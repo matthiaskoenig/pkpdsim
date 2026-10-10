@@ -5,7 +5,7 @@ under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/), the
 source code under [MIT](https://opensource.org/license/MIT). The texts are
 resources of the package; the text of CC BY-SA 4.0 is the same for every
 model, the text of MIT starts with the copyright of the model, e.g.
-`Copyright (c) 2024-2025 Michelle Elias & Matthias König`, which is the only
+`Copyright (c) 2024-2025 Matthias König`, which is the only
 part in which the MIT texts of two models differ.
 
 `write_license` writes a text as `cc-by-sa-4.0.txt` or `mit.txt` into a
@@ -43,10 +43,9 @@ def license_text(license: License | str, copyright: str | None = None) -> str:
     Args:
         license: the license, or its value (`"mit"`).
         copyright: the year or years and the holders of the copyright, e.g.
-            `2024-2025 Michelle Elias & Matthias König`, which make the first
-            line of the MIT text `Copyright (c) 2024-2025 Michelle Elias &
-            Matthias König`. Required for MIT, not allowed for CC BY-SA 4.0,
-            whose text has no copyright line.
+            `2024-2025 Matthias König`, which make the first line of the MIT
+            text `Copyright (c) 2024-2025 Matthias König`. Required for MIT,
+            not allowed for CC BY-SA 4.0, whose text has no copyright line.
 
     Returns:
         The text of the license, every line ends with a line feed.

@@ -14,12 +14,12 @@ MIT_SHA256 = {
         "ccf1f21b1b04471c7675e404c5c192ab79a0e4d803682679fb8a5f91b82c117a"
     ),
     # pkdb_models/models/hctz/models/results/mit.txt
-    "2024-2025 Michelle Elias & Matthias König": (
-        "8f7f6b412f6271e792872c279595dbeac46341a285d97cf9a4a4c2958cb68bf7"
+    "2024-2026 Matthias König": (
+        "47da781a2269219ead5df575b89c6d7f6c5d19c8f7efb105bb4edb930f733e32"
     ),
-    # pkdb_models/models/albuterol/models/results/mit.txt
-    "2026 Linh Chang Nguyen & Matthias König": (
-        "f43d6578e62251a571c4d2e920803cff6ef84366a836d3fc895e56130cb476a2"
+    # pkdb_models/models/glimepiride/models/results/mit.txt
+    "2024-2025 Matthias König": (
+        "87cdbfc2a95335ffb545c8af6f38c24dfa024b8ce8ae9f48828717d470ca7f19"
     ),
 }
 
