@@ -390,7 +390,7 @@ class PKPDModel:
 
     def run_main(self, args: Sequence[str] | None = None) -> None:
         """The command `run_<name>`, see `pkpdsim.cli.run_command`."""
-        from pkpdsim.cli import run_command  # ty: ignore[unresolved-import]
+        from pkpdsim.cli import run_command
 
         run_command(self, args)
 
