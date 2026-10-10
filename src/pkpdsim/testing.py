@@ -159,7 +159,10 @@ def check_model(model: PKPDModel) -> None:
     """Check that a model object belongs to its package and its references hold.
 
     A slip in `package` or `path` of a model resolves the references of another
-    model, or names the paths wrongly, without an error otherwise.
+    model, or names the paths wrongly, without an error otherwise. The name is
+    the last component of the package (or the component ends with `_<name>`),
+    `model_path`, the factory directory and `archive_path` lie below `path`,
+    and the data paths exist.
 
     Raises:
         AssertionError: naming every problem.
@@ -176,6 +179,23 @@ def check_model(model: PKPDModel) -> None:
         file = getattr(module, "__file__", None)
         if file is None or model.path != Path(file).parent:
             problems.append(f"path {model.path} is not the directory of {file}")
+    component = model.package.rsplit(".", 1)[-1]
+    if model.name != component and not component.endswith(f"_{model.name}"):
+        problems.append(
+            f"the name '{model.name}' is not the name of the package '{component}'"
+        )
+    for label, path in [
+        ("model_path", model.model_path),
+        ("the factory directory", model.factory_dir),
+        ("archive_path", model.archive_path),
+    ]:
+        if path is not None and not path.is_relative_to(model.path):
+            problems.append(f"{label} {path} is not below the model {model.path}")
+    problems += [
+        f"the data path {path} does not exist"
+        for path in model.data_paths
+        if not path.exists()
+    ]
 
     references = {
         "factory": model.factory,

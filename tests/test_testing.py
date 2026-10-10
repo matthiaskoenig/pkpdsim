@@ -119,3 +119,18 @@ def test_a_package_which_does_not_import_fails() -> None:
     model = dataclasses.replace(MODEL, package="pkpdsim_missing")
     with pytest.raises(AssertionError, match="does not import"):
         testing.check_model(model)
+
+
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        ({"name": "other"}, "is not the name of the package"),
+        ({"model_path": Path("/elsewhere/model.xml")}, "model_path"),
+        ({"factory_path": Path("/elsewhere")}, "factory"),
+        ({"archive_path": Path("/elsewhere/model.omex")}, "archive_path"),
+        ({"data_paths": (Path("/does/not/exist"),)}, "does not exist"),
+    ],
+)
+def test_check_model_finds_a_slip(changes: dict[str, object], message: str) -> None:
+    with pytest.raises(AssertionError, match=message):
+        testing.check_model(dataclasses.replace(MODEL, **changes))
