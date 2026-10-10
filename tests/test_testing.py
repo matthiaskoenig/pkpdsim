@@ -74,3 +74,48 @@ def test_the_figure_settings_are_restored() -> None:
     with testing.restored_figure_settings():
         Figure.legend_fontsize = 3
     assert Figure.legend_fontsize == before
+
+
+def test_a_model_of_its_package_passes_the_check() -> None:
+    testing.check_model(MODEL)
+
+
+def test_a_broken_model_names_every_problem() -> None:
+    broken = dataclasses.replace(
+        MODEL,
+        path=MODEL.path.parent,
+        factory=".factory:missing",
+        experiments=".simulations:not_a_registry",
+        fit_definitions=".fitting:EMPTY",
+        extra_arguments=".extras:missing",
+    )
+    with pytest.raises(AssertionError) as info:
+        testing.check_model(broken)
+    message = str(info.value)
+    for expected in [
+        "MODEL of 'pkpdsim_toy' is not this model",
+        "is not the directory",
+        "factory '.factory:missing' does not resolve",
+        "experiments '.simulations:not_a_registry' does not resolve",
+        "fit_definitions '.fitting:EMPTY' does not resolve",
+        "extra_arguments '.extras:missing' does not resolve",
+    ]:
+        assert expected in message, expected
+
+
+def test_a_registry_without_all_and_empty_fits_fail() -> None:
+    model = dataclasses.replace(
+        MODEL,
+        experiments=".simulations:WITHOUT_ALL",
+        fit_definitions=".simulations:NO_FITS",
+    )
+    with pytest.raises(AssertionError) as info:
+        testing.check_model(model)
+    assert "'all'" in str(info.value)
+    assert "non-empty mapping" in str(info.value)
+
+
+def test_a_package_which_does_not_import_fails() -> None:
+    model = dataclasses.replace(MODEL, package="pkpdsim_missing")
+    with pytest.raises(AssertionError, match="does not import"):
+        testing.check_model(model)

@@ -1,7 +1,8 @@
 """The tests of a model as functions: the registry, the experiments, the fits.
 
 A repository of models calls them from its own tests, so that a model which is
-exported into a repository of its own keeps them:
+exported into a repository of its own keeps them (`check_model` checks that the
+model object belongs to its package):
 
 ```python
 # not executed
@@ -19,7 +20,7 @@ import importlib
 import inspect
 import pkgutil
 import traceback
-from collections.abc import Collection, Generator, Sequence
+from collections.abc import Collection, Generator, Mapping, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 from types import ModuleType
@@ -28,6 +29,8 @@ from typing import TYPE_CHECKING
 from sbmlsim.experiment import ExperimentRunner, SimulationExperiment
 from sbmlsim.fit.cli import FitRun, run_fit
 from sbmlsim.plot import Figure
+
+from pkpdsim.model import resolve
 
 if TYPE_CHECKING:
     from pkpdsim.model import PKPDModel
@@ -148,6 +151,55 @@ def check_registry(
     stale = sorted(set(not_registered) & set(names))
     if stale:
         problems.append(f"registered, but listed as not registered: {stale}")
+    if problems:
+        raise AssertionError("\n".join(problems))
+
+
+def check_model(model: PKPDModel) -> None:
+    """Check that a model object belongs to its package and its references hold.
+
+    A slip in `package` or `path` of a model resolves the references of another
+    model, or names the paths wrongly, without an error otherwise.
+
+    Raises:
+        AssertionError: naming every problem.
+    """
+    problems: list[str] = []
+    module: ModuleType | None = None
+    try:
+        module = importlib.import_module(model.package)
+    except ImportError as err:
+        problems.append(f"the package '{model.package}' does not import: {err}")
+    if module is not None:
+        if getattr(module, "MODEL", None) is not model:
+            problems.append(f"MODEL of '{model.package}' is not this model")
+        file = getattr(module, "__file__", None)
+        if file is None or model.path != Path(file).parent:
+            problems.append(f"path {model.path} is not the directory of {file}")
+
+    references = {
+        "factory": model.factory,
+        "experiments": model.experiments,
+        "fit_definitions": model.fit_definitions,
+        "extra_arguments": model.extra_arguments,
+        **{f"extra action '{a.name}'": a.function for a in model.extra_actions},
+    }
+    resolved: dict[str, object] = {}
+    for name, reference in references.items():
+        if reference is None:
+            continue
+        try:
+            resolved[name] = resolve(reference, model.package)
+        except Exception as err:  # reported, whatever the reference does
+            problems.append(f"{name} '{reference}' does not resolve: {err!r}")
+    if "experiments" in resolved:
+        registry = resolved["experiments"]
+        if not isinstance(registry, Mapping) or "all" not in registry:
+            problems.append("the registry of experiments is not a mapping with 'all'")
+    if "fit_definitions" in resolved:
+        definitions = resolved["fit_definitions"]
+        if not isinstance(definitions, Mapping) or not definitions:
+            problems.append("the fit definitions are not a non-empty mapping")
     if problems:
         raise AssertionError("\n".join(problems))
 
