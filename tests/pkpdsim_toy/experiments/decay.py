@@ -83,6 +83,7 @@ class ToyDecay(ToyExperiment):
                 "time_unit": "min",
                 "A": [1.0, 0.67, 0.45, 0.30, 0.20],
                 "A_unit": "mM",
+                "count": 4,
             }
         )
         return {"data_decay": DataSet.from_df(df, ureg=self.ureg)}
@@ -92,7 +93,13 @@ class ToyDecay(ToyExperiment):
         return {
             "fm_decay_A": FitMapping(
                 self,
-                reference=FitData(self, dataset="data_decay", xid="time", yid="A"),
+                reference=FitData(
+                    self,
+                    dataset="data_decay",
+                    xid="time",
+                    yid="A",
+                    count="count",
+                ),
                 observable=FitData(self, task="task_decay", xid="time", yid="[A]"),
                 metadata=ToyMappingMetaData(route="iv"),
             )

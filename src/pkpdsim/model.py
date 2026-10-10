@@ -400,18 +400,18 @@ class PKPDModel:
         Returns nothing: a console script exits with the return value of the
         function it calls, and 1 for anything which is not `None` or an int.
         """
-        from pkpdsim.cli import fit_command  # ty: ignore[unresolved-import]
+        from pkpdsim.cli import fit_command
 
         fit_command(self, args)
 
     def report_main(self, args: Sequence[str] | None = None) -> None:
         """The command `report_<name>`, see `pkpdsim.cli.report_command`."""
-        from pkpdsim.cli import report_command  # ty: ignore[unresolved-import]
+        from pkpdsim.cli import report_command
 
         report_command(self, args)
 
     def identifiability_main(self, args: Sequence[str] | None = None) -> None:
         """The command `identifiability_<name>`, see `pkpdsim.cli`."""
-        from pkpdsim.cli import identifiability_command  # ty: ignore[unresolved-import]
+        from pkpdsim.cli import identifiability_command
 
         identifiability_command(self, args)
