@@ -2,7 +2,7 @@
 
 A model is published under two licenses: the model and its documentation under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/), the source code which creates and simulates it under [MIT](https://opensource.org/license/MIT). The texts of both licenses travel with the model in its [COMBINE archive](https://combinearchive.org), the `.omex` file which packs the SBML, the documentation and the figures of a model into one file. `pkpdsim.licenses` holds the texts as resources of the package and writes them into a directory.
 
-The text of CC BY-SA 4.0 is the same for every model. The text of MIT starts with the copyright, which names the years and the authors of the model, e.g. `Copyright (c) 2024-2025 Michelle Elias & Matthias König`; it is the only part in which the MIT texts of two models differ, so it is the argument `copyright` of the functions, without the words `Copyright (c)`, which the text adds.
+The text of CC BY-SA 4.0 is the same for every model. The text of MIT starts with the copyright, which names the years and the authors of the model, e.g. `Copyright (c) 2024-2025 Matthias König`; it is the only part in which the MIT texts of two models differ, so it is the argument `copyright` of the functions, without the words `Copyright (c)`, which the text adds.
 
 ## Usage
 
@@ -47,7 +47,7 @@ entries = {
     }
     for license, copyright in [
         (License.CC_BY_SA_4_0, None),
-        (License.MIT, "2024-2025 Michelle Elias & Matthias König"),
+        (License.MIT, "2024-2025 Matthias König"),
     ]
 }
 ```
