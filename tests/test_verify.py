@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from pkpdsim.verify import describe, verify
+from pkpdsim.verify import _attribute, describe, verify
 from pkpdsim_toy import DATA_PATHS, MODEL, MODEL_PATH, TOY_PATH
 
 TESTS_DIR = Path(__file__).parent
@@ -120,3 +120,15 @@ def test_the_console_script_is_registered() -> None:
 def test_an_unknown_model_package_fails() -> None:
     with pytest.raises(ModuleNotFoundError):
         describe("pkpdsim_missing")
+
+
+def test_a_package_without_fit_definitions_is_described() -> None:
+    info = describe("pkpdsim_legacy_nofit")
+    assert info.fit_definitions is None
+    assert info.experiments is None
+    assert info.absolute_tolerance is None
+
+
+def test_a_missing_nested_module_has_no_attribute() -> None:
+    assert _attribute("pkpdsim_legacy_nofit.fitting.fitting", "FIT_DEFINITIONS") is None
+    assert _attribute("pkpdsim_legacy_nofit.helpers", "ABSOLUTE_TOLERANCE") is None

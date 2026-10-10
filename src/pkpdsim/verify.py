@@ -125,11 +125,11 @@ class ModelInfo:
 
 
 def _attribute(module_name: str, attribute: str) -> object | None:
-    """Get an attribute of a module, `None` if the module does not exist."""
+    """Get an attribute of a module, `None` if the module or a parent does not exist."""
     try:
         module = importlib.import_module(module_name)
     except ModuleNotFoundError as err:
-        if err.name != module_name:
+        if err.name != module_name and not module_name.startswith(f"{err.name}."):
             # the module exists but does not import
             raise
         return None
