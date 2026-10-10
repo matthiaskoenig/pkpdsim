@@ -62,9 +62,9 @@ Documentation is [Zensical](https://zensical.org/): markdown sources in `docs/`,
 
 **`fit.py`.** `default_fit_settings`, `mapping_metadata` (the check of the metadata type, `TypeError`) and `observable_id`; the selection of mapping collections is sbmlsim's `select_mapping_collections`.
 
-**`testing.py`.** The tests of a model as functions: `check_registry`, `initialize_experiments`, `run_all_experiments`, `start_fits` with the helpers `experiment_modules`, `defined_experiments`, `registered_experiments` and `restored_figure_settings`.
+**`testing.py`.** The tests of a model as functions: `check_registry`, `initialize_experiments`, `run_all_experiments`, `start_fits` with the helpers `experiment_modules`, `defined_experiments`, `registered_experiments` and `restored_figure_settings`. `check_model` also checks the name against the package, that `model_path`, the factory directory and `archive_path` lie below `path`, and that the data paths exist.
 
-**`verify.py`.** The command `pkpdsim-verify` (subcommands `dump`, `compare`, `ranges`, `fits`, `definitions`, `png`, `sbml`) and `describe`/`ModelInfo`. `--model` is a dotted package; a package without `MODEL` is described by the conventions of pkdb_models before the model object (`pkpdsim_legacy` in the tests is that convention, `pkpdsim_legacy_nofit` one without fitting), so a checkout from before the switch can be the base of a comparison.
+**`verify.py`.** The command `pkpdsim-verify` (subcommands `dump`, `compare`, `ranges`, `fits`, `definitions`, `settings`, `png`, `sbml`) and `describe`/`ModelInfo`. `--model` is a dotted package; a package without `MODEL` is described by the conventions of pkdb_models before the model object (`pkpdsim_legacy` in the tests is that convention, `pkpdsim_legacy_nofit` one without fitting), so a checkout from before the switch can be the base of a comparison. `settings` captures what a run hands to sbmlsim (the arguments of `SimulatorSerial`, `ExperimentRunner` and the run bound to their signatures, the `Figure` attributes, the changed `rc` keys, call counts) and exits 2 for an incomplete run; `--atol` and `--rtol` take a float or `model`, anything else exits 2.
 
 The tests of these modules run on the toy package `tests/pkpdsim_toy`; its SBML is created once per session by the controller (pytest-xdist), and a test writes only into `tmp_path`.
 
