@@ -23,7 +23,10 @@ class U(Units):
 model = Model(
     sid="liver",
     name="Model of the liver",
-    notes="A model of the liver with a single compartment.\n" + terms_of_use,
+    notes="""
+    A model of the liver with a single compartment.
+    """
+    + terms_of_use,
     creators=creators,
     units=U,
     model_units=ModelUnits(time=U.second, volume=U.liter),
@@ -70,8 +73,10 @@ model_creators = [
 
 ## Terms of use
 
-`terms_of_use` is the markdown of the terms of use, which the models append to the notes behind their description: the copyright of the current year, the [Creative Commons Attribution 4.0](http://creativecommons.org/licenses/by/4.0/) license of the model and the disclaimer. The year is the one of the import, so a model created in a new year carries the new year.
+`terms_of_use` is the markdown of the terms of use, which the models append to the notes behind their description: the copyright of the current year, the [Creative Commons Attribution-ShareAlike 4.0](https://creativecommons.org/licenses/by-sa/4.0/) license of the model, whose text the COMBINE archive of the model carries (see [Licenses](licenses.md)), and the disclaimer. The year is the one of the import, so a model created in a new year carries the new year.
+
+The terms are indented by four spaces, like the description of a model written as an indented triple quoted string, see the usage above. sbmlutils removes the indentation which all lines of the notes have in common before it converts the markdown into the XHTML of the SBML, and lines which keep an indentation of four spaces are a code block: behind a description which is not indented, e.g. `"A model of the liver.\n" + terms_of_use`, the terms of use would show as code with their HTML escaped.
 
 ## Annotations
 
-`compartments` maps the abbreviation of a compartment to its annotation, a list of `(qualifier, resource)` pairs: the qualifier is a biological qualifier of `sbmlutils.metadata.BQB` (`IS`, `IS_PART_OF`, `IS_VERSION_OF`) and the resource the term of an ontology as `collection/term` of [identifiers.org](https://identifiers.org), e.g. `fma/FMA:7197` for the liver in the Foundational Model of Anatomy. A model passes the list as the `annotations` of its compartment, or of a species which lives in the compartment, and sbmlutils resolves the terms and writes the RDF of the element.
+`compartments` maps the abbreviation of a compartment to its annotation, a list of `(qualifier, resource)` pairs: the qualifier is a biological qualifier of `sbmlutils.metadata.BQB` (`IS`, `IS_PART_OF`, `IS_VERSION_OF`) and the resource the term of an ontology as `collection/term` of [identifiers.org](https://identifiers.org), e.g. `fma/FMA:7197` for the liver in the Foundational Model of Anatomy. A model passes the list as the `annotations` of its compartment, or of a species which lives in the compartment, and sbmlutils resolves the terms and writes the RDF of the element. Every resource is a term of a collection of the identifiers.org registry and matches the pattern of its collection, which the tests check for every annotation.

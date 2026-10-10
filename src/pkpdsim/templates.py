@@ -2,7 +2,10 @@
 
 A model sets them in its `sbmlutils.factory.Model`: the creators as
 `creators`, the terms of use appended to its `notes`, behind the description
-of the model. A model with further creators extends the list, e.g.
+of the model. The terms are indented by four spaces, and so has to be the
+description: sbmlutils removes the indentation all lines of the notes have in
+common before it converts the markdown, and lines which keep four spaces are a
+code block. A model with further creators extends the list, e.g.
 `creators=[*creators, Creator(...)]`.
 """
 
@@ -27,8 +30,8 @@ _TERMS_OF_USE = """
     ## Terms of use
     Copyright © {year} <a href="{site}" title="{given_name} {family_name}" target="_blank">{given_name} {family_name}</a>.
 
-    <a rel="license" href="http://creativecommons.org/licenses/by/4.0/">
-    <img alt="Creative Commons License" style="border-width:0" src="https://i.creativecommons.org/l/by/4.0/88x31.png" /></a><br />This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution 4.0 International License</a>.
+    <a rel="license" href="https://creativecommons.org/licenses/by-sa/4.0/">
+    <img alt="Creative Commons License" style="border-width:0" src="https://mirrors.creativecommons.org/presskit/buttons/88x31/png/by-sa.png" /></a><br />This work is licensed under a <a rel="license" href="https://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>.
 
     Redistribution and use of any part of this model, with or without modification, are permitted provided
     that the following conditions are met:
@@ -49,4 +52,8 @@ terms_of_use = _TERMS_OF_USE.format(
     family_name=creators[0].familyName,
     site=creators[0].site,
 )
-"""The terms of use of a model in markdown, with the copyright of the current year."""
+"""The terms of use of a model in markdown, with the copyright of the current year.
+
+The model is licensed under CC BY-SA 4.0, whose text the COMBINE archive of
+the model carries, see `pkpdsim.licenses.License.CC_BY_SA_4_0`.
+"""
