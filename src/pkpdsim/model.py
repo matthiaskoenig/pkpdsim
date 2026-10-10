@@ -355,7 +355,7 @@ class PKPDModel:
 
         See `pkpdsim.run.run_experiments`.
         """
-        from pkpdsim.run import run_experiments  # ty: ignore[unresolved-import]
+        from pkpdsim.run import run_experiments
 
         return run_experiments(
             self,
@@ -378,7 +378,7 @@ class PKPDModel:
 
         See `pkpdsim.run.run_simulation_experiments`.
         """
-        from pkpdsim.run import run_simulation_experiments  # ty: ignore[unresolved-import]
+        from pkpdsim.run import run_simulation_experiments
 
         return run_simulation_experiments(
             self,

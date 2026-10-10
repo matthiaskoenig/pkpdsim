@@ -85,14 +85,14 @@ class ToyDecay(ToyExperiment):
                 "A_unit": "mM",
             }
         )
-        return {"decay": DataSet.from_df(df, ureg=self.ureg)}
+        return {"data_decay": DataSet.from_df(df, ureg=self.ureg)}
 
     def fit_mappings(self) -> dict[str, FitMapping]:
         """Get the mapping of the data of A to the simulation."""
         return {
             "fm_decay_A": FitMapping(
                 self,
-                reference=FitData(self, dataset="decay", xid="time", yid="A"),
+                reference=FitData(self, dataset="data_decay", xid="time", yid="A"),
                 observable=FitData(self, task="task_decay", xid="time", yid="[A]"),
                 metadata=ToyMappingMetaData(route="iv"),
             )
