@@ -70,3 +70,7 @@ docstring-code-line-length = "dynamic"
 
 [lint.pydocstyle]
 convention = "google"  # Accepts: "google", "numpy", or "pep257".
+
+[lint.isort]
+# the toy model package of the tests is first party, like pkpdsim
+known-first-party = ["pkpdsim_toy"]

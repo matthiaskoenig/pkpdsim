@@ -39,6 +39,8 @@ dependencies = [
     "sbmlutils>=0.16.0",
     # the simulator, the initial values are selections of a roadrunner model
     "libroadrunner>=2.10.0",
+    # the simulation experiments, their figures and reports, and the fits
+    "sbmlsim>=0.8.5",
 ]
 
 [project.optional-dependencies]
@@ -76,9 +78,10 @@ addopts = "-n auto"
 
 [tool.ty.environment]
 # the package lives in the src layout, the scripts are a package at the root of
-# the repository; the checked python version is inferred from
-# `project.requires-python` (i.e. the oldest supported version)
-root = ["./src", "."]
+# the repository, the toy model of the tests is a package in `tests`; the
+# checked python version is inferred from `project.requires-python` (i.e. the
+# oldest supported version)
+root = ["./src", ".", "./tests"]
 
 [tool.ty.src]
 include = ["src", "tests", "scripts"]
