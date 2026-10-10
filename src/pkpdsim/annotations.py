@@ -15,13 +15,13 @@ compartments: dict[str, list[tuple[BQB, str]]] = {
     ],
     # liver
     "li": [
-        (BQB.IS, "fma/FMA:7197"),
-        (BQB.IS, "bto/BTO:0000759"),
-        (BQB.IS, "ncit/C12392"),
+        (BQB.IS, "fma/FMA:7197"),  # liver
+        (BQB.IS, "bto/BTO:0000759"),  # liver
+        (BQB.IS, "ncit/C12392"),  # liver
     ],
     "lyso": [
-        (BQB.IS, "fma/FMA:63836"),
-        (BQB.IS, "ncit/C13253"),
+        (BQB.IS, "fma/FMA:63836"),  # lysosome
+        (BQB.IS, "ncit/C13253"),  # lysosome
     ],
     # basolateral membrane
     "basolateral": [
@@ -35,8 +35,8 @@ compartments: dict[str, list[tuple[BQB, str]]] = {
     ],
     # bile
     "bi": [
-        (BQB.IS, "fma/FMA:62971"),
-        (BQB.IS, "ncit/C13192"),
+        (BQB.IS, "fma/FMA:62971"),  # portion of bile
+        (BQB.IS, "ncit/C13192"),  # bile
     ],
     # rest
     # FIXME: rest compartment is not the organism
@@ -46,13 +46,12 @@ compartments: dict[str, list[tuple[BQB, str]]] = {
     ],
     # gastrointestinal tract
     "gi": [
-        (BQB.IS, "fma/FMA:71132"),
-        (BQB.IS, "bto/BTO:0000511"),
-        (BQB.IS, "ncit/C34082"),
+        (BQB.IS, "fma/FMA:71132"),  # gastrointestinal tract
+        (BQB.IS, "bto/BTO:0000511"),  # gastrointestinal tract
+        (BQB.IS, "ncit/C34082"),  # gastrointestinal tract
     ],
     # gut/intestine
     "gu": [
-        (BQB.IS, "fma/FMA:45615"),  # gut
         (BQB.IS, "bto/BTO:0000545"),  # gut
         (BQB.IS, "ncit/C12736"),  # intestine
         (BQB.IS, "fma/FMA:7199"),  # intestine
@@ -63,20 +62,20 @@ compartments: dict[str, list[tuple[BQB, str]]] = {
         (BQB.IS, "uberon/UBERON:0018543"),  # lumen of intestine
     ],
     "duodenum": [
-        (BQB.IS, "fma/FMA:7206"),
-        (BQB.IS, "uberon/UBERON:0002114"),
+        (BQB.IS, "fma/FMA:7206"),  # duodenum
+        (BQB.IS, "uberon/UBERON:0002114"),  # duodenum
     ],
     "jejunum": [
-        (BQB.IS, "fma/FMA:7207"),
-        (BQB.IS, "uberon/UBERON:0002115"),
+        (BQB.IS, "fma/FMA:7207"),  # jejunum
+        (BQB.IS, "uberon/UBERON:0002115"),  # jejunum
     ],
     "ileum": [
-        (BQB.IS, "fma/FMA:7208"),
-        (BQB.IS, "uberon/UBERON:0002116"),
+        (BQB.IS, "fma/FMA:7208"),  # ileum
+        (BQB.IS, "uberon/UBERON:0002116"),  # ileum
     ],
     "colon": [
-        (BQB.IS, "fma/FMA:14543"),
-        (BQB.IS, "uberon/UBERON:000115"),
+        (BQB.IS, "fma/FMA:14543"),  # colon
+        (BQB.IS, "uberon/UBERON:0001155"),  # colon
     ],
     # heart
     "he": [
@@ -86,25 +85,25 @@ compartments: dict[str, list[tuple[BQB, str]]] = {
     ],
     # kidneys
     "ki": [
-        (BQB.IS, "fma/FMA:7203"),
-        (BQB.IS, "bto/BTO:0000671"),
-        (BQB.IS, "ncit/C12415"),
+        (BQB.IS, "fma/FMA:7203"),  # kidney
+        (BQB.IS, "bto/BTO:0000671"),  # kidney
+        (BQB.IS, "ncit/C12415"),  # kidney
     ],
     # lung
     "lu": [
-        (BQB.IS, "fma/FMA:7195"),
-        (BQB.IS, "bto/BTO:0000763"),
-        (BQB.IS, "ncit/C12468"),
+        (BQB.IS, "fma/FMA:7195"),  # lung
+        (BQB.IS, "bto/BTO:0000763"),  # lung
+        (BQB.IS, "ncit/C12468"),  # lung
     ],
     "ve": [
         (BQB.IS, "bto/BTO:0000131"),  # plasma
         (BQB.IS, "ncit/C13356"),  # plasma
-        (BQB.IS_PART_OF, "fma/FMA:50723"),  # vein
+        (BQB.IS_PART_OF, "fma/FMA:50723"),  # venous tree
     ],
     "ar": [
         (BQB.IS, "bto/BTO:0000131"),  # plasma
         (BQB.IS, "ncit/C13356"),  # plasma
-        (BQB.IS_PART_OF, "fma/FMA:50720"),  # artery
+        (BQB.IS_PART_OF, "fma/FMA:50720"),  # arterial tree
     ],
     # portal vein
     "po": [
@@ -118,10 +117,12 @@ compartments: dict[str, list[tuple[BQB, str]]] = {
         (BQB.IS, "ncit/C13356"),  # plasma
         (BQB.IS_PART_OF, "fma/FMA:14337"),  # hepatic vein
     ],
-    # hepatic vein
+    # renal vein
     "rv": [
-        (BQB.IS, "bto/BTO:0002681"),  # renal vein
-        (BQB.IS, "ncit/C33462"),  # renal vein
+        (BQB.IS, "bto/BTO:0000131"),  # plasma
+        (BQB.IS, "ncit/C13356"),  # plasma
+        (BQB.IS_PART_OF, "bto/BTO:0002681"),  # renal vein
+        (BQB.IS_PART_OF, "ncit/C33462"),  # renal vein
         (BQB.IS_PART_OF, "fma/FMA:14334"),  # renal vein
     ],
     # rest vein
@@ -130,37 +131,37 @@ compartments: dict[str, list[tuple[BQB, str]]] = {
         (BQB.IS, "ncit/C13356"),  # plasma
         # fixme: be more specific
     ],
-    # hepatic vein
+    # kidney vein
     "kiv": [
         (BQB.IS, "bto/BTO:0000131"),  # plasma
         (BQB.IS, "ncit/C13356"),  # plasma
         # fixme: be more specific
     ],
     "stomach": [
-        (BQB.IS, "fma/FMA:7148"),
-        (BQB.IS, "ncit/C12391"),
-        (BQB.IS, "uberon/UBERON:0000945"),
-        (BQB.IS, "bto/BTO:0001307"),
+        (BQB.IS, "fma/FMA:7148"),  # stomach
+        (BQB.IS, "ncit/C12391"),  # stomach
+        (BQB.IS, "uberon/UBERON:0000945"),  # stomach
+        (BQB.IS, "bto/BTO:0001307"),  # stomach
     ],
     # spleen
     "sp": [
-        (BQB.IS, "fma/FMA:7196"),
-        (BQB.IS, "ncit/C12432"),
-        (BQB.IS, "uberon/UBERON:0002106"),
-        (BQB.IS, "bto/BTO:0001281"),
+        (BQB.IS, "fma/FMA:7196"),  # spleen
+        (BQB.IS, "ncit/C12432"),  # spleen
+        (BQB.IS, "uberon/UBERON:0002106"),  # spleen
+        (BQB.IS, "bto/BTO:0001281"),  # spleen
     ],
     # muscle
     "mu": [
-        (BQB.IS, "fma/FMA:30316"),
-        (BQB.IS, "bto/BTO:0000511"),
-        (BQB.IS, "ncit/C13056"),
+        (BQB.IS, "fma/FMA:30316"),  # muscle
+        (BQB.IS, "bto/BTO:0000887"),  # muscle
+        (BQB.IS, "ncit/C13056"),  # muscle
     ],
-    # forarm
+    # forearm
     "fo": [
         (BQB.IS, "ncit/C32628"),  # forearm
         (BQB.IS, "fma/FMA:9663"),  # forearm
     ],
-    # hepatic vein
+    # forearm vein
     "fov": [
         (BQB.IS, "bto/BTO:0000131"),  # plasma
         (BQB.IS, "ncit/C13356"),  # plasma
@@ -168,48 +169,48 @@ compartments: dict[str, list[tuple[BQB, str]]] = {
     ],
     # pancreas
     "pa": [
-        (BQB.IS, "fma/FMA:7198"),
-        (BQB.IS, "ncit/C12393"),
-        (BQB.IS, "uberon/UBERON:0001264"),
-        (BQB.IS, "bto/BTO:0000988"),
+        (BQB.IS, "fma/FMA:7198"),  # pancreas
+        (BQB.IS, "ncit/C12393"),  # pancreas
+        (BQB.IS, "uberon/UBERON:0001264"),  # pancreas
+        (BQB.IS, "bto/BTO:0000988"),  # pancreas
     ],
     "feces": [
-        (BQB.IS, "fma/FMA:64183"),
-        (BQB.IS, "ncit/C13234"),
-        (BQB.IS, "bto/BTO:0000440"),
+        (BQB.IS, "fma/FMA:64183"),  # feces
+        (BQB.IS, "ncit/C13234"),  # feces
+        (BQB.IS, "bto/BTO:0000440"),  # feces
     ],
     "plasma": [
-        (BQB.IS, "ncit/C13356"),
-        (BQB.IS, "bto/BTO:0000131"),
+        (BQB.IS, "ncit/C13356"),  # plasma
+        (BQB.IS, "bto/BTO:0000131"),  # plasma
     ],
     "blood": [
-        (BQB.IS, "fma/FMA:62970"),
-        (BQB.IS, "ncit/C12434"),
-        (BQB.IS, "bto/BTO:0000089"),
+        (BQB.IS, "fma/FMA:9670"),  # portion of blood
+        (BQB.IS, "ncit/C12434"),  # blood
+        (BQB.IS, "bto/BTO:0000089"),  # blood
     ],
     "urine": [
-        (BQB.IS, "fma/FMA:12274"),
-        (BQB.IS, "ncit/C13283"),
-        (BQB.IS, "bto/BTO:0001419"),
+        (BQB.IS, "fma/FMA:12274"),  # portion of urine
+        (BQB.IS, "ncit/C13283"),  # urine
+        (BQB.IS, "bto/BTO:0001419"),  # urine
     ],
     "parenchyma": [
-        (BQB.IS, "fma/FMA:45732"),
-        (BQB.IS, "ncit/C74601"),
-        (BQB.IS, "bto/BTO:0001539"),
+        (BQB.IS, "fma/FMA:45732"),  # parenchyma
+        (BQB.IS, "ncit/C74601"),  # parenchyma
+        (BQB.IS, "bto/BTO:0001539"),  # parenchyma
     ],
     "parietal cell": [
-        (BQB.IS, "ncit/C12594"),
-        (BQB.IS, "http://snomed.info/id/57041003"),
+        (BQB.IS, "ncit/C12594"),  # parietal cell
+        (BQB.IS, "snomedct/57041003"),  # gastric parietal cell
     ],
     "gastric acid": [
-        (BQB.IS, "fma/FMA:62972"),  # gastric juice
-        (BQB.IS, "ncit/C94192"),
+        (BQB.IS, "fma/FMA:62972"),  # portion of gastric juice
+        (BQB.IS, "ncit/C94192"),  # gastric acid
         (BQB.IS, "omit/0006944"),  # gastric acid
     ],
     "plasma membrane": [
         (BQB.IS, "ncit/C13735"),  # Plasma membrane
         (BQB.IS, "fma/FMA:63841"),  # Plasma membrane
-        (BQB.IS, "GO:0005886"),  # plasma membrane
+        (BQB.IS, "go/GO:0005886"),  # plasma membrane
     ],
 }
 """The annotations of the compartments, keyed by their abbreviation in the models.
