@@ -88,6 +88,10 @@ report_hctz --subset=PK results/fit/PK_<fit id>/parameters.json
 identifiability_hctz --subset=PK results/fit/PK_<fit id>/parameters.json
 ```
 
+A model without experiments (`experiments=None`) offers `--action factory`, and
+`--action all`, which then runs only the factory; `simulate` and
+`list_experiments` are a usage error for it.
+
 A model adds actions of its own to `run_<model>` with `ExtraAction` and their
 options with `extra_arguments`, e.g. analyses which are not simulation
 experiments.
@@ -110,16 +114,34 @@ references resolve (`check_model`), the experiments initialize
 (`initialize_experiments`), all experiments run (`run_all_experiments`) and every
 fit starts (`start_fits`).
 
+`check_model` also checks that the name of the model is the last component of its
+package (or that component ends with `_<name>`), that `model_path`, the factory
+directory and `archive_path` lie below the path of the model, and that the data
+paths exist.
+
 ## Verification of a change
 
 `pkpdsim-verify` dumps the experiments of a model in two checkouts and compares
-them, writes the fit definitions as json, and compares figures and SBML:
+them, writes the fit definitions and the settings of a run as json, and compares
+figures and SBML:
 
 ```bash
 pkpdsim-verify dump --root ../base --model pkdb_models.models.hctz --out base.pkl --atol model
 pkpdsim-verify dump --root . --model pkdb_models.models.hctz --out new.pkl --order base.pkl --atol model
 pkpdsim-verify compare base.pkl new.pkl
 pkpdsim-verify definitions --root . --model pkdb_models.models.hctz --out new.json
+pkpdsim-verify settings --root ../base --model pkdb_models.models.hctz --out base.json
+pkpdsim-verify settings --root . --model pkdb_models.models.hctz --out new.json
+diff base.json new.json
 pkpdsim-verify png old/results/simulation new/results/simulation
 pkpdsim-verify sbml old.xml new.xml
 ```
+
+`--atol model` and `--rtol model` take the tolerances of the model object (of
+`helpers` for a package of the old conventions); any other value which is not a
+number exits with 2. `settings` captures what a run of the experiments hands to
+sbmlsim, bound to the signatures: the arguments of `SimulatorSerial`, of
+`ExperimentRunner` (without the simulator) and of the run (without the output
+path), the attributes of `Figure`, the matplotlib `rc` settings a run changes and
+the counts of the calls. It works in a checkout with or without a model object
+and exits with 2 for a run which did not complete.

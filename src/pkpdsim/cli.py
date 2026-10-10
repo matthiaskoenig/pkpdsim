@@ -248,6 +248,14 @@ def run_command(model: PKPDModel, args: Sequence[str] | None = None) -> None:
     ]
     if options.action == Action.SIMULATE and not names:
         p.error("'--action simulate' requires '--experiments'")
+    if model.experiments is None and options.action in (
+        Action.SIMULATE,
+        Action.LIST_EXPERIMENTS,
+    ):
+        p.error(
+            f"the model '{model.name}' has no simulation experiments, "
+            f"'--action {options.action}' does not apply"
+        )
 
     display.section(model.title, icon=":pill:")
     display.key_values({"action": options.action})
@@ -264,7 +272,8 @@ def run_command(model: PKPDModel, args: Sequence[str] | None = None) -> None:
         _simulate(model, names, simulation_dir, options.open, formats)
     elif options.action == Action.ALL:
         _run_factory(model)
-        _simulate(model, ["all"], simulation_dir, options.open, formats)
+        if model.experiments is not None:
+            _simulate(model, ["all"], simulation_dir, options.open, formats)
         for extra in model.extra_actions:
             if extra.in_all:
                 resolve(extra.function, model.package)(model, options, results_dir)
@@ -307,10 +316,16 @@ def fit_parser(
             "at least one FitDefinition is required."
         )
     defaults = ProfileSettings()
+    identifiability_text = (
+        "The identifiability of the fitted parameters is analysed after the fit, "
+        "--no-identifiability skips it."
+        if model.fit_identifiability
+        else "--identifiability analyses the identifiability of the fitted "
+        "parameters after the fit."
+    )
     p = argparse.ArgumentParser(
         prog=f"fit_{model.name}",
-        description=f"Parameter fitting of the {model.title} with the "
-        "identifiability analysis of the fitted parameters.",
+        description=f"Parameter fitting of the {model.title}. {identifiability_text}",
     )
     fit = p.add_argument_group("fit")
     fit.add_argument(
@@ -380,7 +395,8 @@ def fit_parser(
         "--identifiability",
         action=argparse.BooleanOptionalAction,
         default=model.fit_identifiability,
-        help="analyse the identifiability of the fitted parameters",
+        help="analyse the identifiability of the fitted parameters after the fit "
+        "(default: %(default)s)",
     )
     identifiability.add_argument(
         "-p",
