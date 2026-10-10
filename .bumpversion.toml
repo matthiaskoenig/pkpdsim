@@ -1,0 +1,35 @@
+[tool.bumpversion]
+current_version = "0.1.0"
+commit = true
+parse = "(?P<major>\\d+)\\.(?P<minor>\\d+)\\.(?P<patch>\\d+)(\\.dev(?P<dev>\\d+))?"
+serialize = ["{major}.{minor}.{patch}.dev{dev}", "{major}.{minor}.{patch}"]
+search = "{current_version}"
+replace = "{new_version}"
+regex = false
+ignore_missing_version = false
+# no tag: the bump is merged into develop through a pull request, which
+# rewrites the commit, so the tag is created on develop afterwards
+tag = false
+sign_tags = false
+tag_name = "{new_version}"
+tag_message = "Bump version: {current_version} → {new_version}"
+allow_dirty = false
+message = "Bump version: {current_version} → {new_version}"
+commit_args = ""
+
+[tool.bumpversion.parts.dev]
+optional_value = "final"
+values = ["0", "final"]
+
+[[tool.bumpversion.files]]
+filename = "./src/pkpdsim/__init__.py"
+
+[[tool.bumpversion.files]]
+# only the version of the software: a bare search would also replace the
+# `cff-version` of the file format whenever the two happen to be equal
+filename = "./CITATION.cff"
+search = 'version: "{current_version}"'
+replace = 'version: "{new_version}"'
+
+[[tool.bumpversion.files]]
+filename = "./tests/test_package.py"

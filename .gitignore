@@ -1,0 +1,28 @@
+# python
+__pycache__/
+*.pyc
+
+# packaging artifacts (hatchling builds into dist/)
+dist/
+*.egg-info/
+
+# environments, tool caches
+.venv/
+.tox/
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+# build cache of zensical
+.cache/
+
+# rendered documentation, built by the `documentation` workflow
+site/
+
+# editors, operating system
+.idea/
+.vscode/
+*~
+.DS_Store
+.ipynb_checkpoints/
+.superpowers/

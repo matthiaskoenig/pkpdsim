@@ -1,0 +1,22 @@
+{
+  "upload_type": "software",
+  "title": "pkpdsim: building blocks of physiologically based pharmacokinetic and pharmacodynamic models in SBML",
+  "creators": [
+    {
+      "orcid": "0000-0003-1725-179X",
+      "affiliation": "Humboldt-University Berlin, Faculty of Life Science, Institute for Biology, Berlin; University Lübeck; University Hospital Schleswig-Holstein, Campus Lübeck, First Department of Medicine, Germany",
+      "name": "König, Matthias"
+    }
+  ],
+  "description": "<p><code>pkpdsim</code> provides the building blocks shared by physiologically based pharmacokinetic and pharmacodynamic (PBPK/PD) models in SBML with source code available from <a href=\"https://github.com/matthiaskoenig/pkpdsim\">https://github.com/matthiaskoenig/pkpdsim</a>.</p>\n<p>Features include<ul><li>the creators and terms of use of a model</li><li>the annotations of recurring compartments</li><li>the collection of study data from the study folders of PK-DB</li><li>the initial values of a substance in every tissue of a model</li><li>the license texts of the COMBINE archive of a model</li></ul></p>\n<p>The documentation is available on <a href=\"https://matthiaskoenig.github.io/pkpdsim\">https://matthiaskoenig.github.io/pkpdsim</a>.</p>\n<p>If you have any questions or issues please <a href=\"https://github.com/matthiaskoenig/pkpdsim/issues\">open an issue</a></p>\n<h2>Funding</h2><p>Matthias König is supported by the German Research Foundation (DFG) within the Research Unit Programme FOR 5151 <strong><a href=\"https://qualiperf.de\">QuaLiPerF</a></strong> (Quantifying Liver Perfusion-Function Relationship in Complex Resection - A Systems Medicine Approach) by grant number 436883643 and by grant number 465194077 (Priority Programme SPP 2311, Subproject SimLivA). Matthias König was supported by the Federal Ministry of Education and Research (BMBF, Germany) within the research network Systems Medicine of the Liver (<strong>LiSyM</strong>, grant number 031L0054).</p>",
+  "access_right": "open",
+  "license": "MIT",
+  "keywords": [
+    "pharmacokinetics",
+    "pharmacodynamics",
+    "PBPK",
+    "SBML",
+    "modeling",
+    "simulation"
+  ]
+}
