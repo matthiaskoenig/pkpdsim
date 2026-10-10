@@ -13,9 +13,20 @@ edit_uri = "edit/develop/docs/"
 nav = [
   { "Home" = "index.md" },
   { "Installation" = "installation.md" },
+  { "User guide" = [
+    { "Templates and annotations" = "templates.md" },
+    { "Study data" = "data.md" },
+    { "Initial values" = "initial_values.md" },
+    { "Licenses" = "licenses.md" },
+  ] },
   { "API reference" = [
     { "Overview" = "api/index.md" },
     { "pkpdsim" = "api/pkpdsim.md" },
+    { "templates" = "api/templates.md" },
+    { "annotations" = "api/annotations.md" },
+    { "data" = "api/data.md" },
+    { "initial_values" = "api/initial_values.md" },
+    { "licenses" = "api/licenses.md" },
   ] },
   { "Contributing" = "development.md" },
 ]

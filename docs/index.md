@@ -7,19 +7,37 @@
 
 The models of [pkdb_models](https://github.com/matthiaskoenig/pkdb_models) describe the pharmacokinetics and pharmacodynamics of a substance in the whole body: one SBML model per tissue, composed into a whole-body model, written in python with the factory of [sbmlutils](https://github.com/matthiaskoenig/sbmlutils), simulated with [sbmlsim](https://github.com/matthiaskoenig/sbmlsim) against the studies curated in [PK-DB](https://pk-db.com). `pkpdsim` holds what these models share, so that the folder of a model imports nothing but itself and released packages and can live in a repository of its own.
 
+## Features
+
+- **[Templates and annotations](templates.md)** - the creators and the terms of use of a model, the annotations of the compartments which recur in the models (liver, kidneys, gut, blood, urine, ...) with the terms of FMA, BTO, NCIT, UBERON and GO.
+- **[Study data](data.md)** - the study folders of PK-DB in a checkout of pkdb_data, found through the environment variable `PKDB_DATA`, and the data of a model collected from them into its own folder.
+- **[Initial values](initial_values.md)** - the same initial concentration or amount of a substance in every tissue of a model, which removes the distribution kinetics.
+- **[Licenses](licenses.md)** - the texts of CC BY-SA 4.0 and MIT for the COMBINE archive of a model, written byte for byte the same on every platform.
+
 ## Quickstart
 
 ```python
-import pkpdsim
+from pathlib import Path
 
-print(pkpdsim.__version__)
+from pkpdsim.annotations import compartments
+from pkpdsim.licenses import License, write_license
+from pkpdsim.templates import creators
+
+print(creators[0].givenName, creators[0].familyName)
+print([resource for _, resource in compartments["li"]])
+
+results = Path("results")
+results.mkdir()
+print(write_license(results, License.MIT, copyright="2026 Matthias König").name)
 ```
 
 ```text
-0.1.0
+Matthias König
+['fma/FMA:7197', 'bto/BTO:0000759', 'ncit/C12392']
+mit.txt
 ```
 
-Continue with [Installation](installation.md).
+Continue with [Installation](installation.md) and the [Templates and annotations](templates.md) of a model.
 
 ## How to cite
 
