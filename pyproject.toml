@@ -1,0 +1,83 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pkpdsim"
+dynamic = ["version"]
+description = "pkpdsim provides the building blocks shared by physiologically based pharmacokinetic and pharmacodynamic (PBPK/PD) models in SBML."
+readme = "README.md"
+requires-python = ">=3.13"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+	{name="Matthias König", email="konigmatt@googlemail.com"},
+]
+maintainers = [
+	{name="Matthias König", email="konigmatt@googlemail.com"}
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+keywords = [
+    "pharmacokinetics",
+    "pharmacodynamics",
+    "PBPK",
+    "SBML",
+    "modeling",
+    "simulation",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "bump-my-version>=1.5.1",
+    "ruff>=0.17.0",
+    "pre-commit>=4.6.2",
+    "ty>=0.0.86",
+    "tox>=4.65.0",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "pytest-xdist>=3.8.0",
+    "zensical>=0.0.69",
+    "mkdocstrings-python>=2.0.9",
+]
+
+[project.urls]
+Homepage = "https://matthiaskoenig.github.io/pkpdsim"
+Documentation = "https://matthiaskoenig.github.io/pkpdsim"
+Repository = "https://github.com/matthiaskoenig/pkpdsim"
+Issues = "https://github.com/matthiaskoenig/pkpdsim/issues"
+Changelog = "https://github.com/matthiaskoenig/pkpdsim/tree/develop/release-notes"
+Download = "https://pypi.org/project/pkpdsim"
+
+[tool.hatch.version]
+path = "./src/pkpdsim/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pkpdsim"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# the tests run in parallel (pytest-xdist), `pytest -n 0` runs them in one process
+addopts = "-n auto"
+
+[tool.ty.environment]
+# the package lives in the src layout, the scripts are a package at the root of
+# the repository; the checked python version is inferred from
+# `project.requires-python` (i.e. the oldest supported version)
+root = ["./src", "."]
+
+[tool.ty.src]
+include = ["src", "tests", "scripts"]
+
+[tool.ty.terminal]
+# warnings are failures: keep the codebase free of any diagnostic
+error-on-warning = true
