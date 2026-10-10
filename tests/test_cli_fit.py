@@ -172,3 +172,16 @@ def test_the_fit_writes_into_the_results_of_the_model(tmp_path: Path) -> None:
     model = dataclasses.replace(MODEL, results_path=tmp_path)
     model.fit_main(["--runs", "1", "--no-mapping-figures"])
     assert list((tmp_path / "fit").glob("**/parameters.json"))
+
+
+def test_the_help_states_the_default_of_the_identifiability() -> None:
+    definitions = MODEL.load_fit_definitions()
+    off = fit_parser(MODEL, definitions).format_help()
+    off = " ".join(off.split())
+    assert "default: False" in off
+    assert "--identifiability analyses the identifiability" in off
+    model = dataclasses.replace(MODEL, fit_identifiability=True)
+    on = fit_parser(model, definitions).format_help()
+    on = " ".join(on.split())
+    assert "default: True" in on
+    assert "--no-identifiability skips it" in on

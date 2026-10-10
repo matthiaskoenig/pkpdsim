@@ -152,3 +152,26 @@ def test_all_runs_the_factory_the_simulations_and_the_extras(tmp_path: Path) -> 
 def test_the_main_of_the_model(tmp_path: Path) -> None:
     MODEL.run_main(["-a", "simulate", "-e", "ToyDecay", "-r", str(tmp_path)])
     assert (tmp_path / "simulation" / "custom_selection").is_dir()
+
+
+NO_EXPERIMENTS = dataclasses.replace(MODEL, experiments=None, fit_definitions=None)
+
+
+@pytest.mark.parametrize("action", ["simulate", "list_experiments"])
+def test_a_model_without_experiments_cannot_simulate(action: str) -> None:
+    with pytest.raises(SystemExit) as error:
+        run_command(NO_EXPERIMENTS, ["-a", action, "-e", "all"])
+    assert error.value.code == 2
+
+
+def test_all_of_a_model_without_experiments_runs_the_factory(tmp_path: Path) -> None:
+    model = dataclasses.replace(NO_EXPERIMENTS, factory_path=tmp_path / "models")
+    run_command(model, ["-a", "all", "-r", str(tmp_path)])
+    assert (tmp_path / "models" / "toy.xml").exists()
+    assert not (tmp_path / "simulation").exists()
+
+
+def test_the_factory_of_a_model_without_experiments(tmp_path: Path) -> None:
+    model = dataclasses.replace(NO_EXPERIMENTS, factory_path=tmp_path)
+    run_command(model, ["-a", "factory"])
+    assert (tmp_path / "toy.xml").exists()
