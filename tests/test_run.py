@@ -5,6 +5,7 @@ from pathlib import Path
 
 import matplotlib
 import matplotlib.image
+import pytest
 from sbmlsim.plot import Figure
 
 from pkpdsim.model import FIGURE_ATTRIBUTES, FigureSettings
@@ -74,3 +75,18 @@ def test_the_figures_of_a_relative_output_dir_are_collected(tmp_path: Path) -> N
     figures = model.run_simulation_experiments([ToyDecay], output_dir="relative")
     assert figures == tmp_path / "simulation" / "relative" / "_figures"
     assert list(figures.glob("*.svg"))
+
+
+def test_a_bare_string_is_not_a_list_of_formats(tmp_path: Path) -> None:
+    with pytest.raises(TypeError, match="not 'png'"):
+        MODEL.run_experiments(
+            ToyDecay,
+            output_dir=tmp_path,
+            figure_formats="png",
+        )
+
+
+def test_empty_formats_fall_back_to_the_formats_of_the_model(tmp_path: Path) -> None:
+    output = MODEL.run_experiments(ToyDecay, output_dir=tmp_path, figure_formats=[])
+    assert list(output.glob("**/*.png"))
+    assert list(output.glob("**/*.svg"))
