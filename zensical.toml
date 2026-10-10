@@ -14,6 +14,7 @@ nav = [
   { "Home" = "index.md" },
   { "Installation" = "installation.md" },
   { "User guide" = [
+    { "Models and their commands" = "models.md" },
     { "Templates and annotations" = "templates.md" },
     { "Study data" = "data.md" },
     { "Initial values" = "initial_values.md" },
@@ -27,6 +28,12 @@ nav = [
     { "data" = "api/data.md" },
     { "initial_values" = "api/initial_values.md" },
     { "licenses" = "api/licenses.md" },
+    { "model" = "api/model.md" },
+    { "run" = "api/run.md" },
+    { "cli" = "api/cli.md" },
+    { "fit" = "api/fit.md" },
+    { "testing" = "api/testing.md" },
+    { "verify" = "api/verify.md" },
   ] },
   { "Contributing" = "development.md" },
 ]

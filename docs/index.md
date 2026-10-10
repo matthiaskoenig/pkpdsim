@@ -13,6 +13,7 @@ The models of [pkdb_models](https://github.com/matthiaskoenig/pkdb_models) descr
 - **[Study data](data.md)** - the study folders of PK-DB in a checkout of pkdb_data, found through the environment variable `PKDB_DATA`, and the data of a model collected from them into its own folder.
 - **[Initial values](initial_values.md)** - the same initial concentration or amount of a substance in every tissue of a model, which removes the distribution kinetics.
 - **[Licenses](licenses.md)** - the texts of CC BY-SA 4.0 and MIT for the COMBINE archive of a model, written byte for byte the same on every platform.
+- **[Models and their commands](models.md)** - the model object and the commands of a model (`run`, `fit`, `report`, `identifiability`), the tests of a model as functions and the verification of a change (`pkpdsim-verify`).
 
 ## Quickstart
 

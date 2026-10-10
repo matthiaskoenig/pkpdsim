@@ -54,6 +54,20 @@ Documentation is [Zensical](https://zensical.org/): markdown sources in `docs/`,
 
 **`licenses.py`.** `License` (`StrEnum`, `CC_BY_SA_4_0 = "cc-by-sa-4.0"`, `MIT = "mit"`, `filename`), `license_text(license, copyright=None)` and `write_license(directory, license, copyright=None)`. The texts are the resources `src/pkpdsim/resources/cc-by-sa-4.0.txt` (byte-identical to the files of the models) and `mit.txt` (the MIT text whose first line is the placeholder `Copyright (c) <year> <copyright holders>`, which `copyright`, e.g. `2024-2025 Michelle Elias & Matthias König`, replaces). The files are written in UTF-8 with LF line endings on every platform; `.gitattributes` keeps git from converting the resources and the whitespace hooks of pre-commit exclude them (the CC BY-SA text ends with an empty line). `tests/test_licenses.py` pins the sha256 of the files of three models of pkdb_models.
 
+**`model.py`.** `PKPDModel` (frozen dataclass) describes a model once, in the `__init__.py` of its package: `name`, `package` (`__name__`), `title`, the paths (`path`, `model_path`, `data_paths`, `archive_path`), the references `factory`, `experiments` and `fit_definitions` (`"module:attribute"`, resolved on use by `resolve`; a reference which starts with a dot is relative to `package`, a malformed one fails when the object is created, a missing attribute names the reference), `SimulatorSettings` (absolute tolerance as a float or an sbmlsim `AbsoluteTolerance`, relative tolerance), `FigureSettings` (formats, `savefig_dpi` and the sizes of sbmlsim's `Figure`, applied for a run and restored after it), `reduced_selections`, `save_results`, `fit_identifiability` and the `ExtraAction`s a model adds to `run_<model>`. `pkpdsim.model` imports nothing of sbmlsim at runtime (the model packages import it in their `__init__.py`, so a model with per-state tolerances keeps them in its own `tolerances.py`). The methods `run_main`, `fit_main`, `report_main`, `identifiability_main` and `run_experiments` are the entry points of the console scripts of a model.
+
+**`run.py`.** `run_experiments` and `run_simulation_experiments`: the run of experiment classes with the settings of the model; a relative output directory is below the simulation results of the model, the figure settings are restored also when the run raises.
+
+**`cli.py`.** The commands as functions of a `PKPDModel`: `run_command` (actions `factory`, `simulate`, `all`, `list_experiments` and the extra actions; `--experiments`, `--formats`, `--results-dir`, `--open`), `fit_command` (the options of `sbmlsim.fit.cli.fit_cli` plus the identifiability options), `report_command` and `identifiability_command`.
+
+**`fit.py`.** `default_fit_settings`, `mapping_metadata` (the check of the metadata type, `TypeError`) and `observable_id`; the selection of mapping collections is sbmlsim's `select_mapping_collections`.
+
+**`testing.py`.** The tests of a model as functions: `check_registry`, `initialize_experiments`, `run_all_experiments`, `start_fits` with the helpers `experiment_modules`, `defined_experiments`, `registered_experiments` and `restored_figure_settings`.
+
+**`verify.py`.** The command `pkpdsim-verify` (subcommands `dump`, `compare`, `ranges`, `fits`, `definitions`, `png`, `sbml`) and `describe`/`ModelInfo`. `--model` is a dotted package; a package without `MODEL` is described by the conventions of pkdb_models before the model object (`pkpdsim_legacy` in the tests is that convention, `pkpdsim_legacy_nofit` one without fitting), so a checkout from before the switch can be the base of a comparison.
+
+The tests of these modules run on the toy package `tests/pkpdsim_toy`; its SBML is created once per session by the controller (pytest-xdist), and a test writes only into `tmp_path`.
+
 ## Conventions
 
 - Type checking is done with [ty](https://docs.astral.sh/ty/). `[tool.ty.terminal] error-on-warning = true` means warnings fail the check, so the tree must stay at zero diagnostics. Suppress a diagnostic with a rule-specific `# ty: ignore[rule-name]`, never a blanket `# type: ignore`. ty also runs as a pre-commit hook (`--extra dev`).
