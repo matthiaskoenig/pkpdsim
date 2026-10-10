@@ -16,5 +16,5 @@ The API reference is generated from the docstrings of the package.
 | [run](run.md) | `run_experiments`, `run_simulation_experiments`: the run of the simulation experiments of a model |
 | [cli](cli.md) | `run_command`, `fit_command`, `report_command`, `identifiability_command`: the commands of a model |
 | [fit](fit.md) | `default_fit_settings`, `mapping_metadata`, `observable_id`: the shared fit settings and the helpers of the mapping collections |
-| [testing](testing.md) | `check_registry`, `initialize_experiments`, `run_all_experiments`, `start_fits`: the tests of a model as functions |
+| [testing](testing.md) | `check_model`, `check_registry`, `initialize_experiments`, `run_all_experiments`, `start_fits`: the tests of a model as functions |
 | [verify](verify.md) | `pkpdsim-verify`: the verification of a change of a model |

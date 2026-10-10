@@ -23,7 +23,7 @@ MODEL = PKPDModel(
     title="HCTZ PBPK/PD model",
     path=HCTZ_PATH,
     model_path=MODEL_PATH,
-    data_paths=tuple(DATA_PATHS),
+    data_paths=DATA_PATHS,
     archive_path=MODEL_BASE_PATH.parent / "hctz_model.omex",
     factory=".models.factory:create_hctz_models",
     experiments=".simulations:EXPERIMENTS",
@@ -33,6 +33,11 @@ MODEL = PKPDModel(
     fit_identifiability=True,
 )
 ```
+
+`PKPDModel`, `FigureSettings`, `SimulatorSettings` and `ExtraAction` take
+keyword arguments only, so the order of their fields is not API. A list of
+`data_paths` is stored as a tuple; a model is hashable unless its absolute
+tolerance is an `AbsoluteTolerance` of sbmlsim.
 
 ## References
 
@@ -100,7 +105,8 @@ MODEL.run_experiments(Anderson1961, output_dir=Anderson1961.__name__)
 ## Tests
 
 `pkpdsim.testing` holds the tests of a model as functions: the registry is
-complete (`check_registry`), the experiments initialize
+complete (`check_registry`), the model object belongs to its package and its
+references resolve (`check_model`), the experiments initialize
 (`initialize_experiments`), all experiments run (`run_all_experiments`) and every
 fit starts (`start_fits`).
 
@@ -114,6 +120,6 @@ pkpdsim-verify dump --root ../base --model pkdb_models.models.hctz --out base.pk
 pkpdsim-verify dump --root . --model pkdb_models.models.hctz --out new.pkl --order base.pkl --atol model
 pkpdsim-verify compare base.pkl new.pkl
 pkpdsim-verify definitions --root . --model pkdb_models.models.hctz --out new.json
-pkpdsim-verify png old/figures new/figures
+pkpdsim-verify png old/results/simulation new/results/simulation
 pkpdsim-verify sbml old.xml new.xml
 ```
