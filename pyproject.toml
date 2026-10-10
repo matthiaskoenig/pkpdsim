@@ -57,6 +57,9 @@ dev = [
     "mkdocstrings-python>=2.0.9",
 ]
 
+[project.scripts]
+pkpdsim-verify = "pkpdsim.verify:main"
+
 [project.urls]
 Homepage = "https://matthiaskoenig.github.io/pkpdsim"
 Documentation = "https://matthiaskoenig.github.io/pkpdsim"
