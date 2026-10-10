@@ -15,8 +15,9 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  # superseded branch runs are cancelled, release runs are never cancelled
-  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+  # a newer run supersedes the running one of the same branch or pull request;
+  # a release is never superseded, every tag is a group of its own
+  cancel-in-progress: true
 
 jobs:
   test:
@@ -25,14 +26,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # continuous integration tests python 3.14 on every platform, python
+        # 3.13 is tested locally with `tox run-parallel`, see docs/development.md
         os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ["3.13", "3.14"]
-        # linux covers the full range, windows and macos only the newest version
-        exclude:
-          - os: windows-latest
-            python-version: "3.13"
-          - os: macos-latest
-            python-version: "3.13"
+        python-version: ["3.14"]
 
     steps:
     - uses: actions/checkout@v7
@@ -81,7 +78,8 @@ jobs:
       uses: astral-sh/setup-uv@v10.2.0
       with:
         python-version: "3.14"
-        enable-cache: true
+        # a release is built from a clean state, never from a restored cache
+        enable-cache: false
     - name: Build package
       run: uvx hatch build
     - name: Check the package

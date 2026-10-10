@@ -20,7 +20,7 @@ pytest -n 0                              # in one process, e.g. for --pdb
 pytest tests/test_package.py             # single file
 pytest tests/test_package.py::test_version  # single test
 tox r -e py3.14                          # single tox env (py3.13, py3.14 available)
-tox run-parallel                         # full matrix + ty
+tox run-parallel                         # full matrix + ty, run before opening a pull request
 
 # lint / format / types
 ruff check
@@ -34,7 +34,7 @@ uv run python scripts/llms_txt.py
 uv run zensical serve
 ```
 
-`develop` is the default branch and takes every change through a pull request; direct pushes are rejected by the rulesets in `.github/rulesets/` (applied with `.github/rulesets/apply.sh`), which require the `tests`, `ruff`, `ty` and `docs` checks. `main` only tracks the latest release and is fast-forwarded by the `sync-main` job of the release workflow, never by hand.
+`develop` is the default branch and takes every change through a pull request; direct pushes are rejected by the rulesets in `.github/rulesets/` (applied with `.github/rulesets/apply.sh`), which require the `tests`, `ruff`, `ty` and `docs` checks. Continuous integration is kept minimal: `tests` runs only `py3.14`, on linux, macos and windows, every workflow cancels a superseded run (`cancel-in-progress: true`), uv caches packages and interpreters, dependabot runs monthly. Python 3.13 runs only locally. `main` only tracks the latest release and is fast-forwarded by the `sync-main` job of the release workflow, never by hand.
 
 Release steps are in `docs/development.md`: the release is prepared on a branch, `uvx bump-my-version bump [dev|major|minor|patch]` updates `src/pkpdsim/__init__.py`, `CITATION.cff` and `tests/test_package.py` and commits without tagging, and the tag (a plain version, `0.1.0`) is created on `develop` after the pull request was merged, which triggers the release job of `ci-cd.yml`: PyPI through the trusted publisher of the GitHub environment `pypi`, the GitHub release from `release-notes/<version>.md` (archived by Zenodo) and the fast-forward of `main`.
 
@@ -62,7 +62,7 @@ Documentation is [Zensical](https://zensical.org/): markdown sources in `docs/`,
 - A dependency is only added for an import of the package; the floors in `pyproject.toml` are the releases the package was tested with.
 - `tests/conftest.py` loads the registry of identifiers.org, which sbmlutils resolves annotations with, into the cache of pymetadata once in the controller of the session; without it the parallel workers download it at the same time and the replace of the cache file fails on Windows (matthiaskoenig/pymetadata#102).
 - `tests/docs/test_snippets.py` executes every ` ```python ` fence of every page of `docs/` in the order it appears, one namespace per page, in a subprocess with warnings as errors and a temporary working directory. A fence whose first line is `# not executed` is a fragment and is skipped. An output a page pastes has to come from a real run of that snippet.
-- `uv.lock` is committed and pins the local development environment (`uv sync`, `uv run`, so also `uv run ty check`), the `documentation` workflow, which runs `uv sync --locked`, and the ruff version of the `ruff` workflow; the tox environments, i.e. the test matrix and the `ty` check of continuous integration, resolve from `pyproject.toml` and do not use it. After changing a dependency in `pyproject.toml` run `uv lock`, otherwise the `documentation` workflow fails; `uv lock --upgrade` moves the lock to the newest releases. Dependabot bumps the lock weekly with `versioning-strategy: lockfile-only`, so the lower bounds in `pyproject.toml`, which users install against, are only changed by hand. The ruff and ty floors of the `dev` extra and the `rev` of their pre-commit hooks are the locked versions; update them together.
+- `uv.lock` is committed and pins the local development environment (`uv sync`, `uv run`, so also `uv run ty check`), the `documentation` workflow, which runs `uv sync --locked`, and the ruff version of the `ruff` workflow; the tox environments, i.e. the test matrix and the `ty` check of continuous integration, resolve from `pyproject.toml` and do not use it. After changing a dependency in `pyproject.toml` run `uv lock`, otherwise the `documentation` workflow fails; `uv lock --upgrade` moves the lock to the newest releases. Dependabot bumps the lock monthly with `versioning-strategy: lockfile-only`, so the lower bounds in `pyproject.toml`, which users install against, are only changed by hand. The ruff and ty floors of the `dev` extra and the `rev` of their pre-commit hooks are the locked versions; update them together.
 - libroadrunner links against `libpython`, which the interpreters of uv ship in their `lib` directory, outside the search path of the loader on Linux: export `LD_LIBRARY_PATH="$(uv run python -c 'import sys; print(sys.base_prefix)')/lib"` before running the tests (a system interpreter with its own `libpython` does not need it); the workflows do it in `.github/actions/setup`.
 - Markdown carries no hard line wraps: a paragraph, a list item or a table row is a single line. Code fences, headings and the rows of badges keep their line structure.
 - Release notes go in `release-notes/` as part of a release commit.
