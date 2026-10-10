@@ -90,11 +90,49 @@ def test_an_extra_action_must_not_repeat_an_action() -> None:
     for name in ["all", "simulate"]:
         with pytest.raises(ValueError, match="repeat an action"):
             dataclasses.replace(
-                MODEL, extra_actions=(ExtraAction(name, "help", ".extras:greet"),)
+                MODEL,
+                extra_actions=(
+                    ExtraAction(name=name, help="help", function=".extras:greet"),
+                ),
             )
-    twice = (ExtraAction("greet", "h", ".extras:greet"),) * 2
+    twice = (ExtraAction(name="greet", help="h", function=".extras:greet"),) * 2
     with pytest.raises(ValueError, match="repeat an action"):
         dataclasses.replace(MODEL, extra_actions=twice)
+
+
+def test_a_bare_string_is_not_a_list_of_formats() -> None:
+    with pytest.raises(TypeError, match="not 'svg'"):
+        FigureSettings(formats="svg")
+
+
+def test_the_formats_are_a_lower_case_tuple() -> None:
+    assert FigureSettings(formats=["SVG", "Png"]).formats == ("svg", "png")
+
+
+def test_the_dataclasses_are_keyword_only() -> None:
+    with pytest.raises(TypeError):
+        FigureSettings(("svg",))  # ty: ignore[too-many-positional-arguments]
+    with pytest.raises(TypeError):
+        SimulatorSettings(1e-10)  # ty: ignore[too-many-positional-arguments]
+    with pytest.raises(TypeError):
+        ExtraAction("a", "b", "c")  # ty: ignore[missing-argument, too-many-positional-arguments]
+
+
+def test_the_sequences_are_tuples_and_the_model_is_hashable() -> None:
+    model = dataclasses.replace(
+        MODEL,
+        data_paths=[TOY_PATH],
+        extra_actions=[],
+    )
+    assert model.data_paths == (TOY_PATH,)
+    assert model.extra_actions == ()
+    assert isinstance(hash(model), int)
+    assert hash(model) == hash(dataclasses.replace(model))
+
+
+def test_resolve_a_relative_reference_needs_a_package() -> None:
+    with pytest.raises(ValueError, match="needs a package"):
+        resolve(".simulations:EXPERIMENTS")
 
 
 def test_a_model_needs_a_figure_format() -> None:

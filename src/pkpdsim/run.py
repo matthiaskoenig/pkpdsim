@@ -19,6 +19,8 @@ from sbmlsim.experiment import ExperimentRunner, SimulationExperiment
 from sbmlsim.report.experiment_report import ExperimentReport, ReportResults
 from sbmlsim.simulator.simulation_serial import SimulatorSerial
 
+from pkpdsim.model import normalize_formats
+
 if TYPE_CHECKING:
     from pkpdsim.model import PKPDModel
 
@@ -50,11 +52,16 @@ def run_experiments(
             `model.save_results` by default.
         show_report: open the report in a web browser.
         figure_formats: the formats of the figures, those of the model by
-            default.
+            default; an empty sequence falls back to the formats of the model
+            as well.
 
     Returns:
         The directory the results were written to.
+
+    Raises:
+        TypeError: if `figure_formats` is a single string.
     """
+    formats = normalize_formats(figure_formats) if figure_formats is not None else ()
     log.enable_rich_logging()
     output_path = model.simulation_dir / output_dir
     classes: list[type[SimulationExperiment]]
@@ -80,7 +87,7 @@ def run_experiments(
             # the figures are written, a window per figure blocks the run
             show_figures=False,
             save_results=model.save_results if save_results is None else save_results,
-            figure_formats=list(figure_formats or model.figures.formats),
+            figure_formats=list(formats or model.figures.formats),
             reduced_selections=model.reduced_selections,
         )
 

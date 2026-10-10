@@ -284,11 +284,11 @@ def with_output_dir(args: Sequence[str], output_dir: Path) -> list[str]:
         output_dir: output directory used if the arguments do not name one.
 
     Returns:
-        The arguments with an output directory.
+        The arguments with the output directory in front of them. argparse keeps
+        the last value of an option, so an output directory in the arguments,
+        also an abbreviation like `--out`, wins.
     """
-    if any(a.startswith(("-o", "--output_dir")) for a in args):
-        return list(args)
-    return [*args, "--output_dir", str(output_dir)]
+    return ["--output_dir", str(output_dir), *args]
 
 
 def fit_parser(
@@ -301,6 +301,11 @@ def fit_parser(
     follows the fit.
     """
     keys = list(definitions)
+    if not keys:
+        raise ValueError(
+            f"The model '{model.name}' has no fit definitions: "
+            "at least one FitDefinition is required."
+        )
     defaults = ProfileSettings()
     p = argparse.ArgumentParser(
         prog=f"fit_{model.name}",

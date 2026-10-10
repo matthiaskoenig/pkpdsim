@@ -16,7 +16,9 @@ from pkpdsim.model import RUN_ACTIONS, ExtraAction
 from pkpdsim_toy import MODEL
 from pkpdsim_toy.experiments.decay import ToyDecay, ToyDecaySlow
 
-GREET = ExtraAction("greet", "write a greeting", ".extras:greet", in_all=True)
+GREET = ExtraAction(
+    name="greet", help="write a greeting", function=".extras:greet", in_all=True
+)
 EXTRA = dataclasses.replace(
     MODEL, extra_actions=(GREET,), extra_arguments=".extras:add_arguments"
 )

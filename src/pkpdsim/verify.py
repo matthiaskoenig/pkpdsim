@@ -46,7 +46,7 @@ and the fit definitions `fitting.fitting.FIT_DEFINITIONS`, so that a checkout
 from before the switch is the base of a comparison. The command only needs the
 python packages of the environment it runs in, so a checkout which needs another
 version of sbmlsim is dumped with the python of an environment with that
-version; `dump` works with sbmlsim 0.8.3 and later.
+version, as long as it is one which pkpdsim supports.
 """
 
 import argparse
@@ -134,6 +134,24 @@ def _attribute(module_name: str, attribute: str) -> object | None:
             raise
         return None
     return getattr(module, attribute, None)
+
+
+def _outside_root(package: str, root: Path) -> str | None:
+    """Check that a package was imported from below `root`.
+
+    `--root` is put first on the python path, but a package which is already
+    imported (a second call in the same process) or installed in an environment
+    in which the root does not take effect would silently be dumped from
+    somewhere else.
+
+    Returns:
+        A message if the package comes from elsewhere, else `None`.
+    """
+    module = importlib.import_module(package)
+    file = getattr(module, "__file__", None)
+    if file is not None and Path(file).resolve().is_relative_to(root):
+        return None
+    return f"{package} is imported from {file}, not from below {root}"
 
 
 def describe(package: str) -> ModelInfo:
@@ -347,10 +365,14 @@ def mapping_range(
 
 def dump(args: argparse.Namespace) -> int:
     """Run the experiments of a model and store everything in a pickle."""
-    sys.path.insert(0, str(Path(args.root).resolve()))
+    root = Path(args.root).resolve()
+    sys.path.insert(0, str(root))
     from sbmlsim.experiment import ExperimentRunner
     from sbmlsim.simulator.simulation_serial import SimulatorSerial
 
+    if message := _outside_root(args.model, root):
+        print(message, file=sys.stderr)
+        return 2
     info = describe(args.model)
     errors: dict[str, str] = {}
     classes = registered_experiments(info)
@@ -687,9 +709,13 @@ def ranges(args: argparse.Namespace) -> int:
 
 def fits(args: argparse.Namespace) -> int:
     """Run a minimal fit (one start, a few evaluations) of every fit definition."""
-    sys.path.insert(0, str(Path(args.root).resolve()))
+    root = Path(args.root).resolve()
+    sys.path.insert(0, str(root))
     from sbmlsim.fit.cli import run_fit
 
+    if message := _outside_root(args.model, root):
+        print(message, file=sys.stderr)
+        return 2
     info = describe(args.model)
     if info.fit_definitions is None:
         print(f"{args.model} has no fit definitions", file=sys.stderr)
@@ -721,8 +747,12 @@ def definitions(args: argparse.Namespace) -> int:
     every fit definition, so that the definitions of two checkouts are
     compared with `diff`. The checkout directory is replaced by `<root>`.
     """
-    root = str(Path(args.root).resolve())
+    root_path = Path(args.root).resolve()
+    root = str(root_path)
     sys.path.insert(0, root)
+    if message := _outside_root(args.model, root_path):
+        print(message, file=sys.stderr)
+        return 2
     info = describe(args.model)
     if info.fit_definitions is None:
         print(f"{args.model} has no fit definitions", file=sys.stderr)
@@ -739,40 +769,72 @@ def definitions(args: argparse.Namespace) -> int:
             },
         }
     text = json.dumps(content, indent=2, sort_keys=True, default=str)
-    Path(args.out).write_text(text.replace(root, "<root>"), encoding="utf-8")
+    Path(args.out).write_text(
+        text.replace(json.dumps(root)[1:-1], "<root>").replace(root, "<root>"),
+        encoding="utf-8",
+    )
     return 0
 
 
 # --- png ------------------------------------------------------------------------
 
 
+def _files(directory: Path, pattern: str) -> dict[Path, Path]:
+    """Get the files below a directory by their path relative to it."""
+    return {p.relative_to(directory): p for p in sorted(directory.rglob(pattern))}
+
+
+def _directories(old: Path, new: Path) -> str | None:
+    """Get the message about a directory which does not exist, or `None`."""
+    for directory in (old, new):
+        if not directory.is_dir():
+            return f"{directory} is not a directory"
+    return None
+
+
 def png(args: argparse.Namespace) -> int:
-    """Compare the PNG figures of two directories pixel by pixel."""
+    """Compare the PNG figures of two directories pixel by pixel.
+
+    The directories are searched recursively and the figures are paired by the
+    path relative to the directory.
+
+    Returns:
+        0 if all figures are identical, 1 if some differ or exist on one side
+        only, 2 if a directory does not exist or no figure was found.
+    """
     from PIL import Image
 
     old, new = Path(args.old), Path(args.new)
+    if message := _directories(old, new):
+        print(message, file=sys.stderr)
+        return 2
 
     def selected(path: Path) -> bool:
         return not args.names or any(s in path.name for s in args.names)
 
+    old_files = {k: v for k, v in _files(old, "*.png").items() if selected(v)}
+    new_files = {k: v for k, v in _files(new, "*.png").items() if selected(v)}
+    if not old_files and not new_files:
+        print(f"no PNG figures in {old} and {new}", file=sys.stderr)
+        return 2
     same = differing = 0
-    for p in sorted(filter(selected, old.glob("*.png"))):
-        q = new / p.name
-        if not q.exists():
-            print(f"only in old: {p.name}")
+    for key in sorted(old_files.keys() | new_files.keys()):
+        if key not in new_files:
+            print(f"only in old: {key}")
             differing += 1
             continue
-        a, b = np.asarray(Image.open(p)), np.asarray(Image.open(q))
+        if key not in old_files:
+            print(f"only in new: {key}")
+            differing += 1
+            continue
+        a = np.asarray(Image.open(old_files[key]))
+        b = np.asarray(Image.open(new_files[key]))
         if a.shape == b.shape and np.array_equal(a, b):
             same += 1
             continue
         fraction = (a != b).any(axis=-1).mean() if a.shape == b.shape else 1.0
-        print(f"differs: {p.name} {a.shape} {b.shape}, pixels {fraction:.2e}")
+        print(f"differs: {key} {a.shape} {b.shape}, pixels {fraction:.2e}")
         differing += 1
-    for q in sorted(filter(selected, new.glob("*.png"))):
-        if not (old / q.name).exists():
-            print(f"only in new: {q.name}")
-            differing += 1
     print(f"{same} identical, {differing} differ")
     return 1 if differing else 0
 
@@ -857,27 +919,40 @@ def _nan_equal(value: object) -> object:
 
 
 def sbml(args: argparse.Namespace) -> int:
-    """Compare SBML models: two files, or the files of the same name in two dirs."""
+    """Compare SBML models: two files, or the files of the same path in two dirs.
+
+    The directories are searched recursively and the files are paired by the
+    path relative to the directory.
+
+    Returns:
+        0 if the models are equal, 1 if they differ or exist on one side only,
+        2 if a directory does not exist or no file was found.
+    """
     old, new = Path(args.old), Path(args.new)
-    if old.is_dir() and new.is_dir():
-        names = sorted(
-            {p.name for p in old.glob("*.xml")} | {p.name for p in new.glob("*.xml")}
-        )
+    if old.is_dir() or new.is_dir():
+        if message := _directories(old, new):
+            print(message, file=sys.stderr)
+            return 2
+        names = sorted(_files(old, "*.xml").keys() | _files(new, "*.xml").keys())
+        if not names:
+            print(f"no XML files in {old} and {new}", file=sys.stderr)
+            return 2
         pairs = [(old / name, new / name) for name in names]
     else:
         pairs = [(old, new)]
     differing = 0
     for a_path, b_path in pairs:
+        label = str(a_path.relative_to(old)) if old.is_dir() else a_path.name
         if not a_path.exists() or not b_path.exists():
-            print(f"{a_path.name}: only in {'new' if b_path.exists() else 'old'}")
+            print(f"{label}: only in {'new' if b_path.exists() else 'old'}")
             differing += 1
             continue
         a, b = sbml_elements(a_path), sbml_elements(b_path)
         if a is None or b is None:
-            print(f"{a_path.name}: no SBML model")
+            print(f"{label}: no SBML model")
             continue
         changed = [k for k in sorted(a.keys() | b.keys()) if a.get(k) != b.get(k)]
-        print(f"{a_path.name}: {len(changed)} of {len(a.keys() | b.keys())} differ")
+        print(f"{label}: {len(changed)} of {len(a.keys() | b.keys())} differ")
         for k in changed:
             print(f"  {k}\n    old: {a.get(k)}\n    new: {b.get(k)}")
         differing += len(changed)

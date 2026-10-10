@@ -1427,6 +1427,10 @@ name = "pkpdsim"
 source = { editable = "." }
 dependencies = [
     { name = "libroadrunner" },
+    { name = "matplotlib" },
+    { name = "numpy" },
+    { name = "pillow" },
+    { name = "python-libsbml" },
     { name = "sbmlsim" },
     { name = "sbmlutils" },
 ]
@@ -1449,11 +1453,15 @@ dev = [
 requires-dist = [
     { name = "bump-my-version", marker = "extra == 'dev'", specifier = ">=1.5.1" },
     { name = "libroadrunner", specifier = ">=2.10.0" },
+    { name = "matplotlib", specifier = ">=3.11.2" },
     { name = "mkdocstrings-python", marker = "extra == 'dev'", specifier = ">=2.0.9" },
+    { name = "numpy", specifier = ">=2.5.3" },
+    { name = "pillow", specifier = ">=12.3.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=4.6.2" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.1.1" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=7.1.0" },
     { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.8.0" },
+    { name = "python-libsbml", specifier = ">=5.21.2" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.17.0" },
     { name = "sbmlsim", specifier = ">=0.8.5" },
     { name = "sbmlutils", specifier = ">=0.16.0" },

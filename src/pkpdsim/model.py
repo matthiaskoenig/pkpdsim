@@ -104,9 +104,26 @@ def resolve(reference: str, package: str | None = None) -> Any:  # noqa: ANN401
     return obj
 
 
-@dataclass(frozen=True)
+def normalize_formats(formats: Sequence[str]) -> tuple[str, ...]:
+    """Get figure formats as a lower-case tuple.
+
+    Raises:
+        TypeError: if the formats are a single string, e.g. `"svg"` instead of
+            `("svg",)`; a string is a sequence of characters.
+    """
+    if isinstance(formats, str):
+        raise TypeError(
+            f"The figure formats must be a sequence of strings, not {formats!r}; "
+            f"use ({formats!r},)."
+        )
+    return tuple(f.lower() for f in formats)
+
+
+@dataclass(frozen=True, kw_only=True)
 class SimulatorSettings:
     """The integrator settings of the simulation experiments of a model.
+
+    All fields are keyword-only.
 
     Attributes:
         absolute_tolerance: the absolute tolerance, one value for every state or
@@ -118,9 +135,11 @@ class SimulatorSettings:
     relative_tolerance: float = 1e-10
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class FigureSettings:
     """The figures of the simulation experiments of a model.
+
+    All fields are keyword-only.
 
     The sizes and positions are class attributes of `sbmlsim.plot.Figure` and
     `savefig_dpi` is the `savefig.dpi` of matplotlib: both hold for every figure
@@ -145,7 +164,7 @@ class FigureSettings:
         panel_height: the height of a panel.
     """
 
-    formats: tuple[str, ...] = ("svg", "png")
+    formats: Sequence[str] = ("svg", "png")
     savefig_dpi: float | None = None
     fig_dpi: float | None = None
     fig_titlesize: float | None = None
@@ -159,9 +178,16 @@ class FigureSettings:
     panel_height: float | None = None
 
     def __post_init__(self) -> None:
-        """Check that there is a format."""
-        if not self.formats:
+        """Check that there is a format and normalize the formats.
+
+        Raises:
+            TypeError: if the formats are a single string.
+            ValueError: if there is no format.
+        """
+        formats = normalize_formats(self.formats)
+        if not formats:
             raise ValueError("A model needs at least one figure format.")
+        object.__setattr__(self, "formats", formats)
 
     @contextmanager
     def applied(self) -> Generator[None]:
@@ -188,9 +214,11 @@ class FigureSettings:
                 setattr(Figure, name, value)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class ExtraAction:
     """An action a model adds to its `run` command, e.g. analyses of its own.
+
+    All fields are keyword-only.
 
     Attributes:
         name: the value of `--action`.
@@ -206,9 +234,15 @@ class ExtraAction:
     in_all: bool = False
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class PKPDModel:
     """A PBPK/PD model: what the commands, the verification and the tests need.
+
+    All fields are keyword-only, so their order is not API. The sequences
+    (`data_paths`, `extra_actions` and the formats of the figures) are stored as
+    tuples, so a list can be passed and the model is hashable, unless the
+    absolute tolerance of the simulator is an `AbsoluteTolerance`, which is not
+    hashable.
 
     Attributes:
         name: the short name, the suffix of the commands (`run_<name>`).
@@ -249,7 +283,7 @@ class PKPDModel:
     factory: str
     experiments: str | None = None
     fit_definitions: str | None = None
-    data_paths: tuple[Path, ...] = ()
+    data_paths: Sequence[Path] = ()
     results_path: Path | None = None
     factory_path: Path | None = None
     archive_path: Path | None = None
@@ -258,11 +292,13 @@ class PKPDModel:
     reduced_selections: bool = True
     save_results: bool = False
     fit_identifiability: bool = False
-    extra_actions: tuple[ExtraAction, ...] = ()
+    extra_actions: Sequence[ExtraAction] = ()
     extra_arguments: str | None = None
 
     def __post_init__(self) -> None:
-        """Check the references and the names of the extra actions."""
+        """Normalize the sequences, check the references and the extra actions."""
+        object.__setattr__(self, "data_paths", tuple(self.data_paths))
+        object.__setattr__(self, "extra_actions", tuple(self.extra_actions))
         references = [
             self.factory,
             self.experiments,
