@@ -1,5 +1,6 @@
 """The verification of a change of a model, run on the toy model."""
 
+import dataclasses
 import json
 import pickle
 import re
@@ -10,9 +11,12 @@ from pathlib import Path
 import numpy as np
 import pytest
 from PIL import Image
+from sbmlsim.plot import Figure
 
+from pkpdsim.model import FigureSettings
 from pkpdsim.verify import _attribute, describe, verify
 from pkpdsim_toy import DATA_PATHS, MODEL, MODEL_PATH, TOY_PATH
+from pkpdsim_toy.experiments.decay import ToyDecay
 
 TESTS_DIR = Path(__file__).parent
 
@@ -254,3 +258,83 @@ def test_the_reraise_path_of_attribute_for_a_broken_module() -> None:
     # the module exists but its own import fails: not "no such attribute"
     with pytest.raises(ModuleNotFoundError, match="pkpdsim_does_not_exist"):
         _attribute("pkpdsim_legacy_broken.helpers", "ABSOLUTE_TOLERANCE")
+
+
+def test_capture_settings_of_a_model() -> None:
+    from pkpdsim.verify import capture_settings
+
+    settings = capture_settings(MODEL.run_experiments, ToyDecay, TESTS_DIR)
+    assert settings["experiment"] == "ToyDecay"
+    assert settings["simulator"]["relative_tolerance"] == 1e-10
+    assert settings["run"]["figure_formats"] == ["svg", "png"]
+    assert settings["run"]["reduced_selections"] is True
+    assert settings["run"]["save_results"] is False
+    assert settings["figure"]["legend_fontsize"] == 7
+    assert settings["savefig_dpi"] == 30
+    assert "<root>" in settings["simulator"]["model"]
+
+
+def test_capture_settings_sees_a_difference() -> None:
+    from pkpdsim.verify import capture_settings
+
+    other = dataclasses.replace(
+        MODEL, figures=FigureSettings(formats=("png",), legend_fontsize=9)
+    )
+    a = capture_settings(MODEL.run_experiments, ToyDecay, TESTS_DIR)
+    b = capture_settings(other.run_experiments, ToyDecay, TESTS_DIR)
+    assert a["figure"] != b["figure"]
+    assert a["run"]["figure_formats"] != b["run"]["figure_formats"]
+
+
+def test_settings_of_a_model_and_of_its_legacy_package_agree(tmp_path: Path) -> None:
+    toy, legacy = tmp_path / "toy.json", tmp_path / "legacy.json"
+    for package, out in [("pkpdsim_toy", toy), ("pkpdsim_legacy", legacy)]:
+        code = verify(
+            [
+                "settings",
+                "--root",
+                str(TESTS_DIR),
+                "--model",
+                package,
+                "--out",
+                str(out),
+            ]
+        )
+        assert code == 0
+    assert toy.read_text(encoding="utf-8") == legacy.read_text(encoding="utf-8")
+
+
+def test_settings_leave_the_figure_settings_as_they_were(tmp_path: Path) -> None:
+    before = Figure.legend_fontsize
+    verify(
+        [
+            "settings",
+            "--root",
+            str(TESTS_DIR),
+            "--model",
+            "pkpdsim_legacy",
+            "--out",
+            str(tmp_path / "s.json"),
+        ]
+    )
+    assert Figure.legend_fontsize == before
+
+
+def test_dump_with_the_relative_tolerance_of_the_model(tmp_path: Path) -> None:
+    out = tmp_path / "dump.pkl"
+    code = verify(
+        [
+            "dump",
+            "--root",
+            str(TESTS_DIR),
+            "--model",
+            "pkpdsim_legacy",
+            "--out",
+            str(out),
+            "--atol",
+            "model",
+            "--rtol",
+            "model",
+        ]
+    )
+    assert code == 0

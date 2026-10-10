@@ -15,6 +15,8 @@ them only where it is meant to. The subcommands make this checkable:
 - `definitions` writes the fit definitions of a model as json: the settings,
   the parameters and the mappings of the collections, so that two checkouts
   are compared with `diff`,
+- `settings` writes what a run of the experiments of a model hands to sbmlsim, so
+  that the settings of two checkouts are compared with `diff`,
 - `png` compares the PNG figures of two directories pixel by pixel,
 - `sbml` compares SBML models by their elements, ignoring the order and the
   annotations.
@@ -58,12 +60,13 @@ import os
 import pickle
 import pkgutil
 import sys
+import tempfile
 import traceback
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict
 
 import libsbml
 import numpy as np
@@ -121,6 +124,8 @@ class ModelInfo:
     data_path: Path | list[Path] | None
     experiments: Mapping[str, Sequence[type["SimulationExperiment"]]] | None
     absolute_tolerance: object | None
+    relative_tolerance: object | None
+    run_experiments: Callable[..., object] | None
     fit_definitions: Mapping[str, "FitDefinition"] | None
 
 
@@ -175,6 +180,8 @@ def describe(package: str) -> ModelInfo:
             data_path=list(model.data_paths) or None,
             experiments=model.load_experiments() if model.experiments else None,
             absolute_tolerance=model.simulator.absolute_tolerance,
+            relative_tolerance=model.simulator.relative_tolerance,
+            run_experiments=model.run_experiments,
             fit_definitions=(
                 dict(model.load_fit_definitions()) if model.fit_definitions else None
             ),
@@ -186,6 +193,7 @@ def describe(package: str) -> ModelInfo:
     )
     registry = _attribute(f"{package}.simulations", "EXPERIMENTS")
     definitions = _attribute(f"{package}.fitting.fitting", "FIT_DEFINITIONS")
+    run = _attribute(f"{package}.helpers", "run_experiments")
     return ModelInfo(
         package=package,
         base_path=Path(base_path),
@@ -194,6 +202,8 @@ def describe(package: str) -> ModelInfo:
         or getattr(module, "DATA_PATH", None),
         experiments=registry if isinstance(registry, dict) else None,
         absolute_tolerance=_attribute(f"{package}.helpers", "ABSOLUTE_TOLERANCE"),
+        relative_tolerance=_attribute(f"{package}.helpers", "RELATIVE_TOLERANCE"),
+        run_experiments=run if callable(run) else None,
         fit_definitions=definitions if isinstance(definitions, dict) else None,
     )
 
@@ -403,8 +413,13 @@ def dump(args: argparse.Namespace) -> int:
         tolerances["absolute_tolerance"] = info.absolute_tolerance
     elif args.atol is not None:
         tolerances["absolute_tolerance"] = float(args.atol)
-    if args.rtol is not None:
-        tolerances["relative_tolerance"] = args.rtol
+    if args.rtol == "model":
+        if info.relative_tolerance is None:
+            print(f"{args.model} has no relative tolerance of its own", file=sys.stderr)
+            return 2
+        tolerances["relative_tolerance"] = info.relative_tolerance
+    elif args.rtol is not None:
+        tolerances["relative_tolerance"] = float(args.rtol)
 
     result = Dump(
         model=args.model,
@@ -776,6 +791,127 @@ def definitions(args: argparse.Namespace) -> int:
     return 0
 
 
+# --- settings -------------------------------------------------------------------
+
+
+def _plain(value: object) -> object:
+    """A json value of a setting: paths as posix strings, classes by name."""
+    if isinstance(value, Path):
+        return value.as_posix()
+    if isinstance(value, type):
+        return value.__name__
+    if isinstance(value, list | tuple):
+        return [_plain(item) for item in value]
+    return serialize(value)
+
+
+def capture_settings(
+    run_experiments: Callable[..., object],
+    experiment: type["SimulationExperiment"],
+    root: Path,
+) -> dict[str, Any]:
+    """Capture the settings a run of an experiment hands to sbmlsim.
+
+    The run is intercepted where it reaches sbmlsim: the arguments of the
+    simulator, of the runner and of the run of the experiments, and the
+    settings of the figures and `savefig.dpi` of matplotlib at the time of the
+    run. Nothing is simulated and no report is written. The figure settings of
+    sbmlsim are restored afterwards, also those a legacy run leaves set.
+
+    Args:
+        run_experiments: the run of a model, `MODEL.run_experiments` or the
+            `run_experiments` of a legacy `helpers` module.
+        experiment: the experiment class the run gets.
+        root: the checkout; it is replaced by `<root>` in the paths.
+
+    Returns:
+        The settings as json values.
+    """
+    from unittest import mock
+
+    import matplotlib
+    from sbmlsim.experiment import ExperimentRunner
+    from sbmlsim.plot import Figure
+    from sbmlsim.report.experiment_report import ExperimentReport
+    from sbmlsim.simulator.simulation_serial import SimulatorSerial
+
+    from pkpdsim.model import FIGURE_ATTRIBUTES
+    from pkpdsim.testing import restored_figure_settings
+
+    captured: dict[str, object] = {"experiment": experiment.__name__}
+    simulator_init = SimulatorSerial.__init__
+    runner_init = ExperimentRunner.__init__
+
+    def record_simulator(self: object, *args: object, **kwargs: object) -> None:
+        captured["simulator"] = {k: _plain(v) for k, v in sorted(kwargs.items())}
+        simulator_init(self, *args, **kwargs)  # ty: ignore[invalid-argument-type]
+
+    def record_runner(self: object, *args: object, **kwargs: object) -> None:
+        # the simulator is captured on its own; as an object it carries memory
+        # addresses, which differ between any two runs
+        captured["runner"] = {
+            k: _plain(v) for k, v in sorted(kwargs.items()) if k != "simulator"
+        }
+        runner_init(self, *args, **kwargs)  # ty: ignore[invalid-argument-type]
+
+    def record_run(self: object, *args: object, **kwargs: object) -> list[object]:
+        captured["run"] = {
+            k: _plain(v) for k, v in sorted(kwargs.items()) if k != "output_path"
+        }
+        captured["figure"] = {
+            name: _plain(getattr(Figure, name)) for name in FIGURE_ATTRIBUTES
+        }
+        captured["savefig_dpi"] = _plain(matplotlib.rcParams["savefig.dpi"])
+        return []
+
+    def no_report(
+        self: object, output_path: Path, *args: object, **kwargs: object
+    ) -> Path:
+        return output_path
+
+    with (
+        tempfile.TemporaryDirectory() as tmp,
+        restored_figure_settings(),
+        mock.patch.object(SimulatorSerial, "__init__", record_simulator),
+        mock.patch.object(ExperimentRunner, "__init__", record_runner),
+        mock.patch.object(ExperimentRunner, "run_experiments", record_run),
+        mock.patch.object(ExperimentReport, "create_report", no_report),
+    ):
+        run_experiments(experiment, output_dir=Path(tmp) / "settings")
+    text = json.dumps(captured, sort_keys=True, default=str)
+    resolved = root.resolve().as_posix()
+    return json.loads(text.replace(resolved, "<root>"))
+
+
+def settings(args: argparse.Namespace) -> int:
+    """Write the settings of a run of the experiments of a model as json."""
+    root = Path(args.root).resolve()
+    sys.path.insert(0, str(root))
+    if message := _outside_root(args.model, root):
+        print(message, file=sys.stderr)
+        return 2
+    info = describe(args.model)
+    if info.run_experiments is None:
+        print(f"{args.model} has no run of its experiments", file=sys.stderr)
+        return 2
+    classes = registered_experiments(info) or []
+    if args.experiment:
+        experiment = {c.__name__: c for c in classes}.get(args.experiment)
+    else:
+        experiment = next(iter(classes), None)
+    if experiment is None:
+        print(
+            f"no experiment {args.experiment or ''} in the registry of {args.model}",
+            file=sys.stderr,
+        )
+        return 2
+    captured = capture_settings(info.run_experiments, experiment, root)
+    Path(args.out).write_text(
+        json.dumps(captured, indent=2, sort_keys=True), encoding="utf-8"
+    )
+    return 0
+
+
 # --- png ------------------------------------------------------------------------
 
 
@@ -992,7 +1128,9 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument(
         "--atol", help="absolute tolerance, or `model` for that of the model"
     )
-    s.add_argument("--rtol", type=float, help="relative tolerance")
+    s.add_argument(
+        "--rtol", help="relative tolerance, or `model` for that of the model"
+    )
     s.add_argument(
         "--reduced-selections",
         action="store_true",
@@ -1023,6 +1161,17 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("--model", required=True, help=MODEL_HELP)
     s.add_argument(
         "--out", required=True, help="json file the definitions are written to"
+    )
+
+    s = command(
+        "settings", settings, "the settings a run of a model hands to sbmlsim as json"
+    )
+    s.add_argument("--root", required=True, help=ROOT_HELP)
+    s.add_argument("--model", required=True, help=MODEL_HELP)
+    s.add_argument("--out", required=True, help="json file the settings are written to")
+    s.add_argument(
+        "--experiment",
+        help="the experiment class to run, the first of the registry by default",
     )
 
     s = command("png", png, "compare the PNG figures of two directories")
