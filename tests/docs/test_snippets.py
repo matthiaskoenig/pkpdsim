@@ -37,7 +37,8 @@ RUNNER = """
 import json
 import sys
 
-blocks = json.loads(open("blocks.json", encoding="utf-8").read())
+with open("blocks.json", encoding="utf-8") as file:
+    blocks = json.load(file)
 namespace = {"__name__": "__main__"}
 for number, code in blocks:
     try:
