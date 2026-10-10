@@ -40,8 +40,9 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
     - name: Test with tox
+      # the slowest tests are listed in the log, so that they stay visible
       run:
-        uvx --with tox-uv tox -e py${{ matrix.python-version }}
+        uvx --with tox-uv tox -e py${{ matrix.python-version }} -- --durations=15
 
   tests:
     # the one check the branch protection requires; the names of the matrix
