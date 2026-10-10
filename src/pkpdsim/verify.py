@@ -62,7 +62,7 @@ import pkgutil
 import sys
 import tempfile
 import traceback
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -412,14 +412,22 @@ def dump(args: argparse.Namespace) -> int:
             return 2
         tolerances["absolute_tolerance"] = info.absolute_tolerance
     elif args.atol is not None:
-        tolerances["absolute_tolerance"] = float(args.atol)
+        try:
+            tolerances["absolute_tolerance"] = float(args.atol)
+        except ValueError:
+            print(f"--atol is a number or `model`, not {args.atol}", file=sys.stderr)
+            return 2
     if args.rtol == "model":
         if info.relative_tolerance is None:
             print(f"{args.model} has no relative tolerance of its own", file=sys.stderr)
             return 2
         tolerances["relative_tolerance"] = info.relative_tolerance
     elif args.rtol is not None:
-        tolerances["relative_tolerance"] = float(args.rtol)
+        try:
+            tolerances["relative_tolerance"] = float(args.rtol)
+        except ValueError:
+            print(f"--rtol is a number or `model`, not {args.rtol}", file=sys.stderr)
+            return 2
 
     result = Dump(
         model=args.model,
@@ -800,9 +808,38 @@ def _plain(value: object) -> object:
         return value.as_posix()
     if isinstance(value, type):
         return value.__name__
+    if isinstance(value, dict):
+        return {str(k): _plain(v) for k, v in value.items()}
     if isinstance(value, list | tuple):
         return [_plain(item) for item in value]
     return serialize(value)
+
+
+def _bound(
+    original: Callable[..., object],
+    args: tuple[object, ...],
+    kwargs: dict[str, object],
+    skip: Collection[str] = (),
+) -> dict[str, object]:
+    """The arguments of a call bound to the signature of `original`, defaults applied.
+
+    A positional and a keyword call of the same values give the same result.
+    `self` and the names in `skip` are left out.
+    """
+    signature = inspect.signature(original)
+    bound = signature.bind(*args, **kwargs)
+    bound.apply_defaults()
+    arguments: dict[str, object] = {}
+    for name, value in bound.arguments.items():
+        if signature.parameters[name].kind is inspect.Parameter.VAR_KEYWORD:
+            arguments.update(value)
+        else:
+            arguments[name] = value
+    return {
+        name: _plain(value)
+        for name, value in sorted(arguments.items())
+        if name != "self" and name not in skip
+    }
 
 
 def capture_settings(
@@ -813,10 +850,12 @@ def capture_settings(
     """Capture the settings a run of an experiment hands to sbmlsim.
 
     The run is intercepted where it reaches sbmlsim: the arguments of the
-    simulator, of the runner and of the run of the experiments, and the
-    settings of the figures and `savefig.dpi` of matplotlib at the time of the
-    run. Nothing is simulated and no report is written. The figure settings of
-    sbmlsim are restored afterwards, also those a legacy run leaves set.
+    simulator, of the runner and of the run of the experiments (bound to the
+    signatures, so positional and keyword calls agree), the settings of the
+    figures, and every matplotlib `rcParams` entry which differs from the value
+    before the run, at the time of the run. `calls` counts the intercepted
+    calls. Nothing is simulated and no report is written. The figure settings
+    of sbmlsim are restored afterwards, also those a legacy run leaves set.
 
     Args:
         run_experiments: the run of a model, `MODEL.run_experiments` or the
@@ -826,6 +865,10 @@ def capture_settings(
 
     Returns:
         The settings as json values.
+
+    Raises:
+        RuntimeError: if the run does not reach the simulator, the runner and
+            the run of the experiments of sbmlsim.
     """
     from unittest import mock
 
@@ -838,30 +881,36 @@ def capture_settings(
     from pkpdsim.model import FIGURE_ATTRIBUTES
     from pkpdsim.testing import restored_figure_settings
 
-    captured: dict[str, object] = {"experiment": experiment.__name__}
+    captured: dict[str, Any] = {"experiment": experiment.__name__}
+    calls = dict.fromkeys(("simulator", "runner", "run"), 0)
     simulator_init = SimulatorSerial.__init__
     runner_init = ExperimentRunner.__init__
+    run_original = ExperimentRunner.run_experiments
+    baseline = dict(matplotlib.rcParams)
 
-    def record_simulator(self: object, *args: object, **kwargs: object) -> None:
-        captured["simulator"] = {k: _plain(v) for k, v in sorted(kwargs.items())}
-        simulator_init(self, *args, **kwargs)  # ty: ignore[invalid-argument-type]
+    def record_simulator(*args: object, **kwargs: object) -> None:
+        calls["simulator"] += 1
+        captured["simulator"] = _bound(simulator_init, args, kwargs)
+        simulator_init(*args, **kwargs)  # ty: ignore[invalid-argument-type]
 
-    def record_runner(self: object, *args: object, **kwargs: object) -> None:
+    def record_runner(*args: object, **kwargs: object) -> None:
+        calls["runner"] += 1
         # the simulator is captured on its own; as an object it carries memory
         # addresses, which differ between any two runs
-        captured["runner"] = {
-            k: _plain(v) for k, v in sorted(kwargs.items()) if k != "simulator"
-        }
-        runner_init(self, *args, **kwargs)  # ty: ignore[invalid-argument-type]
+        captured["runner"] = _bound(runner_init, args, kwargs, skip={"simulator"})
+        runner_init(*args, **kwargs)  # ty: ignore[invalid-argument-type]
 
-    def record_run(self: object, *args: object, **kwargs: object) -> list[object]:
-        captured["run"] = {
-            k: _plain(v) for k, v in sorted(kwargs.items()) if k != "output_path"
-        }
+    def record_run(*args: object, **kwargs: object) -> list[object]:
+        calls["run"] += 1
+        captured["run"] = _bound(run_original, args, kwargs, skip={"output_path"})
         captured["figure"] = {
             name: _plain(getattr(Figure, name)) for name in FIGURE_ATTRIBUTES
         }
-        captured["savefig_dpi"] = _plain(matplotlib.rcParams["savefig.dpi"])
+        captured["rc"] = {
+            key: _plain(value)
+            for key, value in sorted(dict(matplotlib.rcParams).items())
+            if key not in baseline or bool(value != baseline[key])
+        }
         return []
 
     def no_report(
@@ -878,9 +927,21 @@ def capture_settings(
         mock.patch.object(ExperimentReport, "create_report", no_report),
     ):
         run_experiments(experiment, output_dir=Path(tmp) / "settings")
+    missing = [
+        key
+        for key in ("simulator", "runner", "run", "figure", "rc")
+        if key not in captured
+    ]
+    if missing:
+        raise RuntimeError(
+            f"the run did not reach sbmlsim, nothing captured for {missing}"
+        )
+    captured["calls"] = calls
     text = json.dumps(captured, sort_keys=True, default=str)
-    resolved = root.resolve().as_posix()
-    return json.loads(text.replace(resolved, "<root>"))
+    for path in (root.resolve(), root.absolute()):
+        for form in (path.as_posix(), str(path), json.dumps(str(path))[1:-1]):
+            text = text.replace(form, "<root>")
+    return json.loads(text)
 
 
 def settings(args: argparse.Namespace) -> int:
@@ -905,7 +966,13 @@ def settings(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 2
-    captured = capture_settings(info.run_experiments, experiment, root)
+    try:
+        captured = capture_settings(
+            info.run_experiments, experiment, Path(args.root).absolute()
+        )
+    except RuntimeError as err:
+        print(f"{args.model}: {err}", file=sys.stderr)
+        return 2
     Path(args.out).write_text(
         json.dumps(captured, indent=2, sort_keys=True), encoding="utf-8"
     )

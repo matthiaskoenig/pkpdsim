@@ -6,11 +6,13 @@ import pickle
 import re
 import shutil
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
 import pytest
 from PIL import Image
+from sbmlsim.experiment import SimulationExperiment
 from sbmlsim.plot import Figure
 
 from pkpdsim.model import FigureSettings
@@ -270,7 +272,8 @@ def test_capture_settings_of_a_model() -> None:
     assert settings["run"]["reduced_selections"] is True
     assert settings["run"]["save_results"] is False
     assert settings["figure"]["legend_fontsize"] == 7
-    assert settings["savefig_dpi"] == 30
+    assert settings["rc"]["savefig.dpi"] == 30
+    assert settings["calls"] == {"simulator": 1, "runner": 1, "run": 1}
     assert "<root>" in settings["simulator"]["model"]
 
 
@@ -338,3 +341,131 @@ def test_dump_with_the_relative_tolerance_of_the_model(tmp_path: Path) -> None:
         ]
     )
     assert code == 0
+
+
+def _fake_run(positional: bool) -> "Callable[..., object]":
+    from sbmlsim.experiment import ExperimentRunner
+    from sbmlsim.simulator.simulation_serial import SimulatorSerial
+
+    def run(experiment: type[SimulationExperiment], output_dir: Path) -> None:
+        if positional:
+            simulator = SimulatorSerial(MODEL_PATH, absolute_tolerance=1e-10)
+            runner = ExperimentRunner([experiment], TOY_PATH, DATA_PATHS, simulator)
+            runner.run_experiments(output_dir, False, False, ["png"])
+        else:
+            simulator = SimulatorSerial(model=MODEL_PATH, absolute_tolerance=1e-10)
+            runner = ExperimentRunner(
+                experiment_classes=[experiment],
+                simulator=simulator,
+                data_path=DATA_PATHS,
+                base_path=TOY_PATH,
+            )
+            runner.run_experiments(
+                output_path=output_dir,
+                show_figures=False,
+                save_results=False,
+                figure_formats=["png"],
+            )
+
+    return run
+
+
+def test_capture_settings_binds_positional_arguments() -> None:
+    from pkpdsim.verify import capture_settings
+
+    a = capture_settings(_fake_run(True), ToyDecay, TESTS_DIR)
+    b = capture_settings(_fake_run(False), ToyDecay, TESTS_DIR)
+    assert a == b
+    assert a["simulator"]["absolute_tolerance"] == 1e-10
+    assert a["run"]["figure_formats"] == ["png"]
+    assert a["runner"]["experiment_classes"] == ["ToyDecay"]
+
+
+def test_capture_settings_requires_a_complete_run(tmp_path: Path) -> None:
+    from pkpdsim.verify import capture_settings
+
+    with pytest.raises(RuntimeError, match="did not reach sbmlsim"):
+        capture_settings(lambda experiment, output_dir: None, ToyDecay, TESTS_DIR)
+
+
+def test_capture_settings_counts_the_calls() -> None:
+    from sbmlsim.experiment import ExperimentRunner
+
+    from pkpdsim.verify import capture_settings
+
+    inner = _fake_run(False)
+
+    def twice(experiment: type[SimulationExperiment], output_dir: Path) -> None:
+        inner(experiment, output_dir)
+        ExperimentRunner([experiment], TOY_PATH, DATA_PATHS)
+
+    settings = capture_settings(twice, ToyDecay, TESTS_DIR)
+    assert settings["calls"] == {"simulator": 1, "runner": 2, "run": 1}
+
+
+def test_settings_of_a_run_which_misses_sbmlsim_exit_with_2(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(MODEL.__class__, "run_experiments", lambda self, *a, **k: None)
+    code = verify(
+        [
+            "settings",
+            "--root",
+            str(TESTS_DIR),
+            "--model",
+            "pkpdsim_toy",
+            "--out",
+            str(tmp_path / "s.json"),
+        ]
+    )
+    assert code == 2
+
+
+def test_capture_settings_records_the_matplotlib_settings() -> None:
+    import matplotlib
+
+    from pkpdsim.verify import capture_settings
+
+    other = dataclasses.replace(MODEL, figures=FigureSettings(savefig_dpi=55))
+    assert (
+        capture_settings(other.run_experiments, ToyDecay, TESTS_DIR)["rc"][
+            "savefig.dpi"
+        ]
+        == 55
+    )
+
+    def with_font(experiment: type[SimulationExperiment], output_dir: Path) -> None:
+        with matplotlib.rc_context({"font.size": 3}):
+            MODEL.run_experiments(experiment, output_dir)
+
+    rc = capture_settings(with_font, ToyDecay, TESTS_DIR)["rc"]
+    assert rc["font.size"] == 3
+    assert rc["savefig.dpi"] == 30
+
+
+def test_plain_converts_nested_paths() -> None:
+    from pkpdsim.verify import _plain
+
+    value = _plain({"a": [{"b": TESTS_DIR / "x"}], "c": (TESTS_DIR,)})
+    assert value == {
+        "a": [{"b": (TESTS_DIR / "x").as_posix()}],
+        "c": [TESTS_DIR.as_posix()],
+    }
+
+
+def test_dump_with_a_bad_tolerance_exits_with_2(tmp_path: Path) -> None:
+    for option in ("--atol", "--rtol"):
+        code = verify(
+            [
+                "dump",
+                "--root",
+                str(TESTS_DIR),
+                "--model",
+                "pkpdsim_legacy",
+                "--out",
+                str(tmp_path / "d.pkl"),
+                option,
+                "abc",
+            ]
+        )
+        assert code == 2
