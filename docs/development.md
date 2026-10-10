@@ -92,13 +92,13 @@ From now on every commit is checked with ruff (lint and format) and ty, i.e., th
 
 ### libroadrunner on Linux
 
-The simulator [libroadrunner](https://libroadrunner.org) is a dependency, and its extension links against `libpython`. The standalone interpreters which uv installs ship `libpython` in their `lib` directory, where the loader of Linux does not look, so `import roadrunner` fails with `libpython3.14.so.1.0: cannot open shared object file`. Put the directory on the library search path:
+The interpreters of uv keep `libpython`, which the extension of libroadrunner links against, outside the search path of the loader on Linux, see [Installation](installation.md#dependencies). Before running the tests:
 
 ```bash
 export LD_LIBRARY_PATH="$(uv run python -c 'import sys; print(sys.base_prefix)')/lib"
 ```
 
-The workflows do the same in `.github/actions/setup`. An interpreter of the system or of conda is not affected, nor are macOS and Windows.
+The workflows do the same in `.github/actions/setup`.
 
 ## Testing
 

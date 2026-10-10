@@ -75,6 +75,7 @@ PAGES: list[str] = sorted(
 def test_pages_are_found() -> None:
     """The pages with snippets are discovered."""
     assert "index.md" in PAGES
+    assert "licenses.md" in PAGES
 
 
 @pytest.mark.parametrize("name", PAGES)

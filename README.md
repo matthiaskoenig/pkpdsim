@@ -7,9 +7,41 @@
 
 `pkpdsim` is a python package with the building blocks shared by physiologically based pharmacokinetic and pharmacodynamic (PBPK/PD) models in [SBML](https://sbml.org). The models of [pkdb_models](https://github.com/matthiaskoenig/pkdb_models) are written in python with the factory of [sbmlutils](https://github.com/matthiaskoenig/sbmlutils) and simulated with [sbmlsim](https://github.com/matthiaskoenig/sbmlsim); what they share lives in `pkpdsim`, so that the folder of a model imports nothing but itself and released packages.
 
+Features include
+
+- **templates and annotations** - the creators and the terms of use of a model, the annotations of the compartments which recur in the models (liver, kidneys, gut, blood, urine, ...)
+- **study data** - the study folders of [PK-DB](https://pk-db.com) in a checkout of [pkdb_data](https://github.com/matthiaskoenig/pkdb_data), found through the environment variable `PKDB_DATA`, and the data of a model collected from them into its own folder
+- **initial values** - the same initial concentration or amount of a substance in every tissue of a model, which removes the distribution kinetics
+- **licenses** - the texts of CC BY-SA 4.0 and MIT for the COMBINE archive of a model, written byte for byte the same on every platform
+
 The documentation is available at [https://matthiaskoenig.github.io/pkpdsim](https://matthiaskoenig.github.io/pkpdsim).
 
 If you have any questions or issues please [open an issue](https://github.com/matthiaskoenig/pkpdsim/issues).
+
+## Quickstart
+
+```python
+from pathlib import Path
+
+from pkpdsim.annotations import compartments
+from pkpdsim.licenses import License, write_license
+from pkpdsim.templates import creators
+
+print(creators[0].givenName, creators[0].familyName)
+print([resource for _, resource in compartments["li"]])
+
+results = Path("results")
+results.mkdir()
+print(write_license(results, License.MIT, copyright="2026 Matthias König").name)
+```
+
+```text
+Matthias König
+['fma/FMA:7197', 'bto/BTO:0000759', 'ncit/C12392']
+mit.txt
+```
+
+The [user guide](https://matthiaskoenig.github.io/pkpdsim/templates/) of the documentation describes every module with a snippet which runs.
 
 ## How to cite
 

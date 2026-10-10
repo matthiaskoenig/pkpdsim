@@ -4,6 +4,10 @@
 # A commit only checks the changed files; `pre-commit run --all-files` checks
 # the whole repository, which is what a newly added hook should be tried with.
 
+# The license texts of the package are written into the COMBINE archives of
+# the models byte for byte, so the whitespace hooks below leave them alone
+# (the text of CC BY-SA 4.0 ends with an empty line).
+
 repos:
 - repo: https://github.com/pre-commit/pre-commit-hooks
   rev: v6.0.0
@@ -23,8 +27,10 @@ repos:
     description: Check for symlinks which do not point to anything
   - id: trailing-whitespace
     description: Trim trailing whitespaces
+    exclude: '^src/pkpdsim/resources/'
   - id: end-of-file-fixer
     description: Fix empty lines at ends of files
+    exclude: '^src/pkpdsim/resources/'
   - id: detect-private-key
     description: Detects the presence of private keys
   - id: check-case-conflict
@@ -32,6 +38,7 @@ repos:
   - id: mixed-line-ending
     description: Normalize mixed line endings
     args: [ --fix=lf ]
+    exclude: '^src/pkpdsim/resources/'
   - id: debug-statements
     description: Check for forgotten breakpoints and debugger imports
 

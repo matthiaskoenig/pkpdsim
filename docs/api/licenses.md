@@ -1,0 +1,3 @@
+# licenses
+
+::: pkpdsim.licenses
