@@ -18,6 +18,7 @@ experiments of the model derive from that base:
 from typing import ClassVar, NamedTuple
 
 from pkpdsim.experiment import PKPDSimulationExperiment
+from sbmlsim import Q
 from sbmlsim.units import Quantity
 
 from pkdb_models.models.hctz import MODEL
@@ -51,7 +52,7 @@ set by a simulation), `data` (the selections for every task),
 `load_dataframe(fig_id, study=None, *, na_values=None)` and
 `load_dataframes_by_substance(fig_id, study=None)` (the digitized data of the
 figure or table `Fig1` of the study, by default that of the experiment, read
-from the `data_paths` of the experiment) and `figures_by_sid(*figures)`. A model
+from the `data_path` of the experiment, a path or paths) and `figures_by_sid(*figures)`. A model
 overrides what it does differently, e.g. `default_changes` for a model whose
 simulations set a parameter.
 
@@ -165,8 +166,11 @@ every allowed field has one of its values and no excluded field has one of its
 values. `observable_filter(observables)` selects by the id of the observable
 (`observable_id`, the id without the task). Both are callables of sbmlsim's
 `MappingFilter` and have a readable `repr`. An unknown field, a class which is no
-dataclass, a filter without clauses and an empty set of allowed values raise when
-the module of the filters is imported:
+dataclass or is an instance, a filter without clauses, an empty set of allowed
+values (it selects nothing) or of excluded values (it excludes nothing) and values
+which are no collection raise when the module of the filters is imported. A single
+value is an error, not a set of its characters: write `route={Route.IV}`, not
+`route=Route.IV`:
 
 ```python
 from types import SimpleNamespace
@@ -186,6 +190,11 @@ assert filter_control("Fig1", mapping)
 
 try:
     metadata_filter(HctzMappingMetaData, rout={Route.PO})
+except TypeError as err:
+    print(err)
+
+try:
+    metadata_filter(HctzMappingMetaData, route=Route.PO)
 except TypeError as err:
     print(err)
 ```
@@ -263,8 +272,8 @@ remain:
 pkpdsim-verify compare base.pkl new.pkl --renames renames.json
 ```
 
-The file is json with the parts `metadata` and `strings`, any other part is an
-error (exit code 2):
+The file is a json object with the parts `metadata` and `strings`; an unknown part
+or a part of the wrong type is an error (exit code 2):
 
 ```json
 {
