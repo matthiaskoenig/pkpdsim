@@ -4,7 +4,9 @@ A model package describes itself once, in its `__init__.py`, as a `PKPDModel`.
 The commands, the verification and the tests of pkpdsim work with this object;
 what stays in the package is what is the model's own: its factory, the registry
 of its experiments, its fit definitions and parameters, the filters of its
-mapping collections and its tolerances.
+mapping collections and its tolerances. The base class of its experiments, the
+vocabulary of their metadata and the filters of the fits are described in
+[Experiments and their metadata](experiments.md).
 
 ```python
 # not executed
@@ -116,6 +118,10 @@ references resolve (`check_model`), the experiments initialize
 (`initialize_experiments`), all experiments run (`run_all_experiments`) and every
 fit starts (`start_fits`).
 
+The known exceptions of a model (experiments which are not registered, modules
+which do not import, experiments which run one at a time) are its `checks`, see
+[Experiments and their metadata](experiments.md#exceptions-of-the-tests).
+
 `check_model` also checks that the name of the model is the last component of its
 package (or that component ends with `_<name>`), that `model_path`, the factory
 directory and `archive_path` lie below the path of the model, and that the data
@@ -141,7 +147,8 @@ pkpdsim-verify sbml old.xml new.xml
 
 `--atol model` and `--rtol model` take the tolerances of the model object; any other value which is not a
 number exits with 2. A package without a model object exits with 2, and `compare --renames FILE` applies
-the expected renames of a migration to the old dump. `settings` captures what a run of the experiments hands to
+the expected renames of a migration to the old dump (see
+[Experiments and their metadata](experiments.md#renames-in-a-verification)). `settings` captures what a run of the experiments hands to
 sbmlsim, bound to the signatures: the arguments of `SimulatorSerial`, of
 `ExperimentRunner` (without the simulator) and of the run (without the output
 path), the attributes of `Figure`, the matplotlib `rc` settings a run changes and
