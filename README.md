@@ -4,6 +4,7 @@
 [![Version](https://img.shields.io/pypi/v/pkpdsim.svg)](https://pypi.org/project/pkpdsim/)
 [![Python Versions](https://img.shields.io/pypi/pyversions/pkpdsim.svg)](https://pypi.org/project/pkpdsim/)
 [![MIT License](https://img.shields.io/pypi/l/pkpdsim.svg)](https://opensource.org/licenses/MIT)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23297325.svg)](https://doi.org/10.5281/zenodo.23297325)
 
 `pkpdsim` is a python package with the building blocks shared by physiologically based pharmacokinetic and pharmacodynamic (PBPK/PD) models in [SBML](https://sbml.org). The models of [pkdb_models](https://github.com/matthiaskoenig/pkdb_models) are written in python with the factory of [sbmlutils](https://github.com/matthiaskoenig/sbmlutils) and simulated with [sbmlsim](https://github.com/matthiaskoenig/sbmlsim); what they share lives in `pkpdsim`, so that the folder of a model imports nothing but itself and released packages.
 
@@ -46,7 +47,24 @@ The [user guide](https://matthiaskoenig.github.io/pkpdsim/templates/) of the doc
 
 ## How to cite
 
-If you use `pkpdsim` please cite the archived software on [Zenodo](https://zenodo.org), whose DOI is added here with the first release.
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23297325.svg)](https://doi.org/10.5281/zenodo.23297325)
+
+If you use `pkpdsim` please cite the archived software on [Zenodo](https://doi.org/10.5281/zenodo.23297325):
+
+> König, M. (2026). *pkpdsim: building blocks of physiologically based pharmacokinetic and pharmacodynamic models in SBML* (Version 0.3.2) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.23297326
+
+```bibtex
+@software{konig_pkpdsim,
+  author    = {König, Matthias},
+  title     = {pkpdsim: building blocks of physiologically based pharmacokinetic and pharmacodynamic models in SBML},
+  year      = {2026},
+  month     = oct,
+  version   = {0.3.2},
+  publisher = {Zenodo},
+  doi       = {10.5281/zenodo.23297326},
+  url       = {https://doi.org/10.5281/zenodo.23297326},
+}
+```
 
 ## Installation
 
