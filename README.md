@@ -15,6 +15,7 @@ Features include
 - **initial values** - the same initial concentration or amount of a substance in every tissue of a model, which removes the distribution kinetics
 - **licenses** - the texts of CC BY-SA 4.0 and MIT for the COMBINE archive of a model, written byte for byte the same on every platform
 - **models and their commands** - the model object and the commands of a model (`run`, `fit`, `report`, `identifiability`), the tests of a model as functions and the verification of a change (`pkpdsim-verify`)
+- **experiments and their metadata** - the base class of the simulation experiments of a model, the presets of the impaired organ function, the shared vocabulary of the metadata of a fit mapping and the filters which select the mappings of a fit by it
 
 The documentation is available at [https://matthiaskoenig.github.io/pkpdsim](https://matthiaskoenig.github.io/pkpdsim).
 
