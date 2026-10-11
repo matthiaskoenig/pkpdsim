@@ -43,8 +43,8 @@ uv run pkpdsim-verify compare base.pkl new.pkl
 `--root` is the directory which is put first on the python path, e.g. a checkout
 of the repository of the model, so that its packages are imported. `--model` is
 the dotted name of a model package, which defines its model object `MODEL`
-(`pkpdsim.model.PKPDModel`), the model is described by it; a package without
-exits with 2. The command only needs the
+(`pkpdsim.model.PKPDModel`) which describes it; a package without a model object
+`MODEL` is a usage error (exit code 2). The command only needs the
 python packages of the environment it runs in, so a checkout which needs another
 version of sbmlsim is dumped with the python of an environment with that
 version, as long as it is one which pkpdsim supports.
@@ -591,12 +591,53 @@ def load_renames(path: str) -> Renames:
         ValueError: for a part which is not known.
     """
     renames = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(renames, dict):
+        raise ValueError(f"the renames {path} must be a json object")
     unknown = sorted(set(renames) - {"metadata", "strings"}) + sorted(
         set(renames.get("metadata", {})) - {"fields", "members", "added"}
     )
     if unknown:
         raise ValueError(f"unknown parts of the renames {path}: {unknown}")
-    return renames
+    _check_renames(path, renames)
+    return cast("Renames", renames)
+
+
+def _is_strings(value: object) -> bool:
+    """Check for a json object of strings."""
+    return isinstance(value, dict) and all(
+        isinstance(k, str) and isinstance(v, str) for k, v in value.items()
+    )
+
+
+def _check_renames(path: str, renames: dict[str, object]) -> None:
+    """Check the types of the parts of the renames.
+
+    Raises:
+        ValueError: naming the part which has the wrong type.
+    """
+    if "strings" in renames and not _is_strings(renames["strings"]):
+        raise ValueError(
+            f"the part strings of the renames {path} must map text to text"
+        )
+    if "metadata" not in renames:
+        return
+    metadata = renames["metadata"]
+    if not isinstance(metadata, dict):
+        raise ValueError(f"the part metadata of the renames {path} must be an object")
+    for part in ("fields", "added"):
+        if part in metadata and not _is_strings(metadata[part]):
+            raise ValueError(
+                f"the part {part} of the metadata of the renames {path} "
+                "must map text to text"
+            )
+    members = metadata.get("members", {})
+    if not isinstance(members, dict) or not all(
+        _is_strings(v) for v in members.values()
+    ):
+        raise ValueError(
+            f"the part members of the metadata of the renames {path} must map "
+            "a field to an object of text to text"
+        )
 
 
 def rename_mapping(description: str, renames: MetadataRenames) -> str:

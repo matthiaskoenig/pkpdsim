@@ -122,6 +122,35 @@ def test_a_filter_needs_a_clause_and_values() -> None:
         metadata_filter(ToyMappingMetaData, route=set())
 
 
+def test_a_single_value_is_not_a_collection() -> None:
+    with pytest.raises(TypeError, match=r"route.*collection"):
+        metadata_filter(ToyMappingMetaData, route=Route.IV)
+    with pytest.raises(TypeError, match=r"dosing.*collection"):
+        metadata_filter(ToyMappingMetaData, excluded={"dosing": Dosing.SINGLE})
+    with pytest.raises(TypeError, match=r"route.*collection"):
+        metadata_filter(ToyMappingMetaData, route=None)  # ty: ignore[invalid-argument-type]
+    with pytest.raises(TypeError, match=r"observables.*collection"):
+        observable_filter("Cve_hctz")
+
+
+def test_an_empty_exclusion_or_observable_set_is_an_error() -> None:
+    with pytest.raises(ValueError, match=r"excludes nothing.*dosing"):
+        metadata_filter(ToyMappingMetaData, excluded={"dosing": set()})
+    with pytest.raises(ValueError, match=r"observables.*selects nothing"):
+        observable_filter([])
+
+
+def test_the_metadata_class_is_not_an_instance() -> None:
+    metadata = ToyMappingMetaData(
+        tissue=Tissue.PLASMA,
+        route=Route.IV,
+        dosing=Dosing.SINGLE,
+        health=Health.HEALTHY,
+    )
+    with pytest.raises(TypeError, match="class, not an instance"):
+        metadata_filter(metadata, route={Route.IV})  # ty: ignore[invalid-argument-type]
+
+
 def test_the_metadata_class_must_be_a_dataclass() -> None:
     class OtherMetaData:
         route: Route
