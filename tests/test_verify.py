@@ -16,7 +16,7 @@ from sbmlsim.experiment import SimulationExperiment
 from sbmlsim.plot import Figure
 
 from pkpdsim.model import FigureSettings
-from pkpdsim.verify import _attribute, describe, verify
+from pkpdsim.verify import describe, load, load_renames, rename_mapping, verify
 from pkpdsim_toy import DATA_PATHS, MODEL, MODEL_PATH, TOY_PATH
 from pkpdsim_toy.experiments.decay import ToyDecay
 
@@ -35,21 +35,10 @@ def test_describe_a_model_object() -> None:
     assert set(info.fit_definitions) == {"DECAY"}
 
 
-def test_describe_a_package_by_the_conventions() -> None:
-    info = describe("pkpdsim_legacy")
-    assert info.base_path == TOY_PATH
-    assert info.model_path == MODEL_PATH
-    assert info.experiments is not None
-    assert info.absolute_tolerance == 1e-10
-    assert info.fit_definitions is not None
-
-
 def test_dump_and_compare(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     common = ["--root", str(TESTS_DIR), "--atol", "model", "--rtol", "1e-10"]
     old, new = tmp_path / "old.pkl", tmp_path / "new.pkl"
-    assert (
-        verify(["dump", "--model", "pkpdsim_legacy", "--out", str(old), *common]) == 0
-    )
+    assert verify(["dump", "--model", "pkpdsim_toy", "--out", str(old), *common]) == 0
     assert (
         verify(
             [
@@ -94,19 +83,6 @@ def test_definitions(tmp_path: Path) -> None:
     content = json.loads(out.read_text(encoding="utf-8"))
     assert set(content) == {"DECAY"}
     assert [p["pid"] for p in content["DECAY"]["parameters"]] == ["k"]
-    legacy = tmp_path / "legacy.json"
-    verify(
-        [
-            "definitions",
-            "--root",
-            str(TESTS_DIR),
-            "--model",
-            "pkpdsim_legacy",
-            "--out",
-            str(legacy),
-        ]
-    )
-    assert legacy.read_text(encoding="utf-8") == out.read_text(encoding="utf-8")
 
 
 def test_sbml(tmp_path: Path) -> None:
@@ -244,24 +220,6 @@ def test_an_unknown_model_package_fails() -> None:
         describe("pkpdsim_missing")
 
 
-def test_a_package_without_fit_definitions_is_described() -> None:
-    info = describe("pkpdsim_legacy_nofit")
-    assert info.fit_definitions is None
-    assert info.experiments is None
-    assert info.absolute_tolerance is None
-
-
-def test_a_missing_nested_module_has_no_attribute() -> None:
-    assert _attribute("pkpdsim_legacy_nofit.fitting.fitting", "FIT_DEFINITIONS") is None
-    assert _attribute("pkpdsim_legacy_nofit.helpers", "ABSOLUTE_TOLERANCE") is None
-
-
-def test_the_reraise_path_of_attribute_for_a_broken_module() -> None:
-    # the module exists but its own import fails: not "no such attribute"
-    with pytest.raises(ModuleNotFoundError, match="pkpdsim_does_not_exist"):
-        _attribute("pkpdsim_legacy_broken.helpers", "ABSOLUTE_TOLERANCE")
-
-
 def test_capture_settings_of_a_model() -> None:
     from pkpdsim.verify import capture_settings
 
@@ -289,24 +247,6 @@ def test_capture_settings_sees_a_difference() -> None:
     assert a["run"]["figure_formats"] != b["run"]["figure_formats"]
 
 
-def test_settings_of_a_model_and_of_its_legacy_package_agree(tmp_path: Path) -> None:
-    toy, legacy = tmp_path / "toy.json", tmp_path / "legacy.json"
-    for package, out in [("pkpdsim_toy", toy), ("pkpdsim_legacy", legacy)]:
-        code = verify(
-            [
-                "settings",
-                "--root",
-                str(TESTS_DIR),
-                "--model",
-                package,
-                "--out",
-                str(out),
-            ]
-        )
-        assert code == 0
-    assert toy.read_text(encoding="utf-8") == legacy.read_text(encoding="utf-8")
-
-
 def test_settings_leave_the_figure_settings_as_they_were(tmp_path: Path) -> None:
     before = Figure.legend_fontsize
     verify(
@@ -315,7 +255,7 @@ def test_settings_leave_the_figure_settings_as_they_were(tmp_path: Path) -> None
             "--root",
             str(TESTS_DIR),
             "--model",
-            "pkpdsim_legacy",
+            "pkpdsim_toy",
             "--out",
             str(tmp_path / "s.json"),
         ]
@@ -331,7 +271,7 @@ def test_dump_with_the_relative_tolerance_of_the_model(tmp_path: Path) -> None:
             "--root",
             str(TESTS_DIR),
             "--model",
-            "pkpdsim_legacy",
+            "pkpdsim_toy",
             "--out",
             str(out),
             "--atol",
@@ -461,7 +401,7 @@ def test_dump_with_a_bad_tolerance_exits_with_2(tmp_path: Path) -> None:
                 "--root",
                 str(TESTS_DIR),
                 "--model",
-                "pkpdsim_legacy",
+                "pkpdsim_toy",
                 "--out",
                 str(tmp_path / "d.pkl"),
                 option,
@@ -469,3 +409,82 @@ def test_dump_with_a_bad_tolerance_exits_with_2(tmp_path: Path) -> None:
             ]
         )
         assert code == 2
+
+
+def test_a_package_without_a_model_object_is_a_usage_error(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(ValueError, match="defines no model object"):
+        describe("pkpdsim_toy.experiments")
+    code = verify(
+        [
+            "dump",
+            "--root",
+            str(TESTS_DIR),
+            "--model",
+            "pkpdsim_toy.experiments",
+            "--out",
+            str(tmp_path / "x.pkl"),
+        ]
+    )
+    assert code == 2
+    assert "pkpdsim_toy.experiments defines no model object" in capsys.readouterr().err
+
+
+def test_the_metadata_of_a_mapping_is_renamed() -> None:
+    description = (
+        "fm|d|t|time|A|4|None|None|t|t|time|[A]|None|None|None|weight=None|"
+        + str([("data", "MEAN"), ("dosing", "MULTI"), ("route", "IV")])
+    )
+    renamed = rename_mapping(
+        description,
+        {
+            "fields": {"data": "data_type"},
+            "members": {"dosing": {"MULTI": "MULTIPLE"}},
+            "added": {"application_form": "NR"},
+        },
+    )
+    assert renamed.endswith(
+        str(
+            [
+                ("application_form", "NR"),
+                ("data_type", "MEAN"),
+                ("dosing", "MULTIPLE"),
+                ("route", "IV"),
+            ]
+        )
+    )
+
+
+def test_compare_applies_the_expected_renames(tmp_path: Path) -> None:
+    old, new = tmp_path / "old.pkl", tmp_path / "new.pkl"
+    args = ["--root", str(TESTS_DIR), "--model", "pkpdsim_toy"]
+    assert verify(["dump", *args, "--out", str(old)]) == 0
+    dump = load(str(old))
+    dump["mappings"] = {
+        sid: [d.replace("('route', 'IV')", "('route', 'IVX')") for d in descriptions]
+        for sid, descriptions in dump["mappings"].items()
+    }
+    dump["figures"] = {
+        sid: {key: spec.replace('"A"', '"A renamed"') for key, spec in figures.items()}
+        for sid, figures in dump["figures"].items()
+    }
+    new.write_bytes(pickle.dumps(dump))
+    renames = tmp_path / "renames.json"
+    assert verify(["compare", str(old), str(new)]) == 1
+    renames.write_text(
+        json.dumps(
+            {
+                "metadata": {"members": {"route": {"IV": "IVX"}}},
+                "strings": {'"A"': '"A renamed"'},
+            }
+        )
+    )
+    assert verify(["compare", str(old), str(new), "--renames", str(renames)]) == 0
+
+
+def test_a_renames_file_with_unknown_parts_is_an_error(tmp_path: Path) -> None:
+    renames = tmp_path / "renames.json"
+    renames.write_text(json.dumps({"metadata": {"member": {}}}))
+    with pytest.raises(ValueError, match="member"):
+        load_renames(str(renames))

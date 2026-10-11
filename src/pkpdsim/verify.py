@@ -7,7 +7,10 @@ them only where it is meant to. The subcommands make this checkable:
 - `dump` runs the simulation experiments of a model in a checkout and stores the
   results, the datasets, the fit mappings and the figures in a pickle,
 - `compare` compares two dumps: the simulations on their common output times,
-  relative to the scale of every array, everything else exactly,
+  relative to the scale of every array, everything else exactly; with
+  `--renames FILE` the expected renames of a migration (metadata fields and
+  members, added fields, texts such as legend keys) are applied to the old dump
+  first, see `load_renames`,
 - `ranges` lists the fit mappings of a dump whose data lie outside of the
   simulated range, e.g. data times beyond the end of the simulation,
 - `fits` builds the optimization problem of every fit definition of a model and
@@ -39,19 +42,16 @@ uv run pkpdsim-verify compare base.pkl new.pkl
 
 `--root` is the directory which is put first on the python path, e.g. a checkout
 of the repository of the model, so that its packages are imported. `--model` is
-the dotted name of a model package. A package with a `MODEL`
-(`pkpdsim.model.PKPDModel`) is described by it; a package without is described
-by the conventions of pkdb_models before pkpdsim 0.3.0: `<NAME>_PATH` (else the
-directory of the package), `MODEL_PATH`, `DATA_PATHS` (or `DATA_PATH`), the
-registry `simulations.EXPERIMENTS`, the tolerance `helpers.ABSOLUTE_TOLERANCE`
-and the fit definitions `fitting.fitting.FIT_DEFINITIONS`, so that a checkout
-from before the switch is the base of a comparison. The command only needs the
+the dotted name of a model package, which defines its model object `MODEL`
+(`pkpdsim.model.PKPDModel`), the model is described by it; a package without
+exits with 2. The command only needs the
 python packages of the environment it runs in, so a checkout which needs another
 version of sbmlsim is dumped with the python of an environment with that
 version, as long as it is one which pkpdsim supports.
 """
 
 import argparse
+import ast
 import importlib
 import inspect
 import json
@@ -66,7 +66,7 @@ from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict, cast
 
 import libsbml
 import numpy as np
@@ -129,18 +129,6 @@ class ModelInfo:
     fit_definitions: Mapping[str, "FitDefinition"] | None
 
 
-def _attribute(module_name: str, attribute: str) -> object | None:
-    """Get an attribute of a module, `None` if the module or a parent does not exist."""
-    try:
-        module = importlib.import_module(module_name)
-    except ModuleNotFoundError as err:
-        if err.name != module_name and not module_name.startswith(f"{err.name}."):
-            # the module exists but does not import
-            raise
-        return None
-    return getattr(module, attribute, None)
-
-
 def _outside_root(package: str, root: Path) -> str | None:
     """Check that a package was imported from below `root`.
 
@@ -160,52 +148,47 @@ def _outside_root(package: str, root: Path) -> str | None:
 
 
 def describe(package: str) -> ModelInfo:
-    """Describe a model package by its `MODEL` or by the conventions.
+    """Describe a model package by its model object `MODEL`.
 
     Args:
         package: the dotted name of the model package.
 
     Returns:
         What the verification needs of the model.
+
+    Raises:
+        ValueError: if the package defines no model object.
     """
     from pkpdsim.model import PKPDModel
 
     module = importlib.import_module(package)
     model = getattr(module, "MODEL", None)
-    if isinstance(model, PKPDModel):
-        return ModelInfo(
-            package=package,
-            base_path=model.path,
-            model_path=model.model_path,
-            data_path=list(model.data_paths) or None,
-            experiments=model.load_experiments() if model.experiments else None,
-            absolute_tolerance=model.simulator.absolute_tolerance,
-            relative_tolerance=model.simulator.relative_tolerance,
-            run_experiments=model.run_experiments,
-            fit_definitions=(
-                dict(model.load_fit_definitions()) if model.fit_definitions else None
-            ),
+    if not isinstance(model, PKPDModel):
+        raise ValueError(
+            f"{package} defines no model object MODEL (pkpdsim.model.PKPDModel)"
         )
-    name = package.rsplit(".", 1)[-1]
-    base_path = (
-        getattr(module, f"{name.upper()}_PATH", None)
-        or Path(str(module.__file__)).parent
-    )
-    registry = _attribute(f"{package}.simulations", "EXPERIMENTS")
-    definitions = _attribute(f"{package}.fitting.fitting", "FIT_DEFINITIONS")
-    run = _attribute(f"{package}.helpers", "run_experiments")
     return ModelInfo(
         package=package,
-        base_path=Path(base_path),
-        model_path=Path(module.MODEL_PATH),
-        data_path=getattr(module, "DATA_PATHS", None)
-        or getattr(module, "DATA_PATH", None),
-        experiments=registry if isinstance(registry, dict) else None,
-        absolute_tolerance=_attribute(f"{package}.helpers", "ABSOLUTE_TOLERANCE"),
-        relative_tolerance=_attribute(f"{package}.helpers", "RELATIVE_TOLERANCE"),
-        run_experiments=run if callable(run) else None,
-        fit_definitions=definitions if isinstance(definitions, dict) else None,
+        base_path=model.path,
+        model_path=model.model_path,
+        data_path=list(model.data_paths) or None,
+        experiments=model.load_experiments() if model.experiments else None,
+        absolute_tolerance=model.simulator.absolute_tolerance,
+        relative_tolerance=model.simulator.relative_tolerance,
+        run_experiments=model.run_experiments,
+        fit_definitions=(
+            dict(model.load_fit_definitions()) if model.fit_definitions else None
+        ),
     )
+
+
+def _describe(args: argparse.Namespace) -> ModelInfo | int:
+    """Describe the model of the arguments, or print the problem and return 2."""
+    try:
+        return describe(args.model)
+    except ValueError as err:
+        print(err, file=sys.stderr)
+        return 2
 
 
 def registered_experiments(
@@ -383,7 +366,9 @@ def dump(args: argparse.Namespace) -> int:
     if message := _outside_root(args.model, root):
         print(message, file=sys.stderr)
         return 2
-    info = describe(args.model)
+    info = _describe(args)
+    if isinstance(info, int):
+        return info
     errors: dict[str, str] = {}
     classes = registered_experiments(info)
     if classes is None:
@@ -580,9 +565,92 @@ def equal(a: object, b: object) -> bool:
     return a == b
 
 
+class MetadataRenames(TypedDict, total=False):
+    """The expected changes of the metadata of the fit mappings."""
+
+    #: old field name -> new field name
+    fields: dict[str, str]
+    #: field (new name) -> old member name -> new member name
+    members: dict[str, dict[str, str]]
+    #: field -> member name of a field the old metadata did not have
+    added: dict[str, str]
+
+
+class Renames(TypedDict, total=False):
+    """The expected renames between two dumps, applied to the old dump."""
+
+    metadata: MetadataRenames
+    #: old text -> new text, in every key and string of the old dump
+    strings: dict[str, str]
+
+
+def load_renames(path: str) -> Renames:
+    """Load the expected renames from a json file.
+
+    Raises:
+        ValueError: for a part which is not known.
+    """
+    renames = json.loads(Path(path).read_text(encoding="utf-8"))
+    unknown = sorted(set(renames) - {"metadata", "strings"}) + sorted(
+        set(renames.get("metadata", {})) - {"fields", "members", "added"}
+    )
+    if unknown:
+        raise ValueError(f"unknown parts of the renames {path}: {unknown}")
+    return renames
+
+
+def rename_mapping(description: str, renames: MetadataRenames) -> str:
+    """Apply the expected renames to the metadata of a mapping description."""
+    head, metadata = description.rsplit("|", 1)
+    fields = renames.get("fields", {})
+    items = {fields.get(k, k): v for k, v in ast.literal_eval(metadata)}
+    for name, members in renames.get("members", {}).items():
+        if name in items:
+            items[name] = members.get(items[name], items[name])
+    for name, member in renames.get("added", {}).items():
+        items.setdefault(name, member)
+    return f"{head}|{sorted(items.items())}"
+
+
+def _rename_strings(value: object, strings: Mapping[str, str]) -> object:
+    """Replace texts in every key and string of a value, arrays untouched."""
+    if isinstance(value, str):
+        for old, new in strings.items():
+            value = value.replace(old, new)
+        return value
+    if isinstance(value, dict):
+        return {
+            _rename_strings(k, strings): _rename_strings(v, strings)
+            for k, v in value.items()
+        }
+    if isinstance(value, list):
+        return [_rename_strings(v, strings) for v in value]
+    if isinstance(value, tuple):
+        return tuple(_rename_strings(v, strings) for v in value)
+    return value
+
+
+def apply_renames(dump: Dump, renames: Renames) -> Dump:
+    """Apply the expected renames to a dump, the old one of a comparison."""
+    if strings := renames.get("strings"):
+        dump = cast("Dump", _rename_strings(dict(dump), strings))
+    if metadata := renames.get("metadata"):
+        dump["mappings"] = {
+            sid: [rename_mapping(d, metadata) for d in descriptions]
+            for sid, descriptions in dump["mappings"].items()
+        }
+    return dump
+
+
 def compare(args: argparse.Namespace) -> int:
     """Compare two dumps; the exit code is 1 if they differ beyond the threshold."""
     old, new = load(args.old), load(args.new)
+    if args.renames:
+        try:
+            old = apply_renames(old, load_renames(args.renames))
+        except ValueError as err:
+            print(err, file=sys.stderr)
+            return 2
     names: set[str] = set(args.experiments)
 
     def selected(sid: str) -> bool:
@@ -739,7 +807,9 @@ def fits(args: argparse.Namespace) -> int:
     if message := _outside_root(args.model, root):
         print(message, file=sys.stderr)
         return 2
-    info = describe(args.model)
+    info = _describe(args)
+    if isinstance(info, int):
+        return info
     if info.fit_definitions is None:
         print(f"{args.model} has no fit definitions", file=sys.stderr)
         return 2
@@ -776,7 +846,9 @@ def definitions(args: argparse.Namespace) -> int:
     if message := _outside_root(args.model, root_path):
         print(message, file=sys.stderr)
         return 2
-    info = describe(args.model)
+    info = _describe(args)
+    if isinstance(info, int):
+        return info
     if info.fit_definitions is None:
         print(f"{args.model} has no fit definitions", file=sys.stderr)
         return 2
@@ -855,11 +927,10 @@ def capture_settings(
     figures, and every matplotlib `rcParams` entry which differs from the value
     before the run, at the time of the run. `calls` counts the intercepted
     calls. Nothing is simulated and no report is written. The figure settings
-    of sbmlsim are restored afterwards, also those a legacy run leaves set.
+    of sbmlsim are restored afterwards.
 
     Args:
-        run_experiments: the run of a model, `MODEL.run_experiments` or the
-            `run_experiments` of a legacy `helpers` module.
+        run_experiments: the run of a model, `MODEL.run_experiments`.
         experiment: the experiment class the run gets.
         root: the checkout; it is replaced by `<root>` in the paths.
 
@@ -951,7 +1022,9 @@ def settings(args: argparse.Namespace) -> int:
     if message := _outside_root(args.model, root):
         print(message, file=sys.stderr)
         return 2
-    info = describe(args.model)
+    info = _describe(args)
+    if isinstance(info, int):
+        return info
     if info.run_experiments is None:
         print(f"{args.model} has no run of its experiments", file=sys.stderr)
         return 2
@@ -1208,6 +1281,13 @@ def parser() -> argparse.ArgumentParser:
     s = command("compare", compare, "compare two dumps")
     s.add_argument("old")
     s.add_argument("new")
+    s.add_argument(
+        "--renames",
+        help=(
+            "json file of the expected renames, applied to the old dump "
+            "(metadata fields, members, added fields, strings)"
+        ),
+    )
     s.add_argument("--threshold", type=float, default=1e-6, help="default 1e-6")
     s.add_argument("--top", type=int, default=20, help="lines per listing")
     s.add_argument("experiments", nargs="*", help="only these experiments")
