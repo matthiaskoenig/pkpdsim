@@ -639,6 +639,10 @@ def apply_renames(dump: Dump, renames: Renames) -> Dump:
             sid: [rename_mapping(d, metadata) for d in descriptions]
             for sid, descriptions in dump["mappings"].items()
         }
+    # a dump stores the mappings sorted, and a rename can change the order
+    dump["mappings"] = {
+        sid: sorted(descriptions) for sid, descriptions in dump["mappings"].items()
+    }
     return dump
 
 

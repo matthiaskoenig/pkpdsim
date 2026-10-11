@@ -16,7 +16,14 @@ from sbmlsim.experiment import SimulationExperiment
 from sbmlsim.plot import Figure
 
 from pkpdsim.model import FigureSettings
-from pkpdsim.verify import describe, load, load_renames, rename_mapping, verify
+from pkpdsim.verify import (
+    apply_renames,
+    describe,
+    load,
+    load_renames,
+    rename_mapping,
+    verify,
+)
 from pkpdsim_toy import DATA_PATHS, MODEL, MODEL_PATH, TOY_PATH
 from pkpdsim_toy.experiments.decay import ToyDecay
 
@@ -488,3 +495,20 @@ def test_a_renames_file_with_unknown_parts_is_an_error(tmp_path: Path) -> None:
     renames.write_text(json.dumps({"metadata": {"member": {}}}))
     with pytest.raises(ValueError, match="member"):
         load_renames(str(renames))
+
+
+def test_renamed_mappings_are_sorted_like_a_dump() -> None:
+    old = {
+        "mappings": {
+            "E": [
+                "fm|a|t|time|A|4|None|None|t|t|time|[A]|None|None|None|weight=None|"
+                + str([("route", "B")]),
+                "fm|a|t|time|A|4|None|None|t|t|time|[A]|None|None|None|weight=None|"
+                + str([("route", "C")]),
+            ]
+        }
+    }
+    renames = {"metadata": {"members": {"route": {"B": "Z"}}}}
+    renamed = apply_renames(old, renames)  # ty: ignore[invalid-argument-type]
+    assert renamed["mappings"]["E"] == sorted(renamed["mappings"]["E"])
+    assert renamed["mappings"]["E"][0].endswith(str([("route", "C")]))
