@@ -123,16 +123,21 @@ def resolve_experiments(
 
 def run_parser(model: PKPDModel) -> argparse.ArgumentParser:
     """Get the parser of the `run` command of a model."""
-    actions = [action.value for action in Action]
+    with_experiments = model.experiments is not None
+    if with_experiments:
+        actions = [action.value for action in Action]
+    else:
+        actions = [Action.FACTORY.value, Action.ALL.value]
     actions += [extra.name for extra in model.extra_actions]
     action_help = "the action to perform" + "".join(
         f"; {extra.name}: {extra.help}" for extra in model.extra_actions
     )
-    p = argparse.ArgumentParser(
-        prog=f"run_{model.name}",
-        description="Run the model factory and the simulation experiments of the "
-        f"{model.title}.",
-    )
+    if with_experiments:
+        description = f"Run the model factory and the simulation experiments of the {model.title}."
+    else:
+        extras_text = " and its extra actions" if model.extra_actions else ""
+        description = f"Run the model factory of the {model.title}{extras_text}."
+    p = argparse.ArgumentParser(prog=f"run_{model.name}", description=description)
     p.add_argument("-a", "--action", required=True, choices=actions, help=action_help)
     p.add_argument(
         "-r",
@@ -142,28 +147,29 @@ def run_parser(model: PKPDModel) -> argparse.ArgumentParser:
         help="directory of the results, the simulations are written to its "
         "`simulation` folder (default: the results of the model)",
     )
-    p.add_argument(
-        "-e",
-        "--experiments",
-        help="comma separated groups and experiments to simulate, see "
-        "`--action list_experiments`",
-    )
-    p.add_argument(
-        "-o",
-        "--open",
-        action="store_true",
-        help="open the report of the simulations in the web browser",
-    )
-    p.add_argument(
-        "-f",
-        "--formats",
-        default=",".join(model.figures.formats),
-        help="comma separated formats of the figures: static images drawn by "
-        "matplotlib (e.g. 'svg', 'png') and interactive pages drawn by plotly "
-        "('html'). The report shows the SVG and links the interactive page; "
-        "without 'svg' the interactive page is embedded in the report "
-        "(default: %(default)s)",
-    )
+    if with_experiments:
+        p.add_argument(
+            "-e",
+            "--experiments",
+            help="comma separated groups and experiments to simulate, see "
+            "`--action list_experiments`",
+        )
+        p.add_argument(
+            "-o",
+            "--open",
+            action="store_true",
+            help="open the report of the simulations in the web browser",
+        )
+        p.add_argument(
+            "-f",
+            "--formats",
+            default=",".join(model.figures.formats),
+            help="comma separated formats of the figures: static images drawn by "
+            "matplotlib (e.g. 'svg', 'png') and interactive pages drawn by plotly "
+            "('html'). The report shows the SVG and links the interactive page; "
+            "without 'svg' the interactive page is embedded in the report "
+            "(default: %(default)s)",
+        )
     if model.extra_arguments is not None:
         resolve(model.extra_arguments, model.package)(p)
     return p
@@ -240,22 +246,19 @@ def run_command(model: PKPDModel, args: Sequence[str] | None = None) -> None:
     """
     p = run_parser(model)
     options = p.parse_args(args)
-    formats = parse_formats(options.formats)
-    if not formats:
-        p.error("'--formats' requires at least one format")
-    names = [
-        name.strip() for name in (options.experiments or "").split(",") if name.strip()
-    ]
-    if options.action == Action.SIMULATE and not names:
-        p.error("'--action simulate' requires '--experiments'")
-    if model.experiments is None and options.action in (
-        Action.SIMULATE,
-        Action.LIST_EXPERIMENTS,
-    ):
-        p.error(
-            f"the model '{model.name}' has no simulation experiments, "
-            f"'--action {options.action}' does not apply"
-        )
+    formats: list[str] = []
+    names: list[str] = []
+    if model.experiments is not None:
+        formats = parse_formats(options.formats)
+        if not formats:
+            p.error("'--formats' requires at least one format")
+        names = [
+            name.strip()
+            for name in (options.experiments or "").split(",")
+            if name.strip()
+        ]
+        if options.action == Action.SIMULATE and not names:
+            p.error("'--action simulate' requires '--experiments'")
 
     display.section(model.title, icon=":pill:")
     display.key_values({"action": options.action})

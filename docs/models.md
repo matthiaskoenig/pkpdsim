@@ -88,9 +88,11 @@ report_hctz --subset=PK results/fit/PK_<fit id>/parameters.json
 identifiability_hctz --subset=PK results/fit/PK_<fit id>/parameters.json
 ```
 
-A model without experiments (`experiments=None`) offers `--action factory`, and
-`--action all`, which then runs only the factory; `simulate` and
-`list_experiments` are a usage error for it.
+The command of a model without experiments (`experiments=None`) offers only
+`--action factory`, `--action all` (which runs only the factory and the extra
+actions with `in_all`) and its extra actions, and none of `--experiments`,
+`--open` and `--formats`; `simulate` and `list_experiments` are a usage error
+for it.
 
 A model adds actions of its own to `run_<model>` with `ExtraAction` and their
 options with `extra_arguments`, e.g. analyses which are not simulation

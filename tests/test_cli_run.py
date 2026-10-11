@@ -160,7 +160,7 @@ NO_EXPERIMENTS = dataclasses.replace(MODEL, experiments=None, fit_definitions=No
 @pytest.mark.parametrize("action", ["simulate", "list_experiments"])
 def test_a_model_without_experiments_cannot_simulate(action: str) -> None:
     with pytest.raises(SystemExit) as error:
-        run_command(NO_EXPERIMENTS, ["-a", action, "-e", "all"])
+        run_command(NO_EXPERIMENTS, ["-a", action])
     assert error.value.code == 2
 
 
@@ -175,3 +175,41 @@ def test_the_factory_of_a_model_without_experiments(tmp_path: Path) -> None:
     model = dataclasses.replace(NO_EXPERIMENTS, factory_path=tmp_path)
     run_command(model, ["-a", "factory"])
     assert (tmp_path / "toy.xml").exists()
+
+
+def test_the_help_of_a_model_without_experiments_offers_what_applies() -> None:
+    text = " ".join(run_parser(NO_EXPERIMENTS).format_help().split())
+    assert "Run the model factory of the" in text
+    assert "simulation experiments" not in text
+    for absent in [
+        "--experiments",
+        "--formats",
+        "--open",
+        "simulate",
+        "list_experiments",
+    ]:
+        assert absent not in text
+    assert "{factory,all}" in text
+
+
+def test_the_help_of_a_model_without_experiments_names_its_extra_actions() -> None:
+    model = dataclasses.replace(NO_EXPERIMENTS, extra_actions=(GREET,))
+    text = " ".join(run_parser(model).format_help().split())
+    assert "{factory,all,greet}" in text
+    assert "greet: write a greeting" in text
+    assert "Run the model factory of the" in text
+    assert "and its extra actions." in text
+    assert "--experiments" not in text
+
+
+def test_all_of_a_model_without_experiments_runs_the_extras(tmp_path: Path) -> None:
+    model = dataclasses.replace(
+        NO_EXPERIMENTS,
+        factory_path=tmp_path / "models",
+        extra_actions=(GREET,),
+        extra_arguments=".extras:add_arguments",
+    )
+    run_command(model, ["-a", "all", "-r", str(tmp_path)])
+    assert (tmp_path / "models" / "toy.xml").exists()
+    assert (tmp_path / "greeting.txt").exists()
+    assert not (tmp_path / "simulation").exists()
