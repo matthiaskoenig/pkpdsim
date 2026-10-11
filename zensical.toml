@@ -32,6 +32,7 @@ nav = [
     { "run" = "api/run.md" },
     { "cli" = "api/cli.md" },
     { "fit" = "api/fit.md" },
+    { "metadata" = "api/metadata.md" },
     { "testing" = "api/testing.md" },
     { "verify" = "api/verify.md" },
   ] },
