@@ -235,6 +235,45 @@ class ExtraAction:
 
 
 @dataclass(frozen=True, kw_only=True)
+class CheckSettings:
+    """The known exceptions of the tests of a model, each with its reason.
+
+    All fields are keyword-only. The mappings are copied, so the settings do not
+    change with the dictionaries they were created from, and the settings are
+    hashable.
+
+    Attributes:
+        not_registered: experiment classes which are defined but not in the
+            group `all` of the registry on purpose, by class name.
+        not_importable: modules below the package which do not import in the
+            test environment (an optional dependency), by their name relative to
+            the package, e.g. `experiments.zonation.plot_pyvista`.
+        one_at_a_time: why the tests run the registered experiments one at a
+            time (the memory a run of all of them needs), `None` to run them
+            together.
+    """
+
+    not_registered: Mapping[str, str] = field(default_factory=dict)
+    not_importable: Mapping[str, str] = field(default_factory=dict)
+    one_at_a_time: str | None = None
+
+    def __post_init__(self) -> None:
+        """Copy the mappings."""
+        object.__setattr__(self, "not_registered", dict(self.not_registered))
+        object.__setattr__(self, "not_importable", dict(self.not_importable))
+
+    def __hash__(self) -> int:
+        """Hash the settings by their content."""
+        return hash(
+            (
+                tuple(sorted(self.not_registered.items())),
+                tuple(sorted(self.not_importable.items())),
+                self.one_at_a_time,
+            )
+        )
+
+
+@dataclass(frozen=True, kw_only=True)
 class PKPDModel:
     """A PBPK/PD model: what the commands, the verification and the tests need.
 
@@ -273,6 +312,8 @@ class PKPDModel:
         extra_actions: actions the model adds to its `run` command.
         extra_arguments: reference to a function which adds the options of the
             extra actions to the parser of the `run` command.
+        checks: the known exceptions of the tests of the model, see
+            `pkpdsim.testing`.
     """
 
     name: str
@@ -294,6 +335,7 @@ class PKPDModel:
     fit_identifiability: bool = False
     extra_actions: Sequence[ExtraAction] = ()
     extra_arguments: str | None = None
+    checks: CheckSettings = field(default_factory=CheckSettings)
 
     def __post_init__(self) -> None:
         """Normalize the sequences, check the references and the extra actions."""

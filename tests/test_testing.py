@@ -7,10 +7,14 @@ import pytest
 from sbmlsim.plot import Figure
 
 from pkpdsim import testing
+from pkpdsim.model import CheckSettings
 from pkpdsim_toy import MODEL
 from pkpdsim_toy.experiments.decay import ToyDecay, ToyDecaySlow
 
 PARTIAL = dataclasses.replace(MODEL, experiments=".simulations:PARTIAL")
+KNOWN = dataclasses.replace(
+    PARTIAL, checks=CheckSettings(not_registered={"ToyDecaySlow": "a test"})
+)
 
 
 def test_the_modules_of_the_experiments() -> None:
@@ -37,26 +41,51 @@ def test_an_unregistered_experiment_fails() -> None:
 
 
 def test_a_known_exception_passes() -> None:
-    testing.check_registry(PARTIAL, not_registered={"ToyDecaySlow"})
+    testing.check_registry(KNOWN)
 
 
 def test_a_stale_exception_fails() -> None:
+    stale = dataclasses.replace(
+        MODEL, checks=CheckSettings(not_registered={"ToyDecay": "a test"})
+    )
     with pytest.raises(AssertionError, match="listed as not registered"):
-        testing.check_registry(MODEL, not_registered={"ToyDecay"})
+        testing.check_registry(stale)
+
+
+def test_a_listed_class_which_is_not_defined_fails() -> None:
+    gone = dataclasses.replace(
+        MODEL, checks=CheckSettings(not_registered={"ToyGone": "a test"})
+    )
+    with pytest.raises(AssertionError, match=r"not defined.*ToyGone"):
+        testing.check_registry(gone)
 
 
 def test_a_module_which_is_not_importable_is_skipped() -> None:
-    modules, _ = testing.experiment_modules(MODEL, not_importable={"experiments.decay"})
+    skipping = dataclasses.replace(
+        MODEL, checks=CheckSettings(not_importable={"experiments.decay": "a test"})
+    )
+    modules, _ = testing.experiment_modules(skipping)
     assert [module.__name__ for module in modules] == ["pkpdsim_toy.experiments"]
+
+
+def test_a_listed_module_which_does_not_exist_fails() -> None:
+    gone = dataclasses.replace(
+        MODEL, checks=CheckSettings(not_importable={"experiments.gone": "a test"})
+    )
+    with pytest.raises(AssertionError, match=r"no module.*experiments\.gone"):
+        testing.check_registry(gone)
 
 
 def test_the_experiments_initialize() -> None:
     assert set(testing.initialize_experiments(MODEL)) == {"ToyDecay", "ToyDecaySlow"}
 
 
-@pytest.mark.parametrize("one_at_a_time", [False, True])
-def test_all_experiments_run(tmp_path: Path, one_at_a_time: bool) -> None:
-    testing.run_all_experiments(MODEL, tmp_path, one_at_a_time=one_at_a_time)
+@pytest.mark.parametrize("one_at_a_time", [None, "a test"])
+def test_all_experiments_run(tmp_path: Path, one_at_a_time: str | None) -> None:
+    model = dataclasses.replace(
+        MODEL, checks=CheckSettings(one_at_a_time=one_at_a_time)
+    )
+    testing.run_all_experiments(model, tmp_path)
     if one_at_a_time:
         assert (tmp_path / "ToyDecay").is_dir()
         assert (tmp_path / "ToyDecaySlow").is_dir()

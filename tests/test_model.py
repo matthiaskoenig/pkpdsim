@@ -9,6 +9,7 @@ from sbmlsim.plot import Figure
 
 from pkpdsim.model import (
     FIGURE_ATTRIBUTES,
+    CheckSettings,
     ExtraAction,
     FigureSettings,
     PKPDModel,
@@ -128,6 +129,16 @@ def test_the_sequences_are_tuples_and_the_model_is_hashable() -> None:
     assert model.extra_actions == ()
     assert isinstance(hash(model), int)
     assert hash(model) == hash(dataclasses.replace(model))
+
+
+def test_the_checks_are_hashable_and_copied() -> None:
+    reasons = {"ToyDecaySlow": "a test"}
+    checks = CheckSettings(not_registered=reasons)
+    reasons["other"] = "changed"
+    assert dict(checks.not_registered) == {"ToyDecaySlow": "a test"}
+    model = dataclasses.replace(MODEL, checks=checks)
+    assert hash(model) == hash(dataclasses.replace(model))
+    assert MODEL.checks == CheckSettings()
 
 
 def test_resolve_a_relative_reference_needs_a_package() -> None:

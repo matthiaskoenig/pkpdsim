@@ -8,8 +8,12 @@ model object belongs to its package):
 # not executed
 @pytest.mark.parametrize("model", MODELS)
 def test_experiments_registered(model: PKPDModel) -> None:
-    testing.check_registry(model, not_registered={"Dussol2005"})
+    testing.check_registry(model)
 ```
+
+The known exceptions of the tests (experiments which are not registered on
+purpose, modules which do not import, the reason to run the experiments one at
+a time) are the `checks` of the model object, each with its reason.
 
 The functions raise `AssertionError` with a message which names what is wrong.
 """
@@ -17,10 +21,11 @@ The functions raise `AssertionError` with a message which names what is wrong.
 from __future__ import annotations
 
 import importlib
+import importlib.util
 import inspect
 import pkgutil
 import traceback
-from collections.abc import Collection, Generator, Mapping, Sequence
+from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 from types import ModuleType
@@ -57,15 +62,13 @@ def restored_figure_settings() -> Generator[None]:
             setattr(Figure, key, value)
 
 
-def experiment_modules(
-    model: PKPDModel, not_importable: Collection[str] = ()
-) -> tuple[list[ModuleType], dict[str, str]]:
+def experiment_modules(model: PKPDModel) -> tuple[list[ModuleType], dict[str, str]]:
     """Import the modules below `experiments` of a model.
+
+    The modules in `model.checks.not_importable` are skipped.
 
     Args:
         model: the model.
-        not_importable: modules which are skipped, by their name relative to the
-            package of the model, e.g. `experiments.zonation.plot_pyvista`.
 
     Returns:
         The imported modules and the traceback of every module which does not
@@ -82,7 +85,7 @@ def experiment_modules(
     for info in pkgutil.walk_packages(
         package.__path__, prefix=f"{package.__name__}.", onerror=on_error
     ):
-        if info.name.removeprefix(prefix) in not_importable:
+        if info.name.removeprefix(prefix) in model.checks.not_importable:
             continue
         try:
             modules.append(importlib.import_module(info.name))
@@ -116,26 +119,29 @@ def registered_experiments(model: PKPDModel) -> list[type[SimulationExperiment]]
     return list(model.load_experiments()["all"])
 
 
-def check_registry(
-    model: PKPDModel,
-    not_registered: Collection[str] = (),
-    not_importable: Collection[str] = (),
-) -> None:
+def _module_exists(name: str) -> bool:
+    """Check that a module exists without importing it (its parents are imported)."""
+    try:
+        return importlib.util.find_spec(name) is not None
+    except ModuleNotFoundError:
+        return False
+
+
+def check_registry(model: PKPDModel) -> None:
     """Check that every experiment a model defines is in its registry.
 
     Every module below `experiments` imports, every experiment is registered in
-    `all` once, and the known exceptions are still exceptions.
+    `all` once, and the known exceptions of `model.checks` are still exceptions
+    (a listed class is defined and not registered, a listed module exists).
 
     Args:
         model: the model.
-        not_registered: names of experiment classes which are defined but not
-            registered on purpose.
-        not_importable: modules which are skipped, see `experiment_modules`.
 
     Raises:
         AssertionError: naming every problem.
     """
-    modules, errors = experiment_modules(model, not_importable)
+    modules, errors = experiment_modules(model)
+    checks = model.checks
     problems = [f"{name} does not import:\n{tb}" for name, tb in errors.items()]
     names = [cls.__name__ for cls in registered_experiments(model)]
     twice = sorted({name for name in names if names.count(name) > 1})
@@ -144,13 +150,24 @@ def check_registry(
     unregistered = sorted(
         cls.__name__
         for cls in defined_experiments(modules)
-        if cls.__name__ not in names and cls.__name__ not in not_registered
+        if cls.__name__ not in names and cls.__name__ not in checks.not_registered
     )
     if unregistered:
         problems.append(f"defined, but not in the group 'all': {unregistered}")
-    stale = sorted(set(not_registered) & set(names))
+    stale = sorted(set(checks.not_registered) & set(names))
     if stale:
         problems.append(f"registered, but listed as not registered: {stale}")
+    defined = {cls.__name__ for cls in defined_experiments(modules)}
+    missing = sorted(set(checks.not_registered) - defined - set(names))
+    if missing:
+        problems.append(f"listed as not registered, but not defined: {missing}")
+    absent = sorted(
+        name
+        for name in checks.not_importable
+        if not _module_exists(f"{model.package}.{name}")
+    )
+    if absent:
+        problems.append(f"listed as not importable, but no module: {absent}")
     if problems:
         raise AssertionError("\n".join(problems))
 
@@ -243,23 +260,22 @@ def initialize_experiments(model: PKPDModel) -> dict[str, SimulationExperiment]:
     return dict(_runner(model).experiments)
 
 
-def run_all_experiments(
-    model: PKPDModel, output_dir: Path, one_at_a_time: bool = False
-) -> None:
+def run_all_experiments(model: PKPDModel, output_dir: Path) -> None:
     """Run the registered experiments, as `run_<model>` does.
 
     Args:
         model: the model.
-        output_dir: the directory of the results.
-        one_at_a_time: run every experiment on its own, into a directory named
-            after it: the memory of a run of all experiments of a large model
-            exceeds that of a runner of a continuous integration (sbmlsim keeps
-            the results and figures of a run until its end).
+        output_dir: the directory of the results. With
+            `model.checks.one_at_a_time` every experiment runs on its own, into
+            a directory named after it: the memory of a run of all experiments
+            of a large model exceeds that of a runner of a continuous
+            integration (sbmlsim keeps the results and figures of a run until
+            its end).
 
     Raises:
         AssertionError: if a run wrote no report.
     """
-    if one_at_a_time:
+    if model.checks.one_at_a_time is not None:
         for cls in registered_experiments(model):
             path = model.run_experiments(cls, output_dir=output_dir / cls.__name__)
             if not list(path.glob("**/*.html")):
