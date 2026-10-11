@@ -145,10 +145,12 @@ pkpdsim-verify png old/results/simulation new/results/simulation
 pkpdsim-verify sbml old.xml new.xml
 ```
 
-`--atol model` and `--rtol model` take the tolerances of the model object; any other value which is not a
-number exits with 2. A package without a model object exits with 2, and `compare --renames FILE` applies
-the expected renames of a migration to the old dump (see
-[Experiments and their metadata](experiments.md#renames-in-a-verification)). `settings` captures what a run of the experiments hands to
+`--atol model` and `--rtol model` take the tolerances of the model object; any
+other value which is not a number exits with 2. A package without a model object
+exits with 2, and `compare --renames FILE` applies the expected renames of a
+migration to the old dump (see
+[Experiments and their metadata](experiments.md#renames-in-a-verification)).
+`settings` captures what a run of the experiments hands to
 sbmlsim, bound to the signatures: the arguments of `SimulatorSerial`, of
 `ExperimentRunner` (without the simulator) and of the run (without the output
 path), the attributes of `Figure`, the matplotlib `rc` settings a run changes and

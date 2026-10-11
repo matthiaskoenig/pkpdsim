@@ -107,6 +107,22 @@ def _show(values: frozenset[Hashable]) -> str:
     return f"[{', '.join(names)}]"
 
 
+def _values(name: str, values: object) -> frozenset[Hashable]:
+    """Check that the values of a clause are a collection and make a set of them.
+
+    A single value would silently become a set of its characters when it is a
+    string (every `StrEnum` member is one).
+
+    Raises:
+        TypeError: if the values are a string or not a collection.
+    """
+    if isinstance(values, str | bytes) or not isinstance(values, Collection):
+        raise TypeError(
+            f"{name} needs a collection of values, e.g. a set, not {values!r}"
+        )
+    return frozenset(values)
+
+
 @dataclass(frozen=True)
 class MetadataFilter:
     """A filter of fit mappings by the values of their metadata.
@@ -167,11 +183,18 @@ def metadata_filter(
         The filter, called by the selection of the mappings of a fit.
 
     Raises:
-        TypeError: if the metadata class is no dataclass or has no field of a
-            given name, i.e. when the module of the filters is imported.
-        ValueError: for a filter without clauses or with an empty set of
-            allowed values, which would select nothing.
+        TypeError: if the metadata class is no dataclass (or an instance of
+            one), has no field of a given name, or the values of a field are not
+            a collection (a single value, also a string or `None`), i.e. when
+            the module of the filters is imported.
+        ValueError: for a filter without clauses, with an empty set of allowed
+            values, which would select nothing, or with an empty set of excluded
+            values, which would exclude nothing.
     """
+    if not isinstance(metadata_type, type):
+        raise TypeError(
+            f"metadata_type must be the class, not an instance: {metadata_type!r}"
+        )
     if not dataclasses.is_dataclass(metadata_type):
         raise TypeError(f"{metadata_type.__name__} is not a dataclass")
     excluded = excluded or {}
@@ -181,13 +204,18 @@ def metadata_filter(
         raise TypeError(f"{metadata_type.__name__} has no fields {unknown}")
     if not allowed and not excluded:
         raise ValueError("a metadata filter needs at least one clause")
-    empty = sorted(name for name, values in allowed.items() if not values)
+    allowed_sets = {name: _values(name, values) for name, values in allowed.items()}
+    excluded_sets = {name: _values(name, values) for name, values in excluded.items()}
+    empty = sorted(name for name, values in allowed_sets.items() if not values)
     if empty:
         raise ValueError(f"an empty set of allowed values selects nothing: {empty}")
+    empty = sorted(name for name, values in excluded_sets.items() if not values)
+    if empty:
+        raise ValueError(f"an empty set of excluded values excludes nothing: {empty}")
     return MetadataFilter(
         metadata_type=metadata_type,
-        allowed=tuple((name, frozenset(values)) for name, values in allowed.items()),
-        excluded=tuple((name, frozenset(values)) for name, values in excluded.items()),
+        allowed=tuple(allowed_sets.items()),
+        excluded=tuple(excluded_sets.items()),
     )
 
 
@@ -218,8 +246,15 @@ def observable_filter(observables: Collection[str]) -> ObservableFilter:
 
     Returns:
         The filter.
+
+    Raises:
+        TypeError: if the observables are a single id or not a collection.
+        ValueError: for no observables, which would select nothing.
     """
-    return ObservableFilter(frozenset(observables))
+    ids = _values("observables", observables)
+    if not ids:
+        raise ValueError("an empty set of observables selects nothing")
+    return ObservableFilter(frozenset(str(i) for i in ids))
 
 
 def select_mappings(

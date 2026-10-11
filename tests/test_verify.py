@@ -497,6 +497,29 @@ def test_a_renames_file_with_unknown_parts_is_an_error(tmp_path: Path) -> None:
         load_renames(str(renames))
 
 
+@pytest.mark.parametrize(
+    ("content", "part"),
+    [
+        ([], "object"),
+        ({"strings": ["a"]}, "strings"),
+        ({"strings": {"a": 1}}, "strings"),
+        ({"metadata": []}, "metadata"),
+        ({"metadata": {"fields": []}}, "fields"),
+        ({"metadata": {"fields": {"a": 1}}}, "fields"),
+        ({"metadata": {"members": {"route": "PO"}}}, "members"),
+        ({"metadata": {"members": {"route": {"a": 1}}}}, "members"),
+        ({"metadata": {"added": {"a": 1}}}, "added"),
+    ],
+)
+def test_a_renames_file_of_the_wrong_type_is_an_error(
+    tmp_path: Path, content: object, part: str
+) -> None:
+    renames = tmp_path / "renames.json"
+    renames.write_text(json.dumps(content))
+    with pytest.raises(ValueError, match=part):
+        load_renames(str(renames))
+
+
 def test_renamed_mappings_are_sorted_like_a_dump() -> None:
     old = {
         "mappings": {

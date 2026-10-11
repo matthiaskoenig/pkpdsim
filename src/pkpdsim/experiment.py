@@ -6,6 +6,9 @@ base:
 
 ```python
 # not executed
+from sbmlsim import Q
+
+
 class HctzSimulationExperiment(PKPDSimulationExperiment):
     pkpd_model = MODEL
     selections = ("time", "[Cve_hctz]", "Aurine_hctz")

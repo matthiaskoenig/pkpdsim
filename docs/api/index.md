@@ -12,9 +12,13 @@ The API reference is generated from the docstrings of the package.
 | [data](data.md) | `studies_dir`, `collect_tsv_files`: the study data of a model from the study folders of PK-DB, see [Study data](../data.md) |
 | [initial_values](initial_values.md) | `init_concentrations_changes`, `init_amounts_changes`, `get_species_keys`: the initial values of a substance in every tissue, see [Initial values](../initial_values.md) |
 | [licenses](licenses.md) | `License`, `license_text`, `write_license`: the texts of CC BY-SA 4.0 and MIT, see [Licenses](../licenses.md) |
-| [model](model.md) | `PKPDModel`, `SimulatorSettings`, `FigureSettings`, `ExtraAction`, `resolve`: the description of a model, see [Models and their commands](../models.md) |
+| [model](model.md) | `PKPDModel`, `SimulatorSettings`, `FigureSettings`, `CheckSettings`, `ExtraAction`, `resolve`: the description of a model, see [Models and their commands](../models.md) |
 | [run](run.md) | `run_experiments`, `run_simulation_experiments`: the run of the simulation experiments of a model |
 | [cli](cli.md) | `run_command`, `fit_command`, `report_command`, `identifiability_command`: the commands of a model |
-| [fit](fit.md) | `default_fit_settings`, `mapping_metadata`, `observable_id`: the shared fit settings and the helpers of the mapping collections |
+| [fit](fit.md) | `default_fit_settings`, `mapping_metadata`, `observable_id`, `metadata_filter`, `observable_filter`, `select_mappings`: the shared fit settings, the filters and the selection of the mappings of a fit, see [Experiments and their metadata](../experiments.md) |
+| [metadata](metadata.md) | `Tissue`, `Route`, `Dosing`, `Fasting`, `ApplicationForm`, `DataType`, `PKPDData`, `PKPDMappingMetaData`: the vocabulary of the metadata of a fit mapping, see [Experiments and their metadata](../experiments.md) |
+| [experiment](experiment.md) | `PKPDSimulationExperiment`: the base of the simulation experiments of a model |
+| [impairment](impairment.md) | the presets of the renal function, the cirrhosis and the cardiac function with their colors |
+| [pk](pk.md) | `PK_LABELS`, `PK_UNITS`: the labels and units of the pharmacokinetic parameters |
 | [testing](testing.md) | `check_model`, `check_registry`, `initialize_experiments`, `run_all_experiments`, `start_fits`: the tests of a model as functions |
 | [verify](verify.md) | `pkpdsim-verify`: the verification of a change of a model |
