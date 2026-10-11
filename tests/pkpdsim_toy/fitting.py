@@ -2,21 +2,19 @@
 
 from sbmlsim.fit import FitMappingCollection, FitParameter
 from sbmlsim.fit.cli import FitDefinition
-from sbmlsim.fit.helpers import select_mapping_collections
 
-from pkpdsim.fit import default_fit_settings
-from pkpdsim_toy import DATA_PATHS, TOY_PATH
-from pkpdsim_toy.experiments.decay import ToyDecay
+from pkpdsim.fit import default_fit_settings, metadata_filter, select_mappings
+from pkpdsim.metadata import Route
+from pkpdsim_toy import DATA_PATHS, MODEL, TOY_PATH
+from pkpdsim_toy.experiments.decay import ToyDecay, ToyMappingMetaData
+
+#: the intravenous data
+filter_iv = metadata_filter(ToyMappingMetaData, route={Route.IV})
 
 
 def collections_decay() -> dict[str, list[FitMappingCollection]]:
     """Get the fit mappings of the decay."""
-    return select_mapping_collections(
-        experiment_classes=[ToyDecay],
-        base_path=TOY_PATH,
-        data_path=DATA_PATHS,
-        print_info=False,
-    )
+    return select_mappings(MODEL, [ToyDecay], [filter_iv])
 
 
 FIT_DEFINITIONS: dict[str, FitDefinition] = {
