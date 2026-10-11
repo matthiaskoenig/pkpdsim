@@ -40,7 +40,7 @@ dependencies = [
     # the simulator, the initial values are selections of a roadrunner model
     "libroadrunner>=2.10.0",
     # the simulation experiments, their figures and reports, and the fits
-    "sbmlsim>=0.8.5",
+    "sbmlsim>=0.8.5,<0.9",
     # imported directly, also the dependencies of the packages above
     "numpy>=2.5.3",
     "matplotlib>=3.11.2",

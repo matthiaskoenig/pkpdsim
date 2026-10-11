@@ -1463,7 +1463,7 @@ requires-dist = [
     { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.8.0" },
     { name = "python-libsbml", specifier = ">=5.21.2" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.17.0" },
-    { name = "sbmlsim", specifier = ">=0.8.5" },
+    { name = "sbmlsim", specifier = ">=0.8.5,<0.9" },
     { name = "sbmlutils", specifier = ">=0.16.0" },
     { name = "tox", marker = "extra == 'dev'", specifier = ">=4.65.0" },
     { name = "ty", marker = "extra == 'dev'", specifier = ">=0.0.86" },
