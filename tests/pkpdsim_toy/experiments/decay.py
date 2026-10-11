@@ -1,51 +1,49 @@
 """The decay of A at the rate of the model and at half of it."""
 
 from dataclasses import dataclass
-from pathlib import Path
+from enum import StrEnum
+from typing import ClassVar
 
 import pandas as pd
 from sbmlsim import Q
 from sbmlsim.data import Data, DataSet
-from sbmlsim.experiment import SimulationExperiment
 from sbmlsim.fit import FitData, FitMapping
-from sbmlsim.fit.objects import MappingMetaData
-from sbmlsim.model import AbstractModel
 from sbmlsim.plot import Axis, Curve, Figure, Plot, SubPlot
 from sbmlsim.simulation import Simulation
-from sbmlsim.task import Task
 
-from pkpdsim_toy import MODEL_PATH
+from pkpdsim.experiment import PKPDSimulationExperiment
+from pkpdsim.metadata import Dosing, PKPDMappingMetaData, Route, Tissue
+from pkpdsim_toy import MODEL
+
+
+class Health(StrEnum):
+    """The health of the subjects of the toy studies."""
+
+    HEALTHY = "healthy"
 
 
 @dataclass(kw_only=True)
-class ToyMappingMetaData(MappingMetaData):
+class ToyMappingMetaData(PKPDMappingMetaData):
     """The metadata of a fit mapping of the toy model."""
 
-    route: str
+    health: Health
 
 
-class ToyExperiment(SimulationExperiment):
-    """The base of the toy experiments: the model, the decay and its figure."""
+class ToyExperiment(PKPDSimulationExperiment):
+    """The base of the toy experiments: the decay and its figure."""
+
+    pkpd_model = MODEL
+    selections = ("time", "[A]")
+    labels: ClassVar[dict[str, str]] = {"time": "time", "[A]": "A"}
+    units: ClassVar[dict[str, str]] = {"time": "min", "[A]": "mM"}
 
     #: the rate of the decay [1/min], `None` for the rate of the model
     rate: float | None = None
-
-    def models(self) -> dict[str, AbstractModel | Path]:
-        """Get the toy model."""
-        return {"model": AbstractModel(source=MODEL_PATH)}
 
     def simulations(self) -> dict[str, Simulation]:
         """Get the decay over 10 min."""
         changes = None if self.rate is None else {"k": Q(self.rate, "1/min")}
         return {"decay": Simulation(end=10, steps=50, preinit_changes=changes)}
-
-    def tasks(self) -> dict[str, Task]:
-        """Get the task of the decay."""
-        return {"task_decay": Task(model="model", simulation="decay")}
-
-    def data(self) -> dict[str, Data]:
-        """Get the concentration of A."""
-        return {"A": Data(index="[A]", task="task_decay")}
 
     def figures(self) -> dict[str, Figure]:
         """Get the figure of the concentration of A."""
@@ -101,7 +99,12 @@ class ToyDecay(ToyExperiment):
                     count="count",
                 ),
                 observable=FitData(self, task="task_decay", xid="time", yid="[A]"),
-                metadata=ToyMappingMetaData(route="iv"),
+                metadata=ToyMappingMetaData(
+                    tissue=Tissue.PLASMA,
+                    route=Route.IV,
+                    dosing=Dosing.SINGLE,
+                    health=Health.HEALTHY,
+                ),
             )
         }
 

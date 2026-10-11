@@ -1,0 +1,3 @@
+# impairment
+
+::: pkpdsim.impairment
