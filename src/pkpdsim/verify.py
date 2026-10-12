@@ -762,8 +762,9 @@ class Renames(TypedDict, total=False):
     #: the keys of the specification of a figure which are left out of both
     #: dumps, at any depth, e.g. the fields sbmlsim 0.9 added
     figure_fields: list[str]
-    #: part of the dump -> patterns (`fnmatch`) of the keys whose differences
-    #: are expected: `experiment/task/variable` (results),
+    #: part of the dump -> patterns of the keys whose differences are expected
+    #: (`*` and `?` are wildcards, a bracket is literal, e.g. `E/task_po/[A]`):
+    #: `experiment/task/variable` (results),
     #: `experiment/dataset/column` (datasets), `experiment/figure` (figures),
     #: `experiment/mapping` (mappings, ranges)
     expected: dict[str, list[str]]
@@ -1055,11 +1056,15 @@ class _Expected:
         self.used: set[tuple[str, str]] = set()
 
     def match(self, part: str, key: str | tuple[str, ...]) -> bool:
-        """Check whether the difference of a key is expected, recording the patterns."""
+        """Check whether the difference of a key is expected, recording the patterns.
+
+        `*` and `?` of a pattern are the wildcards of `fnmatch`; a bracket is
+        literal, so that `E/task/[A]` is the variable `[A]`.
+        """
         text = "/".join(key) if isinstance(key, tuple) else key
         found = False
         for pattern in self.patterns.get(part, []):
-            if fnmatch.fnmatchcase(text, pattern):
+            if fnmatch.fnmatchcase(text, pattern.replace("[", "[[]")):
                 self.used.add((part, pattern))
                 found = True
         return found
@@ -1847,7 +1852,8 @@ def parser() -> argparse.ArgumentParser:
         "--renames",
         help=(
             "json file of the expected renames and differences (metadata, strings, "
-            "ids, sids, figure_fields, expected), applied to the old dump"
+            "ids, sids, figure_fields, expected), applied to the old dump; in a "
+            "pattern of expected, * and ? are wildcards and a bracket is literal"
         ),
     )
     s.add_argument("--threshold", type=float, default=1e-6, help="default 1e-6")

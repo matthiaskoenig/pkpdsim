@@ -1028,6 +1028,25 @@ def test_two_mappings_of_one_key_are_an_error(
     assert "Two fit mappings of E have the key fm" in capsys.readouterr().err
 
 
+def test_a_bracket_of_a_pattern_is_literal(tmp_path: Path) -> None:
+    def dump(a: float, bracket: float) -> Dump:
+        return synthetic(
+            {
+                ("E", "t", "time"): (("time",), T_OLD),
+                ("E", "t", "A"): (("time",), np.full(4, a)),
+                ("E", "t", "[A]"): (("time",), np.full(4, bracket)),
+            }
+        )
+
+    old = written(tmp_path, "o.pkl", dump(1.0, 1.0))
+    renames = tmp_path / "renames.json"
+    renames.write_text(json.dumps({"expected": {"results": ["E/t/[A]"]}}))
+    other_bracket = written(tmp_path, "b.pkl", dump(1.0, 2.0))
+    other_plain = written(tmp_path, "p.pkl", dump(2.0, 1.0))
+    assert verify(["compare", old, other_bracket, "--renames", str(renames)]) == 0
+    assert verify(["compare", old, other_plain, "--renames", str(renames)]) == 1
+
+
 def test_an_expected_difference_which_does_not_occur_is_counted(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
