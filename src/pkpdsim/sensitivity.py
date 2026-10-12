@@ -33,6 +33,7 @@ import libsbml
 import numpy as np
 import pandas as pd
 import roadrunner
+from sbmlsim.simulation import Simulation
 from sbmlsim.simulation.sampling import Uniform
 from sbmlutils.report.units import udef_to_string
 
@@ -280,6 +281,38 @@ def distributions(
     return {
         p.uid: Uniform(lower=p.lower_bound, upper=p.upper_bound) for p in parameters
     }
+
+
+def free_parameters(
+    parameters: Sequence[SensitivityParameter], simulations: Iterable[Simulation]
+) -> list[SensitivityParameter]:
+    """Get the parameters an analysis varies: those which none of its simulations sets.
+
+    A design replaces its targets wherever a simulation sets them, so a
+    parameter which the simulation of a group sets (in its `preinit_changes` or
+    in a `Change`, e.g. `f_renal_function` of the degree of renal impairment)
+    would take the values of the design in every group, and the groups would
+    be one analysis. sbmlsim 0.8.5 left such a parameter out of an analysis,
+    sbmlsim 0.9's designs do not, so a script takes the parameters of a design
+    from here. Every parameter left out is logged ("Removing fixed parameter"),
+    as sbmlsim 0.8.5 printed it.
+
+    Args:
+        parameters: the parameters of the analysis.
+        simulations: the simulations of the groups of the analysis.
+
+    Returns:
+        The parameters which no simulation sets, in their order.
+    """
+    fixed: set[str] = set()
+    for simulation in simulations:
+        fixed.update(simulation.preinit_changes)
+        for change in simulation.changes:
+            fixed.update(change.values)
+    for p in parameters:
+        if p.uid in fixed:
+            logger.info("Removing fixed parameter: %s", p.uid)
+    return [p for p in parameters if p.uid not in fixed]
 
 
 #: the environment variable which replaces the number of samples of a global

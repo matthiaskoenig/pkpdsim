@@ -26,6 +26,7 @@ sbmlsim 0.9 analyses the sensitivity of a model on the result of a scan, with a 
 from pkpdsim.sensitivity import (
     ParameterType,
     distributions,
+    free_parameters,
     parameters_from_sbml,
     sample_size,
     set_bounds,
@@ -38,8 +39,10 @@ parameters = parameters_from_sbml(MODEL_PATH, exclude_ids={"Mr_hctz"})
 set_bounds(parameters, [("f_renal_function", 0.85, 1.15, ParameterType.SCALING)])
 set_relative_bounds(parameters, 0.15)
 write_parameters(parameters, MODEL.results_dir / "sensitivity")
+# a design must not vary what the simulation of a group sets
+free = free_parameters(parameters, [simulation])
 design = sobol(
-    distributions(parameters), n=sample_size(4096), seed=1234, model=MODEL_PATH
+    distributions(free), n=sample_size(4096), seed=1234, model=MODEL_PATH
 )
 ```
 
@@ -47,6 +50,7 @@ design = sobol(
 - `set_bounds` sets the bounds and the type of parameters by id (an unknown id is logged and skipped), `set_relative_bounds` lets every parameter without bounds vary by `value * (1 +- fraction)`. For a negative value these bounds are reversed (the lower bound `value * (1 - fraction)` is above the upper one), as in the table of sbmlsim 0.8, which stays the same; such a parameter gets its bounds with `set_bounds` before a global analysis.
 - `write_parameters` writes `parameters.tsv` and the LaTeX table `parameters.tex` (`jinja2` is needed for the table), `parameters_to_df` gives the table as a `DataFrame` with the columns `uid`, `name`, `value`, `lower_bound`, `upper_bound`, `unit`, `type` and `reference`, sorted by type and id.
 - `distributions` gives the uniform distribution of every parameter in its bounds, the input of a global design; a parameter without bounds or with a lower bound above the upper one raises a `ValueError` naming it.
+- `free_parameters(parameters, simulations)` gives the parameters which none of the simulations sets, in their order, in its `preinit_changes` or in a `Change`. A design replaces its targets wherever a simulation sets them, so a parameter of a group (e.g. `f_renal_function` of the degree of renal impairment) would take the values of the design in every group and the groups would be one analysis; sbmlsim 0.8.5 left such a parameter out ("Removing fixed parameter"), sbmlsim 0.9's designs do not. Every parameter left out is logged at level info.
 - `sample_size(n)` is `n`, or the value of the environment variable `PKPDSIM_SENSITIVITY_N` for a quick run of the scripts in a verification.
 
 The distributions do not need a model:
@@ -69,4 +73,24 @@ set_bounds(parameters, [("f_renal_function", 0.85, 1.15, ParameterType.SCALING)]
 set_relative_bounds(parameters, 0.5)
 print(parameters_to_df(parameters)[["uid", "lower_bound", "upper_bound", "type"]])
 print(distributions(parameters))
+```
+
+A parameter which a simulation sets is left out of the design:
+
+```python
+from sbmlsim import Q
+from sbmlsim.simulation import Simulation
+
+from pkpdsim.sensitivity import SensitivityParameter, free_parameters
+
+parameters = [
+    SensitivityParameter(uid="Ka", name="absorption", value=2.0),
+    SensitivityParameter(uid="f_renal_function", name="renal function", value=1.0),
+]
+group = Simulation(
+    end=24,
+    steps=100,
+    preinit_changes={"f_renal_function": 0.5, "PODOSE": Q(10, "mg")},
+)
+print([p.uid for p in free_parameters(parameters, [group])])
 ```
