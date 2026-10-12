@@ -1,5 +1,6 @@
 """The base of the experiments of a model, on the toy model."""
 
+import re
 from pathlib import Path
 from types import MappingProxyType
 from typing import ClassVar
@@ -156,9 +157,9 @@ def test_a_model_types_its_conventions_itself() -> None:
         ("tor_iv_chronic renal disease", "tor_iv_chronic_renal_disease"),
         ("Fig1_CIM400, ENA10_B1", "Fig1_CIM400__ENA10_B1"),
         ("µg/ml", "_g_ml"),
-        ("1.5.2", "1p5p2"),
+        ("x1.5.2", "x1p5p2"),
         ("a.b", "a_b"),
-        ("2.", "2_"),
+        ("a2.", "a2_"),
         (".5", "_5"),
         ("a b", "a_b"),
         ("a‐b", "a_b"),
@@ -171,8 +172,30 @@ def test_a_text_becomes_an_sid(text: str, sid: str) -> None:
     assert len(to_sid(text)) == len(text)
 
 
+@pytest.mark.parametrize("text", ["2.5mg", "1.5.2", "2.", "0p5", "9_a"])
+def test_a_text_which_starts_with_a_digit_is_an_error(text: str) -> None:
+    with pytest.raises(
+        ValueError, match=rf"'{re.escape(text)}'.*'{re.escape(to_sid(f'_{text}')[1:])}'"
+    ):
+        to_sid(text)
+
+
+@pytest.mark.parametrize(
+    ("text", "sid"), [(".5", "_5"), ("µg", "_g"), (" a", "_a"), ("-1", "_1")]
+)
+def test_a_text_which_starts_with_another_character_gets_an_underscore(
+    text: str, sid: str
+) -> None:
+    assert to_sid(text) == sid
+
+
+def test_the_experiment_refuses_a_text_with_an_invalid_sid() -> None:
+    with pytest.raises(ValueError, match=r"2\.5mg.*2p5mg"):
+        initialized(ToyStudy).to_sid("2.5mg")
+
+
 def test_a_part_of_a_key_becomes_the_same_part_of_its_sid() -> None:
-    assert f"task_po_{to_sid('2.5')}" == to_sid("task_po_2.5")
+    assert f"task_po_{to_sid('x2.5')}" == to_sid("task_po_x2.5")
 
 
 def test_the_experiment_gives_the_sid_of_a_text() -> None:
