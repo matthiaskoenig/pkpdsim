@@ -959,6 +959,18 @@ def test_png_pairs_the_figures_of_renamed_keys(tmp_path: Path) -> None:
     assert verify(["png", "--sids", str(old), str(new)]) == 0
 
 
+def test_png_with_two_old_figures_of_one_sid_fails(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    old, new = tmp_path / "old", tmp_path / "new"
+    write_png(old / "A" / "A_fig 2.5.png")
+    write_png(old / "A" / "A_fig-2.5.png")
+    write_png(new / "A" / "A_fig_2p5.png")
+    assert verify(["png", "--sids", str(old), str(new)]) == 2
+    message = f"two old figures have the same SId: {Path('A', 'A_fig_2p5.png')}"
+    assert message in capsys.readouterr().err
+
+
 def test_a_dump_names_the_versions(tmp_path: Path) -> None:
     import pkpdsim
 
