@@ -272,6 +272,7 @@ def test_a_failure_exits_with_1_after_every_action(
     assert (tmp_path / "greeting.txt").exists()
     out = capsys.readouterr().out
     assert "ToyCannotInitialize" in out
+    assert "ToyRefusedUnit" in out
     assert "figures_mpl()" in out
 
 

@@ -13,7 +13,7 @@ import pkpdsim.run
 from pkpdsim.model import FigureSettings, SimulatorSettings
 from pkpdsim.run import create_simulator
 from pkpdsim_toy import MODEL
-from pkpdsim_toy.broken import ToyCannotInitialize, ToyFigureFails
+from pkpdsim_toy.broken import ToyCannotInitialize, ToyFigureFails, ToyRefusedUnit
 from pkpdsim_toy.experiments.decay import ToyDecay, ToyDecaySlow
 
 
@@ -152,6 +152,18 @@ def test_a_failing_experiment_is_reported_after_the_run(tmp_path: Path) -> None:
     assert "figures_mpl()" in failures
     assert "'ToyDecay'" not in failures
     # the report is written and the experiment between the failures ran
+    assert list(tmp_path.glob("*.html"))
+    assert list(tmp_path.glob("ToyDecay/*fig_decay*.svg"))
+
+
+def test_a_refused_unit_of_the_data_fails_its_experiment_only(tmp_path: Path) -> None:
+    with pytest.raises(ExperimentRunError) as info:
+        MODEL.run_experiments([ToyRefusedUnit, ToyDecay], output_dir=tmp_path)
+    failures = "\n".join(info.value.failures)
+    assert "ToyRefusedUnit" in failures
+    assert "ValueError: The unit 'IU_toy_refused'" in failures
+    assert "'microgramm' is not defined" in failures
+    # the report is written and the other experiment ran
     assert list(tmp_path.glob("*.html"))
     assert list(tmp_path.glob("ToyDecay/*fig_decay*.svg"))
 

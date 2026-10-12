@@ -116,6 +116,8 @@ class RamiprilSimulationExperiment(PKPDSimulationExperiment):
     data_units = {"IU": "IU_ramipril_renin = 0.6 * microgram"}
 ```
 
+`initialize` defines the units before it reads the data, and a loader which is called outside of `initialize` defines them on its first call. A definition which pint cannot evaluate (an unknown unit in the expression, a syntax error) or which `define_unit` refuses is a `ValueError` naming the unit, which fails the initialization of that experiment only: a run reports it with its traceback, runs the other experiments and raises at the end, and `pkpdsim.testing.initialize_experiments` names it with every other failure.
+
 ## Impairment presets
 
 The classes of impaired organ function with the factors of their parameters and

@@ -8,7 +8,7 @@ import pytest
 from pkpdsim import testing
 from pkpdsim.model import CheckSettings
 from pkpdsim_toy import MODEL
-from pkpdsim_toy.broken import ToyCannotInitialize, ToyFigureFails
+from pkpdsim_toy.broken import ToyCannotInitialize, ToyFigureFails, ToyRefusedUnit
 from pkpdsim_toy.experiments.decay import ToyDecay, ToyDecaySlow
 
 PARTIAL = dataclasses.replace(MODEL, experiments=".simulations:PARTIAL")
@@ -163,11 +163,12 @@ def test_every_failure_of_the_initialization_is_named() -> None:
     with pytest.raises(AssertionError) as info:
         testing.initialize_experiments(BROKEN)
     message = str(info.value)
-    assert "1 of 3 experiments cannot be initialized" in message
+    assert "2 of 4 experiments cannot be initialized" in message
     assert (
         "ToyCannotInitialize: RuntimeError: the simulations of ToyCannotInitialize fail"
         in message
     )
+    assert "ToyRefusedUnit: ValueError: The unit 'IU_toy_refused'" in message
 
 
 def test_every_failure_of_a_run_is_named(tmp_path: Path) -> None:
@@ -176,6 +177,7 @@ def test_every_failure_of_a_run_is_named(tmp_path: Path) -> None:
     message = str(info.value)
     assert ToyCannotInitialize.__name__ in message
     assert ToyFigureFails.__name__ in message
+    assert ToyRefusedUnit.__name__ in message
     assert "figures_mpl()" in message
 
 
@@ -188,5 +190,6 @@ def test_every_failure_of_a_run_one_at_a_time_is_named(tmp_path: Path) -> None:
     message = str(info.value)
     assert ToyCannotInitialize.__name__ in message
     assert ToyFigureFails.__name__ in message
+    assert ToyRefusedUnit.__name__ in message
     # the experiment after a failing one (ToyFigureFails) ran and wrote its report
     assert list((tmp_path / "ToyCannotInitialize").glob("**/*.html"))

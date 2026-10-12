@@ -35,6 +35,7 @@ import math
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
+from tokenize import TokenError
 from types import MappingProxyType
 from typing import TYPE_CHECKING, ClassVar
 
@@ -104,14 +105,24 @@ def define_unit(ureg: UnitRegistry, definition: str) -> str:
 
     Raises:
         ValueError: if the definition is not `<name> = <expression>` with an
-            identifier as the name, or the name is defined with another value.
+            identifier as the name, pint cannot evaluate the expression (e.g. an
+            unknown unit in it, pint's `UndefinedUnitError`) or the name is
+            defined with another value.
     """
     name, separator, expression = (part.strip() for part in definition.partition("="))
     if not separator or not name.isidentifier() or not expression:
         raise ValueError(
             f"A unit is defined as '<name> = <expression>', not '{definition}'."
         )
-    value = ureg.Quantity(expression).to_base_units()
+    try:
+        value = ureg.Quantity(expression).to_base_units()
+    # the errors of pint derive from these (`UndefinedUnitError` from
+    # `AttributeError`), the others come from its parser
+    except (ArithmeticError, AttributeError, TokenError, TypeError, ValueError) as err:
+        raise ValueError(
+            f"The unit '{name}' cannot be defined as '{expression}': "
+            f"{type(err).__name__}: {err}"
+        ) from err
     if name in ureg:
         defined = ureg.Quantity(1, name).to_base_units()
         if defined.units != value.units or not math.isclose(
@@ -217,9 +228,15 @@ class PKPDSimulationExperiment(SimulationExperiment):
     ) -> None:
         """Create the experiment, see `SimulationExperiment`.
 
+        The units of the data (`data_units`) are defined by `initialize`, so a
+        definition which is refused fails the initialization of this experiment,
+        which a run reports, and not the creation, which stops a run of sbmlsim
+        before any experiment ran.
+
         Raises:
-            TypeError: if no base of the experiment sets `pkpd_model`.
-            ValueError: for a definition of `data_units` which `define_unit` refuses.
+            TypeError: if no base of the experiments sets `pkpd_model`. This is
+                an error of the definition of the classes, which every
+                experiment of the base has, so it stops a run.
         """
         if not hasattr(type(self), "pkpd_model"):
             raise TypeError(
@@ -231,11 +248,44 @@ class PKPDSimulationExperiment(SimulationExperiment):
         )
         #: the text of every SId the experiment gave, see `to_sid`
         self._sid_texts: dict[str, str] = {}
-        # the units of the data are defined before `initialize` reads the data
-        self._unit_names: dict[str, str] = {
-            name: define_unit(self.ureg, definition)
-            for name, definition in self.data_units.items()
-        }
+        #: the names of the defined units of the data, see `_data_unit_names`
+        self._unit_names: dict[str, str] | None = None
+
+    def initialize(self) -> None:
+        """Define the units of the data and initialize the experiment.
+
+        The units of `data_units` are defined before the data are read, see
+        `SimulationExperiment.initialize`.
+
+        Raises:
+            ValueError: for a definition of `data_units` which `define_unit`
+                refuses; the runner reports the experiment as failed.
+        """
+        try:
+            self._data_unit_names()
+        except ValueError as err:
+            err.add_note(f"The experiment '{self.sid}' cannot be initialized.")
+            raise
+        super().initialize()
+
+    def _data_unit_names(self) -> dict[str, str]:
+        """Define the units of `data_units` once and get their names.
+
+        `initialize` calls it first; a loader called without `initialize`
+        defines the units on its first call.
+
+        Returns:
+            The name of a unit in the data -> the name of its definition.
+
+        Raises:
+            ValueError: for a definition which `define_unit` refuses.
+        """
+        if self._unit_names is None:
+            self._unit_names = {
+                name: define_unit(self.ureg, definition)
+                for name, definition in self.data_units.items()
+            }
+        return self._unit_names
 
     def to_sid(self, text: str) -> str:
         """Get the SId of a text as a key of the experiment, see `to_sid`.
@@ -323,14 +373,16 @@ class PKPDSimulationExperiment(SimulationExperiment):
                 by column, e.g. `{"time": ["NR"]}`, see `pandas.read_csv`.
 
         Raises:
-            ValueError: if the experiment has no `data_path`.
+            ValueError: if the experiment has no `data_path` or a definition of
+                `data_units` is refused.
         """
+        names = self._data_unit_names()
         df = load_pkdb_dataframe(
             f"{self.sid if study is None else study}_{fig_id}",
             data_path=self._data_paths(),
             na_values=na_values,
         )
-        return rename_units(df, self._unit_names)
+        return rename_units(df, names)
 
     def load_dataframes_by_substance(
         self, fig_id: str, study: str | None = None
@@ -342,13 +394,15 @@ class PKPDSimulationExperiment(SimulationExperiment):
             study: the study, the id of the experiment by default.
 
         Raises:
-            ValueError: if the experiment has no `data_path`.
+            ValueError: if the experiment has no `data_path` or a definition of
+                `data_units` is refused.
         """
+        names = self._data_unit_names()
         frames = load_pkdb_dataframes_by_substance(
             f"{self.sid if study is None else study}_{fig_id}",
             data_path=self._data_paths(),
         )
-        return {key: rename_units(df, self._unit_names) for key, df in frames.items()}
+        return {key: rename_units(df, names) for key, df in frames.items()}
 
     @staticmethod
     def figures_by_sid(*figures: Figure) -> dict[str, Figure]:

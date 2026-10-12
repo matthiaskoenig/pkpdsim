@@ -311,12 +311,19 @@ def test_a_dump_records_an_experiment_which_cannot_be_initialized(
     assert code == 1
     assert "ToyCannotInitialize: ok" not in capsys.readouterr().err
     dump = load(str(out))
-    assert dump["order"] == ["ToyCannotInitialize", "ToyDecay", "ToyFigureFails"]
-    assert list(dump["errors"]) == ["ToyCannotInitialize"]
+    # an experiment which the order does not name runs last
+    assert dump["order"] == [
+        "ToyCannotInitialize",
+        "ToyDecay",
+        "ToyFigureFails",
+        "ToyRefusedUnit",
+    ]
+    assert list(dump["errors"]) == ["ToyCannotInitialize", "ToyRefusedUnit"]
     assert (
         "RuntimeError: the simulations of ToyCannotInitialize fail"
         in dump["errors"]["ToyCannotInitialize"]
     )
+    assert "ValueError: The unit 'IU_toy_refused'" in dump["errors"]["ToyRefusedUnit"]
     # the experiments after it ran and are stored
     assert {sid for sid, _, _ in dump["results"]} == {"ToyDecay", "ToyFigureFails"}
     assert ("ToyDecay", "task_decay", "[A]") in dump["results"]

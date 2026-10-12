@@ -219,6 +219,24 @@ def test_a_count_is_a_unit() -> None:
     ).magnitude == pytest.approx(3.0)
 
 
+@pytest.mark.parametrize(
+    ("expression", "error"),
+    [
+        ("0.6 * microgramm", "'microgramm' is not defined"),
+        ("0.6 * * mg", "missing unary operator"),
+        ("(0.6 * mg", "unexpected EOF"),
+        ("mg ** mg", "Cannot convert"),
+        ("0.6 * mg / 0", "division by zero"),
+    ],
+)
+def test_an_expression_which_pint_refuses_is_an_error(
+    expression: str, error: str
+) -> None:
+    with pytest.raises(ValueError, match=rf"'IU_pkpdsim_test_refused'.*{error}"):
+        define_unit(ureg, f"IU_pkpdsim_test_refused = {expression}")
+    assert "IU_pkpdsim_test_refused" not in ureg
+
+
 @pytest.mark.parametrize("definition", ["IU_x", "IU_x =", "= 0.5 * mg", "1IU = mg"])
 def test_a_definition_needs_a_name_and_an_expression(definition: str) -> None:
     with pytest.raises(ValueError, match="<name> = <expression>"):
@@ -276,6 +294,43 @@ def test_the_units_of_the_data_by_substance_are_renamed(tmp_path: Path) -> None:
     write_study(tmp_path, "ToyIUStudy_Fig2", "substance\tA\tunit\nx\t1.0\tIU/ml\n")
     frames = initialized(ToyIUStudy, tmp_path).load_dataframes_by_substance("Fig2")
     assert frames["x"]["unit"].tolist() == ["IU_pkpdsim_test_toy/ml"]
+
+
+def test_the_units_of_the_data_are_defined_when_a_loader_is_called_first(
+    tmp_path: Path,
+) -> None:
+    """A loader called outside of `initialize` defines the units of the data."""
+
+    class ToyIUStudyAlone(ToyStudy):
+        data_units = MappingProxyType({"IU": "IU_pkpdsim_test_alone = 0.25 * mg"})
+
+    write_study(tmp_path, "ToyIUStudyAlone_Fig1", "time\tA\tunit\n0\t1.0\tIU/ml\n")
+    experiment = ToyIUStudyAlone(base_path=TOY_PATH, data_path=tmp_path)
+    for _ in range(2):
+        assert experiment.load_dataframe("Fig1")["unit"].tolist() == [
+            "IU_pkpdsim_test_alone/ml"
+        ]
+    quantity = experiment.ureg.Quantity(4, "IU_pkpdsim_test_alone")
+    assert quantity.to("mg").magnitude == pytest.approx(1.0)
+
+
+class ToyRefusedStudy(ToyStudy):
+    """A study whose unit of the data is defined with another value."""
+
+    data_units = MappingProxyType({"IU": "IU_pkpdsim_test_toy = 0.6 * mg"})
+
+
+def test_a_refused_unit_of_the_data_fails_the_initialization(tmp_path: Path) -> None:
+    define_unit(ureg, "IU_pkpdsim_test_toy = 0.5 * mg")
+    # the experiment is created, which a run does before its error handling
+    experiment = ToyRefusedStudy(base_path=TOY_PATH, data_path=tmp_path)
+    with pytest.raises(ValueError, match="IU_pkpdsim_test_toy") as info:
+        experiment.initialize()
+    assert "The experiment 'ToyRefusedStudy' cannot be initialized." in (
+        info.value.__notes__
+    )
+    with pytest.raises(ValueError, match="IU_pkpdsim_test_toy"):
+        experiment.load_dataframe("Fig1")
 
 
 def test_missing_values_by_column(tmp_path: Path) -> None:
