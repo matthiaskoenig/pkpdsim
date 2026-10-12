@@ -9,19 +9,23 @@ import shutil
 import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
+from types import MappingProxyType
 
 import numpy as np
 import pytest
 from PIL import Image
 from sbmlsim.experiment import SimulationExperiment
+from sbmlsim.plot import Axis, Figure
 from sbmlsim.simulation import Scan, Simulation
 from sbmlsim.simulation.sampling import local
 
 from pkpdsim.model import FigureSettings
 from pkpdsim.verify import (
+    FIGURE_SETTINGS_08,
     Dump,
     apply_renames,
     describe,
+    figure_spec,
     load,
     load_renames,
     matched_rows,
@@ -986,46 +990,227 @@ def test_the_renames_do_not_change_the_old_dump() -> None:
     assert dump.keys() == before.keys()
 
 
-def test_the_new_fields_of_a_figure_are_left_out(tmp_path: Path) -> None:
-    old_spec = {
-        "sid": "f",
-        "width": 7.0,
-        "legend_position": "outside",
-        "plots": [{"curves": [{"x": 1}]}],
-    }
-    new_spec = {
-        "sid": "f",
-        "width": None,
-        "_settings": {"legend_position": "outside"},
-        "plots": [{"curves": [{"x": 1, "over": [], "sel": {}}], "_bands": []}],
-    }
-    old = written(
-        tmp_path,
-        "o.pkl",
-        synthetic(figures={"E": {"f": json.dumps(old_spec, sort_keys=True)}}),
+#: the figures of `build_figures` as a dump of pkpdsim 0.4.1 with sbmlsim 0.8.5
+#: stored them (written by that function with sbmlsim 0.8.5, which sets a
+#: setting as an attribute of the figure, `setattr`)
+FIGURES_08: dict[str, str] = json.loads(
+    (TESTS_DIR / "data" / "figures-sbmlsim-0.8.5.json").read_text(encoding="utf-8")
+)["figures"]
+
+
+class FigureStudy(SimulationExperiment):
+    """An experiment the figures of `build_figures` belong to."""
+
+
+def build_figures(
+    experiment: SimulationExperiment,
+    set_setting: Callable[[Figure, str, object], None],
+) -> dict[str, Figure]:
+    """Build figures as the models do, with sbmlsim 0.8.5 or 0.9.
+
+    The fixture of sbmlsim 0.8.5 was written by this function, so it runs with
+    both versions; only the setting of a figure is set differently.
+    """
+    figures: dict[str, Figure] = {}
+    # a setting and an explicit width set after the creation (Harris1992 of creatinine)
+    fig = Figure(experiment=experiment, sid="Fig1", name="FigureStudy Fig1")
+    set_setting(fig, "legend_position", "outside")
+    fig.width = 10
+    plots = fig.create_plots(xaxis=Axis("time", unit="hr"), legend=True)
+    plots[0].set_yaxis("creatine", unit="mM")
+    plots[0].add_data(task="task_cr", xid="time", yid="[Cve_cr]", label="Sim")
+    plots[0].add_data(dataset="d", xid="time", yid="mean", yid_sd="mean_sd", label="d")
+    figures["Fig1"] = fig
+    # an explicit size of 2 x 3 panels (Kharasch1997 of midazolam)
+    fig = Figure(experiment, sid="Fig2", num_rows=2, num_cols=3, height=15, width=25)
+    plots = fig.create_plots(xaxis=Axis("time", unit="min"), legend=True)
+    plots[0].add_data(task="task_a", xid="time", yid="[A]", label="A")
+    figures["Fig2"] = fig
+    # the size of the panels, 1 x 2, and a resolution (Bedada2016 of chlorzoxazone)
+    fig = Figure(experiment, sid="Fig3", num_cols=2)
+    set_setting(fig, "fig_dpi", 300)
+    plots = fig.create_plots(xaxis=Axis("time", unit="min"), legend=True)
+    plots[1].add_data(task="task_a", xid="time", yid="[A]", label="A")
+    figures["Fig3"] = fig
+    return figures
+
+
+def setting_of_09(figure: Figure, name: str, value: object) -> None:
+    """Set a setting of a figure as sbmlsim 0.9 does (R1.5 of the port)."""
+    figure.settings = {**figure.settings, name: value}
+
+
+def figures_09(
+    change: Callable[[dict[str, Figure]], object] | None = None,
+) -> dict[str, str]:
+    """Get the figures of `build_figures` as a dump of sbmlsim 0.9 stores them."""
+    experiment = FigureStudy(base_path=TOY_PATH, data_path=DATA_PATHS)
+    figures = build_figures(experiment, setting_of_09)
+    if change is not None:
+        change(figures)
+    return {sid: figure_spec(figure, experiment) for sid, figure in figures.items()}
+
+
+def compare_figures(
+    tmp_path: Path, old: dict[str, str], new: dict[str, str], *args: str
+) -> int:
+    return verify(
+        [
+            "compare",
+            written(tmp_path, "o.pkl", synthetic(figures={"E": old})),
+            written(tmp_path, "n.pkl", synthetic(figures={"E": new})),
+            *args,
+        ]
     )
-    new = written(
-        tmp_path,
-        "n.pkl",
-        synthetic(figures={"E": {"f": json.dumps(new_spec, sort_keys=True)}}),
+
+
+def test_the_settings_of_a_figure_of_sbmlsim_08_are_those_of_sbmlsim_09() -> None:
+    from sbmlsim.plot import FigureSettings as SbmlsimFigureSettings
+
+    names = tuple(f.name for f in dataclasses.fields(SbmlsimFigureSettings))
+    assert names == FIGURE_SETTINGS_08
+
+
+def test_the_figures_of_sbmlsim_08_compare_with_those_of_09(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert compare_figures(tmp_path, FIGURES_08, figures_09()) == 0
+    out = capsys.readouterr().out
+    assert "figures: 3 old, 3 new, 0 differ" in out
+    assert "figures across versions of sbmlsim: 3" in out
+
+
+@pytest.mark.parametrize(
+    ("change", "difference"),
+    [
+        (
+            lambda f: setting_of_09(f["Fig1"], "legend_position", "inside"),
+            "_settings.legend_position 'outside' -> 'inside'",
+        ),
+        (
+            lambda f: setattr(f["Fig3"], "settings", None),
+            "_settings.fig_dpi only in old: 300",
+        ),
+        (
+            lambda f: setting_of_09(f["Fig2"], "legend_fontsize", 9),
+            "_settings.legend_fontsize only in new: 9",
+        ),
+        (lambda f: setattr(f["Fig1"], "width", 12), "width 10 -> 12"),
+        (lambda f: setattr(f["Fig2"], "height", None), "height 15 -> 10.0"),
+        (
+            lambda f: setting_of_09(f["Fig3"], "panel_width", 6.0),
+            "width 14.0 -> 12.0",
+        ),
+        (
+            lambda f: setattr(f["Fig3"].subplots[0].plot, "width", 9.0),
+            "subplots[0].plot.width None -> 9.0",
+        ),
+    ],
+)
+def test_a_setting_or_a_size_across_versions_is_compared(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    change: Callable[[dict[str, Figure]], object],
+    difference: str,
+) -> None:
+    assert compare_figures(tmp_path, FIGURES_08, figures_09(change)) == 1
+    out = capsys.readouterr().out
+    assert "figures: 3 old, 3 new, 1 differ (0 expected)" in out
+    assert difference in out
+
+
+def test_a_figure_of_one_dump_only_is_a_difference(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    new = figures_09()
+    del new["Fig3"]
+    assert compare_figures(tmp_path, FIGURES_08, new) == 1
+    assert "figures: 3 old, 2 new, 1 differ (0 expected)" in capsys.readouterr().out
+    old = dict(FIGURES_08)
+    del old["Fig1"]
+    assert compare_figures(tmp_path, old, figures_09()) == 1
+
+
+def with_new_fields(spec: str) -> str:
+    """Add a selection, a dimension of the lines and a band to a figure."""
+    figure = json.loads(spec)
+    plot = figure["subplots"][0]["plot"]
+    curve = plot["_curves"][0]
+    curve["over"] = ["dim_dose"]
+    curve["y"]["sel"] = {"dim_bw": 0}
+    plot["_bands"] = [{"__type__": "Band", "across": ["dim_sens"]}]
+    return json.dumps(figure, sort_keys=True)
+
+
+def test_the_fields_only_sbmlsim_09_has_are_listed(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    new = figures_09()
+    new["Fig2"] = with_new_fields(new["Fig2"])
+    assert compare_figures(tmp_path, FIGURES_08, new) == 0
+    out = capsys.readouterr().out
+    assert 'new fields: E/Fig2: subplots[0].plot._curves[0].over = ["dim_dose"]' in out
+    assert (
+        'new fields: E/Fig2: subplots[0].plot._curves[0].y.sel = {"dim_bw": 0}' in out
     )
-    renames = tmp_path / "renames.json"
-    renames.write_text(
-        json.dumps(
-            {
-                "figure_fields": [
-                    "width",
-                    "legend_position",
-                    "_settings",
-                    "over",
-                    "sel",
-                    "_bands",
-                ]
-            }
+    assert "new fields: E/Fig2: subplots[0].plot._bands = [{" in out
+    # an empty selection is the default and not listed
+    assert "E/Fig1" not in out
+
+
+def test_two_dumps_of_sbmlsim_09_compare_the_new_fields(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    old = figures_09()
+    new = dict(old)
+    new["Fig2"] = with_new_fields(new["Fig2"])
+    assert compare_figures(tmp_path, old, new) == 1
+    assert "figures across versions" not in capsys.readouterr().out
+
+
+def test_the_settings_and_the_size_a_figure_is_rendered_with() -> None:
+    class Wide(FigureStudy):
+        figure_settings = MappingProxyType(
+            {"panel_width": 3.0, "legend_position": "outside"}
         )
+
+    experiment = Wide(base_path=TOY_PATH, data_path=DATA_PATHS)
+    figure = Figure(
+        experiment, sid="f", num_cols=2, settings={"legend_position": "inside"}
     )
-    assert verify(["compare", old, new]) == 1
-    assert verify(["compare", old, new, "--renames", str(renames)]) == 0
+    resolved = json.loads(figure_spec(figure, experiment))["__resolved__"]
+    assert resolved == {
+        "settings": {"panel_width": 3.0, "legend_position": "inside"},
+        "width": 6.0,
+        "height": 5.0,
+    }
+
+
+def test_the_figure_fields_are_left_out_at_the_level_of_the_figure(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def change(figures: dict[str, Figure]) -> None:
+        figures["Fig2"].subplots[0].plot.width = 14.0
+
+    renames = tmp_path / "renames.json"
+    renames.write_text(json.dumps({"figure_fields": ["width", "height"]}))
+    old, new = figures_09(), figures_09(change)
+    assert compare_figures(tmp_path, old, new, "--renames", str(renames)) == 1
+    assert "subplots[0].plot.width 8.333333333333334 -> 14.0" in capsys.readouterr().out
+    # a field of the figure is left out
+    extra = {**json.loads(old["Fig1"]), "extra": 1}
+    new = {**old, "Fig1": json.dumps(extra, sort_keys=True)}
+    renames.write_text(json.dumps({"figure_fields": ["extra"]}))
+    assert compare_figures(tmp_path, old, new) == 1
+    assert compare_figures(tmp_path, old, new, "--renames", str(renames)) == 0
+
+
+def test_a_dump_stores_the_settings_and_the_size_of_a_figure(tmp_path: Path) -> None:
+    out = tmp_path / "dump.pkl"
+    args = ["dump", "--root", str(TESTS_DIR), "--model", "pkpdsim_toy"]
+    assert verify([*args, "--out", str(out), "ToyDecay"]) == 0
+    spec = json.loads(load(str(out))["figures"]["ToyDecay"]["fig_decay"])
+    assert spec["__resolved__"] == {"settings": {}, "width": 7.0, "height": 5.0}
 
 
 def test_a_figure_field_of_one_dump_only_is_named(

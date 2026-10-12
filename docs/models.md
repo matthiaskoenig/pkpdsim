@@ -203,23 +203,27 @@ prints them. A dump of pkpdsim 0.4 (sbmlsim 0.8) and one of pkpdsim 0.5 (sbmlsim
   (`times of <experiment>/<task>: <n> rows only in new, at <times>`) and which
   the pattern `experiment/task/time` of `expected` names.
 
-The ids of sbmlsim 0.9 are SIds (see [Keys](experiments.md#keys)), and sbmlsim 0.9
-adds fields to the specification of a figure. The migration says so in the renames
-file instead of weakening the comparison, which then passes with exit code 0 or
-fails:
+The specification of a figure (its attributes as json) changed as well. A figure which the old dump has from sbmlsim 0.8 and the new dump from sbmlsim 0.9 is compared in the form of sbmlsim 0.9, and `compare` prints how many (`figures across versions of sbmlsim: <n>`):
+
+- The settings. sbmlsim 0.8 kept a setting which a figure set (`fig.legend_position = "outside"`) as an attribute of the figure, sbmlsim 0.9 keeps it in `_settings` (`fig.settings = {"legend_position": "outside"}`). The attributes of the old figure which are fields of `FigureSettings` move into its `_settings`, which are compared with the settings the new figure is rendered with apart from the settings of the run: the `figure_settings` of its experiment overridden by its own `settings`. Another value, a setting which only one figure has and one which moved into the experiment are compared by value.
+- The size. sbmlsim 0.8 computed the size of a figure when it was created (`_width` and `_height`: the explicit size, or the number of panels times the panel size), sbmlsim 0.9 keeps only the explicit size (`width` and `height`, `None` for the size of the panels) and computes the size when it renders the figure. The old size is compared with the size the new figure is rendered with apart from the settings of the run, which a dump of pkpdsim 0.5 stores with the settings (`__resolved__` of the specification, `pkpdsim.verify.figure_spec`), so an explicit size and the size of the panels are compared by value. A plot which is added to a figure gets its share of the size of the figure, from sbmlsim 0.8 always and from sbmlsim 0.9 only for an explicit size; such a size of a plot is left out on both sides, a size of its own is compared. A figure whose size was set after its plots were added gave them its earlier size in sbmlsim 0.8, which then counts as a size of their own and differs.
+- The fields which only sbmlsim 0.9 has, the selection of a `Data` (`sel`), the dimensions of the lines of a `Curve` (`over`) and the bands of a `Plot` (`_bands`), have no counterpart in sbmlsim 0.8: they are left out of the comparison, and every one which is not empty is listed for the review of the migration, `new fields: <experiment>/<figure>: <path> = <value>` (the path as in a difference, e.g. `subplots[0].plot._curves[1].y.sel`).
+
+Two figures of one version of sbmlsim are compared as they are, `sel`, `over` and `_bands` included. Neither dump has the settings of the run (the `FigureSettings` of the model, which a run hands to every figure); `settings` compares them.
+
+The ids of sbmlsim 0.9 are SIds (see [Keys](experiments.md#keys)). The migration says so in the renames file instead of weakening the comparison, which then passes with exit code 0 or fails:
 
 | part | content |
 | --- | --- |
 | `ids` | an old id to its new id: the task of a result, the dataset, the figure and mapping keys and the references to them in a figure |
 | `sids` | `true`: every id of the old dump becomes `pkpdsim.experiment.to_sid(id)` (after `ids`) |
-| `figure_fields` | the keys of a figure specification which are removed at any depth, in both dumps (`_settings`, `_bands`, `_width`, `_height`, `width`, `height`, `over`, `sel` of sbmlsim 0.9) |
+| `figure_fields` | the keys of the specification of a figure which are left out of both dumps, at the level of the figure only (not in its plots, curves or axes), in the form in which the figures are compared: a field of a figure which `compare` cannot map. The port from sbmlsim 0.8 to 0.9 needs none |
 | `expected` | a part (`results`, `datasets`, `mappings`, `figures`, `ranges`) to the patterns of the keys of the differences which are expected |
 | `metadata`, `strings` | as in [Experiments and their metadata](experiments.md#renames-in-a-verification) |
 
 ```json
 {
   "sids": true,
-  "figure_fields": ["_settings", "_bands", "_width", "_height", "width", "height"],
   "expected": {
     "results": ["Anderson1961/po_2p5/time"],
     "mappings": ["Anderson1961/Fig1_hctz"]

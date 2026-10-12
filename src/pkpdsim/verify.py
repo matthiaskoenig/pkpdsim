@@ -55,9 +55,11 @@ other dimensions by name, matches the rows of a repeated time from the last
 one, so that the state after a change, which is all sbmlsim 0.8 gave, is
 compared, and counts the rows of a time which only one dump has as differences
 (a new output time of a task is expected with the pattern of its variable
-`time`). The renames of a port are the ids which became SIds (`sids`), the
-fields sbmlsim 0.9 added to a figure (`figure_fields`) and the differences which
-are expected (`expected`).
+`time`), and compares a figure of sbmlsim 0.8 with the one of sbmlsim 0.9 in the
+form of sbmlsim 0.9: the settings and the size it is rendered with, without the
+fields which only sbmlsim 0.9 has, which it lists (`align_figures`). The renames
+of a port are the ids which became SIds (`sids`) and the differences which are
+expected (`expected`).
 """
 
 import argparse
@@ -95,6 +97,7 @@ if TYPE_CHECKING:
     from sbmlsim.experiment import SimulationExperiment
     from sbmlsim.fit import FitData, FitMapping
     from sbmlsim.fit.cli import FitDefinition
+    from sbmlsim.plot import Figure
 
 ROOT_HELP = (
     "directory put first on the python path, e.g. a checkout of the repository "
@@ -109,6 +112,39 @@ TIME_DIMENSIONS = ("time", "_time", "_point")
 
 #: experiment groups of the registry which are run first, in this order
 GROUPS = ("studies", "misc", "scans")
+
+#: the settings of a figure of sbmlsim 0.8: attributes of the class `Figure`,
+#: which a figure overrode as attributes of its own; sbmlsim 0.9 has them as
+#: the fields of `FigureSettings`, which a figure overrides in its `_settings`
+FIGURE_SETTINGS_08: tuple[str, ...] = (
+    "fig_dpi",
+    "fig_facecolor",
+    "fig_subplots_wspace",
+    "fig_subplots_hspace",
+    "panel_width",
+    "panel_height",
+    "fig_titlesize",
+    "fig_titleweight",
+    "axes_titlesize",
+    "axes_titleweight",
+    "axes_labelsize",
+    "axes_labelweight",
+    "xtick_labelsize",
+    "ytick_labelsize",
+    "legend_fontsize",
+    "legend_position",
+    "legend_loc",
+)
+
+#: the key of the specification of a figure (sbmlsim 0.9) with the settings of
+#: its experiment and its own and the size it is rendered with, without the
+#: settings of a run, see `figure_spec`
+RESOLVED = "__resolved__"
+
+#: the fields of the specification of a figure which only sbmlsim 0.9 has: the
+#: selection of a `Data`, the dimensions of the lines of a `Curve`, the bands of
+#: a `Plot`
+NEW_FIGURE_FIELDS: tuple[str, ...] = ("sel", "over", "_bands")
 
 
 class Dump(TypedDict):
@@ -525,9 +561,28 @@ def store_experiment(
     )
     result["ranges"][sid] = {k: mapping_range(m) for k, m in mappings.items()}
     result["figures"][sid] = {
-        fid: json.dumps(serialize(fig), sort_keys=True, default=repr)
-        for fid, fig in experiment.figures().items()
+        fid: figure_spec(fig, experiment) for fid, fig in experiment.figures().items()
     }
+
+
+def figure_spec(figure: "Figure", experiment: "SimulationExperiment") -> str:
+    """Get the specification of a figure, its attributes as json.
+
+    `RESOLVED` adds the settings of the experiment and of the figure (the
+    `figure_settings` of the experiment overridden by the `settings` of the
+    figure) and the width and height the figure is rendered with, as sbmlsim
+    resolves them without the settings of a run. A dump of sbmlsim 0.8 has
+    them as attributes of the figure (`_width`, `_height` and a setting such as
+    `legend_position`), so that `compare` compares them across versions.
+    """
+    spec = cast("dict[str, object]", serialize(figure))
+    width, height = figure.size(figure.resolved_settings(experiment))
+    spec[RESOLVED] = {
+        "settings": serialize({**experiment.figure_settings, **figure.settings}),
+        "width": width,
+        "height": height,
+    }
+    return json.dumps(spec, sort_keys=True, default=repr)
 
 
 # --- compare --------------------------------------------------------------------
@@ -779,7 +834,8 @@ class Renames(TypedDict, total=False):
     #: every id of the old dump becomes its SId (`pkpdsim.experiment.to_sid`)
     sids: bool
     #: the keys of the specification of a figure which are left out of both
-    #: dumps, at any depth, e.g. the fields sbmlsim 0.9 added
+    #: dumps, at the level of the figure, after `align_figures`: a field of a
+    #: figure which `compare` cannot map
     figure_fields: list[str]
     #: part of the dump -> patterns of the keys whose differences are expected
     #: (`*` and `?` are wildcards, a bracket is literal, e.g. `E/task_po/[A]`):
@@ -1010,29 +1066,189 @@ def rename_ids(dump: Dump, rename: Callable[[str], str]) -> Dump:
 
 
 def drop_figure_fields(dump: Dump, fields: Collection[str]) -> Dump:
-    """Leave out keys of the specifications of the figures, at any depth.
+    """Leave out keys of the specifications of the figures, of the figure only.
+
+    A key is left out at the level of the figure, not inside its plots, curves
+    or axes: a plot has a `width` and a `height` of its own.
 
     Returns:
         A new dump; the given one is not changed.
     """
     names = set(fields)
 
-    def walk(value: object) -> object:
-        if isinstance(value, dict):
-            return {k: walk(v) for k, v in value.items() if k not in names}
-        if isinstance(value, list):
-            return [walk(v) for v in value]
-        return value
+    def without(spec: str) -> str:
+        figure = json.loads(spec)
+        if isinstance(figure, dict):
+            figure = {k: v for k, v in figure.items() if k not in names}
+        return json.dumps(figure, sort_keys=True)
 
     result = cast("Dump", dict(dump))
     result["figures"] = {
-        sid: {
-            f: json.dumps(walk(json.loads(spec)), sort_keys=True)
-            for f, spec in figures.items()
-        }
+        sid: {f: without(spec) for f, spec in figures.items()}
         for sid, figures in dump["figures"].items()
     }
     return result
+
+
+def _is_figure_of_08(spec: object) -> bool:
+    """Check whether a specification is one of a figure of sbmlsim 0.8.
+
+    A figure of sbmlsim 0.8 always has a size (`_width`, `_height`), one of
+    sbmlsim 0.9 has its settings (`_settings`).
+    """
+    return isinstance(spec, dict) and "_width" in spec and "_settings" not in spec
+
+
+def _is_number(value: object) -> bool:
+    """Check for a json number."""
+    return isinstance(value, int | float) and not isinstance(value, bool)
+
+
+def _without_derived_plot_sizes(figure: dict[str, Any]) -> None:
+    """Leave out the size of a plot which its figure gave it, in place.
+
+    A plot which is added to a figure of a size gets the width of the figure
+    divided by its columns times the columns of the plot, likewise the height:
+    in sbmlsim 0.8 always, a figure had a size, in sbmlsim 0.9 only for a
+    figure of an explicit size. The size of the figure is compared, so a plot
+    size which equals the one of the figure is `None`; a size of its own stays.
+    """
+    for subplot in figure.get("subplots") or []:
+        plot = subplot.get("plot") if isinstance(subplot, dict) else None
+        if not isinstance(plot, dict):
+            continue
+        for size, count, span in (
+            ("width", "num_cols", "col_span"),
+            ("height", "num_rows", "row_span"),
+        ):
+            total, n, k = figure.get(size), figure.get(count), subplot.get(span)
+            value = plot.get(size)
+            if (
+                all(_is_number(x) for x in (total, n, k, value))
+                and n
+                and math.isclose(value, total / n * k, rel_tol=1e-12)
+            ):
+                plot[size] = None
+
+
+def _figure_of_08(spec: dict[str, Any]) -> dict[str, Any]:
+    """Bring the specification of a figure of sbmlsim 0.8 into the compared form.
+
+    The settings the figure set as attributes of its own go into `_settings`,
+    the size (`_width`, `_height`, which sbmlsim 0.8 computed from the panels
+    when the figure was created) into `width` and `height`.
+    """
+    figure = dict(spec)
+    figure["_settings"] = {
+        name: figure.pop(name) for name in FIGURE_SETTINGS_08 if name in figure
+    }
+    figure["width"] = figure.pop("_width")
+    figure["height"] = figure.pop("_height", None)
+    _without_derived_plot_sizes(figure)
+    return figure
+
+
+def _without_new_fields(
+    value: object, path: str, listed: list[tuple[str, object]]
+) -> object:
+    """Leave out the fields of the objects which only sbmlsim 0.9 has.
+
+    A field which is not empty is added to `listed` with its path.
+    """
+    if isinstance(value, dict):
+        result: dict[str, object] = {}
+        for k, v in value.items():
+            if "__type__" in value and k in NEW_FIGURE_FIELDS:
+                if v:
+                    listed.append((f"{path}.{k}".lstrip("."), v))
+                continue
+            result[k] = _without_new_fields(v, f"{path}.{k}", listed)
+        return result
+    if isinstance(value, list):
+        return [
+            _without_new_fields(v, f"{path}[{k}]", listed) for k, v in enumerate(value)
+        ]
+    return value
+
+
+def _figure_of_09(
+    spec: dict[str, Any], listed: list[tuple[str, object]]
+) -> dict[str, Any]:
+    """Bring the specification of a figure of sbmlsim 0.9 into the compared form.
+
+    `_settings`, `width` and `height` are those the figure is rendered with
+    without the settings of the run (`RESOLVED`): the settings of its
+    experiment and its own, the explicit size or the one of its panels. The
+    fields which only sbmlsim 0.9 has (`NEW_FIGURE_FIELDS`) are left out and
+    the ones which are not empty added to `listed`.
+    """
+    figure = cast("dict[str, Any]", _without_new_fields(spec, "", listed))
+    resolved = figure.pop(RESOLVED, None)
+    if isinstance(resolved, dict):
+        figure["_settings"] = resolved.get("settings")
+        figure["width"] = resolved.get("width")
+        figure["height"] = resolved.get("height")
+    _without_derived_plot_sizes(figure)
+    return figure
+
+
+class AlignedFigures(NamedTuple):
+    """The figures of two dumps in the form in which they are compared."""
+
+    old: Dump
+    new: Dump
+    #: the number of figures of sbmlsim 0.8 compared with one of sbmlsim 0.9
+    across: int
+    #: experiment, figure, path and value of a field which only sbmlsim 0.9 has
+    new_fields: list[tuple[str, str, str, object]]
+
+
+def align_figures(old: Dump, new: Dump) -> AlignedFigures:
+    """Bring a figure of sbmlsim 0.8 and the one of sbmlsim 0.9 into one form.
+
+    sbmlsim 0.9 moved the settings of a figure from its attributes
+    (`legend_position`) into `_settings` and its size from `_width` and
+    `_height`, which sbmlsim 0.8 computed when the figure was created, into
+    `width` and `height`, which are `None` for the size of the panels at the
+    time it is rendered; a plot gets a size from its figure only for an
+    explicit one. A figure which is in both dumps, of sbmlsim 0.8 in the old and
+    of sbmlsim 0.9 in the new one, is compared in the form of sbmlsim 0.9, with
+    the settings and the size it is rendered with apart from the settings of
+    the run (`RESOLVED` of the dump, see `figure_spec`), and without the size
+    of a plot which its figure gave it. The selection of a `Data`, the
+    dimensions of the lines of a `Curve` and the bands of a `Plot`
+    (`NEW_FIGURE_FIELDS`) have no counterpart in sbmlsim 0.8: they are left
+    out and listed. Two figures of one version are compared as they are.
+
+    Returns:
+        The two dumps (new ones, the given ones are not changed), the number of
+        figures compared across versions and the listed fields.
+    """
+    figures_old = {sid: dict(figures) for sid, figures in old["figures"].items()}
+    figures_new = {sid: dict(figures) for sid, figures in new["figures"].items()}
+    across = 0
+    new_fields: list[tuple[str, str, str, object]] = []
+    for sid in sorted(figures_old.keys() & figures_new.keys()):
+        a_figures, b_figures = figures_old[sid], figures_new[sid]
+        for fid in sorted(a_figures.keys() & b_figures.keys()):
+            a, b = json.loads(a_figures[fid]), json.loads(b_figures[fid])
+            if (
+                not _is_figure_of_08(a)
+                or not isinstance(b, dict)
+                or "_settings" not in b
+            ):
+                continue
+            listed: list[tuple[str, object]] = []
+            a_figures[fid] = json.dumps(_figure_of_08(a), sort_keys=True)
+            b_figures[fid] = json.dumps(_figure_of_09(b, listed), sort_keys=True)
+            across += 1
+            new_fields += [(sid, fid, path, value) for path, value in listed]
+    return AlignedFigures(
+        old={**old, "figures": figures_old},
+        new={**new, "figures": figures_new},
+        across=across,
+        new_fields=new_fields,
+    )
 
 
 def _renamer(renames: Renames) -> Callable[[str], str]:
@@ -1179,6 +1395,8 @@ def compare(args: argparse.Namespace) -> int:
         except ValueError as err:
             print(err, file=sys.stderr)
             return 2
+    aligned = align_figures(old, new)
+    old, new = aligned.old, aligned.new
     if fields := renames.get("figure_fields"):
         old, new = drop_figure_fields(old, fields), drop_figure_fields(new, fields)
     try:
@@ -1289,6 +1507,17 @@ def compare(args: argparse.Namespace) -> int:
     # a time which only one dump has is a difference; one of the new dump can be
     # expected, the old dump is the reference
     differing += unmatched + unmatched_new - expected_new
+
+    # the figures of sbmlsim 0.8 compared with those of sbmlsim 0.9
+    if aligned.across:
+        print(
+            f"figures across versions of sbmlsim: {aligned.across} (the settings "
+            "and the size as rendered without the settings of the run; "
+            f"{', '.join(NEW_FIGURE_FIELDS)} of the new dump listed, not compared)"
+        )
+    for sid, fid, path, value in aligned.new_fields:
+        if selected(sid):
+            print(f"new fields: {sid}/{fid}: {path} = {json.dumps(value)}")
 
     # everything else exactly
     for part, (flat_old, flat_new) in parts.items():
