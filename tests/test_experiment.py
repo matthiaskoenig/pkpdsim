@@ -164,12 +164,18 @@ def test_a_model_types_its_conventions_itself() -> None:
         ("a b", "a_b"),
         ("a‐b", "a_b"),
         ("(a+b)*c&d", "_a_b__c_d"),
-        ("", ""),
     ],
 )
 def test_a_text_becomes_an_sid(text: str, sid: str) -> None:
     assert to_sid(text) == sid
     assert len(to_sid(text)) == len(text)
+
+
+def test_the_empty_text_is_an_error() -> None:
+    with pytest.raises(ValueError, match="empty text"):
+        to_sid("")
+    with pytest.raises(ValueError, match="empty text"):
+        initialized(ToyStudy).to_sid("")
 
 
 @pytest.mark.parametrize("text", ["2.5mg", "1.5.2", "2.", "0p5", "9_a"])

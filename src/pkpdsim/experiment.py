@@ -75,7 +75,8 @@ def to_sid(text: str) -> str:
     SId starts with a letter or `_`: a text which starts with another invalid
     character gets a leading `_` (`.5` is `_5`), but a text which starts with a
     digit is an error, since the key would be refused by sbmlsim and a prefix
-    would break the rule of one character for one. Put a letter before it.
+    would break the rule of one character for one. Put a letter before it. The
+    empty text is an error as well, it is no SId.
 
     Args:
         text: the text.
@@ -84,8 +85,12 @@ def to_sid(text: str) -> str:
         The SId.
 
     Raises:
-        ValueError: if the SId starts with a digit.
+        ValueError: if the text is empty or the SId starts with a digit.
     """
+    if not text:
+        raise ValueError(
+            "The empty text is no SId; give a text of at least one character."
+        )
     sid = _NOT_IN_SID.sub("_", _DECIMAL_POINT.sub("p", text))
     if sid[:1].isdigit():
         raise ValueError(
@@ -261,8 +266,8 @@ class PKPDSimulationExperiment(SimulationExperiment):
             The SId.
 
         Raises:
-            ValueError: if the SId starts with a digit, see the function
-                `to_sid`, or another text of the experiment gave the same SId.
+            ValueError: if the text is empty or the SId starts with a digit, see
+                the function `to_sid`, or another text of the experiment gave the same SId.
         """
         sid = to_sid(text)
         first = self._sid_texts.setdefault(sid, text)
