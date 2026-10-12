@@ -764,8 +764,8 @@ class Renames(TypedDict, total=False):
     figure_fields: list[str]
     #: part of the dump -> patterns (`fnmatch`) of the keys whose differences
     #: are expected: `experiment/task/variable` (results),
-    #: `experiment/dataset/column`, `experiment` (mappings),
-    #: `experiment/figure`, `experiment/mapping` (ranges)
+    #: `experiment/dataset/column` (datasets), `experiment/figure` (figures),
+    #: `experiment/mapping` (mappings, ranges)
     expected: dict[str, list[str]]
 
 
@@ -1077,7 +1077,27 @@ class _Expected:
 def _flat(
     dump: Dump, part: Literal["datasets", "mappings", "figures", "ranges"]
 ) -> dict[str | tuple[str, ...], object]:
-    """Get a part of a dump by the keys a comparison reports."""
+    """Get a part of a dump by the keys a comparison reports.
+
+    A fit mapping is keyed by its experiment and its key, the first field of its
+    description.
+
+    Raises:
+        ValueError: if two fit mappings of an experiment have one key (a key with
+            a '|').
+    """
+    if part == "mappings":
+        mappings: dict[str | tuple[str, ...], object] = {}
+        for sid, descriptions in dump["mappings"].items():
+            for description in descriptions:
+                key = (sid, description.split("|", 1)[0])
+                if key in mappings:
+                    raise ValueError(
+                        f"Two fit mappings of {sid} have the key {key[1]}, a key "
+                        "has a '|'."
+                    )
+                mappings[key] = description
+        return mappings
     if part in ("figures", "ranges"):
         return {
             (sid, key): value
@@ -1090,7 +1110,7 @@ def _flat(
 def _detail(part: str, a: object, b: object) -> list[str]:
     """Describe the difference of a changed key."""
     if part == "mappings":
-        return diff_lines(a, b)
+        return diff_lines([a] if a else [], [b] if b else [])
     if part == "figures":
         return json_paths(_json(a), _json(b))[:5]
     return [f"{a!r} -> {b!r}"]
@@ -1113,6 +1133,14 @@ def compare(args: argparse.Namespace) -> int:
             return 2
     if fields := renames.get("figure_fields"):
         old, new = drop_figure_fields(old, fields), drop_figure_fields(new, fields)
+    try:
+        parts = {
+            part: (_flat(old, part), _flat(new, part))
+            for part in ("datasets", "mappings", "figures", "ranges")
+        }
+    except ValueError as err:
+        print(err, file=sys.stderr)
+        return 2
     expected = _Expected(renames.get("expected", {}))
     for label, dump_ in (("old", old), ("new", new)):
         if versions := dump_.get("versions"):
@@ -1207,9 +1235,9 @@ def compare(args: argparse.Namespace) -> int:
     differing += unmatched
 
     # everything else exactly
-    for part in ("datasets", "mappings", "figures", "ranges"):
-        a = {k: v for k, v in _flat(old, part).items() if selected(_sid(k))}
-        b = {k: v for k, v in _flat(new, part).items() if selected(_sid(k))}
+    for part, (flat_old, flat_new) in parts.items():
+        a = {k: v for k, v in flat_old.items() if selected(_sid(k))}
+        b = {k: v for k, v in flat_new.items() if selected(_sid(k))}
         changed = sorted(
             (k for k in a.keys() | b.keys() if not equal(a.get(k), b.get(k))), key=str
         )

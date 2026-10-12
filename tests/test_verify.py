@@ -987,6 +987,47 @@ def test_an_expected_difference_is_not_counted(
     assert "datasets: 1 old, 1 new, 1 differ (1 expected)" in capsys.readouterr().out
 
 
+def mapping(key: str, y: str, task: str) -> str:
+    """The description of a fit mapping of the column y to [A] of a task."""
+    return (
+        f"{key}|d|None|time|{y}|4|None|None|None|{task}|time|[A]|None|None|None"
+        "|weight=None|[]"
+    )
+
+
+def test_an_expected_mapping_difference_is_one_mapping(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    old = synthetic(
+        mappings={"E": [mapping("fm1", "A", "t"), mapping("fm2", "A", "t")]}
+    )
+    new = synthetic(
+        mappings={"E": [mapping("fm1", "B", "t"), mapping("fm2", "A", "u")]}
+    )
+    a, b = written(tmp_path, "o.pkl", old), written(tmp_path, "n.pkl", new)
+    renames = tmp_path / "renames.json"
+    capsys.readouterr()
+    for patterns, code in ((["E"], 1), (["E/fm1"], 1), (["E/fm*"], 0)):
+        renames.write_text(json.dumps({"expected": {"mappings": patterns}}))
+        assert verify(["compare", a, b, "--renames", str(renames)]) == code, patterns
+    out = capsys.readouterr().out
+    assert "mappings: 2 old, 2 new, 2 differ (1 expected)" in out
+    assert "expected difference which does not occur: mappings: E" in out
+    assert (
+        f"  E/fm2\n    - {mapping('fm2', 'A', 't')}\n    + {mapping('fm2', 'A', 'u')}"
+        in out
+    )
+
+
+def test_two_mappings_of_one_key_are_an_error(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    dump = synthetic(mappings={"E": [mapping("fm", "A", "t"), mapping("fm", "B", "t")]})
+    path = written(tmp_path, "d.pkl", dump)
+    assert verify(["compare", path, path]) == 2
+    assert "Two fit mappings of E have the key fm" in capsys.readouterr().err
+
+
 def test_an_expected_difference_which_does_not_occur_is_counted(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
