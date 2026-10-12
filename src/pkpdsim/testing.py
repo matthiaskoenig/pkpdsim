@@ -15,7 +15,8 @@ The known exceptions of the tests (experiments which are not registered on
 purpose, modules which do not import, the reason to run the experiments one at
 a time) are the `checks` of the model object, each with its reason.
 
-The functions raise `AssertionError` with a message which names what is wrong.
+The functions raise `AssertionError` with a message which names every problem,
+also for experiments which fail to initialize or to run.
 """
 
 from __future__ import annotations
@@ -30,7 +31,11 @@ from pathlib import Path
 from types import ModuleType
 from typing import TYPE_CHECKING
 
-from sbmlsim.experiment import ExperimentRunner, SimulationExperiment
+from sbmlsim.experiment import (
+    ExperimentRunError,
+    ExperimentRunner,
+    SimulationExperiment,
+)
 from sbmlsim.fit.cli import FitRun, run_fit
 
 from pkpdsim.model import resolve
@@ -124,9 +129,10 @@ def check_registry(model: PKPDModel) -> None:
     twice = sorted({name for name in names if names.count(name) > 1})
     if twice:
         problems.append(f"registered twice: {twice}")
+    defined = defined_experiments(modules)
     unregistered = sorted(
         cls.__name__
-        for cls in defined_experiments(modules)
+        for cls in defined
         if cls.__name__ not in names and cls.__name__ not in checks.not_registered
     )
     if unregistered:
@@ -134,8 +140,9 @@ def check_registry(model: PKPDModel) -> None:
     stale = sorted(set(checks.not_registered) & set(names))
     if stale:
         problems.append(f"registered, but listed as not registered: {stale}")
-    defined = {cls.__name__ for cls in defined_experiments(modules)}
-    missing = sorted(set(checks.not_registered) - defined - set(names))
+    missing = sorted(
+        set(checks.not_registered) - {cls.__name__ for cls in defined} - set(names)
+    )
     if missing:
         problems.append(f"listed as not registered, but not defined: {missing}")
     absent = sorted(
@@ -232,14 +239,30 @@ def _runner(model: PKPDModel) -> ExperimentRunner:
 def initialize_experiments(model: PKPDModel) -> dict[str, SimulationExperiment]:
     """Initialize the registered experiments with their data, figures, mappings.
 
+    Every experiment is initialized, also after one which cannot be.
+
     Returns:
         The experiments by name.
+
+    Raises:
+        AssertionError: naming every experiment which cannot be initialized
+            with its error; the tracebacks are in the log of sbmlsim.
     """
-    return dict(_runner(model).experiments)
+    runner = _runner(model)
+    if runner.failed:
+        total = len(runner.failed) + len(runner.experiments)
+        lines = [f"{sid}: {result.error}" for sid, result in runner.failed.items()]
+        raise AssertionError(
+            f"{len(runner.failed)} of {total} experiments cannot be initialized "
+            "(the tracebacks are in the log):\n" + "\n".join(lines)
+        )
+    return dict(runner.experiments)
 
 
 def run_all_experiments(model: PKPDModel, output_dir: Path) -> None:
     """Run the registered experiments, as `run_<model>` does.
+
+    Every experiment runs, also after one which failed.
 
     Args:
         model: the model.
@@ -250,20 +273,29 @@ def run_all_experiments(model: PKPDModel, output_dir: Path) -> None:
             integration.
 
     Raises:
-        AssertionError: if a run wrote no report.
-        ExperimentRunError: if an experiment or a figure of a run failed, after
-            the report of the run is written.
+        AssertionError: naming every failed experiment and figure, and every
+            run which wrote no report.
     """
+    failures: list[str] = []
     if model.checks.one_at_a_time is not None:
         for cls in registered_experiments(model):
-            path = model.run_experiments(cls, output_dir=output_dir / cls.__name__)
+            path = output_dir / cls.__name__
+            try:
+                model.run_experiments(cls, output_dir=path)
+            except ExperimentRunError as err:
+                failures += err.failures
             if not list(path.glob("**/*.html")):
-                raise AssertionError(f"{cls.__name__} wrote no report")
-        return
-    path = output_dir / "all"
-    model.run_simulation_experiments(registered_experiments(model), path)
-    if not list(path.glob("**/*.html")):
-        raise AssertionError("the run of all experiments wrote no report")
+                failures.append(f"{cls.__name__} wrote no report")
+    else:
+        path = output_dir / "all"
+        try:
+            model.run_simulation_experiments(registered_experiments(model), path)
+        except ExperimentRunError as err:
+            failures += err.failures
+        if not list(path.glob("**/*.html")):
+            failures.append("the run of all experiments wrote no report")
+    if failures:
+        raise AssertionError("\n".join(failures))
 
 
 def start_fits(

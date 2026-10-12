@@ -8,9 +8,11 @@ import pytest
 from pkpdsim import testing
 from pkpdsim.model import CheckSettings
 from pkpdsim_toy import MODEL
+from pkpdsim_toy.broken import ToyCannotInitialize, ToyFigureFails
 from pkpdsim_toy.experiments.decay import ToyDecay, ToyDecaySlow
 
 PARTIAL = dataclasses.replace(MODEL, experiments=".simulations:PARTIAL")
+BROKEN = dataclasses.replace(MODEL, experiments=".broken:BROKEN")
 KNOWN = dataclasses.replace(
     PARTIAL, checks=CheckSettings(not_registered={"ToyDecaySlow": "a test"})
 )
@@ -155,3 +157,36 @@ def test_a_package_which_does_not_import_fails() -> None:
 def test_check_model_finds_a_slip(changes: dict[str, object], message: str) -> None:
     with pytest.raises(AssertionError, match=message):
         testing.check_model(dataclasses.replace(MODEL, **changes))
+
+
+def test_every_failure_of_the_initialization_is_named() -> None:
+    with pytest.raises(AssertionError) as info:
+        testing.initialize_experiments(BROKEN)
+    message = str(info.value)
+    assert "1 of 3 experiments cannot be initialized" in message
+    assert (
+        "ToyCannotInitialize: RuntimeError: the simulations of ToyCannotInitialize fail"
+        in message
+    )
+
+
+def test_every_failure_of_a_run_is_named(tmp_path: Path) -> None:
+    with pytest.raises(AssertionError) as info:
+        testing.run_all_experiments(BROKEN, tmp_path)
+    message = str(info.value)
+    assert ToyCannotInitialize.__name__ in message
+    assert ToyFigureFails.__name__ in message
+    assert "figures_mpl()" in message
+
+
+def test_every_failure_of_a_run_one_at_a_time_is_named(tmp_path: Path) -> None:
+    one_by_one = dataclasses.replace(
+        BROKEN, checks=CheckSettings(one_at_a_time="a test of the failures")
+    )
+    with pytest.raises(AssertionError) as info:
+        testing.run_all_experiments(one_by_one, tmp_path)
+    message = str(info.value)
+    assert ToyCannotInitialize.__name__ in message
+    assert ToyFigureFails.__name__ in message
+    # the experiment after a failing one (ToyFigureFails) ran and wrote its report
+    assert list((tmp_path / "ToyCannotInitialize").glob("**/*.html"))
