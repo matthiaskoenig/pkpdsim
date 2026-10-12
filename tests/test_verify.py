@@ -754,17 +754,19 @@ def test_repeated_times_are_matched_from_the_last_row() -> None:
     match = matched_rows(np.array([0.0, 1, 2, 2, 3]), np.array([0.0, 1, 2, 2, 3, 4]))
     assert match.old.tolist() == [0, 1, 2, 3, 4]
     assert match.new.tolist() == [0, 1, 2, 3, 4]
-    assert match[2:] == (0, 0, 0, 1)
+    assert match[2:6] == (0, 0, 0, 1)
+    assert match.times_old.tolist() == []
+    assert match.times_new.tolist() == [4.0]
     # the old dump has the time twice: its state after the change is compared
     match = matched_rows(np.array([0.0, 1, 2, 2, 3]), T_OLD)
     assert match.old.tolist() == [0, 1, 3, 4]
     assert match.new.tolist() == [0, 1, 2, 3]
-    assert match[2:] == (1, 0, 0, 0)
+    assert match[2:6] == (1, 0, 0, 0)
     # a change at the last time
     match = matched_rows(T_OLD, np.array([0.0, 1, 2, 3, 3]))
     assert match.old.tolist() == [0, 1, 2, 3]
     assert match.new.tolist() == [0, 1, 2, 4]
-    assert match[2:] == (0, 1, 0, 0)
+    assert match[2:6] == (0, 1, 0, 0)
 
 
 def test_a_state_before_a_change_differs_although_the_times_differ(
@@ -774,12 +776,34 @@ def test_a_state_before_a_change_differs_although_the_times_differ(
     times = [0, 1, 2, 2, 3, 4]
     same = written(tmp_path, "s.pkl", timecourse(times, [1, 2, 3, 3.5, 4, 5]))
     other = written(tmp_path, "n.pkl", timecourse(times, [1, 2, 99, 3.5, 4, 5]))
+    # the new output time is expected, the states at 2 are compared
+    renames = tmp_path / "renames.json"
+    renames.write_text(json.dumps({"expected": {"results": ["E/t/time"]}}))
+    args = ["--threshold", "1e-12", "--renames", str(renames)]
+    assert verify(["compare", old, same, *args]) == 0
+    assert verify(["compare", old, other, *args]) == 1
+
+
+def test_a_new_output_time_is_a_difference(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    old = written(tmp_path, "o.pkl", timecourse([0, 1, 2, 3], [1, 2, 3, 4]))
+    new = written(tmp_path, "n.pkl", timecourse([0, 1, 2, 3, 4], [1, 2, 3, 4, 5]))
     capsys.readouterr()
-    assert verify(["compare", old, same, "--threshold", "1e-12"]) == 0
+    assert verify(["compare", old, new, "--threshold", "1e-12"]) == 1
     out = capsys.readouterr().out
-    assert "1 rows of the new dump without a time in the old dump" in out
-    assert "times of E/t: 0 rows only in old, 1 only in new" in out
-    assert verify(["compare", old, other, "--threshold", "1e-12"]) == 1
+    assert "1 rows of the new dump without a time in the old dump (0 expected)" in out
+    assert "  times of E/t: 1 rows only in new, at 4\n" in out
+    # the pattern of the variable time of the task names the new output times
+    renames = tmp_path / "renames.json"
+    renames.write_text(json.dumps({"expected": {"results": ["E/t/time"]}}))
+    assert verify(["compare", old, new, "--renames", str(renames)]) == 0
+    out = capsys.readouterr().out
+    assert "1 rows of the new dump without a time in the old dump (1 expected)" in out
+    assert "  times of E/t: 1 rows only in new, at 4 (expected)" in out
+    # a time only the old dump has is a difference, also with the pattern
+    assert verify(["compare", new, old, "--renames", str(renames)]) == 1
+    assert "  times of E/t: 1 rows only in old, at 4\n" in capsys.readouterr().out
 
 
 def test_repeated_times_of_the_old_dump_are_left_out(

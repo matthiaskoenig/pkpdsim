@@ -53,10 +53,11 @@ Across versions of sbmlsim (a dump of pkpdsim 0.4 with sbmlsim 0.8 and one of
 0.5 with 0.9) `compare` moves the time of every array first and matches the
 other dimensions by name, matches the rows of a repeated time from the last
 one, so that the state after a change, which is all sbmlsim 0.8 gave, is
-compared, and counts the rows of the old dump without a time in the new one as
-differences. The renames of a port are
-the ids which became SIds (`sids`), the fields sbmlsim 0.9 added to a figure
-(`figure_fields`) and the differences which are expected (`expected`).
+compared, and counts the rows of a time which only one dump has as differences
+(a new output time of a task is expected with the pattern of its variable
+`time`). The renames of a port are the ids which became SIds (`sids`), the
+fields sbmlsim 0.9 added to a figure (`figure_fields`) and the differences which
+are expected (`expected`).
 """
 
 import argparse
@@ -586,6 +587,10 @@ class RowMatch(NamedTuple):
     unmatched: int
     #: rows of the new output without a time in the old output
     unmatched_new: int
+    #: the times of the old output which the new output does not have, and
+    #: the other way round
+    times_old: np.ndarray
+    times_new: np.ndarray
 
 
 def _runs(times: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -620,10 +625,20 @@ def matched_rows(old_times: np.ndarray, new_times: np.ndarray) -> RowMatch:
     """
     if old_times.shape == new_times.shape and np.array_equal(old_times, new_times):
         rows = np.arange(old_times.size)
-        return RowMatch(rows, rows, 0, 0, 0, 0)
+        none = np.zeros(0)
+        return RowMatch(rows, rows, 0, 0, 0, 0, none, none)
     if old_times.size == 0 or new_times.size == 0:
         empty = np.arange(0)
-        return RowMatch(empty, empty, 0, 0, int(old_times.size), int(new_times.size))
+        return RowMatch(
+            empty,
+            empty,
+            0,
+            0,
+            int(old_times.size),
+            int(new_times.size),
+            np.unique(old_times),
+            np.unique(new_times),
+        )
     starts_a, counts_a = _runs(old_times)
     starts_b, counts_b = _runs(new_times)
     a, b = old_times[starts_a], new_times[starts_b]
@@ -637,6 +652,8 @@ def matched_rows(old_times: np.ndarray, new_times: np.ndarray) -> RowMatch:
     ka = np.flatnonzero(common & first)
     kb = j[ka]
     n = np.minimum(counts_a[ka], counts_b[kb])
+    only_a, only_b = np.ones(a.size, dtype=bool), np.ones(b.size, dtype=bool)
+    only_a[ka], only_b[kb] = False, False
     return RowMatch(
         _last_rows(starts_a[ka] + counts_a[ka], n),
         _last_rows(starts_b[kb] + counts_b[kb], n),
@@ -644,6 +661,8 @@ def matched_rows(old_times: np.ndarray, new_times: np.ndarray) -> RowMatch:
         int(np.sum(counts_b[kb] - n)),
         int(old_times.size - np.sum(counts_a[ka])),
         int(new_times.size - np.sum(counts_b[kb])),
+        a[only_a],
+        b[only_b],
     )
 
 
@@ -764,7 +783,8 @@ class Renames(TypedDict, total=False):
     figure_fields: list[str]
     #: part of the dump -> patterns of the keys whose differences are expected
     #: (`*` and `?` are wildcards, a bracket is literal, e.g. `E/task_po/[A]`):
-    #: `experiment/task/variable` (results),
+    #: `experiment/task/variable` (results; `experiment/task/time` also names
+    #: the output times which only the new dump has),
     #: `experiment/dataset/column` (datasets), `experiment/figure` (figures),
     #: `experiment/mapping` (mappings, ranges)
     expected: dict[str, list[str]]
@@ -1125,6 +1145,12 @@ def _flat(
     return dict(dump[part].items())
 
 
+def _listed(times: np.ndarray, count: int = 5) -> str:
+    """List the first times of a vector."""
+    listed = ", ".join(f"{t:g}" for t in times[:count])
+    return listed + (", ..." if times.size > count else "")
+
+
 def _detail(part: str, a: object, b: object) -> list[str]:
     """Describe the difference of a changed key."""
     if part == "mappings":
@@ -1138,7 +1164,11 @@ def compare(args: argparse.Namespace) -> int:
     """Compare two dumps; the exit code is 1 if they differ beyond the threshold.
 
     An expected difference (`expected` of the renames) is printed and not
-    counted; an expected difference which does not occur is counted.
+    counted; an expected difference which does not occur is counted. A row at a
+    time which only one dump has is a difference: one of the new dump is
+    expected with the pattern of the variable `time` of its task
+    (`experiment/task/time`, a changed output grid), one of the old dump always
+    counts.
     """
     old, new = load(args.old), load(args.new)
     renames: Renames = {}
@@ -1219,7 +1249,7 @@ def compare(args: argparse.Namespace) -> int:
     differing += len(unexpected) + len(unexpected_side)
 
     # the rows at a change
-    ignored_old = ignored_new = unmatched = unmatched_new = 0
+    ignored_old = ignored_new = unmatched = unmatched_new = expected_new = 0
     changes: dict[str, int] = {}
     other_times: list[str] = []
     for sid, task in sorted({(k[0], k[1]) for k in keys_old & keys_new}):
@@ -1233,24 +1263,32 @@ def compare(args: argparse.Namespace) -> int:
         unmatched_new += match.unmatched_new
         if match.ignored_new:
             changes[sid] = changes.get(sid, 0) + match.ignored_new
-        if match.unmatched or match.unmatched_new:
+        if match.unmatched:
             other_times.append(
                 f"  times of {sid}/{task}: {match.unmatched} rows only in old, "
-                f"{match.unmatched_new} only in new"
+                f"at {_listed(match.times_old)}"
+            )
+        if match.unmatched_new:
+            # a changed output grid of a task is named by its variable `time`
+            named = expected.match("results", (sid, task, "time"))
+            expected_new += match.unmatched_new if named else 0
+            other_times.append(
+                f"  times of {sid}/{task}: {match.unmatched_new} rows only in new, "
+                f"at {_listed(match.times_new)}{' (expected)' if named else ''}"
             )
     print(
         f"rows at a change: {ignored_new} rows of the new dump and {ignored_old} of "
         f"the old dump left out (the states before a change), {unmatched} rows of "
         f"the old dump without a time in the new dump, {unmatched_new} rows of the "
-        "new dump without a time in the old dump"
+        f"new dump without a time in the old dump ({expected_new} expected)"
     )
     for sid, count in sorted(changes.items()):
         print(f"changes: {sid} {count} rows")
     for line in other_times[: args.top]:
         print(line)
-    # the old dump is the reference: a row of it which the new dump lacks is a
-    # difference, a row only the new dump has is printed
-    differing += unmatched
+    # a time which only one dump has is a difference; one of the new dump can be
+    # expected, the old dump is the reference
+    differing += unmatched + unmatched_new - expected_new
 
     # everything else exactly
     for part, (flat_old, flat_new) in parts.items():
@@ -1866,7 +1904,8 @@ def parser() -> argparse.ArgumentParser:
         help=(
             "json file of the expected renames and differences (metadata, strings, "
             "ids, sids, figure_fields, expected), applied to the old dump; in a "
-            "pattern of expected, * and ? are wildcards and a bracket is literal"
+            "pattern of expected, * and ? are wildcards and a bracket is literal, "
+            "experiment/task/time names the output times only the new dump has"
         ),
     )
     s.add_argument("--threshold", type=float, default=1e-6, help="default 1e-6")
