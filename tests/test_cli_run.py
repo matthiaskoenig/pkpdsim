@@ -143,6 +143,33 @@ def test_an_extra_action(tmp_path: Path) -> None:
     assert (tmp_path / "greeting.txt").read_text(encoding="utf-8") == "hi toy"
 
 
+WORKERS = ExtraAction(
+    name="workers", help="write the processes", function=".extras:workers"
+)
+
+
+@pytest.mark.parametrize(
+    ("options", "n_workers"), [([], "1"), (["-w", "3"], "3"), (["-w", "auto"], "None")]
+)
+def test_an_extra_action_gets_the_simulator_of_the_run(
+    tmp_path: Path, options: list[str], n_workers: str
+) -> None:
+    model = dataclasses.replace(MODEL, extra_actions=(WORKERS,))
+    run_command(model, ["-a", "workers", *options, "--results-dir", str(tmp_path)])
+    text = (tmp_path / "workers.txt").read_text(encoding="utf-8")
+    assert text == f"toy {n_workers}"
+
+
+def test_an_extra_action_of_a_model_without_experiments_gets_its_simulator(
+    tmp_path: Path,
+) -> None:
+    model = dataclasses.replace(
+        MODEL, experiments=None, fit_definitions=None, extra_actions=(WORKERS,)
+    )
+    run_command(model, ["-a", "workers", "--results-dir", str(tmp_path)])
+    assert (tmp_path / "workers.txt").read_text(encoding="utf-8") == "toy 1"
+
+
 def test_all_runs_the_factory_the_simulations_and_the_extras(tmp_path: Path) -> None:
     model = dataclasses.replace(EXTRA, factory_path=tmp_path / "models")
     run_command(model, ["-a", "all", "--results-dir", str(tmp_path)])

@@ -103,7 +103,7 @@ report_hctz --subset=PK results/fit/PK_<fit id>/parameters.json
 identifiability_hctz --subset=PK results/fit/PK_<fit id>/parameters.json
 ```
 
-`--workers` sets the processes of the scans for this run: a number, `auto` (sbmlsim's choice, a pool of every CPU for a scan of 256 points or more) or `model` (the `n_workers` of the model object, the default).
+`--workers` sets the processes of the scans for this run: a number, `auto` (sbmlsim's choice, a pool of every CPU for a scan of 256 points or more) or `model` (the `n_workers` of the model object, the default). An extra action gets the settings of the simulator of the run as `options.simulator` (the `SimulatorSettings` of the model with the processes of `--workers`); an action which simulates passes them on, `model.run_experiments(..., simulator=options.simulator)` or `pkpdsim.run.create_simulator(options.simulator)` for a runner of its own, otherwise `--workers` does not reach it.
 
 A run which fails is not the end of the command. An experiment which cannot be initialized or whose figure fails is reported, the other experiments run, the report and the figures are written, and `run_<model>` then runs its remaining actions, prints every failure and exits with 1. `MODEL.run_experiments` raises `sbmlsim.experiment.ExperimentRunError` after the report is written, so a script does not carry on after a failed run.
 

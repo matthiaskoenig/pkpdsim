@@ -208,7 +208,8 @@ def run_parser(model: PKPDModel) -> argparse.ArgumentParser:
             default="model",
             help="the processes of the scans: a number, 'auto' for a pool of "
             "every CPU for a scan of 256 points or more, or 'model' for the "
-            "setting of the model (default: %(default)s)",
+            "setting of the model (default: %(default)s); an extra action gets "
+            "the settings of the simulator as `options.simulator`",
         )
     if model.extra_arguments is not None:
         resolve(model.extra_arguments, model.package)(p)
@@ -296,6 +297,8 @@ def run_command(model: PKPDModel, args: Sequence[str] | None = None) -> None:
 
     A failure of the simulations does not stop the command: the remaining
     actions run, then the failures are printed and the command exits with 1.
+    An extra action gets the settings of the simulator of the run as
+    `options.simulator`: those of the model with the processes of `--workers`.
     """
     p = run_parser(model)
     options = p.parse_args(args)
@@ -319,6 +322,9 @@ def run_command(model: PKPDModel, args: Sequence[str] | None = None) -> None:
         if options.action == Action.SIMULATE and not names:
             p.error("'--action simulate' requires '--experiments'")
 
+    # an extra action runs its simulations with the settings of the run, which
+    # `--workers` changed
+    options.simulator = simulator
     display.section(model.title, icon=":pill:")
     display.key_values({"action": options.action})
     display.link("results", options.results_dir)

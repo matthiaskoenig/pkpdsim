@@ -1,4 +1,4 @@
-"""An extra action of the toy model: it writes a greeting into the results."""
+"""Extra actions of the toy model: they write into the results."""
 
 import argparse
 from pathlib import Path
@@ -16,4 +16,12 @@ def greet(model: PKPDModel, options: argparse.Namespace, results_dir: Path) -> N
     results_dir.mkdir(parents=True, exist_ok=True)
     (results_dir / "greeting.txt").write_text(
         f"{options.greeting} {model.name}", encoding="utf-8"
+    )
+
+
+def workers(model: PKPDModel, options: argparse.Namespace, results_dir: Path) -> None:
+    """Write the processes of the simulator of the run into the results."""
+    results_dir.mkdir(parents=True, exist_ok=True)
+    (results_dir / "workers.txt").write_text(
+        f"{model.name} {options.simulator.n_workers}", encoding="utf-8"
     )

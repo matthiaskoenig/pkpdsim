@@ -208,6 +208,11 @@ class ExtraAction:
         help: what the action does, shown by `--help`.
         function: reference to the function which runs the action; it is called
             with the model, the parsed arguments and the directory of the results.
+            The arguments have the settings of the simulator of the run as
+            `simulator` (`SimulatorSettings`, those of the model with the
+            processes of `--workers`), which an action that simulates passes on,
+            e.g. `model.run_experiments(..., simulator=options.simulator)` or
+            `pkpdsim.run.create_simulator(options.simulator)`.
         in_all: run the action with `--action all`, after the simulations.
     """
 
