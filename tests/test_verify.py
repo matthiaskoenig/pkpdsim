@@ -899,6 +899,21 @@ def test_two_ids_with_one_new_id_are_an_error() -> None:
         apply_renames(dump, {"sids": True})
 
 
+def test_two_keys_with_one_key_after_the_strings_are_an_error() -> None:
+    dump = synthetic(
+        datasets={("E", "d", "x1"): np.array([1.0]), ("E", "d", "x2"): np.array([2.0])}
+    )
+    with pytest.raises(ValueError, match="same new key"):
+        apply_renames(dump, {"strings": {"x1": "x2"}})
+
+
+def test_the_strings_do_not_rename_the_parts_of_a_dump() -> None:
+    dump = synthetic(datasets={("E", "a", "x"): np.array([1.0])})
+    renamed = apply_renames(dump, {"strings": {"a": "b"}})
+    assert renamed.keys() == dump.keys()
+    assert list(renamed["datasets"]) == [("E", "b", "x")]
+
+
 def test_the_renames_do_not_change_the_old_dump() -> None:
     descriptions = ["b", "a"]
     dump = synthetic(mappings={"E": descriptions})

@@ -875,16 +875,26 @@ def rename_mapping(description: str, renames: MetadataRenames) -> str:
 
 
 def _rename_strings(value: object, strings: Mapping[str, str]) -> object:
-    """Replace texts in every key and string of a value, arrays untouched."""
+    """Replace texts in every key and string of a value, arrays untouched.
+
+    Raises:
+        ValueError: if two keys of a dict have the same new key.
+    """
     if isinstance(value, str):
         for old, new in strings.items():
             value = value.replace(old, new)
         return value
     if isinstance(value, dict):
-        return {
-            _rename_strings(k, strings): _rename_strings(v, strings)
-            for k, v in value.items()
-        }
+        renamed: dict[object, object] = {}
+        for k, v in value.items():
+            key = _rename_strings(k, strings)
+            if key in renamed:
+                raise ValueError(
+                    f"Two keys of the old dump have the same new key {key!r} "
+                    "after the renames of strings."
+                )
+            renamed[key] = _rename_strings(v, strings)
+        return renamed
     if isinstance(value, list):
         return [_rename_strings(v, strings) for v in value]
     if isinstance(value, tuple):
@@ -1028,12 +1038,15 @@ def apply_renames(dump: Dump, renames: Renames) -> Dump:
         A new dump; the given one is not changed.
 
     Raises:
-        ValueError: if two ids get the same new id or a mapping description
-            cannot be renamed.
+        ValueError: if two keys or ids get the same new key or id, or a mapping
+            description cannot be renamed.
     """
     result = cast("Dump", dict(dump))
     if strings := renames.get("strings"):
-        result = cast("Dump", _rename_strings(result, strings))
+        # the texts of the parts, not the names of the parts
+        result = cast(
+            "Dump", {part: _rename_strings(v, strings) for part, v in result.items()}
+        )
     if renames.get("ids") or renames.get("sids"):
         result = rename_ids(result, _renamer(renames))
     if metadata := renames.get("metadata"):
