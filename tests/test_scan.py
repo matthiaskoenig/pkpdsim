@@ -44,6 +44,14 @@ def test_the_timecourse_of_a_point_without_changes() -> None:
     assert np.array_equal(values, res["[A]"].isel(dim_k=1).values)
 
 
+@pytest.mark.parametrize("name", ["res", "key"])
+def test_a_dimension_can_have_the_name_of_an_argument(name: str) -> None:
+    res = run(DECAY, [Dimension(name, values={"k": Q([0.1, 0.2], "1/min")})])
+    time, values = point_timecourse(res, "[A]", **{name: 1})
+    assert np.array_equal(time, res.ds["time"].values)
+    assert np.array_equal(values, res["[A]"].isel({name: 1}).values)
+
+
 def test_the_state_before_a_change_is_left_out() -> None:
     res = run(REDOSE, [RATES])
     assert res.ds.sizes["time"] == 52

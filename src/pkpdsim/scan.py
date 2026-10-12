@@ -46,7 +46,7 @@ def single_dimension(res: ScanResult) -> str:
 
 
 def point_timecourse(
-    res: ScanResult, key: str, **point: int
+    res: ScanResult, key: str, /, **point: int
 ) -> tuple[np.ndarray, np.ndarray]:
     """Get the timecourse of a variable at one point of a scan, as sbmlsim 0.8 gave it.
 
@@ -55,8 +55,9 @@ def point_timecourse(
     result whose simulations have different times loses its padding.
 
     Args:
-        res: the result of the scan.
-        key: the variable, a timecourse.
+        res: the result of the scan, positional only.
+        key: the variable, a timecourse, positional only, so that a dimension
+            of any name, also `res` or `key`, is a position.
         **point: the position of the point along every dimension of the scan,
             e.g. `dim_dose=2`; the result of a simulation needs none.
 

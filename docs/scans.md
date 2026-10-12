@@ -4,7 +4,7 @@ Two modules hold what the scripts of the models around scans and sensitivity ana
 
 ## The timecourse of a point of a scan
 
-sbmlsim 0.9 returns a scan as a `ScanResult` with the layout `(*dims, time)`, and at the time of a change after the start (a second dose) it keeps the state before and after the change. The pharmacokinetic parameters of a scan (`<model>_pk.py`) and the figures of a model read the timecourse of one point as sbmlsim 0.8 gave it, with the state after the change only, so that their numbers and figures stay the same. `pkpdsim.scan.single_dimension(res)` gives the id of the dimension of a scan of one dimension and `point_timecourse(res, key, **point)` the time points and the values of a variable at the point `point` (the position along every dimension, e.g. `dim_dose=2`); a result without dimension needs none:
+sbmlsim 0.9 returns a scan as a `ScanResult` with the layout `(*dims, time)`, and at the time of a change after the start (a second dose) it keeps the state before and after the change. The pharmacokinetic parameters of a scan (`<model>_pk.py`) and the figures of a model read the timecourse of one point as sbmlsim 0.8 gave it, with the state after the change only, so that their numbers and figures stay the same. `pkpdsim.scan.single_dimension(res)` gives the id of the dimension of a scan of one dimension and `point_timecourse(res, key, /, **point)` the time points and the values of a variable at the point `point` (the position along every dimension, e.g. `dim_dose=2`; `res` and `key` are positional only, so a dimension may have any name); a result without dimension needs none:
 
 ```python
 # not executed
