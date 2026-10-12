@@ -56,6 +56,66 @@ from the `data_path` of the experiment, a path or paths) and `figures_by_sid(*fi
 overrides what it does differently, e.g. `default_changes` for a model whose
 simulations set a parameter.
 
+## Keys
+
+The keys of an experiment (its datasets, simulations, tasks, figures and fit mappings) are SIds, which sbmlsim checks when the experiment initializes: letters, digits and `_`, not starting with a digit, and unique across the kinds. Keys are often built from the texts of the data (a dose, a label of a legend), so `pkpdsim.experiment.to_sid(text)` maps a text to an SId. A decimal point between two digits becomes `p`, every other character an SId does not allow becomes `_`, and one character becomes one character. The function maps characters, so a part of a key gives the same part of the SId of the key (`f"task_po_{to_sid(dose)}"`). Whether a whole key is valid (not empty, not starting with a digit) is not checked by `to_sid`, because the text of a part of a key may start with a digit; sbmlsim checks every key at initialize and names all invalid ones:
+
+```python
+from pkpdsim.experiment import to_sid
+
+assert to_sid("po 2.5 mg") == "po_2p5_mg"
+assert to_sid("0.5mg") == "0p5mg"
+assert to_sid("µg/ml") == "_g_ml"
+assert to_sid("Cve_hctz") == "Cve_hctz"
+assert to_sid("v1.2.3") == "v1p2p3"
+assert f"task_po_{to_sid('2.5 mg')}" == "task_po_2p5_mg"
+```
+
+Two texts of an experiment can give one SId (`po 2.5` and `po-2.5`), and the second key would silently replace the first entry of a dict. The method `to_sid` of the base gives the same SId and raises a `ValueError` naming both texts, so use it for the keys of an experiment:
+
+```python
+# not executed
+def simulations(self) -> dict[str, Simulation]:
+    return {
+        self.to_sid(f"po {dose}"): Simulation(...)  # "po 2.5" and "po-2.5" are an error
+        for dose in (2.5, 5.0)
+    }
+```
+
+## Units of the data
+
+The data of a study can use units which sbmlsim does not define. An international unit (IU) is specific to a substance (the activity of an enzyme, the effect of a coagulation factor), so it has no value without it. `data_units` of an experiment maps the unit as the data write it to the definition of a unit of its own, which the base defines in the registry of the experiment before the data are read and which `load_dataframe` and `load_dataframes_by_substance` rename in the unit columns of the data (`unit` and every column ending in `_unit`). The name carries the model and the substance (`IU_ramipril_renin`, not `IU`): the registry of sbmlsim exists once per process (pytest runs all models in one) and ignores a redefinition, so two models which defined `IU` with different values would silently get the first one. `define_unit` therefore raises for a name which is defined with another value:
+
+```python
+from pkpdsim.experiment import define_unit, rename_units
+from sbmlsim.units import UnitRegistry
+import pandas as pd
+
+ureg = UnitRegistry()
+name = define_unit(ureg, "IU_ramipril_renin = 0.6 * microgram")
+assert name == "IU_ramipril_renin"
+assert define_unit(ureg, "IU_ramipril_renin = 0.6 * microgram") == name
+
+try:
+    define_unit(ureg, "IU_ramipril_renin = 1.0 * microgram")
+except ValueError as err:
+    print(err)
+
+df = pd.DataFrame(
+    {"unit": ["IU/ml", "µIU/ml", "IU_per_ml"], "mean_unit": ["IU", "2IU", None]}
+)
+print(rename_units(df, {"IU": name}))
+```
+
+`rename_units` replaces a name where it is a unit, alone or after a metric prefix (`IU/ml` and `µIU/ml`), and leaves it where it is part of another name (`IU_per_ml`, `2IU`). In the experiment:
+
+```python
+# not executed
+class RamiprilSimulationExperiment(PKPDSimulationExperiment):
+    pkpd_model = MODEL
+    data_units = {"IU": "IU_ramipril_renin = 0.6 * microgram"}
+```
+
 ## Impairment presets
 
 The classes of impaired organ function with the factors of their parameters and
@@ -163,8 +223,9 @@ A `fitting/mapping_collections.py` selects the mappings of a fit by what a study
 is, not by listing names. `metadata_filter(metadata_type, *, excluded=None,
 **allowed)` builds a filter on the fields of the metadata: a mapping passes when
 every allowed field has one of its values and no excluded field has one of its
-values. `observable_filter(observables)` selects by the id of the observable
-(`observable_id`, the id without the task). Both are callables of sbmlsim's
+values. `observable_filter(observables)` selects by the index of the data of the
+observable (`observable_id`, i.e. `Data.index` of the `y` of the mapping, the
+selection of the model, e.g. `[Cve_hctz]`, without the task). Both are callables of sbmlsim's
 `MappingFilter` and have a readable `repr`. An unknown field, a class which is no
 dataclass or is an instance, a filter without clauses, an empty set of allowed
 values (it selects nothing) or of excluded values (it excludes nothing) and values
@@ -239,7 +300,7 @@ which is gone) fails the test, so the list cannot go stale:
 | --- | --- |
 | `not_registered` | experiment classes which are not in the group `all` of the registry on purpose, class name to reason |
 | `not_importable` | modules below the package which do not import in the test environment (an optional dependency), name relative to the package to reason |
-| `one_at_a_time` | the reason why the registered experiments run one at a time (the memory a run of all of them needs), `None` to run them together |
+| `one_at_a_time` | the reason why the registered experiments run one at a time (the memory a run of all of them needs), `None` to run them together; an empty reason is an error |
 
 ```python
 from pkpdsim.model import CheckSettings
@@ -272,8 +333,10 @@ remain:
 pkpdsim-verify compare base.pkl new.pkl --renames renames.json
 ```
 
-The file is a json object with the parts `metadata` and `strings`; an unknown part
-or a part of the wrong type is an error (exit code 2):
+The file is a json object with the parts `metadata` and `strings` (and, across
+versions of sbmlsim, `ids`, `sids`, `figure_fields` and `expected`, see
+[Verification across versions of sbmlsim](models.md#verification-across-versions-of-sbmlsim));
+an unknown part or a part of the wrong type is an error (exit code 2):
 
 ```json
 {
@@ -291,7 +354,8 @@ or a part of the wrong type is an error (exit code 2):
 - `metadata.added`: a field the old metadata did not have to its member name, set
   where the old mapping has no such field,
 - `strings`: an old text to the new one, in every key and string of the old dump
-  (legend keys, labels); the arrays are untouched.
+  (legend keys, labels); the arrays are untouched. A rename which gives two keys of
+  a part one key is an error.
 
 The renamed mappings are sorted like a dump, so the comparison does not depend on
 the order the renames change.

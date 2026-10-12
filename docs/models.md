@@ -31,7 +31,7 @@ MODEL = PKPDModel(
     experiments=".simulations:EXPERIMENTS",
     fit_definitions=".fitting.fitting:FIT_DEFINITIONS",
     simulator=SimulatorSettings(absolute_tolerance=1e-10, relative_tolerance=1e-10),
-    figures=FigureSettings(formats=("svg",), fig_dpi=300, legend_fontsize=10),
+    figures=FigureSettings(formats=("svg",), savefig_dpi=300, legend_fontsize=10),
     fit_identifiability=True,
 )
 ```
@@ -56,16 +56,28 @@ them; a module which starts with a dot is relative to `package`.
 
 ## Settings
 
-- `SimulatorSettings`: the absolute tolerance (one value, or an
-  `AbsoluteTolerance` of sbmlsim per kind and state) and the relative tolerance
-  of the experiments.
-- `FigureSettings`: the formats of the figures (`svg`, `png`, `html`), the
-  resolution of the static images (`savefig_dpi`) and the sizes and positions
-  of sbmlsim's `Figure`. They hold for the process, so they are applied for a
-  run and restored after it.
-- `reduced_selections`, `save_results`, `fit_identifiability`: what a run
-  simulates, whether it stores its results, whether a fit analyses the
-  identifiability of its parameters by default.
+- `SimulatorSettings`: the absolute tolerance (one value, or an `AbsoluteTolerance` of sbmlsim per kind and state), the relative tolerance and the processes of a scan, `n_workers`. A run creates an sbmlsim `Simulator` from them.
+- `FigureSettings`: sbmlsim's `FigureSettings` (the resolution, the sizes of the panels, the fonts and the legends, with the defaults of sbmlsim) and the two fields of a model, the `formats` of the figures (`svg`, `png`, `html`) and the resolution of the static images (`savefig_dpi`). A run hands the settings of sbmlsim to every figure; an experiment (`figure_settings`) and a figure (`Figure(settings=...)`) override them. Nothing is applied to the process, so nothing has to be restored after a run.
+- `reduced_selections`, `save_results`, `fit_identifiability`: what a run simulates, whether it stores its results, whether a fit analyses the identifiability of its parameters by default.
+
+The simulations run serially by default (`n_workers=1`): a pool needs the guard `if __name__ == "__main__":` in the script which runs the model (the processes of the pool import it again), and the memory of a run grows with every process. `n_workers=4` runs a pool of four processes for a scan, `n_workers=None` leaves the choice to sbmlsim (a pool of every CPU for a scan of 256 points or more, serially below):
+
+```python
+from pkpdsim.model import FigureSettings, SimulatorSettings
+
+serial = SimulatorSettings(absolute_tolerance=1e-10, relative_tolerance=1e-10)
+assert serial.n_workers == 1
+pool = SimulatorSettings(n_workers=4)
+sbmlsim_chooses = SimulatorSettings(n_workers=None)
+
+try:
+    SimulatorSettings(n_workers=0)
+except ValueError as err:
+    print(err)
+
+figures = FigureSettings(formats=("svg", "png"), savefig_dpi=300, legend_fontsize=10)
+print(figures.sbmlsim_settings().legend_fontsize)
+```
 
 ## Commands
 
@@ -85,10 +97,15 @@ run_hctz --action factory                       # the SBML, the ODEs, the archiv
 run_hctz --action list_experiments              # the groups and experiments
 run_hctz --action simulate --experiments "misc,Anderson1961" --open
 run_hctz --action all --results-dir /path/to/results --formats svg,png
+run_hctz --action simulate --experiments all --workers 4
 fit_hctz --subset=PK --runs=10 --cores=10 --max-points=30
 report_hctz --subset=PK results/fit/PK_<fit id>/parameters.json
 identifiability_hctz --subset=PK results/fit/PK_<fit id>/parameters.json
 ```
+
+`--workers` sets the processes of the scans for this run: a number, `auto` (sbmlsim's choice, a pool of every CPU for a scan of 256 points or more) or `model` (the `n_workers` of the model object, the default).
+
+A run which fails is not the end of the command. An experiment which cannot be initialized or whose figure fails is reported, the other experiments run, the report and the figures are written, and `run_<model>` then runs its remaining actions, prints every failure and exits with 1. `MODEL.run_experiments` raises `sbmlsim.experiment.ExperimentRunError` after the report is written, so a script does not carry on after a failed run.
 
 The command of a model without experiments (`experiments=None`) offers only
 `--action factory`, `--action all` (which runs only the factory and the extra
@@ -116,7 +133,8 @@ MODEL.run_experiments(Anderson1961, output_dir=Anderson1961.__name__)
 complete (`check_registry`), the model object belongs to its package and its
 references resolve (`check_model`), the experiments initialize
 (`initialize_experiments`), all experiments run (`run_all_experiments`) and every
-fit starts (`start_fits`).
+fit starts (`start_fits`). A function which checks several things raises one
+`AssertionError` which names every failure, not only the first.
 
 The known exceptions of a model (experiments which are not registered, modules
 which do not import, experiments which run one at a time) are its `checks`, see
@@ -149,9 +167,82 @@ pkpdsim-verify sbml old.xml new.xml
 other value which is not a number exits with 2. A package without a model object
 exits with 2, and `compare --renames FILE` applies the expected renames of a
 migration to the old dump (see
-[Experiments and their metadata](experiments.md#renames-in-a-verification)).
-`settings` captures what a run of the experiments hands to
-sbmlsim, bound to the signatures: the arguments of `SimulatorSerial`, of
-`ExperimentRunner` (without the simulator) and of the run (without the output
-path), the attributes of `Figure`, the matplotlib `rc` settings a run changes and
-the counts of the calls. It exits with 2 for a run which did not complete.
+[Experiments and their metadata](experiments.md#renames-in-a-verification) and
+[Verification across versions of sbmlsim](#verification-across-versions-of-sbmlsim)).
+An experiment which cannot be initialized is recorded in the dump as an error and
+the command exits with 1 after the other experiments are stored.
+
+`settings` captures what a run of the experiments hands to sbmlsim, bound to the
+signatures: the arguments of `Simulator` (its tolerances and `n_workers`), of
+`ExperimentRunner` (without the simulator) and of the run, with its
+`figure_settings` (without the output path), the matplotlib `rc` settings a run
+changes and the counts of the calls. It exits with 2 for a run which did not
+complete. The json has `run.figure_settings`; the part `figure` of pkpdsim 0.4 (the
+class attributes of sbmlsim's `Figure`) is gone.
+
+## Verification across versions of sbmlsim
+
+A dump records the versions of sbmlsim and pkpdsim it was made with, and `compare`
+prints them. A dump of pkpdsim 0.4 (sbmlsim 0.8) and one of pkpdsim 0.5 (sbmlsim
+0.9) differ in their layout, which `compare` takes into account:
+
+- sbmlsim 0.8 puts the time first, `(_point, *dims)`, sbmlsim 0.9 last,
+  `(*dims, time)`. `compare` moves the time of every array first and matches the
+  other dimensions by name. A dimension of size 1 which only one array has is
+  squeezed (a scan of one point is a simulation now), different names of the
+  dimensions are an infinite difference.
+- sbmlsim 0.9 keeps the state before and after a change at the time of the change
+  (a second dose), sbmlsim 0.8 only the state after it. Two dumps with the same
+  time vectors are compared row by row. Otherwise the rows of a repeated time are
+  matched from the last one, i.e. the state after the change, and the states
+  before a change are left out: the summary counts them and names the
+  experiments with `changes: <experiment> <rows> rows`.
+- A row at a time which only the old dump has is always a difference, and no
+  pattern of `expected` hides it. A row at a time which only the new dump has (a
+  new output time of a task) is a difference as well, which is printed per task
+  (`times of <experiment>/<task>: <n> rows only in new, at <times>`) and which
+  the pattern `experiment/task/time` of `expected` names.
+
+The ids of sbmlsim 0.9 are SIds (see [Keys](experiments.md#keys)), and sbmlsim 0.9
+adds fields to the specification of a figure. The migration says so in the renames
+file instead of weakening the comparison, which then passes with exit code 0 or
+fails:
+
+| part | content |
+| --- | --- |
+| `ids` | an old id to its new id: the task of a result, the dataset, the figure and mapping keys and the references to them in a figure |
+| `sids` | `true`: every id of the old dump becomes `pkpdsim.experiment.to_sid(id)` (after `ids`) |
+| `figure_fields` | the keys of a figure specification which are removed at any depth, in both dumps (`_settings`, `_bands`, `_width`, `_height`, `width`, `height`, `over`, `sel` of sbmlsim 0.9) |
+| `expected` | a part (`results`, `datasets`, `mappings`, `figures`, `ranges`) to the patterns of the keys of the differences which are expected |
+| `metadata`, `strings` | as in [Experiments and their metadata](experiments.md#renames-in-a-verification) |
+
+```json
+{
+  "sids": true,
+  "figure_fields": ["_settings", "_bands", "_width", "_height", "width", "height"],
+  "expected": {
+    "results": ["Anderson1961/po_2p5/time"],
+    "mappings": ["Anderson1961/Fig1_hctz"]
+  }
+}
+```
+
+The patterns of `expected` are `fnmatch` patterns of the keys:
+
+| part | key |
+| --- | --- |
+| `results` | `experiment/task/variable` |
+| `datasets` | `experiment/dataset/column` |
+| `mappings`, `ranges` | `experiment/mapping` |
+| `figures` | `experiment/figure` |
+
+`*` and `?` are wildcards, a bracket is literal: `Anderson1961/po_2p5/[Cve_hctz]` names the variable `[Cve_hctz]`. A difference which matches is printed as expected and not counted, a pattern which matches no difference is counted, so the file says exactly what changes. Two old ids with one new id, a `strings` rename which merges two keys of a part and two mappings of one experiment with one key are errors (exit code 2). The renames are applied to the content of the parts of the old dump, never to the names of the parts, and the loaded dump is not changed.
+
+`png` compares the figures of two directories by their file names. After the
+renames to SIds the old file `A_fig 2.5.png` is `A_fig_2p5.png`: `png --sids`
+pairs an old figure with the new figure of the SId of its name (the stem through
+`to_sid`) and exits with 2 when two old figures have one SId:
+
+```bash
+pkpdsim-verify png --sids old/results/simulation new/results/simulation
+```
