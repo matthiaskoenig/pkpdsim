@@ -6,12 +6,15 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
+from sbmlsim import Q
+from sbmlsim.simulation import Change, Simulation, SteadyState
 from sbmlsim.simulation.sampling import Uniform
 
 from pkpdsim.sensitivity import (
     ParameterType,
     SensitivityParameter,
     distributions,
+    free_parameters,
     parameters_from_sbml,
     parameters_to_df,
     sample_size,
@@ -136,3 +139,75 @@ def test_a_smoke_run_needs_a_positive_sample_size(
     monkeypatch.setenv("PKPDSIM_SENSITIVITY_N", value)
     with pytest.raises(ValueError, match="PKPDSIM_SENSITIVITY_N"):
         sample_size(4096)
+
+
+def _parameters(*uids: str) -> list[SensitivityParameter]:
+    return [SensitivityParameter(uid=uid, name=uid, value=1.0) for uid in uids]
+
+
+def test_free_parameters_without_set_targets_keeps_all() -> None:
+    parameters = _parameters("Ka", "CL", "f_renal_function")
+    simulation = Simulation(end=10, steps=5, preinit_changes={"PODOSE": Q(1, "mg")})
+    assert free_parameters(parameters, [simulation]) == parameters
+    assert free_parameters(parameters, []) == parameters
+
+
+def test_free_parameters_leaves_out_a_preinit_change() -> None:
+    parameters = _parameters("Ka", "CL", "f_renal_function")
+    simulation = Simulation(
+        end=10, steps=5, preinit_changes={"f_renal_function": 0.5, "PODOSE": Q(1, "mg")}
+    )
+    free = free_parameters(parameters, [simulation])
+    assert [p.uid for p in free] == ["Ka", "CL"]
+
+
+def test_free_parameters_leaves_out_a_change() -> None:
+    parameters = _parameters("Ka", "CL", "f_renal_function")
+    simulation = Simulation(
+        end=10, steps=5, changes=[Change([5.0], {"CL": Q(2.0, "1/hr")})]
+    )
+    free = free_parameters(parameters, [simulation])
+    assert [p.uid for p in free] == ["Ka", "f_renal_function"]
+
+
+def test_free_parameters_unites_the_simulations_and_keeps_the_order() -> None:
+    parameters = _parameters("d", "c", "b", "a")
+    simulations = [
+        Simulation(end=10, steps=5, preinit_changes={"c": 1.0}),
+        Simulation(end=10, steps=5, changes=[Change([1.0], {"a": 1.0})]),
+    ]
+    assert [p.uid for p in free_parameters(parameters, simulations)] == ["d", "b"]
+    # a generator of simulations is consumed once
+    assert [p.uid for p in free_parameters(parameters, iter(simulations))] == ["d", "b"]
+
+
+def test_free_parameters_logs_the_removed_parameters(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    simulation = Simulation(end=10, steps=5, preinit_changes={"CL": 1.0})
+    with caplog.at_level("INFO", logger="pkpdsim.sensitivity"):
+        free_parameters(_parameters("Ka", "CL"), [simulation])
+    assert "Removing fixed parameter: CL" in caplog.text
+    assert "Ka" not in caplog.text
+
+
+def test_free_parameters_leaves_out_a_target_of_the_presimulation() -> None:
+    simulation = Simulation(
+        end=10, steps=5, presimulation=SteadyState(preinit_changes={"CL": 1.0})
+    )
+    free = free_parameters(_parameters("Ka", "CL"), [simulation])
+    assert [p.uid for p in free] == ["Ka"]
+
+
+def test_free_parameters_leaves_out_a_change_at_several_times() -> None:
+    simulation = Simulation(
+        end=48, steps=5, changes=[Change([0.0, 24.0], {"CL": Q(2.0, "1/hr")})]
+    )
+    free = free_parameters(_parameters("Ka", "CL"), [simulation])
+    assert [p.uid for p in free] == ["Ka"]
+
+
+def test_free_parameters_compares_the_ids_as_written() -> None:
+    simulation = Simulation(end=10, steps=5, changes=[Change([1.0], {"[S]": 1.0})])
+    free = free_parameters(_parameters("S"), [simulation])
+    assert [p.uid for p in free] == ["S"]
