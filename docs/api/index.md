@@ -20,5 +20,6 @@ The API reference is generated from the docstrings of the package.
 | [experiment](experiment.md) | `PKPDSimulationExperiment`: the base of the simulation experiments of a model |
 | [impairment](impairment.md) | the presets of the renal function, the cirrhosis and the cardiac function with their colors |
 | [pk](pk.md) | `PK_LABELS`, `PK_UNITS`: the labels and units of the pharmacokinetic parameters |
+| [scan](scan.md) | `single_dimension`, `point_timecourse`: the dimension of a scan and the timecourse of a point of its result |
 | [testing](testing.md) | `check_model`, `check_registry`, `initialize_experiments`, `run_all_experiments`, `start_fits`: the tests of a model as functions |
 | [verify](verify.md) | `pkpdsim-verify`: the verification of a change of a model |
