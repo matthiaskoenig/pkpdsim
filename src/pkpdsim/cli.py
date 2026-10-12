@@ -37,6 +37,7 @@ write into the results of the model unless `--output_dir` is given.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import sys
 from collections.abc import Mapping, Sequence
 from enum import StrEnum
@@ -44,6 +45,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from sbmlsim import display, log
+from sbmlsim.experiment import ExperimentRunError
 from sbmlsim.fit import display as fit_display
 from sbmlsim.fit.cli import (
     ALGORITHMS,
@@ -66,7 +68,7 @@ from pkpdsim.model import resolve
 if TYPE_CHECKING:
     from sbmlsim.experiment import SimulationExperiment
 
-    from pkpdsim.model import PKPDModel
+    from pkpdsim.model import PKPDModel, SimulatorSettings
 
 
 class Action(StrEnum):
@@ -88,6 +90,36 @@ def parse_formats(text: str) -> list[str]:
         The formats in lower case, without blanks and empty entries.
     """
     return [part.strip().lower() for part in text.split(",") if part.strip()]
+
+
+def parse_workers(text: str, model: PKPDModel) -> int | None:
+    """Get the processes of a run from the option `--workers`.
+
+    Args:
+        text: `model` for the setting of the model, `auto` for the choice of
+            sbmlsim (`None`: a pool of every CPU for a scan of 256 points or
+            more), or a positive number.
+        model: the model.
+
+    Returns:
+        The number of processes, `None` for the choice of sbmlsim.
+
+    Raises:
+        ValueError: for any other text.
+    """
+    if text == "model":
+        return model.simulator.n_workers
+    if text == "auto":
+        return None
+    try:
+        number = int(text)
+    except ValueError:
+        number = 0
+    if number < 1:
+        raise ValueError(
+            f"--workers is a positive number, 'auto' or 'model', not '{text}'"
+        )
+    return number
 
 
 def resolve_experiments(
@@ -170,6 +202,15 @@ def run_parser(model: PKPDModel) -> argparse.ArgumentParser:
             "without 'svg' the interactive page is embedded in the report "
             "(default: %(default)s)",
         )
+        p.add_argument(
+            "-w",
+            "--workers",
+            default="model",
+            help="the processes of the scans: a number, 'auto' for a pool of "
+            "every CPU for a scan of 256 points or more, or 'model' for the "
+            "setting of the model (default: %(default)s); an extra action gets "
+            "the settings of the simulator as `options.simulator`",
+        )
     if model.extra_arguments is not None:
         resolve(model.extra_arguments, model.package)(p)
     return p
@@ -206,7 +247,8 @@ def _simulate(
     simulation_dir: Path,
     show_report: bool,
     figure_formats: Sequence[str],
-) -> None:
+    simulator: SimulatorSettings,
+) -> list[str]:
     """Simulate the given groups and experiments.
 
     Args:
@@ -215,6 +257,10 @@ def _simulate(
         simulation_dir: directory the results of the simulations are written to.
         show_report: open the report in a web browser.
         figure_formats: the formats of the figures.
+        simulator: the settings of the simulator.
+
+    Returns:
+        The failures of the run, one line each.
     """
     registry = model.load_experiments()
     classes, not_found = resolve_experiments(registry, names)
@@ -229,12 +275,17 @@ def _simulate(
     display.section("Simulations", icon=":chart_increasing:")
     display.key_values({"experiments": len(classes)})
     display.link("output", output_dir)
-    model.run_simulation_experiments(
-        classes,
-        output_dir,
-        show_report=show_report,
-        figure_formats=figure_formats,
-    )
+    try:
+        model.run_simulation_experiments(
+            classes,
+            output_dir,
+            show_report=show_report,
+            figure_formats=figure_formats,
+            simulator=simulator,
+        )
+    except ExperimentRunError as err:
+        return list(err.failures)
+    return []
 
 
 def run_command(model: PKPDModel, args: Sequence[str] | None = None) -> None:
@@ -243,15 +294,26 @@ def run_command(model: PKPDModel, args: Sequence[str] | None = None) -> None:
     Args:
         model: the model.
         args: the command line arguments, `sys.argv[1:]` by default.
+
+    A failure of the simulations does not stop the command: the remaining
+    actions run, then the failures are printed and the command exits with 1.
+    An extra action gets the settings of the simulator of the run as
+    `options.simulator`: those of the model with the processes of `--workers`.
     """
     p = run_parser(model)
     options = p.parse_args(args)
     formats: list[str] = []
     names: list[str] = []
+    simulator = model.simulator
     if model.experiments is not None:
         formats = parse_formats(options.formats)
         if not formats:
             p.error("'--formats' requires at least one format")
+        try:
+            n_workers = parse_workers(options.workers, model)
+        except ValueError as err:
+            p.error(str(err))
+        simulator = dataclasses.replace(model.simulator, n_workers=n_workers)
         names = [
             name.strip()
             for name in (options.experiments or "").split(",")
@@ -260,29 +322,47 @@ def run_command(model: PKPDModel, args: Sequence[str] | None = None) -> None:
         if options.action == Action.SIMULATE and not names:
             p.error("'--action simulate' requires '--experiments'")
 
+    # an extra action runs its simulations with the settings of the run, which
+    # `--workers` changed
+    options.simulator = simulator
     display.section(model.title, icon=":pill:")
     display.key_values({"action": options.action})
     display.link("results", options.results_dir)
     results_dir = options.results_dir.resolve()
     simulation_dir = results_dir / "simulation"
     extras = {extra.name: extra for extra in model.extra_actions}
+    failures: list[str] = []
 
     if options.action == Action.FACTORY:
         _run_factory(model)
     elif options.action == Action.LIST_EXPERIMENTS:
         _list_experiments(model)
     elif options.action == Action.SIMULATE:
-        _simulate(model, names, simulation_dir, options.open, formats)
+        failures = _simulate(
+            model, names, simulation_dir, options.open, formats, simulator
+        )
     elif options.action == Action.ALL:
         _run_factory(model)
         if model.experiments is not None:
-            _simulate(model, ["all"], simulation_dir, options.open, formats)
+            failures = _simulate(
+                model, ["all"], simulation_dir, options.open, formats, simulator
+            )
         for extra in model.extra_actions:
             if extra.in_all:
                 resolve(extra.function, model.package)(model, options, results_dir)
     else:
         extra = extras[options.action]
         resolve(extra.function, model.package)(model, options, results_dir)
+
+    if failures:
+        console.print(
+            f"{len(failures)} failures of the simulation experiments, their "
+            "tracebacks are in the log above:",
+            style="error",
+        )
+        for line in failures:
+            console.print(f"  {line}", style="error", markup=False)
+        sys.exit(1)
 
 
 def with_output_dir(args: Sequence[str], output_dir: Path) -> list[str]:

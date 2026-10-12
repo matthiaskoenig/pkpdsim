@@ -22,6 +22,7 @@ from sbmlsim.fit import FitMapping, FitMappingCollection, FitSettings
 from sbmlsim.fit.helpers import FitMappings, MappingFilter
 from sbmlsim.fit.objects import MappingMetaData
 from sbmlsim.fit.options import (
+    DataAtChangeType,
     LossFunctionType,
     ResidualType,
     WeightingCurvesType,
@@ -44,7 +45,10 @@ def default_fit_settings(
     Normalized residuals with a linear loss; the curves are weighted by the
     weights of their mappings and by their number of points, the points by their
     errors (a mapping without errors is weighted with a CV of 0.5); the
-    integrator takes variable steps.
+    integrator takes variable steps; a data point at the time of a change after
+    the start is compared with the state before the change (`data_at_change`),
+    sbmlsim's default, written out so that a change of the default does not
+    change the fits.
 
     Args:
         absolute_tolerance: the absolute tolerance of the integrator, one value or
@@ -63,6 +67,7 @@ def default_fit_settings(
         ),
         weighting_points=WeightingPointsType.ERROR_WEIGHTING,
         variable_step_size=True,
+        data_at_change=DataAtChangeType.BEFORE,
         relative_tolerance=relative_tolerance,
         absolute_tolerance=absolute_tolerance,
     )
@@ -90,7 +95,13 @@ def mapping_metadata[M: MappingMetaData](
 
 
 def observable_id(fit_mapping: FitMapping) -> str:
-    """Get the observable of a fit mapping, the id without the task.
+    """Get the observable of a fit mapping, the index of its data.
+
+    The index of the y data of the observable (`sbmlsim.data.Data.index`): the
+    selection without the brackets of a concentration, `Cve_hctz` for
+    `[Cve_hctz]`, `Aurine_hctz` for `Aurine_hctz`. sbmlsim 0.9 writes the
+    concentration into the id of the data (`<task>__conc__Cve_hctz`), so the
+    id is no longer read.
 
     Args:
         fit_mapping: the fit mapping.
@@ -98,7 +109,7 @@ def observable_id(fit_mapping: FitMapping) -> str:
     Returns:
         The id of the observable, e.g. `Cve_hctz`.
     """
-    return "__".join(fit_mapping.observable.y.sid.split("__")[1:])
+    return fit_mapping.observable.y.index
 
 
 def _show(values: frozenset[Hashable]) -> str:
@@ -224,7 +235,8 @@ class ObservableFilter:
     """A filter of fit mappings by their observable, see `observable_id`.
 
     Attributes:
-        observables: the ids of the observables a mapping may have.
+        observables: the ids of the observables a mapping may have, the index
+            of the data (`Data.index`).
     """
 
     observables: frozenset[str]
@@ -242,7 +254,8 @@ def observable_filter(observables: Collection[str]) -> ObservableFilter:
     """Build a filter of fit mappings by their observable, e.g. the PK data.
 
     Args:
-        observables: the ids of the observables without the task, e.g. `Cve_hctz`.
+        observables: the ids of the observables, the index of the data
+            (`Data.index`), e.g. `Cve_hctz`.
 
     Returns:
         The filter.

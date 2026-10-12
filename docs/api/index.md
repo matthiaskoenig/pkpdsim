@@ -17,8 +17,10 @@ The API reference is generated from the docstrings of the package.
 | [cli](cli.md) | `run_command`, `fit_command`, `report_command`, `identifiability_command`: the commands of a model |
 | [fit](fit.md) | `default_fit_settings`, `mapping_metadata`, `observable_id`, `metadata_filter`, `observable_filter`, `select_mappings`: the shared fit settings, the filters and the selection of the mappings of a fit, see [Experiments and their metadata](../experiments.md) |
 | [metadata](metadata.md) | `Tissue`, `Route`, `Dosing`, `Fasting`, `ApplicationForm`, `DataType`, `PKPDData`, `PKPDMappingMetaData`: the vocabulary of the metadata of a fit mapping, see [Experiments and their metadata](../experiments.md) |
-| [experiment](experiment.md) | `PKPDSimulationExperiment`: the base of the simulation experiments of a model |
+| [experiment](experiment.md) | `PKPDSimulationExperiment`, `to_sid`, `define_unit`, `rename_units`: the base of the simulation experiments of a model, the SIds of its keys and the units of its data, see [Experiments and their metadata](../experiments.md) |
 | [impairment](impairment.md) | the presets of the renal function, the cirrhosis and the cardiac function with their colors |
 | [pk](pk.md) | `PK_LABELS`, `PK_UNITS`: the labels and units of the pharmacokinetic parameters |
+| [scan](scan.md) | `single_dimension`, `point_timecourse`: the dimension of a scan and the timecourse of a point of its result, see [Scans and sensitivity analyses](../scans.md) |
+| [sensitivity](sensitivity.md) | `parameters_from_sbml`, `set_bounds`, `parameters_to_df`, `write_parameters`, `distributions`, `sample_size`: the parameters of the sensitivity analyses of a model, see [Scans and sensitivity analyses](../scans.md) |
 | [testing](testing.md) | `check_model`, `check_registry`, `initialize_experiments`, `run_all_experiments`, `start_fits`: the tests of a model as functions |
 | [verify](verify.md) | `pkpdsim-verify`: the verification of a change of a model |

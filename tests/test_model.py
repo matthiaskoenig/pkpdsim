@@ -3,12 +3,10 @@
 import dataclasses
 from pathlib import Path
 
-import matplotlib
 import pytest
-from sbmlsim.plot import Figure
+from sbmlsim.plot import FigureSettings as SbmlsimFigureSettings
 
 from pkpdsim.model import (
-    FIGURE_ATTRIBUTES,
     CheckSettings,
     ExtraAction,
     FigureSettings,
@@ -111,8 +109,10 @@ def test_the_formats_are_a_lower_case_tuple() -> None:
 
 
 def test_the_dataclasses_are_keyword_only() -> None:
-    with pytest.raises(TypeError):
-        FigureSettings(("svg",))  # ty: ignore[too-many-positional-arguments]
+    assert [f.name for f in dataclasses.fields(FigureSettings) if f.kw_only] == [
+        "formats",
+        "savefig_dpi",
+    ]
     with pytest.raises(TypeError):
         SimulatorSettings(1e-10)  # ty: ignore[too-many-positional-arguments]
     with pytest.raises(TypeError):
@@ -157,30 +157,42 @@ def test_the_settings_are_frozen() -> None:
     assert SimulatorSettings().absolute_tolerance == 1e-10
 
 
-def test_the_figure_attributes_exist_in_sbmlsim() -> None:
-    for name in FIGURE_ATTRIBUTES:
-        assert hasattr(Figure, name), name
+def test_the_figure_settings_are_those_of_sbmlsim() -> None:
+    settings = FigureSettings(fig_dpi=123, legend_fontsize=4)
+    assert isinstance(settings, SbmlsimFigureSettings)
+    assert settings.panel_width == SbmlsimFigureSettings().panel_width
+    assert settings.fig_dpi == 123
 
 
-def test_settings_are_applied_and_restored() -> None:
-    before = {name: getattr(Figure, name) for name in FIGURE_ATTRIBUTES}
-    dpi = matplotlib.rcParams["savefig.dpi"]
-    settings = FigureSettings(fig_dpi=123, legend_fontsize=4, savefig_dpi=17)
-    with settings.applied():
-        assert Figure.fig_dpi == 123
-        assert Figure.legend_fontsize == 4
-        assert matplotlib.rcParams["savefig.dpi"] == 17
-        # what is not set keeps its value
-        assert Figure.panel_width == before["panel_width"]
-    assert {name: getattr(Figure, name) for name in FIGURE_ATTRIBUTES} == before
-    assert matplotlib.rcParams["savefig.dpi"] == dpi
+def test_sbmlsim_gets_its_settings_without_the_formats() -> None:
+    settings = FigureSettings(formats=("png",), savefig_dpi=17, legend_fontsize=4)
+    handed = settings.sbmlsim_settings()
+    assert type(handed) is SbmlsimFigureSettings
+    assert handed == SbmlsimFigureSettings(legend_fontsize=4)
+    assert FigureSettings().sbmlsim_settings() == SbmlsimFigureSettings()
 
 
-def test_settings_are_restored_after_an_error() -> None:
-    before = Figure.fig_dpi
-    with pytest.raises(RuntimeError), FigureSettings(fig_dpi=7).applied():
-        raise RuntimeError("the run failed")
-    assert Figure.fig_dpi == before
+def test_the_resolution_of_the_images_is_a_matplotlib_setting() -> None:
+    assert FigureSettings(savefig_dpi=17).rc_params() == {"savefig.dpi": 17}
+    assert FigureSettings().rc_params() == {}
+
+
+def test_the_simulations_run_serially_by_default() -> None:
+    assert SimulatorSettings().n_workers == 1
+    assert SimulatorSettings(n_workers=None).n_workers is None
+    assert SimulatorSettings(n_workers=4).n_workers == 4
+
+
+@pytest.mark.parametrize("n_workers", [0, -1, 1.5, True, "2"])
+def test_the_number_of_workers_is_a_positive_number(n_workers: object) -> None:
+    with pytest.raises(ValueError, match="n_workers"):
+        SimulatorSettings(n_workers=n_workers)  # ty: ignore[invalid-argument-type]
+
+
+@pytest.mark.parametrize("reason", ["", "  "])
+def test_one_at_a_time_needs_a_reason(reason: str) -> None:
+    with pytest.raises(ValueError, match="reason"):
+        CheckSettings(one_at_a_time=reason)
 
 
 def test_the_model_of_the_toy_package() -> None:

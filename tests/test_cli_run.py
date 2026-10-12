@@ -8,11 +8,12 @@ import pytest
 from pkpdsim.cli import (
     Action,
     parse_formats,
+    parse_workers,
     resolve_experiments,
     run_command,
     run_parser,
 )
-from pkpdsim.model import RUN_ACTIONS, ExtraAction
+from pkpdsim.model import RUN_ACTIONS, ExtraAction, SimulatorSettings
 from pkpdsim_toy import MODEL
 from pkpdsim_toy.experiments.decay import ToyDecay, ToyDecaySlow
 
@@ -22,6 +23,7 @@ GREET = ExtraAction(
 EXTRA = dataclasses.replace(
     MODEL, extra_actions=(GREET,), extra_arguments=".extras:add_arguments"
 )
+BROKEN = dataclasses.replace(EXTRA, experiments=".broken:BROKEN")
 
 
 def test_the_actions_of_the_model_and_the_command_agree() -> None:
@@ -141,6 +143,33 @@ def test_an_extra_action(tmp_path: Path) -> None:
     assert (tmp_path / "greeting.txt").read_text(encoding="utf-8") == "hi toy"
 
 
+WORKERS = ExtraAction(
+    name="workers", help="write the processes", function=".extras:workers"
+)
+
+
+@pytest.mark.parametrize(
+    ("options", "n_workers"), [([], "1"), (["-w", "3"], "3"), (["-w", "auto"], "None")]
+)
+def test_an_extra_action_gets_the_simulator_of_the_run(
+    tmp_path: Path, options: list[str], n_workers: str
+) -> None:
+    model = dataclasses.replace(MODEL, extra_actions=(WORKERS,))
+    run_command(model, ["-a", "workers", *options, "--results-dir", str(tmp_path)])
+    text = (tmp_path / "workers.txt").read_text(encoding="utf-8")
+    assert text == f"toy {n_workers}"
+
+
+def test_an_extra_action_of_a_model_without_experiments_gets_its_simulator(
+    tmp_path: Path,
+) -> None:
+    model = dataclasses.replace(
+        MODEL, experiments=None, fit_definitions=None, extra_actions=(WORKERS,)
+    )
+    run_command(model, ["-a", "workers", "--results-dir", str(tmp_path)])
+    assert (tmp_path / "workers.txt").read_text(encoding="utf-8") == "toy 1"
+
+
 def test_all_runs_the_factory_the_simulations_and_the_extras(tmp_path: Path) -> None:
     model = dataclasses.replace(EXTRA, factory_path=tmp_path / "models")
     run_command(model, ["-a", "all", "--results-dir", str(tmp_path)])
@@ -213,3 +242,67 @@ def test_all_of_a_model_without_experiments_runs_the_extras(tmp_path: Path) -> N
     assert (tmp_path / "models" / "toy.xml").exists()
     assert (tmp_path / "greeting.txt").exists()
     assert not (tmp_path / "simulation").exists()
+
+
+def test_the_workers_of_a_run() -> None:
+    assert parse_workers("model", MODEL) == MODEL.simulator.n_workers
+    assert parse_workers("auto", MODEL) is None
+    assert parse_workers("3", MODEL) == 3
+    other = dataclasses.replace(MODEL, simulator=SimulatorSettings(n_workers=None))
+    assert parse_workers("model", other) is None
+
+
+@pytest.mark.parametrize("text", ["0", "-2", "two", "1.5", ""])
+def test_the_workers_are_a_positive_number(text: str) -> None:
+    with pytest.raises(ValueError, match="--workers"):
+        parse_workers(text, MODEL)
+
+
+def test_a_bad_number_of_workers_is_a_usage_error(tmp_path: Path) -> None:
+    with pytest.raises(SystemExit) as info:
+        run_command(
+            MODEL, ["-a", "simulate", "-e", "ToyDecay", "-w", "0", "-r", str(tmp_path)]
+        )
+    assert info.value.code == 2
+
+
+def test_the_workers_reach_the_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import pkpdsim.run
+
+    seen: list[SimulatorSettings] = []
+    original = pkpdsim.run.create_simulator
+
+    def create(settings: SimulatorSettings) -> object:
+        seen.append(settings)
+        return original(settings)
+
+    monkeypatch.setattr(pkpdsim.run, "create_simulator", create)
+    run_command(
+        MODEL, ["-a", "simulate", "-e", "ToyDecay", "-w", "2", "-r", str(tmp_path)]
+    )
+    assert [s.n_workers for s in seen] == [2]
+    assert seen[0].relative_tolerance == MODEL.simulator.relative_tolerance
+
+
+def test_a_failure_exits_with_1_after_every_action(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    model = dataclasses.replace(BROKEN, factory_path=tmp_path / "models")
+    with pytest.raises(SystemExit) as info:
+        run_command(model, ["-a", "all", "--results-dir", str(tmp_path)])
+    assert info.value.code == 1
+    # the report, the collected figures and the extra action are there
+    assert list((tmp_path / "simulation" / "all").glob("**/*.html"))
+    assert list((tmp_path / "simulation" / "all" / "_figures").glob("ToyDecay_*"))
+    assert (tmp_path / "greeting.txt").exists()
+    out = capsys.readouterr().out
+    assert "ToyCannotInitialize" in out
+    assert "ToyRefusedUnit" in out
+    assert "figures_mpl()" in out
+
+
+def test_a_run_without_failures_exits_normally(tmp_path: Path) -> None:
+    run_command(MODEL, ["-a", "simulate", "-e", "all", "-r", str(tmp_path)])
+    assert list((tmp_path / "simulation" / "all" / "_figures").glob("ToyDecay_*"))

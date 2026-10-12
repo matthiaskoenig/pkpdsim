@@ -1,26 +1,34 @@
 """The verification of a change of a model, run on the toy model."""
 
+import copy
 import dataclasses
 import json
 import pickle
 import re
 import shutil
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
+from types import MappingProxyType
 
 import numpy as np
 import pytest
 from PIL import Image
 from sbmlsim.experiment import SimulationExperiment
-from sbmlsim.plot import Figure
+from sbmlsim.plot import Axis, Figure
+from sbmlsim.simulation import Scan, Simulation
+from sbmlsim.simulation.sampling import local
 
 from pkpdsim.model import FigureSettings
 from pkpdsim.verify import (
+    FIGURE_SETTINGS_08,
+    Dump,
     apply_renames,
     describe,
+    figure_spec,
     load,
     load_renames,
+    matched_rows,
     rename_mapping,
     verify,
 )
@@ -236,10 +244,12 @@ def test_capture_settings_of_a_model() -> None:
     assert settings["run"]["figure_formats"] == ["svg", "png"]
     assert settings["run"]["reduced_selections"] is True
     assert settings["run"]["save_results"] is False
-    assert settings["figure"]["legend_fontsize"] == 7
+    assert settings["run"]["figure_settings"]["legend_fontsize"] == 7
     assert settings["rc"]["savefig.dpi"] == 30
     assert settings["calls"] == {"simulator": 1, "runner": 1, "run": 1}
-    assert "<root>" in settings["simulator"]["model"]
+    assert "<root>" in settings["runner"]["base_path"]
+    assert settings["simulator"]["n_workers"] == 1
+    assert "figure" not in settings
 
 
 def test_capture_settings_sees_a_difference() -> None:
@@ -250,24 +260,8 @@ def test_capture_settings_sees_a_difference() -> None:
     )
     a = capture_settings(MODEL.run_experiments, ToyDecay, TESTS_DIR)
     b = capture_settings(other.run_experiments, ToyDecay, TESTS_DIR)
-    assert a["figure"] != b["figure"]
+    assert a["run"]["figure_settings"] != b["run"]["figure_settings"]
     assert a["run"]["figure_formats"] != b["run"]["figure_formats"]
-
-
-def test_settings_leave_the_figure_settings_as_they_were(tmp_path: Path) -> None:
-    before = Figure.legend_fontsize
-    verify(
-        [
-            "settings",
-            "--root",
-            str(TESTS_DIR),
-            "--model",
-            "pkpdsim_toy",
-            "--out",
-            str(tmp_path / "s.json"),
-        ]
-    )
-    assert Figure.legend_fontsize == before
 
 
 def test_dump_with_the_relative_tolerance_of_the_model(tmp_path: Path) -> None:
@@ -290,17 +284,116 @@ def test_dump_with_the_relative_tolerance_of_the_model(tmp_path: Path) -> None:
     assert code == 0
 
 
+def test_a_dump_records_an_experiment_which_cannot_be_initialized(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    import pkpdsim_toy
+
+    monkeypatch.setattr(
+        pkpdsim_toy, "MODEL", dataclasses.replace(MODEL, experiments=".broken:BROKEN")
+    )
+    # the experiment which cannot be initialized runs first
+    order = tmp_path / "order.pkl"
+    with order.open("wb") as f:
+        pickle.dump({"order": ["ToyCannotInitialize", "ToyDecay", "ToyFigureFails"]}, f)
+    out = tmp_path / "dump.pkl"
+    code = verify(
+        [
+            "dump",
+            "--root",
+            str(TESTS_DIR),
+            "--model",
+            "pkpdsim_toy",
+            "--out",
+            str(out),
+            "--order",
+            str(order),
+        ]
+    )
+    assert code == 1
+    assert "ToyCannotInitialize: ok" not in capsys.readouterr().err
+    dump = load(str(out))
+    # an experiment which the order does not name runs last
+    assert dump["order"] == [
+        "ToyCannotInitialize",
+        "ToyDecay",
+        "ToyFigureFails",
+        "ToyRefusedUnit",
+    ]
+    assert list(dump["errors"]) == ["ToyCannotInitialize", "ToyRefusedUnit"]
+    assert (
+        "RuntimeError: the simulations of ToyCannotInitialize fail"
+        in dump["errors"]["ToyCannotInitialize"]
+    )
+    assert "ValueError: The unit 'IU_toy_refused'" in dump["errors"]["ToyRefusedUnit"]
+    # the experiments after it ran and are stored
+    assert {sid for sid, _, _ in dump["results"]} == {"ToyDecay", "ToyFigureFails"}
+    assert ("ToyDecay", "task_decay", "[A]") in dump["results"]
+    assert set(dump["mappings"]) == {"ToyDecay", "ToyFigureFails"}
+
+
+def test_a_dump_stores_the_time_of_the_grid(tmp_path: Path) -> None:
+    out = tmp_path / "dump.pkl"
+    assert (
+        verify(
+            [
+                "dump",
+                "--root",
+                str(TESTS_DIR),
+                "--model",
+                "pkpdsim_toy",
+                "--out",
+                str(out),
+            ]
+        )
+        == 0
+    )
+    dims, values = load(str(out))["results"]["ToyDecay", "task_decay", "time"]
+    assert dims == ("time",)
+    assert values[0] == 0.0
+    assert values.size == 51
+    dims, _ = load(str(out))["results"]["ToyDecay", "task_decay", "[A]"]
+    assert dims == ("time",)
+
+
+class ToyDesign(ToyDecay):
+    """The decay with a local design of k, whose creation constructs simulators of its own."""
+
+    # the toy experiments have no scan, this one adds its design
+    def simulations(self) -> dict[str, Simulation | Scan]:  # ty: ignore[invalid-method-override]
+        """The decay and its local design."""
+        sim = Simulation(end=10, steps=50)
+        return {
+            "decay": sim,
+            "decay_sensitivity": Scan(
+                sim,
+                [local(["k"], delta=0.5, model=self._models["model"], simulation=sim)],
+            ),
+        }
+
+
+def test_capture_settings_of_an_experiment_with_a_design() -> None:
+    from pkpdsim.verify import capture_settings
+
+    settings = capture_settings(MODEL.run_experiments, ToyDesign, TESTS_DIR)
+    assert settings["simulator"]["n_workers"] == 1
+    assert settings["simulator"]["absolute_tolerance"] == 1e-10
+    assert settings["calls"]["simulator"] == 1
+
+
 def _fake_run(positional: bool) -> "Callable[..., object]":
     from sbmlsim.experiment import ExperimentRunner
-    from sbmlsim.simulator.simulation_serial import SimulatorSerial
+    from sbmlsim.simulator import Simulator
 
     def run(experiment: type[SimulationExperiment], output_dir: Path) -> None:
         if positional:
-            simulator = SimulatorSerial(MODEL_PATH, absolute_tolerance=1e-10)
+            simulator = Simulator(1, absolute_tolerance=1e-10)
             runner = ExperimentRunner([experiment], TOY_PATH, DATA_PATHS, simulator)
             runner.run_experiments(output_dir, False, False, ["png"])
         else:
-            simulator = SimulatorSerial(model=MODEL_PATH, absolute_tolerance=1e-10)
+            simulator = Simulator(n_workers=1, absolute_tolerance=1e-10)
             runner = ExperimentRunner(
                 experiment_classes=[experiment],
                 simulator=simulator,
@@ -535,3 +628,829 @@ def test_renamed_mappings_are_sorted_like_a_dump() -> None:
     renamed = apply_renames(old, renames)  # ty: ignore[invalid-argument-type]
     assert renamed["mappings"]["E"] == sorted(renamed["mappings"]["E"])
     assert renamed["mappings"]["E"][0].endswith(str([("route", "C")]))
+
+
+T_OLD = np.array([0.0, 1.0, 2.0, 3.0])
+#: a change at 2: the state before it, then the state after it
+T_NEW = np.array([0.0, 1.0, 2.0, 2.0, 3.0])
+
+
+def synthetic(
+    results: dict | None = None,
+    *,
+    datasets: dict | None = None,
+    mappings: dict | None = None,
+    figures: dict | None = None,
+    ranges: dict | None = None,
+    versions: dict[str, str] | None = None,
+) -> Dump:
+    dump = Dump(
+        model="m",
+        order=["E"],
+        errors={},
+        results=results or {},
+        datasets=datasets or {},
+        mappings=mappings or {"E": []},
+        figures=figures or {"E": {}},
+        ranges=ranges or {"E": {}},
+    )
+    if versions is not None:
+        dump["versions"] = versions
+    return dump
+
+
+def written(tmp_path: Path, name: str, dump: Dump) -> str:
+    path = tmp_path / name
+    path.write_bytes(pickle.dumps(dump))
+    return str(path)
+
+
+def old_scan() -> Dump:
+    """A scan of sbmlsim 0.8: (_point, dim_k), the state after the change at 2."""
+    values = np.array([[1.0, 10.0], [2.0, 20.0], [3.5, 35.0], [4.0, 40.0]])
+    return synthetic(
+        {
+            ("E", "task_x", "time"): (
+                ("_point", "dim_k"),
+                np.stack([T_OLD, T_OLD], axis=1),
+            ),
+            ("E", "task_x", "[A]"): (("_point", "dim_k"), values),
+        }
+    )
+
+
+def new_scan(before: float = 3.0) -> Dump:
+    """The scan of sbmlsim 0.9: (dim_k, time), the states before and after the change."""
+    values = np.array([[1.0, 2.0, before, 3.5, 4.0], [10.0, 20.0, 30.0, 35.0, 40.0]])
+    return synthetic(
+        {
+            ("E", "task_x", "time"): (("time",), T_NEW),
+            ("E", "task_x", "[A]"): (("dim_k", "time"), values),
+        },
+        versions={"sbmlsim": "0.9.3", "pkpdsim": "0.5.0"},
+    )
+
+
+def test_the_matched_rows() -> None:
+    match = matched_rows(T_OLD, T_NEW)
+    assert match.old.tolist() == [0, 1, 2, 3]
+    assert match.new.tolist() == [0, 1, 3, 4]
+    assert (match.ignored_old, match.ignored_new, match.unmatched) == (0, 1, 0)
+    same = matched_rows(T_NEW, T_NEW)
+    assert same.new.tolist() == [0, 1, 2, 3, 4]
+    assert (same.ignored_old, same.ignored_new) == (0, 0)
+
+
+def test_a_dump_of_sbmlsim_08_compares_with_one_of_09(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    old, new = (
+        written(tmp_path, "old.pkl", old_scan()),
+        written(tmp_path, "new.pkl", new_scan()),
+    )
+    code = verify(["compare", old, new, "--threshold", "1e-12"])
+    out = capsys.readouterr().out
+    assert code == 0, out
+    assert (
+        "rows at a change: 1 rows of the new dump and 0 of the old dump left out" in out
+    )
+    assert "changes: E 1 rows" in out
+    assert "new: pkpdsim 0.5.0, sbmlsim 0.9.3" in out
+
+
+def test_two_dumps_of_sbmlsim_09_compare_every_row(tmp_path: Path) -> None:
+    a = written(tmp_path, "a.pkl", new_scan())
+    b = written(tmp_path, "b.pkl", new_scan(before=3.1))
+    assert verify(["compare", a, a]) == 0
+    assert verify(["compare", a, b, "--threshold", "1e-12"]) == 1
+
+
+def ragged(times: Sequence[Sequence[float]], values: Sequence[Sequence[float]]) -> Dump:
+    """A scan of sbmlsim 0.9 in the ragged layout: every point has its own times.
+
+    The rows of a point are padded with NaN to the longest point, `(dim_k, _point)`.
+    """
+    rows = max(len(t) for t in times)
+
+    def padded(columns: Sequence[Sequence[float]]) -> np.ndarray:
+        return np.array([[*c, *[np.nan] * (rows - len(c))] for c in columns])
+
+    return synthetic(
+        {
+            ("E", "task_x", "time"): (("dim_k", "_point"), padded(times)),
+            ("E", "task_x", "[A]"): (("dim_k", "_point"), padded(values)),
+        },
+        versions={"sbmlsim": "0.9.3", "pkpdsim": "0.5.0"},
+    )
+
+
+def test_the_rows_of_every_point_are_matched_by_its_own_times(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A ragged result: the second point has a change at 2, the first has not."""
+    old = ragged([[0, 1, 2, 3], [0, 1, 2, 3]], [[1, 2, 3, 4], [10, 20, 35, 40]])
+    new = ragged([[0, 1, 2, 3], [0, 1, 2, 2, 3]], [[1, 2, 3, 4], [10, 20, 30, 35, 40]])
+    code = verify(
+        [
+            "compare",
+            written(tmp_path, "old.pkl", old),
+            written(tmp_path, "new.pkl", new),
+            "--threshold",
+            "1e-12",
+        ]
+    )
+    out = capsys.readouterr().out
+    assert code == 0, out
+    assert "changes: E 1 rows" in out
+    # the value after the change of the second point is compared
+    new["results"]["E", "task_x", "[A]"][1][1, 3] = 36.0
+    code = verify(
+        [
+            "compare",
+            written(tmp_path, "old.pkl", old),
+            written(tmp_path, "new.pkl", new),
+            "--threshold",
+            "1e-12",
+        ]
+    )
+    assert code == 1
+
+
+def test_a_time_of_another_point_than_the_first_is_compared(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    old = ragged([[0, 1, 2, 3], [0, 1, 2, 3]], [[1, 2, 3, 4], [10, 20, 30, 40]])
+    new = ragged([[0, 1, 2, 3], [0, 1, 2, 5]], [[1, 2, 3, 4], [10, 20, 30, 40]])
+    code = verify(
+        [
+            "compare",
+            written(tmp_path, "old.pkl", old),
+            written(tmp_path, "new.pkl", new),
+        ]
+    )
+    out = capsys.readouterr().out
+    assert code == 1, out
+    assert "1 rows of the old dump without a time in the new dump" in out
+    assert "times of E/task_x: 1 rows only in old, at 3" in out
+
+
+def test_an_old_row_without_a_new_time_is_a_difference(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    old = old_scan()
+    times = T_OLD.copy()
+    times[2] = 2.5
+    old["results"]["E", "task_x", "time"] = (
+        ("_point", "dim_k"),
+        np.stack([times, times], axis=1),
+    )
+    code = verify(
+        [
+            "compare",
+            written(tmp_path, "old.pkl", old),
+            written(tmp_path, "new.pkl", new_scan()),
+        ]
+    )
+    assert code == 1
+    assert (
+        "1 rows of the old dump without a time in the new dump"
+        in capsys.readouterr().out
+    )
+
+
+def timecourse(times: Sequence[float], values: Sequence[float]) -> Dump:
+    """A dump of one task with its output times and the values of A."""
+    return synthetic(
+        {
+            ("E", "t", "time"): (("time",), np.array(times)),
+            ("E", "t", "[A]"): (("time",), np.array(values)),
+        }
+    )
+
+
+def test_repeated_times_are_matched_from_the_last_row() -> None:
+    # two dumps of sbmlsim 0.9 with other output times: every row of the
+    # common times is compared, the states before a change included
+    match = matched_rows(np.array([0.0, 1, 2, 2, 3]), np.array([0.0, 1, 2, 2, 3, 4]))
+    assert match.old.tolist() == [0, 1, 2, 3, 4]
+    assert match.new.tolist() == [0, 1, 2, 3, 4]
+    assert match[2:6] == (0, 0, 0, 1)
+    assert match.times_old.tolist() == []
+    assert match.times_new.tolist() == [4.0]
+    # the old dump has the time twice: its state after the change is compared
+    match = matched_rows(np.array([0.0, 1, 2, 2, 3]), T_OLD)
+    assert match.old.tolist() == [0, 1, 3, 4]
+    assert match.new.tolist() == [0, 1, 2, 3]
+    assert match[2:6] == (1, 0, 0, 0)
+    # a change at the last time
+    match = matched_rows(T_OLD, np.array([0.0, 1, 2, 3, 3]))
+    assert match.old.tolist() == [0, 1, 2, 3]
+    assert match.new.tolist() == [0, 1, 2, 4]
+    assert match[2:6] == (0, 1, 0, 0)
+
+
+def test_a_state_before_a_change_differs_although_the_times_differ(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    old = written(tmp_path, "o.pkl", timecourse([0, 1, 2, 2, 3], [1, 2, 3, 3.5, 4]))
+    times = [0, 1, 2, 2, 3, 4]
+    same = written(tmp_path, "s.pkl", timecourse(times, [1, 2, 3, 3.5, 4, 5]))
+    other = written(tmp_path, "n.pkl", timecourse(times, [1, 2, 99, 3.5, 4, 5]))
+    # the new output time is expected, the states at 2 are compared
+    renames = tmp_path / "renames.json"
+    renames.write_text(json.dumps({"expected": {"results": ["E/t/time"]}}))
+    args = ["--threshold", "1e-12", "--renames", str(renames)]
+    assert verify(["compare", old, same, *args]) == 0
+    assert verify(["compare", old, other, *args]) == 1
+
+
+def test_a_new_output_time_is_a_difference(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    old = written(tmp_path, "o.pkl", timecourse([0, 1, 2, 3], [1, 2, 3, 4]))
+    new = written(tmp_path, "n.pkl", timecourse([0, 1, 2, 3, 4], [1, 2, 3, 4, 5]))
+    capsys.readouterr()
+    assert verify(["compare", old, new, "--threshold", "1e-12"]) == 1
+    out = capsys.readouterr().out
+    assert "1 rows of the new dump without a time in the old dump (0 expected)" in out
+    assert "  times of E/t: 1 rows only in new, at 4\n" in out
+    # the pattern of the variable time of the task names the new output times
+    renames = tmp_path / "renames.json"
+    renames.write_text(json.dumps({"expected": {"results": ["E/t/time"]}}))
+    assert verify(["compare", old, new, "--renames", str(renames)]) == 0
+    out = capsys.readouterr().out
+    assert "1 rows of the new dump without a time in the old dump (1 expected)" in out
+    assert "  times of E/t: 1 rows only in new, at 4 (expected)" in out
+    # a time only the old dump has is a difference, also with the pattern
+    assert verify(["compare", new, old, "--renames", str(renames)]) == 1
+    assert "  times of E/t: 1 rows only in old, at 4\n" in capsys.readouterr().out
+
+
+def test_repeated_times_of_the_old_dump_are_left_out(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    old = written(tmp_path, "o.pkl", timecourse([0, 1, 2, 2, 3], [1, 2, 9, 3, 4]))
+    new = written(tmp_path, "n.pkl", timecourse([0, 1, 2, 3], [1, 2, 3, 4]))
+    capsys.readouterr()
+    assert verify(["compare", old, new, "--threshold", "1e-12"]) == 0
+    assert (
+        "0 rows of the new dump and 1 of the old dump left out"
+        in capsys.readouterr().out
+    )
+
+
+def test_the_state_after_a_change_at_the_last_time_is_compared(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # sbmlsim 0.8 gave the state after a change at the last output time
+    old = written(tmp_path, "o.pkl", timecourse([0, 1, 2, 3], [1, 2, 3, 10]))
+    times = [0, 1, 2, 3, 3]
+    new = written(tmp_path, "n.pkl", timecourse(times, [1, 2, 3, 4, 10]))
+    swapped = written(tmp_path, "w.pkl", timecourse(times, [1, 2, 3, 10, 4]))
+    capsys.readouterr()
+    assert verify(["compare", old, new, "--threshold", "1e-12"]) == 0
+    assert "changes: E 1 rows" in capsys.readouterr().out
+    assert verify(["compare", old, swapped, "--threshold", "1e-12"]) == 1
+
+
+def test_a_scan_of_one_point_compares_with_a_simulation(tmp_path: Path) -> None:
+    values = np.array([1.0, 2.0, 3.0, 4.0])
+    old = synthetic(
+        {
+            ("E", "task_x", "time"): (("_point", "dim_ref"), T_OLD[:, np.newaxis]),
+            ("E", "task_x", "[A]"): (("_point", "dim_ref"), values[:, np.newaxis]),
+        }
+    )
+    new = synthetic(
+        {
+            ("E", "task_x", "time"): (("time",), T_OLD),
+            ("E", "task_x", "[A]"): (("time",), values),
+        }
+    )
+    assert (
+        verify(
+            [
+                "compare",
+                written(tmp_path, "o.pkl", old),
+                written(tmp_path, "n.pkl", new),
+            ]
+        )
+        == 0
+    )
+
+
+def test_arrays_of_other_dimensions_differ(tmp_path: Path) -> None:
+    new = new_scan()
+    _, values = new["results"]["E", "task_x", "[A]"]
+    new["results"]["E", "task_x", "[A]"] = (("dim_q", "time"), values)
+    old = written(tmp_path, "o.pkl", old_scan())
+    assert verify(["compare", old, written(tmp_path, "n.pkl", new)]) == 1
+
+
+def test_arrays_of_other_sizes_differ(tmp_path: Path) -> None:
+    new = new_scan()
+    _, values = new["results"]["E", "task_x", "[A]"]
+    new["results"]["E", "task_x", "[A]"] = (
+        ("dim_k", "time"),
+        np.vstack([values, values]),
+    )
+    old = written(tmp_path, "o.pkl", old_scan())
+    assert verify(["compare", old, written(tmp_path, "n.pkl", new)]) == 1
+
+
+def test_the_ids_of_the_old_dump_become_sids(tmp_path: Path) -> None:
+    def figure(sid: str, task: str) -> str:
+        spec = {"sid": sid, "curves": [{"task_id": task, "name": "po 2.5"}]}
+        return json.dumps(spec, sort_keys=True)
+
+    def dump(task: str, dataset: str, fig: str, mapping: str) -> Dump:
+        return synthetic(
+            {
+                ("E", task, "time"): (("time",), T_OLD),
+                ("E", task, "[A]"): (("time",), T_OLD),
+            },
+            datasets={("E", dataset, "mean"): np.array([1.0])},
+            figures={"E": {fig: figure(fig, task)}},
+            ranges={"E": {mapping: (0.0, 1.0, 0.0, 1.0, "hr")}},
+        )
+
+    old = written(tmp_path, "o.pkl", dump("task_po 2.5", "Fig1_A b", "fig 1", "fm_a b"))
+    new = written(tmp_path, "n.pkl", dump("task_po_2p5", "Fig1_A_b", "fig_1", "fm_a_b"))
+    renames = tmp_path / "renames.json"
+    renames.write_text(json.dumps({"sids": True}))
+    assert verify(["compare", old, new]) == 1
+    assert verify(["compare", old, new, "--renames", str(renames)]) == 0
+
+
+def test_the_ids_of_a_mapping_description_are_renamed() -> None:
+    description = (
+        "fm_a b|Fig1_A b|None|time|mean|4|mean_sd|None"
+        "|None|task_po 2.5|time|A|None|None|None|weight=None|[('route', 'IV')]"
+    )
+    renamed = apply_renames(synthetic(mappings={"E": [description]}), {"sids": True})
+    assert renamed["mappings"]["E"] == [
+        "fm_a_b|Fig1_A_b|None|time|mean|4|mean_sd|None"
+        "|None|task_po_2p5|time|A|None|None|None|weight=None|[('route', 'IV')]"
+    ]
+
+
+def test_a_key_with_a_bar_cannot_be_renamed() -> None:
+    description = (
+        "fm|a|x|Fig1|None|time|mean|4|mean_sd|None"
+        "|None|task|time|A|None|None|None|weight=None|[]"
+    )
+    with pytest.raises(ValueError, match="cannot be renamed"):
+        apply_renames(synthetic(mappings={"E": [description]}), {"sids": True})
+
+
+def test_two_ids_with_one_new_id_are_an_error() -> None:
+    dump = synthetic(
+        datasets={
+            ("E", "a b", "x"): np.array([1.0]),
+            ("E", "a-b", "x"): np.array([2.0]),
+        }
+    )
+    with pytest.raises(ValueError, match="same new id"):
+        apply_renames(dump, {"sids": True})
+
+
+@pytest.mark.parametrize(
+    "parts",
+    [
+        {
+            "results": {
+                ("E", "task a b", "x"): (("time",), T_OLD),
+                ("E", "task a-b", "x"): (("time",), T_OLD),
+            }
+        },
+        {"figures": {"E": {"fig a": '{"sid": "fig a"}', "fig-a": '{"sid": "fig-a"}'}}},
+        {"ranges": {"E": {"fm a": "no x values", "fm-a": "no x values"}}},
+    ],
+    ids=["results", "figures", "ranges"],
+)
+def test_two_ids_of_a_part_with_one_new_id_are_an_error(parts: dict) -> None:
+    with pytest.raises(ValueError, match="same new id"):
+        apply_renames(synthetic(**parts), {"sids": True})
+
+
+def test_two_keys_with_one_key_after_the_strings_are_an_error() -> None:
+    dump = synthetic(
+        datasets={("E", "d", "x1"): np.array([1.0]), ("E", "d", "x2"): np.array([2.0])}
+    )
+    with pytest.raises(ValueError, match="same new key"):
+        apply_renames(dump, {"strings": {"x1": "x2"}})
+
+
+def test_the_strings_do_not_rename_the_parts_of_a_dump() -> None:
+    dump = synthetic(datasets={("E", "a", "x"): np.array([1.0])})
+    renamed = apply_renames(dump, {"strings": {"a": "b"}})
+    assert renamed.keys() == dump.keys()
+    assert list(renamed["datasets"]) == [("E", "b", "x")]
+
+
+def test_the_renames_do_not_change_the_old_dump() -> None:
+    descriptions = ["b", "a"]
+    dump = synthetic(mappings={"E": descriptions})
+    before = copy.deepcopy(dump)
+    result = apply_renames(dump, {})
+    assert result["mappings"]["E"] == ["a", "b"]
+    assert dump["mappings"]["E"] is descriptions
+    assert descriptions == ["b", "a"]
+    assert dump.keys() == before.keys()
+
+
+#: the figures of `build_figures` as a dump of pkpdsim 0.4.1 with sbmlsim 0.8.5
+#: stored them (written by that function with sbmlsim 0.8.5, which sets a
+#: setting as an attribute of the figure, `setattr`)
+FIGURES_08: dict[str, str] = json.loads(
+    (TESTS_DIR / "data" / "figures-sbmlsim-0.8.5.json").read_text(encoding="utf-8")
+)["figures"]
+
+
+class FigureStudy(SimulationExperiment):
+    """An experiment the figures of `build_figures` belong to."""
+
+
+def build_figures(
+    experiment: SimulationExperiment,
+    set_setting: Callable[[Figure, str, object], None],
+) -> dict[str, Figure]:
+    """Build figures as the models do, with sbmlsim 0.8.5 or 0.9.
+
+    The fixture of sbmlsim 0.8.5 was written by this function, so it runs with
+    both versions; only the setting of a figure is set differently.
+    """
+    figures: dict[str, Figure] = {}
+    # a setting and an explicit width set after the creation (Harris1992 of creatinine)
+    fig = Figure(experiment=experiment, sid="Fig1", name="FigureStudy Fig1")
+    set_setting(fig, "legend_position", "outside")
+    fig.width = 10
+    plots = fig.create_plots(xaxis=Axis("time", unit="hr"), legend=True)
+    plots[0].set_yaxis("creatine", unit="mM")
+    plots[0].add_data(task="task_cr", xid="time", yid="[Cve_cr]", label="Sim")
+    plots[0].add_data(dataset="d", xid="time", yid="mean", yid_sd="mean_sd", label="d")
+    figures["Fig1"] = fig
+    # an explicit size of 2 x 3 panels (Kharasch1997 of midazolam)
+    fig = Figure(experiment, sid="Fig2", num_rows=2, num_cols=3, height=15, width=25)
+    plots = fig.create_plots(xaxis=Axis("time", unit="min"), legend=True)
+    plots[0].add_data(task="task_a", xid="time", yid="[A]", label="A")
+    figures["Fig2"] = fig
+    # the size of the panels, 1 x 2, and a resolution (Bedada2016 of chlorzoxazone)
+    fig = Figure(experiment, sid="Fig3", num_cols=2)
+    set_setting(fig, "fig_dpi", 300)
+    plots = fig.create_plots(xaxis=Axis("time", unit="min"), legend=True)
+    plots[1].add_data(task="task_a", xid="time", yid="[A]", label="A")
+    figures["Fig3"] = fig
+    return figures
+
+
+def setting_of_09(figure: Figure, name: str, value: object) -> None:
+    """Set a setting of a figure as sbmlsim 0.9 does (R1.5 of the port)."""
+    figure.settings = {**figure.settings, name: value}
+
+
+def figures_09(
+    change: Callable[[dict[str, Figure]], object] | None = None,
+) -> dict[str, str]:
+    """Get the figures of `build_figures` as a dump of sbmlsim 0.9 stores them."""
+    experiment = FigureStudy(base_path=TOY_PATH, data_path=DATA_PATHS)
+    figures = build_figures(experiment, setting_of_09)
+    if change is not None:
+        change(figures)
+    return {sid: figure_spec(figure, experiment) for sid, figure in figures.items()}
+
+
+def compare_figures(
+    tmp_path: Path, old: dict[str, str], new: dict[str, str], *args: str
+) -> int:
+    return verify(
+        [
+            "compare",
+            written(tmp_path, "o.pkl", synthetic(figures={"E": old})),
+            written(tmp_path, "n.pkl", synthetic(figures={"E": new})),
+            *args,
+        ]
+    )
+
+
+def test_the_settings_of_a_figure_of_sbmlsim_08_are_those_of_sbmlsim_09() -> None:
+    from sbmlsim.plot import FigureSettings as SbmlsimFigureSettings
+
+    names = tuple(f.name for f in dataclasses.fields(SbmlsimFigureSettings))
+    assert names == FIGURE_SETTINGS_08
+
+
+def test_the_figures_of_sbmlsim_08_compare_with_those_of_09(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert compare_figures(tmp_path, FIGURES_08, figures_09()) == 0
+    out = capsys.readouterr().out
+    assert "figures: 3 old, 3 new, 0 differ" in out
+    assert "figures across versions of sbmlsim: 3" in out
+
+
+@pytest.mark.parametrize(
+    ("change", "difference"),
+    [
+        (
+            lambda f: setting_of_09(f["Fig1"], "legend_position", "inside"),
+            "_settings.legend_position 'outside' -> 'inside'",
+        ),
+        (
+            lambda f: setattr(f["Fig3"], "settings", None),
+            "_settings.fig_dpi only in old: 300",
+        ),
+        (
+            lambda f: setting_of_09(f["Fig2"], "legend_fontsize", 9),
+            "_settings.legend_fontsize only in new: 9",
+        ),
+        (lambda f: setattr(f["Fig1"], "width", 12), "width 10 -> 12"),
+        (lambda f: setattr(f["Fig2"], "height", None), "height 15 -> 10.0"),
+        (
+            lambda f: setting_of_09(f["Fig3"], "panel_width", 6.0),
+            "width 14.0 -> 12.0",
+        ),
+        (
+            lambda f: setattr(f["Fig3"].subplots[0].plot, "width", 9.0),
+            "subplots[0].plot.width None -> 9.0",
+        ),
+    ],
+)
+def test_a_setting_or_a_size_across_versions_is_compared(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    change: Callable[[dict[str, Figure]], object],
+    difference: str,
+) -> None:
+    assert compare_figures(tmp_path, FIGURES_08, figures_09(change)) == 1
+    out = capsys.readouterr().out
+    assert "figures: 3 old, 3 new, 1 differ (0 expected)" in out
+    assert difference in out
+
+
+def test_a_figure_of_one_dump_only_is_a_difference(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    new = figures_09()
+    del new["Fig3"]
+    assert compare_figures(tmp_path, FIGURES_08, new) == 1
+    assert "figures: 3 old, 2 new, 1 differ (0 expected)" in capsys.readouterr().out
+    old = dict(FIGURES_08)
+    del old["Fig1"]
+    assert compare_figures(tmp_path, old, figures_09()) == 1
+
+
+def with_new_fields(spec: str) -> str:
+    """Add a selection, a dimension of the lines and a band to a figure."""
+    figure = json.loads(spec)
+    plot = figure["subplots"][0]["plot"]
+    curve = plot["_curves"][0]
+    curve["over"] = ["dim_dose"]
+    curve["y"]["sel"] = {"dim_bw": 0}
+    plot["_bands"] = [{"__type__": "Band", "across": ["dim_sens"]}]
+    return json.dumps(figure, sort_keys=True)
+
+
+def test_the_fields_only_sbmlsim_09_has_are_listed(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    new = figures_09()
+    new["Fig2"] = with_new_fields(new["Fig2"])
+    assert compare_figures(tmp_path, FIGURES_08, new) == 0
+    out = capsys.readouterr().out
+    assert 'new fields: E/Fig2: subplots[0].plot._curves[0].over = ["dim_dose"]' in out
+    assert (
+        'new fields: E/Fig2: subplots[0].plot._curves[0].y.sel = {"dim_bw": 0}' in out
+    )
+    assert "new fields: E/Fig2: subplots[0].plot._bands = [{" in out
+    # an empty selection is the default and not listed
+    assert "E/Fig1" not in out
+
+
+def test_two_dumps_of_sbmlsim_09_compare_the_new_fields(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    old = figures_09()
+    new = dict(old)
+    new["Fig2"] = with_new_fields(new["Fig2"])
+    assert compare_figures(tmp_path, old, new) == 1
+    assert "figures across versions" not in capsys.readouterr().out
+
+
+def test_the_settings_and_the_size_a_figure_is_rendered_with() -> None:
+    class Wide(FigureStudy):
+        figure_settings = MappingProxyType(
+            {"panel_width": 3.0, "legend_position": "outside"}
+        )
+
+    experiment = Wide(base_path=TOY_PATH, data_path=DATA_PATHS)
+    figure = Figure(
+        experiment, sid="f", num_cols=2, settings={"legend_position": "inside"}
+    )
+    resolved = json.loads(figure_spec(figure, experiment))["__resolved__"]
+    assert resolved == {
+        "settings": {"panel_width": 3.0, "legend_position": "inside"},
+        "width": 6.0,
+        "height": 5.0,
+    }
+
+
+def test_the_figure_fields_are_left_out_at_the_level_of_the_figure(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def change(figures: dict[str, Figure]) -> None:
+        figures["Fig2"].subplots[0].plot.width = 14.0
+
+    renames = tmp_path / "renames.json"
+    renames.write_text(json.dumps({"figure_fields": ["width", "height"]}))
+    old, new = figures_09(), figures_09(change)
+    assert compare_figures(tmp_path, old, new, "--renames", str(renames)) == 1
+    assert "subplots[0].plot.width 8.333333333333334 -> 14.0" in capsys.readouterr().out
+    # a field of the figure is left out
+    extra = {**json.loads(old["Fig1"]), "extra": 1}
+    new = {**old, "Fig1": json.dumps(extra, sort_keys=True)}
+    renames.write_text(json.dumps({"figure_fields": ["extra"]}))
+    assert compare_figures(tmp_path, old, new) == 1
+    assert compare_figures(tmp_path, old, new, "--renames", str(renames)) == 0
+
+
+def test_a_dump_stores_the_settings_and_the_size_of_a_figure(tmp_path: Path) -> None:
+    out = tmp_path / "dump.pkl"
+    args = ["dump", "--root", str(TESTS_DIR), "--model", "pkpdsim_toy"]
+    assert verify([*args, "--out", str(out), "ToyDecay"]) == 0
+    spec = json.loads(load(str(out))["figures"]["ToyDecay"]["fig_decay"])
+    assert spec["__resolved__"] == {"settings": {}, "width": 7.0, "height": 5.0}
+
+
+def test_a_figure_field_of_one_dump_only_is_named(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    old_spec = {"sid": "f", "plots": [{"x": 1}]}
+    new_spec = {"sid": "f", "width": None, "plots": [{"x": 1, "_bands": []}]}
+    old = written(
+        tmp_path, "o.pkl", synthetic(figures={"E": {"f": json.dumps(old_spec)}})
+    )
+    new = written(
+        tmp_path, "n.pkl", synthetic(figures={"E": {"f": json.dumps(new_spec)}})
+    )
+    capsys.readouterr()
+    assert verify(["compare", old, new]) == 1
+    out = capsys.readouterr().out
+    # a field which is null in one dump and missing in the other is a difference
+    assert "width only in new: None" in out
+    assert "plots[0]._bands only in new: []" in out
+
+
+def test_an_expected_difference_is_not_counted(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    old = written(
+        tmp_path, "o.pkl", synthetic(datasets={("E", "d", "mean"): np.array([1.0])})
+    )
+    new = written(
+        tmp_path, "n.pkl", synthetic(datasets={("E", "d", "mean"): np.array([2.0])})
+    )
+    renames = tmp_path / "renames.json"
+    renames.write_text(json.dumps({"expected": {"datasets": ["E/d/*"]}}))
+    capsys.readouterr()
+    assert verify(["compare", old, new, "--renames", str(renames)]) == 0
+    assert "datasets: 1 old, 1 new, 1 differ (1 expected)" in capsys.readouterr().out
+
+
+def mapping(key: str, y: str, task: str) -> str:
+    """The description of a fit mapping of the column y to [A] of a task."""
+    return (
+        f"{key}|d|None|time|{y}|4|None|None|None|{task}|time|[A]|None|None|None"
+        "|weight=None|[]"
+    )
+
+
+def test_an_expected_mapping_difference_is_one_mapping(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    old = synthetic(
+        mappings={"E": [mapping("fm1", "A", "t"), mapping("fm2", "A", "t")]}
+    )
+    new = synthetic(
+        mappings={"E": [mapping("fm1", "B", "t"), mapping("fm2", "A", "u")]}
+    )
+    a, b = written(tmp_path, "o.pkl", old), written(tmp_path, "n.pkl", new)
+    renames = tmp_path / "renames.json"
+    capsys.readouterr()
+    for patterns, code in ((["E"], 1), (["E/fm1"], 1), (["E/fm*"], 0)):
+        renames.write_text(json.dumps({"expected": {"mappings": patterns}}))
+        assert verify(["compare", a, b, "--renames", str(renames)]) == code, patterns
+    out = capsys.readouterr().out
+    assert "mappings: 2 old, 2 new, 2 differ (1 expected)" in out
+    assert "expected difference which does not occur: mappings: E" in out
+    assert (
+        f"  E/fm2\n    - {mapping('fm2', 'A', 't')}\n    + {mapping('fm2', 'A', 'u')}"
+        in out
+    )
+
+
+def test_two_mappings_of_one_key_are_an_error(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    dump = synthetic(mappings={"E": [mapping("fm", "A", "t"), mapping("fm", "B", "t")]})
+    path = written(tmp_path, "d.pkl", dump)
+    assert verify(["compare", path, path]) == 2
+    assert "Two fit mappings of E have the key fm" in capsys.readouterr().err
+
+
+def test_a_bracket_of_a_pattern_is_literal(tmp_path: Path) -> None:
+    def dump(a: float, bracket: float) -> Dump:
+        return synthetic(
+            {
+                ("E", "t", "time"): (("time",), T_OLD),
+                ("E", "t", "A"): (("time",), np.full(4, a)),
+                ("E", "t", "[A]"): (("time",), np.full(4, bracket)),
+            }
+        )
+
+    old = written(tmp_path, "o.pkl", dump(1.0, 1.0))
+    renames = tmp_path / "renames.json"
+    renames.write_text(json.dumps({"expected": {"results": ["E/t/[A]"]}}))
+    other_bracket = written(tmp_path, "b.pkl", dump(1.0, 2.0))
+    other_plain = written(tmp_path, "p.pkl", dump(2.0, 1.0))
+    assert verify(["compare", old, other_bracket, "--renames", str(renames)]) == 0
+    assert verify(["compare", old, other_plain, "--renames", str(renames)]) == 1
+
+
+def test_an_expected_difference_which_does_not_occur_is_counted(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    same = written(
+        tmp_path, "s.pkl", synthetic(datasets={("E", "d", "mean"): np.array([1.0])})
+    )
+    renames = tmp_path / "renames.json"
+    renames.write_text(json.dumps({"expected": {"figures": ["E/fig_x"]}}))
+    capsys.readouterr()
+    assert verify(["compare", same, same, "--renames", str(renames)]) == 1
+    assert (
+        "expected difference which does not occur: figures: E/fig_x"
+        in capsys.readouterr().out
+    )
+
+
+@pytest.mark.parametrize(
+    "renames",
+    [
+        {"ids": {"a": 1}},
+        {"sids": "yes"},
+        {"figure_fields": "width"},
+        {"expected": {"results": "E/*"}},
+        {"expected": {"plots": ["E"]}},
+    ],
+)
+def test_a_renames_file_with_wrong_new_parts_is_an_error(
+    tmp_path: Path, renames: dict
+) -> None:
+    path = tmp_path / "renames.json"
+    path.write_text(json.dumps(renames))
+    with pytest.raises(ValueError):
+        load_renames(str(path))
+
+
+def test_png_pairs_the_figures_of_renamed_keys(tmp_path: Path) -> None:
+    old, new = tmp_path / "old", tmp_path / "new"
+    write_png(old / "A" / "A_fig 2.5.png")
+    write_png(new / "A" / "A_fig_2p5.png")
+    assert verify(["png", str(old), str(new)]) == 1
+    assert verify(["png", "--sids", str(old), str(new)]) == 0
+
+
+def test_png_with_two_old_figures_of_one_sid_fails(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    old, new = tmp_path / "old", tmp_path / "new"
+    write_png(old / "A" / "A_fig 2.5.png")
+    write_png(old / "A" / "A_fig-2.5.png")
+    write_png(new / "A" / "A_fig_2p5.png")
+    assert verify(["png", "--sids", str(old), str(new)]) == 2
+    message = f"two old figures have the same SId: {Path('A', 'A_fig_2p5.png')}"
+    assert message in capsys.readouterr().err
+
+
+def test_a_dump_names_the_versions(tmp_path: Path) -> None:
+    import pkpdsim
+
+    out = tmp_path / "dump.pkl"
+    assert (
+        verify(
+            [
+                "dump",
+                "--root",
+                str(TESTS_DIR),
+                "--model",
+                "pkpdsim_toy",
+                "--out",
+                str(out),
+                "ToyDecay",
+            ]
+        )
+        == 0
+    )
+    versions = load(str(out))["versions"]
+    assert versions["sbmlsim"].startswith("0.9")
+    assert versions["pkpdsim"] == pkpdsim.__version__

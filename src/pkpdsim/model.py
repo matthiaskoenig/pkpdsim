@@ -23,16 +23,21 @@ references `"module:attribute"`, resolved when they are used: the experiments
 import the `__init__.py` of their model, so the model object cannot import them,
 and importing a model package does not import its experiments. A module which
 starts with a dot is relative to `package`.
+
+`FigureSettings` is the `sbmlsim.plot.FigureSettings` of sbmlsim with the
+formats of the figures and the resolution of the static images; the module
+therefore imports sbmlsim's plotting.
 """
 
 from __future__ import annotations
 
 import importlib
-from collections.abc import Callable, Generator, Mapping, Sequence
-from contextlib import contextmanager
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+from sbmlsim.plot import FigureSettings as SbmlsimFigureSettings
 
 if TYPE_CHECKING:
     from sbmlsim.experiment import SimulationExperiment
@@ -41,20 +46,6 @@ if TYPE_CHECKING:
 
 #: the actions of the `run` command of a model, see `pkpdsim.cli`
 RUN_ACTIONS: tuple[str, ...] = ("simulate", "list_experiments", "factory", "all")
-
-#: the class attributes of `sbmlsim.plot.Figure` which `FigureSettings` sets
-FIGURE_ATTRIBUTES: tuple[str, ...] = (
-    "fig_dpi",
-    "fig_titlesize",
-    "axes_labelsize",
-    "xtick_labelsize",
-    "ytick_labelsize",
-    "legend_fontsize",
-    "legend_position",
-    "legend_loc",
-    "panel_width",
-    "panel_height",
-)
 
 
 def check_reference(reference: str) -> None:
@@ -129,53 +120,55 @@ class SimulatorSettings:
         absolute_tolerance: the absolute tolerance, one value for every state or
             an `AbsoluteTolerance` of sbmlsim with tolerances per kind and state.
         relative_tolerance: the relative tolerance.
+        n_workers: the processes of a scan: `1` runs serially, a number runs a
+            pool of that many processes, `None` lets sbmlsim choose (a pool of
+            every CPU for a scan of `sbmlsim.parallel.POOL_THRESHOLD` points or
+            more, serially otherwise). A pool needs the guard
+            `if __name__ == "__main__":` in a script which runs the model.
     """
 
     absolute_tolerance: float | AbsoluteTolerance = 1e-10
     relative_tolerance: float = 1e-10
+    n_workers: int | None = 1
+
+    def __post_init__(self) -> None:
+        """Check the number of processes.
+
+        Raises:
+            ValueError: if `n_workers` is neither a positive int nor `None`.
+        """
+        n = self.n_workers
+        if n is not None and (isinstance(n, bool) or not isinstance(n, int) or n < 1):
+            raise ValueError(
+                f"n_workers is a positive number of processes or None, not {n!r}."
+            )
 
 
 @dataclass(frozen=True, kw_only=True)
-class FigureSettings:
+class FigureSettings(SbmlsimFigureSettings):
     """The figures of the simulation experiments of a model.
 
-    All fields are keyword-only.
+    The settings of sbmlsim's figures (`sbmlsim.plot.FigureSettings`: the
+    resolution, the sizes of the panels, the fonts and the legends, with the
+    defaults of sbmlsim) and what a model adds: the formats of the figures and
+    the resolution of the static images. A run hands the settings of sbmlsim to
+    every figure (`sbmlsim_settings`); an experiment (`figure_settings`) and a
+    figure (`Figure(settings=...)`) override them. `savefig_dpi` is the
+    `savefig.dpi` of matplotlib while the figures of a run are drawn
+    (`rc_params`).
 
-    The sizes and positions are class attributes of `sbmlsim.plot.Figure` and
-    `savefig_dpi` is the `savefig.dpi` of matplotlib: both hold for every figure
-    of the process. `applied` sets them for a run and restores them after it, so
-    no setting leaks into the run of another model in the same process. `None`
-    keeps the value of sbmlsim.
+    The fields of sbmlsim can be given by position, as in sbmlsim; `formats`
+    and `savefig_dpi` only by keyword.
 
     Attributes:
         formats: the formats of the figures, static images drawn by matplotlib
             (`svg`, `png`) and interactive pages drawn by plotly (`html`).
-        savefig_dpi: the resolution of the static images only. `fig_dpi` also sets
-            the size of the interactive pages in pixels.
-        fig_dpi: the resolution of the figures of sbmlsim.
-        fig_titlesize: the font size of the title of a figure.
-        axes_labelsize: the font size of the labels of the axes.
-        xtick_labelsize: the font size of the ticks of the x axis.
-        ytick_labelsize: the font size of the ticks of the y axis.
-        legend_fontsize: the font size of the legends.
-        legend_position: `inside` or `outside` of the plot.
-        legend_loc: the location of the legend in the plot, e.g. `best`.
-        panel_width: the width of a panel.
-        panel_height: the height of a panel.
+        savefig_dpi: the resolution of the static images, `None` keeps the one
+            of matplotlib. An interactive page has 72 pixels per inch.
     """
 
     formats: Sequence[str] = ("svg", "png")
     savefig_dpi: float | None = None
-    fig_dpi: float | None = None
-    fig_titlesize: float | None = None
-    axes_labelsize: float | None = None
-    xtick_labelsize: float | None = None
-    ytick_labelsize: float | None = None
-    legend_fontsize: float | None = None
-    legend_position: str | None = None
-    legend_loc: str | None = None
-    panel_width: float | None = None
-    panel_height: float | None = None
 
     def __post_init__(self) -> None:
         """Check that there is a format and normalize the formats.
@@ -189,29 +182,19 @@ class FigureSettings:
             raise ValueError("A model needs at least one figure format.")
         object.__setattr__(self, "formats", formats)
 
-    @contextmanager
-    def applied(self) -> Generator[None]:
-        """Apply the settings while the context runs, restore them after it."""
-        import matplotlib
-        from sbmlsim.plot import Figure
+    def sbmlsim_settings(self) -> SbmlsimFigureSettings:
+        """Get the settings of sbmlsim, without the formats and the resolution.
 
-        changed = {
-            name: getattr(self, name)
-            for name in FIGURE_ATTRIBUTES
-            if getattr(self, name) is not None
-        }
-        previous = {name: getattr(Figure, name) for name in changed}
-        rc: dict[Any, Any] = {}
-        if self.savefig_dpi is not None:
-            rc["savefig.dpi"] = self.savefig_dpi
-        try:
-            for name, value in changed.items():
-                setattr(Figure, name, value)
-            with matplotlib.rc_context(rc):
-                yield
-        finally:
-            for name, value in previous.items():
-                setattr(Figure, name, value)
+        A plain `sbmlsim.plot.FigureSettings`, which sbmlsim compares with its
+        defaults (a run with the defaults sets nothing).
+        """
+        return SbmlsimFigureSettings(
+            **{name: getattr(self, name) for name in SbmlsimFigureSettings.names()}
+        )
+
+    def rc_params(self) -> dict[str, float]:
+        """Get the settings of matplotlib for a run, the resolution of the images."""
+        return {} if self.savefig_dpi is None else {"savefig.dpi": self.savefig_dpi}
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -225,6 +208,11 @@ class ExtraAction:
         help: what the action does, shown by `--help`.
         function: reference to the function which runs the action; it is called
             with the model, the parsed arguments and the directory of the results.
+            The arguments have the settings of the simulator of the run as
+            `simulator` (`SimulatorSettings`, those of the model with the
+            processes of `--workers`), which an action that simulates passes on,
+            e.g. `model.run_experiments(..., simulator=options.simulator)` or
+            `pkpdsim.run.create_simulator(options.simulator)`.
         in_all: run the action with `--action all`, after the simulations.
     """
 
@@ -258,9 +246,18 @@ class CheckSettings:
     one_at_a_time: str | None = None
 
     def __post_init__(self) -> None:
-        """Copy the mappings."""
+        """Copy the mappings and check the reason to run one at a time.
+
+        Raises:
+            ValueError: if one_at_a_time is an empty reason.
+        """
         object.__setattr__(self, "not_registered", dict(self.not_registered))
         object.__setattr__(self, "not_importable", dict(self.not_importable))
+        if self.one_at_a_time is not None and not self.one_at_a_time.strip():
+            raise ValueError(
+                "one_at_a_time needs a reason, e.g. the memory a run of all "
+                "experiments needs; None runs them together."
+            )
 
     def __hash__(self) -> int:
         """Hash the settings by their content."""
@@ -428,10 +425,13 @@ class PKPDModel:
         save_results: bool | None = None,
         show_report: bool = False,
         figure_formats: Sequence[str] | None = None,
+        simulator: SimulatorSettings | None = None,
     ) -> Path:
         """Run simulation experiments and create their report.
 
-        See `pkpdsim.run.run_experiments`.
+        See `pkpdsim.run.run_experiments`; a run with a failed experiment or
+        figure raises `sbmlsim.experiment.ExperimentRunError` after its report
+        is written.
         """
         from pkpdsim.run import run_experiments
 
@@ -442,6 +442,7 @@ class PKPDModel:
             save_results=save_results,
             show_report=show_report,
             figure_formats=figure_formats,
+            simulator=simulator,
         )
 
     def run_simulation_experiments(
@@ -451,6 +452,7 @@ class PKPDModel:
         *,
         show_report: bool = False,
         figure_formats: Sequence[str] | None = None,
+        simulator: SimulatorSettings | None = None,
     ) -> Path:
         """Run simulation experiments and collect their figures.
 
@@ -464,6 +466,7 @@ class PKPDModel:
             output_dir,
             show_report=show_report,
             figure_formats=figure_formats,
+            simulator=simulator,
         )
 
     def run_main(self, args: Sequence[str] | None = None) -> None:

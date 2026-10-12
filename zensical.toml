@@ -16,6 +16,7 @@ nav = [
   { "User guide" = [
     { "Models and their commands" = "models.md" },
     { "Experiments and their metadata" = "experiments.md" },
+    { "Scans and sensitivity analyses" = "scans.md" },
     { "Templates and annotations" = "templates.md" },
     { "Study data" = "data.md" },
     { "Initial values" = "initial_values.md" },
@@ -37,6 +38,8 @@ nav = [
     { "experiment" = "api/experiment.md" },
     { "impairment" = "api/impairment.md" },
     { "pk" = "api/pk.md" },
+    { "scan" = "api/scan.md" },
+    { "sensitivity" = "api/sensitivity.md" },
     { "testing" = "api/testing.md" },
     { "verify" = "api/verify.md" },
   ] },

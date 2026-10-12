@@ -1,6 +1,6 @@
 # Installation
 
-`pkpdsim` requires python >= 3.13 and is available from [pypi](https://pypi.org/project/pkpdsim/). It is tested on Linux, macOS and Windows with python 3.13 and 3.14.
+`pkpdsim` requires python >= 3.13 and is available from [pypi](https://pypi.org/project/pkpdsim/). It is tested on Linux, macOS and Windows with python 3.13 and 3.14. It simulates with sbmlsim 0.9 (`sbmlsim>=0.9.3,<0.10`, installed with it); pkpdsim 0.4 is the version for models on sbmlsim 0.8.
 
 ## With uv
 

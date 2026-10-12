@@ -6,10 +6,14 @@ from pathlib import Path
 import matplotlib
 import matplotlib.image
 import pytest
-from sbmlsim.plot import Figure
+from sbmlsim.experiment import ExperimentRunError, ExperimentRunner
+from sbmlsim.plot import FigureSettings as SbmlsimFigureSettings
 
-from pkpdsim.model import FIGURE_ATTRIBUTES, FigureSettings
+import pkpdsim.run
+from pkpdsim.model import FigureSettings, SimulatorSettings
+from pkpdsim.run import create_simulator
 from pkpdsim_toy import MODEL
+from pkpdsim_toy.broken import ToyCannotInitialize, ToyFigureFails, ToyRefusedUnit
 from pkpdsim_toy.experiments.decay import ToyDecay, ToyDecaySlow
 
 
@@ -36,14 +40,6 @@ def test_a_relative_output_dir_is_below_the_simulation_results(
     output = model.run_experiments(ToyDecay, output_dir="relative")
     assert output == tmp_path / "simulation" / "relative"
     assert list(output.glob("**/*.html"))
-
-
-def test_a_run_restores_the_figure_settings(tmp_path: Path) -> None:
-    before = {name: getattr(Figure, name) for name in FIGURE_ATTRIBUTES}
-    dpi = matplotlib.rcParams["savefig.dpi"]
-    MODEL.run_experiments(ToyDecay, output_dir=tmp_path)
-    assert {name: getattr(Figure, name) for name in FIGURE_ATTRIBUTES} == before
-    assert matplotlib.rcParams["savefig.dpi"] == dpi
 
 
 def test_the_static_resolution_is_applied(tmp_path: Path) -> None:
@@ -90,3 +86,93 @@ def test_empty_formats_fall_back_to_the_formats_of_the_model(tmp_path: Path) -> 
     output = MODEL.run_experiments(ToyDecay, output_dir=tmp_path, figure_formats=[])
     assert list(output.glob("**/*.png"))
     assert list(output.glob("**/*.svg"))
+
+
+def test_a_run_restores_the_matplotlib_settings(tmp_path: Path) -> None:
+    dpi = matplotlib.rcParams["savefig.dpi"]
+    MODEL.run_experiments(ToyDecay, output_dir=tmp_path)
+    assert matplotlib.rcParams["savefig.dpi"] == dpi
+
+
+def test_the_figure_settings_of_the_model_reach_sbmlsim(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: dict[str, object] = {}
+    original = ExperimentRunner.run_experiments
+
+    def run_experiments(
+        self: ExperimentRunner, *args: object, **kwargs: object
+    ) -> object:
+        captured.update(kwargs)
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(ExperimentRunner, "run_experiments", run_experiments)
+    MODEL.run_experiments(ToyDecay, output_dir=tmp_path)
+    settings = captured["figure_settings"]
+    assert isinstance(settings, SbmlsimFigureSettings)
+    assert settings == MODEL.figures.sbmlsim_settings()
+    assert settings.legend_fontsize == 7
+
+
+def test_the_simulator_has_the_settings_of_the_model() -> None:
+    simulator = create_simulator(
+        SimulatorSettings(absolute_tolerance=1e-9, relative_tolerance=1e-8, n_workers=3)
+    )
+    assert simulator.n_workers == 3
+    assert simulator.integrator_settings["absolute_tolerance"] == 1e-9
+    assert simulator.integrator_settings["relative_tolerance"] == 1e-8
+
+
+def test_a_run_takes_other_simulator_settings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: list[SimulatorSettings] = []
+    original = pkpdsim.run.create_simulator
+
+    def create(settings: SimulatorSettings) -> object:
+        seen.append(settings)
+        return original(settings)
+
+    monkeypatch.setattr(pkpdsim.run, "create_simulator", create)
+    MODEL.run_experiments(
+        ToyDecay, output_dir=tmp_path, simulator=SimulatorSettings(n_workers=2)
+    )
+    assert [s.n_workers for s in seen] == [2]
+    MODEL.run_experiments(ToyDecay, output_dir=tmp_path / "model")
+    assert seen[-1] == MODEL.simulator
+
+
+def test_a_failing_experiment_is_reported_after_the_run(tmp_path: Path) -> None:
+    with pytest.raises(ExperimentRunError) as info:
+        MODEL.run_experiments(
+            [ToyCannotInitialize, ToyDecay, ToyFigureFails], output_dir=tmp_path
+        )
+    failures = "\n".join(info.value.failures)
+    assert "ToyCannotInitialize" in failures
+    assert "figures_mpl()" in failures
+    assert "'ToyDecay'" not in failures
+    # the report is written and the experiment between the failures ran
+    assert list(tmp_path.glob("*.html"))
+    assert list(tmp_path.glob("ToyDecay/*fig_decay*.svg"))
+
+
+def test_a_refused_unit_of_the_data_fails_its_experiment_only(tmp_path: Path) -> None:
+    with pytest.raises(ExperimentRunError) as info:
+        MODEL.run_experiments([ToyRefusedUnit, ToyDecay], output_dir=tmp_path)
+    failures = "\n".join(info.value.failures)
+    assert "ToyRefusedUnit" in failures
+    assert "ValueError: The unit 'IU_toy_refused'" in failures
+    assert "'microgramm' is not defined" in failures
+    # the report is written and the other experiment ran
+    assert list(tmp_path.glob("*.html"))
+    assert list(tmp_path.glob("ToyDecay/*fig_decay*.svg"))
+
+
+def test_the_figures_are_collected_before_the_failures_are_raised(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(ExperimentRunError):
+        MODEL.run_simulation_experiments(
+            [ToyDecay, ToyFigureFails], output_dir=tmp_path / "all"
+        )
+    assert list((tmp_path / "all" / "_figures").glob("ToyDecay_*.svg"))
