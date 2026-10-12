@@ -308,7 +308,7 @@ def test_a_run_without_failures_exits_normally(tmp_path: Path) -> None:
     assert list((tmp_path / "simulation" / "all" / "_figures").glob("ToyDecay_*"))
 
 
-def test_an_extra_option_named_simulator_is_an_error() -> None:
+def test_an_extra_option_named_simulator_is_an_error(tmp_path: Path) -> None:
     model = dataclasses.replace(EXTRA, extra_arguments=".extras:add_simulator_argument")
     with pytest.raises(ValueError, match="--simulator"):
-        run_parser(model)
+        run_command(model, ["-a", "greet", "--results-dir", str(tmp_path)])
