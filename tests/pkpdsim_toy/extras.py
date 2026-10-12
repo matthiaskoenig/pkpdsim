@@ -25,3 +25,8 @@ def workers(model: PKPDModel, options: argparse.Namespace, results_dir: Path) ->
     (results_dir / "workers.txt").write_text(
         f"{model.name} {options.simulator.n_workers}", encoding="utf-8"
     )
+
+
+def add_simulator_argument(parser: argparse.ArgumentParser) -> None:
+    """Add an option which clashes with `options.simulator` of the run."""
+    parser.add_argument("--simulator", default="roadrunner")

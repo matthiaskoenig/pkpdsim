@@ -154,7 +154,12 @@ def resolve_experiments(
 
 
 def run_parser(model: PKPDModel) -> argparse.ArgumentParser:
-    """Get the parser of the `run` command of a model."""
+    """Get the parser of the `run` command of a model.
+
+    Raises:
+        ValueError: if an extra option of the model is named `--simulator`, the
+            name of the settings of the simulator an extra action gets.
+    """
     with_experiments = model.experiments is not None
     if with_experiments:
         actions = [action.value for action in Action]
@@ -213,6 +218,14 @@ def run_parser(model: PKPDModel) -> argparse.ArgumentParser:
         )
     if model.extra_arguments is not None:
         resolve(model.extra_arguments, model.package)(p)
+        # `run_command` sets `options.simulator` after parsing, which would
+        # silently replace the value of an extra option of that name
+        if any(action.dest == "simulator" for action in p._actions):
+            msg = (
+                f"the extra option '--simulator' of {model.name} clashes with "
+                "`options.simulator`, the settings of the simulator of the run"
+            )
+            raise ValueError(msg)
     return p
 
 
