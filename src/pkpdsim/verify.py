@@ -6,11 +6,12 @@ them only where it is meant to. The subcommands make this checkable:
 
 - `dump` runs the simulation experiments of a model in a checkout and stores the
   results, the datasets, the fit mappings and the figures in a pickle,
-- `compare` compares two dumps: the simulations on their common output times,
-  relative to the scale of every array, everything else exactly; with
-  `--renames FILE` the expected renames of a migration (metadata fields and
-  members, added fields, texts such as legend keys) are applied to the old dump
-  first, see `load_renames`,
+- `compare` compares two dumps: the simulations on the matched rows of their
+  output times, relative to the scale of every array (a time which only one
+  dump has is a difference), everything else exactly; with `--renames FILE` the
+  expected renames of a migration (metadata fields and members, added fields,
+  texts such as legend keys, ids) and the expected differences are applied to
+  the old dump first, see `load_renames`,
 - `ranges` lists the fit mappings of a dump whose data lie outside of the
   simulated range, e.g. data times beyond the end of the simulation,
 - `fits` builds the optimization problem of every fit definition of a model and
