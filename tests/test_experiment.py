@@ -80,7 +80,9 @@ class ToyStudy(ToyExperiment):
 
 def write_study(directory: Path, name: str, content: str) -> None:
     (directory / name.split("_")[0]).mkdir(exist_ok=True)
-    (directory / name.split("_")[0] / f".{name}.tsv").write_text(content)
+    (directory / name.split("_")[0] / f".{name}.tsv").write_text(
+        content, encoding="utf-8"
+    )
 
 
 def test_a_figure_of_the_study_is_loaded(tmp_path: Path) -> None:
