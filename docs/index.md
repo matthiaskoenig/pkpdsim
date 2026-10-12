@@ -48,7 +48,7 @@ Continue with [Installation](installation.md) and the [Templates and annotations
 
 If you use `pkpdsim` please cite the archived software on [Zenodo](https://doi.org/10.5281/zenodo.23297325):
 
-> König, M. (2026). *pkpdsim: building blocks of physiologically based pharmacokinetic and pharmacodynamic models in SBML* (Version 0.5.0) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.23316597
+> König, M. (2026). *pkpdsim: building blocks of physiologically based pharmacokinetic and pharmacodynamic models in SBML* (Version 0.5.1) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.23319918
 
 ## License
 

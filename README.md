@@ -53,7 +53,7 @@ The [user guide](https://matthiaskoenig.github.io/pkpdsim/templates/) of the doc
 
 If you use `pkpdsim` please cite the archived software on [Zenodo](https://doi.org/10.5281/zenodo.23297325):
 
-> König, M. (2026). *pkpdsim: building blocks of physiologically based pharmacokinetic and pharmacodynamic models in SBML* (Version 0.5.0) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.23316597
+> König, M. (2026). *pkpdsim: building blocks of physiologically based pharmacokinetic and pharmacodynamic models in SBML* (Version 0.5.1) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.23319918
 
 ```bibtex
 @software{konig_pkpdsim,
@@ -61,10 +61,10 @@ If you use `pkpdsim` please cite the archived software on [Zenodo](https://doi.o
   title     = {pkpdsim: building blocks of physiologically based pharmacokinetic and pharmacodynamic models in SBML},
   year      = {2026},
   month     = oct,
-  version   = {0.5.0},
+  version   = {0.5.1},
   publisher = {Zenodo},
-  doi       = {10.5281/zenodo.23316597},
-  url       = {https://doi.org/10.5281/zenodo.23316597},
+  doi       = {10.5281/zenodo.23319918},
+  url       = {https://doi.org/10.5281/zenodo.23319918},
 }
 ```
 
