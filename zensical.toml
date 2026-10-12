@@ -38,6 +38,7 @@ nav = [
     { "impairment" = "api/impairment.md" },
     { "pk" = "api/pk.md" },
     { "scan" = "api/scan.md" },
+    { "sensitivity" = "api/sensitivity.md" },
     { "testing" = "api/testing.md" },
     { "verify" = "api/verify.md" },
   ] },
