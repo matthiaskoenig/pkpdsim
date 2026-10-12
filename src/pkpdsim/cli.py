@@ -323,7 +323,13 @@ def run_command(model: PKPDModel, args: Sequence[str] | None = None) -> None:
             p.error("'--action simulate' requires '--experiments'")
 
     # an extra action runs its simulations with the settings of the run, which
-    # `--workers` changed
+    # `--workers` changed; an extra option of that name would be replaced
+    if hasattr(options, "simulator"):
+        msg = (
+            f"the extra option '--simulator' of {model.name} clashes with "
+            "`options.simulator`, the settings of the simulator of the run"
+        )
+        raise ValueError(msg)
     options.simulator = simulator
     display.section(model.title, icon=":pill:")
     display.key_values({"action": options.action})

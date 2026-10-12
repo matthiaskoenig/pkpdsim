@@ -13,9 +13,10 @@ from types import MappingProxyType
 
 import numpy as np
 import pytest
+from figure_builders import FigureStudy, build_figures
 from PIL import Image
 from sbmlsim.experiment import SimulationExperiment
-from sbmlsim.plot import Axis, Figure
+from sbmlsim.plot import Figure
 from sbmlsim.simulation import Scan, Simulation
 from sbmlsim.simulation.sampling import local
 
@@ -1065,43 +1066,6 @@ def test_the_renames_do_not_change_the_old_dump() -> None:
 FIGURES_08: dict[str, str] = json.loads(
     (TESTS_DIR / "data" / "figures-sbmlsim-0.8.5.json").read_text(encoding="utf-8")
 )["figures"]
-
-
-class FigureStudy(SimulationExperiment):
-    """An experiment the figures of `build_figures` belong to."""
-
-
-def build_figures(
-    experiment: SimulationExperiment,
-    set_setting: Callable[[Figure, str, object], None],
-) -> dict[str, Figure]:
-    """Build figures as the models do, with sbmlsim 0.8.5 or 0.9.
-
-    The fixture of sbmlsim 0.8.5 was written by this function, so it runs with
-    both versions; only the setting of a figure is set differently.
-    """
-    figures: dict[str, Figure] = {}
-    # a setting and an explicit width set after the creation (Harris1992 of creatinine)
-    fig = Figure(experiment=experiment, sid="Fig1", name="FigureStudy Fig1")
-    set_setting(fig, "legend_position", "outside")
-    fig.width = 10
-    plots = fig.create_plots(xaxis=Axis("time", unit="hr"), legend=True)
-    plots[0].set_yaxis("creatine", unit="mM")
-    plots[0].add_data(task="task_cr", xid="time", yid="[Cve_cr]", label="Sim")
-    plots[0].add_data(dataset="d", xid="time", yid="mean", yid_sd="mean_sd", label="d")
-    figures["Fig1"] = fig
-    # an explicit size of 2 x 3 panels (Kharasch1997 of midazolam)
-    fig = Figure(experiment, sid="Fig2", num_rows=2, num_cols=3, height=15, width=25)
-    plots = fig.create_plots(xaxis=Axis("time", unit="min"), legend=True)
-    plots[0].add_data(task="task_a", xid="time", yid="[A]", label="A")
-    figures["Fig2"] = fig
-    # the size of the panels, 1 x 2, and a resolution (Bedada2016 of chlorzoxazone)
-    fig = Figure(experiment, sid="Fig3", num_cols=2)
-    set_setting(fig, "fig_dpi", 300)
-    plots = fig.create_plots(xaxis=Axis("time", unit="min"), legend=True)
-    plots[1].add_data(task="task_a", xid="time", yid="[A]", label="A")
-    figures["Fig3"] = fig
-    return figures
 
 
 def setting_of_09(figure: Figure, name: str, value: object) -> None:
