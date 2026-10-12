@@ -82,9 +82,10 @@ ROOT_HELP = (
 )
 MODEL_HELP = "dotted name of the model package, e.g. pkdb_models.models.hctz"
 
-#: dimensions along which the simulations of a task are compared, the time of a
-#: timecourse and the points of a scan
-TIME_DIMENSIONS = ("_time", "_point")
+#: dimensions along which the simulations of a task are compared: the time of a
+#: grid (sbmlsim 0.9), the interpolated time and the points of a timecourse
+#: (sbmlsim 0.8)
+TIME_DIMENSIONS = ("time", "_time", "_point")
 
 #: experiment groups of the registry which are run first, in this order
 GROUPS = ("studies", "misc", "scans")
@@ -319,9 +320,11 @@ def describe_mapping(key: str, mapping: "FitMapping") -> str:
     """Describe a fit mapping by its data, its observable, weight and metadata."""
 
     def fit_data(d: "FitData") -> str:
+        # the data of a mapping without x values (sbmlsim 0.9) have no x
+        x = d.x.index if d.x else None
         sd = d.y_sd.index if d.y_sd else None
         se = d.y_se.index if d.y_se else None
-        return f"{d.dset_id}|{d.task_id}|{d.x.index}|{d.y.index}|{d.count}|{sd}|{se}"
+        return f"{d.dset_id}|{d.task_id}|{x}|{d.y.index}|{d.count}|{sd}|{se}"
 
     metadata = sorted(metadata_names(mapping.metadata).items())
     weight = getattr(mapping, "weight", None)
@@ -361,7 +364,7 @@ def dump(args: argparse.Namespace) -> int:
     root = Path(args.root).resolve()
     sys.path.insert(0, str(root))
     from sbmlsim.experiment import ExperimentRunner
-    from sbmlsim.simulator.simulation_serial import SimulatorSerial
+    from sbmlsim.simulator import Simulator
 
     if message := _outside_root(args.model, root):
         print(message, file=sys.stderr)
@@ -390,7 +393,7 @@ def dump(args: argparse.Namespace) -> int:
     classes = [c for c in classes if c.__name__ not in args.skip]
     print(f"{len(classes)} experiments", file=sys.stderr)
 
-    tolerances: dict[str, object] = {}
+    tolerances: dict[str, Any] = {}
     if args.atol == "model":
         if info.absolute_tolerance is None:
             print(f"{args.model} has no tolerance of its own", file=sys.stderr)
@@ -430,7 +433,9 @@ def dump(args: argparse.Namespace) -> int:
                 experiment_classes=[cls],
                 data_path=info.data_path,
                 base_path=info.base_path,
-                simulator=SimulatorSerial(model=info.model_path, **tolerances),
+                # a dump runs serially, the order of its experiments is the
+                # order of the run
+                simulator=Simulator(n_workers=1, **tolerances),
             )
             for sid, experiment in runner.experiments.items():
                 experiment.run(
@@ -460,16 +465,22 @@ def dump(args: argparse.Namespace) -> int:
 def store_experiment(
     result: Dump, sid: str, experiment: "SimulationExperiment"
 ) -> None:
-    """Store the results, datasets, fit mappings and figures of a run experiment."""
-    for task, xres in experiment.results.items():
-        # `xdataset` up to sbmlsim 0.8.3
-        ds = getattr(xres, "xds", None)
-        if ds is None:
-            ds = getattr(xres, "xdataset")  # noqa: B009
+    """Store the results, datasets, fit mappings and figures of a run experiment.
+
+    The time of a grid is a coordinate of a result of sbmlsim 0.9; it is stored
+    as the variable `time` over `("time",)`, which the comparison reads.
+    """
+    for task, res in experiment.results.items():
+        ds = res.ds
         for var in ds.data_vars:
             result["results"][sid, task, str(var)] = (
                 tuple(str(d) for d in ds[var].dims),
                 np.asarray(ds[var].values),
+            )
+        if "time" in ds.coords and "time" not in ds.data_vars:
+            result["results"][sid, task, "time"] = (
+                ("time",),
+                np.asarray(ds["time"].values),
             )
     for key, dset in experiment.datasets().items():
         for column in dset.columns:
@@ -967,12 +978,15 @@ def capture_settings(
     """Capture the settings a run of an experiment hands to sbmlsim.
 
     The run is intercepted where it reaches sbmlsim: the arguments of the
-    simulator, of the runner and of the run of the experiments (bound to the
-    signatures, so positional and keyword calls agree), the settings of the
-    figures, and every matplotlib `rcParams` entry which differs from the value
-    before the run, at the time of the run. `calls` counts the intercepted
-    calls. Nothing is simulated and no report is written. The figure settings
-    of sbmlsim are restored afterwards.
+    simulator (`Simulator`), of the runner (without the simulator) and of the
+    run (without the output path; with the figure settings of the run), bound
+    to the signatures, so positional and keyword calls agree, and every
+    matplotlib `rcParams` entry which differs from the value before the run, at
+    the time of the run. `calls` counts the intercepted calls. The simulator is
+    the one created before the runner: the designs of an experiment
+    (`sbmlsim.simulation.sampling.parameters_of`, `local`) create simulators of
+    their own while the runner initializes it, which are neither recorded nor
+    counted. Nothing is simulated and no report is written.
 
     Args:
         run_experiments: the run of a model, `MODEL.run_experiments`.
@@ -990,23 +1004,22 @@ def capture_settings(
 
     import matplotlib
     from sbmlsim.experiment import ExperimentRunner
-    from sbmlsim.plot import Figure
     from sbmlsim.report.experiment_report import ExperimentReport
-    from sbmlsim.simulator.simulation_serial import SimulatorSerial
-
-    from pkpdsim.model import FIGURE_ATTRIBUTES
-    from pkpdsim.testing import restored_figure_settings
+    from sbmlsim.simulator import Simulator
 
     captured: dict[str, Any] = {"experiment": experiment.__name__}
     calls = dict.fromkeys(("simulator", "runner", "run"), 0)
-    simulator_init = SimulatorSerial.__init__
+    simulator_init = Simulator.__init__
     runner_init = ExperimentRunner.__init__
     run_original = ExperimentRunner.run_experiments
     baseline = dict(matplotlib.rcParams)
 
     def record_simulator(*args: object, **kwargs: object) -> None:
-        calls["simulator"] += 1
-        captured["simulator"] = _bound(simulator_init, args, kwargs)
+        # a design of an experiment creates simulators of its own while the
+        # runner initializes it
+        if calls["runner"] == 0:
+            calls["simulator"] += 1
+            captured["simulator"] = _bound(simulator_init, args, kwargs)
         simulator_init(*args, **kwargs)  # ty: ignore[invalid-argument-type]
 
     def record_runner(*args: object, **kwargs: object) -> None:
@@ -1019,9 +1032,6 @@ def capture_settings(
     def record_run(*args: object, **kwargs: object) -> list[object]:
         calls["run"] += 1
         captured["run"] = _bound(run_original, args, kwargs, skip={"output_path"})
-        captured["figure"] = {
-            name: _plain(getattr(Figure, name)) for name in FIGURE_ATTRIBUTES
-        }
         captured["rc"] = {
             key: _plain(value)
             for key, value in sorted(dict(matplotlib.rcParams).items())
@@ -1036,17 +1046,14 @@ def capture_settings(
 
     with (
         tempfile.TemporaryDirectory() as tmp,
-        restored_figure_settings(),
-        mock.patch.object(SimulatorSerial, "__init__", record_simulator),
+        mock.patch.object(Simulator, "__init__", record_simulator),
         mock.patch.object(ExperimentRunner, "__init__", record_runner),
         mock.patch.object(ExperimentRunner, "run_experiments", record_run),
         mock.patch.object(ExperimentReport, "create_report", no_report),
     ):
         run_experiments(experiment, output_dir=Path(tmp) / "settings")
     missing = [
-        key
-        for key in ("simulator", "runner", "run", "figure", "rc")
-        if key not in captured
+        key for key in ("simulator", "runner", "run", "rc") if key not in captured
     ]
     if missing:
         raise RuntimeError(

@@ -13,7 +13,8 @@ import numpy as np
 import pytest
 from PIL import Image
 from sbmlsim.experiment import SimulationExperiment
-from sbmlsim.plot import Figure
+from sbmlsim.simulation import Scan, Simulation
+from sbmlsim.simulation.sampling import local
 
 from pkpdsim.model import FigureSettings
 from pkpdsim.verify import (
@@ -236,10 +237,12 @@ def test_capture_settings_of_a_model() -> None:
     assert settings["run"]["figure_formats"] == ["svg", "png"]
     assert settings["run"]["reduced_selections"] is True
     assert settings["run"]["save_results"] is False
-    assert settings["figure"]["legend_fontsize"] == 7
+    assert settings["run"]["figure_settings"]["legend_fontsize"] == 7
     assert settings["rc"]["savefig.dpi"] == 30
     assert settings["calls"] == {"simulator": 1, "runner": 1, "run": 1}
-    assert "<root>" in settings["simulator"]["model"]
+    assert "<root>" in settings["runner"]["base_path"]
+    assert settings["simulator"]["n_workers"] == 1
+    assert "figure" not in settings
 
 
 def test_capture_settings_sees_a_difference() -> None:
@@ -250,24 +253,8 @@ def test_capture_settings_sees_a_difference() -> None:
     )
     a = capture_settings(MODEL.run_experiments, ToyDecay, TESTS_DIR)
     b = capture_settings(other.run_experiments, ToyDecay, TESTS_DIR)
-    assert a["figure"] != b["figure"]
+    assert a["run"]["figure_settings"] != b["run"]["figure_settings"]
     assert a["run"]["figure_formats"] != b["run"]["figure_formats"]
-
-
-def test_settings_leave_the_figure_settings_as_they_were(tmp_path: Path) -> None:
-    before = Figure.legend_fontsize
-    verify(
-        [
-            "settings",
-            "--root",
-            str(TESTS_DIR),
-            "--model",
-            "pkpdsim_toy",
-            "--out",
-            str(tmp_path / "s.json"),
-        ]
-    )
-    assert Figure.legend_fontsize == before
 
 
 def test_dump_with_the_relative_tolerance_of_the_model(tmp_path: Path) -> None:
@@ -290,17 +277,66 @@ def test_dump_with_the_relative_tolerance_of_the_model(tmp_path: Path) -> None:
     assert code == 0
 
 
+def test_a_dump_stores_the_time_of_the_grid(tmp_path: Path) -> None:
+    out = tmp_path / "dump.pkl"
+    assert (
+        verify(
+            [
+                "dump",
+                "--root",
+                str(TESTS_DIR),
+                "--model",
+                "pkpdsim_toy",
+                "--out",
+                str(out),
+            ]
+        )
+        == 0
+    )
+    dims, values = load(str(out))["results"]["ToyDecay", "task_decay", "time"]
+    assert dims == ("time",)
+    assert values[0] == 0.0
+    assert values.size == 51
+    dims, _ = load(str(out))["results"]["ToyDecay", "task_decay", "[A]"]
+    assert dims == ("time",)
+
+
+class ToyDesign(ToyDecay):
+    """The decay with a local design of k, whose creation constructs simulators of its own."""
+
+    # the toy experiments have no scan, this one adds its design
+    def simulations(self) -> dict[str, Simulation | Scan]:  # ty: ignore[invalid-method-override]
+        """The decay and its local design."""
+        sim = Simulation(end=10, steps=50)
+        return {
+            "decay": sim,
+            "decay_sensitivity": Scan(
+                sim,
+                [local(["k"], delta=0.5, model=self._models["model"], simulation=sim)],
+            ),
+        }
+
+
+def test_capture_settings_of_an_experiment_with_a_design() -> None:
+    from pkpdsim.verify import capture_settings
+
+    settings = capture_settings(MODEL.run_experiments, ToyDesign, TESTS_DIR)
+    assert settings["simulator"]["n_workers"] == 1
+    assert settings["simulator"]["absolute_tolerance"] == 1e-10
+    assert settings["calls"]["simulator"] == 1
+
+
 def _fake_run(positional: bool) -> "Callable[..., object]":
     from sbmlsim.experiment import ExperimentRunner
-    from sbmlsim.simulator.simulation_serial import SimulatorSerial
+    from sbmlsim.simulator import Simulator
 
     def run(experiment: type[SimulationExperiment], output_dir: Path) -> None:
         if positional:
-            simulator = SimulatorSerial(MODEL_PATH, absolute_tolerance=1e-10)
+            simulator = Simulator(1, absolute_tolerance=1e-10)
             runner = ExperimentRunner([experiment], TOY_PATH, DATA_PATHS, simulator)
             runner.run_experiments(output_dir, False, False, ["png"])
         else:
-            simulator = SimulatorSerial(model=MODEL_PATH, absolute_tolerance=1e-10)
+            simulator = Simulator(n_workers=1, absolute_tolerance=1e-10)
             runner = ExperimentRunner(
                 experiment_classes=[experiment],
                 simulator=simulator,

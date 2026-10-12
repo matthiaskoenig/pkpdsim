@@ -8,6 +8,7 @@ from sbmlsim.experiment import ExperimentRunner
 from sbmlsim.fit import FitMapping, FitMappingCollection, FitSettings, MappingKind
 from sbmlsim.fit.objects import MappingMetaData
 from sbmlsim.fit.options import (
+    DataAtChangeType,
     LossFunctionType,
     ResidualType,
     WeightingCurvesType,
@@ -43,6 +44,11 @@ def test_the_default_settings_are_those_of_the_models() -> None:
     assert (
         default_fit_settings(1e-6, relative_tolerance=1e-8).relative_tolerance == 1e-8
     )
+
+
+def test_the_data_at_a_change_is_compared_with_the_state_before_it() -> None:
+    """sbmlsim's default, written out so that a change of it does not change the fits."""
+    assert default_fit_settings(1e-8).data_at_change is DataAtChangeType.BEFORE
 
 
 @pytest.fixture(scope="module")

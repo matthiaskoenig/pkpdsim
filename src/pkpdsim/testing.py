@@ -25,41 +25,18 @@ import importlib.util
 import inspect
 import pkgutil
 import traceback
-from collections.abc import Generator, Mapping, Sequence
-from contextlib import contextmanager
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from types import ModuleType
 from typing import TYPE_CHECKING
 
 from sbmlsim.experiment import ExperimentRunner, SimulationExperiment
 from sbmlsim.fit.cli import FitRun, run_fit
-from sbmlsim.plot import Figure
 
 from pkpdsim.model import resolve
 
 if TYPE_CHECKING:
     from pkpdsim.model import PKPDModel
-
-
-@contextmanager
-def restored_figure_settings() -> Generator[None]:
-    """Restore the class attributes of sbmlsim's `Figure` after the context.
-
-    A test of a model which sets them directly (not through `FigureSettings`)
-    leaks them into the tests of the next model otherwise.
-    """
-    settings = {
-        key: value
-        for key, value in vars(Figure).items()
-        if not key.startswith("_")
-        and not callable(value)
-        and not isinstance(value, property | classmethod | staticmethod)
-    }
-    try:
-        yield
-    finally:
-        for key, value in settings.items():
-            setattr(Figure, key, value)
 
 
 def experiment_modules(model: PKPDModel) -> tuple[list[ModuleType], dict[str, str]]:
@@ -248,6 +225,7 @@ def _runner(model: PKPDModel) -> ExperimentRunner:
         base_path=model.path,
         data_path=list(model.data_paths) or None,
         simulator=None,
+        on_error="log",
     )
 
 
@@ -269,11 +247,12 @@ def run_all_experiments(model: PKPDModel, output_dir: Path) -> None:
             `model.checks.one_at_a_time` every experiment runs on its own, into
             a directory named after it: the memory of a run of all experiments
             of a large model exceeds that of a runner of a continuous
-            integration (sbmlsim keeps the results and figures of a run until
-            its end).
+            integration.
 
     Raises:
         AssertionError: if a run wrote no report.
+        ExperimentRunError: if an experiment or a figure of a run failed, after
+            the report of the run is written.
     """
     if model.checks.one_at_a_time is not None:
         for cls in registered_experiments(model):

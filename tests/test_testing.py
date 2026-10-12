@@ -4,7 +4,6 @@ import dataclasses
 from pathlib import Path
 
 import pytest
-from sbmlsim.plot import Figure
 
 from pkpdsim import testing
 from pkpdsim.model import CheckSettings
@@ -96,13 +95,6 @@ def test_all_experiments_run(tmp_path: Path, one_at_a_time: str | None) -> None:
 def test_the_fits_start(tmp_path: Path) -> None:
     runs = testing.start_fits(MODEL, tmp_path)
     assert set(runs) == {"DECAY"}
-
-
-def test_the_figure_settings_are_restored() -> None:
-    before = Figure.legend_fontsize
-    with testing.restored_figure_settings():
-        Figure.legend_fontsize = 3
-    assert Figure.legend_fontsize == before
 
 
 def test_a_model_of_its_package_passes_the_check() -> None:
