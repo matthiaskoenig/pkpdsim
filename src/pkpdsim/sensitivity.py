@@ -188,6 +188,12 @@ def set_relative_bounds(
 ) -> None:
     """Let every parameter without bounds vary by `value * (1 +- fraction)`.
 
+    The bounds of a negative value are reversed, the lower bound
+    `value * (1 - fraction)` is above the upper bound `value * (1 + fraction)`,
+    as in the table of sbmlsim 0.8, which stays the same; `distributions`
+    refuses such a parameter, naming it, so a model sets its bounds with
+    `set_bounds`. A value of 0 has the bounds 0 and 0.
+
     Args:
         parameters: the parameters, changed in place.
         fraction: the relative half width.
@@ -249,7 +255,9 @@ def distributions(
         The distribution of every parameter, by its id.
 
     Raises:
-        ValueError: naming the parameters without bounds.
+        ValueError: naming the parameters without bounds, or with a lower bound
+            above the upper one (the relative bounds of a negative value, see
+            `set_relative_bounds`).
     """
     missing = sorted(
         p.uid
@@ -258,6 +266,17 @@ def distributions(
     )
     if missing:
         raise ValueError(f"The parameters {missing} have no bounds.")
+    reversed_bounds = [
+        f"'{p.uid}' ({p.lower_bound:g} > {p.upper_bound:g})"
+        for p in sorted(parameters, key=lambda p: p.uid)
+        if p.lower_bound > p.upper_bound
+    ]
+    if reversed_bounds:
+        raise ValueError(
+            f"The lower bound of the parameters {', '.join(reversed_bounds)} is "
+            "above the upper one, e.g. the relative bounds of a negative value: "
+            "set their bounds with `set_bounds`."
+        )
     return {
         p.uid: Uniform(lower=p.lower_bound, upper=p.upper_bound) for p in parameters
     }

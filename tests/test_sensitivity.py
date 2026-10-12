@@ -102,6 +102,26 @@ def test_a_parameter_without_bounds_has_no_distribution() -> None:
         distributions(parameters_from_sbml(MODEL_PATH))
 
 
+def test_a_negative_value_has_the_bounds_of_sbmlsim_08() -> None:
+    """The relative bounds of a negative value are reversed, as in sbmlsim 0.8."""
+    parameters = [SensitivityParameter(uid="dE", name="dE", value=-2.0)]
+    set_relative_bounds(parameters, 0.15)
+    assert parameters[0].lower_bound == pytest.approx(-1.7)
+    assert parameters[0].upper_bound == pytest.approx(-2.3)
+
+
+def test_reversed_bounds_have_no_distribution() -> None:
+    parameters = [
+        SensitivityParameter(
+            uid="k", name="k", value=1.0, lower_bound=0.9, upper_bound=1.1
+        ),
+        SensitivityParameter(uid="dE", name="dE", value=-2.0),
+    ]
+    set_relative_bounds(parameters, 0.15)
+    with pytest.raises(ValueError, match=r"'dE' \(-1.7 > -2.3\)"):
+        distributions(parameters)
+
+
 def test_the_sample_size_of_a_global_analysis(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("PKPDSIM_SENSITIVITY_N", raising=False)
     assert sample_size(4096) == 4096
