@@ -1,6 +1,7 @@
 """The base of the experiments of a model, on the toy model."""
 
 from pathlib import Path
+from types import MappingProxyType
 from typing import ClassVar
 
 import pandas as pd
@@ -8,9 +9,16 @@ import pytest
 from sbmlsim.experiment import ExperimentRunner
 from sbmlsim.model import AbstractModel
 from sbmlsim.plot import Figure
+from sbmlsim.simulation import Simulation
+from sbmlsim.units import ureg
 
 from pkpdsim import impairment, pk
-from pkpdsim.experiment import PKPDSimulationExperiment
+from pkpdsim.experiment import (
+    PKPDSimulationExperiment,
+    define_unit,
+    rename_units,
+    to_sid,
+)
 from pkpdsim_toy import DATA_PATHS, MODEL, TOY_PATH
 from pkpdsim_toy.experiments.decay import ToyDecay, ToyExperiment
 
@@ -137,3 +145,160 @@ class Narrowed(ToyExperiment):
 
 def test_a_model_types_its_conventions_itself() -> None:
     assert Narrowed.labels == {"time": "time"}
+
+
+@pytest.mark.parametrize(
+    ("text", "sid"),
+    [
+        ("task_po", "task_po"),
+        ("po 2.5 mg", "po_2p5_mg"),
+        ("dset_torasemide-M5_po_2.5", "dset_torasemide_M5_po_2p5"),
+        ("tor_iv_chronic renal disease", "tor_iv_chronic_renal_disease"),
+        ("Fig1_CIM400, ENA10_B1", "Fig1_CIM400__ENA10_B1"),
+        ("µg/ml", "_g_ml"),
+        ("1.5.2", "1p5p2"),
+        ("a.b", "a_b"),
+        ("2.", "2_"),
+        (".5", "_5"),
+        ("a b", "a_b"),
+        ("a‐b", "a_b"),
+        ("(a+b)*c&d", "_a_b__c_d"),
+        ("", ""),
+    ],
+)
+def test_a_text_becomes_an_sid(text: str, sid: str) -> None:
+    assert to_sid(text) == sid
+    assert len(to_sid(text)) == len(text)
+
+
+def test_a_part_of_a_key_becomes_the_same_part_of_its_sid() -> None:
+    assert f"task_po_{to_sid('2.5')}" == to_sid("task_po_2.5")
+
+
+def test_the_experiment_gives_the_sid_of_a_text() -> None:
+    experiment = initialized(ToyStudy)
+    assert experiment.to_sid("po 2.5") == "po_2p5"
+    assert experiment.to_sid("po 2.5") == "po_2p5"
+    assert experiment.to_sid("task_decay") == "task_decay"
+
+
+def test_two_texts_with_one_sid_are_an_error() -> None:
+    experiment = initialized(ToyStudy)
+    experiment.to_sid("po 2.5")
+    with pytest.raises(ValueError, match=r"'po 2.5' and 'po-2.5'.*'po_2p5'.*ToyStudy"):
+        experiment.to_sid("po-2.5")
+
+
+def test_every_experiment_has_its_own_sids() -> None:
+    initialized(ToyStudy).to_sid("a b")
+    assert initialized(ToyStudy).to_sid("a-b") == "a_b"
+
+
+def test_a_unit_is_defined_once() -> None:
+    assert (
+        define_unit(ureg, "IU_pkpdsim_test_once = 0.5 * mg") == "IU_pkpdsim_test_once"
+    )
+    assert define_unit(ureg, "IU_pkpdsim_test_once = 0.5*mg") == "IU_pkpdsim_test_once"
+    assert ureg.Quantity(2, "µIU_pkpdsim_test_once").to(
+        "ng"
+    ).magnitude == pytest.approx(1.0)
+
+
+def test_a_unit_with_another_value_is_an_error() -> None:
+    define_unit(ureg, "IU_pkpdsim_test_other = 0.5 * mg")
+    with pytest.raises(ValueError, match="IU_pkpdsim_test_other"):
+        define_unit(ureg, "IU_pkpdsim_test_other = 0.6 * mg")
+
+
+def test_a_count_is_a_unit() -> None:
+    define_unit(ureg, "IU_pkpdsim_test_count = count")
+    assert ureg.Quantity(3, "IU_pkpdsim_test_count/ml").to(
+        "1/ml"
+    ).magnitude == pytest.approx(3.0)
+
+
+@pytest.mark.parametrize("definition", ["IU_x", "IU_x =", "= 0.5 * mg", "1IU = mg"])
+def test_a_definition_needs_a_name_and_an_expression(definition: str) -> None:
+    with pytest.raises(ValueError, match="<name> = <expression>"):
+        define_unit(ureg, definition)
+
+
+@pytest.mark.parametrize(
+    ("unit", "renamed"),
+    [
+        ("IU/ml", "IU_x/ml"),
+        ("IU/mL", "IU_x/mL"),
+        ("µIU/ml", "µIU_x/ml"),
+        ("μIU/ml", "μIU_x/ml"),
+        ("mIU/l", "mIU_x/l"),
+        ("IU", "IU_x"),
+        ("IU/(ml*hr)", "IU_x/(ml*hr)"),
+        ("IU_per_ml", "IU_per_ml"),
+        ("2IU", "2IU"),
+        ("mg/IUx", "mg/IUx"),
+        ("ng/ml", "ng/ml"),
+    ],
+)
+def test_units_are_renamed_where_they_are_units(unit: str, renamed: str) -> None:
+    df = pd.DataFrame({"unit": [unit], "mean_unit": [unit], "label": ["IU"]})
+    assert rename_units(df, {"IU": "IU_x"}) is df
+    assert df["unit"].tolist() == [renamed]
+    assert df["mean_unit"].tolist() == [renamed]
+    assert df["label"].tolist() == ["IU"]
+
+
+def test_a_missing_unit_stays_missing() -> None:
+    df = pd.DataFrame({"unit": ["IU/ml", None]})
+    rename_units(df, {"IU": "IU_x"})
+    assert df["unit"].tolist()[0] == "IU_x/ml"
+    assert pd.isna(df["unit"].tolist()[1])
+
+
+class ToyIUStudy(ToyStudy):
+    """A study whose data are in an international unit."""
+
+    data_units = MappingProxyType({"IU": "IU_pkpdsim_test_toy = 0.5 * mg"})
+
+
+def test_the_units_of_the_data_are_defined_and_renamed(tmp_path: Path) -> None:
+    write_study(tmp_path, "ToyIUStudy_Fig1", "time\tA\tunit\n0\t1.0\tµIU/ml\n")
+    experiment = initialized(ToyIUStudy, tmp_path)
+    assert experiment.load_dataframe("Fig1")["unit"].tolist() == [
+        "µIU_pkpdsim_test_toy/ml"
+    ]
+    quantity = experiment.ureg.Quantity(2, "µIU_pkpdsim_test_toy")
+    assert quantity.to("ng").magnitude == pytest.approx(1.0)
+
+
+def test_the_units_of_the_data_by_substance_are_renamed(tmp_path: Path) -> None:
+    write_study(tmp_path, "ToyIUStudy_Fig2", "substance\tA\tunit\nx\t1.0\tIU/ml\n")
+    frames = initialized(ToyIUStudy, tmp_path).load_dataframes_by_substance("Fig2")
+    assert frames["x"]["unit"].tolist() == ["IU_pkpdsim_test_toy/ml"]
+
+
+def test_missing_values_by_column(tmp_path: Path) -> None:
+    write_study(tmp_path, "ToyStudy_Fig3", "time\ttime_unit\tlabel\nNR\tNR\tNR\n")
+    df = initialized(ToyStudy, tmp_path).load_dataframe(
+        "Fig3", na_values={"time": ["NR"], "time_unit": ["NR"]}
+    )
+    assert df["time"].isna().all()
+    assert df["time_unit"].isna().all()
+    assert df["label"].tolist() == ["NR"]
+
+
+class CountedStudy(ToyStudy):
+    """A study which counts the calls of its simulations."""
+
+    calls: ClassVar[list[str]] = []
+
+    def simulations(self) -> dict[str, Simulation]:
+        """Count the call."""
+        CountedStudy.calls.append(self.sid)
+        return super().simulations()
+
+
+def test_the_simulations_are_created_once() -> None:
+    CountedStudy.calls.clear()
+    experiment = initialized(CountedStudy)
+    assert CountedStudy.calls == ["CountedStudy"]
+    assert set(experiment._tasks) == {"task_decay"}
