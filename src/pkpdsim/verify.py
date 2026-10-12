@@ -602,17 +602,41 @@ def time_axis(dims: Sequence[str]) -> int | None:
     return None
 
 
-def time_values(dump: Dump, sid: str, task: str) -> np.ndarray | None:
-    """Get the output times of a task as a vector."""
+def point_times(
+    dump: Dump, sid: str, task: str, dims: Sequence[str], shape: tuple[int, ...]
+) -> np.ndarray | None:
+    """Get the output time of every value of a variable of a task, in its layout.
+
+    A grid of sbmlsim 0.9 has one vector of times (`("time",)`) for every
+    point of a scan; sbmlsim 0.8 and the ragged layout of sbmlsim 0.9 (`_point`)
+    have the times of every point, over the dimensions of the variable, padded
+    with NaN to the longest point.
+
+    Args:
+        dump: the dump.
+        sid: the experiment.
+        task: the task.
+        dims: the dimensions of the variable.
+        shape: the shape of the variable.
+
+    Returns:
+        The times in the shape of the variable, or `None` if the task has no
+        times or they do not fit the variable.
+    """
     entry = dump["results"].get((sid, task, "time"))
-    if entry is None:
-        return None
-    dims, values = entry
     axis = time_axis(dims)
-    if axis is None:
+    if entry is None or axis is None:
         return None
-    values = np.moveaxis(values.astype(float), axis, 0)
-    return values.reshape(values.shape[0], -1)[:, 0]
+    tdims, values = entry
+    times = values.astype(float)
+    if len(tdims) == 1 and time_axis(tdims) == 0 and times.size == shape[axis]:
+        expand = [1] * len(shape)
+        expand[axis] = -1
+        return np.broadcast_to(times.reshape(expand), shape)
+    if sorted(tdims) != sorted(dims):
+        return None
+    times = np.transpose(times, [list(tdims).index(d) for d in dims])
+    return times if times.shape == shape else None
 
 
 #: the fields of the specification of a figure with the id of a task or a dataset
@@ -758,47 +782,154 @@ def _aligned(
     return x, np.transpose(y, [0, *(1 + rest_b.index(d) for d in rest_a)])
 
 
+class Columns(NamedTuple):
+    """A variable of a task in two dumps, one column per point of a scan.
+
+    The time is the first dimension, the points are the other dimensions of the
+    variable, matched by name and flattened in the order of the old dump.
+    """
+
+    #: the values of the old and of the new dump, (rows, points)
+    old: np.ndarray
+    new: np.ndarray
+    #: the output time of every value
+    old_times: np.ndarray
+    new_times: np.ndarray
+
+
+def columns(old: Dump, new: Dump, key: tuple[str, str, str]) -> Columns | None:
+    """Get a variable of a task in two dumps with the times of every value.
+
+    Returns:
+        The columns, or `None` if the dimensions of the variables differ or a
+        dump has no times of the task which fit its variable.
+    """
+    (dims_a, a), (dims_b, b) = old["results"][key], new["results"][key]
+    sid, task, _ = key
+    ta = point_times(old, sid, task, dims_a, a.shape)
+    tb = point_times(new, sid, task, dims_b, b.shape)
+    if ta is None or tb is None:
+        return None
+    values = _aligned(dims_a, a, dims_b, b)
+    times = _aligned(dims_a, ta, dims_b, tb)
+    if values is None or times is None or values[0].shape[1:] != values[1].shape[1:]:
+        return None
+    x, y, tx, ty = (v.reshape(v.shape[0], -1) for v in (*values, *times))
+    return Columns(x, y, tx, ty)
+
+
+def task_columns(old: Dump, new: Dump, sid: str, task: str) -> Columns | None:
+    """Get the output times of every point of a task in two dumps.
+
+    The times are those of a variable of the task (the first by name), so
+    that the points are matched by the names of their dimensions as the
+    variables are; a task with the times only compares their arrays.
+
+    Returns:
+        The times as the columns (values and times), or `None`.
+    """
+    variables = sorted(
+        v
+        for (s, t, v) in old["results"]
+        if s == sid and t == task and v != "time" and (s, t, v) in new["results"]
+    )
+    for variable in variables:
+        found = columns(old, new, (sid, task, variable))
+        if found is not None:
+            return Columns(found.old_times, found.new_times, *found[2:])
+    key = (sid, task, "time")
+    if key in old["results"] and key in new["results"]:
+        return columns(old, new, key)
+    return None
+
+
+class PointMatch(NamedTuple):
+    """The rows of points of a task which are compared, see `point_matches`."""
+
+    #: the points (columns) with these times
+    points: np.ndarray
+    #: the rows of the old and of the new values which are compared
+    old: np.ndarray
+    new: np.ndarray
+    #: the match of the times of the points
+    match: RowMatch
+
+
+def _same_columns(times: np.ndarray) -> bool:
+    """Check that every point has the times of the first, NaN equal to NaN."""
+    first = times[:, :1]
+    return bool(np.all((times == first) | (np.isnan(times) & np.isnan(first))))
+
+
+def point_matches(old_times: np.ndarray, new_times: np.ndarray) -> list[PointMatch]:
+    """Match the rows of every point of a task by its own times.
+
+    The points of a grid have the same times and one match; a point of a
+    ragged result is matched by its own times, without the NaN which pad it to
+    the longest point. Points with the same times in both dumps share a match.
+
+    Args:
+        old_times: the times of the old dump, (rows, points).
+        new_times: the times of the new dump, (rows, points).
+
+    Returns:
+        The matches.
+    """
+    points = old_times.shape[1]
+    if _same_columns(old_times) and _same_columns(new_times):
+        groups = [list(range(points))]
+    else:
+        by_times: dict[bytes, list[int]] = {}
+        for p in range(points):
+            key = old_times[:, p].tobytes() + new_times[:, p].tobytes()
+            by_times.setdefault(key, []).append(p)
+        groups = list(by_times.values())
+    matches: list[PointMatch] = []
+    for group in groups:
+        ta, tb = old_times[:, group[0]], new_times[:, group[0]]
+        rows_a, rows_b = np.flatnonzero(~np.isnan(ta)), np.flatnonzero(~np.isnan(tb))
+        match = matched_rows(ta[rows_a], tb[rows_b])
+        matches.append(
+            PointMatch(np.array(group), rows_a[match.old], rows_b[match.new], match)
+        )
+    return matches
+
+
 def relative_difference(old: Dump, new: Dump, key: tuple[str, str, str]) -> float:
     """Get the difference of a result array on the matched rows.
 
     The time is moved first, the other dimensions are matched by name (a
-    dimension of size 1 which only one array has is left out), and the rows are
-    matched by `matched_rows`. The difference is max|new - old| / max|old|;
-    other dimensions and NaN at different positions are an infinite difference.
-    An array without a time is compared exactly; the variable `time` is compared
-    as the output times of the task.
+    dimension of size 1 which only one array has is left out), and the rows of
+    every point are matched by its own times (`point_matches`). The difference
+    is max|new - old| / max|old|; other dimensions and NaN at different
+    positions are an infinite difference. An array without a time is compared
+    exactly; the variable `time` is compared as the output times of the points
+    of the task.
     """
     (dims_a, a), (dims_b, b) = old["results"][key], new["results"][key]
-    if key[2] == "time":
+    sid, task, variable = key
+    if variable == "time":
         # sbmlsim 0.8 repeated the time of a scan for every point, (_point, *dims);
-        # a dump of sbmlsim 0.9 has it once, ("time",): compare the output times
-        ta, tb = time_values(old, key[0], key[1]), time_values(new, key[0], key[1])
-        if ta is None or tb is None:
+        # a grid of sbmlsim 0.9 has it once, ("time",): compare the output times
+        found = task_columns(old, new, sid, task)
+    else:
+        numeric = a.dtype.kind in "fiub" and b.dtype.kind in "fiub"
+        if not numeric or time_axis(dims_a) is None or time_axis(dims_b) is None:
+            same = a.shape == b.shape and np.array_equal(a, b)
+            return 0.0 if same else math.inf
+        found = columns(old, new, key)
+    if found is None:
+        return math.inf
+    scale = difference = 0.0
+    for match in point_matches(found.old_times, found.new_times):
+        x = found.old[np.ix_(match.old, match.points)]
+        y = found.new[np.ix_(match.new, match.points)]
+        if not np.array_equal(np.isnan(x), np.isnan(y)):
             return math.inf
-        (dims_a, a), (dims_b, b) = (("time",), ta), (("time",), tb)
-    numeric = a.dtype.kind in "fiub" and b.dtype.kind in "fiub"
-    if not numeric or time_axis(dims_a) is None or time_axis(dims_b) is None:
-        same = a.shape == b.shape and np.array_equal(a, b)
-        return 0.0 if same else math.inf
-    aligned = _aligned(dims_a, a, dims_b, b)
-    if aligned is None:
-        return math.inf
-    x, y = aligned
-    sid, task, _ = key
-    ta, tb = time_values(old, sid, task), time_values(new, sid, task)
-    if ta is None or tb is None or ta.size != x.shape[0] or tb.size != y.shape[0]:
-        return math.inf
-    match = matched_rows(ta, tb)
-    x, y = x[match.old], y[match.new]
-    if x.shape[1:] != y.shape[1:]:
-        return math.inf
-    if not np.array_equal(np.isnan(x), np.isnan(y)):
-        return math.inf
-    x, y = np.nan_to_num(x), np.nan_to_num(y)
-    if x.size == 0:
-        return 0.0
-    scale = float(np.max(np.abs(x)))
-    difference = float(np.max(np.abs(x - y)))
+        x, y = np.nan_to_num(x), np.nan_to_num(y)
+        if x.size:
+            scale = max(scale, float(np.max(np.abs(x))))
+            difference = max(difference, float(np.max(np.abs(x - y))))
     return difference / scale if scale > 1e-300 else difference
 
 
@@ -1471,29 +1602,28 @@ def compare(args: argparse.Namespace) -> int:
     changes: dict[str, int] = {}
     other_times: list[str] = []
     for sid, task in sorted({(k[0], k[1]) for k in keys_old & keys_new}):
-        ta, tb = time_values(old, sid, task), time_values(new, sid, task)
-        if ta is None or tb is None:
-            continue
-        match = matched_rows(ta, tb)
-        ignored_old += match.ignored_old
-        ignored_new += match.ignored_new
-        unmatched += match.unmatched
-        unmatched_new += match.unmatched_new
-        if match.ignored_new:
-            changes[sid] = changes.get(sid, 0) + match.ignored_new
-        if match.unmatched:
-            other_times.append(
-                f"  times of {sid}/{task}: {match.unmatched} rows only in old, "
-                f"at {_listed(match.times_old)}"
-            )
-        if match.unmatched_new:
-            # a changed output grid of a task is named by its variable `time`
-            named = expected.match("results", (sid, task, "time"))
-            expected_new += match.unmatched_new if named else 0
-            other_times.append(
-                f"  times of {sid}/{task}: {match.unmatched_new} rows only in new, "
-                f"at {_listed(match.times_new)}{' (expected)' if named else ''}"
-            )
+        times = task_columns(old, new, sid, task)
+        matches = [] if times is None else point_matches(times.old, times.new)
+        for match in (m.match for m in matches):
+            ignored_old += match.ignored_old
+            ignored_new += match.ignored_new
+            unmatched += match.unmatched
+            unmatched_new += match.unmatched_new
+            if match.ignored_new:
+                changes[sid] = changes.get(sid, 0) + match.ignored_new
+            if match.unmatched:
+                other_times.append(
+                    f"  times of {sid}/{task}: {match.unmatched} rows only in old, "
+                    f"at {_listed(match.times_old)}"
+                )
+            if match.unmatched_new:
+                # a changed output grid of a task is named by its variable `time`
+                named = expected.match("results", (sid, task, "time"))
+                expected_new += match.unmatched_new if named else 0
+                other_times.append(
+                    f"  times of {sid}/{task}: {match.unmatched_new} rows only in new, "
+                    f"at {_listed(match.times_new)}{' (expected)' if named else ''}"
+                )
     print(
         f"rows at a change: {ignored_new} rows of the new dump and {ignored_old} of "
         f"the old dump left out (the states before a change), {unmatched} rows of "

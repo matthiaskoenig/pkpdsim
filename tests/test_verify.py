@@ -725,6 +725,75 @@ def test_two_dumps_of_sbmlsim_09_compare_every_row(tmp_path: Path) -> None:
     assert verify(["compare", a, b, "--threshold", "1e-12"]) == 1
 
 
+def ragged(times: Sequence[Sequence[float]], values: Sequence[Sequence[float]]) -> Dump:
+    """A scan of sbmlsim 0.9 in the ragged layout: every point has its own times.
+
+    The rows of a point are padded with NaN to the longest point, `(dim_k, _point)`.
+    """
+    rows = max(len(t) for t in times)
+
+    def padded(columns: Sequence[Sequence[float]]) -> np.ndarray:
+        return np.array([[*c, *[np.nan] * (rows - len(c))] for c in columns])
+
+    return synthetic(
+        {
+            ("E", "task_x", "time"): (("dim_k", "_point"), padded(times)),
+            ("E", "task_x", "[A]"): (("dim_k", "_point"), padded(values)),
+        },
+        versions={"sbmlsim": "0.9.3", "pkpdsim": "0.5.0"},
+    )
+
+
+def test_the_rows_of_every_point_are_matched_by_its_own_times(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A ragged result: the second point has a change at 2, the first has not."""
+    old = ragged([[0, 1, 2, 3], [0, 1, 2, 3]], [[1, 2, 3, 4], [10, 20, 35, 40]])
+    new = ragged([[0, 1, 2, 3], [0, 1, 2, 2, 3]], [[1, 2, 3, 4], [10, 20, 30, 35, 40]])
+    code = verify(
+        [
+            "compare",
+            written(tmp_path, "old.pkl", old),
+            written(tmp_path, "new.pkl", new),
+            "--threshold",
+            "1e-12",
+        ]
+    )
+    out = capsys.readouterr().out
+    assert code == 0, out
+    assert "changes: E 1 rows" in out
+    # the value after the change of the second point is compared
+    new["results"]["E", "task_x", "[A]"][1][1, 3] = 36.0
+    code = verify(
+        [
+            "compare",
+            written(tmp_path, "old.pkl", old),
+            written(tmp_path, "new.pkl", new),
+            "--threshold",
+            "1e-12",
+        ]
+    )
+    assert code == 1
+
+
+def test_a_time_of_another_point_than_the_first_is_compared(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    old = ragged([[0, 1, 2, 3], [0, 1, 2, 3]], [[1, 2, 3, 4], [10, 20, 30, 40]])
+    new = ragged([[0, 1, 2, 3], [0, 1, 2, 5]], [[1, 2, 3, 4], [10, 20, 30, 40]])
+    code = verify(
+        [
+            "compare",
+            written(tmp_path, "old.pkl", old),
+            written(tmp_path, "new.pkl", new),
+        ]
+    )
+    out = capsys.readouterr().out
+    assert code == 1, out
+    assert "1 rows of the old dump without a time in the new dump" in out
+    assert "times of E/task_x: 1 rows only in old, at 3" in out
+
+
 def test_an_old_row_without_a_new_time_is_a_difference(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

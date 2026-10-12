@@ -197,6 +197,10 @@ prints them. A dump of pkpdsim 0.4 (sbmlsim 0.8) and one of pkpdsim 0.5 (sbmlsim
   matched from the last one, i.e. the state after the change, and the states
   before a change are left out: the summary counts them and names the
   experiments with `changes: <experiment> <rows> rows`.
+- The rows of every point of a scan are matched by the times of that point. The
+  points of a grid share their times; in the ragged layout of sbmlsim 0.9
+  (`_point`, every point with its own times, padded with NaN) and in a scan of
+  sbmlsim 0.8 a point is matched and its times are compared on its own.
 - A row at a time which only the old dump has is always a difference, and no
   pattern of `expected` hides it. A row at a time which only the new dump has (a
   new output time of a task) is a difference as well, which is printed per task
