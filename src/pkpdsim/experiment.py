@@ -71,33 +71,18 @@ def to_sid(text: str) -> str:
     (`po 2.5 mg` is `po_2p5_mg`, `µg/ml` is `_g_ml`). One character becomes
     one character, and an SId stays as it is. The function maps characters, so
     a part of a key gives the same part of the SId of the key
-    (`f"task_po_{to_sid(dose)}"` with a `dose` which starts with a letter). An
-    SId starts with a letter or `_`: a text which starts with another invalid
-    character gets a leading `_` (`.5` is `_5`), but a text which starts with a
-    digit is an error, since the key would be refused by sbmlsim and a prefix
-    would break the rule of one character for one. Put a letter before it. The
-    empty text is an error as well, it is no SId.
+    (`f"task_po_{to_sid(dose)}"`). Whether a whole key is a valid SId, i.e. not
+    empty and not starting with a digit, is not checked here (the text of a part
+    of a key may start with a digit): sbmlsim checks every key when the
+    experiment initializes and names all invalid ones.
 
     Args:
         text: the text.
 
     Returns:
         The SId.
-
-    Raises:
-        ValueError: if the text is empty or the SId starts with a digit.
     """
-    if not text:
-        raise ValueError(
-            "The empty text is no SId; give a text of at least one character."
-        )
-    sid = _NOT_IN_SID.sub("_", _DECIMAL_POINT.sub("p", text))
-    if sid[:1].isdigit():
-        raise ValueError(
-            f"The text '{text}' gives the SId '{sid}', which starts with a digit; "
-            "an SId starts with a letter or '_', put a letter before the text."
-        )
-    return sid
+    return _NOT_IN_SID.sub("_", _DECIMAL_POINT.sub("p", text))
 
 
 def define_unit(ureg: UnitRegistry, definition: str) -> str:
@@ -266,8 +251,7 @@ class PKPDSimulationExperiment(SimulationExperiment):
             The SId.
 
         Raises:
-            ValueError: if the text is empty or the SId starts with a digit, see
-                the function `to_sid`, or another text of the experiment gave the same SId.
+            ValueError: if another text of the experiment gave the same SId.
         """
         sid = to_sid(text)
         first = self._sid_texts.setdefault(sid, text)
