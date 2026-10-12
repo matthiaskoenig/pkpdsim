@@ -194,9 +194,12 @@ prints them. A dump of pkpdsim 0.4 (sbmlsim 0.8) and one of pkpdsim 0.5 (sbmlsim
 - sbmlsim 0.9 keeps the state before and after a change at the time of the change
   (a second dose), sbmlsim 0.8 only the state after it. Two dumps with the same
   time vectors are compared row by row. Otherwise the rows of a repeated time are
-  matched from the last one, i.e. the state after the change, and the states
-  before a change are left out: the summary counts them and names the
-  experiments with `changes: <experiment> <rows> rows`.
+  matched from the last one, the k-th last old row with the k-th last new row, so
+  the state after a change is compared with the state after it, and only the rows
+  which one dump has more of at a time are left out (the states before a change
+  of a dump of sbmlsim 0.9 compared with one of sbmlsim 0.8; two dumps of sbmlsim
+  0.9 with two rows at a time compare both): the summary counts them and names
+  the experiments with `changes: <experiment> <rows> rows`.
 - The rows of every point of a scan are matched by the times of that point. The
   points of a grid share their times; in the ragged layout of sbmlsim 0.9
   (`_point`, every point with its own times, padded with NaN) and in a scan of
@@ -221,7 +224,7 @@ The ids of sbmlsim 0.9 are SIds (see [Keys](experiments.md#keys)). The migration
 | --- | --- |
 | `ids` | an old id to its new id: the task of a result, the dataset, the figure and mapping keys and the references to them in a figure |
 | `sids` | `true`: every id of the old dump becomes `pkpdsim.experiment.to_sid(id)` (after `ids`) |
-| `figure_fields` | the keys of the specification of a figure which are left out of both dumps, at the level of the figure only (not in its plots, curves or axes), in the form in which the figures are compared: a field of a figure which `compare` cannot map. The port from sbmlsim 0.8 to 0.9 needs none |
+| `figure_fields` | the keys of the specification of a figure which are left out of both dumps, at the level of the figure only (not in its plots, curves or axes), in the form in which the figures are compared: a field of a figure which `compare` cannot map. The specification is the attributes of sbmlsim's `Figure` and its objects as json (`pkpdsim.verify.serialize`, `figure_spec`), so the fields are those of the version of sbmlsim which made the dump. The port from sbmlsim 0.8 to 0.9 needs none |
 | `expected` | a part (`results`, `datasets`, `mappings`, `figures`, `ranges`) to the patterns of the keys of the differences which are expected |
 | `metadata`, `strings` | as in [Experiments and their metadata](experiments.md#renames-in-a-verification) |
 
@@ -229,7 +232,7 @@ The ids of sbmlsim 0.9 are SIds (see [Keys](experiments.md#keys)). The migration
 {
   "sids": true,
   "expected": {
-    "results": ["Anderson1961/po_2p5/time"],
+    "results": ["Anderson1961/task_po_2p5/time"],
     "mappings": ["Anderson1961/Fig1_hctz"]
   }
 }
@@ -244,7 +247,7 @@ The patterns of `expected` are `fnmatch` patterns of the keys:
 | `mappings`, `ranges` | `experiment/mapping` |
 | `figures` | `experiment/figure` |
 
-`*` and `?` are wildcards, a bracket is literal: `Anderson1961/po_2p5/[Cve_hctz]` names the variable `[Cve_hctz]`. A difference which matches is printed as expected and not counted, a pattern which matches no difference is counted, so the file says exactly what changes. Two old ids with one new id, a `strings` rename which merges two keys of a part and two mappings of one experiment with one key are errors (exit code 2). The renames are applied to the content of the parts of the old dump, never to the names of the parts, and the loaded dump is not changed.
+`*` and `?` are wildcards, a bracket is literal: `Anderson1961/task_po_2p5/[Cve_hctz]` names the variable `[Cve_hctz]` of the task `task_po_2p5` (the base names the task of a simulation `task_<simulation>`). A difference which matches is printed as expected and not counted, a pattern which matches no difference is counted, so the file says exactly what changes. Two old ids with one new id, a `strings` rename which merges two keys of a part and two mappings of one experiment with one key are errors (exit code 2). The renames are applied to the content of the parts of the old dump, never to the names of the parts, and the loaded dump is not changed.
 
 `png` compares the figures of two directories by their file names. After the
 renames to SIds the old file `A_fig 2.5.png` is `A_fig_2p5.png`: `png --sids`

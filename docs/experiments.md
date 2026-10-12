@@ -111,9 +111,13 @@ print(rename_units(df, {"IU": name}))
 
 ```python
 # not executed
+from types import MappingProxyType
+
+
 class RamiprilSimulationExperiment(PKPDSimulationExperiment):
     pkpd_model = MODEL
-    data_units = {"IU": "IU_ramipril_renin = 0.6 * microgram"}
+    # a read-only mapping, which ruff (RUF012) asks of a class attribute
+    data_units = MappingProxyType({"IU": "IU_ramipril_renin = 0.6 * microgram"})
 ```
 
 `initialize` defines the units before it reads the data, and a loader which is called outside of `initialize` defines them on its first call. A definition which pint cannot evaluate (an unknown unit in the expression, a syntax error) or which `define_unit` refuses is a `ValueError` naming the unit, which fails the initialization of that experiment only: a run reports it with its traceback, runs the other experiments and raises at the end, and `pkpdsim.testing.initialize_experiments` names it with every other failure.
@@ -226,8 +230,9 @@ is, not by listing names. `metadata_filter(metadata_type, *, excluded=None,
 **allowed)` builds a filter on the fields of the metadata: a mapping passes when
 every allowed field has one of its values and no excluded field has one of its
 values. `observable_filter(observables)` selects by the index of the data of the
-observable (`observable_id`, i.e. `Data.index` of the `y` of the mapping, the
-selection of the model, e.g. `[Cve_hctz]`, without the task). Both are callables of sbmlsim's
+observable (`observable_id`, i.e. `Data.index` of the `y` of the mapping: the
+selection of the model without its brackets and without the task, `Cve_hctz` for
+the selection `[Cve_hctz]`; a filter of `[Cve_hctz]` selects nothing). Both are callables of sbmlsim's
 `MappingFilter` and have a readable `repr`. An unknown field, a class which is no
 dataclass or is an instance, a filter without clauses, an empty set of allowed
 values (it selects nothing) or of excluded values (it excludes nothing) and values
