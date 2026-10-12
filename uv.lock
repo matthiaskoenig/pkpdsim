@@ -1474,6 +1474,7 @@ wheels = [
 name = "pkpdsim"
 source = { editable = "." }
 dependencies = [
+    { name = "jinja2" },
     { name = "libroadrunner" },
     { name = "matplotlib" },
     { name = "numpy" },
@@ -1501,6 +1502,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "bump-my-version", marker = "extra == 'dev'", specifier = ">=1.5.1" },
+    { name = "jinja2", specifier = ">=3.1.6" },
     { name = "libroadrunner", specifier = ">=2.10.0" },
     { name = "matplotlib", specifier = ">=3.11.2" },
     { name = "mkdocstrings-python", marker = "extra == 'dev'", specifier = ">=2.0.9" },
@@ -1513,7 +1515,7 @@ requires-dist = [
     { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.8.0" },
     { name = "python-libsbml", specifier = ">=5.21.2" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.17.0" },
-    { name = "sbmlsim", specifier = ">=0.9.2,<0.10" },
+    { name = "sbmlsim", specifier = ">=0.9.3,<0.10" },
     { name = "sbmlutils", specifier = ">=0.16.0" },
     { name = "tox", marker = "extra == 'dev'", specifier = ">=4.65.0" },
     { name = "ty", marker = "extra == 'dev'", specifier = ">=0.0.86" },
@@ -2129,7 +2131,7 @@ wheels = [
 
 [[package]]
 name = "sbmlsim"
-version = "0.9.2"
+version = "0.9.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "h5netcdf" },
@@ -2155,9 +2157,9 @@ dependencies = [
     { name = "sympy" },
     { name = "xarray" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b0/f0/54eea6f99d0a50b213ed47ee716a5ff01ba6579438007232024998819bb0/sbmlsim-0.9.2.tar.gz", hash = "sha256:aa910a268c9e3c3a12043b318050755c1fc485a9dc4ced1315d16f5f82fc6804", size = 2051647, upload-time = "2026-10-12T05:13:22.791Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b6/93/74318f83a66dde879fda123b93a69c84e2437a46b08199d72eb432b2d9db/sbmlsim-0.9.3.tar.gz", hash = "sha256:17a6b80288ff4a861f895222a4ebbc0cbca35ad4f571d5ed10d3701871815e42", size = 2061436, upload-time = "2026-10-12T09:24:33.818Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/fc/f5/97e7643f2cd9e381b1e20fc0e9619bb2a2128cadb7843fc5c0d836432047/sbmlsim-0.9.2-py3-none-any.whl", hash = "sha256:715c786d618d5781fed4288dfd7e6a30aa392c0eb51198e7bda8f1acebb2df4d", size = 640489, upload-time = "2026-10-12T05:13:20.658Z" },
+    { url = "https://files.pythonhosted.org/packages/b1/7f/83e168a5a378f9b146d8b8634a592a441546293f9acd7f28454915c5a1d9/sbmlsim-0.9.3-py3-none-any.whl", hash = "sha256:63c0025f36484b6245525200ba627cd876d7113e2173a0a2dcb56a278b37275c", size = 643086, upload-time = "2026-10-12T09:24:31.975Z" },
 ]
 
 [[package]]
