@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from sbmlsim import Q
-from sbmlsim.simulation import Change, Simulation
+from sbmlsim.simulation import Change, Simulation, SteadyState
 from sbmlsim.simulation.sampling import Uniform
 
 from pkpdsim.sensitivity import (
@@ -189,3 +189,25 @@ def test_free_parameters_logs_the_removed_parameters(
         free_parameters(_parameters("Ka", "CL"), [simulation])
     assert "Removing fixed parameter: CL" in caplog.text
     assert "Ka" not in caplog.text
+
+
+def test_free_parameters_leaves_out_a_target_of_the_presimulation() -> None:
+    simulation = Simulation(
+        end=10, steps=5, presimulation=SteadyState(preinit_changes={"CL": 1.0})
+    )
+    free = free_parameters(_parameters("Ka", "CL"), [simulation])
+    assert [p.uid for p in free] == ["Ka"]
+
+
+def test_free_parameters_leaves_out_a_change_at_several_times() -> None:
+    simulation = Simulation(
+        end=48, steps=5, changes=[Change([0.0, 24.0], {"CL": Q(2.0, "1/hr")})]
+    )
+    free = free_parameters(_parameters("Ka", "CL"), [simulation])
+    assert [p.uid for p in free] == ["Ka"]
+
+
+def test_free_parameters_compares_the_ids_as_written() -> None:
+    simulation = Simulation(end=10, steps=5, changes=[Change([1.0], {"[S]": 1.0})])
+    free = free_parameters(_parameters("S"), [simulation])
+    assert [p.uid for p in free] == ["S"]

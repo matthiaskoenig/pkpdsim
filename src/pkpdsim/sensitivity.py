@@ -289,12 +289,14 @@ def free_parameters(
     """Get the parameters an analysis varies: those which none of its simulations sets.
 
     A design replaces its targets wherever a simulation sets them, so a
-    parameter which the simulation of a group sets (in its `preinit_changes` or
-    in a `Change`, e.g. `f_renal_function` of the degree of renal impairment)
+    parameter which the simulation of a group sets (in its `preinit_changes`, the
+    `preinit_changes` of its presimulation or in a `Change`, e.g. `f_renal_function` of the degree of renal impairment)
     would take the values of the design in every group, and the groups would
     be one analysis. sbmlsim 0.8.5 left such a parameter out of an analysis,
     sbmlsim 0.9's designs do not, so a script takes the parameters of a design
-    from here. Every parameter left out is logged ("Removing fixed parameter"),
+    from here. The ids are compared as written, plain ids as sbmlsim 0.8.5
+    did: a target given as a selection (`[S]`) does not match the parameter `S`.
+    Every parameter left out is logged ("Removing fixed parameter"),
     as sbmlsim 0.8.5 printed it.
 
     Args:
@@ -307,6 +309,8 @@ def free_parameters(
     fixed: set[str] = set()
     for simulation in simulations:
         fixed.update(simulation.preinit_changes)
+        if simulation.presimulation is not None:
+            fixed.update(simulation.presimulation.preinit_changes)
         for change in simulation.changes:
             fixed.update(change.values)
     for p in parameters:
