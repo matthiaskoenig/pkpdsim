@@ -1235,13 +1235,21 @@ def _json(value: object) -> object:
 
 
 def json_paths(a: object, b: object, path: str = "") -> list[str]:
-    """Get the paths of the elements in which two json values differ."""
+    """Get the paths of the elements in which two json values differ.
+
+    A key which only one object has is named with its value, also a `null` one
+    (a field which one version of sbmlsim added to a figure).
+    """
     if isinstance(a, dict) and isinstance(b, dict):
-        return [
-            p
-            for k in sorted(a.keys() | b.keys())
-            for p in json_paths(a.get(k), b.get(k), f"{path}.{k}")
-        ]
+        paths: list[str] = []
+        for k in sorted(a.keys() | b.keys()):
+            if k in a and k in b:
+                paths += json_paths(a[k], b[k], f"{path}.{k}")
+            else:
+                side, value = ("old", a[k]) if k in a else ("new", b[k])
+                where = f"{path}.{k}".lstrip(".")
+                paths.append(f"{where} only in {side}: {value!r}")
+        return paths
     if isinstance(a, list) and isinstance(b, list) and len(a) == len(b):
         return [
             p

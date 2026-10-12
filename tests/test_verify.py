@@ -881,6 +881,25 @@ def test_the_new_fields_of_a_figure_are_left_out(tmp_path: Path) -> None:
     assert verify(["compare", old, new, "--renames", str(renames)]) == 0
 
 
+def test_a_figure_field_of_one_dump_only_is_named(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    old_spec = {"sid": "f", "plots": [{"x": 1}]}
+    new_spec = {"sid": "f", "width": None, "plots": [{"x": 1, "_bands": []}]}
+    old = written(
+        tmp_path, "o.pkl", synthetic(figures={"E": {"f": json.dumps(old_spec)}})
+    )
+    new = written(
+        tmp_path, "n.pkl", synthetic(figures={"E": {"f": json.dumps(new_spec)}})
+    )
+    capsys.readouterr()
+    assert verify(["compare", old, new]) == 1
+    out = capsys.readouterr().out
+    # a field which is null in one dump and missing in the other is a difference
+    assert "width only in new: None" in out
+    assert "plots[0]._bands only in new: []" in out
+
+
 def test_an_expected_difference_is_not_counted(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
