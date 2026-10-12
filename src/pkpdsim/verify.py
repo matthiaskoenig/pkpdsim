@@ -436,6 +436,9 @@ def dump(args: argparse.Namespace) -> int:
                 # a dump runs serially, the order of its experiments is the
                 # order of the run
                 simulator=Simulator(n_workers=1, **tolerances),
+                # an experiment which cannot be initialized raises and is
+                # recorded below; sbmlsim 0.9 only logs it by default
+                on_error="raise",
             )
             for sid, experiment in runner.experiments.items():
                 experiment.run(

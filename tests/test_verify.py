@@ -277,6 +277,49 @@ def test_dump_with_the_relative_tolerance_of_the_model(tmp_path: Path) -> None:
     assert code == 0
 
 
+def test_a_dump_records_an_experiment_which_cannot_be_initialized(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    import pkpdsim_toy
+
+    monkeypatch.setattr(
+        pkpdsim_toy, "MODEL", dataclasses.replace(MODEL, experiments=".broken:BROKEN")
+    )
+    # the experiment which cannot be initialized runs first
+    order = tmp_path / "order.pkl"
+    with order.open("wb") as f:
+        pickle.dump({"order": ["ToyCannotInitialize", "ToyDecay", "ToyFigureFails"]}, f)
+    out = tmp_path / "dump.pkl"
+    code = verify(
+        [
+            "dump",
+            "--root",
+            str(TESTS_DIR),
+            "--model",
+            "pkpdsim_toy",
+            "--out",
+            str(out),
+            "--order",
+            str(order),
+        ]
+    )
+    assert code == 1
+    assert "ToyCannotInitialize: ok" not in capsys.readouterr().err
+    dump = load(str(out))
+    assert dump["order"] == ["ToyCannotInitialize", "ToyDecay", "ToyFigureFails"]
+    assert list(dump["errors"]) == ["ToyCannotInitialize"]
+    assert (
+        "RuntimeError: the simulations of ToyCannotInitialize fail"
+        in dump["errors"]["ToyCannotInitialize"]
+    )
+    # the experiments after it ran and are stored
+    assert {sid for sid, _, _ in dump["results"]} == {"ToyDecay", "ToyFigureFails"}
+    assert ("ToyDecay", "task_decay", "[A]") in dump["results"]
+    assert set(dump["mappings"]) == {"ToyDecay", "ToyFigureFails"}
+
+
 def test_a_dump_stores_the_time_of_the_grid(tmp_path: Path) -> None:
     out = tmp_path / "dump.pkl"
     assert (
