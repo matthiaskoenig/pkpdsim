@@ -41,9 +41,7 @@ set_relative_bounds(parameters, 0.15)
 write_parameters(parameters, MODEL.results_dir / "sensitivity")
 # a design must not vary what the simulation of a group sets
 free = free_parameters(parameters, [simulation])
-design = sobol(
-    distributions(free), n=sample_size(4096), seed=1234, model=MODEL_PATH
-)
+design = sobol(distributions(free), n=sample_size(4096), seed=1234, model=MODEL_PATH)
 ```
 
 - `parameters_from_sbml` takes the constant parameters, compartments and species of a model in its order, with their values after the initialization, and leaves out those without a value, those close to zero and `exclude_ids`.
