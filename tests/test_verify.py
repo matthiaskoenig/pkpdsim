@@ -843,6 +843,17 @@ def test_arrays_of_other_dimensions_differ(tmp_path: Path) -> None:
     assert verify(["compare", old, written(tmp_path, "n.pkl", new)]) == 1
 
 
+def test_arrays_of_other_sizes_differ(tmp_path: Path) -> None:
+    new = new_scan()
+    _, values = new["results"]["E", "task_x", "[A]"]
+    new["results"]["E", "task_x", "[A]"] = (
+        ("dim_k", "time"),
+        np.vstack([values, values]),
+    )
+    old = written(tmp_path, "o.pkl", old_scan())
+    assert verify(["compare", old, written(tmp_path, "n.pkl", new)]) == 1
+
+
 def test_the_ids_of_the_old_dump_become_sids(tmp_path: Path) -> None:
     def figure(sid: str, task: str) -> str:
         spec = {"sid": sid, "curves": [{"task_id": task, "name": "po 2.5"}]}
@@ -897,6 +908,25 @@ def test_two_ids_with_one_new_id_are_an_error() -> None:
     )
     with pytest.raises(ValueError, match="same new id"):
         apply_renames(dump, {"sids": True})
+
+
+@pytest.mark.parametrize(
+    "parts",
+    [
+        {
+            "results": {
+                ("E", "task a b", "x"): (("time",), T_OLD),
+                ("E", "task a-b", "x"): (("time",), T_OLD),
+            }
+        },
+        {"figures": {"E": {"fig a": '{"sid": "fig a"}', "fig-a": '{"sid": "fig-a"}'}}},
+        {"ranges": {"E": {"fm a": "no x values", "fm-a": "no x values"}}},
+    ],
+    ids=["results", "figures", "ranges"],
+)
+def test_two_ids_of_a_part_with_one_new_id_are_an_error(parts: dict) -> None:
+    with pytest.raises(ValueError, match="same new id"):
+        apply_renames(synthetic(**parts), {"sids": True})
 
 
 def test_two_keys_with_one_key_after_the_strings_are_an_error() -> None:
