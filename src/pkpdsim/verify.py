@@ -48,11 +48,21 @@ the dotted name of a model package, which defines its model object `MODEL`
 python packages of the environment it runs in, so a checkout which needs another
 version of sbmlsim is dumped with the python of an environment with that
 version, as long as it is one which pkpdsim supports.
+
+Across versions of sbmlsim (a dump of pkpdsim 0.4 with sbmlsim 0.8 and one of
+0.5 with 0.9) `compare` moves the time of every array first and matches the
+other dimensions by name, keeps of the rows at a repeated time the last, the
+state after a change, which is all sbmlsim 0.8 gave, and counts the rows of the
+old dump without a time in the new one as differences. The renames of a port are
+the ids which became SIds (`sids`), the fields sbmlsim 0.9 added to a figure
+(`figure_fields`) and the differences which are expected (`expected`).
 """
 
 import argparse
 import ast
+import fnmatch
 import importlib
+import importlib.metadata
 import inspect
 import json
 import math
@@ -66,7 +76,15 @@ from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypedDict, cast
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Literal,
+    NamedTuple,
+    NotRequired,
+    TypedDict,
+    cast,
+)
 
 import libsbml
 import numpy as np
@@ -110,6 +128,8 @@ class Dump(TypedDict):
     #: experiment -> fit mapping -> (data min, data max, simulation min, simulation
     #: max, unit) of the x values, or the error message
     ranges: dict[str, dict[str, tuple[float, float, float, float, str] | str]]
+    #: the versions of the packages which made the dump (since pkpdsim 0.5)
+    versions: NotRequired[dict[str, str]]
 
 
 # --- the experiments of a model -------------------------------------------------
@@ -417,6 +437,8 @@ def dump(args: argparse.Namespace) -> int:
             print(f"--rtol is a number or `model`, not {args.rtol}", file=sys.stderr)
             return 2
 
+    import pkpdsim
+
     result = Dump(
         model=args.model,
         order=[c.__name__ for c in classes],
@@ -426,6 +448,10 @@ def dump(args: argparse.Namespace) -> int:
         mappings={},
         figures={},
         ranges={},
+        versions={
+            "sbmlsim": importlib.metadata.version("sbmlsim"),
+            "pkpdsim": pkpdsim.__version__,
+        },
     )
     for cls in classes:
         try:
@@ -532,31 +558,144 @@ def time_values(dump: Dump, sid: str, task: str) -> np.ndarray | None:
     return values.reshape(values.shape[0], -1)[:, 0]
 
 
-def relative_difference(old: Dump, new: Dump, key: tuple[str, str, str]) -> float:
-    """Get the difference of a result array on the common output times.
+#: the fields of the specification of a figure with the id of a task or a dataset
+ID_FIELDS: tuple[str, ...] = ("task_id", "dset_id")
 
-    At a repeated output time (the end of a timecourse and the start of the next)
-    the last value is used. The difference is max|new - old| / max|old| on the
-    common times; NaN at different positions is an infinite difference.
+#: the parts of a dump whose differences can be expected, and their keys
+EXPECTED_PARTS: tuple[str, ...] = (
+    "results",
+    "datasets",
+    "mappings",
+    "figures",
+    "ranges",
+)
+
+
+class RowMatch(NamedTuple):
+    """The rows of the output of a task in two dumps which are compared."""
+
+    #: the rows of the old and of the new output which are compared
+    old: np.ndarray
+    new: np.ndarray
+    #: rows left out at a repeated time (the states before a change)
+    ignored_old: int
+    ignored_new: int
+    #: kept rows of the old output without a time in the new output
+    unmatched: int
+
+
+def _last_of_repeated(times: np.ndarray) -> np.ndarray:
+    """Get the rows to keep: of the rows at one time the last."""
+    return np.append(np.diff(times) != 0, True)
+
+
+def matched_rows(old_times: np.ndarray, new_times: np.ndarray) -> RowMatch:
+    """Match the rows of the output times of a task in two dumps.
+
+    Equal times are compared row by row, also the states before a change in two
+    dumps of sbmlsim 0.9. Otherwise the last row of every repeated time is kept
+    in each output, the state after a change (sbmlsim 0.8 had only this one,
+    sbmlsim 0.9 has the states before and after it), and the rows are matched
+    by their time, relative to the largest time 1e-6.
+
+    Args:
+        old_times: the output times of the old dump.
+        new_times: the output times of the new dump.
+
+    Returns:
+        The rows which are compared and the rows which are not.
+    """
+    if old_times.shape == new_times.shape and np.array_equal(old_times, new_times):
+        rows = np.arange(old_times.size)
+        return RowMatch(rows, rows, 0, 0, 0)
+    if old_times.size == 0 or new_times.size == 0:
+        empty = np.arange(0)
+        return RowMatch(empty, empty, 0, 0, int(old_times.size))
+    rows_old = np.flatnonzero(_last_of_repeated(old_times))
+    rows_new = np.flatnonzero(_last_of_repeated(new_times))
+    a, b = old_times[rows_old], new_times[rows_new]
+    j = np.clip(np.searchsorted(b, a), 0, b.size - 1)
+    previous = np.clip(j - 1, 0, b.size - 1)
+    j = np.where(np.abs(b[previous] - a) < np.abs(b[j] - a), previous, j)
+    common = np.abs(b[j] - a) < 1e-6 * max(1.0, float(np.max(np.abs(a))))
+    return RowMatch(
+        rows_old[common],
+        rows_new[j[common]],
+        int(old_times.size - rows_old.size),
+        int(new_times.size - rows_new.size),
+        int(np.count_nonzero(~common)),
+    )
+
+
+def _squeezed(
+    values: np.ndarray, dims: list[str], other: list[str]
+) -> tuple[np.ndarray, list[str]]:
+    """Leave out the dimensions of size 1 which the other array does not have."""
+    drop = [
+        k for k, d in enumerate(dims) if d not in other and values.shape[1 + k] == 1
+    ]
+    if not drop:
+        return values, dims
+    kept = [d for k, d in enumerate(dims) if k not in drop]
+    return np.squeeze(values, axis=tuple(1 + k for k in drop)), kept
+
+
+def _aligned(
+    dims_a: Sequence[str], a: np.ndarray, dims_b: Sequence[str], b: np.ndarray
+) -> tuple[np.ndarray, np.ndarray] | None:
+    """Get two arrays with the time first and the other dimensions in the order of `a`.
+
+    Both arrays have a time dimension. A dimension of size 1 which only one array
+    has is left out (a scan of one point is a simulation).
+
+    Returns:
+        The arrays as floats, or `None` if their other dimensions differ.
+    """
+    axis_a, axis_b = time_axis(dims_a), time_axis(dims_b)
+    assert axis_a is not None and axis_b is not None
+    x = np.moveaxis(a.astype(float), axis_a, 0)
+    y = np.moveaxis(b.astype(float), axis_b, 0)
+    rest_a = [str(d) for k, d in enumerate(dims_a) if k != axis_a]
+    rest_b = [str(d) for k, d in enumerate(dims_b) if k != axis_b]
+    x, rest_a = _squeezed(x, rest_a, rest_b)
+    y, rest_b = _squeezed(y, rest_b, rest_a)
+    if sorted(rest_a) != sorted(rest_b):
+        return None
+    return x, np.transpose(y, [0, *(1 + rest_b.index(d) for d in rest_a)])
+
+
+def relative_difference(old: Dump, new: Dump, key: tuple[str, str, str]) -> float:
+    """Get the difference of a result array on the matched rows.
+
+    The time is moved first, the other dimensions are matched by name (a
+    dimension of size 1 which only one array has is left out), and the rows are
+    matched by `matched_rows`. The difference is max|new - old| / max|old|;
+    other dimensions and NaN at different positions are an infinite difference.
+    An array without a time is compared exactly; the variable `time` is compared
+    as the output times of the task.
     """
     (dims_a, a), (dims_b, b) = old["results"][key], new["results"][key]
-    axis_a, axis_b = time_axis(dims_a), time_axis(dims_b)
-    if a.dtype.kind not in "fiub" or axis_a is None or axis_b is None:
+    if key[2] == "time":
+        # sbmlsim 0.8 repeated the time of a scan for every point, (_point, *dims);
+        # a dump of sbmlsim 0.9 has it once, ("time",): compare the output times
+        ta, tb = time_values(old, key[0], key[1]), time_values(new, key[0], key[1])
+        if ta is None or tb is None:
+            return math.inf
+        (dims_a, a), (dims_b, b) = (("time",), ta), (("time",), tb)
+    numeric = a.dtype.kind in "fiub" and b.dtype.kind in "fiub"
+    if not numeric or time_axis(dims_a) is None or time_axis(dims_b) is None:
         same = a.shape == b.shape and np.array_equal(a, b)
         return 0.0 if same else math.inf
+    aligned = _aligned(dims_a, a, dims_b, b)
+    if aligned is None:
+        return math.inf
+    x, y = aligned
     sid, task, _ = key
     ta, tb = time_values(old, sid, task), time_values(new, sid, task)
-    if ta is None or tb is None:
+    if ta is None or tb is None or ta.size != x.shape[0] or tb.size != y.shape[0]:
         return math.inf
-    a = np.moveaxis(a.astype(float), axis_a, 0)
-    b = np.moveaxis(b.astype(float), axis_b, 0)
-    keep = np.append(np.diff(ta) != 0, True)
-    a, ta = a[keep], ta[keep]
-    j = np.clip(np.searchsorted(tb, ta), 0, len(tb) - 1)
-    previous = np.clip(j - 1, 0, len(tb) - 1)
-    j = np.where(np.abs(tb[previous] - ta) < np.abs(tb[j] - ta), previous, j)
-    common = np.abs(tb[j] - ta) < 1e-6 * max(1.0, float(np.max(np.abs(ta))))
-    x, y = a[common], b[j[common]]
+    match = matched_rows(ta, tb)
+    x, y = x[match.old], y[match.new]
     if x.shape[1:] != y.shape[1:]:
         return math.inf
     if not np.array_equal(np.isnan(x), np.isnan(y)):
@@ -591,11 +730,34 @@ class MetadataRenames(TypedDict, total=False):
 
 
 class Renames(TypedDict, total=False):
-    """The expected renames between two dumps, applied to the old dump."""
+    """The expected renames and differences between two dumps."""
 
     metadata: MetadataRenames
     #: old text -> new text, in every key and string of the old dump
     strings: dict[str, str]
+    #: old id -> new id, of a task, a dataset, a figure or a fit mapping
+    ids: dict[str, str]
+    #: every id of the old dump becomes its SId (`pkpdsim.experiment.to_sid`)
+    sids: bool
+    #: the keys of the specification of a figure which are left out of both
+    #: dumps, at any depth, e.g. the fields sbmlsim 0.9 added
+    figure_fields: list[str]
+    #: part of the dump -> patterns (`fnmatch`) of the keys whose differences
+    #: are expected: `experiment/task/variable` (results),
+    #: `experiment/dataset/column`, `experiment` (mappings),
+    #: `experiment/figure`, `experiment/mapping` (ranges)
+    expected: dict[str, list[str]]
+
+
+#: the parts of a renames file
+RENAME_PARTS: tuple[str, ...] = (
+    "metadata",
+    "strings",
+    "ids",
+    "sids",
+    "figure_fields",
+    "expected",
+)
 
 
 def load_renames(path: str) -> Renames:
@@ -607,7 +769,7 @@ def load_renames(path: str) -> Renames:
     renames = json.loads(Path(path).read_text(encoding="utf-8"))
     if not isinstance(renames, dict):
         raise ValueError(f"the renames {path} must be a json object")
-    unknown = sorted(set(renames) - {"metadata", "strings"}) + sorted(
+    unknown = sorted(set(renames) - set(RENAME_PARTS)) + sorted(
         set(renames.get("metadata", {})) - {"fields", "members", "added"}
     )
     if unknown:
@@ -623,6 +785,11 @@ def _is_strings(value: object) -> bool:
     )
 
 
+def _is_texts(value: object) -> bool:
+    """Check for a json list of strings."""
+    return isinstance(value, list) and all(isinstance(v, str) for v in value)
+
+
 def _check_renames(path: str, renames: dict[str, object]) -> None:
     """Check the types of the parts of the renames.
 
@@ -633,6 +800,25 @@ def _check_renames(path: str, renames: dict[str, object]) -> None:
         raise ValueError(
             f"the part strings of the renames {path} must map text to text"
         )
+    if "ids" in renames and not _is_strings(renames["ids"]):
+        raise ValueError(f"the part ids of the renames {path} must map text to text")
+    if "sids" in renames and not isinstance(renames["sids"], bool):
+        raise ValueError(f"the part sids of the renames {path} must be true or false")
+    if "figure_fields" in renames and not _is_texts(renames["figure_fields"]):
+        raise ValueError(
+            f"the part figure_fields of the renames {path} must be a list of texts"
+        )
+    if "expected" in renames:
+        expected = renames["expected"]
+        if (
+            not isinstance(expected, dict)
+            or set(expected) - set(EXPECTED_PARTS)
+            or not all(_is_texts(v) for v in expected.values())
+        ):
+            raise ValueError(
+                f"the part expected of the renames {path} must map parts of "
+                f"{list(EXPECTED_PARTS)} to lists of patterns"
+            )
     if "metadata" not in renames:
         return
     metadata = renames["metadata"]
@@ -685,31 +871,235 @@ def _rename_strings(value: object, strings: Mapping[str, str]) -> object:
     return value
 
 
+def _rename_description(description: str, rename: Callable[[str], str]) -> str:
+    """Rename the key, the datasets and the tasks of a mapping description.
+
+    Raises:
+        ValueError: if the head of the description is not its 16 fields, i.e. a
+            key has a '|'.
+    """
+    head, metadata = description.rsplit("|", 1)
+    fields = head.split("|")
+    if len(fields) != 16:
+        raise ValueError(
+            f"The mapping description cannot be renamed, a key has a '|': {description}"
+        )
+    for k in (0, 1, 2, 8, 9):
+        fields[k] = rename(fields[k])
+    return "|".join([*fields, metadata])
+
+
+def _rename_figure(spec: str, rename: Callable[[str], str]) -> str:
+    """Rename the id of a figure and the ids of its tasks and datasets in its specification."""
+
+    def walk(value: object, top: bool) -> object:
+        if isinstance(value, dict):
+            return {
+                k: rename(v)
+                if isinstance(v, str) and (k in ID_FIELDS or (top and k == "sid"))
+                else walk(v, False)
+                for k, v in value.items()
+            }
+        if isinstance(value, list):
+            return [walk(v, False) for v in value]
+        return value
+
+    return json.dumps(walk(json.loads(spec), True), sort_keys=True)
+
+
+def _unique[K, V](renamed: dict[K, V], before: Mapping[K, V], part: str) -> dict[K, V]:
+    """Check that no two keys of a part got the same new key.
+
+    Raises:
+        ValueError: if two keys have the same new id.
+    """
+    if len(renamed) != len(before):
+        raise ValueError(f"Two ids of the {part} of the old dump have the same new id.")
+    return renamed
+
+
+def rename_ids(dump: Dump, rename: Callable[[str], str]) -> Dump:
+    """Rename the ids of the tasks, datasets, figures and fit mappings of a dump.
+
+    Returns:
+        A new dump; the given one is not changed.
+
+    Raises:
+        ValueError: if two ids of a part have the same new id, or a mapping
+            description cannot be renamed.
+    """
+    result = cast("Dump", dict(dump))
+    result["results"] = _unique(
+        {(s, rename(t), v): x for (s, t, v), x in dump["results"].items()},
+        dump["results"],
+        "results",
+    )
+    result["datasets"] = _unique(
+        {(s, rename(d), c): x for (s, d, c), x in dump["datasets"].items()},
+        dump["datasets"],
+        "datasets",
+    )
+    result["mappings"] = {
+        sid: [_rename_description(d, rename) for d in descriptions]
+        for sid, descriptions in dump["mappings"].items()
+    }
+    result["ranges"] = {
+        sid: _unique({rename(k): v for k, v in items.items()}, items, "ranges")
+        for sid, items in dump["ranges"].items()
+    }
+    result["figures"] = {
+        sid: _unique(
+            {rename(f): _rename_figure(spec, rename) for f, spec in figures.items()},
+            figures,
+            "figures",
+        )
+        for sid, figures in dump["figures"].items()
+    }
+    return result
+
+
+def drop_figure_fields(dump: Dump, fields: Collection[str]) -> Dump:
+    """Leave out keys of the specifications of the figures, at any depth.
+
+    Returns:
+        A new dump; the given one is not changed.
+    """
+    names = set(fields)
+
+    def walk(value: object) -> object:
+        if isinstance(value, dict):
+            return {k: walk(v) for k, v in value.items() if k not in names}
+        if isinstance(value, list):
+            return [walk(v) for v in value]
+        return value
+
+    result = cast("Dump", dict(dump))
+    result["figures"] = {
+        sid: {
+            f: json.dumps(walk(json.loads(spec)), sort_keys=True)
+            for f, spec in figures.items()
+        }
+        for sid, figures in dump["figures"].items()
+    }
+    return result
+
+
+def _renamer(renames: Renames) -> Callable[[str], str]:
+    """Get the rename of an id: `ids`, then its SId with `sids`."""
+    from pkpdsim.experiment import to_sid
+
+    ids = renames.get("ids", {})
+    sids = renames.get("sids", False)
+
+    def rename(text: str) -> str:
+        text = ids.get(text, text)
+        return to_sid(text) if sids else text
+
+    return rename
+
+
 def apply_renames(dump: Dump, renames: Renames) -> Dump:
-    """Apply the expected renames to a dump, the old one of a comparison."""
+    """Apply the expected renames to a dump, the old one of a comparison.
+
+    The strings first, then the ids (`ids`, `sids`), then the metadata.
+
+    Returns:
+        A new dump; the given one is not changed.
+
+    Raises:
+        ValueError: if two ids get the same new id or a mapping description
+            cannot be renamed.
+    """
+    result = cast("Dump", dict(dump))
     if strings := renames.get("strings"):
-        dump = cast("Dump", _rename_strings(dict(dump), strings))
+        result = cast("Dump", _rename_strings(result, strings))
+    if renames.get("ids") or renames.get("sids"):
+        result = rename_ids(result, _renamer(renames))
     if metadata := renames.get("metadata"):
-        dump["mappings"] = {
+        result["mappings"] = {
             sid: [rename_mapping(d, metadata) for d in descriptions]
-            for sid, descriptions in dump["mappings"].items()
+            for sid, descriptions in result["mappings"].items()
         }
     # a dump stores the mappings sorted, and a rename can change the order
-    dump["mappings"] = {
-        sid: sorted(descriptions) for sid, descriptions in dump["mappings"].items()
+    result["mappings"] = {
+        sid: sorted(descriptions) for sid, descriptions in result["mappings"].items()
     }
-    return dump
+    return result
+
+
+class _Expected:
+    """The expected differences of a renames file and which of them occurred."""
+
+    def __init__(self, patterns: Mapping[str, Sequence[str]]) -> None:
+        self.patterns = {part: list(p) for part, p in patterns.items()}
+        self.used: set[tuple[str, str]] = set()
+
+    def match(self, part: str, key: str | tuple[str, ...]) -> bool:
+        """Check whether the difference of a key is expected, recording the patterns."""
+        text = "/".join(key) if isinstance(key, tuple) else key
+        found = False
+        for pattern in self.patterns.get(part, []):
+            if fnmatch.fnmatchcase(text, pattern):
+                self.used.add((part, pattern))
+                found = True
+        return found
+
+    def unused(self) -> list[tuple[str, str]]:
+        """Get the patterns which matched no difference."""
+        return [
+            (part, pattern)
+            for part, patterns in self.patterns.items()
+            for pattern in patterns
+            if (part, pattern) not in self.used
+        ]
+
+
+def _flat(
+    dump: Dump, part: Literal["datasets", "mappings", "figures", "ranges"]
+) -> dict[str | tuple[str, ...], object]:
+    """Get a part of a dump by the keys a comparison reports."""
+    if part in ("figures", "ranges"):
+        return {
+            (sid, key): value
+            for sid, items in dump[part].items()
+            for key, value in items.items()
+        }
+    return dict(dump[part].items())
+
+
+def _detail(part: str, a: object, b: object) -> list[str]:
+    """Describe the difference of a changed key."""
+    if part == "mappings":
+        return diff_lines(a, b)
+    if part == "figures":
+        return json_paths(_json(a), _json(b))[:5]
+    return [f"{a!r} -> {b!r}"]
 
 
 def compare(args: argparse.Namespace) -> int:
-    """Compare two dumps; the exit code is 1 if they differ beyond the threshold."""
+    """Compare two dumps; the exit code is 1 if they differ beyond the threshold.
+
+    An expected difference (`expected` of the renames) is printed and not
+    counted; an expected difference which does not occur is counted.
+    """
     old, new = load(args.old), load(args.new)
+    renames: Renames = {}
     if args.renames:
         try:
-            old = apply_renames(old, load_renames(args.renames))
+            renames = load_renames(args.renames)
+            old = apply_renames(old, renames)
         except ValueError as err:
             print(err, file=sys.stderr)
             return 2
+    if fields := renames.get("figure_fields"):
+        old, new = drop_figure_fields(old, fields), drop_figure_fields(new, fields)
+    expected = _Expected(renames.get("expected", {}))
+    for label, dump_ in (("old", old), ("new", new)):
+        if versions := dump_.get("versions"):
+            print(
+                f"{label}: "
+                + ", ".join(f"{k} {v}" for k, v in sorted(versions.items()))
+            )
     names: set[str] = set(args.experiments)
 
     def selected(sid: str) -> bool:
@@ -731,8 +1121,13 @@ def compare(args: argparse.Namespace) -> int:
     # simulations
     keys_old = {k for k in old["results"] if selected(k[0])}
     keys_new = {k for k in new["results"] if selected(k[0])}
-    for key in sorted(keys_old ^ keys_new)[: args.top]:
-        print(f"array only in {'old' if key in keys_old else 'new'}: {'/'.join(key)}")
+    one_side = sorted(keys_old ^ keys_new)
+    unexpected_side = [k for k in one_side if not expected.match("results", k)]
+    for key in one_side[: args.top]:
+        mark = "" if key in unexpected_side else "expected: "
+        print(
+            f"{mark}array only in {'old' if key in keys_old else 'new'}: {'/'.join(key)}"
+        )
     rows = sorted(
         ((relative_difference(old, new, key), key) for key in keys_old & keys_new),
         reverse=True,
@@ -741,11 +1136,12 @@ def compare(args: argparse.Namespace) -> int:
     for difference, key in rows:
         per_experiment[key[0]] = max(per_experiment.get(key[0], 0.0), difference)
     above = [row for row in rows if row[0] > args.threshold]
+    unexpected = [row for row in above if not expected.match("results", row[1])]
     print(
         f"simulations: {len(rows)} arrays compared, {len(above)} differ by more "
-        f"than {args.threshold:g}, {len(keys_old ^ keys_new)} in one dump only"
+        f"than {args.threshold:g} ({len(above) - len(unexpected)} expected), "
+        f"{len(one_side)} in one dump only"
     )
-    # the experiments and arrays which differ at all, the largest first
     for sid, difference in sorted(per_experiment.items(), key=lambda t: -t[1]):
         if difference > 0:
             print(f"  {difference:.3e} {sid}")
@@ -754,22 +1150,52 @@ def compare(args: argparse.Namespace) -> int:
         for difference, key in rows[: args.top]:
             if difference > 0:
                 print(f"  {difference:.3e} {'/'.join(key)}")
-    differing += len(above) + len(keys_old ^ keys_new)
+    differing += len(unexpected) + len(unexpected_side)
+
+    # the rows at a change
+    ignored_old = ignored_new = unmatched = 0
+    changes: dict[str, int] = {}
+    for sid, task in sorted({(k[0], k[1]) for k in keys_old & keys_new}):
+        ta, tb = time_values(old, sid, task), time_values(new, sid, task)
+        if ta is None or tb is None:
+            continue
+        match = matched_rows(ta, tb)
+        ignored_old += match.ignored_old
+        ignored_new += match.ignored_new
+        unmatched += match.unmatched
+        if match.ignored_new:
+            changes[sid] = changes.get(sid, 0) + match.ignored_new
+    print(
+        f"rows at a change: {ignored_new} rows of the new dump and {ignored_old} of "
+        f"the old dump left out (the states before a change), {unmatched} rows of "
+        "the old dump without a time in the new dump"
+    )
+    for sid, count in sorted(changes.items()):
+        print(f"changes: {sid} {count} rows")
+    differing += unmatched
 
     # everything else exactly
     for part in ("datasets", "mappings", "figures", "ranges"):
-        a = {k: v for k, v in old[part].items() if selected(_sid(k))}
-        b = {k: v for k, v in new[part].items() if selected(_sid(k))}
+        a = {k: v for k, v in _flat(old, part).items() if selected(_sid(k))}
+        b = {k: v for k, v in _flat(new, part).items() if selected(_sid(k))}
         changed = sorted(
             (k for k in a.keys() | b.keys() if not equal(a.get(k), b.get(k))), key=str
         )
-        print(f"{part}: {len(a)} old, {len(b)} new, {len(changed)} differ")
+        unexpected_keys = [k for k in changed if not expected.match(part, k)]
+        print(
+            f"{part}: {len(a)} old, {len(b)} new, {len(changed)} differ "
+            f"({len(changed) - len(unexpected_keys)} expected)"
+        )
         for k in changed[: args.top]:
-            print(f"  {'/'.join(k) if isinstance(k, tuple) else k}")
-            if isinstance(a.get(k), list | dict) or isinstance(b.get(k), list | dict):
-                for line in diff_lines(a.get(k), b.get(k))[: args.top]:
-                    print(f"    {line}")
-        differing += len(changed)
+            mark = "" if k in unexpected_keys else " (expected)"
+            print(f"  {'/'.join(k) if isinstance(k, tuple) else k}{mark}")
+            for line in _detail(part, a.get(k), b.get(k))[: args.top]:
+                print(f"    {line}")
+        differing += len(unexpected_keys)
+
+    for part, pattern in expected.unused():
+        print(f"expected difference which does not occur: {part}: {pattern}")
+        differing += 1
     return 1 if differing else 0
 
 
@@ -1127,11 +1553,13 @@ def png(args: argparse.Namespace) -> int:
     """Compare the PNG figures of two directories pixel by pixel.
 
     The directories are searched recursively and the figures are paired by the
-    path relative to the directory.
+    path relative to the directory; with `--sids` an old figure is paired with
+    the new figure of the SId of its file name (`pkpdsim.experiment.to_sid`).
 
     Returns:
         0 if all figures are identical, 1 if some differ or exist on one side
-        only, 2 if a directory does not exist or no figure was found.
+        only, 2 if a directory does not exist, no figure was found or two old
+        figures have the same SId.
     """
     from PIL import Image
 
@@ -1145,6 +1573,17 @@ def png(args: argparse.Namespace) -> int:
 
     old_files = {k: v for k, v in _files(old, "*.png").items() if selected(v)}
     new_files = {k: v for k, v in _files(new, "*.png").items() if selected(v)}
+    if args.sids:
+        from pkpdsim.experiment import to_sid
+
+        by_sid: dict[Path, Path] = {}
+        for key, path in old_files.items():
+            renamed = key.with_name(to_sid(key.stem) + key.suffix)
+            if renamed in by_sid:
+                print(f"two old figures have the same SId: {renamed}", file=sys.stderr)
+                return 2
+            by_sid[renamed] = path
+        old_files = by_sid
     if not old_files and not new_files:
         print(f"no PNG figures in {old} and {new}", file=sys.stderr)
         return 2
@@ -1339,8 +1778,8 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument(
         "--renames",
         help=(
-            "json file of the expected renames, applied to the old dump "
-            "(metadata fields, members, added fields, strings)"
+            "json file of the expected renames and differences (metadata, strings, "
+            "ids, sids, figure_fields, expected), applied to the old dump"
         ),
     )
     s.add_argument("--threshold", type=float, default=1e-6, help="default 1e-6")
@@ -1379,6 +1818,14 @@ def parser() -> argparse.ArgumentParser:
     s = command("png", png, "compare the PNG figures of two directories")
     s.add_argument("old")
     s.add_argument("new")
+    s.add_argument(
+        "--sids",
+        action="store_true",
+        help=(
+            "pair an old figure with the new figure of the SId of its file name "
+            "(pkpdsim.experiment.to_sid), for a port which renamed the keys"
+        ),
+    )
     s.add_argument("names", nargs="*", help="only files containing one of these")
 
     s = command("sbml", sbml, "compare two SBML files or the SBML files of two dirs")
