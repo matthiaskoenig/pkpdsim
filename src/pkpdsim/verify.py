@@ -51,9 +51,10 @@ version, as long as it is one which pkpdsim supports.
 
 Across versions of sbmlsim (a dump of pkpdsim 0.4 with sbmlsim 0.8 and one of
 0.5 with 0.9) `compare` moves the time of every array first and matches the
-other dimensions by name, keeps of the rows at a repeated time the last, the
-state after a change, which is all sbmlsim 0.8 gave, and counts the rows of the
-old dump without a time in the new one as differences. The renames of a port are
+other dimensions by name, matches the rows of a repeated time from the last
+one, so that the state after a change, which is all sbmlsim 0.8 gave, is
+compared, and counts the rows of the old dump without a time in the new one as
+differences. The renames of a port are
 the ids which became SIds (`sids`), the fields sbmlsim 0.9 added to a figure
 (`figure_fields`) and the differences which are expected (`expected`).
 """
@@ -577,26 +578,38 @@ class RowMatch(NamedTuple):
     #: the rows of the old and of the new output which are compared
     old: np.ndarray
     new: np.ndarray
-    #: rows left out at a repeated time (the states before a change)
+    #: rows left out at a time which the other output has fewer times (the
+    #: states before a change)
     ignored_old: int
     ignored_new: int
-    #: kept rows of the old output without a time in the new output
+    #: rows of the old output without a time in the new output
     unmatched: int
+    #: rows of the new output without a time in the old output
+    unmatched_new: int
 
 
-def _last_of_repeated(times: np.ndarray) -> np.ndarray:
-    """Get the rows to keep: of the rows at one time the last."""
-    return np.append(np.diff(times) != 0, True)
+def _runs(times: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Get the first row and the number of rows of every time of an output."""
+    starts = np.flatnonzero(np.append(True, np.diff(times) != 0))
+    return starts, np.diff(np.append(starts, times.size))
+
+
+def _last_rows(ends: np.ndarray, counts: np.ndarray) -> np.ndarray:
+    """Get the last `counts[k]` rows before `ends[k]` of every time, in order."""
+    offsets = np.arange(counts.sum()) - np.repeat(np.cumsum(counts) - counts, counts)
+    return np.repeat(ends - counts, counts) + offsets
 
 
 def matched_rows(old_times: np.ndarray, new_times: np.ndarray) -> RowMatch:
     """Match the rows of the output times of a task in two dumps.
 
-    Equal times are compared row by row, also the states before a change in two
-    dumps of sbmlsim 0.9. Otherwise the last row of every repeated time is kept
-    in each output, the state after a change (sbmlsim 0.8 had only this one,
-    sbmlsim 0.9 has the states before and after it), and the rows are matched
-    by their time, relative to the largest time 1e-6.
+    The times are matched relative to the largest time 1e-6. The rows of a time
+    which an output has more than once (a change: the state before it, then the
+    state after it) are matched from the last one, the k-th last old row with
+    the k-th last new row, and the surplus rows of the output with more of them
+    are left out. So the state after a change is compared across versions
+    (sbmlsim 0.8 had only this one, sbmlsim 0.9 has the states before and after
+    it), and two dumps of sbmlsim 0.9 compare every row of their common times.
 
     Args:
         old_times: the output times of the old dump.
@@ -607,23 +620,30 @@ def matched_rows(old_times: np.ndarray, new_times: np.ndarray) -> RowMatch:
     """
     if old_times.shape == new_times.shape and np.array_equal(old_times, new_times):
         rows = np.arange(old_times.size)
-        return RowMatch(rows, rows, 0, 0, 0)
+        return RowMatch(rows, rows, 0, 0, 0, 0)
     if old_times.size == 0 or new_times.size == 0:
         empty = np.arange(0)
-        return RowMatch(empty, empty, 0, 0, int(old_times.size))
-    rows_old = np.flatnonzero(_last_of_repeated(old_times))
-    rows_new = np.flatnonzero(_last_of_repeated(new_times))
-    a, b = old_times[rows_old], new_times[rows_new]
+        return RowMatch(empty, empty, 0, 0, int(old_times.size), int(new_times.size))
+    starts_a, counts_a = _runs(old_times)
+    starts_b, counts_b = _runs(new_times)
+    a, b = old_times[starts_a], new_times[starts_b]
     j = np.clip(np.searchsorted(b, a), 0, b.size - 1)
     previous = np.clip(j - 1, 0, b.size - 1)
     j = np.where(np.abs(b[previous] - a) < np.abs(b[j] - a), previous, j)
     common = np.abs(b[j] - a) < 1e-6 * max(1.0, float(np.max(np.abs(a))))
+    # a new time is matched with one old time only, the first close to it
+    first = np.zeros(a.size, dtype=bool)
+    first[np.unique(np.where(common, j, -1), return_index=True)[1]] = True
+    ka = np.flatnonzero(common & first)
+    kb = j[ka]
+    n = np.minimum(counts_a[ka], counts_b[kb])
     return RowMatch(
-        rows_old[common],
-        rows_new[j[common]],
-        int(old_times.size - rows_old.size),
-        int(new_times.size - rows_new.size),
-        int(np.count_nonzero(~common)),
+        _last_rows(starts_a[ka] + counts_a[ka], n),
+        _last_rows(starts_b[kb] + counts_b[kb], n),
+        int(np.sum(counts_a[ka] - n)),
+        int(np.sum(counts_b[kb] - n)),
+        int(old_times.size - np.sum(counts_a[ka])),
+        int(new_times.size - np.sum(counts_b[kb])),
     )
 
 
@@ -1153,8 +1173,9 @@ def compare(args: argparse.Namespace) -> int:
     differing += len(unexpected) + len(unexpected_side)
 
     # the rows at a change
-    ignored_old = ignored_new = unmatched = 0
+    ignored_old = ignored_new = unmatched = unmatched_new = 0
     changes: dict[str, int] = {}
+    other_times: list[str] = []
     for sid, task in sorted({(k[0], k[1]) for k in keys_old & keys_new}):
         ta, tb = time_values(old, sid, task), time_values(new, sid, task)
         if ta is None or tb is None:
@@ -1163,15 +1184,26 @@ def compare(args: argparse.Namespace) -> int:
         ignored_old += match.ignored_old
         ignored_new += match.ignored_new
         unmatched += match.unmatched
+        unmatched_new += match.unmatched_new
         if match.ignored_new:
             changes[sid] = changes.get(sid, 0) + match.ignored_new
+        if match.unmatched or match.unmatched_new:
+            other_times.append(
+                f"  times of {sid}/{task}: {match.unmatched} rows only in old, "
+                f"{match.unmatched_new} only in new"
+            )
     print(
         f"rows at a change: {ignored_new} rows of the new dump and {ignored_old} of "
         f"the old dump left out (the states before a change), {unmatched} rows of "
-        "the old dump without a time in the new dump"
+        f"the old dump without a time in the new dump, {unmatched_new} rows of the "
+        "new dump without a time in the old dump"
     )
     for sid, count in sorted(changes.items()):
         print(f"changes: {sid} {count} rows")
+    for line in other_times[: args.top]:
+        print(line)
+    # the old dump is the reference: a row of it which the new dump lacks is a
+    # difference, a row only the new dump has is printed
     differing += unmatched
 
     # everything else exactly

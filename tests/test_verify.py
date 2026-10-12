@@ -7,7 +7,7 @@ import pickle
 import re
 import shutil
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 import numpy as np
@@ -736,6 +736,77 @@ def test_an_old_row_without_a_new_time_is_a_difference(
         "1 rows of the old dump without a time in the new dump"
         in capsys.readouterr().out
     )
+
+
+def timecourse(times: Sequence[float], values: Sequence[float]) -> Dump:
+    """A dump of one task with its output times and the values of A."""
+    return synthetic(
+        {
+            ("E", "t", "time"): (("time",), np.array(times)),
+            ("E", "t", "[A]"): (("time",), np.array(values)),
+        }
+    )
+
+
+def test_repeated_times_are_matched_from_the_last_row() -> None:
+    # two dumps of sbmlsim 0.9 with other output times: every row of the
+    # common times is compared, the states before a change included
+    match = matched_rows(np.array([0.0, 1, 2, 2, 3]), np.array([0.0, 1, 2, 2, 3, 4]))
+    assert match.old.tolist() == [0, 1, 2, 3, 4]
+    assert match.new.tolist() == [0, 1, 2, 3, 4]
+    assert match[2:] == (0, 0, 0, 1)
+    # the old dump has the time twice: its state after the change is compared
+    match = matched_rows(np.array([0.0, 1, 2, 2, 3]), T_OLD)
+    assert match.old.tolist() == [0, 1, 3, 4]
+    assert match.new.tolist() == [0, 1, 2, 3]
+    assert match[2:] == (1, 0, 0, 0)
+    # a change at the last time
+    match = matched_rows(T_OLD, np.array([0.0, 1, 2, 3, 3]))
+    assert match.old.tolist() == [0, 1, 2, 3]
+    assert match.new.tolist() == [0, 1, 2, 4]
+    assert match[2:] == (0, 1, 0, 0)
+
+
+def test_a_state_before_a_change_differs_although_the_times_differ(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    old = written(tmp_path, "o.pkl", timecourse([0, 1, 2, 2, 3], [1, 2, 3, 3.5, 4]))
+    times = [0, 1, 2, 2, 3, 4]
+    same = written(tmp_path, "s.pkl", timecourse(times, [1, 2, 3, 3.5, 4, 5]))
+    other = written(tmp_path, "n.pkl", timecourse(times, [1, 2, 99, 3.5, 4, 5]))
+    capsys.readouterr()
+    assert verify(["compare", old, same, "--threshold", "1e-12"]) == 0
+    out = capsys.readouterr().out
+    assert "1 rows of the new dump without a time in the old dump" in out
+    assert "times of E/t: 0 rows only in old, 1 only in new" in out
+    assert verify(["compare", old, other, "--threshold", "1e-12"]) == 1
+
+
+def test_repeated_times_of_the_old_dump_are_left_out(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    old = written(tmp_path, "o.pkl", timecourse([0, 1, 2, 2, 3], [1, 2, 9, 3, 4]))
+    new = written(tmp_path, "n.pkl", timecourse([0, 1, 2, 3], [1, 2, 3, 4]))
+    capsys.readouterr()
+    assert verify(["compare", old, new, "--threshold", "1e-12"]) == 0
+    assert (
+        "0 rows of the new dump and 1 of the old dump left out"
+        in capsys.readouterr().out
+    )
+
+
+def test_the_state_after_a_change_at_the_last_time_is_compared(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # sbmlsim 0.8 gave the state after a change at the last output time
+    old = written(tmp_path, "o.pkl", timecourse([0, 1, 2, 3], [1, 2, 3, 10]))
+    times = [0, 1, 2, 3, 3]
+    new = written(tmp_path, "n.pkl", timecourse(times, [1, 2, 3, 4, 10]))
+    swapped = written(tmp_path, "w.pkl", timecourse(times, [1, 2, 3, 10, 4]))
+    capsys.readouterr()
+    assert verify(["compare", old, new, "--threshold", "1e-12"]) == 0
+    assert "changes: E 1 rows" in capsys.readouterr().out
+    assert verify(["compare", old, swapped, "--threshold", "1e-12"]) == 1
 
 
 def test_a_scan_of_one_point_compares_with_a_simulation(tmp_path: Path) -> None:
