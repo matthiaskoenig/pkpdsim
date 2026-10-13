@@ -16,7 +16,7 @@ Features include
 - **licenses** - the texts of CC BY-SA 4.0 and MIT for the COMBINE archive of a model, written byte for byte the same on every platform
 - **models and their commands** - the model object and the commands of a model (`run`, `fit`, `report`, `identifiability`), the tests of a model as functions and the verification of a change, also across versions of sbmlsim (`pkpdsim-verify`)
 - **experiments and their metadata** - the base class of the simulation experiments of a model (the SIds of its keys, the units of its data), the presets of the impaired organ function, the shared vocabulary of the metadata of a fit mapping and the filters which select the mappings of a fit by it
-- **scans and sensitivity analyses** - the timecourse of a point of a scan as sbmlsim 0.8 gave it and the table of the parameters and the distributions of a sensitivity analysis
+- **scans and sensitivity analyses** - the timecourse of a point of a scan as sbmlsim 0.8 gave it and the table of the parameters, the distributions and the runner of the sensitivity analyses of a script
 
 The documentation is available at [https://matthiaskoenig.github.io/pkpdsim](https://matthiaskoenig.github.io/pkpdsim).
 

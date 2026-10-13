@@ -15,7 +15,7 @@ The models of [pkdb_models](https://github.com/matthiaskoenig/pkdb_models) descr
 - **[Licenses](licenses.md)** - the texts of CC BY-SA 4.0 and MIT for the COMBINE archive of a model, written byte for byte the same on every platform.
 - **[Models and their commands](models.md)** - the model object and the commands of a model (`run`, `fit`, `report`, `identifiability`), the tests of a model as functions and the verification of a change, also across versions of sbmlsim (`pkpdsim-verify`).
 - **[Experiments and their metadata](experiments.md)** - the base class of the simulation experiments of a model (the SIds of its keys, the units of its data), the presets of the impaired organ function, the shared vocabulary of the metadata of a fit mapping and the filters which select the mappings of a fit by it.
-- **[Scans and sensitivity analyses](scans.md)** - the timecourse of a point of a scan as sbmlsim 0.8 gave it and the table of the parameters and the distributions of a sensitivity analysis.
+- **[Scans and sensitivity analyses](scans.md)** - the timecourse of a point of a scan as sbmlsim 0.8 gave it and the table of the parameters, the distributions and the runner of the sensitivity analyses of a script.
 
 ## Quickstart
 

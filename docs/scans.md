@@ -1,6 +1,6 @@
 # Scans and sensitivity analyses
 
-Two modules hold what the scripts of the models around scans and sensitivity analyses share. Both build on the API of sbmlsim 0.9, where a design of `sbmlsim.simulation.sampling` is a dimension of a `Scan` and its result is a `ScanResult`.
+Two modules hold what the scripts of the models around scans and sensitivity analyses share, up to the runner of the sensitivity analyses of a script. Both build on the API of sbmlsim 0.9, where a design of `sbmlsim.simulation.sampling` is a dimension of a `Scan` and its result is a `ScanResult`.
 
 ## The timecourse of a point of a scan
 
@@ -91,4 +91,113 @@ group = Simulation(
     preinit_changes={"f_renal_function": 0.5, "PODOSE": Q(10, "mg")},
 )
 print([p.uid for p in free_parameters(parameters, [group])])
+```
+
+## The sensitivity analyses of a script
+
+The sensitivity script of a model (`<model>/sensitivity/sensitivity_analysis.py`) runs the analyses of sbmlsim 0.9 over the simulations of its groups and writes the tables and figures of its outputs. What every script does is `SensitivityRunner` of `pkpdsim.sensitivity`; a script gives only what is the model's own: the parameters with their bounds, the outputs with their observables and the groups of its analyses.
+
+```python
+# not executed
+from pkpdsim.sensitivity import (
+    FastAnalysis,
+    LocalAnalysis,
+    SamplingAnalysis,
+    SensitivityGroup,
+    SensitivityOutput,
+    SensitivityRunner,
+    SobolAnalysis,
+)
+from sbmlsim import Q
+from sbmlsim.simulation import PK, Formula, Simulation
+
+from pkdb_models.models.hctz import MODEL
+from pkdb_models.models.hctz.experiments.base_experiment import (
+    HCTZSimulationExperiment,
+)
+
+OUTPUTS = [
+    SensitivityOutput("cmax", "HCTZ Cmax"),
+    SensitivityOutput("max_diuresis", "max diuresis"),
+]
+OBSERVABLES = [
+    PK("pk_hctz", "[Cve_hctz]", dose="PODOSE_hctz", route="oral", parameters=["cmax"]),
+    Formula("cmax", "pk_hctz.cmax", unit="mM"),
+    Formula("max_diuresis", "max(diuresis)", unit="l/min"),
+]
+
+
+def sensitivity_simulation(changes: dict[str, float]) -> Simulation:
+    return Simulation(
+        end=5 * 24 * 60,
+        steps=10000,
+        time_unit="min",
+        preinit_changes={"PODOSE_hctz": Q(25, "mg"), **changes},
+    )
+
+
+renal_map = HCTZSimulationExperiment.renal_map
+GROUPS = [
+    SensitivityGroup("control", "Control", sensitivity_simulation({})),
+    *(
+        SensitivityGroup(
+            uid, name, sensitivity_simulation({"f_renal_function": renal_map[name]})
+        )
+        for uid, name in [
+            ("mildRI", "Mild renal impairment"),
+            ("modRI", "Moderate renal impairment"),
+            ("sevRI", "Severe renal impairment"),
+        ]
+    ),
+]
+
+SENSITIVITY = SensitivityRunner(
+    model=MODEL,
+    parameters=sensitivity_parameters,  # the table of the section above
+    outputs=OUTPUTS,
+    observables=OBSERVABLES,
+    analyses={
+        "local": LocalAnalysis(groups=GROUPS[:1]),
+        "sampling": SamplingAnalysis(groups=GROUPS),
+        "fast": FastAnalysis(groups=GROUPS[:1]),
+        "sobol": SobolAnalysis(groups=GROUPS[:1]),
+    },
+)
+
+if __name__ == "__main__":
+    SENSITIVITY.main()
+```
+
+```bash
+python -m pkdb_models.models.hctz.sensitivity.sensitivity_analysis             # the default analyses, local
+python -m pkdb_models.models.hctz.sensitivity.sensitivity_analysis local sobol
+PKPDSIM_SENSITIVITY_N=65 python -m pkdb_models.models.hctz.sensitivity.sensitivity_analysis fast
+```
+
+- **The run.** `main(argv)` reads the names of the analyses from the command line (`default`, `("local",)` unless the script gives others, without one; an unknown name exits with 2) and calls `run(names)`. `run` writes the table of the parameters (`parameters.tsv`, `parameters.tex` of `write_parameters`) into `model.results_dir / "sensitivity"` and runs the analyses in their order, every one into `<analysis>/<group>` below it; `path` replaces the folder (e.g. a folder per simulation of a model with several, which makes a runner per simulation), `simulator` the settings of the simulator. The simulator has the tolerances of the model and `n_workers=None`: sbmlsim chooses the processes of the pool, so the script needs the guard `if __name__ == "__main__":`. An unknown name is a `ValueError` before anything runs.
+- **The parameters** are a function, `parameters`, which a run calls (it reads the model). An analysis varies the parameters which no simulation of its groups sets, `free_parameters`: `sampling` over the four groups of hctz leaves out `f_renal_function`, which the groups of renal impairment set.
+- **The outputs.** A `SensitivityOutput` is an observable of the simulation of a group: `uid` names it in the tables and figures, `name` in their titles, and `observable` is the id of the observable in the result, the uid when not given. An id which is no identifier (`[Cve_api]_cmax`, the id of the tables of sbmlsim 0.8) names an observable `Cve_api_cmax`. The ids and the observables of the outputs are unique, and every observable of an output is one of `observables`.
+- **The groups.** A `SensitivityGroup` is a simulation with the changes of the group in its `preinit_changes`; `uid` is the folder, `name` in the titles of the figures. Every analysis has its own groups, at least one (the local and global analyses of most models run for the control only, `GROUPS[:1]`, the sampling for every group).
+- **The seed** of the designs is `seed`, 1234 by default.
+
+| analysis | design and indices | per group | defaults |
+| --- | --- | --- | --- |
+| `LocalAnalysis` | `sampling.local` with the values of the simulation of the group, `sensitivity.local` | `<output>.normalized.tsv`, the heatmap `normalized.png` | `delta=0.01` |
+| `SamplingAnalysis` | `sampling.lhs`, one design for every group | `samples.tsv` (the outputs and the parameters of every point), `summary.tsv` (a row per output: `output`, `name`, the statistics of `ScanResult.summary` with the `quantiles`, `unit`), `distributions.png` | `n=1000`, `quantiles=(0.025, 0.05, 0.5, 0.95, 0.975)` |
+| `FastAnalysis` | `sampling.fast`, `sensitivity.fast` | `<output>.S1.tsv`, `<output>.ST.tsv`, `<output>.png` | `n=1000`, more than 64 |
+| `SobolAnalysis` | `sampling.sobol`, `sensitivity.sobol` | `<output>.S1.tsv`, `<output>.ST.tsv`, `<output>.png` | `n=4096`, a power of 2 |
+
+The number of samples `n` goes through `sample_size`, so `PKPDSIM_SENSITIVITY_N` replaces it in a smoke run. An analysis without a group or with two groups of one id, a number of samples or a `delta` which is not positive, and a runner without outputs or analyses, with two outputs of one id or one observable, with an output whose observable is none of `observables` or with a default which is none of its analyses are a `ValueError` when they are created, not after the first analysis ran.
+
+The outputs and the analyses do not need a model:
+
+```python
+from sbmlsim.simulation import Simulation
+
+from pkpdsim.sensitivity import LocalAnalysis, SensitivityGroup, SensitivityOutput
+
+print(SensitivityOutput("cmax", "Cmax").observable)
+print(SensitivityOutput("[Cve_api]_cmax", "API Cmax", observable="Cve_api_cmax"))
+control = SensitivityGroup("control", "Control", Simulation(end=24, steps=100))
+print(LocalAnalysis(groups=[control]).delta)
 ```
