@@ -314,6 +314,31 @@ def test_the_units_of_the_data_are_defined_when_a_loader_is_called_first(
     assert quantity.to("mg").magnitude == pytest.approx(1.0)
 
 
+def test_the_names_of_the_units_of_the_data(tmp_path: Path) -> None:
+    """A table which a model reads itself is renamed with the names of its experiment."""
+    experiment = initialized(ToyIUStudy, tmp_path)
+    names = experiment.data_unit_names()
+    assert dict(names) == {"IU": "IU_pkpdsim_test_toy"}
+    df = rename_units(pd.DataFrame({"unit": ["IU/ml"]}), names)
+    assert df["unit"].tolist() == ["IU_pkpdsim_test_toy/ml"]
+    with pytest.raises(TypeError):
+        names["IU"] = "IU_other"  # ty: ignore[invalid-assignment]
+    assert dict(experiment.data_unit_names()) == {"IU": "IU_pkpdsim_test_toy"}
+    assert dict(initialized(ToyStudy, tmp_path).data_unit_names()) == {}
+
+
+def test_the_names_of_the_units_of_the_data_define_them(tmp_path: Path) -> None:
+    """The names, asked for before `initialize`, define the units."""
+
+    class ToyIUStudyNames(ToyStudy):
+        data_units = MappingProxyType({"IU": "IU_pkpdsim_test_names = 0.125 * mg"})
+
+    experiment = ToyIUStudyNames(base_path=TOY_PATH, data_path=tmp_path)
+    assert dict(experiment.data_unit_names()) == {"IU": "IU_pkpdsim_test_names"}
+    quantity = experiment.ureg.Quantity(8, "IU_pkpdsim_test_names")
+    assert quantity.to("mg").magnitude == pytest.approx(1.0)
+
+
 class ToyRefusedStudy(ToyStudy):
     """A study whose unit of the data is defined with another value."""
 
