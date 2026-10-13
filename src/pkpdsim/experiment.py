@@ -248,8 +248,8 @@ class PKPDSimulationExperiment(SimulationExperiment):
         )
         #: the text of every SId the experiment gave, see `to_sid`
         self._sid_texts: dict[str, str] = {}
-        #: the names of the defined units of the data, see `_data_unit_names`
-        self._unit_names: dict[str, str] | None = None
+        #: the names of the defined units of the data, see `data_unit_names`
+        self._unit_names: Mapping[str, str] | None = None
 
     def initialize(self) -> None:
         """Define the units of the data and initialize the experiment.
@@ -262,29 +262,34 @@ class PKPDSimulationExperiment(SimulationExperiment):
                 refuses; the runner reports the experiment as failed.
         """
         try:
-            self._data_unit_names()
+            self.data_unit_names()
         except ValueError as err:
             err.add_note(f"The experiment '{self.sid}' cannot be initialized.")
             raise
         super().initialize()
 
-    def _data_unit_names(self) -> dict[str, str]:
-        """Define the units of `data_units` once and get their names.
+    def data_unit_names(self) -> Mapping[str, str]:
+        """Get the names of the units of the data, defining the units of `data_units` once.
 
-        `initialize` calls it first; a loader called without `initialize`
-        defines the units on its first call.
+        The loaders rename the units of the data with these names; a table
+        which a model reads itself, e.g. the data of a figure of a scan, is
+        renamed with them by `rename_units`. `initialize` calls it first; a call
+        without `initialize` defines the units on its first call.
 
         Returns:
-            The name of a unit in the data -> the name of its definition.
+            The name of a unit in the data -> the name of its definition,
+            read-only.
 
         Raises:
             ValueError: for a definition which `define_unit` refuses.
         """
         if self._unit_names is None:
-            self._unit_names = {
-                name: define_unit(self.ureg, definition)
-                for name, definition in self.data_units.items()
-            }
+            self._unit_names = MappingProxyType(
+                {
+                    name: define_unit(self.ureg, definition)
+                    for name, definition in self.data_units.items()
+                }
+            )
         return self._unit_names
 
     def to_sid(self, text: str) -> str:
@@ -376,7 +381,7 @@ class PKPDSimulationExperiment(SimulationExperiment):
             ValueError: if the experiment has no `data_path` or a definition of
                 `data_units` is refused.
         """
-        names = self._data_unit_names()
+        names = self.data_unit_names()
         df = load_pkdb_dataframe(
             f"{self.sid if study is None else study}_{fig_id}",
             data_path=self._data_paths(),
@@ -397,7 +402,7 @@ class PKPDSimulationExperiment(SimulationExperiment):
             ValueError: if the experiment has no `data_path` or a definition of
                 `data_units` is refused.
         """
-        names = self._data_unit_names()
+        names = self.data_unit_names()
         frames = load_pkdb_dataframes_by_substance(
             f"{self.sid if study is None else study}_{fig_id}",
             data_path=self._data_paths(),
