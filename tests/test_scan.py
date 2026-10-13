@@ -118,3 +118,36 @@ def test_a_result_without_a_change_is_unchanged() -> None:
     after = state_after_changes(res)
     assert np.array_equal(after.ds["time"].values, res.ds["time"].values)
     assert np.allclose(after["[A]"].values, res["[A]"].values)
+
+
+def test_the_state_after_a_change_of_a_ragged_result() -> None:
+    lengths = Dimension(
+        "dim_sim",
+        simulations={
+            "short": Simulation(end=5, steps=10),
+            "long": Simulation(
+                end=10, steps=20, changes=[Change([3.0], {"[A]": Q(1.0, "mM")})]
+            ),
+        },
+    )
+    res = run(DECAY, [lengths])
+    assert res.ragged
+    after = state_after_changes(res)
+    for k in range(2):
+        time, values = point_timecourse(res, "[A]", dim_sim=k)
+        got = after.isel(dim_sim=k)
+        finite = np.isfinite(got.ds["time"].values)
+        assert np.allclose(got.ds["time"].values[finite][: time.size], time)
+        assert np.allclose(got["[A]"].values[finite][: time.size], values)
+
+
+def test_the_state_after_a_change_of_a_scan_of_two_dimensions() -> None:
+    doses = Dimension("dim_dose", values={"[A]": Q([1.0, 2.0, 3.0], "mM")})
+    res = run(REDOSE, [RATES, doses])
+    after = state_after_changes(res)
+    assert after["[A]"].shape[:2] == (2, 3)
+    for i in range(2):
+        for j in range(3):
+            time, values = point_timecourse(res, "[A]", dim_k=i, dim_dose=j)
+            assert np.array_equal(after.ds["time"].values, time)
+            assert np.allclose(after["[A]"].isel(dim_k=i, dim_dose=j).values, values)

@@ -1331,7 +1331,7 @@ class CommandLine(NamedTuple):
         choices: the words of the choices of the script, in their order, none
             if none is given.
         workers: the processes of `--workers`, `None` if not given or `0`
-            (the simulator's setting).
+            (`n_workers=None`, sbmlsim chooses).
     """
 
     analyses: tuple[str, ...]
@@ -1642,9 +1642,8 @@ class SensitivityRunner:
             metavar="N",
             help=(
                 "the processes of the pool of a run, at least 1 (a pool needs "
-                "about 300 MB per process for a PBPK model); 0 or absent: the "
-                "setting of the simulator, sbmlsim chooses (every CPU for large "
-                "designs)"
+                "about 300 MB per process for a PBPK model); 0 or absent: "
+                "sbmlsim chooses (every CPU for large designs)"
             ),
         )
         args = parser.parse_intermixed_args(argv)

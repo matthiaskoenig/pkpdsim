@@ -922,3 +922,22 @@ def test_main_passes_the_workers_to_the_run(
         (("local",), None),
         (("local",), None),
     ]
+
+
+@pytest.mark.parametrize(("argv", "n_workers"), [(["--workers", "2"], 2), ([], None)])
+def test_the_simulator_of_a_run_gets_the_workers(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    argv: list[str],
+    n_workers: int | None,
+) -> None:
+    settings: list[SimulatorSettings] = []
+
+    def serial(s: SimulatorSettings) -> object:
+        settings.append(s)
+        return create_simulator(dataclasses.replace(s, n_workers=1))
+
+    monkeypatch.setattr("pkpdsim.sensitivity.create_simulator", serial)
+    analyses = {"local": LocalAnalysis(groups=[CONTROL])}
+    runner(tmp_path, analyses=analyses).main(["local", *argv])
+    assert [s.n_workers for s in settings] == [n_workers]
