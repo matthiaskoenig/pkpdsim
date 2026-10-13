@@ -49,7 +49,6 @@ import dataclasses
 import logging
 import math
 import os
-import shutil
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass
@@ -72,9 +71,7 @@ from sbmlsim.sensitivity.classification import (
     uncertainty_classification,
     uncertainty_classification_symbol,
 )
-from sbmlsim.sensitivity.plots import DEFAULT_CUTOFF
 from sbmlsim.sensitivity.result import PARAMETER
-from sbmlsim.sensitivity.uncertainty import plot_distribution
 from sbmlsim.simulation import Dimension, Observable, Scan, Simulation, sampling
 from sbmlsim.simulation.sampling import Uniform
 from sbmlsim.simulator import Simulator
@@ -413,14 +410,13 @@ class SensitivityOutput:
     """An output of the analyses, an observable of the simulation of a group.
 
     Attributes:
-        uid: the id of the output in the tables and figures,
-            `<uid>.<index>.tsv`, `<uid>.png`, the columns of `samples.tsv` and
-            `summary.tsv` and the column `output` of the tables of sbmlsim
-            0.8.5; the heatmap of the local analysis of a group labels its rows
-            with the observables, as sbmlsim's `plot_heatmap` does.
+        uid: the id of the output in the tables and the names of the files:
+            the columns `output` and `uid` of the tables of sbmlsim 0.8.5, the
+            columns of `samples.tsv`, `<uid>.S1.tsv`, `<uid>.ST.tsv` and the
+            figure of its indices, `..._<o>_<uid>.png`.
         name: the name of the output in the titles of the figures, in the
-            summary of `sampling` and in the heatmaps of sbmlsim 0.8.5, unique
-            among the outputs of a runner.
+            heatmaps and in the column `name` of the tables of sbmlsim 0.8.5,
+            unique among the outputs of a runner.
         observable: the id of the observable in the result of the scan, the uid
             when empty; an id of an output which is no identifier, e.g.
             `[Cve_api]_cmax`, names an observable `Cve_api_cmax`.
@@ -722,9 +718,10 @@ class Analysis(ABC):
     """An analysis of a script over the simulations of its groups.
 
     The parameters it varies are the parameters of the script which no
-    simulation of its groups sets (`free_parameters`); its tables and figures
-    are written per group, into `<analysis>/<group>`, and the tables and
-    figures of sbmlsim 0.8.5 into `<analysis>`. The analyses are the four of
+    simulation of its groups sets (`free_parameters`). It writes one result per
+    quantity: the tables and figures of sbmlsim 0.8.5, with their names, into
+    `<analysis>`, and what sbmlsim 0.8.5 wrote no file of (the samples, the
+    tables of the global indices) per group into `<analysis>/<group>`. The analyses are the four of
     this module, `LocalAnalysis`, `SamplingAnalysis`, `FastAnalysis` and
     `SobolAnalysis`; a script with an analysis of its own runs it itself.
 
@@ -808,18 +805,18 @@ class Analysis(ABC):
 
 @dataclass(frozen=True, kw_only=True)
 class LocalAnalysis(Analysis):
-    """The local sensitivities of every group, each parameter by `+-delta`.
+    """The local sensitivities of every group, each parameter by `+-delta`, as sbmlsim 0.8.5.
 
-    Per group the design `sampling.local` (its values are those of the
-    simulation of the group) and the indices `sensitivity.local`, the table of
-    `normalized` per output and its heatmap, `normalized.png`. The table of
-    sbmlsim 0.8.5, `local_d<delta>_nvar<n_var>_<k>_<group>.tsv` (a row per
-    parameter and output: `parameter`, `output`, `effect`, `Sij`, `|Sij|`,
-    `classification`, `method`, `difference`, `n_var`, sorted by `|Sij|`), and
-    its heatmap (`.png`, the parameters with their names, the outputs by
-    name, cutoff 0.05, no clustering) average `normalized` over the `n_var`
-    designs of `delta * k / n_var`, `k = 1, ..., n_var`, as sbmlsim 0.8.5 did
-    with its steps; the design of `delta` is the one of the table per group.
+    Per group the designs `sampling.local` of `delta * k / n_var`,
+    `k = 1, ..., n_var` (their values are those of the simulation of the
+    group), the indices `sensitivity.local`, and the table of sbmlsim 0.8.5,
+    `local_d<delta>_nvar<n_var>_<k>_<group>.tsv` (a row per parameter and
+    output: `parameter`, `output`, `effect`, `Sij`, `|Sij|`,
+    `classification`, `method`, `difference`, `n_var`, sorted by `|Sij|`;
+    `Sij` the mean of `normalized` over the designs, as sbmlsim 0.8.5 averaged
+    its steps), and its heatmap (`.png`, the parameters with their names, the
+    outputs by name, cutoff 0.05, no clustering), in the folder of the
+    analysis.
 
     Attributes:
         delta: the relative change of a parameter, in (0, 1).
@@ -857,27 +854,22 @@ class LocalAnalysis(Analysis):
         """Run the analysis, see the class."""
         targets = [p.uid for p in varied]
         prefix = f"local_d{self.delta}_nvar{self.n_var}"
+        path.mkdir(parents=True, exist_ok=True)
         for kg, group in enumerate(self.groups):
-            group_path = self._group_path(path, group)
-            results: list[SensitivityResult] = []
-            # the step `n_var` is `delta`, the design of the table of the group
-            for kv in range(self.n_var, 0, -1):
-                design = sampling.local(
-                    targets,
-                    delta=kv / self.n_var * self.delta,
-                    model=context.model_path,
-                    simulation=group.simulation,
-                )
-                results.append(sensitivity.local(context.scan(group, design)))
-                if kv == self.n_var:
-                    context.write_indices(results[0], ["normalized"], group_path)
-                    _heatmap(
-                        results[0],
-                        "normalized",
-                        cutoff=DEFAULT_CUTOFF,
-                        title=f"Local sensitivity ({group.name})",
-                        path=group_path / "normalized.png",
+            results = [
+                sensitivity.local(
+                    context.scan(
+                        group,
+                        sampling.local(
+                            targets,
+                            delta=kv / self.n_var * self.delta,
+                            model=context.model_path,
+                            simulation=group.simulation,
+                        ),
                     )
+                )
+                for kv in range(1, self.n_var + 1)
+            ]
             mean = self._mean(results, context.outputs)
             self._table(mean, results, varied, context.outputs).to_csv(
                 path / f"{prefix}_{kg:>02}_{group.uid}.tsv", sep="\t", index=False
@@ -1028,40 +1020,23 @@ class _SampledAnalysis(Analysis):
 class SamplingAnalysis(_SampledAnalysis):
     """The uncertainty of the outputs over a Latin hypercube of the parameters.
 
-    One design `sampling.lhs` of `sample_size(n)` points for every group;
-    per group the outputs of every point, `samples.tsv`, their statistics,
-    `summary.tsv` (a row per output: its id, name, the statistics of
-    `ScanResult.summary` with the quantiles, the unit), and their
-    distributions, `distributions.png`. The tables and figures of sbmlsim
-    0.8.5 compare the groups: `sampling_N<n>.tsv` (a row per group and
-    output: `gid`, `gname`, `uid`, `name`, `N`, `mean`, `median`, `std`, `cv`,
-    `min`, `q005`, `q095`, `max`, the uncertainty `U = (P97.5 - P2.5) / P50`,
-    its `symbol` and `classification`, `unit`; `std` of the population),
+    One design `sampling.lhs` of `sample_size(n)` points for every group; per
+    group the parameters and outputs of every point, `samples.tsv` (sbmlsim
+    0.8.5 kept them in its cache only). The tables and figures of sbmlsim 0.8.5
+    compare the groups: `sampling_N<n>.tsv` (a row per group and output:
+    `gid`, `gname`, `uid`, `name`, `N`, `mean`, `median`, `std`, `cv`, `min`,
+    `q005`, `q095`, `max`, the uncertainty `U = (P97.5 - P2.5) / P50`, its
+    `symbol` and `classification`, `unit`; `std` of the population),
     `sampling_N<n>_compact.tsv` and its LaTeX table `sampling_N<n>.tex` (an
-    output per row, `mean (cv in %)` per group), and the figures of the
-    samples of the parameters and of the outputs per group,
+    output per row, `mean (cv in %)` per group), and the figures of the samples
+    of the parameters and of the outputs per group,
     `sampling_N<n>_sensitivity_samples.png` and `..._outputs.png`.
 
     Attributes:
         n: the number of samples, see `sample_size`.
-        quantiles: the quantiles of the summary, in [0, 1].
     """
 
     n: int = 1000
-    quantiles: Sequence[float] = (0.025, 0.05, 0.5, 0.95, 0.975)
-
-    def __post_init__(self) -> None:
-        """Check the groups, the number of samples and the quantiles.
-
-        Raises:
-            ValueError: see `Analysis`, and for a number of samples which is
-                not positive or a quantile outside of [0, 1].
-        """
-        super().__post_init__()
-        object.__setattr__(self, "quantiles", tuple(self.quantiles))
-        outside = [q for q in self.quantiles if not 0 <= q <= 1]
-        if outside:
-            raise ValueError(f"The quantiles {outside} are not in [0, 1].")
 
     def _run(
         self, context: _Context, varied: Sequence[SensitivityParameter], path: Path
@@ -1078,48 +1053,7 @@ class SamplingAnalysis(_SampledAnalysis):
             res.ds[list(observables)].to_dataframe().rename(columns=observables).to_csv(
                 group_path / "samples.tsv", sep="\t"
             )
-            summary = res.summary(design.id, quantiles=list(self.quantiles))
-            rows = []
-            for output in context.outputs:
-                values = summary[output.observable]
-                row: dict[str, object] = {"output": output.uid, "name": output.name}
-                for statistic, value in zip(
-                    values["statistic"].values, values.values, strict=True
-                ):
-                    row[str(statistic)] = float(value)
-                row["unit"] = res.units[output.observable]
-                rows.append(row)
-            pd.DataFrame(rows).to_csv(group_path / "summary.tsv", sep="\t", index=False)
-            self._plot(context.outputs, res, design, group, group_path)
         self._write_085(context, varied, results, n, path)
-
-    @staticmethod
-    def _plot(
-        outputs: Sequence[SensitivityOutput],
-        res: ScanResult,
-        design: Dimension,
-        group: SensitivityGroup,
-        path: Path,
-    ) -> None:
-        """Plot the distribution of every output, four in a row."""
-        n_cols = 4
-        n_rows = -(-len(outputs) // n_cols)
-        fig, axes = plt.subplots(
-            nrows=n_rows,
-            ncols=n_cols,
-            figsize=(5 * n_cols, 4 * n_rows),
-            layout="constrained",
-            squeeze=False,
-        )
-        for ax, output in zip(axes.flatten(), outputs, strict=False):
-            plot_distribution(res, output.observable, dim=design.id, ax=ax)
-            ax.set_title(output.name)
-            ax.locator_params(axis="x", nbins=4)
-        for ax in axes.flatten()[len(outputs) :]:
-            ax.set_visible(False)
-        fig.suptitle(f"Uncertainty ({group.name})")
-        fig.savefig(path / "distributions.png", dpi=300, bbox_inches="tight")
-        plt.close("all")
 
     def _write_085(
         self,
@@ -1243,13 +1177,13 @@ class _GlobalAnalysis(_SampledAnalysis):
     """A variance based analysis: the indices `S1` and `ST` of every group.
 
     One design for every group; per group the tables of `S1` and `ST` per
-    output and the figure of its indices, `<output>.png`. The figures of
-    sbmlsim 0.8.5 per group: the heatmaps of `S1` and `ST`
-    (`<prefix>_sensitivity_<k>_<group>_S1.png`, `..._ST.png`, the parameters
-    with their names, the outputs by name, cutoff 0.05, no clustering, viridis
-    from 0 to 1) and the indices of every output,
-    `<prefix>_sensitivity_<k>_<group>_<o>_<output>.png`, the figure of the
-    output of the group. sbmlsim 0.8.5 wrote no tables of a global analysis.
+    output, `<output>.S1.tsv` and `<output>.ST.tsv` (sbmlsim 0.8.5 wrote no
+    tables of a global analysis), and the figures of sbmlsim 0.8.5: the
+    heatmaps of `S1` and `ST` (`<prefix>_sensitivity_<k>_<group>_S1.png`,
+    `..._ST.png`, the parameters with their names, the outputs by name, cutoff
+    0.05, no clustering, viridis from 0 to 1) and the indices of every output
+    with their intervals, `<prefix>_sensitivity_<k>_<group>_<o>_<output>.png`
+    (`plot_indices`).
 
     Attributes:
         n: the base number of samples, see `sample_size`.
@@ -1286,13 +1220,9 @@ class _GlobalAnalysis(_SampledAnalysis):
                     result,
                     output.observable,
                     title=f"{output.name} ({group.name})",
-                    path=group_path / f"{output.uid}.png",
+                    path=path / f"{figures}_{ko:>03}_{output.uid}.png",
                 )
                 plt.close("all")
-                shutil.copyfile(
-                    group_path / f"{output.uid}.png",
-                    path / f"{figures}_{ko:>03}_{output.uid}.png",
-                )
             labelled = _labelled(result, varied, context.outputs)
             for key in ["ST", "S1"]:
                 _heatmap(
@@ -1424,9 +1354,8 @@ class SensitivityRunner:
     their observables, the analyses with their groups) and runs them with `main`
     from its command line, or with `run`. A run writes the table of the
     parameters (`write_parameters`) into its folder,
-    `model.results_dir / "sensitivity"`, and the tables and figures of an
-    analysis into `<analysis>/<group>` below it, or below a subfolder of it,
-    and the ones of sbmlsim 0.8.5 into `<analysis>`. A model with several
+    `model.results_dir / "sensitivity"`, and the results of an analysis into
+    `<analysis>` below it, or below a subfolder of it, see `Analysis`. A model with several
     simulations has a runner per simulation, see `run_subfolders`. What can be
     checked is checked when the runner is created, and the rest at the start
     of a run, before anything is written.

@@ -101,64 +101,27 @@ def test_an_output_is_its_observable_unless_it_names_another() -> None:
 def test_the_defaults_of_the_analyses() -> None:
     assert LocalAnalysis(groups=[CONTROL]).delta == 0.01
     assert SamplingAnalysis(groups=[CONTROL]).n == 1000
-    assert SamplingAnalysis(groups=[CONTROL]).quantiles == (
-        0.025,
-        0.05,
-        0.5,
-        0.95,
-        0.975,
-    )
     assert FastAnalysis(groups=[CONTROL]).n == 1000
     assert SobolAnalysis(groups=[CONTROL]).n == 4096
     # the groups are kept as a tuple
     assert LocalAnalysis(groups=[CONTROL, LARGE]).groups == (CONTROL, LARGE)
+    # the statistics of the sampling are those of sbmlsim 0.8.5, no quantiles
+    with pytest.raises(TypeError, match="quantiles"):
+        SamplingAnalysis(groups=[CONTROL], quantiles=(0.5,))  # ty: ignore[unknown-argument]
 
 
-def test_local_writes_the_normalized_sensitivities_of_every_group(
-    tmp_path: Path,
-) -> None:
+def test_local_writes_one_table_and_heatmap_per_group(tmp_path: Path) -> None:
+    """The table and heatmap of sbmlsim 0.8.5 are the only result of the local analysis."""
     path = runner(tmp_path).run(["local"], simulator=SERIAL)
     assert path == tmp_path / "sensitivity"
     assert (path / "parameters.tsv").is_file()
     assert (path / "parameters.tex").is_file()
-    for group in ["control", "large"]:
-        group_path = path / "local" / group
-        assert sorted(p.name for p in group_path.iterdir()) == sorted(
-            [
-                "A_auc.normalized.tsv",
-                "A_thalf.normalized.tsv",
-                "[A]_min.normalized.tsv",
-                "normalized.png",
-            ]
-        )
-    # the table of an output is named by its id, its column too
-    df = pd.read_csv(path / "local" / "control" / "[A]_min.normalized.tsv", sep="\t")
-    assert "[A]_min.normalized" in df.columns
-
-
-def test_local_is_the_analysis_of_sbmlsim(tmp_path: Path) -> None:
-    """The table is the local analysis of sbmlsim on the scan of the group."""
-    path = runner(tmp_path).run(["local"], simulator=SERIAL)
-    # `Vc` is set by the group `large`, the local analysis varies `k` only
-    design = sampling.local(
-        ["k"], delta=0.01, model=MODEL_PATH, simulation=CONTROL.simulation
-    )
-    result = sensitivity.local(
-        create_simulator(SERIAL).run(
-            MODEL_PATH,
-            Scan(CONTROL.simulation, [design]),
-            OBSERVABLES,
-            keep=["A_auc", "A_thalf", "A_min"],
-        )
-    )
-    expected = result.to_dataframe("A_thalf.normalized")
-    df = pd.read_csv(
-        path / "local" / "control" / "A_thalf.normalized.tsv", sep="\t", index_col=0
-    )
-    assert list(df.index) == list(expected.index)
-    assert np.allclose(df["A_thalf.normalized"], expected["A_thalf.normalized"])
-    # the half-life is inversely proportional to the rate
-    assert df["A_thalf.normalized"].iloc[0] == pytest.approx(-1.0, rel=1e-2)
+    assert sorted(p.name for p in (path / "local").iterdir()) == [
+        "local_d0.01_nvar3_00_control.png",
+        "local_d0.01_nvar3_00_control.tsv",
+        "local_d0.01_nvar3_01_large.png",
+        "local_d0.01_nvar3_01_large.tsv",
+    ]
 
 
 def test_an_analysis_varies_no_parameter_which_a_group_sets(
@@ -167,59 +130,36 @@ def test_an_analysis_varies_no_parameter_which_a_group_sets(
     with caplog.at_level(logging.INFO, logger="pkpdsim.sensitivity"):
         path = runner(tmp_path).run(["local"], simulator=SERIAL)
     assert "Removing fixed parameter: Vc" in caplog.text
-    df = pd.read_csv(path / "local" / "control" / "A_auc.normalized.tsv", sep="\t")
-    assert "Vc" not in df.to_string()
+    df = pd.read_csv(path / "local" / "local_d0.01_nvar3_00_control.tsv", sep="\t")
+    assert set(df["parameter"]) == {"k"}
 
 
-def test_sampling_writes_the_samples_the_summary_and_the_distributions(
-    tmp_path: Path,
-) -> None:
+def test_sampling_writes_the_samples_of_every_group(tmp_path: Path) -> None:
+    """The samples have no table of sbmlsim 0.8.5; its statistics and figures do."""
     path = runner(tmp_path).run(["sampling"], simulator=SERIAL)
     for group in ["control", "large"]:
         group_path = path / "sampling" / group
-        assert sorted(p.name for p in group_path.iterdir()) == [
-            "distributions.png",
-            "samples.tsv",
-            "summary.tsv",
-        ]
+        assert sorted(p.name for p in group_path.iterdir()) == ["samples.tsv"]
         samples = pd.read_csv(group_path / "samples.tsv", sep="\t")
         assert len(samples) == 8
         assert {"A_auc", "A_thalf", "[A]_min"} <= set(samples.columns)
         # the values of the design, `Vc` is set by the group `large`
         assert "k" in samples.columns
         assert "Vc" not in samples.columns
-        summary = pd.read_csv(group_path / "summary.tsv", sep="\t")
-        assert summary["output"].tolist() == ["A_auc", "A_thalf", "[A]_min"]
-        assert summary["name"].tolist() == ["A AUC∞", "A half-life", "A minimum"]
-        assert list(summary.columns) == [
-            "output",
-            "name",
-            "mean",
-            "sd",
-            "cv",
-            "min",
-            "max",
-            "q0.025",
-            "q0.05",
-            "q0.5",
-            "q0.95",
-            "q0.975",
-            "unit",
-        ]
-        assert summary["unit"].tolist()[1] == "minute"
 
 
 @pytest.mark.parametrize(
     ("name", "n"), [("fast", 65), ("sobol", 8)], ids=["fast", "sobol"]
 )
-def test_a_global_analysis_writes_s1_and_st_of_every_output(
+def test_a_global_analysis_writes_the_tables_of_s1_and_st(
     tmp_path: Path, name: str, n: int
 ) -> None:
+    """The indices have no table of sbmlsim 0.8.5, its figures show them."""
     path = runner(tmp_path).run([name], simulator=SERIAL)
     group_path = path / name / "control"
     expected = []
     for uid in ["A_auc", "A_thalf", "[A]_min"]:
-        expected += [f"{uid}.S1.tsv", f"{uid}.ST.tsv", f"{uid}.png"]
+        expected += [f"{uid}.S1.tsv", f"{uid}.ST.tsv"]
     assert sorted(p.name for p in group_path.iterdir()) == sorted(expected)
     st = pd.read_csv(group_path / "A_thalf.ST.tsv", sep="\t", index_col=0)
     assert "A_thalf.ST" in st.columns
@@ -250,7 +190,7 @@ def test_the_analyses_run_by_default_and_into_another_folder(
         path=tmp_path / "single", simulator=SERIAL
     )
     assert path == tmp_path / "single"
-    assert (path / "local" / "control").is_dir()
+    assert (path / "local" / "local_d0.01_nvar3_00_control.tsv").is_file()
     assert not (path / "sampling").exists()
 
 
@@ -324,10 +264,6 @@ def test_main_lists_the_analyses(
         (lambda: LocalAnalysis(groups=[CONTROL], delta=1.0), r"delta.*\(0, 1\)"),
         (lambda: SamplingAnalysis(groups=[CONTROL], n=0), "number of samples"),
         (lambda: SamplingAnalysis(groups=[CONTROL], n=True), "number of samples"),
-        (
-            lambda: SamplingAnalysis(groups=[CONTROL], quantiles=(0.5, 1.5)),
-            r"quantiles.*1\.5",
-        ),
         (lambda: SobolAnalysis(groups=[CONTROL], n=-1), "number of samples"),
         (lambda: SobolAnalysis(groups=[CONTROL], n=1000), "power of two.*1000"),
         (lambda: SobolAnalysis(groups=[CONTROL], n=1), "power of two"),
@@ -340,7 +276,6 @@ def test_main_lists_the_analyses(
         "delta-one",
         "sampling-n",
         "sampling-bool",
-        "quantiles",
         "sobol-n",
         "sobol-power",
         "sobol-one",
@@ -490,7 +425,7 @@ def test_the_analyses_go_into_a_subfolder_the_table_stays(tmp_path: Path) -> Non
         "single",
     ]
     for key in ["single", "multi"]:
-        assert (path / key / "local" / "control" / "A_auc.normalized.tsv").is_file()
+        assert (path / key / "local" / "local_d0.01_nvar3_00_control.tsv").is_file()
 
 
 @pytest.mark.parametrize("subfolder", ["/tmp/elsewhere", "../up", "a/../../up", ""])
@@ -696,10 +631,6 @@ def test_a_global_analysis_writes_the_figures_of_sbmlsim_085(
         for ko, uid in enumerate(uids)
     ]
     assert sorted(p.name for p in folder.iterdir() if p.is_file()) == sorted(expected)
-    # the bars of an output are the figure of its indices
-    for ko, uid in enumerate(uids):
-        bars = folder / f"{prefix}_sensitivity_00_control_{ko:03}_{uid}.png"
-        assert bars.read_bytes() == (folder / "control" / f"{uid}.png").read_bytes()
 
 
 def test_the_heatmaps_of_sbmlsim_085_are_labelled_with_the_names(
@@ -735,11 +666,12 @@ def test_the_heatmaps_of_sbmlsim_085_are_labelled_with_the_names(
     parameters, observables, kwargs = calls["fast_M4_N65_sensitivity_00_control_ST.png"]
     assert observables == names
     assert (kwargs["cmap"], kwargs["vmin"], kwargs["vmax"]) == ("viridis", 0.0, 1.0)
-    assert "fast_M4_N65_sensitivity_00_control_S1.png" in calls
-    # the heatmap of a group keeps the ids, as the copies of the scripts did
-    parameters, observables, _ = calls["normalized.png"]
-    assert parameters == ["k", "Vc"]
-    assert observables == ["A_auc", "A_thalf", "A_min"]
+    # the heatmaps of sbmlsim 0.8.5 are the only heatmaps
+    assert sorted(calls) == [
+        "fast_M4_N65_sensitivity_00_control_S1.png",
+        "fast_M4_N65_sensitivity_00_control_ST.png",
+        "local_d0.01_nvar3_00_control.png",
+    ]
 
 
 def test_a_heatmap_without_a_parameter_above_the_cutoff_shows_every_parameter(
@@ -749,7 +681,6 @@ def test_a_heatmap_without_a_parameter_above_the_cutoff_shows_every_parameter(
     slow = SensitivityGroup("slow", "Slow decay", simulation({"k": 0.1}))
     analyses = {"local": LocalAnalysis(groups=[slow])}
     path = runner(tmp_path, analyses=analyses).run(["local"], simulator=SERIAL)
-    assert (path / "local" / "slow" / "normalized.png").is_file()
     assert (path / "local" / "local_d0.01_nvar3_00_slow.png").is_file()
 
 
@@ -804,9 +735,14 @@ def test_the_table_of_several_subfolders_is_written_once(
         "parameters.tsv",
         "single",
     ]
-    assert (path / "single" / "local" / "control" / "[A]_min.normalized.tsv").is_file()
-    assert (path / "multi" / "local" / "large" / "A_auc.normalized.tsv").is_file()
-    assert not (path / "multi" / "local" / "large" / "A_thalf.normalized.tsv").exists()
+    single = pd.read_csv(
+        path / "single" / "local" / "local_d0.01_nvar3_00_control.tsv", sep="\t"
+    )
+    assert sorted(set(single["output"])) == ["A_auc", "A_thalf", "[A]_min"]
+    multi = pd.read_csv(
+        path / "multi" / "local" / "local_d0.01_nvar3_00_large.tsv", sep="\t"
+    )
+    assert sorted(set(multi["output"])) == ["A_auc"]
 
 
 def test_some_of_several_subfolders(tmp_path: Path) -> None:
