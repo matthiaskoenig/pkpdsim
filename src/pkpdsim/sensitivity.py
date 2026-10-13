@@ -1029,10 +1029,10 @@ class SensitivityRunner:
         repeated = _repeated(names)
         if repeated:
             raise ValueError(f"The analyses {repeated} are given twice.")
+        # a folder with a drive or a root (`/tmp`, which windows takes as
+        # relative to the drive) or with `..` would leave `path`
         if subfolder is not None and (
-            not subfolder
-            or Path(subfolder).is_absolute()
-            or ".." in Path(subfolder).parts
+            not subfolder or Path(subfolder).anchor or ".." in Path(subfolder).parts
         ):
             raise ValueError(
                 f"The subfolder {subfolder!r} is a relative folder below the folder "

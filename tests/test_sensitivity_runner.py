@@ -485,7 +485,7 @@ def test_the_analyses_go_into_a_subfolder_the_table_stays(tmp_path: Path) -> Non
         assert (path / key / "local" / "control" / "A_auc.normalized.tsv").is_file()
 
 
-@pytest.mark.parametrize("subfolder", ["/tmp/elsewhere", "../up", ""])
+@pytest.mark.parametrize("subfolder", ["/tmp/elsewhere", "../up", "a/../../up", ""])
 def test_a_subfolder_lies_below_the_folder(tmp_path: Path, subfolder: str) -> None:
     with pytest.raises(ValueError, match="subfolder"):
         runner(tmp_path).run(["local"], subfolder=subfolder, simulator=SERIAL)
