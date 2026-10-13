@@ -4,8 +4,6 @@ Two modules hold what the scripts of the models around scans and sensitivity ana
 
 ## The timecourse of a point of a scan
 
-(`point_timecourse` for one point; `state_after_changes(res)` below for the whole result.)
-
 sbmlsim 0.9 returns a scan as a `ScanResult` with the layout `(*dims, time)`, and at the time of a change after the start (a second dose) it keeps the state before and after the change. The pharmacokinetic parameters of a scan (`<model>_pk.py`) and the figures of a model read the timecourse of one point as sbmlsim 0.8 gave it, with the state after the change only, so that their numbers and figures stay the same. `pkpdsim.scan.single_dimension(res)` gives the id of the dimension of a scan of one dimension and `point_timecourse(res, key, /, **point)` the time points and the values of a variable at the point `point` (the position along every dimension, e.g. `dim_dose=2`; `res` and `key` are positional only, so a dimension may have any name); a result without dimension needs none:
 
 ```python
@@ -18,6 +16,17 @@ for k in range(res.ds.sizes[dim]):
 ```
 
 A scan with several dimensions, a point which misses a dimension or names an unknown one, and a variable which is no timecourse raise a `ValueError`. The padding of a result whose simulations have different times is removed.
+
+### The state after a change of the whole result
+
+A figure which reads the arrays of a result (a band over the points of a scan, the result of a task of an experiment) needs the state after a change for all points at once. `state_after_changes(res)` gives the result on its time points without the repeated ones, with the state after a change at its time (`res.interpolate(np.unique(res.time_points()))`), as a `ScanResult` whose arrays keep their dimensions; for one point it has the time points and values of `point_timecourse`. A result without a change is unchanged.
+
+```python
+# not executed
+from pkpdsim.scan import state_after_changes
+
+res = state_after_changes(self.results[self.to_sid("task_sim")])
+```
 
 ## The parameters of a sensitivity analysis
 
