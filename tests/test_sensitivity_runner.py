@@ -7,14 +7,21 @@ analysis over both groups varies only `k`.
 
 import dataclasses
 import logging
-from collections.abc import Callable
+import math
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pandas as pd
 import pytest
+from matplotlib.figure import Figure
 from sbmlsim import sensitivity
+from sbmlsim.sensitivity import SensitivityResult
+from sbmlsim.sensitivity.classification import (
+    uncertainty_classification,
+    uncertainty_classification_symbol,
+)
 from sbmlsim.simulation import PK, Formula, Scan, Simulation, sampling
 
 from pkpdsim.model import SimulatorSettings
@@ -29,6 +36,7 @@ from pkpdsim.sensitivity import (
     SensitivityRunner,
     SobolAnalysis,
     parameters_from_sbml,
+    run_subfolders,
     set_relative_bounds,
 )
 from pkpdsim_toy import MODEL, MODEL_PATH
@@ -545,3 +553,356 @@ def test_the_help_names_the_choices_of_the_script(
     out = capsys.readouterr().out
     assert "local, sampling, fast, sobol" in out
     assert "single, multi" in out
+
+
+# the artifacts of sbmlsim 0.8.5, beside the tables and figures per group
+
+
+def test_local_writes_the_table_and_heatmap_of_sbmlsim_085(tmp_path: Path) -> None:
+    path = runner(tmp_path).run(["local"], simulator=SERIAL)
+    local = path / "local"
+    assert sorted(p.name for p in local.iterdir() if p.is_file()) == [
+        "local_d0.01_nvar3_00_control.png",
+        "local_d0.01_nvar3_00_control.tsv",
+        "local_d0.01_nvar3_01_large.png",
+        "local_d0.01_nvar3_01_large.tsv",
+    ]
+    df = pd.read_csv(local / "local_d0.01_nvar3_00_control.tsv", sep="\t")
+    assert list(df.columns) == [
+        "parameter",
+        "output",
+        "effect",
+        "Sij",
+        "|Sij|",
+        "classification",
+        "method",
+        "difference",
+        "n_var",
+    ]
+    # `Vc` is set by the group `large`: one parameter, three outputs
+    assert sorted(df["output"]) == ["A_auc", "A_thalf", "[A]_min"]
+    assert set(df["parameter"]) == {"k"}
+    assert df["|Sij|"].tolist() == sorted(df["|Sij|"], reverse=True)
+    assert set(df["method"]) == {"LocalSensitivity"}
+    assert set(df["difference"]) == {0.01}
+    assert set(df["n_var"]) == {3}
+    # the mean of the normalized sensitivities at delta/3, 2 delta/3 and delta
+    expected = []
+    for delta in [0.01 / 3, 0.02 / 3, 0.01]:
+        design = sampling.local(
+            ["k"], delta=delta, model=MODEL_PATH, simulation=CONTROL.simulation
+        )
+        result = sensitivity.local(
+            create_simulator(SERIAL).run(
+                MODEL_PATH,
+                Scan(CONTROL.simulation, [design]),
+                OBSERVABLES,
+                keep=["A_thalf"],
+            )
+        )
+        expected.append(float(result["A_thalf.normalized"].sel(parameter="k")))
+    row = df[df["output"] == "A_thalf"].iloc[0]
+    assert row["Sij"] == pytest.approx(np.mean(expected), rel=1e-12)
+    assert row["|Sij|"] == pytest.approx(abs(row["Sij"]))
+    assert row["Sij"] == pytest.approx(-1.0, rel=1e-2)
+    assert row["effect"] == "---"
+    assert row["classification"] == "high"
+
+
+def test_n_var_of_a_local_analysis() -> None:
+    assert LocalAnalysis(groups=[CONTROL]).n_var == 3
+    with pytest.raises(ValueError, match="n_var"):
+        LocalAnalysis(groups=[CONTROL], n_var=0)
+
+
+def test_sampling_writes_the_tables_and_figures_of_sbmlsim_085(tmp_path: Path) -> None:
+    path = runner(tmp_path).run(["sampling"], simulator=SERIAL)
+    folder = path / "sampling"
+    assert sorted(p.name for p in folder.iterdir() if p.is_file()) == [
+        "sampling_N8.tex",
+        "sampling_N8.tsv",
+        "sampling_N8_compact.tsv",
+        "sampling_N8_sensitivity_outputs.png",
+        "sampling_N8_sensitivity_samples.png",
+    ]
+    df = pd.read_csv(folder / "sampling_N8.tsv", sep="\t", keep_default_na=False)
+    assert list(df.columns) == [
+        "gid",
+        "gname",
+        "uid",
+        "name",
+        "N",
+        "mean",
+        "median",
+        "std",
+        "cv",
+        "min",
+        "q005",
+        "q095",
+        "max",
+        "U",
+        "symbol",
+        "classification",
+        "unit",
+    ]
+    assert df["gid"].tolist() == ["control"] * 3 + ["large"] * 3
+    assert df["gname"].tolist() == ["Control"] * 3 + ["Large volume"] * 3
+    assert df["uid"].tolist() == ["A_auc", "A_thalf", "[A]_min"] * 2
+    assert df["name"].tolist()[:3] == ["A AUC∞", "A half-life", "A minimum"]
+    assert set(df["N"]) == {8}
+    # the units as the observables give them
+    assert df["unit"].tolist()[:3] == ["mM*min", "min", "mM"]
+    # the statistics of sbmlsim 0.8.5 over the samples of a group
+    values = pd.read_csv(folder / "control" / "samples.tsv", sep="\t")["A_thalf"]
+    v = values.to_numpy()
+    row = df.iloc[1]
+    assert row["mean"] == pytest.approx(np.mean(v))
+    assert row["median"] == pytest.approx(np.median(v))
+    assert row["std"] == pytest.approx(np.std(v))
+    assert row["cv"] == pytest.approx(np.std(v) / np.mean(v))
+    assert row["min"] == pytest.approx(np.min(v))
+    assert row["q005"] == pytest.approx(np.quantile(v, 0.05))
+    assert row["q095"] == pytest.approx(np.quantile(v, 0.95))
+    assert row["max"] == pytest.approx(np.max(v))
+    u = (np.percentile(v, 97.5) - np.percentile(v, 2.5)) / np.percentile(v, 50)
+    assert row["U"] == pytest.approx(u)
+    assert row["symbol"] == uncertainty_classification_symbol(u)
+    assert row["classification"] == uncertainty_classification(u).value
+
+    compact = pd.read_csv(folder / "sampling_N8_compact.tsv", sep="\t")
+    assert list(compact.columns) == ["output", "control", "large", "unit"]
+    assert compact["output"].tolist() == ["A AUC∞", "A half-life", "A minimum"]
+    mean, cv = row["mean"], row["cv"]
+    assert compact["control"].tolist()[1] == f"{mean:.3g} ({cv * 100:.1f})"
+    tex = (folder / "sampling_N8.tex").read_text(encoding="utf-8")
+    assert r"A AUC$\infty$" in tex
+    assert r"mM$\cdot$min" in tex
+
+
+@pytest.mark.parametrize(
+    ("name", "prefix"),
+    [("fast", "fast_M4_N65"), ("sobol", "sobol_N8")],
+    ids=["fast", "sobol"],
+)
+def test_a_global_analysis_writes_the_figures_of_sbmlsim_085(
+    tmp_path: Path, name: str, prefix: str
+) -> None:
+    path = runner(tmp_path).run([name], simulator=SERIAL)
+    folder = path / name
+    uids = ["A_auc", "A_thalf", "[A]_min"]
+    expected = [f"{prefix}_sensitivity_00_control_{key}.png" for key in ["S1", "ST"]]
+    expected += [
+        f"{prefix}_sensitivity_00_control_{ko:03}_{uid}.png"
+        for ko, uid in enumerate(uids)
+    ]
+    assert sorted(p.name for p in folder.iterdir() if p.is_file()) == sorted(expected)
+    # the bars of an output are the figure of its indices
+    for ko, uid in enumerate(uids):
+        bars = folder / f"{prefix}_sensitivity_00_control_{ko:03}_{uid}.png"
+        assert bars.read_bytes() == (folder / "control" / f"{uid}.png").read_bytes()
+
+
+def test_the_heatmaps_of_sbmlsim_085_are_labelled_with_the_names(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: dict[str, tuple[list[str], list[str], dict[str, object]]] = {}
+    plot_heatmap = sensitivity.plot_heatmap
+
+    def recorded(result: SensitivityResult, index: str, **kwargs: object) -> Figure:
+        calls[Path(str(kwargs["path"])).name] = (
+            result.parameters,
+            result.observables,
+            kwargs,
+        )
+        return plot_heatmap(result, index, **kwargs)  # ty: ignore[invalid-argument-type]
+
+    monkeypatch.setattr(sensitivity, "plot_heatmap", recorded)
+    analyses = {
+        "local": LocalAnalysis(groups=[CONTROL]),
+        "fast": FastAnalysis(groups=[CONTROL], n=65),
+    }
+    runner(tmp_path, analyses=analyses).run(["local", "fast"], simulator=SERIAL)
+    names = ["A AUC∞", "A half-life", "A minimum"]
+    parameters, observables, kwargs = calls["local_d0.01_nvar3_00_control.png"]
+    assert parameters == ["k: rate of the decay", "Vc: central"]
+    assert observables == names
+    assert {key: kwargs[key] for key in ["cutoff", "cluster_rows", "cmap"]} == {
+        "cutoff": 0.05,
+        "cluster_rows": False,
+        "cmap": "seismic",
+    }
+    assert (kwargs["vmin"], kwargs["vmax"]) == (-2.0, 2.0)
+    parameters, observables, kwargs = calls["fast_M4_N65_sensitivity_00_control_ST.png"]
+    assert observables == names
+    assert (kwargs["cmap"], kwargs["vmin"], kwargs["vmax"]) == ("viridis", 0.0, 1.0)
+    assert "fast_M4_N65_sensitivity_00_control_S1.png" in calls
+    # the heatmap of a group keeps the ids, as the copies of the scripts did
+    parameters, observables, _ = calls["normalized.png"]
+    assert parameters == ["k", "Vc"]
+    assert observables == ["A_auc", "A_thalf", "A_min"]
+
+
+def test_a_heatmap_without_a_parameter_above_the_cutoff_shows_every_parameter(
+    tmp_path: Path,
+) -> None:
+    """A group which sets `k` varies only `Vc`, which the concentrations ignore."""
+    slow = SensitivityGroup("slow", "Slow decay", simulation({"k": 0.1}))
+    analyses = {"local": LocalAnalysis(groups=[slow])}
+    path = runner(tmp_path, analyses=analyses).run(["local"], simulator=SERIAL)
+    assert (path / "local" / "slow" / "normalized.png").is_file()
+    assert (path / "local" / "local_d0.01_nvar3_00_slow.png").is_file()
+
+
+def test_the_color_of_a_group() -> None:
+    assert CONTROL.color is None
+    group = SensitivityGroup("mildRI", "Mild", simulation({}), color="#66c2a4")
+    assert group.color == "#66c2a4"
+
+
+def test_the_names_of_the_outputs_are_unique(tmp_path: Path) -> None:
+    outputs = [*OUTPUTS[:2], SensitivityOutput("[A]_min", "A half-life", "A_min")]
+    with pytest.raises(ValueError, match=r"names \['A half-life'\]"):
+        runner(tmp_path, outputs=outputs)
+
+
+# several subfolders, one table of the parameters
+
+
+def subfolder_runners(tmp_path: Path) -> dict[str, SensitivityRunner]:
+    return {
+        "single": runner(tmp_path, analyses={"local": LocalAnalysis(groups=[CONTROL])}),
+        "multi": runner(
+            tmp_path,
+            outputs=OUTPUTS[:1],
+            analyses={"local": LocalAnalysis(groups=[LARGE])},
+        ),
+    }
+
+
+def test_the_table_of_several_subfolders_is_written_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import pkpdsim.sensitivity as module
+
+    tables: list[Path] = []
+    write = module.write_parameters
+
+    def counted(
+        parameters: Sequence[SensitivityParameter], directory: Path
+    ) -> pd.DataFrame:
+        tables.append(directory)
+        return write(parameters, directory)
+
+    monkeypatch.setattr(module, "write_parameters", counted)
+    path = run_subfolders(subfolder_runners(tmp_path), ["local"], simulator=SERIAL)
+    assert path == tmp_path / "sensitivity"
+    assert tables == [path]
+    assert capsys.readouterr().out.count("rate of the decay") == 1
+    assert sorted(p.name for p in path.iterdir()) == [
+        "multi",
+        "parameters.tex",
+        "parameters.tsv",
+        "single",
+    ]
+    assert (path / "single" / "local" / "control" / "[A]_min.normalized.tsv").is_file()
+    assert (path / "multi" / "local" / "large" / "A_auc.normalized.tsv").is_file()
+    assert not (path / "multi" / "local" / "large" / "A_thalf.normalized.tsv").exists()
+
+
+def test_some_of_several_subfolders(tmp_path: Path) -> None:
+    path = run_subfolders(
+        subfolder_runners(tmp_path), subfolders=["multi"], simulator=SERIAL
+    )
+    assert sorted(p.name for p in path.iterdir()) == [
+        "multi",
+        "parameters.tex",
+        "parameters.tsv",
+    ]
+
+
+def test_several_subfolders_are_checked_before_anything_runs(tmp_path: Path) -> None:
+    runners = subfolder_runners(tmp_path)
+    with pytest.raises(ValueError, match=r"\['other'\]"):
+        run_subfolders(runners, subfolders=["single", "other"], simulator=SERIAL)
+    # the analysis of the second runner varies nothing
+    fixed = SensitivityGroup("fixed", "Fixed", simulation({"k": 0.1, "Vc": 2.0}))
+    runners["multi"] = runner(
+        tmp_path, analyses={"local": LocalAnalysis(groups=[fixed])}
+    )
+    with pytest.raises(ValueError, match="varies no parameter") as info:
+        run_subfolders(runners, ["local"], simulator=SERIAL)
+    assert "The analysis 'local' of the subfolder 'multi' cannot run." in (
+        info.value.__notes__
+    )
+    with pytest.raises(ValueError, match="no runner"):
+        run_subfolders({}, simulator=SERIAL)
+    assert not (tmp_path / "sensitivity").exists()
+
+
+def test_several_subfolders_share_the_model_and_the_parameters(tmp_path: Path) -> None:
+    runners = subfolder_runners(tmp_path)
+
+    def other() -> list[SensitivityParameter]:
+        parameters = toy_parameters()
+        parameters[0].upper_bound *= 1.01
+        return parameters
+
+    runners["multi"] = runner(tmp_path, parameters=other)
+    with pytest.raises(ValueError, match="parameters"):
+        run_subfolders(runners, ["local"], simulator=SERIAL)
+    runners["multi"] = dataclasses.replace(
+        runners["single"], model=dataclasses.replace(MODEL, title="other")
+    )
+    with pytest.raises(ValueError, match="model"):
+        run_subfolders(runners, ["local"], simulator=SERIAL)
+    assert not (tmp_path / "sensitivity").exists()
+
+
+def test_an_undefined_or_negative_index_is_classified(tmp_path: Path) -> None:
+    """sbmlsim's classifications refuse `NaN` and a negative uncertainty.
+
+    An output which is zero at the reference has an undefined normalized
+    sensitivity and uncertainty, a negative output a negative uncertainty,
+    which is classified by its magnitude.
+    """
+    observables = [
+        *OBSERVABLES,
+        Formula("A_zero", "max([A]) - max([A])", unit="mM"),
+        Formula("A_negative", "-pk_A.thalf", unit="min"),
+    ]
+    outputs = [
+        *OUTPUTS,
+        SensitivityOutput("A_zero", "A zero"),
+        SensitivityOutput("A_negative", "A negative half-life"),
+    ]
+    analyses = {
+        "local": LocalAnalysis(groups=[CONTROL]),
+        "sampling": SamplingAnalysis(groups=[CONTROL], n=8),
+    }
+    path = runner(
+        tmp_path, outputs=outputs, observables=observables, analyses=analyses
+    ).run(["local", "sampling"], simulator=SERIAL)
+    local = pd.read_csv(
+        path / "local" / "local_d0.01_nvar3_00_control.tsv",
+        sep="\t",
+        keep_default_na=False,
+        na_values=[""],
+    )
+    zero = local[(local["output"] == "A_zero") & (local["parameter"] == "k")].iloc[0]
+    assert math.isnan(zero["Sij"])
+    assert math.isnan(zero["effect"])
+    assert math.isnan(zero["classification"])
+    df = pd.read_csv(
+        path / "sampling" / "sampling_N8.tsv",
+        sep="\t",
+        keep_default_na=False,
+        na_values=[""],
+    ).set_index("uid")
+    assert math.isnan(df.loc["A_zero", "U"])
+    assert math.isnan(df.loc["A_zero", "classification"])
+    u = df.loc["A_negative", "U"]
+    assert u < 0
+    assert df.loc["A_negative", "classification"] == (
+        uncertainty_classification(abs(u)).value
+    )
+    assert df.loc["A_negative", "U"] == pytest.approx(-df.loc["A_thalf", "U"])

@@ -49,6 +49,7 @@ import dataclasses
 import logging
 import math
 import os
+import shutil
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass
@@ -65,6 +66,14 @@ import roadrunner
 from sbmlsim import display, sensitivity
 from sbmlsim.result import ScanResult
 from sbmlsim.sensitivity import SensitivityResult
+from sbmlsim.sensitivity.classification import (
+    sensitivity_classification,
+    sensitivity_classification_symbol,
+    uncertainty_classification,
+    uncertainty_classification_symbol,
+)
+from sbmlsim.sensitivity.plots import DEFAULT_CUTOFF
+from sbmlsim.sensitivity.result import PARAMETER
 from sbmlsim.sensitivity.uncertainty import plot_distribution
 from sbmlsim.simulation import Dimension, Observable, Scan, Simulation, sampling
 from sbmlsim.simulation.sampling import Uniform
@@ -395,6 +404,9 @@ def sample_size(n: int) -> int:
 #: the seed of the designs of the analyses
 SEED = 1234
 
+#: the cutoff of the heatmaps of sbmlsim 0.8.5
+CUTOFF_085 = 0.05
+
 
 @dataclass(frozen=True)
 class SensitivityOutput:
@@ -403,10 +415,12 @@ class SensitivityOutput:
     Attributes:
         uid: the id of the output in the tables and figures,
             `<uid>.<index>.tsv`, `<uid>.png`, the columns of `samples.tsv` and
-            `summary.tsv`; the heatmap of the local analysis labels its rows
+            `summary.tsv` and the column `output` of the tables of sbmlsim
+            0.8.5; the heatmap of the local analysis of a group labels its rows
             with the observables, as sbmlsim's `plot_heatmap` does.
-        name: the name of the output in the titles of the figures and in the
-            summary of `sampling`.
+        name: the name of the output in the titles of the figures, in the
+            summary of `sampling` and in the heatmaps of sbmlsim 0.8.5, unique
+            among the outputs of a runner.
         observable: the id of the observable in the result of the scan, the uid
             when empty; an id of an output which is no identifier, e.g.
             `[Cve_api]_cmax`, names an observable `Cve_api_cmax`.
@@ -432,11 +446,16 @@ class SensitivityGroup:
         simulation: the simulation of the group, its changes in
             `preinit_changes`; an analysis varies no parameter which it sets,
             see `free_parameters`.
+        color: the color of the group in the figures of `sampling` which
+            compare the groups, a color of matplotlib; the color of the
+            property cycle of matplotlib (`C0`, `C1`, ...) of its position if
+            `None`.
     """
 
     uid: str
     name: str
     simulation: Simulation
+    color: str | None = None
 
 
 @dataclass(frozen=True)
@@ -469,6 +488,20 @@ class _Context:
                     columns={f"{output.observable}.{index}": column}
                 ).to_csv(path / f"{column}.tsv", sep="\t")
 
+    def unit(self, result: ScanResult, output: SensitivityOutput) -> str:
+        """Get the unit of an output: as its observable gives it, else of the result.
+
+        The unit of a `Formula` or `Custom` observable is the one the script
+        wrote (`mM*min`), as in the tables of sbmlsim 0.8.5; a `PK` observable
+        has the unit of the result (`millimolar * minute`).
+        """
+        for observable in self.observables:
+            if observable.id == output.observable:
+                unit = getattr(observable, "unit", None)
+                if unit:
+                    return str(unit)
+        return str(result.units.get(output.observable, ""))
+
 
 def _repeated(values: Iterable[str]) -> list[str]:
     """Get the values which are given more than once, sorted."""
@@ -492,14 +525,207 @@ def _sequence_of_names(names: Sequence[str], what: str) -> tuple[str, ...]:
     return tuple(names)
 
 
+def _check_subfolder(subfolder: str) -> None:
+    """Check that a subfolder lies below the folder of the results.
+
+    Raises:
+        ValueError: for an empty folder, one with a drive or a root (`/tmp`,
+            which windows takes as relative to the drive) or with `..`.
+    """
+    if not subfolder or Path(subfolder).anchor or ".." in Path(subfolder).parts:
+        raise ValueError(
+            f"The subfolder {subfolder!r} is a relative folder below the folder "
+            "of the results."
+        )
+
+
+def _reaches(result: SensitivityResult, index: str, cutoff: float) -> bool:
+    """Check whether an index reaches a cutoff, as `plot_heatmap` keeps its rows.
+
+    A row is kept if a value reaches the cutoff or one is undefined.
+    """
+    values = np.asarray(result.index(index).values, dtype=float)
+    finite = np.isfinite(values)
+    magnitude = np.abs(np.where(finite, values, 0.0))
+    return bool((~finite).any() or (magnitude >= cutoff).any())
+
+
+def _heatmap(
+    result: SensitivityResult,
+    index: str,
+    *,
+    cutoff: float,
+    path: Path,
+    **options: object,
+) -> None:
+    """Draw a heatmap of `plot_heatmap`, every parameter if none reaches the cutoff.
+
+    `plot_heatmap` refuses an index which no parameter reaches, e.g. the local
+    sensitivities of a group whose parameters do not move its outputs; the
+    heatmap then shows every parameter, which a warning names.
+    """
+    if cutoff > 0 and not _reaches(result, index, cutoff):
+        logger.warning(
+            "No parameter reaches the cutoff %g of '%s' in '%s', the heatmap "
+            "shows every parameter.",
+            cutoff,
+            index,
+            path.name,
+        )
+        cutoff = 0.0
+    sensitivity.plot_heatmap(result, index, cutoff=cutoff, path=path, **options)  # ty: ignore[invalid-argument-type]
+    plt.close("all")
+
+
+def _labelled(
+    result: SensitivityResult,
+    parameters: Sequence[SensitivityParameter],
+    outputs: Sequence[SensitivityOutput],
+) -> SensitivityResult:
+    """Get a result labelled as the heatmaps of sbmlsim 0.8.5.
+
+    The parameters are `uid: name`, the observables the names of the outputs.
+    """
+    names = {o.observable: o.name for o in outputs}
+    renames: dict[str, str] = {}
+    for variable in result.ds.data_vars:
+        observable, index = str(variable).rsplit(".", 1)
+        if observable in names:
+            renames[str(variable)] = f"{names[observable]}.{index}"
+    labels = {p.uid: f"{p.uid}: {p.name}" for p in parameters}
+    ds = result.ds.rename(renames).assign_coords(
+        {PARAMETER: [labels.get(p, p) for p in result.parameters]}
+    )
+    ds.attrs = {
+        **ds.attrs,
+        "units": {renames.get(k, k): v for k, v in result.units.items()},
+    }
+    return SensitivityResult(ds)
+
+
+def _sensitivity_class(s: float) -> tuple[str, str]:
+    """Get the symbol and the class of a local sensitivity, empty if it is undefined.
+
+    sbmlsim's `sensitivity_classification` refuses `NaN`, the sensitivity of
+    an output which is zero at the reference.
+    """
+    if not np.isfinite(s):
+        return "", ""
+    return sensitivity_classification_symbol(s), sensitivity_classification(s).value
+
+
+def _uncertainty_class(u: float) -> tuple[str, str]:
+    """Get the symbol and the class of an uncertainty by its magnitude, empty if undefined.
+
+    sbmlsim's `uncertainty_classification` classifies `|U|` as its reference
+    (the WHO IPCS guidance) does, but refuses a negative `U`, the uncertainty
+    of an output whose median is negative, and `NaN`, of a median of zero.
+    """
+    if not np.isfinite(u):
+        return "", ""
+    return (
+        uncertainty_classification_symbol(abs(u)),
+        uncertainty_classification(abs(u)).value,
+    )
+
+
+def _figshape(n: int) -> tuple[int, int]:
+    """Get the rows and columns of a figure of `n` panels, as sbmlsim 0.8.5 did."""
+    if n <= 4:
+        return 1, n
+    ncols = np.ceil(np.sqrt(n))
+    n_empty = ncols * ncols - n
+    nrows = ncols - np.floor(n_empty / ncols)
+    return int(nrows), int(ncols)
+
+
+def _plot_groups(
+    panels: Sequence[tuple[str, Sequence[np.ndarray]]],
+    groups: Sequence[SensitivityGroup],
+    path: Path,
+    seed: int,
+) -> None:
+    """Draw the values of every group as box, violin and points, a panel per quantity.
+
+    The figures of the sampling of sbmlsim 0.8.5: a box (without outliers), a
+    violin (the mean and the median) and the points of every group side by
+    side in the color of the group. A group with fewer than two distinct
+    values has no violin, which needs a spread.
+
+    Args:
+        panels: the label of the axis and the values of every group.
+        groups: the groups.
+        path: the file of the figure.
+        seed: the seed of the jitter of the points.
+    """
+    nrows, ncols = _figshape(len(panels))
+    fig, axes = plt.subplots(
+        figsize=(4 * ncols, 4 * nrows),
+        nrows=nrows,
+        ncols=ncols,
+        layout="constrained",
+        squeeze=False,
+    )
+    colors = [g.color or f"C{k}" for k, g in enumerate(groups)]
+    rng = np.random.default_rng(seed)
+    for k, ax in enumerate(axes.flat):
+        if k >= len(panels):
+            ax.axis("off")
+            continue
+        label, values = panels[k]
+        data = [v[np.isfinite(v)] for v in values]
+        boxes = ax.boxplot(
+            data,
+            positions=range(len(groups)),
+            tick_labels=[g.uid for g in groups],
+            patch_artist=True,
+            showfliers=False,
+            medianprops={"color": "black"},
+            whiskerprops={"color": "black"},
+            capprops={"color": "black"},
+        )
+        for box, color in zip(boxes["boxes"], colors, strict=True):
+            box.set_facecolor(color)
+        for kg, (d, color) in enumerate(zip(data, colors, strict=True)):
+            if np.unique(d).size > 1:
+                violin = ax.violinplot(
+                    d,
+                    positions=[kg + 0.3],
+                    showmeans=True,
+                    showmedians=True,
+                    showextrema=False,
+                )
+                for body in violin["bodies"]:
+                    body.set_facecolor(color)
+                # the lines of the mean and the median in one color, as the one
+                # call of `violinplot` of sbmlsim 0.8.5 drew them
+                for key in ["cmeans", "cmedians"]:
+                    violin[key].set_color("C0")
+            ax.scatter(
+                rng.normal(kg + 0.3, 0.02, d.size),
+                d,
+                alpha=0.7,
+                s=30,
+                color="white",
+                edgecolors="black",
+            )
+        ax.set_ylabel(label, fontsize=13, fontweight="bold")
+        for tick in ax.get_xticklabels() + ax.get_yticklabels():
+            tick.set_fontweight("bold")
+        ax.tick_params(axis="x", labelrotation=90)
+    fig.savefig(path, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+
+
 @dataclass(frozen=True, kw_only=True)
 class Analysis(ABC):
     """An analysis of a script over the simulations of its groups.
 
     The parameters it varies are the parameters of the script which no
     simulation of its groups sets (`free_parameters`); its tables and figures
-    are written per group, into `<analysis>/<group>`. The analyses are the four
-    of this module, `LocalAnalysis`, `SamplingAnalysis`, `FastAnalysis` and
+    are written per group, into `<analysis>/<group>`, and the tables and
+    figures of sbmlsim 0.8.5 into `<analysis>`. The analyses are the four of
+    this module, `LocalAnalysis`, `SamplingAnalysis`, `FastAnalysis` and
     `SobolAnalysis`; a script with an analysis of its own runs it itself.
 
     Attributes:
@@ -584,27 +810,45 @@ class Analysis(ABC):
 class LocalAnalysis(Analysis):
     """The local sensitivities of every group, each parameter by `+-delta`.
 
-    The design `sampling.local` per group (its values are those of the
-    simulation of the group), the indices `sensitivity.local`, the table of
-    `normalized` per output and its heatmap, `normalized.png`.
+    Per group the design `sampling.local` (its values are those of the
+    simulation of the group) and the indices `sensitivity.local`, the table of
+    `normalized` per output and its heatmap, `normalized.png`. The table of
+    sbmlsim 0.8.5, `local_d<delta>_nvar<n_var>_<k>_<group>.tsv` (a row per
+    parameter and output: `parameter`, `output`, `effect`, `Sij`, `|Sij|`,
+    `classification`, `method`, `difference`, `n_var`, sorted by `|Sij|`), and
+    its heatmap (`.png`, the parameters with their names, the outputs by
+    name, cutoff 0.05, no clustering) average `normalized` over the `n_var`
+    designs of `delta * k / n_var`, `k = 1, ..., n_var`, as sbmlsim 0.8.5 did
+    with its steps; the design of `delta` is the one of the table per group.
 
     Attributes:
         delta: the relative change of a parameter, in (0, 1).
+        n_var: the number of steps of sbmlsim 0.8.5 up to `delta`, at least 1.
     """
 
     delta: float = 0.01
+    n_var: int = 3
 
     def __post_init__(self) -> None:
-        """Check the groups and the change.
+        """Check the groups, the change and its steps.
 
         Raises:
-            ValueError: see `Analysis`, and for a change outside of (0, 1),
-                which `sampling.local` refuses.
+            ValueError: see `Analysis`, for a change outside of (0, 1), which
+                `sampling.local` refuses, and for a number of steps which is no
+                positive int.
         """
         super().__post_init__()
         if not 0 < self.delta < 1:
             raise ValueError(
                 f"The delta of a local analysis is in (0, 1), not {self.delta}."
+            )
+        if (
+            isinstance(self.n_var, bool)
+            or not isinstance(self.n_var, int)
+            or self.n_var < 1
+        ):
+            raise ValueError(
+                f"The n_var of a local analysis is a positive int, not {self.n_var!r}."
             )
 
     def _run(
@@ -612,23 +856,108 @@ class LocalAnalysis(Analysis):
     ) -> None:
         """Run the analysis, see the class."""
         targets = [p.uid for p in varied]
-        for group in self.groups:
+        prefix = f"local_d{self.delta}_nvar{self.n_var}"
+        for kg, group in enumerate(self.groups):
             group_path = self._group_path(path, group)
-            design = sampling.local(
-                targets,
-                delta=self.delta,
-                model=context.model_path,
-                simulation=group.simulation,
+            results: list[SensitivityResult] = []
+            # the step `n_var` is `delta`, the design of the table of the group
+            for kv in range(self.n_var, 0, -1):
+                design = sampling.local(
+                    targets,
+                    delta=kv / self.n_var * self.delta,
+                    model=context.model_path,
+                    simulation=group.simulation,
+                )
+                results.append(sensitivity.local(context.scan(group, design)))
+                if kv == self.n_var:
+                    context.write_indices(results[0], ["normalized"], group_path)
+                    _heatmap(
+                        results[0],
+                        "normalized",
+                        cutoff=DEFAULT_CUTOFF,
+                        title=f"Local sensitivity ({group.name})",
+                        path=group_path / "normalized.png",
+                    )
+            mean = self._mean(results, context.outputs)
+            self._table(mean, results, varied, context.outputs).to_csv(
+                path / f"{prefix}_{kg:>02}_{group.uid}.tsv", sep="\t", index=False
             )
-            result = sensitivity.local(context.scan(group, design))
-            context.write_indices(result, ["normalized"], group_path)
-            sensitivity.plot_heatmap(
-                result,
+            _heatmap(
+                _labelled(mean, varied, context.outputs),
                 "normalized",
-                title=f"Local sensitivity ({group.name})",
-                path=group_path / "normalized.png",
+                cutoff=CUTOFF_085,
+                cluster_rows=False,
+                cmap="seismic",
+                vmin=-2.0,
+                vmax=2.0,
+                path=path / f"{prefix}_{kg:>02}_{group.uid}.png",
             )
-            plt.close("all")
+
+    def _mean(
+        self, results: Sequence[SensitivityResult], outputs: Sequence[SensitivityOutput]
+    ) -> SensitivityResult:
+        """Get the mean of `normalized` over the steps, the `Sij` of sbmlsim 0.8.5."""
+        ds = results[0].ds.copy()
+        for output in outputs:
+            key = f"{output.observable}.normalized"
+            ds[key] = sum(r.ds[key] for r in results) / len(results)
+        return SensitivityResult(ds)
+
+    def _table(
+        self,
+        mean: SensitivityResult,
+        results: Sequence[SensitivityResult],
+        varied: Sequence[SensitivityParameter],
+        outputs: Sequence[SensitivityOutput],
+    ) -> pd.DataFrame:
+        """Get the table of sbmlsim 0.8.5 and log the nonlinear sensitivities.
+
+        A sensitivity whose `raw` values of the steps differ by more than 10 %
+        of their mean while it is larger than 0.01 is logged as an error, as
+        sbmlsim 0.8.5 did: the output is nonlinear in the range or is not
+        computed accurately.
+        """
+        rows = []
+        for p in varied:
+            for output in outputs:
+                s = float(
+                    mean[f"{output.observable}.normalized"].sel({PARAMETER: p.uid})
+                )
+                raw = np.array(
+                    [
+                        float(r[f"{output.observable}.raw"].sel({PARAMETER: p.uid}))
+                        for r in results
+                    ]
+                )
+                if not np.isclose(raw.mean(), 0.0) and s > 0.01:
+                    max_diff = (raw.max() - raw.min()) / raw.mean()
+                    if max_diff > 0.10:
+                        logger.error(
+                            "Large delta difference: %s%% for %s. Parameter '%s' on "
+                            "output '%s'.",
+                            format(max_diff * 100, ".1f"),
+                            raw,
+                            p.uid,
+                            output.uid,
+                        )
+                effect, classification = _sensitivity_class(s)
+                rows.append(
+                    {
+                        "parameter": p.uid,
+                        "output": output.uid,
+                        "effect": effect,
+                        "Sij": s,
+                        "|Sij|": np.abs(s),
+                        "classification": classification,
+                        "method": "LocalSensitivity",
+                        "difference": self.delta,
+                        "n_var": self.n_var,
+                    }
+                )
+        df = pd.DataFrame(rows)
+        return df.sort_values(
+            by="|Sij|", ascending=False, na_position="last", ignore_index=True
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -703,7 +1032,15 @@ class SamplingAnalysis(_SampledAnalysis):
     per group the outputs of every point, `samples.tsv`, their statistics,
     `summary.tsv` (a row per output: its id, name, the statistics of
     `ScanResult.summary` with the quantiles, the unit), and their
-    distributions, `distributions.png`.
+    distributions, `distributions.png`. The tables and figures of sbmlsim
+    0.8.5 compare the groups: `sampling_N<n>.tsv` (a row per group and
+    output: `gid`, `gname`, `uid`, `name`, `N`, `mean`, `median`, `std`, `cv`,
+    `min`, `q005`, `q095`, `max`, the uncertainty `U = (P97.5 - P2.5) / P50`,
+    its `symbol` and `classification`, `unit`; `std` of the population),
+    `sampling_N<n>_compact.tsv` and its LaTeX table `sampling_N<n>.tex` (an
+    output per row, `mean (cv in %)` per group), and the figures of the
+    samples of the parameters and of the outputs per group,
+    `sampling_N<n>_sensitivity_samples.png` and `..._outputs.png`.
 
     Attributes:
         n: the number of samples, see `sample_size`.
@@ -730,15 +1067,14 @@ class SamplingAnalysis(_SampledAnalysis):
         self, context: _Context, varied: Sequence[SensitivityParameter], path: Path
     ) -> None:
         """Run the analysis, see the class."""
-        design = sampling.lhs(
-            distributions(varied),
-            n=self._samples(),
-            seed=context.seed,
-        )
+        n = self._samples()
+        design = sampling.lhs(distributions(varied), n=n, seed=context.seed)
         observables = {o.observable: o.uid for o in context.outputs}
+        results: dict[str, ScanResult] = {}
         for group in self.groups:
             group_path = self._group_path(path, group)
             res = context.scan(group, design)
+            results[group.uid] = res
             res.ds[list(observables)].to_dataframe().rename(columns=observables).to_csv(
                 group_path / "samples.tsv", sep="\t"
             )
@@ -755,6 +1091,7 @@ class SamplingAnalysis(_SampledAnalysis):
                 rows.append(row)
             pd.DataFrame(rows).to_csv(group_path / "summary.tsv", sep="\t", index=False)
             self._plot(context.outputs, res, design, group, group_path)
+        self._write_085(context, varied, results, n, path)
 
     @staticmethod
     def _plot(
@@ -784,21 +1121,147 @@ class SamplingAnalysis(_SampledAnalysis):
         fig.savefig(path / "distributions.png", dpi=300, bbox_inches="tight")
         plt.close("all")
 
+    def _write_085(
+        self,
+        context: _Context,
+        varied: Sequence[SensitivityParameter],
+        results: Mapping[str, ScanResult],
+        n: int,
+        path: Path,
+    ) -> None:
+        """Write the tables and figures of sbmlsim 0.8.5, see the class."""
+        prefix = f"sampling_N{n}"
+        units = {
+            o.uid: context.unit(results[self.groups[0].uid], o) for o in context.outputs
+        }
+        rows = []
+        stats: dict[tuple[str, str], dict[str, float]] = {}
+        for group in self.groups:
+            for output in context.outputs:
+                values = np.asarray(
+                    results[group.uid].ds[output.observable].values, dtype=float
+                )
+                stats[group.uid, output.uid] = _uncertainty(values)
+                symbol, classification = _uncertainty_class(
+                    stats[group.uid, output.uid]["U"]
+                )
+                rows.append(
+                    {
+                        "gid": group.uid,
+                        "gname": group.name,
+                        "uid": output.uid,
+                        "name": output.name,
+                        "N": n,
+                        **stats[group.uid, output.uid],
+                        "symbol": symbol,
+                        "classification": classification,
+                        "unit": units[output.uid],
+                    }
+                )
+        pd.DataFrame(rows).to_csv(path / f"{prefix}.tsv", sep="\t", index=False)
+
+        compact = pd.DataFrame(
+            [
+                {
+                    "output": output.name,
+                    **{
+                        g.uid: (
+                            f"{stats[g.uid, output.uid]['mean']:.3g} "
+                            f"({stats[g.uid, output.uid]['cv'] * 100:.1f})"
+                        )
+                        for g in self.groups
+                    },
+                    "unit": units[output.uid],
+                }
+                for output in context.outputs
+            ]
+        )
+        compact.to_csv(path / f"{prefix}_compact.tsv", sep="\t", index=False)
+        latex = compact.to_latex(None, index=False)
+        latex = latex.replace("∞", r"$\infty$").replace("*", r"$\cdot$")
+        (path / f"{prefix}.tex").write_text(latex, encoding="utf-8")
+
+        samples = [
+            (
+                f"{p.uid}: {p.name} [{p.unit if p.unit else 'AU'}]",
+                [
+                    np.asarray(results[g.uid].ds[p.uid].values, dtype=float)
+                    for g in self.groups
+                ],
+            )
+            for p in varied
+        ]
+        _plot_groups(
+            samples,
+            self.groups,
+            path / f"{prefix}_sensitivity_samples.png",
+            context.seed,
+        )
+        outputs = [
+            (
+                f"{o.name} [{units[o.uid] if units[o.uid] else 'AU'}]",
+                [
+                    np.asarray(results[g.uid].ds[o.observable].values, dtype=float)
+                    for g in self.groups
+                ],
+            )
+            for o in context.outputs
+        ]
+        _plot_groups(
+            outputs,
+            self.groups,
+            path / f"{prefix}_sensitivity_outputs.png",
+            context.seed,
+        )
+
+
+def _uncertainty(values: np.ndarray) -> dict[str, float]:
+    """Get the statistics of the samples of an output, as sbmlsim 0.8.5 did.
+
+    `std` is the standard deviation of the population, `cv = std / mean`, the
+    uncertainty `U = (P97.5 - P2.5) / P50`.
+    """
+    with np.errstate(divide="ignore", invalid="ignore"):
+        return {
+            "mean": float(np.mean(values)),
+            "median": float(np.median(values)),
+            "std": float(np.std(values)),
+            "cv": float(np.std(values) / np.mean(values)),
+            "min": float(np.min(values)),
+            "q005": float(np.quantile(values, q=0.05)),
+            "q095": float(np.quantile(values, q=0.95)),
+            "max": float(np.max(values)),
+            "U": float(
+                (np.percentile(values, 97.5) - np.percentile(values, 2.5))
+                / np.percentile(values, 50)
+            ),
+        }
+
 
 @dataclass(frozen=True, kw_only=True)
 class _GlobalAnalysis(_SampledAnalysis):
     """A variance based analysis: the indices `S1` and `ST` of every group.
 
     One design for every group; per group the tables of `S1` and `ST` per
-    output and the figure of its indices, `<output>.png`.
+    output and the figure of its indices, `<output>.png`. The figures of
+    sbmlsim 0.8.5 per group: the heatmaps of `S1` and `ST`
+    (`<prefix>_sensitivity_<k>_<group>_S1.png`, `..._ST.png`, the parameters
+    with their names, the outputs by name, cutoff 0.05, no clustering, viridis
+    from 0 to 1) and the indices of every output,
+    `<prefix>_sensitivity_<k>_<group>_<o>_<output>.png`, the figure of the
+    output of the group. sbmlsim 0.8.5 wrote no tables of a global analysis.
 
     Attributes:
         n: the base number of samples, see `sample_size`.
     """
 
     @abstractmethod
+    def _prefix(self, n: int) -> str:
+        """Get the prefix of the files of sbmlsim 0.8.5."""
+
+    @abstractmethod
     def _design(
-        self, parameters: Sequence[SensitivityParameter], seed: int
+        self, parameters: Sequence[SensitivityParameter], n: int, seed: int
     ) -> Dimension:
         """Get the design over the parameters the analysis varies."""
 
@@ -810,12 +1273,15 @@ class _GlobalAnalysis(_SampledAnalysis):
         self, context: _Context, varied: Sequence[SensitivityParameter], path: Path
     ) -> None:
         """Run the analysis, see the class."""
-        design = self._design(varied, context.seed)
-        for group in self.groups:
+        n = self._samples()
+        prefix = self._prefix(n)
+        design = self._design(varied, n, context.seed)
+        for kg, group in enumerate(self.groups):
             group_path = self._group_path(path, group)
             result = self._indices(context.scan(group, design))
             context.write_indices(result, ["S1", "ST"], group_path)
-            for output in context.outputs:
+            figures = f"{prefix}_sensitivity_{kg:>02}_{group.uid}"
+            for ko, output in enumerate(context.outputs):
                 sensitivity.plot_indices(
                     result,
                     output.observable,
@@ -823,11 +1289,29 @@ class _GlobalAnalysis(_SampledAnalysis):
                     path=group_path / f"{output.uid}.png",
                 )
                 plt.close("all")
+                shutil.copyfile(
+                    group_path / f"{output.uid}.png",
+                    path / f"{figures}_{ko:>03}_{output.uid}.png",
+                )
+            labelled = _labelled(result, varied, context.outputs)
+            for key in ["ST", "S1"]:
+                _heatmap(
+                    labelled,
+                    key,
+                    cutoff=CUTOFF_085,
+                    cluster_rows=False,
+                    cmap="viridis",
+                    vmin=0.0,
+                    vmax=1.0,
+                    path=path / f"{figures}_{key}.png",
+                )
 
 
 @dataclass(frozen=True, kw_only=True)
 class FastAnalysis(_GlobalAnalysis):
     """The indices of the extended FAST, `sampling.fast` and `sensitivity.fast`.
+
+    The files of sbmlsim 0.8.5 have the prefix `fast_M4_N<n>`.
 
     Attributes:
         n: the number of samples per parameter, more than 64 (`4 m^2` of the
@@ -848,11 +1332,15 @@ class FastAnalysis(_GlobalAnalysis):
                 f"The number of samples of FastAnalysis is more than 64, not {n}."
             )
 
+    def _prefix(self, n: int) -> str:
+        """Get the prefix of the files of sbmlsim 0.8.5, `fast_M4_N<n>`."""
+        return f"fast_M4_N{n}"
+
     def _design(
-        self, parameters: Sequence[SensitivityParameter], seed: int
+        self, parameters: Sequence[SensitivityParameter], n: int, seed: int
     ) -> Dimension:
         """Get the design over the parameters, see `sampling.fast`."""
-        return sampling.fast(distributions(parameters), n=self._samples(), seed=seed)
+        return sampling.fast(distributions(parameters), n=n, seed=seed)
 
     def _indices(self, result: ScanResult) -> SensitivityResult:
         """Get the indices, see `sensitivity.fast`."""
@@ -862,6 +1350,8 @@ class FastAnalysis(_GlobalAnalysis):
 @dataclass(frozen=True, kw_only=True)
 class SobolAnalysis(_GlobalAnalysis):
     """The Sobol indices, `sampling.sobol` and `sensitivity.sobol`.
+
+    The files of sbmlsim 0.8.5 have the prefix `sobol_N<n>`.
 
     Attributes:
         n: the base number of samples, a power of two of at least 2, see
@@ -883,11 +1373,15 @@ class SobolAnalysis(_GlobalAnalysis):
                 f"least 2, not {n}."
             )
 
+    def _prefix(self, n: int) -> str:
+        """Get the prefix of the files of sbmlsim 0.8.5, `sobol_N<n>`."""
+        return f"sobol_N{n}"
+
     def _design(
-        self, parameters: Sequence[SensitivityParameter], seed: int
+        self, parameters: Sequence[SensitivityParameter], n: int, seed: int
     ) -> Dimension:
         """Get the design over the parameters, see `sampling.sobol`."""
-        return sampling.sobol(distributions(parameters), n=self._samples(), seed=seed)
+        return sampling.sobol(distributions(parameters), n=n, seed=seed)
 
     def _indices(self, result: ScanResult) -> SensitivityResult:
         """Get the indices, see `sensitivity.sobol`."""
@@ -907,6 +1401,21 @@ class CommandLine(NamedTuple):
     choices: tuple[str, ...]
 
 
+def _write_table(parameters: Sequence[SensitivityParameter], path: Path) -> None:
+    """Write the table of the parameters into a folder and print it."""
+    path.mkdir(parents=True, exist_ok=True)
+    df_parameters = write_parameters(parameters, path)
+    with pd.option_context("display.float_format", "{:.5g}".format):
+        console.print(df_parameters)
+
+
+def _report(items: Mapping[str, str], path: Path) -> None:
+    """Print the report of a run."""
+    display.section("Report", icon=display.ICON_REPORT)
+    display.key_values(dict(items))
+    display.link("results", path)
+
+
 @dataclass(frozen=True, kw_only=True)
 class SensitivityRunner:
     """The sensitivity analyses of a model, run by its script.
@@ -916,17 +1425,19 @@ class SensitivityRunner:
     from its command line, or with `run`. A run writes the table of the
     parameters (`write_parameters`) into its folder,
     `model.results_dir / "sensitivity"`, and the tables and figures of an
-    analysis into `<analysis>/<group>` below it, or below a subfolder of it.
-    What can be checked is checked when the runner is created, and the rest at
-    the start of a run, before anything is written.
+    analysis into `<analysis>/<group>` below it, or below a subfolder of it,
+    and the ones of sbmlsim 0.8.5 into `<analysis>`. A model with several
+    simulations has a runner per simulation, see `run_subfolders`. What can be
+    checked is checked when the runner is created, and the rest at the start
+    of a run, before anything is written.
 
     Attributes:
         model: the model object: the model which is simulated, the folder of
             the results and the settings of the simulator.
         parameters: the function which gives the parameters of the analyses
             with their bounds; it reads the model, so it is called by a run.
-        outputs: the outputs of the analyses, at least one, the ids and the
-            observables unique; stored as a tuple.
+        outputs: the outputs of the analyses, at least one, the ids, the names
+            and the observables unique; stored as a tuple.
         observables: the observables of the simulation of a group, which give
             the observables of the outputs.
         analyses: the analyses by name, the name on the command line and the
@@ -948,7 +1459,7 @@ class SensitivityRunner:
         """Check the outputs and the analyses.
 
         Raises:
-            ValueError: for no output, two outputs of one id or one
+            ValueError: for no output, two outputs of one id, name or
                 observable, an output whose observable is none of the
                 observables, no analysis, no default analysis, or a default
                 analysis which is none of the analyses or is given twice.
@@ -965,6 +1476,9 @@ class SensitivityRunner:
         repeated = _repeated(o.uid for o in self.outputs)
         if repeated:
             raise ValueError(f"The outputs {repeated} are given twice.")
+        repeated = _repeated(o.name for o in self.outputs)
+        if repeated:
+            raise ValueError(f"The names {repeated} of the outputs are given twice.")
         repeated = _repeated(o.observable for o in self.outputs)
         if repeated:
             raise ValueError(f"The observables {repeated} are outputs twice.")
@@ -987,6 +1501,73 @@ class SensitivityRunner:
         if repeated:
             raise ValueError(f"The default analyses {repeated} are given twice.")
 
+    def _names(self, names: Sequence[str] | None) -> tuple[str, ...]:
+        """Get the names of the analyses of a run, `default` if `None`.
+
+        Raises:
+            TypeError: for names which are a string.
+            ValueError: for a name which is no analysis or is given twice.
+        """
+        names = self.default if names is None else _sequence_of_names(names, "names")
+        unknown = [name for name in names if name not in self.analyses]
+        if unknown:
+            raise ValueError(f"Unknown analyses {unknown}, use {list(self.analyses)}.")
+        repeated = _repeated(names)
+        if repeated:
+            raise ValueError(f"The analyses {repeated} are given twice.")
+        return tuple(names)
+
+    def _plan(
+        self,
+        names: Sequence[str],
+        parameters: Sequence[SensitivityParameter],
+        where: str = "",
+    ) -> dict[str, list[SensitivityParameter]]:
+        """Check the named analyses and get the parameters each varies.
+
+        Raises:
+            ValueError: see `Analysis._check`, with a note naming the analysis.
+        """
+        varied: dict[str, list[SensitivityParameter]] = {}
+        for name in names:
+            try:
+                varied[name] = self.analyses[name]._check(parameters)
+            except ValueError as err:
+                err.add_note(f"The analysis '{name}'{where} cannot run.")
+                raise
+        return varied
+
+    def _context(self, simulator: Simulator) -> _Context:
+        """Get the context of the analyses of a run."""
+        return _Context(
+            simulator=simulator,
+            model_path=self.model.model_path,
+            outputs=self.outputs,
+            observables=self.observables,
+            seed=self.seed,
+        )
+
+    def _simulator(self, simulator: SimulatorSettings | None) -> Simulator:
+        """Get the simulator of a run, of the model with `n_workers=None` by default."""
+        settings = (
+            dataclasses.replace(self.model.simulator, n_workers=None)
+            if simulator is None
+            else simulator
+        )
+        return create_simulator(settings)
+
+    def _execute(
+        self,
+        names: Sequence[str],
+        varied: Mapping[str, Sequence[SensitivityParameter]],
+        path: Path,
+        simulator: Simulator,
+    ) -> None:
+        """Run the named analyses, every one into `path / <name>`."""
+        context = self._context(simulator)
+        for name in names:
+            self.analyses[name]._run(context, varied[name], path / name)
+
     def run(
         self,
         names: Sequence[str] | None = None,
@@ -1005,9 +1586,9 @@ class SensitivityRunner:
             names: the names of the analyses, `default` if `None`.
             path: the folder of the results and of the table of the parameters,
                 `model.results_dir / "sensitivity"` if `None`.
-            subfolder: the folder of the analyses below `path`, e.g. the name of
-                one of several simulations of a model; the table of the
-                parameters stays in `path`.
+            subfolder: the folder of the analyses below `path`; the table of
+                the parameters stays in `path`. Several simulations of a model
+                run with `run_subfolders`, which writes the table once.
             simulator: the settings of the simulator, the settings of the model
                 with `n_workers=None` (sbmlsim chooses the processes of the
                 pool, the script has the guard `if __name__ == "__main__":`) if
@@ -1022,56 +1603,17 @@ class SensitivityRunner:
                 subfolder which does not lie below `path`, and see
                 `distributions` and `sample_size`; before anything is written.
         """
-        names = self.default if names is None else _sequence_of_names(names, "names")
-        unknown = [name for name in names if name not in self.analyses]
-        if unknown:
-            raise ValueError(f"Unknown analyses {unknown}, use {list(self.analyses)}.")
-        repeated = _repeated(names)
-        if repeated:
-            raise ValueError(f"The analyses {repeated} are given twice.")
-        # a folder with a drive or a root (`/tmp`, which windows takes as
-        # relative to the drive) or with `..` would leave `path`
-        if subfolder is not None and (
-            not subfolder or Path(subfolder).anchor or ".." in Path(subfolder).parts
-        ):
-            raise ValueError(
-                f"The subfolder {subfolder!r} is a relative folder below the folder "
-                "of the results."
-            )
+        names = self._names(names)
+        if subfolder is not None:
+            _check_subfolder(subfolder)
         path = self.model.results_dir / "sensitivity" if path is None else path
         parameters = list(self.parameters())
-        varied: dict[str, list[SensitivityParameter]] = {}
-        for name in names:
-            try:
-                varied[name] = self.analyses[name]._check(parameters)
-            except ValueError as err:
-                err.add_note(f"The analysis '{name}' cannot run.")
-                raise
+        varied = self._plan(names, parameters)
 
-        path.mkdir(parents=True, exist_ok=True)
-        df_parameters = write_parameters(parameters, path)
-        with pd.option_context("display.float_format", "{:.5g}".format):
-            console.print(df_parameters)
-
-        settings = (
-            dataclasses.replace(self.model.simulator, n_workers=None)
-            if simulator is None
-            else simulator
-        )
-        context = _Context(
-            simulator=create_simulator(settings),
-            model_path=self.model.model_path,
-            outputs=self.outputs,
-            observables=self.observables,
-            seed=self.seed,
-        )
+        _write_table(parameters, path)
         analyses_path = path if subfolder is None else path / subfolder
-        for name in names:
-            self.analyses[name]._run(context, varied[name], analyses_path / name)
-
-        display.section("Report", icon=display.ICON_REPORT)
-        display.key_values({"analyses": ", ".join(names)})
-        display.link("results", analyses_path)
+        self._execute(names, varied, analyses_path, self._simulator(simulator))
+        _report({"analyses": ", ".join(names)}, analyses_path)
         return path
 
     def parse_command_line(
@@ -1155,3 +1697,115 @@ class SensitivityRunner:
                 2.
         """
         self.run(self.parse_command_line(argv).analyses)
+
+
+def run_subfolders(
+    runners: Mapping[str, SensitivityRunner],
+    names: Sequence[str] | None = None,
+    *,
+    subfolders: Sequence[str] | None = None,
+    path: Path | None = None,
+    simulator: SimulatorSettings | None = None,
+) -> Path:
+    """Run the analyses of several simulations of a model, each into a subfolder.
+
+    A model with several simulations (dulaglutide: a single dose and weekly
+    doses) has a runner per simulation, with its outputs and groups, by the
+    name of its subfolder. The table of the parameters is written and printed
+    once into `path`, the analyses of a runner run into
+    `path / <subfolder> / <analysis> / <group>`. Everything is checked before
+    anything is written, for every runner: the names, the parameters and the
+    sizes, as `SensitivityRunner.run` checks them.
+
+    Args:
+        runners: the runners by the name of their subfolder.
+        names: the names of the analyses, the default analyses of every runner
+            if `None`.
+        subfolders: the subfolders which run, every one if `None`.
+        path: the folder of the results, `model.results_dir / "sensitivity"` if
+            `None`.
+        simulator: the settings of the simulator, see `SensitivityRunner.run`.
+
+    Returns:
+        The folder of the results, `path`.
+
+    Raises:
+            TypeError: for names or subfolders which are a string.
+            ValueError: for no runner, a subfolder which has no runner, is given
+                twice or does not lie below `path`, runners of different models
+                or with different parameters (they share one table), and see
+                `SensitivityRunner.run`; before anything is written.
+    """
+    if not runners:
+        raise ValueError(
+            "A run of subfolders needs at least one runner, there is no runner."
+        )
+    keys = (
+        tuple(runners)
+        if subfolders is None
+        else _sequence_of_names(subfolders, "subfolders")
+    )
+    unknown = [key for key in keys if key not in runners]
+    if unknown:
+        raise ValueError(
+            f"The subfolders {unknown} have no runner, use {list(runners)}."
+        )
+    repeated = _repeated(keys)
+    if repeated:
+        raise ValueError(f"The subfolders {repeated} are given twice.")
+    for key in keys:
+        _check_subfolder(key)
+    first = runners[keys[0]]
+    others = [key for key in keys if runners[key].model != first.model]
+    if others:
+        raise ValueError(
+            f"The runners of the subfolders {others} have another model than the "
+            f"one of '{keys[0]}'; the subfolders of a run share one model."
+        )
+
+    # the parameters of every runner, read once per function
+    read: dict[int, list[SensitivityParameter]] = {}
+    parameters: dict[str, list[SensitivityParameter]] = {}
+    for key in keys:
+        function = runners[key].parameters
+        if id(function) not in read:
+            read[id(function)] = list(function())
+        parameters[key] = read[id(function)]
+    table = parameters_to_df(parameters[keys[0]])
+    different = [
+        key for key in keys if not parameters_to_df(parameters[key]).equals(table)
+    ]
+    if different:
+        raise ValueError(
+            f"The runners of the subfolders {different} give other parameters than "
+            f"the one of '{keys[0]}'; the subfolders of a run share one table of "
+            "the parameters."
+        )
+
+    plans: dict[str, tuple[tuple[str, ...], dict[str, list[SensitivityParameter]]]] = {}
+    for key in keys:
+        runner = runners[key]
+        try:
+            run_names = runner._names(names)
+        except ValueError as err:
+            err.add_note(f"The subfolder '{key}' cannot run.")
+            raise
+        plans[key] = (
+            run_names,
+            runner._plan(run_names, parameters[key], f" of the subfolder '{key}'"),
+        )
+
+    path = first.model.results_dir / "sensitivity" if path is None else path
+    _write_table(parameters[keys[0]], path)
+    simulator_ = first._simulator(simulator)
+    for key in keys:
+        run_names, varied = plans[key]
+        runners[key]._execute(run_names, varied, path / key, simulator_)
+    _report(
+        {
+            "subfolders": ", ".join(keys),
+            "analyses": "; ".join(f"{key}: {', '.join(plans[key][0])}" for key in keys),
+        },
+        path,
+    )
+    return path
