@@ -772,6 +772,8 @@ def test_several_subfolders_are_checked_before_anything_runs(tmp_path: Path) -> 
     )
     with pytest.raises(ValueError, match="no runner"):
         run_subfolders({}, simulator=SERIAL)
+    with pytest.raises(ValueError, match="at least one subfolder"):
+        run_subfolders(runners, subfolders=(), simulator=SERIAL)
     assert not (tmp_path / "sensitivity").exists()
 
 

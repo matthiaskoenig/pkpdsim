@@ -603,7 +603,9 @@ def _sensitivity_class(s: float) -> tuple[str, str]:
     """Get the symbol and the class of a local sensitivity, empty if it is undefined.
 
     sbmlsim's `sensitivity_classification` refuses `NaN`, the sensitivity of
-    an output which is zero at the reference.
+    an output which is zero at the reference. A workaround for sbmlsim#311
+    (https://github.com/matthiaskoenig/sbmlsim/issues/311), to be removed
+    when sbmlsim fixes it.
     """
     if not np.isfinite(s):
         return "", ""
@@ -615,7 +617,10 @@ def _uncertainty_class(u: float) -> tuple[str, str]:
 
     sbmlsim's `uncertainty_classification` classifies `|U|` as its reference
     (the WHO IPCS guidance) does, but refuses a negative `U`, the uncertainty
-    of an output whose median is negative, and `NaN`, of a median of zero.
+    of an output whose median is negative, and `NaN`, of a median of zero. A
+    workaround for sbmlsim#311
+    (https://github.com/matthiaskoenig/sbmlsim/issues/311), to be removed when
+    sbmlsim fixes it.
     """
     if not np.isfinite(u):
         return "", ""
@@ -1659,11 +1664,12 @@ def run_subfolders(
         The folder of the results, `path`.
 
     Raises:
-            TypeError: for names or subfolders which are a string.
-            ValueError: for no runner, a subfolder which has no runner, is given
-                twice or does not lie below `path`, runners of different models
-                or with different parameters (they share one table), and see
-                `SensitivityRunner.run`; before anything is written.
+        TypeError: for names or subfolders which are a string.
+        ValueError: for no runner, no subfolder, a subfolder which has no
+            runner, is given twice or does not lie below `path`, runners of
+            different models or with different parameters (they share one
+            table), and see `SensitivityRunner.run`; before anything is
+            written.
     """
     if not runners:
         raise ValueError(
@@ -1674,6 +1680,10 @@ def run_subfolders(
         if subfolders is None
         else _sequence_of_names(subfolders, "subfolders")
     )
+    if not keys:
+        raise ValueError(
+            f"A run of subfolders needs at least one subfolder, of {list(runners)}."
+        )
     unknown = [key for key in keys if key not in runners]
     if unknown:
         raise ValueError(

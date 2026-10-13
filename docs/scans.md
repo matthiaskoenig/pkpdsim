@@ -205,7 +205,7 @@ The sensitivity analyses of the models keep their parameters and outputs across 
 
 ### Several simulations
 
-A model with several simulations (dulaglutide: a single dose with the pharmacokinetic and the bodyweight outputs, weekly doses with the bodyweight outputs) has a runner per simulation and its own `main`, which reads the simulations with the analyses from the command line (`parse_command_line(argv, choices=...)`, in any order: `local sampling multi`) and runs them with `run_subfolders`: the analyses of every simulation into a subfolder, `sensitivity/<simulation>/<analysis>/<group>`, and the one table of the parameters into `sensitivity`, written and printed once:
+A model with several simulations (dulaglutide: a single dose with the pharmacokinetic and the bodyweight outputs, weekly doses with the bodyweight outputs) has a runner per simulation and its own `main`, which reads the simulations with the analyses from the command line (`parse_command_line(argv, choices=...)`, in any order: `local sampling multi`) and runs them with `run_subfolders`: the analyses of every simulation into a subfolder, `sensitivity/<simulation>/<analysis>`, and the one table of the parameters into `sensitivity`, written and printed once:
 
 ```python
 # not executed
