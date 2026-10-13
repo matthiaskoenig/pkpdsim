@@ -1,4 +1,4 @@
-"""The results of the scans of a model: the dimension and the timecourse of a point.
+"""The results of the scans of a model: the dimension, the timecourse of a point, the state after a change.
 
 sbmlsim 0.9 returns a scan as a `ScanResult` with the layout `(*dims, time)`
 and, at the time of a change after the start, the states before and after it.
@@ -12,6 +12,9 @@ dim = single_dimension(res)
 for k in range(res.ds.sizes[dim]):
     time, values = point_timecourse(res, "[Cve_hctz]", **{dim: k})
 ```
+
+`state_after_changes(res)` gives the whole result in that form, for the figures
+which read the arrays of a result instead of one point.
 """
 
 from __future__ import annotations
@@ -43,6 +46,26 @@ def single_dimension(res: ScanResult) -> str:
             f"A scan of one dimension is required, not of {list(res.dims)}."
         )
     return res.dims[0]
+
+
+def state_after_changes(res: ScanResult) -> ScanResult:
+    """Get a result with the state after a change at its time, every time once.
+
+    The output of sbmlsim 0.9 has the states before and after a change at its
+    time; the figures and analyses of a model read the state after it, as
+    sbmlsim 0.8 gave it. The result is interpolated onto its own time points
+    without the repeated ones (`ScanResult.interpolate`, which gives the state
+    after a change at its time). It is the result of `point_timecourse` for all
+    points of a scan at once, as a `ScanResult`; a result without a change is
+    unchanged.
+
+    Args:
+        res: the result of a simulation or a scan.
+
+    Returns:
+        The result on the grid of its time points, each time once.
+    """
+    return res.interpolate(np.unique(res.time_points()))
 
 
 def point_timecourse(

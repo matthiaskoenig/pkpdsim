@@ -221,7 +221,13 @@ def test_main_runs_the_analyses_of_the_command_line(
 ) -> None:
     calls: list[tuple[str, ...]] = []
 
-    def run(self: SensitivityRunner, names: tuple[str, ...]) -> Path:
+    def run(
+        self: SensitivityRunner,
+        names: tuple[str, ...],
+        *,
+        simulator: SimulatorSettings | None = None,
+    ) -> Path:
+        assert simulator is None
         calls.append(tuple(names))
         return tmp_path
 
@@ -441,6 +447,7 @@ def test_the_command_line_with_a_choice_of_the_script(tmp_path: Path) -> None:
     assert toy.parse_command_line([], choices=choices) == (
         ("local", "sampling"),
         (),
+        None,
     )
     words = toy.parse_command_line(["sobol", "multi", "local"], choices=choices)
     assert words.analyses == ("sobol", "local")
@@ -448,6 +455,7 @@ def test_the_command_line_with_a_choice_of_the_script(tmp_path: Path) -> None:
     assert toy.parse_command_line(["single"], choices=choices) == (
         ("local", "sampling"),
         ("single",),
+        None,
     )
 
 
@@ -844,3 +852,92 @@ def test_an_undefined_or_negative_index_is_classified(tmp_path: Path) -> None:
         uncertainty_classification(abs(u)).value
     )
     assert df.loc["A_negative", "U"] == pytest.approx(-df.loc["A_thalf", "U"])
+
+
+@pytest.mark.parametrize(
+    ("argv", "workers"),
+    [
+        ([], None),
+        (["--workers", "0"], None),
+        (["--workers", "1"], 1),
+        (["local", "--workers", "4", "multi"], 4),
+        (["--workers=3", "sobol"], 3),
+    ],
+)
+def test_the_command_line_reads_the_workers(
+    tmp_path: Path, argv: list[str], workers: int | None
+) -> None:
+    words = runner(tmp_path).parse_command_line(argv, choices=["multi"])
+    assert words.workers == workers
+
+
+@pytest.mark.parametrize("value", ["-1", "two", "1.5", ""])
+def test_the_command_line_refuses_workers(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], value: str
+) -> None:
+    with pytest.raises(SystemExit) as info:
+        runner(tmp_path).parse_command_line(["--workers", value])
+    assert info.value.code == 2
+    assert "--workers" in capsys.readouterr().err
+
+
+def test_the_help_names_the_workers(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("COLUMNS", "200")
+    with pytest.raises(SystemExit):
+        runner(tmp_path).main(["--help"])
+    assert "--workers" in capsys.readouterr().out
+
+
+def test_the_workers_set_the_processes_of_the_simulator(tmp_path: Path) -> None:
+    toy = runner(tmp_path)
+    assert toy.simulator_settings(None) is None
+    assert toy.simulator_settings(4) == dataclasses.replace(
+        MODEL.simulator, n_workers=4
+    )
+
+
+def test_main_passes_the_workers_to_the_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[tuple[tuple[str, ...], SimulatorSettings | None]] = []
+
+    def run(
+        self: SensitivityRunner,
+        names: tuple[str, ...],
+        *,
+        simulator: SimulatorSettings | None = None,
+    ) -> Path:
+        calls.append((tuple(names), simulator))
+        return tmp_path
+
+    monkeypatch.setattr(SensitivityRunner, "run", run)
+    toy = runner(tmp_path)
+    toy.main(["local", "--workers", "2"])
+    toy.main(["local", "--workers", "0"])
+    toy.main(["local"])
+    assert calls == [
+        (("local",), dataclasses.replace(MODEL.simulator, n_workers=2)),
+        (("local",), None),
+        (("local",), None),
+    ]
+
+
+@pytest.mark.parametrize(("argv", "n_workers"), [(["--workers", "2"], 2), ([], None)])
+def test_the_simulator_of_a_run_gets_the_workers(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    argv: list[str],
+    n_workers: int | None,
+) -> None:
+    settings: list[SimulatorSettings] = []
+
+    def serial(s: SimulatorSettings) -> object:
+        settings.append(s)
+        return create_simulator(dataclasses.replace(s, n_workers=1))
+
+    monkeypatch.setattr("pkpdsim.sensitivity.create_simulator", serial)
+    analyses = {"local": LocalAnalysis(groups=[CONTROL])}
+    runner(tmp_path, analyses=analyses).main(["local", *argv])
+    assert [s.n_workers for s in settings] == [n_workers]

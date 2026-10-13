@@ -17,6 +17,17 @@ for k in range(res.ds.sizes[dim]):
 
 A scan with several dimensions, a point which misses a dimension or names an unknown one, and a variable which is no timecourse raise a `ValueError`. The padding of a result whose simulations have different times is removed.
 
+### The state after a change of the whole result
+
+A figure which reads the arrays of a result (a band over the points of a scan, the result of a task of an experiment) needs the state after a change for all points at once. `state_after_changes(res)` gives the result on its time points without the repeated ones, with the state after a change at its time (`res.interpolate(np.unique(res.time_points()))`), as a `ScanResult` whose arrays keep their dimensions; for one point it has the time points and values of `point_timecourse`. A result without a change is unchanged.
+
+```python
+# not executed
+from pkpdsim.scan import state_after_changes
+
+res = state_after_changes(self.results[self.to_sid("task_sim")])
+```
+
 ## The parameters of a sensitivity analysis
 
 sbmlsim 0.9 analyses the sensitivity of a model on the result of a scan, with a design (`local`, `sobol`, `fast`, `lhs`) as a dimension of the scan; it has no table of the parameters of an analysis any more, which the sensitivity scripts of the models write next to their results. `pkpdsim.sensitivity` is that table with the behavior of sbmlsim 0.8, so the tables of the scripts stay the same, and the distributions the global designs need:
@@ -175,6 +186,7 @@ PKPDSIM_SENSITIVITY_N=65 python -m pkdb_models.models.hctz.sensitivity.sensitivi
 ```
 
 - **The run.** `main(argv)` reads the names of the analyses from the command line (`default`, `("local",)` unless the script gives others, without one; an unknown or repeated name exits with 2) and calls `run(names)`. `run` writes the table of the parameters (`parameters.tsv`, `parameters.tex` of `write_parameters`) into `model.results_dir / "sensitivity"` and runs the analyses in their order, every one into `<analysis>` below it (see the table); `path` replaces the folder, `subfolder` puts the analyses into a folder below it while the table stays in `path` (see below), `simulator` replaces the settings of the simulator. The simulator has the tolerances of the model and `n_workers=None`: sbmlsim chooses the processes of the pool, so the script needs the guard `if __name__ == "__main__":`.
+- **The workers.** A pool needs about 300 to 340 MB per process for a PBPK model, so every CPU of a 20-CPU machine exceeds a memory budget of 8 GB. `--workers N` (an int of at least 1; `0` or absent leaves the setting of the simulator, `n_workers=None`) caps the processes: `python -m ...sensitivity_analysis sobol --workers 8`. `main` passes it as the settings of the model with `n_workers=N`; a script with its own `main` reads `parse_command_line(...).workers` and passes `simulator=runner.simulator_settings(words.workers)` to `run` or `run_subfolders`.
 - **The parameters** are a function, `parameters`, which a run calls (it reads the model). An analysis varies the parameters which no simulation of its groups sets, `free_parameters`: `sampling` over the four groups of hctz leaves out `f_renal_function`, which the groups of renal impairment set.
 - **The outputs.** A `SensitivityOutput` is an observable of the simulation of a group: `uid` names it in the tables and the names of the files, `name` in the titles and the heatmaps of the figures and in the column `name` of the tables, and `observable` is the id of the observable in the result, the uid when not given. An id which is no identifier (`[Cve_api]_cmax`, the id of the tables of sbmlsim 0.8) names an observable `Cve_api_cmax`. The ids, the names and the observables of the outputs are unique, and every observable of an output is one of `observables`. The unit of an output in the tables of sbmlsim 0.8.5 is the one its observable was given (`Formula(..., unit="mM*min")`), else the one of the result.
 - **The groups.** A `SensitivityGroup` is a simulation with the changes of the group in its `preinit_changes`; `uid` is its name in the files and folders, `name` in the titles of the figures, `color` the color of the group in the figures of the sampling which compare the groups (the property cycle of matplotlib when not given). Every analysis has its own groups, at least one (the local and global analyses of most models run for the control only, `GROUPS[:1]`, the sampling for every group).
@@ -221,7 +233,7 @@ if __name__ == "__main__":
     main()
 ```
 
-`parse_command_line` returns a `CommandLine` of the names of the analyses (the default analyses without one) and the words of the choices in their order (none without one); a word which is neither, or is given twice, exits with 2, `--help` lists both. A choice which is the name of an analysis is a `ValueError`. `run_subfolders(runners, names, *, subfolders, path, simulator)` checks everything of every runner before anything is written (the names, the parameters and the sizes, as `run`), and that the runners share one model and give the same parameters, which share one table; `run(names, subfolder=...)` runs one runner into a subfolder.
+`parse_command_line` returns a `CommandLine` of the names of the analyses (the default analyses without one) the words of the choices in their order (none without one) and the `workers` of `--workers` (`None` if absent or `0`); a word which is neither, or is given twice, exits with 2, `--help` lists both. A choice which is the name of an analysis is a `ValueError`. `run_subfolders(runners, names, *, subfolders, path, simulator)` checks everything of every runner before anything is written (the names, the parameters and the sizes, as `run`), and that the runners share one model and give the same parameters, which share one table; `run(names, subfolder=...)` runs one runner into a subfolder.
 
 The outputs and the analyses do not need a model:
 
