@@ -1330,10 +1330,24 @@ class CommandLine(NamedTuple):
         analyses: the names of the analyses, the default analyses without one.
         choices: the words of the choices of the script, in their order, none
             if none is given.
+        workers: the processes of `--workers`, `None` if not given or `0`
+            (the simulator's setting).
     """
 
     analyses: tuple[str, ...]
     choices: tuple[str, ...]
+    workers: int | None = None
+
+
+def _workers(text: str) -> int:
+    """Read the value of `--workers`: `0` or a number of processes of at least 1."""
+    try:
+        value = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{text!r} is no whole number") from None
+    if value < 0:
+        raise argparse.ArgumentTypeError(f"{value} is negative (0 or at least 1)")
+    return value
 
 
 def _write_table(parameters: Sequence[SensitivityParameter], path: Path) -> None:
@@ -1481,6 +1495,20 @@ class SensitivityRunner:
             seed=self.seed,
         )
 
+    def simulator_settings(self, workers: int | None) -> SimulatorSettings | None:
+        """Get the settings of the simulator of a run which caps the processes.
+
+        Args:
+            workers: the processes of `--workers` (`CommandLine.workers`).
+
+        Returns:
+            The settings of the model with `n_workers=workers`, `None` (the
+            default of `run`, `n_workers=None`) if `workers` is `None`.
+        """
+        if workers is None:
+            return None
+        return dataclasses.replace(self.model.simulator, n_workers=workers)
+
     def _simulator(self, simulator: SimulatorSettings | None) -> Simulator:
         """Get the simulator of a run, of the model with `n_workers=None` by default."""
         settings = (
@@ -1564,8 +1592,9 @@ class SensitivityRunner:
             choices: the words of the choices of the script, none an analysis.
 
         Returns:
-            The names of the analyses, the default analyses without one, and the
-            words of the choices.
+            The names of the analyses, the default analyses without one, the
+            words of the choices and the `--workers` (`None` if absent or `0`),
+            which a script passes as `simulator=self.simulator_settings(workers)`.
 
         Raises:
             TypeError: for arguments which are a string.
@@ -1606,7 +1635,20 @@ class SensitivityRunner:
                 )
             ),
         )
-        given: list[str] = parser.parse_args(argv).words
+        parser.add_argument(
+            "--workers",
+            type=_workers,
+            default=0,
+            metavar="N",
+            help=(
+                "the processes of the pool of a run, at least 1 (a pool needs "
+                "about 300 MB per process for a PBPK model); 0 or absent: the "
+                "setting of the simulator, sbmlsim chooses (every CPU for large "
+                "designs)"
+            ),
+        )
+        args = parser.parse_intermixed_args(argv)
+        given: list[str] = args.words
         unknown = [w for w in given if w not in self.analyses and w not in choices]
         if unknown:
             parser.error(
@@ -1620,6 +1662,7 @@ class SensitivityRunner:
         return CommandLine(
             analyses=analyses or tuple(self.default),
             choices=tuple(w for w in given if w in choices),
+            workers=args.workers or None,
         )
 
     def main(self, argv: Sequence[str] | None = None) -> None:
@@ -1628,9 +1671,10 @@ class SensitivityRunner:
         Args:
             argv: the arguments, those of the process if `None`: the names of
                 the analyses, `default` without one; an unknown name exits with
-                2.
+                2; `--workers N` caps the processes of the pool.
         """
-        self.run(self.parse_command_line(argv).analyses)
+        words = self.parse_command_line(argv)
+        self.run(words.analyses, simulator=self.simulator_settings(words.workers))
 
 
 def run_subfolders(
