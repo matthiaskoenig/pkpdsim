@@ -174,7 +174,7 @@ python -m pkdb_models.models.hctz.sensitivity.sensitivity_analysis local sobol
 PKPDSIM_SENSITIVITY_N=65 python -m pkdb_models.models.hctz.sensitivity.sensitivity_analysis fast
 ```
 
-- **The run.** `main(argv)` reads the names of the analyses from the command line (`default`, `("local",)` unless the script gives others, without one; an unknown name exits with 2) and calls `run(names)`. `run` writes the table of the parameters (`parameters.tsv`, `parameters.tex` of `write_parameters`) into `model.results_dir / "sensitivity"` and runs the analyses in their order, every one into `<analysis>/<group>` below it; `path` replaces the folder (e.g. a folder per simulation of a model with several, which makes a runner per simulation), `simulator` the settings of the simulator. The simulator has the tolerances of the model and `n_workers=None`: sbmlsim chooses the processes of the pool, so the script needs the guard `if __name__ == "__main__":`. An unknown name is a `ValueError` before anything runs.
+- **The run.** `main(argv)` reads the names of the analyses from the command line (`default`, `("local",)` unless the script gives others, without one; an unknown or repeated name exits with 2) and calls `run(names)`. `run` writes the table of the parameters (`parameters.tsv`, `parameters.tex` of `write_parameters`) into `model.results_dir / "sensitivity"` and runs the analyses in their order, every one into `<analysis>/<group>` below it; `path` replaces the folder, `subfolder` puts the analyses into a folder below it while the table stays in `path` (see below), `simulator` replaces the settings of the simulator. The simulator has the tolerances of the model and `n_workers=None`: sbmlsim chooses the processes of the pool, so the script needs the guard `if __name__ == "__main__":`.
 - **The parameters** are a function, `parameters`, which a run calls (it reads the model). An analysis varies the parameters which no simulation of its groups sets, `free_parameters`: `sampling` over the four groups of hctz leaves out `f_renal_function`, which the groups of renal impairment set.
 - **The outputs.** A `SensitivityOutput` is an observable of the simulation of a group: `uid` names it in the tables and figures, `name` in their titles, and `observable` is the id of the observable in the result, the uid when not given. An id which is no identifier (`[Cve_api]_cmax`, the id of the tables of sbmlsim 0.8) names an observable `Cve_api_cmax`. The ids and the observables of the outputs are unique, and every observable of an output is one of `observables`.
 - **The groups.** A `SensitivityGroup` is a simulation with the changes of the group in its `preinit_changes`; `uid` is the folder, `name` in the titles of the figures. Every analysis has its own groups, at least one (the local and global analyses of most models run for the control only, `GROUPS[:1]`, the sampling for every group).
@@ -182,12 +182,38 @@ PKPDSIM_SENSITIVITY_N=65 python -m pkdb_models.models.hctz.sensitivity.sensitivi
 
 | analysis | design and indices | per group | defaults |
 | --- | --- | --- | --- |
-| `LocalAnalysis` | `sampling.local` with the values of the simulation of the group, `sensitivity.local` | `<output>.normalized.tsv`, the heatmap `normalized.png` | `delta=0.01` |
+| `LocalAnalysis` | `sampling.local` with the values of the simulation of the group, `sensitivity.local` | `<output>.normalized.tsv`, the heatmap `normalized.png` | `delta=0.01`, in (0, 1) |
 | `SamplingAnalysis` | `sampling.lhs`, one design for every group | `samples.tsv` (the outputs and the parameters of every point), `summary.tsv` (a row per output: `output`, `name`, the statistics of `ScanResult.summary` with the `quantiles`, `unit`), `distributions.png` | `n=1000`, `quantiles=(0.025, 0.05, 0.5, 0.95, 0.975)` |
 | `FastAnalysis` | `sampling.fast`, `sensitivity.fast` | `<output>.S1.tsv`, `<output>.ST.tsv`, `<output>.png` | `n=1000`, more than 64 |
-| `SobolAnalysis` | `sampling.sobol`, `sensitivity.sobol` | `<output>.S1.tsv`, `<output>.ST.tsv`, `<output>.png` | `n=4096`, a power of 2 |
+| `SobolAnalysis` | `sampling.sobol`, `sensitivity.sobol` | `<output>.S1.tsv`, `<output>.ST.tsv`, `<output>.png` | `n=4096`, a power of two |
 
-The number of samples `n` goes through `sample_size`, so `PKPDSIM_SENSITIVITY_N` replaces it in a smoke run. An analysis without a group or with two groups of one id, a number of samples or a `delta` which is not positive, and a runner without outputs or analyses, with two outputs of one id or one observable, with an output whose observable is none of `observables` or with a default which is none of its analyses are a `ValueError` when they are created, not after the first analysis ran.
+The number of samples `n` goes through `sample_size`, so `PKPDSIM_SENSITIVITY_N` replaces it in a smoke run (a smoke run of `fast` needs more than 64 samples and one of `sobol` a power of two, so they run with different values). What can go wrong is found before the first analysis runs, not hours into a run:
+
+- when the runner is created: an analysis without a group or with two groups of one id, a `delta` outside of (0, 1), a number of samples which the design refuses (a positive int; for `FastAnalysis` more than 64, for `SobolAnalysis` a power of two), a quantile outside of [0, 1]; a runner without outputs, analyses or default analyses, with two outputs of one id or one observable, with an output whose observable is none of `observables`, with a default which is none of its analyses or is given twice (a `ValueError`; a string as `default` is a `TypeError`);
+- when a run starts, before anything is written: the names (an unknown or repeated name, a string instead of a sequence), the subfolder, and for every named analysis the parameters it varies (none, or one without valid bounds, see `distributions`) and the number of samples which `PKPDSIM_SENSITIVITY_N` gives; the error names the analysis in a note.
+
+The analyses are these four: `Analysis` has no public hook for an analysis of a script's own, a script with its own analysis (simvastatin's central differences) runs it itself. The heatmap of the local analysis labels its rows with the observables, as `plot_heatmap` of sbmlsim does, while the tables and the other figures carry the ids of the outputs: `Cve_api_cmax` in the heatmap, `[Cve_api]_cmax.normalized.tsv` beside it.
+
+### Several simulations
+
+A model with several simulations (dulaglutide: a single dose with the pharmacokinetic and the bodyweight outputs, weekly doses with the bodyweight outputs) has a runner per simulation and its own `main`, which reads the simulations with the analyses from the command line (`parse_command_line(argv, choices=...)`, in any order: `local sampling multi`) and runs the analyses of every simulation into a subfolder, `sensitivity/<simulation>/<analysis>/<group>`, while the one table of the parameters stays in `sensitivity`:
+
+```python
+# not executed
+SIMULATIONS = {"single": SINGLE, "multi": MULTI}  # a SensitivityRunner each
+
+
+def main(argv: Sequence[str] | None = None) -> None:
+    words = SINGLE.parse_command_line(argv, choices=list(SIMULATIONS))
+    for key in words.choices or ("single",):
+        SIMULATIONS[key].run(words.analyses, subfolder=key)
+
+
+if __name__ == "__main__":
+    main()
+```
+
+`parse_command_line` returns a `CommandLine` of the names of the analyses (the default analyses without one) and the words of the choices in their order (none without one); a word which is neither, or is given twice, exits with 2, `--help` lists both. A choice which is the name of an analysis is a `ValueError`. Every run writes the table of the parameters, the same table for every simulation of a script.
 
 The outputs and the analyses do not need a model:
 

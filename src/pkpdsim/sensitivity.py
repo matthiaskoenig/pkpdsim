@@ -55,6 +55,7 @@ from dataclasses import asdict, dataclass
 from enum import StrEnum
 from pathlib import Path
 from types import MappingProxyType
+from typing import NamedTuple
 
 import libsbml
 import matplotlib.pyplot as plt
@@ -400,7 +401,10 @@ class SensitivityOutput:
     """An output of the analyses, an observable of the simulation of a group.
 
     Attributes:
-        uid: the id of the output in the tables and figures, `<uid>.<index>.tsv`.
+        uid: the id of the output in the tables and figures,
+            `<uid>.<index>.tsv`, `<uid>.png`, the columns of `samples.tsv` and
+            `summary.tsv`; the heatmap of the local analysis labels its rows
+            with the observables, as sbmlsim's `plot_heatmap` does.
         name: the name of the output in the titles of the figures and in the
             summary of `sampling`.
         observable: the id of the observable in the result of the scan, the uid
@@ -441,7 +445,6 @@ class _Context:
 
     simulator: Simulator
     model_path: Path
-    parameters: Sequence[SensitivityParameter]
     outputs: Sequence[SensitivityOutput]
     observables: Sequence[Observable]
     seed: int
@@ -476,14 +479,17 @@ def _repeated(values: Iterable[str]) -> list[str]:
     return sorted(repeated)
 
 
-def _check_samples(n: int) -> None:
-    """Check a number of samples of an analysis.
+def _sequence_of_names(names: Sequence[str], what: str) -> tuple[str, ...]:
+    """Get names as a tuple, refusing a single string, which is no sequence of names.
 
     Raises:
-        ValueError: if it is no positive int.
+        TypeError: for a string, e.g. `run("local")` instead of `run(["local"])`.
     """
-    if n < 1:
-        raise ValueError(f"The number of samples is a positive int, not {n}.")
+    if isinstance(names, str):
+        raise TypeError(
+            f"The {what} are a sequence of names, not the string {names!r}."
+        )
+    return tuple(names)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -492,7 +498,9 @@ class Analysis(ABC):
 
     The parameters it varies are the parameters of the script which no
     simulation of its groups sets (`free_parameters`); its tables and figures
-    are written per group, into `<analysis>/<group>`.
+    are written per group, into `<analysis>/<group>`. The analyses are the four
+    of this module, `LocalAnalysis`, `SamplingAnalysis`, `FastAnalysis` and
+    `SobolAnalysis`; a script with an analysis of its own runs it itself.
 
     Attributes:
         groups: the groups of the analysis, at least one, the ids unique;
@@ -529,6 +537,28 @@ class Analysis(ABC):
         """
         return free_parameters(parameters, [g.simulation for g in self.groups])
 
+    def _check(
+        self, parameters: Sequence[SensitivityParameter]
+    ) -> list[SensitivityParameter]:
+        """Check what the analysis needs, at the start of a run.
+
+        Args:
+            parameters: the parameters of the script.
+
+        Returns:
+            The parameters the analysis varies.
+
+        Raises:
+            ValueError: if it varies no parameter.
+        """
+        varied = self.varied(parameters)
+        if not varied:
+            raise ValueError(
+                f"{type(self).__name__} varies no parameter: the simulations of "
+                f"its groups {[g.uid for g in self.groups]} set every parameter."
+            )
+        return varied
+
     @staticmethod
     def _group_path(path: Path, group: SensitivityGroup) -> Path:
         """Get the folder of a group, created if it does not exist."""
@@ -537,12 +567,15 @@ class Analysis(ABC):
         return group_path
 
     @abstractmethod
-    def _run(self, context: _Context, path: Path) -> None:
+    def _run(
+        self, context: _Context, varied: Sequence[SensitivityParameter], path: Path
+    ) -> None:
         """Run the analysis and write its tables and figures.
 
         Args:
-            context: the simulator, the model, the parameters, the outputs and
-                observables and the seed of the run.
+            context: the simulator, the model, the outputs and observables and
+                the seed of the run.
+            varied: the parameters the analysis varies, see `_check`.
             path: the folder of the analysis.
         """
 
@@ -556,7 +589,7 @@ class LocalAnalysis(Analysis):
     `normalized` per output and its heatmap, `normalized.png`.
 
     Attributes:
-        delta: the relative change of a parameter.
+        delta: the relative change of a parameter, in (0, 1).
     """
 
     delta: float = 0.01
@@ -565,17 +598,20 @@ class LocalAnalysis(Analysis):
         """Check the groups and the change.
 
         Raises:
-            ValueError: see `Analysis`, and for a change which is not positive.
+            ValueError: see `Analysis`, and for a change outside of (0, 1),
+                which `sampling.local` refuses.
         """
         super().__post_init__()
-        if not self.delta > 0:
+        if not 0 < self.delta < 1:
             raise ValueError(
-                f"The delta of a local analysis is positive, not {self.delta}."
+                f"The delta of a local analysis is in (0, 1), not {self.delta}."
             )
 
-    def _run(self, context: _Context, path: Path) -> None:
+    def _run(
+        self, context: _Context, varied: Sequence[SensitivityParameter], path: Path
+    ) -> None:
         """Run the analysis, see the class."""
-        targets = [p.uid for p in self.varied(context.parameters)]
+        targets = [p.uid for p in varied]
         for group in self.groups:
             group_path = self._group_path(path, group)
             design = sampling.local(
@@ -596,7 +632,71 @@ class LocalAnalysis(Analysis):
 
 
 @dataclass(frozen=True, kw_only=True)
-class SamplingAnalysis(Analysis):
+class _SampledAnalysis(Analysis):
+    """An analysis of a design of `n` samples, see `sample_size`.
+
+    Attributes:
+        n: the number of samples of the design.
+    """
+
+    n: int
+
+    def __post_init__(self) -> None:
+        """Check the groups and the number of samples.
+
+        Raises:
+            ValueError: see `Analysis`, and for a number of samples which the
+                design refuses.
+        """
+        super().__post_init__()
+        self._check_size(self.n)
+
+    def _check_size(self, n: int) -> None:
+        """Check a number of samples, as the design of the analysis does.
+
+        Raises:
+            ValueError: if it is no positive int.
+        """
+        if isinstance(n, bool) or not isinstance(n, int) or n < 1:
+            raise ValueError(
+                f"The number of samples of {type(self).__name__} is a positive "
+                f"int, not {n!r}."
+            )
+
+    def _samples(self) -> int:
+        """Get the number of samples of a run, `n` or the one of a smoke run.
+
+        Raises:
+            ValueError: for a value of `PKPDSIM_SENSITIVITY_N` which is no
+                positive int or which the design refuses.
+        """
+        n = sample_size(self.n)
+        try:
+            self._check_size(n)
+        except ValueError as err:
+            err.add_note(
+                f"{SAMPLE_SIZE} replaces the number of samples {self.n} of "
+                f"{type(self).__name__} by {n}."
+            )
+            raise
+        return n
+
+    def _check(
+        self, parameters: Sequence[SensitivityParameter]
+    ) -> list[SensitivityParameter]:
+        """Check the parameters, their distributions and the number of samples.
+
+        Raises:
+            ValueError: see `Analysis`, `distributions` and `_samples`.
+        """
+        varied = super()._check(parameters)
+        distributions(varied)
+        self._samples()
+        return varied
+
+
+@dataclass(frozen=True, kw_only=True)
+class SamplingAnalysis(_SampledAnalysis):
     """The uncertainty of the outputs over a Latin hypercube of the parameters.
 
     One design `sampling.lhs` of `sample_size(n)` points for every group;
@@ -607,28 +707,32 @@ class SamplingAnalysis(Analysis):
 
     Attributes:
         n: the number of samples, see `sample_size`.
-        quantiles: the quantiles of the summary.
+        quantiles: the quantiles of the summary, in [0, 1].
     """
 
     n: int = 1000
     quantiles: Sequence[float] = (0.025, 0.05, 0.5, 0.95, 0.975)
 
     def __post_init__(self) -> None:
-        """Check the groups and the number of samples.
+        """Check the groups, the number of samples and the quantiles.
 
         Raises:
             ValueError: see `Analysis`, and for a number of samples which is
-                not positive.
+                not positive or a quantile outside of [0, 1].
         """
         super().__post_init__()
-        _check_samples(self.n)
         object.__setattr__(self, "quantiles", tuple(self.quantiles))
+        outside = [q for q in self.quantiles if not 0 <= q <= 1]
+        if outside:
+            raise ValueError(f"The quantiles {outside} are not in [0, 1].")
 
-    def _run(self, context: _Context, path: Path) -> None:
+    def _run(
+        self, context: _Context, varied: Sequence[SensitivityParameter], path: Path
+    ) -> None:
         """Run the analysis, see the class."""
         design = sampling.lhs(
-            distributions(self.varied(context.parameters)),
-            n=sample_size(self.n),
+            distributions(varied),
+            n=self._samples(),
             seed=context.seed,
         )
         observables = {o.observable: o.uid for o in context.outputs}
@@ -682,7 +786,7 @@ class SamplingAnalysis(Analysis):
 
 
 @dataclass(frozen=True, kw_only=True)
-class _GlobalAnalysis(Analysis):
+class _GlobalAnalysis(_SampledAnalysis):
     """A variance based analysis: the indices `S1` and `ST` of every group.
 
     One design for every group; per group the tables of `S1` and `ST` per
@@ -691,18 +795,6 @@ class _GlobalAnalysis(Analysis):
     Attributes:
         n: the base number of samples, see `sample_size`.
     """
-
-    n: int
-
-    def __post_init__(self) -> None:
-        """Check the groups and the number of samples.
-
-        Raises:
-            ValueError: see `Analysis`, and for a number of samples which is
-                not positive.
-        """
-        super().__post_init__()
-        _check_samples(self.n)
 
     @abstractmethod
     def _design(
@@ -714,9 +806,11 @@ class _GlobalAnalysis(Analysis):
     def _indices(self, result: ScanResult) -> SensitivityResult:
         """Get the indices of the result of the design."""
 
-    def _run(self, context: _Context, path: Path) -> None:
+    def _run(
+        self, context: _Context, varied: Sequence[SensitivityParameter], path: Path
+    ) -> None:
         """Run the analysis, see the class."""
-        design = self._design(self.varied(context.parameters), context.seed)
+        design = self._design(varied, context.seed)
         for group in self.groups:
             group_path = self._group_path(path, group)
             result = self._indices(context.scan(group, design))
@@ -736,18 +830,29 @@ class FastAnalysis(_GlobalAnalysis):
     """The indices of the extended FAST, `sampling.fast` and `sensitivity.fast`.
 
     Attributes:
-        n: the number of samples per parameter, more than 64, see `sample_size`.
+        n: the number of samples per parameter, more than 64 (`4 m^2` of the
+            `m = 4` harmonics of `sampling.fast`), see `sample_size`.
     """
 
     n: int = 1000
+
+    def _check_size(self, n: int) -> None:
+        """Check a number of samples, more than 64, as `sampling.fast` does.
+
+        Raises:
+            ValueError: if it is no int above 64.
+        """
+        super()._check_size(n)
+        if n <= 64:
+            raise ValueError(
+                f"The number of samples of FastAnalysis is more than 64, not {n}."
+            )
 
     def _design(
         self, parameters: Sequence[SensitivityParameter], seed: int
     ) -> Dimension:
         """Get the design over the parameters, see `sampling.fast`."""
-        return sampling.fast(
-            distributions(parameters), n=sample_size(self.n), seed=seed
-        )
+        return sampling.fast(distributions(parameters), n=self._samples(), seed=seed)
 
     def _indices(self, result: ScanResult) -> SensitivityResult:
         """Get the indices, see `sensitivity.fast`."""
@@ -759,22 +864,47 @@ class SobolAnalysis(_GlobalAnalysis):
     """The Sobol indices, `sampling.sobol` and `sensitivity.sobol`.
 
     Attributes:
-        n: the base number of samples, a power of 2, see `sample_size`.
+        n: the base number of samples, a power of two of at least 2, see
+            `sample_size`.
     """
 
     n: int = 4096
+
+    def _check_size(self, n: int) -> None:
+        """Check a number of samples, a power of two, as `sampling.sobol` does.
+
+        Raises:
+            ValueError: if it is no power of two of at least 2.
+        """
+        super()._check_size(n)
+        if n < 2 or n & (n - 1):
+            raise ValueError(
+                "The number of samples of SobolAnalysis is a power of two of at "
+                f"least 2, not {n}."
+            )
 
     def _design(
         self, parameters: Sequence[SensitivityParameter], seed: int
     ) -> Dimension:
         """Get the design over the parameters, see `sampling.sobol`."""
-        return sampling.sobol(
-            distributions(parameters), n=sample_size(self.n), seed=seed
-        )
+        return sampling.sobol(distributions(parameters), n=self._samples(), seed=seed)
 
     def _indices(self, result: ScanResult) -> SensitivityResult:
         """Get the indices, see `sensitivity.sobol`."""
         return sensitivity.sobol(result)
+
+
+class CommandLine(NamedTuple):
+    """The words of the command line of a sensitivity script.
+
+    Attributes:
+        analyses: the names of the analyses, the default analyses without one.
+        choices: the words of the choices of the script, in their order, none
+            if none is given.
+    """
+
+    analyses: tuple[str, ...]
+    choices: tuple[str, ...]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -786,7 +916,9 @@ class SensitivityRunner:
     from its command line, or with `run`. A run writes the table of the
     parameters (`write_parameters`) into its folder,
     `model.results_dir / "sensitivity"`, and the tables and figures of an
-    analysis into `<analysis>/<group>` below it.
+    analysis into `<analysis>/<group>` below it, or below a subfolder of it.
+    What can be checked is checked when the runner is created, and the rest at
+    the start of a run, before anything is written.
 
     Attributes:
         model: the model object: the model which is simulated, the folder of
@@ -799,7 +931,8 @@ class SensitivityRunner:
             the observables of the outputs.
         analyses: the analyses by name, the name on the command line and the
             folder; at least one, stored read-only.
-        default: the analyses which run without a name on the command line.
+        default: the analyses which run without a name on the command line, at
+            least one.
         seed: the seed of the designs.
     """
 
@@ -817,13 +950,16 @@ class SensitivityRunner:
         Raises:
             ValueError: for no output, two outputs of one id or one
                 observable, an output whose observable is none of the
-                observables, no analysis, or a default analysis which is none
-                of the analyses.
+                observables, no analysis, no default analysis, or a default
+                analysis which is none of the analyses or is given twice.
+            TypeError: for a default which is a string.
         """
         object.__setattr__(self, "outputs", tuple(self.outputs))
         object.__setattr__(self, "observables", tuple(self.observables))
         object.__setattr__(self, "analyses", MappingProxyType(dict(self.analyses)))
-        object.__setattr__(self, "default", tuple(self.default))
+        object.__setattr__(
+            self, "default", _sequence_of_names(self.default, "default analyses")
+        )
         if not self.outputs:
             raise ValueError("A sensitivity analysis needs at least one output.")
         repeated = _repeated(o.uid for o in self.outputs)
@@ -838,44 +974,81 @@ class SensitivityRunner:
             raise ValueError(f"The outputs name no observables {missing}.")
         if not self.analyses:
             raise ValueError("A sensitivity analysis needs at least one analysis.")
+        if not self.default:
+            raise ValueError(
+                "A sensitivity analysis needs at least one default analysis."
+            )
         unknown = [name for name in self.default if name not in self.analyses]
         if unknown:
             raise ValueError(
                 f"The default analyses {unknown} are none of {list(self.analyses)}."
             )
+        repeated = _repeated(self.default)
+        if repeated:
+            raise ValueError(f"The default analyses {repeated} are given twice.")
 
     def run(
         self,
         names: Sequence[str] | None = None,
         *,
         path: Path | None = None,
+        subfolder: str | None = None,
         simulator: SimulatorSettings | None = None,
     ) -> Path:
         """Run analyses and write the table of the parameters.
 
+        The names, the parameters (their distributions, whether an analysis
+        varies one) and the numbers of samples of a smoke run are checked
+        before anything is written.
+
         Args:
             names: the names of the analyses, `default` if `None`.
-            path: the folder of the results, `model.results_dir / "sensitivity"`
-                if `None`; e.g. the folder of one of several simulations.
+            path: the folder of the results and of the table of the parameters,
+                `model.results_dir / "sensitivity"` if `None`.
+            subfolder: the folder of the analyses below `path`, e.g. the name of
+                one of several simulations of a model; the table of the
+                parameters stays in `path`.
             simulator: the settings of the simulator, the settings of the model
                 with `n_workers=None` (sbmlsim chooses the processes of the
                 pool, the script has the guard `if __name__ == "__main__":`) if
                 `None`.
 
         Returns:
-            The folder of the results.
+            The folder of the results, `path`.
 
         Raises:
-            ValueError: naming the names which are no analysis, before anything
-                runs.
+            TypeError: for names which are a string.
+            ValueError: for a name which is no analysis or is given twice, a
+                subfolder which does not lie below `path`, and see
+                `distributions` and `sample_size`; before anything is written.
         """
-        names = self.default if names is None else tuple(names)
+        names = self.default if names is None else _sequence_of_names(names, "names")
         unknown = [name for name in names if name not in self.analyses]
         if unknown:
             raise ValueError(f"Unknown analyses {unknown}, use {list(self.analyses)}.")
+        repeated = _repeated(names)
+        if repeated:
+            raise ValueError(f"The analyses {repeated} are given twice.")
+        if subfolder is not None and (
+            not subfolder
+            or Path(subfolder).is_absolute()
+            or ".." in Path(subfolder).parts
+        ):
+            raise ValueError(
+                f"The subfolder {subfolder!r} is a relative folder below the folder "
+                "of the results."
+            )
         path = self.model.results_dir / "sensitivity" if path is None else path
-        path.mkdir(parents=True, exist_ok=True)
         parameters = list(self.parameters())
+        varied: dict[str, list[SensitivityParameter]] = {}
+        for name in names:
+            try:
+                varied[name] = self.analyses[name]._check(parameters)
+            except ValueError as err:
+                err.add_note(f"The analysis '{name}' cannot run.")
+                raise
+
+        path.mkdir(parents=True, exist_ok=True)
         df_parameters = write_parameters(parameters, path)
         with pd.option_context("display.float_format", "{:.5g}".format):
             console.print(df_parameters)
@@ -888,27 +1061,49 @@ class SensitivityRunner:
         context = _Context(
             simulator=create_simulator(settings),
             model_path=self.model.model_path,
-            parameters=parameters,
             outputs=self.outputs,
             observables=self.observables,
             seed=self.seed,
         )
+        analyses_path = path if subfolder is None else path / subfolder
         for name in names:
-            self.analyses[name]._run(context, path / name)
+            self.analyses[name]._run(context, varied[name], analyses_path / name)
 
         display.section("Report", icon=display.ICON_REPORT)
         display.key_values({"analyses": ", ".join(names)})
-        display.link("results", path)
+        display.link("results", analyses_path)
         return path
 
-    def main(self, argv: Sequence[str] | None = None) -> None:
-        """Run the analyses named on the command line, see `run`.
+    def parse_command_line(
+        self, argv: Sequence[str] | None = None, *, choices: Sequence[str] = ()
+    ) -> CommandLine:
+        """Read the names of the analyses, and of choices of the script, from a command line.
+
+        A script with a choice of its own, e.g. the simulation of a model with
+        several, reads it here with the names of the analyses, in any order
+        (`local sampling multi`), and runs the analyses itself.
 
         Args:
-            argv: the arguments, those of the process if `None`: the names of
-                the analyses, `default` without one; an unknown name exits with
-                2.
+            argv: the arguments, those of the process if `None`.
+            choices: the words of the choices of the script, none an analysis.
+
+        Returns:
+            The names of the analyses, the default analyses without one, and the
+            words of the choices.
+
+        Raises:
+            TypeError: for arguments which are a string.
+            ValueError: for a choice which is the name of an analysis.
+            SystemExit: with 2 for a word which is neither an analysis nor a
+                choice or which is given twice (argparse), with 0 for `--help`.
         """
+        if argv is not None:
+            argv = _sequence_of_names(argv, "argv")
+        choices = _sequence_of_names(choices, "choices")
+        clashes = sorted(set(choices) & set(self.analyses))
+        if clashes:
+            raise ValueError(f"The choices {clashes} are names of analyses.")
+        words = ", ".join([*self.analyses, *choices])
         parser = argparse.ArgumentParser(
             description=(
                 f"The sensitivity analyses of the {self.model.title}, into "
@@ -919,22 +1114,44 @@ class SensitivityRunner:
                 "samples of the sampling and the global analyses for a smoke run."
             ),
         )
-        # the names are checked here: argparse of python 3.13 checks the
-        # default of a positional `nargs="*"` as one choice
+        # the words are checked here: argparse of python 3.13 checks the
+        # default of a positional `nargs="*"` with `choices` as one choice
         parser.add_argument(
-            "analyses",
+            "words",
             nargs="*",
-            metavar="ANALYSIS",
+            metavar="ANALYSIS" if not choices else "WORD",
             help=(
                 f"the analyses, of {', '.join(self.analyses)} "
                 f"(default: {' '.join(self.default)})"
+                + (
+                    f"; the choices of the script, of {', '.join(choices)}"
+                    if choices
+                    else ""
+                )
             ),
         )
-        names: list[str] = parser.parse_args(argv).analyses
-        unknown = [name for name in names if name not in self.analyses]
+        given: list[str] = parser.parse_args(argv).words
+        unknown = [w for w in given if w not in self.analyses and w not in choices]
         if unknown:
             parser.error(
-                f"invalid choice: {', '.join(repr(name) for name in unknown)} "
-                f"(choose from {', '.join(self.analyses)})"
+                f"invalid choice: {', '.join(repr(w) for w in unknown)} "
+                f"(choose from {words})"
             )
-        self.run(tuple(names) or self.default)
+        repeated = _repeated(given)
+        if repeated:
+            parser.error(f"{', '.join(repr(w) for w in repeated)} given twice")
+        analyses = tuple(w for w in given if w in self.analyses)
+        return CommandLine(
+            analyses=analyses or tuple(self.default),
+            choices=tuple(w for w in given if w in choices),
+        )
+
+    def main(self, argv: Sequence[str] | None = None) -> None:
+        """Run the analyses named on the command line, see `parse_command_line`, `run`.
+
+        Args:
+            argv: the arguments, those of the process if `None`: the names of
+                the analyses, `default` without one; an unknown name exits with
+                2.
+        """
+        self.run(self.parse_command_line(argv).analyses)

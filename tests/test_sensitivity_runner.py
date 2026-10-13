@@ -313,10 +313,31 @@ def test_main_lists_the_analyses(
         (lambda: LocalAnalysis(groups=[]), "at least one group"),
         (lambda: LocalAnalysis(groups=[CONTROL, CONTROL]), r"groups \['control'\]"),
         (lambda: LocalAnalysis(groups=[CONTROL], delta=0), "delta"),
+        (lambda: LocalAnalysis(groups=[CONTROL], delta=1.0), r"delta.*\(0, 1\)"),
         (lambda: SamplingAnalysis(groups=[CONTROL], n=0), "number of samples"),
+        (lambda: SamplingAnalysis(groups=[CONTROL], n=True), "number of samples"),
+        (
+            lambda: SamplingAnalysis(groups=[CONTROL], quantiles=(0.5, 1.5)),
+            r"quantiles.*1\.5",
+        ),
         (lambda: SobolAnalysis(groups=[CONTROL], n=-1), "number of samples"),
+        (lambda: SobolAnalysis(groups=[CONTROL], n=1000), "power of two.*1000"),
+        (lambda: SobolAnalysis(groups=[CONTROL], n=1), "power of two"),
+        (lambda: FastAnalysis(groups=[CONTROL], n=64), "more than 64.*64"),
     ],
-    ids=["no-group", "same-group", "delta", "sampling-n", "sobol-n"],
+    ids=[
+        "no-group",
+        "same-group",
+        "delta",
+        "delta-one",
+        "sampling-n",
+        "sampling-bool",
+        "quantiles",
+        "sobol-n",
+        "sobol-power",
+        "sobol-one",
+        "fast-n",
+    ],
 )
 def test_an_analysis_is_checked(make: Callable[[], object], match: str) -> None:
     with pytest.raises(ValueError, match=match):
@@ -341,6 +362,8 @@ def test_an_analysis_is_checked(make: Callable[[], object], match: str) -> None:
         ),
         ({"analyses": {}}, "at least one analysis"),
         ({"default": ("local", "morris")}, r"default analyses \['morris'\]"),
+        ({"default": ()}, "at least one default analysis"),
+        ({"default": ("local", "local")}, r"default analyses \['local'\].*twice"),
     ],
     ids=[
         "no-output",
@@ -349,6 +372,8 @@ def test_an_analysis_is_checked(make: Callable[[], object], match: str) -> None:
         "no-observable",
         "no-analysis",
         "default",
+        "no-default",
+        "same-default",
     ],
 )
 def test_a_runner_is_checked(
@@ -356,3 +381,167 @@ def test_a_runner_is_checked(
 ) -> None:
     with pytest.raises(ValueError, match=match):
         runner(tmp_path, **options)
+
+
+def test_the_default_is_no_string(tmp_path: Path) -> None:
+    with pytest.raises(TypeError, match="default"):
+        runner(tmp_path, default="local")
+
+
+def test_the_names_of_a_run_are_no_string(tmp_path: Path) -> None:
+    with pytest.raises(TypeError, match="names"):
+        runner(tmp_path).run("local", simulator=SERIAL)
+    assert not (tmp_path / "sensitivity").exists()
+
+
+def test_a_name_is_run_once(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match=r"\['local'\].*twice"):
+        runner(tmp_path).run(["local", "sampling", "local"], simulator=SERIAL)
+    assert not (tmp_path / "sensitivity").exists()
+
+
+@pytest.mark.parametrize(
+    ("value", "names", "match"),
+    [
+        ("16", ["local", "sampling", "fast"], "more than 64"),
+        ("65", ["local", "sobol"], "power of two"),
+        ("many", ["local", "sampling"], "PKPDSIM_SENSITIVITY_N"),
+    ],
+    ids=["fast", "sobol", "malformed"],
+)
+def test_a_smoke_size_is_checked_before_anything_runs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    value: str,
+    names: list[str],
+    match: str,
+) -> None:
+    monkeypatch.setenv("PKPDSIM_SENSITIVITY_N", value)
+    with pytest.raises(ValueError, match=match) as info:
+        runner(tmp_path).run(names, simulator=SERIAL)
+    assert not (tmp_path / "sensitivity").exists()
+    if value != "many":
+        assert any("PKPDSIM_SENSITIVITY_N" in note for note in info.value.__notes__)
+
+
+def test_the_distributions_are_checked_before_anything_runs(tmp_path: Path) -> None:
+    def reversed_bounds() -> list[SensitivityParameter]:
+        return [
+            SensitivityParameter(
+                uid="k", name="k", value=0.2, lower_bound=0.3, upper_bound=0.1
+            ),
+            SensitivityParameter(uid="Vc", name="Vc", value=1.0),
+        ]
+
+    with pytest.raises(ValueError, match=r"'k' \(0.3 > 0.1\)"):
+        runner(tmp_path, parameters=reversed_bounds).run(
+            ["local", "sampling"], simulator=SERIAL
+        )
+    assert not (tmp_path / "sensitivity").exists()
+
+
+def test_an_analysis_which_varies_nothing_is_refused_before_anything_runs(
+    tmp_path: Path,
+) -> None:
+    fixed = SensitivityGroup("fixed", "Fixed", simulation({"k": 0.1, "Vc": 2.0}))
+    analyses = {
+        "local": LocalAnalysis(groups=[CONTROL]),
+        "fixed": LocalAnalysis(groups=[fixed]),
+    }
+    with pytest.raises(ValueError, match=r"varies no parameter.*\['fixed'\]") as info:
+        runner(tmp_path, analyses=analyses).run(["local", "fixed"], simulator=SERIAL)
+    assert info.value.__notes__ == ["The analysis 'fixed' cannot run."]
+    assert not (tmp_path / "sensitivity").exists()
+
+
+def test_the_seed_of_the_designs(tmp_path: Path) -> None:
+    analyses = {"sampling": SamplingAnalysis(groups=[CONTROL], n=4)}
+
+    def samples(seed: int, folder: str) -> pd.DataFrame:
+        path = runner(tmp_path, analyses=analyses, default=["sampling"], seed=seed).run(
+            path=tmp_path / folder, simulator=SERIAL
+        )
+        return pd.read_csv(path / "sampling" / "control" / "samples.tsv", sep="\t")
+
+    first = samples(1234, "first")
+    pd.testing.assert_frame_equal(first, samples(1234, "again"))
+    assert not np.allclose(first["k"], samples(4321, "other")["k"])
+
+
+def test_the_analyses_go_into_a_subfolder_the_table_stays(tmp_path: Path) -> None:
+    """The analyses of one of several simulations, the one table of the parameters."""
+    analyses = {"local": LocalAnalysis(groups=[CONTROL])}
+    toy = runner(tmp_path, analyses=analyses)
+    path = toy.run(["local"], subfolder="single", simulator=SERIAL)
+    toy.run(["local"], subfolder="multi", simulator=SERIAL)
+    assert path == tmp_path / "sensitivity"
+    assert sorted(p.name for p in path.iterdir()) == [
+        "multi",
+        "parameters.tex",
+        "parameters.tsv",
+        "single",
+    ]
+    for key in ["single", "multi"]:
+        assert (path / key / "local" / "control" / "A_auc.normalized.tsv").is_file()
+
+
+@pytest.mark.parametrize("subfolder", ["/tmp/elsewhere", "../up", ""])
+def test_a_subfolder_lies_below_the_folder(tmp_path: Path, subfolder: str) -> None:
+    with pytest.raises(ValueError, match="subfolder"):
+        runner(tmp_path).run(["local"], subfolder=subfolder, simulator=SERIAL)
+    assert not (tmp_path / "sensitivity").exists()
+
+
+def test_the_command_line_with_a_choice_of_the_script(tmp_path: Path) -> None:
+    toy = runner(tmp_path, default=("local", "sampling"))
+    choices = ["single", "multi"]
+    assert toy.parse_command_line([], choices=choices) == (
+        ("local", "sampling"),
+        (),
+    )
+    words = toy.parse_command_line(["sobol", "multi", "local"], choices=choices)
+    assert words.analyses == ("sobol", "local")
+    assert words.choices == ("multi",)
+    assert toy.parse_command_line(["single"], choices=choices) == (
+        ("local", "sampling"),
+        ("single",),
+    )
+
+
+@pytest.mark.parametrize(
+    ("argv", "message"),
+    [
+        (["morris"], "invalid choice: 'morris' (choose from local, sampling, fast, "),
+        (["local", "local"], "'local' given twice"),
+        (["multi", "multi"], "'multi' given twice"),
+    ],
+    ids=["unknown", "same-analysis", "same-choice"],
+)
+def test_the_command_line_refuses_a_word(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], argv: list[str], message: str
+) -> None:
+    with pytest.raises(SystemExit) as info:
+        runner(tmp_path).parse_command_line(argv, choices=["single", "multi"])
+    assert info.value.code == 2
+    err = capsys.readouterr().err
+    assert message in err
+    if argv == ["morris"]:
+        assert "single, multi" in err
+
+
+def test_a_choice_of_the_script_is_no_analysis(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match=r"\['local'\]"):
+        runner(tmp_path).parse_command_line([], choices=["single", "local"])
+    with pytest.raises(TypeError, match="argv"):
+        runner(tmp_path).parse_command_line("local")
+
+
+def test_the_help_names_the_choices_of_the_script(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("COLUMNS", "200")
+    with pytest.raises(SystemExit):
+        runner(tmp_path).parse_command_line(["--help"], choices=["single", "multi"])
+    out = capsys.readouterr().out
+    assert "local, sampling, fast, sobol" in out
+    assert "single, multi" in out
