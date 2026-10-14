@@ -8,6 +8,7 @@ analysis over both groups varies only `k`.
 import dataclasses
 import logging
 import math
+import re
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
@@ -941,3 +942,19 @@ def test_the_simulator_of_a_run_gets_the_workers(
     analyses = {"local": LocalAnalysis(groups=[CONTROL])}
     runner(tmp_path, analyses=analyses).main(["local", *argv])
     assert [s.n_workers for s in settings] == [n_workers]
+
+
+@pytest.mark.usefixtures("no_pyplot")
+@pytest.mark.parametrize("name", ["local", "sampling", "fast", "sobol"])
+def test_the_figures_of_an_analysis_do_not_use_pyplot(
+    tmp_path: Path, name: str
+) -> None:
+    path = runner(tmp_path).run([name], simulator=SERIAL)
+    assert list((path / name).glob("*.png"))
+
+
+def test_pkpdsim_does_not_import_pyplot() -> None:
+    source = Path(__file__).parents[1] / "src" / "pkpdsim"
+    imports = re.compile(r"^\s*(import|from) matplotlib(\.pyplot| import pyplot)", re.M)
+    users = [p.name for p in source.rglob("*.py") if imports.search(p.read_text())]
+    assert users == []
