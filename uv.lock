@@ -1516,7 +1516,7 @@ requires-dist = [
     { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.8.0" },
     { name = "python-libsbml", specifier = ">=5.21.2" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.17.0" },
-    { name = "sbmlsim", specifier = ">=0.9.3,<0.10" },
+    { name = "sbmlsim", specifier = ">=0.9.5,<0.10" },
     { name = "sbmlutils", specifier = ">=0.16.0" },
     { name = "tox", marker = "extra == 'dev'", specifier = ">=4.65.0" },
     { name = "tox-uv", marker = "extra == 'dev'", specifier = ">=1.35.0" },
@@ -2133,7 +2133,7 @@ wheels = [
 
 [[package]]
 name = "sbmlsim"
-version = "0.9.3"
+version = "0.9.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "h5netcdf" },
@@ -2159,9 +2159,9 @@ dependencies = [
     { name = "sympy" },
     { name = "xarray" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b6/93/74318f83a66dde879fda123b93a69c84e2437a46b08199d72eb432b2d9db/sbmlsim-0.9.3.tar.gz", hash = "sha256:17a6b80288ff4a861f895222a4ebbc0cbca35ad4f571d5ed10d3701871815e42", size = 2061436, upload-time = "2026-10-12T09:24:33.818Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/2e/aa/59156477710aa9811c952004782facbec1666fff6a155d7f64085b85490b/sbmlsim-0.9.5.tar.gz", hash = "sha256:5232ad29fab63d4f5eff66dce8fa6dd26130a4a591acdd0ab69161acc113fd78", size = 2097090, upload-time = "2026-10-14T07:27:52.692Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b1/7f/83e168a5a378f9b146d8b8634a592a441546293f9acd7f28454915c5a1d9/sbmlsim-0.9.3-py3-none-any.whl", hash = "sha256:63c0025f36484b6245525200ba627cd876d7113e2173a0a2dcb56a278b37275c", size = 643086, upload-time = "2026-10-12T09:24:31.975Z" },
+    { url = "https://files.pythonhosted.org/packages/c8/7a/e2b7604a128daa97edf10ffb68d53b90f9ced7c138e3efd8e819c5049397/sbmlsim-0.9.5-py3-none-any.whl", hash = "sha256:8cd8b34b4e52c0f61ff7ac6ac5622f9390cb88f05a9a27d443d976ea7c2abdb7", size = 652498, upload-time = "2026-10-14T07:27:50.858Z" },
 ]
 
 [[package]]
