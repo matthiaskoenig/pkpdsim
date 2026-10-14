@@ -20,6 +20,8 @@ from matplotlib.figure import Figure
 from sbmlsim import sensitivity
 from sbmlsim.sensitivity import SensitivityResult
 from sbmlsim.sensitivity.classification import (
+    sensitivity_classification,
+    sensitivity_classification_symbol,
     uncertainty_classification,
     uncertainty_classification_symbol,
 )
@@ -611,7 +613,9 @@ def test_sampling_writes_the_tables_and_figures_of_sbmlsim_085(tmp_path: Path) -
     u = (np.percentile(v, 97.5) - np.percentile(v, 2.5)) / np.percentile(v, 50)
     assert row["U"] == pytest.approx(u)
     assert row["symbol"] == uncertainty_classification_symbol(u)
-    assert row["classification"] == uncertainty_classification(u).value
+    classification = uncertainty_classification(u)
+    assert classification is not None
+    assert row["classification"] == classification.value
 
     compact = pd.read_csv(folder / "sampling_N8_compact.tsv", sep="\t")
     assert list(compact.columns) == ["output", "control", "large", "unit"]
@@ -806,7 +810,7 @@ def test_several_subfolders_share_the_model_and_the_parameters(tmp_path: Path) -
 
 
 def test_an_undefined_or_negative_index_is_classified(tmp_path: Path) -> None:
-    """sbmlsim's classifications refuse `NaN` and a negative uncertainty.
+    """The classifications of sbmlsim give no class for `NaN` and classify a negative uncertainty.
 
     An output which is zero at the reference has an undefined normalized
     sensitivity and uncertainty, a negative output a negative uncertainty,
@@ -849,9 +853,10 @@ def test_an_undefined_or_negative_index_is_classified(tmp_path: Path) -> None:
     assert math.isnan(df.loc["A_zero", "classification"])
     u = df.loc["A_negative", "U"]
     assert u < 0
-    assert df.loc["A_negative", "classification"] == (
-        uncertainty_classification(abs(u)).value
-    )
+    classification = uncertainty_classification(u)
+    assert classification is not None
+    assert df.loc["A_negative", "classification"] == classification.value
+    assert classification == uncertainty_classification(abs(u))
     assert df.loc["A_negative", "U"] == pytest.approx(-df.loc["A_thalf", "U"])
 
 
@@ -958,3 +963,16 @@ def test_pkpdsim_does_not_import_pyplot() -> None:
     imports = re.compile(r"^\s*(import|from) matplotlib(\.pyplot| import pyplot)", re.M)
     users = [p.name for p in source.rglob("*.py") if imports.search(p.read_text())]
     assert users == []
+
+
+def test_an_undefined_value_has_no_class_and_an_infinite_one_the_highest() -> None:
+    from pkpdsim.sensitivity import _classes
+
+    s = (sensitivity_classification, sensitivity_classification_symbol)
+    u = (uncertainty_classification, uncertainty_classification_symbol)
+    assert _classes(math.nan, *s) == ("", "")
+    assert _classes(math.nan, *u) == ("", "")
+    assert _classes(-1.66, *u) == ("<**>", "medium")
+    assert _classes(0.6, *s) == ("+++", "high")
+    assert _classes(-0.15, *s) == ("-", "low")
+    assert _classes(math.inf, *u) == ("<***>", "high")

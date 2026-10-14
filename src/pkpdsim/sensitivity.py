@@ -598,35 +598,21 @@ def _labelled(
     return SensitivityResult(ds)
 
 
-def _sensitivity_class(s: float) -> tuple[str, str]:
-    """Get the symbol and the class of a local sensitivity, empty if it is undefined.
+def _classes(
+    value: float,
+    classify: Callable[[float], StrEnum | None],
+    symbolize: Callable[[float], str],
+) -> tuple[str, str]:
+    """Get the symbol and the class of a value, empty if it is undefined.
 
-    sbmlsim's `sensitivity_classification` refuses `NaN`, the sensitivity of
-    an output which is zero at the reference. A workaround for sbmlsim#311
-    (https://github.com/matthiaskoenig/sbmlsim/issues/311), to be removed
-    when sbmlsim fixes it.
+    The classifications of sbmlsim give `None` for `NaN`, the sensitivity of
+    an output which is zero at the reference or the uncertainty of one with the
+    median zero, and classify a negative uncertainty by its magnitude.
     """
-    if not np.isfinite(s):
+    classification = classify(value)
+    if classification is None:
         return "", ""
-    return sensitivity_classification_symbol(s), sensitivity_classification(s).value
-
-
-def _uncertainty_class(u: float) -> tuple[str, str]:
-    """Get the symbol and the class of an uncertainty by its magnitude, empty if undefined.
-
-    sbmlsim's `uncertainty_classification` classifies `|U|` as its reference
-    (the WHO IPCS guidance) does, but refuses a negative `U`, the uncertainty
-    of an output whose median is negative, and `NaN`, of a median of zero. A
-    workaround for sbmlsim#311
-    (https://github.com/matthiaskoenig/sbmlsim/issues/311), to be removed when
-    sbmlsim fixes it.
-    """
-    if not np.isfinite(u):
-        return "", ""
-    return (
-        uncertainty_classification_symbol(abs(u)),
-        uncertainty_classification(abs(u)).value,
-    )
+    return symbolize(value), classification.value
 
 
 def _figshape(n: int) -> tuple[int, int]:
@@ -932,7 +918,9 @@ class LocalAnalysis(Analysis):
                             p.uid,
                             output.uid,
                         )
-                effect, classification = _sensitivity_class(s)
+                effect, classification = _classes(
+                    s, sensitivity_classification, sensitivity_classification_symbol
+                )
                 rows.append(
                     {
                         "parameter": p.uid,
@@ -1076,8 +1064,10 @@ class SamplingAnalysis(_SampledAnalysis):
                     results[group.uid].ds[output.observable].values, dtype=float
                 )
                 stats[group.uid, output.uid] = _uncertainty(values)
-                symbol, classification = _uncertainty_class(
-                    stats[group.uid, output.uid]["U"]
+                symbol, classification = _classes(
+                    stats[group.uid, output.uid]["U"],
+                    uncertainty_classification,
+                    uncertainty_classification_symbol,
                 )
                 rows.append(
                     {
