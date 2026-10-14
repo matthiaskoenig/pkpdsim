@@ -1,5 +1,6 @@
 """The decay of A at the rate of the model and at half of it."""
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import ClassVar
@@ -34,8 +35,8 @@ class ToyExperiment(PKPDSimulationExperiment):
 
     pkpd_model = MODEL
     selections = ("time", "[A]")
-    labels: ClassVar[dict[str, str]] = {"time": "time", "[A]": "A"}
-    units: ClassVar[dict[str, str]] = {"time": "min", "[A]": "mM"}
+    labels: ClassVar[Mapping[str, str]] = {"time": "time", "[A]": "A"}
+    units: ClassVar[Mapping[str, str]] = {"time": "min", "[A]": "mM"}
 
     #: the rate of the decay [1/min], `None` for the rate of the model
     rate: float | None = None
