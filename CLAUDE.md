@@ -20,7 +20,7 @@ pytest -n 0                              # in one process, e.g. for --pdb
 pytest tests/test_package.py             # single file
 pytest tests/test_package.py::test_version  # single test
 tox r -e py3.14                          # single tox env (py3.13, py3.14 available)
-tox run-parallel                         # full matrix + ty, run before opening a pull request
+tox run-parallel                         # full matrix + ty, from uv.lock (runner uv-venv-lock-runner of tox-uv, extra dev), run before opening a pull request
 
 # lint / format / types
 ruff check
