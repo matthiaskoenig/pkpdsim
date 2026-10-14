@@ -58,10 +58,10 @@ from types import MappingProxyType
 from typing import NamedTuple
 
 import libsbml
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import roadrunner
+from matplotlib.figure import Figure
 from sbmlsim import display, sensitivity
 from sbmlsim.result import ScanResult
 from sbmlsim.sensitivity import SensitivityResult
@@ -570,7 +570,6 @@ def _heatmap(
         )
         cutoff = 0.0
     sensitivity.plot_heatmap(result, index, cutoff=cutoff, path=path, **options)  # ty: ignore[invalid-argument-type]
-    plt.close("all")
 
 
 def _labelled(
@@ -660,13 +659,10 @@ def _plot_groups(
         seed: the seed of the jitter of the points.
     """
     nrows, ncols = _figshape(len(panels))
-    fig, axes = plt.subplots(
-        figsize=(4 * ncols, 4 * nrows),
-        nrows=nrows,
-        ncols=ncols,
-        layout="constrained",
-        squeeze=False,
-    )
+    # a `Figure`, not a pyplot figure: pyplot binds it to the backend, which
+    # aborts the process with TkAgg next to a pool of processes
+    fig = Figure(figsize=(4 * ncols, 4 * nrows), layout="constrained")
+    axes = fig.subplots(nrows=nrows, ncols=ncols, squeeze=False)
     colors = [g.color or f"C{k}" for k, g in enumerate(groups)]
     rng = np.random.default_rng(seed)
     for k, ax in enumerate(axes.flat):
@@ -715,7 +711,6 @@ def _plot_groups(
             tick.set_fontweight("bold")
         ax.tick_params(axis="x", labelrotation=90)
     fig.savefig(path, dpi=300, bbox_inches="tight")
-    plt.close(fig)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1227,7 +1222,6 @@ class _GlobalAnalysis(_SampledAnalysis):
                     title=f"{output.name} ({group.name})",
                     path=path / f"{figures}_{ko:>03}_{output.uid}.png",
                 )
-                plt.close("all")
             labelled = _labelled(result, varied, context.outputs)
             for key in ["ST", "S1"]:
                 _heatmap(
