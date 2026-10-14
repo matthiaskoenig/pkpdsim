@@ -1,5 +1,6 @@
 """The base of the experiments of a model, on the toy model."""
 
+from collections.abc import Mapping
 from pathlib import Path
 from types import MappingProxyType
 from typing import ClassVar
@@ -142,7 +143,7 @@ def test_an_experiment_without_a_model_object_is_an_error() -> None:
 class Narrowed(ToyExperiment):
     """A base which types its labels as a dict, as the models do."""
 
-    labels: ClassVar[dict[str, str]] = {"time": "time"}
+    labels: ClassVar[Mapping[str, str]] = {"time": "time"}
 
 
 def test_a_model_types_its_conventions_itself() -> None:
