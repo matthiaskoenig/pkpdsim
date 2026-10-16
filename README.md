@@ -70,7 +70,7 @@ If you use `pkpdsim` please cite the archived software on [Zenodo](https://doi.o
 
 ## Installation
 
-`pkpdsim` requires python >= 3.13, simulates with sbmlsim 0.9 (`sbmlsim>=0.9.3,<0.10`, installed with it) and is available from [pypi](https://pypi.org/project/pkpdsim/):
+`pkpdsim` requires python >= 3.13, simulates with sbmlsim 0.10 (`sbmlsim>=0.10.0,<0.11`, installed with it) and is available from [pypi](https://pypi.org/project/pkpdsim/):
 
 ```bash
 uv add pkpdsim

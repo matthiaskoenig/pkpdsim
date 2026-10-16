@@ -2,6 +2,7 @@
 
 import copy
 import dataclasses
+import importlib.metadata
 import json
 import pickle
 import re
@@ -1420,5 +1421,5 @@ def test_a_dump_names_the_versions(tmp_path: Path) -> None:
         == 0
     )
     versions = load(str(out))["versions"]
-    assert versions["sbmlsim"].startswith("0.9")
+    assert versions["sbmlsim"] == importlib.metadata.version("sbmlsim")
     assert versions["pkpdsim"] == pkpdsim.__version__
