@@ -45,6 +45,11 @@ def test_release_repo_cloned_when_missing(
     repo = release_repo(release_settings, path, source)
     assert (repo.path / "README.md").exists()
     assert repo.last_tag == "0.1.0"
+    assert repo.ahead == 0
+    (path / "x.txt").write_text("x\n")
+    git(path, "add", "-A")
+    git(path, "commit", "-m", "local")
+    assert release_repo(release_settings, path, source).ahead == 1
 
 
 def test_release_repo_default_path(

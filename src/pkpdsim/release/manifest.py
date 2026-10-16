@@ -23,6 +23,7 @@ MANIFEST_FILE = "release.json"
 BUILD_MARKER = "pkpd_release_build"
 """The file in the git folder which marks a build which has not finished."""
 _RELEASE_NOTES = "release-notes"
+_SHOWN = 20
 
 
 @dataclass(frozen=True)
@@ -284,6 +285,41 @@ def _ignored(release_path: Path, runner: Runner) -> tuple[set[str], set[str]]:
     entries = {e for e in out.split("\0") if e}
     files = {e for e in entries if not e.endswith("/")}
     return files, entries - files
+
+
+def check_not_ignored(
+    release_path: Path, written: Iterable[Path], runner: Runner = run
+) -> None:
+    """Refuse a build which wrote files that git ignores.
+
+    The commit of the release (`git add -A`) leaves an ignored file out, e.g. a
+    tracked `results/` folder of a model package below an ignore pattern of the
+    release repository.
+
+    Args:
+        release_path: the release repository.
+        written: the files (or folders) the stages wrote.
+        runner: runs git.
+
+    Raises:
+        ReleaseError: if git ignores a written file; the message names them.
+    """
+    ignored_files, ignored_dirs = _ignored(release_path, runner)
+    ignored = sorted(
+        relative
+        for relative in _generated(release_path, written)
+        if relative in ignored_files
+        or any(relative.startswith(d) for d in ignored_dirs)
+    )
+    if ignored:
+        shown = ignored[:_SHOWN]
+        if len(ignored) > _SHOWN:
+            shown.append(f"... and {len(ignored) - _SHOWN} more")
+        raise ReleaseError(
+            "git ignores files of the release, its commit would lack them; "
+            "change the ignore pattern which matches them (git check-ignore -v):\n- "
+            + "\n- ".join(shown)
+        )
 
 
 def prune(

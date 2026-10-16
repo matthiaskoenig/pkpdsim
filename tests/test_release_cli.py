@@ -19,7 +19,7 @@ from release_git import git
 from pkpdsim import __version__
 from pkpdsim.model import PKPDModel
 from pkpdsim.release.cli import main, release
-from pkpdsim.release.manifest import MANIFEST_FILE
+from pkpdsim.release.manifest import BUILD_MARKER, MANIFEST_FILE
 from pkpdsim.release.settings import ReleaseSettings
 from pkpdsim.release.source import ReleaseError, Runner, run
 from pkpdsim.uncertainty import adopt_fit
@@ -438,3 +438,73 @@ def test_workers_validated(workers: str, capsys: pytest.CaptureFixture[str]) -> 
         main(["pkpdsim_toy", "--version", VERSION, "--workers", workers])
     assert err.value.code == 2
     assert "--workers" in capsys.readouterr().err
+
+
+def commit_package_file(model: PKPDModel, relative: str) -> None:
+    """Track a file in the model package of the source repository."""
+    (model.path / relative).parent.mkdir(parents=True, exist_ok=True)
+    (model.path / relative).write_text("x\n")
+    root = model.path.parent.parent
+    git(root, "add", "-f", "-A")
+    git(root, "commit", "-m", f"track {relative}")
+
+
+def test_tracked_results_of_the_package_are_released(
+    model: PKPDModel, clone: Path
+) -> None:
+    """Only the results folder at the top of the release repository is ignored."""
+    commit_package_file(model, "fitting/results/data.xlsx")
+    do_release(model, clone, publish=False)
+    released = "src/pkpdsim_toy/fitting/results/data.xlsx"
+    assert released in json.loads((clone / MANIFEST_FILE).read_text())["files"]
+    untracked = git(clone, "ls-files", "--others", "--exclude-standard")
+    assert released in untracked.splitlines()
+
+
+def test_ignored_export_refused(model: PKPDModel, clone: Path) -> None:
+    commit_package_file(model, "cache/old.pyc")
+    with pytest.raises(ReleaseError, match=r"src/pkpdsim_toy/cache/old\.pyc"):
+        do_release(model, clone, publish=False)
+    assert not (clone / MANIFEST_FILE).exists()
+
+
+def test_skipped_build_removes_a_stale_marker(model: PKPDModel, clone: Path) -> None:
+    do_release(model, clone, publish=False)
+    marker = clone / ".git" / BUILD_MARKER
+    marker.write_text(f"{VERSION}\n")  # a rebuild interrupted before it changed a file
+    runner = FakeRunner()
+    do_release(model, clone, publish=True, runner=runner)
+    assert not runner.ran("run_simulation")
+    assert not marker.exists()
+
+
+def test_resume_removes_a_stale_marker(model: PKPDModel, clone: Path) -> None:
+    do_release(model, clone, publish=False)
+    commit_release(clone, tag=False)
+    marker = clone / ".git" / BUILD_MARKER
+    marker.write_text(f"{VERSION}\n")
+    do_release(model, clone, publish=True)
+    assert not marker.exists()
+
+
+def test_local_commit_ahead_refused(model: PKPDModel, clone: Path) -> None:
+    (clone / "notes.txt").write_text("not from a release\n")
+    git(clone, "add", "-A")
+    git(clone, "commit", "-m", "local")
+    runner = FakeRunner()
+    with pytest.raises(ReleaseError, match="ahead of origin/main"):
+        do_release(model, clone, publish=False, runner=runner)
+    assert not runner.ran("run_simulation")
+
+
+def test_local_commit_before_the_release_commit_refused(
+    model: PKPDModel, clone: Path
+) -> None:
+    """Only the release commit itself may wait for the push."""
+    do_release(model, clone, publish=False)
+    git(clone, "commit", "-q", "--allow-empty", "-m", "local")
+    commit_release(clone, tag=False)
+    publisher = FakePublisher()
+    with pytest.raises(ReleaseError, match="ahead of origin/main by 2 commits"):
+        do_release(model, clone, publish=True, publisher=publisher)
+    assert publisher.calls == []

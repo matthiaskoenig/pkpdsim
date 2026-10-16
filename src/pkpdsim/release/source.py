@@ -115,10 +115,12 @@ class ReleaseRepo:
     Attributes:
         path: the folder of the checkout.
         last_tag: the highest released version, `None` without a release.
+        ahead: the number of local commits which `origin/main` lacks.
     """
 
     path: Path
     last_tag: str | None
+    ahead: int = 0
 
 
 def source_repo(model: PKPDModel, runner: Runner = run) -> SourceRepo:
@@ -219,7 +221,9 @@ def release_repo(
         runner: runs the git commands.
 
     Returns:
-        The checkout and its highest released version.
+        The checkout, its highest released version and the number of its
+        commits which are not pushed (only the release commit of a release
+        which failed while publishing may be, see `pkpdsim.release.cli`).
 
     Raises:
         ReleaseError: if `origin` is another repository, the branch is not `main`
@@ -244,8 +248,11 @@ def release_repo(
     behind = runner(["git", "rev-list", "--count", "HEAD..origin/main"], path)
     if int(behind.strip() or "0") > 0:
         raise ReleaseError(f"{path} is behind origin/main, pull it first")
+    ahead = runner(["git", "rev-list", "--count", "origin/main..HEAD"], path)
     tags = runner(["git", "tag", "--list"], path).split()
-    return ReleaseRepo(path=path, last_tag=_last_tag(tags))
+    return ReleaseRepo(
+        path=path, last_tag=_last_tag(tags), ahead=int(ahead.strip() or "0")
+    )
 
 
 def check_version(version: str, last_tag: str | None) -> None:

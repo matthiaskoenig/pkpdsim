@@ -235,4 +235,7 @@ def test_docs_workflow_copies_existing_reports(
 def test_gitignore(context: ProjectContext, tmp_path: Path) -> None:
     write_project_files(context, tmp_path)
     ignored = (tmp_path / ".gitignore").read_text().splitlines()
-    assert {"results/", ".venv/", ".idea/"} <= set(ignored)
+    assert {"/results/", "/build/", "/dist/", "/site/", ".venv/", ".idea/"} <= set(
+        ignored
+    )
+    assert not {"results/", "build/", "dist/", "site/"} & set(ignored)

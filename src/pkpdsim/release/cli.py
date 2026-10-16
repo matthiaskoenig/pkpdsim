@@ -33,6 +33,7 @@ from pkpdsim.release.build import build
 from pkpdsim.release.docs import write_docs
 from pkpdsim.release.manifest import (
     changed_by_build,
+    check_not_ignored,
     finish_build,
     matches,
     prune,
@@ -147,6 +148,7 @@ def _build(
     stage("Docs and README")
     written += write_docs(context, path)
     stage("Prune and manifest")
+    check_not_ignored(path, written, runner)
     prune(path, written, runner)
     write_manifest(path, version, source, written)
     finish_build(path)
@@ -168,24 +170,25 @@ def release(
     The steps, in order; the first failure stops the release:
 
     1. Checks, before anything is changed: the version is `X.Y.Z`, the release
-       settings of the model
-       are complete, the source repository is clean (`source_repo`), the
-       release repository is a checkout of the repository on `main` and up to
-       date (`release_repo`, cloned when missing), the version is greater than
-       the last release (`check_version`), every adopted fit has its record;
-       when publishing, the model declares its COMBINE archive and docker,
-       its buildx plugin and `gh` are ready (`check_tools`), so a missing tool
-       fails before the long build.
+       settings of the model are complete, the source repository is clean
+       (`source_repo`), the release repository is a checkout of the repository
+       on `main` and up to date (`release_repo`, cloned when missing) without
+       local commits besides the release commit of a resumed release, the
+       version is greater than the last release (`check_version`), every
+       adopted fit has its record; when publishing, the model declares its
+       COMBINE archive and docker, its buildx plugin and `gh` are ready
+       (`check_tools`), so a missing tool fails before the long build.
     2. The build, skipped if a publishing run finds a build of this release
-       (`matches`, i.e. a reviewed `--no-publish` build) with a publishable lock.
-       Otherwise the release repository must be clean, changed only by an
-       earlier build of this version or by an unfinished build
-       (`changed_by_build`). The stages write, in
-       this order: the export of the package, the project files, the build
-       (`uv.lock`, models, simulations, fit reports), the release notes and the
-       docs. `prune` then removes every file which no stage wrote, and the
-       manifest `release.json` is written last, so it hashes the final tree
-       which `matches` compares.
+       (`matches`, i.e. a reviewed `--no-publish` build) with a publishable
+       lock; the mark of an unfinished build is removed then. Otherwise the
+       release repository must be clean, changed only by an earlier build of
+       this version or by an unfinished build (`changed_by_build`). The stages
+       write, in this order: the export of the package, the project files, the
+       build (`uv.lock`, models, simulations, fit reports), the release notes
+       and the docs. A written file which git ignores is refused
+       (`check_not_ignored`), the commit would lack it. `prune` then removes
+       every file which no stage wrote, and the manifest `release.json` is
+       written last, so it hashes the final tree which `matches` compares.
     3. `--no-publish` stops here, before the commit.
     4. The lock is checked (`check_lock`, it exists only after the build), then
        the release is published (`publisher`).
@@ -229,6 +232,13 @@ def release(
     target = release_repo(settings, repo, source, runner)
     path = target.path
     resume = _resumable(path, version, runner)
+    if target.ahead > (1 if resume else 0):
+        commits = "commit" if target.ahead == 1 else "commits"
+        raise ReleaseError(
+            f"{path} is ahead of origin/main by {target.ahead} {commits}; only the "
+            "release commit of this version may wait for the push, push or reset "
+            "the others first"
+        )
     if not resume:
         check_version(version, target.last_tag)
         _check_fits(model)
@@ -240,7 +250,9 @@ def release(
         and matches(path, version, source.commit, __version__, runner)
         and _lock_publishable(path)
     )
-    if not built:
+    if built:
+        finish_build(path)  # the tree is a finished build, a marker is stale
+    else:
         if not changed_by_build(path, version, runner):
             raise ReleaseError(
                 "the release repository has changes which no release made, "

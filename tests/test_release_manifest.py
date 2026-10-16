@@ -7,6 +7,7 @@ import pytest
 from pkpdsim.release.manifest import (
     Manifest,
     changed_by_build,
+    check_not_ignored,
     finish_build,
     matches,
     prune,
@@ -203,3 +204,19 @@ def test_unfinished_build_accepts_any_change(
     finish_build(root)
     assert not (root / ".git" / "pkpd_release_build").exists()
     assert not changed_by_build(root, "0.8.0")
+
+
+def test_check_not_ignored(release: tuple[Path, list[Path]]) -> None:
+    root, written = release
+    check_not_ignored(root, written)
+    tracked = write(root, "src/pkg/fitting/results/data.xlsx")
+    write(root, ".gitignore", "/results/\n.venv/\n")
+    check_not_ignored(root, [*written, tracked])
+    write(root, ".gitignore", "results/\n.venv/\n*.log\n")
+    log = write(root, "simulations/a/run.log")
+    with pytest.raises(ReleaseError) as err:
+        check_not_ignored(root, [*written, tracked])
+    assert "src/pkg/fitting/results/data.xlsx" in str(err.value)
+    assert "simulations/a/run.log" in str(err.value)
+    assert "README.md" not in str(err.value)
+    assert log.is_file()

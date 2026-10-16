@@ -118,7 +118,9 @@ line, and the long steps (`uv`, the simulations, the fit reports, `git push`,
 1. **Checks**, before anything is changed: the release metadata is complete,
    the monorepo is clean and committed (its commit is recorded in the release),
    the release repository is a checkout of the repository on `main`, up to
-   date with the remote and without changes which no release made, the version
+   date with the remote, without local commits (besides the release commit of
+   a release which failed while publishing) and without changes which no
+   release made, the version
    is greater than the last tag and every adopted fit has its record. A run
    which publishes also checks that the model has its archive, docker runs with
    its buildx plugin and `gh` is logged in.
@@ -134,7 +136,10 @@ line, and the long steps (`uv`, the simulations, the fit reports, `git push`,
 5. **Release notes** `release-notes/<version>.md`, generated from the changes
    since the last release.
 6. **Docs and README** of the release repository.
-7. **Prune and manifest**: every file which the steps did not write is removed
+7. **Prune and manifest**: a written file which git ignores is refused, since
+   the commit would lack it (the release repository ignores `results/`,
+   `build/`, `dist/` and `site/` only at its top, a model package may track
+   such folders); every file which the steps did not write is removed
    (besides `.git`, ignored files and the release notes of earlier versions),
    then `release.json` records the version, the commit of the monorepo, the
    versions of the core libraries and a hash of every generated file.
