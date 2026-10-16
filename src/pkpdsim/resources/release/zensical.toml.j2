@@ -6,6 +6,10 @@ site_author = {{ settings.authors[0].name | toml if settings.authors else '""' }
 
 copyright = "Copyright &copy; {{ settings.first_year }}-{{ year }}"
 
+# pages as `simulations.html`, so the reports which the docs workflow copies into
+# the site (`simulations/`, `fit/`) do not replace the pages of the same name
+use_directory_urls = false
+
 repo_url = "https://github.com/{{ settings.repository }}"
 repo_name = {{ settings.repository | toml }}
 

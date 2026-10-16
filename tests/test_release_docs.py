@@ -184,4 +184,14 @@ def test_zensical_strict(release: tuple[ProjectContext, Path]) -> None:
         text=True,
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    assert (path / "site" / "index.html").is_file()
+    site = path / "site"
+    assert (site / "index.html").is_file()
+
+    # the docs workflow copies the reports into the site, they must not
+    # replace the pages of the docs
+    write(path / BuildPaths.FITS / "fit1" / "index.html", "<html/>")
+    for folder in (BuildPaths.SIMULATIONS, BuildPaths.FITS):
+        shutil.copytree(path / folder, site / folder, dirs_exist_ok=True)
+    texts = [page.read_text() for page in site.rglob("*.html")]
+    assert any("Simulation report with the confidence interval" in t for t in texts)
+    assert any("Fit report" in t for t in texts)
