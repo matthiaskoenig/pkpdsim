@@ -64,12 +64,6 @@ class FitEntry:
     rows: list[FitRow]
 
 
-def _given_family(name: str) -> str:
-    """Turn `"Family, Given"` into `"Given Family"`."""
-    family, _, given = name.partition(",")
-    return f"{given.strip()} {family.strip()}".strip()
-
-
 def _join(names: list[str], last: str) -> str:
     if len(names) <= 1:
         return "".join(names)
@@ -208,9 +202,7 @@ def write_docs(context: ProjectContext, release_path: Path) -> list[Path]:
     extra = {
         "figure": figure if _copy_image(release_path, figure, images) else None,
         "citation": citation(context),
-        "authors": _join(
-            [_given_family(a.name) for a in context.settings.authors], " and "
-        ),
+        "authors": context.settings.author_names,
         "models": _models(release_path, images),
         "omex": omex.name if omex else None,
         "experiments": _experiments(release_path),

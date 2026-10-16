@@ -36,6 +36,12 @@ class Author:
             return family.strip()
         return f"{family.strip()}, {given[0]}."
 
+    @property
+    def display_name(self) -> str:
+        """The name as `"Given Family"`."""
+        family, _, given = self.name.partition(",")
+        return f"{given.strip()} {family.strip()}".strip()
+
 
 @dataclass(frozen=True, kw_only=True)
 class ReleaseSettings:
@@ -89,6 +95,14 @@ class ReleaseSettings:
     def site_url(self) -> str:
         """The URL of the docs site on GitHub pages."""
         return f"https://{self.owner}.github.io/{self.repo_name}/"
+
+    @property
+    def author_names(self) -> str:
+        """The authors as `"Given Family"`, the last joined with `and`."""
+        names = [author.display_name for author in self.authors]
+        if len(names) <= 1:
+            return "".join(names)
+        return ", ".join(names[:-1]) + " and " + names[-1]
 
     @property
     def raw_url(self) -> str:

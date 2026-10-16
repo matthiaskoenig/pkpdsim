@@ -149,7 +149,10 @@ def test_workflows_replaced(context: ProjectContext, tmp_path: Path) -> None:
         "${{ steps.deployment.outputs.page_url }}"
         in (workflows / "docs.yml").read_text()
     )
-    assert tomllib.loads((tmp_path / "zensical.toml").read_text())["project"]["nav"]
+    zensical = tomllib.loads((tmp_path / "zensical.toml").read_text())["project"]
+    assert zensical["nav"]
+    assert zensical["site_author"] == "Jane Doe"
+    assert zensical["copyright"].endswith(" Jane Doe")
 
 
 def test_no_em_dash(context: ProjectContext, tmp_path: Path) -> None:

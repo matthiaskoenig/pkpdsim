@@ -64,6 +64,18 @@ def test_citation_name() -> None:
     assert Author("König, Matthias").citation_name == "König, M."
 
 
+def test_display_names() -> None:
+    assert Author("König, Matthias").display_name == "Matthias König"
+    assert Author("Consortium").display_name == "Consortium"
+    authors = [Author("Schwaiger, Amanda"), Author("König, Matthias")]
+    assert make_settings(authors=authors).author_names == (
+        "Amanda Schwaiger and Matthias König"
+    )
+    authors = [Author("A, B"), Author("C, D"), Author("E, F")]
+    assert make_settings(authors=authors).author_names == "B A, D C and F E"
+    assert make_settings().author_names == "Matthias König"
+
+
 def test_model_release_default_none() -> None:
     assert (
         PKPDModel(

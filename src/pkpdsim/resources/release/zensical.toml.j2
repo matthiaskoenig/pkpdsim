@@ -2,9 +2,9 @@
 site_name = {{ model.title | toml }}
 site_url = {{ settings.site_url | toml }}
 site_description = {{ settings.description | toml }}
-site_author = {{ settings.authors[0].name | toml if settings.authors else '""' }}
+site_author = {{ settings.author_names | toml }}
 
-copyright = "Copyright &copy; {{ settings.first_year }}-{{ year }}"
+copyright = {{ ("Copyright &copy; %s-%s %s" % (settings.first_year, year, settings.author_names)) | toml }}
 
 # pages as `simulations.html`, so the reports which the docs workflow copies into
 # the site (`simulations/`, `fit/`) do not replace the pages of the same name
