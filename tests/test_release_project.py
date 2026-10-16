@@ -6,6 +6,7 @@ import tomllib
 from pathlib import Path
 
 import pytest
+import yaml
 from jinja2 import UndefinedError
 
 from pkpdsim.release import project as project_module
@@ -87,6 +88,7 @@ def test_pyproject_parses(context: ProjectContext) -> None:
     assert data["project"]["name"] == "toy-model"
     assert data["project"]["requires-python"] == ">=3.13"
     assert "scripts" not in data["project"]
+    assert "allow-direct-references" not in render("pyproject.toml.j2", context)
     assert "sources" not in data["tool"]["uv"]
     assert data["tool"]["uv"]["constraint-dependencies"] == [
         "sbmlsim==0.9.7",
@@ -158,3 +160,23 @@ def test_strict_undefined(
 def test_zenodo_file_is_json(context: ProjectContext, tmp_path: Path) -> None:
     write_project_files(context, tmp_path)
     assert json.loads((tmp_path / ".zenodo.json").read_text())["title"] == MODEL.title
+
+
+def test_forked_package_not_constrained(source: SourceRepo) -> None:
+    fork = (
+        '\n[[package]]\nname = "numpy"\nversion = "1.0.0"\n'
+        'source = { registry = "https://pypi.org/simple" }\n'
+        '\n[[package]]\nname = "numpy"\nversion = "2.0.0"\n'
+        'source = { registry = "https://pypi.org/simple" }\n'
+    )
+    (source.root / "uv.lock").write_text(LOCK + fork)
+    constraints = project_context(MODEL, SETTINGS, source, "0.1.0").constraints
+    assert constraints == ("sbmlsim==0.9.7", "pkpdsim==0.2.0")
+
+
+def test_workflows_are_yaml(context: ProjectContext) -> None:
+    ci = yaml.safe_load(render("workflows/ci.yml.j2", context))
+    docs = yaml.safe_load(render("workflows/docs.yml.j2", context))
+    runs = [s.get("run", "") for s in ci["jobs"]["simulate"]["steps"]]
+    assert f"uv run run_simulation {MODEL.package} --action factory" in runs
+    assert "deploy" in docs["jobs"]

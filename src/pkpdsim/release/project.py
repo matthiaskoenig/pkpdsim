@@ -92,18 +92,29 @@ def _python_version(source: SourceRepo, requires_python: str) -> str:
 
 
 def _constraints(source: SourceRepo, pkpdsim_path: Path | None) -> tuple[str, ...]:
+    """Get `name==version` of the registry packages of the source lock.
+
+    Packages locked at several versions (resolution forks) are skipped, as
+    pins to two versions of one package cannot be satisfied.
+    """
     lock_path = source.root / "uv.lock"
     if not lock_path.exists():
         raise ReleaseError(f"The source has no 'uv.lock' at {lock_path}.")
     lock = tomllib.loads(lock_path.read_text())
-    constraints = []
+    versions: dict[str, set[str]] = {}
     for package in lock.get("package", []):
         if "registry" not in package.get("source", {}):
             continue
         name = package["name"]
         if pkpdsim_path is not None and name == "pkpdsim":
             continue
-        constraints.append(f"{name}=={package['version']}")
+        versions.setdefault(name, set()).add(package["version"])
+    # a package locked at several versions (resolution forks) gets no constraint
+    constraints = [
+        f"{name}=={next(iter(found))}"
+        for name, found in versions.items()
+        if len(found) == 1
+    ]
     return tuple(constraints)
 
 
@@ -261,6 +272,6 @@ def write_project_files(context: ProjectContext, release_path: Path) -> list[Pat
     )
     written.append(zenodo)
     for workflow in (release_path / ".github" / "workflows").glob("*"):
-        if workflow not in written:
+        if workflow.is_file() and workflow not in written:
             workflow.unlink()
     return written

@@ -36,9 +36,6 @@ docs = ["zensical"]
 [tool.hatch.build.targets.wheel]
 packages = ["src/{{ top_package }}"]
 
-[tool.hatch.metadata]
-allow-direct-references = true
-
 [tool.uv]
 constraint-dependencies = [
 {%- for constraint in constraints %}
