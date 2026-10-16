@@ -9,7 +9,6 @@ import pytest
 
 from pkpdsim.release.publish import (
     check_lock,
-    check_publishable,
     check_tools,
     publish,
 )
@@ -68,7 +67,9 @@ class FakeRunner:
         if cmd[:3] == ["git", "tag", "--list"]:
             return cmd[3] if cmd[3] in self.tags else ""
         if cmd[:2] == ["git", "rev-list"]:
-            return self.tags[cmd[-1]]
+            # a tag is named by its full ref, never a branch of the same name
+            assert cmd[-1].startswith("refs/tags/")
+            return self.tags[cmd[-1].removeprefix("refs/tags/")]
         if cmd[:2] == ["git", "rev-parse"]:
             return self.head
         if cmd[:2] == ["git", "tag"]:
@@ -195,32 +196,32 @@ def _lock(release: Path, source: str) -> None:
     )
 
 
-def test_check_publishable_ok(tmp_path: Path) -> None:
+def test_check_lock_and_tools_ok(tmp_path: Path) -> None:
     _lock(tmp_path, '{ registry = "https://pypi.org/simple" }')
-    check_publishable(tmp_path, FakeRunner())
+    check_lock(tmp_path)
+    check_tools(tmp_path, FakeRunner())
 
 
-def test_check_publishable_local_source(tmp_path: Path) -> None:
+def test_check_lock_local_source(tmp_path: Path) -> None:
     _lock(tmp_path, '{ directory = "../pkpdsim" }')
     with pytest.raises(ReleaseError, match="pkpdsim"):
-        check_publishable(tmp_path, FakeRunner())
+        check_lock(tmp_path)
 
 
-def test_check_publishable_uv_sources(tmp_path: Path) -> None:
+def test_check_lock_uv_sources(tmp_path: Path) -> None:
     _lock(tmp_path, '{ registry = "https://pypi.org/simple" }')
     (tmp_path / "pyproject.toml").write_text(
         '[tool.uv.sources]\npkpdsim = { path = "../pkpdsim" }\n'
     )
     with pytest.raises(ReleaseError, match=r"tool\.uv\.sources"):
-        check_publishable(tmp_path, FakeRunner())
+        check_lock(tmp_path)
 
 
-def test_check_publishable_lists_missing_tools(tmp_path: Path) -> None:
-    _lock(tmp_path, '{ registry = "https://pypi.org/simple" }')
+def test_check_tools_lists_missing_tools(tmp_path: Path) -> None:
     runner = FakeRunner()
     runner.missing = {"docker info", "gh auth status"}
     with pytest.raises(ReleaseError) as err:
-        check_publishable(tmp_path, runner)
+        check_tools(tmp_path, runner)
     assert "docker" in str(err.value)
     assert "gh auth status" in str(err.value)
 
@@ -255,9 +256,9 @@ def test_release_without_archive_is_completed() -> None:
     assert upload[-1][-1] == "--clobber"
 
 
-def test_check_publishable_missing_lock(tmp_path: Path) -> None:
+def test_check_lock_missing_lock(tmp_path: Path) -> None:
     with pytest.raises(ReleaseError, match=r"no uv\.lock"):
-        check_publishable(tmp_path, FakeRunner())
+        check_lock(tmp_path)
 
 
 def test_check_tools_without_lock(tmp_path: Path) -> None:

@@ -180,3 +180,9 @@ def test_workflows_are_yaml(context: ProjectContext) -> None:
     runs = [s.get("run", "") for s in ci["jobs"]["simulate"]["steps"]]
     assert f"uv run run_simulation {MODEL.package} --action factory" in runs
     assert "deploy" in docs["jobs"]
+
+
+def test_gitignore(context: ProjectContext, tmp_path: Path) -> None:
+    write_project_files(context, tmp_path)
+    ignored = (tmp_path / ".gitignore").read_text().splitlines()
+    assert {"results/", ".venv/", ".idea/"} <= set(ignored)

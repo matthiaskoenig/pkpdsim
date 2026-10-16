@@ -306,7 +306,7 @@ def test_main_reports_refusal(
     with pytest.raises(SystemExit) as err:
         main(["pkpdsim_toy", "--version", VERSION, "--no-publish"])
     assert err.value.code == 1
-    assert "no release made" in capsys.readouterr().out
+    assert "no release made" in capsys.readouterr().err
 
 
 def test_main_no_publish(
@@ -328,3 +328,96 @@ def test_main_no_publish(
     out = capsys.readouterr().out
     assert str(tmp_path) in out
     assert "review, then run without --no-publish" in out
+
+
+def commit_source(model: PKPDModel) -> None:
+    """Move the source repository on by a commit which changes the package."""
+    (model.path / "extra.py").write_text("EXTRA = 1\n")
+    root = model.path.parent.parent
+    git(root, "add", "-A")
+    git(root, "commit", "-m", "more")
+
+
+def commit_release(clone: Path, tag: bool) -> None:
+    """Commit the build as the publisher does, with or without the tag."""
+    git(clone, "add", "-A")
+    git(clone, "commit", "-m", f"Release {VERSION}")
+    if tag:
+        git(clone, "tag", VERSION)
+
+
+def test_failed_build_rerun(model: PKPDModel, clone: Path) -> None:
+    with pytest.raises(ReleaseError, match="uncertainty"):
+        do_release(
+            model, clone, publish=False, runner=FakeRunner(fail_on="--uncertainty")
+        )
+    do_release(model, clone, publish=False)
+    assert (clone / MANIFEST_FILE).is_file()
+    assert not (clone / ".git" / "pkpd_release_build").exists()
+
+
+def test_interrupted_rebuild_after_review(model: PKPDModel, clone: Path) -> None:
+    do_release(model, clone, publish=False)
+    commit_source(model)  # the export writes a file which the manifest lacks
+    with pytest.raises(ReleaseError, match="uncertainty"):
+        do_release(
+            model, clone, publish=True, runner=FakeRunner(fail_on="--uncertainty")
+        )
+    publisher = FakePublisher()
+    do_release(model, clone, publish=True, publisher=publisher)
+    assert len(publisher.calls) == 1
+    assert (clone / "src" / "pkpdsim_toy" / "extra.py").is_file()
+
+
+def test_results_survive_and_do_not_block(model: PKPDModel, clone: Path) -> None:
+    do_release(model, clone, publish=False)
+    (clone / "results" / "x").write_text("mine\n")
+    do_release(model, clone, publish=False)
+    assert (clone / "results" / "x").is_file()
+    assert (clone / "results/simulation/all/Decay/index.html").is_file()
+
+
+def test_resume_tag_with_moved_source(model: PKPDModel, clone: Path) -> None:
+    do_release(model, clone, publish=False)
+    commit_release(clone, tag=True)
+    commit_source(model)
+    runner, publisher = FakeRunner(), FakePublisher()
+    do_release(model, clone, publish=True, runner=runner, publisher=publisher)
+    assert not runner.ran("run_simulation")
+    assert len(publisher.calls) == 1
+
+
+def test_resume_release_commit_without_tag(model: PKPDModel, clone: Path) -> None:
+    do_release(model, clone, publish=False)
+    commit_release(clone, tag=False)
+    head = git(clone, "rev-parse", "HEAD")
+    commit_source(model)
+    runner, publisher = FakeRunner(), FakePublisher()
+    do_release(model, clone, publish=True, runner=runner, publisher=publisher)
+    assert not runner.ran("run_simulation")
+    assert len(publisher.calls) == 1
+    assert git(clone, "rev-parse", "HEAD") == head
+    assert not git(clone, "status", "--porcelain").strip()
+
+
+def test_invalid_version_refused(model: PKPDModel, clone: Path) -> None:
+    runner = FakeRunner()
+    with pytest.raises(ReleaseError, match="not a version"):
+        release(
+            model,
+            version="1.0",
+            repo=clone,
+            publish=True,
+            pkpdsim_path=None,
+            workers="auto",
+            runner=runner,
+        )
+    assert runner.commands == []
+
+
+@pytest.mark.parametrize("workers", ["0", "-2", "many"])
+def test_workers_validated(workers: str, capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as err:
+        main(["pkpdsim_toy", "--version", VERSION, "--workers", workers])
+    assert err.value.code == 2
+    assert "--workers" in capsys.readouterr().err

@@ -19,6 +19,7 @@ for the order of the steps.
 from __future__ import annotations
 
 import argparse
+import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
@@ -30,10 +31,22 @@ from pkpdsim.fit_report import fit_record_dir
 from pkpdsim.model import PKPDModel
 from pkpdsim.release.build import build
 from pkpdsim.release.docs import write_docs
-from pkpdsim.release.manifest import changed_by_build, matches, prune, write_manifest
+from pkpdsim.release.manifest import (
+    changed_by_build,
+    finish_build,
+    matches,
+    prune,
+    start_build,
+    write_manifest,
+)
 from pkpdsim.release.notes import fits_prefix, write_release_notes
 from pkpdsim.release.project import project_context, write_project_files
-from pkpdsim.release.publish import check_lock, check_tools
+from pkpdsim.release.publish import (
+    check_lock,
+    check_tools,
+    head_is_release,
+    tag_commit,
+)
 from pkpdsim.release.publish import publish as publish_release
 from pkpdsim.release.settings import ReleaseSettings
 from pkpdsim.release.source import (
@@ -43,6 +56,7 @@ from pkpdsim.release.source import (
     SourceRepo,
     check_version,
     export_package,
+    parse_version,
     release_repo,
     run,
     source_repo,
@@ -86,12 +100,18 @@ def _check_fits(model: PKPDModel) -> None:
             raise ReleaseError(str(err)) from err
 
 
-def _tagged_at_head(path: Path, version: str, runner: Runner) -> bool:
-    """Tell whether the tag of the version exists and is the current commit."""
-    if not runner(["git", "tag", "--list", version], path).strip():
+def _resumable(path: Path, version: str, runner: Runner) -> bool:
+    """Tell whether the release of the version is committed, only publishing remains.
+
+    `HEAD` is the release commit of the version (see `head_is_release`) and the
+    tag of the version is missing or at `HEAD`.
+    """
+    if not head_is_release(path, version, runner):
         return False
-    tagged = runner(["git", "rev-list", "-n", "1", version], path).strip()
-    return tagged == runner(["git", "rev-parse", "HEAD"], path).strip()
+    tagged = tag_commit(path, version, runner)
+    return (
+        tagged is None or tagged == runner(["git", "rev-parse", "HEAD"], path).strip()
+    )
 
 
 def _lock_publishable(path: Path) -> bool:
@@ -115,6 +135,7 @@ def _build(
     """Build the release in the release repository and write its manifest."""
     path = target.path
     context = project_context(model, settings, source, version, pkpdsim_path)
+    start_build(path, version)
     console.print(f"Export of {model.package} into {path}")
     written: list[Path] = export_package(model, settings, source, path, runner)
     written += write_project_files(context, path)
@@ -125,6 +146,7 @@ def _build(
     written += write_docs(context, path)
     prune(path, written, runner)
     write_manifest(path, version, source, written)
+    finish_build(path)
 
 
 def release(
@@ -142,7 +164,8 @@ def release(
 
     The steps, in order; the first failure stops the release:
 
-    1. Checks, before anything is changed: the release settings of the model
+    1. Checks, before anything is changed: the version is `X.Y.Z`, the release
+       settings of the model
        are complete, the source repository is clean (`source_repo`), the
        release repository is a checkout of the repository on `main` and up to
        date (`release_repo`, cloned when missing), the version is greater than
@@ -152,8 +175,9 @@ def release(
        build.
     2. The build, skipped if a publishing run finds a build of this release
        (`matches`, i.e. a reviewed `--no-publish` build) with a publishable lock.
-       Otherwise the release repository must be clean or changed only by an
-       earlier build of this version (`changed_by_build`). The stages write, in
+       Otherwise the release repository must be clean, changed only by an
+       earlier build of this version or by an unfinished build
+       (`changed_by_build`). The stages write, in
        this order: the export of the package, the project files, the build
        (`uv.lock`, models, simulations, fit reports), the release notes and the
        docs. `prune` then removes every file which no stage wrote, and the
@@ -163,9 +187,16 @@ def release(
     4. The lock is checked (`check_lock`, it exists only after the build), then
        the release is published (`publisher`).
 
-    If the tag of the version is at `HEAD` and the manifest matches, the release
-    was committed by an earlier run which failed while publishing: the version
-    check and the build are skipped and the publishing steps resume.
+    A build which failed or was interrupted is rebuilt by the next run: the
+    build marks its start in the git folder and removes the mark after the
+    manifest (`start_build`, `finish_build`), and a marked repository may hold
+    any change.
+
+    If `HEAD` is the release commit of the version (clean, with its manifest)
+    and its tag is missing or at `HEAD`, an earlier run failed while
+    publishing: the version check, the fit records and the build are skipped
+    and the publishing steps resume, whatever the source commit or the
+    pkpdsim version is now.
 
     Args:
         model: the model which is released, with its release settings.
@@ -185,6 +216,7 @@ def release(
     Raises:
         ReleaseError: if a check or a step fails; the message is for the user.
     """
+    parse_version(version)
     if publish and pkpdsim_path is not None:
         raise ReleaseError("a local pkpdsim (pkpdsim_path) is only for --no-publish")
     settings = _settings(model)
@@ -193,12 +225,10 @@ def release(
     source = source_repo(model, runner)
     target = release_repo(settings, repo, source, runner)
     path = target.path
-    resume = _tagged_at_head(path, version, runner) and matches(
-        path, version, source.commit, __version__, runner
-    )
+    resume = _resumable(path, version, runner)
     if not resume:
         check_version(version, target.last_tag)
-    _check_fits(model)
+        _check_fits(model)
     if publish:
         check_tools(path, runner)
 
@@ -221,6 +251,13 @@ def release(
     console.print(f"Publishing {settings.repository} {version}")
     publisher(settings, path, version, path / _archive_name(model), runner)
     return path
+
+
+def _workers(text: str) -> str:
+    """Check the number of workers: `auto` or a positive int."""
+    if text != "auto" and not (text.isdigit() and int(text) > 0):
+        raise argparse.ArgumentTypeError(f"'{text}' is not auto or a positive int")
+    return text
 
 
 def parser() -> argparse.ArgumentParser:
@@ -263,6 +300,7 @@ def parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--workers",
+        type=_workers,
         default="auto",
         help="the number of workers of the simulations (default: auto)",
     )
@@ -298,7 +336,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             workers=options.workers,
         )
     except ReleaseError as err:
-        console.print(str(err), style="error", markup=False)
+        print(f"pkpd_release: error: {err}", file=sys.stderr)
         raise SystemExit(1) from err
     if options.publish:
         console.print(f"Released {options.version} from {path}.")

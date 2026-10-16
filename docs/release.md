@@ -63,9 +63,11 @@ print(release.missing())
 - `first_year`: the year of the first release, the start of the copyright.
 
 The model object sets it as `PKPDModel(..., release=release)`. A model without
-`release`, or with an empty field, cannot be released; the command names the
-missing fields. The adopted fits of `MODEL.fits` are released with their
-records, the archive of `MODEL.archive_path` is attached to the GitHub release.
+`release`, with an empty field or a `first_year` which is no positive year
+cannot be released; the command names the missing fields. An empty `exclude`
+releases the whole model folder. The adopted fits of `MODEL.fits` are released
+with their records, the archive of `MODEL.archive_path` is attached to the
+GitHub release.
 
 ## One-time setup
 
@@ -141,12 +143,17 @@ built) commits it as it is, without running the simulations again. A file
 changed during the review makes the run build again, so the published release
 is always the output of the command.
 
-A run which failed while publishing is finished by running the same command
-again: every publishing step checks whether it is done already (the tag, the
-push, the image, the GitHub release) and is skipped then. If the tag of the
-version is at the last commit of the release repository and the manifest
-matches, the build is skipped and the publishing steps resume.
+A build which failed or was interrupted (a failing simulation, a stopped
+command) is built again by the next run; nothing has to be cleaned up by hand.
 
-The command refuses a release repository with changes which no release made,
-e.g. a file added by hand or the output of a build which failed half way;
-discard them (`git status` lists them) and run the command again.
+A run which failed while publishing is finished by running the same command
+again: every publishing step checks whether it is done already (the commit, the
+tag, the push, the image, the GitHub release) and is skipped then. If the last
+commit of the release repository is the release of the version (the tag is
+missing or at that commit), the build is skipped and the publishing steps
+resume, even if the monorepo moved on since.
+
+The results of the build (`results/`), the environment (`.venv/`) and the
+settings of an editor (`.idea/`) are ignored by git and stay. A file added to
+the release repository by hand is refused; the release repository holds only
+what the command generates.

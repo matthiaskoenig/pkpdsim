@@ -50,6 +50,10 @@ def test_urls() -> None:
 def test_missing() -> None:
     assert make_settings().missing() == []
     assert make_settings(funding="", keywords=()).missing() == ["funding", "keywords"]
+    assert make_settings(exclude=()).missing() == []
+    assert make_settings(first_year=0).missing() == ["first_year"]
+    assert make_settings(first_year=-1).missing() == ["first_year"]
+    assert make_settings(first_year=True).missing() == ["first_year"]
 
 
 def test_default_exclude() -> None:

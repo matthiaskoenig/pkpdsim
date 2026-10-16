@@ -7,8 +7,10 @@ import pytest
 from pkpdsim.release.manifest import (
     Manifest,
     changed_by_build,
+    finish_build,
     matches,
     prune,
+    start_build,
     write_manifest,
 )
 from pkpdsim.release.source import ReleaseError, SourceRepo, run
@@ -173,3 +175,19 @@ def test_changed_by_build_clean(release: tuple[Path, list[Path]]) -> None:
     assert changed_by_build(root, "0.8.0")
     (root / "docs" / "RELEASE.md").unlink()
     assert changed_by_build(root, "0.8.0")
+
+
+def test_unfinished_build_accepts_any_change(
+    release: tuple[Path, list[Path]],
+) -> None:
+    root, written = release
+    write_manifest(root, "0.8.0", SOURCE, written)
+    write(root, "extra.txt")
+    assert not changed_by_build(root, "0.8.0")
+    start_build(root, "0.9.0")
+    assert (root / ".git" / "pkpd_release_build").read_text() == "0.9.0\n"
+    assert changed_by_build(root, "0.8.0")
+    assert changed_by_build(root, "1.0.0")
+    finish_build(root)
+    assert not (root / ".git" / "pkpd_release_build").exists()
+    assert not changed_by_build(root, "0.8.0")

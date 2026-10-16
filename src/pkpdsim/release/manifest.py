@@ -20,6 +20,8 @@ from pathlib import Path, PurePosixPath
 from pkpdsim.release.source import ReleaseError, Runner, SourceRepo, run
 
 MANIFEST_FILE = "release.json"
+BUILD_MARKER = "pkpd_release_build"
+"""The file in the git folder which marks a build which has not finished."""
 _RELEASE_NOTES = "release-notes"
 
 
@@ -211,12 +213,38 @@ def matches(
     return _status_paths(release_path, runner) <= allowed
 
 
+def _marker(release_path: Path) -> Path:
+    return release_path / ".git" / BUILD_MARKER
+
+
+def start_build(release_path: Path, version: str) -> None:
+    """Mark the start of a build, before the first file is written.
+
+    The marker lies in the git folder, so it is never committed or pruned.
+
+    Args:
+        release_path: the release repository.
+        version: the version which is built.
+    """
+    _marker(release_path).write_text(f"{version}\n", encoding="utf-8")
+
+
+def finish_build(release_path: Path) -> None:
+    """Remove the marker of a build, after the manifest is written.
+
+    Args:
+        release_path: the release repository.
+    """
+    _marker(release_path).unlink(missing_ok=True)
+
+
 def changed_by_build(release_path: Path, version: str, runner: Runner = run) -> bool:
     """Tell whether the release repository is clean or changed only by a build.
 
     A build of the same version may be rebuilt, the files may differ from their
     hashes (e.g. after a hand edit during the review). Deleted files are no
-    change, a build deletes what it did not generate.
+    change, a build deletes what it did not generate. A build which failed or
+    was interrupted left its marker, its changes are rebuilt as well.
 
     Args:
         release_path: the release repository.
@@ -224,9 +252,12 @@ def changed_by_build(release_path: Path, version: str, runner: Runner = run) -> 
         runner: runs git.
 
     Returns:
-        `True` if git status lists no file, or the manifest is of `version` and
-        git status lists only files of the manifest and `release.json`.
+        `True` if a build has not finished (see `start_build`), git status lists
+        no file, or the manifest is of `version` and git status lists only files
+        of the manifest and `release.json`.
     """
+    if _marker(release_path).is_file():
+        return True
     changed = _status_paths(release_path, runner)
     if not changed:
         return True

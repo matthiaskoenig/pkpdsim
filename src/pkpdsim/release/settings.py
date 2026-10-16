@@ -96,5 +96,17 @@ class ReleaseSettings:
         return f"https://raw.githubusercontent.com/{self.repository}/main/"
 
     def missing(self) -> list[str]:
-        """Get the names of the empty fields, sorted."""
-        return sorted(f.name for f in fields(self) if not getattr(self, f.name))
+        """Get the names of the fields a release lacks, sorted.
+
+        A field is missing if it is empty; `exclude` may be empty (everything is
+        released), `first_year` is missing unless it is a positive int.
+        """
+        names = [
+            f.name
+            for f in fields(self)
+            if f.name not in ("exclude", "first_year") and not getattr(self, f.name)
+        ]
+        year = self.first_year
+        if isinstance(year, bool) or not isinstance(year, int) or year < 1:
+            names.append("first_year")
+        return sorted(names)

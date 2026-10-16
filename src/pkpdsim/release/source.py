@@ -130,7 +130,18 @@ def _is_repository(origin: str, repository: str) -> bool:
     return bool(match) and match["repository"].lower() == repository.lower()
 
 
-def _parse_version(version: str) -> tuple[int, int, int]:
+def parse_version(version: str) -> tuple[int, int, int]:
+    """Parse a version of a release.
+
+    Args:
+        version: the version `X.Y.Z`.
+
+    Returns:
+        The three numbers of the version.
+
+    Raises:
+        ReleaseError: if the version is not `X.Y.Z`.
+    """
     match = _VERSION.match(version)
     if match is None:
         raise ReleaseError(f"'{version}' is not a version 'X.Y.Z'")
@@ -139,7 +150,7 @@ def _parse_version(version: str) -> tuple[int, int, int]:
 
 def _last_tag(tags: Sequence[str]) -> str | None:
     versions = [t for t in tags if _VERSION.match(t)]
-    return max(versions, key=_parse_version, default=None)
+    return max(versions, key=parse_version, default=None)
 
 
 def release_repo(
@@ -197,8 +208,8 @@ def check_version(version: str, last_tag: str | None) -> None:
     Raises:
         ReleaseError: if a version is malformed or `version` is not greater.
     """
-    new = _parse_version(version)
-    if last_tag is not None and new <= _parse_version(last_tag):
+    new = parse_version(version)
+    if last_tag is not None and new <= parse_version(last_tag):
         raise ReleaseError(
             f"version {version} must be greater than the last release {last_tag}"
         )

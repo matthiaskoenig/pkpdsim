@@ -105,24 +105,20 @@ def check_lock(release_path: Path) -> None:
     _refuse(_lock_problems(release_path))
 
 
-def check_publishable(release_path: Path, runner: Runner = run) -> None:
-    """Check that the release repository can be published.
-
-    Both `check_lock` and `check_tools` in one check.
+def head_is_release(path: Path, version: str, runner: Runner = run) -> bool:
+    """Tell whether the release of a version is committed at `HEAD`.
 
     Args:
-        release_path: the checkout of the release repository.
-        runner: runs the tool checks.
+        path: the checkout of the release repository.
+        version: the released version.
+        runner: runs git.
 
-    Raises:
-        ReleaseError: if the lock has a package which is not from PyPI, the
-            project uses `tool.uv.sources`, Docker is not running or `gh` is not
-            logged in; one message lists everything.
+    Returns:
+        `True` if the working tree is clean and the `release.json` of `HEAD` is
+        the manifest of `version`.
     """
-    _refuse(_lock_problems(release_path) + _tool_problems(release_path, runner))
-
-
-def _head_has_manifest(path: Path, version: str, runner: Runner) -> bool:
+    if runner(["git", "status", "--porcelain"], path).strip():
+        return False
     try:
         text = runner(["git", "show", f"HEAD:{MANIFEST_FILE}"], path)
         return json.loads(text).get("version") == version
@@ -130,9 +126,24 @@ def _head_has_manifest(path: Path, version: str, runner: Runner) -> bool:
         return False
 
 
+def tag_commit(path: Path, version: str, runner: Runner = run) -> str | None:
+    """Get the commit of the tag of a version.
+
+    Args:
+        path: the checkout of the release repository.
+        version: the version, the name of the tag.
+        runner: runs git.
+
+    Returns:
+        The commit of `refs/tags/<version>`, `None` without the tag.
+    """
+    if not runner(["git", "tag", "--list", version], path).strip():
+        return None
+    return runner(["git", "rev-list", "-n", "1", f"refs/tags/{version}"], path).strip()
+
+
 def _commit(path: Path, version: str, runner: Runner) -> bool:
-    clean = not runner(["git", "status", "--porcelain"], path).strip()
-    if clean and _head_has_manifest(path, version, runner):
+    if head_is_release(path, version, runner):
         return False
     runner(["git", "add", "-A"], path)
     runner(["git", "commit", "-m", f"Release {version}"], path)
@@ -140,8 +151,8 @@ def _commit(path: Path, version: str, runner: Runner) -> bool:
 
 
 def _tag(path: Path, version: str, runner: Runner) -> bool:
-    if runner(["git", "tag", "--list", version], path).strip():
-        tagged = runner(["git", "rev-list", "-n", "1", version], path).strip()
+    tagged = tag_commit(path, version, runner)
+    if tagged is not None:
         if tagged != runner(["git", "rev-parse", "HEAD"], path).strip():
             raise ReleaseError(f"tag {version} exists and is not at HEAD")
         return False
