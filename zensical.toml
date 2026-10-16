@@ -45,6 +45,7 @@ nav = [
     { "sensitivity" = "api/sensitivity.md" },
     { "uncertainty" = "api/uncertainty.md" },
     { "reports" = "api/reports.md" },
+    { "release" = "api/release.md" },
     { "testing" = "api/testing.md" },
     { "verify" = "api/verify.md" },
   ] },
