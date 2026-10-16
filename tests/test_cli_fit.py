@@ -12,6 +12,8 @@ from pkpdsim.cli import (
     report_command,
     with_output_dir,
 )
+from pkpdsim.fit import report_context
+from pkpdsim.uncertainty import adopt_fit
 from pkpdsim_toy import MODEL
 
 
@@ -188,3 +190,73 @@ def test_the_help_states_the_default_of_the_identifiability() -> None:
     on = " ".join(on.split())
     assert "default: True" in on
     assert "--no-identifiability skips it" in on
+
+
+def _report_dir(output: Path) -> Path:
+    """Get the directory of the one report below an output directory."""
+    (index,) = output.glob("**/index.html")
+    return index.parent
+
+
+def test_the_fit_report_has_the_model_context(tmp_path: Path) -> None:
+    runs = fit_command(MODEL, ["--runs", "1", "--output_dir", str(tmp_path)])
+    (opid,) = runs
+    report = _report_dir(tmp_path)
+    html = (report / "index.html").read_text(encoding="utf-8")
+    assert "<math" in html and 'data-tab="report"' in html
+    typst = (report / "report.typ").read_text(encoding="utf-8")
+    assert MODEL.title in typst
+    assert (report / "report.pdf").exists()
+    (result,) = tmp_path.glob("**/optimization_result.json")
+    arguments = json.loads(result.read_text(encoding="utf-8"))["provenance"]
+    assert arguments["arguments"]["subset"] == "DECAY"
+    assert arguments["arguments"]["command"] == f"run_fit {MODEL.package}"
+    assert arguments["fixed_values"] == {}
+    assert opid.startswith("DECAY_")
+
+
+def test_the_report_context_names_the_fixed_adopted_fits(tmp_path: Path) -> None:
+    # a hand-made adopted fit of another subset: the record of a toy fit,
+    # copied under the id of a fit of the subset OTHER
+    first = tmp_path / "first"
+    fit_command(
+        MODEL,
+        [
+            "--runs",
+            "1",
+            "--identifiability",
+            "--max-points",
+            "5",
+            "--no-fisher",
+            "--no-mapping-figures",
+            "--output_dir",
+            str(first),
+        ],
+    )
+    (fit,) = [p for p in first.iterdir() if p.is_dir()]
+    fits = tmp_path / "fits"
+    adopt_fit(fit, fits)
+    other = fits / "OTHER_20260101_000000__abcde"
+    (fits / fit.name).rename(other)
+    model = dataclasses.replace(MODEL, fits=[other.name], fits_path=fits)
+
+    context = report_context(model, "DECAY", model.load_fit_definitions()["DECAY"])
+    assert context.title == f"{model.title}: fit DECAY"
+    assert context.notes == (
+        f"The parameters of the adopted fits {other.name} were fixed at their "
+        f"fitted values.",
+    )
+    assert (
+        report_context(MODEL, "DECAY", MODEL.load_fit_definitions()["DECAY"]).notes
+        == ()
+    )
+
+    output = tmp_path / "second"
+    fit_command(
+        model, ["--runs", "1", "--no-mapping-figures", "--output_dir", str(output)]
+    )
+    (result,) = output.glob("**/optimization_result.json")
+    provenance = json.loads(result.read_text(encoding="utf-8"))["provenance"]
+    assert set(provenance["fixed_values"]) == {"k"}
+    typst = _report_dir(output).joinpath("report.typ").read_text(encoding="utf-8")
+    assert "were fixed at their fitted values" in typst
