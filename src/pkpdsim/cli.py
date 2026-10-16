@@ -73,6 +73,7 @@ from sbmlsim.fit.result import fit_id
 from sbmlsim.utils import paths_text
 from sbmlutils.console import console
 
+from pkpdsim.fit import report_context
 from pkpdsim.model import PKPDModel, resolve
 from pkpdsim.uncertainty import UncertaintySettings, adopt_fit
 
@@ -728,6 +729,15 @@ def fit_command(
     # the parameters are printed per problem by `run_fit`, with their coverage
     fit_display.print_settings(definition.settings)
 
+    # the values of the adopted fits of other subsets, in the units of the model
+    fixed_values = {
+        pid: parameter.value
+        for fit_id_, record in model.fit_records().records.items()
+        if not fit_id_.startswith(f"{options.subset}_")
+        for pid, parameter in record.parameters.items()
+    }
+    context = report_context(model, options.subset, definition)
+
     runs = run_fit(
         definition=definition,
         opid=opid,
@@ -739,6 +749,14 @@ def fit_command(
         study_ids=options.experiments,
         timeout=options.timeout,
         output_dir=options.output_dir,
+        arguments={
+            "subset": options.subset,
+            "runs": options.runs,
+            "cores": options.cores,
+            "method": options.method,
+            "command": f"run_fit {model.package}",
+        },
+        fixed_values=fixed_values,
     )
 
     # the fit only optimizes, the report is created from its parameters and
@@ -756,6 +774,7 @@ def fit_command(
             fisher=fisher,
             show_titles=False,
             mapping_figures=not options.no_mapping_figures,
+            context=context,
         )
     return runs
 

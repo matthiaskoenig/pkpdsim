@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, overload
 
 from sbmlsim.fit import FitMapping, FitMappingCollection, FitSettings
 from sbmlsim.fit.helpers import FitMappings, MappingFilter
+from sbmlsim.fit.methods import ReportContext
 from sbmlsim.fit.objects import MappingMetaData
 from sbmlsim.fit.options import (
     DataAtChangeType,
@@ -33,6 +34,7 @@ from pkpdsim.metadata import PKPDMappingMetaData
 
 if TYPE_CHECKING:
     from sbmlsim.experiment import SimulationExperiment
+    from sbmlsim.fit.cli import FitDefinition
     from sbmlsim.model.tolerances import AbsoluteTolerance
 
     from pkpdsim.model import PKPDModel
@@ -317,3 +319,37 @@ def select_mappings(
     )
     selection.print(detail=False)
     return selection.collections
+
+
+def report_context(
+    model: PKPDModel, subset: str, definition: FitDefinition
+) -> ReportContext:
+    """Get what the report of a fit says about the model beyond the fit itself.
+
+    Args:
+        model: the model.
+        subset: the fit problem, e.g. `PK`.
+        definition: the definition of the fit problem.
+
+    Returns:
+        The title of the model and the fit, the description of the fit and of
+        its parameters, and a note on the adopted fits of other subsets, whose
+        parameters were kept at their fitted values.
+    """
+    fixed = [f for f in model.fits if not f.startswith(f"{subset}_")]
+    notes = (
+        (
+            f"The parameters of the adopted fits {', '.join(fixed)} were fixed at "
+            f"their fitted values.",
+        )
+        if fixed
+        else ()
+    )
+    return ReportContext(
+        title=f"{model.title}: fit {subset}",
+        description=definition.description,
+        parameter_descriptions={
+            p.pid: p.description for p in definition.parameters if p.description
+        },
+        notes=notes,
+    )
