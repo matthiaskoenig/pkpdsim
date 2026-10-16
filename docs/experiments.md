@@ -218,8 +218,10 @@ class LocalMappingMetaData(PKPDMappingMetaData):
 
 `to_dict` is what the tables of sbmlsim show: the member names of the enums
 (`PO`, not `po`), the string of any other value, in the order of the fields with
-those of `PKPDMappingMetaData` first. No code reads the values, which are readable
-text.
+those of `PKPDMappingMetaData` first. The values are readable text, and they are
+API as much as the names: a model may look a member up by its value, e.g.
+`Genotype(f"CYP2C9 {genotype}")` from the genotype in the data of a study, so a
+value is not changed lightly either.
 
 ## Filters
 

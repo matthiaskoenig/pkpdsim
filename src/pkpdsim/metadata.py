@@ -22,8 +22,10 @@ class LocalMappingMetaData(PKPDMappingMetaData):
     diplotype: str | None = None
 ```
 
-The tables of sbmlsim show the metadata by member name (`to_dict`); no code
-reads the values, which are readable text.
+The tables of sbmlsim show the metadata by member name (`to_dict`). The values
+are readable text, and they are API as much as the names: a model may look a
+member up by its value, e.g. `Genotype(f"CYP2C9 {genotype}")` from the genotype
+in the data of a study, so a value is not changed lightly either.
 """
 
 from __future__ import annotations
@@ -169,13 +171,14 @@ class Health(StrEnum):
 
     HEALTHY = "healthy"
     NR = "not reported"
-    ALCOHOLISM = "alcoholism"
+    ALCOHOLISM = "alcoholism"  # alcohol use disorder, drinking or abstinent
     BILIARY_OBSTRUCTION = "biliary obstruction"
-    CANCER = "cancer"  # adults with solid tumors other than HCC
+    # adults with a cancer which has no member of its own (HCC, NSCLC, CML)
+    CANCER = "cancer"
     CARDIAC_IMPAIRMENT = "cardiac impairment"
     CARDIAC_RENAL_IMPAIRMENT = "cardiac renal impairment"
-    CHOLECYSTECTOMY = "cholecystectomy"
-    CIRRHOSIS = "cirrhosis"  # affects PK
+    CHOLECYSTECTOMY = "cholecystectomy"  # after the removal of the gallbladder
+    CIRRHOSIS = "cirrhosis"
     CIRRHOSIS_HEART_FAILURE = "cirrhosis & heart failure"
     CML = "chronic myelogenous leukemia"
     CYSTIC_FIBROSIS = "cystic fibrosis"
@@ -184,6 +187,8 @@ class Health(StrEnum):
     EPILEPSY = "epilepsy"
     HCC = "hepatocellular carcinoma"
     HCC_RENAL_IMPAIRMENT = "hepatocellular carcinoma & renal impairment"
+    # cardiac patients of several diseases, e.g. ischemic heart disease,
+    # hypertension or mitral valve disease; not HEART_FAILURE
     HEART_DISEASE = "heart disease"
     HEART_FAILURE = "heart failure"
     HEPATIC_IMPAIRMENT = "hepatic impairment"
@@ -191,6 +196,7 @@ class Health(StrEnum):
     HEPATO_RENAL_IMPAIRMENT = "hepatorenal impairment"
     HOSPITALIZED = "hospitalized"
     HYPERTENSION = "hypertension"
+    # regular drinking without alcohol use disorder
     MODERATE_DRINKING = "moderate alcohol consumption"
     NSCLC = "non-small cell lung cancer"
     OBESE = "obese"
@@ -202,7 +208,7 @@ class Health(StrEnum):
     SURGERY = "surgical patients"
     T1DM = "type 1 diabetes mellitus"
     T2DM = "type 2 diabetes mellitus"
-    T2DM_RENAL_IMPAIRMENT = "T2DM & renal impairment"  # affects PK
+    T2DM_RENAL_IMPAIRMENT = "T2DM & renal impairment"
 
 
 @unique
@@ -216,7 +222,7 @@ class Coadministration(StrEnum):
     ALLOPURINOL = "allopurinol"
     AMENAMEVIR = "amenamevir"
     AMLODIPINE = "amlodipine"
-    ANESTHESIA = "anesthesia"
+    ANESTHESIA = "anesthesia"  # e.g. spinal or epidural (bupivacaine, fentanyl)
     ANTIEPILEPTICS = "antiepileptics"
     ANTIHYPERGLYCEMIC_MEDICATION = "antihyperglycemic medication"
     ANTIPYRINE = "antipyrine"
@@ -244,9 +250,10 @@ class Coadministration(StrEnum):
     CLARITHROMYCIN = "clarithromycin"
     CLOPIDOGREL = "clopidogrel"
     CLOTRIMAZOLE = "clotrimazole"
-    COCA_COLA = "coca cola"
-    COCKTAIL = "phenotyping cocktail"  # several other drugs, often the probe drugs of a phenotyping cocktail (e.g. the Inje cocktail)
-    COMEDICATION = "comedication"
+    COCA_COLA = "coca cola"  # the substance dissolved in Coca-Cola, i.e. caffeine
+    # several other drugs, mostly the probe drugs of a phenotyping cocktail
+    COCKTAIL = "phenotyping cocktail"
+    COMEDICATION = "comedication"  # the chronic medication of patients
     CYCLOSPORINE = "cyclosporine"
     DAPAGLIFLOZIN = "dapagliflozin"
     DIGOXIN = "digoxin"
@@ -255,6 +262,7 @@ class Coadministration(StrEnum):
     EMPAGLIFLOZIN = "empagliflozin"
     ENALAPRIL = "enalapril"
     ERYTHROMYCIN = "erythromycin"
+    # the tracer of the erythromycin breath test, a probe of CYP3A4
     ERYTHROMYCIN_BREATH_TEST = "[14C N-methyl] erythromycin"
     EVOGLIPTIN = "evogliptin"
     FAMOTIDINE = "famotidine"
@@ -287,7 +295,7 @@ class Coadministration(StrEnum):
     LOBEGLITAZONE = "lobeglitazone"
     MARAVIROC = "maraviroc"
     METFORMIN = "metformin"
-    METOCLOPRAMIDE = "metoclopramide"
+    METOCLOPRAMIDE = "metoclopramide"  # changes the gastric emptying
     MIDAZOLAM = "midazolam"
     MORPHINE = "morphine"
     MYCOPHENOLATE_MOFETIL = "mycophenolate mofetil"
@@ -297,9 +305,9 @@ class Coadministration(StrEnum):
     ORLISTAT = "orlistat"
     OSIMERTINIB = "osimertinib"
     PACLITAXEL = "paclitaxel"
-    PAH = "p-aminohippurate"
+    PAH = "p-aminohippurate"  # a marker of the renal plasma flow
     PEMBROLIZUMAB = "pembrolizumab"
-    PENTAGASTRIN = "pentagastrin"
+    PENTAGASTRIN = "pentagastrin"  # stimulates the gastric acid secretion
     PETHIDINE = "pethidine"
     PHENYTOIN = "phenytoin"
     PIOGLITAZONE = "pioglitazone"
@@ -312,7 +320,7 @@ class Coadministration(StrEnum):
     QUINIDINE = "quinidine"
     RAMIPRIL = "ramipril"
     RIFAMPICIN = "rifampicin"
-    RITONAVIR = "ritonavir"  # 3D regimen
+    RITONAVIR = "ritonavir"
     ROSIGLITAZONE_METFORMIN = "rosiglitazone + metformin"
     ROSUVASTATIN = "rosuvastatin"
     SETIPIPRANT = "setipiprant"
@@ -339,8 +347,6 @@ class Genotype(StrEnum):
     """The genotype of a group of subjects, the gene and its alleles."""
 
     NR = "not reported"
-    ABCB1_1236_CC = "ABCB1 1236 C/T_CC"
-    ABCB1_1236_CC_CT = "ABCB1 1236 C/T_CC_CT"
     ABCB1_2677AT_3435CT = "ABCB1 2677AT/3435CT"
     ABCB1_2677GG_3435CC = "ABCB1 2677GG/3435CC"
     ABCB1_2677GT_3435CT = "ABCB1 2677GT/3435CT"
@@ -348,6 +354,8 @@ class Genotype(StrEnum):
     ABCB1_3435CC = "ABCB1 3435CC"
     ABCB1_3435CT = "ABCB1 3435CT"
     ABCB1_3435TT = "ABCB1 3435TT"
+    ABCB1_3435CT_OR_TT = "ABCB1 3435CT or 3435TT"
+    # the haplotypes of c.1236C>T, c.2677G>T/A and c.3435C>T
     ABCB1_CGC_CGC = "ABCB1 CGC/CGC"
     ABCB1_TTT_TTT = "ABCB1 TTT/TTT"
     ABCG2_421AA = "ABCG2 c.421AA"
@@ -373,12 +381,16 @@ class Genotype(StrEnum):
     SLCO1B1_521CC = "SLCO1B1 c.521CC"
     SLCO1B1_521TC = "SLCO1B1 c.521TC"
     SLCO1B1_521TT = "SLCO1B1 c.521TT"
+    # SLCO1B1 alone: the wild type is the reference genotype *1a/*1a (c.521TT),
+    # a polymorphism any genotype with a variant allele (e.g. *1b, *5, *15, *17)
     SLCO1B1_POLYMORPHISM = "SLCO1B1 polymorphism"
+    SLCO1B1_WILD_TYPE = "SLCO1B1 wild type"
+    # SLCO1B1 and SLCO1B3 together: a variant is any genotype other than the
+    # reference genotype of its gene (SLCO1B1 *1a/*1a)
     SLCO1B1_SLCO1B3_VARIANT = "SLCO1B1 and SLCO1B3 variant"
     SLCO1B1_SLCO1B3_WILD_TYPE = "SLCO1B1 and SLCO1B3 wild type"
-    SLCO1B1_VARIANT = "SLCO1B1 variant"
-    SLCO1B1_WILD_TYPE = "SLCO1B1 wild type"
-    SLCO1B3_VARIANT = "SLCO1B3 variant"
+    SLCO1B1_VARIANT_SLCO1B3_WILD_TYPE = "SLCO1B1 variant and SLCO1B3 wild type"
+    SLCO1B1_WILD_TYPE_SLCO1B3_VARIANT = "SLCO1B1 wild type and SLCO1B3 variant"
     SLCO2B1_1457_CC = "SLCO2B1 c.1457 C/C"
     SLCO2B1_1457_CT = "SLCO2B1 c.1457 C/T"
     SLCO2B1_1457_TT = "SLCO2B1 c.1457 T/T"
@@ -401,9 +413,9 @@ class Phenotype(StrEnum):
     """The metabolizer phenotype of the subjects for an enzyme."""
 
     NR = "not reported"
-    CYP2C19_EM = "CYP2C19 extensive metabolizer"
-    CYP2C19_IM = "CYP2C19 intermediate metabolizer"
-    CYP2C19_PM = "CYP2C19 poor metabolizer"
+    CYP2C19_EM = "CYP2C19 extensive metabolizer"  # e.g. *1/*1
+    CYP2C19_IM = "CYP2C19 intermediate metabolizer"  # e.g. *1/*2, *1/*3
+    CYP2C19_PM = "CYP2C19 poor metabolizer"  # e.g. *2/*2, *2/*3, *3/*3
     CYP2D6_EM = "CYP2D6 extensive metabolizer"
     CYP2D6_IM = "CYP2D6 intermediate metabolizer"
     CYP2D6_PM = "CYP2D6 poor metabolizer"
