@@ -211,6 +211,31 @@ def matches(
     return _status_paths(release_path, runner) <= allowed
 
 
+def changed_by_build(release_path: Path, version: str, runner: Runner = run) -> bool:
+    """Tell whether the release repository is clean or changed only by a build.
+
+    A build of the same version may be rebuilt, the files may differ from their
+    hashes (e.g. after a hand edit during the review). Deleted files are no
+    change, a build deletes what it did not generate.
+
+    Args:
+        release_path: the release repository.
+        version: the version to release.
+        runner: runs git.
+
+    Returns:
+        `True` if git status lists no file, or the manifest is of `version` and
+        git status lists only files of the manifest and `release.json`.
+    """
+    changed = _status_paths(release_path, runner)
+    if not changed:
+        return True
+    manifest = Manifest.read(release_path / MANIFEST_FILE)
+    if manifest is None or manifest.version != version:
+        return False
+    return changed <= {*manifest.files, MANIFEST_FILE}
+
+
 def _ignored(release_path: Path, runner: Runner) -> tuple[set[str], set[str]]:
     """The untracked ignored files and folders (the latter with a trailing /)."""
     out = runner(

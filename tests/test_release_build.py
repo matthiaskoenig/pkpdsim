@@ -90,6 +90,7 @@ def test_build_copies_outputs(tmp_path: Path) -> None:
     assert (tmp_path / "cc-by-sa-4.0.txt").is_file()
     assert (tmp_path / "figures/model.svg").is_file()
     assert Path("models/toy.xml") in written
+    assert Path("uv.lock") in written
     assert Path("simulations") in written
     assert Path("fit") / FIT_ID in written
 

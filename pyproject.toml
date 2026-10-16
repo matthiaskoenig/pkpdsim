@@ -73,6 +73,8 @@ run_simulation = "pkpdsim.cli:run_simulation_main"
 run_fit = "pkpdsim.cli:run_fit_main"
 run_report = "pkpdsim.cli:run_report_main"
 run_identifiability = "pkpdsim.cli:run_identifiability_main"
+# the release of a model repository
+pkpd_release = "pkpdsim.release.cli:main"
 
 [project.urls]
 Homepage = "https://matthiaskoenig.github.io/pkpdsim"

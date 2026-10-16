@@ -187,7 +187,7 @@ def write_docs(context: ProjectContext, release_path: Path) -> list[Path]:
         release_path: the folder of the release repository.
 
     Returns:
-        The written files.
+        The written files: the pages, the README and the images of the site.
 
     Raises:
         ReleaseError: if the record of an adopted fit cannot be read.
@@ -222,4 +222,5 @@ def write_docs(context: ProjectContext, release_path: Path) -> list[Path]:
     readme = release_path / "README.md"
     readme.write_text(render("README.md.j2", context, extra), "utf-8")
     written.append(readme)
+    written.extend(sorted(images.glob("*")))
     return written

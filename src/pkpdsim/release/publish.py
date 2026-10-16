@@ -44,18 +44,7 @@ def _ok(runner: Runner, args: list[str], cwd: Path) -> bool:
     return True
 
 
-def check_publishable(release_path: Path, runner: Runner = run) -> None:
-    """Check that the release repository can be published.
-
-    Args:
-        release_path: the checkout of the release repository.
-        runner: runs the tool checks.
-
-    Raises:
-        ReleaseError: if the lock has a package which is not from PyPI, the
-            project uses `tool.uv.sources`, Docker is not running or `gh` is not
-            logged in; one message lists everything.
-    """
+def _lock_problems(release_path: Path) -> list[str]:
     problems = []
     if not (release_path / "uv.lock").is_file():
         problems.append("no uv.lock")
@@ -69,12 +58,68 @@ def check_publishable(release_path: Path, runner: Runner = run) -> None:
         data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
         if data.get("tool", {}).get("uv", {}).get("sources"):
             problems.append("pyproject.toml has tool.uv.sources")
+    return problems
+
+
+def _tool_problems(release_path: Path, runner: Runner) -> list[str]:
+    problems = []
     if not _ok(runner, ["docker", "info"], release_path):
         problems.append("docker is not available (docker info failed)")
     if not _ok(runner, ["gh", "auth", "status"], release_path):
         problems.append("gh is not logged in (gh auth status failed)")
+    return problems
+
+
+def _refuse(problems: list[str]) -> None:
     if problems:
         raise ReleaseError("cannot publish:\n- " + "\n- ".join(problems))
+
+
+def check_tools(release_path: Path, runner: Runner = run) -> None:
+    """Check that the tools of the publishing steps are ready.
+
+    The check needs no build, so a release runs it before the build.
+
+    Args:
+        release_path: the checkout of the release repository.
+        runner: runs the tool checks.
+
+    Raises:
+        ReleaseError: if Docker is not running or `gh` is not logged in; one
+            message lists both.
+    """
+    _refuse(_tool_problems(release_path, runner))
+
+
+def check_lock(release_path: Path) -> None:
+    """Check that the built project depends on released packages only.
+
+    Args:
+        release_path: the checkout of the release repository, after the build.
+
+    Raises:
+        ReleaseError: if there is no `uv.lock`, the lock has a package which is
+            not from PyPI or the project uses `tool.uv.sources`; one message
+            lists everything.
+    """
+    _refuse(_lock_problems(release_path))
+
+
+def check_publishable(release_path: Path, runner: Runner = run) -> None:
+    """Check that the release repository can be published.
+
+    Both `check_lock` and `check_tools` in one check.
+
+    Args:
+        release_path: the checkout of the release repository.
+        runner: runs the tool checks.
+
+    Raises:
+        ReleaseError: if the lock has a package which is not from PyPI, the
+            project uses `tool.uv.sources`, Docker is not running or `gh` is not
+            logged in; one message lists everything.
+    """
+    _refuse(_lock_problems(release_path) + _tool_problems(release_path, runner))
 
 
 def _head_has_manifest(path: Path, version: str, runner: Runner) -> bool:

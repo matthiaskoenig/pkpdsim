@@ -1,6 +1,6 @@
 # Commands
 
-pkpdsim installs four commands which work with every model package. The model
+pkpdsim installs five commands which work with every model package. The model
 is the first argument of a command, the dotted name of its package; everything
 after it are the options of the command for that model:
 
@@ -10,12 +10,14 @@ after it are the options of the command for that model:
   identifiability, or adopts a finished fit.
 - `run_report` writes the report of a fit for stored parameter sets.
 - `run_identifiability` analyses the identifiability of a stored parameter set.
+- `pkpd_release` makes the complete release of the repository of a model.
 
 ```bash
 run_simulation pkdb_models.models.hctz --action simulate --experiments all
 run_fit pkdb_models.models.hctz --subset PK --runs 10 --cores 10
 run_report pkdb_models.models.hctz --subset PK results/fit/PK_<fit id>/parameters.json
 run_identifiability pkdb_models.models.hctz --subset PK results/fit/PK_<fit id>/parameters.json
+pkpd_release pkdb_models.models.hctz --version 0.8.0 --no-publish
 ```
 
 A model package registers no commands of its own: the commands are defined once,
@@ -209,6 +211,27 @@ Two limitations:
   problem, since the record does not store the selection.
 - Fits of the strategy `SINGLE` (one problem per experiment, ids
   `<experiment>_<problem>_<time>__<hash>`) are not supported.
+
+## pkpd_release
+
+`pkpd_release` makes the complete release of the repository of a model
+(`hctz-model`) from its package: export, build of the models, simulations and
+fit reports, release notes, docs, commit, tag, push, Docker image and GitHub
+release. `--no-publish` stops before the commit, so the build can be reviewed;
+a later run without the flag publishes the reviewed build:
+
+```bash
+pkpd_release pkdb_models.models.hctz --version 0.8.0 --no-publish
+pkpd_release pkdb_models.models.hctz --version 0.8.0
+pkpd_release pkdb_models.models.hctz --version 0.8.0 --repo ../hctz-model
+```
+
+`--repo` is the checkout of the release repository (by default a sibling of the
+monorepo named like the repository, cloned when missing), `--pkpdsim-path` a
+local pkpdsim for a run with `--no-publish`, `--workers` the workers of the
+simulations. A refused check or a failed step ends the command with exit code 1
+and the reason. The release metadata of a model, the one-time setup and the
+steps are in [Release of a model repository](release.md).
 
 ## The folders of the results
 

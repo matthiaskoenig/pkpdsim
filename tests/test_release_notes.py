@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
+from release_git import git
 
 from pkpdsim import __version__
 from pkpdsim.model import PKPDModel
@@ -25,17 +26,9 @@ from pkpdsim.release.notes import (
     write_release_notes,
 )
 from pkpdsim.release.project import ProjectContext
-from pkpdsim.release.source import ReleaseError, ReleaseRepo, SourceRepo, run
+from pkpdsim.release.source import ReleaseError, ReleaseRepo, SourceRepo
 from pkpdsim_toy import MODEL
 
-GIT_ENV = {
-    "GIT_AUTHOR_NAME": "Test",
-    "GIT_AUTHOR_EMAIL": "test@example.org",
-    "GIT_COMMITTER_NAME": "Test",
-    "GIT_COMMITTER_EMAIL": "test@example.org",
-    "GIT_CONFIG_GLOBAL": "/dev/null",
-    "GIT_CONFIG_SYSTEM": "/dev/null",
-}
 OLD_FIT = "PK_20260101_000000__abcde"
 NEW_FIT = "PK_20261016_185018__3efe3"
 PD_FIT = "PD_20261016_185018__12345"
@@ -69,14 +62,7 @@ NEW_LOCK = lock(
 )
 
 
-@pytest.fixture(autouse=True)
-def git_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    for key, value in GIT_ENV.items():
-        monkeypatch.setenv(key, value)
-
-
-def git(cwd: Path, *args: str) -> str:
-    return run(["git", *args], cwd)
+pytestmark = pytest.mark.usefixtures("git_env")
 
 
 def write(path: Path, text: str) -> None:

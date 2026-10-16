@@ -68,6 +68,7 @@ def test_docs_pages(release: tuple[ProjectContext, Path]) -> None:
     in_nav = {file for entry in nav for file in entry.values()}
     assert in_nav == {f"{page}.md" for page in PAGES}
     assert (path / "docs" / "images" / "toy_model.png").is_file()
+    assert path / "docs" / "images" / "toy_model.png" in written
     index = (path / "docs" / "index.md").read_text()
     assert "images/toy_model.png" in index
     assert (

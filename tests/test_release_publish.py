@@ -7,7 +7,12 @@ from typing import cast
 
 import pytest
 
-from pkpdsim.release.publish import check_publishable, publish
+from pkpdsim.release.publish import (
+    check_lock,
+    check_publishable,
+    check_tools,
+    publish,
+)
 from pkpdsim.release.settings import ReleaseSettings
 from pkpdsim.release.source import ReleaseError
 from pkpdsim_toy import MODEL
@@ -253,3 +258,23 @@ def test_release_without_archive_is_completed() -> None:
 def test_check_publishable_missing_lock(tmp_path: Path) -> None:
     with pytest.raises(ReleaseError, match=r"no uv\.lock"):
         check_publishable(tmp_path, FakeRunner())
+
+
+def test_check_tools_without_lock(tmp_path: Path) -> None:
+    check_tools(tmp_path, FakeRunner())
+    runner = FakeRunner()
+    runner.missing = {"docker info"}
+    with pytest.raises(ReleaseError, match="docker") as err:
+        check_tools(tmp_path, runner)
+    assert "uv.lock" not in str(err.value)
+
+
+def test_check_lock_without_tools(tmp_path: Path) -> None:
+    runner = FakeRunner()
+    runner.missing = {"docker info", "gh auth status"}
+    _lock(tmp_path, '{ registry = "https://pypi.org/simple" }')
+    check_lock(tmp_path)
+    _lock(tmp_path, '{ directory = "../pkpdsim" }')
+    with pytest.raises(ReleaseError, match="pkpdsim") as err:
+        check_lock(tmp_path)
+    assert "docker" not in str(err.value)

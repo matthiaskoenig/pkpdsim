@@ -126,7 +126,7 @@ def build(
         workers: the number of workers of the simulations, `auto` by default.
 
     Returns:
-        The written paths, relative to `release_path`.
+        The written paths, relative to `release_path`, with the new `uv.lock`.
 
     Raises:
         ReleaseError: if a step fails; the message names the step.
@@ -140,7 +140,10 @@ def build(
     _step(runner, ["uv", "sync", "--locked"], release_path)
 
     _step(runner, [*run_simulation, "--action", "factory", "-r", results], release_path)
-    written = _copy_factory_output(model, package_root, release_path)
+    written = [
+        Path("uv.lock"),
+        *_copy_factory_output(model, package_root, release_path),
+    ]
 
     simulate = [
         *run_simulation,

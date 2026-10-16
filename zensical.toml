@@ -23,6 +23,7 @@ nav = [
     { "Study data" = "data.md" },
     { "Initial values" = "initial_values.md" },
     { "Licenses" = "licenses.md" },
+    { "Release of a model repository" = "release.md" },
   ] },
   { "API reference" = [
     { "Overview" = "api/index.md" },

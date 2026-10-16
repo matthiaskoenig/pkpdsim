@@ -4,17 +4,15 @@ from pathlib import Path
 
 import pytest
 
-from pkpdsim.release.manifest import Manifest, matches, prune, write_manifest
+from pkpdsim.release.manifest import (
+    Manifest,
+    changed_by_build,
+    matches,
+    prune,
+    write_manifest,
+)
 from pkpdsim.release.source import ReleaseError, SourceRepo, run
 
-GIT_ENV = {
-    "GIT_AUTHOR_NAME": "Test",
-    "GIT_AUTHOR_EMAIL": "test@example.org",
-    "GIT_COMMITTER_NAME": "Test",
-    "GIT_COMMITTER_EMAIL": "test@example.org",
-    "GIT_CONFIG_GLOBAL": "/dev/null",
-    "GIT_CONFIG_SYSTEM": "/dev/null",
-}
 LOCK = """version = 1
 
 [[package]]
@@ -32,10 +30,7 @@ version = "0.9.2"
 SOURCE = SourceRepo(root=Path("/unused"), commit="abc123")
 
 
-@pytest.fixture(autouse=True)
-def git_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    for key, value in GIT_ENV.items():
-        monkeypatch.setenv(key, value)
+pytestmark = pytest.mark.usefixtures("git_env")
 
 
 def write(root: Path, relative: str, text: str = "x\n") -> Path:
@@ -156,3 +151,25 @@ def test_missing_written_path_is_a_release_error(
     root, written = release
     with pytest.raises(ReleaseError, match=r"nope\.txt"):
         write_manifest(root, "0.8.0", SOURCE, [*written, Path("nope.txt")])
+
+
+def test_changed_by_build(release: tuple[Path, list[Path]]) -> None:
+    root, written = release
+    assert not changed_by_build(root, "0.8.0")
+    write_manifest(root, "0.8.0", SOURCE, written)
+    assert changed_by_build(root, "0.8.0")
+    with (root / "README.md").open("a") as f:
+        f.write("edited by hand")
+    assert changed_by_build(root, "0.8.0")
+    assert not changed_by_build(root, "0.9.0")
+    write(root, "extra.txt")
+    assert not changed_by_build(root, "0.8.0")
+
+
+def test_changed_by_build_clean(release: tuple[Path, list[Path]]) -> None:
+    root, _ = release
+    run(["git", "add", "-A"], root)
+    run(["git", "commit", "-m", "all"], root)
+    assert changed_by_build(root, "0.8.0")
+    (root / "docs" / "RELEASE.md").unlink()
+    assert changed_by_build(root, "0.8.0")
