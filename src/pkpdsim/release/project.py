@@ -13,6 +13,7 @@ import html
 import json
 import re
 import tomllib
+from collections.abc import Mapping
 from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path
@@ -178,12 +179,16 @@ def _template(name: str) -> Template:
     return _environment().from_string(source)
 
 
-def render(name: str, context: ProjectContext) -> str:
+def render(
+    name: str, context: ProjectContext, extra: Mapping[str, Any] | None = None
+) -> str:
     """Render a template of `resources/release`.
 
     Args:
         name: the path of the template below `resources/release`.
         context: the values of the template, available by field name.
+        extra: further values of the template, e.g. the changes of the release
+            notes.
 
     Returns:
         The rendered text.
@@ -203,6 +208,7 @@ def render(name: str, context: ProjectContext) -> str:
         "requires_python": context.requires_python,
         "repo_name": context.repo_name,
         "top_package": context.top_package,
+        **(extra or {}),
     }
     return _template(name).render(**values)
 

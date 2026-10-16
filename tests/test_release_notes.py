@@ -1,0 +1,386 @@
+"""Tests of the release notes, from the previous release and the new build."""
+
+import dataclasses
+import json
+import shutil
+from collections.abc import Sequence
+from pathlib import Path
+
+import pytest
+
+from pkpdsim import __version__
+from pkpdsim.model import PKPDModel
+from pkpdsim.release.notes import (
+    CoreSummary,
+    DataChanges,
+    FitChange,
+    LibraryChange,
+    core_summaries,
+    data_changes,
+    experiment_changes,
+    fit_changes,
+    github_releases,
+    library_changes,
+    model_changes,
+    write_release_notes,
+)
+from pkpdsim.release.project import ProjectContext
+from pkpdsim.release.source import ReleaseError, ReleaseRepo, SourceRepo, run
+from pkpdsim_toy import MODEL
+
+GIT_ENV = {
+    "GIT_AUTHOR_NAME": "Test",
+    "GIT_AUTHOR_EMAIL": "test@example.org",
+    "GIT_COMMITTER_NAME": "Test",
+    "GIT_COMMITTER_EMAIL": "test@example.org",
+    "GIT_CONFIG_GLOBAL": "/dev/null",
+    "GIT_CONFIG_SYSTEM": "/dev/null",
+}
+OLD_FIT = "PK_20260101_000000__abcde"
+NEW_FIT = "PK_20261016_185018__3efe3"
+PD_FIT = "PD_20261016_185018__12345"
+DATA_DIR = "src/pkpdsim_toy/data"
+FITS_DIR = "src/pkpdsim_toy/fits"
+COMMIT = "0123456789abcdef0123456789abcdef01234567"
+
+
+def lock(*packages: tuple[str, str]) -> str:
+    text = 'version = 1\n\n[[package]]\nname = "toy-model"\nversion = "0.1.0"\n'
+    text += 'source = { editable = "." }\n'
+    for name, version in packages:
+        text += f'\n[[package]]\nname = "{name}"\nversion = "{version}"\n'
+        text += 'source = { registry = "https://pypi.org/simple" }\n'
+    return text
+
+
+OLD_LOCK = lock(
+    ("numpy", "2.0.0"),
+    ("pkpdsim", "0.6.0"),
+    ("removed-package", "1.0.0"),
+    ("sbmlsim", "0.9.6"),
+    ("sbmlutils", "0.16.0"),
+)
+NEW_LOCK = lock(
+    ("added-package", "0.1.0"),
+    ("numpy", "2.1.0"),
+    ("pkpdsim", "0.7.0"),
+    ("sbmlsim", "0.9.7"),
+    ("sbmlutils", "0.16.0"),
+)
+
+
+@pytest.fixture(autouse=True)
+def git_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    for key, value in GIT_ENV.items():
+        monkeypatch.setenv(key, value)
+
+
+def git(cwd: Path, *args: str) -> str:
+    return run(["git", *args], cwd)
+
+
+def write(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+
+
+def parameters(values: dict[str, float]) -> str:
+    return json.dumps({"sets": [{"sid": "best", "values": values, "cost": 1.0}]})
+
+
+def toy_sbml() -> str:
+    return (MODEL.path / "models" / "toy.xml").read_text()
+
+
+def commit_release(path: Path, tag: str) -> ReleaseRepo:
+    git(path, "add", "-A")
+    git(path, "commit", "-m", f"release {tag}")
+    git(path, "tag", tag)
+    return ReleaseRepo(path=path, last_tag=tag)
+
+
+@pytest.fixture
+def model() -> PKPDModel:
+    return dataclasses.replace(MODEL, fits=[NEW_FIT])
+
+
+@pytest.fixture
+def release(tmp_path: Path) -> ReleaseRepo:
+    """A previous release 0.1.0 and the new build in the working tree."""
+    path = tmp_path / "toy-model"
+    path.mkdir()
+    git(path, "init", "-b", "main")
+    write(path / "uv.lock", OLD_LOCK)
+    write(path / DATA_DIR / "drug" / "Same2000" / "Same2000.tsv", "a\n1\n")
+    write(path / DATA_DIR / "drug" / "Changed2001" / "Changed2001.tsv", "a\n1\n")
+    write(path / DATA_DIR / "drug" / "Removed2002" / "Removed2002.tsv", "a\n1\n")
+    write(path / DATA_DIR / "collect_data.py", "print()\n")
+    write(path / "simulations" / "A" / "index.html", "<html/>")
+    write(path / "simulations" / "B" / "index.html", "<html/>")
+    write(path / "simulations" / "_figures" / "a.svg", "<svg/>")
+    write(path / "simulations" / "index.html", "<html/>")
+    unset = '<parameter id="r" value="NaN" constant="false"/>\n<parameter '
+    write(path / "models" / "toy.xml", toy_sbml().replace("<parameter ", unset, 1))
+    write(path / "models" / "removed.xml", toy_sbml())
+    write(path / "models" / "toy.md", "# toy")
+    write(path / FITS_DIR / OLD_FIT / "parameters.json", parameters({"k": 0.2}))
+    write(path / FITS_DIR / PD_FIT / "parameters.json", parameters({"e": 1.0}))
+    repo = commit_release(path, "0.1.0")
+
+    write(path / "uv.lock", NEW_LOCK)
+    write(path / DATA_DIR / "drug" / "Changed2001" / "Changed2001.tsv", "a\n2\n")
+    shutil.rmtree(path / DATA_DIR / "drug" / "Removed2002")
+    write(path / DATA_DIR / "other" / "Added2003" / "Added2003.tsv", "a\n1\n")
+    shutil.rmtree(path / "simulations" / "B")
+    write(path / "simulations" / "C" / "index.html", "<html/>")
+    changed = toy_sbml().replace('value="0.2"', 'value="0.3"')
+    changed = changed.replace(
+        "<parameter ",
+        '<parameter id="k2" value="1" constant="true"/>\n'
+        '<parameter id="r" constant="false"/>\n<parameter ',
+        1,
+    )
+    write(path / "models" / "toy.xml", changed)
+    (path / "models" / "removed.xml").unlink()
+    write(path / "models" / "added.xml", toy_sbml())
+    shutil.rmtree(path / FITS_DIR)
+    write(path / FITS_DIR / NEW_FIT / "parameters.json", parameters({"k": 0.25}))
+    return repo
+
+
+@pytest.fixture
+def old_layout(tmp_path: Path) -> ReleaseRepo:
+    """A previous release of the old layout: no lock file, no fit records."""
+    path = tmp_path / "old-model"
+    path.mkdir()
+    git(path, "init", "-b", "main")
+    write(path / DATA_DIR / "drug" / "Same2000" / "Same2000.tsv", "a\n1\n")
+    write(path / "simulations" / "A" / "index.html", "<html/>")
+    write(path / "simulations" / "_figures" / "a.svg", "<svg/>")
+    write(path / "models" / "toy.xml", toy_sbml())
+    write(path / "fit" / "20260421_191243__251fc" / "index.html", "<html/>")
+    repo = commit_release(path, "0.7.1")
+
+    write(path / "uv.lock", NEW_LOCK)
+    write(path / FITS_DIR / NEW_FIT / "parameters.json", parameters({"k": 0.25}))
+    return repo
+
+
+def context(model: PKPDModel, version: str) -> ProjectContext:
+    assert model.release is not None
+    return ProjectContext(
+        model=model,
+        settings=model.release,
+        version=version,
+        python="3.14",
+        dependencies=(),
+        constraints=(),
+        pkpdsim_path=None,
+        year=2026,
+        requires_python=">=3.13",
+    )
+
+
+RELEASES = {
+    "pkpdsim": {
+        "0.5.0": "- too old. Not shown.\n",
+        "0.6.0": "- the old version. Not shown.\n",
+        "0.6.1": (
+            "# Release notes\n\nIntro text.\n\n## New features\n"
+            "- First of 0.6.1. Second sentence.\n"
+            "  - nested, not shown\n"
+            "- sixth bullet, over the limit.\n"
+        ),
+        "0.7.0": (
+            "## Breaking changes\r\n- third bullet! More.\r\n- fourth bullet\r\n"
+            "- fifth bullet? More.\r\n"
+            "- `run_report` recreates the report, e.g. of a fit. More.\r\n"
+        ),
+        "0.8.0": "- newer than the release. Not shown.\n",
+    },
+    "sbmlsim": {
+        "0.9.7": (
+            "- **A bold sentence.** More.\n"
+            "- **Bold** ([#1](https://x.org/1)). lowercase more.\n"
+            "- Versions 1.5 and 2.0, i.e. two. More.\n"
+        )
+    },
+}
+
+
+def fake_fetch(repository: str) -> dict[str, str]:
+    return RELEASES[repository]
+
+
+def failing_fetch(repository: str) -> dict[str, str]:
+    raise ReleaseError("'gh api' could not run")
+
+
+def test_library_changes() -> None:
+    assert library_changes(OLD_LOCK, NEW_LOCK) == [
+        LibraryChange("added-package", None, "0.1.0"),
+        LibraryChange("numpy", "2.0.0", "2.1.0"),
+        LibraryChange("pkpdsim", "0.6.0", "0.7.0"),
+        LibraryChange("removed-package", "1.0.0", None),
+        LibraryChange("sbmlsim", "0.9.6", "0.9.7"),
+    ]
+    assert library_changes(None, NEW_LOCK) == []
+
+
+def test_data_changes(release: ReleaseRepo) -> None:
+    assert data_changes(release, DATA_DIR) == DataChanges(
+        added=["other/Added2003"],
+        removed=["drug/Removed2002"],
+        changed=["drug/Changed2001"],
+    )
+
+
+def test_experiment_changes(release: ReleaseRepo) -> None:
+    assert experiment_changes(release) == (["C"], ["B"])
+
+
+def test_model_changes(release: ReleaseRepo) -> None:
+    changes = {change.file: change for change in model_changes(release)}
+    assert sorted(changes) == ["added.xml", "removed.xml", "toy.xml"]
+    toy = changes["toy.xml"]
+    assert toy.status == "changed"
+    assert toy.added == {"species": 0, "reactions": 0, "parameters": 1}
+    assert toy.removed == {"species": 0, "reactions": 0, "parameters": 0}
+    assert toy.changed_parameters == [("k", 0.2, 0.3)]
+    assert changes["added.xml"].status == "added"
+    assert changes["added.xml"].added == {"species": 1, "reactions": 1, "parameters": 1}
+    assert changes["removed.xml"].status == "removed"
+    assert changes["removed.xml"].removed["reactions"] == 1
+
+
+def test_fit_changes(release: ReleaseRepo, model: PKPDModel) -> None:
+    assert fit_changes(release, model) == [
+        FitChange(PD_FIT, None, []),
+        FitChange(OLD_FIT, NEW_FIT, [("k", 0.2, 0.25)]),
+    ]
+
+
+def test_core_summaries() -> None:
+    changes = library_changes(OLD_LOCK, NEW_LOCK)
+    assert core_summaries(changes, fetch=fake_fetch) == [
+        CoreSummary(
+            "pkpdsim",
+            "0.6.0",
+            "0.7.0",
+            [
+                "third bullet!",
+                "fourth bullet",
+                "fifth bullet?",
+                "`run_report` recreates the report, e.g. of a fit.",
+                "First of 0.6.1.",
+            ],
+        ),
+        CoreSummary(
+            "sbmlsim",
+            "0.9.6",
+            "0.9.7",
+            [
+                "**A bold sentence.**",
+                "**Bold** ([#1](https://x.org/1)).",
+                "Versions 1.5 and 2.0, i.e. two.",
+            ],
+        ),
+    ]
+
+
+def test_core_summaries_added_library() -> None:
+    changes = [LibraryChange("sbmlutils", None, "0.16.0")]
+    assert core_summaries(changes, fetch=failing_fetch) == [
+        CoreSummary("sbmlutils", None, "0.16.0", [])
+    ]
+
+
+def test_core_summaries_fetch_fails() -> None:
+    changes = library_changes(OLD_LOCK, NEW_LOCK)
+    summaries = core_summaries(changes, fetch=failing_fetch)
+    assert [(s.name, s.fetched, s.bullets) for s in summaries] == [
+        ("pkpdsim", False, []),
+        ("sbmlsim", False, []),
+    ]
+
+
+def test_github_releases() -> None:
+    calls: list[list[str]] = []
+
+    def runner(args: Sequence[str], cwd: Path) -> str:
+        calls.append([str(a) for a in args])
+        return '{"tag":"0.7.0","body":"- a"}\n{"tag":"v0.6.0","body":null}\n'
+
+    assert github_releases("pkpdsim", runner) == {"0.7.0": "- a", "0.6.0": ""}
+    assert calls[0][:3] == ["gh", "api", "repos/matthiaskoenig/pkpdsim/releases"]
+
+
+def test_write_release_notes(release: ReleaseRepo, model: PKPDModel) -> None:
+    source = SourceRepo(root=release.path, commit=COMMIT)
+    path = write_release_notes(
+        context(model, "0.2.0"), release, model, source, fetch=fake_fetch
+    )
+    assert path == release.path / "release-notes" / "0.2.0.md"
+    text = path.read_text()
+    assert text.startswith("# Release notes for toy-model v0.2.0\n")
+    assert f"Made from pkdb_models {COMMIT[:10]} with pkpdsim {__version__}." in text
+    for heading in ("Core libraries", "Libraries", "Data", "Analysis"):
+        assert f"## {heading}\n" in text
+    assert "third bullet!" in text
+    assert "sixth bullet" not in text
+    assert "| `numpy` | 2.0.0 | 2.1.0 |" in text
+    assert "`other/Added2003`" in text
+    assert "`drug/Removed2002`" in text
+    assert "`drug/Changed2001`" in text
+    assert "`k` 0.2 → 0.3" in text
+    assert "`k` 0.2 → 0.25" in text
+    assert "\u2014" not in text
+    assert "\n\n\n" not in text
+
+
+def test_write_release_notes_fetch_fails(
+    release: ReleaseRepo, model: PKPDModel
+) -> None:
+    source = SourceRepo(root=release.path, commit=COMMIT)
+    text = write_release_notes(
+        context(model, "0.2.0"), release, model, source, fetch=failing_fetch
+    ).read_text()
+    assert "pkpdsim 0.6.0 → 0.7.0: the release notes could not be fetched." in text
+
+
+def test_notes_no_changes(tmp_path: Path, model: PKPDModel) -> None:
+    path = tmp_path / "toy-model"
+    path.mkdir()
+    git(path, "init", "-b", "main")
+    write(path / "uv.lock", OLD_LOCK)
+    write(path / "models" / "toy.xml", toy_sbml())
+    write(path / FITS_DIR / NEW_FIT / "parameters.json", parameters({"k": 0.25}))
+    release = commit_release(path, "0.1.0")
+    source = SourceRepo(root=path, commit=COMMIT)
+    text = write_release_notes(
+        context(model, "0.1.1"), release, model, source, fetch=fake_fetch
+    ).read_text()
+    assert text.count("No changes.") == 6
+
+
+def test_notes_old_layout(old_layout: ReleaseRepo, model: PKPDModel) -> None:
+    source = SourceRepo(root=old_layout.path, commit=COMMIT)
+    text = write_release_notes(
+        context(model, "0.8.0"), old_layout, model, source, fetch=failing_fetch
+    ).read_text()
+    assert "no lock file in the previous release" in text
+    assert "no fit record in the previous release" in text
+    assert f"`{NEW_FIT}`" in text
+
+
+def test_notes_no_previous_release(release: ReleaseRepo, model: PKPDModel) -> None:
+    first = ReleaseRepo(path=release.path, last_tag=None)
+    source = SourceRepo(root=release.path, commit=COMMIT)
+    text = write_release_notes(
+        context(model, "0.1.0"), first, model, source, fetch=fake_fetch
+    ).read_text()
+    assert "First release." in text
+    for item in ("drug/Same2000", "other/Added2003", "`A`", "`C`", "toy.xml", NEW_FIT):
+        assert item in text
+    assert "drug/Removed2002" not in text
+    assert "no fit record in the previous release" not in text
