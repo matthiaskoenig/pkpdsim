@@ -39,6 +39,8 @@ from typing import TYPE_CHECKING, Any
 
 from sbmlsim.plot import FigureSettings as SbmlsimFigureSettings
 
+from pkpdsim.release.settings import ReleaseSettings
+
 if TYPE_CHECKING:
     from sbmlsim.experiment import SimulationExperiment
     from sbmlsim.fit.cli import FitDefinition
@@ -317,6 +319,8 @@ class PKPDModel:
             fitted values and their uncertainty, see `pkpdsim.uncertainty`.
         fits_path: the folder of the adopted fits, `fits` next to the output
             directory of the factory by default.
+        release: the release metadata, see `pkpdsim.release.settings`; a model
+            without it cannot be released.
     """
 
     name: str
@@ -341,6 +345,7 @@ class PKPDModel:
     checks: CheckSettings = field(default_factory=CheckSettings)
     fits: Sequence[str] = ()
     fits_path: Path | None = None
+    release: ReleaseSettings | None = None
 
     def __post_init__(self) -> None:
         """Normalize the sequences, check the references and the extra actions."""
