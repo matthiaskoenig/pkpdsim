@@ -137,6 +137,11 @@ FIGURE_SETTINGS_08: tuple[str, ...] = (
     "legend_loc",
 )
 
+#: the settings of a figure which only sbmlsim from 0.9.6 has (the scope of a
+#: legend, `legend_scope`): sbmlsim 0.8 has no counterpart, and a figure which
+#: does not override them has the same settings in both
+NEW_FIGURE_SETTINGS: tuple[str, ...] = ("legend_scope",)
+
 #: the key of the specification of a figure (sbmlsim 0.9) with the settings of
 #: its experiment and its own and the size it is rendered with, without the
 #: settings of a run, see `figure_spec`
