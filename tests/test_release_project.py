@@ -5,7 +5,7 @@ import json
 import subprocess
 import sys
 import tomllib
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 import pytest
 import yaml
@@ -29,6 +29,7 @@ SETTINGS = MODEL.release
 PYPROJECT = """\
 [project]
 name = "source"
+description = "Model of Łódź"
 requires-python = ">=3.13"
 dependencies = ["sbmlsim>=0.9.7", "sbmlutils>=0.16.0"]
 """
@@ -62,9 +63,10 @@ source = { git = "https://github.com/x/gitdep" }
 def source(tmp_path: Path) -> SourceRepo:
     root = tmp_path / "source"
     root.mkdir()
-    (root / "pyproject.toml").write_text(PYPROJECT)
-    (root / "uv.lock").write_text(LOCK)
-    (root / ".python-version").write_text("3.14\n")
+    # TOML files are UTF-8, whatever the encoding of the locale
+    (root / "pyproject.toml").write_text(PYPROJECT, encoding="utf-8")
+    (root / "uv.lock").write_text(LOCK, encoding="utf-8")
+    (root / ".python-version").write_text("3.14\n", encoding="utf-8")
     return SourceRepo(root=root, commit="abc")
 
 
@@ -110,6 +112,15 @@ def test_pyproject_local_pkpdsim(source: SourceRepo) -> None:
         "editable": True,
     }
     assert "pkpdsim==0.2.0" not in data["tool"]["uv"]["constraint-dependencies"]
+
+
+def test_pyproject_local_pkpdsim_on_windows(context: ProjectContext) -> None:
+    """A Windows path is a TOML string with forward slashes, which uv accepts."""
+    windows = dataclasses.replace(
+        context, pkpdsim_path=PureWindowsPath(r"C:\Users\me\pkpdsim")
+    )
+    data = tomllib.loads(render("pyproject.toml.j2", windows))
+    assert data["tool"]["uv"]["sources"]["pkpdsim"]["path"] == "C:/Users/me/pkpdsim"
 
 
 def test_pyproject_one_entry_per_line(source: SourceRepo) -> None:
@@ -163,7 +174,15 @@ def test_workflows_replaced(context: ProjectContext, tmp_path: Path) -> None:
 
 def test_no_em_dash(context: ProjectContext, tmp_path: Path) -> None:
     for path in write_project_files(context, tmp_path):
-        assert "\u2014" not in path.read_text(), path
+        assert "\u2014" not in path.read_text(encoding="utf-8"), path
+
+
+def test_project_files_have_unix_line_endings(
+    context: ProjectContext, tmp_path: Path
+) -> None:
+    """The files of the release are the same on every platform."""
+    for path in write_project_files(context, tmp_path):
+        assert b"\r" not in path.read_bytes(), path
 
 
 def test_strict_undefined(

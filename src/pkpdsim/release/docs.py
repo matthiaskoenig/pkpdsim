@@ -217,10 +217,12 @@ def write_docs(context: ProjectContext, release_path: Path) -> list[Path]:
     written = []
     for page in PAGES:
         path = docs / f"{page}.md"
-        path.write_text(render(f"docs/{page}.md.j2", context, extra), "utf-8")
+        path.write_text(
+            render(f"docs/{page}.md.j2", context, extra), "utf-8", newline="\n"
+        )
         written.append(path)
     readme = release_path / "README.md"
-    readme.write_text(render("README.md.j2", context, extra), "utf-8")
+    readme.write_text(render("README.md.j2", context, extra), "utf-8", newline="\n")
     written.append(readme)
     written.extend(sorted(images.glob("*")))
     return written

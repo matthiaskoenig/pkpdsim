@@ -78,6 +78,7 @@ def test_manifest_roundtrip(release: tuple[Path, list[Path]]) -> None:
     assert "release.json" not in manifest.files
     assert Manifest.read(root / "release.json") == manifest
     assert Manifest.read(root / "missing.json") is None
+    assert b"\r" not in (root / "release.json").read_bytes()
 
 
 def test_manifest_local_pkpdsim(release: tuple[Path, list[Path]]) -> None:

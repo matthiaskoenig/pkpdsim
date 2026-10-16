@@ -156,7 +156,9 @@ def write_manifest(
         sbmlutils=libraries["sbmlutils"],
         files=files,
     )
-    (release_path / MANIFEST_FILE).write_text(manifest.to_json(), encoding="utf-8")
+    (release_path / MANIFEST_FILE).write_text(
+        manifest.to_json(), encoding="utf-8", newline="\n"
+    )
     return manifest
 
 
@@ -227,7 +229,7 @@ def start_build(release_path: Path, version: str) -> None:
         release_path: the release repository.
         version: the version which is built.
     """
-    _marker(release_path).write_text(f"{version}\n", encoding="utf-8")
+    _marker(release_path).write_text(f"{version}\n", encoding="utf-8", newline="\n")
 
 
 def finish_build(release_path: Path) -> None:

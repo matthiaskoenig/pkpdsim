@@ -331,7 +331,9 @@ def test_write_release_notes(release: ReleaseRepo, model: PKPDModel) -> None:
         context(model, "0.2.0"), release, model, source, fetch=fake_fetch
     )
     assert path == release.path / "release-notes" / "0.2.0.md"
-    text = path.read_text()
+    # UTF-8 with Unix line endings on every platform
+    text = path.read_bytes().decode("utf-8")
+    assert "\r" not in text
     assert text.startswith("# Release notes for toy-model 0.2.0\n")
     assert "The changes since 0.1.0.\n" in text
     assert f"Made from pkdb_models {COMMIT[:10]} with pkpdsim {__version__}." in text
@@ -357,7 +359,7 @@ def test_write_release_notes_fetch_fails(
     source = SourceRepo(root=release.path, commit=COMMIT)
     text = write_release_notes(
         context(model, "0.2.0"), release, model, source, fetch=failing_fetch
-    ).read_text()
+    ).read_text("utf-8")
     assert "pkpdsim 0.6.0 → 0.7.0: the release notes could not be fetched." in text
 
 

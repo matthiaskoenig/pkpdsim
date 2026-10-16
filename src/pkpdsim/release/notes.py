@@ -716,5 +716,7 @@ def write_release_notes(
     }
     path = release.path / NOTES_DIR / f"{context.version}.md"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(render("release-notes.md.j2", context, extra), encoding="utf-8")
+    path.write_text(
+        render("release-notes.md.j2", context, extra), encoding="utf-8", newline="\n"
+    )
     return path

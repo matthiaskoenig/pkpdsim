@@ -92,6 +92,14 @@ def test_docs_pages(release: tuple[ProjectContext, Path]) -> None:
     assert "Toy PK model" not in index + readme
 
 
+def test_docs_have_unix_line_endings(release: tuple[ProjectContext, Path]) -> None:
+    """The pages of the release are the same on every platform."""
+    context, path = release
+    for written in write_docs(context, path):
+        if written.suffix == ".md":
+            assert b"\r" not in written.read_bytes(), written
+
+
 def test_docs_replaced(release: tuple[ProjectContext, Path]) -> None:
     context, path = release
     write(path / "docs" / "stale.md", "stale")

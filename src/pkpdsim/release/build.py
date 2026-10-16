@@ -192,7 +192,8 @@ def build(
         stage("Fit reports")
         _step(
             runner,
-            ["uv", "run", "run_report", package, "--adopted", "-o", str(reports)],
+            # POSIX form, as every path of a command of the build
+            ["uv", "run", "run_report", package, "--adopted", "-o", reports.as_posix()],
             release_path,
         )
     for fit_id in model.fits:

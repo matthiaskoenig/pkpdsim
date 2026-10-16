@@ -80,7 +80,7 @@ class ProjectContext:
 def _python_version(source: SourceRepo, requires_python: str) -> str:
     version_file = source.root / ".python-version"
     if version_file.exists():
-        match = _PYTHON_VERSION.match(version_file.read_text().strip())
+        match = _PYTHON_VERSION.match(version_file.read_text("utf-8").strip())
         if match:
             return match.group(0)
     floor = _PYTHON_FLOOR.search(requires_python)
@@ -101,7 +101,7 @@ def _constraints(source: SourceRepo, pkpdsim_path: Path | None) -> tuple[str, ..
     lock_path = source.root / "uv.lock"
     if not lock_path.exists():
         raise ReleaseError(f"The source has no 'uv.lock' at {lock_path}.")
-    lock = tomllib.loads(lock_path.read_text())
+    lock = tomllib.loads(lock_path.read_text("utf-8"))
     versions: dict[str, set[str]] = {}
     for package in lock.get("package", []):
         if "registry" not in package.get("source", {}):
@@ -142,7 +142,7 @@ def project_context(
     Raises:
         ReleaseError: if the source lacks `uv.lock` or its Python version is unknown.
     """
-    pyproject = tomllib.loads((source.root / "pyproject.toml").read_text())
+    pyproject = tomllib.loads((source.root / "pyproject.toml").read_text("utf-8"))
     project = pyproject["project"]
     requires_python = project["requires-python"]
     return ProjectContext(
@@ -203,7 +203,10 @@ def render(
         "python": context.python,
         "dependencies": context.dependencies,
         "constraints": context.constraints,
-        "pkpdsim_path": str(context.pkpdsim_path) if context.pkpdsim_path else None,
+        # forward slashes on Windows too: a TOML string and a path which uv accepts
+        "pkpdsim_path": (
+            context.pkpdsim_path.as_posix() if context.pkpdsim_path else None
+        ),
         "year": context.year,
         "requires_python": context.requires_python,
         "repo_name": context.repo_name,
@@ -269,12 +272,13 @@ def write_project_files(context: ProjectContext, release_path: Path) -> list[Pat
     for target, template in _TEMPLATES.items():
         path = release_path / target
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(render(template, context), encoding="utf-8")
+        path.write_text(render(template, context), encoding="utf-8", newline="\n")
         written.append(path)
     zenodo = release_path / ".zenodo.json"
     zenodo.write_text(
         json.dumps(zenodo_json(context), indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
+        newline="\n",
     )
     written.append(zenodo)
     for workflow in (release_path / ".github" / "workflows").glob("*"):
