@@ -92,6 +92,7 @@ packages = ["src/pkpdsim"]
 testpaths = ["tests"]
 # the tests run in parallel (pytest-xdist), `pytest -n 0` runs them in one process
 addopts = "-n auto"
+markers = ["slow: slow tests, deselect with -m \"not slow\""]
 
 [tool.ty.environment]
 # the package lives in the src layout, the scripts are a package at the root of

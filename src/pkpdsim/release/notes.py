@@ -547,7 +547,7 @@ def _best_values(text: str, name: str) -> dict[str, float]:
         ) from err
 
 
-def _fits_prefix(model: PKPDModel) -> PurePosixPath:
+def fits_prefix(model: PKPDModel) -> PurePosixPath:
     """Get the folder of the adopted fits in the release repository."""
     try:
         relative = model.fits_dir.relative_to(model.path)
@@ -579,7 +579,7 @@ def fit_changes(
     Raises:
         ReleaseError: if the record of an adopted fit lacks `parameters.json`.
     """
-    prefix = _fits_prefix(model)
+    prefix = fits_prefix(model)
     old: dict[str, str] = {}
     for path in sorted(_tree(release, runner)):
         relative = PurePosixPath(path)

@@ -1,0 +1,29 @@
+[![DOI](https://zenodo.org/badge/DOI/{{ settings.doi }}.svg)](https://doi.org/{{ settings.doi }})
+[![CI](https://github.com/{{ settings.repository }}/actions/workflows/ci.yml/badge.svg)](https://github.com/{{ settings.repository }}/actions/workflows/ci.yml)
+[![Docs](https://github.com/{{ settings.repository }}/actions/workflows/docs.yml/badge.svg)](https://github.com/{{ settings.repository }}/actions/workflows/docs.yml)
+
+# {{ model.title }}
+
+{{ settings.description }}
+
+Documentation: <{{ settings.site_url }}>
+
+## Quick start
+
+```bash
+git clone https://github.com/{{ settings.repository }}.git && cd {{ repo_name }}
+uv sync
+uv run run_simulation {{ model.package }} --action all -r results
+```
+
+## How to cite
+
+> {{ citation }}
+
+## License
+
+* Source Code: [MIT](https://opensource.org/license/MIT)
+* Documentation: [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
+* Models: [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
+
+&copy; {{ settings.first_year }}-{{ year }} {{ authors }}
