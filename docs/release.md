@@ -60,7 +60,9 @@ print(release.missing())
 - `keywords`, `funding`, `description`: the Zenodo record (`.zenodo.json`), the
   docs and the README.
 - `docker_image`: the image which is pushed as `<docker_image>:<version>` and
-  `:latest`.
+  `:latest`. The image of the version is built and pushed while the registry
+  lacks it, a pushed version is never rebuilt and `:latest` is then tagged on
+  the registry from it.
 - `exclude`: paths of the model folder which are not released, by default
   `TODO.md`, `literature/` and `thesis/`.
 - `first_year`: the year of the first release, the start of the copyright.
@@ -76,7 +78,9 @@ GitHub release.
 
 Once per machine:
 
-- `docker login` with an account which may push the `docker_image`.
+- `docker login` with an account which may push the `docker_image`; the
+  buildx plugin of docker (part of Docker Desktop and Docker Engine) tags
+  `:latest` on the registry.
 - `gh auth login` with an account which may push to the repository and create
   its releases.
 
@@ -116,8 +120,8 @@ line, and the long steps (`uv`, the simulations, the fit reports, `git push`,
    the release repository is a checkout of the repository on `main`, up to
    date with the remote and without changes which no release made, the version
    is greater than the last tag and every adopted fit has its record. A run
-   which publishes also checks that the model has its archive, docker runs and
-   `gh` is logged in.
+   which publishes also checks that the model has its archive, docker runs with
+   its buildx plugin and `gh` is logged in.
 2. **Export** of the files git tracks in the model folder into
    `src/<package as folders>/`, without the excluded paths.
 3. **Project files** from the templates of pkpdsim: `pyproject.toml`,
@@ -136,8 +140,9 @@ line, and the long steps (`uv`, the simulations, the fit reports, `git push`,
    versions of the core libraries and a hash of every generated file.
 8. `--no-publish` stops here.
 9. **Publish**: the lock must hold packages of PyPI only; then the commit, the
-   tag (the plain version), the push, GitHub Pages, the Docker image and the
-   GitHub release with the release notes and the COMBINE archive. Zenodo
+   tag (the plain version), GitHub Pages (set up to deploy from the docs
+   workflow, before the push which starts it), the push, the Docker image and
+   the GitHub release with the release notes and the COMBINE archive. Zenodo
    archives the release, the docs workflow deploys the site.
 
 ## Review, then publish

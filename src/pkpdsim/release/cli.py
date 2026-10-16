@@ -9,7 +9,7 @@ pkpd_release pkdb_models.models.hctz --repo ../hctz-model --version 0.8.0
 The command checks the source and the release repository, builds the release in
 the release repository (export of the model package, project files, models,
 simulations, fit reports, release notes, docs, manifest) and publishes it
-(commit, tag, push, GitHub Pages, Docker image, GitHub release). `--no-publish`
+(commit, tag, GitHub Pages, push, Docker image, GitHub release). `--no-publish`
 stops before the commit, so the build can be reviewed; a later run without the
 flag publishes the reviewed build without building it again. A run which failed
 while publishing is finished by running the same command again. See `release`
@@ -173,9 +173,9 @@ def release(
        release repository is a checkout of the repository on `main` and up to
        date (`release_repo`, cloned when missing), the version is greater than
        the last release (`check_version`), every adopted fit has its record;
-       when publishing, the model declares its COMBINE archive and docker and
-       `gh` are ready (`check_tools`), so a missing tool fails before the long
-       build.
+       when publishing, the model declares its COMBINE archive and docker,
+       its buildx plugin and `gh` are ready (`check_tools`), so a missing tool
+       fails before the long build.
     2. The build, skipped if a publishing run finds a build of this release
        (`matches`, i.e. a reviewed `--no-publish` build) with a publishable lock.
        Otherwise the release repository must be clean, changed only by an

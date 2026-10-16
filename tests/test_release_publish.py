@@ -32,7 +32,7 @@ class FakeRunner:
         self.head_version: str | None = None
         self.tags: dict[str, str] = {}
         self.remote: dict[str, str] = {}
-        self.pages = False
+        self.pages: str | None = None
         self.images: dict[str, str] = {}
         self.local_images: set[str] = set()
         self.releases: dict[str, list[str]] = {}
@@ -90,9 +90,8 @@ class FakeRunner:
             if cmd[3] not in self.images:
                 raise ReleaseError("no such manifest")
             return self.images[cmd[3]]
-        if cmd[:3] == ["docker", "image", "inspect"]:
-            if cmd[3] not in self.local_images:
-                raise ReleaseError("no such image")
+        if cmd[:4] == ["docker", "buildx", "imagetools", "create"]:
+            self.images[cmd[5]] = self.images[cmd[6]]
             return ""
         if cmd[:2] == ["docker", "build"]:
             self.local_images.update(cmd[3::2][:2])
@@ -115,11 +114,13 @@ class FakeRunner:
 
     def _pages(self, cmd: list[str]) -> str:
         if cmd[2] == "-X":
-            self.pages = True
+            if (cmd[3] == "POST") == (self.pages is not None):
+                raise ReleaseError(f"gh: {cmd[3]} of the Pages site failed")
+            self.pages = cmd[-1].removeprefix("build_type=")
             return ""
-        if not self.pages:
+        if self.pages is None:
             raise ReleaseError("gh: Not Found (HTTP 404)")
-        return "{}"
+        return json.dumps({"build_type": self.pages, "status": "built"})
 
 
 ARCHIVE = Path("toy.zip")
@@ -132,7 +133,7 @@ def _publish(runner: FakeRunner) -> list[str]:
 def test_publish_all_steps() -> None:
     runner = FakeRunner()
     steps = _publish(runner)
-    assert steps == ["commit", "tag", "push", "pages", "docker", "github_release"]
+    assert steps == ["commit", "tag", "pages", "push", "docker", "github_release"]
     mutating = [
         c
         for c in runner.commands
@@ -146,8 +147,8 @@ def test_publish_all_steps() -> None:
         ["git", "add", "-A"],
         ["git", "commit", "-m", f"Release {VERSION}"],
         ["git", "tag", VERSION],
-        ["git", "push", "origin", "main", VERSION],
         ["gh", "api", "-X", "POST", f"repos/{REPO}/pages", "-f", "build_type=workflow"],
+        ["git", "push", "origin", "main", VERSION],
         ["docker", "build", "-t", f"{IMAGE}:{VERSION}", "-t", f"{IMAGE}:latest", "."],
         ["docker", "push", f"{IMAGE}:{VERSION}"],
         ["docker", "push", f"{IMAGE}:latest"],
@@ -168,8 +169,8 @@ def test_publish_prints_steps_and_streams(capsys: pytest.CaptureFixture[str]) ->
     for line in (
         "Commit",
         "Tag",
-        "Push",
         "GitHub Pages",
+        "Push",
         "Docker image",
         "GitHub release",
     ):
@@ -245,31 +246,77 @@ def test_check_lock_uv_sources(tmp_path: Path) -> None:
 
 def test_check_tools_lists_missing_tools(tmp_path: Path) -> None:
     runner = FakeRunner()
-    runner.missing = {"docker info", "gh auth status"}
+    runner.missing = {"docker info", "docker buildx version", "gh auth status"}
     with pytest.raises(ReleaseError) as err:
         check_tools(tmp_path, runner)
-    assert "docker" in str(err.value)
+    assert "docker info" in str(err.value)
+    assert "docker buildx version" in str(err.value)
     assert "gh auth status" in str(err.value)
+
+
+LATEST = f"{IMAGE}:latest"
+RETAG = ["docker", "buildx", "imagetools", "create", "-t", LATEST, f"{IMAGE}:{VERSION}"]
+
+
+def _docker_commands(runner: FakeRunner) -> list[list[str]]:
+    return [
+        c
+        for c in runner.commands
+        if c[:2] in (["docker", "build"], ["docker", "push"]) or c == RETAG
+    ]
 
 
 def test_publish_resume_after_latest_push_failure() -> None:
     runner = FakeRunner()
-    runner.fail_on = f"docker push {IMAGE}:latest"
+    runner.fail_on = f"docker push {LATEST}"
     with pytest.raises(ReleaseError):
         _publish(runner)
     runner.commands.clear()
     assert _publish(runner) == ["docker", "github_release"]
-    assert f"{IMAGE}:latest" in runner.images
-    assert ["docker", "push", f"{IMAGE}:{VERSION}"] not in runner.commands
-    assert not [c for c in runner.commands if c[:2] == ["docker", "build"]]
+    assert runner.images[LATEST] == runner.images[f"{IMAGE}:{VERSION}"]
+    assert _docker_commands(runner) == [RETAG]
 
 
-def test_docker_pushes_a_differing_latest() -> None:
+def test_docker_retags_a_differing_latest() -> None:
     runner = FakeRunner()
     _publish(runner)
-    runner.images[f"{IMAGE}:latest"] = "other"
+    runner.images[LATEST] = "other"
+    runner.commands.clear()
     assert _publish(runner) == ["docker"]
-    assert runner.images[f"{IMAGE}:latest"] == "digest-1"
+    assert runner.images[LATEST] == "digest-1"
+    assert _docker_commands(runner) == [RETAG]
+
+
+def test_docker_pushed_version_is_never_rebuilt() -> None:
+    """The version on the registry is the release, a local image may differ."""
+    runner = FakeRunner()
+    runner.images[f"{IMAGE}:{VERSION}"] = "digest-0"
+    _publish(runner)
+    assert runner.images[LATEST] == "digest-0"
+    assert _docker_commands(runner) == [RETAG]
+
+
+def test_docker_builds_over_a_stale_local_image() -> None:
+    """A local image of the version may be of an earlier build, it is rebuilt."""
+    runner = FakeRunner()
+    runner.local_images = {f"{IMAGE}:{VERSION}", LATEST}
+    _publish(runner)
+    assert _docker_commands(runner) == [
+        ["docker", "build", "-t", f"{IMAGE}:{VERSION}", "-t", LATEST, "."],
+        ["docker", "push", f"{IMAGE}:{VERSION}"],
+        ["docker", "push", LATEST],
+    ]
+
+
+def test_pages_switched_to_workflow() -> None:
+    runner = FakeRunner()
+    runner.pages = "legacy"
+    assert "pages" in _publish(runner)
+    assert runner.pages == "workflow"
+    assert [
+        "gh", "api", "-X", "PUT", f"repos/{REPO}/pages", "-f", "build_type=workflow"
+    ] in runner.commands  # fmt: skip
+    assert "pages" not in _publish(runner)
 
 
 def test_release_without_archive_is_completed() -> None:

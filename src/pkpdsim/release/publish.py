@@ -67,6 +67,8 @@ def _tool_problems(release_path: Path, runner: Runner) -> list[str]:
     problems = []
     if not _ok(runner, ["docker", "info"], release_path):
         problems.append("docker is not available (docker info failed)")
+    if not _ok(runner, ["docker", "buildx", "version"], release_path):
+        problems.append("docker buildx is not available (docker buildx version failed)")
     if not _ok(runner, ["gh", "auth", "status"], release_path):
         problems.append("gh is not logged in (gh auth status failed)")
     return problems
@@ -87,8 +89,8 @@ def check_tools(release_path: Path, runner: Runner = run) -> None:
         runner: runs the tool checks.
 
     Raises:
-        ReleaseError: if Docker is not running or `gh` is not logged in; one
-            message lists both.
+        ReleaseError: if Docker or its buildx plugin is not available or `gh`
+            is not logged in; one message lists every problem.
     """
     _refuse(_tool_problems(release_path, runner))
 
@@ -182,15 +184,27 @@ def _push(path: Path, version: str, runner: Runner) -> bool:
 
 
 def _pages(path: Path, settings: ReleaseSettings, runner: Runner) -> bool:
+    """Make GitHub Pages deploy the site from the docs workflow.
+
+    A new site is created with the build type `workflow`, an existing site which
+    is built from a branch is switched to it.
+    """
     endpoint = f"repos/{settings.repository}/pages"
     try:
-        runner(["gh", "api", endpoint], path)
+        answer = runner(["gh", "api", endpoint], path)
     except ReleaseError as err:
         if "HTTP 404" not in str(err) and "Not Found" not in str(err):
             raise
         runner(["gh", "api", "-X", "POST", endpoint, "-f", "build_type=workflow"], path)
         return True
-    return False
+    try:
+        build_type = json.loads(answer).get("build_type")
+    except (ValueError, AttributeError) as err:
+        raise ReleaseError(f"'gh api {endpoint}' gave no Pages site: {err}") from err
+    if build_type == "workflow":
+        return False
+    runner(["gh", "api", "-X", "PUT", endpoint, "-f", "build_type=workflow"], path)
+    return True
 
 
 def _manifest(runner: Runner, reference: str, path: Path) -> str | None:
@@ -203,19 +217,30 @@ def _manifest(runner: Runner, reference: str, path: Path) -> str | None:
 def _docker(
     path: Path, settings: ReleaseSettings, version: str, runner: Runner
 ) -> bool:
+    """Push the image of the version and point `latest` at it.
+
+    The image of the version on the registry is the release: it is built and
+    pushed only while the registry lacks it (a local image of the version may be
+    of an earlier build, the layer cache keeps the build cheap), and once it is
+    there `latest` is tagged on the registry from it.
+    """
     image = settings.docker_image
     versioned, latest = f"{image}:{version}", f"{image}:latest"
     remote_version = _manifest(runner, versioned, path)
-    remote_latest = _manifest(runner, latest, path)
-    if remote_version is not None and remote_version == remote_latest:
-        return False
-    if not _ok(runner, ["docker", "image", "inspect", versioned], path):
+    if remote_version is None:
         runner(
             ["docker", "build", "-t", versioned, "-t", latest, "."], path, stream=True
         )
-    if remote_version is None:
         runner(["docker", "push", versioned], path, stream=True)
-    runner(["docker", "push", latest], path, stream=True)
+        runner(["docker", "push", latest], path, stream=True)
+        return True
+    if remote_version == _manifest(runner, latest, path):
+        return False
+    runner(
+        ["docker", "buildx", "imagetools", "create", "-t", latest, versioned],
+        path,
+        stream=True,
+    )
     return True
 
 
@@ -269,6 +294,9 @@ def publish(
 ) -> list[str]:
     """Publish a built release; every step already done is skipped.
 
+    GitHub Pages is set up before the push, so the docs workflow which the push
+    starts deploys the site.
+
     Args:
         settings: the release settings of the model.
         release_path: the checkout of the release repository.
@@ -277,7 +305,7 @@ def publish(
         runner: runs git, gh and docker.
 
     Returns:
-        The names of the steps which ran: `commit`, `tag`, `push`, `pages`,
+        The names of the steps which ran: `commit`, `tag`, `pages`, `push`,
         `docker`, `github_release`.
 
     Raises:
@@ -286,8 +314,8 @@ def publish(
     steps = {
         "commit": ("Commit", lambda: _commit(release_path, version, runner)),
         "tag": ("Tag", lambda: _tag(release_path, version, runner)),
-        "push": ("Push", lambda: _push(release_path, version, runner)),
         "pages": ("GitHub Pages", lambda: _pages(release_path, settings, runner)),
+        "push": ("Push", lambda: _push(release_path, version, runner)),
         "docker": (
             "Docker image",
             lambda: _docker(release_path, settings, version, runner),
