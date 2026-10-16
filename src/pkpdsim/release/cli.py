@@ -354,6 +354,15 @@ def main(argv: Sequence[str] | None = None) -> None:
         print(f"pkpd_release: error: {err}", file=sys.stderr)
         raise SystemExit(1) from err
     if options.publish:
-        console.print(f"Released {options.version} from {path}.")
+        _print_verbatim(f"Released {options.version} from {path}.")
     else:
-        console.print(f"{path}\nreview, then run without --no-publish", markup=False)
+        _print_verbatim(f"{path}\nreview, then run without --no-publish")
+
+
+def _print_verbatim(text: str) -> None:
+    """Print text with paths, which are copied from the terminal.
+
+    The lines are not wrapped at the terminal width, and their characters are no
+    markup and not highlighted.
+    """
+    console.print(text, soft_wrap=True, markup=False, highlight=False)

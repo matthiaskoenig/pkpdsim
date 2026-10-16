@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 from release_git import git
+from sbmlutils.console import console
 
 from pkpdsim import __version__
 from pkpdsim.fit import fit_subset
@@ -350,6 +351,28 @@ def test_main_no_publish(
     out = capsys.readouterr().out
     assert str(tmp_path) in out
     assert "review, then run without --no-publish" in out
+
+
+@pytest.mark.parametrize(
+    ("args", "line"),
+    [
+        (["--no-publish"], "{path}"),
+        ([], f"Released {VERSION} from {{path}}."),
+    ],
+)
+def test_main_prints_the_release_path_verbatim(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+    args: list[str],
+    line: str,
+) -> None:
+    """The path is one line on a narrow terminal, markup characters included."""
+    path = tmp_path / ("long-folder-name-" * 4) / "[draft]"
+    monkeypatch.setattr(console, "_width", 20)
+    monkeypatch.setattr("pkpdsim.release.cli.release", lambda *a, **k: path)
+    main(["pkpdsim_toy", "--version", VERSION, *args])
+    assert line.format(path=path) in capsys.readouterr().out.splitlines()
 
 
 def commit_source(model: PKPDModel) -> None:
