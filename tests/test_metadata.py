@@ -1,5 +1,6 @@
 """The shared vocabulary of the metadata of the fit mappings."""
 
+import dataclasses
 import math
 from dataclasses import dataclass
 from enum import StrEnum
@@ -7,31 +8,32 @@ from enum import StrEnum
 import pytest
 from sbmlsim.fit.objects import MappingMetaData
 
+from pkpdsim import metadata
 from pkpdsim.metadata import (
+    AdministrationSite,
     ApplicationForm,
+    Coadministration,
     DataType,
     Dosing,
     Fasting,
+    Genotype,
+    Health,
+    Phenotype,
     PKPDData,
     PKPDMappingMetaData,
     Route,
     Tissue,
 )
 
-
-class Health(StrEnum):
-    HEALTHY = "healthy"
-
-
-class Coadministration(StrEnum):
-    NONE = "none"
-    RIFAMPICIN = "rifampicin"
+VOCABULARIES = [
+    obj
+    for obj in vars(metadata).values()
+    if isinstance(obj, type) and issubclass(obj, StrEnum) and obj is not StrEnum
+]
 
 
 @dataclass(kw_only=True)
 class ModelMappingMetaData(PKPDMappingMetaData):
-    health: Health
-    coadministration: Coadministration = Coadministration.NONE
     diplotype: str | None = None
     activity_score: float = math.nan
 
@@ -71,6 +73,7 @@ def test_to_dict_names_every_field_in_the_order_of_the_fields() -> None:
         fasting=Fasting.FED,
         health=Health.HEALTHY,
         coadministration=Coadministration.RIFAMPICIN,
+        genotype=Genotype.NR,
     )
     assert list(metadata.to_dict().items()) == [
         ("tissue", "URINE"),
@@ -80,6 +83,11 @@ def test_to_dict_names_every_field_in_the_order_of_the_fields() -> None:
         ("fasting", "FED"),
         ("health", "HEALTHY"),
         ("coadministration", "RIFAMPICIN"),
+        ("genotype", "NR"),
+        ("phenotype", "NR"),
+        ("administration_site", "NR"),
+        ("data", "NR"),
+        ("data_type", "NR"),
         ("diplotype", "None"),
         ("activity_score", "nan"),
     ]
@@ -120,8 +128,8 @@ def test_other_values_are_their_strings() -> None:
             "SUSPENSION SYRUP POWDER GRANULES FILM NANOPARTICLES SUPPOSITORY PATCH "
             "RING SUBCUTANEOUS PROPACETAMOL MIXED NR",
         ),
-        (DataType, "MEAN MEDIAN INDIVIDUAL"),
-        (PKPDData, "PK PD"),
+        (DataType, "MEAN MEDIAN INDIVIDUAL NR"),
+        (PKPDData, "PK PD NR"),
     ],
 )
 def test_the_vocabularies_hold_the_members_of_the_models(
@@ -134,7 +142,62 @@ def test_the_vocabularies_hold_the_members_of_the_models(
 @pytest.mark.parametrize(
     "enum", [Tissue, Route, Dosing, Fasting, ApplicationForm, DataType, PKPDData]
 )
-def test_the_values_are_unique_and_text(enum: type[StrEnum]) -> None:
+def test_the_values_are_text_and_text(enum: type[StrEnum]) -> None:
     values = [member.value for member in enum.__members__.values()]
     assert len(values) == len(set(values))
     assert all("_" not in value for value in values)
+
+
+@pytest.mark.parametrize("enum", VOCABULARIES, ids=lambda e: e.__name__)
+def test_a_value_is_one_member(enum: type[StrEnum]) -> None:
+    values = [m.value for m in enum]
+    assert len(values) == len(set(values))
+
+
+def test_the_conventional_members() -> None:
+    assert Health.HEALTHY == "healthy"
+    assert Health.NR == "not reported"
+    assert Coadministration.NONE == "none"
+    for enum in (Genotype, Phenotype, AdministrationSite, PKPDData, DataType):
+        assert enum.NR == "not reported"
+
+
+def test_every_genotype_names_its_gene() -> None:
+    bare = [m for m in Genotype if m is not Genotype.NR and m.value[0] in "*0123456789"]
+    assert bare == []
+
+
+def test_the_fields_and_their_defaults() -> None:
+    md = PKPDMappingMetaData(
+        tissue=Tissue.PLASMA,
+        route=Route.PO,
+        dosing=Dosing.SINGLE,
+        health=Health.HEALTHY,
+    )
+    assert md.coadministration is Coadministration.NONE
+    assert md.genotype is Genotype.NR
+    assert md.phenotype is Phenotype.NR
+    assert md.administration_site is AdministrationSite.NR
+    assert md.data is PKPDData.NR
+    assert md.data_type is DataType.NR
+    assert [f.name for f in dataclasses.fields(md)] == [
+        "tissue",
+        "route",
+        "application_form",
+        "dosing",
+        "fasting",
+        "health",
+        "coadministration",
+        "genotype",
+        "phenotype",
+        "administration_site",
+        "data",
+        "data_type",
+    ]
+
+
+def test_health_is_required() -> None:
+    with pytest.raises(TypeError, match="health"):
+        PKPDMappingMetaData(  # ty: ignore[missing-argument]
+            tissue=Tissue.PLASMA, route=Route.PO, dosing=Dosing.SINGLE
+        )

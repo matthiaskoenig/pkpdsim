@@ -2,26 +2,24 @@
 
 Every fit mapping of an experiment carries metadata which says what its curve
 is: the tissue, the route, the application form, the dosing, the fasting, the
-health of the subjects and what was coadministered. The fits select their data
-by these values (see `pkpdsim.fit.metadata_filter`), so a model describes its
-studies with the same words as the other models:
+health of the subjects, what was coadministered, the genotype and the phenotype
+of the subjects, the site of the administration and the kind of the data. The
+fits select their data by these values (see `pkpdsim.fit.metadata_filter`), so
+all models describe their studies with the same words: there is one vocabulary
+for all models, and every closed vocabulary is an enum of this module.
+Their conventional members are `HEALTHY`, `NONE` (nothing coadministered) and
+`NR` (not reported), and a member has one name and one value everywhere. A new
+study which needs a new member adds it here.
 
-- the closed vocabularies are shared, the enums of this module;
-- the open vocabularies (the health of the subjects, the coadministered
-  substances, the genotypes) are the model's own `StrEnum`s, which grow with
-  its studies. Their conventional members are `HEALTHY`, `NONE` (nothing
-  coadministered) and `NR` (not reported), and a member has the same name and
-  value in every model.
-
-A model derives the metadata of its mappings from `PKPDMappingMetaData` and adds
-its own fields:
+A model uses `PKPDMappingMetaData` as it is. It extends it only for a facet
+no other model has, in its `fitting/mapping_collections.py`, without
+redefining a field or repeating a vocabulary:
 
 ```python
 # not executed
 @dataclass(kw_only=True)
-class HctzMappingMetaData(PKPDMappingMetaData):
-    health: Health
-    coadministration: Coadministration = Coadministration.NONE
+class LocalMappingMetaData(PKPDMappingMetaData):
+    diplotype: str | None = None
 ```
 
 The tables of sbmlsim show the metadata by member name (`to_dict`); no code
@@ -37,12 +35,17 @@ from typing import override
 from sbmlsim.fit.objects import MappingMetaData
 
 __all__ = [
+    "AdministrationSite",
     "ApplicationForm",
+    "Coadministration",
     "DataType",
     "Dosing",
     "Fasting",
+    "Genotype",
+    "Health",
     "PKPDData",
     "PKPDMappingMetaData",
+    "Phenotype",
     "Route",
     "Tissue",
 ]
@@ -148,6 +151,7 @@ class DataType(StrEnum):
     MEAN = "mean"
     MEDIAN = "median"
     INDIVIDUAL = "individual"
+    NR = "not reported"
 
 
 @unique
@@ -156,6 +160,264 @@ class PKPDData(StrEnum):
 
     PK = "pk"
     PD = "pd"
+    NR = "not reported"
+
+
+@unique
+class Health(StrEnum):
+    """The health of the subjects."""
+
+    HEALTHY = "healthy"
+    NR = "not reported"
+    ALCOHOLISM = "alcoholism"
+    BILIARY_OBSTRUCTION = "biliary obstruction"
+    CANCER = "cancer"  # adults with solid tumors other than HCC
+    CARDIAC_IMPAIRMENT = "cardiac impairment"
+    CARDIAC_RENAL_IMPAIRMENT = "cardiac renal impairment"
+    CHOLECYSTECTOMY = "cholecystectomy"
+    CIRRHOSIS = "cirrhosis"  # affects PK
+    CIRRHOSIS_HEART_FAILURE = "cirrhosis & heart failure"
+    CML = "chronic myelogenous leukemia"
+    CYSTIC_FIBROSIS = "cystic fibrosis"
+    DIABETES = "diabetes mellitus"
+    DUODENAL_ULCER = "duodenal ulcer"
+    EPILEPSY = "epilepsy"
+    HCC = "hepatocellular carcinoma"
+    HCC_RENAL_IMPAIRMENT = "hepatocellular carcinoma & renal impairment"
+    HEART_DISEASE = "heart disease"
+    HEART_FAILURE = "heart failure"
+    HEPATIC_IMPAIRMENT = "hepatic impairment"
+    HEPATITIS = "acute viral hepatitis"
+    HEPATO_RENAL_IMPAIRMENT = "hepatorenal impairment"
+    HOSPITALIZED = "hospitalized"
+    HYPERTENSION = "hypertension"
+    MODERATE_DRINKING = "moderate alcohol consumption"
+    NSCLC = "non-small cell lung cancer"
+    OBESE = "obese"
+    PAIN = "pain"
+    PEDIATRIC_CANCER = "pediatric cancer"  # children and young adults
+    PRIMARY_HYPERCHOLESTEROLEMIA = "primary hypercholesterolemia"
+    RENAL_IMPAIRMENT = "renal impairment"
+    RENAL_TRANSPLANT = "renal transplant"
+    SURGERY = "surgical patients"
+    T1DM = "type 1 diabetes mellitus"
+    T2DM = "type 2 diabetes mellitus"
+    T2DM_RENAL_IMPAIRMENT = "T2DM & renal impairment"  # affects PK
+
+
+@unique
+class Coadministration(StrEnum):
+    """A substance administered together with the substance of the model."""
+
+    NONE = "none"  # nothing coadministered
+    ACETAMINOPHEN = "acetaminophen"
+    ALFENTANIL = "alfentanil"
+    ALISKIREN = "aliskiren"
+    ALLOPURINOL = "allopurinol"
+    AMENAMEVIR = "amenamevir"
+    AMLODIPINE = "amlodipine"
+    ANESTHESIA = "anesthesia"
+    ANTIEPILEPTICS = "antiepileptics"
+    ANTIHYPERGLYCEMIC_MEDICATION = "antihyperglycemic medication"
+    ANTIPYRINE = "antipyrine"
+    APPLE = "apple"
+    ASA = "aspirin"
+    ATENOLOL = "atenolol"
+    ATOGEPANT = "atogepant"
+    ATORVASTATIN = "atorvastatin"
+    ATROPINE = "atropine"
+    BREVISCAPINE = "breviscapine"
+    BUCOLOME = "bucolome"
+    CABOTEGRAVIR = "cabotegravir"
+    CANAGLIFLOZIN = "canagliflozin"
+    CAPTOPRIL = "captopril"
+    CARBAMAZEPINE = "carbamazepine"
+    CARBOHYDRATE = "carbohydrate"
+    CELECOXIB = "celecoxib"
+    CETUXIMAB = "cetuximab"
+    CHOLESTYRAMINE = "cholestyramine"
+    CILAZAPRIL = "cilazapril"
+    CILOSTAZOL = "cilostazol"
+    CIMETIDINE = "cimetidine"
+    CISAPRIDE = "cisapride"
+    CISPLATIN = "cisplatin"
+    CLARITHROMYCIN = "clarithromycin"
+    CLOPIDOGREL = "clopidogrel"
+    CLOTRIMAZOLE = "clotrimazole"
+    COCA_COLA = "coca cola"
+    COCKTAIL = "phenotyping cocktail"  # several other drugs, often the probe drugs of a phenotyping cocktail (e.g. the Inje cocktail)
+    COMEDICATION = "comedication"
+    CYCLOSPORINE = "cyclosporine"
+    DAPAGLIFLOZIN = "dapagliflozin"
+    DIGOXIN = "digoxin"
+    DILTIAZEM = "diltiazem"
+    EDOXABAN = "edoxaban"
+    EMPAGLIFLOZIN = "empagliflozin"
+    ENALAPRIL = "enalapril"
+    ERYTHROMYCIN = "erythromycin"
+    ERYTHROMYCIN_BREATH_TEST = "[14C N-methyl] erythromycin"
+    EVOGLIPTIN = "evogliptin"
+    FAMOTIDINE = "famotidine"
+    FENOFIBRATE = "fenofibrate"
+    FIMASARTAN = "fimasartan"
+    FLIBANSERINE = "flibanserine"
+    FUROSEMIDE = "furosemide"
+    GABAPENTIN = "gabapentin"
+    GEMFIBROZIL = "gemfibrozil"
+    GEMFIBROZIL_ITRACONAZOLE = "gemfibrozil+itraconazole"
+    GEMIGLIPTIN = "gemigliptin"
+    GINSENG = "ginseng"
+    GLIMEPIRIDE = "glimepiride"
+    GRAPEFRUIT_JUICE = "grapefruit juice"
+    GREEN_TEA = "green tea"
+    GUAIFENESIN = "guaifenesin"
+    HCTZ = "hydrochlorothiazide"
+    IMATINIB = "imatinib"
+    INDOMETACIN = "indometacin"
+    INSULIN = "insulin"
+    IRBESARTAN = "irbesartan"
+    ISMN = "ismn"
+    ITRACONAZOLE = "itraconazole"
+    KETOCONAZOLE = "ketoconazole"
+    LACIDIPINE = "lacidipine"
+    LAPATINIB = "lapatinib"
+    LCZ696 = "lcz696"
+    LINAGLIPTIN = "linagliptin"
+    LISINOPRIL = "lisinopril"
+    LOBEGLITAZONE = "lobeglitazone"
+    MARAVIROC = "maraviroc"
+    METFORMIN = "metformin"
+    METOCLOPRAMIDE = "metoclopramide"
+    MIDAZOLAM = "midazolam"
+    MORPHINE = "morphine"
+    MYCOPHENOLATE_MOFETIL = "mycophenolate mofetil"
+    NELFINAVIR = "nelfinavir"
+    ORAL_CONTRACEPTIVES = "oral contraceptives"
+    ORANGE = "orange"
+    ORLISTAT = "orlistat"
+    OSIMERTINIB = "osimertinib"
+    PACLITAXEL = "paclitaxel"
+    PAH = "p-aminohippurate"
+    PEMBROLIZUMAB = "pembrolizumab"
+    PENTAGASTRIN = "pentagastrin"
+    PETHIDINE = "pethidine"
+    PHENYTOIN = "phenytoin"
+    PIOGLITAZONE = "pioglitazone"
+    PRASUGREL = "prasugrel"
+    PREDNISONE = "prednisone"
+    PREGABALIN = "pregabalin"
+    PROBENECID = "probenecid"
+    PROTEIN = "protein"
+    QUERCETIN = "quercetin"
+    QUINIDINE = "quinidine"
+    RAMIPRIL = "ramipril"
+    RIFAMPICIN = "rifampicin"
+    RITONAVIR = "ritonavir"  # 3D regimen
+    ROSIGLITAZONE_METFORMIN = "rosiglitazone + metformin"
+    ROSUVASTATIN = "rosuvastatin"
+    SETIPIPRANT = "setipiprant"
+    SILEXAN = "silexan"
+    SILYMARIN = "silymarin"
+    SIMVASTATIN = "simvastatin"
+    SITAGLIPTIN = "sitagliptin"
+    ST_JOHNS_WORT = "st john's wort extract"
+    TACROLIMUS = "tacrolimus"
+    TACROLIMUS_MYCOPHENOLATE_MOFETIL = "tacrolimus and mycophenolate mofetil"
+    TORASEMIDE = "torasemide"
+    TROGLITAZONE = "troglitazone"
+    TROLEANDOMYCIN = "troleandomycin"
+    UREA = "urea"
+    VALSARTAN = "valsartan"
+    VERAPAMIL = "verapamil"
+    VINORELBINE = "vinorelbine"
+    VOGLIBOSE = "voglibose"
+    WARFARIN = "warfarin"
+
+
+@unique
+class Genotype(StrEnum):
+    """The genotype of a group of subjects, the gene and its alleles."""
+
+    NR = "not reported"
+    ABCB1_1236_CC = "ABCB1 1236 C/T_CC"
+    ABCB1_1236_CC_CT = "ABCB1 1236 C/T_CC_CT"
+    ABCB1_2677AT_3435CT = "ABCB1 2677AT/3435CT"
+    ABCB1_2677GG_3435CC = "ABCB1 2677GG/3435CC"
+    ABCB1_2677GT_3435CT = "ABCB1 2677GT/3435CT"
+    ABCB1_2677TT_3435TT = "ABCB1 2677TT/3435TT"
+    ABCB1_3435CC = "ABCB1 3435CC"
+    ABCB1_3435CT = "ABCB1 3435CT"
+    ABCB1_3435TT = "ABCB1 3435TT"
+    ABCB1_CGC_CGC = "ABCB1 CGC/CGC"
+    ABCB1_TTT_TTT = "ABCB1 TTT/TTT"
+    ABCG2_421AA = "ABCG2 c.421AA"
+    ABCG2_421CA = "ABCG2 c.421CA"
+    ABCG2_421CC = "ABCG2 c.421CC"
+    CES1_GAIN_OF_FUNCTION = "CES1 mutation with increased activity"
+    CES1_LOSS_OF_FUNCTION = "CES1 mutation with reduced activity"
+    CES1_WILD_TYPE = "CES1 wild type"
+    CYP2C9_1_1 = "CYP2C9 *1/*1"
+    CYP2C9_1_13 = "CYP2C9 *1/*13"
+    CYP2C9_1_1_AND_1_3 = "CYP2C9 *1/*1 and *1/*3"
+    CYP2C9_1_2 = "CYP2C9 *1/*2"
+    CYP2C9_1_3 = "CYP2C9 *1/*3"
+    CYP2C9_2_2 = "CYP2C9 *2/*2"
+    CYP2C9_2_3 = "CYP2C9 *2/*3"
+    CYP2C9_3_3 = "CYP2C9 *3/*3"
+    CYP3A4_1G_1G = "CYP3A4 *1G/*1G"
+    CYP3A4_1_1 = "CYP3A4 *1/*1"
+    CYP3A4_1_1G = "CYP3A4 *1/*1G"
+    CYP3A5_1_1 = "CYP3A5 *1/*1"
+    CYP3A5_1_3 = "CYP3A5 *1/*3"
+    CYP3A5_3_3 = "CYP3A5 *3/*3"
+    SLCO1B1_521CC = "SLCO1B1 c.521CC"
+    SLCO1B1_521TC = "SLCO1B1 c.521TC"
+    SLCO1B1_521TT = "SLCO1B1 c.521TT"
+    SLCO1B1_POLYMORPHISM = "SLCO1B1 polymorphism"
+    SLCO1B1_SLCO1B3_VARIANT = "SLCO1B1 and SLCO1B3 variant"
+    SLCO1B1_SLCO1B3_WILD_TYPE = "SLCO1B1 and SLCO1B3 wild type"
+    SLCO1B1_VARIANT = "SLCO1B1 variant"
+    SLCO1B1_WILD_TYPE = "SLCO1B1 wild type"
+    SLCO1B3_VARIANT = "SLCO1B3 variant"
+    SLCO2B1_1457_CC = "SLCO2B1 c.1457 C/C"
+    SLCO2B1_1457_CT = "SLCO2B1 c.1457 C/T"
+    SLCO2B1_1457_TT = "SLCO2B1 c.1457 T/T"
+    SLCO2B1_282_AA = "SLCO2B1 g.-282 A/A"
+    SLCO2B1_282_GA = "SLCO2B1 g.-282 G/A"
+    SLCO2B1_282_GG = "SLCO2B1 g.-282 G/G"
+    SLCO2B1_601_AA = "SLCO2B1 c.601 A/A"
+    SLCO2B1_601_GA = "SLCO2B1 c.601 G/A"
+    SLCO2B1_601_GG = "SLCO2B1 c.601 G/G"
+    SLCO2B1_935_AA = "SLCO2B1 c.935 A/A"
+    SLCO2B1_935_GA = "SLCO2B1 c.935 G/A"
+    SLCO2B1_935_GG = "SLCO2B1 c.935 G/G"
+    UGT1A3_2_2 = "UGT1A3 *2/*2"
+    UGT1A3_NONCARRIER = "UGT1A3 *1/*1 or *1/*3"
+    UGT1A3_X_2 = "UGT1A3 *x/*2"
+
+
+@unique
+class Phenotype(StrEnum):
+    """The metabolizer phenotype of the subjects for an enzyme."""
+
+    NR = "not reported"
+    CYP2C19_EM = "CYP2C19 extensive metabolizer"
+    CYP2C19_IM = "CYP2C19 intermediate metabolizer"
+    CYP2C19_PM = "CYP2C19 poor metabolizer"
+    CYP2D6_EM = "CYP2D6 extensive metabolizer"
+    CYP2D6_IM = "CYP2D6 intermediate metabolizer"
+    CYP2D6_PM = "CYP2D6 poor metabolizer"
+    CYP2D6_UM = "CYP2D6 ultrarapid metabolizer"
+
+
+@unique
+class AdministrationSite(StrEnum):
+    """The site of an injection or application."""
+
+    NR = "not reported"
+    ABDOMEN = "abdomen"
+    THIGH = "thigh"
+    UPPER_ARM = "upper arm"
 
 
 def _name(value: object) -> str:
@@ -177,6 +439,15 @@ class PKPDMappingMetaData(MappingMetaData):
         application_form: the pharmaceutical form, not reported by default.
         dosing: the dosing.
         fasting: the fasting state, not reported by default.
+        health: the health of the subjects.
+        coadministration: the substance coadministered, none by default.
+        genotype: the genotype of the subjects, not reported by default.
+        phenotype: the metabolizer phenotype, not reported by default.
+        administration_site: the site of an injection or application, not
+            reported by default.
+        data: whether the curve is pharmacokinetic or pharmacodynamic data, not
+            reported by default.
+        data_type: what the values of the curve are, not reported by default.
     """
 
     tissue: Tissue
@@ -184,6 +455,13 @@ class PKPDMappingMetaData(MappingMetaData):
     application_form: ApplicationForm = ApplicationForm.NR
     dosing: Dosing
     fasting: Fasting = Fasting.NR
+    health: Health
+    coadministration: Coadministration = Coadministration.NONE
+    genotype: Genotype = Genotype.NR
+    phenotype: Phenotype = Phenotype.NR
+    administration_site: AdministrationSite = AdministrationSite.NR
+    data: PKPDData = PKPDData.NR
+    data_type: DataType = DataType.NR
 
     @override
     def to_dict(self) -> dict[str, str]:

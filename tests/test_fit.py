@@ -24,9 +24,17 @@ from pkpdsim.fit import (
     observable_id,
     select_mappings,
 )
-from pkpdsim.metadata import Dosing, Fasting, Route, Tissue
+from pkpdsim.metadata import (
+    Coadministration,
+    Dosing,
+    Fasting,
+    Health,
+    PKPDMappingMetaData,
+    Route,
+    Tissue,
+)
 from pkpdsim_toy import DATA_PATHS, MODEL, TOY_PATH
-from pkpdsim_toy.experiments.decay import Health, ToyDecay, ToyMappingMetaData
+from pkpdsim_toy.experiments.decay import ToyDecay
 
 
 def test_the_default_settings_are_those_of_the_models() -> None:
@@ -63,7 +71,7 @@ def fit_mapping() -> FitMapping:
 
 
 def test_the_metadata_of_a_mapping(fit_mapping: FitMapping) -> None:
-    metadata = mapping_metadata(fit_mapping, ToyMappingMetaData)
+    metadata = mapping_metadata(fit_mapping, PKPDMappingMetaData)
     assert metadata.route == "iv"
 
 
@@ -81,73 +89,75 @@ def test_the_observable_of_a_mapping(fit_mapping: FitMapping) -> None:
 
 def with_metadata(fit_mapping: FitMapping, **changes: object) -> FitMapping:
     """A copy of the mapping whose metadata differs in some fields."""
-    metadata = mapping_metadata(fit_mapping, ToyMappingMetaData)
+    metadata = mapping_metadata(fit_mapping, PKPDMappingMetaData)
     other = copy.copy(fit_mapping)
     other.metadata = dataclasses.replace(metadata, **changes)
     return other
 
 
 def test_a_mapping_with_an_allowed_value_passes(fit_mapping: FitMapping) -> None:
-    control = metadata_filter(ToyMappingMetaData, route={Route.IV, Route.PO})
+    control = metadata_filter(PKPDMappingMetaData, route={Route.IV, Route.PO})
     assert control("fm_decay_A", fit_mapping)
     assert not control("fm_decay_A", with_metadata(fit_mapping, route=Route.SC))
 
 
 def test_every_clause_must_hold(fit_mapping: FitMapping) -> None:
     control = metadata_filter(
-        ToyMappingMetaData, route={Route.IV}, health={Health.HEALTHY}
+        PKPDMappingMetaData, route={Route.IV}, health={Health.HEALTHY}
     )
     assert control("fm_decay_A", fit_mapping)
     assert not control("fm_decay_A", with_metadata(fit_mapping, route=Route.PO))
 
 
 def test_an_excluded_value_fails(fit_mapping: FitMapping) -> None:
-    single = metadata_filter(ToyMappingMetaData, excluded={"dosing": {Dosing.MULTIPLE}})
+    single = metadata_filter(
+        PKPDMappingMetaData, excluded={"dosing": {Dosing.MULTIPLE}}
+    )
     assert single("fm_decay_A", fit_mapping)
     assert not single("fm_decay_A", with_metadata(fit_mapping, dosing=Dosing.MULTIPLE))
 
 
 def test_a_constant_set_is_a_clause(fit_mapping: FitMapping) -> None:
     control_fasting = {Fasting.FASTED, Fasting.NR}
-    fasted = metadata_filter(ToyMappingMetaData, fasting=control_fasting)
+    fasted = metadata_filter(PKPDMappingMetaData, fasting=control_fasting)
     assert fasted("fm_decay_A", fit_mapping)
     assert not fasted("fm_decay_A", with_metadata(fit_mapping, fasting=Fasting.FED))
 
 
 def test_an_unknown_field_fails_when_the_filter_is_built() -> None:
-    with pytest.raises(TypeError, match=r"ToyMappingMetaData has no field.*genotype"):
-        metadata_filter(ToyMappingMetaData, genotype={"*1/*1"})
+    with pytest.raises(TypeError, match=r"PKPDMappingMetaData has no field.*diplotype"):
+        metadata_filter(PKPDMappingMetaData, diplotype={"*1/*1"})
     with pytest.raises(TypeError, match=r"has no field.*tisue"):
-        metadata_filter(ToyMappingMetaData, excluded={"tisue": {Tissue.URINE}})
+        metadata_filter(PKPDMappingMetaData, excluded={"tisue": {Tissue.URINE}})
 
 
 def test_a_filter_needs_a_clause_and_values() -> None:
     with pytest.raises(ValueError, match="at least one clause"):
-        metadata_filter(ToyMappingMetaData)
+        metadata_filter(PKPDMappingMetaData)
     with pytest.raises(ValueError, match=r"selects nothing.*route"):
-        metadata_filter(ToyMappingMetaData, route=set())
+        metadata_filter(PKPDMappingMetaData, route=set())
 
 
 def test_a_single_value_is_not_a_collection() -> None:
     with pytest.raises(TypeError, match=r"route.*collection"):
-        metadata_filter(ToyMappingMetaData, route=Route.IV)
+        metadata_filter(PKPDMappingMetaData, route=Route.IV)
     with pytest.raises(TypeError, match=r"dosing.*collection"):
-        metadata_filter(ToyMappingMetaData, excluded={"dosing": Dosing.SINGLE})
+        metadata_filter(PKPDMappingMetaData, excluded={"dosing": Dosing.SINGLE})
     with pytest.raises(TypeError, match=r"route.*collection"):
-        metadata_filter(ToyMappingMetaData, route=None)  # ty: ignore[invalid-argument-type]
+        metadata_filter(PKPDMappingMetaData, route=None)  # ty: ignore[invalid-argument-type]
     with pytest.raises(TypeError, match=r"observables.*collection"):
         observable_filter("Cve_hctz")
 
 
 def test_an_empty_exclusion_or_observable_set_is_an_error() -> None:
     with pytest.raises(ValueError, match=r"excludes nothing.*dosing"):
-        metadata_filter(ToyMappingMetaData, excluded={"dosing": set()})
+        metadata_filter(PKPDMappingMetaData, excluded={"dosing": set()})
     with pytest.raises(ValueError, match=r"observables.*selects nothing"):
         observable_filter([])
 
 
 def test_the_metadata_class_is_not_an_instance() -> None:
-    metadata = ToyMappingMetaData(
+    metadata = PKPDMappingMetaData(
         tissue=Tissue.PLASMA,
         route=Route.IV,
         dosing=Dosing.SINGLE,
@@ -175,12 +185,12 @@ def test_the_filter_checks_the_type_of_the_metadata(fit_mapping: FitMapping) -> 
 
 def test_the_filter_says_what_it_selects() -> None:
     control = metadata_filter(
-        ToyMappingMetaData,
+        PKPDMappingMetaData,
         route={Route.PO, Route.IV},
         excluded={"dosing": {Dosing.MULTIPLE}},
     )
     assert repr(control) == (
-        "MetadataFilter(ToyMappingMetaData: route in [IV, PO] "
+        "MetadataFilter(PKPDMappingMetaData: route in [IV, PO] "
         "and dosing not in [MULTIPLE])"
     )
 
@@ -200,11 +210,11 @@ def training(collections: dict[str, list[FitMappingCollection]]) -> list[list[st
 
 def test_the_mappings_are_selected_by_the_filters() -> None:
     selected = select_mappings(
-        MODEL, [ToyDecay], [metadata_filter(ToyMappingMetaData, route={Route.IV})]
+        MODEL, [ToyDecay], [metadata_filter(PKPDMappingMetaData, route={Route.IV})]
     )
     assert training(selected) == [["fm_decay_A"]]
     excluded = select_mappings(
-        MODEL, [ToyDecay], [metadata_filter(ToyMappingMetaData, route={Route.PO})]
+        MODEL, [ToyDecay], [metadata_filter(PKPDMappingMetaData, route={Route.PO})]
     )
     assert training(excluded) == []
 
@@ -214,3 +224,33 @@ def test_outliers_and_validation_are_passed_on() -> None:
     assert training(outlier) == []
     with pytest.raises(ValueError, match="no_mapping"):
         select_mappings(MODEL, [ToyDecay], validation={"no_mapping"})
+
+
+def test_metadata_filter_defaults_to_the_shared_metadata() -> None:
+    f = metadata_filter(route={Route.IV})
+    assert f.metadata_type is PKPDMappingMetaData
+    assert repr(
+        metadata_filter(
+            route={Route.PO, Route.IV},
+            coadministration={Coadministration.NONE},
+            excluded={"dosing": {Dosing.MULTIPLE}},
+        )
+    ) == (
+        "MetadataFilter(PKPDMappingMetaData: route in [IV, PO] "
+        "and coadministration in [NONE] and dosing not in [MULTIPLE])"
+    )
+
+
+def test_metadata_filter_takes_a_local_subclass() -> None:
+    @dataclasses.dataclass(kw_only=True)
+    class LocalMetaData(PKPDMappingMetaData):
+        diplotype: str | None = None
+
+    f = metadata_filter(LocalMetaData, diplotype={"*1/*1"})
+    assert f.metadata_type is LocalMetaData
+
+
+def test_mapping_metadata_defaults_to_the_shared_metadata(
+    fit_mapping: FitMapping,
+) -> None:
+    assert mapping_metadata(fit_mapping).route == "iv"

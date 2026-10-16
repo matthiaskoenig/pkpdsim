@@ -6,10 +6,10 @@ from sbmlsim.fit.cli import FitDefinition
 from pkpdsim.fit import default_fit_settings, metadata_filter, select_mappings
 from pkpdsim.metadata import Route
 from pkpdsim_toy import DATA_PATHS, MODEL, TOY_PATH
-from pkpdsim_toy.experiments.decay import ToyDecay, ToyMappingMetaData
+from pkpdsim_toy.experiments.decay import ToyDecay
 
 #: the intravenous data
-filter_iv = metadata_filter(ToyMappingMetaData, route={Route.IV})
+filter_iv = metadata_filter(route={Route.IV})
 
 
 def collections_decay() -> dict[str, list[FitMappingCollection]]:

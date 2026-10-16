@@ -169,53 +169,51 @@ class HctzSimulationExperiment(PKPDSimulationExperiment):
 ## The vocabulary of the metadata
 
 Every fit mapping carries metadata which says what its curve is. The fits select
-their data by these values, so the models describe their studies with the same
-words. `pkpdsim.metadata` holds the closed vocabularies as `StrEnum`s, shared by
-all models: `Tissue`, `Route`, `Dosing`, `Fasting`, `ApplicationForm`, `DataType`
-and `PKPDData`. The open vocabularies (the health of the subjects, the
-coadministered substances, the genotypes) are the model's own `StrEnum`s, which
-grow with its studies. Their conventional members are `HEALTHY`, `NONE` (nothing
-coadministered) and `NR` (not reported), with the same name and value in every
-model.
+their data by these values, so all models describe their studies with the same
+words: there is one vocabulary for all models. `pkpdsim.metadata` holds it as
+`StrEnum`s: `Tissue`, `Route`, `Dosing`, `Fasting`, `ApplicationForm`, `Health`,
+`Coadministration`, `Genotype`, `Phenotype`, `AdministrationSite`, `PKPDData` and
+`DataType`. Their conventional members are `HEALTHY`, `NONE` (nothing
+coadministered) and `NR` (not reported), and a member has one name and one value
+in every model. A study which needs a new member adds it to `pkpdsim.metadata`,
+not to the model.
 
-A model derives the metadata of its mappings from `PKPDMappingMetaData`, which
-has the fields `tissue`, `route`, `application_form` (default `NR`), `dosing` and
-`fasting` (default `NR`), and adds its own fields. All fields are keyword-only,
-so the model's fields without a default may follow the defaults:
+A model uses `PKPDMappingMetaData`, which has the fields `tissue`, `route`,
+`application_form` (default `NR`), `dosing`, `fasting` (default `NR`), `health`,
+`coadministration` (default `NONE`), `genotype`, `phenotype`, `administration_site`,
+`data` and `data_type` (default `NR`). All fields are keyword-only, so a field
+without a default may follow the defaults:
 
 ```python
-from dataclasses import dataclass
-from enum import StrEnum, unique
+from pkpdsim.metadata import (
+    Coadministration,
+    Dosing,
+    Health,
+    PKPDMappingMetaData,
+    Route,
+    Tissue,
+)
 
-from pkpdsim.metadata import Dosing, PKPDMappingMetaData, Route, Tissue
-
-
-@unique
-class Health(StrEnum):
-    HEALTHY = "healthy"
-    RENAL_IMPAIRMENT = "renal impairment"
-    NR = "not reported"
-
-
-@unique
-class Coadministration(StrEnum):
-    NONE = "none"
-    PROBENECID = "probenecid"
-
-
-@dataclass(kw_only=True)
-class HctzMappingMetaData(PKPDMappingMetaData):
-    health: Health
-    coadministration: Coadministration = Coadministration.NONE
-
-
-metadata = HctzMappingMetaData(
+metadata = PKPDMappingMetaData(
     tissue=Tissue.PLASMA,
     route=Route.PO,
     dosing=Dosing.SINGLE,
     health=Health.HEALTHY,
 )
 print(metadata.to_dict())
+```
+
+A model extends the class only for a facet no other model has, in its
+`fitting/mapping_collections.py`, without redefining a field or repeating a
+vocabulary:
+
+```python
+from dataclasses import dataclass
+
+
+@dataclass(kw_only=True)
+class LocalMappingMetaData(PKPDMappingMetaData):
+    diplotype: str | None = None
 ```
 
 `to_dict` is what the tables of sbmlsim show: the member names of the enums
@@ -226,8 +224,9 @@ text.
 ## Filters
 
 A `fitting/mapping_collections.py` selects the mappings of a fit by what a study
-is, not by listing names. `metadata_filter(metadata_type, *, excluded=None,
-**allowed)` builds a filter on the fields of the metadata: a mapping passes when
+is, not by listing names. `metadata_filter(metadata_type=PKPDMappingMetaData, /, *,
+excluded=None, **allowed)` builds a filter on the fields of the metadata (the class only for a
+local extension): a mapping passes when
 every allowed field has one of its values and no excluded field has one of its
 values. `observable_filter(observables)` selects by the index of the data of the
 observable (`observable_id`, i.e. `Data.index` of the `y` of the mapping: the
@@ -246,7 +245,6 @@ from types import SimpleNamespace
 from pkpdsim.fit import metadata_filter
 
 filter_control = metadata_filter(
-    HctzMappingMetaData,
     route={Route.PO, Route.IV},
     coadministration={Coadministration.NONE},
     excluded={"dosing": {Dosing.MULTIPLE}},
@@ -257,12 +255,12 @@ mapping = SimpleNamespace(metadata=metadata)  # stands for a FitMapping
 assert filter_control("Fig1", mapping)
 
 try:
-    metadata_filter(HctzMappingMetaData, rout={Route.PO})
+    metadata_filter(rout={Route.PO})
 except TypeError as err:
     print(err)
 
 try:
-    metadata_filter(HctzMappingMetaData, route=Route.PO)
+    metadata_filter(route=Route.PO)
 except TypeError as err:
     print(err)
 ```
@@ -283,7 +281,6 @@ from pkdb_models.models.hctz.experiments.studies import Anderson1961, Barbhaiya1
 
 PK = observable_filter({"Cve_hctz", "Aurine_hctz"})
 CONTROL = metadata_filter(
-    HctzMappingMetaData,
     route={Route.PO, Route.IV},
     coadministration={Coadministration.NONE},
 )
