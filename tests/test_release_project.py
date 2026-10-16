@@ -163,7 +163,7 @@ def test_workflows_replaced(context: ProjectContext, tmp_path: Path) -> None:
 
 def test_no_em_dash(context: ProjectContext, tmp_path: Path) -> None:
     for path in write_project_files(context, tmp_path):
-        assert "—" not in path.read_text(), path
+        assert "\u2014" not in path.read_text(), path
 
 
 def test_strict_undefined(

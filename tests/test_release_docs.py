@@ -31,7 +31,9 @@ def write(path: Path, text: str | bytes) -> None:
 @pytest.fixture
 def release(toy_fit: Path, tmp_path: Path) -> tuple[ProjectContext, Path]:
     """A built release repository of the toy model with an adopted fit."""
-    model = dataclasses.replace(MODEL, fits=[toy_fit.name])
+    model = dataclasses.replace(
+        MODEL, fits=[toy_fit.name], archive_path=MODEL.path / "toy_model.omex"
+    )
     path = tmp_path / "toy-model"
     adopt_fit(toy_fit, path / fits_prefix(model))
     (path / BuildPaths.MODELS).mkdir(parents=True)
@@ -110,6 +112,20 @@ def test_models_links(release: tuple[ProjectContext, Path]) -> None:
         'width: auto; max-width: 100%" }' in models
     )
     assert f"({raw}toy_model.omex)" in models
+
+
+def test_models_link_the_archive_of_the_model(
+    release: tuple[ProjectContext, Path],
+) -> None:
+    context, path = release
+    write(path / "a_stale.omex", b"omex")  # e.g. an ignored file of another build
+    write_docs(context, path)
+    models = (path / "docs" / "models.md").read_text()
+    assert "toy_model.omex" in models
+    assert "a_stale.omex" not in models
+    model = dataclasses.replace(context.model, archive_path=None)
+    write_docs(dataclasses.replace(context, model=model), path)
+    assert ".omex" not in (path / "docs" / "models.md").read_text()
 
 
 def test_simulations_links(release: tuple[ProjectContext, Path]) -> None:

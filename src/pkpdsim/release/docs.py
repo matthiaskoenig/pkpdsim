@@ -198,13 +198,13 @@ def write_docs(context: ProjectContext, release_path: Path) -> list[Path]:
     images = docs / _IMAGES
 
     figure = f"{context.model.name}_model.png"
-    omex = next(iter(sorted(release_path.glob("*.omex"))), None)
+    archive = context.model.archive_path
     extra = {
         "figure": figure if _copy_image(release_path, figure, images) else None,
         "citation": citation(context),
         "authors": context.settings.author_names,
         "models": _models(release_path, images),
-        "omex": omex.name if omex else None,
+        "omex": archive.name if archive is not None else None,
         "experiments": _experiments(release_path),
         "fits": _fit_entries(context, release_path),
         "fit_ids": list(context.model.fits),
