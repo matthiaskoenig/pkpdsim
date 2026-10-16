@@ -82,55 +82,24 @@ print(figures.sbmlsim_settings().legend_fontsize)
 
 ## Commands
 
-`pyproject.toml` of the repository of the model registers the commands with the
-model object:
-
-```toml
-[project.scripts]
-run_hctz = "pkdb_models.models.hctz:MODEL.run_main"
-fit_hctz = "pkdb_models.models.hctz:MODEL.fit_main"
-report_hctz = "pkdb_models.models.hctz:MODEL.report_main"
-identifiability_hctz = "pkdb_models.models.hctz:MODEL.identifiability_main"
-```
+The commands of pkpdsim run every model by the dotted name of its package; the
+package registers no commands of its own:
 
 ```bash
-run_hctz --action factory                       # the SBML, the ODEs, the archive
-run_hctz --action list_experiments              # the groups and experiments
-run_hctz --action simulate --experiments "misc,Anderson1961" --open
-run_hctz --action all --results-dir /path/to/results --formats svg,png
-run_hctz --action simulate --experiments all --workers 4
-run_hctz --action simulate --experiments all --uncertainty --draws 100
-fit_hctz --subset=PK --runs=10 --cores=10 --max-points=30
-fit_hctz --adopt PK_<fit id>                    # the record into the adopted fits
-report_hctz --subset=PK results/fit/PK_<fit id>/parameters.json
-identifiability_hctz --subset=PK results/fit/PK_<fit id>/parameters.json
+run_simulation pkdb_models.models.hctz --action simulate --experiments all
+run_fit pkdb_models.models.hctz --subset PK --identifiability
+run_report pkdb_models.models.hctz --subset PK results/fit/PK_<fit id>/parameters.json
+run_identifiability pkdb_models.models.hctz --subset PK results/fit/PK_<fit id>/parameters.json
 ```
 
-`--workers` sets the processes of the scans for this run: a number, `auto` (sbmlsim's choice, a pool of every CPU for a scan of 256 points or more) or `model` (the `n_workers` of the model object, the default). An extra action gets the settings of the simulator of the run as `options.simulator` (the `SimulatorSettings` of the model with the processes of `--workers`); an action which simulates passes them on, `model.run_experiments(..., simulator=options.simulator)` or `pkpdsim.run.create_simulator(options.simulator)` for a runner of its own, otherwise `--workers` does not reach it. An option of the model named `--simulator` is refused (`run_<model>` raises a `ValueError` naming it before the action runs), because it would be replaced by `options.simulator`.
-
-`--uncertainty` runs the experiments over draws of the fitted parameters of the model (`--draws`, `--seed`, `--quantiles`) and draws the curves of the simulations as bands, into the folder `simulation_uncertainty` of the results; an extra action gets the settings as `options.uncertainty`. `fit_<model> --adopt <fit id>` copies the record of a finished fit into the adopted fits of the model instead of fitting. See [Uncertainty of the fitted parameters](uncertainty.md).
-
-A run which fails is not the end of the command. An experiment which cannot be initialized or whose figure fails is reported, the other experiments run, the report and the figures are written, and `run_<model>` then runs its remaining actions, prints every failure and exits with 1. `MODEL.run_experiments` raises `sbmlsim.experiment.ExperimentRunError` after the report is written, so a script does not carry on after a failed run.
-
-The command of a model without experiments (`experiments=None`) offers only
-`--action factory`, `--action all` (which runs only the factory and the extra
-actions with `in_all`) and its extra actions, and none of `--experiments`,
-`--open` and `--formats`; `simulate` and `list_experiments` are a usage error
-for it.
-
-A model adds actions of its own to `run_<model>` with `ExtraAction` and their
-options with `extra_arguments`, e.g. analyses which are not simulation
-experiments.
-
-In a script or the `__main__` block of an experiment:
-
-```python
-# not executed
-from pkdb_models.models.hctz import MODEL
-from pkdb_models.models.hctz.experiments.studies import Anderson1961
-
-MODEL.run_experiments(Anderson1961, output_dir=Anderson1961.__name__)
-```
+The model object gives everything which differs between two models: the
+actions of `run_simulation` (the extra actions of `extra_actions`, an
+`ExtraAction` with `name`, `help`, the `function` called with the model, the
+parsed arguments and the folder of the results, and `in_all` to run it with
+`--action all`; their options are added by the function of `extra_arguments`),
+the fit problems of the fit commands, the settings of the simulator and the
+figures and the folders of the results. See [Commands](commands.md) for the
+commands, their options and their errors.
 
 ## Tests
 

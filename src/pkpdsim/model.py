@@ -283,7 +283,7 @@ class PKPDModel:
     hashable.
 
     Attributes:
-        name: the short name, the suffix of the commands (`run_<name>`).
+        name: the short name of the model.
         package: the dotted name of the model package, `__name__` in its
             `__init__.py`; relative references are relative to it.
         title: the title of the model in the output of the commands.
@@ -502,31 +502,3 @@ class PKPDModel:
             simulator=simulator,
             uncertainty=uncertainty,
         )
-
-    def run_main(self, args: Sequence[str] | None = None) -> None:
-        """The command `run_<name>`, see `pkpdsim.cli.run_command`."""
-        from pkpdsim.cli import run_command
-
-        run_command(self, args)
-
-    def fit_main(self, args: Sequence[str] | None = None) -> None:
-        """The command `fit_<name>`, see `pkpdsim.cli.fit_command`.
-
-        Returns nothing: a console script exits with the return value of the
-        function it calls, and 1 for anything which is not `None` or an int.
-        """
-        from pkpdsim.cli import fit_command
-
-        fit_command(self, args)
-
-    def report_main(self, args: Sequence[str] | None = None) -> None:
-        """The command `report_<name>`, see `pkpdsim.cli.report_command`."""
-        from pkpdsim.cli import report_command
-
-        report_command(self, args)
-
-    def identifiability_main(self, args: Sequence[str] | None = None) -> None:
-        """The command `identifiability_<name>`, see `pkpdsim.cli`."""
-        from pkpdsim.cli import identifiability_command
-
-        identifiability_command(self, args)

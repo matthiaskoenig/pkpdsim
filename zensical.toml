@@ -15,6 +15,7 @@ nav = [
   { "Installation" = "installation.md" },
   { "User guide" = [
     { "Models and their commands" = "models.md" },
+    { "Commands" = "commands.md" },
     { "Experiments and their metadata" = "experiments.md" },
     { "Scans and sensitivity analyses" = "scans.md" },
     { "Uncertainty of the fitted parameters" = "uncertainty.md" },

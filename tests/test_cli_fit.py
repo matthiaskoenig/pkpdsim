@@ -57,7 +57,7 @@ def test_the_options_of_the_fit_command() -> None:
         "--no-fisher",
     ]:
         assert option in text, option
-    assert "fit_toy" in text
+    assert "usage: run_fit pkpdsim_toy " in text
 
 
 def test_the_identifiability_default_comes_from_the_model() -> None:
@@ -152,13 +152,16 @@ def test_the_identifiability_of_stored_parameters(tmp_path: Path) -> None:
     assert content["parameter_set"]["values"].keys() == {"k"}
 
 
-def test_the_commands_of_the_model_object(tmp_path: Path) -> None:
+def test_the_reports_write_into_the_results_of_the_model(tmp_path: Path) -> None:
     model = dataclasses.replace(MODEL, results_path=tmp_path)
     parameters = fitted_parameters(tmp_path / "fit")
-    model.report_main(["--subset", "DECAY", "--no-mapping-figures", str(parameters)])
+    report_command(
+        model, ["--subset", "DECAY", "--no-mapping-figures", str(parameters)]
+    )
     assert list((tmp_path / "report").glob("**/index.html"))
-    model.identifiability_main(
-        ["--subset", "DECAY", "--max-points", "3", "--no-fisher", str(parameters)]
+    identifiability_command(
+        model,
+        ["--subset", "DECAY", "--max-points", "3", "--no-fisher", str(parameters)],
     )
     assert list((tmp_path / "identifiability").glob("**/identifiability.json"))
 
@@ -170,7 +173,7 @@ def test_a_model_with_an_empty_mapping_of_fit_definitions_fails() -> None:
 
 def test_the_fit_writes_into_the_results_of_the_model(tmp_path: Path) -> None:
     model = dataclasses.replace(MODEL, results_path=tmp_path)
-    model.fit_main(["--runs", "1", "--no-mapping-figures"])
+    fit_command(model, ["--runs", "1", "--no-mapping-figures"])
     assert list((tmp_path / "fit").glob("**/parameters.json"))
 
 
