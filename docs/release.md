@@ -107,7 +107,9 @@ pkpd_release PACKAGE --version VERSION [--repo PATH] [--no-publish] [--pkpdsim-p
   for a test of a pkpdsim which is not released yet; only with `--no-publish`.
 - `--workers`: the number of workers of the simulations, `auto` by default.
 
-The steps, in order; the first failure stops the release:
+The steps, in order; the first failure stops the release. Every stage prints a
+line, and the long steps (`uv`, the simulations, the fit reports, `git push`,
+`docker build` and `docker push`) show their output as they run:
 
 1. **Checks**, before anything is changed: the release metadata is complete,
    the monorepo is clean and committed (its commit is recorded in the release),

@@ -1,6 +1,7 @@
 """Tests of the source repository, the release repository and the export."""
 
 import dataclasses
+import sys
 from pathlib import Path
 
 import pytest
@@ -112,6 +113,17 @@ def test_run_failure_message(tmp_path: Path) -> None:
     with pytest.raises(ReleaseError, match="git") as err:
         run(["git", "rev-parse", "--verify", "nothing"], tmp_path)
     assert "git rev-parse --verify nothing" in str(err.value)
+
+
+def test_run_stream(tmp_path: Path, capfd: pytest.CaptureFixture[str]) -> None:
+    """A streamed command writes to the terminal, its output is not returned."""
+    script = "import sys; print('to stdout'); print('to stderr', file=sys.stderr)"
+    assert run([sys.executable, "-c", script], tmp_path, stream=True) == ""
+    captured = capfd.readouterr()
+    assert "to stdout" in captured.out
+    assert "to stderr" in captured.err
+    with pytest.raises(ReleaseError, match="exit code 3"):
+        run([sys.executable, "-c", "raise SystemExit(3)"], tmp_path, stream=True)
 
 
 def export(tmp_path: Path, model: PKPDModel) -> tuple[Path, list[Path]]:

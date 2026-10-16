@@ -14,7 +14,7 @@ import shutil
 from pathlib import Path
 
 from pkpdsim.model import PKPDModel
-from pkpdsim.release.source import ReleaseError, Runner, run
+from pkpdsim.release.source import ReleaseError, Runner, run, stage
 
 _FACTORY_PATTERNS = ("*.xml", "*.md", "*.ant")
 _LICENSES = ("mit.txt", "cc-by-sa-4.0.txt")
@@ -45,9 +45,9 @@ def _clear(path: Path) -> None:
 
 
 def _step(runner: Runner, args: list[str], cwd: Path) -> None:
-    """Run one step of the build; a failure names the step."""
+    """Run one step of the build with its output shown; a failure names the step."""
     try:
-        runner(args, cwd)
+        runner(args, cwd, stream=True)
     except ReleaseError as err:
         raise ReleaseError(f"Build step '{' '.join(args)}' failed: {err}") from err
 
@@ -136,9 +136,11 @@ def build(
     results = BuildPaths.RESULTS
     run_simulation = ["uv", "run", "run_simulation", package]
 
+    stage("Lock and sync of the environment")
     _step(runner, ["uv", "lock"], release_path)
     _step(runner, ["uv", "sync", "--locked"], release_path)
 
+    stage("Models")
     _step(runner, [*run_simulation, "--action", "factory", "-r", results], release_path)
     written = [
         Path("uv.lock"),
@@ -156,6 +158,7 @@ def build(
         "--workers",
         workers,
     ]
+    stage("Simulations")
     _clear(release_path / results / "simulation" / "all")
     _step(runner, simulate, release_path)
     _replace(
@@ -164,6 +167,7 @@ def build(
     )
     written.append(Path(BuildPaths.SIMULATIONS))
 
+    stage("Simulations with the confidence interval")
     _clear(release_path / results / "simulation_uncertainty" / "all")
     _step(runner, [*simulate, "--uncertainty"], release_path)
     _replace(
@@ -182,6 +186,7 @@ def build(
     reports = Path(results) / "fit_reports"
     _clear(release_path / reports)
     for fit_id in model.fits:
+        stage(f"Fit report {fit_id}")
         _step(
             runner,
             [

@@ -24,11 +24,14 @@ class FakeRunner:
         self.no_archive = no_archive
         self.no_sim = no_sim
         self.commands: list[list[str]] = []
+        self.streamed: list[list[str]] = []
         self.fail_on = fail_on
 
-    def __call__(self, args: Sequence[str], cwd: Path) -> str:
+    def __call__(self, args: Sequence[str], cwd: Path, *, stream: bool = False) -> str:
         command = [str(a) for a in args]
         self.commands.append(command)
+        if stream:
+            self.streamed.append(command)
         joined = " ".join(command)
         if self.fail_on and self.fail_on in joined:
             raise ReleaseError(f"'{joined}' failed in {cwd}")
@@ -75,6 +78,24 @@ def test_build_commands_in_order(tmp_path: Path) -> None:
         [*simulate, "--uncertainty"],
         report,
     ]
+
+
+def test_build_streams_and_prints_stages(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The steps stream their output and every stage prints a line."""
+    runner = FakeRunner()
+    build(MODEL_WITH_FIT, tmp_path, runner=runner)
+    assert runner.streamed == runner.commands
+    out = capsys.readouterr().out
+    for line in (
+        "Lock and sync of the environment",
+        "Models",
+        "Simulations",
+        "Simulations with the confidence interval",
+        f"Fit report {FIT_ID}",
+    ):
+        assert line in out
 
 
 def test_build_copies_outputs(tmp_path: Path) -> None:

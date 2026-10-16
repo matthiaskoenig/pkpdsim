@@ -60,6 +60,7 @@ from pkpdsim.release.source import (
     release_repo,
     run,
     source_repo,
+    stage,
 )
 
 Publisher = Callable[[ReleaseSettings, Path, str, Path, Runner], list[str]]
@@ -136,14 +137,16 @@ def _build(
     path = target.path
     context = project_context(model, settings, source, version, pkpdsim_path)
     start_build(path, version)
-    console.print(f"Export of {model.package} into {path}")
+    stage(f"Export of {model.package} into {path}")
     written: list[Path] = export_package(model, settings, source, path, runner)
+    stage("Project files")
     written += write_project_files(context, path)
-    console.print("Build of the models, simulations and fit reports")
     written += build(model, path, runner, workers)
-    console.print("Release notes and docs")
+    stage("Release notes")
     written.append(write_release_notes(context, target, model, source, runner))
+    stage("Docs and README")
     written += write_docs(context, path)
+    stage("Prune and manifest")
     prune(path, written, runner)
     write_manifest(path, version, source, written)
     finish_build(path)
@@ -248,7 +251,7 @@ def release(
         return path
 
     check_lock(path)
-    console.print(f"Publishing {settings.repository} {version}")
+    stage(f"Publishing {settings.repository} {version}")
     publisher(settings, path, version, path / _archive_name(model), runner)
     return path
 

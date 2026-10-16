@@ -38,10 +38,13 @@ class FakeRunner:
         self.releases: dict[str, list[str]] = {}
         self.fail_on: str | None = None
         self.missing: set[str] = set()
+        self.streamed: list[list[str]] = []
 
-    def __call__(self, args: Sequence[str], cwd: Path) -> str:
+    def __call__(self, args: Sequence[str], cwd: Path, *, stream: bool = False) -> str:
         cmd = [str(a) for a in args]
         self.commands.append(cmd)
+        if stream:
+            self.streamed.append(cmd)
         joined = " ".join(cmd)
         if self.fail_on and self.fail_on in joined:
             self.fail_on = None
@@ -156,6 +159,29 @@ def test_publish_all_steps() -> None:
             str(ARCHIVE),
         ],
     ]  # fmt: skip
+
+
+def test_publish_prints_steps_and_streams(capsys: pytest.CaptureFixture[str]) -> None:
+    runner = FakeRunner()
+    _publish(runner)
+    out = capsys.readouterr().out
+    for line in (
+        "Commit",
+        "Tag",
+        "Push",
+        "GitHub Pages",
+        "Docker image",
+        "GitHub release",
+    ):
+        assert line in out
+    assert runner.streamed == [
+        ["git", "push", "origin", "main", VERSION],
+        ["docker", "build", "-t", f"{IMAGE}:{VERSION}", "-t", f"{IMAGE}:latest", "."],
+        ["docker", "push", f"{IMAGE}:{VERSION}"],
+        ["docker", "push", f"{IMAGE}:latest"],
+    ]
+    _publish(runner)
+    assert "done already" in capsys.readouterr().out
 
 
 def test_publish_resume_after_docker_failure() -> None:

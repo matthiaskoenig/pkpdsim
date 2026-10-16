@@ -12,10 +12,12 @@ from __future__ import annotations
 import re
 import shutil
 import subprocess
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, Protocol
+
+from sbmlutils.console import console
 
 from pkpdsim.model import PKPDModel
 from pkpdsim.release.settings import ReleaseSettings
@@ -32,24 +34,51 @@ class ReleaseError(Exception):
     """A refusal of the release command, the message is for the user."""
 
 
-Runner = Callable[[Sequence[str], Path], str]
+class Runner(Protocol):
+    """Runs a command in a folder, see `run`."""
+
+    def __call__(self, args: Sequence[str], cwd: Path, *, stream: bool = False) -> str:
+        """Run the command `args` in `cwd`; `stream` shows its output."""
+        ...
 
 
-def run(args: Sequence[str], cwd: Path) -> str:
+def stage(text: str) -> None:
+    """Print the line of a stage of the release on the console."""
+    console.rule(text, style="info", align="left")
+
+
+def run(args: Sequence[str], cwd: Path, *, stream: bool = False) -> str:
     """Run a command and return its stdout.
+
+    A command whose output is parsed (git, gh, docker queries) is captured. A long
+    step of the build or the publishing (`uv`, the commands of the model, `docker
+    build`) is streamed: its output goes to the terminal as it runs.
 
     Args:
         args: the command and its arguments.
         cwd: the working directory.
+        stream: show the output of the command instead of capturing it.
 
     Returns:
-        The standard output of the command.
+        The standard output of the command, empty if it is streamed.
 
     Raises:
         ReleaseError: if the command fails or does not exist; the message has the
-            command and the tail of its standard error.
+            command and the tail of its standard error (a streamed command has
+            shown its standard error already).
     """
     command = " ".join(str(a) for a in args)
+    if stream:
+        try:
+            subprocess.run([str(a) for a in args], cwd=cwd, check=True)
+        except subprocess.CalledProcessError as err:
+            raise ReleaseError(
+                f"'{command}' failed in {cwd} with exit code {err.returncode}, "
+                "see its output above"
+            ) from err
+        except OSError as err:
+            raise ReleaseError(f"'{command}' could not run in {cwd}: {err}") from err
+        return ""
     try:
         result = subprocess.run(
             [str(a) for a in args],

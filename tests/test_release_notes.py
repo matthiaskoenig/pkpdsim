@@ -317,7 +317,7 @@ def test_core_summaries_fetch_fails() -> None:
 def test_github_releases() -> None:
     calls: list[list[str]] = []
 
-    def runner(args: Sequence[str], cwd: Path) -> str:
+    def runner(args: Sequence[str], cwd: Path, *, stream: bool = False) -> str:
         calls.append([str(a) for a in args])
         return '{"tag":"0.7.0","body":"- a"}\n{"tag":"v0.6.0","body":null}\n'
 

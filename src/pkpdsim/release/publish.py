@@ -12,9 +12,11 @@ import json
 import tomllib
 from pathlib import Path
 
+from sbmlutils.console import console
+
 from pkpdsim.release.manifest import MANIFEST_FILE
 from pkpdsim.release.settings import ReleaseSettings
-from pkpdsim.release.source import ReleaseError, Runner, run
+from pkpdsim.release.source import ReleaseError, Runner, run, stage
 
 _PYPI = "https://pypi.org/simple"
 
@@ -175,7 +177,7 @@ def _push(path: Path, version: str, runner: Runner) -> bool:
         and remote.get(f"refs/tags/{version}") == head
     ):
         return False
-    runner(["git", "push", "origin", "main", version], path)
+    runner(["git", "push", "origin", "main", version], path, stream=True)
     return True
 
 
@@ -208,10 +210,12 @@ def _docker(
     if remote_version is not None and remote_version == remote_latest:
         return False
     if not _ok(runner, ["docker", "image", "inspect", versioned], path):
-        runner(["docker", "build", "-t", versioned, "-t", latest, "."], path)
+        runner(
+            ["docker", "build", "-t", versioned, "-t", latest, "."], path, stream=True
+        )
     if remote_version is None:
-        runner(["docker", "push", versioned], path)
-    runner(["docker", "push", latest], path)
+        runner(["docker", "push", versioned], path, stream=True)
+    runner(["docker", "push", latest], path, stream=True)
     return True
 
 
@@ -280,13 +284,24 @@ def publish(
         ReleaseError: if a command fails or the tag exists at another commit.
     """
     steps = {
-        "commit": lambda: _commit(release_path, version, runner),
-        "tag": lambda: _tag(release_path, version, runner),
-        "push": lambda: _push(release_path, version, runner),
-        "pages": lambda: _pages(release_path, settings, runner),
-        "docker": lambda: _docker(release_path, settings, version, runner),
-        "github_release": lambda: _github_release(
-            release_path, settings, version, archive, runner
+        "commit": ("Commit", lambda: _commit(release_path, version, runner)),
+        "tag": ("Tag", lambda: _tag(release_path, version, runner)),
+        "push": ("Push", lambda: _push(release_path, version, runner)),
+        "pages": ("GitHub Pages", lambda: _pages(release_path, settings, runner)),
+        "docker": (
+            "Docker image",
+            lambda: _docker(release_path, settings, version, runner),
+        ),
+        "github_release": (
+            "GitHub release",
+            lambda: _github_release(release_path, settings, version, archive, runner),
         ),
     }
-    return [name for name, step in steps.items() if step()]
+    done = []
+    for name, (label, step) in steps.items():
+        stage(label)
+        if step():
+            done.append(name)
+        else:
+            console.print(f"{label}: done already")
+    return done

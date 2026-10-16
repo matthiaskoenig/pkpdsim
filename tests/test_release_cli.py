@@ -50,7 +50,7 @@ class FakeRunner:
         self.commands: list[list[str]] = []
         self.fail_on = fail_on
 
-    def __call__(self, args: Sequence[str], cwd: Path) -> str:
+    def __call__(self, args: Sequence[str], cwd: Path, *, stream: bool = False) -> str:
         command = [str(a) for a in args]
         self.commands.append(command)
         joined = " ".join(command)
@@ -207,6 +207,23 @@ def test_no_publish_stops_before_commit(model: PKPDModel, clone: Path) -> None:
     assert (clone / "release-notes" / f"{VERSION}.md").is_file()
     assert (clone / "fit" / model.fits[0] / "index.html").is_file()
     assert not (clone / "run_toy.py").exists()
+
+
+def test_stage_lines(
+    model: PKPDModel, clone: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    do_release(model, clone, publish=False)
+    out = capsys.readouterr().out
+    for line in (
+        "Export of pkpdsim_toy",
+        "Project files",
+        "Lock and sync of the environment",
+        "Simulations with the confidence interval",
+        "Release notes",
+        "Docs and README",
+        "Prune and manifest",
+    ):
+        assert line in out
 
 
 def test_publish_after_review_skips_build(model: PKPDModel, clone: Path) -> None:
