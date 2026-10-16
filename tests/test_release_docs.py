@@ -81,6 +81,9 @@ def test_docs_pages(release: tuple[ProjectContext, Path]) -> None:
         "https://doi.org/10.5281/zenodo.0000000" in index
     )
     assert index.startswith("# Toy model of the decay of a substance\n")
+    badge = "https://zenodo.org/badge/DOI/10.5281/zenodo.0000000.svg"
+    assert index.count(badge) == 1
+    assert index.index(badge) < index.index("## How to cite")
     readme = (path / "README.md").read_text()
     assert "# Toy model of the decay of a substance\n" in readme
     assert "*Toy model of the decay of a substance*" in readme

@@ -32,8 +32,12 @@ jobs:
       - name: Build the site
         run: uv run zensical build --clean --strict
 
-      - name: Add the simulations and fit results
-        run: cp -r simulations simulations_uncertainty fit site/
+      - name: Add the simulation and fit reports
+        # a model without adopted fits has no fit folder
+        run: |
+          for folder in simulations simulations_uncertainty fit; do
+            if [ -d "$folder" ]; then cp -r "$folder" site/; fi
+          done
 
       - uses: actions/upload-pages-artifact@v3
         with:

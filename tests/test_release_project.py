@@ -2,6 +2,8 @@
 
 import dataclasses
 import json
+import subprocess
+import sys
 import tomllib
 from pathlib import Path
 
@@ -144,7 +146,11 @@ def test_workflows_replaced(context: ProjectContext, tmp_path: Path) -> None:
     assert {p.name for p in workflows.iterdir()} == {"ci.yml", "docs.yml"}
     assert tmp_path / ".zenodo.json" in written
     assert (tmp_path / ".python-version").read_text() == "3.14\n"
-    assert "toy:0.1.0" in (tmp_path / "Dockerfile").read_text()
+    dockerfile = (tmp_path / "Dockerfile").read_text()
+    assert dockerfile.startswith(
+        "# The image is built and pushed by pkpd_release.\n\nFROM python:3.14-slim\n"
+    )
+    assert "docker build" not in dockerfile
     assert (
         "${{ steps.deployment.outputs.page_url }}"
         in (workflows / "docs.yml").read_text()
@@ -198,6 +204,32 @@ def test_workflows_are_yaml(context: ProjectContext) -> None:
     runs = [s.get("run", "") for s in ci["jobs"]["simulate"]["steps"]]
     assert f"uv run run_simulation {MODEL.package} --action factory" in runs
     assert "deploy" in docs["jobs"]
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="the workflow runs on linux")
+@pytest.mark.parametrize(
+    "folders",
+    [
+        ("simulations", "simulations_uncertainty", "fit"),
+        ("simulations", "simulations_uncertainty"),
+    ],
+)
+def test_docs_workflow_copies_existing_reports(
+    context: ProjectContext, tmp_path: Path, folders: tuple[str, ...]
+) -> None:
+    """A model without adopted fits has no `fit` folder in the checkout."""
+    docs = yaml.safe_load(render("workflows/docs.yml.j2", context))
+    (step,) = [s for s in docs["jobs"]["build"]["steps"] if "site/" in s.get("run", "")]
+    for folder in folders:
+        (tmp_path / folder).mkdir()
+        (tmp_path / folder / "index.html").write_text("<html/>")
+    (tmp_path / "site").mkdir()
+    result = subprocess.run(
+        ["bash", "-e", "-c", step["run"]], cwd=tmp_path, capture_output=True, text=True
+    )
+    assert result.returncode == 0, result.stderr
+    copied = {p.parent.name for p in (tmp_path / "site").rglob("index.html")}
+    assert copied == set(folders)
 
 
 def test_gitignore(context: ProjectContext, tmp_path: Path) -> None:

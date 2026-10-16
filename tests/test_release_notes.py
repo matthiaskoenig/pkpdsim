@@ -332,7 +332,8 @@ def test_write_release_notes(release: ReleaseRepo, model: PKPDModel) -> None:
     )
     assert path == release.path / "release-notes" / "0.2.0.md"
     text = path.read_text()
-    assert text.startswith("# Release notes for toy-model v0.2.0\n")
+    assert text.startswith("# Release notes for toy-model 0.2.0\n")
+    assert "The changes since 0.1.0.\n" in text
     assert f"Made from pkdb_models {COMMIT[:10]} with pkpdsim {__version__}." in text
     for heading in ("Core libraries", "Libraries", "Data", "Analysis"):
         assert f"## {heading}\n" in text

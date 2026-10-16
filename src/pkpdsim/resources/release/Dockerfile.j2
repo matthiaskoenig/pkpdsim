@@ -1,10 +1,4 @@
-# -----------------------
-# Dockerfile
-# -----------------------
-# Build and push image
-#   docker build -f Dockerfile -t {{ settings.docker_image }}:{{ version }} -t {{ settings.docker_image }}:latest .
-#   docker login
-#   docker push --all-tags {{ settings.docker_image }}
+# The image is built and pushed by pkpd_release.
 
 FROM python:{{ python }}-slim
 

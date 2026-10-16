@@ -19,14 +19,14 @@
 | `{{ change.name }}` | {{ change.old or "-" }} | {{ change.new or "-" }} |{{ "\n" if not loop.last }}
 {%- endfor %}
 {%- endmacro %}
-# Release notes for {{ repo_name }} v{{ version }}
+# Release notes for {{ repo_name }} {{ version }}
 
 Made from pkdb_models {{ commit }} with pkpdsim {{ pkpdsim_version }}.
 
 {% if previous is none %}
 First release.
 {% else %}
-The changes since v{{ previous }}.
+The changes since {{ previous }}.
 {% endif %}
 
 ## Core libraries
