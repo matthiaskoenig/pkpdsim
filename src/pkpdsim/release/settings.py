@@ -51,6 +51,8 @@ class ReleaseSettings:
     can be passed and the settings are hashable.
 
     Attributes:
+        title: the title of the release: the Zenodo record, the citation, the
+            README and the docs site.
         repository: the GitHub repository as `owner/name`.
         doi: the concept DOI of Zenodo.
         authors: the authors of the citation, in order.
@@ -62,6 +64,7 @@ class ReleaseSettings:
         first_year: the year of the first release, the start of the copyright.
     """
 
+    title: str
     repository: str
     doi: str
     authors: Sequence[Author]

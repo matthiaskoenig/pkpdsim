@@ -241,7 +241,7 @@ def zenodo_json(context: ProjectContext) -> dict[str, Any]:
     )
     return {
         "upload_type": "software",
-        "title": context.model.title,
+        "title": context.settings.title,
         "creators": creators,
         "description": description,
         "access_right": "open",

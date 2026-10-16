@@ -77,9 +77,14 @@ def test_docs_pages(release: tuple[ProjectContext, Path]) -> None:
     index = (path / "docs" / "index.md").read_text()
     assert "images/toy_model.png" in index
     assert (
-        "Doe, J. (2026). *Toy PK model*. Zenodo. https://doi.org/10.5281/zenodo.0000000"
-        in index
+        "Doe, J. (2026). *Toy model of the decay of a substance*. Zenodo. "
+        "https://doi.org/10.5281/zenodo.0000000" in index
     )
+    assert index.startswith("# Toy model of the decay of a substance\n")
+    readme = (path / "README.md").read_text()
+    assert "# Toy model of the decay of a substance\n" in readme
+    assert "*Toy model of the decay of a substance*" in readme
+    assert "Toy PK model" not in index + readme
 
 
 def test_docs_replaced(release: tuple[ProjectContext, Path]) -> None:

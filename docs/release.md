@@ -30,6 +30,7 @@ object, a `ReleaseSettings` (`pkpdsim.release.settings`):
 from pkpdsim.release.settings import Author, ReleaseSettings
 
 release = ReleaseSettings(
+    title="Physiologically based pharmacokinetic model of hydrochlorothiazide",
     repository="matthiaskoenig/hctz-model",
     doi="10.5281/zenodo.15427418",
     authors=[
@@ -49,6 +50,8 @@ print(release.site_url)
 print(release.missing())
 ```
 
+- `title`: the title of the release: the Zenodo record, the citation, the
+  heading of the README and the name of the docs site.
 - `repository`: the GitHub repository as `owner/name`; the docs site is
   `https://<owner>.github.io/<name>/`.
 - `doi`: the concept DOI of Zenodo, which cites every version.

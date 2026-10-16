@@ -28,6 +28,7 @@ MODEL = PKPDModel(
     simulator=SimulatorSettings(absolute_tolerance=1e-10, relative_tolerance=1e-10),
     figures=FigureSettings(formats=("svg", "png"), savefig_dpi=30, legend_fontsize=7),
     release=ReleaseSettings(
+        title="Toy model of the decay of a substance",
         repository="pkpdsim/toy-model",
         doi="10.5281/zenodo.0000000",
         authors=[Author("Doe, Jane", orcid="0000-0000-0000-0000", affiliation="Lab")],

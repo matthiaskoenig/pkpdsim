@@ -174,7 +174,10 @@ def test_strict_undefined(
 
 def test_zenodo_file_is_json(context: ProjectContext, tmp_path: Path) -> None:
     write_project_files(context, tmp_path)
-    assert json.loads((tmp_path / ".zenodo.json").read_text())["title"] == MODEL.title
+    zenodo = json.loads((tmp_path / ".zenodo.json").read_text())
+    assert zenodo["title"] == "Toy model of the decay of a substance"
+    site_name = tomllib.loads((tmp_path / "zensical.toml").read_text())["project"]
+    assert site_name["site_name"] == "Toy model of the decay of a substance"
 
 
 def test_forked_package_not_constrained(source: SourceRepo) -> None:

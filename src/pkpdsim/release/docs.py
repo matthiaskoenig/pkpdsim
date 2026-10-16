@@ -82,7 +82,7 @@ def citation(context: ProjectContext) -> str:
     settings = context.settings
     authors = _join([a.citation_name for a in settings.authors], " & ")
     return (
-        f"{authors} ({context.year}). *{context.model.title}*. Zenodo. "
+        f"{authors} ({context.year}). *{context.settings.title}*. Zenodo. "
         f"https://doi.org/{settings.doi}"
     )
 

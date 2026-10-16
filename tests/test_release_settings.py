@@ -9,6 +9,7 @@ from pkpdsim_toy import MODEL
 
 def make_settings(**changes: object) -> ReleaseSettings:
     values: dict = {
+        "title": "A model of hydrochlorothiazide",
         "repository": "matthiaskoenig/hctz-model",
         "doi": "10.5281/zenodo.15427418",
         "authors": [Author("König, Matthias", orcid="0000-0003-1725-179X")],
@@ -50,6 +51,7 @@ def test_urls() -> None:
 def test_missing() -> None:
     assert make_settings().missing() == []
     assert make_settings(funding="", keywords=()).missing() == ["funding", "keywords"]
+    assert make_settings(title="").missing() == ["title"]
     assert make_settings(exclude=()).missing() == []
     assert make_settings(first_year=0).missing() == ["first_year"]
     assert make_settings(first_year=-1).missing() == ["first_year"]
@@ -74,6 +76,15 @@ def test_display_names() -> None:
     authors = [Author("A, B"), Author("C, D"), Author("E, F")]
     assert make_settings(authors=authors).author_names == "B A, D C and F E"
     assert make_settings().author_names == "Matthias König"
+
+
+def test_title_required() -> None:
+    values = {
+        f: getattr(make_settings(), f)
+        for f in ("repository", "doi", "authors", "keywords", "docker_image")
+    }
+    with pytest.raises(TypeError, match="title"):
+        ReleaseSettings(**values, funding="F.", description="D.", first_year=2024)
 
 
 def test_model_release_default_none() -> None:
