@@ -1,8 +1,6 @@
 """The decay of A at the rate of the model and at half of it."""
 
 from collections.abc import Mapping
-from dataclasses import dataclass
-from enum import StrEnum
 from typing import ClassVar
 
 import pandas as pd
@@ -13,21 +11,8 @@ from sbmlsim.plot import Axis, Curve, Figure, Plot, SubPlot
 from sbmlsim.simulation import Simulation
 
 from pkpdsim.experiment import PKPDSimulationExperiment
-from pkpdsim.metadata import Dosing, PKPDMappingMetaData, Route, Tissue
+from pkpdsim.metadata import Dosing, Health, PKPDMappingMetaData, Route, Tissue
 from pkpdsim_toy import MODEL
-
-
-class Health(StrEnum):
-    """The health of the subjects of the toy studies."""
-
-    HEALTHY = "healthy"
-
-
-@dataclass(kw_only=True)
-class ToyMappingMetaData(PKPDMappingMetaData):
-    """The metadata of a fit mapping of the toy model."""
-
-    health: Health
 
 
 class ToyExperiment(PKPDSimulationExperiment):
@@ -100,7 +85,7 @@ class ToyDecay(ToyExperiment):
                     count="count",
                 ),
                 observable=FitData(self, task="task_decay", xid="time", yid="[A]"),
-                metadata=ToyMappingMetaData(
+                metadata=PKPDMappingMetaData(
                     tissue=Tissue.PLASMA,
                     route=Route.IV,
                     dosing=Dosing.SINGLE,

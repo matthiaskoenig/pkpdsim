@@ -16,7 +16,7 @@ import dataclasses
 from collections.abc import Collection, Hashable, Iterable, Mapping
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, overload
 
 from sbmlsim.fit import FitMapping, FitMappingCollection, FitSettings
 from sbmlsim.fit.helpers import FitMappings, MappingFilter
@@ -28,6 +28,8 @@ from sbmlsim.fit.options import (
     WeightingCurvesType,
     WeightingPointsType,
 )
+
+from pkpdsim.metadata import PKPDMappingMetaData
 
 if TYPE_CHECKING:
     from sbmlsim.experiment import SimulationExperiment
@@ -73,14 +75,25 @@ def default_fit_settings(
     )
 
 
+@overload
+def mapping_metadata(fit_mapping: FitMapping) -> PKPDMappingMetaData: ...
+
+
+@overload
 def mapping_metadata[M: MappingMetaData](
     fit_mapping: FitMapping, metadata_type: type[M]
-) -> M:
+) -> M: ...
+
+
+def mapping_metadata(
+    fit_mapping: FitMapping, metadata_type: type[MappingMetaData] = PKPDMappingMetaData
+) -> MappingMetaData:
     """Get the metadata of a fit mapping, checked against the type of the model.
 
     Args:
         fit_mapping: the fit mapping.
-        metadata_type: the metadata class of the model.
+        metadata_type: the metadata class, `PKPDMappingMetaData` unless a model
+            extends it.
 
     Returns:
         The metadata.
@@ -142,7 +155,8 @@ class MetadataFilter:
     excluded field has one of its values. Build it with `metadata_filter`.
 
     Attributes:
-        metadata_type: the metadata class of the model.
+        metadata_type: the metadata class, `PKPDMappingMetaData` unless a model
+            extends it.
         allowed: the fields with the values a mapping must have.
         excluded: the fields with the values a mapping must not have.
     """
@@ -168,7 +182,8 @@ class MetadataFilter:
 
 
 def metadata_filter(
-    metadata_type: type[MappingMetaData],
+    metadata_type: type[MappingMetaData] = PKPDMappingMetaData,
+    /,
     *,
     excluded: Mapping[str, Collection[Hashable]] | None = None,
     **allowed: Collection[Hashable],
@@ -178,7 +193,6 @@ def metadata_filter(
     ```python
     # not executed
     filter_control = metadata_filter(
-        HctzMappingMetaData,
         route={Route.PO, Route.IV},
         coadministration={Coadministration.NONE},
         excluded={"dosing": {Dosing.MULTIPLE}},
@@ -186,7 +200,8 @@ def metadata_filter(
     ```
 
     Args:
-        metadata_type: the metadata class of the model, a dataclass.
+        metadata_type: the metadata class, `PKPDMappingMetaData` unless a model
+            extends it; a dataclass.
         excluded: the fields with the values a mapping must not have.
         **allowed: the fields with the values a mapping must have.
 

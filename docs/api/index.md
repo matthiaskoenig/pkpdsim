@@ -16,7 +16,7 @@ The API reference is generated from the docstrings of the package.
 | [run](run.md) | `run_experiments`, `run_simulation_experiments`: the run of the simulation experiments of a model |
 | [cli](cli.md) | `run_command`, `fit_command`, `report_command`, `identifiability_command`: the commands of a model |
 | [fit](fit.md) | `default_fit_settings`, `mapping_metadata`, `observable_id`, `metadata_filter`, `observable_filter`, `select_mappings`: the shared fit settings, the filters and the selection of the mappings of a fit, see [Experiments and their metadata](../experiments.md) |
-| [metadata](metadata.md) | `Tissue`, `Route`, `Dosing`, `Fasting`, `ApplicationForm`, `DataType`, `PKPDData`, `PKPDMappingMetaData`: the vocabulary of the metadata of a fit mapping, see [Experiments and their metadata](../experiments.md) |
+| [metadata](metadata.md) | `Tissue`, `Route`, `Dosing`, `Fasting`, `ApplicationForm`, `Health`, `Coadministration`, `Genotype`, `Phenotype`, `AdministrationSite`, `DataType`, `PKPDData`, `PKPDMappingMetaData`: the vocabulary of the metadata of a fit mapping, see [Experiments and their metadata](../experiments.md) |
 | [experiment](experiment.md) | `PKPDSimulationExperiment`, `to_sid`, `define_unit`, `rename_units`: the base of the simulation experiments of a model, the SIds of its keys and the units of its data, see [Experiments and their metadata](../experiments.md) |
 | [impairment](impairment.md) | the presets of the renal function, the cirrhosis and the cardiac function with their colors |
 | [pk](pk.md) | `PK_LABELS`, `PK_UNITS`: the labels and units of the pharmacokinetic parameters |
