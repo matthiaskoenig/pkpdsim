@@ -4,10 +4,10 @@
 * [Simulation report with the confidence interval]({{ settings.site_url }}simulations_uncertainty/index.html)
 
 {% if experiments %}
-| Experiment | Report |
-| --- | --- |
+| Experiment |
+| --- |
 {% for experiment in experiments %}
-| `{{ experiment }}` | [{{ experiment }}]({{ settings.site_url }}simulations/{{ experiment }}/{{ experiment }}.html) |
+| [{{ experiment }}]({{ settings.site_url }}simulations/{{ experiment }}/{{ experiment }}.html) |
 {% endfor %}
 {% else %}
 The release has no experiment reports.

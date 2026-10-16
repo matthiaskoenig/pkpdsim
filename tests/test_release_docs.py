@@ -118,6 +118,9 @@ def test_simulations_links(release: tuple[ProjectContext, Path]) -> None:
     assert f"{site}simulations_uncertainty/index.html" in page
     assert f"{site}simulations/Decay/Decay.html" in page
     assert f"{site}simulations/Slow/Slow.html" in page
+    assert "| Experiment |\n| --- |\n" in page
+    assert f"| [Decay]({site}simulations/Decay/Decay.html) |\n" in page
+    assert "`Decay`" not in page
     assert "_figures" not in page
     assert "no experiment reports" not in page
 
