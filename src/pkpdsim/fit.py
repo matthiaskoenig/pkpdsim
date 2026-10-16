@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import dataclasses
 import re
-from collections.abc import Collection, Hashable, Iterable, Mapping
+from collections.abc import Callable, Collection, Hashable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING, overload
@@ -35,7 +35,7 @@ from pkpdsim.metadata import PKPDMappingMetaData
 
 if TYPE_CHECKING:
     from sbmlsim.experiment import SimulationExperiment
-    from sbmlsim.fit.cli import FitDefinition
+    from sbmlsim.fit.cli import FitDefinition, FitRecords
     from sbmlsim.model.tolerances import AbsoluteTolerance
 
     from pkpdsim.model import PKPDModel
@@ -348,8 +348,48 @@ def fit_subset(fit_id: str) -> str:
     return match["subset"]
 
 
+#: the argument of the provenance of a fit which names the fixed adopted fits
+FIXED_FITS = "fixed_fits"
+
+
+def current_fixed_fits(model: PKPDModel, subset: str) -> list[str]:
+    """Get the adopted fits whose parameters a fit of a subset keeps fixed.
+
+    Args:
+        model: the model.
+        subset: the fit problem, e.g. `PK`.
+
+    Returns:
+        The adopted fits of the model of the other subsets, in the order of
+        `model.fits`.
+    """
+    return [f for f in model.fits if fit_subset(f) != subset]
+
+
+def recorded_fixed_fits(records: FitRecords) -> tuple[str, ...]:
+    """Get the fixed adopted fits which the provenance of a fit records.
+
+    `run_fit` records them in the arguments of the provenance (`FIXED_FITS`).
+
+    Args:
+        records: the records of the fit (`sbmlsim.fit.cli.load_fit_records`).
+
+    Returns:
+        The ids of the fixed fits, none for a fit without a result, without a
+        provenance or of an older pkpdsim, which did not record them.
+    """
+    opt_result = records.opt_result
+    if opt_result is None or opt_result.provenance is None:
+        return ()
+    return tuple(opt_result.provenance.arguments.get(FIXED_FITS, ()))
+
+
 def report_context(
-    model: PKPDModel, subset: str, definition: FitDefinition
+    model: PKPDModel,
+    subset: str,
+    definition: FitDefinition,
+    *,
+    fixed_fits: Sequence[str],
 ) -> ReportContext:
     """Get what the report of a fit says about the model beyond the fit itself.
 
@@ -357,19 +397,22 @@ def report_context(
         model: the model.
         subset: the fit problem, e.g. `PK`.
         definition: the definition of the fit problem.
+        fixed_fits: the adopted fits whose parameters the fit kept fixed, the
+            current ones for a fit which runs (`current_fixed_fits`), the
+            recorded ones for a report from a record (`recorded_fixed_fits`).
 
     Returns:
         The title of the model and the fit, the description of the fit and of
-        its parameters, and a note on the adopted fits of other subsets, whose
-        parameters were kept at their fitted values.
+        its parameters, and a note on the fixed adopted fits, none without
+        them.
     """
-    fixed = [f for f in model.fits if fit_subset(f) != subset]
+    noun = "fit" if len(fixed_fits) == 1 else "fits"
     notes = (
         (
-            f"The parameters of the adopted fits {', '.join(fixed)} were fixed at "
-            f"their fitted values.",
+            f"The parameters of the adopted {noun} {', '.join(fixed_fits)} were "
+            f"fixed at their fitted values.",
         )
-        if fixed
+        if fixed_fits
         else ()
     )
     return ReportContext(
@@ -380,3 +423,32 @@ def report_context(
         },
         notes=notes,
     )
+
+
+def records_context(
+    model: PKPDModel,
+) -> Callable[[str, FitDefinition, FitRecords], ReportContext]:
+    """Get the context of the report of a fit from its records.
+
+    It is the context of `sbmlsim.fit.cli.report_cli` and of
+    `sbmlsim.fit.cli.report_from_records` for a model: the fixed adopted fits
+    are those the provenance of the record names (`recorded_fixed_fits`), not
+    the adopted fits of the model now.
+
+    Args:
+        model: the model.
+
+    Returns:
+        A function of the subset, its definition and the records of the fit
+        which returns the context of its report (`report_context`).
+    """
+
+    def context(
+        subset: str, definition: FitDefinition, records: FitRecords
+    ) -> ReportContext:
+        """Get the context of the report of a record."""
+        return report_context(
+            model, subset, definition, fixed_fits=recorded_fixed_fits(records)
+        )
+
+    return context

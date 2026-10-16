@@ -88,15 +88,14 @@ RECORD_FILES: tuple[str, ...] = (
     "report.txt",
     "report.pdf",
     "report.typ",
-    "report.tex",
-    "report_standalone.tex",
     "references.bib",
     "references.csl",
 )
-#: the figures of the plots which the Typst and LaTeX sources of a report show
+#: the figures of the plots which the Typst source of a report shows
 REPORT_FIGURE = re.compile(r"plots/[\w.\-]+\.(?:png|svg|pdf)")
-#: the sources of the report which refer to figures
-REPORT_SOURCES: tuple[str, ...] = ("report.typ", "report.tex")
+#: the source of the report which refers to figures; the LaTeX sources and the
+#: PNG copies of the figures they show stay in the results of the fit
+REPORT_SOURCES: tuple[str, ...] = ("report.typ",)
 #: the files without which a fit cannot be adopted
 REQUIRED_FILES: tuple[str, ...] = ("parameters.json", "optimization_result.json")
 #: one of these files gives the uncertainty of the parameters
@@ -122,11 +121,12 @@ def adopt_fit(fit_dir: Path, fits_dir: Path, *, force: bool = False) -> Path:
     The record is the part of the results of a fit which the model needs: the
     parameters, the settings and the problem (`optimization_result.json`), the
     profile likelihood and the Fisher information with their tables, the
-    metrics, the text report and the methods report with its references
-    (`RECORD_FILES`) and the figures the report shows, in `plots/`, so that
-    `report.typ` compiles in the record. The report is optional, a record of an
-    older fit without it is adopted as well. The runs, the other figures and
-    the HTML report stay in the results of the fit.
+    metrics, the text report and the methods report as PDF and Typst source
+    with its references (`RECORD_FILES`) and the figures the Typst source
+    shows, in `plots/`, so that `report.typ` compiles in the record. The report
+    is optional, a record of an older fit without it is adopted as well. The
+    runs, the other figures, the LaTeX sources with the PNG copies of their
+    figures and the HTML report stay in the results of the fit.
 
     Args:
         fit_dir: the directory of the results of the fit, named by its id.
@@ -177,8 +177,8 @@ def _report_figures(fit_dir: Path) -> list[str]:
         fit_dir: the directory of the results of the fit.
 
     Returns:
-        The paths (`plots/<name>.png`) which are referenced by `report.typ` or
-        `report.tex` and exist, sorted.
+        The paths (`plots/<name>.svg`) which are referenced by `report.typ`
+        and exist, sorted.
     """
     found: set[str] = set()
     for name in REPORT_SOURCES:
