@@ -2,11 +2,13 @@
 
 import dataclasses
 import json
+import shutil
 from pathlib import Path
 
 import pytest
+from sbmlsim.report.render import escape_typst
 
-from pkpdsim.cli import fit_command, main
+from pkpdsim.cli import fit_command, main, report_command
 from pkpdsim.model import PKPDModel
 from pkpdsim.reports import adopted_reports
 from pkpdsim.uncertainty import adopt_fit
@@ -65,8 +67,6 @@ def test_the_output_dir(adopted: PKPDModel, tmp_path: Path) -> None:
 
 
 def test_the_command_writes_the_reports(adopted: PKPDModel) -> None:
-    from pkpdsim.cli import report_command
-
     assert report_command(adopted, ["--adopted"]) == adopted.report_dir
     for fit in adopted.fits:
         assert (adopted.report_dir / fit / "index.html").exists()
@@ -97,7 +97,79 @@ def test_a_record_without_provenance(adopted: PKPDModel, tmp_path: Path) -> None
     path.write_text(json.dumps(data), encoding="utf-8")
     model = dataclasses.replace(adopted, fits=[fit], fits_path=fits)
     (directory,) = adopted_reports(model, tmp_path / "out")
-    assert "not recorded" in (directory / "report.typ").read_text(encoding="utf-8")
+    typst = (directory / "report.typ").read_text(encoding="utf-8")
+    assert "not recorded" in typst
+    assert "were fixed" not in typst
+
+
+def test_the_report_names_the_fixed_fits_of_its_record(
+    adopted: PKPDModel, tmp_path: Path
+) -> None:
+    """The fixed fits are those the provenance of the record names.
+
+    The fit ran while a fit of another subset was adopted, which the model no
+    longer adopts.
+    """
+    fits = tmp_path / "fits"
+    other = "OTHER_20260101_000000__abcde"
+    shutil.copytree(adopted.fits_dir / adopted.fits[0], fits / other)
+    out = tmp_path / "fit"
+    (opid,) = fit_command(
+        dataclasses.replace(adopted, fits=[other], fits_path=fits),
+        [
+            "--runs",
+            "1",
+            "--identifiability",
+            "--max-points",
+            "5",
+            "--no-fisher",
+            "--no-mapping-figures",
+            "--output_dir",
+            str(out),
+        ],
+    )
+    adopt_fit(out / opid, fits)
+    model = dataclasses.replace(adopted, fits=[opid], fits_path=fits)
+    (directory,) = adopted_reports(model, tmp_path / "out")
+    typst = (directory / "report.typ").read_text(encoding="utf-8")
+    # the Typst source escapes the underscores of the id
+    assert (
+        escape_typst(
+            f"The parameters of the adopted fit {other} were fixed at their "
+            f"fitted values."
+        )
+        in typst
+    )
+    assert typst.count("were fixed at their fitted values") == 1
+
+
+def test_the_report_of_an_adopted_fit_is_the_report_of_its_record(
+    adopted: PKPDModel, tmp_path: Path
+) -> None:
+    """`run_report --adopted` writes what `run_report` writes for the record."""
+    fit = adopted.fits[0]
+    (directory,) = adopted_reports(
+        dataclasses.replace(adopted, fits=[fit]),
+        tmp_path / "adopted",
+        mapping_figures=False,
+    )
+    single = report_command(
+        adopted,
+        [
+            "--subset",
+            "DECAY",
+            "--name",
+            fit,
+            "--no-mapping-figures",
+            "--output_dir",
+            str(tmp_path / "single"),
+            str(adopted.fits_dir / fit / "parameters.json"),
+        ],
+    )
+    assert single == tmp_path / "single" / fit
+    assert (directory / "report.typ").read_text(encoding="utf-8") == (
+        single / "report.typ"
+    ).read_text(encoding="utf-8")
 
 
 def test_a_fit_of_an_unknown_subset(adopted: PKPDModel, tmp_path: Path) -> None:

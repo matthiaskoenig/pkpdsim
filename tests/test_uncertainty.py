@@ -124,8 +124,6 @@ def test_adopt_copies_the_record(toy_fit: Path, tmp_path: Path) -> None:
 REPORT_FILES = [
     "report.pdf",
     "report.typ",
-    "report.tex",
-    "report_standalone.tex",
     "references.bib",
     "references.csl",
 ]
@@ -135,17 +133,23 @@ def test_adopt_copies_the_report(toy_fit: Path, tmp_path: Path) -> None:
     record = adopt_fit(toy_fit, tmp_path)
     for name in REPORT_FILES:
         assert (record / name).exists(), name
+    # the LaTeX sources stay in the results of the fit
+    for name in ("report.tex", "report_standalone.tex"):
+        assert (toy_fit / name).exists(), name
+        assert not (record / name).exists(), name
     referenced = set(
         re.findall(
             r"plots/[\w.\-]+\.(?:png|svg|pdf)",
-            (record / "report.typ").read_text(encoding="utf-8")
-            + (record / "report.tex").read_text(encoding="utf-8"),
+            (record / "report.typ").read_text(encoding="utf-8"),
         )
     )
     assert referenced
     kept = {p.relative_to(record).as_posix() for p in (record / "plots").iterdir()}
-    # the figures the report shows, nothing else of the plots
+    # the figures the Typst source shows, nothing else of the plots, no PNG
+    # copies of the LaTeX source
     assert kept == referenced
+    assert list((toy_fit / "plots").glob("*.png"))
+    assert not list((record / "plots").glob("*.png"))
 
 
 def test_the_report_compiles_in_the_record(toy_fit: Path, tmp_path: Path) -> None:

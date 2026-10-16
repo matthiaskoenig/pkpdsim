@@ -169,6 +169,8 @@ experiments together or `SINGLE` every experiment on its own), `--experiments`
 are `--parameter` (`-p`, repeatable), `--alpha` (`-a`), `--df`,
 `--max-points`, `--no-reoptimize` and `--no-fisher`.
 
+The report of the fit carries the title of the model (`PKPDModel.title`), the description of the fit (`FitDefinition.description`) and of its parameters (`FitParameter.description`), and a note on the adopted fits of the other subsets of the model, whose parameters were fixed at their fitted values. The provenance of the fit records the arguments of the command (`subset`, `runs`, `cores`, `method`, `command` and `fixed_fits`, the ids of the fixed adopted fits) and the fixed values, i.e. the values of the parameters of the fixed adopted fits which the fit does not optimize itself.
+
 `--adopt <fit id>` copies the record of the finished fit `<fit id>` from the
 output folder into the adopted fits of the model (`MODEL.fits_dir`) instead of
 fitting, `--force` replaces an adopted record of the same id; the id then goes
@@ -190,6 +192,8 @@ parameter sets, `run_identifiability` the profile likelihood and the Fisher
 information of the first parameter set of a file. `--subset` is the fit
 problem, `--output_dir` the folder of the report.
 
+The report of `run_report` has the context of the model as the report of `run_fit` has it: the title of the model, the description of the fit and of its parameters and the note on the fixed adopted fits, which are the fits the provenance of the record next to the first file names, not the adopted fits of the model now (a record without provenance names none).
+
 `run_report <package> --adopted` writes the report of every adopted fit of the
 model (`MODEL.fits`) instead, each from its record in `MODEL.fits_dir`, without
 a parameters file and without running a fit:
@@ -198,13 +202,7 @@ a parameters file and without running a fit:
 run_report pkdb_models.models.hctz --adopted
 ```
 
-Every fit has a report of its own in `MODEL.report_dir/<fit id>` (`--output_dir`
-replaces `MODEL.report_dir`), the complete report of sbmlsim with the
-description of the model, the fit and its parameters, the adopted fits whose
-parameters were fixed and the provenance of the record (a record without it
-states that it was not recorded). The subset of a fit is the part of its id
-before the date, `PK` for `PK_20261016_185018__3efe3`, and must have a fit
-definition. There is no report which merges the fits of a model.
+Every fit has a report of its own in `MODEL.report_dir/<fit id>` (`--output_dir` replaces `MODEL.report_dir`). It is the report which `run_report <package> --subset <subset> --name <fit id> <record>/parameters.json` writes for the record: the complete report of sbmlsim with the title of the model, the description of the fit and its parameters, the adopted fits whose parameters were fixed as the provenance of the record names them, and the provenance of the record (a record without it states that it was not recorded and names no fixed fits). The subset of a fit is the part of its id before the date, `PK` for `PK_20261016_185018__3efe3`, and must have a fit definition. There is no report which merges the fits of a model.
 
 ## The folders of the results
 

@@ -10,10 +10,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sbmlsim.fit.cli import load_fit_records, load_parameter_sets
-from sbmlsim.fit.report import FitReport
+from sbmlsim.fit.cli import load_fit_records, report_from_records
 
-from pkpdsim.fit import fit_subset, report_context
+from pkpdsim.fit import fit_subset, records_context
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -27,11 +26,15 @@ def adopted_reports(
     """Write the report of every adopted fit of a model, each from its record.
 
     No fit is run. The report of a record is the report which
-    `run_report <package> --subset <subset> <record>/parameters.json` writes
-    for it, with the context of the model (`report_context`): the title, the
-    description of the fit and of its parameters, and the adopted fits whose
-    parameters were fixed. A record without provenance gives a report which
-    states that the provenance was not recorded.
+    `run_report <package> --subset <subset> --name <fit id>
+    <record>/parameters.json` writes for it: the same problem (its id is the
+    subset), the settings the fit ran with, the records of the fit
+    (`sbmlsim.fit.cli.report_from_records`) and the context of the model
+    (`pkpdsim.fit.records_context`), i.e. the title, the description of the
+    fit and of its parameters, and the adopted fits whose parameters were
+    fixed as the provenance of the record names them. A record without
+    provenance gives a report which states that the provenance was not
+    recorded and names no fixed fits.
 
     Args:
         model: the model, its `fits` are the fits to report.
@@ -51,6 +54,7 @@ def adopted_reports(
     if not model.fits:
         raise ValueError(f"The model '{model.name}' has no adopted fits.")
     definitions = model.load_fit_definitions()
+    context = records_context(model)
     directories: list[Path] = []
     for fit_id in model.fits:
         subset = fit_subset(fit_id)
@@ -67,25 +71,13 @@ def adopted_reports(
                 f"The record of the adopted fit '{fit_id}' has no {parameters}."
             )
         records = load_fit_records(record)
-        # the settings the fit ran with, the definition may have changed since
-        opt_result = records.opt_result
-        settings = (
-            opt_result.settings
-            if opt_result is not None and opt_result.settings is not None
-            else definition.settings
-        )
-        problem = definition.problem(opid=fit_id)
-        problem.initialize(settings)
-        report = FitReport(
-            problem=problem,
-            settings=settings,
-            parameter_sets=load_parameter_sets([parameters]),
-            opt_result=records.opt_result,
-            identifiability=records.identifiability,
-            fisher=records.fisher,
-            show_titles=False,
+        report = report_from_records(
+            definition,
+            record,
+            opid=subset,
+            records=records,
+            context=context(subset, definition, records),
             mapping_figures=mapping_figures,
-            context=report_context(model, subset, definition),
         )
         directories.append(
             report.create(output_dir=output_dir or model.report_dir, name=fit_id)

@@ -73,7 +73,12 @@ from sbmlsim.fit.result import fit_id
 from sbmlsim.utils import paths_text
 from sbmlutils.console import console
 
-from pkpdsim.fit import fit_subset, report_context
+from pkpdsim.fit import (
+    FIXED_FITS,
+    current_fixed_fits,
+    records_context,
+    report_context,
+)
 from pkpdsim.model import PKPDModel, resolve
 from pkpdsim.reports import adopted_reports
 from pkpdsim.uncertainty import UncertaintySettings, adopt_fit
@@ -730,14 +735,18 @@ def fit_command(
     # the parameters are printed per problem by `run_fit`, with their coverage
     fit_display.print_settings(definition.settings)
 
-    # the values of the adopted fits of other subsets, in the units of the model
+    # the adopted fits of the other subsets and the values of their parameters,
+    # in the units of the model, which this fit does not optimize itself
+    fixed_fits = current_fixed_fits(model, options.subset)
+    records = model.fit_records().records
+    fitted = {p.pid for p in definition.parameters}
     fixed_values = {
         pid: parameter.value
-        for fit_id_, record in model.fit_records().records.items()
-        if fit_subset(fit_id_) != options.subset
-        for pid, parameter in record.parameters.items()
+        for fit_id_ in fixed_fits
+        for pid, parameter in records[fit_id_].parameters.items()
+        if pid not in fitted
     }
-    context = report_context(model, options.subset, definition)
+    context = report_context(model, options.subset, definition, fixed_fits=fixed_fits)
 
     runs = run_fit(
         definition=definition,
@@ -756,6 +765,7 @@ def fit_command(
             "cores": options.cores,
             "method": options.method,
             "command": f"run_fit {model.package}",
+            FIXED_FITS: fixed_fits,
         },
         fixed_values=fixed_values,
     )
@@ -783,8 +793,11 @@ def fit_command(
 def report_command(model: PKPDModel, args: Sequence[str] | None = None) -> Path:
     """Report stored parameter sets of a model (`sbmlsim.fit.cli.report_cli`).
 
-    With `--adopted` the report of every adopted fit of the model is written
-    from its record, see `pkpdsim.reports.adopted_reports`.
+    The report has the context of the model, with the fixed adopted fits which
+    the record of the fit next to the parameters names
+    (`pkpdsim.fit.records_context`). With `--adopted` the report of every
+    adopted fit of the model is written from its record, see
+    `pkpdsim.reports.adopted_reports`.
 
     Args:
         model: the model.
@@ -830,6 +843,7 @@ def report_command(model: PKPDModel, args: Sequence[str] | None = None) -> Path:
             "the report of every adopted fit of the model, without a "
             "parameters file."
         ),
+        context=records_context(model),
     )
 
 

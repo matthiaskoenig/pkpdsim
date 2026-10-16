@@ -11,9 +11,7 @@ run_fit pkdb_models.models.hctz --subset PK --runs 40 --cores 10 --identifiabili
 run_fit pkdb_models.models.hctz --adopt PK_20261015_235422__7a62a
 ```
 
-The record is the part of the results which the model needs (`RECORD_FILES`): the best parameter sets (`parameters.json`), the problem with its settings and bounds (`optimization_result.json`), the profile likelihood (`identifiability.json`, `identifiability.tsv`), the Fisher information (`fisher.json`, `fisher.tsv`), the metrics and the text report, about 300 kB. A fit without a profile likelihood and without a Fisher information cannot be adopted (run it with `--identifiability`); an adopted fit is only replaced with `--force`. The model object lists its adopted fits:
-
-`run_report <package> --adopted` writes the report of every adopted fit from its record, one folder per fit in the reports of the model, see [Commands](commands.md).
+The record is the part of the results which the model needs (`RECORD_FILES`): the best parameter sets (`parameters.json`), the problem with its settings and bounds (`optimization_result.json`), the profile likelihood (`identifiability.json`, `identifiability.tsv`), the Fisher information (`fisher.json`, `fisher.tsv`), the metrics, the text report and the methods report: `report.pdf`, its Typst source `report.typ` with `references.bib` and `references.csl` and the SVG figures it shows (`plots/`), so that `report.typ` compiles in the record. The LaTeX sources of the report (`report.tex`, `report_standalone.tex`) with the PNG copies of their figures, the HTML report and the runs stay in the results of the fit. The record of the PK fit of HCTZ is 1.6 MB: the five SVG figures 0.83 MB, `report.pdf` 0.41 MB, `optimization_result.json` 0.14 MB, `report.txt` 0.12 MB and the other files 0.10 MB. A fit without a profile likelihood and without a Fisher information cannot be adopted (run it with `--identifiability`); an adopted fit is only replaced with `--force`. The model object lists its adopted fits:
 
 ```python
 # not executed
@@ -23,6 +21,8 @@ MODEL = PKPDModel(
     fits=("PK_20261015_235422__7a62a", "PD_20261016_000200__28b30"),
 )
 ```
+
+`run_report <package> --adopted` writes the report of every adopted fit from its record, one folder per fit in the reports of the model, see [Commands](commands.md).
 
 ## The fitted values in the factory
 
