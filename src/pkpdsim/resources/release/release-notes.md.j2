@@ -12,6 +12,13 @@
 {% macro names(items) -%}
 {% for item in items %}`{{ item }}`{{ ", " if not loop.last }}{% endfor %}
 {%- endmacro %}
+{% macro table(changes) -%}
+| Package | Previous | New |
+| --- | --- | --- |
+{% for change in changes %}
+| `{{ change.name }}` | {{ change.old or "-" }} | {{ change.new or "-" }} |{{ "\n" if not loop.last }}
+{%- endfor %}
+{%- endmacro %}
 # Release notes for {{ repo_name }} v{{ version }}
 
 Made from pkdb_models {{ commit }} with pkpdsim {{ pkpdsim_version }}.
@@ -41,7 +48,7 @@ The versions of the core libraries cannot be compared, there is no lock file in 
 {% elif not summary.fetched %}
 {{ summary.name }} {{ summary.old }} → {{ summary.new }}: the release notes could not be fetched.
 {% elif summary.bullets %}
-{{ summary.name }} {{ summary.old }} → {{ summary.new }}:
+{{ summary.name }} {{ summary.old }} → {{ summary.new }}{{ " (latest %d of %d)" % (summary.bullets | length, summary.total) if summary.total > summary.bullets | length }}:
 
 {% for bullet in summary.bullets %}
 - {{ bullet }}
@@ -64,11 +71,21 @@ First release, the versions of the libraries are locked in `uv.lock`.
 {% elif not old_lock %}
 The versions cannot be compared, there is no lock file in the previous release.
 {% elif libraries %}
-| Package | Previous | New |
-| --- | --- | --- |
-{% for change in libraries %}
-| `{{ change.name }}` | {{ change.old or "-" }} | {{ change.new or "-" }} |
-{% endfor %}
+{% if direct_libraries %}
+{{ table(direct_libraries) }}
+
+{% endif %}
+{% set others = libraries | length - direct_libraries | length %}
+{% if others %}
+{{ others }} other package{{ "s" if others != 1 }} changed.
+
+{% endif %}
+<details>
+<summary>All changed packages</summary>
+
+{{ table(libraries) }}
+
+</details>
 {% else %}
 No changes.
 {% endif %}

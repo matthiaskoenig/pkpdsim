@@ -166,14 +166,16 @@ def old_layout(tmp_path: Path) -> ReleaseRepo:
     return repo
 
 
-def context(model: PKPDModel, version: str) -> ProjectContext:
+def context(
+    model: PKPDModel, version: str, dependencies: tuple[str, ...] = ()
+) -> ProjectContext:
     assert model.release is not None
     return ProjectContext(
         model=model,
         settings=model.release,
         version=version,
         python="3.14",
-        dependencies=(),
+        dependencies=dependencies,
         constraints=(),
         pkpdsim_path=None,
         year=2026,
@@ -274,6 +276,7 @@ def test_core_summaries() -> None:
                 "`run_report` recreates the report, e.g. of a fit.",
                 "First of 0.6.1.",
             ],
+            total=6,
         ),
         CoreSummary(
             "sbmlsim",
@@ -284,6 +287,7 @@ def test_core_summaries() -> None:
                 "**Bold** ([#1](https://x.org/1)).",
                 "Versions 1.5 and 2.0, i.e. two.",
             ],
+            total=3,
         ),
     ]
 
@@ -326,6 +330,8 @@ def test_write_release_notes(release: ReleaseRepo, model: PKPDModel) -> None:
     assert f"Made from pkdb_models {COMMIT[:10]} with pkpdsim {__version__}." in text
     for heading in ("Core libraries", "Libraries", "Data", "Analysis"):
         assert f"## {heading}\n" in text
+    assert "pkpdsim 0.6.0 → 0.7.0 (latest 5 of 6):\n" in text
+    assert "sbmlsim 0.9.6 → 0.9.7:\n" in text
     assert "third bullet!" in text
     assert "sixth bullet" not in text
     assert "| `numpy` | 2.0.0 | 2.1.0 |" in text
@@ -348,19 +354,82 @@ def test_write_release_notes_fetch_fails(
     assert "pkpdsim 0.6.0 → 0.7.0: the release notes could not be fetched." in text
 
 
-def test_notes_no_changes(tmp_path: Path, model: PKPDModel) -> None:
+def minimal_release(tmp_path: Path, old_lock: str) -> ReleaseRepo:
+    """A previous release 0.1.0 with a lock file, a model and a fit record."""
     path = tmp_path / "toy-model"
     path.mkdir()
     git(path, "init", "-b", "main")
-    write(path / "uv.lock", OLD_LOCK)
+    write(path / "uv.lock", old_lock)
     write(path / "models" / "toy.xml", toy_sbml())
     write(path / FITS_DIR / NEW_FIT / "parameters.json", parameters({"k": 0.25}))
-    release = commit_release(path, "0.1.0")
-    source = SourceRepo(root=path, commit=COMMIT)
+    return commit_release(path, "0.1.0")
+
+
+def test_notes_no_changes(tmp_path: Path, model: PKPDModel) -> None:
+    release = minimal_release(tmp_path, OLD_LOCK)
+    source = SourceRepo(root=release.path, commit=COMMIT)
     text = write_release_notes(
         context(model, "0.1.1"), release, model, source, fetch=fake_fetch
     ).read_text()
     assert text.count("No changes.") == 6
+
+
+def test_notes_direct_dependencies(tmp_path: Path, model: PKPDModel) -> None:
+    release = minimal_release(
+        tmp_path, lock(("numpy", "2.0.0"), ("pint", "0.25"), ("idna", "3.11"))
+    )
+    write(
+        release.path / "uv.lock",
+        lock(("numpy", "2.1.0"), ("pint", "0.26"), ("idna", "3.20")),
+    )
+    source = SourceRepo(root=release.path, commit=COMMIT)
+    dependencies = ("NumPy>=2.0", "pkpdsim[docs]>=0.7")
+    text = write_release_notes(
+        context(model, "0.1.1", dependencies), release, model, source, fetch=fake_fetch
+    ).read_text()
+    libraries = text.split("## Libraries\n\n")[1].split("\n## Data")[0]
+    assert libraries == (
+        "| Package | Previous | New |\n"
+        "| --- | --- | --- |\n"
+        "| `numpy` | 2.0.0 | 2.1.0 |\n"
+        "\n"
+        "2 other packages changed.\n"
+        "\n"
+        "<details>\n"
+        "<summary>All changed packages</summary>\n"
+        "\n"
+        "| Package | Previous | New |\n"
+        "| --- | --- | --- |\n"
+        "| `idna` | 3.11 | 3.20 |\n"
+        "| `numpy` | 2.0.0 | 2.1.0 |\n"
+        "| `pint` | 0.25 | 0.26 |\n"
+        "\n"
+        "</details>\n"
+    )
+
+
+@pytest.mark.parametrize(
+    "content", ["{", '{"sets": []}', '{"sets": [{"sid": "best"}]}']
+)
+@pytest.mark.parametrize("where", ["tag", "worktree"])
+def test_fit_changes_malformed_record(
+    release: ReleaseRepo, model: PKPDModel, content: str, where: str
+) -> None:
+    if where == "tag":
+        shutil.rmtree(release.path / FITS_DIR)
+        write(release.path / FITS_DIR / OLD_FIT / "parameters.json", content)
+        git(release.path, "add", "-A")
+        git(release.path, "commit", "-m", "broken record")
+        git(release.path, "tag", "0.1.1")
+        release = ReleaseRepo(path=release.path, last_tag="0.1.1")
+        write(release.path / FITS_DIR / NEW_FIT / "parameters.json", parameters({}))
+        name = f"0.1.1:{FITS_DIR}/{OLD_FIT}/parameters.json"
+    else:
+        write(release.path / FITS_DIR / NEW_FIT / "parameters.json", content)
+        name = str(release.path / FITS_DIR / NEW_FIT / "parameters.json")
+    with pytest.raises(ReleaseError, match="malformed") as err:
+        fit_changes(release, model)
+    assert name in str(err.value)
 
 
 def test_notes_old_layout(old_layout: ReleaseRepo, model: PKPDModel) -> None:

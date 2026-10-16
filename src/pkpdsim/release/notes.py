@@ -53,6 +53,7 @@ _SENTENCE_END = re.compile(
 closing emphasis, parenthesis or backtick belongs to the sentence."""
 _RELEASE_VERSION = re.compile(r"^v?(?P<version>\d+(?:\.\d+)*)$")
 _ELEMENTS = ("species", "reactions", "parameters")
+_REQUIREMENT_NAME = re.compile(r"^\s*(?P<name>[A-Za-z0-9][A-Za-z0-9._-]*)")
 
 Fetch = Callable[[str], dict[str, str]]
 """Get the release notes of a library, the body by version, from its repository."""
@@ -83,6 +84,8 @@ class CoreSummary:
         new: the version in the new release, `None` if it is no longer used.
         bullets: the first sentences of the top level bullets of the releases.
         fetched: whether the release notes of the library could be fetched.
+        total: the number of bullets of the releases, more than `bullets` if
+            they were cut to `MAX_BULLETS`.
     """
 
     name: str
@@ -90,6 +93,7 @@ class CoreSummary:
     new: str | None
     bullets: list[str]
     fetched: bool = True
+    total: int = 0
 
 
 @dataclass(frozen=True)
@@ -344,7 +348,13 @@ def core_summaries(
             bullet for version in versions for bullet in _bullets(releases[version])
         ]
         summaries.append(
-            CoreSummary(name, change.old, change.new, bullets[:MAX_BULLETS])
+            CoreSummary(
+                name,
+                change.old,
+                change.new,
+                bullets[:MAX_BULLETS],
+                total=len(bullets),
+            )
         )
     return summaries
 
@@ -522,9 +532,19 @@ def model_changes(release: ReleaseRepo, runner: Runner = run) -> list[ModelChang
     return changes
 
 
-def _best_values(text: str) -> dict[str, float]:
-    """Get the values of the best parameter set of a `parameters.json`."""
-    return dict(json.loads(text)["sets"][0]["values"])
+def _best_values(text: str, name: str) -> dict[str, float]:
+    """Get the values of the best parameter set of a `parameters.json`.
+
+    Raises:
+        ReleaseError: if the record is no JSON or has no parameter set with values.
+    """
+    try:
+        return dict(json.loads(text)["sets"][0]["values"])
+    except (ValueError, KeyError, IndexError, TypeError) as err:
+        raise ReleaseError(
+            f"The fit record {name} is malformed, it needs the values of a "
+            f"parameter set in 'sets': {err!r}"
+        ) from err
 
 
 def _fits_prefix(model: PKPDModel) -> PurePosixPath:
@@ -579,8 +599,9 @@ def fit_changes(
         before: dict[str, float] = {}
         after: dict[str, float] = {}
         if old_id is not None:
+            name = f"{prefix}/{old_id}/parameters.json"
             before = _best_values(
-                _show(release, f"{prefix}/{old_id}/parameters.json", runner)
+                _show(release, name, runner), f"{release.last_tag}:{name}"
             )
         if new_id is not None:
             record = release.path / prefix / new_id / "parameters.json"
@@ -588,7 +609,7 @@ def fit_changes(
                 raise ReleaseError(
                     f"The adopted fit '{new_id}' has no record {record}."
                 )
-            after = _best_values(record.read_text("utf-8"))
+            after = _best_values(record.read_text("utf-8"), str(record))
         moved = (
             [
                 (pid, before.get(pid), after.get(pid))
@@ -607,6 +628,24 @@ def _lock_text(
 ) -> str | None:
     """Get the lock file of the previous release, `None` without one."""
     return _show(release, "uv.lock", runner) if "uv.lock" in tree else None
+
+
+def dependency_names(dependencies: Iterable[str]) -> set[str]:
+    """Get the normalized names of the packages of requirements.
+
+    Args:
+        dependencies: requirements as in `[project].dependencies`, e.g.
+            `"pkpdsim[docs]>=0.7"`.
+
+    Returns:
+        The names, lower case with runs of `-`, `_` and `.` as `-` (as in `uv.lock`).
+    """
+    names = set()
+    for dependency in dependencies:
+        match = _REQUIREMENT_NAME.match(dependency)
+        if match:
+            names.add(re.sub(r"[-_.]+", "-", match["name"]).lower())
+    return names
 
 
 def _number(value: float | None) -> str:
@@ -649,6 +688,7 @@ def write_release_notes(
     old_lock = _lock_text(release, tree, runner)
     libraries = library_changes(old_lock, new_lock)
     locked = _locked(new_lock)
+    direct = dependency_names(context.dependencies)
     data_dir = PurePosixPath("src", *model.package.split("."), "data")
     added_experiments, removed_experiments = experiment_changes(release, runner)
     extra = {
@@ -659,6 +699,7 @@ def write_release_notes(
         "core_versions": [(n, locked[n]) for n in CORE_LIBRARIES if n in locked],
         "core": core_summaries(libraries, fetch),
         "libraries": libraries,
+        "direct_libraries": [c for c in libraries if c.name in direct],
         "data": data_changes(release, str(data_dir), runner),
         "models": model_changes(release, runner),
         "experiments_added": added_experiments,
