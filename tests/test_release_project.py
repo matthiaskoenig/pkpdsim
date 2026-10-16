@@ -110,6 +110,18 @@ def test_pyproject_local_pkpdsim(source: SourceRepo) -> None:
     assert "pkpdsim==0.2.0" not in data["tool"]["uv"]["constraint-dependencies"]
 
 
+def test_pyproject_one_entry_per_line(source: SourceRepo) -> None:
+    context = project_context(MODEL, SETTINGS, source, "0.1.0", Path("/x/pkpdsim"))
+    text = render("pyproject.toml.j2", context)
+    assert (
+        '\ndependencies = [\n    "sbmlsim>=0.9.7",\n    "sbmlutils>=0.16.0",\n]\n'
+        in text
+    )
+    assert '\nconstraint-dependencies = [\n    "sbmlsim==0.9.7",\n]\n' in text
+    assert '\nauthors = [\n    { name = "Doe, Jane" },\n]\n' in text
+    assert "]\n\n[tool.uv.sources]\n" in text
+
+
 def test_zenodo_json(context: ProjectContext) -> None:
     data = zenodo_json(context)
     assert data["creators"] == [

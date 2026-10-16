@@ -9,19 +9,19 @@ description = {{ settings.description | toml }}
 readme = "README.md"
 requires-python = {{ requires_python | toml }}
 authors = [
-{%- for author in settings.authors %}
+{% for author in settings.authors %}
     { name = {{ author.name | toml }} },
-{%- endfor %}
+{% endfor %}
 ]
 keywords = [
-{%- for keyword in settings.keywords %}
+{% for keyword in settings.keywords %}
     {{ keyword | toml }},
-{%- endfor %}
+{% endfor %}
 ]
 dependencies = [
-{%- for dependency in dependencies %}
+{% for dependency in dependencies %}
     {{ dependency | toml }},
-{%- endfor %}
+{% endfor %}
 ]
 
 [project.urls]
@@ -38,11 +38,12 @@ packages = ["src/{{ top_package }}"]
 
 [tool.uv]
 constraint-dependencies = [
-{%- for constraint in constraints %}
+{% for constraint in constraints %}
     {{ constraint | toml }},
-{%- endfor %}
+{% endfor %}
 ]
 {% if pkpdsim_path %}
+
 [tool.uv.sources]
 pkpdsim = { path = {{ pkpdsim_path | toml }}, editable = true }
 {% endif %}
