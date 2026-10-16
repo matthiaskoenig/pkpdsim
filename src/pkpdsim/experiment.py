@@ -28,7 +28,7 @@ checks that no two texts of an experiment give the same SId. A unit which the
 data use and sbmlsim does not define (an international unit is specific to a
 substance) is defined under a name of the model and the substance, `data_units`.
 
-A run over the draws of the fitted parameters (`run_<model> --uncertainty`)
+A run over the draws of the fitted parameters (`run_simulation <package> --uncertainty`)
 gives every experiment the setting `uncertainty`, a
 `pkpdsim.uncertainty.UncertaintyRun`: `initialize` runs every simulation over the
 draws and turns the curves of the simulations into bands

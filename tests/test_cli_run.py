@@ -40,7 +40,7 @@ def test_the_options_of_the_command() -> None:
         "--formats",
     ]:
         assert option in text
-    assert "run_toy" in text
+    assert "usage: run_simulation pkpdsim_toy " in text
     assert "svg,png" in text
 
 
@@ -176,11 +176,6 @@ def test_all_runs_the_factory_the_simulations_and_the_extras(tmp_path: Path) -> 
     assert (tmp_path / "models" / "toy.xml").exists()
     assert (tmp_path / "simulation" / "all" / "_figures").is_dir()
     assert (tmp_path / "greeting.txt").exists()
-
-
-def test_the_main_of_the_model(tmp_path: Path) -> None:
-    MODEL.run_main(["-a", "simulate", "-e", "ToyDecay", "-r", str(tmp_path)])
-    assert (tmp_path / "simulation" / "custom_selection").is_dir()
 
 
 NO_EXPERIMENTS = dataclasses.replace(MODEL, experiments=None, fit_definitions=None)

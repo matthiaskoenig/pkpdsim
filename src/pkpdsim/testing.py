@@ -264,7 +264,7 @@ def initialize_experiments(model: PKPDModel) -> dict[str, SimulationExperiment]:
 
 
 def run_all_experiments(model: PKPDModel, output_dir: Path) -> None:
-    """Run the registered experiments, as `run_<model>` does.
+    """Run the registered experiments, as `run_simulation` does.
 
     Every experiment runs, also after one which failed.
 

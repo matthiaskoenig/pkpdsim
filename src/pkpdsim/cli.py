@@ -1,57 +1,55 @@
-"""The commands of a model.
+"""The commands of the models.
 
-A model package registers its commands in `[project.scripts]` with its model
-object, e.g. for hctz:
-
-```toml
-run_hctz = "pkdb_models.models.hctz:MODEL.run_main"
-fit_hctz = "pkdb_models.models.hctz:MODEL.fit_main"
-report_hctz = "pkdb_models.models.hctz:MODEL.report_main"
-identifiability_hctz = "pkdb_models.models.hctz:MODEL.identifiability_main"
-```
-
-`run_<model>` creates the models with the factory and runs the simulation
-experiments:
+pkpdsim installs four console scripts which take the dotted name of a model
+package first and the options of the command for that model after it
+(`main`, `resolve_model`):
 
 ```bash
-run_hctz --action factory
-run_hctz --action list_experiments
-run_hctz --action simulate --experiments "misc,Anderson1961" --open
-run_hctz --action all --results-dir /path/to/results
+run_simulation pkdb_models.models.hctz --action factory
+run_simulation pkdb_models.models.hctz --action list_experiments
+run_simulation pkdb_models.models.hctz --action simulate --experiments "misc,Anderson1961" --open
+run_simulation pkdb_models.models.hctz --action all --results-dir /path/to/results
+run_simulation pkdb_models.models.hctz --action simulate --experiments all --uncertainty --draws 100
+run_fit pkdb_models.models.hctz --subset PK --identifiability
+run_fit pkdb_models.models.hctz --adopt PK_<fit id>
+run_report pkdb_models.models.hctz --subset PK results/fit/PK_<fit id>/parameters.json
+run_identifiability pkdb_models.models.hctz --subset PK results/fit/PK_<fit id>/parameters.json
 ```
 
-A single group is written into the directory of the group, any other selection
-into `custom_selection`, both in the `simulation` folder of the results. The
-output ends with the links to the report and to the figures.
+The package is imported and its model object `MODEL` gives everything which
+differs between two models; a model package registers no commands of its own.
 
-`--uncertainty` runs the experiments over draws of the fitted parameters of the
-model and draws the curves of the simulations as bands of the quantiles of the
-draws, into the `simulation_uncertainty` folder of the results (see
-`pkpdsim.uncertainty`):
+`run_simulation` (`run_command`) creates the models with the factory and runs
+the simulation experiments and the extra actions of the model. A single group
+is written into the directory of the group, any other selection into
+`custom_selection`, both in the `simulation` folder of the results. The output
+ends with the links to the report and to the figures. `--uncertainty` runs the
+experiments over draws of the fitted parameters of the model and draws the
+curves of the simulations as bands of the quantiles of the draws, into the
+`simulation_uncertainty` folder of the results (see `pkpdsim.uncertainty`).
 
-```bash
-run_hctz --action simulate --experiments all --uncertainty --draws 100
-```
-
-`fit_<model>` fits the parameters of a fit problem and, with
+`run_fit` (`fit_command`) fits the parameters of a fit problem and, with
 `--identifiability` (the default of a model with `fit_identifiability`),
 analyses the identifiability of the fitted parameters: the profile likelihood
 of every fitted parameter and the Fisher information around the best parameter
 set, which end up in the identifiability section of the report of the fit.
-`fit_<model> --adopt <fit id>` copies the record of a finished fit into the
-adopted fits of the model, whose values and uncertainty the factory takes
+`run_fit <package> --adopt <fit id>` copies the record of a finished fit into
+the adopted fits of the model, whose values and uncertainty the factory takes
 (`pkpdsim.uncertainty.adopt_fit`).
-`report_<model>` and `identifiability_<model>` work on the `parameters.json`
-of an earlier fit (`sbmlsim.fit.cli.report_cli`, `identifiability_cli`). All
-write into the results of the model unless `--output_dir` is given.
+`run_report` and `run_identifiability` (`report_command`,
+`identifiability_command`) work on the `parameters.json` of an earlier fit
+(`sbmlsim.fit.cli.report_cli`, `identifiability_cli`). All write into the
+results of the model unless `--output_dir` is given.
 """
 
 from __future__ import annotations
 
 import argparse
 import dataclasses
+import importlib
+import re
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -75,13 +73,13 @@ from sbmlsim.fit.result import fit_id
 from sbmlsim.utils import paths_text
 from sbmlutils.console import console
 
-from pkpdsim.model import resolve
+from pkpdsim.model import PKPDModel, resolve
 from pkpdsim.uncertainty import UncertaintySettings, adopt_fit
 
 if TYPE_CHECKING:
     from sbmlsim.experiment import SimulationExperiment
 
-    from pkpdsim.model import PKPDModel, SimulatorSettings
+    from pkpdsim.model import SimulatorSettings
 
 
 class Action(StrEnum):
@@ -182,7 +180,9 @@ def run_parser(model: PKPDModel) -> argparse.ArgumentParser:
     else:
         extras_text = " and its extra actions" if model.extra_actions else ""
         description = f"Run the model factory of the {model.title}{extras_text}."
-    p = argparse.ArgumentParser(prog=f"run_{model.name}", description=description)
+    p = argparse.ArgumentParser(
+        prog=f"run_simulation {model.package}", description=description
+    )
     p.add_argument("-a", "--action", required=True, choices=actions, help=action_help)
     p.add_argument(
         "-r",
@@ -334,7 +334,7 @@ def _simulate(
 
 
 def run_command(model: PKPDModel, args: Sequence[str] | None = None) -> None:
-    """Run the action of the command line of `run_<model>`.
+    """Run the action of the command line of `run_simulation`.
 
     Args:
         model: the model.
@@ -485,7 +485,7 @@ def fit_parser(
         "parameters after the fit."
     )
     p = argparse.ArgumentParser(
-        prog=f"fit_{model.name}",
+        prog=f"run_fit {model.package}",
         description=f"Parameter fitting of the {model.title}. {identifiability_text}",
     )
     fit = p.add_argument_group("fit")
@@ -773,7 +773,7 @@ def report_command(model: PKPDModel, args: Sequence[str] | None = None) -> Path:
     return report_cli(
         dict(model.load_fit_definitions()),
         args=with_output_dir(sys.argv[1:] if args is None else args, model.report_dir),
-        prog=f"report_{model.name}",
+        prog=f"run_report {model.package}",
     )
 
 
@@ -796,5 +796,186 @@ def identifiability_command(
         args=with_output_dir(
             sys.argv[1:] if args is None else args, model.identifiability_dir
         ),
-        prog=f"identifiability_{model.name}",
+        prog=f"run_identifiability {model.package}",
     )
+
+
+DOTTED_PACKAGE = re.compile(r"^[A-Za-z_]\w*(\.[A-Za-z_]\w*)*$")
+"""The form of a dotted package, e.g. `pkdb_models.models.hctz`."""
+
+
+class ModelNotFoundError(LookupError):
+    """A package which is not found or is no model package."""
+
+
+def resolve_model(package: str) -> PKPDModel:
+    """Get the model object `MODEL` of a model package.
+
+    Args:
+        package: the dotted name of the model package, e.g.
+            `pkdb_models.models.hctz`.
+
+    Returns:
+        The model object of the package.
+
+    Raises:
+        ModelNotFoundError: if the name is no dotted package, the package is not
+            found, it has no `MODEL`, its `MODEL` is no `PKPDModel` or belongs
+            to another package. Any other error of the import of the package,
+            e.g. a missing module which the package imports, is raised as it is,
+            with its traceback.
+    """
+    if not DOTTED_PACKAGE.match(package):
+        raise ModelNotFoundError(f"'{package}' is no dotted package.")
+    try:
+        module = importlib.import_module(package)
+    except ModuleNotFoundError as err:
+        # only the package itself or one of its parents is not found
+        if err.name is not None and (
+            package == err.name or package.startswith(f"{err.name}.")
+        ):
+            raise ModelNotFoundError(
+                f"The model package '{package}' is not found."
+            ) from err
+        raise
+    model = getattr(module, "MODEL", None)
+    if model is None:
+        raise ModelNotFoundError(f"The package '{package}' has no model object MODEL.")
+    if not isinstance(model, PKPDModel):
+        raise ModelNotFoundError(
+            f"MODEL of the package '{package}' is no PKPDModel but a "
+            f"{type(model).__name__}."
+        )
+    if model.package != package:
+        raise ModelNotFoundError(
+            f"MODEL of the package '{package}' belongs to the package "
+            f"'{model.package}'."
+        )
+    return model
+
+
+@dataclasses.dataclass(frozen=True)
+class Command:
+    """A command of the models, a console script of pkpdsim.
+
+    Attributes:
+        name: the name of the console script.
+        description: what the command does, the description of its help.
+        function: the command as a function of the model and the arguments
+            after the model package.
+        fits: the command needs the fit definitions of the model.
+    """
+
+    name: str
+    description: str
+    function: Callable[[PKPDModel, Sequence[str]], object]
+    fits: bool
+
+
+COMMANDS: dict[str, Command] = {
+    command.name: command
+    for command in (
+        Command(
+            name="run_simulation",
+            description="Run the model factory, the simulation experiments and "
+            "the extra actions of a model.",
+            function=run_command,
+            fits=False,
+        ),
+        Command(
+            name="run_fit",
+            description="Fit the parameters of a model and analyse their "
+            "identifiability, or adopt a finished fit.",
+            function=fit_command,
+            fits=True,
+        ),
+        Command(
+            name="run_report",
+            description="Report stored parameters of a model.",
+            function=report_command,
+            fits=True,
+        ),
+        Command(
+            name="run_identifiability",
+            description="Analyse the identifiability of stored parameters of a model.",
+            function=identifiability_command,
+            fits=True,
+        ),
+    )
+}
+"""The commands by the names of their console scripts."""
+
+
+def command_parser(command: Command) -> argparse.ArgumentParser:
+    """Get the parser of a command before its model is known.
+
+    The options of a command depend on the model, so this parser only prints
+    the general usage and the errors of the model package.
+    """
+    p = argparse.ArgumentParser(
+        prog=command.name,
+        usage=f"{command.name} PACKAGE [options]",
+        description=command.description,
+        epilog=f"`{command.name} PACKAGE --help` shows the options of the model.",
+    )
+    p.add_argument(
+        "package",
+        metavar="PACKAGE",
+        help="the dotted name of the model package, which defines the model "
+        "object MODEL, e.g. pkdb_models.models.hctz",
+    )
+    return p
+
+
+def main(name: str, argv: Sequence[str] | None = None) -> None:
+    """Run a command with the model package as the first argument.
+
+    The model is resolved first, since the options of the command depend on it;
+    the arguments after the package are the arguments of the command.
+
+    Args:
+        name: the name of the command, a key of `COMMANDS`.
+        argv: the command line arguments, `sys.argv[1:]` by default.
+    """
+    command = COMMANDS[name]
+    args = list(sys.argv[1:] if argv is None else argv)
+    p = command_parser(command)
+    if not args:
+        p.error("the model package is required")
+    if args[0] in ("-h", "--help"):
+        p.print_help()
+        p.exit()
+    if args[0].startswith("-"):
+        p.error(f"the model package is the first argument, not '{args[0]}'")
+    package, *rest = args
+    try:
+        model = resolve_model(package)
+    except ModelNotFoundError as err:
+        p.error(str(err))
+    if command.fits and model.fit_definitions is None:
+        p.error(f"the model '{model.name}' ({package}) has no fit definitions")
+    command.function(model, rest)
+
+
+def run_simulation_main(argv: Sequence[str] | None = None) -> None:
+    """The console script `run_simulation`, see `run_command`."""
+    main("run_simulation", argv)
+
+
+def run_fit_main(argv: Sequence[str] | None = None) -> None:
+    """The console script `run_fit`, see `fit_command`.
+
+    Returns nothing: a console script exits with the return value of the
+    function it calls, and 1 for anything which is not `None` or an int.
+    """
+    main("run_fit", argv)
+
+
+def run_report_main(argv: Sequence[str] | None = None) -> None:
+    """The console script `run_report`, see `report_command`."""
+    main("run_report", argv)
+
+
+def run_identifiability_main(argv: Sequence[str] | None = None) -> None:
+    """The console script `run_identifiability`, see `identifiability_command`."""
+    main("run_identifiability", argv)

@@ -68,6 +68,11 @@ dev = [
 
 [project.scripts]
 pkpdsim-verify = "pkpdsim.verify:main"
+# the commands of the models, which take the model package first
+run_simulation = "pkpdsim.cli:run_simulation_main"
+run_fit = "pkpdsim.cli:run_fit_main"
+run_report = "pkpdsim.cli:run_report_main"
+run_identifiability = "pkpdsim.cli:run_identifiability_main"
 
 [project.urls]
 Homepage = "https://matthiaskoenig.github.io/pkpdsim"

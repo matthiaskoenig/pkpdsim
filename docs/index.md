@@ -16,7 +16,7 @@ The models of [pkdb_models](https://github.com/matthiaskoenig/pkdb_models) descr
 - **[Models and their commands](models.md)** - the model object and the commands of a model (`run`, `fit`, `report`, `identifiability`), the tests of a model as functions and the verification of a change, also across versions of sbmlsim (`pkpdsim-verify`).
 - **[Experiments and their metadata](experiments.md)** - the base class of the simulation experiments of a model (the SIds of its keys, the units of its data), the presets of the impaired organ function, the shared vocabulary of the metadata of a fit mapping and the filters which select the mappings of a fit by it.
 - **[Scans and sensitivity analyses](scans.md)** - the timecourse of a point of a scan as sbmlsim 0.8 gave it and the table of the parameters, the distributions and the runner of the sensitivity analyses of a script.
-- **[Uncertainty of the fitted parameters](uncertainty.md)** - adopted fits whose values the factory takes, their confidence intervals as distrib uncertainties of the SBML parameters, and the run of the experiments over draws of the fitted parameters with bands (`run_<model> --uncertainty`).
+- **[Uncertainty of the fitted parameters](uncertainty.md)** - adopted fits whose values the factory takes, their confidence intervals as distrib uncertainties of the SBML parameters, and the run of the experiments over draws of the fitted parameters with bands (`run_simulation <package> --uncertainty`).
 
 ## Quickstart
 

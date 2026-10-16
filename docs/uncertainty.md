@@ -4,11 +4,11 @@ The fitted parameters of a model are known only within their confidence interval
 
 ## Adopting a fit
 
-A fit writes its results into the results of the model (`results/fit/<fit id>`), which are not tracked. `fit_<model> --adopt <fit id>` copies the record of a finished fit into the folder of the adopted fits of the model, `PKPDModel.fits_dir` (`fits` next to the output directory of the factory, e.g. `models/results/fits`), which is tracked with the model:
+A fit writes its results into the results of the model (`results/fit/<fit id>`), which are not tracked. `run_fit <package> --adopt <fit id>` copies the record of a finished fit into the folder of the adopted fits of the model, `PKPDModel.fits_dir` (`fits` next to the output directory of the factory, e.g. `models/results/fits`), which is tracked with the model:
 
 ```bash
-fit_hctz --subset PK --runs 40 --cores 10 --identifiability
-fit_hctz --adopt PK_20261015_235422__7a62a
+run_fit pkdb_models.models.hctz --subset PK --runs 40 --cores 10 --identifiability
+run_fit pkdb_models.models.hctz --adopt PK_20261015_235422__7a62a
 ```
 
 The record is the part of the results which the model needs (`RECORD_FILES`): the best parameter sets (`parameters.json`), the problem with its settings and bounds (`optimization_result.json`), the profile likelihood (`identifiability.json`, `identifiability.tsv`), the Fisher information (`fisher.json`, `fisher.tsv`), the metrics and the text report, about 300 kB. A fit without a profile likelihood and without a Fisher information cannot be adopted (run it with `--identifiability`); an adopted fit is only replaced with `--force`. The model object lists its adopted fits:
@@ -63,12 +63,12 @@ The notes name the fit, the record, the cost and the number of data points, the 
 
 ## Running over the draws
 
-`run_<model> --uncertainty` runs the experiments over draws of the fitted parameters of the model into the folder `simulation_uncertainty` of the results; without the option the experiments run once into `simulation`, as before:
+`run_simulation <package> --uncertainty` runs the experiments over draws of the fitted parameters of the model into the folder `simulation_uncertainty` of the results; without the option the experiments run once into `simulation`, as before:
 
 ```bash
-run_hctz --action simulate --experiments all                 # fast
-run_hctz --action simulate --experiments all --uncertainty   # with bands
-run_hctz --action simulate --experiments all -u --draws 200 --seed 1 --quantiles 0.025 0.975
+run_simulation pkdb_models.models.hctz --action simulate --experiments all                 # fast
+run_simulation pkdb_models.models.hctz --action simulate --experiments all --uncertainty   # with bands
+run_simulation pkdb_models.models.hctz --action simulate --experiments all -u --draws 200 --seed 1 --quantiles 0.025 0.975
 ```
 
 The run reads the distribution of every parameter of `model_path` (`parameter_distributions`) and draws them once in a Latin hypercube into the dimension `uncertainty` (`uncertainty_dimension`, `UncertaintySettings`: 100 draws, seed 1234, the quantiles 0.05 and 0.95). Every experiment gets the draws as its setting `uncertainty` (`UncertaintyRun`), and `PKPDSimulationExperiment.initialize` applies them (`apply_uncertainty`):
@@ -94,4 +94,4 @@ else:
     ax.plot(time, median, color=color)
 ```
 
-An extra action of `run_<model>` gets the settings of `--uncertainty` as `options.uncertainty`, and `PKPDModel.run_experiments(..., uncertainty=UncertaintySettings())` runs experiments over the draws from a script.
+An extra action of `run_simulation` gets the settings of `--uncertainty` as `options.uncertainty`, and `PKPDModel.run_experiments(..., uncertainty=UncertaintySettings())` runs experiments over the draws from a script.

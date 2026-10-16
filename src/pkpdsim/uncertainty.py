@@ -2,7 +2,7 @@
 
 A fit of a model becomes part of the model in three steps:
 
-1. **Adopt** the fit: `fit_<model> --adopt <fit id>` copies the record of a
+1. **Adopt** the fit: `run_fit <package> --adopt <fit id>` copies the record of a
    finished fit (its parameters, the profile likelihood and the Fisher
    information) from the results of the fits into the tracked folder of the
    fits next to the model (`PKPDModel.fits_dir`), see `adopt_fit`.
@@ -22,7 +22,7 @@ A fit of a model becomes part of the model in three steps:
    distribution the draws of the parameter come from and the provenance in its
    notes, see `ParameterUncertainty`. `check_fit_parameters` checks that the
    model has them.
-3. **Draw** it: `run_<model> --uncertainty` reads the distributions of the
+3. **Draw** it: `run_simulation <package> --uncertainty` reads the distributions of the
    parameters of the model (`parameter_distributions`), draws them into the
    dimension `uncertainty` (`uncertainty_dimension`) and runs every simulation
    over the draws; every curve of a simulation becomes the band of a quantile
@@ -572,7 +572,7 @@ class FitRecords:
             if not path.is_dir():
                 raise FileNotFoundError(
                     f"The fit '{fit_id}' is not adopted: {path} does not exist, "
-                    f"adopt it with `fit_<model> --adopt {fit_id}`."
+                    f"adopt it with `run_fit <package> --adopt {fit_id}`."
                 )
             self.records[fit_id] = FitRecord.load(path)
         self.parameters: dict[str, ParameterUncertainty] = {}
