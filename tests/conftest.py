@@ -62,13 +62,16 @@ def no_pyplot(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture(scope="module")
 def toy_fit(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """Fit the toy model with its profile likelihood and Fisher information."""
+    """Fit the toy model with its profile likelihood and Fisher information.
+
+    Two runs, so that the report of the fit has the waterfall of the runs.
+    """
     output = tmp_path_factory.mktemp("fit")
     runs = fit_command(
         MODEL,
         [
             "--runs",
-            "1",
+            "2",
             "--identifiability",
             "--max-points",
             "5",

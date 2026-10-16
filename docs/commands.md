@@ -191,14 +191,24 @@ information of the first parameter set of a file. `--subset` is the fit
 problem, `--output_dir` the folder of the report.
 
 `run_report --adopted` recreates the report of an adopted fit from its record
-in `MODEL.fits_dir`, with all of its figures and the identifiability section of
-the stored profile likelihood and Fisher information
-(`pkpdsim.fit_report.report_adopted_fit`); the fit problem is the one of the id
-of the fit, the report is written into `<output_dir>/<fit id>`:
+in `MODEL.fits_dir` (`pkpdsim.fit_report.report_adopted_fit`): the parameters of
+`parameters.json`; the settings, the runs with their traces and the waterfall
+of `optimization_result.json`; the identifiability section of the stored
+profile likelihood and Fisher information; the figures of the fit mappings,
+also when the fit was run with `--no-mapping-figures`. The fit problem is the
+one of the id of the fit, the report is written into `<output_dir>/<fit id>`:
 
 ```bash
 run_report pkdb_models.models.hctz --adopted PK_<fit id> -o reports
 ```
+
+The data and the predictions are those of the current fit definition and model.
+Two limitations:
+
+- A fit run with `--experiments` is reported over all experiments of its
+  problem, since the record does not store the selection.
+- Fits of the strategy `SINGLE` (one problem per experiment, ids
+  `<experiment>_<problem>_<time>__<hash>`) are not supported.
 
 ## The folders of the results
 

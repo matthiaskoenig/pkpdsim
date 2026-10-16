@@ -1,6 +1,7 @@
 """Tests of the report of an adopted fit, recreated from its record."""
 
 import dataclasses
+import re
 import shutil
 from pathlib import Path
 
@@ -24,20 +25,48 @@ def test_fit_subset(fit_id: str, subset: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "fit_id", ["nonsense", "PK_20261016_185018", "_20261016_185018__3efe3"]
+    "fit_id",
+    [
+        "nonsense",
+        "PK_20261016_185018",
+        "_20261016_185018__3efe3",
+        "../PK_20261016_185018__3efe3",
+        "a/PK_20261016_185018__3efe3",
+        "a\\PK_20261016_185018__3efe3",
+        "..PK_20261016_185018__3efe3",
+    ],
 )
 def test_fit_subset_of_no_fit_id_raises(fit_id: str) -> None:
-    with pytest.raises(ValueError, match=fit_id):
+    with pytest.raises(ValueError, match="is no id of a fit"):
         fit_subset(fit_id)
+
+
+def headings(report: Path) -> set[str]:
+    """Get the headings of the HTML report."""
+    html = (report / "index.html").read_text(encoding="utf-8")
+    return set(re.findall(r"<h[1-6][^>]*>([^<]+)</h[1-6]>", html))
+
+
+def plots(report: Path) -> set[str]:
+    """Get the names of the figures of a report."""
+    return {path.name for path in (report / "plots").iterdir()}
 
 
 def test_report_adopted_fit(fits_dir: Path, toy_fit: Path, tmp_path: Path) -> None:
     model = dataclasses.replace(MODEL, fits_path=fits_dir)
     report = report_adopted_fit(model, toy_fit.name, tmp_path)
     assert report == tmp_path / toy_fit.name
-    # the figures of the fit mappings are drawn again, also the profiles
-    plots = {path.name for path in (report / "plots").glob("*.svg")}
-    assert {"fit_ToyDecay_fm_decay_A.svg", "profile_k.svg"} <= plots
+    # every figure and section of the report of the fit itself, which was made
+    # without the figures of the fit mappings
+    assert plots(toy_fit) <= plots(report)
+    assert headings(toy_fit) <= headings(report)
+    # the runs of the optimization, the figures of the fit mappings, the profiles
+    assert {
+        "traces.svg",
+        "waterfall.svg",
+        "fit_ToyDecay_fm_decay_A.svg",
+        "profile_k.svg",
+    } <= plots(report)
     # the identifiability section with the profiles and the Fisher information
     html = (report / "index.html").read_text(encoding="utf-8")
     assert 'id="identifiability"' in html

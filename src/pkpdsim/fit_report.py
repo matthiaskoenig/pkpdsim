@@ -2,10 +2,11 @@
 
 The record of an adopted fit (`pkpdsim.uncertainty.adopt_fit`) holds only what
 is needed to recreate the report of the fit: the parameters
-(`parameters.json`), the profile likelihood (`identifiability.json`) and the
-Fisher information (`fisher.json`). `report_adopted_fit` builds the fit problem
-of the record again from the fit definitions of the model and writes the full
-report with its figures, its tables and its identifiability section
+(`parameters.json`), the optimization with its runs and their traces
+(`optimization_result.json`), the profile likelihood (`identifiability.json`)
+and the Fisher information (`fisher.json`). `report_adopted_fit` builds the fit
+problem of the record again from the fit definitions of the model and writes
+the full report with its figures, its tables and its identifiability section
 (`run_report <package> --adopted <fit id>`).
 """
 
@@ -18,8 +19,9 @@ from typing import TYPE_CHECKING
 from sbmlsim.fit.identifiability import IdentifiabilityResult
 from sbmlsim.fit.parameters import ParameterSets
 from sbmlsim.fit.report import FitReport
+from sbmlsim.fit.result import OptimizationResult
 
-from pkpdsim.uncertainty import read_fisher
+from pkpdsim.uncertainty import REQUIRED_FILES, read_fisher
 
 if TYPE_CHECKING:
     from pkpdsim.model import PKPDModel
@@ -39,10 +41,11 @@ def fit_subset(fit_id: str) -> str:
         The name of the fit problem, the `--subset` of the fit, e.g. `PK`.
 
     Raises:
-        ValueError: if the text is no id of a fit.
+        ValueError: if the text is no id of a fit, also if it holds a path
+            separator or `..`, so that the id is safe as the name of a directory.
     """
     match = FIT_ID.match(fit_id)
-    if match is None:
+    if match is None or any(part in fit_id for part in ("/", "\\", "..")):
         raise ValueError(
             f"'{fit_id}' is no id of a fit, i.e. <problem>_<YYYYMMDD>_<HHMMSS>__<hash>."
         )
@@ -63,7 +66,7 @@ def fit_record_dir(model: PKPDModel, fit_id: str) -> Path:
         ValueError: if the text is no id of a fit or its fit problem is no fit
             definition of the model.
         FileNotFoundError: if the model has no record of the fit or the record
-            has no `parameters.json`.
+            lacks `parameters.json` or `optimization_result.json`.
     """
     subset = fit_subset(fit_id)
     definitions = model.load_fit_definitions()
@@ -78,8 +81,9 @@ def fit_record_dir(model: PKPDModel, fit_id: str) -> Path:
             f"The model '{model.name}' has no record of the fit '{fit_id}' in "
             f"{model.fits_dir}."
         )
-    if not (directory / "parameters.json").exists():
-        raise FileNotFoundError(f"The record '{directory}' has no parameters.json.")
+    missing = [name for name in REQUIRED_FILES if not (directory / name).exists()]
+    if missing:
+        raise FileNotFoundError(f"The record '{directory}' has no {missing}.")
     return directory
 
 
@@ -87,9 +91,11 @@ def report_adopted_fit(model: PKPDModel, fit_id: str, output_dir: Path) -> Path:
     """Create the report of an adopted fit from its record.
 
     The fit problem is the fit definition of the model named by the id of the
-    fit; the parameter sets come from `parameters.json`, the identifiability
-    section from `identifiability.json` and `fisher.json` of the record, each
-    when present. The report is written with all of its figures.
+    fit; the parameter sets come from `parameters.json`, the settings, the
+    runs, their traces and the waterfall from `optimization_result.json`, the
+    identifiability section from `identifiability.json` and `fisher.json` of
+    the record, each when present. The report is written with all of its
+    figures, those of the fit mappings included.
 
     Args:
         model: the model.
@@ -104,16 +110,23 @@ def report_adopted_fit(model: PKPDModel, fit_id: str, output_dir: Path) -> Path:
         ValueError: if the text is no id of a fit or its fit problem is no fit
             definition of the model.
         FileNotFoundError: if the model has no record of the fit or the record
-            has no `parameters.json`.
+            lacks `parameters.json` or `optimization_result.json`.
     """
     directory = fit_record_dir(model, fit_id)
     definition = model.load_fit_definitions()[fit_subset(fit_id)]
     identifiability_path = directory / "identifiability.json"
     fisher_path = directory / "fisher.json"
+    opt_result = OptimizationResult.from_json(directory / "optimization_result.json")
     report = FitReport(
         problem=definition.problem(opid=fit_id),
-        settings=definition.settings,
+        # the settings the fit ran with, the definition may have changed since
+        settings=(
+            opt_result.settings_stored
+            if opt_result.settings is not None
+            else definition.settings
+        ),
         parameter_sets=ParameterSets.from_json(directory / "parameters.json"),
+        opt_result=opt_result,
         identifiability=(
             IdentifiabilityResult.from_json(identifiability_path)
             if identifiability_path.exists()
