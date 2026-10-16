@@ -15,10 +15,16 @@ for k in range(res.ds.sizes[dim]):
 
 `state_after_changes(res)` gives the whole result in that form, for the figures
 which read the arrays of a result instead of one point.
+
+A run over the draws of the fitted parameters adds the dimension of the draws to
+every result (`pkpdsim.uncertainty`); `scan_dimensions(res, across)` gives the
+dimensions of the scan without it, and `point_band(res, key, across, quantiles,
+**point)` the quantiles and the median of the draws at a point of the scan.
 """
 
 from __future__ import annotations
 
+import warnings
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -46,6 +52,19 @@ def single_dimension(res: ScanResult) -> str:
             f"A scan of one dimension is required, not of {list(res.dims)}."
         )
     return res.dims[0]
+
+
+def scan_dimensions(res: ScanResult, across: str | None = None) -> list[str]:
+    """Get the dimensions of a scan without the dimension of the draws.
+
+    Args:
+        res: the result of the scan.
+        across: the dimension of the draws, `None` for a result without.
+
+    Returns:
+        The ids of the dimensions, in the order of the result.
+    """
+    return [d for d in res.dims if d != across]
 
 
 def state_after_changes(res: ScanResult) -> ScanResult:
@@ -110,3 +129,62 @@ def point_timecourse(
     )
     finite = np.isfinite(kept_time[0])
     return kept_time[0][finite], kept_values[0][finite]
+
+
+def point_band(
+    res: ScanResult,
+    key: str,
+    /,
+    across: str,
+    quantiles: tuple[float, float] = (0.05, 0.95),
+    **point: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Get the band of the draws of a variable at one point of a scan.
+
+    The timecourse of every draw is the one of `point_timecourse`; the draws
+    share their time points (a simulation with `steps` or `times`), a draw
+    whose simulation failed (`NaN`) is ignored.
+
+    Args:
+        res: the result of the scan, positional only.
+        key: the variable, a timecourse, positional only.
+        across: the dimension of the draws.
+        quantiles: the lower and the upper quantile.
+        **point: the position of the point along every other dimension.
+
+    Returns:
+        The time points, the lower quantile, the median and the upper quantile.
+
+    Raises:
+        ValueError: if the result has no dimension `across`, a dimension has
+            no position, or the draws have different time points.
+    """
+    if across not in res.dims:
+        raise ValueError(
+            f"The result has no dimension '{across}' of draws: {list(res.dims)}."
+        )
+    if across in point:
+        raise ValueError(
+            f"The dimension '{across}' of the draws is reduced, not a point."
+        )
+    times: np.ndarray | None = None
+    rows: list[np.ndarray] = []
+    for k in range(res.ds.sizes[across]):
+        time, values = point_timecourse(res, key, **point, **{across: k})
+        if times is None:
+            times = time
+        elif time.shape != times.shape or not np.allclose(time, times):
+            raise ValueError(
+                f"The draws of '{key}' have different time points; run the scan "
+                f"on a common grid (a simulation with steps or times)."
+            )
+        rows.append(values)
+    if times is None:
+        raise ValueError(f"The result has no draws along '{across}'.")
+    stacked = np.vstack(rows)
+    low, high = quantiles
+    # a time at which every draw failed has no quantile, it is NaN
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        lower, median, upper = np.nanquantile(stacked, [low, 0.5, high], axis=0)
+    return times, lower, median, upper

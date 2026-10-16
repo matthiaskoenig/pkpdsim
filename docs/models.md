@@ -59,6 +59,7 @@ them; a module which starts with a dot is relative to `package`.
 - `SimulatorSettings`: the absolute tolerance (one value, or an `AbsoluteTolerance` of sbmlsim per kind and state), the relative tolerance and the processes of a scan, `n_workers`. A run creates an sbmlsim `Simulator` from them.
 - `FigureSettings`: sbmlsim's `FigureSettings` (the resolution, the sizes of the panels, the fonts and the legends, with the defaults of sbmlsim) and the two fields of a model, the `formats` of the figures (`svg`, `png`, `html`) and the resolution of the static images (`savefig_dpi`). A run hands the settings of sbmlsim to every figure; an experiment (`figure_settings`) and a figure (`Figure(settings=...)`) override them. Nothing is applied to the process, so nothing has to be restored after a run.
 - `reduced_selections`, `save_results`, `fit_identifiability`: what a run simulates, whether it stores its results, whether a fit analyses the identifiability of its parameters by default.
+- `fits`, `fits_path`: the ids of the adopted fits, whose records in `fits_dir` (`fits` next to the output directory of the factory by default) give the fitted values and their uncertainty to the factory (`fit_records()`), see [Uncertainty of the fitted parameters](uncertainty.md).
 
 The simulations run serially by default (`n_workers=1`): a pool needs the guard `if __name__ == "__main__":` in the script which runs the model (the processes of the pool import it again), and the memory of a run grows with every process. `n_workers=4` runs a pool of four processes for a scan, `n_workers=None` leaves the choice to sbmlsim (a pool of every CPU for a scan of 256 points or more, serially below):
 
@@ -98,12 +99,16 @@ run_hctz --action list_experiments              # the groups and experiments
 run_hctz --action simulate --experiments "misc,Anderson1961" --open
 run_hctz --action all --results-dir /path/to/results --formats svg,png
 run_hctz --action simulate --experiments all --workers 4
+run_hctz --action simulate --experiments all --uncertainty --draws 100
 fit_hctz --subset=PK --runs=10 --cores=10 --max-points=30
+fit_hctz --adopt PK_<fit id>                    # the record into the adopted fits
 report_hctz --subset=PK results/fit/PK_<fit id>/parameters.json
 identifiability_hctz --subset=PK results/fit/PK_<fit id>/parameters.json
 ```
 
 `--workers` sets the processes of the scans for this run: a number, `auto` (sbmlsim's choice, a pool of every CPU for a scan of 256 points or more) or `model` (the `n_workers` of the model object, the default). An extra action gets the settings of the simulator of the run as `options.simulator` (the `SimulatorSettings` of the model with the processes of `--workers`); an action which simulates passes them on, `model.run_experiments(..., simulator=options.simulator)` or `pkpdsim.run.create_simulator(options.simulator)` for a runner of its own, otherwise `--workers` does not reach it. An option of the model named `--simulator` is refused (`run_<model>` raises a `ValueError` naming it before the action runs), because it would be replaced by `options.simulator`.
+
+`--uncertainty` runs the experiments over draws of the fitted parameters of the model (`--draws`, `--seed`, `--quantiles`) and draws the curves of the simulations as bands, into the folder `simulation_uncertainty` of the results; an extra action gets the settings as `options.uncertainty`. `fit_<model> --adopt <fit id>` copies the record of a finished fit into the adopted fits of the model instead of fitting. See [Uncertainty of the fitted parameters](uncertainty.md).
 
 A run which fails is not the end of the command. An experiment which cannot be initialized or whose figure fails is reported, the other experiments run, the report and the figures are written, and `run_<model>` then runs its remaining actions, prints every failure and exits with 1. `MODEL.run_experiments` raises `sbmlsim.experiment.ExperimentRunError` after the report is written, so a script does not carry on after a failed run.
 

@@ -10,6 +10,12 @@ Every experiment runs, also after another one failed: sbmlsim logs a failure
 with its traceback and records it. Once the report (and the collected figures)
 are written, a run with a failure raises `ExperimentRunError`, whose
 `failures` name every failed experiment and figure.
+
+With `uncertainty` (`pkpdsim.uncertainty.UncertaintySettings`) the experiments
+run over draws of the fitted parameters of the model: the parameters are drawn
+once per run, every experiment gets the draws as its setting `uncertainty` and
+runs every simulation over them, see `pkpdsim.uncertainty.apply_uncertainty`.
+A relative output directory is then below `model.uncertainty_dir`.
 """
 
 from __future__ import annotations
@@ -30,11 +36,13 @@ from sbmlsim.report.experiment_report import ExperimentReport, ReportResults
 from sbmlsim.simulator import Simulator
 
 from pkpdsim.model import normalize_formats
+from pkpdsim.uncertainty import UncertaintyRun
 
 if TYPE_CHECKING:
     from sbmlsim.experiment import ExperimentResult
 
     from pkpdsim.model import PKPDModel, SimulatorSettings
+    from pkpdsim.uncertainty import UncertaintySettings
 
 #: the formats of the figures which are copied into `_figures`
 COLLECTED_FORMATS: tuple[str, ...] = ("png", "svg")
@@ -66,6 +74,7 @@ def _run(
     show_report: bool,
     figure_formats: Sequence[str] | None,
     simulator: SimulatorSettings | None,
+    uncertainty: UncertaintySettings | None,
 ) -> tuple[Path, list[ExperimentResult]]:
     """Run experiments and write their report, see `run_experiments`.
 
@@ -74,7 +83,20 @@ def _run(
     """
     formats = normalize_formats(figure_formats) if figure_formats is not None else ()
     log.enable_rich_logging()
-    output_path = model.simulation_dir / output_dir
+    settings: dict[str, Any] = {}
+    if uncertainty is None:
+        output_path = model.simulation_dir / output_dir
+    else:
+        output_path = model.uncertainty_dir / output_dir
+        run = UncertaintyRun.create(model, uncertainty)
+        display.key_values(
+            {
+                "uncertainty": f"{uncertainty.draws} draws of "
+                f"{len(run.dimension.values)} parameters, seed {uncertainty.seed}, "
+                f"bands {uncertainty.quantiles[0]:g} to {uncertainty.quantiles[1]:g}"
+            }
+        )
+        settings["uncertainty"] = run
     classes: list[type[SimulationExperiment]]
     if isinstance(experiment_classes, Sequence):
         classes = list(experiment_classes)
@@ -87,6 +109,7 @@ def _run(
         simulator=create_simulator(simulator or model.simulator),
         # an experiment which cannot be initialized is logged and reported
         on_error="log",
+        **settings,
     )
     # the resolution of the static images holds while the figures are drawn
     rc: dict[Any, Any] = model.figures.rc_params()
@@ -134,6 +157,7 @@ def run_experiments(
     show_report: bool = False,
     figure_formats: Sequence[str] | None = None,
     simulator: SimulatorSettings | None = None,
+    uncertainty: UncertaintySettings | None = None,
 ) -> Path:
     """Run simulation experiments of a model and create their report.
 
@@ -153,6 +177,8 @@ def run_experiments(
             as well.
         simulator: the settings of the simulator, those of the model by
             default, e.g. with more processes.
+        uncertainty: run the experiments over draws of the fitted parameters
+            of the model, see the module; `None` runs them once.
 
     Returns:
         The directory the results were written to.
@@ -171,6 +197,7 @@ def run_experiments(
         show_report=show_report,
         figure_formats=figure_formats,
         simulator=simulator,
+        uncertainty=uncertainty,
     )
     _raise_failures(results)
     return output_path
@@ -184,6 +211,7 @@ def run_simulation_experiments(
     show_report: bool = False,
     figure_formats: Sequence[str] | None = None,
     simulator: SimulatorSettings | None = None,
+    uncertainty: UncertaintySettings | None = None,
 ) -> Path:
     """Run simulation experiments and collect their figures.
 
@@ -198,6 +226,8 @@ def run_simulation_experiments(
         figure_formats: the formats of the figures, those of the model by
             default.
         simulator: the settings of the simulator, those of the model by default.
+        uncertainty: run the experiments over draws of the fitted parameters,
+            see `run_experiments`.
 
     Returns:
         The directory of the collected figures.
@@ -214,6 +244,7 @@ def run_simulation_experiments(
         show_report=show_report,
         figure_formats=figure_formats,
         simulator=simulator,
+        uncertainty=uncertainty,
     )
     figures_dir = output_path / "_figures"
     figures_dir.mkdir(parents=True, exist_ok=True)

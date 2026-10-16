@@ -44,6 +44,8 @@ if TYPE_CHECKING:
     from sbmlsim.fit.cli import FitDefinition
     from sbmlsim.model.tolerances import AbsoluteTolerance
 
+    from pkpdsim.uncertainty import FitRecords, UncertaintySettings
+
 #: the actions of the `run` command of a model, see `pkpdsim.cli`
 RUN_ACTIONS: tuple[str, ...] = ("simulate", "list_experiments", "factory", "all")
 
@@ -311,6 +313,10 @@ class PKPDModel:
             extra actions to the parser of the `run` command.
         checks: the known exceptions of the tests of the model, see
             `pkpdsim.testing`.
+        fits: the ids of the adopted fits, whose records in `fits_dir` give the
+            fitted values and their uncertainty, see `pkpdsim.uncertainty`.
+        fits_path: the folder of the adopted fits, `fits` next to the output
+            directory of the factory by default.
     """
 
     name: str
@@ -333,10 +339,18 @@ class PKPDModel:
     extra_actions: Sequence[ExtraAction] = ()
     extra_arguments: str | None = None
     checks: CheckSettings = field(default_factory=CheckSettings)
+    fits: Sequence[str] = ()
+    fits_path: Path | None = None
 
     def __post_init__(self) -> None:
         """Normalize the sequences, check the references and the extra actions."""
         object.__setattr__(self, "data_paths", tuple(self.data_paths))
+        object.__setattr__(self, "fits", tuple(self.fits))
+        repeated_fits = sorted({f for f in self.fits if self.fits.count(f) > 1})
+        if repeated_fits:
+            raise ValueError(
+                f"The adopted fits of '{self.name}' repeat a fit: {repeated_fits}."
+            )
         object.__setattr__(self, "extra_actions", tuple(self.extra_actions))
         references = [
             self.factory,
@@ -366,6 +380,11 @@ class PKPDModel:
         return self.results_dir / "simulation"
 
     @property
+    def uncertainty_dir(self) -> Path:
+        """The directory of the results of the experiments over the draws of the fits."""
+        return self.results_dir / "simulation_uncertainty"
+
+    @property
     def fit_dir(self) -> Path:
         """The directory of the results of the fits."""
         return self.results_dir / "fit"
@@ -384,6 +403,17 @@ class PKPDModel:
     def factory_dir(self) -> Path:
         """The output directory of the factory."""
         return self.factory_path or self.model_path.parent
+
+    @property
+    def fits_dir(self) -> Path:
+        """The folder of the adopted fits, next to the output of the factory."""
+        return self.fits_path or self.factory_dir.parent / "fits"
+
+    def fit_records(self) -> FitRecords:
+        """Get the records of the adopted fits, see `pkpdsim.uncertainty.FitRecords`."""
+        from pkpdsim.uncertainty import FitRecords
+
+        return FitRecords(self.fits_dir, self.fits)
 
     def load_factory(self) -> Callable[[Path], object]:
         """Get the function which creates the models."""
@@ -426,6 +456,7 @@ class PKPDModel:
         show_report: bool = False,
         figure_formats: Sequence[str] | None = None,
         simulator: SimulatorSettings | None = None,
+        uncertainty: UncertaintySettings | None = None,
     ) -> Path:
         """Run simulation experiments and create their report.
 
@@ -443,6 +474,7 @@ class PKPDModel:
             show_report=show_report,
             figure_formats=figure_formats,
             simulator=simulator,
+            uncertainty=uncertainty,
         )
 
     def run_simulation_experiments(
@@ -453,6 +485,7 @@ class PKPDModel:
         show_report: bool = False,
         figure_formats: Sequence[str] | None = None,
         simulator: SimulatorSettings | None = None,
+        uncertainty: UncertaintySettings | None = None,
     ) -> Path:
         """Run simulation experiments and collect their figures.
 
@@ -467,6 +500,7 @@ class PKPDModel:
             show_report=show_report,
             figure_formats=figure_formats,
             simulator=simulator,
+            uncertainty=uncertainty,
         )
 
     def run_main(self, args: Sequence[str] | None = None) -> None:

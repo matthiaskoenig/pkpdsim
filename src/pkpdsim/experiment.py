@@ -27,6 +27,15 @@ of a text, e.g. of a label of the data, and the method `to_sid` of the base
 checks that no two texts of an experiment give the same SId. A unit which the
 data use and sbmlsim does not define (an international unit is specific to a
 substance) is defined under a name of the model and the substance, `data_units`.
+
+A run over the draws of the fitted parameters (`run_<model> --uncertainty`)
+gives every experiment the setting `uncertainty`, a
+`pkpdsim.uncertainty.UncertaintyRun`: `initialize` runs every simulation over the
+draws and turns the curves of the simulations into bands
+(`pkpdsim.uncertainty.apply_uncertainty`), so an experiment needs no code of its
+own for it. A figure which an experiment draws itself (`figures_mpl`) reads
+`uncertainty` and draws the bands of the draws, e.g. with
+`pkpdsim.scan.point_band`.
 """
 
 from __future__ import annotations
@@ -45,6 +54,7 @@ from sbmlsim.model import AbstractModel
 from sbmlsim.task import Task
 
 from pkpdsim import impairment, pk
+from pkpdsim.uncertainty import UncertaintyRun, apply_uncertainty
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -257,6 +267,10 @@ class PKPDSimulationExperiment(SimulationExperiment):
         The units of `data_units` are defined before the data are read, see
         `SimulationExperiment.initialize`.
 
+        With the setting `uncertainty` every simulation runs over the draws of
+        the fitted parameters and the curves of the simulations become bands,
+        see `pkpdsim.uncertainty.apply_uncertainty`.
+
         Raises:
             ValueError: for a definition of `data_units` which `define_unit`
                 refuses; the runner reports the experiment as failed.
@@ -267,6 +281,32 @@ class PKPDSimulationExperiment(SimulationExperiment):
             err.add_note(f"The experiment '{self.sid}' cannot be initialized.")
             raise
         super().initialize()
+        run = self.uncertainty
+        if run is not None:
+            try:
+                apply_uncertainty(self, run)
+                self._check_figures()
+            except Exception as err:
+                err.add_note(
+                    f"The experiment '{self.sid}' cannot run over the draws of the "
+                    f"fitted parameters."
+                )
+                raise
+
+    @property
+    def uncertainty(self) -> UncertaintyRun | None:
+        """The draws of the fitted parameters of a run over them, `None` otherwise.
+
+        Raises:
+            TypeError: if the setting `uncertainty` is no `UncertaintyRun`.
+        """
+        run = self.settings.get("uncertainty")
+        if run is not None and not isinstance(run, UncertaintyRun):
+            raise TypeError(
+                f"The setting 'uncertainty' of '{self.sid}' is no UncertaintyRun: "
+                f"{run!r}."
+            )
+        return run
 
     def data_unit_names(self) -> Mapping[str, str]:
         """Get the names of the units of the data, defining the units of `data_units` once.
