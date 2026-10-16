@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from pkpdsim.release.manifest import Manifest, matches, prune, write_manifest
-from pkpdsim.release.source import SourceRepo, run
+from pkpdsim.release.source import ReleaseError, SourceRepo, run
 
 GIT_ENV = {
     "GIT_AUTHOR_NAME": "Test",
@@ -125,3 +125,34 @@ def test_prune_keeps_release_notes_and_ignored(
     assert not (root / "src").exists()
     assert root / "docs" / "RELEASE.md" in removed
     assert root / "src" / "pkg" / "run_hctz.py" in removed
+
+
+def test_empty_folder_of_ignored_directory_survives(
+    release: tuple[Path, list[Path]],
+) -> None:
+    root, written = release
+    (root / ".venv" / "include").mkdir()
+    (root / "results" / "empty").mkdir()
+    prune(root, written)
+    assert (root / ".venv" / "include").is_dir()
+    assert (root / "results" / "empty").is_dir()
+
+
+def test_matches_after_prune_of_tracked_files(
+    release: tuple[Path, list[Path]],
+) -> None:
+    root, written = release
+    prune(root, written)
+    write_manifest(root, "0.8.0", SOURCE, written)
+    assert matches(root, "0.8.0", "abc123", "0.8.0")
+    with (root / "README.md").open("a") as f:
+        f.write("x")
+    assert not matches(root, "0.8.0", "abc123", "0.8.0")
+
+
+def test_missing_written_path_is_a_release_error(
+    release: tuple[Path, list[Path]],
+) -> None:
+    root, written = release
+    with pytest.raises(ReleaseError, match=r"nope\.txt"):
+        write_manifest(root, "0.8.0", SOURCE, [*written, Path("nope.txt")])

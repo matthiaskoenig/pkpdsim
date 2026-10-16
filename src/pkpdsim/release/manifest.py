@@ -91,6 +91,8 @@ def _generated(release_path: Path, written: Iterable[Path]) -> set[str]:
     for path in written:
         relative = _relative(release_path, path)
         absolute = release_path / relative
+        if not absolute.exists():
+            raise ReleaseError(f"The stage wrote '{relative}', but it does not exist.")
         if absolute.is_dir():
             for root, _, names in os.walk(absolute):
                 for name in names:
@@ -101,7 +103,8 @@ def _generated(release_path: Path, written: Iterable[Path]) -> set[str]:
 
 
 def _hash(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    with path.open("rb") as f:
+        return hashlib.file_digest(f, "sha256").hexdigest()
 
 
 def _library_versions(release_path: Path) -> dict[str, str]:
@@ -163,7 +166,8 @@ def _status_paths(release_path: Path, runner: Runner) -> set[str]:
     for entry in entries:
         if len(entry) < 4:
             continue
-        paths.add(entry[3:])
+        if "D" not in entry[:2]:  # a deleted file is not an addition
+            paths.add(entry[3:])
         if entry[0] in "RC":  # the source of a rename or copy follows
             paths.add(next(entries, ""))
     return paths
@@ -270,7 +274,9 @@ def prune(
         if relative == Path() or relative.parts[0] == ".git":
             continue
         prefix = relative.as_posix() + "/"
-        if prefix in ignored_dirs or any(i.startswith(prefix) for i in ignored_files):
+        if any(prefix.startswith(d) for d in ignored_dirs) or any(
+            i.startswith(prefix) for i in ignored_files
+        ):
             continue
         if not any(here.iterdir()):
             here.rmdir()
