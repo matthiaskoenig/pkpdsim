@@ -39,6 +39,7 @@ from sbmlsim.experiment import (
 from sbmlsim.fit.cli import FitRun, run_fit
 
 from pkpdsim.model import resolve
+from pkpdsim.uncertainty import check_fit_parameters
 
 if TYPE_CHECKING:
     from pkpdsim.model import PKPDModel
@@ -163,7 +164,8 @@ def check_model(model: PKPDModel) -> None:
     model, or names the paths wrongly, without an error otherwise. The name is
     the last component of the package (or the component ends with `_<name>`),
     `model_path`, the factory directory and `archive_path` lie below `path`,
-    and the data paths exist.
+    the data paths exist, and every parameter of an adopted fit has its value
+    and a distribution in the model (`pkpdsim.uncertainty.check_fit_parameters`).
 
     Raises:
         AssertionError: naming every problem.
@@ -221,6 +223,8 @@ def check_model(model: PKPDModel) -> None:
         definitions = resolved["fit_definitions"]
         if not isinstance(definitions, Mapping) or not definitions:
             problems.append("the fit definitions are not a non-empty mapping")
+    # the values of the adopted fits and their uncertainty are in the model
+    problems += check_fit_parameters(model)
     if problems:
         raise AssertionError("\n".join(problems))
 

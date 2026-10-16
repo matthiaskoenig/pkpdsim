@@ -24,11 +24,23 @@ A single group is written into the directory of the group, any other selection
 into `custom_selection`, both in the `simulation` folder of the results. The
 output ends with the links to the report and to the figures.
 
+`--uncertainty` runs the experiments over draws of the fitted parameters of the
+model and draws the curves of the simulations as bands of the quantiles of the
+draws, into the `simulation_uncertainty` folder of the results (see
+`pkpdsim.uncertainty`):
+
+```bash
+run_hctz --action simulate --experiments all --uncertainty --draws 100
+```
+
 `fit_<model>` fits the parameters of a fit problem and, with
 `--identifiability` (the default of a model with `fit_identifiability`),
 analyses the identifiability of the fitted parameters: the profile likelihood
 of every fitted parameter and the Fisher information around the best parameter
 set, which end up in the identifiability section of the report of the fit.
+`fit_<model> --adopt <fit id>` copies the record of a finished fit into the
+adopted fits of the model, whose values and uncertainty the factory takes
+(`pkpdsim.uncertainty.adopt_fit`).
 `report_<model>` and `identifiability_<model>` work on the `parameters.json`
 of an earlier fit (`sbmlsim.fit.cli.report_cli`, `identifiability_cli`). All
 write into the results of the model unless `--output_dir` is given.
@@ -64,6 +76,7 @@ from sbmlsim.utils import paths_text
 from sbmlutils.console import console
 
 from pkpdsim.model import resolve
+from pkpdsim.uncertainty import UncertaintySettings, adopt_fit
 
 if TYPE_CHECKING:
     from sbmlsim.experiment import SimulationExperiment
@@ -203,6 +216,35 @@ def run_parser(model: PKPDModel) -> argparse.ArgumentParser:
             "(default: %(default)s)",
         )
         p.add_argument(
+            "-u",
+            "--uncertainty",
+            action="store_true",
+            help="run the experiments over draws of the fitted parameters of the "
+            "model and draw the simulations as bands, into the "
+            "`simulation_uncertainty` folder of the results; an extra action gets "
+            "the settings as `options.uncertainty`",
+        )
+        p.add_argument(
+            "--draws",
+            type=int,
+            default=UncertaintySettings.draws,
+            help="the number of draws of --uncertainty (default: %(default)s)",
+        )
+        p.add_argument(
+            "--seed",
+            type=int,
+            default=UncertaintySettings.seed,
+            help="the seed of the draws of --uncertainty (default: %(default)s)",
+        )
+        p.add_argument(
+            "--quantiles",
+            type=float,
+            nargs=2,
+            default=UncertaintySettings.quantiles,
+            metavar=("LOWER", "UPPER"),
+            help="the quantiles of the bands of --uncertainty (default: %(default)s)",
+        )
+        p.add_argument(
             "-w",
             "--workers",
             default="model",
@@ -248,6 +290,7 @@ def _simulate(
     show_report: bool,
     figure_formats: Sequence[str],
     simulator: SimulatorSettings,
+    uncertainty: UncertaintySettings | None = None,
 ) -> list[str]:
     """Simulate the given groups and experiments.
 
@@ -258,6 +301,7 @@ def _simulate(
         show_report: open the report in a web browser.
         figure_formats: the formats of the figures.
         simulator: the settings of the simulator.
+        uncertainty: run over draws of the fitted parameters, `None` for once.
 
     Returns:
         The failures of the run, one line each.
@@ -282,6 +326,7 @@ def _simulate(
             show_report=show_report,
             figure_formats=figure_formats,
             simulator=simulator,
+            uncertainty=uncertainty,
         )
     except ExperimentRunError as err:
         return list(err.failures)
@@ -298,14 +343,26 @@ def run_command(model: PKPDModel, args: Sequence[str] | None = None) -> None:
     A failure of the simulations does not stop the command: the remaining
     actions run, then the failures are printed and the command exits with 1.
     An extra action gets the settings of the simulator of the run as
-    `options.simulator`: those of the model with the processes of `--workers`.
+    `options.simulator`: those of the model with the processes of `--workers`,
+    and the settings of `--uncertainty` as `options.uncertainty` (`None`
+    without).
     """
     p = run_parser(model)
     options = p.parse_args(args)
     formats: list[str] = []
     names: list[str] = []
     simulator = model.simulator
+    uncertainty: UncertaintySettings | None = None
     if model.experiments is not None:
+        if options.uncertainty:
+            try:
+                uncertainty = UncertaintySettings(
+                    draws=options.draws,
+                    seed=options.seed,
+                    quantiles=tuple(options.quantiles),
+                )
+            except ValueError as err:
+                p.error(str(err))
         formats = parse_formats(options.formats)
         if not formats:
             p.error("'--formats' requires at least one format")
@@ -330,12 +387,21 @@ def run_command(model: PKPDModel, args: Sequence[str] | None = None) -> None:
             "`options.simulator`, the settings of the simulator of the run"
         )
         raise ValueError(msg)
+    if model.experiments is None and hasattr(options, "uncertainty"):
+        msg = (
+            f"the extra option '--uncertainty' of {model.name} clashes with "
+            "`options.uncertainty`, the settings of the draws of the run"
+        )
+        raise ValueError(msg)
     options.simulator = simulator
+    options.uncertainty = uncertainty
     display.section(model.title, icon=":pill:")
     display.key_values({"action": options.action})
     display.link("results", options.results_dir)
     results_dir = options.results_dir.resolve()
-    simulation_dir = results_dir / "simulation"
+    simulation_dir = results_dir / (
+        "simulation" if uncertainty is None else "simulation_uncertainty"
+    )
     extras = {extra.name: extra for extra in model.extra_actions}
     failures: list[str] = []
 
@@ -345,13 +411,19 @@ def run_command(model: PKPDModel, args: Sequence[str] | None = None) -> None:
         _list_experiments(model)
     elif options.action == Action.SIMULATE:
         failures = _simulate(
-            model, names, simulation_dir, options.open, formats, simulator
+            model, names, simulation_dir, options.open, formats, simulator, uncertainty
         )
     elif options.action == Action.ALL:
         _run_factory(model)
         if model.experiments is not None:
             failures = _simulate(
-                model, ["all"], simulation_dir, options.open, formats, simulator
+                model,
+                ["all"],
+                simulation_dir,
+                options.open,
+                formats,
+                simulator,
+                uncertainty,
             )
         for extra in model.extra_actions:
             if extra.in_all:
@@ -479,6 +551,22 @@ def fit_parser(
         help="directory for the results of the fit",
     )
 
+    adopt = p.add_argument_group("adopt")
+    adopt.add_argument(
+        "--adopt",
+        metavar="FIT_ID",
+        default=None,
+        help="copy the record of the finished fit FIT_ID from the output "
+        "directory into the adopted fits of the model "
+        f"({model.fits_dir}) instead of fitting; add its id to `fits` of the "
+        "model object",
+    )
+    adopt.add_argument(
+        "--force",
+        action="store_true",
+        help="replace the record of an adopted fit of the same id",
+    )
+
     identifiability = p.add_argument_group("identifiability")
     identifiability.add_argument(
         "--identifiability",
@@ -567,6 +655,29 @@ def analyse_identifiability(
     return identifiability, fisher
 
 
+def _adopt(model: PKPDModel, fit_dir: Path, *, force: bool) -> Path:
+    """Adopt a finished fit and print what the model object needs.
+
+    Raises:
+        SystemExit: if the fit cannot be adopted.
+    """
+    fit_display.section("Adopt fit", icon=fit_display.ICON_FIT)
+    try:
+        record = adopt_fit(fit_dir, model.fits_dir, force=force)
+    except (FileNotFoundError, FileExistsError) as err:
+        console.print(str(err), style="error")
+        sys.exit(1)
+    fit_display.key_values({"fit": fit_dir.name, "record": record})
+    if fit_dir.name not in model.fits:
+        console.print(
+            f"Add '{fit_dir.name}' to `fits` of the model object, the factory takes "
+            f"the fitted values and their uncertainty from the record "
+            f"(`FitRecords.parameter`).",
+            style="warning",
+        )
+    return record
+
+
 def fit_command(
     model: PKPDModel, args: Sequence[str] | None = None
 ) -> dict[str, FitRun]:
@@ -577,11 +688,14 @@ def fit_command(
         args: command line arguments, `sys.argv[1:]` by default.
 
     Returns:
-        The finished fits by optimization id.
+        The finished fits by optimization id, none for `--adopt`.
     """
     definitions = model.load_fit_definitions()
     options = fit_parser(model, definitions).parse_args(args)
     log.enable_rich_logging()
+    if options.adopt is not None:
+        _adopt(model, options.output_dir / options.adopt, force=options.force)
+        return {}
 
     definition = definitions[options.subset]
     algorithm = ALGORITHMS[options.method]
