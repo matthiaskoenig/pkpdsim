@@ -7,7 +7,7 @@
 | Experiment | Report |
 | --- | --- |
 {% for experiment in experiments %}
-| `{{ experiment }}` | [{{ experiment }}]({{ settings.site_url }}simulations/{{ experiment }}/index.html) |
+| `{{ experiment }}` | [{{ experiment }}]({{ settings.site_url }}simulations/{{ experiment }}/{{ experiment }}.html) |
 {% endfor %}
 {% else %}
 The release has no experiment reports.

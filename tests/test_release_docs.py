@@ -40,8 +40,13 @@ def release(toy_fit: Path, tmp_path: Path) -> tuple[ProjectContext, Path]:
     write(path / BuildPaths.FIGURES / "toy_model.png", b"png")
     write(path / BuildPaths.FIGURES / "toy.png", b"png")
     write(path / "toy_model.omex", b"omex")
-    for experiment in ("Decay", "Slow", "_figures"):
-        write(path / BuildPaths.SIMULATIONS / experiment / "index.html", "<html/>")
+    # the simulation report of sbmlsim: `index.html` and `<experiment>/<experiment>.html`
+    write(path / BuildPaths.SIMULATIONS / "index.html", "<html/>")
+    for experiment in ("Decay", "Slow"):
+        write(
+            path / BuildPaths.SIMULATIONS / experiment / f"{experiment}.html", "<html/>"
+        )
+    write(path / BuildPaths.SIMULATIONS / "_figures" / "Decay_fig.svg", "<svg/>")
     for version in ("0.9.0", "0.10.0", "0.2.0"):
         write(path / "release-notes" / f"{version}.md", f"# Notes {version}\n\n## A\n")
     context = ProjectContext(
@@ -103,8 +108,10 @@ def test_simulations_links(release: tuple[ProjectContext, Path]) -> None:
     site = SETTINGS.site_url
     assert f"{site}simulations/index.html" in page
     assert f"{site}simulations_uncertainty/index.html" in page
-    assert f"{site}simulations/Decay/index.html" in page
+    assert f"{site}simulations/Decay/Decay.html" in page
+    assert f"{site}simulations/Slow/Slow.html" in page
     assert "_figures" not in page
+    assert "no experiment reports" not in page
 
 
 def test_fit_table(release: tuple[ProjectContext, Path]) -> None:

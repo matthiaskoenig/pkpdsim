@@ -148,13 +148,18 @@ def _models(release_path: Path, images: Path) -> list[ModelEntry]:
 
 
 def _experiments(release_path: Path) -> list[str]:
+    """Get the experiments of the simulation report.
+
+    The report of sbmlsim has a folder per experiment with the page
+    `<experiment>/<experiment>.html`; `_figures` holds copies of the figures.
+    """
     folder = release_path / BuildPaths.SIMULATIONS
     if not folder.is_dir():
         return []
     return sorted(
         path.name
         for path in folder.iterdir()
-        if not path.name.startswith("_") and (path / "index.html").is_file()
+        if not path.name.startswith("_") and (path / f"{path.name}.html").is_file()
     )
 
 
