@@ -390,7 +390,7 @@ def _scale(name: str | None, default: ParameterScaleType) -> ParameterScaleType:
     return ParameterScaleType[str(name)]
 
 
-def _fisher(path: Path) -> FisherInformation:
+def read_fisher(path: Path) -> FisherInformation:
     """Read the Fisher information a fit wrote (`FisherInformation.to_dict`)."""
     d = _read_json(path)
     return FisherInformation(
@@ -473,7 +473,7 @@ class FitRecord:
             df = int(settings.get("degrees_of_freedom", df))
         fisher: FisherInformation | None = None
         if (directory / "fisher.json").exists():
-            fisher = _fisher(directory / "fisher.json")
+            fisher = read_fisher(directory / "fisher.json")
         if not profiles and fisher is None:
             raise FileNotFoundError(
                 f"The record '{directory}' has neither a profile likelihood nor a "

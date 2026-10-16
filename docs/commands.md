@@ -190,6 +190,16 @@ parameter sets, `run_identifiability` the profile likelihood and the Fisher
 information of the first parameter set of a file. `--subset` is the fit
 problem, `--output_dir` the folder of the report.
 
+`run_report --adopted` recreates the report of an adopted fit from its record
+in `MODEL.fits_dir`, with all of its figures and the identifiability section of
+the stored profile likelihood and Fisher information
+(`pkpdsim.fit_report.report_adopted_fit`); the fit problem is the one of the id
+of the fit, the report is written into `<output_dir>/<fit id>`:
+
+```bash
+run_report pkdb_models.models.hctz --adopted PK_<fit id> -o reports
+```
+
 ## The folders of the results
 
 Every command writes into the folders of the model object unless an option
@@ -202,8 +212,8 @@ names another one; the results are not tracked, the adopted fits are:
   it.
 - `run_fit --adopt`: `MODEL.fits_dir` (`fits` next to the output of the
   factory).
-- `run_report`: `MODEL.report_dir` (`results/report`), `--output_dir` replaces
-  it.
+- `run_report`: `MODEL.report_dir` (`results/report`), with `--adopted`
+  `MODEL.report_dir/<fit id>`; `--output_dir` replaces `MODEL.report_dir`.
 - `run_identifiability`: `MODEL.identifiability_dir`
   (`results/identifiability`), `--output_dir` replaces it.
 

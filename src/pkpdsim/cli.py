@@ -13,6 +13,7 @@ run_simulation pkdb_models.models.hctz --action simulate --experiments all --unc
 run_fit pkdb_models.models.hctz --subset PK --identifiability
 run_fit pkdb_models.models.hctz --adopt PK_<fit id>
 run_report pkdb_models.models.hctz --subset PK results/fit/PK_<fit id>/parameters.json
+run_report pkdb_models.models.hctz --adopted PK_<fit id>
 run_identifiability pkdb_models.models.hctz --subset PK results/fit/PK_<fit id>/parameters.json
 ```
 
@@ -38,7 +39,9 @@ the adopted fits of the model, whose values and uncertainty the factory takes
 (`pkpdsim.uncertainty.adopt_fit`).
 `run_report` and `run_identifiability` (`report_command`,
 `identifiability_command`) work on the `parameters.json` of an earlier fit
-(`sbmlsim.fit.cli.report_cli`, `identifiability_cli`). All write into the
+(`sbmlsim.fit.cli.report_cli`, `identifiability_cli`);
+`run_report <package> --adopted <fit id>` recreates the report of an adopted fit
+from its record (`pkpdsim.fit_report.report_adopted_fit`). All write into the
 results of the model unless `--output_dir` is given.
 """
 
@@ -73,6 +76,7 @@ from sbmlsim.fit.result import fit_id
 from sbmlsim.utils import paths_text
 from sbmlutils.console import console
 
+from pkpdsim.fit_report import fit_record_dir, report_adopted_fit
 from pkpdsim.model import PKPDModel, resolve
 from pkpdsim.uncertainty import UncertaintySettings, adopt_fit
 
@@ -760,8 +764,48 @@ def fit_command(
     return runs
 
 
+REPORT_DESCRIPTION = (
+    "Report of a fit for stored parameters. `--adopted FIT_ID [-o DIR]` instead "
+    "recreates the report of the adopted fit FIT_ID of the model from its record."
+)
+"""The description of the help of `run_report`."""
+
+
+def adopted_report_parser(model: PKPDModel) -> argparse.ArgumentParser:
+    """Get the parser of `run_report --adopted`, the report of an adopted fit.
+
+    Args:
+        model: the model.
+
+    Returns:
+        The parser of `--adopted FIT_ID [-o DIR]`.
+    """
+    p = argparse.ArgumentParser(
+        prog=f"run_report {model.package}",
+        description="Recreate the report of an adopted fit of the model from its "
+        "record.",
+    )
+    p.add_argument(
+        "--adopted",
+        metavar="FIT_ID",
+        required=True,
+        help=f"the id of the adopted fit, its record is in {model.fits_dir}",
+    )
+    p.add_argument(
+        "-o",
+        "--output_dir",
+        type=Path,
+        default=model.report_dir,
+        help="directory of the reports, the report is written into OUTPUT_DIR/FIT_ID",
+    )
+    return p
+
+
 def report_command(model: PKPDModel, args: Sequence[str] | None = None) -> Path:
     """Report stored parameter sets of a model (`sbmlsim.fit.cli.report_cli`).
+
+    With `--adopted FIT_ID [-o DIR]` the report of an adopted fit is recreated
+    from its record instead (`pkpdsim.fit_report.report_adopted_fit`).
 
     Args:
         model: the model.
@@ -769,12 +813,31 @@ def report_command(model: PKPDModel, args: Sequence[str] | None = None) -> Path:
 
     Returns:
         The directory of the report.
+
+    Raises:
+        SystemExit: with 2 for an id which is no adopted fit of the model.
     """
-    return report_cli(
-        dict(model.load_fit_definitions()),
-        args=with_output_dir(sys.argv[1:] if args is None else args, model.report_dir),
-        prog=f"run_report {model.package}",
-    )
+    args = list(sys.argv[1:] if args is None else args)
+    p = adopted_report_parser(model)
+    # `--adopted` is looked for first, the parser of `report_cli` requires
+    # files of parameter sets which the report of an adopted fit has none of
+    adopted = argparse.ArgumentParser(add_help=False)
+    adopted.add_argument("--adopted", nargs="?", const="")
+    if adopted.parse_known_args(args)[0].adopted is None:
+        return report_cli(
+            dict(model.load_fit_definitions()),
+            args=with_output_dir(args, model.report_dir),
+            prog=p.prog,
+            description=REPORT_DESCRIPTION,
+        )
+
+    options = p.parse_args(args)
+    log.enable_rich_logging()
+    try:
+        fit_record_dir(model, options.adopted)
+    except (ValueError, FileNotFoundError) as err:
+        p.error(str(err))
+    return report_adopted_fit(model, options.adopted, options.output_dir)
 
 
 def identifiability_command(

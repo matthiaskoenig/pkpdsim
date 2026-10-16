@@ -13,15 +13,22 @@ the cache.
 The SBML model of the toy model package (`tests/pkpdsim_toy`) is created in the
 controller of the session as well, before the workers start; the tests only read
 it.
+
+A short fit of the toy model with its identifiability, adopted into a folder of
+fits, is shared by the tests of the records (`toy_fit`, `fits_dir`); it is made
+once per module which uses it.
 """
 
 from contextlib import suppress
+from pathlib import Path
 
 import pytest
 from pymetadata.webservices.registry import get_registry
 from pymetadata.webservices.webservice import WebserviceError
 
-from pkpdsim_toy import MODEL_BASE_PATH
+from pkpdsim.cli import fit_command
+from pkpdsim.uncertainty import adopt_fit
+from pkpdsim_toy import MODEL, MODEL_BASE_PATH
 from pkpdsim_toy.factory import create_toy_models
 
 
@@ -51,3 +58,32 @@ def no_pyplot(monkeypatch: pytest.MonkeyPatch) -> None:
         raise AssertionError("A figure must be a matplotlib.figure.Figure, not pyplot.")
 
     monkeypatch.setattr(plt, "figure", refuse)
+
+
+@pytest.fixture(scope="module")
+def toy_fit(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Fit the toy model with its profile likelihood and Fisher information."""
+    output = tmp_path_factory.mktemp("fit")
+    runs = fit_command(
+        MODEL,
+        [
+            "--runs",
+            "1",
+            "--identifiability",
+            "--max-points",
+            "5",
+            "--no-mapping-figures",
+            "--output_dir",
+            str(output),
+        ],
+    )
+    (opid,) = runs
+    return output / opid
+
+
+@pytest.fixture(scope="module")
+def fits_dir(toy_fit: Path, tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Get a folder of fits with the adopted toy fit."""
+    directory = tmp_path_factory.mktemp("fits")
+    adopt_fit(toy_fit, directory)
+    return directory

@@ -43,35 +43,6 @@ from pkpdsim_toy.factory import U, toy_model
 
 
 @pytest.fixture(scope="module")
-def toy_fit(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """Fit the toy model with its profile likelihood and Fisher information."""
-    output = tmp_path_factory.mktemp("fit")
-    runs = fit_command(
-        MODEL,
-        [
-            "--runs",
-            "1",
-            "--identifiability",
-            "--max-points",
-            "5",
-            "--no-mapping-figures",
-            "--output_dir",
-            str(output),
-        ],
-    )
-    (opid,) = runs
-    return output / opid
-
-
-@pytest.fixture(scope="module")
-def fits_dir(toy_fit: Path, tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """Get a folder of fits with the adopted toy fit."""
-    directory = tmp_path_factory.mktemp("fits")
-    adopt_fit(toy_fit, directory)
-    return directory
-
-
-@pytest.fixture(scope="module")
 def toy_with_uncertainty(
     toy_fit: Path, fits_dir: Path, tmp_path_factory: pytest.TempPathFactory
 ) -> Path:
