@@ -36,12 +36,12 @@ def _local_packages(release_path: Path) -> list[str]:
     return names
 
 
-def _tool_missing(runner: Runner, args: list[str], cwd: Path) -> bool:
+def _ok(runner: Runner, args: list[str], cwd: Path) -> bool:
     try:
         runner(args, cwd)
     except ReleaseError:
-        return True
-    return False
+        return False
+    return True
 
 
 def check_publishable(release_path: Path, runner: Runner = run) -> None:
@@ -57,6 +57,8 @@ def check_publishable(release_path: Path, runner: Runner = run) -> None:
             logged in; one message lists everything.
     """
     problems = []
+    if not (release_path / "uv.lock").is_file():
+        problems.append("no uv.lock")
     local = _local_packages(release_path)
     if local:
         problems.append(
@@ -67,16 +69,12 @@ def check_publishable(release_path: Path, runner: Runner = run) -> None:
         data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
         if data.get("tool", {}).get("uv", {}).get("sources"):
             problems.append("pyproject.toml has tool.uv.sources")
-    if _tool_missing(runner, ["docker", "info"], release_path):
+    if not _ok(runner, ["docker", "info"], release_path):
         problems.append("docker is not available (docker info failed)")
-    if _tool_missing(runner, ["gh", "auth", "status"], release_path):
+    if not _ok(runner, ["gh", "auth", "status"], release_path):
         problems.append("gh is not logged in (gh auth status failed)")
     if problems:
         raise ReleaseError("cannot publish:\n- " + "\n- ".join(problems))
-
-
-def _succeeds(runner: Runner, args: list[str], cwd: Path) -> bool:
-    return not _tool_missing(runner, args, cwd)
 
 
 def _head_has_manifest(path: Path, version: str, runner: Runner) -> bool:
@@ -130,25 +128,34 @@ def _pages(path: Path, settings: ReleaseSettings, runner: Runner) -> bool:
     try:
         runner(["gh", "api", endpoint], path)
     except ReleaseError as err:
-        if "404" not in str(err) and "Not Found" not in str(err):
+        if "HTTP 404" not in str(err) and "Not Found" not in str(err):
             raise
         runner(["gh", "api", "-X", "POST", endpoint, "-f", "build_type=workflow"], path)
         return True
     return False
 
 
+def _manifest(runner: Runner, reference: str, path: Path) -> str | None:
+    try:
+        return runner(["docker", "manifest", "inspect", reference], path)
+    except ReleaseError:
+        return None
+
+
 def _docker(
     path: Path, settings: ReleaseSettings, version: str, runner: Runner
 ) -> bool:
     image = settings.docker_image
-    if _succeeds(runner, ["docker", "manifest", "inspect", f"{image}:{version}"], path):
+    versioned, latest = f"{image}:{version}", f"{image}:latest"
+    remote_version = _manifest(runner, versioned, path)
+    remote_latest = _manifest(runner, latest, path)
+    if remote_version is not None and remote_version == remote_latest:
         return False
-    runner(
-        ["docker", "build", "-t", f"{image}:{version}", "-t", f"{image}:latest", "."],
-        path,
-    )
-    runner(["docker", "push", f"{image}:{version}"], path)
-    runner(["docker", "push", f"{image}:latest"], path)
+    if not _ok(runner, ["docker", "image", "inspect", versioned], path):
+        runner(["docker", "build", "-t", versioned, "-t", latest, "."], path)
+    if remote_version is None:
+        runner(["docker", "push", versioned], path)
+    runner(["docker", "push", latest], path)
     return True
 
 
@@ -156,18 +163,38 @@ def _github_release(
     path: Path, settings: ReleaseSettings, version: str, archive: Path, runner: Runner
 ) -> bool:
     repository = settings.repository
-    if _succeeds(
-        runner, ["gh", "release", "view", version, "--repo", repository], path
-    ):
+    try:
+        view = runner(
+            [
+                "gh",
+                "release",
+                "view",
+                version,
+                "--repo",
+                repository,
+                "--json",
+                "assets",
+            ],
+            path,
+        )
+    except ReleaseError:
+        runner(
+            [
+                "gh", "release", "create", version,
+                "--repo", repository,
+                "--title", f"{settings.repo_name} {version}",
+                "--notes-file", f"release-notes/{version}.md",
+                str(archive),
+            ],
+            path,
+        )  # fmt: skip
+        return True
+    assets = {a.get("name") for a in json.loads(view or "{}").get("assets", [])}
+    if archive.name in assets:
         return False
     runner(
-        [
-            "gh", "release", "create", version,
-            "--repo", repository,
-            "--title", f"{settings.repo_name} {version}",
-            "--notes-file", f"release-notes/{version}.md",
-            str(archive),
-        ],
+        ["gh", "release", "upload", version, str(archive), "--repo", repository,
+         "--clobber"],
         path,
     )  # fmt: skip
     return True

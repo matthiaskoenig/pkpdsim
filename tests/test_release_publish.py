@@ -29,8 +29,9 @@ class FakeRunner:
         self.tags: dict[str, str] = {}
         self.remote: dict[str, str] = {}
         self.pages = False
-        self.images: set[str] = set()
-        self.releases: set[str] = set()
+        self.images: dict[str, str] = {}
+        self.local_images: set[str] = set()
+        self.releases: dict[str, list[str]] = {}
         self.fail_on: str | None = None
         self.missing: set[str] = set()
 
@@ -79,18 +80,27 @@ class FakeRunner:
         if cmd[:3] == ["docker", "manifest", "inspect"]:
             if cmd[3] not in self.images:
                 raise ReleaseError("no such manifest")
+            return self.images[cmd[3]]
+        if cmd[:3] == ["docker", "image", "inspect"]:
+            if cmd[3] not in self.local_images:
+                raise ReleaseError("no such image")
             return ""
         if cmd[:2] == ["docker", "build"]:
+            self.local_images.update(cmd[3::2][:2])
             return ""
         if cmd[:2] == ["docker", "push"]:
-            self.images.add(cmd[2])
+            self.images[cmd[2]] = "digest-1"
             return ""
         if cmd[:3] == ["gh", "release", "view"]:
             if cmd[3] not in self.releases:
                 raise ReleaseError("release not found")
-            return ""
+            assets = [{"name": n} for n in self.releases[cmd[3]]]
+            return json.dumps({"assets": assets})
         if cmd[:3] == ["gh", "release", "create"]:
-            self.releases.add(cmd[3])
+            self.releases[cmd[3]] = [Path(cmd[-1]).name]
+            return ""
+        if cmd[:3] == ["gh", "release", "upload"]:
+            self.releases[cmd[3]].append(Path(cmd[4]).name)
             return ""
         return ""
 
@@ -148,7 +158,7 @@ def test_publish_resume_after_docker_failure() -> None:
     with pytest.raises(ReleaseError):
         _publish(runner)
     assert _publish(runner) == ["docker", "github_release"]
-    assert runner.releases == {VERSION}
+    assert VERSION in runner.releases
 
 
 def test_publish_idempotent() -> None:
@@ -208,3 +218,38 @@ def test_check_publishable_lists_missing_tools(tmp_path: Path) -> None:
         check_publishable(tmp_path, runner)
     assert "docker" in str(err.value)
     assert "gh auth status" in str(err.value)
+
+
+def test_publish_resume_after_latest_push_failure() -> None:
+    runner = FakeRunner()
+    runner.fail_on = f"docker push {IMAGE}:latest"
+    with pytest.raises(ReleaseError):
+        _publish(runner)
+    runner.commands.clear()
+    assert _publish(runner) == ["docker", "github_release"]
+    assert f"{IMAGE}:latest" in runner.images
+    assert ["docker", "push", f"{IMAGE}:{VERSION}"] not in runner.commands
+    assert not [c for c in runner.commands if c[:2] == ["docker", "build"]]
+
+
+def test_docker_pushes_a_differing_latest() -> None:
+    runner = FakeRunner()
+    _publish(runner)
+    runner.images[f"{IMAGE}:latest"] = "other"
+    assert _publish(runner) == ["docker"]
+    assert runner.images[f"{IMAGE}:latest"] == "digest-1"
+
+
+def test_release_without_archive_is_completed() -> None:
+    runner = FakeRunner()
+    _publish(runner)
+    runner.releases[VERSION] = []
+    assert _publish(runner) == ["github_release"]
+    assert runner.releases[VERSION] == [ARCHIVE.name]
+    upload = [c for c in runner.commands if c[:3] == ["gh", "release", "upload"]]
+    assert upload[-1][-1] == "--clobber"
+
+
+def test_check_publishable_missing_lock(tmp_path: Path) -> None:
+    with pytest.raises(ReleaseError, match=r"no uv\.lock"):
+        check_publishable(tmp_path, FakeRunner())
