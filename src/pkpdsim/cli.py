@@ -73,8 +73,9 @@ from sbmlsim.fit.result import fit_id
 from sbmlsim.utils import paths_text
 from sbmlutils.console import console
 
-from pkpdsim.fit import report_context
+from pkpdsim.fit import fit_subset, report_context
 from pkpdsim.model import PKPDModel, resolve
+from pkpdsim.reports import adopted_reports
 from pkpdsim.uncertainty import UncertaintySettings, adopt_fit
 
 if TYPE_CHECKING:
@@ -733,7 +734,7 @@ def fit_command(
     fixed_values = {
         pid: parameter.value
         for fit_id_, record in model.fit_records().records.items()
-        if not fit_id_.startswith(f"{options.subset}_")
+        if fit_subset(fit_id_) != options.subset
         for pid, parameter in record.parameters.items()
     }
     context = report_context(model, options.subset, definition)
@@ -782,17 +783,53 @@ def fit_command(
 def report_command(model: PKPDModel, args: Sequence[str] | None = None) -> Path:
     """Report stored parameter sets of a model (`sbmlsim.fit.cli.report_cli`).
 
+    With `--adopted` the report of every adopted fit of the model is written
+    from its record, see `pkpdsim.reports.adopted_reports`.
+
     Args:
         model: the model.
         args: command line arguments, `sys.argv[1:]` by default.
 
     Returns:
-        The directory of the report.
+        The directory of the report, with `--adopted` the directory of the
+        reports.
     """
+    arguments = sys.argv[1:] if args is None else list(args)
+    if "--adopted" in arguments:
+        p = argparse.ArgumentParser(
+            prog=f"run_report {model.package}",
+            description="Report of every adopted fit of the model, from its record.",
+        )
+        p.add_argument("--adopted", action="store_true", required=True)
+        p.add_argument(
+            "-o",
+            "--output_dir",
+            type=Path,
+            default=model.report_dir,
+            help="directory of the reports, one folder per fit",
+        )
+        p.add_argument("--no-mapping-figures", action="store_true")
+        options = p.parse_args(arguments)
+        try:
+            directories = adopted_reports(
+                model,
+                options.output_dir,
+                mapping_figures=not options.no_mapping_figures,
+            )
+        except (ValueError, FileNotFoundError) as err:
+            console.print(str(err), style="error")
+            sys.exit(1)
+        fit_display.key_values({d.name: d for d in directories})
+        return options.output_dir
     return report_cli(
         dict(model.load_fit_definitions()),
-        args=with_output_dir(sys.argv[1:] if args is None else args, model.report_dir),
+        args=with_output_dir(arguments, model.report_dir),
         prog=f"run_report {model.package}",
+        description=(
+            "Report of a fit for stored parameters. `--adopted` instead writes "
+            "the report of every adopted fit of the model, without a "
+            "parameters file."
+        ),
     )
 
 

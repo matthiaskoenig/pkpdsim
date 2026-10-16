@@ -13,6 +13,8 @@ run_fit pkdb_models.models.hctz --adopt PK_20261015_235422__7a62a
 
 The record is the part of the results which the model needs (`RECORD_FILES`): the best parameter sets (`parameters.json`), the problem with its settings and bounds (`optimization_result.json`), the profile likelihood (`identifiability.json`, `identifiability.tsv`), the Fisher information (`fisher.json`, `fisher.tsv`), the metrics and the text report, about 300 kB. A fit without a profile likelihood and without a Fisher information cannot be adopted (run it with `--identifiability`); an adopted fit is only replaced with `--force`. The model object lists its adopted fits:
 
+`run_report <package> --adopted` writes the report of every adopted fit from its record, one folder per fit in the reports of the model, see [Commands](commands.md).
+
 ```python
 # not executed
 MODEL = PKPDModel(

@@ -190,6 +190,22 @@ parameter sets, `run_identifiability` the profile likelihood and the Fisher
 information of the first parameter set of a file. `--subset` is the fit
 problem, `--output_dir` the folder of the report.
 
+`run_report <package> --adopted` writes the report of every adopted fit of the
+model (`MODEL.fits`) instead, each from its record in `MODEL.fits_dir`, without
+a parameters file and without running a fit:
+
+```bash
+run_report pkdb_models.models.hctz --adopted
+```
+
+Every fit has a report of its own in `MODEL.report_dir/<fit id>` (`--output_dir`
+replaces `MODEL.report_dir`), the complete report of sbmlsim with the
+description of the model, the fit and its parameters, the adopted fits whose
+parameters were fixed and the provenance of the record (a record without it
+states that it was not recorded). The subset of a fit is the part of its id
+before the date, `PK` for `PK_20261016_185018__3efe3`, and must have a fit
+definition. There is no report which merges the fits of a model.
+
 ## The folders of the results
 
 Every command writes into the folders of the model object unless an option
@@ -203,7 +219,7 @@ names another one; the results are not tracked, the adopted fits are:
 - `run_fit --adopt`: `MODEL.fits_dir` (`fits` next to the output of the
   factory).
 - `run_report`: `MODEL.report_dir` (`results/report`), `--output_dir` replaces
-  it.
+  it; with `--adopted` one folder per adopted fit below it.
 - `run_identifiability`: `MODEL.identifiability_dir`
   (`results/identifiability`), `--output_dir` replaces it.
 

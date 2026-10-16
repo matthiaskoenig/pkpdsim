@@ -13,6 +13,7 @@ validation data.
 from __future__ import annotations
 
 import dataclasses
+import re
 from collections.abc import Collection, Hashable, Iterable, Mapping
 from dataclasses import dataclass
 from enum import Enum
@@ -321,6 +322,32 @@ def select_mappings(
     return selection.collections
 
 
+FIT_ID = re.compile(r"^(?P<subset>.+)_\d{8}_\d{6}__[0-9a-f]{5}$")
+"""The form of the id of a fit, `<subset>_<date>_<time>__<hash>`."""
+
+
+def fit_subset(fit_id: str) -> str:
+    """Get the fit problem a fit belongs to from its id.
+
+    Args:
+        fit_id: the id of a fit, e.g. `PK_20261016_185018__3efe3`
+            (`sbmlsim.fit.result.fit_id`).
+
+    Returns:
+        The subset, e.g. `PK`. It may contain underscores, `PK_X_...` is `PK_X`.
+
+    Raises:
+        ValueError: if the id does not have the form of the id of a fit.
+    """
+    match = FIT_ID.match(fit_id)
+    if match is None:
+        raise ValueError(
+            f"'{fit_id}' is not the id of a fit, which has the form "
+            f"'<subset>_<date>_<time>__<hash>', e.g. 'PK_20261016_185018__3efe3'."
+        )
+    return match["subset"]
+
+
 def report_context(
     model: PKPDModel, subset: str, definition: FitDefinition
 ) -> ReportContext:
@@ -336,7 +363,7 @@ def report_context(
         its parameters, and a note on the adopted fits of other subsets, whose
         parameters were kept at their fitted values.
     """
-    fixed = [f for f in model.fits if not f.startswith(f"{subset}_")]
+    fixed = [f for f in model.fits if fit_subset(f) != subset]
     notes = (
         (
             f"The parameters of the adopted fits {', '.join(fixed)} were fixed at "
