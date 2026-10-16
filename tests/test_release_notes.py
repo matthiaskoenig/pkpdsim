@@ -215,6 +215,26 @@ def test_library_changes() -> None:
     assert library_changes(None, NEW_LOCK) == []
 
 
+LOCAL_PKPDSIM_LOCK = """\
+version = 1
+
+[[package]]
+name = "pkpdsim"
+source = { editable = "/home/user/pkpdsim" }
+
+[[package]]
+name = "sbmlsim"
+version = "0.9.7"
+source = { registry = "https://pypi.org/simple" }
+"""
+
+
+def test_library_changes_local_package_without_version() -> None:
+    """uv locks a local package with a dynamic version without a version."""
+    changes = library_changes(OLD_LOCK, LOCAL_PKPDSIM_LOCK)
+    assert LibraryChange("pkpdsim", "0.6.0", "editable /home/user/pkpdsim") in changes
+
+
 def test_data_changes(release: ReleaseRepo) -> None:
     assert data_changes(release, DATA_DIR) == DataChanges(
         added=["other/Added2003"],

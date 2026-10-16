@@ -79,6 +79,18 @@ def test_manifest_roundtrip(release: tuple[Path, list[Path]]) -> None:
     assert Manifest.read(root / "missing.json") is None
 
 
+def test_manifest_local_pkpdsim(release: tuple[Path, list[Path]]) -> None:
+    """A local pkpdsim (`--pkpdsim-path`) has no version in the lock."""
+    root, written = release
+    lock = LOCK.replace(
+        'version = "0.8.0"', 'source = { editable = "/home/user/pkpdsim" }'
+    )
+    write(root, "uv.lock", lock)
+    manifest = write_manifest(root, "0.8.0", SOURCE, written)
+    assert manifest.pkpdsim == "editable /home/user/pkpdsim"
+    assert not matches(root, "0.8.0", "abc123", "0.8.0")
+
+
 def test_matches_after_build(release: tuple[Path, list[Path]]) -> None:
     root, written = release
     write_manifest(root, "0.8.0", SOURCE, [p.relative_to(root) for p in written])

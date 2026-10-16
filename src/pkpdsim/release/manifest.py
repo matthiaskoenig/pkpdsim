@@ -17,7 +17,7 @@ from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 from pathlib import Path, PurePosixPath
 
-from pkpdsim.release.source import ReleaseError, Runner, SourceRepo, run
+from pkpdsim.release.source import ReleaseError, Runner, SourceRepo, locked_version, run
 
 MANIFEST_FILE = "release.json"
 BUILD_MARKER = "pkpd_release_build"
@@ -114,7 +114,7 @@ def _library_versions(release_path: Path) -> dict[str, str]:
     if not lock_path.is_file():
         raise ReleaseError(f"The release has no 'uv.lock' at {lock_path}.")
     lock = tomllib.loads(lock_path.read_text(encoding="utf-8"))
-    return {p["name"]: p["version"] for p in lock.get("package", []) if "version" in p}
+    return {p["name"]: locked_version(p) for p in lock.get("package", [])}
 
 
 def write_manifest(

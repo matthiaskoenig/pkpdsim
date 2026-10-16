@@ -12,9 +12,10 @@ from __future__ import annotations
 import re
 import shutil
 import subprocess
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+from typing import Any
 
 from pkpdsim.model import PKPDModel
 from pkpdsim.release.settings import ReleaseSettings
@@ -146,6 +147,26 @@ def parse_version(version: str) -> tuple[int, int, int]:
     if match is None:
         raise ReleaseError(f"'{version}' is not a version 'X.Y.Z'")
     return int(match[1]), int(match[2]), int(match[3])
+
+
+def locked_version(package: Mapping[str, Any]) -> str:
+    """Get the version of a package of `uv.lock`.
+
+    uv locks a local package (a path, directory or editable source) whose version
+    is dynamic without a version, e.g. a checkout of pkpdsim given with
+    `--pkpdsim-path`; its version is then the kind and the location of its
+    source, e.g. `editable /home/user/pkpdsim`.
+
+    Args:
+        package: a `[[package]]` table of `uv.lock`.
+
+    Returns:
+        The locked version or the description of the local source.
+    """
+    if "version" in package:
+        return str(package["version"])
+    source = package.get("source", {})
+    return " ".join(f"{kind} {location}" for kind, location in source.items()) or "?"
 
 
 def _last_tag(tags: Sequence[str]) -> str | None:

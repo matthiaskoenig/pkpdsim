@@ -31,7 +31,14 @@ from pkpdsim.fit_report import fit_subset
 from pkpdsim.model import PKPDModel
 from pkpdsim.release.build import BuildPaths
 from pkpdsim.release.project import ProjectContext, render
-from pkpdsim.release.source import ReleaseError, ReleaseRepo, Runner, SourceRepo, run
+from pkpdsim.release.source import (
+    ReleaseError,
+    ReleaseRepo,
+    Runner,
+    SourceRepo,
+    locked_version,
+    run,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -212,7 +219,7 @@ def _locked(lock: str) -> dict[str, str]:
         source = package.get("source", {})
         if source.get("editable") == "." or source.get("virtual") == ".":
             continue
-        versions.setdefault(package["name"], set()).add(package["version"])
+        versions.setdefault(package["name"], set()).add(locked_version(package))
     return {name: ", ".join(sorted(found)) for name, found in versions.items()}
 
 
