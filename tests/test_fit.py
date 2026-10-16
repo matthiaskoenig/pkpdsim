@@ -18,6 +18,7 @@ from sbmlsim.model.tolerances import AbsoluteTolerance
 
 from pkpdsim.fit import (
     default_fit_settings,
+    fit_subset,
     mapping_metadata,
     metadata_filter,
     observable_filter,
@@ -254,3 +255,36 @@ def test_mapping_metadata_defaults_to_the_shared_metadata(
     fit_mapping: FitMapping,
 ) -> None:
     assert mapping_metadata(fit_mapping).route == "iv"
+
+
+@pytest.mark.parametrize(
+    ("fit_id", "subset"),
+    [
+        ("PK_20261016_185018__3efe3", "PK"),
+        ("PK_X_20261016_185018__3efe3", "PK_X"),
+        ("20261016_185018__3efe3", ""),
+    ],
+)
+def test_the_subset_of_a_fit_id(fit_id: str, subset: str) -> None:
+    if subset:
+        assert fit_subset(fit_id) == subset
+    else:
+        with pytest.raises(ValueError, match="not the id of a fit"):
+            fit_subset(fit_id)
+
+
+@pytest.mark.parametrize(
+    "fit_id",
+    [
+        "PK",
+        "PK_2026_1",
+        "PK_20261016_185018_3efe3",
+        "../PK_20261016_185018__3efe3",
+        "a/PK_20261016_185018__3efe3",
+        "a\\PK_20261016_185018__3efe3",
+        "..PK_20261016_185018__3efe3",
+    ],
+)
+def test_an_invalid_fit_id_has_no_subset(fit_id: str) -> None:
+    with pytest.raises(ValueError, match="not the id of a fit"):
+        fit_subset(fit_id)

@@ -17,6 +17,7 @@ import pytest
 from release_git import git
 
 from pkpdsim import __version__
+from pkpdsim.fit import fit_subset
 from pkpdsim.model import PKPDModel
 from pkpdsim.release.cli import main, release
 from pkpdsim.release.manifest import BUILD_MARKER, MANIFEST_FILE
@@ -73,8 +74,11 @@ class FakeRunner:
         elif "--action simulate" in joined:
             self._write(cwd / "results/simulation/all/Decay/index.html")
         elif "run_report" in command:
-            fit_id = command[command.index("--adopted") + 1]
-            self._write(cwd / "results/fit_reports" / fit_id / "index.html")
+            # a report per adopted fit, from the records of the exported package
+            for record in (cwd / "src").glob("**/parameters.json"):
+                report = cwd / "results/fit_reports" / record.parent.name
+                self._write(report / "index.html")
+                self._write(report / "report.pdf", "%PDF")
         return ""
 
     @staticmethod
@@ -206,6 +210,7 @@ def test_no_publish_stops_before_commit(model: PKPDModel, clone: Path) -> None:
     assert (clone / "docs" / "images" / "toy_model.png").is_file()
     assert (clone / "release-notes" / f"{VERSION}.md").is_file()
     assert (clone / "fit" / model.fits[0] / "index.html").is_file()
+    assert (clone / "fit" / model.fits[0] / "report.pdf").is_file()
     assert not (clone / "run_toy.py").exists()
 
 
@@ -296,7 +301,7 @@ def test_local_lock_after_review_rebuilds(model: PKPDModel, clone: Path) -> None
 
 
 def test_fit_without_record_refused(model: PKPDModel, clone: Path) -> None:
-    fit_id = model.fits[0].replace("__", "__f")
+    fit_id = f"{fit_subset(model.fits[0])}_19990101_000000__00000"
     runner = FakeRunner()
     with pytest.raises(ReleaseError, match=fit_id):
         do_release(

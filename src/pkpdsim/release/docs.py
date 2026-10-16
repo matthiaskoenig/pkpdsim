@@ -62,6 +62,8 @@ class FitEntry:
 
     id: str
     rows: list[FitRow]
+    #: the build wrote the methods report of the fit, `fit/<fit id>/report.pdf`
+    pdf: bool = False
 
 
 def _join(names: list[str], last: str) -> str:
@@ -112,7 +114,8 @@ def _fit_entries(context: ProjectContext, release_path: Path) -> list[FitEntry]:
             )
             for pid, p in sorted(record.parameters.items())
         ]
-        entries.append(FitEntry(fit_id, rows))
+        pdf = (release_path / BuildPaths.FITS / fit_id / "report.pdf").is_file()
+        entries.append(FitEntry(fit_id, rows, pdf=pdf))
     return entries
 
 

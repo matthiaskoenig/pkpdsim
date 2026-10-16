@@ -13,7 +13,7 @@ run_simulation pkdb_models.models.hctz --action simulate --experiments all --unc
 run_fit pkdb_models.models.hctz --subset PK --identifiability
 run_fit pkdb_models.models.hctz --adopt PK_<fit id>
 run_report pkdb_models.models.hctz --subset PK results/fit/PK_<fit id>/parameters.json
-run_report pkdb_models.models.hctz --adopted PK_<fit id>
+run_report pkdb_models.models.hctz --adopted
 run_identifiability pkdb_models.models.hctz --subset PK results/fit/PK_<fit id>/parameters.json
 ```
 
@@ -40,8 +40,8 @@ the adopted fits of the model, whose values and uncertainty the factory takes
 `run_report` and `run_identifiability` (`report_command`,
 `identifiability_command`) work on the `parameters.json` of an earlier fit
 (`sbmlsim.fit.cli.report_cli`, `identifiability_cli`);
-`run_report <package> --adopted <fit id>` recreates the report of an adopted fit
-from its record (`pkpdsim.fit_report.report_adopted_fit`). All write into the
+`run_report <package> --adopted` writes the report of every adopted fit of the
+model from its record (`pkpdsim.reports.adopted_reports`). All write into the
 results of the model unless `--output_dir` is given.
 """
 
@@ -76,8 +76,14 @@ from sbmlsim.fit.result import fit_id
 from sbmlsim.utils import paths_text
 from sbmlutils.console import console
 
-from pkpdsim.fit_report import fit_record_dir, report_adopted_fit
+from pkpdsim.fit import (
+    FIXED_FITS,
+    current_fixed_fits,
+    records_context,
+    report_context,
+)
 from pkpdsim.model import PKPDModel, resolve
+from pkpdsim.reports import adopted_reports
 from pkpdsim.uncertainty import UncertaintySettings, adopt_fit
 
 if TYPE_CHECKING:
@@ -732,6 +738,19 @@ def fit_command(
     # the parameters are printed per problem by `run_fit`, with their coverage
     fit_display.print_settings(definition.settings)
 
+    # the adopted fits of the other subsets and the values of their parameters,
+    # in the units of the model, which this fit does not optimize itself
+    fixed_fits = current_fixed_fits(model, options.subset)
+    records = model.fit_records().records
+    fitted = {p.pid for p in definition.parameters}
+    fixed_values = {
+        pid: parameter.value
+        for fit_id_ in fixed_fits
+        for pid, parameter in records[fit_id_].parameters.items()
+        if pid not in fitted
+    }
+    context = report_context(model, options.subset, definition, fixed_fits=fixed_fits)
+
     runs = run_fit(
         definition=definition,
         opid=opid,
@@ -743,6 +762,15 @@ def fit_command(
         study_ids=options.experiments,
         timeout=options.timeout,
         output_dir=options.output_dir,
+        arguments={
+            "subset": options.subset,
+            "runs": options.runs,
+            "cores": options.cores,
+            "method": options.method,
+            "command": f"run_fit {model.package}",
+            FIXED_FITS: fixed_fits,
+        },
+        fixed_values=fixed_values,
     )
 
     # the fit only optimizes, the report is created from its parameters and
@@ -760,84 +788,66 @@ def fit_command(
             fisher=fisher,
             show_titles=False,
             mapping_figures=not options.no_mapping_figures,
+            context=context,
         )
     return runs
-
-
-REPORT_DESCRIPTION = (
-    "Report of a fit for stored parameters. `--adopted FIT_ID [-o DIR]` instead "
-    "recreates the report of the adopted fit FIT_ID of the model from its record."
-)
-"""The description of the help of `run_report`."""
-
-
-def adopted_report_parser(model: PKPDModel) -> argparse.ArgumentParser:
-    """Get the parser of `run_report --adopted`, the report of an adopted fit.
-
-    Args:
-        model: the model.
-
-    Returns:
-        The parser of `--adopted FIT_ID [-o DIR]`.
-    """
-    p = argparse.ArgumentParser(
-        prog=f"run_report {model.package}",
-        description="Recreate the report of an adopted fit of the model from its "
-        "record.",
-    )
-    p.add_argument(
-        "--adopted",
-        metavar="FIT_ID",
-        required=True,
-        help=f"the id of the adopted fit, its record is in {model.fits_dir}",
-    )
-    p.add_argument(
-        "-o",
-        "--output_dir",
-        type=Path,
-        default=model.report_dir,
-        help="directory of the reports, the report is written into OUTPUT_DIR/FIT_ID",
-    )
-    return p
 
 
 def report_command(model: PKPDModel, args: Sequence[str] | None = None) -> Path:
     """Report stored parameter sets of a model (`sbmlsim.fit.cli.report_cli`).
 
-    With `--adopted FIT_ID [-o DIR]` the report of an adopted fit is recreated
-    from its record instead (`pkpdsim.fit_report.report_adopted_fit`).
+    The report has the context of the model, with the fixed adopted fits which
+    the record of the fit next to the parameters names
+    (`pkpdsim.fit.records_context`). With `--adopted` the report of every
+    adopted fit of the model is written from its record, see
+    `pkpdsim.reports.adopted_reports`.
 
     Args:
         model: the model.
         args: command line arguments, `sys.argv[1:]` by default.
 
     Returns:
-        The directory of the report.
-
-    Raises:
-        SystemExit: with 2 for an id which is no adopted fit of the model.
+        The directory of the report, with `--adopted` the directory of the
+        reports.
     """
-    args = list(sys.argv[1:] if args is None else args)
-    p = adopted_report_parser(model)
-    # `--adopted` is looked for first, the parser of `report_cli` requires
-    # files of parameter sets which the report of an adopted fit has none of
-    adopted = argparse.ArgumentParser(add_help=False)
-    adopted.add_argument("--adopted", nargs="?", const="")
-    if adopted.parse_known_args(args)[0].adopted is None:
-        return report_cli(
-            dict(model.load_fit_definitions()),
-            args=with_output_dir(args, model.report_dir),
-            prog=p.prog,
-            description=REPORT_DESCRIPTION,
+    arguments = sys.argv[1:] if args is None else list(args)
+    if "--adopted" in arguments:
+        p = argparse.ArgumentParser(
+            prog=f"run_report {model.package}",
+            description="Report of every adopted fit of the model, from its record.",
         )
-
-    options = p.parse_args(args)
-    log.enable_rich_logging()
-    try:
-        fit_record_dir(model, options.adopted)
-    except (ValueError, FileNotFoundError) as err:
-        p.error(str(err))
-    return report_adopted_fit(model, options.adopted, options.output_dir)
+        p.add_argument("--adopted", action="store_true", required=True)
+        p.add_argument(
+            "-o",
+            "--output_dir",
+            type=Path,
+            default=model.report_dir,
+            help="directory of the reports, one folder per fit",
+        )
+        p.add_argument("--no-mapping-figures", action="store_true")
+        options = p.parse_args(arguments)
+        try:
+            directories = adopted_reports(
+                model,
+                options.output_dir,
+                mapping_figures=not options.no_mapping_figures,
+            )
+        except (ValueError, FileNotFoundError) as err:
+            console.print(str(err), style="error")
+            sys.exit(1)
+        fit_display.key_values({d.name: d for d in directories})
+        return options.output_dir
+    return report_cli(
+        dict(model.load_fit_definitions()),
+        args=with_output_dir(arguments, model.report_dir),
+        prog=f"run_report {model.package}",
+        description=(
+            "Report of a fit for stored parameters. `--adopted` instead writes "
+            "the report of every adopted fit of the model, without a "
+            "parameters file."
+        ),
+        context=records_context(model),
+    )
 
 
 def identifiability_command(

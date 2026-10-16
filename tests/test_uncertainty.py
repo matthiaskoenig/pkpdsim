@@ -3,6 +3,7 @@
 import dataclasses
 import json
 import math
+import re
 import shutil
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,7 @@ from sbmlsim.experiment import ExperimentRunner
 from sbmlsim.fit.options import ParameterScaleType
 from sbmlsim.plot import Curve, Figure
 from sbmlsim.plot.plotting import Band
+from sbmlsim.report.render import compile_pdf
 from sbmlsim.simulation import Dimension, Scan, Simulation
 from sbmlsim.simulation.sampling import LogNormal, Normal, Truncated, Uniform
 from sbmlsim.simulator import Simulator
@@ -87,7 +89,54 @@ def test_adopt_copies_the_record(toy_fit: Path, tmp_path: Path) -> None:
     assert record == tmp_path / toy_fit.name
     names = {p.name for p in record.iterdir()}
     assert {"parameters.json", "identifiability.json", "fisher.json"} <= names
-    assert names <= set(RECORD_FILES)
+    assert names <= set(RECORD_FILES) | {"plots"}
+
+
+REPORT_FILES = [
+    "report.pdf",
+    "report.typ",
+    "references.bib",
+    "references.csl",
+]
+
+
+def test_adopt_copies_the_report(toy_fit: Path, tmp_path: Path) -> None:
+    record = adopt_fit(toy_fit, tmp_path)
+    for name in REPORT_FILES:
+        assert (record / name).exists(), name
+    # the LaTeX sources stay in the results of the fit
+    for name in ("report.tex", "report_standalone.tex"):
+        assert (toy_fit / name).exists(), name
+        assert not (record / name).exists(), name
+    referenced = set(
+        re.findall(
+            r"plots/[\w.\-]+\.(?:png|svg|pdf)",
+            (record / "report.typ").read_text(encoding="utf-8"),
+        )
+    )
+    assert referenced
+    kept = {p.relative_to(record).as_posix() for p in (record / "plots").iterdir()}
+    # the figures the Typst source shows, nothing else of the plots, no PNG
+    # copies of the LaTeX source
+    assert kept == referenced
+    assert list((toy_fit / "plots").glob("*.png"))
+    assert not list((record / "plots").glob("*.png"))
+
+
+def test_the_report_compiles_in_the_record(toy_fit: Path, tmp_path: Path) -> None:
+    record = adopt_fit(toy_fit, tmp_path)
+    pdf = compile_pdf(record / "report.typ", tmp_path / "recompiled.pdf")
+    assert pdf.stat().st_size > 0
+
+
+def test_adopt_skips_a_missing_report(toy_fit: Path, tmp_path: Path) -> None:
+    fit = tmp_path / "old" / toy_fit.name
+    shutil.copytree(toy_fit, fit)
+    for name in REPORT_FILES:
+        (fit / name).unlink(missing_ok=True)
+    record = adopt_fit(fit, tmp_path / "fits")
+    assert (record / "parameters.json").exists()
+    assert not (record / "report.typ").exists()
     assert not (record / "plots").exists()
 
 

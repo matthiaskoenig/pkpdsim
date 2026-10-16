@@ -171,6 +171,8 @@ experiments together or `SINGLE` every experiment on its own), `--experiments`
 are `--parameter` (`-p`, repeatable), `--alpha` (`-a`), `--df`,
 `--max-points`, `--no-reoptimize` and `--no-fisher`.
 
+The report of the fit carries the title of the model (`PKPDModel.title`), the description of the fit (`FitDefinition.description`) and of its parameters (`FitParameter.description`), and a note on the adopted fits of the other subsets of the model, whose parameters were fixed at their fitted values. The provenance of the fit records the arguments of the command (`subset`, `runs`, `cores`, `method`, `command` and `fixed_fits`, the ids of the fixed adopted fits) and the fixed values, i.e. the values of the parameters of the fixed adopted fits which the fit does not optimize itself.
+
 `--adopt <fit id>` copies the record of the finished fit `<fit id>` from the
 output folder into the adopted fits of the model (`MODEL.fits_dir`) instead of
 fitting, `--force` replaces an adopted record of the same id; the id then goes
@@ -192,25 +194,17 @@ parameter sets, `run_identifiability` the profile likelihood and the Fisher
 information of the first parameter set of a file. `--subset` is the fit
 problem, `--output_dir` the folder of the report.
 
-`run_report --adopted` recreates the report of an adopted fit from its record
-in `MODEL.fits_dir` (`pkpdsim.fit_report.report_adopted_fit`): the parameters of
-`parameters.json`; the settings, the runs with their traces and the waterfall
-of `optimization_result.json`; the identifiability section of the stored
-profile likelihood and Fisher information; the figures of the fit mappings,
-also when the fit was run with `--no-mapping-figures`. The fit problem is the
-one of the id of the fit, the report is written into `<output_dir>/<fit id>`:
+The report of `run_report` has the context of the model as the report of `run_fit` has it: the title of the model, the description of the fit and of its parameters and the note on the fixed adopted fits, which are the fits the provenance of the record next to the first file names, not the adopted fits of the model now (a record without provenance names none).
+
+`run_report <package> --adopted` writes the report of every adopted fit of the
+model (`MODEL.fits`) instead, each from its record in `MODEL.fits_dir`, without
+a parameters file and without running a fit:
 
 ```bash
-run_report pkdb_models.models.hctz --adopted PK_<fit id> -o reports
+run_report pkdb_models.models.hctz --adopted
 ```
 
-The data and the predictions are those of the current fit definition and model.
-Two limitations:
-
-- A fit run with `--experiments` is reported over all experiments of its
-  problem, since the record does not store the selection.
-- Fits of the strategy `SINGLE` (one problem per experiment, ids
-  `<experiment>_<problem>_<time>__<hash>`) are not supported.
+Every fit has a report of its own in `MODEL.report_dir/<fit id>` (`--output_dir` replaces `MODEL.report_dir`). It is the report which `run_report <package> --subset <subset> --name <fit id> <record>/parameters.json` writes for the record: the complete report of sbmlsim with the title of the model, the description of the fit and its parameters, the adopted fits whose parameters were fixed as the provenance of the record names them, and the provenance of the record (a record without it states that it was not recorded and names no fixed fits). The subset of a fit is the part of its id before the date, `PK` for `PK_20261016_185018__3efe3`, and must have a fit definition. There is no report which merges the fits of a model.
 
 ## pkpd_release
 
@@ -245,8 +239,8 @@ names another one; the results are not tracked, the adopted fits are:
   it.
 - `run_fit --adopt`: `MODEL.fits_dir` (`fits` next to the output of the
   factory).
-- `run_report`: `MODEL.report_dir` (`results/report`), with `--adopted`
-  `MODEL.report_dir/<fit id>`; `--output_dir` replaces `MODEL.report_dir`.
+- `run_report`: `MODEL.report_dir` (`results/report`), `--output_dir` replaces
+  it; with `--adopted` one folder per adopted fit below it.
 - `run_identifiability`: `MODEL.identifiability_dir`
   (`results/identifiability`), `--output_dir` replaces it.
 

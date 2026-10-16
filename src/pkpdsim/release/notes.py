@@ -27,7 +27,7 @@ from typing import Any, Literal
 import libsbml
 
 from pkpdsim import __version__
-from pkpdsim.fit_report import fit_subset
+from pkpdsim.fit import fit_subset
 from pkpdsim.model import PKPDModel
 from pkpdsim.release.build import BuildPaths
 from pkpdsim.release.project import ProjectContext, render

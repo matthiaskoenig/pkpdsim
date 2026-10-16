@@ -112,7 +112,8 @@ def build(
     runs are written to the ignored folder `results` and copied to the tracked
     folders `models`, `figures`, `simulations`, `simulations_uncertainty` and
     `fit`; `fit` is replaced, so reports of fits which are no longer adopted
-    disappear.
+    disappear. `run_report <package> --adopted` writes the report of every
+    adopted fit into a folder named by its id, which becomes `fit/<fit id>`.
 
     A declared output is required, an undeclared one is optional: the factory must
     create at least one SBML model and, if `model.archive_path` is set, the
@@ -185,24 +186,18 @@ def build(
     fits_dir.mkdir()
     reports = Path(results) / "fit_reports"
     _clear(release_path / reports)
-    for fit_id in model.fits:
-        stage(f"Fit report {fit_id}")
+    if model.fits:
+        # one folder per adopted fit, named by its id, with the HTML report, the
+        # methods report (PDF and Typst source) and the figures
+        stage("Fit reports")
         _step(
             runner,
-            [
-                "uv",
-                "run",
-                "run_report",
-                package,
-                "--adopted",
-                fit_id,
-                "-o",
-                str(reports),
-            ],
+            ["uv", "run", "run_report", package, "--adopted", "-o", str(reports)],
             release_path,
         )
+    for fit_id in model.fits:
         _replace(
-            _require(release_path / reports / fit_id, f"run_report {fit_id}"),
+            _require(release_path / reports / fit_id, f"run_report --adopted {fit_id}"),
             fits_dir / fit_id,
         )
         written.append(Path(BuildPaths.FITS) / fit_id)

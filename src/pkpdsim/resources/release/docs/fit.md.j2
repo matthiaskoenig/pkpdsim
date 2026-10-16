@@ -3,7 +3,7 @@
 {% for fit in fits %}
 ## {{ fit.id }}
 
-[Fit report]({{ settings.site_url }}fit/{{ fit.id }}/index.html)
+[Fit report]({{ settings.site_url }}fit/{{ fit.id }}/index.html){% if fit.pdf %} · [Methods report (PDF)]({{ settings.site_url }}fit/{{ fit.id }}/report.pdf){% endif %}
 
 | Parameter | Value | Unit | Confidence interval | Identifiability |
 | --- | --- | --- | --- | --- |

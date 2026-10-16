@@ -11,16 +11,23 @@ from pkpdsim.release.source import ReleaseError
 from pkpdsim_toy import MODEL
 
 FIT_ID = "FIT_20260101_000000__abcde"
+OTHER_FIT_ID = "OTHER_20260102_000000__bcdef"
+FIT_IDS = [FIT_ID, OTHER_FIT_ID]
 ARCHIVE = MODEL.path / "toy.omex"
-MODEL_WITH_FIT = dataclasses.replace(MODEL, fits=[FIT_ID], archive_path=ARCHIVE)
+MODEL_WITH_FIT = dataclasses.replace(MODEL, fits=FIT_IDS, archive_path=ARCHIVE)
 
 
 class FakeRunner:
     """Records the commands and creates the files a real run would."""
 
     def __init__(
-        self, fail_on: str | None = None, no_archive: bool = False, no_sim: bool = False
+        self,
+        fail_on: str | None = None,
+        no_archive: bool = False,
+        no_sim: bool = False,
+        reported: Sequence[str] = tuple(FIT_IDS),
     ) -> None:
+        self.reported = reported
         self.no_archive = no_archive
         self.no_sim = no_sim
         self.commands: list[list[str]] = []
@@ -53,12 +60,15 @@ class FakeRunner:
         elif "--action simulate" in joined and not self.no_sim:
             self._write(cwd / "results/simulation/all/Exp/index.html")
         elif "run_report" in command:
-            self._write(cwd / "results/fit_reports" / FIT_ID / "index.html")
+            # `run_report --adopted` writes a report per adopted fit
+            for fit_id in self.reported:
+                self._write(cwd / "results/fit_reports" / fit_id / "index.html")
+                self._write(cwd / "results/fit_reports" / fit_id / "report.pdf")
         return ""
 
     @staticmethod
     def _write(path: Path) -> None:
-        path.parent.mkdir(parents=True)
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("<html/>")
 
 
@@ -68,7 +78,7 @@ def test_build_commands_in_order(tmp_path: Path) -> None:
     base = ["uv", "run", "run_simulation", "pkpdsim_toy"]
     simulate = [*base, "--action", "simulate", "--experiments", "all", "-r", "results"]
     simulate += ["--workers", "2"]
-    report = ["uv", "run", "run_report", "pkpdsim_toy", "--adopted", FIT_ID]
+    report = ["uv", "run", "run_report", "pkpdsim_toy", "--adopted"]
     report += ["-o", "results/fit_reports"]
     assert runner.commands == [
         ["uv", "lock"],
@@ -93,7 +103,7 @@ def test_build_streams_and_prints_stages(
         "Models",
         "Simulations",
         "Simulations with the confidence interval",
-        f"Fit report {FIT_ID}",
+        "Fit reports",
     ):
         assert line in out
 
@@ -105,7 +115,9 @@ def test_build_copies_outputs(tmp_path: Path) -> None:
     assert not (tmp_path / "models/other.txt").exists()
     assert (tmp_path / "simulations/Exp/index.html").is_file()
     assert (tmp_path / "simulations_uncertainty/Exp/index.html").is_file()
-    assert (tmp_path / "fit" / FIT_ID / "index.html").is_file()
+    for fit_id in FIT_IDS:
+        assert (tmp_path / "fit" / fit_id / "index.html").is_file()
+        assert (tmp_path / "fit" / fit_id / "report.pdf").is_file()
     assert (tmp_path / "toy.omex").is_file()
     assert (tmp_path / "mit.txt").is_file()
     assert (tmp_path / "cc-by-sa-4.0.txt").is_file()
@@ -114,6 +126,7 @@ def test_build_copies_outputs(tmp_path: Path) -> None:
     assert Path("uv.lock") in written
     assert Path("simulations") in written
     assert Path("fit") / FIT_ID in written
+    assert Path("fit") / OTHER_FIT_ID in written
 
 
 def test_build_replaces_stale_reports(tmp_path: Path) -> None:
@@ -148,3 +161,17 @@ def test_build_does_not_reuse_stale_results(tmp_path: Path) -> None:
     (stale / "index.html").write_text("stale")
     with pytest.raises(ReleaseError, match="simulate"):
         build(MODEL_WITH_FIT, tmp_path, runner=FakeRunner(no_sim=True))
+
+
+def test_build_without_fits_writes_no_reports(tmp_path: Path) -> None:
+    runner = FakeRunner()
+    written = build(dataclasses.replace(MODEL_WITH_FIT, fits=[]), tmp_path, runner)
+    assert not any("run_report" in command for command in runner.commands)
+    assert (tmp_path / "fit").is_dir()
+    assert not any((tmp_path / "fit").iterdir())
+    assert not any(path.parts[0] == "fit" for path in written)
+
+
+def test_build_requires_the_report_of_every_fit(tmp_path: Path) -> None:
+    with pytest.raises(ReleaseError, match=OTHER_FIT_ID):
+        build(MODEL_WITH_FIT, tmp_path, runner=FakeRunner(reported=[FIT_ID]))

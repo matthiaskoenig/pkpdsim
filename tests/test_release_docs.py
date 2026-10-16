@@ -144,6 +144,31 @@ def test_simulations_links(release: tuple[ProjectContext, Path]) -> None:
     assert "no experiment reports" not in page
 
 
+def test_fit_links_the_methods_report(release: tuple[ProjectContext, Path]) -> None:
+    context, path = release
+    fit_id = context.model.fits[0]
+    write(path / BuildPaths.FITS / fit_id / "report.pdf", b"%PDF")
+    write_docs(context, path)
+    page = (path / "docs" / "fit.md").read_text()
+    pdf = f"[Methods report (PDF)]({SETTINGS.site_url}fit/{fit_id}/report.pdf)"
+    assert pdf in page
+
+
+def test_running_recreates_the_fit_reports(
+    release: tuple[ProjectContext, Path],
+) -> None:
+    context, path = release
+    write_docs(context, path)
+    page = (path / "docs" / "running.md").read_text()
+    package = context.model.package
+    assert f"uv run run_report {package} --adopted -o results/fit_reports" in page
+    write_docs(
+        dataclasses.replace(context, model=dataclasses.replace(context.model, fits=[])),
+        path,
+    )
+    assert "run_report" not in (path / "docs" / "running.md").read_text()
+
+
 def test_fit_table(release: tuple[ProjectContext, Path]) -> None:
     context, path = release
     write_docs(context, path)
@@ -151,6 +176,8 @@ def test_fit_table(release: tuple[ProjectContext, Path]) -> None:
     record = FitRecord.load(path / fits_prefix(context.model) / fit_id)
     page = (path / "docs" / "fit.md").read_text()
     assert f"{SETTINGS.site_url}fit/{fit_id}/index.html" in page
+    # the build wrote no methods report
+    assert "report.pdf" not in page
     for pid, parameter in record.parameters.items():
         (row,) = [line for line in page.splitlines() if line.startswith(f"| `{pid}`")]
         if parameter.ci_lower is None or parameter.ci_upper is None:

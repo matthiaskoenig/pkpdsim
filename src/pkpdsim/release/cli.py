@@ -27,7 +27,6 @@ from sbmlutils.console import console
 
 from pkpdsim import __version__
 from pkpdsim.cli import ModelNotFoundError, resolve_model
-from pkpdsim.fit_report import fit_record_dir
 from pkpdsim.model import PKPDModel
 from pkpdsim.release.build import build
 from pkpdsim.release.docs import write_docs
@@ -63,6 +62,7 @@ from pkpdsim.release.source import (
     source_repo,
     stage,
 )
+from pkpdsim.reports import adopted_record
 
 Publisher = Callable[[ReleaseSettings, Path, str, Path, Runner], list[str]]
 """Publishes a built release, see `pkpdsim.release.publish.publish`."""
@@ -97,7 +97,7 @@ def _check_fits(model: PKPDModel) -> None:
         fits_prefix(model)
     for fit_id in model.fits:
         try:
-            fit_record_dir(model, fit_id)
+            adopted_record(model, fit_id)
         except (ValueError, FileNotFoundError) as err:
             raise ReleaseError(str(err)) from err
 
