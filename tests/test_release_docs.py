@@ -102,7 +102,10 @@ def test_models_links(release: tuple[ProjectContext, Path]) -> None:
     assert f"https://sbml4humans.de/model_url?url={raw}models/toy.xml" in models
     assert f"({raw}models/toy.xml)" in models
     assert "https://github.com/pkpdsim/toy-model/blob/main/models/toy.md" in models
-    assert "images/toy.png" in models
+    assert (
+        '![toy model diagram](images/toy.png){ style="max-height: 420px; '
+        'width: auto; max-width: 100%" }' in models
+    )
     assert f"({raw}toy_model.omex)" in models
 
 
@@ -197,6 +200,12 @@ def test_zensical_strict(release: tuple[ProjectContext, Path]) -> None:
     write(path / BuildPaths.FITS / "fit1" / "index.html", "<html/>")
     for folder in (BuildPaths.SIMULATIONS, BuildPaths.FITS):
         shutil.copytree(path / folder, site / folder, dirs_exist_ok=True)
+    # the figure of a model is bounded (attr_list), the overview is not
+    models = (site / "models.html").read_text()
+    assert 'alt="toy model diagram"' in models
+    assert "max-height: 420px" in models
+    assert "max-height" not in (site / "index.html").read_text()
+
     texts = [page.read_text() for page in site.rglob("*.html")]
     assert any("Simulation report with the confidence interval" in t for t in texts)
     assert any("Fit report" in t for t in texts)

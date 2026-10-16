@@ -12,7 +12,7 @@ The models are distributed in [SBML](http://sbml.org) format.
 * Report: [SBML4humans](https://sbml4humans.de/model_url?url={{ settings.raw_url }}models/{{ entry.file }})
 {% if entry.figure %}
 
-![{{ entry.stem }}](images/{{ entry.figure }})
+![{{ entry.stem }} model diagram](images/{{ entry.figure }}){ style="max-height: 420px; width: auto; max-width: 100%" }
 {% endif %}
 
 {% endfor %}
