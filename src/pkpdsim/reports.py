@@ -20,6 +20,37 @@ if TYPE_CHECKING:
     from pkpdsim.model import PKPDModel
 
 
+def adopted_record(model: PKPDModel, fit_id: str) -> Path:
+    """Get the record of an adopted fit of a model, which its report is built from.
+
+    Args:
+        model: the model.
+        fit_id: the id of the adopted fit, e.g. `PK_20261016_185018__3efe3`.
+
+    Returns:
+        The directory of the record in `model.fits_dir`.
+
+    Raises:
+        ValueError: if the id is not the id of a fit (`pkpdsim.fit.fit_subset`)
+            or its subset has no fit definition.
+        FileNotFoundError: if the record of the fit has no `parameters.json`.
+    """
+    subset = fit_subset(fit_id)
+    definitions = model.load_fit_definitions()
+    if subset not in definitions:
+        raise ValueError(
+            f"The subset '{subset}' of the adopted fit '{fit_id}' has no fit "
+            f"definition, the subsets are {', '.join(definitions)}."
+        )
+    record = model.fits_dir / fit_id
+    parameters = record / "parameters.json"
+    if not parameters.exists():
+        raise FileNotFoundError(
+            f"The record of the adopted fit '{fit_id}' has no {parameters}."
+        )
+    return record
+
+
 def adopted_reports(
     model: PKPDModel, output_dir: Path | None = None, *, mapping_figures: bool = True
 ) -> list[Path]:
@@ -57,19 +88,9 @@ def adopted_reports(
     context = records_context(model)
     directories: list[Path] = []
     for fit_id in model.fits:
+        record = adopted_record(model, fit_id)
         subset = fit_subset(fit_id)
-        if subset not in definitions:
-            raise ValueError(
-                f"The subset '{subset}' of the adopted fit '{fit_id}' has no fit "
-                f"definition, the subsets are {', '.join(definitions)}."
-            )
         definition = definitions[subset]
-        record = model.fits_dir / fit_id
-        parameters = record / "parameters.json"
-        if not parameters.exists():
-            raise FileNotFoundError(
-                f"The record of the adopted fit '{fit_id}' has no {parameters}."
-            )
         records = load_fit_records(record)
         report = report_from_records(
             definition,

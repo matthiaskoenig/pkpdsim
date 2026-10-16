@@ -44,7 +44,8 @@ dependencies = [
     # imported directly, also the dependencies of the packages above
     "numpy>=2.5.3",
     "pandas>=3.0.6",
-    # the LaTeX table of the parameters of a sensitivity analysis (`DataFrame.to_latex`)
+    # the templates of the files of a release repository (`pkpdsim.release`) and the
+    # LaTeX table of the parameters of a sensitivity analysis (`DataFrame.to_latex`)
     "jinja2>=3.1.6",
     "matplotlib>=3.11.2",
     "pillow>=12.3.0",
@@ -64,6 +65,7 @@ dev = [
     "pytest-xdist>=3.8.0",
     "zensical>=0.0.69",
     "mkdocstrings-python>=2.0.9",
+    "pyyaml>=6.0.3",
 ]
 
 [project.scripts]
@@ -73,6 +75,8 @@ run_simulation = "pkpdsim.cli:run_simulation_main"
 run_fit = "pkpdsim.cli:run_fit_main"
 run_report = "pkpdsim.cli:run_report_main"
 run_identifiability = "pkpdsim.cli:run_identifiability_main"
+# the release of a model repository
+pkpd_release = "pkpdsim.release.cli:main"
 
 [project.urls]
 Homepage = "https://matthiaskoenig.github.io/pkpdsim"
@@ -92,6 +96,7 @@ packages = ["src/pkpdsim"]
 testpaths = ["tests"]
 # the tests run in parallel (pytest-xdist), `pytest -n 0` runs them in one process
 addopts = "-n auto"
+markers = ["slow: slow tests, deselect with -m \"not slow\""]
 
 [tool.ty.environment]
 # the package lives in the src layout, the scripts are a package at the root of

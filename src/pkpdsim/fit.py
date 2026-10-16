@@ -337,10 +337,12 @@ def fit_subset(fit_id: str) -> str:
         The subset, e.g. `PK`. It may contain underscores, `PK_X_...` is `PK_X`.
 
     Raises:
-        ValueError: if the id does not have the form of the id of a fit.
+        ValueError: if the id does not have the form of the id of a fit, also if
+            it holds a path separator or `..`, so that the id is safe as the name
+            of a directory.
     """
     match = FIT_ID.match(fit_id)
-    if match is None:
+    if match is None or any(part in fit_id for part in ("/", "\\", "..")):
         raise ValueError(
             f"'{fit_id}' is not the id of a fit, which has the form "
             f"'<subset>_<date>_<time>__<hash>', e.g. 'PK_20261016_185018__3efe3'."

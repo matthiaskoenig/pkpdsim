@@ -8,6 +8,7 @@ before the tests start (`tests/conftest.py`) and is not tracked.
 from pathlib import Path
 
 from pkpdsim.model import FigureSettings, PKPDModel, SimulatorSettings
+from pkpdsim.release.settings import Author, ReleaseSettings
 
 TOY_PATH = Path(__file__).parent
 MODEL_BASE_PATH = TOY_PATH / "models"
@@ -26,4 +27,15 @@ MODEL = PKPDModel(
     data_paths=tuple(DATA_PATHS),
     simulator=SimulatorSettings(absolute_tolerance=1e-10, relative_tolerance=1e-10),
     figures=FigureSettings(formats=("svg", "png"), savefig_dpi=30, legend_fontsize=7),
+    release=ReleaseSettings(
+        title="Toy model of the decay of a substance",
+        repository="pkpdsim/toy-model",
+        doi="10.5281/zenodo.0000000",
+        authors=[Author("Doe, Jane", orcid="0000-0000-0000-0000", affiliation="Lab")],
+        keywords=["toy", "pharmacokinetics"],
+        docker_image="pkpdsim/toy",
+        funding="No funding.",
+        description="The decay of a substance A in one compartment.",
+        first_year=2026,
+    ),
 )

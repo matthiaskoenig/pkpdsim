@@ -13,6 +13,7 @@ run_simulation pkdb_models.models.hctz --action simulate --experiments all --unc
 run_fit pkdb_models.models.hctz --subset PK --identifiability
 run_fit pkdb_models.models.hctz --adopt PK_<fit id>
 run_report pkdb_models.models.hctz --subset PK results/fit/PK_<fit id>/parameters.json
+run_report pkdb_models.models.hctz --adopted
 run_identifiability pkdb_models.models.hctz --subset PK results/fit/PK_<fit id>/parameters.json
 ```
 
@@ -38,7 +39,9 @@ the adopted fits of the model, whose values and uncertainty the factory takes
 (`pkpdsim.uncertainty.adopt_fit`).
 `run_report` and `run_identifiability` (`report_command`,
 `identifiability_command`) work on the `parameters.json` of an earlier fit
-(`sbmlsim.fit.cli.report_cli`, `identifiability_cli`). All write into the
+(`sbmlsim.fit.cli.report_cli`, `identifiability_cli`);
+`run_report <package> --adopted` writes the report of every adopted fit of the
+model from its record (`pkpdsim.reports.adopted_reports`). All write into the
 results of the model unless `--output_dir` is given.
 """
 

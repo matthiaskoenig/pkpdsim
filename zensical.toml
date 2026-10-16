@@ -23,6 +23,7 @@ nav = [
     { "Study data" = "data.md" },
     { "Initial values" = "initial_values.md" },
     { "Licenses" = "licenses.md" },
+    { "Release of a model repository" = "release.md" },
   ] },
   { "API reference" = [
     { "Overview" = "api/index.md" },
@@ -43,6 +44,8 @@ nav = [
     { "scan" = "api/scan.md" },
     { "sensitivity" = "api/sensitivity.md" },
     { "uncertainty" = "api/uncertainty.md" },
+    { "reports" = "api/reports.md" },
+    { "release" = "api/release.md" },
     { "testing" = "api/testing.md" },
     { "verify" = "api/verify.md" },
   ] },

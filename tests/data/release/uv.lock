@@ -1,0 +1,12 @@
+version = 1
+requires-python = ">=3.13"
+
+[[package]]
+name = "toy"
+version = "0.1.0"
+source = { virtual = "." }
+
+[[package]]
+name = "pkpdsim"
+version = "0.8.0"
+source = { registry = "https://pypi.org/simple" }
