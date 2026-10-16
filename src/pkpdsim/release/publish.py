@@ -19,6 +19,8 @@ from pkpdsim.release.settings import ReleaseSettings
 from pkpdsim.release.source import ReleaseError, Runner, run, stage
 
 _PYPI = "https://pypi.org/simple"
+DOCKER_PLATFORM = "linux/amd64"
+"""The platform of the Docker image of a release."""
 
 
 def _local_packages(release_path: Path) -> list[str]:
@@ -214,23 +216,42 @@ def _manifest(runner: Runner, reference: str, path: Path) -> str | None:
         return None
 
 
+def _image(path: Path, settings: ReleaseSettings, version: str, runner: Runner) -> bool:
+    """Build the image of the version, before anything is published.
+
+    A Dockerfile or a lock which does not build fails the release before the
+    commit, the tag and the push; a pushed tag cannot be moved. The image is
+    built only while the registry lacks the version (a local image of the
+    version may be of an earlier build, the layer cache keeps the build cheap),
+    for the platform of the hosted runners and of most servers, whatever the
+    machine of the release is.
+    """
+    image = settings.docker_image
+    versioned, latest = f"{image}:{version}", f"{image}:latest"
+    if _manifest(runner, versioned, path) is not None:
+        return False
+    runner(
+        ["docker", "build", "--platform", DOCKER_PLATFORM,
+         "-t", versioned, "-t", latest, "."],
+        path,
+        stream=True,
+    )  # fmt: skip
+    return True
+
+
 def _docker(
     path: Path, settings: ReleaseSettings, version: str, runner: Runner
 ) -> bool:
     """Push the image of the version and point `latest` at it.
 
-    The image of the version on the registry is the release: it is built and
-    pushed only while the registry lacks it (a local image of the version may be
-    of an earlier build, the layer cache keeps the build cheap), and once it is
-    there `latest` is tagged on the registry from it.
+    The image of the version on the registry is the release: the local image
+    (`_image`) is pushed only while the registry lacks it, and once it is there
+    `latest` is tagged on the registry from it.
     """
     image = settings.docker_image
     versioned, latest = f"{image}:{version}", f"{image}:latest"
     remote_version = _manifest(runner, versioned, path)
     if remote_version is None:
-        runner(
-            ["docker", "build", "-t", versioned, "-t", latest, "."], path, stream=True
-        )
         runner(["docker", "push", versioned], path, stream=True)
         runner(["docker", "push", latest], path, stream=True)
         return True
@@ -294,8 +315,9 @@ def publish(
 ) -> list[str]:
     """Publish a built release; every step already done is skipped.
 
-    GitHub Pages is set up before the push, so the docs workflow which the push
-    starts deploys the site.
+    The Docker image is built first, so an image which does not build stops
+    the release before anything is published. GitHub Pages is set up before the
+    push, so the docs workflow which the push starts deploys the site.
 
     Args:
         settings: the release settings of the model.
@@ -305,19 +327,23 @@ def publish(
         runner: runs git, gh and docker.
 
     Returns:
-        The names of the steps which ran: `commit`, `tag`, `pages`, `push`,
-        `docker`, `github_release`.
+        The names of the steps which ran: `image`, `commit`, `tag`, `pages`,
+        `push`, `docker`, `github_release`.
 
     Raises:
         ReleaseError: if a command fails or the tag exists at another commit.
     """
     steps = {
+        "image": (
+            "Docker image build",
+            lambda: _image(release_path, settings, version, runner),
+        ),
         "commit": ("Commit", lambda: _commit(release_path, version, runner)),
         "tag": ("Tag", lambda: _tag(release_path, version, runner)),
         "pages": ("GitHub Pages", lambda: _pages(release_path, settings, runner)),
         "push": ("Push", lambda: _push(release_path, version, runner)),
         "docker": (
-            "Docker image",
+            "Docker image push",
             lambda: _docker(release_path, settings, version, runner),
         ),
         "github_release": (

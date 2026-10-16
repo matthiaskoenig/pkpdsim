@@ -26,7 +26,6 @@ from typing import Any, Literal
 
 import libsbml
 
-from pkpdsim import __version__
 from pkpdsim.fit import fit_subset
 from pkpdsim.model import PKPDModel
 from pkpdsim.release.build import BuildPaths
@@ -700,7 +699,8 @@ def write_release_notes(
     added_experiments, removed_experiments = experiment_changes(release, runner)
     extra = {
         "commit": source.commit[:10],
-        "pkpdsim_version": __version__,
+        # the pkpdsim of the release, not the one which runs the command
+        "pkpdsim_version": locked.get("pkpdsim"),
         "previous": release.last_tag,
         "old_lock": old_lock is not None,
         "core_versions": [(n, locked[n]) for n in CORE_LIBRARIES if n in locked],

@@ -94,7 +94,7 @@ class FakeRunner:
             self.images[cmd[5]] = self.images[cmd[6]]
             return ""
         if cmd[:2] == ["docker", "build"]:
-            self.local_images.update(cmd[3::2][:2])
+            self.local_images.update(cmd[5::2][:2])
             return ""
         if cmd[:2] == ["docker", "push"]:
             self.images[cmd[2]] = "digest-1"
@@ -124,6 +124,10 @@ class FakeRunner:
 
 
 ARCHIVE = Path("toy.zip")
+BUILD = [
+    "docker", "build", "--platform", "linux/amd64",
+    "-t", f"{IMAGE}:{VERSION}", "-t", f"{IMAGE}:latest", ".",
+]  # fmt: skip
 
 
 def _publish(runner: FakeRunner) -> list[str]:
@@ -133,7 +137,9 @@ def _publish(runner: FakeRunner) -> list[str]:
 def test_publish_all_steps() -> None:
     runner = FakeRunner()
     steps = _publish(runner)
-    assert steps == ["commit", "tag", "pages", "push", "docker", "github_release"]
+    assert steps == [
+        "image", "commit", "tag", "pages", "push", "docker", "github_release"
+    ]  # fmt: skip
     mutating = [
         c
         for c in runner.commands
@@ -144,12 +150,12 @@ def test_publish_all_steps() -> None:
         or c[:4] == ["gh", "api", "-X", "POST"]
     ]
     assert mutating == [
+        BUILD,
         ["git", "add", "-A"],
         ["git", "commit", "-m", f"Release {VERSION}"],
         ["git", "tag", VERSION],
         ["gh", "api", "-X", "POST", f"repos/{REPO}/pages", "-f", "build_type=workflow"],
         ["git", "push", "origin", "main", VERSION],
-        ["docker", "build", "-t", f"{IMAGE}:{VERSION}", "-t", f"{IMAGE}:latest", "."],
         ["docker", "push", f"{IMAGE}:{VERSION}"],
         ["docker", "push", f"{IMAGE}:latest"],
         [
@@ -171,13 +177,14 @@ def test_publish_prints_steps_and_streams(capsys: pytest.CaptureFixture[str]) ->
         "Tag",
         "GitHub Pages",
         "Push",
-        "Docker image",
+        "Docker image build",
+        "Docker image push",
         "GitHub release",
     ):
         assert line in out
     assert runner.streamed == [
+        BUILD,
         ["git", "push", "origin", "main", VERSION],
-        ["docker", "build", "-t", f"{IMAGE}:{VERSION}", "-t", f"{IMAGE}:latest", "."],
         ["docker", "push", f"{IMAGE}:{VERSION}"],
         ["docker", "push", f"{IMAGE}:latest"],
     ]
@@ -190,7 +197,20 @@ def test_publish_resume_after_docker_failure() -> None:
     runner.fail_on = f"docker push {IMAGE}:{VERSION}"
     with pytest.raises(ReleaseError):
         _publish(runner)
-    assert _publish(runner) == ["docker", "github_release"]
+    assert _publish(runner) == ["image", "docker", "github_release"]
+    assert VERSION in runner.releases
+
+
+def test_publish_nothing_before_the_image_builds() -> None:
+    """A tag cannot be moved, an image which does not build stops the release first."""
+    runner = FakeRunner()
+    runner.fail_on = "docker build"
+    with pytest.raises(ReleaseError, match="docker build"):
+        _publish(runner)
+    assert not runner.tags
+    assert not runner.remote
+    assert runner.dirty
+    assert _publish(runner)[0] == "image"
     assert VERSION in runner.releases
 
 
@@ -302,7 +322,7 @@ def test_docker_builds_over_a_stale_local_image() -> None:
     runner.local_images = {f"{IMAGE}:{VERSION}", LATEST}
     _publish(runner)
     assert _docker_commands(runner) == [
-        ["docker", "build", "-t", f"{IMAGE}:{VERSION}", "-t", LATEST, "."],
+        BUILD,
         ["docker", "push", f"{IMAGE}:{VERSION}"],
         ["docker", "push", LATEST],
     ]

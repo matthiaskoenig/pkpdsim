@@ -20,7 +20,7 @@ from pkpdsim.release.project import (
     zenodo_json,
 )
 from pkpdsim.release.settings import Author
-from pkpdsim.release.source import SourceRepo
+from pkpdsim.release.source import ReleaseError, SourceRepo
 from pkpdsim_toy import MODEL
 
 assert MODEL.release is not None
@@ -223,6 +223,8 @@ def test_workflows_are_yaml(context: ProjectContext) -> None:
     runs = [s.get("run", "") for s in ci["jobs"]["simulate"]["steps"]]
     assert f"uv run run_simulation {MODEL.package} --action factory" in runs
     assert "deploy" in docs["jobs"]
+    # a tag push does not run the tests again (YAML 1.1 reads the key `on` as True)
+    assert ci[True]["push"] == {"branches": ["main"]}
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="the workflow runs on linux")
@@ -258,3 +260,38 @@ def test_gitignore(context: ProjectContext, tmp_path: Path) -> None:
         ignored
     )
     assert not {"results/", "build/", "dist/", "site/"} & set(ignored)
+
+
+def test_readme_for_the_build(context: ProjectContext, tmp_path: Path) -> None:
+    """The build installs the project, whose `readme` must exist before the docs."""
+    written = write_project_files(context, tmp_path)
+    readme = tmp_path / "README.md"
+    assert readme in written
+    assert readme.read_text() == f"# {SETTINGS.title}\n"
+    readme.write_text("the README of the last release\n")
+    assert readme not in write_project_files(context, tmp_path)
+    assert readme.read_text() == "the README of the last release\n"
+
+
+@pytest.mark.parametrize(
+    ("first_year", "years"), [(2026, "2026"), (2024, "2024-2026"), (2027, "2027")]
+)
+def test_copyright_years(
+    context: ProjectContext, tmp_path: Path, first_year: int, years: str
+) -> None:
+    settings = dataclasses.replace(SETTINGS, first_year=first_year)
+    context = dataclasses.replace(context, settings=settings, year=2026)
+    assert context.copyright_years == years
+    write_project_files(context, tmp_path)
+    zensical = tomllib.loads((tmp_path / "zensical.toml").read_text())["project"]
+    assert zensical["copyright"] == f"Copyright &copy; {years} Jane Doe"
+
+
+def test_source_without_requires_python(source: SourceRepo) -> None:
+    pyproject = source.root / "pyproject.toml"
+    pyproject.write_text('[project]\nname = "source"\n', encoding="utf-8")
+    with pytest.raises(ReleaseError, match="requires-python"):
+        project_context(MODEL, SETTINGS, source, "0.1.0")
+    pyproject.unlink()
+    with pytest.raises(ReleaseError, match=r"no 'pyproject\.toml'"):
+        project_context(MODEL, SETTINGS, source, "0.1.0")

@@ -9,7 +9,6 @@ from pathlib import Path
 import pytest
 from release_git import git
 
-from pkpdsim import __version__
 from pkpdsim.model import PKPDModel
 from pkpdsim.release.notes import (
     CoreSummary,
@@ -336,7 +335,8 @@ def test_write_release_notes(release: ReleaseRepo, model: PKPDModel) -> None:
     assert "\r" not in text
     assert text.startswith("# Release notes for toy-model 0.2.0\n")
     assert "The changes since 0.1.0.\n" in text
-    assert f"Made from pkdb_models {COMMIT[:10]} with pkpdsim {__version__}." in text
+    # the source package and the pkpdsim of the release lock
+    assert f"Made from pkpdsim_toy {COMMIT[:10]} with pkpdsim 0.7.0." in text
     for heading in ("Core libraries", "Libraries", "Data", "Analysis"):
         assert f"## {heading}\n" in text
     assert "pkpdsim 0.6.0 → 0.7.0 (latest 5 of 6):\n" in text

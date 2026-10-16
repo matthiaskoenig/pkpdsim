@@ -76,6 +76,12 @@ class ProjectContext:
         """The first component of the model package, the folder below `src`."""
         return self.model.package.split(".")[0]
 
+    @property
+    def copyright_years(self) -> str:
+        """The years of the copyright, `2026` or `2024-2026`."""
+        first = self.settings.first_year
+        return str(first) if first >= self.year else f"{first}-{self.year}"
+
 
 def _python_version(source: SourceRepo, requires_python: str) -> str:
     version_file = source.root / ".python-version"
@@ -140,11 +146,18 @@ def project_context(
         The context of the templates.
 
     Raises:
-        ReleaseError: if the source lacks `uv.lock` or its Python version is unknown.
+        ReleaseError: if the source lacks `pyproject.toml`, its `requires-python`
+            or `uv.lock`, or its Python version is unknown.
     """
-    pyproject = tomllib.loads((source.root / "pyproject.toml").read_text("utf-8"))
-    project = pyproject["project"]
-    requires_python = project["requires-python"]
+    pyproject_path = source.root / "pyproject.toml"
+    if not pyproject_path.is_file():
+        raise ReleaseError(f"The source has no 'pyproject.toml' at {pyproject_path}.")
+    project = tomllib.loads(pyproject_path.read_text("utf-8")).get("project", {})
+    requires_python = project.get("requires-python")
+    if not isinstance(requires_python, str):
+        raise ReleaseError(
+            f"'{pyproject_path}' has no requires-python in its [project] table."
+        )
     return ProjectContext(
         model=model,
         settings=settings,
@@ -211,6 +224,7 @@ def render(
         "requires_python": context.requires_python,
         "repo_name": context.repo_name,
         "top_package": context.top_package,
+        "copyright_years": context.copyright_years,
         **(extra or {}),
     }
     return _template(name).render(**values)
@@ -259,7 +273,10 @@ def zenodo_json(context: ProjectContext) -> dict[str, Any]:
 def write_project_files(context: ProjectContext, release_path: Path) -> list[Path]:
     """Write the project files into the release repository.
 
-    Workflows in `.github/workflows` which are not written are removed.
+    Workflows in `.github/workflows` which are not written are removed. A
+    repository without `README.md` gets one with the title of the model, the
+    `readme` of `pyproject.toml` which the build installs; the docs stage
+    replaces it.
 
     Args:
         context: the project context.
@@ -284,4 +301,8 @@ def write_project_files(context: ProjectContext, release_path: Path) -> list[Pat
     for workflow in (release_path / ".github" / "workflows").glob("*"):
         if workflow.is_file() and workflow not in written:
             workflow.unlink()
+    readme = release_path / "README.md"
+    if not readme.is_file():
+        readme.write_text(f"# {context.settings.title}\n", "utf-8", newline="\n")
+        written.append(readme)
     return written

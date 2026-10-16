@@ -17,9 +17,9 @@ import pytest
 from release_git import git
 from sbmlutils.console import console
 
-from pkpdsim import __version__
 from pkpdsim.fit import fit_subset
 from pkpdsim.model import PKPDModel
+from pkpdsim.release import source as source_module
 from pkpdsim.release.cli import main, release
 from pkpdsim.release.manifest import BUILD_MARKER, MANIFEST_FILE
 from pkpdsim.release.settings import ReleaseSettings
@@ -31,12 +31,14 @@ pytestmark = pytest.mark.usefixtures("git_env")
 
 VERSION = "0.2.0"
 PYPI = '{ registry = "https://pypi.org/simple" }'
+#: the pkpdsim of the lock of the source repository (`tests/data/release/uv.lock`)
+PKPDSIM = "0.8.0"
 
 
 def lock_text() -> str:
     """A lock of the release with the core libraries from PyPI."""
     packages = [("toy-model", VERSION, '{ editable = "." }')]
-    packages += [(name, __version__, PYPI) for name in ("pkpdsim",)]
+    packages += [("pkpdsim", PKPDSIM, PYPI)]
     packages += [(name, "1.0.0", PYPI) for name in ("sbmlsim", "sbmlutils")]
     blocks = [
         f'[[package]]\nname = "{name}"\nversion = "{version}"\nsource = {source}\n'
@@ -48,9 +50,12 @@ def lock_text() -> str:
 class FakeRunner:
     """Runs git; fakes uv, the commands of the model, docker and gh."""
 
-    def __init__(self, fail_on: str | None = None) -> None:
+    def __init__(
+        self, fail_on: str | None = None, interrupt_on: str | None = None
+    ) -> None:
         self.commands: list[list[str]] = []
         self.fail_on = fail_on
+        self.interrupt_on = interrupt_on
 
     def __call__(self, args: Sequence[str], cwd: Path, *, stream: bool = False) -> str:
         command = [str(a) for a in args]
@@ -58,6 +63,8 @@ class FakeRunner:
         joined = " ".join(command)
         if self.fail_on and self.fail_on in joined:
             raise ReleaseError(f"'{joined}' failed in {cwd}")
+        if self.interrupt_on and self.interrupt_on in joined:
+            raise KeyboardInterrupt
         if command[0] == "git":
             return run(command, cwd)
         if command[:2] == ["uv", "lock"]:
@@ -401,6 +408,33 @@ def test_failed_build_rerun(model: PKPDModel, clone: Path) -> None:
     assert not (clone / ".git" / "pkpd_release_build").exists()
 
 
+def test_file_added_after_a_failed_build_refused(model: PKPDModel, clone: Path) -> None:
+    """A failed build records its changes, a file added by hand is not one."""
+    with pytest.raises(ReleaseError, match="uncertainty"):
+        do_release(
+            model, clone, publish=False, runner=FakeRunner(fail_on="--uncertainty")
+        )
+    (clone / "mine.txt").write_text("added by hand\n")
+    with pytest.raises(ReleaseError, match="changes which no release made"):
+        do_release(model, clone, publish=False)
+    assert (clone / "mine.txt").is_file()
+    (clone / "mine.txt").unlink()
+    do_release(model, clone, publish=False)
+    assert (clone / MANIFEST_FILE).is_file()
+
+
+def test_interrupted_build_is_rebuilt(model: PKPDModel, clone: Path) -> None:
+    """An interrupt (Ctrl+C) records the changes of the build like a failure."""
+    with pytest.raises(KeyboardInterrupt):
+        do_release(
+            model, clone, publish=False, runner=FakeRunner(interrupt_on="--uncertainty")
+        )
+    marker = json.loads((clone / ".git" / BUILD_MARKER).read_text())
+    assert "src/pkpdsim_toy/__init__.py" in marker["changed"]
+    do_release(model, clone, publish=False)
+    assert not (clone / ".git" / BUILD_MARKER).exists()
+
+
 def test_interrupted_rebuild_after_review(model: PKPDModel, clone: Path) -> None:
     do_release(model, clone, publish=False)
     commit_source(model)  # the export writes a file which the manifest lacks
@@ -499,7 +533,8 @@ def test_ignored_export_refused(model: PKPDModel, clone: Path) -> None:
 def test_skipped_build_removes_a_stale_marker(model: PKPDModel, clone: Path) -> None:
     do_release(model, clone, publish=False)
     marker = clone / ".git" / BUILD_MARKER
-    marker.write_text(f"{VERSION}\n")  # a rebuild interrupted before it changed a file
+    # a rebuild killed before it changed a file
+    marker.write_text(json.dumps({"version": VERSION}) + "\n")
     runner = FakeRunner()
     do_release(model, clone, publish=True, runner=runner)
     assert not runner.ran("run_simulation")
@@ -510,7 +545,7 @@ def test_resume_removes_a_stale_marker(model: PKPDModel, clone: Path) -> None:
     do_release(model, clone, publish=False)
     commit_release(clone, tag=False)
     marker = clone / ".git" / BUILD_MARKER
-    marker.write_text(f"{VERSION}\n")
+    marker.write_text(json.dumps({"version": VERSION}) + "\n")
     do_release(model, clone, publish=True)
     assert not marker.exists()
 
@@ -536,3 +571,20 @@ def test_local_commit_before_the_release_commit_refused(
     with pytest.raises(ReleaseError, match="ahead of origin/main by 2 commits"):
         do_release(model, clone, publish=True, publisher=publisher)
     assert publisher.calls == []
+
+
+def test_first_release_into_an_empty_repository(
+    model: PKPDModel, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    remote = tmp_path / "empty.git"
+    remote.mkdir()
+    git(remote, "init", "--bare", "-b", "main")
+    monkeypatch.setattr(
+        source_module, "clone_url", lambda repository: f"file://{remote}"
+    )
+    path = tmp_path / "new-model"
+    do_release(model, path, publish=False)
+    assert (path / MANIFEST_FILE).is_file()
+    assert (path / "README.md").is_file()
+    notes = (path / "release-notes" / f"{VERSION}.md").read_text()
+    assert "First release." in notes

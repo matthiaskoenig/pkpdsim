@@ -21,7 +21,7 @@
 {%- endmacro %}
 # Release notes for {{ repo_name }} {{ version }}
 
-Made from pkdb_models {{ commit }} with pkpdsim {{ pkpdsim_version }}.
+Made from {{ top_package }} {{ commit }}{% if pkpdsim_version %} with pkpdsim {{ pkpdsim_version }}{% endif %}.
 
 {% if previous is none %}
 First release.

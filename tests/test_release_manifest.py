@@ -1,5 +1,6 @@
 """Tests of the release manifest and the pruning of the release repository."""
 
+import json
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,7 @@ from pkpdsim.release.manifest import (
     matches,
     prune,
     start_build,
+    stop_build,
     write_manifest,
 )
 from pkpdsim.release.source import ReleaseError, SourceRepo, run
@@ -120,6 +122,7 @@ def test_other_commit_breaks_match(release: tuple[Path, list[Path]]) -> None:
     assert not matches(root, "0.8.0", "other", "0.8.0")
     assert not matches(root, "0.9.0", "abc123", "0.8.0")
     assert not matches(root, "0.8.0", "abc123", "0.8.1")
+    assert not matches(root, "0.8.0", "abc123", None)
 
 
 def test_prune_keeps_release_notes_and_ignored(
@@ -191,20 +194,53 @@ def test_changed_by_build_clean(release: tuple[Path, list[Path]]) -> None:
     assert changed_by_build(root, "0.8.0")
 
 
-def test_unfinished_build_accepts_any_change(
+def test_unfinished_build_accepts_its_changes(
     release: tuple[Path, list[Path]],
 ) -> None:
     root, written = release
     write_manifest(root, "0.8.0", SOURCE, written)
     write(root, "extra.txt")
     assert not changed_by_build(root, "0.8.0")
+    marker = root / ".git" / "pkpd_release_build"
     start_build(root, "0.9.0")
-    assert (root / ".git" / "pkpd_release_build").read_text() == "0.9.0\n"
+    assert json.loads(marker.read_text()) == {"version": "0.9.0"}
+    # a killed build recorded no paths, every change may be its change
     assert changed_by_build(root, "0.8.0")
     assert changed_by_build(root, "1.0.0")
+    stop_build(root)
+    assert "extra.txt" in json.loads(marker.read_text())["changed"]
+    assert changed_by_build(root, "1.0.0")
+    write(root, "added_by_hand.txt")
+    assert not changed_by_build(root, "1.0.0")
+    (root / "added_by_hand.txt").unlink()
     finish_build(root)
-    assert not (root / ".git" / "pkpd_release_build").exists()
+    assert not marker.exists()
     assert not changed_by_build(root, "0.8.0")
+
+
+def test_stop_build_without_marker(release: tuple[Path, list[Path]]) -> None:
+    root, _ = release
+    stop_build(root)
+    assert not (root / ".git" / "pkpd_release_build").exists()
+
+
+def test_marker_of_a_worktree(release: tuple[Path, list[Path]], tmp_path: Path) -> None:
+    """In a worktree `.git` is a file, the marker lies in its git folder."""
+    root, _ = release
+    run(["git", "add", "-A"], root)
+    run(["git", "commit", "-m", "all"], root)
+    worktree = tmp_path / "worktree"
+    run(["git", "worktree", "add", "-b", "other", str(worktree)], root)
+    assert (worktree / ".git").is_file()
+    start_build(worktree, "0.9.0")
+    git_dir = Path(run(["git", "rev-parse", "--absolute-git-dir"], worktree).strip())
+    assert (git_dir / "pkpd_release_build").is_file()
+    write(worktree, "extra.txt")
+    removed = prune(worktree, [])
+    assert (worktree / ".git").is_file()
+    assert worktree / "extra.txt" in removed
+    finish_build(worktree)
+    assert not (git_dir / "pkpd_release_build").exists()
 
 
 def test_check_not_ignored(release: tuple[Path, list[Path]]) -> None:

@@ -164,9 +164,16 @@ def test_build_does_not_reuse_stale_results(tmp_path: Path) -> None:
 
 
 def test_build_without_fits_writes_no_reports(tmp_path: Path) -> None:
+    """Without adopted fits there are no fit reports and no confidence interval."""
+    stale = tmp_path / "simulations_uncertainty"
+    stale.mkdir()
+    (stale / "index.html").write_text("stale")
     runner = FakeRunner()
     written = build(dataclasses.replace(MODEL_WITH_FIT, fits=[]), tmp_path, runner)
     assert not any("run_report" in command for command in runner.commands)
+    assert not any("--uncertainty" in command for command in runner.commands)
+    assert not stale.exists()
+    assert Path("simulations_uncertainty") not in written
     assert (tmp_path / "fit").is_dir()
     assert not any((tmp_path / "fit").iterdir())
     assert not any(path.parts[0] == "fit" for path in written)

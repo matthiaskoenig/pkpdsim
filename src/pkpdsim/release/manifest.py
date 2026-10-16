@@ -182,7 +182,7 @@ def matches(
     release_path: Path,
     version: str,
     source_commit: str,
-    pkpdsim_version: str,
+    pkpdsim_version: str | None,
     runner: Runner = run,
 ) -> bool:
     """Tell whether the release repository holds the build of this release.
@@ -191,7 +191,8 @@ def matches(
         release_path: the release repository.
         version: the version to release.
         source_commit: the commit of the source repository.
-        pkpdsim_version: the version of pkpdsim which runs the release.
+        pkpdsim_version: the version of pkpdsim which the source locks (see
+            `pkpdsim.release.source.source_pkpdsim`), `None` matches no build.
         runner: runs git.
 
     Returns:
@@ -216,11 +217,23 @@ def matches(
     return _status_paths(release_path, runner) <= allowed
 
 
-def _marker(release_path: Path) -> Path:
-    return release_path / ".git" / BUILD_MARKER
+def _marker(release_path: Path, runner: Runner) -> Path:
+    # the git folder of the checkout, `.git` is a file in a worktree or submodule
+    git_dir = runner(["git", "rev-parse", "--absolute-git-dir"], release_path)
+    return Path(git_dir.strip()) / BUILD_MARKER
 
 
-def start_build(release_path: Path, version: str) -> None:
+def _read_marker(marker: Path) -> dict[str, object] | None:
+    if not marker.is_file():
+        return None
+    try:
+        data = json.loads(marker.read_text(encoding="utf-8"))
+    except ValueError:
+        return {}  # a marker of an unknown format, the build left no paths
+    return data if isinstance(data, dict) else {}
+
+
+def start_build(release_path: Path, version: str, runner: Runner = run) -> None:
     """Mark the start of a build, before the first file is written.
 
     The marker lies in the git folder, so it is never committed or pruned.
@@ -228,17 +241,41 @@ def start_build(release_path: Path, version: str) -> None:
     Args:
         release_path: the release repository.
         version: the version which is built.
+        runner: runs git.
     """
-    _marker(release_path).write_text(f"{version}\n", encoding="utf-8", newline="\n")
+    _marker(release_path, runner).write_text(
+        json.dumps({"version": version}) + "\n", encoding="utf-8", newline="\n"
+    )
 
 
-def finish_build(release_path: Path) -> None:
+def stop_build(release_path: Path, runner: Runner = run) -> None:
+    """Record the paths a build changed before it failed or was interrupted.
+
+    The marker keeps the paths which git status lists, so the next run tells
+    the changes of the build from a file added by hand (`changed_by_build`). A
+    build which could not record them (it was killed) leaves a marker without
+    paths.
+
+    Args:
+        release_path: the release repository.
+        runner: runs git.
+    """
+    marker = _marker(release_path, runner)
+    data = _read_marker(marker)
+    if data is None:
+        return
+    data["changed"] = sorted(_status_paths(release_path, runner))
+    marker.write_text(json.dumps(data) + "\n", encoding="utf-8", newline="\n")
+
+
+def finish_build(release_path: Path, runner: Runner = run) -> None:
     """Remove the marker of a build, after the manifest is written.
 
     Args:
         release_path: the release repository.
+        runner: runs git.
     """
-    _marker(release_path).unlink(missing_ok=True)
+    _marker(release_path, runner).unlink(missing_ok=True)
 
 
 def changed_by_build(release_path: Path, version: str, runner: Runner = run) -> bool:
@@ -247,7 +284,9 @@ def changed_by_build(release_path: Path, version: str, runner: Runner = run) -> 
     A build of the same version may be rebuilt, the files may differ from their
     hashes (e.g. after a hand edit during the review). Deleted files are no
     change, a build deletes what it did not generate. A build which failed or
-    was interrupted left its marker, its changes are rebuilt as well.
+    was interrupted left its marker with the paths it had changed
+    (`stop_build`), these are rebuilt as well; a build which was killed left
+    no paths, then every change is taken as its change.
 
     Args:
         release_path: the release repository.
@@ -255,19 +294,25 @@ def changed_by_build(release_path: Path, version: str, runner: Runner = run) -> 
         runner: runs git.
 
     Returns:
-        `True` if a build has not finished (see `start_build`), git status lists
-        no file, or the manifest is of `version` and git status lists only files
-        of the manifest and `release.json`.
+        `True` if git status lists no file, or lists only files of the manifest
+        of `version`, `release.json` and the paths of an unfinished build.
     """
-    if _marker(release_path).is_file():
-        return True
     changed = _status_paths(release_path, runner)
     if not changed:
         return True
+    allowed = {MANIFEST_FILE}
     manifest = Manifest.read(release_path / MANIFEST_FILE)
-    if manifest is None or manifest.version != version:
+    if manifest is not None and manifest.version == version:
+        allowed |= set(manifest.files)
+    marker = _read_marker(_marker(release_path, runner))
+    if marker is not None:
+        paths = marker.get("changed")
+        if not isinstance(paths, list):
+            return True
+        allowed |= {str(p) for p in paths}
+    elif manifest is None or manifest.version != version:
         return False
-    return changed <= {*manifest.files, MANIFEST_FILE}
+    return changed <= allowed
 
 
 def _ignored(release_path: Path, runner: Runner) -> tuple[set[str], set[str]]:
@@ -329,7 +374,7 @@ def prune(
 ) -> list[Path]:
     """Remove every file of the release repository the command did not generate.
 
-    Kept are `.git/`, ignored files (`.gitignore`), `release-notes/*.md`,
+    Kept are `.git`, ignored files (`.gitignore`), `release-notes/*.md`,
     `release.json` and `written`. Folders left empty are removed.
 
     Args:
@@ -356,6 +401,7 @@ def prune(
             relative = (relative_root / name).as_posix()
             if (
                 relative in keep
+                or relative == ".git"  # the git file of a worktree or submodule
                 or relative in ignored_files
                 or (relative_root.as_posix() == _RELEASE_NOTES and name.endswith(".md"))
             ):

@@ -19,13 +19,13 @@ for the order of the steps.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
 from sbmlutils.console import console
 
-from pkpdsim import __version__
 from pkpdsim.cli import ModelNotFoundError, resolve_model
 from pkpdsim.model import PKPDModel
 from pkpdsim.release.build import build
@@ -37,6 +37,7 @@ from pkpdsim.release.manifest import (
     matches,
     prune,
     start_build,
+    stop_build,
     write_manifest,
 )
 from pkpdsim.release.notes import fits_prefix, write_release_notes
@@ -59,6 +60,7 @@ from pkpdsim.release.source import (
     parse_version,
     release_repo,
     run,
+    source_pkpdsim,
     source_repo,
     stage,
 )
@@ -137,21 +139,28 @@ def _build(
     """Build the release in the release repository and write its manifest."""
     path = target.path
     context = project_context(model, settings, source, version, pkpdsim_path)
-    start_build(path, version)
-    stage(f"Export of {model.package} into {path}")
-    written: list[Path] = export_package(model, settings, source, path, runner)
-    stage("Project files")
-    written += write_project_files(context, path)
-    written += build(model, path, runner, workers)
-    stage("Release notes")
-    written.append(write_release_notes(context, target, model, source, runner))
-    stage("Docs and README")
-    written += write_docs(context, path)
-    stage("Prune and manifest")
-    check_not_ignored(path, written, runner)
-    prune(path, written, runner)
-    write_manifest(path, version, source, written)
-    finish_build(path)
+    start_build(path, version, runner)
+    try:
+        stage(f"Export of {model.package} into {path}")
+        written: list[Path] = export_package(model, settings, source, path, runner)
+        stage("Project files")
+        written += write_project_files(context, path)
+        written += build(model, path, runner, workers)
+        stage("Release notes")
+        written.append(write_release_notes(context, target, model, source, runner))
+        stage("Docs and README")
+        written += write_docs(context, path)
+        stage("Prune and manifest")
+        check_not_ignored(path, written, runner)
+        prune(path, written, runner)
+        write_manifest(path, version, source, written)
+    except BaseException:
+        # a failed or interrupted build records what it changed, the next run
+        # rebuilds it; recording must not hide the failure
+        with contextlib.suppress(Exception):
+            stop_build(path, runner)
+        raise
+    finish_build(path, runner)
 
 
 def release(
@@ -195,8 +204,9 @@ def release(
 
     A build which failed or was interrupted is rebuilt by the next run: the
     build marks its start in the git folder and removes the mark after the
-    manifest (`start_build`, `finish_build`), and a marked repository may hold
-    any change.
+    manifest (`start_build`, `finish_build`); a build which fails or is
+    interrupted records the paths it changed in the mark (`stop_build`), so a
+    file added by hand afterwards is still refused.
 
     If `HEAD` is the release commit of the version (clean, with its manifest)
     and its tag is missing or at `HEAD`, an earlier run failed while
@@ -247,11 +257,11 @@ def release(
 
     built = resume or (
         publish
-        and matches(path, version, source.commit, __version__, runner)
+        and matches(path, version, source.commit, source_pkpdsim(source), runner)
         and _lock_publishable(path)
     )
     if built:
-        finish_build(path)  # the tree is a finished build, a marker is stale
+        finish_build(path, runner)  # the tree is a finished build, a marker is stale
     else:
         if not changed_by_build(path, version, runner):
             raise ReleaseError(

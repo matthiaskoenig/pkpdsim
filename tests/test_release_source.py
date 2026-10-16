@@ -8,6 +8,7 @@ import pytest
 from release_git import git
 
 from pkpdsim.model import PKPDModel
+from pkpdsim.release import source as source_module
 from pkpdsim.release.settings import ReleaseSettings
 from pkpdsim.release.source import (
     ReleaseError,
@@ -168,3 +169,36 @@ def test_export_replaces(tmp_path: Path, source_repo_model: PKPDModel) -> None:
     stale.write_text("old\n")
     export_package(source_repo_model, SETTINGS, source_repo(source_repo_model), release)
     assert not stale.exists()
+
+
+def test_release_repo_empty(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    source_repo_model: PKPDModel,
+) -> None:
+    """A new repository on GitHub has no commit, it has no release yet."""
+    remote = tmp_path / "empty.git"
+    remote.mkdir()
+    git(remote, "init", "--bare", "-b", "main")
+    monkeypatch.setattr(
+        source_module, "clone_url", lambda repository: f"file://{remote}"
+    )
+    source = source_repo(source_repo_model)
+    path = tmp_path / "toy-model"
+    repo = release_repo(SETTINGS, path, source)
+    assert (repo.last_tag, repo.ahead) == (None, 0)
+    (path / "x.txt").write_text("x\n")
+    git(path, "add", "-A")
+    git(path, "commit", "-m", "the release commit, not pushed")
+    assert release_repo(SETTINGS, path, source).ahead == 1
+
+
+def test_release_repo_detached_refused(
+    source_repo_model: PKPDModel,
+    remote_and_clone: tuple[Path, Path],
+    release_settings: ReleaseSettings,
+) -> None:
+    _, clone = remote_and_clone
+    git(clone, "checkout", "--detach")
+    with pytest.raises(ReleaseError, match="on branch 'HEAD', not 'main'"):
+        release_repo(release_settings, clone, source_repo(source_repo_model))

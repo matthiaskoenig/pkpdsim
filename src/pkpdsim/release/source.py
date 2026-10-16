@@ -12,6 +12,7 @@ from __future__ import annotations
 import re
 import shutil
 import subprocess
+import tomllib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -200,6 +201,30 @@ def locked_version(package: Mapping[str, Any]) -> str:
     return " ".join(f"{kind} {location}" for kind, location in source.items()) or "?"
 
 
+def source_pkpdsim(source: SourceRepo) -> str | None:
+    """Get the version of pkpdsim which the source repository locks.
+
+    The release repository is locked to the library versions of the source (see
+    `pkpdsim.release.project`), so this is the pkpdsim of the release, whichever
+    pkpdsim runs the command.
+
+    Args:
+        source: the source repository.
+
+    Returns:
+        The locked version (see `locked_version`), `None` without `uv.lock` or
+        without pkpdsim in it.
+    """
+    lock_path = source.root / "uv.lock"
+    if not lock_path.is_file():
+        return None
+    lock = tomllib.loads(lock_path.read_text("utf-8"))
+    for package in lock.get("package", []):
+        if package.get("name") == "pkpdsim":
+            return locked_version(package)
+    return None
+
+
 def _last_tag(tags: Sequence[str]) -> str | None:
     versions = [t for t in tags if _VERSION.match(t)]
     return max(versions, key=parse_version, default=None)
@@ -225,6 +250,9 @@ def release_repo(
         commits which are not pushed (only the release commit of a release
         which failed while publishing may be, see `pkpdsim.release.cli`).
 
+    An empty repository (a new repository on GitHub without a commit) has no
+    release and no commit ahead.
+
     Raises:
         ReleaseError: if `origin` is another repository, the branch is not `main`
             or the branch is behind `origin/main`.
@@ -241,18 +269,33 @@ def release_repo(
             f"{path} has origin {origin}, not the release repository "
             f"{settings.repository}"
         )
-    branch = runner(["git", "rev-parse", "--abbrev-ref", "HEAD"], path).strip()
+    # empty on a detached HEAD; the branch of an empty repository has no commit
+    branch = runner(["git", "branch", "--show-current"], path).strip()
     if branch != "main":
-        raise ReleaseError(f"{path} is on branch '{branch}', not 'main'")
+        raise ReleaseError(f"{path} is on branch '{branch or 'HEAD'}', not 'main'")
     runner(["git", "fetch", "--tags", "origin"], path)
-    behind = runner(["git", "rev-list", "--count", "HEAD..origin/main"], path)
-    if int(behind.strip() or "0") > 0:
+    local = _has_ref(path, "refs/heads/main", runner)
+    remote = _has_ref(path, "refs/remotes/origin/main", runner)
+    if remote and (not local or _count(path, "HEAD..origin/main", runner) > 0):
         raise ReleaseError(f"{path} is behind origin/main, pull it first")
-    ahead = runner(["git", "rev-list", "--count", "origin/main..HEAD"], path)
+    if not local:
+        ahead = 0
+    elif remote:
+        ahead = _count(path, "origin/main..HEAD", runner)
+    else:
+        ahead = _count(path, "HEAD", runner)
     tags = runner(["git", "tag", "--list"], path).split()
-    return ReleaseRepo(
-        path=path, last_tag=_last_tag(tags), ahead=int(ahead.strip() or "0")
+    return ReleaseRepo(path=path, last_tag=_last_tag(tags), ahead=ahead)
+
+
+def _has_ref(path: Path, ref: str, runner: Runner) -> bool:
+    return bool(
+        runner(["git", "for-each-ref", "--format=%(refname)", ref], path).strip()
     )
+
+
+def _count(path: Path, revisions: str, runner: Runner) -> int:
+    return int(runner(["git", "rev-list", "--count", revisions], path).strip() or "0")
 
 
 def check_version(version: str, last_tag: str | None) -> None:

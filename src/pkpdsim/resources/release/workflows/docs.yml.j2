@@ -18,10 +18,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install uv and set the python version
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v10.2.0
         with:
           python-version: "{{ python }}"
           enable-cache: true
@@ -39,7 +39,7 @@ jobs:
             if [ -d "$folder" ]; then cp -r "$folder" site/; fi
           done
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: site
 
@@ -51,4 +51,4 @@ jobs:
       url: ${{ '{{' }} steps.deployment.outputs.page_url {{ '}}' }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

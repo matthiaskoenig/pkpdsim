@@ -177,6 +177,21 @@ def test_running_recreates_the_fit_reports(
     assert "run_report" not in (path / "docs" / "running.md").read_text()
 
 
+def test_without_fits_no_confidence_interval(
+    release: tuple[ProjectContext, Path],
+) -> None:
+    """A model without adopted fits has no simulations with a confidence interval."""
+    context, path = release
+    write_docs(context, path)
+    assert "--uncertainty" in (path / "docs" / "running.md").read_text()
+    model = dataclasses.replace(context.model, fits=[])
+    write_docs(dataclasses.replace(context, model=model), path)
+    assert "--uncertainty" not in (path / "docs" / "running.md").read_text()
+    page = (path / "docs" / "simulations.md").read_text()
+    assert "simulations_uncertainty" not in page
+    assert f"{SETTINGS.site_url}simulations/index.html" in page
+
+
 def test_fit_table(release: tuple[ProjectContext, Path]) -> None:
     context, path = release
     write_docs(context, path)

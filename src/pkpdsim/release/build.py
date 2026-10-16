@@ -112,7 +112,9 @@ def build(
     runs are written to the ignored folder `results` and copied to the tracked
     folders `models`, `figures`, `simulations`, `simulations_uncertainty` and
     `fit`; `fit` is replaced, so reports of fits which are no longer adopted
-    disappear. `run_report <package> --adopted` writes the report of every
+    disappear. The simulations with the confidence interval need the
+    distributions of the adopted fits, a model without adopted fits has no
+    `simulations_uncertainty`. `run_report <package> --adopted` writes the report of every
     adopted fit into a folder named by its id, which becomes `fit/<fit id>`.
 
     A declared output is required, an undeclared one is optional: the factory must
@@ -168,17 +170,23 @@ def build(
     )
     written.append(Path(BuildPaths.SIMULATIONS))
 
-    stage("Simulations with the confidence interval")
+    uncertainty_dir = release_path / BuildPaths.UNCERTAINTY
+    if uncertainty_dir.exists():
+        shutil.rmtree(uncertainty_dir)
     _clear(release_path / results / "simulation_uncertainty" / "all")
-    _step(runner, [*simulate, "--uncertainty"], release_path)
-    _replace(
-        _require(
-            release_path / results / "simulation_uncertainty" / "all",
-            "simulate --uncertainty",
-        ),
-        release_path / BuildPaths.UNCERTAINTY,
-    )
-    written.append(Path(BuildPaths.UNCERTAINTY))
+    if model.fits:
+        # the confidence interval comes from the distributions of the fitted
+        # parameters, a model without adopted fits has none
+        stage("Simulations with the confidence interval")
+        _step(runner, [*simulate, "--uncertainty"], release_path)
+        _replace(
+            _require(
+                release_path / results / "simulation_uncertainty" / "all",
+                "simulate --uncertainty",
+            ),
+            uncertainty_dir,
+        )
+        written.append(Path(BuildPaths.UNCERTAINTY))
 
     fits_dir = release_path / BuildPaths.FITS
     if fits_dir.exists():
