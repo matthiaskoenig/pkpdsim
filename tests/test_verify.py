@@ -23,6 +23,7 @@ from sbmlsim.simulation.sampling import local
 from pkpdsim.model import FigureSettings
 from pkpdsim.verify import (
     FIGURE_SETTINGS_08,
+    NEW_FIGURE_SETTINGS,
     Dump,
     apply_renames,
     describe,
@@ -1101,7 +1102,10 @@ def test_the_settings_of_a_figure_of_sbmlsim_08_are_those_of_sbmlsim_09() -> Non
     from sbmlsim.plot import FigureSettings as SbmlsimFigureSettings
 
     names = tuple(f.name for f in dataclasses.fields(SbmlsimFigureSettings))
-    assert names == FIGURE_SETTINGS_08
+    # the settings only newer sbmlsim has (absent from 0.9.5) are not those of 0.8
+    old = tuple(name for name in names if name not in NEW_FIGURE_SETTINGS)
+    assert old == FIGURE_SETTINGS_08
+    assert set(names) - set(old) <= set(NEW_FIGURE_SETTINGS)
 
 
 def test_the_figures_of_sbmlsim_08_compare_with_those_of_09(
