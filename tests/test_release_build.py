@@ -11,13 +11,18 @@ from pkpdsim.release.source import ReleaseError
 from pkpdsim_toy import MODEL
 
 FIT_ID = "FIT_20260101_000000__abcde"
-MODEL_WITH_FIT = dataclasses.replace(MODEL, fits=[FIT_ID])
+ARCHIVE = MODEL.path / "toy.omex"
+MODEL_WITH_FIT = dataclasses.replace(MODEL, fits=[FIT_ID], archive_path=ARCHIVE)
 
 
 class FakeRunner:
     """Records the commands and creates the files a real run would."""
 
-    def __init__(self, fail_on: str | None = None) -> None:
+    def __init__(
+        self, fail_on: str | None = None, no_archive: bool = False, no_sim: bool = False
+    ) -> None:
+        self.no_archive = no_archive
+        self.no_sim = no_sim
         self.commands: list[list[str]] = []
         self.fail_on = fail_on
 
@@ -33,9 +38,16 @@ class FakeRunner:
             (models / "toy.xml").write_text("<sbml/>")
             (models / "toy.md").write_text("# toy")
             (models / "other.txt").write_text("not copied")
+            output = models.parent
+            (output / "mit.txt").write_text("MIT")
+            (output / "cc-by-sa-4.0.txt").write_text("CC")
+            (output / "figures").mkdir()
+            (output / "figures" / "model.svg").write_text("<svg/>")
+            if not self.no_archive:
+                (output / "toy.omex").write_text("omex")
         elif "--uncertainty" in command:
             self._write(cwd / "results/simulation_uncertainty/all/Exp/index.html")
-        elif "--action simulate" in joined:
+        elif "--action simulate" in joined and not self.no_sim:
             self._write(cwd / "results/simulation/all/Exp/index.html")
         elif "run_report" in command:
             self._write(cwd / "results/fit_reports" / FIT_ID / "index.html")
@@ -73,6 +85,10 @@ def test_build_copies_outputs(tmp_path: Path) -> None:
     assert (tmp_path / "simulations/Exp/index.html").is_file()
     assert (tmp_path / "simulations_uncertainty/Exp/index.html").is_file()
     assert (tmp_path / "fit" / FIT_ID / "index.html").is_file()
+    assert (tmp_path / "toy.omex").is_file()
+    assert (tmp_path / "mit.txt").is_file()
+    assert (tmp_path / "cc-by-sa-4.0.txt").is_file()
+    assert (tmp_path / "figures/model.svg").is_file()
     assert Path("models/toy.xml") in written
     assert Path("simulations") in written
     assert Path("fit") / FIT_ID in written
@@ -90,3 +106,23 @@ def test_build_replaces_stale_reports(tmp_path: Path) -> None:
 def test_build_failure_names_step(tmp_path: Path) -> None:
     with pytest.raises(ReleaseError, match="--uncertainty"):
         build(MODEL_WITH_FIT, tmp_path, runner=FakeRunner(fail_on="--uncertainty"))
+
+
+def test_build_missing_declared_archive_raises(tmp_path: Path) -> None:
+    with pytest.raises(ReleaseError, match=r"toy\.omex"):
+        build(MODEL_WITH_FIT, tmp_path, runner=FakeRunner(no_archive=True))
+
+
+def test_build_removes_stale_models(tmp_path: Path) -> None:
+    (tmp_path / "models").mkdir()
+    (tmp_path / "models/old.xml").write_text("old")
+    build(MODEL_WITH_FIT, tmp_path, runner=FakeRunner())
+    assert not (tmp_path / "models/old.xml").exists()
+
+
+def test_build_does_not_reuse_stale_results(tmp_path: Path) -> None:
+    stale = tmp_path / "results/simulation/all/Exp"
+    stale.mkdir(parents=True)
+    (stale / "index.html").write_text("stale")
+    with pytest.raises(ReleaseError, match="simulate"):
+        build(MODEL_WITH_FIT, tmp_path, runner=FakeRunner(no_sim=True))

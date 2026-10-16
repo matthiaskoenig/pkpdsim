@@ -38,6 +38,12 @@ def _replace(source: Path, target: Path) -> None:
     shutil.copytree(source, target)
 
 
+def _clear(path: Path) -> None:
+    """Remove the result folder of a run, so stale results are never reused."""
+    if path.exists():
+        shutil.rmtree(path)
+
+
 def _step(runner: Runner, args: list[str], cwd: Path) -> None:
     """Run one step of the build; a failure names the step."""
     try:
@@ -69,15 +75,23 @@ def _copy_factory_output(
         for source in sorted(factory_dir.glob(pattern)):
             shutil.copy2(source, models_dir / source.name)
             written.append(models_dir.relative_to(release_path) / source.name)
+    if not any(models_dir.glob("*.xml")):
+        raise ReleaseError(
+            f"The factory step created no SBML model in '{factory_dir}'."
+        )
 
-    files: list[Path] = []
     if model.archive_path is not None:
-        files.append(package_root / model.archive_path.relative_to(model.path))
-    files.extend(output_dir / name for name in _LICENSES)
-    for source in files:
-        if source.is_file():
-            shutil.copy2(source, release_path / source.name)
-            written.append(Path(source.name))
+        archive = package_root / model.archive_path.relative_to(model.path)
+        if not archive.is_file():
+            raise ReleaseError(
+                f"The factory step did not create the archive '{archive}'."
+            )
+        shutil.copy2(archive, release_path / archive.name)
+        written.append(Path(archive.name))
+    for name in _LICENSES:
+        if (output_dir / name).is_file():
+            shutil.copy2(output_dir / name, release_path / name)
+            written.append(Path(name))
 
     figures_dir = output_dir / "figures"
     if figures_dir.is_dir():
@@ -99,6 +113,11 @@ def build(
     folders `models`, `figures`, `simulations`, `simulations_uncertainty` and
     `fit`; `fit` is replaced, so reports of fits which are no longer adopted
     disappear.
+
+    A declared output is required, an undeclared one is optional: the factory must
+    create at least one SBML model and, if `model.archive_path` is set, the
+    archive; the licenses and the `figures` folder are copied if the factory
+    creates them.
 
     Args:
         model: the model object of the source package.
@@ -134,6 +153,7 @@ def build(
         "--workers",
         workers,
     ]
+    _clear(release_path / results / "simulation" / "all")
     _step(runner, simulate, release_path)
     _replace(
         _require(release_path / results / "simulation" / "all", "simulate"),
@@ -141,6 +161,7 @@ def build(
     )
     written.append(Path(BuildPaths.SIMULATIONS))
 
+    _clear(release_path / results / "simulation_uncertainty" / "all")
     _step(runner, [*simulate, "--uncertainty"], release_path)
     _replace(
         _require(
@@ -156,6 +177,7 @@ def build(
         shutil.rmtree(fits_dir)
     fits_dir.mkdir()
     reports = Path(results) / "fit_reports"
+    _clear(release_path / reports)
     for fit_id in model.fits:
         _step(
             runner,
