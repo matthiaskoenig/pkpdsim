@@ -86,7 +86,17 @@ RECORD_FILES: tuple[str, ...] = (
     "metrics.tsv",
     "metrics_mappings.tsv",
     "report.txt",
+    "report.pdf",
+    "report.typ",
+    "report.tex",
+    "report_standalone.tex",
+    "references.bib",
+    "references.csl",
 )
+#: the figures of the plots which the Typst and LaTeX sources of a report show
+REPORT_FIGURE = re.compile(r"plots/[\w.\-]+\.(?:png|svg|pdf)")
+#: the sources of the report which refer to figures
+REPORT_SOURCES: tuple[str, ...] = ("report.typ", "report.tex")
 #: the files without which a fit cannot be adopted
 REQUIRED_FILES: tuple[str, ...] = ("parameters.json", "optimization_result.json")
 #: one of these files gives the uncertainty of the parameters
@@ -112,7 +122,10 @@ def adopt_fit(fit_dir: Path, fits_dir: Path, *, force: bool = False) -> Path:
     The record is the part of the results of a fit which the model needs: the
     parameters, the settings and the problem (`optimization_result.json`), the
     profile likelihood and the Fisher information with their tables, the
-    metrics and the text report (`RECORD_FILES`). The runs, the figures and
+    metrics, the text report and the methods report with its references
+    (`RECORD_FILES`) and the figures the report shows, in `plots/`, so that
+    `report.typ` compiles in the record. The report is optional, a record of an
+    older fit without it is adopted as well. The runs, the other figures and
     the HTML report stay in the results of the fit.
 
     Args:
@@ -151,7 +164,28 @@ def adopt_fit(fit_dir: Path, fits_dir: Path, *, force: bool = False) -> Path:
         source = fit_dir / name
         if source.exists():
             shutil.copy2(source, target / name)
+    for figure in _report_figures(fit_dir):
+        (target / figure).parent.mkdir(exist_ok=True)
+        shutil.copy2(fit_dir / figure, target / figure)
     return target
+
+
+def _report_figures(fit_dir: Path) -> list[str]:
+    """Get the figures, relative to the fit, which the sources of the report show.
+
+    Args:
+        fit_dir: the directory of the results of the fit.
+
+    Returns:
+        The paths (`plots/<name>.png`) which are referenced by `report.typ` or
+        `report.tex` and exist, sorted.
+    """
+    found: set[str] = set()
+    for name in REPORT_SOURCES:
+        source = fit_dir / name
+        if source.exists():
+            found.update(REPORT_FIGURE.findall(source.read_text(encoding="utf-8")))
+    return sorted(figure for figure in found if (fit_dir / figure).is_file())
 
 
 # ----------------------------------------------------------------------------
@@ -390,25 +424,6 @@ def _scale(name: str | None, default: ParameterScaleType) -> ParameterScaleType:
     return ParameterScaleType[str(name)]
 
 
-def _fisher(path: Path) -> FisherInformation:
-    """Read the Fisher information a fit wrote (`FisherInformation.to_dict`)."""
-    d = _read_json(path)
-    return FisherInformation(
-        opid=d["opid"],
-        sid=d["sid"],
-        pids=list(d["pids"]),
-        values=np.asarray(d["values"], dtype=float),
-        scale=ParameterScaleType[d["scale"]],
-        matrix=np.asarray(d["matrix"], dtype=float),
-        cost=float(d["cost"]),
-        n=int(d["n"]),
-        alpha=float(d.get("alpha", 0.95)),
-        units=list(d.get("units") or []),
-        scales=[ParameterScaleType[s] for s in d.get("scales") or []],
-        targets=list(d.get("targets") or []),
-    )
-
-
 @dataclass(frozen=True)
 class FitRecord:
     """The record of an adopted fit: the fitted parameters with their uncertainty.
@@ -473,7 +488,7 @@ class FitRecord:
             df = int(settings.get("degrees_of_freedom", df))
         fisher: FisherInformation | None = None
         if (directory / "fisher.json").exists():
-            fisher = _fisher(directory / "fisher.json")
+            fisher = FisherInformation.from_dict(_read_json(directory / "fisher.json"))
         if not profiles and fisher is None:
             raise FileNotFoundError(
                 f"The record '{directory}' has neither a profile likelihood nor a "
