@@ -565,9 +565,18 @@ def test_a_curve_over_another_variable_draws_the_fitted_values(
     (plot,) = exp._figures["fig_decay"].get_plots()
     (band,) = plot.bands
     assert band.y.task_id == "task_decay"
-    (curve,) = [c for c in plot.curves if c.y.task_id is not None]
-    assert curve.x.task_id == curve.y.task_id == "task_decay_fitted"
+    (curve,) = [c for c in plot.curves if c.y.task_id == "task_decay_fitted"]
+    assert curve.x.task_id == "task_decay_fitted"
     assert curve.name == "A over A (fit)"
+    # below it a line of every draw, without a legend entry
+    lines = [c for c in plot.curves if c.y.task_id == "task_decay"]
+    assert plot.curves[: len(lines)] == lines
+    assert [line.y.sel for line in lines] == [
+        {UNCERTAINTY_DIMENSION: k} for k in range(3)
+    ]
+    assert len({line.y.sid for line in lines}) == 3
+    assert all(line.name is None for line in lines)
+    assert all(line.kwargs["alpha"] == 0.3 for line in lines)
     assert isinstance(exp._simulations["decay_fitted"], Simulation)
     assert exp._tasks["task_decay_fitted"].simulation_id == "decay_fitted"
 
