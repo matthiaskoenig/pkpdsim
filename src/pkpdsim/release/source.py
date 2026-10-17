@@ -9,6 +9,7 @@ can replace it.
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
@@ -53,7 +54,9 @@ def run(args: Sequence[str], cwd: Path, *, stream: bool = False) -> str:
 
     A command whose output is parsed (git, gh, docker queries) is captured. A long
     step of the build or the publishing (`uv`, the commands of the model, `docker
-    build`) is streamed: its output goes to the terminal as it runs.
+    build`) is streamed: its output goes to the terminal as it runs. The command
+    does not inherit `VIRTUAL_ENV`: the environment `pkpd_release` runs in is the
+    one of the monorepo, uv in the release repository uses its own.
 
     Args:
         args: the command and its arguments.
@@ -69,9 +72,10 @@ def run(args: Sequence[str], cwd: Path, *, stream: bool = False) -> str:
             shown its standard error already).
     """
     command = " ".join(str(a) for a in args)
+    env = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}
     if stream:
         try:
-            subprocess.run([str(a) for a in args], cwd=cwd, check=True)
+            subprocess.run([str(a) for a in args], cwd=cwd, env=env, check=True)
         except subprocess.CalledProcessError as err:
             raise ReleaseError(
                 f"'{command}' failed in {cwd} with exit code {err.returncode}, "
@@ -84,6 +88,7 @@ def run(args: Sequence[str], cwd: Path, *, stream: bool = False) -> str:
         result = subprocess.run(
             [str(a) for a in args],
             cwd=cwd,
+            env=env,
             check=True,
             text=True,
             capture_output=True,
