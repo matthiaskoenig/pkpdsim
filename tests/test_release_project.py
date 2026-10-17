@@ -2,6 +2,8 @@
 
 import dataclasses
 import json
+import os
+import shutil
 import subprocess
 import sys
 import tomllib
@@ -225,6 +227,33 @@ def test_workflows_are_yaml(context: ProjectContext) -> None:
     assert "deploy" in docs["jobs"]
     # a tag push does not run the tests again (YAML 1.1 reads the key `on` as True)
     assert ci[True]["push"] == {"branches": ["main"]}
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="the workflow runs on linux")
+@pytest.mark.skipif(shutil.which("uv") is None, reason="the step runs uv")
+def test_ci_workflow_puts_libpython_on_the_library_path(
+    context: ProjectContext, tmp_path: Path
+) -> None:
+    """The extension of libroadrunner links against libpython, which the
+    interpreters of uv keep in their `lib`: the step puts it on the library
+    search path before the first command which imports roadrunner."""
+    ci = yaml.safe_load(render("workflows/ci.yml.j2", context))
+    runs = [s.get("run", "") for s in ci["jobs"]["simulate"]["steps"]]
+    (index,) = [k for k, run in enumerate(runs) if "LD_LIBRARY_PATH" in run]
+    first = next(k for k, run in enumerate(runs) if run.startswith("uv run "))
+    assert index < first
+    env = tmp_path / "github_env"
+    result = subprocess.run(
+        ["bash", "-e", "-c", runs[index]],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "GITHUB_ENV": str(env)},
+    )
+    assert result.returncode == 0, result.stderr
+    (line,) = env.read_text().splitlines()
+    assert line.startswith("LD_LIBRARY_PATH=/")
+    assert line.split("=", 1)[1].split(":")[0].endswith("/lib")
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="the workflow runs on linux")
