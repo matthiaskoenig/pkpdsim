@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import tomllib
 from pathlib import Path
+from urllib.parse import quote
 
 import pytest
 
@@ -112,7 +113,9 @@ def test_models_links(release: tuple[ProjectContext, Path]) -> None:
     write_docs(context, path)
     models = (path / "docs" / "models.md").read_text()
     raw = SETTINGS.raw_url
-    assert f"https://sbml4humans.de/model_url?url={raw}models/toy.xml" in models
+    # the report of SBML4humans takes the url of the model as query parameter
+    report = quote(f"{raw}models/toy.xml", safe="")
+    assert f"(https://sbml4humans.de/report?url={report})" in models
     assert f"({raw}models/toy.xml)" in models
     assert "https://github.com/pkpdsim/toy-model/blob/main/models/toy.md" in models
     assert (
