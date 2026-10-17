@@ -454,8 +454,14 @@ def experiment_changes(
 
 
 def _model_elements(text: str | None, name: str) -> dict[str, dict[str, Any]]:
-    """Get the species, reactions and parameters of an SBML model by id."""
-    elements: dict[str, dict[str, Any]] = {kind: {} for kind in _ELEMENTS}
+    """Get the species, reactions and parameters of an SBML model by id.
+
+    `computed` holds the ids which an assignment rule or an initial assignment
+    sets: the value attribute of such a parameter is not its value in the model.
+    """
+    elements: dict[str, dict[str, Any]] = {
+        kind: {} for kind in (*_ELEMENTS, "computed")
+    }
     if text is None:
         return elements
     model = libsbml.readSBMLFromString(text).getModel()
@@ -464,6 +470,10 @@ def _model_elements(text: str | None, name: str) -> dict[str, dict[str, Any]]:
     elements["species"] = {s.getId(): None for s in model.getListOfSpecies()}
     elements["reactions"] = {r.getId(): None for r in model.getListOfReactions()}
     elements["parameters"] = {p.getId(): _value(p) for p in model.getListOfParameters()}
+    elements["computed"] = {
+        **{r.getVariable(): None for r in model.getListOfRules() if r.isAssignment()},
+        **{a.getSymbol(): None for a in model.getListOfInitialAssignments()},
+    }
     return elements
 
 
@@ -487,7 +497,8 @@ def model_changes(release: ReleaseRepo, runner: Runner = run) -> list[ModelChang
     Returns:
         The models which are new, gone or changed, sorted by file: the number of
         species, reactions and parameters added and removed and the parameters
-        with another value.
+        with another value; a parameter which an assignment rule or an initial
+        assignment sets has no value of its own and is not compared.
 
     Raises:
         ReleaseError: if a file is no SBML model.
@@ -516,6 +527,7 @@ def model_changes(release: ReleaseRepo, runner: Runner = run) -> list[ModelChang
         before = _model_elements(old_text, name)
         after = _model_elements(new_text, name)
         old_parameters, new_parameters = before["parameters"], after["parameters"]
+        computed = before["computed"].keys() | after["computed"].keys()
         changes.append(
             ModelChange(
                 file=name,
@@ -523,7 +535,9 @@ def model_changes(release: ReleaseRepo, runner: Runner = run) -> list[ModelChang
                 removed={k: len(before[k].keys() - after[k].keys()) for k in _ELEMENTS},
                 changed_parameters=[
                     (pid, old_parameters[pid], new_parameters[pid])
-                    for pid in sorted(old_parameters.keys() & new_parameters.keys())
+                    for pid in sorted(
+                        (old_parameters.keys() & new_parameters.keys()) - computed
+                    )
                     if old_parameters[pid] != new_parameters[pid]
                 ],
                 status=(
