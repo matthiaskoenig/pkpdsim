@@ -260,6 +260,37 @@ def test_model_changes(release: ReleaseRepo) -> None:
     assert changes["removed.xml"].removed["reactions"] == 1
 
 
+def computed_sbml(q: str, p: str) -> str:
+    """The toy model with a parameter of an assignment rule and one of an
+    initial assignment, whose value attributes are `q` and `p`."""
+    computed = (
+        f'<parameter id="q" value="{q}" constant="false"/>\n'
+        f'<parameter id="p" value="{p}" constant="true"/>\n'
+        "</listOfParameters>\n"
+        '<listOfInitialAssignments><initialAssignment symbol="p">'
+        '<math xmlns="http://www.w3.org/1998/Math/MathML"><cn>2</cn></math>'
+        "</initialAssignment></listOfInitialAssignments>\n"
+        '<listOfRules><assignmentRule variable="q">'
+        '<math xmlns="http://www.w3.org/1998/Math/MathML"><cn>6.5</cn></math>'
+        "</assignmentRule></listOfRules>"
+    )
+    return toy_sbml().replace("</listOfParameters>", computed, 1)
+
+
+def test_model_changes_computed_parameters(tmp_path: Path) -> None:
+    """The value attribute of a parameter which a rule or an initial assignment
+    sets is not the value of the model, its change is no changed value."""
+    path = tmp_path / "toy-model"
+    path.mkdir()
+    git(path, "init", "-b", "main")
+    write(path / "models" / "toy.xml", computed_sbml(q="6499800", p="1"))
+    release = commit_release(path, "0.1.0")
+    write(path / "models" / "toy.xml", computed_sbml(q="6.5", p="2"))
+    (change,) = model_changes(release)
+    assert change.status == "changed"
+    assert change.changed_parameters == []
+
+
 def test_fit_changes(release: ReleaseRepo, model: PKPDModel) -> None:
     assert fit_changes(release, model) == [
         FitChange(PD_FIT, None, []),
