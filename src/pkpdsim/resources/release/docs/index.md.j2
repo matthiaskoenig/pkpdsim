@@ -1,6 +1,8 @@
 # {{ settings.title }}
 
-[![DOI](https://zenodo.org/badge/DOI/{{ settings.doi }}.svg)](https://doi.org/{{ settings.doi }})
+{% for badge in badges %}
+[![{{ badge.label }}]({{ badge.image }})]({{ badge.link }})
+{% endfor %}
 
 {{ settings.description }}
 

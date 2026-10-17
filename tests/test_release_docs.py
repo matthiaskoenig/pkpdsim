@@ -84,9 +84,6 @@ def test_docs_pages(release: tuple[ProjectContext, Path]) -> None:
         "https://doi.org/10.5281/zenodo.0000000" in index
     )
     assert index.startswith("# Toy model of the decay of a substance\n")
-    badge = "https://zenodo.org/badge/DOI/10.5281/zenodo.0000000.svg"
-    assert index.count(badge) == 1
-    assert index.index(badge) < index.index("## How to cite")
     readme = (path / "README.md").read_text()
     assert "# Toy model of the decay of a substance\n" in readme
     assert "*Toy model of the decay of a substance*" in readme
@@ -256,6 +253,54 @@ def test_release_notes_sorted(release: tuple[ProjectContext, Path]) -> None:
     order = [page.index(f"Notes {v}") for v in ("0.10.0", "0.9.0", "0.2.0")]
     assert order == sorted(order)
     assert "\n## Notes 0.10.0" in page
+
+
+def badge_lines(text: str) -> list[str]:
+    return [line for line in text.splitlines() if line.startswith("[![")]
+
+
+def test_badges(release: tuple[ProjectContext, Path]) -> None:
+    """The README and the documentation show the same badges at their top."""
+    context, path = release
+    write_docs(context, path)
+    readme = (path / "README.md").read_text()
+    index = (path / "docs" / "index.md").read_text()
+    badges = badge_lines(readme)
+    assert badges == badge_lines(index)
+    repo = "https://github.com/pkpdsim/toy-model"
+    expected = [
+        "[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.0000000.svg)]"
+        "(https://doi.org/10.5281/zenodo.0000000)",
+        "[![Release](https://img.shields.io/github/v/release/pkpdsim/toy-model)]"
+        f"({repo}/releases)",
+        f"[![Documentation]({repo}/actions/workflows/docs.yml/badge.svg)]"
+        f"({SETTINGS.site_url})",
+        f"[![CI]({repo}/actions/workflows/ci.yml/badge.svg)]"
+        f"({repo}/actions/workflows/ci.yml)",
+        "[![Docker](https://img.shields.io/docker/v/pkpdsim/toy?sort=semver&label=docker)]"
+        "(https://hub.docker.com/r/pkpdsim/toy)",
+        f"[![Python](https://img.shields.io/badge/python-{context.python}-blue)]"
+        "(https://www.python.org)",
+        "[![Code license: MIT](https://img.shields.io/badge/code%20license-MIT-blue)]"
+        "(https://opensource.org/license/MIT)",
+        "[![Model license: CC BY-SA 4.0]"
+        "(https://img.shields.io/badge/model%20license-CC%20BY--SA%204.0-lightgrey)]"
+        "(https://creativecommons.org/licenses/by-sa/4.0/)",
+    ]
+    assert badges == expected
+    # one paragraph of badges, on top of the README and below the title of the docs
+    block = "\n".join(expected) + "\n\n"
+    assert readme.startswith(block)
+    assert index.startswith(f"# {SETTINGS.title}\n\n{block}")
+
+
+def test_badges_image_of_another_registry(release: tuple[ProjectContext, Path]) -> None:
+    """Only an image of Docker Hub has a badge, the registry of another is unknown."""
+    context, path = release
+    settings = dataclasses.replace(SETTINGS, docker_image="ghcr.io/pkpdsim/toy")
+    write_docs(dataclasses.replace(context, settings=settings), path)
+    readme = (path / "README.md").read_text()
+    assert "Docker" not in "\n".join(badge_lines(readme))
 
 
 def test_readme_thin(release: tuple[ProjectContext, Path]) -> None:
