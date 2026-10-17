@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from jinja2 import Environment, StrictUndefined, Template
 
@@ -176,6 +177,11 @@ def _toml_string(value: object) -> str:
     return json.dumps(str(value), ensure_ascii=False)
 
 
+def _query_value(value: object) -> str:
+    """Quote a value as the value of a query parameter of a url, `/` included."""
+    return quote(str(value), safe="")
+
+
 def _environment() -> Environment:
     environment = Environment(
         undefined=StrictUndefined,
@@ -184,6 +190,7 @@ def _environment() -> Environment:
         lstrip_blocks=True,
     )
     environment.filters["toml"] = _toml_string
+    environment.filters["query"] = _query_value
     return environment
 
 
