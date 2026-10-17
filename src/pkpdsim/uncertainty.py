@@ -986,6 +986,48 @@ def _over_scan_dimension(data: Data, simulation: Simulation | Scan) -> bool:
     return any(d.id == dimension for d in simulation.dimensions)
 
 
+def _draw_data(data: Data, run_id: str, k: int) -> Data:
+    """Get the data of a draw, an id of its own (the id does not depend on `sel`)."""
+    sid = Data(data.selection, task=data.task_id, sel=data.sel).sid
+    return Data(
+        data.selection,
+        task=data.task_id,
+        sel={**data.sel, run_id: k},
+        sid=f"{sid}__{run_id}_{k}",
+    )
+
+
+def _draw_curves(curve: Curve, run: UncertaintyRun) -> list[Curve]:
+    """Get a line of every draw of a curve over another variable than the time.
+
+    x differs between the draws, so the quantiles of y have no common x: the
+    lines of the draws, thin, translucent and without a legend entry, in the
+    colour of the curve, give the area of the draws; their opacity falls with
+    the number of draws, so that the area is denser where more draws lie.
+    """
+    draws = run.settings.draws
+    kwargs: dict[str, Any] = {
+        **(curve.kwargs or {}),
+        "label": None,
+        "alpha": min(0.3, 10 / draws),
+        "linewidth": 0.5,
+        "marker": "",
+    }
+    kwargs.pop("markeredgecolor", None)
+    color = _curve_color(curve)
+    if color is not None:
+        kwargs["color"] = color
+    return [
+        Curve(
+            x=_draw_data(curve.x, run.id, k),
+            y=_draw_data(curve.y, run.id, k),
+            yaxis_position=curve.yaxis_position,
+            **kwargs,
+        )
+        for k in range(draws)
+    ]
+
+
 def apply_uncertainty(experiment: SimulationExperiment, run: UncertaintyRun) -> None:
     """Run an initialized experiment over the draws of the fitted parameters.
 
@@ -997,10 +1039,11 @@ def apply_uncertainty(experiment: SimulationExperiment, run: UncertaintyRun) -> 
     of its scan (e.g. an amount at a time over the scanned renal function),
     becomes the band of the quantiles of the draws with the median, with the
     name and the colour of the curve. A curve whose x is another variable of
-    the task (e.g. an effect over a concentration, which differs between the
-    draws) has no band across the draws: it draws the simulation with the
-    fitted values, which runs once next to the draws (`<simulation>_fitted`).
-    The curves of the data stay.
+    the task (e.g. an effect over a concentration) has no common x across the
+    draws: it draws the simulation with the fitted values, which runs once next
+    to the draws (`<simulation>_fitted`), over a thin translucent line of every
+    draw in its colour (the area of the draws, without a legend entry; not for
+    a curve with a line per point of a dimension). The curves of the data stay.
 
     Args:
         experiment: the initialized experiment.
@@ -1036,6 +1079,8 @@ def apply_uncertainty(experiment: SimulationExperiment, run: UncertaintyRun) -> 
     for figure in experiment._figures.values():
         for plot in figure.get_plots():
             curves: list[Curve] = []
+            # the lines of the draws come first, below every curve of the plot
+            draw_curves: list[Curve] = []
             for curve in plot.curves:
                 task_id = None if curve.y.task_id is None else str(curve.y.task_id)
                 if task_id is None or task_id not in drawn:
@@ -1045,6 +1090,8 @@ def apply_uncertainty(experiment: SimulationExperiment, run: UncertaintyRun) -> 
                 if curve.x.index != "time" and not _over_scan_dimension(
                     curve.x, original
                 ):
+                    if not curve.over:
+                        draw_curves.extend(_draw_curves(curve, run))
                     fitted = _fitted_task(experiment, task_id, originals)
                     curve.x = _on_task(curve.x, fitted)  # ty: ignore[invalid-assignment]
                     curve.y = _on_task(curve.y, fitted)  # ty: ignore[invalid-assignment]
@@ -1069,7 +1116,7 @@ def apply_uncertainty(experiment: SimulationExperiment, run: UncertaintyRun) -> 
                     color=_curve_color(curve),
                     yaxis_position=curve.yaxis_position,
                 )
-            plot.curves = curves
+            plot.curves = draw_curves + curves
 
 
 # ----------------------------------------------------------------------------
