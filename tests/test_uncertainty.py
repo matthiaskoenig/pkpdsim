@@ -10,6 +10,7 @@ from typing import Any
 
 import numpy as np
 import pytest
+from sbmlsim import Q
 from sbmlsim.data import Data
 from sbmlsim.experiment import ExperimentRunner
 from sbmlsim.fit.options import ParameterScaleType
@@ -569,6 +570,46 @@ def test_a_curve_over_another_variable_draws_the_fitted_values(
     assert curve.name == "A over A (fit)"
     assert isinstance(exp._simulations["decay_fitted"], Simulation)
     assert exp._tasks["task_decay_fitted"].simulation_id == "decay_fitted"
+
+
+class ToyInitialScan(ToyDecay):
+    """The decay at three initial concentrations, A at its end over them."""
+
+    def simulations(self) -> dict[str, Simulation | Scan]:  # ty: ignore[invalid-method-override]
+        """Get the decay and the scan of the initial concentration."""
+        return {
+            **super().simulations(),
+            "scan_initial": Scan(
+                Simulation(end=10, steps=50),
+                [Dimension("dim_initial", values={"[A]": Q([0.5, 1, 2], "mM")})],
+            ),
+        }
+
+    def figures(self) -> dict[str, Figure]:
+        """Get the figure of the decay and A over the initial concentration."""
+        figures = super().figures()
+        (plot,) = figures["fig_decay"].get_plots()
+        plot.curves.append(
+            Curve(
+                x=Data(index="dim_initial.[A]", task="task_scan_initial"),
+                y=Data(index="[A]", task="task_scan_initial"),
+                name="A over the initial A",
+            )
+        )
+        return figures
+
+
+def test_a_curve_over_a_dimension_of_its_scan_draws_a_band(
+    toy_with_uncertainty: Path,
+) -> None:
+    """The values of a dimension are the same in every draw, the curve has a band."""
+    exp = initialized(ToyInitialScan, draws_run(toy_with_uncertainty))
+    (plot,) = exp._figures["fig_decay"].get_plots()
+    assert not [c for c in plot.curves if c.y.task_id is not None]
+    band = next(b for b in plot.bands if b.y.task_id == "task_scan_initial")
+    assert band.x.index == "dim_initial.[A]"
+    assert band.name == "A over the initial A"
+    assert "scan_initial_fitted" not in exp._simulations
 
 
 def test_a_parameter_which_the_model_has_not_is_not_drawn(

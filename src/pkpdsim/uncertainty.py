@@ -942,7 +942,7 @@ def _model_parameters(
 
 
 #: the suffix of the simulation and the task of the fitted values, which the
-#: curves draw whose x is not the time
+#: curves draw whose x is neither the time nor the values of a dimension of the scan
 FITTED_SUFFIX = "_fitted"
 
 
@@ -974,6 +974,18 @@ def _on_task(data: Data | None, task_id: str) -> Data | None:
     return Data(data.selection, task=task_id, sel=data.sel)
 
 
+def _over_scan_dimension(data: Data, simulation: Simulation | Scan) -> bool:
+    """Check whether data are the values of a dimension of a scan.
+
+    The values of a dimension (`<dimension>.<target>`) are the same in every
+    draw, a curve over them has a band across the draws.
+    """
+    if not isinstance(simulation, Scan):
+        return False
+    dimension = str(data.index).split(".", 1)[0]
+    return any(d.id == dimension for d in simulation.dimensions)
+
+
 def apply_uncertainty(experiment: SimulationExperiment, run: UncertaintyRun) -> None:
     """Run an initialized experiment over the draws of the fitted parameters.
 
@@ -981,11 +993,13 @@ def apply_uncertainty(experiment: SimulationExperiment, run: UncertaintyRun) -> 
     of the draws appended); a parameter which the simulation sets itself, or
     which the model of the simulation does not have, is not drawn, and a
     simulation without a drawn parameter runs once. Every curve of a figure
-    over the time of a task over the draws becomes the band of the quantiles
-    of the draws with the median, with the name and the colour of the curve.
-    A curve whose x is another variable of the task (e.g. an effect over a
-    concentration) has no band across the draws: it draws the simulation with
-    the fitted values, which runs once next to the draws (`<simulation>_fitted`).
+    over the time of a task over the draws, or over the values of a dimension
+    of its scan (e.g. an amount at a time over the scanned renal function),
+    becomes the band of the quantiles of the draws with the median, with the
+    name and the colour of the curve. A curve whose x is another variable of
+    the task (e.g. an effect over a concentration, which differs between the
+    draws) has no band across the draws: it draws the simulation with the
+    fitted values, which runs once next to the draws (`<simulation>_fitted`).
     The curves of the data stay.
 
     Args:
@@ -1027,7 +1041,10 @@ def apply_uncertainty(experiment: SimulationExperiment, run: UncertaintyRun) -> 
                 if task_id is None or task_id not in drawn:
                     curves.append(curve)
                     continue
-                if curve.x.index != "time":
+                original = originals[experiment._tasks[task_id].simulation_id]
+                if curve.x.index != "time" and not _over_scan_dimension(
+                    curve.x, original
+                ):
                     fitted = _fitted_task(experiment, task_id, originals)
                     curve.x = _on_task(curve.x, fitted)  # ty: ignore[invalid-assignment]
                     curve.y = _on_task(curve.y, fitted)  # ty: ignore[invalid-assignment]
