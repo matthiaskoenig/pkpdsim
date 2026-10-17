@@ -1,6 +1,6 @@
-[![DOI](https://zenodo.org/badge/DOI/{{ settings.doi }}.svg)](https://doi.org/{{ settings.doi }})
-[![CI](https://github.com/{{ settings.repository }}/actions/workflows/ci.yml/badge.svg)](https://github.com/{{ settings.repository }}/actions/workflows/ci.yml)
-[![Docs](https://github.com/{{ settings.repository }}/actions/workflows/docs.yml/badge.svg)](https://github.com/{{ settings.repository }}/actions/workflows/docs.yml)
+{% for badge in badges %}
+[![{{ badge.label }}]({{ badge.image }})]({{ badge.link }})
+{% endfor %}
 
 # {{ settings.title }}
 

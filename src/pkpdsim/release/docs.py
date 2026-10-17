@@ -13,6 +13,7 @@ import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import quote
 
 from pkpdsim.release.build import BuildPaths
 from pkpdsim.release.notes import NOTES_DIR, fits_prefix
@@ -26,6 +27,8 @@ PAGES = ("index", "running", "models", "simulations", "fit", "release-notes")
 _IMAGES = "images"
 _HEADING = re.compile(r"^(#+ )", re.MULTILINE)
 _VERSION = re.compile(r"^\d+(\.\d+)*$")
+_MIT = "https://opensource.org/license/MIT"
+_CC_BY_SA = "https://creativecommons.org/licenses/by-sa/4.0/"
 
 
 @dataclass(frozen=True)
@@ -64,6 +67,84 @@ class FitEntry:
     rows: list[FitRow]
     #: the build wrote the methods report of the fit, `fit/<fit id>/report.pdf`
     pdf: bool = False
+
+
+@dataclass(frozen=True)
+class Badge:
+    """A badge of the README and of the documentation, an image with a link."""
+
+    label: str
+    image: str
+    link: str
+
+
+def _shield(label: str, message: str, color: str) -> str:
+    """Get the URL of a static badge of shields.io."""
+
+    def escape(text: str) -> str:
+        return quote(text.replace("-", "--").replace("_", "__"), safe="")
+
+    return f"https://img.shields.io/badge/{escape(label)}-{escape(message)}-{color}"
+
+
+def _on_docker_hub(image: str) -> bool:
+    """Check whether an image is one of Docker Hub, `owner/name` without a registry."""
+    first, _, rest = image.partition("/")
+    return bool(rest) and not ("." in first or ":" in first or first == "localhost")
+
+
+def badges(context: ProjectContext) -> list[Badge]:
+    """Get the badges of the release, shown at the top of the README and the docs.
+
+    Args:
+        context: the project context.
+
+    Returns:
+        The DOI, the latest release, the documentation (the status of its
+        workflow, linked to the site), the tests, the Docker image (an image of
+        Docker Hub only), the Python version and the licenses of the code and of
+        the models.
+    """
+    settings = context.settings
+    repository = f"https://github.com/{settings.repository}"
+    workflows = f"{repository}/actions/workflows"
+    image = settings.docker_image
+    return [
+        Badge(
+            "DOI",
+            f"https://zenodo.org/badge/DOI/{settings.doi}.svg",
+            f"https://doi.org/{settings.doi}",
+        ),
+        Badge(
+            "Release",
+            f"https://img.shields.io/github/v/release/{settings.repository}",
+            f"{repository}/releases",
+        ),
+        Badge("Documentation", f"{workflows}/docs.yml/badge.svg", settings.site_url),
+        Badge("CI", f"{workflows}/ci.yml/badge.svg", f"{workflows}/ci.yml"),
+        *(
+            [
+                Badge(
+                    "Docker",
+                    f"https://img.shields.io/docker/v/{image}?sort=semver&label=docker",
+                    f"https://hub.docker.com/r/{image}",
+                )
+            ]
+            if _on_docker_hub(image)
+            else []
+        ),
+        Badge(
+            "Python",
+            _shield("python", context.python, "blue"),
+            "https://www.python.org",
+        ),
+        Badge("Code license: MIT", _shield("code license", "MIT", "blue"), _MIT),
+        Badge(
+            "Model license: CC BY-SA 4.0",
+            _shield("model license", "CC BY-SA 4.0", "lightgrey"),
+            _CC_BY_SA,
+        ),
+    ]
 
 
 def _join(names: list[str], last: str) -> str:
@@ -205,6 +286,7 @@ def write_docs(context: ProjectContext, release_path: Path) -> list[Path]:
     extra = {
         "figure": figure if _copy_image(release_path, figure, images) else None,
         "citation": citation(context),
+        "badges": badges(context),
         "authors": context.settings.author_names,
         "models": _models(release_path, images),
         "omex": archive.name if archive is not None else None,
