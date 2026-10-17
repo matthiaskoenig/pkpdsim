@@ -195,7 +195,10 @@ class PKPDSimulationExperiment(SimulationExperiment):
             experiments.
         selections: the selections of every task, see `data`.
         Mr: the molecular weights of the substances, for the conversion of the
-            data (a `NamedTuple` of the model).
+            data (a `NamedTuple` of the model). The base does not declare it:
+            its type is the `NamedTuple` of the model, which the base of the
+            model declares, and the narrowing of a declared class attribute is
+            an invalid override of a mutable attribute (ty).
         labels: the labels of the observables by id.
         units: the units of the observables by id.
         renal_map: the factor of the renal function by class.
@@ -212,7 +215,6 @@ class PKPDSimulationExperiment(SimulationExperiment):
 
     pkpd_model: ClassVar[PKPDModel]
     selections: ClassVar[Sequence[str]] = ()
-    Mr: ClassVar[tuple[Quantity, ...]]
     labels: ClassVar[Mapping[str, str]]
     units: ClassVar[Mapping[str, str]]
     renal_map: ClassVar[Mapping[str, float]] = impairment.RENAL_FUNCTION

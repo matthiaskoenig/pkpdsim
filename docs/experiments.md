@@ -45,6 +45,13 @@ The class attributes are the conventions of the experiments:
 | `Mr` | the molecular weights of the substances for the conversion of the data, a `NamedTuple` of the model |
 | `labels`, `units` | the labels and units of the observables by id |
 
+A base which annotates a convention keeps the type of `PKPDSimulationExperiment`,
+e.g. `labels: ClassVar[Mapping[str, str]]`, also for the maps of the impaired
+organ functions and the labels of the pharmacokinetic parameters: a narrower
+type, `ClassVar[dict[str, str]]`, is an invalid override of a mutable attribute
+(ty, `invalid-mutable-override`). Only `Mr` has the type of the model, its
+`NamedTuple`, which `PKPDSimulationExperiment` does not declare for this reason.
+
 The base provides what is the same in every model: `models` (the SBML model of
 the model object, without changes), `tasks` (a task per simulation),
 `default_changes` (none, a fitted parameter is part of the model and must not be

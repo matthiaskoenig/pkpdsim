@@ -3,7 +3,7 @@
 from collections.abc import Mapping
 from pathlib import Path
 from types import MappingProxyType
-from typing import ClassVar
+from typing import ClassVar, NamedTuple
 
 import pandas as pd
 import pytest
@@ -11,7 +11,7 @@ from sbmlsim.experiment import ExperimentRunner
 from sbmlsim.model import AbstractModel
 from sbmlsim.plot import Figure
 from sbmlsim.simulation import Simulation
-from sbmlsim.units import ureg
+from sbmlsim.units import Quantity, ureg
 
 from pkpdsim import impairment, pk
 from pkpdsim.experiment import (
@@ -140,13 +140,21 @@ def test_an_experiment_without_a_model_object_is_an_error() -> None:
         Unbound(base_path=TOY_PATH)
 
 
-class Narrowed(ToyExperiment):
-    """A base which types its labels as a dict, as the models do."""
+class MolecularWeights(NamedTuple):
+    """The molecular weights of a model, by substance."""
 
+    A: Quantity
+
+
+class Narrowed(ToyExperiment):
+    """A base which types its conventions itself, as the models do."""
+
+    Mr: ClassVar[MolecularWeights] = MolecularWeights(A=ureg.Quantity(100, "g/mole"))
     labels: ClassVar[Mapping[str, str]] = {"time": "time"}
 
 
 def test_a_model_types_its_conventions_itself() -> None:
+    assert Narrowed.Mr.A.m_as("g/mole") == 100
     assert Narrowed.labels == {"time": "time"}
 
 
