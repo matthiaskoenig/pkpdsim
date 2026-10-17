@@ -209,6 +209,19 @@ def test_fit_table(release: tuple[ProjectContext, Path]) -> None:
             assert f"{parameter.ci_lower:.4g}" in row
 
 
+def test_fit_table_is_a_block(release: tuple[ProjectContext, Path]) -> None:
+    """The table of a fit is a block of its own, after the line of its links."""
+    context, path = release
+    write_docs(context, path)
+    page = (path / "docs" / "fit.md").read_text()
+    assert "/index.html)\n\n| Parameter |" in page
+    fit_id = context.model.fits[0]
+    write(path / BuildPaths.FITS / fit_id / "report.pdf", b"%PDF")
+    write_docs(context, path)
+    page = (path / "docs" / "fit.md").read_text()
+    assert "/report.pdf)\n\n| Parameter |" in page
+
+
 def test_fit_table_open_interval(release: tuple[ProjectContext, Path]) -> None:
     context, path = release
     fit_id = context.model.fits[0]
