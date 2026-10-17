@@ -132,6 +132,18 @@ def test_run_stream(tmp_path: Path, capfd: pytest.CaptureFixture[str]) -> None:
         run([sys.executable, "-c", "raise SystemExit(3)"], tmp_path, stream=True)
 
 
+def test_run_without_the_virtual_environment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capfd: pytest.CaptureFixture[str]
+) -> None:
+    """A command does not inherit the virtual environment of the monorepo, which
+    `pkpd_release` runs in: uv warns about it in the release repository."""
+    monkeypatch.setenv("VIRTUAL_ENV", str(tmp_path / ".venv"))
+    script = "import os; print(os.environ.get('VIRTUAL_ENV'))"
+    assert run([sys.executable, "-c", script], tmp_path).strip() == "None"
+    run([sys.executable, "-c", script], tmp_path, stream=True)
+    assert capfd.readouterr().out.strip() == "None"
+
+
 def export(tmp_path: Path, model: PKPDModel) -> tuple[Path, list[Path]]:
     release = tmp_path / "release"
     release.mkdir()
