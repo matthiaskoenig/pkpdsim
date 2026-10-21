@@ -89,6 +89,25 @@ def simulations(self) -> dict[str, Simulation]:
     }
 ```
 
+## Repeated doses
+
+A dose is given by its dose state, e.g. `PODOSE_hctz`, from which a rate rule of the model dissolves, absorbs or infuses it. The first dose is usually a change before the initialization (`preinit_changes`). A later dose must add to the dose state: a change of the state to the dose, `Change(times, {"PODOSE_hctz": Q(12.5, "mg")})`, discards what is left of the earlier doses, which loses drug at every dose of a slowly dissolving, absorbed or infused form ([pkdb_models#105](https://github.com/matthiaskoenig/pkdb_models/issues/105)). `add_doses` of the base returns the change which adds the dose, a formula of the dose state in its unit in the model:
+
+```python
+# not executed
+def simulations(self) -> dict[str, Simulation]:
+    times = [24 * k for k in range(1, 7)]  # [hr], the doses after the first
+    return {
+        "hctz12p5_daily": Simulation(
+            end=7 * 24,
+            preinit_changes={"PODOSE_hctz": Q(12.5, "mg")},
+            changes=[self.add_doses(times, {"PODOSE_hctz": Q(12.5, "mg")})],
+        )
+    }
+```
+
+The change is `Change(times, {"PODOSE_hctz": "PODOSE_hctz + 12.5"})` for a model whose dose state is in mg. The models are loaded before `simulations()`, so the unit of the dose state is known there.
+
 ## Units of the data
 
 The data of a study can use units which sbmlsim does not define. An international unit (IU) is specific to a substance (the activity of an enzyme, the effect of a coagulation factor), so it has no value without it. `data_units` of an experiment maps the unit as the data write it to the definition of a unit of its own, which the base defines in the registry of the experiment before the data are read and which `load_dataframe` and `load_dataframes_by_substance` rename in the unit columns of the data (`unit` and every column ending in `_unit`). The name carries the model and the substance (`IU_ramipril_renin`, not `IU`): the registry of sbmlsim exists once per process (pytest runs all models in one) and ignores a redefinition, so two models which defined `IU` with different values would silently get the first one. `define_unit` therefore raises for a name which is defined with another value:
