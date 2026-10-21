@@ -11,6 +11,7 @@ The API reference is generated from the docstrings of the package.
 | [annotations](annotations.md) | `compartments`, the annotations of the recurring compartments, see [Templates and annotations](../templates.md) |
 | [data](data.md) | `studies_dir`, `collect_tsv_files`: the study data of a model from the study folders of PK-DB, see [Study data](../data.md) |
 | [initial_values](initial_values.md) | `init_concentrations_changes`, `init_amounts_changes`, `get_species_keys`: the initial values of a substance in every tissue, see [Initial values](../initial_values.md) |
+| [timecourse](timecourse.md) | `SimPart`, `Simulation`, `run_simulation`: the timecourse of a roadrunner model which is simulated in parts, see [Timecourses in parts](../timecourse.md) |
 | [licenses](licenses.md) | `License`, `license_text`, `write_license`: the texts of CC BY-SA 4.0 and MIT, see [Licenses](../licenses.md) |
 | [model](model.md) | `PKPDModel`, `SimulatorSettings`, `FigureSettings`, `CheckSettings`, `ExtraAction`, `resolve`: the description of a model, see [Models and their commands](../models.md) |
 | [run](run.md) | `run_experiments`, `run_simulation_experiments`: the run of the simulation experiments of a model |
