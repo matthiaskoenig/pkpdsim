@@ -36,6 +36,10 @@ draws and turns the curves of the simulations into bands
 own for it. A figure which an experiment draws itself (`figures_mpl`) reads
 `uncertainty` and draws the bands of the draws, e.g. with
 `pkpdsim.scan.point_band`.
+
+A dose after the first one adds to its dose state (`add_doses`): the rest of the
+earlier doses which is not yet dissolved, absorbed or infused stays, which a
+change of the dose state to the dose would discard (pkdb_models#105).
 """
 
 from __future__ import annotations
@@ -51,6 +55,7 @@ from typing import TYPE_CHECKING, ClassVar
 from sbmlsim.data import Data, load_pkdb_dataframe, load_pkdb_dataframes_by_substance
 from sbmlsim.experiment import SimulationExperiment
 from sbmlsim.model import AbstractModel
+from sbmlsim.simulation import Change
 from sbmlsim.task import Task
 
 from pkpdsim import impairment, pk
@@ -379,6 +384,51 @@ class PKPDSimulationExperiment(SimulationExperiment):
             f"task_{key}": Task(model="model", simulation=key)
             for key in self._simulations
         }
+
+    def add_doses(
+        self,
+        times: float | Quantity | Sequence[float | Quantity],
+        doses: Mapping[str, Quantity],
+        model: str = "model",
+    ) -> Change:
+        """Get doses at times which add to their dose states.
+
+        A dose is given by its dose state, e.g. `PODOSE_hctz`, from which a
+        rate rule dissolves, absorbs or infuses it. A change of the dose state
+        to the dose (`Change(times, {"PODOSE_hctz": Q(10, "mg")})`) discards
+        what is left of the earlier doses; the change of this method adds the
+        dose (`"PODOSE_hctz + 10.0"`, a formula in the unit of the dose state
+        in the model), so repeated doses keep the rest of the earlier ones. The
+        first dose is usually a change before the initialization
+        (`preinit_changes`), which may set the state. The models are loaded
+        before `simulations()`, where the doses are created.
+
+        Args:
+            times: the times of the doses, in the time unit of the simulation
+                or quantities.
+            doses: the dose state and the dose, e.g.
+                `{"PODOSE_hctz": Q(10, "mg")}`.
+            model: the key of the model whose units the dose states have.
+
+        Returns:
+            The change of the dose states at the times.
+
+        Raises:
+            ValueError: if the model is not loaded.
+        """
+        loaded = self._models.get(model)
+        uinfo = getattr(loaded, "uinfo", None)
+        if uinfo is None:
+            raise ValueError(
+                f"The model '{model}' of the experiment '{self.sid}' is not loaded: "
+                "the doses are created in `simulations()` or later."
+            )
+        values: dict[str, str] = {}
+        for sid, dose in doses.items():
+            unit = uinfo.quantity(1.0, uinfo[sid]).units
+            magnitude = float(dose.to(unit).magnitude)
+            values[sid] = f"{sid} + {magnitude!r}"
+        return Change(times, values)
 
     def default_changes(self) -> Mapping[str, Quantity | float]:
         """Get the changes of every simulation of the experiments, none.
