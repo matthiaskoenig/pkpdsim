@@ -57,7 +57,7 @@ them; a module which starts with a dot is relative to `package`.
 ## Settings
 
 - `SimulatorSettings`: the absolute tolerance (one value, or an `AbsoluteTolerance` of sbmlsim per kind and state), the relative tolerance and the processes of a scan, `n_workers`. A run creates an sbmlsim `Simulator` from them.
-- `FigureSettings`: sbmlsim's `FigureSettings` (the resolution, the sizes of the panels, the fonts and the legends, with the defaults of sbmlsim) and the two fields of a model, the `formats` of the figures (`svg`, `png`, `html`) and the resolution of the static images (`savefig_dpi`). A run hands the settings of sbmlsim to every figure; an experiment (`figure_settings`) and a figure (`Figure(settings=...)`) override them. Nothing is applied to the process, so nothing has to be restored after a run.
+- `FigureSettings`: sbmlsim's `FigureSettings` (the resolution, the sizes of the panels, the fonts and the legends, with the defaults of sbmlsim) and the two fields of a model, the `formats` of the figures (`svg`, `png`, `html`; SVG only by default) and the resolution of the static images (`savefig_dpi`). A run hands the settings of sbmlsim to every figure; an experiment (`figure_settings`) and a figure (`Figure(settings=...)`) override them. Nothing is applied to the process, so nothing has to be restored after a run.
 - `reduced_selections`, `save_results`, `fit_identifiability`: what a run simulates, whether it stores its results, whether a fit analyses the identifiability of its parameters by default.
 - `fits`, `fits_path`: the ids of the adopted fits, whose records in `fits_dir` (`fits` next to the output directory of the factory by default) give the fitted values and their uncertainty to the factory (`fit_records()`), see [Uncertainty of the fitted parameters](uncertainty.md).
 - `release`: the release metadata of the model (`ReleaseSettings`: the repository, the Docker image, the authors, ...), which `pkpd_release` needs to make the release of its model repository, see [Release of a model repository](release.md); `None` (the default) for a model without a release repository.
@@ -77,7 +77,8 @@ try:
 except ValueError as err:
     print(err)
 
-figures = FigureSettings(formats=("svg", "png"), savefig_dpi=300, legend_fontsize=10)
+figures = FigureSettings(savefig_dpi=300, legend_fontsize=10)
+assert figures.formats == ("svg",)
 print(figures.sbmlsim_settings().legend_fontsize)
 ```
 
@@ -224,7 +225,9 @@ The patterns of `expected` are `fnmatch` patterns of the keys:
 
 `*` and `?` are wildcards, a bracket is literal: `Anderson1961/task_po_2p5/[Cve_hctz]` names the variable `[Cve_hctz]` of the task `task_po_2p5` (the base names the task of a simulation `task_<simulation>`). A difference which matches is printed as expected and not counted, a pattern which matches no difference is counted, so the file says exactly what changes. Two old ids with one new id, a `strings` rename which merges two keys of a part and two mappings of one experiment with one key are errors (exit code 2). The renames are applied to the content of the parts of the old dump, never to the names of the parts, and the loaded dump is not changed.
 
-`png` compares the figures of two directories by their file names. After the
+`png` compares the PNG figures of two directories by their file names; a model
+draws SVG only by default, so both runs ask for PNG (`run_simulation <package>
+--formats png`). After the
 renames to SIds the old file `A_fig 2.5.png` is `A_fig_2p5.png`: `png --sids`
 pairs an old figure with the new figure of the SId of its name (the stem through
 `to_sid`) and exits with 2 when two old figures have one SId:

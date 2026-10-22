@@ -104,6 +104,10 @@ def test_a_bare_string_is_not_a_list_of_formats() -> None:
         FigureSettings(formats="svg")
 
 
+def test_the_figures_are_svg_by_default() -> None:
+    assert FigureSettings().formats == ("svg",)
+
+
 def test_the_formats_are_a_lower_case_tuple() -> None:
     assert FigureSettings(formats=["SVG", "Png"]).formats == ("svg", "png")
 
