@@ -36,11 +36,11 @@ keywords = [
 ]
 dependencies = [
     # the factory, the metadata and the console of the models
-    "sbmlutils>=0.16.0",
+    "sbmlutils>=0.17.0",
     # the simulator, the initial values are selections of a roadrunner model
     "libroadrunner>=2.11.0",
     # the simulation experiments, their figures and reports, and the fits
-    "sbmlsim>=0.10.0,<0.11",
+    "sbmlsim>=0.11.0,<0.12",
     # imported directly, also the dependencies of the packages above
     "numpy>=2.5.3",
     "pandas>=3.0.6",
