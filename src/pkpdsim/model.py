@@ -166,12 +166,14 @@ class FigureSettings(SbmlsimFigureSettings):
 
     Attributes:
         formats: the formats of the figures, static images drawn by matplotlib
-            (`svg`, `png`) and interactive pages drawn by plotly (`html`).
+            (`svg`, `png`) and interactive pages drawn by plotly (`html`); SVG
+            only by default, a run draws other formats on request
+            (`--formats svg,png`).
         savefig_dpi: the resolution of the static images, `None` keeps the one
             of matplotlib. An interactive page has 72 pixels per inch.
     """
 
-    formats: Sequence[str] = ("svg", "png")
+    formats: Sequence[str] = ("svg",)
     savefig_dpi: float | None = None
 
     def __post_init__(self) -> None:
