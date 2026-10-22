@@ -16,6 +16,13 @@ for k in range(res.ds.sizes[dim]):
 `state_after_changes(res)` gives the whole result in that form, for the figures
 which read the arrays of a result instead of one point.
 
+A simulation without `steps` or `times` outputs the steps of the integrator, a
+scan of such simulations is ragged: every point keeps its own time points
+(`(*dims, _point)`, padded with `NaN`). `start_values(res, key)` and
+`end_values(res, key)` give the first and the last value of a variable at every
+point of a scan in both layouts, e.g. the dose or the scanned parameter at the
+start and the amount in the urine at the end.
+
 A run over the draws of the fitted parameters adds the dimension of the draws to
 every result (`pkpdsim.uncertainty`); `scan_dimensions(res, across)` gives the
 dimensions of the scan without it, and `point_band(res, key, across, quantiles,
@@ -32,6 +39,7 @@ from sbmlsim.result.scan import CHANGES, POINT, TIME
 from sbmlsim.result.timecourse import without_states_before
 
 if TYPE_CHECKING:
+    import xarray as xr
     from sbmlsim.result import ScanResult
 
 
@@ -85,6 +93,64 @@ def state_after_changes(res: ScanResult) -> ScanResult:
         The result on the grid of its time points, each time once.
     """
     return res.interpolate(np.unique(res.time_points()))
+
+
+def _timecourse_variable(res: ScanResult, key: str) -> xr.DataArray:
+    """Get a variable which is a timecourse of the result.
+
+    Raises:
+        ValueError: if the variable is no timecourse.
+    """
+    tdim = POINT if res.ragged else TIME
+    if key not in res.ds.data_vars or tdim not in res.ds[key].dims:
+        raise ValueError(f"'{key}' is no timecourse of the result.")
+    return res.ds[key]
+
+
+def start_values(res: ScanResult, key: str, /) -> xr.DataArray:
+    """Get the value of a variable at the start of every point of a scan.
+
+    The first output of every simulation, on a grid (`time`) and in the ragged
+    layout of the steps of the integrator (`_point`) alike.
+
+    Args:
+        res: the result of the scan, positional only.
+        key: the variable, a timecourse, positional only.
+
+    Returns:
+        The values over the dimensions of the scan, with their coordinates.
+
+    Raises:
+        ValueError: if the variable is no timecourse.
+    """
+    values = _timecourse_variable(res, key)
+    tdim = POINT if res.ragged else TIME
+    return values.isel({tdim: 0}).drop_vars(TIME, errors="ignore")
+
+
+def end_values(res: ScanResult, key: str, /) -> xr.DataArray:
+    """Get the value of a variable at the end of every point of a scan.
+
+    The last output of every simulation: the last time of a grid (`time`), the
+    last time before the padding of every point of a ragged result (`_point`);
+    a point whose simulation failed has `NaN`.
+
+    Args:
+        res: the result of the scan, positional only.
+        key: the variable, a timecourse, positional only.
+
+    Returns:
+        The values over the dimensions of the scan, with their coordinates.
+
+    Raises:
+        ValueError: if the variable is no timecourse.
+    """
+    values = _timecourse_variable(res, key)
+    if not res.ragged:
+        return values.isel({TIME: -1}).drop_vars(TIME, errors="ignore")
+    # the padding is at the end: the last time of a point is its last finite one
+    last = (res.ds[TIME].notnull().sum(POINT) - 1).clip(min=0)
+    return values.isel({POINT: last})
 
 
 def point_timecourse(

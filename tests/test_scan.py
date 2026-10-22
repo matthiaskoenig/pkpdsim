@@ -10,7 +10,13 @@ from sbmlsim.result import ScanResult
 from sbmlsim.simulation import Change, Dimension, Scan, Simulation
 from sbmlsim.simulator import Simulator
 
-from pkpdsim.scan import point_timecourse, single_dimension, state_after_changes
+from pkpdsim.scan import (
+    end_values,
+    point_timecourse,
+    single_dimension,
+    start_values,
+    state_after_changes,
+)
 from pkpdsim_toy import MODEL_PATH
 
 TOY = AbstractModel(
@@ -151,3 +157,52 @@ def test_the_state_after_a_change_of_a_scan_of_two_dimensions() -> None:
             time, values = point_timecourse(res, "[A]", dim_k=i, dim_dose=j)
             assert np.array_equal(after.ds["time"].values, time)
             assert np.allclose(after["[A]"].isel(dim_k=i, dim_dose=j).values, values)
+
+
+def test_the_start_and_end_values_on_a_grid() -> None:
+    res = run(DECAY, [RATES])
+    assert not res.ragged
+    start = start_values(res, "[A]")
+    end = end_values(res, "[A]")
+    assert start.dims == end.dims == ("dim_k",)
+    np.testing.assert_array_equal(start.values, res["[A]"].isel(time=0).values)
+    np.testing.assert_array_equal(end.values, res["[A]"].isel(time=-1).values)
+
+
+def test_the_start_and_end_values_of_the_steps_of_the_integrator() -> None:
+    """A scan without steps is ragged, the end is the last time of every point."""
+    res = run(Simulation(end=10), [RATES])
+    assert res.ragged
+    start = start_values(res, "[A]")
+    end = end_values(res, "[A]")
+    assert start.dims == end.dims == ("dim_k",)
+    for k in range(2):
+        _, values = point_timecourse(res, "[A]", dim_k=k)
+        assert start.values[k] == values[0]
+        assert end.values[k] == values[-1]
+    # the faster decay ends lower
+    assert end.values[1] < end.values[0]
+
+
+def test_the_end_values_of_simulations_of_different_lengths() -> None:
+    lengths = Dimension(
+        "dim_sim",
+        simulations={
+            "short": Simulation(end=5, steps=10),
+            "long": Simulation(end=10, steps=20),
+        },
+    )
+    res = run(DECAY, [lengths])
+    end = end_values(res, "[A]")
+    for k in range(2):
+        _, values = point_timecourse(res, "[A]", dim_sim=k)
+        assert end.values[k] == values[-1]
+    assert np.all(np.isfinite(end.values))
+
+
+def test_the_start_and_end_values_need_a_timecourse() -> None:
+    res = run(DECAY, [RATES])
+    with pytest.raises(ValueError, match="no timecourse"):
+        start_values(res, "missing")
+    with pytest.raises(ValueError, match="no timecourse"):
+        end_values(res, "missing")

@@ -28,6 +28,18 @@ from pkpdsim.scan import state_after_changes
 res = state_after_changes(self.results[self.to_sid("task_sim")])
 ```
 
+### The start and the end of every point
+
+A simulation without `steps` or `times` outputs the steps of the integrator; a scan of such simulations is ragged, every point keeps its own time points (`(*dims, _point)`, padded with `NaN`), and `res["[X]"].isel(time=0)` has no `time` to select. `start_values(res, key)` and `end_values(res, key)` give the first and the last value of a variable at every point, over the dimensions of the scan, on a grid and in the ragged layout alike; a point whose simulation failed ends with `NaN`:
+
+```python
+# not executed
+from pkpdsim.scan import end_values, start_values
+
+doses = start_values(res, "PODOSE_hctz")  # the dose of every point
+urine = end_values(res, "Aurine_hctz")  # the amount in the urine at the end
+```
+
 ## The parameters of a sensitivity analysis
 
 sbmlsim 0.9 analyses the sensitivity of a model on the result of a scan, with a design (`local`, `sobol`, `fast`, `lhs`) as a dimension of the scan; it has no table of the parameters of an analysis any more, which the sensitivity scripts of the models write next to their results. `pkpdsim.sensitivity` is that table with the behavior of sbmlsim 0.8, so the tables of the scripts stay the same, and the distributions the global designs need:
