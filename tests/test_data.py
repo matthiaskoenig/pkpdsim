@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from pkpdsim.data import PKDB_DATA, collect_tsv_files, studies_dir
+from pkpdsim.data import PKDB_DATA, collect_tsv_files, studies_dir, study_format
 
 
 @pytest.fixture
@@ -86,6 +86,10 @@ def source_dir(tmp_path: Path) -> Path:
         (source / study).mkdir(parents=True)
         for name in names:
             (source / study / name).write_text(f"{study}/{name}", encoding="utf-8")
+    # a study of format 1 has no field `format`
+    (source / "Boulton1996a" / "study.json").write_text(
+        '{"sid": "Boulton1996a"}', encoding="utf-8"
+    )
     (source / "README.md").write_text("not a study", encoding="utf-8")
     return source
 
@@ -137,3 +141,41 @@ def test_collect_tsv_files_again(source_dir: Path, tmp_path: Path) -> None:
     copy = target_dir / "Boulton1996a" / ".Boulton1996a_Fig1.tsv"
     assert copy.read_text(encoding="utf-8") == "Boulton1996a/.Boulton1996a_Fig1.tsv"
     assert (target_dir / "collect_data.py").exists()
+
+
+def test_the_study_format(tmp_path: Path) -> None:
+    """A study without a study.json or without a format is in format 1."""
+    assert study_format(tmp_path) == 1
+    (tmp_path / "study.json").write_text('{"sid": "A"}', encoding="utf-8")
+    assert study_format(tmp_path) == 1
+    (tmp_path / "study.json").write_text('{"format": 2}', encoding="utf-8")
+    assert study_format(tmp_path) == 2
+
+
+@pytest.mark.parametrize(
+    "text", ["no json", "[2]", '{"format": "2"}', '{"format": true}']
+)
+def test_a_study_format_which_cannot_be_read(tmp_path: Path, text: str) -> None:
+    """A study.json which is no JSON object with an integer format is an error."""
+    (tmp_path / "study.json").write_text(text, encoding="utf-8")
+    with pytest.raises(ValueError, match=r"study\.json"):
+        study_format(tmp_path)
+
+
+def test_a_study_of_format_2_is_not_collected(source_dir: Path, tmp_path: Path) -> None:
+    """A study of format 2 has no hidden tsv files: nothing is copied (#109)."""
+    study = source_dir / "Mendell2012"
+    study.mkdir()
+    (study / "study.json").write_text('{"format": 2}', encoding="utf-8")
+    (study / "timecourses_Fig1.tsv").write_text("study", encoding="utf-8")
+    target_dir = tmp_path / "data"
+    with pytest.raises(ValueError, match=r"Mendell2012 \(format 2\)"):
+        collect_tsv_files(source_dir=source_dir, target_dir=target_dir)
+    assert not target_dir.exists()
+    # a filter which leaves the study out collects the others
+    collect_tsv_files(
+        source_dir=source_dir,
+        target_dir=target_dir,
+        filter_study=lambda name: name != "Mendell2012",
+    )
+    assert "Hindle1992/.Hindle1992_Fig2.tsv" in tree(target_dir)

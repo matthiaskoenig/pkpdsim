@@ -35,6 +35,8 @@ FileNotFoundError
 
 ## Collecting the data of a model
 
+The data files are the hidden `.tsv` files of study format 1. pkdb_data is curated in study format 2 (`"format": 2` in the `study.json`, with the tables `timecourses_<source>.tsv`, `outputs_<source>.tsv`, `subjects.tsv`, ...), which the models do not read yet: `collect_tsv_files` raises a `ValueError` which names the studies of another format (`study_format`) and copies nothing, instead of copying nothing silently and leaving the data of the model as they were.
+
 `collect_tsv_files(source_dir, target_dir, filter_study=None)` copies the data files of every study folder of `source_dir` into a folder of the same name in `target_dir`; a study without data files is left out, as are the figures, the tables and the publication, and `filter_study` selects studies by the name of their folder. Every copy is reported on the console. Continuing the snippet above:
 
 ```python
