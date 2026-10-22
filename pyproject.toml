@@ -38,7 +38,7 @@ dependencies = [
     # the factory, the metadata and the console of the models
     "sbmlutils>=0.16.0",
     # the simulator, the initial values are selections of a roadrunner model
-    "libroadrunner>=2.10.0",
+    "libroadrunner>=2.11.0",
     # the simulation experiments, their figures and reports, and the fits
     "sbmlsim>=0.10.0,<0.11",
     # imported directly, also the dependencies of the packages above
