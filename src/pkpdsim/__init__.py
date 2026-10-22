@@ -16,6 +16,6 @@ and `pkpdsim.licenses` (the license texts of the COMBINE archive of a model).
 `import pkpdsim` imports none of them.
 """
 
-__version__ = "0.9.7"
+__version__ = "0.9.8.dev0"
 
 __all__ = ["__version__"]
