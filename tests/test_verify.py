@@ -942,6 +942,41 @@ def test_a_scan_of_one_point_compares_with_a_simulation(tmp_path: Path) -> None:
     )
 
 
+def test_an_array_without_a_time_is_compared_relative_to_its_scale(
+    tmp_path: Path,
+) -> None:
+    # the values at the end of the points of a scan, e.g. a clearance per renal
+    # function, have a dimension of the scan and no time
+    def dump(values: list[float]) -> Dump:
+        return synthetic(
+            {
+                ("E", "task_x", "time"): (("time",), T_OLD),
+                ("E", "task_x", "cl"): (("dim_renal",), np.array(values)),
+            }
+        )
+
+    old = written(tmp_path, "o.pkl", dump([2.0, 4.0, 10.0]))
+    close = written(tmp_path, "c.pkl", dump([2.0 + 1e-10, 4.0, 10.0]))
+    far = written(tmp_path, "f.pkl", dump([2.1, 4.0, 10.0]))
+    nan = written(tmp_path, "n.pkl", dump([np.nan, 4.0, 10.0]))
+    assert verify(["compare", old, close]) == 0
+    assert verify(["compare", old, far]) == 1
+    assert verify(["compare", old, nan]) == 1
+
+
+def test_arrays_without_a_time_of_other_dimensions_differ(tmp_path: Path) -> None:
+    def dump(dim: str) -> Dump:
+        return synthetic(
+            {
+                ("E", "task_x", "time"): (("time",), T_OLD),
+                ("E", "task_x", "cl"): ((dim,), np.array([2.0, 4.0])),
+            }
+        )
+
+    old = written(tmp_path, "o.pkl", dump("dim_renal"))
+    assert verify(["compare", old, written(tmp_path, "n.pkl", dump("dim_q"))]) == 1
+
+
 def test_arrays_of_other_dimensions_differ(tmp_path: Path) -> None:
     new = new_scan()
     _, values = new["results"]["E", "task_x", "[A]"]

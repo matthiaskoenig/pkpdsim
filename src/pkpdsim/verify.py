@@ -908,9 +908,10 @@ def relative_difference(old: Dump, new: Dump, key: tuple[str, str, str]) -> floa
     dimension of size 1 which only one array has is left out), and the rows of
     every point are matched by its own times (`point_matches`). The difference
     is max|new - old| / max|old|; other dimensions and NaN at different
-    positions are an infinite difference. An array without a time is compared
-    exactly; the variable `time` is compared as the output times of the points
-    of the task.
+    positions are an infinite difference. A numeric array without a time, e.g.
+    the values at the end of the points of a scan, is compared on the same
+    dimensions relative to its scale, any other array exactly; the variable
+    `time` is compared as the output times of the points of the task.
     """
     (dims_a, a), (dims_b, b) = old["results"][key], new["results"][key]
     sid, task, variable = key
@@ -920,16 +921,33 @@ def relative_difference(old: Dump, new: Dump, key: tuple[str, str, str]) -> floa
         found = task_columns(old, new, sid, task)
     else:
         numeric = a.dtype.kind in "fiub" and b.dtype.kind in "fiub"
+        timeless = time_axis(dims_a) is None and time_axis(dims_b) is None
+        if numeric and timeless:
+            if tuple(dims_a) != tuple(dims_b) or a.shape != b.shape:
+                return math.inf
+            return scaled_difference([(a, b)])
         if not numeric or time_axis(dims_a) is None or time_axis(dims_b) is None:
             same = a.shape == b.shape and np.array_equal(a, b)
             return 0.0 if same else math.inf
         found = columns(old, new, key)
     if found is None:
         return math.inf
+    return scaled_difference(
+        (
+            found.old[np.ix_(match.old, match.points)],
+            found.new[np.ix_(match.new, match.points)],
+        )
+        for match in point_matches(found.old_times, found.new_times)
+    )
+
+
+def scaled_difference(pairs: Iterable[tuple[np.ndarray, np.ndarray]]) -> float:
+    """Get max|new - old| / max|old| over pairs of old and new arrays.
+
+    NaN at different positions is an infinite difference.
+    """
     scale = difference = 0.0
-    for match in point_matches(found.old_times, found.new_times):
-        x = found.old[np.ix_(match.old, match.points)]
-        y = found.new[np.ix_(match.new, match.points)]
+    for x, y in pairs:
         if not np.array_equal(np.isnan(x), np.isnan(y)):
             return math.inf
         x, y = np.nan_to_num(x), np.nan_to_num(y)
