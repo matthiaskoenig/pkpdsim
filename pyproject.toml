@@ -50,6 +50,9 @@ dependencies = [
     "matplotlib>=3.11.2",
     "pillow>=12.3.0",
     "python-libsbml>=5.21.2",
+    # not imported: the CA bundle of requests, through which sbmlutils and pymetadata
+    # reach the network; 2026.10.19 removes the emSign roots (GHSA-6q48-6c7w-9gw2)
+    "certifi>=2026.10.19",
 ]
 
 [project.optional-dependencies]

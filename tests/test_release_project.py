@@ -15,6 +15,7 @@ from jinja2 import UndefinedError
 
 from pkpdsim.release import project as project_module
 from pkpdsim.release.project import (
+    UV_VERSION,
     ProjectContext,
     project_context,
     render,
@@ -227,6 +228,24 @@ def test_workflows_are_yaml(context: ProjectContext) -> None:
     assert "deploy" in docs["jobs"]
     # a tag push does not run the tests again (YAML 1.1 reads the key `on` as True)
     assert ci[True]["push"] == {"branches": ["main"]}
+
+
+def test_uv_version(context: ProjectContext) -> None:
+    """The Docker image and the workflows use one uv, at least the fix of the
+    CA store (GHSA-hq85-5cpj-mr62)."""
+    assert UV_VERSION == "0.13.4"
+    dockerfile = render("Dockerfile.j2", context)
+    assert "COPY --from=ghcr.io/astral-sh/uv:0.13.4 /uv /bin/uv\n" in dockerfile
+    for name in ("ci.yml.j2", "docs.yml.j2"):
+        workflow = yaml.safe_load(render(f"workflows/{name}", context))
+        steps = [
+            step
+            for job in workflow["jobs"].values()
+            for step in job["steps"]
+            if step.get("uses", "").startswith("astral-sh/setup-uv@")
+        ]
+        assert steps, name
+        assert {step["with"]["version"] for step in steps} == {"0.13.4"}, name
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="the workflow runs on linux")

@@ -3,7 +3,7 @@
 FROM python:{{ python }}-slim
 
 # install uv
-COPY --from=ghcr.io/astral-sh/uv:0.13.1 /uv /bin/uv
+COPY --from=ghcr.io/astral-sh/uv:{{ uv }} /uv /bin/uv
 
 # install git
 RUN apt-get update && \
