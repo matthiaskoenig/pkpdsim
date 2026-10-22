@@ -26,6 +26,13 @@ from pkpdsim.model import PKPDModel
 from pkpdsim.release.settings import ReleaseSettings
 from pkpdsim.release.source import ReleaseError, SourceRepo
 
+UV_VERSION = "0.13.4"
+"""The uv of a release repository: its Docker image and its workflows.
+
+0.13.4 is the first uv whose bundled CA store lacks the emSign roots
+(GHSA-hq85-5cpj-mr62).
+"""
+
 _PYTHON_FLOOR = re.compile(r">=\s*(\d+\.\d+)")
 _PYTHON_VERSION = re.compile(r"^\d+\.\d+")
 
@@ -221,6 +228,7 @@ def render(
         "settings": context.settings,
         "version": context.version,
         "python": context.python,
+        "uv": UV_VERSION,
         "dependencies": context.dependencies,
         "constraints": context.constraints,
         # forward slashes on Windows too: a TOML string and a path which uv accepts
