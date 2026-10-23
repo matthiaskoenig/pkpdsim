@@ -62,8 +62,8 @@ def scan_nca(
     res: ScanResult,
     key: str,
     *,
-    dose: Quantity,
-    route: Route,
+    dose: Quantity | None,
+    route: Route | None,
     substance: str,
     lloq_fraction: float | None = None,
     options: NCAOptions | None = None,
@@ -81,8 +81,10 @@ def scan_nca(
         dose: the dose of every point as an amount of substance, a quantity
             whose magnitude has the shape of the dimensions of the scan, in
             their order (`start_values(res, dose_id)` converted with the
-            molecular weight), or one dose of all points.
-        route: the route of the dose.
+            molecular weight), or one dose of all points; `None` for a
+            substance without a dose, e.g. a metabolite, whose analysis has no
+            parameters of the dose (clearance, volume).
+        route: the route of the dose, `None` without a dose.
         substance: the name of the substance.
         lloq_fraction: the limit of quantification of every point relative to
             its maximum, `None` without; long simulations decay into the
@@ -95,12 +97,15 @@ def scan_nca(
         The analysis over the dimensions of the scan; `to_dataframe()` has a
         row per point with its position along every dimension.
     """
-    amount = dose.to("mmole").magnitude
-    timecourses = res.to_timecourses(
-        key,
-        dose={"amount": amount, "unit": "mmol"},
-        route=route,
-        substance=substance,
+    timecourses = (
+        res.to_timecourses(key, substance=substance)
+        if dose is None
+        else res.to_timecourses(
+            key,
+            dose={"amount": dose.to("mmole").magnitude, "unit": "mmol"},
+            route=route,
+            substance=substance,
+        )
     )
     if lloq_fraction is not None:
         values = timecourses.ds["value"]

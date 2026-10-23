@@ -109,3 +109,14 @@ def test_the_frame_has_the_rows_of_every_point() -> None:
         np.testing.assert_allclose(df[name].iloc[1], quantity.magnitude, rtol=1e-12)
         assert df[f"{name}_unit"].iloc[1] == str(quantity.units)
     assert df["nca_flags"].iloc[1] == ", ".join(single.flags())
+
+
+def test_a_substance_without_a_dose() -> None:
+    """A metabolite has the parameters of its curve, none of a dose."""
+    res = run(Simulation(end=60), [RATES])
+    df = nca_frame(
+        scan_nca(res, "[A]", dose=None, route=None, substance="A", lloq_fraction=1e-3)
+    )
+    assert df["dim_k"].tolist() == [0, 1, 2]
+    assert df["auc_last"].notna().all()
+    assert "cl" not in df.columns
