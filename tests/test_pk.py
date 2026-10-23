@@ -9,7 +9,7 @@ from sbmlsim.result import ScanResult
 from sbmlsim.simulation import Change, Dimension, Scan, Simulation
 from sbmlsim.simulator import Simulator
 
-from pkpdsim.pk import scan_nca
+from pkpdsim.pk import nca_frame, scan_nca
 from pkpdsim.scan import point_timecourse
 from pkpdsim_toy import MODEL_PATH
 
@@ -85,3 +85,27 @@ def test_a_change_gives_the_state_after_it() -> None:
     )
     expected = per_point(res, 1.0, None)
     np.testing.assert_allclose(result.to_dataframe()["cmax"], expected["cmax"])
+
+
+def test_the_frame_has_the_rows_of_every_point() -> None:
+    """The quantities and the flags of `nca_single` of every point, as rows."""
+    res = run(Simulation(end=60), [RATES])
+    df = nca_frame(
+        scan_nca(res, "[A]", dose=Q(2.0, "mmole"), route=Route.IV_BOLUS, substance="A")
+    )
+    assert df["dim_k"].tolist() == [0, 1, 2]
+    time, values = point_timecourse(res, "[A]", dim_k=1)
+    single = nca_single(
+        Timecourse(
+            time=time,
+            value=values,
+            time_unit=res.units["time"],
+            unit=res.units["[A]"],
+            dose=Dose(amount=2.0, unit="mmol", route=Route.IV_BOLUS),
+            substance="A",
+        )
+    )
+    for name, quantity in single.to_quantities().items():
+        np.testing.assert_allclose(df[name].iloc[1], quantity.magnitude, rtol=1e-12)
+        assert df[f"{name}_unit"].iloc[1] == str(quantity.units)
+    assert df["nca_flags"].iloc[1] == ", ".join(single.flags())

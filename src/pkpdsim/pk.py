@@ -11,7 +11,7 @@ result = scan_nca(
     res, "[Cve_hctz]", dose=dose, route=Route.ORAL, substance="hctz",
     lloq_fraction=1e-6,
 )
-df = result.to_dataframe()  # a row per point, a column per dimension
+df = nca_frame(result)  # a row per point: its position, the parameters, the units
 ```
 
 The labels and the units of the parameters in the figures are `PK_LABELS` and
@@ -24,6 +24,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
+import pandas as pd
 from pkpdutils import NCAOptions, NCAResult, Route, Timecourses, nca
 
 if TYPE_CHECKING:
@@ -108,3 +109,33 @@ def scan_nca(
         lloq = (lloq_fraction * cmax).where(cmax > 0)
         timecourses = Timecourses(timecourses.ds.assign(lloq=lloq))
     return nca(timecourses, options=options)
+
+
+def nca_frame(result: NCAResult) -> pd.DataFrame:
+    """Get the parameters of an analysis as a row per point with their units.
+
+    The rows of `nca_single(...).to_quantities()` of every point: the position
+    of the point along every dimension (a column named after the dimension),
+    every parameter of the analysis with its unit (`<name>_unit`) and the
+    names of its flags, comma separated (`nca_flags`).
+
+    Args:
+        result: the analysis of a scan, see `scan_nca`.
+
+    Returns:
+        A row per point.
+    """
+    df = result.to_dataframe()
+    dims = list(result.sample_dims)
+    names = [
+        name
+        for name in df.columns
+        if name not in {*dims, *result.status_variables, "flags"}
+    ]
+    flags = result.ds["flags"].transpose(*dims).values.ravel()
+    columns: dict[str, object] = {dim: df[dim].to_numpy() for dim in dims}
+    columns["nca_flags"] = [", ".join(result.decode_flags(int(code))) for code in flags]
+    for name in names:
+        columns[name] = df[name].to_numpy(dtype=float)
+        columns[f"{name}_unit"] = result.units(name)
+    return pd.DataFrame(columns)
