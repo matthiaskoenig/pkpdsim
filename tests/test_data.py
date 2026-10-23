@@ -13,6 +13,7 @@ from pkpdsim.data import (
     INTERVENTION_COLUMNS,
     MEASUREMENT_COLUMNS,
     PKDB_DATA,
+    SCATTER_COLUMNS,
     _statistics,
     collect_tsv_files,
     database_differences,
@@ -181,14 +182,12 @@ def test_a_study_format_which_cannot_be_read(tmp_path: Path, text: str) -> None:
 
 
 #: a study of format 2, a copy of pkdb_data (see tests/data/pkdb_data/README.md)
-PATEL1984 = (
-    Path(__file__).parent
-    / "data"
-    / "pkdb_data"
-    / "studies"
-    / "hydrochlorothiazide"
-    / "Patel1984"
+HYDROCHLOROTHIAZIDE = (
+    Path(__file__).parent / "data" / "pkdb_data" / "studies" / "hydrochlorothiazide"
 )
+PATEL1984 = HYDROCHLOROTHIAZIDE / "Patel1984"
+#: a study of format 2 with scatters
+NILSEN1989 = HYDROCHLOROTHIAZIDE / "Nilsen1989"
 
 
 @pytest.fixture(scope="module")
@@ -265,6 +264,20 @@ def test_study_tables_subjects(patel1984_tables: dict[str, pd.DataFrame]) -> Non
     assert sorted(interventions["name"]) == sorted(source["name"])
     assert set(interventions["substance"]) == {"hydrochlorothiazide"}
     assert patel1984_tables["TabIndividuals"].empty
+
+
+def test_study_tables_scatters() -> None:
+    """A point of a scatter is a row with the x and y columns of format 1."""
+    tables = study_tables(NILSEN1989)
+    source = pd.read_csv(NILSEN1989 / "scatters_Fig5.tsv", sep="\t")
+    df = tables["Fig5"]
+    assert list(df.columns) == list(SCATTER_COLUMNS)
+    assert len(df) == len(source)
+    assert df["label"].tolist() == source["name"].tolist()
+    assert df["x_value"].tolist() == pytest.approx(source["x_mean"].tolist())
+    assert df["y_value"].tolist() == pytest.approx(source["y_mean"].tolist())
+    assert df["x_unit"].tolist() == source["x_unit"].tolist()
+    assert df["y_measurement_type"].tolist() == source["y_measurement"].tolist()
 
 
 def test_collect_a_study_of_format_2(source_dir: Path, tmp_path: Path) -> None:

@@ -33,7 +33,13 @@ from sbmlutils.console import console
 
 if TYPE_CHECKING:
     from pkdb import Client
-    from pkdb.schemas.study import CanonicalStudy, Notes, Observation, Subject
+    from pkdb.schemas.study import (
+        CanonicalStudy,
+        Measurement,
+        Notes,
+        Observation,
+        Subject,
+    )
 
 PKDB_DATA = "PKDB_DATA"
 """The environment variable with the path of a checkout of pkdb_data."""
@@ -203,7 +209,33 @@ STATISTICS: tuple[str, ...] = (
 )
 
 #: the prefixes of the data tables of study format 2, `<prefix>_<source>.tsv`
-DATA_PREFIXES: tuple[str, ...] = ("timecourses_", "outputs_")
+DATA_PREFIXES: tuple[str, ...] = ("timecourses_", "outputs_", "scatters_")
+
+#: the columns of a dimension of a scatter of study format 1, `x_<column>` and `y_<column>`
+SCATTER_DIMENSION_COLUMNS: tuple[str, ...] = (
+    "measurement_type",
+    "substance",
+    "tissue",
+    "method",
+    "label",
+    "value",
+    "unit",
+)
+
+#: the columns of a scatter of study format 1 (`.<study>_<source>.tsv` of a scatter)
+SCATTER_COLUMNS: tuple[str, ...] = (
+    "study",
+    "individual",
+    "group",
+    "count",
+    "intervention",
+    "label",
+    "time",
+    "time_unit",
+    *(f"x_{column}" for column in SCATTER_DIMENSION_COLUMNS),
+    *(f"y_{column}" for column in SCATTER_DIMENSION_COLUMNS),
+    "comments",
+)
 
 
 def _comments(record: Notes) -> str | None:
@@ -260,7 +292,11 @@ def _measurement_tables(study: CanonicalStudy, name: str) -> dict[str, pd.DataFr
     }
     rows: dict[str, list[dict[str, Any]]] = {}
     for measurement in study.measurements:
-        if measurement.origin != "reported" or measurement.source is None:
+        if (
+            measurement.origin != "reported"
+            or measurement.source is None
+            or measurement.source.file.startswith("scatters_")
+        ):
             continue
         statistics = _statistics(measurement)
         individual = measurement.individual
@@ -297,6 +333,66 @@ def _measurement_tables(study: CanonicalStudy, name: str) -> dict[str, pd.DataFr
         rows.setdefault(_source(measurement.source.file), []).append(row)
     return {
         source: pd.DataFrame(source_rows, columns=list(MEASUREMENT_COLUMNS))
+        for source, source_rows in rows.items()
+    }
+
+
+def _scatter_tables(study: CanonicalStudy, name: str) -> dict[str, pd.DataFrame]:
+    """Get the scatters of a study as the tables of format 1, by source.
+
+    A point of a scatter (a subject, the row of `scatters_<source>.tsv`) is a
+    row with its two measurements in the columns `x_<column>` and
+    `y_<column>`, the value in `x_value` and `y_value`; the label is the name
+    of the scatter, the interventions are those of both measurements and the
+    time is the one of `y` (else of `x`).
+    """
+    reported = {
+        measurement.key: measurement
+        for measurement in study.measurements
+        if measurement.origin == "reported"
+    }
+    every = {measurement.key: measurement for measurement in study.measurements}
+
+    def point(key: str) -> Measurement:
+        measurement = every[key]
+        if measurement.origin != "reported" and measurement.derived_from:
+            measurement = reported[measurement.derived_from]
+        return measurement
+
+    rows: dict[str, list[dict[str, Any]]] = {}
+    for scatter in study.scatters:
+        if scatter.data_type != "scatter" or scatter.source is None:
+            continue
+        for subset in scatter.subsets:
+            for keys in subset.points:
+                x, y = (point(key) for key in keys)
+                interventions = list(
+                    dict.fromkeys([*x.interventions, *y.interventions])
+                )
+                row: dict[str, Any] = {
+                    "study": name,
+                    "individual": y.individual,
+                    "group": y.group,
+                    "count": y.statistics.count,
+                    "intervention": ",".join(interventions) or None,
+                    "label": scatter.name,
+                    "time": y.time if y.time is not None else x.time,
+                    "time_unit": y.time_unit or x.time_unit,
+                    "comments": _comments(y) or _comments(x),
+                }
+                for axis, measurement in (("x", x), ("y", y)):
+                    row |= {
+                        f"{axis}_measurement_type": measurement.measurement_type,
+                        f"{axis}_substance": measurement.substance,
+                        f"{axis}_tissue": measurement.tissue,
+                        f"{axis}_method": measurement.method,
+                        f"{axis}_label": measurement.label,
+                        f"{axis}_value": measurement.statistics.mean,
+                        f"{axis}_unit": measurement.unit,
+                    }
+                rows.setdefault(_source(scatter.source.file), []).append(row)
+    return {
+        source: pd.DataFrame(source_rows, columns=list(SCATTER_COLUMNS))
         for source, source_rows in rows.items()
     }
 
@@ -424,11 +520,14 @@ def study_tables(study_folder: Path) -> dict[str, pd.DataFrame]:
     The tables are keyed by the source of format 1, the part of the file name
     after the study (`Fig1` of `.Boulton1996a_Fig1.tsv`): a table per source
     of the measurements (the reported outputs and timecourses of
-    `outputs_<source>.tsv` and `timecourses_<source>.tsv`), and `TabGroups`,
-    `TabIndividuals` and `TabInterventions` with the subjects, their
-    characteristics and the interventions. The columns are those of format 1
-    (`MEASUREMENT_COLUMNS`, `GROUP_COLUMNS`, `INDIVIDUAL_COLUMNS`,
-    `INTERVENTION_COLUMNS`), so the experiments select their rows as before.
+    `outputs_<source>.tsv` and `timecourses_<source>.tsv`, `MEASUREMENT_COLUMNS`),
+    a table per source of the scatters of `scatters_<source>.tsv`
+    (`SCATTER_COLUMNS`; `<source>Scatter` when the source also has
+    measurements), and `TabGroups` (`GROUP_COLUMNS`), `TabIndividuals`
+    (`INDIVIDUAL_COLUMNS`) and `TabInterventions` (`INTERVENTION_COLUMNS`)
+    with the subjects, their characteristics and the interventions. The
+    columns are those of format 1, so the experiments select their rows as
+    before.
 
     Args:
         study_folder: the folder of a study of format 2.
@@ -439,6 +538,8 @@ def study_tables(study_folder: Path) -> dict[str, pd.DataFrame]:
     name = study_folder.name
     study = prepare_study(study_folder)
     tables = _measurement_tables(study, name)
+    for source, df in _scatter_tables(study, name).items():
+        tables[f"{source}Scatter" if source in tables else source] = df
     tables["TabGroups"] = _group_table(study, name)
     tables["TabIndividuals"] = _individual_table(study, name)
     tables["TabInterventions"] = _intervention_table(study, name)

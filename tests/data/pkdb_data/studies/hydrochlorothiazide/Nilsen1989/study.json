@@ -1,0 +1,40 @@
+{
+  "format": 2,
+  "reference": {
+    "pmid": "2527546",
+    "doi": "10.1111/j.1365-2125.1989.tb03499.x"
+  },
+  "creator": "amdangelica",
+  "curators": [
+    {
+      "user": "amdangelica",
+      "rating": 0.9
+    },
+    {
+      "user": "mkoenig",
+      "rating": 0.5
+    }
+  ],
+  "licence": "closed",
+  "access": "public",
+  "issue": 1732,
+  "release": {
+    "pkdb_id": "PKDB01107",
+    "date": "2025-11-18"
+  },
+  "descriptions": [
+    "9 healthy subjects received an oral dose of Cilazapril 5 mg or HCTZ 25 mg or a combination of both, 16 patients with hypertension received 2.5 mg cilazapril, 25 mg HCT or the combination 2.5 + 25 mg of the respective drugs once daily for 2 weeks in a randomized double-blind two way crossover study"
+  ],
+  "notes": {
+    "subjects": {
+      "descriptions": [
+        "9 healthy subjects received an oral dose of Cilazapril 5 mg or HCTZ 25 mg or a combination of both, 16 patients with hypertension received 2.5 mg cilazapril, 25 mg HCT or the combination 2.5 + 25 mg of the respective drugs once daily for 2 weeks in a randomized double-blind two way crossover study"
+      ]
+    },
+    "interventions": {
+      "descriptions": [
+        "9 healthy subjects received an oral dose of Cilazapril 5 mg or HCTZ 25 mg or a combination of both, 16 patients with hypertension received 2.5 mg cilazapril, 25 mg HCT or the combination 2.5 + 25 mg of the respective drugs once daily for 2 weeks in a randomized double-blind two way crossover study"
+      ]
+    }
+  }
+}
