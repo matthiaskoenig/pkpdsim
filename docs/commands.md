@@ -139,6 +139,17 @@ pkpd_release pkdb_models.models.hctz --version 0.8.0 --repo ../hctz-model
 
 `--repo` is the checkout of the release repository (by default a sibling of the monorepo named like the repository, cloned when missing), `--pkpdsim-path` a local pkpdsim for a run with `--no-publish`, `--workers` the workers of the simulations. A refused check or a failed step ends the command with exit code 1 and the reason. The release metadata of a model, the one-time setup and the steps are in [Release of a model repository](release.md).
 
+## Profiling a command
+
+`--profile` anywhere after the model package runs a command under the statistical sampling profiler of python 3.15 (`profiling.sampling`, [PEP 799](https://peps.python.org/pep-0799/)), which samples the stack of the command from a process of its own, so the command runs at nearly its normal speed:
+
+```bash
+run_simulation pkdb_models.models.hctz --profile --action simulate --experiments all
+run_fit pkdb_models.models.hctz --profile --subset PK
+```
+
+The profile is written into `profiling/<command>_<time>/` of the results of the model: `flamegraph.html` (the interactive flame graph), `heatmap/` (the sampled lines of the source code), `profile.pstats` (the statistics of the functions, for `pstats` and its viewers), `summary.txt` (the functions with the most time) and `profile.bin` (the samples; `python -m profiling.sampling replay --diff-flamegraph old/profile.bin new/profile.bin` compares two profiles). The command keeps its exit code. With an older python `--profile` is a usage error and the command does not run. The profiler runs the command as `python -m pkpdsim.cli <command> <package> ...`, which works without the profiler as well. A command which runs its simulations in a pool of processes (`--workers`) is profiled in its main process only.
+
 ## The folders of the results
 
 Every command writes into the folders of the model object unless an option names another one; the results are not tracked, the adopted fits are:

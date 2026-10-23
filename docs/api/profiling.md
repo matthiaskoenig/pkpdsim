@@ -1,0 +1,3 @@
+# profiling
+
+::: pkpdsim.profiling

@@ -43,6 +43,11 @@ the adopted fits of the model, whose values and uncertainty the factory takes
 `run_report <package> --adopted` writes the report of every adopted fit of the
 model from its record (`pkpdsim.reports.adopted_reports`). All write into the
 results of the model unless `--output_dir` is given.
+
+`--profile` anywhere after the model package runs a command under the
+sampling profiler of python 3.15 and writes its flame graph and statistics
+into `profiling/` of the results of the model, see `pkpdsim.profiling`; the
+commands also run as `python -m pkpdsim.cli <command> <package> ...`.
 """
 
 from __future__ import annotations
@@ -83,6 +88,12 @@ from pkpdsim.fit import (
     report_context,
 )
 from pkpdsim.model import PKPDModel, resolve
+from pkpdsim.profiling import (
+    PROFILE_OPTION,
+    profiler_available,
+    record_exit_code,
+    run_profiled,
+)
 from pkpdsim.reports import adopted_reports
 from pkpdsim.uncertainty import UncertaintySettings, adopt_fit
 
@@ -987,7 +998,7 @@ def command_parser(command: Command) -> argparse.ArgumentParser:
     """
     p = argparse.ArgumentParser(
         prog=command.name,
-        usage=f"{command.name} PACKAGE [options]",
+        usage=f"{command.name} PACKAGE [{PROFILE_OPTION}] [options]",
         description=command.description,
         epilog=f"`{command.name} PACKAGE --help` shows the options of the model.",
     )
@@ -996,6 +1007,13 @@ def command_parser(command: Command) -> argparse.ArgumentParser:
         metavar="PACKAGE",
         help="the dotted name of the model package, which defines the model "
         "object MODEL, e.g. pkdb_models.models.hctz",
+    )
+    p.add_argument(
+        PROFILE_OPTION,
+        action="store_true",
+        help="run the command under the sampling profiler of python 3.15 and "
+        "write its flame graph and statistics into profiling/ of the results "
+        "of the model",
     )
     return p
 
@@ -1027,6 +1045,17 @@ def main(name: str, argv: Sequence[str] | None = None) -> None:
         p.error(str(err))
     if command.fits and model.fit_definitions is None:
         p.error(f"the model '{model.name}' ({package}) has no fit definitions")
+    if PROFILE_OPTION in rest:
+        rest = [arg for arg in rest if arg != PROFILE_OPTION]
+        if not profiler_available():
+            p.error(
+                f"{PROFILE_OPTION} needs the sampling profiler of python 3.15, "
+                f"this is python {sys.version.split()[0]}"
+            )
+        code = run_profiled(model, name, rest)
+        if code:
+            sys.exit(code)
+        return
     command.function(model, rest)
 
 
@@ -1052,3 +1081,17 @@ def run_report_main(argv: Sequence[str] | None = None) -> None:
 def run_identifiability_main(argv: Sequence[str] | None = None) -> None:
     """The console script `run_identifiability`, see `identifiability_command`."""
     main("run_identifiability", argv)
+
+
+if __name__ == "__main__":
+    # `python -m pkpdsim.cli <command> <package> ...`, which the profiler runs;
+    # its exit code goes to the profiler through a file (`record_exit_code`)
+    try:
+        main(sys.argv[1], sys.argv[2:])
+    except SystemExit as stop:
+        record_exit_code(stop.code)
+        raise
+    except BaseException:
+        record_exit_code(1)
+        raise
+    record_exit_code(0)

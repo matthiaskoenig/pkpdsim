@@ -38,6 +38,7 @@ nav = [
     { "model" = "api/model.md" },
     { "run" = "api/run.md" },
     { "cli" = "api/cli.md" },
+    { "profiling" = "api/profiling.md" },
     { "fit" = "api/fit.md" },
     { "metadata" = "api/metadata.md" },
     { "experiment" = "api/experiment.md" },

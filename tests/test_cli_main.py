@@ -99,7 +99,7 @@ def test_the_help_without_a_model_names_the_package(
         MAINS[name](["--help"])
     assert exit_info.value.code == 0
     out = capsys.readouterr().out
-    assert out.startswith(f"usage: {name} PACKAGE [options]")
+    assert out.startswith(f"usage: {name} PACKAGE [--profile] [options]")
     assert f"{name} PACKAGE --help" in out
 
 
@@ -134,7 +134,7 @@ def test_a_command_without_a_model_is_a_usage_error(
         MAINS[name](args)
     assert exit_info.value.code == 2
     err = capsys.readouterr().err
-    assert err.startswith(f"usage: {name} PACKAGE [options]")
+    assert err.startswith(f"usage: {name} PACKAGE [--profile] [options]")
     assert message in err
 
 
