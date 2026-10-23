@@ -44,7 +44,7 @@ def lock_text() -> str:
         f'[[package]]\nname = "{name}"\nversion = "{version}"\nsource = {source}\n'
         for name, version, source in packages
     ]
-    return 'version = 1\nrequires-python = ">=3.13"\n\n' + "\n".join(blocks)
+    return 'version = 1\nrequires-python = ">=3.14"\n\n' + "\n".join(blocks)
 
 
 class FakeRunner:

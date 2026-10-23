@@ -26,7 +26,7 @@ A pull request can only be merged once the four required checks are green:
 
 `tests` aggregates the test matrix into a single job, so the name of the required check stays the same when the matrix changes.
 
-Continuous integration is kept small: every workflow cancels its running build when a newer commit of the same branch or pull request arrives, uv caches the packages and the interpreters between runs, dependabot proposes its updates once a month, and the matrix tests only python 3.14. Python 3.13 is tested locally, see [Testing](#testing), before a pull request is opened.
+Continuous integration is kept small: every workflow cancels its running build when a newer commit of the same branch or pull request arrives, uv caches the packages and the interpreters between runs, dependabot proposes its updates once a month, and the matrix tests only python 3.14. Python 3.15 is tested locally, see [Testing](#testing), before a pull request is opened.
 
 Further rules of a pull request:
 
@@ -72,7 +72,7 @@ uv sync --extra dev
 
 The environment is resolved from `uv.lock`, which is committed, so local development, including `uv run ty check`, and the documentation build use the same versions. The tox environments, i.e. the test matrix and the `ty` check of continuous integration, use the lock as well (`runner = uv-venv-lock-runner` of tox-uv with the extra `dev`, so pytest and ty are the locked versions; the package itself is still built as a wheel and installed); the lower bounds in `pyproject.toml` are what a user of the library installs against. After changing a dependency in `pyproject.toml` run `uv lock`: the `documentation` workflow syncs with `uv sync --locked`, which fails when `pyproject.toml` and the lock disagree. `uv lock --upgrade` moves the lock to the newest releases. Dependabot bumps the locked dependencies as one grouped monthly pull request, with `versioning-strategy: lockfile-only`, so the lower bounds in `pyproject.toml` are never raised by it and only ever changed by hand.
 
-The `dev` extra contains everything used below, i.e., pytest, ruff, ty, tox, pre-commit, zensical and bump-my-version, so nothing has to be installed separately. The python version is taken from `.python-version` (currently 3.14); to work against the oldest supported version instead use `uv sync --extra dev --python 3.13`, which replaces the environment.
+The `dev` extra contains everything used below, i.e., pytest, ruff, ty, tox, pre-commit, zensical and bump-my-version, so nothing has to be installed separately. The python version is taken from `.python-version` (currently 3.14); to work against the newest supported version instead use `uv sync --extra dev --python 3.15`, which replaces the environment.
 
 The tools are then run either with `uv run <command>`, which uses the environment without activating it, or from the activated environment:
 
@@ -106,7 +106,7 @@ The workflows do the same in `.github/actions/setup`.
 
 The tests are written with pytest, tox runs them against every supported python version.
 
-The tox environments are named after the interpreter (`py3.13` and `py3.14`, see `envlist` in `tox.ini`), a single one is run with
+The tox environments are named after the interpreter (`py3.14` and `py3.15`, see `envlist` in `tox.ini`), a single one is run with
 
 ```bash
 tox r -e py3.14
@@ -118,7 +118,7 @@ and the complete matrix, including the `ty` environment, in parallel with
 tox run-parallel
 ```
 
-This needs the interpreters to be available, which uv installs with `uv python install 3.13 3.14`. The tox environments build the wheel and install it, so the tests run against the package as it is published. It is the complete test and is run before a pull request is opened: continuous integration runs only `py3.14`, on linux, macos and windows, as `uvx --with tox-uv tox -e py3.14 -- --durations=15`, which lists the slowest tests in the log.
+This needs the interpreters to be available, which uv installs with `uv python install 3.14 3.15`. The tox environments build the wheel and install it, so the tests run against the package as it is published. It is the complete test and is run before a pull request is opened: continuous integration runs only `py3.14`, on linux, macos and windows, as `uvx --with tox-uv tox -e py3.14 -- --durations=15`, which lists the slowest tests in the log.
 
 To run the tests directly against the development environment use
 

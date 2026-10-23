@@ -164,7 +164,7 @@ def context(
         constraints=(),
         pkpdsim_path=None,
         year=2026,
-        requires_python=">=3.13",
+        requires_python=">=3.14",
     )
 
 

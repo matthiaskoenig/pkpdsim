@@ -56,12 +56,12 @@ def release(toy_fit: Path, tmp_path: Path) -> tuple[ProjectContext, Path]:
         model=model,
         settings=SETTINGS,
         version="0.10.0",
-        python="3.13",
+        python="3.14",
         dependencies=(),
         constraints=(),
         pkpdsim_path=None,
         year=2026,
-        requires_python=">=3.13",
+        requires_python=">=3.14",
     )
     return context, path
 
