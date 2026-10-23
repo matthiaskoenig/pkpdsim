@@ -36,7 +36,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 from sbmlsim.result.scan import CHANGES, POINT, TIME
-from sbmlsim.result.timecourse import without_states_before
+from sbmlsim.result.timecourse import plot_times, without_states_before
 
 if TYPE_CHECKING:
     import xarray as xr
@@ -209,9 +209,11 @@ def point_band(
 
     The timecourse of every draw is the one of `point_timecourse`. Draws
     with different time points (the steps of the integrator, a simulation
-    without `steps` or `times`) are interpolated linearly onto the union of
-    their time points, `NaN` outside of the times of a draw; a draw whose
-    simulation failed (`NaN`) is ignored.
+    without `steps` or `times`) are interpolated linearly onto the time points
+    of a figure (`sbmlsim.result.timecourse.plot_times`: a few hundred, dense
+    where the draws stepped densely, with the times of the changes), `NaN`
+    outside of the times of a draw; a draw whose simulation failed (`NaN`) is
+    ignored.
 
     Args:
         res: the result of the scan, positional only.
@@ -246,8 +248,10 @@ def point_band(
         times = first
         stacked = np.vstack([values for _, values in draws])
     else:
-        # the steps of the integrator: every draw on the union of the times
-        times = np.unique(np.concatenate([t for t, _ in draws]))
+        # the steps of the integrator: every draw on the time points of a
+        # figure, not on the union of the steps of all draws
+        changes = np.asarray(res.ds.attrs.get(CHANGES, []), dtype=float)
+        times = plot_times(np.concatenate([t for t, _ in draws]), keep=changes.tolist())
         stacked = np.vstack(
             [
                 np.interp(times, t, values, left=np.nan, right=np.nan)

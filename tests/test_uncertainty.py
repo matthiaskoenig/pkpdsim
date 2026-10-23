@@ -17,6 +17,7 @@ from sbmlsim.fit.options import ParameterScaleType
 from sbmlsim.plot import Curve, Figure
 from sbmlsim.plot.plotting import Band
 from sbmlsim.report.render import compile_pdf
+from sbmlsim.result.timecourse import PLOT_POINTS
 from sbmlsim.simulation import Dimension, Scan, Simulation
 from sbmlsim.simulation.sampling import LogNormal, Normal, Truncated, Uniform
 from sbmlsim.simulator import Simulator
@@ -498,7 +499,7 @@ def test_the_band_of_a_point(toy_with_uncertainty: Path) -> None:
 
 
 def test_the_band_of_the_steps_of_the_integrator(toy_with_uncertainty: Path) -> None:
-    """Draws with their own time points are on the union of the time points."""
+    """Draws with their own time points are on the time points of a figure."""
     run = draws_run(toy_with_uncertainty, draws=5)
     scan = Scan(Simulation(end=10), [run.dimension])
     simulator = Simulator()
@@ -507,9 +508,10 @@ def test_the_band_of_the_steps_of_the_integrator(toy_with_uncertainty: Path) -> 
     time, lower, median, upper = point_band(res, "[A]", across=UNCERTAINTY_DIMENSION)
     assert np.all(np.diff(time) > 0)
     assert time[0] == 0.0 and time[-1] == 10.0
-    for k in range(5):
-        t, _ = point_timecourse(res, "[A]", **{UNCERTAINTY_DIMENSION: k})
-        assert np.isin(t, time).all()
+    steps = [
+        point_timecourse(res, "[A]", **{UNCERTAINTY_DIMENSION: k})[0] for k in range(5)
+    ]
+    assert time.size <= max(PLOT_POINTS, np.unique(np.concatenate(steps)).size)
     assert np.all(lower <= median) and np.all(median <= upper)
 
 
