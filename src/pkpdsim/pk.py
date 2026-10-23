@@ -1,11 +1,36 @@
-"""The labels and units of the pharmacokinetic parameters in the figures.
+"""The pharmacokinetic parameters of the scans of a model.
 
-The keys are the parameters of the non-compartmental analysis of pkpdutils
-(`nca_single`); the base of the experiments of a model has them as `pk_labels`
-and `pk_units`.
+`scan_nca` is the non-compartmental analysis of pkpdutils of a timecourse at
+every point of a scan at once (`pkpdutils.nca` of a batch), instead of one
+analysis per point (`nca_single`):
+
+```python
+# not executed
+dose = Q(start_values(res, "PODOSE_hctz").values, res.units["PODOSE_hctz"]) / Mr
+result = scan_nca(
+    res, "[Cve_hctz]", dose=dose, route=Route.ORAL, substance="hctz",
+    lloq_fraction=1e-6,
+)
+df = nca_frame(result)  # a row per point: its position, the parameters, the units
+```
+
+The labels and the units of the parameters in the figures are `PK_LABELS` and
+`PK_UNITS`; the keys are the parameters of the analysis, the base of the
+experiments of a model has them as `pk_labels` and `pk_units`.
 """
 
+from __future__ import annotations
+
 from collections.abc import Mapping
+from typing import TYPE_CHECKING
+
+import numpy as np
+import pandas as pd
+from pkpdutils import NCAOptions, NCAResult, Route, Timecourses, nca
+
+if TYPE_CHECKING:
+    from sbmlsim.result import ScanResult
+    from sbmlsim.units import Quantity
 
 #: the label of a pharmacokinetic parameter
 PK_LABELS: Mapping[str, str] = {
@@ -32,3 +57,103 @@ PK_UNITS: Mapping[str, str] = {
     "lambda_z": "1/hr",
     "vz_f": "l",
 }
+
+
+def scan_nca(
+    res: ScanResult,
+    key: str,
+    *,
+    dose: Quantity | None,
+    route: Route | None,
+    substance: str,
+    lloq_fraction: float | None = None,
+    options: NCAOptions | None = None,
+) -> NCAResult:
+    """Get the non-compartmental analysis of a timecourse at every point of a scan.
+
+    The timecourses of all points are one batch of pkpdutils
+    (`ScanResult.to_timecourses`: the state after a change at its time, the
+    padding of a ragged result left out), which `pkpdutils.nca` analyses
+    vectorized, with the parameters of `nca_single` of every point.
+
+    Args:
+        res: the result of the scan, of any number of dimensions.
+        key: the variable, a concentration.
+        dose: the dose of every point as an amount of substance, a quantity
+            whose magnitude has the shape of the dimensions of the scan, in
+            their order (`start_values(res, dose_id)` converted with the
+            molecular weight), or one dose of all points; `None` for a
+            substance without a dose, e.g. a metabolite, whose analysis has no
+            parameters of the dose (clearance, volume).
+        route: the route of the dose, `None` without a dose.
+        substance: the name of the substance.
+        lloq_fraction: the limit of quantification of every point relative to
+            its maximum, `None` without; long simulations decay into the
+            numerical noise of the integrator, which would be the terminal
+            phase.
+        options: the options of the analysis, the defaults of pkpdutils by
+            default.
+
+    Returns:
+        The analysis over the dimensions of the scan; `to_dataframe()` has a
+        row per point with its position along every dimension.
+    """
+    timecourses = (
+        res.to_timecourses(key, substance=substance)
+        if dose is None
+        else res.to_timecourses(
+            key,
+            dose={"amount": dose.to("mmole").magnitude, "unit": "mmol"},
+            route=route,
+            substance=substance,
+        )
+    )
+    if lloq_fraction is not None:
+        values = timecourses.ds["value"]
+        sample_dims = set(timecourses.sample_dims)
+        cmax = values.max(dim=[d for d in values.dims if d not in sample_dims])
+        lloq = (lloq_fraction * cmax).where(cmax > 0)
+        timecourses = Timecourses(timecourses.ds.assign(lloq=lloq))
+    return nca(timecourses, options=options)
+
+
+def nca_frame(result: NCAResult) -> pd.DataFrame:
+    """Get the parameters of an analysis as a row per point with their units.
+
+    The rows of `nca_single(...).to_quantities()` of every point: the position
+    of the point along every dimension (a column named after the dimension,
+    the index along it, also for a dimension with labels, e.g. the points of
+    a local sensitivity design),
+    every parameter of the analysis with its unit (`<name>_unit`) and the
+    names of its flags, comma separated (`nca_flags`).
+
+    Args:
+        result: the analysis of a scan, see `scan_nca`.
+
+    Returns:
+        A row per point.
+    """
+    df = result.to_dataframe()
+    dims = list(result.sample_dims)
+    names = [
+        name
+        for name in df.columns
+        if name not in {*dims, *result.status_variables, "flags"}
+    ]
+    flags = result.ds["flags"].transpose(*dims).values.ravel()
+    # the rows are the points in the order of the dimensions, the last fastest
+    shape = tuple(result.ds.sizes[dim] for dim in dims)
+    positions = np.unravel_index(np.arange(len(df)), shape) if dims else ()
+    columns: dict[str, object] = {}
+    for dim, position in zip(dims, positions, strict=True):
+        labels = result.ds[dim].values
+        if not np.array_equal(df[dim].to_numpy(), labels[position]):
+            raise ValueError(
+                f"The rows of the analysis are not in the order of '{dim}'."
+            )
+        columns[dim] = position
+    columns["nca_flags"] = [", ".join(result.decode_flags(int(code))) for code in flags]
+    for name in names:
+        columns[name] = df[name].to_numpy(dtype=float)
+        columns[f"{name}_unit"] = result.units(name)
+    return pd.DataFrame(columns)

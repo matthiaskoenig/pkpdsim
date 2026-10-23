@@ -17,6 +17,7 @@ from sbmlsim.fit.options import ParameterScaleType
 from sbmlsim.plot import Curve, Figure
 from sbmlsim.plot.plotting import Band
 from sbmlsim.report.render import compile_pdf
+from sbmlsim.result.timecourse import PLOT_POINTS
 from sbmlsim.simulation import Dimension, Scan, Simulation
 from sbmlsim.simulation.sampling import LogNormal, Normal, Truncated, Uniform
 from sbmlsim.simulator import Simulator
@@ -24,7 +25,7 @@ from sbmlutils.factory import Parameter, create_model
 
 from pkpdsim.cli import fit_command, run_command
 from pkpdsim.experiment import PKPDSimulationExperiment
-from pkpdsim.scan import point_band, scan_dimensions
+from pkpdsim.scan import point_band, point_timecourse, scan_dimensions
 from pkpdsim.uncertainty import (
     RECORD_FILES,
     UNCERTAINTY_DIMENSION,
@@ -495,6 +496,23 @@ def test_the_band_of_a_point(toy_with_uncertainty: Path) -> None:
     assert lower[-1] < upper[-1]
     with pytest.raises(ValueError, match="no dimension"):
         point_band(res, "[A]", across="draws", dim_volume=0)
+
+
+def test_the_band_of_the_steps_of_the_integrator(toy_with_uncertainty: Path) -> None:
+    """Draws with their own time points are on the time points of a figure."""
+    run = draws_run(toy_with_uncertainty, draws=5)
+    scan = Scan(Simulation(end=10), [run.dimension])
+    simulator = Simulator()
+    res = simulator.run(simulator.load(MODEL.model_path), scan)
+    assert res.ragged
+    time, lower, median, upper = point_band(res, "[A]", across=UNCERTAINTY_DIMENSION)
+    assert np.all(np.diff(time) > 0)
+    assert time[0] == 0.0 and time[-1] == 10.0
+    steps = [
+        point_timecourse(res, "[A]", **{UNCERTAINTY_DIMENSION: k})[0] for k in range(5)
+    ]
+    assert time.size <= max(PLOT_POINTS, np.unique(np.concatenate(steps)).size)
+    assert np.all(lower <= median) and np.all(median <= upper)
 
 
 def test_the_run_writes_into_the_results_of_the_draws(

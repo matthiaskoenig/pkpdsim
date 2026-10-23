@@ -16,6 +16,13 @@ for k in range(res.ds.sizes[dim]):
 `state_after_changes(res)` gives the whole result in that form, for the figures
 which read the arrays of a result instead of one point.
 
+A simulation without `steps` or `times` outputs the steps of the integrator, a
+scan of such simulations is ragged: every point keeps its own time points
+(`(*dims, _point)`, padded with `NaN`). `start_values(res, key)` and
+`end_values(res, key)` give the first and the last value of a variable at every
+point of a scan in both layouts, e.g. the dose or the scanned parameter at the
+start and the amount in the urine at the end.
+
 A run over the draws of the fitted parameters adds the dimension of the draws to
 every result (`pkpdsim.uncertainty`); `scan_dimensions(res, across)` gives the
 dimensions of the scan without it, and `point_band(res, key, across, quantiles,
@@ -29,9 +36,10 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 from sbmlsim.result.scan import CHANGES, POINT, TIME
-from sbmlsim.result.timecourse import without_states_before
+from sbmlsim.result.timecourse import plot_times, without_states_before
 
 if TYPE_CHECKING:
+    import xarray as xr
     from sbmlsim.result import ScanResult
 
 
@@ -85,6 +93,64 @@ def state_after_changes(res: ScanResult) -> ScanResult:
         The result on the grid of its time points, each time once.
     """
     return res.interpolate(np.unique(res.time_points()))
+
+
+def _timecourse_variable(res: ScanResult, key: str) -> xr.DataArray:
+    """Get a variable which is a timecourse of the result.
+
+    Raises:
+        ValueError: if the variable is no timecourse.
+    """
+    tdim = POINT if res.ragged else TIME
+    if key not in res.ds.data_vars or tdim not in res.ds[key].dims:
+        raise ValueError(f"'{key}' is no timecourse of the result.")
+    return res.ds[key]
+
+
+def start_values(res: ScanResult, key: str, /) -> xr.DataArray:
+    """Get the value of a variable at the start of every point of a scan.
+
+    The first output of every simulation, on a grid (`time`) and in the ragged
+    layout of the steps of the integrator (`_point`) alike.
+
+    Args:
+        res: the result of the scan, positional only.
+        key: the variable, a timecourse, positional only.
+
+    Returns:
+        The values over the dimensions of the scan, with their coordinates.
+
+    Raises:
+        ValueError: if the variable is no timecourse.
+    """
+    values = _timecourse_variable(res, key)
+    tdim = POINT if res.ragged else TIME
+    return values.isel({tdim: 0}).drop_vars(TIME, errors="ignore")
+
+
+def end_values(res: ScanResult, key: str, /) -> xr.DataArray:
+    """Get the value of a variable at the end of every point of a scan.
+
+    The last output of every simulation: the last time of a grid (`time`), the
+    last time before the padding of every point of a ragged result (`_point`);
+    a point whose simulation failed has `NaN`.
+
+    Args:
+        res: the result of the scan, positional only.
+        key: the variable, a timecourse, positional only.
+
+    Returns:
+        The values over the dimensions of the scan, with their coordinates.
+
+    Raises:
+        ValueError: if the variable is no timecourse.
+    """
+    values = _timecourse_variable(res, key)
+    if not res.ragged:
+        return values.isel({TIME: -1}).drop_vars(TIME, errors="ignore")
+    # the padding is at the end: the last time of a point is its last finite one
+    last = (res.ds[TIME].notnull().sum(POINT) - 1).clip(min=0)
+    return values.isel({POINT: last})
 
 
 def point_timecourse(
@@ -141,9 +207,13 @@ def point_band(
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Get the band of the draws of a variable at one point of a scan.
 
-    The timecourse of every draw is the one of `point_timecourse`; the draws
-    share their time points (a simulation with `steps` or `times`), a draw
-    whose simulation failed (`NaN`) is ignored.
+    The timecourse of every draw is the one of `point_timecourse`. Draws
+    with different time points (the steps of the integrator, a simulation
+    without `steps` or `times`) are interpolated linearly onto the time points
+    of a figure (`sbmlsim.result.timecourse.plot_times`: a few hundred, dense
+    where the draws stepped densely, with the times of the changes), `NaN`
+    outside of the times of a draw; a draw whose simulation failed (`NaN`) is
+    ignored.
 
     Args:
         res: the result of the scan, positional only.
@@ -156,8 +226,8 @@ def point_band(
         The time points, the lower quantile, the median and the upper quantile.
 
     Raises:
-        ValueError: if the result has no dimension `across`, a dimension has
-            no position, or the draws have different time points.
+        ValueError: if the result has no dimension `across` or a dimension
+            has no position.
     """
     if across not in res.dims:
         raise ValueError(
@@ -167,21 +237,29 @@ def point_band(
         raise ValueError(
             f"The dimension '{across}' of the draws is reduced, not a point."
         )
-    times: np.ndarray | None = None
-    rows: list[np.ndarray] = []
-    for k in range(res.ds.sizes[across]):
-        time, values = point_timecourse(res, key, **point, **{across: k})
-        if times is None:
-            times = time
-        elif time.shape != times.shape or not np.allclose(time, times):
-            raise ValueError(
-                f"The draws of '{key}' have different time points; run the scan "
-                f"on a common grid (a simulation with steps or times)."
-            )
-        rows.append(values)
-    if times is None:
+    draws = [
+        point_timecourse(res, key, **point, **{across: k})
+        for k in range(res.ds.sizes[across])
+    ]
+    if not draws:
         raise ValueError(f"The result has no draws along '{across}'.")
-    stacked = np.vstack(rows)
+    first = draws[0][0]
+    if all(t.shape == first.shape and np.allclose(t, first) for t, _ in draws):
+        times = first
+        stacked = np.vstack([values for _, values in draws])
+    else:
+        # the steps of the integrator: every draw on the time points of a
+        # figure, not on the union of the steps of all draws
+        changes = np.asarray(res.ds.attrs.get(CHANGES, []), dtype=float)
+        times = plot_times(np.concatenate([t for t, _ in draws]), keep=changes.tolist())
+        stacked = np.vstack(
+            [
+                np.interp(times, t, values, left=np.nan, right=np.nan)
+                if t.size
+                else np.full(times.shape, np.nan)
+                for t, values in draws
+            ]
+        )
     low, high = quantiles
     # a time at which every draw failed has no quantile, it is NaN
     with warnings.catch_warnings():
