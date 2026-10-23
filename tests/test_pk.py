@@ -120,3 +120,23 @@ def test_a_substance_without_a_dose() -> None:
     assert df["dim_k"].tolist() == [0, 1, 2]
     assert df["auc_last"].notna().all()
     assert "cl" not in df.columns
+
+
+def test_the_position_of_a_point_with_labels() -> None:
+    """A dimension with labels, e.g. a sensitivity design, has positions too."""
+    labelled = Dimension("dim_k", values={"k": Q([0.1, 0.2, 0.4], "1/min")})
+    res = run(Simulation(end=60), [labelled])
+    res.ds = res.ds.assign_coords(dim_k=["slow", "mid", "fast"])
+    df = nca_frame(
+        scan_nca(res, "[A]", dose=Q(1.0, "mmole"), route=Route.IV_BOLUS, substance="A")
+    )
+    assert df["dim_k"].tolist() == [0, 1, 2]
+
+
+def test_a_single_simulation_has_one_row() -> None:
+    res = Simulator(n_workers=1).run(TOY, Simulation(end=60))
+    df = nca_frame(
+        scan_nca(res, "[A]", dose=Q(1.0, "mmole"), route=Route.IV_BOLUS, substance="A")
+    )
+    assert len(df) == 1
+    assert df["auc_last"].notna().all()

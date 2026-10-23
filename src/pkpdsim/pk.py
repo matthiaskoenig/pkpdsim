@@ -24,6 +24,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
+import numpy as np
 import pandas as pd
 from pkpdutils import NCAOptions, NCAResult, Route, Timecourses, nca
 
@@ -120,7 +121,9 @@ def nca_frame(result: NCAResult) -> pd.DataFrame:
     """Get the parameters of an analysis as a row per point with their units.
 
     The rows of `nca_single(...).to_quantities()` of every point: the position
-    of the point along every dimension (a column named after the dimension),
+    of the point along every dimension (a column named after the dimension,
+    the index along it, also for a dimension with labels, e.g. the points of
+    a local sensitivity design),
     every parameter of the analysis with its unit (`<name>_unit`) and the
     names of its flags, comma separated (`nca_flags`).
 
@@ -138,7 +141,17 @@ def nca_frame(result: NCAResult) -> pd.DataFrame:
         if name not in {*dims, *result.status_variables, "flags"}
     ]
     flags = result.ds["flags"].transpose(*dims).values.ravel()
-    columns: dict[str, object] = {dim: df[dim].to_numpy() for dim in dims}
+    # the rows are the points in the order of the dimensions, the last fastest
+    shape = tuple(result.ds.sizes[dim] for dim in dims)
+    positions = np.unravel_index(np.arange(len(df)), shape) if dims else ()
+    columns: dict[str, object] = {}
+    for dim, position in zip(dims, positions, strict=True):
+        labels = result.ds[dim].values
+        if not np.array_equal(df[dim].to_numpy(), labels[position]):
+            raise ValueError(
+                f"The rows of the analysis are not in the order of '{dim}'."
+            )
+        columns[dim] = position
     columns["nca_flags"] = [", ".join(result.decode_flags(int(code))) for code in flags]
     for name in names:
         columns[name] = df[name].to_numpy(dtype=float)
