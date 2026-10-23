@@ -35,9 +35,13 @@ FileNotFoundError
 
 ## Collecting the data of a model
 
-The data files are the hidden `.tsv` files of study format 1. pkdb_data is curated in study format 2 (`"format": 2` in the `study.json`, with the tables `timecourses_<source>.tsv`, `outputs_<source>.tsv`, `subjects.tsv`, ...), which the models do not read yet: `collect_tsv_files` raises a `ValueError` which names the studies of another format (`study_format`) and copies nothing, instead of copying nothing silently and leaving the data of the model as they were.
+The experiments read the tables of study format 1, one hidden `.tsv` file per source of a study (`.Boulton1996a_Fig1.tsv`). pkdb_data is curated in study format 2 (`"format": 2` in the `study.json`, with the tables `subjects.tsv`, `interventions.tsv`, `timecourses_<source>.tsv`, `outputs_<source>.tsv`, ...). `collect_tsv_files(source_dir, target_dir, filter_study=None)` writes the data of every study folder of `source_dir` into a folder of the same name in `target_dir`, as the tables of format 1, so that the experiments read them unchanged:
 
-`collect_tsv_files(source_dir, target_dir, filter_study=None)` copies the data files of every study folder of `source_dir` into a folder of the same name in `target_dir`; a study without data files is left out, as are the figures, the tables and the publication, and `filter_study` selects studies by the name of their folder. Every copy is reported on the console. Continuing the snippet above:
+- a study of format 2 is read with the library of PK-DB, `pkdb.prepare`, with the vocabulary of the checkout (`vocabulary.lock.json`); this is the reading and the validation of `pkdb check` and of the upload to the database, so a study which `pkdb check` refuses is an error. Its data become one table per source (the reported outputs and timecourses of `outputs_<source>.tsv` and `timecourses_<source>.tsv`, the statistics PK-DB calculates or normalizes from them are left out) and the tables `TabGroups`, `TabIndividuals` and `TabInterventions` of the subjects, their characteristics and the interventions (`study_tables`, `write_study_tables`). A digitized error bar gives the statistic it names (`sd`, `se` or `gsd`), and the earlier tables of the study in `target_dir` are replaced;
+- the hidden `.tsv` files of a study of format 1 are copied; a study without them is left out;
+- the figures, the tables and the publication stay in pkdb_data, and `filter_study` selects studies by the name of their folder.
+
+Every written file is reported on the console. Continuing the snippet above:
 
 ```python
 from pkpdsim.data import collect_tsv_files
@@ -64,4 +68,17 @@ from pkpdsim.data import collect_tsv_files, studies_dir
 collect_tsv_files(
     source_dir=studies_dir() / "albuterol", target_dir=DATA_PATH_ALBUTEROL
 )
+```
+
+## Comparing with the database
+
+The models read the study folders of the checkout, which are the studies of a revision of pkdb_data. `database_differences(study_folders, client=None)` compares them with the studies uploaded to a PK-DB server: a study agrees when the digest of its source files (`source_digest` of `pkdb.prepare`) is the one of the server, a study the server does not have and a study with another digest are a `DatabaseDifference` with the reason. The server and the credentials are those of `pkdb.Client` (`PKDB_ENDPOINT`, `PKDB_API_KEY`); a private study needs an API key.
+
+```python
+# not executed: needs a checkout of pkdb_data and a PK-DB server
+from pkpdsim.data import database_differences, studies_dir
+
+folders = sorted((studies_dir() / "albuterol").iterdir())
+for difference in database_differences(folders):
+    print(difference.sid, difference.reason)
 ```
