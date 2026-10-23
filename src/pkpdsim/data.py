@@ -22,6 +22,7 @@ the ones uploaded to a PK-DB server.
 
 import json
 import os
+import re
 import shutil
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
@@ -211,7 +212,8 @@ STATISTICS: tuple[str, ...] = (
 #: the prefixes of the data tables of study format 2, `<prefix>_<source>.tsv`
 DATA_PREFIXES: tuple[str, ...] = ("timecourses_", "outputs_", "scatters_")
 
-#: the columns of a dimension of a scatter of study format 1, `x_<column>` and `y_<column>`
+#: the columns of a dimension of a scatter of study format 1, `x_<column>` and
+#: `y_<column>`; `""` is the column `x` (`y`) of the value, which `x_unit` is the unit of
 SCATTER_DIMENSION_COLUMNS: tuple[str, ...] = (
     "measurement_type",
     "substance",
@@ -219,6 +221,7 @@ SCATTER_DIMENSION_COLUMNS: tuple[str, ...] = (
     "method",
     "label",
     "value",
+    "",
     "unit",
 )
 
@@ -232,8 +235,8 @@ SCATTER_COLUMNS: tuple[str, ...] = (
     "label",
     "time",
     "time_unit",
-    *(f"x_{column}" for column in SCATTER_DIMENSION_COLUMNS),
-    *(f"y_{column}" for column in SCATTER_DIMENSION_COLUMNS),
+    *("_".join(("x", column)).rstrip("_") for column in SCATTER_DIMENSION_COLUMNS),
+    *("_".join(("y", column)).rstrip("_") for column in SCATTER_DIMENSION_COLUMNS),
     "comments",
 )
 
@@ -253,17 +256,32 @@ def _source(file: str) -> str:
     return stem
 
 
-def _statistics(observation: Observation) -> dict[str, Any]:
+def _statistics(
+    observation: Observation, *, complete: bool = False, count: int | None = None
+) -> dict[str, Any]:
     """Get the statistics of an observation as the columns of format 1.
 
     A digitized error bar of format 2 (`error_bar`, the position of the end of
     the bar, with its `error_type`) gives the statistic it names, which format
     1 stored as the size of the bar: `sd` or `se` is the distance of the end
-    from the mean, `gsd` the ratio of the end and the geometric mean (as
-    `pkdb` completes the statistics). A reported value of the statistic is
-    kept.
+    from the mean, `gsd` the ratio of the end and the geometric mean. With
+    `complete`, the missing `sd`, `se` and `cv` are calculated from the others
+    and the count as PK-DB does (`pkdb.domain.statistics.complete_statistics`,
+    `cv` is a fraction of the mean). A reported value is always kept.
+
+    Args:
+        observation: a measurement or characteristic of PK-DB.
+        complete: whether to calculate the missing statistics.
+        count: the count of the subjects of the observation, for `complete`.
+
+    Returns:
+        The statistics by the columns of format 1.
     """
+    from pkdb.domain.statistics import complete_statistics
+
     statistics = observation.statistics
+    if complete:
+        statistics = complete_statistics(statistics, count)
     values = {key: getattr(statistics, key) for key in STATISTICS}
     error_bar, error_type = statistics.error_bar, statistics.error_type
     if error_bar is not None and error_type is not None and values[error_type] is None:
@@ -276,15 +294,29 @@ def _statistics(observation: Observation) -> dict[str, Any]:
     return values
 
 
+def _label(*parts: str | None) -> str:
+    """Get the label of an output without one from the columns which identify it.
+
+    The parts which are given are joined by `_`, every other character than a
+    letter or a digit becomes `_` (`auc_hydrochlorothiazide_plasma_HCTZ25_all`).
+    """
+    text = "_".join(part for part in parts if part)
+    return re.sub(r"[^A-Za-z0-9]+", "_", text).strip("_")
+
+
 def _measurement_tables(study: CanonicalStudy, name: str) -> dict[str, pd.DataFrame]:
     """Get the measurements of a study as the tables of format 1, by source.
 
     A table holds the reported measurements of a source, the outputs and the
     points of the timecourses of `outputs_<source>.tsv` and
-    `timecourses_<source>.tsv`; the statistics PK-DB calculates or normalizes
-    from them are left out, as format 1 had none. A measurement of an
-    individual has its mean in the column `value` and its group in `group`,
-    the count of a row without one is the count of its subjects.
+    `timecourses_<source>.tsv`; the records PK-DB normalizes into other units
+    or calculates from them are left out, and the missing `sd`, `se` and `cv`
+    of a row are calculated from its statistics (see `_statistics`). A measurement of an individual has its mean in the
+    column `value` and its group in `group`, the count of a row without one is
+    the count of its subjects. An output without a label (the outputs of
+    format 2 have none) gets one from its measurement, substance, tissue,
+    interventions and subject (`_label`), so that the experiments can group
+    the rows by `label` as for the timecourses.
     """
     group_counts = {group.name: group.count for group in study.groups}
     individual_groups = {
@@ -298,31 +330,40 @@ def _measurement_tables(study: CanonicalStudy, name: str) -> dict[str, pd.DataFr
             or measurement.source.file.startswith("scatters_")
         ):
             continue
-        statistics = _statistics(measurement)
         individual = measurement.individual
         group = measurement.group
         count = measurement.statistics.count
-        value = None
         if individual is not None:
             group = group or individual_groups.get(individual)
-            value = statistics.pop("mean")
-            statistics["mean"] = None
             count = 1 if count is None else count
         elif count is None and group is not None:
             count = group_counts.get(group)
+        statistics = _statistics(measurement, complete=True, count=count)
+        value = None
+        if individual is not None:
+            value = statistics["mean"]
+            statistics["mean"] = None
+        interventions = ",".join(measurement.interventions) or None
+        label = measurement.label or _label(
+            measurement.measurement_type,
+            measurement.substance,
+            measurement.tissue,
+            "_".join(measurement.interventions),
+            individual or group,
+        )
         row = {
             "study": name,
             "group": group,
             "individual": individual,
             "count": count,
-            "intervention": ",".join(measurement.interventions) or None,
+            "intervention": interventions,
             "measurement_type": measurement.measurement_type,
             "calculation_type": measurement.calculation_type,
             "choice": measurement.choice,
             "substance": measurement.substance,
             "tissue": measurement.tissue,
             "method": measurement.method,
-            "label": measurement.label,
+            "label": label,
             "time": None if measurement.time_not_reported else measurement.time,
             "time_unit": measurement.time_unit,
             "value": value,
@@ -342,9 +383,10 @@ def _scatter_tables(study: CanonicalStudy, name: str) -> dict[str, pd.DataFrame]
 
     A point of a scatter (a subject, the row of `scatters_<source>.tsv`) is a
     row with its two measurements in the columns `x_<column>` and
-    `y_<column>`, the value in `x_value` and `y_value`; the label is the name
-    of the scatter, the interventions are those of both measurements and the
-    time is the one of `y` (else of `x`).
+    `y_<column>`, the value in `x_value` and `x` (the column of sbmlsim which
+    `x_unit` is the unit of) and in `y_value` and `y`, and the count 1; the
+    label is the name of the scatter, the interventions are those of both
+    measurements and the time is the one of `y` (else of `x`).
     """
     reported = {
         measurement.key: measurement
@@ -373,7 +415,7 @@ def _scatter_tables(study: CanonicalStudy, name: str) -> dict[str, pd.DataFrame]
                     "study": name,
                     "individual": y.individual,
                     "group": y.group,
-                    "count": y.statistics.count,
+                    "count": 1,
                     "intervention": ",".join(interventions) or None,
                     "label": scatter.name,
                     "time": y.time if y.time is not None else x.time,
@@ -388,6 +430,7 @@ def _scatter_tables(study: CanonicalStudy, name: str) -> dict[str, pd.DataFrame]
                         f"{axis}_method": measurement.method,
                         f"{axis}_label": measurement.label,
                         f"{axis}_value": measurement.statistics.mean,
+                        axis: measurement.statistics.mean,
                         f"{axis}_unit": measurement.unit,
                     }
                 rows.setdefault(_source(scatter.source.file), []).append(row)

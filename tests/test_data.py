@@ -14,6 +14,7 @@ from pkpdsim.data import (
     MEASUREMENT_COLUMNS,
     PKDB_DATA,
     SCATTER_COLUMNS,
+    _label,
     _statistics,
     collect_tsv_files,
     database_differences,
@@ -234,6 +235,34 @@ def test_study_tables_measurements(patel1984_tables: dict[str, pd.DataFrame]) ->
     assert set(df["count"]) == {12}
 
 
+def test_study_tables_outputs(patel1984_tables: dict[str, pd.DataFrame]) -> None:
+    """An output gets a label, its missing statistics are calculated."""
+    df = patel1984_tables["Tab4"]
+    assert df["label"].notna().all()
+    assert df["label"].iloc[0] == (
+        "cumulative_amount_change_chloride_urine_HCTZ25_sus_all"
+    )
+    with_sd = df["sd"].notna() & df["count"].notna()
+    assert with_sd.any()
+    expected = df.loc[with_sd, "sd"] / df.loc[with_sd, "count"] ** 0.5
+    assert df.loc[with_sd, "se"].tolist() == pytest.approx(expected.tolist())
+
+
+@pytest.mark.parametrize(
+    ("parts", "expected"),
+    [
+        (("auc", "hctz", "plasma", "HCTZ25", "all"), "auc_hctz_plasma_HCTZ25_all"),
+        (
+            ("cumulative amount (change)", None, "urine", "", "g1"),
+            "cumulative_amount_change_urine_g1",
+        ),
+    ],
+)
+def test_label(parts: tuple[str | None, ...], expected: str) -> None:
+    """The label of an output is made of the columns which identify it."""
+    assert _label(*parts) == expected
+
+
 @pytest.mark.parametrize(
     ("statistics", "expected"),
     [
@@ -278,6 +307,9 @@ def test_study_tables_scatters() -> None:
     assert df["y_value"].tolist() == pytest.approx(source["y_mean"].tolist())
     assert df["x_unit"].tolist() == source["x_unit"].tolist()
     assert df["y_measurement_type"].tolist() == source["y_measurement"].tolist()
+    # the value also in the columns of sbmlsim, a point counts one
+    assert df["x"].tolist() == df["x_value"].tolist()
+    assert set(df["count"]) == {1}
 
 
 def test_collect_a_study_of_format_2(source_dir: Path, tmp_path: Path) -> None:
