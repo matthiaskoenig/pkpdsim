@@ -4,7 +4,7 @@ This file provides guidance when working with code in this repository.
 
 ## Project
 
-`pkpdsim` is a python package with the building blocks shared by physiologically based pharmacokinetic and pharmacodynamic (PBPK/PD) models in SBML, i.e., the models of [pkdb_models](https://github.com/matthiaskoenig/pkdb_models): what these models share moves here, so that the folder of a model imports nothing but itself and released packages ([pkdb_models#95](https://github.com/matthiaskoenig/pkdb_models/issues/95)). A library with the console scripts `pkpdsim-verify`, `pkpd_release` and the four commands of the models, `run_simulation`, `run_fit`, `run_report` and `run_identifiability`, which take the dotted name of a model package first. Requires python >= 3.13 (tested on 3.13 and 3.14), packaged with hatchling (version is read from `src/pkpdsim/__init__.py`).
+`pkpdsim` is a python package with the building blocks shared by physiologically based pharmacokinetic and pharmacodynamic (PBPK/PD) models in SBML, i.e., the models of [pkdb_models](https://github.com/matthiaskoenig/pkdb_models): what these models share moves here, so that the folder of a model imports nothing but itself and released packages ([pkdb_models#95](https://github.com/matthiaskoenig/pkdb_models/issues/95)). A library with the console scripts `pkpdsim-verify`, `pkpd_release` and the four commands of the models, `run_simulation`, `run_fit`, `run_report` and `run_identifiability`, which take the dotted name of a model package first. Requires python >= 3.14 (tested on 3.14 and 3.15), packaged with hatchling (version is read from `src/pkpdsim/__init__.py`).
 
 ## Commands
 
@@ -19,7 +19,7 @@ pytest                                   # all tests, in parallel with pytest-xd
 pytest -n 0                              # in one process, e.g. for --pdb
 pytest tests/test_package.py             # single file
 pytest tests/test_package.py::test_version  # single test
-tox r -e py3.14                          # single tox env (py3.13, py3.14 available)
+tox r -e py3.14                          # single tox env (py3.14, py3.15 available)
 tox run-parallel                         # full matrix + ty, from uv.lock (runner uv-venv-lock-runner of tox-uv, extra dev), run before opening a pull request
 
 # lint / format / types
@@ -34,7 +34,7 @@ uv run python scripts/llms_txt.py
 uv run zensical serve
 ```
 
-`develop` is the default branch and takes every change through a pull request; direct pushes are rejected by the rulesets in `.github/rulesets/` (applied with `.github/rulesets/apply.sh`), which require the `tests`, `ruff`, `ty` and `docs` checks. Continuous integration is kept minimal: `tests` runs only `py3.14`, on linux, macos and windows, every workflow cancels a superseded run (`cancel-in-progress: true`), uv caches packages and interpreters, dependabot runs monthly. Python 3.13 runs only locally. `main` only tracks the latest release and is fast-forwarded by the `sync-main` job of the release workflow, never by hand.
+`develop` is the default branch and takes every change through a pull request; direct pushes are rejected by the rulesets in `.github/rulesets/` (applied with `.github/rulesets/apply.sh`), which require the `tests`, `ruff`, `ty` and `docs` checks. Continuous integration is kept minimal: `tests` runs only `py3.14`, on linux, macos and windows, every workflow cancels a superseded run (`cancel-in-progress: true`), uv caches packages and interpreters, dependabot runs monthly. Python 3.15 runs only locally. `main` only tracks the latest release and is fast-forwarded by the `sync-main` job of the release workflow, never by hand.
 
 Release steps are in `docs/development.md`: the release is prepared on a branch, `uvx bump-my-version bump [dev|major|minor|patch]` updates `src/pkpdsim/__init__.py`, `CITATION.cff` and `tests/test_package.py` and commits without tagging, and the tag (a plain version, `0.1.0`) is created on `develop` after the pull request was merged, which triggers the release job of `ci-cd.yml`: PyPI through the trusted publisher of the GitHub environment `pypi`, the GitHub release from `release-notes/<version>.md` (archived by Zenodo) and the fast-forward of `main`.
 

@@ -116,7 +116,7 @@ def source_repo_model(tmp_path: Path, git_env: None) -> PKPDModel:
     root = tmp_path / "monorepo"
     init_repo(root)
     (root / "pyproject.toml").write_text(
-        '[project]\nname = "toy"\nrequires-python = ">=3.13"\n'
+        '[project]\nname = "toy"\nrequires-python = ">=3.14"\n'
     )
     shutil.copy(RELEASE_DATA / "uv.lock", root / "uv.lock")
     package = root / "pkg" / "pkpdsim_toy"

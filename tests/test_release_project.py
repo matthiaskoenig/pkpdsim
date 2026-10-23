@@ -33,7 +33,7 @@ PYPROJECT = """\
 [project]
 name = "source"
 description = "Model of Łódź"
-requires-python = ">=3.13"
+requires-python = ">=3.14"
 dependencies = ["sbmlsim>=0.9.7", "sbmlutils>=0.16.0"]
 """
 
@@ -86,14 +86,14 @@ def test_constraints_from_lock(context: ProjectContext) -> None:
 
 def test_python_from_requires_python(source: SourceRepo) -> None:
     (source.root / ".python-version").unlink()
-    assert project_context(MODEL, SETTINGS, source, "0.1.0").python == "3.13"
+    assert project_context(MODEL, SETTINGS, source, "0.1.0").python == "3.14"
 
 
 def test_pyproject_parses(context: ProjectContext) -> None:
     data = tomllib.loads(render("pyproject.toml.j2", context))
     assert data["project"]["version"] == "0.1.0"
     assert data["project"]["name"] == "toy-model"
-    assert data["project"]["requires-python"] == ">=3.13"
+    assert data["project"]["requires-python"] == ">=3.14"
     assert "scripts" not in data["project"]
     assert "allow-direct-references" not in render("pyproject.toml.j2", context)
     assert "sources" not in data["tool"]["uv"]
