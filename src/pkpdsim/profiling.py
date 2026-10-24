@@ -142,11 +142,16 @@ def run_profiled(
         console.print(f"The profiler wrote no profile into '{folder}'.", style="error")
         return code or 1
     for option, name in FORMATS:
-        subprocess.run(
+        replay = subprocess.run(
             [*profiler, "replay", option, "-o", str(folder / name), str(binary)],
-            check=True,
+            check=False,
             capture_output=True,
+            text=True,
         )
+        if replay.returncode:
+            raise RuntimeError(
+                f"replay {option} failed:\n{replay.stderr}{replay.stdout}"
+            )
     summary = subprocess.run(
         [*profiler, "replay", "--pstats", "--sort", "cumtime", "-l", "40", str(binary)],
         check=True,

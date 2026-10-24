@@ -3,10 +3,10 @@ revision = 5
 requires-python = ">=3.14"
 resolution-markers = [
     "python_full_version >= '3.15' and sys_platform == 'win32'",
-    "python_full_version < '3.15' and sys_platform == 'win32'",
     "python_full_version >= '3.15' and sys_platform == 'emscripten'",
-    "python_full_version < '3.15' and sys_platform == 'emscripten'",
     "python_full_version >= '3.15' and sys_platform != 'emscripten' and sys_platform != 'win32'",
+    "python_full_version < '3.15' and sys_platform == 'win32'",
+    "python_full_version < '3.15' and sys_platform == 'emscripten'",
     "python_full_version < '3.15' and sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
 
@@ -1423,7 +1423,7 @@ requires-dist = [
     { name = "python-libsbml", specifier = ">=5.21.2" },
     { name = "pyyaml", marker = "extra == 'dev'", specifier = ">=6.0.3" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.17.0" },
-    { name = "sbmlsim", specifier = ">=0.13.0,<0.14" },
+    { name = "sbmlsim", specifier = ">=0.14.0,<0.15" },
     { name = "sbmlutils", specifier = ">=0.17.0" },
     { name = "tox", marker = "extra == 'dev'", specifier = ">=4.65.0" },
     { name = "tox-uv", marker = "extra == 'dev'", specifier = ">=1.35.0" },
@@ -2021,7 +2021,7 @@ wheels = [
 
 [[package]]
 name = "sbmlsim"
-version = "0.13.0"
+version = "0.14.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "certifi" },
@@ -2050,9 +2050,9 @@ dependencies = [
     { name = "typst" },
     { name = "xarray" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4d/33/54587a2792fac0c9f898f7a75891d79c021b2c97400298d530ab37e69d39/sbmlsim-0.13.0.tar.gz", hash = "sha256:199fd573d8d34d1fdca72b4caffbd9ebadabd2a70954db8af9e4d95ad7963863", size = 2300685, upload-time = "2026-10-24T07:46:00.772Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/0b/d1/d6e46c23d5212a8de48b6b7ebb60edaedd0ceb7f9fb71673b30e45386c36/sbmlsim-0.14.0.tar.gz", hash = "sha256:95b9d8df03b274883629b4b4d01a3f506a0c13b4ff8653105a251089af991cbd", size = 3685852, upload-time = "2026-10-24T22:18:13.061Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/41/5e/6c33fcc32954f335a1443759d3244f310605e9190821e39e2eefdebd08c3/sbmlsim-0.13.0-py3-none-any.whl", hash = "sha256:2f96bf33d8a38837bc1cba9f1ce9179101555d631afe0161dc8fda78b4d4d2bb", size = 774647, upload-time = "2026-10-24T07:45:58.964Z" },
+    { url = "https://files.pythonhosted.org/packages/ae/17/d149028c4d9ea414dfacaa447396bc176235af4040d7c3f4df76d9d237b1/sbmlsim-0.14.0-py3-none-any.whl", hash = "sha256:d960eaf057fb365540bc91ccd4c0083f1b331ad7ca87f9f15c3e98db327bc5c2", size = 806134, upload-time = "2026-10-24T22:18:11.425Z" },
 ]
 
 [[package]]
