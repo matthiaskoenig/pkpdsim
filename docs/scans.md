@@ -19,7 +19,7 @@ A scan with several dimensions, a point which misses a dimension or names an unk
 
 ### The state after a change of the whole result
 
-A figure which reads the arrays of a result (a band over the points of a scan, the result of a task of an experiment) needs the state after a change for all points at once. `state_after_changes(res)` gives the result on its time points without the repeated ones, with the state after a change at its time (`res.interpolate(np.unique(res.time_points()))`), as a `ScanResult` whose arrays keep their dimensions; for one point it has the time points and values of `point_timecourse`. A result without a change is unchanged.
+A figure which reads the arrays of a result (a band over the points of a scan, the result of a task of an experiment) needs the state after a change for all points at once. `state_after_changes(res)` gives the result on its time points without the repeated ones, with the state after a change at its time (`res.interpolate(np.unique(res.time_points()))`), as a `ScanResult` whose arrays keep their dimensions; for one point it has the time points and values of `point_timecourse`. A result without a change is unchanged. A ragged result of several simulations (the steps of the integrator) is interpolated onto the time points of a figure instead (`sbmlsim.result.timecourse.plot_times`: a few hundred, dense where the simulations stepped densely, with the times of the changes), since the union of the steps of all simulations grows with the square of their number.
 
 ```python
 # not executed

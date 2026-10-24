@@ -206,3 +206,33 @@ def test_the_start_and_end_values_need_a_timecourse() -> None:
         start_values(res, "missing")
     with pytest.raises(ValueError, match="no timecourse"):
         end_values(res, "missing")
+
+
+def test_a_ragged_result_of_many_simulations_is_on_the_time_points_of_a_figure() -> (
+    None
+):
+    # the steps of the integrator of 60 rates: every simulation steps at other
+    # times, their union has more than 1000 time points, the time points of a
+    # figure 500 and the time of the change
+    steps = Simulation(end=10, changes=[Change([5.0], {"[A]": Q(1.0, "mM")})])
+    rates = Dimension("dim_k", values={"k": Q(np.linspace(0.1, 3.0, 60), "1/min")})
+    res = run(steps, [rates])
+    assert res.ragged
+    assert np.unique(res.time_points()).size > 1000
+    after = state_after_changes(res)
+    time = after.ds["time"].values
+    assert time.size <= 501
+    assert 5.0 in time
+    # the state after the change at its time, the change sets [A] to 1 mM
+    assert np.allclose(after["[A]"].isel(time=time_index(after, 5.0)).values, 1.0)
+    # the end, as the union of the steps gives it
+    union = res.interpolate(np.unique(res.time_points()))
+    assert np.allclose(
+        after["[A]"].isel(time=time_index(after, 10.0)).values,
+        union["[A]"].isel(time=time_index(union, 10.0)).values,
+    )
+
+
+def time_index(res: ScanResult, time: float) -> int:
+    """The position of a time in the time points of a result."""
+    return int(np.flatnonzero(res.ds["time"].values == time)[0])
