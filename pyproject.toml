@@ -43,6 +43,8 @@ dependencies = [
     "sbmlsim>=0.13.0,<0.14",
     # the non-compartmental analysis of the scans of a model (`pkpdsim.pk`)
     "pkpdutils>=1.3.0",
+    # the study folders of format 2 of PK-DB, read as `pkdb check` reads them (`pkpdsim.data`)
+    "pkdb>=0.12.17",
     # imported directly, also the dependencies of the packages above
     "numpy>=2.5.3",
     "pandas>=3.0.6",

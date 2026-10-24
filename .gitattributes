@@ -1,3 +1,9 @@
 # the license texts are written into the COMBINE archives of the models byte
 # for byte, git never converts their line endings
 src/pkpdsim/resources/*.txt -text
+
+# the study data of pkdb_data in the tests are checked in canonical form
+# (`pkdb format`), which has LF line endings on every platform
+tests/data/pkdb_data/**/*.tsv text eol=lf
+tests/data/pkdb_data/**/*.json text eol=lf
+tests/data/pkdb_data/**/*.md text eol=lf

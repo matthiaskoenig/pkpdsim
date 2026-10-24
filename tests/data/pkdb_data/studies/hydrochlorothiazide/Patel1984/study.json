@@ -1,0 +1,39 @@
+{
+  "format": 2,
+  "reference": {
+    "pmid": "6716243"
+  },
+  "creator": "amdangelica",
+  "curators": [
+    {
+      "user": "amdangelica",
+      "rating": 0.9
+    },
+    {
+      "user": "mkoenig",
+      "rating": 3.5
+    }
+  ],
+  "licence": "closed",
+  "access": "public",
+  "issue": 1546,
+  "release": {
+    "pkdb_id": "PKDB00759",
+    "date": "2024-03-26"
+  },
+  "descriptions": [
+    "The bioavailability of hydrochlorothiazide was determined following single oral 25-, 50-, 100-, and 200-mg tablet and suspension doses in 12 healthy male volunteers."
+  ],
+  "notes": {
+    "subjects": {
+      "descriptions": [
+        "12 healthy male subjects single oral 25-, 50-, 100-, and 200-mg tablet and suspension doses in separate occasions at least 1 week apart."
+      ]
+    },
+    "interventions": {
+      "descriptions": [
+        "12 healthy male subjects single oral 25-, 50-, 100-, and 200-mg tablet and suspension doses in separate occasions at least 1 week apart."
+      ]
+    }
+  }
+}

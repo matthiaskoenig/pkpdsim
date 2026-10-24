@@ -1,0 +1,19 @@
+study	source	subjects	interventions	measurement	calculation	substance	tissue	method	choice	time	time_unit	count	mean	sd	se	cv	gmean	gsd	gcv	median	min	max	unit	error_bar	error_type	comment
+Nilsen1989	Tab1	patients	CIL2.5	auc_end		cilazaprilat	plasma	radioenzymatic assay		24	hr		181		10								µg/l*hr			AUC 0-24 h at steady state for hypertensive patients (Table 1 footnote)
+Nilsen1989	Tab1	patients	CIL2.5	cmax		cilazaprilat	plasma	radioenzymatic assay					48.4		7.5								ng/ml			
+Nilsen1989	Tab1	patients	CIL2.5	thalf		cilazaprilat	plasma	radioenzymatic assay					2.1		0.07								hr			t1/2 (2-8 h), Table 1
+Nilsen1989	Tab1	patients	CIL2.5,HCTZ25md	auc_end		cilazaprilat	plasma	radioenzymatic assay		24	hr		196		7.4								µg/l*hr			AUC 0-24 h at steady state for hypertensive patients (Table 1 footnote)
+Nilsen1989	Tab1	patients	CIL2.5,HCTZ25md	cmax		cilazaprilat	plasma	radioenzymatic assay					47.6		4.5								ng/ml			
+Nilsen1989	Tab1	patients	CIL2.5,HCTZ25md	thalf		cilazaprilat	plasma	radioenzymatic assay					2.1		0.07								hr			t1/2 (2-8 h), Table 1
+Nilsen1989	Tab1	volunteers	CIL5	amount		cilazaprilat	urine	radioenzymatic assay		24	hr		1.975		0.145								mg			urine 0-24 h, Table 1 in % of dose (39.5 and 35.2 % of the 5 mg dose), converted to mg
+Nilsen1989	Tab1	volunteers	CIL5	auc_inf		cilazaprilat	plasma	radioenzymatic assay					396		20								µg/l*hr			AUC 0-inf for healthy subjects (Table 1 footnote)
+Nilsen1989	Tab1	volunteers	CIL5	clearance_renal		cilazaprilat	plasma	radioenzymatic assay					6.4		0.5								l/hr			
+Nilsen1989	Tab1	volunteers	CIL5	cmax		cilazaprilat	plasma	radioenzymatic assay					83.8		7.4								ng/ml			
+Nilsen1989	Tab1	volunteers	CIL5	thalf		cilazaprilat	plasma	radioenzymatic assay					1.4		0.08								hr			t1/2 (2-8 h), Table 1
+Nilsen1989	Tab1	volunteers	CIL5	thalf		cilazaprilat	plasma	radioenzymatic assay					41.9		3.5								hr			t1/2 (24-94 h), Table 1
+Nilsen1989	Tab1	volunteers	CIL5,HCTZ25	amount		cilazaprilat	urine	radioenzymatic assay		24	hr		1.76		0.16								mg			urine 0-24 h, Table 1 in % of dose (39.5 and 35.2 % of the 5 mg dose), converted to mg
+Nilsen1989	Tab1	volunteers	CIL5,HCTZ25	auc_inf		cilazaprilat	plasma	radioenzymatic assay					415		21								µg/l*hr			AUC 0-inf for healthy subjects (Table 1 footnote)
+Nilsen1989	Tab1	volunteers	CIL5,HCTZ25	clearance_renal		cilazaprilat	plasma	radioenzymatic assay					5.5		0.6								l/hr			
+Nilsen1989	Tab1	volunteers	CIL5,HCTZ25	cmax		cilazaprilat	plasma	radioenzymatic assay					81.5		5.6								ng/ml			
+Nilsen1989	Tab1	volunteers	CIL5,HCTZ25	thalf		cilazaprilat	plasma	radioenzymatic assay					1.6		0.05								hr			t1/2 (2-8 h), Table 1
+Nilsen1989	Tab1	volunteers	CIL5,HCTZ25	thalf		cilazaprilat	plasma	radioenzymatic assay					45.8		3.6								hr			t1/2 (24-94 h), Table 1

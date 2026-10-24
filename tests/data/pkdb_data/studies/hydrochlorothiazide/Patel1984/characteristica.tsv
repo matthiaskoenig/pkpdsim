@@ -1,0 +1,10 @@
+study	source	subjects	measurement	calculation	substance	tissue	method	choice	time	time_unit	count	mean	sd	se	cv	gmean	gsd	gcv	median	min	max	unit	error_bar	error_type	comment
+Patel1984	Text	all	abstinence		caffeine						12									24		hr			
+Patel1984	Text	all	abstinence medication								12									2		week			
+Patel1984	Text	all	age								12	24								22	29	yr			
+Patel1984	Text	all	healthy					Y			12														
+Patel1984	Text	all	medication					N			12														
+Patel1984	Text	all	overnight fast					Y			12														
+Patel1984	Text	all	sex					M			12														
+Patel1984	Text	all	species					homo sapiens			12														
+Patel1984	Text	all	weight								12	78								67	84	kg			
