@@ -15,9 +15,15 @@ curated in study format 2 (`"format": 2` of the `study.json`, the tables
 `outputs_<source>.tsv`, ...). A study of format 2 is read with the library of
 PK-DB (`pkdb.prepare`, the same reading and validation as `pkdb check` and the
 upload to the database), and its data are written as the tables of format 1
-(`study_tables`), so that the experiments read them unchanged. A study of
-format 1 is copied as it is. `database_differences` compares the studies with
-the ones uploaded to a PK-DB server.
+(`study_tables`), so that the experiments read them unchanged: a geometric
+mean in `gmean` (calculation `geometric mean`), a value below the limit of
+quantification as a row without a central value, an output with a label
+generated from its columns which is unique across the sources of the study,
+the interventions in the natural order of format 2 (`GEM,SIM`). Format 2 has
+no collection intervals (no `tstart` and `tend` of format 1) and no columns
+of its own of a table, so neither have the tables. A study of format 1 is
+copied as it is. `database_differences` compares the studies with the ones
+uploaded to a PK-DB server.
 """
 
 import json
@@ -307,6 +313,29 @@ def _label(*parts: str | None) -> str:
     return re.sub(r"[^A-Za-z0-9]+", "_", text).strip("_")
 
 
+#: the calculation PK-DB gives every measurement of a group without one
+SAMPLE_MEAN = "sample mean"
+#: the calculation of a measurement of a group with a geometric mean but no mean
+GEOMETRIC_MEAN = "geometric mean"
+
+
+def _calculation_type(measurement: Measurement) -> str | None:
+    """Get the calculation of a measurement as the column of format 1.
+
+    PK-DB gives every measurement of a group without a `calculation` the
+    calculation `sample mean` (`pkdb.prepare`), also one with a geometric mean
+    and no mean: such a measurement is a `geometric mean`.
+    """
+    statistics = measurement.statistics
+    if (
+        measurement.calculation_type == SAMPLE_MEAN
+        and statistics.mean is None
+        and statistics.gmean is not None
+    ):
+        return GEOMETRIC_MEAN
+    return measurement.calculation_type
+
+
 def _measurement_tables(study: CanonicalStudy, name: str) -> dict[str, pd.DataFrame]:
     """Get the measurements of a study as the tables of format 1, by source.
 
@@ -314,18 +343,30 @@ def _measurement_tables(study: CanonicalStudy, name: str) -> dict[str, pd.DataFr
     points of the timecourses of `outputs_<source>.tsv` and
     `timecourses_<source>.tsv`; the records PK-DB normalizes into other units
     or calculates from them are left out, and the missing `sd`, `se` and `cv`
-    of a row are calculated from its statistics (see `_statistics`). A measurement of an individual has its mean in the
-    column `value` and its group in `group`, the count of a row without one is
-    the count of its subjects. An output without a label (the outputs of
-    format 2 have none) gets one from its measurement, substance, tissue,
-    interventions and subject (`_label`), so that the experiments can group
-    the rows by `label` as for the timecourses.
+    of a row are calculated from its statistics (see `_statistics`). A
+    measurement of an individual has its mean in the column `value` and its
+    group in `group`, the count of a row without one is the count of its
+    subjects. A row without a central value (a value below the limit of
+    quantification, curated with only its `max`) has none in `value`, `mean`,
+    `median` and `gmean`. A row with a geometric mean but no mean has the
+    calculation `geometric mean` (`_calculation_type`). The interventions are
+    the names of the cell of format 2, comma separated in the order of the
+    cell, which is the natural order of `pkdb format` (`GEM,SIM`).
+
+    An output without a label (the outputs of format 2 have none) gets one
+    from its measurement, substance, tissue, interventions and subject
+    (`_label`), so that the experiments can group the rows by `label` as for
+    the timecourses. A label is unique in the study: a generated label which
+    another source of the study has as well gets the source appended
+    (`concentration_sorafenib_plasma_SOF400_1_Fig1` and `..._Tab3`), in every
+    source which has it.
     """
     group_counts = {group.name: group.count for group in study.groups}
     individual_groups = {
         individual.name: individual.group for individual in study.individuals
     }
     rows: dict[str, list[dict[str, Any]]] = {}
+    generated_rows: list[tuple[str, dict[str, Any]]] = []
     for measurement in study.measurements:
         if (
             measurement.origin != "reported"
@@ -347,6 +388,7 @@ def _measurement_tables(study: CanonicalStudy, name: str) -> dict[str, pd.DataFr
             value = statistics["mean"]
             statistics["mean"] = None
         interventions = ",".join(measurement.interventions) or None
+        generated = not measurement.label
         label = measurement.label or _label(
             measurement.measurement_type,
             measurement.substance,
@@ -361,7 +403,7 @@ def _measurement_tables(study: CanonicalStudy, name: str) -> dict[str, pd.DataFr
             "count": count,
             "intervention": interventions,
             "measurement_type": measurement.measurement_type,
-            "calculation_type": measurement.calculation_type,
+            "calculation_type": _calculation_type(measurement),
             "choice": measurement.choice,
             "substance": measurement.substance,
             "tissue": measurement.tissue,
@@ -374,7 +416,19 @@ def _measurement_tables(study: CanonicalStudy, name: str) -> dict[str, pd.DataFr
             "unit": measurement.unit,
             "comments": _comments(measurement),
         }
-        rows.setdefault(_source(measurement.source.file), []).append(row)
+        source = _source(measurement.source.file)
+        rows.setdefault(source, []).append(row)
+        if generated:
+            generated_rows.append((source, row))
+
+    # the sources of a label, before a generated label gets its source
+    sources: dict[str, set[str]] = {}
+    for source, source_rows in rows.items():
+        for row in source_rows:
+            sources.setdefault(row["label"], set()).add(source)
+    for source, row in generated_rows:
+        if len(sources[row["label"]]) > 1:
+            row["label"] = _label(row["label"], source)
     return {
         source: pd.DataFrame(source_rows, columns=list(MEASUREMENT_COLUMNS))
         for source, source_rows in rows.items()
