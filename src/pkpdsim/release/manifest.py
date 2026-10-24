@@ -24,6 +24,8 @@ BUILD_MARKER = "pkpd_release_build"
 """The file in the git folder which marks a build which has not finished."""
 _RELEASE_NOTES = "release-notes"
 _SHOWN = 20
+MAX_FILE_SIZE = 100 * 1024 * 1024
+"""The largest file a release may hold: GitHub rejects a push of a larger one."""
 
 
 @dataclass(frozen=True)
@@ -366,6 +368,43 @@ def check_not_ignored(
             "git ignores files of the release, its commit would lack them; "
             "change the ignore pattern which matches them (git check-ignore -v):\n- "
             + "\n- ".join(shown)
+        )
+
+
+def check_file_sizes(
+    release_path: Path, written: Iterable[Path], max_size: int = MAX_FILE_SIZE
+) -> None:
+    """Refuse a build which wrote a file above the size GitHub accepts.
+
+    GitHub rejects a push with a file above 100 MB, after the commit and the
+    tag of the release; e.g. the netCDF results of the simulations of a model
+    with `save_results`, gigabytes for the steps of the integrator.
+
+    Args:
+        release_path: the release repository.
+        written: the files (or folders) the stages wrote.
+        max_size: the largest size of a file in bytes.
+
+    Raises:
+        ReleaseError: if a written file is larger; the message names them with
+            their size.
+    """
+    sizes = {
+        relative: (release_path / relative).stat().st_size
+        for relative in _generated(release_path, written)
+    }
+    large = sorted(
+        (relative for relative, size in sizes.items() if size > max_size),
+        key=lambda relative: -sizes[relative],
+    )
+    if large:
+        shown = [f"{relative} ({sizes[relative] / 1e6:.0f} MB)" for relative in large]
+        if len(shown) > _SHOWN:
+            shown = [*shown[:_SHOWN], f"... and {len(large) - _SHOWN} more"]
+        raise ReleaseError(
+            f"files of the release are larger than {max_size / 1e6:.0f} MB, "
+            "which GitHub rejects; leave them out of the outputs of the model "
+            "(e.g. save_results of the model object):\n- " + "\n- ".join(shown)
         )
 
 

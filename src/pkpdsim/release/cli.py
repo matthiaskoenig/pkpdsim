@@ -32,6 +32,7 @@ from pkpdsim.release.build import build
 from pkpdsim.release.docs import write_docs
 from pkpdsim.release.manifest import (
     changed_by_build,
+    check_file_sizes,
     check_not_ignored,
     finish_build,
     matches,
@@ -152,6 +153,7 @@ def _build(
         written += write_docs(context, path)
         stage("Prune and manifest")
         check_not_ignored(path, written, runner)
+        check_file_sizes(path, written)
         prune(path, written, runner)
         write_manifest(path, version, source, written)
     except BaseException:

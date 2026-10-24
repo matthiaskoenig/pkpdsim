@@ -8,6 +8,7 @@ import pytest
 from pkpdsim.release.manifest import (
     Manifest,
     changed_by_build,
+    check_file_sizes,
     check_not_ignored,
     finish_build,
     matches,
@@ -257,3 +258,13 @@ def test_check_not_ignored(release: tuple[Path, list[Path]]) -> None:
     assert "simulations/a/run.log" in str(err.value)
     assert "README.md" not in str(err.value)
     assert log.is_file()
+
+
+def test_check_file_sizes(release: tuple[Path, list[Path]]) -> None:
+    root, written = release
+    check_file_sizes(root, written, max_size=1000)
+    large = write(root, "simulations/a/a_task.nc", "x" * 2000)
+    with pytest.raises(ReleaseError) as err:
+        check_file_sizes(root, [*written, large], max_size=1000)
+    assert "simulations/a/a_task.nc (0 MB)" in str(err.value)
+    assert "README.md" not in str(err.value)
