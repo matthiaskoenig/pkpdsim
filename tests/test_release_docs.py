@@ -57,6 +57,7 @@ def release(toy_fit: Path, tmp_path: Path) -> tuple[ProjectContext, Path]:
         settings=SETTINGS,
         version="0.10.0",
         python="3.14",
+        pythons=("3.14", "3.15"),
         dependencies=(),
         constraints=(),
         pkpdsim_path=None,
@@ -279,7 +280,7 @@ def test_badges(release: tuple[ProjectContext, Path]) -> None:
         f"({repo}/actions/workflows/ci.yml)",
         "[![Docker](https://img.shields.io/docker/v/pkpdsim/toy?sort=semver&label=docker)]"
         "(https://hub.docker.com/r/pkpdsim/toy)",
-        f"[![Python](https://img.shields.io/badge/python-{context.python}-blue)]"
+        "[![Python](https://img.shields.io/badge/python-3.14%20%7C%203.15-blue)]"
         "(https://www.python.org)",
         "[![Code license: MIT](https://img.shields.io/badge/code%20license-MIT-blue)]"
         "(https://opensource.org/license/MIT)",
