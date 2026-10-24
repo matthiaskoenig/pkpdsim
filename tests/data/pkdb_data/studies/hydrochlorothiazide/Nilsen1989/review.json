@@ -1,0 +1,128 @@
+{
+  "status": "in_review",
+  "reviewers": [
+    "mkoenig"
+  ],
+  "items": [
+    {
+      "id": "01M4ZPR79DJ57E4KETX28TCF4W",
+      "kind": "issue",
+      "state": "resolved",
+      "target": {
+        "file": "outputs_Tab1.tsv",
+        "rows": {
+          "subjects": "volunteers",
+          "interventions": "CIL5",
+          "measurement": "thalf",
+          "substance": "cilazaprilat",
+          "tissue": "plasma",
+          "method": "radioenzymatic assay",
+          "mean": "41.9"
+        }
+      },
+      "acknowledges": "duplicate_observation",
+      "text": "Table 1 gives two half-lives of cilazaprilat, t1/2 (2-8 h) and t1/2 (24-94 h); format 2 has no column for the fitting window, the comments name it.",
+      "author": "mkoenig",
+      "agent": "claude-opus-5-5",
+      "created": "2026-10-15T11:56:52Z",
+      "resolved_by": "mkoenig",
+      "resolved": "2026-10-15T11:56:52Z"
+    },
+    {
+      "id": "01M4ZPR92FREN95Z9VRYZCR5SR",
+      "kind": "issue",
+      "state": "resolved",
+      "target": {
+        "file": "outputs_Tab1.tsv",
+        "rows": {
+          "subjects": "volunteers",
+          "interventions": "CIL5,HCTZ25",
+          "measurement": "thalf",
+          "substance": "cilazaprilat",
+          "tissue": "plasma",
+          "method": "radioenzymatic assay",
+          "mean": "45.8"
+        }
+      },
+      "acknowledges": "duplicate_observation",
+      "text": "Table 1 gives two half-lives of cilazaprilat, t1/2 (2-8 h) and t1/2 (24-94 h); format 2 has no column for the fitting window, the comments name it.",
+      "author": "mkoenig",
+      "agent": "claude-opus-5-5",
+      "created": "2026-10-15T11:56:54Z",
+      "resolved_by": "mkoenig",
+      "resolved": "2026-10-15T11:56:54Z"
+    },
+    {
+      "id": "01M4ZPSSZ29P4K990YTBZHP0FK",
+      "kind": "question",
+      "state": "open",
+      "target": {
+        "file": "scatters_Fig2.tsv"
+      },
+      "text": "Fig2 plots the mean diastolic blood pressure against the mean ACE inhibition of the 9 healthy subjects without error bars, points connected in order of time (Results): kept as scatters of group volunteers, paired by row. The format 1 times 0-7 h are not in the paper and were removed. The 8 points per series were checked on an overlay of the calibrated figure; in the crowded cluster at 88-98 % two points are up to 4 px (about 1 %) from their marker centre.",
+      "author": "mkoenig",
+      "agent": "claude-opus-5-5",
+      "created": "2026-10-15T11:57:44Z"
+    },
+    {
+      "id": "01M4ZPSVESFM9V3RMVZ42HTEM9",
+      "kind": "question",
+      "state": "open",
+      "target": {
+        "file": "scatters_Fig5.tsv"
+      },
+      "text": "Fig5 plots the mean urinary sodium excretion rate against the mean HCT excretion rate (group volunteers, no error bars): kept as scatters paired by row; 5 points per series checked on an overlay. x_time/y_time are not printed in Fig5: the curator matched each sodium value to the Fig4 series at the collection mid-points (0.5, 1.5, 3, 6, 16 h); supported by the Results (maximum HCT excretion rate 3.1 mg/h in the 1-2 h interval). The format 1 HCT excretion timecourses in the Fig4 sheet, which only repeated these Fig5 x values with the matched times, were commented out (not in Fig4). Confirm the time assignment or remove the times.",
+      "author": "mkoenig",
+      "agent": "claude-opus-5-5",
+      "created": "2026-10-15T11:57:45Z"
+    },
+    {
+      "id": "01M4ZPSWW7YDJVPG9H1EHN3N4W",
+      "kind": "question",
+      "state": "open",
+      "target": {
+        "file": "timecourses_Fig1.tsv"
+      },
+      "text": "Fig1 corrected: the ACE inhibition series had been read on the left log concentration axis (for example 46.8 at 1 h, while the Results give 90 % after 1 h); the same pixel heights are now mapped to the right % inhibition axis (89.2 % at 1 h, 98.2 % peak). Late sample times set to 34, 46, 70 and 94 h from the isolated markers (Table 1: t1/2 24-94 h), were 36, 48, 72, 96 and one 38 h; the peak times set to 2 h (Results: peak levels and maximum inhibition at 2 h), were 2.6 and 3 h. Still uncertain: the 0-8 h region is crowded; the first points stand at time 0 although they are post-dose samples at about 0.5 h (48-50 % inhibition, 12.6 ng/ml), the cilazapril series lacks a point near 1 h (a filled triangle near 48 ng/ml is visible), and the concentration tails 22-94 h of both series are identical because the markers coincide. A new digitization of the 0-8 h region on the embedded figure of the PDF (819 x 715 px) is advised.",
+      "author": "mkoenig",
+      "agent": "claude-opus-5-5",
+      "created": "2026-10-15T11:57:47Z"
+    },
+    {
+      "id": "01M4ZPSYC2CZ7ENGYC0VQ2FK0K",
+      "kind": "question",
+      "state": "open",
+      "target": {
+        "file": "interventions.tsv"
+      },
+      "text": "CIL2,5 renamed to CIL2.5 (no comma in names). Table 1 rows of the hypertensive patients had CIL5 and count 9; the footnote gives cilazapril 2.5 mg + HCT 25 mg, multiple dosing, and the Methods 16 patients once daily for 2 weeks: now CIL2.5 and the new HCTZ25md, both 14 daily doses with the last at 0 h, count 16. The sequence (2 weeks of one drug, then directly 2 weeks of the combination) means the combination regimen followed 2 weeks of monotherapy; this is not encoded. Form changed from tablet to NR (not reported).",
+      "author": "mkoenig",
+      "agent": "claude-opus-5-5",
+      "created": "2026-10-15T11:57:48Z"
+    },
+    {
+      "id": "01M4ZPSZTPM648N5HRE4869YP0",
+      "kind": "question",
+      "state": "open",
+      "target": {
+        "file": "outputs_Tab1.tsv"
+      },
+      "text": "Table 1: the healthy AUC is AUC 0-inf (footnote +), so auc_inf without time (was auc_end 24 h); the s.e. mean is now mapped (se), it was in the sheet but not in study.json. The commented-out Fig3 sheet (GFR and RPF bars) is not carried into format 2.",
+      "author": "mkoenig",
+      "agent": "claude-opus-5-5",
+      "created": "2026-10-15T11:57:50Z"
+    },
+    {
+      "id": "01M505FA5F1WXA3N1BREWY2VBZ",
+      "kind": "uncertainty",
+      "state": "open",
+      "target": {
+        "file": "timecourses_Fig4.tsv",
+        "column": "time"
+      },
+      "text": "The rates are at the mid-point time of each collection (axis of Fig4): 0-1, 1-2, 2-4, 4-8 and 8-24 hr (the 1-2 hr interval and 0-24 hr are named in the text). The collection before the dose has its midpoint at about -0.5 hr, its duration is not stated (-1 to 0 hr assumed).",
+      "author": "mkoenig",
+      "created": "2026-10-15T16:14:09Z"
+    }
+  ]
+}

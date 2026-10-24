@@ -1,0 +1,11 @@
+study	source	subjects	measurement	calculation	substance	tissue	method	choice	time	time_unit	count	mean	sd	se	cv	gmean	gsd	gcv	median	min	max	unit	error_bar	error_type	comment
+Nilsen1989	Text	all	healthy					Y			25														
+Nilsen1989	Text	all	sex					MF			25														
+Nilsen1989	Text	all	species					homo sapiens			25														
+Nilsen1989	Text	patients	age								16									40	62	yr			
+Nilsen1989	Text	patients	disease					hypertension			16														
+Nilsen1989	Text	patients	healthy					N			16														
+Nilsen1989	Text	patients	sex					MF			16														
+Nilsen1989	Text	volunteers	age								9									24	35	yr			
+Nilsen1989	Text	volunteers	healthy					Y			9														
+Nilsen1989	Text	volunteers	sex					M			9														

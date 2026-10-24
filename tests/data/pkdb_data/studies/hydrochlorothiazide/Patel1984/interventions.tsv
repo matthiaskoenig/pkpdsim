@@ -1,0 +1,9 @@
+study	source	name	subjects	measurement	calculation	substance	tissue	method	choice	route	form	application	time	time_end	interval	doses	time_unit	count	mean	sd	se	cv	gmean	gsd	gcv	median	min	max	unit	error_bar	error_type	comment
+Patel1984	Text	HCTZ25_sus		dosing		hydrochlorothiazide				oral	suspension	single dose	0				hr		25										mg			
+Patel1984	Text	HCTZ25_tab		dosing		hydrochlorothiazide				oral	tablet	single dose	0				hr		25										mg			
+Patel1984	Text	HCTZ50_sus		dosing		hydrochlorothiazide				oral	suspension	single dose	0				hr		50										mg			
+Patel1984	Text	HCTZ50_tab		dosing		hydrochlorothiazide				oral	tablet	single dose	0				hr		50										mg			
+Patel1984	Text	HCTZ100_sus		dosing		hydrochlorothiazide				oral	suspension	single dose	0				hr		100										mg			
+Patel1984	Text	HCTZ100_tab		dosing		hydrochlorothiazide				oral	tablet	single dose	0				hr		100										mg			
+Patel1984	Text	HCTZ200_sus		dosing		hydrochlorothiazide				oral	suspension	single dose	0				hr		200										mg			
+Patel1984	Text	HCTZ200_tab		dosing		hydrochlorothiazide				oral	tablet	single dose	0				hr		200										mg			

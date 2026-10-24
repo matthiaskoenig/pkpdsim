@@ -1,0 +1,25 @@
+study	source	subjects	interventions	measurement	calculation	substance	tissue	method	choice	time	time_unit	count	mean	sd	se	cv	gmean	gsd	gcv	median	min	max	unit	error_bar	error_type	comment
+Patel1984	Tab2	all	HCTZ25_sus	auc_end		hydrochlorothiazide	plasma	HPLC		36	hr		1038	282									ng*hr/ml			
+Patel1984	Tab2	all	HCTZ25_sus	clearance_renal		hydrochlorothiazide	plasma	HPLC					232	78									ml/min			
+Patel1984	Tab2	all	HCTZ25_sus	cmax		hydrochlorothiazide	plasma	HPLC					134	44									ng/ml			
+Patel1984	Tab2	all	HCTZ25_sus	tmax		hydrochlorothiazide	plasma	HPLC					2.4	0.9									hr			
+Patel1984	Tab2	all	HCTZ25_tab	auc_end		hydrochlorothiazide	plasma	HPLC		36	hr		978	237									ng*hr/ml			
+Patel1984	Tab2	all	HCTZ25_tab	clearance_renal		hydrochlorothiazide	plasma	HPLC					257	83									ml/min			
+Patel1984	Tab2	all	HCTZ25_tab	cmax		hydrochlorothiazide	plasma	HPLC					127	34									ng/ml			
+Patel1984	Tab2	all	HCTZ25_tab	tmax		hydrochlorothiazide	plasma	HPLC					2.4	0.9									hr			
+Patel1984	Tab2	all	HCTZ50_sus	auc_end		hydrochlorothiazide	plasma	HPLC		36	hr		1910	344									ng*hr/ml			
+Patel1984	Tab2	all	HCTZ50_sus	clearance_renal		hydrochlorothiazide	plasma	HPLC					233	83									ml/min			
+Patel1984	Tab2	all	HCTZ50_sus	cmax		hydrochlorothiazide	plasma	HPLC					270	76									ng/ml			
+Patel1984	Tab2	all	HCTZ50_sus	tmax		hydrochlorothiazide	plasma	HPLC					1.8	0.7									hr			
+Patel1984	Tab2	all	HCTZ50_tab	auc_end		hydrochlorothiazide	plasma	HPLC		36	hr		1968	390									ng*h/ml			
+Patel1984	Tab2	all	HCTZ50_tab	clearance_renal		hydrochlorothiazide	plasma	HPLC					222	36									ml/min			
+Patel1984	Tab2	all	HCTZ50_tab	cmax		hydrochlorothiazide	plasma	HPLC					280	108									ng/ml			
+Patel1984	Tab2	all	HCTZ50_tab	tmax		hydrochlorothiazide	plasma	HPLC					2.1	1									hr			
+Patel1984	Tab2	all	HCTZ100_sus	auc_end		hydrochlorothiazide	plasma	HPLC		36	hr		3493	735									ng*hr/ml			
+Patel1984	Tab2	all	HCTZ100_sus	clearance_renal		hydrochlorothiazide	plasma	HPLC					256	89									ml/min			
+Patel1984	Tab2	all	HCTZ100_sus	cmax		hydrochlorothiazide	plasma	HPLC					490	130									ng/ml			
+Patel1984	Tab2	all	HCTZ100_sus	tmax		hydrochlorothiazide	plasma	HPLC					1.8	0.3									hr			
+Patel1984	Tab2	all	HCTZ100_tab	auc_end		hydrochlorothiazide	plasma	HPLC		36	hr		3554	779									ng*hr/ml			
+Patel1984	Tab2	all	HCTZ100_tab	clearance_renal		hydrochlorothiazide	plasma	HPLC					232	52									ml/min			
+Patel1984	Tab2	all	HCTZ100_tab	cmax		hydrochlorothiazide	plasma	HPLC					437	105									ng/ml			
+Patel1984	Tab2	all	HCTZ100_tab	tmax		hydrochlorothiazide	plasma	HPLC					2.3	1									hr			

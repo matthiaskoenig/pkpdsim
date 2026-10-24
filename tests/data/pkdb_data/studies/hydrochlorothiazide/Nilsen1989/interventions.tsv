@@ -1,0 +1,5 @@
+study	source	name	subjects	measurement	calculation	substance	tissue	method	choice	route	form	application	time	time_end	interval	doses	time_unit	count	mean	sd	se	cv	gmean	gsd	gcv	median	min	max	unit	error_bar	error_type	comment
+Nilsen1989	Text	CIL2.5		dosing		cilazapril				oral	NR	multiple dose	-312		24	14	hr		2.5										mg			hypertensive patients: 2.5 mg once daily for 2 weeks, sampled on the last day of the regimen (Methods): 14 doses, the last at 0 h; form not reported
+Nilsen1989	Text	CIL5		dosing		cilazapril				oral	NR	single dose	0				hr		5										mg			healthy subjects, single oral dose (Methods); form not reported
+Nilsen1989	Text	HCTZ25		dosing		hydrochlorothiazide				oral	NR	single dose	0				hr		25										mg			healthy subjects, single oral dose (Methods); form not reported
+Nilsen1989	Text	HCTZ25md		dosing		hydrochlorothiazide				oral	NR	multiple dose	-312		24	14	hr		25										mg			hypertensive patients: 25 mg once daily for 2 weeks, sampled on the last day of the regimen (Methods): 14 doses, the last at 0 h; form not reported
