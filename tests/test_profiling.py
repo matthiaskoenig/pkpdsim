@@ -16,6 +16,15 @@ needs_profiler = pytest.mark.skipif(
     not profiler_available(), reason="the sampling profiler of python 3.15"
 )
 
+#: the sampling profiler of python 3.15.1 crashes now and then while it writes
+#: a sample of the binary profile (`UnicodeEncodeError: ... surrogates not
+#: allowed` in `binary_collector.write_sample`), 3.15.0 does not
+profiler_of_3151 = pytest.mark.xfail(
+    sys.version_info[:3] == (3, 15, 1),
+    reason="the sampling profiler of python 3.15.1 crashes writing a sample",
+    strict=False,
+)
+
 
 def test_the_help_names_the_option() -> None:
     assert "--profile" in command_parser(COMMANDS["run_simulation"]).format_help()
@@ -45,6 +54,7 @@ def test_run_profiled_needs_the_profiler(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 @needs_profiler
+@profiler_of_3151
 def test_a_profiled_command_writes_its_profile(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -72,6 +82,7 @@ def test_a_profiled_command_writes_its_profile(
 
 
 @needs_profiler
+@profiler_of_3151
 def test_the_exit_code_of_a_failing_command_is_kept(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
