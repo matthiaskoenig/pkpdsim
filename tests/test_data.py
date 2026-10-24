@@ -1,4 +1,7 @@
+import csv
+import math
 import shutil
+from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -311,6 +314,118 @@ def test_study_tables_scatters() -> None:
     # the value also in the columns of sbmlsim, a point counts one
     assert df["x"].tolist() == df["x_value"].tolist()
     assert set(df["count"]) == {1}
+
+
+def edit_table(path: Path, edit: Callable[[list[dict[str, str]]], None]) -> None:
+    """Edit the rows of a table of format 2, `edit(rows)` on the rows as dicts."""
+    with path.open(encoding="utf-8", newline="") as file:
+        reader = csv.DictReader(file, delimiter="\t")
+        columns = list(reader.fieldnames or [])
+        rows = list(reader)
+    edit(rows)
+    lines = ["\t".join(columns), *("\t".join(row[c] for c in columns) for row in rows)]
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="")
+
+
+@pytest.fixture(scope="module")
+def edited_tables(tmp_path_factory: pytest.TempPathFactory) -> dict[str, pd.DataFrame]:
+    """The tables of a copy of Patel1984 with the cases the ports of the models met.
+
+    The cmax of Tab2 is a geometric mean with a gcv of 30 %, the first point of Fig1
+    is below the limit of quantification (only its `max`), and Tab3 has a cmax
+    of the same measurement, substance, tissue, interventions and subject as
+    Tab2, i.e. the same generated label.
+    """
+    from pkdb.studyformat.formatter import format_folder
+
+    study = tmp_path_factory.mktemp("studies") / "Patel1984"
+    shutil.copytree(PATEL1984, study)
+
+    def geometric_cmax(rows: list[dict[str, str]]) -> None:
+        for row in rows:
+            if row["measurement"] == "cmax":
+                row.update(gmean=row["mean"], mean="", sd="", gcv="30")
+
+    def below_loq(rows: list[dict[str, str]]) -> None:
+        rows[0].update(mean="", sd="", max="5", comment="below the LOQ of 5 ng/ml")
+
+    def second_cmax(rows: list[dict[str, str]]) -> None:
+        row = dict(rows[0])
+        row.update(measurement="cmax", mean="130", sd="40", unit="ng/ml", comment="")
+        rows.insert(0, row)
+
+    edit_table(study / "outputs_Tab2.tsv", geometric_cmax)
+    edit_table(study / "timecourses_Fig1.tsv", below_loq)
+    edit_table(study / "outputs_Tab3.tsv", second_cmax)
+    format_folder(study)
+    return study_tables(study)
+
+
+def test_a_geometric_mean(edited_tables: dict[str, pd.DataFrame]) -> None:
+    """A row with a geometric mean and no mean is a geometric mean, with its gsd."""
+    df = edited_tables["Tab2"]
+    cmax = df[df["measurement_type"] == "cmax"].iloc[0]
+    assert cmax["calculation_type"] == "geometric mean"
+    assert pd.isna(cmax["mean"])
+    assert cmax["gmean"] == pytest.approx(134)
+    assert cmax["gcv"] == pytest.approx(0.3)
+    assert cmax["gsd"] == pytest.approx(math.exp(math.sqrt(math.log(1 + 0.3**2))))
+    others = df[df["measurement_type"] != "cmax"]
+    assert set(others["calculation_type"]) == {"sample mean"}
+
+
+def test_a_value_below_the_loq(
+    edited_tables: dict[str, pd.DataFrame], tmp_path: Path
+) -> None:
+    """A row without a central value has none, also in the written table."""
+    df = edited_tables["Fig1"]
+    first = df.iloc[0]
+    assert first["time"] == 0.5
+    assert first[["value", "mean", "median", "gmean"]].isna().all()
+    assert first["max"] == 5
+    assert first["comments"] == "below the LOQ of 5 ng/ml"
+    assert df["mean"].iloc[1:].notna().all()
+    path = tmp_path / "Fig1.tsv"
+    df.to_csv(path, sep="\t", index=False, na_rep="NA")
+    written = pd.read_csv(path, sep="\t", comment="#")
+    assert written["mean"].isna().tolist() == df["mean"].isna().tolist()
+    assert len(written.dropna(subset=["mean"])) == len(df) - 1
+
+
+def test_a_generated_label_is_unique(edited_tables: dict[str, pd.DataFrame]) -> None:
+    """A generated label of several sources gets the source, in every source."""
+    label = "cmax_hydrochlorothiazide_plasma_HCTZ25_sus_all"
+    tab2, tab3 = edited_tables["Tab2"], edited_tables["Tab3"]
+    suspension = tab2[
+        (tab2["measurement_type"] == "cmax") & (tab2["intervention"] == "HCTZ25_sus")
+    ]
+    assert suspension["label"].tolist() == [f"{label}_Tab2"]
+    assert tab3.loc[tab3["measurement_type"] == "cmax", "label"].tolist() == [
+        f"{label}_Tab3"
+    ]
+    # the labels which only one source has stay
+    assert "cmax_hydrochlorothiazide_plasma_HCTZ25_tab_all" in set(tab2["label"])
+    assert "auc_end_hydrochlorothiazide_plasma_HCTZ25_sus_all" in set(tab2["label"])
+    assert "kel_hydrochlorothiazide_plasma_HCTZ25_sus_all" in set(tab3["label"])
+    labels = [set(df["label"]) for df in (tab2, tab3, edited_tables["Fig1"])]
+    assert not labels[0] & labels[1]
+    assert not (labels[0] | labels[1]) & labels[2]
+
+
+def test_the_interventions_in_the_order_of_format_2() -> None:
+    """The interventions are the names of the cell in its natural order, comma separated."""
+    from pkdb.studyformat.text import natural_key
+
+    source = pd.read_csv(NILSEN1989 / "outputs_Tab1.tsv", sep="\t")
+    df = study_tables(NILSEN1989)["Tab1"]
+    assert df["intervention"].tolist() == source["interventions"].tolist()
+    assert "CIL5,HCTZ25" in set(df["intervention"])
+    for interventions in df["intervention"]:
+        names = interventions.split(",")
+        assert names == sorted(names, key=natural_key)
+    # in the generated labels joined by `_`
+    combined = df[df["intervention"] == "CIL5,HCTZ25"]
+    assert all("_CIL5_HCTZ25_" in label for label in combined["label"])
 
 
 def test_collect_a_study_of_format_2(source_dir: Path, tmp_path: Path) -> None:
