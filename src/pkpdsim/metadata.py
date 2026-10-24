@@ -198,6 +198,7 @@ class Health(StrEnum):
     HYPERTENSION = "hypertension"
     # regular drinking without alcohol use disorder
     MODERATE_DRINKING = "moderate alcohol consumption"
+    NAFLD = "non-alcoholic fatty liver disease"
     NSCLC = "non-small cell lung cancer"
     OBESE = "obese"
     PAIN = "pain"
@@ -299,6 +300,7 @@ class Coadministration(StrEnum):
     MIDAZOLAM = "midazolam"
     MORPHINE = "morphine"
     MYCOPHENOLATE_MOFETIL = "mycophenolate mofetil"
+    NAPROXEN = "naproxen"
     NELFINAVIR = "nelfinavir"
     ORAL_CONTRACEPTIVES = "oral contraceptives"
     ORANGE = "orange"

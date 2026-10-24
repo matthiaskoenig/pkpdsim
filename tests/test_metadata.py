@@ -156,6 +156,12 @@ def test_the_conventional_members() -> None:
         assert enum.NR == "not reported"
 
 
+def test_the_members_of_the_apixaban_studies() -> None:
+    """The NAFLD group of Tirona2018 and the naproxen arm of Frost2014a."""
+    assert Health("non-alcoholic fatty liver disease") is Health.NAFLD
+    assert Coadministration("naproxen") is Coadministration.NAPROXEN
+
+
 def test_every_genotype_names_its_gene() -> None:
     """The value starts with the gene, and so does the name."""
     unnamed = [
