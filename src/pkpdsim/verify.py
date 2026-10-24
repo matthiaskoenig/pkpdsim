@@ -74,6 +74,7 @@ import math
 import os
 import pickle
 import pkgutil
+import re
 import sys
 import tempfile
 import traceback
@@ -1326,6 +1327,38 @@ def _without_new_fields(
     return value
 
 
+#: the error of the label of data without spaces, see `_label_as_name`
+ERROR_LABEL = re.compile(r"(?<! )±(S[DE])")
+
+
+def _label_as_name(value: object) -> object:
+    """Bring the label of a curve into the form of sbmlsim 0.14.
+
+    A curve of sbmlsim before 0.14 kept the label it was given in `kwargs`
+    next to its `name`, a curve of sbmlsim 0.14 has it as its name only, so a
+    label which is the name is no difference across versions. sbmlsim 0.14
+    writes the error of data as ` ± SD` and ` ± SE`, which was `±SD`.
+    """
+    if isinstance(value, dict):
+        result: dict[str, object] = {
+            str(k): _label_as_name(v) for k, v in value.items()
+        }
+        kwargs = result.get("kwargs")
+        if (
+            isinstance(kwargs, dict)
+            and "label" in kwargs
+            and kwargs["label"] == result.get("name")
+        ):
+            result["kwargs"] = {k: v for k, v in kwargs.items() if k != "label"}
+        name = result.get("name")
+        if isinstance(name, str) and "kwargs" in result:
+            result["name"] = ERROR_LABEL.sub(r" ± \1", name)
+        return result
+    if isinstance(value, list):
+        return [_label_as_name(v) for v in value]
+    return value
+
+
 def _figure_of_09(
     spec: dict[str, Any], listed: list[tuple[str, object]]
 ) -> dict[str, Any]:
@@ -1386,12 +1419,16 @@ def align_figures(old: Dump, new: Dump) -> AlignedFigures:
     for sid in sorted(figures_old.keys() & figures_new.keys()):
         a_figures, b_figures = figures_old[sid], figures_new[sid]
         for fid in sorted(a_figures.keys() & b_figures.keys()):
-            a, b = json.loads(a_figures[fid]), json.loads(b_figures[fid])
+            # the label of a curve is its name in every version
+            a: Any = _label_as_name(json.loads(a_figures[fid]))
+            b: Any = _label_as_name(json.loads(b_figures[fid]))
             if (
                 not _is_figure_of_08(a)
                 or not isinstance(b, dict)
                 or "_settings" not in b
             ):
+                a_figures[fid] = json.dumps(a, sort_keys=True)
+                b_figures[fid] = json.dumps(b, sort_keys=True)
                 continue
             listed: list[tuple[str, object]] = []
             a_figures[fid] = json.dumps(_figure_of_08(a), sort_keys=True)

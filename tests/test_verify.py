@@ -26,6 +26,7 @@ from pkpdsim.verify import (
     FIGURE_SETTINGS_08,
     NEW_FIGURE_SETTINGS,
     Dump,
+    align_figures,
     apply_renames,
     describe,
     figure_spec,
@@ -1458,3 +1459,23 @@ def test_a_dump_names_the_versions(tmp_path: Path) -> None:
     versions = load(str(out))["versions"]
     assert versions["sbmlsim"] == importlib.metadata.version("sbmlsim")
     assert versions["pkpdsim"] == pkpdsim.__version__
+
+
+def _curve(name: str, **kwargs: object) -> str:
+    """Get a figure of one curve as a dump stores it."""
+    curve = {"__type__": "Curve", "name": name, "kwargs": kwargs}
+    return json.dumps(
+        {"__type__": "Figure", "subplots": [{"plot": {"_curves": [curve]}}]}
+    )
+
+
+def test_the_label_of_a_curve_across_versions_of_sbmlsim_is_its_name() -> None:
+    """sbmlsim 0.14 keeps the label of a curve as its name and writes ` ± SD`."""
+    old = synthetic(figures={"E": {"Fig1": _curve("d±SD", label="d±SD", color="k")}})
+    new = synthetic(figures={"E": {"Fig1": _curve("d ± SD", color="k")}})
+    aligned = align_figures(old, new)
+    assert aligned.old["figures"]["E"]["Fig1"] == aligned.new["figures"]["E"]["Fig1"]
+    # a label which is not the name of its curve stays a difference
+    other = synthetic(figures={"E": {"Fig1": _curve("d", label="x", color="k")}})
+    aligned = align_figures(other, new)
+    assert aligned.old["figures"]["E"]["Fig1"] != aligned.new["figures"]["E"]["Fig1"]

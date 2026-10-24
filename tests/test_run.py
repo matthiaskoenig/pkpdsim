@@ -2,6 +2,7 @@
 
 import dataclasses
 from pathlib import Path
+from typing import Any
 
 import matplotlib
 import matplotlib.image
@@ -101,7 +102,9 @@ def test_the_figure_settings_of_the_model_reach_sbmlsim(
     original = ExperimentRunner.run_experiments
 
     def run_experiments(
-        self: ExperimentRunner, *args: object, **kwargs: object
+        self: ExperimentRunner,
+        *args: Any,  # noqa: ANN401, the arguments of sbmlsim, passed on
+        **kwargs: Any,  # noqa: ANN401
     ) -> object:
         captured.update(kwargs)
         return original(self, *args, **kwargs)
