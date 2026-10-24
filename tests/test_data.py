@@ -292,6 +292,7 @@ def test_study_tables_subjects(patel1984_tables: dict[str, pd.DataFrame]) -> Non
     source = pd.read_csv(PATEL1984 / "interventions.tsv", sep="\t")
     assert sorted(interventions["name"]) == sorted(source["name"])
     assert set(interventions["substance"]) == {"hydrochlorothiazide"}
+    assert {"interval", "doses"} <= set(interventions.columns)
     assert patel1984_tables["TabIndividuals"].empty
 
 

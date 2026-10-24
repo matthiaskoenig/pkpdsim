@@ -178,13 +178,16 @@ INDIVIDUAL_COLUMNS: tuple[str, ...] = (
     "comments",
 )
 
-#: the columns of the interventions of study format 1 (`.<study>_TabInterventions.tsv`)
+#: the columns of the interventions of study format 1 (`.<study>_TabInterventions.tsv`),
+#: with the `interval` and the number of `doses` of a repeated dose of format 2
 INTERVENTION_COLUMNS: tuple[str, ...] = (
     "study",
     "name",
     "time",
     "time_end",
     "time_unit",
+    "interval",
+    "doses",
     "route",
     "application",
     "measurement_type",
@@ -523,6 +526,8 @@ def _intervention_table(study: CanonicalStudy, name: str) -> pd.DataFrame:
                 "time": None if intervention.time_not_reported else time,
                 "time_end": intervention.time_end,
                 "time_unit": intervention.time_unit,
+                "interval": intervention.interval,
+                "doses": intervention.doses,
                 "route": intervention.route,
                 "application": intervention.application,
                 "measurement_type": intervention.measurement_type,
