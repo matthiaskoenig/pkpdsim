@@ -14,7 +14,9 @@ for k in range(res.ds.sizes[dim]):
 ```
 
 `state_after_changes(res)` gives the whole result in that form, for the figures
-which read the arrays of a result instead of one point.
+which read the arrays of a result instead of one point; a ragged result of
+several simulations on the time points of a figure (`plot_times`), not on the
+union of their steps.
 
 A simulation without `steps` or `times` outputs the steps of the integrator, a
 scan of such simulations is ragged: every point keeps its own time points
@@ -80,19 +82,32 @@ def state_after_changes(res: ScanResult) -> ScanResult:
 
     The output of sbmlsim 0.9 has the states before and after a change at its
     time; the figures and analyses of a model read the state after it, as
-    sbmlsim 0.8 gave it. The result is interpolated onto its own time points
+    sbmlsim 0.8 gave it. The result is interpolated onto its time points
     without the repeated ones (`ScanResult.interpolate`, which gives the state
     after a change at its time). It is the result of `point_timecourse` for all
     points of a scan at once, as a `ScanResult`; a result without a change is
     unchanged.
 
+    A ragged result of several simulations (the steps of the integrator, a
+    simulation without `steps` or `times`) is interpolated onto the time points
+    of a figure instead (`sbmlsim.result.timecourse.plot_times`: a few hundred,
+    dense where the simulations stepped densely, with the times of the
+    changes), not onto the union of the steps of all its simulations, whose
+    size grows with the square of the number of simulations: a scan of 11
+    points over 100 draws took more than 40 GB.
+
     Args:
         res: the result of a simulation or a scan.
 
     Returns:
-        The result on the grid of its time points, each time once.
+        The result on its time points, each time once.
     """
-    return res.interpolate(np.unique(res.time_points()))
+    times = res.time_points()
+    simulations = res.ds[TIME].size // res.ds.sizes[POINT] if res.ragged else 1
+    if simulations <= 1:
+        return res.interpolate(np.unique(times))
+    changes = np.asarray(res.ds.attrs.get(CHANGES, []), dtype=float)
+    return res.interpolate(plot_times(times, keep=changes.tolist()))
 
 
 def _timecourse_variable(res: ScanResult, key: str) -> xr.DataArray:
