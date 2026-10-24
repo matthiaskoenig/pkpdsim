@@ -102,7 +102,7 @@ def badges(context: ProjectContext) -> list[Badge]:
     Returns:
         The DOI, the latest release, the documentation (the status of its
         workflow, linked to the site), the tests, the Docker image (an image of
-        Docker Hub only), the Python version and the licenses of the code and of
+        Docker Hub only), the Python versions and the licenses of the code and of
         the models.
     """
     settings = context.settings
@@ -135,7 +135,7 @@ def badges(context: ProjectContext) -> list[Badge]:
         ),
         Badge(
             "Python",
-            _shield("python", context.python, "blue"),
+            _shield("python", " | ".join(context.pythons), "blue"),
             "https://www.python.org",
         ),
         Badge("Code license: MIT", _shield("code license", "MIT", "blue"), _MIT),
