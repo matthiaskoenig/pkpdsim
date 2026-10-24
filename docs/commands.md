@@ -73,7 +73,7 @@ The options:
 - `--results-dir` (`-r`): the folder of the results, `MODEL.results_dir` by default.
 - `--formats` (`-f`): comma separated formats of the figures, the static images of matplotlib (`svg`, `png`, ...) and the interactive pages of plotly (`html`); the formats of the `FigureSettings` of the model by default. The report shows the SVG and links the interactive page; without `svg` the interactive page is embedded in the report.
 - `--open` (`-o`): opens the report of the simulations in the web browser.
-- `--workers` (`-w`): the processes of the scans for this run: a number, `auto` (sbmlsim's choice, a pool of every CPU for a scan of 256 points or more) or `model` (the `n_workers` of the model object, the default).
+- `--workers` (`-w`): the processes of the scans for this run: a number, `auto` (sbmlsim's choice, a pool of every CPU for a scan of 256 points or more) or `model` (the `n_workers` of the model object, the default). With serial scans (`--workers 1`, the default of a model) sbmlsim runs the experiments in a pool, a worker per four experiments, at most one per CPU; with a pool of the scans the experiments run one after the other.
 - `--uncertainty` (`-u`) with `--draws` (100), `--seed` (1234) and `--quantiles` (0.05 0.95): runs the experiments over draws of the fitted parameters of the model and draws the curves of the simulations as bands, into the folder `simulation_uncertainty` of the results, see [Uncertainty of the fitted parameters](uncertainty.md).
 
 A run which fails is not the end of the command. An experiment which cannot be initialized or whose figure fails is reported, the other experiments run, the report and the figures are written, and the command then runs its remaining actions, prints every failure and exits with 1.
