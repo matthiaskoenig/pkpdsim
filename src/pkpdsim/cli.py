@@ -271,8 +271,10 @@ def run_parser(model: PKPDModel) -> argparse.ArgumentParser:
             default="model",
             help="the processes of the scans: a number, 'auto' for a pool of "
             "every CPU for a scan of 256 points or more, or 'model' for the "
-            "setting of the model (default: %(default)s); an extra action gets "
-            "the settings of the simulator as `options.simulator`",
+            "setting of the model (default: %(default)s); with serial scans "
+            "the experiments run in a pool, a worker per four experiments; an "
+            "extra action gets the settings of the simulator as "
+            "`options.simulator`",
         )
     if model.extra_arguments is not None:
         resolve(model.extra_arguments, model.package)(p)
