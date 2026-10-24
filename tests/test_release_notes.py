@@ -160,6 +160,7 @@ def context(
         settings=model.release,
         version=version,
         python="3.14",
+        pythons=("3.14",),
         dependencies=dependencies,
         constraints=(),
         pkpdsim_path=None,

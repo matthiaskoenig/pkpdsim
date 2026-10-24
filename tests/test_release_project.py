@@ -34,6 +34,11 @@ PYPROJECT = """\
 name = "source"
 description = "Model of Łódź"
 requires-python = ">=3.14"
+classifiers = [
+    "Programming Language :: Python :: 3.15",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python",
+]
 dependencies = ["sbmlsim>=0.9.7", "sbmlutils>=0.16.0"]
 """
 
@@ -87,6 +92,32 @@ def test_constraints_from_lock(context: ProjectContext) -> None:
 def test_python_from_requires_python(source: SourceRepo) -> None:
     (source.root / ".python-version").unlink()
     assert project_context(MODEL, SETTINGS, source, "0.1.0").python == "3.14"
+
+
+def test_pythons_from_classifiers(context: ProjectContext) -> None:
+    assert context.pythons == ("3.14", "3.15")
+
+
+def test_pythons_without_classifiers(source: SourceRepo) -> None:
+    text = "\n".join(
+        line for line in PYPROJECT.splitlines() if "Programming Language" not in line
+    )
+    (source.root / "pyproject.toml").write_text(text, encoding="utf-8")
+    assert project_context(MODEL, SETTINGS, source, "0.1.0").pythons == ("3.14",)
+
+
+def test_release_supports_the_pythons(context: ProjectContext) -> None:
+    classifiers = tomllib.loads(render("pyproject.toml.j2", context))["project"][
+        "classifiers"
+    ]
+    assert classifiers == [
+        "Programming Language :: Python :: 3.14",
+        "Programming Language :: Python :: 3.15",
+    ]
+    ci = render("workflows/ci.yml.j2", context)
+    assert 'python-version: ["3.14", "3.15"]' in ci
+    assert "python-version: ${{ matrix.python-version }}" in ci
+    assert "FROM python:3.14-slim" in render("Dockerfile.j2", context)
 
 
 def test_pyproject_parses(context: ProjectContext) -> None:

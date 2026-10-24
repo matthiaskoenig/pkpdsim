@@ -18,6 +18,11 @@ keywords = [
     {{ keyword | toml }},
 {% endfor %}
 ]
+classifiers = [
+{% for version in pythons %}
+    "Programming Language :: Python :: {{ version }}",
+{% endfor %}
+]
 dependencies = [
 {% for dependency in dependencies %}
     {{ dependency | toml }},

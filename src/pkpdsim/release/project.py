@@ -35,6 +35,7 @@ UV_VERSION = "0.13.4"
 
 _PYTHON_FLOOR = re.compile(r">=\s*(\d+\.\d+)")
 _PYTHON_VERSION = re.compile(r"^\d+\.\d+")
+_PYTHON_CLASSIFIER = re.compile(r"^Programming Language :: Python :: (\d+\.\d+)$")
 
 _TEMPLATES = {
     "pyproject.toml": "pyproject.toml.j2",
@@ -56,7 +57,11 @@ class ProjectContext:
         model: the model which is released.
         settings: the release settings of the model.
         version: the version of the release.
-        python: the Python version of the source, e.g. `"3.14"`.
+        python: the Python version of the source, e.g. `"3.14"`: the Python of
+            the Docker image and of the docs.
+        pythons: the Python versions the release supports, those of the
+            classifiers of the source, e.g. `("3.14", "3.15")`: the tests of the
+            release repository run on every one.
         dependencies: the dependencies of the source project.
         constraints: `name==version` for every registry package of the source lock.
         pkpdsim_path: local checkout of pkpdsim to use instead of the registry.
@@ -68,6 +73,7 @@ class ProjectContext:
     settings: ReleaseSettings
     version: str
     python: str
+    pythons: tuple[str, ...]
     dependencies: tuple[str, ...]
     constraints: tuple[str, ...]
     pkpdsim_path: Path | None
@@ -104,6 +110,27 @@ def _python_version(source: SourceRepo, requires_python: str) -> str:
             f"or a '>=X.Y' requires-python (is '{requires_python}')."
         )
     return floor.group(1)
+
+
+def _python_versions(project: Mapping[str, Any], python: str) -> tuple[str, ...]:
+    """Get the Python versions which the classifiers of the source name.
+
+    Args:
+        project: the `[project]` table of the source.
+        python: the Python version of the source, the versions without a
+            classifier of one.
+
+    Returns:
+        The versions in their order, `(python,)` without a classifier of one.
+    """
+    versions = {
+        match.group(1)
+        for classifier in project.get("classifiers", ())
+        if (match := _PYTHON_CLASSIFIER.match(classifier))
+    }
+    if not versions:
+        return (python,)
+    return tuple(sorted(versions, key=lambda v: tuple(int(p) for p in v.split("."))))
 
 
 def _constraints(source: SourceRepo, pkpdsim_path: Path | None) -> tuple[str, ...]:
@@ -166,11 +193,13 @@ def project_context(
         raise ReleaseError(
             f"'{pyproject_path}' has no requires-python in its [project] table."
         )
+    python = _python_version(source, requires_python)
     return ProjectContext(
         model=model,
         settings=settings,
         version=version,
-        python=_python_version(source, requires_python),
+        python=python,
+        pythons=_python_versions(project, python),
         dependencies=tuple(project.get("dependencies", ())),
         constraints=_constraints(source, pkpdsim_path),
         pkpdsim_path=pkpdsim_path,
@@ -228,6 +257,7 @@ def render(
         "settings": context.settings,
         "version": context.version,
         "python": context.python,
+        "pythons": context.pythons,
         "uv": UV_VERSION,
         "dependencies": context.dependencies,
         "constraints": context.constraints,
