@@ -16,6 +16,7 @@ from sbmlsim.units import Quantity, ureg
 from pkpdsim import impairment, pk
 from pkpdsim.experiment import (
     PKPDSimulationExperiment,
+    add_gmean_unit,
     define_unit,
     rename_units,
     to_sid,
@@ -111,6 +112,52 @@ def test_the_data_is_split_by_substance(tmp_path: Path) -> None:
     frames = initialized(ToyStudy, tmp_path).load_dataframes_by_substance("Fig2")
     assert set(frames) == {"x", "y"}
     assert pd.isna(frames["y"]["A"].tolist()[0])
+
+
+#: a table of PK-DB with geometric means in two units and a mean
+GMEAN_TABLE = (
+    "label\ttime\ttime_unit\tmean\tsd\tgmean\tgsd\tunit\n"
+    "a\t1\thr\tNA\tNA\t2.0\t1.5\tng/ml\n"
+    "a\t2\thr\tNA\tNA\t3.0\t1.4\tµg/ml\n"
+    "b\t1\thr\t5.0\t1.0\tNA\tNA\tmg\n"
+)
+
+
+def test_the_geometric_means_get_their_unit(tmp_path: Path) -> None:
+    """sbmlsim reads the unit of the rows as the unit of `gmean` and converts them."""
+    from sbmlsim.data import DataSet
+
+    write_study(tmp_path, "ToyStudy_Fig3", GMEAN_TABLE)
+    experiment = initialized(ToyStudy, tmp_path)
+    df = experiment.load_dataframe("Fig3")
+    assert df["gmean_unit"].tolist()[:2] == ["ng/ml", "µg/ml"]
+    assert pd.isna(df["gmean_unit"].tolist()[2])
+    dset = DataSet.from_df(df[df["label"] == "a"], experiment.ureg)
+    assert dset.uinfo["gmean"] == "ng/ml"
+    assert dset["gmean"].tolist() == pytest.approx([2.0, 3000.0])
+    # the geometric SD is a ratio
+    assert dset["gsd"].tolist() == pytest.approx([1.5, 1.4])
+
+
+def test_the_geometric_means_by_substance_get_their_unit(tmp_path: Path) -> None:
+    write_study(tmp_path, "ToyStudy_Fig4", "substance\tgmean\tunit\nx\t1.0\tng/ml\n")
+    frames = initialized(ToyStudy, tmp_path).load_dataframes_by_substance("Fig4")
+    assert frames["x"]["gmean_unit"].tolist() == ["ng/ml"]
+
+
+@pytest.mark.parametrize(
+    "columns",
+    [
+        {"mean": [1.0], "unit": ["ng/ml"]},
+        {"gmean": [None], "unit": ["ng/ml"]},
+        {"gmean": [1.0], "unit": ["ng/ml"], "gmean_unit": ["mg/l"]},
+    ],
+)
+def test_a_table_without_geometric_means_stays(columns: dict[str, list]) -> None:
+    """No geometric means, or a unit of their own: the table is left as it is."""
+    df = pd.DataFrame(columns)
+    assert add_gmean_unit(df) is df
+    assert list(df.columns) == list(columns)
 
 
 def test_an_experiment_without_data_paths_cannot_load() -> None:

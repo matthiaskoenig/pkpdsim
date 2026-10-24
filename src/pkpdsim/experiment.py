@@ -17,7 +17,8 @@ class HctzSimulationExperiment(PKPDSimulationExperiment):
 
 The base simulates the model of the model object (`models`), creates a task per
 simulation (`tasks`), adds the selections to every task (`data`), loads the
-digitized data of the study (`load_dataframe`) and has the classes of impaired
+digitized data of the study (`load_dataframe`, with the unit of the geometric
+means, `add_gmean_unit`) and has the classes of impaired
 organ function (`pkpdsim.impairment`) and the labels of the pharmacokinetic
 parameters (`pkpdsim.pk`) as defaults. A model overrides what it does
 differently.
@@ -189,6 +190,34 @@ def rename_units(df: pd.DataFrame, names: Mapping[str, str]) -> pd.DataFrame:
     for column in df.columns:
         if column == "unit" or str(column).endswith("_unit"):
             df[column] = df[column].map(rename)
+    return df
+
+
+def add_gmean_unit(df: pd.DataFrame) -> pd.DataFrame:
+    """Give the geometric means of a table of the data their unit, `gmean_unit`.
+
+    The `unit` of a row of the tables of PK-DB is the unit of all its
+    statistics, but sbmlsim (`DataSet.from_df`) reads it as the unit of
+    `mean`, `value` and `median` only, so that a curve of the geometric means
+    (`yid="gmean"`) has no unit. The column `gmean_unit` is the `unit` of the
+    rows with a geometric mean, which sbmlsim reads as the unit of `gmean`
+    (and converts the rows of other units into the first). The geometric SD
+    `gsd` and the `gcv` are ratios without a unit. A table without geometric
+    means or with a `gmean_unit` stays as it is.
+
+    Args:
+        df: the table, changed in place.
+
+    Returns:
+        The table.
+    """
+    if (
+        "gmean" in df.columns
+        and "unit" in df.columns
+        and "gmean_unit" not in df.columns
+        and df["gmean"].notna().any()
+    ):
+        df["gmean_unit"] = df["unit"].where(df["gmean"].notna())
     return df
 
 
@@ -463,6 +492,9 @@ class PKPDSimulationExperiment(SimulationExperiment):
     ) -> pd.DataFrame:
         """Load the digitized data of a figure or table of a study.
 
+        The geometric means get their unit (`add_gmean_unit`), the units of the
+        data are renamed (`data_units`, `rename_units`).
+
         Args:
             fig_id: the id of the figure or table in the study, e.g. `Fig1`.
             study: the study, the id of the experiment by default.
@@ -479,12 +511,15 @@ class PKPDSimulationExperiment(SimulationExperiment):
             data_path=self._data_paths(),
             na_values=na_values,
         )
-        return rename_units(df, names)
+        return rename_units(add_gmean_unit(df), names)
 
     def load_dataframes_by_substance(
         self, fig_id: str, study: str | None = None
     ) -> dict[str, pd.DataFrame]:
         """Load the digitized data of a figure or table by substance.
+
+        The geometric means get their unit (`add_gmean_unit`), the units of the
+        data are renamed (`data_units`, `rename_units`).
 
         Args:
             fig_id: the id of the figure or table in the study, e.g. `Fig1`.
@@ -499,7 +534,9 @@ class PKPDSimulationExperiment(SimulationExperiment):
             f"{self.sid if study is None else study}_{fig_id}",
             data_path=self._data_paths(),
         )
-        return {key: rename_units(df, names) for key, df in frames.items()}
+        return {
+            key: rename_units(add_gmean_unit(df), names) for key, df in frames.items()
+        }
 
     @staticmethod
     def figures_by_sid(*figures: Figure) -> dict[str, Figure]:

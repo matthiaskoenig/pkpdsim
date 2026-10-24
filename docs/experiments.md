@@ -59,7 +59,8 @@ set by a simulation), `data` (the selections for every task),
 `load_dataframe(fig_id, study=None, *, na_values=None)` and
 `load_dataframes_by_substance(fig_id, study=None)` (the digitized data of the
 figure or table `Fig1` of the study, by default that of the experiment, read
-from the `data_path` of the experiment, a path or paths) and `figures_by_sid(*figures)`. A model
+from the `data_path` of the experiment, a path or paths, with the unit of the
+geometric means in `gmean_unit`, `add_gmean_unit`) and `figures_by_sid(*figures)`. A model
 overrides what it does differently, e.g. `default_changes` for a model whose
 simulations set a parameter.
 
