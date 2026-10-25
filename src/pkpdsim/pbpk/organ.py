@@ -2,12 +2,13 @@
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Protocol
 
 from sbmlutils.factory import ModelDefinition
 
 from pkpdsim.pbpk.chemistry import CustomReaction, Metabolism, Transport
 from pkpdsim.pbpk.organs import Organ
+from pkpdsim.pbpk.parts import Parts
 from pkpdsim.pbpk.proteins import Induction, Inhibition
 from pkpdsim.pbpk.substance import Substance
 
@@ -21,8 +22,7 @@ class OrganContext:
     Attributes:
         organ: the organ.
         substances: the substances of the definition.
-        parts: the parts of the organ by substance id (`Any` until the parts
-            exist, tightened with the standard organ).
+        parts: the parts of the organ by substance id.
         chemistry: the processes of the definition.
         inhibitions: the inhibitions as (inhibitor id, inhibition).
         inductions: the inductions as (inducer id, induction).
@@ -30,7 +30,7 @@ class OrganContext:
 
     organ: Organ
     substances: tuple[Substance, ...]
-    parts: Mapping[str, Any]
+    parts: Mapping[str, Parts]
     chemistry: tuple[Metabolism | Transport | CustomReaction, ...]
     inhibitions: tuple[tuple[str, Inhibition], ...]
     inductions: tuple[tuple[str, Induction], ...]

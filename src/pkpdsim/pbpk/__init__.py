@@ -14,6 +14,7 @@ from pkpdsim.pbpk.data import Source, cite, load, sources
 from pkpdsim.pbpk.definition import PBPKDefinition, Variants
 from pkpdsim.pbpk.organ import Boundary, OrganComponent, OrganContext
 from pkpdsim.pbpk.organs import Organ, Part, Pool
+from pkpdsim.pbpk.parts import Parts, parts_for
 from pkpdsim.pbpk.pd import PDComponent
 from pkpdsim.pbpk.physiology import Sex, physiology_objects
 from pkpdsim.pbpk.proteins import PROTEINS, Induction, Inhibition, Protein
@@ -55,6 +56,7 @@ __all__ = [
     "PBPKDefinition",
     "PDComponent",
     "Part",
+    "Parts",
     "Pool",
     "Protein",
     "Q",
@@ -70,6 +72,7 @@ __all__ = [
     "cite",
     "fitted",
     "load",
+    "parts_for",
     "physiology_objects",
     "sources",
 ]
