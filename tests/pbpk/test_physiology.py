@@ -8,7 +8,7 @@ import pytest
 import roadrunner
 from sbmlutils.factory import Model, Parameter, create_model
 
-from pkpdsim.pbpk import MODEL_UNITS, U, cite, ids, load, physiology
+from pkpdsim.pbpk import MODEL_UNITS, U, cite, ids, load, physiology, sources
 from pkpdsim.pbpk.organs import PORTAL_ORGANS, Organ, Pool
 from pkpdsim.pbpk.physiology import Sex, physiology_objects
 
@@ -149,27 +149,41 @@ def test_flows_sum_to_cardiac_output(paths: dict[Sex, Path], sex: Sex) -> None:
 
 
 def test_scaled_individual_sums(paths: dict[Sex, Path]) -> None:
-    """An individual of 100 kg and 180 cm: lean organs follow FFM, adipose grows."""
+    """An individual of 100 kg and 180 cm, scaled as in Huisinga 2012.
+
+    Brain is constant, skin follows the body surface area, the other lean
+    organs, the blood and the cardiac output follow the fat-free mass less
+    brain and skin (eqs. 9, 10, 12, 13); adipose grows.
+    """
     reference = _rr(paths, Sex.MALE)
     r = _rr(paths, Sex.MALE)
     r.setValue(ids.BW, 100.0)
     r.setValue(ids.HEIGHT, 180.0)
 
     ffm = _janmahasatian(100.0, 180.0, Sex.MALE)
+    bsa = 0.007184 * 100**0.425 * 180**0.725
     assert r[ids.BMI] == pytest.approx(100.0 / 1.8**2, rel=1e-12)
-    assert r[ids.BSA] == pytest.approx(0.007184 * 100**0.425 * 180**0.725, rel=1e-12)
+    assert r[ids.BSA] == pytest.approx(bsa, rel=1e-12)
     assert r[ids.FFM] == pytest.approx(ffm, rel=1e-12)
-    scale = ffm / reference[ids.FFM]
+
+    br, sk = ids.organ_mass(Organ.BRAIN), ids.organ_mass(Organ.SKIN)
+    bsa_ratio = bsa / reference[ids.BSA]
+    sv = (ffm - reference[br] - reference[sk] * bsa_ratio) / (
+        reference[ids.FFM] - reference[br] - reference[sk]
+    )
+    assert r[ids.SV_TIS] == pytest.approx(sv, rel=1e-12)
+    assert r[br] == pytest.approx(reference[br], rel=1e-12)
+    assert r[sk] == pytest.approx(reference[sk] * bsa_ratio, rel=1e-12)
     for o in LEAN:
-        vid = ids.organ_volume(o)
-        assert r[vid] == pytest.approx(reference[vid] * scale, rel=1e-9), o
-    assert r[ids.VBLOOD] == pytest.approx(reference[ids.VBLOOD] * scale, rel=1e-9)
+        if o in (Organ.BRAIN, Organ.SKIN):
+            continue
+        mid = ids.organ_mass(o)
+        assert r[mid] == pytest.approx(reference[mid] * sv, rel=1e-12), o
+    assert r[ids.VBLOOD] == pytest.approx(reference[ids.VBLOOD] * sv, rel=1e-12)
     vad = ids.organ_volume(Organ.ADIPOSE)
     assert r[vad] > reference[vad] + 10.0
-    assert r[ids.CO] == pytest.approx(reference[ids.CO] * scale**0.75, rel=1e-9)
-    assert r[ids.GFR] == pytest.approx(
-        reference[ids.GFR] * r[ids.BSA] / reference[ids.BSA], rel=1e-9
-    )
+    assert r[ids.CO] == pytest.approx(reference[ids.CO] * sv, rel=1e-12)
+    assert r[ids.GFR] == pytest.approx(reference[ids.GFR] * bsa_ratio, rel=1e-12)
     _assert_balance(r, Sex.MALE)
     _assert_flows(r)
 
@@ -226,16 +240,20 @@ def test_reset_keeps_covariates(paths: dict[Sex, Path]) -> None:
 
 @pytest.mark.parametrize("sex", list(Sex))
 def test_parameters_annotated(sex: Sex) -> None:
-    """Every parameter has an SBO term, a unit, a name and cited notes."""
-    citations = [cite(key) for key in ("ICRP89", "Janmahasatian2005", "DuBois1916")]
+    """Every parameter has an SBO term, a unit, a name and notes with its source.
+
+    The source is a citation, or the value is a model default.
+    """
+    citations = [cite(key) for key in sources()]
     parameters = [o for o in physiology_objects(sex) if isinstance(o, Parameter)]
-    assert parameters
+    defaults = {p.sid for p in parameters if physiology.MODEL_DEFAULT in str(p.notes)}
+    assert defaults == {ids.AGE, ids.F_RENAL_FUNCTION, ids.F_CARDIAC_FUNCTION}
     for p in parameters:
         assert p.sboTerm, p.sid
         assert p.unit is not None, p.sid
         assert p.name, p.sid
-        notes = str(p.notes)
-        assert any(c in notes for c in citations) or "doi:" in notes, p.sid
+        if p.sid not in defaults:
+            assert any(c in str(p.notes) for c in citations), p.sid
 
 
 def test_negative_reference_adipose_raises(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -249,4 +267,13 @@ def test_negative_reference_adipose_raises(monkeypatch: pytest.MonkeyPatch) -> N
 
     monkeypatch.setattr(physiology, "load", fake_load)
     with pytest.raises(ValueError, match=r"female.*adipose.*kg"):
+        physiology_objects(Sex.MALE)
+
+
+def test_unit_of_data_checked(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A unit of the data which the model cannot convert is rejected."""
+    data = copy.deepcopy(load("physiology_human"))
+    data["male"]["gfr"]["unit"] = "ml/h"
+    monkeypatch.setattr(physiology, "load", lambda name: data)
+    with pytest.raises(ValueError, match=r"'gfr'.*ml/h.*l/min"):
         physiology_objects(Sex.MALE)

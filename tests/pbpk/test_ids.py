@@ -28,6 +28,7 @@ def test_physiology_ids() -> None:
     assert ids.pool_volume(Pool.VENOUS) == "Vve"
     assert ids.pool_fraction(Pool.PORTAL) == "fVpo"
     assert ids.VBLOOD == "Vblood"
+    assert ids.SV_TIS == "SV_tis"
     assert ids.F_CARDIAC_FUNCTION == "f_cardiac_function"
 
 

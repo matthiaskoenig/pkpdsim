@@ -27,6 +27,7 @@ __all__ = [
     "QHA",
     "QPO",
     "SEX",
+    "SV_TIS",
     "VBLOOD",
     "activity",
     "arm",
@@ -88,6 +89,8 @@ VBLOOD = "Vblood"
 """The total blood volume."""
 MLEAN = "Mlean"
 """The mass of the lean organ tissues without their blood."""
+SV_TIS = "SV_tis"
+"""The scaling factor of the lean tissues, the blood and the cardiac output."""
 QHA = "Qha"
 """The hepatic arterial blood flow."""
 QPO = "Qpo"
