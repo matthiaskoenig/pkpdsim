@@ -41,7 +41,14 @@ from pkpdsim.pbpk.chemistry import Direction, Membrane
 from pkpdsim.pbpk.impairment import GASTRIC_EMPTYING, SI_TRANSIT
 from pkpdsim.pbpk.variants import lookup, names
 
-from .conftest import definition, dose_amount, load, simple_drug, total_amount
+from .conftest import (
+    definition,
+    dose_amount,
+    individual,
+    load,
+    simple_drug,
+    total_amount,
+)
 
 if TYPE_CHECKING:
     import roadrunner
@@ -272,6 +279,39 @@ def test_placement_by_expression(tmp_path: Path) -> None:
         seg: r[weights[seg]] / r[_gu(ids.mucosa_volume(seg))] for seg in SMALL
     }
     assert max(per_volume, key=lambda k: per_volume[k]) == "du"
+
+
+def test_first_order_per_volume_in_segments(tmp_path: Path) -> None:
+    """A first order clearance per litre of small intestine is placed by mucosa volume.
+
+    A process without protein has in every mucosa segment the share
+    `Vmu_<seg>/sum(Vmu)` of the capacity `k*Vsi` of the standard organ: with the
+    same mucosa concentration everywhere the segments together clear
+    `k*Vsi*fu/K_mu*C`, and the clearance scales with the small intestine of the
+    individual (BW).
+    """
+    process = Metabolism("DRGG", Organ.SMALL_INTESTINE, S, {}, FirstOrder(k=0.5))
+    path = build(_definition("per_volume", chemistry=[process]), tmp_path).flat_path
+    segments = SMALL + COLON
+    c = 0.005
+    totals = {}
+    for bw in (75.0, 150.0):
+        r = individual(path, BW=bw)
+        for seg in segments:
+            r[f"[{_gu(ids.mucosa(S, seg))}]"] = c
+        rates = np.array([r[_gu(ids.segment_process("DRGG", seg))] for seg in segments])
+        volumes = np.array([r[_gu(ids.mucosa_volume(seg))] for seg in segments])
+        v_si = r[ids.organ_volume(Organ.SMALL_INTESTINE)]
+        cu = r[ids.fu(S)] / r[_gu(ids.mucosa_coefficient(S))] * c
+        assert rates.sum() == pytest.approx(0.5 * v_si * cu, rel=1e-12)
+        np.testing.assert_allclose(
+            rates / rates.sum(), volumes / volumes.sum(), rtol=1e-12
+        )
+        totals[bw] = (rates.sum(), v_si)
+    assert totals[150.0][1] / totals[75.0][1] > 1.1
+    assert totals[150.0][0] / totals[75.0][0] == pytest.approx(
+        totals[150.0][1] / totals[75.0][1], rel=1e-12
+    )
 
 
 def test_efflux_returns_to_lumen(tmp_path: Path) -> None:

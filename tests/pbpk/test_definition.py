@@ -30,13 +30,13 @@ from pkpdsim.pbpk import (
     U,
     Value,
     Variants,
+    ZonatedLiver,
     compose,
     ids,
     load,
     sources,
 )
 from pkpdsim.pbpk.builder import organ_component
-from pkpdsim.pbpk.variants.liver_zonated import ZonatedLiver
 
 
 def _api(**kwargs: object) -> Substance:

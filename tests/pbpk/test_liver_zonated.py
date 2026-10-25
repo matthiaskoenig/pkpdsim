@@ -485,6 +485,50 @@ def test_profile_preserves_total_capacity(tmp_path: Path) -> None:
             )
 
 
+def test_first_order_per_volume_in_zones(tmp_path: Path) -> None:
+    """A first order clearance per litre of liver is placed by zone volume and follows the liver.
+
+    Without a profile a zone has the share `Vti_z/sum(Vti)` of the capacity
+    `k*Vli` of the standard liver: with the same tissue concentration in every
+    zone the zones together clear `k*Vli*fu/Kp*C`, what the standard liver
+    clears, and the clearance scales with the liver of the individual (BW).
+    """
+    d = definition(
+        routes=[Route.iv(S)],
+        chemistry=[Metabolism("DRGX", Organ.LIVER, S, {}, FirstOrder(k=0.5))],
+    )
+    zonated = Variants(organs={Organ.LIVER: ZonatedLiver(n_zones=4)})
+    paths = {
+        "standard": build(d, tmp_path / "standard").flat_path,
+        "zonated": build(
+            dataclasses.replace(d, variants=zonated), tmp_path / "zonated"
+        ).flat_path,
+    }
+    c = 0.005
+    totals = {}
+    for bw in (75.0, 150.0):
+        r = _load(paths["standard"], BW=bw)
+        r[f"[{_liver(ids.species(Part.TISSUE, S))}]"] = c
+        clearance = 0.5 * r["Vli"] * r[ids.fu(S)] / r[ids.kp(S)]
+        assert r[_liver("DRGX")] == pytest.approx(clearance * c, rel=1e-12)
+        r = _load(paths["zonated"], BW=bw)
+        for z in _zones(4):
+            r[f"[{_liver(ids.species(Part.TISSUE, S, z))}]"] = c
+        rates = np.array([r[_liver(ids.segment_process("DRGX", z))] for z in _zones(4)])
+        volumes = np.array(
+            [r[_liver(ids.compartment(Part.TISSUE, z))] for z in _zones(4)]
+        )
+        assert rates.sum() == pytest.approx(clearance * c, rel=1e-12)
+        np.testing.assert_allclose(
+            rates / rates.sum(), volumes / volumes.sum(), rtol=1e-12
+        )
+        totals[bw] = (rates.sum(), r["Vli"])
+    assert totals[150.0][1] / totals[75.0][1] > 1.1
+    assert totals[150.0][0] / totals[75.0][0] == pytest.approx(
+        totals[150.0][1] / totals[75.0][1], rel=1e-12
+    )
+
+
 def test_unplaced_process_raises() -> None:
     """A process the zonated liver cannot place is refused, naming it.
 
