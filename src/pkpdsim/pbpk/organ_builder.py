@@ -12,7 +12,9 @@ reactions and the activity of the proteins of its processes. The standard
 organ and the variants derive from it and add their kinetics.
 
 A protein of a process of the organ has the base activity `f_<protein>`, a
-constant of the organ (1, set by genotype, impairment and the experiments).
+constant of the organ (1, set by genotype and the experiments); in the liver
+the impairment multiplies it by the input `fimp_<protein>`
+(`pkpdsim.pbpk.impairment`).
 When a substance of the definition inactivates it (mechanism-based) or
 induces it, the organ has the turnover state `E_<protein>`, the amount of the
 protein relative to its baseline (initially 1),
@@ -48,6 +50,7 @@ from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk import ids
 from pkpdsim.pbpk.data import cite
+from pkpdsim.pbpk.impairment import organ_activity
 from pkpdsim.pbpk.organs import Organ, Part, Pool
 from pkpdsim.pbpk.parts import Parts
 from pkpdsim.pbpk.placement import (
@@ -388,6 +391,17 @@ class OrganBuilder:
             "rates).",
             port=True,
         )
+        impaired = organ_activity(self.organ, protein)
+        if impaired is not None:
+            self._input(
+                impaired,
+                U.dimensionless,
+                f"impairment of {protein}",
+                f"The factor of the impaired organ function on the activity of "
+                f"{protein} in the organ (`pkpdsim.pbpk.impairment`); the rates "
+                f"run with `{pid}` times it.",
+            )
+            self.replacements[impaired] = ids.impairment_activity(protein, self.organ)
         for sid, inh in self.ctx.inhibitions:
             if inh.protein != protein:
                 continue

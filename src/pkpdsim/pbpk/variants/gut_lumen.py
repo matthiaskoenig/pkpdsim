@@ -18,6 +18,7 @@ from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk import ids
 from pkpdsim.pbpk.data import cite, value
+from pkpdsim.pbpk.impairment import GASTRIC_EMPTYING, SI_TRANSIT
 from pkpdsim.pbpk.organ import StandardBuilder
 from pkpdsim.pbpk.organ_builder import ONE
 from pkpdsim.pbpk.organs import Part
@@ -31,7 +32,7 @@ from pkpdsim.pbpk.routes import (
 from pkpdsim.pbpk.substance import Substance
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import Value
-from pkpdsim.pbpk.variants.segments import DATA, Segment
+from pkpdsim.pbpk.variants.segments import DATA, SMALL, Segment
 
 __all__ = ["LumenBuilder"]
 
@@ -99,12 +100,29 @@ class LumenBuilder(StandardBuilder):
             )
 
     def _transit(self, seg: Segment) -> str:
-        """The transit time of a segment, of the stomach by the prandial state."""
+        """The transit time of a segment, of the stomach by the prandial state.
+
+        The impairment (chronic kidney disease) multiplies the transit time of
+        the stomach and of the small intestine (its segments, the single
+        lumen) by its factors, inputs of the body.
+        """
         t = ids.transit_time(seg.token)
-        if seg.token != "st":
-            return t
-        fed = self._input(ids.FED, U.dimensionless, "fed state (0 fasted, 1 fed)")
-        return f"({t} + {fed} * ({ids.T_STOMACH_FED} - {t}))"
+        if seg.token == "st":
+            fed = self._input(ids.FED, U.dimensionless, "fed state (0 fasted, 1 fed)")
+            factor = self._input(
+                GASTRIC_EMPTYING,
+                U.dimensionless,
+                "impairment factor gastric emptying time",
+            )
+            return f"({t} + {fed} * ({ids.T_STOMACH_FED} - {t})) * {factor}"
+        if seg.token is None or seg.token in SMALL:
+            factor = self._input(
+                SI_TRANSIT,
+                U.dimensionless,
+                "impairment factor small intestinal transit time",
+            )
+            return f"{t} * {factor}"
+        return t
 
     def _gut_species(
         self, sid: str, compartment: str, name: str, amount: bool = False

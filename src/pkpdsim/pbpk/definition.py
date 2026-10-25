@@ -89,6 +89,11 @@ class PBPKDefinition:
         population: the population of the physiology.
         arm_vein: the preset of the weights of the arm vein sampling site
             (`data/arm_vein.toml`), the PK-Sim default skin and muscle mix.
+        dynamic: the parameters of the top model which change during a
+            simulation (an impairment changed in the middle of a study, a PD
+            output): every quantity which depends on them is an assignment
+            rule instead of an initial assignment, so it follows the change;
+            every other quantity follows a change before the simulation only.
         name: the name of the model.
         notes: the notes of the model.
     """
@@ -102,6 +107,7 @@ class PBPKDefinition:
     sex: Sex = Sex.MALE
     population: str = "european_icrp"
     arm_vein: str = "pksim_default"
+    dynamic: tuple[str, ...] = ()
     name: str | None = None
     notes: str | None = None
 
@@ -116,6 +122,7 @@ class PBPKDefinition:
         known = {s.sid for s in self.substances}
         problems += self._check_chemistry(known)
         problems += self._check_routes(known)
+        problems += self._check_dynamic()
         presets = sorted(load("arm_vein"))
         if self.arm_vein not in presets:
             problems.append(
@@ -224,6 +231,21 @@ class PBPKDefinition:
             protein = getattr(p, "protein", None)
             if protein is not None and protein not in PROTEINS:
                 problems.append(f"{p.sid}: unknown protein '{protein}'")
+        return problems
+
+    def _check_dynamic(self) -> list[str]:
+        """Check the names of the dynamic parameters.
+
+        That they are parameters of the top model is checked by `compose`.
+        """
+        problems = [
+            f"dynamic '{pid}' is not an SBML SId"
+            for pid in self.dynamic
+            if not _SID.fullmatch(pid)
+        ]
+        twice = sorted({p for p in self.dynamic if self.dynamic.count(p) > 1})
+        if twice:
+            problems.append(f"dynamic names {twice} more than once")
         return problems
 
     def _check_routes(self, known: set[str]) -> list[str]:

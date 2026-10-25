@@ -33,10 +33,16 @@ tissue without blood (Schmitt 2008) times the tissue share `1 - f_vas`.
 A covariate or a factor of organ function is an initial value: changed before
 the simulation (a change of an experiment, `init(...)` in roadrunner), every
 quantity which depends on it follows; changed during a simulation, nothing
-follows.
+follows (unless the definition names it `dynamic`, see
+`pkpdsim.pbpk.builder`).
+
+The impaired organ function (`pkpdsim.pbpk.impairment`) multiplies cardiac
+output, the blood flows, the GFR, the hematocrit and the kidney mass by its
+factors (`factors` of `physiology_objects`); without them the physiology is
+the healthy one.
 """
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
@@ -51,6 +57,7 @@ from pkpdsim.pbpk.units import U
 
 __all__ = [
     "Sex",
+    "normal_gfr",
     "physiology_objects",
     "reference_fractions",
     "reference_tissue_volumes",
@@ -291,9 +298,31 @@ def _initial(
 class _Physiology:
     """The SBML objects of the physiology, from the reference values of one sex."""
 
-    def __init__(self, sex: Sex) -> None:
+    def __init__(self, sex: Sex, factors: Mapping[str, str]) -> None:
         self.sex = sex
         self.refs = _references(sex, load("physiology_human"))
+        self.factors = factors
+        self.applied: set[str] = set()
+
+    def initial(
+        self,
+        pid: str,
+        formula: str,
+        unit: UnitDefinition,
+        name: str,
+        text: str,
+        sources: Iterable[str],
+    ) -> list[Sbase]:
+        """A constant parameter with its initial assignment, times its factor of impairment."""
+        factor = self.factors.get(pid)
+        if factor is not None:
+            formula = f"({formula}) * {factor}"
+            text += (
+                f" Times `{factor}`, the factor of the impaired organ function "
+                "(`pkpdsim.pbpk.impairment`)."
+            )
+            self.applied.add(pid)
+        return _initial(pid, formula, unit, name, text, sources)
 
     def number(self, key: str, unit: UnitDefinition) -> str:
         """The reference value of the sex in a formula, `1.04 kg_per_l`."""
@@ -310,10 +339,19 @@ class _Physiology:
         return "\n".join(lines), tuple(sources)
 
     def reference(
-        self, pid: str, unit: UnitDefinition, name: str, text: str
+        self,
+        pid: str,
+        unit: UnitDefinition,
+        name: str,
+        text: str,
+        key: str | None = None,
     ) -> list[Sbase]:
-        """A constant reference parameter of the sex with its provenance."""
-        notes, sources = self.provenance(pid)
+        """A constant reference parameter of the sex with its provenance.
+
+        `key` is the reference value of the parameter, `pid` by default.
+        """
+        key = key or pid
+        notes, sources = self.provenance(key)
         return [
             _parameter(
                 pid,
@@ -321,7 +359,7 @@ class _Physiology:
                 name,
                 f"{text}\n\n{notes}",
                 sources,
-                value=self.refs[pid].value,
+                value=self.refs[key].value,
             )
         ]
 
@@ -433,12 +471,30 @@ class _Physiology:
             "reference blood volume [l]",
             "Total blood volume of the reference individual.",
         )
-        objects += self.reference(
-            ids.HCT,
-            U.dimensionless,
-            "hematocrit",
-            "The volume fraction of the blood cells in blood.",
-        )
+        if ids.HCT in self.factors:
+            objects += self.reference(
+                ids.ref(ids.HCT),
+                U.dimensionless,
+                "reference hematocrit",
+                "The volume fraction of the blood cells in blood of the healthy "
+                "individual.",
+                key=ids.HCT,
+            )
+            objects += self.initial(
+                ids.HCT,
+                ids.ref(ids.HCT),
+                U.dimensionless,
+                "hematocrit",
+                "The volume fraction of the blood cells in blood.",
+                (),
+            )
+        else:
+            objects += self.reference(
+                ids.HCT,
+                U.dimensionless,
+                "hematocrit",
+                "The volume fraction of the blood cells in blood.",
+            )
         for o in LEAN_ORGANS:
             objects += self.reference(
                 ids.ref(ids.organ_mass(o)),
@@ -468,7 +524,7 @@ class _Physiology:
 
     def body(self) -> list[Sbase]:
         """Body mass index, body surface area, fat-free mass and `SV_tis`."""
-        objects = _initial(
+        objects = self.initial(
             ids.BMI,
             f"({ids.BW} / 1 kg) / ({ids.HEIGHT} / 100 cm)^2 * 1 kg_per_m2",
             U.kg_per_m2,
@@ -476,7 +532,7 @@ class _Physiology:
             "Body mass index of the individual.",
             ("Janmahasatian2005",),
         )
-        objects += _initial(
+        objects += self.initial(
             ids.BSA,
             f"0.007184 m2 * ({ids.BW} / 1 kg)^0.425 * ({ids.HEIGHT} / 1 cm)^0.725",
             U.m2,
@@ -493,7 +549,7 @@ class _Physiology:
             )
 
         k, a = (6680, 216) if self.sex is Sex.MALE else (8780, 244)
-        objects += _initial(
+        objects += self.initial(
             ids.FFM,
             f"{ids.BW} * {ffm(k, a)}",
             U.kg,
@@ -504,7 +560,7 @@ class _Physiology:
             ("Janmahasatian2005", "Huisinga2012"),
         )
         br, sk = ids.organ_mass(Organ.BRAIN), ids.organ_mass(Organ.SKIN)
-        objects += _initial(
+        objects += self.initial(
             ids.SV_TIS,
             f"({ids.FFM} - {br} - {sk}) / "
             f"({ids.ref(ids.FFM)} - {ids.ref(br)} - {ids.ref(sk)})",
@@ -520,7 +576,7 @@ class _Physiology:
 
     def volumes(self) -> list[Sbase]:
         """Tissue masses, organ volumes, blood volume and blood pools."""
-        objects = _initial(
+        objects = self.initial(
             ids.VBLOOD,
             f"{ids.ref(ids.VBLOOD)} * {ids.SV_TIS}",
             U.litre,
@@ -544,7 +600,7 @@ class _Physiology:
             else:
                 formula = f"{ids.ref(mid)} * {ids.SV_TIS}"
                 text = "it scales with the lean tissues (Huisinga 2012 eq. 12)."
-            objects += _initial(
+            objects += self.initial(
                 mid,
                 formula,
                 U.kg,
@@ -552,7 +608,7 @@ class _Physiology:
                 f"Mass of the organ tissue without its blood; {text}",
                 ("Huisinga2012",),
             )
-        objects += _initial(
+        objects += self.initial(
             ids.MLEAN,
             " + ".join(ids.organ_mass(o) for o in LEAN_ORGANS),
             U.kg,
@@ -562,7 +618,7 @@ class _Physiology:
         )
         mad = ids.organ_mass(Organ.ADIPOSE)
         notes, sources = self.provenance("rho_blood")
-        objects += _initial(
+        objects += self.initial(
             mad,
             f"{ids.BW} - {ids.MLEAN} - {ids.VBLOOD} * "
             f"{self.number('rho_blood', U.kg_per_l)}",
@@ -575,7 +631,7 @@ class _Physiology:
         )
         for o in Organ:
             notes, sources = self.provenance(f"rho_{o}", f"blood_{o}")
-            objects += _initial(
+            objects += self.initial(
                 ids.organ_volume(o),
                 f"{ids.organ_mass(o)} / {self.number(f'rho_{o}', U.kg_per_l)} + "
                 f"{self.number(f'blood_{o}', U.dimensionless)} * {ids.VBLOOD}",
@@ -587,7 +643,7 @@ class _Physiology:
                 sources,
             )
         for pool in Pool:
-            objects += _initial(
+            objects += self.initial(
                 ids.pool_volume(pool),
                 f"{ids.pool_fraction(pool)} * {ids.VBLOOD}",
                 U.litre,
@@ -603,7 +659,7 @@ class _Physiology:
         for o in Organ:
             f_vas, f_int = ids.vascular_fraction(o), ids.interstitial_fraction(o)
             notes, sources = self.provenance(f"blood_{o}")
-            objects += _initial(
+            objects += self.initial(
                 f_vas,
                 f"{self.number(f'blood_{o}', U.dimensionless)} * {ids.VBLOOD} / "
                 f"{ids.organ_volume(o)}",
@@ -616,7 +672,7 @@ class _Physiology:
                 sources,
             )
             notes, sources = self.provenance(f"fint_{o}")
-            objects += _initial(
+            objects += self.initial(
                 f_int,
                 f"{self.number(f'fint_{o}', U.dimensionless)} * (1 dimensionless - "
                 f"{f_vas})",
@@ -631,17 +687,25 @@ class _Physiology:
         return objects
 
     def flows(self) -> list[Sbase]:
-        """Cardiac output, blood flows and GFR."""
-        objects = _initial(
+        """Cardiac output, blood flows and GFR.
+
+        An organ flow is its fraction of the cardiac output of the circulation
+        without impairment, `fQ<o>*(CO_ref*SV_tis*f_cardiac_function)`, so that
+        a factor of impairment on the cardiac output (the sum of the impaired
+        flows) is not a part of every flow; without impairment it is
+        `fQ<o>*CO`, bitwise.
+        """
+        co = f"{ids.ref(ids.CO)} * {ids.SV_TIS} * {ids.F_CARDIAC_FUNCTION}"
+        objects = self.initial(
             ids.CO,
-            f"{ids.ref(ids.CO)} * {ids.SV_TIS} * {ids.F_CARDIAC_FUNCTION}",
+            co,
             U.l_per_min,
             "cardiac output [l/min]",
             "Cardiac output of the individual; it scales as the lean tissues "
             "(Huisinga 2012 eq. 13, SQ_co = SV_tis) and with the cardiac function.",
             ("Huisinga2012",),
         )
-        objects += _initial(
+        objects += self.initial(
             ids.organ_flow(Organ.LUNG),
             ids.CO,
             U.l_per_min,
@@ -652,16 +716,17 @@ class _Physiology:
         for o in Organ:
             if o is Organ.LUNG:
                 continue
-            objects += _initial(
+            objects += self.initial(
                 ids.organ_flow(o),
-                f"{ids.flow_fraction(o)} * {ids.CO}",
+                f"{ids.flow_fraction(o)} * ({co})",
                 U.l_per_min,
                 f"blood flow {_label(o)} [l/min]",
                 "Blood flow of the organ"
-                + (", the hepatic artery." if o is Organ.LIVER else "."),
+                + (", the hepatic artery" if o is Organ.LIVER else "")
+                + ": its fraction of the cardiac output without impairment.",
                 ("ICRP89",),
             )
-        objects += _initial(
+        objects += self.initial(
             ids.QHA,
             ids.organ_flow(Organ.LIVER),
             U.l_per_min,
@@ -670,7 +735,7 @@ class _Physiology:
             "fractions.",
             ("ICRP89",),
         )
-        objects += _initial(
+        objects += self.initial(
             ids.QPO,
             " + ".join(ids.organ_flow(o) for o in Organ if o in PORTAL_ORGANS),
             U.l_per_min,
@@ -679,7 +744,7 @@ class _Physiology:
             "into it.",
             ("ICRP89",),
         )
-        objects += _initial(
+        objects += self.initial(
             ids.QH,
             f"{ids.QHA} + {ids.QPO}",
             U.l_per_min,
@@ -687,7 +752,7 @@ class _Physiology:
             "Total blood flow of the liver, hepatic artery and portal vein.",
             ("ICRP89",),
         )
-        objects += _initial(
+        objects += self.initial(
             ids.GFR,
             f"{ids.ref(ids.GFR)} * {ids.BSA} / {ids.ref(ids.BSA)} * "
             f"{ids.F_RENAL_FUNCTION}",
@@ -707,23 +772,31 @@ def _label(organ: Organ) -> str:
     return organ.name.lower().replace("_", " ")
 
 
-def physiology_objects(sex: Sex = Sex.MALE) -> list[Sbase]:
+def physiology_objects(
+    sex: Sex = Sex.MALE, factors: Mapping[str, str] | None = None
+) -> list[Sbase]:
     """The parameters and initial assignments of the standard human physiology.
 
     Args:
         sex: the sex of the model: its reference values and the default
             individual (`BW`, `HEIGHT`). A study of both sexes uses one model
             per sex.
+        factors: the factors of the impaired organ function by the id of the
+            quantity they multiply (`pkpdsim.pbpk.impairment.physiology_factors`):
+            the formula of the quantity is multiplied by the factor (a formula);
+            the hematocrit becomes `HCT = HCT_ref * factor`. None: the healthy
+            physiology.
 
     Returns:
         The constant parameters and their initial assignments of the top model.
 
     Raises:
-        ValueError: if the reference individual leaves no mass for adipose, or
-            a unit of the data is not the unit of the model.
+        ValueError: if the reference individual leaves no mass for adipose, a
+            unit of the data is not the unit of the model, or a factor names
+            no quantity of the physiology with an initial assignment.
     """
-    physiology = _Physiology(sex)
-    return [
+    physiology = _Physiology(sex, factors or {})
+    objects = [
         *physiology.covariates(),
         *physiology.references(),
         *physiology.body(),
@@ -731,6 +804,13 @@ def physiology_objects(sex: Sex = Sex.MALE) -> list[Sbase]:
         *physiology.fractions(),
         *physiology.flows(),
     ]
+    unused = sorted(set(physiology.factors) - physiology.applied)
+    if unused:
+        raise ValueError(
+            f"Factors of impairment for quantities which the physiology does not "
+            f"compute: {unused}."
+        )
+    return objects
 
 
 def reference_fractions(organ: Organ) -> dict[Sex, tuple[float, float]]:
@@ -750,6 +830,20 @@ def reference_fractions(organ: Organ) -> dict[Sex, tuple[float, float]]:
         )
         for sex in Sex
     }
+
+
+def normal_gfr(sex: Sex) -> float:
+    """The GFR per 1.73 m2 body surface area of a reference individual.
+
+    Args:
+        sex: the sex of the reference individual.
+
+    Returns:
+        The reference GFR scaled to 1.73 m2 with the reference body surface
+        area (l/min), the GFR of the normal renal function.
+    """
+    refs = _references(sex, load("physiology_human"))
+    return refs[ids.ref(ids.GFR)].value * 1.73 / refs[ids.ref(ids.BSA)].value
 
 
 def reference_tissue_volumes(sex: Sex) -> dict[Organ, float]:

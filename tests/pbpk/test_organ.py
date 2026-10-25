@@ -457,19 +457,24 @@ def test_boundary_physiology_and_substance_parameters() -> None:
 
 
 def test_metabolism_on_unbound_with_activity() -> None:
-    """The rate acts on the unbound tissue concentration and has the activity."""
+    """The rate acts on the unbound tissue concentration and has the activity.
+
+    The activity is the organ-local base activity times the impairment of the
+    liver, an input of the body (`fimp_li_cyp3a4`).
+    """
     md, boundary = _build(chemistry=[_metabolism()])
     reaction = _reaction(md, "DRG2M")
     formula = _formula(reaction)
     assert "f_cyp3a4" in formula
     assert "fu_drg" in formula
     assert formula == (
-        "f_cyp3a4 * f_functional * DRG2M_Vmax * Vli * (fu_drg / Kp_drg * Cti_drg) / "
-        "(DRG2M_Km + fu_drg / Kp_drg * Cti_drg)"
+        "f_cyp3a4 * fimp_cyp3a4 * f_functional * DRG2M_Vmax * Vli * "
+        "(fu_drg / Kp_drg * Cti_drg) / (DRG2M_Km + fu_drg / Kp_drg * Cti_drg)"
     )
     assert reaction.compartment == "Vti"
     assert _parameters(md)["f_cyp3a4"].port is True
     assert "f_cyp3a4" not in boundary.replacements
+    assert boundary.replacements["fimp_cyp3a4"] == "fimp_li_cyp3a4"
 
 
 @pytest.mark.parametrize(
@@ -547,8 +552,9 @@ def test_metabolism_kinetics() -> None:
     )
     assert _equation(_reaction(md, "E1")) == ([("Cti_drg", 1.0)], [])
     assert _formula(_reaction(md, "E2")) == (
-        "f_cyp3a4 * f_functional * E2_Vmax * Vli * ((fu_drg / Kp_drg * Cti_drg) / "
-        "E2_Km)^E2_n / (1 dimensionless + ((fu_drg / Kp_drg * Cti_drg) / E2_Km)^E2_n)"
+        "f_cyp3a4 * fimp_cyp3a4 * f_functional * E2_Vmax * Vli * ((fu_drg / Kp_drg * "
+        "Cti_drg) / E2_Km)^E2_n / (1 dimensionless + ((fu_drg / Kp_drg * Cti_drg) / "
+        "E2_Km)^E2_n)"
     )
 
 

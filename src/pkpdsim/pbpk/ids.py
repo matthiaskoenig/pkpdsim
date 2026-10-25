@@ -15,7 +15,10 @@ __all__ = [
     "BMI",
     "BSA",
     "BW",
+    "CKD_HEPATIC",
     "CO",
+    "CP_SEVERITY",
+    "EGFR",
     "FED",
     "FFM",
     "F_CARDIAC_FUNCTION",
@@ -35,6 +38,7 @@ __all__ = [
     "GUT_WALL_FLOW",
     "HCT",
     "HEIGHT",
+    "HF_SEVERITY",
     "K_BILE",
     "MLEAN",
     "MUCOSA_FLOW_TOTAL",
@@ -66,6 +70,7 @@ __all__ = [
     "blood",
     "bp",
     "compartment",
+    "condition_factor",
     "dissolution",
     "dissolution_age",
     "dissolution_clock",
@@ -94,6 +99,8 @@ __all__ = [
     "hepatic_vein",
     "hepatic_vein_blood",
     "hepatic_vein_free",
+    "impairment_activity",
+    "impairment_factor",
     "inflow_reaction",
     "infusion_rate",
     "injection_rate",
@@ -203,6 +210,14 @@ F_SHUNT = "f_shunt"
 """The portosystemic shunt: the fraction of the liver inflow which bypasses the liver."""
 F_FUNCTIONAL = "f_functional"
 """The functional fraction of the liver tissue."""
+CP_SEVERITY = "CP_severity"
+"""The severity of liver cirrhosis: 0 healthy, 1, 2, 3 the Child-Pugh classes A, B, C."""
+HF_SEVERITY = "HF_severity"
+"""The severity of heart failure: 0 healthy, 1 to 4 the NYHA classes I to IV."""
+CKD_HEPATIC = "CKD_hepatic"
+"""The switch (0 off, 1 on) of the hepatic changes of chronic kidney disease."""
+EGFR = "eGFR"
+"""The GFR per 1.73 m2 body surface area of the renal function, which gives the CKD stage."""
 F_ZONE = "f_zone"
 """The volume fraction of a zone of a zonated organ, `1/n` of `n` zones."""
 VBILE = "Vbile"
@@ -267,6 +282,40 @@ TUBULE_SEGMENTS: tuple[str, ...] = ("pt", "lh", "dt", "cd")
 flow: proximal tubule, loop of Henle, distal tubule and collecting duct."""
 PS_VAS = "PS_vas"
 """The local id of the exchange between plasma and interstitium of an organ."""
+
+
+def impairment_factor(pid: str) -> str:
+    """The id of the factor of all impairments on a quantity, `fimp_GFR`.
+
+    The product of the factors of the conditions (Child-Pugh, chronic kidney
+    disease, heart failure) on the quantity `pid` of the body.
+    """
+    return f"fimp_{pid}"
+
+
+def condition_factor(condition: str, key: str) -> str:
+    """The id of the factor of one condition, `fcp_albumin`, `fckd_hematocrit`.
+
+    Args:
+        condition: the condition, `cp` (Child-Pugh), `ckd` (chronic kidney
+            disease) or `hf` (heart failure).
+        key: the key of the factor in `data/impairment.toml`, a protein in
+            lower case.
+    """
+    return f"f{condition}_{key.lower()}"
+
+
+def impairment_activity(protein: str, organ: Organ | None = None) -> str:
+    """The id of the factor of the impairments on the activity of a protein in an organ.
+
+    In the organ the local input `fimp_cyp3a4`, in the body `fimp_li_cyp3a4`;
+    the rates of the protein in the organ run with `f_<protein>` times it, so
+    that a genotype or an interaction which sets `LI__f_cyp3a4` acts on top
+    of the impairment.
+    """
+    if organ is None:
+        return f"fimp_{protein.lower()}"
+    return f"fimp_{organ.value}_{protein.lower()}"
 
 
 def ref(pid: str) -> str:

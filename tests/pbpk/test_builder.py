@@ -172,7 +172,10 @@ def test_flat_ids_follow_scheme(simple: BuildResult) -> None:
         a.getSymbol(): libsbml.formulaToL3String(a.getMath())
         for a in model.getListOfInitialAssignments()
     }
-    assert initial[ids.fu("drg")] == ids.fu_ref("drg")
+    assert initial[ids.fu("drg")].replace(" ", "") == (
+        "1dimensionless/(1dimensionless+(fimp_albumin/fimp_fu)*"
+        "(1dimensionless-fu_ref_drg)/fu_ref_drg)"
+    )
     assert initial[ids.bp("drg")].replace(" ", "") == "1dimensionless-HCT"
     assert initial["GU__Vgu"].replace(" ", "") == "Vsi+Vla"
     assert initial["LI__Vpl"].replace(" ", "") == "Vli*f_vas_li*(1dimensionless-HCT)"

@@ -88,6 +88,51 @@ def test_every_class_has_a_color() -> None:
         assert set(renal) <= set(impairment.RENAL_COLORS_END_STAGE)
     assert set(impairment.CIRRHOSIS) <= set(impairment.CIRRHOSIS_COLORS)
     assert set(impairment.CARDIAC) <= set(impairment.CARDIAC_COLORS)
+    assert set(impairment.CHILD_PUGH) <= set(impairment.CIRRHOSIS_COLORS)
+    assert set(impairment.HEART_FAILURE) <= set(impairment.HEART_FAILURE_COLORS)
+
+
+def test_the_child_pugh_severity_of_the_library() -> None:
+    """The Child-Pugh classes are the severities `CP_severity` 0 to 3 of the library."""
+    assert list(impairment.CHILD_PUGH.items()) == [
+        ("Control", 0),
+        ("Mild cirrhosis", 1),
+        ("Moderate cirrhosis", 2),
+        ("Severe cirrhosis", 3),
+    ]
+    assert list(impairment.CHILD_PUGH) == list(impairment.CIRRHOSIS)
+
+
+def test_the_heart_failure_severity_of_the_library() -> None:
+    """The NYHA classes are the severities `HF_severity` 0 to 4 of the library."""
+    assert list(impairment.HEART_FAILURE.items()) == [
+        ("Normal cardiac function", 0),
+        ("NYHA I", 1),
+        ("NYHA II", 2),
+        ("NYHA III", 3),
+        ("NYHA IV", 4),
+    ]
+    assert impairment.HEART_FAILURE_COLORS["Normal cardiac function"] == "black"
+
+
+def test_old_maps_unchanged() -> None:
+    """The maps of the models not built on the library keep their values."""
+    assert dict(impairment.CIRRHOSIS) == {
+        "Control": 0,
+        "Mild cirrhosis": 0.3994897959183674,
+        "Moderate cirrhosis": 0.6979591836734694,
+        "Severe cirrhosis": 0.8127551020408164,
+    }
+    assert dict(impairment.CARDIAC) == {
+        "Normal cardiac function": 1.0,
+        "Mild cardiac impairment": 4.75 / 5.25,
+        "Moderate cardiac impairment": 3.5 / 5.25,
+        "Severe cardiac impairment": 3 / 5.25,
+        "Cardiac failure": 0.5,
+    }
+    assert impairment.RENAL_FUNCTION["Moderate renal impairment"] == 32.5 / 101.0
+    assert impairment.RENAL_FUNCTION_GFR["End stage renal disease"] == 10.5 / 101.0
+    assert impairment.RENAL_FUNCTION_90["End stage renal disease"] == 9.0 / 90.0
 
 
 def test_the_labels_and_units_of_the_pk_parameters() -> None:

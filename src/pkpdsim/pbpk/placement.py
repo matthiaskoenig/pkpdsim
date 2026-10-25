@@ -69,6 +69,7 @@ from pkpdsim.pbpk.chemistry import (
     Transport,
 )
 from pkpdsim.pbpk.data import cite
+from pkpdsim.pbpk.impairment import organ_activity
 from pkpdsim.pbpk.organs import Organ, Part
 from pkpdsim.pbpk.parts import Parts
 from pkpdsim.pbpk.proteins import Inhibition
@@ -408,10 +409,17 @@ def has_turnover(protein: str, ctx: "OrganContext") -> bool:
 
 
 def _activity(protein: str | None, ctx: "OrganContext") -> str:
-    """The factor of the protein on a rate: `f_<protein>`, times `E_<protein>`."""
+    """The factor of the protein on a rate: `f_<protein>`, times `E_<protein>`.
+
+    In the liver times the factor of the impairment `fimp_<protein>` of a
+    protein with data of impairment (`pkpdsim.pbpk.impairment`).
+    """
     if protein is None:
         return ""
     factor = f"{ids.activity(protein)} * "
+    impaired = organ_activity(ctx.organ, protein)
+    if impaired is not None:
+        factor += f"{impaired} * "
     if has_turnover(protein, ctx):
         factor += f"{ids.enzyme(protein)} * "
     return factor

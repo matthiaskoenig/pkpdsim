@@ -118,3 +118,39 @@ doi = "10.1016/j.ejps.2016.03.018"
 [Huang2018]
 citation = "Huang W, Isoherranen N. Development of a dynamic physiologically based mechanistic kidney model to predict renal clearance. CPT Pharmacometrics Syst Pharmacol 7(9):593-602, 2018."
 doi = "10.1002/psp4.12321"
+
+[Edginton2008]
+citation = "Edginton AN, Willmann S. Physiology-based simulations of a pathological condition: prediction of pharmacokinetics in patients with liver cirrhosis. Clin Pharmacokinet 47(11):743-752, 2008."
+doi = "10.2165/00003088-200847110-00005"
+
+[ElKhateeb2021]
+citation = "El-Khateeb E, Achour B, Al-Majdoub ZM, Barber J, Rostami-Hodjegan A. Non-uniformity of changes in drug-metabolizing enzymes and transporters in liver cirrhosis: implications for drug dosage adjustment. Mol Pharm 18(9):3563-3577, 2021."
+doi = "10.1021/acs.molpharmaceut.1c00462"
+
+[Koller2021]
+citation = "Köller A, Grzegorzewski J, Tautenhahn HM, König M. Prediction of survival after partial hepatectomy using a physiologically based pharmacokinetic model of indocyanine green liver function tests. Front Physiol 12:730418, 2021."
+doi = "10.3389/fphys.2021.730418"
+
+[Malik2020]
+citation = "Malik PRV, Yeung CHT, Ismaeil S, Advani U, Djie S, Edginton AN. A physiological approach to pharmacokinetics in chronic kidney disease. J Clin Pharmacol 60(S1):S52-S62, 2020."
+doi = "10.1002/jcph.1713"
+
+[Yoshida2016]
+citation = "Yoshida K, Sun B, Zhang L, Zhao P, Abernethy DR, Nolin TD, Rostami-Hodjegan A, Zineh I, Huang SM. Systematic and quantitative assessment of the effect of chronic kidney disease on CYP2D6 and CYP3A4/5. Clin Pharmacol Ther 100(1):75-87, 2016."
+doi = "10.1002/cpt.337"
+
+[Tan2018]
+citation = "Tan ML, Yoshida K, Zhao P, Zhang L, Nolin TD, Piquette-Miller M, Galetin A, Huang SM. Effect of chronic kidney disease on nonrenal elimination pathways: a systematic assessment of CYP1A2, CYP2C8, CYP2C9, CYP2C19, and OATP. Clin Pharmacol Ther 103(5):854-867, 2018."
+doi = "10.1002/cpt.807"
+
+[Rasool2015]
+citation = "Rasool MF, Khalil F, Läer S. A physiologically based pharmacokinetic drug-disease model to predict carvedilol exposure in adult and paediatric heart failure patients by incorporating pathophysiological changes in hepatic and renal blood flows. Clin Pharmacokinet 54(9):943-962, 2015."
+doi = "10.1007/s40262-015-0253-7"
+
+[Gu2025]
+citation = "Gu W, Shao Q, Jiang L. Predicting pharmacokinetics of drugs in patients with heart failure and optimizing their dosing strategies using a physiologically based pharmacokinetic model. Pharmaceutics 17(11):1394, 2025."
+doi = "10.3390/pharmaceutics17111394"
+
+[McNamara2002]
+citation = "McNamara PJ, Alcorn J. Protein binding predictions in infants. AAPS PharmSci 4(1):E4, 2002."
+doi = "10.1208/ps040104"

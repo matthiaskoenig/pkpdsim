@@ -23,17 +23,25 @@ The sinks are those of `pkpdsim.pbpk.sinks`, the observers (unbound and blood co
 of `pkpdsim.pbpk.observers`.
 
 Every quantity which depends on parameters only (the physiology, the
-compartments of the pools and the organs, `fu`, `BP`, the coefficients and
-exchanges of the organs) is a constant with an initial assignment, not an
-assignment rule: a change before the simulation (a change of an experiment,
-which sbmlsim applies with the initial assignments which read it) is
-followed, a change during the simulation is not. Only what reads a species
-(the outflow concentrations `Cout_<o>_<s>`, the observers) and the rate of
-an intravenous injection `Kiv_<s>` (of the dose protocol, which changes it
-between doses) are assignment rules.
+impairment, the compartments of the pools and the organs, `fu`, `BP`, the
+coefficients and exchanges of the organs) is a constant with an initial
+assignment, not an assignment rule: a change before the simulation (a change
+of an experiment, which sbmlsim applies with the initial assignments which
+read it) is followed, a change during the simulation is not. Only what reads
+a species (the outflow concentrations `Cout_<o>_<s>`, the observers) and the
+rate of an intravenous injection `Kiv_<s>` (of the dose protocol, which
+changes it between doses) are assignment rules. A parameter which changes
+during a simulation is named in `PBPKDefinition.dynamic`: every quantity
+downstream of it, in the top model and in the organs, is an assignment rule
+(`_dynamic`).
+
+The top model holds the impaired organ function as well
+(`pkpdsim.pbpk.impairment`): the severities and their factors on the
+physiology, `fu` and the activity of the proteins of the liver.
 """
 
 import copy
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -41,6 +49,7 @@ from pathlib import Path
 from sbmlutils.comp import flatten_sbml
 from sbmlutils.factory import (
     PORT_SUFFIX,
+    AssignmentRule,
     Compartment,
     InitialAssignment,
     Model,
@@ -63,6 +72,11 @@ from pkpdsim.pbpk import ids, variants
 from pkpdsim.pbpk.chemistry import Membrane, Metabolism, Transport
 from pkpdsim.pbpk.data import cite
 from pkpdsim.pbpk.definition import PBPKDefinition
+from pkpdsim.pbpk.impairment import (
+    impairment_objects,
+    physiology_factors,
+    unbound_fraction,
+)
 from pkpdsim.pbpk.observers import observer_objects
 from pkpdsim.pbpk.organ import Boundary, GutComponent, OrganComponent, OrganContext
 from pkpdsim.pbpk.organs import Organ, Part, Pool
@@ -254,6 +268,7 @@ def compose(definition: PBPKDefinition) -> Model:
         submodels.append(Submodel(submodel, modelRef=md.sid, name=organ.name.lower()))
         replaced += top.connect(organ, submodel, boundary)
     top.add(observer_objects(definition))
+    _dynamic(definition, top.objects, model_definitions, submodels, replaced)
 
     return Model(
         sid=definition.sid,
@@ -266,6 +281,102 @@ def compose(definition: PBPKDefinition) -> Model:
         submodels=submodels,
         replaced_elements=replaced,
     )
+
+
+_TOKEN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+"""An identifier in a formula."""
+
+
+def _symbols(formula: object) -> set[str]:
+    """The identifiers of a formula (ids, units and functions alike)."""
+    return set(_TOKEN.findall(str(formula)))
+
+
+def _to_rules(
+    assignments: list[InitialAssignment],
+    elements: Iterable[Parameter | Compartment],
+    dynamic: set[str],
+) -> list[AssignmentRule]:
+    """Turn the initial assignments which depend on dynamic ids into assignment rules.
+
+    `dynamic` is extended by the converted ids; the converted assignments are
+    removed from `assignments` and their elements become variable.
+
+    Returns:
+        The assignment rules.
+    """
+    rules: list[AssignmentRule] = []
+    changed = True
+    while changed:
+        changed = False
+        for ia in list(assignments):
+            if ia.symbol in dynamic or not _symbols(ia.value) & dynamic:
+                continue
+            assignments.remove(ia)
+            rules.append(AssignmentRule(ia.symbol, ia.value, ia.unit))
+            dynamic.add(ia.symbol)
+            changed = True
+    for element in elements:
+        if element.sid in dynamic:
+            element.constant = False
+    return rules
+
+
+def _dynamic(
+    definition: PBPKDefinition,
+    objects: list[Sbase],
+    model_definitions: list[ModelDefinition],
+    submodels: list[Submodel],
+    replaced: list[ReplacedElement],
+) -> None:
+    """Keep the quantities downstream of the dynamic parameters as assignment rules.
+
+    The parameters `definition.dynamic` change during a simulation: every
+    initial assignment of the top model which reads one of them (directly or
+    through another such quantity) becomes an assignment rule, and so does
+    every initial assignment of an organ which reads such an element through
+    its port; these elements and the dynamic parameters are variable.
+    Everything else stays an initial assignment (a change before the
+    simulation is followed, a change during it is not).
+
+    Raises:
+        ValueError: if a dynamic name is no parameter of the top model.
+    """
+    if not definition.dynamic:
+        return
+    parameters = {str(o.sid) for o in objects if isinstance(o, Parameter)}
+    unknown = sorted(set(definition.dynamic) - parameters)
+    if unknown:
+        raise ValueError(
+            f"{definition.sid}: dynamic {unknown} are no parameters of the top model."
+        )
+    dynamic = set(definition.dynamic)
+    assignments = [o for o in objects if isinstance(o, InitialAssignment)]
+    elements = [o for o in objects if isinstance(o, Parameter | Compartment)]
+    rules = _to_rules(assignments, elements, dynamic)
+    objects[:] = [
+        o for o in objects if not isinstance(o, InitialAssignment) or o in assignments
+    ]
+    objects += rules
+    by_submodel = {str(sm.sid): str(sm.modelRef) for sm in submodels}
+    by_sid = {str(md.sid): md for md in model_definitions}
+    seeds: dict[str, set[str]] = {}
+    for r in replaced:
+        if r.elementRef in dynamic:
+            local = str(r.portRef).removesuffix(PORT_SUFFIX)
+            seeds.setdefault(by_submodel[str(r.submodelRef)], set()).add(local)
+    for md_sid, local in seeds.items():
+        md = by_sid[md_sid]
+        local_assignments = list(md.assignments or [])
+        md.rules = [
+            *(md.rules or []),
+            *_to_rules(
+                local_assignments,
+                [*(md.parameters or []), *(md.compartments or [])],
+                local,
+            ),
+        ]
+        md.assignments = local_assignments
 
 
 def build(definition: PBPKDefinition, output_dir: Path) -> BuildResult:
@@ -300,7 +411,10 @@ class _Top:
 
     def __init__(self, definition: PBPKDefinition) -> None:
         self.definition = definition
-        self.objects: list[Sbase] = list(physiology_objects(definition.sex))
+        self.objects: list[Sbase] = [
+            *physiology_objects(definition.sex, physiology_factors()),
+            *impairment_objects(definition),
+        ]
         self.known: set[str] = {
             str(o.sid) for o in self.objects if isinstance(o, Parameter)
         }
@@ -428,10 +542,15 @@ class _Top:
         )
         self._initial(
             ids.fu(sid),
-            ids.fu_ref(sid),
+            unbound_fraction(s),
             U.dimensionless,
             f"fraction unbound {sid}",
-            "Fraction unbound in plasma of the individual.",
+            "Fraction unbound in plasma of the individual: the reference fraction "
+            "scaled with the binding protein under impairment (McNamara 2002, "
+            "`pkpdsim.pbpk.impairment`)."
+            if s.binding is not None
+            else "Fraction unbound in plasma of the individual; the substance does "
+            "not bind to plasma proteins.",
         )
         if s.excretion.urine:
             self.add(

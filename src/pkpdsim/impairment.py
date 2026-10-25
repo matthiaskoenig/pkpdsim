@@ -7,6 +7,15 @@ colors draw a class in every figure of the model alike. The base of the
 experiments of a model (`pkpdsim.experiment.PKPDSimulationExperiment`) has
 `RENAL_FUNCTION`, `CIRRHOSIS` and `CARDIAC` as its maps; a model which defines
 the classes otherwise assigns another preset in its base.
+
+The models built on the PBPK library (`pkpdsim.pbpk.impairment`) have other
+parameters: `CP_severity` (liver cirrhosis, 0 healthy and 1, 2, 3 the
+Child-Pugh classes A, B, C), `f_renal_function` (the GFR relative to healthy,
+which gives the stage of chronic kidney disease) and `HF_severity` (heart
+failure, 0 healthy and 1 to 4 the NYHA classes I to IV). Their maps are
+`CHILD_PUGH` (colors `CIRRHOSIS_COLORS`), the `RENAL_FUNCTION` presets and
+`HEART_FAILURE` (colors `HEART_FAILURE_COLORS`); the maps of the other models
+keep their values and meaning.
 """
 
 from collections.abc import Mapping
@@ -91,4 +100,32 @@ CARDIAC_COLORS: Mapping[str, str] = {
     "Severe cardiac impairment": "#67001F",
     "Cardiac failure": "#67001F",
     "CHF": "#67001F",
+}
+
+#: the severity `CP_severity` of the Child-Pugh classes of the models built on
+#: the PBPK library (`pkpdsim.pbpk.impairment`); colors `CIRRHOSIS_COLORS`
+CHILD_PUGH: Mapping[str, float] = {
+    "Control": 0,
+    "Mild cirrhosis": 1,  # CPT A
+    "Moderate cirrhosis": 2,  # CPT B
+    "Severe cirrhosis": 3,  # CPT C
+}
+
+#: the severity `HF_severity` of the NYHA classes of heart failure of the models
+#: built on the PBPK library (`pkpdsim.pbpk.impairment`)
+HEART_FAILURE: Mapping[str, float] = {
+    "Normal cardiac function": 0,
+    "NYHA I": 1,
+    "NYHA II": 2,
+    "NYHA III": 3,
+    "NYHA IV": 4,
+}
+
+#: the colors of the classes of `HEART_FAILURE`
+HEART_FAILURE_COLORS: Mapping[str, str] = {
+    "Normal cardiac function": "black",
+    "NYHA I": "#FDDBC7",
+    "NYHA II": "#F4A582",
+    "NYHA III": "#D6604D",
+    "NYHA IV": "#67001F",
 }
