@@ -148,3 +148,33 @@ def test_submodels_unique_and_not_physiology() -> None:
     assert len(set(submodels)) == len(submodels)
     taken = {str(getattr(o, "sid", "")) for o in physiology_objects()}
     assert not taken & set(submodels)
+
+
+def test_tubule_ids() -> None:
+    """The ids of the tubule of the nephron kidney: the segment is always in the id."""
+    assert ids.TUBULE_SEGMENTS == ("pt", "lh", "dt", "cd")
+    assert ids.tubule("api", "pt") == "Ctub_pt_api"
+    assert ids.tubule_volume("cd") == "Vtub_cd"
+    assert ids.tubule_flow_fraction("lh") == "f_tub_lh"
+    assert ids.tubule_reaction("api", "cd") == "J_tub_cd_api"
+    assert ids.tubule_reabsorption_reaction("api") == "J_reab_api"
+
+
+def test_species_of_tubule_exact_substance() -> None:
+    """The tubule species match their substance only, also for ids which start with a segment token.
+
+    The segment token is mandatory after `Ctub_`, so `Ctub_pt_pt_x` is the
+    substance `pt_x` and never `x`; no substance token is reserved for it.
+    """
+    all_ids = [
+        "KI__Ctub_pt_x",
+        "KI__Ctub_cd_x",
+        "KI__Ctub_pt_pt_x",
+        "KI__Ctub_lh_x_m",
+        "KI__Ctub_x",
+        "KI__Ctub_ic_x",
+        "KI__Vtub_pt",
+    ]
+    assert ids.species_of("x", all_ids) == ["KI__Ctub_pt_x", "KI__Ctub_cd_x"]
+    assert ids.species_of("pt_x", all_ids) == ["KI__Ctub_pt_pt_x"]
+    assert ids.species_of("x_m", all_ids) == ["KI__Ctub_lh_x_m"]

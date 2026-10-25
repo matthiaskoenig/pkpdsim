@@ -419,8 +419,8 @@ def test_variants() -> None:
     model = compose(d)
     assert "custom_li" in {md.sid for md in model.model_definitions or []}
 
-    unknown = definition(variants=Variants(organs={Organ.KIDNEY: "nephron"}))
-    with pytest.raises(ValueError, match=r"'nephron'.*'ki'"):
+    unknown = definition(variants=Variants(organs={Organ.KIDNEY: "glomerular"}))
+    with pytest.raises(ValueError, match=r"'glomerular'.*'ki'.*'nephron'"):
         compose(unknown)
 
 

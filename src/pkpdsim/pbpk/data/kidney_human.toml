@@ -1,0 +1,31 @@
+# The nephron of the reference adult: the tubule segments of the nephron
+# kidney (proximal tubule, loop of Henle, distal tubule, collecting duct).
+#
+# Per segment: the tubular fluid flow leaving the segment as fraction of the
+# glomerular filtration rate (`flow_fraction`; the flow entering the proximal
+# tubule is the GFR) and the volume of its lumen (l, both kidneys). The flows
+# are those at the beginning and the end of the tubule regions of Scotcher
+# 2016, Table 1 (120 ml/min entering the proximal tubule, 43.2, 24.0, 11.6 and
+# 1.0 ml/min leaving proximal tubule, loop of Henle, distal tubule and
+# collecting duct), as fractions of the 120 ml/min, so that the tubular flow
+# follows the GFR of the individual. The water reabsorbed in a segment is the
+# difference of the flows entering and leaving it. The lumen volumes are the
+# cylinders of Huang 2018, Table 1 (two kidneys of 0.9 million nephrons, the
+# lengths and diameters compiled by Scotcher 2016), summed over the
+# subsegments of a segment.
+
+[proximal_tubule]
+flow_fraction = { value = 0.36, unit = "dimensionless", source = "Scotcher2016", notes = "Table 1, tubular flow at the end of the proximal tubule 43.2 ml/min of 120 ml/min at its beginning (the GFR): 64 % of the filtered water is reabsorbed in the proximal tubule" }
+volume = { value = 0.0915, unit = "l", source = "Huang2018", notes = "Table 1, three proximal tubule subsegments of 0.0305 l each" }
+
+[loop_of_henle]
+flow_fraction = { value = 0.2, unit = "dimensionless", source = "Scotcher2016", notes = "Table 1, tubular flow at the end of the loop of Henle 24.0 ml/min of 120 ml/min" }
+volume = { value = 0.0054, unit = "l", source = "Huang2018", notes = "Table 1, descending and ascending limb of 0.0027 l each" }
+
+[distal_tubule]
+flow_fraction = { value = 0.09667, unit = "dimensionless", source = "Scotcher2016", notes = "Table 1, tubular flow at the end of the distal tubule 11.6 ml/min of 120 ml/min" }
+volume = { value = 0.0194, unit = "l", source = "Huang2018", notes = "Table 1, distal tubule 0.0194 l" }
+
+[collecting_duct]
+flow_fraction = { value = 0.008333, unit = "dimensionless", source = "Scotcher2016", notes = "Table 1, tubular flow at the end of the collecting duct (the urine flow) 1.0 ml/min of 120 ml/min; the urine flow varies with the water intake and antidiuretic hormone, an experiment may change the fraction" }
+volume = { value = 0.005, unit = "l", source = "ModelChoice", notes = "no volume of a source could be verified: Huang 2018 (Table 1) give 0.237 l for each of five collecting duct subsegments, 1.19 l in total, more than the kidneys themselves (0.31 kg, ICRP 89), which is not physical and not used; chosen of the order of the lumen volumes of loop of Henle and distal tubule (0.0054 and 0.0194 l). The volume sets the delay of the urinary excretion (the mean residence time of the drug in the collecting duct is volume over the urine flow, 5 min), not the renal clearance at steady state" }

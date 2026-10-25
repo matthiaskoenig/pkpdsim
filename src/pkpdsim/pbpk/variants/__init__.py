@@ -4,7 +4,8 @@ A variant is an `OrganComponent` registered under a name for an organ; a
 definition selects it by name (`Variants(organs={Organ.LIVER: "zonated"})`)
 or gives a component (`ZonatedLiver(n_zones=4, profiles=...)`). Every organ
 has the standard organ (`standard`); the liver has the zonated liver
-(`zonated`, 8 zones placed by volume); the intestine has the segmented
+(`zonated`, 8 zones placed by volume); the kidney has the nephron kidney
+(`nephron`, filtration into the segments of the tubule); the intestine has the segmented
 intestine (`segmented`, the default) and the single lumen (`single_lumen`),
 which replace small and large intestine with one submodel `GU`.
 """
@@ -12,6 +13,7 @@ which replace small and large intestine with one submodel `GU`.
 from pkpdsim.pbpk.organ import OrganComponent, StandardOrgan
 from pkpdsim.pbpk.organs import Organ
 from pkpdsim.pbpk.variants.intestine import SegmentedIntestine, SingleLumen
+from pkpdsim.pbpk.variants.kidney_nephron import NephronKidney
 from pkpdsim.pbpk.variants.liver_zonated import ZonatedLiver
 
 __all__ = ["DEFAULTS", "lookup", "names", "register"]
@@ -77,5 +79,6 @@ def lookup(organ: Organ, name: str) -> OrganComponent:
 for _organ in Organ:
     register(_organ, "standard", StandardOrgan())
 register(Organ.LIVER, "zonated", ZonatedLiver())
+register(Organ.KIDNEY, "nephron", NephronKidney())
 register(Organ.SMALL_INTESTINE, "segmented", SegmentedIntestine())
 register(Organ.SMALL_INTESTINE, "single_lumen", SingleLumen())

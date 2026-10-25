@@ -44,6 +44,7 @@ __all__ = [
     "QHA",
     "QPO",
     "SV_TIS",
+    "TUBULE_SEGMENTS",
     "T_LUMEN",
     "T_STOMACH_FED",
     "VBILE",
@@ -151,6 +152,11 @@ __all__ = [
     "tissue_volume_total_ref",
     "transit_reaction",
     "transit_time",
+    "tubule",
+    "tubule_flow_fraction",
+    "tubule_reabsorption_reaction",
+    "tubule_reaction",
+    "tubule_volume",
     "unbound",
     "urine",
     "vascular_fraction",
@@ -256,6 +262,9 @@ GUT_SEGMENTS: tuple[str, ...] = (
 """The lumen segments of the segmented intestine, in the order of the transit:
 stomach, duodenum, upper and lower jejunum, upper and lower ileum, caecum,
 colon ascendens, transversum, descendens, sigmoid and rectum."""
+TUBULE_SEGMENTS: tuple[str, ...] = ("pt", "lh", "dt", "cd")
+"""The tubule segments of the nephron kidney, in the order of the tubular
+flow: proximal tubule, loop of Henle, distal tubule and collecting duct."""
 PS_VAS = "PS_vas"
 """The local id of the exchange between plasma and interstitium of an organ."""
 
@@ -562,6 +571,38 @@ def solid(s: str, seg: str) -> str:
     undissolved drug.
     """
     return _segment("Asolid", s, seg)
+
+
+def tubule(s: str, seg: str) -> str:
+    """The local id of the concentration in the lumen of a tubule segment, `Ctub_pt_<s>`.
+
+    The segment is always part of the id (`TUBULE_SEGMENTS`), so the id
+    names its substance without ambiguity.
+    """
+    return f"Ctub_{seg}_{s}"
+
+
+def tubule_volume(seg: str) -> str:
+    """The local id of the volume of the lumen of a tubule segment, `Vtub_pt`."""
+    return f"Vtub_{seg}"
+
+
+def tubule_flow_fraction(seg: str) -> str:
+    """The local id of the tubular flow leaving a segment as fraction of the GFR, `f_tub_pt`."""
+    return f"f_tub_{seg}"
+
+
+def tubule_reaction(s: str, seg: str) -> str:
+    """The local id of the tubular flow of `s` out of a segment, `J_tub_pt_<s>`.
+
+    Out of the collecting duct the urinary excretion `J_tub_cd_<s>`.
+    """
+    return f"J_tub_{seg}_{s}"
+
+
+def tubule_reabsorption_reaction(s: str) -> str:
+    """The local id of the reabsorbed fraction of `s` out of the collecting duct, `J_reab_<s>`."""
+    return f"J_reab_{s}"
 
 
 def mucosa(s: str, seg: str | None = None) -> str:
@@ -898,6 +939,7 @@ def ec50(protein: str, s: str) -> str:
 _PARTS = "|".join(p.value for p in Part)
 _POOLS = "|".join(p.value for p in Pool)
 _SEGMENTS = "|".join(GUT_SEGMENTS)
+_TUBULE = "|".join(TUBULE_SEGMENTS)
 
 
 def species_of(s: str, ids: Iterable[str]) -> list[str]:
@@ -913,10 +955,11 @@ def species_of(s: str, ids: Iterable[str]) -> list[str]:
     Returns:
         The ids which are an organ species (of a zone as well), a pool
         species, a blood cell pool species, a lumen, undissolved or mucosa
-        species of `s`, in the order of `ids`.
+        species, a tubule species of `s`, in the order of `ids`.
     """
     pattern = re.compile(
         rf"(?:C(?:(?:{_PARTS})(?:_z\d+)?|(?:{_POOLS})(?:_{Part.BLOOD_CELLS.value})?)"
-        rf"|(?:Clumen|Cmu|Asolid)(?:_(?:{_SEGMENTS}))?)_{re.escape(s)}"
+        rf"|(?:Clumen|Cmu|Asolid)(?:_(?:{_SEGMENTS}))?"
+        rf"|Ctub_(?:{_TUBULE}))_{re.escape(s)}"
     )
     return [i for i in ids if pattern.fullmatch(i.rsplit("__", 1)[-1])]

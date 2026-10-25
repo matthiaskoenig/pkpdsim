@@ -42,6 +42,12 @@ A zonated organ (`pkpdsim.pbpk.variants.liver_zonated`) places every
 metabolism and transport into the parts of each of its zones (`zone`), with
 the ids of the zone (`Cti_z1_<s>`, `DRG2M_z1`) and the share of the zone of
 the capacity of the organ (`capacity`); the apical sink is that of the organ.
+
+A variant with a lumen of its own on the apical side of the cell gives it
+(`Apical`): the nephron kidney (`pkpdsim.pbpk.variants.kidney_nephron`)
+places the apical transport between the cells of the kidney and the lumen of
+the proximal tubule, an efflux secretes into it, an influx reabsorbs from it
+(with the inhibitors of its protein in the lumen).
 """
 
 from collections.abc import Callable, Iterable, Mapping
@@ -75,6 +81,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "ONE",
+    "Apical",
     "Inhibitors",
     "Sink",
     "apical_sink",
@@ -138,6 +145,22 @@ class Sink:
     species: str
     compartment: str
     amount: bool
+
+
+@dataclass(frozen=True)
+class Apical:
+    """The apical side of the cell of a variant, instead of the sink of the organ.
+
+    Attributes:
+        name: the apical compartment in words, for the notes
+            (`lumen of the proximal tubule`).
+        species: the local id of the species of a substance (by its id) on
+            the apical side; its concentration is unbound (a lumen without
+            proteins).
+    """
+
+    name: str
+    species: Callable[[str], str]
 
 
 def apical_sink(organ: Organ, s: str) -> Sink:
@@ -345,10 +368,18 @@ def _inhibitor_site(
     organ: Organ,
     parts: Mapping[str, Parts],
     zone: str | None = None,
+    apical: Apical | None = None,
 ) -> tuple[str, str]:
-    """The species of an inhibitor where a process takes its substrate and its unbound concentration."""
+    """The species of an inhibitor where a process takes its substrate and its unbound concentration.
+
+    `source` `None` is the apical side: the sink of the organ, or the
+    apical compartment of a variant.
+    """
     if source is None:
-        species = apical_sink(organ, inhibitor.sid).species
+        if apical is not None:
+            species = apical.species(inhibitor.sid)
+        else:
+            species = apical_sink(organ, inhibitor.sid).species
         return species, species
     built = built_parts(parts[inhibitor.sid])
     part = next(p for p in _EQUIVALENT_PARTS[source] if p in built)
@@ -410,11 +441,14 @@ def _inhibitors(
     ctx: "OrganContext",
     parts: Mapping[str, Parts],
     zone: str | None,
+    apical: Apical | None = None,
 ) -> Inhibitors:
     """The competitive and the uncompetitive terms of the inhibitors of the protein."""
     source = process_source(process, parts) if process.protein is not None else None
     return inhibitor_terms(
-        process, ctx, lambda s: _inhibitor_site(source, s, ctx.organ, parts, zone)
+        process,
+        ctx,
+        lambda s: _inhibitor_site(source, s, ctx.organ, parts, zone, apical),
     )
 
 
@@ -528,6 +562,7 @@ def place(
     parts: Mapping[str, Parts],
     capacity: str | None = None,
     zone: str | None = None,
+    apical: Apical | None = None,
 ) -> list[Reaction]:
     """Place a process of the chemistry in the parts of the standard organ.
 
@@ -546,6 +581,9 @@ def place(
             its rate itself and is not scaled.
         zone: the zone of a zonated organ in which the process is placed,
             `None` for the organ.
+        apical: the apical side of the cell of a variant (the lumen of the
+            proximal tubule of the nephron kidney), `None` for the sink of
+            the organ.
 
     Returns:
         The reactions of the process.
@@ -553,7 +591,8 @@ def place(
     Raises:
         ValueError: if the process is of another organ, transports a substance
             without interstitial and intracellular species, is apical in an
-            organ without sink, acts in a part which is not built, or is a
+            organ without sink, is an apical influx from the urine of the
+            standard kidney, acts in a part which is not built, or is a
             custom reaction in a zone (its rate is that of the whole organ).
     """
     if process.organ is not ctx.organ:
@@ -564,7 +603,7 @@ def place(
     if isinstance(process, Metabolism):
         return [_metabolism(process, ctx, parts, capacity, zone)]
     if isinstance(process, Transport):
-        return [_transport(process, ctx, parts, capacity, zone)]
+        return [_transport(process, ctx, parts, capacity, zone, apical)]
     if zone is not None:
         raise ValueError(
             f"Custom reaction '{process.sid}' cannot be placed in zone '{zone}': "
@@ -751,6 +790,7 @@ def _transport(
     parts: Mapping[str, Parts],
     capacity: str | None,
     zone: str | None,
+    apical: Apical | None = None,
 ) -> Reaction:
     """The reaction of an active transport across the membrane of the cell."""
     substance = _substance(ctx, process.substance)
@@ -766,6 +806,9 @@ def _transport(
         other = ids.species(Part.INTERSTITIAL, s, zone)
         outside = unbound(Part.INTERSTITIAL, substance, ctx.organ, zone)
         where = "interstitium"
+    elif apical is not None:
+        other = outside = apical.species(s)
+        where = apical.name
     else:
         sink = apical_sink(ctx.organ, s)
         if process.direction is Direction.INFLUX and ctx.organ is Organ.KIDNEY:
@@ -788,7 +831,7 @@ def _transport(
             f"{cell} -> {other}",
             unbound(Part.INTRACELLULAR, substance, ctx.organ, zone),
         )
-    inhibitors = _inhibitors(process, ctx, parts, zone)
+    inhibitors = _inhibitors(process, ctx, parts, zone, apical)
     rate, pars = rate_law(process, ctx, cu, capacity, inhibitors)
     return Reaction(
         sid=ids.segment_process(process.sid, zone),
