@@ -89,6 +89,7 @@ __all__ = [
     "feces",
     "feces_reaction",
     "filtration_reaction",
+    "fkp",
     "flat",
     "flow_fraction",
     "fraction_absorbed",
@@ -555,6 +556,11 @@ def kp(s: str) -> str:
 def kp_organ(organ: Organ, s: str) -> str:
     """The id of the tissue to plasma coefficient of an organ, `Kp_li_<s>`."""
     return f"Kp_{organ.value}_{s}"
+
+
+def fkp(s: str) -> str:
+    """The id of the factor of the coefficients of a Kp method, `fKp_<s>`."""
+    return f"fKp_{s}"
 
 
 def ftissue(s: str) -> str:

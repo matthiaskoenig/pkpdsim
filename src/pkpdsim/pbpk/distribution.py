@@ -26,6 +26,7 @@ from sbmlutils.factory import Parameter, UnitDefinition
 from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk.data import load
+from pkpdsim.pbpk.kp import kp_values
 from pkpdsim.pbpk.organs import Organ
 from pkpdsim.pbpk.physiology import reference_fractions
 from pkpdsim.pbpk.placement import value_parameter
@@ -183,8 +184,8 @@ def check_kp(substance: Substance, organ: Organ) -> None:
     """Check that the Kp of a substance leaves a positive `K_cell_pls` in an organ.
 
     The check uses the fractions of the reference individuals of both sexes
-    and the fu of the definition; the Kp of a method is computed per organ
-    and checked there.
+    and the fu of the definition; the Kp of a method is computed per sex (for
+    its reference hematocrit) and checked with the factor of the method.
 
     Args:
         substance: the substance.
@@ -195,16 +196,19 @@ def check_kp(substance: Substance, organ: Organ) -> None:
             whole tissue, `f_int*K_int_pls/(f_int + f_cell)`.
     """
     dist = substance.distribution
-    if not isinstance(dist, Kp):
+    if dist is None:
         return
-    kp = number(dist.overrides.get(organ, dist.value))
     fu = number(substance.binding.fu) if substance.binding is not None else 1.0
     for sex, (f_vas, f_int) in reference_fractions(organ).items():
+        if isinstance(dist, Kp):
+            kp = number(dist.overrides.get(organ, dist.value))
+        else:
+            kp = kp_values(substance, sex)[organ].value * number(dist.factor)
         if k_cell_pls_value(kp, fu, f_vas, f_int) <= 0:
             share = f_int * k_int_pls_value(fu) / (1.0 - f_vas)
             raise ValueError(
-                f"{substance.sid}: Kp {kp} in organ '{organ.value}' is not above "
-                f"the interstitial share {share:.4g} of the tissue ({sex.value} "
-                f"reference individual), the full form would need "
+                f"{substance.sid}: Kp {kp:.4g} in organ '{organ.value}' is not "
+                f"above the interstitial share {share:.4g} of the tissue "
+                f"({sex.value} reference individual), the full form would need "
                 f"K_cell_pls <= 0."
             )

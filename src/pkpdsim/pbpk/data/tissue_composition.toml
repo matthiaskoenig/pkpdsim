@@ -1,0 +1,180 @@
+# The tissue composition of the Kp method of Rodgers & Rowland
+# (`pkpdsim.pbpk.kp`).
+#
+# The method (Rodgers, Leahy & Rowland 2005, moderate-to-strong bases;
+# Rodgers & Rowland 2006, acids, very weak bases, neutrals and zwitterions)
+# predicts the tissue to unbound plasma coefficient Kpu from fractional tissue
+# volumes of extracellular water (f_ew), intracellular water (f_iw), neutral
+# lipids (f_nl) and neutral phospholipids (f_np), the acidic phospholipids of
+# the tissue (ap, mg/g tissue) and the tissue to plasma ratios of albumin and
+# of lipoproteins. The 2005 and 2006 papers were not accessible (publisher
+# paywall); every number below is taken from an open source that was read,
+# which names the original:
+#
+# - the fractional volumes and the protein ratios are the rat tissue
+#   composition of Rodgers & Rowland (corrected for residual blood), which the
+#   method applies to human tissues (Rodgers & Rowland 2007; Coutinho 2024:
+#   "rat tissue physiological composition was applied to calculate human
+#   Kpu"), transcribed from Coutinho 2024 Table III (open access, CC BY 4.0);
+#   the four fraction columns of that table are all headed "fNL", their order
+#   is neutral lipid, neutral phospholipid, extracellular water, intracellular
+#   water;
+# - the acidic phospholipids and the erythrocytes are transcribed from the
+#   MATLAB supplement of Huisinga 2012 (GenericPBPKmodel_physiology.m), which
+#   cites Rodgers, Leahy & Rowland 2005 (rat acidic phospholipids, adopted for
+#   human as there), Poulin & Theil 2009 (erythrocyte water) and Rodgers &
+#   Rowland 2007 Table VII (erythrocyte lipids);
+# - the pH values and the vegetable oil:water partition of adipose are those
+#   Yau 2020 (accepted manuscript) states for the method.
+#
+# None of the numbers was verified against Rodgers & Rowland 2005/2006.
+
+[plasma]
+f_nl = { value = 0.0023, unit = "dimensionless", source = "Coutinho2024", notes = "fractional volume of neutral lipids of plasma (f_NL,P), Materials and Methods, Eq. 3; the rat plasma value of the method, not verified against Rodgers & Rowland 2006" }
+f_np = { value = 0.0013, unit = "dimensionless", source = "Coutinho2024", notes = "fractional volume of neutral phospholipids of plasma (f_NP,P), Materials and Methods, Eq. 3; the rat plasma value of the method, not verified against Rodgers & Rowland 2006" }
+ph = { value = 7.4, unit = "dimensionless", source = "Yau2020", notes = "pH of plasma, Methods line 107, citing Rodgers, Leahy & Rowland 2005" }
+
+[intracellular]
+ph = { value = 7.0, unit = "dimensionless", source = "Yau2020", notes = "pH of the intracellular water, Methods line 107, citing Rodgers, Leahy & Rowland 2005 (Coutinho 2024 state 7.22, the erythrocyte value; Huisinga 2012 use 7.0)" }
+
+[erythrocytes]
+f_iw = { value = 0.63, unit = "dimensionless", source = "Huisinga2012Supplement", notes = "fractional volume of intracellular water of human erythrocytes, the total water 0.63 (Poulin & Theil 2009) without extracellular water; not verified against the original" }
+f_nl = { value = 0.0033, unit = "dimensionless", source = "Huisinga2012Supplement", notes = "fractional volume of neutral lipids of human erythrocytes (Rodgers & Rowland 2007 Table VII); not verified against the original" }
+f_np = { value = 0.0012, unit = "dimensionless", source = "Huisinga2012Supplement", notes = "fractional volume of neutral phospholipids of human erythrocytes (Rodgers & Rowland 2007 Table VII); not verified against the original" }
+ap = { value = 0.5, unit = "mg/g", source = "Huisinga2012Supplement", notes = "acidic phospholipids of erythrocytes, the rat value of Rodgers, Leahy & Rowland 2005 adopted for human; not verified against the original" }
+ph = { value = 7.22, unit = "dimensionless", source = "Yau2020", notes = "intracellular pH of red blood cells, Methods line 115, citing Rodgers, Leahy & Rowland 2005" }
+
+[adipose]
+vo_slope = { value = 1.115, unit = "dimensionless", source = "Yau2020", notes = "slope of log P_vo:w = 1.115 * log P_o:w - 1.35, the vegetable oil:water partition which replaces P in the lipid terms of adipose (Methods lines 97-98)" }
+vo_intercept = { value = -1.35, unit = "dimensionless", source = "Yau2020", notes = "intercept of log P_vo:w = 1.115 * log P_o:w - 1.35 (Methods line 98)" }
+
+# The tissues, keys of [organs]. f_*: fractional tissue volumes corrected for
+# residual blood; albumin, lipoprotein: tissue to plasma ratios; ap: mg/g tissue.
+
+[tissues.adipose]
+f_nl = { value = 0.853, unit = "dimensionless", source = "Coutinho2024", notes = "Table III; the table gives 0.0016 as neutral lipid and 0.853 as neutral phospholipid of adipose, the two values exchanged (a neutral lipid fraction of 85 % is adipose tissue, Huisinga 2012 supplement: neutral lipid 0.8530, neutral phospholipid 0.0016); the Kpu of adipose of Coutinho 2024 Tables S4-S7 are computed with the exchanged values" }
+f_np = { value = 0.0016, unit = "dimensionless", source = "Coutinho2024", notes = "Table III, exchanged with the neutral lipid of the table (see f_nl)" }
+f_ew = { value = 0.135, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+f_iw = { value = 0.017, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+albumin = { value = 0.049, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+lipoprotein = { value = 0.068, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+ap = { value = 0.4, unit = "mg/g", source = "Huisinga2012Supplement", notes = "rat value of Rodgers, Leahy & Rowland 2005; not verified against the original" }
+
+[tissues.bone]
+f_nl = { value = 0.0174, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+f_np = { value = 0.0016, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+f_ew = { value = 0.1, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+f_iw = { value = 0.346, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+albumin = { value = 0.1, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+lipoprotein = { value = 0.05, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+ap = { value = 0.67, unit = "mg/g", source = "Huisinga2012Supplement", notes = "rat value of Rodgers, Leahy & Rowland 2005; not verified against the original" }
+
+[tissues.brain]
+f_nl = { value = 0.0391, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+f_np = { value = 0.0015, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+f_ew = { value = 0.162, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+f_iw = { value = 0.62, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+albumin = { value = 0.048, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+lipoprotein = { value = 0.041, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+ap = { value = 0.4, unit = "mg/g", source = "Huisinga2012Supplement", notes = "rat value of Rodgers, Leahy & Rowland 2005; not verified against the original" }
+
+[tissues.gut]
+f_nl = { value = 0.0375, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+f_np = { value = 0.0124, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+f_ew = { value = 0.282, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+f_iw = { value = 0.475, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+albumin = { value = 0.158, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+lipoprotein = { value = 0.141, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+ap = { value = 2.41, unit = "mg/g", source = "Huisinga2012Supplement", notes = "rat value of Rodgers, Leahy & Rowland 2005; not verified against the original" }
+
+[tissues.heart]
+f_nl = { value = 0.0135, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+f_np = { value = 0.0106, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+f_ew = { value = 0.32, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+f_iw = { value = 0.456, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+albumin = { value = 0.157, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+lipoprotein = { value = 0.16, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+ap = { value = 2.25, unit = "mg/g", source = "Huisinga2012Supplement", notes = "rat value of Rodgers, Leahy & Rowland 2005; not verified against the original" }
+
+[tissues.kidney]
+f_nl = { value = 0.0121, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+f_np = { value = 0.024, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+f_ew = { value = 0.273, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+f_iw = { value = 0.483, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+albumin = { value = 0.13, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+lipoprotein = { value = 0.137, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+ap = { value = 5.03, unit = "mg/g", source = "Huisinga2012Supplement", notes = "rat value of Rodgers, Leahy & Rowland 2005; not verified against the original" }
+
+[tissues.liver]
+f_nl = { value = 0.0135, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+f_np = { value = 0.0238, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+f_ew = { value = 0.161, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+f_iw = { value = 0.573, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+albumin = { value = 0.086, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+lipoprotein = { value = 0.161, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+ap = { value = 4.56, unit = "mg/g", source = "Huisinga2012Supplement", notes = "rat value of Rodgers, Leahy & Rowland 2005; not verified against the original" }
+
+[tissues.lung]
+f_nl = { value = 0.0215, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+f_np = { value = 0.0123, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+f_ew = { value = 0.336, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+f_iw = { value = 0.446, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+albumin = { value = 0.212, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+lipoprotein = { value = 0.168, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+ap = { value = 3.91, unit = "mg/g", source = "Huisinga2012Supplement", notes = "rat value of Rodgers, Leahy & Rowland 2005; not verified against the original" }
+
+[tissues.muscle]
+f_nl = { value = 0.01, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+f_np = { value = 0.0072, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+f_ew = { value = 0.118, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+f_iw = { value = 0.63, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+albumin = { value = 0.064, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+lipoprotein = { value = 0.059, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+ap = { value = 1.53, unit = "mg/g", source = "Huisinga2012Supplement", notes = "rat value of Rodgers, Leahy & Rowland 2005; not verified against the original" }
+
+[tissues.pancreas]
+f_nl = { value = 0.0403, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+f_np = { value = 0.009, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+f_ew = { value = 0.12, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+f_iw = { value = 0.664, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+albumin = { value = 0.06, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+lipoprotein = { value = 0.06, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+ap = { value = 2.41, unit = "mg/g", source = "ModelChoice", notes = "no value of the pancreas in the sources read; the acidic phospholipids of the gut" }
+
+[tissues.skin]
+f_nl = { value = 0.0603, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+f_np = { value = 0.0044, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+f_ew = { value = 0.382, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+f_iw = { value = 0.291, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+albumin = { value = 0.277, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+lipoprotein = { value = 0.096, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+ap = { value = 1.32, unit = "mg/g", source = "Huisinga2012Supplement", notes = "rat value of Rodgers, Leahy & Rowland 2005; not verified against the original" }
+
+[tissues.spleen]
+f_nl = { value = 0.0071, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+f_np = { value = 0.0107, unit = "dimensionless", source = "Coutinho2024", notes = "Table III; the Huisinga 2012 supplement gives 0.0170 (citing Graham 2012, based on Rodgers & Rowland 2006), unresolved without the original" }
+f_ew = { value = 0.207, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+f_iw = { value = 0.579, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+albumin = { value = 0.097, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+lipoprotein = { value = 0.207, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
+ap = { value = 3.18, unit = "mg/g", source = "Huisinga2012Supplement", notes = "rat value of Rodgers, Leahy & Rowland 2005; not verified against the original" }
+
+# The tissue of the composition of every organ of the model. An organ without
+# a tissue of its own in the sources read takes a surrogate (ModelChoice).
+
+[organs]
+lu = { tissue = "lung", source = "Coutinho2024" }
+he = { tissue = "heart", source = "Coutinho2024" }
+br = { tissue = "brain", source = "Coutinho2024" }
+li = { tissue = "liver", source = "Coutinho2024" }
+ki = { tissue = "kidney", source = "Coutinho2024" }
+st = { tissue = "gut", source = "ModelChoice", notes = "the stomach takes the composition of the gut (no stomach in the sources read)" }
+si = { tissue = "gut", source = "Coutinho2024" }
+la = { tissue = "gut", source = "ModelChoice", notes = "the large intestine takes the composition of the gut, which the sources do not split into small and large intestine" }
+sp = { tissue = "spleen", source = "Coutinho2024" }
+pa = { tissue = "pancreas", source = "Coutinho2024" }
+mu = { tissue = "muscle", source = "Coutinho2024" }
+sk = { tissue = "skin", source = "Coutinho2024" }
+ad = { tissue = "adipose", source = "Coutinho2024" }
+bo = { tissue = "bone", source = "Coutinho2024" }
+go = { tissue = "muscle", source = "ModelChoice", notes = "the gonads take the composition of muscle, a lean soft tissue (no gonads in the sources read); a small organ with little weight in the volume of distribution" }

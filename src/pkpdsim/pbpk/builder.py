@@ -4,8 +4,8 @@ The comp model has a top model and one submodel per organ:
 
 - the top model holds the physiology (covariates, volumes, flows), the blood
   pools (arterial, venous, portal; plasma `C<pool>_<s>` and kinetic blood
-  cells `C<pool>_bc_<s>`), the parameters of the substances (`Mr`, `fu`, `Kp`,
-  `BP`, ...), the sinks (urine, feces, bile), the dose states of the routes
+  cells `C<pool>_bc_<s>`), the parameters of the substances (`Mr`, `fu`, `Kp`
+  or the factor `fKp_<s>` and the `Kp_<o>_<s>` of a Kp method, `BP`, ...), the sinks (urine, feces, bile), the dose states of the routes
   and the parameters the intestine reads (`ka_<s>`, `FED`);
 - every organ is a `ModelDefinition` with a `Submodel` (`LI`, `KI`, ...), the
   standard organ or a variant (`pkpdsim.pbpk.variants`); it reads the
@@ -77,6 +77,7 @@ from pkpdsim.pbpk.impairment import (
     physiology_factors,
     unbound_fraction,
 )
+from pkpdsim.pbpk.kp import kp_sources, kp_values
 from pkpdsim.pbpk.observers import observer_objects
 from pkpdsim.pbpk.organ import Boundary, GutComponent, OrganComponent, OrganContext
 from pkpdsim.pbpk.organs import Organ, Part, Pool
@@ -215,8 +216,8 @@ def compose(definition: PBPKDefinition) -> Model:
             an organ reads an element the body does not have, a route is
             given twice, or an oral route or an apical transport of the small
             intestine has no intestine with a lumen.
-        NotImplementedError: for a Kp method or a PD component, which later
-            versions of the library build.
+        NotImplementedError: for a PD component, which later versions of the
+            library build.
     """
     definition.validate()
     if definition.pd:
@@ -412,7 +413,9 @@ class _Top:
     def __init__(self, definition: PBPKDefinition) -> None:
         self.definition = definition
         self.objects: list[Sbase] = [
-            *physiology_objects(definition.sex, physiology_factors()),
+            *physiology_objects(
+                definition.sex, physiology_factors(), definition.population
+            ),
             *impairment_objects(definition),
         ]
         self.known: set[str] = {
@@ -510,11 +513,7 @@ class _Top:
     # --- substances ------------------------------------------------------
 
     def substance(self, s: Substance) -> None:
-        """The parameters of a substance: Mr, fu, the distribution and the blood.
-
-        Raises:
-            NotImplementedError: for a Kp method.
-        """
+        """The parameters of a substance: Mr, fu, the distribution and the blood."""
         sid = s.sid
         self.add(
             [
@@ -653,33 +652,11 @@ class _Top:
         if dist is None:
             return
         sid = s.sid
-        if isinstance(dist, KpMethod):
-            raise NotImplementedError(
-                f"{sid}: Kp methods are not built yet by the library, give a Kp."
-            )
-        assert isinstance(dist, Kp)
-        objects = [
-            value_parameter(
-                ids.kp(sid),
-                dist.value,
-                U.dimensionless,
-                f"tissue to plasma coefficient {sid}",
-                _SBO_PARAMETER,
-                "Whole-tissue (interstitial and intracellular) to plasma "
-                "coefficient of the organs without an own value.",
-            )
-        ]
-        for organ, q in dist.overrides.items():
-            objects.append(
-                value_parameter(
-                    ids.kp_organ(organ, sid),
-                    q,
-                    U.dimensionless,
-                    f"tissue to plasma coefficient {sid} {organ.name.lower()}",
-                    _SBO_PARAMETER,
-                    "Whole-tissue to plasma coefficient of the organ.",
-                )
-            )
+        objects = (
+            self._kp_method(s, dist)
+            if isinstance(dist, KpMethod)
+            else self._kp_value(sid, dist)
+        )
         if dist.ftissue is not None:
             objects.append(
                 value_parameter(
@@ -716,6 +693,70 @@ class _Top:
                 )
             )
         self.add(objects)
+
+    def _kp_value(self, sid: str, dist: Kp) -> list[Sbase]:
+        """The coefficient of a substance and the coefficients of single organs."""
+        objects: list[Sbase] = [
+            value_parameter(
+                ids.kp(sid),
+                dist.value,
+                U.dimensionless,
+                f"tissue to plasma coefficient {sid}",
+                _SBO_PARAMETER,
+                "Whole-tissue (interstitial and intracellular) to plasma "
+                "coefficient of the organs without an own value.",
+            )
+        ]
+        for organ, q in dist.overrides.items():
+            objects.append(
+                value_parameter(
+                    ids.kp_organ(organ, sid),
+                    q,
+                    U.dimensionless,
+                    f"tissue to plasma coefficient {sid} {organ.name.lower()}",
+                    _SBO_PARAMETER,
+                    "Whole-tissue to plasma coefficient of the organ.",
+                )
+            )
+        return objects
+
+    def _kp_method(self, s: Substance, method: KpMethod) -> list[Sbase]:
+        """The factor of a Kp method and the coefficient of every organ it computes.
+
+        Every `Kp_<o>_<s>` is an initial assignment `fKp_<s> * value` with the
+        value of the method (`pkpdsim.pbpk.kp`) for the sex of the build.
+        """
+        sid, fkp = s.sid, ids.fkp(s.sid)
+        objects: list[Sbase] = [
+            value_parameter(
+                fkp,
+                method.factor,
+                U.dimensionless,
+                f"factor of the tissue to plasma coefficients {sid}",
+                _SBO_PARAMETER,
+                "Factor on every tissue to plasma coefficient of the Kp method "
+                f"({method.method}), so that a fit scales all of them.",
+            )
+        ]
+        for organ, v in kp_values(s, self.definition.sex).items():
+            pid = ids.kp_organ(organ, sid)
+            formula = f"{fkp} * {v.value!r} dimensionless"
+            citations = "\n".join(f"- {cite(key)}" for key in kp_sources(organ))
+            objects += [
+                Parameter(
+                    pid,
+                    None,
+                    U.dimensionless,
+                    constant=True,
+                    name=f"tissue to plasma coefficient {sid} {organ.name.lower()}",
+                    sboTerm=_SBO_PARAMETER,
+                    notes=f"Whole-tissue to plasma coefficient of the organ, the "
+                    f"Kp method times its factor. {v.notes}\n\n`{pid} = "
+                    f"{formula}`\n\nSources:\n\n{citations}",
+                ),
+                InitialAssignment(pid, formula, U.dimensionless),
+            ]
+        return objects
 
     def _ftissue_organs(self, s: Substance) -> list[Organ]:
         """The organs whose exchange of a substance is a share of `ftissue_<s>`.

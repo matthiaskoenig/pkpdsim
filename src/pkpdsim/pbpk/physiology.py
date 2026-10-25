@@ -11,6 +11,11 @@ integration keeps the compiled model small and fast to load):
 - the reference values of the sex of the build (ICRP 89,
   `data/physiology_human.toml`); the sex is chosen when the model is built,
   a study of both sexes uses one model per sex;
+- the default individual (`BW`, `HEIGHT`, `AGE`) is the reference individual
+  of the sex of the population of the build (`pkpdsim.pbpk.populations`,
+  ICRP 89 by default); the reference anatomy stays ICRP 89 for every
+  population, the organs of another population's individual follow from the
+  scaling;
 - body mass index, body surface area (Du Bois 1916) and fat-free mass
   (Janmahasatian 2005);
 - the tissues scale as in Huisinga 2012 (eqs. 9, 10, 12): brain is constant,
@@ -45,7 +50,7 @@ the healthy one.
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sbmlutils.factory import InitialAssignment, Parameter, Sbase, UnitDefinition
 from sbmlutils.metadata import SBO
@@ -55,11 +60,15 @@ from pkpdsim.pbpk.data import cite, load
 from pkpdsim.pbpk.organs import PORTAL_ORGANS, Organ, Pool
 from pkpdsim.pbpk.units import U
 
+if TYPE_CHECKING:
+    from pkpdsim.pbpk.populations import Population
+
 __all__ = [
     "Sex",
     "normal_gfr",
     "physiology_objects",
     "reference_fractions",
+    "reference_hematocrit",
     "reference_tissue_volumes",
 ]
 
@@ -298,9 +307,17 @@ def _initial(
 class _Physiology:
     """The SBML objects of the physiology, from the reference values of one sex."""
 
-    def __init__(self, sex: Sex, factors: Mapping[str, str]) -> None:
+    def __init__(
+        self,
+        sex: Sex,
+        factors: Mapping[str, str],
+        population: "Population",
+        default: bool,
+    ) -> None:
         self.sex = sex
         self.refs = _references(sex, load("physiology_human"))
+        self.population = population
+        self.default = default
         self.factors = factors
         self.applied: set[str] = set()
 
@@ -365,34 +382,30 @@ class _Physiology:
 
     def covariates(self) -> list[Sbase]:
         """The covariates of the individual and the factors of organ function."""
-        default = self.refs
+        individual = self.population.reference[self.sex]
+        default = (
+            "the reference individual of the sex"
+            if self.default
+            else f"the reference individual of the population {self.population.name}"
+        )
+
+        def covariate(pid: str, unit: UnitDefinition, name: str) -> Parameter:
+            """A covariate with the value of the reference individual."""
+            v = individual[pid]
+            return _parameter(
+                pid,
+                unit,
+                name,
+                f"Covariate, an initial value; the default is {default}. "
+                f"{v.notes or ''}".rstrip(),
+                (v.source,) if v.source is not None else (),
+                value=v.value,
+            )
+
         return [
-            _parameter(
-                ids.BW,
-                U.kg,
-                "body weight [kg]",
-                "Covariate, an initial value; the default is the reference "
-                f"individual of the sex. {default[ids.BW].notes}",
-                default[ids.BW].sources,
-                value=default[ids.BW].value,
-            ),
-            _parameter(
-                ids.HEIGHT,
-                U.cm,
-                "height [cm]",
-                "Covariate, an initial value; the default is the reference "
-                f"individual of the sex. {default[ids.HEIGHT].notes}",
-                default[ids.HEIGHT].sources,
-                value=default[ids.HEIGHT].value,
-            ),
-            _parameter(
-                ids.AGE,
-                U.yr,
-                "age [yr]",
-                f"Covariate. {MODEL_DEFAULT} No rule uses AGE yet.",
-                (),
-                value=AGE_DEFAULT,
-            ),
+            covariate(ids.BW, U.kg, "body weight [kg]"),
+            covariate(ids.HEIGHT, U.cm, "height [cm]"),
+            covariate(ids.AGE, U.yr, "age [yr]"),
             _parameter(
                 ids.F_RENAL_FUNCTION,
                 U.dimensionless,
@@ -782,7 +795,9 @@ def _label(organ: Organ) -> str:
 
 
 def physiology_objects(
-    sex: Sex = Sex.MALE, factors: Mapping[str, str] | None = None
+    sex: Sex = Sex.MALE,
+    factors: Mapping[str, str] | None = None,
+    population: str = "european_icrp",
 ) -> list[Sbase]:
     """The parameters and initial assignments of the standard human physiology.
 
@@ -795,16 +810,29 @@ def physiology_objects(
             the formula of the quantity is multiplied by the factor (a formula);
             the hematocrit becomes `HCT = HCT_ref * factor`. None: the healthy
             physiology.
+        population: the population (`pkpdsim.pbpk.populations`) whose reference
+            individual of the sex is the default individual (`BW`, `HEIGHT`,
+            `AGE`); the reference anatomy stays ICRP 89.
 
     Returns:
         The constant parameters and their initial assignments of the top model.
 
     Raises:
         ValueError: if the reference individual leaves no mass for adipose, a
-            unit of the data is not the unit of the model, or a factor names
-            no quantity of the physiology with an initial assignment.
+            unit of the data is not the unit of the model, a factor names
+            no quantity of the physiology with an initial assignment, or the
+            population is unknown.
     """
-    physiology = _Physiology(sex, factors or {})
+    # populations imports this module (Sex, the defaults), so it is imported here
+    from pkpdsim.pbpk.populations import DEFAULT_POPULATION
+    from pkpdsim.pbpk.populations import population as get_population
+
+    physiology = _Physiology(
+        sex,
+        factors or {},
+        get_population(population),
+        population == DEFAULT_POPULATION,
+    )
     objects = [
         *physiology.covariates(),
         *physiology.references(),
@@ -876,3 +904,15 @@ def reference_tissue_volumes(sex: Sex) -> dict[Organ, float]:
         - refs[ids.ref(ids.VBLOOD)].value * refs["rho_blood"].value
     )
     return {o: masses[o] / refs[f"rho_{o}"].value for o in Organ}
+
+
+def reference_hematocrit(sex: Sex) -> float:
+    """The hematocrit of a reference individual.
+
+    Args:
+        sex: the sex of the reference individual.
+
+    Returns:
+        The hematocrit of physiology_human.toml.
+    """
+    return _references(sex, load("physiology_human"))[ids.HCT].value

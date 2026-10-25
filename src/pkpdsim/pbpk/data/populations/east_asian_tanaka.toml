@@ -1,0 +1,29 @@
+# The Asian reference individuals of Tanaka 1996 (NIRS-M-115, "Tanaka model"),
+# adults of 20 to 49 years.
+#
+# The reference body weight and height are the values of the Asian Reference
+# Man (ARM) of Tables 9 and 10, row 20-49 years; Tanaka took the 50th
+# percentile of the body weight as the reference body weight (Section 3.1.3).
+# The distributions are the means and standard deviations of the Japanese of
+# the same tables and row (national statistics of 1976 to 1988, Section
+# 3.1.3); Tanaka found no appreciable difference between Japanese and Chinese.
+# The report gives no mean age, the age is the model default.
+
+name = "East Asian (Tanaka 1996)"
+source = "Tanaka1996"
+
+[male.reference]
+BW = { value = 60.0, unit = "kg", source = "Tanaka1996", notes = "Table 10, Asian Reference Man (ARM) value, male, 20-49 years" }
+HEIGHT = { value = 169.97, unit = "cm", source = "Tanaka1996", notes = "Table 9, Asian Reference Man (RAM) value, male, 20-49 years" }
+
+[male.covariates]
+BW = { kind = "lognormal", mean = 63.63, sd = 8.84, unit = "kg", source = "Tanaka1996", notes = "Table 10, Japanese male, 20-49 years, mean and S.D.; lognormal, the mean exceeds the 50th percentile (the ARM value 60.0 kg)" }
+HEIGHT = { kind = "normal", mean = 169.97, sd = 5.68, unit = "cm", source = "Tanaka1996", notes = "Table 9, Japanese male, 20-49 years, mean and S.D." }
+
+[female.reference]
+BW = { value = 51.28, unit = "kg", source = "Tanaka1996", notes = "Table 10, Asian Reference Man (ARM) value, female, 20-49 years" }
+HEIGHT = { value = 155.04, unit = "cm", source = "Tanaka1996", notes = "Table 9, Asian Reference Man (RAM) value, female, 20-49 years" }
+
+[female.covariates]
+BW = { kind = "lognormal", mean = 52.34, sd = 7.41, unit = "kg", source = "Tanaka1996", notes = "Table 10, Japanese female, 20-49 years, mean and S.D.; lognormal, the mean exceeds the 50th percentile (the ARM value 51.28 kg)" }
+HEIGHT = { kind = "normal", mean = 155.04, sd = 5.22, unit = "cm", source = "Tanaka1996", notes = "Table 9, Japanese female, 20-49 years, mean and S.D." }

@@ -12,10 +12,10 @@ from pkpdsim.pbpk.units import U
 
 
 def _tables(node: object) -> list[dict[str, Any]]:
-    """Get all tables of a parsed file which state a value."""
+    """Get all tables of a parsed file which state a value or a distribution."""
     found: list[dict[str, Any]] = []
     if isinstance(node, dict):
-        if "value" in node:
+        if "value" in node or "mean" in node:
             found.append(node)
         for child in node.values():
             found.extend(_tables(child))
@@ -36,11 +36,16 @@ def test_every_source_has_citation() -> None:
 def test_every_data_value_has_known_source() -> None:
     """Every number of every data file has a source of sources.toml."""
     known = sources()
-    for path in resources.files("pkpdsim.pbpk").joinpath("data").iterdir():
+    data = resources.files("pkpdsim.pbpk").joinpath("data")
+    files = [*data.iterdir(), *data.joinpath("populations").iterdir()]
+    checked = set()
+    for path in files:
         if not path.name.endswith(".toml") or path.name == "sources.toml":
             continue
+        checked.add(path.name)
         for table in _tables(tomllib.loads(path.read_text("utf-8"))):
             assert table.get("source") in known, f"{path.name}: {table}"
+    assert {"tissue_composition.toml", "white_american_nhanes.toml"} <= checked
 
 
 def test_cite_includes_doi() -> None:

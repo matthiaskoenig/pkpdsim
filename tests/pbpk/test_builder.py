@@ -17,7 +17,6 @@ from pkpdsim.pbpk import (
     FirstOrder,
     FirstOrderDissolution,
     Kp,
-    KpMethod,
     Membrane,
     Mode,
     Organ,
@@ -428,14 +427,7 @@ def test_variants() -> None:
 
 
 def test_not_built_yet_raises() -> None:
-    """Kp methods and PD components are refused, not dropped."""
-    method = KpMethod(
-        method="rodgers_rowland", logp=1.0, pka=(), compound="neutral", ftissue=1.0
-    )
-    with pytest.raises(NotImplementedError, match="drg"):
-        compose(
-            definition(substances=[_closed_drug(distribution=method)], chemistry=[])
-        )
+    """PD components are refused, not dropped."""
     with pytest.raises(NotImplementedError, match="PD"):
         pd = PDComponent(model=Model(sid="pd"), inputs={}, outputs={})
         compose(definition(pd=[pd]))

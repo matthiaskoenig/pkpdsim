@@ -14,10 +14,12 @@ from pkpdsim.pbpk.chemistry import (
     Transport,
 )
 from pkpdsim.pbpk.data import load
+from pkpdsim.pbpk.kp import check_kp_method
 from pkpdsim.pbpk.organ import OrganComponent
 from pkpdsim.pbpk.organs import Organ, Part, Pool
 from pkpdsim.pbpk.pd import PDComponent
 from pkpdsim.pbpk.physiology import Sex
+from pkpdsim.pbpk.populations import POPULATIONS
 from pkpdsim.pbpk.proteins import PROTEINS
 from pkpdsim.pbpk.routes import Route
 from pkpdsim.pbpk.substance import Erythrocytes, Kp, KpMethod, Mode, Substance
@@ -86,7 +88,10 @@ class PBPKDefinition:
         sex: the sex of the model, chosen when it is built: its reference
             values and default individual; a study of both sexes uses one
             model per sex.
-        population: the population of the physiology.
+        population: the population (`pkpdsim.pbpk.populations`), chosen when
+            the model is built: its reference individual of the sex is the
+            default individual (`BW`, `HEIGHT`, `AGE`); the reference anatomy
+            stays ICRP 89.
         arm_vein: the preset of the weights of the arm vein sampling site
             (`data/arm_vein.toml`), the PK-Sim default skin and muscle mix.
         dynamic: the parameters of the top model which change during a
@@ -123,6 +128,11 @@ class PBPKDefinition:
         problems += self._check_chemistry(known)
         problems += self._check_routes(known)
         problems += self._check_dynamic()
+        if self.population not in POPULATIONS:
+            problems.append(
+                f"population '{self.population}' is unknown, the populations are "
+                f"{sorted(POPULATIONS)}"
+            )
         presets = sorted(load("arm_vein"))
         if self.arm_vein not in presets:
             problems.append(
@@ -188,6 +198,7 @@ class PBPKDefinition:
         if dist is not None:
             if isinstance(dist, Kp | KpMethod):
                 problems += _check_distribution(s.sid, dist)
+            problems += check_kp_method(s)
             if (
                 ery is not None
                 and ery.mode == "kinetic"
