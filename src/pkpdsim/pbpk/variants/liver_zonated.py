@@ -269,6 +269,7 @@ class ZonatedBuilder(StandardBuilder):
                 "changed (the shares `p/sum(p)` follow and keep the capacity of "
                 "the liver), but not every value of the profile set to 0: the "
                 "shares are then undefined.",
+                kind="placement_weight",
             )
         total = " + ".join(abundances)
         for z, pid in zip(self.zones, abundances, strict=True):
@@ -281,6 +282,7 @@ class ZonatedBuilder(StandardBuilder):
                 f"`{key}`: its relative abundance times the zone volume over the "
                 "sum of the zones (the zones have the same volume); the shares "
                 "sum to 1, the capacity of the liver is kept.",
+                kind="placement_weight",
             )
         return weight
 

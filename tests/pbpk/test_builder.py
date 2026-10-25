@@ -8,7 +8,7 @@ from pathlib import Path
 import libsbml
 import pytest
 import roadrunner
-from sbmlutils.factory import Model, create_model
+from sbmlutils.factory import create_model
 
 from pkpdsim.pbpk import (
     Direction,
@@ -22,7 +22,6 @@ from pkpdsim.pbpk import (
     Organ,
     Part,
     PBPKDefinition,
-    PDComponent,
     Pool,
     Route,
     StandardOrgan,
@@ -424,13 +423,6 @@ def test_variants() -> None:
     unknown = definition(variants=Variants(organs={Organ.KIDNEY: "glomerular"}))
     with pytest.raises(ValueError, match=r"'glomerular'.*'ki'.*'nephron'"):
         compose(unknown)
-
-
-def test_not_built_yet_raises() -> None:
-    """PD components are refused, not dropped."""
-    with pytest.raises(NotImplementedError, match="PD"):
-        pd = PDComponent(model=Model(sid="pd"), inputs={}, outputs={})
-        compose(definition(pd=[pd]))
 
 
 def test_formulation_rate() -> None:

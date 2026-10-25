@@ -49,6 +49,7 @@ from sbmlutils.factory import (
 from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk import ids
+from pkpdsim.pbpk.annotation import annotate
 from pkpdsim.pbpk.data import cite
 from pkpdsim.pbpk.impairment import organ_activity
 from pkpdsim.pbpk.organs import Organ, Part, Pool
@@ -71,7 +72,7 @@ from pkpdsim.pbpk.values import Q
 if TYPE_CHECKING:
     from pkpdsim.pbpk.organ import OrganContext
 
-__all__ = ["CAPACITY", "ONE", "OrganBuilder", "label"]
+__all__ = ["CAPACITY", "COMPARTMENT_KINDS", "ONE", "OrganBuilder", "label"]
 
 CAPACITY = (
     "Not a physical volume: the plasma-equivalent capacity of the blood of a "
@@ -88,6 +89,27 @@ _INPUT = (
 """The notes of an element of the body in the organ."""
 
 _POOL_PART = {Part.PLASMA: "plasma", Part.BLOOD_CELLS: "blood cells"}
+
+_SPECIES_KINDS = {
+    Part.PLASMA: "concentration_plasma",
+    Part.BLOOD_CELLS: "concentration",
+    Part.INTERSTITIAL: "concentration_tissue",
+    Part.INTRACELLULAR: "concentration_tissue",
+    Part.TISSUE: "concentration_tissue",
+    Part.ORGAN: "concentration_tissue",
+}
+"""The kind (`pkpdsim.pbpk.annotation`) of the species of a part of an organ."""
+
+COMPARTMENT_KINDS = {
+    Part.PLASMA: "plasma",
+    Part.BLOOD_CELLS: "blood_cells",
+    Part.INTERSTITIAL: "interstitial",
+    Part.INTRACELLULAR: "intracellular",
+    Part.TISSUE: "tissue",
+    Part.ORGAN: "organ",
+}
+"""The kind (`pkpdsim.pbpk.annotation`) of the compartment of a part of an organ."""
+
 """The parts of a pool in names."""
 
 
@@ -128,6 +150,30 @@ class OrganBuilder:
         self.reactions: list[Reaction] = []
         self.replacements: dict[str, str] = {}
         self.outputs: dict[str, str] = {}
+
+    def _annotate[E: (Compartment, Parameter, Reaction, Species)](
+        self,
+        element: E,
+        kind: str,
+        pool: Pool | None = None,
+        segment: str | None = None,
+        protein: str | None = None,
+        substance: Substance | None = None,
+    ) -> E:
+        """Annotate an element of the organ as `kind` (`pkpdsim.pbpk.annotation`).
+
+        An input of the organ is annotated when the organ is composed, with
+        the annotation of the element of the body which replaces it.
+        """
+        return annotate(
+            element,
+            kind,
+            organ=self.organ,
+            pool=pool,
+            segment=segment,
+            protein=protein,
+            substance=substance,
+        )
 
     def _input(self, pid: str, unit: UnitDefinition, name: str, text: str = "") -> str:
         """A parameter of the body in the organ, with an input port."""
@@ -191,17 +237,26 @@ class OrganBuilder:
         name: str,
         text: str,
         port: bool | Port = False,
+        *,
+        kind: str,
+        pool: Pool | None = None,
+        segment: str | None = None,
     ) -> str:
         """A parameter of the organ with its assignment rule (it reads species)."""
-        self.parameters[pid] = Parameter(
-            pid,
-            None,
-            unit,
-            constant=False,
-            name=name,
-            sboTerm=SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
-            notes=f"{text}\n\n`{pid} = {formula}`",
-            port=port,
+        self.parameters[pid] = self._annotate(
+            Parameter(
+                pid,
+                None,
+                unit,
+                constant=False,
+                name=name,
+                sboTerm=SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
+                notes=f"{text}\n\n`{pid} = {formula}`",
+                port=port,
+            ),
+            kind,
+            pool=pool,
+            segment=segment,
         )
         self.rules.append(AssignmentRule(pid, formula, unit))
         return pid
@@ -213,31 +268,59 @@ class OrganBuilder:
         unit: UnitDefinition,
         name: str,
         text: str,
+        *,
+        kind: str,
+        pool: Pool | None = None,
+        segment: str | None = None,
+        protein: str | None = None,
     ) -> str:
         """A constant parameter of the organ with its initial assignment.
 
         For a quantity of the parameters of the body (volumes, fractions,
         substance parameters), which changes with them before a simulation.
         """
-        self.parameters[pid] = Parameter(
-            pid,
-            None,
-            unit,
-            constant=True,
-            name=name,
-            sboTerm=SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
-            notes=f"{text}\n\n`{pid} = {formula}`",
+        self.parameters[pid] = self._annotate(
+            Parameter(
+                pid,
+                None,
+                unit,
+                constant=True,
+                name=name,
+                sboTerm=SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
+                notes=f"{text}\n\n`{pid} = {formula}`",
+            ),
+            kind,
+            pool=pool,
+            segment=segment,
+            protein=protein,
         )
         self.assignments.append(InitialAssignment(pid, formula, unit))
         return pid
 
     def _constant(
-        self, pid: str, q: Q, unit: UnitDefinition, name: str, text: str = ""
+        self,
+        pid: str,
+        q: Q,
+        unit: UnitDefinition,
+        name: str,
+        text: str = "",
+        *,
+        kind: str,
+        segment: str | None = None,
     ) -> str:
         """A constant parameter of the organ with its provenance."""
         if pid not in self.parameters:
-            self.parameters[pid] = value_parameter(
-                pid, q, unit, name, SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER, text
+            self.parameters[pid] = self._annotate(
+                value_parameter(
+                    pid,
+                    q,
+                    unit,
+                    name,
+                    SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
+                    text,
+                ),
+                kind,
+                segment=segment,
             )
         return pid
 
@@ -247,21 +330,32 @@ class OrganBuilder:
         formula: str,
         name: str,
         text: str = "",
-        sbo: str = SBO.PHYSICAL_COMPARTMENT,
         zone: str | None = None,
+        *,
+        kind: str,
+        segment: str | None = None,
     ) -> None:
-        """A constant compartment of the organ (of a zone) with its volume as initial assignment."""
+        """A constant compartment of the organ (of a zone) with its volume as initial assignment.
+
+        It is annotated as `kind` (`pkpdsim.pbpk.annotation`), which gives its
+        SBO term.
+        """
         if cid in self.compartments:
             return
-        self.compartments[cid] = Compartment(
-            cid,
-            None,
-            U.litre,
-            constant=True,
-            name=in_zone(f"{name} {label(self.organ)}", zone),
-            sboTerm=sbo,
-            notes=f"{text}\n\n`{cid} = {formula}`" if text else f"`{cid} = {formula}`",
-            port=True,
+        self.compartments[cid] = self._annotate(
+            Compartment(
+                cid,
+                None,
+                U.litre,
+                constant=True,
+                name=in_zone(f"{name} {label(self.organ)}", zone),
+                notes=f"{text}\n\n`{cid} = {formula}`"
+                if text
+                else f"`{cid} = {formula}`",
+                port=True,
+            ),
+            kind,
+            segment=segment,
         )
         self.assignments.append(InitialAssignment(cid, formula, U.litre))
 
@@ -270,28 +364,47 @@ class OrganBuilder:
     ) -> None:
         """The species of a substance in a part of the organ (of a zone of it)."""
         sid = ids.species(part, s.sid, zone)
-        self.species[sid] = Species(
-            sid,
-            species_compartment(part, s.sid, parts, zone),
-            initialConcentration=0.0,
-            substanceUnit=U.mmole,
-            hasOnlySubstanceUnits=False,
-            name=f"{s.name} ({part.name.lower().replace('_', ' ')}, "
-            + in_zone(label(self.organ), zone)
-            + ")",
-            sboTerm=SBO.SIMPLE_CHEMICAL,
-            port=True,
+        self.species[sid] = self._annotate(
+            Species(
+                sid,
+                species_compartment(part, s.sid, parts, zone),
+                initialConcentration=0.0,
+                substanceUnit=U.mmole,
+                hasOnlySubstanceUnits=False,
+                name=f"{s.name} ({part.name.lower().replace('_', ' ')}, "
+                + in_zone(label(self.organ), zone)
+                + ")",
+                sboTerm=SBO.SIMPLE_CHEMICAL,
+                port=True,
+            ),
+            _SPECIES_KINDS[part],
+            substance=s,
         )
 
-    def _reaction(self, sid: str, equation: str, rate: str, name: str) -> None:
-        """A transport of the organ, the rate in mmole/min."""
+    def _reaction(
+        self,
+        sid: str,
+        equation: str,
+        rate: str,
+        name: str,
+        *,
+        kind: str,
+        pool: Pool | None = None,
+        segment: str | None = None,
+    ) -> None:
+        """A transport of the organ, the rate in mmole/min, annotated as `kind`."""
         self.reactions.append(
-            Reaction(
-                sid=sid,
-                equation=equation,
-                formula=(rate, U.mmole_per_min),
-                name=name,
-                sboTerm=SBO.TRANSPORT_REACTION,
+            self._annotate(
+                Reaction(
+                    sid=sid,
+                    equation=equation,
+                    formula=(rate, U.mmole_per_min),
+                    name=name,
+                    sboTerm=SBO.TRANSPORT_REACTION,
+                ),
+                kind,
+                pool=pool,
+                segment=segment,
             )
         )
 
@@ -377,19 +490,23 @@ class OrganBuilder:
         pid = ids.activity(protein)
         if pid in self.parameters:
             return
-        self.parameters[pid] = Parameter(
-            pid,
-            1.0,
-            U.dimensionless,
-            constant=True,
-            name=f"activity {protein}",
-            sboTerm=SBO.RELATIVE_ACTIVITY,
-            notes=f"Base activity of {protein} in the organ relative to normal "
-            "(1.0), set by genotype, impairment and the experiments; it "
-            "multiplies the rates of its processes. Inhibition and induction act "
-            "on top of it (the turnover state and the inhibitor terms of the "
-            "rates).",
-            port=True,
+        self.parameters[pid] = self._annotate(
+            Parameter(
+                pid,
+                1.0,
+                U.dimensionless,
+                constant=True,
+                name=f"activity {protein}",
+                sboTerm=SBO.RELATIVE_ACTIVITY,
+                notes=f"Base activity of {protein} in the organ relative to normal "
+                "(1.0), set by genotype, impairment and the experiments; it "
+                "multiplies the rates of its processes. Inhibition and induction "
+                "act on top of it (the turnover state and the inhibitor terms of "
+                "the rates).",
+                port=True,
+            ),
+            "activity",
+            protein=protein,
         )
         impaired = organ_activity(self.organ, protein)
         if impaired is not None:
@@ -420,14 +537,18 @@ class OrganBuilder:
     def _turnover(self, protein: str) -> None:
         """The turnover state `E_<protein>` under mechanism-based inhibition and induction."""
         kdeg = ids.kdeg(protein)
-        self.parameters[kdeg] = value_parameter(
-            kdeg,
-            turnover(self.organ),
-            U.per_min,
-            f"degradation rate {protein} [1/min]",
-            SBO.DECAY_CONSTANT,
-            f"First order degradation of {protein} in the organ; the synthesis "
-            "of the baseline amount balances it.",
+        self.parameters[kdeg] = self._annotate(
+            value_parameter(
+                kdeg,
+                turnover(self.organ),
+                U.per_min,
+                f"degradation rate {protein} [1/min]",
+                SBO.DECAY_CONSTANT,
+                f"First order degradation of {protein} in the organ; the synthesis "
+                "of the baseline amount balances it.",
+            ),
+            "kdeg",
+            protein=protein,
         )
         synthesis = [ONE]
         inactivation: list[str] = []
@@ -449,20 +570,24 @@ class OrganBuilder:
         formula = f"{kdeg} * ({' + '.join(synthesis)}) - {kdeg} * {e}"
         if inactivation:
             formula += f" - ({' + '.join(inactivation)}) * {e}"
-        self.parameters[e] = Parameter(
-            e,
-            1.0,
-            U.dimensionless,
-            constant=False,
-            name=f"amount {protein} relative to baseline",
-            sboTerm=SBO.RELATIVE_ACTIVITY,
-            notes=f"Turnover of {protein} in the organ (initially 1): synthesis "
-            "`kdeg*(1 + sum Emax*I/(EC50 + I))` with the induction of Almond "
-            "2009, degradation `kdeg*E` and the mechanism-based inactivation "
-            "`kinact*I/(KI + I)*E` of Mayhew 2000, combined as in Fahmi 2008; "
-            "`I` is the unbound concentration in the cell. It multiplies the "
-            f"rates of {protein}.\n\n`d{e}/dt = {formula}`\n\nSources:\n\n"
-            f"- {cite('Mayhew2000')}\n- {cite('Almond2009')}\n- {cite('Fahmi2008')}",
+        self.parameters[e] = self._annotate(
+            Parameter(
+                e,
+                1.0,
+                U.dimensionless,
+                constant=False,
+                name=f"amount {protein} relative to baseline",
+                sboTerm=SBO.RELATIVE_ACTIVITY,
+                notes=f"Turnover of {protein} in the organ (initially 1): synthesis "
+                "`kdeg*(1 + sum Emax*I/(EC50 + I))` with the induction of Almond "
+                "2009, degradation `kdeg*E` and the mechanism-based inactivation "
+                "`kinact*I/(KI + I)*E` of Mayhew 2000, combined as in Fahmi 2008; "
+                "`I` is the unbound concentration in the cell. It multiplies the "
+                f"rates of {protein}.\n\n`d{e}/dt = {formula}`\n\nSources:\n\n"
+                f"- {cite('Mayhew2000')}\n- {cite('Almond2009')}\n- {cite('Fahmi2008')}",
+            ),
+            "enzyme_amount",
+            protein=protein,
         )
         self.rate_rules.append(RateRule(e, formula, U.per_min))
 

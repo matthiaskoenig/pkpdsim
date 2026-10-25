@@ -27,6 +27,7 @@ from sbmlutils.factory import AssignmentRule, Parameter, Sbase
 from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk import ids
+from pkpdsim.pbpk.annotation import annotate
 from pkpdsim.pbpk.data import load, value
 from pkpdsim.pbpk.definition import PBPKDefinition
 from pkpdsim.pbpk.organs import Organ, Part, Pool
@@ -85,14 +86,19 @@ def observer_objects(definition: PBPKDefinition) -> list[Sbase]:
     """
     weights = arm_vein_weights(definition.arm_vein)
     objects: list[Sbase] = [
-        value_parameter(
-            ids.arm_weight(site),
-            w,
-            U.dimensionless,
-            f"weight of {_site_label(site)} in the arm vein",
-            _SBO_PARAMETER,
-            f"Share of the {_site_label(site)} in the arm vein sample "
-            f"(preset '{definition.arm_vein}').",
+        annotate(
+            value_parameter(
+                ids.arm_weight(site),
+                w,
+                U.dimensionless,
+                f"weight of {_site_label(site)} in the arm vein",
+                _SBO_PARAMETER,
+                f"Share of the {_site_label(site)} in the arm vein sample "
+                f"(preset '{definition.arm_vein}').",
+            ),
+            "arm_weight",
+            organ=site if isinstance(site, Organ) else None,
+            pool=site if isinstance(site, Pool) else None,
         )
         for site, w in weights.items()
     ]
@@ -108,17 +114,30 @@ def _site_label(site: Organ | Pool) -> str:
     return f"venous outflow of the {site.name.lower().replace('_', ' ')}"
 
 
-def _observer(pid: str, formula: str, name: str, text: str) -> list[Sbase]:
-    """A concentration (mM) with its assignment rule."""
+def _observer(
+    pid: str,
+    formula: str,
+    name: str,
+    text: str,
+    kind: str,
+    pool: Pool | None = None,
+    site: str | None = None,
+) -> list[Sbase]:
+    """A concentration (mM) with its assignment rule, annotated as `kind`."""
     return [
-        Parameter(
-            pid,
-            None,
-            U.mM,
-            constant=False,
-            name=name,
-            sboTerm=_SBO_PARAMETER,
-            notes=f"{text} {_OBSERVER}\n\n`{pid} = {formula}`",
+        annotate(
+            Parameter(
+                pid,
+                None,
+                U.mM,
+                constant=False,
+                name=name,
+                sboTerm=_SBO_PARAMETER,
+                notes=f"{text} {_OBSERVER}\n\n`{pid} = {formula}`",
+            ),
+            kind,
+            pool=pool,
+            site=site,
         ),
         AssignmentRule(pid, formula, U.mM),
     ]
@@ -165,12 +184,16 @@ def _substance(s: Substance, weights: dict[Organ | Pool, Value]) -> list[Sbase]:
             f"{fu} * {c}",
             f"unbound plasma concentration {sid} {label} [mM]",
             f"Unbound plasma concentration of the {label} pool.",
+            "free_concentration",
+            pool=pool,
         )
         objects += _observer(
             ids.blood(pool, sid),
             _blood(s, c, ids.pool_species(pool, sid, Part.BLOOD_CELLS)),
             f"blood concentration {sid} {label} [mM]",
             f"Blood concentration of the {label} pool.",
+            "blood_concentration",
+            pool=pool,
         )
 
     hv = ids.hepatic_vein(sid)
@@ -180,12 +203,16 @@ def _substance(s: Substance, weights: dict[Organ | Pool, Value]) -> list[Sbase]:
         f"hepatic vein plasma concentration {sid} [mM]",
         "Plasma concentration of the hepatic vein: the outflow of the liver "
         "mixed with the portosystemic shunt by their flows.",
+        "plasma_concentration",
+        site="hepatic_vein",
     )
     objects += _observer(
         ids.hepatic_vein_free(sid),
         f"{fu} * {hv}",
         f"hepatic vein unbound plasma concentration {sid} [mM]",
         "Unbound plasma concentration of the hepatic vein.",
+        "free_concentration",
+        site="hepatic_vein",
     )
     ery = s.erythrocytes
     kinetic = ery is not None and ery.mode == "kinetic"
@@ -194,6 +221,8 @@ def _substance(s: Substance, weights: dict[Organ | Pool, Value]) -> list[Sbase]:
         _blood(s, hv, f"({_hepatic(s, cells=True)})" if kinetic else ""),
         f"hepatic vein blood concentration {sid} [mM]",
         "Blood concentration of the hepatic vein.",
+        "blood_concentration",
+        site="hepatic_vein",
     )
 
     def mix(cells: bool) -> str:
@@ -218,12 +247,16 @@ def _substance(s: Substance, weights: dict[Organ | Pool, Value]) -> list[Sbase]:
         "Plasma concentration of an arm vein sample: the venous outflows of the "
         "organs and the arterial plasma mixed with the weights of the preset. "
         "Plasma data without a stated sampling site map to it.",
+        "plasma_concentration",
+        site="arm_vein",
     )
     objects += _observer(
         ids.arm_free(sid),
         f"{fu} * {arm}",
         f"arm vein unbound plasma concentration {sid} [mM]",
         "Unbound plasma concentration of an arm vein sample.",
+        "free_concentration",
+        site="arm_vein",
     )
     cells = f"({mix(cells=True)})" if kinetic else ""
     objects += _observer(
@@ -231,5 +264,7 @@ def _substance(s: Substance, weights: dict[Organ | Pool, Value]) -> list[Sbase]:
         _blood(s, arm, cells),
         f"arm vein blood concentration {sid} [mM]",
         "Blood concentration of an arm vein sample.",
+        "blood_concentration",
+        site="arm_vein",
     )
     return objects

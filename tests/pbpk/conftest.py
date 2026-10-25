@@ -7,16 +7,22 @@ varies them with arguments: `definition(routes=[Route.iv("drg")])`.
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from sbmlutils.factory import AssignmentRule, Model, Parameter, Port, PortType
+from sbmlutils.metadata import BQB, SBO
+
 from pkpdsim.pbpk import (
     MM,
+    MODEL_UNITS,
     Binding,
     Excretion,
     Kp,
     Metabolism,
     Organ,
     PBPKDefinition,
+    PDComponent,
     Route,
     Substance,
+    U,
     ids,
 )
 from pkpdsim.pbpk.builder import BuildResult
@@ -66,6 +72,72 @@ def definition(**overrides: Any) -> PBPKDefinition:  # noqa: ANN401
     }
     fields.update(overrides)
     return PBPKDefinition(**fields)
+
+
+def cardiac_pd(
+    sid: str = "cardio", emax: float = 0.5, ec50: float = 1e-4, reads: str = "drg"
+) -> PDComponent:
+    """Get a PD component which lowers the cardiac function with the drug.
+
+    `f_cardiac = 1 - Emax*C/(EC50 + C)` of the unbound arm vein concentration
+    `C` of the substance `reads`; the output replaces `f_cardiac_function`.
+    Its elements are annotated, as a package would annotate its PD model.
+
+    Args:
+        sid: the id of the component.
+        emax: the maximal reduction of the cardiac function.
+        ec50: the concentration of half the reduction (mM).
+        reads: the substance whose unbound arm vein concentration it reads.
+
+    Returns:
+        The component.
+    """
+    pd = [(BQB.IS, "ncit/C15720")]  # pharmacodynamics
+    model = Model(
+        sid,
+        units=U,
+        model_units=MODEL_UNITS,
+        objects=[
+            Parameter(
+                "C_drug",
+                0.0,
+                U.mM,
+                constant=False,
+                name="unbound concentration",
+                sboTerm=SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
+                annotations=pd,
+                port=Port("C_drug_port", portType=PortType.INPUT_PORT),
+            ),
+            Parameter(
+                "Emax",
+                emax,
+                U.dimensionless,
+                sboTerm=SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
+                annotations=pd,
+            ),
+            Parameter("EC50", ec50, U.mM, sboTerm=SBO.EC50, annotations=pd),
+            Parameter(
+                "f_cardiac",
+                None,
+                U.dimensionless,
+                constant=False,
+                name="cardiac function",
+                sboTerm=SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
+                annotations=pd,
+                port=Port("f_cardiac_port", portType=PortType.OUTPUT_PORT),
+            ),
+            AssignmentRule(
+                "f_cardiac",
+                "1 dimensionless - Emax * C_drug / (EC50 + C_drug)",
+                U.dimensionless,
+            ),
+        ],
+    )
+    return PDComponent(
+        model=model,
+        inputs={"C_drug": ids.arm_free(reads)},
+        outputs={"f_cardiac": ids.F_CARDIAC_FUNCTION},
+    )
 
 
 def load(result: BuildResult) -> "roadrunner.RoadRunner":

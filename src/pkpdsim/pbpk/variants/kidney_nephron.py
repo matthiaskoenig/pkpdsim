@@ -220,15 +220,19 @@ class NephronBuilder(StandardBuilder):
         for seg, key, name in _SEGMENTS:
             cid = ids.tubule_volume(seg)
             v = value(_DATA, key, "volume")
-            self.compartments[cid] = Compartment(
-                cid,
-                v.value,
-                U.litre,
-                constant=True,
-                name=f"lumen {name} kidney",
-                sboTerm=SBO.PHYSICAL_COMPARTMENT,
-                notes=f"{_LUMEN} {v.notes}\n\nSource:\n\n- {cite(str(v.source))}",
-                port=True,
+            self.compartments[cid] = self._annotate(
+                Compartment(
+                    cid,
+                    v.value,
+                    U.litre,
+                    constant=True,
+                    name=f"lumen {name} kidney",
+                    sboTerm=SBO.PHYSICAL_COMPARTMENT,
+                    notes=f"{_LUMEN} {v.notes}\n\nSource:\n\n- {cite(str(v.source))}",
+                    port=True,
+                ),
+                "tubule",
+                segment=seg,
             )
             self._constant(
                 ids.tubule_flow_fraction(seg),
@@ -239,6 +243,8 @@ class NephronBuilder(StandardBuilder):
                 "glomerular filtration rate; the water reabsorbed upstream is "
                 "the rest. An experiment may change it (e.g. the urine flow out "
                 "of the collecting duct).",
+                kind="tubule_fraction",
+                segment=seg,
             )
 
     def _source(self, parts: Parts) -> Part:
@@ -264,6 +270,8 @@ class NephronBuilder(StandardBuilder):
             f"{source} -> {ids.tubule(s.sid, 'pt')}",
             f"{fu} * {self._gfr} * {cplasma}",
             f"glomerular filtration {s.sid} into the proximal tubule",
+            kind="filtration",
+            segment="pt",
         )
 
     def _tubule(self, s: Substance) -> None:
@@ -281,15 +289,20 @@ class NephronBuilder(StandardBuilder):
         )
         for seg, _, name in _SEGMENTS:
             sid = ids.tubule(s.sid, seg)
-            self.species[sid] = Species(
-                sid,
-                ids.tubule_volume(seg),
-                initialConcentration=0.0,
-                substanceUnit=U.mmole,
-                hasOnlySubstanceUnits=False,
-                name=f"{s.name} (lumen {name}, kidney)",
-                sboTerm=SBO.SIMPLE_CHEMICAL,
-                port=True,
+            self.species[sid] = self._annotate(
+                Species(
+                    sid,
+                    ids.tubule_volume(seg),
+                    initialConcentration=0.0,
+                    substanceUnit=U.mmole,
+                    hasOnlySubstanceUnits=False,
+                    name=f"{s.name} (lumen {name}, kidney)",
+                    sboTerm=SBO.SIMPLE_CHEMICAL,
+                    port=True,
+                ),
+                "concentration_tubule",
+                segment=seg,
+                substance=s,
             )
         for (seg, _, name), (downstream, _, downstream_name) in itertools.pairwise(
             _SEGMENTS
@@ -300,6 +313,8 @@ class NephronBuilder(StandardBuilder):
                 f"{c} -> {ids.tubule(s.sid, downstream)}",
                 f"{gfr} * {ids.tubule_flow_fraction(seg)} * {c}",
                 f"tubular flow {s.sid} from the {name} into the {downstream_name}",
+                kind="tubular_flow",
+                segment=seg,
             )
         cd = ids.tubule(s.sid, "cd")
         leaving = f"{gfr} * {ids.tubule_flow_fraction('cd')} * {cd}"
@@ -309,6 +324,8 @@ class NephronBuilder(StandardBuilder):
                 f"{cd} -> {urine}",
                 leaving,
                 f"urinary excretion {s.sid} from the collecting duct",
+                kind="tubular_flow",
+                segment="cd",
             )
             return
         reabsorbed = self._input(
@@ -323,6 +340,8 @@ class NephronBuilder(StandardBuilder):
             f"{cd} -> {urine}",
             f"{leaving} * ({ONE} - {reabsorbed})",
             f"urinary excretion {s.sid} from the collecting duct",
+            kind="tubular_flow",
+            segment="cd",
         )
         source = ids.species(self._source(self.ctx.parts[s.sid]), s.sid)
         self._reaction(
@@ -330,6 +349,8 @@ class NephronBuilder(StandardBuilder):
             f"{cd} -> {source}",
             f"{leaving} * {reabsorbed}",
             f"reabsorbed fraction {s.sid} from the collecting duct into the plasma",
+            kind="reabsorption",
+            segment="cd",
         )
 
     def _chemistry(self) -> None:

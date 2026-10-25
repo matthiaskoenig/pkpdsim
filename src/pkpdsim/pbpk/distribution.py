@@ -25,6 +25,7 @@ import libsbml
 from sbmlutils.factory import Parameter, UnitDefinition
 from sbmlutils.metadata import SBO
 
+from pkpdsim.pbpk.annotation import annotate
 from pkpdsim.pbpk.data import load
 from pkpdsim.pbpk.kp import kp_values
 from pkpdsim.pbpk.organs import Organ
@@ -92,12 +93,15 @@ def constant(key: str) -> Parameter:
     """The parameter of a constant of `data/distribution.toml`, with its source."""
     value = constants()[key]
     assert isinstance(value.unit, UnitDefinition)
-    return value_parameter(
-        key,
-        value,
-        value.unit,
-        _NAMES[key],
-        SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
+    return annotate(
+        value_parameter(
+            key,
+            value,
+            value.unit,
+            _NAMES[key],
+            SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
+        ),
+        "exchange_rate" if key == K_VAS else "tissue_composition",
     )
 
 

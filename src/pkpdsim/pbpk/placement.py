@@ -58,6 +58,7 @@ from sbmlutils.factory import Parameter, Reaction, UnitDefinition
 from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk import ids
+from pkpdsim.pbpk.annotation import annotate
 from pkpdsim.pbpk.chemistry import (
     MM,
     CustomReaction,
@@ -652,6 +653,7 @@ def rate_law(
         The rate (mmole/min) and the parameters of the process.
     """
     pid, k = process.sid, process.kinetics
+    kinds = _parameter_kinds(process)
     factor = _activity(process.protein, ctx)
     if capacity is not None:
         factor += f"{capacity} * "
@@ -661,32 +663,47 @@ def rate_law(
         p_k = f"{pid}_k"
         rate = f"{factor}{p_k} * {cu}" + (f" / {c}" if c else "")
         return rate, [
-            value_parameter(
-                p_k,
-                k.k,
-                U.l_per_min,
-                f"clearance {pid} [l/min]",
-                SBO.KINETIC_CONSTANT,
-                "Clearance of the whole organ on the unbound concentration.",
+            annotate(
+                value_parameter(
+                    p_k,
+                    k.k,
+                    U.l_per_min,
+                    f"clearance {pid} [l/min]",
+                    SBO.KINETIC_CONSTANT,
+                    "Clearance of the whole organ on the unbound concentration.",
+                ),
+                kinds["k"],
+                organ=ctx.organ,
+                protein=process.protein,
             )
         ]
     vmax, km = f"{pid}_Vmax", f"{pid}_Km"
     pars = [
-        value_parameter(
-            vmax,
-            k.vmax,
-            U.mmole_per_min_l,
-            f"Vmax {pid} [mmole/min/l]",
-            SBO.MAXIMAL_VELOCITY,
-            f"Maximal rate per litre of organ; the organ has `{vmax} * {v}`.",
+        annotate(
+            value_parameter(
+                vmax,
+                k.vmax,
+                U.mmole_per_min_l,
+                f"Vmax {pid} [mmole/min/l]",
+                SBO.MAXIMAL_VELOCITY,
+                f"Maximal rate per litre of organ; the organ has `{vmax} * {v}`.",
+            ),
+            kinds["vmax"],
+            organ=ctx.organ,
+            protein=process.protein,
         ),
-        value_parameter(
-            km,
-            k.km,
-            U.mM,
-            f"Km {pid} [mM]",
-            SBO.MICHAELIS_CONSTANT,
-            "On the unbound concentration.",
+        annotate(
+            value_parameter(
+                km,
+                k.km,
+                U.mM,
+                f"Km {pid} [mM]",
+                SBO.MICHAELIS_CONSTANT,
+                "On the unbound concentration.",
+            ),
+            kinds["km"],
+            organ=ctx.organ,
+            protein=process.protein,
         ),
     ]
     km_c = f"{km} * {c}" if c else km
@@ -696,8 +713,13 @@ def rate_law(
     assert isinstance(k, Hill)
     n = f"{pid}_n"
     pars.append(
-        value_parameter(
-            n, k.n, U.dimensionless, f"Hill coefficient {pid}", SBO.HILL_COEFFICIENT
+        annotate(
+            value_parameter(
+                n, k.n, U.dimensionless, f"Hill coefficient {pid}", SBO.HILL_COEFFICIENT
+            ),
+            "hill",
+            organ=ctx.organ,
+            protein=process.protein,
         )
     )
     if u:
@@ -711,6 +733,51 @@ def rate_law(
         f"{factor}{vmax_app} * {v} * {x}^{n} / ({ONE} + {x}^{n})",
         pars,
     )
+
+
+def _parameter_kinds(process: Metabolism | Transport) -> dict[str, str]:
+    """The kinds (`pkpdsim.pbpk.annotation`) of the parameters of a process."""
+    if isinstance(process, Metabolism):
+        return {"k": "k_metabolism", "vmax": "vmax", "km": "km"}
+    side = "basolateral" if process.membrane is Membrane.BASOLATERAL else "apical"
+    return {
+        "k": "k_influx" if process.direction is Direction.INFLUX else "k_efflux",
+        "vmax": f"vmax_{side}",
+        "km": f"km_{side}",
+    }
+
+
+def process_kind(process: Metabolism | Transport, organ: Organ) -> str:
+    """Get the kind (`pkpdsim.pbpk.annotation`) of the reaction of a process.
+
+    Args:
+        process: the metabolism or transport.
+        organ: the organ of the process.
+
+    Returns:
+        The kind: a metabolism (in the intestine the gut metabolism, else
+        linear or saturable), or a transport (the apical efflux of the liver
+        into the bile is the biliary excretion, of the kidney into the urine
+        the renal secretion, the apical influx of the kidney the
+        reabsorption and of the intestine the absorption).
+    """
+    if isinstance(process, Metabolism):
+        if organ in {Organ.SMALL_INTESTINE, Organ.LARGE_INTESTINE}:
+            return "gut_metabolism"
+        return (
+            "metabolism"
+            if isinstance(process.kinetics, FirstOrder)
+            else ("metabolism_saturable")
+        )
+    if process.membrane is Membrane.APICAL:
+        efflux = process.direction is Direction.EFFLUX
+        if organ is Organ.LIVER and efflux:
+            return "biliary_excretion"
+        if organ is Organ.KIDNEY:
+            return "renal_secretion" if efflux else "reabsorption"
+        if organ is Organ.SMALL_INTESTINE and not efflux:
+            return "absorption"
+    return "transport"
 
 
 def with_modifiers(equation: str, modifiers: tuple[str, ...]) -> str:
@@ -770,7 +837,7 @@ def _metabolism(
     inhibitors = _inhibitors(process, ctx, parts, zone)
     rate, pars = rate_law(process, ctx, cu, capacity, inhibitors)
     names = ", ".join(process.products) or "elimination"
-    return Reaction(
+    reaction = Reaction(
         sid=ids.segment_process(process.sid, zone),
         name=in_zone(
             f"{process.substrate} -> {names}"
@@ -789,6 +856,12 @@ def _metabolism(
         sboTerm=SBO.BIOCHEMICAL_REACTION,
         notes=in_zone(f"Metabolism in the {_PART_NAMES[part]} part", zone)
         + f" on the unbound concentration `{cu}`.",
+    )
+    return annotate(
+        reaction,
+        process_kind(process, ctx.organ),
+        organ=ctx.organ,
+        protein=process.protein,
     )
 
 
@@ -841,7 +914,7 @@ def _transport(
         )
     inhibitors = _inhibitors(process, ctx, parts, zone, apical)
     rate, pars = rate_law(process, ctx, cu, capacity, inhibitors)
-    return Reaction(
+    reaction = Reaction(
         sid=ids.segment_process(process.sid, zone),
         name=in_zone(
             f"{process.direction.value} {s} {process.membrane.value}"
@@ -860,6 +933,12 @@ def _transport(
         )
         + f" on the unbound concentration `{cu}`.",
     )
+    return annotate(
+        reaction,
+        process_kind(process, ctx.organ),
+        organ=ctx.organ,
+        protein=process.protein,
+    )
 
 
 def _custom(process: CustomReaction, parts: Mapping[str, Parts]) -> Reaction:
@@ -869,13 +948,17 @@ def _custom(process: CustomReaction, parts: Mapping[str, Parts]) -> Reaction:
             f"Custom reaction '{process.sid}' acts in part '{process.part.value}' "
             f"of organ '{process.organ.value}', which no substance has there."
         )
-    return Reaction(
-        sid=process.sid,
-        equation=process.equation,
-        formula=(process.formula, U.mmole_per_min),
-        pars=list(process.parameters),
-        compartment=ids.compartment(process.part),
-        notes=f"Custom reaction in the {_PART_NAMES[process.part]} part.",
+    return annotate(
+        Reaction(
+            sid=process.sid,
+            equation=process.equation,
+            formula=(process.formula, U.mmole_per_min),
+            pars=list(process.parameters),
+            compartment=ids.compartment(process.part),
+            notes=f"Custom reaction in the {_PART_NAMES[process.part]} part.",
+        ),
+        "custom_reaction",
+        organ=process.organ,
     )
 
 

@@ -57,6 +57,7 @@ from sbmlutils.factory import (
 from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk import ids
+from pkpdsim.pbpk.annotation import annotate
 from pkpdsim.pbpk.data import value
 from pkpdsim.pbpk.organs import Pool
 from pkpdsim.pbpk.placement import value_parameter
@@ -266,19 +267,27 @@ def route_objects(route: Route, substance: Substance) -> list[Sbase]:
             f"Oral dose of {substance.name} as solution, which enters the stomach "
             "lumen dissolved.",
         ),
-        value_parameter(
-            ids.solution(s),
-            value("routes", "oral", "Ka_sol"),
-            U.per_hr,
-            f"application rate {s} (solution) [1/hr]",
-            _SBO_PARAMETER,
-            "Swallowing of the solution into the stomach lumen.",
+        annotate(
+            value_parameter(
+                ids.solution(s),
+                value("routes", "oral", "Ka_sol"),
+                U.per_hr,
+                f"application rate {s} (solution) [1/hr]",
+                _SBO_PARAMETER,
+                "Swallowing of the solution into the stomach lumen.",
+            ),
+            "application_rate",
         ),
     ]
 
 
 def _formulation_parameters(route: Route) -> list[Sbase]:
     """The parameters of the dissolution of a tablet."""
+    return [annotate(p, "dissolution") for p in _dissolution_parameters(route)]
+
+
+def _dissolution_parameters(route: Route) -> list[Parameter]:
+    """The parameters of the dissolution of a tablet, not annotated."""
     s = route.substance
     f = _formulation(route)
     if isinstance(f, WeibullDissolution):
@@ -340,15 +349,18 @@ def _formulation_parameters(route: Route) -> list[Sbase]:
 
 def _dose(pid: str, name: str, text: str) -> Parameter:
     """The dose state of a route (mg), set or added to by the experiments."""
-    return Parameter(
-        pid,
-        0.0,
-        U.mg,
-        constant=False,
-        name=name,
-        sboTerm=_SBO_PARAMETER,
-        notes=f"{text} An experiment sets the dose or adds to the rest of an "
-        "earlier one (`add_doses`).",
+    return annotate(
+        Parameter(
+            pid,
+            0.0,
+            U.mg,
+            constant=False,
+            name=name,
+            sboTerm=_SBO_PARAMETER,
+            notes=f"{text} An experiment sets the dose or adds to the rest of an "
+            "earlier one (`add_doses`).",
+        ),
+        "dose",
     )
 
 
@@ -365,42 +377,55 @@ def _iv(s: Substance) -> list[Sbase]:
             f"intravenous dose {sid} [mg]",
             f"Intravenous dose of {s.name}, applied into the venous plasma.",
         ),
-        value_parameter(
-            ti,
-            value("routes", "iv", "ti"),
-            U.second,
-            f"injection time {sid} [s]",
-            _SBO_PARAMETER,
-            "Half-life of the application of the intravenous dose.",
+        annotate(
+            value_parameter(
+                ti,
+                value("routes", "iv", "ti"),
+                U.second,
+                f"injection time {sid} [s]",
+                _SBO_PARAMETER,
+                "Half-life of the application of the intravenous dose.",
+            ),
+            "iv_time",
         ),
-        Parameter(
-            kiv,
-            None,
-            U.per_min,
-            constant=False,
-            name=f"injection rate {sid} [1/min]",
-            sboTerm=_SBO_PARAMETER,
-            notes="Rate of the application of the intravenous dose; a rule, so "
-            f"that a dose protocol may change `{ti}` between doses.\n\n"
-            f"`{kiv} = {kiv_formula}`",
+        annotate(
+            Parameter(
+                kiv,
+                None,
+                U.per_min,
+                constant=False,
+                name=f"injection rate {sid} [1/min]",
+                sboTerm=_SBO_PARAMETER,
+                notes="Rate of the application of the intravenous dose; a rule, so "
+                f"that a dose protocol may change `{ti}` between doses.\n\n"
+                f"`{kiv} = {kiv_formula}`",
+            ),
+            "iv_rate",
         ),
         AssignmentRule(kiv, kiv_formula, U.per_min),
-        Parameter(
-            ri,
-            0.0,
-            U.mg_per_min,
-            constant=True,
-            name=f"infusion rate {sid} [mg/min]",
-            sboTerm=_SBO_PARAMETER,
-            notes="Rate of a constant intravenous infusion, which adds to the "
-            "intravenous dose state; an experiment sets it.",
+        annotate(
+            Parameter(
+                ri,
+                0.0,
+                U.mg_per_min,
+                constant=True,
+                name=f"infusion rate {sid} [mg/min]",
+                sboTerm=_SBO_PARAMETER,
+                notes="Rate of a constant intravenous infusion, which adds to the "
+                "intravenous dose state; an experiment sets it.",
+            ),
+            "infusion_rate",
         ),
-        Reaction(
-            sid=reaction,
-            equation=f"-> {ids.pool_species(Pool.VENOUS, sid)}",
-            formula=(f"{kiv} * {dose} / {ids.mr(sid)}", U.mmole_per_min),
-            name=f"intravenous application {sid}",
-            sboTerm=SBO.TRANSPORT_REACTION,
+        annotate(
+            Reaction(
+                sid=reaction,
+                equation=f"-> {ids.pool_species(Pool.VENOUS, sid)}",
+                formula=(f"{kiv} * {dose} / {ids.mr(sid)}", U.mmole_per_min),
+                name=f"intravenous application {sid}",
+                sboTerm=SBO.TRANSPORT_REACTION,
+            ),
+            "iv_application",
+            pool=Pool.VENOUS,
         ),
         RateRule(
             dose,

@@ -56,6 +56,7 @@ from sbmlutils.factory import InitialAssignment, Parameter, Sbase, UnitDefinitio
 from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk import ids
+from pkpdsim.pbpk.annotation import annotate
 from pkpdsim.pbpk.data import cite, load
 from pkpdsim.pbpk.organs import PORTAL_ORGANS, Organ, Pool
 from pkpdsim.pbpk.units import U
@@ -280,16 +281,28 @@ def _parameter(
     text: str,
     sources: Iterable[str],
     value: float | None = None,
+    *,
+    kind: str,
+    organ: Organ | None = None,
+    pool: Pool | None = None,
 ) -> Parameter:
-    """A constant parameter, of a value or of its initial assignment."""
-    return Parameter(
-        pid,
-        value,
-        unit,
-        constant=True,
-        name=name,
-        sboTerm=SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
-        notes=_notes(text, sources),
+    """A constant parameter, of a value or of its initial assignment.
+
+    It is annotated as `kind` (`pkpdsim.pbpk.annotation`) of the organ or pool.
+    """
+    return annotate(
+        Parameter(
+            pid,
+            value,
+            unit,
+            constant=True,
+            name=name,
+            sboTerm=SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
+            notes=_notes(text, sources),
+        ),
+        kind,
+        organ=organ,
+        pool=pool,
     )
 
 
@@ -300,10 +313,23 @@ def _initial(
     name: str,
     text: str,
     sources: Iterable[str],
+    *,
+    kind: str,
+    organ: Organ | None = None,
+    pool: Pool | None = None,
 ) -> list[Sbase]:
-    """A constant parameter with its initial assignment."""
+    """A constant parameter with its initial assignment, annotated as `kind`."""
     return [
-        _parameter(pid, unit, name, f"{text}\n\n`{pid} = {formula}`", sources),
+        _parameter(
+            pid,
+            unit,
+            name,
+            f"{text}\n\n`{pid} = {formula}`",
+            sources,
+            kind=kind,
+            organ=organ,
+            pool=pool,
+        ),
         InitialAssignment(pid, formula, unit),
     ]
 
@@ -333,6 +359,10 @@ class _Physiology:
         name: str,
         text: str,
         sources: Iterable[str],
+        *,
+        kind: str,
+        organ: Organ | None = None,
+        pool: Pool | None = None,
     ) -> list[Sbase]:
         """A constant parameter with its initial assignment, times its factor of impairment."""
         factor = self.factors.get(pid)
@@ -343,7 +373,9 @@ class _Physiology:
                 "(`pkpdsim.pbpk.impairment`)."
             )
             self.applied.add(pid)
-        return _initial(pid, formula, unit, name, text, sources)
+        return _initial(
+            pid, formula, unit, name, text, sources, kind=kind, organ=organ, pool=pool
+        )
 
     def number(self, key: str, unit: UnitDefinition) -> str:
         """The reference value of the sex in a formula, `1.04 kg_per_l`."""
@@ -366,6 +398,10 @@ class _Physiology:
         name: str,
         text: str,
         key: str | None = None,
+        *,
+        kind: str,
+        organ: Organ | None = None,
+        pool: Pool | None = None,
     ) -> list[Sbase]:
         """A constant reference parameter of the sex with its provenance.
 
@@ -381,6 +417,9 @@ class _Physiology:
                 f"{text}\n\n{notes}",
                 sources,
                 value=self.refs[key].value,
+                kind=kind,
+                organ=organ,
+                pool=pool,
             )
         ]
 
@@ -393,7 +432,9 @@ class _Physiology:
             else f"the reference individual of the population {self.population.name}"
         )
 
-        def covariate(pid: str, unit: UnitDefinition, name: str) -> Parameter:
+        def covariate(
+            pid: str, unit: UnitDefinition, name: str, kind: str
+        ) -> Parameter:
             """A covariate with the value of the reference individual."""
             v = individual[pid]
             origin = (
@@ -409,12 +450,13 @@ class _Physiology:
                 f"Covariate, an initial value; {origin}. {v.notes or ''}".rstrip(),
                 (v.source,) if v.source is not None else (),
                 value=v.value,
+                kind=kind,
             )
 
         return [
-            covariate(ids.BW, U.kg, "body weight [kg]"),
-            covariate(ids.HEIGHT, U.cm, "height [cm]"),
-            covariate(ids.AGE, U.yr, "age [yr]"),
+            covariate(ids.BW, U.kg, "body weight [kg]", kind="body_weight"),
+            covariate(ids.HEIGHT, U.cm, "height [cm]", kind="height"),
+            covariate(ids.AGE, U.yr, "age [yr]", kind="age"),
             _parameter(
                 ids.F_RENAL_FUNCTION,
                 U.dimensionless,
@@ -424,6 +466,8 @@ class _Physiology:
                 f"{MODEL_DEFAULT}",
                 (),
                 value=1.0,
+                kind="organ_function",
+                organ=Organ.KIDNEY,
             ),
             _parameter(
                 ids.F_CARDIAC_FUNCTION,
@@ -435,6 +479,8 @@ class _Physiology:
                 f"{MODEL_DEFAULT}",
                 (),
                 value=1.0,
+                kind="organ_function",
+                organ=Organ.HEART,
             ),
             _parameter(
                 ids.F_SHUNT,
@@ -446,6 +492,8 @@ class _Physiology:
                 f"the covariates. {MODEL_DEFAULT}",
                 (),
                 value=_fraction(ids.F_SHUNT, LIVER_DEFAULTS[ids.F_SHUNT]),
+                kind="shunt",
+                organ=Organ.LIVER,
             ),
             _parameter(
                 ids.F_FUNCTIONAL,
@@ -457,6 +505,8 @@ class _Physiology:
                 f"initial value, as the covariates. {MODEL_DEFAULT}",
                 (),
                 value=_fraction(ids.F_FUNCTIONAL, LIVER_DEFAULTS[ids.F_FUNCTIONAL]),
+                kind="organ_function",
+                organ=Organ.LIVER,
             ),
         ]
 
@@ -468,30 +518,36 @@ class _Physiology:
             "reference body surface area [m2]",
             "Body surface area of the reference individual, the reference of "
             "skin and GFR.",
+            kind="bsa",
         )
         objects += self.reference(
             ids.ref(ids.FFM),
             U.kg,
             "reference fat-free mass [kg]",
             "Fat-free mass of the reference individual.",
+            kind="lean_mass",
         )
         objects += self.reference(
             ids.ref(ids.CO),
             U.l_per_min,
             "reference cardiac output [l/min]",
             "Cardiac output of the reference individual.",
+            kind="cardiac_output",
         )
         objects += self.reference(
             ids.ref(ids.GFR),
             U.l_per_min,
             "reference glomerular filtration rate [l/min]",
             "GFR of the reference individual.",
+            kind="gfr",
+            organ=Organ.KIDNEY,
         )
         objects += self.reference(
             ids.ref(ids.VBLOOD),
             U.litre,
             "reference blood volume [l]",
             "Total blood volume of the reference individual.",
+            kind="blood_volume",
         )
         if ids.HCT in self.factors:
             objects += self.reference(
@@ -501,6 +557,7 @@ class _Physiology:
                 "The volume fraction of the blood cells in blood of the healthy "
                 "individual.",
                 key=ids.HCT,
+                kind="hematocrit",
             )
             objects += self.initial(
                 ids.HCT,
@@ -509,6 +566,7 @@ class _Physiology:
                 "hematocrit",
                 "The volume fraction of the blood cells in blood.",
                 (),
+                kind="hematocrit",
             )
         else:
             objects += self.reference(
@@ -516,6 +574,7 @@ class _Physiology:
                 U.dimensionless,
                 "hematocrit",
                 "The volume fraction of the blood cells in blood.",
+                kind="hematocrit",
             )
         for o in LEAN_ORGANS:
             objects += self.reference(
@@ -524,6 +583,8 @@ class _Physiology:
                 f"reference tissue mass {_label(o)} [kg]",
                 "Mass of the organ tissue without its blood of the reference "
                 "individual.",
+                kind="organ_mass",
+                organ=o,
             )
         for o in Organ:
             if o is Organ.LUNG:
@@ -534,6 +595,8 @@ class _Physiology:
                 f"blood flow fraction {_label(o)}",
                 "Blood flow as fraction of cardiac output"
                 + (" (hepatic artery)." if o is Organ.LIVER else "."),
+                kind="flow_fraction",
+                organ=o,
             )
         for pool in Pool:
             objects += self.reference(
@@ -541,6 +604,8 @@ class _Physiology:
                 U.dimensionless,
                 f"blood fraction {pool.name.lower()} pool",
                 "Volume of the blood pool as fraction of the blood volume.",
+                kind="pool_fraction",
+                pool=pool,
             )
         return objects
 
@@ -553,6 +618,7 @@ class _Physiology:
             "body mass index [kg/m2]",
             "Body mass index of the individual.",
             ("Janmahasatian2005",),
+            kind="bmi",
         )
         objects += self.initial(
             ids.BSA,
@@ -561,6 +627,7 @@ class _Physiology:
             "body surface area [m2]",
             "Body surface area of the individual, Du Bois formula.",
             ("DuBois1916",),
+            kind="bsa",
         )
 
         def ffm(k: int, a: int) -> str:
@@ -580,6 +647,7 @@ class _Physiology:
             "Janmahasatian 2005; Huisinga 2012 (eq. 6) use it for the lean body "
             "weight.",
             ("Janmahasatian2005", "Huisinga2012"),
+            kind="lean_mass",
         )
         br, sk = ids.organ_mass(Organ.BRAIN), ids.organ_mass(Organ.SKIN)
         objects += self.initial(
@@ -593,6 +661,7 @@ class _Physiology:
             "skin relative to the reference individual (Huisinga 2012 eq. 12, "
             "with the tissue masses without blood).",
             ("Huisinga2012",),
+            kind="scaling_factor",
         )
         return objects
 
@@ -606,6 +675,7 @@ class _Physiology:
             "Blood volume of the individual; it scales with the lean tissues "
             "(Huisinga 2012 eq. 12, blood is one of the remaining tissues).",
             ("Huisinga2012",),
+            kind="blood_volume",
         )
         for o in LEAN_ORGANS:
             mid = ids.organ_mass(o)
@@ -629,6 +699,8 @@ class _Physiology:
                 f"tissue mass {_label(o)} [kg]",
                 f"Mass of the organ tissue without its blood; {text}",
                 ("Huisinga2012",),
+                kind="organ_mass",
+                organ=o,
             )
         objects += self.initial(
             ids.MLEAN,
@@ -637,6 +709,7 @@ class _Physiology:
             "mass of the lean organ tissues [kg]",
             "Mass of the tissues of the lean organs without their blood.",
             ("ICRP89",),
+            kind="lean_mass",
         )
         mad = ids.organ_mass(Organ.ADIPOSE)
         notes, sources = self.provenance("rho_blood")
@@ -650,6 +723,8 @@ class _Physiology:
             "weight; it includes the tissues of ICRP 89 which are not organs of "
             f"the model. Density of blood:\n\n{notes}",
             sources,
+            kind="organ_mass",
+            organ=Organ.ADIPOSE,
         )
         for o in Organ:
             notes, sources = self.provenance(f"rho_{o}", f"blood_{o}")
@@ -663,6 +738,8 @@ class _Physiology:
                 "the tissue and the blood of the organ as fraction of the blood "
                 f"volume:\n\n{notes}",
                 sources,
+                kind="organ_volume",
+                organ=o,
             )
         for pool in Pool:
             objects += self.initial(
@@ -672,6 +749,8 @@ class _Physiology:
                 f"volume {pool.name.lower()} blood [l]",
                 "Volume of the blood pool.",
                 ("ICRP89",),
+                kind="pool_volume",
+                pool=pool,
             )
         return objects
 
@@ -692,6 +771,8 @@ class _Physiology:
                 "is the `f_vas` of physiology_human.toml for the reference "
                 f"individual. Blood of the organ:\n\n{notes}",
                 sources,
+                kind="vascular_fraction",
+                organ=o,
             )
             notes, sources = self.provenance(f"fint_{o}")
             objects += self.initial(
@@ -705,6 +786,8 @@ class _Physiology:
                 "the organ volume; it is the `f_int` of physiology_human.toml for "
                 f"the reference individual.\n\n{notes}",
                 sources,
+                kind="interstitial_fraction",
+                organ=o,
             )
         return objects
 
@@ -726,6 +809,7 @@ class _Physiology:
             "SQ_co = SV_tis) and with the cardiac function. The organ flows are "
             "fractions of it.",
             ("Huisinga2012",),
+            kind="cardiac_output",
         )
         objects += self.initial(
             ids.CO,
@@ -734,6 +818,7 @@ class _Physiology:
             "cardiac output [l/min]",
             "Cardiac output of the individual, the sum of the organ flows.",
             ("Huisinga2012",),
+            kind="cardiac_output",
         )
         objects += self.initial(
             ids.organ_flow(Organ.LUNG),
@@ -742,6 +827,8 @@ class _Physiology:
             "blood flow lung [l/min]",
             "The lung is in series and receives the cardiac output.",
             ("ICRP89",),
+            kind="organ_flow",
+            organ=Organ.LUNG,
         )
         for o in Organ:
             if o is Organ.LUNG:
@@ -756,6 +843,8 @@ class _Physiology:
                 + f": its fraction of the cardiac output without impairment "
                 f"`{ids.CO_BASE}`.",
                 ("ICRP89",),
+                kind="organ_flow",
+                organ=o,
             )
         objects += self.initial(
             ids.QHA,
@@ -765,6 +854,8 @@ class _Physiology:
             "Blood flow of the hepatic artery, the flow of the liver of the flow "
             "fractions.",
             ("ICRP89",),
+            kind="hepatic_artery_flow",
+            organ=Organ.LIVER,
         )
         objects += self.initial(
             ids.QPO,
@@ -774,6 +865,8 @@ class _Physiology:
             "Blood flow of the portal vein, the flows of the organs which drain "
             "into it.",
             ("ICRP89",),
+            kind="portal_flow",
+            pool=Pool.PORTAL,
         )
         objects += self.initial(
             ids.QH,
@@ -782,6 +875,8 @@ class _Physiology:
             "liver blood flow [l/min]",
             "Total blood flow of the liver, hepatic artery and portal vein.",
             ("ICRP89",),
+            kind="hepatic_flow",
+            organ=Organ.LIVER,
         )
         objects += self.initial(
             ids.GFR,
@@ -794,6 +889,8 @@ class _Physiology:
             "body surface area, i.e. the same GFR per 1.73 m2, times the renal "
             "function.",
             ("ICRP89",),
+            kind="gfr",
+            organ=Organ.KIDNEY,
         )
         return objects
 

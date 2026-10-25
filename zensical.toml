@@ -26,6 +26,9 @@ nav = [
     { "Licenses" = "licenses.md" },
     { "Release of a model repository" = "release.md" },
   ] },
+  { "PBPK library" = [
+    { "Annotation" = "pbpk/annotation.md" },
+  ] },
   { "API reference" = [
     { "Overview" = "api/index.md" },
     { "pkpdsim" = "api/pkpdsim.md" },

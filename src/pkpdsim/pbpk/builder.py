@@ -38,6 +38,14 @@ downstream of it, in the top model and in the organs, is an assignment rule
 The top model holds the impaired organ function as well
 (`pkpdsim.pbpk.impairment`): the severities and their factors on the
 physiology, `fu` and the activity of the proteins of the liver.
+
+A PD component (`pkpdsim.pbpk.pd`) is a further `ModelDefinition` with a
+`Submodel` of its id: the elements of the body replace its inputs, its
+outputs replace parameters of the body, which are dynamic.
+
+Every element is annotated when it is created (`pkpdsim.pbpk.annotation`);
+an input of a component takes the annotation of the element of the body
+which replaces it, and the model the annotation of a PBPK model.
 """
 
 import copy
@@ -56,6 +64,7 @@ from sbmlutils.factory import (
     ModelDefinition,
     Parameter,
     Port,
+    PortType,
     Reaction,
     ReplacedBy,
     ReplacedElement,
@@ -69,6 +78,7 @@ from sbmlutils.metadata import SBO
 from sbmlutils.validation import validate_doc
 
 from pkpdsim.pbpk import ids, variants
+from pkpdsim.pbpk.annotation import annotate, model_annotations
 from pkpdsim.pbpk.chemistry import Membrane, Metabolism, Transport
 from pkpdsim.pbpk.data import cite
 from pkpdsim.pbpk.definition import PBPKDefinition
@@ -82,6 +92,7 @@ from pkpdsim.pbpk.observers import observer_objects
 from pkpdsim.pbpk.organ import Boundary, GutComponent, OrganComponent, OrganContext
 from pkpdsim.pbpk.organs import Organ, Part, Pool
 from pkpdsim.pbpk.parts import parts_for
+from pkpdsim.pbpk.pd import PDComponent, ports
 from pkpdsim.pbpk.physiology import physiology_objects, reference_tissue_volumes
 from pkpdsim.pbpk.placement import inhibition_parameters, kp_id, value_parameter
 from pkpdsim.pbpk.routes import ORAL, route_objects
@@ -99,6 +110,30 @@ __all__ = [
 ]
 
 _ONE = "1 dimensionless"
+_ANNOTATED = (Compartment, Species, Parameter, Reaction)
+_MODEL_FIELDS = (
+    "name",
+    "sboTerm",
+    "annotations",
+    "notes",
+    "creators",
+    "model_units",
+    "conversionFactor",
+    "units",
+    "functions",
+    "compartments",
+    "species",
+    "parameters",
+    "assignments",
+    "rules",
+    "rate_rules",
+    "algebraic_rules",
+    "reactions",
+    "events",
+    "constraints",
+    "ports",
+)
+"""The fields of the model of a PD component which its model definition takes."""
 _SBO_PARAMETER = SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER
 _SOURCE = {
     "competitive": "Segel1975",
@@ -214,16 +249,11 @@ def compose(definition: PBPKDefinition) -> Model:
     Raises:
         ValueError: if the definition is invalid, an organ variant is unknown,
             an organ reads an element the body does not have, a route is
-            given twice, or an oral route or an apical transport of the small
-            intestine has no intestine with a lumen.
-        NotImplementedError: for a PD component, which later versions of the
-            library build.
+            given twice, an oral route or an apical transport of the small
+            intestine has no intestine with a lumen, or a PD component names
+            a port or an element of the body which does not exist.
     """
     definition.validate()
-    if definition.pd:
-        raise NotImplementedError(
-            f"{definition.sid}: PD components are not built yet by the library."
-        )
     gut = _gut(definition)
     oral = sorted({r.substance for r in definition.routes if r.kind in ORAL})
     apical = sorted(
@@ -269,11 +299,31 @@ def compose(definition: PBPKDefinition) -> Model:
         submodels.append(Submodel(submodel, modelRef=md.sid, name=organ.name.lower()))
         replaced += top.connect(organ, submodel, boundary)
     top.add(observer_objects(definition))
-    _dynamic(definition, top.objects, model_definitions, submodels, replaced)
+    outputs: list[str] = []
+    for pd in definition.pd:
+        md, submodel, pd_replaced = top.couple(pd)
+        if any(md.sid == other.sid for other in model_definitions):
+            raise ValueError(
+                f"The PD component '{md.sid}' has the id of another model definition."
+            )
+        model_definitions.append(md)
+        submodels.append(submodel)
+        replaced += pd_replaced
+        outputs += pd.outputs.values()
+    _annotate_inputs(top.objects, model_definitions, submodels, replaced)
+    _dynamic(
+        definition,
+        (*definition.dynamic, *(o for o in outputs if o not in definition.dynamic)),
+        top.objects,
+        model_definitions,
+        submodels,
+        replaced,
+    )
 
     return Model(
         sid=definition.sid,
         name=definition.name or definition.sid,
+        annotations=model_annotations(definition.substances),
         notes=definition.notes,
         units=U,
         model_units=MODEL_UNITS,
@@ -323,8 +373,47 @@ def _to_rules(
     return rules
 
 
+def _annotate_inputs(
+    objects: list[Sbase],
+    model_definitions: list[ModelDefinition],
+    submodels: list[Submodel],
+    replaced: list[ReplacedElement],
+) -> None:
+    """Give every element of a component which is linked to the body its annotation.
+
+    An input of an organ is the element of the body (`V<o>`, `fu_<s>`,
+    `Cve_<s>`), replaced by it in the comp model; the comp model shows the
+    input with the SBO term and the annotations of the element of the body,
+    so that every element of the comp model carries them as the flat model
+    does. An output (of an organ `Cout_<s>`, of a PD component the parameter
+    of the body it replaces) without annotations of its own takes those of
+    the element of the body, which the flat model shows under its id.
+    """
+    by_sid = {str(o.sid): o for o in objects if isinstance(o, _ANNOTATED)}
+    by_submodel = {str(sm.sid): str(sm.modelRef) for sm in submodels}
+    by_md = {str(md.sid): md for md in model_definitions}
+    links = [(r.elementRef, r.submodelRef, r.portRef) for r in replaced] + [
+        (o.replacedBy.elementRef, o.replacedBy.submodelRef, o.replacedBy.portRef)
+        for o in by_sid.values()
+        if isinstance(o, Parameter) and o.replacedBy is not None
+    ]
+    for element_ref, submodel_ref, port_ref in links:
+        top = by_sid.get(str(element_ref))
+        md = by_md.get(by_submodel.get(str(submodel_ref), ""))
+        if top is None or md is None:
+            continue
+        local = str(port_ref).removesuffix(PORT_SUFFIX)
+        for name in ("compartments", "species", "parameters"):
+            for element in getattr(md, name) or []:
+                if str(element.sid) == local and not element.annotations:
+                    element.sboTerm = top.sboTerm
+                    element.annotations = list(top.annotations or [])
+                    element.metaId = element.metaId or f"meta_{md.sid}__{local}"
+
+
 def _dynamic(
     definition: PBPKDefinition,
+    names: Iterable[str],
     objects: list[Sbase],
     model_definitions: list[ModelDefinition],
     submodels: list[Submodel],
@@ -332,7 +421,8 @@ def _dynamic(
 ) -> None:
     """Keep the quantities downstream of the dynamic parameters as assignment rules.
 
-    The parameters `definition.dynamic` change during a simulation: every
+    The parameters `names` (`definition.dynamic` and the parameters which a
+    PD component replaces) change during a simulation: every
     initial assignment of the top model which reads one of them (directly or
     through another such quantity) becomes an assignment rule, and so does
     every initial assignment of an organ which reads such an element through
@@ -343,15 +433,15 @@ def _dynamic(
     Raises:
         ValueError: if a dynamic name is no parameter of the top model.
     """
-    if not definition.dynamic:
+    dynamic = set(names)
+    if not dynamic:
         return
     parameters = {str(o.sid) for o in objects if isinstance(o, Parameter)}
-    unknown = sorted(set(definition.dynamic) - parameters)
+    unknown = sorted(dynamic - parameters)
     if unknown:
         raise ValueError(
             f"{definition.sid}: dynamic {unknown} are no parameters of the top model."
         )
-    dynamic = set(definition.dynamic)
     assignments = [o for o in objects if isinstance(o, InitialAssignment)]
     elements = [o for o in objects if isinstance(o, Parameter | Compartment)]
     rules = _to_rules(assignments, elements, dynamic)
@@ -436,18 +526,22 @@ class _Top:
         unit: UnitDefinition,
         name: str,
         text: str,
+        kind: str,
     ) -> None:
-        """A constant parameter with its initial assignment."""
+        """A constant parameter with its initial assignment, annotated as `kind`."""
         self.add(
             [
-                Parameter(
-                    pid,
-                    None,
-                    unit,
-                    constant=True,
-                    name=name,
-                    sboTerm=_SBO_PARAMETER,
-                    notes=f"{text}\n\n`{pid} = {formula}`",
+                annotate(
+                    Parameter(
+                        pid,
+                        None,
+                        unit,
+                        constant=True,
+                        name=name,
+                        sboTerm=_SBO_PARAMETER,
+                        notes=f"{text}\n\n`{pid} = {formula}`",
+                    ),
+                    kind,
                 ),
                 InitialAssignment(pid, formula, unit),
             ]
@@ -459,53 +553,64 @@ class _Top:
         formula: str,
         name: str,
         text: str,
-        sbo: str = SBO.PHYSICAL_COMPARTMENT,
+        kind: str,
+        pool: Pool,
     ) -> None:
-        """A constant compartment with its volume as initial assignment."""
+        """A constant compartment of a pool with its volume as initial assignment."""
         self.add(
             [
-                Compartment(
-                    cid,
-                    None,
-                    U.litre,
-                    constant=True,
-                    name=name,
-                    sboTerm=sbo,
-                    notes=f"{text}\n\n`{cid} = {formula}`",
+                annotate(
+                    Compartment(
+                        cid,
+                        None,
+                        U.litre,
+                        constant=True,
+                        name=name,
+                        notes=f"{text}\n\n`{cid} = {formula}`",
+                    ),
+                    kind,
+                    pool=pool,
                 ),
                 InitialAssignment(cid, formula, U.litre),
             ]
         )
 
     def _species(
-        self, sid: str, compartment: str, name: str, amount: bool = False
+        self, sid: str, compartment: str, name: str, kind: str, s: Substance
     ) -> None:
-        """A species of the top model, initially zero."""
+        """A species of a substance in the top model, initially zero."""
         self.add(
             [
-                Species(
-                    sid,
-                    compartment,
-                    initialAmount=0.0 if amount else None,
-                    initialConcentration=None if amount else 0.0,
-                    substanceUnit=U.mmole,
-                    hasOnlySubstanceUnits=amount,
-                    name=name,
-                    sboTerm=SBO.SIMPLE_CHEMICAL,
+                annotate(
+                    Species(
+                        sid,
+                        compartment,
+                        initialConcentration=0.0,
+                        substanceUnit=U.mmole,
+                        hasOnlySubstanceUnits=False,
+                        name=name,
+                    ),
+                    kind,
+                    substance=s,
                 )
             ]
         )
 
-    def _reaction(self, sid: str, equation: str, rate: str, name: str) -> None:
-        """A transport of the top model, the rate in mmole/min."""
+    def _reaction(
+        self, sid: str, equation: str, rate: str, name: str, pool: Pool
+    ) -> None:
+        """An exchange of a pool, the rate in mmole/min."""
         self.add(
             [
-                Reaction(
-                    sid=sid,
-                    equation=equation,
-                    formula=(rate, U.mmole_per_min),
-                    name=name,
-                    sboTerm=SBO.TRANSPORT_REACTION,
+                annotate(
+                    Reaction(
+                        sid=sid,
+                        equation=equation,
+                        formula=(rate, U.mmole_per_min),
+                        name=name,
+                    ),
+                    "exchange",
+                    pool=pool,
                 )
             ]
         )
@@ -517,25 +622,31 @@ class _Top:
         sid = s.sid
         self.add(
             [
-                value_parameter(
-                    ids.mr(sid),
-                    s.mr,
-                    U.g_per_mole,
-                    f"molecular weight {sid} [g/mole]",
-                    SBO.MOLECULAR_MASS,
-                ),
-                value_parameter(
-                    ids.fu_ref(sid),
-                    s.binding.fu if s.binding is not None else 1.0,
-                    U.dimensionless,
-                    f"reference fraction unbound {sid}",
-                    _SBO_PARAMETER,
-                    "Fraction unbound in plasma of the reference individual"
-                    + (
-                        f" (binding protein {s.binding.protein})."
-                        if s.binding is not None
-                        else "; the substance does not bind to plasma proteins."
+                annotate(
+                    value_parameter(
+                        ids.mr(sid),
+                        s.mr,
+                        U.g_per_mole,
+                        f"molecular weight {sid} [g/mole]",
+                        SBO.MOLECULAR_MASS,
                     ),
+                    "molecular_weight",
+                ),
+                annotate(
+                    value_parameter(
+                        ids.fu_ref(sid),
+                        s.binding.fu if s.binding is not None else 1.0,
+                        U.dimensionless,
+                        f"reference fraction unbound {sid}",
+                        _SBO_PARAMETER,
+                        "Fraction unbound in plasma of the reference individual"
+                        + (
+                            f" (binding protein {s.binding.protein})."
+                            if s.binding is not None
+                            else "; the substance does not bind to plasma proteins."
+                        ),
+                    ),
+                    "fu",
                 ),
             ]
         )
@@ -550,18 +661,22 @@ class _Top:
             if s.binding is not None
             else "Fraction unbound in plasma of the individual; the substance does "
             "not bind to plasma proteins.",
+            "fu",
         )
         if s.excretion.urine:
             self.add(
                 [
-                    value_parameter(
-                        ids.fraction_reabsorbed(sid),
-                        s.excretion.fraction_reabsorbed,
-                        U.dimensionless,
-                        f"fraction reabsorbed {sid}",
-                        _SBO_PARAMETER,
-                        "Fraction of the glomerular filtrate which is reabsorbed "
-                        "into the plasma of the kidney.",
+                    annotate(
+                        value_parameter(
+                            ids.fraction_reabsorbed(sid),
+                            s.excretion.fraction_reabsorbed,
+                            U.dimensionless,
+                            f"fraction reabsorbed {sid}",
+                            _SBO_PARAMETER,
+                            "Fraction of the glomerular filtrate which is reabsorbed "
+                            "into the plasma of the kidney.",
+                        ),
+                        "fraction_reabsorbed",
                     )
                 ]
             )
@@ -610,13 +725,18 @@ class _Top:
                     }[field]
                 self.add(
                     [
-                        value_parameter(
-                            pid,
-                            q,
-                            unit,
-                            f"{field} {inh.protein} {s.sid}",
-                            sbo,
-                            f"{text}\n\nSource of the rate law: {cite(_SOURCE[inh.kind])}",
+                        annotate(
+                            value_parameter(
+                                pid,
+                                q,
+                                unit,
+                                f"{field} {inh.protein} {s.sid}",
+                                sbo,
+                                f"{text}\n\nSource of the rate law: "
+                                f"{cite(_SOURCE[inh.kind])}",
+                            ),
+                            "kinact" if field == "kinact" else "ki",
+                            protein=inh.protein,
                         )
                     ]
                 )
@@ -625,23 +745,31 @@ class _Top:
                 continue
             self.add(
                 [
-                    value_parameter(
-                        ids.emax(ind.protein, s.sid),
-                        ind.emax,
-                        U.dimensionless,
-                        f"Emax {ind.protein} {s.sid}",
-                        _SBO_PARAMETER,
-                        f"Maximal induction of {ind.protein} by {s.sid}, the "
-                        "fold increase of its synthesis minus 1.",
+                    annotate(
+                        value_parameter(
+                            ids.emax(ind.protein, s.sid),
+                            ind.emax,
+                            U.dimensionless,
+                            f"Emax {ind.protein} {s.sid}",
+                            _SBO_PARAMETER,
+                            f"Maximal induction of {ind.protein} by {s.sid}, the "
+                            "fold increase of its synthesis minus 1.",
+                        ),
+                        "emax",
+                        protein=ind.protein,
                     ),
-                    value_parameter(
-                        ids.ec50(ind.protein, s.sid),
-                        ind.ec50,
-                        U.mM,
-                        f"EC50 {ind.protein} {s.sid}",
-                        SBO.EC50,
-                        f"Unbound concentration of {s.sid} of half-maximal "
-                        f"induction of {ind.protein}.",
+                    annotate(
+                        value_parameter(
+                            ids.ec50(ind.protein, s.sid),
+                            ind.ec50,
+                            U.mM,
+                            f"EC50 {ind.protein} {s.sid}",
+                            SBO.EC50,
+                            f"Unbound concentration of {s.sid} of half-maximal "
+                            f"induction of {ind.protein}.",
+                        ),
+                        "ec50",
+                        protein=ind.protein,
                     ),
                 ]
             )
@@ -659,16 +787,19 @@ class _Top:
         )
         if dist.ftissue is not None:
             objects.append(
-                value_parameter(
-                    ids.ftissue(sid),
-                    dist.ftissue,
-                    U.l_per_min,
-                    f"whole-body exchange {sid} [l/min]",
-                    _SBO_PARAMETER,
-                    "Exchange between plasma and tissue of the whole body of the "
-                    "reference individual; an organ has the share of its tissue "
-                    "volume. It multiplies `fu*(Cpl - Cti/Kp)`, so its fitted "
-                    "values differ from those of the hand-written models.",
+                annotate(
+                    value_parameter(
+                        ids.ftissue(sid),
+                        dist.ftissue,
+                        U.l_per_min,
+                        f"whole-body exchange {sid} [l/min]",
+                        _SBO_PARAMETER,
+                        "Exchange between plasma and tissue of the whole body of the "
+                        "reference individual; an organ has the share of its tissue "
+                        "volume. It multiplies `fu*(Cpl - Cti/Kp)`, so its fitted "
+                        "values differ from those of the hand-written models.",
+                    ),
+                    "permeability",
                 )
             )
         shared = self._ftissue_organs(s)
@@ -676,20 +807,23 @@ class _Top:
             volumes = reference_tissue_volumes(self.definition.sex)
             total = sum(volumes[o] for o in shared)
             objects.append(
-                Parameter(
-                    ids.tissue_volume_total_ref(sid),
-                    total,
-                    U.litre,
-                    constant=True,
-                    name=f"reference tissue volume of the organs {sid} enters [l]",
-                    sboTerm=_SBO_PARAMETER,
-                    notes="Tissue volume `V<o>*(1 - f_vas_<o>)` of the "
-                    f"{self.definition.sex.value} reference individual summed "
-                    "over the organs whose exchange is a share of "
-                    f"`{ids.ftissue(sid)}`: "
-                    + ", ".join(o.name.lower() for o in shared)
-                    + ". A constant, so that the exchange scales with the "
-                    "tissue volume of the individual.",
+                annotate(
+                    Parameter(
+                        ids.tissue_volume_total_ref(sid),
+                        total,
+                        U.litre,
+                        constant=True,
+                        name=f"reference tissue volume of the organs {sid} enters [l]",
+                        sboTerm=_SBO_PARAMETER,
+                        notes="Tissue volume `V<o>*(1 - f_vas_<o>)` of the "
+                        f"{self.definition.sex.value} reference individual summed "
+                        "over the organs whose exchange is a share of "
+                        f"`{ids.ftissue(sid)}`: "
+                        + ", ".join(o.name.lower() for o in shared)
+                        + ". A constant, so that the exchange scales with the "
+                        "tissue volume of the individual.",
+                    ),
+                    "tissue_volume",
                 )
             )
         self.add(objects)
@@ -697,25 +831,32 @@ class _Top:
     def _kp_value(self, sid: str, dist: Kp) -> list[Sbase]:
         """The coefficient of a substance and the coefficients of single organs."""
         objects: list[Sbase] = [
-            value_parameter(
-                ids.kp(sid),
-                dist.value,
-                U.dimensionless,
-                f"tissue to plasma coefficient {sid}",
-                _SBO_PARAMETER,
-                "Whole-tissue (interstitial and intracellular) to plasma "
-                "coefficient of the organs without an own value.",
+            annotate(
+                value_parameter(
+                    ids.kp(sid),
+                    dist.value,
+                    U.dimensionless,
+                    f"tissue to plasma coefficient {sid}",
+                    _SBO_PARAMETER,
+                    "Whole-tissue (interstitial and intracellular) to plasma "
+                    "coefficient of the organs without an own value.",
+                ),
+                "kp",
             )
         ]
         for organ, q in dist.overrides.items():
             objects.append(
-                value_parameter(
-                    ids.kp_organ(organ, sid),
-                    q,
-                    U.dimensionless,
-                    f"tissue to plasma coefficient {sid} {organ.name.lower()}",
-                    _SBO_PARAMETER,
-                    "Whole-tissue to plasma coefficient of the organ.",
+                annotate(
+                    value_parameter(
+                        ids.kp_organ(organ, sid),
+                        q,
+                        U.dimensionless,
+                        f"tissue to plasma coefficient {sid} {organ.name.lower()}",
+                        _SBO_PARAMETER,
+                        "Whole-tissue to plasma coefficient of the organ.",
+                    ),
+                    "kp_organ",
+                    organ=organ,
                 )
             )
         return objects
@@ -728,14 +869,17 @@ class _Top:
         """
         sid, fkp = s.sid, ids.fkp(s.sid)
         objects: list[Sbase] = [
-            value_parameter(
-                fkp,
-                method.factor,
-                U.dimensionless,
-                f"factor of the tissue to plasma coefficients {sid}",
-                _SBO_PARAMETER,
-                "Factor on every tissue to plasma coefficient of the Kp method "
-                f"({method.method}), so that a fit scales all of them.",
+            annotate(
+                value_parameter(
+                    fkp,
+                    method.factor,
+                    U.dimensionless,
+                    f"factor of the tissue to plasma coefficients {sid}",
+                    _SBO_PARAMETER,
+                    "Factor on every tissue to plasma coefficient of the Kp method "
+                    f"({method.method}), so that a fit scales all of them.",
+                ),
+                "kp_factor",
             )
         ]
         for organ, v in kp_values(s, self.definition.sex).items():
@@ -743,16 +887,20 @@ class _Top:
             formula = f"{fkp} * {v.value!r} dimensionless"
             citations = "\n".join(f"- {cite(key)}" for key in kp_sources(organ))
             objects += [
-                Parameter(
-                    pid,
-                    None,
-                    U.dimensionless,
-                    constant=True,
-                    name=f"tissue to plasma coefficient {sid} {organ.name.lower()}",
-                    sboTerm=_SBO_PARAMETER,
-                    notes=f"Whole-tissue to plasma coefficient of the organ, the "
-                    f"Kp method times its factor. {v.notes}\n\n`{pid} = "
-                    f"{formula}`\n\nSources:\n\n{citations}",
+                annotate(
+                    Parameter(
+                        pid,
+                        None,
+                        U.dimensionless,
+                        constant=True,
+                        name=f"tissue to plasma coefficient {sid} {organ.name.lower()}",
+                        sboTerm=_SBO_PARAMETER,
+                        notes=f"Whole-tissue to plasma coefficient of the organ, the "
+                        f"Kp method times its factor. {v.notes}\n\n`{pid} = "
+                        f"{formula}`\n\nSources:\n\n{citations}",
+                    ),
+                    "kp_organ",
+                    organ=organ,
                 ),
                 InitialAssignment(pid, formula, U.dimensionless),
             ]
@@ -788,18 +936,22 @@ class _Top:
                 name,
                 "Blood to plasma ratio of a substance which does not enter the "
                 "erythrocytes; an observer value, the flows carry plasma only.",
+                "bp",
             )
             return
         if ery.bp is not None:
             self.add(
                 [
-                    value_parameter(
-                        bp,
-                        ery.bp,
-                        U.dimensionless,
-                        name,
-                        _SBO_PARAMETER,
-                        "Blood to plasma ratio, erythrocytes in equilibrium.",
+                    annotate(
+                        value_parameter(
+                            bp,
+                            ery.bp,
+                            U.dimensionless,
+                            name,
+                            _SBO_PARAMETER,
+                            "Blood to plasma ratio, erythrocytes in equilibrium.",
+                        ),
+                        "bp",
                     )
                 ]
             )
@@ -807,26 +959,32 @@ class _Top:
         assert ery.kbc is not None
         self.add(
             [
-                value_parameter(
-                    ids.kbc(sid),
-                    ery.kbc,
-                    U.dimensionless,
-                    f"blood cell to plasma coefficient {sid}",
-                    _SBO_PARAMETER,
+                annotate(
+                    value_parameter(
+                        ids.kbc(sid),
+                        ery.kbc,
+                        U.dimensionless,
+                        f"blood cell to plasma coefficient {sid}",
+                        _SBO_PARAMETER,
+                    ),
+                    "kbc",
                 )
             ]
         )
         if ery.k_exchange is not None:
             self.add(
                 [
-                    value_parameter(
-                        ids.kbc_exchange(sid),
-                        ery.k_exchange,
-                        U.per_min,
-                        f"exchange plasma and blood cells {sid} [1/min]",
-                        _SBO_PARAMETER,
-                        "Rate of the exchange between plasma and blood cells per "
-                        "blood cell volume.",
+                    annotate(
+                        value_parameter(
+                            ids.kbc_exchange(sid),
+                            ery.k_exchange,
+                            U.per_min,
+                            f"exchange plasma and blood cells {sid} [1/min]",
+                            _SBO_PARAMETER,
+                            "Rate of the exchange between plasma and blood cells per "
+                            "blood cell volume.",
+                        ),
+                        "exchange_rate",
                     )
                 ]
             )
@@ -841,6 +999,7 @@ class _Top:
                 if ery.mode == "kinetic"
                 else "."
             ),
+            "bp",
         )
 
     # --- pools -----------------------------------------------------------
@@ -856,12 +1015,16 @@ class _Top:
             f"{volume} * ({_ONE} - {ids.HCT})",
             f"{label} plasma",
             "Plasma of the blood pool.",
+            "plasma",
+            pool,
         )
         self._compartment(
             cells,
             f"{volume} * {ids.HCT}",
             f"{label} blood cells",
             "Blood cells of the blood pool.",
+            "blood_cells",
+            pool,
         )
         for s in self.definition.substances:
             ery = s.erythrocytes
@@ -876,20 +1039,30 @@ class _Top:
                     "blood of a substance with erythrocytes in equilibrium, the "
                     "pool volume times the blood to plasma ratio, so that the "
                     "plasma concentration in it gives the amount in the blood.",
-                    SBO.IMPLICIT_COMPARTMENT,
+                    "capacity",
+                    pool,
                 )
             cpl = ids.pool_species(pool, s.sid)
-            self._species(cpl, compartment, f"{s.name} ({label} plasma)")
+            self._species(
+                cpl,
+                compartment,
+                f"{s.name} ({label} plasma)",
+                "concentration_plasma",
+                s,
+            )
             if ery is None or ery.mode != "kinetic":
                 continue
             cbc = ids.pool_species(pool, s.sid, Part.BLOOD_CELLS)
-            self._species(cbc, cells, f"{s.name} ({label} blood cells)")
+            self._species(
+                cbc, cells, f"{s.name} ({label} blood cells)", "concentration", s
+            )
             self._reaction(
                 ids.pool_exchange_reaction(pool, s.sid),
                 f"{cpl} <-> {cbc}",
                 f"{ids.kbc_exchange(s.sid)} * {cells} * "
                 f"({cpl} - {cbc} / {ids.kbc(s.sid)})",
                 f"exchange {s.sid} plasma and blood cells, {label} pool",
+                pool,
             )
 
     # --- routes ----------------------------------------------------------
@@ -914,6 +1087,74 @@ class _Top:
 
     # --- organs ----------------------------------------------------------
 
+    def couple(
+        self, pd: PDComponent
+    ) -> tuple[ModelDefinition, Submodel, list[ReplacedElement]]:
+        """The model definition, submodel and replacements of a PD component.
+
+        Every input of the component is replaced by the element of the body;
+        every parameter of the body which an output names is replaced by the
+        element of the output (a `ReplacedBy` of the parameter).
+
+        Raises:
+            ValueError: naming an input or output which is no port of the
+                component, of the wrong type, an element of the body which
+                does not exist (an input) or is no parameter (an output), or a
+                component whose id is an id of the top model.
+        """
+        model = copy.deepcopy(pd.model)
+        sid = str(model.sid)
+        if sid in self.known:
+            raise ValueError(
+                f"The PD component '{sid}' has the id of an element of the body."
+            )
+        if model.model_definitions or model.external_model_definitions:
+            raise ValueError(
+                f"The PD component '{sid}' has model definitions of its own; "
+                "comp does not nest them."
+            )
+        declared = ports(model)
+        parameters = {str(o.sid): o for o in self.objects if isinstance(o, Parameter)}
+        problems: list[str] = []
+        for what, mapping, wrong in (
+            ("input", pd.inputs, PortType.OUTPUT_PORT),
+            ("output", pd.outputs, PortType.INPUT_PORT),
+        ):
+            for local, body in mapping.items():
+                if local not in declared:
+                    problems.append(f"{what} '{local}' is no port of the component")
+                elif declared[local][1] is wrong:
+                    problems.append(
+                        f"{what} '{local}' is declared as {wrong.value} of the "
+                        "component"
+                    )
+                if what == "input" and body not in self.known:
+                    problems.append(f"input '{local}' reads the unknown id '{body}'")
+                if what == "output" and body not in parameters:
+                    problems.append(
+                        f"output '{local}' replaces '{body}', which is no "
+                        "parameter of the body"
+                    )
+        if problems:
+            raise ValueError(f"PD component '{sid}': " + "; ".join(problems) + ".")
+        md = ModelDefinition(
+            sid=sid,
+            **{f: getattr(model, f) for f in _MODEL_FIELDS if getattr(model, f)},
+        )
+        _scope_port_metaids(md)
+        for local, body in pd.outputs.items():
+            parameters[body].replacedBy = ReplacedBy(
+                elementRef=body, submodelRef=sid, portRef=declared[local][0]
+            )
+        submodel = Submodel(sid, modelRef=sid, name=model.name or sid)
+        replaced = [
+            ReplacedElement(
+                elementRef=body, submodelRef=sid, portRef=declared[local][0]
+            )
+            for local, body in pd.inputs.items()
+        ]
+        return md, submodel, replaced
+
     def connect(
         self, organ: Organ, submodel: str, boundary: Boundary
     ) -> list[ReplacedElement]:
@@ -937,21 +1178,25 @@ class _Top:
         for local, top in boundary.outputs.items():
             self.add(
                 [
-                    Parameter(
-                        top,
-                        0.0,
-                        U.mM,
-                        constant=False,
-                        name=f"outflow concentration {top} [mM]",
-                        sboTerm=_SBO_PARAMETER,
-                        notes="Concentration (plasma or kinetic blood cells) "
-                        f"leaving the organ {organ.name.lower()}, replaced by the "
-                        "output of the organ; the value is a placeholder.",
-                        replacedBy=ReplacedBy(
-                            elementRef=top,
-                            submodelRef=submodel,
-                            portRef=f"{local}{PORT_SUFFIX}",
+                    annotate(
+                        Parameter(
+                            top,
+                            0.0,
+                            U.mM,
+                            constant=False,
+                            name=f"outflow concentration {top} [mM]",
+                            sboTerm=_SBO_PARAMETER,
+                            notes="Concentration (plasma or kinetic blood cells) "
+                            f"leaving the organ {organ.name.lower()}, replaced by "
+                            "the output of the organ; the value is a placeholder.",
+                            replacedBy=ReplacedBy(
+                                elementRef=top,
+                                submodelRef=submodel,
+                                portRef=f"{local}{PORT_SUFFIX}",
+                            ),
                         ),
+                        "outflow",
+                        organ=organ,
                     )
                 ]
             )
@@ -972,10 +1217,13 @@ def _scope_port_metaids(md: ModelDefinition) -> None:
     metaid of its id; a metaid is unique in the whole document, so the ports
     of two organs with the same local ids (`Vpl_port`) would collide. The
     metaid is prefixed with the id of the model definition, the port ids, to
-    which the replacements refer, stay.
+    which the replacements refer, stay. The same holds for the metaid of an
+    annotated element (`meta_<id>` by default), which is prefixed as well.
     """
     for name in ("compartments", "species", "parameters", "reactions"):
         for element in getattr(md, name) or []:
+            if element.annotations and element.metaId is None:
+                element.metaId = f"meta_{md.sid}__{element.sid}"
             port = getattr(element, "port", None)
             if port is None or port is False:
                 continue

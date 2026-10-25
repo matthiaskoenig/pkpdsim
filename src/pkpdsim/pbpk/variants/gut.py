@@ -28,6 +28,7 @@ from pkpdsim.pbpk.parts import Parts, parts_for
 from pkpdsim.pbpk.placement import (
     built_parts,
     inhibitor_terms,
+    process_kind,
     rate_law,
     stoichiometry,
     with_modifiers,
@@ -246,6 +247,7 @@ class GutBuilder(LumenBuilder):
                 U.litre,
                 "volume intestine [l]",
                 "Volume of small and large intestine.",
+                kind="gut_volume",
             )
         return ids.GUT_VOLUME
 
@@ -264,6 +266,9 @@ class GutBuilder(LumenBuilder):
                 U.dimensionless,
                 f"{name} intestine",
                 f"The {name} of small and large intestine, weighted by volume.",
+                kind="vascular_fraction"
+                if pid == ids.GUT_VASCULAR_FRACTION
+                else "interstitial_fraction",
             )
         return pid
 
@@ -301,6 +306,7 @@ class GutBuilder(LumenBuilder):
                 U.l_per_min,
                 "blood flow intestine [l/min]",
                 "Blood flow of small and large intestine.",
+                kind="gut_flow",
             )
         return ids.GUT_FLOW
 
@@ -328,6 +334,7 @@ class GutBuilder(LumenBuilder):
                 "fraction of the intestinal tissue without the mucosa",
                 "The mucosa is carved out of the tissue of the wall for a substance "
                 "with mucosa species.",
+                kind="intestine_geometry",
             )
         for part in sorted(carved):
             base = ids.compartment(part)
@@ -341,6 +348,7 @@ class GutBuilder(LumenBuilder):
                 f"{_TISSUE[part]} without the mucosa",
                 "Compartment of a substance with mucosa species: the mucosa is "
                 "carved out of the wall.",
+                kind="gut_wall",
             )
 
     def _species(
@@ -377,6 +385,7 @@ class GutBuilder(LumenBuilder):
             f"organ to plasma coefficient {s.sid}",
             "Organ to plasma coefficient of the flow-limited wall without the "
             "mucosa: wall and mucosa together hold `(Vpl + Vbc*Kbc + Vti*Kp)*Cpl`.",
+            kind="partition",
         )
 
     def _flows(self, s: Substance) -> tuple[list[tuple[Pool, str]], str]:
@@ -399,12 +408,14 @@ class GutBuilder(LumenBuilder):
             value(DATA, "mucosa", "volume_fraction"),
             U.dimensionless,
             "mucosa fraction of the intestinal tissue",
+            kind="intestine_geometry",
         )
         f_flow = self._constant(
             ids.F_MUCOSA_FLOW,
             value(DATA, "mucosa", "flow_fraction"),
             U.dimensionless,
             "mucosa fraction of the intestinal blood flow",
+            kind="intestine_geometry",
         )
         volumes, flows = [], []
         for seg in self.mucosa_segments:
@@ -427,6 +438,8 @@ class GutBuilder(LumenBuilder):
                 f"mucosa {seg.label}",
                 "Mucosa (enterocytes) of the segment: its share of the tissue of "
                 "the region by the transit time.",
+                kind="mucosa",
+                segment=seg.token,
             )
             q = self._initial(
                 ids.mucosa_flow(seg.token),
@@ -435,6 +448,8 @@ class GutBuilder(LumenBuilder):
                 f"blood flow mucosa {seg.label} [l/min]",
                 "Blood flow of the mucosa of the segment: its share of the blood "
                 "flow of the region by the transit time.",
+                kind="mucosa_flow",
+                segment=seg.token,
             )
             volumes.append(cid)
             flows.append(q)
@@ -444,6 +459,7 @@ class GutBuilder(LumenBuilder):
             U.litre,
             "volume mucosa [l]",
             "Volume of the mucosa of all segments.",
+            kind="mucosa_volume",
         )
         self._initial(
             ids.MUCOSA_FLOW_TOTAL,
@@ -451,6 +467,7 @@ class GutBuilder(LumenBuilder):
             U.l_per_min,
             "blood flow mucosa [l/min]",
             "Blood flow of the mucosa of all segments.",
+            kind="mucosa_flow",
         )
         self._initial(
             ids.GUT_WALL_FLOW,
@@ -458,6 +475,7 @@ class GutBuilder(LumenBuilder):
             U.l_per_min,
             "blood flow intestinal wall [l/min]",
             "Blood flow of the wall past the mucosa, for a substance with a mucosa.",
+            kind="gut_flow",
         )
 
     def _mucosa_substance(self, s: Substance, parts: Parts) -> None:
@@ -475,6 +493,7 @@ class GutBuilder(LumenBuilder):
             f"mucosa to plasma coefficient {sid}",
             "Mucosa to plasma coefficient of the flow-limited mucosa: the Kp of "
             "the small intestine, 1 for a substance without tissue distribution.",
+            kind="partition",
         )
         if parts.flow_carrier == "blood_bp":
             carrier = self._bp(s)
@@ -488,18 +507,27 @@ class GutBuilder(LumenBuilder):
                 ids.mucosa(sid, seg.token),
                 ids.mucosa_volume(seg.token),
                 f"{s.name} (mucosa {seg.label})",
+                kind="concentration_mucosa",
+                substance=s,
+                segment=seg.token,
             )
             self._reaction(
                 ids.mucosa_reaction("in", sid, seg.token),
                 f"{car} -> {c}",
                 f"{q} * {carrier} * {car}",
                 f"inflow {sid} into mucosa {seg.label}",
+                kind="blood_flow",
+                pool=Pool.ARTERIAL,
+                segment=seg.token,
             )
             self._reaction(
                 ids.mucosa_reaction("out", sid, seg.token),
                 f"{c} -> {cpo}",
                 f"{q} * {carrier} * {c} / {k}",
                 f"outflow {sid} from mucosa {seg.label}",
+                kind="blood_flow",
+                pool=Pool.PORTAL,
+                segment=seg.token,
             )
             self._rule(
                 ids.mucosa_unbound(sid, seg.token),
@@ -508,6 +536,8 @@ class GutBuilder(LumenBuilder):
                 f"unbound concentration {sid} mucosa {seg.label} [mM]",
                 "Unbound concentration of the mucosa of the segment, `fu/K_mu*Cmu`; "
                 "an observer.",
+                kind="unbound_concentration",
+                segment=seg.token,
             )
             if parts.blood_cells:
                 car_bc = self._pool_species(Pool.ARTERIAL, Part.BLOOD_CELLS, s, parts)
@@ -517,6 +547,8 @@ class GutBuilder(LumenBuilder):
                     f"{car_bc} -> {cpo_bc}",
                     f"{q} * {self.hct} * {car_bc}",
                     f"blood cells {sid} past mucosa {seg.label}",
+                    kind="blood_flow",
+                    segment=seg.token,
                 )
 
     def _mucosa_unbound(self, s: Substance, seg: Segment) -> str:
@@ -595,6 +627,9 @@ class GutBuilder(LumenBuilder):
             U.dimensionless,
             f"share {key} mucosa {seg.label}",
             f"Share of a process of the protein in the mucosa of the segment, {text}",
+            kind="placement_weight",
+            segment=seg.token,
+            protein=protein,
         )
         return pid
 
@@ -652,14 +687,21 @@ class GutBuilder(LumenBuilder):
         for par in pars:
             self.parameters.setdefault(str(par.sid), par)
         self.reactions.append(
-            Reaction(
-                sid=ids.segment_process(p.sid, seg.token),
-                name=f"{what} mucosa {name}" + (f" ({p.protein})" if p.protein else ""),
-                equation=with_modifiers(equation, inhibitors.modifiers),
-                formula=(rate, U.mmole_per_min),
-                compartment=ids.mucosa_volume(seg.token),
-                sboTerm=sbo,
-                notes=f"Process `{p.sid}` of the small intestine in the mucosa of "
-                f"the {name}, its share `{weight}` of the capacity, on `{cu}`.",
+            self._annotate(
+                Reaction(
+                    sid=ids.segment_process(p.sid, seg.token),
+                    name=f"{what} mucosa {name}"
+                    + (f" ({p.protein})" if p.protein else ""),
+                    equation=with_modifiers(equation, inhibitors.modifiers),
+                    formula=(rate, U.mmole_per_min),
+                    compartment=ids.mucosa_volume(seg.token),
+                    sboTerm=sbo,
+                    notes=f"Process `{p.sid}` of the small intestine in the mucosa "
+                    f"of the {name}, its share `{weight}` of the capacity, on "
+                    f"`{cu}`.",
+                ),
+                process_kind(p, Organ.SMALL_INTESTINE),
+                segment=seg.token,
+                protein=p.protein,
             )
         )

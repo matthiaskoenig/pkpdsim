@@ -63,15 +63,19 @@ class LumenBuilder(StandardBuilder):
         for seg in self.segments:
             v = value(DATA, seg.key, "volume")
             cid = ids.lumen_volume(seg.token)
-            self.compartments[cid] = Compartment(
-                cid,
-                v.value,
-                U.litre,
-                constant=True,
-                name=f"lumen {seg.label}",
-                sboTerm=SBO.PHYSICAL_COMPARTMENT,
-                notes=_notes("Fluid volume of the lumen segment.", v),
-                port=True,
+            self.compartments[cid] = self._annotate(
+                Compartment(
+                    cid,
+                    v.value,
+                    U.litre,
+                    constant=True,
+                    name=f"lumen {seg.label}",
+                    sboTerm=SBO.PHYSICAL_COMPARTMENT,
+                    notes=_notes("Fluid volume of the lumen segment.", v),
+                    port=True,
+                ),
+                "lumen",
+                segment=seg.token,
             )
             self._constant(
                 ids.transit_time(seg.token),
@@ -80,6 +84,8 @@ class LumenBuilder(StandardBuilder):
                 f"transit time {seg.label} [min]",
                 "Mean transit time of the lumen segment (fasted), the transit "
                 "into the next segment is `V*C/T`.",
+                kind="transit_time",
+                segment=seg.token,
             )
             if seg.absorbs:
                 self._constant(
@@ -89,6 +95,8 @@ class LumenBuilder(StandardBuilder):
                     f"absorption area factor {seg.label}",
                     "Mucosal surface per lumen volume relative to the small "
                     "intestine: the absorption of the segment is `ka*f_area`.",
+                    kind="intestine_geometry",
+                    segment=seg.token,
                 )
         if not self.single:
             self._constant(
@@ -97,6 +105,8 @@ class LumenBuilder(StandardBuilder):
                 U.min,
                 "transit time stomach fed [min]",
                 "Mean transit time of the stomach in the fed state (`FED = 1`).",
+                kind="transit_time",
+                segment="st",
             )
 
     def _transit(self, seg: Segment) -> str:
@@ -125,19 +135,32 @@ class LumenBuilder(StandardBuilder):
         return t
 
     def _gut_species(
-        self, sid: str, compartment: str, name: str, amount: bool = False
+        self,
+        sid: str,
+        compartment: str,
+        name: str,
+        amount: bool = False,
+        *,
+        kind: str,
+        substance: Substance,
+        segment: str | None,
     ) -> str:
-        """A species of the intestine, initially zero."""
-        self.species[sid] = Species(
-            sid,
-            compartment,
-            initialAmount=0.0 if amount else None,
-            initialConcentration=None if amount else 0.0,
-            substanceUnit=U.mmole,
-            hasOnlySubstanceUnits=amount,
-            name=name,
-            sboTerm=SBO.SIMPLE_CHEMICAL,
-            port=True,
+        """A species of a substance in the intestine, initially zero."""
+        self.species[sid] = self._annotate(
+            Species(
+                sid,
+                compartment,
+                initialAmount=0.0 if amount else None,
+                initialConcentration=None if amount else 0.0,
+                substanceUnit=U.mmole,
+                hasOnlySubstanceUnits=amount,
+                name=name,
+                sboTerm=SBO.SIMPLE_CHEMICAL,
+                port=True,
+            ),
+            kind,
+            segment=segment,
+            substance=substance,
         )
         return sid
 
@@ -172,6 +195,9 @@ class LumenBuilder(StandardBuilder):
                 ids.lumen(sid, seg.token),
                 ids.lumen_volume(seg.token),
                 f"{s.name} (lumen {seg.label})",
+                kind="concentration_lumen",
+                substance=s,
+                segment=seg.token,
             )
             for seg in self.segments
         ]
@@ -188,6 +214,8 @@ class LumenBuilder(StandardBuilder):
                 f"{c} -> {target}",
                 f"{v} * {c} / {self._transit(seg)}",
                 f"transit {sid} {seg.label}",
+                kind="transit",
+                segment=seg.token,
             )
             if seg.absorbs:
                 into = self._absorbed_into(s, parts, seg)
@@ -197,6 +225,8 @@ class LumenBuilder(StandardBuilder):
                     f"{ka} / 60 min_per_hr * {ids.area_factor(str(seg.token))} * "
                     f"{v} * {c}",
                     f"absorption {sid} {seg.label}",
+                    kind="absorption",
+                    segment=seg.token,
                 )
             elif self.single:
                 into = self._absorbed_into(s, parts, seg)
@@ -211,12 +241,14 @@ class LumenBuilder(StandardBuilder):
                     f"{c} -> {into}",
                     f"{fabs} * {rate}",
                     f"absorption {sid}",
+                    kind="absorption",
                 )
                 self._reaction(
                     ids.feces_reaction(sid),
                     f"{c} -> {feces}",
                     f"({ONE} - {fabs}) * {rate}",
                     f"unabsorbed fraction {sid} into the feces",
+                    kind="fecal_excretion",
                 )
         self._bile(s, lumen[0 if self.single else 1])
         tablet = self.oral.get(("oral", sid))
@@ -245,6 +277,7 @@ class LumenBuilder(StandardBuilder):
             f"{k_bile} * {ids.VBILE} * {bile}",
             f"transit {sid} bile to "
             + ("feces (no lumen species)" if into_feces else "intestinal lumen"),
+            kind="fecal_excretion" if into_feces else "bile_flow",
         )
 
     def _bile_to_feces(self, s: Substance) -> None:
@@ -269,6 +302,8 @@ class LumenBuilder(StandardBuilder):
             f"-> {stomach}",
             f"{k} / 60 min_per_hr * {dose} / {mr}",
             f"oral application {sid} (solution)",
+            kind="oral_application",
+            segment=self.segments[0].token,
         )
         self.rate_rules.append(
             RateRule(dose, f"-{reaction} * {mr}", U.mg_per_min, name=f"oral dose {sid}")
@@ -291,6 +326,9 @@ class LumenBuilder(StandardBuilder):
                 ids.lumen_volume(seg.token),
                 f"{s.name} (undissolved, lumen {seg.label})",
                 amount=True,
+                kind="amount_undissolved",
+                substance=s,
+                segment=seg.token,
             )
             for seg in self.segments[1:]
         ]
@@ -304,6 +342,7 @@ class LumenBuilder(StandardBuilder):
                 U.per_min,
                 f"dissolution rate {sid} [1/min]",
                 "Dissolution rate of the undissolved drug in every segment.",
+                kind="dissolution",
             )
         else:
             kdis = f"({kdis})"
@@ -313,6 +352,8 @@ class LumenBuilder(StandardBuilder):
             f"-> {lumen[0]}",
             f"{kdis} * {dose} / {mr}",
             f"dissolution {sid} (tablet) {self.segments[0].label}",
+            kind="dissolution_reaction",
+            segment=self.segments[0].token,
         )
         empty = ids.transit_reaction(sid, self.segments[0].token, solid=True)
         self._reaction(
@@ -320,6 +361,8 @@ class LumenBuilder(StandardBuilder):
             f"-> {solids[0] if solids else feces}",
             f"{dose} / {mr} / {self._transit(self.segments[0])}",
             f"transit {sid} undissolved {self.segments[0].label}",
+            kind="transit",
+            segment=self.segments[0].token,
         )
         self.rate_rules.append(
             RateRule(
@@ -338,6 +381,8 @@ class LumenBuilder(StandardBuilder):
                 f"{a} -> {lumen[i]}",
                 f"{kdis} * {a}",
                 f"dissolution {sid} {seg.label}",
+                kind="dissolution_reaction",
+                segment=seg.token,
             )
             last = ids.transit_reaction(sid, seg.token, solid=True)
             self._reaction(
@@ -345,6 +390,8 @@ class LumenBuilder(StandardBuilder):
                 f"{a} -> {solids[i] if i < len(solids) else feces}",
                 f"{a} / {self._transit(seg)}",
                 f"transit {sid} undissolved {seg.label}",
+                kind="transit",
+                segment=seg.token,
             )
             dissolved.append(dis)
         if is_weibull(route):
@@ -365,15 +412,18 @@ class LumenBuilder(StandardBuilder):
         and the transit into the feces) take the mean age with them.
         """
         w, age = ids.dissolution_clock(sid), ids.dissolution_age(sid)
-        self.parameters[w] = Parameter(
-            w,
-            0.0,
-            U.mmole_min,
-            constant=False,
-            name=f"age-weighted undissolved amount {sid} [mmole*min]",
-            sboTerm=_SBO_PARAMETER,
-            notes="The undissolved amount weighted by its time since the dose; "
-            f"`{age} = {w}/A` is the mean age of the undissolved amount `A`.",
+        self.parameters[w] = self._annotate(
+            Parameter(
+                w,
+                0.0,
+                U.mmole_min,
+                constant=False,
+                name=f"age-weighted undissolved amount {sid} [mmole*min]",
+                sboTerm=_SBO_PARAMETER,
+                notes="The undissolved amount weighted by its time since the dose; "
+                f"`{age} = {w}/A` is the mean age of the undissolved amount `A`.",
+            ),
+            "dissolution",
         )
         self.rate_rules.append(
             RateRule(w, f"{pool} - ({' + '.join(outflows)}) * {age}", U.mmole)
@@ -385,6 +435,7 @@ class LumenBuilder(StandardBuilder):
             f"mean time since the dose of the undissolved drug {sid} [min]",
             "The time since the dose of a Weibull dissolution: exact for one "
             "dose, the amount-weighted mean of doses which overlap.",
+            kind="dissolution",
         )
 
 

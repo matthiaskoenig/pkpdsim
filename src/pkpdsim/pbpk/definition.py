@@ -1,7 +1,7 @@
 """The definition of a PBPK model: the substances, the chemistry and the choices."""
 
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Hashable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 
 from pkpdsim.pbpk import ids
@@ -26,6 +26,7 @@ from pkpdsim.pbpk.substance import Erythrocytes, Kp, KpMethod, Mode, Substance
 from pkpdsim.pbpk.values import Q, Value
 
 __all__ = ["PBPKDefinition", "Variants"]
+
 
 _SID = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 _RESERVED = (
@@ -115,6 +116,80 @@ class PBPKDefinition:
     dynamic: tuple[str, ...] = ()
     name: str | None = None
     notes: str | None = None
+
+    @classmethod
+    def combine(cls, *definitions: "PBPKDefinition", sid: str) -> "PBPKDefinition":
+        """Couple the definitions of several packages into one physiology.
+
+        The substances, the chemistry, the routes, the PD components and the
+        dynamic parameters are the unions of the definitions (the observers
+        follow from the substances), the organ variants are merged; there is
+        one physiology, so the definitions must agree on sex, population and
+        the arm vein preset. Substance ids are unique over all packages, so
+        nothing is renamed: an id which two definitions define is accepted
+        only if both define the same object (a shared metabolite), and an
+        organ only if both choose the same variant.
+
+        Args:
+            *definitions: the definitions, e.g. of a drug and an inhibitor.
+            sid: the id of the coupled model.
+
+        Returns:
+            The coupled definition, in the order of the definitions.
+
+        Raises:
+            ValueError: if no definition is given, the definitions differ in
+                sex, population or arm vein preset, two definitions define an
+                id (substance, process, route, PD component) differently, or
+                choose different variants of an organ; naming the id.
+        """
+        if not definitions:
+            raise ValueError(f"Combine '{sid}': no definitions given.")
+        for attribute in ("sex", "population", "arm_vein"):
+            values = {getattr(d, attribute) for d in definitions}
+            if len(values) > 1:
+                raise ValueError(
+                    f"Combine '{sid}': the definitions differ in {attribute} "
+                    f"{sorted(str(v) for v in values)}, a coupled model has one "
+                    "physiology."
+                )
+        first = definitions[0]
+        sids = ", ".join(d.sid for d in definitions)
+        return cls(
+            sid=sid,
+            substances=_union(
+                sid,
+                "substance",
+                (x for d in definitions for x in d.substances),
+                lambda x: x.sid,
+            ),
+            chemistry=_union(
+                sid,
+                "process",
+                (x for d in definitions for x in d.chemistry),
+                lambda x: x.sid,
+            ),
+            variants=Variants(
+                organs=_merge_variants(sid, [d.variants for d in definitions])
+            ),
+            routes=_union(
+                sid,
+                "route",
+                (x for d in definitions for x in d.routes),
+                lambda x: (x.kind, x.substance),
+            ),
+            pd=_union(
+                sid,
+                "PD component",
+                (x for d in definitions for x in d.pd),
+                lambda x: str(x.model.sid),
+            ),
+            sex=first.sex,
+            population=first.population,
+            arm_vein=first.arm_vein,
+            dynamic=tuple(dict.fromkeys(p for d in definitions for p in d.dynamic)),
+            notes=f"The coupled physiology of the definitions {sids}.",
+        )
 
     def validate(self) -> None:
         """Check the definition.
@@ -266,6 +341,47 @@ class PBPKDefinition:
             for r in self.routes
             if r.substance not in known
         ]
+
+
+def _union[T](
+    sid: str, what: str, items: Iterable[T], key: Callable[[T], Hashable]
+) -> list[T]:
+    """The union of the items of several definitions by their id, in order.
+
+    Raises:
+        ValueError: if two items of one id differ, naming the id.
+    """
+    result: dict[Hashable, T] = {}
+    for item in items:
+        k = key(item)
+        if k in result and result[k] != item:
+            name = " ".join(k) if isinstance(k, tuple) else k
+            raise ValueError(
+                f"Combine '{sid}': the {what} '{name}' is defined differently by "
+                "two definitions."
+            )
+        result.setdefault(k, item)
+    return list(result.values())
+
+
+def _merge_variants(
+    sid: str, variants: Sequence[Variants]
+) -> dict[Organ, "str | OrganComponent"]:
+    """The organ variants of several definitions.
+
+    Raises:
+        ValueError: if two definitions choose different variants of an organ.
+    """
+    merged: dict[Organ, str | OrganComponent] = {}
+    for v in variants:
+        for organ, choice in v.organs.items():
+            if organ in merged and merged[organ] != choice:
+                raise ValueError(
+                    f"Combine '{sid}': the definitions choose different variants "
+                    f"of organ '{organ.value}'."
+                )
+            merged.setdefault(organ, choice)
+    return merged
 
 
 def _check_erythrocytes(sid: str, ery: Erythrocytes) -> list[str]:

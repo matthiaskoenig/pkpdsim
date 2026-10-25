@@ -65,10 +65,12 @@ from sbmlutils.factory import InitialAssignment, Parameter, Sbase, UnitDefinitio
 from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk import ids
+from pkpdsim.pbpk.annotation import annotate
 from pkpdsim.pbpk.chemistry import Metabolism, Transport
 from pkpdsim.pbpk.data import cite, load
 from pkpdsim.pbpk.organs import PORTAL_ORGANS, Organ
 from pkpdsim.pbpk.physiology import normal_gfr
+from pkpdsim.pbpk.proteins import PROTEINS
 from pkpdsim.pbpk.substance import Substance
 from pkpdsim.pbpk.units import U
 
@@ -236,27 +238,50 @@ def _initial(
     text: str,
     sources: Iterable[str] = (),
     unit: UnitDefinition = U.dimensionless,
+    *,
+    kind: str,
+    organ: Organ | None = None,
+    protein: str | None = None,
 ) -> list[Sbase]:
-    """A constant parameter with its initial assignment."""
+    """A constant parameter with its initial assignment, annotated as `kind`."""
     return [
-        Parameter(
-            pid,
-            None,
-            unit,
-            constant=True,
-            name=name,
-            sboTerm=_SBO,
-            notes=_notes(f"{text}\n\n`{pid} = {formula}`", sources),
+        annotate(
+            Parameter(
+                pid,
+                None,
+                unit,
+                constant=True,
+                name=name,
+                sboTerm=_SBO,
+                notes=_notes(f"{text}\n\n`{pid} = {formula}`", sources),
+            ),
+            kind,
+            organ=organ,
+            protein=protein,
         ),
         InitialAssignment(pid, formula, unit),
     ]
 
 
-def _input(pid: str, value: float, name: str, text: str) -> Parameter:
-    """A constant parameter of a severity, an initial value."""
-    return Parameter(
-        pid, value, U.dimensionless, constant=True, name=name, sboTerm=_SBO, notes=text
+def _input(pid: str, value: float, name: str, text: str, kind: str) -> Parameter:
+    """A constant parameter of a severity, an initial value, annotated as `kind`."""
+    return annotate(
+        Parameter(
+            pid,
+            value,
+            U.dimensionless,
+            constant=True,
+            name=name,
+            sboTerm=_SBO,
+            notes=text,
+        ),
+        kind,
     )
+
+
+def _protein(key: str) -> str | None:
+    """The protein of a factor by its key, `None` for a factor of the physiology."""
+    return key if key in PROTEINS else None
 
 
 @dataclass(frozen=True)
@@ -346,6 +371,7 @@ class _Impairment:
                     "0 healthy, 1, 2, 3 the Child-Pugh classes A, B, C; between "
                     "the classes every factor interpolates linearly. An initial "
                     "value, as the covariates.",
+                    "child_pugh",
                 ),
                 _input(
                     ids.HF_SEVERITY,
@@ -354,6 +380,7 @@ class _Impairment:
                     "0 healthy, 1 to 4 the NYHA classes I to IV; between the "
                     "classes every factor interpolates linearly. An initial "
                     "value, as the covariates.",
+                    "heart_failure",
                 ),
                 _input(
                     ids.CKD_HEPATIC,
@@ -362,6 +389,7 @@ class _Impairment:
                     "Switch (0 off, 1 on) of the reduced activity of the hepatic "
                     "CYP2D6 and OATP1B of chronic kidney disease (by the stage of "
                     f"`{ids.F_RENAL_FUNCTION}`).",
+                    "ckd",
                 ),
             ]
         )
@@ -380,6 +408,8 @@ class _Impairment:
                 f"{text} (CP_severity 1, 2, 3 the classes A, B, C, linear in "
                 f"between), {provenance}",
                 sources,
+                kind="cirrhosis_factor",
+                protein=_protein(key),
             )
         )
         return pid
@@ -455,6 +485,7 @@ class _Impairment:
                 "and the kidney by their factors) over their share of cardiac "
                 "output, so that the flows sum to the cardiac output of the "
                 "cardiac index.",
+                kind="cirrhosis_factor",
             )
         )
 
@@ -510,6 +541,8 @@ class _Impairment:
                 f"{list(stages.values)}; {stages.notes}",
                 (stages.source, "ICRP89", "DuBois1916"),
                 unit=U.l_per_min,
+                kind="egfr",
+                organ=Organ.KIDNEY,
             )
         )
         limits = [x * 1e-3 for x in stages.values]
@@ -558,6 +591,8 @@ class _Impairment:
                 f"Factor of chronic kidney disease {text}, a step per stage "
                 f"(normal 1), {provenance}",
                 sources,
+                kind="ckd_factor",
+                protein=_protein(key),
             )
         )
 
@@ -583,6 +618,7 @@ class _Impairment:
                     + " (HF_severity 1 to 4 the NYHA classes I to IV, linear in "
                     f"between), {provenance}",
                     sources,
+                    kind="heart_failure_factor",
                 )
             )
 
@@ -622,6 +658,8 @@ class _Impairment:
                     f"impairment factor {q}",
                     f"{text} the blood flow `{q}`; the cardiac output is the "
                     f"sum of the flows (`{ids.impairment_factor(ids.CO)}`).",
+                    kind="impairment_factor",
+                    organ=o,
                 )
             )
             if cp_flow is None:
@@ -652,6 +690,7 @@ class _Impairment:
                 "output (cirrhosis: the cardiac index; heart failure: the sum "
                 "of the reduced flows, Gu 2025).",
                 ("Gu2025",),
+                kind="impairment_factor",
             )
         )
         quantities = {
@@ -702,6 +741,7 @@ class _Impairment:
                     formula,
                     f"impairment factor {key}",
                     f"{text} {what}.",
+                    kind="impairment_factor",
                 )
             )
         cp_proteins = set(self.liver_proteins(self.data["child_pugh"]["proteins"]))
@@ -725,6 +765,9 @@ class _Impairment:
                     f"{text} the activity of {protein} in the liver, the input "
                     f"`{ids.impairment_activity(protein)}` of the liver; its rates "
                     f"run with `{ids.activity(protein)}` times it.",
+                    kind="impairment_factor",
+                    organ=Organ.LIVER,
+                    protein=protein,
                 )
             )
 

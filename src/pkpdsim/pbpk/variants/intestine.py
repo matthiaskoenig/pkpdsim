@@ -67,6 +67,7 @@ from sbmlutils.factory import ModelDefinition, Parameter, Sbase
 from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk import ids
+from pkpdsim.pbpk.annotation import annotate
 from pkpdsim.pbpk.data import value
 from pkpdsim.pbpk.organ import Boundary, OrganContext
 from pkpdsim.pbpk.organs import Organ
@@ -90,17 +91,21 @@ def _ka_objects(definition: "PBPKDefinition", ka: Q | None) -> list[Sbase]:
     oral = {r.substance for r in definition.routes if r.kind in ORAL}
     default = ka if ka is not None else value(DATA, "absorption", "ka")
     return [
-        value_parameter(
-            ids.absorption(s.sid),
-            default if s.sid in oral else 0.0,
-            U.per_hr,
-            f"absorption {s.sid} [1/hr]",
-            _SBO_PARAMETER,
-            "Absorption rate constant of the small intestine; a segment absorbs "
-            "with the factor of its area, `ka*f_area`; a model fits it."
-            if s.sid in oral
-            else "No absorption: the substance has no oral route, it is not "
-            "reabsorbed after biliary excretion unless a model sets it.",
+        annotate(
+            value_parameter(
+                ids.absorption(s.sid),
+                default if s.sid in oral else 0.0,
+                U.per_hr,
+                f"absorption {s.sid} [1/hr]",
+                _SBO_PARAMETER,
+                "Absorption rate constant of the small intestine; a segment absorbs "
+                "with the factor of its area, `ka*f_area`; a model fits it."
+                if s.sid in oral
+                else "No absorption: the substance has no oral route, it is not "
+                "reabsorbed after biliary excretion unless a model sets it.",
+            ),
+            "absorption_rate",
+            organ=Organ.SMALL_INTESTINE,
         )
         for s in definition.substances
     ]
@@ -128,16 +133,19 @@ class SegmentedIntestine:
         """Get `ka_<s>` of every substance and the prandial state `FED`."""
         return [
             *_ka_objects(definition, self.ka),
-            Parameter(
-                ids.FED,
-                0.0,
-                U.dimensionless,
-                constant=True,
-                name="fed state (0 fasted, 1 fed)",
-                sboTerm=_SBO_PARAMETER,
-                notes="The prandial state: 1 slows the gastric emptying to the "
-                "stomach transit time of the fed state (an initial value, an "
-                "experiment sets it before the simulation).",
+            annotate(
+                Parameter(
+                    ids.FED,
+                    0.0,
+                    U.dimensionless,
+                    constant=True,
+                    name="fed state (0 fasted, 1 fed)",
+                    sboTerm=_SBO_PARAMETER,
+                    notes="The prandial state: 1 slows the gastric emptying to the "
+                    "stomach transit time of the fed state (an initial value, an "
+                    "experiment sets it before the simulation).",
+                ),
+                "fed",
             ),
         ]
 
@@ -186,14 +194,17 @@ class SingleLumen:
         return [
             *_ka_objects(definition, self.ka),
             *(
-                value_parameter(
-                    ids.fraction_absorbed(s.sid),
-                    self.fabs if self.fabs is not None else 1.0,
-                    U.dimensionless,
-                    f"fraction absorbed {s.sid}",
-                    _SBO_PARAMETER,
-                    "Fraction of the absorbed flux which enters the body, the "
-                    "rest goes into the feces.",
+                annotate(
+                    value_parameter(
+                        ids.fraction_absorbed(s.sid),
+                        self.fabs if self.fabs is not None else 1.0,
+                        U.dimensionless,
+                        f"fraction absorbed {s.sid}",
+                        _SBO_PARAMETER,
+                        "Fraction of the absorbed flux which enters the body, the "
+                        "rest goes into the feces.",
+                    ),
+                    "fraction_absorbed",
                 )
                 for s in definition.substances
             ),

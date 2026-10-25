@@ -17,6 +17,7 @@ from sbmlutils.factory import (
 from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk import ids
+from pkpdsim.pbpk.annotation import annotate
 from pkpdsim.pbpk.data import cite, value
 from pkpdsim.pbpk.definition import PBPKDefinition
 from pkpdsim.pbpk.placement import value_parameter
@@ -42,37 +43,58 @@ def sink_objects(definition: PBPKDefinition, lumen: bool = True) -> list[Sbase]:
         transit of the bile into the feces without lumen.
     """
     objects: list[Sbase] = [
-        _nominal(ids.VURINE, "urine"),
-        _nominal(ids.VFECES, "feces"),
-        _value_compartment(
-            ids.VBILE,
-            value("intestine_human", "bile", "volume"),
+        annotate(_nominal(ids.VURINE, "urine"), "urine"),
+        annotate(_nominal(ids.VFECES, "feces"), "feces"),
+        annotate(
+            _value_compartment(
+                ids.VBILE,
+                value("intestine_human", "bile", "volume"),
+                "bile",
+                "Bile, which drains into the duodenum.",
+            ),
             "bile",
-            "Bile, which drains into the duodenum.",
         ),
-        value_parameter(
-            ids.K_BILE,
-            value("intestine_human", "bile", "k_bile"),
-            U.per_min,
-            "transit bile to intestinal lumen [1/min]",
-            _SBO_PARAMETER,
+        annotate(
+            value_parameter(
+                ids.K_BILE,
+                value("intestine_human", "bile", "k_bile"),
+                U.per_min,
+                "transit bile to intestinal lumen [1/min]",
+                _SBO_PARAMETER,
+            ),
+            "bile_transit",
         ),
     ]
     for s in definition.substances:
         sid = s.sid
         bile = ids.bile(sid)
         objects += [
-            _species(ids.urine(sid), ids.VURINE, f"{s.name} (urine)", amount=True),
-            _species(ids.feces(sid), ids.VFECES, f"{s.name} (feces)", amount=True),
-            _species(bile, ids.VBILE, f"{s.name} (bile)"),
+            annotate(
+                _species(ids.urine(sid), ids.VURINE, f"{s.name} (urine)", amount=True),
+                "amount_urine",
+                substance=s,
+            ),
+            annotate(
+                _species(ids.feces(sid), ids.VFECES, f"{s.name} (feces)", amount=True),
+                "amount_feces",
+                substance=s,
+            ),
+            annotate(
+                _species(bile, ids.VBILE, f"{s.name} (bile)"),
+                "concentration_bile",
+                substance=s,
+            ),
         ]
         if not lumen:
             objects.append(
-                _transit(
-                    ids.bile_reaction(sid),
-                    f"{bile} -> {ids.feces(sid)}",
-                    f"{ids.K_BILE} * {ids.VBILE} * {bile}",
-                    f"transit {sid} bile to feces (intestine without lumen)",
+                annotate(
+                    _transit(
+                        ids.bile_reaction(sid),
+                        f"{bile} -> {ids.feces(sid)}",
+                        f"{ids.K_BILE} * {ids.VBILE} * {bile}",
+                        f"transit {sid} bile to feces (intestine without lumen)",
+                    ),
+                    "fecal_excretion",
                 )
             )
     return objects
