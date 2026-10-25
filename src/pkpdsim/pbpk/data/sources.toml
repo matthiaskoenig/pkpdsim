@@ -1,6 +1,6 @@
 # The publications the numbers of the data files are taken from.
 # Every number of a data file has a `source` which is a key of this file.
-# The DOIs were written from the citations and are not yet checked online.
+# The DOIs were checked against Crossref (2026-10-25).
 
 [ICRP89]
 citation = "Valentin J (ed). Basic anatomical and physiological data for use in radiological protection: reference values. ICRP Publication 89. Ann ICRP 32(3-4), 2002."
@@ -13,3 +13,11 @@ doi = "10.1038/psp.2013.41"
 [Brown1997]
 citation = "Brown RP, Delp MD, Lindstedt SL, Rhomberg LR, Beliles RP. Physiological parameter values for physiologically based pharmacokinetic models. Toxicol Ind Health 13(4):407-484, 1997."
 doi = "10.1177/074823379701300401"
+
+[Schmitt2008]
+citation = "Schmitt W. General approach for the calculation of tissue to plasma partition coefficients. Toxicol In Vitro 22(2):457-467, 2008."
+doi = "10.1016/j.tiv.2007.09.010"
+
+[Chau2023]
+citation = "Chau P, Yoon JS, Moses D, Pather N. A systematic review and meta-analysis of portal vein morphometry in pediatric and adult populations: drawing the line between normal and abnormal findings. Eur J Radiol 168:111016, 2023."
+doi = "10.1016/j.ejrad.2023.111016"

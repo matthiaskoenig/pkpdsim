@@ -1,0 +1,461 @@
+# The reference physiology of the adult human, male and female.
+#
+# The values are those of the reference individuals of ICRP Publication 89
+# (Valentin 2002), taken directly from its tables; `notes` names the table or
+# section of every value. Where ICRP 89 has no value, another primary source is
+# cited. The male values are compared in `notes` with the supplementary model of
+# Jones and Rowland-Yeo 2013 (a 70 kg man), which takes its values from other
+# references (Brown 1997 and others).
+#
+# Conventions:
+# - `mass` is the ICRP 89 mass of the organ without its blood: the whole-body
+#   sum of ICRP 89 Table 2.8 counts the blood (5.6 kg male, 4.1 kg female) on
+#   its own, so the organ masses (lung and heart explicitly) exclude it.
+# - `density` is the specific gravity of the organ (kg/l) where ICRP 89 states
+#   one; an organ without `density` has the density 1.0 kg/l.
+# - `blood` is the blood content of the organ as fraction of the total blood
+#   volume (ICRP 89 Table 2.14). The organ volume of the model is the volume of
+#   the tissue and its blood, `mass/density + blood*V_blood`.
+# - `f_vas` is the vascular fraction of that organ volume,
+#   `blood*V_blood / (mass/density + blood*V_blood)` of the reference individual.
+# - `f_int` is the interstitial fraction of that organ volume,
+#   `Fint*(1 - f_vas)`, with `Fint` the interstitial fraction of the tissue
+#   without blood of Schmitt 2008; the intracellular fraction is
+#   `1 - f_vas - f_int`.
+# - `flow` is the blood flow as fraction of cardiac output (ICRP 89 Table 2.40).
+#   The lung is in series and receives the cardiac output (1.0); the liver
+#   states its arterial flow, the portal organs (stomach, small and large
+#   intestine, spleen, pancreas) feed it in addition.
+# - Adipose is the remainder of the body weight in the physiology; its ICRP
+#   mass is a reference value. The tissues of ICRP 89 which are not organs of
+#   the model are listed in `[<sex>.unmapped]` with their mass, flow and blood:
+#   the mass is what adipose absorbs, the flows and blood complete those of the
+#   organs to one.
+
+[male]
+bodyweight = { value = 73.0, unit = "kg", source = "ICRP89", notes = "Table 2.9, adult male; Jones 2013 uses 70 kg" }
+height = { value = 176.0, unit = "cm", source = "ICRP89", notes = "Table 2.9, adult male" }
+body_surface_area = { value = 1.9, unit = "m2", source = "ICRP89", notes = "Table 2.9, adult male" }
+cardiac_output = { value = 6.5, unit = "l/min", source = "ICRP89", notes = "Table 2.39, adult; Jones 2013: 108.33 ml/s = 6.5 l/min, the same" }
+hematocrit = { value = 0.43, unit = "dimensionless", source = "ICRP89", notes = "Section 7.3 para 309, red blood cells about 43 % (42-52 %) of the blood volume of adult males; Table 2.12: 2300 ml of 5300 ml" }
+gfr = { value = 125.0, unit = "ml/min", source = "ICRP89", notes = "Section 8.3.1 para 380, middle-aged adult male, 180 l/day" }
+hepatic_artery_fraction = { value = 0.2549, unit = "dimensionless", source = "ICRP89", notes = "derived: Table 2.40, hepatic artery 6.5 % of liver total 25.5 % (= 6.5 % + portal organs 19 %)" }
+
+[male.blood]
+volume = { value = 5.3, unit = "l", source = "ICRP89", notes = "Section 7.4, total blood volume, adult; Jones 2013: (0.0514 + 0.0257) BW = 5.4 l" }
+density = { value = 1.06, unit = "kg/l", source = "ICRP89", notes = "Section 7.2.1, specific gravity of whole blood" }
+arterial = { value = 0.105, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14, left heart 4.5 % + aorta and large arteries 6.0 %; Jones 2013: 1/3 of the pool blood" }
+venous = { value = 0.2242, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14, right heart 4.5 % + large veins 18 %, less the portal vein (portal); Jones 2013: 2/3 of the pool blood" }
+portal = { value = 0.000828, unit = "dimensionless", source = "Chau2023", notes = "derived: the adult portal vein as cylinder of mean length 48.63 mm and diameter 10.72 mm (Chau 2023, abstract) holds 4.39 ml, divided by the blood volume; taken from the large veins of ICRP 89 Table 2.14, which has no portal vein of its own" }
+
+[male.organs.lu]
+mass = { value = 0.5, unit = "kg", source = "ICRP89", notes = "Table 2.8, lung tissue only (without blood); Jones 2013: 0.0076 BW = 0.532 l" }
+density = { value = 1.0, unit = "kg/l", source = "ICRP89", notes = "Section 5.3.6 para 166, blood- and air-free lung parenchyma" }
+flow = { value = 1.0, unit = "dimensionless", source = "ICRP89", notes = "in series, the lung receives the cardiac output (Section 7.7.1, Fig. 7.2); the bronchial flow of Table 2.40 is in [unmapped]; Jones 2013: 1 (cardiac output), the same" }
+blood = { value = 0.125, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14, pulmonary 10.5 % + bronchial tissue 2.0 %" }
+f_vas = { value = 0.5699, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
+f_int = { value = 0.08602, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.2 (Schmitt 2008 human composition, Fint of lung); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+
+[male.organs.he]
+mass = { value = 0.33, unit = "kg", source = "ICRP89", notes = "Table 2.8, heart tissue only (the blood of the chambers is in the pools); Jones 2013: 0.0047 BW = 0.329 l" }
+flow = { value = 0.04, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40, coronary tissue; Jones 2013: 0.04, the same" }
+blood = { value = 0.01, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14, coronary tissue" }
+f_vas = { value = 0.1384, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
+f_int = { value = 0.2154, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.25 (Schmitt 2008 human composition, Fint of heart); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+
+[male.organs.br]
+mass = { value = 1.45, unit = "kg", source = "ICRP89", notes = "Table 2.8; Jones 2013: 0.02 BW = 1.4 l" }
+density = { value = 1.04, unit = "kg/l", source = "ICRP89", notes = "Section 11.3.2 para 554" }
+flow = { value = 0.12, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40; Jones 2013: 0.12, the same" }
+blood = { value = 0.012, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14" }
+f_vas = { value = 0.04363, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
+f_int = { value = 0.004782, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.005 (Schmitt 2008 human composition, Fint of brain); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+
+[male.organs.li]
+mass = { value = 1.8, unit = "kg", source = "ICRP89", notes = "Table 2.8; Jones 2013: 0.021 BW = 1.47 l" }
+flow = { value = 0.065, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40, hepatic artery (liver total 25.5 % male, 27.0 % female); the portal organs feed the liver in addition; Jones 2013: 0.2154 total liver flow (ICRP 0.255)" }
+blood = { value = 0.1, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14" }
+f_vas = { value = 0.2275, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
+f_int = { value = 0.1777, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.23 (Schmitt 2008 human composition, Fint of liver); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+
+[male.organs.ki]
+mass = { value = 0.31, unit = "kg", source = "ICRP89", notes = "Table 2.8, both kidneys; Jones 2013: 0.0044 BW = 0.308 l" }
+density = { value = 1.05, unit = "kg/l", source = "ICRP89", notes = "Section 8.2.1 para 337, adult" }
+flow = { value = 0.19, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40; Jones 2013: 0.19, the same" }
+blood = { value = 0.02, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14" }
+f_vas = { value = 0.2642, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
+f_int = { value = 0.1214, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.165 (Schmitt 2008 human composition, Fint of kidney); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+
+[male.organs.st]
+mass = { value = 0.15, unit = "kg", source = "ICRP89", notes = "Table 2.8, stomach wall (the contents are in [unmapped]); Jones 2013: gut 0.0171 BW = 1.197 l for stomach, small and large intestine" }
+density = { value = 1.045, unit = "kg/l", source = "ICRP89", notes = "Section 6.3 para 191, all soft tissues of the alimentary tract" }
+flow = { value = 0.01, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40, stomach and oesophagus; Jones 2013: gut 0.1465 for stomach, intestines and pancreas (ICRP 0.16)" }
+blood = { value = 0.01, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14, stomach and oesophagus" }
+f_vas = { value = 0.2697, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
+f_int = { value = 0.07011, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (Schmitt 2008 human composition, Fint of gut (Schmitt 2008 has no stomach)); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+
+[male.organs.si]
+mass = { value = 0.65, unit = "kg", source = "ICRP89", notes = "Table 2.8, small intestine wall (the contents are in [unmapped])" }
+density = { value = 1.045, unit = "kg/l", source = "ICRP89", notes = "Section 6.3 para 191, all soft tissues of the alimentary tract" }
+flow = { value = 0.1, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40" }
+blood = { value = 0.038, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14" }
+f_vas = { value = 0.2446, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
+f_int = { value = 0.07252, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (Schmitt 2008 human composition, Fint of gut); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+
+[male.organs.co]
+mass = { value = 0.37, unit = "kg", source = "ICRP89", notes = "Table 2.8, walls of right colon, left colon and rectosigmoid (150 + 150 + 70 g male, 145 + 145 + 70 g female; the contents are in [unmapped])" }
+density = { value = 1.045, unit = "kg/l", source = "ICRP89", notes = "Section 6.3 para 191, all soft tissues of the alimentary tract" }
+flow = { value = 0.04, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40" }
+blood = { value = 0.022, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14" }
+f_vas = { value = 0.2477, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
+f_int = { value = 0.07222, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (Schmitt 2008 human composition, Fint of gut); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+
+[male.organs.sp]
+mass = { value = 0.15, unit = "kg", source = "ICRP89", notes = "Table 2.8; Jones 2013: 0.0026 BW = 0.182 l" }
+density = { value = 1.06, unit = "kg/l", source = "ICRP89", notes = "Section 11.10.2 para 600" }
+flow = { value = 0.03, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40; Jones 2013: 0.0172 (ICRP 0.03)" }
+blood = { value = 0.014, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14" }
+f_vas = { value = 0.344, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
+f_int = { value = 0.1673, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.255 (Schmitt 2008 human composition, Fint of spleen); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+
+[male.organs.pa]
+mass = { value = 0.14, unit = "kg", source = "ICRP89", notes = "Table 2.8; Jones 2013: no pancreas" }
+flow = { value = 0.01, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40; Jones 2013: no pancreas" }
+blood = { value = 0.006, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14" }
+f_vas = { value = 0.1851, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
+f_int = { value = 0.07823, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (Schmitt 2008 human composition, Fint of gut; assumption: Schmitt 2008 has no pancreas, the value of the gut is used); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+
+[male.organs.mu]
+mass = { value = 29.0, unit = "kg", source = "ICRP89", notes = "Table 2.8, skeletal muscle; Jones 2013: 0.4 BW = 28 l" }
+flow = { value = 0.17, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40, skeletal muscle; Jones 2013: 0.17, the same" }
+blood = { value = 0.14, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14, skeletal muscle" }
+f_vas = { value = 0.02495, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
+f_int = { value = 0.1463, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.15 (Schmitt 2008 human composition, Fint of muscle); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+
+[male.organs.sk]
+mass = { value = 3.3, unit = "kg", source = "ICRP89", notes = "Table 2.8; Jones 2013: 0.0371 BW = 2.597 l" }
+density = { value = 1.1, unit = "kg/l", source = "ICRP89", notes = "Section 10.6 para 529" }
+flow = { value = 0.05, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40; Jones 2013: 0.05, the same" }
+blood = { value = 0.03, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14" }
+f_vas = { value = 0.05033, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
+f_int = { value = 0.5698, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.6 (Schmitt 2008 human composition, Fint of skin); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+
+[male.organs.ad]
+mass = { value = 14.5, unit = "kg", source = "ICRP89", notes = "Table 2.8, separable adipose tissue excluding yellow marrow (total adipose tissue 18.2 kg male, 22.5 kg female); reference only: adipose is the remainder of the body weight; Jones 2013: 0.213 BW = 14.91 l" }
+flow = { value = 0.05, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40, fat; Jones 2013: 0.05, the same" }
+blood = { value = 0.05, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14, fat" }
+f_vas = { value = 0.01795, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
+f_int = { value = 0.1375, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.14 (Schmitt 2008 human composition, Fint of adipose); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+
+[male.organs.bo]
+mass = { value = 10.5, unit = "kg", source = "ICRP89", notes = "Table 2.8, total skeleton (bone, active and inactive marrow, cartilage, teeth, miscellaneous); Jones 2013: 0.0856 BW = 5.99 l" }
+density = { value = 1.3, unit = "kg/l", source = "ICRP89", notes = "Table 2.20, whole skeleton, adults" }
+flow = { value = 0.05, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40, skeleton; Jones 2013: 0.05, the same" }
+blood = { value = 0.07, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14, skeleton" }
+f_vas = { value = 0.04392, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
+f_int = { value = 0.09561, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.1 (Schmitt 2008 human composition, Fint of bone); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+
+[male.organs.go]
+mass = { value = 0.035, unit = "kg", source = "ICRP89", notes = "Table 2.8, testes (2); Jones 2013: testes 0.01 BW = 0.7 l" }
+density = { value = 1.04, unit = "kg/l", source = "ICRP89", notes = "Section 8.2.5 para 354, testes" }
+flow = { value = 0.0005, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40, gonads; Jones 2013: testes 0.0108 (ICRP 0.0005)" }
+blood = { value = 0.0004, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14, gonads" }
+f_vas = { value = 0.05926, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
+f_int = { value = 0.09031, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (Schmitt 2008 human composition, Fint of gut; assumption: Schmitt 2008 has no gonads, the value of the gut is used); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+
+[male.unmapped.adrenals]
+mass = { value = 0.014, unit = "kg", source = "ICRP89", notes = "Table 2.8, adrenals (2)" }
+flow = { value = 0.003, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40, adrenals (2)" }
+blood = { value = 0.0006, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14, adrenals (2)" }
+
+[male.unmapped.thyroid]
+mass = { value = 0.02, unit = "kg", source = "ICRP89", notes = "Table 2.8, thyroid" }
+flow = { value = 0.015, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40, thyroid" }
+blood = { value = 0.0006, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14, thyroid" }
+
+[male.unmapped.urinary_bladder]
+mass = { value = 0.05, unit = "kg", source = "ICRP89", notes = "Table 2.8, urinary bladder" }
+flow = { value = 0.0006, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40, urinary bladder" }
+blood = { value = 0.0002, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14, urinary bladder" }
+
+[male.unmapped.lymph_nodes]
+flow = { value = 0.017, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40, lymph nodes; Table 2.8 lists no mass, the nodes are part of the tissues of footnote c (see unlisted)" }
+blood = { value = 0.002, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14, lymph nodes; Table 2.8 lists no mass, the nodes are part of the tissues of footnote c (see unlisted)" }
+
+[male.unmapped.bronchial]
+flow = { value = 0.025, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40, bronchial tissue; the lung tissue is the organ lu, which receives the cardiac output; its blood is counted in lu" }
+
+[male.unmapped.other_tissues]
+flow = { value = 0.0139, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40, all other tissues" }
+blood = { value = 0.0192, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14, all other tissues" }
+
+[male.unmapped.tongue]
+mass = { value = 0.073, unit = "kg", source = "ICRP89", notes = "Table 2.8, tongue" }
+
+[male.unmapped.salivary_glands]
+mass = { value = 0.085, unit = "kg", source = "ICRP89", notes = "Table 2.8, salivary glands" }
+
+[male.unmapped.oesophagus]
+mass = { value = 0.04, unit = "kg", source = "ICRP89", notes = "Table 2.8, oesophagus wall; its flow and blood are counted in st (Tables 2.14, 2.40: stomach and oesophagus)" }
+
+[male.unmapped.stomach_contents]
+mass = { value = 0.25, unit = "kg", source = "ICRP89", notes = "Table 2.8, stomach contents" }
+
+[male.unmapped.small_intestine_contents]
+mass = { value = 0.35, unit = "kg", source = "ICRP89", notes = "Table 2.8, small intestine contents" }
+
+[male.unmapped.large_intestine_contents]
+mass = { value = 0.3, unit = "kg", source = "ICRP89", notes = "Table 2.8, contents of right colon, left colon and rectosigmoid (150 + 75 + 75 g male, 160 + 80 + 80 g female)" }
+
+[male.unmapped.gallbladder]
+mass = { value = 0.068, unit = "kg", source = "ICRP89", notes = "Table 2.8, gallbladder wall and contents (10 + 58 g male, 8 + 48 g female)" }
+
+[male.unmapped.breasts]
+mass = { value = 0.025, unit = "kg", source = "ICRP89", notes = "Table 2.8, breasts" }
+
+[male.unmapped.eyes]
+mass = { value = 0.015, unit = "kg", source = "ICRP89", notes = "Table 2.8, eyes (2)" }
+
+[male.unmapped.pituitary]
+mass = { value = 0.0006, unit = "kg", source = "ICRP89", notes = "Table 2.8, pituitary gland" }
+
+[male.unmapped.larynx]
+mass = { value = 0.028, unit = "kg", source = "ICRP89", notes = "Table 2.8, larynx" }
+
+[male.unmapped.trachea]
+mass = { value = 0.01, unit = "kg", source = "ICRP89", notes = "Table 2.8, trachea" }
+
+[male.unmapped.thymus]
+mass = { value = 0.025, unit = "kg", source = "ICRP89", notes = "Table 2.8, thymus" }
+
+[male.unmapped.tonsils]
+mass = { value = 0.003, unit = "kg", source = "ICRP89", notes = "Table 2.8, tonsils (2 palatine)" }
+
+[male.unmapped.ureters]
+mass = { value = 0.016, unit = "kg", source = "ICRP89", notes = "Table 2.8, ureters (2)" }
+
+[male.unmapped.urethra]
+mass = { value = 0.01, unit = "kg", source = "ICRP89", notes = "Table 2.8, urethra" }
+
+[male.unmapped.epididymes]
+mass = { value = 0.004, unit = "kg", source = "ICRP89", notes = "Table 2.8, epididymes (2)" }
+
+[male.unmapped.prostate]
+mass = { value = 0.017, unit = "kg", source = "ICRP89", notes = "Table 2.8, prostate" }
+
+[male.unmapped.unlisted]
+mass = { value = 2.811, unit = "kg", source = "ICRP89", notes = "derived: body weight less all masses of Table 2.8 (blood included); footnote c: the listed components are 96 % of the body mass, separable connective tissues and certain lymphatic tissues account for most of the rest (fixed lymphatic tissue 730 g male, 600 g female, Table 2.15)" }
+
+[female]
+bodyweight = { value = 60.0, unit = "kg", source = "ICRP89", notes = "Table 2.9, adult female" }
+height = { value = 163.0, unit = "cm", source = "ICRP89", notes = "Table 2.9, adult female" }
+body_surface_area = { value = 1.66, unit = "m2", source = "ICRP89", notes = "Table 2.9, adult female" }
+cardiac_output = { value = 5.9, unit = "l/min", source = "ICRP89", notes = "Table 2.39, adult" }
+hematocrit = { value = 0.38, unit = "dimensionless", source = "ICRP89", notes = "Section 7.3 para 309, red blood cells about 38 % (37-48 %) of the blood volume of adult females; Table 2.12: 1500 ml of 3900 ml" }
+gfr = { value = 109.0, unit = "ml/min", source = "ICRP89", notes = "derived: ICRP 89 Section 8.3.1 para 380 gives 125 ml/min for the adult male and a GFR roughly proportional to body size and lower in females; scaled with the body surface area of Table 2.9, 125 * 1.66/1.90" }
+hepatic_artery_fraction = { value = 0.2364, unit = "dimensionless", source = "ICRP89", notes = "derived: Table 2.40, hepatic artery 6.5 % of 27.5 % (= 6.5 % + portal organs 21 %); Table 2.40 states a liver total of 27.0 % (fraction 0.2407), which does not match the flows of the portal organs" }
+
+[female.blood]
+volume = { value = 3.9, unit = "l", source = "ICRP89", notes = "Section 7.4, total blood volume, adult" }
+density = { value = 1.06, unit = "kg/l", source = "ICRP89", notes = "Section 7.2.1, specific gravity of whole blood" }
+arterial = { value = 0.105, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14, left heart 4.5 % + aorta and large arteries 6.0 %" }
+venous = { value = 0.2239, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14, right heart 4.5 % + large veins 18 %, less the portal vein (portal)" }
+portal = { value = 0.00113, unit = "dimensionless", source = "Chau2023", notes = "derived: the adult portal vein as cylinder of mean length 48.63 mm and diameter 10.72 mm (Chau 2023, abstract) holds 4.39 ml, divided by the blood volume; taken from the large veins of ICRP 89 Table 2.14, which has no portal vein of its own" }
+
+[female.organs.lu]
+mass = { value = 0.42, unit = "kg", source = "ICRP89", notes = "Table 2.8, lung tissue only (without blood)" }
+density = { value = 1.0, unit = "kg/l", source = "ICRP89", notes = "Section 5.3.6 para 166, blood- and air-free lung parenchyma" }
+flow = { value = 1.0, unit = "dimensionless", source = "ICRP89", notes = "in series, the lung receives the cardiac output (Section 7.7.1, Fig. 7.2); the bronchial flow of Table 2.40 is in [unmapped]" }
+blood = { value = 0.125, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14, pulmonary 10.5 % + bronchial tissue 2.0 %" }
+f_vas = { value = 0.5372, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
+f_int = { value = 0.09256, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.2 (Schmitt 2008 human composition, Fint of lung); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+
+[female.organs.he]
+mass = { value = 0.25, unit = "kg", source = "ICRP89", notes = "Table 2.8, heart tissue only (the blood of the chambers is in the pools)" }
+flow = { value = 0.05, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40, coronary tissue" }
+blood = { value = 0.01, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14, coronary tissue" }
+f_vas = { value = 0.1349, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
+f_int = { value = 0.2163, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.25 (Schmitt 2008 human composition, Fint of heart); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+
+[female.organs.br]
+mass = { value = 1.3, unit = "kg", source = "ICRP89", notes = "Table 2.8" }
+density = { value = 1.04, unit = "kg/l", source = "ICRP89", notes = "Section 11.3.2 para 554" }
+flow = { value = 0.12, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40" }
+blood = { value = 0.012, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14" }
+f_vas = { value = 0.03609, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
+f_int = { value = 0.00482, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.005 (Schmitt 2008 human composition, Fint of brain); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+
+[female.organs.li]
+mass = { value = 1.4, unit = "kg", source = "ICRP89", notes = "Table 2.8" }
+flow = { value = 0.065, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40, hepatic artery (liver total 25.5 % male, 27.0 % female); the portal organs feed the liver in addition" }
+blood = { value = 0.1, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14" }
+f_vas = { value = 0.2179, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
+f_int = { value = 0.1799, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.23 (Schmitt 2008 human composition, Fint of liver); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+
+[female.organs.ki]
+mass = { value = 0.275, unit = "kg", source = "ICRP89", notes = "Table 2.8, both kidneys" }
+density = { value = 1.05, unit = "kg/l", source = "ICRP89", notes = "Section 8.2.1 para 337, adult" }
+flow = { value = 0.17, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40" }
+blood = { value = 0.02, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14" }
+f_vas = { value = 0.2295, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
+f_int = { value = 0.1271, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.165 (Schmitt 2008 human composition, Fint of kidney); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+
+[female.organs.st]
+mass = { value = 0.14, unit = "kg", source = "ICRP89", notes = "Table 2.8, stomach wall (the contents are in [unmapped])" }
+density = { value = 1.045, unit = "kg/l", source = "ICRP89", notes = "Section 6.3 para 191, all soft tissues of the alimentary tract" }
+flow = { value = 0.01, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40, stomach and oesophagus" }
+blood = { value = 0.01, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14, stomach and oesophagus" }
+f_vas = { value = 0.2255, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
+f_int = { value = 0.07435, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (Schmitt 2008 human composition, Fint of gut (Schmitt 2008 has no stomach)); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+
+[female.organs.si]
+mass = { value = 0.6, unit = "kg", source = "ICRP89", notes = "Table 2.8, small intestine wall (the contents are in [unmapped])" }
+density = { value = 1.045, unit = "kg/l", source = "ICRP89", notes = "Section 6.3 para 191, all soft tissues of the alimentary tract" }
+flow = { value = 0.11, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40" }
+blood = { value = 0.038, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14" }
+f_vas = { value = 0.2052, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
+f_int = { value = 0.0763, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (Schmitt 2008 human composition, Fint of gut); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+
+[female.organs.co]
+mass = { value = 0.36, unit = "kg", source = "ICRP89", notes = "Table 2.8, walls of right colon, left colon and rectosigmoid (150 + 150 + 70 g male, 145 + 145 + 70 g female; the contents are in [unmapped])" }
+density = { value = 1.045, unit = "kg/l", source = "ICRP89", notes = "Section 6.3 para 191, all soft tissues of the alimentary tract" }
+flow = { value = 0.05, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40" }
+blood = { value = 0.022, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14" }
+f_vas = { value = 0.1994, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
+f_int = { value = 0.07686, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (Schmitt 2008 human composition, Fint of gut); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+
+[female.organs.sp]
+mass = { value = 0.13, unit = "kg", source = "ICRP89", notes = "Table 2.8" }
+density = { value = 1.06, unit = "kg/l", source = "ICRP89", notes = "Section 11.10.2 para 600" }
+flow = { value = 0.03, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40" }
+blood = { value = 0.014, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14" }
+f_vas = { value = 0.3081, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
+f_int = { value = 0.1764, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.255 (Schmitt 2008 human composition, Fint of spleen); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+
+[female.organs.pa]
+mass = { value = 0.12, unit = "kg", source = "ICRP89", notes = "Table 2.8" }
+flow = { value = 0.01, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40" }
+blood = { value = 0.006, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14" }
+f_vas = { value = 0.1632, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
+f_int = { value = 0.08033, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (Schmitt 2008 human composition, Fint of gut; assumption: Schmitt 2008 has no pancreas, the value of the gut is used); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+
+[female.organs.mu]
+mass = { value = 17.5, unit = "kg", source = "ICRP89", notes = "Table 2.8, skeletal muscle" }
+flow = { value = 0.12, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40, skeletal muscle" }
+blood = { value = 0.105, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14, skeletal muscle" }
+f_vas = { value = 0.02286, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
+f_int = { value = 0.1466, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.15 (Schmitt 2008 human composition, Fint of muscle); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+
+[female.organs.sk]
+mass = { value = 2.3, unit = "kg", source = "ICRP89", notes = "Table 2.8" }
+density = { value = 1.1, unit = "kg/l", source = "ICRP89", notes = "Section 10.6 para 529" }
+flow = { value = 0.05, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40" }
+blood = { value = 0.03, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14" }
+f_vas = { value = 0.05299, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
+f_int = { value = 0.5682, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.6 (Schmitt 2008 human composition, Fint of skin); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+
+[female.organs.ad]
+mass = { value = 19.0, unit = "kg", source = "ICRP89", notes = "Table 2.8, separable adipose tissue excluding yellow marrow (total adipose tissue 18.2 kg male, 22.5 kg female); reference only: adipose is the remainder of the body weight" }
+flow = { value = 0.085, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40, fat" }
+blood = { value = 0.085, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14, fat" }
+f_vas = { value = 0.01715, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
+f_int = { value = 0.1376, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.14 (Schmitt 2008 human composition, Fint of adipose); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+
+[female.organs.bo]
+mass = { value = 7.8, unit = "kg", source = "ICRP89", notes = "Table 2.8, total skeleton (bone, active and inactive marrow, cartilage, teeth, miscellaneous)" }
+density = { value = 1.3, unit = "kg/l", source = "ICRP89", notes = "Table 2.20, whole skeleton, adults" }
+flow = { value = 0.05, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40, skeleton" }
+blood = { value = 0.07, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14, skeleton" }
+f_vas = { value = 0.04352, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
+f_int = { value = 0.09565, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.1 (Schmitt 2008 human composition, Fint of bone); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+
+[female.organs.go]
+mass = { value = 0.011, unit = "kg", source = "ICRP89", notes = "Table 2.8, ovaries (2)" }
+density = { value = 1.05, unit = "kg/l", source = "ICRP89", notes = "Section 8.2.7 para 369, ovaries" }
+flow = { value = 0.0002, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40, gonads" }
+blood = { value = 0.0002, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14, gonads" }
+f_vas = { value = 0.0693, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
+f_int = { value = 0.08935, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (Schmitt 2008 human composition, Fint of gut; assumption: Schmitt 2008 has no gonads, the value of the gut is used); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+
+[female.unmapped.adrenals]
+mass = { value = 0.013, unit = "kg", source = "ICRP89", notes = "Table 2.8, adrenals (2)" }
+flow = { value = 0.003, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40, adrenals (2)" }
+blood = { value = 0.0006, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14, adrenals (2)" }
+
+[female.unmapped.thyroid]
+mass = { value = 0.017, unit = "kg", source = "ICRP89", notes = "Table 2.8, thyroid" }
+flow = { value = 0.015, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40, thyroid" }
+blood = { value = 0.0006, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14, thyroid" }
+
+[female.unmapped.urinary_bladder]
+mass = { value = 0.04, unit = "kg", source = "ICRP89", notes = "Table 2.8, urinary bladder" }
+flow = { value = 0.0006, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40, urinary bladder" }
+blood = { value = 0.0002, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14, urinary bladder" }
+
+[female.unmapped.lymph_nodes]
+flow = { value = 0.017, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40, lymph nodes; Table 2.8 lists no mass, the nodes are part of the tissues of footnote c (see unlisted)" }
+blood = { value = 0.002, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14, lymph nodes; Table 2.8 lists no mass, the nodes are part of the tissues of footnote c (see unlisted)" }
+
+[female.unmapped.bronchial]
+flow = { value = 0.025, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40, bronchial tissue; the lung tissue is the organ lu, which receives the cardiac output; its blood is counted in lu" }
+
+[female.unmapped.other_tissues]
+flow = { value = 0.0192, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40, all other tissues" }
+blood = { value = 0.0192, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14, all other tissues" }
+
+[female.unmapped.tongue]
+mass = { value = 0.06, unit = "kg", source = "ICRP89", notes = "Table 2.8, tongue" }
+
+[female.unmapped.salivary_glands]
+mass = { value = 0.07, unit = "kg", source = "ICRP89", notes = "Table 2.8, salivary glands" }
+
+[female.unmapped.oesophagus]
+mass = { value = 0.035, unit = "kg", source = "ICRP89", notes = "Table 2.8, oesophagus wall; its flow and blood are counted in st (Tables 2.14, 2.40: stomach and oesophagus)" }
+
+[female.unmapped.stomach_contents]
+mass = { value = 0.23, unit = "kg", source = "ICRP89", notes = "Table 2.8, stomach contents" }
+
+[female.unmapped.small_intestine_contents]
+mass = { value = 0.28, unit = "kg", source = "ICRP89", notes = "Table 2.8, small intestine contents" }
+
+[female.unmapped.large_intestine_contents]
+mass = { value = 0.32, unit = "kg", source = "ICRP89", notes = "Table 2.8, contents of right colon, left colon and rectosigmoid (150 + 75 + 75 g male, 160 + 80 + 80 g female)" }
+
+[female.unmapped.gallbladder]
+mass = { value = 0.056, unit = "kg", source = "ICRP89", notes = "Table 2.8, gallbladder wall and contents (10 + 58 g male, 8 + 48 g female)" }
+
+[female.unmapped.breasts]
+mass = { value = 0.5, unit = "kg", source = "ICRP89", notes = "Table 2.8, breasts" }
+
+[female.unmapped.eyes]
+mass = { value = 0.015, unit = "kg", source = "ICRP89", notes = "Table 2.8, eyes (2)" }
+
+[female.unmapped.pituitary]
+mass = { value = 0.0006, unit = "kg", source = "ICRP89", notes = "Table 2.8, pituitary gland" }
+
+[female.unmapped.larynx]
+mass = { value = 0.019, unit = "kg", source = "ICRP89", notes = "Table 2.8, larynx" }
+
+[female.unmapped.trachea]
+mass = { value = 0.008, unit = "kg", source = "ICRP89", notes = "Table 2.8, trachea" }
+
+[female.unmapped.thymus]
+mass = { value = 0.02, unit = "kg", source = "ICRP89", notes = "Table 2.8, thymus" }
+
+[female.unmapped.tonsils]
+mass = { value = 0.003, unit = "kg", source = "ICRP89", notes = "Table 2.8, tonsils (2 palatine)" }
+
+[female.unmapped.ureters]
+mass = { value = 0.015, unit = "kg", source = "ICRP89", notes = "Table 2.8, ureters (2)" }
+
+[female.unmapped.urethra]
+mass = { value = 0.003, unit = "kg", source = "ICRP89", notes = "Table 2.8, urethra" }
+
+[female.unmapped.fallopian_tubes]
+mass = { value = 0.0021, unit = "kg", source = "ICRP89", notes = "Table 2.8, fallopian tubes (2)" }
+
+[female.unmapped.uterus]
+mass = { value = 0.08, unit = "kg", source = "ICRP89", notes = "Table 2.8, uterus" }
+
+[female.unmapped.unlisted]
+mass = { value = 2.507, unit = "kg", source = "ICRP89", notes = "derived: body weight less all masses of Table 2.8 (blood included); footnote c: the listed components are 96 % of the body mass, separable connective tissues and certain lymphatic tissues account for most of the rest (fixed lymphatic tissue 730 g male, 600 g female, Table 2.15)" }
