@@ -61,6 +61,7 @@ class Tissue(StrEnum):
     SERUM = "serum"
     BLOOD = "blood"
     ARTERIAL_BLOOD = "arterial blood"
+    ARTERIAL_PLASMA = "arterial plasma"
     SALIVA = "saliva"
     URINE = "urine"
     FECES = "feces"
