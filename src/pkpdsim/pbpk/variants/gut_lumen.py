@@ -114,7 +114,8 @@ class LumenBuilder(StandardBuilder):
 
         The impairment (chronic kidney disease) multiplies the transit time of
         the stomach and of the small intestine (its segments, the single
-        lumen) by its factors, inputs of the body.
+        lumen) by its factors, inputs of the body. The time is returned in
+        parentheses, so that a caller divides by the whole product.
         """
         t = ids.transit_time(seg.token)
         if seg.token == "st":
@@ -124,14 +125,14 @@ class LumenBuilder(StandardBuilder):
                 U.dimensionless,
                 "impairment factor gastric emptying time",
             )
-            return f"({t} + {fed} * ({ids.T_STOMACH_FED} - {t})) * {factor}"
+            return f"(({t} + {fed} * ({ids.T_STOMACH_FED} - {t})) * {factor})"
         if seg.token is None or seg.token in SMALL:
             factor = self._input(
                 SI_TRANSIT,
                 U.dimensionless,
                 "impairment factor small intestinal transit time",
             )
-            return f"{t} * {factor}"
+            return f"({t} * {factor})"
         return t
 
     def _gut_species(

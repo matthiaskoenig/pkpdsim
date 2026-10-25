@@ -22,7 +22,7 @@ d(IVDOSE_<s>)/dt = -J_iv_<s> * Mr_<s> + Ri_<s>
 J_sol_<s>: -> Clumen_st_<s> = Ka_sol_<s> / 60 min_per_hr * SOLDOSE_<s> / Mr_<s>
 d(SOLDOSE_<s>)/dt = -J_sol_<s> * Mr_<s>
 J_po_<s>: -> Clumen_st_<s> = Ka_dis_<s> / 60 min_per_hr * PODOSE_<s> / Mr_<s>
-J_trs_st_<s>: -> Asolid_du_<s> = PODOSE_<s> / Mr_<s> / (T_st + FED * (T_st_fed - T_st)) * fimp_t_stomach
+J_trs_st_<s>: -> Asolid_du_<s> = PODOSE_<s> / Mr_<s> / ((T_st + FED * (T_st_fed - T_st)) * fimp_t_stomach)
 d(PODOSE_<s>)/dt = -(J_po_<s> + J_trs_st_<s>) * Mr_<s>
 ```
 
@@ -52,15 +52,15 @@ The lumen segments follow the anatomical segmentation of Thelen 2011, as PK-Sim:
 The absorption rate constant of the small intestine is `ka_<s>` (1/hr, 1 by default for a substance with an oral route, a choice of the library; 0 for any other); a segment absorbs with `ka_<s>*f_area_<seg>`, the mucosal surface per lumen volume relative to the small intestine (the stomach does not absorb). Without chemistry of the intestine the substance is absorbed into the plasma of the intestinal wall:
 
 ```equations title="transit and absorption"
-J_tr_st_<s>: Clumen_st_<s> -> Clumen_du_<s> = Vlumen_st * Clumen_st_<s> / (T_st + FED * (T_st_fed - T_st)) * fimp_t_stomach
-J_tr_du_<s>: Clumen_du_<s> -> Clumen_jej1_<s> = Vlumen_du * Clumen_du_<s> / T_du * fimp_t_si
+J_tr_st_<s>: Clumen_st_<s> -> Clumen_du_<s> = Vlumen_st * Clumen_st_<s> / ((T_st + FED * (T_st_fed - T_st)) * fimp_t_stomach)
+J_tr_du_<s>: Clumen_du_<s> -> Clumen_jej1_<s> = Vlumen_du * Clumen_du_<s> / (T_du * fimp_t_si)
 J_tr_rec_<s>: Clumen_rec_<s> -> Afeces_<s> = Vlumen_rec * Clumen_rec_<s> / T_rec
 J_abs_du_<s>: Clumen_du_<s> -> Cpl_<s> = ka_<s> / 60 min_per_hr * f_area_du * Vlumen_du * Clumen_du_<s>
-J_trs_du_<s>: Asolid_du_<s> -> Asolid_jej1_<s> = Asolid_du_<s> / T_du * fimp_t_si
+J_trs_du_<s>: Asolid_du_<s> -> Asolid_jej1_<s> = Asolid_du_<s> / (T_du * fimp_t_si)
 J_trs_rec_<s>: Asolid_rec_<s> -> Afeces_<s> = Asolid_rec_<s> / T_rec
 ```
 
-The factors `fimp_t_stomach` and `fimp_t_si` are the factors of chronic kidney disease on the gastric emptying and the small intestinal transit, 1 until their source is read (see [Impairment](impairment.md#limitations)). The data of the segments:
+The factors `fimp_t_stomach` and `fimp_t_si` are the factors of chronic kidney disease on the gastric emptying time and the small intestinal transit time: they multiply the transit time, a factor above 1 slows the transit. They are 1 until their source is read (see [Impairment](impairment.md#limitations)). The data of the segments:
 
 <!-- generated: intestine-segments (scripts/pbpk_tables.py), do not edit -->
 *Generated from `data/intestine_human.toml` by `scripts/pbpk_tables.py`; the notes of every number are in the data file.*

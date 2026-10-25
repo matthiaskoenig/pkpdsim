@@ -38,6 +38,7 @@ from pkpdsim.pbpk import (
     ids,
 )
 from pkpdsim.pbpk.chemistry import Direction, Membrane
+from pkpdsim.pbpk.impairment import GASTRIC_EMPTYING, SI_TRANSIT
 from pkpdsim.pbpk.variants import lookup, names
 
 from .conftest import definition, dose_amount, load, simple_drug, total_amount
@@ -325,6 +326,47 @@ def test_fed_slows_gastric_emptying(tmp_path: Path) -> None:
         r.simulate(0, 30, 5)
         left[fed] = r[stomach]
     assert left[1.0] > 1.5 * left[0.0]
+
+
+def _with_transit_factors(path: Path, factor: float) -> "roadrunner.RoadRunner":
+    """Load a flat model with the CKD factors of the transit times set to a value.
+
+    The factors are initial assignments of the impairment (1 in every stage
+    of the data, R40); the test replaces them by a constant.
+    """
+    from sbmlsim.model.model_roadrunner import load_roadrunner
+
+    doc = libsbml.readSBMLFromFile(str(path))
+    model = doc.getModel()
+    for pid in (GASTRIC_EMPTYING, SI_TRANSIT):
+        model.removeInitialAssignment(pid)
+        model.getParameter(pid).setValue(factor)
+    changed = path.with_name(f"{path.stem}_transit{factor:g}.xml")
+    libsbml.writeSBMLToFile(doc, str(changed))
+    return load_roadrunner(changed)
+
+
+def test_longer_transit_factor_slows_transit(tmp_path: Path) -> None:
+    """A transit time factor of 2 doubles the transit times: the drug moves slower.
+
+    The factor multiplies the time `T*factor` of the stomach and the small
+    intestine, so the transit rate is `V*C/(T*factor)` (R55, the precedence
+    bug gave `V*C/T*factor`). After a solution the stomach keeps more drug and
+    less reaches the colon.
+    """
+    result = build(_definition("transit", routes=[Route.oral_solution(S)]), tmp_path)
+    stomach = f"[{_gu(ids.lumen(S, 'st'))}]"
+    colon = f"[{_gu(ids.lumen(S, 'cae'))}]"
+    left, arrived = {}, {}
+    for factor in (1.0, 2.0):
+        r = _with_transit_factors(result.flat_path, factor)
+        r[ids.sol_dose(S)] = 10.0
+        r.simulate(0, 30, 5)
+        left[factor] = r[stomach]
+        r.simulate(30, 240, 5)
+        arrived[factor] = r[colon]
+    assert left[2.0] > 1.5 * left[1.0]
+    assert arrived[2.0] < arrived[1.0]
 
 
 def test_add_doses_compatible(tmp_path: Path) -> None:
