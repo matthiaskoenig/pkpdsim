@@ -75,42 +75,42 @@ volume = { value = 0.002093, unit = "l", source = "Schiller2005", notes = "colon
 transit_time = { value = 339.0, unit = "min", source = "Metcalf1987", notes = "half of the transit of the right colon, 11.3 +- 1.1 h (73 subjects; total colonic transit 35.0 h)" }
 ph = { value = 6.4, unit = "dimensionless", source = "Evans1988", notes = "mean pH after the passage into the caecum, 6.4 +- 0.4" }
 area_factor = { value = 0.0362, unit = "dimensionless", source = "Helander2014", notes = "mucosal surface per lumen volume relative to the small intestine: (A_LI/A_SI)*(L_SI/L_LI)*(d_SI/d_LI)^2 = (2/30)*2*(2.5/4.8)^2 with the mucosal surfaces 2 m2 (large intestine) and 30 m2 (small intestine, of 32 m2 in total), the small intestine two thirds of the oroanal length and the inner diameters 2.5 and 4.8 cm; the lumen a cylinder of the inner diameter; permeability differences are not included" }
-cyp3a4 = { value = 0.0, unit = "dimensionless", source = "ModelChoice", notes = "no CYP3A4 metabolism in the colon: Paine 1997 measured duodenum, jejunum and ileum only, the colonic content is low against the small intestine (Drozdzik 2018: the highest abundance in the jejunum)" }
+cyp3a4 = { value = 0.0, unit = "dimensionless", source = "ModelChoice", notes = "no CYP3A4 metabolism in the colon, a choice: Paine 1997 measured duodenum, jejunum and ileum only; Drozdzik 2018 (Drozdzik2018 of sources.toml, abstract read, the full text is not open access) measured the colon as well and found nearly all detected enzymes highest in the jejunum; the colonic abundance relative to the small intestine is not read" }
 
 [colon_ascendens]
 volume = { value = 0.002093, unit = "l", source = "Schiller2005", notes = "colonic fluid volume 13 ml by the transit share 339/2106 min" }
 transit_time = { value = 339.0, unit = "min", source = "Metcalf1987", notes = "half of the transit of the right colon, 11.3 h" }
 ph = { value = 6.6, unit = "dimensionless", source = "Evans1988", notes = "the pH rises progressively from the caecum (6.4) to the left colon (7.0); a linear interpolation over the colonic segments" }
 area_factor = { value = 0.0362, unit = "dimensionless", source = "Helander2014", notes = "as the caecum" }
-cyp3a4 = { value = 0.0, unit = "dimensionless", source = "ModelChoice", notes = "no CYP3A4 metabolism in the colon: Paine 1997 measured duodenum, jejunum and ileum only, the colonic content is low against the small intestine (Drozdzik 2018: the highest abundance in the jejunum)" }
+cyp3a4 = { value = 0.0, unit = "dimensionless", source = "ModelChoice", notes = "no CYP3A4 metabolism in the colon, a choice: Paine 1997 measured duodenum, jejunum and ileum only; Drozdzik 2018 (Drozdzik2018 of sources.toml, abstract read, the full text is not open access) measured the colon as well and found nearly all detected enzymes highest in the jejunum; the colonic abundance relative to the small intestine is not read" }
 
 [colon_transversum]
 volume = { value = 0.002111, unit = "l", source = "Schiller2005", notes = "colonic fluid volume 13 ml by the transit share 342/2106 min" }
 transit_time = { value = 342.0, unit = "min", source = "Metcalf1987", notes = "half of the transit of the left colon, 11.4 +- 1.4 h" }
 ph = { value = 6.8, unit = "dimensionless", source = "Evans1988", notes = "linear interpolation from the caecum (6.4) to the left colon (7.0)" }
 area_factor = { value = 0.0362, unit = "dimensionless", source = "Helander2014", notes = "as the caecum" }
-cyp3a4 = { value = 0.0, unit = "dimensionless", source = "ModelChoice", notes = "no CYP3A4 metabolism in the colon: Paine 1997 measured duodenum, jejunum and ileum only, the colonic content is low against the small intestine (Drozdzik 2018: the highest abundance in the jejunum)" }
+cyp3a4 = { value = 0.0, unit = "dimensionless", source = "ModelChoice", notes = "no CYP3A4 metabolism in the colon, a choice: Paine 1997 measured duodenum, jejunum and ileum only; Drozdzik 2018 (Drozdzik2018 of sources.toml, abstract read, the full text is not open access) measured the colon as well and found nearly all detected enzymes highest in the jejunum; the colonic abundance relative to the small intestine is not read" }
 
 [colon_descendens]
 volume = { value = 0.002111, unit = "l", source = "Schiller2005", notes = "colonic fluid volume 13 ml by the transit share 342/2106 min" }
 transit_time = { value = 342.0, unit = "min", source = "Metcalf1987", notes = "half of the transit of the left colon, 11.4 h" }
 ph = { value = 7.0, unit = "dimensionless", source = "Evans1988", notes = "final mean pH of the left colon, 7.0 +- 0.7" }
 area_factor = { value = 0.0362, unit = "dimensionless", source = "Helander2014", notes = "as the caecum" }
-cyp3a4 = { value = 0.0, unit = "dimensionless", source = "ModelChoice", notes = "no CYP3A4 metabolism in the colon: Paine 1997 measured duodenum, jejunum and ileum only, the colonic content is low against the small intestine (Drozdzik 2018: the highest abundance in the jejunum)" }
+cyp3a4 = { value = 0.0, unit = "dimensionless", source = "ModelChoice", notes = "no CYP3A4 metabolism in the colon, a choice: Paine 1997 measured duodenum, jejunum and ileum only; Drozdzik 2018 (Drozdzik2018 of sources.toml, abstract read, the full text is not open access) measured the colon as well and found nearly all detected enzymes highest in the jejunum; the colonic abundance relative to the small intestine is not read" }
 
 [colon_sigmoid]
 volume = { value = 0.002296, unit = "l", source = "Schiller2005", notes = "colonic fluid volume 13 ml by the transit share 372/2106 min" }
 transit_time = { value = 372.0, unit = "min", source = "Metcalf1987", notes = "half of the transit of the rectosigmoid, 12.4 +- 1.1 h" }
 ph = { value = 7.0, unit = "dimensionless", source = "Evans1988", notes = "final mean pH of the left colon, 7.0" }
 area_factor = { value = 0.0362, unit = "dimensionless", source = "Helander2014", notes = "as the caecum" }
-cyp3a4 = { value = 0.0, unit = "dimensionless", source = "ModelChoice", notes = "no CYP3A4 metabolism in the colon: Paine 1997 measured duodenum, jejunum and ileum only, the colonic content is low against the small intestine (Drozdzik 2018: the highest abundance in the jejunum)" }
+cyp3a4 = { value = 0.0, unit = "dimensionless", source = "ModelChoice", notes = "no CYP3A4 metabolism in the colon, a choice: Paine 1997 measured duodenum, jejunum and ileum only; Drozdzik 2018 (Drozdzik2018 of sources.toml, abstract read, the full text is not open access) measured the colon as well and found nearly all detected enzymes highest in the jejunum; the colonic abundance relative to the small intestine is not read" }
 
 [rectum]
 volume = { value = 0.002296, unit = "l", source = "Schiller2005", notes = "colonic fluid volume 13 ml by the transit share 372/2106 min" }
 transit_time = { value = 372.0, unit = "min", source = "Metcalf1987", notes = "half of the transit of the rectosigmoid, 12.4 h" }
 ph = { value = 7.0, unit = "dimensionless", source = "Evans1988", notes = "final mean pH of the left colon, 7.0" }
 area_factor = { value = 0.0362, unit = "dimensionless", source = "Helander2014", notes = "as the caecum" }
-cyp3a4 = { value = 0.0, unit = "dimensionless", source = "ModelChoice", notes = "no CYP3A4 metabolism in the colon: Paine 1997 measured duodenum, jejunum and ileum only, the colonic content is low against the small intestine (Drozdzik 2018: the highest abundance in the jejunum)" }
+cyp3a4 = { value = 0.0, unit = "dimensionless", source = "ModelChoice", notes = "no CYP3A4 metabolism in the colon, a choice: Paine 1997 measured duodenum, jejunum and ileum only; Drozdzik 2018 (Drozdzik2018 of sources.toml, abstract read, the full text is not open access) measured the colon as well and found nearly all detected enzymes highest in the jejunum; the colonic abundance relative to the small intestine is not read" }
 
 [mucosa]
 volume_fraction = { value = 0.1, unit = "dimensionless", source = "ModelChoice", notes = "the mucosa (enterocyte layer) as a tenth of the tissue volume of small and large intestine, `volume_fraction * V<region> * (1 - f_vas) * share` per segment with its transit share of the region; carved out of the wall for a substance with mucosa species; it enters the dynamics of the mucosa only, not the steady state first-pass extraction of the flow-limited mucosa" }
