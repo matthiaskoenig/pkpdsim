@@ -1,4 +1,10 @@
-"""The processes of the chemistry: metabolism, transport and custom reactions."""
+"""The processes of the chemistry: metabolism, transport and custom reactions.
+
+The enum fields of a process (`organ`, `direction`, `membrane`, `part`) may be
+given as member, value or name (`"li"`, `"liver"`, `"basolateral"`): the
+process holds the member, anything else raises a `ValueError` which names the
+field and the allowed values.
+"""
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -6,7 +12,7 @@ from enum import StrEnum
 
 from sbmlutils.factory import Parameter, Species
 
-from pkpdsim.pbpk.organs import Organ, Part
+from pkpdsim.pbpk.organs import Organ, Part, as_member
 from pkpdsim.pbpk.values import Q
 
 __all__ = [
@@ -108,6 +114,12 @@ class Metabolism:
     protein: str | None = None
     profile: str | None = None
 
+    def __post_init__(self) -> None:
+        """Normalise the organ to an `Organ` member."""
+        object.__setattr__(
+            self, "organ", as_member(Organ, self.organ, "Metabolism.organ")
+        )
+
 
 @dataclass(frozen=True)
 class Transport:
@@ -131,6 +143,20 @@ class Transport:
     kinetics: FirstOrder | MM | Hill
     protein: str | None = None
 
+    def __post_init__(self) -> None:
+        """Normalise organ, direction and membrane to their enum members."""
+        object.__setattr__(
+            self, "organ", as_member(Organ, self.organ, "Transport.organ")
+        )
+        object.__setattr__(
+            self,
+            "direction",
+            as_member(Direction, self.direction, "Transport.direction"),
+        )
+        object.__setattr__(
+            self, "membrane", as_member(Membrane, self.membrane, "Transport.membrane")
+        )
+
 
 @dataclass(frozen=True)
 class CustomReaction:
@@ -153,3 +179,12 @@ class CustomReaction:
     formula: str
     parameters: list[Parameter]
     species: list[Species] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        """Normalise organ and part to their enum members."""
+        object.__setattr__(
+            self, "organ", as_member(Organ, self.organ, "CustomReaction.organ")
+        )
+        object.__setattr__(
+            self, "part", as_member(Part, self.part, "CustomReaction.part")
+        )

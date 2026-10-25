@@ -14,7 +14,7 @@ from typing import Literal
 from pkpdsim.pbpk.data import load, value
 from pkpdsim.pbpk.organs import Organ
 from pkpdsim.pbpk.units import U
-from pkpdsim.pbpk.values import Q, Value
+from pkpdsim.pbpk.values import Q, Value, check_literals
 
 __all__ = [
     "PROTEINS",
@@ -93,6 +93,10 @@ class Inhibition:
     ki: Q
     kiu: Q | None = None
     kinact: Q | None = None
+
+    def __post_init__(self) -> None:
+        """Check the kind against its choices."""
+        check_literals(self)
 
 
 @dataclass(frozen=True)

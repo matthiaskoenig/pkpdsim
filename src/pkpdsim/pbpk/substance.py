@@ -7,9 +7,9 @@ from typing import Literal
 
 from sbmlutils.metadata import BQB
 
-from pkpdsim.pbpk.organs import Organ, as_organ_keys, as_organs
+from pkpdsim.pbpk.organs import Organ, as_member, as_organ_keys, as_organs
 from pkpdsim.pbpk.proteins import Induction, Inhibition
-from pkpdsim.pbpk.values import Q
+from pkpdsim.pbpk.values import Q, check_literals
 
 __all__ = [
     "Binding",
@@ -34,6 +34,10 @@ class Binding:
     fu: Q
     protein: Literal["albumin", "agp", "unknown"] = "unknown"
 
+    def __post_init__(self) -> None:
+        """Check the protein against its choices."""
+        check_literals(self)
+
 
 @dataclass(frozen=True)
 class Erythrocytes:
@@ -52,6 +56,10 @@ class Erythrocytes:
     kbc: Q | None = None
     k_exchange: Q | None = None
 
+    def __post_init__(self) -> None:
+        """Check the mode against its choices."""
+        check_literals(self)
+
 
 class Mode(StrEnum):
     """How a substance is exchanged between plasma and tissue."""
@@ -68,9 +76,9 @@ class Mode(StrEnum):
 class _Exchange:
     """What the Kp and the Kp method share.
 
-    The organs of `organs` and the keys of `ps` may be given as `Organ`
-    members, their values or their names (`"li"`, `"liver"`): they are
-    normalised to `Organ` members, anything else raises a `ValueError`.
+    The mode, the organs of `organs` and the keys of `ps` may be given as
+    members, their values or their names (`"tissue"`, `"li"`, `"liver"`): they
+    are normalised to the members, anything else raises a `ValueError`.
 
     Attributes:
         organs: the organs the substance enters, all if `None` (a set,
@@ -93,8 +101,9 @@ class _Exchange:
     ps: Mapping[Organ, Q] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        """Normalise the organs and the keys of `ps` to `Organ` members."""
+        """Normalise the mode, the organs and the keys of `ps` to enum members."""
         name = type(self).__name__
+        object.__setattr__(self, "mode", as_member(Mode, self.mode, f"{name}.mode"))
         if self.organs is not None:
             object.__setattr__(self, "organs", as_organs(self.organs, f"{name}.organs"))
         object.__setattr__(self, "ps", as_organ_keys(self.ps, f"{name}.ps"))
@@ -138,6 +147,11 @@ class KpMethod(_Exchange):
     pka: tuple[float, ...]
     compound: Literal["neutral", "acid", "base", "zwitterion"]
     factor: Q = 1.0
+
+    def __post_init__(self) -> None:
+        """Normalise as `Kp` does and check method and compound."""
+        super().__post_init__()
+        check_literals(self)
 
 
 @dataclass(frozen=True)

@@ -3,18 +3,23 @@
 import dataclasses
 import re
 from collections.abc import Callable
+from pathlib import Path
 
+import libsbml
 import pytest
+from sbmlutils.factory import Parameter
 
 from pkpdsim.pbpk import (
     MM,
     PROTEINS,
     Binding,
+    CustomReaction,
     Direction,
     Erythrocytes,
     Excretion,
     FirstOrder,
     Hill,
+    Inhibition,
     Kp,
     KpMethod,
     Membrane,
@@ -22,6 +27,7 @@ from pkpdsim.pbpk import (
     Mode,
     Observer,
     Organ,
+    Part,
     PBPKDefinition,
     Route,
     Sex,
@@ -31,6 +37,7 @@ from pkpdsim.pbpk import (
     Value,
     Variants,
     ZonatedLiver,
+    build,
     compose,
     ids,
     load,
@@ -530,3 +537,121 @@ def test_definition_with_texts_composes() -> None:
     parameters = {str(p.sid): p.value for p in compose(d).parameters or []}
     assert parameters[ids.kp_organ(Organ.ADIPOSE, "api")] == 0.4
     assert parameters[ids.BW] == 60.0
+
+
+def _text_processes() -> tuple[Metabolism, Transport, CustomReaction]:
+    """The processes of the chemistry with every enum field given as text."""
+    return (
+        _untyped(Metabolism, "EL", "liver", "api", {"api_m2": 1.0}, MM(1e-3, 0.01)),
+        _untyped(Transport, "UP", "li", "api", "influx", "BASOLATERAL", MM(1e-3, 0.01)),
+        _untyped(
+            CustomReaction,
+            sid="KX",
+            organ="kidney",
+            part="tissue",
+            equation="Cti_api ->",
+            formula="kx * Cti_api",
+            parameters=[Parameter("kx", 0.01, U.l_per_min)],
+        ),
+    )
+
+
+def test_chemistry_enum_fields_accept_texts(tmp_path: Path) -> None:
+    """Organ, direction, membrane, part and mode given as text build the reactions (R61).
+
+    Before, a process of a text organ was dropped from the model.
+    """
+    metabolism, transport, custom = _text_processes()
+    assert metabolism.organ is Organ.LIVER
+    assert (transport.organ, transport.direction, transport.membrane) == (
+        Organ.LIVER,
+        Direction.INFLUX,
+        Membrane.BASOLATERAL,
+    )
+    assert type(transport.direction) is Direction
+    assert (custom.organ, custom.part) == (Organ.KIDNEY, Part.TISSUE)
+    kp = _untyped(Kp, 2.0, mode="TISSUE", ftissue=0.5)
+    assert kp.mode is Mode.TISSUE
+    method = _untyped(KpMethod, **_METHOD, mode="perfusion")
+    assert method.mode is Mode.PERFUSION
+    d = _definition(
+        substances=[_api(distribution=kp), Substance("api_m2", "metabolite", 445.5)],
+        chemistry=list(_text_processes()),
+    )
+    doc = libsbml.readSBMLFromFile(str(build(d, tmp_path).flat_path))
+    reactions = {r.getId() for r in doc.getModel().getListOfReactions()}
+    assert {"LI__EL", "LI__UP", "KI__KX"} <= reactions
+
+
+@pytest.mark.parametrize(
+    ("cls", "args", "field"),
+    [
+        (Metabolism, ("EL", "lever", "api", {}, MM(1e-3, 0.01)), "Metabolism.organ"),
+        (
+            Transport,
+            ("T", "lever", "api", "influx", "apical", MM(1e-3, 0.01)),
+            "Transport.organ",
+        ),
+        (
+            Transport,
+            ("T", "li", "api", "inflow", "apical", MM(1e-3, 0.01)),
+            "Transport.direction",
+        ),
+        (
+            Transport,
+            ("T", "li", "api", "influx", "apikal", MM(1e-3, 0.01)),
+            "Transport.membrane",
+        ),
+        (CustomReaction, ("C", "brian", "ti", "", "", []), "CustomReaction.organ"),
+        (CustomReaction, ("C", "br", "cell", "", "", []), "CustomReaction.part"),
+        (Kp, (2.0,), "Kp.mode"),
+    ],
+)
+def test_chemistry_enum_fields_reject_other_texts(
+    cls: Callable[..., object], args: tuple[object, ...], field: str
+) -> None:
+    """An unknown text raises with the field and the allowed values (R61)."""
+    kwargs = {"mode": "flow"} if cls is Kp else {}
+    with pytest.raises(ValueError, match=re.escape(field)) as err:
+        _untyped(cls, *args, **kwargs)
+    assert "allowed values are" in str(err.value)
+
+
+def test_basolateral_text_hits_the_gut_refusal() -> None:
+    """A basolateral transport of the intestine given as text is refused as with the member."""
+    transport = _untyped(
+        Transport,
+        "GUTUP",
+        "small_intestine",
+        "api",
+        "influx",
+        "basolateral",
+        FirstOrder(0.1),
+    )
+    d = _definition(routes=[Route.iv("api"), Route.oral("api")], chemistry=[transport])
+    with pytest.raises(ValueError, match="Transport 'GUTUP' is basolateral"):
+        compose(d)
+
+
+@pytest.mark.parametrize(
+    ("make", "field"),
+    [
+        (lambda: _untyped(Binding, 0.1, "albumine"), "Binding.protein"),
+        (lambda: _untyped(Erythrocytes, "kinetik", kbc=2.0), "Erythrocytes.mode"),
+        (lambda: _untyped(Route, "ivv", "api"), "Route.kind"),
+        (lambda: _untyped(Inhibition, "CYP3A4", "competitve", 1.0), "Inhibition.kind"),
+        (
+            lambda: _untyped(KpMethod, **{**_METHOD, "compound": "bas"}),
+            "KpMethod.compound",
+        ),
+        (lambda: _untyped(KpMethod, **{**_METHOD, "method": "rr"}), "KpMethod.method"),
+    ],
+)
+def test_choices_reject_other_texts(make: Callable[[], object], field: str) -> None:
+    """A text which is none of the choices of a `Literal` field raises (R61).
+
+    Before, a route of an unknown kind composed no doses and an unknown
+    erythrocyte mode was taken for another.
+    """
+    with pytest.raises(ValueError, match=re.escape(field) + ".*allowed values"):
+        make()

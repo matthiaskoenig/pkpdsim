@@ -63,7 +63,7 @@ from pkpdsim.pbpk.organs import Pool
 from pkpdsim.pbpk.placement import value_parameter
 from pkpdsim.pbpk.substance import Substance
 from pkpdsim.pbpk.units import U
-from pkpdsim.pbpk.values import Q
+from pkpdsim.pbpk.values import Q, check_literals
 
 __all__ = [
     "ORAL",
@@ -144,6 +144,10 @@ class Route:
     kind: Literal["iv", "oral", "oral_solution"]
     substance: str
     formulation: Formulation | None = None
+
+    def __post_init__(self) -> None:
+        """Check the kind against its choices."""
+        check_literals(self)
 
     @classmethod
     def iv(cls, s: str) -> "Route":
