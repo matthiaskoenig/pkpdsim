@@ -64,6 +64,8 @@ __all__ = [
     "fu",
     "fu_ref",
     "hepatic_vein",
+    "hepatic_vein_blood",
+    "hepatic_vein_free",
     "inflow_reaction",
     "infusion_rate",
     "injection_rate",
@@ -104,6 +106,7 @@ __all__ = [
     "species_of",
     "submodel",
     "tissue_volume_total_ref",
+    "unbound",
     "urine",
     "vascular_fraction",
 ]
@@ -521,6 +524,21 @@ def blood(pool: Pool, s: str) -> str:
 def hepatic_vein(s: str) -> str:
     """The id of the concentration in the hepatic vein, `Chv_<s>`."""
     return f"Chv_{s}"
+
+
+def hepatic_vein_free(s: str) -> str:
+    """The id of the unbound concentration in the hepatic vein, `Chv_free_<s>`."""
+    return f"Chv_free_{s}"
+
+
+def hepatic_vein_blood(s: str) -> str:
+    """The id of the blood concentration in the hepatic vein, `Chv_blood_<s>`."""
+    return f"Chv_blood_{s}"
+
+
+def unbound(part: Part, s: str) -> str:
+    """The local id of the unbound concentration of `s` in a tissue part, `Cu_ti_<s>`."""
+    return f"Cu_{part.value}_{s}"
 
 
 def activity(protein: str) -> str:

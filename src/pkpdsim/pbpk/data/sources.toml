@@ -51,7 +51,7 @@ citation = "Yu LX, Crison JR, Amidon GL. Compartmental transit and dispersion mo
 doi = "10.1016/0378-5173(96)04592-9"
 
 [OSPDocumentation]
-citation = "Open Systems Pharmacology. PK-Sim documentation: simulations, peripheral venous blood. https://docs.open-systems-pharmacology.org (accessed 2026-10-25)."
+citation = "Open Systems Pharmacology. PK-Sim documentation: Simulations, section on the venous blood outputs (Peripheral Venous Blood). https://docs.open-systems-pharmacology.org/working-with-pk-sim/pk-sim-documentation/pk-sim-simulations (accessed 2026-10-25)."
 
 [Levitt2004]
 citation = "Levitt DG. Physiologically based pharmacokinetic modeling of arterial - antecubital vein concentration difference. BMC Clin Pharmacol 4:2, 2004."

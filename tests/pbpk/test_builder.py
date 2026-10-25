@@ -21,6 +21,7 @@ from pkpdsim.pbpk import (
     Membrane,
     Mode,
     Organ,
+    Part,
     PBPKDefinition,
     PDComponent,
     Pool,
@@ -143,9 +144,22 @@ def test_flat_ids_follow_scheme(simple: BuildResult) -> None:
     observers = {
         f(s)
         for s in ("drg", "drg_m")
-        for f in (ids.arm, ids.arm_free, ids.arm_blood, ids.hepatic_vein)
+        for f in (
+            ids.arm,
+            ids.arm_free,
+            ids.arm_blood,
+            ids.hepatic_vein,
+            ids.hepatic_vein_free,
+            ids.hepatic_vein_blood,
+        )
     } | {f(p, s) for s in ("drg", "drg_m") for p in Pool for f in (ids.free, ids.blood)}
-    assert set(rules) - set(outflows) == observers | {ids.injection_rate("drg")}
+    unbound = {ids.flat(o, ids.unbound(Part.TISSUE, "drg")) for o in Organ}
+    assert rules[ids.flat(Organ.LIVER, ids.unbound(Part.TISSUE, "drg"))] == (
+        "(fu_drg / Kp_drg) * LI__Cti_drg"
+    )
+    assert set(rules) - set(outflows) == observers | unbound | {
+        ids.injection_rate("drg")
+    }
     initial = {
         a.getSymbol(): libsbml.formulaToL3String(a.getMath())
         for a in model.getListOfInitialAssignments()

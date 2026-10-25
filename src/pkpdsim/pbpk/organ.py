@@ -32,44 +32,31 @@ urinary excretion into the urine, `fu*GFR*Cpl*(1 - f_reabsorbed)`.
 
 The volumes of the parts, the coefficients and the exchanges depend on
 parameters only and are constants with initial assignments (they follow a
-change of the body before a simulation, not during it); only the outflow
-concentration, which reads a species, is an assignment rule.
+change of the body before a simulation, not during it); only what reads a
+species is an assignment rule: the outflow concentrations and the unbound
+concentrations of the tissue parts `Cu_<part>_<s>` (observers).
+
+The elements (inputs with their ports, compartments, species, rules,
+constants) are collected by `pkpdsim.pbpk.organ_builder.OrganBuilder`, which
+the variants reuse.
 """
 
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Protocol
 
-from sbmlutils.factory import (
-    AssignmentRule,
-    Compartment,
-    InitialAssignment,
-    ModelDefinition,
-    Parameter,
-    Port,
-    PortType,
-    Reaction,
-    Species,
-    UnitDefinition,
-)
+from sbmlutils.factory import ModelDefinition, Parameter, Port, PortType
 from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk import distribution, ids
 from pkpdsim.pbpk.chemistry import CustomReaction, Membrane, Metabolism, Transport
+from pkpdsim.pbpk.organ_builder import CAPACITY, ONE, OrganBuilder, label
 from pkpdsim.pbpk.organs import Organ, Part, Pool, inflow, outflow
 from pkpdsim.pbpk.parts import Parts
-from pkpdsim.pbpk.placement import (
-    apical_sink,
-    built_parts,
-    kp_id,
-    place,
-    species_compartment,
-    value_parameter,
-)
+from pkpdsim.pbpk.placement import apical_sink, built_parts, kp_id, place, unbound
 from pkpdsim.pbpk.proteins import Induction, Inhibition
 from pkpdsim.pbpk.substance import Substance
-from pkpdsim.pbpk.units import MODEL_UNITS, U
-from pkpdsim.pbpk.values import Q
+from pkpdsim.pbpk.units import U
 
 __all__ = ["Boundary", "OrganComponent", "OrganContext", "StandardOrgan"]
 
@@ -150,27 +137,8 @@ class StandardOrgan:
                 above the interstitial share in the full form, an exchange
                 without `ftissue`, a process which cannot be placed.
         """
-        return _Builder(ctx, self.name).build()
+        return _StandardBuilder(ctx, self.name).build()
 
-
-_INPUT = (
-    "Input of the organ, replaced by the element of the body; the value is a "
-    "placeholder."
-)
-"""The notes of an element of the body in the organ."""
-
-_ONE = "1 dimensionless"
-
-_POOL_PART = {Part.PLASMA: "plasma", Part.BLOOD_CELLS: "blood cells"}
-"""The parts of a pool in names."""
-
-_CAPACITY = (
-    "Not a physical volume: the plasma-equivalent capacity of the blood of a "
-    "substance with erythrocytes in equilibrium, the vascular volume times the "
-    "blood to plasma ratio, so that the plasma concentration in it gives the "
-    "amount in the blood."
-)
-"""The notes of a capacity of the blood."""
 
 _FTISSUE = (
     "ftissue multiplies `fu*(Cpl - Cti/Kp)` (the unbound plasma concentration "
@@ -181,9 +149,13 @@ _FTISSUE = (
 """The meaning of ftissue in the notes."""
 
 
-def _label(organ: Organ) -> str:
-    """The organ in a name, `small intestine`."""
-    return organ.name.lower().replace("_", " ")
+_TISSUE_PARTS = {
+    Part.TISSUE: "tissue",
+    Part.INTERSTITIAL: "interstitium",
+    Part.INTRACELLULAR: "intracellular space",
+    Part.ORGAN: "organ",
+}
+"""The parts of the tissue with an unbound concentration observer, in names."""
 
 
 def _flows(organ: Organ) -> tuple[list[tuple[Pool, str]], str]:
@@ -194,21 +166,8 @@ def _flows(organ: Organ) -> tuple[list[tuple[Pool, str]], str]:
     return [(pool, flow) for pool in inflow(organ)], flow
 
 
-class _Builder:
-    """The SBML objects of one standard organ, collected by id."""
-
-    def __init__(self, ctx: OrganContext, name: str) -> None:
-        self.ctx = ctx
-        self.organ = ctx.organ
-        self.name = name
-        self.compartments: dict[str, Compartment] = {}
-        self.species: dict[str, Species] = {}
-        self.parameters: dict[str, Parameter] = {}
-        self.rules: list[AssignmentRule] = []
-        self.assignments: list[InitialAssignment] = []
-        self.reactions: list[Reaction] = []
-        self.replacements: dict[str, str] = {}
-        self.outputs: dict[str, str] = {}
+class _StandardBuilder(OrganBuilder):
+    """The SBML objects of one standard organ: its parts, flows, exchanges and chemistry."""
 
     def build(self) -> tuple[ModelDefinition, Boundary]:
         """Build the model definition and the boundary."""
@@ -216,237 +175,30 @@ class _Builder:
         for s in self.ctx.substances:
             self._substance(s)
         self._chemistry()
-        label = _label(self.organ)
-        md = ModelDefinition(
-            sid=f"{self.name}_{self.organ.value}",
-            name=f"{label} ({self.name} organ)",
-            notes=f"The {self.name} organ {label}: the parts which the substances "
-            "need, their blood flows, exchanges and chemistry.",
-            units=U,
-            model_units=MODEL_UNITS,
-            compartments=list(self.compartments.values()),
-            species=list(self.species.values()),
-            parameters=list(self.parameters.values()),
-            rules=self.rules,
-            assignments=self.assignments,
-            reactions=self.reactions,
+        md = self.model_definition(
+            f"The {self.name} organ {label(self.organ)}: the parts which the "
+            "substances need, their blood flows, exchanges and chemistry."
         )
         boundary = Boundary(
             replacements=dict(self.replacements), outputs=dict(self.outputs)
         )
         return md, boundary
 
-    # --- elements --------------------------------------------------------
-
-    def _input(self, pid: str, unit: UnitDefinition, name: str, text: str = "") -> str:
-        """A parameter of the body in the organ, with an input port."""
-        if pid not in self.parameters:
-            self.parameters[pid] = Parameter(
-                pid,
-                1.0,
-                unit,
-                constant=True,
-                name=name,
-                sboTerm=SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
-                notes=f"{text}\n\n{_INPUT}" if text else _INPUT,
-                port=Port(f"{pid}_port", portType=PortType.INPUT_PORT),
-            )
-            self.replacements[pid] = pid
-        return pid
-
-    def _input_compartment(
-        self, cid: str, name: str, text: str = "", sbo: str = SBO.PHYSICAL_COMPARTMENT
-    ) -> str:
-        """A compartment of the body in the organ, with an input port."""
-        if cid not in self.compartments:
-            self.compartments[cid] = Compartment(
-                cid,
-                1.0,
-                U.litre,
-                constant=True,
-                name=name,
-                sboTerm=sbo,
-                notes=f"{text}\n\n{_INPUT}" if text else _INPUT,
-                port=Port(f"{cid}_port", portType=PortType.INPUT_PORT),
-            )
-            self.replacements[cid] = cid
-        return cid
-
-    def _input_species(
-        self, sid: str, compartment: str, name: str, amount: bool = False
-    ) -> str:
-        """A species of the body (pool or sink) which the organ reads and writes."""
-        if sid not in self.species:
-            self.species[sid] = Species(
-                sid,
-                compartment,
-                initialAmount=0.0 if amount else None,
-                initialConcentration=None if amount else 0.0,
-                substanceUnit=U.mmole,
-                hasOnlySubstanceUnits=amount,
-                name=name,
-                sboTerm=SBO.SIMPLE_CHEMICAL,
-                notes=_INPUT,
-                port=True,
-            )
-            self.replacements[sid] = sid
-        return sid
-
-    def _rule(
-        self,
-        pid: str,
-        formula: str,
-        unit: UnitDefinition,
-        name: str,
-        text: str,
-        port: bool | Port = False,
-    ) -> str:
-        """A parameter of the organ with its assignment rule (it reads species)."""
-        self.parameters[pid] = Parameter(
-            pid,
-            None,
-            unit,
-            constant=False,
-            name=name,
-            sboTerm=SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
-            notes=f"{text}\n\n`{pid} = {formula}`",
-            port=port,
-        )
-        self.rules.append(AssignmentRule(pid, formula, unit))
-        return pid
-
-    def _initial(
-        self,
-        pid: str,
-        formula: str,
-        unit: UnitDefinition,
-        name: str,
-        text: str,
-    ) -> str:
-        """A constant parameter of the organ with its initial assignment.
-
-        For a quantity of the parameters of the body (volumes, fractions,
-        substance parameters), which changes with them before a simulation.
-        """
-        self.parameters[pid] = Parameter(
-            pid,
-            None,
-            unit,
-            constant=True,
-            name=name,
-            sboTerm=SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
-            notes=f"{text}\n\n`{pid} = {formula}`",
-        )
-        self.assignments.append(InitialAssignment(pid, formula, unit))
-        return pid
-
-    def _constant(
-        self, pid: str, q: Q, unit: UnitDefinition, name: str, text: str = ""
-    ) -> str:
-        """A constant parameter of the organ with its provenance."""
-        if pid not in self.parameters:
-            self.parameters[pid] = value_parameter(
-                pid, q, unit, name, SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER, text
-            )
-        return pid
-
-    def _compartment(
-        self,
-        cid: str,
-        formula: str,
-        name: str,
-        text: str = "",
-        sbo: str = SBO.PHYSICAL_COMPARTMENT,
-    ) -> None:
-        """A constant compartment of the organ with its volume as initial assignment."""
-        if cid in self.compartments:
-            return
-        self.compartments[cid] = Compartment(
-            cid,
-            None,
-            U.litre,
-            constant=True,
-            name=f"{name} {_label(self.organ)}",
-            sboTerm=sbo,
-            notes=f"{text}\n\n`{cid} = {formula}`" if text else f"`{cid} = {formula}`",
-            port=True,
-        )
-        self.assignments.append(InitialAssignment(cid, formula, U.litre))
-
-    def _species(self, part: Part, s: Substance, parts: Parts) -> None:
-        """The species of a substance in a part of the organ."""
-        sid = ids.species(part, s.sid)
-        self.species[sid] = Species(
-            sid,
-            species_compartment(part, s.sid, parts),
-            initialConcentration=0.0,
-            substanceUnit=U.mmole,
-            hasOnlySubstanceUnits=False,
-            name=f"{s.name} ({part.name.lower().replace('_', ' ')}, "
-            f"{_label(self.organ)})",
-            sboTerm=SBO.SIMPLE_CHEMICAL,
-            port=True,
-        )
-
-    def _reaction(self, sid: str, equation: str, rate: str, name: str) -> None:
-        """A transport of the organ, the rate in mmole/min."""
-        self.reactions.append(
-            Reaction(
-                sid=sid,
-                equation=equation,
-                formula=(rate, U.mmole_per_min),
-                name=name,
-                sboTerm=SBO.TRANSPORT_REACTION,
-            )
-        )
-
-    # --- physiology ------------------------------------------------------
-
-    @property
-    def v(self) -> str:
-        """The organ volume."""
-        return self._input(
-            ids.organ_volume(self.organ), U.litre, f"volume {_label(self.organ)} [l]"
-        )
-
-    @property
-    def hct(self) -> str:
-        """The hematocrit."""
-        return self._input(ids.HCT, U.dimensionless, "hematocrit")
-
-    @property
-    def f_vas(self) -> str:
-        """The vascular fraction of the organ volume."""
-        return self._input(
-            ids.vascular_fraction(self.organ),
-            U.dimensionless,
-            f"vascular fraction {_label(self.organ)}",
-        )
-
-    @property
-    def f_int(self) -> str:
-        """The interstitial fraction of the organ volume."""
-        return self._input(
-            ids.interstitial_fraction(self.organ),
-            U.dimensionless,
-            f"interstitial fraction {_label(self.organ)}",
-        )
-
-    def _functional(self, tissue: str) -> str:
-        """A quantity of the tissue of the organ, of the liver its functional share.
+    def _capacity(self) -> str | None:
+        """The functional fraction of the tissue: `f_functional` in the liver.
 
         The non-functional tissue of the liver (fibrosis, necrosis) holds no
         substance and has no capacity: `f_functional` multiplies the tissue
-        volumes, the tissue coefficient of the flow-limited liver and the
-        exchange share of the liver.
+        volumes, the tissue coefficient of the flow-limited liver, the
+        exchange share of the liver and the rate of every metabolism and
+        transport of the liver (`place`). The other organs have no such
+        fraction.
+
+        Returns:
+            The id of the input `f_functional` in the liver, `None` elsewhere.
         """
         if self.organ is not Organ.LIVER:
-            return tissue
-        return f"{tissue} * {self.f_functional}"
-
-    @property
-    def f_functional(self) -> str:
-        """The functional fraction of the liver tissue."""
+            return None
         return self._input(
             ids.F_FUNCTIONAL,
             U.dimensionless,
@@ -454,15 +206,16 @@ class _Builder:
             "The functional fraction of the liver tissue.",
         )
 
+    def _functional(self, tissue: str) -> str:
+        """A quantity of the tissue of the organ, of the liver its functional share."""
+        capacity = self._capacity()
+        return tissue if capacity is None else f"{tissue} * {capacity}"
+
     def _functional_text(self) -> str:
         """The notes of a quantity of the tissue scaled by the functional fraction."""
         if self.organ is not Organ.LIVER:
             return ""
         return f"The functional share `{ids.F_FUNCTIONAL}` of the tissue of the liver."
-
-    def _flow(self, fid: str) -> str:
-        """A blood flow."""
-        return self._input(fid, U.l_per_min, f"blood flow {fid} [l/min]")
 
     def _compartments(self) -> None:
         """The compartments of the parts which hold a species of any substance."""
@@ -471,7 +224,7 @@ class _Builder:
         if Part.PLASMA in built:
             self._compartment(
                 ids.compartment(Part.PLASMA),
-                f"{v} * {f_vas} * ({_ONE} - {self.hct})",
+                f"{v} * {f_vas} * ({ONE} - {self.hct})",
                 "plasma",
             )
         if Part.BLOOD_CELLS in built:
@@ -489,21 +242,19 @@ class _Builder:
             )
             self._compartment(
                 ids.compartment(Part.INTRACELLULAR),
-                self._functional(f"{v} * ({_ONE} - {f_vas} - {self.f_int})"),
+                self._functional(f"{v} * ({ONE} - {f_vas} - {self.f_int})"),
                 "intracellular space",
                 self._functional_text(),
             )
         if Part.TISSUE in built:
             self._compartment(
                 ids.compartment(Part.TISSUE),
-                self._functional(f"{v} * ({_ONE} - {f_vas})"),
+                self._functional(f"{v} * ({ONE} - {f_vas})"),
                 "tissue",
                 self._functional_text(),
             )
         if Part.ORGAN in built:
             self._compartment(ids.compartment(Part.ORGAN), v, "organ")
-
-    # --- substances ------------------------------------------------------
 
     def _substance(self, s: Substance) -> None:
         """The species, outflow concentration, flows and exchanges of a substance."""
@@ -513,13 +264,13 @@ class _Builder:
                 f"{s.sid}: kinetic erythrocytes need a distribution with exchange, "
                 f"not the flow-limited organ '{self.organ.value}'."
             )
-        fu = self._input(ids.fu(s.sid), U.dimensionless, f"fraction unbound {s.sid}")
+        fu = self._fu(s)
         if parts.flow_carrier == "blood_bp" and parts.tissue != "organ":
             self._compartment(
                 ids.plasma_capacity(s.sid),
                 f"{self.v} * {self.f_vas} * {self._bp(s)}",
                 f"plasma-equivalent capacity V*f_vas*BP of {s.sid},",
-                _CAPACITY,
+                CAPACITY,
                 SBO.IMPLICIT_COMPARTMENT,
             )
         for part in built_parts(parts):
@@ -533,7 +284,7 @@ class _Builder:
             out,
             cout,
             U.mM,
-            f"outflow plasma concentration {s.sid} {_label(self.organ)} [mM]",
+            f"outflow plasma concentration {s.sid} {label(self.organ)} [mM]",
             "Plasma concentration of the blood leaving the organ.",
             port=Port(f"{out}_port", portType=PortType.OUTPUT_PORT),
         )
@@ -544,7 +295,7 @@ class _Builder:
                 out_bc,
                 ids.species(Part.BLOOD_CELLS, s.sid),
                 U.mM,
-                f"outflow blood cell concentration {s.sid} {_label(self.organ)} [mM]",
+                f"outflow blood cell concentration {s.sid} {label(self.organ)} [mM]",
                 "Blood cell concentration of the blood leaving the organ.",
                 port=Port(f"{out_bc}_port", portType=PortType.OUTPUT_PORT),
             )
@@ -558,19 +309,27 @@ class _Builder:
             self._merged(s, fu)
         elif parts.tissue == "full":
             self._full(s, fu)
+        self._unbound_observers(s, parts)
 
-    def _bp(self, s: Substance) -> str:
-        """The blood to plasma ratio of a substance."""
-        return self._input(
-            ids.bp(s.sid), U.dimensionless, f"blood to plasma ratio {s.sid}"
-        )
+    def _unbound_observers(self, s: Substance, parts: Parts) -> None:
+        """The unbound concentrations of the tissue parts of a substance, `Cu_<part>_<s>`.
 
-    def _kp(self, s: Substance) -> str | None:
-        """The whole-tissue to plasma coefficient of a substance in the organ."""
-        kp = kp_id(s, self.organ)
-        if kp is None:
-            return None
-        return self._input(kp, U.dimensionless, f"tissue to plasma coefficient {s.sid}")
+        `fu/K*C` with the coefficient of the part to plasma (`Kp`,
+        `K_int_pls`, `K_cell_pls`, `K_or`): observers, assignment rules of
+        the organ (they read species), the concentration which the processes
+        of the part act on.
+        """
+        for part in built_parts(parts):
+            if part not in _TISSUE_PARTS:
+                continue
+            self._rule(
+                ids.unbound(part, s.sid),
+                unbound(part, s, self.organ),
+                U.mM,
+                f"unbound concentration {s.sid} {_TISSUE_PARTS[part]} "
+                f"{label(self.organ)} [mM]",
+                f"Unbound concentration of the {_TISSUE_PARTS[part]}; an observer.",
+            )
 
     def _k_organ(self, s: Substance, parts: Parts) -> str:
         """The organ to plasma coefficient of the flow-limited organ.
@@ -583,7 +342,7 @@ class _Builder:
         if parts.flow_carrier == "blood_bp":
             vascular = self._bp(s)
         else:
-            vascular = f"({_ONE} - {self.hct})"
+            vascular = f"({ONE} - {self.hct})"
         return self._initial(
             ids.k_organ(s.sid),
             distribution.k_organ(self.f_vas, vascular, self._functional(kp)),
@@ -592,27 +351,6 @@ class _Builder:
             "Organ to plasma coefficient of the flow-limited organ, "
             "`(Vpl + Vbc*Kbc + Vti*Kp)/V`: the organ is in equilibrium with the "
             f"plasma leaving it. {self._functional_text()}".rstrip(),
-        )
-
-    def _pool_species(self, pool: Pool, part: Part, s: Substance, parts: Parts) -> str:
-        """The species of a substance in a pool, an element of the body."""
-        if part is Part.PLASMA and parts.flow_carrier == "blood_bp":
-            compartment = ids.pool_capacity(pool, s.sid)
-            self._input_compartment(
-                compartment,
-                f"plasma-equivalent capacity V*BP of {s.sid}, {pool.name.lower()} pool",
-                _CAPACITY,
-                SBO.IMPLICIT_COMPARTMENT,
-            )
-        else:
-            compartment = ids.pool_compartment(pool, part)
-            self._input_compartment(
-                compartment, f"{pool.name.lower()} {_POOL_PART[part]}"
-            )
-        return self._input_species(
-            ids.pool_species(pool, s.sid, part),
-            compartment,
-            f"{s.name} ({pool.name.lower()} {_POOL_PART[part]})",
         )
 
     def _blood_flows(self, s: Substance, parts: Parts) -> None:
@@ -629,7 +367,7 @@ class _Builder:
         if parts.flow_carrier == "blood_bp":
             carrier = self._bp(s)
         else:
-            carrier = f"({_ONE} - {self.hct})"
+            carrier = f"({ONE} - {self.hct})"
         target = Part.ORGAN if parts.tissue == "organ" else Part.PLASMA
         carried = [(Part.PLASMA, carrier, ids.species(target, s.sid))]
         if parts.blood_cells:
@@ -644,7 +382,7 @@ class _Builder:
                 "portosystemic shunt",
                 "The fraction of the liver inflow which bypasses the liver.",
             )
-            perfused = f"({_ONE} - {f_shunt}) * "
+            perfused = f"({ONE} - {f_shunt}) * "
         for part, share, local in carried:
             what = "" if part is Part.PLASMA else " blood cells"
             out = self._pool_species(out_pool, part, s, parts)
@@ -702,7 +440,7 @@ class _Builder:
         self._reaction(
             ids.filtration_reaction(s.sid),
             f"{source} -> {urine}",
-            f"{fu} * {gfr} * {cplasma} * ({_ONE} - {reabsorbed})",
+            f"{fu} * {gfr} * {cplasma} * ({ONE} - {reabsorbed})",
             f"glomerular filtration {s.sid}",
         )
 
@@ -785,7 +523,7 @@ class _Builder:
         return self._initial(
             pid,
             f"{ftissue} * "
-            + self._functional(f"{self.v} * ({_ONE} - {self.f_vas})")
+            + self._functional(f"{self.v} * ({ONE} - {self.f_vas})")
             + f" / {total}",
             U.l_per_min,
             name,
@@ -878,8 +616,6 @@ class _Builder:
             f"passive exchange {s.sid} interstitium and cells",
         )
 
-    # --- chemistry -------------------------------------------------------
-
     def _chemistry(self) -> None:
         """The processes of the organ with the activities of their proteins and their sinks.
 
@@ -891,8 +627,6 @@ class _Builder:
         for p in processes:
             if isinstance(p, Metabolism | Transport) and p.protein is not None:
                 self._activity(p.protein)
-            if isinstance(p, Metabolism | Transport) and self.organ is Organ.LIVER:
-                _ = self.f_functional  # the rates of the liver read it (placement)
             if isinstance(p, Transport) and p.membrane is Membrane.APICAL:
                 sink = apical_sink(self.organ, p.substance)
                 self._input_compartment(sink.compartment, f"sink {sink.compartment}")
@@ -913,8 +647,9 @@ class _Builder:
                         f"of the organ '{self.organ.value}' already."
                     )
                 self.species[sid] = sp
+        capacity = self._capacity()
         for p in processes:
-            self.reactions += place(p, self.ctx, self.ctx.parts)
+            self.reactions += place(p, self.ctx, self.ctx.parts, capacity)
 
     def _activity(self, protein: str) -> None:
         """The activity `f_<protein>` of a protein in the organ."""

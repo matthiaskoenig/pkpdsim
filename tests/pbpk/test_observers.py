@@ -16,6 +16,8 @@ import pytest
 
 from pkpdsim.pbpk import (
     Erythrocytes,
+    Kp,
+    Mode,
     Organ,
     Part,
     PBPKDefinition,
@@ -37,6 +39,9 @@ S = "drg"
 
 TIMES = np.linspace(0.0, 240.0, 49)
 """The time points of the curves (min)."""
+
+DEFAULT = arm_vein_weights("pksim_default")
+"""The weights of the default preset of the arm vein, skin and muscle."""
 
 
 def _run(path: Path, cols: list[str], **changes: float) -> np.ndarray:
@@ -60,11 +65,17 @@ def _rr(path: Path) -> "roadrunner.RoadRunner":
 
 
 def test_arm_vein_weighted_outflow(tmp_path: Path) -> None:
-    """`Carm` is the PK-Sim default mix `0.713*Cout_sk + 0.287*Cout_mu`."""
+    """`Carm` is the default mix `w_sk*Cout_sk + w_mu*Cout_mu` of skin and muscle.
+
+    The PK-Sim documentation gives about 70 % skin and 30 % muscle.
+    """
+    assert set(DEFAULT) == {Organ.SKIN, Organ.MUSCLE}
+    w_sk, w_mu = DEFAULT[Organ.SKIN].value, DEFAULT[Organ.MUSCLE].value
+    assert (w_sk, w_mu) == (0.7, 0.3)
     path = _build(tmp_path)
     sk, mu = ids.organ_outflow(Organ.SKIN, S), ids.organ_outflow(Organ.MUSCLE, S)
     carm, csk, cmu = _run(path, [ids.arm(S), sk, mu]).T
-    np.testing.assert_allclose(carm, 0.713 * csk + 0.287 * cmu, rtol=1e-12, atol=0)
+    np.testing.assert_allclose(carm, w_sk * csk + w_mu * cmu, rtol=1e-12, atol=0)
     assert np.max(carm) > 0
 
 
@@ -96,8 +107,8 @@ def test_arm_vein_weights_are_parameters(tmp_path: Path) -> None:
     """The weights are parameters with their source, which a model may change."""
     path = _build(tmp_path)
     r = _rr(path)
-    assert r[ids.arm_weight(Organ.SKIN)] == 0.713
-    assert r[ids.arm_weight(Organ.MUSCLE)] == 0.287
+    for site, w in DEFAULT.items():
+        assert r[ids.arm_weight(site)] == w.value
     doc = libsbml.readSBMLFromFile(str(path))
     notes = doc.getModel().getParameter(ids.arm_weight(Organ.SKIN)).getNotesString()
     assert "PK-Sim" in notes
@@ -128,7 +139,22 @@ def test_arm_vein_is_observer(tmp_path: Path) -> None:
 
     path = _build(tmp_path / "check")
     model = libsbml.readSBMLFromFile(str(path)).getModel()
-    observers = {ids.arm(S), ids.arm_free(S), ids.arm_blood(S), ids.hepatic_vein(S)}
+    observers = {
+        f(S)
+        for f in (
+            ids.arm,
+            ids.arm_free,
+            ids.arm_blood,
+            ids.hepatic_vein,
+            ids.hepatic_vein_free,
+            ids.hepatic_vein_blood,
+        )
+    }
+    observers |= {
+        ids.flat(o, ids.unbound(p, S))
+        for o in Organ
+        for p in (Part.TISSUE, Part.INTERSTITIAL, Part.INTRACELLULAR, Part.ORGAN)
+    }
     observers |= {f(p, S) for p in Pool for f in (ids.free, ids.blood)}
     assert all(model.getSpecies(o) is None for o in observers)
     readers = [
@@ -187,12 +213,86 @@ def test_free_and_blood_observers(tmp_path: Path, ery: Erythrocytes | None) -> N
     result = _run(path, cols)
     np.testing.assert_allclose(result[:, 1], fu * result[:, 0], rtol=1e-12)
     if ery is not None and ery.mode == "kinetic":
-        cbc = 0.713 * result[:, 3] + 0.287 * result[:, 4]
+        cbc = (
+            DEFAULT[Organ.SKIN].value * result[:, 3]
+            + DEFAULT[Organ.MUSCLE].value * result[:, 4]
+        )
         blood = (1 - hct) * result[:, 0] + hct * cbc
         assert np.max(cbc) > 0
     else:
         blood = bp * result[:, 0]
     np.testing.assert_allclose(result[:, 2], blood, rtol=1e-12)
+
+    f_shunt = 0.3
+    cols = [ids.hepatic_vein(S), ids.hepatic_vein_free(S), ids.hepatic_vein_blood(S)]
+    if ery is not None and ery.mode == "kinetic":
+        cols += [
+            ids.organ_outflow_bc(Organ.LIVER, S),
+            f"[{ids.pool_species(Pool.ARTERIAL, S, Part.BLOOD_CELLS)}]",
+            f"[{ids.pool_species(Pool.PORTAL, S, Part.BLOOD_CELLS)}]",
+        ]
+    result = _run(path, cols, f_shunt=f_shunt)
+    np.testing.assert_allclose(result[:, 1], fu * result[:, 0], rtol=1e-12)
+    if ery is not None and ery.mode == "kinetic":
+        qh, qha, qpo = r[ids.QH], r[ids.QHA], r[ids.QPO]
+        cbc = (
+            (1 - f_shunt) * qh * result[:, 3]
+            + f_shunt * (qha * result[:, 4] + qpo * result[:, 5])
+        ) / qh
+        blood = (1 - hct) * result[:, 0] + hct * cbc
+        assert np.max(cbc) > 0
+    else:
+        blood = bp * result[:, 0]
+    np.testing.assert_allclose(result[:, 2], blood, rtol=1e-12)
+
+
+def test_unbound_tissue_observers(tmp_path: Path) -> None:
+    """Every organ has the unbound concentration of each tissue part of a substance.
+
+    `Cu_<part>_<s> = fu/K*C` with the coefficient of the part to plasma: the
+    merged tissue `Kp`, interstitium and cells `K_int_pls`, `K_cell_pls`, the
+    flow-limited organ `K_or`.
+    """
+    full = dataclasses.replace(
+        simple_drug(), distribution=Kp(2.0, mode=Mode.PERMEABILITY, ftissue=1.0)
+    )
+    perfusion = dataclasses.replace(
+        simple_drug(), distribution=Kp(2.0, mode=Mode.PERFUSION)
+    )
+    cases = [
+        (simple_drug(), {Part.TISSUE: ids.kp(S)}),
+        (
+            full,
+            {
+                Part.INTERSTITIAL: ids.k_int_pls(S),
+                Part.INTRACELLULAR: ids.k_cell_pls(S),
+            },
+        ),
+        (perfusion, {Part.ORGAN: ids.k_organ(S)}),
+    ]
+    for i, (drug, coefficients) in enumerate(cases):
+        path = _build(tmp_path / str(i), substances=[drug], chemistry=[])
+        r = _rr(path)
+        fu = r[ids.fu(S)]
+        parameters = set(r.model.getGlobalParameterIds())
+        for organ in (Organ.LIVER, Organ.MUSCLE):
+            for part, k in coefficients.items():
+                c = f"[{ids.flat(organ, ids.species(part, S))}]"
+                cu = ids.flat(organ, ids.unbound(part, S))
+                coefficient = r[k] if k == ids.kp(S) else r[ids.flat(organ, k)]
+                result = _run(path, [c, cu])
+                np.testing.assert_allclose(
+                    result[:, 1], fu / coefficient * result[:, 0], rtol=1e-12
+                )
+                assert np.max(result[:, 1]) > 0
+            absent = {
+                Part.TISSUE,
+                Part.INTERSTITIAL,
+                Part.INTRACELLULAR,
+                Part.ORGAN,
+            } - set(coefficients)
+            for part in absent:
+                assert ids.flat(organ, ids.unbound(part, S)) not in parameters
 
 
 def test_arm_vein_data_sources() -> None:

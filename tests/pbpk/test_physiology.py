@@ -332,3 +332,19 @@ def test_unit_of_data_checked(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(physiology, "load", lambda name: data)
     with pytest.raises(ValueError, match=r"'gfr'.*ml/h.*l/min"):
         physiology_objects(Sex.MALE)
+
+
+def test_liver_defaults_are_fractions(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The healthy liver: no shunt, all tissue functional; a default outside [0, 1] fails.
+
+    The values at runtime are set by the hepatic impairment.
+    """
+    values = {
+        p.sid: p.value
+        for p in physiology_objects(Sex.MALE)
+        if isinstance(p, Parameter) and p.sid in physiology.LIVER_DEFAULTS
+    }
+    assert values == {ids.F_SHUNT: 0.0, ids.F_FUNCTIONAL: 1.0}
+    monkeypatch.setitem(physiology.LIVER_DEFAULTS, ids.F_SHUNT, 1.5)
+    with pytest.raises(ValueError, match=r"f_shunt.*\[0, 1\].*1\.5"):
+        physiology_objects(Sex.MALE)

@@ -8,8 +8,8 @@
 # `PBPKDefinition.arm_vein` selects the preset.
 
 [pksim_default]
-skin = { value = 0.713, unit = "dimensionless", source = "OSPDocumentation", notes = "PK-Sim's default peripheral venous blood, documented as a weighted mean of skin and muscle venous blood with about 70 % skin and 30 % muscle (after Levitt 2004); the default weights of PK-Sim are 0.713 skin and 0.287 muscle" }
-muscle = { value = 0.287, unit = "dimensionless", source = "OSPDocumentation", notes = "PK-Sim's default peripheral venous blood, about 30 % muscle venous blood (the complement of skin)" }
+skin = { value = 0.7, unit = "dimensionless", source = "OSPDocumentation", notes = "PK-Sim's default peripheral venous blood, documented as a weighted mean of skin and muscle venous blood with about 70 % contribution from skin (a similar approach in the literature: Levitt 2004)" }
+muscle = { value = 0.3, unit = "dimensionless", source = "OSPDocumentation", notes = "PK-Sim's default peripheral venous blood, documented with about 30 % contribution from muscle" }
 
 [levitt2004]
 skin = { value = 0.875, unit = "dimensionless", source = "Levitt2004", notes = "standard arm of Levitt 2004 (fitted to ethanol, thiopental, DTPA and ketamine): skin 0.25, the arteriovenous shunt of the hand 0.525 and the subcutaneous and connective tissue ('other') 0.1, both as skin as in the Levitt 'skin' model (LAS) of Musther 2015: the shunt tissue has the properties of skin (Levitt 2004), the model has no connective tissue organ; the higher perfusion of the shunt tissue (1 ml/min/g against 0.1 ml/min/g of skin) is not represented by an observer" }

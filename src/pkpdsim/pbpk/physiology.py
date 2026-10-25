@@ -73,6 +73,11 @@ AGE_DEFAULT = 40.0
 MODEL_DEFAULT = "Model default without a source."
 """The notes of a parameter whose value is a choice of the model, not data."""
 
+LIVER_DEFAULTS: dict[str, float] = {ids.F_SHUNT: 0.0, ids.F_FUNCTIONAL: 1.0}
+"""The healthy liver: no portosystemic shunt, all tissue functional. The
+values at runtime are those of the hepatic impairment (`pkpdsim.impairment`),
+which sets them as an experiment sets a covariate."""
+
 _POOL_KEYS = {Pool.ARTERIAL: "arterial", Pool.VENOUS: "venous", Pool.PORTAL: "portal"}
 
 _CONVERSIONS: dict[tuple[str, str], float] = {("ml/min", "l/min"): 1e-3}
@@ -228,6 +233,17 @@ def _references(sex: Sex, data: dict[str, Any]) -> dict[str, _Ref]:
     return refs
 
 
+def _fraction(pid: str, value: float) -> float:
+    """Check that a default of the physiology is a fraction in [0, 1].
+
+    Raises:
+        ValueError: if it is not.
+    """
+    if not 0.0 <= value <= 1.0:
+        raise ValueError(f"The default of '{pid}' must be in [0, 1], got {value}.")
+    return value
+
+
 def _notes(text: str, sources: Iterable[str]) -> str:
     """Notes with the citations of the sources."""
     keys = list(dict.fromkeys(sources))
@@ -364,23 +380,23 @@ class _Physiology:
                 ids.F_SHUNT,
                 U.dimensionless,
                 "portosystemic shunt",
-                "The fraction of the hepatic arterial and portal venous inflow "
-                "which bypasses the liver into the venous blood; 0.0 healthy, "
-                "the hepatic impairment sets it. An initial value, as the "
-                f"covariates. {MODEL_DEFAULT}",
+                "The fraction in [0, 1] of the hepatic arterial and portal venous "
+                "inflow which bypasses the liver into the venous blood; 0.0 "
+                "healthy, the hepatic impairment sets it. An initial value, as "
+                f"the covariates. {MODEL_DEFAULT}",
                 (),
-                value=0.0,
+                value=_fraction(ids.F_SHUNT, LIVER_DEFAULTS[ids.F_SHUNT]),
             ),
             _parameter(
                 ids.F_FUNCTIONAL,
                 U.dimensionless,
                 "functional liver fraction",
-                "The functional fraction of the liver tissue, which scales the "
-                "tissue volume of the liver and the capacity of its processes; "
-                "1.0 healthy, the hepatic impairment sets it. An initial value, "
-                f"as the covariates. {MODEL_DEFAULT}",
+                "The functional fraction in [0, 1] of the liver tissue, which "
+                "scales the tissue volume of the liver and the capacity of its "
+                "processes; 1.0 healthy, the hepatic impairment sets it. An "
+                f"initial value, as the covariates. {MODEL_DEFAULT}",
                 (),
-                value=1.0,
+                value=_fraction(ids.F_FUNCTIONAL, LIVER_DEFAULTS[ids.F_FUNCTIONAL]),
             ),
         ]
 

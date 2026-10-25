@@ -12,12 +12,14 @@ import dataclasses
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import libsbml
 import numpy as np
 import pytest
 
 from pkpdsim.pbpk import (
     Binding,
     Direction,
+    Erythrocytes,
     Excretion,
     FirstOrder,
     Membrane,
@@ -129,15 +131,24 @@ def test_no_filtration_without_urine_excretion(tmp_path: Path) -> None:
     """A substance without `Excretion(urine=True)` is not filtered."""
     d = definition(sid="no_urine")
     result = build(d, tmp_path)
-    text = result.flat_path.read_text()
-    assert ids.flat(Organ.KIDNEY, ids.filtration_reaction(S)) in text
-    assert ids.flat(Organ.KIDNEY, ids.filtration_reaction("drg_m")) not in text
-    assert ids.fraction_reabsorbed("drg_m") not in text
+    model = libsbml.readSBMLFromFile(str(result.flat_path)).getModel()
+    assert model.getReaction(ids.flat(Organ.KIDNEY, ids.filtration_reaction(S)))
+    assert (
+        model.getReaction(ids.flat(Organ.KIDNEY, ids.filtration_reaction("drg_m")))
+        is None
+    )
+    assert model.getParameter(ids.fraction_reabsorbed(S)) is not None
+    assert model.getParameter(ids.fraction_reabsorbed("drg_m")) is None
 
 
-def _metabolized(tmp_path: Path) -> Path:
-    """The simple drug with the liver metabolism, without excretion, IV."""
-    drug = dataclasses.replace(simple_drug(), excretion=Excretion())
+def _metabolized(tmp_path: Path, **changes: object) -> Path:
+    """The simple drug with the liver metabolism, without excretion, IV.
+
+    Args:
+        tmp_path: the folder of the build.
+        **changes: fields of the drug which replace those of `simple_drug`.
+    """
+    drug = dataclasses.replace(simple_drug(), excretion=Excretion(), **changes)
     metabolite = Substance(sid="drg_m", name="metabolite", mr=316.0)
     d = definition(sid="liver", substances=[drug, metabolite], routes=[Route.iv(S)])
     return build(d, tmp_path).flat_path
@@ -161,6 +172,21 @@ def test_shunt_bypasses_liver(tmp_path: Path) -> None:
         else:
             assert total_amount(r, "drg_m") == pytest.approx(0.0, abs=1e-15)
             assert r["[LI__Cti_drg]"] == pytest.approx(0.0, abs=1e-15)
+
+
+def test_shunt_mass_balance_kinetic_erythrocytes(tmp_path: Path) -> None:
+    """The shunt of the kinetic blood cells conserves the amount as well."""
+    ery = Erythrocytes("kinetic", kbc=2.0, k_exchange=1.0)
+    r = _load(_metabolized(tmp_path, erythrocytes=ery), f_shunt=0.5)
+    r[ids.iv_dose(S)] = 10.0
+    r.simulate(0, DAY, 50)
+    amount = total_amount(r, S) + total_amount(r, "drg_m") + dose_amount(r, S)
+    assert amount == pytest.approx(10.0 / r[ids.mr(S)], rel=1e-7)
+    assert r[f"[{ids.pool_species(Pool.VENOUS, S, Part.BLOOD_CELLS)}]"] > 0
+    assert (
+        r[ids.flat(Organ.LIVER, ids.shunt_reaction(Pool.PORTAL, Part.BLOOD_CELLS, S))]
+        > 0
+    )
 
 
 def test_functional_fraction_scales_capacity(tmp_path: Path) -> None:

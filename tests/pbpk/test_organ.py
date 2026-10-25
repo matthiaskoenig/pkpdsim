@@ -615,7 +615,10 @@ def test_apical_transport_without_sink_raises() -> None:
 
 
 def test_custom_reaction_in_part() -> None:
-    """A custom reaction is placed as given in its part."""
+    """A custom reaction is placed as given in its part.
+
+    Its rate is its own: in the liver `f_functional` does not scale it.
+    """
     from pkpdsim.pbpk import Part
 
     custom = CustomReaction(

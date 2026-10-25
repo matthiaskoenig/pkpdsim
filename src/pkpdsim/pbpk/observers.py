@@ -9,15 +9,18 @@ organs and changes nothing, so it conserves mass. Per substance `<s>`:
   `(1-HCT)*C + HCT*C_bc`: `BP*C` unless the blood cells are kinetic;
 - `Chv_<s>`, the hepatic vein: the outflow of the liver mixed with the
   portosystemic shunt by their flows,
-  `((1-f_shunt)*Qh*Cout_li + f_shunt*(Qha*Car + Qpo*Cpo))/Qh`;
+  `((1-f_shunt)*Qh*Cout_li + f_shunt*(Qha*Car + Qpo*Cpo))/Qh`, with
+  `Chv_free_<s>` and `Chv_blood_<s>`;
 - `Carm_<s> = sum w*C`, the arm vein (peripheral venous) sampling site: the
   venous plasma outflows of organs and the arterial plasma mixed with the
   weights `w_arm_<site>` of a preset of `data/arm_vein.toml`
-  (`PBPKDefinition.arm_vein`, the PK-Sim default 0.713 skin and 0.287
-  muscle); `Carm_free_<s>` and `Carm_blood_<s>` as for the pools.
+  (`PBPKDefinition.arm_vein`, by default the mix of skin and muscle of the
+  PK-Sim documentation); `Carm_free_<s>` and `Carm_blood_<s>` as for the
+  pools.
 
-The tissue concentrations are the species of the organs themselves, the
-amounts in urine and feces the sink species.
+The tissue concentrations are the species of the organs themselves, their
+unbound concentrations `Cu_<part>_<s>` observers of the organs, the amounts
+in urine and feces the sink species.
 """
 
 from sbmlutils.factory import AssignmentRule, Parameter, Sbase
@@ -129,6 +132,27 @@ def _blood(s: Substance, plasma: str, cells: str) -> str:
     return f"{ids.bp(s.sid)} * {plasma}"
 
 
+def _hepatic(s: Substance, cells: bool) -> str:
+    """The hepatic vein mix of the liver outflow and the shunt, as formula.
+
+    `((1-f_shunt)*Qh*Cout_li + f_shunt*(Qha*Car + Qpo*Cpo))/Qh` of the plasma,
+    or of the kinetic blood cells.
+    """
+    sid = s.sid
+    part = Part.BLOOD_CELLS if cells else Part.PLASMA
+    liver = (
+        ids.organ_outflow_bc(Organ.LIVER, sid)
+        if cells
+        else ids.organ_outflow(Organ.LIVER, sid)
+    )
+    car = ids.pool_species(Pool.ARTERIAL, sid, part)
+    cpo = ids.pool_species(Pool.PORTAL, sid, part)
+    return (
+        f"(({_ONE} - {ids.F_SHUNT}) * {ids.QH} * {liver} + {ids.F_SHUNT} * "
+        f"({ids.QHA} * {car} + {ids.QPO} * {cpo})) / {ids.QH}"
+    )
+
+
 def _substance(s: Substance, weights: dict[Organ | Pool, Value]) -> list[Sbase]:
     """The observers of a substance."""
     sid, fu = s.sid, ids.fu(s.sid)
@@ -149,15 +173,27 @@ def _substance(s: Substance, weights: dict[Organ | Pool, Value]) -> list[Sbase]:
             f"Blood concentration of the {label} pool.",
         )
 
-    car, cpo = ids.pool_species(Pool.ARTERIAL, sid), ids.pool_species(Pool.PORTAL, sid)
+    hv = ids.hepatic_vein(sid)
     objects += _observer(
-        ids.hepatic_vein(sid),
-        f"(({_ONE} - {ids.F_SHUNT}) * {ids.QH} * "
-        f"{ids.organ_outflow(Organ.LIVER, sid)} + {ids.F_SHUNT} * "
-        f"({ids.QHA} * {car} + {ids.QPO} * {cpo})) / {ids.QH}",
+        hv,
+        _hepatic(s, cells=False),
         f"hepatic vein plasma concentration {sid} [mM]",
         "Plasma concentration of the hepatic vein: the outflow of the liver "
         "mixed with the portosystemic shunt by their flows.",
+    )
+    objects += _observer(
+        ids.hepatic_vein_free(sid),
+        f"{fu} * {hv}",
+        f"hepatic vein unbound plasma concentration {sid} [mM]",
+        "Unbound plasma concentration of the hepatic vein.",
+    )
+    ery = s.erythrocytes
+    kinetic = ery is not None and ery.mode == "kinetic"
+    objects += _observer(
+        ids.hepatic_vein_blood(sid),
+        _blood(s, hv, f"({_hepatic(s, cells=True)})" if kinetic else ""),
+        f"hepatic vein blood concentration {sid} [mM]",
+        "Blood concentration of the hepatic vein.",
     )
 
     def mix(cells: bool) -> str:
@@ -189,8 +225,7 @@ def _substance(s: Substance, weights: dict[Organ | Pool, Value]) -> list[Sbase]:
         f"arm vein unbound plasma concentration {sid} [mM]",
         "Unbound plasma concentration of an arm vein sample.",
     )
-    ery = s.erythrocytes
-    cells = f"({mix(cells=True)})" if ery is not None and ery.mode == "kinetic" else ""
+    cells = f"({mix(cells=True)})" if kinetic else ""
     objects += _observer(
         ids.arm_blood(sid),
         _blood(s, arm, cells),

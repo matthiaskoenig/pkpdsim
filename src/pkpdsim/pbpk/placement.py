@@ -11,9 +11,10 @@ cumulative urine), a custom reaction in the part it names.
 Every rate acts on the unbound concentration of its part and is an amount per
 time: the Vmax of a process is per litre of organ, so the whole organ has the
 capacity `Vmax * V<o>`, and the activity `f_<protein>` of its protein
-multiplies it. In the liver the functional fraction `f_functional`
-multiplies the rate of every metabolism and transport as well, the share of
-the capacity in the functional tissue.
+multiplies it. The organ may give a functional fraction (`f_functional` of
+the liver), which multiplies the rate of every metabolism and transport as
+well, the share of the capacity in the functional tissue; a custom reaction
+states its rate itself and is not scaled.
 """
 
 from collections.abc import Iterable, Mapping
@@ -280,6 +281,7 @@ def place(
     process: Metabolism | Transport | CustomReaction,
     ctx: "OrganContext",
     parts: Mapping[str, Parts],
+    capacity: str | None = None,
 ) -> list[Reaction]:
     """Place a process of the chemistry in the parts of the standard organ.
 
@@ -291,6 +293,10 @@ def place(
         process: the process, of the organ of `ctx`.
         ctx: the context of the organ.
         parts: the parts of the substances in the organ by substance id.
+        capacity: the id of the functional fraction of the organ which
+            multiplies the rate of a metabolism or a transport (`f_functional`
+            of the liver), `None` for none; a custom reaction states its
+            rate itself and is not scaled.
 
     Returns:
         The reactions of the process.
@@ -306,9 +312,9 @@ def place(
             f"of '{ctx.organ.value}'."
         )
     if isinstance(process, Metabolism):
-        return [_metabolism(process, ctx, parts)]
+        return [_metabolism(process, ctx, parts, capacity)]
     if isinstance(process, Transport):
-        return [_transport(process, ctx, parts)]
+        return [_transport(process, ctx, parts, capacity)]
     return [_custom(process, parts)]
 
 
@@ -321,17 +327,20 @@ def _substance(ctx: "OrganContext", sid: str) -> Substance:
 
 
 def _rate(
-    process: Metabolism | Transport, organ: Organ, cu: str
+    process: Metabolism | Transport, organ: Organ, cu: str, capacity: str | None
 ) -> tuple[str, list[Parameter]]:
     """Get the rate law of a process on the unbound concentration `cu`.
+
+    The activity of the protein and the functional fraction `capacity`
+    multiply it.
 
     Returns:
         The rate (mmole/min) and the parameters of the process.
     """
     pid, k = process.sid, process.kinetics
     factor = f"{ids.activity(process.protein)} * " if process.protein else ""
-    if organ is Organ.LIVER:
-        factor += f"{ids.F_FUNCTIONAL} * "
+    if capacity is not None:
+        factor += f"{capacity} * "
     v = ids.organ_volume(organ)
     if isinstance(k, FirstOrder):
         p_k = f"{pid}_k"
@@ -385,7 +394,10 @@ def _stoichiometry(fraction: float, species: str) -> str:
 
 
 def _metabolism(
-    process: Metabolism, ctx: "OrganContext", parts: Mapping[str, Parts]
+    process: Metabolism,
+    ctx: "OrganContext",
+    parts: Mapping[str, Parts],
+    capacity: str | None,
 ) -> Reaction:
     """The reaction of a metabolism in the part of the tissue of its substrate.
 
@@ -402,7 +414,7 @@ def _metabolism(
         built = built_parts(parts[product])
         target = next(t for t in _PRODUCT_PARTS[part] if t in built)
         products.append(_stoichiometry(fraction, ids.species(target, product)))
-    rate, pars = _rate(process, ctx.organ, cu)
+    rate, pars = _rate(process, ctx.organ, cu, capacity)
     names = ", ".join(process.products) or "elimination"
     return Reaction(
         sid=process.sid,
@@ -419,7 +431,10 @@ def _metabolism(
 
 
 def _transport(
-    process: Transport, ctx: "OrganContext", parts: Mapping[str, Parts]
+    process: Transport,
+    ctx: "OrganContext",
+    parts: Mapping[str, Parts],
+    capacity: str | None,
 ) -> Reaction:
     """The reaction of an active transport across the membrane of the cell."""
     substance = _substance(ctx, process.substance)
@@ -457,7 +472,7 @@ def _transport(
             f"{cell} -> {other}",
             unbound(Part.INTRACELLULAR, substance, ctx.organ),
         )
-    rate, pars = _rate(process, ctx.organ, cu)
+    rate, pars = _rate(process, ctx.organ, cu, capacity)
     return Reaction(
         sid=process.sid,
         name=f"{process.direction.value} {s} {process.membrane.value}"
