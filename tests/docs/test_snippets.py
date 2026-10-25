@@ -66,10 +66,13 @@ def executable_blocks(page: Path) -> list[tuple[int, str]]:
     ]
 
 
-#: the pages with at least one snippet to run, `docs/api/` holds only the
+#: the pages with at least one snippet to run, relative to `docs/`: the pages
+#: of the user guide and of the PBPK library; `docs/api/` holds only the
 #: directives of the API reference and is left out
 PAGES: list[str] = sorted(
-    page.name for page in DOCS_DIR.glob("*.md") if executable_blocks(page)
+    page.relative_to(DOCS_DIR).as_posix()
+    for page in [*DOCS_DIR.glob("*.md"), *DOCS_DIR.glob("pbpk/*.md")]
+    if executable_blocks(page)
 )
 
 
@@ -77,6 +80,7 @@ def test_pages_are_found() -> None:
     """The pages with snippets are discovered."""
     assert "index.md" in PAGES
     assert "licenses.md" in PAGES
+    assert "pbpk/tutorial.md" in PAGES
 
 
 @pytest.mark.parametrize("name", PAGES)

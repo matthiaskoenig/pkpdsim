@@ -144,7 +144,12 @@ def test_other_values_are_their_strings() -> None:
 def test_the_vocabularies_hold_the_members_of_the_models(
     enum: type[StrEnum], members: str
 ) -> None:
-    """The union of the members the models of pkdb_models use, synonyms merged."""
+    """The union of the members the models of pkdb_models use, synonyms merged.
+
+    `SamplingSite` holds the sites of the observers of the PBPK library
+    (`pkpdsim.pbpk.observers`), which the models take up when they are built
+    on it; the hand-written models do not set it.
+    """
     assert list(enum.__members__) == members.split()
 
 

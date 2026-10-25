@@ -19,6 +19,8 @@ Features include
 - **scans and sensitivity analyses** - the timecourse of a point of a scan as sbmlsim 0.8 gave it and the table of the parameters, the distributions and the runner of the sensitivity analyses of a script
 - **release of a model repository** - `pkpd_release` makes the complete release of the repository of a model (models, simulations, fit reports, release notes, docs, Docker image, GitHub release) from its package, with `--no-publish` for a review before the commit
 
+The subpackage `pkpdsim.pbpk` is the PBPK model library from which the PBPK models of pkdb_models are built: a model package writes its substances with their mechanism flags, the chemistry of its organs (metabolism, transport) and its choices, and `build` adds the standard human physiology of ICRP 89 with its scaling to the individual, the standard organ with the collapsing of its parts, the organ variants (zonated liver, nephron kidney, segmented intestine), the routes and sinks, the impaired organ function (Child-Pugh, chronic kidney disease, heart failure), the observers (the arm vein by default) and the annotation of every element, and writes the comp and the flat SBML model; the [PBPK library](https://matthiaskoenig.github.io/pkpdsim/pbpk/) section of the documentation is the guide for modellers.
+
 The documentation is available at [https://matthiaskoenig.github.io/pkpdsim](https://matthiaskoenig.github.io/pkpdsim).
 
 If you have any questions or issues please [open an issue](https://github.com/matthiaskoenig/pkpdsim/issues).

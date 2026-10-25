@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 494" role="img" aria-labelledby="pk-organ-title pk-organ-desc">
+<title id="pk-organ-title">The standard organ and its collapsing</title>
+<desc id="pk-organ-desc">The standard organ has plasma, blood cells, interstitial and intracellular space. The organ takes the arterial plasma and returns its outflow to the venous pool; plasma exchanges with the interstitium across the endothelium, the interstitium with the cells passively and by basolateral transport, the cells with bile, urine or lumen by apical transport. Only the parts a substance needs are built: the full form with interstitial and intracellular space, the merged tissue, or one species for the flow-limited organ.</desc>
+<style>
+.pk-t{fill:currentColor;font-family:var(--md-text-font-family,system-ui),system-ui,sans-serif;font-size:14px}
+.pk-s{font-size:12.5px}
+.pk-b{font-weight:600}
+.pk-dim{fill-opacity:.72}
+.pk-line{stroke:currentColor;stroke-opacity:.6;stroke-width:1.5;fill:none}
+.pk-band{fill:none;stroke:currentColor;stroke-opacity:.35;stroke-width:1}
+.pk-art{fill:rgba(225,60,60,.14);stroke:rgba(225,60,60,.85);stroke-width:1.2}
+.pk-bc{fill:rgba(225,60,60,.07);stroke:rgba(225,60,60,.6);stroke-width:1.2;stroke-dasharray:4 3}
+.pk-is{fill:rgba(60,170,170,.14);stroke:rgba(40,150,150,.85);stroke-width:1.2}
+.pk-ic{fill:rgba(70,140,255,.14);stroke:rgba(70,140,255,.8);stroke-width:1.2}
+.pk-ti{fill:rgba(60,170,100,.14);stroke:rgba(60,170,100,.85);stroke-width:1.2}
+.pk-sink{fill:rgba(150,80,200,.12);stroke:rgba(150,80,200,.8);stroke-width:1.2}
+</style>
+<defs>
+<marker id="pk-organ-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor" fill-opacity=".7"/></marker>
+</defs>
+<line class="pk-line" x1="40" y1="4" x2="40" y2="50" marker-end="url(#pk-organ-arrow)"/>
+<text class="pk-t pk-s" x="48" y="24">in: Q·(1-HCT)·Car</text>
+<line class="pk-line" x1="210" y1="50" x2="210" y2="6" marker-end="url(#pk-organ-arrow)"/>
+<text class="pk-t pk-s" x="218" y="24">out: Q·(1-HCT)·Cout</text>
+<rect class="pk-band" x="8" y="40" width="384" height="234" rx="8"/>
+<rect class="pk-art" x="20" y="52" width="230" height="52" rx="6"/>
+<text class="pk-t pk-b" x="30" y="72">plasma Cpl</text>
+<text class="pk-t pk-s" x="30" y="92">V·f_vas·(1-HCT), unbound fu·Cpl</text>
+<rect class="pk-bc" x="262" y="52" width="118" height="52" rx="6"/>
+<text class="pk-t pk-b" x="272" y="72">blood cells</text>
+<text class="pk-t pk-s" x="272" y="92">Cbc, kinetic</text>
+<line class="pk-line" x1="60" y1="104" x2="60" y2="132" marker-start="url(#pk-organ-arrow)" marker-end="url(#pk-organ-arrow)"/>
+<text class="pk-t pk-s" x="72" y="123">PS_vas·fu·(Cpl - Cis/K_int_pls)</text>
+<rect class="pk-is" x="20" y="134" width="360" height="42" rx="6"/>
+<text class="pk-t pk-b" x="30" y="152">interstitial Cis</text>
+<text class="pk-t pk-s" x="30" y="169">V·f_int, unbound fu/K_int_pls·Cis</text>
+<line class="pk-line" x1="60" y1="176" x2="60" y2="204" marker-start="url(#pk-organ-arrow)" marker-end="url(#pk-organ-arrow)"/>
+<text class="pk-t pk-s" x="72" y="195">PS·(Cu_is - Cu_ic), basolateral transport</text>
+<rect class="pk-ic" x="20" y="206" width="360" height="58" rx="6"/>
+<text class="pk-t pk-b" x="30" y="225">intracellular Cic</text>
+<text class="pk-t pk-s" x="30" y="242">V·(1-f_vas-f_int), unbound fu/K_cell_pls·Cic</text>
+<text class="pk-t pk-s pk-dim" x="30" y="258">the chemistry of the organ acts here</text>
+<line class="pk-line" x1="320" y1="264" x2="320" y2="292" marker-end="url(#pk-organ-arrow)"/>
+<text class="pk-t pk-s" x="252" y="288" text-anchor="end">apical transport</text>
+<rect class="pk-sink" x="232" y="294" width="160" height="26" rx="6"/>
+<text class="pk-t pk-s" x="312" y="312" text-anchor="middle">bile, urine, lumen</text>
+<text class="pk-t pk-b" x="8" y="348">collapsing: only the parts a substance needs</text>
+<rect class="pk-art" x="18" y="360" width="100" height="26" rx="5"/>
+<text class="pk-t pk-s" x="68" y="378" text-anchor="middle">plasma</text>
+<rect class="pk-is" x="18" y="392" width="100" height="26" rx="5"/>
+<text class="pk-t pk-s" x="68" y="410" text-anchor="middle">interstitial</text>
+<rect class="pk-ic" x="18" y="424" width="100" height="26" rx="5"/>
+<text class="pk-t pk-s" x="68" y="442" text-anchor="middle">intracellular</text>
+<text class="pk-t pk-s pk-b" x="68" y="470" text-anchor="middle">full form</text>
+<text class="pk-t pk-s pk-dim" x="68" y="486" text-anchor="middle">PERMEABILITY</text>
+<rect class="pk-art" x="150" y="360" width="100" height="26" rx="5"/>
+<text class="pk-t pk-s" x="200" y="378" text-anchor="middle">plasma</text>
+<rect class="pk-ti" x="150" y="392" width="100" height="58" rx="5"/>
+<text class="pk-t pk-s" x="200" y="417" text-anchor="middle">tissue</text>
+<text class="pk-t pk-s pk-dim" x="200" y="434" text-anchor="middle">is + ic, Kp</text>
+<text class="pk-t pk-s pk-b" x="200" y="470" text-anchor="middle">merged tissue</text>
+<text class="pk-t pk-s pk-dim" x="200" y="486" text-anchor="middle">TISSUE, default</text>
+<rect class="pk-ti" x="282" y="360" width="100" height="90" rx="5"/>
+<text class="pk-t pk-s" x="332" y="396" text-anchor="middle">organ</text>
+<text class="pk-t pk-s pk-dim" x="332" y="413" text-anchor="middle">vascular and</text>
+<text class="pk-t pk-s pk-dim" x="332" y="429" text-anchor="middle">tissue, K_or</text>
+<text class="pk-t pk-s pk-b" x="332" y="470" text-anchor="middle">flow-limited</text>
+<text class="pk-t pk-s pk-dim" x="332" y="486" text-anchor="middle">PERFUSION</text>
+</svg>

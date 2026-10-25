@@ -29,3 +29,4 @@ The API reference is generated from the docstrings of the package.
 | [release](release.md) | `ReleaseSettings`, `Author`: the release metadata of a model (`PKPDModel.release`); `release`, `main`: the release of a model repository, the command `pkpd_release`, see [Release of a model repository](../release.md) |
 | [testing](testing.md) | `check_model`, `check_registry`, `initialize_experiments`, `run_all_experiments`, `start_fits`: the tests of a model as functions |
 | [verify](verify.md) | `pkpdsim-verify`: the verification of a change of a model |
+| [pbpk](pbpk.md) | `PBPKDefinition`, `Substance`, `Binding`, `Erythrocytes`, `Kp`, `KpMethod`, `Excretion`, `Metabolism`, `Transport`, `CustomReaction`, `Route`, `Variants`, `PDComponent`, `build`, `compose`: the PBPK model library and its modules, see [PBPK library](../pbpk/index.md) |
