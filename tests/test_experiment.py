@@ -457,3 +457,13 @@ def test_a_whole_key_which_starts_with_a_digit_fails_the_initialization() -> Non
         ValueError, match=r"must be valid SIds.*_simulations key '2p5mg'"
     ):
         experiment.initialize()
+
+
+def test_rows_without_a_substance_are_in_no_frame(tmp_path: Path) -> None:
+    """The rows without a substance (a bile flow) make no empty frame."""
+    write_study(
+        tmp_path, "ToyStudy_Fig5", "substance\ttime\tA\nx\t0\t1.0\nNA\t0\t2.0\n"
+    )
+    frames = initialized(ToyStudy, tmp_path).load_dataframes_by_substance("Fig5")
+    assert list(frames) == ["x"]
+    assert frames["x"]["A"].tolist() == [1.0]

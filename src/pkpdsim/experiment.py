@@ -53,7 +53,7 @@ from tokenize import TokenError
 from types import MappingProxyType
 from typing import TYPE_CHECKING, ClassVar
 
-from sbmlsim.data import Data, load_pkdb_dataframe, load_pkdb_dataframes_by_substance
+from sbmlsim.data import Data, load_pkdb_dataframe
 from sbmlsim.experiment import SimulationExperiment
 from sbmlsim.model import AbstractModel
 from sbmlsim.simulation import Change
@@ -519,7 +519,9 @@ class PKPDSimulationExperiment(SimulationExperiment):
         """Load the digitized data of a figure or table by substance.
 
         The geometric means get their unit (`add_gmean_unit`), the units of the
-        data are renamed (`data_units`, `rename_units`).
+        data are renamed (`data_units`, `rename_units`). The rows without a
+        substance (a bile flow, a blood pressure) are in no frame, they are in
+        the table of `load_dataframe`.
 
         Args:
             fig_id: the id of the figure or table in the study, e.g. `Fig1`.
@@ -530,12 +532,14 @@ class PKPDSimulationExperiment(SimulationExperiment):
                 `data_units` is refused.
         """
         names = self.data_unit_names()
-        frames = load_pkdb_dataframes_by_substance(
+        df = load_pkdb_dataframe(
             f"{self.sid if study is None else study}_{fig_id}",
             data_path=self._data_paths(),
+            na_values=["na"],
         )
         return {
-            key: rename_units(add_gmean_unit(df), names) for key, df in frames.items()
+            str(substance): rename_units(add_gmean_unit(frame.copy()), names)
+            for substance, frame in df.groupby("substance", sort=False)
         }
 
     @staticmethod

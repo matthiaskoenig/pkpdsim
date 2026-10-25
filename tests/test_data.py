@@ -1,6 +1,8 @@
 import csv
 import math
+import re
 import shutil
+import warnings
 from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
@@ -17,14 +19,18 @@ from pkpdsim.data import (
     MEASUREMENT_COLUMNS,
     PKDB_DATA,
     SCATTER_COLUMNS,
+    CollectionWarning,
     _label,
     _statistics,
     collect_tsv_files,
     database_differences,
+    mean_of_individuals,
     prepare_study,
+    sampling_times,
     studies_dir,
     study_format,
     study_tables,
+    write_study_tables,
 )
 
 
@@ -311,9 +317,9 @@ def test_study_tables_scatters() -> None:
     assert df["y_value"].tolist() == pytest.approx(source["y_mean"].tolist())
     assert df["x_unit"].tolist() == source["x_unit"].tolist()
     assert df["y_measurement_type"].tolist() == source["y_measurement"].tolist()
-    # the value also in the columns of sbmlsim, a point counts one
+    # the value also in the columns of sbmlsim, a point of the group counts the group
     assert df["x"].tolist() == df["x_value"].tolist()
-    assert set(df["count"]) == {1}
+    assert set(df["count"]) == {9}
 
 
 def edit_table(path: Path, edit: Callable[[list[dict[str, str]]], None]) -> None:
@@ -512,3 +518,337 @@ def test_database_differences() -> None:
 
     missing = database_differences([PATEL1984], client=FakeClient({}))  # ty: ignore[invalid-argument-type]
     assert [d.reason for d in missing] == ["not in the database"]
+
+
+def collect_warnings(
+    function: Callable[[], dict[str, pd.DataFrame]],
+) -> tuple[dict[str, pd.DataFrame], list[str]]:
+    """Call a function, with the messages of the warnings of the collection it gave."""
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        result = function()
+    messages = [
+        str(warning.message)
+        for warning in caught
+        if issubclass(warning.category, CollectionWarning)
+    ]
+    return result, messages
+
+
+@pytest.fixture(scope="module")
+def followups(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> tuple[Path, dict[str, pd.DataFrame], list[str]]:
+    """The tables and warnings of a copy of Patel1984 with the cases of the model sync.
+
+    Fig2 `amount_cumulative_hctz25_sus` is a curve of geometric means with the
+    curator 0 at 0 hr and a point below the LOQ at 2 hr, Tab3 repeats the AUC
+    of the suspension of Tab2, a group has no characteristics (no count of a
+    characteristic) and a curve of Fig1 has a label which is no SId.
+    """
+    from pkdb.studyformat.formatter import format_folder
+
+    study = tmp_path_factory.mktemp("followups") / "Patel1984"
+    shutil.copytree(PATEL1984, study)
+
+    def geometric_curve(rows: list[dict[str, str]]) -> None:
+        for row in rows:
+            if row["label"] != "amount_cumulative_hctz25_sus" or row["time"] == "0":
+                continue
+            if row["time"] == "2":
+                row.update(mean="", sd="", max="4", comment="below the LOQ")
+            else:
+                row.update(gmean=row["mean"], mean="", sd="")
+
+    def repeated_auc(rows: list[dict[str, str]]) -> None:
+        with (PATEL1984 / "outputs_Tab2.tsv").open(encoding="utf-8") as file:
+            auc = next(csv.DictReader(file, delimiter="\t"))
+        assert auc["measurement"] == "auc_end"
+        rows.append({**auc, "source": "Tab3"})
+
+    def group_without_characteristics(rows: list[dict[str, str]]) -> None:
+        rows.append({**rows[0], "name": "men", "parent": "all", "count": "6"})
+
+    def no_sid(rows: list[dict[str, str]]) -> None:
+        for row in rows:
+            if row["label"] == "hctz25_sus":
+                row["label"] = "hctz-25_sus"
+
+    edit_table(study / "timecourses_Fig2.tsv", geometric_curve)
+    edit_table(study / "outputs_Tab3.tsv", repeated_auc)
+    edit_table(study / "subjects.tsv", group_without_characteristics)
+    edit_table(study / "timecourses_Fig1.tsv", no_sid)
+    format_folder(study)
+    tables, messages = collect_warnings(lambda: study_tables(study))
+    return study, tables, messages
+
+
+def test_the_counts_are_integers(
+    followups: tuple[Path, dict[str, pd.DataFrame], list[str]], tmp_path: Path
+) -> None:
+    """A count is an integer, also in a column with a missing count (not 12.0)."""
+    study, tables, _ = followups
+    groups = tables["TabGroups"]
+    assert groups["count"].isna().any()
+    for source, column in (
+        ("TabGroups", "count"),
+        ("TabGroups", "group_count"),
+        ("TabIndividuals", "count"),
+        ("Fig1", "count"),
+        ("TabInterventions", "doses"),
+    ):
+        assert str(tables[source][column].dtype) == "Int64", (source, column)
+    with pytest.warns(CollectionWarning):
+        paths = write_study_tables(study, tmp_path)
+    path = next(path for path in paths if path.name.endswith("_TabGroups.tsv"))
+    written = pd.read_csv(path, sep="\t", dtype=str, keep_default_na=False)
+    assert set(written["count"]) == {"12", "NA"}
+
+
+def test_a_row_below_the_loq_has_the_calculation_of_its_curve(
+    followups: tuple[Path, dict[str, pd.DataFrame], list[str]],
+) -> None:
+    """A row below the LOQ in a curve of geometric means is a geometric mean."""
+    _, tables, _ = followups
+    df = tables["Fig2"]
+    curve = df[df["label"] == "amount_cumulative_hctz25_sus"]
+    loq = curve[curve["time"] == 2].iloc[0]
+    assert loq[["value", "mean", "median", "gmean"]].isna().all()
+    assert loq["max"] == 4
+    assert set(curve["calculation_type"]) == {"geometric mean"}
+    # the curves of means stay
+    other = df[df["label"] == "amount_cumulative_hctz25_tab"]
+    assert set(other["calculation_type"]) == {"sample mean"}
+
+
+def test_the_curator_zero_of_a_curve_of_geometric_means_is_dropped(
+    followups: tuple[Path, dict[str, pd.DataFrame], list[str]],
+) -> None:
+    """A mean of 0 cannot be a geometric mean: it is left out with a warning."""
+    _, tables, messages = followups
+    df = tables["Fig2"]
+    curve = df[df["label"] == "amount_cumulative_hctz25_sus"]
+    assert 0 not in set(curve["time"])
+    assert len(curve) == 9
+    # the 0 of a curve of means stays
+    other = df[df["label"] == "amount_cumulative_hctz25_tab"]
+    assert 0 in set(other["time"])
+    assert any(
+        "Patel1984" in message
+        and "Fig2" in message
+        and "amount_cumulative_hctz25_sus" in message
+        and "geometric" in message
+        for message in messages
+    )
+
+
+def test_a_duplicate_across_sources_is_a_warning(
+    followups: tuple[Path, dict[str, pd.DataFrame], list[str]],
+) -> None:
+    """The same output in two sources of a study is reported with both sources."""
+    _, tables, messages = followups
+    duplicates = [message for message in messages if "duplicate" in message]
+    assert len(duplicates) == 1
+    assert "Patel1984" in duplicates[0]
+    assert "Tab2" in duplicates[0]
+    assert "Tab3" in duplicates[0]
+    assert "auc_end" in duplicates[0]
+    # both rows are kept
+    for source in ("Tab2", "Tab3"):
+        df = tables[source]
+        assert (df["measurement_type"] == "auc_end").any()
+
+
+def test_a_label_which_is_no_sid_is_a_warning(
+    followups: tuple[Path, dict[str, pd.DataFrame], list[str]],
+) -> None:
+    """A curated label which is no SId stays, with a warning."""
+    _, tables, messages = followups
+    assert "hctz-25_sus" in set(tables["Fig1"]["label"])
+    assert any(
+        "Patel1984" in message and "'hctz-25_sus'" in message for message in messages
+    )
+    # the generated labels are SIds
+    for df in tables.values():
+        if "label" not in df.columns or "measurement_type" not in df.columns:
+            continue
+        for label in df["label"].dropna():
+            if label != "hctz-25_sus":
+                assert re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", label), label
+
+
+def test_a_study_without_the_cases_gives_no_warning() -> None:
+    """The unedited study warns of nothing."""
+    _, messages = collect_warnings(lambda: study_tables(PATEL1984))
+    assert messages == []
+
+
+def test_a_generated_label_is_an_sid() -> None:
+    """A generated label starting with a digit gets an underscore."""
+    assert _label("24h urine", "sodium") == "_24h_urine_sodium"
+    assert _label("auc", "hctz") == "auc_hctz"
+
+
+@pytest.fixture(scope="module")
+def nilsen1989_tables() -> dict[str, pd.DataFrame]:
+    """The tables of the study with scatters."""
+    return study_tables(NILSEN1989)
+
+
+def test_a_scatter_has_the_times_and_interventions_of_both_axes(
+    nilsen1989_tables: dict[str, pd.DataFrame],
+) -> None:
+    """x and y keep their own time and interventions, the joined ones stay."""
+    source = pd.read_csv(NILSEN1989 / "scatters_Fig5.tsv", sep="\t")
+    df = nilsen1989_tables["Fig5"]
+    assert df["x_time"].tolist() == pytest.approx(source["x_time"].tolist())
+    assert df["y_time"].tolist() == pytest.approx(source["y_time"].tolist())
+    assert df["time"].tolist() == df["y_time"].tolist()
+    assert set(df["x_time_unit"]) == set(df["y_time_unit"]) == {"hr"}
+    assert df["x_intervention"].tolist() == source["x_interventions"].tolist()
+    assert df["y_intervention"].tolist() == source["y_interventions"].tolist()
+    assert df["intervention"].tolist() == source["y_interventions"].tolist()
+    assert set(df["x_substance"]) == {"hydrochlorothiazide"}
+    assert set(df["y_substance"]) == {"sodium"}
+
+
+def test_a_scatter_of_group_means_has_the_count_of_the_group(
+    nilsen1989_tables: dict[str, pd.DataFrame],
+) -> None:
+    """A point of a group counts the group, an anonymous subject of a group one."""
+    # Fig5: the means of the 9 volunteers at the times of the collections
+    assert set(nilsen1989_tables["Fig5"]["count"]) == {9}
+    # Fig2: 8 points of the volunteers with the same interventions and times
+    assert set(nilsen1989_tables["Fig2"]["count"]) == {1}
+
+
+def test_collect_further_studies(source_dir: Path, tmp_path: Path) -> None:
+    """A study folder of another substance is collected with the substance."""
+    other = tmp_path / "pkdb_data" / "studies" / "hydrochlorothiazide"
+    shutil.copytree(PATEL1984, other / "Patel1984")
+    target_dir = tmp_path / "data"
+    collect_tsv_files(
+        source_dir=source_dir,
+        target_dir=target_dir,
+        filter_study=lambda name: name == "Hindle1992",
+        studies=[other / "Patel1984"],
+    )
+    folders = {path.split("/")[0] for path in tree(target_dir)}
+    assert folders == {"Hindle1992", "Patel1984"}
+    assert (target_dir / "Patel1984" / ".Patel1984_Fig1.tsv").is_file()
+
+
+def test_collect_keeps_files_on_request(source_dir: Path, tmp_path: Path) -> None:
+    """With `keep_files` a table the collection did not write stays."""
+    shutil.copytree(PATEL1984, source_dir / "Patel1984")
+    target_dir = tmp_path / "data"
+    (target_dir / "Patel1984").mkdir(parents=True)
+    extra = target_dir / "Patel1984" / ".Patel1984_Fig2_pH.tsv"
+    extra.write_text("pH", encoding="utf-8")
+    outdated = target_dir / "Patel1984" / ".Patel1984_Fig1.tsv"
+    outdated.write_text("old", encoding="utf-8")
+    collect_tsv_files(source_dir=source_dir, target_dir=target_dir, keep_files=True)
+    assert extra.read_text(encoding="utf-8") == "pH"
+    # a table of the study is written
+    assert outdated.read_text(encoding="utf-8") != "old"
+    collect_tsv_files(source_dir=source_dir, target_dir=target_dir)
+    assert not extra.exists()
+
+
+def test_the_geometric_statistics_of_a_group(tmp_path: Path) -> None:
+    """A characteristic of a group with a geometric mean has it in the table."""
+    from pkdb.studyformat.formatter import format_folder
+
+    study = tmp_path / "Patel1984"
+    shutil.copytree(PATEL1984, study)
+
+    def geometric_age(rows: list[dict[str, str]]) -> None:
+        for row in rows:
+            if row["measurement"] == "age":
+                row.update(mean="", gmean="24", gcv="20")
+
+    edit_table(study / "characteristica.tsv", geometric_age)
+    format_folder(study)
+    groups = study_tables(study)["TabGroups"]
+    assert {"cv", "gmean", "gsd", "gcv"} <= set(groups.columns)
+    age = groups[groups["measurement_type"] == "age"].iloc[0]
+    assert pd.isna(age["mean"])
+    assert age["gmean"] == pytest.approx(24)
+    assert age["gcv"] == pytest.approx(0.2)
+
+
+def test_the_mean_of_individuals() -> None:
+    """The mean, SD and count of the individuals of a curve at a time."""
+    df = pd.DataFrame(
+        {
+            "study": "S",
+            "group": "all",
+            "individual": ["i1", "i2", "i3", "i1", "i2", "i3"],
+            "intervention": "D1",
+            "substance": "x",
+            "tissue": "plasma",
+            "measurement_type": "concentration",
+            "time": [1.0, 1.0, 1.0, 2.0, 2.0, 2.0],
+            "time_unit": "hr",
+            "value": [1.0, 2.0, 3.0, 4.0, None, 8.0],
+            "unit": "mg/l",
+        }
+    )
+    means = mean_of_individuals(df)
+    assert means["time"].tolist() == [1.0, 2.0]
+    assert means["mean"].tolist() == pytest.approx([2.0, 6.0])
+    assert means["sd"].tolist() == pytest.approx([1.0, math.sqrt(8)])
+    assert means["count"].tolist() == [3, 2]
+    assert set(means["unit"]) == {"mg/l"}
+    assert set(means["time_unit"]) == {"hr"}
+
+
+def test_the_sampling_times() -> None:
+    """The points of a curve move in their order to the nearest sampling times."""
+    df = pd.DataFrame(
+        {
+            "label": ["a", "a", "a", "a", "b", "b"],
+            "time": [-0.1, 0.48, 0.55, 2.2, 0.9, 0.8],
+            "mean": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+        }
+    )
+    moved = sampling_times(df, [0.0, 0.5, 1.0, 2.0])
+    a = moved[moved["label"] == "a"]
+    # two points near 0.5 go to distinct samples, in their order
+    assert a["time"].tolist() == [0.0, 0.5, 1.0, 2.0]
+    assert a["mean"].tolist() == [1.0, 2.0, 3.0, 4.0]
+    b = moved[moved["label"] == "b"]
+    assert b["time"].tolist() == [0.5, 1.0]
+    assert b["mean"].tolist() == [6.0, 5.0]
+    # the data are not changed
+    assert df["time"].tolist()[0] == -0.1
+    # the points before `start` keep their times
+    kept = sampling_times(df, [0.0, 0.5, 1.0, 2.0], start=0.5)
+    assert kept[kept["label"] == "a"]["time"].tolist() == [-0.1, 0.48, 0.5, 2.0]
+    # a curve with more points than samples
+    with pytest.raises(ValueError, match="'a' has 4 points for 2 sampling times"):
+        sampling_times(df, [0.0, 1.0])
+
+
+def test_a_scatter_of_partly_repeated_points_is_a_warning(tmp_path: Path) -> None:
+    """Points of a group of which some have the same times are a warning."""
+    from pkdb.studyformat.formatter import format_folder
+
+    study = tmp_path / "Nilsen1989"
+    shutil.copytree(NILSEN1989, study)
+
+    def same_times(rows: list[dict[str, str]]) -> None:
+        rows[1].update(x_time=rows[0]["x_time"], y_time=rows[0]["y_time"])
+
+    edit_table(study / "scatters_Fig5.tsv", same_times)
+    format_folder(study)
+    tables, messages = collect_warnings(lambda: study_tables(study))
+    df = tables["Fig5"]
+    curve = df[df["label"] == "excretion_sodium2_hctz25"]
+    assert sorted(curve["count"]) == [1, 1, 9, 9, 9]
+    assert any(
+        "Nilsen1989" in message
+        and "excretion_sodium2_hctz25" in message
+        and "volunteers" in message
+        for message in messages
+    )

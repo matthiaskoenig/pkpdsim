@@ -112,7 +112,8 @@ def test_other_values_are_their_strings() -> None:
     [
         (
             Tissue,
-            "PLASMA SERUM BLOOD ARTERIAL_BLOOD SALIVA URINE FECES FECES_URINE BILE NONE",
+            "PLASMA SERUM BLOOD ARTERIAL_BLOOD ARTERIAL_PLASMA SALIVA URINE FECES "
+            "FECES_URINE BILE NONE",
         ),
         (
             Route,
@@ -160,6 +161,11 @@ def test_the_members_of_the_apixaban_studies() -> None:
     """The NAFLD group of Tirona2018 and the naproxen arm of Frost2014a."""
     assert Health("non-alcoholic fatty liver disease") is Health.NAFLD
     assert Coadministration("naproxen") is Coadministration.NAPROXEN
+
+
+def test_the_arterial_plasma_is_the_term_of_pk_db() -> None:
+    """The tissue `arterial plasma` of the vocabulary of PK-DB."""
+    assert Tissue("arterial plasma") is Tissue.ARTERIAL_PLASMA
 
 
 def test_every_genotype_names_its_gene() -> None:
