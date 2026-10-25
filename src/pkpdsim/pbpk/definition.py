@@ -449,14 +449,10 @@ def _union[T](
 def _creators(definitions: Iterable["PBPKDefinition"]) -> list[Creator]:
     """The creators of several definitions, each person once, in order.
 
-    A sbmlutils `Creator` compares by identity; two creators are the same
-    person when all their fields are equal (its string).
+    A sbmlutils `Creator` compares and hashes by value: two creators are the
+    same person when all their fields are equal.
     """
-    unique: dict[str, Creator] = {}
-    for d in definitions:
-        for c in d.creators:
-            unique.setdefault(str(c), c)
-    return list(unique.values())
+    return list(dict.fromkeys(c for d in definitions for c in d.creators))
 
 
 def _merge_variants(
