@@ -69,6 +69,10 @@ def test_european_reproduces_defaults() -> None:
         assert default.keys() == explicit.keys()
         for pid in (ids.BW, ids.HEIGHT, ids.AGE):
             assert default[pid].value == explicit[pid].value  # ty: ignore[unresolved-attribute]
+    age = {str(o.sid): o for o in physiology_objects(Sex.MALE)}[ids.AGE]
+    notes = str(age.notes)
+    assert "the population gives no value" in notes
+    assert "reference individual" not in notes
 
 
 @pytest.mark.parametrize("key", sorted(POPULATIONS))

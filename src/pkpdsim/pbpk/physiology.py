@@ -64,6 +64,7 @@ if TYPE_CHECKING:
     from pkpdsim.pbpk.populations import Population
 
 __all__ = [
+    "DEFAULT_POPULATION",
     "Sex",
     "normal_gfr",
     "physiology_objects",
@@ -82,6 +83,9 @@ class Sex(StrEnum):
 
 LEAN_ORGANS: tuple[Organ, ...] = tuple(o for o in Organ if o is not Organ.ADIPOSE)
 """The organs whose tissue mass scales with the individual; adipose is the rest."""
+
+DEFAULT_POPULATION = "european_icrp"
+"""The population of a model which does not choose one (`pkpdsim.pbpk.populations`)."""
 
 AGE_DEFAULT = 40.0
 """The age of an individual if an experiment does not set it (yr)."""
@@ -392,12 +396,17 @@ class _Physiology:
         def covariate(pid: str, unit: UnitDefinition, name: str) -> Parameter:
             """A covariate with the value of the reference individual."""
             v = individual[pid]
+            origin = (
+                f"the default is {default}"
+                if v.source is not None
+                else "the population gives no value, the default is a choice of "
+                "the model"
+            )
             return _parameter(
                 pid,
                 unit,
                 name,
-                f"Covariate, an initial value; the default is {default}. "
-                f"{v.notes or ''}".rstrip(),
+                f"Covariate, an initial value; {origin}. {v.notes or ''}".rstrip(),
                 (v.source,) if v.source is not None else (),
                 value=v.value,
             )
@@ -797,7 +806,7 @@ def _label(organ: Organ) -> str:
 def physiology_objects(
     sex: Sex = Sex.MALE,
     factors: Mapping[str, str] | None = None,
-    population: str = "european_icrp",
+    population: str = DEFAULT_POPULATION,
 ) -> list[Sbase]:
     """The parameters and initial assignments of the standard human physiology.
 
@@ -824,7 +833,6 @@ def physiology_objects(
             population is unknown.
     """
     # populations imports this module (Sex, the defaults), so it is imported here
-    from pkpdsim.pbpk.populations import DEFAULT_POPULATION
     from pkpdsim.pbpk.populations import population as get_population
 
     physiology = _Physiology(

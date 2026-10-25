@@ -18,7 +18,7 @@ from pkpdsim.pbpk.kp import check_kp_method
 from pkpdsim.pbpk.organ import OrganComponent
 from pkpdsim.pbpk.organs import Organ, Part, Pool
 from pkpdsim.pbpk.pd import PDComponent
-from pkpdsim.pbpk.physiology import Sex
+from pkpdsim.pbpk.physiology import DEFAULT_POPULATION, Sex
 from pkpdsim.pbpk.populations import POPULATIONS
 from pkpdsim.pbpk.proteins import PROTEINS
 from pkpdsim.pbpk.routes import Route
@@ -110,7 +110,7 @@ class PBPKDefinition:
     routes: Sequence[Route] = ()
     pd: Sequence[PDComponent] = ()
     sex: Sex = Sex.MALE
-    population: str = "european_icrp"
+    population: str = DEFAULT_POPULATION
     arm_vein: str = "pksim_default"
     dynamic: tuple[str, ...] = ()
     name: str | None = None

@@ -44,7 +44,7 @@ from sbmlutils.factory import UnitDefinition
 
 from pkpdsim.pbpk import ids
 from pkpdsim.pbpk.data import load
-from pkpdsim.pbpk.physiology import AGE_DEFAULT, MODEL_DEFAULT, Sex
+from pkpdsim.pbpk.physiology import AGE_DEFAULT, DEFAULT_POPULATION, MODEL_DEFAULT, Sex
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import Value
 
@@ -56,9 +56,6 @@ __all__ = [
     "Population",
     "population",
 ]
-
-DEFAULT_POPULATION = "european_icrp"
-"""The population of a model which does not choose one."""
 
 COVARIATES: tuple[str, ...] = (ids.BW, ids.HEIGHT, ids.AGE)
 """The covariates a population gives reference values for."""

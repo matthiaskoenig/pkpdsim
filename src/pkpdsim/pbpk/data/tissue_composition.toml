@@ -20,10 +20,13 @@
 #   is neutral lipid, neutral phospholipid, extracellular water, intracellular
 #   water;
 # - the acidic phospholipids and the erythrocytes are transcribed from the
-#   MATLAB supplement of Huisinga 2012 (GenericPBPKmodel_physiology.m), which
-#   cites Rodgers, Leahy & Rowland 2005 (rat acidic phospholipids, adopted for
-#   human as there), Poulin & Theil 2009 (erythrocyte water) and Rodgers &
-#   Rowland 2007 Table VII (erythrocyte lipids);
+#   MATLAB supplement of Huisinga 2012 (GenericPBPKmodel_physiology.m, CC
+#   BY-NC-SA 3.0), which cites Rodgers, Leahy & Rowland 2005 (rat acidic
+#   phospholipids, adopted for human as there), Poulin & Theil 2009
+#   (erythrocyte water) and Rodgers & Rowland 2007 Table VII (erythrocyte
+#   lipids); no open (MIT, CC BY, CC0) or primary source that tabulates them
+#   was accessible, so they are ModelChoice, "not verified", and listed for
+#   the maintainer;
 # - the pH values and the vegetable oil:water partition of adipose are those
 #   Yau 2020 (accepted manuscript) states for the method.
 #
@@ -38,10 +41,10 @@ ph = { value = 7.4, unit = "dimensionless", source = "Yau2020", notes = "pH of p
 ph = { value = 7.0, unit = "dimensionless", source = "Yau2020", notes = "pH of the intracellular water, Methods line 107, citing Rodgers, Leahy & Rowland 2005 (Coutinho 2024 state 7.22, the erythrocyte value; Huisinga 2012 use 7.0)" }
 
 [erythrocytes]
-f_iw = { value = 0.63, unit = "dimensionless", source = "Huisinga2012Supplement", notes = "fractional volume of intracellular water of human erythrocytes, the total water 0.63 (Poulin & Theil 2009) without extracellular water; not verified against the original" }
-f_nl = { value = 0.0033, unit = "dimensionless", source = "Huisinga2012Supplement", notes = "fractional volume of neutral lipids of human erythrocytes (Rodgers & Rowland 2007 Table VII); not verified against the original" }
-f_np = { value = 0.0012, unit = "dimensionless", source = "Huisinga2012Supplement", notes = "fractional volume of neutral phospholipids of human erythrocytes (Rodgers & Rowland 2007 Table VII); not verified against the original" }
-ap = { value = 0.5, unit = "mg/g", source = "Huisinga2012Supplement", notes = "acidic phospholipids of erythrocytes, the rat value of Rodgers, Leahy & Rowland 2005 adopted for human; not verified against the original" }
+f_iw = { value = 0.63, unit = "dimensionless", source = "ModelChoice", notes = "fractional volume of intracellular water of human erythrocytes, transcribed from the Huisinga 2012 online supplement (GenericPBPKmodel_physiology.m, CC BY-NC-SA 3.0): the total water 0.63 of Poulin & Theil 2009 (J Pharm Sci 98:4941) without extracellular water; not verified against the original. The unified human composition of Utsey 2020 (Metrum Research Group poster, ACoP 2019, Table 1) gives 0.663 for red blood cells; unresolved without the originals" }
+f_nl = { value = 0.0033, unit = "dimensionless", source = "ModelChoice", notes = "fractional volume of neutral lipids of human erythrocytes, transcribed from the Huisinga 2012 online supplement (GenericPBPKmodel_physiology.m, CC BY-NC-SA 3.0), which cites Rodgers & Rowland 2007 (Pharm Res 24:918) Table VII; not verified against the original" }
+f_np = { value = 0.0012, unit = "dimensionless", source = "ModelChoice", notes = "fractional volume of neutral phospholipids of human erythrocytes, transcribed from the Huisinga 2012 online supplement (GenericPBPKmodel_physiology.m, CC BY-NC-SA 3.0), which cites Rodgers & Rowland 2007 (Pharm Res 24:918) Table VII; not verified against the original" }
+ap = { value = 0.5, unit = "mg/g", source = "ModelChoice", notes = "acidic phospholipids of erythrocytes, transcribed from the Huisinga 2012 online supplement (GenericPBPKmodel_physiology.m, CC BY-NC-SA 3.0), which gives it as the rat value of Rodgers, Leahy & Rowland 2005 (J Pharm Sci 94:1259) adopted for human; not verified against the original, no open source tabulates it" }
 ph = { value = 7.22, unit = "dimensionless", source = "Yau2020", notes = "intracellular pH of red blood cells, Methods line 115, citing Rodgers, Leahy & Rowland 2005" }
 
 [adipose]
@@ -58,7 +61,7 @@ f_ew = { value = 0.135, unit = "dimensionless", source = "Coutinho2024", notes =
 f_iw = { value = 0.017, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
 albumin = { value = 0.049, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
 lipoprotein = { value = 0.068, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
-ap = { value = 0.4, unit = "mg/g", source = "Huisinga2012Supplement", notes = "rat value of Rodgers, Leahy & Rowland 2005; not verified against the original" }
+ap = { value = 0.4, unit = "mg/g", source = "ModelChoice", notes = "transcribed from the Huisinga 2012 online supplement (GenericPBPKmodel_physiology.m, CC BY-NC-SA 3.0), which gives it as the rat value of Rodgers, Leahy & Rowland 2005 (J Pharm Sci 94:1259) adopted for human; not verified against the original, no open source tabulates it" }
 
 [tissues.bone]
 f_nl = { value = 0.0174, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
@@ -67,7 +70,7 @@ f_ew = { value = 0.1, unit = "dimensionless", source = "Coutinho2024", notes = "
 f_iw = { value = 0.346, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
 albumin = { value = 0.1, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
 lipoprotein = { value = 0.05, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
-ap = { value = 0.67, unit = "mg/g", source = "Huisinga2012Supplement", notes = "rat value of Rodgers, Leahy & Rowland 2005; not verified against the original" }
+ap = { value = 0.67, unit = "mg/g", source = "ModelChoice", notes = "transcribed from the Huisinga 2012 online supplement (GenericPBPKmodel_physiology.m, CC BY-NC-SA 3.0), which gives it as the rat value of Rodgers, Leahy & Rowland 2005 (J Pharm Sci 94:1259) adopted for human; not verified against the original, no open source tabulates it" }
 
 [tissues.brain]
 f_nl = { value = 0.0391, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
@@ -76,7 +79,7 @@ f_ew = { value = 0.162, unit = "dimensionless", source = "Coutinho2024", notes =
 f_iw = { value = 0.62, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
 albumin = { value = 0.048, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
 lipoprotein = { value = 0.041, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
-ap = { value = 0.4, unit = "mg/g", source = "Huisinga2012Supplement", notes = "rat value of Rodgers, Leahy & Rowland 2005; not verified against the original" }
+ap = { value = 0.4, unit = "mg/g", source = "ModelChoice", notes = "transcribed from the Huisinga 2012 online supplement (GenericPBPKmodel_physiology.m, CC BY-NC-SA 3.0), which gives it as the rat value of Rodgers, Leahy & Rowland 2005 (J Pharm Sci 94:1259) adopted for human; not verified against the original, no open source tabulates it" }
 
 [tissues.gut]
 f_nl = { value = 0.0375, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
@@ -85,7 +88,7 @@ f_ew = { value = 0.282, unit = "dimensionless", source = "Coutinho2024", notes =
 f_iw = { value = 0.475, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
 albumin = { value = 0.158, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
 lipoprotein = { value = 0.141, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
-ap = { value = 2.41, unit = "mg/g", source = "Huisinga2012Supplement", notes = "rat value of Rodgers, Leahy & Rowland 2005; not verified against the original" }
+ap = { value = 2.41, unit = "mg/g", source = "ModelChoice", notes = "transcribed from the Huisinga 2012 online supplement (GenericPBPKmodel_physiology.m, CC BY-NC-SA 3.0), which gives it as the rat value of Rodgers, Leahy & Rowland 2005 (J Pharm Sci 94:1259) adopted for human; not verified against the original, no open source tabulates it" }
 
 [tissues.heart]
 f_nl = { value = 0.0135, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
@@ -94,7 +97,7 @@ f_ew = { value = 0.32, unit = "dimensionless", source = "Coutinho2024", notes = 
 f_iw = { value = 0.456, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
 albumin = { value = 0.157, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
 lipoprotein = { value = 0.16, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
-ap = { value = 2.25, unit = "mg/g", source = "Huisinga2012Supplement", notes = "rat value of Rodgers, Leahy & Rowland 2005; not verified against the original" }
+ap = { value = 2.25, unit = "mg/g", source = "ModelChoice", notes = "transcribed from the Huisinga 2012 online supplement (GenericPBPKmodel_physiology.m, CC BY-NC-SA 3.0), which gives it as the rat value of Rodgers, Leahy & Rowland 2005 (J Pharm Sci 94:1259) adopted for human; not verified against the original, no open source tabulates it" }
 
 [tissues.kidney]
 f_nl = { value = 0.0121, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
@@ -103,7 +106,7 @@ f_ew = { value = 0.273, unit = "dimensionless", source = "Coutinho2024", notes =
 f_iw = { value = 0.483, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
 albumin = { value = 0.13, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
 lipoprotein = { value = 0.137, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
-ap = { value = 5.03, unit = "mg/g", source = "Huisinga2012Supplement", notes = "rat value of Rodgers, Leahy & Rowland 2005; not verified against the original" }
+ap = { value = 5.03, unit = "mg/g", source = "ModelChoice", notes = "transcribed from the Huisinga 2012 online supplement (GenericPBPKmodel_physiology.m, CC BY-NC-SA 3.0), which gives it as the rat value of Rodgers, Leahy & Rowland 2005 (J Pharm Sci 94:1259) adopted for human; not verified against the original, no open source tabulates it" }
 
 [tissues.liver]
 f_nl = { value = 0.0135, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
@@ -112,7 +115,7 @@ f_ew = { value = 0.161, unit = "dimensionless", source = "Coutinho2024", notes =
 f_iw = { value = 0.573, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
 albumin = { value = 0.086, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
 lipoprotein = { value = 0.161, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
-ap = { value = 4.56, unit = "mg/g", source = "Huisinga2012Supplement", notes = "rat value of Rodgers, Leahy & Rowland 2005; not verified against the original" }
+ap = { value = 4.56, unit = "mg/g", source = "ModelChoice", notes = "transcribed from the Huisinga 2012 online supplement (GenericPBPKmodel_physiology.m, CC BY-NC-SA 3.0), which gives it as the rat value of Rodgers, Leahy & Rowland 2005 (J Pharm Sci 94:1259) adopted for human; not verified against the original, no open source tabulates it" }
 
 [tissues.lung]
 f_nl = { value = 0.0215, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
@@ -121,7 +124,7 @@ f_ew = { value = 0.336, unit = "dimensionless", source = "Coutinho2024", notes =
 f_iw = { value = 0.446, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
 albumin = { value = 0.212, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
 lipoprotein = { value = 0.168, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
-ap = { value = 3.91, unit = "mg/g", source = "Huisinga2012Supplement", notes = "rat value of Rodgers, Leahy & Rowland 2005; not verified against the original" }
+ap = { value = 3.91, unit = "mg/g", source = "ModelChoice", notes = "transcribed from the Huisinga 2012 online supplement (GenericPBPKmodel_physiology.m, CC BY-NC-SA 3.0), which gives it as the rat value of Rodgers, Leahy & Rowland 2005 (J Pharm Sci 94:1259) adopted for human; not verified against the original, no open source tabulates it" }
 
 [tissues.muscle]
 f_nl = { value = 0.01, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
@@ -130,7 +133,7 @@ f_ew = { value = 0.118, unit = "dimensionless", source = "Coutinho2024", notes =
 f_iw = { value = 0.63, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
 albumin = { value = 0.064, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
 lipoprotein = { value = 0.059, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
-ap = { value = 1.53, unit = "mg/g", source = "Huisinga2012Supplement", notes = "rat value of Rodgers, Leahy & Rowland 2005; not verified against the original" }
+ap = { value = 1.53, unit = "mg/g", source = "ModelChoice", notes = "transcribed from the Huisinga 2012 online supplement (GenericPBPKmodel_physiology.m, CC BY-NC-SA 3.0), which gives it as the rat value of Rodgers, Leahy & Rowland 2005 (J Pharm Sci 94:1259) adopted for human; not verified against the original, no open source tabulates it" }
 
 [tissues.pancreas]
 f_nl = { value = 0.0403, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
@@ -139,7 +142,7 @@ f_ew = { value = 0.12, unit = "dimensionless", source = "Coutinho2024", notes = 
 f_iw = { value = 0.664, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
 albumin = { value = 0.06, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
 lipoprotein = { value = 0.06, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
-ap = { value = 2.41, unit = "mg/g", source = "ModelChoice", notes = "no value of the pancreas in the sources read; the acidic phospholipids of the gut" }
+ap = { value = 2.41, unit = "mg/g", source = "ModelChoice", notes = "no value of the pancreas in the sources read; the acidic phospholipids of the gut (itself transcribed from the Huisinga 2012 supplement, not verified)" }
 
 [tissues.skin]
 f_nl = { value = 0.0603, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
@@ -148,7 +151,7 @@ f_ew = { value = 0.382, unit = "dimensionless", source = "Coutinho2024", notes =
 f_iw = { value = 0.291, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
 albumin = { value = 0.277, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
 lipoprotein = { value = 0.096, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
-ap = { value = 1.32, unit = "mg/g", source = "Huisinga2012Supplement", notes = "rat value of Rodgers, Leahy & Rowland 2005; not verified against the original" }
+ap = { value = 1.32, unit = "mg/g", source = "ModelChoice", notes = "transcribed from the Huisinga 2012 online supplement (GenericPBPKmodel_physiology.m, CC BY-NC-SA 3.0), which gives it as the rat value of Rodgers, Leahy & Rowland 2005 (J Pharm Sci 94:1259) adopted for human; not verified against the original, no open source tabulates it" }
 
 [tissues.spleen]
 f_nl = { value = 0.0071, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
@@ -157,7 +160,7 @@ f_ew = { value = 0.207, unit = "dimensionless", source = "Coutinho2024", notes =
 f_iw = { value = 0.579, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
 albumin = { value = 0.097, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
 lipoprotein = { value = 0.207, unit = "dimensionless", source = "Coutinho2024", notes = "Table III" }
-ap = { value = 3.18, unit = "mg/g", source = "Huisinga2012Supplement", notes = "rat value of Rodgers, Leahy & Rowland 2005; not verified against the original" }
+ap = { value = 3.18, unit = "mg/g", source = "ModelChoice", notes = "transcribed from the Huisinga 2012 online supplement (GenericPBPKmodel_physiology.m, CC BY-NC-SA 3.0), which gives it as the rat value of Rodgers, Leahy & Rowland 2005 (J Pharm Sci 94:1259) adopted for human; not verified against the original, no open source tabulates it" }
 
 # The tissue of the composition of every organ of the model. An organ without
 # a tissue of its own in the sources read takes a surrogate (ModelChoice).

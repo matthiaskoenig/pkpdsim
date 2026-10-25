@@ -43,6 +43,14 @@ Rowland 2007, Coutinho 2024); the inputs are the substance's reference `fu`
 HCT*kbc`) and the reference hematocrit of the sex. The coefficients are
 numbers of the build: a change of `fu` by an impairment (the binding factor of
 `pkpdsim.pbpk.impairment`) or of the hematocrit does not recompute them.
+
+A limitation of the full form (`Mode.PERMEABILITY`): its interstitium binds
+the substance as `K_int_pls` of Schmitt 2008 (`pkpdsim.pbpk.distribution`),
+not as the albumin ratio of Rodgers & Rowland. For a highly bound, hydrophilic
+acid (e.g. fu 0.01, pKa 4, logP 1) the Kp of adipose (albumin ratio 0.049)
+lies below the interstitial share, the full form would need `K_cell_pls <= 0`
+and the build refuses it (`distribution.check_kp`); such a substance uses the
+merged tissue or the perfusion-limited organ.
 """
 
 from collections.abc import Mapping
@@ -71,6 +79,10 @@ __all__ = [
 
 AP_PKA = 7.0
 """A base with a pKa at or above it binds to the acidic phospholipids (Yau 2020)."""
+
+_ZWITTERION = (
+    "a zwitterion needs two pKa values (acidic, basic) with acidic < basic, got {pka}"
+)
 
 _KEYS = ("f_ew", "f_iw", "f_nl", "f_np", "albumin", "lipoprotein", "ap")
 _UNITS = {"dimensionless", "mg/g"}
@@ -186,6 +198,8 @@ def _ionisation(
         return 1.0
     if compound == "zwitterion":
         acidic, basic = pka
+        if not acidic < basic:
+            raise ValueError(_ZWITTERION.format(pka=list(pka)))
         return 1.0 + 10 ** (ph - acidic) + 10 ** (basic - ph)
     total, term = 1.0, 0.0
     ordered = sorted(pka) if compound == "acid" else sorted(pka, reverse=True)
@@ -373,11 +387,10 @@ def check_kp_method(substance: Substance) -> list[str]:
         problems.append(f"{sid}: a neutral compound has no pKa, got {list(method.pka)}")
     if method.compound in ("acid", "base") and not n:
         problems.append(f"{sid}: an acid or a base needs at least one pKa")
-    if method.compound == "zwitterion" and n != 2:
-        problems.append(
-            f"{sid}: a zwitterion needs two pKa values (acidic, basic), got "
-            f"{list(method.pka)}"
-        )
+    if method.compound == "zwitterion" and (
+        n != 2 or not method.pka[0] < method.pka[1]
+    ):
+        problems.append(f"{sid}: " + _ZWITTERION.format(pka=list(method.pka)))
     ery = substance.erythrocytes
     if (
         not problems
