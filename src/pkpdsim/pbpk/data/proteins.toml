@@ -1,0 +1,104 @@
+# The enzymes and transporters of the PBPK models (human).
+# `uniprot` is the reviewed human UniProtKB accession (UniProt, checked against rest.uniprot.org
+# 2026-10-25); `ncit` the NCI Thesaurus concept of the protein (checked against the NCIt EVS API
+# 2026-10-25), left out where NCIt has no concept for the protein (SLC22A6, SLC22A8).
+
+source = "UniProt"
+
+[proteins.CYP1A2]
+name = "Cytochrome P450 1A2"
+uniprot = "P05177"
+ncit = "C17673"
+
+[proteins.CYP2C8]
+name = "Cytochrome P450 2C8"
+uniprot = "P10632"
+ncit = "C46001"
+
+[proteins.CYP2C9]
+name = "Cytochrome P450 2C9"
+uniprot = "P11712"
+ncit = "C28750"
+
+[proteins.CYP2C19]
+name = "Cytochrome P450 2C19"
+uniprot = "P33261"
+ncit = "C25948"
+
+[proteins.CYP2D6]
+name = "Cytochrome P450 2D6"
+uniprot = "P10635"
+ncit = "C17287"
+
+[proteins.CYP3A4]
+name = "Cytochrome P450 3A4"
+uniprot = "P08684"
+ncit = "C17573"
+
+[proteins.UGT1A1]
+name = "UDP-glucuronosyltransferase 1A1"
+uniprot = "P22309"
+ncit = "C28288"
+
+[proteins.UGT1A9]
+name = "UDP-glucuronosyltransferase 1A9"
+uniprot = "O60656"
+ncit = "C105864"
+
+[proteins.UGT2B7]
+name = "UDP-glucuronosyltransferase 2B7"
+uniprot = "P16662"
+ncit = "C105577"
+
+[proteins.SULT1A1]
+name = "Sulfotransferase 1A1"
+uniprot = "P50225"
+ncit = "C107443"
+
+[proteins.SLCO1B1]
+name = "Solute carrier organic anion transporter family member 1B1"
+uniprot = "Q9Y6L6"
+ncit = "C106616"
+
+[proteins.SLCO1B3]
+name = "Solute carrier organic anion transporter family member 1B3"
+uniprot = "Q9NPD5"
+ncit = "C106619"
+
+[proteins.SLC22A1]
+name = "Solute carrier family 22 member 1 (OCT1)"
+uniprot = "O15245"
+ncit = "C105075"
+
+[proteins.SLC22A2]
+name = "Solute carrier family 22 member 2 (OCT2)"
+uniprot = "O15244"
+ncit = "C107576"
+
+[proteins.SLC22A6]
+name = "Solute carrier family 22 member 6 (OAT1)"
+uniprot = "Q4U2R8"
+
+[proteins.SLC22A8]
+name = "Solute carrier family 22 member 8 (OAT3)"
+uniprot = "Q8TCC7"
+
+[proteins.SLC47A1]
+name = "Multidrug and toxin extrusion protein 1 (MATE1)"
+uniprot = "Q96FL8"
+ncit = "C113566"
+
+[proteins.ABCB1]
+name = "ATP-dependent translocase ABCB1 (P-glycoprotein)"
+uniprot = "P08183"
+ncit = "C17746"
+
+[proteins.ABCG2]
+name = "Broad substrate specificity ATP-binding cassette transporter ABCG2"
+uniprot = "Q9UNQ0"
+ncit = "C21253"
+
+[proteins.ABCC2]
+name = "ATP-binding cassette sub-family C member 2 (MRP2)"
+uniprot = "Q92887"
+ncit = "C103884"

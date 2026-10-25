@@ -12,7 +12,7 @@ from typing import Any
 from sbmlutils.factory import Uncertainty
 from sbmlutils.factory.units import UnitType
 
-__all__ = ["Value", "as_value", "fitted"]
+__all__ = ["Q", "Value", "as_value", "fitted"]
 
 
 @dataclass(frozen=True)
@@ -33,6 +33,10 @@ class Value:
     source: str | None = None
     notes: str | None = None
     uncertainties: list[Uncertainty] | None = None
+
+
+type Q = float | Value
+"""A number, plain or with unit and provenance."""
 
 
 def fitted(kwargs: Mapping[str, Any], source: str = "fit") -> Value:
