@@ -20,7 +20,8 @@
 #   `blood*V_blood / (mass/density + blood*V_blood)` of the reference individual.
 # - `f_int` is the interstitial fraction of that organ volume,
 #   `Fint*(1 - f_vas)`, with `Fint` the interstitial fraction of the tissue
-#   without blood of Schmitt 2008; the intracellular fraction is
+#   without blood of Schmitt 2008 as tabulated by httk 2.7.4 (`tissue.data`);
+#   the intracellular fraction is
 #   `1 - f_vas - f_int`.
 # - `flow` is the blood flow as fraction of cardiac output (ICRP 89 Table 2.40).
 #   The lung is in series and receives the cardiac output (1.0); the liver
@@ -54,14 +55,14 @@ density = { value = 1.0, unit = "kg/l", source = "ICRP89", notes = "Section 5.3.
 flow = { value = 1.0, unit = "dimensionless", source = "ICRP89", notes = "in series, the lung receives the cardiac output (Section 7.7.1, Fig. 7.2); the bronchial flow of Table 2.40 is in [unmapped]; Jones 2013: 1 (cardiac output), the same" }
 blood = { value = 0.125, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14, pulmonary 10.5 % + bronchial tissue 2.0 %" }
 f_vas = { value = 0.5699, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
-f_int = { value = 0.08602, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.2 (Schmitt 2008 human composition, Fint of lung); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+f_int = { value = 0.08602, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.2 (httk 2.7.4 tissue.data, Human, reference Schmitt 2008, Fint of lung); read in httk (MIT), Schmitt 2008 itself not read" }
 
 [male.organs.he]
 mass = { value = 0.33, unit = "kg", source = "ICRP89", notes = "Table 2.8, heart tissue only (the blood of the chambers is in the pools); Jones 2013: 0.0047 BW = 0.329 l" }
 flow = { value = 0.04, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40, coronary tissue; Jones 2013: 0.04, the same" }
 blood = { value = 0.01, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14, coronary tissue" }
 f_vas = { value = 0.1384, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
-f_int = { value = 0.2154, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.25 (Schmitt 2008 human composition, Fint of heart); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+f_int = { value = 0.2154, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.25 (httk 2.7.4 tissue.data, Human, reference Schmitt 2008, Fint of heart); read in httk (MIT), Schmitt 2008 itself not read" }
 
 [male.organs.br]
 mass = { value = 1.45, unit = "kg", source = "ICRP89", notes = "Table 2.8; Jones 2013: 0.02 BW = 1.4 l" }
@@ -69,14 +70,14 @@ density = { value = 1.04, unit = "kg/l", source = "ICRP89", notes = "Section 11.
 flow = { value = 0.12, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40; Jones 2013: 0.12, the same" }
 blood = { value = 0.012, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14" }
 f_vas = { value = 0.04363, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
-f_int = { value = 0.004782, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.005 (Schmitt 2008 human composition, Fint of brain); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+f_int = { value = 0.004782, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.005 (httk 2.7.4 tissue.data, Human, reference Schmitt 2008, Fint of brain); read in httk (MIT), Schmitt 2008 itself not read" }
 
 [male.organs.li]
 mass = { value = 1.8, unit = "kg", source = "ICRP89", notes = "Table 2.8; Jones 2013: 0.021 BW = 1.47 l" }
 flow = { value = 0.065, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40, hepatic artery (liver total 25.5 % male, 27.0 % female); the portal organs feed the liver in addition; Jones 2013: 0.2154 total liver flow (ICRP 0.255)" }
 blood = { value = 0.1, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14" }
 f_vas = { value = 0.2275, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
-f_int = { value = 0.1777, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.23 (Schmitt 2008 human composition, Fint of liver); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+f_int = { value = 0.1777, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.23 (httk 2.7.4 tissue.data, Human, reference Schmitt 2008, Fint of liver); read in httk (MIT), Schmitt 2008 itself not read" }
 
 [male.organs.ki]
 mass = { value = 0.31, unit = "kg", source = "ICRP89", notes = "Table 2.8, both kidneys; Jones 2013: 0.0044 BW = 0.308 l" }
@@ -84,7 +85,7 @@ density = { value = 1.05, unit = "kg/l", source = "ICRP89", notes = "Section 8.2
 flow = { value = 0.19, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40; Jones 2013: 0.19, the same" }
 blood = { value = 0.02, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14" }
 f_vas = { value = 0.2642, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
-f_int = { value = 0.1214, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.165 (Schmitt 2008 human composition, Fint of kidney); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+f_int = { value = 0.1214, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.165 (httk 2.7.4 tissue.data, Human, reference Schmitt 2008, Fint of kidney); read in httk (MIT), Schmitt 2008 itself not read" }
 
 [male.organs.st]
 mass = { value = 0.15, unit = "kg", source = "ICRP89", notes = "Table 2.8, stomach wall (the contents are in [unmapped]); Jones 2013: gut 0.0171 BW = 1.197 l for stomach, small and large intestine" }
@@ -92,7 +93,7 @@ density = { value = 1.045, unit = "kg/l", source = "ICRP89", notes = "Section 6.
 flow = { value = 0.01, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40, stomach and oesophagus; Jones 2013: gut 0.1465 for stomach, intestines and pancreas (ICRP 0.16)" }
 blood = { value = 0.01, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14, stomach and oesophagus" }
 f_vas = { value = 0.2697, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
-f_int = { value = 0.07011, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (Schmitt 2008 human composition, Fint of gut (Schmitt 2008 has no stomach)); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+f_int = { value = 0.07011, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (httk 2.7.4 tissue.data, Human, reference Schmitt 2008, Fint of gut (httk has no stomach)); read in httk (MIT), Schmitt 2008 itself not read" }
 
 [male.organs.si]
 mass = { value = 0.65, unit = "kg", source = "ICRP89", notes = "Table 2.8, small intestine wall (the contents are in [unmapped])" }
@@ -100,7 +101,7 @@ density = { value = 1.045, unit = "kg/l", source = "ICRP89", notes = "Section 6.
 flow = { value = 0.1, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40" }
 blood = { value = 0.038, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14" }
 f_vas = { value = 0.2446, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
-f_int = { value = 0.07252, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (Schmitt 2008 human composition, Fint of gut); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+f_int = { value = 0.07252, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (httk 2.7.4 tissue.data, Human, reference Schmitt 2008, Fint of gut); read in httk (MIT), Schmitt 2008 itself not read" }
 
 [male.organs.la]
 mass = { value = 0.37, unit = "kg", source = "ICRP89", notes = "Table 2.8, walls of right colon, left colon and rectosigmoid (150 + 150 + 70 g male, 145 + 145 + 70 g female; the contents are in [unmapped])" }
@@ -108,7 +109,7 @@ density = { value = 1.045, unit = "kg/l", source = "ICRP89", notes = "Section 6.
 flow = { value = 0.04, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40" }
 blood = { value = 0.022, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14" }
 f_vas = { value = 0.2477, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
-f_int = { value = 0.07222, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (Schmitt 2008 human composition, Fint of gut); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+f_int = { value = 0.07222, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (httk 2.7.4 tissue.data, Human, reference Schmitt 2008, Fint of gut); read in httk (MIT), Schmitt 2008 itself not read" }
 
 [male.organs.sp]
 mass = { value = 0.15, unit = "kg", source = "ICRP89", notes = "Table 2.8; Jones 2013: 0.0026 BW = 0.182 l" }
@@ -116,21 +117,21 @@ density = { value = 1.06, unit = "kg/l", source = "ICRP89", notes = "Section 11.
 flow = { value = 0.03, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40; Jones 2013: 0.0172 (ICRP 0.03)" }
 blood = { value = 0.014, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14" }
 f_vas = { value = 0.344, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
-f_int = { value = 0.1673, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.255 (Schmitt 2008 human composition, Fint of spleen); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+f_int = { value = 0.1673, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.255 (httk 2.7.4 tissue.data, Human, reference Schmitt 2008, Fint of spleen); read in httk (MIT), Schmitt 2008 itself not read" }
 
 [male.organs.pa]
 mass = { value = 0.14, unit = "kg", source = "ICRP89", notes = "Table 2.8; Jones 2013: no pancreas" }
 flow = { value = 0.01, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40; Jones 2013: no pancreas" }
 blood = { value = 0.006, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14" }
 f_vas = { value = 0.1851, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
-f_int = { value = 0.07823, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (Schmitt 2008 human composition, Fint of gut; assumption: Schmitt 2008 has no pancreas, the value of the gut is used); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+f_int = { value = 0.07823, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (httk 2.7.4 tissue.data, Human, reference Schmitt 2008, Fint of gut; assumption: httk has no pancreas, the value of the gut is used); read in httk (MIT), Schmitt 2008 itself not read" }
 
 [male.organs.mu]
 mass = { value = 29.0, unit = "kg", source = "ICRP89", notes = "Table 2.8, skeletal muscle; Jones 2013: 0.4 BW = 28 l" }
 flow = { value = 0.17, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40, skeletal muscle; Jones 2013: 0.17, the same" }
 blood = { value = 0.14, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14, skeletal muscle" }
 f_vas = { value = 0.02495, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
-f_int = { value = 0.1463, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.15 (Schmitt 2008 human composition, Fint of muscle); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+f_int = { value = 0.1463, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.15 (httk 2.7.4 tissue.data, Human, reference Schmitt 2008, Fint of muscle); read in httk (MIT), Schmitt 2008 itself not read" }
 
 [male.organs.sk]
 mass = { value = 3.3, unit = "kg", source = "ICRP89", notes = "Table 2.8; Jones 2013: 0.0371 BW = 2.597 l" }
@@ -138,14 +139,14 @@ density = { value = 1.1, unit = "kg/l", source = "ICRP89", notes = "Section 10.6
 flow = { value = 0.05, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40; Jones 2013: 0.05, the same" }
 blood = { value = 0.03, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14" }
 f_vas = { value = 0.05033, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
-f_int = { value = 0.5698, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.6 (Schmitt 2008 human composition, Fint of skin); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+f_int = { value = 0.5698, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.6 (httk 2.7.4 tissue.data, Human, reference Schmitt 2008, Fint of skin); read in httk (MIT), Schmitt 2008 itself not read" }
 
 [male.organs.ad]
 mass = { value = 14.5, unit = "kg", source = "ICRP89", notes = "Table 2.8, separable adipose tissue excluding yellow marrow (total adipose tissue 18.2 kg male, 22.5 kg female); reference only: adipose is the remainder of the body weight; Jones 2013: 0.213 BW = 14.91 l" }
 flow = { value = 0.05, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40, fat; Jones 2013: 0.05, the same" }
 blood = { value = 0.05, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14, fat" }
 f_vas = { value = 0.01795, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
-f_int = { value = 0.1375, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.14 (Schmitt 2008 human composition, Fint of adipose); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+f_int = { value = 0.1375, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.14 (httk 2.7.4 tissue.data, Human, reference Schmitt 2008, Fint of adipose); read in httk (MIT), Schmitt 2008 itself not read" }
 
 [male.organs.bo]
 mass = { value = 10.5, unit = "kg", source = "ICRP89", notes = "Table 2.8, total skeleton (bone, active and inactive marrow, cartilage, teeth, miscellaneous); Jones 2013: 0.0856 BW = 5.99 l" }
@@ -153,7 +154,7 @@ density = { value = 1.3, unit = "kg/l", source = "ICRP89", notes = "Table 2.20, 
 flow = { value = 0.05, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40, skeleton; Jones 2013: 0.05, the same" }
 blood = { value = 0.07, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14, skeleton" }
 f_vas = { value = 0.04392, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
-f_int = { value = 0.09561, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.1 (Schmitt 2008 human composition, Fint of bone); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+f_int = { value = 0.09561, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.1 (httk 2.7.4 tissue.data, Human, reference Schmitt 2008, Fint of bone); read in httk (MIT), Schmitt 2008 itself not read" }
 
 [male.organs.go]
 mass = { value = 0.035, unit = "kg", source = "ICRP89", notes = "Table 2.8, testes (2); Jones 2013: testes 0.01 BW = 0.7 l" }
@@ -161,7 +162,7 @@ density = { value = 1.04, unit = "kg/l", source = "ICRP89", notes = "Section 8.2
 flow = { value = 0.0005, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40, gonads; Jones 2013: testes 0.0108 (ICRP 0.0005)" }
 blood = { value = 0.0004, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14, gonads" }
 f_vas = { value = 0.05926, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
-f_int = { value = 0.09031, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (Schmitt 2008 human composition, Fint of gut; assumption: Schmitt 2008 has no gonads, the value of the gut is used); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+f_int = { value = 0.09031, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (httk 2.7.4 tissue.data, Human, reference Schmitt 2008, Fint of gut; assumption: httk has no gonads, the value of the gut is used); read in httk (MIT), Schmitt 2008 itself not read" }
 
 [male.unmapped.adrenals]
 mass = { value = 0.014, unit = "kg", source = "ICRP89", notes = "Table 2.8, adrenals (2)" }
@@ -268,14 +269,14 @@ density = { value = 1.0, unit = "kg/l", source = "ICRP89", notes = "Section 5.3.
 flow = { value = 1.0, unit = "dimensionless", source = "ICRP89", notes = "in series, the lung receives the cardiac output (Section 7.7.1, Fig. 7.2); the bronchial flow of Table 2.40 is in [unmapped]" }
 blood = { value = 0.125, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14, pulmonary 10.5 % + bronchial tissue 2.0 %" }
 f_vas = { value = 0.5372, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
-f_int = { value = 0.09256, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.2 (Schmitt 2008 human composition, Fint of lung); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+f_int = { value = 0.09256, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.2 (httk 2.7.4 tissue.data, Human, reference Schmitt 2008, Fint of lung); read in httk (MIT), Schmitt 2008 itself not read" }
 
 [female.organs.he]
 mass = { value = 0.25, unit = "kg", source = "ICRP89", notes = "Table 2.8, heart tissue only (the blood of the chambers is in the pools)" }
 flow = { value = 0.05, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40, coronary tissue" }
 blood = { value = 0.01, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14, coronary tissue" }
 f_vas = { value = 0.1349, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
-f_int = { value = 0.2163, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.25 (Schmitt 2008 human composition, Fint of heart); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+f_int = { value = 0.2163, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.25 (httk 2.7.4 tissue.data, Human, reference Schmitt 2008, Fint of heart); read in httk (MIT), Schmitt 2008 itself not read" }
 
 [female.organs.br]
 mass = { value = 1.3, unit = "kg", source = "ICRP89", notes = "Table 2.8" }
@@ -283,14 +284,14 @@ density = { value = 1.04, unit = "kg/l", source = "ICRP89", notes = "Section 11.
 flow = { value = 0.12, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40" }
 blood = { value = 0.012, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14" }
 f_vas = { value = 0.03609, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
-f_int = { value = 0.00482, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.005 (Schmitt 2008 human composition, Fint of brain); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+f_int = { value = 0.00482, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.005 (httk 2.7.4 tissue.data, Human, reference Schmitt 2008, Fint of brain); read in httk (MIT), Schmitt 2008 itself not read" }
 
 [female.organs.li]
 mass = { value = 1.4, unit = "kg", source = "ICRP89", notes = "Table 2.8" }
 flow = { value = 0.065, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40, hepatic artery (liver total 25.5 % male, 27.0 % female); the portal organs feed the liver in addition" }
 blood = { value = 0.1, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14" }
 f_vas = { value = 0.2179, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
-f_int = { value = 0.1799, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.23 (Schmitt 2008 human composition, Fint of liver); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+f_int = { value = 0.1799, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.23 (httk 2.7.4 tissue.data, Human, reference Schmitt 2008, Fint of liver); read in httk (MIT), Schmitt 2008 itself not read" }
 
 [female.organs.ki]
 mass = { value = 0.275, unit = "kg", source = "ICRP89", notes = "Table 2.8, both kidneys" }
@@ -298,7 +299,7 @@ density = { value = 1.05, unit = "kg/l", source = "ICRP89", notes = "Section 8.2
 flow = { value = 0.17, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40" }
 blood = { value = 0.02, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14" }
 f_vas = { value = 0.2295, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
-f_int = { value = 0.1271, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.165 (Schmitt 2008 human composition, Fint of kidney); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+f_int = { value = 0.1271, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.165 (httk 2.7.4 tissue.data, Human, reference Schmitt 2008, Fint of kidney); read in httk (MIT), Schmitt 2008 itself not read" }
 
 [female.organs.st]
 mass = { value = 0.14, unit = "kg", source = "ICRP89", notes = "Table 2.8, stomach wall (the contents are in [unmapped])" }
@@ -306,7 +307,7 @@ density = { value = 1.045, unit = "kg/l", source = "ICRP89", notes = "Section 6.
 flow = { value = 0.01, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40, stomach and oesophagus" }
 blood = { value = 0.01, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14, stomach and oesophagus" }
 f_vas = { value = 0.2255, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
-f_int = { value = 0.07435, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (Schmitt 2008 human composition, Fint of gut (Schmitt 2008 has no stomach)); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+f_int = { value = 0.07435, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (httk 2.7.4 tissue.data, Human, reference Schmitt 2008, Fint of gut (httk has no stomach)); read in httk (MIT), Schmitt 2008 itself not read" }
 
 [female.organs.si]
 mass = { value = 0.6, unit = "kg", source = "ICRP89", notes = "Table 2.8, small intestine wall (the contents are in [unmapped])" }
@@ -314,7 +315,7 @@ density = { value = 1.045, unit = "kg/l", source = "ICRP89", notes = "Section 6.
 flow = { value = 0.11, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40" }
 blood = { value = 0.038, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14" }
 f_vas = { value = 0.2052, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
-f_int = { value = 0.0763, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (Schmitt 2008 human composition, Fint of gut); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+f_int = { value = 0.0763, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (httk 2.7.4 tissue.data, Human, reference Schmitt 2008, Fint of gut); read in httk (MIT), Schmitt 2008 itself not read" }
 
 [female.organs.la]
 mass = { value = 0.36, unit = "kg", source = "ICRP89", notes = "Table 2.8, walls of right colon, left colon and rectosigmoid (150 + 150 + 70 g male, 145 + 145 + 70 g female; the contents are in [unmapped])" }
@@ -322,7 +323,7 @@ density = { value = 1.045, unit = "kg/l", source = "ICRP89", notes = "Section 6.
 flow = { value = 0.05, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40" }
 blood = { value = 0.022, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14" }
 f_vas = { value = 0.1994, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
-f_int = { value = 0.07686, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (Schmitt 2008 human composition, Fint of gut); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+f_int = { value = 0.07686, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (httk 2.7.4 tissue.data, Human, reference Schmitt 2008, Fint of gut); read in httk (MIT), Schmitt 2008 itself not read" }
 
 [female.organs.sp]
 mass = { value = 0.13, unit = "kg", source = "ICRP89", notes = "Table 2.8" }
@@ -330,21 +331,21 @@ density = { value = 1.06, unit = "kg/l", source = "ICRP89", notes = "Section 11.
 flow = { value = 0.03, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40" }
 blood = { value = 0.014, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14" }
 f_vas = { value = 0.3081, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
-f_int = { value = 0.1764, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.255 (Schmitt 2008 human composition, Fint of spleen); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+f_int = { value = 0.1764, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.255 (httk 2.7.4 tissue.data, Human, reference Schmitt 2008, Fint of spleen); read in httk (MIT), Schmitt 2008 itself not read" }
 
 [female.organs.pa]
 mass = { value = 0.12, unit = "kg", source = "ICRP89", notes = "Table 2.8" }
 flow = { value = 0.01, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40" }
 blood = { value = 0.006, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14" }
 f_vas = { value = 0.1632, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
-f_int = { value = 0.08033, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (Schmitt 2008 human composition, Fint of gut; assumption: Schmitt 2008 has no pancreas, the value of the gut is used); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+f_int = { value = 0.08033, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (httk 2.7.4 tissue.data, Human, reference Schmitt 2008, Fint of gut; assumption: httk has no pancreas, the value of the gut is used); read in httk (MIT), Schmitt 2008 itself not read" }
 
 [female.organs.mu]
 mass = { value = 17.5, unit = "kg", source = "ICRP89", notes = "Table 2.8, skeletal muscle" }
 flow = { value = 0.12, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40, skeletal muscle" }
 blood = { value = 0.105, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14, skeletal muscle" }
 f_vas = { value = 0.02286, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
-f_int = { value = 0.1466, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.15 (Schmitt 2008 human composition, Fint of muscle); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+f_int = { value = 0.1466, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.15 (httk 2.7.4 tissue.data, Human, reference Schmitt 2008, Fint of muscle); read in httk (MIT), Schmitt 2008 itself not read" }
 
 [female.organs.sk]
 mass = { value = 2.3, unit = "kg", source = "ICRP89", notes = "Table 2.8" }
@@ -352,14 +353,14 @@ density = { value = 1.1, unit = "kg/l", source = "ICRP89", notes = "Section 10.6
 flow = { value = 0.05, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40" }
 blood = { value = 0.03, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14" }
 f_vas = { value = 0.05299, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
-f_int = { value = 0.5682, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.6 (Schmitt 2008 human composition, Fint of skin); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+f_int = { value = 0.5682, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.6 (httk 2.7.4 tissue.data, Human, reference Schmitt 2008, Fint of skin); read in httk (MIT), Schmitt 2008 itself not read" }
 
 [female.organs.ad]
 mass = { value = 19.0, unit = "kg", source = "ICRP89", notes = "Table 2.8, separable adipose tissue excluding yellow marrow (total adipose tissue 18.2 kg male, 22.5 kg female); reference only: adipose is the remainder of the body weight" }
 flow = { value = 0.085, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40, fat" }
 blood = { value = 0.085, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14, fat" }
 f_vas = { value = 0.01715, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
-f_int = { value = 0.1376, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.14 (Schmitt 2008 human composition, Fint of adipose); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+f_int = { value = 0.1376, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.14 (httk 2.7.4 tissue.data, Human, reference Schmitt 2008, Fint of adipose); read in httk (MIT), Schmitt 2008 itself not read" }
 
 [female.organs.bo]
 mass = { value = 7.8, unit = "kg", source = "ICRP89", notes = "Table 2.8, total skeleton (bone, active and inactive marrow, cartilage, teeth, miscellaneous)" }
@@ -367,7 +368,7 @@ density = { value = 1.3, unit = "kg/l", source = "ICRP89", notes = "Table 2.20, 
 flow = { value = 0.05, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40, skeleton" }
 blood = { value = 0.07, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14, skeleton" }
 f_vas = { value = 0.04352, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
-f_int = { value = 0.09565, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.1 (Schmitt 2008 human composition, Fint of bone); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+f_int = { value = 0.09565, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.1 (httk 2.7.4 tissue.data, Human, reference Schmitt 2008, Fint of bone); read in httk (MIT), Schmitt 2008 itself not read" }
 
 [female.organs.go]
 mass = { value = 0.011, unit = "kg", source = "ICRP89", notes = "Table 2.8, ovaries (2)" }
@@ -375,7 +376,7 @@ density = { value = 1.05, unit = "kg/l", source = "ICRP89", notes = "Section 8.2
 flow = { value = 0.0002, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40, gonads" }
 blood = { value = 0.0002, unit = "dimensionless", source = "ICRP89", notes = "Table 2.14, gonads" }
 f_vas = { value = 0.0693, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
-f_int = { value = 0.08935, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (Schmitt 2008 human composition, Fint of gut; assumption: Schmitt 2008 has no gonads, the value of the gut is used); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
+f_int = { value = 0.08935, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (httk 2.7.4 tissue.data, Human, reference Schmitt 2008, Fint of gut; assumption: httk has no gonads, the value of the gut is used); read in httk (MIT), Schmitt 2008 itself not read" }
 
 [female.unmapped.adrenals]
 mass = { value = 0.013, unit = "kg", source = "ICRP89", notes = "Table 2.8, adrenals (2)" }

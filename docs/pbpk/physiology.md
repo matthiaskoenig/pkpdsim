@@ -14,11 +14,11 @@ Every organ owns its blood flows: it reads the plasma (and blood cell) species o
 
 ## Reference values
 
-The organ masses, densities, blood contents and blood flows are those of the ICRP 89 reference individuals (Valentin 2002), taken directly from its tables; the interstitial fractions are those of Schmitt 2008. The data file `data/physiology_human.toml` compares the male values with Jones & Rowland-Yeo 2013 in the notes of every value. The conventions of the data:
+The organ masses, densities, blood contents and blood flows are those of the ICRP 89 reference individuals (Valentin 2002), taken directly from its tables; the interstitial fractions are those of Schmitt 2008 as tabulated by httk 2.7.4 (`tissue.data`, MIT), where they were read. The data file `data/physiology_human.toml` compares the male values with Jones & Rowland-Yeo 2013 in the notes of every value. The conventions of the data:
 
 - `mass` is the mass of the organ without its blood (the blood is counted on its own); `density` is the specific gravity (1 kg/l where ICRP 89 states none); `blood` is the blood content of the organ as fraction of the blood volume.
 - The organ volume of the model is the volume of its tissue and its blood, `V<o> = M<o>/density + blood*Vblood`; the vascular fraction is its blood, `f_vas_<o> = blood*Vblood/V<o>`, so that the vascular spaces of the organs and the pools are the blood volume for every individual.
-- `f_int` is the interstitial fraction of the organ volume, the interstitial fraction of the tissue without blood of Schmitt 2008 times `1 - f_vas`; the intracellular fraction is `1 - f_vas - f_int`.
+- `f_int` is the interstitial fraction of the organ volume, the interstitial fraction of the tissue without blood of Schmitt 2008 (as tabulated by httk) times `1 - f_vas`; the intracellular fraction is `1 - f_vas - f_int`.
 - `flow` is the blood flow as fraction of the cardiac output (ICRP 89 Table 2.40); the liver states its arterial flow (`Qli` is the hepatic artery, `Qha`), the portal organs feed it in addition. ICRP 89 gives about 8 % of the cardiac output to tissues which are no organ of the model (`[unmapped]` of the data): the flow fractions of the model, `fQ<o>`, are renormalised over the organs, so they sum to the cardiac output.
 - The portal vein pool is the anatomical portal vein (Chau 2023, 4.4 ml); the splanchnic venous blood stays in the vascular volume of the portal organs. The blood of the unmapped tissues is part of the venous pool.
 - Adipose closes the body weight: its mass is the remainder, `Mad = BW - Mlean - Vblood*rho_blood`; the ICRP adipose mass in the data is a reference value only.
@@ -70,12 +70,12 @@ The organ masses, densities, blood contents and blood flows are those of the ICR
 | `bo` bone | 10.5 | 1.3 | 0.07 | 0.04392 | 0.09561 | 0.05 |
 | `go` gonads | 0.035 | 1.04 | 0.0004 | 0.05926 | 0.09031 | 0.0005 |
 
-Sources of the columns: mass, density, blood, f_vas, flow: `ICRP89`; f_int: `Schmitt2008`.
+Sources of the columns: mass, density, blood, f_vas, flow: `ICRP89`; f_int: `httk`.
 
 ??? note "Sources"
 
     - `ICRP89`: Valentin J (ed). Basic anatomical and physiological data for use in radiological protection: reference values. ICRP Publication 89. Ann ICRP 32(3-4), 2002. [doi:10.1016/S0146-6453(03)00002-2](https://doi.org/10.1016/S0146-6453(03)00002-2)
-    - `Schmitt2008`: Schmitt W. General approach for the calculation of tissue to plasma partition coefficients. Toxicol In Vitro 22(2):457-467, 2008. [doi:10.1016/j.tiv.2007.09.010](https://doi.org/10.1016/j.tiv.2007.09.010)
+    - `httk`: Pearce RG, Setzer RW, Strope CL, Wambaugh JF, Sipes NS. httk: R package for high-throughput toxicokinetics. J Stat Softw 79(4):1-26, 2017. R package httk version 2.7.4 (CRAN, 2025-12-08), MIT license, copyright 2025 John Wambaugh; the data set mecdt of HTTK-Pop (Ring 2017) holds the preprocessed NHANES 2013-2018 respondents. [doi:10.18637/jss.v079.i04](https://doi.org/10.18637/jss.v079.i04)
 <!-- end generated -->
 
 ### Female reference individual
@@ -101,12 +101,12 @@ Sources of the columns: mass, density, blood, f_vas, flow: `ICRP89`; f_int: `Sch
 | `bo` bone | 7.8 | 1.3 | 0.07 | 0.04352 | 0.09565 | 0.05 |
 | `go` gonads | 0.011 | 1.05 | 0.0002 | 0.0693 | 0.08935 | 0.0002 |
 
-Sources of the columns: mass, density, blood, f_vas, flow: `ICRP89`; f_int: `Schmitt2008`.
+Sources of the columns: mass, density, blood, f_vas, flow: `ICRP89`; f_int: `httk`.
 
 ??? note "Sources"
 
     - `ICRP89`: Valentin J (ed). Basic anatomical and physiological data for use in radiological protection: reference values. ICRP Publication 89. Ann ICRP 32(3-4), 2002. [doi:10.1016/S0146-6453(03)00002-2](https://doi.org/10.1016/S0146-6453(03)00002-2)
-    - `Schmitt2008`: Schmitt W. General approach for the calculation of tissue to plasma partition coefficients. Toxicol In Vitro 22(2):457-467, 2008. [doi:10.1016/j.tiv.2007.09.010](https://doi.org/10.1016/j.tiv.2007.09.010)
+    - `httk`: Pearce RG, Setzer RW, Strope CL, Wambaugh JF, Sipes NS. httk: R package for high-throughput toxicokinetics. J Stat Softw 79(4):1-26, 2017. R package httk version 2.7.4 (CRAN, 2025-12-08), MIT license, copyright 2025 John Wambaugh; the data set mecdt of HTTK-Pop (Ring 2017) holds the preprocessed NHANES 2013-2018 respondents. [doi:10.18637/jss.v079.i04](https://doi.org/10.18637/jss.v079.i04)
 <!-- end generated -->
 
 ## Blood and plasma

@@ -158,7 +158,7 @@ doi = "10.1016/j.envint.2017.06.004"
 citation = "Centers for Disease Control and Prevention, National Center for Health Statistics. National Health and Nutrition Examination Survey (NHANES) 2013-2014, 2015-2016 and 2017-2018, demographics, body measures and laboratory data (public domain). https://wwwn.cdc.gov/nchs/nhanes/ (accessed 2026-10-25). Read as the data set `mecdt` of the R package httk 2.7.4, see `httk`."
 
 [httk]
-citation = "Pearce RG, Setzer RW, Strope CL, Wambaugh JF, Sipes NS. httk: R package for high-throughput toxicokinetics. J Stat Softw 79(4):1-26, 2017. R package httk version 2.7.4 (CRAN, 2025-12-08), MIT license, copyright 2025 John Wambaugh; the data set `mecdt` of HTTK-Pop (Ring 2017) holds the preprocessed NHANES 2013-2018 respondents."
+citation = "Pearce RG, Setzer RW, Strope CL, Wambaugh JF, Sipes NS. httk: R package for high-throughput toxicokinetics. J Stat Softw 79(4):1-26, 2017. R package httk version 2.7.4 (CRAN, 2025-12-08), MIT license, copyright 2025 John Wambaugh; the data set mecdt of HTTK-Pop (Ring 2017) holds the preprocessed NHANES 2013-2018 respondents."
 doi = "10.18637/jss.v079.i04"
 
 [Tanaka1996]
