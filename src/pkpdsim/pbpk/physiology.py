@@ -689,20 +689,28 @@ class _Physiology:
     def flows(self) -> list[Sbase]:
         """Cardiac output, blood flows and GFR.
 
-        An organ flow is its fraction of the cardiac output of the circulation
-        without impairment, `fQ<o>*(CO_ref*SV_tis*f_cardiac_function)`, so that
-        a factor of impairment on the cardiac output (the sum of the impaired
-        flows) is not a part of every flow; without impairment it is
-        `fQ<o>*CO`, bitwise.
+        An organ flow is its fraction of the cardiac output without
+        impairment `CO_base`, so that a factor of impairment on the cardiac
+        output (the sum of the impaired flows) is not a part of every flow;
+        without impairment `CO = CO_base`.
         """
-        co = f"{ids.ref(ids.CO)} * {ids.SV_TIS} * {ids.F_CARDIAC_FUNCTION}"
-        objects = self.initial(
+        objects = _initial(
+            ids.CO_BASE,
+            f"{ids.ref(ids.CO)} * {ids.SV_TIS} * {ids.F_CARDIAC_FUNCTION}",
+            U.l_per_min,
+            "cardiac output without impairment [l/min]",
+            "Cardiac output of the individual without the impaired organ "
+            "function; it scales as the lean tissues (Huisinga 2012 eq. 13, "
+            "SQ_co = SV_tis) and with the cardiac function. The organ flows are "
+            "fractions of it.",
+            ("Huisinga2012",),
+        )
+        objects += self.initial(
             ids.CO,
-            co,
+            ids.CO_BASE,
             U.l_per_min,
             "cardiac output [l/min]",
-            "Cardiac output of the individual; it scales as the lean tissues "
-            "(Huisinga 2012 eq. 13, SQ_co = SV_tis) and with the cardiac function.",
+            "Cardiac output of the individual, the sum of the organ flows.",
             ("Huisinga2012",),
         )
         objects += self.initial(
@@ -718,12 +726,13 @@ class _Physiology:
                 continue
             objects += self.initial(
                 ids.organ_flow(o),
-                f"{ids.flow_fraction(o)} * ({co})",
+                f"{ids.flow_fraction(o)} * {ids.CO_BASE}",
                 U.l_per_min,
                 f"blood flow {_label(o)} [l/min]",
                 "Blood flow of the organ"
                 + (", the hepatic artery" if o is Organ.LIVER else "")
-                + ": its fraction of the cardiac output without impairment.",
+                + f": its fraction of the cardiac output without impairment "
+                f"`{ids.CO_BASE}`.",
                 ("ICRP89",),
             )
         objects += self.initial(

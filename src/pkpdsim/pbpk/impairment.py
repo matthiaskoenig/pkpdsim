@@ -3,7 +3,8 @@
 Impairment is never a structurally different model: three severities of the
 top model set factors on the quantities of the healthy physiology, the
 liver and the binding to plasma proteins (`data/impairment.toml`, every
-number with its source):
+number with its source; a value which no publication read gives is a model
+choice):
 
 - `CP_severity`: liver cirrhosis, 0 healthy, 1, 2, 3 the Child-Pugh classes
   A, B, C; a severity between the classes interpolates every factor linearly
@@ -12,30 +13,37 @@ number with its source):
   hepatic arterial and the renal blood flow, the cardiac output (cardiac
   index; the organs without a factor of their own close the cardiac output to
   it), the GFR, albumin and alpha-1-acid glycoprotein (and so fu) and the
-  hematocrit, and the activity of the enzymes and transporters of the liver.
+  activity of the enzymes and transporters of the liver.
 - `f_renal_function`: chronic kidney disease by the GFR relative to healthy
   (the factor of the physiology); its GFR per 1.73 m2 (`eGFR`) gives the
-  stage (normal, mild, moderate, severe, end stage), which sets fu (the
-  plasma protein factor), the hematocrit and the gastric emptying and small
-  intestinal transit times, and the kidney volume and blood flow by the
-  regressions on the GFR; the switch `CKD_hepatic` (0 off, 1 on) adds the
-  reduced activity of hepatic CYP2D6 and OATP1B.
+  stage (normal, mild, moderate, severe, end stage), which sets the binding
+  capacity of the plasma proteins (and so fu); the factors are steps at the
+  stage limits, a scan or fit of `f_renal_function` across a limit sees a
+  discontinuity. The switch `CKD_hepatic` (0 off, 1 on) adds the reduced
+  activity of hepatic CYP2D6 and OATP1B.
 - `HF_severity`: heart failure, 0 healthy, 1 to 4 the NYHA classes I to IV,
   interpolated: the blood flows of liver and portal organs, kidney and skin,
   adipose and muscle are reduced, the cardiac output is the sum of the flows,
-  the GFR follows the renal blood flow.
+  the GFR follows the renal blood flow (which is not monotonic in the class,
+  NYHA IV above NYHA III, as measured by Leithe 1984).
+
+The hematocrit (anaemia of cirrhosis and CKD, combined multiplicatively on
+the hematocrit of the sex of the build), the kidney volume and blood flow and
+the gastric emptying and small intestinal transit of CKD have their factors,
+which are 1 until a publication with the healthy reference is read (the data
+say why).
 
 Each condition has its factors `fcp_<key>`, `fckd_<key>`, `fhf_<key>`; the
 factor of all conditions on a quantity is `fimp_<id>` (`fimp_GFR`,
 `fimp_Qki`, `fimp_HCT`), their product. Blood flows: every organ flow is its
-fraction of the healthy cardiac output times `fimp_Q<o>`, and the cardiac
-output is multiplied by `fimp_CO = sum fQ<o>*fimp_Q<o>`, so the flows sum to
-it.
+fraction of the cardiac output without impairment (`CO_base`) times
+`fimp_Q<o>`, and the cardiac output is `CO_base` times
+`fimp_CO = sum fQ<o>*fimp_Q<o>`, so the flows sum to it.
 Plasma binding (McNamara 2002): `fu = 1/(1 + f*(1 - fu_ref)/fu_ref)` with the
 binding factor `f`, the factor of the binding protein (`fimp_albumin`,
-`fimp_agp`, 1 for an unknown protein) over the CKD factor `fimp_fu`: Malik
-2020 multiply fu by the CKD factor, which this is for a strongly bound
-substance (`fu ~ fimp_fu*fu_ref`), and fu stays below 1. Enzymes and transporters: a rate of a
+`fimp_agp`, 1 for an unknown protein) over the CKD factor of the binding
+capacity `fimp_plasma_protein`: fu of a strongly bound substance rises by the
+CKD factor, and fu stays below 1. Enzymes and transporters: a rate of a
 protein in the liver runs with `f_<protein>*fimp_<protein>`, the organ-local
 base activity (genotype, interactions of an experiment, `LI__f_cyp3a4`)
 times the input `fimp_<protein>` of the impairment (`fimp_li_<protein>` of
@@ -49,6 +57,7 @@ severities 0 give the healthy model: every factor is 1.
 """
 
 from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
 from functools import cache
 from typing import TYPE_CHECKING, Any
 
@@ -87,7 +96,7 @@ SI_TRANSIT = ids.impairment_factor("t_si")
 _ONE = "1 dimensionless"
 _SBO = SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER
 _STAGES = ("mild", "moderate", "severe", "end stage")
-"""The CKD stages of the lists of `[ckd]`; normal renal function is 1."""
+"""The CKD stages of the vectors of `[ckd]`; normal renal function is 1."""
 
 _CP_FIXED = frozenset({*PORTAL_ORGANS, Organ.BRAIN})
 """The organs whose flow cirrhosis does not change: the portal organs (the
@@ -174,8 +183,11 @@ def unbound_fraction(s: Substance) -> str:
         `fu_ref_<s>` for a substance without binding, else the McNamara 2002
         scaling `1/(1 + f*(1 - fu_ref)/fu_ref)` with the binding factor `f`:
         the factor of the binding protein (1 for an unknown protein) over the
-        CKD factor on fu. The CKD factor multiplies fu of a strongly bound
-        substance (Malik 2020: the factor multiplies fu) and fu stays below 1.
+        CKD factor of the binding capacity `fimp_plasma_protein`. The CKD
+        factor raises fu of a strongly bound substance by itself
+        (`fu ~ fimp_plasma_protein*fu_ref`), fu stays below 1; fu of a weakly
+        bound substance rises less (fu_ref 0.5 at a factor 2.5: 0.71, not
+        1.25).
     """
     fu_ref = ids.fu_ref(s.sid)
     if s.binding is None:
@@ -184,7 +196,7 @@ def unbound_fraction(s: Substance) -> str:
         "albumin": ids.impairment_factor("albumin"),
         "agp": ids.impairment_factor("agp"),
     }.get(s.binding.protein, _ONE)
-    binding = f"{protein} / {ids.impairment_factor('fu')}"
+    binding = f"{protein} / {ids.impairment_factor('plasma_protein')}"
     return f"{_ONE} / ({_ONE} + {binding} * ({_ONE} - {fu_ref}) / {fu_ref})"
 
 
@@ -247,10 +259,68 @@ def _input(pid: str, value: float, name: str, text: str) -> Parameter:
     )
 
 
-def _entry(section: dict[str, Any], key: str) -> tuple[list[float], str, str]:
-    """The values, the source and the notes of an entry of the data."""
+@dataclass(frozen=True)
+class _Entry:
+    """A vector of the data with its provenance.
+
+    Attributes:
+        values: the values of the classes in order.
+        source: the source of the values.
+        notes: the notes of the values.
+        choice: the classes whose value is a choice of the library, not a
+            value of the source.
+    """
+
+    values: tuple[float, ...]
+    source: str
+    notes: str
+    choice: tuple[str, ...]
+
+    def provenance(self, classes: Sequence[str]) -> tuple[str, tuple[str, ...]]:
+        """The text on the values and the sources of a parameter.
+
+        Args:
+            classes: the labels of the classes of the values.
+
+        Returns:
+            The values by class with the classes which are model choices, and
+            the sources (ModelChoice besides the source for those classes).
+
+        Raises:
+            ValueError: if the vector does not have a value per class or a
+                choice names no class.
+        """
+        if len(self.values) != len(classes):
+            raise ValueError(
+                f"{DATA}.toml: {len(self.values)} values for the classes {classes}."
+            )
+        unknown = sorted(set(self.choice) - set(classes))
+        if unknown:
+            raise ValueError(f"{DATA}.toml: choice of unknown classes {unknown}.")
+        values = ", ".join(
+            f"{c} {v}" for c, v in zip(classes, self.values, strict=True)
+        )
+        text = f"the values of the classes: {values}"
+        sources = (self.source,)
+        if self.choice:
+            text += f" ({', '.join(self.choice)}: a model choice, not a value of the source)"
+            sources += ("ModelChoice",)
+        return f"{text}; {self.notes}", sources
+
+
+def _entry(section: dict[str, Any], key: str) -> _Entry:
+    """An entry of the data."""
     entry = section[key]
-    return [float(v) for v in entry["value"]], entry["source"], entry.get("notes", "")
+    return _Entry(
+        values=tuple(float(v) for v in entry["value"]),
+        source=entry["source"],
+        notes=entry.get("notes", ""),
+        choice=tuple(entry.get("choice", ())),
+    )
+
+
+_CP_CLASSES = ("A", "B", "C")
+_HF_CLASSES = ("I", "II", "III", "IV")
 
 
 class _Impairment:
@@ -298,16 +368,18 @@ class _Impairment:
 
     # --- Child-Pugh -------------------------------------------------------
 
-    def _cp(self, key: str, points: Sequence[float], text: str, src: str) -> str:
-        """A factor of cirrhosis interpolated over the severity."""
+    def _cp(self, key: str, entry: _Entry, text: str, healthy: float = 1.0) -> str:
+        """A factor of cirrhosis interpolated over the severity (healthy at 0)."""
         pid = ids.condition_factor("cp", key)
+        provenance, sources = entry.provenance(_CP_CLASSES)
         self.add(
             _initial(
                 pid,
-                _interpolation(ids.CP_SEVERITY, points),
+                _interpolation(ids.CP_SEVERITY, [healthy, *entry.values]),
                 f"cirrhosis factor {key}",
-                text,
-                (src,),
+                f"{text} (CP_severity 1, 2, 3 the classes A, B, C, linear in "
+                f"between), {provenance}",
+                sources,
             )
         )
         return pid
@@ -315,8 +387,6 @@ class _Impairment:
     def child_pugh(self) -> None:
         """The factors of the Child-Pugh classes, the shunt and the functional fraction."""
         cp = self.data["child_pugh"]
-        healthy = float(cp["healthy_hematocrit"]["value"])
-        notes_h = cp["healthy_hematocrit"]["notes"]
         for key in (
             "functional_liver",
             "hepatic_artery_flow",
@@ -325,31 +395,18 @@ class _Impairment:
             "gfr",
             "albumin",
             "agp",
+            "hematocrit",
         ):
-            values, src, notes = _entry(cp, key)
             self._cp(
                 key,
-                [1.0, *values],
-                f"Factor of liver cirrhosis on {key.replace('_', ' ')}, the values "
-                f"of the classes A, B, C (CP_severity 1, 2, 3): {values}; {notes}",
-                src,
+                _entry(cp, key),
+                f"Factor of liver cirrhosis on the {key.replace('_', ' ')}",
             )
-        values, src, notes = _entry(cp, "shunt")
         shunt = self._cp(
             "shunt",
-            [0.0, *values],
-            f"Portosystemic shunt of liver cirrhosis, the classes A, B, C: "
-            f"{values}; {notes}",
-            src,
-        )
-        values, src, notes = _entry(cp, "hematocrit")
-        self._cp(
-            "hematocrit",
-            [1.0, *(v / healthy for v in values)],
-            f"Factor of liver cirrhosis on the hematocrit: the hematocrit of the "
-            f"classes A, B, C {values} relative to the healthy hematocrit "
-            f"{healthy} ({notes_h}); {notes}",
-            src,
+            _entry(cp, "shunt"),
+            "Portosystemic shunt of liver cirrhosis",
+            healthy=0.0,
         )
         self.add(
             [
@@ -362,14 +419,11 @@ class _Impairment:
             ]
         )
         for protein in self.liver_proteins(cp["proteins"]):
-            values, src, notes = _entry(cp["proteins"], protein)
             self._cp(
                 protein,
-                [1.0, *values],
+                _entry(cp["proteins"], protein),
                 f"Factor of liver cirrhosis on the activity of {protein} in the "
-                f"liver (abundance per g liver), the classes A, B, C: {values}; "
-                f"{notes}",
-                src,
+                "liver (abundance per g liver)",
             )
         self._closing_flow()
 
@@ -432,9 +486,14 @@ class _Impairment:
     # --- chronic kidney disease -----------------------------------------
 
     def ckd(self) -> None:
-        """The GFR per 1.73 m2 and the factors of the CKD stages."""
+        """The GFR per 1.73 m2 and the factors of the CKD stages.
+
+        The factors are constant per stage, steps at the stage limits of the
+        GFR per 1.73 m2 (`eGFR`): a scan or fit of `f_renal_function` across
+        a limit sees a discontinuity.
+        """
         ckd = self.data["ckd"]
-        limits, src, notes = _entry(ckd, "stage_gfr")
+        stages = _entry(ckd, "stage_gfr")
         normal = normal_gfr(self.definition.sex)
         f = ids.F_RENAL_FUNCTION
         self.add(
@@ -447,104 +506,83 @@ class _Impairment:
                 f"individual ({normal * 1e3:.4g} ml/min, the reference GFR scaled "
                 f"to 1.73 m2 with the reference body surface area) times `{f}`; "
                 "it gives the stage of chronic kidney disease, the lower limits "
-                f"(ml/min/1.73 m2) {limits}; {notes}",
-                (src, "ICRP89", "DuBois1916"),
+                f"(ml/min/1.73 m2) of normal, mild, moderate and severe "
+                f"{list(stages.values)}; {stages.notes}",
+                (stages.source, "ICRP89", "DuBois1916"),
                 unit=U.l_per_min,
             )
         )
-        self._limits = [x * 1e-3 for x in limits]
-        for key in ("plasma_protein_fu", "gastric_emptying_time", "si_transit_time"):
-            values, src, notes = _entry(ckd, key)
-            self._stage(key, values, f"on {key.replace('_', ' ')}: {notes}", src)
-        healthy = float(self.data["child_pugh"]["healthy_hematocrit"]["value"])
-        values, src, notes = _entry(ckd, "hematocrit")
-        self._stage(
+        limits = [x * 1e-3 for x in stages.values]
+        for key in (
+            "plasma_protein",
             "hematocrit",
-            [v / healthy for v in values],
-            f"on the hematocrit: the hematocrit {values} of the stages relative "
-            f"to the healthy hematocrit {healthy}; {notes}",
-            src,
-        )
-        # the regressions on x = x0*m, relative to x0: exp(a*x0^2*(m^2 - 1) +
-        # b*x0*(m - 1)), with the renal function m at most 1
-        x0 = normal * 1e3
-        m = f"piecewise({_ONE}, {f} > {_ONE}, {f})"
-        for key in ("kidney_volume", "kidney_flow"):
-            (a, b, _), src, notes = _entry(ckd, key)
-            ratio = (
-                f"exp({_number(a * x0**2)} * ({m}^2 - {_ONE}) + "
-                f"{_number(b * x0)} * ({m} - {_ONE}))"
-            )
-            if key == "kidney_flow":
-                ratio += f" * {ids.condition_factor('ckd', 'kidney_volume')}"
-            self.add(
-                _initial(
-                    ids.condition_factor("ckd", key),
-                    ratio,
-                    f"CKD factor {key.replace('_', ' ')}",
-                    f"Factor of chronic kidney disease on the {key.replace('_', ' ')}"
-                    " by the regression on the GFR per 1.73 m2 x (ml/min/1.73 m2), "
-                    f"relative to the GFR of the healthy individual x0 = {x0:.4g} "
-                    f"(x = x0*{f}, a renal function above normal is taken as "
-                    "normal)"
-                    + (
-                        ", the specific flow times the kidney volume"
-                        if key == "kidney_flow"
-                        else ""
-                    )
-                    + f"; {notes}",
-                    (src,),
-                )
+            "kidney_volume",
+            "kidney_flow",
+            "gastric_emptying_time",
+            "si_transit_time",
+        ):
+            self._stage(
+                key, _entry(ckd, key), f"on the {key.replace('_', ' ')}", limits
             )
         for protein in self.liver_proteins(ckd["proteins"]):
-            values, src, notes = _entry(ckd["proteins"], protein)
             self._stage(
                 protein,
-                values,
+                _entry(ckd["proteins"], protein),
                 f"on the activity of {protein} in the liver (with "
-                f"`{ids.CKD_HEPATIC}` = 1): {notes}",
-                src,
+                f"`{ids.CKD_HEPATIC}` = 1)",
+                limits,
             )
 
-    def _stage(self, key: str, values: Sequence[float], text: str, src: str) -> None:
-        """A factor of chronic kidney disease, constant per stage of the GFR."""
-        normal, *limits = self._limits
-        terms = [_ONE, f"{ids.EGFR} >= {normal!r} l_per_min"]
-        for value, limit in zip(values, limits, strict=False):
+    def _stage(
+        self, key: str, entry: _Entry, text: str, limits: Sequence[float]
+    ) -> None:
+        """A factor of chronic kidney disease, constant per stage of the GFR.
+
+        Args:
+            key: the key of the factor.
+            entry: the values of mild, moderate, severe and end stage CKD.
+            text: the description of the factor.
+            limits: the lower limits of the GFR per 1.73 m2 (l/min) of normal
+                function and of mild, moderate and severe CKD.
+        """
+        provenance, sources = entry.provenance(_STAGES)
+        terms = [_ONE, f"{ids.EGFR} >= {limits[0]!r} l_per_min"]
+        for value, limit in zip(entry.values[:-1], limits[1:], strict=True):
             terms += [_number(value), f"{ids.EGFR} >= {limit!r} l_per_min"]
-        terms.append(_number(values[-1]))
-        stages = ", ".join(
-            f"{stage} {v}" for stage, v in zip(_STAGES, values, strict=True)
-        )
+        terms.append(_number(entry.values[-1]))
         self.add(
             _initial(
                 ids.condition_factor("ckd", key),
                 f"piecewise({', '.join(terms)})",
                 f"CKD factor {key}",
-                f"Factor of chronic kidney disease {text}; per stage: normal 1, "
-                f"{stages}.",
-                (src,),
+                f"Factor of chronic kidney disease {text}, a step per stage "
+                f"(normal 1), {provenance}",
+                sources,
             )
         )
 
     # --- heart failure ---------------------------------------------------
 
     def heart_failure(self) -> None:
-        """The factors of the NYHA classes."""
+        """The factors of the NYHA classes.
+
+        The renal blood flow is not monotonic in the class (Leithe 1984: NYHA
+        IV above NYHA III), and the GFR follows it.
+        """
         hf = self.data["heart_failure"]
         for key in _HF_ORGANS:
-            values, src, notes = _entry(hf, key)
-            pid = ids.condition_factor("hf", key)
+            provenance, sources = _entry(hf, key).provenance(_HF_CLASSES)
             self.add(
                 _initial(
-                    pid,
-                    _interpolation(ids.HF_SEVERITY, [1.0, *values]),
+                    ids.condition_factor("hf", key),
+                    _interpolation(ids.HF_SEVERITY, [1.0, *_entry(hf, key).values]),
                     f"heart failure factor {key.replace('_', ' ')}",
                     f"Factor of heart failure on the {key.replace('_', ' ')} of "
-                    f"the organs "
+                    "the organs "
                     + ", ".join(sorted(o.name.lower() for o in _HF_ORGANS[key]))
-                    + f", the NYHA classes I to IV: {values}; {notes}",
-                    (src,),
+                    + " (HF_severity 1 to 4 the NYHA classes I to IV, linear in "
+                    f"between), {provenance}",
+                    sources,
                 )
             )
 
@@ -630,7 +668,9 @@ class _Impairment:
                     ids.condition_factor("cp", "hematocrit"),
                     ids.condition_factor("ckd", "hematocrit"),
                 ),
-                "the hematocrit",
+                "the hematocrit of the sex of the build; the anaemia of "
+                "cirrhosis and of chronic kidney disease combine "
+                "multiplicatively",
             ),
             ids.organ_mass(Organ.KIDNEY): (
                 ids.condition_factor("ckd", "kidney_volume"),
@@ -641,9 +681,10 @@ class _Impairment:
                 ids.condition_factor("cp", "agp"),
                 "the plasma alpha-1-acid glycoprotein",
             ),
-            "fu": (
-                ids.condition_factor("ckd", "plasma_protein_fu"),
-                "fu, the factor multiplies fu (Malik 2020)",
+            "plasma_protein": (
+                ids.condition_factor("ckd", "plasma_protein"),
+                "the binding capacity of the plasma proteins: it divides the "
+                "binding factor of fu, so fu of a strongly bound drug rises by it",
             ),
             "t_stomach": (
                 ids.condition_factor("ckd", "gastric_emptying_time"),

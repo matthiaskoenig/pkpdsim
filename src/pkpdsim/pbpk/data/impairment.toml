@@ -2,20 +2,22 @@
 # cirrhosis by the Child-Pugh class, chronic kidney disease (CKD) by the stage
 # of the GFR and heart failure by the NYHA class. Every number is a factor on
 # a quantity of the healthy individual (dimensionless, 1 healthy) unless the
-# notes say otherwise.
+# notes say otherwise. A vector gives the classes in order; `choice` names the
+# classes whose value is a choice of the library and not a value of `source`
+# (the notes give the choice), the SBML notes cite ModelChoice for them.
 #
 # [child_pugh]: the classes A, B, C (`CP_severity` 1, 2, 3; 0 is healthy); a
 # severity between the classes interpolates linearly. The physiological
-# factors are those of Edginton & Willmann 2008; their primary paper was not
-# accessible, the values are transcribed from Alasmari 2024 (Pharmaceutics
-# 16:1540, Table 3, CC BY 4.0, doi:10.3390/pharmaceutics16121540), which cites
-# Edginton 2008, and are marked unverified. The enzymes and transporters are
-# the median abundances per g liver of El-Khateeb 2021 (Figures 1, 2 and 4,
-# the percentages of change from the control which the figures annotate; open
+# factors are those which Alasmari 2024 (Pharmaceutics 16:1540, Table 3, CC BY
+# 4.0, doi:10.3390/pharmaceutics16121540, the publication read) attribute to
+# Edginton & Willmann 2008 (doi:10.2165/00003088-200847110-00005, not read);
+# they are model choices, not verified. The enzymes and transporters are the
+# median abundances per g liver of El-Khateeb 2021 (Figures 1, 2 and 4, the
+# percentages of change from the control which the figures annotate; open
 # access, CC BY 4.0), the only source with all three classes; a class the
 # figures do not annotate (no significant change, CP-A has n = 6) is the
 # linear interpolation between healthy and the next annotated class, a model
-# choice which the notes name. Johnson 2010 (Clin Pharmacokinet 49:189,
+# choice (`choice`). Johnson 2010 (Clin Pharmacokinet 49:189,
 # doi:10.2165/11318160-000000000-00000), the abundance factors of the Simcyp
 # cirrhosis populations, was not accessible and is not used. Prasad 2018 (Drug
 # Metab Dispos 46:943, doi:10.1124/dmd.118.080523, Table 3) measured
@@ -27,85 +29,94 @@
 # 2021 find more reduced (they discuss it).
 #
 # The shunt and the portal blood flow (reconciliation): the shunt fractions
-# are the degrees of cirrhosis of the König lab (`pkpdsim.impairment.CIRRHOSIS`,
-# fitted to the indocyanine green clearance of the Child-Pugh classes, Köller
-# 2021), which set the shunt of the portal venous blood and the loss of
-# parenchyma together in the ICG model. Edginton 2008 represent the
-# portosystemic shunting by a portal vein flow of 0.40, 0.36 and 0.04 of
-# healthy. Both describe the same portal blood which does not reach the
-# sinusoids; applied together they would count it twice. The library takes
-# the shunt (`f_shunt`): the splanchnic flow of the portal organs is not
-# reduced and the fraction `f_shunt` of the liver inflow bypasses the liver,
-# so the portal blood which perfuses the liver is 0.60, 0.30 and 0.19 of
-# healthy (Edginton 2008: 0.40, 0.36, 0.04). The library's shunt acts on the
-# hepatic arterial inflow as well (the ICG model shunts the portal blood only),
-# so the perfused arterial flow is (1 - f_shunt) times the increased hepatic
-# arterial flow of Edginton 2008.
+# are the degrees of cirrhosis of the Child-Pugh classes of
+# `pkpdsim.impairment.CIRRHOSIS`, which set the shunt of the portal venous
+# blood and the loss of parenchyma together in the hand-written ICG models.
+# Edginton 2008 (per Alasmari 2024) represent the portosystemic shunting by a
+# portal vein flow of 0.40, 0.36 and 0.04 of healthy. Both describe the same
+# portal blood which does not reach the sinusoids; applied together they
+# would count it twice. The library takes the shunt (`f_shunt`): the
+# splanchnic flow of the portal organs is not reduced and the fraction
+# `f_shunt` of the liver inflow bypasses the liver, so the portal blood which
+# perfuses the liver is 0.60, 0.30 and 0.19 of healthy (Edginton 2008: 0.40,
+# 0.36, 0.04). The library's shunt acts on the hepatic arterial inflow as well
+# (the ICG models shunt the portal blood only), so the perfused arterial flow
+# is (1 - f_shunt) times the increased hepatic arterial flow.
+#
+# The hematocrit: cirrhosis and CKD reduce it (anaemia), and the two factors
+# would combine multiplicatively on the hematocrit of the sex of the build
+# (`HCT = HCT_ref*fimp_HCT`). The publications read state absolute hematocrits
+# without the healthy value of their population, so no factor relative to the
+# source's healthy value can be derived: both factors are 1 until a source
+# with its healthy reference is read.
 #
 # [ckd]: the stages by the GFR per 1.73 m2 of the renal function
 # (`f_renal_function` times the healthy GFR per 1.73 m2 of the reference
-# individual): normal >= 90, mild 60-89, moderate 30-59, severe 15-29, end
-# stage < 15 ml/min/1.73 m2; a list gives mild, moderate, severe and end stage,
-# normal is 1. The physiology of Malik 2020 (paywalled) is unverified: the
-# regressions of kidney volume and flow on the eGFR, the gastric emptying and
-# small intestinal transit factors and the plasma protein factor are the values
-# of the plan of the library (its research notes of the PK-Sim CKD population,
-# which implements Malik 2020); the hematocrit is transcribed from Alasmari 2023
-# (Front Pharmacol 14:1200828, Table 3, CC BY 4.0, doi:10.3389/fphar.2023.1200828).
-# The hepatic proteins (switch `CKD_hepatic`) are the mean ratios of the unbound
-# clearance of model drugs (Yoshida 2016, Tan 2018), clearances of the drugs,
-# taken as activity of the pathway.
+# individual): normal >= 90, mild 60-89, moderate (stage 3) 30-59, severe
+# (stage 4) 15-29, end stage (stage 5) < 15 ml/min/1.73 m2; a vector gives
+# mild, moderate, severe and end stage, normal is 1. The factors are steps at
+# the stage limits: a scan or fit of `f_renal_function` across a limit sees a
+# discontinuity. Malik 2020 (paywalled) was not read; the effects which PK-Sim
+# takes from it and no open publication read gives with its healthy reference
+# (kidney volume and blood flow, gastric emptying and small intestinal
+# transit) are 1 with a note. The plasma protein factor is read in Alasmari
+# 2023 (Front Pharmacol 14:1200828, Table 3, CC BY 4.0,
+# doi:10.3389/fphar.2023.1200828), which tabulates it for the stages 3 to 5
+# from Malik 2020. The hepatic proteins (switch `CKD_hepatic`) are the mean
+# ratios of the unbound clearance of model drugs (Yoshida 2016, Tan 2018),
+# clearances of the drugs, taken as activity of the pathway.
 #
 # [heart_failure]: the NYHA classes I to IV (`HF_severity` 1 to 4, 0 healthy).
 # The flows of the organs are multiplied, the cardiac output is their sum
 # (Gu 2025, Table 1: the lung flow of each class is the sum of the organ flows).
+# The renal blood flow is not monotonic in the class (NYHA IV 0.629 above
+# NYHA III 0.55, as measured by Leithe 1984), and the GFR follows it.
 
 [child_pugh]
-healthy_hematocrit = { value = 0.45, unit = "dimensionless", source = "ModelChoice", notes = "the healthy hematocrit to which the absolute hematocrit of the classes is related; Edginton 2008 and Alasmari 2023 state absolute values without their healthy reference here; 0.45 is within the healthy adult range of ICRP 89 (0.37-0.52 for women and men)" }
-functional_liver = { value = [0.69, 0.55, 0.28], unit = "dimensionless", source = "Edginton2008", notes = "functional liver mass of the classes A, B, C relative to healthy, the functional fraction `f_functional`; unverified: transcribed from Alasmari 2024, Table 3, which cites Edginton 2008; the ICG model of Köller 2021 keeps 1 - f_cirrhosis = 0.60, 0.30, 0.19 of the parenchyma" }
-shunt = { value = [0.3994897959183674, 0.6979591836734694, 0.8127551020408164], unit = "dimensionless", source = "Koller2021", notes = "portosystemic shunt `f_shunt` of the classes A, B, C (healthy 0), the degrees of cirrhosis of the Child-Pugh classes of `pkpdsim.impairment.CIRRHOSIS` (bit-identical here; the MathML of the SBML writes 15 significant digits), fitted to the ICG clearance of the classes with the ICG model of Köller 2021 (unverified: the values of pkpdsim.impairment, attributed to this work, not checked against the paper); replaces the reduced portal vein flow of Edginton 2008 (0.40, 0.36, 0.04), see the header" }
-hepatic_artery_flow = { value = [1.3, 2.3, 3.4], unit = "dimensionless", source = "Edginton2008", notes = "hepatic arterial blood flow relative to healthy (hepatic arterial buffer response); unverified: transcribed from Alasmari 2024, Table 3" }
-kidney_flow = { value = [0.88, 0.65, 0.48], unit = "dimensionless", source = "Edginton2008", notes = "renal blood flow relative to healthy; unverified: transcribed from Alasmari 2024, Table 3" }
-cardiac_index = { value = [1.11, 1.27, 1.36], unit = "dimensionless", source = "Edginton2008", notes = "cardiac index relative to healthy (hyperdynamic circulation); the flows of the organs without a factor of their own (heart, muscle, skin, adipose, bone, gonads) close the cardiac output to it; Edginton 2008 give 1.75, 2.25 and 2.75 for the flow of the other organs (Alasmari 2024), which with the organ flows of the library would exceed the cardiac index and is not used; unverified: transcribed from Alasmari 2024, Table 3" }
-gfr = { value = [1.0, 0.70, 0.36], unit = "dimensionless", source = "Edginton2008", notes = "glomerular filtration rate relative to healthy (hepatorenal reduction); unverified: transcribed from Alasmari 2024, Table 3" }
-albumin = { value = [0.81, 0.68, 0.50], unit = "dimensionless", source = "Edginton2008", notes = "plasma albumin relative to healthy, the binding protein factor of fu; unverified: transcribed from Alasmari 2024, Table 3" }
-agp = { value = [0.60, 0.56, 0.30], unit = "dimensionless", source = "Edginton2008", notes = "plasma alpha-1-acid glycoprotein relative to healthy, the binding protein factor of fu; unverified: transcribed from Alasmari 2024, Table 3" }
-hematocrit = { value = [0.39, 0.37, 0.35], unit = "dimensionless", source = "Edginton2008", notes = "absolute hematocrit of the classes A, B, C, the factor relative to `healthy_hematocrit`; unverified: transcribed from Alasmari 2024, Table 3" }
+functional_liver = { value = [0.69, 0.55, 0.28], unit = "dimensionless", source = "ModelChoice", notes = "functional liver mass of the classes A, B, C relative to healthy, the functional fraction `f_functional`: the values of Edginton & Willmann 2008 as tabulated in Alasmari 2024, Table 3 (doi:10.3390/pharmaceutics16121540, the publication read); not verified; the ICG models keep 1 - f_cirrhosis = 0.60, 0.30, 0.19 of the parenchyma" }
+shunt = { value = [0.3994897959183674, 0.6979591836734694, 0.8127551020408164], unit = "dimensionless", source = "ModelChoice", notes = "portosystemic shunt `f_shunt` of the classes A, B, C (healthy 0): the values of pkpdsim.impairment.CIRRHOSIS (bit-identical here; the MathML of the SBML writes 15 significant digits), the degrees of cirrhosis of the Child-Pugh classes of the hand-written ICG models; their publication is not verified; replaces the reduced portal vein flow of Edginton 2008 (0.40, 0.36, 0.04), see the header" }
+hepatic_artery_flow = { value = [1.3, 2.3, 3.4], unit = "dimensionless", source = "ModelChoice", notes = "hepatic arterial blood flow relative to healthy (hepatic arterial buffer response): the values of Edginton & Willmann 2008 as tabulated in Alasmari 2024, Table 3 (the publication read); not verified" }
+kidney_flow = { value = [0.88, 0.65, 0.48], unit = "dimensionless", source = "ModelChoice", notes = "renal blood flow relative to healthy: the values of Edginton & Willmann 2008 as tabulated in Alasmari 2024, Table 3 (the publication read); not verified" }
+cardiac_index = { value = [1.11, 1.27, 1.36], unit = "dimensionless", source = "ModelChoice", notes = "cardiac index relative to healthy (hyperdynamic circulation): the values of Edginton & Willmann 2008 as tabulated in Alasmari 2024, Table 3 (the publication read); not verified; the flows of the organs without a factor of their own (heart, muscle, skin, adipose, bone, gonads) close the cardiac output to it; Alasmari 2024 give 1.75, 2.25 and 2.75 for the flow of the other organs, which with the organ flows of the library would exceed the cardiac index and is not used" }
+gfr = { value = [1.0, 0.70, 0.36], unit = "dimensionless", source = "ModelChoice", notes = "glomerular filtration rate relative to healthy (hepatorenal reduction): the values of Edginton & Willmann 2008 as tabulated in Alasmari 2024, Table 3 (the publication read); not verified" }
+albumin = { value = [0.81, 0.68, 0.50], unit = "dimensionless", source = "ModelChoice", notes = "plasma albumin relative to healthy, the binding protein factor of fu: the values of Edginton & Willmann 2008 as tabulated in Alasmari 2024, Table 3 (the publication read); not verified" }
+agp = { value = [0.60, 0.56, 0.30], unit = "dimensionless", source = "ModelChoice", notes = "plasma alpha-1-acid glycoprotein relative to healthy, the binding protein factor of fu: the values of Edginton & Willmann 2008 as tabulated in Alasmari 2024, Table 3 (the publication read); not verified" }
+hematocrit = { value = [1.0, 1.0, 1.0], unit = "dimensionless", source = "ModelChoice", notes = "hematocrit relative to healthy: 1 until a source with its healthy value is read; Alasmari 2024 (Table 3, the publication read) tabulate absolute hematocrits of 0.39, 0.37 and 0.35 for the classes A, B, C (attributed to Edginton & Willmann 2008, not read) without the healthy hematocrit of the population, so no relative factor can be derived" }
 
 [child_pugh.proteins]
-CYP1A2 = { value = [0.69, 0.38, 0.13], unit = "dimensionless", source = "ElKhateeb2021", notes = "Figure 1: B -62 %, C -87 % of control; A not annotated, the midpoint of healthy and B (model choice)" }
-CYP2A6 = { value = [0.725, 0.45, 0.28], unit = "dimensionless", source = "ElKhateeb2021", notes = "Figure 1: B -55 %, C -72 %; A the midpoint of healthy and B (model choice)" }
+CYP1A2 = { value = [0.69, 0.38, 0.13], choice = ["A"], unit = "dimensionless", source = "ElKhateeb2021", notes = "Figure 1: B -62 %, C -87 % of control; A not annotated, the midpoint of healthy and B (model choice)" }
+CYP2A6 = { value = [0.725, 0.45, 0.28], choice = ["A"], unit = "dimensionless", source = "ElKhateeb2021", notes = "Figure 1: B -55 %, C -72 %; A the midpoint of healthy and B (model choice)" }
 CYP2B6 = { value = [1.0, 1.0, 1.0], unit = "dimensionless", source = "ElKhateeb2021", notes = "Figure 1 and Results: no significant change in any class" }
-CYP2C8 = { value = [0.685, 0.37, 0.25], unit = "dimensionless", source = "ElKhateeb2021", notes = "Figure 1: B -63 %, C -75 %; A the midpoint of healthy and B (model choice)" }
-CYP2C9 = { value = [0.73, 0.46, 0.23], unit = "dimensionless", source = "ElKhateeb2021", notes = "Figure 1: B -54 %, C -77 %; A the midpoint of healthy and B (model choice)" }
-CYP2C18 = { value = [0.8, 0.6, 0.40], unit = "dimensionless", source = "ElKhateeb2021", notes = "Figure 1: C -60 %; A and B not annotated, the linear interpolation between healthy and C (model choice)" }
-CYP2C19 = { value = [0.51, 0.02, 0.05], unit = "dimensionless", source = "ElKhateeb2021", notes = "Figure 1: B -98 %, C -95 %; A the midpoint of healthy and B (model choice)" }
-CYP2D6 = { value = [0.70, 0.40, 0.30], unit = "dimensionless", source = "ElKhateeb2021", notes = "Figure 1: B -60 %, C -70 %; A the midpoint of healthy and B (model choice)" }
-CYP2E1 = { value = [0.695, 0.39, 0.14], unit = "dimensionless", source = "ElKhateeb2021", notes = "Figure 1: B -61 %, C -86 %; A the midpoint of healthy and B (model choice)" }
-CYP3A4 = { value = [0.615, 0.23, 0.20], unit = "dimensionless", source = "ElKhateeb2021", notes = "Figure 1: B -77 %, C -80 %; A the midpoint of healthy and B (model choice)" }
+CYP2C8 = { value = [0.685, 0.37, 0.25], choice = ["A"], unit = "dimensionless", source = "ElKhateeb2021", notes = "Figure 1: B -63 %, C -75 %; A the midpoint of healthy and B (model choice)" }
+CYP2C9 = { value = [0.73, 0.46, 0.23], choice = ["A"], unit = "dimensionless", source = "ElKhateeb2021", notes = "Figure 1: B -54 %, C -77 %; A the midpoint of healthy and B (model choice)" }
+CYP2C18 = { value = [0.8, 0.6, 0.40], choice = ["A", "B"], unit = "dimensionless", source = "ElKhateeb2021", notes = "Figure 1: C -60 %; A and B not annotated, the linear interpolation between healthy and C (model choice)" }
+CYP2C19 = { value = [0.51, 0.02, 0.05], choice = ["A"], unit = "dimensionless", source = "ElKhateeb2021", notes = "Figure 1: B -98 %, C -95 %; A the midpoint of healthy and B (model choice)" }
+CYP2D6 = { value = [0.70, 0.40, 0.30], choice = ["A"], unit = "dimensionless", source = "ElKhateeb2021", notes = "Figure 1: B -60 %, C -70 %; A the midpoint of healthy and B (model choice)" }
+CYP2E1 = { value = [0.695, 0.39, 0.14], choice = ["A"], unit = "dimensionless", source = "ElKhateeb2021", notes = "Figure 1: B -61 %, C -86 %; A the midpoint of healthy and B (model choice)" }
+CYP3A4 = { value = [0.615, 0.23, 0.20], choice = ["A"], unit = "dimensionless", source = "ElKhateeb2021", notes = "Figure 1: B -77 %, C -80 %; A the midpoint of healthy and B (model choice)" }
 UGT1A1 = { value = [1.0, 1.0, 1.0], unit = "dimensionless", source = "ElKhateeb2021", notes = "Figure 2: no significant change in any class" }
-UGT1A9 = { value = [0.74, 0.48, 0.28], unit = "dimensionless", source = "ElKhateeb2021", notes = "Figure 2: B -52 %, C -72 %; A the midpoint of healthy and B (model choice)" }
-UGT2B7 = { value = [0.65, 0.30, 0.13], unit = "dimensionless", source = "ElKhateeb2021", notes = "Figure 2: B -70 %, C -87 %; A the midpoint of healthy and B (model choice)" }
+UGT1A9 = { value = [0.74, 0.48, 0.28], choice = ["A"], unit = "dimensionless", source = "ElKhateeb2021", notes = "Figure 2: B -52 %, C -72 %; A the midpoint of healthy and B (model choice)" }
+UGT2B7 = { value = [0.65, 0.30, 0.13], choice = ["A"], unit = "dimensionless", source = "ElKhateeb2021", notes = "Figure 2: B -70 %, C -87 %; A the midpoint of healthy and B (model choice)" }
 SLCO1B1 = { value = [0.46, 0.42, 0.30], unit = "dimensionless", source = "ElKhateeb2021", notes = "Figure 4 (OATP1B1): A -54 %, B -58 %, C -70 %" }
 SLCO1B3 = { value = [1.0, 1.0, 1.0], unit = "dimensionless", source = "ElKhateeb2021", notes = "Results (OATP1B3): no significant change in any class" }
 ABCC2 = { value = [0.46, 0.34, 0.18], unit = "dimensionless", source = "ElKhateeb2021", notes = "Figure 4 (MRP2): A -54 %, B -66 %, C -82 %; P-gp (ABCB1) and OCT1 (SLC22A1) are not included, the annotations of their panels do not name the compared classes unambiguously" }
 
 [ckd]
-stage_gfr = { value = [90.0, 60.0, 30.0, 15.0], unit = "ml/min", source = "Yoshida2016", notes = "lower limits of the GFR per 1.73 m2 of normal function and of mild, moderate and severe CKD (Methods: mild 60-89, moderate 30-59, severe 15-29, end stage < 15 ml/min/1.73 m2, the classes of the FDA guidance)" }
-plasma_protein_fu = { value = [1.0, 1.07, 1.16, 1.55], unit = "dimensionless", source = "Malik2020", notes = "factor on fu of mild, moderate (stage 3), severe (stage 4) and end stage (stage 5) CKD, the uraemic displacement and the lower albumin; unverified: the values of the plan of the library; Alasmari 2023 (Table 3) tabulate a plasma protein correction factor of 1.45, 2.20 and 2.50 for the stages 3 to 5 from Malik 2020, the primary paper decides" }
-hematocrit = { value = [0.45, 0.44, 0.40, 0.34], unit = "dimensionless", source = "Malik2020", notes = "absolute hematocrit of mild (healthy, `healthy_hematocrit`), moderate, severe and end stage CKD, the factor relative to `healthy_hematocrit` (renal anaemia); unverified: transcribed from Alasmari 2023, Table 3, which cites Malik 2020" }
-gastric_emptying_time = { value = [1.0, 1.0, 1.6, 1.6], unit = "dimensionless", source = "Malik2020", notes = "factor on the gastric emptying time of mild, moderate, severe and end stage CKD; unverified: the values of the plan of the library" }
-si_transit_time = { value = [1.0, 1.0, 1.4, 1.4], unit = "dimensionless", source = "Malik2020", notes = "factor on the small intestinal transit time of mild, moderate, severe and end stage CKD; unverified: the values of the plan of the library" }
-kidney_volume = { value = [-6.3e-5, 0.0149, 4.13], unit = "dimensionless", source = "Malik2020", notes = "coefficients a, b, c of the regression ln(V) = a*x^2 + b*x + c of the kidney volume on the GFR x (ml/min/1.73 m2); the factor is V(x)/V(x0) of the GFR of the renal function and of the healthy individual; unverified: the values of the plan of the library; Alasmari 2023 (Table 3) tabulate kidney volumes of 132, 92 and 76 ml for the stages 3 to 5 which the regression does not reproduce, the primary paper decides" }
-kidney_flow = { value = [-3.1e-5, 0.0170, 4.09], unit = "dimensionless", source = "Malik2020", notes = "coefficients a, b, c of the regression ln(Q) = a*x^2 + b*x + c of the renal blood flow per kidney mass on the GFR x (ml/min/1.73 m2); the factor on the kidney flow is Q(x)/Q(x0) times the factor of the kidney volume; unverified: the values of the plan of the library" }
+stage_gfr = { value = [90.0, 60.0, 30.0, 15.0], unit = "ml/min/1.73 m2", source = "Yoshida2016", notes = "lower limits of the GFR per 1.73 m2 of normal function and of mild, moderate and severe CKD (Methods: mild 60-89, moderate 30-59, severe 15-29, end stage < 15 ml/min/1.73 m2, the classes of the FDA guidance)" }
+plasma_protein = { value = [1.0, 1.45, 2.20, 2.50], choice = ["mild"], unit = "dimensionless", source = "Alasmari2023", notes = "Table 3: the correction factor for the effect of CKD on the content of plasma proteins of the stages 3, 4 and 5 (30-60, 15-30, < 15 ml/min/1.73 m2), from Malik 2020 (not read); mild CKD (stage 2) is not tabulated, 1 (model choice); the library takes the factor as the factor by which the binding capacity of the plasma proteins falls (the binding factor of fu is divided by it, so fu of a strongly bound drug rises by it), a model choice of the direction" }
+hematocrit = { value = [1.0, 1.0, 1.0, 1.0], unit = "dimensionless", source = "ModelChoice", notes = "hematocrit relative to healthy: 1 until a source with its healthy value is read; Alasmari 2023 (Table 3, the publication read) tabulate absolute hematocrits of 0.44, 0.40 and 0.34 for the stages 3, 4 and 5 (from Malik 2020, not read) without the healthy hematocrit of the population, so no relative factor can be derived" }
+kidney_volume = { value = [1.0, 1.0, 1.0, 1.0], unit = "dimensionless", source = "ModelChoice", notes = "kidney volume relative to healthy: 1; Alasmari 2023 (Table 3) tabulate kidney volumes of 132, 92 and 76 ml for the stages 3 to 5 (from Malik 2020, not read) without the healthy volume of the population, so no relative factor can be derived" }
+kidney_flow = { value = [1.0, 1.0, 1.0, 1.0], unit = "dimensionless", source = "ModelChoice", notes = "renal blood flow relative to healthy: 1; Alasmari 2023 (Table 3) tabulate a renal perfusion of 176, 97 and 75.35 ml/min/100 g for the stages 3 to 5 (from Malik 2020, not read) without the healthy perfusion of the population, so no relative factor can be derived" }
+gastric_emptying_time = { value = [1.0, 1.0, 1.0, 1.0], unit = "dimensionless", source = "ModelChoice", notes = "gastric emptying time relative to healthy: 1; Malik 2020 (not read) describe a delayed gastric emptying in CKD, no open publication read gives its factor" }
+si_transit_time = { value = [1.0, 1.0, 1.0, 1.0], unit = "dimensionless", source = "ModelChoice", notes = "small intestinal transit time relative to healthy: 1; Malik 2020 (not read) describe a slower small intestinal transit in CKD, no open publication read gives its factor" }
 
 [ckd.proteins]
-CYP2D6 = { value = [1.0, 0.53, 0.41, 0.50], unit = "dimensionless", source = "Yoshida2016", notes = "mean ratio of the unbound clearance of CYP2D6 model drugs of moderate, severe and end stage CKD (off dialysis) to the control (Results); mild CKD 1.16, no reduction, is taken as 1 (model choice)" }
+CYP2D6 = { value = [1.0, 0.53, 0.41, 0.50], choice = ["mild"], unit = "dimensionless", source = "Yoshida2016", notes = "mean ratio of the unbound clearance of CYP2D6 model drugs of moderate, severe and end stage CKD (off dialysis) to the control (Results); mild CKD 1.16, no reduction, is taken as 1 (model choice)" }
 CYP3A4 = { value = [1.0, 1.0, 1.0, 1.0], unit = "dimensionless", source = "Yoshida2016", notes = "no apparent relationship between the severity of CKD and the clearance of CYP3A4/5 model drugs (mean ratios of the unbound clearance 0.84, 1.05, 0.79, 0.99), taken as unchanged" }
 SLCO1B1 = { value = [0.68, 0.56, 0.54, 0.45], unit = "dimensionless", source = "Tan2018", notes = "Table 2, mean ratio of the unbound clearance of the OATP model drugs of mild, moderate, severe and end stage CKD (off dialysis) to the control" }
 SLCO1B3 = { value = [0.68, 0.56, 0.54, 0.45], unit = "dimensionless", source = "Tan2018", notes = "Table 2, the OATP model drugs (OATP1B1 and OATP1B3 are not separated), as SLCO1B1" }
 
 [heart_failure]
-liver_flow = { value = [1.0, 0.765, 0.538, 0.463], unit = "dimensionless", source = "Rasool2015", notes = "hepatic blood flow of NYHA I to IV relative to healthy: the reductions 23.5, 46.2 and 53.7 % of mild, moderate and severe heart failure (NYHA II, III, IV) measured by Leithe 1984 (ICG clearance, doi:10.1161/01.CIR.69.1.57); NYHA I (no limitation of physical activity) has no data and is taken as healthy (model choice); it acts on the hepatic artery and the portal organs, whose flows follow the hepatic flow (Gu 2025)" }
-kidney_flow = { value = [1.0, 0.778, 0.55, 0.629], unit = "dimensionless", source = "Rasool2015", notes = "renal blood flow of NYHA I to IV relative to healthy: the reductions 22.2, 45 and 37.1 % of mild, moderate and severe heart failure measured by Leithe 1984 (PAH clearance); NYHA I taken as healthy (model choice); the GFR follows it (the filtration fraction is kept, a simplification: the filtration fraction rises in heart failure)" }
-peripheral_flow = { value = [1.0, 0.57, 0.44, 0.28], unit = "dimensionless", source = "Gu2025", notes = "blood flow of skin, adipose and muscle of NYHA I to IV relative to healthy (Methods: 57, 44 and 28 % of baseline for NYHA II, III, IV, from Leithe 1984); NYHA I taken as healthy (model choice); heart and brain and the other organs are unchanged" }
+liver_flow = { value = [1.0, 0.765, 0.538, 0.463], choice = ["I"], unit = "dimensionless", source = "Rasool2015", notes = "hepatic blood flow of NYHA I to IV relative to healthy: the reductions 23.5, 46.2 and 53.7 % of mild, moderate and severe heart failure (NYHA II, III, IV) measured by Leithe 1984 (ICG clearance, doi:10.1161/01.CIR.69.1.57); NYHA I (no limitation of physical activity) has no data and is taken as healthy (model choice); it acts on the hepatic artery and the portal organs, whose flows follow the hepatic flow (Gu 2025)" }
+kidney_flow = { value = [1.0, 0.778, 0.55, 0.629], choice = ["I"], unit = "dimensionless", source = "Rasool2015", notes = "renal blood flow of NYHA I to IV relative to healthy: the reductions 22.2, 45 and 37.1 % of mild, moderate and severe heart failure measured by Leithe 1984 (PAH clearance), not monotonic in the class (NYHA IV above NYHA III, as measured); NYHA I taken as healthy (model choice); the GFR follows it (the filtration fraction is kept, a simplification: the filtration fraction rises in heart failure)" }
+peripheral_flow = { value = [1.0, 0.57, 0.44, 0.28], choice = ["I"], unit = "dimensionless", source = "Gu2025", notes = "blood flow of skin, adipose and muscle of NYHA I to IV relative to healthy (Methods: 57, 44 and 28 % of baseline for NYHA II, III, IV, from Leithe 1984); NYHA I taken as healthy (model choice); heart and brain and the other organs are unchanged" }

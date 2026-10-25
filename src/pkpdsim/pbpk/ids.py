@@ -17,6 +17,7 @@ __all__ = [
     "BW",
     "CKD_HEPATIC",
     "CO",
+    "CO_BASE",
     "CP_SEVERITY",
     "EGFR",
     "FED",
@@ -188,6 +189,8 @@ HCT = "HCT"
 """The hematocrit."""
 CO = "CO"
 """The cardiac output."""
+CO_BASE = "CO_base"
+"""The cardiac output without impairment, of which the organ flows are fractions."""
 GFR = "GFR"
 """The glomerular filtration rate."""
 VBLOOD = "Vblood"
