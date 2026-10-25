@@ -85,7 +85,7 @@ def test_organ_ids() -> None:
     """The ids of the standard organ, its boundary and the sinks."""
     assert ids.vascular_fraction(Organ.LIVER) == "f_vas_li"
     assert ids.interstitial_fraction(Organ.LIVER) == "f_int_li"
-    assert ids.tissue_volume_total("api") == "Vti_total_api"
+    assert ids.tissue_volume_total_ref("api") == "Vti_total_ref_api"
     assert ids.organ_outflow(Organ.LIVER, "api") == "Cout_li_api"
     assert ids.plasma_capacity("api") == "Vpl_api"
     assert ids.pool_capacity(Pool.VENOUS, "api") == "Vve_pl_api"

@@ -78,7 +78,7 @@ __all__ = [
     "species",
     "species_of",
     "submodel",
-    "tissue_volume_total",
+    "tissue_volume_total_ref",
     "urine",
     "vascular_fraction",
 ]
@@ -225,9 +225,14 @@ def interstitial_fraction(organ: Organ) -> str:
     return f"f_int_{organ.value}"
 
 
-def tissue_volume_total(s: str) -> str:
-    """The id of the tissue volume of the organs which `s` enters, `Vti_total_<s>`."""
-    return f"Vti_total_{s}"
+def tissue_volume_total_ref(s: str) -> str:
+    """The id of the reference tissue volume of the organs `s` enters, `Vti_total_ref_<s>`.
+
+    The tissue volume of the reference individual summed over the organs
+    whose exchange is a share of `ftissue_<s>`; the exchange of an organ is
+    `ftissue_<s> * Vti_o / Vti_total_ref_<s>`, so it scales with the individual.
+    """
+    return f"Vti_total_ref_{s}"
 
 
 def ps(s: str) -> str:

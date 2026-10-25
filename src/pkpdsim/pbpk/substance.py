@@ -72,9 +72,14 @@ class _Exchange:
         organs: the organs the substance enters, all if `None`.
         mode: the exchange between plasma and tissue.
         ftissue: the whole-body exchange (l/min), required for the modes
-            `TISSUE` and `PERMEABILITY`.
+            `TISSUE` and `PERMEABILITY`; an organ has the share
+            `ftissue * Vti_o / Vti_total_ref` (reference tissue volume), and it
+            multiplies `fu*(Cpl - Cti/Kp)`, so its values differ from the
+            `ftissue` of the hand-written models.
         ps: the exchange of single organs (l/min) instead of the share of
-            `ftissue`.
+            `ftissue`; a transporter of a substance in mode `PERFUSION` gives
+            the organ the full form, which needs `ps={organ: ...}` (or
+            `ftissue`).
     """
 
     organs: frozenset[Organ] | None = None

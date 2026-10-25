@@ -26,7 +26,6 @@ intracellular) to plasma coefficient in every form.
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from functools import cache
 from typing import Protocol
 
 from sbmlutils.factory import (
@@ -42,12 +41,10 @@ from sbmlutils.factory import (
 )
 from sbmlutils.metadata import SBO
 
-from pkpdsim.pbpk import ids
+from pkpdsim.pbpk import distribution, ids
 from pkpdsim.pbpk.chemistry import CustomReaction, Membrane, Metabolism, Transport
-from pkpdsim.pbpk.data import load
 from pkpdsim.pbpk.organs import Organ, Part, Pool, inflow, outflow
 from pkpdsim.pbpk.parts import Parts
-from pkpdsim.pbpk.physiology import reference_fractions
 from pkpdsim.pbpk.placement import (
     apical_sink,
     built_parts,
@@ -57,9 +54,9 @@ from pkpdsim.pbpk.placement import (
     value_parameter,
 )
 from pkpdsim.pbpk.proteins import Induction, Inhibition
-from pkpdsim.pbpk.substance import Kp, Substance
+from pkpdsim.pbpk.substance import Substance
 from pkpdsim.pbpk.units import MODEL_UNITS, U
-from pkpdsim.pbpk.values import Q, Value
+from pkpdsim.pbpk.values import Q
 
 __all__ = ["Boundary", "OrganComponent", "OrganContext", "StandardOrgan"]
 
@@ -151,29 +148,21 @@ _ONE = "1 dimensionless"
 _POOL_PART = {Part.PLASMA: "plasma", Part.BLOOD_CELLS: "blood cells"}
 """The parts of a pool in names."""
 
+_CAPACITY = (
+    "Not a physical volume: the plasma-equivalent capacity of the blood of a "
+    "substance with erythrocytes in equilibrium, the vascular volume times the "
+    "blood to plasma ratio, so that the plasma concentration in it gives the "
+    "amount in the blood."
+)
+"""The notes of a capacity of the blood."""
 
-_DATA_UNITS: dict[str, UnitDefinition] = {
-    "dimensionless": U.dimensionless,
-    "1/min": U.per_min,
-}
-"""The units of the model for the units of `data/distribution.toml`."""
-
-
-@cache
-def _distribution() -> dict[str, dict[str, Value]]:
-    """The constants of `data/distribution.toml` as values with their source."""
-    return {
-        group: {
-            key: Value(e["value"], _DATA_UNITS[e["unit"]], e["source"], e.get("notes"))
-            for key, e in table.items()
-        }
-        for group, table in load("distribution").items()
-    }
-
-
-def _number(q: Q) -> float:
-    """The number of a plain float or a `Value`."""
-    return q.value if isinstance(q, Value) else q
+_FTISSUE = (
+    "ftissue multiplies `fu*(Cpl - Cti/Kp)` (the unbound plasma concentration "
+    "and the tissue concentration as plasma equivalent), so its fitted values "
+    "differ from those of the hand-written models, where it multiplied the "
+    "total concentrations."
+)
+"""The meaning of ftissue in the notes."""
 
 
 def _label(organ: Organ) -> str:
@@ -231,7 +220,7 @@ class _Builder:
 
     # --- elements --------------------------------------------------------
 
-    def _input(self, pid: str, unit: UnitDefinition, name: str) -> str:
+    def _input(self, pid: str, unit: UnitDefinition, name: str, text: str = "") -> str:
         """A parameter of the body in the organ, with an input port."""
         if pid not in self.parameters:
             self.parameters[pid] = Parameter(
@@ -241,13 +230,15 @@ class _Builder:
                 constant=False,
                 name=name,
                 sboTerm=SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
-                notes=_INPUT,
+                notes=f"{text}\n\n{_INPUT}" if text else _INPUT,
                 port=Port(f"{pid}_port", portType=PortType.INPUT_PORT),
             )
             self.replacements[pid] = pid
         return pid
 
-    def _input_compartment(self, cid: str, name: str) -> str:
+    def _input_compartment(
+        self, cid: str, name: str, text: str = "", sbo: str = SBO.PHYSICAL_COMPARTMENT
+    ) -> str:
         """A compartment of the body in the organ, with an input port."""
         if cid not in self.compartments:
             self.compartments[cid] = Compartment(
@@ -256,8 +247,8 @@ class _Builder:
                 U.litre,
                 constant=False,
                 name=name,
-                sboTerm=SBO.PHYSICAL_COMPARTMENT,
-                notes=_INPUT,
+                sboTerm=sbo,
+                notes=f"{text}\n\n{_INPUT}" if text else _INPUT,
                 port=Port(f"{cid}_port", portType=PortType.INPUT_PORT),
             )
             self.replacements[cid] = cid
@@ -316,7 +307,14 @@ class _Builder:
             )
         return pid
 
-    def _compartment(self, cid: str, formula: str, name: str) -> None:
+    def _compartment(
+        self,
+        cid: str,
+        formula: str,
+        name: str,
+        text: str = "",
+        sbo: str = SBO.PHYSICAL_COMPARTMENT,
+    ) -> None:
         """A compartment of the organ with its volume as assignment rule."""
         if cid in self.compartments:
             return
@@ -326,8 +324,8 @@ class _Builder:
             U.litre,
             constant=False,
             name=f"{name} {_label(self.organ)}",
-            sboTerm=SBO.PHYSICAL_COMPARTMENT,
-            notes=f"`{cid} = {formula}`",
+            sboTerm=sbo,
+            notes=f"{text}\n\n`{cid} = {formula}`" if text else f"`{cid} = {formula}`",
             port=True,
         )
         self.rules.append(AssignmentRule(cid, formula, U.litre))
@@ -444,7 +442,9 @@ class _Builder:
             self._compartment(
                 ids.plasma_capacity(s.sid),
                 f"{self.v} * {self.f_vas} * {self._bp(s)}",
-                f"blood (plasma volume of {s.sid} with the blood to plasma ratio)",
+                f"plasma-equivalent capacity V*f_vas*BP of {s.sid},",
+                _CAPACITY,
+                SBO.IMPLICIT_COMPARTMENT,
             )
         for part in built_parts(parts):
             self._species(part, s, parts)
@@ -492,12 +492,12 @@ class _Builder:
         kp = self._kp(s)
         assert kp is not None
         if parts.flow_carrier == "blood_bp":
-            vascular = f"{self.f_vas} * {self._bp(s)}"
+            vascular = self._bp(s)
         else:
-            vascular = f"{self.f_vas} * ({_ONE} - {self.hct})"
+            vascular = f"({_ONE} - {self.hct})"
         return self._rule(
             ids.k_organ(s.sid),
-            f"{vascular} + ({_ONE} - {self.f_vas}) * {kp}",
+            distribution.k_organ(self.f_vas, vascular, kp),
             U.dimensionless,
             f"organ to plasma coefficient {s.sid}",
             "Organ to plasma coefficient of the flow-limited organ, "
@@ -509,11 +509,17 @@ class _Builder:
         """The species of a substance in a pool, an element of the body."""
         if part is Part.PLASMA and parts.flow_carrier == "blood_bp":
             compartment = ids.pool_capacity(pool, s.sid)
-            text = f"{pool.name.lower()} blood of {s.sid} (blood to plasma ratio)"
+            self._input_compartment(
+                compartment,
+                f"plasma-equivalent capacity V*BP of {s.sid}, {pool.name.lower()} pool",
+                _CAPACITY,
+                SBO.IMPLICIT_COMPARTMENT,
+            )
         else:
             compartment = ids.pool_compartment(pool, part)
-            text = f"{pool.name.lower()} {_POOL_PART[part]}"
-        self._input_compartment(compartment, text)
+            self._input_compartment(
+                compartment, f"{pool.name.lower()} {_POOL_PART[part]}"
+            )
         return self._input_species(
             ids.pool_species(pool, s.sid, part),
             compartment,
@@ -593,8 +599,10 @@ class _Builder:
     def _ps(self, s: Substance) -> str:
         """The passive exchange between plasma and tissue of a substance in the organ.
 
-        `PS = ftissue * Vti/Vti_total`, the share of the whole-body exchange by
-        the tissue volume, or the value of the organ (`ps` of the Kp); no
+        `PS = ftissue * Vti/Vti_total_ref`, the share of the whole-body exchange
+        by the tissue volume relative to the tissue volume of the reference
+        individual (so the exchange scales with the individual), or the value
+        of the organ (`ps` of the Kp); no
         passive exchange for a substance which does not enter the tissue of
         the organ (it has the full form by its transporters).
 
@@ -630,12 +638,17 @@ class _Builder:
                 f"(ps), mode '{dist.mode.value}' has neither."
             )
         ftissue = self._input(
-            ids.ftissue(s.sid), U.l_per_min, f"whole-body exchange {s.sid} [l/min]"
+            ids.ftissue(s.sid),
+            U.l_per_min,
+            f"whole-body exchange {s.sid} [l/min]",
+            _FTISSUE,
         )
         total = self._input(
-            ids.tissue_volume_total(s.sid),
+            ids.tissue_volume_total_ref(s.sid),
             U.litre,
-            f"tissue volume of the organs {s.sid} enters [l]",
+            f"reference tissue volume of the organs {s.sid} enters [l]",
+            "Tissue volume of the reference individual summed over the organs "
+            "whose exchange is a share of ftissue.",
         )
         return self._rule(
             pid,
@@ -643,7 +656,8 @@ class _Builder:
             U.l_per_min,
             name,
             "Passive exchange between plasma and tissue: the share of the "
-            "whole-body exchange `ftissue` by the tissue volume of the organ.",
+            "whole-body exchange `ftissue` by the tissue volume of the organ "
+            f"relative to the reference tissue volume. {_FTISSUE}",
         )
 
     def _merged(self, s: Substance, fu: str) -> None:
@@ -666,28 +680,12 @@ class _Builder:
         `PS*(fu/K_int_pls*Cis - fu/K_cell_pls*Cic)`, with `K_int_pls` of
         Schmitt 2008 and `K_cell_pls` such that the whole tissue has the Kp.
         """
-        constants = _distribution()["interstitial"]
-        f_water_int = self._constant(
-            "f_water_int",
-            constants["f_water_int"],
-            U.dimensionless,
-            "water fraction interstitial fluid",
-        )
-        f_water_pls = self._constant(
-            "f_water_pls",
-            constants["f_water_pls"],
-            U.dimensionless,
-            "water fraction plasma",
-        )
-        r_protein = self._constant(
-            "r_protein_int_pls",
-            constants["r_protein_int_pls"],
-            U.dimensionless,
-            "protein of the interstitial fluid relative to plasma",
-        )
+        for key in distribution.INTERSTITIAL:
+            if key not in self.parameters:
+                self.parameters[key] = distribution.constant(key)
         k_int = self._rule(
             ids.k_int_pls(s.sid),
-            f"({f_water_int} + {r_protein} * ({_ONE} / {fu} - {f_water_pls})) * {fu}",
+            distribution.k_int_pls(fu),
             U.dimensionless,
             f"interstitial to plasma coefficient {s.sid}",
             "Interstitial to plasma coefficient (Schmitt 2008): the water of the "
@@ -704,28 +702,27 @@ class _Builder:
                 "without a Kp the cells bind it as the interstitial fluid.",
             )
         else:
-            self._check_k_cell(s)
-            f_cell = f"({_ONE} - {self.f_vas} - {self.f_int})"
+            distribution.check_kp(s, self.organ)
             k_cell = self._rule(
                 ids.k_cell_pls(s.sid),
-                f"({kp} * ({self.f_int} + {f_cell}) - {self.f_int} * {k_int}) / "
-                f"{f_cell}",
+                distribution.k_cell_pls(kp, k_int, self.f_vas, self.f_int),
                 U.dimensionless,
                 f"intracellular to plasma coefficient {s.sid}",
                 "Intracellular to plasma coefficient such that interstitium and "
                 "cells together have the whole-tissue Kp, "
-                "`(f_int*K_int_pls + f_cell*K_cell_pls)/(f_int + f_cell) = Kp`.",
+                "`(f_int*K_int_pls + f_cell*K_cell_pls)/(f_int + f_cell) = Kp`. "
+                "The Kp must exceed the interstitial share "
+                "`f_int*K_int_pls/(f_int + f_cell)` (the lower bound of a fitted "
+                f"Kp); below it the coefficient is floored at "
+                f"{distribution.K_CELL_FLOOR}.",
             )
         if ids.PS_VAS not in self.parameters:
-            k_vas = self._constant(
-                "k_vas",
-                _distribution()["vascular"]["k_vas"],
-                U.per_min,
-                "exchange plasma and interstitium per organ volume [1/min]",
+            self.parameters[distribution.K_VAS] = distribution.constant(
+                distribution.K_VAS
             )
             self._rule(
                 ids.PS_VAS,
-                f"{k_vas} * {self.v}",
+                f"{distribution.K_VAS} * {self.v}",
                 U.l_per_min,
                 "exchange plasma and interstitium [l/min]",
                 "Exchange between plasma and interstitium across the endothelium.",
@@ -747,54 +744,19 @@ class _Builder:
             f"passive exchange {s.sid} interstitium and cells",
         )
 
-    def _check_k_cell(self, s: Substance) -> None:
-        """Check that the Kp leaves a positive `K_cell_pls` (reference individuals).
-
-        Raises:
-            ValueError: if the Kp is not above the interstitial share of the
-                whole tissue, `f_int*K_int_pls/(f_int + f_cell)`.
-        """
-        dist = s.distribution
-        if not isinstance(dist, Kp):
-            return  # the Kp of a method is computed per organ
-        kp = _number(dist.overrides.get(self.organ, dist.value))
-        fu = _number(s.binding.fu) if s.binding is not None else 1.0
-        c = {key: v.value for key, v in _distribution()["interstitial"].items()}
-        k_int = (
-            c["f_water_int"] + c["r_protein_int_pls"] * (1.0 / fu - c["f_water_pls"])
-        ) * fu
-        for sex, (f_vas, f_int) in reference_fractions(self.organ).items():
-            f_cell = 1.0 - f_vas - f_int
-            share = f_int * k_int / (f_int + f_cell)
-            if kp <= share:
-                raise ValueError(
-                    f"{s.sid}: Kp {kp} in organ '{self.organ.value}' is not above "
-                    f"the interstitial share {share:.4g} of the tissue ({sex.value} "
-                    f"reference individual), the full form would need "
-                    f"K_cell_pls <= 0."
-                )
-
     # --- chemistry -------------------------------------------------------
 
     def _chemistry(self) -> None:
-        """The processes of the organ with the activities of their proteins and their sinks."""
-        for p in self.ctx.chemistry:
-            if p.organ is not self.organ:
-                continue
+        """The processes of the organ with the activities of their proteins and their sinks.
+
+        Raises:
+            ValueError: if a species of a custom reaction has the id of a
+                species of the organ.
+        """
+        processes = [p for p in self.ctx.chemistry if p.organ is self.organ]
+        for p in processes:
             if isinstance(p, Metabolism | Transport) and p.protein is not None:
-                pid = ids.activity(p.protein)
-                if pid not in self.parameters:
-                    self.parameters[pid] = Parameter(
-                        pid,
-                        1.0,
-                        U.dimensionless,
-                        constant=True,
-                        name=f"activity {p.protein}",
-                        sboTerm=SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
-                        notes=f"Activity of {p.protein} in the organ relative to "
-                        "normal (1.0); it multiplies the rates of its processes.",
-                        port=True,
-                    )
+                self._activity(p.protein)
             if isinstance(p, Transport) and p.membrane is Membrane.APICAL:
                 sink = apical_sink(self.organ, p.substance)
                 self._input_compartment(sink.compartment, f"sink {sink.compartment}")
@@ -804,7 +766,33 @@ class _Builder:
                     f"{p.substance} ({sink.compartment})",
                     amount=sink.amount,
                 )
-            if isinstance(p, CustomReaction):
-                for sp in p.species:
-                    self.species[str(sp.sid)] = sp
+        for p in processes:
+            if not isinstance(p, CustomReaction):
+                continue
+            for sp in p.species:
+                sid = str(sp.sid)
+                if sid in self.species:
+                    raise ValueError(
+                        f"Custom reaction '{p.sid}': species '{sid}' is a species "
+                        f"of the organ '{self.organ.value}' already."
+                    )
+                self.species[sid] = sp
+        for p in processes:
             self.reactions += place(p, self.ctx, self.ctx.parts)
+
+    def _activity(self, protein: str) -> None:
+        """The activity `f_<protein>` of a protein in the organ."""
+        pid = ids.activity(protein)
+        if pid in self.parameters:
+            return
+        self.parameters[pid] = Parameter(
+            pid,
+            1.0,
+            U.dimensionless,
+            constant=True,
+            name=f"activity {protein}",
+            sboTerm=SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
+            notes=f"Activity of {protein} in the organ relative to normal (1.0); "
+            "it multiplies the rates of its processes.",
+            port=True,
+        )

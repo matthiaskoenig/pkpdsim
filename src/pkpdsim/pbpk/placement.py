@@ -5,7 +5,8 @@ part which holds the tissue of its substrate (intracellular in the full form,
 the merged tissue, the whole organ when flow-limited, the plasma without
 tissue), a transport across the membrane of the cell (basolateral between
 interstitium and cell, apical between cell and the sink of the organ: bile,
-urine or the intestinal lumen), a custom reaction in the part it names.
+urine or the intestinal lumen; the standard kidney has no uptake from the
+cumulative urine), a custom reaction in the part it names.
 
 Every rate acts on the unbound concentration of its part and is an amount per
 time: the Vmax of a process is per litre of organ, so the whole organ has the
@@ -62,6 +63,17 @@ _PART_NAMES = {
     Part.ORGAN: "organ",
 }
 """The parts in names."""
+
+
+_PRODUCT_PARTS: dict[Part, tuple[Part, ...]] = {
+    Part.INTRACELLULAR: (Part.INTRACELLULAR, Part.TISSUE, Part.ORGAN, Part.PLASMA),
+    Part.TISSUE: (Part.TISSUE, Part.INTRACELLULAR, Part.ORGAN, Part.PLASMA),
+    Part.ORGAN: (Part.ORGAN, Part.TISSUE, Part.INTRACELLULAR, Part.PLASMA),
+    Part.PLASMA: (Part.PLASMA, Part.ORGAN),
+}
+"""The parts a product of a metabolism goes into by the part of the substrate,
+in order: the same part, the equivalent tissue part, plasma (the whole organ
+for a flow-limited product, which has no plasma species)."""
 
 
 @dataclass(frozen=True)
@@ -373,8 +385,10 @@ def _metabolism(
 ) -> Reaction:
     """The reaction of a metabolism in the part of the tissue of its substrate.
 
-    A product goes into the same part if it has a species there, else into
-    its vascular species (`Cor_<p>` flow-limited, `Cpl_<p>` otherwise).
+    A product goes into the first part of `_PRODUCT_PARTS` of the part of
+    the substrate in which it has a species: the same part, else the
+    equivalent tissue part (intracellular, merged tissue, whole organ), else
+    plasma.
     """
     substrate = _substance(ctx, process.substrate)
     part = metabolism_part(parts[substrate.sid])
@@ -382,10 +396,7 @@ def _metabolism(
     products = []
     for product, fraction in process.products.items():
         built = built_parts(parts[product])
-        if part in built:
-            target = part
-        else:
-            target = Part.ORGAN if Part.ORGAN in built else Part.PLASMA
+        target = next(t for t in _PRODUCT_PARTS[part] if t in built)
         products.append(_stoichiometry(fraction, ids.species(target, product)))
     rate, pars = _rate(process, ctx.organ, cu)
     names = ", ".join(process.products) or "elimination"
@@ -422,8 +433,14 @@ def _transport(
         where = "interstitium"
     else:
         sink = apical_sink(ctx.organ, s)
-        other = sink.species
-        outside = f"{other} / {sink.compartment}" if sink.amount else other
+        if process.direction is Direction.INFLUX and ctx.organ is Organ.KIDNEY:
+            raise ValueError(
+                f"Transport '{process.sid}': apical influx from the urine is not "
+                "part of the standard kidney (the urine is cumulative); "
+                "reabsorption is `Excretion.fraction_reabsorbed` or the nephron "
+                "variant."
+            )
+        other = outside = sink.species
         where = {
             Organ.LIVER: "bile",
             Organ.KIDNEY: "urine",

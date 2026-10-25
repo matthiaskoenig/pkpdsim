@@ -192,7 +192,7 @@ def test_merged_parts_species() -> None:
         "PS_drg * fu_drg * (Cpl_drg - Cti_drg / Kp_drg)"
     )
     assert rules["PS_drg"] == (
-        "ftissue_drg * Vli * (1 dimensionless - f_vas_li) / Vti_total_drg"
+        "ftissue_drg * Vli * (1 dimensionless - f_vas_li) / Vti_total_ref_drg"
     )
 
 
@@ -213,9 +213,13 @@ def test_full_parts_species() -> None:
         "f_water_pls)) * fu_drg"
     )
     f_cell = "(1 dimensionless - f_vas_li - f_int_li)"
+    k_cell = f"(Kp_drg * (f_int_li + {f_cell}) - f_int_li * K_int_pls_drg) / {f_cell}"
+    floor = "1e-06 dimensionless"
     assert rules["K_cell_pls_drg"] == (
-        f"(Kp_drg * (f_int_li + {f_cell}) - f_int_li * K_int_pls_drg) / {f_cell}"
+        f"piecewise({k_cell}, {k_cell} > {floor}, {floor})"
     )
+    notes = str(_parameters(md)["K_cell_pls_drg"].notes)
+    assert "must exceed the interstitial share" in notes
     assert _formula(_reaction(md, "J_is_drg")) == (
         "PS_vas * fu_drg * (Cpl_drg - Cis_drg / K_int_pls_drg)"
     )
@@ -323,7 +327,7 @@ def test_ps_of_organ() -> None:
     assert "doi:10.1016/j.tiv.2007.09.010" in str(par.notes)
     assert "PS_drg" not in _rules(md)
     assert "ftissue_drg" not in boundary.replacements
-    assert "Vti_total_drg" not in boundary.replacements
+    assert "Vti_total_ref_drg" not in boundary.replacements
 
 
 def test_organ_not_entered() -> None:
@@ -413,7 +417,7 @@ def test_boundary_physiology_and_substance_parameters() -> None:
         "fu_drg",
         "Kp_drg",
         "ftissue_drg",
-        "Vti_total_drg",
+        "Vti_total_ref_drg",
         "fu_drg_m",
     ):
         assert boundary.replacements[pid] == pid
@@ -492,6 +496,28 @@ def test_product_with_tissue_stays_in_part() -> None:
     ]
 
 
+def test_product_into_equivalent_tissue_part() -> None:
+    """A product goes into its equivalent tissue part before plasma (R19)."""
+    full = Kp(2.0, mode=Mode.PERMEABILITY, ftissue=1.0)
+    merged = Kp(1.0, ftissue=1.0)
+    perfusion = Kp(1.0, mode=Mode.PERFUSION)
+    cases = [
+        (full, merged, "Cic_drg", "Cti_drg_m"),
+        (merged, full, "Cti_drg", "Cic_drg_m"),
+        (full, perfusion, "Cic_drg", "Cor_drg_m"),
+        (perfusion, full, "Cor_drg", "Cic_drg_m"),
+        (None, perfusion, "Cpl_drg", "Cor_drg_m"),
+    ]
+    for parent, child, substrate, product in cases:
+        drug = _drug(distribution=parent)
+        metabolite = dataclasses.replace(_metabolite(), distribution=child)
+        md, _ = _build(substances=[drug, metabolite], chemistry=[_metabolism()])
+        assert _equation(_reaction(md, "DRG2M")) == (
+            [(substrate, 1.0)],
+            [(product, 1.0)],
+        ), (parent, child)
+
+
 def test_metabolism_kinetics() -> None:
     """First order and Hill kinetics, an elimination without products."""
     first = _metabolism(sid="E1", products={}, kinetics=FirstOrder(k=0.5), protein=None)
@@ -542,14 +568,20 @@ def test_apical_efflux_writes_to_sink_port(
 
 
 def test_apical_influx_from_sink() -> None:
-    """Apical influx takes up the drug from the sink, urine by its concentration."""
-    md, _ = _build(
-        Organ.KIDNEY,
-        chemistry=[_transport(Direction.INFLUX, Membrane.APICAL, Organ.KIDNEY)],
-    )
+    """Apical influx takes up the drug from the bile (a transit compartment)."""
+    md, _ = _build(chemistry=[_transport(Direction.INFLUX, Membrane.APICAL)])
     reaction = _reaction(md, "DRGT")
-    assert _equation(reaction) == ([("Aurine_drg", 1.0)], [("Cic_drg", 1.0)])
-    assert "(Aurine_drg / Vurine)" in _formula(reaction)
+    assert _equation(reaction) == ([("Cbile_drg", 1.0)], [("Cic_drg", 1.0)])
+    assert "(Cbile_drg) / (DRGT_Km + Cbile_drg)" in _formula(reaction)
+
+
+def test_apical_influx_from_urine_raises() -> None:
+    """The standard kidney takes up nothing from the cumulative urine (R18)."""
+    with pytest.raises(ValueError, match=r"'DRGT'.*fraction_reabsorbed.*nephron"):
+        _build(
+            Organ.KIDNEY,
+            chemistry=[_transport(Direction.INFLUX, Membrane.APICAL, Organ.KIDNEY)],
+        )
 
 
 def test_apical_transport_without_sink_raises() -> None:
@@ -620,7 +652,7 @@ def test_chemistry_of_other_organs_ignored() -> None:
             Organ.KIDNEY,
             _drug(binding=Binding(fu=0.5)),
             [
-                _transport(Direction.INFLUX, Membrane.APICAL, Organ.KIDNEY),
+                _transport(Direction.EFFLUX, Membrane.APICAL, Organ.KIDNEY),
                 _metabolism(Organ.KIDNEY, kinetics=FirstOrder(k=0.1)),
             ],
         ),
@@ -646,3 +678,44 @@ def test_valid_sbml(
     """The model definitions are valid SBML with consistent units."""
     md, _ = _build(organ, substances=[drug, _metabolite()], chemistry=chemistry)
     _validate(md, tmp_path)
+
+
+def test_custom_species_collision_raises() -> None:
+    """A species of a custom reaction must not replace a species of the organ."""
+    from sbmlutils.factory import Species
+
+    from pkpdsim.pbpk import Part
+
+    custom = CustomReaction(
+        sid="CUSTOM",
+        organ=LIVER,
+        part=Part.TISSUE,
+        equation="Cti_drg -> Cpl_drg_m",
+        formula="k_custom * Vti * Cti_drg",
+        parameters=[Parameter("k_custom", 0.1, U.per_min)],
+        species=[Species("Cti_drg", "Vti", initialConcentration=0.0)],
+    )
+    with pytest.raises(ValueError, match=r"CUSTOM.*Cti_drg"):
+        _build(chemistry=[custom])
+
+
+def test_blood_capacities_not_physical() -> None:
+    """The capacities of the blood with BP are implicit, not physical compartments."""
+    from sbmlutils.metadata import SBO
+
+    drug = _drug(erythrocytes=Erythrocytes(mode="equilibrium", bp=1.5))
+    md, _ = _build(substances=[drug, _metabolite()])
+    compartments = {c.sid: c for c in md.compartments or []}
+    for cid in ("Vpl_drg", "Var_pl_drg", "Vpo_pl_drg", "Vve_pl_drg"):
+        assert compartments[cid].sboTerm == SBO.IMPLICIT_COMPARTMENT, cid
+        assert "plasma-equivalent capacity" in str(compartments[cid].name), cid
+        assert "Not a physical volume" in str(compartments[cid].notes), cid
+    assert compartments["Vpl"].sboTerm == SBO.PHYSICAL_COMPARTMENT
+
+
+def test_ftissue_meaning_in_notes() -> None:
+    """The notes say that ftissue multiplies the unbound driving force (R20)."""
+    md, _ = _build()
+    pars = _parameters(md)
+    for pid in ("ftissue_drg", "PS_drg"):
+        assert "fu*(Cpl - Cti/Kp)" in str(pars[pid].notes), pid
