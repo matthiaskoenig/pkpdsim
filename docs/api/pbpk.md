@@ -1,6 +1,6 @@
 # pbpk
 
-The PBPK library, see [PBPK library](../pbpk/index.md). The package exports the classes and functions a model package uses; the modules below hold them and the generators.
+The PBPK library, see [PBPK library](../pbpk/index.md): the package and the classes a model package writes its definition with, and the build. The organs, the physiology and the id scheme are on the pages [pbpk organs](pbpk_organs.md), [pbpk physiology](pbpk_physiology.md) and [pbpk ids and data](pbpk_ids.md).
 
 ::: pkpdsim.pbpk
     options:
@@ -33,87 +33,3 @@ The PBPK library, see [PBPK library](../pbpk/index.md). The package exports the 
 ## builder
 
 ::: pkpdsim.pbpk.builder
-
-## organs
-
-::: pkpdsim.pbpk.organs
-
-## parts
-
-::: pkpdsim.pbpk.parts
-
-## organ
-
-::: pkpdsim.pbpk.organ
-
-## organ_builder
-
-::: pkpdsim.pbpk.organ_builder
-
-## placement
-
-::: pkpdsim.pbpk.placement
-
-## distribution
-
-::: pkpdsim.pbpk.distribution
-
-## kp
-
-::: pkpdsim.pbpk.kp
-
-## variants
-
-::: pkpdsim.pbpk.variants
-
-## variants.liver_zonated
-
-::: pkpdsim.pbpk.variants.liver_zonated
-
-## variants.kidney_nephron
-
-::: pkpdsim.pbpk.variants.kidney_nephron
-
-## variants.intestine
-
-::: pkpdsim.pbpk.variants.intestine
-
-## physiology
-
-::: pkpdsim.pbpk.physiology
-
-## populations
-
-::: pkpdsim.pbpk.populations
-
-## impairment
-
-::: pkpdsim.pbpk.impairment
-
-## observers
-
-::: pkpdsim.pbpk.observers
-
-## sinks
-
-::: pkpdsim.pbpk.sinks
-
-## annotation
-
-::: pkpdsim.pbpk.annotation
-
-## ids
-
-::: pkpdsim.pbpk.ids
-
-## values
-
-::: pkpdsim.pbpk.values
-
-## data
-
-::: pkpdsim.pbpk.data
-
-## units
-
-::: pkpdsim.pbpk.units

@@ -87,7 +87,7 @@ Without secretion and reabsorption every filtered molecule reaches the urine: th
 <!-- generated: nephron-segments (scripts/pbpk_tables.py), do not edit -->
 *Generated from `data/kidney_human.toml` by `scripts/pbpk_tables.py`; the notes of every number are in the data file.*
 
-| segment | flow leaving [fraction of GFR] | volume [l] |
+| segment | flow leaving, fraction of GFR [-] | volume [l] |
 | --- | ---: | ---: |
 | proximal tubule | 0.36 | 0.0915 |
 | loop of Henle | 0.2 | 0.0054 |
@@ -110,6 +110,8 @@ The segmented intestine and the single lumen replace small and large intestine w
 ## Writing a variant
 
 A variant is an `OrganComponent`: an object with a `name` and a method `build(ctx: OrganContext) -> tuple[ModelDefinition, Boundary]`. The context gives the organ, the substances with their parts in the organ (`parts_for`), the chemistry, the inhibitions and inductions and the routes; the boundary names, for every input of the model definition, the element of the body which replaces it, and the outputs which replace parameters of the body (`Cout_<s>` -> `Cout_<o>_<s>`). The builder generates the ports and replacements from the boundary; a variant writes no `ReplacedElement`.
+
+An intestine which replaces several organs with one submodel is a `GutComponent`: in addition it names the organs it replaces (`replaces`, the small intestine first) and gives the parameters of the top model it reads (`body_objects(definition)`, e.g. `ka_<s>` and `FED`), as the segmented intestine and the single lumen do.
 
 The base classes do the bookkeeping: `pkpdsim.pbpk.organ_builder.OrganBuilder` collects the inputs with their ports, the compartments, species, rules, initial assignments, constants with their provenance and the activities of the proteins, and `pkpdsim.pbpk.organ.StandardBuilder` builds the parts, flows and exchanges of the standard organ (with zones, as the zonated liver uses it); `pkpdsim.pbpk.placement` places the chemistry. A new variant derives from them, keeps the boundary of the standard organ, places the chemistry by volume fraction and ships its equivalence test.
 

@@ -87,7 +87,7 @@ The organs of the chemistry are those of `Organ`; the chemistry of the intestine
 
 ## Kinetics
 
-Every rate acts on the unbound concentration of its part and is an amount per time. The Vmax of a process is per litre of organ, so the whole organ has the capacity `Vmax*V<o>`; the clearance `k` of a first order process is that of the whole organ (l/min). The activity `f_<protein>` of the protein multiplies the rate, and in the liver the impairment factor `fimp_<protein>` and the functional fraction `f_functional` multiply it as well. A custom reaction states its rate itself and is not scaled.
+Every rate acts on the unbound concentration of its part and is an amount per time. The Vmax of a process is per litre of organ, so the whole organ has the capacity `Vmax*V<o>` and follows the organ of the individual; the clearance `k` of a first order process is that of the whole organ (l/min) and does not scale with the organ volume (a known gap, see [Migration](migration.md#known-gaps)). The activity `f_<protein>` of the protein multiplies the rate, and in the liver the impairment factor `fimp_<protein>` and the functional fraction `f_functional` multiply it as well. A custom reaction states its rate itself and is not scaled.
 
 ```equations title="Michaelis-Menten, liver"
 DRG2M: Cti_drg -> Cpl_drg_m = f_cyp3a4 * fimp_cyp3a4 * f_functional * DRG2M_Vmax * Vli * (fu_drg / Kp_drg * Cti_drg) / (DRG2M_Km + fu_drg / Kp_drg * Cti_drg)

@@ -28,6 +28,8 @@ from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 from typing import Any
 
+from sbmlutils.factory import UnitDefinition
+
 from pkpdsim.pbpk.data import load, sources
 from pkpdsim.pbpk.organs import Organ
 from pkpdsim.pbpk.physiology import Sex
@@ -126,6 +128,29 @@ def _value(entry: Mapping[str, Any] | None) -> str:
     return _number(value)
 
 
+def _unit(entries: Iterable[Mapping[str, Any]], key: str) -> str:
+    """Get the one unit of a column of a data file, `-` for dimensionless.
+
+    Raises:
+        ValueError: if the rows of the column state different units.
+    """
+    units = {row[key]["unit"] for row in entries if key in row}
+    if len(units) != 1:
+        raise ValueError(f"column '{key}' has the units {sorted(units)}, not one")
+    unit = units.pop()
+    return "-" if unit == "dimensionless" else unit
+
+
+def _unit_id(unit: object) -> str:
+    """Get the id of a unit of the model (a `UnitDefinition` or its id)."""
+    return str(unit.sid) if isinstance(unit, UnitDefinition) else str(unit)
+
+
+def _header(label: str, entries: Iterable[Mapping[str, Any]], key: str) -> str:
+    """Get the header of a column with the unit of the data file."""
+    return f"{label} [{_unit(entries, key)}]"
+
+
 def _column_sources(
     entries: Iterable[Mapping[str, Any]], columns: Mapping[str, str]
 ) -> tuple[str, list[str]]:
@@ -161,28 +186,25 @@ def physiology_general() -> str:
     rows: list[list[str]] = []
     cited: list[str] = []
     entries = [
-        ("body weight", "bodyweight", "kg"),
-        ("height", "height", "cm"),
-        ("body surface area", "body_surface_area", "m2"),
-        ("cardiac output", "cardiac_output", "l/min"),
-        ("hematocrit", "hematocrit", "-"),
-        ("GFR", "gfr", "ml/min"),
-        ("hepatic artery share of the liver flow", "hepatic_artery_fraction", "-"),
+        ("body weight", (), "bodyweight"),
+        ("height", (), "height"),
+        ("body surface area", (), "body_surface_area"),
+        ("cardiac output", (), "cardiac_output"),
+        ("hematocrit", (), "hematocrit"),
+        ("GFR", (), "gfr"),
+        ("hepatic artery share of the liver flow", (), "hepatic_artery_fraction"),
+        ("blood volume", ("blood",), "volume"),
+        ("blood density", ("blood",), "density"),
+        ("arterial pool (fraction of blood)", ("blood",), "arterial"),
+        ("venous pool (fraction of blood)", ("blood",), "venous"),
+        ("portal vein (fraction of blood)", ("blood",), "portal"),
     ]
-    for label, key, unit in entries:
-        male, female = data["male"][key], data["female"][key]
-        rows.append([label, unit, _value(male), _value(female)])
-        cited += [male["source"], female["source"]]
-    blood = [
-        ("blood volume", "volume", "l"),
-        ("blood density", "density", "kg/l"),
-        ("arterial pool (fraction of blood)", "arterial", "-"),
-        ("venous pool (fraction of blood)", "venous", "-"),
-        ("portal vein (fraction of blood)", "portal", "-"),
-    ]
-    for label, key, unit in blood:
-        male, female = data["male"]["blood"][key], data["female"]["blood"][key]
-        rows.append([label, unit, _value(male), _value(female)])
+    for label, path, key in entries:
+        tables = [data[sex.value] for sex in (Sex.MALE, Sex.FEMALE)]
+        for part in path:
+            tables = [table[part] for table in tables]
+        male, female = (table[key] for table in tables)
+        rows.append([label, _unit(tables, key), _value(male), _value(female)])
         cited += [male["source"], female["source"]]
     lines = _table(["quantity", "unit", "male", "female"], rows)
     return _generated("`data/physiology_human.toml`", lines, cited)
@@ -203,15 +225,9 @@ def _organs(sex: Sex) -> str:
         ]
         for organ in Organ
     ]
-    header = [
-        "organ",
-        "mass [kg]",
-        "density [kg/l]",
-        "blood [-]",
-        "f_vas [-]",
-        "f_int [-]",
-        "flow [-]",
-    ]
+    entries = list(organs.values())
+    keys = ("mass", "density", "blood", "f_vas", "f_int", "flow")
+    header = ["organ", *(_header(k, entries, k) for k in keys)]
     columns = {k: k for k in ("mass", "density", "blood", "f_vas", "f_int", "flow")}
     line, cited = _column_sources(organs.values(), columns)
     lines = [*_table(header, rows), "", line]
@@ -256,7 +272,13 @@ def populations() -> str:
                     "<br>".join(spread) if spread else "none",
                 ]
             )
-    header = ["population", "sex", "BW [kg]", "HEIGHT [cm]", "AGE [yr]", "covariates"]
+    reference = POPULATIONS[default].reference[Sex.MALE]
+    header = [
+        "population",
+        "sex",
+        *(f"{c} [{_unit_id(reference[c].unit)}]" for c in ("BW", "HEIGHT", "AGE")),
+        "covariates",
+    ]
     lines = _table(header, rows)
     return _generated("`data/populations/*.toml`", lines, cited)
 
@@ -369,15 +391,8 @@ def intestine_segments() -> str:
         [name.replace("_", " "), *(_value(entry.get(k)) for k in columns)]
         for name, entry in segments.items()
     ]
-    header = [
-        "segment",
-        "volume [l]",
-        "transit [min]",
-        "transit fed [min]",
-        "pH",
-        "area factor",
-        "CYP3A4",
-    ]
+    entries = list(segments.values())
+    header = ["segment", *(_header(label, entries, k) for k, label in columns.items())]
     line, cited = _column_sources(segments.values(), columns)
     lines = [*_table(header, rows), "", line]
     return _generated("`data/intestine_human.toml`", lines, cited)
@@ -394,7 +409,12 @@ def nephron_segments() -> str:
         ]
         for name, entry in data.items()
     ]
-    header = ["segment", "flow leaving [fraction of GFR]", "volume [l]"]
+    entries = list(data.values())
+    header = [
+        "segment",
+        "flow leaving, fraction of GFR " + f"[{_unit(entries, 'flow_fraction')}]",
+        _header("volume", entries, "volume"),
+    ]
     columns = {"flow_fraction": "flow", "volume": "volume"}
     line, cited = _column_sources(data.values(), columns)
     lines = [*_table(header, rows), "", line]
@@ -417,7 +437,8 @@ def proteins() -> str:
     lines = _table(["protein", "name", "UniProt", "NCIT"], rows)
     lines += [
         "",
-        "Degradation rate `kdeg_<protein>` of the turnover state (1/hr): "
+        "Degradation rate `kdeg_<protein>` of the turnover state "
+        + f"({_unit([turnover], next(iter(turnover)))}): "
         + ", ".join(f"{organ} {_value(e)}" for organ, e in turnover.items())
         + ".",
     ]

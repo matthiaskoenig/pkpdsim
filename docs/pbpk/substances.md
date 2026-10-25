@@ -10,7 +10,7 @@ A `Substance` is a short id, a name, a molecular weight and the mechanism flags 
 | `binding` | `Binding(fu, protein)` | `fu = 1` | protein binding: `fu_ref_<s>`, and `fu_<s>` which follows the binding protein in impairment |
 | `erythrocytes` | `Erythrocytes(mode, bp, kbc, k_exchange)` | no blood cells, `BP = 1 - HCT` | the distribution into the erythrocytes, in equilibrium or kinetic |
 | `distribution` | `Kp(...)` or `KpMethod(...)` | vascular only | the distribution into the tissues: one Kp with overrides, or a Kp method |
-| `excretion` | `Excretion(urine, fraction_reabsorbed)` | no filtration | glomerular filtration `fu*GFR` into the urine |
+| `excretion` | `Excretion(urine, fraction_reabsorbed)` | the default `Excretion()`: no filtration | glomerular filtration `fu*GFR` into the urine |
 | `inhibits` | tuple of `Inhibition` | | the inhibition of proteins by the substance, see [Chemistry](chemistry.md) |
 | `induces` | tuple of `Induction` | | the induction of proteins by the substance |
 

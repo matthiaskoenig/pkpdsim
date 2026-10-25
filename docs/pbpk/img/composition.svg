@@ -1,77 +1,77 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 676" role="img" aria-labelledby="pk-comp-title pk-comp-desc">
-<title id="pk-comp-title">How a model is composed</title>
-<desc id="pk-comp-desc">The model package writes substances, chemistry, choices and PD components; build composes them with the physiology, the standard organ, the organ variants, the proteins, routes and sinks, impairment, observers and annotation of pkpdsim.pbpk into a comp model with one submodel per organ, which is flattened for simulation.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 690" role="img" aria-labelledby="pkc-comp-title pkc-comp-desc">
+<title id="pkc-comp-title">How a model is composed</title>
+<desc id="pkc-comp-desc">The model package writes substances, chemistry, choices and PD components; build composes them with the physiology, the standard organ, the organ variants, the proteins, routes and sinks, impairment, observers and annotation of pkpdsim.pbpk into a comp model with one submodel per organ, which is flattened for simulation.</desc>
 <style>
-.pk-t{fill:currentColor;font-family:var(--md-text-font-family,system-ui),system-ui,sans-serif;font-size:14px}
-.pk-s{font-size:12.5px}
-.pk-b{font-weight:600}
-.pk-m{font-family:var(--md-code-font-family,ui-monospace),ui-monospace,monospace;font-size:12.5px}
-.pk-dim{fill-opacity:.72}
-.pk-line{stroke:currentColor;stroke-opacity:.6;stroke-width:1.5;fill:none}
-.pk-band{fill:none;stroke:currentColor;stroke-opacity:.3;stroke-width:1}
-.pk-pkg{fill:rgba(255,150,40,.16);stroke:rgba(230,130,30,.85);stroke-width:1.2}
-.pk-lib{fill:rgba(70,140,255,.14);stroke:rgba(70,140,255,.8);stroke-width:1.2}
-.pk-gen{fill:rgba(60,170,100,.14);stroke:rgba(60,170,100,.85);stroke-width:1.2}
+.pkc-t{fill:currentColor;font-family:var(--md-text-font-family,system-ui),system-ui,sans-serif;font-size:14px}
+.pkc-s{font-size:12.5px}
+.pkc-b{font-weight:600}
+.pkc-m{font-family:var(--md-code-font-family,ui-monospace),ui-monospace,monospace;font-size:12.5px}
+.pkc-dim{fill-opacity:.72}
+.pkc-line{stroke:currentColor;stroke-opacity:.6;stroke-width:1.5;fill:none}
+.pkc-band{fill:none;stroke:currentColor;stroke-opacity:.3;stroke-width:1}
+.pkc-pkg{fill:rgba(255,150,40,.16);stroke:rgba(230,130,30,.85);stroke-width:1.2}
+.pkc-lib{fill:rgba(70,140,255,.14);stroke:rgba(70,140,255,.8);stroke-width:1.2}
+.pkc-gen{fill:rgba(60,170,100,.14);stroke:rgba(60,170,100,.85);stroke-width:1.2}
 </style>
 <defs>
-<marker id="pk-comp-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor" fill-opacity=".7"/></marker>
+<marker id="pkc-comp-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor" fill-opacity=".7"/></marker>
 </defs>
-<text class="pk-t pk-s pk-dim" x="8" y="16">model package (pkdb_models/models/&lt;model&gt;)</text>
-<rect class="pk-band" x="2" y="24" width="396" height="148" rx="8"/>
-<rect class="pk-pkg" x="10" y="32" width="186" height="62" rx="6"/>
-<text class="pk-t pk-b" x="18" y="51">Substances</text>
-<text class="pk-t pk-s" x="18" y="69">id, Mr, binding (fu),</text>
-<text class="pk-t pk-s" x="18" y="85">erythrocytes, Kp, urine</text>
-<rect class="pk-pkg" x="204" y="32" width="186" height="62" rx="6"/>
-<text class="pk-t pk-b" x="212" y="51">Chemistry</text>
-<text class="pk-t pk-s" x="212" y="69">metabolism, transport,</text>
-<text class="pk-t pk-s" x="212" y="85">once per organ</text>
-<rect class="pk-pkg" x="10" y="102" width="186" height="62" rx="6"/>
-<text class="pk-t pk-b" x="18" y="121">Choices</text>
-<text class="pk-t pk-s" x="18" y="139">organ variants, routes,</text>
-<text class="pk-t pk-s" x="18" y="155">sex, population</text>
-<rect class="pk-pkg" x="204" y="102" width="186" height="62" rx="6"/>
-<text class="pk-t pk-b" x="212" y="121">PD components</text>
-<text class="pk-t pk-s" x="212" y="139">sbmlutils models with</text>
-<text class="pk-t pk-s" x="212" y="155">input and output ports</text>
-<line class="pk-line" x1="40" y1="174" x2="40" y2="208" marker-end="url(#pk-comp-arrow)"/>
-<text class="pk-t pk-m" x="54" y="195">build(definition, output_dir)</text>
-<text class="pk-t pk-s pk-dim" x="8" y="228">pkpdsim.pbpk</text>
-<rect class="pk-band" x="2" y="236" width="396" height="216" rx="8"/>
-<rect class="pk-lib" x="10" y="244" width="186" height="44" rx="6"/>
-<text class="pk-t pk-b" x="18" y="262">Physiology</text>
-<text class="pk-t pk-s" x="18" y="279">ICRP 89, scaling to BW</text>
-<rect class="pk-lib" x="204" y="244" width="186" height="44" rx="6"/>
-<text class="pk-t pk-b" x="212" y="262">Standard organ</text>
-<text class="pk-t pk-s" x="212" y="279">four parts, collapsing</text>
-<rect class="pk-lib" x="10" y="296" width="186" height="44" rx="6"/>
-<text class="pk-t pk-b" x="18" y="314">Organ variants</text>
-<text class="pk-t pk-s" x="18" y="331">zonated liver, nephron</text>
-<rect class="pk-lib" x="204" y="296" width="186" height="44" rx="6"/>
-<text class="pk-t pk-b" x="212" y="314">Proteins</text>
-<text class="pk-t pk-s" x="212" y="331">activity, inhibition</text>
-<rect class="pk-lib" x="10" y="348" width="186" height="44" rx="6"/>
-<text class="pk-t pk-b" x="18" y="366">Routes and sinks</text>
-<text class="pk-t pk-s" x="18" y="383">iv, oral, urine, bile</text>
-<rect class="pk-lib" x="204" y="348" width="186" height="44" rx="6"/>
-<text class="pk-t pk-b" x="212" y="366">Impairment</text>
-<text class="pk-t pk-s" x="212" y="383">Child-Pugh, CKD, NYHA</text>
-<rect class="pk-lib" x="10" y="400" width="186" height="44" rx="6"/>
-<text class="pk-t pk-b" x="18" y="418">Observers</text>
-<text class="pk-t pk-s" x="18" y="435">plasma, free, arm vein</text>
-<rect class="pk-lib" x="204" y="400" width="186" height="44" rx="6"/>
-<text class="pk-t pk-b" x="212" y="418">Annotation</text>
-<text class="pk-t pk-s" x="212" y="435">SBO, PBPKO, UBERON</text>
-<line class="pk-line" x1="40" y1="454" x2="40" y2="488" marker-end="url(#pk-comp-arrow)"/>
-<text class="pk-t pk-s" x="54" y="475">generated comp model, flattened</text>
-<text class="pk-t pk-s pk-dim" x="8" y="508">result</text>
-<rect class="pk-gen" x="2" y="516" width="396" height="158" rx="8"/>
-<text class="pk-t pk-m pk-b" x="12" y="538">glimepiride_body.xml (comp)</text>
-<text class="pk-t pk-m" x="12" y="557">├─ top: physiology, pools, substances</text>
-<text class="pk-t pk-m" x="12" y="576">├─ LI standard liver + GLI2M1, M12M2</text>
-<text class="pk-t pk-m" x="12" y="595">├─ KI standard kidney + filtration</text>
-<text class="pk-t pk-m" x="12" y="614">├─ GU segmented intestine + oral dose</text>
-<text class="pk-t pk-m" x="12" y="633">├─ LU HE BR ... GO standard organs</text>
-<text class="pk-t pk-m" x="12" y="652">└─ observers Carm, Chv, Aurine</text>
-<text class="pk-t pk-m pk-b" x="12" y="668">glimepiride_body_flat.xml: MODEL_PATH</text>
+<text class="pkc-t pkc-s pkc-dim" x="8" y="16">model package (pkdb_models/models/&lt;model&gt;)</text>
+<rect class="pkc-band" x="2" y="24" width="396" height="148" rx="8"/>
+<rect class="pkc-pkg" x="10" y="32" width="186" height="62" rx="6"/>
+<text class="pkc-t pkc-b" x="18" y="51">Substances</text>
+<text class="pkc-t pkc-s" x="18" y="69">id, Mr, binding (fu),</text>
+<text class="pkc-t pkc-s" x="18" y="85">erythrocytes, Kp, urine</text>
+<rect class="pkc-pkg" x="204" y="32" width="186" height="62" rx="6"/>
+<text class="pkc-t pkc-b" x="212" y="51">Chemistry</text>
+<text class="pkc-t pkc-s" x="212" y="69">metabolism, transport,</text>
+<text class="pkc-t pkc-s" x="212" y="85">once per organ</text>
+<rect class="pkc-pkg" x="10" y="102" width="186" height="62" rx="6"/>
+<text class="pkc-t pkc-b" x="18" y="121">Choices</text>
+<text class="pkc-t pkc-s" x="18" y="139">organ variants, routes,</text>
+<text class="pkc-t pkc-s" x="18" y="155">sex, population</text>
+<rect class="pkc-pkg" x="204" y="102" width="186" height="62" rx="6"/>
+<text class="pkc-t pkc-b" x="212" y="121">PD components</text>
+<text class="pkc-t pkc-s" x="212" y="139">sbmlutils models with</text>
+<text class="pkc-t pkc-s" x="212" y="155">input and output ports</text>
+<line class="pkc-line" x1="40" y1="174" x2="40" y2="208" marker-end="url(#pkc-comp-arrow)"/>
+<text class="pkc-t pkc-m" x="54" y="195">build(definition, output_dir)</text>
+<text class="pkc-t pkc-s pkc-dim" x="8" y="228">pkpdsim.pbpk</text>
+<rect class="pkc-band" x="2" y="236" width="396" height="216" rx="8"/>
+<rect class="pkc-lib" x="10" y="244" width="186" height="44" rx="6"/>
+<text class="pkc-t pkc-b" x="18" y="262">Physiology</text>
+<text class="pkc-t pkc-s" x="18" y="279">ICRP 89, scaling to BW</text>
+<rect class="pkc-lib" x="204" y="244" width="186" height="44" rx="6"/>
+<text class="pkc-t pkc-b" x="212" y="262">Standard organ</text>
+<text class="pkc-t pkc-s" x="212" y="279">four parts, collapsing</text>
+<rect class="pkc-lib" x="10" y="296" width="186" height="44" rx="6"/>
+<text class="pkc-t pkc-b" x="18" y="314">Organ variants</text>
+<text class="pkc-t pkc-s" x="18" y="331">zonated liver, nephron</text>
+<rect class="pkc-lib" x="204" y="296" width="186" height="44" rx="6"/>
+<text class="pkc-t pkc-b" x="212" y="314">Proteins</text>
+<text class="pkc-t pkc-s" x="212" y="331">activity, inhibition</text>
+<rect class="pkc-lib" x="10" y="348" width="186" height="44" rx="6"/>
+<text class="pkc-t pkc-b" x="18" y="366">Routes and sinks</text>
+<text class="pkc-t pkc-s" x="18" y="383">iv, oral, urine, bile</text>
+<rect class="pkc-lib" x="204" y="348" width="186" height="44" rx="6"/>
+<text class="pkc-t pkc-b" x="212" y="366">Impairment</text>
+<text class="pkc-t pkc-s" x="212" y="383">Child-Pugh, CKD, NYHA</text>
+<rect class="pkc-lib" x="10" y="400" width="186" height="44" rx="6"/>
+<text class="pkc-t pkc-b" x="18" y="418">Observers</text>
+<text class="pkc-t pkc-s" x="18" y="435">plasma, free, arm vein</text>
+<rect class="pkc-lib" x="204" y="400" width="186" height="44" rx="6"/>
+<text class="pkc-t pkc-b" x="212" y="418">Annotation</text>
+<text class="pkc-t pkc-s" x="212" y="435">SBO, PBPKO, UBERON</text>
+<line class="pkc-line" x1="40" y1="454" x2="40" y2="488" marker-end="url(#pkc-comp-arrow)"/>
+<text class="pkc-t pkc-s" x="54" y="475">generated comp model, flattened</text>
+<text class="pkc-t pkc-s pkc-dim" x="8" y="508">result</text>
+<rect class="pkc-gen" x="2" y="516" width="396" height="172" rx="8"/>
+<text class="pkc-t pkc-m pkc-b" x="12" y="538">glimepiride_body.xml (comp)</text>
+<text class="pkc-t pkc-m" x="12" y="557">├─ top: physiology, pools, substances,</text>
+<text class="pkc-t pkc-m" x="12" y="576">│  observers Carm, Chv, Aurine</text>
+<text class="pkc-t pkc-m" x="12" y="595">├─ LI standard liver + GLI2M1, M12M2</text>
+<text class="pkc-t pkc-m" x="12" y="614">├─ KI standard kidney + filtration</text>
+<text class="pkc-t pkc-m" x="12" y="633">├─ GU segmented intestine + oral dose</text>
+<text class="pkc-t pkc-m" x="12" y="652">└─ LU HE BR ... GO standard organs</text>
+<text class="pkc-t pkc-m pkc-b" x="12" y="671">glimepiride_body_flat.xml: MODEL_PATH</text>
 </svg>

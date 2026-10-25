@@ -8,7 +8,7 @@ The models of pkdb_models were built from one body model which was copied and ed
 |---|---|---|
 | `model_body.py`: the whole-body model, organs, blood flows, dosing, the scaling with `BW`, the ports and replacements | 1472 | the physiology, the standard organs, the routes, the sinks and the observers of the library; nothing in the package |
 | `model_liver.py`: `GLIIM` (uptake of glimepiride), `GLI2M1` (CYP2C9), `M1EX` and `M2EX` (export of the metabolites), `M12M2`, `M1BIL` and `M2BIL` (biliary excretion) | 374 | the distribution of `gli` (Kp, the exchange of the liver `ps`), `Metabolism("GLI2M1", ...)` and `Metabolism("M12M2", ...)`; the products are placed into the plasma of the liver (no export reaction); a biliary excretion is `Transport(..., Direction.EFFLUX, Membrane.APICAL, ...)` of the liver |
-| `model_kidney.py`: `M1EX`, `M2EX` (`GFR*M1EX_f*m1_ext`, a fraction of the GFR) | 273 | `Excretion(urine=True)` of the metabolites: `fu*GFR*(1 - f_reabsorbed)`; a fraction above 1 is a secretion, an apical efflux of the kidney |
+| `model_kidney.py`: `M1EX`, `M2EX` (`GFR*M1EX_f*m1_ext`, a fraction of the GFR) | 273 | `Excretion(urine=True)` of the metabolites: `fu*GFR*(1 - f_reabsorbed)`, with `f_reabsorbed = 1 - M1EX_f` for a fraction below 1; a fraction above 1 is a secretion, an apical efflux of the kidney, which does not follow `f_renal_function` yet (see [Known gaps](#known-gaps)) |
 | `model_intestine.py`: dissolution of the tablet, `GLIABS` with the fraction `F_gli_abs`, the excretion of the lumen into the feces | 350 | `Route.oral("gli")` and the segmented intestine (dissolution, transit, absorption `ka_gli`, feces); or the single lumen (`fabs_gli`) |
 | `factory.py`: create the four models, flatten, the ODEs, the COMBINE archive | 145 | `build(DEFINITION, output_dir)` for the comp and the flat model; the ODEs, the license texts and the COMBINE archive stay in the factory of the package |
 | `annotations.py`, `templates.py` | | the annotation of the library (see [Annotation](annotation.md)); the substance annotations go into `Substance.annotations` |
@@ -26,7 +26,7 @@ The library keeps the ids of the hand-written models where they fit its id schem
 | `Chv_gli` (a species) | `Chv_gli` (an observer) | the outflow of the liver mixed with the shunt |
 | `m1`, `m2` (substance ids) | `gli_m1`, `gli_m2` | a substance id is unique over all models: `Cve_m1` becomes `Cve_gli_m1`, `Aurine_m1` becomes `Aurine_gli_m1` |
 | `Aurine_m1`, `Afeces_gli` | `Aurine_gli_m1`, `Afeces_gli` | the sinks keep their pattern |
-| `Cve_m1_m2` (the sum of the metabolites) | none | the library generates no sums of substances; the pilot decides how the package keeps it |
+| `Cve_m1_m2` (the sum of the metabolites) | none | the library has no observers of the definition yet (see [Known gaps](#known-gaps)) |
 | `Cli_plasma_gli`, `LI__gli` | `LI__Cpl_gli`, `LI__Cti_gli` | the plasma and the tissue of the liver (local ids of the organ) |
 | `Clu_gli`, `Cre_gli` ("rest") | `LU__Cti_gli`, the organs `HE__`, `BR__`, `MU__`, ... | every organ of ICRP 89, no rest compartment |
 | `GU__gli_stomach`, `GU__gli_lumen` | `PODOSE_gli`, `GU__Clumen_<seg>_gli`, `GU__Asolid_<seg>_gli` | the undissolved tablet, the lumen segments |
@@ -34,7 +34,8 @@ The library keeps the ids of the hand-written models where they fit its id schem
 | `Ki_gli` (injection rate) | `Kiv_gli` | `Ki_<protein>_<s>` is an inhibition constant now |
 | `GU__Ka_dis_gli` | `Ka_dis_gli` | a parameter of the top model (1/hr) |
 | `GU__GLIABS_k` (1/min), `GU__F_gli_abs` | `ka_gli` (1/hr), `fabs_gli` (single lumen) | the absorption rate constant of the small intestine |
-| `LI__GLI2M1_Vmax`, `LI__M12M2_k` | `LI__GLI2M1_Vmax`, `LI__M12M2_k` | the same when the processes keep their ids |
+| `LI__GLI2M1_Vmax` | `LI__GLI2M1_Vmax` | the same when the process keeps its id: a Vmax per litre of liver in both |
+| `LI__M12M2_k` (1/min, per litre of liver: `M12M2_k*Vli*m1`) | `LI__M12M2_k` (l/min, the whole liver) | the same id, another meaning: `FirstOrder.k` is a clearance of the whole organ on the unbound concentration, so an old value maps as `k_new = k_old*Vli` (about 2.3 l for the male reference) and does not scale with the liver of another individual (see [Known gaps](#known-gaps)) |
 | `LI__GLI2M1_Km_gli` | `LI__GLI2M1_Km` | the Km of a process is `<p>_Km` |
 | `LI__fu_gli` | `fu_ref_gli` (input), `fu_gli` | fu is a parameter of the substance, fitted as `fu_ref_gli` |
 | `LI__f_cyp2c9` | `LI__f_cyp2c9` | the same: the activity of the protein in the liver |
@@ -56,11 +57,22 @@ The migration does not reproduce the simulations of the hand-written model, and 
 - Blood and plasma: every vascular space has plasma and blood cells with the hematocrit of the sex (0.43 male), the blood flows carry plasma; the hand-written models had five conventions (whole-blood pools with plasma organ volumes, blood flows multiplied by plasma concentrations, hematocrits 0.51, 0.45, 0.40 or none).
 - Tissue distribution: one convention, the whole-tissue Kp with the unbound plasma concentration, `PS*fu*(C_p - C_t/Kp)`. `ftissue_<s>` multiplies the unbound concentrations, so its fitted values change, and an organ has the share of its tissue volume of the reference individual. For a highly bound substance the exchange of the liver needs its own `ps` (glimepiride: fu 0.005).
 - Physiology: the organs, volumes and flows of ICRP 89 with their sources, and the scaling of Huisinga 2012 (fat-free mass, adipose as the remainder) instead of `ftissue*BW/BW_ref`.
+- First order processes: `FirstOrder.k` is a clearance of the whole organ, a per-litre constant of the hand-written model maps as `k*V` of the reference organ.
 - Absorption: the segmented intestine has a transit through the segments into the feces, and the single lumen a physiological transit, `Fa = fabs*ka/(ka + 1/T)`; the fitted absorption constants of the hand-written models (without transit) do not carry over.
 - Observables: the arm vein instead of the venous plasma.
 - Impairment: Child-Pugh, CKD and heart failure as vectors with sources instead of one map `f_cirrhosis` (shunt = tissue loss), which over-predicted the exposure of low-extraction drugs.
 
 The bootstrap of a pilot builds the model with the literature values and the current fitted values where the parameter still exists, then fits and adopts the fits (`run_fit <package> --adopt <fit id>`), so the factory takes the new values with their uncertainties.
+
+## Known gaps
+
+The library as it stands lacks what some hand-written models use. These gaps are known and are planned as the prerequisites of the pilots (plan 2, tasks P1 and P2 on this branch); the pages are updated when they land:
+
+- A first order process (`FirstOrder.k`) is a clearance of the whole organ: it does not scale with the organ volume or the size of the individual, as the per-litre constants of the hand-written models did (`k*V`).
+- A tubular secretion (an apical efflux of the kidney) does not follow the renal function `f_renal_function`, as the fraction of the GFR of the hand-written models did (`GFR*M1EX_f`); only the filtration does.
+- There is no urinary excretion rate `Rurine_<s>`; the urine is read as the cumulative amount `Aurine_<s>`.
+- A definition cannot declare observers of its own (a sum of metabolites such as `Cve_m1_m2`, a ratio).
+- `build` writes no creators into the model; the factory of the package adds the model history it needs.
 
 ## The pilots are the validation gate
 

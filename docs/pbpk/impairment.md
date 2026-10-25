@@ -8,8 +8,8 @@ Impaired organ function is a set of parameter vectors on the physiology, never a
 
 | condition | severity | classes | acts on |
 |---|---|---|---|
-| liver cirrhosis | `CP_severity` | 0 healthy, 1, 2, 3 the Child-Pugh classes A, B, C, interpolated linearly | functional liver `f_functional`, shunt `f_shunt`, hepatic artery and kidney flow, cardiac index, GFR, albumin and AGP (so fu), hematocrit, the enzymes and transporters of the liver |
-| chronic kidney disease | `f_renal_function` | the GFR relative to healthy; its GFR per 1.73 m2 (`eGFR`) gives the stage | GFR, the binding capacity of the plasma proteins (so fu), hematocrit, kidney volume and flow, gastric emptying and small intestinal transit; with `CKD_hepatic = 1` hepatic CYP2D6 and OATP1B |
+| liver cirrhosis | `CP_severity` | 0 healthy, 1, 2, 3 the Child-Pugh classes A, B, C, interpolated linearly | functional liver `f_functional`, shunt `f_shunt`, hepatic artery and kidney flow, cardiac index, GFR, albumin and AGP (so fu), the enzymes and transporters of the liver; hematocrit (factor 1, see [Limitations](#limitations)) |
+| chronic kidney disease | `f_renal_function` | the GFR relative to healthy; its GFR per 1.73 m2 (`eGFR`) gives the stage | GFR, the binding capacity of the plasma proteins (so fu); hematocrit, kidney volume and flow, gastric emptying and small intestinal transit (factor 1, see [Limitations](#limitations)); with the switch `CKD_hepatic = 1` hepatic CYP2D6 and OATP1B |
 | heart failure | `HF_severity` | 0 healthy, 1 to 4 the NYHA classes I to IV, interpolated linearly | the blood flows of liver and portal organs, kidney, skin, adipose and muscle; the cardiac output is their sum, the GFR follows the renal blood flow |
 
 Each condition has its factors `fcp_<key>`, `fckd_<key>`, `fhf_<key>`; the factor of all conditions on a quantity is `fimp_<id>`, their product (`fimp_GFR`, `fimp_Qki`, `fimp_HCT`), which the [physiology](physiology.md#scaling-to-the-individual) multiplies. Every organ flow is its fraction of the cardiac output without impairment (`CO_base`) times `fimp_Q<o>`, and the cardiac output is `CO_base*fimp_CO`, so the flows sum to it. A rate of a protein in the liver runs with `f_<protein>*fimp_<protein>`, the base activity of the organ (genotype, interactions of an experiment) times the impairment, so both act multiplicatively.
@@ -39,7 +39,7 @@ fcp_shunt = piecewise(0, CP_severity <= 0, 0 + 0.399489795918367 * (CP_severity 
 fcp_rest_flow = 1 + (fcp_cardiac_index - 1 - (fQli * (fcp_hepatic_artery_flow - 1) + fQki * (fcp_kidney_flow - 1))) / (fQhe + fQmu + fQsk + fQad + fQbo + fQgo)
 ```
 
-The organs without a factor of their own (heart, muscle, skin, adipose, bone, gonads) close the cardiac output to the cardiac index of the class (`fcp_rest_flow`).
+The organs without a factor of their own (heart, muscle, skin, adipose, bone, gonads) close the cardiac output to the cardiac index of the class (`fcp_rest_flow`). The brain (autoregulation of the cerebral blood flow, a choice of the library) and the portal organs (the shunt represents the portal blood which does not reach the liver) keep their flow.
 
 <!-- generated: impairment-child-pugh (scripts/pbpk_tables.py), do not edit -->
 *Generated from `data/impairment.toml` by `scripts/pbpk_tables.py`; the notes of every number are in the data file.*

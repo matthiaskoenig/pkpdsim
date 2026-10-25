@@ -1,75 +1,75 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 368" role="img" aria-labelledby="pk-imp-title pk-imp-desc">
-<title id="pk-imp-title">Impairment as parameter vectors</title>
-<desc id="pk-imp-desc">Three severities: CP_severity for liver cirrhosis (Child-Pugh A, B, C), f_renal_function for chronic kidney disease (its eGFR gives the stage) and HF_severity for heart failure (NYHA I to IV). Their factors are interpolated between the classes or steps at the CKD stages, and their product fimp acts on the physiology (cardiac output, flows, GFR, hematocrit, kidney mass), on the liver (shunt, functional fraction, proteins) and on the plasma binding (fu).</desc>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 368" role="img" aria-labelledby="pki-imp-title pki-imp-desc">
+<title id="pki-imp-title">Impairment as parameter vectors</title>
+<desc id="pki-imp-desc">Three severities: CP_severity for liver cirrhosis (Child-Pugh A, B, C), f_renal_function for chronic kidney disease (its eGFR gives the stage) and HF_severity for heart failure (NYHA I to IV). Their factors are interpolated between the classes or steps at the CKD stages, and their product fimp acts on the physiology (cardiac output, flows, GFR; hematocrit and kidney mass with factor 1), on the liver (shunt, functional fraction, proteins) and on the plasma binding (fu).</desc>
 <style>
-.pk-t{fill:currentColor;font-family:var(--md-text-font-family,system-ui),system-ui,sans-serif;font-size:14px}
-.pk-s{font-size:12.5px}
-.pk-b{font-weight:600}
-.pk-m{font-family:var(--md-code-font-family,ui-monospace),ui-monospace,monospace;font-size:12.5px}
-.pk-dim{fill-opacity:.72}
-.pk-line{stroke:currentColor;stroke-opacity:.6;stroke-width:1.5;fill:none}
-.pk-axis{stroke:currentColor;stroke-opacity:.35;stroke-width:1;fill:none}
-.pk-curve{stroke:rgba(230,130,30,.95);stroke-width:2;fill:none}
-.pk-dot{fill:rgba(230,130,30,.95)}
-.pk-pkg{fill:rgba(255,150,40,.16);stroke:rgba(230,130,30,.85);stroke-width:1.2}
-.pk-lib{fill:rgba(70,140,255,.14);stroke:rgba(70,140,255,.8);stroke-width:1.2}
-.pk-gen{fill:rgba(60,170,100,.14);stroke:rgba(60,170,100,.85);stroke-width:1.2}
+.pki-t{fill:currentColor;font-family:var(--md-text-font-family,system-ui),system-ui,sans-serif;font-size:14px}
+.pki-s{font-size:12.5px}
+.pki-b{font-weight:600}
+.pki-m{font-family:var(--md-code-font-family,ui-monospace),ui-monospace,monospace;font-size:12.5px}
+.pki-dim{fill-opacity:.72}
+.pki-line{stroke:currentColor;stroke-opacity:.6;stroke-width:1.5;fill:none}
+.pki-axis{stroke:currentColor;stroke-opacity:.35;stroke-width:1;fill:none}
+.pki-curve{stroke:rgba(230,130,30,.95);stroke-width:2;fill:none}
+.pki-dot{fill:rgba(230,130,30,.95)}
+.pki-pkg{fill:rgba(255,150,40,.16);stroke:rgba(230,130,30,.85);stroke-width:1.2}
+.pki-lib{fill:rgba(70,140,255,.14);stroke:rgba(70,140,255,.8);stroke-width:1.2}
+.pki-gen{fill:rgba(60,170,100,.14);stroke:rgba(60,170,100,.85);stroke-width:1.2}
 </style>
 <defs>
-<marker id="pk-imp-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor" fill-opacity=".7"/></marker>
+<marker id="pki-imp-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor" fill-opacity=".7"/></marker>
 </defs>
-<rect class="pk-pkg" x="8" y="8" width="124" height="46" rx="6"/>
-<text class="pk-t pk-s pk-b" x="16" y="27">CP_severity</text>
-<text class="pk-t pk-s" x="16" y="45">0, A 1, B 2, C 3</text>
-<rect class="pk-pkg" x="138" y="8" width="124" height="46" rx="6"/>
-<text class="pk-t pk-s pk-b" x="146" y="27">f_renal_function</text>
-<text class="pk-t pk-s" x="146" y="45">eGFR: the stage</text>
-<rect class="pk-pkg" x="268" y="8" width="124" height="46" rx="6"/>
-<text class="pk-t pk-s pk-b" x="276" y="27">HF_severity</text>
-<text class="pk-t pk-s" x="276" y="45">0, NYHA I-IV 1-4</text>
-<polyline class="pk-axis" points="18,70 18,136 124,136"/>
-<polyline class="pk-curve" points="18.0,80.0 53.3,97.4 88.7,105.2 124.0,120.3"/>
-<circle class="pk-dot" cx="18.0" cy="80.0" r="2.5"/>
-<circle class="pk-dot" cx="53.3" cy="97.4" r="2.5"/>
-<circle class="pk-dot" cx="88.7" cy="105.2" r="2.5"/>
-<circle class="pk-dot" cx="124.0" cy="120.3" r="2.5"/>
-<text class="pk-t pk-s pk-dim" x="72" y="154" text-anchor="middle">f_functional</text>
-<text class="pk-t pk-s" x="72" y="170" text-anchor="middle">interpolated</text>
-<polyline class="pk-axis" points="148,70 148,136 254,136"/>
-<path class="pk-curve" d="M148,112.0 V112.0 H169.2 V112.0 H190.4 V101.2 H211.6 V83.2 H232.8 V76.0 H254.0"/>
-<text class="pk-t pk-s pk-dim" x="202" y="154" text-anchor="middle">binding factor</text>
-<text class="pk-t pk-s" x="202" y="170" text-anchor="middle">steps at the stages</text>
-<polyline class="pk-axis" points="278,70 278,136 384,136"/>
-<polyline class="pk-curve" points="278.0,80.0 304.5,80.0 331.0,92.4 357.5,105.2 384.0,100.8"/>
-<circle class="pk-dot" cx="278.0" cy="80.0" r="2.5"/>
-<circle class="pk-dot" cx="304.5" cy="80.0" r="2.5"/>
-<circle class="pk-dot" cx="331.0" cy="92.4" r="2.5"/>
-<circle class="pk-dot" cx="357.5" cy="105.2" r="2.5"/>
-<circle class="pk-dot" cx="384.0" cy="100.8" r="2.5"/>
-<text class="pk-t pk-s pk-dim" x="332" y="154" text-anchor="middle">kidney flow</text>
-<text class="pk-t pk-s" x="332" y="170" text-anchor="middle">interpolated</text>
-<line class="pk-line" x1="70" y1="178" x2="70" y2="200" marker-end="url(#pk-imp-arrow)"/>
-<line class="pk-line" x1="200" y1="178" x2="200" y2="200" marker-end="url(#pk-imp-arrow)"/>
-<line class="pk-line" x1="330" y1="178" x2="330" y2="200" marker-end="url(#pk-imp-arrow)"/>
-<rect class="pk-lib" x="8" y="202" width="384" height="32" rx="6"/>
-<text class="pk-t pk-m" x="200" y="223" text-anchor="middle">fimp_&lt;id&gt; = fcp · fckd · fhf</text>
-<line class="pk-line" x1="70" y1="234" x2="70" y2="256" marker-end="url(#pk-imp-arrow)"/>
-<line class="pk-line" x1="200" y1="234" x2="200" y2="256" marker-end="url(#pk-imp-arrow)"/>
-<line class="pk-line" x1="330" y1="234" x2="330" y2="256" marker-end="url(#pk-imp-arrow)"/>
-<rect class="pk-gen" x="8" y="258" width="124" height="80" rx="6"/>
-<text class="pk-t pk-b" x="16" y="277">physiology</text>
-<text class="pk-t pk-s" x="16" y="295">CO, flows Q&lt;o&gt;,</text>
-<text class="pk-t pk-s" x="16" y="311">GFR, HCT,</text>
-<text class="pk-t pk-s" x="16" y="327">kidney mass</text>
-<rect class="pk-gen" x="138" y="258" width="124" height="80" rx="6"/>
-<text class="pk-t pk-b" x="146" y="277">liver</text>
-<text class="pk-t pk-s" x="146" y="295">f_shunt,</text>
-<text class="pk-t pk-s" x="146" y="311">f_functional,</text>
-<text class="pk-t pk-s" x="146" y="327">protein activity</text>
-<rect class="pk-gen" x="268" y="258" width="124" height="80" rx="6"/>
-<text class="pk-t pk-b" x="276" y="277">plasma binding</text>
-<text class="pk-t pk-s" x="276" y="295">fu from albumin,</text>
-<text class="pk-t pk-s" x="276" y="311">AGP and the CKD</text>
-<text class="pk-t pk-s" x="276" y="327">binding capacity</text>
-<text class="pk-t pk-s pk-dim" x="8" y="360">all severities 0: every factor 1, the healthy model</text>
+<rect class="pki-pkg" x="8" y="8" width="124" height="46" rx="6"/>
+<text class="pki-t pki-s pki-b" x="16" y="27">CP_severity</text>
+<text class="pki-t pki-s" x="16" y="45">0, A 1, B 2, C 3</text>
+<rect class="pki-pkg" x="138" y="8" width="124" height="46" rx="6"/>
+<text class="pki-t pki-s pki-b" x="146" y="27">f_renal_function</text>
+<text class="pki-t pki-s" x="146" y="45">eGFR: the stage</text>
+<rect class="pki-pkg" x="268" y="8" width="124" height="46" rx="6"/>
+<text class="pki-t pki-s pki-b" x="276" y="27">HF_severity</text>
+<text class="pki-t pki-s" x="276" y="45">0, NYHA I-IV 1-4</text>
+<polyline class="pki-axis" points="18,70 18,136 124,136"/>
+<polyline class="pki-curve" points="18.0,80.0 53.3,97.4 88.7,105.2 124.0,120.3"/>
+<circle class="pki-dot" cx="18.0" cy="80.0" r="2.5"/>
+<circle class="pki-dot" cx="53.3" cy="97.4" r="2.5"/>
+<circle class="pki-dot" cx="88.7" cy="105.2" r="2.5"/>
+<circle class="pki-dot" cx="124.0" cy="120.3" r="2.5"/>
+<text class="pki-t pki-s pki-dim" x="72" y="154" text-anchor="middle">f_functional</text>
+<text class="pki-t pki-s" x="72" y="170" text-anchor="middle">interpolated</text>
+<polyline class="pki-axis" points="148,70 148,136 254,136"/>
+<path class="pki-curve" d="M148,112.0 V112.0 H169.2 V112.0 H190.4 V101.2 H211.6 V83.2 H232.8 V76.0 H254.0"/>
+<text class="pki-t pki-s pki-dim" x="202" y="154" text-anchor="middle">binding factor</text>
+<text class="pki-t pki-s" x="202" y="170" text-anchor="middle">steps at the stages</text>
+<polyline class="pki-axis" points="278,70 278,136 384,136"/>
+<polyline class="pki-curve" points="278.0,80.0 304.5,80.0 331.0,92.4 357.5,105.2 384.0,100.8"/>
+<circle class="pki-dot" cx="278.0" cy="80.0" r="2.5"/>
+<circle class="pki-dot" cx="304.5" cy="80.0" r="2.5"/>
+<circle class="pki-dot" cx="331.0" cy="92.4" r="2.5"/>
+<circle class="pki-dot" cx="357.5" cy="105.2" r="2.5"/>
+<circle class="pki-dot" cx="384.0" cy="100.8" r="2.5"/>
+<text class="pki-t pki-s pki-dim" x="332" y="154" text-anchor="middle">kidney flow</text>
+<text class="pki-t pki-s" x="332" y="170" text-anchor="middle">interpolated</text>
+<line class="pki-line" x1="70" y1="178" x2="70" y2="200" marker-end="url(#pki-imp-arrow)"/>
+<line class="pki-line" x1="200" y1="178" x2="200" y2="200" marker-end="url(#pki-imp-arrow)"/>
+<line class="pki-line" x1="330" y1="178" x2="330" y2="200" marker-end="url(#pki-imp-arrow)"/>
+<rect class="pki-lib" x="8" y="202" width="384" height="32" rx="6"/>
+<text class="pki-t pki-m" x="200" y="223" text-anchor="middle">fimp_&lt;id&gt; = fcp · fckd · fhf</text>
+<line class="pki-line" x1="70" y1="234" x2="70" y2="256" marker-end="url(#pki-imp-arrow)"/>
+<line class="pki-line" x1="200" y1="234" x2="200" y2="256" marker-end="url(#pki-imp-arrow)"/>
+<line class="pki-line" x1="330" y1="234" x2="330" y2="256" marker-end="url(#pki-imp-arrow)"/>
+<rect class="pki-gen" x="8" y="258" width="124" height="80" rx="6"/>
+<text class="pki-t pki-b" x="16" y="277">physiology</text>
+<text class="pki-t pki-s" x="16" y="295">CO, flows Q&lt;o&gt;,</text>
+<text class="pki-t pki-s" x="16" y="311">GFR; HCT, kidney</text>
+<text class="pki-t pki-s" x="16" y="327">mass: factor 1</text>
+<rect class="pki-gen" x="138" y="258" width="124" height="80" rx="6"/>
+<text class="pki-t pki-b" x="146" y="277">liver</text>
+<text class="pki-t pki-s" x="146" y="295">f_shunt,</text>
+<text class="pki-t pki-s" x="146" y="311">f_functional,</text>
+<text class="pki-t pki-s" x="146" y="327">protein activity</text>
+<rect class="pki-gen" x="268" y="258" width="124" height="80" rx="6"/>
+<text class="pki-t pki-b" x="276" y="277">plasma binding</text>
+<text class="pki-t pki-s" x="276" y="295">fu from albumin,</text>
+<text class="pki-t pki-s" x="276" y="311">AGP and the CKD</text>
+<text class="pki-t pki-s" x="276" y="327">binding capacity</text>
+<text class="pki-t pki-s pki-dim" x="8" y="360">all severities 0: every factor 1, the healthy model</text>
 </svg>

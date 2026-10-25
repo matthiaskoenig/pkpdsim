@@ -161,23 +161,45 @@ An individual of 100 kg and the reference height has more adipose, a larger live
 The factory of the model package builds the definition with the fitted values from the adopted fits of the model (`FITS = MODEL.fit_records()`), so the uncertainties of the fits reach the SBML:
 
 ```python
-# not executed: the model package and its adopted fits
+# not executed: the model package and its adopted fits; m1, m2, chemistry of above
 from pathlib import Path
 
-from pkpdsim.pbpk import Kp, Organ, U, build, fitted
+from pkpdsim.pbpk import (
+    Binding,
+    Kp,
+    Organ,
+    PBPKDefinition,
+    Route,
+    Substance,
+    U,
+    build,
+    fitted,
+)
 
 from pkdb_models.models.glimepiride.models.fits import FITS
 
-distribution = Kp(
-    fitted(FITS.parameter("Kp_gli", unit=U.dimensionless)),
-    ftissue=fitted(FITS.parameter("ftissue_gli", unit=U.l_per_min)),
-    ps={Organ.LIVER: 100.0},
+glimepiride = Substance(
+    "gli",
+    name="glimepiride",
+    mr=490.6,
+    binding=Binding(fu=0.005, protein="albumin"),
+    distribution=Kp(
+        fitted(FITS.parameter("Kp_gli", unit=U.dimensionless)),
+        ftissue=fitted(FITS.parameter("ftissue_gli", unit=U.l_per_min)),
+        ps={Organ.LIVER: 100.0},
+    ),
+)
+DEFINITION = PBPKDefinition(
+    sid="glimepiride_body",
+    substances=[glimepiride, m1, m2],
+    chemistry=chemistry,
+    routes=[Route.oral("gli")],
 )
 
 
 def create_glimepiride_models(output_dir: Path) -> None:
     """Build the glimepiride model into the output folder of the model."""
-    build(definition, output_dir)
+    build(DEFINITION, output_dir)
 ```
 
 The experiments then set the doses, covariates and activity factors and read the observables as before; the [migration guide](migration.md) lists the ids which change.

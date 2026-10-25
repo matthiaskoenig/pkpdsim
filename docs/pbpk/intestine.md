@@ -65,7 +65,7 @@ The factors `fimp_t_stomach` and `fimp_t_si` are the factors of chronic kidney d
 <!-- generated: intestine-segments (scripts/pbpk_tables.py), do not edit -->
 *Generated from `data/intestine_human.toml` by `scripts/pbpk_tables.py`; the notes of every number are in the data file.*
 
-| segment | volume [l] | transit [min] | transit fed [min] | pH | area factor | CYP3A4 |
+| segment | volume [l] | transit [min] | transit fed [min] | pH [-] | area factor [-] | CYP3A4 [-] |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | stomach | 0.028 | 22.79 | 63.48 | 1.7 | 0 |  |
 | duodenum | 0.007819 | 14.3 |  | 6.2 | 1 | 31 |

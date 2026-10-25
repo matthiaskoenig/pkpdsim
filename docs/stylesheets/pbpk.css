@@ -12,10 +12,10 @@
   height: auto;
 }
 
-/* An id in a table cell is not broken inside the id: a cell wraps at the
-   spaces, and a wide table scrolls in its own container (the id table of the
-   PBPK library on a phone). */
-.md-typeset td code {
+/* The id table of the overview page of the PBPK library: an id is not
+   broken inside the id, a cell wraps at the spaces, and the table scrolls in
+   its own container on a phone. */
+.pbpk-ids td code {
   overflow-wrap: normal;
   word-break: keep-all;
 }
