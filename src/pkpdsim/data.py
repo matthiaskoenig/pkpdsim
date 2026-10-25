@@ -19,22 +19,29 @@ upload to the database), and its data are written as the tables of format 1
 mean in `gmean` (calculation `geometric mean`), a value below the limit of
 quantification as a row without a central value, an output with a label
 generated from its columns which is unique across the sources of the study,
-the interventions in the natural order of format 2 (`GEM,SIM`). Format 2 has
-no collection intervals (no `tstart` and `tend` of format 1) and no columns
-of its own of a table, so neither have the tables. A study of format 1 is
-copied as it is. `database_differences` compares the studies with the ones
-uploaded to a PK-DB server.
+the interventions in the natural order of format 2 (`GEM,SIM`), the counts as
+integers, the time and the interventions of both axes of a scatter. What the
+curation should look at is a `CollectionWarning` (a label which is no SId,
+the same output in two sources). Format 2 has no collection intervals (no
+`tstart` and `tend` of format 1) and no columns of its own of a table, so
+neither have the tables. A study of format 1 is copied as it is.
+`database_differences` compares the studies with the ones uploaded to a
+PK-DB server; `mean_of_individuals` and `sampling_times` prepare the tables
+for an experiment.
 """
 
 import json
 import os
 import re
 import shutil
-from collections.abc import Callable, Iterable
+import warnings
+from collections import defaultdict
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import numpy as np
 import pandas as pd
 from sbmlutils.console import console
 
@@ -50,6 +57,15 @@ if TYPE_CHECKING:
 
 PKDB_DATA = "PKDB_DATA"
 """The environment variable with the path of a checkout of pkdb_data."""
+
+
+class CollectionWarning(UserWarning):
+    """A finding of the collection of a study which the curation should look at.
+
+    The collection goes on: a curated label which is no SId, the same output
+    in two sources of a study, a curator 0 in a curve of geometric means which
+    is left out.
+    """
 
 
 def studies_dir() -> Path:
@@ -164,8 +180,12 @@ GROUP_COLUMNS: tuple[str, ...] = (
     "median",
     "sd",
     "se",
+    "cv",
     "min",
     "max",
+    "gmean",
+    "gsd",
+    "gcv",
     "unit",
     "comments",
 )
@@ -222,7 +242,8 @@ STATISTICS: tuple[str, ...] = (
 DATA_PREFIXES: tuple[str, ...] = ("timecourses_", "outputs_", "scatters_")
 
 #: the columns of a dimension of a scatter of study format 1, `x_<column>` and
-#: `y_<column>`; `""` is the column `x` (`y`) of the value, which `x_unit` is the unit of
+#: `y_<column>`; `""` is the column `x` (`y`) of the value, which `x_unit` is the
+#: unit of; the time and the interventions of a dimension come from format 2
 SCATTER_DIMENSION_COLUMNS: tuple[str, ...] = (
     "measurement_type",
     "substance",
@@ -232,6 +253,9 @@ SCATTER_DIMENSION_COLUMNS: tuple[str, ...] = (
     "value",
     "",
     "unit",
+    "time",
+    "time_unit",
+    "intervention",
 )
 
 #: the columns of a scatter of study format 1 (`.<study>_<source>.tsv` of a scatter)
@@ -248,6 +272,51 @@ SCATTER_COLUMNS: tuple[str, ...] = (
     *("_".join(("y", column)).rstrip("_") for column in SCATTER_DIMENSION_COLUMNS),
     "comments",
 )
+
+
+#: the integer columns of the tables, nullable integers (`Int64`), so that a
+#: column with a missing value is written as `12` and `NA`, not as `12.0`
+INTEGER_COLUMNS: tuple[str, ...] = ("count", "group_count", "doses")
+
+#: an SId of SBML, which the labels are used as (the keys of the datasets)
+SID = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def _integers(df: pd.DataFrame) -> pd.DataFrame:
+    """Make the integer columns of a table nullable integers (`INTEGER_COLUMNS`).
+
+    A column with a value which is no whole number stays as it is.
+    """
+    for column in INTEGER_COLUMNS:
+        if column not in df.columns:
+            continue
+        values = pd.to_numeric(df[column], errors="coerce")
+        present = values.dropna()
+        if (present == present.round()).all():
+            df[column] = values.astype("Int64")
+    return df
+
+
+def _warn(message: str) -> None:
+    """Report a finding of the collection (`CollectionWarning`)."""
+    warnings.warn(message, CollectionWarning, stacklevel=3)
+
+
+def _check_labels(name: str, labels: Iterable[str | None]) -> None:
+    """Warn about the curated labels of a study which are no SId.
+
+    The datasets of an experiment are keyed by the labels; a label with a
+    character which an SId does not allow (`-`, `+`, a leading digit) has to
+    be converted (`to_sid` of the experiments). The labels stay as they are.
+    """
+    invalid = sorted({label for label in labels if label and not SID.fullmatch(label)})
+    if invalid:
+        shown = ", ".join(f"'{label}'" for label in invalid[:10])
+        more = f" and {len(invalid) - 10} more" if len(invalid) > 10 else ""
+        _warn(
+            f"{name}: the curated labels {shown}{more} are no SId; they stay as "
+            f"curated, convert them with `to_sid`."
+        )
 
 
 def _comments(record: Notes) -> str | None:
@@ -307,10 +376,13 @@ def _label(*parts: str | None) -> str:
     """Get the label of an output without one from the columns which identify it.
 
     The parts which are given are joined by `_`, every other character than a
-    letter or a digit becomes `_` (`auc_hydrochlorothiazide_plasma_HCTZ25_all`).
+    letter or a digit becomes `_` (`auc_hydrochlorothiazide_plasma_HCTZ25_all`),
+    a label which would start with a digit starts with `_`: a generated label
+    is an SId.
     """
     text = "_".join(part for part in parts if part)
-    return re.sub(r"[^A-Za-z0-9]+", "_", text).strip("_")
+    label = re.sub(r"[^A-Za-z0-9]+", "_", text).strip("_")
+    return f"_{label}" if label[:1].isdigit() else label
 
 
 #: the calculation PK-DB gives every measurement of a group without one
@@ -336,6 +408,111 @@ def _calculation_type(measurement: Measurement) -> str | None:
     return measurement.calculation_type
 
 
+#: the columns of a row of the measurements which hold its central value
+CENTRAL_COLUMNS: tuple[str, ...] = ("value", "mean", "median", "gmean")
+
+
+def _central_value(row: dict[str, Any]) -> float | None:
+    """Get the central value of a row of the measurements, `None` below the LOQ."""
+    return next(
+        (row[column] for column in CENTRAL_COLUMNS if row[column] is not None), None
+    )
+
+
+def _series_calculations(name: str, rows: dict[str, list[dict[str, Any]]]) -> None:
+    """Give the rows of a curve without a central value the calculation of the curve.
+
+    A curve is the rows of a source with the same label. A row below the
+    limit of quantification has no central value, so PK-DB gives it the
+    calculation `sample mean` of a measurement of a group without one; it
+    takes the calculation of the other rows of its curve if they have one
+    (a curve of geometric means has its LOQ rows as `geometric mean`). A
+    curve of geometric means cannot have a mean of 0, the curator 0 at the
+    time of the dose: such a row is left out with a `CollectionWarning`.
+
+    Args:
+        name: the name of the study.
+        rows: the rows by source, changed in place.
+    """
+    for source, source_rows in rows.items():
+        curves: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for row in source_rows:
+            curves[row["label"]].append(row)
+        dropped: set[int] = set()
+        for label, curve in curves.items():
+            central = [row for row in curve if _central_value(row) is not None]
+            zeros = [
+                row
+                for row in central
+                if row["mean"] == 0
+                and all(row[column] is None for column in ("value", "median", "gmean"))
+            ]
+            others = [row for row in central if all(row is not zero for zero in zeros)]
+            calculations = {row["calculation_type"] for row in others}
+            if zeros and calculations == {GEOMETRIC_MEAN}:
+                times = ", ".join(f"{row['time']} {row['time_unit']}" for row in zeros)
+                _warn(
+                    f"{name}: the curve '{label}' of {source} is of geometric means, "
+                    f"its mean of 0 at {times} cannot be a geometric mean and is "
+                    f"left out."
+                )
+                dropped |= {id(row) for row in zeros}
+            if len(calculations) == 1:
+                (calculation,) = calculations
+                for row in curve:
+                    if _central_value(row) is None:
+                        row["calculation_type"] = calculation
+        if dropped:
+            rows[source] = [row for row in source_rows if id(row) not in dropped]
+
+
+def _warn_duplicates(name: str, rows: dict[str, list[dict[str, Any]]]) -> None:
+    """Warn about the same output in several sources of a study.
+
+    Two rows are the same when they have the same measurement, substance,
+    tissue, group, individual, interventions, time, unit and central value;
+    the rows stay, a `CollectionWarning` names the sources. A duplicate makes
+    a generated label get its source (`_measurement_tables`), which changes
+    again once the duplicate is removed from the curation.
+    """
+    sources_of: dict[tuple[Any, ...], set[str]] = defaultdict(set)
+    for source, source_rows in rows.items():
+        for row in source_rows:
+            value = _central_value(row)
+            if value is None:
+                continue
+            key = (
+                *(
+                    row[column]
+                    for column in (
+                        "measurement_type",
+                        "substance",
+                        "tissue",
+                        "group",
+                        "individual",
+                        "intervention",
+                        "time",
+                        "time_unit",
+                        "unit",
+                    )
+                ),
+                float(f"{value:.12g}"),
+            )
+            sources_of[key].add(source)
+    duplicates: dict[tuple[str, ...], list[tuple[Any, ...]]] = defaultdict(list)
+    for key, sources in sources_of.items():
+        if len(sources) > 1:
+            duplicates[tuple(sorted(sources))].append(key)
+    for sources, keys in duplicates.items():
+        measurements = ", ".join(sorted({str(key[0]) for key in keys}))
+        _warn(
+            f"{name}: the sources {' and '.join(sources)} have {len(keys)} "
+            f"duplicate output{'' if len(keys) == 1 else 's'} (the same "
+            f"measurement, substance, tissue, "
+            f"subject, interventions, time and value: {measurements})."
+        )
+
+
 def _measurement_tables(study: CanonicalStudy, name: str) -> dict[str, pd.DataFrame]:
     """Get the measurements of a study as the tables of format 1, by source.
 
@@ -348,10 +525,12 @@ def _measurement_tables(study: CanonicalStudy, name: str) -> dict[str, pd.DataFr
     group in `group`, the count of a row without one is the count of its
     subjects. A row without a central value (a value below the limit of
     quantification, curated with only its `max`) has none in `value`, `mean`,
-    `median` and `gmean`. A row with a geometric mean but no mean has the
-    calculation `geometric mean` (`_calculation_type`). The interventions are
-    the names of the cell of format 2, comma separated in the order of the
-    cell, which is the natural order of `pkdb format` (`GEM,SIM`).
+    `median` and `gmean`, and the calculation of its curve. A row with a
+    geometric mean but no mean has the calculation `geometric mean`
+    (`_calculation_type`); a curve of geometric means has no curator 0 (see
+    `_series_calculations`). The interventions are the names of the cell of
+    format 2, comma separated in the order of the cell, which is the natural
+    order of `pkdb format` (`GEM,SIM`).
 
     An output without a label (the outputs of format 2 have none) gets one
     from its measurement, substance, tissue, interventions and subject
@@ -359,7 +538,8 @@ def _measurement_tables(study: CanonicalStudy, name: str) -> dict[str, pd.DataFr
     the timecourses. A label is unique in the study: a generated label which
     another source of the study has as well gets the source appended
     (`concentration_sorafenib_plasma_SOF400_1_Fig1` and `..._Tab3`), in every
-    source which has it.
+    source which has it. The same output in several sources and a curated
+    label which is no SId are reported as a `CollectionWarning`.
     """
     group_counts = {group.name: group.count for group in study.groups}
     individual_groups = {
@@ -367,6 +547,7 @@ def _measurement_tables(study: CanonicalStudy, name: str) -> dict[str, pd.DataFr
     }
     rows: dict[str, list[dict[str, Any]]] = {}
     generated_rows: list[tuple[str, dict[str, Any]]] = []
+    curated_labels: list[str] = []
     for measurement in study.measurements:
         if (
             measurement.origin != "reported"
@@ -420,6 +601,14 @@ def _measurement_tables(study: CanonicalStudy, name: str) -> dict[str, pd.DataFr
         rows.setdefault(source, []).append(row)
         if generated:
             generated_rows.append((source, row))
+        else:
+            curated_labels.append(label)
+
+    _check_labels(name, curated_labels)
+    _series_calculations(name, rows)
+    kept = {id(row) for source_rows in rows.values() for row in source_rows}
+    generated_rows = [(s, row) for s, row in generated_rows if id(row) in kept]
+    _warn_duplicates(name, rows)
 
     # the sources of a label, before a generated label gets its source
     sources: dict[str, set[str]] = {}
@@ -430,7 +619,7 @@ def _measurement_tables(study: CanonicalStudy, name: str) -> dict[str, pd.DataFr
         if len(sources[row["label"]]) > 1:
             row["label"] = _label(row["label"], source)
     return {
-        source: pd.DataFrame(source_rows, columns=list(MEASUREMENT_COLUMNS))
+        source: _integers(pd.DataFrame(source_rows, columns=list(MEASUREMENT_COLUMNS)))
         for source, source_rows in rows.items()
     }
 
@@ -440,10 +629,18 @@ def _scatter_tables(study: CanonicalStudy, name: str) -> dict[str, pd.DataFrame]
 
     A point of a scatter (a subject, the row of `scatters_<source>.tsv`) is a
     row with its two measurements in the columns `x_<column>` and
-    `y_<column>`, the value in `x_value` and `x` (the column of sbmlsim which
-    `x_unit` is the unit of) and in `y_value` and `y`, and the count 1; the
-    label is the name of the scatter, the interventions are those of both
-    measurements and the time is the one of `y` (else of `x`).
+    `y_<column>`: the value in `x_value` and `x` (the column of sbmlsim which
+    `x_unit` is the unit of), the time in `x_time` and `x_time_unit` and the
+    interventions in `x_intervention`, and the same for `y`. The label is the
+    name of the scatter, `intervention` the interventions of both
+    measurements and `time` the time of `y` (else of `x`).
+
+    A point of an individual counts 1, a point of a group the count of the
+    group (the means of the groups of inulin/Prescott1991 Fig4). Several
+    points of a scatter with the same group, interventions and times are
+    subjects of the group which the curation does not name
+    (empagliflozin/Sarashina2014 Fig2): they count 1. A group with both kinds
+    of points is a `CollectionWarning`.
     """
     reported = {
         measurement.key: measurement
@@ -451,6 +648,7 @@ def _scatter_tables(study: CanonicalStudy, name: str) -> dict[str, pd.DataFrame]
         if measurement.origin == "reported"
     }
     every = {measurement.key: measurement for measurement in study.measurements}
+    group_counts = {group.name: group.count for group in study.groups}
 
     def point(key: str) -> Measurement:
         measurement = every[key]
@@ -458,41 +656,86 @@ def _scatter_tables(study: CanonicalStudy, name: str) -> dict[str, pd.DataFrame]
             measurement = reported[measurement.derived_from]
         return measurement
 
+    def identity(x: Measurement, y: Measurement) -> tuple[Any, ...]:
+        """The group, interventions and times of a point."""
+        return (
+            y.group,
+            tuple(x.interventions),
+            tuple(y.interventions),
+            x.time,
+            y.time,
+        )
+
     rows: dict[str, list[dict[str, Any]]] = {}
+    names: list[str] = []
     for scatter in study.scatters:
         if scatter.data_type != "scatter" or scatter.source is None:
             continue
-        for subset in scatter.subsets:
-            for keys in subset.points:
-                x, y = (point(key) for key in keys)
-                interventions = list(
-                    dict.fromkeys([*x.interventions, *y.interventions])
-                )
-                row: dict[str, Any] = {
-                    "study": name,
-                    "individual": y.individual,
-                    "group": y.group,
-                    "count": 1,
-                    "intervention": ",".join(interventions) or None,
-                    "label": scatter.name,
-                    "time": y.time if y.time is not None else x.time,
-                    "time_unit": y.time_unit or x.time_unit,
-                    "comments": _comments(y) or _comments(x),
+        names.append(scatter.name)
+        points = [
+            tuple(point(key) for key in keys)
+            for subset in scatter.subsets
+            for keys in subset.points
+        ]
+        repeated: defaultdict[tuple[Any, ...], int] = defaultdict(int)
+        for x, y in points:
+            repeated[identity(x, y)] += 1
+        partly = sorted(
+            {
+                str(y.group)
+                for x, y in points
+                if y.individual is None and repeated[identity(x, y)] > 1
+            }
+            & {
+                str(y.group)
+                for x, y in points
+                if y.individual is None and repeated[identity(x, y)] == 1
+            }
+        )
+        for group_name in partly:
+            _warn(
+                f"{name}: the points of the group '{group_name}' of the scatter "
+                f"'{scatter.name}' are partly at the same interventions and "
+                f"times; these count 1, the others the group "
+                f"({group_counts.get(group_name)})."
+            )
+        for x, y in points:
+            count: int | None = 1
+            group = y.individual is None and y.group is not None
+            if group and repeated[identity(x, y)] == 1:
+                count = group_counts.get(y.group)
+            interventions = list(dict.fromkeys([*x.interventions, *y.interventions]))
+            row: dict[str, Any] = {
+                "study": name,
+                "individual": y.individual,
+                "group": y.group,
+                "count": count,
+                "intervention": ",".join(interventions) or None,
+                "label": scatter.name,
+                "time": y.time if y.time is not None else x.time,
+                "time_unit": y.time_unit or x.time_unit,
+                "comments": _comments(y) or _comments(x),
+            }
+            for axis, measurement in (("x", x), ("y", y)):
+                row |= {
+                    f"{axis}_measurement_type": measurement.measurement_type,
+                    f"{axis}_substance": measurement.substance,
+                    f"{axis}_tissue": measurement.tissue,
+                    f"{axis}_method": measurement.method,
+                    f"{axis}_label": measurement.label,
+                    f"{axis}_value": measurement.statistics.mean,
+                    axis: measurement.statistics.mean,
+                    f"{axis}_unit": measurement.unit,
+                    f"{axis}_time": None
+                    if measurement.time_not_reported
+                    else measurement.time,
+                    f"{axis}_time_unit": measurement.time_unit,
+                    f"{axis}_intervention": ",".join(measurement.interventions) or None,
                 }
-                for axis, measurement in (("x", x), ("y", y)):
-                    row |= {
-                        f"{axis}_measurement_type": measurement.measurement_type,
-                        f"{axis}_substance": measurement.substance,
-                        f"{axis}_tissue": measurement.tissue,
-                        f"{axis}_method": measurement.method,
-                        f"{axis}_label": measurement.label,
-                        f"{axis}_value": measurement.statistics.mean,
-                        axis: measurement.statistics.mean,
-                        f"{axis}_unit": measurement.unit,
-                    }
-                rows.setdefault(_source(scatter.source.file), []).append(row)
+            rows.setdefault(_source(scatter.source.file), []).append(row)
+    _check_labels(name, names)
     return {
-        source: pd.DataFrame(source_rows, columns=list(SCATTER_COLUMNS))
+        source: _integers(pd.DataFrame(source_rows, columns=list(SCATTER_COLUMNS)))
         for source, source_rows in rows.items()
     }
 
@@ -534,7 +777,7 @@ def _group_table(study: CanonicalStudy, name: str) -> pd.DataFrame:
                     "comments": _comments(observation),
                 }
             rows.append(row)
-    return pd.DataFrame(rows, columns=list(GROUP_COLUMNS))
+    return _integers(pd.DataFrame(rows, columns=list(GROUP_COLUMNS)))
 
 
 def _individual_table(study: CanonicalStudy, name: str) -> pd.DataFrame:
@@ -558,7 +801,7 @@ def _individual_table(study: CanonicalStudy, name: str) -> pd.DataFrame:
                     "comments": _comments(observation),
                 }
             rows.append(row)
-    return pd.DataFrame(rows, columns=list(INDIVIDUAL_COLUMNS))
+    return _integers(pd.DataFrame(rows, columns=list(INDIVIDUAL_COLUMNS)))
 
 
 def _intervention_table(study: CanonicalStudy, name: str) -> pd.DataFrame:
@@ -592,7 +835,7 @@ def _intervention_table(study: CanonicalStudy, name: str) -> pd.DataFrame:
                 "comments": _comments(intervention),
             }
         )
-    return pd.DataFrame(rows, columns=list(INTERVENTION_COLUMNS))
+    return _integers(pd.DataFrame(rows, columns=list(INTERVENTION_COLUMNS)))
 
 
 def prepare_study(study_folder: Path) -> CanonicalStudy:
@@ -648,17 +891,22 @@ def study_tables(study_folder: Path) -> dict[str, pd.DataFrame]:
     return {source: tables[source] for source in sorted(tables)}
 
 
-def write_study_tables(study_folder: Path, target_dir: Path) -> list[Path]:
+def write_study_tables(
+    study_folder: Path, target_dir: Path, *, keep_files: bool = False
+) -> list[Path]:
     """Write the data of a study of format 2 into the data folder of a model.
 
     Every table of `study_tables` becomes `target_dir/<study>/.<study>_<source>.tsv`,
     the file `PKPDSimulationExperiment.load_dataframe` reads; the files of an
     earlier collection of the study are replaced, so a source which the study
-    no longer has leaves no file behind.
+    no longer has leaves no file behind. Other files of the folder stay.
 
     Args:
         study_folder: the folder of a study of format 2.
         target_dir: the data folder of the model.
+        keep_files: keep the tables `.<study>_*.tsv` of the folder which the
+            collection does not write, e.g. tables a model keeps beside the
+            ones of PK-DB; they are removed by default.
 
     Returns:
         The written files.
@@ -666,7 +914,7 @@ def write_study_tables(study_folder: Path, target_dir: Path) -> list[Path]:
     name = study_folder.name
     tables = study_tables(study_folder)
     folder = target_dir / name
-    if folder.is_dir():
+    if folder.is_dir() and not keep_files:
         for old in folder.glob(f".{name}_*.tsv"):
             old.unlink()
     folder.mkdir(parents=True, exist_ok=True)
@@ -682,28 +930,37 @@ def collect_tsv_files(
     source_dir: Path,
     target_dir: Path,
     filter_study: Callable[[str], bool] | None = None,
+    *,
+    studies: Iterable[Path] = (),
+    keep_files: bool = False,
 ) -> None:
     """Collect the data of the studies of a substance into the data folder of a model.
 
-    Every study folder of `source_dir` which passes `filter_study` becomes a
-    folder of the same name in `target_dir` with the data of the study as the
-    tables of study format 1, and every written file is reported on the
-    console. A study of format 2 is read with the library of PK-DB and
-    written with `write_study_tables`; the hidden `.tsv` files of a study of
-    format 1 are copied. The figures, the tables and the publication are left
-    behind.
+    Every study folder of `source_dir` which passes `filter_study`, and every
+    folder of `studies`, becomes a folder of the same name in `target_dir`
+    with the data of the study as the tables of study format 1, and every
+    written file is reported on the console. A study of format 2 is read with
+    the library of PK-DB and written with `write_study_tables`; the hidden
+    `.tsv` files of a study of format 1 are copied. The figures, the tables
+    and the publication are left behind.
 
     Args:
         source_dir: the folder of the studies of a substance, e.g.
             `studies_dir() / "albuterol"`.
         target_dir: the data folder of the model, created if it does not exist
             (its parent has to).
-        filter_study: decides by the name of a study folder whether the study
-            is collected; all studies by default.
+        filter_study: decides by the name of a study folder of `source_dir`
+            whether the study is collected; all studies by default.
+        studies: further study folders, e.g. of the studies of another
+            substance with a group of the model (`studies_dir() / "midazolam" /
+            "Chung2006"`); collected without `filter_study`.
+        keep_files: keep the tables of a study of format 2 in `target_dir`
+            which the collection does not write (see `write_study_tables`).
 
     Raises:
         ValueError: if a study has a format which is neither 1 nor 2, see
-            `study_format`; nothing is written then.
+            `study_format`, or two studies have the same name; nothing is
+            written then.
     """
     if not filter_study:
 
@@ -717,6 +974,14 @@ def collect_tsv_files(
         and not folder.name.startswith(".")
         and filter_study(folder.name)
     )
+    study_folders += [Path(folder) for folder in studies]
+    names = [folder.name for folder in study_folders]
+    twice = sorted({name for name in names if names.count(name) > 1})
+    if twice:
+        raise ValueError(
+            f"The studies {', '.join(twice)} are collected twice into "
+            f"'{target_dir}'. Nothing is written."
+        )
     formats = {folder.name: study_format(folder) for folder in study_folders}
     other = {name: value for name, value in formats.items() if value not in (1, 2)}
     if other:
@@ -732,7 +997,9 @@ def collect_tsv_files(
         dest_study_folder = target_dir / study_folder.name
         if formats[study_folder.name] == 2:
             console.rule(f"{dest_study_folder}", style="white", align="left")
-            for path in write_study_tables(study_folder, target_dir):
+            for path in write_study_tables(
+                study_folder, target_dir, keep_files=keep_files
+            ):
                 console.print(f"'{study_folder}' -> '{path}'")
             continue
 
@@ -745,6 +1012,111 @@ def collect_tsv_files(
                 dest_file = dest_study_folder / tsv_file.name
                 shutil.copy2(tsv_file, dest_file)
                 console.print(f"'{tsv_file}' -> '{dest_file}'")
+
+
+def mean_of_individuals(
+    df: pd.DataFrame, by: Sequence[str] | None = None
+) -> pd.DataFrame:
+    """Get the mean, SD and number of the individuals of a table at every time.
+
+    A curve of the means of a group which the publication does not report
+    (the curation has the individuals only) is calculated from the rows of
+    the individuals, the rows with a `value`, by `by` (the study, group,
+    interventions, substance, tissue, measurement type and time by default).
+    A missing value of a key is a value of its own.
+
+    Args:
+        df: the data of a table with the individuals.
+        by: the columns which make a point of the curves.
+
+    Returns:
+        A row per point with the columns of `by`, `time_unit` and `unit` (of
+        the first individual), `mean`, `sd` (with one individual `NA`) and
+        `count`, sorted by substance and time.
+    """
+    keys = list(
+        by
+        if by is not None
+        else (
+            "study",
+            "group",
+            "intervention",
+            "substance",
+            "tissue",
+            "measurement_type",
+            "time",
+        )
+    )
+    individuals = df[df["value"].notna()]
+    means = individuals.groupby(keys, as_index=False, dropna=False).agg(
+        time_unit=("time_unit", "first"),
+        unit=("unit", "first"),
+        mean=("value", "mean"),
+        sd=("value", "std"),
+        count=("value", "count"),
+    )
+    order = [column for column in ("substance", "time") if column in keys]
+    return means.sort_values(order).reset_index(drop=True) if order else means
+
+
+def sampling_times(
+    df: pd.DataFrame,
+    times: Sequence[float],
+    *,
+    start: float | None = None,
+    by: str = "label",
+) -> pd.DataFrame:
+    """Move the digitized times of the data to the sampling times of a protocol.
+
+    PK-DB has the times of a figure as digitized, some minutes off the
+    samples, a marker drawn on the y axis at 0 or before. Within a curve (the
+    rows with the same `by`) the points keep their order and go to distinct
+    sampling times, the assignment with the least total shift.
+
+    Args:
+        df: the data of the curves, with the columns `time` and `by`.
+        times: the sampling times of the protocol in the time unit of the
+            data.
+        start: the points before it keep their digitized times (dense samples
+            which the figure does not resolve); all points are moved by
+            default.
+        by: the column of the curves.
+
+    Returns:
+        A copy of the data with the sampling times, sorted by time within a
+        curve.
+
+    Raises:
+        ValueError: if a curve has more points than sampling times.
+    """
+    samples = np.sort(np.asarray(times, dtype=float))
+    df = df.sort_values([by, "time"]).copy()
+    for curve, df_curve in df.groupby(by):
+        moved = df_curve.index
+        if start is not None:
+            moved = moved[(df_curve["time"] >= start).to_numpy()]
+        points = df.loc[moved, "time"].to_numpy(dtype=float)
+        n, m = len(points), len(samples)
+        if n > m:
+            raise ValueError(
+                f"'{curve}' has {n} points for {m} sampling times {samples}."
+            )
+        if n == 0:
+            continue
+        # cost[i, j]: the least shift of the points 0..i with point i at sample j
+        shift = np.abs(points[:, None] - samples[None, :])
+        cost = np.full((n, m), np.inf)
+        cost[0] = shift[0]
+        for i in range(1, n):
+            cost[i, 1:] = np.minimum.accumulate(cost[i - 1])[:-1] + shift[i, 1:]
+        assigned = np.empty(n, dtype=int)
+        j = int(np.argmin(cost[-1]))
+        for i in range(n - 1, -1, -1):
+            assigned[i] = j
+            if i:
+                j = int(np.argmin(cost[i - 1, :j]))
+        df.loc[moved, "time"] = samples[assigned]
+    return df
 
 
 @dataclass(frozen=True)
