@@ -12,8 +12,9 @@ Every rate acts on the unbound concentration of its part and is an amount per
 time: the Vmax of a process is per litre of organ, so the whole organ has the
 capacity `Vmax * V<o>`; the clearance `k` of a first order process is per
 litre of organ as well (`FirstOrder.per_volume`, the default, 1/min), so the
-whole organ has `k * V<o>` as with a Vmax, or that of the whole organ (l/min). The activity
-`f_<protein>` of its protein multiplies the rate (times the turnover state
+whole organ has `k * V<o>` as with a Vmax; with `per_volume=False` it is the
+clearance of the whole organ (l/min). The activity `f_<protein>` of its
+protein multiplies the rate (times the turnover state
 `E_<protein>` when a substance of the definition inactivates or induces the
 protein). The organ may give a factor of its capacity, which multiplies the
 rate of every metabolism and transport as well: the functional fraction
