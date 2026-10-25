@@ -23,6 +23,13 @@ through a port, and `Boundary.replacements` names the element of the body
 which replaces it. The Kp of a substance is the whole-tissue (interstitial +
 intracellular) to plasma coefficient in every form.
 
+The liver has a portosystemic shunt, the fraction `f_shunt` of its arterial
+and portal inflow which flows past it into the venous pool, and a functional
+fraction `f_functional` of its tissue, which scales the tissue volumes and
+the capacity of its processes (both inputs of the top model, healthy 0 and 1).
+The kidney filters the unbound plasma concentration of a substance with
+urinary excretion into the urine, `fu*GFR*Cpl*(1 - f_reabsorbed)`.
+
 The volumes of the parts, the coefficients and the exchanges depend on
 parameters only and are constants with initial assignments (they follow a
 change of the body before a simulation, not during it); only the outflow
@@ -425,6 +432,34 @@ class _Builder:
             f"interstitial fraction {_label(self.organ)}",
         )
 
+    def _functional(self, tissue: str) -> str:
+        """A quantity of the tissue of the organ, of the liver its functional share.
+
+        The non-functional tissue of the liver (fibrosis, necrosis) holds no
+        substance and has no capacity: `f_functional` multiplies the tissue
+        volumes, the tissue coefficient of the flow-limited liver and the
+        exchange share of the liver.
+        """
+        if self.organ is not Organ.LIVER:
+            return tissue
+        return f"{tissue} * {self.f_functional}"
+
+    @property
+    def f_functional(self) -> str:
+        """The functional fraction of the liver tissue."""
+        return self._input(
+            ids.F_FUNCTIONAL,
+            U.dimensionless,
+            "functional liver fraction",
+            "The functional fraction of the liver tissue.",
+        )
+
+    def _functional_text(self) -> str:
+        """The notes of a quantity of the tissue scaled by the functional fraction."""
+        if self.organ is not Organ.LIVER:
+            return ""
+        return f"The functional share `{ids.F_FUNCTIONAL}` of the tissue of the liver."
+
     def _flow(self, fid: str) -> str:
         """A blood flow."""
         return self._input(fid, U.l_per_min, f"blood flow {fid} [l/min]")
@@ -448,17 +483,22 @@ class _Builder:
         if Part.INTERSTITIAL in built:
             self._compartment(
                 ids.compartment(Part.INTERSTITIAL),
-                f"{v} * {self.f_int}",
+                self._functional(f"{v} * {self.f_int}"),
                 "interstitium",
+                self._functional_text(),
             )
             self._compartment(
                 ids.compartment(Part.INTRACELLULAR),
-                f"{v} * ({_ONE} - {f_vas} - {self.f_int})",
+                self._functional(f"{v} * ({_ONE} - {f_vas} - {self.f_int})"),
                 "intracellular space",
+                self._functional_text(),
             )
         if Part.TISSUE in built:
             self._compartment(
-                ids.compartment(Part.TISSUE), f"{v} * ({_ONE} - {f_vas})", "tissue"
+                ids.compartment(Part.TISSUE),
+                self._functional(f"{v} * ({_ONE} - {f_vas})"),
+                "tissue",
+                self._functional_text(),
             )
         if Part.ORGAN in built:
             self._compartment(ids.compartment(Part.ORGAN), v, "organ")
@@ -498,9 +538,22 @@ class _Builder:
             port=Port(f"{out}_port", portType=PortType.OUTPUT_PORT),
         )
         self.outputs[out] = ids.organ_outflow(self.organ, s.sid)
+        if parts.blood_cells:
+            out_bc = ids.outflow_conc_bc(s.sid)
+            self._rule(
+                out_bc,
+                ids.species(Part.BLOOD_CELLS, s.sid),
+                U.mM,
+                f"outflow blood cell concentration {s.sid} {_label(self.organ)} [mM]",
+                "Blood cell concentration of the blood leaving the organ.",
+                port=Port(f"{out_bc}_port", portType=PortType.OUTPUT_PORT),
+            )
+            self.outputs[out_bc] = ids.organ_outflow_bc(self.organ, s.sid)
         self._blood_flows(s, parts)
         if parts.blood_cells:
             self._blood_cells(s)
+        if self.organ is Organ.KIDNEY and s.excretion.urine:
+            self._filtration(s, parts, fu, cout)
         if parts.tissue == "merged":
             self._merged(s, fu)
         elif parts.tissue == "full":
@@ -533,12 +586,12 @@ class _Builder:
             vascular = f"({_ONE} - {self.hct})"
         return self._initial(
             ids.k_organ(s.sid),
-            distribution.k_organ(self.f_vas, vascular, kp),
+            distribution.k_organ(self.f_vas, vascular, self._functional(kp)),
             U.dimensionless,
             f"organ to plasma coefficient {s.sid}",
             "Organ to plasma coefficient of the flow-limited organ, "
             "`(Vpl + Vbc*Kbc + Vti*Kp)/V`: the organ is in equilibrium with the "
-            "plasma leaving it.",
+            f"plasma leaving it. {self._functional_text()}".rstrip(),
         )
 
     def _pool_species(self, pool: Pool, part: Part, s: Substance, parts: Parts) -> str:
@@ -566,7 +619,10 @@ class _Builder:
         """The inflow from the pools and the outflow into the pool, plasma and blood cells.
 
         The plasma carries `Q*(1-HCT)*C`, or `Q*BP*C` with erythrocytes in
-        equilibrium; kinetic blood cells carry `Q*HCT*Cbc`.
+        equilibrium; kinetic blood cells carry `Q*HCT*Cbc`. The fraction
+        `f_shunt` of the inflow of the liver bypasses it (portosystemic shunt)
+        from the arterial and the portal pool directly into the venous pool;
+        the liver is perfused by and drains `(1 - f_shunt)*Q`.
         """
         inflows, out_flow = _flows(self.organ)
         out_pool = outflow(self.organ)
@@ -575,39 +631,79 @@ class _Builder:
         else:
             carrier = f"({_ONE} - {self.hct})"
         target = Part.ORGAN if parts.tissue == "organ" else Part.PLASMA
-        organ_species = ids.species(target, s.sid)
-        for pool, flow in inflows:
-            c = self._pool_species(pool, Part.PLASMA, s, parts)
-            self._reaction(
-                ids.inflow_reaction(pool, Part.PLASMA, s.sid),
-                f"{c} -> {organ_species}",
-                f"{self._flow(flow)} * {carrier} * {c}",
-                f"inflow {s.sid} from {pool.name.lower()} pool",
+        carried = [(Part.PLASMA, carrier, ids.species(target, s.sid))]
+        if parts.blood_cells:
+            carried.append(
+                (Part.BLOOD_CELLS, self.hct, ids.species(Part.BLOOD_CELLS, s.sid))
             )
-        c = self._pool_species(out_pool, Part.PLASMA, s, parts)
-        self._reaction(
-            ids.outflow_reaction(Part.PLASMA, s.sid),
-            f"{organ_species} -> {c}",
-            f"{self._flow(out_flow)} * {carrier} * {ids.outflow_conc(s.sid)}",
-            f"outflow {s.sid} into {out_pool.name.lower()} pool",
+        perfused, f_shunt = "", None
+        if self.organ is Organ.LIVER:
+            f_shunt = self._input(
+                ids.F_SHUNT,
+                U.dimensionless,
+                "portosystemic shunt",
+                "The fraction of the liver inflow which bypasses the liver.",
+            )
+            perfused = f"({_ONE} - {f_shunt}) * "
+        for part, share, local in carried:
+            what = "" if part is Part.PLASMA else " blood cells"
+            out = self._pool_species(out_pool, part, s, parts)
+            for pool, flow in inflows:
+                c = self._pool_species(pool, part, s, parts)
+                rate = f"{self._flow(flow)} * {share} * {c}"
+                self._reaction(
+                    ids.inflow_reaction(pool, part, s.sid),
+                    f"{c} -> {local}",
+                    f"{perfused}{rate}",
+                    f"inflow {s.sid}{what} from {pool.name.lower()} pool",
+                )
+                if f_shunt is not None:
+                    self._reaction(
+                        ids.shunt_reaction(pool, part, s.sid),
+                        f"{c} -> {out}",
+                        f"{f_shunt} * {rate}",
+                        f"shunt {s.sid}{what} from {pool.name.lower()} pool past "
+                        f"the liver into {out_pool.name.lower()} pool",
+                    )
+            leaving = (
+                ids.outflow_conc(s.sid)
+                if part is Part.PLASMA
+                else ids.outflow_conc_bc(s.sid)
+            )
+            self._reaction(
+                ids.outflow_reaction(part, s.sid),
+                f"{local} -> {out}",
+                f"{perfused}{self._flow(out_flow)} * {share} * {leaving}",
+                f"outflow {s.sid}{what} into {out_pool.name.lower()} pool",
+            )
+
+    def _filtration(self, s: Substance, parts: Parts, fu: str, cplasma: str) -> None:
+        """The glomerular filtration into the urine, `fu*GFR*Cpl*(1 - f_reabsorbed)`.
+
+        The unbound plasma concentration is filtered, the fraction
+        `f_reabsorbed_<s>` of the filtrate returns into the plasma (it is not
+        taken out); the flow-limited kidney filters the plasma concentration of
+        its outflow.
+        """
+        gfr = self._input(ids.GFR, U.l_per_min, "glomerular filtration rate [l/min]")
+        reabsorbed = self._input(
+            ids.fraction_reabsorbed(s.sid),
+            U.dimensionless,
+            f"fraction reabsorbed {s.sid}",
+            "The fraction of the filtrate which is reabsorbed.",
         )
-        if not parts.blood_cells:
-            return
-        cbc = ids.species(Part.BLOOD_CELLS, s.sid)
-        for pool, flow in inflows:
-            c = self._pool_species(pool, Part.BLOOD_CELLS, s, parts)
-            self._reaction(
-                ids.inflow_reaction(pool, Part.BLOOD_CELLS, s.sid),
-                f"{c} -> {cbc}",
-                f"{self._flow(flow)} * {self.hct} * {c}",
-                f"inflow {s.sid} blood cells from {pool.name.lower()} pool",
-            )
-        c = self._pool_species(out_pool, Part.BLOOD_CELLS, s, parts)
+        self._input_compartment(ids.VURINE, "urine")
+        urine = self._input_species(
+            ids.urine(s.sid), ids.VURINE, f"{s.name} (urine)", amount=True
+        )
+        source = ids.species(
+            Part.ORGAN if parts.tissue == "organ" else Part.PLASMA, s.sid
+        )
         self._reaction(
-            ids.outflow_reaction(Part.BLOOD_CELLS, s.sid),
-            f"{cbc} -> {c}",
-            f"{self._flow(out_flow)} * {self.hct} * {cbc}",
-            f"outflow {s.sid} blood cells into {out_pool.name.lower()} pool",
+            ids.filtration_reaction(s.sid),
+            f"{source} -> {urine}",
+            f"{fu} * {gfr} * {cplasma} * ({_ONE} - {reabsorbed})",
+            f"glomerular filtration {s.sid}",
         )
 
     def _blood_cells(self, s: Substance) -> None:
@@ -688,7 +784,9 @@ class _Builder:
         )
         return self._initial(
             pid,
-            f"{ftissue} * {self.v} * ({_ONE} - {self.f_vas}) / {total}",
+            f"{ftissue} * "
+            + self._functional(f"{self.v} * ({_ONE} - {self.f_vas})")
+            + f" / {total}",
             U.l_per_min,
             name,
             "Passive exchange between plasma and tissue: the share of the "
@@ -793,6 +891,8 @@ class _Builder:
         for p in processes:
             if isinstance(p, Metabolism | Transport) and p.protein is not None:
                 self._activity(p.protein)
+            if isinstance(p, Metabolism | Transport) and self.organ is Organ.LIVER:
+                _ = self.f_functional  # the rates of the liver read it (placement)
             if isinstance(p, Transport) and p.membrane is Membrane.APICAL:
                 sink = apical_sink(self.organ, p.substance)
                 self._input_compartment(sink.compartment, f"sink {sink.compartment}")

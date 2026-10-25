@@ -200,8 +200,8 @@ Every fit mapping carries metadata which says what its curve is. The fits select
 their data by these values, so all models describe their studies with the same
 words: there is one vocabulary for all models. `pkpdsim.metadata` holds it as
 `StrEnum`s: `Tissue`, `Route`, `Dosing`, `Fasting`, `ApplicationForm`, `Health`,
-`Coadministration`, `Genotype`, `Phenotype`, `AdministrationSite`, `PKPDData` and
-`DataType`. Their conventional members are `HEALTHY`, `NONE` (nothing
+`Coadministration`, `Genotype`, `Phenotype`, `AdministrationSite`, `PKPDData`,
+`DataType` and `SamplingSite`. Their conventional members are `HEALTHY`, `NONE` (nothing
 coadministered) and `NR` (not reported), and a member has one name and one value
 in every model. A study which needs a new member adds it to `pkpdsim.metadata`,
 not to the model.
@@ -209,8 +209,10 @@ not to the model.
 A model uses `PKPDMappingMetaData`, which has the fields `tissue`, `route`,
 `application_form` (default `NR`), `dosing`, `fasting` (default `NR`), `health`,
 `coadministration` (default `NONE`), `genotype`, `phenotype`, `administration_site`,
-`data` and `data_type` (default `NR`). All fields are keyword-only, so a field
-without a default may follow the defaults:
+`data` and `data_type` (default `NR`) and `sampling_site` (default `ARM_VEIN`:
+plasma and blood are typically drawn from an arm vein, so data without a stated
+site are arm-vein samples; `NOT_APPLICABLE` for urine and feces). All fields
+are keyword-only, so a field without a default may follow the defaults:
 
 ```python
 from pkpdsim.metadata import (

@@ -1,0 +1,26 @@
+# The arm vein (peripheral venous) sampling site: presets of the weights of the
+# flow-weighted mix of the venous plasma outflows of organs and the arterial
+# plasma which an antecubital or hand vein sample is.
+#
+# A preset is a table of weights which sum to 1, keyed by the organ (`skin`,
+# `muscle`, `adipose`, ...) or the pool (`arterial`); the arm vein observer
+# `Carm_<s> = sum w * C` is an assignment rule, so it conserves mass.
+# `PBPKDefinition.arm_vein` selects the preset.
+
+[pksim_default]
+skin = { value = 0.713, unit = "dimensionless", source = "OSPDocumentation", notes = "PK-Sim's default peripheral venous blood, documented as a weighted mean of skin and muscle venous blood with about 70 % skin and 30 % muscle (after Levitt 2004); the default weights of PK-Sim are 0.713 skin and 0.287 muscle" }
+muscle = { value = 0.287, unit = "dimensionless", source = "OSPDocumentation", notes = "PK-Sim's default peripheral venous blood, about 30 % muscle venous blood (the complement of skin)" }
+
+[levitt2004]
+skin = { value = 0.875, unit = "dimensionless", source = "Levitt2004", notes = "standard arm of Levitt 2004 (fitted to ethanol, thiopental, DTPA and ketamine): skin 0.25, the arteriovenous shunt of the hand 0.525 and the subcutaneous and connective tissue ('other') 0.1, both as skin as in the Levitt 'skin' model (LAS) of Musther 2015: the shunt tissue has the properties of skin (Levitt 2004), the model has no connective tissue organ; the higher perfusion of the shunt tissue (1 ml/min/g against 0.1 ml/min/g of skin) is not represented by an observer" }
+muscle = { value = 0.05, unit = "dimensionless", source = "Levitt2004", notes = "standard arm of Levitt 2004, flow fraction of muscle" }
+adipose = { value = 0.075, unit = "dimensionless", source = "Levitt2004", notes = "standard arm of Levitt 2004, flow fraction of adipose tissue" }
+
+[musther2015]
+skin = { value = 0.775, unit = "dimensionless", source = "Musther2015", notes = "final model LAA (Table V, eqs. 5-7): skin 0.25 and the skin part of the shunt 0.525" }
+muscle = { value = 0.05, unit = "dimensionless", source = "Musther2015", notes = "final model LAA, muscle" }
+adipose = { value = 0.075, unit = "dimensionless", source = "Musther2015", notes = "final model LAA, adipose" }
+arterial = { value = 0.1, unit = "dimensionless", source = "Musther2015", notes = "final model LAA, the arterial part of the shunt (Musther 2015 approximate the arterial concentration by the lung outflow, here the arterial pool)" }
+
+[arterialised]
+arterial = { value = 1.0, unit = "dimensionless", source = "Liu1992", notes = "arterialised venous blood of a heated hand vein, whose arteriovenous anastomoses are open, taken as the arterial plasma; an approximation: arterialised venous glucose lies slightly below arterial during insulin clamps (Liu 1992)" }

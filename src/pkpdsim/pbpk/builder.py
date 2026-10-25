@@ -16,7 +16,9 @@ Every port is declared by the organ (its `Boundary`) and every replacement is
 generated here from it; the flat model has the ids of the scheme
 (`LI__Cpl_<s>` in the organs, the ids of the top model unprefixed).
 
-The sinks and the single intestinal lumen are those of `pkpdsim.pbpk.sinks`.
+The sinks and the single intestinal lumen are those of `pkpdsim.pbpk.sinks`,
+the observers (unbound and blood concentrations, hepatic and arm vein) those
+of `pkpdsim.pbpk.observers`.
 
 Every quantity which depends on parameters only (the physiology, the
 compartments of the pools and the organs, `fu`, `BP`, the coefficients and
@@ -24,7 +26,9 @@ exchanges of the organs) is a constant with an initial assignment, not an
 assignment rule: a change before the simulation (a change of an experiment,
 which sbmlsim applies with the initial assignments which read it) is
 followed, a change during the simulation is not. Only what reads a species
-(the outflow concentrations `Cout_<o>_<s>`) is an assignment rule.
+(the outflow concentrations `Cout_<o>_<s>`, the observers) and the rate of
+an intravenous injection `Kiv_<s>` (of the dose protocol, which changes it
+between doses) are assignment rules.
 """
 
 import copy
@@ -55,6 +59,7 @@ from sbmlutils.validation import validate_doc
 
 from pkpdsim.pbpk import ids
 from pkpdsim.pbpk.definition import PBPKDefinition
+from pkpdsim.pbpk.observers import observer_objects
 from pkpdsim.pbpk.organ import Boundary, OrganComponent, OrganContext, StandardOrgan
 from pkpdsim.pbpk.organs import Organ, Part, Pool
 from pkpdsim.pbpk.parts import parts_for
@@ -182,6 +187,7 @@ def compose(definition: PBPKDefinition) -> Model:
             )
         submodels.append(Submodel(submodel, modelRef=md.sid, name=organ.name.lower()))
         replaced += top.connect(organ, submodel, boundary)
+    top.add(observer_objects(definition))
 
     return Model(
         sid=definition.sid,
@@ -361,6 +367,20 @@ class _Top:
             f"fraction unbound {sid}",
             "Fraction unbound in plasma of the individual.",
         )
+        if s.excretion.urine:
+            self.add(
+                [
+                    value_parameter(
+                        ids.fraction_reabsorbed(sid),
+                        s.excretion.fraction_reabsorbed,
+                        U.dimensionless,
+                        f"fraction reabsorbed {sid}",
+                        _SBO_PARAMETER,
+                        "Fraction of the glomerular filtrate which is reabsorbed "
+                        "into the plasma of the kidney.",
+                    )
+                ]
+            )
         self._distribution(s)
         self._erythrocytes(s)
 
@@ -618,11 +638,11 @@ class _Top:
                         0.0,
                         U.mM,
                         constant=False,
-                        name=f"outflow plasma concentration {top} [mM]",
+                        name=f"outflow concentration {top} [mM]",
                         sboTerm=_SBO_PARAMETER,
-                        notes=f"Plasma concentration leaving the organ "
-                        f"{organ.name.lower()}, replaced by the output of the "
-                        "organ; the value is a placeholder.",
+                        notes="Concentration (plasma or kinetic blood cells) "
+                        f"leaving the organ {organ.name.lower()}, replaced by the "
+                        "output of the organ; the value is a placeholder.",
                         replacedBy=ReplacedBy(
                             elementRef=top,
                             submodelRef=submodel,

@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from sbmlutils.factory import (
-    InitialAssignment,
+    AssignmentRule,
     Parameter,
     RateRule,
     Reaction,
@@ -159,13 +159,14 @@ def _iv(s: Substance) -> list[Sbase]:
             kiv,
             None,
             U.per_min,
-            constant=True,
+            constant=False,
             name=f"injection rate {sid} [1/min]",
             sboTerm=_SBO_PARAMETER,
-            notes="Rate of the application of the intravenous dose.\n\n"
+            notes="Rate of the application of the intravenous dose; a rule, so "
+            f"that a dose protocol may change `{ti}` between doses.\n\n"
             f"`{kiv} = {kiv_formula}`",
         ),
-        InitialAssignment(kiv, kiv_formula, U.per_min),
+        AssignmentRule(kiv, kiv_formula, U.per_min),
         Parameter(
             ri,
             0.0,

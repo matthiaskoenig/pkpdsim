@@ -49,3 +49,18 @@ doi = "10.1111/j.1365-2036.2005.02683.x"
 [Yu1996]
 citation = "Yu LX, Crison JR, Amidon GL. Compartmental transit and dispersion model analysis of small intestinal transit flow in humans. Int J Pharm 140(1):111-118, 1996."
 doi = "10.1016/0378-5173(96)04592-9"
+
+[OSPDocumentation]
+citation = "Open Systems Pharmacology. PK-Sim documentation: simulations, peripheral venous blood. https://docs.open-systems-pharmacology.org (accessed 2026-10-25)."
+
+[Levitt2004]
+citation = "Levitt DG. Physiologically based pharmacokinetic modeling of arterial - antecubital vein concentration difference. BMC Clin Pharmacol 4:2, 2004."
+doi = "10.1186/1472-6904-4-2"
+
+[Musther2015]
+citation = "Musther H, Gill KL, Chetty M, Rostami-Hodjegan A, Rowland M, Jamei M. Are physiologically based pharmacokinetic models reporting the right Cmax? Central venous versus peripheral sampling site. AAPS J 17(5):1268-1279, 2015."
+doi = "10.1208/s12248-015-9796-7"
+
+[Liu1992]
+citation = "Liu D, Moberg E, Kollind M, Lins PE, Adamson U, Macdonald IA. Arterial, arterialized venous, venous and capillary blood glucose measurements in normal man during hyperinsulinaemic euglycaemia and hypoglycaemia. Diabetologia 35(3):287-290, 1992."
+doi = "10.1007/BF00400932"

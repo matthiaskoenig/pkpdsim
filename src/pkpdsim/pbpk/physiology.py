@@ -360,6 +360,28 @@ class _Physiology:
                 (),
                 value=1.0,
             ),
+            _parameter(
+                ids.F_SHUNT,
+                U.dimensionless,
+                "portosystemic shunt",
+                "The fraction of the hepatic arterial and portal venous inflow "
+                "which bypasses the liver into the venous blood; 0.0 healthy, "
+                "the hepatic impairment sets it. An initial value, as the "
+                f"covariates. {MODEL_DEFAULT}",
+                (),
+                value=0.0,
+            ),
+            _parameter(
+                ids.F_FUNCTIONAL,
+                U.dimensionless,
+                "functional liver fraction",
+                "The functional fraction of the liver tissue, which scales the "
+                "tissue volume of the liver and the capacity of its processes; "
+                "1.0 healthy, the hepatic impairment sets it. An initial value, "
+                f"as the covariates. {MODEL_DEFAULT}",
+                (),
+                value=1.0,
+            ),
         ]
 
     def references(self) -> list[Sbase]:

@@ -11,7 +11,9 @@ cumulative urine), a custom reaction in the part it names.
 Every rate acts on the unbound concentration of its part and is an amount per
 time: the Vmax of a process is per litre of organ, so the whole organ has the
 capacity `Vmax * V<o>`, and the activity `f_<protein>` of its protein
-multiplies it.
+multiplies it. In the liver the functional fraction `f_functional`
+multiplies the rate of every metabolism and transport as well, the share of
+the capacity in the functional tissue.
 """
 
 from collections.abc import Iterable, Mapping
@@ -328,6 +330,8 @@ def _rate(
     """
     pid, k = process.sid, process.kinetics
     factor = f"{ids.activity(process.protein)} * " if process.protein else ""
+    if organ is Organ.LIVER:
+        factor += f"{ids.F_FUNCTIONAL} * "
     v = ids.organ_volume(organ)
     if isinstance(k, FirstOrder):
         p_k = f"{pid}_k"

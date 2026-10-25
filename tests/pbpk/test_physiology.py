@@ -295,7 +295,13 @@ def test_parameters_annotated(sex: Sex) -> None:
     citations = [cite(key) for key in sources()]
     parameters = [o for o in physiology_objects(sex) if isinstance(o, Parameter)]
     defaults = {p.sid for p in parameters if physiology.MODEL_DEFAULT in str(p.notes)}
-    assert defaults == {ids.AGE, ids.F_RENAL_FUNCTION, ids.F_CARDIAC_FUNCTION}
+    assert defaults == {
+        ids.AGE,
+        ids.F_RENAL_FUNCTION,
+        ids.F_CARDIAC_FUNCTION,
+        ids.F_SHUNT,
+        ids.F_FUNCTIONAL,
+    }
     for p in parameters:
         assert p.sboTerm, p.sid
         assert p.unit is not None, p.sid

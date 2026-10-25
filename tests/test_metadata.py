@@ -23,6 +23,7 @@ from pkpdsim.metadata import (
     PKPDData,
     PKPDMappingMetaData,
     Route,
+    SamplingSite,
     Tissue,
 )
 
@@ -89,6 +90,7 @@ def test_to_dict_names_every_field_in_the_order_of_the_fields() -> None:
         ("administration_site", "NR"),
         ("data", "NR"),
         ("data_type", "NR"),
+        ("sampling_site", "ARM_VEIN"),
         ("diplotype", "None"),
         ("activity_score", "nan"),
     ]
@@ -131,6 +133,11 @@ def test_other_values_are_their_strings() -> None:
             "RING SUBCUTANEOUS PROPACETAMOL MIXED NR",
         ),
         (DataType, "MEAN MEDIAN INDIVIDUAL NR"),
+        (
+            SamplingSite,
+            "ARM_VEIN VENOUS ARTERIAL ARTERIALISED HEPATIC_VEIN CAPILLARY "
+            "NOT_APPLICABLE",
+        ),
         (PKPDData, "PK PD NR"),
     ],
 )
@@ -208,6 +215,7 @@ def test_the_fields_and_their_defaults() -> None:
         "administration_site",
         "data",
         "data_type",
+        "sampling_site",
     ]
 
 
@@ -216,3 +224,12 @@ def test_health_is_required() -> None:
         PKPDMappingMetaData(  # ty: ignore[missing-argument]
             tissue=Tissue.PLASMA, route=Route.PO, dosing=Dosing.SINGLE
         )
+
+
+def test_sampling_site_default_arm_vein() -> None:
+    """Plasma and blood data without a stated site are arm-vein samples."""
+    md = minimal()
+    assert md.sampling_site is SamplingSite.ARM_VEIN
+    assert SamplingSite("arm vein") is SamplingSite.ARM_VEIN
+    urine = dataclasses.replace(md, sampling_site=SamplingSite.NOT_APPLICABLE)
+    assert urine.to_dict()["sampling_site"] == "NOT_APPLICABLE"

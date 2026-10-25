@@ -18,7 +18,9 @@ __all__ = [
     "CO",
     "FFM",
     "F_CARDIAC_FUNCTION",
+    "F_FUNCTIONAL",
     "F_RENAL_FUNCTION",
+    "F_SHUNT",
     "GFR",
     "HCT",
     "HEIGHT",
@@ -42,6 +44,7 @@ __all__ = [
     "arm",
     "arm_blood",
     "arm_free",
+    "arm_weight",
     "bile",
     "bile_reaction",
     "blood",
@@ -52,8 +55,10 @@ __all__ = [
     "exchange_reaction",
     "feces",
     "feces_reaction",
+    "filtration_reaction",
     "flat",
     "flow_fraction",
+    "fraction_reabsorbed",
     "free",
     "ftissue",
     "fu",
@@ -77,8 +82,10 @@ __all__ = [
     "organ_flow",
     "organ_mass",
     "organ_outflow",
+    "organ_outflow_bc",
     "organ_volume",
     "outflow_conc",
+    "outflow_conc_bc",
     "outflow_reaction",
     "plasma_capacity",
     "po_dose",
@@ -90,6 +97,7 @@ __all__ = [
     "pool_volume",
     "ps",
     "ref",
+    "shunt_reaction",
     "sol_dose",
     "solution",
     "species",
@@ -135,6 +143,10 @@ F_RENAL_FUNCTION = "f_renal_function"
 """The renal function relative to normal."""
 F_CARDIAC_FUNCTION = "f_cardiac_function"
 """The cardiac function (cardiac output) relative to normal."""
+F_SHUNT = "f_shunt"
+"""The portosystemic shunt: the fraction of the liver inflow which bypasses the liver."""
+F_FUNCTIONAL = "f_functional"
+"""The functional fraction of the liver tissue."""
 VBILE = "Vbile"
 """The volume of the bile, the compartment of `Cbile_<s>`."""
 VURINE = "Vurine"
@@ -283,6 +295,14 @@ def organ_outflow(organ: Organ, s: str) -> str:
     return f"Cout_{organ.value}_{s}"
 
 
+def organ_outflow_bc(organ: Organ, s: str) -> str:
+    """The id of the blood cell concentration leaving an organ, `Cout_li_bc_<s>`.
+
+    Only for a substance with kinetic blood cells.
+    """
+    return f"Cout_{organ.value}_{Part.BLOOD_CELLS.value}_{s}"
+
+
 def inflow_reaction(pool: Pool, part: Part, s: str) -> str:
     """The local id of the inflow of `s` from a pool into an organ, `J_in_ar_pl_<s>`.
 
@@ -294,6 +314,19 @@ def inflow_reaction(pool: Pool, part: Part, s: str) -> str:
 def outflow_reaction(part: Part, s: str) -> str:
     """The local id of the outflow of `s` from an organ into its pool, `J_out_pl_<s>`."""
     return f"J_out_{part.value}_{s}"
+
+
+def shunt_reaction(pool: Pool, part: Part, s: str) -> str:
+    """The local id of the shunt of `s` from a pool past the liver, `J_shunt_po_pl_<s>`.
+
+    `part` is the part of the blood which carries it, plasma or blood cells.
+    """
+    return f"J_shunt_{pool.value}_{part.value}_{s}"
+
+
+def filtration_reaction(s: str) -> str:
+    """The local id of the glomerular filtration of `s` into the urine, `J_gfr_<s>`."""
+    return f"J_gfr_{s}"
 
 
 def exchange_reaction(part: Part, s: str) -> str:
@@ -308,6 +341,11 @@ def exchange_reaction(part: Part, s: str) -> str:
 def outflow_conc(s: str) -> str:
     """The local id of the concentration leaving an organ, `Cout_<s>`."""
     return f"Cout_{s}"
+
+
+def outflow_conc_bc(s: str) -> str:
+    """The local id of the blood cell concentration leaving an organ, `Cout_bc_<s>`."""
+    return f"Cout_{Part.BLOOD_CELLS.value}_{s}"
 
 
 def mr(s: str) -> str:
@@ -353,6 +391,11 @@ def kbc(s: str) -> str:
 def kbc_exchange(s: str) -> str:
     """The id of the exchange rate between plasma and blood cells, `kex_bc_<s>`."""
     return f"kex_bc_{s}"
+
+
+def fraction_reabsorbed(s: str) -> str:
+    """The id of the fraction of the filtrate which is reabsorbed, `f_reabsorbed_<s>`."""
+    return f"f_reabsorbed_{s}"
 
 
 def urine(s: str) -> str:
@@ -458,6 +501,11 @@ def arm_free(s: str) -> str:
 def arm_blood(s: str) -> str:
     """The id of the blood concentration at the arm-vein site, `Carm_blood_<s>`."""
     return f"Carm_blood_{s}"
+
+
+def arm_weight(site: Organ | Pool) -> str:
+    """The id of the weight of an organ outflow or a pool in the arm vein, `w_arm_sk`."""
+    return f"w_arm_{site.value}"
 
 
 def free(pool: Pool, s: str) -> str:

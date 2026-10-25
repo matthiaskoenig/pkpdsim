@@ -13,6 +13,7 @@ from pkpdsim.pbpk.chemistry import (
     Metabolism,
     Transport,
 )
+from pkpdsim.pbpk.data import load
 from pkpdsim.pbpk.organ import OrganComponent
 from pkpdsim.pbpk.organs import Organ, Part, Pool
 from pkpdsim.pbpk.pd import PDComponent
@@ -80,7 +81,8 @@ class PBPKDefinition:
             values and default individual; a study of both sexes uses one
             model per sex.
         population: the population of the physiology.
-        arm_vein: the arm vein sampling site.
+        arm_vein: the preset of the weights of the arm vein sampling site
+            (`data/arm_vein.toml`), the PK-Sim default skin and muscle mix.
         name: the name of the model.
         notes: the notes of the model.
     """
@@ -108,6 +110,12 @@ class PBPKDefinition:
         known = {s.sid for s in self.substances}
         problems += self._check_chemistry(known)
         problems += self._check_routes(known)
+        presets = sorted(load("arm_vein"))
+        if self.arm_vein not in presets:
+            problems.append(
+                f"arm_vein '{self.arm_vein}' is no preset of data/arm_vein.toml, "
+                f"the presets are {presets}"
+            )
         if problems:
             raise ValueError(
                 f"Invalid PBPK definition '{self.sid}':\n- " + "\n- ".join(problems)

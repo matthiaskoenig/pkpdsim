@@ -1,6 +1,7 @@
 """Tests of the composition and the build of a PBPK model."""
 
 import dataclasses
+import math
 import time
 from pathlib import Path
 
@@ -22,6 +23,7 @@ from pkpdsim.pbpk import (
     Organ,
     PBPKDefinition,
     PDComponent,
+    Pool,
     Route,
     StandardOrgan,
     Substance,
@@ -132,11 +134,18 @@ def test_flat_ids_follow_scheme(simple: BuildResult) -> None:
         for r in model.getListOfRules()
         if r.isAssignment()
     }
-    assert rules == {
+    outflows = {
         ids.organ_outflow(o, s): f"{ids.submodel(o)}__Cpl_{s}"
         for o in Organ
         for s in ("drg", "drg_m")
     }
+    assert {k: rules[k] for k in outflows} == outflows
+    observers = {
+        f(s)
+        for s in ("drg", "drg_m")
+        for f in (ids.arm, ids.arm_free, ids.arm_blood, ids.hepatic_vein)
+    } | {f(p, s) for s in ("drg", "drg_m") for p in Pool for f in (ids.free, ids.blood)}
+    assert set(rules) - set(outflows) == observers | {ids.injection_rate("drg")}
     initial = {
         a.getSymbol(): libsbml.formulaToL3String(a.getMath())
         for a in model.getListOfInitialAssignments()
@@ -418,3 +427,14 @@ def test_route_given_twice_raises() -> None:
     """Two routes of one kind for one substance raise."""
     with pytest.raises(ValueError, match="twice"):
         compose(definition(routes=[Route.iv("drg"), Route.iv("drg")]))
+
+
+def test_injection_rate_follows_injection_time(simple: BuildResult) -> None:
+    """`Kiv_<s> = ln(2)/ti_<s>` is a rule: a dose protocol changes `ti_<s>` between doses."""
+    r = load(simple)
+    kiv, ti = ids.injection_rate("drg"), ids.injection_time("drg")
+    assert r[kiv] == pytest.approx(math.log(2) / r[ti] * 60, rel=1e-12)
+    r.simulate(0, 10, 2)
+    r[ti] = 120.0
+    r.simulate(10, 20, 2)
+    assert r[kiv] == pytest.approx(math.log(2) / 120.0 * 60, rel=1e-12)
