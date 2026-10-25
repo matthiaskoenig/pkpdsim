@@ -547,8 +547,8 @@ def test_metabolism_kinetics() -> None:
     )
     assert _equation(_reaction(md, "E1")) == ([("Cti_drg", 1.0)], [])
     assert _formula(_reaction(md, "E2")) == (
-        "f_cyp3a4 * f_functional * E2_Vmax * Vli * (fu_drg / Kp_drg * Cti_drg)^E2_n / "
-        "(E2_Km^E2_n + (fu_drg / Kp_drg * Cti_drg)^E2_n)"
+        "f_cyp3a4 * f_functional * E2_Vmax * Vli * ((fu_drg / Kp_drg * Cti_drg) / "
+        "E2_Km)^E2_n / (1 dimensionless + ((fu_drg / Kp_drg * Cti_drg) / E2_Km)^E2_n)"
     )
 
 

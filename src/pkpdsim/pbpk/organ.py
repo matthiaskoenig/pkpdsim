@@ -45,11 +45,17 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Protocol
 
-from sbmlutils.factory import ModelDefinition, Parameter, Port, PortType
+from sbmlutils.factory import ModelDefinition, Port, PortType
 from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk import distribution, ids
-from pkpdsim.pbpk.chemistry import CustomReaction, Membrane, Metabolism, Transport
+from pkpdsim.pbpk.chemistry import (
+    CustomReaction,
+    Direction,
+    Membrane,
+    Metabolism,
+    Transport,
+)
 from pkpdsim.pbpk.organ_builder import CAPACITY, ONE, OrganBuilder, label
 from pkpdsim.pbpk.organs import Organ, Part, Pool, inflow, outflow
 from pkpdsim.pbpk.parts import Parts
@@ -628,14 +634,11 @@ class _StandardBuilder(OrganBuilder):
             if isinstance(p, Metabolism | Transport) and p.protein is not None:
                 self._activity(p.protein)
             if isinstance(p, Transport) and p.membrane is Membrane.APICAL:
-                sink = apical_sink(self.organ, p.substance)
-                self._input_compartment(sink.compartment, f"sink {sink.compartment}")
-                self._input_species(
-                    sink.species,
-                    sink.compartment,
-                    f"{p.substance} ({sink.compartment})",
-                    amount=sink.amount,
-                )
+                self._sink(p.substance)
+                if p.direction is Direction.INFLUX:
+                    for sid, inh in self.ctx.inhibitions:
+                        if inh.protein == p.protein:
+                            self._sink(sid)
         for p in processes:
             if not isinstance(p, CustomReaction):
                 continue
@@ -651,19 +654,17 @@ class _StandardBuilder(OrganBuilder):
         for p in processes:
             self.reactions += place(p, self.ctx, self.ctx.parts, capacity)
 
-    def _activity(self, protein: str) -> None:
-        """The activity `f_<protein>` of a protein in the organ."""
-        pid = ids.activity(protein)
-        if pid in self.parameters:
-            return
-        self.parameters[pid] = Parameter(
-            pid,
-            1.0,
-            U.dimensionless,
-            constant=True,
-            name=f"activity {protein}",
-            sboTerm=SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
-            notes=f"Activity of {protein} in the organ relative to normal (1.0); "
-            "it multiplies the rates of its processes.",
-            port=True,
+    def _sink(self, s: str) -> None:
+        """The apical sink species of a substance in the organ, an element of the body.
+
+        Read by an apical transport of the substance and, for an apical
+        influx, by the inhibitors of its protein, which act from the sink.
+        """
+        sink = apical_sink(self.organ, s)
+        self._input_compartment(sink.compartment, f"sink {sink.compartment}")
+        self._input_species(
+            sink.species,
+            sink.compartment,
+            f"{s} ({sink.compartment})",
+            amount=sink.amount,
         )

@@ -156,6 +156,7 @@ class PBPKDefinition:
         for ind in s.induces:
             if ind.protein not in PROTEINS:
                 problems.append(f"{s.sid}: unknown protein '{ind.protein}' (induction)")
+        problems += _check_interactions(s)
         problems += _positive(s.sid, "mr", s.mr)
         if s.binding is not None:
             problems += _in_unit_interval(s.sid, "fu", s.binding.fu, open_low=True)
@@ -295,6 +296,41 @@ def _in_unit_interval(
         interval = "(0, 1]" if open_low else "[0, 1]"
         return [f"{where}: {name} must be in {interval}, got {x}"]
     return []
+
+
+def _check_interactions(s: Substance) -> list[str]:
+    """Check the inhibitions and inductions of a substance.
+
+    One inhibition and one induction per protein (a mechanism-based
+    inhibition includes the competitive part), the constants of the kind of
+    the inhibition and none other, positive constants.
+    """
+    problems: list[str] = []
+    for what, proteins in (
+        ("inhibitions", [i.protein for i in s.inhibits]),
+        ("inductions", [i.protein for i in s.induces]),
+    ):
+        twice = sorted({p for p in proteins if proteins.count(p) > 1})
+        if twice:
+            problems.append(f"{s.sid}: several {what} of {twice}")
+    for inh in s.inhibits:
+        where = f"{s.sid} ({inh.kind} inhibition of {inh.protein})"
+        if (inh.kiu is None) is (inh.kind == "mixed"):
+            problems.append(
+                f"{where}: kiu is required for a mixed inhibition and only there"
+            )
+        if (inh.kinact is None) is (inh.kind == "mechanism"):
+            problems.append(
+                f"{where}: kinact is required for a mechanism-based inhibition "
+                "and only there"
+            )
+        for name in ("ki", "kiu", "kinact"):
+            problems += _positive(where, name, getattr(inh, name))
+    for ind in s.induces:
+        where = f"{s.sid} (induction of {ind.protein})"
+        problems += _positive(where, "emax", ind.emax)
+        problems += _positive(where, "ec50", ind.ec50)
+    return problems
 
 
 def _check_kinetics(where: str, k: FirstOrder | MM | Hill) -> list[str]:

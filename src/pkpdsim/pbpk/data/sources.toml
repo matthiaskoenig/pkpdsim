@@ -64,3 +64,26 @@ doi = "10.1208/s12248-015-9796-7"
 [Liu1992]
 citation = "Liu D, Moberg E, Kollind M, Lins PE, Adamson U, Macdonald IA. Arterial, arterialized venous, venous and capillary blood glucose measurements in normal man during hyperinsulinaemic euglycaemia and hypoglycaemia. Diabetologia 35(3):287-290, 1992."
 doi = "10.1007/BF00400932"
+
+[Segel1975]
+citation = "Segel IH. Enzyme Kinetics: Behavior and Analysis of Rapid Equilibrium and Steady-State Enzyme Systems. New York: Wiley-Interscience, 1975. Chapter 3 (simple inhibition systems: competitive, noncompetitive, uncompetitive, mixed)."
+
+[Mayhew2000]
+citation = "Mayhew BS, Jones DR, Hall SD. An in vitro model for predicting in vivo inhibition of cytochrome P450 3A4 by metabolic intermediate complex formation. Drug Metab Dispos 28(9):1031-1037, 2000."
+doi = "10.1016/S0090-9556(24)15182-3"
+
+[Almond2009]
+citation = "Almond LM, Yang J, Jamei M, Tucker GT, Rostami-Hodjegan A. Towards a quantitative framework for the prediction of DDIs arising from cytochrome P450 induction. Curr Drug Metab 10(4):420-432, 2009."
+doi = "10.2174/138920009788498978"
+
+[Fahmi2008]
+citation = "Fahmi OA, Maurer TS, Kish M, Cardenas E, Boldt S, Nettleton D. A combined model for predicting CYP3A4 clinical net drug-drug interaction based on CYP3A4 inhibition, inactivation, and induction determined in vitro. Drug Metab Dispos 36(8):1698-1708, 2008."
+doi = "10.1124/dmd.107.018663"
+
+[RowlandYeo2011]
+citation = "Rowland Yeo K, Walsky RL, Jamei M, Rostami-Hodjegan A, Tucker GT. Prediction of time-dependent CYP3A4 drug-drug interactions by physiologically based pharmacokinetic modelling: impact of inactivation parameters and enzyme turnover. Eur J Pharm Sci 43(3):160-173, 2011."
+doi = "10.1016/j.ejps.2011.04.008"
+
+[Greenblatt2003]
+citation = "Greenblatt DJ, von Moltke LL, Harmatz JS, Chen G, Weemhoff JL, Jen C, Kelley CJ, LeDuc BW, Zinny MA. Time course of recovery of cytochrome P450 3A function after single doses of grapefruit juice. Clin Pharmacol Ther 74(2):121-129, 2003."
+doi = "10.1016/S0009-9236(03)00118-8"

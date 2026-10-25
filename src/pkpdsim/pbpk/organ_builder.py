@@ -7,9 +7,26 @@ species) are inputs with a port, which the body replaces
 (`outputs`). `OrganBuilder` collects the elements of one organ by id and
 creates each element once: the inputs, the compartments and species of the
 organ, the rules (for what reads a species), the initial assignments (for
-what depends on parameters only), the constants with their provenance and the
-reactions. The standard organ and the variants derive from it and add their
-kinetics.
+what depends on parameters only), the constants with their provenance, the
+reactions and the activity of the proteins of its processes. The standard
+organ and the variants derive from it and add their kinetics.
+
+A protein of a process of the organ has the base activity `f_<protein>`, a
+constant of the organ (1, set by genotype, impairment and the experiments).
+When a substance of the definition inactivates it (mechanism-based) or
+induces it, the organ has the turnover state `E_<protein>`, the amount of the
+protein relative to its baseline (initially 1),
+
+```
+dE/dt = kdeg*(1 + sum Emax*I/(EC50 + I)) - kdeg*E - sum kinact*I/(KI + I)*E
+```
+
+(Mayhew 2000, Almond 2009, Fahmi 2008), with the unbound concentration `I`
+of the inhibitor or inducer in the cell (intracellular, else the equivalent
+tissue part, else plasma) and the degradation rate `kdeg_<protein>` of the
+organ; the rates of the protein are multiplied by `E_<protein>`. The
+constants of the interactions (`Ki`, `Kiu`, `kinact`, `Emax`, `EC50`) are
+parameters of the body, read through a port.
 """
 
 from typing import TYPE_CHECKING
@@ -22,6 +39,7 @@ from sbmlutils.factory import (
     Parameter,
     Port,
     PortType,
+    RateRule,
     Reaction,
     Species,
     UnitDefinition,
@@ -29,9 +47,19 @@ from sbmlutils.factory import (
 from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk import ids
+from pkpdsim.pbpk.data import cite
 from pkpdsim.pbpk.organs import Organ, Part, Pool
 from pkpdsim.pbpk.parts import Parts
-from pkpdsim.pbpk.placement import kp_id, species_compartment, value_parameter
+from pkpdsim.pbpk.placement import (
+    ONE,
+    has_turnover,
+    inhibition_parameters,
+    inhibitor_unbound,
+    kp_id,
+    species_compartment,
+    value_parameter,
+)
+from pkpdsim.pbpk.proteins import turnover
 from pkpdsim.pbpk.substance import Substance
 from pkpdsim.pbpk.units import MODEL_UNITS, U
 from pkpdsim.pbpk.values import Q
@@ -40,9 +68,6 @@ if TYPE_CHECKING:
     from pkpdsim.pbpk.organ import OrganContext
 
 __all__ = ["CAPACITY", "ONE", "OrganBuilder", "label"]
-
-ONE = "1 dimensionless"
-"""The number one in a formula."""
 
 CAPACITY = (
     "Not a physical volume: the plasma-equivalent capacity of the blood of a "
@@ -95,6 +120,7 @@ class OrganBuilder:
         self.parameters: dict[str, Parameter] = {}
         self.rules: list[AssignmentRule] = []
         self.assignments: list[InitialAssignment] = []
+        self.rate_rules: list[RateRule] = []
         self.reactions: list[Reaction] = []
         self.replacements: dict[str, str] = {}
         self.outputs: dict[str, str] = {}
@@ -333,6 +359,103 @@ class OrganBuilder:
         """The fraction unbound in plasma of a substance."""
         return self._input(ids.fu(s.sid), U.dimensionless, f"fraction unbound {s.sid}")
 
+    def _activity(self, protein: str) -> None:
+        """The base activity `f_<protein>` of a protein in the organ and its interactions.
+
+        The constants of the inhibitions and inductions of the protein are
+        inputs of the organ; a protein which a substance inactivates or
+        induces has the turnover state `E_<protein>`.
+        """
+        pid = ids.activity(protein)
+        if pid in self.parameters:
+            return
+        self.parameters[pid] = Parameter(
+            pid,
+            1.0,
+            U.dimensionless,
+            constant=True,
+            name=f"activity {protein}",
+            sboTerm=SBO.RELATIVE_ACTIVITY,
+            notes=f"Base activity of {protein} in the organ relative to normal "
+            "(1.0), set by genotype, impairment and the experiments; it "
+            "multiplies the rates of its processes. Inhibition and induction act "
+            "on top of it (the turnover state and the inhibitor terms of the "
+            "rates).",
+            port=True,
+        )
+        for sid, inh in self.ctx.inhibitions:
+            if inh.protein != protein:
+                continue
+            for par, field in inhibition_parameters(sid, inh):
+                unit = U.per_min if field == "kinact" else U.mM
+                self._input(par, unit, f"{field} {protein} {sid}")
+        for sid, ind in self.ctx.inductions:
+            if ind.protein == protein:
+                self._input(
+                    ids.emax(protein, sid), U.dimensionless, f"Emax {protein} {sid}"
+                )
+                self._input(ids.ec50(protein, sid), U.mM, f"EC50 {protein} {sid}")
+        if has_turnover(protein, self.ctx):
+            self._turnover(protein)
+
+    def _turnover(self, protein: str) -> None:
+        """The turnover state `E_<protein>` under mechanism-based inhibition and induction."""
+        kdeg = ids.kdeg(protein)
+        self.parameters[kdeg] = value_parameter(
+            kdeg,
+            turnover(self.organ),
+            U.per_min,
+            f"degradation rate {protein} [1/min]",
+            SBO.DECAY_CONSTANT,
+            f"First order degradation of {protein} in the organ; the synthesis "
+            "of the baseline amount balances it.",
+        )
+        synthesis = [ONE]
+        inactivation: list[str] = []
+        for sid, ind in self.ctx.inductions:
+            if ind.protein != protein:
+                continue
+            i = self._unbound_in_cell(sid)
+            synthesis.append(
+                f"{ids.emax(protein, sid)} * ({i}) / ({ids.ec50(protein, sid)} + {i})"
+            )
+        for sid, inh in self.ctx.inhibitions:
+            if inh.protein != protein or inh.kind != "mechanism":
+                continue
+            i = self._unbound_in_cell(sid)
+            inactivation.append(
+                f"{ids.kinact(protein, sid)} * ({i}) / ({ids.ki(protein, sid)} + {i})"
+            )
+        e = ids.enzyme(protein)
+        formula = f"{kdeg} * ({' + '.join(synthesis)}) - {kdeg} * {e}"
+        if inactivation:
+            formula += f" - ({' + '.join(inactivation)}) * {e}"
+        self.parameters[e] = Parameter(
+            e,
+            1.0,
+            U.dimensionless,
+            constant=False,
+            name=f"amount {protein} relative to baseline",
+            sboTerm=SBO.RELATIVE_ACTIVITY,
+            notes=f"Turnover of {protein} in the organ (initially 1): synthesis "
+            "`kdeg*(1 + sum Emax*I/(EC50 + I))` with the induction of Almond "
+            "2009, degradation `kdeg*E` and the mechanism-based inactivation "
+            "`kinact*I/(KI + I)*E` of Mayhew 2000, combined as in Fahmi 2008; "
+            "`I` is the unbound concentration in the cell. It multiplies the "
+            f"rates of {protein}.\n\n`d{e}/dt = {formula}`\n\nSources:\n\n"
+            f"- {cite('Mayhew2000')}\n- {cite('Almond2009')}\n- {cite('Fahmi2008')}",
+        )
+        self.rate_rules.append(RateRule(e, formula, U.per_min))
+
+    def _unbound_in_cell(self, sid: str) -> str:
+        """The unbound concentration of a substance in the cell of the organ.
+
+        Intracellular, else the equivalent tissue part (merged tissue, whole
+        organ), else plasma.
+        """
+        s = next(s for s in self.ctx.substances if s.sid == sid)
+        return inhibitor_unbound(Part.INTRACELLULAR, s, self.organ, self.ctx.parts)
+
     def model_definition(self, notes: str) -> ModelDefinition:
         """Get the model definition of the collected elements.
 
@@ -353,5 +476,6 @@ class OrganBuilder:
             parameters=list(self.parameters.values()),
             rules=self.rules,
             assignments=self.assignments,
+            rate_rules=self.rate_rules,
             reactions=self.reactions,
         )

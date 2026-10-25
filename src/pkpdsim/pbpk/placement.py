@@ -11,10 +11,32 @@ cumulative urine), a custom reaction in the part it names.
 Every rate acts on the unbound concentration of its part and is an amount per
 time: the Vmax of a process is per litre of organ, so the whole organ has the
 capacity `Vmax * V<o>`, and the activity `f_<protein>` of its protein
-multiplies it. The organ may give a functional fraction (`f_functional` of
-the liver), which multiplies the rate of every metabolism and transport as
-well, the share of the capacity in the functional tissue; a custom reaction
-states its rate itself and is not scaled.
+multiplies it (times the turnover state `E_<protein>` when a substance of the
+definition inactivates or induces the protein). The organ may give a
+functional fraction (`f_functional` of the liver), which multiplies the rate
+of every metabolism and transport as well, the share of the capacity in the
+functional tissue; a custom reaction states its rate itself and is not scaled.
+
+The reversible inhibitors of the protein enter the rate of every process of
+the protein with their unbound concentration `I` in the compartment from
+which the process takes its substrate (the part of the substrate of a
+metabolism, the interstitium of a basolateral influx, the cell of an efflux,
+the sink of an apical influx): the inhibitor species of the same part, else
+of the equivalent tissue part, else plasma. With the competitive sum
+`c = sum I/Ki` (competitive, mixed with its competitive constant,
+noncompetitive, and mechanism-based inhibition with `Ki = KI`) and the
+uncompetitive sum `u = sum I/Kiu` (uncompetitive, mixed, noncompetitive), the
+rate laws of mutually exclusive inhibitors (Segel 1975) are
+
+```
+MM           Vmax*V*C / (Km*(1 + c) + C*(1 + u))
+Hill         Vmax*V/(1 + u) * x^n / (1 + x^n),  x = C/(Km*(1 + c)/(1 + u))
+first order  k*C / (1 + c)
+```
+
+i.e. `Vmax_app = Vmax/(1 + u)` and `Km_app = Km*(1 + c)/(1 + u)`; the first
+order rate is the limit `C << Km`, which an uncompetitive inhibitor does not
+change.
 """
 
 from collections.abc import Iterable, Mapping
@@ -38,6 +60,7 @@ from pkpdsim.pbpk.chemistry import (
 from pkpdsim.pbpk.data import cite
 from pkpdsim.pbpk.organs import Organ, Part
 from pkpdsim.pbpk.parts import Parts
+from pkpdsim.pbpk.proteins import Inhibition
 from pkpdsim.pbpk.substance import KpMethod, Substance
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import Q, as_value
@@ -46,12 +69,17 @@ if TYPE_CHECKING:
     from pkpdsim.pbpk.organ import OrganContext
 
 __all__ = [
+    "ONE",
     "Sink",
     "apical_sink",
     "built_parts",
+    "has_turnover",
+    "inhibition_parameters",
+    "inhibitor_unbound",
     "kp_id",
     "metabolism_part",
     "place",
+    "process_source",
     "species_compartment",
     "unbound",
     "value_parameter",
@@ -68,15 +96,21 @@ _PART_NAMES = {
 """The parts in names."""
 
 
-_PRODUCT_PARTS: dict[Part, tuple[Part, ...]] = {
+ONE = "1 dimensionless"
+"""The number one in a formula."""
+
+
+_EQUIVALENT_PARTS: dict[Part, tuple[Part, ...]] = {
     Part.INTRACELLULAR: (Part.INTRACELLULAR, Part.TISSUE, Part.ORGAN, Part.PLASMA),
+    Part.INTERSTITIAL: (Part.INTERSTITIAL, Part.TISSUE, Part.ORGAN, Part.PLASMA),
     Part.TISSUE: (Part.TISSUE, Part.INTRACELLULAR, Part.ORGAN, Part.PLASMA),
     Part.ORGAN: (Part.ORGAN, Part.TISSUE, Part.INTRACELLULAR, Part.PLASMA),
     Part.PLASMA: (Part.PLASMA, Part.ORGAN),
 }
-"""The parts a product of a metabolism goes into by the part of the substrate,
-in order: the same part, the equivalent tissue part, plasma (the whole organ
-for a flow-limited product, which has no plasma species)."""
+"""The part of another substance which corresponds to a part, in order: the
+same part, the equivalent tissue part, plasma (the whole organ for a
+flow-limited substance, which has no plasma species); where a product of a
+metabolism goes and where an inhibitor acts."""
 
 
 @dataclass(frozen=True)
@@ -235,6 +269,167 @@ def unbound(part: Part, substance: Substance, organ: Organ) -> str:
     )
 
 
+def process_source(
+    process: Metabolism | Transport, parts: Mapping[str, Parts]
+) -> Part | None:
+    """Get the part from which a process takes its substrate.
+
+    Args:
+        process: the metabolism or transport.
+        parts: the parts of the substances in the organ by substance id.
+
+    Returns:
+        The part of the substrate of a metabolism, the interstitium of a
+        basolateral influx, the cell of an efflux, `None` for the sink of an
+        apical influx.
+    """
+    if isinstance(process, Metabolism):
+        return metabolism_part(parts[process.substrate])
+    if process.direction is Direction.EFFLUX:
+        return Part.INTRACELLULAR
+    if process.membrane is Membrane.BASOLATERAL:
+        return Part.INTERSTITIAL
+    return None
+
+
+def inhibitor_unbound(
+    source: Part | None,
+    inhibitor: Substance,
+    organ: Organ,
+    parts: Mapping[str, Parts],
+) -> str:
+    """Get the unbound concentration of an inhibitor where a process takes its substrate.
+
+    Args:
+        source: the part of the substrate (`process_source`), `None` for the
+            apical sink.
+        inhibitor: the inhibiting (or inducing) substance.
+        organ: the organ.
+        parts: the parts of the substances in the organ by substance id.
+
+    Returns:
+        The unbound concentration (formula) of the inhibitor species of the
+        same part, else of the equivalent tissue part, else of plasma; the
+        concentration of the inhibitor in the sink of an apical influx.
+    """
+    return _inhibitor_site(source, inhibitor, organ, parts)[1]
+
+
+def _inhibitor_site(
+    source: Part | None,
+    inhibitor: Substance,
+    organ: Organ,
+    parts: Mapping[str, Parts],
+) -> tuple[str, str]:
+    """The species of an inhibitor where a process takes its substrate and its unbound concentration."""
+    if source is None:
+        species = apical_sink(organ, inhibitor.sid).species
+        return species, species
+    built = built_parts(parts[inhibitor.sid])
+    part = next(p for p in _EQUIVALENT_PARTS[source] if p in built)
+    return ids.species(part, inhibitor.sid), unbound(part, inhibitor, organ)
+
+
+def has_turnover(protein: str, ctx: "OrganContext") -> bool:
+    """Check whether a protein has a turnover state.
+
+    A protein has one when a substance of the definition inactivates it
+    (mechanism-based) or induces it.
+
+    Args:
+        protein: the protein id.
+        ctx: the context of the organ.
+
+    Returns:
+        `True` if the protein needs the state `E_<protein>`.
+    """
+    return any(
+        i.protein == protein and i.kind == "mechanism" for _, i in ctx.inhibitions
+    ) or any(i.protein == protein for _, i in ctx.inductions)
+
+
+def _activity(protein: str | None, ctx: "OrganContext") -> str:
+    """The factor of the protein on a rate: `f_<protein>`, times `E_<protein>`."""
+    if protein is None:
+        return ""
+    factor = f"{ids.activity(protein)} * "
+    if has_turnover(protein, ctx):
+        factor += f"{ids.enzyme(protein)} * "
+    return factor
+
+
+@dataclass(frozen=True)
+class _Inhibitors:
+    """The inhibitors of the protein of a process.
+
+    Attributes:
+        competitive: `(1 + sum I/Ki)` of the competitive part (competitive,
+            mixed, noncompetitive, mechanism-based with `Ki = KI`), `None`
+            without one.
+        uncompetitive: `(1 + sum I/Kiu)` of the uncompetitive part
+            (uncompetitive, mixed with `Kiu`, noncompetitive with
+            `Kiu = Ki`), `None` without one.
+        modifiers: the inhibitor species which the rate reads.
+    """
+
+    competitive: str | None = None
+    uncompetitive: str | None = None
+    modifiers: tuple[str, ...] = ()
+
+
+def _inhibitors(
+    process: Metabolism | Transport,
+    ctx: "OrganContext",
+    parts: Mapping[str, Parts],
+) -> _Inhibitors:
+    """The competitive and the uncompetitive terms of the inhibitors of the protein."""
+    if process.protein is None:
+        return _Inhibitors()
+    source = process_source(process, parts)
+    competitive: list[str] = []
+    uncompetitive: list[str] = []
+    modifiers: list[str] = []
+    for sid, inh in ctx.inhibitions:
+        if inh.protein != process.protein:
+            continue
+        species, i = _inhibitor_site(source, _substance(ctx, sid), ctx.organ, parts)
+        if species not in modifiers:
+            modifiers.append(species)
+        ki = ids.ki(inh.protein, sid)
+        if inh.kind in ("competitive", "mixed", "noncompetitive", "mechanism"):
+            competitive.append(f"({i}) / {ki}")
+        if inh.kind in ("uncompetitive", "noncompetitive"):
+            uncompetitive.append(f"({i}) / {ki}")
+        elif inh.kind == "mixed":
+            uncompetitive.append(f"({i}) / {ids.kiu(inh.protein, sid)}")
+    return _Inhibitors(
+        competitive=f"({ONE} + {' + '.join(competitive)})" if competitive else None,
+        uncompetitive=(
+            f"({ONE} + {' + '.join(uncompetitive)})" if uncompetitive else None
+        ),
+        modifiers=tuple(modifiers),
+    )
+
+
+def inhibition_parameters(sid: str, inh: Inhibition) -> list[tuple[str, str]]:
+    """Get the ids of the constants of an inhibition and their quantity.
+
+    Args:
+        sid: the inhibitor id.
+        inh: the inhibition.
+
+    Returns:
+        (id, field of `Inhibition`) of `Ki`, and `Kiu` of a mixed, `kinact`
+        of a mechanism-based inhibition.
+    """
+    pars = [(ids.ki(inh.protein, sid), "ki")]
+    if inh.kind == "mixed":
+        pars.append((ids.kiu(inh.protein, sid), "kiu"))
+    if inh.kind == "mechanism":
+        pars.append((ids.kinact(inh.protein, sid), "kinact"))
+    return pars
+
+
 def value_parameter(
     pid: str,
     q: Q,
@@ -327,24 +522,31 @@ def _substance(ctx: "OrganContext", sid: str) -> Substance:
 
 
 def _rate(
-    process: Metabolism | Transport, organ: Organ, cu: str, capacity: str | None
+    process: Metabolism | Transport,
+    ctx: "OrganContext",
+    cu: str,
+    capacity: str | None,
+    inhibitors: _Inhibitors,
 ) -> tuple[str, list[Parameter]]:
     """Get the rate law of a process on the unbound concentration `cu`.
 
-    The activity of the protein and the functional fraction `capacity`
-    multiply it.
+    The activity of the protein (with its turnover state) and the functional
+    fraction `capacity` multiply it; the inhibitors of the protein enter as
+    the competitive and uncompetitive sums (module docstring).
 
     Returns:
         The rate (mmole/min) and the parameters of the process.
     """
     pid, k = process.sid, process.kinetics
-    factor = f"{ids.activity(process.protein)} * " if process.protein else ""
+    factor = _activity(process.protein, ctx)
     if capacity is not None:
         factor += f"{capacity} * "
-    v = ids.organ_volume(organ)
+    c, u = inhibitors.competitive, inhibitors.uncompetitive
+    v = ids.organ_volume(ctx.organ)
     if isinstance(k, FirstOrder):
         p_k = f"{pid}_k"
-        return f"{factor}{p_k} * {cu}", [
+        rate = f"{factor}{p_k} * {cu}" + (f" / {c}" if c else "")
+        return rate, [
             value_parameter(
                 p_k,
                 k.k,
@@ -373,8 +575,10 @@ def _rate(
             "On the unbound concentration.",
         ),
     ]
+    km_c = f"{km} * {c}" if c else km
     if isinstance(k, MM):
-        return f"{factor}{vmax} * {v} * ({cu}) / ({km} + {cu})", pars
+        s_u = f"({cu}) * {u}" if u else cu
+        return f"{factor}{vmax} * {v} * ({cu}) / ({km_c} + {s_u})", pars
     assert isinstance(k, Hill)
     n = f"{pid}_n"
     pars.append(
@@ -382,10 +586,31 @@ def _rate(
             n, k.n, U.dimensionless, f"Hill coefficient {pid}", SBO.HILL_COEFFICIENT
         )
     )
+    if u:
+        vmax_app, km_app = f"{vmax} / {u}", f"({km_c} / {u})"
+    else:
+        vmax_app, km_app = vmax, f"({km_c})" if c else km
+    # the power of the dimensionless ratio, so that the units of the rate are
+    # checkable: `C^n/(Km^n + C^n) = x^n/(1 + x^n)` with `x = C/Km`
+    x = f"(({cu}) / {km_app})"
     return (
-        f"{factor}{vmax} * {v} * ({cu})^{n} / ({km}^{n} + ({cu})^{n})",
+        f"{factor}{vmax_app} * {v} * {x}^{n} / ({ONE} + {x}^{n})",
         pars,
     )
+
+
+def _with_modifiers(equation: str, modifiers: tuple[str, ...]) -> str:
+    """An equation with the inhibitor species which its rate reads as modifiers.
+
+    A species of the equation itself (an inhibitor of its own process) is not
+    repeated.
+    """
+    sides = equation.replace("<->", "->").split("->")
+    present = {
+        part.strip().split(" ")[-1] for side in sides for part in side.split("+")
+    }
+    extra = [m for m in modifiers if m not in present]
+    return f"{equation} [{', '.join(extra)}]" if extra else equation
 
 
 def _stoichiometry(fraction: float, species: str) -> str:
@@ -401,7 +626,7 @@ def _metabolism(
 ) -> Reaction:
     """The reaction of a metabolism in the part of the tissue of its substrate.
 
-    A product goes into the first part of `_PRODUCT_PARTS` of the part of
+    A product goes into the first part of `_EQUIVALENT_PARTS` of the part of
     the substrate in which it has a species: the same part, else the
     equivalent tissue part (intracellular, merged tissue, whole organ), else
     plasma.
@@ -412,15 +637,19 @@ def _metabolism(
     products = []
     for product, fraction in process.products.items():
         built = built_parts(parts[product])
-        target = next(t for t in _PRODUCT_PARTS[part] if t in built)
+        target = next(t for t in _EQUIVALENT_PARTS[part] if t in built)
         products.append(_stoichiometry(fraction, ids.species(target, product)))
-    rate, pars = _rate(process, ctx.organ, cu, capacity)
+    inhibitors = _inhibitors(process, ctx, parts)
+    rate, pars = _rate(process, ctx, cu, capacity, inhibitors)
     names = ", ".join(process.products) or "elimination"
     return Reaction(
         sid=process.sid,
         name=f"{process.substrate} -> {names}"
         + (f" ({process.protein})" if process.protein else ""),
-        equation=f"{ids.species(part, substrate.sid)} -> {' + '.join(products)}",
+        equation=_with_modifiers(
+            f"{ids.species(part, substrate.sid)} -> {' + '.join(products)}",
+            inhibitors.modifiers,
+        ),
         formula=(rate, U.mmole_per_min),
         pars=pars,
         compartment=species_compartment(part, substrate.sid, parts[substrate.sid]),
@@ -472,12 +701,13 @@ def _transport(
             f"{cell} -> {other}",
             unbound(Part.INTRACELLULAR, substance, ctx.organ),
         )
-    rate, pars = _rate(process, ctx.organ, cu, capacity)
+    inhibitors = _inhibitors(process, ctx, parts)
+    rate, pars = _rate(process, ctx, cu, capacity, inhibitors)
     return Reaction(
         sid=process.sid,
         name=f"{process.direction.value} {s} {process.membrane.value}"
         + (f" ({process.protein})" if process.protein else ""),
-        equation=equation,
+        equation=_with_modifiers(equation, inhibitors.modifiers),
         formula=(rate, U.mmole_per_min),
         pars=pars,
         compartment=ids.compartment(Part.INTRACELLULAR),

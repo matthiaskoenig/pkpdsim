@@ -58,13 +58,15 @@ from sbmlutils.metadata import SBO
 from sbmlutils.validation import validate_doc
 
 from pkpdsim.pbpk import ids
+from pkpdsim.pbpk.chemistry import Metabolism, Transport
+from pkpdsim.pbpk.data import cite
 from pkpdsim.pbpk.definition import PBPKDefinition
 from pkpdsim.pbpk.observers import observer_objects
 from pkpdsim.pbpk.organ import Boundary, OrganComponent, OrganContext, StandardOrgan
 from pkpdsim.pbpk.organs import Organ, Part, Pool
 from pkpdsim.pbpk.parts import parts_for
 from pkpdsim.pbpk.physiology import physiology_objects, reference_tissue_volumes
-from pkpdsim.pbpk.placement import kp_id, value_parameter
+from pkpdsim.pbpk.placement import inhibition_parameters, kp_id, value_parameter
 from pkpdsim.pbpk.routes import route_objects
 from pkpdsim.pbpk.sinks import sink_objects
 from pkpdsim.pbpk.substance import Kp, KpMethod, Substance
@@ -76,6 +78,14 @@ _ONE = "1 dimensionless"
 _SBO_PARAMETER = SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER
 _VARIANTS: dict[str, OrganComponent] = {"standard": StandardOrgan()}
 """The organ variants by name; the registry of the variants extends it."""
+_SOURCE = {
+    "competitive": "Segel1975",
+    "noncompetitive": "Segel1975",
+    "uncompetitive": "Segel1975",
+    "mixed": "Segel1975",
+    "mechanism": "Mayhew2000",
+}
+"""The source of the rate law of an inhibition by its kind."""
 
 
 @dataclass(frozen=True)
@@ -383,6 +393,84 @@ class _Top:
             )
         self._distribution(s)
         self._erythrocytes(s)
+        self._interactions(s)
+
+    def _interactions(self, s: Substance) -> None:
+        """The constants of the inhibitions and inductions of a substance.
+
+        Only of a protein which a process of the definition uses: the organs
+        with such a process read them (`Ki`, `Kiu`, `kinact`, `Emax`,
+        `EC50`), one value for every organ.
+        """
+        used = {
+            p.protein
+            for p in self.definition.chemistry
+            if isinstance(p, Metabolism | Transport) and p.protein is not None
+        }
+        for inh in s.inhibits:
+            if inh.protein not in used:
+                continue
+            for pid, field in inhibition_parameters(s.sid, inh):
+                q = getattr(inh, field)
+                assert q is not None
+                if field == "kinact":
+                    unit, sbo, text = (
+                        U.per_min,
+                        SBO.INACTIVATION_RATE_CONSTANT,
+                        f"Maximal inactivation rate of {inh.protein} by {s.sid} "
+                        "(mechanism-based inhibition).",
+                    )
+                else:
+                    unit, sbo = U.mM, SBO.INHIBITORY_CONSTANT
+                    text = {
+                        "ki": f"Inhibition constant of {s.sid} on {inh.protein} "
+                        f"({inh.kind}) on the unbound concentration"
+                        + (
+                            "; the KI of the inactivation, and the competitive "
+                            "constant of the inhibitor while it binds."
+                            if inh.kind == "mechanism"
+                            else "."
+                        ),
+                        "kiu": f"Uncompetitive constant of the mixed inhibition of "
+                        f"{inh.protein} by {s.sid} on the unbound concentration.",
+                    }[field]
+                self.add(
+                    [
+                        value_parameter(
+                            pid,
+                            q,
+                            unit,
+                            f"{field} {inh.protein} {s.sid}",
+                            sbo,
+                            f"{text}\n\nSource of the rate law: {cite(_SOURCE[inh.kind])}",
+                        )
+                    ]
+                )
+        for ind in s.induces:
+            if ind.protein not in used:
+                continue
+            self.add(
+                [
+                    value_parameter(
+                        ids.emax(ind.protein, s.sid),
+                        ind.emax,
+                        U.dimensionless,
+                        f"Emax {ind.protein} {s.sid}",
+                        _SBO_PARAMETER,
+                        f"Maximal induction of {ind.protein} by {s.sid}, the "
+                        "fold increase of its synthesis minus 1.",
+                    ),
+                    value_parameter(
+                        ids.ec50(ind.protein, s.sid),
+                        ind.ec50,
+                        U.mM,
+                        f"EC50 {ind.protein} {s.sid}",
+                        SBO.EC50,
+                        f"Unbound concentration of {s.sid} of half-maximal "
+                        f"induction of {ind.protein}.",
+                    ),
+                ]
+            )
 
     def _distribution(self, s: Substance) -> None:
         """The tissue to plasma coefficients, ftissue and the reference tissue volume."""

@@ -102,3 +102,13 @@ ncit = "C21253"
 name = "ATP-binding cassette sub-family C member 2 (MRP2)"
 uniprot = "Q92887"
 ncit = "C103884"
+
+# The degradation rate constant kdeg of a protein, the turnover of its amount
+# E (relative to baseline) under mechanism-based inhibition and induction,
+# `dE/dt = kdeg*(1 + induction) - kdeg*E - inactivation`. The values are those
+# of CYP3A4, the only protein with in vivo estimates in both organs; every
+# protein takes them unless a model sets `kdeg_<protein>` of an organ.
+[turnover]
+li = { value = 0.0193, unit = "1/hr", source = "RowlandYeo2011", notes = "hepatic CYP3A4 (half-life 35.9 h): of the two values tested (0.0193 and 0.0077 1/h), the one which predicted 29 clinical mechanism-based CYP3A4 interactions with less bias and higher precision" }
+si = { value = 0.0301, unit = "1/hr", source = "Greenblatt2003", notes = "derived: ln(2)/23 h, the recovery half-life of intestinal CYP3A after a single dose of grapefruit juice (midazolam AUC ratios 26 to 74 h after the juice)" }
+other = { value = 0.0193, unit = "1/hr", source = "ModelChoice", notes = "the hepatic value (Rowland Yeo 2011) for the organs without an in vivo estimate of the turnover" }

@@ -52,6 +52,9 @@ __all__ = [
     "compartment",
     "dissolution",
     "dose_reaction",
+    "ec50",
+    "emax",
+    "enzyme",
     "exchange_reaction",
     "feces",
     "feces_reaction",
@@ -77,6 +80,10 @@ __all__ = [
     "k_organ",
     "kbc",
     "kbc_exchange",
+    "kdeg",
+    "ki",
+    "kinact",
+    "kiu",
     "kp",
     "kp_organ",
     "lumen",
@@ -542,8 +549,62 @@ def unbound(part: Part, s: str) -> str:
 
 
 def activity(protein: str) -> str:
-    """The id of the relative activity of a protein, `f_cyp3a4`."""
+    """The id of the base activity of a protein in an organ, `f_cyp3a4`.
+
+    A constant of every organ in which a process uses the protein (flat
+    `LI__f_cyp3a4`), relative to normal (1): the factor which genotype,
+    impairment and the experiments set. Interactions act on top of it, not on
+    it: mechanism-based inhibition and induction through the turnover state
+    `E_<protein>` of the organ, reversible inhibition through the inhibitor
+    terms in the rate of every process of the protein. A process of the
+    protein runs with `f_<protein>` (times `E_<protein>`) on its Vmax or
+    clearance.
+    """
     return f"f_{protein.lower()}"
+
+
+def enzyme(protein: str) -> str:
+    """The id of the turnover state of a protein in an organ, `E_cyp3a4`.
+
+    The amount of the protein relative to its baseline (initially 1), a state
+    of the organs with a process of the protein when a substance of the
+    definition inactivates (mechanism-based) or induces it.
+    """
+    return f"E_{protein.lower()}"
+
+
+def kdeg(protein: str) -> str:
+    """The id of the degradation rate of a protein in an organ, `kdeg_cyp3a4`."""
+    return f"kdeg_{protein.lower()}"
+
+
+def ki(protein: str, s: str) -> str:
+    """The id of the inhibition constant of `s` on a protein, `Ki_cyp3a4_<s>`.
+
+    The competitive constant of a mixed inhibition, the KI (half-maximal
+    inactivation) of a mechanism-based inhibition.
+    """
+    return f"Ki_{protein.lower()}_{s}"
+
+
+def kiu(protein: str, s: str) -> str:
+    """The id of the uncompetitive constant of a mixed inhibition, `Kiu_cyp3a4_<s>`."""
+    return f"Kiu_{protein.lower()}_{s}"
+
+
+def kinact(protein: str, s: str) -> str:
+    """The id of the maximal inactivation rate of `s` on a protein, `kinact_cyp3a4_<s>`."""
+    return f"kinact_{protein.lower()}_{s}"
+
+
+def emax(protein: str, s: str) -> str:
+    """The id of the maximal induction of a protein by `s`, `Emax_cyp3a4_<s>`."""
+    return f"Emax_{protein.lower()}_{s}"
+
+
+def ec50(protein: str, s: str) -> str:
+    """The id of the half-maximal inducing concentration of `s`, `EC50_cyp3a4_<s>`."""
+    return f"EC50_{protein.lower()}_{s}"
 
 
 _PARTS = "|".join(p.value for p in Part)
