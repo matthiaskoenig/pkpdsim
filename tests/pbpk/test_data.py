@@ -7,6 +7,8 @@ from typing import Any
 import pytest
 
 from pkpdsim.pbpk import cite, sources
+from pkpdsim.pbpk.data import value
+from pkpdsim.pbpk.units import U
 
 
 def _tables(node: object) -> list[dict[str, Any]]:
@@ -50,3 +52,10 @@ def test_cite_unknown_key_raises() -> None:
     """An unknown key raises a KeyError which names the key."""
     with pytest.raises(KeyError, match="nope"):
         cite("nope")
+
+
+def test_value_of_data_file() -> None:
+    """A number of a data file is read with its unit of the model and its source."""
+    ti = value("routes", "iv", "ti")
+    assert (ti.value, ti.unit, ti.source) == (10.0, U.second, "ModelChoice")
+    assert ti.notes

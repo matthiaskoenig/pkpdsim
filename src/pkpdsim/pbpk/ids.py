@@ -22,6 +22,8 @@ __all__ = [
     "GFR",
     "HCT",
     "HEIGHT",
+    "K_BILE",
+    "K_FECES",
     "MLEAN",
     "PS_VAS",
     "QH",
@@ -31,18 +33,25 @@ __all__ = [
     "SV_TIS",
     "VBILE",
     "VBLOOD",
+    "VFECES",
     "VLUMEN",
     "VURINE",
+    "absorption",
+    "absorption_reaction",
     "activity",
     "arm",
     "arm_blood",
     "arm_free",
     "bile",
+    "bile_reaction",
     "blood",
     "bp",
     "compartment",
+    "dissolution",
+    "dose_reaction",
     "exchange_reaction",
     "feces",
+    "feces_reaction",
     "flat",
     "flow_fraction",
     "free",
@@ -51,7 +60,11 @@ __all__ = [
     "fu_ref",
     "hepatic_vein",
     "inflow_reaction",
+    "infusion_rate",
+    "injection_rate",
+    "injection_time",
     "interstitial_fraction",
+    "iv_dose",
     "k_cell_pls",
     "k_int_pls",
     "k_organ",
@@ -68,13 +81,17 @@ __all__ = [
     "outflow_conc",
     "outflow_reaction",
     "plasma_capacity",
+    "po_dose",
     "pool_capacity",
     "pool_compartment",
+    "pool_exchange_reaction",
     "pool_fraction",
     "pool_species",
     "pool_volume",
     "ps",
     "ref",
+    "sol_dose",
+    "solution",
     "species",
     "species_of",
     "submodel",
@@ -126,6 +143,12 @@ VURINE = "Vurine"
 """The compartment of the urine amounts `Aurine_<s>`."""
 VLUMEN = "Vlumen"
 """The volume of the intestinal lumen, the compartment of `Clumen_<s>`."""
+VFECES = "Vfeces"
+"""The compartment of the feces amounts `Afeces_<s>`."""
+K_BILE = "k_bile"
+"""The rate of the transit of the bile into the intestinal lumen."""
+K_FECES = "k_feces"
+"""The rate of the transit of the intestinal lumen into the feces."""
 PS_VAS = "PS_vas"
 """The local id of the exchange between plasma and interstitium of an organ."""
 
@@ -135,9 +158,17 @@ def ref(pid: str) -> str:
     return f"{pid}_ref"
 
 
+_SUBMODELS: dict[Organ, str] = {Organ.LARGE_INTESTINE: "LA"}
+"""The submodels whose id is not the organ id in capitals: `CO` is the cardiac output."""
+
+
 def submodel(organ: Organ) -> str:
-    """The id of the submodel of an organ, `LI`."""
-    return organ.value.upper()
+    """The id of the submodel of an organ, `LI`; `LA` for the large intestine.
+
+    The organ id in capitals, but for the large intestine (`co`), whose
+    capitals are the id of the cardiac output `CO`.
+    """
+    return _SUBMODELS.get(organ, organ.value.upper())
 
 
 def flat(organ: Organ, local: str) -> str:
@@ -350,6 +381,76 @@ def bile(s: str) -> str:
 def lumen(s: str) -> str:
     """The id of the concentration in the intestinal lumen, `Clumen_<s>`."""
     return f"Clumen_{s}"
+
+
+def iv_dose(s: str) -> str:
+    """The id of the intravenous dose state (mg), `IVDOSE_<s>`."""
+    return f"IVDOSE_{s}"
+
+
+def injection_time(s: str) -> str:
+    """The id of the half-life of an intravenous injection (s), `ti_<s>`."""
+    return f"ti_{s}"
+
+
+def injection_rate(s: str) -> str:
+    """The id of the rate of an intravenous injection, `Kiv_<s>`."""
+    return f"Kiv_{s}"
+
+
+def infusion_rate(s: str) -> str:
+    """The id of the rate of an intravenous infusion (mg/min), `Ri_<s>`."""
+    return f"Ri_{s}"
+
+
+def po_dose(s: str) -> str:
+    """The id of the oral dose state of a tablet (mg), `PODOSE_<s>`."""
+    return f"PODOSE_{s}"
+
+
+def sol_dose(s: str) -> str:
+    """The id of the oral dose state of a solution (mg), `SOLDOSE_<s>`."""
+    return f"SOLDOSE_{s}"
+
+
+def dissolution(s: str) -> str:
+    """The id of the rate of the dissolution of a tablet, `Ka_dis_<s>`."""
+    return f"Ka_dis_{s}"
+
+
+def solution(s: str) -> str:
+    """The id of the rate of the application of a solution, `Ka_sol_<s>`."""
+    return f"Ka_sol_{s}"
+
+
+def absorption(s: str) -> str:
+    """The id of the rate of the absorption from the intestinal lumen, `ka_<s>`."""
+    return f"ka_{s}"
+
+
+def dose_reaction(kind: str, s: str) -> str:
+    """The id of the application of a dose state, `J_iv_<s>`, `J_po_<s>`, `J_sol_<s>`."""
+    return f"J_{kind}_{s}"
+
+
+def absorption_reaction(s: str) -> str:
+    """The id of the absorption from the intestinal lumen, `J_abs_<s>`."""
+    return f"J_abs_{s}"
+
+
+def feces_reaction(s: str) -> str:
+    """The id of the transit of the intestinal lumen into the feces, `J_feces_<s>`."""
+    return f"J_feces_{s}"
+
+
+def bile_reaction(s: str) -> str:
+    """The id of the transit of the bile into the intestinal lumen, `J_bile_<s>`."""
+    return f"J_bile_{s}"
+
+
+def pool_exchange_reaction(pool: Pool, s: str) -> str:
+    """The id of the exchange of `s` between plasma and blood cells of a pool, `J_bc_ve_<s>`."""
+    return f"J_{Part.BLOOD_CELLS.value}_{pool.value}_{s}"
 
 
 def arm(s: str) -> str:

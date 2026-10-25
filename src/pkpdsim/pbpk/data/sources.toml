@@ -41,3 +41,11 @@ doi = "10.1093/nar/gkac1052"
 
 [ModelChoice]
 citation = "Choice of the pkpdsim PBPK library, not a value of the literature; the notes of the value give the reasoning."
+
+[Schiller2005]
+citation = "Schiller C, Fröhlich CP, Giessmann T, Siegmund W, Mönnikes H, Hosten N, Weitschies W. Intestinal fluid volumes and transit of dosage forms as assessed by magnetic resonance imaging. Aliment Pharmacol Ther 22(10):971-979, 2005."
+doi = "10.1111/j.1365-2036.2005.02683.x"
+
+[Yu1996]
+citation = "Yu LX, Crison JR, Amidon GL. Compartmental transit and dispersion model analysis of small intestinal transit flow in humans. Int J Pharm 140(1):111-118, 1996."
+doi = "10.1016/0378-5173(96)04592-9"

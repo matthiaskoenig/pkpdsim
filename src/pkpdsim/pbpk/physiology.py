@@ -41,7 +41,12 @@ from pkpdsim.pbpk.data import cite, load
 from pkpdsim.pbpk.organs import PORTAL_ORGANS, Organ, Pool
 from pkpdsim.pbpk.units import U
 
-__all__ = ["Sex", "physiology_objects", "reference_fractions"]
+__all__ = [
+    "Sex",
+    "physiology_objects",
+    "reference_fractions",
+    "reference_tissue_volumes",
+]
 
 
 class Sex(StrEnum):
@@ -713,3 +718,26 @@ def reference_fractions(organ: Organ) -> dict[Sex, tuple[float, float]]:
         )
         for sex in Sex
     }
+
+
+def reference_tissue_volumes(sex: Sex) -> dict[Organ, float]:
+    """The tissue volumes of the organs of a reference individual.
+
+    The tissue volume of an organ is its volume without its blood,
+    `V<o>*(1 - f_vas_<o>) = M<o>/density`; adipose is the remainder of the
+    body weight, as in the model.
+
+    Args:
+        sex: the sex of the reference individual.
+
+    Returns:
+        The tissue volume (l) by organ.
+    """
+    refs = _references(sex, load("physiology_human"))
+    masses = {o: refs[ids.ref(ids.organ_mass(o))].value for o in LEAN_ORGANS}
+    masses[Organ.ADIPOSE] = (
+        refs[ids.BW].value
+        - sum(masses.values())
+        - refs[ids.ref(ids.VBLOOD)].value * refs["rho_blood"].value
+    )
+    return {o: masses[o] / refs[f"rho_{o}"].value for o in Organ}

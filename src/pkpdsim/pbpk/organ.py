@@ -102,7 +102,10 @@ class Boundary:
 class OrganComponent(Protocol):
     """An organ of the body, the standard one or a variant."""
 
-    name: str
+    @property
+    def name(self) -> str:
+        """The name of the component (variant)."""
+        ...
 
     def build(self, ctx: OrganContext) -> tuple[ModelDefinition, Boundary]:
         """Build the model of the organ and its boundary."""

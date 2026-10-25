@@ -2,11 +2,13 @@
 
 from pkpdsim.pbpk import ids
 from pkpdsim.pbpk.organs import Organ, Part, Pool
+from pkpdsim.pbpk.physiology import physiology_objects
 
 
 def test_examples() -> None:
     """The documented examples."""
     assert ids.submodel(Organ.LIVER) == "LI"
+    assert ids.submodel(Organ.LARGE_INTESTINE) == "LA"
     assert ids.flat(Organ.LIVER, "Cpl_api") == "LI__Cpl_api"
     assert ids.compartment(Part.INTERSTITIAL) == "Vis"
     assert ids.species(Part.PLASMA, "api") == "Cpl_api"
@@ -100,3 +102,11 @@ def test_organ_ids() -> None:
     assert ids.inflow_reaction(Pool.PORTAL, Part.PLASMA, "api") == "J_in_po_pl_api"
     assert ids.outflow_reaction(Part.BLOOD_CELLS, "api") == "J_out_bc_api"
     assert ids.exchange_reaction(Part.TISSUE, "api") == "J_ti_api"
+
+
+def test_submodels_unique_and_not_physiology() -> None:
+    """The submodel ids are unique and no id of the physiology (`CO`)."""
+    submodels = [ids.submodel(o) for o in Organ]
+    assert len(set(submodels)) == len(submodels)
+    taken = {str(getattr(o, "sid", "")) for o in physiology_objects()}
+    assert not taken & set(submodels)

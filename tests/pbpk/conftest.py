@@ -1,13 +1,10 @@
 """Shared helpers of the PBPK tests.
 
 `simple_drug` and `definition` are plain functions (not fixtures), so a test
-varies them with arguments: `definition(routes=[Route.iv("drg")])`. `load` and
-`total_amount` need the builder, which exists from the task of the builder on,
-and import it inside the functions, so that this module imports before.
+varies them with arguments: `definition(routes=[Route.iv("drg")])`.
 """
 
-from pathlib import Path
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any
 
 from pkpdsim.pbpk import (
     MM,
@@ -21,18 +18,10 @@ from pkpdsim.pbpk import (
     Substance,
     ids,
 )
+from pkpdsim.pbpk.builder import BuildResult
 
 if TYPE_CHECKING:
     import roadrunner
-
-
-class _Built(Protocol):
-    """What `load` needs of a build result: the field of `BuildResult`.
-
-    Task 10 replaces this by `BuildResult` (`pkpdsim.pbpk.builder`).
-    """
-
-    flat_path: Path
 
 
 def simple_drug() -> Substance:
@@ -78,11 +67,22 @@ def definition(**overrides: Any) -> PBPKDefinition:  # noqa: ANN401
     return PBPKDefinition(**fields)
 
 
-def load(result: "_Built") -> "roadrunner.RoadRunner":
-    """Load the flat model of a build result with tight integrator tolerances."""
+def load(result: BuildResult) -> "roadrunner.RoadRunner":
+    """Load the flat model of a build result with tight integrator tolerances.
+
+    The model is compiled with the LLJIT backend of roadrunner: the MCJIT
+    backend (the default) takes about ten times longer for the deep rules of
+    the physiology.
+    """
     import roadrunner
 
-    r = roadrunner.RoadRunner(str(result.flat_path))
+    config = roadrunner.Config
+    backend = config.getValue(config.LLVM_BACKEND)
+    config.setValue(config.LLVM_BACKEND, config.LLJIT)
+    try:
+        r = roadrunner.RoadRunner(str(result.flat_path))
+    finally:
+        config.setValue(config.LLVM_BACKEND, backend)
     r.integrator.absolute_tolerance = 1e-12
     r.integrator.relative_tolerance = 1e-10
     return r
@@ -94,14 +94,15 @@ def total_amount(r: "roadrunner.RoadRunner", sid: str) -> float:
     The amount of a species is decided from the SBML: a species with
     `hasOnlySubstanceUnits` is an amount, any other a concentration which is
     multiplied with the volume of its compartment. The sinks are the urine and
-    feces amounts and the bile species.
+    feces amounts, the bile and the intestinal lumen; the dose states are not
+    counted (`dose_amount`).
     """
     import libsbml
 
     doc = libsbml.readSBMLFromString(r.getCurrentSBML())
     model = doc.getModel()
     by_id = {sp.getId(): sp for sp in model.getListOfSpecies()}
-    sinks = {ids.urine(sid), ids.feces(sid), ids.bile(sid)}
+    sinks = {ids.urine(sid), ids.feces(sid), ids.bile(sid), ids.lumen(sid)}
     selected = ids.species_of(sid, by_id) + [
         i for i in by_id if i.rsplit("__", 1)[-1] in sinks
     ]
@@ -113,3 +114,10 @@ def total_amount(r: "roadrunner.RoadRunner", sid: str) -> float:
         else:
             total += float(r[f"[{i}]"]) * float(r[sp.getCompartment()])
     return total
+
+
+def dose_amount(r: "roadrunner.RoadRunner", sid: str) -> float:
+    """Get the amount (mmole) of a substance in its dose states, not yet applied."""
+    doses = (ids.iv_dose(sid), ids.po_dose(sid), ids.sol_dose(sid))
+    mg = sum(float(r[d]) for d in doses if d in r.model.getGlobalParameterIds())
+    return mg / float(r[ids.mr(sid)])

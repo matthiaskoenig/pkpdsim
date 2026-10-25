@@ -1,0 +1,15 @@
+# The intestinal lumen and the bile.
+#
+# Until the segmented intestine the lumen is one compartment, the fluid of the
+# small intestine, from which a substance is absorbed with first order and
+# which drains into the feces with the small intestinal transit. The bile
+# drains into the lumen.
+
+[lumen]
+volume = { value = 0.105, unit = "l", source = "Schiller2005", notes = "mean fluid volume of the small intestine in the fasted state, 105 +- 72 ml (MRI, 12 healthy subjects; 54 +- 41 ml one hour after a meal)" }
+transit_time = { value = 199.0, unit = "min", source = "Yu1996", notes = "mean small intestinal transit time (3.32 h) of the human transit data analysed; unverified: the value as cited by the compartmental absorption and transit model literature, not checked against the paper" }
+ka = { value = 1.0, unit = "1/hr", source = "ModelChoice", notes = "first order absorption from the lumen, the default of a substance whose model does not fit it" }
+
+[bile]
+volume = { value = 0.058, unit = "l", source = "ICRP89", notes = "Table 2.8, gallbladder contents 58 g male (48 g female), with the density 1.0 kg/l; the capacity of the bile, which enters no rate" }
+k_bile = { value = 0.01, unit = "1/min", source = "ModelChoice", notes = "transit of the bile into the intestinal lumen as one first order process (half-life 69 min): the bile reaches the duodenum directly or after storage in the gallbladder, which empties with the meals; without a model of the gallbladder the transit is of the order of the interval of its emptying, a model with enterohepatic circulation fits it" }

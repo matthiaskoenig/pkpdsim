@@ -1,5 +1,6 @@
 """The PBPK model library: the building blocks of the PBPK models of a substance."""
 
+from pkpdsim.pbpk.builder import BuildResult, build, compose
 from pkpdsim.pbpk.chemistry import (
     MM,
     CustomReaction,
@@ -18,7 +19,7 @@ from pkpdsim.pbpk.parts import Parts, parts_for
 from pkpdsim.pbpk.pd import PDComponent
 from pkpdsim.pbpk.physiology import Sex, physiology_objects
 from pkpdsim.pbpk.proteins import PROTEINS, Induction, Inhibition, Protein
-from pkpdsim.pbpk.routes import Route
+from pkpdsim.pbpk.routes import FirstOrderDissolution, Route
 from pkpdsim.pbpk.substance import (
     Binding,
     Erythrocytes,
@@ -37,11 +38,13 @@ __all__ = [
     "PROTEINS",
     "Binding",
     "Boundary",
+    "BuildResult",
     "CustomReaction",
     "Direction",
     "Erythrocytes",
     "Excretion",
     "FirstOrder",
+    "FirstOrderDissolution",
     "Hill",
     "Induction",
     "Inhibition",
@@ -70,7 +73,9 @@ __all__ = [
     "Value",
     "Variants",
     "as_value",
+    "build",
     "cite",
+    "compose",
     "fitted",
     "load",
     "parts_for",
