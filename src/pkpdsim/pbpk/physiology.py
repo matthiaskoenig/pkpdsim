@@ -21,7 +21,11 @@ changes `BW` today; everything else follows from them by assignment rules:
 
 An organ volume is the volume of its tissue and its blood,
 `M<o>/density + blood*Vblood`; the body weight is the mass of the tissues
-without blood and of the blood, `sum(M<o>) + Vblood*rho_blood`.
+without blood and of the blood, `sum(M<o>) + Vblood*rho_blood`. The vascular
+fraction of an organ volume is its blood, `blood*Vblood/V<o>`, so that the
+vascular spaces of the organs and the pools are the blood volume for every
+individual; the interstitial fraction is the interstitial fraction of the
+tissue without blood (Schmitt 2008) times the tissue share `1 - f_vas`.
 """
 
 from collections.abc import Iterable
@@ -37,7 +41,7 @@ from pkpdsim.pbpk.data import cite, load
 from pkpdsim.pbpk.organs import PORTAL_ORGANS, Organ, Pool
 from pkpdsim.pbpk.units import U
 
-__all__ = ["Sex", "physiology_objects"]
+__all__ = ["Sex", "physiology_objects", "reference_fractions"]
 
 
 class Sex(StrEnum):
@@ -163,6 +167,14 @@ def _references(sex: Sex, data: dict[str, Any]) -> dict[str, _Ref]:
     for o in Organ:
         refs[f"rho_{o}"] = _density(organs[o])
         refs[f"blood_{o}"] = _entry(organs[o], "blood", "dimensionless")
+        f_vas = _number(organs[o], "f_vas", "dimensionless")
+        f_int = _entry(organs[o], "f_int", "dimensionless")
+        refs[f"fint_{o}"] = _Ref(
+            f_int.value / (1.0 - f_vas),
+            f_int.sources,
+            f"f_int / (1 - f_vas) = {f_int.value} / (1 - {f_vas}), the "
+            f"interstitial fraction of the tissue without blood; {f_int.notes}",
+        )
     for o in LEAN_ORGANS:
         refs[ids.ref(ids.organ_mass(o))] = _entry(organs[o], "mass", "kg")
 
@@ -548,6 +560,39 @@ class _Physiology:
             )
         return objects
 
+    def fractions(self) -> list[Sbase]:
+        """The vascular and interstitial fractions of the organ volumes."""
+        objects: list[Sbase] = []
+        for o in Organ:
+            f_vas, f_int = ids.vascular_fraction(o), ids.interstitial_fraction(o)
+            notes, sources = self.provenance(f"blood_{o}")
+            objects += _rule(
+                f_vas,
+                f"{self.number(f'blood_{o}', U.dimensionless)} * {ids.VBLOOD} / "
+                f"{ids.organ_volume(o)}",
+                U.dimensionless,
+                f"vascular fraction {_label(o)}",
+                "Vascular fraction of the organ volume: the blood of the organ "
+                "(fraction of the blood volume) relative to the organ volume; it "
+                "is the `f_vas` of physiology_human.toml for the reference "
+                f"individual. Blood of the organ:\n\n{notes}",
+                sources,
+            )
+            notes, sources = self.provenance(f"fint_{o}")
+            objects += _rule(
+                f_int,
+                f"{self.number(f'fint_{o}', U.dimensionless)} * (1 dimensionless - "
+                f"{f_vas})",
+                U.dimensionless,
+                f"interstitial fraction {_label(o)}",
+                "Interstitial fraction of the organ volume: the interstitial "
+                "fraction of the tissue without blood times the tissue share of "
+                "the organ volume; it is the `f_int` of physiology_human.toml for "
+                f"the reference individual.\n\n{notes}",
+                sources,
+            )
+        return objects
+
     def flows(self) -> list[Sbase]:
         """Cardiac output, blood flows and GFR."""
         objects = _rule(
@@ -646,5 +691,25 @@ def physiology_objects(sex: Sex = Sex.MALE) -> list[Sbase]:
         *physiology.references(),
         *physiology.body(),
         *physiology.volumes(),
+        *physiology.fractions(),
         *physiology.flows(),
     ]
+
+
+def reference_fractions(organ: Organ) -> dict[Sex, tuple[float, float]]:
+    """The vascular and interstitial fraction of an organ volume of the reference individuals.
+
+    Args:
+        organ: the organ.
+
+    Returns:
+        `(f_vas, f_int)` of physiology_human.toml by sex.
+    """
+    data = load("physiology_human")
+    return {
+        sex: (
+            _number(data[sex.value]["organs"][organ], "f_vas", "dimensionless"),
+            _number(data[sex.value]["organs"][organ], "f_int", "dimensionless"),
+        )
+        for sex in Sex
+    }

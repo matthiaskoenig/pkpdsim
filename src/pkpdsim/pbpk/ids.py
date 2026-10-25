@@ -23,12 +23,16 @@ __all__ = [
     "HCT",
     "HEIGHT",
     "MLEAN",
+    "PS_VAS",
     "QH",
     "QHA",
     "QPO",
     "SEX",
     "SV_TIS",
+    "VBILE",
     "VBLOOD",
+    "VLUMEN",
+    "VURINE",
     "activity",
     "arm",
     "arm_blood",
@@ -37,6 +41,7 @@ __all__ = [
     "blood",
     "bp",
     "compartment",
+    "exchange_reaction",
     "feces",
     "flat",
     "flow_fraction",
@@ -45,23 +50,37 @@ __all__ = [
     "fu",
     "fu_ref",
     "hepatic_vein",
+    "inflow_reaction",
+    "interstitial_fraction",
+    "k_cell_pls",
+    "k_int_pls",
+    "k_organ",
     "kbc",
+    "kbc_exchange",
     "kp",
     "kp_organ",
+    "lumen",
     "mr",
     "organ_flow",
     "organ_mass",
+    "organ_outflow",
     "organ_volume",
     "outflow_conc",
+    "outflow_reaction",
+    "plasma_capacity",
+    "pool_capacity",
     "pool_compartment",
     "pool_fraction",
     "pool_species",
     "pool_volume",
+    "ps",
     "ref",
     "species",
     "species_of",
     "submodel",
+    "tissue_volume_total",
     "urine",
+    "vascular_fraction",
 ]
 
 
@@ -101,6 +120,14 @@ F_RENAL_FUNCTION = "f_renal_function"
 """The renal function relative to normal."""
 F_CARDIAC_FUNCTION = "f_cardiac_function"
 """The cardiac function (cardiac output) relative to normal."""
+VBILE = "Vbile"
+"""The volume of the bile, the compartment of `Cbile_<s>`."""
+VURINE = "Vurine"
+"""The compartment of the urine amounts `Aurine_<s>`."""
+VLUMEN = "Vlumen"
+"""The volume of the intestinal lumen, the compartment of `Clumen_<s>`."""
+PS_VAS = "PS_vas"
+"""The local id of the exchange between plasma and interstitium of an organ."""
 
 
 def ref(pid: str) -> str:
@@ -170,6 +197,86 @@ def pool_fraction(pool: Pool) -> str:
     return f"fV{pool.value}"
 
 
+def pool_capacity(pool: Pool, s: str) -> str:
+    """The id of the compartment of a pool species of `s` with erythrocytes in equilibrium.
+
+    The pool volume times the blood to plasma ratio, `Vve_pl_<s>`: the plasma
+    species then holds the amount of the blood.
+    """
+    return f"V{pool.value}_{Part.PLASMA.value}_{s}"
+
+
+def plasma_capacity(s: str) -> str:
+    """The local id of the compartment of `Cpl_<s>` with erythrocytes in equilibrium.
+
+    The vascular volume of the organ times the blood to plasma ratio,
+    `Vpl_<s>`: the plasma species then holds the amount of the blood.
+    """
+    return f"V{Part.PLASMA.value}_{s}"
+
+
+def vascular_fraction(organ: Organ) -> str:
+    """The id of the vascular fraction of the organ volume, `f_vas_li`."""
+    return f"f_vas_{organ.value}"
+
+
+def interstitial_fraction(organ: Organ) -> str:
+    """The id of the interstitial fraction of the organ volume, `f_int_li`."""
+    return f"f_int_{organ.value}"
+
+
+def tissue_volume_total(s: str) -> str:
+    """The id of the tissue volume of the organs which `s` enters, `Vti_total_<s>`."""
+    return f"Vti_total_{s}"
+
+
+def ps(s: str) -> str:
+    """The local id of the exchange of `s` between plasma and tissue, `PS_<s>`."""
+    return f"PS_{s}"
+
+
+def k_int_pls(s: str) -> str:
+    """The local id of the interstitial to plasma coefficient, `K_int_pls_<s>`."""
+    return f"K_int_pls_{s}"
+
+
+def k_cell_pls(s: str) -> str:
+    """The local id of the intracellular to plasma coefficient, `K_cell_pls_<s>`."""
+    return f"K_cell_pls_{s}"
+
+
+def k_organ(s: str) -> str:
+    """The local id of the organ to plasma coefficient (flow-limited), `K_or_<s>`."""
+    return f"K_or_{s}"
+
+
+def organ_outflow(organ: Organ, s: str) -> str:
+    """The id of the plasma concentration leaving an organ, `Cout_li_<s>`."""
+    return f"Cout_{organ.value}_{s}"
+
+
+def inflow_reaction(pool: Pool, part: Part, s: str) -> str:
+    """The local id of the inflow of `s` from a pool into an organ, `J_in_ar_pl_<s>`.
+
+    `part` is the part of the blood which carries it, plasma or blood cells.
+    """
+    return f"J_in_{pool.value}_{part.value}_{s}"
+
+
+def outflow_reaction(part: Part, s: str) -> str:
+    """The local id of the outflow of `s` from an organ into its pool, `J_out_pl_<s>`."""
+    return f"J_out_{part.value}_{s}"
+
+
+def exchange_reaction(part: Part, s: str) -> str:
+    """The local id of the passive exchange of `s` into a part of an organ, `J_ti_<s>`.
+
+    From plasma into the tissue, the interstitium or the blood cells, from
+    the interstitium into the cells (`J_ic_<s>`).
+    """
+    return f"J_{part.value}_{s}"
+
+
 def outflow_conc(s: str) -> str:
     """The local id of the concentration leaving an organ, `Cout_<s>`."""
     return f"Cout_{s}"
@@ -215,6 +322,11 @@ def kbc(s: str) -> str:
     return f"Kbc_{s}"
 
 
+def kbc_exchange(s: str) -> str:
+    """The id of the exchange rate between plasma and blood cells, `kex_bc_<s>`."""
+    return f"kex_bc_{s}"
+
+
 def urine(s: str) -> str:
     """The id of the amount in urine, `Aurine_<s>`."""
     return f"Aurine_{s}"
@@ -228,6 +340,11 @@ def feces(s: str) -> str:
 def bile(s: str) -> str:
     """The id of the concentration in bile, `Cbile_<s>`."""
     return f"Cbile_{s}"
+
+
+def lumen(s: str) -> str:
+    """The id of the concentration in the intestinal lumen, `Clumen_<s>`."""
+    return f"Clumen_{s}"
 
 
 def arm(s: str) -> str:

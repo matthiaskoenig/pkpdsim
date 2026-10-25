@@ -239,6 +239,45 @@ def test_reset_keeps_covariates(paths: dict[Sex, Path]) -> None:
 
 
 @pytest.mark.parametrize("sex", list(Sex))
+def test_reference_fractions(paths: dict[Sex, Path], sex: Sex) -> None:
+    """The vascular and interstitial fractions of the reference are those of the data.
+
+    Adipose is the remainder of the body weight (R2), larger than its ICRP mass
+    of the data, so its vascular fraction is smaller than the `f_vas` of the data.
+    """
+    r = _rr(paths, sex)
+    fractions = {o: physiology.reference_fractions(o)[sex] for o in Organ}
+    for o, (f_vas, f_int) in fractions.items():
+        assert f_vas == _v(_data(sex)["organs"][o], "f_vas")
+        if o is Organ.ADIPOSE:
+            continue
+        assert r[ids.vascular_fraction(o)] == pytest.approx(f_vas, rel=2e-3), o
+        assert r[ids.interstitial_fraction(o)] == pytest.approx(f_int, rel=2e-3), o
+    vad = ids.organ_volume(Organ.ADIPOSE)
+    blood = _v(_data(sex)["organs"][Organ.ADIPOSE], "blood")
+    assert r[ids.vascular_fraction(Organ.ADIPOSE)] == pytest.approx(
+        blood * r[ids.VBLOOD] / r[vad], rel=1e-12
+    )
+
+
+def test_vascular_spaces_are_blood_volume(paths: dict[Sex, Path]) -> None:
+    """For any individual the vascular spaces of the organs and the pools are the blood."""
+    r = _rr(paths, Sex.MALE)
+    r.setValue(ids.BW, 100.0)
+    r.setValue(ids.HEIGHT, 180.0)
+    vascular = sum(r[ids.vascular_fraction(o)] * r[ids.organ_volume(o)] for o in Organ)
+    pools = sum(r[ids.pool_volume(pool)] for pool in Pool)
+    assert vascular + pools == pytest.approx(r[ids.VBLOOD], rel=1e-9)
+    for o in Organ:
+        fint = _v(_data(Sex.MALE)["organs"][o], "f_int") / (
+            1 - _v(_data(Sex.MALE)["organs"][o], "f_vas")
+        )
+        assert r[ids.interstitial_fraction(o)] == pytest.approx(
+            fint * (1 - r[ids.vascular_fraction(o)]), rel=1e-9
+        )
+
+
+@pytest.mark.parametrize("sex", list(Sex))
 def test_parameters_annotated(sex: Sex) -> None:
     """Every parameter has an SBO term, a unit, a name and notes with its source.
 

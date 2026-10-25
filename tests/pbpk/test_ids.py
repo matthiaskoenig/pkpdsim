@@ -79,3 +79,24 @@ def test_species_of_exact_substance() -> None:
     assert ids.species_of("api_m2", all_ids) == ["LI__Cpl_api_m2", "Cve_api_m2"]
     assert ids.species_of("drg", all_ids) == ["Cpl_drg"]
     assert ids.species_of("m2", all_ids) == []
+
+
+def test_organ_ids() -> None:
+    """The ids of the standard organ, its boundary and the sinks."""
+    assert ids.vascular_fraction(Organ.LIVER) == "f_vas_li"
+    assert ids.interstitial_fraction(Organ.LIVER) == "f_int_li"
+    assert ids.tissue_volume_total("api") == "Vti_total_api"
+    assert ids.organ_outflow(Organ.LIVER, "api") == "Cout_li_api"
+    assert ids.plasma_capacity("api") == "Vpl_api"
+    assert ids.pool_capacity(Pool.VENOUS, "api") == "Vve_pl_api"
+    assert ids.ps("api") == "PS_api"
+    assert ids.PS_VAS == "PS_vas"
+    assert ids.k_int_pls("api") == "K_int_pls_api"
+    assert ids.k_cell_pls("api") == "K_cell_pls_api"
+    assert ids.k_organ("api") == "K_or_api"
+    assert ids.kbc_exchange("api") == "kex_bc_api"
+    assert ids.lumen("api") == "Clumen_api"
+    assert (ids.VBILE, ids.VURINE, ids.VLUMEN) == ("Vbile", "Vurine", "Vlumen")
+    assert ids.inflow_reaction(Pool.PORTAL, Part.PLASMA, "api") == "J_in_po_pl_api"
+    assert ids.outflow_reaction(Part.BLOOD_CELLS, "api") == "J_out_bc_api"
+    assert ids.exchange_reaction(Part.TISSUE, "api") == "J_ti_api"

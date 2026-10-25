@@ -1,4 +1,5 @@
-# The publications the numbers of the data files are taken from.
+# The publications the numbers of the data files are taken from, and `ModelChoice`
+# for a number the library chooses where the literature gives none.
 # Every number of a data file has a `source` which is a key of this file.
 # The DOIs were checked against Crossref (2026-10-25).
 
@@ -37,3 +38,6 @@ doi = "10.1038/psp.2012.3"
 [UniProt]
 citation = "The UniProt Consortium. UniProt: the Universal Protein Knowledgebase in 2023. Nucleic Acids Res 51(D1):D523-D531, 2023."
 doi = "10.1093/nar/gkac1052"
+
+[ModelChoice]
+citation = "Choice of the pkpdsim PBPK library, not a value of the literature; the notes of the value give the reasoning."

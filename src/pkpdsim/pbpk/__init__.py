@@ -12,7 +12,7 @@ from pkpdsim.pbpk.chemistry import (
 )
 from pkpdsim.pbpk.data import Source, cite, load, sources
 from pkpdsim.pbpk.definition import PBPKDefinition, Variants
-from pkpdsim.pbpk.organ import Boundary, OrganComponent, OrganContext
+from pkpdsim.pbpk.organ import Boundary, OrganComponent, OrganContext, StandardOrgan
 from pkpdsim.pbpk.organs import Organ, Part, Pool
 from pkpdsim.pbpk.parts import Parts, parts_for
 from pkpdsim.pbpk.pd import PDComponent
@@ -63,6 +63,7 @@ __all__ = [
     "Route",
     "Sex",
     "Source",
+    "StandardOrgan",
     "Substance",
     "Transport",
     "U",
