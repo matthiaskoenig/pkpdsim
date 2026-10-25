@@ -2,6 +2,7 @@
 
 from pkpdsim.pbpk.data import Source, cite, load, sources
 from pkpdsim.pbpk.organs import Organ, Part, Pool
+from pkpdsim.pbpk.physiology import Sex, physiology_objects
 from pkpdsim.pbpk.units import MODEL_UNITS, U
 from pkpdsim.pbpk.values import Value, as_value, fitted
 
@@ -10,6 +11,7 @@ __all__ = [
     "Organ",
     "Part",
     "Pool",
+    "Sex",
     "Source",
     "U",
     "Value",
@@ -17,5 +19,6 @@ __all__ = [
     "cite",
     "fitted",
     "load",
+    "physiology_objects",
     "sources",
 ]

@@ -11,6 +11,23 @@ from collections.abc import Iterable
 from pkpdsim.pbpk.organs import Organ, Part, Pool
 
 __all__ = [
+    "AGE",
+    "BMI",
+    "BSA",
+    "BW",
+    "CO",
+    "FFM",
+    "F_CARDIAC_FUNCTION",
+    "F_RENAL_FUNCTION",
+    "GFR",
+    "HCT",
+    "HEIGHT",
+    "MLEAN",
+    "QH",
+    "QHA",
+    "QPO",
+    "SEX",
+    "VBLOOD",
     "activity",
     "arm",
     "arm_blood",
@@ -21,6 +38,7 @@ __all__ = [
     "compartment",
     "feces",
     "flat",
+    "flow_fraction",
     "free",
     "ftissue",
     "fu",
@@ -31,15 +49,60 @@ __all__ = [
     "kp_organ",
     "mr",
     "organ_flow",
+    "organ_mass",
     "organ_volume",
     "outflow_conc",
     "pool_compartment",
+    "pool_fraction",
     "pool_species",
+    "pool_volume",
+    "ref",
     "species",
     "species_of",
     "submodel",
     "urine",
 ]
+
+
+BW = "BW"
+"""The body weight (covariate)."""
+HEIGHT = "HEIGHT"
+"""The height (covariate)."""
+SEX = "SEX"
+"""The sex, 0 male and 1 female (covariate)."""
+AGE = "AGE"
+"""The age (covariate)."""
+BMI = "BMI"
+"""The body mass index."""
+BSA = "BSA"
+"""The body surface area."""
+FFM = "FFM"
+"""The fat-free mass."""
+HCT = "HCT"
+"""The hematocrit."""
+CO = "CO"
+"""The cardiac output."""
+GFR = "GFR"
+"""The glomerular filtration rate."""
+VBLOOD = "Vblood"
+"""The total blood volume."""
+MLEAN = "Mlean"
+"""The mass of the lean organ tissues without their blood."""
+QHA = "Qha"
+"""The hepatic arterial blood flow."""
+QPO = "Qpo"
+"""The portal venous blood flow."""
+QH = "Qh"
+"""The total liver blood flow."""
+F_RENAL_FUNCTION = "f_renal_function"
+"""The renal function relative to normal."""
+F_CARDIAC_FUNCTION = "f_cardiac_function"
+"""The cardiac function (cardiac output) relative to normal."""
+
+
+def ref(pid: str) -> str:
+    """The id of the reference value of a parameter, `FFM_ref`, `Vli_ref`."""
+    return f"{pid}_ref"
 
 
 def submodel(organ: Organ) -> str:
@@ -82,6 +145,26 @@ def organ_volume(organ: Organ) -> str:
 def organ_flow(organ: Organ) -> str:
     """The id of the blood flow of an organ, `Qli`."""
     return f"Q{organ.value}"
+
+
+def organ_mass(organ: Organ) -> str:
+    """The id of the tissue mass of an organ without its blood, `Mad`."""
+    return f"M{organ.value}"
+
+
+def flow_fraction(organ: Organ) -> str:
+    """The id of the blood flow of an organ as fraction of cardiac output, `fQli`."""
+    return f"fQ{organ.value}"
+
+
+def pool_volume(pool: Pool) -> str:
+    """The id of the volume of a blood pool, `Vve`."""
+    return f"V{pool.value}"
+
+
+def pool_fraction(pool: Pool) -> str:
+    """The id of the volume of a blood pool as fraction of the blood volume, `fVve`."""
+    return f"fV{pool.value}"
 
 
 def outflow_conc(s: str) -> str:

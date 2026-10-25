@@ -21,3 +21,15 @@ doi = "10.1016/j.tiv.2007.09.010"
 [Chau2023]
 citation = "Chau P, Yoon JS, Moses D, Pather N. A systematic review and meta-analysis of portal vein morphometry in pediatric and adult populations: drawing the line between normal and abnormal findings. Eur J Radiol 168:111016, 2023."
 doi = "10.1016/j.ejrad.2023.111016"
+
+[DuBois1916]
+citation = "Du Bois D, Du Bois EF. Clinical calorimetry, tenth paper: a formula to estimate the approximate surface area if height and weight be known. Arch Intern Med 17(6_2):863-871, 1916."
+doi = "10.1001/archinte.1916.00080130010002"
+
+[Janmahasatian2005]
+citation = "Janmahasatian S, Duffull SB, Ash S, Ward LC, Byrne NM, Green B. Quantification of lean bodyweight. Clin Pharmacokinet 44(10):1051-1065, 2005."
+doi = "10.2165/00003088-200544100-00004"
+
+[Huisinga2012]
+citation = "Huisinga W, Solms A, Fronton L, Pilari S. Modeling interindividual variability in physiologically based pharmacokinetics and its link to mechanistic covariate modeling. CPT Pharmacometrics Syst Pharmacol 1(9):e4, 2012."
+doi = "10.1038/psp.2012.3"

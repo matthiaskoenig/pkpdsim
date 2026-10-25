@@ -19,6 +19,18 @@ def test_examples() -> None:
     assert ids.activity("CYP3A4") == "f_cyp3a4"
 
 
+def test_physiology_ids() -> None:
+    """The ids of the physiology: reference values, fractions, masses and pools."""
+    assert ids.ref(ids.FFM) == "FFM_ref"
+    assert ids.ref(ids.organ_volume(Organ.LIVER)) == "Vli_ref"
+    assert ids.organ_mass(Organ.ADIPOSE) == "Mad"
+    assert ids.flow_fraction(Organ.LIVER) == "fQli"
+    assert ids.pool_volume(Pool.VENOUS) == "Vve"
+    assert ids.pool_fraction(Pool.PORTAL) == "fVpo"
+    assert ids.VBLOOD == "Vblood"
+    assert ids.F_CARDIAC_FUNCTION == "f_cardiac_function"
+
+
 def test_substance_parameters() -> None:
     """Parameter, sink and observer ids."""
     assert ids.mr("api") == "Mr_api"
