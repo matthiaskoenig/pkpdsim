@@ -91,7 +91,7 @@ def _metabolism() -> Metabolism:
         organ=Organ.LIVER,
         substrate=S,
         products={},
-        kinetics=FirstOrder(k=CLINT),
+        kinetics=FirstOrder(k=CLINT, per_volume=False),
     )
 
 
@@ -421,7 +421,7 @@ def test_extended_clearance(tmp_path: Path) -> None:
         substance=S,
         direction=Direction.INFLUX,
         membrane=Membrane.BASOLATERAL,
-        kinetics=FirstOrder(k=PS_ACT),
+        kinetics=FirstOrder(k=PS_ACT, per_volume=False),
     )
     path = _model(
         tmp_path,

@@ -125,9 +125,7 @@ def _variants() -> PBPKDefinition:
                 Hill(1e-3, 0.01, 2.0),
                 "CYP2C9",
             ),
-            Metabolism(
-                "INHX", Organ.LIVER, "inh", {}, FirstOrder(0.01, per_volume=True)
-            ),
+            Metabolism("INHX", Organ.LIVER, "inh", {}, FirstOrder(0.01)),
             Transport(
                 "DRGUP",
                 Organ.LIVER,
@@ -152,7 +150,7 @@ def _variants() -> PBPKDefinition:
                 "drg",
                 Direction.EFFLUX,
                 Membrane.APICAL,
-                FirstOrder(0.01),
+                FirstOrder(0.01, per_volume=False),
             ),
             Metabolism(
                 "DRGGUT",
@@ -232,7 +230,7 @@ def _standard() -> PBPKDefinition:
                 "sec",
                 Direction.INFLUX,
                 Membrane.BASOLATERAL,
-                FirstOrder(0.1, per_volume=True),
+                FirstOrder(0.1),
             ),
             CustomReaction(
                 sid="SECBIND",
@@ -435,7 +433,8 @@ def test_clearance_per_volume_is_no_clearance(built: BuildResult) -> None:
     """A first order clearance per litre of organ is not asserted as a clearance (R49).
 
     It is a kinetic constant and a `BIOCHEMICAL_PARAMETER` which is a version
-    of the (intrinsic) clearance; the tubular share is a physiological
+    of the (intrinsic) clearance; the clearance of a whole organ
+    (`per_volume=False`) is a clearance; the tubular share is a physiological
     parameter.
     """
     doc = libsbml.readSBMLFromFile(str(built.flat_path))
@@ -455,6 +454,11 @@ def test_clearance_per_volume_is_no_clearance(built: BuildResult) -> None:
     assert (libsbml.BQB_IS, pbpko("BIOCHEMICAL_PARAMETER")) in terms
     assert (libsbml.BQB_IS_VERSION_OF, pbpko(version)) in terms
     assert (libsbml.BQB_IS, pbpko(version)) not in terms
+    whole = model.getParameter("KI__DRGSEC_k")
+    if whole is not None:
+        assert whole.getSBOTermID() == "SBO:0000009"
+        assert pbpko("CLEARANCE_RATE") in _resources(whole)
+        assert pbpko("BIOCHEMICAL_PARAMETER") not in _resources(whole)
     share = model.getParameter("KI__f_tubular")
     assert pbpko("PHYSIOLOGICAL_PARAMETER") in _resources(share)
 

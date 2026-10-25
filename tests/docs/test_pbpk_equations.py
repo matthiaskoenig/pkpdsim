@@ -132,7 +132,7 @@ def standard() -> PBPKDefinition:
                 Organ.LIVER,
                 "prf",
                 {},
-                FirstOrder(k=0.2, per_volume=True),
+                FirstOrder(k=0.2),
                 protein="CYP2C9",
             ),
             Metabolism(

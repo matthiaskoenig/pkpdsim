@@ -39,7 +39,7 @@ The metabolites take the prefix of the parent (`gli_m1`), so their ids stay uniq
 
 ## 2. Chemistry
 
-The chemistry is defined once per organ, the organ places it. CYP2C9 converts glimepiride into M1 with Michaelis-Menten kinetics on the unbound concentration in the liver tissue (Vmax per litre of liver), and M1 becomes M2 by first order, a clearance per litre of liver (1/min, `per_volume=True`), so the clearance of the liver follows its volume as the per-litre constant of the hand-written model did.
+The chemistry is defined once per organ, the organ places it. CYP2C9 converts glimepiride into M1 with Michaelis-Menten kinetics on the unbound concentration in the liver tissue (Vmax per litre of liver), and M1 becomes M2 by first order, a clearance per litre of liver (1/min, the default of `FirstOrder`), so the clearance of the liver follows its volume as the per-litre constant of the hand-written model did.
 
 ```python
 from pkpdsim.pbpk import MM, FirstOrder, Metabolism
@@ -58,7 +58,7 @@ chemistry = [
         Organ.LIVER,
         "gli_m1",
         products={"gli_m2": 1.0},
-        kinetics=FirstOrder(k=0.2, per_volume=True),
+        kinetics=FirstOrder(k=0.2),
     ),
 ]
 ```

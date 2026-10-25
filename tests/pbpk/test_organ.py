@@ -548,7 +548,7 @@ def test_metabolism_kinetics() -> None:
     hill = _metabolism(sid="E2", products={}, kinetics=Hill(vmax=1.0, km=0.1, n=2.0))
     md, _ = _build(chemistry=[first, hill])
     assert _formula(_reaction(md, "E1")) == (
-        "f_functional * E1_k * fu_drg / Kp_drg * Cti_drg"
+        "f_functional * E1_k * Vli * fu_drg / Kp_drg * Cti_drg"
     )
     assert _equation(_reaction(md, "E1")) == ([("Cti_drg", 1.0)], [])
     assert _formula(_reaction(md, "E2")) == (
@@ -559,17 +559,23 @@ def test_metabolism_kinetics() -> None:
 
 
 def test_first_order_per_volume() -> None:
-    """A first order clearance per litre of organ: the rate `k*V<o>*Cu`, `k` in 1/min."""
-    first = _metabolism(
-        sid="E1",
+    """A first order clearance per litre of organ by default: the rate `k*V<o>*Cu`, `k` in 1/min.
+
+    `per_volume=False` keeps the clearance of the whole organ, `k` in l/min.
+    """
+    first = _metabolism(sid="E1", products={}, kinetics=FirstOrder(k=0.5), protein=None)
+    whole = _metabolism(
+        sid="E2",
         products={},
-        kinetics=FirstOrder(k=0.5, per_volume=True),
+        kinetics=FirstOrder(k=0.5, per_volume=False),
         protein=None,
     )
-    whole = _metabolism(sid="E2", products={}, kinetics=FirstOrder(k=0.5), protein=None)
     md, _ = _build(chemistry=[first, whole])
     assert _formula(_reaction(md, "E1")) == (
         "f_functional * E1_k * Vli * fu_drg / Kp_drg * Cti_drg"
+    )
+    assert _formula(_reaction(md, "E2")) == (
+        "f_functional * E2_k * fu_drg / Kp_drg * Cti_drg"
     )
     pars = _parameters(md)
     assert pars["E1_k"].unit is U.per_min
@@ -586,7 +592,10 @@ def test_kidney_processes_follow_the_renal_function() -> None:
     no renal function.
     """
     elimination = _metabolism(
-        Organ.KIDNEY, products={}, kinetics=FirstOrder(k=0.5), protein=None
+        Organ.KIDNEY,
+        products={},
+        kinetics=FirstOrder(k=0.5, per_volume=False),
+        protein=None,
     )
     secretion = _transport(Direction.EFFLUX, Membrane.APICAL, Organ.KIDNEY)
     md, boundary = _build(Organ.KIDNEY, chemistry=[elimination, secretion])

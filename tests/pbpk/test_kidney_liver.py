@@ -342,7 +342,7 @@ def test_first_order_per_volume_scales_with_the_organ(tmp_path: Path) -> None:
         _kidney_transport(
             Direction.INFLUX,
             Membrane.BASOLATERAL,
-            FirstOrder(k=0.5, per_volume=True),
+            FirstOrder(k=0.5),
         ),
     )
     r = _load(path)
@@ -365,7 +365,9 @@ def test_first_order_whole_organ_does_not_scale(tmp_path: Path) -> None:
     """A first order clearance of the whole organ is `k`, whatever the organ volume."""
     path = _process_model(
         tmp_path,
-        _kidney_transport(Direction.INFLUX, Membrane.BASOLATERAL, FirstOrder(k=0.5)),
+        _kidney_transport(
+            Direction.INFLUX, Membrane.BASOLATERAL, FirstOrder(k=0.5, per_volume=False)
+        ),
     )
     assert _kidney_influx(path) == pytest.approx(0.5, rel=1e-9)
     ratio = _kidney_influx(path, BW=150.0) / _kidney_influx(path, BW=75.0)

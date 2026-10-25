@@ -117,7 +117,7 @@ def _linear(clint: float) -> Metabolism:
         organ=Organ.LIVER,
         substrate=S,
         products={},
-        kinetics=FirstOrder(k=clint),
+        kinetics=FirstOrder(k=clint, per_volume=False),
         protein="CYP3A4",
     )
 
@@ -342,7 +342,7 @@ def test_one_zone_is_standard_liver(
 
 @pytest.mark.parametrize(
     "kinetics",
-    [FirstOrder(k=2e-3), MM(vmax=1.2e-3, km=1.0)],
+    [FirstOrder(k=2e-3, per_volume=False), MM(vmax=1.2e-3, km=1.0)],
     ids=["linear", "mm"],
 )
 def test_uniform_zones_equal_standard_liver(

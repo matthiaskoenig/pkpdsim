@@ -26,16 +26,17 @@ class FirstOrder:
     """First order kinetics on the unbound concentration.
 
     Attributes:
-        k: the clearance of the whole organ (l/min), with `per_volume` the
-            clearance per litre of organ (1/min).
-        per_volume: `k` is per litre of organ, so the whole organ has the
-            clearance `k * V<o>` and follows the organ of the individual, as a
-            Vmax does; `False` keeps the clearance of the whole organ, which
-            does not scale with the organ volume.
+        k: the clearance per litre of organ (1/min), with `per_volume=False`
+            the clearance of the whole organ (l/min).
+        per_volume: `k` is per litre of organ (the default), so the whole organ
+            has the clearance `k * V<o>` and follows the organ of the
+            individual, as the `vmax` of `MM` and `Hill` does; `False` keeps
+            the clearance of the whole organ, which does not scale with the
+            organ volume.
     """
 
     k: Q
-    per_volume: bool = False
+    per_volume: bool = True
 
 
 @dataclass(frozen=True)
@@ -43,7 +44,8 @@ class MM:
     """Michaelis-Menten kinetics on the unbound concentration.
 
     Attributes:
-        vmax: the maximal rate of the whole organ (mmole/min/l of organ).
+        vmax: the maximal rate per litre of organ (mmole/min/l), the whole
+            organ has the maximal rate `vmax * V<o>`.
         km: the Michaelis constant (mmole/l).
     """
 
@@ -56,7 +58,8 @@ class Hill:
     """Hill kinetics on the unbound concentration.
 
     Attributes:
-        vmax: the maximal rate of the whole organ (mmole/min/l of organ).
+        vmax: the maximal rate per litre of organ (mmole/min/l), the whole
+            organ has the maximal rate `vmax * V<o>`.
         km: the concentration of the half-maximal rate (mmole/l).
         n: the Hill coefficient.
     """

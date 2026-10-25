@@ -108,7 +108,7 @@ def _secretion(k: float = 0.5, protein: str | None = None) -> Transport:
         substance=S,
         direction=Direction.EFFLUX,
         membrane=Membrane.APICAL,
-        kinetics=FirstOrder(k=k),
+        kinetics=FirstOrder(k=k, per_volume=False),
         protein=protein,
     )
 
@@ -121,7 +121,7 @@ def _reabsorption(k: float = 0.05, protein: str | None = None) -> Transport:
         substance=S,
         direction=Direction.INFLUX,
         membrane=Membrane.APICAL,
-        kinetics=FirstOrder(k=k),
+        kinetics=FirstOrder(k=k, per_volume=False),
         protein=protein,
     )
 

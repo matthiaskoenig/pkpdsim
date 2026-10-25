@@ -35,7 +35,7 @@ chemistry = [
         Organ.LIVER,
         "prf",
         {},
-        FirstOrder(k=0.2, per_volume=True),
+        FirstOrder(k=0.2),
         protein="CYP2C9",
     ),
     # kidney: elimination of hil with Hill kinetics, no protein
@@ -94,7 +94,7 @@ The organs of the chemistry are those of `Organ`; the chemistry of the intestine
 
 ## Kinetics
 
-Every rate acts on the unbound concentration of its part and is an amount per time. The Vmax of a process is per litre of organ, so the whole organ has the capacity `Vmax*V<o>` and follows the organ of the individual. The clearance `k` of a first order process is that of the whole organ (l/min, `FirstOrder(k)`), which does not scale with the organ volume, or per litre of organ (1/min, `FirstOrder(k, per_volume=True)`), so that the whole organ has `k*V<o>` and follows the organ of the individual as a Vmax does (the first order constants of the hand-written models, `k*V<o>`, are per volume). The activity `f_<protein>` of the protein multiplies the rate, and in the liver the impairment factor `fimp_<protein>` and the functional fraction `f_functional` multiply it as well. In the kidney every metabolism and transport runs with the tubular capacity `1 - f_tubular + f_tubular*f_renal_function`, which follows the renal function: the share `f_tubular` is 1, the intact nephron hypothesis (Bricker 1960, a choice of the library), so a tubular secretion falls with the GFR as the secretion of a fraction of the GFR of the hand-written models did; the filtration `fu*GFR` follows the GFR itself (see [Impairment](impairment.md#chronic-kidney-disease)). A custom reaction states its rate itself and is not scaled.
+Every rate acts on the unbound concentration of its part and is an amount per time. The Vmax of a process is per litre of organ, so the whole organ has the capacity `Vmax*V<o>` and follows the organ of the individual. The clearance `k` of a first order process is per litre of organ as well (1/min, `FirstOrder(k)`), so the whole organ has `k*V<o>` and follows the organ of the individual as a Vmax does, as the first order constants of the hand-written models (`k*V<o>`) did; `FirstOrder(k, per_volume=False)` states the clearance of the whole organ (l/min), which does not scale with the organ volume. The activity `f_<protein>` of the protein multiplies the rate, and in the liver the impairment factor `fimp_<protein>` and the functional fraction `f_functional` multiply it as well. In the kidney every metabolism and transport runs with the tubular capacity `1 - f_tubular + f_tubular*f_renal_function`, which follows the renal function: the share `f_tubular` is 1, the intact nephron hypothesis (Bricker 1960, a choice of the library), so a tubular secretion falls with the GFR as the secretion of a fraction of the GFR of the hand-written models did; the filtration `fu*GFR` follows the GFR itself (see [Impairment](impairment.md#chronic-kidney-disease)). A custom reaction states its rate itself and is not scaled.
 
 ```equations title="Michaelis-Menten, liver"
 DRG2M: Cti_drg -> Cpl_drg_m = f_cyp3a4 * fimp_cyp3a4 * f_functional * DRG2M_Vmax * Vli * (fu_drg / Kp_drg * Cti_drg) / (DRG2M_Km + fu_drg / Kp_drg * Cti_drg)
@@ -106,7 +106,7 @@ HILEL: Cti_hil -> = (1 - f_tubular + f_tubular * f_renal_function) * HILEL_Vmax 
 
 ```equations title="transport, liver (full form of prm)"
 PRMIN: Cis_prm -> Cic_prm = f_slco1b1 * fimp_slco1b1 * f_functional * PRMIN_Vmax * Vli * (fu_prm / K_int_pls_prm * Cis_prm) / (PRMIN_Km + fu_prm / K_int_pls_prm * Cis_prm)
-PRMBIL: Cic_prm -> Cbile_prm = f_abcc2 * fimp_abcc2 * f_functional * PRMBIL_k * fu_prm / K_cell_pls_prm * Cic_prm
+PRMBIL: Cic_prm -> Cbile_prm = f_abcc2 * fimp_abcc2 * f_functional * PRMBIL_k * Vli * fu_prm / K_cell_pls_prm * Cic_prm
 ```
 
 The parameters of a process are constants of its organ with the process id as prefix (`DRG2M_Vmax`, `DRG2M_Km`, `PRFEL_k`, `HILEL_n`), so a fit of a Vmax uses the flat id `LI__DRG2M_Vmax`, as the hand-written models do. The tubular share is the constant `f_tubular` of the kidney (`KI__f_tubular`), with its provenance in the notes; an experiment may set it to test another hypothesis.

@@ -185,7 +185,7 @@ def test_first_order_inhibition_rate(
 ) -> None:
     """A first order process (`C << Km`) is `k*C/(1 + I/Ki)`; uncompetitive leaves it."""
     k = 0.5
-    rate, _, cu, iu = _rate_at(tmp_path, inhibition, FirstOrder(k))
+    rate, _, cu, iu = _rate_at(tmp_path, inhibition, FirstOrder(k, per_volume=False))
     expected = k * cu / (1 + iu / KI) if inhibited else k * cu
     assert rate == pytest.approx(expected, rel=1e-12)
 
@@ -294,7 +294,7 @@ def test_activity_base_factor(tmp_path: Path) -> None:
     impairment and the experiments set (`f_<protein>`, flat `LI__f_cyp3a4`).
     """
     k = 0.5
-    path = _build(tmp_path, _inhibitor(), FirstOrder(k)).flat_path
+    path = _build(tmp_path, _inhibitor(), FirstOrder(k, per_volume=False)).flat_path
     f = ids.flat(Organ.LIVER, ids.activity("CYP3A4"))
     clearance = {}
     for activity in (1.0, 0.5):

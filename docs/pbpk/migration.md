@@ -36,7 +36,7 @@ The library keeps the ids of the hand-written models where they fit its id schem
 | `GU__Ka_dis_gli` | `Ka_dis_gli` | a parameter of the top model (1/hr) |
 | `GU__GLIABS_k` (1/min), `GU__F_gli_abs` | `ka_gli` (1/hr), `fabs_gli` (single lumen) | the absorption rate constant of the small intestine |
 | `LI__GLI2M1_Vmax` | `LI__GLI2M1_Vmax` | the same when the process keeps its id: a Vmax per litre of liver in both |
-| `LI__M12M2_k` (1/min, per litre of liver: `M12M2_k*Vli*m1`) | `LI__M12M2_k` (1/min, per litre of liver) | the same id and value with `FirstOrder(k, per_volume=True)`: the rate `M12M2_k*Vli*Cu` on the unbound concentration, which follows the liver of the individual (divided by `fu_ref` for a bound substance, whose old rate read the total concentration) |
+| `LI__M12M2_k` (1/min, per litre of liver: `M12M2_k*Vli*m1`) | `LI__M12M2_k` (1/min, per litre of liver) | the same id and value with `FirstOrder(k)` (per litre of organ, the default): the rate `M12M2_k*Vli*Cu` on the unbound concentration, which follows the liver of the individual (divided by `fu_ref` for a bound substance, whose old rate read the total concentration) |
 | `LI__GLI2M1_Km_gli` | `LI__GLI2M1_Km` | the Km of a process is `<p>_Km` |
 | `LI__fu_gli` | `fu_ref_gli` (input), `fu_gli` | fu is a parameter of the substance, fitted as `fu_ref_gli` |
 | `LI__f_cyp2c9` | `LI__f_cyp2c9` | the same: the activity of the protein in the liver |
@@ -58,7 +58,7 @@ The migration does not reproduce the simulations of the hand-written model, and 
 - Blood and plasma: every vascular space has plasma and blood cells with the hematocrit of the sex (0.43 male), the blood flows carry plasma; the hand-written models had five conventions (whole-blood pools with plasma organ volumes, blood flows multiplied by plasma concentrations, hematocrits 0.51, 0.45, 0.40 or none).
 - Tissue distribution: one convention, the whole-tissue Kp with the unbound plasma concentration, `PS*fu*(C_p - C_t/Kp)`. `ftissue_<s>` multiplies the unbound concentrations, so its fitted values change, and an organ has the share of its tissue volume of the reference individual. For a highly bound substance the exchange of the liver needs its own `ps` (glimepiride: fu 0.005).
 - Physiology: the organs, volumes and flows of ICRP 89 with their sources, and the scaling of Huisinga 2012 (fat-free mass, adipose as the remainder) instead of `ftissue*BW/BW_ref`.
-- First order processes act on the unbound concentration: a per-litre constant of the hand-written model keeps its value with `FirstOrder(k, per_volume=True)` (divided by `fu_ref` where the old rate read the total concentration).
+- First order processes act on the unbound concentration: a per-litre constant of the hand-written model keeps its value with `FirstOrder(k)`, which is per litre of organ (divided by `fu_ref` where the old rate read the total concentration); a clearance of the whole organ (l/min) needs `FirstOrder(k, per_volume=False)`.
 - Renal function: every metabolism and transport of the kidney runs with the tubular capacity, which follows `f_renal_function` (the intact nephron hypothesis), as a secretion of a fraction of the GFR did.
 - Absorption: the segmented intestine has a transit through the segments into the feces, and the single lumen a physiological transit, `Fa = fabs*ka/(ka + 1/T)`; the fitted absorption constants of the hand-written models (without transit) do not carry over.
 - Observables: the arm vein instead of the venous plasma.

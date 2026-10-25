@@ -78,7 +78,7 @@ def _gut_metabolism(k: float = 0.5) -> Metabolism:
         organ=Organ.SMALL_INTESTINE,
         substrate=S,
         products={M: 1.0},
-        kinetics=FirstOrder(k=k),
+        kinetics=FirstOrder(k=k, per_volume=False),
         protein="CYP3A4",
     )
 
@@ -91,7 +91,7 @@ def _efflux(k: float = 0.5) -> Transport:
         substance=S,
         direction=Direction.EFFLUX,
         membrane=Membrane.APICAL,
-        kinetics=FirstOrder(k=k),
+        kinetics=FirstOrder(k=k, per_volume=False),
         protein="ABCB1",
     )
 
