@@ -17,7 +17,7 @@ from pkpdsim.pbpk.chemistry import (
 )
 from pkpdsim.pbpk.data import load
 from pkpdsim.pbpk.kp import check_kp_method
-from pkpdsim.pbpk.observers import Observer, formula_symbols
+from pkpdsim.pbpk.observers import Observer, formula_functions
 from pkpdsim.pbpk.organ import OrganComponent
 from pkpdsim.pbpk.organs import Organ, Part, Pool, as_member, as_organ_keys
 from pkpdsim.pbpk.pd import PDComponent
@@ -294,9 +294,16 @@ class PBPKDefinition:
                     "ids of the organs in the flat model"
                 )
             try:
-                formula_symbols(o.formula)
+                functions = formula_functions(o.formula)
             except ValueError as err:
                 problems.append(f"observer '{o.sid}': {err}")
+                continue
+            if functions:
+                problems.append(
+                    f"observer '{o.sid}' calls {sorted(functions)}, which are no "
+                    "functions of SBML L3 infix (exp, ln, piecewise, ...); the "
+                    "model defines no function definitions"
+                )
         return problems
 
     def _check_substances(self) -> list[str]:

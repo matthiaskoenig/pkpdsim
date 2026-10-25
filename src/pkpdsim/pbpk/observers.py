@@ -58,6 +58,7 @@ __all__ = [
     "Observer",
     "arm_vein_weights",
     "definition_observer_objects",
+    "formula_functions",
     "formula_symbols",
     "observer_objects",
 ]
@@ -106,22 +107,59 @@ def formula_symbols(formula: str) -> set[str]:
         ValueError: if the formula cannot be parsed, with the message of
             libsbml.
     """
+    found: set[str] = set()
+    for node in _nodes(formula):
+        if node.getType() == libsbml.AST_NAME_TIME:
+            found.add(TIME)
+        elif node.getType() == libsbml.AST_NAME:
+            found.add(node.getName())
+    return found
+
+
+def formula_functions(formula: str) -> set[str]:
+    """Get the functions a formula calls which are no functions of SBML L3 infix.
+
+    Such a call (`foo(x)`) reads a function definition of the model; the
+    models of the library define none.
+
+    Args:
+        formula: the formula.
+
+    Returns:
+        The names of the called functions which are no built-in functions
+        (`exp`, `piecewise`, ...).
+
+    Raises:
+        ValueError: if the formula cannot be parsed, with the message of
+            libsbml.
+    """
+    return {
+        node.getName()
+        for node in _nodes(formula)
+        if node.getType() == libsbml.AST_FUNCTION
+    }
+
+
+def _nodes(formula: str) -> list[libsbml.ASTNode]:
+    """Get the nodes of a formula, parsed with libsbml's parser of SBML L3 infix.
+
+    Raises:
+        ValueError: if the formula cannot be parsed, with the message of
+            libsbml.
+    """
     ast = libsbml.parseL3Formula(formula)
     if ast is None:
         raise ValueError(
             f"formula '{formula}' cannot be parsed: "
             f"{libsbml.getLastParseL3Error().strip()}"
         )
-    found: set[str] = set()
-    nodes = [ast]
-    while nodes:
-        node = nodes.pop()
-        if node.getType() == libsbml.AST_NAME_TIME:
-            found.add(TIME)
-        elif node.getType() == libsbml.AST_NAME:
-            found.add(node.getName())
-        nodes.extend(node.getChild(i) for i in range(node.getNumChildren()))
-    return found
+    nodes: list[libsbml.ASTNode] = []
+    pending = [ast]
+    while pending:
+        node = pending.pop()
+        nodes.append(node)
+        pending.extend(node.getChild(i) for i in range(node.getNumChildren()))
+    return nodes
 
 
 def definition_observer_objects(observers: Iterable[Observer]) -> list[Sbase]:

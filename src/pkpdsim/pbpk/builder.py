@@ -292,8 +292,10 @@ def observer_problems(definition: PBPKDefinition) -> list[str]:
     """Check the observers of a definition against the top model.
 
     The model is composed without the observers of the definition; an
-    observer id must be no id of the body (nor of a submodel), every symbol
-    of its formula an id of the top model or of another observer, the
+    observer id must be no id of the body (nor of a submodel or model
+    definition), every symbol of its formula a value of the top model (a
+    parameter, species, compartment or reaction, never a submodel or model
+    definition) or another observer, the
     observers must not read each other in a cycle, and every observer must
     read a state (`_observer_problems`).
 
@@ -326,14 +328,19 @@ def _observer_problems(
     assignment rule of constants slows the compile of the model (R53), so it
     is rejected.
     """
-    body: set[str] = {
+    # the ids an observer may read: the values of the top model
+    values: set[str] = {
         str(o.sid)
         for o in top.objects
         if isinstance(o, Parameter | Species | Compartment | Reaction)
     }
-    body |= {str(sm.sid) for sm in submodels} | {
-        str(md.sid) for md in model_definitions
-    }
+    # the ids an observer must not take: the values, the submodels and the
+    # model definitions (no values, a formula cannot read them)
+    body = (
+        values
+        | {str(sm.sid) for sm in submodels}
+        | {str(md.sid) for md in model_definitions}
+    )
     states: set[str] = {TIME}
     for o in top.objects:
         if isinstance(o, Species | Reaction):
@@ -347,10 +354,10 @@ def _observer_problems(
     for sid, symbols in observers.items():
         if sid in body:
             problems.append(f"observer id '{sid}' is an id of the body")
-        unknown = sorted(symbols - body - set(observers) - {TIME})
+        unknown = sorted(symbols - values - set(observers) - {TIME})
         if unknown:
             problems.append(
-                f"observer '{sid}' reads {unknown}, which are no ids of the top "
+                f"observer '{sid}' reads {unknown}, which are no values of the top "
                 "model (the pools, sinks, observers, covariates and outputs of "
                 "the organs; an id of an organ is not visible in the top model)"
             )

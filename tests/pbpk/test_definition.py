@@ -352,6 +352,40 @@ def test_observer_with_a_body_id_is_rejected() -> None:
         _definition(observers=[observer]).validate()
 
 
+@pytest.mark.parametrize("sid", ["LI", "standard_li"])
+def test_observer_reading_a_submodel_id_is_rejected(sid: str) -> None:
+    """A submodel or model definition id is no value: a formula cannot read it.
+
+    It stays an id of the body, which an observer must not take.
+    """
+    observer = Observer("x", f"{sid} + Car_api", U.mM, "x")
+    with pytest.raises(ValueError, match=rf"'x' reads \['{sid}'\]"):
+        _definition(observers=[observer]).validate()
+    observer = Observer(sid, "Car_api", U.mM, "x")
+    with pytest.raises(ValueError, match=f"observer id '{sid}' is an id of the body"):
+        _definition(observers=[observer]).validate()
+
+
+def test_observer_calling_an_unknown_function_is_rejected() -> None:
+    """A call of a function which SBML L3 infix does not define is named.
+
+    The models of the library have no function definitions; the built-in
+    functions pass.
+    """
+    from pkpdsim.pbpk.observers import formula_functions
+
+    assert formula_functions("exp(a) * piecewise(b, c > 1, 0) + foo(d, bar(e))") == {
+        "foo",
+        "bar",
+    }
+    observer = Observer("x", "foo(Car_api)", U.mM, "x")
+    with pytest.raises(ValueError, match=r"observer 'x' calls \['foo'\]"):
+        _definition(observers=[observer]).validate(symbols=False)
+    _definition(
+        observers=[Observer("y", "exp(-Car_api / 1 mM) * 1 mM", U.mM, "y")]
+    ).validate()
+
+
 def test_observer_ids_and_formulas_checked() -> None:
     """Observer ids are SIds without `__`, unique; a formula must parse."""
     observers = [
