@@ -101,7 +101,7 @@ Cu_is_<s> = fu_<s> / K_int_pls_<s> * Cis_<s>
 Cu_ic_<s> = fu_<s> / K_cell_pls_<s> * Cic_<s>
 ```
 
-The water fractions of interstitium and plasma and the protein ratio of the interstitial fluid (`f_water_int` 0.935, `f_water_pls` 0.926, `r_protein_int_pls` 0.37) are those of Schmitt 2008, the values of the plan which are not yet checked against the table of the paper (`data/distribution.toml`).
+The water fractions of interstitium and plasma and the protein ratio of the interstitial fluid (`f_water_int` 0.93049, `f_water_pls` 0.93049, `r_protein_int_pls` 0.37) are those of the implementation of Schmitt 2008 in httk 2.7.4 (MIT), read in its code and data: the water fraction of plasma is one minus the plasma protein volume fraction 0.06951, the interstitial fluid has the same water fraction and 37 % of the protein of plasma (`data/distribution.toml`).
 
 ## Kp and fu
 

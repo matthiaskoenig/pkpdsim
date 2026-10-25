@@ -233,8 +233,8 @@ def test_full_parts_species() -> None:
         "Cic_drg)"
     )
     pars = _parameters(md)
-    assert pars["f_water_int"].value == 0.935
-    assert "Schmitt" in str(pars["f_water_int"].notes)
+    assert pars["f_water_int"].value == 0.93049
+    assert "httk" in str(pars["f_water_int"].notes)
 
 
 def test_perfusion_single_species() -> None:

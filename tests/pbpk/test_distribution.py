@@ -13,7 +13,7 @@ from .conftest import simple_drug
 def test_k_int_pls_value_and_rule_agree() -> None:
     """The number is the rule evaluated with the constants (one template)."""
     fu = 0.1
-    expected = (0.935 + 0.37 * (1 / fu - 0.926)) * fu
+    expected = (0.93049 + 0.37 * (1 / fu - 0.93049)) * fu
     assert distribution.k_int_pls_value(fu) == pytest.approx(expected, rel=1e-12)
     assert distribution.k_int_pls("fu_drg") == (
         "(f_water_int + r_protein_int_pls * (1 dimensionless / fu_drg - "

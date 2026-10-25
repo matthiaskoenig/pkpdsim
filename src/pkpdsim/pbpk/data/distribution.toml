@@ -1,6 +1,7 @@
 # The constants of the distribution between plasma and tissue in the standard organ.
 #
-# Interstitial to plasma coefficient of Schmitt 2008:
+# Interstitial to plasma coefficient of Schmitt 2008 (equation 4), with the
+# constants of its implementation in httk 2.7.4 (MIT):
 # `K_int_pls = (f_water_int + r_protein_int_pls * (1/fu - f_water_pls)) * fu`,
 # the interstitial fluid has the water of the interstitium and a share of the
 # plasma proteins, to which the substance binds as in plasma.
@@ -10,9 +11,9 @@
 # chosen large against the blood flows.
 
 [interstitial]
-f_water_int = { value = 0.935, unit = "dimensionless", source = "Schmitt2008", notes = "water fraction of the interstitial fluid; unverified: the value of the plan, not checked against the table of the paper" }
-f_water_pls = { value = 0.926, unit = "dimensionless", source = "Schmitt2008", notes = "water fraction of plasma; unverified: the value of the plan, not checked against the table of the paper" }
-r_protein_int_pls = { value = 0.37, unit = "dimensionless", source = "Schmitt2008", notes = "protein concentration of the interstitial fluid relative to plasma; unverified: the value of the plan, not checked against the table of the paper" }
+f_water_int = { value = 0.93049, unit = "dimensionless", source = "httk", notes = "water fraction of the interstitial fluid; httk 2.7.4 sets it to the water fraction of plasma (R/predict_partitioning_schmitt.R: FWint = FWpl), 1 - 0.06951; read in httk (MIT), Schmitt 2008 itself not read" }
+f_water_pls = { value = 0.93049, unit = "dimensionless", source = "httk", notes = "water fraction of plasma; httk 2.7.4 R/predict_partitioning_schmitt.R: FWpl = 1 - Fprotein.plasma, with the plasma protein volume fraction 0.06951 of the human column of physiology.data ('Plasma Protein Volume Fraction'); read in httk (MIT), Schmitt 2008 itself not read" }
+r_protein_int_pls = { value = 0.37, unit = "dimensionless", source = "httk", notes = "protein of the interstitial fluid relative to plasma; httk 2.7.4 R/predict_partitioning_schmitt.R: FPint = 0.37 * Fprotein.plasma, the ratio FPint/Fprotein.plasma of Kint, Schmitt 2008 equation 4 as httk implements it; read in httk (MIT), Schmitt 2008 itself not read" }
 
 [vascular]
 k_vas = { value = 1000.0, unit = "1/min", source = "ModelChoice", notes = "exchange between plasma and interstitium per organ volume, PS_vas = k_vas * V; chosen so that the equilibration of the interstitium (time constant f_int * K_int_pls / (k_vas * fu), below 0.05 min in every organ for fu >= 0.005) is fast against the passage of the blood through an organ (f_vas * V / Q, about 0.1 to 1 min), i.e. the endothelium does not limit the exchange of small molecules" }
