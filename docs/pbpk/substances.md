@@ -33,7 +33,7 @@ Without erythrocytes the substance stays in the plasma: the blood concentration 
 
 ## Tissue distribution
 
-`Kp(value, overrides={...}, organs=..., mode=..., ftissue=..., ps={...})` is the whole-tissue (interstitial and intracellular) to plasma coefficient of the substance, `Kp_<s>`, with the coefficients of single organs, `Kp_<o>_<s>` (`overrides={Organ.ADIPOSE: 0.4}`). The Kp means the same in every form of the organ, so a fitted Kp keeps its meaning when the mode changes. The keyword-only options:
+`Kp(value, overrides={...}, organs=..., mode=..., ftissue=..., ps={...})` is the whole-tissue (interstitial and intracellular) to plasma coefficient of the substance, `Kp_<s>`, with the coefficients of single organs, `Kp_<o>_<s>` (`overrides={Organ.ADIPOSE: 0.4}`). An organ of `overrides`, `organs`, `ps` and of `Variants(organs=...)` may also be given by its value or name (`"ad"`, `"adipose"`) and the sex of the definition by its value (`sex="female"`): the definition holds the enum members, and anything else raises an error which names the field and the allowed values. The Kp means the same in every form of the organ, so a fitted Kp keeps its meaning when the mode changes. The keyword-only options:
 
 - `organs`: the organs the substance enters (`frozenset({Organ.LIVER, Organ.KIDNEY})`), all if `None`; in the other organs it stays in the blood.
 - `mode`: how plasma and tissue exchange (the collapsing of the [standard organ](organ.md#collapsing)):

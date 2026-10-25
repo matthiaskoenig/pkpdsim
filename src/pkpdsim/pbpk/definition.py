@@ -19,7 +19,7 @@ from pkpdsim.pbpk.data import load
 from pkpdsim.pbpk.kp import check_kp_method
 from pkpdsim.pbpk.observers import Observer, formula_symbols
 from pkpdsim.pbpk.organ import OrganComponent
-from pkpdsim.pbpk.organs import Organ, Part, Pool
+from pkpdsim.pbpk.organs import Organ, Part, Pool, as_member, as_organ_keys
 from pkpdsim.pbpk.pd import PDComponent
 from pkpdsim.pbpk.physiology import DEFAULT_POPULATION, Sex
 from pkpdsim.pbpk.populations import POPULATIONS
@@ -73,9 +73,17 @@ class Variants:
     Attributes:
         organs: the variant of an organ, by name or as component; the names
             are resolved from the variant registry when the model is built.
+            The organs may be given as `Organ` members, their values or their
+            names (`"li"`, `"liver"`), normalised to `Organ` members.
     """
 
     organs: Mapping[Organ, str | OrganComponent] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        """Normalise the organs to `Organ` members."""
+        object.__setattr__(
+            self, "organs", as_organ_keys(self.organs, "Variants.organs")
+        )
 
 
 @dataclass(frozen=True)
@@ -91,7 +99,8 @@ class PBPKDefinition:
         pd: the pharmacodynamic components.
         sex: the sex of the model, chosen when it is built: its reference
             values and default individual; a study of both sexes uses one
-            model per sex.
+            model per sex. A `Sex` member or its value (`"female"`),
+            normalised to the member.
         population: the population (`pkpdsim.pbpk.populations`), chosen when
             the model is built: its reference individual of the sex is the
             default individual (`BW`, `HEIGHT`, `AGE`); the reference anatomy
@@ -126,6 +135,10 @@ class PBPKDefinition:
     notes: str | None = None
     observers: Sequence[Observer] = ()
     creators: Sequence[Creator] = ()
+
+    def __post_init__(self) -> None:
+        """Normalise the sex to a `Sex` member."""
+        object.__setattr__(self, "sex", as_member(Sex, self.sex, "PBPKDefinition.sex"))
 
     @classmethod
     def combine(cls, *definitions: "PBPKDefinition", sid: str) -> "PBPKDefinition":

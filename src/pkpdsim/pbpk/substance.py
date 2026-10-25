@@ -7,7 +7,7 @@ from typing import Literal
 
 from sbmlutils.metadata import BQB
 
-from pkpdsim.pbpk.organs import Organ
+from pkpdsim.pbpk.organs import Organ, as_organ_keys, as_organs
 from pkpdsim.pbpk.proteins import Induction, Inhibition
 from pkpdsim.pbpk.values import Q
 
@@ -68,8 +68,13 @@ class Mode(StrEnum):
 class _Exchange:
     """What the Kp and the Kp method share.
 
+    The organs of `organs` and the keys of `ps` may be given as `Organ`
+    members, their values or their names (`"li"`, `"liver"`): they are
+    normalised to `Organ` members, anything else raises a `ValueError`.
+
     Attributes:
-        organs: the organs the substance enters, all if `None`.
+        organs: the organs the substance enters, all if `None` (a set,
+            frozenset, list or tuple of organs, kept as frozenset).
         mode: the exchange between plasma and tissue.
         ftissue: the whole-body exchange (l/min), required for the modes
             `TISSUE` and `PERMEABILITY`; an organ has the share
@@ -87,6 +92,13 @@ class _Exchange:
     ftissue: Q | None = None
     ps: Mapping[Organ, Q] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        """Normalise the organs and the keys of `ps` to `Organ` members."""
+        name = type(self).__name__
+        if self.organs is not None:
+            object.__setattr__(self, "organs", as_organs(self.organs, f"{name}.organs"))
+        object.__setattr__(self, "ps", as_organ_keys(self.ps, f"{name}.ps"))
+
 
 @dataclass(frozen=True)
 class Kp(_Exchange):
@@ -94,11 +106,19 @@ class Kp(_Exchange):
 
     Attributes:
         value: the coefficient of the substance.
-        overrides: the coefficients of single organs.
+        overrides: the coefficients of single organs, by `Organ` member, value
+            or name (normalised to `Organ` members).
     """
 
     value: Q
     overrides: Mapping[Organ, Q] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        """Normalise the organs, and the keys of `ps` and `overrides`."""
+        super().__post_init__()
+        object.__setattr__(
+            self, "overrides", as_organ_keys(self.overrides, "Kp.overrides")
+        )
 
 
 @dataclass(frozen=True)

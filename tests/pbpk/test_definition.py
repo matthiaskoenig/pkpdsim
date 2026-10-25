@@ -1,6 +1,8 @@
 """Tests of the definition dataclasses and their validation."""
 
 import dataclasses
+import re
+from collections.abc import Callable
 
 import pytest
 
@@ -14,6 +16,7 @@ from pkpdsim.pbpk import (
     FirstOrder,
     Hill,
     Kp,
+    KpMethod,
     Membrane,
     Metabolism,
     Mode,
@@ -21,13 +24,19 @@ from pkpdsim.pbpk import (
     Organ,
     PBPKDefinition,
     Route,
+    Sex,
     Substance,
     Transport,
     U,
     Value,
+    Variants,
+    compose,
+    ids,
     load,
     sources,
 )
+from pkpdsim.pbpk.builder import organ_component
+from pkpdsim.pbpk.variants.liver_zonated import ZonatedLiver
 
 
 def _api(**kwargs: object) -> Substance:
@@ -378,3 +387,112 @@ def test_observer_formula_symbols() -> None:
         "b",
         "c",
     }
+
+
+def _untyped[T](cls: Callable[..., T], *args: object, **kwargs: object) -> T:
+    """Construct a dataclass from untyped arguments, as a script or a notebook does."""
+    return cls(*args, **kwargs)
+
+
+@pytest.mark.parametrize(
+    "organ", [Organ.ADIPOSE, "ad", "adipose", "Adipose", "ADIPOSE"]
+)
+def test_kp_overrides_accept_organ_texts(organ: object) -> None:
+    """The keys of `Kp.overrides` are organs, their values or their names (R60)."""
+    kp = _untyped(Kp, 2.0, ftissue=0.5, overrides={organ: 0.4})
+    assert kp.overrides == {Organ.ADIPOSE: 0.4}
+    assert all(type(k) is Organ for k in kp.overrides)
+
+
+def test_organ_fields_are_normalised() -> None:
+    """`Kp.organs`, `Kp.ps`, `KpMethod` and `Variants.organs` hold `Organ` members."""
+    for organs in ({"liver", "ki"}, frozenset({"liver", "ki"}), ["li", "kidney"]):
+        kp = _untyped(Kp, 1.0, organs=organs, ftissue=0.5)
+        assert kp.organs == frozenset({Organ.LIVER, Organ.KIDNEY})
+        assert isinstance(kp.organs, frozenset)
+    assert Kp(1.0).organs is None
+    kp = _untyped(Kp, 1.0, ps={"kidney": 0.2})
+    assert kp.ps == {Organ.KIDNEY: 0.2}
+    method = _untyped(
+        KpMethod,
+        method="rodgers_rowland",
+        logp=1.0,
+        pka=(),
+        compound="neutral",
+        organs=("liver",),
+        ps={"li": 0.1},
+    )
+    assert method.organs == frozenset({Organ.LIVER})
+    assert method.ps == {Organ.LIVER: 0.1}
+    variants = _untyped(Variants, organs={"liver": "zonated"})
+    assert variants.organs == {Organ.LIVER: "zonated"}
+    replaced = _untyped(dataclasses.replace, kp, overrides={"adipose": 0.4})
+    assert replaced.overrides == {Organ.ADIPOSE: 0.4}
+
+
+_METHOD = {"method": "rodgers_rowland", "logp": 1.0, "pka": (), "compound": "neutral"}
+"""The arguments of a Kp method but the organs."""
+
+
+@pytest.mark.parametrize(
+    ("cls", "kwargs", "field"),
+    [
+        (Kp, {"value": 2.0, "overrides": {"adipos": 0.4}}, "Kp.overrides"),
+        (Kp, {"value": 2.0, "overrides": [("ad", 0.4)]}, "Kp.overrides"),
+        (Kp, {"value": 2.0, "ps": {3: 0.2}}, "Kp.ps"),
+        (Kp, {"value": 2.0, "organs": {"lever"}}, "Kp.organs"),
+        (Kp, {"value": 2.0, "organs": "liver"}, "Kp.organs"),
+        (Kp, {"value": 2.0, "organs": {"li": 1.0}}, "Kp.organs"),
+        (KpMethod, {**_METHOD, "organs": {"brian"}}, "KpMethod.organs"),
+        (KpMethod, {**_METHOD, "ps": {"brian": 0.1}}, "KpMethod.ps"),
+        (Variants, {"organs": {"lever": "zonated"}}, "Variants.organs"),
+        (Variants, {"organs": {"li": "zonated", "liver": "x"}}, "Variants.organs"),
+    ],
+)
+def test_organ_fields_reject_other_values(
+    cls: Callable[..., object], kwargs: dict[str, object], field: str
+) -> None:
+    """Anything but an organ, its value or its name raises, naming the field (R60).
+
+    The message lists the allowed values, or says what is wrong with the
+    collection (no mapping, no set, an organ given twice).
+    """
+    with pytest.raises(ValueError, match=re.escape(field)) as err:
+        _untyped(cls, **kwargs)
+    message = str(err.value)
+    assert any(s in message for s in ("'li' (liver)", "given twice", "e.g."))
+
+
+@pytest.mark.parametrize("sex", [Sex.FEMALE, "female", "FEMALE", "Female"])
+def test_sex_accepts_its_value(sex: object) -> None:
+    """The sex is a `Sex` member or its value (R60), also through `replace`."""
+    assert _definition(sex=sex).sex is Sex.FEMALE
+    assert _untyped(dataclasses.replace, _definition(), sex=sex).sex is Sex.FEMALE
+
+
+def test_sex_rejects_other_values() -> None:
+    """Another sex raises with the field and the allowed values."""
+    with pytest.raises(
+        ValueError, match=r"PBPKDefinition\.sex.*'male' \(male\), 'female'"
+    ):
+        _definition(sex="f")
+
+
+def test_definition_with_texts_composes() -> None:
+    """The examples of the spec compose: the texts select the organs and the sex.
+
+    `overrides={"adipose": 0.4}`, `sex="female"` and a variant by the name of
+    the organ give the override of adipose, the female reference and the
+    zonated liver.
+    """
+    kp = _untyped(Kp, 2.0, ftissue=0.5, overrides={"adipose": 0.4})
+    d = _definition(
+        substances=[_api(distribution=kp), Substance("api_m2", "metabolite", 445.5)],
+        sex="female",
+        variants=_untyped(Variants, organs={"liver": "zonated"}),
+    )
+    d.validate()
+    assert isinstance(organ_component(d, Organ.LIVER), ZonatedLiver)
+    parameters = {str(p.sid): p.value for p in compose(d).parameters or []}
+    assert parameters[ids.kp_organ(Organ.ADIPOSE, "api")] == 0.4
+    assert parameters[ids.BW] == 60.0
