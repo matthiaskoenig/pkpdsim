@@ -265,7 +265,10 @@ class ZonatedBuilder(StandardBuilder):
                 U.dimensionless,
                 f"relative abundance {key} zone {z}",
                 f"Relative abundance of the profile `{key}` in the zone, given "
-                "with the zonated liver (periportal zone first).",
+                "with the zonated liver (periportal zone first). A value may be "
+                "changed (the shares `p/sum(p)` follow and keep the capacity of "
+                "the liver), but not every value of the profile set to 0: the "
+                "shares are then undefined.",
             )
         total = " + ".join(abundances)
         for z, pid in zip(self.zones, abundances, strict=True):

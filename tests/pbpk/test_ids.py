@@ -130,6 +130,18 @@ def test_zone_ids() -> None:
     assert ids.F_ZONE == "f_zone"
 
 
+def test_species_of_zones_exact_substance() -> None:
+    """Zone species belong to exactly their substance.
+
+    A substance id does not start with a zone token (`z1_`, refused by the
+    validation of the definition), so `Cpl_z1_drg` is a zone species of `drg`;
+    a substance `z1` is allowed and has the species `Cpl_z1` and `Cpl_z2_z1`.
+    """
+    all_ids = ["LI__Cpl_z1", "LI__Cpl_z2_z1", "LI__Cpl_z1_drg", "LI__Cu_ti_z1_drg"]
+    assert ids.species_of("z1", all_ids) == ["LI__Cpl_z1", "LI__Cpl_z2_z1"]
+    assert ids.species_of("drg", all_ids) == ["LI__Cpl_z1_drg"]
+
+
 def test_submodels_unique_and_not_physiology() -> None:
     """The submodel ids are unique and no id of the physiology (`CO`)."""
     submodels = [ids.submodel(o) for o in Organ]

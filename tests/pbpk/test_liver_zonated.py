@@ -356,8 +356,8 @@ def test_uniform_zones_equal_standard_liver(
     the standard liver, `E/(1 - E)`). The test drug has
     `x` about 1e-3 (asserted), so that 8 zones differ from the standard liver
     by about 6e-4 in the steady-state extraction, below the tolerance 1e-3,
-    and less in the venous curves after an IV bolus (`PASSED`), where the
-    liver is one of two eliminating organs. The Michaelis-Menten metabolism
+    and less in the venous and the hepatic outflow curves after an IV bolus
+    (`PASSED`), where the liver is one of two eliminating organs. The Michaelis-Menten metabolism
     (`Vmax*V/Km` the linear clearance, `Km` 1 mM about 20 times the unbound
     concentration of the infusion) is nearly linear here; with a saturated
     metabolism the zones see different concentrations and differ more.
@@ -390,7 +390,7 @@ def test_uniform_zones_equal_standard_liver(
         expected, rel=1e-2 if linear else 0.1
     )
     assert abs(e_zonated / e_standard - 1) < 1e-3
-    assert _deviation(c_standard[:, :1], c_zonated[:, :1], PASSED) < 1e-3
+    assert _deviation(c_standard, c_zonated, PASSED) < 1e-3
 
 
 def test_extraction_tanks_in_series(tmp_path: Path) -> None:
@@ -549,20 +549,53 @@ def test_zonated_liver_only_for_the_liver(tmp_path: Path) -> None:
         build(d, tmp_path)
 
 
-def test_mass_balance_zonated(tmp_path: Path) -> None:
+_BALANCE: dict[str, tuple[dict[str, object], list[Metabolism | Transport], int]] = {
+    "full_kinetic": (
+        {"erythrocytes": Erythrocytes("kinetic", kbc=2.0, k_exchange=1.0)},
+        [_drg2m(), _UPTAKE, _BILE],
+        4,
+    ),
+    "perfusion_bp": (
+        {
+            "distribution": Kp(2.0, mode=Mode.PERFUSION),
+            "erythrocytes": Erythrocytes("equilibrium", bp=1.3),
+        },
+        [_drg2m()],
+        3,
+    ),
+    "merged_bp": (
+        {"erythrocytes": Erythrocytes("equilibrium", bp=1.3)},
+        [_drg2m()],
+        3,
+    ),
+}
+"""The forms of the drug in the mass balance test: changes of the drug, the
+processes of the liver and the number of zones."""
+
+_TISSUE = {
+    "full_kinetic": (Part.INTERSTITIAL, Part.INTRACELLULAR),
+    "perfusion_bp": (Part.ORGAN,),
+    "merged_bp": (Part.TISSUE,),
+}
+"""The tissue parts of the drug in the liver by form."""
+
+
+@pytest.mark.parametrize("form", list(_BALANCE))
+def test_mass_balance_zonated(tmp_path: Path, form: str) -> None:
     """The zonated liver conserves the amounts.
 
-    The drug with kinetic erythrocytes in the full form (saturable uptake,
-    bile efflux, pericentral CYP3A4 metabolism into the metabolite) and a
-    mechanism-based inhibitor of CYP3A4, with shunt and functional fraction:
-    the amounts of drug and metabolite (body, bile, intestine, feces, urine)
-    stay the dose, and so does the inhibitor. The unbound concentrations of
-    every zone are observers, the one turnover state of CYP3A4 falls, driven
-    by the zones weighted by the profile.
+    The drug with a pericentral CYP3A4 metabolism into the metabolite and a
+    mechanism-based inhibitor of CYP3A4, with shunt and functional fraction,
+    in the forms: the full form (saturable uptake, bile efflux) with kinetic
+    erythrocytes, the flow-limited liver and the merged tissue with
+    erythrocytes in equilibrium (the flows between the zones carry
+    `Q*BP*C`). The amounts of drug and metabolite (body, bile, intestine,
+    feces, urine) stay the dose, and so does the inhibitor. The unbound
+    concentrations of every zone are observers, the one turnover state of
+    CYP3A4 falls, driven by the zones weighted by the profile.
     """
-    drug = dataclasses.replace(
-        simple_drug(), erythrocytes=Erythrocytes("kinetic", kbc=2.0, k_exchange=1.0)
-    )
+    changes, chemistry, n = _BALANCE[form]
+    drug = dataclasses.replace(simple_drug(), **changes)
     inhibitor = Substance(
         sid="inh",
         name="inhibitor",
@@ -579,12 +612,12 @@ def test_mass_balance_zonated(tmp_path: Path) -> None:
             Substance(sid="drg_m", name="metabolite", mr=316.0),
             inhibitor,
         ],
-        chemistry=[_drg2m(), _UPTAKE, _BILE],
+        chemistry=chemistry,
         routes=[Route.iv(S), Route.iv("inh")],
         variants=Variants(
             organs={
                 Organ.LIVER: ZonatedLiver(
-                    n_zones=4, profiles={"CYP3A4": [0.5, 1.0, 1.5, 2.0]}
+                    n_zones=n, profiles={"CYP3A4": [0.5 * (i + 1) for i in range(n)]}
                 )
             }
         ),
@@ -598,15 +631,17 @@ def test_mass_balance_zonated(tmp_path: Path) -> None:
     inh_amount = total_amount(r, "inh") + dose_amount(r, "inh")
     assert inh_amount == pytest.approx(20.0 / r[ids.mr("inh")], rel=1e-7)
     assert total_amount(r, "drg_m") > 0
-    assert r[ids.feces(S)] > 0
+    if _BILE in chemistry:
+        assert r[ids.feces(S)] > 0
+    for upstream in _zones(n)[:-1]:
+        assert r[_liver(ids.sinusoid_reaction(Part.PLASMA, S, upstream))] > 0
     assert r[_liver(ids.enzyme("CYP3A4"))] < 1.0
     model = libsbml.readSBMLFromString(r.getCurrentSBML()).getModel()
     turnover = libsbml.formulaToL3String(
         model.getRateRule(_liver(ids.enzyme("CYP3A4"))).getMath()
     )
-    for z in _zones(4):
+    for z in _zones(n):
         assert _liver(ids.placement_weight("cyp3a4", z)) in turnover
-    for z in _zones(4):
-        for part in (Part.INTERSTITIAL, Part.INTRACELLULAR):
+        for part in _TISSUE[form]:
             assert r[_liver(ids.unbound(part, S, z))] > 0
         assert r[_liver(ids.unbound(Part.TISSUE, "inh", z))] > 0

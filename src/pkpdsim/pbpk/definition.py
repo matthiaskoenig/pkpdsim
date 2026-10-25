@@ -36,6 +36,10 @@ _RESERVED = (
 """The tokens of the id scheme which a substance id must not start with (the
 segment tokens follow `Clumen_`, `Cmu_` and `Asolid_`)."""
 
+_ZONE = re.compile(r"z\d+_")
+"""The zone tokens (`z1_`) of the id scheme, which follow the part in the ids
+of a zonated organ (`Cpl_z1_<s>`); a substance id must not start with one."""
+
 
 def _physiology_ids() -> frozenset[str]:
     """Get all ids of the physiology which a substance id must not take."""
@@ -142,6 +146,11 @@ class PBPKDefinition:
                         f"substance id '{s.sid}' starts with the reserved token "
                         f"'{token}_' of the id scheme"
                     )
+            if zone := _ZONE.match(s.sid):
+                problems.append(
+                    f"substance id '{s.sid}' starts with the reserved zone token "
+                    f"'{zone.group()}' of the id scheme"
+                )
             if s.sid in taken:
                 problems.append(f"substance id '{s.sid}' is an id of the physiology")
             problems += self._check_substance(s)

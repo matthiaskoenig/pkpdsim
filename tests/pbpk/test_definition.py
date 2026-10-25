@@ -83,12 +83,36 @@ def test_substance_id_collides_with_physiology_id(sid: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "sid", ["1abc", "a-b", "a b", "a__b", "pl_x", "bc_x", "free_x", "blood_x", "ve_x"]
+    "sid",
+    [
+        "1abc",
+        "a-b",
+        "a b",
+        "a__b",
+        "pl_x",
+        "bc_x",
+        "free_x",
+        "blood_x",
+        "ve_x",
+        "du_x",
+        "z1_x",
+        "z12_x",
+    ],
 )
 def test_invalid_sid(sid: str) -> None:
-    """Ids which are no SId, contain '__' or take a token of the id scheme."""
+    """Ids which are no SId, contain '__' or take a token of the id scheme.
+
+    The tokens of the parts, pools, observers, lumen segments (`du_`) and the
+    zones of a zonated organ (`z1_`), which precede the substance in an id.
+    """
     with pytest.raises(ValueError, match=sid):
         _definition(substances=[_api(sid=sid)], chemistry=[], routes=[]).validate()
+
+
+@pytest.mark.parametrize("sid", ["z1", "zx_drg", "zinc", "drg_z1"])
+def test_sid_like_zone_token_valid(sid: str) -> None:
+    """Only a zone token followed by `_` at the start of a substance id is reserved."""
+    _definition(substances=[_api(sid=sid)], chemistry=[], routes=[]).validate()
 
 
 def test_unknown_substance_in_chemistry() -> None:

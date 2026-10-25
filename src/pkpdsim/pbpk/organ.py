@@ -382,10 +382,9 @@ class StandardBuilder(OrganBuilder):
                 )
             for part in built_parts(parts):
                 self._species(part, s, parts, zone)
-        if parts.tissue == "organ":
-            self._k_organ(s, parts)
+        k_organ = self._k_organ(s, parts) if parts.tissue == "organ" else None
         last = self._each_zone[-1]
-        cout = self._leaving(s, parts, Part.PLASMA, last)
+        cout = self._leaving(s, Part.PLASMA, last, k_organ)
         out = ids.outflow_conc(s.sid)
         self._rule(
             out,
@@ -400,14 +399,14 @@ class StandardBuilder(OrganBuilder):
             out_bc = ids.outflow_conc_bc(s.sid)
             self._rule(
                 out_bc,
-                self._leaving(s, parts, Part.BLOOD_CELLS, last),
+                self._leaving(s, Part.BLOOD_CELLS, last, k_organ),
                 U.mM,
                 f"outflow blood cell concentration {s.sid} {label(self.organ)} [mM]",
                 "Blood cell concentration of the blood leaving the organ.",
                 port=Port(f"{out_bc}_port", portType=PortType.OUTPUT_PORT),
             )
             self.outputs[out_bc] = ids.organ_outflow_bc(self.organ, s.sid)
-        self._blood_flows(s, parts)
+        self._blood_flows(s, parts, k_organ)
         if parts.blood_cells:
             for zone in self._each_zone:
                 self._blood_cells(s, zone)
@@ -420,16 +419,20 @@ class StandardBuilder(OrganBuilder):
                 self._full(s, fu, zone)
             self._unbound_observers(s, parts, zone)
 
-    def _leaving(self, s: Substance, parts: Parts, part: Part, zone: str | None) -> str:
+    def _leaving(
+        self, s: Substance, part: Part, zone: str | None, k_organ: str | None
+    ) -> str:
         """The concentration of the blood leaving a zone (the organ), plasma or blood cells.
 
         The plasma concentration, of the flow-limited organ `Cor/K_or` (in
-        equilibrium with the plasma leaving it); the blood cell concentration.
+        equilibrium with the plasma leaving it, `k_organ` the id of its organ
+        to plasma coefficient, `None` for an organ with a plasma species); the
+        blood cell concentration.
         """
         if part is Part.BLOOD_CELLS:
             return ids.species(Part.BLOOD_CELLS, s.sid, zone)
-        if parts.tissue == "organ":
-            return f"{ids.species(Part.ORGAN, s.sid, zone)} / {ids.k_organ(s.sid)}"
+        if k_organ is not None:
+            return f"{ids.species(Part.ORGAN, s.sid, zone)} / {k_organ}"
         return ids.species(Part.PLASMA, s.sid, zone)
 
     def _unbound_observers(
@@ -480,7 +483,7 @@ class StandardBuilder(OrganBuilder):
             f"plasma leaving it. {self._functional_text()}".rstrip(),
         )
 
-    def _blood_flows(self, s: Substance, parts: Parts) -> None:
+    def _blood_flows(self, s: Substance, parts: Parts, k_organ: str | None) -> None:
         """The inflow from the pools and the outflow into the pool, plasma and blood cells.
 
         The plasma carries `Q*(1-HCT)*C`, or `Q*BP*C` with erythrocytes in
@@ -489,7 +492,9 @@ class StandardBuilder(OrganBuilder):
         from the arterial and the portal pool directly into the venous pool;
         the liver is perfused by and drains `(1 - f_shunt)*Q`. The zones of a
         zonated organ are perfused in series: the inflow enters the first
-        zone, the flow leaving a zone enters the next, the last one drains.
+        zone, the flow leaving a zone enters the next, the last one drains;
+        `k_organ` is the organ to plasma coefficient of the flow-limited
+        organ (`_leaving`).
         """
         inflows, out_flow = self._flows(s)
         out_pool = outflow(self.organ)
@@ -538,7 +543,7 @@ class StandardBuilder(OrganBuilder):
                     f"{ids.species(local_part, s.sid, upstream)} -> "
                     f"{ids.species(local_part, s.sid, downstream)}",
                     f"{perfused}{self._flow(out_flow)} * {share} * "
-                    f"{self._leaving(s, parts, part, upstream)}",
+                    f"{self._leaving(s, part, upstream, k_organ)}",
                     f"flow {s.sid}{what} from zone {upstream} into zone {downstream}",
                 )
             leaving = (
