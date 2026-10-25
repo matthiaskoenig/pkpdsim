@@ -154,6 +154,7 @@ One id scheme for every model, built by the functions of `pkpdsim.pbpk.ids`, so 
 | `HF_severity` | the severity of heart failure (0, NYHA I to IV 1 to 4) | `ids.HF_SEVERITY` |
 | `f_shunt` | the portosystemic shunt of the liver | `ids.F_SHUNT` |
 | `f_functional` | the functional fraction of the liver tissue | `ids.F_FUNCTIONAL` |
+| `f_tubular` | the share of the tubular capacity of the kidney which follows the renal function (`KI__f_tubular`) | `ids.F_TUBULAR` |
 
 </div>
 

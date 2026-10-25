@@ -30,7 +30,7 @@ Every resource of a collection which identifiers.org registers is written as its
 
 ## Terms requested upstream
 
-PBPKO has no term for some of the quantities, compartments and processes of the library. The library annotates such an element with the nearest PBPKO term which is true for it: the superclass (`PHYSIOLOGICAL_PARAMETER`, `BIOCHEMICAL_PARAMETER`, `MISCELLANEOUS_PARAMETER`, `COMPARTMENT`), never a specific term whose definition contradicts the element (a fraction per body weight for a fraction of the blood volume, a flow rate for a fraction of the GFR). A more specific PBPKO term which the element is a part or a version of is added with `BQB.IS_PART_OF` or `BQB.IS_VERSION_OF` (the mucosa is part of the `INTESTINAL_TISSUE_COMPARTMENT`, the dissolution part of the `ABSORPTION`). The missing terms are requested from PBPKO:
+PBPKO has no term for some of the quantities, compartments and processes of the library. The library annotates such an element with the nearest PBPKO term which is true for it: the superclass (`PHYSIOLOGICAL_PARAMETER`, `BIOCHEMICAL_PARAMETER`, `MISCELLANEOUS_PARAMETER`, `COMPARTMENT`), never a specific term whose definition contradicts the element (a fraction per body weight for a fraction of the blood volume, a flow rate for a fraction of the GFR, a clearance (a volume per time) for a clearance per litre of organ). A more specific PBPKO term which the element is a part or a version of is added with `BQB.IS_PART_OF` or `BQB.IS_VERSION_OF` (the mucosa is part of the `INTESTINAL_TISSUE_COMPARTMENT`, the dissolution part of the `ABSORPTION`). The missing terms are requested from PBPKO:
 
 | missing term | broader term used |
 |---|---|
@@ -48,6 +48,7 @@ PBPKO has no term for some of the quantities, compartments and processes of the 
 | volume fraction of a zone of the liver | `PHYSIOLOGICAL_PARAMETER` |
 | hepatic artery blood flow | `BLOOD_FLOW_RATE_TO_COMPARTMENT` |
 | relative organ function | `PHYSIOLOGICAL_PARAMETER` |
+| share of the tubular capacity which follows the renal function | `PHYSIOLOGICAL_PARAMETER` |
 | portosystemic shunt fraction | `PHYSIOLOGICAL_PARAMETER` |
 | severity of hepatic impairment | `PHYSIOLOGICAL_PARAMETER` |
 | severity of heart failure | `PHYSIOLOGICAL_PARAMETER` |
@@ -65,6 +66,8 @@ PBPKO has no term for some of the quantities, compartments and processes of the 
 | half-maximal effective concentration | `BIOCHEMICAL_PARAMETER` |
 | abundance weight of a protein or process | `MISCELLANEOUS_PARAMETER` |
 | Michaelis constant | `BIOCHEMICAL_PARAMETER` |
+| intrinsic clearance per organ volume | `BIOCHEMICAL_PARAMETER` |
+| transport clearance per organ volume | `BIOCHEMICAL_PARAMETER` |
 | dose | `PARAMETER` |
 | injection time of an intravenous dose | `PARAMETER` |
 | injection rate constant of an intravenous dose | `PARAMETER` |

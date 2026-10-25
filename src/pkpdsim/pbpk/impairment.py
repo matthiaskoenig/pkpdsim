@@ -20,7 +20,12 @@ choice):
   capacity of the plasma proteins (and so fu); the factors are steps at the
   stage limits, a scan or fit of `f_renal_function` across a limit sees a
   discontinuity. The switch `CKD_hepatic` (0 off, 1 on) adds the reduced
-  activity of hepatic CYP2D6 and OATP1B.
+  activity of hepatic CYP2D6 and OATP1B. The tubular capacity of the kidney
+  (every metabolism and transport of the kidney) follows `f_renal_function`
+  continuously, `1 - f_tubular + f_tubular*f_renal_function` with the share
+  `f_tubular` 1 of the intact nephron hypothesis (`[ckd] tubular_capacity`
+  of the data, a model choice; the kidney owns the factor,
+  `pkpdsim.pbpk.organ`).
 - `HF_severity`: heart failure, 0 healthy, 1 to 4 the NYHA classes I to IV,
   interpolated: the blood flows of liver and portal organs, kidney and skin,
   adipose and muscle are reduced, the cardiac output is the sum of the flows,

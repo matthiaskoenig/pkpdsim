@@ -23,6 +23,7 @@ from pkpdsim.pbpk import (
     Excretion,
     FirstOrder,
     Membrane,
+    Metabolism,
     Organ,
     Part,
     PBPKDefinition,
@@ -266,3 +267,141 @@ def test_hepatic_vein_observer(tmp_path: Path) -> None:
         np.testing.assert_allclose(chv, expected, rtol=1e-12, atol=0)
         if f_shunt == 0.0:
             np.testing.assert_allclose(chv, cli, rtol=1e-12, atol=0)
+
+
+# --- per-volume first order kinetics and the tubular capacity ---------------
+
+
+def _kidney_transport(
+    direction: Direction, membrane: Membrane, kinetics: FirstOrder
+) -> Transport:
+    """A transport `KITR` of the drug in the kidney."""
+    return Transport("KITR", Organ.KIDNEY, S, direction, membrane, kinetics)
+
+
+def _process_model(tmp_path: Path, process: Transport | Metabolism) -> Path:
+    """Build the simple drug with one process, given intravenously."""
+    d = definition(sid="process", chemistry=[process], routes=[Route.iv(S)])
+    return build(d, tmp_path).flat_path
+
+
+def _clearance(
+    path: Path, process: str, species: str, coefficient: str, **changes: float
+) -> float:
+    """The clearance (l/min) of a process: its rate over its unbound substrate.
+
+    The model is initialized with the changes (sbmlsim evaluates the initial
+    assignments which read them again, R21), the substrate species is set
+    and the rate read at that state; the unbound concentration is
+    `fu*C/coefficient` with the values of the model (a CKD stage changes fu).
+
+    Args:
+        path: the flat model.
+        process: the flat id of the reaction.
+        species: the flat id of the substrate species.
+        coefficient: the id of its coefficient to plasma (`K_int_pls_<s>`).
+        **changes: the covariates and the impairment.
+    """
+    r = _load(path, **changes)
+    r[f"[{species}]"] = 1e-3
+    unbound = r[ids.fu(S)] * 1e-3 / r[coefficient]
+    return r[process] / unbound
+
+
+def _kidney_influx(path: Path, **changes: float) -> float:
+    """The clearance of the basolateral influx of the kidney."""
+    return _clearance(
+        path,
+        ids.flat(Organ.KIDNEY, "KITR"),
+        ids.flat(Organ.KIDNEY, ids.species(Part.INTERSTITIAL, S)),
+        ids.flat(Organ.KIDNEY, ids.k_int_pls(S)),
+        **changes,
+    )
+
+
+def _kidney_efflux(path: Path, **changes: float) -> float:
+    """The clearance of the apical efflux of the kidney (secretion)."""
+    return _clearance(
+        path,
+        ids.flat(Organ.KIDNEY, "KITR"),
+        ids.flat(Organ.KIDNEY, ids.species(Part.INTRACELLULAR, S)),
+        ids.flat(Organ.KIDNEY, ids.k_cell_pls(S)),
+        **changes,
+    )
+
+
+def _volume(path: Path, organ: Organ, **changes: float) -> float:
+    """The volume of an organ of an individual (l)."""
+    return _load(path, **changes)[ids.organ_volume(organ)]
+
+
+def test_first_order_per_volume_scales_with_the_organ(tmp_path: Path) -> None:
+    """A first order clearance per volume is `k*V<o>`: it follows the organ of the individual."""
+    path = _process_model(
+        tmp_path,
+        _kidney_transport(
+            Direction.INFLUX,
+            Membrane.BASOLATERAL,
+            FirstOrder(k=0.5, per_volume=True),
+        ),
+    )
+    r = _load(path)
+    assert r[ids.flat(Organ.KIDNEY, "KITR_k")] == 0.5
+    doc = libsbml.readSBMLFromFile(str(path))
+    k = doc.getModel().getParameter(ids.flat(Organ.KIDNEY, "KITR_k"))
+    assert k.getUnits().rsplit("__", 1)[-1] == "per_min"  # flat: `KI__per_min`
+    assert _kidney_influx(path) == pytest.approx(
+        0.5 * _volume(path, Organ.KIDNEY), rel=1e-9
+    )
+    ratio = _kidney_influx(path, BW=150.0) / _kidney_influx(path, BW=75.0)
+    expected = _volume(path, Organ.KIDNEY, BW=150.0) / _volume(
+        path, Organ.KIDNEY, BW=75.0
+    )
+    assert expected > 1.1
+    assert ratio == pytest.approx(expected, rel=1e-9)
+
+
+def test_first_order_whole_organ_does_not_scale(tmp_path: Path) -> None:
+    """A first order clearance of the whole organ is `k`, whatever the organ volume."""
+    path = _process_model(
+        tmp_path,
+        _kidney_transport(Direction.INFLUX, Membrane.BASOLATERAL, FirstOrder(k=0.5)),
+    )
+    assert _kidney_influx(path) == pytest.approx(0.5, rel=1e-9)
+    ratio = _kidney_influx(path, BW=150.0) / _kidney_influx(path, BW=75.0)
+    assert ratio == pytest.approx(1.0, rel=1e-9)
+
+
+def test_renal_function_scales_tubular_transport(tmp_path: Path) -> None:
+    """The secretion of the kidney follows the renal function (intact nephron hypothesis).
+
+    With half the renal function (a CKD stage, which changes fu) the
+    clearance of the apical efflux on its unbound substrate halves.
+    """
+    path = _process_model(
+        tmp_path,
+        _kidney_transport(Direction.EFFLUX, Membrane.APICAL, FirstOrder(k=0.5)),
+    )
+    r = _load(path)
+    assert r[ids.flat(Organ.KIDNEY, ids.F_TUBULAR)] == 1.0
+    ratio = _kidney_efflux(path, f_renal_function=0.5) / _kidney_efflux(path)
+    assert ratio == pytest.approx(0.5, rel=1e-9)
+
+
+def test_renal_function_leaves_the_liver(tmp_path: Path) -> None:
+    """The renal function does not change the capacity of the liver."""
+    path = _process_model(
+        tmp_path,
+        Metabolism("DRG2M", Organ.LIVER, S, {}, FirstOrder(k=0.5, per_volume=True)),
+    )
+
+    def liver(**changes: float) -> float:
+        return _clearance(
+            path,
+            ids.flat(Organ.LIVER, "DRG2M"),
+            ids.flat(Organ.LIVER, ids.species(Part.TISSUE, S)),
+            ids.kp(S),
+            **changes,
+        )
+
+    assert liver(f_renal_function=0.5) / liver() == pytest.approx(1.0, rel=1e-9)

@@ -40,7 +40,9 @@ in the standard kidney; an apical transport between the cells and the lumen
 of the proximal tubule, an efflux secretes into it, an influx reabsorbs from
 it on the lumen concentration (the inhibitors of its protein act from the
 lumen of the proximal tubule). A custom reaction states its rate for a part
-of the standard kidney: the nephron kidney refuses it (R34). A substance has
+of the standard kidney: the nephron kidney refuses it (R34). Every
+metabolism and transport runs with the tubular capacity of the standard
+kidney, `1 - f_tubular + f_tubular*f_renal_function`. A substance has
 the species of the tubule when it is filtered, transported apically in the
 kidney or inhibits the protein of an apical influx of the kidney.
 
@@ -358,5 +360,8 @@ class NephronBuilder(StandardBuilder):
         for p in self.processes:
             if p.protein is not None:
                 self._activity(p.protein)
+        capacity = self._tubular_capacity() if self.processes else None
         for p in self.processes:
-            self.reactions += place(p, self.ctx, self.ctx.parts, apical=_APICAL)
+            self.reactions += place(
+                p, self.ctx, self.ctx.parts, capacity, apical=_APICAL
+            )

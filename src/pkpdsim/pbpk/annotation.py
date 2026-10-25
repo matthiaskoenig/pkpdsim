@@ -437,6 +437,11 @@ KINDS: dict[str, Kind] = {
     "gfr": Kind(_P, "GLOMERULAR_FILTRATION_RATE"),
     "egfr": Kind(_P, "GLOMERULAR_FILTRATION_RATE", terms=((BQB.IS, "ncit/C110935"),)),
     "organ_function": Kind(_P, _PHYS, requested="relative organ function"),
+    "tubular_share": Kind(
+        _P,
+        _PHYS,
+        requested="share of the tubular capacity which follows the renal function",
+    ),
     "shunt": Kind(_P, _PHYS, requested="portosystemic shunt fraction"),
     # impairment
     "child_pugh": Kind(
@@ -540,6 +545,20 @@ KINDS: dict[str, Kind] = {
     "k_metabolism": Kind(SBO.KINETIC_CONSTANT, "INTRINSIC_CLEARANCE_RATE"),
     "k_influx": Kind(SBO.KINETIC_CONSTANT, "CLEARANCE_RATE"),
     "k_efflux": Kind(SBO.KINETIC_CONSTANT, "CLEARANCE_RATE"),
+    # a clearance per litre of organ (1/min) is no clearance (a volume per
+    # time) nor a rate constant of an amount: the broader term (R49)
+    "k_metabolism_volume": Kind(
+        SBO.KINETIC_CONSTANT,
+        _BIOCHEM,
+        terms=((BQB.IS_VERSION_OF, pbpko("INTRINSIC_CLEARANCE_RATE")),),
+        requested="intrinsic clearance per organ volume",
+    ),
+    "k_transport_volume": Kind(
+        SBO.KINETIC_CONSTANT,
+        _BIOCHEM,
+        terms=((BQB.IS_VERSION_OF, pbpko("CLEARANCE_RATE")),),
+        requested="transport clearance per organ volume",
+    ),
     "custom_parameter": Kind(None, _MISC),
     "custom_species": Kind(None, "CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT"),
     "custom_amount": Kind(None, "AMOUNT_OF_COMPOUND_IN_COMPARTMENT"),

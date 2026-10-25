@@ -131,7 +131,7 @@ The kidney filters the unbound plasma concentration of a substance with urinary 
 J_gfr_<s>: Cpl_<s> -> Aurine_<s> = fu_<s> * GFR * Cpl_<s> * (1 - f_reabsorbed_<s>)
 ```
 
-Tubular secretion is an apical efflux of the kidney into the urine (see [Chemistry](chemistry.md)); the standard kidney refuses an uptake from the urine, which is cumulative. The [nephron kidney](variants.md#nephron-kidney) has the tubule with its segments, for secretion into and reabsorption from the tubular fluid.
+Tubular secretion is an apical efflux of the kidney into the urine (see [Chemistry](chemistry.md)); the standard kidney refuses an uptake from the urine, which is cumulative. Every metabolism and transport of the kidney runs with the tubular capacity `1 - f_tubular + f_tubular*f_renal_function`, which follows the renal function (the intact nephron hypothesis, see [Impairment](impairment.md#chronic-kidney-disease)). The [nephron kidney](variants.md#nephron-kidney) has the tubule with its segments, for secretion into and reabsorption from the tubular fluid.
 
 ## Boundary
 

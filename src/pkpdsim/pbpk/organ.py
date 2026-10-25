@@ -28,7 +28,10 @@ and portal inflow which flows past it into the venous pool, and a functional
 fraction `f_functional` of its tissue, which scales the tissue volumes and
 the capacity of its processes (both inputs of the top model, healthy 0 and 1).
 The kidney filters the unbound plasma concentration of a substance with
-urinary excretion into the urine, `fu*GFR*Cpl*(1 - f_reabsorbed)`.
+urinary excretion into the urine, `fu*GFR*Cpl*(1 - f_reabsorbed)`; its
+metabolism and transport (the tubular processes) run with the tubular
+capacity `1 - f_tubular + f_tubular*f_renal_function`, which follows the
+renal function (the intact nephron hypothesis, `f_tubular` 1).
 
 The volumes of the parts, the coefficients and the exchanges depend on
 parameters only and are constants with initial assignments (they follow a
@@ -60,6 +63,7 @@ from pkpdsim.pbpk.chemistry import (
     Metabolism,
     Transport,
 )
+from pkpdsim.pbpk.data import value
 from pkpdsim.pbpk.organ_builder import (
     CAPACITY,
     COMPARTMENT_KINDS,
@@ -197,6 +201,10 @@ class StandardOrgan:
         return StandardBuilder(ctx, self.name).build()
 
 
+_IMPAIRMENT = "impairment"
+"""The data file of the impairment, which holds the tubular capacity."""
+
+
 _FTISSUE = (
     "ftissue multiplies `fu*(Cpl - Cti/Kp)` (the unbound plasma concentration "
     "and the tissue concentration as plasma equivalent), so its fitted values "
@@ -306,6 +314,52 @@ class StandardBuilder(OrganBuilder):
             "functional liver fraction",
             "The functional fraction of the liver tissue.",
         )
+
+    def _process_capacity(self) -> str | None:
+        """The factor of the capacity of every metabolism and transport of the organ.
+
+        The functional fraction `f_functional` in the liver (`_capacity`),
+        the tubular capacity in the kidney (`_tubular_capacity`), none
+        elsewhere.
+
+        Returns:
+            The factor (formula), `None` for none.
+        """
+        if self.organ is Organ.KIDNEY:
+            return self._tubular_capacity()
+        return self._capacity()
+
+    def _tubular_capacity(self) -> str:
+        """The capacity of the tubular processes: `1 - f_tubular + f_tubular*f_renal_function`.
+
+        Every metabolism and transport of the kidney runs with the share
+        `f_tubular` of its capacity which follows the renal function, the
+        intact nephron hypothesis (a model choice of `data/impairment.toml`,
+        `[ckd] tubular_capacity`): with the share 1 a tubular secretion falls
+        with the GFR, as the secretion of a fraction of the GFR of the
+        hand-written models did. The filtration `fu*GFR` follows the GFR
+        itself.
+
+        Returns:
+            The factor (formula).
+        """
+        f = self._input(
+            ids.F_RENAL_FUNCTION,
+            U.dimensionless,
+            "renal function",
+            "The GFR relative to the normal GFR of the individual.",
+        )
+        share = self._constant(
+            ids.F_TUBULAR,
+            value(_IMPAIRMENT, "ckd", "tubular_capacity"),
+            U.dimensionless,
+            "share of the tubular capacity which follows the renal function",
+            "The capacity of every metabolism and transport of the kidney is "
+            f"`1 - {ids.F_TUBULAR} + {ids.F_TUBULAR}*{ids.F_RENAL_FUNCTION}` of "
+            "the healthy kidney.",
+            kind="tubular_share",
+        )
+        return f"({ONE} - {share} + {share} * {f})"
 
     def _functional(self, tissue: str) -> str:
         """A quantity of the tissue of the organ, of the liver its functional share."""
@@ -835,7 +889,11 @@ class StandardBuilder(OrganBuilder):
                     copy.copy(sp),
                     "custom_amount" if sp.hasOnlySubstanceUnits else "custom_species",
                 )
-        capacity = self._capacity()
+        capacity = (
+            self._process_capacity()
+            if any(not isinstance(p, CustomReaction) for p in processes)
+            else None
+        )
         for p in processes:
             self.reactions += place(p, self.ctx, self.ctx.parts, capacity)
 

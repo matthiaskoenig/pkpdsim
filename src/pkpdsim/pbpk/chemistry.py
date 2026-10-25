@@ -23,13 +23,19 @@ __all__ = [
 
 @dataclass(frozen=True)
 class FirstOrder:
-    """First order kinetics.
+    """First order kinetics on the unbound concentration.
 
     Attributes:
-        k: the clearance of the whole organ (l/min).
+        k: the clearance of the whole organ (l/min), with `per_volume` the
+            clearance per litre of organ (1/min).
+        per_volume: `k` is per litre of organ, so the whole organ has the
+            clearance `k * V<o>` and follows the organ of the individual, as a
+            Vmax does; `False` keeps the clearance of the whole organ, which
+            does not scale with the organ volume.
     """
 
     k: Q
+    per_volume: bool = False
 
 
 @dataclass(frozen=True)

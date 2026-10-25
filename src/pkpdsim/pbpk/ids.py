@@ -28,6 +28,7 @@ __all__ = [
     "F_MUCOSA_VOLUME",
     "F_RENAL_FUNCTION",
     "F_SHUNT",
+    "F_TUBULAR",
     "F_ZONE",
     "GFR",
     "GUT",
@@ -214,6 +215,8 @@ F_SHUNT = "f_shunt"
 """The portosystemic shunt: the fraction of the liver inflow which bypasses the liver."""
 F_FUNCTIONAL = "f_functional"
 """The functional fraction of the liver tissue."""
+F_TUBULAR = "f_tubular"
+"""The share of the tubular capacity of the kidney which follows the renal function."""
 CP_SEVERITY = "CP_severity"
 """The severity of liver cirrhosis: 0 healthy, 1, 2, 3 the Child-Pugh classes A, B, C."""
 HF_SEVERITY = "HF_severity"

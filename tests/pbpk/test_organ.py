@@ -558,6 +558,54 @@ def test_metabolism_kinetics() -> None:
     )
 
 
+def test_first_order_per_volume() -> None:
+    """A first order clearance per litre of organ: the rate `k*V<o>*Cu`, `k` in 1/min."""
+    first = _metabolism(
+        sid="E1",
+        products={},
+        kinetics=FirstOrder(k=0.5, per_volume=True),
+        protein=None,
+    )
+    whole = _metabolism(sid="E2", products={}, kinetics=FirstOrder(k=0.5), protein=None)
+    md, _ = _build(chemistry=[first, whole])
+    assert _formula(_reaction(md, "E1")) == (
+        "f_functional * E1_k * Vli * fu_drg / Kp_drg * Cti_drg"
+    )
+    pars = _parameters(md)
+    assert pars["E1_k"].unit is U.per_min
+    assert pars["E2_k"].unit is U.l_per_min
+    assert "per litre of organ" in str(pars["E1_k"].notes)
+
+
+def test_kidney_processes_follow_the_renal_function() -> None:
+    """Every metabolism and transport of the kidney runs with the tubular capacity.
+
+    `1 - f_tubular + f_tubular*f_renal_function`, the share `f_tubular` 1 of
+    the intact nephron hypothesis with its provenance (a model choice); the
+    renal function is an input of the body. A kidney without processes reads
+    no renal function.
+    """
+    elimination = _metabolism(
+        Organ.KIDNEY, products={}, kinetics=FirstOrder(k=0.5), protein=None
+    )
+    secretion = _transport(Direction.EFFLUX, Membrane.APICAL, Organ.KIDNEY)
+    md, boundary = _build(Organ.KIDNEY, chemistry=[elimination, secretion])
+    capacity = "(1 dimensionless - f_tubular + f_tubular * f_renal_function)"
+    # the transport gives the drug the full form: the metabolism acts in the cell
+    assert _formula(_reaction(md, "DRG2M")) == (
+        f"{capacity} * DRG2M_k * fu_drg / K_cell_pls_drg * Cic_drg"
+    )
+    assert _formula(_reaction(md, "DRGT")).startswith(f"f_oatp1b1 * {capacity} * ")
+    assert boundary.replacements["f_renal_function"] == "f_renal_function"
+    share = _parameters(md)["f_tubular"]
+    assert share.value == 1.0
+    assert "intact nephron hypothesis (Bricker 1960), not verified" in str(share.notes)
+    assert "Choice of the pkpdsim PBPK library" in str(share.notes)
+    md, boundary = _build(Organ.KIDNEY)
+    assert "f_renal_function" not in boundary.replacements
+    assert "f_tubular" not in _parameters(md)
+
+
 def test_basolateral_transport() -> None:
     """Basolateral influx from the interstitium, efflux into it."""
     influx = _transport()

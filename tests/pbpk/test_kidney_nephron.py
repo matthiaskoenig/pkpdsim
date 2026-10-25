@@ -350,6 +350,26 @@ def test_secretion_increases_clearance(tmp_path: Path) -> None:
     )
 
 
+def test_nephron_kidney_scales_secretion(tmp_path: Path) -> None:
+    """The secretion of the nephron kidney follows the renal function, as in the standard kidney.
+
+    With half the renal function (a CKD stage, which changes fu) the
+    clearance of the apical efflux on its unbound substrate in the cells
+    halves (the tubular capacity, the intact nephron hypothesis).
+    """
+    drug = _renal_drug(distribution=_KIDNEY_TISSUE)
+    path = _model(tmp_path, "renal", "nephron", [drug], chemistry=[_secretion()])
+
+    def clearance(**changes: float) -> float:
+        r = _load(path, **changes)
+        r[f"[{_kidney(ids.species(Part.INTRACELLULAR, S))}]"] = 1e-3
+        unbound = r[ids.fu(S)] * 1e-3 / r[_kidney(ids.k_cell_pls(S))]
+        return r[_kidney("DRGSEC")] / unbound
+
+    assert clearance() == pytest.approx(0.5, rel=1e-9)
+    assert clearance(f_renal_function=0.5) / clearance() == pytest.approx(0.5, rel=1e-9)
+
+
 def test_tubular_reabsorption_decreases_clearance(tmp_path: Path) -> None:
     """An apical influx from the proximal tubule reabsorbs a share of the filtrate.
 

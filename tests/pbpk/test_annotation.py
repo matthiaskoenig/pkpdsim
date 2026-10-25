@@ -122,7 +122,9 @@ def _variants() -> PBPKDefinition:
                 Hill(1e-3, 0.01, 2.0),
                 "CYP2C9",
             ),
-            Metabolism("INHX", Organ.LIVER, "inh", {}, FirstOrder(0.01)),
+            Metabolism(
+                "INHX", Organ.LIVER, "inh", {}, FirstOrder(0.01, per_volume=True)
+            ),
             Transport(
                 "DRGUP",
                 Organ.LIVER,
@@ -227,7 +229,7 @@ def _standard() -> PBPKDefinition:
                 "sec",
                 Direction.INFLUX,
                 Membrane.BASOLATERAL,
-                FirstOrder(0.1),
+                FirstOrder(0.1, per_volume=True),
             ),
             CustomReaction(
                 sid="SECBIND",
@@ -421,3 +423,36 @@ def test_compartment_terms_resolved() -> None:
         assert compartments[key], key
     for organ, place in ORGANS.items():
         assert any(r.startswith("uberon/") for _, r in place.terms), organ
+
+
+def test_clearance_per_volume_is_no_clearance(built: BuildResult) -> None:
+    """A first order clearance per litre of organ is not asserted as a clearance (R49).
+
+    It is a kinetic constant and a `BIOCHEMICAL_PARAMETER` which is a version
+    of the (intrinsic) clearance; the tubular share is a physiological
+    parameter.
+    """
+    doc = libsbml.readSBMLFromFile(str(built.flat_path))
+    model = doc.getModel()
+    pid, version = (
+        ("LI__INHX_k", "INTRINSIC_CLEARANCE_RATE")
+        if model.getParameter("LI__INHX_k") is not None
+        else ("KI__SECUP_k", "CLEARANCE_RATE")
+    )
+    k = model.getParameter(pid)
+    assert k.getSBOTermID() == "SBO:0000009"  # kinetic constant
+    terms = {
+        (k.getCVTerm(i).getBiologicalQualifierType(), url)
+        for i in range(k.getNumCVTerms())
+        for url in _resources_of(k.getCVTerm(i))
+    }
+    assert (libsbml.BQB_IS, pbpko("BIOCHEMICAL_PARAMETER")) in terms
+    assert (libsbml.BQB_IS_VERSION_OF, pbpko(version)) in terms
+    assert (libsbml.BQB_IS, pbpko(version)) not in terms
+    share = model.getParameter("KI__f_tubular")
+    assert pbpko("PHYSIOLOGICAL_PARAMETER") in _resources(share)
+
+
+def _resources_of(term: libsbml.CVTerm) -> list[str]:
+    """The resources of one CV term."""
+    return [term.getResourceURI(j) for j in range(term.getNumResources())]

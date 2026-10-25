@@ -64,7 +64,10 @@
 # doi:10.3389/fphar.2023.1200828), which tabulates it for the stages 3 to 5
 # from Malik 2020. The hepatic proteins (switch `CKD_hepatic`) are the mean
 # ratios of the unbound clearance of model drugs (Yoshida 2016, Tan 2018),
-# clearances of the drugs, taken as activity of the pathway.
+# clearances of the drugs, taken as activity of the pathway. The tubular
+# capacity (`tubular_capacity`, a number, not a vector of the stages) is the
+# share of the capacity of the processes of the kidney which follows the renal
+# function continuously (the intact nephron hypothesis), a model choice.
 #
 # [heart_failure]: the NYHA classes I to IV (`HF_severity` 1 to 4, 0 healthy).
 # The flows of the organs are multiplied, the cardiac output is their sum
@@ -109,6 +112,7 @@ kidney_volume = { value = [1.0, 1.0, 1.0, 1.0], unit = "dimensionless", source =
 kidney_flow = { value = [1.0, 1.0, 1.0, 1.0], unit = "dimensionless", source = "ModelChoice", notes = "renal blood flow relative to healthy: 1; Alasmari 2023 (Table 3) tabulate a renal perfusion of 176, 97 and 75.35 ml/min/100 g for the stages 3 to 5 (from Malik 2020, not read) without the healthy perfusion of the population, so no relative factor can be derived" }
 gastric_emptying_time = { value = [1.0, 1.0, 1.0, 1.0], unit = "dimensionless", source = "ModelChoice", notes = "gastric emptying time relative to healthy: 1; Malik 2020 (not read) describe a delayed gastric emptying in CKD, no open publication read gives its factor" }
 si_transit_time = { value = [1.0, 1.0, 1.0, 1.0], unit = "dimensionless", source = "ModelChoice", notes = "small intestinal transit time relative to healthy: 1; Malik 2020 (not read) describe a slower small intestinal transit in CKD, no open publication read gives its factor" }
+tubular_capacity = { value = 1.0, unit = "dimensionless", source = "ModelChoice", notes = "the share `f_tubular` of the capacity of the tubular processes (every metabolism and transport of the kidney) which follows the renal function, the capacity is `1 - f_tubular + f_tubular*f_renal_function` of healthy: 1, the capacity falls in proportion to the GFR, the intact nephron hypothesis (Bricker 1960), not verified: the nephrons which remain in a diseased kidney work normally, so the tubular secretion falls with the number of nephrons as the GFR does, as the hand-written models scaled it (a secretion of a fraction of the GFR); the filtration `fu*GFR` follows the GFR itself; not a stage factor, a continuous factor of `f_renal_function`" }
 
 [ckd.proteins]
 CYP2D6 = { value = [1.0, 0.53, 0.41, 0.50], choice = ["mild"], unit = "dimensionless", source = "Yoshida2016", notes = "mean ratio of the unbound clearance of CYP2D6 model drugs of moderate, severe and end stage CKD (off dialysis) to the control (Results); mild CKD 1.16, no reduction, is taken as 1 (model choice)" }

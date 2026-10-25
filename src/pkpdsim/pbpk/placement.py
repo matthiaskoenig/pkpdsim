@@ -10,12 +10,17 @@ cumulative urine), a custom reaction in the part it names.
 
 Every rate acts on the unbound concentration of its part and is an amount per
 time: the Vmax of a process is per litre of organ, so the whole organ has the
-capacity `Vmax * V<o>`, and the activity `f_<protein>` of its protein
-multiplies it (times the turnover state `E_<protein>` when a substance of the
-definition inactivates or induces the protein). The organ may give a
-functional fraction (`f_functional` of the liver), which multiplies the rate
-of every metabolism and transport as well, the share of the capacity in the
-functional tissue; a custom reaction states its rate itself and is not scaled.
+capacity `Vmax * V<o>`; the clearance `k` of a first order process is that of
+the whole organ (l/min), or per litre of organ (`FirstOrder.per_volume`,
+1/min), so the whole organ has `k * V<o>` as with a Vmax. The activity
+`f_<protein>` of its protein multiplies the rate (times the turnover state
+`E_<protein>` when a substance of the definition inactivates or induces the
+protein). The organ may give a factor of its capacity, which multiplies the
+rate of every metabolism and transport as well: the functional fraction
+`f_functional` of the liver, the share of the capacity in the functional
+tissue, and the tubular capacity of the kidney, which follows the renal
+function `f_renal_function` (the intact nephron hypothesis); a custom
+reaction states its rate itself and is not scaled.
 
 The reversible inhibitors of the protein enter the rate of every process of
 the protein with their unbound concentration `I` in the compartment from
@@ -31,7 +36,7 @@ rate laws of mutually exclusive inhibitors (Segel 1975) are
 ```
 MM           Vmax*V*C / (Km*(1 + c) + C*(1 + u))
 Hill         Vmax*V/(1 + u) * x^n / (1 + x^n),  x = C/(Km*(1 + c)/(1 + u))
-first order  k*C / (1 + c)
+first order  k*C / (1 + c), per volume k*V*C / (1 + c)
 ```
 
 i.e. `Vmax_app = Vmax/(1 + u)` and `Km_app = Km*(1 + c)/(1 + u)`; the first
@@ -587,7 +592,8 @@ def place(
         capacity: the factor (formula) of the capacity of the organ which
             multiplies the rate of a metabolism or a transport: the
             functional fraction (`f_functional` of the liver), in a zone times
-            the share of the zone; `None` for none. A custom reaction states
+            the share of the zone, the tubular capacity of the kidney (with
+            `f_renal_function`); `None` for none. A custom reaction states
             its rate itself and is not scaled.
         zone: the zone of a zonated organ in which the process is placed,
             `None` for the organ.
@@ -639,9 +645,11 @@ def rate_law(
 ) -> tuple[str, list[Parameter]]:
     """Get the rate law of a process on the unbound concentration `cu`.
 
-    The activity of the protein (with its turnover state) and the functional
-    fraction `capacity` multiply it; the inhibitors of the protein enter as
-    the competitive and uncompetitive sums (module docstring).
+    The activity of the protein (with its turnover state) and the factor of
+    the capacity of the organ `capacity` multiply it; the inhibitors of the
+    protein enter as the competitive and uncompetitive sums (module
+    docstring). A first order clearance per volume is multiplied by the
+    organ volume, as a Vmax.
 
     Args:
         process: the metabolism or transport.
@@ -662,18 +670,29 @@ def rate_law(
     v = ids.organ_volume(ctx.organ)
     if isinstance(k, FirstOrder):
         p_k = f"{pid}_k"
-        rate = f"{factor}{p_k} * {cu}" + (f" / {c}" if c else "")
+        if k.per_volume:
+            rate = f"{factor}{p_k} * {v} * {cu}"
+            unit, name, text, kind = (
+                U.per_min,
+                f"clearance per volume {pid} [1/min]",
+                "Clearance per litre of organ on the unbound concentration; the "
+                f"organ has `{p_k} * {v}`.",
+                kinds["k_volume"],
+            )
+        else:
+            rate = f"{factor}{p_k} * {cu}"
+            unit, name, text, kind = (
+                U.l_per_min,
+                f"clearance {pid} [l/min]",
+                "Clearance of the whole organ on the unbound concentration.",
+                kinds["k"],
+            )
+        if c:
+            rate += f" / {c}"
         return rate, [
             annotate(
-                value_parameter(
-                    p_k,
-                    k.k,
-                    U.l_per_min,
-                    f"clearance {pid} [l/min]",
-                    SBO.KINETIC_CONSTANT,
-                    "Clearance of the whole organ on the unbound concentration.",
-                ),
-                kinds["k"],
+                value_parameter(p_k, k.k, unit, name, SBO.KINETIC_CONSTANT, text),
+                kind,
                 organ=ctx.organ,
                 protein=process.protein,
             )
@@ -739,10 +758,16 @@ def rate_law(
 def _parameter_kinds(process: Metabolism | Transport) -> dict[str, str]:
     """The kinds (`pkpdsim.pbpk.annotation`) of the parameters of a process."""
     if isinstance(process, Metabolism):
-        return {"k": "k_metabolism", "vmax": "vmax", "km": "km"}
+        return {
+            "k": "k_metabolism",
+            "k_volume": "k_metabolism_volume",
+            "vmax": "vmax",
+            "km": "km",
+        }
     side = "basolateral" if process.membrane is Membrane.BASOLATERAL else "apical"
     return {
         "k": "k_influx" if process.direction is Direction.INFLUX else "k_efflux",
+        "k_volume": "k_transport_volume",
         "vmax": f"vmax_{side}",
         "km": f"km_{side}",
     }

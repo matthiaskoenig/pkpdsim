@@ -29,8 +29,15 @@ chemistry = [
         kinetics=MM(vmax=1e-3, km=0.01),
         protein="CYP3A4",
     ),
-    # liver: elimination of prf by CYP2C9, first order (no products)
-    Metabolism("PRFEL", Organ.LIVER, "prf", {}, FirstOrder(k=0.5), protein="CYP2C9"),
+    # liver: elimination of prf by CYP2C9, first order per litre of liver
+    Metabolism(
+        "PRFEL",
+        Organ.LIVER,
+        "prf",
+        {},
+        FirstOrder(k=0.2, per_volume=True),
+        protein="CYP2C9",
+    ),
     # kidney: elimination of hil with Hill kinetics, no protein
     Metabolism("HILEL", Organ.KIDNEY, "hil", {}, Hill(vmax=1e-3, km=0.01, n=2.0)),
     # liver: elimination of inh by the CYP2D6 it inactivates and induces
@@ -87,14 +94,14 @@ The organs of the chemistry are those of `Organ`; the chemistry of the intestine
 
 ## Kinetics
 
-Every rate acts on the unbound concentration of its part and is an amount per time. The Vmax of a process is per litre of organ, so the whole organ has the capacity `Vmax*V<o>` and follows the organ of the individual; the clearance `k` of a first order process is that of the whole organ (l/min) and does not scale with the organ volume (a known gap, see [Migration](migration.md#known-gaps)). The activity `f_<protein>` of the protein multiplies the rate, and in the liver the impairment factor `fimp_<protein>` and the functional fraction `f_functional` multiply it as well. A custom reaction states its rate itself and is not scaled.
+Every rate acts on the unbound concentration of its part and is an amount per time. The Vmax of a process is per litre of organ, so the whole organ has the capacity `Vmax*V<o>` and follows the organ of the individual. The clearance `k` of a first order process is that of the whole organ (l/min, `FirstOrder(k)`), which does not scale with the organ volume, or per litre of organ (1/min, `FirstOrder(k, per_volume=True)`), so that the whole organ has `k*V<o>` and follows the organ of the individual as a Vmax does (the first order constants of the hand-written models, `k*V<o>`, are per volume). The activity `f_<protein>` of the protein multiplies the rate, and in the liver the impairment factor `fimp_<protein>` and the functional fraction `f_functional` multiply it as well. In the kidney every metabolism and transport runs with the tubular capacity `1 - f_tubular + f_tubular*f_renal_function`, which follows the renal function: the share `f_tubular` is 1, the intact nephron hypothesis (Bricker 1960, a choice of the library), so a tubular secretion falls with the GFR as the secretion of a fraction of the GFR of the hand-written models did; the filtration `fu*GFR` follows the GFR itself (see [Impairment](impairment.md#chronic-kidney-disease)). A custom reaction states its rate itself and is not scaled.
 
 ```equations title="Michaelis-Menten, liver"
 DRG2M: Cti_drg -> Cpl_drg_m = f_cyp3a4 * fimp_cyp3a4 * f_functional * DRG2M_Vmax * Vli * (fu_drg / Kp_drg * Cti_drg) / (DRG2M_Km + fu_drg / Kp_drg * Cti_drg)
 ```
 
-```equations title="Hill, kidney (no protein)"
-HILEL: Cti_hil -> = HILEL_Vmax * Vki * (fu_hil / Kp_hil * Cti_hil / HILEL_Km)^HILEL_n / (1 + (fu_hil / Kp_hil * Cti_hil / HILEL_Km)^HILEL_n)
+```equations title="Hill, kidney (no protein, the tubular capacity)"
+HILEL: Cti_hil -> = (1 - f_tubular + f_tubular * f_renal_function) * HILEL_Vmax * Vki * (fu_hil / Kp_hil * Cti_hil / HILEL_Km)^HILEL_n / (1 + (fu_hil / Kp_hil * Cti_hil / HILEL_Km)^HILEL_n)
 ```
 
 ```equations title="transport, liver (full form of prm)"
@@ -102,7 +109,7 @@ PRMIN: Cis_prm -> Cic_prm = f_slco1b1 * fimp_slco1b1 * f_functional * PRMIN_Vmax
 PRMBIL: Cic_prm -> Cbile_prm = f_abcc2 * fimp_abcc2 * f_functional * PRMBIL_k * fu_prm / K_cell_pls_prm * Cic_prm
 ```
 
-The parameters of a process are constants of its organ with the process id as prefix (`DRG2M_Vmax`, `DRG2M_Km`, `PRFEL_k`, `HILEL_n`), so a fit of a Vmax uses the flat id `LI__DRG2M_Vmax`, as the hand-written models do.
+The parameters of a process are constants of its organ with the process id as prefix (`DRG2M_Vmax`, `DRG2M_Km`, `PRFEL_k`, `HILEL_n`), so a fit of a Vmax uses the flat id `LI__DRG2M_Vmax`, as the hand-written models do. The tubular share is the constant `f_tubular` of the kidney (`KI__f_tubular`), with its provenance in the notes; an experiment may set it to test another hypothesis.
 
 ## Proteins
 
@@ -148,10 +155,10 @@ Degradation rate `kdeg_<protein>` of the turnover state (1/hr): li 0.0193, si 0.
 
 An inhibition or an induction is declared on the inhibitor (`Substance.inhibits`, `Substance.induces`), and acts on every process of the protein in every organ, with the unbound concentration of the inhibitor in the compartment from which the process takes its substrate (the part of the substrate of a metabolism, the interstitium of a basolateral influx, the cell of an efflux): `Inhibition(protein, kind, ki, kiu, kinact)` with the kinds `competitive`, `noncompetitive`, `uncompetitive`, `mixed` and `mechanism` (mechanism-based), and `Induction(protein, emax, ec50)`. The constants are parameters of the top model, `Ki_<protein>_<s>`, `Kiu_<protein>_<s>`, `kinact_<protein>_<s>`, `Emax_<protein>_<s>`, `EC50_<protein>_<s>`. A substance inhibits a protein once and induces it once.
 
-The rate laws of mutually exclusive inhibitors (Segel 1975), with the competitive sum `c = sum I/Ki` (competitive, mixed with its competitive constant, noncompetitive, and mechanism-based with `Ki = KI`) and the uncompetitive sum `u = sum I/Kiu` (uncompetitive, mixed, noncompetitive), are `Vmax*V*C/(Km*(1 + c) + C*(1 + u))` for Michaelis-Menten, the Hill law with `Vmax_app = Vmax/(1 + u)` and `Km_app = Km*(1 + c)/(1 + u)`, and `k*C/(1 + c)` for first order (the limit `C << Km`, which an uncompetitive inhibitor does not change). The competitive inhibition of CYP2C9 by `drg`:
+The rate laws of mutually exclusive inhibitors (Segel 1975), with the competitive sum `c = sum I/Ki` (competitive, mixed with its competitive constant, noncompetitive, and mechanism-based with `Ki = KI`) and the uncompetitive sum `u = sum I/Kiu` (uncompetitive, mixed, noncompetitive), are `Vmax*V*C/(Km*(1 + c) + C*(1 + u))` for Michaelis-Menten, the Hill law with `Vmax_app = Vmax/(1 + u)` and `Km_app = Km*(1 + c)/(1 + u)`, and `k*C/(1 + c)` for first order (`k*V*C/(1 + c)` per volume; the limit `C << Km`, which an uncompetitive inhibitor does not change). The competitive inhibition of CYP2C9 by `drg`:
 
-```equations title="competitive inhibition of a first order process"
-PRFEL: Cor_prf -> = f_cyp2c9 * fimp_cyp2c9 * f_functional * PRFEL_k * fu_prf / K_or_prf * Cor_prf / (1 + fu_drg / Kp_drg * Cti_drg / Ki_cyp2c9_drg)
+```equations title="competitive inhibition of a first order process (per volume)"
+PRFEL: Cor_prf -> = f_cyp2c9 * fimp_cyp2c9 * f_functional * PRFEL_k * Vli * fu_prf / K_or_prf * Cor_prf / (1 + fu_drg / Kp_drg * Cti_drg / Ki_cyp2c9_drg)
 ```
 
 A mechanism-based inhibition or an induction gives the organ the turnover state `E_<protein>`, the amount of the protein relative to its baseline (initially 1), which multiplies the rates of the protein (Mayhew 2000, Almond 2009, Fahmi 2008); the degradation rate `kdeg_<protein>` is that of hepatic CYP3A4 (Rowland Yeo 2011) in every organ but the intestine (Greenblatt 2003), a choice of the library for the proteins without their own estimate. `inh` inactivates and induces the CYP2D6 which metabolises it:

@@ -98,6 +98,8 @@ A value marked `*` is a choice of the library, not a value of the source.
 
 `f_renal_function` is the factor of the GFR, as in the hand-written models (`KI__f_renal_function` there, `f_renal_function` of the top model here). Its GFR per 1.73 m2 of the reference individual of the build (`eGFR`) gives the stage: normal at least 90, mild 60-89, moderate 30-59, severe 15-29, end stage below 15 ml/min/1.73 m2. The factors are steps at the stage limits: a scan or fit of `f_renal_function` across a limit sees a discontinuity.
 
+The renal function scales the tubular capacity of the kidney as well, continuously and not by stage: every metabolism and transport of the kidney (a tubular secretion, a reabsorption by a transporter, a renal metabolism) runs with `1 - f_tubular + f_tubular*f_renal_function` of its healthy capacity (see [Chemistry](chemistry.md#kinetics)). The share `f_tubular` (a constant of the kidney, `KI__f_tubular`) is 1, the intact nephron hypothesis (Bricker 1960): the nephrons which remain in a diseased kidney work normally, so the tubular capacity falls with their number as the GFR does, as the secretion of a fraction of the GFR of the hand-written models did. The value is a choice of the library, the publication is not verified; the filtration `fu*GFR` follows the GFR itself.
+
 ```equations title="the stage and the binding capacity (male build)"
 eGFR = 0.114467156025102 l_per_min * f_renal_function
 fckd_plasma_protein = piecewise(1, eGFR >= 0.09 l_per_min, 1, eGFR >= 0.06 l_per_min, 1.45, eGFR >= 0.03 l_per_min, 2.2, eGFR >= 0.015 l_per_min, 2.5)
@@ -118,6 +120,8 @@ Stage limits of the GFR per 1.73 m2 (ml/min/1.73 m2): 90, 60, 30, 15 (`Yoshida20
 | `si_transit_time` | 1 | 1 | 1 | 1 | `ModelChoice` |
 
 A value marked `*` is a choice of the library, not a value of the source.
+
+Share of the tubular capacity which follows the renal function (`f_tubular`, not per stage): 1 (`ModelChoice`).
 
 ??? note "Sources"
 
@@ -178,3 +182,4 @@ The experiments of a model built on the library map the classes of a study onto 
 - The kidney volume and blood flow and the gastric emptying and small intestinal transit of CKD are factor 1: the constants which reach a PBPK library only through the code of PK-Sim (GPL) are not shipped, and Malik 2020 was not read. A dropped effect is factor 1 with a note in the data file. The CKD physiology is thinner than that of PK-Sim until Malik 2020 is read.
 - The binding factor of CKD acts on the binding capacity, PK-Sim multiplies fu by it: the two differ for weakly bound drugs (at `fu_ref` 0.5 and the factor 1.45 of moderate CKD, fu 0.59 against 0.725).
 - A Kp of a Kp method is a number of the build: a change of fu by an impairment does not recompute it.
+- The tubular capacity follows the renal function in proportion (`f_tubular` 1, the intact nephron hypothesis, Bricker 1960, not verified, a choice of the library); a transporter whose activity falls less or more than the GFR in CKD needs another share or an activity factor of the experiment.

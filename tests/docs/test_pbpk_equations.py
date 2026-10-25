@@ -128,7 +128,12 @@ def standard() -> PBPKDefinition:
                 protein="CYP3A4",
             ),
             Metabolism(
-                "PRFEL", Organ.LIVER, "prf", {}, FirstOrder(k=0.5), protein="CYP2C9"
+                "PRFEL",
+                Organ.LIVER,
+                "prf",
+                {},
+                FirstOrder(k=0.2, per_volume=True),
+                protein="CYP2C9",
             ),
             Metabolism(
                 "HILEL", Organ.KIDNEY, "hil", {}, Hill(vmax=1e-3, km=0.01, n=2.0)
