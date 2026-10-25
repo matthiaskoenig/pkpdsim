@@ -149,6 +149,7 @@ One id scheme for every model, built by the functions of `pkpdsim.pbpk.ids`, so 
 | `HCT` | the hematocrit | `ids.HCT` |
 | `CO` | the cardiac output | `ids.CO` |
 | `GFR` | the glomerular filtration rate | `ids.GFR` |
+| `GFR_base` | the glomerular filtration rate at renal function 1 | `ids.GFR_BASE` |
 | `f_renal_function` | the renal function, the GFR relative to healthy | `ids.F_RENAL_FUNCTION` |
 | `f_cardiac_function` | the cardiac function, a factor on the cardiac output | `ids.F_CARDIAC_FUNCTION` |
 | `CP_severity` | the severity of liver cirrhosis (0, Child-Pugh A 1, B 2, C 3) | `ids.CP_SEVERITY` |

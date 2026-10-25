@@ -457,6 +457,35 @@ def test_dynamic_renal_function(tmp_path: Path, dynamic: bool) -> None:
     assert r[ids.GFR] == pytest.approx(factor * gfr, rel=1e-12)
 
 
+@pytest.mark.parametrize("cp_severity", [0.0, 2.0])
+def test_gfr_base_is_the_gfr_at_full_renal_function(
+    model: BuildResult, cp_severity: float
+) -> None:
+    """`GFR_base` is the GFR at renal function 1, the renal function its factor.
+
+    It does not change with `f_renal_function` (defined without renal
+    function, where the GFR is 0) and carries the other impairments
+    (`fimp_GFR`) and the body surface area.
+    """
+    bases = []
+    for f in (1.0, 0.3, 0.0):
+        r = individual(
+            model.flat_path, f_renal_function=f, CP_severity=cp_severity, BW=100.0
+        )
+        base = r[ids.GFR_BASE]
+        assert r[ids.GFR] == pytest.approx(base * f, rel=1e-12, abs=1e-15)
+        assert base == pytest.approx(
+            r[ids.ref(ids.GFR)]
+            * r[ids.BSA]
+            / r[ids.ref(ids.BSA)]
+            * r[ids.impairment_factor(ids.GFR)],
+            rel=1e-12,
+        )
+        bases.append(base)
+    assert bases == pytest.approx([bases[0]] * 3, rel=1e-12)
+    assert (r[ids.impairment_factor(ids.GFR)] < 1.0) is (cp_severity > 0)
+
+
 def test_dynamic_names_parameters(tmp_path: Path) -> None:
     """A dynamic name must be a parameter of the top model."""
     with pytest.raises(ValueError, match="nope"):

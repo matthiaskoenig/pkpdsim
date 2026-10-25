@@ -31,6 +31,7 @@ __all__ = [
     "F_TUBULAR",
     "F_ZONE",
     "GFR",
+    "GFR_BASE",
     "GUT",
     "GUT_FLOW",
     "GUT_INTERSTITIAL_FRACTION",
@@ -196,6 +197,8 @@ CO_BASE = "CO_base"
 """The cardiac output without impairment, of which the organ flows are fractions."""
 GFR = "GFR"
 """The glomerular filtration rate."""
+GFR_BASE = "GFR_base"
+"""The glomerular filtration rate at renal function 1, of which the renal function is the factor."""
 VBLOOD = "Vblood"
 """The total blood volume."""
 MLEAN = "Mlean"

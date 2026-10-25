@@ -150,8 +150,11 @@ Q<o> = fQ<o> * CO_base * fimp_Q<o>
 Qha = Qli
 Qpo = Qst + Qsi + Qla + Qsp + Qpa
 Qh = Qha + Qpo
-GFR = GFR_ref * BSA / BSA_ref * f_renal_function * fimp_GFR
+GFR_base = GFR_ref * BSA / BSA_ref * fimp_GFR
+GFR = GFR_base * f_renal_function
 ```
+
+`GFR_base` is the GFR of the individual at renal function 1, with the body surface area and the other impairments: a model which needs the GFR of the kidney without chronic kidney disease (a PD model whose effect scales with the filtration relative to it, a measured clearance converted into a renal function) reads it, and it is defined at renal function 0, where the GFR is 0.
 
 The factors `fimp_<id>` are those of the [impairment](impairment.md), 1 for the healthy individual; `f_cardiac_function` and `f_renal_function` are the factors of organ function of the hand-written models, with the same ids. All of these are initial assignments on constant parameters: a covariate changed before the simulation (a change of an experiment) changes every organ, a change during the simulation does not, unless the definition names it in `PBPKDefinition.dynamic`. The kidney mass carries the CKD factor of the kidney volume (`fimp_Mki`, 1 until its source is read, see [Impairment](impairment.md#limitations)).
 

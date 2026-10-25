@@ -162,13 +162,14 @@ def physiology_factors() -> dict[str, str]:
     Returns:
         The factor (formula) by the id of the quantity it multiplies, for
         `pkpdsim.pbpk.physiology.physiology_objects`: the cardiac output (the
-        sum of the impaired flows), the flows, the GFR, the hematocrit and the
+        sum of the impaired flows), the flows, the GFR (at renal function 1,
+        `GFR_base`), the hematocrit and the
         kidney mass.
     """
     co = ids.impairment_factor(ids.CO)
     factors = {
         ids.CO: co,
-        ids.GFR: ids.impairment_factor(ids.GFR),
+        ids.GFR_BASE: ids.impairment_factor(ids.GFR),
         ids.HCT: ids.impairment_factor(ids.HCT),
         ids.organ_mass(Organ.KIDNEY): ids.impairment_factor(
             ids.organ_mass(Organ.KIDNEY)

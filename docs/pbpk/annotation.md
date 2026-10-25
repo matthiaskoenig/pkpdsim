@@ -47,6 +47,7 @@ PBPKO has no term for some of the quantities, compartments and processes of the 
 | interstitial volume fraction of an organ | `PHYSIOLOGICAL_PARAMETER` |
 | volume fraction of a zone of the liver | `PHYSIOLOGICAL_PARAMETER` |
 | hepatic artery blood flow | `BLOOD_FLOW_RATE_TO_COMPARTMENT` |
+| glomerular filtration rate at normal renal function | `PHYSIOLOGICAL_PARAMETER` |
 | relative organ function | `PHYSIOLOGICAL_PARAMETER` |
 | share of the tubular capacity which follows the renal function | `PHYSIOLOGICAL_PARAMETER` |
 | portosystemic shunt fraction | `PHYSIOLOGICAL_PARAMETER` |

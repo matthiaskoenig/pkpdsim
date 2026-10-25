@@ -879,15 +879,26 @@ class _Physiology:
             organ=Organ.LIVER,
         )
         objects += self.initial(
+            ids.GFR_BASE,
+            f"{ids.ref(ids.GFR)} * {ids.BSA} / {ids.ref(ids.BSA)}",
+            U.l_per_min,
+            "glomerular filtration rate at renal function 1 [l/min]",
+            "GFR of the individual at renal function 1: the reference GFR, which "
+            "is roughly proportional to body size (ICRP 89 Section 8.3.1), scaled "
+            "with the body surface area, i.e. the same GFR per 1.73 m2. A model "
+            "which needs the GFR of the kidney without chronic kidney disease "
+            "reads it (defined at renal function 0, where the GFR is 0).",
+            ("ICRP89",),
+            kind="gfr_base",
+            organ=Organ.KIDNEY,
+        )
+        objects += _initial(
             ids.GFR,
-            f"{ids.ref(ids.GFR)} * {ids.BSA} / {ids.ref(ids.BSA)} * "
-            f"{ids.F_RENAL_FUNCTION}",
+            f"{ids.GFR_BASE} * {ids.F_RENAL_FUNCTION}",
             U.l_per_min,
             "glomerular filtration rate [l/min]",
-            "GFR of the individual: the reference GFR, which is roughly "
-            "proportional to body size (ICRP 89 Section 8.3.1), scaled with the "
-            "body surface area, i.e. the same GFR per 1.73 m2, times the renal "
-            "function.",
+            f"GFR of the individual: the GFR at renal function 1 `{ids.GFR_BASE}` "
+            "times the renal function.",
             ("ICRP89",),
             kind="gfr",
             organ=Organ.KIDNEY,

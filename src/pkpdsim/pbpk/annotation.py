@@ -435,6 +435,14 @@ KINDS: dict[str, Kind] = {
     "portal_flow": Kind(_P, "BLOOD_FLOW_RATE_TO_PORTAL_VEIN"),
     "hepatic_flow": Kind(_P, "HEPATIC_VEIN_BLOOD_FLOW"),
     "gfr": Kind(_P, "GLOMERULAR_FILTRATION_RATE"),
+    # the GFR at renal function 1 is not the GFR of the individual (a CKD
+    # model has another): the broader term with a version of the GFR (R49)
+    "gfr_base": Kind(
+        _P,
+        _PHYS,
+        terms=((BQB.IS_VERSION_OF, pbpko("GLOMERULAR_FILTRATION_RATE")),),
+        requested="glomerular filtration rate at normal renal function",
+    ),
     "egfr": Kind(_P, "GLOMERULAR_FILTRATION_RATE", terms=((BQB.IS, "ncit/C110935"),)),
     "organ_function": Kind(_P, _PHYS, requested="relative organ function"),
     "tubular_share": Kind(
