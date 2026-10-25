@@ -12,7 +12,7 @@ from pkpdsim.pbpk.chemistry import (
 )
 from pkpdsim.pbpk.data import Source, cite, load, sources
 from pkpdsim.pbpk.definition import PBPKDefinition, Variants
-from pkpdsim.pbpk.organ import Boundary, ModelDefinition, OrganComponent, OrganContext
+from pkpdsim.pbpk.organ import Boundary, OrganComponent, OrganContext
 from pkpdsim.pbpk.organs import Organ, Part, Pool
 from pkpdsim.pbpk.pd import PDComponent
 from pkpdsim.pbpk.physiology import Sex, physiology_objects
@@ -49,7 +49,6 @@ __all__ = [
     "Membrane",
     "Metabolism",
     "Mode",
-    "ModelDefinition",
     "Organ",
     "OrganComponent",
     "OrganContext",

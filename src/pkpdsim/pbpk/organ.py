@@ -4,17 +4,14 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from sbmlutils.factory import Model
+from sbmlutils.factory import ModelDefinition
 
 from pkpdsim.pbpk.chemistry import CustomReaction, Metabolism, Transport
 from pkpdsim.pbpk.organs import Organ
 from pkpdsim.pbpk.proteins import Induction, Inhibition
 from pkpdsim.pbpk.substance import Substance
 
-__all__ = ["Boundary", "ModelDefinition", "OrganComponent", "OrganContext"]
-
-type ModelDefinition = Model
-"""The sbmlutils model an organ component defines."""
+__all__ = ["Boundary", "OrganComponent", "OrganContext"]
 
 
 @dataclass(frozen=True)

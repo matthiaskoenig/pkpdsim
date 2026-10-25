@@ -12,6 +12,7 @@ from pkpdsim.pbpk import (
     Erythrocytes,
     Excretion,
     FirstOrder,
+    Hill,
     Kp,
     Membrane,
     Metabolism,
@@ -21,6 +22,8 @@ from pkpdsim.pbpk import (
     Route,
     Substance,
     Transport,
+    U,
+    Value,
     load,
     sources,
 )
@@ -238,3 +241,58 @@ def test_proteins_table() -> None:
     assert PROTEINS["CYP3A4"].uniprot == "P08684"
     assert PROTEINS["SLC22A6"].ncit is None
     assert load("proteins")["source"] in sources()
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"binding": Binding(fu=0.0)}, "api: fu"),
+        ({"binding": Binding(fu=1.5)}, "api: fu"),
+        ({"binding": Binding(fu=Value(-1.0, U.dimensionless))}, "api: fu"),
+        ({"mr": 0.0}, "api: mr"),
+        ({"distribution": Kp(-1.0, ftissue=0.5)}, "api: Kp"),
+        (
+            {"distribution": Kp(1.0, overrides={Organ.LIVER: 0.0}, ftissue=0.5)},
+            "Kp override 'li'",
+        ),
+        ({"distribution": Kp(1.0, ftissue=0.0)}, "api: ftissue"),
+        ({"distribution": Kp(1.0, ftissue=0.5, ps={Organ.LIVER: -1.0})}, "ps 'li'"),
+        (
+            {"excretion": Excretion(urine=True, fraction_reabsorbed=1.2)},
+            "fraction_reabsorbed",
+        ),
+        ({"erythrocytes": Erythrocytes("equilibrium", bp=0.0)}, "api: bp"),
+        ({"erythrocytes": Erythrocytes("equilibrium", kbc=-1.0)}, "api: kbc"),
+    ],
+)
+def test_substance_numbers_checked(kwargs: dict[str, object], message: str) -> None:
+    """Plain numbers and the numbers of values are range checked."""
+    with pytest.raises(ValueError, match=message):
+        _definition(substances=[_api(**kwargs)], chemistry=[], routes=[]).validate()
+
+
+@pytest.mark.parametrize(
+    "kinetics",
+    [FirstOrder(0.0), MM(vmax=-1.0, km=1.0), MM(vmax=1.0, km=0.0), Hill(1.0, 1.0, 0.0)],
+)
+def test_kinetics_numbers_checked(kinetics: FirstOrder | MM | Hill) -> None:
+    """Kinetic parameters must be positive."""
+    m = Metabolism("met1", Organ.LIVER, "api", {"api_m2": 1.0}, kinetics)
+    with pytest.raises(ValueError, match=r"met1: .* must be positive"):
+        _definition(chemistry=[m]).validate()
+
+
+def test_product_fraction_must_be_positive() -> None:
+    """A zero or negative product fraction is rejected."""
+    m = Metabolism(
+        "met1", Organ.LIVER, "api", {"api_m2": 1.0, "api_x": 0.0}, FirstOrder(1.0)
+    )
+    with pytest.raises(ValueError, match="product fraction of 'api_x'"):
+        _definition(
+            substances=[
+                _api(),
+                Substance("api_m2", "m", 1.0),
+                Substance("api_x", "x", 1.0),
+            ],
+            chemistry=[m],
+        ).validate()

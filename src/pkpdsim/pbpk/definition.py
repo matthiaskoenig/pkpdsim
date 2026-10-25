@@ -5,7 +5,14 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
 from pkpdsim.pbpk import ids
-from pkpdsim.pbpk.chemistry import CustomReaction, Metabolism, Transport
+from pkpdsim.pbpk.chemistry import (
+    MM,
+    CustomReaction,
+    FirstOrder,
+    Hill,
+    Metabolism,
+    Transport,
+)
 from pkpdsim.pbpk.organ import OrganComponent
 from pkpdsim.pbpk.organs import Organ, Part, Pool
 from pkpdsim.pbpk.pd import PDComponent
@@ -13,6 +20,7 @@ from pkpdsim.pbpk.physiology import Sex
 from pkpdsim.pbpk.proteins import PROTEINS
 from pkpdsim.pbpk.routes import Route
 from pkpdsim.pbpk.substance import Erythrocytes, Kp, KpMethod, Mode, Substance
+from pkpdsim.pbpk.values import Q, Value
 
 __all__ = ["PBPKDefinition", "Variants"]
 
@@ -138,6 +146,12 @@ class PBPKDefinition:
         for ind in s.induces:
             if ind.protein not in PROTEINS:
                 problems.append(f"{s.sid}: unknown protein '{ind.protein}' (induction)")
+        problems += _positive(s.sid, "mr", s.mr)
+        if s.binding is not None:
+            problems += _in_unit_interval(s.sid, "fu", s.binding.fu, open_low=True)
+        problems += _in_unit_interval(
+            s.sid, "fraction_reabsorbed", s.excretion.fraction_reabsorbed
+        )
         ery = s.erythrocytes
         if ery is not None:
             problems += _check_erythrocytes(s.sid, ery)
@@ -169,13 +183,19 @@ class PBPKDefinition:
             used: list[str] = []
             if isinstance(p, Metabolism):
                 used = [p.substrate, *p.products]
-                if any(f < 0 for f in p.products.values()):
-                    problems.append(f"{p.sid}: negative product fraction")
+                for product, fraction in p.products.items():
+                    if fraction <= 0:
+                        problems.append(
+                            f"{p.sid}: product fraction of '{product}' must be "
+                            f"positive, got {fraction}"
+                        )
                 total = sum(p.products.values())
                 if p.products and abs(total - 1.0) > 1e-9:
                     problems.append(f"{p.sid}: product fractions sum to {total}, not 1")
             elif isinstance(p, Transport):
                 used = [p.substance]
+            if isinstance(p, Metabolism | Transport):
+                problems += _check_kinetics(p.sid, p.kinetics)
             unknown = sorted(u for u in used if u not in known)
             if unknown:
                 problems.append(f"{p.sid}: unknown substances {unknown}")
@@ -195,6 +215,13 @@ class PBPKDefinition:
 
 def _check_erythrocytes(sid: str, ery: Erythrocytes) -> list[str]:
     """Check the parameters of the erythrocytes of a substance."""
+    problems = [
+        *_positive(sid, "bp", ery.bp),
+        *_positive(sid, "kbc", ery.kbc),
+        *_positive(sid, "k_exchange", ery.k_exchange),
+    ]
+    if problems:
+        return problems
     if ery.mode == "equilibrium":
         if (ery.bp is None) == (ery.kbc is None):
             return [f"{sid}: equilibrium erythrocytes need exactly one of bp and kbc"]
@@ -213,13 +240,56 @@ def _check_distribution(sid: str, dist: Kp | KpMethod) -> list[str]:
     if dist.mode in {Mode.TISSUE, Mode.PERMEABILITY} and dist.ftissue is None:
         problems.append(f"{sid}: mode '{dist.mode.value}' requires ftissue")
     entered = dist.organs
-    named = {
-        "override": getattr(dist, "overrides", {}),
-        "ps": dist.ps,
-    }
+    named: dict[str, Mapping[Organ, Q]] = {"ps": dist.ps}
+    if isinstance(dist, Kp):
+        named["override"] = dist.overrides
+        problems += _positive(sid, "Kp", dist.value)
+        for organ, value in dist.overrides.items():
+            problems += _positive(sid, f"Kp override '{organ.value}'", value)
+    else:
+        problems += _positive(sid, "factor", dist.factor)
+    if dist.ftissue is not None:
+        problems += _positive(sid, "ftissue", dist.ftissue)
+    for organ, value in dist.ps.items():
+        problems += _positive(sid, f"ps '{organ.value}'", value)
     if entered is not None:
         for what, mapping in named.items():
             outside = sorted(o.value for o in mapping if o not in entered)
             if outside:
                 problems.append(f"{sid}: {what} for organs not entered: {outside}")
+    return problems
+
+
+def _number(q: Q | None) -> float | None:
+    """Get the number of a plain float or a `Value`, `None` if there is none."""
+    return q.value if isinstance(q, Value) else q
+
+
+def _positive(where: str, name: str, q: Q | None) -> list[str]:
+    """Check that a number is positive."""
+    x = _number(q)
+    if x is not None and not x > 0:
+        return [f"{where}: {name} must be positive, got {x}"]
+    return []
+
+
+def _in_unit_interval(
+    where: str, name: str, q: Q | None, *, open_low: bool = False
+) -> list[str]:
+    """Check that a number is a fraction, in (0, 1] or [0, 1]."""
+    x = _number(q)
+    if x is None:
+        return []
+    low_ok = x > 0 if open_low else x >= 0
+    if not (low_ok and x <= 1):
+        interval = "(0, 1]" if open_low else "[0, 1]"
+        return [f"{where}: {name} must be in {interval}, got {x}"]
+    return []
+
+
+def _check_kinetics(where: str, k: FirstOrder | MM | Hill) -> list[str]:
+    """Check that the parameters of a rate law are positive."""
+    problems: list[str] = []
+    for name in ("k", "vmax", "km", "n"):
+        problems += _positive(where, name, getattr(k, name, None))
     return problems
