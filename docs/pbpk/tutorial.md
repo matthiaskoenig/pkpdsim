@@ -14,7 +14,8 @@ glimepiride = Substance(
     name="glimepiride",
     mr=490.6,
     binding=Binding(fu=0.005, protein="albumin"),
-    distribution=Kp(0.25, ftissue=50.0, ps={Organ.LIVER: 100.0}),
+    # ps per litre of liver: 42.9 * 2.33 l = 100 l/min for the whole liver
+    distribution=Kp(0.25, ftissue=50.0, ps={Organ.LIVER: 42.9}),
 )
 m1 = Substance(
     "gli_m1",
@@ -188,7 +189,8 @@ glimepiride = Substance(
     distribution=Kp(
         fitted(FITS.parameter("Kp_gli", unit=U.dimensionless)),
         ftissue=fitted(FITS.parameter("ftissue_gli", unit=U.l_per_min)),
-        ps={Organ.LIVER: 100.0},
+        # per litre of liver, 42.9 * 2.33 l = 100 l/min for the whole liver
+        ps={Organ.LIVER: 42.9},
     ),
 )
 DEFINITION = PBPKDefinition(
