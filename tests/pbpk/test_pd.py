@@ -12,7 +12,14 @@ from pathlib import Path
 import libsbml
 import numpy as np
 import pytest
-from sbmlutils.factory import AssignmentRule, Model, Parameter, Port, PortType
+from sbmlutils.factory import (
+    AssignmentRule,
+    Model,
+    ModelUnits,
+    Parameter,
+    Port,
+    PortType,
+)
 
 from pkpdsim.pbpk import MODEL_UNITS, Organ, Part, PDComponent, Pool, U, ids
 from pkpdsim.pbpk.builder import build, compose
@@ -159,3 +166,59 @@ def test_pd_output_reaches_the_organs(tmp_path: Path) -> None:
         (1 - shunt) * float(r[ids.QHA]) * (1 - hct) * car, rel=1e-8
     )
     assert float(r[ids.QHA]) < before
+
+
+@pytest.mark.parametrize(
+    "target",
+    [ids.CO, ids.organ_flow(Organ.MUSCLE), ids.organ_outflow(Organ.LIVER, "drg")],
+    ids=["initial assignment", "flow", "organ output"],
+)
+def test_pd_output_to_derived_parameter_raises(target: str) -> None:
+    """An output which replaces a derived parameter raises, naming it.
+
+    `CO` and the flows are initial assignments of the physiology,
+    `Cout_li_drg` the output of the liver: the component changes the
+    parameters they derive from (`f_cardiac_function`), not them.
+    """
+    pd = dataclasses.replace(cardiac_pd(), outputs={"f_cardiac": target})
+    with pytest.raises(ValueError, match=f"'{target}'.*derived"):
+        compose(definition(pd=[pd]))
+
+
+def test_pd_output_to_dynamic_parameter(tmp_path: Path) -> None:
+    """A parameter of `dynamic` may be the target of an output: it is dynamic either way."""
+    d = definition(pd=[cardiac_pd()], dynamic=(ids.F_CARDIAC_FUNCTION,))
+    model = libsbml.readSBMLFromFile(str(build(d, tmp_path).flat_path)).getModel()
+    assert model.getAssignmentRuleByVariable(ids.CO) is not None
+    assert model.getAssignmentRuleByVariable(ids.F_CARDIAC_FUNCTION) is not None
+
+
+def test_pd_two_outputs_to_one_parameter_raises() -> None:
+    """Two components cannot both replace one parameter of the body."""
+    with pytest.raises(ValueError, match=f"'{ids.F_CARDIAC_FUNCTION}'.*derived"):
+        compose(definition(pd=[cardiac_pd(), cardiac_pd(sid="cardio2")]))
+
+
+def test_pd_model_units_raise() -> None:
+    """A component in other model units (seconds) or without model units raises."""
+    seconds = cardiac_pd()
+    seconds.model.model_units = ModelUnits(
+        time=U.second,
+        extent=U.mmole,
+        substance=U.mmole,
+        length=U.metre,
+        area=U.m2,
+        volume=U.litre,
+    )
+    with pytest.raises(ValueError, match=r"'cardio'.*time s(econd)? \(library min\)"):
+        compose(definition(pd=[seconds]))
+    none = cardiac_pd()
+    none.model.model_units = None
+    with pytest.raises(ValueError, match="'cardio' has no model units"):
+        compose(definition(pd=[none]))
+
+
+def test_pd_id_of_an_organ_submodel_raises() -> None:
+    """A component with the id of an organ submodel (`LI`) raises, naming it."""
+    with pytest.raises(ValueError, match=r"'LI'.*submodel of an organ"):
+        compose(definition(pd=[cardiac_pd(sid=ids.submodel(Organ.LIVER))]))

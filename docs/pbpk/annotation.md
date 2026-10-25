@@ -47,32 +47,43 @@ no substance enters tissue.
 
 ## Resource format
 
-Every resource is written in one format, the identifiers.org
-`collection/term` of `pkpdsim.annotations`: `pbpko/PBPKO:00558`,
-`uberon/UBERON:0002107`, `uniprot/P08684`. sbmlutils writes them as the
-identifiers.org urls of pymetadata, `https://identifiers.org/PBPKO:00558`;
-identifiers.org does not register PBPKO yet (bioregistry does), the url is the
-`url` of the pymetadata term.
+Every resource of a collection which identifiers.org registers is written as
+its identifiers.org `collection/term`, the format of `pkpdsim.annotations`:
+`uberon/UBERON:0002107`, `uniprot/P08684`; sbmlutils writes the
+identifiers.org url. identifiers.org does not register PBPKO, so pymetadata
+cannot parse `pbpko/PBPKO:00558` (it logs a MIRIAM error and writes an
+identifiers.org url which does not resolve). A PBPKO term is therefore written
+as its bioregistry url, `https://bioregistry.io/PBPKO:00558`, which resolves
+and which sbmlutils writes as given (as the apixaban model of pkdb_models
+does). A build logs no annotation error.
 
 ## Terms requested upstream
 
 PBPKO has no term for some of the quantities, compartments and processes of
-the library. The library annotates such an element with the nearest broader
-PBPKO term (and its SBO term and the terms of other ontologies) and requests
-the missing term from PBPKO:
+the library. The library annotates such an element with the nearest PBPKO
+term which is true for it: the superclass (`PHYSIOLOGICAL_PARAMETER`,
+`BIOCHEMICAL_PARAMETER`, `MISCELLANEOUS_PARAMETER`, `COMPARTMENT`), never a
+specific term whose definition contradicts the element (a fraction per body
+weight for a fraction of the blood volume, a flow rate for a fraction of the
+GFR). A more specific PBPKO term which the element is a part or a version of
+is added with `BQB.IS_PART_OF` or `BQB.IS_VERSION_OF` (the mucosa is part of
+the `INTESTINAL_TISSUE_COMPARTMENT`, the dissolution part of the
+`ABSORPTION`). The missing terms are requested from PBPKO:
 
 | missing term | broader term used |
 |---|---|
+| plasma-equivalent capacity of the blood (volume times BP) | `COMPARTMENT` |
 | tissue compartment (interstitial and intracellular space) | `COMPARTMENT` |
 | interstitial compartment | `COMPARTMENT` |
 | intracellular space compartment | `COMPARTMENT` |
-| intestinal mucosa compartment (enterocytes) | `INTESTINAL_TISSUE_COMPARTMENT` |
+| intestinal mucosa compartment (enterocytes) | `COMPARTMENT` |
+| intestinal tissue compartment without the mucosa | `COMPARTMENT` |
 | fat-free mass | `PHYSIOLOGICAL_PARAMETER` |
 | covariate scaling factor | `PHYSIOLOGICAL_PARAMETER` |
 | mass of organ | `PHYSIOLOGICAL_PARAMETER` |
-| fraction of venous and of portal blood volume | `FRACTION_OF_VOLUME_OF_COMPARTMENT` |
-| interstitial volume fraction of organ | `FRACTION_OF_VOLUME_OF_COMPARTMENT` |
-| volume fraction of a zone of the liver | `FRACTION_OF_VOLUME_OF_COMPARTMENT` |
+| fraction of the blood volume in a blood pool | `PHYSIOLOGICAL_PARAMETER` |
+| interstitial volume fraction of an organ | `PHYSIOLOGICAL_PARAMETER` |
+| volume fraction of a zone of the liver | `PHYSIOLOGICAL_PARAMETER` |
 | hepatic artery blood flow | `BLOOD_FLOW_RATE_TO_COMPARTMENT` |
 | relative organ function | `PHYSIOLOGICAL_PARAMETER` |
 | portosystemic shunt fraction | `PHYSIOLOGICAL_PARAMETER` |
@@ -80,10 +91,11 @@ the missing term from PBPKO:
 | severity of heart failure | `PHYSIOLOGICAL_PARAMETER` |
 | stage of chronic kidney disease | `PHYSIOLOGICAL_PARAMETER` |
 | impairment factor | `PHYSIOLOGICAL_PARAMETER` |
-| factor of the partition coefficients | `PARTITION_COEFFICIENT` |
+| factor of the partition coefficients | `BIOCHEMICAL_PARAMETER` |
 | tissue composition (water, protein, lipid fractions) | `PHYSIOLOGICAL_PARAMETER` |
-| permeability surface area product | `APPARENT_PERMEABILITY` |
-| exchange rate constant | `DIFFUSION_RATE` |
+| permeability surface area product (exchange flow) | `BIOCHEMICAL_PARAMETER` |
+| exchange rate constant of plasma and blood cells | `BIOCHEMICAL_PARAMETER` |
+| endothelial exchange rate constant per organ volume | `PHYSIOLOGICAL_PARAMETER` |
 | relative activity of enzyme or transporter | `BIOCHEMICAL_PARAMETER` |
 | relative amount of enzyme or transporter | `BIOCHEMICAL_PARAMETER` |
 | maximal inactivation rate constant | `BIOCHEMICAL_PARAMETER` |
@@ -95,11 +107,13 @@ the missing term from PBPKO:
 | injection time of an intravenous dose | `PARAMETER` |
 | injection rate constant of an intravenous dose | `PARAMETER` |
 | infusion rate of an intravenous infusion | `PARAMETER` |
-| dissolution of a formulation | `PHYSICOCHEMICAL_PARAMETER` |
-| fed state | `MISCELLANEOUS_PARAMETER` |
-| intestinal mucosa and absorption geometry | `FRACTION_OF_INTESTINAL_TISSUE` |
+| dissolution of a formulation | `MISCELLANEOUS_PARAMETER` |
+| gastric emptying time | `PHYSIOLOGICAL_PARAMETER` |
+| prandial state (fed or fasted) | `MISCELLANEOUS_PARAMETER` |
+| intestinal mucosa and absorption geometry | `PHYSIOLOGICAL_PARAMETER` |
 | blood flow rate to intestinal mucosa | `BLOOD_FLOW_RATE_TO_COMPARTMENT` |
-| tubular flow fraction of the glomerular filtration rate | `BODILY_FLUID_FLOW_RATE_PARAMETER` |
+| bile transit rate constant | `PHYSIOLOGICAL_PARAMETER` |
+| tubular flow fraction of the glomerular filtration rate | `PHYSIOLOGICAL_PARAMETER` |
 | weight of a tissue in the arm vein sampling site | `PHYSIOLOGICAL_PARAMETER` |
 | `CONCENTRATION_IN_HEART` | `CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT` |
 | `CONCENTRATION_IN_PANCREAS` | `CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT` |
@@ -112,5 +126,5 @@ the missing term from PBPKO:
 | bone compartment | none, the terms of other ontologies only |
 | portal vein blood compartment | none, the terms of other ontologies only |
 
-PBPKO is further not registered at identifiers.org, so its urls do not
-resolve there yet.
+PBPKO is further not registered at identifiers.org, so its terms are written
+as bioregistry urls.

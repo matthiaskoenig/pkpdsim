@@ -65,6 +65,7 @@ from sbmlutils.factory import (
     Parameter,
     Port,
     PortType,
+    RateRule,
     Reaction,
     ReplacedBy,
     ReplacedElement,
@@ -301,7 +302,7 @@ def compose(definition: PBPKDefinition) -> Model:
     top.add(observer_objects(definition))
     outputs: list[str] = []
     for pd in definition.pd:
-        md, submodel, pd_replaced = top.couple(pd)
+        md, submodel, pd_replaced = top.couple(pd, (str(sm.sid) for sm in submodels))
         if any(md.sid == other.sid for other in model_definitions):
             raise ValueError(
                 f"The PD component '{md.sid}' has the id of another model definition."
@@ -1088,19 +1089,30 @@ class _Top:
     # --- organs ----------------------------------------------------------
 
     def couple(
-        self, pd: PDComponent
+        self, pd: PDComponent, submodels: Iterable[str]
     ) -> tuple[ModelDefinition, Submodel, list[ReplacedElement]]:
         """The model definition, submodel and replacements of a PD component.
 
         Every input of the component is replaced by the element of the body;
         every parameter of the body which an output names is replaced by the
-        element of the output (a `ReplacedBy` of the parameter).
+        element of the output (a `ReplacedBy` of the parameter). The target of
+        an output is a plain parameter of a value: one which no initial
+        assignment, rule or other component defines (a derived quantity
+        such as `CO` is changed through the parameters it derives from). A
+        parameter of `PBPKDefinition.dynamic` is such a parameter and may be
+        the target; it is dynamic either way.
+
+        Args:
+            pd: the component.
+            submodels: the ids of the submodels of the organs.
 
         Raises:
             ValueError: naming an input or output which is no port of the
                 component, of the wrong type, an element of the body which
-                does not exist (an input) or is no parameter (an output), or a
-                component whose id is an id of the top model.
+                does not exist (an input) or is no plain parameter of a value
+                (an output), a component whose id is an id of the top model or
+                of an organ submodel, or whose model units differ from those of
+                the library.
         """
         model = copy.deepcopy(pd.model)
         sid = str(model.sid)
@@ -1108,6 +1120,11 @@ class _Top:
             raise ValueError(
                 f"The PD component '{sid}' has the id of an element of the body."
             )
+        if sid in set(submodels):
+            raise ValueError(
+                f"The PD component '{sid}' has the id of the submodel of an organ."
+            )
+        _check_model_units(sid, model)
         if model.model_definitions or model.external_model_definitions:
             raise ValueError(
                 f"The PD component '{sid}' has model definitions of its own; "
@@ -1115,6 +1132,11 @@ class _Top:
             )
         declared = ports(model)
         parameters = {str(o.sid): o for o in self.objects if isinstance(o, Parameter)}
+        derived = {
+            str(o.symbol if isinstance(o, InitialAssignment) else o.variable)
+            for o in self.objects
+            if isinstance(o, InitialAssignment | AssignmentRule | RateRule)
+        }
         problems: list[str] = []
         for what, mapping, wrong in (
             ("input", pd.inputs, PortType.OUTPUT_PORT),
@@ -1134,6 +1156,14 @@ class _Top:
                     problems.append(
                         f"output '{local}' replaces '{body}', which is no "
                         "parameter of the body"
+                    )
+                elif what == "output" and (
+                    body in derived or parameters[body].replacedBy is not None
+                ):
+                    problems.append(
+                        f"output '{local}' replaces '{body}', which is derived "
+                        "(an initial assignment, a rule or the output of another "
+                        "component), not a parameter of a value"
                     )
         if problems:
             raise ValueError(f"PD component '{sid}': " + "; ".join(problems) + ".")
@@ -1175,6 +1205,7 @@ class _Top:
                 f"Organ '{organ.value}' reads elements which the body does not "
                 f"have: {missing}."
             )
+        cells = {ids.outflow_conc_bc(s.sid) for s in self.definition.substances}
         for local, top in boundary.outputs.items():
             self.add(
                 [
@@ -1195,7 +1226,7 @@ class _Top:
                                 portRef=f"{local}{PORT_SUFFIX}",
                             ),
                         ),
-                        "outflow",
+                        "outflow_blood_cells" if local in cells else "outflow",
                         organ=organ,
                     )
                 ]
@@ -1208,6 +1239,48 @@ class _Top:
             )
             for local, top in boundary.replacements.items()
         ]
+
+
+_UNIT_FIELDS = ("time", "extent", "substance", "length", "area", "volume")
+
+
+def _unit_id(unit: object) -> str | None:
+    """The id of a model unit (a unit definition or its id)."""
+    if unit is None:
+        return None
+    return str(getattr(unit, "sid", unit))
+
+
+def _check_model_units(sid: str, model: Model) -> None:
+    """Check that a PD component has the model units of the library.
+
+    The flat model has one set of model units; a component in other units
+    (hours) would be integrated in the units of the library without a
+    conversion factor.
+
+    Raises:
+        ValueError: naming the model units which differ, or if the component
+            has none.
+    """
+    units = model.model_units
+    if units is None:
+        raise ValueError(
+            f"The PD component '{sid}' has no model units, the library has "
+            "`pkpdsim.pbpk.MODEL_UNITS`."
+        )
+    differ = [
+        f"{field} {_unit_id(getattr(units, field, None))} (library "
+        f"{_unit_id(getattr(MODEL_UNITS, field))})"
+        for field in _UNIT_FIELDS
+        if _unit_id(getattr(units, field, None))
+        != _unit_id(getattr(MODEL_UNITS, field))
+    ]
+    if differ:
+        raise ValueError(
+            f"The PD component '{sid}' has other model units than the library: "
+            + ", ".join(differ)
+            + "."
+        )
 
 
 def _scope_port_metaids(md: ModelDefinition) -> None:

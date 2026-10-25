@@ -101,7 +101,7 @@ def constant(key: str) -> Parameter:
             _NAMES[key],
             SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
         ),
-        "exchange_rate" if key == K_VAS else "tissue_composition",
+        "endothelial_exchange" if key == K_VAS else "tissue_composition",
     )
 
 

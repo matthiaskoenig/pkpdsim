@@ -84,7 +84,7 @@ class LumenBuilder(StandardBuilder):
                 f"transit time {seg.label} [min]",
                 "Mean transit time of the lumen segment (fasted), the transit "
                 "into the next segment is `V*C/T`.",
-                kind="transit_time",
+                kind="gastric_transit_time" if seg.token == "st" else "transit_time",
                 segment=seg.token,
             )
             if seg.absorbs:
@@ -105,7 +105,7 @@ class LumenBuilder(StandardBuilder):
                 U.min,
                 "transit time stomach fed [min]",
                 "Mean transit time of the stomach in the fed state (`FED = 1`).",
-                kind="transit_time",
+                kind="gastric_transit_time",
                 segment="st",
             )
 

@@ -43,6 +43,7 @@ liver (`pkpdsim.pbpk.variants.liver_zonated`) builds the same parts, flows and
 exchanges in each of its zones, which the blood flows through in series.
 """
 
+import copy
 import itertools
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -51,6 +52,7 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 from sbmlutils.factory import ModelDefinition, Port, PortType, Sbase
 
 from pkpdsim.pbpk import distribution, ids
+from pkpdsim.pbpk.annotation import annotate
 from pkpdsim.pbpk.chemistry import (
     CustomReaction,
     Direction,
@@ -412,7 +414,7 @@ class StandardBuilder(OrganBuilder):
                 f"outflow blood cell concentration {s.sid} {label(self.organ)} [mM]",
                 "Blood cell concentration of the blood leaving the organ.",
                 port=Port(f"{out_bc}_port", portType=PortType.OUTPUT_PORT),
-                kind="outflow",
+                kind="outflow_blood_cells",
             )
             self.outputs[out_bc] = ids.organ_outflow_bc(self.organ, s.sid)
         self._blood_flows(s, parts, k_organ)
@@ -829,7 +831,10 @@ class StandardBuilder(OrganBuilder):
                         f"Custom reaction '{p.sid}': species '{sid}' is a species "
                         f"of the organ '{self.organ.value}' already."
                     )
-                self.species[sid] = sp
+                self.species[sid] = annotate(
+                    copy.copy(sp),
+                    "custom_amount" if sp.hasOnlySubstanceUnits else "custom_species",
+                )
         capacity = self._capacity()
         for p in processes:
             self.reactions += place(p, self.ctx, self.ctx.parts, capacity)

@@ -50,6 +50,7 @@ the proximal tubule, an efflux secretes into it, an influx reabsorbs from it
 (with the inhibitors of its protein in the lumen).
 """
 
+import copy
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -953,7 +954,10 @@ def _custom(process: CustomReaction, parts: Mapping[str, Parts]) -> Reaction:
             sid=process.sid,
             equation=process.equation,
             formula=(process.formula, U.mmole_per_min),
-            pars=list(process.parameters),
+            pars=[
+                annotate(copy.copy(par), "custom_parameter", organ=process.organ)
+                for par in process.parameters
+            ],
             compartment=ids.compartment(process.part),
             notes=f"Custom reaction in the {_PART_NAMES[process.part]} part.",
         ),

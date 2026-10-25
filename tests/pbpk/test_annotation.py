@@ -10,6 +10,7 @@ Every compartment, species, parameter and reaction of the comp model and of
 the flat model has an SBO term and at least one ontology term.
 """
 
+import logging
 import re
 from pathlib import Path
 
@@ -17,12 +18,14 @@ import libsbml
 import pytest
 from pymetadata.core.annotation import ProviderType, RDFAnnotation
 from pymetadata.ontologies.pbpko import PBPKO
+from sbmlutils.factory import Parameter, Species
 from sbmlutils.metadata import BQB
 
 from pkpdsim.annotations import compartments
 from pkpdsim.pbpk import (
     MM,
     Binding,
+    CustomReaction,
     Direction,
     DoseDependentDissolution,
     Erythrocytes,
@@ -37,10 +40,12 @@ from pkpdsim.pbpk import (
     Metabolism,
     Mode,
     Organ,
+    Part,
     PBPKDefinition,
     Route,
     Substance,
     Transport,
+    U,
     Variants,
     WeibullDissolution,
 )
@@ -181,7 +186,7 @@ def _variants() -> PBPKDefinition:
 
 
 def _standard() -> PBPKDefinition:
-    """The standard organs with the single lumen, a flow-limited drug and a dynamic factor."""
+    """The standard organs: single lumen, flow-limited drug, custom reaction, dynamic factor."""
     flow_limited = Substance(
         "drg",
         name="drug",
@@ -223,6 +228,23 @@ def _standard() -> PBPKDefinition:
                 Direction.INFLUX,
                 Membrane.BASOLATERAL,
                 FirstOrder(0.1),
+            ),
+            CustomReaction(
+                sid="SECBIND",
+                organ=Organ.KIDNEY,
+                part=Part.INTRACELLULAR,
+                equation="Cic_sec -> Cbound_sec",
+                formula="kb_sec * Cic_sec",
+                parameters=[Parameter("kb_sec", 0.01, U.l_per_min)],
+                species=[
+                    Species(
+                        "Cbound_sec",
+                        "Vic",
+                        initialConcentration=0.0,
+                        substanceUnit=U.mmole,
+                        hasOnlySubstanceUnits=False,
+                    )
+                ],
             ),
         ],
         variants=Variants(organs={Organ.SMALL_INTESTINE: "single_lumen"}),
@@ -278,12 +300,12 @@ def test_model_type(built: BuildResult) -> None:
     """The model is a whole-body PBPK model of the human, perfusion- or permeability-limited."""
     doc = libsbml.readSBMLFromFile(str(built.flat_path))
     resources = set(_resources(doc.getModel()))
-    assert PBPKO.PHYSIOLOGICALLY_BASED_PHARMACOKINETIC_MODEL.url in resources
-    assert PBPKO.WHOLE_BODY_PBPK.url in resources
+    assert _url(PBPKO.PHYSIOLOGICALLY_BASED_PHARMACOKINETIC_MODEL) in resources
+    assert _url(PBPKO.WHOLE_BODY_PBPK) in resources
     assert "https://identifiers.org/taxonomy:9606" in resources
     # both definitions have a substance with a finite exchange
-    assert PBPKO.PERMEABILITY_LIMITED_PBPK.url in resources
-    assert PBPKO.PERFUSION_LIMITED_MODEL.url not in resources
+    assert _url(PBPKO.PERMEABILITY_LIMITED_PBPK) in resources
+    assert _url(PBPKO.PERFUSION_LIMITED_MODEL) not in resources
 
 
 def test_model_type_perfusion_limited() -> None:
@@ -312,8 +334,12 @@ def _resources(sbase: libsbml.SBase) -> list[str]:
     return result
 
 
-_PBPKO_RESOURCE = re.compile(r"pbpko/PBPKO:\d{5}")
-_PBPKO_URL = re.compile(r"https://identifiers\.org/PBPKO:\d{5}")
+_PBPKO_URL = re.compile(r"https://bioregistry\.io/PBPKO:\d{5}")
+
+
+def _url(term: str) -> str:
+    """The resource of a PBPKO term as the library writes it."""
+    return f"https://bioregistry.io/{PBPKO[term].curie}"
 
 
 def _table_resources() -> list[str]:
@@ -331,17 +357,18 @@ def _table_resources() -> list[str]:
 
 
 def test_pbpko_resource_format(built: BuildResult) -> None:
-    """One resource format: the identifiers.org `collection/term` of `pkpdsim.annotations`.
+    """The resource formats: identifiers.org `collection/term`, PBPKO by bioregistry.
 
-    A PBPKO term is `pbpko/PBPKO:<5 digits>` of the pinned PBPKO, written as
-    `https://identifiers.org/PBPKO:<5 digits>` (the url of the pymetadata
-    term; identifiers.org does not register PBPKO yet); every other resource
-    is a term of a collection of identifiers.org and written as its url.
+    Every resource of a collection which identifiers.org registers is its
+    `collection/term` (the format of `pkpdsim.annotations`), written as the
+    identifiers.org url; identifiers.org does not register PBPKO, so a PBPKO
+    term is `https://bioregistry.io/PBPKO:<5 digits>` of the pinned PBPKO,
+    written as given (R48).
     """
     for resource in _table_resources():
-        if resource.startswith("pbpko/"):
-            assert _PBPKO_RESOURCE.fullmatch(resource), resource
-            assert resource.removeprefix("pbpko/") in PBPKO, resource
+        if "PBPKO" in resource:
+            assert _PBPKO_URL.fullmatch(resource), resource
+            assert resource.rsplit("/", 1)[1] in PBPKO, resource
             continue
         annotation = RDFAnnotation(qualifier=BQB.IS, resource=resource, validate=False)
         assert annotation.provider == ProviderType.IDENTIFIERS_ORG, resource
@@ -352,12 +379,27 @@ def test_pbpko_resource_format(built: BuildResult) -> None:
     for model in _models(doc):
         for element in [model, *_elements(model)]:
             for url in _resources(element):
-                assert url.startswith("https://identifiers.org/"), url
                 if "PBPKO" in url:
                     assert _PBPKO_URL.fullmatch(url), url
                     pbpko_urls.add(url)
+                else:
+                    assert url.startswith("https://identifiers.org/"), url
     assert pbpko_urls
-    assert all(PBPKO(url.rsplit("/", 1)[1]).url == url for url in pbpko_urls)
+    assert all(url.rsplit("/", 1)[1] in PBPKO for url in pbpko_urls)
+
+
+def test_build_logs_no_annotation_errors(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A build logs no error of the annotation (no MIRIAM namespace of pymetadata)."""
+    with caplog.at_level(logging.WARNING):
+        build(_variants(), tmp_path)
+    errors = [
+        f"{r.name}: {r.getMessage()}"
+        for r in caplog.records
+        if r.levelno >= logging.ERROR or "MIRIAM" in r.getMessage()
+    ]
+    assert not errors, errors[:5]
 
 
 def test_requested_terms_documented() -> None:

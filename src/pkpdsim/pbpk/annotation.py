@@ -49,6 +49,9 @@ __all__ = [
     "requested_terms",
 ]
 
+PBPKO_URL = "https://bioregistry.io/"
+"""The prefix of the resources of PBPKO terms, `https://bioregistry.io/PBPKO:00558`."""
+
 Term = tuple[BQB, str]
 """An annotation: the qualifier and the resource, `collection/term`."""
 
@@ -60,13 +63,17 @@ def pbpko(name: str) -> str:
         name: the name of the term in the pymetadata enum, `LIVER_COMPARTMENT`.
 
     Returns:
-        The resource `pbpko/PBPKO:00558`.
+        The resource `https://bioregistry.io/PBPKO:00558`: identifiers.org
+        does not register PBPKO, so pymetadata cannot parse a
+        `pbpko/PBPKO:00558` (it logs a MIRIAM error and writes an
+        identifiers.org url which does not resolve); the bioregistry url is
+        written as given and resolves.
 
     Raises:
         AttributeError: if PBPKO has no term of the name.
     """
     term = getattr(PBPKO, name)
-    return f"pbpko/{term.curie}"
+    return f"{PBPKO_URL}{term.curie}"
 
 
 def _has(name: str) -> bool:
@@ -95,6 +102,17 @@ class _Place:
     terms: tuple[Term, ...]
     compartment: str | None
     tokens: tuple[str, ...] = ()
+
+
+def _location_terms(key: str) -> tuple[Term, ...]:
+    """The terms of where a compartment of `pkpdsim.annotations` is, not of what it is.
+
+    The blood pools and the veins of `pkpdsim.annotations` are plasma
+    (`BQB.IS`) which is part of a vessel (`BQB.IS_PART_OF`); the place of an
+    element in a pool is the vessel, the kind of the element says whether it
+    is plasma.
+    """
+    return tuple(t for t in _compartments[key] if t[0] is BQB.IS_PART_OF)
 
 
 def _organ(
@@ -144,17 +162,17 @@ the bone marrow)."""
 POOLS: dict[Pool, _Place] = {
     Pool.ARTERIAL: _Place(
         "arterial blood",
-        ((BQB.IS_PART_OF, "uberon/UBERON:0013755"), *_compartments["ar"]),
+        ((BQB.IS_PART_OF, "uberon/UBERON:0013755"), *_location_terms("ar")),
         "ARTERIAL_BLOOD_COMPARTMENT",
     ),
     Pool.VENOUS: _Place(
         "venous blood",
-        ((BQB.IS_PART_OF, "uberon/UBERON:0013756"), *_compartments["ve"]),
+        ((BQB.IS_PART_OF, "uberon/UBERON:0013756"), *_location_terms("ve")),
         "VENOUS_BLOOD_COMPARTMENT",
     ),
     Pool.PORTAL: _Place(
         "portal vein blood",
-        ((BQB.IS_PART_OF, "uberon/UBERON:0002017"), *_compartments["po"]),
+        ((BQB.IS_PART_OF, "uberon/UBERON:0002017"), *_location_terms("po")),
         None,
     ),
 }
@@ -220,10 +238,10 @@ nephron kidney, by their id token."""
 SITES: dict[str, _Place] = {
     "hepatic_vein": _Place(
         "hepatic vein",
-        (*_compartments["hv"], (BQB.IS_PART_OF, "uberon/UBERON:0001143")),
+        (*_location_terms("hv"), (BQB.IS_PART_OF, "uberon/UBERON:0001143")),
         None,
     ),
-    "arm_vein": _Place("arm vein", tuple(_compartments["fov"]), None),
+    "arm_vein": _Place("arm vein", _location_terms("fov"), None),
 }
 """The terms of the sampling sites of the observers which are no blood pool."""
 
@@ -272,9 +290,17 @@ _C = SBO.PHYSICAL_COMPARTMENT
 _SPECIES = SBO.SIMPLE_CHEMICAL
 _T = SBO.TRANSPORT_REACTION
 _PLASMA = tuple(_compartments["plasma"])
-_IV: tuple[Term, ...] = (
+_IV_ROUTE: Term = (
+    BQB.IS_PROPERTY_OF,
+    "ncit/C38276",  # intravenous route of administration
+)
+_IV_BOLUS: tuple[Term, ...] = (
+    (BQB.IS_PROPERTY_OF, pbpko("INTRAVENOUS_BOLUS_EXPOSURE")),
+    _IV_ROUTE,
+)
+_IV_INFUSION: tuple[Term, ...] = (
     (BQB.IS_PROPERTY_OF, pbpko("INTRAVENOUS_INFUSION_EXPOSURE")),
-    (BQB.IS_PROPERTY_OF, "ncit/C38276"),  # intravenous route of administration
+    _IV_ROUTE,
 )
 _BLOOD_CELLS: tuple[Term, ...] = ((BQB.IS, "cl/CL:0000232"),)  # erythrocyte
 _DISEASES: dict[str, Term] = {
@@ -298,8 +324,9 @@ KINDS: dict[str, Kind] = {
     "blood_cells": Kind(_C, "RED_BLOOD_CELL_COMPARTMENT", terms=_BLOOD_CELLS),
     "capacity": Kind(
         SBO.IMPLICIT_COMPARTMENT,
-        "BLOOD_COMPARTMENT",
-        terms=tuple(_compartments["blood"]),
+        "COMPARTMENT",
+        terms=((BQB.IS_VERSION_OF, pbpko("BLOOD_COMPARTMENT")),),
+        requested="plasma-equivalent capacity of the blood (volume times BP)",
     ),
     "organ": Kind(_C, "COMPARTMENT", is_place=True),
     "tissue": Kind(
@@ -331,11 +358,19 @@ KINDS: dict[str, Kind] = {
     "lumen": Kind(_C, "GUT_LUMEN_COMPARTMENT", terms=tuple(_compartments["gu_lumen"])),
     "mucosa": Kind(
         _C,
-        "INTESTINAL_TISSUE_COMPARTMENT",
-        terms=((BQB.IS, "uberon/UBERON:0001242"),),  # intestinal mucosa
+        "COMPARTMENT",
+        terms=(
+            (BQB.IS, "uberon/UBERON:0001242"),  # intestinal mucosa
+            (BQB.IS_PART_OF, pbpko("INTESTINAL_TISSUE_COMPARTMENT")),
+        ),
         requested="intestinal mucosa compartment (enterocytes)",
     ),
-    "gut_wall": Kind(_C, "INTESTINAL_TISSUE_COMPARTMENT"),
+    "gut_wall": Kind(
+        _C,
+        "COMPARTMENT",
+        terms=((BQB.IS_PART_OF, pbpko("INTESTINAL_TISSUE_COMPARTMENT")),),
+        requested="intestinal tissue compartment without the mucosa",
+    ),
     "tubule": Kind(_C, "FILTRATE_COMPARTMENT"),
     # covariates and the body
     "body_weight": Kind(_P, "BODYWEIGHT"),
@@ -362,25 +397,20 @@ KINDS: dict[str, Kind] = {
         },
     ),
     "pool_fraction": Kind(
-        _P,
-        "FRACTION_OF_VOLUME_OF_COMPARTMENT",
-        pools={Pool.ARTERIAL: "FRACTION_OF_ARTERIAL_BLOOD_VOLUME"},
-        requested="fraction of venous and of portal blood volume",
+        _P, _PHYS, requested="fraction of the blood volume in a blood pool"
     ),
     "vascular_fraction": Kind(_P, "VOLUME_FRACTION_OF_BLOOD"),
     "interstitial_fraction": Kind(
-        _P,
-        "FRACTION_OF_VOLUME_OF_COMPARTMENT",
-        requested="interstitial volume fraction of organ",
+        _P, _PHYS, requested="interstitial volume fraction of an organ"
     ),
     "tissue_volume": Kind(_P, "VOLUME_OF_COMPARTMENT"),
     "zone_fraction": Kind(
-        _P,
-        "FRACTION_OF_VOLUME_OF_COMPARTMENT",
-        requested="volume fraction of a zone of the liver",
+        _P, _PHYS, requested="volume fraction of a zone of the liver"
     ),
     "hematocrit": Kind(
-        _P, "VOLUME_FRACTION_OF_RED_BLOOD_CELLS", terms=((BQB.IS, "ncit/C64796"),)
+        _P,
+        "VOLUME_FRACTION_OF_RED_BLOOD_CELLS",
+        terms=((BQB.IS_PROPERTY_OF, "uberon/UBERON:0000178"),),  # blood
     ),
     "cardiac_output": Kind(_P, "CARDIAC_OUTPUT_RATE"),
     "flow_fraction": Kind(
@@ -439,19 +469,22 @@ KINDS: dict[str, Kind] = {
         "TISSUE_PLASMA_PARTITION_COEFFICIENT",
         organ="{}_PLASMA_PARTITION_COEFFICIENT",
     ),
-    "kp_factor": Kind(
-        _P, "PARTITION_COEFFICIENT", requested="factor of the partition coefficients"
-    ),
+    "kp_factor": Kind(_P, _BIOCHEM, requested="factor of the partition coefficients"),
     "partition": Kind(_P, "PARTITION_COEFFICIENT"),
     "tissue_composition": Kind(
         _P, _PHYS, requested="tissue composition (water, protein, lipid fractions)"
     ),
     "permeability": Kind(
-        _P, "APPARENT_PERMEABILITY", requested="permeability surface area product"
+        _P, _BIOCHEM, requested="permeability surface area product (exchange flow)"
     ),
     "bp": Kind(_P, "BLOOD_PLASMA_RATIO"),
     "kbc": Kind(_P, "RED_BLOOD_CELLS_PARTITION_COEFFICIENT"),
-    "exchange_rate": Kind(_P, "DIFFUSION_RATE", requested="exchange rate constant"),
+    "exchange_rate": Kind(
+        _P, _BIOCHEM, requested="exchange rate constant of plasma and blood cells"
+    ),
+    "endothelial_exchange": Kind(
+        _P, _PHYS, requested="endothelial exchange rate constant per organ volume"
+    ),
     # proteins and interactions
     "activity": Kind(
         SBO.RELATIVE_ACTIVITY,
@@ -496,50 +529,47 @@ KINDS: dict[str, Kind] = {
     "km_basolateral": Kind(SBO.MICHAELIS_CONSTANT, "MICHAELIS_CONSTANT_BASO"),
     "km_apical": Kind(SBO.MICHAELIS_CONSTANT, "MICHAELIS_CONSTANT_APICAL"),
     "hill": Kind(SBO.HILL_COEFFICIENT, "HILL_COEFFICIENT"),
-    "k_metabolism": Kind(
-        SBO.FORWARD_RATE_CONSTANT,
-        "LINEAR_METABOLIC_RATE",
-        organ="METABOLISM_RATE_CONSTANT_IN_{}",
-        per_organ=False,
-    ),
-    "k_influx": Kind(SBO.FORWARD_RATE_CONSTANT, "INFLUX_CONSTANT"),
-    "k_efflux": Kind(SBO.FORWARD_RATE_CONSTANT, "EFFLUX_RATE_CONSTANT"),
-    "custom_parameter": Kind(None, _BIOCHEM),
+    "k_metabolism": Kind(SBO.KINETIC_CONSTANT, "INTRINSIC_CLEARANCE_RATE"),
+    "k_influx": Kind(SBO.KINETIC_CONSTANT, "CLEARANCE_RATE"),
+    "k_efflux": Kind(SBO.KINETIC_CONSTANT, "CLEARANCE_RATE"),
+    "custom_parameter": Kind(None, _MISC),
+    "custom_species": Kind(None, "CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT"),
+    "custom_amount": Kind(None, "AMOUNT_OF_COMPOUND_IN_COMPARTMENT"),
     # routes, intestine, sinks
     "dose": Kind(_P, "PARAMETER", terms=((BQB.IS, "ncit/C25488"),), requested="dose"),
     "iv_time": Kind(
         _P,
         "PARAMETER",
-        terms=_IV,
+        terms=_IV_BOLUS,
         requested="injection time of an intravenous dose",
     ),
     "iv_rate": Kind(
         SBO.FORWARD_RATE_CONSTANT,
         "PARAMETER",
-        terms=_IV,
+        terms=_IV_BOLUS,
         requested="injection rate constant of an intravenous dose",
     ),
     "infusion_rate": Kind(
         _P,
         "PARAMETER",
-        terms=_IV,
+        terms=_IV_INFUSION,
         requested="infusion rate of an intravenous infusion",
     ),
-    "dissolution": Kind(
-        _P, "PHYSICOCHEMICAL_PARAMETER", requested="dissolution of a formulation"
-    ),
+    "dissolution": Kind(_P, _MISC, requested="dissolution of a formulation"),
     "application_rate": Kind(SBO.FORWARD_RATE_CONSTANT, "ABSORPTION_RATE_CONSTANT"),
     "absorption_rate": Kind(
         SBO.FORWARD_RATE_CONSTANT, "ABSORPTION_RATE_CONSTANT_INTESTINE"
     ),
     "transit_time": Kind(_P, "INTESTINAL_TRANSIT_TIME"),
+    "gastric_transit_time": Kind(_P, _PHYS, requested="gastric emptying time"),
     "fed": Kind(
-        _P, _MISC, terms=((BQB.IS_VERSION_OF, "ncit/C63663"),), requested="fed state"
+        _P,
+        _MISC,
+        terms=((BQB.IS_VERSION_OF, "ncit/C65056"),),  # postprandial
+        requested="prandial state (fed or fasted)",
     ),
     "intestine_geometry": Kind(
-        _P,
-        "FRACTION_OF_INTESTINAL_TISSUE",
-        requested="intestinal mucosa and absorption geometry",
+        _P, _PHYS, requested="intestinal mucosa and absorption geometry"
     ),
     "gut_flow": Kind(_P, "BLOOD_FLOW_RATE_TO_GUT"),
     "gut_volume": Kind(_P, "VOLUME_OF_GUT"),
@@ -550,11 +580,11 @@ KINDS: dict[str, Kind] = {
     ),
     "mucosa_volume": Kind(_P, "ENTEROCYTE_VOLUME"),
     "bile_transit": Kind(
-        SBO.FORWARD_RATE_CONSTANT, "ENTEROHEPATIC_RECIRCULATION_RATE_CONSTANT"
+        SBO.FORWARD_RATE_CONSTANT, _PHYS, requested="bile transit rate constant"
     ),
     "tubule_fraction": Kind(
         _P,
-        "BODILY_FLUID_FLOW_RATE_PARAMETER",
+        _PHYS,
         requested="tubular flow fraction of the glomerular filtration rate",
     ),
     "fraction_absorbed": Kind(_P, "UPTAKE_FRACTION_TO_BLOOD"),
@@ -563,6 +593,7 @@ KINDS: dict[str, Kind] = {
     ),
     # observers and the outflow of the organs
     "outflow": Kind(_P, "TOTAL_VENOUS_CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT"),
+    "outflow_blood_cells": Kind(_P, "CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT"),
     "plasma_concentration": Kind(_P, "CONCENTRATION_IN_PLASMA"),
     "free_concentration": Kind(_P, "UNBOUND_CONCENTRATION_IN_PLASMA"),
     "blood_concentration": Kind(_P, "CONCENTRATION_IN_BLOOD"),
@@ -624,7 +655,12 @@ KINDS: dict[str, Kind] = {
         _T, "RENAL_EXCRETION", terms=((BQB.IS, "go/GO:0003094"),)
     ),  # glomerular filtration
     "tubular_flow": Kind(
-        _T, "RENAL_EXCRETION", terms=((BQB.IS, "go/GO:0007588"),)
+        _T,
+        None,
+        terms=(
+            (BQB.IS_PART_OF, pbpko("RENAL_EXCRETION")),
+            (BQB.IS_PART_OF, "go/GO:0007588"),  # excretion
+        ),
     ),  # excretion
     "absorption": Kind(
         _T, "ABSORPTION", terms=((BQB.IS, "go/GO:0050892"),)
@@ -642,8 +678,17 @@ KINDS: dict[str, Kind] = {
         requested="gastrointestinal transit process",
     ),
     "fecal_excretion": Kind(_T, "FECAL_EXCRETION", terms=((BQB.IS, "go/GO:0007588"),)),
-    "bile_flow": Kind(_T, "ENTEROHEPATIC_RECIRCULATION"),
-    "iv_application": Kind(_T, "INTRAVENOUS_INFUSION_EXPOSURE"),
+    "bile_flow": Kind(
+        _T, None, terms=((BQB.IS_PART_OF, pbpko("ENTEROHEPATIC_RECIRCULATION")),)
+    ),
+    "iv_application": Kind(
+        _T,
+        None,
+        terms=(
+            (BQB.IS_VERSION_OF, pbpko("INTRAVENOUS_BOLUS_EXPOSURE")),
+            (BQB.IS_VERSION_OF, pbpko("INTRAVENOUS_INFUSION_EXPOSURE")),
+        ),
+    ),
     "oral_application": Kind(_T, "ORAL_EXPOSURE"),
     "custom_reaction": Kind(
         SBO.BIOCHEMICAL_OR_TRANSPORT_REACTION,
@@ -652,6 +697,15 @@ KINDS: dict[str, Kind] = {
     ),
 }
 """The kinds of the elements the library creates."""
+
+
+_DEFAULT_SBO = {
+    "Compartment": _C,
+    "Species": _SPECIES,
+    "Parameter": _P,
+    "Reaction": SBO.BIOCHEMICAL_OR_TRANSPORT_REACTION,
+}
+"""The SBO term of an element whose kind keeps the SBO term of the element, if it has none."""
 
 
 def _resolve(kind: Kind, place: _Place | None, pool: Pool | None) -> str | None:
@@ -702,8 +756,10 @@ def annotate[S: Sbase](
         substance: the substance of a species, whose annotations it takes.
 
     Returns:
-        The element, with the SBO term of the kind (unless the kind keeps the
-        element's) and its terms added to its annotations.
+        The element, with the SBO term of the kind (a kind which keeps the
+        SBO term of the element gives a generic one to an element without)
+        and its terms added to its annotations; a term of the place whose
+        resource the element has already (as what it is) is not repeated.
 
     Raises:
         KeyError: if the kind, the segment or the site is unknown.
@@ -724,8 +780,9 @@ def annotate[S: Sbase](
     if site is not None:
         places.append(SITES[site])
     if not isinstance(element, Species):
+        present = {r for _, r in terms}
         for p in places:
-            terms += [(where, r) for _, r in p.terms]
+            terms += [(where, r) for _, r in p.terms if r not in present]
             if isinstance(element, Compartment) and p.compartment is not None:
                 terms.append((where, pbpko(p.compartment)))
     if protein is not None and protein in PROTEINS:
@@ -736,6 +793,8 @@ def annotate[S: Sbase](
             terms.append((q, f"ncit/{entry.ncit}"))
     if k.sbo is not None:
         element.sboTerm = k.sbo
+    elif element.sboTerm is None:
+        element.sboTerm = _DEFAULT_SBO[type(element).__name__]
     existing = list(element.annotations or [])
     element.annotations = existing + [
         t for t in dict.fromkeys(terms) if t not in existing

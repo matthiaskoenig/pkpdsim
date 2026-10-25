@@ -155,7 +155,10 @@ def test_combine_shared_object_accepted() -> None:
             },
             "process 'DRG3A4'",
         ),
-        ({"pd": [cardiac_pd(emax=0.9)]}, "PD component 'cardio'"),
+        (
+            {"pd": [cardiac_pd(reads="inh")]},
+            "PD component 'cardio' has different inputs or outputs",
+        ),
         ({"variants": Variants({Organ.LIVER: "zonated"})}, "organ 'li'"),
         ({"sex": Sex.FEMALE}, "sex"),
         ({"population": "east_asian_tanaka"}, "population"),
@@ -187,6 +190,44 @@ def test_combine_duplicate_ids_raises(change: dict[str, object], match: str) -> 
     )
     with pytest.raises(ValueError, match=match):
         PBPKDefinition.combine(base, other, sid="coupled")
+
+
+def test_combine_pd_equal_by_model_id_and_ports() -> None:
+    """The same PD component, constructed by each package for itself, is taken once.
+
+    PD components are equal by the id of their model, their inputs and their
+    outputs (R50): two separately built `cardiac_pd()` merge, a component of
+    the same id with other inputs raises (the "pd" case of
+    `test_combine_duplicate_ids_raises`).
+    """
+    a = dataclasses.replace(_drg_package(), pd=[cardiac_pd()])
+    b = dataclasses.replace(_inh_package(), pd=[cardiac_pd()])
+    assert a.pd[0].model is not b.pd[0].model
+    d = PBPKDefinition.combine(a, b, sid="coupled")
+    assert len(d.pd) == 1
+    assert d.pd[0] == cardiac_pd()
+    different = dataclasses.replace(b, pd=[cardiac_pd(reads="inh")])
+    with pytest.raises(ValueError, match="different inputs or outputs"):
+        PBPKDefinition.combine(a, different, sid="coupled")
+
+
+def test_combine_omitted_variant_is_no_requirement() -> None:
+    """An organ which a package leaves out takes the variant of the other package.
+
+    The inhibitor package does not choose a liver: the coupled model has the
+    zonated liver of the drug package, in either order.
+    """
+    drg = dataclasses.replace(
+        _drg_package(), variants=Variants({Organ.LIVER: "zonated"})
+    )
+    inh = _inh_package()
+    assert Organ.LIVER not in inh.variants.organs
+    for order in ((drg, inh), (inh, drg)):
+        d = PBPKDefinition.combine(*order, sid="coupled")
+        assert dict(d.variants.organs) == {Organ.LIVER: "zonated"}
+    standard = dataclasses.replace(inh, variants=Variants({Organ.LIVER: "standard"}))
+    with pytest.raises(ValueError, match="organ 'li'"):
+        PBPKDefinition.combine(drg, standard, sid="coupled")
 
 
 def test_combine_nothing_raises() -> None:
@@ -232,11 +273,17 @@ def test_cross_package_inhibition(tmp_path: Path) -> None:
     constant over the AUC of the drug (checked to 1e-6). The intrinsic
     clearance falls by `1 + I_u/Ki` and the AUC rises by it.
 
-    Tolerance: 1 %. The well-stirred hepatic clearance deviates from the
-    intrinsic-clearance limit by the extraction `E`: the AUC ratio is
-    `(1 + r)*(1 - E*r/(1 + r))` with `r = I_u/Ki`, i.e. about `E/2` (0.5 %)
-    low at `r` about 1 and `E` about 1 %; the saturation of the drug
-    (`C/Km` < 1e-4) and the trapezoidal rule (< 1e-4) are far below it.
+    The expectation is the well-stirred liver of the model, not the
+    intrinsic-clearance limit: the flow-limited liver is perfused by the
+    plasma flow `Qp = Qh*(1 - HCT)` (the drug does not enter the
+    erythrocytes, no shunt) and metabolizes `CLint_u*fu*Cout/(1 + r)` with
+    `CLint_u = Vmax*Vli/Km`, so the plasma clearance is
+    `Qp*fu*CLint_u/(1 + r)/(Qp + fu*CLint_u/(1 + r))` and the AUC ratio
+    `(Qp*(1 + r) + fu*CLint_u)/(Qp + fu*CLint_u)`, about 0.6 % below
+    `1 + r` at an extraction of about 1 %. No other organ eliminates, so the
+    AUC is that of any pool. Tolerance 1e-3: the saturation of the drug
+    (`C/Km` < 1e-4), the trapezoidal rule and the extrapolated tail
+    (< 1e-4 of the AUC) are below it.
     """
     d = PBPKDefinition.combine(_drg_package(), _inh_package(), sid="ddi")
     result = build(d, tmp_path)
@@ -257,4 +304,17 @@ def test_cross_package_inhibition(tmp_path: Path) -> None:
     # the extrapolated terminal tail is a small part of the AUC
     assert tail_control < 1e-3
     assert tail_inhibited < 1e-2
-    assert auc_inhibited / auc_control == pytest.approx(ratio, rel=1e-2)
+    r = ratio - 1
+    qp = float(control[ids.QH]) * (1 - float(control[ids.HCT]))
+    clint = (
+        float(control[ids.flat(Organ.LIVER, "DRG3A4_Vmax")])
+        * float(control[ids.organ_volume(Organ.LIVER)])
+        / float(control[ids.flat(Organ.LIVER, "DRG3A4_Km")])
+        * float(control[ids.fu("drg")])
+    )
+    assert float(control[ids.F_SHUNT]) == 0.0
+    assert float(control[ids.F_FUNCTIONAL]) == 1.0
+    assert float(control[ids.flat(Organ.LIVER, ids.activity("CYP3A4"))]) == 1.0
+    expected = (qp * (1 + r) + clint) / (qp + clint)
+    assert 0.003 < 1 - expected / ratio < 0.02
+    assert auc_inhibited / auc_control == pytest.approx(expected, rel=1e-3)

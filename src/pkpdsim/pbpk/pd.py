@@ -28,9 +28,14 @@ from sbmlutils.factory import PORT_SUFFIX, Model, Port, PortType
 __all__ = ["PDComponent", "ports"]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class PDComponent:
     """A model with declared ports, connected to the body by name.
+
+    Two components are equal when their models have the same id and they
+    have the same inputs and outputs (the sbmlutils `Model` compares by
+    identity), so the component which two packages construct each for
+    itself is one component of a coupled model (`PBPKDefinition.combine`).
 
     Attributes:
         model: the model of the component; its id is the id of its submodel
@@ -47,6 +52,26 @@ class PDComponent:
     model: Model
     inputs: Mapping[str, str]
     outputs: Mapping[str, str]
+
+    def _key(
+        self,
+    ) -> tuple[str, frozenset[tuple[str, str]], frozenset[tuple[str, str]]]:
+        """The model id, the inputs and the outputs, by which components compare."""
+        return (
+            str(self.model.sid),
+            frozenset(self.inputs.items()),
+            frozenset(self.outputs.items()),
+        )
+
+    def __eq__(self, other: object) -> bool:
+        """Compare by the model id, the inputs and the outputs."""
+        if not isinstance(other, PDComponent):
+            return NotImplemented
+        return self._key() == other._key()
+
+    def __hash__(self) -> int:
+        """Hash the model id, the inputs and the outputs."""
+        return hash(self._key())
 
 
 def ports(model: Model) -> dict[str, tuple[str, PortType | None]]:

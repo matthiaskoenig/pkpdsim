@@ -127,8 +127,13 @@ class PBPKDefinition:
         one physiology, so the definitions must agree on sex, population and
         the arm vein preset. Substance ids are unique over all packages, so
         nothing is renamed: an id which two definitions define is accepted
-        only if both define the same object (a shared metabolite), and an
-        organ only if both choose the same variant.
+        only if both define equal objects (a shared metabolite; PD components
+        are equal by the id of their model, their inputs and outputs). An
+        organ variant is a requirement: an organ which a definition leaves
+        out (the default organ) means no requirement, so the coupled model
+        takes the variant another definition chooses (e.g. its zonated
+        liver); two definitions which choose different variants of an organ
+        raise.
 
         Args:
             *definitions: the definitions, e.g. of a drug and an inhibitor.
@@ -183,6 +188,7 @@ class PBPKDefinition:
                 "PD component",
                 (x for d in definitions for x in d.pd),
                 lambda x: str(x.model.sid),
+                "has different inputs or outputs in two definitions",
             ),
             sex=first.sex,
             population=first.population,
@@ -344,22 +350,24 @@ class PBPKDefinition:
 
 
 def _union[T](
-    sid: str, what: str, items: Iterable[T], key: Callable[[T], Hashable]
+    sid: str,
+    what: str,
+    items: Iterable[T],
+    key: Callable[[T], Hashable],
+    differs: str = "is defined differently by two definitions",
 ) -> list[T]:
     """The union of the items of several definitions by their id, in order.
 
     Raises:
-        ValueError: if two items of one id differ, naming the id.
+        ValueError: if two items of one id differ, naming the id and how
+            they differ (`differs`).
     """
     result: dict[Hashable, T] = {}
     for item in items:
         k = key(item)
         if k in result and result[k] != item:
             name = " ".join(k) if isinstance(k, tuple) else k
-            raise ValueError(
-                f"Combine '{sid}': the {what} '{name}' is defined differently by "
-                "two definitions."
-            )
+            raise ValueError(f"Combine '{sid}': the {what} '{name}' {differs}.")
         result.setdefault(k, item)
     return list(result.values())
 
