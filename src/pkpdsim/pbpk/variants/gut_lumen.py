@@ -427,7 +427,12 @@ class LumenBuilder(StandardBuilder):
             "dissolution",
         )
         self.rate_rules.append(
-            RateRule(w, f"{pool} - ({' + '.join(outflows)}) * {age}", U.mmole)
+            RateRule(
+                w,
+                f"{pool} - ({' + '.join(outflows)}) * {age}",
+                U.mmole,
+                name=f"age-weighted undissolved amount {sid}",
+            )
         )
         self._rule(
             age,

@@ -79,7 +79,7 @@ from sbmlutils.metadata import SBO
 from sbmlutils.validation import validate_doc
 
 from pkpdsim.pbpk import ids, variants
-from pkpdsim.pbpk.annotation import annotate, model_annotations
+from pkpdsim.pbpk.annotation import annotate, initial_assignment, model_annotations
 from pkpdsim.pbpk.chemistry import Membrane, Metabolism, Transport
 from pkpdsim.pbpk.data import cite
 from pkpdsim.pbpk.definition import PBPKDefinition
@@ -365,7 +365,7 @@ def _to_rules(
             if ia.symbol in dynamic or not _symbols(ia.value) & dynamic:
                 continue
             assignments.remove(ia)
-            rules.append(AssignmentRule(ia.symbol, ia.value, ia.unit))
+            rules.append(AssignmentRule(ia.symbol, ia.value, ia.unit, name=ia.name))
             dynamic.add(ia.symbol)
             changed = True
     for element in elements:
@@ -488,7 +488,16 @@ def build(definition: PBPKDefinition, output_dir: Path) -> BuildResult:
     model = compose(definition)
     comp_path = output_dir / f"{definition.sid}.xml"
     flat_path = output_dir / f"{definition.sid}_flat.xml"
-    create_model(model, filepath=comp_path, validate=True, raise_on_error=True)
+    # SBML L3V2, the level of the models of pkdb_models: the names of the rules
+    # and initial assignments are written (L3V1 has no name on them)
+    create_model(
+        model,
+        filepath=comp_path,
+        sbml_level=3,
+        sbml_version=2,
+        validate=True,
+        raise_on_error=True,
+    )
     doc = flatten_sbml(comp_path, flat_path)
     validation = validate_doc(doc, title=flat_path.name)
     if validation.error_count:
@@ -544,7 +553,7 @@ class _Top:
                     ),
                     kind,
                 ),
-                InitialAssignment(pid, formula, unit),
+                initial_assignment(pid, formula, unit, name),
             ]
         )
 
@@ -572,7 +581,7 @@ class _Top:
                     kind,
                     pool=pool,
                 ),
-                InitialAssignment(cid, formula, U.litre),
+                initial_assignment(cid, formula, U.litre, name),
             ]
         )
 
@@ -903,7 +912,12 @@ class _Top:
                     "kp_organ",
                     organ=organ,
                 ),
-                InitialAssignment(pid, formula, U.dimensionless),
+                initial_assignment(
+                    pid,
+                    formula,
+                    U.dimensionless,
+                    f"tissue to plasma coefficient {sid} {organ.name.lower()}",
+                ),
             ]
         return objects
 

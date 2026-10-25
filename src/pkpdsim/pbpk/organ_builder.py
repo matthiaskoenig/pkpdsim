@@ -49,7 +49,7 @@ from sbmlutils.factory import (
 from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk import ids
-from pkpdsim.pbpk.annotation import annotate
+from pkpdsim.pbpk.annotation import annotate, initial_assignment
 from pkpdsim.pbpk.data import cite
 from pkpdsim.pbpk.impairment import organ_activity
 from pkpdsim.pbpk.organs import Organ, Part, Pool
@@ -294,7 +294,7 @@ class OrganBuilder:
             segment=segment,
             protein=protein,
         )
-        self.assignments.append(InitialAssignment(pid, formula, unit))
+        self.assignments.append(initial_assignment(pid, formula, unit, name))
         return pid
 
     def _constant(
@@ -357,7 +357,11 @@ class OrganBuilder:
             kind,
             segment=segment,
         )
-        self.assignments.append(InitialAssignment(cid, formula, U.litre))
+        self.assignments.append(
+            initial_assignment(
+                cid, formula, U.litre, in_zone(f"{name} {label(self.organ)}", zone)
+            )
+        )
 
     def _species(
         self, part: Part, s: Substance, parts: Parts, zone: str | None = None
@@ -589,7 +593,9 @@ class OrganBuilder:
             "enzyme_amount",
             protein=protein,
         )
-        self.rate_rules.append(RateRule(e, formula, U.per_min))
+        self.rate_rules.append(
+            RateRule(e, formula, U.per_min, name=f"turnover of {protein}")
+        )
 
     def _unbound_in_cell(self, sid: str, protein: str) -> str:
         """The unbound concentration of a substance in the cell of the organ.

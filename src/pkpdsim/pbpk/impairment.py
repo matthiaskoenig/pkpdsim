@@ -61,11 +61,11 @@ from dataclasses import dataclass
 from functools import cache
 from typing import TYPE_CHECKING, Any
 
-from sbmlutils.factory import InitialAssignment, Parameter, Sbase, UnitDefinition
+from sbmlutils.factory import Parameter, Sbase, UnitDefinition
 from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk import ids
-from pkpdsim.pbpk.annotation import annotate
+from pkpdsim.pbpk.annotation import annotate, initial_assignment
 from pkpdsim.pbpk.chemistry import Metabolism, Transport
 from pkpdsim.pbpk.data import cite, load
 from pkpdsim.pbpk.organs import PORTAL_ORGANS, Organ
@@ -259,7 +259,7 @@ def _initial(
             organ=organ,
             protein=protein,
         ),
-        InitialAssignment(pid, formula, unit),
+        initial_assignment(pid, formula, unit, name),
     ]
 
 
@@ -440,11 +440,14 @@ class _Impairment:
         )
         self.add(
             [
-                InitialAssignment(ids.F_SHUNT, shunt, U.dimensionless),
-                InitialAssignment(
+                initial_assignment(
+                    ids.F_SHUNT, shunt, U.dimensionless, "portosystemic shunt"
+                ),
+                initial_assignment(
                     ids.F_FUNCTIONAL,
                     ids.condition_factor("cp", "functional_liver"),
                     U.dimensionless,
+                    "functional fraction of the liver",
                 ),
             ]
         )

@@ -31,7 +31,14 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 
 from pymetadata.ontologies.pbpko import PBPKO
-from sbmlutils.factory import Compartment, Reaction, Sbase, Species
+from sbmlutils.factory import (
+    Compartment,
+    InitialAssignment,
+    Reaction,
+    Sbase,
+    Species,
+    UnitDefinition,
+)
 from sbmlutils.metadata import BQB, SBO
 
 from pkpdsim.annotations import compartments as _compartments
@@ -44,6 +51,7 @@ __all__ = [
     "Kind",
     "Term",
     "annotate",
+    "initial_assignment",
     "model_annotations",
     "pbpko",
     "requested_terms",
@@ -727,6 +735,30 @@ def _location(element: Sbase) -> BQB:
     if isinstance(element, Reaction):
         return BQB.OCCURS_IN
     return BQB.IS_PROPERTY_OF
+
+
+def initial_assignment(
+    symbol: str, formula: str, unit: UnitDefinition, name: str
+) -> InitialAssignment:
+    """Get the initial assignment of a constant, with a name and an SBO term.
+
+    Every quantity of the library which depends on parameters only is a
+    constant with an initial assignment; the assignment carries the name of
+    its target and the SBO term of a mathematical expression, so the factory
+    has nothing to hint about.
+
+    Args:
+        symbol: the id of the target.
+        formula: the formula.
+        unit: the unit of the formula.
+        name: the name of the target.
+
+    Returns:
+        The initial assignment.
+    """
+    return InitialAssignment(
+        symbol, formula, unit, name=name, sboTerm=SBO.MATHEMATICAL_EXPRESSION
+    )
 
 
 def annotate[S: Sbase](

@@ -1,7 +1,9 @@
 """Tests of the composition and the build of a PBPK model."""
 
 import dataclasses
+import logging
 import math
+import os
 import time
 from pathlib import Path
 
@@ -16,6 +18,7 @@ from pkpdsim.pbpk import (
     Excretion,
     FirstOrder,
     FirstOrderDissolution,
+    Inhibition,
     Kp,
     Membrane,
     Mode,
@@ -28,6 +31,7 @@ from pkpdsim.pbpk import (
     Substance,
     Transport,
     Variants,
+    WeibullDissolution,
     ids,
 )
 from pkpdsim.pbpk.builder import (
@@ -184,18 +188,148 @@ def test_flat_ids_follow_scheme(simple: BuildResult) -> None:
     assert model.getParameter(ids.absorption("drg_m")).getValue() == 0.0
 
 
+@pytest.mark.skipif(
+    "PYTEST_XDIST_WORKER" in os.environ,
+    reason="CPU time inflates under the contention of the parallel workers (R53); "
+    "runs serially: `pytest -n 0`, the second command of tox",
+)
 def test_load_time(simple: BuildResult) -> None:
     """The flat model loads fast in sbmlsim.
 
     Every quantity of parameters only is an initial assignment, since
     roadrunner inlines assignment rules: with the deep rules of the physiology
-    the simple model took 28.8 s to compile (LLJIT O2), now 2.0 s alone and
-    up to 6 s of CPU time among the workers of the full parallel test run
-    (shared cores); the bound sits between both.
+    the simple model took 28.8 s to compile (LLJIT O2), now about 2 s. The CPU
+    time of the compile grows with the contention of the parallel test run
+    (11 s observed among the workers), so the test runs only serially, in a
+    run without pytest-xdist (`pytest -n 0`, the second command of tox and so
+    of continuous integration); the structural guard
+    `test_rules_read_a_state` runs in every run.
     """
     start = time.process_time()
     load(simple)
     assert time.process_time() - start < 10.0
+
+
+def rules_without_state(doc: libsbml.SBMLDocument) -> list[str]:
+    """Get the assignment rules which read no state, also through other rules.
+
+    A state is what changes during a simulation by itself: a species, the
+    variable of a rate rule, `time`, or a variable parameter or compartment
+    which no rule computes (an input changed during the simulation, a dynamic
+    parameter of the definition). A rule which reaches none of them, directly
+    or through the assignment rules it reads, depends on constants only and
+    belongs into an initial assignment: roadrunner inlines assignment rules,
+    and the deep chains of the physiology as rules made the compile of the
+    simple model 14 times slower (R21). The rate of an intravenous injection
+    `Kiv_<s>` is a rule by design (the dose protocol changes `ti_<s>` between
+    doses) and is not reported.
+
+    Args:
+        doc: the flat model.
+
+    Returns:
+        The ids of the rules which read no state.
+    """
+    model = doc.getModel()
+    rules = {r.getVariable(): r for r in model.getListOfRules() if r.isAssignment()}
+    states = {s.getId() for s in model.getListOfSpecies()}
+    states |= {r.getVariable() for r in model.getListOfRules() if r.isRate()}
+    states |= {
+        e.getId()
+        for e in [*model.getListOfParameters(), *model.getListOfCompartments()]
+        if not e.getConstant() and e.getId() not in rules
+    }
+    states.add("time")
+
+    def names(rule: libsbml.Rule) -> set[str]:
+        found: set[str] = set()
+        nodes = [rule.getMath()]
+        while nodes:
+            node = nodes.pop()
+            if node.getType() == libsbml.AST_NAME_TIME:
+                found.add("time")
+            elif node.isName():
+                found.add(node.getName())
+            nodes.extend(node.getChild(i) for i in range(node.getNumChildren()))
+        return found
+
+    reads = {sid: names(rule) for sid, rule in rules.items()}
+    stateful = set(states)
+    changed = True
+    while changed:
+        changed = False
+        for sid, symbols in reads.items():
+            if sid not in stateful and symbols & stateful:
+                stateful.add(sid)
+                changed = True
+    return sorted(
+        sid
+        for sid in rules
+        if sid not in stateful and not sid.startswith(ids.injection_rate(""))
+    )
+
+
+def test_rules_read_a_state(simple: BuildResult) -> None:
+    """No assignment rule of the flat model depends on constants only (R53).
+
+    The deterministic guard of the load time: the cause of the slow compile
+    (assignment rules over constants which should be initial assignments) is
+    absent, whatever the contention of the test run.
+    """
+    assert rules_without_state(_flat(simple)) == []
+
+
+def test_rules_of_constants_are_found(simple: BuildResult) -> None:
+    """The guard finds the slow pattern: the physiology as assignment rules."""
+    doc = _flat(simple)
+    model = doc.getModel()
+    for pid in (ids.BMI, ids.BSA, ids.FFM, ids.CO):
+        ia = model.getInitialAssignment(pid)
+        rule = model.createAssignmentRule()
+        rule.setVariable(pid)
+        rule.setMath(ia.getMath().deepCopy())
+        model.removeInitialAssignment(pid)
+        model.getParameter(pid).setConstant(False)
+    assert rules_without_state(doc) == sorted([ids.BMI, ids.BSA, ids.CO, ids.FFM])
+
+
+def test_build_logs_no_sbmlutils_warning(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A build logs no warning of sbmlutils: every element is complete.
+
+    The definition has the variants (zonated liver, nephron kidney, segmented
+    intestine with a Weibull tablet and an intravenous route) and a
+    mechanism-based inhibitor (a turnover rate rule), so the elements of every
+    builder are created. A definition with a `dynamic` parameter gets the hint
+    of sbmlutils that nothing in the model changes the variable parameter: the
+    experiment changes it during the simulation, the hint is expected there.
+    """
+    inhibitor = Substance(
+        "inh",
+        name="inhibitor",
+        mr=350.0,
+        distribution=Kp(1.0, ftissue=1.0),
+        inhibits=(Inhibition("CYP3A4", "mechanism", ki=0.005, kinact=0.05),),
+    )
+    d = definition(
+        substances=[
+            simple_drug(),
+            Substance("drg_m", name="metabolite", mr=316.0),
+            inhibitor,
+        ],
+        variants=Variants(organs={Organ.LIVER: "zonated", Organ.KIDNEY: "nephron"}),
+        routes=[
+            Route.iv("drg"),
+            Route.oral("drg", WeibullDissolution(t50=30.0, shape=1.5)),
+        ],
+    )
+    with caplog.at_level(logging.WARNING, logger="sbmlutils"):
+        build(d, tmp_path)
+    warnings = [
+        r.getMessage() for r in caplog.records if r.name.startswith("sbmlutils")
+    ]
+    assert warnings == []
 
 
 def test_covariate_change_propagates(simple: BuildResult) -> None:
