@@ -1,0 +1,15 @@
+# The publications the numbers of the data files are taken from.
+# Every number of a data file has a `source` which is a key of this file.
+# The DOIs were written from the citations and are not yet checked online.
+
+[ICRP89]
+citation = "Valentin J (ed). Basic anatomical and physiological data for use in radiological protection: reference values. ICRP Publication 89. Ann ICRP 32(3-4), 2002."
+doi = "10.1016/S0146-6453(03)00002-2"
+
+[Jones2013]
+citation = "Jones H, Rowland-Yeo K. Basic concepts in physiologically based pharmacokinetic modeling in drug discovery and development. CPT Pharmacometrics Syst Pharmacol 2:e63, 2013."
+doi = "10.1038/psp.2013.41"
+
+[Brown1997]
+citation = "Brown RP, Delp MD, Lindstedt SL, Rhomberg LR, Beliles RP. Physiological parameter values for physiologically based pharmacokinetic models. Toxicol Ind Health 13(4):407-484, 1997."
+doi = "10.1177/074823379701300401"
