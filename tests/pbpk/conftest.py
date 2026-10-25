@@ -4,6 +4,7 @@
 varies them with arguments: `definition(routes=[Route.iv("drg")])`.
 """
 
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from pkpdsim.pbpk import (
@@ -68,24 +69,41 @@ def definition(**overrides: Any) -> PBPKDefinition:  # noqa: ANN401
 
 
 def load(result: BuildResult) -> "roadrunner.RoadRunner":
-    """Load the flat model of a build result with tight integrator tolerances.
+    """Load the flat model of a build as sbmlsim does, with tight integrator tolerances.
 
-    The model is compiled with the LLJIT backend of roadrunner: the MCJIT
-    backend (the default) takes about ten times longer for the deep rules of
-    the physiology.
+    `load_roadrunner` of sbmlsim is the production path: LLJIT, always compiled.
     """
-    import roadrunner
+    from sbmlsim.model.model_roadrunner import load_roadrunner
 
-    config = roadrunner.Config
-    backend = config.getValue(config.LLVM_BACKEND)
-    config.setValue(config.LLVM_BACKEND, config.LLJIT)
-    try:
-        r = roadrunner.RoadRunner(str(result.flat_path))
-    finally:
-        config.setValue(config.LLVM_BACKEND, backend)
+    r = load_roadrunner(result.flat_path)
     r.integrator.absolute_tolerance = 1e-12
     r.integrator.relative_tolerance = 1e-10
     return r
+
+
+def individual(path: Path, **changes: float) -> "roadrunner.RoadRunner":
+    """Load a model with changes before its initialization, as an experiment does.
+
+    The changes are the pre-initialization assignments of sbmlsim
+    (`RoadrunnerSBMLModel.initialize`), which evaluates the initial
+    assignments which read a changed parameter again.
+
+    Args:
+        path: the SBML file.
+        **changes: the values of parameters by id, e.g. `BW=100.0`.
+
+    Returns:
+        The roadrunner instance of the initialized model.
+    """
+    from sbmlsim.model.model_roadrunner import RoadrunnerSBMLModel
+    from sbmlsim.model.symbols import TargetKind
+    from sbmlsim.simulator.plan import Assignment
+
+    model = RoadrunnerSBMLModel(source=path)
+    model.initialize(
+        [Assignment(k, TargetKind.PARAMETER, value=v) for k, v in changes.items()]
+    )
+    return model.r_loaded
 
 
 def total_amount(r: "roadrunner.RoadRunner", sid: str) -> float:

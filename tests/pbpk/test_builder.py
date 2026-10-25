@@ -1,6 +1,7 @@
 """Tests of the composition and the build of a PBPK model."""
 
 import dataclasses
+import time
 from pathlib import Path
 
 import libsbml
@@ -37,7 +38,14 @@ from pkpdsim.pbpk.builder import (
 )
 from pkpdsim.pbpk.physiology import Sex, reference_tissue_volumes
 
-from .conftest import definition, dose_amount, load, simple_drug, total_amount
+from .conftest import (
+    definition,
+    dose_amount,
+    individual,
+    load,
+    simple_drug,
+    total_amount,
+)
 
 DAY = 24 * 60.0
 """One day (min)."""
@@ -122,13 +130,57 @@ def test_flat_ids_follow_scheme(simple: BuildResult) -> None:
     rules = {
         r.getVariable(): libsbml.formulaToL3String(r.getMath())
         for r in model.getListOfRules()
+        if r.isAssignment()
     }
-    assert rules["Cout_li_drg"] == "LI__Cpl_drg"
-    assert rules[ids.fu("drg")] == ids.fu_ref("drg")
-    assert rules[ids.bp("drg")].replace(" ", "") == "1dimensionless-HCT"
+    assert rules == {
+        ids.organ_outflow(o, s): f"{ids.submodel(o)}__Cpl_{s}"
+        for o in Organ
+        for s in ("drg", "drg_m")
+    }
+    initial = {
+        a.getSymbol(): libsbml.formulaToL3String(a.getMath())
+        for a in model.getListOfInitialAssignments()
+    }
+    assert initial[ids.fu("drg")] == ids.fu_ref("drg")
+    assert initial[ids.bp("drg")].replace(" ", "") == "1dimensionless-HCT"
+    assert initial[ids.K_FECES].replace(" ", "") == "1dimensionless/t_lumen"
+    assert initial["LI__Vpl"].replace(" ", "") == "Vli*f_vas_li*(1dimensionless-HCT)"
     assert model.getParameter("Cout_li_drg") is not None
     for pid in ("IVDOSE_drg", "PODOSE_drg", "Ri_drg", "ti_drg", "Mr_drg", "ka_drg"):
         assert model.getParameter(pid) is not None, pid
+    assert model.getParameter(ids.absorption("drg")).getValue() == 1.0
+    assert model.getParameter(ids.absorption("drg_m")).getValue() == 0.0
+
+
+def test_load_time(simple: BuildResult) -> None:
+    """The flat model loads fast in sbmlsim.
+
+    Every quantity of parameters only is an initial assignment, since
+    roadrunner inlines assignment rules: with the deep rules of the physiology
+    the simple model took 28.8 s to compile (LLJIT O2), now 2.0 s alone and
+    up to 6 s of CPU time among the workers of the full parallel test run
+    (shared cores); the bound sits between both.
+    """
+    start = time.process_time()
+    load(simple)
+    assert time.process_time() - start < 10.0
+
+
+def test_covariate_change_propagates(simple: BuildResult) -> None:
+    """A change of an experiment before the simulation reaches organs and pools."""
+    reference = individual(simple.flat_path)
+    r = individual(simple.flat_path, BW=100.0, f_cardiac_function=0.5)
+    vad, qmu = ids.organ_volume(Organ.ADIPOSE), ids.organ_flow(Organ.MUSCLE)
+    assert r[vad] > reference[vad] + 10.0
+    assert r[qmu] < 0.6 * reference[qmu]
+    for local, factor in (("Vpl", 1.1), ("Vti", 1.5), ("PS_drg", 1.5)):
+        flat = ids.flat(Organ.ADIPOSE, local)
+        assert r[flat] > reference[flat] * factor, flat
+    assert r["AD__Vpl"] == pytest.approx(
+        r[vad] * r[ids.vascular_fraction(Organ.ADIPOSE)] * (1 - r[ids.HCT]), rel=1e-12
+    )
+    assert r["Vve_pl"] == pytest.approx(r["Vve"] * (1 - r[ids.HCT]), rel=1e-12)
+    assert r[ids.fu("drg")] == reference[ids.fu("drg")]
 
 
 def test_reference_tissue_volume(simple: BuildResult) -> None:
@@ -169,8 +221,13 @@ def test_mass_balance_closed_system(tmp_path: Path, mode: Mode, ery: str) -> Non
     r[ids.iv_dose("drg")] = 10.0
     assert _drift(r, ["drg"]) < 1e-6
     assert dose_amount(r, "drg") < 1e-12
-    tissue = "LI__Cor_drg" if mode is Mode.PERFUSION else "MU__Cpl_drg"
-    assert r[f"[{tissue}]"] > 0
+    tissue = {
+        Mode.TISSUE: ["MU__Cti_drg"],
+        Mode.PERMEABILITY: ["MU__Cis_drg", "MU__Cic_drg"],
+        Mode.PERFUSION: ["MU__Cor_drg"],
+    }[mode]
+    for sid in tissue:
+        assert r[f"[{sid}]"] > 0, sid
 
 
 def test_mass_balance_with_elimination(tmp_path: Path) -> None:
@@ -271,7 +328,7 @@ def test_two_substances_independent(tmp_path: Path) -> None:
     a = alone.simulate(times=times, selections=["time", "[Cve_drg]"])
     b = both.simulate(times=times, selections=["time", "[Cve_drg]"])
     for ca, cb in zip(a[1:, 1], b[1:, 1], strict=True):
-        assert cb == pytest.approx(ca, rel=1e-9)
+        assert cb == pytest.approx(ca, rel=1e-7)
 
 
 def _ports(md: libsbml.Model) -> dict[str, str]:

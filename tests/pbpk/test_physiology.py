@@ -4,6 +4,7 @@ import copy
 from pathlib import Path
 from typing import Any
 
+import libsbml
 import pytest
 import roadrunner
 from sbmlutils.factory import Model, Parameter, create_model
@@ -11,6 +12,8 @@ from sbmlutils.factory import Model, Parameter, create_model
 from pkpdsim.pbpk import MODEL_UNITS, U, cite, ids, load, physiology, sources
 from pkpdsim.pbpk.organs import PORTAL_ORGANS, Organ, Pool
 from pkpdsim.pbpk.physiology import Sex, physiology_objects
+
+from .conftest import individual
 
 LEAN = [o for o in Organ if o is not Organ.ADIPOSE]
 
@@ -44,8 +47,9 @@ def paths(tmp_path_factory: pytest.TempPathFactory) -> dict[Sex, Path]:
     return paths
 
 
-def _rr(paths: dict[Sex, Path], sex: Sex) -> roadrunner.RoadRunner:
-    return roadrunner.RoadRunner(str(paths[sex]))
+def _rr(paths: dict[Sex, Path], sex: Sex, **changes: float) -> roadrunner.RoadRunner:
+    """The physiology of a sex, with covariates changed as an experiment does."""
+    return individual(paths[sex], **changes)
 
 
 def _janmahasatian(bw: float, height: float, sex: Sex) -> float:
@@ -100,7 +104,6 @@ def test_reference_individual_reproduces_reference(
     p = _data(sex)
     organs = p["organs"]
     vblood = _v(p["blood"], "volume")
-    assert r[ids.SEX] == (0.0 if sex is Sex.MALE else 1.0)
     assert r[ids.BW] == _v(p, "bodyweight")
     assert r[ids.HEIGHT] == _v(p, "height")
     assert r[ids.VBLOOD] == pytest.approx(vblood, rel=1e-9)
@@ -156,9 +159,7 @@ def test_scaled_individual_sums(paths: dict[Sex, Path]) -> None:
     brain and skin (eqs. 9, 10, 12, 13); adipose grows.
     """
     reference = _rr(paths, Sex.MALE)
-    r = _rr(paths, Sex.MALE)
-    r.setValue(ids.BW, 100.0)
-    r.setValue(ids.HEIGHT, 180.0)
+    r = _rr(paths, Sex.MALE, BW=100.0, HEIGHT=180.0)
 
     ffm = _janmahasatian(100.0, 180.0, Sex.MALE)
     bsa = 0.007184 * 100**0.425 * 180**0.725
@@ -190,35 +191,38 @@ def test_scaled_individual_sums(paths: dict[Sex, Path]) -> None:
 
 def test_extreme_individual_adipose_positive(paths: dict[Sex, Path]) -> None:
     """A lean, tall man of 45 kg and 190 cm keeps a positive adipose volume."""
-    r = _rr(paths, Sex.MALE)
-    r.setValue(ids.BW, 45.0)
-    r.setValue(ids.HEIGHT, 190.0)
+    r = _rr(paths, Sex.MALE, BW=45.0, HEIGHT=190.0)
     assert r[ids.organ_mass(Organ.ADIPOSE)] > 0
     assert r[ids.organ_volume(Organ.ADIPOSE)] > 0
     _assert_balance(r, Sex.MALE)
 
 
-def test_sex_switch(paths: dict[Sex, Path]) -> None:
-    """SEX = 1 on the male model gives the values of the female model."""
-    female = _rr(paths, Sex.FEMALE)
-    r = _rr(paths, Sex.MALE)
-    p = _data(Sex.FEMALE)
-    r.setValue(ids.SEX, 1.0)
-    r.setValue(ids.BW, _v(p, "bodyweight"))
-    r.setValue(ids.HEIGHT, _v(p, "height"))
-    pids = female.model.getGlobalParameterIds()
-    assert set(pids) == set(r.model.getGlobalParameterIds())
-    for pid in pids:
-        assert r[pid] == pytest.approx(female[pid], rel=1e-12), pid
-    _assert_balance(r, Sex.FEMALE)
+def test_sex_is_chosen_at_build(paths: dict[Sex, Path]) -> None:
+    """Each build has the references of its sex, no switch and no rule.
+
+    The male model with the body weight and height of the female reference
+    keeps the male references: the sex is not a covariate.
+    """
+    for sex in Sex:
+        doc = libsbml.readSBMLFromFile(str(paths[sex]))
+        model = doc.getModel()
+        assert model.getNumRules() == 0
+        assert model.getParameter("SEX") is None
+        assert "piecewise" not in libsbml.writeSBMLToString(doc)
+        r = _rr(paths, sex)
+        p = _data(sex)
+        assert r[ids.HCT] == _v(p, "hematocrit")
+        assert r[ids.ref(ids.CO)] == pytest.approx(_v(p, "cardiac_output"))
+    female = _data(Sex.FEMALE)
+    r = _rr(paths, Sex.MALE, BW=_v(female, "bodyweight"), HEIGHT=_v(female, "height"))
+    assert r[ids.HCT] == _v(_data(Sex.MALE), "hematocrit")
+    _assert_balance(r, Sex.MALE)
 
 
 def test_renal_and_cardiac_factors(paths: dict[Sex, Path]) -> None:
     """The renal factor scales GFR, the cardiac factor CO and every flow."""
     reference = _rr(paths, Sex.MALE)
-    r = _rr(paths, Sex.MALE)
-    r.setValue(ids.F_RENAL_FUNCTION, 0.5)
-    r.setValue(ids.F_CARDIAC_FUNCTION, 0.5)
+    r = _rr(paths, Sex.MALE, f_renal_function=0.5, f_cardiac_function=0.5)
     assert r[ids.GFR] == pytest.approx(0.5 * reference[ids.GFR], rel=1e-12)
     assert r[ids.CO] == pytest.approx(0.5 * reference[ids.CO], rel=1e-12)
     flows = [ids.organ_flow(o) for o in Organ] + [ids.QHA, ids.QPO, ids.QH]
@@ -227,15 +231,22 @@ def test_renal_and_cardiac_factors(paths: dict[Sex, Path]) -> None:
     _assert_flows(r)
 
 
-def test_reset_keeps_covariates(paths: dict[Sex, Path]) -> None:
-    """A covariate changed before the simulation holds through it."""
-    r = _rr(paths, Sex.MALE)
-    r.setValue(ids.BW, 100.0)
+def test_covariates_are_initial_values(paths: dict[Sex, Path]) -> None:
+    """A covariate changed before the simulation holds through it; during it, not.
+
+    The quantities which follow from the covariates are constants with initial
+    assignments: a change of `BW` during the simulation changes nothing else.
+    """
+    reference = _rr(paths, Sex.MALE)
+    r = _rr(paths, Sex.MALE, BW=100.0)
     vad = r[ids.organ_volume(Organ.ADIPOSE)]
+    assert vad > reference[ids.organ_volume(Organ.ADIPOSE)] + 10.0
     r.simulate(0, 10, 3)
-    r.reset()
     assert r[ids.BW] == 100.0
-    assert r[ids.organ_volume(Organ.ADIPOSE)] == pytest.approx(vad, rel=1e-12)
+    assert r[ids.organ_volume(Organ.ADIPOSE)] == vad
+    r.setValue(ids.BW, 50.0)
+    r.simulate(10, 20, 3)
+    assert r[ids.organ_volume(Organ.ADIPOSE)] == vad
 
 
 @pytest.mark.parametrize("sex", list(Sex))
@@ -262,9 +273,7 @@ def test_reference_fractions(paths: dict[Sex, Path], sex: Sex) -> None:
 
 def test_vascular_spaces_are_blood_volume(paths: dict[Sex, Path]) -> None:
     """For any individual the vascular spaces of the organs and the pools are the blood."""
-    r = _rr(paths, Sex.MALE)
-    r.setValue(ids.BW, 100.0)
-    r.setValue(ids.HEIGHT, 180.0)
+    r = _rr(paths, Sex.MALE, BW=100.0, HEIGHT=180.0)
     vascular = sum(r[ids.vascular_fraction(o)] * r[ids.organ_volume(o)] for o in Organ)
     pools = sum(r[ids.pool_volume(pool)] for pool in Pool)
     assert vascular + pools == pytest.approx(r[ids.VBLOOD], rel=1e-9)
@@ -306,7 +315,8 @@ def test_negative_reference_adipose_raises(monkeypatch: pytest.MonkeyPatch) -> N
 
     monkeypatch.setattr(physiology, "load", fake_load)
     with pytest.raises(ValueError, match=r"female.*adipose.*kg"):
-        physiology_objects(Sex.MALE)
+        physiology_objects(Sex.FEMALE)
+    physiology_objects(Sex.MALE)
 
 
 def test_unit_of_data_checked(monkeypatch: pytest.MonkeyPatch) -> None:

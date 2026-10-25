@@ -19,7 +19,13 @@ Until the segmented intestine, the lumen is the single lumen of the builder.
 from dataclasses import dataclass
 from typing import Literal
 
-from sbmlutils.factory import AssignmentRule, Parameter, RateRule, Reaction, Sbase
+from sbmlutils.factory import (
+    InitialAssignment,
+    Parameter,
+    RateRule,
+    Reaction,
+    Sbase,
+)
 from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk import ids
@@ -153,13 +159,13 @@ def _iv(s: Substance) -> list[Sbase]:
             kiv,
             None,
             U.per_min,
-            constant=False,
+            constant=True,
             name=f"injection rate {sid} [1/min]",
             sboTerm=_SBO_PARAMETER,
             notes="Rate of the application of the intravenous dose.\n\n"
             f"`{kiv} = {kiv_formula}`",
         ),
-        AssignmentRule(kiv, kiv_formula, U.per_min),
+        InitialAssignment(kiv, kiv_formula, U.per_min),
         Parameter(
             ri,
             0.0,

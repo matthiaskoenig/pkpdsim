@@ -22,6 +22,11 @@ flows, hematocrit, fractions, substance parameters, pool and sink species)
 through a port, and `Boundary.replacements` names the element of the body
 which replaces it. The Kp of a substance is the whole-tissue (interstitial +
 intracellular) to plasma coefficient in every form.
+
+The volumes of the parts, the coefficients and the exchanges depend on
+parameters only and are constants with initial assignments (they follow a
+change of the body before a simulation, not during it); only the outflow
+concentration, which reads a species, is an assignment rule.
 """
 
 from collections.abc import Mapping
@@ -31,6 +36,7 @@ from typing import Protocol
 from sbmlutils.factory import (
     AssignmentRule,
     Compartment,
+    InitialAssignment,
     ModelDefinition,
     Parameter,
     Port,
@@ -192,6 +198,7 @@ class _Builder:
         self.species: dict[str, Species] = {}
         self.parameters: dict[str, Parameter] = {}
         self.rules: list[AssignmentRule] = []
+        self.assignments: list[InitialAssignment] = []
         self.reactions: list[Reaction] = []
         self.replacements: dict[str, str] = {}
         self.outputs: dict[str, str] = {}
@@ -214,6 +221,7 @@ class _Builder:
             species=list(self.species.values()),
             parameters=list(self.parameters.values()),
             rules=self.rules,
+            assignments=self.assignments,
             reactions=self.reactions,
         )
         boundary = Boundary(
@@ -230,7 +238,7 @@ class _Builder:
                 pid,
                 1.0,
                 unit,
-                constant=False,
+                constant=True,
                 name=name,
                 sboTerm=SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
                 notes=f"{text}\n\n{_INPUT}" if text else _INPUT,
@@ -248,7 +256,7 @@ class _Builder:
                 cid,
                 1.0,
                 U.litre,
-                constant=False,
+                constant=True,
                 name=name,
                 sboTerm=sbo,
                 notes=f"{text}\n\n{_INPUT}" if text else _INPUT,
@@ -286,7 +294,7 @@ class _Builder:
         text: str,
         port: bool | Port = False,
     ) -> str:
-        """A parameter of the organ with its assignment rule."""
+        """A parameter of the organ with its assignment rule (it reads species)."""
         self.parameters[pid] = Parameter(
             pid,
             None,
@@ -298,6 +306,31 @@ class _Builder:
             port=port,
         )
         self.rules.append(AssignmentRule(pid, formula, unit))
+        return pid
+
+    def _initial(
+        self,
+        pid: str,
+        formula: str,
+        unit: UnitDefinition,
+        name: str,
+        text: str,
+    ) -> str:
+        """A constant parameter of the organ with its initial assignment.
+
+        For a quantity of the parameters of the body (volumes, fractions,
+        substance parameters), which changes with them before a simulation.
+        """
+        self.parameters[pid] = Parameter(
+            pid,
+            None,
+            unit,
+            constant=True,
+            name=name,
+            sboTerm=SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
+            notes=f"{text}\n\n`{pid} = {formula}`",
+        )
+        self.assignments.append(InitialAssignment(pid, formula, unit))
         return pid
 
     def _constant(
@@ -318,20 +351,20 @@ class _Builder:
         text: str = "",
         sbo: str = SBO.PHYSICAL_COMPARTMENT,
     ) -> None:
-        """A compartment of the organ with its volume as assignment rule."""
+        """A constant compartment of the organ with its volume as initial assignment."""
         if cid in self.compartments:
             return
         self.compartments[cid] = Compartment(
             cid,
             None,
             U.litre,
-            constant=False,
+            constant=True,
             name=f"{name} {_label(self.organ)}",
             sboTerm=sbo,
             notes=f"{text}\n\n`{cid} = {formula}`" if text else f"`{cid} = {formula}`",
             port=True,
         )
-        self.rules.append(AssignmentRule(cid, formula, U.litre))
+        self.assignments.append(InitialAssignment(cid, formula, U.litre))
 
     def _species(self, part: Part, s: Substance, parts: Parts) -> None:
         """The species of a substance in a part of the organ."""
@@ -498,7 +531,7 @@ class _Builder:
             vascular = self._bp(s)
         else:
             vascular = f"({_ONE} - {self.hct})"
-        return self._rule(
+        return self._initial(
             ids.k_organ(s.sid),
             distribution.k_organ(self.f_vas, vascular, kp),
             U.dimensionless,
@@ -653,7 +686,7 @@ class _Builder:
             "Tissue volume of the reference individual summed over the organs "
             "whose exchange is a share of ftissue.",
         )
-        return self._rule(
+        return self._initial(
             pid,
             f"{ftissue} * {self.v} * ({_ONE} - {self.f_vas}) / {total}",
             U.l_per_min,
@@ -686,7 +719,7 @@ class _Builder:
         for key in distribution.INTERSTITIAL:
             if key not in self.parameters:
                 self.parameters[key] = distribution.constant(key)
-        k_int = self._rule(
+        k_int = self._initial(
             ids.k_int_pls(s.sid),
             distribution.k_int_pls(fu),
             U.dimensionless,
@@ -696,7 +729,7 @@ class _Builder:
         )
         kp = self._kp(s)
         if kp is None:
-            k_cell = self._rule(
+            k_cell = self._initial(
                 ids.k_cell_pls(s.sid),
                 k_int,
                 U.dimensionless,
@@ -706,7 +739,7 @@ class _Builder:
             )
         else:
             distribution.check_kp(s, self.organ)
-            k_cell = self._rule(
+            k_cell = self._initial(
                 ids.k_cell_pls(s.sid),
                 distribution.k_cell_pls(kp, k_int, self.f_vas, self.f_int),
                 U.dimensionless,
@@ -723,7 +756,7 @@ class _Builder:
             self.parameters[distribution.K_VAS] = distribution.constant(
                 distribution.K_VAS
             )
-            self._rule(
+            self._initial(
                 ids.PS_VAS,
                 f"{distribution.K_VAS} * {self.v}",
                 U.l_per_min,

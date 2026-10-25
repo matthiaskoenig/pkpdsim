@@ -23,7 +23,7 @@ class Organ(StrEnum):
     KIDNEY = "ki"
     STOMACH = "st"
     SMALL_INTESTINE = "si"
-    LARGE_INTESTINE = "co"
+    LARGE_INTESTINE = "la"
     SPLEEN = "sp"
     PANCREAS = "pa"
     MUSCLE = "mu"

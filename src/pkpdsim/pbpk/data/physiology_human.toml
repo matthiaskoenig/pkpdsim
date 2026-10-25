@@ -102,7 +102,7 @@ blood = { value = 0.038, unit = "dimensionless", source = "ICRP89", notes = "Tab
 f_vas = { value = 0.2446, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
 f_int = { value = 0.07252, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (Schmitt 2008 human composition, Fint of gut); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
 
-[male.organs.co]
+[male.organs.la]
 mass = { value = 0.37, unit = "kg", source = "ICRP89", notes = "Table 2.8, walls of right colon, left colon and rectosigmoid (150 + 150 + 70 g male, 145 + 145 + 70 g female; the contents are in [unmapped])" }
 density = { value = 1.045, unit = "kg/l", source = "ICRP89", notes = "Section 6.3 para 191, all soft tissues of the alimentary tract" }
 flow = { value = 0.04, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40" }
@@ -316,7 +316,7 @@ blood = { value = 0.038, unit = "dimensionless", source = "ICRP89", notes = "Tab
 f_vas = { value = 0.2052, unit = "dimensionless", source = "ICRP89", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), Tables 2.8, 2.14, Section 7.4" }
 f_int = { value = 0.0763, unit = "dimensionless", source = "Schmitt2008", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (Schmitt 2008 human composition, Fint of gut); unverified: transcribed from httk 2.7.4 tissue.data (MIT), not checked against the table of the paper" }
 
-[female.organs.co]
+[female.organs.la]
 mass = { value = 0.36, unit = "kg", source = "ICRP89", notes = "Table 2.8, walls of right colon, left colon and rectosigmoid (150 + 150 + 70 g male, 145 + 145 + 70 g female; the contents are in [unmapped])" }
 density = { value = 1.045, unit = "kg/l", source = "ICRP89", notes = "Section 6.3 para 191, all soft tissues of the alimentary tract" }
 flow = { value = 0.05, unit = "dimensionless", source = "ICRP89", notes = "Table 2.40" }

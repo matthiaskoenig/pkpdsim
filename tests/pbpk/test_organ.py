@@ -131,8 +131,9 @@ def _equation(
 
 
 def _rules(md: ModelDefinition) -> dict[str, str]:
-    """The assignment rules of a model definition."""
-    return {r.variable: str(r.value) for r in md.rules or []}
+    """The assignment rules and initial assignments of a model definition."""
+    rules = {r.variable: str(r.value) for r in md.rules or []}
+    return rules | {a.symbol: str(a.value) for a in md.assignments or []}
 
 
 def _parameters(md: ModelDefinition) -> dict[str, Parameter]:
@@ -165,6 +166,7 @@ def _validate(md: ModelDefinition, tmp_path: Path) -> None:
         species=md.species,
         parameters=md.parameters,
         rules=md.rules,
+        assignments=md.assignments,
         reactions=md.reactions,
     )
     for model in (container, main):

@@ -76,7 +76,9 @@ class PBPKDefinition:
         variants: the organ variants.
         routes: the routes of administration.
         pd: the pharmacodynamic components.
-        sex: the sex of the reference individual.
+        sex: the sex of the model, chosen when it is built: its reference
+            values and default individual; a study of both sexes uses one
+            model per sex.
         population: the population of the physiology.
         arm_vein: the arm vein sampling site.
         name: the name of the model.

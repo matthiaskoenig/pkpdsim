@@ -16,13 +16,18 @@ Every port is declared by the organ (its `Boundary`) and every replacement is
 generated here from it; the flat model has the ids of the scheme
 (`LI__Cpl_<s>` in the organs, the ids of the top model unprefixed).
 
-Until the segmented intestine the lumen is a single compartment `Vlumen`
-(the fluid of the small intestine) in the top model: the oral doses enter it,
-a substance is absorbed from it with first order `ka_<s>` into the portal
-vein (the gut wall is passed without distribution) and leaves it with the
-small intestinal transit into the feces; the bile drains into it.
+The sinks and the single intestinal lumen are those of `pkpdsim.pbpk.sinks`.
+
+Every quantity which depends on parameters only (the physiology, the
+compartments of the pools and the organs, `fu`, `BP`, the coefficients and
+exchanges of the organs) is a constant with an initial assignment, not an
+assignment rule: a change before the simulation (a change of an experiment,
+which sbmlsim applies with the initial assignments which read it) is
+followed, a change during the simulation is not. Only what reads a species
+(the outflow concentrations `Cout_<o>_<s>`) is an assignment rule.
 """
 
+import copy
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -30,8 +35,8 @@ from pathlib import Path
 from sbmlutils.comp import flatten_sbml
 from sbmlutils.factory import (
     PORT_SUFFIX,
-    AssignmentRule,
     Compartment,
+    InitialAssignment,
     Model,
     ModelDefinition,
     Parameter,
@@ -49,7 +54,6 @@ from sbmlutils.metadata import SBO
 from sbmlutils.validation import validate_doc
 
 from pkpdsim.pbpk import ids
-from pkpdsim.pbpk.data import cite, value
 from pkpdsim.pbpk.definition import PBPKDefinition
 from pkpdsim.pbpk.organ import Boundary, OrganComponent, OrganContext, StandardOrgan
 from pkpdsim.pbpk.organs import Organ, Part, Pool
@@ -57,9 +61,9 @@ from pkpdsim.pbpk.parts import parts_for
 from pkpdsim.pbpk.physiology import physiology_objects, reference_tissue_volumes
 from pkpdsim.pbpk.placement import kp_id, value_parameter
 from pkpdsim.pbpk.routes import route_objects
+from pkpdsim.pbpk.sinks import sink_objects
 from pkpdsim.pbpk.substance import Kp, KpMethod, Substance
 from pkpdsim.pbpk.units import MODEL_UNITS, U
-from pkpdsim.pbpk.values import Value
 
 __all__ = ["BuildResult", "build", "compose", "organ_component", "organ_context"]
 
@@ -156,7 +160,7 @@ def compose(definition: PBPKDefinition) -> Model:
         top.substance(s)
     for pool in Pool:
         top.pool(pool)
-    top.sinks()
+    top.add(sink_objects(definition))
     top.routes()
 
     model_definitions: list[ModelDefinition] = []
@@ -236,7 +240,7 @@ class _Top:
                 self.known.add(str(o.sid))
             self.objects.append(o)
 
-    def _rule(
+    def _initial(
         self,
         pid: str,
         formula: str,
@@ -244,19 +248,19 @@ class _Top:
         name: str,
         text: str,
     ) -> None:
-        """A parameter with its assignment rule."""
+        """A constant parameter with its initial assignment."""
         self.add(
             [
                 Parameter(
                     pid,
                     None,
                     unit,
-                    constant=False,
+                    constant=True,
                     name=name,
                     sboTerm=_SBO_PARAMETER,
                     notes=f"{text}\n\n`{pid} = {formula}`",
                 ),
-                AssignmentRule(pid, formula, unit),
+                InitialAssignment(pid, formula, unit),
             ]
         )
 
@@ -268,19 +272,19 @@ class _Top:
         text: str,
         sbo: str = SBO.PHYSICAL_COMPARTMENT,
     ) -> None:
-        """A compartment with its volume as assignment rule."""
+        """A constant compartment with its volume as initial assignment."""
         self.add(
             [
                 Compartment(
                     cid,
                     None,
                     U.litre,
-                    constant=False,
+                    constant=True,
                     name=name,
                     sboTerm=sbo,
                     notes=f"{text}\n\n`{cid} = {formula}`",
                 ),
-                AssignmentRule(cid, formula, U.litre),
+                InitialAssignment(cid, formula, U.litre),
             ]
         )
 
@@ -350,7 +354,7 @@ class _Top:
                 ),
             ]
         )
-        self._rule(
+        self._initial(
             ids.fu(sid),
             ids.fu_ref(sid),
             U.dimensionless,
@@ -453,7 +457,7 @@ class _Top:
         sid, ery = s.sid, s.erythrocytes
         bp, name = ids.bp(sid), f"blood to plasma ratio {sid}"
         if ery is None:
-            self._rule(
+            self._initial(
                 bp,
                 f"{_ONE} - {ids.HCT}",
                 U.dimensionless,
@@ -502,7 +506,7 @@ class _Top:
                     )
                 ]
             )
-        self._rule(
+        self._initial(
             bp,
             f"{_ONE} - {ids.HCT} + {ids.HCT} * {ids.kbc(sid)}",
             U.dimensionless,
@@ -562,104 +566,6 @@ class _Top:
                 f"{ids.kbc_exchange(s.sid)} * {cells} * "
                 f"({cpl} - {cbc} / {ids.kbc(s.sid)})",
                 f"exchange {s.sid} plasma and blood cells, {label} pool",
-            )
-
-    # --- sinks and lumen -------------------------------------------------
-
-    def sinks(self) -> None:
-        """The urine, the feces, the bile and the single intestinal lumen."""
-        nominal = "Nominal volume of a compartment of amounts, which enters no rate."
-        transit = value("intestine_human", "lumen", "transit_time")
-        self.add(
-            [
-                Compartment(
-                    ids.VURINE,
-                    1.0,
-                    U.litre,
-                    constant=True,
-                    name="urine",
-                    sboTerm=SBO.PHYSICAL_COMPARTMENT,
-                    notes=nominal,
-                ),
-                Compartment(
-                    ids.VFECES,
-                    1.0,
-                    U.litre,
-                    constant=True,
-                    name="feces",
-                    sboTerm=SBO.PHYSICAL_COMPARTMENT,
-                    notes=nominal,
-                ),
-                _value_compartment(
-                    ids.VBILE,
-                    value("intestine_human", "bile", "volume"),
-                    "bile",
-                    "Bile, which drains into the intestinal lumen.",
-                ),
-                _value_compartment(
-                    ids.VLUMEN,
-                    value("intestine_human", "lumen", "volume"),
-                    "intestinal lumen",
-                    "The single intestinal lumen: the fluid of the small "
-                    "intestine, into which the oral doses and the bile enter.",
-                ),
-                value_parameter(
-                    ids.K_BILE,
-                    value("intestine_human", "bile", "k_bile"),
-                    U.per_min,
-                    "transit bile to intestinal lumen [1/min]",
-                    _SBO_PARAMETER,
-                ),
-                value_parameter(
-                    ids.K_FECES,
-                    1.0 / transit.value,
-                    U.per_min,
-                    "transit intestinal lumen to feces [1/min]",
-                    _SBO_PARAMETER,
-                    f"The reciprocal of the small intestinal transit time "
-                    f"{transit.value} min ({transit.notes}).\n\nSource:\n\n- "
-                    f"{cite(str(transit.source))}",
-                ),
-            ]
-        )
-        ka = value("intestine_human", "lumen", "ka")
-        for s in self.definition.substances:
-            sid = s.sid
-            self._species(ids.urine(sid), ids.VURINE, f"{s.name} (urine)", amount=True)
-            self._species(ids.feces(sid), ids.VFECES, f"{s.name} (feces)", amount=True)
-            self._species(ids.bile(sid), ids.VBILE, f"{s.name} (bile)")
-            self._species(ids.lumen(sid), ids.VLUMEN, f"{s.name} (intestinal lumen)")
-            self.add(
-                [
-                    value_parameter(
-                        ids.absorption(sid),
-                        ka,
-                        U.per_hr,
-                        f"absorption {sid} [1/hr]",
-                        _SBO_PARAMETER,
-                        "First order absorption from the intestinal lumen into "
-                        "the portal vein; a model fits it.",
-                    )
-                ]
-            )
-            self._reaction(
-                ids.bile_reaction(sid),
-                f"{ids.bile(sid)} -> {ids.lumen(sid)}",
-                f"{ids.K_BILE} * {ids.VBILE} * {ids.bile(sid)}",
-                f"transit {sid} bile to intestinal lumen",
-            )
-            self._reaction(
-                ids.absorption_reaction(sid),
-                f"{ids.lumen(sid)} -> {ids.pool_species(Pool.PORTAL, sid)}",
-                f"{ids.absorption(sid)} / 60 min_per_hr * {ids.VLUMEN} * "
-                f"{ids.lumen(sid)}",
-                f"absorption {sid} intestinal lumen to portal vein",
-            )
-            self._reaction(
-                ids.feces_reaction(sid),
-                f"{ids.lumen(sid)} -> {ids.feces(sid)}",
-                f"{ids.K_FECES} * {ids.VLUMEN} * {ids.lumen(sid)}",
-                f"transit {sid} intestinal lumen to feces",
             )
 
     # --- routes ----------------------------------------------------------
@@ -755,18 +661,7 @@ def _scope_port_metaids(md: ModelDefinition) -> None:
                     name=f"Port of {element.sid}",
                     sboTerm=SBO.PORT,
                 )
-                element.port = port
+            else:
+                port = copy.copy(port)
             port.metaId = f"{md.sid}__{port.sid}"
-
-
-def _value_compartment(cid: str, v: Value, name: str, text: str) -> Compartment:
-    """A constant compartment of a value of the data, its source in the notes."""
-    return Compartment(
-        cid,
-        v.value,
-        U.litre,
-        constant=True,
-        name=name,
-        sboTerm=SBO.PHYSICAL_COMPARTMENT,
-        notes=f"{text} {v.notes}\n\nSource:\n\n- {cite(str(v.source))}",
-    )
+            element.port = port

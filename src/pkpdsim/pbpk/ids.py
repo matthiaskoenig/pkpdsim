@@ -29,8 +29,8 @@ __all__ = [
     "QH",
     "QHA",
     "QPO",
-    "SEX",
     "SV_TIS",
+    "T_LUMEN",
     "VBILE",
     "VBLOOD",
     "VFECES",
@@ -105,8 +105,6 @@ BW = "BW"
 """The body weight (covariate)."""
 HEIGHT = "HEIGHT"
 """The height (covariate)."""
-SEX = "SEX"
-"""The sex, 0 male and 1 female (covariate)."""
 AGE = "AGE"
 """The age (covariate)."""
 BMI = "BMI"
@@ -148,7 +146,9 @@ VFECES = "Vfeces"
 K_BILE = "k_bile"
 """The rate of the transit of the bile into the intestinal lumen."""
 K_FECES = "k_feces"
-"""The rate of the transit of the intestinal lumen into the feces."""
+"""The rate of the transit of the intestinal lumen into the feces, `1/t_lumen`."""
+T_LUMEN = "t_lumen"
+"""The transit time of the intestinal lumen."""
 PS_VAS = "PS_vas"
 """The local id of the exchange between plasma and interstitium of an organ."""
 
@@ -158,17 +158,9 @@ def ref(pid: str) -> str:
     return f"{pid}_ref"
 
 
-_SUBMODELS: dict[Organ, str] = {Organ.LARGE_INTESTINE: "LA"}
-"""The submodels whose id is not the organ id in capitals: `CO` is the cardiac output."""
-
-
 def submodel(organ: Organ) -> str:
-    """The id of the submodel of an organ, `LI`; `LA` for the large intestine.
-
-    The organ id in capitals, but for the large intestine (`co`), whose
-    capitals are the id of the cardiac output `CO`.
-    """
-    return _SUBMODELS.get(organ, organ.value.upper())
+    """The id of the submodel of an organ, the organ id in capitals, `LI`."""
+    return organ.value.upper()
 
 
 def flat(organ: Organ, local: str) -> str:
