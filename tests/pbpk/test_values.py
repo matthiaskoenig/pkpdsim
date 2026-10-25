@@ -10,6 +10,18 @@ def test_fitted_takes_fit_record_kwargs() -> None:
     assert v.source == "fit"
     assert v.uncertainties == []
     assert v.unit == U.dimensionless
+    assert v.notes is None
+
+
+def test_fitted_keeps_notes() -> None:
+    """A fitted value takes a remark, e.g. the literature of the process."""
+    v = fitted(
+        {"value": 0.6, "uncertainties": [], "unit": U.per_min},
+        notes="The uptake by OAT1.",
+    )
+    assert v.notes == "The uptake by OAT1."
+    assert v.source == "fit"
+    assert v.value == 0.6
 
 
 def test_as_value_wraps_float() -> None:

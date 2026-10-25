@@ -82,7 +82,7 @@ The full form (`Mode.PERMEABILITY`) derives the intracellular coefficient from t
 
 ## Values, fits and ids
 
-A number of a substance is a plain float in the units of the model or a `Value` with unit and source (a key of `data/sources.toml` of the library); a fitted number is `fitted(FITS.parameter(pid, unit=...))`, which carries the distrib uncertainty of the fit into the SBML parameter:
+A number of a substance is a plain float in the units of the model or a `Value` with unit and source (a key of `data/sources.toml` of the library); a fitted number is `fitted(FITS.parameter(pid, unit=...))`, which carries the distrib uncertainty of the fit into the SBML parameter (`notes=` adds a remark to the notes of the parameter, e.g. the literature of a process):
 
 ```python
 # not executed: FITS are the adopted fits of a model package

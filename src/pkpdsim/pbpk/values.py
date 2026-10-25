@@ -41,13 +41,17 @@ type Q = float | Value
 """A number, plain or with unit and provenance."""
 
 
-def fitted(kwargs: Mapping[str, Any], source: str = "fit") -> Value:
+def fitted(
+    kwargs: Mapping[str, Any], source: str = "fit", notes: str | None = None
+) -> Value:
     """Get the value of a fitted parameter.
 
     Args:
         kwargs: the keyword arguments of `FitRecords.parameter(pid, unit=...)`:
             `value`, `uncertainties` and `unit`.
         source: the provenance of the value.
+        notes: a remark on the value, e.g. the literature of the process; the
+            provenance of the fit is in the uncertainties.
 
     Returns:
         The value with the uncertainty of the fit.
@@ -56,6 +60,7 @@ def fitted(kwargs: Mapping[str, Any], source: str = "fit") -> Value:
         value=kwargs["value"],
         unit=kwargs["unit"],
         source=source,
+        notes=notes,
         uncertainties=kwargs.get("uncertainties"),
     )
 
