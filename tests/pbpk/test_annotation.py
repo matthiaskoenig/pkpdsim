@@ -4,8 +4,10 @@ Two definitions together use every feature of the library: the organ
 variants (zonated liver, nephron kidney, segmented intestine; the standard
 organs with the single lumen), kinetic and equilibrium erythrocytes, a Kp
 with an override, a Kp method, the flow-limited organ, active transport on
-both membranes, competitive and mechanism-based inhibition, induction, the
-impairment, the observers, a PD component and every route and formulation.
+both membranes, first order kinetics per volume, competitive and
+mechanism-based inhibition, induction, the impairment, the observers (of the
+library, the urinary excretion rate and of a definition), a PD component and
+every route and formulation.
 Every compartment, species, parameter and reaction of the comp model and of
 the flat model has an SBO term and at least one ontology term.
 """
@@ -39,6 +41,7 @@ from pkpdsim.pbpk import (
     Membrane,
     Metabolism,
     Mode,
+    Observer,
     Organ,
     Part,
     PBPKDefinition,
@@ -252,6 +255,9 @@ def _standard() -> PBPKDefinition:
         variants=Variants(organs={Organ.SMALL_INTESTINE: "single_lumen"}),
         routes=[Route.iv("drg"), Route.oral("drg"), Route.oral_solution("sec")],
         dynamic=("f_renal_function",),
+        observers=[
+            Observer("Aurine_total", "Aurine_drg + Aurine_sec", U.mmole, "urine")
+        ],
     )
 
 
@@ -456,3 +462,31 @@ def test_clearance_per_volume_is_no_clearance(built: BuildResult) -> None:
 def _resources_of(term: libsbml.CVTerm) -> list[str]:
     """The resources of one CV term."""
     return [term.getResourceURI(j) for j in range(term.getNumResources())]
+
+
+def test_outputs_of_the_model_are_output_parameters(built: BuildResult) -> None:
+    """The urinary excretion rate and an observer of the definition are output parameters.
+
+    PBPKO's urinary rate is a biochemical parameter (an input): the rate is
+    a version of it, not asserted as it (R49).
+    """
+    doc = libsbml.readSBMLFromFile(str(built.comp_path))
+    model = doc.getModel()
+    rate = model.getParameter("Rurine_drg")
+    assert _url_of("OUTPUT_PARAMETER") in _resources(rate)
+    terms = {
+        (rate.getCVTerm(i).getBiologicalQualifierType(), url)
+        for i in range(rate.getNumCVTerms())
+        for url in _resources_of(rate.getCVTerm(i))
+    }
+    assert (libsbml.BQB_IS_VERSION_OF, pbpko("URINARY_RATE")) in terms
+    assert (libsbml.BQB_IS, pbpko("URINARY_RATE")) not in terms
+    if model.getId() == "standard":
+        observer = model.getParameter("Aurine_total")
+        assert _url_of("OUTPUT_PARAMETER") in _resources(observer)
+        assert observer.getSBOTermID() == "SBO:0000002"
+
+
+def _url_of(name: str) -> str:
+    """The resource of a PBPKO term by its name."""
+    return pbpko(name)

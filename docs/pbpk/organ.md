@@ -129,10 +129,13 @@ The kidney filters the unbound plasma concentration of a substance with urinary 
 
 ```equations title="kidney"
 J_gfr_<s>: Cpl_<s> -> Aurine_<s> = fu_<s> * GFR * Cpl_<s> * (1 - f_reabsorbed_<s>)
+Rurine_<s> = J_gfr_<s>
 ```
+
+The urinary excretion rate `Rurine_<s>` (mmole/min) is the sum of the fluxes of the kidney into the urine, the filtration and every apical efflux (`J_gfr_<s> + SEC` with a secretion `SEC`), for every substance with urinary excretion or an apical transport of the kidney; it is an output of the kidney which replaces `Rurine_<s>` of the top model, so experiments and observers read it there.
 
 Tubular secretion is an apical efflux of the kidney into the urine (see [Chemistry](chemistry.md)); the standard kidney refuses an uptake from the urine, which is cumulative. Every metabolism and transport of the kidney runs with the tubular capacity `1 - f_tubular + f_tubular*f_renal_function`, which follows the renal function (the intact nephron hypothesis, see [Impairment](impairment.md#chronic-kidney-disease)). The [nephron kidney](variants.md#nephron-kidney) has the tubule with its segments, for secretion into and reabsorption from the tubular fluid.
 
 ## Boundary
 
-The organ declares its boundary (`Boundary`): every input (`Qmu`, `HCT`, `fu_api`, `Car_api`, ...) with the element of the body which replaces it, and its outputs (`Cout_<s>` replaces `Cout_<o>_<s>` of the top model). The builder generates the ports and the replacements from it. A variant has the same boundary, so the circulation sees nothing else and swapping a variant changes nothing outside the organ (see [Organ variants](variants.md)).
+The organ declares its boundary (`Boundary`): every input (`Qmu`, `HCT`, `fu_api`, `Car_api`, ...) with the element of the body which replaces it, and its outputs (`Cout_<s>` replaces `Cout_<o>_<s>` of the top model, the kidney's `Rurine_<s>` replaces `Rurine_<s>`). The builder generates the ports and the replacements from it. A variant has the same boundary, so the circulation sees nothing else and swapping a variant changes nothing outside the organ (see [Organ variants](variants.md)).

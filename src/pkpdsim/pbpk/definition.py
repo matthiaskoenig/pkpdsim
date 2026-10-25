@@ -4,6 +4,8 @@ import re
 from collections.abc import Callable, Hashable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 
+from sbmlutils.factory import Creator
+
 from pkpdsim.pbpk import ids
 from pkpdsim.pbpk.chemistry import (
     MM,
@@ -15,6 +17,7 @@ from pkpdsim.pbpk.chemistry import (
 )
 from pkpdsim.pbpk.data import load
 from pkpdsim.pbpk.kp import check_kp_method
+from pkpdsim.pbpk.observers import Observer, formula_symbols
 from pkpdsim.pbpk.organ import OrganComponent
 from pkpdsim.pbpk.organs import Organ, Part, Pool
 from pkpdsim.pbpk.pd import PDComponent
@@ -102,6 +105,11 @@ class PBPKDefinition:
             every other quantity follows a change before the simulation only.
         name: the name of the model.
         notes: the notes of the model.
+        observers: the observers of the definition, assignment rules of the
+            top model after the observers of the library (a sum of
+            metabolites, a ratio); each reads a state.
+        creators: the creators of the model, its model history (sbmlutils
+            `Creator`).
     """
 
     sid: str
@@ -116,19 +124,23 @@ class PBPKDefinition:
     dynamic: tuple[str, ...] = ()
     name: str | None = None
     notes: str | None = None
+    observers: Sequence[Observer] = ()
+    creators: Sequence[Creator] = ()
 
     @classmethod
     def combine(cls, *definitions: "PBPKDefinition", sid: str) -> "PBPKDefinition":
         """Couple the definitions of several packages into one physiology.
 
-        The substances, the chemistry, the routes, the PD components and the
-        dynamic parameters are the unions of the definitions (the observers
-        follow from the substances), the organ variants are merged; there is
+        The substances, the chemistry, the routes, the PD components, the
+        dynamic parameters, the observers of the definitions and the creators
+        are the unions of the definitions (the observers of the library follow
+        from the substances), the organ variants are merged; there is
         one physiology, so the definitions must agree on sex, population and
         the arm vein preset. Substance ids are unique over all packages, so
         nothing is renamed: an id which two definitions define is accepted
         only if both define equal objects (a shared metabolite; PD components
-        are equal by the id of their model, their inputs and outputs). An
+        are equal by the id of their model, their inputs and outputs; a
+        creator is the same person when all its fields are equal). An
         organ variant is a requirement: an organ which a definition leaves
         out (the default organ) means no requirement, so the coupled model
         takes the variant another definition chooses (e.g. its zonated
@@ -145,8 +157,9 @@ class PBPKDefinition:
         Raises:
             ValueError: if no definition is given, the definitions differ in
                 sex, population or arm vein preset, two definitions define an
-                id (substance, process, route, PD component) differently, or
-                choose different variants of an organ; naming the id.
+                id (substance, process, route, PD component, observer)
+                differently, or choose different variants of an organ; naming
+                the id.
         """
         if not definitions:
             raise ValueError(f"Combine '{sid}': no definitions given.")
@@ -195,10 +208,27 @@ class PBPKDefinition:
             arm_vein=first.arm_vein,
             dynamic=tuple(dict.fromkeys(p for d in definitions for p in d.dynamic)),
             notes=f"The coupled physiology of the definitions {sids}.",
+            observers=_union(
+                sid,
+                "observer",
+                (x for d in definitions for x in d.observers),
+                lambda x: x.sid,
+            ),
+            creators=_creators(definitions),
         )
 
-    def validate(self) -> None:
+    def validate(self, *, symbols: bool = True) -> None:
         """Check the definition.
+
+        The observers of the definition are checked against the top model:
+        `validate` composes the model without them (`pkpdsim.pbpk.builder`)
+        and checks that an observer id is no id of the body nor of another
+        observer, that every symbol of its formula is an id of the top model
+        (or another observer) and that it reads a state; `compose` makes the
+        same check on the model it composes and calls `validate` without it.
+
+        Args:
+            symbols: check the observers against the top model.
 
         Raises:
             ValueError: with all problems found, naming the offending ids.
@@ -209,6 +239,7 @@ class PBPKDefinition:
         problems += self._check_chemistry(known)
         problems += self._check_routes(known)
         problems += self._check_dynamic()
+        problems += self._check_observers()
         if self.population not in POPULATIONS:
             problems.append(
                 f"population '{self.population}' is unknown, the populations are "
@@ -220,10 +251,40 @@ class PBPKDefinition:
                 f"arm_vein '{self.arm_vein}' is no preset of data/arm_vein.toml, "
                 f"the presets are {presets}"
             )
+        if not problems and symbols and self.observers:
+            # the builder imports the definition: imported on use
+            from pkpdsim.pbpk.builder import observer_problems
+
+            problems += observer_problems(self)
         if problems:
             raise ValueError(
                 f"Invalid PBPK definition '{self.sid}':\n- " + "\n- ".join(problems)
             )
+
+    def _check_observers(self) -> list[str]:
+        """Check the ids and the formulas of the observers of the definition.
+
+        Their symbols are checked against the top model by
+        `pkpdsim.pbpk.builder.observer_problems`.
+        """
+        problems: list[str] = []
+        sids = [o.sid for o in self.observers]
+        twice = sorted({s for s in sids if sids.count(s) > 1})
+        if twice:
+            problems.append(f"duplicate observer ids: {twice}")
+        for o in self.observers:
+            if not _SID.fullmatch(o.sid):
+                problems.append(f"observer id '{o.sid}' is not an SBML SId")
+            elif "__" in o.sid:
+                problems.append(
+                    f"observer id '{o.sid}' contains '__', the separator of the "
+                    "ids of the organs in the flat model"
+                )
+            try:
+                formula_symbols(o.formula)
+            except ValueError as err:
+                problems.append(f"observer '{o.sid}': {err}")
+        return problems
 
     def _check_substances(self) -> list[str]:
         """Check the ids and the mechanisms of the substances."""
@@ -370,6 +431,19 @@ def _union[T](
             raise ValueError(f"Combine '{sid}': the {what} '{name}' {differs}.")
         result.setdefault(k, item)
     return list(result.values())
+
+
+def _creators(definitions: Iterable["PBPKDefinition"]) -> list[Creator]:
+    """The creators of several definitions, each person once, in order.
+
+    A sbmlutils `Creator` compares by identity; two creators are the same
+    person when all their fields are equal (its string).
+    """
+    unique: dict[str, Creator] = {}
+    for d in definitions:
+        for c in d.creators:
+            unique.setdefault(str(c), c)
+    return list(unique.values())
 
 
 def _merge_variants(

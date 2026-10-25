@@ -17,6 +17,7 @@ from pkpdsim.pbpk import (
     Membrane,
     Metabolism,
     Mode,
+    Observer,
     Organ,
     PBPKDefinition,
     Route,
@@ -320,3 +321,60 @@ def test_product_fraction_must_be_positive() -> None:
             ],
             chemistry=[m],
         ).validate()
+
+
+def test_observer_with_unknown_symbol_is_rejected() -> None:
+    """A symbol of an observer which is no id of the top model is named."""
+    with pytest.raises(ValueError, match=r"'x' reads \['Cnope'\]"):
+        _definition(observers=[Observer("x", "Cnope + 1 mM", U.mM, "x")]).validate()
+
+
+def test_observer_with_an_organ_id_is_rejected() -> None:
+    """An id of an organ (`LI__Cpl_api`) is not visible in the top model."""
+    observer = Observer("x", "LI__Cpl_api", U.mM, "x")
+    with pytest.raises(ValueError, match="LI__Cpl_api"):
+        _definition(observers=[observer]).validate()
+
+
+def test_observer_with_a_body_id_is_rejected() -> None:
+    """An observer id which is an id of the body is named."""
+    observer = Observer("Cve_api", "Car_api", U.mM, "x")
+    with pytest.raises(ValueError, match="observer id 'Cve_api' is an id of the body"):
+        _definition(observers=[observer]).validate()
+
+
+def test_observer_ids_and_formulas_checked() -> None:
+    """Observer ids are SIds without `__`, unique; a formula must parse."""
+    observers = [
+        Observer("a", "Carm_api", U.mM, "a"),
+        Observer("a", "Carm_api", U.mM, "a again"),
+        Observer("1b", "Carm_api", U.mM, "b"),
+        Observer("c__d", "Carm_api", U.mM, "c"),
+        Observer("e", "Carm_api +* 2", U.mM, "e"),
+    ]
+    with pytest.raises(ValueError) as info:
+        _definition(observers=observers).validate()
+    message = str(info.value)
+    assert "duplicate observer ids: ['a']" in message
+    assert "observer id '1b' is not an SBML SId" in message
+    assert "observer id 'c__d' contains '__'" in message
+    assert "observer 'e': formula 'Carm_api +* 2' cannot be parsed" in message
+
+
+def test_observer_symbols_checked_without_compose() -> None:
+    """`validate(symbols=False)` leaves the symbols to `compose`."""
+    observer = Observer("x", "Cnope", U.mM, "x")
+    _definition(observers=[observer]).validate(symbols=False)
+
+
+def test_observer_formula_symbols() -> None:
+    """The symbols of a formula by libsbml's parser: no units, no functions, `time`."""
+    from pkpdsim.pbpk.observers import formula_symbols
+
+    assert formula_symbols("exp(-k * time) * 2 mM + piecewise(a, b > 1 mM, c)") == {
+        "k",
+        "time",
+        "a",
+        "b",
+        "c",
+    }

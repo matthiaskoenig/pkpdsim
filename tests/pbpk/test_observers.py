@@ -3,7 +3,8 @@
 The observers read the pool species and the outflow concentrations of the
 organs: the unbound and the blood concentration of every pool, the hepatic
 vein and the arm vein, the flow-weighted mix of the venous outflows of the
-organs of a preset of `data/arm_vein.toml`.
+organs of a preset of `data/arm_vein.toml`. The kidney exposes the urinary
+excretion rate `Rurine_<s>`, and a definition adds observers of its own.
 """
 
 import dataclasses
@@ -15,14 +16,21 @@ import numpy as np
 import pytest
 
 from pkpdsim.pbpk import (
+    Direction,
     Erythrocytes,
+    FirstOrder,
     Kp,
+    Membrane,
     Mode,
+    Observer,
     Organ,
     Part,
     PBPKDefinition,
     Pool,
     Route,
+    Transport,
+    U,
+    Variants,
     ids,
     load,
 )
@@ -308,3 +316,131 @@ def test_arm_vein_data_sources() -> None:
 def test_definition_arm_vein_default() -> None:
     """The PK-Sim default is the preset of a definition which names none."""
     assert PBPKDefinition(sid="x", substances=[]).arm_vein == "pksim_default"
+
+
+# --- the urinary excretion rate ----------------------------------------------
+
+
+_SECRETION = Transport(
+    "SEC", Organ.KIDNEY, S, Direction.EFFLUX, Membrane.APICAL, FirstOrder(k=0.05)
+)
+"""The tubular secretion of the drug, an apical efflux of the kidney."""
+
+
+def _urine_run(path: Path, cols: list[str]) -> np.ndarray:
+    """Simulate an IV bolus of 10 mg for 10 hours, with time."""
+    r = individual(path)
+    r.integrator.absolute_tolerance = 1e-12
+    r.integrator.relative_tolerance = 1e-10
+    r[ids.iv_dose(S)] = 10.0
+    return r.simulate(0, 600, 6001, selections=["time", *cols])
+
+
+def test_urine_rate_integrates_to_the_urine(tmp_path: Path) -> None:
+    """The urinary excretion rate integrates to the amount in the urine."""
+    s = _urine_run(_build(tmp_path), [ids.urine_rate(S), ids.urine(S)])
+    assert s[-1, 2] > 0
+    assert np.trapezoid(s[:, 1], s[:, 0]) == pytest.approx(s[-1, 2], rel=1e-3)
+
+
+def test_urine_rate_sums_filtration_and_secretion(tmp_path: Path) -> None:
+    """`Rurine_<s>` is the filtration plus the apical efflux of the kidney."""
+    path = _build(tmp_path, chemistry=[_SECRETION])
+    gfr = ids.flat(Organ.KIDNEY, ids.filtration_reaction(S))
+    sec = ids.flat(Organ.KIDNEY, "SEC")
+    s = _urine_run(path, [ids.urine_rate(S), gfr, sec])
+    assert np.all(s[1:, 3] > 0)
+    np.testing.assert_allclose(s[:, 1], s[:, 2] + s[:, 3], rtol=1e-12, atol=0)
+
+
+def test_urine_rate_of_the_nephron_kidney(tmp_path: Path) -> None:
+    """In the nephron kidney `Rurine_<s>` is the outflow of the collecting duct."""
+    path = _build(
+        tmp_path,
+        chemistry=[_SECRETION],
+        variants=Variants(organs={Organ.KIDNEY: "nephron"}),
+    )
+    cd = ids.flat(Organ.KIDNEY, ids.tubule_reaction(S, "cd"))
+    s = _urine_run(path, [ids.urine_rate(S), cd, ids.urine(S)])
+    np.testing.assert_allclose(s[:, 1], s[:, 2], rtol=1e-12, atol=0)
+    assert np.trapezoid(s[:, 1], s[:, 0]) == pytest.approx(s[-1, 3], rel=1e-3)
+
+
+def test_urine_rate_only_for_the_urine(tmp_path: Path) -> None:
+    """A substance which reaches no urine has no urinary excretion rate."""
+    model = libsbml.readSBMLFromFile(str(_build(tmp_path))).getModel()
+    assert model.getParameter(ids.urine_rate(S)) is not None
+    assert model.getParameter(ids.urine_rate("drg_m")) is None
+
+
+# --- the observers of a definition -------------------------------------------
+
+
+def test_observer_sums_two_sinks(tmp_path: Path) -> None:
+    """An observer of the definition is an assignment rule of the top model."""
+    observer = Observer(
+        "Aurine_sum", "Aurine_drg + Aurine_drg_m", U.mmole, "drug and metabolite"
+    )
+    path = _build(tmp_path, observers=[observer])
+    cols = ["Aurine_sum", ids.urine(S), ids.urine("drg_m")]
+    s = _urine_run(path, cols)
+    assert s[-1, 1] > 0
+    np.testing.assert_allclose(s[:, 1], s[:, 2] + s[:, 3], rtol=1e-12, atol=0)
+    model = libsbml.readSBMLFromFile(str(path)).getModel()
+    parameter = model.getParameter("Aurine_sum")
+    assert not parameter.getConstant()
+    assert parameter.getName() == "drug and metabolite"
+
+
+def test_observer_reads_another_observer(tmp_path: Path) -> None:
+    """An observer may read an observer of the library and one of the definition."""
+    observers = [
+        Observer("Carm_uM", "1000 dimensionless * Carm_drg", U.mM, "arm vein x 1000"),
+        Observer("Carm_ratio", "Carm_uM / Cve_drg", U.dimensionless, "ratio"),
+    ]
+    path = _build(tmp_path, observers=observers)
+    s = _urine_run(
+        path, ["Carm_ratio", ids.arm(S), f"[{ids.pool_species(Pool.VENOUS, S)}]"]
+    )
+    np.testing.assert_allclose(s[1:, 1], 1000 * s[1:, 2] / s[1:, 3], rtol=1e-10, atol=0)
+
+
+def test_observer_of_constants_is_rejected() -> None:
+    """An observer which reads no state is rejected (R53): it would be a rule of constants."""
+    observer = Observer("BW_g", "1000 dimensionless * BW", U.kg, "body weight (g)")
+    with pytest.raises(ValueError, match=r"'BW_g' reads constants only \(\['BW'\]\)"):
+        definition(observers=[observer]).validate()
+
+
+def test_observer_through_constant_observers_is_rejected() -> None:
+    """An observer which reads only an observer of constants reads no state either."""
+    observers = [
+        Observer("x1", "2 dimensionless * HEIGHT", U.cm, "x1"),
+        Observer("x2", "x1 + Carm_drg * 0 cm / 1 mM", U.cm, "x2"),
+        Observer("x3", "x1 / 2 dimensionless", U.cm, "x3"),
+    ]
+    with pytest.raises(ValueError) as info:
+        definition(observers=observers).validate()
+    message = str(info.value)
+    assert "'x1' reads constants only" in message
+    assert "'x3' reads constants only" in message
+    assert "'x2'" not in message
+
+
+def test_observer_cycle_is_rejected() -> None:
+    """Observers which read each other in a cycle are rejected, naming them."""
+    observers = [
+        Observer("a1", "a2 + Carm_drg", U.mM, "a1"),
+        Observer("a2", "a1 + Carm_drg", U.mM, "a2"),
+    ]
+    with pytest.raises(ValueError, match=r"\['a1', 'a2'\] read each other"):
+        definition(observers=observers).validate()
+
+
+def test_compose_checks_the_observers() -> None:
+    """`compose` makes the checks of the observers on the model it composes."""
+    from pkpdsim.pbpk import compose
+
+    observer = Observer("x", "Cnope + 1 dimensionless", U.mM, "x")
+    with pytest.raises(ValueError, match="Cnope"):
+        compose(definition(observers=[observer]))

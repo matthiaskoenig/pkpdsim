@@ -31,7 +31,9 @@ The kidney filters the unbound plasma concentration of a substance with
 urinary excretion into the urine, `fu*GFR*Cpl*(1 - f_reabsorbed)`; its
 metabolism and transport (the tubular processes) run with the tubular
 capacity `1 - f_tubular + f_tubular*f_renal_function`, which follows the
-renal function (the intact nephron hypothesis, `f_tubular` 1).
+renal function (the intact nephron hypothesis, `f_tubular` 1). The kidney
+exposes the urinary excretion rate `Rurine_<s>`, the sum of its fluxes into
+the urine, as an output.
 
 The volumes of the parts, the coefficients and the exchanges depend on
 parameters only and are constants with initial assignments (they follow a
@@ -247,6 +249,8 @@ class StandardBuilder(OrganBuilder):
         for s in self.ctx.substances:
             self._substance(s)
         self._chemistry()
+        if self.organ is Organ.KIDNEY:
+            self._urine_rates()
         md = self.model_definition(self._notes())
         boundary = Boundary(
             replacements=dict(self.replacements), outputs=dict(self.outputs)
@@ -896,6 +900,46 @@ class StandardBuilder(OrganBuilder):
         )
         for p in processes:
             self.reactions += place(p, self.ctx, self.ctx.parts, capacity)
+
+    def _urine_rates(self) -> None:
+        """The urinary excretion rate `Rurine_<s>` of every substance which reaches the urine.
+
+        A substance with urinary excretion or an apical transport of the
+        kidney: the sum of the fluxes of the reactions of the kidney into the
+        urine `Aurine_<s>` (the filtration and the apical efflux of the
+        standard kidney, the outflow of the collecting duct of the nephron
+        kidney), an output which replaces `Rurine_<s>` of the body.
+        """
+        apical = {
+            p.substance
+            for p in self.ctx.chemistry
+            if isinstance(p, Transport)
+            and p.organ is self.organ
+            and p.membrane is Membrane.APICAL
+        }
+        for s in self.ctx.substances:
+            if not (s.excretion.urine or s.sid in apical):
+                continue
+            urine = ids.urine(s.sid)
+            fluxes = [
+                str(r.sid)
+                for r in self.reactions
+                if any(p.species == urine for p in r.equation.products)
+            ]
+            if not fluxes:
+                continue
+            pid = ids.urine_rate(s.sid)
+            self._rule(
+                pid,
+                " + ".join(fluxes),
+                U.mmole_per_min,
+                f"urinary excretion rate {s.sid} [mmole/min]",
+                "The rate of the urinary excretion: the sum of the fluxes of the "
+                "kidney into the urine.",
+                port=Port(f"{pid}_port", portType=PortType.OUTPUT_PORT),
+                kind="urine_rate",
+            )
+            self.outputs[pid] = pid
 
     def _processes(self) -> list[Metabolism | Transport | CustomReaction]:
         """The processes of the chemistry of the organ."""

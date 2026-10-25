@@ -11,7 +11,7 @@ The pages of this section are for modellers first: this page and the [tutorial](
 </div>
 
 1. The model package describes its substances (`Substance`) and their chemistry (`Metabolism`, `Transport`, `CustomReaction`), and makes its choices in one `PBPKDefinition`: the organ variants (`Variants`, the standard organ everywhere else), the routes (`Route`), the PD components (`PDComponent`), the sex and the population.
-2. `build(definition, output_dir)` in the factory of the model validates the definition and composes the comp model: a top model with the physiology, the blood pools, the parameters of the substances, the sinks, the dose states and the observers, and one submodel per organ (`LI`, `KI`, `GU`, ...), the standard organ or a variant, which owns everything inside its boundary. Every port and every replacement is generated; the model package never writes a `ReplacedElement`.
+2. `build(definition, output_dir)` in the factory of the model validates the definition and composes the comp model: a top model with the physiology, the blood pools, the parameters of the substances, the sinks, the dose states and the observers (of the library and of the definition), the creators of the definition as model history, and one submodel per organ (`LI`, `KI`, `GU`, ...), the standard organ or a variant, which owns everything inside its boundary. Every port and every replacement is generated; the model package never writes a `ReplacedElement`.
 3. `build` writes the comp model `<sid>.xml` and flattens it into `<sid>_flat.xml`, the model which `MODEL_PATH` points at and which every simulation runs. Simulation never resolves comp.
 4. The experiments of the model set the covariates (`BW`, `HEIGHT`), the doses (`PODOSE_<s>`), the impairment (`CP_severity`, `f_renal_function`) and the activities of the proteins (`LI__f_cyp2c9`) as they do today, and read the observers (`Carm_<s>`, `Aurine_<s>`).
 
@@ -78,14 +78,14 @@ Everything else is a default: the standard organ in every organ (the segmented i
 | organ variants | alternatives of an organ with the boundary of the standard organ: the zonated liver, the nephron kidney, the intestines | [Organ variants](variants.md) |
 | intestine and routes | the lumen segments, dissolution, absorption, the mucosa, the bile and the enterohepatic circulation; the routes and the sinks | [Intestine and routes](intestine.md) |
 | impairment | liver cirrhosis, chronic kidney disease and heart failure as parameter vectors on the physiology | [Impairment](impairment.md) |
-| observers | the plasma, free and blood concentrations, the hepatic and the arm vein, the sampling sites of the fit mappings | [Observers](observers.md) |
+| observers | the plasma, free and blood concentrations, the hepatic and the arm vein, the urinary excretion rate, the observers of a definition, the sampling sites of the fit mappings | [Observers](observers.md) |
 | annotation | the SBO, PBPKO, UBERON, NCIT, UniProt and ChEBI terms of every element | [Annotation](annotation.md) |
 
 The [migration guide](migration.md) explains the move of a hand-written model of pkdb_models onto the library, with the glimepiride model as example.
 
 ## What is generated
 
-Every quantity which depends on parameters only (the physiology, the impairment, the compartments, `fu`, `BP`, the coefficients and exchanges of the organs) is a constant with an initial assignment: an experiment which changes `BW` before the simulation changes every organ volume and flow with it, because sbmlsim evaluates the initial assignments again after the changes of an experiment. A change during a simulation is not followed, unless the definition names the parameter in `PBPKDefinition.dynamic` (an impairment changed in the middle of a study, a PD output): then every quantity downstream of it is an assignment rule. Only what reads a species is always an assignment rule: the outflow concentrations of the organs and the observers. A model loaded with plain roadrunner sets a covariate with `r.setValue("init(BW)", 100.0)` and resets, so that the initial assignments are evaluated again.
+Every quantity which depends on parameters only (the physiology, the impairment, the compartments, `fu`, `BP`, the coefficients and exchanges of the organs) is a constant with an initial assignment: an experiment which changes `BW` before the simulation changes every organ volume and flow with it, because sbmlsim evaluates the initial assignments again after the changes of an experiment. A change during a simulation is not followed, unless the definition names the parameter in `PBPKDefinition.dynamic` (an impairment changed in the middle of a study, a PD output): then every quantity downstream of it is an assignment rule. Only what reads a species is always an assignment rule: the outflow concentrations of the organs, the urinary excretion rate and the observers; an observer of a definition must therefore read a state (see [Observers](observers.md#observers-of-a-definition)). A model loaded with plain roadrunner sets a covariate with `r.setValue("init(BW)", 100.0)` and resets, so that the initial assignments are evaluated again.
 
 Sex is a choice of the build (`PBPKDefinition.sex`): it selects the male or female reference values when the model is built, and a study of both sexes uses one model per sex. A sex switch inside the SBML made the models load about ten times slower.
 
@@ -116,6 +116,7 @@ One id scheme for every model, built by the functions of `pkpdsim.pbpk.ids`, so 
 | `Chv_<s>` | the hepatic vein plasma concentration | `ids.hepatic_vein(s)` |
 | `Cout_<o>_<s>` | the plasma leaving an organ | `ids.organ_outflow(o, s)` |
 | `Aurine_<s>` | the amount in urine | `ids.urine(s)` |
+| `Rurine_<s>` | the urinary excretion rate (mmole/min), an output of the kidney | `ids.urine_rate(s)` |
 | `Afeces_<s>` | the amount in feces | `ids.feces(s)` |
 | `Cbile_<s>` | the concentration in bile | `ids.bile(s)` |
 | `Mr_<s>` | the molecular weight | `ids.mr(s)` |

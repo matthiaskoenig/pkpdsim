@@ -20,27 +20,142 @@ organs and changes nothing, so it conserves mass. Per substance `<s>`:
 
 The tissue concentrations are the species of the organs themselves, their
 unbound concentrations `Cu_<part>_<s>` observers of the organs, the amounts
-in urine and feces the sink species.
+in urine and feces the sink species, the urinary excretion rate
+`Rurine_<s>` an output of the kidney.
+
+A definition adds observers of its own (`Observer`, `PBPKDefinition.observers`,
+e.g. the sum of two metabolites): assignment rules of the top model over the
+ids of the top model, appended after the observers of the library. An
+observer reads a state, directly or through other observers (a species, an
+observer of the library, an output of an organ or a PD component, a dynamic
+parameter, `time`): an observer of constants only is rejected when the
+model is composed (`pkpdsim.pbpk.builder`), its value is fixed before the
+simulation and an assignment rule of constants slows the compile of the model
+(R53).
 """
 
-from sbmlutils.factory import AssignmentRule, Parameter, Sbase
+from collections.abc import Iterable
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+import libsbml
+from sbmlutils.factory import AssignmentRule, Parameter, Sbase, UnitDefinition
 from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk import ids
 from pkpdsim.pbpk.annotation import annotate
 from pkpdsim.pbpk.data import load, value
-from pkpdsim.pbpk.definition import PBPKDefinition
 from pkpdsim.pbpk.organs import Organ, Part, Pool
 from pkpdsim.pbpk.placement import value_parameter
 from pkpdsim.pbpk.substance import Substance
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import Value
 
-__all__ = ["arm_vein_weights", "observer_objects"]
+if TYPE_CHECKING:
+    from pkpdsim.pbpk.definition import PBPKDefinition
+
+__all__ = [
+    "Observer",
+    "arm_vein_weights",
+    "definition_observer_objects",
+    "formula_symbols",
+    "observer_objects",
+]
 
 _ONE = "1 dimensionless"
 _SBO_PARAMETER = SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER
 _OBSERVER = "An observer: an assignment rule which changes no state."
+
+
+@dataclass(frozen=True)
+class Observer:
+    """An observer of a definition: an assignment rule of the top model.
+
+    Attributes:
+        sid: the id of the observer, an id of the top model.
+        formula: the formula (SBML L3 infix) over the ids of the top model:
+            the pools, the sinks, the observers of the library and of the
+            definition, the covariates, the outputs of the organs.
+        unit: the unit of the formula.
+        name: the name of the observer.
+        notes: the notes of the observer.
+    """
+
+    sid: str
+    formula: str
+    unit: UnitDefinition
+    name: str
+    notes: str | None = None
+
+
+TIME = "time"
+"""The symbol of the simulation time in the symbols of a formula."""
+
+
+def formula_symbols(formula: str) -> set[str]:
+    """Get the ids a formula reads, with libsbml's parser of SBML L3 infix.
+
+    Args:
+        formula: the formula; the units of its numbers (`1 dimensionless`)
+            and the names of its functions are no ids.
+
+    Returns:
+        The ids of the formula, `time` for the simulation time.
+
+    Raises:
+        ValueError: if the formula cannot be parsed, with the message of
+            libsbml.
+    """
+    ast = libsbml.parseL3Formula(formula)
+    if ast is None:
+        raise ValueError(
+            f"formula '{formula}' cannot be parsed: "
+            f"{libsbml.getLastParseL3Error().strip()}"
+        )
+    found: set[str] = set()
+    nodes = [ast]
+    while nodes:
+        node = nodes.pop()
+        if node.getType() == libsbml.AST_NAME_TIME:
+            found.add(TIME)
+        elif node.getType() == libsbml.AST_NAME:
+            found.add(node.getName())
+        nodes.extend(node.getChild(i) for i in range(node.getNumChildren()))
+    return found
+
+
+def definition_observer_objects(observers: Iterable[Observer]) -> list[Sbase]:
+    """Get the parameters and the assignment rules of the observers of a definition.
+
+    The ids, the symbols of the formulas and whether an observer reads a
+    state are checked when the model is composed (`pkpdsim.pbpk.builder`).
+
+    Args:
+        observers: the observers of the definition.
+
+    Returns:
+        The parameters with their assignment rules, annotated as observers.
+    """
+    objects: list[Sbase] = []
+    for o in observers:
+        text = f"{o.notes} " if o.notes else ""
+        objects += [
+            annotate(
+                Parameter(
+                    o.sid,
+                    None,
+                    o.unit,
+                    constant=False,
+                    name=o.name,
+                    sboTerm=_SBO_PARAMETER,
+                    notes=f"{text}An observer of the definition. {_OBSERVER}\n\n"
+                    f"`{o.sid} = {o.formula}`",
+                ),
+                "observer",
+            ),
+            AssignmentRule(o.sid, o.formula, o.unit, name=o.name),
+        ]
+    return objects
 
 
 def arm_vein_weights(preset: str) -> dict[Organ | Pool, Value]:
@@ -74,7 +189,7 @@ def _site(preset: str, key: str) -> Organ | Pool:
     )
 
 
-def observer_objects(definition: PBPKDefinition) -> list[Sbase]:
+def observer_objects(definition: "PBPKDefinition") -> list[Sbase]:
     """Get the observers of a definition.
 
     Args:

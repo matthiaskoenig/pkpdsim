@@ -13,6 +13,7 @@ from pkpdsim.pbpk.chemistry import (
 )
 from pkpdsim.pbpk.data import Source, cite, load, sources
 from pkpdsim.pbpk.definition import PBPKDefinition, Variants
+from pkpdsim.pbpk.observers import Observer
 from pkpdsim.pbpk.organ import (
     Boundary,
     GutComponent,
@@ -70,6 +71,7 @@ __all__ = [
     "Metabolism",
     "Mode",
     "NephronKidney",
+    "Observer",
     "Organ",
     "OrganComponent",
     "OrganContext",

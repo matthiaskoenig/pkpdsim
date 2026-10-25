@@ -10,7 +10,7 @@ from pathlib import Path
 import libsbml
 import pytest
 import roadrunner
-from sbmlutils.factory import create_model
+from sbmlutils.factory import Creator, create_model
 
 from pkpdsim.pbpk import (
     Direction,
@@ -125,7 +125,11 @@ def test_comp_model_without_warnings(tmp_path: Path) -> None:
 
 
 def test_flat_ids_follow_scheme(simple: BuildResult) -> None:
-    """Organ ids are prefixed by the submodel, top ids are not; the outputs are rules."""
+    """Organ ids are prefixed by the submodel, top ids are not; the outputs are rules.
+
+    The outputs of the organs (`Cout_<o>_<s>`, the urinary excretion rate
+    `Rurine_<s>`) are the rules of the organs under the ids of the top model.
+    """
     doc = _flat(simple)
     model = doc.getModel()
     species = {s.getId() for s in model.getListOfSpecies()}
@@ -168,8 +172,11 @@ def test_flat_ids_follow_scheme(simple: BuildResult) -> None:
         "(fu_drg / Kp_drg) * LI__Cti_drg"
     )
     assert set(rules) - set(outflows) == observers | unbound | {
-        ids.injection_rate("drg")
+        ids.injection_rate("drg"),
+        ids.urine_rate("drg"),
     }
+    # the urinary excretion rate of the kidney replaces the parameter of the top
+    assert rules[ids.urine_rate("drg")] == "KI__J_gfr_drg"
     initial = {
         a.getSymbol(): libsbml.formulaToL3String(a.getMath())
         for a in model.getListOfInitialAssignments()
@@ -216,8 +223,10 @@ def rules_without_state(doc: libsbml.SBMLDocument) -> list[str]:
     A state is what changes during a simulation by itself: a species, the
     variable of a rate rule, `time`, or a variable parameter or compartment
     which no rule computes (an input changed during the simulation, a dynamic
-    parameter of the definition). A rule which reaches none of them, directly
-    or through the assignment rules it reads, depends on constants only and
+    parameter of the definition). A reaction (its id in a formula is its
+    flux, the urinary excretion rate `Rurine_<s>` sums fluxes) is read as
+    its kinetic law. A rule which reaches none of them, directly or through
+    the assignment rules and reactions it reads, depends on constants only and
     belongs into an initial assignment: roadrunner inlines assignment rules,
     and the deep chains of the physiology as rules made the compile of the
     simple model 14 times slower (R21). The rate of an intravenous injection
@@ -254,6 +263,11 @@ def rules_without_state(doc: libsbml.SBMLDocument) -> list[str]:
         return found
 
     reads = {sid: names(rule) for sid, rule in rules.items()}
+    reads |= {
+        r.getId(): names(r.getKineticLaw())
+        for r in model.getListOfReactions()
+        if r.isSetKineticLaw()
+    }
     stateful = set(states)
     changed = True
     while changed:
@@ -582,3 +596,33 @@ def test_injection_rate_follows_injection_time(simple: BuildResult) -> None:
     r[ti] = 120.0
     r.simulate(10, 20, 2)
     assert r[kiv] == pytest.approx(math.log(2) / 120.0 * 60, rel=1e-12)
+
+
+def test_creators_reach_the_flat_model(tmp_path: Path) -> None:
+    """The creators of the definition are the model history of the comp and the flat model."""
+    creator = Creator(
+        familyName="König",
+        givenName="Matthias",
+        email="creator@example.org",
+        organization="Humboldt-University Berlin",
+        orcid="0000-0003-1725-179X",
+    )
+    result = build(definition(creators=[creator]), tmp_path)
+    for path in (result.comp_path, result.flat_path):
+        doc = libsbml.readSBMLFromFile(str(path))  # the document owns the history
+        history = doc.getModel().getModelHistory()
+        assert history is not None, path.name
+        assert history.getNumCreators() == 1, path.name
+        written = history.getCreator(0)
+        assert (written.getFamilyName(), written.getGivenName()) == (
+            "König",
+            "Matthias",
+        )
+        assert written.getOrganisation() == "Humboldt-University Berlin"
+
+
+def test_no_creators_no_history(simple: BuildResult) -> None:
+    """Without creators the flat model has no creators in its history."""
+    doc = _flat(simple)
+    history = doc.getModel().getModelHistory()
+    assert history is None or history.getNumCreators() == 0

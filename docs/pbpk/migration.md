@@ -11,7 +11,7 @@ The models of pkdb_models were built from one body model which was copied and ed
 | `model_kidney.py`: `M1EX`, `M2EX` (`GFR*M1EX_f*m1_ext`, a fraction of the GFR) | 273 | `Excretion(urine=True)` of the metabolites: `fu*GFR*(1 - f_reabsorbed)`, with `f_reabsorbed = 1 - M1EX_f` for a fraction below 1; a fraction above 1 is a secretion, an apical efflux of the kidney, which follows `f_renal_function` with the tubular capacity of the kidney, as the fraction of the GFR did |
 | `model_intestine.py`: dissolution of the tablet, `GLIABS` with the fraction `F_gli_abs`, the excretion of the lumen into the feces | 350 | `Route.oral("gli")` and the segmented intestine (dissolution, transit, absorption `ka_gli`, feces); or the single lumen (`fabs_gli`) |
 | `factory.py`: create the four models, flatten, the ODEs, the COMBINE archive | 145 | `build(DEFINITION, output_dir)` for the comp and the flat model; the ODEs, the license texts and the COMBINE archive stay in the factory of the package |
-| `annotations.py`, `templates.py` | | the annotation of the library (see [Annotation](annotation.md)); the substance annotations go into `Substance.annotations` |
+| `annotations.py`, `templates.py` | | the annotation of the library (see [Annotation](annotation.md)); the substance annotations go into `Substance.annotations`, the creators into `PBPKDefinition.creators` (the model history of the comp and the flat model) |
 
 The definition of glimepiride is the one of the [tutorial](tutorial.md) with the fitted values of the adopted fits, `fitted(FITS.parameter(...))`.
 
@@ -26,7 +26,8 @@ The library keeps the ids of the hand-written models where they fit its id schem
 | `Chv_gli` (a species) | `Chv_gli` (an observer) | the outflow of the liver mixed with the shunt |
 | `m1`, `m2` (substance ids) | `gli_m1`, `gli_m2` | a substance id is unique over all models: `Cve_m1` becomes `Cve_gli_m1`, `Aurine_m1` becomes `Aurine_gli_m1` |
 | `Aurine_m1`, `Afeces_gli` | `Aurine_gli_m1`, `Afeces_gli` | the sinks keep their pattern |
-| `Cve_m1_m2` (the sum of the metabolites) | none | the library has no observers of the definition yet (see [Known gaps](#known-gaps)) |
+| the rate of a urinary excretion reaction (`KI__M1EX`, hctz `KI__HCTZEX`) | `Rurine_gli_m1` | the urinary excretion rate, the sum of the fluxes of the kidney into the urine |
+| `Cve_m1_m2` (the sum of the metabolites) | `Cve_gli_m1_m2` | an observer of the definition, `Observer("Cve_gli_m1_m2", "Cve_gli_m1 + Cve_gli_m2", U.mM, ...)` (see [Observers](observers.md#observers-of-a-definition)) |
 | `Cli_plasma_gli`, `LI__gli` | `LI__Cpl_gli`, `LI__Cti_gli` | the plasma and the tissue of the liver (local ids of the organ) |
 | `Clu_gli`, `Cre_gli` ("rest") | `LU__Cti_gli`, the organs `HE__`, `BR__`, `MU__`, ... | every organ of ICRP 89, no rest compartment |
 | `GU__gli_stomach`, `GU__gli_lumen` | `PODOSE_gli`, `GU__Clumen_<seg>_gli`, `GU__Asolid_<seg>_gli` | the undissolved tablet, the lumen segments |
@@ -65,14 +66,6 @@ The migration does not reproduce the simulations of the hand-written model, and 
 
 The bootstrap of a pilot builds the model with the literature values and the current fitted values where the parameter still exists, then fits and adopts the fits (`run_fit <package> --adopt <fit id>`), so the factory takes the new values with their uncertainties.
 
-## Known gaps
-
-The library as it stands lacks what some hand-written models use. These gaps are known and are planned as the prerequisites of the pilots (plan 2, task P2 on this branch); the pages are updated when they land:
-
-- There is no urinary excretion rate `Rurine_<s>`; the urine is read as the cumulative amount `Aurine_<s>`.
-- A definition cannot declare observers of its own (a sum of metabolites such as `Cve_m1_m2`, a ratio).
-- `build` writes no creators into the model; the factory of the package adds the model history it needs.
-
 ## The pilots are the validation gate
 
 hctz, apixaban and glimepiride are rebuilt on the library in pkdb_models: their factories call `build`, their old body, liver, kidney and intestine modules are deleted, their experiments and fit mappings use the new observables, the models are refitted and the fits adopted, and the fast and slow tests of pkdb_models pass for the three models; `pkpdsim-verify` documents the change of the simulations. The pilots are the validation gate of the library (decided by Matthias König):
@@ -88,7 +81,7 @@ The pilots are not released into their public model repositories in this project
 
 1. Write the substances: short ids unique over all models (metabolites with the prefix of the parent), the molecular weights, the binding, the erythrocytes, the distribution and the excretion; the annotations of the old `annotations.py` into `Substance.annotations`.
 2. Write the chemistry of every organ with the process ids of the hand-written model, so that the fitted parameters keep their flat ids (`LI__GLI2M1_Vmax`).
-3. Write the definition with the routes, the variants (the zonated liver of a zonated model, the single lumen if the model keeps a first order absorption) and the PD components.
+3. Write the definition with the routes, the variants (the zonated liver of a zonated model, the single lumen if the model keeps a first order absorption), the PD components, the observers the experiments read which the library does not compute (`PBPKDefinition.observers`) and the creators (`PBPKDefinition.creators`).
 4. Replace the factory by `build` and delete the body, liver, kidney and intestine modules.
 5. Change the experiments: the observables (`Carm_<s>` for plasma data, the metabolite ids with the prefix of the parent), the impairment parameters (`CP_severity`, `f_renal_function`, the presets `CHILD_PUGH`, `RENAL_FUNCTION`, `HEART_FAILURE` of `pkpdsim.impairment`), the sampling site of the fit mappings.
 6. Bootstrap with the current fitted values where the parameters still exist, refit, adopt, and run the scientific tests of the model.

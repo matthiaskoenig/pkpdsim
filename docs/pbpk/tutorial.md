@@ -158,7 +158,7 @@ An individual of 100 kg and the reference height has more adipose, a larger live
 
 ## 7. In a model package
 
-The factory of the model package builds the definition with the fitted values from the adopted fits of the model (`FITS = MODEL.fit_records()`), so the uncertainties of the fits reach the SBML:
+The factory of the model package builds the definition with the fitted values from the adopted fits of the model (`FITS = MODEL.fit_records()`), so the uncertainties of the fits reach the SBML; the observers the experiments read which the library does not compute (the sum of the metabolites in urine) and the creators of the model are part of the definition:
 
 ```python
 # not executed: the model package and its adopted fits; m1, m2, chemistry of above
@@ -167,6 +167,7 @@ from pathlib import Path
 from pkpdsim.pbpk import (
     Binding,
     Kp,
+    Observer,
     Organ,
     PBPKDefinition,
     Route,
@@ -175,6 +176,7 @@ from pkpdsim.pbpk import (
     build,
     fitted,
 )
+from pkpdsim.templates import creators
 
 from pkdb_models.models.glimepiride.models.fits import FITS
 
@@ -194,6 +196,15 @@ DEFINITION = PBPKDefinition(
     substances=[glimepiride, m1, m2],
     chemistry=chemistry,
     routes=[Route.oral("gli")],
+    observers=[
+        Observer(
+            "Aurine_gli_m1_m2",
+            "Aurine_gli_m1 + Aurine_gli_m2",
+            U.mmole,
+            "M1 and M2 in urine [mmole]",
+        )
+    ],
+    creators=creators,
 )
 
 

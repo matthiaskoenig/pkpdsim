@@ -89,7 +89,12 @@ from pkpdsim.pbpk.impairment import (
     unbound_fraction,
 )
 from pkpdsim.pbpk.kp import kp_sources, kp_values
-from pkpdsim.pbpk.observers import observer_objects
+from pkpdsim.pbpk.observers import (
+    TIME,
+    definition_observer_objects,
+    formula_symbols,
+    observer_objects,
+)
 from pkpdsim.pbpk.organ import Boundary, GutComponent, OrganComponent, OrganContext
 from pkpdsim.pbpk.organs import Organ, Part, Pool
 from pkpdsim.pbpk.parts import parts_for
@@ -106,6 +111,7 @@ __all__ = [
     "build",
     "built_organs",
     "compose",
+    "observer_problems",
     "organ_component",
     "organ_context",
 ]
@@ -245,16 +251,149 @@ def compose(definition: PBPKDefinition) -> Model:
         definition: the definition.
 
     Returns:
-        The comp model: the top model with one submodel per organ.
+        The comp model: the top model with one submodel per organ and one per
+        PD component, the observers of the definition after those of the
+        library, the creators of the definition as model history.
 
     Raises:
         ValueError: if the definition is invalid, an organ variant is unknown,
             an organ reads an element the body does not have, a route is
             given twice, an oral route or an apical transport of the small
-            intestine has no intestine with a lumen, or a PD component names
-            a port or an element of the body which does not exist.
+            intestine has no intestine with a lumen, a PD component names
+            a port or an element of the body which does not exist, or an
+            observer of the definition is invalid in the top model
+            (`observer_problems`).
     """
-    definition.validate()
+    definition.validate(symbols=False)
+    top, model_definitions, submodels, replaced = _body(definition)
+    problems = _observer_problems(definition, top, model_definitions, submodels)
+    if problems:
+        raise ValueError(
+            f"Invalid PBPK definition '{definition.sid}':\n- " + "\n- ".join(problems)
+        )
+    top.add(definition_observer_objects(definition.observers))
+
+    return Model(
+        sid=definition.sid,
+        name=definition.name or definition.sid,
+        annotations=model_annotations(definition.substances),
+        notes=definition.notes,
+        creators=list(definition.creators),
+        units=U,
+        model_units=MODEL_UNITS,
+        objects=top.objects,
+        model_definitions=model_definitions,
+        submodels=submodels,
+        replaced_elements=replaced,
+    )
+
+
+def observer_problems(definition: PBPKDefinition) -> list[str]:
+    """Check the observers of a definition against the top model.
+
+    The model is composed without the observers of the definition; an
+    observer id must be no id of the body (nor of a submodel), every symbol
+    of its formula an id of the top model or of another observer, the
+    observers must not read each other in a cycle, and every observer must
+    read a state (`_observer_problems`).
+
+    Args:
+        definition: the definition, otherwise valid.
+
+    Returns:
+        The problems, naming the observers and the ids.
+    """
+    if not definition.observers:
+        return []
+    top, model_definitions, submodels, _ = _body(definition)
+    return _observer_problems(definition, top, model_definitions, submodels)
+
+
+def _observer_problems(
+    definition: PBPKDefinition,
+    top: "_Top",
+    model_definitions: list[ModelDefinition],
+    submodels: list[Submodel],
+) -> list[str]:
+    """The problems of the observers of a definition in its composed body.
+
+    A state is what changes during a simulation: a species, the variable of
+    a rule (the observers of the library, the outputs of the organs and PD
+    components, the quantities downstream of a dynamic parameter), a
+    variable parameter (a dynamic one), a reaction and `time`. An observer
+    which reaches none of them, directly or through other observers, reads
+    constants only: its value is fixed before the simulation, and an
+    assignment rule of constants slows the compile of the model (R53), so it
+    is rejected.
+    """
+    body: set[str] = {
+        str(o.sid)
+        for o in top.objects
+        if isinstance(o, Parameter | Species | Compartment | Reaction)
+    }
+    body |= {str(sm.sid) for sm in submodels} | {
+        str(md.sid) for md in model_definitions
+    }
+    states: set[str] = {TIME}
+    for o in top.objects:
+        if isinstance(o, Species | Reaction):
+            states.add(str(o.sid))
+        elif isinstance(o, AssignmentRule | RateRule):
+            states.add(str(o.variable))
+        elif isinstance(o, Parameter | Compartment) and not o.constant:
+            states.add(str(o.sid))
+    observers = {o.sid: formula_symbols(o.formula) for o in definition.observers}
+    problems: list[str] = []
+    for sid, symbols in observers.items():
+        if sid in body:
+            problems.append(f"observer id '{sid}' is an id of the body")
+        unknown = sorted(symbols - body - set(observers) - {TIME})
+        if unknown:
+            problems.append(
+                f"observer '{sid}' reads {unknown}, which are no ids of the top "
+                "model (the pools, sinks, observers, covariates and outputs of "
+                "the organs; an id of an organ is not visible in the top model)"
+            )
+    if problems:
+        return problems
+    reads = {sid: symbols & set(observers) for sid, symbols in observers.items()}
+    remaining = dict(reads)
+    while True:
+        done = [sid for sid, rs in remaining.items() if not rs & set(remaining)]
+        if not done:
+            break
+        for sid in done:
+            del remaining[sid]
+    if remaining:
+        return [f"observers {sorted(remaining)} read each other in a cycle"]
+    stateful = set(states)
+    changed = True
+    while changed:
+        changed = False
+        for sid, symbols in observers.items():
+            if sid not in stateful and symbols & stateful:
+                stateful.add(sid)
+                changed = True
+    return [
+        f"observer '{sid}' reads constants only ({sorted(symbols)}): its value is "
+        "fixed before the simulation, and an assignment rule of constants slows "
+        "the compile of the model (R53); read a state (a species, an observer, "
+        "an output of an organ, a dynamic parameter, time) or compute it from "
+        "the results"
+        for sid, symbols in observers.items()
+        if sid not in stateful
+    ]
+
+
+def _body(
+    definition: PBPKDefinition,
+) -> tuple["_Top", list[ModelDefinition], list[Submodel], list[ReplacedElement]]:
+    """Compose the body of a definition: everything but its own observers.
+
+    Returns:
+        The top model, the model definitions and submodels of the organs and
+        the PD components, and the replaced elements.
+    """
     gut = _gut(definition)
     oral = sorted({r.substance for r in definition.routes if r.kind in ORAL})
     apical = sorted(
@@ -320,19 +459,7 @@ def compose(definition: PBPKDefinition) -> Model:
         submodels,
         replaced,
     )
-
-    return Model(
-        sid=definition.sid,
-        name=definition.name or definition.sid,
-        annotations=model_annotations(definition.substances),
-        notes=definition.notes,
-        units=U,
-        model_units=MODEL_UNITS,
-        objects=top.objects,
-        model_definitions=model_definitions,
-        submodels=submodels,
-        replaced_elements=replaced,
-    )
+    return top, model_definitions, submodels, replaced
 
 
 _TOKEN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
@@ -1205,8 +1332,10 @@ class _Top:
         """The replacements of the boundary of an organ.
 
         Every element of the body which the organ reads replaces the port of
-        the organ; every output of the organ replaces a parameter
-        `Cout_<o>_<s>` of the top model, which is created here.
+        the organ; every output of the organ replaces a parameter of the top
+        model, which is created here: the outflow concentration
+        `Cout_<o>_<s>`, the urinary excretion rate `Rurine_<s>` of the
+        kidney.
 
         Raises:
             ValueError: if the organ reads an element the body does not have.
@@ -1220,19 +1349,33 @@ class _Top:
                 f"have: {missing}."
             )
         cells = {ids.outflow_conc_bc(s.sid) for s in self.definition.substances}
+        rates = {ids.urine_rate(s.sid) for s in self.definition.substances}
         for local, top in boundary.outputs.items():
+            if top in rates:
+                unit, name, kind = (
+                    U.mmole_per_min,
+                    f"urinary excretion rate {top} [mmole/min]",
+                    "urine_rate",
+                )
+                text = "Rate of the urinary excretion, the sum of the fluxes of the "
+            else:
+                unit, name, kind = (
+                    U.mM,
+                    f"outflow concentration {top} [mM]",
+                    "outflow_blood_cells" if local in cells else "outflow",
+                )
+                text = "Concentration (plasma or kinetic blood cells) leaving the "
             self.add(
                 [
                     annotate(
                         Parameter(
                             top,
                             0.0,
-                            U.mM,
+                            unit,
                             constant=False,
-                            name=f"outflow concentration {top} [mM]",
+                            name=name,
                             sboTerm=_SBO_PARAMETER,
-                            notes="Concentration (plasma or kinetic blood cells) "
-                            f"leaving the organ {organ.name.lower()}, replaced by "
+                            notes=f"{text}organ {organ.name.lower()}, replaced by "
                             "the output of the organ; the value is a placeholder.",
                             replacedBy=ReplacedBy(
                                 elementRef=top,
@@ -1240,7 +1383,7 @@ class _Top:
                                 portRef=f"{local}{PORT_SUFFIX}",
                             ),
                         ),
-                        "outflow_blood_cells" if local in cells else "outflow",
+                        kind,
                         organ=organ,
                     )
                 ]

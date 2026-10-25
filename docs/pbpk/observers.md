@@ -1,6 +1,6 @@
 # Observers
 
-The observers are assignment rules, no states: they read the pool species and the outflow concentrations of the organs and change nothing, so they conserve mass exactly. The forearm compartment of some hand-written models lost mass and was removed from three of them; the arm vein of the library is an observer.
+The observers are assignment rules, no states: they read the pool species and the outflow concentrations of the organs and change nothing, so they conserve mass exactly. A definition adds observers of its own (below). The forearm compartment of some hand-written models lost mass and was removed from three of them; the arm vein of the library is an observer.
 
 | observable | id | what |
 |---|---|---|
@@ -13,6 +13,7 @@ The observers are assignment rules, no states: they read the pool species and th
 | unbound tissue | `<O>__Cu_ti_<s>`, `<O>__Cu_ic_<s>`, ... | the unbound concentrations of the tissue parts, see [Standard organ](organ.md#kp-and-fu) |
 | outflow of an organ | `Cout_<o>_<s>` | the plasma leaving an organ |
 | urine, feces | `Aurine_<s>`, `Afeces_<s>` | the amounts in the sinks |
+| urinary excretion rate | `Rurine_<s>` | the sum of the fluxes of the kidney into the urine (mmole/min), an output of the kidney, see [Standard organ](organ.md#kidney) |
 | bile | `Cbile_<s>` | the concentration in the bile |
 
 The equations of the top model, for a substance without erythrocytes and for one with kinetic erythrocytes (`prm`), with the preset `pksim_default`:
@@ -88,4 +89,66 @@ print(metadata.sampling_site)
 arm vein
 ```
 
-The urine and the feces are the amounts of the sinks; the bile `Cbile_<s>` drains into the duodenum, so a biliary excretion is read from the feces (or from the bile when a study samples it).
+The urine and the feces are the amounts of the sinks; the bile `Cbile_<s>` drains into the duodenum, so a biliary excretion is read from the feces (or from the bile when a study samples it). The urinary excretion rate `Rurine_<s>` integrates to the amount in the urine: a study which reports the excretion per collection interval maps to the amount `Aurine_<s>` (reset at the start of the interval) or to the rate.
+
+## Observers of a definition
+
+A definition adds observers of its own, `Observer(sid, formula, unit, name, notes)` in `PBPKDefinition.observers`: assignment rules of the top model, appended after the observers of the library, for what a model package reads which the library does not compute (the sum of two metabolites, a ratio, the amount in urine of a parent and its metabolites). The formula is SBML L3 infix over the ids of the top model: the pools, the sinks, the observers of the library and of the definition, the covariates and the outputs of the organs (`Cout_<o>_<s>`, `Rurine_<s>`); an id of an organ (`LI__Cpl_<s>`) is not visible in the top model. `validate` checks every observer against the model composed without them, with the parser of libsbml: an id which is an id of the body or of another observer, a symbol which is no id of the top model, observers which read each other in a cycle.
+
+```python
+from pkpdsim.pbpk import (
+    Binding,
+    Excretion,
+    Metabolism,
+    MM,
+    Observer,
+    Organ,
+    PBPKDefinition,
+    Route,
+    Substance,
+    U,
+)
+
+definition = PBPKDefinition(
+    sid="observed",
+    substances=[
+        Substance(
+            "drg",
+            name="drug",
+            mr=300.0,
+            binding=Binding(fu=0.1),
+            excretion=Excretion(urine=True),
+        ),
+        Substance(
+            "drg_m", name="metabolite", mr=316.0, excretion=Excretion(urine=True)
+        ),
+    ],
+    chemistry=[
+        Metabolism("DRG2M", Organ.LIVER, "drg", {"drg_m": 1.0}, MM(vmax=1e-3, km=0.01))
+    ],
+    routes=[Route.iv("drg")],
+    observers=[
+        Observer(
+            "Aurine_drg_total",
+            "Aurine_drg + Aurine_drg_m",
+            U.mmole,
+            "drug and metabolite in urine [mmole]",
+        )
+    ],
+)
+definition.validate()
+try:
+    PBPKDefinition(
+        sid="constant",
+        substances=definition.substances,
+        observers=[Observer("BW_g", "1000 dimensionless * BW", U.kg, "body weight")],
+    ).validate()
+except ValueError as error:
+    print(str(error).splitlines()[1][:40])
+```
+
+```text
+- observer 'BW_g' reads constants only (
+```
+
+An observer must read a state, directly or through other observers: a species, an observer of the library, an output of an organ or a PD component, a dynamic parameter (`PBPKDefinition.dynamic`) or `time`. An observer of constants only is rejected with the message above: its value is fixed before the simulation, and an assignment rule of constants slows the compile of the model (the structural guard of the load time, see [the overview](index.md)); such a value is computed from the results.

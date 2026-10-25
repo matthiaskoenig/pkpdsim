@@ -169,6 +169,7 @@ __all__ = [
     "tubule_volume",
     "unbound",
     "urine",
+    "urine_rate",
     "vascular_fraction",
     "wall_compartment",
     "zone",
@@ -594,6 +595,15 @@ def fraction_reabsorbed(s: str) -> str:
 def urine(s: str) -> str:
     """The id of the amount in urine, `Aurine_<s>`."""
     return f"Aurine_{s}"
+
+
+def urine_rate(s: str) -> str:
+    """The id of the urinary excretion rate, `Rurine_<s>` (mmole/min).
+
+    The sum of the fluxes of the kidney into the urine `Aurine_<s>`, an output
+    of the kidney which replaces the parameter of the top model.
+    """
+    return f"Rurine_{s}"
 
 
 def feces(s: str) -> str:

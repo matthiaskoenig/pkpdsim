@@ -80,9 +80,10 @@ J_tub_lh_<s>: Ctub_lh_<s> -> Ctub_dt_<s> = GFR * f_tub_lh * Ctub_lh_<s>
 J_tub_dt_<s>: Ctub_dt_<s> -> Ctub_cd_<s> = GFR * f_tub_dt * Ctub_dt_<s>
 J_tub_cd_<s>: Ctub_cd_<s> -> Aurine_<s> = GFR * f_tub_cd * Ctub_cd_<s> * (1 - f_reabsorbed_<s>)
 J_reab_<s>: Ctub_cd_<s> -> Cpl_<s> = GFR * f_tub_cd * Ctub_cd_<s> * f_reabsorbed_<s>
+Rurine_<s> = J_tub_cd_<s>
 ```
 
-Without secretion and reabsorption every filtered molecule reaches the urine: the urinary excretion at steady state is the filtration of the standard kidney, whatever the volumes and flows of the segments; the tubule delays the excretion by minutes. The fraction reabsorbed (`Excretion.fraction_reabsorbed`) is an empirical passive reabsorption at the end of the collecting duct, which acts on secreted drug as well, the lumped `(fu*GFR + CL_sec)*(1 - F_reabs)` of the literature. An apical efflux of the kidney secretes into the proximal tubule, an apical influx reabsorbs from it, with the inhibitors of its protein acting from the lumen.
+Without secretion and reabsorption every filtered molecule reaches the urine: the urinary excretion at steady state is the filtration of the standard kidney, whatever the volumes and flows of the segments; the tubule delays the excretion by minutes. The fraction reabsorbed (`Excretion.fraction_reabsorbed`) is an empirical passive reabsorption at the end of the collecting duct, which acts on secreted drug as well, the lumped `(fu*GFR + CL_sec)*(1 - F_reabs)` of the literature. An apical efflux of the kidney secretes into the proximal tubule, an apical influx reabsorbs from it, with the inhibitors of its protein acting from the lumen. The urinary excretion rate `Rurine_<s>` is the outflow of the collecting duct, the output of the standard kidney with the same id.
 
 <!-- generated: nephron-segments (scripts/pbpk_tables.py), do not edit -->
 *Generated from `data/kidney_human.toml` by `scripts/pbpk_tables.py`; the notes of every number are in the data file.*

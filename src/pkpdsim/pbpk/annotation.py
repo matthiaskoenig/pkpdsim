@@ -627,6 +627,17 @@ KINDS: dict[str, Kind] = {
     "unbound_concentration": Kind(
         _P, "UNBOUND_CONCENTRATION_OF_COMPUND_IN_COMPARTMENT"
     ),
+    # the amount per time into the urine is a result of the model; PBPKO's
+    # urinary rate is a biochemical parameter (an input), so a version of it
+    "urine_rate": Kind(
+        _P,
+        "OUTPUT_PARAMETER",
+        terms=((BQB.IS_VERSION_OF, pbpko("URINARY_RATE")),),
+        requested="urinary excretion rate (amount of compound per time)",
+    ),
+    # an observer of a definition: what it computes is the definition's, the
+    # library knows only that it is a result of the model
+    "observer": Kind(_P, "OUTPUT_PARAMETER"),
     # species
     "concentration": Kind(_SPECIES, "CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT"),
     "concentration_plasma": Kind(_SPECIES, "CONCENTRATION_IN_PLASMA"),

@@ -12,6 +12,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from sbmlutils.factory import Creator
 
 from pkpdsim.pbpk import (
     MM,
@@ -20,12 +21,14 @@ from pkpdsim.pbpk import (
     Kp,
     Metabolism,
     Mode,
+    Observer,
     Organ,
     Part,
     PBPKDefinition,
     Pool,
     Route,
     Substance,
+    U,
     Variants,
     ids,
 )
@@ -318,3 +321,44 @@ def test_cross_package_inhibition(tmp_path: Path) -> None:
     expected = (qp * (1 + r) + clint) / (qp + clint)
     assert 0.003 < 1 - expected / ratio < 0.02
     assert auc_inhibited / auc_control == pytest.approx(expected, rel=1e-3)
+
+
+def _creator(given: str = "Matthias") -> Creator:
+    """A creator of a package (a placeholder email, no personal data)."""
+    return Creator(
+        familyName="König",
+        givenName=given,
+        email="creator@example.org",
+        organization="Humboldt-University Berlin",
+    )
+
+
+def test_combine_observers_and_creators() -> None:
+    """The observers and the creators of the packages are united.
+
+    An observer which two packages define equally is taken once, one which
+    they define differently raises; a creator is the same person when all its
+    fields are equal (a sbmlutils `Creator` compares by identity).
+    """
+    total = Observer("Carm_total", "Carm_drg + Carm_inh", U.mM, "drug and inhibitor")
+    a = dataclasses.replace(
+        _drg_package(),
+        observers=[total, Observer("Carm_drg_uM", "Carm_drg", U.mM, "drug")],
+        creators=[_creator()],
+    )
+    b = dataclasses.replace(
+        _inh_package(),
+        observers=[
+            Observer("Carm_total", "Carm_drg + Carm_inh", U.mM, "drug and inhibitor")
+        ],
+        creators=[_creator(), _creator("Michelle")],
+    )
+    d = PBPKDefinition.combine(a, b, sid="coupled")
+    assert [o.sid for o in d.observers] == ["Carm_total", "Carm_drg_uM"]
+    assert [c.givenName for c in d.creators] == ["Matthias", "Michelle"]
+    d.validate()
+    other = dataclasses.replace(
+        b, observers=[Observer("Carm_total", "Carm_inh", U.mM, "inhibitor")]
+    )
+    with pytest.raises(ValueError, match="observer 'Carm_total'"):
+        PBPKDefinition.combine(a, other, sid="coupled")
