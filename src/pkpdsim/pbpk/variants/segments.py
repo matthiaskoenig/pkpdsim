@@ -63,6 +63,11 @@ class Segment:
     share: float
     absorbs: bool
 
+    @property
+    def label(self) -> str:
+        """The segment in names, `upper jejunum`."""
+        return self.key.replace("_", " ")
+
 
 def segments() -> tuple[Segment, ...]:
     """Get the lumen segments of the segmented intestine.

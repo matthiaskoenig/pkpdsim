@@ -448,3 +448,37 @@ def test_extended_clearance(tmp_path: Path) -> None:
     cu_pl = r[ids.fu(S)] * r[f"[{_liver(ids.species(Part.PLASMA, S))}]"]
     cu_ic = _unbound(r, Part.INTRACELLULAR, ids.k_cell_pls(S))
     assert cu_ic / cu_pl == pytest.approx(kp_uu, rel=1e-3)
+
+
+@pytest.mark.parametrize("mode", [Mode.PERFUSION, Mode.TISSUE, Mode.PERMEABILITY])
+def test_vss_with_gut_mucosa(tmp_path: Path, mode: Mode) -> None:
+    """Gut chemistry adds mucosa species but not capacity: the mucosa is carved out of the wall.
+
+    A CYP3A4 metabolism of the small intestine with its activity 0 (a closed
+    system) gives the drug the mucosa of every intestinal segment; wall and
+    mucosa together hold what the wall holds without gut chemistry, so the
+    volume of distribution is the sum of the capacities of the organs, as
+    without (and the same value).
+    """
+    gut = Metabolism(
+        sid="DRG_GU",
+        organ=Organ.SMALL_INTESTINE,
+        substrate=S,
+        products={},
+        kinetics=FirstOrder(k=1.0),
+        protein="CYP3A4",
+    )
+    distribution = Kp(2.0, mode=mode, ftissue=100.0, overrides=KP_ORGANS)
+    vss = {}
+    cases: list[list[Metabolism | Transport]] = [[], [gut]]
+    for chemistry in cases:
+        path = _model(
+            tmp_path, f"vss_gut{len(chemistry)}", chemistry, distribution=distribution
+        )
+        changes = {ids.flat(Organ.SMALL_INTESTINE, ids.activity("CYP3A4")): 0.0}
+        r = _load(path, **(changes if chemistry else {}))
+        mucosa = ids.flat(Organ.SMALL_INTESTINE, ids.mucosa(S, "du"))
+        assert (mucosa in r.model.getFloatingSpeciesIds()) is bool(chemistry)
+        vss[len(chemistry)] = _closed_vss(r)
+        assert vss[len(chemistry)] == pytest.approx(_vss(r, 0.0), rel=1e-9)
+    assert vss[1] == pytest.approx(vss[0], rel=1e-9)

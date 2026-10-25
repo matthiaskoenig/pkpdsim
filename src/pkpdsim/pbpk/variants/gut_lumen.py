@@ -67,7 +67,7 @@ class LumenBuilder(StandardBuilder):
                 v.value,
                 U.litre,
                 constant=True,
-                name=f"lumen {seg.key.replace('_', ' ')}",
+                name=f"lumen {seg.label}",
                 sboTerm=SBO.PHYSICAL_COMPARTMENT,
                 notes=_notes("Fluid volume of the lumen segment.", v),
                 port=True,
@@ -76,7 +76,7 @@ class LumenBuilder(StandardBuilder):
                 ids.transit_time(seg.token),
                 value(DATA, seg.key, "transit_time"),
                 U.min,
-                f"transit time {seg.key.replace('_', ' ')} [min]",
+                f"transit time {seg.label} [min]",
                 "Mean transit time of the lumen segment (fasted), the transit "
                 "into the next segment is `V*C/T`.",
             )
@@ -85,7 +85,7 @@ class LumenBuilder(StandardBuilder):
                     ids.area_factor(str(seg.token)),
                     value(DATA, seg.key, "area_factor"),
                     U.dimensionless,
-                    f"absorption area factor {seg.key.replace('_', ' ')}",
+                    f"absorption area factor {seg.label}",
                     "Mucosal surface per lumen volume relative to the small "
                     "intestine: the absorption of the segment is `ka*f_area`.",
                 )
@@ -153,7 +153,7 @@ class LumenBuilder(StandardBuilder):
             self._gut_species(
                 ids.lumen(sid, seg.token),
                 ids.lumen_volume(seg.token),
-                f"{s.name} (lumen {seg.key.replace('_', ' ')})",
+                f"{s.name} (lumen {seg.label})",
             )
             for seg in self.segments
         ]
@@ -169,7 +169,7 @@ class LumenBuilder(StandardBuilder):
                 ids.transit_reaction(sid, seg.token),
                 f"{c} -> {target}",
                 f"{v} * {c} / {self._transit(seg)}",
-                f"transit {sid} {seg.key.replace('_', ' ')}",
+                f"transit {sid} {seg.label}",
             )
             if seg.absorbs:
                 into = self._absorbed_into(s, parts, seg)
@@ -178,7 +178,7 @@ class LumenBuilder(StandardBuilder):
                     f"{c} -> {into}",
                     f"{ka} / 60 min_per_hr * {ids.area_factor(str(seg.token))} * "
                     f"{v} * {c}",
-                    f"absorption {sid} {seg.key.replace('_', ' ')}",
+                    f"absorption {sid} {seg.label}",
                 )
             elif self.single:
                 into = self._absorbed_into(s, parts, seg)
@@ -200,24 +200,42 @@ class LumenBuilder(StandardBuilder):
                     f"({ONE} - {fabs}) * {rate}",
                     f"unabsorbed fraction {sid} into the feces",
                 )
-        if sid in self.bile:
-            self._input_compartment(ids.VBILE, "bile")
-            bile = self._input_species(ids.bile(sid), ids.VBILE, f"{s.name} (bile)")
-            k_bile = self._input(
-                ids.K_BILE, U.per_min, "transit bile to intestinal lumen [1/min]"
-            )
-            into_lumen = lumen[0 if self.single else 1]
-            self._reaction(
-                ids.bile_reaction(sid),
-                f"{bile} -> {into_lumen}",
-                f"{k_bile} * {ids.VBILE} * {bile}",
-                f"transit {sid} bile to intestinal lumen",
-            )
+        self._bile(s, lumen[0 if self.single else 1])
         tablet = self.oral.get(("oral", sid))
         if tablet is not None:
             self._tablet(s, tablet, lumen, feces)
         if ("oral_solution", sid) in self.oral:
             self._solution(s, lumen[0])
+
+    def _bile(self, s: Substance, into: str) -> None:
+        """The transit of the bile of a substance into the duodenum (or the feces).
+
+        Every substance drains its bile: one with lumen species into the
+        duodenum (the single lumen), any other into the feces, so nothing
+        accumulates in the bile.
+        """
+        sid = s.sid
+        self._input_compartment(ids.VBILE, "bile")
+        bile = self._input_species(ids.bile(sid), ids.VBILE, f"{s.name} (bile)")
+        k_bile = self._input(
+            ids.K_BILE, U.per_min, "transit bile to intestinal lumen [1/min]"
+        )
+        into_feces = into == ids.feces(sid)
+        self._reaction(
+            ids.bile_reaction(sid),
+            f"{bile} -> {into}",
+            f"{k_bile} * {ids.VBILE} * {bile}",
+            f"transit {sid} bile to "
+            + ("feces (no lumen species)" if into_feces else "intestinal lumen"),
+        )
+
+    def _bile_to_feces(self, s: Substance) -> None:
+        """The bile of a substance without lumen species drains into the feces."""
+        self._input_compartment(ids.VFECES, "feces")
+        feces = self._input_species(
+            ids.feces(s.sid), ids.VFECES, f"{s.name} (feces)", amount=True
+        )
+        self._bile(s, feces)
 
     def _solution(self, s: Substance, stomach: str) -> None:
         """The oral solution: swallowed into the lumen of the stomach, dissolved."""
@@ -253,7 +271,7 @@ class LumenBuilder(StandardBuilder):
             self._gut_species(
                 ids.solid(sid, str(seg.token)),
                 ids.lumen_volume(seg.token),
-                f"{s.name} (undissolved, lumen {seg.key.replace('_', ' ')})",
+                f"{s.name} (undissolved, lumen {seg.label})",
                 amount=True,
             )
             for seg in self.segments[1:]
@@ -276,14 +294,14 @@ class LumenBuilder(StandardBuilder):
             first,
             f"-> {lumen[0]}",
             f"{kdis} * {dose} / {mr}",
-            f"dissolution {sid} (tablet) {self.segments[0].key.replace('_', ' ')}",
+            f"dissolution {sid} (tablet) {self.segments[0].label}",
         )
         empty = ids.transit_reaction(sid, self.segments[0].token, solid=True)
         self._reaction(
             empty,
             f"-> {solids[0] if solids else feces}",
             f"{dose} / {mr} / {self._transit(self.segments[0])}",
-            f"transit {sid} undissolved {self.segments[0].key.replace('_', ' ')}",
+            f"transit {sid} undissolved {self.segments[0].label}",
         )
         self.rate_rules.append(
             RateRule(
@@ -301,14 +319,14 @@ class LumenBuilder(StandardBuilder):
                 dis,
                 f"{a} -> {lumen[i]}",
                 f"{kdis} * {a}",
-                f"dissolution {sid} {seg.key.replace('_', ' ')}",
+                f"dissolution {sid} {seg.label}",
             )
             last = ids.transit_reaction(sid, seg.token, solid=True)
             self._reaction(
                 last,
                 f"{a} -> {solids[i] if i < len(solids) else feces}",
                 f"{a} / {self._transit(seg)}",
-                f"transit {sid} undissolved {seg.key.replace('_', ' ')}",
+                f"transit {sid} undissolved {seg.label}",
             )
             dissolved.append(dis)
         if is_weibull(route):

@@ -32,7 +32,11 @@ segment:
   undissolved amount, with the time since the dose `t` the mean age of the
   undissolved drug (`age_dis_<s>`, the state `W_dis_<s>` of the
   age-weighted amount divided by the undissolved amount): exact for one
-  dose, the amount-weighted mean for doses which overlap;
+  dose; doses which overlap share one clock, the amount-weighted mean age:
+  both dissolve with the hazard of the mean age, the rest of the earlier
+  dose as if it were younger (not at all while the mean age is below the
+  lag time), the new dose as if it were older; a dose given after the
+  earlier one has dissolved is exact again;
 - `DoseDependentDissolution(k, dose50)`: `kdis = k*D50/(D50 + D)` with the
   undissolved amount `D` (mg) of all segments, a dissolution which saturates
   with the undissolved dose (solubility-limited), at most `k*D50`.

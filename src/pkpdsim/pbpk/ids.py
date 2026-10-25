@@ -50,6 +50,7 @@ __all__ = [
     "VFECES",
     "VLUMEN",
     "VURINE",
+    "WALL_FRACTION",
     "absorption",
     "absorption_reaction",
     "activity",
@@ -115,6 +116,7 @@ __all__ = [
     "mucosa_coefficient",
     "mucosa_flow",
     "mucosa_reaction",
+    "mucosa_unbound",
     "mucosa_volume",
     "organ_flow",
     "organ_mass",
@@ -149,6 +151,7 @@ __all__ = [
     "unbound",
     "urine",
     "vascular_fraction",
+    "wall_compartment",
 ]
 
 
@@ -222,6 +225,8 @@ MUCOSA_FLOW_TOTAL = "Qmu_total"
 """The local blood flow of the mucosa of all segments."""
 MUCOSA_VOLUME_TOTAL = "Vmu_total"
 """The local volume of the mucosa of all segments."""
+WALL_FRACTION = "f_wall"
+"""The local fraction of the intestinal tissue without the mucosa, `1 - Vmu_total/Vti`."""
 F_MUCOSA_VOLUME = "f_mucosa_volume"
 """The local fraction of the intestinal tissue which is mucosa."""
 F_MUCOSA_FLOW = "f_mucosa_flow"
@@ -257,8 +262,10 @@ def ref(pid: str) -> str:
 def submodel(organ: Organ) -> str:
     """The id of the submodel of an organ, the organ id in capitals, `LI`.
 
-    The small intestine is the submodel `GU` (gut): the segmented and the
-    single lumen intestine replace small and large intestine with it.
+    The small intestine is the submodel `GU` (gut) for every intestine
+    variant: the segmented and the single lumen intestine replace small and
+    large intestine with it; with the standard organs as intestine the small
+    intestine is `GU` and the large intestine `LA`.
     """
     if organ is Organ.SMALL_INTESTINE:
         return GUT
@@ -534,6 +541,21 @@ def solid(s: str, seg: str) -> str:
 def mucosa(s: str, seg: str | None = None) -> str:
     """The local id of the concentration in the mucosa of a segment, `Cmu_du_<s>`."""
     return _segment("Cmu", s, seg)
+
+
+def mucosa_unbound(s: str, seg: str | None = None) -> str:
+    """The local id of the unbound concentration in the mucosa of a segment, `Cu_mu_du_<s>`."""
+    return _segment("Cu_mu", s, seg)
+
+
+def wall_compartment(part: Part) -> str:
+    """The local id of a tissue compartment of the intestinal wall without the mucosa, `Vti_wall`.
+
+    The compartment of the tissue species of a substance with mucosa species:
+    the mucosa is carved out of the wall, so the capacity of the intestine
+    stays that of the wall without mucosa.
+    """
+    return f"V{part.value}_wall"
 
 
 def mucosa_volume(seg: str | None = None) -> str:

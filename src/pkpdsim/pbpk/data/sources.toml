@@ -46,10 +46,6 @@ citation = "Choice of the pkpdsim PBPK library, not a value of the literature; t
 citation = "Schiller C, Fröhlich CP, Giessmann T, Siegmund W, Mönnikes H, Hosten N, Weitschies W. Intestinal fluid volumes and transit of dosage forms as assessed by magnetic resonance imaging. Aliment Pharmacol Ther 22(10):971-979, 2005."
 doi = "10.1111/j.1365-2036.2005.02683.x"
 
-[Yu1996]
-citation = "Yu LX, Crison JR, Amidon GL. Compartmental transit and dispersion model analysis of small intestinal transit flow in humans. Int J Pharm 140(1):111-118, 1996."
-doi = "10.1016/0378-5173(96)04592-9"
-
 [OSPDocumentation]
 citation = "Open Systems Pharmacology. PK-Sim documentation: Simulations, section on the venous blood outputs (Peripheral Venous Blood). https://docs.open-systems-pharmacology.org/working-with-pk-sim/pk-sim-documentation/pk-sim-simulations (accessed 2026-10-25)."
 
@@ -111,14 +107,6 @@ doi = "10.3109/00365521.2014.898326"
 [Paine1997]
 citation = "Paine MF, Khalighi M, Fisher JM, Shen DD, Kunze KL, Marsh CL, Perkins JD, Thummel KE. Characterization of interintestinal and intraintestinal variations in human CYP3A-dependent metabolism. J Pharmacol Exp Ther 283(3):1552-1562, 1997."
 
-[Drozdzik2014]
-citation = "Drozdzik M, Gröer C, Penski J, Lapczuk J, Ostrowski M, Lai Y, Prasad B, Unadkat JD, Siegmund W, Oswald S. Protein abundance of clinically relevant multidrug transporters along the entire length of the human intestine. Mol Pharm 11(10):3547-3555, 2014."
-doi = "10.1021/mp500330y"
-
 [Yu1999]
 citation = "Yu LX, Amidon GL. A compartmental absorption and transit model for estimating oral drug absorption. Int J Pharm 186(2):119-125, 1999."
 doi = "10.1016/S0378-5173(99)00147-7"
-
-[Granger1980]
-citation = "Granger DN, Richardson PD, Kvietys PR, Mortillaro NA. Intestinal blood flow. Gastroenterology 78(4):837-863, 1980."
-doi = "10.1016/0016-5085(80)90692-7"

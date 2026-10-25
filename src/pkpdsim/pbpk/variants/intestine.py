@@ -1,8 +1,11 @@
 """The intestine variants: the segmented intestine and the single lumen.
 
-Both replace small and large intestine with one submodel (`GU`) with the
+Both replace small and large intestine with one submodel (`GU`, the id of
+the small intestine for every intestine variant, `ids.submodel`) with the
 boundary of the standard organs on the blood side: the arterial inflow of
-both organs, `Qgu = Qsi + Qla`, drains into the portal vein. Their parts:
+both organs, `Qgu = Qsi + Qla`, drains into the portal vein. The output
+`Cout_si_<s>` is the plasma leaving the wall; the venous blood of the mucosa
+enters the portal vein directly. Their parts:
 
 - the intestinal wall, the standard organ (`StandardBuilder`) of the volume
   `Vgu = Vsi + Vla` with the volume-weighted vascular and interstitial
@@ -31,18 +34,30 @@ both organs, `Qgu = Qsi + Qla`, drains into the portal vein. Their parts:
   transported substance, inhibitor or inducer of a protein of a process of
   the small intestine): flow-limited with the mucosa to plasma coefficient
   `K_mu_<s>` (the Kp of the small intestine, 1 without), perfused by
-  arterial blood with its share `Qmu_<seg>` of the intestinal blood flow
-  (the wall gets the rest) and draining into the portal vein; the absorbed
-  drug enters it. Without such chemistry the substance has no mucosa
-  species and is absorbed into the plasma of the wall.
+  arterial blood with its flow `Qmu_<seg> = f_mucosa_flow * Q<region> *
+  share` (the mucosa fraction of the blood flow of its region, small or
+  large intestine, times the transit share of the segment in the region;
+  the wall gets the rest) and draining into the portal vein; the absorbed
+  drug enters it; its volume `Vmu_<seg>` is carved out of the tissue of the
+  wall of that substance (`V<part>_wall`), so wall and mucosa together have
+  the capacity of the wall of a substance without mucosa; the unbound
+  concentration `Cu_mu_<seg>_<s>` is an observer. Without such chemistry
+  the substance has no mucosa species and is absorbed into the plasma of
+  the wall.
 
 The chemistry of the small intestine is placed into the mucosa segments by
-the relative expression of its protein (CYP3A4, ABCB1, ABCG2 of the data)
-times the mucosa volume, the sum kept: the Vmax of a process stays per
-litre of small intestine (`Vmax * Vsi` for the whole intestine, as in the
-standard organ), a segment has the weight `w_<protein>_<seg>`; a protein
-without expression data is placed by mucosa volume. Apical efflux moves the
-drug from the mucosa into the lumen of the segment, apical influx back.
+the relative expression of its protein (CYP3A4 of the data) times the
+mucosa volume, the sum kept: the Vmax of a process stays per litre of small
+intestine (`Vmax * Vsi` for the whole intestine, as in the standard organ),
+a segment has the weight `w_<protein>_<seg>`; a protein without expression
+data is placed by mucosa volume. Apical efflux moves the drug from the
+mucosa into the lumen of the segment, apical influx back. A protein which a
+substance inactivates or induces has one turnover state `E_<protein>` for
+the intestine, driven by the unbound mucosa concentration weighted by the
+placement weights of the protein.
+
+The bile of every substance drains: of a substance with lumen species into
+the duodenum (the single lumen), of any other into the feces.
 """
 
 from dataclasses import dataclass
@@ -143,7 +158,11 @@ class SingleLumen:
 
     The first order absorption of most current models: one lumen (the fluid
     of the small intestine) with the transit into the feces, absorption with
-    `ka_<s>`, of which the fraction `fabs_<s>` enters the body.
+    `ka_<s>`, of which the fraction `fabs_<s>` enters the body. The lumen
+    keeps a physiological transit `t_lumen` into the feces, so the fraction
+    of a solution which enters the body is `fabs*ka/(ka + 1/t_lumen)`: the
+    fitted absorption and fraction absorbed of the hand-written models,
+    which had no transit, do not port unchanged (a refit is expected).
 
     Attributes:
         name: the name of the component.

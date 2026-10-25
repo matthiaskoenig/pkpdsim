@@ -19,6 +19,7 @@ from pkpdsim.pbpk import (
     DoseDependentDissolution,
     Excretion,
     FirstOrder,
+    Induction,
     Inhibition,
     Kp,
     Metabolism,
@@ -478,3 +479,70 @@ def test_large_intestine_kp_raises() -> None:
     )
     with pytest.raises(ValueError, match="large intestine"):
         compose(_definition("kp", substances=[drug, _metabolite()]))
+
+
+def test_mucosa_unbound_observer(tmp_path: Path) -> None:
+    """`Cu_mu_<seg>_<s> = fu/K_mu*Cmu`, an observer of every mucosa segment."""
+    r = _build(tmp_path, _definition("observer", chemistry=[_gut_metabolism()]))
+    r[ids.sol_dose(S)] = 10.0
+    r.simulate(0, 60, 5)
+    for seg in SMALL + COLON:
+        c = r[f"[{_gu(ids.mucosa(S, seg))}]"]
+        k = r[_gu(ids.mucosa_coefficient(S))]
+        assert c > 0
+        assert r[_gu(ids.mucosa_unbound(S, seg))] == pytest.approx(
+            r[ids.fu(S)] / k * c, rel=1e-12
+        )
+
+
+def test_gut_turnover_steady_state(tmp_path: Path) -> None:
+    """The turnover of CYP3A4 in the gut reaches the analytic steady state.
+
+    A constant infusion of an inducer and mechanism-based inhibitor gives the
+    same unbound concentration `I` in every mucosa segment;
+    `E = (1 + Emax*I/(EC50 + I))/(1 + kinact/kdeg*I/(KI + I))`. Only the
+    segments with CYP3A4 (not the colon) drive the state.
+    """
+    emax, ec50, ki, kinact = 2.0, 1e-3, 2e-3, 1e-3
+    inhibitor = Substance(
+        sid="inh",
+        name="inhibitor",
+        mr=400.0,
+        excretion=Excretion(urine=True),
+        inhibits=(Inhibition("CYP3A4", "mechanism", ki, kinact=kinact),),
+        induces=(Induction("CYP3A4", emax, ec50),),
+    )
+    d = _definition(
+        "turnover",
+        substances=[_drug(), _metabolite(), inhibitor],
+        chemistry=[_gut_metabolism()],
+        routes=[Route.iv("inh")],
+    )
+    result = build(d, tmp_path)
+    doc = libsbml.readSBMLFromFile(str(result.flat_path))
+    rule = doc.getModel().getRateRule(_gu(ids.enzyme("CYP3A4")))
+    drive = libsbml.formulaToL3String(rule.getMath())
+    assert _gu(ids.mucosa("inh", "du")) in drive
+    assert not any(_gu(ids.mucosa("inh", seg)) in drive for seg in COLON)
+    r = load(result)
+    r[ids.infusion_rate("inh")] = 0.01
+    r.simulate(0, 20 * DAY, 20)
+    unbound = [r[_gu(ids.mucosa_unbound("inh", seg))] for seg in SMALL]
+    assert unbound == pytest.approx([unbound[0]] * len(SMALL), rel=1e-6)
+    i = unbound[0]
+    kdeg = r[_gu(ids.kdeg("CYP3A4"))]
+    expected = (1 + emax * i / (ec50 + i)) / (1 + kinact / kdeg * i / (ki + i))
+    assert r[_gu(ids.enzyme("CYP3A4"))] == pytest.approx(expected, rel=1e-6)
+
+
+def test_bile_drains_for_every_substance(tmp_path: Path) -> None:
+    """The bile of a substance without lumen species drains into the feces."""
+    d = _definition("bile_drain", routes=[Route.oral(S)])
+    doc = libsbml.readSBMLFromFile(str(build(d, tmp_path).flat_path))
+    model = doc.getModel()
+    for sid, into in ((S, _gu(ids.lumen(S, "du"))), (M, ids.feces(M))):
+        reaction = model.getReaction(_gu(ids.bile_reaction(sid)))
+        assert [x.getSpecies() for x in reaction.getListOfReactants()] == [
+            ids.bile(sid)
+        ]
+        assert [x.getSpecies() for x in reaction.getListOfProducts()] == [into]

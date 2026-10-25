@@ -26,6 +26,7 @@ from pkpdsim.pbpk.organ_builder import ONE
 from pkpdsim.pbpk.organs import Organ, Part, Pool
 from pkpdsim.pbpk.parts import Parts, parts_for
 from pkpdsim.pbpk.placement import (
+    built_parts,
     inhibitor_terms,
     rate_law,
     stoichiometry,
@@ -43,11 +44,20 @@ __all__ = ["GUT_ORGANS", "GutBuilder"]
 GUT_ORGANS = (Organ.SMALL_INTESTINE, Organ.LARGE_INTESTINE)
 """The organs the intestine variants replace."""
 
-_PROFILED = {"CYP3A4": "cyp3a4", "ABCB1": "abcb1", "ABCG2": "abcg2"}
-"""The proteins with an expression of the data, by their key."""
+_PROFILED = {"CYP3A4": "cyp3a4"}
+"""The proteins with an expression of the data, by their key (ABCB1 and ABCG2
+are placed by mucosa volume until their abundances are verified)."""
 
 _UNIFORM = "uniform"
 """The key of the placement by mucosa volume."""
+
+_TISSUE = {
+    Part.TISSUE: "tissue",
+    Part.INTERSTITIAL: "interstitium",
+    Part.INTRACELLULAR: "intracellular space",
+    Part.ORGAN: "organ",
+}
+"""The parts of the wall the mucosa is carved out of, in names."""
 
 
 def _gut_chemistry(
@@ -166,6 +176,11 @@ class GutBuilder(LumenBuilder):
             and p.organ is Organ.LIVER
             and p.membrane is Membrane.APICAL
             and p.direction is Direction.EFFLUX
+        } | {
+            s.sid
+            for s in ctx.substances
+            for p in ctx.chemistry
+            if isinstance(p, CustomReaction) and ids.bile(s.sid) in p.equation.split()
         }
         influx = {
             p.protein
@@ -193,13 +208,21 @@ class GutBuilder(LumenBuilder):
                 self._mucosa_substance(s, parts)
             if s.sid in self.luminal:
                 self._lumen(s, parts)
+            else:
+                self._bile_to_feces(s)
         self._chemistry()
         kind = "single lumen" if self.single else "segmented"
-        md = self.model_definition(
+        notes = (
             f"The {kind} intestine, which replaces small and large intestine: "
             "the intestinal wall, the lumen with the transit, dissolution and "
             "absorption, the mucosa and the chemistry of the intestine."
         )
+        if not self.single:
+            notes += (
+                "\n\nThe segmentation of the lumen (stomach to rectum, a mucosa "
+                f"per intestinal segment):\n\n- {cite('Thelen2011')}"
+            )
+        md = self.model_definition(notes)
         md.name = f"intestine ({self.name})"
         return md, Boundary(
             replacements=dict(self.replacements), outputs=dict(self.outputs)
@@ -281,6 +304,79 @@ class GutBuilder(LumenBuilder):
             )
         return ids.GUT_FLOW
 
+    def _compartments(self) -> None:
+        """The compartments of the wall, and those without the mucosa.
+
+        A substance with mucosa species has its tissue species in the wall
+        without the mucosa (`V<part>_wall`): the tissue parts times
+        `f_wall = 1 - Vmu_total/Vti`, the flow-limited organ `Vor - Vmu_total`,
+        so that wall and mucosa together have the capacity of the wall of a
+        substance without mucosa.
+        """
+        super()._compartments()
+        carved = {
+            part
+            for sid in self.mucosal
+            for part in built_parts(self.ctx.parts[sid])
+            if part in _TISSUE
+        }
+        if carved - {Part.ORGAN}:
+            self._initial(
+                ids.WALL_FRACTION,
+                f"{ONE} - {ids.MUCOSA_VOLUME_TOTAL} / ({self.v} * ({ONE} - {self.f_vas}))",
+                U.dimensionless,
+                "fraction of the intestinal tissue without the mucosa",
+                "The mucosa is carved out of the tissue of the wall for a substance "
+                "with mucosa species.",
+            )
+        for part in sorted(carved):
+            base = ids.compartment(part)
+            if part is Part.ORGAN:
+                formula = f"{base} - {ids.MUCOSA_VOLUME_TOTAL}"
+            else:
+                formula = f"{base} * {ids.WALL_FRACTION}"
+            self._compartment(
+                ids.wall_compartment(part),
+                formula,
+                f"{_TISSUE[part]} without the mucosa",
+                "Compartment of a substance with mucosa species: the mucosa is "
+                "carved out of the wall.",
+            )
+
+    def _species(self, part: Part, s: Substance, parts: Parts) -> None:
+        """The species of a substance in a part of the wall, without the mucosa for a mucosal one."""
+        super()._species(part, s, parts)
+        if s.sid in self.mucosal and part in _TISSUE:
+            self.species[ids.species(part, s.sid)].compartment = ids.wall_compartment(
+                part
+            )
+
+    def _k_organ(self, s: Substance, parts: Parts) -> str:
+        """The organ to plasma coefficient of the flow-limited wall.
+
+        Of a substance with mucosa species the wall without the mucosa,
+        `(V*f_vas*vascular + (V*(1 - f_vas) - Vmu_total)*Kp)/(V - Vmu_total)`.
+        """
+        if s.sid not in self.mucosal:
+            return super()._k_organ(s, parts)
+        kp = self._kp(s)
+        if kp is None:
+            raise ValueError(f"{s.sid}: a flow-limited intestine needs a Kp.")
+        if parts.flow_carrier == "blood_bp":
+            vascular = self._bp(s)
+        else:
+            vascular = f"({ONE} - {self.hct})"
+        v, f_vas, vmu = self.v, self.f_vas, ids.MUCOSA_VOLUME_TOTAL
+        return self._initial(
+            ids.k_organ(s.sid),
+            f"({v} * {f_vas} * {vascular} + ({v} * ({ONE} - {f_vas}) - {vmu}) * {kp})"
+            f" / ({v} - {vmu})",
+            U.dimensionless,
+            f"organ to plasma coefficient {s.sid}",
+            "Organ to plasma coefficient of the flow-limited wall without the "
+            "mucosa: wall and mucosa together hold `(Vpl + Vbc*Kbc + Vti*Kp)*Cpl`.",
+        )
+
     def _flows(self, s: Substance) -> tuple[list[tuple[Pool, str]], str]:
         """The arterial inflow of the wall and its outflow into the portal vein.
 
@@ -311,7 +407,8 @@ class GutBuilder(LumenBuilder):
         volumes, flows = [], []
         for seg in self.mucosa_segments:
             region = seg.region
-            assert region is not None
+            if region is None:
+                raise ValueError(f"Lumen segment '{seg.key}' has no mucosa.")
             share = f"{seg.share:.6g} dimensionless"
             vo = self._input(
                 ids.organ_volume(region), U.litre, f"volume {region.name.lower()} [l]"
@@ -325,7 +422,7 @@ class GutBuilder(LumenBuilder):
             self._compartment(
                 cid,
                 f"{f_vol} * {vo} * ({ONE} - {fv}) * {share}",
-                f"mucosa {seg.key.replace('_', ' ')}",
+                f"mucosa {seg.label}",
                 "Mucosa (enterocytes) of the segment: its share of the tissue of "
                 "the region by the transit time.",
             )
@@ -333,7 +430,7 @@ class GutBuilder(LumenBuilder):
                 ids.mucosa_flow(seg.token),
                 f"{f_flow} * {super()._flow(ids.organ_flow(region))} * {share}",
                 U.l_per_min,
-                f"blood flow mucosa {seg.key.replace('_', ' ')} [l/min]",
+                f"blood flow mucosa {seg.label} [l/min]",
                 "Blood flow of the mucosa of the segment: its share of the blood "
                 "flow of the region by the transit time.",
             )
@@ -388,19 +485,27 @@ class GutBuilder(LumenBuilder):
             c = self._gut_species(
                 ids.mucosa(sid, seg.token),
                 ids.mucosa_volume(seg.token),
-                f"{s.name} (mucosa {seg.key.replace('_', ' ')})",
+                f"{s.name} (mucosa {seg.label})",
             )
             self._reaction(
                 ids.mucosa_reaction("in", sid, seg.token),
                 f"{car} -> {c}",
                 f"{q} * {carrier} * {car}",
-                f"inflow {sid} into mucosa {seg.key.replace('_', ' ')}",
+                f"inflow {sid} into mucosa {seg.label}",
             )
             self._reaction(
                 ids.mucosa_reaction("out", sid, seg.token),
                 f"{c} -> {cpo}",
                 f"{q} * {carrier} * {c} / {k}",
-                f"outflow {sid} from mucosa {seg.key.replace('_', ' ')}",
+                f"outflow {sid} from mucosa {seg.label}",
+            )
+            self._rule(
+                ids.mucosa_unbound(sid, seg.token),
+                self._mucosa_unbound(s, seg),
+                U.mM,
+                f"unbound concentration {sid} mucosa {seg.label} [mM]",
+                "Unbound concentration of the mucosa of the segment, `fu/K_mu*Cmu`; "
+                "an observer.",
             )
             if parts.blood_cells:
                 car_bc = self._pool_species(Pool.ARTERIAL, Part.BLOOD_CELLS, s, parts)
@@ -409,7 +514,7 @@ class GutBuilder(LumenBuilder):
                     ids.mucosa_reaction("bc", sid, seg.token),
                     f"{car_bc} -> {cpo_bc}",
                     f"{q} * {self.hct} * {car_bc}",
-                    f"blood cells {sid} past mucosa {seg.key.replace('_', ' ')}",
+                    f"blood cells {sid} past mucosa {seg.label}",
                 )
 
     def _mucosa_unbound(self, s: Substance, seg: Segment) -> str:
@@ -419,16 +524,25 @@ class GutBuilder(LumenBuilder):
             f"{fu} / {ids.mucosa_coefficient(s.sid)} * {ids.mucosa(s.sid, seg.token)}"
         )
 
-    def _unbound_in_cell(self, sid: str) -> str:
-        """The unbound concentration in the cell, the mean over the mucosa segments."""
+    def _unbound_in_cell(self, sid: str, protein: str) -> str:
+        """The unbound concentration in the cell which drives the turnover of a protein.
+
+        One turnover state `E_<protein>` for the intestine, driven by the
+        mean unbound mucosa concentration weighted by the placement of the
+        protein (`w_<protein>_<seg>`, sum 1): the segments without the
+        protein (CYP3A4 in the colon) do not drive it, and with the same
+        concentration in every expressing segment the state is that of this
+        concentration.
+        """
         if sid not in self.mucosal:
-            return super()._unbound_in_cell(sid)
+            return super()._unbound_in_cell(sid, protein)
         s = next(s for s in self.ctx.substances if s.sid == sid)
-        terms = " + ".join(
-            f"{ids.mucosa_volume(seg.token)} * {self._mucosa_unbound(s, seg)}"
+        terms = [
+            f"{w} * {self._mucosa_unbound(s, seg)}"
             for seg in self.mucosa_segments
-        )
-        return f"({terms}) / {ids.MUCOSA_VOLUME_TOTAL}"
+            if (w := self._weight(protein, seg)) is not None
+        ]
+        return f"({' + '.join(terms)})"
 
     # --- the chemistry --------------------------------------------------
 
@@ -477,7 +591,7 @@ class GutBuilder(LumenBuilder):
             pid,
             f"{term(seg)} / ({total})",
             U.dimensionless,
-            f"share {key} mucosa {seg.key.replace('_', ' ')}",
+            f"share {key} mucosa {seg.label}",
             f"Share of a process of the protein in the mucosa of the segment, {text}",
         )
         return pid
@@ -510,7 +624,7 @@ class GutBuilder(LumenBuilder):
     def _place(self, p: Metabolism | Transport, seg: Segment, weight: str) -> None:
         """A process of the chemistry in the mucosa of a segment."""
         by_id = {s.sid: s for s in self.ctx.substances}
-        name = seg.key.replace("_", " ")
+        name = seg.label
         if isinstance(p, Metabolism):
             s = by_id[p.substrate]
             cu = self._mucosa_unbound(s, seg)

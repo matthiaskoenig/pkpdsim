@@ -415,14 +415,14 @@ class OrganBuilder:
         for sid, ind in self.ctx.inductions:
             if ind.protein != protein:
                 continue
-            i = self._unbound_in_cell(sid)
+            i = self._unbound_in_cell(sid, protein)
             synthesis.append(
                 f"{ids.emax(protein, sid)} * ({i}) / ({ids.ec50(protein, sid)} + {i})"
             )
         for sid, inh in self.ctx.inhibitions:
             if inh.protein != protein or inh.kind != "mechanism":
                 continue
-            i = self._unbound_in_cell(sid)
+            i = self._unbound_in_cell(sid, protein)
             inactivation.append(
                 f"{ids.kinact(protein, sid)} * ({i}) / ({ids.ki(protein, sid)} + {i})"
             )
@@ -447,12 +447,14 @@ class OrganBuilder:
         )
         self.rate_rules.append(RateRule(e, formula, U.per_min))
 
-    def _unbound_in_cell(self, sid: str) -> str:
+    def _unbound_in_cell(self, sid: str, protein: str) -> str:
         """The unbound concentration of a substance in the cell of the organ.
 
         Intracellular, else the equivalent tissue part (merged tissue, whole
-        organ), else plasma.
+        organ), else plasma; the same for every protein (a variant with
+        several cells weights them by the protein).
         """
+        del protein
         s = next(s for s in self.ctx.substances if s.sid == sid)
         return inhibitor_unbound(Part.INTRACELLULAR, s, self.organ, self.ctx.parts)
 
