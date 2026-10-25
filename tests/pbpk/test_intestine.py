@@ -284,15 +284,20 @@ def test_placement_by_expression(tmp_path: Path) -> None:
 def test_first_order_per_volume_in_segments(tmp_path: Path) -> None:
     """A first order clearance per litre of small intestine is placed by mucosa volume.
 
-    A process without protein has in every mucosa segment the share
-    `Vmu_<seg>/sum(Vmu)` of the capacity `k*Vsi` of the standard organ: with the
-    same mucosa concentration everywhere the segments together clear
+    A process without protein has in every mucosa segment of the small
+    intestine the share `Vmu_<seg>/sum(Vmu)` of the capacity `k*Vsi` of the
+    standard organ, the colon segments carry none of it (R62): with the same
+    mucosa concentration everywhere the segments together clear
     `k*Vsi*fu/K_mu*C`, and the clearance scales with the small intestine of the
     individual (BW).
     """
     process = Metabolism("DRGG", Organ.SMALL_INTESTINE, S, {}, FirstOrder(k=0.5))
     path = build(_definition("per_volume", chemistry=[process]), tmp_path).flat_path
-    segments = SMALL + COLON
+    doc = libsbml.readSBMLFromFile(str(path))
+    reactions = {x.getId() for x in doc.getModel().getListOfReactions()}
+    assert {_gu(ids.segment_process("DRGG", seg)) for seg in SMALL} <= reactions
+    assert not {_gu(ids.segment_process("DRGG", seg)) for seg in COLON} & reactions
+    segments = SMALL
     c = 0.005
     totals = {}
     for bw in (75.0, 150.0):

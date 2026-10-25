@@ -50,7 +50,8 @@ the relative expression of its protein (CYP3A4 of the data) times the
 mucosa volume, the sum kept: the Vmax of a process stays per litre of small
 intestine (`Vmax * Vsi` for the whole intestine, as in the standard organ),
 a segment has the weight `w_<protein>_<seg>`; a protein without expression
-data is placed by mucosa volume. Apical efflux moves the drug from the
+data (or a process without protein) is placed by mucosa volume over the
+segments of the small intestine, the organ of the process. Apical efflux moves the drug from the
 mucosa into the lumen of the segment, apical influx back. A protein which a
 substance inactivates or induces has one turnover state `E_<protein>` for
 the intestine, driven by the unbound mucosa concentration weighted by the

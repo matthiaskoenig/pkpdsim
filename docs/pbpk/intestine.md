@@ -110,7 +110,7 @@ J_out_pl_<s>: Cpl_<s> -> Cpo_<s> = Qgu * (1 - HCT) * Cout_<s>
 
 ### Mucosa
 
-A substance with chemistry of the intestine (substrate, product, transported substance, inhibitor or inducer of a protein of a process of `Organ.SMALL_INTESTINE`) has a mucosa (enterocyte) species per segment, `Cmu_<seg>_<s>`: flow-limited with the mucosa to plasma coefficient `K_mu_<s>` (the Kp of the small intestine, 1 without), perfused by arterial blood with the mucosa share of the blood flow of its region times the transit share of the segment in the region, and draining into the portal vein; the absorbed drug enters it. Its volume is carved out of the tissue of the wall, so wall and mucosa together have the capacity of the wall of a substance without mucosa. The mucosa is a tenth of the tissue of the intestine and receives 70 % of its blood flow, choices of the library (`data/intestine_human.toml`). The chemistry of the small intestine is placed into the mucosa segments by the relative expression of its protein (CYP3A4 of Paine 1997) times the mucosa volume, the sum kept: the Vmax stays per litre of small intestine. An apical efflux moves the drug from the mucosa into the lumen of its segment, an apical influx back.
+A substance with chemistry of the intestine (substrate, product, transported substance, inhibitor or inducer of a protein of a process of `Organ.SMALL_INTESTINE`) has a mucosa (enterocyte) species per segment, `Cmu_<seg>_<s>`: flow-limited with the mucosa to plasma coefficient `K_mu_<s>` (the Kp of the small intestine, 1 without), perfused by arterial blood with the mucosa share of the blood flow of its region times the transit share of the segment in the region, and draining into the portal vein; the absorbed drug enters it. Its volume is carved out of the tissue of the wall, so wall and mucosa together have the capacity of the wall of a substance without mucosa. The mucosa is a tenth of the tissue of the intestine and receives 70 % of its blood flow, choices of the library (`data/intestine_human.toml`). The chemistry of the small intestine is placed into the mucosa segments by the relative expression of its protein (CYP3A4 of Paine 1997) times the mucosa volume, the sum kept: the Vmax stays per litre of small intestine. A protein without expression data, and a process without protein, is placed by mucosa volume over the segments of the small intestine only, the organ of the process; the colon mucosa carries none of it, so the gut first pass of such a process equals that of the single lumen. An apical efflux moves the drug from the mucosa into the lumen of its segment, an apical influx back.
 
 ```equations title="mucosa of the duodenum (a gut metabolism of drg into drg_m)"
 Vmu_du = f_mucosa_volume * Vsi * (1 - f_vas_si) * 0.0744792
@@ -124,7 +124,7 @@ w_cyp3a4_du = 31 * Vmu_du / (31 * Vmu_du + 31 * Vmu_jej1 + 24 * Vmu_jej2 + 17 * 
 DRGGU_du: Cmu_du_drg -> Cmu_du_drg_m = f_cyp3a4 * w_cyp3a4_du * DRGGU_Vmax * Vsi * (fu_drg / K_mu_drg * Cmu_du_drg) / (DRGGU_Km + fu_drg / K_mu_drg * Cmu_du_drg)
 ```
 
-The number `0.0744792` is the transit share of the duodenum in the small intestine. A protein which a substance inactivates or induces has one turnover state for the intestine, driven by the unbound mucosa concentration weighted by the placement of the protein. ABCB1, ABCG2 and every protein but CYP3A4 are placed by mucosa volume until their abundances along the intestine (Drozdzik 2014) are transcribed and verified.
+The number `0.0744792` is the transit share of the duodenum in the small intestine. A protein which a substance inactivates or induces has one turnover state for the intestine, driven by the unbound mucosa concentration weighted by the placement of the protein. ABCB1, ABCG2 and every protein but CYP3A4 are placed by mucosa volume over the small intestine until their abundances along the intestine (Drozdzik 2014) are transcribed and verified.
 
 ## Single lumen
 
@@ -147,5 +147,5 @@ Every substance has the amounts in urine `Aurine_<s>` and feces `Afeces_<s>` (co
 ## Limitations
 
 - The deconjugation in the colon lumen (glucuronides back to the parent) is not implemented: a custom reaction of the intestine is refused, a hook for the chemistry of the lumen is open.
-- Only CYP3A4 has an expression profile along the intestine; the pH of the segments is data no process reads.
+- Only CYP3A4 has an expression profile along the intestine; every other protein is placed by mucosa volume over the small intestine, so a process expressed in the colon needs expression data (or a hook for the large intestine). The pH of the segments is data no process reads.
 - The gastric emptying and small intestinal transit factors of chronic kidney disease are 1 (see [Impairment](impairment.md#limitations)).

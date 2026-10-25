@@ -82,7 +82,9 @@ def _gut_chemistry(
             raise ValueError(
                 f"Process '{p.sid}' is of the large intestine: the intestine "
                 "places the chemistry of the small intestine (organ "
-                "SMALL_INTESTINE) into the mucosa of all segments."
+                "SMALL_INTESTINE) into the mucosa segments by the expression of "
+                "its protein, by mucosa volume over the small intestine without "
+                "expression data; the large intestine has no chemistry."
             )
         if isinstance(p, CustomReaction):
             raise ValueError(
@@ -584,8 +586,9 @@ class GutBuilder(LumenBuilder):
         """The share of a process of a protein in the mucosa of a segment.
 
         `w = e*Vmu/sum(e*Vmu)` with the expression `e` of the protein of the
-        data, by mucosa volume (`e = 1`) for a protein without; `None` where
-        the protein is not expressed.
+        data; a protein without expression data (or no protein) is placed by
+        mucosa volume (`e = 1`) over the segments of the small intestine, the
+        organ of the process (R62); `None` where the protein is not placed.
         """
         key = _UNIFORM if self.single else _PROFILED.get(protein or "", _UNIFORM)
 
@@ -594,8 +597,13 @@ class GutBuilder(LumenBuilder):
                 return None
             return value(DATA, other.key, key)
 
-        e = expression(seg)
-        if e is not None and e.value == 0.0:
+        def placed(other: Segment) -> bool:
+            if key == _UNIFORM:
+                return other.region is not Organ.LARGE_INTESTINE
+            ex = expression(other)
+            return ex is None or ex.value != 0.0
+
+        if not placed(seg):
             return None
         pid = ids.placement_weight(key, seg.token)
         if pid in self.parameters:
@@ -606,13 +614,12 @@ class GutBuilder(LumenBuilder):
             v = ids.mucosa_volume(other.token)
             return v if ex is None else f"{ex.value!r} dimensionless * {v}"
 
-        total = " + ".join(
-            term(o)
-            for o in self.mucosa_segments
-            if (ex := expression(o)) is None or ex.value != 0.0
-        )
+        total = " + ".join(term(o) for o in self.mucosa_segments if placed(o))
         if key == _UNIFORM:
-            text = "by mucosa volume (the protein has no expression data)"
+            text = (
+                "by mucosa volume over the segments of the small intestine (the "
+                "protein has no expression data)"
+            )
         else:
             sources = sorted(
                 {str(x.source) for o in self.mucosa_segments if (x := expression(o))}
