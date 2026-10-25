@@ -458,6 +458,15 @@ def ps(s: str) -> str:
     return f"PS_{s}"
 
 
+def ps_ref(s: str) -> str:
+    """The local id of the exchange of the whole healthy liver, `PS_ref_<s>`.
+
+    The exchange of the whole liver in l/min (`ps` with
+    `ps_per_volume=False`): the liver has `PS_<s> = PS_ref_<s> * f_functional`.
+    """
+    return f"PS_ref_{s}"
+
+
 def kps(s: str) -> str:
     """The local id of the exchange of `s` per litre of organ, `kps_<s>`.
 

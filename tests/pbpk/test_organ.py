@@ -341,12 +341,24 @@ def test_ps_of_organ() -> None:
     ps = Value(0.2, U.l_per_min, source="Schmitt2008")
     drug = _drug(distribution=Kp(2.0, ftissue=1.0, ps={LIVER: ps}, ps_per_volume=False))
     md, boundary = _build(substances=[drug, _metabolite()])
-    par = _parameters(md)["PS_drg"]
+    par = _parameters(md)["PS_ref_drg"]
     assert par.value == 0.2
     assert "doi:10.1016/j.tiv.2007.09.010" in str(par.notes)
-    assert "PS_drg" not in _rules(md)
+    assert _rules(md)["PS_drg"].replace(" ", "") == "PS_ref_drg*f_functional"
     assert "ftissue_drg" not in boundary.replacements
     assert "Vti_total_ref_drg" not in boundary.replacements
+
+
+def test_ps_of_organ_other_organ_constant() -> None:
+    """Outside the liver the whole-organ value stays the constant `PS`."""
+    ps = Value(0.2, U.l_per_min, source="Schmitt2008")
+    drug = _drug(
+        distribution=Kp(2.0, ftissue=1.0, ps={Organ.MUSCLE: ps}, ps_per_volume=False)
+    )
+    md, _ = _build(Organ.MUSCLE, substances=[drug, _metabolite()])
+    assert _parameters(md)["PS_drg"].value == 0.2
+    assert "PS_ref_drg" not in _parameters(md)
+    assert "PS_drg" not in _rules(md)
 
 
 def test_ps_of_organ_per_volume() -> None:

@@ -127,6 +127,7 @@ One id scheme for every model, built by the functions of `pkpdsim.pbpk.ids`, so 
 | `ftissue_<s>` | the whole-body exchange between plasma and tissue | `ids.ftissue(s)` |
 | `PS_<s>` | the exchange of an organ (l/min, local id) | `ids.ps(s)` |
 | `kps_<s>` | the exchange of an organ per litre of organ (`ps`, 1/min, local id) | `ids.kps(s)` |
+| `PS_ref_<s>` | the exchange of the whole healthy liver (`ps` with `ps_per_volume=False`, l/min, local id) | `ids.ps_ref(s)` |
 | `BP_<s>` | the blood to plasma ratio | `ids.bp(s)` |
 | `Kbc_<s>` | the blood cell to plasma coefficient | `ids.kbc(s)` |
 | `f_reabsorbed_<s>` | the fraction of the filtrate which is reabsorbed | `ids.fraction_reabsorbed(s)` |

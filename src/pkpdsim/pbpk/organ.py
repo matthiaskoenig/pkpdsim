@@ -724,14 +724,34 @@ class StandardBuilder(OrganBuilder):
             )
         if self.organ in dist.ps:
             if not dist.ps_per_volume:
-                return self._constant(
-                    pid,
-                    dist.ps[self.organ],
-                    U.l_per_min,
-                    name,
+                whole = (
                     "Passive exchange of the whole organ, given instead of the "
                     "share of the whole-body exchange; it does not scale with the "
-                    "organ volume.",
+                    "organ volume."
+                )
+                if self.organ is not Organ.LIVER:
+                    return self._constant(
+                        pid,
+                        dist.ps[self.organ],
+                        U.l_per_min,
+                        name,
+                        whole,
+                        kind="permeability",
+                    )
+                ref = self._constant(
+                    ids.ps_ref(s.sid),
+                    dist.ps[self.organ],
+                    U.l_per_min,
+                    f"exchange plasma and tissue {s.sid} of the healthy liver [l/min]",
+                    whole,
+                    kind="permeability",
+                )
+                return self._initial(
+                    pid,
+                    self._functional(ref),
+                    U.l_per_min,
+                    name,
+                    f"{whole} {self._functional_text()}",
                     kind="permeability",
                 )
             kps = self._constant(
