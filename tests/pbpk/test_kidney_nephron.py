@@ -93,7 +93,11 @@ def _renal_drug(
 
 
 _KIDNEY_TISSUE = Kp(
-    1.0, organs=frozenset({Organ.KIDNEY}), ftissue=1.0, ps={Organ.KIDNEY: 0.2}
+    1.0,
+    organs=frozenset({Organ.KIDNEY}),
+    ftissue=1.0,
+    ps={Organ.KIDNEY: 0.2},
+    ps_per_volume=False,
 )
 """The drug enters the tissue of the kidney only, with the passive exchange
 0.2 l/min of the cells instead of the share of `ftissue` (the transporters

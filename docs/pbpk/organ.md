@@ -67,7 +67,7 @@ The collapsed forms are the limiting cases of the full form, not other models: `
 
 ### Merged tissue
 
-The default with a Kp: the interstitial and the intracellular space are one tissue species with the whole-tissue Kp. The exchange of the organ is its share of the whole-body exchange `ftissue_<s>` by its tissue volume, relative to the reference tissue volume of the organs the substance enters (a `ps` of the organ replaces it).
+The default with a Kp: the interstitial and the intracellular space are one tissue species with the whole-tissue Kp. The exchange of the organ is its share of the whole-body exchange `ftissue_<s>` by its tissue volume, relative to the reference tissue volume of the organs the substance enters (a `ps` of the organ replaces it: per litre of organ `PS_<s> = kps_<s> * V<o>`, or with `ps_per_volume=False` the exchange of the whole organ).
 
 ```equations title="merged tissue (Mode.TISSUE)"
 J_ti_<s>: Cpl_<s> -> Cti_<s> = PS_<s> * fu_<s> * (Cpl_<s> - Cti_<s> / Kp_<s>)

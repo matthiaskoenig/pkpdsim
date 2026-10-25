@@ -337,9 +337,9 @@ def test_kp_override() -> None:
 
 
 def test_ps_of_organ() -> None:
-    """A value of the organ replaces the share of `ftissue`."""
+    """A value of the whole organ (l/min) replaces the share of `ftissue`."""
     ps = Value(0.2, U.l_per_min, source="Schmitt2008")
-    drug = _drug(distribution=Kp(2.0, ftissue=1.0, ps={LIVER: ps}))
+    drug = _drug(distribution=Kp(2.0, ftissue=1.0, ps={LIVER: ps}, ps_per_volume=False))
     md, boundary = _build(substances=[drug, _metabolite()])
     par = _parameters(md)["PS_drg"]
     assert par.value == 0.2
@@ -347,6 +347,18 @@ def test_ps_of_organ() -> None:
     assert "PS_drg" not in _rules(md)
     assert "ftissue_drg" not in boundary.replacements
     assert "Vti_total_ref_drg" not in boundary.replacements
+
+
+def test_ps_of_organ_per_volume() -> None:
+    """A value per litre of organ (the default) is `kps`, the organ has `kps*V<o>`."""
+    kps = Value(0.2, U.per_min, source="Schmitt2008")
+    drug = _drug(distribution=Kp(2.0, ftissue=1.0, ps={LIVER: kps}))
+    md, boundary = _build(substances=[drug, _metabolite()])
+    par = _parameters(md)["kps_drg"]
+    assert par.value == 0.2
+    assert "doi:10.1016/j.tiv.2007.09.010" in str(par.notes)
+    assert _rules(md)["PS_drg"].replace(" ", "") == "kps_drg*Vli*f_functional"
+    assert "ftissue_drg" not in boundary.replacements
 
 
 def test_organ_not_entered() -> None:

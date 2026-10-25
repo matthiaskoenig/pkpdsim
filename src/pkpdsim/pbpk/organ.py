@@ -697,7 +697,9 @@ class StandardBuilder(OrganBuilder):
         `PS = ftissue * Vti/Vti_total_ref`, the share of the whole-body exchange
         by the tissue volume relative to the tissue volume of the reference
         individual (so the exchange scales with the individual), or the value
-        of the organ (`ps` of the Kp); no
+        of the organ (`ps` of the Kp): per litre of organ `PS = kps * V<o>`
+        (the default, it scales with the individual as well), else the
+        exchange of the whole organ in l/min; no
         passive exchange for a substance which does not enter the tissue of
         the organ (it has the full form by its transporters).
 
@@ -721,13 +723,35 @@ class StandardBuilder(OrganBuilder):
                 kind="permeability",
             )
         if self.organ in dist.ps:
-            return self._constant(
-                pid,
+            if not dist.ps_per_volume:
+                return self._constant(
+                    pid,
+                    dist.ps[self.organ],
+                    U.l_per_min,
+                    name,
+                    "Passive exchange of the whole organ, given instead of the "
+                    "share of the whole-body exchange; it does not scale with the "
+                    "organ volume.",
+                    kind="permeability",
+                )
+            kps = self._constant(
+                ids.kps(s.sid),
                 dist.ps[self.organ],
+                U.per_min,
+                f"exchange per volume plasma and tissue {s.sid} [1/min]",
+                "Passive exchange per litre of organ, given instead of the share "
+                f"of the whole-body exchange; the organ has `{ids.kps(s.sid)} * "
+                f"{self.v}`.",
+                kind="permeability",
+            )
+            return self._initial(
+                pid,
+                f"{kps} * " + self._functional(self.v),
                 U.l_per_min,
                 name,
-                "Passive exchange of the organ, given instead of the share of the "
-                "whole-body exchange.",
+                "Passive exchange between plasma and tissue: the exchange per "
+                "litre of organ times the organ volume, so it follows the organ "
+                f"of the individual. {self._functional_text()}".strip(),
                 kind="permeability",
             )
         if dist.ftissue is None:

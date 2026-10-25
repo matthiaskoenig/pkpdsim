@@ -299,6 +299,25 @@ def test_proteins_table() -> None:
         ({"distribution": Kp(1.0, ftissue=0.0)}, "api: ftissue"),
         ({"distribution": Kp(1.0, ftissue=0.5, ps={Organ.LIVER: -1.0})}, "ps 'li'"),
         (
+            {
+                "distribution": Kp(
+                    1.0, ftissue=0.5, ps={Organ.LIVER: Value(0.2, U.l_per_min)}
+                )
+            },
+            "ps 'li' must be in 1/min, got l/min",
+        ),
+        (
+            {
+                "distribution": Kp(
+                    1.0,
+                    ftissue=0.5,
+                    ps={Organ.LIVER: Value(0.2, U.per_min)},
+                    ps_per_volume=False,
+                )
+            },
+            "ps 'li' must be in l/min, got 1/min",
+        ),
+        (
             {"excretion": Excretion(urine=True, fraction_reabsorbed=1.2)},
             "fraction_reabsorbed",
         ),

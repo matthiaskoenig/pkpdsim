@@ -22,6 +22,7 @@ from pkpdsim.pbpk import (
     Erythrocytes,
     Excretion,
     FirstOrder,
+    Kp,
     Membrane,
     Metabolism,
     Organ,
@@ -372,6 +373,50 @@ def test_first_order_whole_organ_does_not_scale(tmp_path: Path) -> None:
     assert _kidney_influx(path) == pytest.approx(0.5, rel=1e-9)
     ratio = _kidney_influx(path, BW=150.0) / _kidney_influx(path, BW=75.0)
     assert ratio == pytest.approx(1.0, rel=1e-9)
+
+
+def _ps_model(tmp_path: Path, distribution: Kp) -> Path:
+    """Build the simple drug with a distribution of its own, given intravenously."""
+    drug = dataclasses.replace(simple_drug(), distribution=distribution)
+    d = definition(sid="ps", substances=[drug], chemistry=[], routes=[Route.iv(S)])
+    return build(d, tmp_path).flat_path
+
+
+def test_ps_per_volume_scales_with_the_organ(tmp_path: Path) -> None:
+    """The exchange of an organ given per litre of organ is `kps*V<o>`.
+
+    It follows the organ of the individual when the body weight changes, as
+    the share of `ftissue` and a first order clearance per volume do.
+    """
+    path = _ps_model(tmp_path, Kp(2.0, ftissue=1.0, ps={Organ.MUSCLE: 0.05}))
+    ps, kps = ids.flat(Organ.MUSCLE, ids.ps(S)), ids.flat(Organ.MUSCLE, ids.kps(S))
+    r = _load(path)
+    assert r[kps] == 0.05
+    doc = libsbml.readSBMLFromFile(str(path))
+    unit = doc.getModel().getParameter(kps).getUnits().rsplit("__", 1)[-1]
+    assert unit == "per_min"
+    assert r[ps] == pytest.approx(0.05 * _volume(path, Organ.MUSCLE), rel=1e-9)
+    ratio = _load(path, BW=150.0)[ps] / _load(path, BW=75.0)[ps]
+    expected = _volume(path, Organ.MUSCLE, BW=150.0) / _volume(
+        path, Organ.MUSCLE, BW=75.0
+    )
+    assert expected > 1.1
+    assert ratio == pytest.approx(expected, rel=1e-9)
+
+
+def test_ps_of_the_whole_organ_does_not_scale(tmp_path: Path) -> None:
+    """With `ps_per_volume=False` the exchange of an organ is its value in l/min."""
+    path = _ps_model(
+        tmp_path,
+        Kp(2.0, ftissue=1.0, ps={Organ.MUSCLE: 0.05}, ps_per_volume=False),
+    )
+    ps = ids.flat(Organ.MUSCLE, ids.ps(S))
+    assert _load(path)[ps] == pytest.approx(0.05, rel=1e-9)
+    assert _load(path, BW=150.0)[ps] == pytest.approx(0.05, rel=1e-9)
+    assert (
+        ids.flat(Organ.MUSCLE, ids.kps(S))
+        not in _load(path).model.getGlobalParameterIds()
+    )
 
 
 def test_renal_function_scales_tubular_transport(tmp_path: Path) -> None:

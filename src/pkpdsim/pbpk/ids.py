@@ -458,6 +458,16 @@ def ps(s: str) -> str:
     return f"PS_{s}"
 
 
+def kps(s: str) -> str:
+    """The local id of the exchange of `s` per litre of organ, `kps_<s>`.
+
+    The exchange of an organ given per litre of organ (`ps` of the
+    distribution with `ps_per_volume`, 1/min): the organ has
+    `PS_<s> = kps_<s> * V<o>`.
+    """
+    return f"kps_{s}"
+
+
 def k_int_pls(s: str) -> str:
     """The local id of the interstitial to plasma coefficient, `K_int_pls_<s>`."""
     return f"K_int_pls_{s}"

@@ -89,16 +89,22 @@ class _Exchange:
             `ftissue * Vti_o / Vti_total_ref` (reference tissue volume), and it
             multiplies `fu*(Cpl - Cti/Kp)`, so its values differ from the
             `ftissue` of the hand-written models.
-        ps: the exchange of single organs (l/min) instead of the share of
-            `ftissue`; a transporter of a substance in mode `PERFUSION` gives
-            the organ the full form, which needs `ps={organ: ...}` (or
-            `ftissue`).
+        ps: the exchange of single organs instead of the share of
+            `ftissue`, per litre of organ (1/min) by default; a transporter of
+            a substance in mode `PERFUSION` gives the organ the full form,
+            which needs `ps={organ: ...}` (or `ftissue`).
+        ps_per_volume: the values of `ps` are per litre of organ (the
+            default), so an organ has the exchange `kps * V<o>` and follows
+            the organ of the individual, as the share of `ftissue` and a
+            `FirstOrder` per volume do; `False` keeps the exchange of the whole
+            organ (l/min), which does not scale with the organ volume.
     """
 
     organs: frozenset[Organ] | None = None
     mode: Mode = Mode.TISSUE
     ftissue: Q | None = None
     ps: Mapping[Organ, Q] = field(default_factory=dict)
+    ps_per_volume: bool = True
 
     def __post_init__(self) -> None:
         """Normalise the mode, the organs and the keys of `ps` to enum members."""

@@ -5,6 +5,7 @@ from collections.abc import Callable, Hashable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 
 from sbmlutils.factory import Creator
+from sbmlutils.factory.units import UnitType
 
 from pkpdsim.pbpk import ids
 from pkpdsim.pbpk.chemistry import (
@@ -26,6 +27,7 @@ from pkpdsim.pbpk.populations import POPULATIONS
 from pkpdsim.pbpk.proteins import PROTEINS
 from pkpdsim.pbpk.routes import Route
 from pkpdsim.pbpk.substance import Erythrocytes, Kp, KpMethod, Mode, Substance
+from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import Q, Value
 
 __all__ = ["PBPKDefinition", "Variants"]
@@ -519,8 +521,10 @@ def _check_distribution(sid: str, dist: Kp | KpMethod) -> list[str]:
         problems += _positive(sid, "factor", dist.factor)
     if dist.ftissue is not None:
         problems += _positive(sid, "ftissue", dist.ftissue)
+    ps_unit = U.per_min if dist.ps_per_volume else U.l_per_min
     for organ, value in dist.ps.items():
         problems += _positive(sid, f"ps '{organ.value}'", value)
+        problems += _unit(sid, f"ps '{organ.value}'", value, ps_unit)
     if entered is not None:
         for what, mapping in named.items():
             outside = sorted(o.value for o in mapping if o not in entered)
@@ -540,6 +544,26 @@ def _positive(where: str, name: str, q: Q | None) -> list[str]:
     if x is not None and not x > 0:
         return [f"{where}: {name} must be positive, got {x}"]
     return []
+
+
+def _unit(where: str, name: str, q: Q | None, unit: UnitType) -> list[str]:
+    """Check that a `Value` is given in the unit of its parameter.
+
+    The numbers of a definition are in the units of the model; a `Value` in
+    another unit (an exchange in l/min where one per litre of organ is meant)
+    would be taken as it is.
+    """
+    if not isinstance(q, Value) or q.unit is None:
+        return []
+    given, expected = _unit_text(q.unit), _unit_text(unit)
+    if given != expected:
+        return [f"{where}: {name} must be in {expected}, got {given}"]
+    return []
+
+
+def _unit_text(unit: UnitType) -> str:
+    """The definition of a unit, e.g. `1/min`."""
+    return str(getattr(unit, "definition", unit))
 
 
 def _in_unit_interval(

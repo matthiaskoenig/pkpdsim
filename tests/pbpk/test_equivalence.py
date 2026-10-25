@@ -427,7 +427,9 @@ def test_extended_clearance(tmp_path: Path) -> None:
         tmp_path,
         "extended",
         [uptake, _metabolism()],
-        distribution=Kp(2.0, mode=Mode.PERFUSION, ps={Organ.LIVER: PS_DIF}),
+        distribution=Kp(
+            2.0, mode=Mode.PERFUSION, ps={Organ.LIVER: PS_DIF}, ps_per_volume=False
+        ),
     )
     kp_uu = (PS_ACT + PS_DIF) / (PS_DIF + CLINT)
     clall = kp_uu * CLINT
