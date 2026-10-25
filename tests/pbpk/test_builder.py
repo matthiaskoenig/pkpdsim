@@ -35,6 +35,7 @@ from pkpdsim.pbpk import (
 from pkpdsim.pbpk.builder import (
     BuildResult,
     build,
+    built_organs,
     compose,
     organ_component,
     organ_context,
@@ -126,18 +127,25 @@ def test_flat_ids_follow_scheme(simple: BuildResult) -> None:
     doc = _flat(simple)
     model = doc.getModel()
     species = {s.getId() for s in model.getListOfSpecies()}
-    assert {"LI__Cpl_drg", "LI__Cti_drg", "LA__Cpl_drg", "Cve_drg", "Car_drg"} <= (
+    assert {"LI__Cpl_drg", "LI__Cti_drg", "GU__Cpl_drg", "Cve_drg", "Car_drg"} <= (
         species
     )
-    assert {"Aurine_drg", "Afeces_drg", "Cbile_drg", "Clumen_drg"} <= species
+    assert not any(s.startswith("LA__") for s in species)
+    assert {"Aurine_drg", "Afeces_drg", "Cbile_drg"} <= species
+    lumen = {
+        ids.flat(Organ.SMALL_INTESTINE, ids.lumen("drg", seg))
+        for seg in ids.GUT_SEGMENTS
+    }
+    assert lumen <= species
     rules = {
         r.getVariable(): libsbml.formulaToL3String(r.getMath())
         for r in model.getListOfRules()
         if r.isAssignment()
     }
+    organs = built_organs(definition())
     outflows = {
         ids.organ_outflow(o, s): f"{ids.submodel(o)}__Cpl_{s}"
-        for o in Organ
+        for o in organs
         for s in ("drg", "drg_m")
     }
     assert {k: rules[k] for k in outflows} == outflows
@@ -153,7 +161,7 @@ def test_flat_ids_follow_scheme(simple: BuildResult) -> None:
             ids.hepatic_vein_blood,
         )
     } | {f(p, s) for s in ("drg", "drg_m") for p in Pool for f in (ids.free, ids.blood)}
-    unbound = {ids.flat(o, ids.unbound(Part.TISSUE, "drg")) for o in Organ}
+    unbound = {ids.flat(o, ids.unbound(Part.TISSUE, "drg")) for o in organs}
     assert rules[ids.flat(Organ.LIVER, ids.unbound(Part.TISSUE, "drg"))] == (
         "(fu_drg / Kp_drg) * LI__Cti_drg"
     )
@@ -166,7 +174,7 @@ def test_flat_ids_follow_scheme(simple: BuildResult) -> None:
     }
     assert initial[ids.fu("drg")] == ids.fu_ref("drg")
     assert initial[ids.bp("drg")].replace(" ", "") == "1dimensionless-HCT"
-    assert initial[ids.K_FECES].replace(" ", "") == "1dimensionless/t_lumen"
+    assert initial["GU__Vgu"].replace(" ", "") == "Vsi+Vla"
     assert initial["LI__Vpl"].replace(" ", "") == "Vli*f_vas_li*(1dimensionless-HCT)"
     assert model.getParameter("Cout_li_drg") is not None
     for pid in ("IVDOSE_drg", "PODOSE_drg", "Ri_drg", "ti_drg", "Mr_drg", "ka_drg"):
@@ -370,7 +378,9 @@ def test_no_hand_written_replacements(simple: BuildResult) -> None:
     for submodel in comp.getListOfSubmodels():
         md = definitions.getModelDefinition(submodel.getModelRef())
         ports[submodel.getId()] = _ports(md)
-    assert len(ports) == len(Organ)
+    d = definition()
+    assert set(ports) == {ids.submodel(o) for o in built_organs(d)}
+    assert ids.submodel(Organ.LARGE_INTESTINE) not in ports
 
     referenced: dict[str, set[str]] = {sub: set() for sub in ports}
     for element in model.getListOfAllElements():
@@ -393,8 +403,7 @@ def test_no_hand_written_replacements(simple: BuildResult) -> None:
         unreplaced = {p for p, sbo in organ_ports.items() if sbo in input_output}
         assert unreplaced <= referenced[sub], sub
 
-    d = definition()
-    for organ in Organ:
+    for organ in built_organs(d):
         _, boundary = organ_component(d, organ).build(organ_context(d, organ))
         expected = {f"{local}_port" for local in boundary.replacements} | {
             f"{local}_port" for local in boundary.outputs

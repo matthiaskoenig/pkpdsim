@@ -39,7 +39,7 @@ order rate is the limit `C << Km`, which an uncompetitive inhibitor does not
 change.
 """
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -70,19 +70,24 @@ if TYPE_CHECKING:
 
 __all__ = [
     "ONE",
+    "Inhibitors",
     "Sink",
     "apical_sink",
     "built_parts",
     "has_turnover",
     "inhibition_parameters",
+    "inhibitor_terms",
     "inhibitor_unbound",
     "kp_id",
     "metabolism_part",
     "place",
     "process_source",
+    "rate_law",
     "species_compartment",
+    "stoichiometry",
     "unbound",
     "value_parameter",
+    "with_modifiers",
 ]
 
 _PART_NAMES = {
@@ -131,6 +136,11 @@ class Sink:
 
 def apical_sink(organ: Organ, s: str) -> Sink:
     """Get the apical sink of an organ: bile, urine or the intestinal lumen.
+
+    The lumen `Clumen_<s>` of a standard small intestine is an element of the
+    body which the body has not: the intestine variants, which own the
+    lumen, place the apical transport of the small intestine themselves, and
+    the builder refuses it with the standard intestine.
 
     Args:
         organ: the organ.
@@ -359,7 +369,7 @@ def _activity(protein: str | None, ctx: "OrganContext") -> str:
 
 
 @dataclass(frozen=True)
-class _Inhibitors:
+class Inhibitors:
     """The inhibitors of the protein of a process.
 
     Attributes:
@@ -381,18 +391,39 @@ def _inhibitors(
     process: Metabolism | Transport,
     ctx: "OrganContext",
     parts: Mapping[str, Parts],
-) -> _Inhibitors:
+) -> Inhibitors:
     """The competitive and the uncompetitive terms of the inhibitors of the protein."""
+    source = process_source(process, parts) if process.protein is not None else None
+    return inhibitor_terms(
+        process, ctx, lambda s: _inhibitor_site(source, s, ctx.organ, parts)
+    )
+
+
+def inhibitor_terms(
+    process: Metabolism | Transport,
+    ctx: "OrganContext",
+    site: Callable[[Substance], tuple[str, str]],
+) -> Inhibitors:
+    """Get the competitive and the uncompetitive terms of the inhibitors of a process.
+
+    Args:
+        process: the metabolism or transport.
+        ctx: the context of the organ.
+        site: the species of an inhibitor where the process takes its
+            substrate and its unbound concentration (formula).
+
+    Returns:
+        The terms of the inhibitors of the protein of the process.
+    """
     if process.protein is None:
-        return _Inhibitors()
-    source = process_source(process, parts)
+        return Inhibitors()
     competitive: list[str] = []
     uncompetitive: list[str] = []
     modifiers: list[str] = []
     for sid, inh in ctx.inhibitions:
         if inh.protein != process.protein:
             continue
-        species, i = _inhibitor_site(source, _substance(ctx, sid), ctx.organ, parts)
+        species, i = site(_substance(ctx, sid))
         if species not in modifiers:
             modifiers.append(species)
         ki = ids.ki(inh.protein, sid)
@@ -402,7 +433,7 @@ def _inhibitors(
             uncompetitive.append(f"({i}) / {ki}")
         elif inh.kind == "mixed":
             uncompetitive.append(f"({i}) / {ids.kiu(inh.protein, sid)}")
-    return _Inhibitors(
+    return Inhibitors(
         competitive=f"({ONE} + {' + '.join(competitive)})" if competitive else None,
         uncompetitive=(
             f"({ONE} + {' + '.join(uncompetitive)})" if uncompetitive else None
@@ -521,12 +552,12 @@ def _substance(ctx: "OrganContext", sid: str) -> Substance:
     raise ValueError(f"Unknown substance '{sid}' in organ '{ctx.organ.value}'.")
 
 
-def _rate(
+def rate_law(
     process: Metabolism | Transport,
     ctx: "OrganContext",
     cu: str,
     capacity: str | None,
-    inhibitors: _Inhibitors,
+    inhibitors: Inhibitors,
 ) -> tuple[str, list[Parameter]]:
     """Get the rate law of a process on the unbound concentration `cu`.
 
@@ -599,7 +630,7 @@ def _rate(
     )
 
 
-def _with_modifiers(equation: str, modifiers: tuple[str, ...]) -> str:
+def with_modifiers(equation: str, modifiers: tuple[str, ...]) -> str:
     """An equation with the inhibitor species which its rate reads as modifiers.
 
     A species of the equation itself (an inhibitor of its own process) is not
@@ -613,7 +644,7 @@ def _with_modifiers(equation: str, modifiers: tuple[str, ...]) -> str:
     return f"{equation} [{', '.join(extra)}]" if extra else equation
 
 
-def _stoichiometry(fraction: float, species: str) -> str:
+def stoichiometry(fraction: float, species: str) -> str:
     """A product of an equation, the fraction left out if it is 1."""
     return species if fraction == 1.0 else f"{fraction!r} {species}"
 
@@ -638,15 +669,15 @@ def _metabolism(
     for product, fraction in process.products.items():
         built = built_parts(parts[product])
         target = next(t for t in _EQUIVALENT_PARTS[part] if t in built)
-        products.append(_stoichiometry(fraction, ids.species(target, product)))
+        products.append(stoichiometry(fraction, ids.species(target, product)))
     inhibitors = _inhibitors(process, ctx, parts)
-    rate, pars = _rate(process, ctx, cu, capacity, inhibitors)
+    rate, pars = rate_law(process, ctx, cu, capacity, inhibitors)
     names = ", ".join(process.products) or "elimination"
     return Reaction(
         sid=process.sid,
         name=f"{process.substrate} -> {names}"
         + (f" ({process.protein})" if process.protein else ""),
-        equation=_with_modifiers(
+        equation=with_modifiers(
             f"{ids.species(part, substrate.sid)} -> {' + '.join(products)}",
             inhibitors.modifiers,
         ),
@@ -702,12 +733,12 @@ def _transport(
             unbound(Part.INTRACELLULAR, substance, ctx.organ),
         )
     inhibitors = _inhibitors(process, ctx, parts)
-    rate, pars = _rate(process, ctx, cu, capacity, inhibitors)
+    rate, pars = rate_law(process, ctx, cu, capacity, inhibitors)
     return Reaction(
         sid=process.sid,
         name=f"{process.direction.value} {s} {process.membrane.value}"
         + (f" ({process.protein})" if process.protein else ""),
-        equation=_with_modifiers(equation, inhibitors.modifiers),
+        equation=with_modifiers(equation, inhibitors.modifiers),
         formula=(rate, U.mmole_per_min),
         pars=pars,
         compartment=ids.compartment(Part.INTRACELLULAR),

@@ -16,23 +16,35 @@ __all__ = [
     "BSA",
     "BW",
     "CO",
+    "FED",
     "FFM",
     "F_CARDIAC_FUNCTION",
     "F_FUNCTIONAL",
+    "F_MUCOSA_FLOW",
+    "F_MUCOSA_VOLUME",
     "F_RENAL_FUNCTION",
     "F_SHUNT",
     "GFR",
+    "GUT",
+    "GUT_FLOW",
+    "GUT_INTERSTITIAL_FRACTION",
+    "GUT_SEGMENTS",
+    "GUT_VASCULAR_FRACTION",
+    "GUT_VOLUME",
+    "GUT_WALL_FLOW",
     "HCT",
     "HEIGHT",
     "K_BILE",
-    "K_FECES",
     "MLEAN",
+    "MUCOSA_FLOW_TOTAL",
+    "MUCOSA_VOLUME_TOTAL",
     "PS_VAS",
     "QH",
     "QHA",
     "QPO",
     "SV_TIS",
     "T_LUMEN",
+    "T_STOMACH_FED",
     "VBILE",
     "VBLOOD",
     "VFECES",
@@ -41,6 +53,7 @@ __all__ = [
     "absorption",
     "absorption_reaction",
     "activity",
+    "area_factor",
     "arm",
     "arm_blood",
     "arm_free",
@@ -51,6 +64,14 @@ __all__ = [
     "bp",
     "compartment",
     "dissolution",
+    "dissolution_age",
+    "dissolution_clock",
+    "dissolution_dose50",
+    "dissolution_lag",
+    "dissolution_rate",
+    "dissolution_reaction",
+    "dissolution_shape",
+    "dissolution_t50",
     "dose_reaction",
     "ec50",
     "emax",
@@ -61,6 +82,7 @@ __all__ = [
     "filtration_reaction",
     "flat",
     "flow_fraction",
+    "fraction_absorbed",
     "fraction_reabsorbed",
     "free",
     "ftissue",
@@ -87,7 +109,13 @@ __all__ = [
     "kp",
     "kp_organ",
     "lumen",
+    "lumen_volume",
     "mr",
+    "mucosa",
+    "mucosa_coefficient",
+    "mucosa_flow",
+    "mucosa_reaction",
+    "mucosa_volume",
     "organ_flow",
     "organ_mass",
     "organ_outflow",
@@ -96,6 +124,7 @@ __all__ = [
     "outflow_conc",
     "outflow_conc_bc",
     "outflow_reaction",
+    "placement_weight",
     "plasma_capacity",
     "po_dose",
     "pool_capacity",
@@ -106,13 +135,17 @@ __all__ = [
     "pool_volume",
     "ps",
     "ref",
+    "segment_process",
     "shunt_reaction",
     "sol_dose",
+    "solid",
     "solution",
     "species",
     "species_of",
     "submodel",
     "tissue_volume_total_ref",
+    "transit_reaction",
+    "transit_time",
     "unbound",
     "urine",
     "vascular_fraction",
@@ -162,15 +195,56 @@ VBILE = "Vbile"
 VURINE = "Vurine"
 """The compartment of the urine amounts `Aurine_<s>`."""
 VLUMEN = "Vlumen"
-"""The volume of the intestinal lumen, the compartment of `Clumen_<s>`."""
+"""The local volume of the single intestinal lumen, the compartment of `Clumen_<s>`."""
 VFECES = "Vfeces"
 """The compartment of the feces amounts `Afeces_<s>`."""
 K_BILE = "k_bile"
 """The rate of the transit of the bile into the intestinal lumen."""
-K_FECES = "k_feces"
-"""The rate of the transit of the intestinal lumen into the feces, `1/t_lumen`."""
 T_LUMEN = "t_lumen"
-"""The transit time of the intestinal lumen."""
+"""The local transit time of the single intestinal lumen into the feces."""
+FED = "FED"
+"""The prandial state, 0 fasted (default) and 1 fed: it slows the gastric emptying."""
+GUT = "GU"
+"""The id of the submodel of the intestine (the small intestine, or the
+segmented and single lumen intestine, which replace small and large
+intestine), the prefix of the hand-written models `GU__`."""
+GUT_VOLUME = "Vgu"
+"""The local volume of the intestine which replaces small and large intestine, `Vsi + Vla`."""
+GUT_VASCULAR_FRACTION = "f_vas_gu"
+"""The local vascular fraction of the intestine of small and large intestine."""
+GUT_INTERSTITIAL_FRACTION = "f_int_gu"
+"""The local interstitial fraction of the intestine of small and large intestine."""
+GUT_FLOW = "Qgu"
+"""The local blood flow of the intestine of small and large intestine, `Qsi + Qla`."""
+GUT_WALL_FLOW = "Qgu_wall"
+"""The local blood flow of the intestinal wall past the mucosa, `Qgu - Qmu_total`."""
+MUCOSA_FLOW_TOTAL = "Qmu_total"
+"""The local blood flow of the mucosa of all segments."""
+MUCOSA_VOLUME_TOTAL = "Vmu_total"
+"""The local volume of the mucosa of all segments."""
+F_MUCOSA_VOLUME = "f_mucosa_volume"
+"""The local fraction of the intestinal tissue which is mucosa."""
+F_MUCOSA_FLOW = "f_mucosa_flow"
+"""The local fraction of the intestinal blood flow which perfuses the mucosa."""
+T_STOMACH_FED = "T_st_fed"
+"""The local transit time of the stomach in the fed state."""
+GUT_SEGMENTS: tuple[str, ...] = (
+    "st",
+    "du",
+    "jej1",
+    "jej2",
+    "ile1",
+    "ile2",
+    "cae",
+    "asc",
+    "tra",
+    "des",
+    "sig",
+    "rec",
+)
+"""The lumen segments of the segmented intestine, in the order of the transit:
+stomach, duodenum, upper and lower jejunum, upper and lower ileum, caecum,
+colon ascendens, transversum, descendens, sigmoid and rectum."""
 PS_VAS = "PS_vas"
 """The local id of the exchange between plasma and interstitium of an organ."""
 
@@ -181,7 +255,13 @@ def ref(pid: str) -> str:
 
 
 def submodel(organ: Organ) -> str:
-    """The id of the submodel of an organ, the organ id in capitals, `LI`."""
+    """The id of the submodel of an organ, the organ id in capitals, `LI`.
+
+    The small intestine is the submodel `GU` (gut): the segmented and the
+    single lumen intestine replace small and large intestine with it.
+    """
+    if organ is Organ.SMALL_INTESTINE:
+        return GUT
     return organ.value.upper()
 
 
@@ -423,9 +503,125 @@ def bile(s: str) -> str:
     return f"Cbile_{s}"
 
 
-def lumen(s: str) -> str:
-    """The id of the concentration in the intestinal lumen, `Clumen_<s>`."""
-    return f"Clumen_{s}"
+def _segment(prefix: str, s: str | None, seg: str | None) -> str:
+    """An id of a lumen segment, `<prefix>_<seg>_<s>`, without segment `<prefix>_<s>`."""
+    parts = [prefix, *(p for p in (seg, s) if p is not None)]
+    return "_".join(parts)
+
+
+def lumen(s: str, seg: str | None = None) -> str:
+    """The local id of the concentration in an intestinal lumen segment, `Clumen_du_<s>`.
+
+    Without a segment the single lumen, `Clumen_<s>`.
+    """
+    return _segment("Clumen", s, seg)
+
+
+def lumen_volume(seg: str | None = None) -> str:
+    """The local id of the volume of a lumen segment, `Vlumen_du` (single: `Vlumen`)."""
+    return _segment("Vlumen", None, seg)
+
+
+def solid(s: str, seg: str) -> str:
+    """The local id of the undissolved amount of `s` in a lumen segment, `Asolid_du_<s>`.
+
+    In the stomach (and the single lumen) the dose state `PODOSE_<s>` is the
+    undissolved drug.
+    """
+    return _segment("Asolid", s, seg)
+
+
+def mucosa(s: str, seg: str | None = None) -> str:
+    """The local id of the concentration in the mucosa of a segment, `Cmu_du_<s>`."""
+    return _segment("Cmu", s, seg)
+
+
+def mucosa_volume(seg: str | None = None) -> str:
+    """The local id of the volume of the mucosa of a segment, `Vmu_du`."""
+    return _segment("Vmu", None, seg)
+
+
+def mucosa_flow(seg: str | None = None) -> str:
+    """The local id of the blood flow of the mucosa of a segment, `Qmu_du`."""
+    return _segment("Qmu", None, seg)
+
+
+def mucosa_coefficient(s: str) -> str:
+    """The local id of the mucosa to plasma coefficient, `K_mu_<s>`."""
+    return f"K_mu_{s}"
+
+
+def transit_time(seg: str | None = None) -> str:
+    """The local id of the transit time of a lumen segment, `T_du` (single: `t_lumen`)."""
+    return T_LUMEN if seg is None else f"T_{seg}"
+
+
+def area_factor(seg: str) -> str:
+    """The local id of the absorption scaling of a lumen segment, `f_area_du`."""
+    return f"f_area_{seg}"
+
+
+def fraction_absorbed(s: str) -> str:
+    """The id of the fraction of the absorbed flux entering the gut, `fabs_<s>` (single lumen)."""
+    return f"fabs_{s}"
+
+
+def transit_reaction(s: str, seg: str | None = None, solid: bool = False) -> str:
+    """The local id of the transit of `s` out of a lumen segment, `J_tr_du_<s>`.
+
+    The undissolved drug `J_trs_du_<s>`.
+    """
+    return _segment("J_trs" if solid else "J_tr", s, seg)
+
+
+def dissolution_reaction(s: str, seg: str) -> str:
+    """The local id of the dissolution of `s` in a lumen segment, `J_dis_du_<s>`."""
+    return _segment("J_dis", s, seg)
+
+
+def mucosa_reaction(kind: str, s: str, seg: str | None = None) -> str:
+    """The local id of a flow of the mucosa of a segment, `J_mu_in_du_<s>`.
+
+    `kind` is `in` (arterial inflow), `out` (outflow into the portal vein)
+    or `bc` (the blood cells of the mucosal blood, which pass it).
+    """
+    return _segment(f"J_mu_{kind}", s, seg)
+
+
+def placement_weight(key: str, seg: str | None) -> str:
+    """The local id of the share of a process in the mucosa of a segment, `w_cyp3a4_du`.
+
+    `key` is the protein in lower case or `uniform` (by mucosa volume).
+    """
+    return _segment(f"w_{key}", None, seg)
+
+
+def segment_process(pid: str, seg: str | None) -> str:
+    """The local id of a process of the chemistry in the mucosa of a segment, `CYP3A4_DRG_du`."""
+    return pid if seg is None else f"{pid}_{seg}"
+
+
+def dissolution_rate(s: str) -> str:
+    """The local id of the dissolution rate of a tablet (1/min), `kdis_<s>`.
+
+    An assignment rule of the intestine for a Weibull or dose-dependent
+    dissolution; a first order dissolution is the constant `Ka_dis_<s>`.
+    """
+    return f"kdis_{s}"
+
+
+def dissolution_age(s: str) -> str:
+    """The local id of the mean age of the undissolved dose (min), `age_dis_<s>`."""
+    return f"age_dis_{s}"
+
+
+def dissolution_clock(s: str) -> str:
+    """The local id of the age-weighted undissolved amount (mmole*min), `W_dis_<s>`.
+
+    The state whose ratio to the undissolved amount is the mean time since
+    the dose (`age_dis_<s>`) of a Weibull dissolution.
+    """
+    return f"W_dis_{s}"
 
 
 def iv_dose(s: str) -> str:
@@ -463,13 +659,38 @@ def dissolution(s: str) -> str:
     return f"Ka_dis_{s}"
 
 
+def dissolution_t50(s: str) -> str:
+    """The id of the time of half dissolution of a Weibull dissolution (min), `t50_dis_<s>`."""
+    return f"t50_dis_{s}"
+
+
+def dissolution_shape(s: str) -> str:
+    """The id of the shape of a Weibull dissolution, `shape_dis_<s>`."""
+    return f"shape_dis_{s}"
+
+
+def dissolution_lag(s: str) -> str:
+    """The id of the lag time of a Weibull dissolution (min), `lag_dis_<s>`."""
+    return f"lag_dis_{s}"
+
+
+def dissolution_dose50(s: str) -> str:
+    """The id of the undissolved amount of half the dissolution rate (mg), `D50_dis_<s>`."""
+    return f"D50_dis_{s}"
+
+
 def solution(s: str) -> str:
     """The id of the rate of the application of a solution, `Ka_sol_<s>`."""
     return f"Ka_sol_{s}"
 
 
 def absorption(s: str) -> str:
-    """The id of the rate of the absorption from the intestinal lumen, `ka_<s>`."""
+    """The id of the rate of the absorption from the intestinal lumen, `ka_<s>`.
+
+    The first order absorption of the single lumen; in the segmented
+    intestine the absorption rate constant of the small intestine, which the
+    area factor of a segment scales.
+    """
     return f"ka_{s}"
 
 
@@ -478,18 +699,24 @@ def dose_reaction(kind: str, s: str) -> str:
     return f"J_{kind}_{s}"
 
 
-def absorption_reaction(s: str) -> str:
-    """The id of the absorption from the intestinal lumen, `J_abs_<s>`."""
-    return f"J_abs_{s}"
+def absorption_reaction(s: str, seg: str | None = None) -> str:
+    """The local id of the absorption from a lumen segment, `J_abs_du_<s>`."""
+    return _segment("J_abs", s, seg)
 
 
 def feces_reaction(s: str) -> str:
-    """The id of the transit of the intestinal lumen into the feces, `J_feces_<s>`."""
+    """The id of the unabsorbed fraction of the absorption into the feces, `J_feces_<s>`.
+
+    Of the single lumen with `fabs_<s>` below 1.
+    """
     return f"J_feces_{s}"
 
 
 def bile_reaction(s: str) -> str:
-    """The id of the transit of the bile into the intestinal lumen, `J_bile_<s>`."""
+    """The id of the transit of the bile into the intestinal lumen, `J_bile_<s>`.
+
+    Into the feces when the intestine has no lumen (standard organs).
+    """
     return f"J_bile_{s}"
 
 
@@ -609,6 +836,7 @@ def ec50(protein: str, s: str) -> str:
 
 _PARTS = "|".join(p.value for p in Part)
 _POOLS = "|".join(p.value for p in Pool)
+_SEGMENTS = "|".join(GUT_SEGMENTS)
 
 
 def species_of(s: str, ids: Iterable[str]) -> list[str]:
@@ -622,10 +850,12 @@ def species_of(s: str, ids: Iterable[str]) -> list[str]:
         ids: the ids to select from.
 
     Returns:
-        The ids which are an organ species, a pool species or a blood cell
-        pool species of `s`, in the order of `ids`.
+        The ids which are an organ species, a pool species, a blood cell
+        pool species, a lumen, undissolved or mucosa species of `s`, in the
+        order of `ids`.
     """
     pattern = re.compile(
-        rf"C(?:(?:{_PARTS})|(?:{_POOLS})(?:_{Part.BLOOD_CELLS.value})?)_{re.escape(s)}"
+        rf"(?:C(?:(?:{_PARTS})|(?:{_POOLS})(?:_{Part.BLOOD_CELLS.value})?)"
+        rf"|(?:Clumen|Cmu|Asolid)(?:_(?:{_SEGMENTS}))?)_{re.escape(s)}"
     )
     return [i for i in ids if pattern.fullmatch(i.rsplit("__", 1)[-1])]

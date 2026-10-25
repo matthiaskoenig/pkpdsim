@@ -210,10 +210,10 @@ def test_functional_fraction_scales_capacity(tmp_path: Path) -> None:
 
 
 def test_bile_reaches_lumen(tmp_path: Path) -> None:
-    """The apical efflux of the liver writes into the bile, which drains into the lumen.
+    """The apical efflux of the liver writes into the bile, which drains into the duodenum.
 
     Without an oral route the substance is not reabsorbed (`ka_<s>` 0), so it
-    goes on into the feces; the amount is conserved.
+    goes on with the transit into the feces; the amount is conserved.
     """
     drug = dataclasses.replace(simple_drug(), excretion=Excretion())
     efflux = Transport(
@@ -230,7 +230,14 @@ def test_bile_reaches_lumen(tmp_path: Path) -> None:
     r = _load(build(d, tmp_path).flat_path)
     r[ids.iv_dose(S)] = 10.0
     result = r.simulate(
-        0, DAY, 49, selections=["time", f"[{ids.bile(S)}]", f"[{ids.lumen(S)}]"]
+        0,
+        DAY,
+        49,
+        selections=[
+            "time",
+            f"[{ids.bile(S)}]",
+            f"[{ids.flat(Organ.SMALL_INTESTINE, ids.lumen(S, 'du'))}]",
+        ],
     )
     assert np.max(result[:, 1]) > 0
     assert np.max(result[:, 2]) > 0

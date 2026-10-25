@@ -31,8 +31,10 @@ _RESERVED = (
     *(p.value for p in Pool),
     "free",
     "blood",
+    *ids.GUT_SEGMENTS,
 )
-"""The tokens of the id scheme which a substance id must not start with."""
+"""The tokens of the id scheme which a substance id must not start with (the
+segment tokens follow `Clumen_`, `Cmu_` and `Asolid_`)."""
 
 
 def _physiology_ids() -> frozenset[str]:

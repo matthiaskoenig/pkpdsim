@@ -87,3 +87,38 @@ doi = "10.1016/j.ejps.2011.04.008"
 [Greenblatt2003]
 citation = "Greenblatt DJ, von Moltke LL, Harmatz JS, Chen G, Weemhoff JL, Jen C, Kelley CJ, LeDuc BW, Zinny MA. Time course of recovery of cytochrome P450 3A function after single doses of grapefruit juice. Clin Pharmacol Ther 74(2):121-129, 2003."
 doi = "10.1016/S0009-9236(03)00118-8"
+
+[Thelen2011]
+citation = "Thelen K, Coboeken K, Willmann S, Burghaus R, Dressman JB, Lippert J. Evolution of a detailed physiological model to simulate the gastrointestinal transit and absorption process in humans, part 1: oral solutions. J Pharm Sci 100(12):5324-5345, 2011."
+doi = "10.1002/jps.22726"
+
+[Mudie2010]
+citation = "Mudie DM, Amidon GL, Amidon GE. Physiological parameters for oral delivery and in vitro testing. Mol Pharm 7(5):1388-1405, 2010."
+doi = "10.1021/mp100149j"
+
+[Evans1988]
+citation = "Evans DF, Pye G, Bramley R, Clark AG, Dyson TJ, Hardcastle JD. Measurement of gastrointestinal pH profiles in normal ambulant human subjects. Gut 29(8):1035-1041, 1988."
+doi = "10.1136/gut.29.8.1035"
+
+[Metcalf1987]
+citation = "Metcalf AM, Phillips SF, Zinsmeister AR, MacCarty RL, Beart RW, Wolff BG. Simplified assessment of segmental colonic transit. Gastroenterology 92(1):40-47, 1987."
+doi = "10.1016/0016-5085(87)90837-7"
+
+[Helander2014]
+citation = "Helander HF, Fändriks L. Surface area of the digestive tract - revisited. Scand J Gastroenterol 49(6):681-689, 2014."
+doi = "10.3109/00365521.2014.898326"
+
+[Paine1997]
+citation = "Paine MF, Khalighi M, Fisher JM, Shen DD, Kunze KL, Marsh CL, Perkins JD, Thummel KE. Characterization of interintestinal and intraintestinal variations in human CYP3A-dependent metabolism. J Pharmacol Exp Ther 283(3):1552-1562, 1997."
+
+[Drozdzik2014]
+citation = "Drozdzik M, Gröer C, Penski J, Lapczuk J, Ostrowski M, Lai Y, Prasad B, Unadkat JD, Siegmund W, Oswald S. Protein abundance of clinically relevant multidrug transporters along the entire length of the human intestine. Mol Pharm 11(10):3547-3555, 2014."
+doi = "10.1021/mp500330y"
+
+[Yu1999]
+citation = "Yu LX, Amidon GL. A compartmental absorption and transit model for estimating oral drug absorption. Int J Pharm 186(2):119-125, 1999."
+doi = "10.1016/S0378-5173(99)00147-7"
+
+[Granger1980]
+citation = "Granger DN, Richardson PD, Kvietys PR, Mortillaro NA. Intestinal blood flow. Gastroenterology 78(4):837-863, 1980."
+doi = "10.1016/0016-5085(80)90692-7"

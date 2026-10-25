@@ -5,19 +5,21 @@ The comp model has a top model and one submodel per organ:
 - the top model holds the physiology (covariates, volumes, flows), the blood
   pools (arterial, venous, portal; plasma `C<pool>_<s>` and kinetic blood
   cells `C<pool>_bc_<s>`), the parameters of the substances (`Mr`, `fu`, `Kp`,
-  `BP`, ...), the sinks (urine, feces, bile), the intestinal lumen and the
-  routes;
+  `BP`, ...), the sinks (urine, feces, bile), the dose states of the routes
+  and the parameters the intestine reads (`ka_<s>`, `FED`);
 - every organ is a `ModelDefinition` with a `Submodel` (`LI`, `KI`, ...), the
-  standard organ or a variant; it reads the elements of the body through its
-  ports, and its outflow concentrations replace the parameters
-  `Cout_<o>_<s>` of the top model.
+  standard organ or a variant (`pkpdsim.pbpk.variants`); it reads the
+  elements of the body through its ports, and its outflow concentrations
+  replace the parameters `Cout_<o>_<s>` of the top model. The intestine
+  (`segmented` by default, or `single_lumen`) replaces small and large
+  intestine with one submodel `GU`, which owns the intestinal lumen and
+  applies the oral doses.
 
 Every port is declared by the organ (its `Boundary`) and every replacement is
 generated here from it; the flat model has the ids of the scheme
 (`LI__Cpl_<s>` in the organs, the ids of the top model unprefixed).
 
-The sinks and the single intestinal lumen are those of `pkpdsim.pbpk.sinks`,
-the observers (unbound and blood concentrations, hepatic and arm vein) those
+The sinks are those of `pkpdsim.pbpk.sinks`, the observers (unbound and blood concentrations, hepatic and arm vein) those
 of `pkpdsim.pbpk.observers`.
 
 Every quantity which depends on parameters only (the physiology, the
@@ -57,27 +59,32 @@ from sbmlutils.factory import (
 from sbmlutils.metadata import SBO
 from sbmlutils.validation import validate_doc
 
-from pkpdsim.pbpk import ids
-from pkpdsim.pbpk.chemistry import Metabolism, Transport
+from pkpdsim.pbpk import ids, variants
+from pkpdsim.pbpk.chemistry import Membrane, Metabolism, Transport
 from pkpdsim.pbpk.data import cite
 from pkpdsim.pbpk.definition import PBPKDefinition
 from pkpdsim.pbpk.observers import observer_objects
-from pkpdsim.pbpk.organ import Boundary, OrganComponent, OrganContext, StandardOrgan
+from pkpdsim.pbpk.organ import Boundary, GutComponent, OrganComponent, OrganContext
 from pkpdsim.pbpk.organs import Organ, Part, Pool
 from pkpdsim.pbpk.parts import parts_for
 from pkpdsim.pbpk.physiology import physiology_objects, reference_tissue_volumes
 from pkpdsim.pbpk.placement import inhibition_parameters, kp_id, value_parameter
-from pkpdsim.pbpk.routes import route_objects
+from pkpdsim.pbpk.routes import ORAL, route_objects
 from pkpdsim.pbpk.sinks import sink_objects
 from pkpdsim.pbpk.substance import Kp, KpMethod, Substance
 from pkpdsim.pbpk.units import MODEL_UNITS, U
 
-__all__ = ["BuildResult", "build", "compose", "organ_component", "organ_context"]
+__all__ = [
+    "BuildResult",
+    "build",
+    "built_organs",
+    "compose",
+    "organ_component",
+    "organ_context",
+]
 
 _ONE = "1 dimensionless"
 _SBO_PARAMETER = SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER
-_VARIANTS: dict[str, OrganComponent] = {"standard": StandardOrgan()}
-"""The organ variants by name; the registry of the variants extends it."""
 _SOURCE = {
     "competitive": "Segel1975",
     "noncompetitive": "Segel1975",
@@ -114,16 +121,46 @@ def organ_component(definition: PBPKDefinition, organ: Organ) -> OrganComponent:
     Raises:
         ValueError: if the variant of the organ is a name of no variant.
     """
-    variant = definition.variants.organs.get(organ, "standard")
+    variant = definition.variants.organs.get(
+        organ, variants.DEFAULTS.get(organ, "standard")
+    )
     if not isinstance(variant, str):
         return variant
-    try:
-        return _VARIANTS[variant]
-    except KeyError:
-        raise ValueError(
-            f"Unknown variant '{variant}' of organ '{organ.value}', the variants "
-            f"are {sorted(_VARIANTS)}."
-        ) from None
+    return variants.lookup(organ, variant)
+
+
+def _gut(definition: PBPKDefinition) -> GutComponent | None:
+    """The intestine which replaces several organs, `None` for the standard organs.
+
+    Raises:
+        ValueError: if an organ which the intestine replaces has a variant of
+            its own.
+    """
+    component = organ_component(definition, Organ.SMALL_INTESTINE)
+    if not isinstance(component, GutComponent):
+        return None
+    for organ in component.replaces[1:]:
+        if organ in definition.variants.organs:
+            raise ValueError(
+                f"Organ '{organ.value}' has a variant, but the intestine "
+                f"'{component.name}' replaces it."
+            )
+    return component
+
+
+def built_organs(definition: PBPKDefinition) -> list[Organ]:
+    """Get the organs which are built as a submodel.
+
+    Args:
+        definition: the definition.
+
+    Returns:
+        Every organ but those the intestine replaces besides the small
+        intestine (the large intestine).
+    """
+    gut = _gut(definition)
+    replaced = set(gut.replaces[1:]) if gut is not None else set()
+    return [organ for organ in Organ if organ not in replaced]
 
 
 def organ_context(definition: PBPKDefinition, organ: Organ) -> OrganContext:
@@ -146,6 +183,7 @@ def organ_context(definition: PBPKDefinition, organ: Organ) -> OrganContext:
         chemistry=chemistry,
         inhibitions=tuple((s.sid, i) for s in substances for i in s.inhibits),
         inductions=tuple((s.sid, i) for s in substances for i in s.induces),
+        routes=tuple(definition.routes),
     )
 
 
@@ -160,8 +198,9 @@ def compose(definition: PBPKDefinition) -> Model:
 
     Raises:
         ValueError: if the definition is invalid, an organ variant is unknown,
-            an organ reads an element the body does not have, or a route is
-            given twice.
+            an organ reads an element the body does not have, a route is
+            given twice, or an oral route or an apical transport of the small
+            intestine has no intestine with a lumen.
         NotImplementedError: for a Kp method or a PD component, which later
             versions of the library build.
     """
@@ -170,18 +209,35 @@ def compose(definition: PBPKDefinition) -> Model:
         raise NotImplementedError(
             f"{definition.sid}: PD components are not built yet by the library."
         )
+    gut = _gut(definition)
+    oral = sorted({r.substance for r in definition.routes if r.kind in ORAL})
+    apical = sorted(
+        p.sid
+        for p in definition.chemistry
+        if isinstance(p, Transport)
+        and p.organ is Organ.SMALL_INTESTINE
+        and p.membrane is Membrane.APICAL
+    )
+    if gut is None and (oral or apical):
+        raise ValueError(
+            f"Oral routes of {oral} and apical transport {apical} of the small "
+            "intestine need an intestine with a lumen (variant 'segmented' or "
+            "'single_lumen'), the small intestine is a standard organ."
+        )
     top = _Top(definition)
     for s in definition.substances:
         top.substance(s)
     for pool in Pool:
         top.pool(pool)
-    top.add(sink_objects(definition))
+    top.add(sink_objects(definition, lumen=gut is not None))
+    if gut is not None:
+        top.add(gut.body_objects(definition))
     top.routes()
 
     model_definitions: list[ModelDefinition] = []
     submodels: list[Submodel] = []
     replaced: list[ReplacedElement] = []
-    for organ in Organ:
+    for organ in built_organs(definition):
         md, boundary = organ_component(definition, organ).build(
             organ_context(definition, organ)
         )

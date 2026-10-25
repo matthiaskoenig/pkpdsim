@@ -43,9 +43,9 @@ the variants reuse.
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from sbmlutils.factory import ModelDefinition, Port, PortType
+from sbmlutils.factory import ModelDefinition, Port, PortType, Sbase
 from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk import distribution, ids
@@ -61,10 +61,21 @@ from pkpdsim.pbpk.organs import Organ, Part, Pool, inflow, outflow
 from pkpdsim.pbpk.parts import Parts
 from pkpdsim.pbpk.placement import apical_sink, built_parts, kp_id, place, unbound
 from pkpdsim.pbpk.proteins import Induction, Inhibition
+from pkpdsim.pbpk.routes import Route
 from pkpdsim.pbpk.substance import Substance
 from pkpdsim.pbpk.units import U
 
-__all__ = ["Boundary", "OrganComponent", "OrganContext", "StandardOrgan"]
+if TYPE_CHECKING:
+    from pkpdsim.pbpk.definition import PBPKDefinition
+
+__all__ = [
+    "Boundary",
+    "GutComponent",
+    "OrganComponent",
+    "OrganContext",
+    "StandardBuilder",
+    "StandardOrgan",
+]
 
 
 @dataclass(frozen=True)
@@ -78,6 +89,8 @@ class OrganContext:
         chemistry: the processes of the definition.
         inhibitions: the inhibitions as (inhibitor id, inhibition).
         inductions: the inductions as (inducer id, induction).
+        routes: the routes of administration (the intestine applies the
+            oral doses).
     """
 
     organ: Organ
@@ -86,6 +99,7 @@ class OrganContext:
     chemistry: tuple[Metabolism | Transport | CustomReaction, ...]
     inhibitions: tuple[tuple[str, Inhibition], ...]
     inductions: tuple[tuple[str, Induction], ...]
+    routes: tuple[Route, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -118,6 +132,26 @@ class OrganComponent(Protocol):
         ...
 
 
+@runtime_checkable
+class GutComponent(OrganComponent, Protocol):
+    """An intestine which replaces several organs with one submodel (`GU`).
+
+    The segmented and the single lumen intestine replace small and large
+    intestine: they receive the arterial inflow of both and drain into the
+    portal vein, own the intestinal lumen, apply the oral doses and take the
+    bile; the body gets the parameters they read from it (`body_objects`).
+    """
+
+    @property
+    def replaces(self) -> tuple[Organ, ...]:
+        """The organs the component replaces, the small intestine first."""
+        ...
+
+    def body_objects(self, definition: "PBPKDefinition") -> list[Sbase]:
+        """Get the parameters of the top model which the component reads."""
+        ...
+
+
 @dataclass(frozen=True)
 class StandardOrgan:
     """The standard organ with the collapsing of its parts.
@@ -143,7 +177,7 @@ class StandardOrgan:
                 above the interstitial share in the full form, an exchange
                 without `ftissue`, a process which cannot be placed.
         """
-        return _StandardBuilder(ctx, self.name).build()
+        return StandardBuilder(ctx, self.name).build()
 
 
 _FTISSUE = (
@@ -164,16 +198,11 @@ _TISSUE_PARTS = {
 """The parts of the tissue with an unbound concentration observer, in names."""
 
 
-def _flows(organ: Organ) -> tuple[list[tuple[Pool, str]], str]:
-    """The inflows (pool, flow) of an organ and the flow of its outflow."""
-    if organ is Organ.LIVER:
-        return [(Pool.ARTERIAL, ids.QHA), (Pool.PORTAL, ids.QPO)], ids.QH
-    flow = ids.organ_flow(organ)
-    return [(pool, flow) for pool in inflow(organ)], flow
+class StandardBuilder(OrganBuilder):
+    """The SBML objects of one standard organ: its parts, flows, exchanges and chemistry.
 
-
-class _StandardBuilder(OrganBuilder):
-    """The SBML objects of one standard organ: its parts, flows, exchanges and chemistry."""
+    The intestine variants derive from it for the intestinal wall.
+    """
 
     def build(self) -> tuple[ModelDefinition, Boundary]:
         """Build the model definition and the boundary."""
@@ -189,6 +218,14 @@ class _StandardBuilder(OrganBuilder):
             replacements=dict(self.replacements), outputs=dict(self.outputs)
         )
         return md, boundary
+
+    def _flows(self, s: Substance) -> tuple[list[tuple[Pool, str]], str]:
+        """The inflows (pool, flow) of a substance into the organ and the flow of its outflow."""
+        del s
+        if self.organ is Organ.LIVER:
+            return [(Pool.ARTERIAL, ids.QHA), (Pool.PORTAL, ids.QPO)], ids.QH
+        flow = ids.organ_flow(self.organ)
+        return [(pool, flow) for pool in inflow(self.organ)], flow
 
     def _capacity(self) -> str | None:
         """The functional fraction of the tissue: `f_functional` in the liver.
@@ -368,7 +405,7 @@ class _StandardBuilder(OrganBuilder):
         from the arterial and the portal pool directly into the venous pool;
         the liver is perfused by and drains `(1 - f_shunt)*Q`.
         """
-        inflows, out_flow = _flows(self.organ)
+        inflows, out_flow = self._flows(s)
         out_pool = outflow(self.organ)
         if parts.flow_carrier == "blood_bp":
             carrier = self._bp(s)

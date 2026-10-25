@@ -31,6 +31,7 @@ class U(Units):
     kg_per_m2 = UnitDefinition("kg_per_m2", "kg/meter^2")
     mmole_per_min = UnitDefinition("mmole_per_min", "mmole/min")
     mmole_per_min_l = UnitDefinition("mmole_per_min_l", "mmole/min/l")
+    mmole_min = UnitDefinition("mmole_min", "mmole*min")
     g_per_mole = UnitDefinition("g_per_mole", "g/mole")
 
 

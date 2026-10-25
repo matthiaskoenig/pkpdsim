@@ -1,14 +1,148 @@
-# The intestinal lumen and the bile.
+# The intestine of the reference adult: the lumen segments of the segmented
+# intestine, the mucosa, the single lumen and the bile.
 #
-# Until the segmented intestine the lumen is one compartment, the fluid of the
-# small intestine, from which a substance is absorbed with first order and
-# which drains into the feces with the small intestinal transit. The bile
-# drains into the lumen.
+# The segments follow the anatomical segmentation of Thelen 2011 (stomach,
+# duodenum, upper and lower jejunum, upper and lower ileum, caecum, colon
+# ascendens, transversum, descendens, sigmoid, rectum). A region of the
+# literature (small intestine, colon) is split onto its segments:
+#
+# - the small intestinal transit time onto duodenum, jejunum and ileum by
+#   their physiological lengths (Mudie 2010, Table 4: 21, 105 and 156 cm of
+#   282 cm), jejunum and ileum into equal halves: a uniform velocity of the
+#   transit (a choice, the velocity is higher proximally);
+# - the colonic transit onto the segments by the segmental transits of
+#   Metcalf 1987 (right colon: caecum and colon ascendens, left colon: colon
+#   transversum and descendens, rectosigmoid: colon sigmoid and rectum, each
+#   halved; a choice of the mapping);
+# - the fluid volume of a region onto its segments in proportion to their
+#   transit times (a uniform flow of the fluid through the region).
+#
+# Per segment: the fluid volume (l), the transit time (min, fasted; the
+# stomach fed as well), the pH (data only, no process reads it yet), the
+# absorption scaling `area_factor` (the mucosal surface per lumen volume
+# relative to the small intestine, the factor on `ka_<s>`) and the relative
+# expression of CYP3A4, ABCB1 and ABCG2 in the mucosa (their abundance per
+# protein; a process of the protein is placed into the mucosa segments by
+# expression times mucosa volume, the sum kept). The stomach has no mucosa
+# and no absorption. Values marked "unverified" are not checked against the
+# publication.
 
-[lumen]
+[stomach]
+volume = { value = 0.028, unit = "l", source = "Mudie2010", notes = "Table 4, fasted gastric fluid volume, mean 28 ml (range 18-54 ml)" }
+transit_time = { value = 22.79, unit = "min", source = "Mudie2010", notes = "Table 6, fasted half-emptying time 15.8 min (300 ml water, range 11.5-17.0 min) as mean residence time of a first order emptying, 15.8 min / ln 2" }
+transit_time_fed = { value = 63.48, unit = "min", source = "Mudie2010", notes = "Table 6, fed half-emptying time of liquids 44 +- 15 min as mean residence time of a first order emptying, 44 min / ln 2; solids empty slower (105 +- 21 min)" }
+ph = { value = 1.7, unit = "dimensionless", source = "Mudie2010", notes = "Table 3, fasted median" }
+area_factor = { value = 0.0, unit = "dimensionless", source = "Mudie2010", notes = "drugs are rarely absorbed in the stomach (small surface area, short residence time); no absorption" }
+
+[duodenum]
+volume = { value = 0.007819, unit = "l", source = "Schiller2005", notes = "small intestinal fluid volume, fasted 105 +- 72 ml (MRI), by the length share 21/282 of the duodenum (Mudie 2010, Table 4)" }
+transit_time = { value = 14.30, unit = "min", source = "Mudie2010", notes = "Table 6, small intestinal transit time fasted 192 min (coated pellets, range 90-324 min), by the length share 21/282 of the duodenum (Table 4)" }
+ph = { value = 6.2, unit = "dimensionless", source = "Mudie2010", notes = "Table 3, fasted medians 6.1 and 6.2" }
+area_factor = { value = 1.0, unit = "dimensionless", source = "Yu1999", notes = "uniform absorption along the small intestine, the assumption of the compartmental absorption and transit model" }
+cyp3a4 = { value = 31.0, unit = "dimensionless", source = "Paine1997", notes = "median microsomal CYP3A content of the duodenal mucosa, 31 pmol/mg protein (20 donors)" }
+abcb1 = { value = 0.30, unit = "dimensionless", source = "Drozdzik2014", notes = "unverified: P-gp abundance of the duodenum in pmol/mg as recalled from the table of the paper; the abstract states 0.2-1.6 pmol/mg for the small intestinal transporters and more ABCB1 in jejunum and ileum than in colon" }
+abcg2 = { value = 0.29, unit = "dimensionless", source = "Drozdzik2014", notes = "unverified: BCRP abundance of the duodenum in pmol/mg as recalled from the table of the paper; the abstract states more ABCG2 in jejunum and ileum than in colon" }
+
+[upper_jejunum]
+volume = { value = 0.01955, unit = "l", source = "Schiller2005", notes = "small intestinal fluid volume 105 ml by the length share 52.5/282 (half of the jejunum, Mudie 2010, Table 4)" }
+transit_time = { value = 35.74, unit = "min", source = "Mudie2010", notes = "small intestinal transit time 192 min (Table 6) by the length share 52.5/282 (half of the jejunum, Table 4)" }
+ph = { value = 6.6, unit = "dimensionless", source = "Evans1988", notes = "mean pH of the proximal small intestine in the first hour of intestinal recording, 6.6 +- 0.5 (66 subjects)" }
+area_factor = { value = 1.0, unit = "dimensionless", source = "Yu1999", notes = "uniform absorption along the small intestine" }
+cyp3a4 = { value = 23.0, unit = "dimensionless", source = "Paine1997", notes = "unverified: median microsomal CYP3A content of the jejunal mucosa, 23 pmol/mg as recalled; the abstract gives the duodenum (31) and the ileum (17) and a slight rise to the middle jejunum" }
+abcb1 = { value = 0.50, unit = "dimensionless", source = "Drozdzik2014", notes = "unverified: P-gp abundance of the proximal jejunum in pmol/mg as recalled" }
+abcg2 = { value = 0.36, unit = "dimensionless", source = "Drozdzik2014", notes = "unverified: BCRP abundance of the proximal jejunum in pmol/mg as recalled" }
+
+[lower_jejunum]
+volume = { value = 0.01955, unit = "l", source = "Schiller2005", notes = "small intestinal fluid volume 105 ml by the length share 52.5/282 (half of the jejunum)" }
+transit_time = { value = 35.74, unit = "min", source = "Mudie2010", notes = "small intestinal transit time 192 min by the length share 52.5/282 (half of the jejunum)" }
+ph = { value = 6.6, unit = "dimensionless", source = "Mudie2010", notes = "Table 3, fasted median of the jejunum" }
+area_factor = { value = 1.0, unit = "dimensionless", source = "Yu1999", notes = "uniform absorption along the small intestine" }
+cyp3a4 = { value = 23.0, unit = "dimensionless", source = "Paine1997", notes = "unverified: median microsomal CYP3A content of the jejunal mucosa, 23 pmol/mg as recalled" }
+abcb1 = { value = 0.55, unit = "dimensionless", source = "Drozdzik2014", notes = "unverified: P-gp abundance of the distal jejunum in pmol/mg as recalled" }
+abcg2 = { value = 0.37, unit = "dimensionless", source = "Drozdzik2014", notes = "unverified: BCRP abundance of the distal jejunum in pmol/mg as recalled" }
+
+[upper_ileum]
+volume = { value = 0.02904, unit = "l", source = "Schiller2005", notes = "small intestinal fluid volume 105 ml by the length share 78/282 (half of the ileum, Mudie 2010, Table 4)" }
+transit_time = { value = 53.11, unit = "min", source = "Mudie2010", notes = "small intestinal transit time 192 min by the length share 78/282 (half of the ileum)" }
+ph = { value = 7.2, unit = "dimensionless", source = "Mudie2010", notes = "Table 3, fasted median of the ileum" }
+area_factor = { value = 1.0, unit = "dimensionless", source = "Yu1999", notes = "uniform absorption along the small intestine" }
+cyp3a4 = { value = 17.0, unit = "dimensionless", source = "Paine1997", notes = "median microsomal CYP3A content of the ileal mucosa, 17 pmol/mg protein" }
+abcb1 = { value = 0.68, unit = "dimensionless", source = "Drozdzik2014", notes = "unverified: P-gp abundance of the ileum in pmol/mg as recalled" }
+abcg2 = { value = 0.32, unit = "dimensionless", source = "Drozdzik2014", notes = "unverified: BCRP abundance of the ileum in pmol/mg as recalled" }
+
+[lower_ileum]
+volume = { value = 0.02904, unit = "l", source = "Schiller2005", notes = "small intestinal fluid volume 105 ml by the length share 78/282 (half of the ileum)" }
+transit_time = { value = 53.11, unit = "min", source = "Mudie2010", notes = "small intestinal transit time 192 min by the length share 78/282 (half of the ileum)" }
+ph = { value = 7.5, unit = "dimensionless", source = "Evans1988", notes = "mean pH of the terminal ileum, 7.5 +- 0.4" }
+area_factor = { value = 1.0, unit = "dimensionless", source = "Yu1999", notes = "uniform absorption along the small intestine" }
+cyp3a4 = { value = 17.0, unit = "dimensionless", source = "Paine1997", notes = "median microsomal CYP3A content of the ileal mucosa, 17 pmol/mg protein" }
+abcb1 = { value = 0.68, unit = "dimensionless", source = "Drozdzik2014", notes = "unverified: P-gp abundance of the ileum in pmol/mg as recalled (one value for the ileum)" }
+abcg2 = { value = 0.32, unit = "dimensionless", source = "Drozdzik2014", notes = "unverified: BCRP abundance of the ileum in pmol/mg as recalled (one value for the ileum)" }
+
+[caecum]
+volume = { value = 0.002093, unit = "l", source = "Schiller2005", notes = "colonic fluid volume, fasted 13 +- 12 ml (MRI), by the transit share 339/2106 min" }
+transit_time = { value = 339.0, unit = "min", source = "Metcalf1987", notes = "half of the transit of the right colon, 11.3 +- 1.1 h (73 subjects; total colonic transit 35.0 h)" }
+ph = { value = 6.4, unit = "dimensionless", source = "Evans1988", notes = "mean pH after the passage into the caecum, 6.4 +- 0.4" }
+area_factor = { value = 0.0362, unit = "dimensionless", source = "Helander2014", notes = "mucosal surface per lumen volume relative to the small intestine: (A_LI/A_SI)*(L_SI/L_LI)*(d_SI/d_LI)^2 = (2/30)*2*(2.5/4.8)^2 with the mucosal surfaces 2 m2 (large intestine) and 30 m2 (small intestine, of 32 m2 in total), the small intestine two thirds of the oroanal length and the inner diameters 2.5 and 4.8 cm; the lumen a cylinder of the inner diameter; permeability differences are not included" }
+cyp3a4 = { value = 0.0, unit = "dimensionless", source = "Paine1997", notes = "unverified: the colon was not measured; colonic CYP3A4 is low against the small intestine (Drozdzik 2018: highest abundance in the jejunum), taken as none" }
+abcb1 = { value = 0.24, unit = "dimensionless", source = "Drozdzik2014", notes = "unverified: the caecum was not measured, the P-gp abundance of the colon ascendens (pmol/mg as recalled)" }
+abcg2 = { value = 0.13, unit = "dimensionless", source = "Drozdzik2014", notes = "unverified: the caecum was not measured, the BCRP abundance of the colon ascendens (pmol/mg as recalled)" }
+
+[colon_ascendens]
+volume = { value = 0.002093, unit = "l", source = "Schiller2005", notes = "colonic fluid volume 13 ml by the transit share 339/2106 min" }
+transit_time = { value = 339.0, unit = "min", source = "Metcalf1987", notes = "half of the transit of the right colon, 11.3 h" }
+ph = { value = 6.6, unit = "dimensionless", source = "Evans1988", notes = "the pH rises progressively from the caecum (6.4) to the left colon (7.0); a linear interpolation over the colonic segments" }
+area_factor = { value = 0.0362, unit = "dimensionless", source = "Helander2014", notes = "as the caecum" }
+cyp3a4 = { value = 0.0, unit = "dimensionless", source = "Paine1997", notes = "unverified: the colon was not measured, taken as none" }
+abcb1 = { value = 0.24, unit = "dimensionless", source = "Drozdzik2014", notes = "unverified: P-gp abundance of the colon ascendens in pmol/mg as recalled" }
+abcg2 = { value = 0.13, unit = "dimensionless", source = "Drozdzik2014", notes = "unverified: BCRP abundance of the colon ascendens in pmol/mg as recalled" }
+
+[colon_transversum]
+volume = { value = 0.002111, unit = "l", source = "Schiller2005", notes = "colonic fluid volume 13 ml by the transit share 342/2106 min" }
+transit_time = { value = 342.0, unit = "min", source = "Metcalf1987", notes = "half of the transit of the left colon, 11.4 +- 1.4 h" }
+ph = { value = 6.8, unit = "dimensionless", source = "Evans1988", notes = "linear interpolation from the caecum (6.4) to the left colon (7.0)" }
+area_factor = { value = 0.0362, unit = "dimensionless", source = "Helander2014", notes = "as the caecum" }
+cyp3a4 = { value = 0.0, unit = "dimensionless", source = "Paine1997", notes = "unverified: the colon was not measured, taken as none" }
+abcb1 = { value = 0.23, unit = "dimensionless", source = "Drozdzik2014", notes = "unverified: P-gp abundance of the colon transversum in pmol/mg as recalled" }
+abcg2 = { value = 0.13, unit = "dimensionless", source = "Drozdzik2014", notes = "unverified: BCRP abundance of the colon transversum in pmol/mg as recalled" }
+
+[colon_descendens]
+volume = { value = 0.002111, unit = "l", source = "Schiller2005", notes = "colonic fluid volume 13 ml by the transit share 342/2106 min" }
+transit_time = { value = 342.0, unit = "min", source = "Metcalf1987", notes = "half of the transit of the left colon, 11.4 h" }
+ph = { value = 7.0, unit = "dimensionless", source = "Evans1988", notes = "final mean pH of the left colon, 7.0 +- 0.7" }
+area_factor = { value = 0.0362, unit = "dimensionless", source = "Helander2014", notes = "as the caecum" }
+cyp3a4 = { value = 0.0, unit = "dimensionless", source = "Paine1997", notes = "unverified: the colon was not measured, taken as none" }
+abcb1 = { value = 0.24, unit = "dimensionless", source = "Drozdzik2014", notes = "unverified: P-gp abundance of the colon descendens in pmol/mg as recalled" }
+abcg2 = { value = 0.12, unit = "dimensionless", source = "Drozdzik2014", notes = "unverified: BCRP abundance of the colon descendens in pmol/mg as recalled" }
+
+[colon_sigmoid]
+volume = { value = 0.002296, unit = "l", source = "Schiller2005", notes = "colonic fluid volume 13 ml by the transit share 372/2106 min" }
+transit_time = { value = 372.0, unit = "min", source = "Metcalf1987", notes = "half of the transit of the rectosigmoid, 12.4 +- 1.1 h" }
+ph = { value = 7.0, unit = "dimensionless", source = "Evans1988", notes = "final mean pH of the left colon, 7.0" }
+area_factor = { value = 0.0362, unit = "dimensionless", source = "Helander2014", notes = "as the caecum" }
+cyp3a4 = { value = 0.0, unit = "dimensionless", source = "Paine1997", notes = "unverified: the colon was not measured, taken as none" }
+abcb1 = { value = 0.22, unit = "dimensionless", source = "Drozdzik2014", notes = "unverified: P-gp abundance of the colon sigmoid in pmol/mg as recalled" }
+abcg2 = { value = 0.11, unit = "dimensionless", source = "Drozdzik2014", notes = "unverified: BCRP abundance of the colon sigmoid in pmol/mg as recalled" }
+
+[rectum]
+volume = { value = 0.002296, unit = "l", source = "Schiller2005", notes = "colonic fluid volume 13 ml by the transit share 372/2106 min" }
+transit_time = { value = 372.0, unit = "min", source = "Metcalf1987", notes = "half of the transit of the rectosigmoid, 12.4 h" }
+ph = { value = 7.0, unit = "dimensionless", source = "Evans1988", notes = "final mean pH of the left colon, 7.0" }
+area_factor = { value = 0.0362, unit = "dimensionless", source = "Helander2014", notes = "as the caecum" }
+cyp3a4 = { value = 0.0, unit = "dimensionless", source = "Paine1997", notes = "unverified: the colon was not measured, taken as none" }
+abcb1 = { value = 0.22, unit = "dimensionless", source = "Drozdzik2014", notes = "unverified: the rectum was not measured, the P-gp abundance of the colon sigmoid (pmol/mg as recalled)" }
+abcg2 = { value = 0.11, unit = "dimensionless", source = "Drozdzik2014", notes = "unverified: the rectum was not measured, the BCRP abundance of the colon sigmoid (pmol/mg as recalled)" }
+
+[mucosa]
+volume_fraction = { value = 0.1, unit = "dimensionless", source = "ModelChoice", notes = "the mucosa (enterocyte layer) as a tenth of the tissue volume of small and large intestine, distributed onto the segments of a region by their transit share; it enters the dynamics of the mucosa only, not the steady state first-pass extraction of the flow-limited mucosa" }
+flow_fraction = { value = 0.7, unit = "dimensionless", source = "Granger1980", notes = "unverified: the fraction of the intestinal blood flow which perfuses the mucosa (mucosa and submucosa receive about 70 % of the intestinal blood flow, as cited in the reviews of intestinal blood flow), distributed onto the segments of a region by their transit share" }
+
+[absorption]
+ka = { value = 1.0, unit = "1/hr", source = "ModelChoice", notes = "first order absorption rate constant of the small intestine, the default of a substance with an oral route whose model does not fit it" }
+
+[single_lumen]
 volume = { value = 0.105, unit = "l", source = "Schiller2005", notes = "mean fluid volume of the small intestine in the fasted state, 105 +- 72 ml (MRI, 12 healthy subjects; 54 +- 41 ml one hour after a meal)" }
-transit_time = { value = 199.0, unit = "min", source = "Yu1996", notes = "mean small intestinal transit time (3.32 h) of the human transit data analysed; unverified: the value as cited by the compartmental absorption and transit model literature, not checked against the paper" }
-ka = { value = 1.0, unit = "1/hr", source = "ModelChoice", notes = "first order absorption from the lumen, the default of a substance whose model does not fit it" }
+transit_time = { value = 192.0, unit = "min", source = "Mudie2010", notes = "Table 6, small intestinal transit time fasted 192 min (coated pellets, range 90-324 min): the single lumen is the fluid of the small intestine" }
 
 [bile]
 volume = { value = 0.058, unit = "l", source = "ICRP89", notes = "Table 2.8, gallbladder contents 58 g male (48 g female), with the density 1.0 kg/l; the capacity of the bile, which enters no rate" }

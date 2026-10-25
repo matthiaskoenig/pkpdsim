@@ -111,16 +111,17 @@ def total_amount(r: "roadrunner.RoadRunner", sid: str) -> float:
 
     The amount of a species is decided from the SBML: a species with
     `hasOnlySubstanceUnits` is an amount, any other a concentration which is
-    multiplied with the volume of its compartment. The sinks are the urine and
-    feces amounts, the bile and the intestinal lumen; the dose states are not
-    counted (`dose_amount`).
+    multiplied with the volume of its compartment. The species of the id
+    scheme (`ids.species_of`: organs, pools, intestinal lumen, undissolved
+    drug, mucosa) and the sinks: the urine and feces amounts and the bile;
+    the dose states are not counted (`dose_amount`).
     """
     import libsbml
 
     doc = libsbml.readSBMLFromString(r.getCurrentSBML())
     model = doc.getModel()
     by_id = {sp.getId(): sp for sp in model.getListOfSpecies()}
-    sinks = {ids.urine(sid), ids.feces(sid), ids.bile(sid), ids.lumen(sid)}
+    sinks = {ids.urine(sid), ids.feces(sid), ids.bile(sid)}
     selected = ids.species_of(sid, by_id) + [
         i for i in by_id if i.rsplit("__", 1)[-1] in sinks
     ]

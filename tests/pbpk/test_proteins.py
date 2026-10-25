@@ -251,7 +251,7 @@ def test_inhibitor_without_tissue_acts_from_plasma(tmp_path: Path) -> None:
 
 def test_transporter_inhibitor_acts_where_the_substrate_is(tmp_path: Path) -> None:
     """Basolateral influx: the inhibitor of the interstitium (its merged tissue);
-    apical influx: the inhibitor of the lumen."""
+    apical influx: the inhibitor of the lumen of the segment."""
     chemistry: list[Metabolism | Transport] = [
         Transport(
             sid="OATP_DRG",
@@ -281,8 +281,10 @@ def test_transporter_inhibitor_acts_where_the_substrate_is(tmp_path: Path) -> No
     path = _build(tmp_path, inhibitor, chemistry=chemistry)
     liver = _kinetic_law(path, Organ.LIVER, "OATP_DRG")
     assert ids.flat(Organ.LIVER, ids.species(Part.TISSUE, INH)) in liver
-    gut = _kinetic_law(path, Organ.SMALL_INTESTINE, "OCT1_DRG")
-    assert ids.lumen(INH) in gut
+    gut = _kinetic_law(
+        path, Organ.SMALL_INTESTINE, ids.segment_process("OCT1_DRG", "du")
+    )
+    assert ids.flat(Organ.SMALL_INTESTINE, ids.lumen(INH, "du")) in gut
 
 
 def test_activity_base_factor(tmp_path: Path) -> None:

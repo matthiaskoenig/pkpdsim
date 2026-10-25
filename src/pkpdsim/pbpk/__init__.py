@@ -13,13 +13,24 @@ from pkpdsim.pbpk.chemistry import (
 )
 from pkpdsim.pbpk.data import Source, cite, load, sources
 from pkpdsim.pbpk.definition import PBPKDefinition, Variants
-from pkpdsim.pbpk.organ import Boundary, OrganComponent, OrganContext, StandardOrgan
+from pkpdsim.pbpk.organ import (
+    Boundary,
+    GutComponent,
+    OrganComponent,
+    OrganContext,
+    StandardOrgan,
+)
 from pkpdsim.pbpk.organs import Organ, Part, Pool
 from pkpdsim.pbpk.parts import Parts, parts_for
 from pkpdsim.pbpk.pd import PDComponent
 from pkpdsim.pbpk.physiology import Sex, physiology_objects
 from pkpdsim.pbpk.proteins import PROTEINS, Induction, Inhibition, Protein
-from pkpdsim.pbpk.routes import FirstOrderDissolution, Route
+from pkpdsim.pbpk.routes import (
+    DoseDependentDissolution,
+    FirstOrderDissolution,
+    Route,
+    WeibullDissolution,
+)
 from pkpdsim.pbpk.substance import (
     Binding,
     Erythrocytes,
@@ -31,6 +42,7 @@ from pkpdsim.pbpk.substance import (
 )
 from pkpdsim.pbpk.units import MODEL_UNITS, U
 from pkpdsim.pbpk.values import Q, Value, as_value, fitted
+from pkpdsim.pbpk.variants.intestine import SegmentedIntestine, SingleLumen
 
 __all__ = [
     "MM",
@@ -41,10 +53,12 @@ __all__ = [
     "BuildResult",
     "CustomReaction",
     "Direction",
+    "DoseDependentDissolution",
     "Erythrocytes",
     "Excretion",
     "FirstOrder",
     "FirstOrderDissolution",
+    "GutComponent",
     "Hill",
     "Induction",
     "Inhibition",
@@ -64,7 +78,9 @@ __all__ = [
     "Protein",
     "Q",
     "Route",
+    "SegmentedIntestine",
     "Sex",
+    "SingleLumen",
     "Source",
     "StandardOrgan",
     "Substance",
@@ -72,6 +88,7 @@ __all__ = [
     "U",
     "Value",
     "Variants",
+    "WeibullDissolution",
     "as_value",
     "build",
     "cite",

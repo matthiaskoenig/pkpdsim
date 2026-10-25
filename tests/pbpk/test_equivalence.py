@@ -212,7 +212,8 @@ def test_full_large_ps_equals_merged(tmp_path: Path) -> None:
         [_metabolism()],
         distribution=Kp(2.0, mode=Mode.PERMEABILITY, ftissue=1e4),
     )
-    fast = {ids.flat(o, K_VAS): 1e4 for o in Organ}
+    # the intestine (submodel GU) replaces the large intestine
+    fast = {ids.flat(o, K_VAS): 1e4 for o in Organ if o is not Organ.LARGE_INTESTINE}
     deviation = _deviation(merged, _curve(_load(full, **fast)))
     assert deviation < 1e-3
     assert _deviation(merged, _curve(_load(full))) > 5 * deviation
