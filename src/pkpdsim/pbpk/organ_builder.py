@@ -53,6 +53,7 @@ from pkpdsim.pbpk.parts import Parts
 from pkpdsim.pbpk.placement import (
     ONE,
     has_turnover,
+    in_zone,
     inhibition_parameters,
     inhibitor_unbound,
     kp_id,
@@ -244,8 +245,9 @@ class OrganBuilder:
         name: str,
         text: str = "",
         sbo: str = SBO.PHYSICAL_COMPARTMENT,
+        zone: str | None = None,
     ) -> None:
-        """A constant compartment of the organ with its volume as initial assignment."""
+        """A constant compartment of the organ (of a zone) with its volume as initial assignment."""
         if cid in self.compartments:
             return
         self.compartments[cid] = Compartment(
@@ -253,24 +255,27 @@ class OrganBuilder:
             None,
             U.litre,
             constant=True,
-            name=f"{name} {label(self.organ)}",
+            name=in_zone(f"{name} {label(self.organ)}", zone),
             sboTerm=sbo,
             notes=f"{text}\n\n`{cid} = {formula}`" if text else f"`{cid} = {formula}`",
             port=True,
         )
         self.assignments.append(InitialAssignment(cid, formula, U.litre))
 
-    def _species(self, part: Part, s: Substance, parts: Parts) -> None:
-        """The species of a substance in a part of the organ."""
-        sid = ids.species(part, s.sid)
+    def _species(
+        self, part: Part, s: Substance, parts: Parts, zone: str | None = None
+    ) -> None:
+        """The species of a substance in a part of the organ (of a zone of it)."""
+        sid = ids.species(part, s.sid, zone)
         self.species[sid] = Species(
             sid,
-            species_compartment(part, s.sid, parts),
+            species_compartment(part, s.sid, parts, zone),
             initialConcentration=0.0,
             substanceUnit=U.mmole,
             hasOnlySubstanceUnits=False,
             name=f"{s.name} ({part.name.lower().replace('_', ' ')}, "
-            f"{label(self.organ)})",
+            + in_zone(label(self.organ), zone)
+            + ")",
             sboTerm=SBO.SIMPLE_CHEMICAL,
             port=True,
         )

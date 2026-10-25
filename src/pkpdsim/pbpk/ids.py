@@ -24,6 +24,7 @@ __all__ = [
     "F_MUCOSA_VOLUME",
     "F_RENAL_FUNCTION",
     "F_SHUNT",
+    "F_ZONE",
     "GFR",
     "GUT",
     "GUT_FLOW",
@@ -126,6 +127,7 @@ __all__ = [
     "outflow_conc",
     "outflow_conc_bc",
     "outflow_reaction",
+    "placement_profile",
     "placement_weight",
     "plasma_capacity",
     "po_dose",
@@ -139,6 +141,7 @@ __all__ = [
     "ref",
     "segment_process",
     "shunt_reaction",
+    "sinusoid_reaction",
     "sol_dose",
     "solid",
     "solution",
@@ -152,6 +155,7 @@ __all__ = [
     "urine",
     "vascular_fraction",
     "wall_compartment",
+    "zone",
 ]
 
 
@@ -193,6 +197,8 @@ F_SHUNT = "f_shunt"
 """The portosystemic shunt: the fraction of the liver inflow which bypasses the liver."""
 F_FUNCTIONAL = "f_functional"
 """The functional fraction of the liver tissue."""
+F_ZONE = "f_zone"
+"""The volume fraction of a zone of a zonated organ, `1/n` of `n` zones."""
 VBILE = "Vbile"
 """The volume of the bile, the compartment of `Cbile_<s>`."""
 VURINE = "Vurine"
@@ -277,14 +283,24 @@ def flat(organ: Organ, local: str) -> str:
     return f"{submodel(organ)}__{local}"
 
 
-def compartment(part: Part) -> str:
-    """The local id of a compartment of an organ, `Vpl`."""
-    return f"V{part.value}"
+def zone(i: int) -> str:
+    """The token of zone `i` of a zonated organ, `z1` (periportal) to `z<n>`."""
+    return f"z{i}"
 
 
-def species(part: Part, s: str) -> str:
-    """The local id of a species of substance `s` in a part, `Cpl_<s>`."""
-    return f"C{part.value}_{s}"
+def _zoned(prefix: str, zone: str | None, s: str | None = None) -> str:
+    """An id of an organ part in a zone, `<prefix>_<zone>_<s>`, without zone `<prefix>_<s>`."""
+    return "_".join(p for p in (prefix, zone, s) if p is not None)
+
+
+def compartment(part: Part, zone: str | None = None) -> str:
+    """The local id of a compartment of an organ, `Vpl`; of a zone `Vpl_z1`."""
+    return _zoned(f"V{part.value}", zone)
+
+
+def species(part: Part, s: str, zone: str | None = None) -> str:
+    """The local id of a species of substance `s` in a part, `Cpl_<s>`; of a zone `Cpl_z1_<s>`."""
+    return _zoned(f"C{part.value}", zone, s)
 
 
 def pool_compartment(pool: Pool, part: Part) -> str:
@@ -338,13 +354,14 @@ def pool_capacity(pool: Pool, s: str) -> str:
     return f"V{pool.value}_{Part.PLASMA.value}_{s}"
 
 
-def plasma_capacity(s: str) -> str:
+def plasma_capacity(s: str, zone: str | None = None) -> str:
     """The local id of the compartment of `Cpl_<s>` with erythrocytes in equilibrium.
 
     The vascular volume of the organ times the blood to plasma ratio,
-    `Vpl_<s>`: the plasma species then holds the amount of the blood.
+    `Vpl_<s>` (of a zone `Vpl_z1_<s>`): the plasma species then holds the
+    amount of the blood.
     """
-    return f"V{Part.PLASMA.value}_{s}"
+    return _zoned(f"V{Part.PLASMA.value}", zone, s)
 
 
 def vascular_fraction(organ: Organ) -> str:
@@ -426,13 +443,22 @@ def filtration_reaction(s: str) -> str:
     return f"J_gfr_{s}"
 
 
-def exchange_reaction(part: Part, s: str) -> str:
+def exchange_reaction(part: Part, s: str, zone: str | None = None) -> str:
     """The local id of the passive exchange of `s` into a part of an organ, `J_ti_<s>`.
 
     From plasma into the tissue, the interstitium or the blood cells, from
-    the interstitium into the cells (`J_ic_<s>`).
+    the interstitium into the cells (`J_ic_<s>`); in a zone `J_ti_z1_<s>`.
     """
-    return f"J_{part.value}_{s}"
+    return _zoned(f"J_{part.value}", zone, s)
+
+
+def sinusoid_reaction(part: Part, s: str, zone: str) -> str:
+    """The local id of the flow of `s` from a zone into the next one, `J_sin_z1_pl_<s>`.
+
+    `part` is the part of the blood which carries it, plasma or blood cells
+    (the whole organ of a flow-limited substance carries it as plasma).
+    """
+    return f"J_sin_{zone}_{part.value}_{s}"
 
 
 def outflow_conc(s: str) -> str:
@@ -611,15 +637,25 @@ def mucosa_reaction(kind: str, s: str, seg: str | None = None) -> str:
 
 
 def placement_weight(key: str, seg: str | None) -> str:
-    """The local id of the share of a process in the mucosa of a segment, `w_cyp3a4_du`.
+    """The local id of the share of a process in a segment or a zone, `w_cyp3a4_du`.
 
-    `key` is the protein in lower case or `uniform` (by mucosa volume).
+    `key` is the protein (or profile) in lower case or `uniform` (by mucosa
+    volume); in the zone of a zonated organ `w_cyp3a4_z1`.
     """
     return _segment(f"w_{key}", None, seg)
 
 
+def placement_profile(key: str, zone: str) -> str:
+    """The local id of the relative abundance of a profile in a zone, `p_cyp3a4_z1`."""
+    return f"p_{key}_{zone}"
+
+
 def segment_process(pid: str, seg: str | None) -> str:
-    """The local id of a process of the chemistry in the mucosa of a segment, `CYP3A4_DRG_du`."""
+    """The local id of a process of the chemistry in a segment or a zone, `CYP3A4_DRG_du`.
+
+    In the mucosa of a segment of the intestine or a zone of a zonated organ
+    (`CYP3A4_DRG_z1`).
+    """
     return pid if seg is None else f"{pid}_{seg}"
 
 
@@ -792,9 +828,12 @@ def hepatic_vein_blood(s: str) -> str:
     return f"Chv_blood_{s}"
 
 
-def unbound(part: Part, s: str) -> str:
-    """The local id of the unbound concentration of `s` in a tissue part, `Cu_ti_<s>`."""
-    return f"Cu_{part.value}_{s}"
+def unbound(part: Part, s: str, zone: str | None = None) -> str:
+    """The local id of the unbound concentration of `s` in a tissue part, `Cu_ti_<s>`.
+
+    In a zone of a zonated organ `Cu_ti_z1_<s>`.
+    """
+    return _zoned(f"Cu_{part.value}", zone, s)
 
 
 def activity(protein: str) -> str:
@@ -872,12 +911,12 @@ def species_of(s: str, ids: Iterable[str]) -> list[str]:
         ids: the ids to select from.
 
     Returns:
-        The ids which are an organ species, a pool species, a blood cell
-        pool species, a lumen, undissolved or mucosa species of `s`, in the
-        order of `ids`.
+        The ids which are an organ species (of a zone as well), a pool
+        species, a blood cell pool species, a lumen, undissolved or mucosa
+        species of `s`, in the order of `ids`.
     """
     pattern = re.compile(
-        rf"(?:C(?:(?:{_PARTS})|(?:{_POOLS})(?:_{Part.BLOOD_CELLS.value})?)"
+        rf"(?:C(?:(?:{_PARTS})(?:_z\d+)?|(?:{_POOLS})(?:_{Part.BLOOD_CELLS.value})?)"
         rf"|(?:Clumen|Cmu|Asolid)(?:_(?:{_SEGMENTS}))?)_{re.escape(s)}"
     )
     return [i for i in ids if pattern.fullmatch(i.rsplit("__", 1)[-1])]

@@ -43,6 +43,7 @@ from pkpdsim.pbpk.substance import (
 from pkpdsim.pbpk.units import MODEL_UNITS, U
 from pkpdsim.pbpk.values import Q, Value, as_value, fitted
 from pkpdsim.pbpk.variants.intestine import SegmentedIntestine, SingleLumen
+from pkpdsim.pbpk.variants.liver_zonated import ZonatedLiver
 
 __all__ = [
     "MM",
@@ -89,6 +90,7 @@ __all__ = [
     "Value",
     "Variants",
     "WeibullDissolution",
+    "ZonatedLiver",
     "as_value",
     "build",
     "cite",

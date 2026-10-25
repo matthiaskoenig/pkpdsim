@@ -387,11 +387,11 @@ def test_dose_dependent_dissolution(tmp_path: Path) -> None:
 def test_variant_registry() -> None:
     """The intestine has the standard, segmented and single lumen variants; unknown names raise."""
     assert names(Organ.SMALL_INTESTINE) == ["segmented", "single_lumen", "standard"]
-    assert names(Organ.LIVER) == ["standard"]
-    with pytest.raises(ValueError, match=r"'zonated'.*'li'"):
-        lookup(Organ.LIVER, "zonated")
-    with pytest.raises(ValueError, match=r"'zonated'.*'li'"):
-        compose(definition(variants=Variants(organs={Organ.LIVER: "zonated"})))
+    assert names(Organ.LIVER) == ["standard", "zonated"]
+    with pytest.raises(ValueError, match=r"'lobular'.*'li'"):
+        lookup(Organ.LIVER, "lobular")
+    with pytest.raises(ValueError, match=r"'lobular'.*'li'"):
+        compose(definition(variants=Variants(organs={Organ.LIVER: "lobular"})))
 
 
 def test_standard_intestine(tmp_path: Path) -> None:

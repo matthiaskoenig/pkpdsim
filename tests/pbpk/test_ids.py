@@ -60,10 +60,14 @@ def test_species_of_exact_substance() -> None:
     all_ids = [
         "LI__Cpl_api",
         "LI__Cti_api",
+        "LI__Cpl_z1_api",
+        "LI__Cbc_z12_api",
+        "LI__Cu_ti_z1_api",
         "Cve_api",
         "Cve_bc_api",
         "Car_bc_api",
         "LI__Cpl_api_m2",
+        "LI__Cti_z2_api_m2",
         "Cve_api_m2",
         "Cpl_xdrg",
         "Cpl_drg",
@@ -74,11 +78,17 @@ def test_species_of_exact_substance() -> None:
     assert ids.species_of("api", all_ids) == [
         "LI__Cpl_api",
         "LI__Cti_api",
+        "LI__Cpl_z1_api",
+        "LI__Cbc_z12_api",
         "Cve_api",
         "Cve_bc_api",
         "Car_bc_api",
     ]
-    assert ids.species_of("api_m2", all_ids) == ["LI__Cpl_api_m2", "Cve_api_m2"]
+    assert ids.species_of("api_m2", all_ids) == [
+        "LI__Cpl_api_m2",
+        "LI__Cti_z2_api_m2",
+        "Cve_api_m2",
+    ]
     assert ids.species_of("drg", all_ids) == ["Cpl_drg"]
     assert ids.species_of("m2", all_ids) == []
 
@@ -102,6 +112,22 @@ def test_organ_ids() -> None:
     assert ids.inflow_reaction(Pool.PORTAL, Part.PLASMA, "api") == "J_in_po_pl_api"
     assert ids.outflow_reaction(Part.BLOOD_CELLS, "api") == "J_out_bc_api"
     assert ids.exchange_reaction(Part.TISSUE, "api") == "J_ti_api"
+
+
+def test_zone_ids() -> None:
+    """The ids of the parts of a zone carry the zone between part and substance."""
+    z = ids.zone(1)
+    assert z == "z1"
+    assert ids.compartment(Part.TISSUE, z) == "Vti_z1"
+    assert ids.species(Part.PLASMA, "api", z) == "Cpl_z1_api"
+    assert ids.unbound(Part.TISSUE, "api", z) == "Cu_ti_z1_api"
+    assert ids.plasma_capacity("api", z) == "Vpl_z1_api"
+    assert ids.exchange_reaction(Part.TISSUE, "api", z) == "J_ti_z1_api"
+    assert ids.sinusoid_reaction(Part.PLASMA, "api", z) == "J_sin_z1_pl_api"
+    assert ids.segment_process("DRG2M", z) == "DRG2M_z1"
+    assert ids.placement_weight("cyp3a4", z) == "w_cyp3a4_z1"
+    assert ids.placement_profile("cyp3a4", z) == "p_cyp3a4_z1"
+    assert ids.F_ZONE == "f_zone"
 
 
 def test_submodels_unique_and_not_physiology() -> None:

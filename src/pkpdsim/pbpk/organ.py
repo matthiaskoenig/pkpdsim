@@ -38,10 +38,13 @@ concentrations of the tissue parts `Cu_<part>_<s>` (observers).
 
 The elements (inputs with their ports, compartments, species, rules,
 constants) are collected by `pkpdsim.pbpk.organ_builder.OrganBuilder`, which
-the variants reuse.
+the variants reuse. The standard organ is one well-stirred zone; the zonated
+liver (`pkpdsim.pbpk.variants.liver_zonated`) builds the same parts, flows and
+exchanges in each of its zones, which the blood flows through in series.
 """
 
-from collections.abc import Mapping
+import itertools
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
@@ -59,7 +62,14 @@ from pkpdsim.pbpk.chemistry import (
 from pkpdsim.pbpk.organ_builder import CAPACITY, ONE, OrganBuilder, label
 from pkpdsim.pbpk.organs import Organ, Part, Pool, inflow, outflow
 from pkpdsim.pbpk.parts import Parts
-from pkpdsim.pbpk.placement import apical_sink, built_parts, kp_id, place, unbound
+from pkpdsim.pbpk.placement import (
+    apical_sink,
+    built_parts,
+    in_zone,
+    kp_id,
+    place,
+    unbound,
+)
 from pkpdsim.pbpk.proteins import Induction, Inhibition
 from pkpdsim.pbpk.routes import Route
 from pkpdsim.pbpk.substance import Substance
@@ -201,8 +211,20 @@ _TISSUE_PARTS = {
 class StandardBuilder(OrganBuilder):
     """The SBML objects of one standard organ: its parts, flows, exchanges and chemistry.
 
-    The intestine variants derive from it for the intestinal wall.
+    The organ is one well-stirred zone with the ids without zone. A zonated
+    organ gives its zones (`zones`): the blood flows from the pools into the
+    first zone, from each zone into the next and from the last one into the
+    pool (the outflow concentration is that of the last zone); every zone has
+    the parts of the organ with the share `f_zone` (`1/n`) of their volumes
+    and of the passive exchanges, with the coefficients of the organ. The
+    intestine variants derive from it for the intestinal wall.
+
+    Attributes:
+        zones: the zones of a zonated organ in the order of the blood flow,
+            none for the organ without zones.
     """
+
+    zones: tuple[str, ...] = ()
 
     def build(self) -> tuple[ModelDefinition, Boundary]:
         """Build the model definition and the boundary."""
@@ -210,14 +232,42 @@ class StandardBuilder(OrganBuilder):
         for s in self.ctx.substances:
             self._substance(s)
         self._chemistry()
-        md = self.model_definition(
-            f"The {self.name} organ {label(self.organ)}: the parts which the "
-            "substances need, their blood flows, exchanges and chemistry."
-        )
+        md = self.model_definition(self._notes())
         boundary = Boundary(
             replacements=dict(self.replacements), outputs=dict(self.outputs)
         )
         return md, boundary
+
+    def _notes(self) -> str:
+        """The notes of the model definition."""
+        return (
+            f"The {self.name} organ {label(self.organ)}: the parts which the "
+            "substances need, their blood flows, exchanges and chemistry."
+        )
+
+    @property
+    def _each_zone(self) -> tuple[str | None, ...]:
+        """The zones in the order of the blood flow, `(None,)` for the organ without zones."""
+        return self.zones or (None,)
+
+    def _zone_fraction(self) -> str:
+        """The volume fraction of a zone, `f_zone = 1/n` of `n` zones of equal volume."""
+        return self._constant(
+            ids.F_ZONE,
+            1.0 / len(self.zones),
+            U.dimensionless,
+            "volume fraction of a zone",
+            f"The organ has {len(self.zones)} zones of equal volume in series; a "
+            "zone has this share of the volumes and of the passive exchanges of "
+            "the organ. A constant of the structure of the model, not a "
+            "parameter to change.",
+        )
+
+    def _share(self, quantity: str, zone: str | None) -> str:
+        """The share of a zone of a volume or an exchange of the organ, without zone all of it."""
+        if zone is None:
+            return quantity
+        return f"{quantity} * {self._zone_fraction()}"
 
     def _flows(self, s: Substance) -> tuple[list[tuple[Pool, str]], str]:
         """The inflows (pool, flow) of a substance into the organ and the flow of its outflow."""
@@ -261,43 +311,55 @@ class StandardBuilder(OrganBuilder):
         return f"The functional share `{ids.F_FUNCTIONAL}` of the tissue of the liver."
 
     def _compartments(self) -> None:
-        """The compartments of the parts which hold a species of any substance."""
+        """The compartments of the parts which hold a species of any substance (in every zone)."""
         built = {p for parts in self.ctx.parts.values() for p in built_parts(parts)}
         v, f_vas = self.v, self.f_vas
+        volumes: list[tuple[Part, str, str, str]] = []
         if Part.PLASMA in built:
-            self._compartment(
-                ids.compartment(Part.PLASMA),
-                f"{v} * {f_vas} * ({ONE} - {self.hct})",
-                "plasma",
+            volumes.append(
+                (Part.PLASMA, f"{v} * {f_vas} * ({ONE} - {self.hct})", "plasma", "")
             )
         if Part.BLOOD_CELLS in built:
-            self._compartment(
-                ids.compartment(Part.BLOOD_CELLS),
-                f"{v} * {f_vas} * {self.hct}",
-                "blood cells",
+            volumes.append(
+                (Part.BLOOD_CELLS, f"{v} * {f_vas} * {self.hct}", "blood cells", "")
             )
         if Part.INTERSTITIAL in built:
-            self._compartment(
-                ids.compartment(Part.INTERSTITIAL),
-                self._functional(f"{v} * {self.f_int}"),
-                "interstitium",
-                self._functional_text(),
+            volumes.append(
+                (
+                    Part.INTERSTITIAL,
+                    self._functional(f"{v} * {self.f_int}"),
+                    "interstitium",
+                    self._functional_text(),
+                )
             )
-            self._compartment(
-                ids.compartment(Part.INTRACELLULAR),
-                self._functional(f"{v} * ({ONE} - {f_vas} - {self.f_int})"),
-                "intracellular space",
-                self._functional_text(),
+            volumes.append(
+                (
+                    Part.INTRACELLULAR,
+                    self._functional(f"{v} * ({ONE} - {f_vas} - {self.f_int})"),
+                    "intracellular space",
+                    self._functional_text(),
+                )
             )
         if Part.TISSUE in built:
-            self._compartment(
-                ids.compartment(Part.TISSUE),
-                self._functional(f"{v} * ({ONE} - {f_vas})"),
-                "tissue",
-                self._functional_text(),
+            volumes.append(
+                (
+                    Part.TISSUE,
+                    self._functional(f"{v} * ({ONE} - {f_vas})"),
+                    "tissue",
+                    self._functional_text(),
+                )
             )
         if Part.ORGAN in built:
-            self._compartment(ids.compartment(Part.ORGAN), v, "organ")
+            volumes.append((Part.ORGAN, v, "organ", ""))
+        for zone in self._each_zone:
+            for part, formula, name, text in volumes:
+                self._compartment(
+                    ids.compartment(part, zone),
+                    self._share(formula, zone),
+                    name,
+                    text,
+                    zone=zone,
+                )
 
     def _substance(self, s: Substance) -> None:
         """The species, outflow concentration, flows and exchanges of a substance."""
@@ -308,20 +370,22 @@ class StandardBuilder(OrganBuilder):
                 f"not the flow-limited organ '{self.organ.value}'."
             )
         fu = self._fu(s)
-        if parts.flow_carrier == "blood_bp" and parts.tissue != "organ":
-            self._compartment(
-                ids.plasma_capacity(s.sid),
-                f"{self.v} * {self.f_vas} * {self._bp(s)}",
-                f"plasma-equivalent capacity V*f_vas*BP of {s.sid},",
-                CAPACITY,
-                SBO.IMPLICIT_COMPARTMENT,
-            )
-        for part in built_parts(parts):
-            self._species(part, s, parts)
+        for zone in self._each_zone:
+            if parts.flow_carrier == "blood_bp" and parts.tissue != "organ":
+                self._compartment(
+                    ids.plasma_capacity(s.sid, zone),
+                    self._share(f"{self.v} * {self.f_vas} * {self._bp(s)}", zone),
+                    f"plasma-equivalent capacity V*f_vas*BP of {s.sid},",
+                    CAPACITY,
+                    SBO.IMPLICIT_COMPARTMENT,
+                    zone=zone,
+                )
+            for part in built_parts(parts):
+                self._species(part, s, parts, zone)
         if parts.tissue == "organ":
-            cout = f"{ids.species(Part.ORGAN, s.sid)} / {self._k_organ(s, parts)}"
-        else:
-            cout = ids.species(Part.PLASMA, s.sid)
+            self._k_organ(s, parts)
+        last = self._each_zone[-1]
+        cout = self._leaving(s, parts, Part.PLASMA, last)
         out = ids.outflow_conc(s.sid)
         self._rule(
             out,
@@ -336,7 +400,7 @@ class StandardBuilder(OrganBuilder):
             out_bc = ids.outflow_conc_bc(s.sid)
             self._rule(
                 out_bc,
-                ids.species(Part.BLOOD_CELLS, s.sid),
+                self._leaving(s, parts, Part.BLOOD_CELLS, last),
                 U.mM,
                 f"outflow blood cell concentration {s.sid} {label(self.organ)} [mM]",
                 "Blood cell concentration of the blood leaving the organ.",
@@ -345,32 +409,52 @@ class StandardBuilder(OrganBuilder):
             self.outputs[out_bc] = ids.organ_outflow_bc(self.organ, s.sid)
         self._blood_flows(s, parts)
         if parts.blood_cells:
-            self._blood_cells(s)
+            for zone in self._each_zone:
+                self._blood_cells(s, zone)
         if self.organ is Organ.KIDNEY and s.excretion.urine:
             self._filtration(s, parts, fu, cout)
-        if parts.tissue == "merged":
-            self._merged(s, fu)
-        elif parts.tissue == "full":
-            self._full(s, fu)
-        self._unbound_observers(s, parts)
+        for zone in self._each_zone:
+            if parts.tissue == "merged":
+                self._merged(s, fu, zone)
+            elif parts.tissue == "full":
+                self._full(s, fu, zone)
+            self._unbound_observers(s, parts, zone)
 
-    def _unbound_observers(self, s: Substance, parts: Parts) -> None:
+    def _leaving(self, s: Substance, parts: Parts, part: Part, zone: str | None) -> str:
+        """The concentration of the blood leaving a zone (the organ), plasma or blood cells.
+
+        The plasma concentration, of the flow-limited organ `Cor/K_or` (in
+        equilibrium with the plasma leaving it); the blood cell concentration.
+        """
+        if part is Part.BLOOD_CELLS:
+            return ids.species(Part.BLOOD_CELLS, s.sid, zone)
+        if parts.tissue == "organ":
+            return f"{ids.species(Part.ORGAN, s.sid, zone)} / {ids.k_organ(s.sid)}"
+        return ids.species(Part.PLASMA, s.sid, zone)
+
+    def _unbound_observers(
+        self, s: Substance, parts: Parts, zone: str | None = None
+    ) -> None:
         """The unbound concentrations of the tissue parts of a substance, `Cu_<part>_<s>`.
 
         `fu/K*C` with the coefficient of the part to plasma (`Kp`,
         `K_int_pls`, `K_cell_pls`, `K_or`): observers, assignment rules of
         the organ (they read species), the concentration which the processes
-        of the part act on.
+        of the part act on; in a zone `Cu_<part>_<zone>_<s>`.
         """
         for part in built_parts(parts):
             if part not in _TISSUE_PARTS:
                 continue
             self._rule(
-                ids.unbound(part, s.sid),
-                unbound(part, s, self.organ),
+                ids.unbound(part, s.sid, zone),
+                unbound(part, s, self.organ, zone),
                 U.mM,
-                f"unbound concentration {s.sid} {_TISSUE_PARTS[part]} "
-                f"{label(self.organ)} [mM]",
+                in_zone(
+                    f"unbound concentration {s.sid} {_TISSUE_PARTS[part]} "
+                    f"{label(self.organ)}",
+                    zone,
+                )
+                + " [mM]",
                 f"Unbound concentration of the {_TISSUE_PARTS[part]}; an observer.",
             )
 
@@ -403,7 +487,9 @@ class StandardBuilder(OrganBuilder):
         equilibrium; kinetic blood cells carry `Q*HCT*Cbc`. The fraction
         `f_shunt` of the inflow of the liver bypasses it (portosystemic shunt)
         from the arterial and the portal pool directly into the venous pool;
-        the liver is perfused by and drains `(1 - f_shunt)*Q`.
+        the liver is perfused by and drains `(1 - f_shunt)*Q`. The zones of a
+        zonated organ are perfused in series: the inflow enters the first
+        zone, the flow leaving a zone enters the next, the last one drains.
         """
         inflows, out_flow = self._flows(s)
         out_pool = outflow(self.organ)
@@ -412,11 +498,9 @@ class StandardBuilder(OrganBuilder):
         else:
             carrier = f"({ONE} - {self.hct})"
         target = Part.ORGAN if parts.tissue == "organ" else Part.PLASMA
-        carried = [(Part.PLASMA, carrier, ids.species(target, s.sid))]
+        carried = [(Part.PLASMA, carrier, target)]
         if parts.blood_cells:
-            carried.append(
-                (Part.BLOOD_CELLS, self.hct, ids.species(Part.BLOOD_CELLS, s.sid))
-            )
+            carried.append((Part.BLOOD_CELLS, self.hct, Part.BLOOD_CELLS))
         perfused, f_shunt = "", None
         if self.organ is Organ.LIVER:
             f_shunt = self._input(
@@ -426,8 +510,10 @@ class StandardBuilder(OrganBuilder):
                 "The fraction of the liver inflow which bypasses the liver.",
             )
             perfused = f"({ONE} - {f_shunt}) * "
-        for part, share, local in carried:
+        first, last = self._each_zone[0], self._each_zone[-1]
+        for part, share, local_part in carried:
             what = "" if part is Part.PLASMA else " blood cells"
+            local = ids.species(local_part, s.sid, first)
             out = self._pool_species(out_pool, part, s, parts)
             for pool, flow in inflows:
                 c = self._pool_species(pool, part, s, parts)
@@ -446,6 +532,15 @@ class StandardBuilder(OrganBuilder):
                         f"shunt {s.sid}{what} from {pool.name.lower()} pool past "
                         f"the liver into {out_pool.name.lower()} pool",
                     )
+            for upstream, downstream in itertools.pairwise(self.zones):
+                self._reaction(
+                    ids.sinusoid_reaction(part, s.sid, upstream),
+                    f"{ids.species(local_part, s.sid, upstream)} -> "
+                    f"{ids.species(local_part, s.sid, downstream)}",
+                    f"{perfused}{self._flow(out_flow)} * {share} * "
+                    f"{self._leaving(s, parts, part, upstream)}",
+                    f"flow {s.sid}{what} from zone {upstream} into zone {downstream}",
+                )
             leaving = (
                 ids.outflow_conc(s.sid)
                 if part is Part.PLASMA
@@ -453,7 +548,7 @@ class StandardBuilder(OrganBuilder):
             )
             self._reaction(
                 ids.outflow_reaction(part, s.sid),
-                f"{local} -> {out}",
+                f"{ids.species(local_part, s.sid, last)} -> {out}",
                 f"{perfused}{self._flow(out_flow)} * {share} * {leaving}",
                 f"outflow {s.sid}{what} into {out_pool.name.lower()} pool",
             )
@@ -487,8 +582,8 @@ class StandardBuilder(OrganBuilder):
             f"glomerular filtration {s.sid}",
         )
 
-    def _blood_cells(self, s: Substance) -> None:
-        """The exchange between plasma and kinetic blood cells.
+    def _blood_cells(self, s: Substance, zone: str | None = None) -> None:
+        """The exchange between plasma and kinetic blood cells (of a zone).
 
         `kex_bc * Vbc * (Cpl - Cbc/Kbc)`: the blood cells approach `Kbc*Cpl`
         with the rate `kex_bc/Kbc`.
@@ -501,12 +596,14 @@ class StandardBuilder(OrganBuilder):
             U.per_min,
             f"exchange plasma and blood cells {s.sid} [1/min]",
         )
-        cpl, cbc = ids.species(Part.PLASMA, s.sid), ids.species(Part.BLOOD_CELLS, s.sid)
+        cpl = ids.species(Part.PLASMA, s.sid, zone)
+        cbc = ids.species(Part.BLOOD_CELLS, s.sid, zone)
+        vbc = ids.compartment(Part.BLOOD_CELLS, zone)
         self._reaction(
-            ids.exchange_reaction(Part.BLOOD_CELLS, s.sid),
+            ids.exchange_reaction(Part.BLOOD_CELLS, s.sid, zone),
             f"{cpl} <-> {cbc}",
-            f"{kex} * {ids.compartment(Part.BLOOD_CELLS)} * ({cpl} - {cbc} / {kbc})",
-            f"exchange {s.sid} plasma and blood cells",
+            f"{kex} * {vbc} * ({cpl} - {cbc} / {kbc})",
+            in_zone(f"exchange {s.sid} plasma and blood cells", zone),
         )
 
     def _ps(self, s: Substance) -> str:
@@ -524,6 +621,8 @@ class StandardBuilder(OrganBuilder):
                 `ftissue` nor a value of the organ.
         """
         pid = ids.ps(s.sid)
+        if pid in self.parameters:
+            return pid
         name = f"exchange plasma and tissue {s.sid} [l/min]"
         dist = s.distribution
         if dist is None or kp_id(s, self.organ) is None:
@@ -575,26 +674,69 @@ class StandardBuilder(OrganBuilder):
             f"relative to the reference tissue volume. {_FTISSUE}",
         )
 
-    def _merged(self, s: Substance, fu: str) -> None:
-        """The exchange between plasma and the merged tissue, `PS*fu*(Cpl - Cti/Kp)`."""
+    def _merged(self, s: Substance, fu: str, zone: str | None = None) -> None:
+        """The exchange between plasma and the merged tissue, `PS*fu*(Cpl - Cti/Kp)`.
+
+        A zone has the share `f_zone` of the exchange.
+        """
         kp = self._kp(s)
         assert kp is not None
         ps = self._ps(s)
-        cpl, cti = ids.species(Part.PLASMA, s.sid), ids.species(Part.TISSUE, s.sid)
+        cpl = ids.species(Part.PLASMA, s.sid, zone)
+        cti = ids.species(Part.TISSUE, s.sid, zone)
         self._reaction(
-            ids.exchange_reaction(Part.TISSUE, s.sid),
+            ids.exchange_reaction(Part.TISSUE, s.sid, zone),
             f"{cpl} <-> {cti}",
-            f"{ps} * {fu} * ({cpl} - {cti} / {kp})",
-            f"exchange {s.sid} plasma and tissue",
+            f"{self._share(ps, zone)} * {fu} * ({cpl} - {cti} / {kp})",
+            in_zone(f"exchange {s.sid} plasma and tissue", zone),
         )
 
-    def _full(self, s: Substance, fu: str) -> None:
+    def _full(self, s: Substance, fu: str, zone: str | None = None) -> None:
         """The exchanges plasma - interstitium - intracellular space.
 
         `PS_vas*fu*(Cpl - Cis/K_int_pls)` and
         `PS*(fu/K_int_pls*Cis - fu/K_cell_pls*Cic)`, with `K_int_pls` of
-        Schmitt 2008 and `K_cell_pls` such that the whole tissue has the Kp.
+        Schmitt 2008 and `K_cell_pls` such that the whole tissue has the Kp;
+        a zone has the share `f_zone` of both exchanges.
         """
+        k_int, k_cell = self._cell_coefficients(s, fu)
+        if ids.PS_VAS not in self.parameters:
+            self.parameters[distribution.K_VAS] = distribution.constant(
+                distribution.K_VAS
+            )
+            self._initial(
+                ids.PS_VAS,
+                f"{distribution.K_VAS} * {self.v}",
+                U.l_per_min,
+                "exchange plasma and interstitium [l/min]",
+                "Exchange between plasma and interstitium across the endothelium.",
+            )
+        ps = self._ps(s)
+        cpl = ids.species(Part.PLASMA, s.sid, zone)
+        cis = ids.species(Part.INTERSTITIAL, s.sid, zone)
+        cic = ids.species(Part.INTRACELLULAR, s.sid, zone)
+        self._reaction(
+            ids.exchange_reaction(Part.INTERSTITIAL, s.sid, zone),
+            f"{cpl} <-> {cis}",
+            f"{self._share(ids.PS_VAS, zone)} * {fu} * ({cpl} - {cis} / {k_int})",
+            in_zone(f"exchange {s.sid} plasma and interstitium", zone),
+        )
+        self._reaction(
+            ids.exchange_reaction(Part.INTRACELLULAR, s.sid, zone),
+            f"{cis} <-> {cic}",
+            f"{self._share(ps, zone)} * ({fu} / {k_int} * {cis} - {fu} / {k_cell} "
+            f"* {cic})",
+            in_zone(f"passive exchange {s.sid} interstitium and cells", zone),
+        )
+
+    def _cell_coefficients(self, s: Substance, fu: str) -> tuple[str, str]:
+        """The interstitial and the intracellular to plasma coefficients of a substance.
+
+        `K_int_pls` of Schmitt 2008 and `K_cell_pls` such that the whole
+        tissue has the Kp, once for the organ (every zone has them).
+        """
+        if ids.k_cell_pls(s.sid) in self.parameters:
+            return ids.k_int_pls(s.sid), ids.k_cell_pls(s.sid)
         for key in distribution.INTERSTITIAL:
             if key not in self.parameters:
                 self.parameters[key] = distribution.constant(key)
@@ -631,33 +773,7 @@ class StandardBuilder(OrganBuilder):
                 f"Kp); below it the coefficient is floored at "
                 f"{distribution.K_CELL_FLOOR}.",
             )
-        if ids.PS_VAS not in self.parameters:
-            self.parameters[distribution.K_VAS] = distribution.constant(
-                distribution.K_VAS
-            )
-            self._initial(
-                ids.PS_VAS,
-                f"{distribution.K_VAS} * {self.v}",
-                U.l_per_min,
-                "exchange plasma and interstitium [l/min]",
-                "Exchange between plasma and interstitium across the endothelium.",
-            )
-        ps = self._ps(s)
-        cpl = ids.species(Part.PLASMA, s.sid)
-        cis = ids.species(Part.INTERSTITIAL, s.sid)
-        cic = ids.species(Part.INTRACELLULAR, s.sid)
-        self._reaction(
-            ids.exchange_reaction(Part.INTERSTITIAL, s.sid),
-            f"{cpl} <-> {cis}",
-            f"{ids.PS_VAS} * {fu} * ({cpl} - {cis} / {k_int})",
-            f"exchange {s.sid} plasma and interstitium",
-        )
-        self._reaction(
-            ids.exchange_reaction(Part.INTRACELLULAR, s.sid),
-            f"{cis} <-> {cic}",
-            f"{ps} * ({fu} / {k_int} * {cis} - {fu} / {k_cell} * {cic})",
-            f"passive exchange {s.sid} interstitium and cells",
-        )
+        return k_int, k_cell
 
     def _chemistry(self) -> None:
         """The processes of the organ with the activities of their proteins and their sinks.
@@ -666,16 +782,8 @@ class StandardBuilder(OrganBuilder):
             ValueError: if a species of a custom reaction has the id of a
                 species of the organ.
         """
-        processes = [p for p in self.ctx.chemistry if p.organ is self.organ]
-        for p in processes:
-            if isinstance(p, Metabolism | Transport) and p.protein is not None:
-                self._activity(p.protein)
-            if isinstance(p, Transport) and p.membrane is Membrane.APICAL:
-                self._sink(p.substance)
-                if p.direction is Direction.INFLUX:
-                    for sid, inh in self.ctx.inhibitions:
-                        if inh.protein == p.protein:
-                            self._sink(sid)
+        processes = self._processes()
+        self._proteins_and_sinks(processes)
         for p in processes:
             if not isinstance(p, CustomReaction):
                 continue
@@ -690,6 +798,27 @@ class StandardBuilder(OrganBuilder):
         capacity = self._capacity()
         for p in processes:
             self.reactions += place(p, self.ctx, self.ctx.parts, capacity)
+
+    def _processes(self) -> list[Metabolism | Transport | CustomReaction]:
+        """The processes of the chemistry of the organ."""
+        return [p for p in self.ctx.chemistry if p.organ is self.organ]
+
+    def _proteins_and_sinks(
+        self, processes: Sequence[Metabolism | Transport | CustomReaction]
+    ) -> None:
+        """The activities of the proteins of the processes and the sinks of their apical transport.
+
+        An apical influx reads the inhibitors of its protein from the sink.
+        """
+        for p in processes:
+            if isinstance(p, Metabolism | Transport) and p.protein is not None:
+                self._activity(p.protein)
+            if isinstance(p, Transport) and p.membrane is Membrane.APICAL:
+                self._sink(p.substance)
+                if p.direction is Direction.INFLUX:
+                    for sid, inh in self.ctx.inhibitions:
+                        if inh.protein == p.protein:
+                            self._sink(sid)
 
     def _sink(self, s: str) -> None:
         """The apical sink species of a substance in the organ, an element of the body.

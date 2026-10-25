@@ -343,13 +343,15 @@ class GutBuilder(LumenBuilder):
                 "carved out of the wall.",
             )
 
-    def _species(self, part: Part, s: Substance, parts: Parts) -> None:
+    def _species(
+        self, part: Part, s: Substance, parts: Parts, zone: str | None = None
+    ) -> None:
         """The species of a substance in a part of the wall, without the mucosa for a mucosal one."""
-        super()._species(part, s, parts)
+        super()._species(part, s, parts, zone)
         if s.sid in self.mucosal and part in _TISSUE:
-            self.species[ids.species(part, s.sid)].compartment = ids.wall_compartment(
-                part
-            )
+            self.species[
+                ids.species(part, s.sid, zone)
+            ].compartment = ids.wall_compartment(part)
 
     def _k_organ(self, s: Substance, parts: Parts) -> str:
         """The organ to plasma coefficient of the flow-limited wall.
