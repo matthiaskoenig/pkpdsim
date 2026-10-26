@@ -99,6 +99,7 @@ __all__ = [
     "built_parts",
     "formula_assignment",
     "formula_ids",
+    "formula_problems",
     "has_turnover",
     "in_zone",
     "inhibition_parameters",
@@ -587,6 +588,40 @@ def formula_ids(expression: str) -> set[str]:
             found.add(node.getName())
         stack.extend(node.getChild(k) for k in range(node.getNumChildren()))
     return found
+
+
+def formula_problems(
+    where: str, expression: str, top: Mapping[str, tuple[str, object]]
+) -> list[str]:
+    """Check the ids of a formula against the elements of the top model.
+
+    Args:
+        where: what the formula belongs to, the start of a problem.
+        expression: the formula.
+        top: the elements of the top model, id -> (kind, unit), with the kinds
+            `parameter`, `compartment`, `species` and `variable`.
+
+    Returns:
+        The problems: the ids which are no element of the top model, the ids
+        of species and of variables (observers, outputs, elements with a
+        rule), which change during the simulation.
+    """
+    ids_ = formula_ids(expression)
+    unknown = sorted(s for s in ids_ if s not in top)
+    states = sorted(
+        s for s in ids_ if s in top and top[s][0] not in ("parameter", "compartment")
+    )
+    problems: list[str] = []
+    if unknown:
+        problems.append(
+            f"{where} reads ids which are unknown in the top model: {unknown}"
+        )
+    if states:
+        problems.append(
+            f"{where} reads species or observers of the top model, which change "
+            f"during the simulation: {states}"
+        )
+    return problems
 
 
 def formula_assignment(p: FormulaParameter) -> InitialAssignment:

@@ -60,6 +60,7 @@ from pkpdsim.pbpk.placement import (
     FormulaParameter,
     formula_assignment,
     formula_ids,
+    formula_problems,
     has_turnover,
     in_zone,
     inhibition_parameters,
@@ -615,36 +616,47 @@ class OrganBuilder:
     def _formula(self, p: FormulaParameter) -> None:
         """The initial assignment of a `Formula` of the organ and its inputs.
 
-        The ids of the formula are ids of the top model: an id the organ
-        already reads through an input port is that input, any other
-        parameter or compartment of the top model becomes an input of the
-        organ; in the flat model the formula reads the elements of the top
-        model.
+        Every id of the formula is a constant parameter or compartment of the
+        top model (`OrganContext.top`), read through an input port of the
+        organ whose local id is the id of the top model: an input the organ
+        already has under that id is used, else the input is added; in the
+        flat model the formula reads the elements of the top model. An input
+        whose local id differs from the id of the top model (the liver reads
+        `fimp_li_cyp3a4` as `fimp_cyp3a4`) is no id of a formula, and a
+        local element of the organ under the id of the top model is refused.
         """
         pid = str(p.sid)
-        unknown: list[str] = []
+        where = (
+            f"The formula of '{pid}' in organ '{self.organ.value}' "
+            f"(`{p.formula.expression}`)"
+        )
+        problems = formula_problems(where, p.formula.expression, self.ctx.top)
+        clash: list[str] = []
         for symbol in sorted(formula_ids(p.formula.expression)):
-            if symbol in self.replacements:
+            kind = self.ctx.top.get(symbol, ("", None))[0]
+            if kind not in ("parameter", "compartment"):
                 continue
-            local = (
+            if self.replacements.get(symbol) == symbol:
+                continue
+            if (
                 symbol in self.parameters
                 or symbol in self.compartments
                 or symbol in self.species
-            )
-            if local or symbol not in self.ctx.top:
-                unknown.append(symbol)
-                continue
-            kind, unit = self.ctx.top[symbol]
-            if kind == "compartment":
+            ):
+                clash.append(symbol)
+            elif kind == "compartment":
                 self._input_compartment(symbol, f"{symbol} (formula of {pid})")
             else:
-                self._input(symbol, unit, f"{symbol} (formula of {pid})")
-        if unknown:
-            raise ValueError(
-                f"The formula of '{pid}' in organ '{self.organ.value}' "
-                f"(`{p.formula.expression}`) reads ids which are unknown in the "
-                f"top model: {unknown}."
+                self._input(
+                    symbol, self.ctx.top[symbol][1], f"{symbol} (formula of {pid})"
+                )
+        if clash:
+            problems.append(
+                f"{where} reads ids of the top model which are local elements of "
+                f"the organ: {clash}"
             )
+        if problems:
+            raise ValueError("; ".join(problems) + ".")
         self.assignments.append(formula_assignment(p))
 
     def model_definition(self, notes: str) -> ModelDefinition:

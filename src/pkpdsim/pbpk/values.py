@@ -47,11 +47,13 @@ class Formula:
     The parameter of the value gets the formula as its initial assignment, as
     the covariates do (R21): a change of a parameter it reads before the
     simulation is followed, and an id of `PBPKDefinition.dynamic` keeps it an
-    assignment rule. The ids of the formula are ids of the top model (the
-    parameters of the substances, the covariates, the physiology), also for a
-    value of an organ, which reads them through its input ports; the build
-    refuses an id the top model does not have. The unit is the unit of the
-    parameter, it is not inferred from the formula.
+    assignment rule. The ids of the formula are constant parameters and
+    compartments of the top model (the parameters of the substances, the
+    covariates, the physiology), also for a value of an organ, which reads
+    them through input ports under the same ids; the build refuses an id the
+    top model does not have and the species and observers (they change during
+    the simulation). The unit is the unit of the parameter, it is not inferred
+    from the formula.
 
     Attributes:
         expression: the formula (SBML L3 infix), e.g. `Kp_gli` or

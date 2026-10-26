@@ -104,7 +104,7 @@ from pkpdsim.pbpk.physiology import physiology_objects, reference_tissue_volumes
 from pkpdsim.pbpk.placement import (
     FormulaParameter,
     formula_assignment,
-    formula_ids,
+    formula_problems,
     inhibition_parameters,
     kp_id,
     value_parameter,
@@ -680,13 +680,32 @@ class _Top:
             self.objects.append(o)
 
     def inputs(self) -> dict[str, tuple[str, UnitType]]:
-        """The parameters and compartments of the top model with their kind and unit."""
+        """The elements of the top model with their kind and unit.
+
+        The kinds: `parameter` and `compartment` for the constants, which a
+        `Formula` may read; `species` and `variable` (an observer, an output
+        of an organ, any element with a rule) for what changes during the
+        simulation, which a formula would freeze at its initial value.
+        """
+        ruled = {
+            str(o.variable)
+            for o in self.objects
+            if isinstance(o, AssignmentRule | RateRule)
+        }
+        local = [
+            p for o in self.objects if isinstance(o, Reaction) for p in o.pars or []
+        ]
         found: dict[str, tuple[str, UnitType]] = {}
-        for o in self.objects:
-            if isinstance(o, Parameter):
-                found[str(o.sid)] = ("parameter", o.unit)
-            elif isinstance(o, Compartment):
-                found[str(o.sid)] = ("compartment", o.unit)
+        for o in [*self.objects, *local]:
+            if isinstance(o, Species):
+                found[str(o.sid)] = ("species", o.substanceUnits)
+            elif isinstance(o, Parameter | Compartment):
+                sid = str(o.sid)
+                if not o.constant or sid in ruled:
+                    found[sid] = ("variable", o.unit)
+                else:
+                    kind = "parameter" if isinstance(o, Parameter) else "compartment"
+                    found[sid] = (kind, o.unit)
         return found
 
     def formulas(self) -> None:
@@ -694,27 +713,22 @@ class _Top:
 
         Raises:
             ValueError: if a formula reads an id which is no element of the
-                top model, naming every such id.
+                top model, or a species or an observer, naming every such id.
         """
+        top = self.inputs()
         local = [
             p for o in self.objects if isinstance(o, Reaction) for p in o.pars or []
         ]
-        known = {
-            str(o.sid)
-            for o in [*self.objects, *local]
-            if isinstance(o, Parameter | Compartment | Species)
-        }
         problems: list[str] = []
         assignments: list[Sbase] = []
         for o in [*self.objects, *local]:
             if not isinstance(o, FormulaParameter):
                 continue
-            unknown = sorted(formula_ids(o.formula.expression) - known)
-            if unknown:
-                problems.append(
-                    f"the formula of '{o.sid}' (`{o.formula.expression}`) reads "
-                    f"ids which are unknown in the top model: {unknown}"
-                )
+            problems += formula_problems(
+                f"the formula of '{o.sid}' (`{o.formula.expression}`)",
+                o.formula.expression,
+                top,
+            )
             assignments.append(formula_assignment(o))
         if problems:
             raise ValueError(
