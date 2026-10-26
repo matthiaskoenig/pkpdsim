@@ -108,7 +108,7 @@ def test_formula_is_a_value() -> None:
     assert f.unit == U.dimensionless
     assert f.notes == "The Kp of the parent."
     assert as_value(f, U.mM) is f
-    assert Formula("Kp_p", U.dimensionless).notes == ""
+    assert Formula("Kp_p", U.dimensionless).notes is None
 
 
 def test_an_organ_value_follows_a_parameter_of_the_top_model(tmp_path: Path) -> None:

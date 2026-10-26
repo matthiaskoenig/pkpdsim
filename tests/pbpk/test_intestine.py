@@ -16,6 +16,7 @@ import numpy as np
 import pytest
 
 from pkpdsim.pbpk import (
+    CustomReaction,
     DoseDependentDissolution,
     Excretion,
     FirstOrder,
@@ -639,7 +640,7 @@ def test_bile_drains_for_every_substance(tmp_path: Path) -> None:
 def _segmented(
     sid: str,
     *,
-    chemistry: tuple[Metabolism, ...] = (),
+    chemistry: tuple[Metabolism | Transport | CustomReaction, ...] = (),
     fabs: float | None = None,
     f_ka_colon: float | None = None,
 ) -> PBPKDefinition:
@@ -759,6 +760,43 @@ def test_segmented_colon_absorption(tmp_path: Path) -> None:
         zero[:, 1 : 1 + n], default[:, 1 : 1 + n], rtol=1e-6, atol=1e-14
     )
     np.testing.assert_allclose(runs["one"], default, rtol=1e-6, atol=1e-14)
+
+
+def test_segmented_factors_only_for_oral_substances(tmp_path: Path) -> None:
+    """`fabs` and `f_ka_colon` act only on the substances with an oral route.
+
+    The metabolite reaches the lumen by its biliary excretion (its `ka` is
+    0): it has neither `fabs_<s>` nor `f_ka_colon_<s>` and no reaction of the
+    unabsorbed fraction `J_feces_<seg>_<s>`, its absorption is `ka*f_area*V*C`;
+    the oral drug has both.
+    """
+    bile = Transport(
+        sid="DRGMBILE",
+        organ=Organ.LIVER,
+        substance=M,
+        direction=Direction.EFFLUX,
+        membrane=Membrane.APICAL,
+        kinetics=FirstOrder(k=0.1),
+    )
+    d = _segmented(
+        "seg_oral_only",
+        chemistry=(*definition().chemistry, bile),
+        fabs=0.5,
+        f_ka_colon=0.3,
+    )
+    result = build(d, tmp_path)
+    found = _sbml_ids(result.flat_path)
+    assert {ids.fraction_absorbed(S), ids.colon_absorption_factor(S)} <= found
+    assert _gu(ids.feces_reaction(S, "asc")) in found
+    assert ids.fraction_absorbed(M) not in found
+    assert ids.colon_absorption_factor(M) not in found
+    assert not {i for i in found if "J_feces_" in i and i.endswith(f"_{M}")}
+    model = libsbml.readSBMLFromFile(str(result.flat_path)).getModel()
+    for seg in ("jej1", "asc"):
+        law = model.getReaction(_gu(ids.absorption_reaction(M, seg)))
+        formula = libsbml.formulaToL3String(law.getKineticLaw().getMath())
+        assert "fabs" not in formula
+        assert "f_ka_colon" not in formula
 
 
 @pytest.mark.parametrize("mucosa", [False, True])

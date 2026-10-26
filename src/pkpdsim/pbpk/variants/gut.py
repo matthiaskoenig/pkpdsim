@@ -129,8 +129,8 @@ class GutBuilder(LumenBuilder):
         segments: tuple[Segment, ...],
         *,
         single: bool,
-        fabs: bool = False,
-        colon: bool = False,
+        fabs: frozenset[str] = frozenset(),
+        colon: frozenset[str] = frozenset(),
     ) -> None:
         """Start the collection of the elements of the intestine.
 
@@ -142,9 +142,10 @@ class GutBuilder(LumenBuilder):
             name: the name of the component.
             segments: the lumen segments.
             single: the single lumen.
-            fabs: the segments absorb the fraction `fabs_<s>`, the rest goes
-                into the feces.
-            colon: the large intestine absorbs with `f_ka_colon_<s>`.
+            fabs: the substances of which the segments absorb the fraction
+                `fabs_<s>`, the rest goes into the feces.
+            colon: the substances which the large intestine absorbs with
+                `f_ka_colon_<s>`.
 
         Raises:
             ValueError: for chemistry the intestine cannot place, or a

@@ -45,10 +45,11 @@ class LumenBuilder(StandardBuilder):
     Attributes:
         segments: the lumen segments in the order of the transit.
         single: the single lumen (absorption without area factor, no fed state).
-        fabs: the segments absorb the fraction `fabs_<s>` of their absorbed
-            flux into the body, the rest into the feces.
-        colon: the segments of the large intestine absorb with the factor
-            `f_ka_colon_<s>`.
+        fabs: the substances of which the segments absorb the fraction
+            `fabs_<s>` of their absorbed flux into the body, the rest into
+            the feces.
+        colon: the substances which the segments of the large intestine
+            absorb with the factor `f_ka_colon_<s>`.
         oral: the oral routes by (kind, substance).
         bile: the substances excreted into the bile.
         luminal: the substances which reach the lumen.
@@ -57,8 +58,8 @@ class LumenBuilder(StandardBuilder):
 
     segments: tuple[Segment, ...]
     single: bool
-    fabs: bool
-    colon: bool
+    fabs: frozenset[str]
+    colon: frozenset[str]
     oral: dict[tuple[str, str], Route]
     bile: set[str]
     luminal: set[str]
@@ -239,16 +240,16 @@ class LumenBuilder(StandardBuilder):
         """The absorption from a lumen segment and its unabsorbed fraction.
 
         The rate `ka/60*f_area*V*C` (the single lumen without the area
-        factor), in the large intestine times `f_ka_colon_<s>` (`colon`); with
-        `fabs` the fraction `fabs_<s>` of it enters the body, the rest the
-        feces.
+        factor), in the large intestine times `f_ka_colon_<s>` (a substance
+        of `colon`); of a substance of `fabs` the fraction `fabs_<s>` of it
+        enters the body, the rest the feces.
         """
         sid, v = s.sid, ids.lumen_volume(seg.token)
         into = self._absorbed_into(s, parts, seg)
         factors = [f"{ka} / 60 min_per_hr"]
         if seg.absorbs:
             factors.append(ids.area_factor(str(seg.token)))
-        if self.colon and seg.region is Organ.LARGE_INTESTINE:
+        if sid in self.colon and seg.region is Organ.LARGE_INTESTINE:
             factors.append(
                 self._input(
                     ids.colon_absorption_factor(sid),
@@ -262,7 +263,7 @@ class LumenBuilder(StandardBuilder):
             self._input(
                 ids.fraction_absorbed(sid), U.dimensionless, f"fraction absorbed {sid}"
             )
-            if self.fabs
+            if sid in self.fabs
             else None
         )
         self._reaction(

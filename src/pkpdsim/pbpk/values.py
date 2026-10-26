@@ -64,7 +64,7 @@ class Formula:
 
     expression: str
     unit: UnitType
-    notes: str = ""
+    notes: str | None = None
 
 
 type Q = float | Value | Formula

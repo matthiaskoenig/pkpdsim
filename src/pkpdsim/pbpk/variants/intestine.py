@@ -28,10 +28,11 @@ enters the portal vein directly. Their parts:
   small intestine, a segment absorbs with `ka_<s> * f_area_<seg>` (the
   mucosal surface per lumen volume relative to the small intestine; the
   stomach does not absorb), a segment of the large intestine optionally
-  times `f_ka_colon_<s>` (`SegmentedIntestine.f_ka_colon`); the single
-  lumen absorbs with `ka_<s>`; of the absorbed flux the fraction `fabs_<s>`
-  enters the body and the rest the feces (the single lumen, the segments
-  with `SegmentedIntestine.fabs`);
+  times `f_ka_colon_<s>` (`SegmentedIntestine.f_ka_colon`, a substance
+  with an oral route); the single lumen absorbs with `ka_<s>`; of the
+  absorbed flux the fraction `fabs_<s>` enters the body and the rest the
+  feces (the single lumen for every substance, the segments with
+  `SegmentedIntestine.fabs` for a substance with an oral route);
 - the mucosa (enterocytes) per intestinal segment, `Cmu_<seg>_<s>`, only for
   a substance with chemistry of the intestine (substrate, product,
   transported substance, inhibitor or inducer of a protein of a process of
@@ -83,15 +84,25 @@ from pkpdsim.pbpk.variants.gut import GUT_ORGANS, GutBuilder
 from pkpdsim.pbpk.variants.segments import DATA, segments, single_lumen
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from pkpdsim.pbpk.definition import PBPKDefinition
+    from pkpdsim.pbpk.routes import Route
 
 __all__ = ["SegmentedIntestine", "SingleLumen"]
 
 _SBO_PARAMETER = SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER
 
 
-def _fabs_objects(definition: "PBPKDefinition", fabs: Q) -> list[Sbase]:
-    """The fraction absorbed `fabs_<s>` of every substance."""
+def _oral(routes: "Sequence[Route]") -> frozenset[str]:
+    """The substances with an oral route (tablet or solution)."""
+    return frozenset(r.substance for r in routes if r.kind in ORAL)
+
+
+def _fabs_objects(
+    definition: "PBPKDefinition", fabs: Q, substances: frozenset[str] | None = None
+) -> list[Sbase]:
+    """The fraction absorbed `fabs_<s>` of the substances (all if `None`)."""
     return [
         annotate(
             value_parameter(
@@ -106,11 +117,14 @@ def _fabs_objects(definition: "PBPKDefinition", fabs: Q) -> list[Sbase]:
             "fraction_absorbed",
         )
         for s in definition.substances
+        if substances is None or s.sid in substances
     ]
 
 
-def _colon_objects(definition: "PBPKDefinition", f_ka_colon: Q) -> list[Sbase]:
-    """The factor of the absorption in the large intestine `f_ka_colon_<s>` of every substance."""
+def _colon_objects(
+    definition: "PBPKDefinition", f_ka_colon: Q, substances: frozenset[str]
+) -> list[Sbase]:
+    """The factor of the absorption in the large intestine `f_ka_colon_<s>` of the substances."""
     return [
         annotate(
             value_parameter(
@@ -126,12 +140,13 @@ def _colon_objects(definition: "PBPKDefinition", f_ka_colon: Q) -> list[Sbase]:
             organ=Organ.LARGE_INTESTINE,
         )
         for s in definition.substances
+        if s.sid in substances
     ]
 
 
 def _ka_objects(definition: "PBPKDefinition", ka: Q | None) -> list[Sbase]:
     """The absorption `ka_<s>` of every substance: of the oral ones the default, else 0."""
-    oral = {r.substance for r in definition.routes if r.kind in ORAL}
+    oral = _oral(definition.routes)
     default = ka if ka is not None else value(DATA, "absorption", "ka")
     return [
         annotate(
@@ -159,22 +174,27 @@ class SegmentedIntestine:
     """The segmented intestine (Thelen 2011), the default intestine.
 
     Every segment but the stomach absorbs with `ka_<s> * f_area_<seg>`.
-    Two optional factors change it, for every substance of the definition
+    Two optional factors change it, for every substance with an oral route
     (a model fits the parameter of its substance): `fabs` sends the fraction
     `1 - fabs_<s>` of the absorbed flux of every segment into the feces
     (incomplete absorption with a fast onset), `f_ka_colon` scales the
     absorption of the segments of the large intestine (a substance absorbed
-    less in the colon). Without them the model has neither parameter.
+    less in the colon). Without them the model has neither parameter, nor
+    has a substance without an oral route (its `ka_<s>` is 0): it keeps the
+    absorption `ka_<s> * f_area_<seg>` and has no reaction
+    `J_feces_<seg>_<s>`. Unlike `SingleLumen`, whose `fabs=None` is
+    `fabs_<s> = 1` for every substance, `None` creates no parameter.
 
     Attributes:
         name: the name of the component.
         ka: the absorption rate constant of a substance with an oral route,
             the default of the data if `None`.
         fabs: the fraction of the absorbed flux which enters the body,
-            `fabs_<s>`; none (all of it) if `None`.
+            `fabs_<s>` of a substance with an oral route; none (all of it)
+            if `None`.
         f_ka_colon: the factor of the absorption of the segments of the large
-            intestine (caecum to rectum), `f_ka_colon_<s>`; none (1) if
-            `None`.
+            intestine (caecum to rectum), `f_ka_colon_<s>` of a substance
+            with an oral route; none (1) if `None`.
     """
 
     name: str = "segmented"
@@ -188,12 +208,17 @@ class SegmentedIntestine:
         return GUT_ORGANS
 
     def body_objects(self, definition: "PBPKDefinition") -> list[Sbase]:
-        """Get `ka_<s>` (`fabs_<s>`, `f_ka_colon_<s>`) of every substance and `FED`."""
+        """Get `ka_<s>` of every substance, `fabs_<s>` and `f_ka_colon_<s>` of the oral ones, `FED`."""
+        oral = _oral(definition.routes)
         return [
             *_ka_objects(definition, self.ka),
-            *(_fabs_objects(definition, self.fabs) if self.fabs is not None else []),
             *(
-                _colon_objects(definition, self.f_ka_colon)
+                _fabs_objects(definition, self.fabs, oral)
+                if self.fabs is not None
+                else []
+            ),
+            *(
+                _colon_objects(definition, self.f_ka_colon, oral)
                 if self.f_ka_colon is not None
                 else []
             ),
@@ -226,8 +251,8 @@ class SegmentedIntestine:
             self.name,
             segments(),
             single=False,
-            fabs=self.fabs is not None,
-            colon=self.f_ka_colon is not None,
+            fabs=_oral(ctx.routes) if self.fabs is not None else frozenset(),
+            colon=_oral(ctx.routes) if self.f_ka_colon is not None else frozenset(),
         ).build()
 
 
@@ -242,6 +267,10 @@ class SingleLumen:
     of a solution which enters the body is `fabs*ka/(ka + 1/t_lumen)`: the
     fitted absorption and fraction absorbed of the hand-written models,
     which had no transit, do not port unchanged (a refit is expected).
+
+    `fabs_<s>` is a parameter of every substance, 1 if `fabs=None` (unlike
+    `SegmentedIntestine`, which creates it only when set and only for the
+    substances with an oral route).
 
     Attributes:
         name: the name of the component.
@@ -274,5 +303,9 @@ class SingleLumen:
             ValueError: for chemistry the intestine cannot place.
         """
         return GutBuilder(
-            ctx, self.name, single_lumen(), single=True, fabs=True
+            ctx,
+            self.name,
+            single_lumen(),
+            single=True,
+            fabs=frozenset(s.sid for s in ctx.substances),
         ).build()
