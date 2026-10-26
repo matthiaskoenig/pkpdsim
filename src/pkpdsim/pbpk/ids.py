@@ -744,8 +744,17 @@ def area_factor(seg: str) -> str:
 
 
 def fraction_absorbed(s: str) -> str:
-    """The id of the fraction of the absorbed flux entering the gut, `fabs_<s>` (single lumen)."""
+    """The id of the fraction of the absorbed flux entering the gut, `fabs_<s>`."""
     return f"fabs_{s}"
+
+
+def colon_absorption_factor(s: str) -> str:
+    """The id of the factor of the absorption in the large intestine, `f_ka_colon_<s>`.
+
+    Of the segmented intestine: scales `ka_<s>*f_area_<seg>` of the segments
+    of the large intestine.
+    """
+    return f"f_ka_colon_{s}"
 
 
 def transit_reaction(s: str, seg: str | None = None, solid: bool = False) -> str:
@@ -896,12 +905,12 @@ def absorption_reaction(s: str, seg: str | None = None) -> str:
     return _segment("J_abs", s, seg)
 
 
-def feces_reaction(s: str) -> str:
-    """The id of the unabsorbed fraction of the absorption into the feces, `J_feces_<s>`.
+def feces_reaction(s: str, seg: str | None = None) -> str:
+    """The local id of the unabsorbed fraction of the absorption into the feces, `J_feces_du_<s>`.
 
-    Of the single lumen with `fabs_<s>` below 1.
+    Of a lumen segment with `fabs_<s>`, `J_feces_<s>` of the single lumen.
     """
-    return f"J_feces_{s}"
+    return _segment("J_feces", s, seg)
 
 
 def bile_reaction(s: str) -> str:

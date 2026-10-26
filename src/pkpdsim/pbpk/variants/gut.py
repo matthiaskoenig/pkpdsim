@@ -129,6 +129,8 @@ class GutBuilder(LumenBuilder):
         segments: tuple[Segment, ...],
         *,
         single: bool,
+        fabs: bool = False,
+        colon: bool = False,
     ) -> None:
         """Start the collection of the elements of the intestine.
 
@@ -140,6 +142,9 @@ class GutBuilder(LumenBuilder):
             name: the name of the component.
             segments: the lumen segments.
             single: the single lumen.
+            fabs: the segments absorb the fraction `fabs_<s>` (the single
+                lumen always).
+            colon: the large intestine absorbs with `f_ka_colon_<s>`.
 
         Raises:
             ValueError: for chemistry the intestine cannot place, or a
@@ -158,6 +163,8 @@ class GutBuilder(LumenBuilder):
         self.processes = processes
         self.segments = segments
         self.single = single
+        self.fabs = fabs
+        self.colon = colon
         self.mucosa_segments = tuple(seg for seg in segments if seg.region)
         proteins = {p.protein for p in processes if p.protein is not None}
         mucosal = {

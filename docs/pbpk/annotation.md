@@ -77,6 +77,7 @@ PBPKO has no term for some of the quantities, compartments and processes of the 
 | gastric emptying time | `PHYSIOLOGICAL_PARAMETER` |
 | prandial state (fed or fasted) | `MISCELLANEOUS_PARAMETER` |
 | intestinal mucosa and absorption geometry | `PHYSIOLOGICAL_PARAMETER` |
+| absorption factor of the large intestine | `PHYSIOLOGICAL_PARAMETER` |
 | blood flow rate to intestinal mucosa | `BLOOD_FLOW_RATE_TO_COMPARTMENT` |
 | bile transit rate constant | `PHYSIOLOGICAL_PARAMETER` |
 | tubular flow fraction of the glomerular filtration rate | `PHYSIOLOGICAL_PARAMETER` |

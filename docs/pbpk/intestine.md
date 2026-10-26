@@ -49,7 +49,7 @@ J_dis_du_<s>: Asolid_du_<s> -> Clumen_du_<s> = kdis_<s> * Asolid_du_<s>
 
 The lumen segments follow the anatomical segmentation of Thelen 2011, as PK-Sim: stomach `st`, duodenum `du`, upper and lower jejunum `jej1`, `jej2`, upper and lower ileum `ile1`, `ile2`, caecum `cae`, colon ascendens `asc`, transversum `tra`, descendens `des`, sigmoid `sig` and rectum `rec`, then the feces. A substance which reaches the lumen (oral route, biliary excretion, transport into the lumen) has the dissolved concentration `Clumen_<seg>_<s>` in every segment, which moves on with the transit `V*C/T` of the segment and from the rectum into the feces `Afeces_<s>`. The fed state `FED = 1` slows the gastric emptying to the stomach transit time of the fed state.
 
-The absorption rate constant of the small intestine is `ka_<s>` (1/hr, 1 by default for a substance with an oral route, a choice of the library; 0 for any other); a segment absorbs with `ka_<s>*f_area_<seg>`, the mucosal surface per lumen volume relative to the small intestine (the stomach does not absorb). Without chemistry of the intestine the substance is absorbed into the plasma of the intestinal wall:
+The absorption rate constant of the small intestine is `ka_<s>` (1/hr, 1 by default for a substance with an oral route, a choice of the library; 0 for any other); a segment absorbs with `ka_<s>*f_area_<seg>`, the mucosal surface per lumen volume relative to the small intestine (the stomach does not absorb); two optional factors change it (see [Fraction absorbed and colon absorption](#fraction-absorbed-and-colon-absorption)). Without chemistry of the intestine the substance is absorbed into the plasma of the intestinal wall:
 
 ```equations title="transit and absorption"
 J_tr_st_<s>: Clumen_st_<s> -> Clumen_du_<s> = Vlumen_st * Clumen_st_<s> / ((T_st + FED * (T_st_fed - T_st)) * fimp_t_stomach)
@@ -95,6 +95,22 @@ Sources of the columns: volume: `Mudie2010`, `Schiller2005`; transit: `Metcalf19
 <!-- end generated -->
 
 The small intestinal transit time is split onto duodenum, jejunum and ileum by their lengths (Mudie 2010), the colonic transit onto its segments by the segmental transits of Metcalf 1987, and the fluid volume of a region onto its segments in proportion to their transit times. The pH is data only, no process reads it yet.
+
+### Fraction absorbed and colon absorption
+
+Two optional attributes of `SegmentedIntestine` change the absorption of the segments, both `None` by default. Without them the model has neither parameter nor reaction, and the absorption is the one above.
+
+- `fabs`: the fraction of the absorbed flux of every segment which enters the body, the parameter `fabs_<s>` of the top model (as in the single lumen). The rest, `1 - fabs_<s>`, goes from the lumen of the segment into the feces (`J_feces_<seg>_<s>`). The lumen empties as fast as without it, so the onset of the absorption stays and less of the drug enters the body: for a substance with incomplete absorption and a fast onset, which a smaller `ka_<s>` cannot give (it delays the onset and moves the absorption down the intestine).
+- `f_ka_colon`: the factor `f_ka_colon_<s>` of the absorption of the segments of the large intestine (caecum to rectum, the segments of the region `Organ.LARGE_INTESTINE`), relative to `ka_<s>*f_area_<seg>`; the area factors stay. For a substance which the colon absorbs less than its area factor gives, or not at all (0): its slow transit otherwise adds a late absorption of what the small intestine left.
+
+A set attribute is one value for every substance of the definition, as `SingleLumen.fabs`; a model fits the parameter of its substance by id (`fabs_api`, `f_ka_colon_api`). A value of 1 gives the model without the attribute numerically.
+
+```equations title="absorption with fabs and f_ka_colon"
+J_abs_du_<s>: Clumen_du_<s> -> Cpl_<s> = fabs_<s> * ka_<s> / 60 min_per_hr * f_area_du * Vlumen_du * Clumen_du_<s>
+J_feces_du_<s>: Clumen_du_<s> -> Afeces_<s> = (1 - fabs_<s>) * ka_<s> / 60 min_per_hr * f_area_du * Vlumen_du * Clumen_du_<s>
+J_abs_asc_<s>: Clumen_asc_<s> -> Cpl_<s> = fabs_<s> * ka_<s> / 60 min_per_hr * f_area_asc * f_ka_colon_<s> * Vlumen_asc * Clumen_asc_<s>
+J_feces_asc_<s>: Clumen_asc_<s> -> Afeces_<s> = (1 - fabs_<s>) * ka_<s> / 60 min_per_hr * f_area_asc * f_ka_colon_<s> * Vlumen_asc * Clumen_asc_<s>
+```
 
 ### Intestinal wall
 

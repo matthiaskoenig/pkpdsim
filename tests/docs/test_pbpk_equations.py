@@ -45,6 +45,7 @@ from pkpdsim.pbpk import (
     Organ,
     PBPKDefinition,
     Route,
+    SegmentedIntestine,
     Substance,
     Transport,
     Variants,
@@ -217,6 +218,18 @@ def variants() -> PBPKDefinition:
     )
 
 
+def absorption() -> PBPKDefinition:
+    """Get the toy with the fraction absorbed and the colon factor of the segmented intestine."""
+    return PBPKDefinition(
+        sid="toy_absorption",
+        substances=[Substance("drg", name="drug", mr=300.0)],
+        variants=Variants(
+            organs={Organ.SMALL_INTESTINE: SegmentedIntestine(fabs=0.8, f_ka_colon=0.5)}
+        ),
+        routes=[Route.oral_solution("drg")],
+    )
+
+
 @dataclass(frozen=True)
 class Context:
     """A model of a toy in which an equation is looked up.
@@ -239,7 +252,7 @@ def contexts(tmp_path_factory: pytest.TempPathFactory) -> list[Context]:
     """The models of the built toys: the top models and the organ components."""
     directory = tmp_path_factory.mktemp("pbpk_equations")
     result: list[Context] = []
-    for definition in (standard(), variants()):
+    for definition in (standard(), variants(), absorption()):
         paths = build(definition, directory)
         doc = libsbml.readSBMLFromFile(str(paths.comp_path))
         substances = tuple(s.sid for s in definition.substances)

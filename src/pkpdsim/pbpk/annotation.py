@@ -623,6 +623,9 @@ KINDS: dict[str, Kind] = {
         requested="tubular flow fraction of the glomerular filtration rate",
     ),
     "fraction_absorbed": Kind(_P, "UPTAKE_FRACTION_TO_BLOOD"),
+    "colon_absorption": Kind(
+        _P, _PHYS, requested="absorption factor of the large intestine"
+    ),
     "arm_weight": Kind(
         _P, _PHYS, requested="weight of a tissue in the arm vein sampling site"
     ),

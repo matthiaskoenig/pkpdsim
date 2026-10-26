@@ -27,8 +27,11 @@ enters the portal vein directly. Their parts:
 - the absorption: `ka_<s>` (1/hr) is the absorption rate constant of the
   small intestine, a segment absorbs with `ka_<s> * f_area_<seg>` (the
   mucosal surface per lumen volume relative to the small intestine; the
-  stomach does not absorb); the single lumen absorbs with `ka_<s>`, of which
-  the fraction `fabs_<s>` enters the body and the rest the feces;
+  stomach does not absorb), a segment of the large intestine optionally
+  times `f_ka_colon_<s>` (`SegmentedIntestine.f_ka_colon`); the single
+  lumen absorbs with `ka_<s>`; of the absorbed flux the fraction `fabs_<s>`
+  enters the body and the rest the feces (the single lumen, the segments
+  with `SegmentedIntestine.fabs`);
 - the mucosa (enterocytes) per intestinal segment, `Cmu_<seg>_<s>`, only for
   a substance with chemistry of the intestine (substrate, product,
   transported substance, inhibitor or inducer of a protein of a process of
@@ -87,6 +90,25 @@ __all__ = ["SegmentedIntestine", "SingleLumen"]
 _SBO_PARAMETER = SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER
 
 
+def _fabs_objects(definition: "PBPKDefinition", fabs: Q) -> list[Sbase]:
+    """The fraction absorbed `fabs_<s>` of every substance."""
+    return [
+        annotate(
+            value_parameter(
+                ids.fraction_absorbed(s.sid),
+                fabs,
+                U.dimensionless,
+                f"fraction absorbed {s.sid}",
+                _SBO_PARAMETER,
+                "Fraction of the absorbed flux which enters the body, the "
+                "rest goes into the feces.",
+            ),
+            "fraction_absorbed",
+        )
+        for s in definition.substances
+    ]
+
+
 def _ka_objects(definition: "PBPKDefinition", ka: Q | None) -> list[Sbase]:
     """The absorption `ka_<s>` of every substance: of the oral ones the default, else 0."""
     oral = {r.substance for r in definition.routes if r.kind in ORAL}
@@ -116,14 +138,29 @@ def _ka_objects(definition: "PBPKDefinition", ka: Q | None) -> list[Sbase]:
 class SegmentedIntestine:
     """The segmented intestine (Thelen 2011), the default intestine.
 
+    Every segment but the stomach absorbs with `ka_<s> * f_area_<seg>`.
+    Two optional factors change it, for every substance of the definition
+    (a model fits the parameter of its substance): `fabs` sends the fraction
+    `1 - fabs_<s>` of the absorbed flux of every segment into the feces
+    (incomplete absorption with a fast onset), `f_ka_colon` scales the
+    absorption of the segments of the large intestine (a substance absorbed
+    less in the colon). Without them the model has neither parameter.
+
     Attributes:
         name: the name of the component.
         ka: the absorption rate constant of a substance with an oral route,
             the default of the data if `None`.
+        fabs: the fraction of the absorbed flux which enters the body,
+            `fabs_<s>`; none (all of it) if `None`.
+        f_ka_colon: the factor of the absorption of the segments of the large
+            intestine (caecum to rectum), `f_ka_colon_<s>`; none (1) if
+            `None`.
     """
 
     name: str = "segmented"
     ka: Q | None = None
+    fabs: Q | None = None
+    f_ka_colon: Q | None = None
 
     @property
     def replaces(self) -> tuple[Organ, ...]:
@@ -131,9 +168,27 @@ class SegmentedIntestine:
         return GUT_ORGANS
 
     def body_objects(self, definition: "PBPKDefinition") -> list[Sbase]:
-        """Get `ka_<s>` of every substance and the prandial state `FED`."""
+        """Get `ka_<s>` (`fabs_<s>`, `f_ka_colon_<s>`) of every substance and `FED`."""
         return [
             *_ka_objects(definition, self.ka),
+            *(_fabs_objects(definition, self.fabs) if self.fabs is not None else []),
+            *(
+                annotate(
+                    value_parameter(
+                        ids.colon_absorption_factor(s.sid),
+                        self.f_ka_colon,
+                        U.dimensionless,
+                        f"absorption factor large intestine {s.sid}",
+                        _SBO_PARAMETER,
+                        "Factor of the absorption of the segments of the large "
+                        "intestine, `ka*f_area*f_ka_colon`; a model fits it.",
+                    ),
+                    "colon_absorption",
+                    organ=Organ.LARGE_INTESTINE,
+                )
+                for s in definition.substances
+                if self.f_ka_colon is not None
+            ),
             annotate(
                 Parameter(
                     ids.FED,
@@ -158,7 +213,14 @@ class SegmentedIntestine:
                 of the large intestine, a custom reaction, a basolateral
                 transport of the mucosa.
         """
-        return GutBuilder(ctx, self.name, segments(), single=False).build()
+        return GutBuilder(
+            ctx,
+            self.name,
+            segments(),
+            single=False,
+            fabs=self.fabs is not None,
+            colon=self.f_ka_colon is not None,
+        ).build()
 
 
 @dataclass(frozen=True)
@@ -194,21 +256,7 @@ class SingleLumen:
         """Get `ka_<s>` and `fabs_<s>` of every substance."""
         return [
             *_ka_objects(definition, self.ka),
-            *(
-                annotate(
-                    value_parameter(
-                        ids.fraction_absorbed(s.sid),
-                        self.fabs if self.fabs is not None else 1.0,
-                        U.dimensionless,
-                        f"fraction absorbed {s.sid}",
-                        _SBO_PARAMETER,
-                        "Fraction of the absorbed flux which enters the body, the "
-                        "rest goes into the feces.",
-                    ),
-                    "fraction_absorbed",
-                )
-                for s in definition.substances
-            ),
+            *_fabs_objects(definition, self.fabs if self.fabs is not None else 1.0),
         ]
 
     def build(self, ctx: OrganContext) -> tuple[ModelDefinition, Boundary]:

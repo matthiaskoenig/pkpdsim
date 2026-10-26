@@ -21,7 +21,7 @@ from pkpdsim.pbpk.data import cite, value
 from pkpdsim.pbpk.impairment import GASTRIC_EMPTYING, SI_TRANSIT
 from pkpdsim.pbpk.organ import StandardBuilder
 from pkpdsim.pbpk.organ_builder import ONE
-from pkpdsim.pbpk.organs import Part
+from pkpdsim.pbpk.organs import Organ, Part
 from pkpdsim.pbpk.parts import Parts
 from pkpdsim.pbpk.routes import (
     Route,
@@ -45,6 +45,11 @@ class LumenBuilder(StandardBuilder):
     Attributes:
         segments: the lumen segments in the order of the transit.
         single: the single lumen (absorption with `fabs`, no fed state).
+        fabs: the segments absorb the fraction `fabs_<s>` of their absorbed
+            flux into the body, the rest into the feces (the single lumen
+            always).
+        colon: the segments of the large intestine absorb with the factor
+            `f_ka_colon_<s>`.
         oral: the oral routes by (kind, substance).
         bile: the substances excreted into the bile.
         luminal: the substances which reach the lumen.
@@ -53,6 +58,8 @@ class LumenBuilder(StandardBuilder):
 
     segments: tuple[Segment, ...]
     single: bool
+    fabs: bool
+    colon: bool
     oral: dict[tuple[str, str], Route]
     bile: set[str]
     luminal: set[str]
@@ -218,45 +225,64 @@ class LumenBuilder(StandardBuilder):
                 kind="transit",
                 segment=seg.token,
             )
-            if seg.absorbs:
-                into = self._absorbed_into(s, parts, seg)
-                self._reaction(
-                    ids.absorption_reaction(sid, seg.token),
-                    f"{c} -> {into}",
-                    f"{ka} / 60 min_per_hr * {ids.area_factor(str(seg.token))} * "
-                    f"{v} * {c}",
-                    f"absorption {sid} {seg.label}",
-                    kind="absorption",
-                    segment=seg.token,
-                )
-            elif self.single:
-                into = self._absorbed_into(s, parts, seg)
-                fabs = self._input(
-                    ids.fraction_absorbed(sid),
-                    U.dimensionless,
-                    f"fraction absorbed {sid}",
-                )
-                rate = f"{ka} / 60 min_per_hr * {v} * {c}"
-                self._reaction(
-                    ids.absorption_reaction(sid),
-                    f"{c} -> {into}",
-                    f"{fabs} * {rate}",
-                    f"absorption {sid}",
-                    kind="absorption",
-                )
-                self._reaction(
-                    ids.feces_reaction(sid),
-                    f"{c} -> {feces}",
-                    f"({ONE} - {fabs}) * {rate}",
-                    f"unabsorbed fraction {sid} into the feces",
-                    kind="fecal_excretion",
-                )
+            if seg.absorbs or self.single:
+                self._absorption(s, parts, seg, c, feces, ka)
         self._bile(s, lumen[0 if self.single else 1])
         tablet = self.oral.get(("oral", sid))
         if tablet is not None:
             self._tablet(s, tablet, lumen, feces)
         if ("oral_solution", sid) in self.oral:
             self._solution(s, lumen[0])
+
+    def _absorption(
+        self, s: Substance, parts: Parts, seg: Segment, c: str, feces: str, ka: str
+    ) -> None:
+        """The absorption from a lumen segment and its unabsorbed fraction.
+
+        The rate `ka/60*f_area*V*C` (the single lumen without the area
+        factor), in the large intestine times `f_ka_colon_<s>` (`colon`); with
+        `fabs` the fraction `fabs_<s>` of it enters the body, the rest the
+        feces.
+        """
+        sid, v = s.sid, ids.lumen_volume(seg.token)
+        into = self._absorbed_into(s, parts, seg)
+        factors = [f"{ka} / 60 min_per_hr"]
+        if seg.absorbs:
+            factors.append(ids.area_factor(str(seg.token)))
+        if self.colon and seg.region is Organ.LARGE_INTESTINE:
+            factors.append(
+                self._input(
+                    ids.colon_absorption_factor(sid),
+                    U.dimensionless,
+                    f"absorption factor large intestine {sid}",
+                )
+            )
+        rate = " * ".join([*factors, v, c])
+        label = f" {seg.label}" if seg.token is not None else ""
+        fabs = (
+            self._input(
+                ids.fraction_absorbed(sid), U.dimensionless, f"fraction absorbed {sid}"
+            )
+            if self.fabs or self.single
+            else None
+        )
+        self._reaction(
+            ids.absorption_reaction(sid, seg.token),
+            f"{c} -> {into}",
+            f"{fabs} * {rate}" if fabs else rate,
+            f"absorption {sid}{label}",
+            kind="absorption",
+            segment=seg.token,
+        )
+        if fabs:
+            self._reaction(
+                ids.feces_reaction(sid, seg.token),
+                f"{c} -> {feces}",
+                f"({ONE} - {fabs}) * {rate}",
+                f"unabsorbed fraction {sid}{label} into the feces",
+                kind="fecal_excretion",
+                segment=seg.token,
+            )
 
     def _bile(self, s: Substance, into: str) -> None:
         """The transit of the bile of a substance into the duodenum (or the feces).

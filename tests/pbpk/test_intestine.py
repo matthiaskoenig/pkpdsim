@@ -28,6 +28,7 @@ from pkpdsim.pbpk import (
     PBPKDefinition,
     Pool,
     Route,
+    SegmentedIntestine,
     SingleLumen,
     Substance,
     Transport,
@@ -633,3 +634,170 @@ def test_bile_drains_for_every_substance(tmp_path: Path) -> None:
             ids.bile(sid)
         ]
         assert [x.getSpecies() for x in reaction.getListOfProducts()] == [into]
+
+
+def _segmented(
+    sid: str,
+    *,
+    chemistry: tuple[Metabolism, ...] = (),
+    fabs: float | None = None,
+    f_ka_colon: float | None = None,
+) -> PBPKDefinition:
+    """The oral solution of the drug in the segmented intestine with `fabs` and `f_ka_colon`."""
+    intestine = SegmentedIntestine(fabs=fabs, f_ka_colon=f_ka_colon)
+    return _definition(
+        sid,
+        routes=[Route.oral_solution(S)],
+        chemistry=list(chemistry),
+        variants=Variants(organs={Organ.SMALL_INTESTINE: intestine}),
+    )
+
+
+def _sbml_ids(path: Path) -> set[str]:
+    """The ids of the parameters, species and reactions of a flat model."""
+    model = libsbml.readSBMLFromFile(str(path)).getModel()
+    return {
+        x.getId()
+        for xs in (
+            model.getListOfParameters(),
+            model.getListOfSpecies(),
+            model.getListOfReactions(),
+        )
+        for x in xs
+    }
+
+
+def _absorbed(r: "roadrunner.RoadRunner", dose_mg: float, end: float) -> float:
+    """The amount (mmole) of an oral solution absorbed until `end`: dose - lumen - feces."""
+    r[ids.sol_dose(S)] = dose_mg
+    r.simulate(0, end, 20)
+    left = _lumen_amount(r, S, ids.GUT_SEGMENTS) + r[ids.feces(S)]
+    return dose_mg / r[ids.mr(S)] - left
+
+
+def test_segmented_defaults_unchanged(tmp_path: Path) -> None:
+    """Without `fabs` and `f_ka_colon` the segmented intestine has neither.
+
+    No parameter `fabs_<s>` or `f_ka_colon_<s>`, no reaction of the unabsorbed
+    fraction per segment, the absorption of a colon segment `ka*f_area`.
+    """
+    result = build(_segmented("seg_default"), tmp_path)
+    found = _sbml_ids(result.flat_path)
+    assert not {i for i in found if i.startswith(("fabs_", "f_ka_colon_"))}
+    assert not {i for i in found if "J_feces_" in i}
+    doc = libsbml.readSBMLFromFile(str(result.flat_path))
+    law = doc.getModel().getReaction(_gu(ids.absorption_reaction(S, "asc")))
+    formula = libsbml.formulaToL3String(law.getKineticLaw().getMath())
+    assert "f_ka_colon" not in formula
+    assert "fabs" not in formula
+
+
+def test_segmented_fraction_absorbed(tmp_path: Path) -> None:
+    """`fabs`: the fraction of the absorbed flux which enters the body, the rest the feces.
+
+    Every absorbing segment has the absorption `fabs*rate` and the reaction
+    `(1 - fabs)*rate` into the feces; the lumen is emptied as without
+    `fabs`, so the absorbed amount is `fabs` times that of `fabs = 1`.
+    """
+    result = build(_segmented("seg_fabs", fabs=0.5), tmp_path / "half")
+    doc = libsbml.readSBMLFromFile(str(result.flat_path))
+    model = doc.getModel()
+    for seg in SMALL + COLON:
+        for rid, into in (
+            (ids.absorption_reaction(S, seg), ids.species(Part.PLASMA, S)),
+            (ids.feces_reaction(S, seg), ids.feces(S)),
+        ):
+            reaction = model.getReaction(_gu(rid))
+            assert [x.getSpecies() for x in reaction.getListOfReactants()] == [
+                _gu(ids.lumen(S, seg))
+            ]
+            products = [x.getSpecies() for x in reaction.getListOfProducts()]
+            assert products == [into if into == ids.feces(S) else _gu(into)]
+    assert model.getReaction(_gu(ids.feces_reaction(S, "st"))) is None
+    assert ids.feces_reaction(S) == f"J_feces_{S}"
+    r = load(result)
+    assert r[ids.fraction_absorbed(S)] == 0.5
+    half = _absorbed(r, 10.0, 6 * 60.0)
+    r.simulate(6 * 60.0, 3 * DAY, 20)
+    assert total_amount(r, S) + total_amount(r, M) + dose_amount(r, S) == (
+        pytest.approx(10.0 / r[ids.mr(S)], rel=1e-6)
+    )
+    full = _absorbed(
+        _build(tmp_path / "full", _segmented("seg_fabs1", fabs=1.0)), 10.0, 6 * 60.0
+    )
+    assert half == pytest.approx(0.5 * full, rel=1e-6)
+
+
+def test_segmented_colon_absorption(tmp_path: Path) -> None:
+    """`f_ka_colon` scales the absorption of the segments of the large intestine.
+
+    With 0 nothing is absorbed from the colon segments and the small
+    intestine absorbs as without the factor; with 1 (and `fabs = 1`) the
+    model equals the default.
+    """
+    fluxes = [_gu(ids.absorption_reaction(S, seg)) for seg in SMALL + COLON]
+    lumen = [f"[{_gu(ids.lumen(S, seg))}]" for seg in COLON]
+    selections = ["time", *fluxes, *lumen, f"[{ids.pool_species(Pool.VENOUS, S)}]"]
+    runs = {}
+    for name, fabs, f_ka_colon in (
+        ("default", None, None),
+        ("zero", None, 0.0),
+        ("one", 1.0, 1.0),
+    ):
+        d = _segmented(f"seg_colon_{name}", fabs=fabs, f_ka_colon=f_ka_colon)
+        r = _build(tmp_path / name, d)
+        if name == "zero":
+            assert r[ids.colon_absorption_factor(S)] == 0.0
+        r[ids.sol_dose(S)] = 10.0
+        runs[name] = np.asarray(r.simulate(0, DAY, 100, selections=selections))
+    n = len(SMALL)
+    zero, default = runs["zero"], runs["default"]
+    assert np.all(zero[:, 1 + n : 1 + len(fluxes)] == 0.0)
+    assert np.max(zero[:, 1 + len(fluxes) : 1 + len(fluxes) + len(COLON)]) > 0
+    assert np.max(default[:, 1 + n : 1 + len(fluxes)]) > 0
+    np.testing.assert_allclose(
+        zero[:, 1 : 1 + n], default[:, 1 : 1 + n], rtol=1e-6, atol=1e-14
+    )
+    np.testing.assert_allclose(runs["one"], default, rtol=1e-6, atol=1e-14)
+
+
+@pytest.mark.parametrize("mucosa", [False, True])
+def test_segmented_fabs_and_colon(mucosa: bool, tmp_path: Path) -> None:
+    """Both together, absorbed into the mucosa (gut chemistry) or the plasma of the wall.
+
+    The absorption of a colon segment is
+    `fabs*ka/60*f_area*f_ka_colon*V*C`, its unabsorbed fraction
+    `(1 - fabs)*ka/60*f_area*f_ka_colon*V*C`; the mass is conserved.
+    """
+    fabs, f_colon = 0.6, 0.2
+    d = _segmented(
+        f"seg_both{int(mucosa)}",
+        chemistry=(_gut_metabolism(),) if mucosa else (),
+        fabs=fabs,
+        f_ka_colon=f_colon,
+    )
+    r = _build(tmp_path, d)
+    assert (_gu(ids.mucosa(S, "asc")) in _flat_species(r)) is mucosa
+    assert r[ids.fraction_absorbed(S)] == fabs
+    assert r[ids.colon_absorption_factor(S)] == f_colon
+    r[ids.sol_dose(S)] = 10.0
+    r.simulate(0, 6 * 60.0, 20)
+    for seg in ("jej1", "asc"):
+        factor = f_colon if seg in COLON else 1.0
+        rate = (
+            r[ids.absorption(S)]
+            / 60
+            * r[_gu(ids.area_factor(seg))]
+            * factor
+            * r[_gu(ids.lumen_volume(seg))]
+            * r[f"[{_gu(ids.lumen(S, seg))}]"]
+        )
+        assert rate > 0
+        absorbed = r[_gu(ids.absorption_reaction(S, seg))]
+        assert absorbed == pytest.approx(fabs * rate, rel=1e-9)
+        unabsorbed = r[_gu(ids.feces_reaction(S, seg))]
+        assert unabsorbed == pytest.approx((1 - fabs) * rate, rel=1e-9)
+    r.simulate(6 * 60.0, 3 * DAY, 20)
+    assert total_amount(r, S) + total_amount(r, M) + dose_amount(r, S) == (
+        pytest.approx(10.0 / r[ids.mr(S)], rel=1e-6)
+    )
