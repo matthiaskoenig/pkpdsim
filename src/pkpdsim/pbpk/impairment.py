@@ -52,7 +52,9 @@ Plasma binding (McNamara 2002): `fu = 1/(1 + f*(1 - fu_ref)/fu_ref)` with the
 binding factor `f`, the factor of the binding protein (`fimp_albumin`,
 `fimp_agp`, 1 for an unknown protein) over the CKD factor of the binding
 capacity `fimp_plasma_protein`: fu of a strongly bound substance rises by the
-CKD factor, and fu stays below 1. Enzymes and transporters: a rate of a
+CKD factor, and fu stays below 1. A binding with `ckd=False` (measured
+unchanged in renal impairment) leaves out the CKD factor, so `f` is the factor
+of the binding protein alone. Enzymes and transporters: a rate of a
 protein in the liver runs with `f_<protein>*fimp_<protein>`, the organ-local
 base activity (genotype, interactions of an experiment, `LI__f_cyp3a4`)
 times the input `fimp_<protein>` of the impairment (`fimp_li_<protein>` of
@@ -200,7 +202,8 @@ def unbound_fraction(s: Substance) -> str:
         factor raises fu of a strongly bound substance by itself
         (`fu ~ fimp_plasma_protein*fu_ref`), fu stays below 1; fu of a weakly
         bound substance rises less (fu_ref 0.5 at a factor 2.5: 0.71, not
-        1.25).
+        1.25). A binding with `ckd=False` has the factor of the binding
+        protein alone.
     """
     fu_ref = ids.fu_ref(s.sid)
     if s.binding is None:
@@ -209,7 +212,9 @@ def unbound_fraction(s: Substance) -> str:
         "albumin": ids.impairment_factor("albumin"),
         "agp": ids.impairment_factor("agp"),
     }.get(s.binding.protein, _ONE)
-    binding = f"{protein} / {ids.impairment_factor('plasma_protein')}"
+    binding = protein
+    if s.binding.ckd:
+        binding = f"{protein} / {ids.impairment_factor('plasma_protein')}"
     return f"{_ONE} / ({_ONE} + {binding} * ({_ONE} - {fu_ref}) / {fu_ref})"
 
 

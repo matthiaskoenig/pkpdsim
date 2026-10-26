@@ -29,10 +29,16 @@ class Binding:
     Attributes:
         fu: the fraction unbound in plasma.
         protein: the binding protein.
+        ckd: whether the CKD factor of the binding capacity
+            (`fimp_plasma_protein`) acts on the fu of the substance; `False`
+            for a substance whose binding is measured unchanged in renal
+            impairment (fu then follows only the factor of its binding
+            protein).
     """
 
     fu: Q
     protein: Literal["albumin", "agp", "unknown"] = "unknown"
+    ckd: bool = True
 
     def __post_init__(self) -> None:
         """Check the protein against its choices."""

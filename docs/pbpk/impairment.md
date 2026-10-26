@@ -28,7 +28,7 @@ fimp_li_cyp3a4 = fcp_cyp3a4 * (1 + CKD_hepatic * (fckd_cyp3a4 - 1))
 fu_<s> = 1 / (1 + fimp_albumin / fimp_plasma_protein * (1 - fu_ref_<s>) / fu_ref_<s>)
 ```
 
-The unbound fraction follows the binding (McNamara 2002): `fu = 1/(1 + f*(1 - fu_ref)/fu_ref)` with the binding factor `f`, the factor of the binding protein (`fimp_albumin`, `fimp_agp`, 1 for an unknown protein) over the CKD factor of the binding capacity `fimp_plasma_protein`. The fu of a strongly bound substance rises by the CKD factor, and fu stays below 1.
+The unbound fraction follows the binding (McNamara 2002): `fu = 1/(1 + f*(1 - fu_ref)/fu_ref)` with the binding factor `f`, the factor of the binding protein (`fimp_albumin`, `fimp_agp`, 1 for an unknown protein) over the CKD factor of the binding capacity `fimp_plasma_protein`. The fu of a strongly bound substance rises by the CKD factor, and fu stays below 1. A substance whose binding is measured unchanged in renal impairment (apixaban: 92-94 % bound in healthy and ESRD subjects, US label) opts out with `Binding(fu, protein, ckd=False)`: the formula then has no `fimp_plasma_protein`, `fu = 1/(1 + fimp_albumin * (1 - fu_ref)/fu_ref)`, so fu follows only the binding protein (cirrhosis still acts).
 
 ## Liver cirrhosis
 

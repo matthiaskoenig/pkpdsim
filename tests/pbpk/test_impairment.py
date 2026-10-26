@@ -214,6 +214,47 @@ def test_fu_follows_albumin(tmp_path: Path, fu_ref: float) -> None:
     assert unbound_fraction(substances[3]) == ids.fu_ref("free")
 
 
+def test_binding_free_of_ckd(tmp_path: Path) -> None:
+    """A binding with `ckd=False` ignores the CKD factor of the binding capacity.
+
+    fu stays fu_ref in renal impairment, while the factor of the binding
+    protein still acts in cirrhosis; the default builds the formula as before.
+    """
+    fu_ref = 0.07
+    substances = [
+        Substance(
+            sid="keep",
+            name="keep",
+            mr=300.0,
+            binding=Binding(fu=fu_ref, protein="albumin", ckd=False),
+        ),
+        Substance(
+            sid="rise",
+            name="rise",
+            mr=300.0,
+            binding=Binding(fu=fu_ref, protein="albumin"),
+        ),
+    ]
+    assert Binding(fu=fu_ref).ckd is True
+    d = PBPKDefinition(sid="binding", substances=substances)
+    path = build(d, tmp_path).flat_path
+    r = individual(path, f_renal_function=0.2)
+    assert r[ids.fu("keep")] == pytest.approx(fu_ref, rel=1e-12)
+    assert r[ids.fu("rise")] > fu_ref * 1.2
+    r = individual(path, CP_severity=2.0)
+    albumin = CP["albumin"]["value"][1]
+    assert r[ids.fu("keep")] == pytest.approx(_fu(fu_ref, albumin), rel=1e-12)
+    assert r[ids.fu("keep")] > fu_ref
+    r = individual(path, CP_severity=2.0, f_renal_function=0.2)
+    assert r[ids.fu("keep")] == pytest.approx(_fu(fu_ref, albumin), rel=1e-12)
+    keep, rise = (unbound_fraction(s) for s in substances)
+    assert "fimp_plasma_protein" not in keep
+    assert rise.replace(" ", "") == (
+        "1dimensionless/(1dimensionless+fimp_albumin/fimp_plasma_protein*"
+        f"(1dimensionless-{ids.fu_ref('rise')})/{ids.fu_ref('rise')})"
+    )
+
+
 def _stage_function(r: roadrunner.RoadRunner, egfr: float) -> float:
     """The renal function which gives a GFR per 1.73 m2 (ml/min) of the model."""
     return egfr / (r[ids.EGFR] * 1000.0)

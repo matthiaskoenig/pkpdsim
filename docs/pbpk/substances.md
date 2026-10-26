@@ -7,7 +7,7 @@ A `Substance` is a short id, a name, a molecular weight and the mechanism flags 
 | `sid` | `str` | | the id, unique over all models; a metabolite takes the prefix of its parent (`api_m2`) |
 | `name`, `mr` | `str`, number | | the name and the molecular weight (g/mole), `Mr_<s>` |
 | `annotations` | list of `(BQB, resource)` | | the ChEBI, PubChem and NCIT terms of the species of the substance |
-| `binding` | `Binding(fu, protein)` | `fu = 1` | protein binding: `fu_ref_<s>`, and `fu_<s>` which follows the binding protein in impairment |
+| `binding` | `Binding(fu, protein, ckd=True)` | `fu = 1` | protein binding: `fu_ref_<s>`, and `fu_<s>` which follows the binding protein in impairment |
 | `erythrocytes` | `Erythrocytes(mode, bp, kbc, k_exchange)` | no blood cells, `BP = 1 - HCT` | the distribution into the erythrocytes, in equilibrium or kinetic |
 | `distribution` | `Kp(...)` or `KpMethod(...)` | vascular only | the distribution into the tissues: one Kp with overrides, or a Kp method |
 | `excretion` | `Excretion(urine, fraction_reabsorbed)` | the default `Excretion()`: no filtration | glomerular filtration `fu*GFR` into the urine |
@@ -18,7 +18,7 @@ The routes are declared on the definition (`PBPKDefinition.routes`), not on the 
 
 ## Protein binding
 
-`Binding(fu=0.13, protein="albumin")` gives the fraction unbound in plasma of the healthy individual, `fu_ref_<s>`, and the binding protein: `albumin`, `agp` (alpha-1-acid glycoprotein) or `unknown`. The unbound fraction which every rate reads, `fu_<s>`, is an initial assignment of `fu_ref_<s>` and the impairment: the binding protein falls in liver cirrhosis and the binding capacity in chronic kidney disease, so fu rises (see [Impairment](impairment.md)); healthy, `fu_<s> = fu_ref_<s>`. Fit `fu_ref_<s>`, not `fu_<s>`.
+`Binding(fu=0.13, protein="albumin")` gives the fraction unbound in plasma of the healthy individual, `fu_ref_<s>`, and the binding protein: `albumin`, `agp` (alpha-1-acid glycoprotein) or `unknown`. The unbound fraction which every rate reads, `fu_<s>`, is an initial assignment of `fu_ref_<s>` and the impairment: the binding protein falls in liver cirrhosis and the binding capacity in chronic kidney disease, so fu rises (see [Impairment](impairment.md)); `ckd=False` keeps the substance free of the CKD factor of the binding capacity, for a substance whose binding is measured unchanged in renal impairment (apixaban: 92-94 % bound in healthy and ESRD subjects), so that only the factor of its binding protein (cirrhosis) acts on fu; healthy, `fu_<s> = fu_ref_<s>`. Fit `fu_ref_<s>`, not `fu_<s>`.
 
 ## Erythrocytes
 
