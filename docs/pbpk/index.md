@@ -93,7 +93,7 @@ Sex is a choice of the build (`PBPKDefinition.sex`): it selects the male or fema
 
 Every number which the library writes into a model is a `Value`: the number, its unit and its source, a key of `data/sources.toml` (citation and DOI), and the generated SBML parameter carries the citation in its notes. The data files of the library (`pkpdsim/pbpk/data/*.toml`) give every number with its source; a number which no publication gives is a choice of the library with the source `ModelChoice` and a note which gives the reasoning. The tables of these pages are generated from the data files.
 
-A number of a definition is a plain float (the unit of the model is implied) or a `Value`; a fitted value enters with its uncertainty from the record of its fit, `fitted(FITS.parameter("Kp_api", unit=U.dimensionless))`, and keeps the id which `FITS.parameter` and `check_model` resolve. The units are those of the models: time in min, amount in mmole, volume in litre, area in m2.
+A number of a definition is a plain float (the unit of the model is implied), a `Value`, or a `Formula` over ids of the top model, which ties it to other parameters (a metabolite with the Kp of its parent, see [Substances](substances.md#values-fits-and-ids)); a fitted value enters with its uncertainty from the record of its fit, `fitted(FITS.parameter("Kp_api", unit=U.dimensionless))`, and keeps the id which `FITS.parameter` and `check_model` resolve. The units are those of the models: time in min, amount in mmole, volume in litre, area in m2.
 
 ## The id scheme
 

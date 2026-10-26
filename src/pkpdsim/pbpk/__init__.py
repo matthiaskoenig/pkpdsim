@@ -42,7 +42,7 @@ from pkpdsim.pbpk.substance import (
     Substance,
 )
 from pkpdsim.pbpk.units import MODEL_UNITS, U
-from pkpdsim.pbpk.values import Q, Value, as_value, fitted
+from pkpdsim.pbpk.values import Formula, Q, Value, as_value, fitted
 from pkpdsim.pbpk.variants.intestine import SegmentedIntestine, SingleLumen
 from pkpdsim.pbpk.variants.kidney_nephron import NephronKidney
 from pkpdsim.pbpk.variants.liver_zonated import ZonatedLiver
@@ -61,6 +61,7 @@ __all__ = [
     "Excretion",
     "FirstOrder",
     "FirstOrderDissolution",
+    "Formula",
     "GutComponent",
     "Hill",
     "Induction",

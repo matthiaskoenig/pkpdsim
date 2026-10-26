@@ -63,7 +63,7 @@ from pkpdsim.pbpk.organs import Organ
 from pkpdsim.pbpk.physiology import Sex, reference_hematocrit
 from pkpdsim.pbpk.substance import KpMethod, Substance
 from pkpdsim.pbpk.units import U
-from pkpdsim.pbpk.values import Q, Value
+from pkpdsim.pbpk.values import Formula, Q, Value
 
 __all__ = [
     "AP_PKA",
@@ -298,7 +298,13 @@ def rodgers_rowland(
 
 
 def _number_of(q: Q) -> float:
-    """The number of a plain float or a `Value`."""
+    """The number of a plain float or a `Value`.
+
+    Raises:
+        TypeError: for a `Formula`, which has no number before the simulation.
+    """
+    if isinstance(q, Formula):
+        raise TypeError(f"The formula `{q.expression}` has no number.")
     return q.value if isinstance(q, Value) else q
 
 
@@ -383,6 +389,18 @@ def check_kp_method(substance: Substance) -> list[str]:
         return []
     sid, n = substance.sid, len(method.pka)
     problems: list[str] = []
+    ery = substance.erythrocytes
+    numbers = {
+        "fu": substance.binding.fu if substance.binding is not None else None,
+        "bp": ery.bp if ery is not None else None,
+        "kbc": ery.kbc if ery is not None else None,
+    }
+    formulas = sorted(k for k, q in numbers.items() if isinstance(q, Formula))
+    if formulas:
+        problems.append(
+            f"{sid}: the Kp method computes with {formulas}, they must be numbers, "
+            "not formulas"
+        )
     if method.compound == "neutral" and n:
         problems.append(f"{sid}: a neutral compound has no pKa, got {list(method.pka)}")
     if method.compound in ("acid", "base") and not n:
@@ -391,7 +409,6 @@ def check_kp_method(substance: Substance) -> list[str]:
         n != 2 or not method.pka[0] < method.pka[1]
     ):
         problems.append(f"{sid}: " + _ZWITTERION.format(pka=list(method.pka)))
-    ery = substance.erythrocytes
     if (
         not problems
         and binds_phospholipids(method)

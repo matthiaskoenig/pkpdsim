@@ -61,11 +61,12 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from sbmlutils.factory import Parameter, Reaction, UnitDefinition
+import libsbml
+from sbmlutils.factory import InitialAssignment, Parameter, Reaction, UnitDefinition
 from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk import ids
-from pkpdsim.pbpk.annotation import annotate
+from pkpdsim.pbpk.annotation import annotate, initial_assignment
 from pkpdsim.pbpk.chemistry import (
     MM,
     CustomReaction,
@@ -83,7 +84,7 @@ from pkpdsim.pbpk.parts import Parts
 from pkpdsim.pbpk.proteins import Inhibition
 from pkpdsim.pbpk.substance import KpMethod, Substance
 from pkpdsim.pbpk.units import U
-from pkpdsim.pbpk.values import Q, as_value
+from pkpdsim.pbpk.values import Formula, Q, as_value
 
 if TYPE_CHECKING:
     from pkpdsim.pbpk.organ import OrganContext
@@ -91,10 +92,13 @@ if TYPE_CHECKING:
 __all__ = [
     "ONE",
     "Apical",
+    "FormulaParameter",
     "Inhibitors",
     "Sink",
     "apical_sink",
     "built_parts",
+    "formula_assignment",
+    "formula_ids",
     "has_turnover",
     "in_zone",
     "inhibition_parameters",
@@ -530,6 +534,68 @@ def inhibition_parameters(sid: str, inh: Inhibition) -> list[tuple[str, str]]:
     return pars
 
 
+class FormulaParameter(Parameter):
+    """A constant parameter whose value is a `Formula` over ids of the top model.
+
+    The parameter has no value; the build gives it the initial assignment of
+    the formula (`formula_assignment`): the top model in its objects, an organ
+    in its assignments, with an input port for every id of the top model the
+    formula reads (`OrganBuilder.model_definition`).
+
+    Attributes:
+        formula: the formula.
+    """
+
+    def __init__(
+        self, pid: str, formula: Formula, name: str, sbo: str, notes: str
+    ) -> None:
+        """Create the parameter of a formula."""
+        super().__init__(
+            pid,
+            None,
+            formula.unit,
+            constant=True,
+            name=name,
+            sboTerm=sbo,
+            notes=notes,
+        )
+        self.formula = formula
+
+
+def formula_ids(expression: str) -> set[str]:
+    """Get the ids a formula reads (SBML L3 infix), `time` for the simulation time.
+
+    The units of its numbers (`1 per_min`) and the names of its functions
+    are no ids.
+
+    Raises:
+        ValueError: if the formula cannot be parsed.
+    """
+    ast = libsbml.parseL3Formula(expression)
+    if ast is None:
+        raise ValueError(
+            f"The formula '{expression}' cannot be parsed: "
+            f"{libsbml.getLastParseL3Error()}"
+        )
+    found: set[str] = set()
+    stack = [ast]
+    while stack:
+        node = stack.pop()
+        if node.getType() == libsbml.AST_NAME_TIME:
+            found.add("time")
+        elif node.getType() == libsbml.AST_NAME:
+            found.add(node.getName())
+        stack.extend(node.getChild(k) for k in range(node.getNumChildren()))
+    return found
+
+
+def formula_assignment(p: FormulaParameter) -> InitialAssignment:
+    """Get the initial assignment of the parameter of a formula."""
+    return initial_assignment(
+        str(p.sid), p.formula.expression, p.formula.unit, str(p.name)
+    )
+
+
 def value_parameter(
     pid: str,
     q: Q,
@@ -542,7 +608,8 @@ def value_parameter(
 
     Args:
         pid: the id of the parameter.
-        q: the number, plain (in `unit`) or a `Value` with unit and source.
+        q: the number, plain (in `unit`) or a `Value` with unit and source,
+            or a `Formula` (a `FormulaParameter`, the notes name the formula).
         unit: the unit of a plain number.
         name: the name of the parameter.
         sbo: the SBO term.
@@ -554,6 +621,13 @@ def value_parameter(
     """
     v = as_value(q, unit)
     lines = [text] if text else []
+    if isinstance(v, Formula):
+        if v.notes:
+            lines.append(v.notes)
+        lines.append(
+            f"Tied to other parameters of the model: `{pid} = {v.expression}`."
+        )
+        return FormulaParameter(pid, v, name, sbo, "\n\n".join(lines))
     if v.notes:
         lines.append(v.notes)
     if v.source == "fit":

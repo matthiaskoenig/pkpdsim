@@ -50,7 +50,7 @@ which replaces it, and the model the annotation of a PBPK model.
 
 import copy
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -75,6 +75,7 @@ from sbmlutils.factory import (
     UnitDefinition,
     create_model,
 )
+from sbmlutils.factory.units import UnitType
 from sbmlutils.metadata import SBO
 from sbmlutils.validation import validate_doc
 
@@ -100,7 +101,14 @@ from pkpdsim.pbpk.organs import Organ, Part, Pool
 from pkpdsim.pbpk.parts import parts_for
 from pkpdsim.pbpk.pd import PDComponent, ports
 from pkpdsim.pbpk.physiology import physiology_objects, reference_tissue_volumes
-from pkpdsim.pbpk.placement import inhibition_parameters, kp_id, value_parameter
+from pkpdsim.pbpk.placement import (
+    FormulaParameter,
+    formula_assignment,
+    formula_ids,
+    inhibition_parameters,
+    kp_id,
+    value_parameter,
+)
 from pkpdsim.pbpk.routes import ORAL, route_objects
 from pkpdsim.pbpk.sinks import sink_objects
 from pkpdsim.pbpk.substance import Kp, KpMethod, Substance
@@ -220,12 +228,18 @@ def built_organs(definition: PBPKDefinition) -> list[Organ]:
     return [organ for organ in Organ if organ not in replaced]
 
 
-def organ_context(definition: PBPKDefinition, organ: Organ) -> OrganContext:
+def organ_context(
+    definition: PBPKDefinition,
+    organ: Organ,
+    top: Mapping[str, tuple[str, UnitType]] | None = None,
+) -> OrganContext:
     """Get the context of an organ: every substance flows through every organ.
 
     Args:
         definition: the definition.
         organ: the organ.
+        top: the parameters and compartments of the top model with their
+            kind and unit, which a `Formula` of the organ may read.
 
     Returns:
         The substances with their parts in the organ, the chemistry and the
@@ -241,6 +255,7 @@ def organ_context(definition: PBPKDefinition, organ: Organ) -> OrganContext:
         inhibitions=tuple((s.sid, i) for s in substances for i in s.inhibits),
         inductions=tuple((s.sid, i) for s in substances for i in s.induces),
         routes=tuple(definition.routes),
+        top=dict(top or {}),
     )
 
 
@@ -431,7 +446,7 @@ def _body(
     replaced: list[ReplacedElement] = []
     for organ in built_organs(definition):
         md, boundary = organ_component(definition, organ).build(
-            organ_context(definition, organ)
+            organ_context(definition, organ, top.inputs())
         )
         if any(md.sid == other.sid for other in model_definitions):
             raise ValueError(f"Two organs build the model definition '{md.sid}'.")
@@ -457,6 +472,7 @@ def _body(
         submodels.append(submodel)
         replaced += pd_replaced
         outputs += pd.outputs.values()
+    top.formulas()
     _annotate_inputs(top.objects, model_definitions, submodels, replaced)
     _dynamic(
         definition,
@@ -662,6 +678,50 @@ class _Top:
             if isinstance(o, Parameter | Compartment | Species):
                 self.known.add(str(o.sid))
             self.objects.append(o)
+
+    def inputs(self) -> dict[str, tuple[str, UnitType]]:
+        """The parameters and compartments of the top model with their kind and unit."""
+        found: dict[str, tuple[str, UnitType]] = {}
+        for o in self.objects:
+            if isinstance(o, Parameter):
+                found[str(o.sid)] = ("parameter", o.unit)
+            elif isinstance(o, Compartment):
+                found[str(o.sid)] = ("compartment", o.unit)
+        return found
+
+    def formulas(self) -> None:
+        """Give every `Formula` of the top model its initial assignment.
+
+        Raises:
+            ValueError: if a formula reads an id which is no element of the
+                top model, naming every such id.
+        """
+        local = [
+            p for o in self.objects if isinstance(o, Reaction) for p in o.pars or []
+        ]
+        known = {
+            str(o.sid)
+            for o in [*self.objects, *local]
+            if isinstance(o, Parameter | Compartment | Species)
+        }
+        problems: list[str] = []
+        assignments: list[Sbase] = []
+        for o in [*self.objects, *local]:
+            if not isinstance(o, FormulaParameter):
+                continue
+            unknown = sorted(formula_ids(o.formula.expression) - known)
+            if unknown:
+                problems.append(
+                    f"the formula of '{o.sid}' (`{o.formula.expression}`) reads "
+                    f"ids which are unknown in the top model: {unknown}"
+                )
+            assignments.append(formula_assignment(o))
+        if problems:
+            raise ValueError(
+                f"Invalid PBPK definition '{self.definition.sid}':\n- "
+                + "\n- ".join(problems)
+            )
+        self.objects += assignments
 
     def _initial(
         self,

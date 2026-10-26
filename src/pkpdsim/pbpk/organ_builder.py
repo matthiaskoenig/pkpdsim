@@ -46,6 +46,7 @@ from sbmlutils.factory import (
     Species,
     UnitDefinition,
 )
+from sbmlutils.factory.units import UnitType
 from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk import ids
@@ -56,6 +57,9 @@ from pkpdsim.pbpk.organs import Organ, Part, Pool
 from pkpdsim.pbpk.parts import Parts
 from pkpdsim.pbpk.placement import (
     ONE,
+    FormulaParameter,
+    formula_assignment,
+    formula_ids,
     has_turnover,
     in_zone,
     inhibition_parameters,
@@ -175,7 +179,7 @@ class OrganBuilder:
             substance=substance,
         )
 
-    def _input(self, pid: str, unit: UnitDefinition, name: str, text: str = "") -> str:
+    def _input(self, pid: str, unit: UnitType, name: str, text: str = "") -> str:
         """A parameter of the body in the organ, with an input port."""
         if pid not in self.parameters:
             self.parameters[pid] = Parameter(
@@ -608,6 +612,41 @@ class OrganBuilder:
         s = next(s for s in self.ctx.substances if s.sid == sid)
         return inhibitor_unbound(Part.INTRACELLULAR, s, self.organ, self.ctx.parts)
 
+    def _formula(self, p: FormulaParameter) -> None:
+        """The initial assignment of a `Formula` of the organ and its inputs.
+
+        The ids of the formula are ids of the top model: an id the organ
+        already reads through an input port is that input, any other
+        parameter or compartment of the top model becomes an input of the
+        organ; in the flat model the formula reads the elements of the top
+        model.
+        """
+        pid = str(p.sid)
+        unknown: list[str] = []
+        for symbol in sorted(formula_ids(p.formula.expression)):
+            if symbol in self.replacements:
+                continue
+            local = (
+                symbol in self.parameters
+                or symbol in self.compartments
+                or symbol in self.species
+            )
+            if local or symbol not in self.ctx.top:
+                unknown.append(symbol)
+                continue
+            kind, unit = self.ctx.top[symbol]
+            if kind == "compartment":
+                self._input_compartment(symbol, f"{symbol} (formula of {pid})")
+            else:
+                self._input(symbol, unit, f"{symbol} (formula of {pid})")
+        if unknown:
+            raise ValueError(
+                f"The formula of '{pid}' in organ '{self.organ.value}' "
+                f"(`{p.formula.expression}`) reads ids which are unknown in the "
+                f"top model: {unknown}."
+            )
+        self.assignments.append(formula_assignment(p))
+
     def model_definition(self, notes: str) -> ModelDefinition:
         """Get the model definition of the collected elements.
 
@@ -616,7 +655,19 @@ class OrganBuilder:
 
         Returns:
             The model definition `<name>_<organ>`.
+
+        Raises:
+            ValueError: if a `Formula` of the organ reads an id which is no
+                parameter or compartment of the top model, or an element of
+                the organ which is no input.
         """
+        parameters = [
+            *self.parameters.values(),
+            *(p for r in self.reactions for p in (r.pars or [])),
+        ]
+        for p in parameters:
+            if isinstance(p, FormulaParameter):
+                self._formula(p)
         return ModelDefinition(
             sid=f"{self.name}_{self.organ.value}",
             name=f"{label(self.organ)} ({self.name} organ)",

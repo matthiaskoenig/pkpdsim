@@ -28,7 +28,7 @@ from pkpdsim.pbpk.proteins import PROTEINS
 from pkpdsim.pbpk.routes import Route
 from pkpdsim.pbpk.substance import Erythrocytes, Kp, KpMethod, Mode, Substance
 from pkpdsim.pbpk.units import U
-from pkpdsim.pbpk.values import Q, Value
+from pkpdsim.pbpk.values import Formula, Q, Value
 
 __all__ = ["PBPKDefinition", "Variants"]
 
@@ -540,7 +540,9 @@ def _check_distribution(sid: str, dist: Kp | KpMethod) -> list[str]:
 
 
 def _number(q: Q | None) -> float | None:
-    """Get the number of a plain float or a `Value`, `None` if there is none."""
+    """Get the number of a plain float or a `Value`, `None` for none or a `Formula`."""
+    if isinstance(q, Formula):
+        return None
     return q.value if isinstance(q, Value) else q
 
 
@@ -559,7 +561,7 @@ def _unit(where: str, name: str, q: Q | None, unit: UnitType) -> list[str]:
     another unit (an exchange in l/min where one per litre of organ is meant)
     would be taken as it is.
     """
-    if not isinstance(q, Value) or q.unit is None:
+    if not isinstance(q, Value | Formula) or q.unit is None:
         return []
     given, expected = _unit_text(q.unit), _unit_text(unit)
     if given != expected:

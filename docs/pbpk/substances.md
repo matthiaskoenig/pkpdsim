@@ -100,4 +100,30 @@ glimepiride = Substance(
 )
 ```
 
+A value which is tied to other parameters is a `Formula(expression, unit, notes="")`: an SBML L3 formula over ids of the top model, accepted wherever a number or a `Value` is (the Kp and its overrides, `ftissue`, `ps`, the binding, the kinetic constants of the chemistry, the routes). The hand-written glimepiride model gave its metabolites the distribution of glimepiride by assignment rules; with the library the metabolite reads the parameters of the parent, so the fit keeps the parameters of the parent only:
+
+```python
+from pkpdsim.pbpk import Binding, Formula, Kp, Organ, Substance, U
+
+m1 = Substance(
+    "gli_m1",
+    name="hydroxy glimepiride (M1)",
+    mr=506.6,
+    binding=Binding(fu=0.48),
+    distribution=Kp(
+        Formula("Kp_gli", U.dimensionless, notes="the Kp of glimepiride"),
+        ftissue=Formula("ftissue_gli * fu_ref_gli / fu_ref_gli_m1", U.l_per_min),
+        overrides={Organ.LIVER: 1.0},
+        ps={Organ.LIVER: 0.08},
+    ),
+)
+print(m1.distribution.value.expression)
+```
+
+```text
+Kp_gli
+```
+
+The parameter of a formula (`Kp_gli_m1`) has the formula as its initial assignment and names it in its notes, as the covariates do: a change of a parameter it reads before the simulation (`preinit_changes`, `init(Kp_gli)`) is followed, and an id of `PBPKDefinition.dynamic` makes it an assignment rule. The ids of the formula are ids of the top model (the parameters of the substances such as `Kp_<s>`, `fu_ref_<s>` and `ftissue_<s>`, the covariates, the physiology), also for a value of an organ (`ps`, a kinetic constant): the organ reads each of them through an input port, so in the flat model the formula of `LI__kps_<s>` reads `BW`, not an id of the liver; an organ reads the parameters and compartments which the top model has before the organs are built. The build names every id of a formula which the top model does not have. The unit is the declared unit of the parameter, it is not inferred from the formula. A formula has no number before the simulation: the validation skips the positivity and interval checks of such a value, the check that a Kp leaves a positive `K_cell_pls` is skipped (the model bounds `K_cell_pls` below by 1e-6), and the Kp method, which computes with `fu`, `bp` and `kbc`, refuses a formula there.
+
 The validation (`PBPKDefinition.validate()`, called by `build`) refuses an id which is no SBML SId, contains `__`, starts with a token of the id scheme or is an id of the physiology, a duplicate id, a fraction outside its interval, a non-positive constant, a mode which needs `ftissue` without it (an entered organ without `ps`, named in the message), kinetic erythrocytes with a flow-limited distribution, and names every problem at once.

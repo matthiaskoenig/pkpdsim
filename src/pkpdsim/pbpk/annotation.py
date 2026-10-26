@@ -37,8 +37,8 @@ from sbmlutils.factory import (
     Reaction,
     Sbase,
     Species,
-    UnitDefinition,
 )
+from sbmlutils.factory.units import UnitType
 from sbmlutils.metadata import BQB, SBO
 
 from pkpdsim.annotations import compartments as _compartments
@@ -776,7 +776,7 @@ def _location(element: Sbase) -> BQB:
 
 
 def initial_assignment(
-    symbol: str, formula: str, unit: UnitDefinition, name: str
+    symbol: str, formula: str, unit: UnitType, name: str
 ) -> InitialAssignment:
     """Get the initial assignment of a constant, with a name and an SBO term.
 

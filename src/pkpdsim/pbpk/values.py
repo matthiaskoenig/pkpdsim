@@ -2,7 +2,10 @@
 
 A number of a PBPK model is a `Value`: the number, its unit and where it
 comes from (a key of `data/sources.toml`, see `pkpdsim.pbpk.data`). A fitted
-value is a `Value` as well, from the keyword arguments of a fit record.
+value is a `Value` as well, from the keyword arguments of a fit record. A
+value which is tied to other parameters (a metabolite with the Kp of its
+parent, a fixed ratio) is a `Formula` over ids of the top model, written as
+the initial assignment of its parameter.
 """
 
 import functools
@@ -14,7 +17,7 @@ from typing import Any, Literal
 from sbmlutils.factory import Uncertainty
 from sbmlutils.factory.units import UnitType
 
-__all__ = ["Q", "Value", "as_value", "check_literals", "fitted"]
+__all__ = ["Formula", "Q", "Value", "as_value", "check_literals", "fitted"]
 
 
 @dataclass(frozen=True)
@@ -37,8 +40,33 @@ class Value:
     uncertainties: list[Uncertainty] | None = None
 
 
-type Q = float | Value
-"""A number, plain or with unit and provenance."""
+@dataclass(frozen=True)
+class Formula:
+    """A value tied to other parameters: a formula over ids of the top model.
+
+    The parameter of the value gets the formula as its initial assignment, as
+    the covariates do (R21): a change of a parameter it reads before the
+    simulation is followed, and an id of `PBPKDefinition.dynamic` keeps it an
+    assignment rule. The ids of the formula are ids of the top model (the
+    parameters of the substances, the covariates, the physiology), also for a
+    value of an organ, which reads them through its input ports; the build
+    refuses an id the top model does not have. The unit is the unit of the
+    parameter, it is not inferred from the formula.
+
+    Attributes:
+        expression: the formula (SBML L3 infix), e.g. `Kp_gli` or
+            `ftissue_gli * fu_ref_gli / fu_ref_gli_m1`.
+        unit: the unit of the parameter.
+        notes: a remark on the value, e.g. why it is tied.
+    """
+
+    expression: str
+    unit: UnitType
+    notes: str = ""
+
+
+type Q = float | Value | Formula
+"""A number, plain or with unit and provenance, or a formula."""
 
 
 def fitted(
@@ -65,17 +93,18 @@ def fitted(
     )
 
 
-def as_value(x: float | Value, unit: UnitType) -> Value:
-    """Get a value of a number or a value.
+def as_value(x: Q, unit: UnitType) -> Value | Formula:
+    """Get a value of a number, a value or a formula.
 
     Args:
-        x: a number, which gets the unit, or a value, which is returned as it is.
+        x: a number, which gets the unit, or a value or a formula, which is
+            returned as it is.
         unit: the unit of a number.
 
     Returns:
-        The value.
+        The value or the formula.
     """
-    if isinstance(x, Value):
+    if isinstance(x, Value | Formula):
         return x
     return Value(x, unit)
 

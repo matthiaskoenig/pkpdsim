@@ -79,7 +79,7 @@ The pilots are not released into their public model repositories in this project
 
 ## Steps of a migration
 
-1. Write the substances: short ids unique over all models (metabolites with the prefix of the parent), the molecular weights, the binding, the erythrocytes, the distribution and the excretion; the annotations of the old `annotations.py` into `Substance.annotations`.
+1. Write the substances: short ids unique over all models (metabolites with the prefix of the parent), the molecular weights, the binding, the erythrocytes, the distribution and the excretion; the annotations of the old `annotations.py` into `Substance.annotations`; a value which the hand-written model tied to another by an assignment rule (`ftissue_m1 = ftissue_gli`) is a `Formula` (see [Substances](substances.md#values-fits-and-ids)), so the fit keeps its parameters.
 2. Write the chemistry of every organ with the process ids of the hand-written model, so that the fitted parameters keep their flat ids (`LI__GLI2M1_Vmax`).
 3. Write the definition with the routes, the variants (the zonated liver of a zonated model, the single lumen if the model keeps a first order absorption), the PD components, the observers the experiments read which the library does not compute (`PBPKDefinition.observers`) and the creators (`PBPKDefinition.creators`).
 4. Replace the factory by `build` and delete the body, liver, kidney and intestine modules.

@@ -33,7 +33,7 @@ from pkpdsim.pbpk.physiology import reference_fractions
 from pkpdsim.pbpk.placement import value_parameter
 from pkpdsim.pbpk.substance import Kp, Substance
 from pkpdsim.pbpk.units import U
-from pkpdsim.pbpk.values import Q, Value
+from pkpdsim.pbpk.values import Formula, Q, Value
 
 __all__ = [
     "INTERSTITIAL",
@@ -106,7 +106,13 @@ def constant(key: str) -> Parameter:
 
 
 def number(q: Q) -> float:
-    """The number of a plain float or a `Value`."""
+    """The number of a plain float or a `Value`.
+
+    Raises:
+        TypeError: for a `Formula`, which has no number before the simulation.
+    """
+    if isinstance(q, Formula):
+        raise TypeError(f"The formula `{q.expression}` has no number.")
     return q.value if isinstance(q, Value) else q
 
 
@@ -201,6 +207,14 @@ def check_kp(substance: Substance, organ: Organ) -> None:
     """
     dist = substance.distribution
     if dist is None:
+        return
+    tied = [
+        substance.binding.fu if substance.binding is not None else None,
+        dist.overrides.get(organ, dist.value) if isinstance(dist, Kp) else dist.factor,
+    ]
+    if any(isinstance(q, Formula) for q in tied):
+        # a formula has no number before the simulation; `K_cell_pls` has the
+        # lower bound 1e-6 in the model
         return
     fu = number(substance.binding.fu) if substance.binding is not None else 1.0
     for sex, (f_vas, f_int) in reference_fractions(organ).items():

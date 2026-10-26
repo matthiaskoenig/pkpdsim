@@ -51,10 +51,11 @@ exchanges in each of its zones, which the blood flows through in series.
 import copy
 import itertools
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from sbmlutils.factory import ModelDefinition, Port, PortType, Sbase
+from sbmlutils.factory.units import UnitType
 
 from pkpdsim.pbpk import distribution, ids
 from pkpdsim.pbpk.annotation import annotate
@@ -114,6 +115,10 @@ class OrganContext:
         inductions: the inductions as (inducer id, induction).
         routes: the routes of administration (the intestine applies the
             oral doses).
+        top: the parameters and compartments of the top model which exist
+            when the organs are built, id -> (`parameter` or `compartment`,
+            unit): the ids a `Formula` of the organ may read, through an
+            input port each.
     """
 
     organ: Organ
@@ -123,6 +128,7 @@ class OrganContext:
     inhibitions: tuple[tuple[str, Inhibition], ...]
     inductions: tuple[tuple[str, Induction], ...]
     routes: tuple[Route, ...] = ()
+    top: Mapping[str, tuple[str, UnitType]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
