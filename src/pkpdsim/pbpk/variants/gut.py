@@ -142,8 +142,8 @@ class GutBuilder(LumenBuilder):
             name: the name of the component.
             segments: the lumen segments.
             single: the single lumen.
-            fabs: the segments absorb the fraction `fabs_<s>` (the single
-                lumen always).
+            fabs: the segments absorb the fraction `fabs_<s>`, the rest goes
+                into the feces.
             colon: the large intestine absorbs with `f_ka_colon_<s>`.
 
         Raises:

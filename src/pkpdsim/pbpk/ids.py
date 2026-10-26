@@ -744,7 +744,7 @@ def area_factor(seg: str) -> str:
 
 
 def fraction_absorbed(s: str) -> str:
-    """The id of the fraction of the absorbed flux entering the gut, `fabs_<s>`."""
+    """The id of the fraction of the absorbed flux entering the body, `fabs_<s>`."""
     return f"fabs_{s}"
 
 

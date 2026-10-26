@@ -44,10 +44,9 @@ class LumenBuilder(StandardBuilder):
 
     Attributes:
         segments: the lumen segments in the order of the transit.
-        single: the single lumen (absorption with `fabs`, no fed state).
+        single: the single lumen (absorption without area factor, no fed state).
         fabs: the segments absorb the fraction `fabs_<s>` of their absorbed
-            flux into the body, the rest into the feces (the single lumen
-            always).
+            flux into the body, the rest into the feces.
         colon: the segments of the large intestine absorb with the factor
             `f_ka_colon_<s>`.
         oral: the oral routes by (kind, substance).
@@ -263,18 +262,18 @@ class LumenBuilder(StandardBuilder):
             self._input(
                 ids.fraction_absorbed(sid), U.dimensionless, f"fraction absorbed {sid}"
             )
-            if self.fabs or self.single
+            if self.fabs
             else None
         )
         self._reaction(
             ids.absorption_reaction(sid, seg.token),
             f"{c} -> {into}",
-            f"{fabs} * {rate}" if fabs else rate,
+            f"{fabs} * {rate}" if fabs is not None else rate,
             f"absorption {sid}{label}",
             kind="absorption",
             segment=seg.token,
         )
-        if fabs:
+        if fabs is not None:
             self._reaction(
                 ids.feces_reaction(sid, seg.token),
                 f"{c} -> {feces}",

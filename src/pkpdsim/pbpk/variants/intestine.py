@@ -109,6 +109,26 @@ def _fabs_objects(definition: "PBPKDefinition", fabs: Q) -> list[Sbase]:
     ]
 
 
+def _colon_objects(definition: "PBPKDefinition", f_ka_colon: Q) -> list[Sbase]:
+    """The factor of the absorption in the large intestine `f_ka_colon_<s>` of every substance."""
+    return [
+        annotate(
+            value_parameter(
+                ids.colon_absorption_factor(s.sid),
+                f_ka_colon,
+                U.dimensionless,
+                f"absorption factor large intestine {s.sid}",
+                _SBO_PARAMETER,
+                "Factor of the absorption of the segments of the large "
+                "intestine, `ka*f_area*f_ka_colon`; a model fits it.",
+            ),
+            "colon_absorption",
+            organ=Organ.LARGE_INTESTINE,
+        )
+        for s in definition.substances
+    ]
+
+
 def _ka_objects(definition: "PBPKDefinition", ka: Q | None) -> list[Sbase]:
     """The absorption `ka_<s>` of every substance: of the oral ones the default, else 0."""
     oral = {r.substance for r in definition.routes if r.kind in ORAL}
@@ -173,21 +193,9 @@ class SegmentedIntestine:
             *_ka_objects(definition, self.ka),
             *(_fabs_objects(definition, self.fabs) if self.fabs is not None else []),
             *(
-                annotate(
-                    value_parameter(
-                        ids.colon_absorption_factor(s.sid),
-                        self.f_ka_colon,
-                        U.dimensionless,
-                        f"absorption factor large intestine {s.sid}",
-                        _SBO_PARAMETER,
-                        "Factor of the absorption of the segments of the large "
-                        "intestine, `ka*f_area*f_ka_colon`; a model fits it.",
-                    ),
-                    "colon_absorption",
-                    organ=Organ.LARGE_INTESTINE,
-                )
-                for s in definition.substances
+                _colon_objects(definition, self.f_ka_colon)
                 if self.f_ka_colon is not None
+                else []
             ),
             annotate(
                 Parameter(
@@ -265,4 +273,6 @@ class SingleLumen:
         Raises:
             ValueError: for chemistry the intestine cannot place.
         """
-        return GutBuilder(ctx, self.name, single_lumen(), single=True).build()
+        return GutBuilder(
+            ctx, self.name, single_lumen(), single=True, fabs=True
+        ).build()
