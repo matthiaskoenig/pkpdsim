@@ -40,7 +40,7 @@ Without erythrocytes the substance stays in the plasma: the blood concentration 
     - `Mode.TISSUE` (the default): plasma and one tissue species with the finite exchange `PS*fu*(C_p - C_t/Kp)`;
     - `Mode.PERFUSION`: one species for the whole organ, flow-limited;
     - `Mode.PERMEABILITY`: interstitial and intracellular species with a permeability each.
-- `ftissue`: the whole-body exchange `ftissue_<s>` (l/min) of the modes `TISSUE` and `PERMEABILITY`; an organ has the share of its tissue volume, `PS_<s> = ftissue_<s>*Vti_o/Vti_total_ref_<s>` (the reference tissue volume of the organs the substance enters), so the whole-body exchange scales with the tissue volume of the individual.
+- `ftissue`: the whole-body exchange `ftissue_<s>` (l/min) of the modes `TISSUE` and `PERMEABILITY`; an organ has the share of its tissue volume, `PS_<s> = ftissue_<s>*Vti_o/Vti_total_ref_<s>` (the reference tissue volume of the organs the substance enters), so the whole-body exchange scales with the tissue volume of the individual. It is needed only when an organ the substance enters has no `ps` of its own: a metabolite which enters only the liver, with the liver exchange `ps={Organ.LIVER: ...}`, has no `ftissue` (and no `Vti_total_ref_<s>`).
 - `ps`: the exchange of single organs instead of the share of `ftissue`, e.g. a fast exchange of the liver for a highly bound drug, `ps={Organ.LIVER: 100.0}`. A value is per litre of organ (1/min, `kps_<s>`), so the organ has `PS_<s> = kps_<s>*V<o>` (of the liver times `f_functional`) and its exchange follows the organ of the individual, as the share of `ftissue` and a `FirstOrder` per volume do; `ps_per_volume=False` gives the exchange of the whole organ in l/min (`PS_<s>`), which does not scale with the organ volume; in the liver the value is that of the healthy liver (`PS_ref_<s>`) and the organ has `PS_<s> = PS_ref_<s>*f_functional`, as a `FirstOrder` of the whole organ. The validation refuses a `Value` of `ps` in the other unit.
 
 !!! warning "ftissue is not the ftissue of the hand-written models"
@@ -100,4 +100,4 @@ glimepiride = Substance(
 )
 ```
 
-The validation (`PBPKDefinition.validate()`, called by `build`) refuses an id which is no SBML SId, contains `__`, starts with a token of the id scheme or is an id of the physiology, a duplicate id, a fraction outside its interval, a non-positive constant, a mode which needs `ftissue` without it, kinetic erythrocytes with a flow-limited distribution, and names every problem at once.
+The validation (`PBPKDefinition.validate()`, called by `build`) refuses an id which is no SBML SId, contains `__`, starts with a token of the id scheme or is an id of the physiology, a duplicate id, a fraction outside its interval, a non-positive constant, a mode which needs `ftissue` without it (an entered organ without `ps`, named in the message), kinetic erythrocytes with a flow-limited distribution, and names every problem at once.

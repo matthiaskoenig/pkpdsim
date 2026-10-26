@@ -85,7 +85,8 @@ class _Exchange:
             frozenset, list or tuple of organs, kept as frozenset).
         mode: the exchange between plasma and tissue.
         ftissue: the whole-body exchange (l/min), required for the modes
-            `TISSUE` and `PERMEABILITY`; an organ has the share
+            `TISSUE` and `PERMEABILITY` when an entered organ has no `ps` of
+            its own; an organ has the share
             `ftissue * Vti_o / Vti_total_ref` (reference tissue volume), and it
             multiplies `fu*(Cpl - Cti/Kp)`, so its values differ from the
             `ftissue` of the hand-written models.

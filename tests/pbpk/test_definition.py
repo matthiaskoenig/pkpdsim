@@ -7,6 +7,7 @@ from pathlib import Path
 
 import libsbml
 import pytest
+import roadrunner
 from sbmlutils.factory import Parameter
 
 from pkpdsim.pbpk import (
@@ -203,6 +204,62 @@ def test_tissue_mode_requires_ftissue(mode: Mode) -> None:
     s = _api(distribution=Kp(2.0, mode=mode))
     with pytest.raises(ValueError, match="requires ftissue"):
         _definition(substances=[s], chemistry=[], routes=[]).validate()
+
+
+def _liver_only(mode: Mode, organs: frozenset[Organ]) -> PBPKDefinition:
+    """A metabolite which enters the given organs, the liver with an exchange of its own."""
+    m = Substance(
+        "m",
+        "metabolite",
+        300.0,
+        distribution=Kp(1.0, mode=mode, organs=organs, ps={Organ.LIVER: 1.0}),
+        excretion=Excretion(urine=True),
+    )
+    bile = Transport(
+        "MBIL",
+        Organ.LIVER,
+        "m",
+        Direction.EFFLUX,
+        Membrane.APICAL,
+        FirstOrder(0.01),
+    )
+    return PBPKDefinition(
+        sid="liver_only", substances=[m], chemistry=[bile], routes=[Route.iv("m")]
+    )
+
+
+@pytest.mark.parametrize("mode", [Mode.TISSUE, Mode.PERMEABILITY])
+def test_no_ftissue_when_every_entered_organ_has_its_own_ps(
+    mode: Mode, tmp_path: Path
+) -> None:
+    """`ftissue` is needed only for an entered organ without an exchange of its own.
+
+    A metabolite which enters only the liver, with the liver exchange `ps` and
+    a biliary excretion, is built without `ftissue`: the liver has
+    `PS = kps*Vli*f_functional`, no organ has a share of a whole-body exchange.
+    """
+    d = _liver_only(mode, frozenset({Organ.LIVER}))
+    d.validate()
+    flat = build(d, tmp_path).flat_path
+    model = libsbml.readSBMLFromFile(str(flat)).getModel()
+    assert model.getParameter(ids.ftissue("m")) is None
+    assert model.getParameter(ids.tissue_volume_total_ref("m")) is None
+    assert model.getParameter("LI__kps_m").getValue() == 1.0
+    ia = model.getInitialAssignmentBySymbol("LI__PS_m")
+    assert libsbml.formulaToL3String(ia.getMath()) == "LI__kps_m * Vli * f_functional"
+    r = roadrunner.RoadRunner(str(flat))
+    r["IVDOSE_m"] = 1.0
+    r.simulate(0, 600, 11)
+    assert r["LI__PS_m"] == pytest.approx(r["Vli"] * r["f_functional"])
+    assert r["Cbile_m"] > 0
+
+
+@pytest.mark.parametrize("mode", [Mode.TISSUE, Mode.PERMEABILITY])
+def test_ftissue_for_an_entered_organ_without_ps(mode: Mode) -> None:
+    """An entered organ without an exchange of its own needs `ftissue`."""
+    d = _liver_only(mode, frozenset({Organ.LIVER, Organ.MUSCLE}))
+    with pytest.raises(ValueError, match=r"requires ftissue.*\['mu'\]"):
+        d.validate()
 
 
 def test_override_for_organ_not_entered() -> None:

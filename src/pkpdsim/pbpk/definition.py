@@ -508,9 +508,15 @@ def _check_erythrocytes(sid: str, ery: Erythrocytes) -> list[str]:
 def _check_distribution(sid: str, dist: Kp | KpMethod) -> list[str]:
     """Check the distribution of a substance."""
     problems: list[str] = []
-    if dist.mode in {Mode.TISSUE, Mode.PERMEABILITY} and dist.ftissue is None:
-        problems.append(f"{sid}: mode '{dist.mode.value}' requires ftissue")
     entered = dist.organs
+    if dist.mode in {Mode.TISSUE, Mode.PERMEABILITY} and dist.ftissue is None:
+        # an organ with an exchange of its own (`ps`) has no share of ftissue
+        shared = sorted(o.value for o in (entered or Organ) if o not in dist.ps)
+        if shared:
+            problems.append(
+                f"{sid}: mode '{dist.mode.value}' requires ftissue for the "
+                f"organs without ps: {shared}"
+            )
     named: dict[str, Mapping[Organ, Q]] = {"ps": dist.ps}
     if isinstance(dist, Kp):
         named["override"] = dist.overrides
