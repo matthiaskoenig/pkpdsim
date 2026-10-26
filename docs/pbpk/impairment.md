@@ -96,19 +96,21 @@ A value marked `*` is a choice of the library, not a value of the source.
 
 ## Chronic kidney disease
 
-`f_renal_function` is the factor of the GFR, as in the hand-written models (`KI__f_renal_function` there, `f_renal_function` of the top model here): `GFR = GFR_base * f_renal_function`, with `GFR_base` the GFR at renal function 1, which carries the body surface area and the factor `fimp_GFR` of cirrhosis and heart failure (see [Physiology](physiology.md#scaling-to-the-individual)). Its GFR per 1.73 m2 of the reference individual of the build (`eGFR`) gives the stage: normal at least 90, mild 60-89, moderate 30-59, severe 15-29, end stage below 15 ml/min/1.73 m2. The factors are steps at the stage limits: a scan or fit of `f_renal_function` across a limit sees a discontinuity.
+`f_renal_function` is the factor of the GFR, as in the hand-written models (`KI__f_renal_function` there, `f_renal_function` of the top model here): `GFR = GFR_base * f_renal_function`, with `GFR_base` the GFR at renal function 1, which carries the body surface area and the factor `fimp_GFR` of cirrhosis and heart failure (see [Physiology](physiology.md#scaling-to-the-individual)). Its GFR per 1.73 m2 of the reference individual of the build (`eGFR`) gives the stage: normal at least 90, mild 60-89, moderate 30-59, severe 15-29, end stage below 15 ml/min/1.73 m2. The factors are piecewise linear in the eGFR through anchor points at the stage midpoints: 1 from 90, the value of mild CKD at 75, of moderate CKD at 45, of severe CKD at 22.5 and of end stage CKD at 7.5 ml/min/1.73 m2 and below, linear in between (from 1 at 90 to the mild value at 75), as the factors of the Child-Pugh classes are between the classes. A scan or fit of `f_renal_function` therefore sees no step at a stage limit. The anchors are a choice of the library (`ModelChoice`: continuous covariate for scans and fits; stage midpoints), the values of the stages and their sources are unchanged.
 
 The renal function scales the tubular capacity of the kidney as well, continuously and not by stage: every metabolism and transport of the kidney (a tubular secretion, a reabsorption by a transporter, a renal metabolism) runs with `1 - f_tubular + f_tubular*f_renal_function` of its healthy capacity (see [Chemistry](chemistry.md#kinetics)). The share `f_tubular` (a constant of the kidney, `KI__f_tubular`) is 1, the intact nephron hypothesis (Bricker 1960): the nephrons which remain in a diseased kidney work normally, so the tubular capacity falls with their number as the GFR does, as the secretion of a fraction of the GFR of the hand-written models did. The value is a choice of the library, the publication is not verified; the filtration `fu*GFR` follows the GFR itself.
 
 ```equations title="the stage and the binding capacity (male build)"
 eGFR = 0.114467156025102 l_per_min * f_renal_function
-fckd_plasma_protein = piecewise(1, eGFR >= 0.09 l_per_min, 1, eGFR >= 0.06 l_per_min, 1.45, eGFR >= 0.03 l_per_min, 2.2, eGFR >= 0.015 l_per_min, 2.5)
+fckd_plasma_protein = piecewise(1, eGFR >= 0.09, 1, eGFR >= 0.075, 1 + 0.45 * (0.075 - eGFR) / 0.03, eGFR >= 0.045, 1.45 + 0.75 * (0.045 - eGFR) / 0.0225, eGFR >= 0.0225, 2.2 + 0.3 * (0.0225 - eGFR) / 0.015, eGFR >= 0.0075, 2.5)
 ```
 
 <!-- generated: impairment-ckd (scripts/pbpk_tables.py), do not edit -->
 *Generated from `data/impairment.toml` by `scripts/pbpk_tables.py`; the notes of every number are in the data file.*
 
 Stage limits of the GFR per 1.73 m2 (ml/min/1.73 m2): 90, 60, 30, 15 (`Yoshida2016`).
+
+Anchors of the interpolation, the eGFR (ml/min/1.73 m2) of the values of mild, moderate, severe and end stage: 75, 45, 22.5, 7.5 (`ModelChoice`).
 
 | factor | mild | moderate | severe | end stage | source |
 | --- | ---: | ---: | ---: | ---: | --- |

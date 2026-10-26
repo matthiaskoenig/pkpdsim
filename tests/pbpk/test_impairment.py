@@ -1,6 +1,7 @@
 """Tests of the impaired organ function: Child-Pugh, CKD and heart failure."""
 
 import dataclasses
+import itertools
 from pathlib import Path
 from typing import Any
 
@@ -218,31 +219,62 @@ def _stage_function(r: roadrunner.RoadRunner, egfr: float) -> float:
     return egfr / (r[ids.EGFR] * 1000.0)
 
 
-def test_ckd_stage_factors(model: BuildResult) -> None:
-    """The renal function gives the CKD stage and its factors.
+ANCHORS = CKD["stage_anchor"]["value"]
+"""The eGFR (ml/min/1.73 m2) of the values of mild, moderate, severe and end stage."""
+LIMIT = CKD["stage_gfr"]["value"][0]
+"""The eGFR above which the factors are 1."""
+PROTEIN_KEYS = (
+    "plasma_protein",
+    "hematocrit",
+    "kidney_volume",
+    "kidney_flow",
+    "gastric_emptying_time",
+    "si_transit_time",
+)
 
-    Normal >= 90, mild 60-89, moderate 30-59, severe 15-29, end stage < 15
-    ml/min/1.73 m2, steps at the limits; the factors which no publication
-    read gives are 1 (the kidney keeps its mass and flow, the body weight
-    holds), the hepatic factors act with `CKD_hepatic` only.
+
+def _expected(values: list[float], egfr: float) -> float:
+    """The factor at an eGFR: piecewise linear through 1 at 90 and the anchors.
+
+    Constant (1) above 90 and (end stage value) below the last anchor.
     """
+    xs = [LIMIT, *ANCHORS]
+    ys = [1.0, *values]
+    if egfr >= xs[0]:
+        return ys[0]
+    if egfr <= xs[-1]:
+        return ys[-1]
+    for i in range(len(xs) - 1):
+        if xs[i + 1] <= egfr <= xs[i]:
+            t = (xs[i] - egfr) / (xs[i] - xs[i + 1])
+            return ys[i] + t * (ys[i + 1] - ys[i])
+    raise AssertionError(egfr)  # pragma: no cover
+
+
+def test_ckd_anchors_are_the_stage_midpoints() -> None:
+    """The anchors are the midpoints of the stages, the end stage one at 7.5."""
+    assert ANCHORS == [75.0, 45.0, 22.5, 7.5]
+    assert CKD["stage_anchor"]["source"] == "ModelChoice"
+    assert "continuous covariate" in CKD["stage_anchor"]["notes"]
+
+
+def test_ckd_factors_at_the_anchors(model: BuildResult) -> None:
+    """At each anchor eGFR the factor is the value of the stage, 1 from 90."""
     healthy = individual(model.flat_path)
-    assert healthy[ids.EGFR] * 1000.0 > 90.0
-    keys = (
-        "plasma_protein",
-        "hematocrit",
-        "kidney_volume",
-        "kidney_flow",
-        "gastric_emptying_time",
-        "si_transit_time",
-    )
-    for egfr, stage in ((100.0, None), (75.0, 0), (45.0, 1), (22.0, 2), (10.0, 3)):
+    assert healthy[ids.EGFR] * 1000.0 > LIMIT
+    for egfr, stage in (
+        (100.0, None),
+        (LIMIT, None),
+        *zip(ANCHORS, range(4), strict=True),
+    ):
         f = _stage_function(healthy, egfr)
         r = individual(model.flat_path, f_renal_function=f)
         assert r[ids.EGFR] * 1000.0 == pytest.approx(egfr, rel=1e-12)
-        for key in keys:
+        for key in PROTEIN_KEYS:
             expected = 1.0 if stage is None else CKD[key]["value"][stage]
-            assert r[ids.condition_factor("ckd", key)] == expected, (key, egfr)
+            assert r[ids.condition_factor("ckd", key)] == pytest.approx(
+                expected, rel=1e-12
+            ), (key, egfr)
         assert r[ids.HCT] == healthy[ids.HCT]
         mki = ids.organ_mass(Organ.KIDNEY)
         assert r[mki] == healthy[mki]
@@ -253,11 +285,72 @@ def test_ckd_stage_factors(model: BuildResult) -> None:
         assert r[liver_2d6] == 1.0
         on = individual(model.flat_path, f_renal_function=f, CKD_hepatic=1.0)
         assert on[liver_2d6] == pytest.approx(cyp2d6, rel=1e-12)
-    # the step at the limit of moderate CKD
+    # constant below the end stage anchor and above 90
+    for egfr in (0.0, 1.0, 5.0):
+        r = individual(model.flat_path, f_renal_function=_stage_function(healthy, egfr))
+        assert r[ids.condition_factor("ckd", "plasma_protein")] == pytest.approx(
+            CKD["plasma_protein"]["value"][3], rel=1e-12
+        )
+
+
+def test_ckd_factors_interpolate_between_anchors(model: BuildResult) -> None:
+    """Between two anchors (and from 90 to the mild one) the factor is linear."""
+    healthy = individual(model.flat_path)
+    liver_2d6 = ids.impairment_activity("CYP2D6", Organ.LIVER)
+    for egfr in (89.0, 82.5, 70.0, 60.0, 59.9, 45.1, 33.0, 15.0, 10.0, 7.6):
+        f = _stage_function(healthy, egfr)
+        r = individual(model.flat_path, f_renal_function=f, CKD_hepatic=1.0)
+        for key in ("plasma_protein", "hematocrit"):
+            assert r[ids.condition_factor("ckd", key)] == pytest.approx(
+                _expected(CKD[key]["value"], egfr), rel=1e-12
+            ), (key, egfr)
+        assert r[liver_2d6] == pytest.approx(
+            _expected(CKD["proteins"]["CYP2D6"]["value"], egfr), rel=1e-12
+        )
+    # no step at the former limit of moderate CKD (1 below, 1.45 above)
     below = individual(model.flat_path, f_renal_function=_stage_function(healthy, 59.9))
     above = individual(model.flat_path, f_renal_function=_stage_function(healthy, 60.1))
-    assert below[ids.condition_factor("ckd", "plasma_protein")] == 1.45
-    assert above[ids.condition_factor("ckd", "plasma_protein")] == 1.0
+    pp = ids.condition_factor("ckd", "plasma_protein")
+    assert above[pp] == pytest.approx(_expected(CKD["plasma_protein"]["value"], 60.1))
+    assert below[pp] == pytest.approx(_expected(CKD["plasma_protein"]["value"], 59.9))
+    assert abs(above[pp] - below[pp]) < 5e-3
+
+
+def test_ckd_fu_scan_is_continuous(tmp_path: Path) -> None:
+    """A fine scan of `f_renal_function` from 0 to 1.2 gives a continuous fu.
+
+    fu = c/(c + k) of the capacity factor c (k = (1 - fu_ref)/fu_ref), so the
+    jump between neighbouring points is bounded by the steepest slope of the
+    factor between the anchors times the step of the eGFR times the largest
+    slope of fu in c, `k/(c + k)^2` at c = 1. The former staircase jumped by
+    0.021 at the limit of moderate CKD, 20 times more.
+    """
+    fu_ref = 0.05
+    k = (1.0 - fu_ref) / fu_ref
+    substance = Substance(
+        sid="alb", name="alb", mr=300.0, binding=Binding(fu=fu_ref, protein="albumin")
+    )
+    d = PBPKDefinition(sid="fuscan", substances=[substance])
+    path = build(d, tmp_path).flat_path
+    n = 240
+    steps = [i * 1.2 / n for i in range(n + 1)]
+    egfr_step = 0.0
+    fus = []
+    for f in steps:
+        r = individual(path, f_renal_function=f)
+        fus.append(r[ids.fu("alb")])
+        egfr_step = r[ids.EGFR] * 1000.0 / f if f else egfr_step
+    egfr_step *= 1.2 / n
+    xs = [LIMIT, *ANCHORS]
+    ys = [1.0, *CKD["plasma_protein"]["value"]]
+    slope = max(abs(ys[i + 1] - ys[i]) / (xs[i] - xs[i + 1]) for i in range(4))
+    bound = slope * egfr_step * k / (1.0 + k) ** 2
+    jumps = [abs(b - a) for a, b in itertools.pairwise(fus)]
+    assert max(jumps) <= bound * (1.0 + 1e-9)
+    assert max(jumps) < 0.001
+    # no step: the scan spans the factors 1 to the end stage value
+    assert fus[0] == pytest.approx(_fu(fu_ref, 1.0 / ys[-1]), rel=1e-12)
+    assert fus[-1] == pytest.approx(fu_ref, rel=1e-12)
 
 
 def test_heart_failure_redistribution(model: BuildResult) -> None:

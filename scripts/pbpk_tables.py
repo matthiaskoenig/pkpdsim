@@ -322,12 +322,18 @@ def impairment_ckd() -> str:
     """The factors of the CKD stages on the physiology."""
     section = dict(load("impairment")["ckd"])
     stages = section.pop("stage_gfr")
+    anchors = section.pop("stage_anchor")
     tubular = section.pop("tubular_capacity")
     lines, cited = _vector_table(section, ["mild", "moderate", "severe", "end stage"])
     limits = ", ".join(_number(v) for v in stages["value"])
+    points = ", ".join(_number(v) for v in anchors["value"])
     head = [
         f"Stage limits of the GFR per 1.73 m2 ({stages['unit']}): {limits} "
         f"(`{stages['source']}`).",
+        "",
+        f"Anchors of the interpolation, the eGFR ({anchors['unit']}) of the "
+        f"values of mild, moderate, severe and end stage: {points} "
+        f"(`{anchors['source']}`).",
         "",
     ]
     tail = [
@@ -338,7 +344,7 @@ def impairment_ckd() -> str:
     return _generated(
         "`data/impairment.toml`",
         [*head, *lines, "", _CHOICE, "", *tail],
-        [*cited, stages["source"], tubular["source"]],
+        [*cited, stages["source"], anchors["source"], tubular["source"]],
     )
 
 

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 368" role="img" aria-labelledby="pki-imp-title pki-imp-desc">
 <title id="pki-imp-title">Impairment as parameter vectors</title>
-<desc id="pki-imp-desc">Three severities: CP_severity for liver cirrhosis (Child-Pugh A, B, C), f_renal_function for chronic kidney disease (its eGFR gives the stage) and HF_severity for heart failure (NYHA I to IV). Their factors are interpolated between the classes or steps at the CKD stages, and their product fimp acts on the physiology (cardiac output, flows, GFR; hematocrit and kidney mass with factor 1), on the liver (shunt, functional fraction, proteins) and on the plasma binding (fu).</desc>
+<desc id="pki-imp-desc">Three severities: CP_severity for liver cirrhosis (Child-Pugh A, B, C), f_renal_function for chronic kidney disease (its eGFR gives the stage) and HF_severity for heart failure (NYHA I to IV). Their factors are interpolated between the classes or piecewise linear in the eGFR for CKD, and their product fimp acts on the physiology (cardiac output, flows, GFR; hematocrit and kidney mass with factor 1), on the liver (shunt, functional fraction, proteins) and on the plasma binding (fu).</desc>
 <style>
 .pki-t{fill:currentColor;font-family:var(--md-text-font-family,system-ui),system-ui,sans-serif;font-size:14px}
 .pki-s{font-size:12.5px}
@@ -36,9 +36,9 @@
 <text class="pki-t pki-s pki-dim" x="72" y="154" text-anchor="middle">f_functional</text>
 <text class="pki-t pki-s" x="72" y="170" text-anchor="middle">interpolated</text>
 <polyline class="pki-axis" points="148,70 148,136 254,136"/>
-<path class="pki-curve" d="M148,112.0 V112.0 H169.2 V112.0 H190.4 V101.2 H211.6 V83.2 H232.8 V76.0 H254.0"/>
+<path class="pki-curve" d="M148,112.0 H158.6 L179.8,112.0 L201.0,101.2 L222.2,83.2 L243.4,76.0 H254.0"/>
 <text class="pki-t pki-s pki-dim" x="202" y="154" text-anchor="middle">binding factor</text>
-<text class="pki-t pki-s" x="202" y="170" text-anchor="middle">steps at the stages</text>
+<text class="pki-t pki-s" x="202" y="170" text-anchor="middle">linear between stages</text>
 <polyline class="pki-axis" points="278,70 278,136 384,136"/>
 <polyline class="pki-curve" points="278.0,80.0 304.5,80.0 331.0,92.4 357.5,105.2 384.0,100.8"/>
 <circle class="pki-dot" cx="278.0" cy="80.0" r="2.5"/>

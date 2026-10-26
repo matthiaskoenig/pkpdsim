@@ -54,9 +54,14 @@
 # (`f_renal_function` times the healthy GFR per 1.73 m2 of the reference
 # individual): normal >= 90, mild 60-89, moderate (stage 3) 30-59, severe
 # (stage 4) 15-29, end stage (stage 5) < 15 ml/min/1.73 m2; a vector gives
-# mild, moderate, severe and end stage, normal is 1. The factors are steps at
-# the stage limits: a scan or fit of `f_renal_function` across a limit sees a
-# discontinuity. Malik 2020 (paywalled) was not read; the effects which PK-Sim
+# mild, moderate, severe and end stage, normal is 1. The factors interpolate
+# piecewise linearly over the eGFR through anchor points at the stage
+# midpoints (`stage_anchor`: mild at 75, moderate at 45, severe at 22.5, end
+# stage at 7.5 and constant below; 1 from 90 and a linear change from 90 to
+# the mild value), so a scan or fit of `f_renal_function` sees no step at a
+# stage limit. The anchors are a model choice (`ModelChoice`: continuous
+# covariate for scans and fits; stage midpoints), the values of the stages
+# and their sources are unchanged. Malik 2020 (paywalled) was not read; the effects which PK-Sim
 # takes from it and no open publication read gives with its healthy reference
 # (kidney volume and blood flow, gastric emptying and small intestinal
 # transit) are 1 with a note. The plasma protein factor is read in Alasmari
@@ -106,6 +111,7 @@ ABCC2 = { value = [0.46, 0.34, 0.18], unit = "dimensionless", source = "ElKhatee
 
 [ckd]
 stage_gfr = { value = [90.0, 60.0, 30.0, 15.0], unit = "ml/min/1.73 m2", source = "Yoshida2016", notes = "lower limits of the GFR per 1.73 m2 of normal function and of mild, moderate and severe CKD (Methods: mild 60-89, moderate 30-59, severe 15-29, end stage < 15 ml/min/1.73 m2, the classes of the FDA guidance)" }
+stage_anchor = { value = [75.0, 45.0, 22.5, 7.5], unit = "ml/min/1.73 m2", source = "ModelChoice", notes = "the eGFR at which each CKD factor takes the value of mild, moderate, severe and end stage CKD: the midpoints of the stages (mild 60-89, moderate 30-59, severe 15-29) and 7.5 for the end stage (< 15); the factors are 1 from the eGFR of normal function (90) and interpolate linearly between the anchors, constant below the end stage anchor; a model choice: continuous covariate for scans and fits; stage midpoints" }
 plasma_protein = { value = [1.0, 1.45, 2.20, 2.50], choice = ["mild"], unit = "dimensionless", source = "Alasmari2023", notes = "Table 3: the correction factor for the effect of CKD on the content of plasma proteins of the stages 3, 4 and 5 (30-60, 15-30, < 15 ml/min/1.73 m2), from Malik 2020 (not read); mild CKD (stage 2) is not tabulated, 1 (model choice); the library takes the factor as the factor by which the binding capacity of the plasma proteins falls (the binding factor of fu is divided by it, so fu of a strongly bound drug rises by it), a model choice of the direction" }
 hematocrit = { value = [1.0, 1.0, 1.0, 1.0], unit = "dimensionless", source = "ModelChoice", notes = "hematocrit relative to healthy: 1 until a source with its healthy value is read; Alasmari 2023 (Table 3, the publication read) tabulate absolute hematocrits of 0.44, 0.40 and 0.34 for the stages 3, 4 and 5 (from Malik 2020, not read) without the healthy hematocrit of the population, so no relative factor can be derived" }
 kidney_volume = { value = [1.0, 1.0, 1.0, 1.0], unit = "dimensionless", source = "ModelChoice", notes = "kidney volume relative to healthy: 1; Alasmari 2023 (Table 3) tabulate kidney volumes of 132, 92 and 76 ml for the stages 3 to 5 (from Malik 2020, not read) without the healthy volume of the population, so no relative factor can be derived" }

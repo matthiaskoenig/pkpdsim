@@ -17,9 +17,13 @@ choice):
 - `f_renal_function`: chronic kidney disease by the GFR relative to healthy
   (the factor of the physiology); its GFR per 1.73 m2 (`eGFR`) gives the
   stage (normal, mild, moderate, severe, end stage), which sets the binding
-  capacity of the plasma proteins (and so fu); the factors are steps at the
-  stage limits, a scan or fit of `f_renal_function` across a limit sees a
-  discontinuity. The switch `CKD_hepatic` (0 off, 1 on) adds the reduced
+  capacity of the plasma proteins (and so fu). The factors are piecewise
+  linear in the eGFR through anchor points at the stage midpoints (`[ckd]
+  stage_anchor` of the data, a model choice: continuous covariate for scans
+  and fits; stage midpoints): 1 from 90 ml/min/1.73 m2, the mild value at 75,
+  the moderate value at 45, the severe value at 22.5 and the end stage value
+  at 7.5 and below, linear in between (from 90 to 75 from 1 to the mild
+  value), so a scan or fit of `f_renal_function` sees no step. The switch `CKD_hepatic` (0 off, 1 on) adds the reduced
   activity of hepatic CYP2D6 and OATP1B. The tubular capacity of the kidney
   (every metabolism and transport of the kidney) follows `f_renal_function`
   continuously, `1 - f_tubular + f_tubular*f_renal_function` with the share
@@ -61,6 +65,7 @@ simulation is named in `PBPKDefinition.dynamic`. `f_shunt` and
 severities 0 give the healthy model: every factor is 1.
 """
 
+import itertools
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from functools import cache
@@ -211,6 +216,11 @@ def unbound_fraction(s: Substance) -> str:
 def _number(x: float) -> str:
     """A number in a formula."""
     return f"{x!r} dimensionless"
+
+
+def _l_per_min(ml_per_min: float) -> str:
+    """A flow in a formula, from ml/min (the eGFR is in l/min)."""
+    return f"{ml_per_min / 1000.0!r} l_per_min"
 
 
 def _interpolation(severity: str, points: Sequence[float]) -> str:
@@ -528,9 +538,9 @@ class _Impairment:
     def ckd(self) -> None:
         """The GFR per 1.73 m2 and the factors of the CKD stages.
 
-        The factors are constant per stage, steps at the stage limits of the
-        GFR per 1.73 m2 (`eGFR`): a scan or fit of `f_renal_function` across
-        a limit sees a discontinuity.
+        The factors are piecewise linear in the GFR per 1.73 m2 (`eGFR`)
+        through the anchors at the stage midpoints (`stage_anchor`), so a
+        scan or fit of `f_renal_function` sees no step at a stage limit.
         """
         ckd = self.data["ckd"]
         stages = _entry(ckd, "stage_gfr")
@@ -554,7 +564,16 @@ class _Impairment:
                 organ=Organ.KIDNEY,
             )
         )
-        limits = [x * 1e-3 for x in stages.values]
+        anchors = _entry(ckd, "stage_anchor")
+        if len(anchors.values) != len(_STAGES):
+            raise ValueError(
+                f"{DATA}.toml: {len(anchors.values)} anchors for the stages {_STAGES}."
+            )
+        # the eGFR (l/min) of 1 and of the values of the stages, decreasing
+        points = [stages.values[0], *anchors.values]
+        if any(a <= b for a, b in itertools.pairwise(points)):
+            raise ValueError(f"{DATA}.toml: the anchors {points} do not decrease.")
+        limits = points
         for key in (
             "plasma_protein",
             "hematocrit",
@@ -578,27 +597,39 @@ class _Impairment:
     def _stage(
         self, key: str, entry: _Entry, text: str, limits: Sequence[float]
     ) -> None:
-        """A factor of chronic kidney disease, constant per stage of the GFR.
+        """A factor of chronic kidney disease, piecewise linear in the eGFR.
 
         Args:
             key: the key of the factor.
             entry: the values of mild, moderate, severe and end stage CKD.
             text: the description of the factor.
-            limits: the lower limits of the GFR per 1.73 m2 (l/min) of normal
-                function and of mild, moderate and severe CKD.
+            limits: the eGFR per 1.73 m2 (ml/min), decreasing, of normal
+                function (the factor 1, from there up) and of the values of
+                mild, moderate, severe and end stage CKD (the factor is
+                constant from the last one down).
         """
         provenance, sources = entry.provenance(_STAGES)
-        terms = [_ONE, f"{ids.EGFR} >= {limits[0]!r} l_per_min"]
-        for value, limit in zip(entry.values[:-1], limits[1:], strict=True):
-            terms += [_number(value), f"{ids.EGFR} >= {limit!r} l_per_min"]
-        terms.append(_number(entry.values[-1]))
+        values = [1.0, *entry.values]
+        egfr = ids.EGFR
+        terms = [_number(values[0]), f"{egfr} >= {_l_per_min(limits[0])}"]
+        for i in range(len(values) - 1):
+            a, b = values[i], values[i + 1]
+            x0, x1 = limits[i], limits[i + 1]
+            line = (
+                _number(a)
+                if a == b
+                else f"{_number(a)} + {_number(b - a)} * ({_l_per_min(x0)} - {egfr})"
+                f" / {_l_per_min(x0 - x1)}"
+            )
+            terms += [line, f"{egfr} >= {_l_per_min(x1)}"]
+        terms.append(_number(values[-1]))
         self.add(
             _initial(
                 ids.condition_factor("ckd", key),
                 f"piecewise({', '.join(terms)})",
                 f"CKD factor {key}",
-                f"Factor of chronic kidney disease {text}, a step per stage "
-                f"(normal 1), {provenance}",
+                f"Factor of chronic kidney disease {text}, linear in the eGFR "
+                f"between the anchors of the stages (normal 1), {provenance}",
                 sources,
                 kind="ckd_factor",
                 protein=_protein(key),
