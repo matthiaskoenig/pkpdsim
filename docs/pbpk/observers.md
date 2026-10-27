@@ -57,7 +57,7 @@ Plasma and blood are typically sampled from an antecubital or forearm vein, whos
 
 ## Sampling sites
 
-The site of a blood sample is part of the metadata of a fit mapping: `PKPDMappingMetaData.sampling_site`, the vocabulary `SamplingSite` of `pkpdsim.metadata`. Plasma and blood data map to the arm vein by default (decided by Matthias König: this is how the data are typically sampled); a venous, arterial, arterialised or hepatic venous observable only where the study states that site. The arm vein observer is the default fit target of the models built on the library.
+The site of a blood sample is part of the metadata of a fit mapping: `PKPDMappingMetaData.sampling_site`, the vocabulary `SamplingSite` of `pkpdsim.metadata`. Plasma and blood data map to the arm vein by default (decided by Matthias König: this is how the data are typically sampled); a venous, arterial, arterialised or hepatic venous observable only where the study states that site. The arm vein observer is the default fit target of the models built on the library. A mapping of urine, feces, feces and urine, bile, saliva or no tissue has no blood sample: its site is `NOT_APPLICABLE` without a statement, and a blood site there (or `NOT_APPLICABLE` on plasma, serum or blood) is a `ValueError`. `pkpdsim.fit.check_sampling_sites(fit_mappings, sites)` checks the site of every mapping against a table `{observable id: SamplingSite}` and returns one problem per mismatch or unknown observable; a model test asserts it is empty.
 
 | `SamplingSite` | value | observable |
 |---|---|---|

@@ -209,9 +209,11 @@ not to the model.
 A model uses `PKPDMappingMetaData`, which has the fields `tissue`, `route`,
 `application_form` (default `NR`), `dosing`, `fasting` (default `NR`), `health`,
 `coadministration` (default `NONE`), `genotype`, `phenotype`, `administration_site`,
-`data` and `data_type` (default `NR`) and `sampling_site` (default `ARM_VEIN`:
-plasma and blood are typically drawn from an arm vein, so data without a stated
-site are arm-vein samples; `NOT_APPLICABLE` for urine and feces). All fields
+`data` and `data_type` (default `NR`) and `sampling_site` (without a
+stated site it follows the tissue: plasma and blood are typically drawn from an
+arm vein, so they are `ARM_VEIN`; saliva, urine, feces, feces and urine, bile and
+no tissue have no blood sample and are `NOT_APPLICABLE`; a blood site on such a
+tissue and `NOT_APPLICABLE` on plasma, serum or blood are a `ValueError`). All fields
 are keyword-only, so a field without a default may follow the defaults:
 
 ```python
@@ -264,7 +266,7 @@ values. `observable_filter(observables)` selects by the index of the data of the
 observable (`observable_id`, i.e. `Data.index` of the `y` of the mapping: the
 selection of the model without its brackets and without the task, `Cve_hctz` for
 the selection `[Cve_hctz]`; a filter of `[Cve_hctz]` selects nothing). Both are callables of sbmlsim's
-`MappingFilter` and have a readable `repr`. An unknown field, a class which is no
+`MappingFilter` and have a readable `repr`. `check_sampling_sites(fit_mappings, sites)` checks the `sampling_site` of every mapping against a table of the site of each observable id and returns one problem per mismatch or unknown observable. An unknown field, a class which is no
 dataclass or is an instance, a filter without clauses, an empty set of allowed
 values (it selects nothing) or of excluded values (it excludes nothing) and values
 which are no collection raise when the module of the filters is imported. A single

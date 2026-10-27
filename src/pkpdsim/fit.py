@@ -31,7 +31,7 @@ from sbmlsim.fit.options import (
     WeightingPointsType,
 )
 
-from pkpdsim.metadata import PKPDMappingMetaData
+from pkpdsim.metadata import PKPDMappingMetaData, SamplingSite
 
 if TYPE_CHECKING:
     from sbmlsim.experiment import SimulationExperiment
@@ -126,6 +126,47 @@ def observable_id(fit_mapping: FitMapping) -> str:
         The id of the observable, e.g. `Cve_hctz`.
     """
     return fit_mapping.observable.y.index
+
+
+def check_sampling_sites(
+    fit_mappings: FitMappings | Iterable[FitMapping],
+    sites: Mapping[str, SamplingSite],
+    metadata_type: type[PKPDMappingMetaData] = PKPDMappingMetaData,
+) -> list[str]:
+    """Check the sampling site of the mappings against their observable.
+
+    Args:
+        fit_mappings: the fit mappings, or the instantiated experiments of a
+            model (`FitMappings`, every fit mapping of every experiment).
+        sites: the sampling site of every observable by observable id, e.g.
+            `Carm_hctz` is `ARM_VEIN` and `Aurine_hctz` is `NOT_APPLICABLE`.
+        metadata_type: the metadata class, `PKPDMappingMetaData` unless a model
+            extends it.
+
+    Returns:
+        One problem per mapping whose site differs from the site of its
+        observable or whose observable is not in `sites`; empty if all fit.
+    """
+    if isinstance(fit_mappings, FitMappings):
+        mappings: list[tuple[str, FitMapping]] = [
+            (f"{experiment_id}.{key}", fit_mapping)
+            for experiment_id, experiment in fit_mappings.experiments.items()
+            for key, fit_mapping in experiment._fit_mappings.items()
+        ]
+    else:
+        mappings = [(str(fm), fm) for fm in fit_mappings]
+    problems: list[str] = []
+    for name, fit_mapping in mappings:
+        observable = observable_id(fit_mapping)
+        site = mapping_metadata(fit_mapping, metadata_type).sampling_site
+        if observable not in sites:
+            problems.append(f"{name}: observable '{observable}' has no sampling site")
+        elif site is not sites[observable]:
+            problems.append(
+                f"{name}: sampling site {site.name} of '{observable}' "
+                f"differs from {sites[observable].name}"
+            )
+    return problems
 
 
 def _show(values: frozenset[Hashable]) -> str:

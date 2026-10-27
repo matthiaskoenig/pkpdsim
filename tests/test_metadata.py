@@ -90,7 +90,7 @@ def test_to_dict_names_every_field_in_the_order_of_the_fields() -> None:
         ("administration_site", "NR"),
         ("data", "NR"),
         ("data_type", "NR"),
-        ("sampling_site", "ARM_VEIN"),
+        ("sampling_site", "NOT_APPLICABLE"),
         ("diplotype", "None"),
         ("activity_score", "nan"),
     ]
@@ -236,5 +236,54 @@ def test_sampling_site_default_arm_vein() -> None:
     md = minimal()
     assert md.sampling_site is SamplingSite.ARM_VEIN
     assert SamplingSite("arm vein") is SamplingSite.ARM_VEIN
-    urine = dataclasses.replace(md, sampling_site=SamplingSite.NOT_APPLICABLE)
+    urine = dataclasses.replace(
+        md, tissue=Tissue.URINE, sampling_site=SamplingSite.NOT_APPLICABLE
+    )
     assert urine.to_dict()["sampling_site"] == "NOT_APPLICABLE"
+
+
+@pytest.mark.parametrize(
+    "tissue",
+    [Tissue.URINE, Tissue.FECES, Tissue.FECES_URINE, Tissue.BILE, Tissue.NONE],
+)
+def test_urine_without_a_site_is_not_applicable(tissue: Tissue) -> None:
+    md = ModelMappingMetaData(
+        tissue=tissue, route=Route.PO, dosing=Dosing.SINGLE, health=Health.HEALTHY
+    )
+    assert md.sampling_site is SamplingSite.NOT_APPLICABLE
+    assert md.to_dict()["sampling_site"] == "NOT_APPLICABLE"
+
+
+@pytest.mark.parametrize("tissue", [Tissue.PLASMA, Tissue.SERUM, Tissue.BLOOD])
+def test_a_blood_tissue_keeps_an_explicit_site(tissue: Tissue) -> None:
+    md = ModelMappingMetaData(
+        tissue=tissue,
+        route=Route.PO,
+        dosing=Dosing.SINGLE,
+        health=Health.HEALTHY,
+        sampling_site=SamplingSite.ARTERIAL,
+    )
+    assert md.sampling_site is SamplingSite.ARTERIAL
+
+
+def test_a_blood_site_on_urine_is_refused() -> None:
+    for site in (SamplingSite.ARM_VEIN, SamplingSite.VENOUS):
+        with pytest.raises(ValueError, match="no blood sample"):
+            ModelMappingMetaData(
+                tissue=Tissue.URINE,
+                route=Route.PO,
+                dosing=Dosing.SINGLE,
+                health=Health.HEALTHY,
+                sampling_site=site,
+            )
+
+
+def test_not_applicable_on_plasma_is_refused() -> None:
+    with pytest.raises(ValueError, match="blood sample"):
+        ModelMappingMetaData(
+            tissue=Tissue.PLASMA,
+            route=Route.PO,
+            dosing=Dosing.SINGLE,
+            health=Health.HEALTHY,
+            sampling_site=SamplingSite.NOT_APPLICABLE,
+        )

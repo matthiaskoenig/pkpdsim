@@ -17,6 +17,7 @@ from sbmlsim.fit.options import (
 from sbmlsim.model.tolerances import AbsoluteTolerance
 
 from pkpdsim.fit import (
+    check_sampling_sites,
     default_fit_settings,
     fit_subset,
     mapping_metadata,
@@ -32,6 +33,7 @@ from pkpdsim.metadata import (
     Health,
     PKPDMappingMetaData,
     Route,
+    SamplingSite,
     Tissue,
 )
 from pkpdsim_toy import DATA_PATHS, MODEL, TOY_PATH
@@ -288,3 +290,18 @@ def test_the_subset_of_a_fit_id(fit_id: str, subset: str) -> None:
 def test_an_invalid_fit_id_has_no_subset(fit_id: str) -> None:
     with pytest.raises(ValueError, match="not the id of a fit"):
         fit_subset(fit_id)
+
+
+def test_check_sampling_sites_names_every_mismatch(fit_mapping: FitMapping) -> None:
+    assert not check_sampling_sites([fit_mapping], {"A": SamplingSite.ARM_VEIN})
+    wrong = check_sampling_sites([fit_mapping], {"A": SamplingSite.VENOUS})
+    assert len(wrong) == 1
+    assert "'A'" in wrong[0]
+    assert "ARM_VEIN" in wrong[0]
+    assert "VENOUS" in wrong[0]
+    other = with_metadata(fit_mapping, sampling_site=SamplingSite.ARTERIAL)
+    problems = check_sampling_sites([fit_mapping, other], {"A": SamplingSite.ARM_VEIN})
+    assert len(problems) == 1
+    unknown = check_sampling_sites([fit_mapping, other], {"B": SamplingSite.ARM_VEIN})
+    assert len(unknown) == 2
+    assert all("no sampling site" in problem for problem in unknown)

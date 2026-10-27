@@ -33,7 +33,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, fields
 from enum import Enum, StrEnum, unique
-from typing import override
+from typing import Final, cast, override
 
 from sbmlsim.fit.objects import MappingMetaData
 
@@ -454,6 +454,27 @@ class SamplingSite(StrEnum):
     NOT_APPLICABLE = "not applicable"  # no blood sample, e.g. urine or feces
 
 
+_NO_BLOOD: Final = frozenset(
+    {
+        Tissue.SALIVA,
+        Tissue.URINE,
+        Tissue.FECES,
+        Tissue.FECES_URINE,
+        Tissue.BILE,
+        Tissue.NONE,
+    }
+)
+"""The tissues without a blood sample: no sampling site applies to them.
+
+Saliva is no blood sample, so it is treated like the excretions. Every other
+tissue (plasma, serum, blood, arterial blood and plasma) is a blood sample.
+"""
+
+# The default of `sampling_site` before `__post_init__` resolves it by the tissue.
+# It is cast to the public type, so readers of the resolved field see `SamplingSite`.
+_DEFAULT_SITE: Final = cast("SamplingSite", object())
+
+
 def _name(value: object) -> str:
     """Get the member name of an enum value, the string of any other value."""
     return value.name if isinstance(value, Enum) else str(value)
@@ -482,11 +503,18 @@ class PKPDMappingMetaData(MappingMetaData):
         data: whether the curve is pharmacokinetic or pharmacodynamic data, not
             reported by default.
         data_type: what the values of the curve are, not reported by default.
-        sampling_site: the site of the blood sample, the arm vein by default:
-            plasma and blood are typically sampled from an arm vein, so data
-            without a stated site are arm-vein samples (`NOT_APPLICABLE` for
-            urine and feces). Appended after the fields of the first version,
-            so a subclass of a model keeps its fields valid.
+        sampling_site: the site of the blood sample. Without a stated site it
+            follows the tissue: plasma and blood are typically sampled from an
+            arm vein, so data without a stated site are arm-vein samples
+            (`ARM_VEIN`), and the tissues without a blood sample (saliva,
+            urine, feces, feces and urine, bile, none) are `NOT_APPLICABLE`. A blood
+            site on such a tissue and `NOT_APPLICABLE` on a tissue with a
+            blood sample (plasma, serum, blood, arterial blood and plasma) are a
+            `ValueError`. Appended after the fields of the first version, so a
+            subclass of a model keeps its fields valid.
+
+    Raises:
+        ValueError: if the sampling site does not fit the tissue.
     """
 
     tissue: Tissue
@@ -501,7 +529,25 @@ class PKPDMappingMetaData(MappingMetaData):
     administration_site: AdministrationSite = AdministrationSite.NR
     data: PKPDData = PKPDData.NR
     data_type: DataType = DataType.NR
-    sampling_site: SamplingSite = SamplingSite.ARM_VEIN
+    sampling_site: SamplingSite = _DEFAULT_SITE
+
+    def __post_init__(self) -> None:
+        """Resolve the sampling site by the tissue and check it against it."""
+        without_blood = self.tissue in _NO_BLOOD
+        if self.sampling_site is _DEFAULT_SITE:
+            self.sampling_site = (
+                SamplingSite.NOT_APPLICABLE if without_blood else SamplingSite.ARM_VEIN
+            )
+        elif without_blood and self.sampling_site is not SamplingSite.NOT_APPLICABLE:
+            raise ValueError(
+                f"{self.tissue.name} has no blood sample, so the sampling site "
+                f"'{self.sampling_site.name}' does not apply: use NOT_APPLICABLE"
+            )
+        elif not without_blood and self.sampling_site is SamplingSite.NOT_APPLICABLE:
+            raise ValueError(
+                f"{self.tissue.name} is a blood sample, so the sampling site "
+                "cannot be NOT_APPLICABLE"
+            )
 
     @override
     def to_dict(self) -> dict[str, str]:
