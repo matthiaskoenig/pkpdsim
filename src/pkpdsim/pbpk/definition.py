@@ -355,6 +355,9 @@ class PBPKDefinition:
         problems += _in_unit_interval(
             s.sid, "fraction_reabsorbed", s.excretion.fraction_reabsorbed
         )
+        if s.baseline is not None:
+            problems += _positive(s.sid, "baseline", s.baseline)
+            problems += _unit(s.sid, "baseline", s.baseline, U.mM)
         ery = s.erythrocytes
         if ery is not None:
             problems += _check_erythrocytes(s.sid, ery)

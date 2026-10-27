@@ -68,6 +68,7 @@ __all__ = [
     "arm_blood",
     "arm_free",
     "arm_weight",
+    "baseline",
     "bile",
     "bile_reaction",
     "blood",
@@ -574,6 +575,11 @@ def fu(s: str) -> str:
 def fu_ref(s: str) -> str:
     """The id of the reference unbound fraction in plasma, `fu_ref_<s>`."""
     return f"fu_ref_{s}"
+
+
+def baseline(s: str) -> str:
+    """The id of the plasma concentration of an endogenous substance at the start, `baseline_<s>`."""
+    return f"baseline_{s}"
 
 
 def kp(s: str) -> str:

@@ -85,7 +85,7 @@ The [migration guide](migration.md) explains the move of a hand-written model of
 
 ## What is generated
 
-Every quantity which depends on parameters only (the physiology, the impairment, the compartments, `fu`, `BP`, the coefficients and exchanges of the organs) is a constant with an initial assignment: an experiment which changes `BW` before the simulation changes every organ volume and flow with it, because sbmlsim evaluates the initial assignments again after the changes of an experiment. A change during a simulation is not followed, unless the definition names the parameter in `PBPKDefinition.dynamic` (an impairment changed in the middle of a study, a PD output): then every quantity downstream of it is an assignment rule. Only what reads a species is always an assignment rule: the outflow concentrations of the organs, the urinary excretion rate and the observers; an observer of a definition must therefore read a state (see [Observers](observers.md#observers-of-a-definition)). A model loaded with plain roadrunner sets a covariate with `r.setValue("init(BW)", 100.0)` and resets, so that the initial assignments are evaluated again.
+Every quantity which depends on parameters only (the physiology, the impairment, the compartments, `fu`, `BP`, the coefficients and exchanges of the organs) is a constant with an initial assignment: an experiment which changes `BW` before the simulation changes every organ volume and flow with it, because sbmlsim evaluates the initial assignments again after the changes of an experiment. A change during a simulation is not followed, unless the definition names the parameter in `PBPKDefinition.dynamic` (an impairment changed in the middle of a study, a PD output): then every quantity downstream of it is an assignment rule. The start of the species of an endogenous substance (`Substance.baseline`) is an initial assignment as well, which stays one under a dynamic parameter (see [Substances](substances.md#endogenous-baseline)). Only what reads a species is always an assignment rule: the outflow concentrations of the organs, the urinary excretion rate and the observers; an observer of a definition must therefore read a state (see [Observers](observers.md#observers-of-a-definition)). A model loaded with plain roadrunner sets a covariate with `r.setValue("init(BW)", 100.0)` and resets, so that the initial assignments are evaluated again.
 
 Sex is a choice of the build (`PBPKDefinition.sex`): it selects the male or female reference values when the model is built, and a study of both sexes uses one model per sex. A sex switch inside the SBML made the models load about ten times slower.
 
@@ -131,6 +131,7 @@ One id scheme for every model, built by the functions of `pkpdsim.pbpk.ids`, so 
 | `BP_<s>` | the blood to plasma ratio | `ids.bp(s)` |
 | `Kbc_<s>` | the blood cell to plasma coefficient | `ids.kbc(s)` |
 | `f_reabsorbed_<s>` | the fraction of the filtrate which is reabsorbed | `ids.fraction_reabsorbed(s)` |
+| `baseline_<s>` | the plasma concentration of an endogenous substance at the start (mM) | `ids.baseline(s)` |
 | `IVDOSE_<s>` | the intravenous dose state (mg) | `ids.iv_dose(s)` |
 | `Ri_<s>` | the intravenous infusion (mg/min) | `ids.infusion_rate(s)` |
 | `PODOSE_<s>` | the oral dose state of a tablet (mg) | `ids.po_dose(s)` |

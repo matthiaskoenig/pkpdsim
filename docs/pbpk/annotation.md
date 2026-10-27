@@ -55,6 +55,7 @@ PBPKO has no term for some of the quantities, compartments and processes of the 
 | severity of heart failure | `PHYSIOLOGICAL_PARAMETER` |
 | stage of chronic kidney disease | `PHYSIOLOGICAL_PARAMETER` |
 | impairment factor | `PHYSIOLOGICAL_PARAMETER` |
+| endogenous baseline plasma concentration | `CONCENTRATION_IN_PLASMA` |
 | factor of the partition coefficients | `BIOCHEMICAL_PARAMETER` |
 | tissue composition (water, protein, lipid fractions) | `PHYSIOLOGICAL_PARAMETER` |
 | permeability surface area product (exchange flow) | `BIOCHEMICAL_PARAMETER` |

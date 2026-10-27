@@ -13,6 +13,7 @@ A `Substance` is a short id, a name, a molecular weight and the mechanism flags 
 | `excretion` | `Excretion(urine, fraction_reabsorbed)` | the default `Excretion()`: no filtration | glomerular filtration `fu*GFR` into the urine |
 | `inhibits` | tuple of `Inhibition` | | the inhibition of proteins by the substance, see [Chemistry](chemistry.md) |
 | `induces` | tuple of `Induction` | | the induction of proteins by the substance |
+| `baseline` | number, `Value` or `Formula` (mM) | every species starts at 0 | an endogenous substance: every species starts at the equilibrium with the plasma concentration `baseline_<s>`, see [Endogenous baseline](#endogenous-baseline) |
 
 The routes are declared on the definition (`PBPKDefinition.routes`), not on the substance; the biliary and the intestinal excretion are processes of the chemistry (an apical efflux of the liver into the bile, of the intestine into the lumen).
 
@@ -79,6 +80,37 @@ The full form (`Mode.PERMEABILITY`) derives the intracellular coefficient from t
 ## Excretion
 
 `Excretion(urine=True)` filters the unbound plasma concentration in the kidney, `fu*GFR*C_p`, into `Aurine_<s>`; `fraction_reabsorbed` (`f_reabsorbed_<s>`) returns a fraction of the filtrate, so the renal clearance without transport is `fu*GFR*(1 - f_reabsorbed)`. Tubular secretion and transporter-mediated reabsorption are transport chemistry of the kidney (the standard kidney refuses an uptake from the cumulative urine; a reabsorption by a transporter needs the [nephron kidney](variants.md#nephron-kidney)). The fecal excretion is what leaves the last lumen segment of the intestine.
+
+## Endogenous baseline
+
+An endogenous substance (creatinine, creatine, glucose) is in the body before any dose. `baseline=0.05` gives its plasma concentration (mM) at the start, the parameter `baseline_<s>`, and every species of the substance starts at the equilibrium of its exchange with plasma: the plasma at the baseline, every other part of the blood and the tissue at the baseline times its coefficient to plasma, which sets the net exchange of the library to zero. Without a baseline every species starts at 0 and the model has no `baseline_<s>`.
+
+| species | start | the exchange it balances |
+|---|---|---|
+| plasma of an organ `Cpl_<s>`, pools `Cve_<s>`, `Car_<s>`, `Cpo_<s>` | `baseline_<s>` | the blood flows carry the same concentration in and out |
+| kinetic blood cells `Cbc_<s>`, `Cve_bc_<s>` (pools) | `Kbc_<s>*baseline_<s>` | `kex_bc*Vbc*(Cpl - Cbc/Kbc)` |
+| merged tissue `Cti_<s>` | `Kp*baseline_<s>` (`Kp_<s>` or `Kp_<o>_<s>`) | `PS*fu*(Cpl - Cti/Kp)` |
+| interstitium `Cis_<s>` | `K_int_pls_<s>*baseline_<s>` | `PS_vas*fu*(Cpl - Cis/K_int_pls)` |
+| intracellular space `Cic_<s>` | `K_cell_pls_<s>*baseline_<s>` | `PS*(fu/K_int_pls*Cis - fu/K_cell_pls*Cic)` |
+| flow-limited organ `Cor_<s>` | `K_or_<s>*baseline_<s>` | the organ releases `Cor/K_or` |
+| intestinal mucosa `Cmu_<seg>_<s>` | `K_mu_<s>*baseline_<s>` | the mucosa releases `Cmu/K_mu` |
+| lumen, tubule, urine, feces, bile, dose states | 0 | |
+
+With erythrocytes in equilibrium the plasma species live in the capacity `V*BP` and start at the baseline as well; the zones of the zonated liver, the wall of the intestine and the nephron kidney start as the standard organ. The arm vein `Carm_<s>`, a mean of venous outflows, is then at the baseline. The starts are initial assignments of the species, which read the coefficients and `baseline_<s>`: an impairment or a covariate changed before the simulation (`preinit_changes`) moves `fu`, the coefficients and the volumes, and every species follows, so the body without production and elimination stays where it starts. A substance which is eliminated (filtration, metabolism) and has no production decays from its baseline; its production is chemistry of the model (a `CustomReaction`), which balances the elimination at the baseline.
+
+```equations
+# the start of an endogenous substance at the equilibrium with its baseline
+Cpl_<s> = baseline_<s>
+Cve_<s> = baseline_<s>
+Cbc_<s> = Kbc_<s> * baseline_<s>
+Cve_bc_<s> = Kbc_<s> * baseline_<s>
+Cti_<s> = Kp_<s> * baseline_<s>
+Cis_<s> = K_int_pls_<s> * baseline_<s>
+Cic_<s> = K_cell_pls_<s> * baseline_<s>
+Cor_<s> = K_or_<s> * baseline_<s>
+```
+
+A `Formula` baseline is the initial assignment of `baseline_<s>`, so a model can state it as a production over a clearance, e.g. `Formula("0.006 mmole_per_min / GFR", U.mM)`: a change of the renal function before the simulation moves the baseline and with it every species. Besides the parameters and compartments of the top model it may read the observers of the definition, which are evaluated at the start (a clearance observer which reads a dynamic GFR); what it reads, directly or through the observers, must not change during the simulation (species, reactions, the observers of the library and the outputs of the organs), since the species start at the baseline, and the build names every such id. With a dynamic parameter `baseline_<s>` may become an assignment rule (it reads the parameter); the species keep their initial assignments and start once. The validation refuses a baseline which is not positive and a `Value` in another unit than mM.
 
 ## Values, fits and ids
 

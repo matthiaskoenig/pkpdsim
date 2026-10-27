@@ -76,7 +76,8 @@ def standard() -> PBPKDefinition:
     (flow-limited, erythrocytes in equilibrium, a Kp override of adipose),
     `prm` (full form, kinetic erythrocytes, transport), `hil` (Hill kinetics
     in the kidney) and `inh` (a mechanism-based inhibitor and inducer of the
-    CYP2D6 which metabolises it); `drg` inhibits CYP2C9 competitively.
+    CYP2D6 which metabolises it); `drg` inhibits CYP2C9 competitively;
+    `drg`, `prf` and `prm` have an endogenous baseline.
     """
     return PBPKDefinition(
         sid="toy_standard",
@@ -89,6 +90,7 @@ def standard() -> PBPKDefinition:
                 distribution=Kp(2.0, ftissue=1.0),
                 excretion=Excretion(urine=True, fraction_reabsorbed=0.1),
                 inhibits=(Inhibition("CYP2C9", "competitive", ki=0.01),),
+                baseline=0.01,
             ),
             Substance("drg_m", name="metabolite", mr=316.0),
             Substance(
@@ -100,6 +102,7 @@ def standard() -> PBPKDefinition:
                 distribution=Kp(
                     3.0, mode=Mode.PERFUSION, overrides={Organ.ADIPOSE: 10.0}
                 ),
+                baseline=0.02,
             ),
             Substance(
                 "prm",
@@ -108,6 +111,7 @@ def standard() -> PBPKDefinition:
                 binding=Binding(fu=0.2),
                 erythrocytes=Erythrocytes("kinetic", kbc=1.5, k_exchange=0.1),
                 distribution=Kp(4.0, mode=Mode.PERMEABILITY, ftissue=0.5),
+                baseline=0.03,
             ),
             Substance("hil", name="drug", mr=200.0, distribution=Kp(1.5, ftissue=1.0)),
             Substance(

@@ -104,9 +104,11 @@ from pkpdsim.pbpk.physiology import physiology_objects, reference_tissue_volumes
 from pkpdsim.pbpk.placement import (
     FormulaParameter,
     formula_assignment,
+    formula_ids,
     formula_problems,
     inhibition_parameters,
     kp_id,
+    start_formula,
     value_parameter,
 )
 from pkpdsim.pbpk.routes import ORAL, route_objects
@@ -498,11 +500,21 @@ def _to_rules(
     assignments: list[InitialAssignment],
     elements: Iterable[Parameter | Compartment],
     dynamic: set[str],
+    species: set[str],
 ) -> list[AssignmentRule]:
     """Turn the initial assignments which depend on dynamic ids into assignment rules.
 
     `dynamic` is extended by the converted ids; the converted assignments are
-    removed from `assignments` and their elements become variable.
+    removed from `assignments` and their elements become variable. The
+    initial assignment of a species (the start of an endogenous substance,
+    `Substance.baseline`) stays one: the species starts at the value of the
+    dynamic quantities at the start, its reactions change it afterwards.
+
+    Args:
+        assignments: the initial assignments.
+        elements: the parameters and compartments.
+        dynamic: the dynamic ids.
+        species: the ids of the species, whose initial assignments stay.
 
     Returns:
         The assignment rules.
@@ -512,7 +524,11 @@ def _to_rules(
     while changed:
         changed = False
         for ia in list(assignments):
-            if ia.symbol in dynamic or not _symbols(ia.value) & dynamic:
+            if (
+                ia.symbol in dynamic
+                or ia.symbol in species
+                or not _symbols(ia.value) & dynamic
+            ):
                 continue
             assignments.remove(ia)
             rules.append(AssignmentRule(ia.symbol, ia.value, ia.unit, name=ia.name))
@@ -595,7 +611,8 @@ def _dynamic(
         )
     assignments = [o for o in objects if isinstance(o, InitialAssignment)]
     elements = [o for o in objects if isinstance(o, Parameter | Compartment)]
-    rules = _to_rules(assignments, elements, dynamic)
+    species = {str(o.sid) for o in objects if isinstance(o, Species)}
+    rules = _to_rules(assignments, elements, dynamic, species)
     objects[:] = [
         o for o in objects if not isinstance(o, InitialAssignment) or o in assignments
     ]
@@ -616,6 +633,7 @@ def _dynamic(
                 local_assignments,
                 [*(md.parameters or []), *(md.compartments or [])],
                 local,
+                {str(s.sid) for s in md.species or []},
             ),
         ]
         md.assignments = local_assignments
@@ -719,16 +737,21 @@ class _Top:
         local = [
             p for o in self.objects if isinstance(o, Reaction) for p in o.pars or []
         ]
+        baselines = {
+            ids.baseline(s.sid)
+            for s in self.definition.substances
+            if s.baseline is not None
+        }
         problems: list[str] = []
         assignments: list[Sbase] = []
         for o in [*self.objects, *local]:
             if not isinstance(o, FormulaParameter):
                 continue
-            problems += formula_problems(
-                f"the formula of '{o.sid}' (`{o.formula.expression}`)",
-                o.formula.expression,
-                top,
-            )
+            where = f"the formula of '{o.sid}' (`{o.formula.expression}`)"
+            if str(o.sid) in baselines:
+                problems += self._baseline_problems(where, o.formula.expression, top)
+            else:
+                problems += formula_problems(where, o.formula.expression, top)
             assignments.append(formula_assignment(o))
         if problems:
             raise ValueError(
@@ -736,6 +759,54 @@ class _Top:
                 + "\n- ".join(problems)
             )
         self.objects += assignments
+
+    def _baseline_problems(
+        self, where: str, expression: str, top: Mapping[str, tuple[str, UnitType]]
+    ) -> list[str]:
+        """Check the formula of a baseline: parameters, compartments and observers.
+
+        The formula of `baseline_<s>` may read, besides the parameters and
+        compartments of the top model, the observers of the definition (a
+        production over a clearance): they are evaluated at the start. What
+        it reads, directly or through the observers, must not change during
+        the simulation (species, reactions, the observers of the library and
+        the outputs of the organs, which read species): the species start at
+        the baseline, so it would read its own start.
+
+        Returns:
+            The problems: the unknown ids and the ids which change during the
+            simulation, with the observer through which they are read.
+        """
+        observers = {
+            o.sid: formula_symbols(o.formula) for o in self.definition.observers
+        }
+        symbols = formula_ids(expression)
+        problems: list[str] = []
+        unknown = sorted(x for x in symbols if x not in top and x not in observers)
+        if unknown:
+            problems.append(
+                f"{where} reads ids which are unknown in the top model: {unknown}"
+            )
+        changing: list[str] = []
+        seen: set[str] = set()
+        stack: list[tuple[str, str | None]] = [(x, None) for x in sorted(symbols)]
+        while stack:
+            x, via = stack.pop()
+            if x in seen:
+                continue
+            seen.add(x)
+            if x in observers:
+                stack += [(y, x) for y in sorted(observers[x])]
+            elif x in top and top[x][0] not in ("parameter", "compartment"):
+                changing.append(x if via is None else f"{x} (through observer {via})")
+        if changing:
+            problems.append(
+                f"{where} reads species or observers of the top model, which change "
+                f"during the simulation: {sorted(changing)}; the species start at the "
+                "baseline, which reads parameters and compartments of the top model "
+                "and observers of the definition which read them"
+            )
+        return problems
 
     def _initial(
         self,
@@ -794,16 +865,27 @@ class _Top:
         )
 
     def _species(
-        self, sid: str, compartment: str, name: str, kind: str, s: Substance
+        self,
+        sid: str,
+        compartment: str,
+        name: str,
+        kind: str,
+        s: Substance,
+        start: str | None = None,
     ) -> None:
-        """A species of a substance in the top model, initially zero."""
+        """A species of a substance in the top model, initially zero or at `start`.
+
+        `start` is the initial concentration as formula (the baseline of an
+        endogenous substance, `start_formula`), the initial assignment of
+        the species.
+        """
         self.add(
             [
                 annotate(
                     Species(
                         sid,
                         compartment,
-                        initialConcentration=0.0,
+                        initialConcentration=0.0 if start is None else None,
                         substanceUnit=U.mmole,
                         hasOnlySubstanceUnits=False,
                         name=name,
@@ -813,6 +895,8 @@ class _Top:
                 )
             ]
         )
+        if start is not None:
+            self.add([initial_assignment(sid, start, U.mM, name)])
 
     def _reaction(
         self, sid: str, equation: str, rate: str, name: str, pool: Pool
@@ -895,6 +979,26 @@ class _Top:
                             "into the plasma of the kidney.",
                         ),
                         "fraction_reabsorbed",
+                    )
+                ]
+            )
+        if s.baseline is not None:
+            self.add(
+                [
+                    annotate(
+                        value_parameter(
+                            ids.baseline(sid),
+                            s.baseline,
+                            U.mM,
+                            f"baseline {sid} [mM]",
+                            _SBO_PARAMETER,
+                            "Plasma concentration of the endogenous substance at the "
+                            "start: every plasma species starts at it, every other "
+                            "species of the blood and the tissue at the equilibrium "
+                            "of its exchange with plasma, the lumen and the sinks "
+                            "at 0.",
+                        ),
+                        "baseline",
                     )
                 ]
             )
@@ -1272,12 +1376,18 @@ class _Top:
                 f"{s.name} ({label} plasma)",
                 "concentration_plasma",
                 s,
+                start_formula(s),
             )
             if ery is None or ery.mode != "kinetic":
                 continue
             cbc = ids.pool_species(pool, s.sid, Part.BLOOD_CELLS)
             self._species(
-                cbc, cells, f"{s.name} ({label} blood cells)", "concentration", s
+                cbc,
+                cells,
+                f"{s.name} ({label} blood cells)",
+                "concentration",
+                s,
+                start_formula(s, ids.kbc(s.sid)),
             )
             self._reaction(
                 ids.pool_exchange_reaction(pool, s.sid),

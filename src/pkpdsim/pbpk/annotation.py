@@ -484,6 +484,11 @@ KINDS: dict[str, Kind] = {
     "molecular_weight": Kind(SBO.MOLECULAR_MASS, "MOLECULAR_WEIGHT"),
     "fu": Kind(_P, "FRACTION_UNBOUND_PLASMA"),
     "fraction_reabsorbed": Kind(_P, "RESORPTION"),
+    "baseline": Kind(
+        _P,
+        "CONCENTRATION_IN_PLASMA",
+        requested="endogenous baseline plasma concentration",
+    ),
     "kp": Kind(_P, "TISSUE_PLASMA_PARTITION_COEFFICIENT"),
     "kp_organ": Kind(
         _P,

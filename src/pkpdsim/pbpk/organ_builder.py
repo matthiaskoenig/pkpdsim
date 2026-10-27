@@ -67,6 +67,7 @@ from pkpdsim.pbpk.placement import (
     inhibitor_unbound,
     kp_id,
     species_compartment,
+    start_formula,
     value_parameter,
 )
 from pkpdsim.pbpk.proteins import turnover
@@ -389,6 +390,47 @@ class OrganBuilder:
             _SPECIES_KINDS[part],
             substance=s,
         )
+        self._start(sid, s, self._equilibrium(part, s))
+
+    def _equilibrium(self, part: Part, s: Substance) -> str | None:
+        """The coefficient of a part to plasma at the equilibrium of its exchange.
+
+        `Kbc` of the kinetic blood cells (`kex_bc*Vbc*(Cpl - Cbc/Kbc)`), the
+        Kp of the merged tissue (`PS*fu*(Cpl - Cti/Kp)`), `K_int_pls` of the
+        interstitium (`PS_vas*fu*(Cpl - Cis/K_int_pls)`), `K_cell_pls` of the
+        cells (`PS*(fu/K_int_pls*Cis - fu/K_cell_pls*Cic)`), `K_or` of the
+        flow-limited organ (it releases `Cor/K_or`); `None` for plasma.
+        """
+        if part is Part.BLOOD_CELLS:
+            return self._input(
+                ids.kbc(s.sid),
+                U.dimensionless,
+                f"blood cell to plasma coefficient {s.sid}",
+            )
+        if part is Part.TISSUE:
+            return self._kp(s)
+        if part is Part.INTERSTITIAL:
+            return ids.k_int_pls(s.sid)
+        if part is Part.INTRACELLULAR:
+            return ids.k_cell_pls(s.sid)
+        if part is Part.ORGAN:
+            return ids.k_organ(s.sid)
+        return None
+
+    def _start(self, sid: str, s: Substance, coefficient: str | None) -> None:
+        """The start of a species of an endogenous substance at its equilibrium with plasma.
+
+        The initial assignment `coefficient * baseline_<s>` (`baseline_<s>`
+        for plasma), the baseline an input of the organ; nothing for a
+        substance without baseline, whose species start at 0.
+        """
+        start = start_formula(s, coefficient)
+        if start is None:
+            return
+        self._input(ids.baseline(s.sid), U.mM, f"baseline {s.sid} [mM]")
+        species = self.species[sid]
+        species.initialConcentration = None
+        self.assignments.append(initial_assignment(sid, start, U.mM, str(species.name)))
 
     def _reaction(
         self,

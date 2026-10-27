@@ -111,6 +111,7 @@ __all__ = [
     "process_source",
     "rate_law",
     "species_compartment",
+    "start_formula",
     "stoichiometry",
     "unbound",
     "value_parameter",
@@ -268,6 +269,29 @@ def species_compartment(
     if part is Part.PLASMA and parts.flow_carrier == "blood_bp":
         return ids.plasma_capacity(s, zone)
     return ids.compartment(part, zone)
+
+
+def start_formula(substance: Substance, coefficient: str | None = None) -> str | None:
+    """Get the initial concentration of a species of an endogenous substance, as formula.
+
+    The species of a substance with a baseline start at the equilibrium of
+    their exchange with plasma: the plasma at the baseline, every other part
+    at the baseline times its coefficient to plasma (`Kbc`, `Kp`,
+    `K_int_pls`, `K_cell_pls`, `K_or`, `K_mu`).
+
+    Args:
+        substance: the substance.
+        coefficient: the coefficient of the part to plasma at the equilibrium
+            of its exchange (an id), `None` for plasma.
+
+    Returns:
+        `baseline_<s>` or `<coefficient> * baseline_<s>`; `None` for a
+        substance without baseline, whose species start at 0.
+    """
+    if substance.baseline is None:
+        return None
+    b = ids.baseline(substance.sid)
+    return b if coefficient is None else f"{coefficient} * {b}"
 
 
 def kp_id(substance: Substance, organ: Organ) -> str | None:

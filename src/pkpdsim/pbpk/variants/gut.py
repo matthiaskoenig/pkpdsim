@@ -521,6 +521,8 @@ class GutBuilder(LumenBuilder):
                 substance=s,
                 segment=seg.token,
             )
+            # the mucosa releases `Cmu/K_mu`: at equilibrium `K_mu*baseline`
+            self._start(c, s, k)
             self._reaction(
                 ids.mucosa_reaction("in", sid, seg.token),
                 f"{car} -> {c}",

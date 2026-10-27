@@ -196,6 +196,14 @@ class Substance:
         excretion: the excretion.
         inhibits: the inhibitions of proteins by the substance.
         induces: the inductions of proteins by the substance.
+        baseline: the plasma concentration (mM) of an endogenous substance at
+            the start, `baseline_<s>`; `None` starts every species at 0.
+            Every plasma species starts at it, every other species of the
+            blood and the tissue at the equilibrium of its exchange with
+            plasma (e.g. `Kp*baseline` in the merged tissue), the lumen, the
+            tubule and the sinks at 0. A `Formula` may read the parameters of
+            the top model and the observers of the definition (a production
+            over a clearance), not what changes during the simulation.
     """
 
     sid: str
@@ -208,3 +216,4 @@ class Substance:
     excretion: Excretion = field(default_factory=Excretion)
     inhibits: tuple[Inhibition, ...] = ()
     induces: tuple[Induction, ...] = ()
+    baseline: Q | None = None
