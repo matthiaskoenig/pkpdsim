@@ -67,6 +67,7 @@ from pkpdsim.pbpk.placement import (
     inhibitor_unbound,
     kp_id,
     species_compartment,
+    species_start,
     start_formula,
     value_parameter,
 )
@@ -156,6 +157,7 @@ class OrganBuilder:
         self.reactions: list[Reaction] = []
         self.replacements: dict[str, str] = {}
         self.outputs: dict[str, str] = {}
+        self.starts: list[tuple[str, Substance, Part | None, str | None]] = []
 
     def _annotate[E: (Compartment, Parameter, Reaction, Species)](
         self,
@@ -390,7 +392,34 @@ class OrganBuilder:
             _SPECIES_KINDS[part],
             substance=s,
         )
-        self._start(sid, s, self._equilibrium(part, s))
+        self._defer_start(sid, s, part)
+
+    def _defer_start(
+        self,
+        sid: str,
+        s: Substance,
+        part: Part | None = None,
+        coefficient: str | None = None,
+    ) -> None:
+        """Record the start of a species of an endogenous substance, built at the end.
+
+        The starts are built when the model definition is created
+        (`model_definition`), after every exchange: the elements they add
+        (the input `baseline_<s>`, a coefficient, the initial assignments)
+        come after those of the organ, which keep their order, so the model
+        of a substance without baseline is unchanged and that of one with a
+        baseline only gains elements.
+
+        Args:
+            sid: the id of the species.
+            s: the substance; nothing is recorded without baseline.
+            part: the part of the species, whose coefficient the start reads
+                (`_equilibrium`), `None` for `coefficient`.
+            coefficient: the coefficient of a species of no part (the
+                mucosa).
+        """
+        if s.baseline is not None:
+            self.starts.append((sid, s, part, coefficient))
 
     def _equilibrium(self, part: Part, s: Substance) -> str | None:
         """The coefficient of a part to plasma at the equilibrium of its exchange.
@@ -430,7 +459,7 @@ class OrganBuilder:
         self._input(ids.baseline(s.sid), U.mM, f"baseline {s.sid} [mM]")
         species = self.species[sid]
         species.initialConcentration = None
-        self.assignments.append(initial_assignment(sid, start, U.mM, str(species.name)))
+        self.assignments.append(species_start(sid, start, str(species.name)))
 
     def _reaction(
         self,
@@ -715,6 +744,11 @@ class OrganBuilder:
                 parameter or compartment of the top model, or an element of
                 the organ which is no input.
         """
+        for sid, s, part, coefficient in self.starts:
+            if part is not None:
+                coefficient = self._equilibrium(part, s)
+            self._start(sid, s, coefficient)
+        self.starts = []
         parameters = [
             *self.parameters.values(),
             *(p for r in self.reactions for p in (r.pars or [])),

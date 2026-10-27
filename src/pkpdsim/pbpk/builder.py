@@ -103,11 +103,13 @@ from pkpdsim.pbpk.pd import PDComponent, ports
 from pkpdsim.pbpk.physiology import physiology_objects, reference_tissue_volumes
 from pkpdsim.pbpk.placement import (
     FormulaParameter,
+    SpeciesStart,
     formula_assignment,
     formula_ids,
     formula_problems,
     inhibition_parameters,
     kp_id,
+    species_start,
     start_formula,
     value_parameter,
 )
@@ -500,21 +502,21 @@ def _to_rules(
     assignments: list[InitialAssignment],
     elements: Iterable[Parameter | Compartment],
     dynamic: set[str],
-    species: set[str],
 ) -> list[AssignmentRule]:
     """Turn the initial assignments which depend on dynamic ids into assignment rules.
 
     `dynamic` is extended by the converted ids; the converted assignments are
-    removed from `assignments` and their elements become variable. The
-    initial assignment of a species (the start of an endogenous substance,
-    `Substance.baseline`) stays one: the species starts at the value of the
-    dynamic quantities at the start, its reactions change it afterwards.
+    removed from `assignments` and their elements become variable. The start
+    of a species of an endogenous substance (`SpeciesStart`,
+    `Substance.baseline`) stays an initial assignment: the species starts at
+    the value of the dynamic quantities at the start, its reactions change it
+    afterwards. Every other initial assignment, also of a species of a PD
+    component, is converted as before.
 
     Args:
         assignments: the initial assignments.
         elements: the parameters and compartments.
         dynamic: the dynamic ids.
-        species: the ids of the species, whose initial assignments stay.
 
     Returns:
         The assignment rules.
@@ -526,7 +528,7 @@ def _to_rules(
         for ia in list(assignments):
             if (
                 ia.symbol in dynamic
-                or ia.symbol in species
+                or isinstance(ia, SpeciesStart)
                 or not _symbols(ia.value) & dynamic
             ):
                 continue
@@ -611,8 +613,7 @@ def _dynamic(
         )
     assignments = [o for o in objects if isinstance(o, InitialAssignment)]
     elements = [o for o in objects if isinstance(o, Parameter | Compartment)]
-    species = {str(o.sid) for o in objects if isinstance(o, Species)}
-    rules = _to_rules(assignments, elements, dynamic, species)
+    rules = _to_rules(assignments, elements, dynamic)
     objects[:] = [
         o for o in objects if not isinstance(o, InitialAssignment) or o in assignments
     ]
@@ -633,7 +634,6 @@ def _dynamic(
                 local_assignments,
                 [*(md.parameters or []), *(md.compartments or [])],
                 local,
-                {str(s.sid) for s in md.species or []},
             ),
         ]
         md.assignments = local_assignments
@@ -742,6 +742,7 @@ class _Top:
             for s in self.definition.substances
             if s.baseline is not None
         }
+        downstream = self._pd_downstream(local) if baselines else set()
         problems: list[str] = []
         assignments: list[Sbase] = []
         for o in [*self.objects, *local]:
@@ -749,7 +750,9 @@ class _Top:
                 continue
             where = f"the formula of '{o.sid}' (`{o.formula.expression}`)"
             if str(o.sid) in baselines:
-                problems += self._baseline_problems(where, o.formula.expression, top)
+                problems += self._baseline_problems(
+                    where, o.formula.expression, top, downstream
+                )
             else:
                 problems += formula_problems(where, o.formula.expression, top)
             assignments.append(formula_assignment(o))
@@ -760,8 +763,42 @@ class _Top:
             )
         self.objects += assignments
 
+    def _pd_downstream(self, local: Iterable[Parameter]) -> set[str]:
+        """The parameters replaced by a PD output and the quantities which read them.
+
+        A PD output changes during the simulation and may read the species
+        (an effect of the arm vein concentration); the initial assignments
+        of the top model and the formulas which read it, directly or through
+        each other, follow it (they become rules, `_dynamic`).
+        """
+        down = {o for pd in self.definition.pd for o in pd.outputs.values()}
+        if not down:
+            return down
+        reads = {
+            str(o.symbol): _symbols(o.value)
+            for o in self.objects
+            if isinstance(o, InitialAssignment)
+        }
+        reads |= {
+            str(o.sid): formula_ids(o.formula.expression)
+            for o in [*self.objects, *local]
+            if isinstance(o, FormulaParameter)
+        }
+        changed = True
+        while changed:
+            changed = False
+            for sid, symbols in reads.items():
+                if sid not in down and symbols & down:
+                    down.add(sid)
+                    changed = True
+        return down
+
     def _baseline_problems(
-        self, where: str, expression: str, top: Mapping[str, tuple[str, UnitType]]
+        self,
+        where: str,
+        expression: str,
+        top: Mapping[str, tuple[str, UnitType]],
+        downstream: set[str],
     ) -> list[str]:
         """Check the formula of a baseline: parameters, compartments and observers.
 
@@ -769,9 +806,10 @@ class _Top:
         compartments of the top model, the observers of the definition (a
         production over a clearance): they are evaluated at the start. What
         it reads, directly or through the observers, must not change during
-        the simulation (species, reactions, the observers of the library and
-        the outputs of the organs, which read species): the species start at
-        the baseline, so it would read its own start.
+        the simulation (species, reactions, the observers of the library, the
+        outputs of the organs, which read species, and the parameters which
+        a PD output replaces with what reads them, `downstream`): the species
+        start at the baseline, so it would read its own start.
 
         Returns:
             The problems: the unknown ids and the ids which change during the
@@ -797,14 +835,20 @@ class _Top:
             seen.add(x)
             if x in observers:
                 stack += [(y, x) for y in sorted(observers[x])]
-            elif x in top and top[x][0] not in ("parameter", "compartment"):
-                changing.append(x if via is None else f"{x} (through observer {via})")
+                continue
+            pd = x in downstream
+            if pd or (x in top and top[x][0] not in ("parameter", "compartment")):
+                label = f"{x} (a PD output or downstream of one)" if pd else x
+                changing.append(
+                    label if via is None else f"{label} (through observer {via})"
+                )
         if changing:
             problems.append(
-                f"{where} reads species or observers of the top model, which change "
-                f"during the simulation: {sorted(changing)}; the species start at the "
-                "baseline, which reads parameters and compartments of the top model "
-                "and observers of the definition which read them"
+                f"{where} reads species, observers or PD outputs of the top model, "
+                f"which change during the simulation: {sorted(changing)}; the "
+                "species start at the baseline, which reads parameters and "
+                "compartments of the top model and observers of the definition "
+                "which read them"
             )
         return problems
 
@@ -896,7 +940,7 @@ class _Top:
             ]
         )
         if start is not None:
-            self.add([initial_assignment(sid, start, U.mM, name)])
+            self.add([species_start(sid, start, name)])
 
     def _reaction(
         self, sid: str, equation: str, rate: str, name: str, pool: Pool

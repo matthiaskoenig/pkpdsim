@@ -95,6 +95,7 @@ __all__ = [
     "FormulaParameter",
     "Inhibitors",
     "Sink",
+    "SpeciesStart",
     "apical_sink",
     "built_parts",
     "formula_assignment",
@@ -111,6 +112,7 @@ __all__ = [
     "process_source",
     "rate_law",
     "species_compartment",
+    "species_start",
     "start_formula",
     "stoichiometry",
     "unbound",
@@ -292,6 +294,31 @@ def start_formula(substance: Substance, coefficient: str | None = None) -> str |
         return None
     b = ids.baseline(substance.sid)
     return b if coefficient is None else f"{coefficient} * {b}"
+
+
+class SpeciesStart(InitialAssignment):
+    """The initial assignment of a species of an endogenous substance (`start_formula`).
+
+    It stays an initial assignment when it reads a dynamic quantity
+    (`pkpdsim.pbpk.builder`): the species starts once, its reactions change
+    it afterwards.
+    """
+
+
+def species_start(sid: str, formula: str, name: str) -> SpeciesStart:
+    """Get the start of a species of an endogenous substance, with a name and an SBO term.
+
+    Args:
+        sid: the id of the species.
+        formula: the initial concentration (mM), `start_formula`.
+        name: the name of the species.
+
+    Returns:
+        The initial assignment.
+    """
+    return SpeciesStart(
+        sid, formula, U.mM, name=name, sboTerm=SBO.MATHEMATICAL_EXPRESSION
+    )
 
 
 def kp_id(substance: Substance, organ: Organ) -> str | None:

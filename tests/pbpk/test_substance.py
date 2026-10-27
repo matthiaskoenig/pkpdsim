@@ -8,6 +8,9 @@ stationary, in every form of the organ the library builds.
 """
 
 import dataclasses
+import difflib
+import gzip
+import re
 from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -44,7 +47,7 @@ from pkpdsim.pbpk.variants.intestine import SingleLumen
 from pkpdsim.pbpk.variants.kidney_nephron import NephronKidney
 from pkpdsim.pbpk.variants.liver_zonated import ZonatedLiver
 
-from .conftest import individual, load
+from .conftest import cardiac_pd, individual, load
 
 if TYPE_CHECKING:
     import roadrunner
@@ -282,22 +285,46 @@ _MODES: dict[str, Callable[[], PBPKDefinition]] = {
 }
 
 
+_PARTS = {
+    "perfusion, erythrocytes bp": {"Cor"},
+    "tissue, erythrocytes kbc, overrides, organs, ps": {"Cpl", "Cti"},
+    "permeability, kinetic erythrocytes": {"Cpl", "Cbc", "Cis", "Cic"},
+    "kp method": {"Cpl", "Cti"},
+    "vascular only": {"Cpl"},
+    "zonated liver, nephron kidney, single lumen, oral route": {"Cpl", "Cis", "Cic"},
+    "segmented intestine with mucosa, flow-limited": {"Cor", "Cmu"},
+    "segmented intestine with mucosa, kinetic erythrocytes": {
+        "Cpl",
+        "Cbc",
+        "Cti",
+        "Cmu",
+    },
+}
+"""The parts of the organs whose species each case builds for the substance."""
+
+
 @pytest.mark.parametrize("case", list(_MODES))
 def test_a_baseline_is_stationary_in_every_mode(tmp_path: Path, case: str) -> None:
-    """Every form of the organ, erythrocyte mode and variant starts at the equilibrium."""
+    """Every form of the organ, erythrocyte mode and variant starts at the equilibrium.
+
+    The case builds the species of its parts (`_PARTS`), and every species
+    starts at the equilibrium of its part with the baseline.
+    """
     r = load(build(_MODES[case](), tmp_path))
+    parts = {
+        _local(sid).split("_", 1)[0] for sid in _species(r) if sid.endswith(f"_{S}")
+    }
+    assert _PARTS[case] <= parts
     _assert_starts(r)
     assert r[ids.arm(S)] == pytest.approx(B, rel=1e-12)
     _assert_stationary(r)
 
 
-def test_the_species_of_every_part_have_a_start(tmp_path: Path) -> None:
-    """The cases above build every part: plasma, blood cells, tissue, interstitium, cells, organ, mucosa."""
-    parts: set[str] = set()
-    for case, make in _MODES.items():
-        r = load(build(make(), tmp_path / case.replace(" ", "_").replace(",", "")))
-        parts |= {_local(sid).split("_", 1)[0] for sid in _species(r)}
-    assert {"Cpl", "Cbc", "Cti", "Cis", "Cic", "Cor", "Cmu"} <= parts
+def test_the_cases_cover_every_part() -> None:
+    """Together the cases build plasma, blood cells, tissue, interstitium, cells, organ, mucosa."""
+    assert set(_PARTS) == set(_MODES)
+    covered = set().union(*_PARTS.values())
+    assert covered == {"Cpl", "Cbc", "Cti", "Cis", "Cic", "Cor", "Cmu"}
 
 
 def test_a_baseline_follows_a_preinit_impairment(tmp_path: Path) -> None:
@@ -420,6 +447,41 @@ def test_a_formula_baseline_refuses_what_changes_during_the_simulation() -> None
         compose(
             _definition("bl_unknown", _endogenous(baseline=Formula("k_prod", U.mM)))
         )
+
+
+def test_a_formula_baseline_refuses_a_pd_output(tmp_path: Path) -> None:
+    """A PD output reads the species: a baseline must not read it nor what follows it."""
+    pd = cardiac_pd(reads=S)
+    for read in (ids.F_CARDIAC_FUNCTION, ids.CO):
+        d = _definition(
+            "bl_pd",
+            _endogenous(baseline=Formula(f"0.006 mmole_per_min / {read}", U.mM)),
+            pd=[pd],
+        )
+        with pytest.raises(ValueError, match=rf"baseline_{S}.*{read} \(a PD output"):
+            compose(d)
+    observer = Observer(
+        "CO_obs",
+        f"{ids.CO} * (1 dimensionless + 0 per_min * time)",
+        U.l_per_min,
+        "cardiac output",
+    )
+    d = _definition(
+        "bl_pd_observer",
+        _endogenous(baseline=Formula("0.006 mmole_per_min / CO_obs", U.mM)),
+        pd=[pd],
+        observers=[observer],
+    )
+    with pytest.raises(ValueError, match=r"CO \(a PD output.*through observer CO_obs"):
+        compose(d)
+    # without the PD component the same formula is valid
+    build(
+        _definition(
+            "bl_no_pd",
+            _endogenous(baseline=Formula(f"0.006 mmole_per_min / {ids.CO}", U.mM)),
+        ),
+        tmp_path,
+    )
 
 
 def test_the_baseline_is_validated() -> None:
@@ -547,6 +609,72 @@ def _without_baseline(path: Path) -> str:
             if sp.isSetInitialConcentration() or not sp.isSetInitialAmount():
                 sp.setInitialConcentration(0.0)
     return libsbml.writeSBMLToString(doc)
+
+
+REFERENCE = Path(__file__).parent / "data"
+"""The comp and flat SBML of `_reference()` built at pkpdsim f008d56, gzipped."""
+
+_DATE = re.compile(r"<dcterms:(created|modified)\b|<dcterms:W3CDTF>")
+"""A line of the model history with a date, which changes with every build."""
+
+
+def _reference() -> PBPKDefinition:
+    """The definition of the stored reference: no baseline, every input a start would read.
+
+    `end` in the full form with kinetic erythrocytes (`Kbc`, `K_int_pls`,
+    `K_cell_pls`), `mrg` in the merged tissue with a Kp override and
+    erythrocytes in equilibrium (`Kp_<s>`, `Kp_ad_<s>`), with an IV and an
+    oral route.
+    """
+    return PBPKDefinition(
+        sid="baseline_reference",
+        substances=[
+            Substance(
+                "end",
+                name="endogenous substance",
+                mr=150.0,
+                binding=Binding(fu=0.5, protein="albumin"),
+                erythrocytes=Erythrocytes("kinetic", kbc=2.0, k_exchange=1.0),
+                distribution=Kp(2.0, mode=Mode.PERMEABILITY, ftissue=1.0),
+            ),
+            Substance(
+                "mrg",
+                name="merged substance",
+                mr=200.0,
+                erythrocytes=Erythrocytes("equilibrium", kbc=1.5),
+                distribution=Kp(2.0, overrides={Organ.ADIPOSE: 5.0}, ftissue=1.0),
+            ),
+        ],
+        routes=[Route.iv("mrg"), Route.oral("mrg")],
+    )
+
+
+def _dateless(text: str) -> list[str]:
+    """The lines of an SBML file without the dates of the model history."""
+    return [line for line in text.splitlines() if not _DATE.search(line)]
+
+
+def test_the_sbml_without_baseline_is_that_of_f008d56(tmp_path: Path) -> None:
+    """Without a baseline the comp and flat SBML are those of f008d56, line by line.
+
+    The order of the elements counts: an input of an organ created earlier
+    (a coefficient a start would read) moves lines of the comp model. The
+    references are `tests/pbpk/data/<file>.gz` (`gzip -n`), built from
+    `_reference()` at f008d56; a change of the library which changes the
+    SBML of every model on purpose rebuilds them and says so.
+    """
+    result = build(_reference(), tmp_path)
+    for path in (result.comp_path, result.flat_path):
+        reference = gzip.decompress((REFERENCE / f"{path.name}.gz").read_bytes())
+        expected = _dateless(reference.decode("utf-8"))
+        actual = _dateless(path.read_text(encoding="utf-8"))
+        if actual != expected:
+            diff = list(
+                difflib.unified_diff(
+                    expected, actual, "f008d56", "now", n=0, lineterm=""
+                )
+            )
+            pytest.fail(f"{path.name} differs:\n" + "\n".join(diff[:40]))
 
 
 def test_dataclass_default() -> None:
