@@ -71,6 +71,7 @@ nav = [
     { "pbpk" = "api/pbpk.md" },
     { "pbpk organs" = "api/pbpk_organs.md" },
     { "pbpk physiology" = "api/pbpk_physiology.md" },
+    { "pbpk experiment" = "api/pbpk_experiment.md" },
     { "pbpk ids and data" = "api/pbpk_ids.md" },
   ] },
   { "Contributing" = "development.md" },

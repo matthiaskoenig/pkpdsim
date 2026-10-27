@@ -1,4 +1,12 @@
-"""The PBPK model library: the building blocks of the PBPK models of a substance."""
+"""The PBPK model library: the building blocks of the PBPK models of a substance.
+
+The base of the experiments of a model built on the library
+(`PBPKSimulationExperiment`, `ScaledRenalMap`, `healthy_gfr` of
+`pkpdsim.pbpk.experiment`) is exported lazily: it imports sbmlsim, which a
+factory does not need, so `import pkpdsim.pbpk` imports no simulator.
+"""
+
+from typing import TYPE_CHECKING
 
 from pkpdsim.pbpk.builder import BuildResult, build, compose
 from pkpdsim.pbpk.chemistry import (
@@ -47,6 +55,32 @@ from pkpdsim.pbpk.variants.intestine import SegmentedIntestine, SingleLumen
 from pkpdsim.pbpk.variants.kidney_nephron import NephronKidney
 from pkpdsim.pbpk.variants.liver_zonated import ZonatedLiver
 
+if TYPE_CHECKING:
+    from pkpdsim.pbpk.experiment import (
+        PBPKSimulationExperiment,
+        ScaledRenalMap,
+        healthy_gfr,
+    )
+
+#: the names of `pkpdsim.pbpk.experiment`, imported on their first access
+_EXPERIMENT_NAMES = frozenset(
+    {"PBPKSimulationExperiment", "ScaledRenalMap", "healthy_gfr"}
+)
+
+
+def __getattr__(name: str) -> object:
+    """Import a name of `pkpdsim.pbpk.experiment` on its first access (PEP 562).
+
+    Raises:
+        AttributeError: for any other name.
+    """
+    if name in _EXPERIMENT_NAMES:
+        from pkpdsim.pbpk import experiment
+
+        return getattr(experiment, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
 __all__ = [
     "MM",
     "MODEL_UNITS",
@@ -78,6 +112,7 @@ __all__ = [
     "OrganComponent",
     "OrganContext",
     "PBPKDefinition",
+    "PBPKSimulationExperiment",
     "PDComponent",
     "Part",
     "Parts",
@@ -85,6 +120,7 @@ __all__ = [
     "Protein",
     "Q",
     "Route",
+    "ScaledRenalMap",
     "SegmentedIntestine",
     "Sex",
     "SingleLumen",
@@ -102,6 +138,7 @@ __all__ = [
     "cite",
     "compose",
     "fitted",
+    "healthy_gfr",
     "load",
     "parts_for",
     "physiology_objects",
