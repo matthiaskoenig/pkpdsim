@@ -1,7 +1,7 @@
 """Tests of the nephron kidney, the variant `nephron` of the kidney.
 
-The nephron kidney filters the unbound plasma concentration into the lumen of
-the proximal tubule, `fu*GFR*Cpl`; the tubular fluid flows through proximal
+The nephron kidney filters the unbound afferent (arterial) plasma into the
+lumen of the proximal tubule, `fu*GFR*Car`; the tubular fluid flows through proximal
 tubule, loop of Henle, distal tubule and collecting duct, each segment
 reabsorbs water (the flow leaving a segment is the fraction `f_tub_<seg>` of
 the GFR), the drug moves with the fluid and the collecting duct drains into
@@ -286,14 +286,14 @@ def test_no_secretion_no_reabsorption_equals_fu_gfr(
 
     At the steady state of an infusion every compartment of the tubule is
     stationary, so the flow out of each segment equals the flow into it: the
-    urinary excretion rate is the filtration rate `fu*GFR*Cpl` (exactly,
+    urinary excretion rate is the filtration rate `fu*GFR*Car` (exactly,
     whatever the volumes and the water reabsorption of the segments), and it
     is the infusion. A fraction reabsorbed returns from the collecting duct
     into the plasma of the kidney, `fu*GFR*(1 - f_reabsorbed)` as the
     standard kidney. The circulation sees the same kidney: the venous
     steady state equals that of the standard kidney, and the plasma leaving
-    the kidney carries the plasma flow less the net filtered amount, so the
-    urine rate over the arterial plasma is the clearance in both kidneys.
+    the kidney lacks the net filtrate, so the kidney plasma is the arterial
+    plasma and the urine rate over it is the clearance in both kidneys.
     """
     drug = _renal_drug(fraction_reabsorbed)
     venous = f"[{ids.pool_species(Pool.VENOUS, S)}]"
@@ -307,7 +307,6 @@ def test_no_secretion_no_reabsorption_equals_fu_gfr(
         rate = r[ids.urine_rate(S)]
         assert rate / r[arterial] == pytest.approx(clearance, rel=1e-6)
     assert _urine_rate(r) == pytest.approx(INFUSION / r[ids.mr(S)], rel=1e-8)
-    assert _urine_rate(r) / _kidney_plasma(r) == pytest.approx(clearance, rel=1e-3)
     assert _urine_rate(r) / _kidney_plasma(r) == pytest.approx(clearance, rel=1e-8)
     assert result["nephron"] == pytest.approx(result["standard"], rel=1e-8)
     # the drug concentrates along the tubule as the water is reabsorbed
@@ -331,36 +330,39 @@ def _effective_secretion(r: "roadrunner.RoadRunner", k: float) -> float:
     return 1.0 / (1.0 / ps_vas + 1.0 / ps + 1.0 / k)
 
 
-def test_secretion_increases_clearance(tmp_path: Path) -> None:
-    """Secretion into the proximal tubule adds to the filtration: the analytic well-stirred value.
+@pytest.mark.parametrize("kidney", ["standard", "nephron"])
+def test_secretion_increases_clearance(tmp_path: Path, kidney: str) -> None:
+    """Secretion adds to the filtration: the analytic value of the glomerulus upstream of the secretion.
 
-    At steady state the urine rate is `fu*(GFR + k_sec)*Cpl` of the kidney
-    plasma, with `k_sec` the conductances of the passage plasma -
-    interstitium - cell - lumen in series. The filtrate leaves the plasma of
-    the kidney with the plasma flow, the secreted drug is taken out of the
-    plasma flow: on the arterial inflow the kidney is well-stirred for the
-    secretion, `Qpl*Car = Qpl*Cpl + CL_sec*Cpl`, so
-    `CL_R = Qpl*(CL_gfr + CL_sec)/(Qpl + CL_sec)` with `CL_gfr = fu*GFR`,
-    `CL_sec = fu*k_sec` and the plasma flow `Qpl = Qki*(1 - HCT)`.
+    The glomerulus filters the afferent plasma, `CL_gfr*Car` with
+    `CL_gfr = fu*GFR`, the plasma flow less the filtrate,
+    `(Qpl - CL_gfr)*Car`, passes the tubule, whose secretion clears the
+    plasma of the kidney well-stirred: `(Qpl - CL_gfr)*(Car - Cpl) =
+    CL_sec*Cpl`, with `CL_sec = fu*k_sec`, `k_sec` the conductances of the
+    passage plasma - interstitium - cell - lumen in series, and the plasma
+    flow `Qpl = Qki*(1 - HCT)`. At steady state the renal clearance of the
+    arterial plasma is `CL_gfr + (Qpl - CL_gfr)*CL_sec/(Qpl - CL_gfr +
+    CL_sec)`, in the standard kidney (secretion into the urine) and in the
+    nephron kidney (secretion into the proximal tubule).
     """
     k = 0.5
     drug = _renal_drug(distribution=_KIDNEY_TISSUE)
-    r = _load(
-        _model(tmp_path, "secretion", "nephron", [drug], chemistry=[_secretion(k)])
-    )
+    r = _load(_model(tmp_path, kidney, kidney, [drug], chemistry=[_secretion(k)]))
     _steady(r)
     fu, gfr = r[ids.fu(S)], r[ids.GFR]
-    secretion = fu * _effective_secretion(r, k)
-    clearance = fu * gfr + secretion
-    rate = _urine_rate(r)
-    assert rate == pytest.approx(INFUSION / r[ids.mr(S)], rel=1e-8)
-    assert rate / _kidney_plasma(r) == pytest.approx(clearance, rel=1e-8)
-    assert rate / _kidney_plasma(r) > 2 * fu * gfr
+    filtration, secretion = fu * gfr, fu * _effective_secretion(r, k)
     qpl = r[ids.organ_flow(Organ.KIDNEY)] * (1.0 - r[ids.HCT])
     arterial = r[f"[{ids.pool_species(Pool.ARTERIAL, S)}]"]
-    assert rate / arterial == pytest.approx(
-        qpl * clearance / (qpl + secretion), rel=1e-8
+    rate = r[ids.urine_rate(S)]
+    assert rate == pytest.approx(INFUSION / r[ids.mr(S)], rel=1e-8)
+    assert rate - filtration * arterial == pytest.approx(
+        secretion * _kidney_plasma(r), rel=1e-8
     )
+    assert rate / arterial == pytest.approx(
+        filtration + (qpl - filtration) * secretion / (qpl - filtration + secretion),
+        rel=1e-8,
+    )
+    assert rate / arterial > 2 * filtration
 
 
 def test_nephron_kidney_scales_secretion(tmp_path: Path) -> None:
@@ -389,7 +391,8 @@ def test_tubular_reabsorption_decreases_clearance(tmp_path: Path) -> None:
     At steady state the proximal tubule passes on the share
     `f_tub_pt*GFR/(f_tub_pt*GFR + k)` of the filtered drug, the influx with
     the clearance `k` on the lumen concentration takes the rest back into the
-    cells; downstream every molecule reaches the urine.
+    cells; downstream every molecule reaches the urine. The glomerulus
+    filters the afferent plasma: the clearance is that of the arterial plasma.
     """
     k = 0.05
     drug = _renal_drug(distribution=_KIDNEY_TISSUE)
@@ -399,9 +402,8 @@ def test_tubular_reabsorption_decreases_clearance(tmp_path: Path) -> None:
     flow = r[_kidney(ids.tubule_flow_fraction("pt"))] * gfr
     rate = _urine_rate(r)
     assert rate == pytest.approx(INFUSION / r[ids.mr(S)], rel=1e-8)
-    assert rate / _kidney_plasma(r) == pytest.approx(
-        fu * gfr * flow / (flow + k), rel=1e-8
-    )
+    arterial = r[f"[{ids.pool_species(Pool.ARTERIAL, S)}]"]
+    assert rate / arterial == pytest.approx(fu * gfr * flow / (flow + k), rel=1e-8)
     assert r[_kidney("DRGREAB")] > 0
 
 

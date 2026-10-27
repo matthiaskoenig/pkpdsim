@@ -1,9 +1,9 @@
 """Tests of the specifics of the standard kidney and liver and of the bile.
 
-The kidney filters the unbound plasma concentration into the urine,
-`fu*GFR*Cpl*(1 - f_reabsorbed)`, and the plasma leaving it carries the plasma
-flow less the filtration, so the filtration clearance of the arterial plasma
-is `fu*GFR*(1 - f_reabsorbed)`; the liver has the portosystemic shunt
+The kidney filters the unbound afferent (arterial) plasma into the urine,
+`fu*GFR*Car*(1 - f_reabsorbed)`, and the plasma leaving it lacks the net
+filtrate at the outflow concentration, so the filtration clearance of the
+arterial plasma is `fu*GFR*(1 - f_reabsorbed)`; the liver has the portosystemic shunt
 `f_shunt`, which bypasses the sinusoids, and the functional fraction
 `f_functional`, which scales its tissue and the capacity of its processes;
 the apical efflux of the liver writes into the bile, which drains into the
@@ -27,6 +27,7 @@ from pkpdsim.pbpk import (
     Kp,
     Membrane,
     Metabolism,
+    Mode,
     Organ,
     Part,
     PBPKDefinition,
@@ -54,7 +55,7 @@ INFUSION = 1.0
 
 
 def _renal_drug(fraction_reabsorbed: float = 0.0, fu: float = 0.5) -> Substance:
-    """A vascular drug (fu 0.5) eliminated by filtration only.
+    """A vascular drug (fu 0.5 by default) eliminated by filtration only.
 
     Without tissue distribution the volume is the plasma, so the steady state
     of an infusion is reached within hours.
@@ -97,6 +98,49 @@ def _filtration(r: "roadrunner.RoadRunner") -> float:
     return r[ids.flat(Organ.KIDNEY, ids.filtration_reaction(S))]
 
 
+def _arterial(r: "roadrunner.RoadRunner") -> float:
+    """The arterial plasma concentration (mM), the afferent plasma of the kidney."""
+    return r[f"[{ids.pool_species(Pool.ARTERIAL, S)}]"]
+
+
+def _kidney_outflow(r: "roadrunner.RoadRunner") -> float:
+    """The plasma concentration of the blood leaving the kidney (mM), every form."""
+    return r[ids.organ_outflow(Organ.KIDNEY, S)]
+
+
+_ERYTHROCYTES = {
+    "none": None,
+    "equilibrium": Erythrocytes("equilibrium", bp=1.3),
+    "kinetic": Erythrocytes("kinetic", kbc=2.0, k_exchange=1.0),
+}
+"""The erythrocyte modes of the form tests."""
+
+_FORMS = [
+    (mode, ery)
+    for mode in Mode
+    for ery in _ERYTHROCYTES
+    if not (mode is Mode.PERFUSION and ery == "kinetic")
+]
+"""Every form of the standard kidney: the modes with the erythrocyte modes
+(the flow-limited organ has no kinetic blood cells)."""
+
+
+def _distributed(tmp_path: Path, mode: Mode, ery: str) -> Path:
+    """A distributed drug in a form of the kidney (fu 0.3, 20 % reabsorbed), IV, no chemistry."""
+    drug = dataclasses.replace(
+        _renal_drug(fraction_reabsorbed=0.2, fu=0.3),
+        distribution=Kp(1.5, mode=mode, ftissue=1.0),
+        erythrocytes=_ERYTHROCYTES[ery],
+    )
+    d = definition(
+        sid=f"form_{mode.value}_{ery}",
+        substances=[drug],
+        chemistry=[],
+        routes=[Route.iv(S)],
+    )
+    return build(d, tmp_path).flat_path
+
+
 def test_renal_clearance_fu_gfr(tmp_path: Path) -> None:
     """At the steady state of an infusion the urine rate over `KI__Cpl` is `fu*GFR`.
 
@@ -108,7 +152,7 @@ def test_renal_clearance_fu_gfr(tmp_path: Path) -> None:
     rate = _filtration(r)
     assert rate == pytest.approx(INFUSION / r[ids.mr(S)], rel=1e-8)
     assert rate / _kidney_plasma(r) == pytest.approx(
-        r[ids.fu(S)] * r[ids.GFR], rel=1e-10
+        r[ids.fu(S)] * r[ids.GFR], rel=1e-8
     )
     assert r[ids.urine(S)] > 0
 
@@ -121,10 +165,10 @@ def test_filtration_clearance_of_the_arterial_plasma(
 ) -> None:
     """The systemic filtration clearance is `fu*GFR*(1 - f_reabsorbed)`.
 
-    The filtered amount leaves the plasma of the kidney with the filtrate, the
-    plasma leaving the kidney carries the rest: at the steady state of an
-    infusion the plasma of the kidney is the arterial plasma, and the urine
-    rate over the arterial (and the arm vein) plasma is the clearance, not
+    The glomerulus filters the afferent plasma and the plasma leaving the
+    kidney lacks the filtrate: at the steady state of an infusion the plasma
+    of the kidney is the arterial plasma, and the urine rate over the
+    arterial (and the arm vein) plasma is the clearance, not
     `fu*GFR*Qp/(Qp + fu*GFR)` of a kidney which returns the whole plasma flow.
     """
     r = _load(_renal(tmp_path, fraction_reabsorbed, fu))
@@ -133,10 +177,49 @@ def test_filtration_clearance_of_the_arterial_plasma(
     rate = r[ids.urine_rate(S)]
     assert rate == pytest.approx(INFUSION / r[ids.mr(S)], rel=1e-8)
     clearance = fu * r[ids.GFR] * (1 - fraction_reabsorbed)
-    arterial = r[f"[{ids.pool_species(Pool.ARTERIAL, S)}]"]
+    arterial = _arterial(r)
     assert rate / arterial == pytest.approx(clearance, rel=1e-6)
     assert rate / r[ids.arm(S)] == pytest.approx(clearance, rel=1e-6)
     assert _kidney_plasma(r) == pytest.approx(arterial, rel=1e-6)
+
+
+@pytest.mark.parametrize(("mode", "ery"), _FORMS)
+def test_filtration_clearance_in_every_form(
+    tmp_path: Path, mode: Mode, ery: str
+) -> None:
+    """The filtration clearance of the arterial plasma is `fu*GFR*(1 - f_reabsorbed)` in every form.
+
+    The filtration reads the afferent (arterial) plasma, the plasma leaving
+    the kidney carries the flow of its carrier (`Q*(1-HCT)`, `Q*BP`) less
+    the net filtrate at the outflow concentration: at the steady state of an
+    infusion the blood leaving the kidney has the arterial plasma
+    concentration, with tissue distribution and with either erythrocyte
+    mode, also in the flow-limited kidney (`Cor/K_or`).
+    """
+    r = _load(_distributed(tmp_path, mode, ery))
+    r[ids.infusion_rate(S)] = INFUSION
+    r.simulate(0, 40 * DAY, 2)
+    rate = r[ids.urine_rate(S)]
+    assert rate == pytest.approx(INFUSION / r[ids.mr(S)], rel=1e-6)
+    clearance = 0.3 * r[ids.GFR] * 0.8
+    assert rate / _arterial(r) == pytest.approx(clearance, rel=1e-8)
+    assert _kidney_outflow(r) == pytest.approx(_arterial(r), rel=1e-8)
+
+
+@pytest.mark.parametrize(("mode", "ery"), _FORMS)
+def test_filtration_conserves_the_amount(tmp_path: Path, mode: Mode, ery: str) -> None:
+    """The kidney with filtration conserves the amount in every form.
+
+    The filtration takes the net filtrate out of the plasma of the kidney
+    into the urine and the outflow carries the rest of the plasma flow: body
+    and urine keep the dose of an IV bolus.
+    """
+    r = _load(_distributed(tmp_path, mode, ery))
+    r[ids.iv_dose(S)] = 10.0
+    r.simulate(0, 600, 2)
+    amount = total_amount(r, S) + dose_amount(r, S)
+    assert amount == pytest.approx(10.0 / r[ids.mr(S)], rel=1e-9)
+    assert r[ids.urine(S)] > 0.1 * amount
 
 
 def test_reabsorption_fraction(tmp_path: Path) -> None:
@@ -150,7 +233,7 @@ def test_reabsorption_fraction(tmp_path: Path) -> None:
     r[ids.iv_dose(S)] = 10.0
     r.simulate(0, 60, 2)
     clearance = r[ids.fu(S)] * r[ids.GFR] * 0.6
-    assert _filtration(r) / _kidney_plasma(r) == pytest.approx(clearance, rel=1e-10)
+    assert _filtration(r) / _arterial(r) == pytest.approx(clearance, rel=1e-10)
     r = _load(path, **{ids.fraction_reabsorbed(S): 1.0})
     r[ids.iv_dose(S)] = 10.0
     r.simulate(0, 60, 2)

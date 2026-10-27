@@ -71,20 +71,20 @@ With one zone the zonated liver is the standard liver. With `n` zones and linear
 
 ## Nephron kidney
 
-`NephronKidney` builds the kidney with the tubule of the nephron. The unbound plasma concentration is filtered into the lumen of the proximal tubule, and the tubular fluid flows through the lumens of the segments in series, proximal tubule `pt`, loop of Henle `lh`, distal tubule `dt` and collecting duct `cd`, into the urine. Every segment reabsorbs water: the flow leaving a segment is the fraction `f_tub_<seg>` of the GFR (Scotcher 2016), so the tubular flows follow the GFR of the individual and the renal function, and the drug concentrates as the water is reabsorbed. The lumens are well-stirred compartments of constant volume (Huang 2018, both kidneys), lumen and not tissue: the blood and tissue of the kidney keep the volumes of the standard kidney.
+`NephronKidney` builds the kidney with the tubule of the nephron. The unbound afferent (arterial) plasma concentration is filtered into the lumen of the proximal tubule, as in the standard kidney, and the tubular fluid flows through the lumens of the segments in series, proximal tubule `pt`, loop of Henle `lh`, distal tubule `dt` and collecting duct `cd`, into the urine. Every segment reabsorbs water: the flow leaving a segment is the fraction `f_tub_<seg>` of the GFR (Scotcher 2016), so the tubular flows follow the GFR of the individual and the renal function, and the drug concentrates as the water is reabsorbed. The lumens are well-stirred compartments of constant volume (Huang 2018, both kidneys), lumen and not tissue: the blood and tissue of the kidney keep the volumes of the standard kidney.
 
 ```equations title="nephron kidney"
-J_gfr_<s>: Cpl_<s> -> Ctub_pt_<s> = fu_<s> * GFR * Cpl_<s>
+J_gfr_<s>: Cpl_<s> -> Ctub_pt_<s> = fu_<s> * GFR * Car_<s>
 J_tub_pt_<s>: Ctub_pt_<s> -> Ctub_lh_<s> = GFR * f_tub_pt * Ctub_pt_<s>
 J_tub_lh_<s>: Ctub_lh_<s> -> Ctub_dt_<s> = GFR * f_tub_lh * Ctub_lh_<s>
 J_tub_dt_<s>: Ctub_dt_<s> -> Ctub_cd_<s> = GFR * f_tub_dt * Ctub_dt_<s>
 J_tub_cd_<s>: Ctub_cd_<s> -> Aurine_<s> = GFR * f_tub_cd * Ctub_cd_<s> * (1 - f_reabsorbed_<s>)
 J_reab_<s>: Ctub_cd_<s> -> Cpl_<s> = GFR * f_tub_cd * Ctub_cd_<s> * f_reabsorbed_<s>
-J_out_pl_<s>: Cpl_<s> -> Cve_<s> = Qki * (1 - HCT) * Cout_<s> - (fu_<s> * GFR * Cpl_<s> - GFR * f_tub_cd * Ctub_cd_<s> * f_reabsorbed_<s>)
+J_out_pl_<s>: Cpl_<s> -> Cve_<s> = Qki * (1 - HCT) * Cout_<s> - fu_<s> * GFR * Cout_<s> * (1 - f_reabsorbed_<s>)
 Rurine_<s> = J_tub_cd_<s>
 ```
 
-Without secretion and reabsorption every filtered molecule reaches the urine: the urinary excretion at steady state is the filtration of the standard kidney, whatever the volumes and flows of the segments; the tubule delays the excretion by minutes. The plasma leaving the kidney carries the plasma flow less the net filtered amount, the filtration less the reabsorption from the collecting duct, as in the standard kidney, so the clearance of the arterial plasma is that of the standard kidney. The fraction reabsorbed (`Excretion.fraction_reabsorbed`) is an empirical passive reabsorption at the end of the collecting duct, which acts on secreted drug as well, the lumped `(fu*GFR + CL_sec)*(1 - F_reabs)` of the literature. An apical efflux of the kidney secretes into the proximal tubule, an apical influx reabsorbs from it, with the inhibitors of its protein acting from the lumen. The urinary excretion rate `Rurine_<s>` is the outflow of the collecting duct, the output of the standard kidney with the same id.
+Without secretion and reabsorption every filtered molecule reaches the urine: the urinary excretion at steady state is the filtration of the standard kidney, whatever the volumes and flows of the segments; the tubule delays the excretion by minutes. The plasma leaving the kidney lacks the net filtrate of the standard kidney: at steady state the reabsorption returns the fraction reabsorbed of the filtrate into the plasma of the kidney, so the kidney plasma and the clearance of the arterial plasma are those of the standard kidney. The fraction reabsorbed (`Excretion.fraction_reabsorbed`) is an empirical passive reabsorption at the end of the collecting duct, which acts on secreted drug as well, the lumped `(fu*GFR + CL_sec)*(1 - F_reabs)` of the literature. An apical efflux of the kidney secretes into the proximal tubule, an apical influx reabsorbs from it, with the inhibitors of its protein acting from the lumen. The urinary excretion rate `Rurine_<s>` is the outflow of the collecting duct, the output of the standard kidney with the same id.
 
 <!-- generated: nephron-segments (scripts/pbpk_tables.py), do not edit -->
 *Generated from `data/kidney_human.toml` by `scripts/pbpk_tables.py`; the notes of every number are in the data file.*

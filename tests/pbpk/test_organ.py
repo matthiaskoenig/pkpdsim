@@ -851,20 +851,27 @@ def test_liver_shunt_past_the_liver() -> None:
 
 
 @pytest.mark.parametrize(
-    ("distribution", "source", "plasma"),
+    ("distribution", "source", "carrier"),
     [
-        (Kp(2.0, ftissue=1.0), "Cpl_drg", "Cpl_drg"),
-        (Kp(2.0, mode=Mode.PERFUSION), "Cor_drg", "Cor_drg / K_or_drg"),
+        (Kp(2.0, ftissue=1.0), "Cpl_drg", "(1 dimensionless - HCT)"),
+        (Kp(2.0, mode=Mode.PERFUSION), "Cor_drg", "(1 dimensionless - HCT)"),
     ],
     ids=["merged", "perfusion"],
 )
-def test_kidney_filtration(distribution: Kp, source: str, plasma: str) -> None:
-    """The kidney filters `fu*GFR*Cpl*(1 - f_reabsorbed)` into the urine."""
+def test_kidney_filtration(distribution: Kp, source: str, carrier: str) -> None:
+    """The kidney filters the afferent plasma, `fu*GFR*Car*(1 - f_reabsorbed)`, into the urine.
+
+    The arterial plasma `Car_drg` is a modifier of the filtration; the plasma
+    leaving the kidney lacks the net filtrate at the outflow concentration.
+    """
     md, boundary = _build(Organ.KIDNEY, substances=[_drug(distribution=distribution)])
     reaction = _reaction(md, "J_gfr_drg")
     assert _equation(reaction) == ([(source, 1.0)], [("Aurine_drg", 1.0)])
-    assert _formula(reaction) == (
-        f"fu_drg * GFR * {plasma} * (1 dimensionless - f_reabsorbed_drg)"
+    assert [m.species for m in reaction.equation.modifiers] == ["Car_drg"]
+    filtrate = "fu_drg * GFR * {} * (1 dimensionless - f_reabsorbed_drg)"
+    assert _formula(reaction) == filtrate.format("Car_drg")
+    assert _formula(_reaction(md, "J_out_pl_drg")) == (
+        f"Qki * {carrier} * Cout_drg - {filtrate.format('Cout_drg')}"
     )
     assert {"GFR", "f_reabsorbed_drg", "Aurine_drg", "Vurine"} <= set(
         boundary.replacements
