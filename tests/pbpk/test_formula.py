@@ -454,3 +454,63 @@ def test_a_custom_reaction_reads_a_definition_parameter(tmp_path: Path) -> None:
         r.integrator.relative_tolerance = 1e-10
         r.simulate(0, 100)
         assert total_amount(r, "prd") == pytest.approx(k_prod * 100, rel=1e-6)
+
+
+def test_a_custom_reaction_reads_a_covariate_and_a_compartment(tmp_path: Path) -> None:
+    """A custom reaction reads `BW` and the compartment `Vurine` of the top model.
+
+    The muscle reads the covariate through a parameter input and the
+    compartment through a compartment input, each under its id; a change of
+    `BW` before the simulation doubles the production.
+    """
+    s = Substance("prd", "produced substance", 150.0, distribution=Kp(2.0, ftissue=1.0))
+    production = CustomReaction(
+        "PRDPROD",
+        Organ.MUSCLE,
+        Part.TISSUE,
+        "-> Cti_prd",
+        "0.002 mmole_per_min * BW / 70 kg * Vurine / Vurine",
+        parameters=[],
+    )
+    d = PBPKDefinition(sid="custom_top", substances=[s], chemistry=[production])
+    result = build(d, tmp_path)
+    comp = libsbml.readSBMLFromFile(str(result.comp_path))
+    muscle = comp.getPlugin("comp").getModelDefinition("standard_mu")
+    assert muscle.getCompartment("Vurine") is not None
+    assert muscle.getParameter("BW") is not None
+    ports = muscle.getPlugin("comp")
+    assert ports.getPort("Vurine_port").getIdRef() == "Vurine"
+    assert ports.getPort("BW_port").getIdRef() == "BW"
+    flat = _model(result.flat_path)
+    assert flat.getCompartment("MU__Vurine") is None
+    assert flat.getParameter("MU__BW") is None
+    for bw in (70.0, 140.0):
+        r = individual(result.flat_path, BW=bw)
+        r.integrator.absolute_tolerance = 1e-12
+        r.integrator.relative_tolerance = 1e-10
+        r.simulate(0, 100)
+        expected = 0.002 * bw / 70.0 * 100
+        assert total_amount(r, "prd") == pytest.approx(expected, rel=1e-6)
+
+
+def test_an_organ_formula_reads_a_definition_parameter(tmp_path: Path) -> None:
+    """A kinetic constant of the liver is a formula over a parameter of the definition.
+
+    The liver reads `k_bl` through an input port under its id; a change
+    before the simulation is followed.
+    """
+    k = Formula("2 dimensionless * k_bl", U.per_min)
+    d = dataclasses.replace(
+        _definition(k=k),
+        parameters=[ModelParameter("k_bl", 0.005, U.per_min, name="bile constant")],
+    )
+    result = build(d, tmp_path)
+    comp = libsbml.readSBMLFromFile(str(result.comp_path))
+    liver = comp.getPlugin("comp").getModelDefinition("standard_li")
+    assert liver.getPlugin("comp").getPort("k_bl_port").getIdRef() == "k_bl"
+    model = _model(result.flat_path)
+    assert formula_ids(str(_formula(model, "LI__PMBIL_k"))) == {"k_bl"}
+    r = individual(result.flat_path)
+    assert r["LI__PMBIL_k"] == pytest.approx(0.01)
+    r = individual(result.flat_path, k_bl=0.01)
+    assert r["LI__PMBIL_k"] == pytest.approx(0.02)

@@ -769,11 +769,11 @@ K_PROD = Value(
 )
 
 
-def _k_prod(value: object = K_PROD) -> ModelParameter:
+def _k_prod(value: float | Value = K_PROD) -> ModelParameter:
     """The production rate `k_prod` of a definition."""
     return ModelParameter(
         "k_prod",
-        value,  # ty: ignore[invalid-argument-type]
+        value,
         U.mmole_per_min,
         name="production rate",
         notes="The production shared by the baseline and the muscle.",
@@ -935,12 +935,12 @@ def test_a_definition_without_parameters_is_unchanged(tmp_path: Path) -> None:
     """
     plain = reference_definition()
     assert plain.parameters == ()
-    assert_reference_sbml(build(plain, tmp_path / "plain"))
+    plain_result = build(plain, tmp_path / "plain")
+    assert_reference_sbml(plain_result)
     with_parameter = dataclasses.replace(
         plain, parameters=[ModelParameter("k_prod", 0.002, U.mmole_per_min)]
     )
     result = build(with_parameter, tmp_path / "parameter")
-    plain_result = build(plain, tmp_path / "plain2")
     for path, reference in (
         (result.comp_path, plain_result.comp_path),
         (result.flat_path, plain_result.flat_path),
@@ -950,3 +950,24 @@ def test_a_definition_without_parameters_is_unchanged(tmp_path: Path) -> None:
         assert dateless(libsbml.writeSBMLToString(doc)) == dateless(
             reference.read_text(encoding="utf-8")
         )
+
+
+def test_a_definition_parameter_may_not_take_an_id_of_the_definition() -> None:
+    """An observer of the definition or a PD component under the id is named as such."""
+    from .conftest import cardiac_pd
+
+    observer = Observer("A_prod", "1 mmole_per_min * time", U.mmole, "produced")
+    d = _definition(
+        parameters=[ModelParameter("A_prod", 1.0, U.mmole)], observers=[observer]
+    )
+    with pytest.raises(
+        ValueError,
+        match="parameter 'A_prod' is the id of an observer of the definition",
+    ):
+        compose(d)
+    d = _definition(
+        parameters=[ModelParameter("cardio", 1.0, U.dimensionless)],
+        pd=[cardiac_pd(reads="api")],
+    )
+    with pytest.raises(ValueError, match="parameter 'cardio' is an id of the PD"):
+        compose(d)

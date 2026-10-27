@@ -479,7 +479,9 @@ def _body(
         submodels.append(submodel)
         replaced += pd_replaced
         outputs += pd.outputs.values()
-    problems = _parameter_problems(definition, top, organ_models, submodels, replaced)
+    problems = _parameter_problems(
+        definition, top, model_definitions, organ_models, submodels, replaced
+    )
     if problems:
         raise ValueError(
             f"Invalid PBPK definition '{definition.sid}':\n- " + "\n- ".join(problems)
@@ -530,20 +532,23 @@ def _formula_cycles(objects: Iterable[Sbase]) -> list[str]:
 def _parameter_problems(
     definition: PBPKDefinition,
     top: "_Top",
+    model_definitions: Iterable[ModelDefinition],
     organ_models: Iterable[ModelDefinition],
     submodels: Iterable[Submodel],
     replaced: Iterable[ReplacedElement],
 ) -> list[str]:
-    """The parameters of a definition which take an id of the library.
+    """The parameters of a definition which take an id of the body or of the definition.
 
     An id of the top model (a parameter of a substance, a pool, a sink, an
-    observer of the library, a submodel or a model definition) would be
-    defined twice; a local id of an organ which is no input under the same
-    id (`Vti`, `<process>_Vmax`, the liver's `fimp_<protein>`) is what a
-    custom reaction of the organ reads instead of the parameter.
+    observer of the library, the submodel or the model definition of an
+    organ or a PD component) would be defined twice, and so would the id of
+    an observer of the definition (added after the body); a local id of an
+    organ which is no input under the same id (`Vti`, `<process>_Vmax`, the
+    liver's `fimp_<protein>`) is what a custom reaction of the organ reads
+    instead of the parameter.
 
     Returns:
-        The problems, naming the parameter and where the library has its id.
+        The problems, naming the parameter and what has its id.
     """
     sids = {p.sid for p in definition.parameters}
     if not sids:
@@ -553,8 +558,9 @@ def _parameter_problems(
     for o in [*top.objects, *local]:
         if isinstance(o, Parameter | Compartment | Species | Reaction):
             counts[str(o.sid)] = counts.get(str(o.sid), 0) + 1
-    for x in [*submodels, *organ_models]:
+    for x in [*submodels, *model_definitions]:
         counts[str(x.sid)] = counts.get(str(x.sid), 0) + 1
+    observers = {o.sid for o in definition.observers}
     inputs = {
         (str(r.submodelRef), str(r.portRef).removesuffix(PORT_SUFFIX))
         for r in replaced
@@ -575,9 +581,15 @@ def _parameter_problems(
                     organs.setdefault(str(par.sid), []).append(sm)
     problems: list[str] = []
     for p in definition.parameters:
+        if p.sid in observers:
+            problems.append(
+                f"parameter '{p.sid}' is the id of an observer of the definition"
+            )
         if counts.get(p.sid, 0) > 1:
             problems.append(
-                f"parameter '{p.sid}' is an id of the top model of the library"
+                f"parameter '{p.sid}' is an id of the body (the top model of the "
+                "library, a submodel or a model definition of an organ or a PD "
+                "component)"
             )
         if p.sid in organs:
             problems.append(
@@ -1614,6 +1626,12 @@ class _Top:
         """
         model = copy.deepcopy(pd.model)
         sid = str(model.sid)
+        if sid in {p.sid for p in self.definition.parameters}:
+            raise ValueError(
+                f"Invalid PBPK definition '{self.definition.sid}':\n- parameter "
+                f"'{sid}' is an id of the PD component '{sid}' (its submodel and "
+                "model definition)"
+            )
         if sid in self.known:
             raise ValueError(
                 f"The PD component '{sid}' has the id of an element of the body."
