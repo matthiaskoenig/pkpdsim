@@ -1,5 +1,8 @@
 """The base experiment of the models built on the library (`pkpdsim.pbpk.experiment`)."""
 
+import os
+import pickle
+import shutil
 import subprocess
 import sys
 from collections.abc import Callable
@@ -13,7 +16,7 @@ from sbmlsim.simulator import Simulator
 
 from pkpdsim import impairment
 from pkpdsim.model import PKPDModel
-from pkpdsim.pbpk import Sex, build
+from pkpdsim.pbpk import Sex, build, load
 from pkpdsim.pbpk import experiment as pbpk_experiment
 from pkpdsim.pbpk.builder import BuildResult
 from pkpdsim.pbpk.experiment import (
@@ -108,6 +111,50 @@ def test_the_healthy_gfr_is_cached(
     healthy_gfr(path, bw=70.0)
     healthy_gfr(Path(str(path)), bw=70.0, height=None, hf_severity=0.0)
     assert runs == []
+
+
+def test_the_healthy_gfr_falls_with_the_cirrhosis(male: BuildResult) -> None:
+    """At `CP_severity` 3 the healthy GFR is lower by the hepatorenal factor."""
+    path = male.flat_path
+    factor = load("impairment")["child_pugh"]["gfr"]["value"][2]
+    cirrhosis = healthy_gfr(path, cp_severity=3.0)
+    assert cirrhosis == pytest.approx(
+        individual(path, CP_severity=3.0)["GFR_base"] * 1000, rel=1e-12
+    )
+    assert cirrhosis == pytest.approx(factor * healthy_gfr(path), rel=1e-12)
+    cls = _experiment(male)
+    assert cls.healthy_gfr(cp_severity=3.0) == cirrhosis
+    f = cls.renal_function(30.0, bw=60.0, height=165.0, cp_severity=3.0)
+    result = Simulator(n_workers=1).run(
+        path,
+        Simulation(
+            end=1,
+            time_unit="min",
+            preinit_changes={
+                "BW": Q(60.0, "kg"),
+                "HEIGHT": Q(165.0, "cm"),
+                "CP_severity": Q(3.0, "dimensionless"),
+                "f_renal_function": f,
+            },
+        ),
+    )
+    gfr = float(start_values(result, "GFR").item())
+    assert Q(gfr, result.units["GFR"]).to("ml/min").magnitude == pytest.approx(
+        30.0, rel=1e-9
+    )
+
+
+def test_a_rebuilt_model_is_simulated_again(
+    male: BuildResult, female: BuildResult, tmp_path: Path
+) -> None:
+    """The cache knows the modification time of the model file."""
+    path = tmp_path / "model_flat.xml"
+    shutil.copyfile(male.flat_path, path)
+    assert healthy_gfr(path) == pytest.approx(healthy_gfr(male.flat_path))
+    mtime = path.stat().st_mtime_ns
+    shutil.copyfile(female.flat_path, path)
+    os.utime(path, ns=(mtime + 1_000_000_000, mtime + 1_000_000_000))
+    assert healthy_gfr(path) == pytest.approx(healthy_gfr(female.flat_path))
 
 
 def test_the_renal_function_gives_the_measured_clearance(male: BuildResult) -> None:
@@ -209,6 +256,10 @@ def test_importing_the_library_imports_no_simulator() -> None:
     assert {"PBPKSimulationExperiment", "ScaledRenalMap", "healthy_gfr"} <= set(
         pkpdsim.pbpk.__all__
     )
+    assert {"PBPKSimulationExperiment", "ScaledRenalMap", "healthy_gfr"} <= set(
+        dir(pkpdsim.pbpk)
+    )
+    assert {"build", "Substance", "ids"} <= set(dir(pkpdsim.pbpk))
     with pytest.raises(AttributeError, match="no_such_name"):
         _ = pkpdsim.pbpk.no_such_name
 
@@ -271,6 +322,19 @@ def test_a_scaled_renal_map_of_a_function() -> None:
     assert list(unbound) == list(impairment.RENAL_FUNCTION)
     with pytest.raises(TypeError, match="healthy GFR"):
         _ = unbound["Normal renal function"]
+
+
+def test_a_renal_map_is_picklable(male: BuildResult) -> None:
+    """A map pickles without the maps of the classes which accessed it."""
+    cls = _experiment(male)
+    _ = cls.renal_map["Normal renal function"]
+    unbound = PBPKSimulationExperiment.__dict__["renal_map"]
+    copy = pickle.loads(pickle.dumps(unbound))
+    assert isinstance(copy, ScaledRenalMap)
+    assert list(copy) == list(impairment.RENAL_FUNCTION_GFR)
+    assert copy.__dict__["_bound"] == {}
+    with pytest.raises(TypeError, match="healthy GFR"):
+        _ = copy["Normal renal function"]
 
 
 def test_the_healthy_gfr_needs_a_model_object() -> None:

@@ -81,6 +81,11 @@ def __getattr__(name: str) -> object:
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
+def __dir__() -> list[str]:
+    """List the names of the module with the names imported on their first access."""
+    return sorted({*globals(), *_EXPERIMENT_NAMES})
+
+
 __all__ = [
     "MM",
     "MODEL_UNITS",

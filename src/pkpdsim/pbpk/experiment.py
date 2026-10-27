@@ -26,7 +26,6 @@ The module imports sbmlsim; `pkpdsim.pbpk` exports its names lazily, so
 
 from __future__ import annotations
 
-import weakref
 from collections.abc import Callable, Iterator, Mapping
 from functools import cache
 from pathlib import Path
@@ -54,20 +53,21 @@ def healthy_gfr(
     bw: float | None = None,
     height: float | None = None,
     hf_severity: float = 0.0,
+    cp_severity: float = 0.0,
 ) -> float:
     """Get the healthy glomerular filtration rate of an individual [ml/min].
 
     The GFR of an individual at renal function 1 (`GFR_base` of the library,
     `GFR = GFR_base * f_renal_function`): it scales with the body surface area
-    of the body weight and the height, and the severity of heart failure lowers
-    the renal blood flow and with it the GFR; the cirrhosis is that of the
-    model (`CP_severity`, 0 in a model of the library). The GFR and its
-    covariates are initial assignments, so it is read from a simulation of one
-    minute with the covariates as changes before the initialization, which
-    evaluates the initial assignments again (sbmlsim). It is cached per model
-    file and individual, once for all experiments of a process; a model file
-    which is created again in the process keeps the cached values. The sex is
-    no parameter of the model (the library builds the model of one sex).
+    of the body weight and the height, the severity of heart failure lowers
+    the renal blood flow and with it the GFR, and the cirrhosis lowers it by
+    the hepatorenal factor of its Child-Pugh class. The GFR and its covariates
+    are initial assignments, so it is read from a simulation of one minute
+    with the covariates as changes before the initialization, which evaluates
+    the initial assignments again (sbmlsim). It is cached per model file, its
+    modification time and the individual, once for all experiments of a
+    process; a model file which is created again is simulated again. The sex
+    is no parameter of the model (the library builds the model of one sex).
 
     Args:
         model_path: the flat SBML model of the library.
@@ -76,19 +76,40 @@ def healthy_gfr(
         height: the height of the individual [cm], `None` for that of the
             model.
         hf_severity: the severity of heart failure `HF_severity` (0 to 4).
+        cp_severity: the severity of cirrhosis `CP_severity` (0 to 3).
 
     Returns:
         The GFR at renal function 1 [ml/min].
     """
-    return _healthy_gfr(Path(model_path), bw, height, float(hf_severity))
+    path = Path(model_path)
+    return _healthy_gfr(
+        path,
+        path.stat().st_mtime_ns,
+        bw,
+        height,
+        float(hf_severity),
+        float(cp_severity),
+    )
 
 
 @cache
 def _healthy_gfr(
-    model_path: Path, bw: float | None, height: float | None, hf_severity: float
+    model_path: Path,
+    mtime_ns: int,  # a key of the cache only
+    bw: float | None,
+    height: float | None,
+    hf_severity: float,
+    cp_severity: float,
 ) -> float:
-    """Simulate the healthy GFR of an individual once, see `healthy_gfr`."""
-    changes = {ids.HF_SEVERITY: Q(hf_severity, "dimensionless")}
+    """Simulate the healthy GFR of an individual once, see `healthy_gfr`.
+
+    `mtime_ns`, the modification time of the model file, is only a key of the
+    cache: a model which is created again is simulated again.
+    """
+    changes = {
+        ids.HF_SEVERITY: Q(hf_severity, "dimensionless"),
+        ids.CP_SEVERITY: Q(cp_severity, "dimensionless"),
+    }
     if bw is not None:
         changes[ids.BW] = Q(bw, "kg")
     if height is not None:
@@ -147,10 +168,16 @@ class ScaledRenalMap(Mapping[str, float]):
         self._gfr = gfr
         self._reference = reference
         self._values: dict[str, float] | None = None
-        #: the maps bound to the classes which accessed this unbound map
-        self._bound: weakref.WeakKeyDictionary[type, ScaledRenalMap] = (
-            weakref.WeakKeyDictionary()
-        )
+        #: the maps bound to the classes which accessed this unbound map; a
+        #: plain dict, since a bound map holds the classmethod `healthy_gfr` of
+        #: its class, which a weak key would not free either (the classes of
+        #: experiments live as long as their module), a cache which `pickle`
+        #: leaves out (`__getstate__`)
+        self._bound: dict[type, ScaledRenalMap] = {}
+
+    def __getstate__(self) -> dict[str, object]:
+        """Get the state to pickle: without the maps bound to classes."""
+        return {**self.__dict__, "_bound": {}}
 
     def __get__(
         self, instance: object | None, owner: type | None = None
@@ -255,6 +282,7 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
         bw: float | None = None,
         height: float | None = None,
         hf_severity: float = 0.0,
+        cp_severity: float = 0.0,
     ) -> float:
         """Get the healthy glomerular filtration rate of an individual [ml/min].
 
@@ -267,6 +295,7 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
             height: the height of the individual [cm], `None` for that of the
                 model.
             hf_severity: the severity of heart failure `HF_severity` (0 to 4).
+            cp_severity: the severity of cirrhosis `CP_severity` (0 to 3).
 
         Returns:
             The GFR at renal function 1 [ml/min].
@@ -280,7 +309,11 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
                 "base of the experiments of the model."
             )
         return healthy_gfr(
-            cls.pkpd_model.model_path, bw=bw, height=height, hf_severity=hf_severity
+            cls.pkpd_model.model_path,
+            bw=bw,
+            height=height,
+            hf_severity=hf_severity,
+            cp_severity=cp_severity,
         )
 
     @classmethod
@@ -291,14 +324,15 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
         bw: float | None = None,
         height: float | None = None,
         hf_severity: float = 0.0,
+        cp_severity: float = 0.0,
     ) -> Quantity:
         """Get the renal function of a measured clearance.
 
         The glomerular filtration rate of the model is `f_renal_function *
         GFR_base`, and `GFR_base`, the healthy rate of the individual of the
         simulation (`healthy_gfr`), scales with its body surface area and
-        falls with the severity of heart failure. A measured clearance includes
-        both, so the renal function is the clearance relative to the healthy
+        falls with the severity of heart failure and of cirrhosis. A measured
+        clearance includes all of them, so the renal function is the clearance relative to the healthy
         rate of the individual of the study, and the simulated rate is the
         measured one; the simulation sets the same covariates.
 
@@ -310,6 +344,7 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
             height: the height of the simulation [cm], `None` for that of the
                 model.
             hf_severity: the severity of heart failure of the simulation.
+            cp_severity: the severity of cirrhosis of the simulation.
 
         Returns:
             The renal function `f_renal_function`.
@@ -318,7 +353,7 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
             ValueError: for a renal function outside of `renal_function_range`.
         """
         value = clearance / cls.healthy_gfr(
-            bw=bw, height=height, hf_severity=hf_severity
+            bw=bw, height=height, hf_severity=hf_severity, cp_severity=cp_severity
         )
         low, high = cls.renal_function_range
         if not low <= value <= high:
