@@ -332,9 +332,10 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
         GFR_base`, and `GFR_base`, the healthy rate of the individual of the
         simulation (`healthy_gfr`), scales with its body surface area and
         falls with the severity of heart failure and of cirrhosis. A measured
-        clearance includes all of them, so the renal function is the clearance relative to the healthy
-        rate of the individual of the study, and the simulated rate is the
-        measured one; the simulation sets the same covariates.
+        clearance includes all of them, so the renal function is the
+        clearance relative to the healthy rate of the individual of the
+        study, and the simulated rate is the measured one; the simulation
+        sets the same covariates.
 
         Args:
             clearance: measured clearance (creatinine clearance or GFR)
