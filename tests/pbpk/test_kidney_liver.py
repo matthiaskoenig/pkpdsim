@@ -194,7 +194,10 @@ def test_filtration_clearance_in_every_form(
     the net filtrate at the outflow concentration: at the steady state of an
     infusion the blood leaving the kidney has the arterial plasma
     concentration, with tissue distribution and with either erythrocyte
-    mode, also in the flow-limited kidney (`Cor/K_or`).
+    mode, also in the flow-limited kidney (`Cor/K_or`). Since the filtration
+    reads `Car`, the clearance ratio is an identity of the formula: the
+    outflow law is pinned by `Cout == Car` and by the urine rate equal to
+    the infusion.
     """
     r = _load(_distributed(tmp_path, mode, ery))
     r[ids.infusion_rate(S)] = INFUSION
