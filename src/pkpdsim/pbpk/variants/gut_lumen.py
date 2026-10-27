@@ -27,6 +27,7 @@ from pkpdsim.pbpk.routes import (
     Route,
     dissolution_inputs,
     dissolution_rate,
+    dissolution_reads_fed,
     is_weibull,
 )
 from pkpdsim.pbpk.substance import Substance
@@ -345,6 +346,14 @@ class LumenBuilder(StandardBuilder):
         sid = s.sid
         dose = self._dose_input(ids.po_dose(sid), f"oral dose {sid} (tablet) [mg]")
         mr = self._input(ids.mr(sid), U.g_per_mole, f"molecular weight {sid} [g/mole]")
+        if dissolution_reads_fed(route):
+            if self.single:
+                msg = (
+                    f"The dissolution of {sid} has a factor of the fed state, but "
+                    "the single lumen has no fed state: use the segmented intestine."
+                )
+                raise ValueError(msg)
+            self._input(ids.FED, U.dimensionless, "fed state (0 fasted, 1 fed)")
         for pid, unit, name in dissolution_inputs(route):
             self._input(pid, unit, name)
         solids = [

@@ -78,9 +78,11 @@ __all__ = [
     "dissolution_age",
     "dissolution_clock",
     "dissolution_dose50",
+    "dissolution_fed_factor",
     "dissolution_lag",
     "dissolution_rate",
     "dissolution_reaction",
+    "dissolution_release_factor",
     "dissolution_shape",
     "dissolution_t50",
     "dose_reaction",
@@ -858,6 +860,16 @@ def sol_dose(s: str) -> str:
 def dissolution(s: str) -> str:
     """The id of the rate of the dissolution of a tablet, `Ka_dis_<s>`."""
     return f"Ka_dis_{s}"
+
+
+def dissolution_fed_factor(s: str) -> str:
+    """The id of the factor of the dissolution rate in the fed state, `f_dis_fed_<s>`."""
+    return f"f_dis_fed_{s}"
+
+
+def dissolution_release_factor(s: str) -> str:
+    """The id of the factor of a modified-release formulation, `f_dis_release_<s>`."""
+    return f"f_dis_release_{s}"
 
 
 def dissolution_t50(s: str) -> str:

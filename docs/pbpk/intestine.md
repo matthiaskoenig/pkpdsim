@@ -32,9 +32,15 @@ d(PODOSE_<s>)/dt = -(J_po_<s> + J_trs_st_<s>) * Mr_<s>
 
 The dissolution rate `kdis` (1/min) acts on the undissolved amount of every segment; the formulation of the tablet decides it:
 
-- `FirstOrderDissolution(k)`: `kdis = k` (`Ka_dis_<s>`, 1/hr); the default (2/hr, the default of the hand-written models, a choice of the library) when the route states no formulation;
+- `FirstOrderDissolution(k, fed, release)`: `kdis = k` (`Ka_dis_<s>`, 1/hr), with two optional factors (see below); the default (2/hr, the default of the hand-written models, a choice of the library) when the route states no formulation;
 - `WeibullDissolution(t50, shape, lag)`: the fraction dissolved `F = 1 - exp(-ln2*((t - lag)/t50)^shape)` after the lag time, applied as its hazard on the undissolved amount, with the time since the dose the mean age of the undissolved drug (`age_dis_<s>`); exact for one dose, doses which overlap share one clock (the amount-weighted mean age);
 - `DoseDependentDissolution(k, dose50)`: `kdis = k*D50/(D50 + D)` with the undissolved amount `D` (mg) of all segments, a dissolution which saturates with the dose (solubility-limited).
+
+The first order dissolution has two optional factors, each creating a dimensionless parameter of the body only if it is set (without them the model has neither parameter and the rate is `Ka_dis_<s>`): `fed` creates `f_dis_fed_<s>`, the factor of the rate in the fed state (`FED = 1`; food slows the dissolution), and `release` creates `f_dis_release_<s>`, the factor of a modified-release formulation (the given value, 1 for the immediate-release tablet; the experiments of a prolonged-release tablet set it, e.g. 0.2). The single lumen has no fed state, a `fed` factor there raises.
+
+```equations title="first order dissolution with the factors of the formulation and the fed state"
+J_po_<s>: -> Clumen_st_<s> = Ka_dis_<s> / 60 min_per_hr * f_dis_release_<s> * (1 + FED * (f_dis_fed_<s> - 1)) * PODOSE_<s> / Mr_<s>
+```
 
 ```equations title="Weibull dissolution (t50, shape, lag of the tablet)"
 kdis_<s> = piecewise(0, age_dis_<s> <= lag_dis_<s>, 0.693147180559945 * shape_dis_<s> / t50_dis_<s> * ((age_dis_<s> - lag_dis_<s>) / t50_dis_<s> + 1e-9)^(shape_dis_<s> - 1))

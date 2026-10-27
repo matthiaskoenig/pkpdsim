@@ -25,7 +25,9 @@ rules act on them).
 The dissolution rate `kdis` (1/min) acts on the undissolved amount of every
 segment:
 
-- `FirstOrderDissolution(k)`: `kdis = k` (`Ka_dis_<s>`, 1/hr);
+- `FirstOrderDissolution(k, fed, release)`: `kdis = k` (`Ka_dis_<s>`, 1/hr),
+  times the factor of a modified-release formulation `f_dis_release_<s>`
+  and `(1 + FED*(f_dis_fed_<s> - 1))` of the fed state, of those which are set;
 - `WeibullDissolution(t50, shape, lag)`: the fraction dissolved
   `F = 1 - exp(-ln2*((t - lag)/t50)^shape)` after the lag time, applied as
   its hazard `kdis = ln2*shape/t50*((t - lag)/t50)^(shape - 1)` on the
@@ -74,6 +76,7 @@ __all__ = [
     "WeibullDissolution",
     "dissolution_inputs",
     "dissolution_rate",
+    "dissolution_reads_fed",
     "is_weibull",
     "route_objects",
 ]
@@ -85,9 +88,19 @@ class FirstOrderDissolution:
 
     Attributes:
         k: the rate of the dissolution (1/hr).
+        fed: the factor of the dissolution rate in the fed state (`FED = 1`),
+            the body parameter `f_dis_fed_<s>`; the rate is
+            `k*(1 + FED*(fed - 1))`. No parameter if `None`. The single lumen
+            has no fed state and raises.
+        release: the factor of a modified-release formulation, the body
+            parameter `f_dis_release_<s>` (the given value, set by the
+            experiments of such a formulation; 1 for the immediate-release
+            tablet), which multiplies the rate. No parameter if `None`.
     """
 
     k: Q
+    fed: Q | None = None
+    release: Q | None = None
 
 
 @dataclass(frozen=True)
@@ -201,7 +214,32 @@ def dissolution_inputs(route: Route) -> list[tuple[str, UnitDefinition, str]]:
                 f"undissolved amount of half the dissolution rate {s} [mg]",
             )
         )
+    if isinstance(f, FirstOrderDissolution):
+        if f.fed is not None:
+            pars.append(_fed_input(s))
+        if f.release is not None:
+            pars.append(_release_input(s))
     return pars
+
+
+def _fed_input(s: str) -> tuple[str, UnitDefinition, str]:
+    """The input of the factor of the fed state."""
+    return ids.dissolution_fed_factor(s), U.dimensionless, f"dissolution factor fed {s}"
+
+
+def _release_input(s: str) -> tuple[str, UnitDefinition, str]:
+    """The input of the factor of the modified-release formulation."""
+    return (
+        ids.dissolution_release_factor(s),
+        U.dimensionless,
+        f"dissolution factor release {s}",
+    )
+
+
+def dissolution_reads_fed(route: Route) -> bool:
+    """Check whether the dissolution of a tablet depends on the fed state."""
+    f = _formulation(route)
+    return isinstance(f, FirstOrderDissolution) and f.fed is not None
 
 
 def is_weibull(route: Route) -> bool:
@@ -225,6 +263,11 @@ def dissolution_rate(route: Route, undissolved: str, age: str) -> tuple[str, boo
     f = _formulation(route)
     k = f"{ids.dissolution(s)} / 60 min_per_hr"
     if isinstance(f, FirstOrderDissolution):
+        if f.release is not None:
+            k += f" * {ids.dissolution_release_factor(s)}"
+        if f.fed is not None:
+            fed = ids.dissolution_fed_factor(s)
+            k += f" * (1 dimensionless + {ids.FED} * ({fed} - 1 dimensionless))"
         return k, False
     if isinstance(f, DoseDependentDissolution):
         d50 = ids.dissolution_dose50(s)
@@ -322,7 +365,7 @@ def _dissolution_parameters(route: Route) -> list[Parameter]:
                 "dissolves.",
             ),
         ]
-    pars = [
+    pars: list[Parameter] = [
         value_parameter(
             ids.dissolution(s),
             f.k,
@@ -348,6 +391,32 @@ def _dissolution_parameters(route: Route) -> list[Parameter]:
                 "undissolved amount `D`.",
             )
         )
+    if isinstance(f, FirstOrderDissolution):
+        if f.fed is not None:
+            pars.append(
+                value_parameter(
+                    ids.dissolution_fed_factor(s),
+                    f.fed,
+                    U.dimensionless,
+                    f"dissolution factor fed {s}",
+                    _SBO_PARAMETER,
+                    "Factor of the dissolution rate in the fed state: the rate is "
+                    "`Ka_dis*(1 + FED*(f_dis_fed - 1))`.",
+                )
+            )
+        if f.release is not None:
+            pars.append(
+                value_parameter(
+                    ids.dissolution_release_factor(s),
+                    f.release,
+                    U.dimensionless,
+                    f"dissolution factor release {s}",
+                    _SBO_PARAMETER,
+                    "Factor of the dissolution rate of a modified-release "
+                    "formulation (1 is the immediate-release tablet); the "
+                    "experiments of such a formulation set it.",
+                )
+            )
     return pars
 
 

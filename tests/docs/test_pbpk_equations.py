@@ -35,6 +35,7 @@ from pkpdsim.pbpk import (
     Erythrocytes,
     Excretion,
     FirstOrder,
+    FirstOrderDissolution,
     Hill,
     Induction,
     Inhibition,
@@ -226,7 +227,10 @@ def absorption() -> PBPKDefinition:
         variants=Variants(
             organs={Organ.SMALL_INTESTINE: SegmentedIntestine(fabs=0.8, f_ka_colon=0.5)}
         ),
-        routes=[Route.oral_solution("drg")],
+        routes=[
+            Route.oral_solution("drg"),
+            Route.oral("drg", FirstOrderDissolution(k=2.0, fed=0.5, release=0.2)),
+        ],
     )
 
 

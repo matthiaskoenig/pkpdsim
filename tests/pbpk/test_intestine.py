@@ -21,6 +21,7 @@ from pkpdsim.pbpk import (
     DoseDependentDissolution,
     Excretion,
     FirstOrder,
+    FirstOrderDissolution,
     Induction,
     Inhibition,
     Kp,
@@ -473,6 +474,79 @@ def test_dose_dependent_dissolution(tmp_path: Path) -> None:
         r.simulate(1e-3, 30, 5)
         fraction[dose] = 1 - r[ids.po_dose(S)] / dose
     assert fraction[500.0] < fraction[1.0]
+
+
+def _tablet_flux(r: "roadrunner.RoadRunner", fed: float = 0.0, **sets: float) -> float:
+    """The dissolution flux (mmole/min) of a tablet of 10 mg at its start."""
+    r.resetAll()
+    r[ids.FED] = fed
+    for pid, v in sets.items():
+        r[pid] = v
+    r[ids.po_dose(S)] = 10.0
+    return r[_gu(ids.dose_reaction("po", S))]
+
+
+def test_the_fed_state_scales_the_dissolution(tmp_path: Path) -> None:
+    """`fed=0.25`: the flux at `FED = 1` is 0.25 of that at `FED = 0` at the same amount."""
+    route = Route.oral(S, FirstOrderDissolution(k=2.0, fed=0.25))
+    r = _build(tmp_path, _definition("dis_fed", routes=[route]))
+    assert r[ids.dissolution_fed_factor(S)] == 0.25
+    assert ids.dissolution_release_factor(S) not in r.model.getGlobalParameterIds()
+    fasted = _tablet_flux(r)
+    assert fasted == pytest.approx(2.0 / 60 * 10.0 / r[ids.mr(S)], rel=1e-9)
+    assert _tablet_flux(r, fed=1.0) == pytest.approx(0.25 * fasted, rel=1e-9)
+
+
+def test_a_release_factor_slows_the_dissolution(tmp_path: Path) -> None:
+    """`release=1.0`: with `f_dis_release_<s> = 0.2` the tablet dissolves at 0.2 of the rate."""
+    route = Route.oral(S, FirstOrderDissolution(k=2.0, release=1.0))
+    r = _build(tmp_path, _definition("dis_release", routes=[route]))
+    assert r[ids.dissolution_release_factor(S)] == 1.0
+    assert ids.dissolution_fed_factor(S) not in r.model.getGlobalParameterIds()
+    immediate = _tablet_flux(r)
+    slow = _tablet_flux(r, **{ids.dissolution_release_factor(S): 0.2})
+    assert slow == pytest.approx(0.2 * immediate, rel=1e-9)
+
+
+def test_both_dissolution_factors_multiply(tmp_path: Path) -> None:
+    """The release factor and the fed factor act together on the rate."""
+    route = Route.oral(S, FirstOrderDissolution(k=2.0, fed=0.5, release=0.2))
+    r = _build(tmp_path, _definition("dis_both", routes=[route]))
+    fasted = _tablet_flux(r)
+    assert fasted == pytest.approx(0.2 * 2.0 / 60 * 10.0 / r[ids.mr(S)], rel=1e-9)
+    assert _tablet_flux(r, fed=1.0) == pytest.approx(0.5 * fasted, rel=1e-9)
+
+
+def test_a_dissolution_without_factors_is_unchanged(tmp_path: Path) -> None:
+    """Neither factor: no parameter of a factor, the rate is `Ka_dis/60*PODOSE/Mr`."""
+    for formulation in (None, FirstOrderDissolution(k=2.0)):
+        d = _definition("dis_plain", routes=[Route.oral(S, formulation)])
+        result = build(d, tmp_path)
+        found = _sbml_ids(result.flat_path)
+        assert not {i for i in found if i.startswith("f_dis_")}
+        assert {i for i in found if "dis" in i.lower() and "Ka_" in i} == {
+            ids.dissolution(S)
+        }
+        model = libsbml.readSBMLFromFile(str(result.flat_path)).getModel()
+        law = model.getReaction(_gu(ids.dose_reaction("po", S))).getKineticLaw()
+        assert (
+            libsbml.formulaToL3String(law.getMath())
+            == f"({ids.dissolution(S)} / 60 GU__min_per_hr) * {ids.po_dose(S)} / {ids.mr(S)}"
+        )
+
+
+def test_the_fed_factor_needs_the_segmented_intestine(tmp_path: Path) -> None:
+    """The single lumen has no fed state: a fed factor raises."""
+    route = Route.oral(S, FirstOrderDissolution(k=2.0, fed=0.5))
+    d = _definition(
+        "dis_single",
+        routes=[route],
+        variants=Variants(organs={Organ.SMALL_INTESTINE: SingleLumen()}),
+    )
+    with pytest.raises(ValueError, match="fed state"):
+        build(d, tmp_path)
+    release = Route.oral(S, FirstOrderDissolution(k=2.0, release=0.2))
+    build(dataclasses.replace(d, routes=[release]), tmp_path)
 
 
 def test_variant_registry() -> None:
