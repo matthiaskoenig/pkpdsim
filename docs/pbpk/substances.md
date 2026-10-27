@@ -186,7 +186,7 @@ creatinine = PBPKDefinition(
             mr=113.1,
             distribution=Kp(1.0, ftissue=1.0),
             excretion=Excretion(urine=True),
-            # production over filtration: the steady state of the kidney plasma
+            # production over filtration: the steady state of the arterial plasma
             baseline=Formula("CRTNPROD_k / GFR", U.mM),
         )
     ],
@@ -220,7 +220,7 @@ print([p.sid for p in creatinine.parameters])
 ['CRTNPROD_k']
 ```
 
-The example starts every plasma species at `CRTNPROD_k / GFR`, which is the plasma concentration of the kidney at the steady state, and only that one: the filtration lowers the plasma of the kidney below the arterial plasma, and the production of the muscle raises the venous plasma above it, so the body is not stationary at this start. In a build of the example the arterial plasma settles about 16 % above the baseline, within about two days. A model which needs a stationary start accounts for the renal extraction (and the production) in its baseline, or runs into the steady state before its experiment.
+The example starts every plasma species at `CRTNPROD_k / GFR`, the arterial plasma concentration at the steady state (the filtration clears `GFR*Car`, see [Organ](organ.md#kidney)). The body is not stationary at this start: the filtration takes its amount out of the plasma at once, while the production of the muscle reaches the plasma only as the tissue of the muscle rises. In a build of the example the arterial plasma dips about 2 % below the baseline in the first day and returns to it within about two days. A model which needs a stationary start accounts for the distribution of the production in its baseline, or runs into the steady state before its experiment.
 
 The parameters are constants: a change before the simulation (`preinit_changes`) moves every formula which reads them, and an id of `PBPKDefinition.dynamic` makes them variable. The validation refuses an id which is no SBML SId, contains `__`, is given twice or is an id of the physiology or an organ submodel, and a `Value` or `Formula` in another unit than `unit`; the build (`compose`) refuses an id which the body has (a parameter of a substance such as `fu_<s>` or `Kp_<s>`, a sink, an observer of the library, a PD component), the id of an observer of the definition and a local id of an organ which is no input under the same id (`Vti`, `<process>_Vmax`): a custom reaction there would read the element of the organ instead. Formulas which read each other in a cycle are refused, naming them. Without parameters the SBML is that of a definition without the field.
 

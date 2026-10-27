@@ -23,7 +23,10 @@ Without secretion and reabsorption every filtered molecule reaches the
 urine: at steady state the flow out of every segment equals the flow into
 it, so the urinary excretion is the filtration `fu*GFR*Cpl` of the standard
 kidney, whatever the volumes and the flows of the segments; the tubule
-delays the excretion by minutes.
+delays the excretion by minutes. The plasma leaving the kidney carries the
+plasma flow less the net filtered amount, the filtration less the
+reabsorption from the collecting duct (`J_gfr_<s> - J_reab_<s>`), as in the
+standard kidney.
 
 The fraction reabsorbed of a filtered substance (`f_reabsorbed_<s>` of
 `Excretion.fraction_reabsorbed`) is an empirical passive reabsorption at the
@@ -69,7 +72,12 @@ from pkpdsim.pbpk.chemistry import (
     Transport,
 )
 from pkpdsim.pbpk.data import cite, value
-from pkpdsim.pbpk.organ import Boundary, OrganContext, StandardBuilder
+from pkpdsim.pbpk.organ import (
+    Boundary,
+    NetFiltration,
+    OrganContext,
+    StandardBuilder,
+)
 from pkpdsim.pbpk.organ_builder import ONE
 from pkpdsim.pbpk.organs import Organ, Part
 from pkpdsim.pbpk.parts import Parts
@@ -259,6 +267,40 @@ class NephronBuilder(StandardBuilder):
         if s.sid in self.tubular:
             self._tubule(s)
 
+    def _reabsorbed(self, s: Substance) -> str:
+        """The fraction `f_reabsorbed_<s>` of the drug leaving the collecting duct which returns."""
+        return self._input(
+            ids.fraction_reabsorbed(s.sid),
+            U.dimensionless,
+            f"fraction reabsorbed {s.sid}",
+            "The fraction of the drug leaving the collecting duct which is "
+            "reabsorbed into the plasma of the kidney (passive, empirical).",
+        )
+
+    def _reabsorption(self, s: Substance) -> str:
+        """The rate of the reabsorption from the collecting duct into the plasma, `J_reab_<s>`."""
+        leaving = self._leaving_tubule(s)
+        return f"{leaving} * {self._reabsorbed(s)}"
+
+    def _leaving_tubule(self, s: Substance) -> str:
+        """The flow of the drug out of the collecting duct, `GFR*f_tub_cd*Ctub_cd_<s>`."""
+        cd = ids.tubule(s.sid, "cd")
+        return f"{self._gfr} * {ids.tubule_flow_fraction('cd')} * {cd}"
+
+    def _filtered(self, s: Substance, fu: str, cplasma: str) -> NetFiltration:
+        """The net amount filtered out of the plasma, `fu*GFR*Cpl - J_reab_<s>`.
+
+        The filtrate leaves the plasma of the kidney, the reabsorbed drug of the
+        collecting duct returns into it: the plasma leaving the kidney carries
+        the plasma flow less the net amount, as in the standard kidney, so at
+        steady state the clearance of the arterial plasma is
+        `fu*GFR*(1 - f_reabsorbed)` of the standard kidney.
+        """
+        return NetFiltration(
+            f"{fu} * {self._gfr} * {cplasma} - {self._reabsorption(s)}",
+            reads=(ids.tubule(s.sid, "cd"),),
+        )
+
     def _filtration(self, s: Substance, parts: Parts, fu: str, cplasma: str) -> None:
         """The glomerular filtration into the lumen of the proximal tubule, `fu*GFR*Cpl`.
 
@@ -319,7 +361,7 @@ class NephronBuilder(StandardBuilder):
                 segment=seg,
             )
         cd = ids.tubule(s.sid, "cd")
-        leaving = f"{gfr} * {ids.tubule_flow_fraction('cd')} * {cd}"
+        leaving = self._leaving_tubule(s)
         if not s.excretion.urine:
             self._reaction(
                 ids.tubule_reaction(s.sid, "cd"),
@@ -330,13 +372,7 @@ class NephronBuilder(StandardBuilder):
                 segment="cd",
             )
             return
-        reabsorbed = self._input(
-            ids.fraction_reabsorbed(s.sid),
-            U.dimensionless,
-            f"fraction reabsorbed {s.sid}",
-            "The fraction of the drug leaving the collecting duct which is "
-            "reabsorbed into the plasma of the kidney (passive, empirical).",
-        )
+        reabsorbed = self._reabsorbed(s)
         self._reaction(
             ids.tubule_reaction(s.sid, "cd"),
             f"{cd} -> {urine}",
@@ -349,7 +385,7 @@ class NephronBuilder(StandardBuilder):
         self._reaction(
             ids.tubule_reabsorption_reaction(s.sid),
             f"{cd} -> {source}",
-            f"{leaving} * {reabsorbed}",
+            self._reabsorption(s),
             f"reabsorbed fraction {s.sid} from the collecting duct into the plasma",
             kind="reabsorption",
             segment="cd",

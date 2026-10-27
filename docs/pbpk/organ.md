@@ -125,12 +125,15 @@ The hepatic venous concentration is an observer of the top model, the outflow of
 
 ## Kidney
 
-The kidney filters the unbound plasma concentration of a substance with urinary excretion into the urine, with the GFR of the physiology (scaled with the individual and the renal function):
+The kidney filters the unbound plasma concentration of a substance with urinary excretion into the urine, with the GFR of the physiology (scaled with the individual and the renal function). The filtered amount leaves the plasma of the kidney with the filtrate: the plasma leaving the kidney carries the plasma flow less the filtration, the fraction reabsorbed stays in the plasma.
 
 ```equations title="kidney"
 J_gfr_<s>: Cpl_<s> -> Aurine_<s> = fu_<s> * GFR * Cpl_<s> * (1 - f_reabsorbed_<s>)
+J_out_pl_<s>: Cpl_<s> -> Cve_<s> = Qki * (1 - HCT) * Cout_<s> - fu_<s> * GFR * Cpl_<s> * (1 - f_reabsorbed_<s>)
 Rurine_<s> = J_gfr_<s>
 ```
+
+Without other processes in the kidney the plasma of the kidney is the arterial plasma at steady state (`Qki*(1-HCT)*Car = Qki*(1-HCT)*Cpl`), so the filtration clearance of the arterial plasma is `fu*GFR*(1 - f_reabsorbed)`, as in the hand-written models (`(Qki - GFR)*C` leaving the kidney), and it follows the GFR exactly.
 
 The urinary excretion rate `Rurine_<s>` (mmole/min) is the sum of the fluxes of the kidney into the urine, the filtration and every apical efflux (`J_gfr_<s> + SEC` with a secretion `SEC`), for every substance with urinary excretion or an apical transport of the kidney; it is an output of the kidney which replaces `Rurine_<s>` of the top model, so experiments and observers read it there.
 

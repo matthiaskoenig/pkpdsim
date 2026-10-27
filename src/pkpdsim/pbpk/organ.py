@@ -28,7 +28,10 @@ and portal inflow which flows past it into the venous pool, and a functional
 fraction `f_functional` of its tissue, which scales the tissue volumes and
 the capacity of its processes (both inputs of the top model, healthy 0 and 1).
 The kidney filters the unbound plasma concentration of a substance with
-urinary excretion into the urine, `fu*GFR*Cpl*(1 - f_reabsorbed)`; its
+urinary excretion into the urine, `J_gfr = fu*GFR*Cpl*(1 - f_reabsorbed)`;
+the filtered amount leaves the plasma with the filtrate, the plasma leaving
+the kidney carries `Qki*(1-HCT)*Cout - J_gfr`, so the filtration clearance of
+the arterial plasma is `fu*GFR*(1 - f_reabsorbed)`. Its
 metabolism and transport (the tubular processes) run with the tubular
 capacity `1 - f_tubular + f_tubular*f_renal_function`, which follows the
 renal function (the intact nephron hypothesis, `f_tubular` 1). The kidney
@@ -83,6 +86,7 @@ from pkpdsim.pbpk.placement import (
     kp_id,
     place,
     unbound,
+    with_modifiers,
 )
 from pkpdsim.pbpk.proteins import Induction, Inhibition
 from pkpdsim.pbpk.routes import Route
@@ -95,11 +99,28 @@ if TYPE_CHECKING:
 __all__ = [
     "Boundary",
     "GutComponent",
+    "NetFiltration",
     "OrganComponent",
     "OrganContext",
     "StandardBuilder",
     "StandardOrgan",
 ]
+
+
+@dataclass(frozen=True)
+class NetFiltration:
+    """The net amount filtered out of the plasma of the kidney, as formula.
+
+    Attributes:
+        rate: the rate (mmole/min), the filtration less what returns into the
+            plasma of the kidney.
+        reads: the species the rate reads besides the plasma of the kidney
+            (the modifiers of the outflow, the collecting duct of the nephron
+            kidney).
+    """
+
+    rate: str
+    reads: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -481,11 +502,14 @@ class StandardBuilder(OrganBuilder):
                 kind="outflow_blood_cells",
             )
             self.outputs[out_bc] = ids.organ_outflow_bc(self.organ, s.sid)
-        self._blood_flows(s, parts, k_organ)
+        filters = self.organ is Organ.KIDNEY and s.excretion.urine
+        self._blood_flows(
+            s, parts, k_organ, self._filtered(s, fu, cout) if filters else None
+        )
         if parts.blood_cells:
             for zone in self._each_zone:
                 self._blood_cells(s, zone)
-        if self.organ is Organ.KIDNEY and s.excretion.urine:
+        if filters:
             self._filtration(s, parts, fu, cout)
         for zone in self._each_zone:
             if parts.tissue == "merged":
@@ -560,11 +584,20 @@ class StandardBuilder(OrganBuilder):
             kind="partition",
         )
 
-    def _blood_flows(self, s: Substance, parts: Parts, k_organ: str | None) -> None:
+    def _blood_flows(
+        self,
+        s: Substance,
+        parts: Parts,
+        k_organ: str | None,
+        filtered: NetFiltration | None = None,
+    ) -> None:
         """The inflow from the pools and the outflow into the pool, plasma and blood cells.
 
         The plasma carries `Q*(1-HCT)*C`, or `Q*BP*C` with erythrocytes in
-        equilibrium; kinetic blood cells carry `Q*HCT*Cbc`. The fraction
+        equilibrium; kinetic blood cells carry `Q*HCT*Cbc`. The plasma leaving
+        the kidney carries the plasma flow less the net filtered amount
+        `filtered` (`_filtered`), which leaves the plasma with the filtrate:
+        `Q*(1-HCT)*Cout - J_gfr`. The fraction
         `f_shunt` of the inflow of the liver bypasses it (portosystemic shunt)
         from the arterial and the portal pool directly into the venous pool;
         the liver is perfused by and drains `(1 - f_shunt)*Q`. The zones of a
@@ -633,22 +666,30 @@ class StandardBuilder(OrganBuilder):
                 if part is Part.PLASMA
                 else ids.outflow_conc_bc(s.sid)
             )
+            equation = f"{ids.species(local_part, s.sid, last)} -> {out}"
+            rate = f"{perfused}{self._flow(out_flow)} * {share} * {leaving}"
+            if part is Part.PLASMA and filtered is not None:
+                equation = with_modifiers(equation, filtered.reads)
+                rate = f"{rate} - ({filtered.rate})"
             self._reaction(
                 ids.outflow_reaction(part, s.sid),
-                f"{ids.species(local_part, s.sid, last)} -> {out}",
-                f"{perfused}{self._flow(out_flow)} * {share} * {leaving}",
+                equation,
+                rate,
                 f"outflow {s.sid}{what} into {out_pool.name.lower()} pool",
                 kind="blood_flow",
                 pool=out_pool,
             )
 
-    def _filtration(self, s: Substance, parts: Parts, fu: str, cplasma: str) -> None:
-        """The glomerular filtration into the urine, `fu*GFR*Cpl*(1 - f_reabsorbed)`.
+    def _filtered(self, s: Substance, fu: str, cplasma: str) -> NetFiltration:
+        """The net amount filtered out of the plasma, `fu*GFR*Cpl*(1 - f_reabsorbed)`.
 
-        The unbound plasma concentration is filtered, the fraction
-        `f_reabsorbed_<s>` of the filtrate returns into the plasma (it is not
-        taken out); the flow-limited kidney filters the plasma concentration of
-        its outflow.
+        The rate of the filtration, which leaves the plasma of the kidney with
+        the filtrate, net of the fraction `f_reabsorbed_<s>` which returns into
+        the plasma (it is not taken out); the flow-limited kidney filters the
+        plasma concentration of its outflow `cplasma`. The plasma leaving the
+        kidney carries the plasma flow less this amount, so the filtration
+        clearance of the arterial plasma is `fu*GFR*(1 - f_reabsorbed)`
+        (`_blood_flows`).
         """
         gfr = self._input(ids.GFR, U.l_per_min, "glomerular filtration rate [l/min]")
         reabsorbed = self._input(
@@ -657,6 +698,16 @@ class StandardBuilder(OrganBuilder):
             f"fraction reabsorbed {s.sid}",
             "The fraction of the filtrate which is reabsorbed.",
         )
+        return NetFiltration(f"{fu} * {gfr} * {cplasma} * ({ONE} - {reabsorbed})")
+
+    def _filtration(self, s: Substance, parts: Parts, fu: str, cplasma: str) -> None:
+        """The glomerular filtration into the urine, `fu*GFR*Cpl*(1 - f_reabsorbed)`.
+
+        The unbound plasma concentration is filtered, the fraction
+        `f_reabsorbed_<s>` of the filtrate returns into the plasma (it is not
+        taken out, `_filtered`); the flow-limited kidney filters the plasma
+        concentration of its outflow.
+        """
         self._input_compartment(ids.VURINE, "urine")
         urine = self._input_species(
             ids.urine(s.sid), ids.VURINE, f"{s.name} (urine)", amount=True
@@ -667,7 +718,7 @@ class StandardBuilder(OrganBuilder):
         self._reaction(
             ids.filtration_reaction(s.sid),
             f"{source} -> {urine}",
-            f"{fu} * {gfr} * {cplasma} * ({ONE} - {reabsorbed})",
+            self._filtered(s, fu, cplasma).rate,
             f"glomerular filtration {s.sid}",
             kind="filtration",
         )

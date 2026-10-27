@@ -1,7 +1,9 @@
 """Tests of the specifics of the standard kidney and liver and of the bile.
 
 The kidney filters the unbound plasma concentration into the urine,
-`fu*GFR*Cpl*(1 - f_reabsorbed)`; the liver has the portosystemic shunt
+`fu*GFR*Cpl*(1 - f_reabsorbed)`, and the plasma leaving it carries the plasma
+flow less the filtration, so the filtration clearance of the arterial plasma
+is `fu*GFR*(1 - f_reabsorbed)`; the liver has the portosystemic shunt
 `f_shunt`, which bypasses the sinusoids, and the functional fraction
 `f_functional`, which scales its tissue and the capacity of its processes;
 the apical efflux of the liver writes into the bile, which drains into the
@@ -51,7 +53,7 @@ INFUSION = 1.0
 """The infusion rate of the steady state tests (mg/min)."""
 
 
-def _renal_drug(fraction_reabsorbed: float = 0.0) -> Substance:
+def _renal_drug(fraction_reabsorbed: float = 0.0, fu: float = 0.5) -> Substance:
     """A vascular drug (fu 0.5) eliminated by filtration only.
 
     Without tissue distribution the volume is the plasma, so the steady state
@@ -61,16 +63,16 @@ def _renal_drug(fraction_reabsorbed: float = 0.0) -> Substance:
         sid=S,
         name="drug",
         mr=300.0,
-        binding=Binding(fu=0.5, protein="albumin"),
+        binding=Binding(fu=fu, protein="albumin"),
         excretion=Excretion(urine=True, fraction_reabsorbed=fraction_reabsorbed),
     )
 
 
-def _renal(tmp_path: Path, fraction_reabsorbed: float = 0.0) -> Path:
+def _renal(tmp_path: Path, fraction_reabsorbed: float = 0.0, fu: float = 0.5) -> Path:
     """Build the renal drug, given intravenously, without chemistry."""
     d = definition(
         sid="renal",
-        substances=[_renal_drug(fraction_reabsorbed)],
+        substances=[_renal_drug(fraction_reabsorbed, fu)],
         chemistry=[],
         routes=[Route.iv(S)],
     )
@@ -109,6 +111,32 @@ def test_renal_clearance_fu_gfr(tmp_path: Path) -> None:
         r[ids.fu(S)] * r[ids.GFR], rel=1e-10
     )
     assert r[ids.urine(S)] > 0
+
+
+@pytest.mark.parametrize(
+    ("fu", "fraction_reabsorbed"), [(1.0, 0.0), (0.2, 0.3)], ids=["free", "bound"]
+)
+def test_filtration_clearance_of_the_arterial_plasma(
+    tmp_path: Path, fu: float, fraction_reabsorbed: float
+) -> None:
+    """The systemic filtration clearance is `fu*GFR*(1 - f_reabsorbed)`.
+
+    The filtered amount leaves the plasma of the kidney with the filtrate, the
+    plasma leaving the kidney carries the rest: at the steady state of an
+    infusion the plasma of the kidney is the arterial plasma, and the urine
+    rate over the arterial (and the arm vein) plasma is the clearance, not
+    `fu*GFR*Qp/(Qp + fu*GFR)` of a kidney which returns the whole plasma flow.
+    """
+    r = _load(_renal(tmp_path, fraction_reabsorbed, fu))
+    r[ids.infusion_rate(S)] = INFUSION
+    r.simulate(0, 4 * DAY, 2)
+    rate = r[ids.urine_rate(S)]
+    assert rate == pytest.approx(INFUSION / r[ids.mr(S)], rel=1e-8)
+    clearance = fu * r[ids.GFR] * (1 - fraction_reabsorbed)
+    arterial = r[f"[{ids.pool_species(Pool.ARTERIAL, S)}]"]
+    assert rate / arterial == pytest.approx(clearance, rel=1e-6)
+    assert rate / r[ids.arm(S)] == pytest.approx(clearance, rel=1e-6)
+    assert _kidney_plasma(r) == pytest.approx(arterial, rel=1e-6)
 
 
 def test_reabsorption_fraction(tmp_path: Path) -> None:

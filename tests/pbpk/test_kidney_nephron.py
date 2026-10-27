@@ -291,16 +291,21 @@ def test_no_secretion_no_reabsorption_equals_fu_gfr(
     is the infusion. A fraction reabsorbed returns from the collecting duct
     into the plasma of the kidney, `fu*GFR*(1 - f_reabsorbed)` as the
     standard kidney. The circulation sees the same kidney: the venous
-    steady state equals that of the standard kidney.
+    steady state equals that of the standard kidney, and the plasma leaving
+    the kidney carries the plasma flow less the net filtered amount, so the
+    urine rate over the arterial plasma is the clearance in both kidneys.
     """
     drug = _renal_drug(fraction_reabsorbed)
     venous = f"[{ids.pool_species(Pool.VENOUS, S)}]"
+    arterial = f"[{ids.pool_species(Pool.ARTERIAL, S)}]"
     result = {}
     for kidney in ("standard", "nephron"):
         r = _load(_model(tmp_path, kidney, kidney, substances=[drug]))
         _steady(r)
         result[kidney] = r[venous]
-    clearance = r[ids.fu(S)] * r[ids.GFR] * (1.0 - fraction_reabsorbed)
+        clearance = r[ids.fu(S)] * r[ids.GFR] * (1.0 - fraction_reabsorbed)
+        rate = r[ids.urine_rate(S)]
+        assert rate / r[arterial] == pytest.approx(clearance, rel=1e-6)
     assert _urine_rate(r) == pytest.approx(INFUSION / r[ids.mr(S)], rel=1e-8)
     assert _urine_rate(r) / _kidney_plasma(r) == pytest.approx(clearance, rel=1e-3)
     assert _urine_rate(r) / _kidney_plasma(r) == pytest.approx(clearance, rel=1e-8)
@@ -331,9 +336,12 @@ def test_secretion_increases_clearance(tmp_path: Path) -> None:
 
     At steady state the urine rate is `fu*(GFR + k_sec)*Cpl` of the kidney
     plasma, with `k_sec` the conductances of the passage plasma -
-    interstitium - cell - lumen in series; on the arterial inflow the kidney
-    is well-stirred, `CL_R = Qpl*CL/(Qpl + CL)` with `CL = fu*(GFR + k_sec)`
-    and the plasma flow `Qpl = Qki*(1 - HCT)`.
+    interstitium - cell - lumen in series. The filtrate leaves the plasma of
+    the kidney with the plasma flow, the secreted drug is taken out of the
+    plasma flow: on the arterial inflow the kidney is well-stirred for the
+    secretion, `Qpl*Car = Qpl*Cpl + CL_sec*Cpl`, so
+    `CL_R = Qpl*(CL_gfr + CL_sec)/(Qpl + CL_sec)` with `CL_gfr = fu*GFR`,
+    `CL_sec = fu*k_sec` and the plasma flow `Qpl = Qki*(1 - HCT)`.
     """
     k = 0.5
     drug = _renal_drug(distribution=_KIDNEY_TISSUE)
@@ -342,7 +350,8 @@ def test_secretion_increases_clearance(tmp_path: Path) -> None:
     )
     _steady(r)
     fu, gfr = r[ids.fu(S)], r[ids.GFR]
-    clearance = fu * (gfr + _effective_secretion(r, k))
+    secretion = fu * _effective_secretion(r, k)
+    clearance = fu * gfr + secretion
     rate = _urine_rate(r)
     assert rate == pytest.approx(INFUSION / r[ids.mr(S)], rel=1e-8)
     assert rate / _kidney_plasma(r) == pytest.approx(clearance, rel=1e-8)
@@ -350,7 +359,7 @@ def test_secretion_increases_clearance(tmp_path: Path) -> None:
     qpl = r[ids.organ_flow(Organ.KIDNEY)] * (1.0 - r[ids.HCT])
     arterial = r[f"[{ids.pool_species(Pool.ARTERIAL, S)}]"]
     assert rate / arterial == pytest.approx(
-        qpl * clearance / (qpl + clearance), rel=1e-8
+        qpl * clearance / (qpl + secretion), rel=1e-8
     )
 
 
