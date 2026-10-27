@@ -8,6 +8,7 @@ factory does not need, so `import pkpdsim.pbpk` imports no simulator.
 
 from typing import TYPE_CHECKING
 
+from pkpdsim.pbpk.archive import create_archive
 from pkpdsim.pbpk.builder import BuildResult, build, compose
 from pkpdsim.pbpk.chemistry import (
     MM,
@@ -142,6 +143,7 @@ __all__ = [
     "build",
     "cite",
     "compose",
+    "create_archive",
     "fitted",
     "healthy_gfr",
     "load",

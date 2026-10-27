@@ -164,6 +164,7 @@ The factory of the model package builds the definition with the fitted values fr
 ```python
 # not executed: the model package and its adopted fits; m1, m2, chemistry of above
 from pathlib import Path
+from typing import Any
 
 from pkpdsim.pbpk import (
     Binding,
@@ -174,11 +175,12 @@ from pkpdsim.pbpk import (
     Route,
     Substance,
     U,
-    build,
+    create_archive,
     fitted,
 )
 from pkpdsim.templates import creators
 
+from pkdb_models.models.glimepiride import MODEL_BASE_PATH
 from pkdb_models.models.glimepiride.models.fits import FITS
 
 glimepiride = Substance(
@@ -210,9 +212,17 @@ DEFINITION = PBPKDefinition(
 )
 
 
-def create_glimepiride_models(output_dir: Path) -> None:
-    """Build the glimepiride model into the output folder of the model."""
-    build(DEFINITION, output_dir)
+def create_glimepiride_models(model_output_dir: Path) -> dict[str, dict[str, Any]]:
+    """Build the glimepiride model and its COMBINE archive."""
+    return create_archive(
+        DEFINITION,
+        model_output_dir,
+        model="glimepiride",
+        copyright="2024-2026 Matthias König",
+        readme=MODEL_BASE_PATH.parent / "README.md",
+    )
 ```
+
+`create_archive` builds the definition (`build`), writes the differential equations of the flat model as markdown and its antimony, the texts of the licenses (CC BY-SA 4.0 and MIT with the copyright) into the parent of `model_output_dir` and the COMBINE archive `<model>_model.omex` there, with the README, the licenses, the comp model, the flat model as the master entry, the markdown, the antimony and the SBML files of `extra_models` (a submodel which is simulated on its own). It returns the files with their entries by the keys `README`, `cc-by`, `mit`, `<sid>`, `<sid>_flat`, `<sid>_flat_md`, `<sid>_flat_ant` and the stem of every extra model.
 
 The experiments then set the doses, covariates and activity factors and read the observables as before; the [migration guide](migration.md) lists the ids which change.
