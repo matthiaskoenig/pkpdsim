@@ -50,12 +50,13 @@ import logging
 import math
 import os
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from enum import StrEnum
 from pathlib import Path
 from types import MappingProxyType
-from typing import NamedTuple
+from typing import NamedTuple, override
+from xml.etree import ElementTree
 
 import libsbml
 import numpy as np
@@ -135,6 +136,8 @@ def parameters_from_sbml(
     exclude_ids: Iterable[str] | None = None,
     exclude_na: bool = True,
     exclude_zero: bool = True,
+    *,
+    exclude_derived: bool = False,
 ) -> list[SensitivityParameter]:
     """Get the parameters of a model which an analysis varies, as sbmlsim 0.8 did.
 
@@ -142,13 +145,18 @@ def parameters_from_sbml(
     boundary species, in the order of the model, with their values after the
     initialization (the concentration of a species with only substance units).
     A parameter whose value is not a number (`exclude_na`) or is close to zero
-    (`exclude_zero`), and every id of `exclude_ids`, is left out.
+    (`exclude_zero`), and every id of `exclude_ids`, is left out; so is every
+    derived parameter, compartment and species (`exclude_derived`).
 
     Args:
         sbml_path: the SBML model.
         exclude_ids: the ids to leave out.
         exclude_na: leave out a parameter without a value.
         exclude_zero: leave out a parameter whose value is close to zero.
+        exclude_derived: leave out every parameter, compartment and species
+            with an initial assignment, e.g. the organ volumes and the
+            clearances which a library model derives from its covariates; the
+            covariates and the fitted parameters have none.
 
     Returns:
         The parameters, without bounds.
@@ -201,6 +209,10 @@ def parameters_from_sbml(
             excluded.add(s.getId())
         if s.getConstant() or s.getBoundaryCondition():
             parameters.append(parameter(s))
+    if exclude_derived:
+        excluded.update(
+            p.uid for p in parameters if model.getInitialAssignmentBySymbol(p.uid)
+        )
     logger.info(
         "Excluded parameters: %s",
         sorted(p.uid for p in parameters if p.uid in excluded),
@@ -938,6 +950,162 @@ class LocalAnalysis(Analysis):
         return df.sort_values(
             by="|Sij|", ascending=False, na_position="last", ignore_index=True
         )
+
+
+#: the severities of the impairments of a library model, 0 in the healthy
+#: individual, by their largest value (Child-Pugh C, NYHA IV)
+SEVERITIES: Mapping[str, float] = MappingProxyType(
+    {"CP_severity": 3.0, "HF_severity": 4.0}
+)
+
+
+@dataclass(frozen=True, kw_only=True)
+class NonzeroLocalAnalysis(LocalAnalysis):
+    """The local analysis of the parameters whose value is not 0.
+
+    A local design changes a value relative to itself, so a severity at 0
+    (the healthy individual) is not changed and its sensitivity is 0/0; the
+    sampled analyses vary the severities within their bounds.
+    """
+
+    @override
+    def varied(
+        self, parameters: Sequence[SensitivityParameter]
+    ) -> list[SensitivityParameter]:
+        return [p for p in super().varied(parameters) if p.value != 0]
+
+
+def notes_sources(sbase: libsbml.SBase) -> list[str]:
+    """Get the sources in the notes of an element of a library model.
+
+    The library writes the sources of a value as a list after a paragraph
+    `Sources:` of its notes.
+
+    Args:
+        sbase: the element.
+
+    Returns:
+        The sources, one text per list item; empty without notes or sources.
+    """
+    if not sbase.isSetNotes():
+        return []
+    root = ElementTree.fromstring(sbase.getNotesString())
+    elements = list(root.iter())
+    for k, element in enumerate(elements):
+        if element.tag.endswith("}p") and "".join(element.itertext()).strip() == (
+            "Sources:"
+        ):
+            lists = [e for e in elements[k + 1 :] if e.tag.endswith("}ul")]
+            if lists:
+                return [
+                    " ".join("".join(item.itertext()).split())
+                    for item in lists[0]
+                    if item.tag.endswith("}li")
+                ]
+    return []
+
+
+def library_parameters(
+    model_path: Path,
+    ids: Sequence[str],
+    *,
+    fit_ids: Collection[str],
+    scaling_ids: Collection[str],
+    references: Mapping[str, str] = MappingProxyType({}),
+    relative: float = 0.15,
+) -> list[SensitivityParameter]:
+    """Get the parameters of the analyses of a model of the PBPK library.
+
+    A library model has hundreds of constants, most of them initial
+    assignments of the covariates, which an analysis of all constants would
+    vary as well; the analysis names the parameters it varies. They are the
+    `ids`, in this order, with these bounds:
+
+    - fitted parameters (`fit_ids`, type fitted): `value * (1 +- relative)`;
+    - scaling factors (`scaling_ids`, type scaling, 1 in the healthy
+      individual): `1 +- relative`;
+    - severities (`SEVERITIES`, type scaling): 0 to `relative * top`, since
+      relative bounds around 0 would be 0;
+    - any other parameter: `value * (1 +- relative)`.
+
+    The reference of a parameter is the sources of its notes (`;` separated),
+    replaced by the text in `references` (e.g. the guideline of the classes of
+    the renal function, whose notes give no source). A parameter of the type
+    not set with a reference is of the type data.
+
+    Args:
+        model_path: the SBML model.
+        ids: the parameters of the analysis.
+        fit_ids: the fitted parameters among the `ids`.
+        scaling_ids: the scaling factors among the `ids`.
+        references: references by id, which replace those of the notes.
+        relative: the relative half width of the bounds.
+
+    Returns:
+        The parameters of the `ids` with bounds, types and references.
+
+    Raises:
+        ValueError: naming every id which is no parameter of the model, and
+            every id of `fit_ids`, `scaling_ids` or `references` which is not
+            in `ids`.
+    """
+    by_uid = {
+        p.uid: p
+        for p in parameters_from_sbml(model_path, exclude_na=False, exclude_zero=False)
+    }
+    missing = [uid for uid in ids if uid not in by_uid]
+    if missing:
+        raise ValueError(
+            f"The parameters {missing} of the sensitivity analysis are no "
+            f"parameters of the model {model_path.name}."
+        )
+    outside = sorted(
+        {*fit_ids, *scaling_ids, *references}.difference(ids),
+    )
+    if outside:
+        raise ValueError(
+            f"The ids {outside} of the sensitivity analysis are not in its parameters."
+        )
+    parameters = [by_uid[uid] for uid in ids]
+
+    # the fitted parameters, their bounds are set relative to the value below
+    set_bounds(
+        parameters, [(uid, np.nan, np.nan, ParameterType.FIT) for uid in fit_ids]
+    )
+    # the scaling factors of the organ functions and of the protein activities
+    set_bounds(
+        parameters,
+        [
+            (uid, 1 - relative, 1 + relative, ParameterType.SCALING)
+            for uid in scaling_ids
+        ],
+    )
+    # the severities, whose relative bounds around 0 would be 0
+    set_bounds(
+        parameters,
+        [
+            (uid, 0.0, relative * top, ParameterType.SCALING)
+            for uid, top in SEVERITIES.items()
+        ],
+    )
+
+    # the references of the values, as the sources of their notes
+    model: libsbml.Model = libsbml.readSBMLFromFile(str(model_path)).getModel()
+    texts = {
+        uid: "; ".join(sources)
+        for uid in ids
+        if (sources := notes_sources(model.getParameter(uid)))
+    }
+    texts.update(references)
+    for uid, reference in texts.items():
+        p = by_uid[uid]
+        p.reference = reference
+        if p.type == ParameterType.NA:
+            p.type = ParameterType.DATA
+
+    # every parameter without bounds varies around its value
+    set_relative_bounds(parameters, relative)
+    return parameters
 
 
 @dataclass(frozen=True, kw_only=True)
