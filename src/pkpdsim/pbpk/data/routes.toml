@@ -1,0 +1,12 @@
+# The defaults of the routes of administration.
+#
+# A dose is a dose state in mg (`IVDOSE_<s>`, `PODOSE_<s>`, `SOLDOSE_<s>`)
+# which is applied by a first order process, so that a dose given on top of
+# the rest of an earlier one adds to it (`PKPDSimulationExperiment.add_doses`).
+
+[iv]
+ti = { value = 10.0, unit = "s", source = "ModelChoice", notes = "half-life of the application of an intravenous bolus, the injection time of the hand-written models; fast against the distribution, the bolus is in the venous blood within a minute" }
+
+[oral]
+Ka_dis = { value = 2.0, unit = "1/hr", source = "ModelChoice", notes = "first order dissolution of a tablet whose route states no formulation, the default of the hand-written models (Ka_dis_gli); a model sets the formulation or fits it" }
+Ka_sol = { value = 60.0, unit = "1/hr", source = "ModelChoice", notes = "application of an oral solution: swallowing and transfer into the intestinal lumen, fast against the absorption (half-life 0.7 min)" }

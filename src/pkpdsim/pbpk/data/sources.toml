@@ -1,0 +1,177 @@
+# The publications the numbers of the data files are taken from, and `ModelChoice`
+# for a number the library chooses where the literature gives none.
+# Every number of a data file has a `source` which is a key of this file.
+# The DOIs were checked against Crossref (2026-10-25).
+
+[ICRP89]
+citation = "Valentin J (ed). Basic anatomical and physiological data for use in radiological protection: reference values. ICRP Publication 89. Ann ICRP 32(3-4), 2002."
+doi = "10.1016/S0146-6453(03)00002-2"
+
+[Jones2013]
+citation = "Jones H, Rowland-Yeo K. Basic concepts in physiologically based pharmacokinetic modeling in drug discovery and development. CPT Pharmacometrics Syst Pharmacol 2:e63, 2013."
+doi = "10.1038/psp.2013.41"
+
+[Brown1997]
+citation = "Brown RP, Delp MD, Lindstedt SL, Rhomberg LR, Beliles RP. Physiological parameter values for physiologically based pharmacokinetic models. Toxicol Ind Health 13(4):407-484, 1997."
+doi = "10.1177/074823379701300401"
+
+[Schmitt2008]
+citation = "Schmitt W. General approach for the calculation of tissue to plasma partition coefficients. Toxicol In Vitro 22(2):457-467, 2008."
+doi = "10.1016/j.tiv.2007.09.010"
+
+[Chau2023]
+citation = "Chau P, Yoon JS, Moses D, Pather N. A systematic review and meta-analysis of portal vein morphometry in pediatric and adult populations: drawing the line between normal and abnormal findings. Eur J Radiol 168:111016, 2023."
+doi = "10.1016/j.ejrad.2023.111016"
+
+[DuBois1916]
+citation = "Du Bois D, Du Bois EF. Clinical calorimetry, tenth paper: a formula to estimate the approximate surface area if height and weight be known. Arch Intern Med 17(6_2):863-871, 1916."
+doi = "10.1001/archinte.1916.00080130010002"
+
+[Janmahasatian2005]
+citation = "Janmahasatian S, Duffull SB, Ash S, Ward LC, Byrne NM, Green B. Quantification of lean bodyweight. Clin Pharmacokinet 44(10):1051-1065, 2005."
+doi = "10.2165/00003088-200544100-00004"
+
+[Huisinga2012]
+citation = "Huisinga W, Solms A, Fronton L, Pilari S. Modeling interindividual variability in physiologically based pharmacokinetics and its link to mechanistic covariate modeling. CPT Pharmacometrics Syst Pharmacol 1(9):e4, 2012."
+doi = "10.1038/psp.2012.3"
+
+[UniProt]
+citation = "The UniProt Consortium. UniProt: the Universal Protein Knowledgebase in 2023. Nucleic Acids Res 51(D1):D523-D531, 2023."
+doi = "10.1093/nar/gkac1052"
+
+[ModelChoice]
+citation = "Choice of the pkpdsim PBPK library, not a value of the literature; the notes of the value give the reasoning."
+
+[Schiller2005]
+citation = "Schiller C, Fröhlich CP, Giessmann T, Siegmund W, Mönnikes H, Hosten N, Weitschies W. Intestinal fluid volumes and transit of dosage forms as assessed by magnetic resonance imaging. Aliment Pharmacol Ther 22(10):971-979, 2005."
+doi = "10.1111/j.1365-2036.2005.02683.x"
+
+[OSPDocumentation]
+citation = "Open Systems Pharmacology. PK-Sim documentation: Simulations, section on the venous blood outputs (Peripheral Venous Blood). https://docs.open-systems-pharmacology.org/working-with-pk-sim/pk-sim-documentation/pk-sim-simulations (accessed 2026-10-25)."
+
+[Levitt2004]
+citation = "Levitt DG. Physiologically based pharmacokinetic modeling of arterial - antecubital vein concentration difference. BMC Clin Pharmacol 4:2, 2004."
+doi = "10.1186/1472-6904-4-2"
+
+[Musther2015]
+citation = "Musther H, Gill KL, Chetty M, Rostami-Hodjegan A, Rowland M, Jamei M. Are physiologically based pharmacokinetic models reporting the right Cmax? Central venous versus peripheral sampling site. AAPS J 17(5):1268-1279, 2015."
+doi = "10.1208/s12248-015-9796-7"
+
+[Liu1992]
+citation = "Liu D, Moberg E, Kollind M, Lins PE, Adamson U, Macdonald IA. Arterial, arterialized venous, venous and capillary blood glucose measurements in normal man during hyperinsulinaemic euglycaemia and hypoglycaemia. Diabetologia 35(3):287-290, 1992."
+doi = "10.1007/BF00400932"
+
+[Segel1975]
+citation = "Segel IH. Enzyme Kinetics: Behavior and Analysis of Rapid Equilibrium and Steady-State Enzyme Systems. New York: Wiley-Interscience, 1975. Chapter 3 (simple inhibition systems: competitive, noncompetitive, uncompetitive, mixed)."
+
+[Mayhew2000]
+citation = "Mayhew BS, Jones DR, Hall SD. An in vitro model for predicting in vivo inhibition of cytochrome P450 3A4 by metabolic intermediate complex formation. Drug Metab Dispos 28(9):1031-1037, 2000."
+doi = "10.1016/S0090-9556(24)15182-3"
+
+[Almond2009]
+citation = "Almond LM, Yang J, Jamei M, Tucker GT, Rostami-Hodjegan A. Towards a quantitative framework for the prediction of DDIs arising from cytochrome P450 induction. Curr Drug Metab 10(4):420-432, 2009."
+doi = "10.2174/138920009788498978"
+
+[Fahmi2008]
+citation = "Fahmi OA, Maurer TS, Kish M, Cardenas E, Boldt S, Nettleton D. A combined model for predicting CYP3A4 clinical net drug-drug interaction based on CYP3A4 inhibition, inactivation, and induction determined in vitro. Drug Metab Dispos 36(8):1698-1708, 2008."
+doi = "10.1124/dmd.107.018663"
+
+[RowlandYeo2011]
+citation = "Rowland Yeo K, Walsky RL, Jamei M, Rostami-Hodjegan A, Tucker GT. Prediction of time-dependent CYP3A4 drug-drug interactions by physiologically based pharmacokinetic modelling: impact of inactivation parameters and enzyme turnover. Eur J Pharm Sci 43(3):160-173, 2011."
+doi = "10.1016/j.ejps.2011.04.008"
+
+[Greenblatt2003]
+citation = "Greenblatt DJ, von Moltke LL, Harmatz JS, Chen G, Weemhoff JL, Jen C, Kelley CJ, LeDuc BW, Zinny MA. Time course of recovery of cytochrome P450 3A function after single doses of grapefruit juice. Clin Pharmacol Ther 74(2):121-129, 2003."
+doi = "10.1016/S0009-9236(03)00118-8"
+
+[Thelen2011]
+citation = "Thelen K, Coboeken K, Willmann S, Burghaus R, Dressman JB, Lippert J. Evolution of a detailed physiological model to simulate the gastrointestinal transit and absorption process in humans, part 1: oral solutions. J Pharm Sci 100(12):5324-5345, 2011."
+doi = "10.1002/jps.22726"
+
+[Mudie2010]
+citation = "Mudie DM, Amidon GL, Amidon GE. Physiological parameters for oral delivery and in vitro testing. Mol Pharm 7(5):1388-1405, 2010."
+doi = "10.1021/mp100149j"
+
+[Evans1988]
+citation = "Evans DF, Pye G, Bramley R, Clark AG, Dyson TJ, Hardcastle JD. Measurement of gastrointestinal pH profiles in normal ambulant human subjects. Gut 29(8):1035-1041, 1988."
+doi = "10.1136/gut.29.8.1035"
+
+[Metcalf1987]
+citation = "Metcalf AM, Phillips SF, Zinsmeister AR, MacCarty RL, Beart RW, Wolff BG. Simplified assessment of segmental colonic transit. Gastroenterology 92(1):40-47, 1987."
+doi = "10.1016/0016-5085(87)90837-7"
+
+[Helander2014]
+citation = "Helander HF, Fändriks L. Surface area of the digestive tract - revisited. Scand J Gastroenterol 49(6):681-689, 2014."
+doi = "10.3109/00365521.2014.898326"
+
+[Paine1997]
+citation = "Paine MF, Khalighi M, Fisher JM, Shen DD, Kunze KL, Marsh CL, Perkins JD, Thummel KE. Characterization of interintestinal and intraintestinal variations in human CYP3A-dependent metabolism. J Pharmacol Exp Ther 283(3):1552-1562, 1997."
+
+[Drozdzik2018]
+citation = "Drozdzik M, Busch D, Lapczuk J, Müller J, Ostrowski M, Kurzawski M, Oswald S. Protein abundance of clinically relevant drug-metabolizing enzymes in the human liver and intestine: a comparative analysis in paired tissue specimens. Clin Pharmacol Ther 104(3):515-524, 2018. Abstract read (Europe PMC, 2026-10-25); the full text is not open access."
+doi = "10.1002/cpt.967"
+
+[Yu1999]
+citation = "Yu LX, Amidon GL. A compartmental absorption and transit model for estimating oral drug absorption. Int J Pharm 186(2):119-125, 1999."
+doi = "10.1016/S0378-5173(99)00147-7"
+
+[Scotcher2016]
+citation = "Scotcher D, Jones C, Rostami-Hodjegan A, Galetin A. Novel minimal physiologically-based model for the prediction of passive tubular reabsorption and renal excretion clearance. Eur J Pharm Sci 94:59-71, 2016."
+doi = "10.1016/j.ejps.2016.03.018"
+
+[Huang2018]
+citation = "Huang W, Isoherranen N. Development of a dynamic physiologically based mechanistic kidney model to predict renal clearance. CPT Pharmacometrics Syst Pharmacol 7(9):593-602, 2018."
+doi = "10.1002/psp4.12321"
+
+
+[ElKhateeb2021]
+citation = "El-Khateeb E, Achour B, Al-Majdoub ZM, Barber J, Rostami-Hodjegan A. Non-uniformity of changes in drug-metabolizing enzymes and transporters in liver cirrhosis: implications for drug dosage adjustment. Mol Pharm 18(9):3563-3577, 2021."
+doi = "10.1021/acs.molpharmaceut.1c00462"
+
+
+
+[Yoshida2016]
+citation = "Yoshida K, Sun B, Zhang L, Zhao P, Abernethy DR, Nolin TD, Rostami-Hodjegan A, Zineh I, Huang SM. Systematic and quantitative assessment of the effect of chronic kidney disease on CYP2D6 and CYP3A4/5. Clin Pharmacol Ther 100(1):75-87, 2016."
+doi = "10.1002/cpt.337"
+
+[Tan2018]
+citation = "Tan ML, Yoshida K, Zhao P, Zhang L, Nolin TD, Piquette-Miller M, Galetin A, Huang SM. Effect of chronic kidney disease on nonrenal elimination pathways: a systematic assessment of CYP1A2, CYP2C8, CYP2C9, CYP2C19, and OATP. Clin Pharmacol Ther 103(5):854-867, 2018."
+doi = "10.1002/cpt.807"
+
+[Rasool2015]
+citation = "Rasool MF, Khalil F, Läer S. A physiologically based pharmacokinetic drug-disease model to predict carvedilol exposure in adult and paediatric heart failure patients by incorporating pathophysiological changes in hepatic and renal blood flows. Clin Pharmacokinet 54(9):943-962, 2015."
+doi = "10.1007/s40262-015-0253-7"
+
+[Gu2025]
+citation = "Gu W, Shao Q, Jiang L. Predicting pharmacokinetics of drugs in patients with heart failure and optimizing their dosing strategies using a physiologically based pharmacokinetic model. Pharmaceutics 17(11):1394, 2025."
+doi = "10.3390/pharmaceutics17111394"
+
+[McNamara2002]
+citation = "McNamara PJ, Alcorn J. Protein binding predictions in infants. AAPS PharmSci 4(1):E4, 2002."
+doi = "10.1208/ps040104"
+
+[Alasmari2023]
+citation = "Alasmari F, Alasmari MS, Muwainea HM, Alomar HA, Alasmari AF, Alsanea S, Alshamsan A, Rasool MF, Alqahtani F. Physiologically-based pharmacokinetic modeling for single and multiple dosing regimens of ceftriaxone in healthy and chronic kidney disease populations: a tool for model-informed precision dosing. Front Pharmacol 14:1200828, 2023."
+doi = "10.3389/fphar.2023.1200828"
+
+[Ring2017]
+citation = "Ring CL, Pearce RG, Setzer RW, Wetmore BA, Wambaugh JF. Identifying populations sensitive to environmental chemicals by simulating toxicokinetic variability. Environ Int 106:105-118, 2017."
+doi = "10.1016/j.envint.2017.06.004"
+
+[NHANES2013_2018]
+citation = "Centers for Disease Control and Prevention, National Center for Health Statistics. National Health and Nutrition Examination Survey (NHANES) 2013-2014, 2015-2016 and 2017-2018, demographics, body measures and laboratory data (public domain). https://wwwn.cdc.gov/nchs/nhanes/ (accessed 2026-10-25). Read as the data set `mecdt` of the R package httk 2.7.4, see `httk`."
+
+[httk]
+citation = "Pearce RG, Setzer RW, Strope CL, Wambaugh JF, Sipes NS. httk: R package for high-throughput toxicokinetics. J Stat Softw 79(4):1-26, 2017. R package httk version 2.7.4 (CRAN, 2025-12-08), MIT license, copyright 2025 John Wambaugh; the data set mecdt of HTTK-Pop (Ring 2017) holds the preprocessed NHANES 2013-2018 respondents."
+doi = "10.18637/jss.v079.i04"
+
+[Tanaka1996]
+citation = "Tanaka G, Kawamura H. Anatomical and physiological characteristics for Asian reference man: male and female of different ages: Tanaka model. NIRS-M-115, National Institute of Radiological Sciences, Hitachinaka, Japan, 1996. https://repo.qst.go.jp/records/73628 (accessed 2026-10-25)."
+
+[Yau2020]
+citation = "Yau E, Olivares-Morales A, Gertz M, Parrott N, Darwich AS, Aarons L, Ogungbenro K. Global sensitivity analysis of the Rodgers and Rowland model for prediction of tissue:plasma partitioning coefficients: assessment of the key physiological and physicochemical factors that determine small-molecule tissue distribution. AAPS J 22(2):41, 2020 (accepted manuscript, KTH DiVA diva2:1391464, accessed 2026-10-25)."
+doi = "10.1208/s12248-020-0418-7"
+
+[Coutinho2024]
+citation = "Coutinho AL, Cristofoletti R, Wu F, Al Shoyaib A, Dressman J, Polli JE. Relative performance of volume of distribution prediction methods for lipophilic drugs with uncertainty in LogP value. Pharm Res 41(6):1121-1138, 2024 (open access, CC BY 4.0)."
+doi = "10.1007/s11095-024-03703-4"

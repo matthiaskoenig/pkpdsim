@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 282" role="img" aria-labelledby="pkz-zone-title pkz-zone-desc">
+<title id="pkz-zone-title">The zonated liver places the chemistry of the liver</title>
+<desc id="pkz-zone-desc">The metabolism DRG2M is defined once for the liver with the capacity Vmax times the liver volume. The zonated liver has three zones in series from periportal to pericentral; each zone gets the share w of the capacity, by the CYP3A4 profile 1, 2, 4, so w is one, two and four sevenths. The portosystemic shunt bypasses all zones. One zone is the standard liver.</desc>
+<style>
+.pkz-t{fill:currentColor;font-family:var(--md-text-font-family,system-ui),system-ui,sans-serif;font-size:14px}
+.pkz-s{font-size:12.5px}
+.pkz-b{font-weight:600}
+.pkz-dim{fill-opacity:.72}
+.pkz-line{stroke:currentColor;stroke-opacity:.6;stroke-width:1.5;fill:none}
+.pkz-shunt{stroke:currentColor;stroke-opacity:.5;stroke-width:1.5;fill:none;stroke-dasharray:5 4}
+.pkz-pkg{fill:rgba(255,150,40,.16);stroke:rgba(230,130,30,.85);stroke-width:1.2}
+.pkz-zone{fill:rgba(60,170,100,.14);stroke:rgba(60,170,100,.85);stroke-width:1.2}
+.pkz-bar{fill:rgba(230,130,30,.75)}
+</style>
+<defs>
+<marker id="pkz-zone-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor" fill-opacity=".7"/></marker>
+</defs>
+<rect class="pkz-pkg" x="8" y="8" width="384" height="44" rx="6"/>
+<text class="pkz-t pkz-b" x="18" y="26">chemistry, defined once for the liver</text>
+<text class="pkz-t pkz-s" x="18" y="44">DRG2M: drg → drg_m by CYP3A4, Vmax·Vli</text>
+<line class="pkz-line" x1="88" y1="52" x2="88" y2="96" marker-end="url(#pkz-zone-arrow)"/>
+<text class="pkz-t pkz-s" x="96" y="80">w1</text>
+<line class="pkz-line" x1="200" y1="52" x2="200" y2="96" marker-end="url(#pkz-zone-arrow)"/>
+<text class="pkz-t pkz-s" x="208" y="80">w2</text>
+<line class="pkz-line" x1="312" y1="52" x2="312" y2="96" marker-end="url(#pkz-zone-arrow)"/>
+<text class="pkz-t pkz-s" x="320" y="80">w3</text>
+<rect class="pkz-zone" x="40" y="98" width="96" height="80" rx="6"/>
+<text class="pkz-t pkz-b" x="50" y="117">z1</text>
+<text class="pkz-t pkz-s pkz-dim" x="50" y="134">periportal</text>
+<rect class="pkz-bar" x="50" y="144" width="18" height="10" rx="2"/>
+<text class="pkz-t pkz-s" x="50" y="171">p = 1</text>
+<rect class="pkz-zone" x="152" y="98" width="96" height="80" rx="6"/>
+<text class="pkz-t pkz-b" x="162" y="117">z2</text>
+<rect class="pkz-bar" x="162" y="144" width="36" height="10" rx="2"/>
+<text class="pkz-t pkz-s" x="162" y="171">p = 2</text>
+<rect class="pkz-zone" x="264" y="98" width="96" height="80" rx="6"/>
+<text class="pkz-t pkz-b" x="274" y="117">z3</text>
+<text class="pkz-t pkz-s pkz-dim" x="274" y="134">pericentral</text>
+<rect class="pkz-bar" x="274" y="144" width="72" height="10" rx="2"/>
+<text class="pkz-t pkz-s" x="274" y="171">p = 4</text>
+<text class="pkz-t pkz-s pkz-dim" x="4" y="128">in</text>
+<line class="pkz-line" x1="2" y1="138" x2="38" y2="138" marker-end="url(#pkz-zone-arrow)"/>
+<line class="pkz-line" x1="136" y1="138" x2="150" y2="138" marker-end="url(#pkz-zone-arrow)"/>
+<line class="pkz-line" x1="248" y1="138" x2="262" y2="138" marker-end="url(#pkz-zone-arrow)"/>
+<text class="pkz-t pkz-s pkz-dim" x="372" y="128">out</text>
+<line class="pkz-line" x1="360" y1="138" x2="396" y2="138" marker-end="url(#pkz-zone-arrow)"/>
+<path class="pkz-shunt" d="M20,138 V196 H380 V142" marker-end="url(#pkz-zone-arrow)"/>
+<text class="pkz-t pkz-s" x="200" y="214" text-anchor="middle">f_shunt bypasses all zones</text>
+<text class="pkz-t pkz-s" x="8" y="240">w = p/Σp = 1/7, 2/7, 4/7: Σw = 1, the capacity</text>
+<text class="pkz-t pkz-s" x="8" y="256">of the standard liver; volumes and exchange 1/3 each</text>
+<text class="pkz-t pkz-s pkz-dim" x="8" y="274">equivalence: one zone is the standard liver</text>
+</svg>

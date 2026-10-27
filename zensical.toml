@@ -10,6 +10,9 @@ repo_url = "https://github.com/matthiaskoenig/pkpdsim"
 repo_name = "matthiaskoenig/pkpdsim"
 edit_uri = "edit/develop/docs/"
 
+# the diagrams of the PBPK library, see `docs/stylesheets/pbpk.css`
+extra_css = ["stylesheets/pbpk.css"]
+
 nav = [
   { "Home" = "index.md" },
   { "Installation" = "installation.md" },
@@ -25,6 +28,20 @@ nav = [
     { "Timecourses in parts" = "timecourse.md" },
     { "Licenses" = "licenses.md" },
     { "Release of a model repository" = "release.md" },
+  ] },
+  { "PBPK library" = [
+    { "Overview" = "pbpk/index.md" },
+    { "Tutorial" = "pbpk/tutorial.md" },
+    { "Physiology" = "pbpk/physiology.md" },
+    { "Standard organ" = "pbpk/organ.md" },
+    { "Substances" = "pbpk/substances.md" },
+    { "Chemistry" = "pbpk/chemistry.md" },
+    { "Organ variants" = "pbpk/variants.md" },
+    { "Intestine and routes" = "pbpk/intestine.md" },
+    { "Impairment" = "pbpk/impairment.md" },
+    { "Observers" = "pbpk/observers.md" },
+    { "Annotation" = "pbpk/annotation.md" },
+    { "Migration" = "pbpk/migration.md" },
   ] },
   { "API reference" = [
     { "Overview" = "api/index.md" },
@@ -51,6 +68,10 @@ nav = [
     { "release" = "api/release.md" },
     { "testing" = "api/testing.md" },
     { "verify" = "api/verify.md" },
+    { "pbpk" = "api/pbpk.md" },
+    { "pbpk organs" = "api/pbpk_organs.md" },
+    { "pbpk physiology" = "api/pbpk_physiology.md" },
+    { "pbpk ids and data" = "api/pbpk_ids.md" },
   ] },
   { "Contributing" = "development.md" },
 ]
@@ -152,6 +173,7 @@ pymdownx.keys = {}
 pymdownx.magiclink = {}
 pymdownx.mark = {}
 pymdownx.smartsymbols = {}
+pymdownx.snippets = { base_path = ["docs"], check_paths = true }
 pymdownx.superfences = {}
 pymdownx.tabbed.alternate_style = true
 pymdownx.tasklist.custom_checkbox = true

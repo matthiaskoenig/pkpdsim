@@ -18,6 +18,8 @@ Features include
 - **experiments and their metadata** - the base class of the simulation experiments of a model (the SIds of its keys, the units of its data), the presets of the impaired organ function, the shared vocabulary of the metadata of a fit mapping and the filters which select the mappings of a fit by it
 - **scans and sensitivity analyses** - the timecourse of a point of a scan as sbmlsim 0.8 gave it and the table of the parameters, the distributions and the runner of the sensitivity analyses of a script
 - **release of a model repository** - `pkpd_release` makes the complete release of the repository of a model (models, simulations, fit reports, release notes, docs, Docker image, GitHub release) from its package, with `--no-publish` for a review before the commit
+- **PBPK model library** - `pkpdsim.pbpk`, from which the PBPK models of pkdb_models will be built: a model package writes its substances, the chemistry of its organs and its choices, and `build` adds the standard human physiology of ICRP 89, the standard organ with collapsing, the organ variants, routes and sinks, impaired organ function, observers (the arm vein by default) and the annotation of every element, and writes the comp and the flat SBML model (see the [PBPK library](https://matthiaskoenig.github.io/pkpdsim/pbpk/))
+
 
 The documentation is available at [https://matthiaskoenig.github.io/pkpdsim](https://matthiaskoenig.github.io/pkpdsim).
 

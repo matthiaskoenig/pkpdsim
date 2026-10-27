@@ -5,19 +5,26 @@ biological qualifier of `sbmlutils.metadata.BQB` and the resource a term of an
 ontology, written as `collection/term` of identifiers.org. sbmlutils writes
 them as the RDF of the element they are given to, e.g.
 `Compartment("Vli", ..., annotations=compartments["li"])` for the liver.
+
+The PBPK library (`pkpdsim.pbpk.annotation`) takes the terms of its organs,
+blood pools, lumen and tubule segments and sampling sites from here and adds
+the terms of the PBPK ontology.
 """
 
 from sbmlutils.metadata import BQB
 
 compartments: dict[str, list[tuple[BQB, str]]] = {
+    # the extracellular fluid
     "fluid volume": [
-        # FIXME: annotations
+        (BQB.IS, "mesh/D045604"),  # extracellular fluid
+        (BQB.IS_VERSION_OF, "ncit/C13236"),  # body fluid or substance
     ],
     # liver
     "li": [
         (BQB.IS, "fma/FMA:7197"),  # liver
         (BQB.IS, "bto/BTO:0000759"),  # liver
         (BQB.IS, "ncit/C12392"),  # liver
+        (BQB.IS, "uberon/UBERON:0002107"),  # liver
     ],
     "lyso": [
         (BQB.IS, "fma/FMA:63836"),  # lysosome
@@ -38,11 +45,12 @@ compartments: dict[str, list[tuple[BQB, str]]] = {
         (BQB.IS, "fma/FMA:62971"),  # portion of bile
         (BQB.IS, "ncit/C13192"),  # bile
     ],
-    # rest
-    # FIXME: rest compartment is not the organism
+    # rest of the body: the tissues of the organism which no other
+    # compartment of the model holds, a part of the organism
     "re": [
         (BQB.IS_VERSION_OF, "fma/FMA:62955"),  # anatomical entity
         (BQB.IS_PART_OF, "ncit/C14250"),  # Organism
+        (BQB.IS_PART_OF, "uberon/UBERON:0000468"),  # multicellular organism
     ],
     # gastrointestinal tract
     "gi": [
@@ -82,18 +90,21 @@ compartments: dict[str, list[tuple[BQB, str]]] = {
         (BQB.IS, "ncit/C12727"),  # heart
         (BQB.IS, "fma/FMA:7088"),  # heart
         (BQB.IS, "bto/BTO:0000562"),  # heart
+        (BQB.IS, "uberon/UBERON:0000948"),  # heart
     ],
     # kidneys
     "ki": [
         (BQB.IS, "fma/FMA:7203"),  # kidney
         (BQB.IS, "bto/BTO:0000671"),  # kidney
         (BQB.IS, "ncit/C12415"),  # kidney
+        (BQB.IS, "uberon/UBERON:0002113"),  # kidney
     ],
     # lung
     "lu": [
         (BQB.IS, "fma/FMA:7195"),  # lung
         (BQB.IS, "bto/BTO:0000763"),  # lung
         (BQB.IS, "ncit/C12468"),  # lung
+        (BQB.IS, "uberon/UBERON:0002048"),  # lung
     ],
     "ve": [
         (BQB.IS, "bto/BTO:0000131"),  # plasma
@@ -125,17 +136,19 @@ compartments: dict[str, list[tuple[BQB, str]]] = {
         (BQB.IS_PART_OF, "ncit/C33462"),  # renal vein
         (BQB.IS_PART_OF, "fma/FMA:14334"),  # renal vein
     ],
-    # rest vein
+    # rest vein: the veins of the rest of the body
     "rev": [
         (BQB.IS, "bto/BTO:0000131"),  # plasma
         (BQB.IS, "ncit/C13356"),  # plasma
-        # fixme: be more specific
+        (BQB.IS_PART_OF, "uberon/UBERON:0004582"),  # venous system
+        (BQB.IS_PART_OF, "ncit/C12814"),  # vein
     ],
     # kidney vein
     "kiv": [
         (BQB.IS, "bto/BTO:0000131"),  # plasma
         (BQB.IS, "ncit/C13356"),  # plasma
-        # fixme: be more specific
+        (BQB.IS_PART_OF, "uberon/UBERON:0001140"),  # renal vein
+        (BQB.IS_PART_OF, "ncit/C33462"),  # renal vein
     ],
     "stomach": [
         (BQB.IS, "fma/FMA:7148"),  # stomach
@@ -155,17 +168,19 @@ compartments: dict[str, list[tuple[BQB, str]]] = {
         (BQB.IS, "fma/FMA:30316"),  # muscle
         (BQB.IS, "bto/BTO:0000887"),  # muscle
         (BQB.IS, "ncit/C13056"),  # muscle
+        (BQB.IS, "uberon/UBERON:0001134"),  # skeletal muscle tissue
     ],
     # forearm
     "fo": [
         (BQB.IS, "ncit/C32628"),  # forearm
         (BQB.IS, "fma/FMA:9663"),  # forearm
     ],
-    # forearm vein
+    # forearm vein: the superficial veins of the forearm, the sampling site
     "fov": [
         (BQB.IS, "bto/BTO:0000131"),  # plasma
         (BQB.IS, "ncit/C13356"),  # plasma
-        # fixme: be more specific
+        (BQB.IS_PART_OF, "ncit/C12814"),  # vein
+        (BQB.IS_PART_OF, "ncit/C32628"),  # forearm
     ],
     # pancreas
     "pa": [
@@ -182,6 +197,7 @@ compartments: dict[str, list[tuple[BQB, str]]] = {
     "plasma": [
         (BQB.IS, "ncit/C13356"),  # plasma
         (BQB.IS, "bto/BTO:0000131"),  # plasma
+        (BQB.IS, "uberon/UBERON:0001969"),  # blood plasma
     ],
     "blood": [
         (BQB.IS, "fma/FMA:9670"),  # portion of blood
@@ -206,6 +222,73 @@ compartments: dict[str, list[tuple[BQB, str]]] = {
         (BQB.IS, "fma/FMA:62972"),  # portion of gastric juice
         (BQB.IS, "ncit/C94192"),  # gastric acid
         (BQB.IS, "omit/0006944"),  # gastric acid
+    ],
+    # the organs of the PBPK models which have no key above
+    "br": [
+        (BQB.IS, "uberon/UBERON:0000955"),  # brain
+        (BQB.IS, "ncit/C12439"),  # brain
+    ],
+    "si": [
+        (BQB.IS, "uberon/UBERON:0002108"),  # small intestine
+        (BQB.IS, "ncit/C12386"),  # small intestine
+    ],
+    "la": [
+        (BQB.IS, "uberon/UBERON:0000059"),  # large intestine
+        (BQB.IS, "ncit/C12379"),  # large intestine
+    ],
+    "sk": [
+        (BQB.IS, "uberon/UBERON:0002097"),  # skin of body
+        (BQB.IS, "ncit/C12470"),  # skin
+    ],
+    "ad": [
+        (BQB.IS, "uberon/UBERON:0001013"),  # adipose tissue
+        (BQB.IS, "ncit/C12472"),  # adipose tissue
+    ],
+    "bo": [
+        (BQB.IS, "uberon/UBERON:0002481"),  # bone tissue
+        (BQB.IS, "ncit/C12366"),  # bone
+    ],
+    "go": [
+        (BQB.IS, "uberon/UBERON:0000991"),  # gonad
+        (BQB.IS, "ncit/C12725"),  # gonad
+    ],
+    # the segments of the large intestine
+    "caecum": [
+        (BQB.IS, "uberon/UBERON:0001153"),  # caecum
+        (BQB.IS, "ncit/C12381"),  # cecum
+    ],
+    "ascending colon": [
+        (BQB.IS, "uberon/UBERON:0001156"),  # ascending colon
+        (BQB.IS, "ncit/C12265"),  # ascending colon
+    ],
+    "transverse colon": [
+        (BQB.IS, "uberon/UBERON:0001157"),  # transverse colon
+        (BQB.IS, "ncit/C12385"),  # transverse colon
+    ],
+    "descending colon": [
+        (BQB.IS, "uberon/UBERON:0001158"),  # descending colon
+        (BQB.IS, "ncit/C12268"),  # descending colon
+    ],
+    "sigmoid colon": [
+        (BQB.IS, "uberon/UBERON:0001159"),  # sigmoid colon
+        (BQB.IS, "ncit/C12384"),  # sigmoid colon
+    ],
+    "rectum": [
+        (BQB.IS, "uberon/UBERON:0001052"),  # rectum
+        (BQB.IS, "ncit/C12390"),  # rectum
+    ],
+    # the segments of the renal tubule
+    "proximal tubule": [
+        (BQB.IS, "uberon/UBERON:0004134"),  # proximal tubule
+    ],
+    "loop of Henle": [
+        (BQB.IS, "uberon/UBERON:0001288"),  # loop of Henle
+    ],
+    "distal tubule": [
+        (BQB.IS, "uberon/UBERON:0004135"),  # distal tubule
+    ],
+    "collecting duct": [
+        (BQB.IS, "uberon/UBERON:0001232"),  # collecting duct of renal tubule
     ],
     "plasma membrane": [
         (BQB.IS, "ncit/C13735"),  # Plasma membrane

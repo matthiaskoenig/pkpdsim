@@ -1,0 +1,66 @@
+"""Tests of the data files and their sources."""
+
+import tomllib
+from importlib import resources
+from typing import Any
+
+import pytest
+
+from pkpdsim.pbpk import cite, sources
+from pkpdsim.pbpk.data import value
+from pkpdsim.pbpk.units import U
+
+
+def _tables(node: object) -> list[dict[str, Any]]:
+    """Get all tables of a parsed file which state a value or a distribution."""
+    found: list[dict[str, Any]] = []
+    if isinstance(node, dict):
+        if "value" in node or "mean" in node:
+            found.append(node)
+        for child in node.values():
+            found.extend(_tables(child))
+    elif isinstance(node, list):
+        for child in node:
+            found.extend(_tables(child))
+    return found
+
+
+def test_every_source_has_citation() -> None:
+    """Every source states its key and a citation."""
+    assert {"ICRP89", "Jones2013", "Brown1997"} <= set(sources())
+    for key, s in sources().items():
+        assert s.key == key
+        assert s.citation
+
+
+def test_every_data_value_has_known_source() -> None:
+    """Every number of every data file has a source of sources.toml."""
+    known = sources()
+    data = resources.files("pkpdsim.pbpk").joinpath("data")
+    files = [*data.iterdir(), *data.joinpath("populations").iterdir()]
+    checked = set()
+    for path in files:
+        if not path.name.endswith(".toml") or path.name == "sources.toml":
+            continue
+        checked.add(path.name)
+        for table in _tables(tomllib.loads(path.read_text("utf-8"))):
+            assert table.get("source") in known, f"{path.name}: {table}"
+    assert {"tissue_composition.toml", "white_american_nhanes.toml"} <= checked
+
+
+def test_cite_includes_doi() -> None:
+    """The citation names the DOI."""
+    assert "10.1038/psp.2013.41" in cite("Jones2013")
+
+
+def test_cite_unknown_key_raises() -> None:
+    """An unknown key raises a KeyError which names the key."""
+    with pytest.raises(KeyError, match="nope"):
+        cite("nope")
+
+
+def test_value_of_data_file() -> None:
+    """A number of a data file is read with its unit of the model and its source."""
+    ti = value("routes", "iv", "ti")
+    assert (ti.value, ti.unit, ti.source) == (10.0, U.second, "ModelChoice")
+    assert ti.notes

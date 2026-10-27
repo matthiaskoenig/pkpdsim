@@ -131,6 +131,14 @@ pytest tests/test_package.py::test_version   # a single test
 
 The tests run in parallel, `addopts = "-n auto"` in `pyproject.toml` gives pytest-xdist one worker per core; `-n 0` on the command line runs everything in one process, which the debugger needs.
 
+The load-time guard of the PBPK library, `tests/pbpk/test_builder.py::test_load_time` (the load of a simple model under 10 s CPU), measures CPU time, which inflates among the parallel workers: it skips itself inside a pytest-xdist worker and runs serially. tox runs it as the second command of `py3.14` and `py3.15`, after the suite, so continuous integration measures it serially on linux, macos and windows; directly it is
+
+```bash
+pytest -n 0 tests/pbpk/test_builder.py::test_load_time
+```
+
+The second command of tox runs also when the arguments after `--` select other tests: tox has no conditional commands, and continuous integration passes `--durations=15` itself, so the measurement cannot be skipped whenever arguments are given; it costs a few seconds.
+
 ## Linting and formatting
 
 Linting and formatting use [ruff](https://docs.astral.sh/ruff/):

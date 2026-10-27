@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 488" role="img" aria-labelledby="pkg-gut-title pkg-gut-desc">
+<title id="pkg-gut-title">The segmented intestine</title>
+<desc id="pkg-gut-desc">An oral dose enters the stomach. The lumen segments stomach, duodenum, upper and lower jejunum, upper and lower ileum, caecum, colon ascendens, transversum, descendens, sigmoid and rectum pass the drug on by transit into the feces. Every segment but the stomach absorbs into its mucosa, which drains into the portal vein; the colon absorbs little. The bile drains into the duodenum.</desc>
+<style>
+.pkg-t{fill:currentColor;font-family:var(--md-text-font-family,system-ui),system-ui,sans-serif;font-size:14px}
+.pkg-s{font-size:12.5px}
+.pkg-b{font-weight:600}
+.pkg-dim{fill-opacity:.72}
+.pkg-line{stroke:currentColor;stroke-opacity:.6;stroke-width:1.5;fill:none}
+.pkg-faint{stroke:currentColor;stroke-opacity:.3;stroke-width:1.5;fill:none}
+.pkg-lumen{fill:rgba(255,150,40,.14);stroke:rgba(230,130,30,.8);stroke-width:1.2}
+.pkg-mu{fill:rgba(60,170,100,.14);stroke:rgba(60,170,100,.85);stroke-width:1.2}
+.pkg-mu2{fill:rgba(60,170,100,.06);stroke:rgba(60,170,100,.5);stroke-width:1.2}
+.pkg-por{fill:rgba(150,80,200,.14);stroke:rgba(150,80,200,.85);stroke-width:1.2}
+.pkg-sink{fill:rgba(128,128,128,.12);stroke:currentColor;stroke-opacity:.45;stroke-width:1.2}
+</style>
+<defs>
+<marker id="pkg-gut-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor" fill-opacity=".7"/></marker>
+</defs>
+<rect class="pkg-sink" x="40" y="8" width="130" height="24" rx="5"/>
+<text class="pkg-t pkg-s" x="105" y="25" text-anchor="middle">oral dose (mg)</text>
+<line class="pkg-line" x1="105" y1="32" x2="105" y2="58" marker-end="url(#pkg-gut-arrow)"/>
+<rect class="pkg-sink" x="205" y="25" width="90" height="24" rx="5"/>
+<text class="pkg-t pkg-s" x="250" y="42" text-anchor="middle">bile</text>
+<polyline class="pkg-line" points="205,37 186,37 186,93 172,93" marker-end="url(#pkg-gut-arrow)"/>
+<rect class="pkg-lumen" x="40" y="60" width="130" height="24" rx="5"/>
+<text class="pkg-t pkg-s" x="50" y="77">stomach st</text>
+<text class="pkg-t pkg-s pkg-dim" x="250" y="77" text-anchor="middle">no absorption</text>
+<rect class="pkg-lumen" x="40" y="88" width="130" height="24" rx="5"/>
+<text class="pkg-t pkg-s" x="50" y="105">duodenum du</text>
+<line class="pkg-line" x1="170" y1="106" x2="203" y2="106" marker-end="url(#pkg-gut-arrow)"/>
+<rect class="pkg-mu" x="205" y="88" width="90" height="24" rx="5"/>
+<text class="pkg-t pkg-s" x="250" y="105" text-anchor="middle">mucosa</text>
+<line class="pkg-line" x1="295" y1="100" x2="338" y2="100" marker-end="url(#pkg-gut-arrow)"/>
+<rect class="pkg-lumen" x="40" y="116" width="130" height="24" rx="5"/>
+<text class="pkg-t pkg-s" x="50" y="133">jejunum jej1</text>
+<line class="pkg-line" x1="170" y1="128" x2="203" y2="128" marker-end="url(#pkg-gut-arrow)"/>
+<rect class="pkg-mu" x="205" y="116" width="90" height="24" rx="5"/>
+<text class="pkg-t pkg-s" x="250" y="133" text-anchor="middle">mucosa</text>
+<line class="pkg-line" x1="295" y1="128" x2="338" y2="128" marker-end="url(#pkg-gut-arrow)"/>
+<rect class="pkg-lumen" x="40" y="144" width="130" height="24" rx="5"/>
+<text class="pkg-t pkg-s" x="50" y="161">jejunum jej2</text>
+<line class="pkg-line" x1="170" y1="156" x2="203" y2="156" marker-end="url(#pkg-gut-arrow)"/>
+<rect class="pkg-mu" x="205" y="144" width="90" height="24" rx="5"/>
+<text class="pkg-t pkg-s" x="250" y="161" text-anchor="middle">mucosa</text>
+<line class="pkg-line" x1="295" y1="156" x2="338" y2="156" marker-end="url(#pkg-gut-arrow)"/>
+<rect class="pkg-lumen" x="40" y="172" width="130" height="24" rx="5"/>
+<text class="pkg-t pkg-s" x="50" y="189">ileum ile1</text>
+<line class="pkg-line" x1="170" y1="184" x2="203" y2="184" marker-end="url(#pkg-gut-arrow)"/>
+<rect class="pkg-mu" x="205" y="172" width="90" height="24" rx="5"/>
+<text class="pkg-t pkg-s" x="250" y="189" text-anchor="middle">mucosa</text>
+<line class="pkg-line" x1="295" y1="184" x2="338" y2="184" marker-end="url(#pkg-gut-arrow)"/>
+<rect class="pkg-lumen" x="40" y="200" width="130" height="24" rx="5"/>
+<text class="pkg-t pkg-s" x="50" y="217">ileum ile2</text>
+<line class="pkg-line" x1="170" y1="212" x2="203" y2="212" marker-end="url(#pkg-gut-arrow)"/>
+<rect class="pkg-mu" x="205" y="200" width="90" height="24" rx="5"/>
+<text class="pkg-t pkg-s" x="250" y="217" text-anchor="middle">mucosa</text>
+<line class="pkg-line" x1="295" y1="212" x2="338" y2="212" marker-end="url(#pkg-gut-arrow)"/>
+<rect class="pkg-lumen" x="40" y="228" width="130" height="24" rx="5"/>
+<text class="pkg-t pkg-s" x="50" y="245">caecum cae</text>
+<line class="pkg-faint" x1="170" y1="240" x2="203" y2="240" marker-end="url(#pkg-gut-arrow)"/>
+<rect class="pkg-mu2" x="205" y="228" width="90" height="24" rx="5"/>
+<text class="pkg-t pkg-s" x="250" y="245" text-anchor="middle">mucosa</text>
+<line class="pkg-line" x1="295" y1="240" x2="338" y2="240" marker-end="url(#pkg-gut-arrow)"/>
+<rect class="pkg-lumen" x="40" y="256" width="130" height="24" rx="5"/>
+<text class="pkg-t pkg-s" x="50" y="273">colon asc</text>
+<line class="pkg-faint" x1="170" y1="268" x2="203" y2="268" marker-end="url(#pkg-gut-arrow)"/>
+<rect class="pkg-mu2" x="205" y="256" width="90" height="24" rx="5"/>
+<text class="pkg-t pkg-s" x="250" y="273" text-anchor="middle">mucosa</text>
+<line class="pkg-line" x1="295" y1="268" x2="338" y2="268" marker-end="url(#pkg-gut-arrow)"/>
+<rect class="pkg-lumen" x="40" y="284" width="130" height="24" rx="5"/>
+<text class="pkg-t pkg-s" x="50" y="301">colon tra</text>
+<line class="pkg-faint" x1="170" y1="296" x2="203" y2="296" marker-end="url(#pkg-gut-arrow)"/>
+<rect class="pkg-mu2" x="205" y="284" width="90" height="24" rx="5"/>
+<text class="pkg-t pkg-s" x="250" y="301" text-anchor="middle">mucosa</text>
+<line class="pkg-line" x1="295" y1="296" x2="338" y2="296" marker-end="url(#pkg-gut-arrow)"/>
+<rect class="pkg-lumen" x="40" y="312" width="130" height="24" rx="5"/>
+<text class="pkg-t pkg-s" x="50" y="329">colon des</text>
+<line class="pkg-faint" x1="170" y1="324" x2="203" y2="324" marker-end="url(#pkg-gut-arrow)"/>
+<rect class="pkg-mu2" x="205" y="312" width="90" height="24" rx="5"/>
+<text class="pkg-t pkg-s" x="250" y="329" text-anchor="middle">mucosa</text>
+<line class="pkg-line" x1="295" y1="324" x2="338" y2="324" marker-end="url(#pkg-gut-arrow)"/>
+<rect class="pkg-lumen" x="40" y="340" width="130" height="24" rx="5"/>
+<text class="pkg-t pkg-s" x="50" y="357">colon sig</text>
+<line class="pkg-faint" x1="170" y1="352" x2="203" y2="352" marker-end="url(#pkg-gut-arrow)"/>
+<rect class="pkg-mu2" x="205" y="340" width="90" height="24" rx="5"/>
+<text class="pkg-t pkg-s" x="250" y="357" text-anchor="middle">mucosa</text>
+<line class="pkg-line" x1="295" y1="352" x2="338" y2="352" marker-end="url(#pkg-gut-arrow)"/>
+<rect class="pkg-lumen" x="40" y="368" width="130" height="24" rx="5"/>
+<text class="pkg-t pkg-s" x="50" y="385">rectum rec</text>
+<line class="pkg-faint" x1="170" y1="380" x2="203" y2="380" marker-end="url(#pkg-gut-arrow)"/>
+<rect class="pkg-mu2" x="205" y="368" width="90" height="24" rx="5"/>
+<text class="pkg-t pkg-s" x="250" y="385" text-anchor="middle">mucosa</text>
+<line class="pkg-line" x1="295" y1="380" x2="338" y2="380" marker-end="url(#pkg-gut-arrow)"/>
+<rect class="pkg-por" x="340" y="88" width="52" height="304" rx="6"/>
+<text class="pkg-t pkg-b" x="366" y="240" text-anchor="middle" transform="rotate(-90 366 240)">portal vein to liver</text>
+<polyline class="pkg-line" points="30,72 30,416 38,416" marker-end="url(#pkg-gut-arrow)"/>
+<text class="pkg-t pkg-s pkg-dim" x="20" y="240" text-anchor="middle" transform="rotate(-90 20 240)">transit V·C/T</text>
+<rect class="pkg-sink" x="40" y="404" width="130" height="24" rx="5"/>
+<text class="pkg-t pkg-s" x="105" y="421" text-anchor="middle">feces</text>
+<text class="pkg-t pkg-s" x="8" y="450">absorption ka·f_area into the mucosa,</text>
+<text class="pkg-t pkg-s" x="8" y="466">which exists with chemistry of the intestine;</text>
+<text class="pkg-t pkg-s" x="8" y="482">without, into the plasma of the intestinal wall</text>
+</svg>

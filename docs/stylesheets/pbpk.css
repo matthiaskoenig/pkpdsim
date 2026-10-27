@@ -1,0 +1,27 @@
+/* The diagrams of the PBPK library: inline SVG (pymdownx.snippets), which
+   take the colors of the theme from `currentColor` and the CSS variables of
+   the page, so they follow the light and the dark scheme. */
+.pbpk-figure {
+  max-width: 22rem;
+  margin: 1.5em auto;
+}
+
+.pbpk-figure svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* The id table of the overview page of the PBPK library: an id is not
+   broken inside the id, a cell wraps at the spaces, and the table scrolls in
+   its own container on a phone. */
+.pbpk-ids td code {
+  overflow-wrap: normal;
+  word-break: keep-all;
+}
+
+/* The id table of the overview page: the description keeps a readable width
+   on a phone, the table scrolls in its container. */
+.pbpk-ids td:nth-child(2) {
+  min-width: 16em;
+}

@@ -1,0 +1,1550 @@
+"""The composition of a PBPK model from its definition, and its build.
+
+The comp model has a top model and one submodel per organ:
+
+- the top model holds the physiology (covariates, volumes, flows), the blood
+  pools (arterial, venous, portal; plasma `C<pool>_<s>` and kinetic blood
+  cells `C<pool>_bc_<s>`), the parameters of the substances (`Mr`, `fu`, `Kp`
+  or the factor `fKp_<s>` and the `Kp_<o>_<s>` of a Kp method, `BP`, ...), the sinks (urine, feces, bile), the dose states of the routes
+  and the parameters the intestine reads (`ka_<s>`, `FED`);
+- every organ is a `ModelDefinition` with a `Submodel` (`LI`, `KI`, ...), the
+  standard organ or a variant (`pkpdsim.pbpk.variants`); it reads the
+  elements of the body through its ports, and its outflow concentrations
+  replace the parameters `Cout_<o>_<s>` of the top model. The intestine
+  (`segmented` by default, or `single_lumen`) replaces small and large
+  intestine with one submodel `GU`, which owns the intestinal lumen and
+  applies the oral doses.
+
+Every port is declared by the organ (its `Boundary`) and every replacement is
+generated here from it; the flat model has the ids of the scheme
+(`LI__Cpl_<s>` in the organs, the ids of the top model unprefixed).
+
+The sinks are those of `pkpdsim.pbpk.sinks`, the observers (unbound and blood concentrations, hepatic and arm vein) those
+of `pkpdsim.pbpk.observers`.
+
+Every quantity which depends on parameters only (the physiology, the
+impairment, the compartments of the pools and the organs, `fu`, `BP`, the
+coefficients and exchanges of the organs) is a constant with an initial
+assignment, not an assignment rule: a change before the simulation (a change
+of an experiment, which sbmlsim applies with the initial assignments which
+read it) is followed, a change during the simulation is not. Only what reads
+a species (the outflow concentrations `Cout_<o>_<s>`, the observers) and the
+rate of an intravenous injection `Kiv_<s>` (of the dose protocol, which
+changes it between doses) are assignment rules. A parameter which changes
+during a simulation is named in `PBPKDefinition.dynamic`: every quantity
+downstream of it, in the top model and in the organs, is an assignment rule
+(`_dynamic`).
+
+The top model holds the impaired organ function as well
+(`pkpdsim.pbpk.impairment`): the severities and their factors on the
+physiology, `fu` and the activity of the proteins of the liver.
+
+A PD component (`pkpdsim.pbpk.pd`) is a further `ModelDefinition` with a
+`Submodel` of its id: the elements of the body replace its inputs, its
+outputs replace parameters of the body, which are dynamic.
+
+Every element is annotated when it is created (`pkpdsim.pbpk.annotation`);
+an input of a component takes the annotation of the element of the body
+which replaces it, and the model the annotation of a PBPK model.
+"""
+
+import copy
+import re
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
+from pathlib import Path
+
+from sbmlutils.comp import flatten_sbml
+from sbmlutils.factory import (
+    PORT_SUFFIX,
+    AssignmentRule,
+    Compartment,
+    InitialAssignment,
+    Model,
+    ModelDefinition,
+    Parameter,
+    Port,
+    PortType,
+    RateRule,
+    Reaction,
+    ReplacedBy,
+    ReplacedElement,
+    Sbase,
+    Species,
+    Submodel,
+    UnitDefinition,
+    create_model,
+)
+from sbmlutils.factory.units import UnitType
+from sbmlutils.metadata import SBO
+from sbmlutils.validation import validate_doc
+
+from pkpdsim.pbpk import ids, variants
+from pkpdsim.pbpk.annotation import annotate, initial_assignment, model_annotations
+from pkpdsim.pbpk.chemistry import Membrane, Metabolism, Transport
+from pkpdsim.pbpk.data import cite
+from pkpdsim.pbpk.definition import PBPKDefinition
+from pkpdsim.pbpk.impairment import (
+    impairment_objects,
+    physiology_factors,
+    unbound_fraction,
+)
+from pkpdsim.pbpk.kp import kp_sources, kp_values
+from pkpdsim.pbpk.observers import (
+    TIME,
+    definition_observer_objects,
+    formula_symbols,
+    observer_objects,
+)
+from pkpdsim.pbpk.organ import Boundary, GutComponent, OrganComponent, OrganContext
+from pkpdsim.pbpk.organs import Organ, Part, Pool
+from pkpdsim.pbpk.parts import parts_for
+from pkpdsim.pbpk.pd import PDComponent, ports
+from pkpdsim.pbpk.physiology import physiology_objects, reference_tissue_volumes
+from pkpdsim.pbpk.placement import (
+    FormulaParameter,
+    formula_assignment,
+    formula_problems,
+    inhibition_parameters,
+    kp_id,
+    value_parameter,
+)
+from pkpdsim.pbpk.routes import ORAL, route_objects
+from pkpdsim.pbpk.sinks import sink_objects
+from pkpdsim.pbpk.substance import Kp, KpMethod, Substance
+from pkpdsim.pbpk.units import MODEL_UNITS, U
+
+__all__ = [
+    "BuildResult",
+    "build",
+    "built_organs",
+    "compose",
+    "observer_problems",
+    "organ_component",
+    "organ_context",
+]
+
+_ONE = "1 dimensionless"
+_ANNOTATED = (Compartment, Species, Parameter, Reaction)
+_MODEL_FIELDS = (
+    "name",
+    "sboTerm",
+    "annotations",
+    "notes",
+    "creators",
+    "model_units",
+    "conversionFactor",
+    "units",
+    "functions",
+    "compartments",
+    "species",
+    "parameters",
+    "assignments",
+    "rules",
+    "rate_rules",
+    "algebraic_rules",
+    "reactions",
+    "events",
+    "constraints",
+    "ports",
+)
+"""The fields of the model of a PD component which its model definition takes."""
+_SBO_PARAMETER = SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER
+_SOURCE = {
+    "competitive": "Segel1975",
+    "noncompetitive": "Segel1975",
+    "uncompetitive": "Segel1975",
+    "mixed": "Segel1975",
+    "mechanism": "Mayhew2000",
+}
+"""The source of the rate law of an inhibition by its kind."""
+
+
+@dataclass(frozen=True)
+class BuildResult:
+    """The files of a built model.
+
+    Attributes:
+        comp_path: the comp model, the organs as submodels.
+        flat_path: the flattened model, which is simulated.
+    """
+
+    comp_path: Path
+    flat_path: Path
+
+
+def organ_component(definition: PBPKDefinition, organ: Organ) -> OrganComponent:
+    """Get the component of an organ: its variant, the standard organ by default.
+
+    Args:
+        definition: the definition.
+        organ: the organ.
+
+    Returns:
+        The component.
+
+    Raises:
+        ValueError: if the variant of the organ is a name of no variant.
+    """
+    variant = definition.variants.organs.get(
+        organ, variants.DEFAULTS.get(organ, "standard")
+    )
+    if not isinstance(variant, str):
+        return variant
+    return variants.lookup(organ, variant)
+
+
+def _gut(definition: PBPKDefinition) -> GutComponent | None:
+    """The intestine which replaces several organs, `None` for the standard organs.
+
+    Raises:
+        ValueError: if an organ which the intestine replaces has a variant of
+            its own.
+    """
+    component = organ_component(definition, Organ.SMALL_INTESTINE)
+    if not isinstance(component, GutComponent):
+        return None
+    for organ in component.replaces[1:]:
+        if organ in definition.variants.organs:
+            raise ValueError(
+                f"Organ '{organ.value}' has a variant, but the intestine "
+                f"'{component.name}' replaces it."
+            )
+    return component
+
+
+def built_organs(definition: PBPKDefinition) -> list[Organ]:
+    """Get the organs which are built as a submodel.
+
+    Args:
+        definition: the definition.
+
+    Returns:
+        Every organ but those the intestine replaces besides the small
+        intestine (the large intestine).
+    """
+    gut = _gut(definition)
+    replaced = set(gut.replaces[1:]) if gut is not None else set()
+    return [organ for organ in Organ if organ not in replaced]
+
+
+def organ_context(
+    definition: PBPKDefinition,
+    organ: Organ,
+    top: Mapping[str, tuple[str, UnitType]] | None = None,
+) -> OrganContext:
+    """Get the context of an organ: every substance flows through every organ.
+
+    Args:
+        definition: the definition.
+        organ: the organ.
+        top: the parameters and compartments of the top model with their
+            kind and unit, which a `Formula` of the organ may read.
+
+    Returns:
+        The substances with their parts in the organ, the chemistry and the
+        inhibitions and inductions of the substances.
+    """
+    chemistry = tuple(definition.chemistry)
+    substances = tuple(definition.substances)
+    return OrganContext(
+        organ=organ,
+        substances=substances,
+        parts={s.sid: parts_for(s, organ, chemistry) for s in substances},
+        chemistry=chemistry,
+        inhibitions=tuple((s.sid, i) for s in substances for i in s.inhibits),
+        inductions=tuple((s.sid, i) for s in substances for i in s.induces),
+        routes=tuple(definition.routes),
+        top=dict(top or {}),
+    )
+
+
+def compose(definition: PBPKDefinition) -> Model:
+    """Compose the comp model of a definition.
+
+    Args:
+        definition: the definition.
+
+    Returns:
+        The comp model: the top model with one submodel per organ and one per
+        PD component, the observers of the definition after those of the
+        library, the creators of the definition as model history.
+
+    Raises:
+        ValueError: if the definition is invalid, an organ variant is unknown,
+            an organ reads an element the body does not have, a route is
+            given twice, an oral route or an apical transport of the small
+            intestine has no intestine with a lumen, a PD component names
+            a port or an element of the body which does not exist, or an
+            observer of the definition is invalid in the top model
+            (`observer_problems`).
+    """
+    definition.validate(symbols=False)
+    top, model_definitions, submodels, replaced = _body(definition)
+    problems = _observer_problems(definition, top, model_definitions, submodels)
+    if problems:
+        raise ValueError(
+            f"Invalid PBPK definition '{definition.sid}':\n- " + "\n- ".join(problems)
+        )
+    top.add(definition_observer_objects(definition.observers))
+
+    return Model(
+        sid=definition.sid,
+        name=definition.name or definition.sid,
+        annotations=model_annotations(definition.substances),
+        notes=definition.notes,
+        creators=list(definition.creators),
+        units=U,
+        model_units=MODEL_UNITS,
+        objects=top.objects,
+        model_definitions=model_definitions,
+        submodels=submodels,
+        replaced_elements=replaced,
+    )
+
+
+def observer_problems(definition: PBPKDefinition) -> list[str]:
+    """Check the observers of a definition against the top model.
+
+    The model is composed without the observers of the definition; an
+    observer id must be no id of the body (nor of a submodel or model
+    definition), every symbol of its formula a value of the top model (a
+    parameter, species, compartment or reaction, never a submodel or model
+    definition) or another observer, the
+    observers must not read each other in a cycle, and every observer must
+    read a state (`_observer_problems`).
+
+    Args:
+        definition: the definition, otherwise valid.
+
+    Returns:
+        The problems, naming the observers and the ids.
+    """
+    if not definition.observers:
+        return []
+    top, model_definitions, submodels, _ = _body(definition)
+    return _observer_problems(definition, top, model_definitions, submodels)
+
+
+def _observer_problems(
+    definition: PBPKDefinition,
+    top: "_Top",
+    model_definitions: list[ModelDefinition],
+    submodels: list[Submodel],
+) -> list[str]:
+    """The problems of the observers of a definition in its composed body.
+
+    A state is what changes during a simulation: a species, the variable of
+    a rule (the observers of the library, the outputs of the organs and PD
+    components, the quantities downstream of a dynamic parameter), a
+    variable parameter (a dynamic one), a reaction and `time`. An observer
+    which reaches none of them, directly or through other observers, reads
+    constants only: its value is fixed before the simulation, and an
+    assignment rule of constants slows the compile of the model (R53), so it
+    is rejected.
+    """
+    # the ids an observer may read: the values of the top model
+    values: set[str] = {
+        str(o.sid)
+        for o in top.objects
+        if isinstance(o, Parameter | Species | Compartment | Reaction)
+    }
+    # the ids an observer must not take: the values, the submodels and the
+    # model definitions (no values, a formula cannot read them)
+    body = (
+        values
+        | {str(sm.sid) for sm in submodels}
+        | {str(md.sid) for md in model_definitions}
+    )
+    states: set[str] = {TIME}
+    for o in top.objects:
+        if isinstance(o, Species | Reaction):
+            states.add(str(o.sid))
+        elif isinstance(o, AssignmentRule | RateRule):
+            states.add(str(o.variable))
+        elif isinstance(o, Parameter | Compartment) and not o.constant:
+            states.add(str(o.sid))
+    observers = {o.sid: formula_symbols(o.formula) for o in definition.observers}
+    problems: list[str] = []
+    for sid, symbols in observers.items():
+        if sid in body:
+            problems.append(f"observer id '{sid}' is an id of the body")
+        unknown = sorted(symbols - values - set(observers) - {TIME})
+        if unknown:
+            problems.append(
+                f"observer '{sid}' reads {unknown}, which are no values of the top "
+                "model (the pools, sinks, observers, covariates and outputs of "
+                "the organs; an id of an organ is not visible in the top model)"
+            )
+    if problems:
+        return problems
+    reads = {sid: symbols & set(observers) for sid, symbols in observers.items()}
+    remaining = dict(reads)
+    while True:
+        done = [sid for sid, rs in remaining.items() if not rs & set(remaining)]
+        if not done:
+            break
+        for sid in done:
+            del remaining[sid]
+    if remaining:
+        return [f"observers {sorted(remaining)} read each other in a cycle"]
+    stateful = set(states)
+    changed = True
+    while changed:
+        changed = False
+        for sid, symbols in observers.items():
+            if sid not in stateful and symbols & stateful:
+                stateful.add(sid)
+                changed = True
+    return [
+        f"observer '{sid}' reads constants only ({sorted(symbols)}): its value is "
+        "fixed before the simulation, and an assignment rule of constants slows "
+        "the compile of the model (R53); read a state (a species, an observer, "
+        "an output of an organ, a dynamic parameter, time) or compute it from "
+        "the results"
+        for sid, symbols in observers.items()
+        if sid not in stateful
+    ]
+
+
+def _body(
+    definition: PBPKDefinition,
+) -> tuple["_Top", list[ModelDefinition], list[Submodel], list[ReplacedElement]]:
+    """Compose the body of a definition: everything but its own observers.
+
+    Returns:
+        The top model, the model definitions and submodels of the organs and
+        the PD components, and the replaced elements.
+    """
+    gut = _gut(definition)
+    oral = sorted({r.substance for r in definition.routes if r.kind in ORAL})
+    apical = sorted(
+        p.sid
+        for p in definition.chemistry
+        if isinstance(p, Transport)
+        and p.organ is Organ.SMALL_INTESTINE
+        and p.membrane is Membrane.APICAL
+    )
+    if gut is None and (oral or apical):
+        raise ValueError(
+            f"Oral routes of {oral} and apical transport {apical} of the small "
+            "intestine need an intestine with a lumen (variant 'segmented' or "
+            "'single_lumen'), the small intestine is a standard organ."
+        )
+    top = _Top(definition)
+    for s in definition.substances:
+        top.substance(s)
+    for pool in Pool:
+        top.pool(pool)
+    top.add(sink_objects(definition, lumen=gut is not None))
+    if gut is not None:
+        top.add(gut.body_objects(definition))
+    top.routes()
+
+    model_definitions: list[ModelDefinition] = []
+    submodels: list[Submodel] = []
+    replaced: list[ReplacedElement] = []
+    for organ in built_organs(definition):
+        md, boundary = organ_component(definition, organ).build(
+            organ_context(definition, organ, top.inputs())
+        )
+        if any(md.sid == other.sid for other in model_definitions):
+            raise ValueError(f"Two organs build the model definition '{md.sid}'.")
+        _scope_port_metaids(md)
+        model_definitions.append(md)
+        submodel = ids.submodel(organ)
+        if submodel in top.known:
+            raise ValueError(
+                f"The submodel id '{submodel}' of organ '{organ.value}' is an id "
+                "of the top model."
+            )
+        submodels.append(Submodel(submodel, modelRef=md.sid, name=organ.name.lower()))
+        replaced += top.connect(organ, submodel, boundary)
+    top.add(observer_objects(definition))
+    outputs: list[str] = []
+    for pd in definition.pd:
+        md, submodel, pd_replaced = top.couple(pd, (str(sm.sid) for sm in submodels))
+        if any(md.sid == other.sid for other in model_definitions):
+            raise ValueError(
+                f"The PD component '{md.sid}' has the id of another model definition."
+            )
+        model_definitions.append(md)
+        submodels.append(submodel)
+        replaced += pd_replaced
+        outputs += pd.outputs.values()
+    top.formulas()
+    _annotate_inputs(top.objects, model_definitions, submodels, replaced)
+    _dynamic(
+        definition,
+        (*definition.dynamic, *(o for o in outputs if o not in definition.dynamic)),
+        top.objects,
+        model_definitions,
+        submodels,
+        replaced,
+    )
+    return top, model_definitions, submodels, replaced
+
+
+_TOKEN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+"""An identifier in a formula."""
+
+
+def _symbols(formula: object) -> set[str]:
+    """The identifiers of a formula (ids, units and functions alike)."""
+    return set(_TOKEN.findall(str(formula)))
+
+
+def _to_rules(
+    assignments: list[InitialAssignment],
+    elements: Iterable[Parameter | Compartment],
+    dynamic: set[str],
+) -> list[AssignmentRule]:
+    """Turn the initial assignments which depend on dynamic ids into assignment rules.
+
+    `dynamic` is extended by the converted ids; the converted assignments are
+    removed from `assignments` and their elements become variable.
+
+    Returns:
+        The assignment rules.
+    """
+    rules: list[AssignmentRule] = []
+    changed = True
+    while changed:
+        changed = False
+        for ia in list(assignments):
+            if ia.symbol in dynamic or not _symbols(ia.value) & dynamic:
+                continue
+            assignments.remove(ia)
+            rules.append(AssignmentRule(ia.symbol, ia.value, ia.unit, name=ia.name))
+            dynamic.add(ia.symbol)
+            changed = True
+    for element in elements:
+        if element.sid in dynamic:
+            element.constant = False
+    return rules
+
+
+def _annotate_inputs(
+    objects: list[Sbase],
+    model_definitions: list[ModelDefinition],
+    submodels: list[Submodel],
+    replaced: list[ReplacedElement],
+) -> None:
+    """Give every element of a component which is linked to the body its annotation.
+
+    An input of an organ is the element of the body (`V<o>`, `fu_<s>`,
+    `Cve_<s>`), replaced by it in the comp model; the comp model shows the
+    input with the SBO term and the annotations of the element of the body,
+    so that every element of the comp model carries them as the flat model
+    does. An output (of an organ `Cout_<s>`, of a PD component the parameter
+    of the body it replaces) without annotations of its own takes those of
+    the element of the body, which the flat model shows under its id.
+    """
+    by_sid = {str(o.sid): o for o in objects if isinstance(o, _ANNOTATED)}
+    by_submodel = {str(sm.sid): str(sm.modelRef) for sm in submodels}
+    by_md = {str(md.sid): md for md in model_definitions}
+    links = [(r.elementRef, r.submodelRef, r.portRef) for r in replaced] + [
+        (o.replacedBy.elementRef, o.replacedBy.submodelRef, o.replacedBy.portRef)
+        for o in by_sid.values()
+        if isinstance(o, Parameter) and o.replacedBy is not None
+    ]
+    for element_ref, submodel_ref, port_ref in links:
+        top = by_sid.get(str(element_ref))
+        md = by_md.get(by_submodel.get(str(submodel_ref), ""))
+        if top is None or md is None:
+            continue
+        local = str(port_ref).removesuffix(PORT_SUFFIX)
+        for name in ("compartments", "species", "parameters"):
+            for element in getattr(md, name) or []:
+                if str(element.sid) == local and not element.annotations:
+                    element.sboTerm = top.sboTerm
+                    element.annotations = list(top.annotations or [])
+                    element.metaId = element.metaId or f"meta_{md.sid}__{local}"
+
+
+def _dynamic(
+    definition: PBPKDefinition,
+    names: Iterable[str],
+    objects: list[Sbase],
+    model_definitions: list[ModelDefinition],
+    submodels: list[Submodel],
+    replaced: list[ReplacedElement],
+) -> None:
+    """Keep the quantities downstream of the dynamic parameters as assignment rules.
+
+    The parameters `names` (`definition.dynamic` and the parameters which a
+    PD component replaces) change during a simulation: every
+    initial assignment of the top model which reads one of them (directly or
+    through another such quantity) becomes an assignment rule, and so does
+    every initial assignment of an organ which reads such an element through
+    its port; these elements and the dynamic parameters are variable.
+    Everything else stays an initial assignment (a change before the
+    simulation is followed, a change during it is not).
+
+    Raises:
+        ValueError: if a dynamic name is no parameter of the top model.
+    """
+    dynamic = set(names)
+    if not dynamic:
+        return
+    parameters = {str(o.sid) for o in objects if isinstance(o, Parameter)}
+    unknown = sorted(dynamic - parameters)
+    if unknown:
+        raise ValueError(
+            f"{definition.sid}: dynamic {unknown} are no parameters of the top model."
+        )
+    assignments = [o for o in objects if isinstance(o, InitialAssignment)]
+    elements = [o for o in objects if isinstance(o, Parameter | Compartment)]
+    rules = _to_rules(assignments, elements, dynamic)
+    objects[:] = [
+        o for o in objects if not isinstance(o, InitialAssignment) or o in assignments
+    ]
+    objects += rules
+    by_submodel = {str(sm.sid): str(sm.modelRef) for sm in submodels}
+    by_sid = {str(md.sid): md for md in model_definitions}
+    seeds: dict[str, set[str]] = {}
+    for r in replaced:
+        if r.elementRef in dynamic:
+            local = str(r.portRef).removesuffix(PORT_SUFFIX)
+            seeds.setdefault(by_submodel[str(r.submodelRef)], set()).add(local)
+    for md_sid, local in seeds.items():
+        md = by_sid[md_sid]
+        local_assignments = list(md.assignments or [])
+        md.rules = [
+            *(md.rules or []),
+            *_to_rules(
+                local_assignments,
+                [*(md.parameters or []), *(md.compartments or [])],
+                local,
+            ),
+        ]
+        md.assignments = local_assignments
+
+
+def build(definition: PBPKDefinition, output_dir: Path) -> BuildResult:
+    """Build a definition: the comp model and the flat model.
+
+    Args:
+        definition: the definition.
+        output_dir: the folder of the files `<sid>.xml` and `<sid>_flat.xml`.
+
+    Returns:
+        The paths of the comp and the flat model.
+
+    Raises:
+        ValueError: if the definition cannot be composed, or a model has SBML
+            errors.
+    """
+    model = compose(definition)
+    comp_path = output_dir / f"{definition.sid}.xml"
+    flat_path = output_dir / f"{definition.sid}_flat.xml"
+    # SBML L3V2, the level of the models of pkdb_models: the names of the rules
+    # and initial assignments are written (L3V1 has no name on them)
+    create_model(
+        model,
+        filepath=comp_path,
+        sbml_level=3,
+        sbml_version=2,
+        validate=True,
+        raise_on_error=True,
+    )
+    doc = flatten_sbml(comp_path, flat_path)
+    validation = validate_doc(doc, title=flat_path.name)
+    if validation.error_count:
+        raise ValueError(
+            f"The flat model '{flat_path}' has {validation.error_count} SBML errors."
+        )
+    return BuildResult(comp_path=comp_path, flat_path=flat_path)
+
+
+class _Top:
+    """The objects of the top model, collected while the definition is composed."""
+
+    def __init__(self, definition: PBPKDefinition) -> None:
+        self.definition = definition
+        self.objects: list[Sbase] = [
+            *physiology_objects(
+                definition.sex, physiology_factors(), definition.population
+            ),
+            *impairment_objects(definition),
+        ]
+        self.known: set[str] = {
+            str(o.sid) for o in self.objects if isinstance(o, Parameter)
+        }
+
+    def add(self, objects: Iterable[Sbase]) -> None:
+        """Add objects, recording the ids of compartments, species and parameters."""
+        for o in objects:
+            if isinstance(o, Parameter | Compartment | Species):
+                self.known.add(str(o.sid))
+            self.objects.append(o)
+
+    def inputs(self) -> dict[str, tuple[str, UnitType]]:
+        """The elements of the top model with their kind and unit.
+
+        The kinds: `parameter` and `compartment` for the constants, which a
+        `Formula` may read; `species` and `variable` (an observer, an output
+        of an organ, any element with a rule) for what changes during the
+        simulation, which a formula would freeze at its initial value.
+        """
+        ruled = {
+            str(o.variable)
+            for o in self.objects
+            if isinstance(o, AssignmentRule | RateRule)
+        }
+        local = [
+            p for o in self.objects if isinstance(o, Reaction) for p in o.pars or []
+        ]
+        found: dict[str, tuple[str, UnitType]] = {}
+        for o in [*self.objects, *local]:
+            if isinstance(o, Species):
+                found[str(o.sid)] = ("species", o.substanceUnits)
+            elif isinstance(o, Parameter | Compartment):
+                sid = str(o.sid)
+                if not o.constant or sid in ruled:
+                    found[sid] = ("variable", o.unit)
+                else:
+                    kind = "parameter" if isinstance(o, Parameter) else "compartment"
+                    found[sid] = (kind, o.unit)
+        return found
+
+    def formulas(self) -> None:
+        """Give every `Formula` of the top model its initial assignment.
+
+        Raises:
+            ValueError: if a formula reads an id which is no element of the
+                top model, or a species or an observer, naming every such id.
+        """
+        top = self.inputs()
+        local = [
+            p for o in self.objects if isinstance(o, Reaction) for p in o.pars or []
+        ]
+        problems: list[str] = []
+        assignments: list[Sbase] = []
+        for o in [*self.objects, *local]:
+            if not isinstance(o, FormulaParameter):
+                continue
+            problems += formula_problems(
+                f"the formula of '{o.sid}' (`{o.formula.expression}`)",
+                o.formula.expression,
+                top,
+            )
+            assignments.append(formula_assignment(o))
+        if problems:
+            raise ValueError(
+                f"Invalid PBPK definition '{self.definition.sid}':\n- "
+                + "\n- ".join(problems)
+            )
+        self.objects += assignments
+
+    def _initial(
+        self,
+        pid: str,
+        formula: str,
+        unit: UnitDefinition,
+        name: str,
+        text: str,
+        kind: str,
+    ) -> None:
+        """A constant parameter with its initial assignment, annotated as `kind`."""
+        self.add(
+            [
+                annotate(
+                    Parameter(
+                        pid,
+                        None,
+                        unit,
+                        constant=True,
+                        name=name,
+                        sboTerm=_SBO_PARAMETER,
+                        notes=f"{text}\n\n`{pid} = {formula}`",
+                    ),
+                    kind,
+                ),
+                initial_assignment(pid, formula, unit, name),
+            ]
+        )
+
+    def _compartment(
+        self,
+        cid: str,
+        formula: str,
+        name: str,
+        text: str,
+        kind: str,
+        pool: Pool,
+    ) -> None:
+        """A constant compartment of a pool with its volume as initial assignment."""
+        self.add(
+            [
+                annotate(
+                    Compartment(
+                        cid,
+                        None,
+                        U.litre,
+                        constant=True,
+                        name=name,
+                        notes=f"{text}\n\n`{cid} = {formula}`",
+                    ),
+                    kind,
+                    pool=pool,
+                ),
+                initial_assignment(cid, formula, U.litre, name),
+            ]
+        )
+
+    def _species(
+        self, sid: str, compartment: str, name: str, kind: str, s: Substance
+    ) -> None:
+        """A species of a substance in the top model, initially zero."""
+        self.add(
+            [
+                annotate(
+                    Species(
+                        sid,
+                        compartment,
+                        initialConcentration=0.0,
+                        substanceUnit=U.mmole,
+                        hasOnlySubstanceUnits=False,
+                        name=name,
+                    ),
+                    kind,
+                    substance=s,
+                )
+            ]
+        )
+
+    def _reaction(
+        self, sid: str, equation: str, rate: str, name: str, pool: Pool
+    ) -> None:
+        """An exchange of a pool, the rate in mmole/min."""
+        self.add(
+            [
+                annotate(
+                    Reaction(
+                        sid=sid,
+                        equation=equation,
+                        formula=(rate, U.mmole_per_min),
+                        name=name,
+                    ),
+                    "exchange",
+                    pool=pool,
+                )
+            ]
+        )
+
+    # --- substances ------------------------------------------------------
+
+    def substance(self, s: Substance) -> None:
+        """The parameters of a substance: Mr, fu, the distribution and the blood."""
+        sid = s.sid
+        self.add(
+            [
+                annotate(
+                    value_parameter(
+                        ids.mr(sid),
+                        s.mr,
+                        U.g_per_mole,
+                        f"molecular weight {sid} [g/mole]",
+                        SBO.MOLECULAR_MASS,
+                    ),
+                    "molecular_weight",
+                ),
+                annotate(
+                    value_parameter(
+                        ids.fu_ref(sid),
+                        s.binding.fu if s.binding is not None else 1.0,
+                        U.dimensionless,
+                        f"reference fraction unbound {sid}",
+                        _SBO_PARAMETER,
+                        "Fraction unbound in plasma of the reference individual"
+                        + (
+                            f" (binding protein {s.binding.protein})."
+                            if s.binding is not None
+                            else "; the substance does not bind to plasma proteins."
+                        ),
+                    ),
+                    "fu",
+                ),
+            ]
+        )
+        self._initial(
+            ids.fu(sid),
+            unbound_fraction(s),
+            U.dimensionless,
+            f"fraction unbound {sid}",
+            "Fraction unbound in plasma of the individual: the reference fraction "
+            "scaled with the binding protein under impairment (McNamara 2002, "
+            "`pkpdsim.pbpk.impairment`)."
+            if s.binding is not None
+            else "Fraction unbound in plasma of the individual; the substance does "
+            "not bind to plasma proteins.",
+            "fu",
+        )
+        if s.excretion.urine:
+            self.add(
+                [
+                    annotate(
+                        value_parameter(
+                            ids.fraction_reabsorbed(sid),
+                            s.excretion.fraction_reabsorbed,
+                            U.dimensionless,
+                            f"fraction reabsorbed {sid}",
+                            _SBO_PARAMETER,
+                            "Fraction of the glomerular filtrate which is reabsorbed "
+                            "into the plasma of the kidney.",
+                        ),
+                        "fraction_reabsorbed",
+                    )
+                ]
+            )
+        self._distribution(s)
+        self._erythrocytes(s)
+        self._interactions(s)
+
+    def _interactions(self, s: Substance) -> None:
+        """The constants of the inhibitions and inductions of a substance.
+
+        Only of a protein which a process of the definition uses: the organs
+        with such a process read them (`Ki`, `Kiu`, `kinact`, `Emax`,
+        `EC50`), one value for every organ.
+        """
+        used = {
+            p.protein
+            for p in self.definition.chemistry
+            if isinstance(p, Metabolism | Transport) and p.protein is not None
+        }
+        for inh in s.inhibits:
+            if inh.protein not in used:
+                continue
+            for pid, field in inhibition_parameters(s.sid, inh):
+                q = getattr(inh, field)
+                assert q is not None
+                if field == "kinact":
+                    unit, sbo, text = (
+                        U.per_min,
+                        SBO.INACTIVATION_RATE_CONSTANT,
+                        f"Maximal inactivation rate of {inh.protein} by {s.sid} "
+                        "(mechanism-based inhibition).",
+                    )
+                else:
+                    unit, sbo = U.mM, SBO.INHIBITORY_CONSTANT
+                    text = {
+                        "ki": f"Inhibition constant of {s.sid} on {inh.protein} "
+                        f"({inh.kind}) on the unbound concentration"
+                        + (
+                            "; the KI of the inactivation, and the competitive "
+                            "constant of the inhibitor while it binds."
+                            if inh.kind == "mechanism"
+                            else "."
+                        ),
+                        "kiu": f"Uncompetitive constant of the mixed inhibition of "
+                        f"{inh.protein} by {s.sid} on the unbound concentration.",
+                    }[field]
+                self.add(
+                    [
+                        annotate(
+                            value_parameter(
+                                pid,
+                                q,
+                                unit,
+                                f"{field} {inh.protein} {s.sid}",
+                                sbo,
+                                f"{text}\n\nSource of the rate law: "
+                                f"{cite(_SOURCE[inh.kind])}",
+                            ),
+                            "kinact" if field == "kinact" else "ki",
+                            protein=inh.protein,
+                        )
+                    ]
+                )
+        for ind in s.induces:
+            if ind.protein not in used:
+                continue
+            self.add(
+                [
+                    annotate(
+                        value_parameter(
+                            ids.emax(ind.protein, s.sid),
+                            ind.emax,
+                            U.dimensionless,
+                            f"Emax {ind.protein} {s.sid}",
+                            _SBO_PARAMETER,
+                            f"Maximal induction of {ind.protein} by {s.sid}, the "
+                            "fold increase of its synthesis minus 1.",
+                        ),
+                        "emax",
+                        protein=ind.protein,
+                    ),
+                    annotate(
+                        value_parameter(
+                            ids.ec50(ind.protein, s.sid),
+                            ind.ec50,
+                            U.mM,
+                            f"EC50 {ind.protein} {s.sid}",
+                            SBO.EC50,
+                            f"Unbound concentration of {s.sid} of half-maximal "
+                            f"induction of {ind.protein}.",
+                        ),
+                        "ec50",
+                        protein=ind.protein,
+                    ),
+                ]
+            )
+
+    def _distribution(self, s: Substance) -> None:
+        """The tissue to plasma coefficients, ftissue and the reference tissue volume."""
+        dist = s.distribution
+        if dist is None:
+            return
+        sid = s.sid
+        objects = (
+            self._kp_method(s, dist)
+            if isinstance(dist, KpMethod)
+            else self._kp_value(sid, dist)
+        )
+        if dist.ftissue is not None:
+            objects.append(
+                annotate(
+                    value_parameter(
+                        ids.ftissue(sid),
+                        dist.ftissue,
+                        U.l_per_min,
+                        f"whole-body exchange {sid} [l/min]",
+                        _SBO_PARAMETER,
+                        "Exchange between plasma and tissue of the whole body of the "
+                        "reference individual; an organ has the share of its tissue "
+                        "volume. It multiplies `fu*(Cpl - Cti/Kp)`, so its fitted "
+                        "values differ from those of the hand-written models.",
+                    ),
+                    "permeability",
+                )
+            )
+        shared = self._ftissue_organs(s)
+        if shared:
+            volumes = reference_tissue_volumes(self.definition.sex)
+            total = sum(volumes[o] for o in shared)
+            objects.append(
+                annotate(
+                    Parameter(
+                        ids.tissue_volume_total_ref(sid),
+                        total,
+                        U.litre,
+                        constant=True,
+                        name=f"reference tissue volume of the organs {sid} enters [l]",
+                        sboTerm=_SBO_PARAMETER,
+                        notes="Tissue volume `V<o>*(1 - f_vas_<o>)` of the "
+                        f"{self.definition.sex.value} reference individual summed "
+                        "over the organs whose exchange is a share of "
+                        f"`{ids.ftissue(sid)}`: "
+                        + ", ".join(o.name.lower() for o in shared)
+                        + ". A constant, so that the exchange scales with the "
+                        "tissue volume of the individual.",
+                    ),
+                    "tissue_volume",
+                )
+            )
+        self.add(objects)
+
+    def _kp_value(self, sid: str, dist: Kp) -> list[Sbase]:
+        """The coefficient of a substance and the coefficients of single organs."""
+        objects: list[Sbase] = [
+            annotate(
+                value_parameter(
+                    ids.kp(sid),
+                    dist.value,
+                    U.dimensionless,
+                    f"tissue to plasma coefficient {sid}",
+                    _SBO_PARAMETER,
+                    "Whole-tissue (interstitial and intracellular) to plasma "
+                    "coefficient of the organs without an own value.",
+                ),
+                "kp",
+            )
+        ]
+        for organ, q in dist.overrides.items():
+            objects.append(
+                annotate(
+                    value_parameter(
+                        ids.kp_organ(organ, sid),
+                        q,
+                        U.dimensionless,
+                        f"tissue to plasma coefficient {sid} {organ.name.lower()}",
+                        _SBO_PARAMETER,
+                        "Whole-tissue to plasma coefficient of the organ.",
+                    ),
+                    "kp_organ",
+                    organ=organ,
+                )
+            )
+        return objects
+
+    def _kp_method(self, s: Substance, method: KpMethod) -> list[Sbase]:
+        """The factor of a Kp method and the coefficient of every organ it computes.
+
+        Every `Kp_<o>_<s>` is an initial assignment `fKp_<s> * value` with the
+        value of the method (`pkpdsim.pbpk.kp`) for the sex of the build.
+        """
+        sid, fkp = s.sid, ids.fkp(s.sid)
+        objects: list[Sbase] = [
+            annotate(
+                value_parameter(
+                    fkp,
+                    method.factor,
+                    U.dimensionless,
+                    f"factor of the tissue to plasma coefficients {sid}",
+                    _SBO_PARAMETER,
+                    "Factor on every tissue to plasma coefficient of the Kp method "
+                    f"({method.method}), so that a fit scales all of them.",
+                ),
+                "kp_factor",
+            )
+        ]
+        for organ, v in kp_values(s, self.definition.sex).items():
+            pid = ids.kp_organ(organ, sid)
+            formula = f"{fkp} * {v.value!r} dimensionless"
+            citations = "\n".join(f"- {cite(key)}" for key in kp_sources(organ))
+            objects += [
+                annotate(
+                    Parameter(
+                        pid,
+                        None,
+                        U.dimensionless,
+                        constant=True,
+                        name=f"tissue to plasma coefficient {sid} {organ.name.lower()}",
+                        sboTerm=_SBO_PARAMETER,
+                        notes=f"Whole-tissue to plasma coefficient of the organ, the "
+                        f"Kp method times its factor. {v.notes}\n\n`{pid} = "
+                        f"{formula}`\n\nSources:\n\n{citations}",
+                    ),
+                    "kp_organ",
+                    organ=organ,
+                ),
+                initial_assignment(
+                    pid,
+                    formula,
+                    U.dimensionless,
+                    f"tissue to plasma coefficient {sid} {organ.name.lower()}",
+                ),
+            ]
+        return objects
+
+    def _ftissue_organs(self, s: Substance) -> list[Organ]:
+        """The organs whose exchange of a substance is a share of `ftissue_<s>`.
+
+        The merged and the full form of an organ the substance enters, unless
+        the distribution gives the exchange of the organ (`ps`).
+        """
+        dist = s.distribution
+        if dist is None:
+            return []
+        return [
+            organ
+            for organ in Organ
+            if parts_for(s, organ, self.definition.chemistry).tissue
+            in {"merged", "full"}
+            and kp_id(s, organ) is not None
+            and organ not in dist.ps
+        ]
+
+    def _erythrocytes(self, s: Substance) -> None:
+        """The blood to plasma ratio and the parameters of the blood cells."""
+        sid, ery = s.sid, s.erythrocytes
+        bp, name = ids.bp(sid), f"blood to plasma ratio {sid}"
+        if ery is None:
+            self._initial(
+                bp,
+                f"{_ONE} - {ids.HCT}",
+                U.dimensionless,
+                name,
+                "Blood to plasma ratio of a substance which does not enter the "
+                "erythrocytes; an observer value, the flows carry plasma only.",
+                "bp",
+            )
+            return
+        if ery.bp is not None:
+            self.add(
+                [
+                    annotate(
+                        value_parameter(
+                            bp,
+                            ery.bp,
+                            U.dimensionless,
+                            name,
+                            _SBO_PARAMETER,
+                            "Blood to plasma ratio, erythrocytes in equilibrium.",
+                        ),
+                        "bp",
+                    )
+                ]
+            )
+            return
+        assert ery.kbc is not None
+        self.add(
+            [
+                annotate(
+                    value_parameter(
+                        ids.kbc(sid),
+                        ery.kbc,
+                        U.dimensionless,
+                        f"blood cell to plasma coefficient {sid}",
+                        _SBO_PARAMETER,
+                    ),
+                    "kbc",
+                )
+            ]
+        )
+        if ery.k_exchange is not None:
+            self.add(
+                [
+                    annotate(
+                        value_parameter(
+                            ids.kbc_exchange(sid),
+                            ery.k_exchange,
+                            U.per_min,
+                            f"exchange plasma and blood cells {sid} [1/min]",
+                            _SBO_PARAMETER,
+                            "Rate of the exchange between plasma and blood cells per "
+                            "blood cell volume.",
+                        ),
+                        "exchange_rate",
+                    )
+                ]
+            )
+        self._initial(
+            bp,
+            f"{_ONE} - {ids.HCT} + {ids.HCT} * {ids.kbc(sid)}",
+            U.dimensionless,
+            name,
+            "Blood to plasma ratio of the blood cell to plasma coefficient"
+            + (
+                " (at equilibrium of the kinetic blood cells)."
+                if ery.mode == "kinetic"
+                else "."
+            ),
+            "bp",
+        )
+
+    # --- pools -----------------------------------------------------------
+
+    def pool(self, pool: Pool) -> None:
+        """The compartments and species of a blood pool."""
+        label = pool.name.lower()
+        volume = ids.pool_volume(pool)
+        plasma = ids.pool_compartment(pool, Part.PLASMA)
+        cells = ids.pool_compartment(pool, Part.BLOOD_CELLS)
+        self._compartment(
+            plasma,
+            f"{volume} * ({_ONE} - {ids.HCT})",
+            f"{label} plasma",
+            "Plasma of the blood pool.",
+            "plasma",
+            pool,
+        )
+        self._compartment(
+            cells,
+            f"{volume} * {ids.HCT}",
+            f"{label} blood cells",
+            "Blood cells of the blood pool.",
+            "blood_cells",
+            pool,
+        )
+        for s in self.definition.substances:
+            ery = s.erythrocytes
+            compartment = plasma
+            if ery is not None and ery.mode == "equilibrium":
+                compartment = ids.pool_capacity(pool, s.sid)
+                self._compartment(
+                    compartment,
+                    f"{volume} * {ids.bp(s.sid)}",
+                    f"plasma-equivalent capacity V*BP of {s.sid}, {label} pool",
+                    "Not a physical volume: the plasma-equivalent capacity of the "
+                    "blood of a substance with erythrocytes in equilibrium, the "
+                    "pool volume times the blood to plasma ratio, so that the "
+                    "plasma concentration in it gives the amount in the blood.",
+                    "capacity",
+                    pool,
+                )
+            cpl = ids.pool_species(pool, s.sid)
+            self._species(
+                cpl,
+                compartment,
+                f"{s.name} ({label} plasma)",
+                "concentration_plasma",
+                s,
+            )
+            if ery is None or ery.mode != "kinetic":
+                continue
+            cbc = ids.pool_species(pool, s.sid, Part.BLOOD_CELLS)
+            self._species(
+                cbc, cells, f"{s.name} ({label} blood cells)", "concentration", s
+            )
+            self._reaction(
+                ids.pool_exchange_reaction(pool, s.sid),
+                f"{cpl} <-> {cbc}",
+                f"{ids.kbc_exchange(s.sid)} * {cells} * "
+                f"({cpl} - {cbc} / {ids.kbc(s.sid)})",
+                f"exchange {s.sid} plasma and blood cells, {label} pool",
+                pool,
+            )
+
+    # --- routes ----------------------------------------------------------
+
+    def routes(self) -> None:
+        """The dose states of the routes.
+
+        Raises:
+            ValueError: if a route of a substance is given twice.
+        """
+        by_id = {s.sid: s for s in self.definition.substances}
+        seen: set[tuple[str, str]] = set()
+        for route in self.definition.routes:
+            key = (route.kind, route.substance)
+            if key in seen:
+                raise ValueError(
+                    f"Route '{route.kind}' of substance '{route.substance}' is "
+                    "given twice."
+                )
+            seen.add(key)
+            self.add(route_objects(route, by_id[route.substance]))
+
+    # --- organs ----------------------------------------------------------
+
+    def couple(
+        self, pd: PDComponent, submodels: Iterable[str]
+    ) -> tuple[ModelDefinition, Submodel, list[ReplacedElement]]:
+        """The model definition, submodel and replacements of a PD component.
+
+        Every input of the component is replaced by the element of the body;
+        every parameter of the body which an output names is replaced by the
+        element of the output (a `ReplacedBy` of the parameter). The target of
+        an output is a plain parameter of a value: one which no initial
+        assignment, rule or other component defines (a derived quantity
+        such as `CO` is changed through the parameters it derives from). A
+        parameter of `PBPKDefinition.dynamic` is such a parameter and may be
+        the target; it is dynamic either way.
+
+        Args:
+            pd: the component.
+            submodels: the ids of the submodels of the organs.
+
+        Raises:
+            ValueError: naming an input or output which is no port of the
+                component, of the wrong type, an element of the body which
+                does not exist (an input) or is no plain parameter of a value
+                (an output), a component whose id is an id of the top model or
+                of an organ submodel, or whose model units differ from those of
+                the library.
+        """
+        model = copy.deepcopy(pd.model)
+        sid = str(model.sid)
+        if sid in self.known:
+            raise ValueError(
+                f"The PD component '{sid}' has the id of an element of the body."
+            )
+        if sid in set(submodels):
+            raise ValueError(
+                f"The PD component '{sid}' has the id of the submodel of an organ."
+            )
+        _check_model_units(sid, model)
+        if model.model_definitions or model.external_model_definitions:
+            raise ValueError(
+                f"The PD component '{sid}' has model definitions of its own; "
+                "comp does not nest them."
+            )
+        declared = ports(model)
+        parameters = {str(o.sid): o for o in self.objects if isinstance(o, Parameter)}
+        derived = {
+            str(o.symbol if isinstance(o, InitialAssignment) else o.variable)
+            for o in self.objects
+            if isinstance(o, InitialAssignment | AssignmentRule | RateRule)
+        }
+        problems: list[str] = []
+        for what, mapping, wrong in (
+            ("input", pd.inputs, PortType.OUTPUT_PORT),
+            ("output", pd.outputs, PortType.INPUT_PORT),
+        ):
+            for local, body in mapping.items():
+                if local not in declared:
+                    problems.append(f"{what} '{local}' is no port of the component")
+                elif declared[local][1] is wrong:
+                    problems.append(
+                        f"{what} '{local}' is declared as {wrong.value} of the "
+                        "component"
+                    )
+                if what == "input" and body not in self.known:
+                    problems.append(f"input '{local}' reads the unknown id '{body}'")
+                if what == "output" and body not in parameters:
+                    problems.append(
+                        f"output '{local}' replaces '{body}', which is no "
+                        "parameter of the body"
+                    )
+                elif what == "output" and (
+                    body in derived or parameters[body].replacedBy is not None
+                ):
+                    problems.append(
+                        f"output '{local}' replaces '{body}', which is derived "
+                        "(an initial assignment, a rule or the output of another "
+                        "component), not a parameter of a value"
+                    )
+        if problems:
+            raise ValueError(f"PD component '{sid}': " + "; ".join(problems) + ".")
+        md = ModelDefinition(
+            sid=sid,
+            **{f: getattr(model, f) for f in _MODEL_FIELDS if getattr(model, f)},
+        )
+        _scope_port_metaids(md)
+        for local, body in pd.outputs.items():
+            parameters[body].replacedBy = ReplacedBy(
+                elementRef=body, submodelRef=sid, portRef=declared[local][0]
+            )
+        submodel = Submodel(sid, modelRef=sid, name=model.name or sid)
+        replaced = [
+            ReplacedElement(
+                elementRef=body, submodelRef=sid, portRef=declared[local][0]
+            )
+            for local, body in pd.inputs.items()
+        ]
+        return md, submodel, replaced
+
+    def connect(
+        self, organ: Organ, submodel: str, boundary: Boundary
+    ) -> list[ReplacedElement]:
+        """The replacements of the boundary of an organ.
+
+        Every element of the body which the organ reads replaces the port of
+        the organ; every output of the organ replaces a parameter of the top
+        model, which is created here: the outflow concentration
+        `Cout_<o>_<s>`, the urinary excretion rate `Rurine_<s>` of the
+        kidney.
+
+        Raises:
+            ValueError: if the organ reads an element the body does not have.
+        """
+        missing = sorted(
+            t for t in boundary.replacements.values() if t not in self.known
+        )
+        if missing:
+            raise ValueError(
+                f"Organ '{organ.value}' reads elements which the body does not "
+                f"have: {missing}."
+            )
+        cells = {ids.outflow_conc_bc(s.sid) for s in self.definition.substances}
+        rates = {ids.urine_rate(s.sid) for s in self.definition.substances}
+        for local, top in boundary.outputs.items():
+            if top in rates:
+                unit, name, kind = (
+                    U.mmole_per_min,
+                    f"urinary excretion rate {top} [mmole/min]",
+                    "urine_rate",
+                )
+                text = "Rate of the urinary excretion, the sum of the fluxes of the "
+            else:
+                unit, name, kind = (
+                    U.mM,
+                    f"outflow concentration {top} [mM]",
+                    "outflow_blood_cells" if local in cells else "outflow",
+                )
+                text = "Concentration (plasma or kinetic blood cells) leaving the "
+            self.add(
+                [
+                    annotate(
+                        Parameter(
+                            top,
+                            0.0,
+                            unit,
+                            constant=False,
+                            name=name,
+                            sboTerm=_SBO_PARAMETER,
+                            notes=f"{text}organ {organ.name.lower()}, replaced by "
+                            "the output of the organ; the value is a placeholder.",
+                            replacedBy=ReplacedBy(
+                                elementRef=top,
+                                submodelRef=submodel,
+                                portRef=f"{local}{PORT_SUFFIX}",
+                            ),
+                        ),
+                        kind,
+                        organ=organ,
+                    )
+                ]
+            )
+        return [
+            ReplacedElement(
+                elementRef=top,
+                submodelRef=submodel,
+                portRef=f"{local}{PORT_SUFFIX}",
+            )
+            for local, top in boundary.replacements.items()
+        ]
+
+
+_UNIT_FIELDS = ("time", "extent", "substance", "length", "area", "volume")
+
+
+def _unit_id(unit: object) -> str | None:
+    """The id of a model unit (a unit definition or its id)."""
+    if unit is None:
+        return None
+    return str(getattr(unit, "sid", unit))
+
+
+def _check_model_units(sid: str, model: Model) -> None:
+    """Check that a PD component has the model units of the library.
+
+    The flat model has one set of model units; a component in other units
+    (hours) would be integrated in the units of the library without a
+    conversion factor.
+
+    Raises:
+        ValueError: naming the model units which differ, or if the component
+            has none.
+    """
+    units = model.model_units
+    if units is None:
+        raise ValueError(
+            f"The PD component '{sid}' has no model units, the library has "
+            "`pkpdsim.pbpk.MODEL_UNITS`."
+        )
+    differ = [
+        f"{field} {_unit_id(getattr(units, field, None))} (library "
+        f"{_unit_id(getattr(MODEL_UNITS, field))})"
+        for field in _UNIT_FIELDS
+        if _unit_id(getattr(units, field, None))
+        != _unit_id(getattr(MODEL_UNITS, field))
+    ]
+    if differ:
+        raise ValueError(
+            f"The PD component '{sid}' has other model units than the library: "
+            + ", ".join(differ)
+            + "."
+        )
+
+
+def _scope_port_metaids(md: ModelDefinition) -> None:
+    """Give the ports of a model definition metaids unique in the document.
+
+    The port of an element is `<id>_port`, and sbmlutils gives a port the
+    metaid of its id; a metaid is unique in the whole document, so the ports
+    of two organs with the same local ids (`Vpl_port`) would collide. The
+    metaid is prefixed with the id of the model definition, the port ids, to
+    which the replacements refer, stay. The same holds for the metaid of an
+    annotated element (`meta_<id>` by default), which is prefixed as well.
+    """
+    for name in ("compartments", "species", "parameters", "reactions"):
+        for element in getattr(md, name) or []:
+            if element.annotations and element.metaId is None:
+                element.metaId = f"meta_{md.sid}__{element.sid}"
+            port = getattr(element, "port", None)
+            if port is None or port is False:
+                continue
+            if port is True:
+                port = Port(
+                    f"{element.sid}{PORT_SUFFIX}",
+                    name=f"Port of {element.sid}",
+                    sboTerm=SBO.PORT,
+                )
+            else:
+                port = copy.copy(port)
+            port.metaId = f"{md.sid}__{port.sid}"
+            element.port = port

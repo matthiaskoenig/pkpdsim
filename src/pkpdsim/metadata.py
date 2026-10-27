@@ -3,7 +3,8 @@
 Every fit mapping of an experiment carries metadata which says what its curve
 is: the tissue, the route, the application form, the dosing, the fasting, the
 health of the subjects, what was coadministered, the genotype and the phenotype
-of the subjects, the site of the administration and the kind of the data. The
+of the subjects, the site of the administration, the kind of the data and the
+site of the blood sample. The
 fits select their data by these values (see `pkpdsim.fit.metadata_filter`), so
 all models describe their studies with the same words: there is one vocabulary
 for all models, and every closed vocabulary is an enum of this module.
@@ -49,6 +50,7 @@ __all__ = [
     "PKPDMappingMetaData",
     "Phenotype",
     "Route",
+    "SamplingSite",
     "Tissue",
 ]
 
@@ -435,6 +437,23 @@ class AdministrationSite(StrEnum):
     UPPER_ARM = "upper arm"
 
 
+@unique
+class SamplingSite(StrEnum):
+    """The site at which the blood of a sample is drawn.
+
+    Plasma and blood are typically sampled from an arm vein, which is the
+    default; the other sites are taken where a study states them.
+    """
+
+    ARM_VEIN = "arm vein"  # antecubital or forearm vein, peripheral venous
+    VENOUS = "venous"  # central venous blood (e.g. a central venous catheter)
+    ARTERIAL = "arterial"
+    ARTERIALISED = "arterialised"  # venous blood of a heated hand
+    HEPATIC_VEIN = "hepatic vein"
+    CAPILLARY = "capillary"  # e.g. finger prick
+    NOT_APPLICABLE = "not applicable"  # no blood sample, e.g. urine or feces
+
+
 def _name(value: object) -> str:
     """Get the member name of an enum value, the string of any other value."""
     return value.name if isinstance(value, Enum) else str(value)
@@ -463,6 +482,11 @@ class PKPDMappingMetaData(MappingMetaData):
         data: whether the curve is pharmacokinetic or pharmacodynamic data, not
             reported by default.
         data_type: what the values of the curve are, not reported by default.
+        sampling_site: the site of the blood sample, the arm vein by default:
+            plasma and blood are typically sampled from an arm vein, so data
+            without a stated site are arm-vein samples (`NOT_APPLICABLE` for
+            urine and feces). Appended after the fields of the first version,
+            so a subclass of a model keeps its fields valid.
     """
 
     tissue: Tissue
@@ -477,6 +501,7 @@ class PKPDMappingMetaData(MappingMetaData):
     administration_site: AdministrationSite = AdministrationSite.NR
     data: PKPDData = PKPDData.NR
     data_type: DataType = DataType.NR
+    sampling_site: SamplingSite = SamplingSite.ARM_VEIN
 
     @override
     def to_dict(self) -> dict[str, str]:

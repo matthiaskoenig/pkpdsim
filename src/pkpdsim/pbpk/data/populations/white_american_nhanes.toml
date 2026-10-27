@@ -1,0 +1,27 @@
+# The non-Hispanic white adults of the United States, aged 20 to 49 years (age at
+# examination), from the NHANES examinations 2013-2018 as preprocessed in
+# the data set `mecdt` of httk 2.7.4 (HTTK-Pop, Ring 2017). The numbers are
+# survey-weighted (6-year examination weights `wtmec6yr`) means and standard
+# deviations of the respondents with body weight and height; the age band is
+# a choice of the library (adults, the ages of most clinical studies).
+
+name = "White American (NHANES 2013-2018)"
+source = "Ring2017"
+
+[male.reference]
+BW = { value = 92.32, unit = "kg", source = "NHANES2013_2018", notes = "survey-weighted mean body weight of the 1228 non-Hispanic white male respondents aged 20-49 y" }
+HEIGHT = { value = 177.99, unit = "cm", source = "NHANES2013_2018", notes = "survey-weighted mean height (standing height or recumbent length) of the 1228 non-Hispanic white male respondents aged 20-49 y" }
+AGE = { value = 34.56, unit = "yr", source = "NHANES2013_2018", notes = "survey-weighted mean age at examination of the 1228 non-Hispanic white male respondents aged 20-49 y" }
+
+[male.covariates]
+BW = { kind = "lognormal", mean = 92.32, sd = 22.42, unit = "kg", source = "NHANES2013_2018", notes = "survey-weighted mean and standard deviation of the body weight of the 1228 non-Hispanic white male respondents aged 20-49 y; lognormal, the body weight is skewed to the right" }
+HEIGHT = { kind = "normal", mean = 177.99, sd = 6.71, unit = "cm", source = "NHANES2013_2018", notes = "survey-weighted mean and standard deviation of the height of the 1228 non-Hispanic white male respondents aged 20-49 y" }
+
+[female.reference]
+BW = { value = 78.25, unit = "kg", source = "NHANES2013_2018", notes = "survey-weighted mean body weight of the 1304 non-Hispanic white female respondents aged 20-49 y" }
+HEIGHT = { value = 164.32, unit = "cm", source = "NHANES2013_2018", notes = "survey-weighted mean height (standing height or recumbent length) of the 1304 non-Hispanic white female respondents aged 20-49 y" }
+AGE = { value = 34.74, unit = "yr", source = "NHANES2013_2018", notes = "survey-weighted mean age at examination of the 1304 non-Hispanic white female respondents aged 20-49 y" }
+
+[female.covariates]
+BW = { kind = "lognormal", mean = 78.25, sd = 22.36, unit = "kg", source = "NHANES2013_2018", notes = "survey-weighted mean and standard deviation of the body weight of the 1304 non-Hispanic white female respondents aged 20-49 y; lognormal, the body weight is skewed to the right" }
+HEIGHT = { kind = "normal", mean = 164.32, sd = 6.33, unit = "cm", source = "NHANES2013_2018", notes = "survey-weighted mean and standard deviation of the height of the 1304 non-Hispanic white female respondents aged 20-49 y" }
