@@ -234,7 +234,8 @@ def test_health_is_required() -> None:
 def test_sampling_site_default_arm_vein() -> None:
     """Plasma and blood data without a stated site are arm-vein samples."""
     md = minimal()
-    assert md.sampling_site is SamplingSite.ARM_VEIN
+    assert md.sampling_site is None
+    assert md.resolved_sampling_site() is SamplingSite.ARM_VEIN
     assert SamplingSite("arm vein") is SamplingSite.ARM_VEIN
     urine = dataclasses.replace(
         md, tissue=Tissue.URINE, sampling_site=SamplingSite.NOT_APPLICABLE
@@ -250,7 +251,8 @@ def test_urine_without_a_site_is_not_applicable(tissue: Tissue) -> None:
     md = ModelMappingMetaData(
         tissue=tissue, route=Route.PO, dosing=Dosing.SINGLE, health=Health.HEALTHY
     )
-    assert md.sampling_site is SamplingSite.NOT_APPLICABLE
+    assert md.sampling_site is None
+    assert md.resolved_sampling_site() is SamplingSite.NOT_APPLICABLE
     assert md.to_dict()["sampling_site"] == "NOT_APPLICABLE"
 
 
@@ -287,3 +289,43 @@ def test_not_applicable_on_plasma_is_refused() -> None:
             health=Health.HEALTHY,
             sampling_site=SamplingSite.NOT_APPLICABLE,
         )
+
+
+def test_replace_of_the_tissue_follows_the_default_site() -> None:
+    plasma = minimal()
+    urine = dataclasses.replace(plasma, tissue=Tissue.URINE)
+    assert urine.resolved_sampling_site() is SamplingSite.NOT_APPLICABLE
+    back = dataclasses.replace(urine, tissue=Tissue.PLASMA)
+    assert back.resolved_sampling_site() is SamplingSite.ARM_VEIN
+
+
+def test_an_explicit_site_is_kept_by_replace_of_another_field() -> None:
+    md = dataclasses.replace(minimal(), sampling_site=SamplingSite.ARTERIAL)
+    other = dataclasses.replace(md, route=Route.IV)
+    assert other.sampling_site is SamplingSite.ARTERIAL
+    assert other.resolved_sampling_site() is SamplingSite.ARTERIAL
+    with pytest.raises(ValueError, match="no blood sample"):
+        dataclasses.replace(md, tissue=Tissue.URINE)
+
+
+@dataclasses.dataclass(kw_only=True)
+class OwnPostInit(PKPDMappingMetaData):
+    extra: int = 0
+
+    def __post_init__(self) -> None:  # no super() call
+        self.extra += 1
+
+
+def test_a_subclass_with_its_own_post_init_resolves() -> None:
+    urine = OwnPostInit(
+        tissue=Tissue.URINE, route=Route.PO, dosing=Dosing.SINGLE, health=Health.HEALTHY
+    )
+    assert urine.resolved_sampling_site() is SamplingSite.NOT_APPLICABLE
+    assert urine.to_dict()["sampling_site"] == "NOT_APPLICABLE"
+    plasma = OwnPostInit(
+        tissue=Tissue.PLASMA,
+        route=Route.PO,
+        dosing=Dosing.SINGLE,
+        health=Health.HEALTHY,
+    )
+    assert plasma.to_dict()["sampling_site"] == "ARM_VEIN"

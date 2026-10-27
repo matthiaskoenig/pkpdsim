@@ -209,8 +209,8 @@ not to the model.
 A model uses `PKPDMappingMetaData`, which has the fields `tissue`, `route`,
 `application_form` (default `NR`), `dosing`, `fasting` (default `NR`), `health`,
 `coadministration` (default `NONE`), `genotype`, `phenotype`, `administration_site`,
-`data` and `data_type` (default `NR`) and `sampling_site` (without a
-stated site it follows the tissue: plasma and blood are typically drawn from an
+`data` and `data_type` (default `NR`) and `sampling_site` (stated or `None`; read the
+site with `resolved_sampling_site()`. Without a stated site it follows the tissue: plasma and blood are typically drawn from an
 arm vein, so they are `ARM_VEIN`; saliva, urine, feces, feces and urine, bile and
 no tissue have no blood sample and are `NOT_APPLICABLE`; a blood site on such a
 tissue and `NOT_APPLICABLE` on plasma, serum or blood are a `ValueError`). All fields

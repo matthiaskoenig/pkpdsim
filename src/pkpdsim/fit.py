@@ -158,7 +158,7 @@ def check_sampling_sites(
     problems: list[str] = []
     for name, fit_mapping in mappings:
         observable = observable_id(fit_mapping)
-        site = mapping_metadata(fit_mapping, metadata_type).sampling_site
+        site = mapping_metadata(fit_mapping, metadata_type).resolved_sampling_site()
         if observable not in sites:
             problems.append(f"{name}: observable '{observable}' has no sampling site")
         elif site is not sites[observable]:
@@ -167,6 +167,17 @@ def check_sampling_sites(
                 f"differs from {sites[observable].name}"
             )
     return problems
+
+
+def _value(metadata: MappingMetaData, name: str) -> Hashable:
+    """Get the value of a field of the metadata the filters compare.
+
+    The sampling site is the resolved one, which follows the tissue if it is not
+    stated.
+    """
+    if name == "sampling_site" and isinstance(metadata, PKPDMappingMetaData):
+        return metadata.resolved_sampling_site()
+    return getattr(metadata, name)
 
 
 def _show(values: frozenset[Hashable]) -> str:
@@ -213,9 +224,9 @@ class MetadataFilter:
         """Check a fit mapping, see `sbmlsim.fit.helpers.MappingFilter`."""
         metadata = mapping_metadata(fit_mapping, self.metadata_type)
         return all(
-            getattr(metadata, name) in values for name, values in self.allowed
+            _value(metadata, name) in values for name, values in self.allowed
         ) and not any(
-            getattr(metadata, name) in values for name, values in self.excluded
+            _value(metadata, name) in values for name, values in self.excluded
         )
 
     def __repr__(self) -> str:

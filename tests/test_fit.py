@@ -305,3 +305,15 @@ def test_check_sampling_sites_names_every_mismatch(fit_mapping: FitMapping) -> N
     unknown = check_sampling_sites([fit_mapping, other], {"B": SamplingSite.ARM_VEIN})
     assert len(unknown) == 2
     assert all("no sampling site" in problem for problem in unknown)
+
+
+def test_a_filter_on_the_sampling_site_compares_the_resolved_site(
+    fit_mapping: FitMapping,
+) -> None:
+    arm = metadata_filter(sampling_site={SamplingSite.ARM_VEIN})
+    not_applicable = metadata_filter(sampling_site={SamplingSite.NOT_APPLICABLE})
+    assert arm("k", fit_mapping)
+    assert not not_applicable("k", fit_mapping)
+    urine = with_metadata(fit_mapping, tissue=Tissue.URINE)
+    assert not_applicable("k", urine)
+    assert not arm("k", urine)

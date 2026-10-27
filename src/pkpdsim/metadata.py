@@ -33,7 +33,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, fields
 from enum import Enum, StrEnum, unique
-from typing import Final, cast, override
+from typing import Final, override
 
 from sbmlsim.fit.objects import MappingMetaData
 
@@ -470,10 +470,6 @@ Saliva is no blood sample, so it is treated like the excretions. Every other
 tissue (plasma, serum, blood, arterial blood and plasma) is a blood sample.
 """
 
-# The default of `sampling_site` before `__post_init__` resolves it by the tissue.
-# It is cast to the public type, so readers of the resolved field see `SamplingSite`.
-_DEFAULT_SITE: Final = cast("SamplingSite", object())
-
 
 def _name(value: object) -> str:
     """Get the member name of an enum value, the string of any other value."""
@@ -503,8 +499,9 @@ class PKPDMappingMetaData(MappingMetaData):
         data: whether the curve is pharmacokinetic or pharmacodynamic data, not
             reported by default.
         data_type: what the values of the curve are, not reported by default.
-        sampling_site: the site of the blood sample. Without a stated site it
-            follows the tissue: plasma and blood are typically sampled from an
+        sampling_site: the stated site of the blood sample, `None` if none was
+            stated; read it with `resolved_sampling_site()`. Without a stated
+            site it follows the tissue: plasma and blood are typically sampled from an
             arm vein, so data without a stated site are arm-vein samples
             (`ARM_VEIN`), and the tissues without a blood sample (saliva,
             urine, feces, feces and urine, bile, none) are `NOT_APPLICABLE`. A blood
@@ -529,31 +526,57 @@ class PKPDMappingMetaData(MappingMetaData):
     administration_site: AdministrationSite = AdministrationSite.NR
     data: PKPDData = PKPDData.NR
     data_type: DataType = DataType.NR
-    sampling_site: SamplingSite = _DEFAULT_SITE
+    sampling_site: SamplingSite | None = None
 
     def __post_init__(self) -> None:
-        """Resolve the sampling site by the tissue and check it against it."""
+        """Refuse a sampling site which contradicts the tissue."""
+        site = self.sampling_site
+        if site is None:
+            return
         without_blood = self.tissue in _NO_BLOOD
-        if self.sampling_site is _DEFAULT_SITE:
-            self.sampling_site = (
-                SamplingSite.NOT_APPLICABLE if without_blood else SamplingSite.ARM_VEIN
-            )
-        elif without_blood and self.sampling_site is not SamplingSite.NOT_APPLICABLE:
+        if without_blood and site is not SamplingSite.NOT_APPLICABLE:
             raise ValueError(
                 f"{self.tissue.name} has no blood sample, so the sampling site "
-                f"'{self.sampling_site.name}' does not apply: use NOT_APPLICABLE"
+                f"'{site.name}' does not apply: use NOT_APPLICABLE"
             )
-        elif not without_blood and self.sampling_site is SamplingSite.NOT_APPLICABLE:
+        if not without_blood and site is SamplingSite.NOT_APPLICABLE:
             raise ValueError(
                 f"{self.tissue.name} is a blood sample, so the sampling site "
                 "cannot be NOT_APPLICABLE"
             )
+
+    def resolved_sampling_site(self) -> SamplingSite:
+        """Get the sampling site: the stated one, else the one of the tissue.
+
+        Read the site with this method, not from the field `sampling_site`,
+        which holds what was stated (`None` if nothing). It does not depend on
+        `__post_init__`, so a subclass which defines its own `__post_init__`
+        without calling this one resolves as well, and
+        `dataclasses.replace(metadata, tissue=...)` re-resolves.
+
+        Returns:
+            The stated site; `NOT_APPLICABLE` for a tissue without a blood
+            sample and `ARM_VEIN` for the others if none was stated.
+        """
+        if self.sampling_site is not None:
+            return self.sampling_site
+        if self.tissue in _NO_BLOOD:
+            return SamplingSite.NOT_APPLICABLE
+        return SamplingSite.ARM_VEIN
 
     @override
     def to_dict(self) -> dict[str, str]:
         """Get the metadata by field: the member names of the enums.
 
         Any other value is its string (`"None"` for `None`). The order is that of
-        the fields, the fields of this class first.
+        the fields, the fields of this class first. The sampling site is the
+        resolved one (`resolved_sampling_site`).
         """
-        return {field.name: _name(getattr(self, field.name)) for field in fields(self)}
+        return {
+            field.name: _name(
+                self.resolved_sampling_site()
+                if field.name == "sampling_site"
+                else getattr(self, field.name)
+            )
+            for field in fields(self)
+        }
