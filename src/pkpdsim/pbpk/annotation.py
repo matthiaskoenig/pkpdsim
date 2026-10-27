@@ -573,6 +573,7 @@ KINDS: dict[str, Kind] = {
         requested="transport clearance per organ volume",
     ),
     "custom_parameter": Kind(None, _MISC),
+    "definition_parameter": Kind(None, _MISC),
     "custom_species": Kind(None, "CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT"),
     "custom_amount": Kind(None, "AMOUNT_OF_COMPOUND_IN_COMPARTMENT"),
     # routes, intestine, sinks

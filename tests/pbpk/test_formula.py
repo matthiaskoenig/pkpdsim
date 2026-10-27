@@ -11,6 +11,7 @@ from sbmlutils.factory import Uncertainty, UncertParameter
 from pkpdsim.pbpk import (
     MM,
     Binding,
+    CustomReaction,
     Direction,
     Excretion,
     FirstOrder,
@@ -18,8 +19,11 @@ from pkpdsim.pbpk import (
     Kp,
     Membrane,
     Metabolism,
+    ModelParameter,
     Organ,
+    Part,
     PBPKDefinition,
+    Pool,
     Route,
     SegmentedIntestine,
     Substance,
@@ -34,7 +38,7 @@ from pkpdsim.pbpk import (
 from pkpdsim.pbpk.placement import formula_ids
 from pkpdsim.pbpk.values import as_value
 
-from .conftest import definition, simple_drug
+from .conftest import definition, individual, simple_drug, total_amount
 
 #: a fitted Kp of the parent with its uncertainty
 FITTED_KP = Value(
@@ -378,3 +382,75 @@ def test_a_formula_per_substance_in_the_segmented_intestine(tmp_path: Path) -> N
     r.reset()
     assert r["ka_drg"] == pytest.approx(2.0)
     assert r["ka_drg_m"] == pytest.approx(0.5)
+
+
+def _k_prod(value: float = 0.025) -> ModelParameter:
+    """The constant `k_prod` of a definition (mM)."""
+    return ModelParameter("k_prod", value, U.mM, name="production constant")
+
+
+def test_a_formula_baseline_reads_a_definition_parameter(tmp_path: Path) -> None:
+    """A baseline `2 * k_prod` reads the parameter of the definition.
+
+    A change of `k_prod` before the simulation (`preinit_changes`) moves the
+    baseline and every start with it.
+    """
+    s = Substance(
+        "end",
+        "endogenous substance",
+        150.0,
+        distribution=Kp(2.0, ftissue=1.0),
+        baseline=Formula("2 dimensionless * k_prod", U.mM),
+    )
+    d = PBPKDefinition(sid="bl_parameter", substances=[s], parameters=[_k_prod()])
+    path = build(d, tmp_path).flat_path
+    plain = individual(path)
+    doubled = individual(path, k_prod=0.05)
+    venous = f"[{ids.pool_species(Pool.VENOUS, 'end')}]"
+    assert plain[ids.baseline("end")] == pytest.approx(0.05)
+    assert plain[venous] == pytest.approx(0.05)
+    assert plain["[MU__Cti_end]"] == pytest.approx(0.1)
+    assert doubled[ids.baseline("end")] == pytest.approx(0.1)
+    assert doubled[venous] == pytest.approx(0.1)
+    assert doubled["[MU__Cti_end]"] == pytest.approx(0.2)
+
+
+def test_a_custom_reaction_reads_a_definition_parameter(tmp_path: Path) -> None:
+    """A production in the muscle reads `k_prod` of the definition through an input port.
+
+    The substance is not eliminated, so the body holds `k_prod * t`; a
+    change of `k_prod` before the simulation doubles it. The muscle reads
+    the parameter under its id, the flat model has no `MU__k_prod`.
+    """
+    s = Substance("prd", "produced substance", 150.0, distribution=Kp(2.0, ftissue=1.0))
+    production = CustomReaction(
+        "PRDPROD",
+        Organ.MUSCLE,
+        Part.TISSUE,
+        "-> Cti_prd",
+        "k_prod",
+        parameters=[],
+    )
+    d = PBPKDefinition(
+        sid="custom_parameter",
+        substances=[s],
+        chemistry=[production],
+        parameters=[
+            ModelParameter("k_prod", 0.002, U.mmole_per_min, name="production rate")
+        ],
+    )
+    result = build(d, tmp_path)
+    comp = libsbml.readSBMLFromFile(str(result.comp_path))
+    muscle = comp.getPlugin("comp").getModelDefinition("standard_mu")
+    port = muscle.getPlugin("comp").getPort("k_prod_port")
+    assert port is not None and port.getIdRef() == "k_prod"
+    flat = _model(result.flat_path)
+    assert flat.getParameter("MU__k_prod") is None
+    reaction = flat.getReaction("MU__PRDPROD")
+    assert libsbml.formulaToL3String(reaction.getKineticLaw().getMath()) == "k_prod"
+    for k_prod in (0.002, 0.004):
+        r = individual(result.flat_path, k_prod=k_prod)
+        r.integrator.absolute_tolerance = 1e-12
+        r.integrator.relative_tolerance = 1e-10
+        r.simulate(0, 100)
+        assert total_amount(r, "prd") == pytest.approx(k_prod * 100, rel=1e-6)

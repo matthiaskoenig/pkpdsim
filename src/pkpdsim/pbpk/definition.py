@@ -5,7 +5,7 @@ from collections.abc import Callable, Hashable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 
 from sbmlutils.factory import Creator
-from sbmlutils.factory.units import UnitType
+from sbmlutils.factory.units import UnitDefinition, UnitType
 
 from pkpdsim.pbpk import ids
 from pkpdsim.pbpk.chemistry import (
@@ -30,7 +30,7 @@ from pkpdsim.pbpk.substance import Erythrocytes, Kp, KpMethod, Mode, Substance
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import Formula, Q, Value
 
-__all__ = ["PBPKDefinition", "Variants"]
+__all__ = ["ModelParameter", "PBPKDefinition", "Variants"]
 
 
 _SID = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
@@ -66,6 +66,35 @@ def _physiology_ids() -> frozenset[str]:
     for pool in Pool:
         names |= {ids.pool_volume(pool), ids.pool_fraction(pool)}
     return frozenset(names)
+
+
+@dataclass(frozen=True)
+class ModelParameter:
+    """A constant parameter of the top model which the model package states.
+
+    A constant of the model which no field of the library holds (a
+    production rate which the baseline of a substance and a custom reaction
+    of the muscle share): the formulas of the definition, its observers and
+    the custom reactions of the organs read it under its id, an organ through
+    an input port under the same id.
+
+    Attributes:
+        sid: the id of the parameter, an id of the top model which is no id
+            of the library.
+        value: the number in `unit`, a `Value` (a fitted value with its
+            uncertainty, `fitted(FITS.parameter(pid, unit=...))`) or a
+            `Formula` over ids of the top model (its initial assignment); a
+            `Value` or a `Formula` is in `unit`.
+        unit: the unit of the parameter.
+        name: the name of the parameter, the id by default.
+        notes: the notes of the parameter, e.g. its meaning and source.
+    """
+
+    sid: str
+    value: Q
+    unit: UnitDefinition
+    name: str | None = None
+    notes: str | None = None
 
 
 @dataclass(frozen=True)
@@ -121,6 +150,9 @@ class PBPKDefinition:
             metabolites, a ratio); each reads a state.
         creators: the creators of the model, its model history (sbmlutils
             `Creator`).
+        parameters: the constant parameters of the top model which the model
+            package states (`ModelParameter`), read by the formulas, the
+            observers and the custom reactions of the definition.
     """
 
     sid: str
@@ -137,6 +169,7 @@ class PBPKDefinition:
     notes: str | None = None
     observers: Sequence[Observer] = ()
     creators: Sequence[Creator] = ()
+    parameters: Sequence[ModelParameter] = ()
 
     def __post_init__(self) -> None:
         """Normalise the sex to a `Sex` member."""
@@ -147,8 +180,8 @@ class PBPKDefinition:
         """Couple the definitions of several packages into one physiology.
 
         The substances, the chemistry, the routes, the PD components, the
-        dynamic parameters, the observers of the definitions and the creators
-        are the unions of the definitions (the observers of the library follow
+        dynamic parameters, the observers and parameters of the definitions
+        and the creators are the unions of the definitions (the observers of the library follow
         from the substances), the organ variants are merged; there is
         one physiology, so the definitions must agree on sex, population and
         the arm vein preset. Substance ids are unique over all packages, so
@@ -172,8 +205,8 @@ class PBPKDefinition:
         Raises:
             ValueError: if no definition is given, the definitions differ in
                 sex, population or arm vein preset, two definitions define an
-                id (substance, process, route, PD component, observer)
-                differently, or choose different variants of an organ; naming
+                id (substance, process, route, PD component, observer,
+                parameter) differently, or choose different variants of an organ; naming
                 the id.
         """
         if not definitions:
@@ -230,6 +263,12 @@ class PBPKDefinition:
                 lambda x: x.sid,
             ),
             creators=_creators(definitions),
+            parameters=_union(
+                sid,
+                "parameter",
+                (x for d in definitions for x in d.parameters),
+                lambda x: x.sid,
+            ),
         )
 
     def validate(self, *, symbols: bool = True) -> None:
@@ -255,6 +294,7 @@ class PBPKDefinition:
         problems += self._check_routes(known)
         problems += self._check_dynamic()
         problems += self._check_observers()
+        problems += self._check_parameters()
         if self.population not in POPULATIONS:
             problems.append(
                 f"population '{self.population}' is unknown, the populations are "
@@ -306,6 +346,38 @@ class PBPKDefinition:
                     "functions of SBML L3 infix (exp, ln, piecewise, ...); the "
                     "model defines no function definitions"
                 )
+        return problems
+
+    def _check_parameters(self) -> list[str]:
+        """Check the ids and the units of the parameters of the definition.
+
+        That an id is no other id of the top model nor a local id of an organ
+        is checked by `compose` (`pkpdsim.pbpk.builder`).
+        """
+        problems: list[str] = []
+        sids = [p.sid for p in self.parameters]
+        twice = sorted({s for s in sids if sids.count(s) > 1})
+        if twice:
+            problems.append(f"duplicate parameter ids: {twice}")
+        taken = _physiology_ids()
+        submodels = {ids.submodel(organ) for organ in Organ}
+        for p in self.parameters:
+            if not _SID.fullmatch(p.sid):
+                problems.append(f"parameter id '{p.sid}' is not an SBML SId")
+            elif "__" in p.sid:
+                problems.append(
+                    f"parameter id '{p.sid}' contains '__', the separator of the "
+                    "ids of the organs in the flat model"
+                )
+            elif p.sid in taken:
+                problems.append(
+                    f"parameter '{p.sid}' is an id of the physiology of the library"
+                )
+            elif p.sid in submodels:
+                problems.append(
+                    f"parameter '{p.sid}' is the id of an organ submodel of the library"
+                )
+            problems += _unit(f"parameter '{p.sid}'", "value", p.value, p.unit)
         return problems
 
     def _check_substances(self) -> list[str]:

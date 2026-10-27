@@ -4,9 +4,13 @@
 varies them with arguments: `definition(routes=[Route.iv("drg")])`.
 """
 
+import difflib
+import gzip
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import pytest
 from sbmlutils.factory import AssignmentRule, Model, Parameter, Port, PortType
 from sbmlutils.metadata import BQB, SBO
 
@@ -14,9 +18,11 @@ from pkpdsim.pbpk import (
     MM,
     MODEL_UNITS,
     Binding,
+    Erythrocytes,
     Excretion,
     Kp,
     Metabolism,
+    Mode,
     Organ,
     PBPKDefinition,
     PDComponent,
@@ -212,3 +218,67 @@ def dose_amount(r: "roadrunner.RoadRunner", sid: str) -> float:
     doses = (ids.iv_dose(sid), ids.po_dose(sid), ids.sol_dose(sid))
     mg = sum(float(r[d]) for d in doses if d in r.model.getGlobalParameterIds())
     return mg / float(r[ids.mr(sid)])
+
+
+REFERENCE = Path(__file__).parent / "data"
+"""The comp and flat SBML of `reference_definition()` built at pkpdsim f008d56, gzipped."""
+
+_DATE = re.compile(r"<dcterms:(created|modified)\b|<dcterms:W3CDTF>")
+"""A line of the model history with a date, which changes with every build."""
+
+
+def reference_definition() -> PBPKDefinition:
+    """The definition of the stored reference: every option of the library unset.
+
+    `end` in the full form with kinetic erythrocytes (`Kbc`, `K_int_pls`,
+    `K_cell_pls`), `mrg` in the merged tissue with a Kp override and
+    erythrocytes in equilibrium (`Kp_<s>`, `Kp_ad_<s>`), with an IV and an
+    oral route; no baseline, no parameters of the definition.
+    """
+    return PBPKDefinition(
+        sid="baseline_reference",
+        substances=[
+            Substance(
+                "end",
+                name="endogenous substance",
+                mr=150.0,
+                binding=Binding(fu=0.5, protein="albumin"),
+                erythrocytes=Erythrocytes("kinetic", kbc=2.0, k_exchange=1.0),
+                distribution=Kp(2.0, mode=Mode.PERMEABILITY, ftissue=1.0),
+            ),
+            Substance(
+                "mrg",
+                name="merged substance",
+                mr=200.0,
+                erythrocytes=Erythrocytes("equilibrium", kbc=1.5),
+                distribution=Kp(2.0, overrides={Organ.ADIPOSE: 5.0}, ftissue=1.0),
+            ),
+        ],
+        routes=[Route.iv("mrg"), Route.oral("mrg")],
+    )
+
+
+def dateless(text: str) -> list[str]:
+    """The lines of an SBML text without the dates of the model history."""
+    return [line for line in text.splitlines() if not _DATE.search(line)]
+
+
+def assert_reference_sbml(result: BuildResult) -> None:
+    """Assert that a build is the stored reference of f008d56, line by line.
+
+    The order of the elements counts. The references are
+    `tests/pbpk/data/<file>.gz` (`gzip -n`), built from
+    `reference_definition()` at f008d56; a change of the library which
+    changes the SBML of every model on purpose rebuilds them and says so.
+    """
+    for path in (result.comp_path, result.flat_path):
+        reference = gzip.decompress((REFERENCE / f"{path.name}.gz").read_bytes())
+        expected = dateless(reference.decode("utf-8"))
+        actual = dateless(path.read_text(encoding="utf-8"))
+        if actual != expected:
+            diff = list(
+                difflib.unified_diff(
+                    expected, actual, "f008d56", "now", n=0, lineterm=""
+                )
+            )
+            pytest.fail(f"{path.name} differs:\n" + "\n".join(diff[:40]))

@@ -159,7 +159,7 @@ An individual of 100 kg and the reference height has more adipose, a larger live
 
 ## 7. In a model package
 
-The factory of the model package builds the definition with the fitted values from the adopted fits of the model (`FITS = MODEL.fit_records()`), so the uncertainties of the fits reach the SBML; the observers the experiments read which the library does not compute (the sum of the metabolites in urine) and the creators of the model are part of the definition:
+The factory of the model package builds the definition with the fitted values from the adopted fits of the model (`FITS = MODEL.fit_records()`), so the uncertainties of the fits reach the SBML; the observers the experiments read which the library does not compute (the sum of the metabolites in urine) and the creators of the model are part of the definition, and so are the constants of the model which no field of the library holds (`parameters`, see [Substances](substances.md#parameters-of-the-definition)):
 
 ```python
 # not executed: the model package and its adopted fits; m1, m2, chemistry of above

@@ -436,6 +436,7 @@ def _body(
             "'single_lumen'), the small intestine is a standard organ."
         )
     top = _Top(definition)
+    top.parameters()
     for s in definition.substances:
         top.substance(s)
     for pool in Pool:
@@ -448,6 +449,7 @@ def _body(
     model_definitions: list[ModelDefinition] = []
     submodels: list[Submodel] = []
     replaced: list[ReplacedElement] = []
+    organ_models: list[ModelDefinition] = []
     for organ in built_organs(definition):
         md, boundary = organ_component(definition, organ).build(
             organ_context(definition, organ, top.inputs())
@@ -456,6 +458,7 @@ def _body(
             raise ValueError(f"Two organs build the model definition '{md.sid}'.")
         _scope_port_metaids(md)
         model_definitions.append(md)
+        organ_models.append(md)
         submodel = ids.submodel(organ)
         if submodel in top.known:
             raise ValueError(
@@ -476,6 +479,11 @@ def _body(
         submodels.append(submodel)
         replaced += pd_replaced
         outputs += pd.outputs.values()
+    problems = _parameter_problems(definition, top, organ_models, submodels, replaced)
+    if problems:
+        raise ValueError(
+            f"Invalid PBPK definition '{definition.sid}':\n- " + "\n- ".join(problems)
+        )
     top.formulas()
     _annotate_inputs(top.objects, model_definitions, submodels, replaced)
     _dynamic(
@@ -487,6 +495,97 @@ def _body(
         replaced,
     )
     return top, model_definitions, submodels, replaced
+
+
+def _formula_cycles(objects: Iterable[Sbase]) -> list[str]:
+    """The formulas of the top model which read each other in a cycle.
+
+    A cycle of initial assignments has no value. A formula which reads no
+    remaining formula, or which no remaining formula reads, is no part of a
+    cycle and is removed until none is left to remove; the formulas which
+    only read a cycle are not named.
+    """
+    reads = {
+        str(o.sid): formula_ids(o.formula.expression)
+        for o in objects
+        if isinstance(o, FormulaParameter)
+    }
+    remaining = {sid: symbols & set(reads) for sid, symbols in reads.items()}
+    while True:
+        read = {x for rs in remaining.values() for x in rs}
+        done = [
+            sid
+            for sid, rs in remaining.items()
+            if not rs & set(remaining) or sid not in read
+        ]
+        if not done:
+            break
+        for sid in done:
+            del remaining[sid]
+    if remaining:
+        return [f"the formulas of {sorted(remaining)} read each other in a cycle"]
+    return []
+
+
+def _parameter_problems(
+    definition: PBPKDefinition,
+    top: "_Top",
+    organ_models: Iterable[ModelDefinition],
+    submodels: Iterable[Submodel],
+    replaced: Iterable[ReplacedElement],
+) -> list[str]:
+    """The parameters of a definition which take an id of the library.
+
+    An id of the top model (a parameter of a substance, a pool, a sink, an
+    observer of the library, a submodel or a model definition) would be
+    defined twice; a local id of an organ which is no input under the same
+    id (`Vti`, `<process>_Vmax`, the liver's `fimp_<protein>`) is what a
+    custom reaction of the organ reads instead of the parameter.
+
+    Returns:
+        The problems, naming the parameter and where the library has its id.
+    """
+    sids = {p.sid for p in definition.parameters}
+    if not sids:
+        return []
+    local = [p for o in top.objects if isinstance(o, Reaction) for p in o.pars or []]
+    counts: dict[str, int] = {}
+    for o in [*top.objects, *local]:
+        if isinstance(o, Parameter | Compartment | Species | Reaction):
+            counts[str(o.sid)] = counts.get(str(o.sid), 0) + 1
+    for x in [*submodels, *organ_models]:
+        counts[str(x.sid)] = counts.get(str(x.sid), 0) + 1
+    inputs = {
+        (str(r.submodelRef), str(r.portRef).removesuffix(PORT_SUFFIX))
+        for r in replaced
+        if str(r.portRef).removesuffix(PORT_SUFFIX) == str(r.elementRef)
+    }
+    submodel_of = {str(sm.modelRef): str(sm.sid) for sm in submodels}
+    organs: dict[str, list[str]] = {}
+    for md in organ_models:
+        sm = submodel_of[str(md.sid)]
+        for name in ("compartments", "species", "parameters", "reactions"):
+            for element in getattr(md, name) or []:
+                sid = str(element.sid)
+                if sid in sids and (sm, sid) not in inputs:
+                    organs.setdefault(sid, []).append(sm)
+        for r in md.reactions or []:
+            for par in r.pars or []:
+                if str(par.sid) in sids:
+                    organs.setdefault(str(par.sid), []).append(sm)
+    problems: list[str] = []
+    for p in definition.parameters:
+        if counts.get(p.sid, 0) > 1:
+            problems.append(
+                f"parameter '{p.sid}' is an id of the top model of the library"
+            )
+        if p.sid in organs:
+            problems.append(
+                f"parameter '{p.sid}' is a local id of the organ submodels "
+                f"{sorted(set(organs[p.sid]))} of the library, which a custom "
+                "reaction there would read instead"
+            )
+    return problems
 
 
 _TOKEN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
@@ -697,6 +796,28 @@ class _Top:
                 self.known.add(str(o.sid))
             self.objects.append(o)
 
+    def parameters(self) -> None:
+        """The parameters of the definition (`PBPKDefinition.parameters`).
+
+        A number or a `Value` is a constant parameter with its provenance and
+        uncertainty, a `Formula` a `FormulaParameter` whose initial
+        assignment `formulas` adds.
+        """
+        self.add(
+            annotate(
+                value_parameter(
+                    p.sid,
+                    p.value,
+                    p.unit,
+                    p.name or p.sid,
+                    _SBO_PARAMETER,
+                    p.notes or "",
+                ),
+                "definition_parameter",
+            )
+            for p in self.definition.parameters
+        )
+
     def inputs(self) -> dict[str, tuple[str, UnitType]]:
         """The elements of the top model with their kind and unit.
 
@@ -756,6 +877,7 @@ class _Top:
             else:
                 problems += formula_problems(where, o.formula.expression, top)
             assignments.append(formula_assignment(o))
+        problems += _formula_cycles([*self.objects, *local])
         if problems:
             raise ValueError(
                 f"Invalid PBPK definition '{self.definition.sid}':\n- "

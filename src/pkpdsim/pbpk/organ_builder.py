@@ -51,6 +51,7 @@ from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk import ids
 from pkpdsim.pbpk.annotation import annotate, initial_assignment
+from pkpdsim.pbpk.chemistry import CustomReaction
 from pkpdsim.pbpk.data import cite
 from pkpdsim.pbpk.impairment import organ_activity
 from pkpdsim.pbpk.organs import Organ, Part, Pool
@@ -730,6 +731,50 @@ class OrganBuilder:
             raise ValueError("; ".join(problems) + ".")
         self.assignments.append(formula_assignment(p))
 
+    def _custom_inputs(self) -> None:
+        """The inputs of the ids of the top model which the custom reactions read.
+
+        An id of the formula of a custom reaction is an element of the organ
+        (its species, compartments, parameters, the parameters of the
+        reaction), `time`, or a constant parameter or compartment of the top
+        model (`OrganContext.top`, a parameter of the definition, a
+        covariate), which the organ reads through an input port under the
+        same id, as for the ids of a `Formula`.
+
+        Raises:
+            ValueError: if an id is neither, naming the reaction and the ids.
+        """
+        placed = {str(r.sid) for r in self.reactions}
+        local = {
+            *self.parameters,
+            *self.compartments,
+            *self.species,
+            *placed,
+            *(str(p.sid) for r in self.reactions for p in r.pars or []),
+            "time",
+        }
+        for p in self.ctx.chemistry:
+            if not isinstance(p, CustomReaction) or p.sid not in placed:
+                continue
+            refused: list[str] = []
+            for symbol in sorted(formula_ids(p.formula) - local):
+                kind, unit = self.ctx.top.get(symbol, ("", None))
+                if kind == "compartment":
+                    self._input_compartment(symbol, f"{symbol} (read by {p.sid})")
+                elif kind == "parameter":
+                    self._input(symbol, unit, f"{symbol} (read by {p.sid})")
+                else:
+                    refused.append(symbol)
+            if refused:
+                raise ValueError(
+                    f"Custom reaction '{p.sid}' of organ '{self.organ.value}' reads "
+                    f"{refused}, which are no elements of the organ nor constant "
+                    "parameters or compartments of the top model (a parameter of "
+                    "the definition, a covariate); a species or an observer of the "
+                    "top model is not read by an organ"
+                )
+            local |= formula_ids(p.formula)
+
     def model_definition(self, notes: str) -> ModelDefinition:
         """Get the model definition of the collected elements.
 
@@ -742,13 +787,16 @@ class OrganBuilder:
         Raises:
             ValueError: if a `Formula` of the organ reads an id which is no
                 parameter or compartment of the top model, or an element of
-                the organ which is no input.
+                the organ which is no input, or a custom reaction reads an
+                id which is neither an element of the organ nor a parameter
+                or compartment of the top model.
         """
         for sid, s, part, coefficient in self.starts:
             if part is not None:
                 coefficient = self._equilibrium(part, s)
             self._start(sid, s, coefficient)
         self.starts = []
+        self._custom_inputs()
         parameters = [
             *self.parameters.values(),
             *(p for r in self.reactions for p in (r.pars or [])),

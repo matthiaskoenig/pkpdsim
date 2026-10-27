@@ -12,7 +12,7 @@ from pkpdsim.pbpk.chemistry import (
     Transport,
 )
 from pkpdsim.pbpk.data import Source, cite, load, sources
-from pkpdsim.pbpk.definition import PBPKDefinition, Variants
+from pkpdsim.pbpk.definition import ModelParameter, PBPKDefinition, Variants
 from pkpdsim.pbpk.observers import Observer
 from pkpdsim.pbpk.organ import (
     Boundary,
@@ -71,6 +71,7 @@ __all__ = [
     "Membrane",
     "Metabolism",
     "Mode",
+    "ModelParameter",
     "NephronKidney",
     "Observer",
     "Organ",

@@ -8,9 +8,6 @@ stationary, in every form of the organ the library builds.
 """
 
 import dataclasses
-import difflib
-import gzip
-import re
 from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -47,7 +44,13 @@ from pkpdsim.pbpk.variants.intestine import SingleLumen
 from pkpdsim.pbpk.variants.kidney_nephron import NephronKidney
 from pkpdsim.pbpk.variants.liver_zonated import ZonatedLiver
 
-from .conftest import cardiac_pd, individual, load
+from .conftest import (
+    assert_reference_sbml,
+    cardiac_pd,
+    individual,
+    load,
+    reference_definition,
+)
 
 if TYPE_CHECKING:
     import roadrunner
@@ -611,70 +614,14 @@ def _without_baseline(path: Path) -> str:
     return libsbml.writeSBMLToString(doc)
 
 
-REFERENCE = Path(__file__).parent / "data"
-"""The comp and flat SBML of `_reference()` built at pkpdsim f008d56, gzipped."""
-
-_DATE = re.compile(r"<dcterms:(created|modified)\b|<dcterms:W3CDTF>")
-"""A line of the model history with a date, which changes with every build."""
-
-
-def _reference() -> PBPKDefinition:
-    """The definition of the stored reference: no baseline, every input a start would read.
-
-    `end` in the full form with kinetic erythrocytes (`Kbc`, `K_int_pls`,
-    `K_cell_pls`), `mrg` in the merged tissue with a Kp override and
-    erythrocytes in equilibrium (`Kp_<s>`, `Kp_ad_<s>`), with an IV and an
-    oral route.
-    """
-    return PBPKDefinition(
-        sid="baseline_reference",
-        substances=[
-            Substance(
-                "end",
-                name="endogenous substance",
-                mr=150.0,
-                binding=Binding(fu=0.5, protein="albumin"),
-                erythrocytes=Erythrocytes("kinetic", kbc=2.0, k_exchange=1.0),
-                distribution=Kp(2.0, mode=Mode.PERMEABILITY, ftissue=1.0),
-            ),
-            Substance(
-                "mrg",
-                name="merged substance",
-                mr=200.0,
-                erythrocytes=Erythrocytes("equilibrium", kbc=1.5),
-                distribution=Kp(2.0, overrides={Organ.ADIPOSE: 5.0}, ftissue=1.0),
-            ),
-        ],
-        routes=[Route.iv("mrg"), Route.oral("mrg")],
-    )
-
-
-def _dateless(text: str) -> list[str]:
-    """The lines of an SBML file without the dates of the model history."""
-    return [line for line in text.splitlines() if not _DATE.search(line)]
-
-
 def test_the_sbml_without_baseline_is_that_of_f008d56(tmp_path: Path) -> None:
     """Without a baseline the comp and flat SBML are those of f008d56, line by line.
 
     The order of the elements counts: an input of an organ created earlier
-    (a coefficient a start would read) moves lines of the comp model. The
-    references are `tests/pbpk/data/<file>.gz` (`gzip -n`), built from
-    `_reference()` at f008d56; a change of the library which changes the
-    SBML of every model on purpose rebuilds them and says so.
+    (a coefficient a start would read) moves lines of the comp model
+    (`conftest.assert_reference_sbml`).
     """
-    result = build(_reference(), tmp_path)
-    for path in (result.comp_path, result.flat_path):
-        reference = gzip.decompress((REFERENCE / f"{path.name}.gz").read_bytes())
-        expected = _dateless(reference.decode("utf-8"))
-        actual = _dateless(path.read_text(encoding="utf-8"))
-        if actual != expected:
-            diff = list(
-                difflib.unified_diff(
-                    expected, actual, "f008d56", "now", n=0, lineterm=""
-                )
-            )
-            pytest.fail(f"{path.name} differs:\n" + "\n".join(diff[:40]))
+    assert_reference_sbml(build(reference_definition(), tmp_path))
 
 
 def test_dataclass_default() -> None:

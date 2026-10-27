@@ -110,7 +110,7 @@ Cic_<s> = K_cell_pls_<s> * baseline_<s>
 Cor_<s> = K_or_<s> * baseline_<s>
 ```
 
-A `Formula` baseline is the initial assignment of `baseline_<s>`, so a model can state it as a production over a clearance, e.g. `Formula("0.006 mmole_per_min / GFR", U.mM)`: a change of the renal function before the simulation moves the baseline and with it every species. Besides the parameters and compartments of the top model it may read the observers of the definition, which are evaluated at the start (a clearance observer which reads a dynamic GFR); what it reads, directly or through the observers, must not change during the simulation (species, reactions, the observers of the library, the outputs of the organs, and a parameter which a PD output replaces with everything that reads it, such as `CO` under a PD of the cardiac function), since the species start at the baseline, and the build names every such id. With a dynamic parameter `baseline_<s>` may become an assignment rule (it reads the parameter); the species keep their initial assignments and start once. The validation refuses a baseline which is not positive and a `Value` in another unit than mM.
+A `Formula` baseline is the initial assignment of `baseline_<s>`, so a model can state it as a production over a clearance, e.g. `Formula("0.006 mmole_per_min / GFR", U.mM)` or, with the production as a [parameter of the definition](#parameters-of-the-definition) which a custom reaction reads as well, `Formula("CRTNPROD_k / GFR", U.mM)`: a change of the renal function before the simulation moves the baseline and with it every species. Besides the parameters and compartments of the top model it may read the observers of the definition, which are evaluated at the start (a clearance observer which reads a dynamic GFR); what it reads, directly or through the observers, must not change during the simulation (species, reactions, the observers of the library, the outputs of the organs, and a parameter which a PD output replaces with everything that reads it, such as `CO` under a PD of the cardiac function), since the species start at the baseline, and the build names every such id. With a dynamic parameter `baseline_<s>` may become an assignment rule (it reads the parameter); the species keep their initial assignments and start once. The validation refuses a baseline which is not positive and a `Value` in another unit than mM.
 
 ## Values, fits and ids
 
@@ -156,6 +156,67 @@ print(m1.distribution.value.expression)
 Kp_gli
 ```
 
-The parameter of a formula (`Kp_gli_m1`) has the formula as its initial assignment and names it in its notes, as the covariates do: a change of a parameter it reads before the simulation (`preinit_changes`, `init(Kp_gli)`) is followed, and an id of `PBPKDefinition.dynamic` makes it an assignment rule. The ids of the formula are constant parameters and compartments of the top model (the parameters of the substances such as `Kp_<s>`, `fu_ref_<s>` and `ftissue_<s>`, the covariates, the physiology), also for a value of an organ (`ps`, a kinetic constant): the organ reads each of them through an input port under the same id, so in the flat model the formula of `LI__kps_<s>` reads `BW`, not an id of the liver. A local id of an organ is no id of a formula, also not that of an input whose local id differs from the id of the top model (the liver reads `fimp_li_cyp3a4` of the top model as `fimp_cyp3a4`; a formula reads `fimp_li_cyp3a4`). An organ reads the parameters and compartments which the top model has before the organs are built. The build names every id of a formula which the top model does not have, and refuses species and observers (and every element with a rule, such as the outflow of an organ): they change during the simulation, and a formula, evaluated before it, would freeze them at their initial values. The unit is the declared unit of the parameter, it is not inferred from the formula. A formula has no number before the simulation: the validation skips the positivity and interval checks of such a value, the check that a Kp leaves a positive `K_cell_pls` is skipped (the model bounds `K_cell_pls` below by 1e-6), and the Kp method, which computes with `fu`, `bp` and `kbc`, refuses a formula there.
+The parameter of a formula (`Kp_gli_m1`) has the formula as its initial assignment and names it in its notes, as the covariates do: a change of a parameter it reads before the simulation (`preinit_changes`, `init(Kp_gli)`) is followed, and an id of `PBPKDefinition.dynamic` makes it an assignment rule. The ids of the formula are constant parameters and compartments of the top model (the parameters of the substances such as `Kp_<s>`, `fu_ref_<s>` and `ftissue_<s>`, the covariates, the physiology, the [parameters of the definition](#parameters-of-the-definition)), also for a value of an organ (`ps`, a kinetic constant): the organ reads each of them through an input port under the same id, so in the flat model the formula of `LI__kps_<s>` reads `BW`, not an id of the liver. A local id of an organ is no id of a formula, also not that of an input whose local id differs from the id of the top model (the liver reads `fimp_li_cyp3a4` of the top model as `fimp_cyp3a4`; a formula reads `fimp_li_cyp3a4`). An organ reads the parameters and compartments which the top model has before the organs are built. The build names every id of a formula which the top model does not have, and refuses species and observers (and every element with a rule, such as the outflow of an organ): they change during the simulation, and a formula, evaluated before it, would freeze them at their initial values. The unit is the declared unit of the parameter, it is not inferred from the formula. A formula has no number before the simulation: the validation skips the positivity and interval checks of such a value, the check that a Kp leaves a positive `K_cell_pls` is skipped (the model bounds `K_cell_pls` below by 1e-6), and the Kp method, which computes with `fu`, `bp` and `kbc`, refuses a formula there.
+
+### Parameters of the definition
+
+A constant of the model which no field of the library holds is a parameter of the definition, `ModelParameter(sid, value, unit, name=None, notes=None)` in `PBPKDefinition.parameters`: a constant parameter of the top model under its id, e.g. the production rate of creatinine, which its baseline (production over clearance) and the production in the muscle (a custom reaction) share. The value is a number in `unit`, a `Value` (a fitted value, `fitted(FITS.parameter("CRTNPROD_k", unit=U.mmole_per_min))`, gets the provenance in the notes and the uncertainty of the fit as the `distrib` of the parameter, as every fitted value of the library, so `check_model` checks it against the record) or a `Formula` over ids of the top model (its initial assignment, which may read another parameter of the definition); a `Value` or a `Formula` is in `unit`. The formulas of the definition (a baseline, a Kp, a kinetic constant) and its observers read the parameter like any parameter of the top model, and so does the formula of a custom reaction: the organ reads it through an input port under the same id (see [Chemistry](chemistry.md#custom-reactions)), so in the flat model the reaction reads `CRTNPROD_k`, not an id of the muscle.
+
+```python
+from pkpdsim.pbpk import (
+    CustomReaction,
+    Excretion,
+    Formula,
+    Kp,
+    ModelParameter,
+    Organ,
+    Part,
+    PBPKDefinition,
+    Substance,
+    U,
+)
+
+creatinine = PBPKDefinition(
+    sid="creatinine_body",
+    substances=[
+        Substance(
+            "crtn",
+            name="creatinine",
+            mr=113.1,
+            distribution=Kp(1.0, ftissue=1.0),
+            excretion=Excretion(urine=True),
+            # production over filtration, the steady state of the kidney plasma
+            baseline=Formula("CRTNPROD_k / GFR", U.mM),
+        )
+    ],
+    chemistry=[
+        CustomReaction(
+            "CRTNPROD",
+            Organ.MUSCLE,
+            Part.TISSUE,
+            "-> Cti_crtn",
+            "CRTNPROD_k",
+            parameters=[],
+        )
+    ],
+    parameters=[
+        ModelParameter(
+            "CRTNPROD_k",
+            0.0074,
+            U.mmole_per_min,
+            name="creatinine production",
+            notes="About 1.2 g/day.",
+        )
+    ],
+)
+creatinine.validate()
+print([p.sid for p in creatinine.parameters])
+```
+
+```text
+['CRTNPROD_k']
+```
+
+The parameters are constants: a change before the simulation (`preinit_changes`) moves every formula which reads them, and an id of `PBPKDefinition.dynamic` makes them variable. The validation refuses an id which is no SBML SId, contains `__`, is given twice or is an id of the physiology or an organ submodel, and a `Value` or `Formula` in another unit than `unit`; the build refuses an id which the library has (a parameter of a substance such as `fu_<s>` or `Kp_<s>`, a sink, an observer of the library) and a local id of an organ which is no input under the same id (`Vti`, `<process>_Vmax`): a custom reaction there would read the element of the organ instead. Formulas which read each other in a cycle are refused, naming them. Without parameters the SBML is that of a definition without the field.
 
 The validation (`PBPKDefinition.validate()`, called by `build`) refuses an id which is no SBML SId, contains `__`, starts with a token of the id scheme or is an id of the physiology, a duplicate id, a fraction outside its interval, a non-positive constant, a mode which needs `ftissue` without it (an entered organ without `ps`, named in the message), kinetic erythrocytes with a flow-limited distribution, and names every problem at once.

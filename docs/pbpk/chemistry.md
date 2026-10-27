@@ -182,3 +182,7 @@ The chemistry is defined once per organ; the organ variant places it into its pa
 - the nephron kidney places an apical transport between the cells and the lumen of the proximal tubule.
 
 A custom reaction states its rate for the whole organ: the variants refuse it with an error which names the process, since an arbitrary formula cannot be split by volume.
+
+## Custom reactions
+
+The formula of a custom reaction reads the elements of its organ (its species, compartments and parameters such as `Vti` and `Cti_<s>`, the parameters of the reaction) and the constant parameters and compartments of the top model, such as a [parameter of the definition](substances.md#parameters-of-the-definition) (`PBPKDefinition.parameters`) or a covariate: the organ reads such an id through an input port under the same id, as for the ids of a `Formula`, so a constant which two processes share (a production rate which the baseline reads as well) is defined once. An element of the organ comes first; the build refuses a parameter of the definition under a local id of an organ, and names every id of a custom reaction which is neither an element of the organ nor a constant of the top model (a species or an observer of the top model is not read by an organ, an unknown id).
