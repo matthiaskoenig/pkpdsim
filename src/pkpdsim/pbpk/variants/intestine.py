@@ -85,7 +85,7 @@ from pkpdsim.pbpk.variants.gut import GUT_ORGANS, GutBuilder
 from pkpdsim.pbpk.variants.segments import DATA, segments, single_lumen
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Iterable, Iterator, Sequence
 
     from pkpdsim.pbpk.definition import PBPKDefinition
     from pkpdsim.pbpk.routes import Route
@@ -97,8 +97,46 @@ _SBO_PARAMETER = SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER
 type PerSubstance = Q | Mapping[str, Q]
 """One value for every oral substance, or a mapping from substance id to value."""
 
-type _Pairs = tuple[tuple[str, Q], ...]
-type _Spec = PerSubstance | _Pairs
+
+class _FrozenMap(Mapping[str, Q]):
+    """A read-only, hashable mapping from substance id to value.
+
+    A dict is unhashable, so a dataclass holding one cannot be hashed; this
+    copy reads back as a `Mapping` (`ka["a"]`, `.items()`) and is hashed by
+    its items.
+    """
+
+    __slots__ = ("_items",)
+
+    def __init__(self, items: Mapping[str, Q]) -> None:
+        """Copy the items."""
+        self._items: dict[str, Q] = dict(items)
+
+    def __getitem__(self, key: str) -> Q:
+        """Get the value of a substance."""
+        return self._items[key]
+
+    def __iter__(self) -> "Iterator[str]":
+        """Iterate over the substance ids."""
+        return iter(self._items)
+
+    def __len__(self) -> int:
+        """Get the number of substances."""
+        return len(self._items)
+
+    def __hash__(self) -> int:
+        """Hash the items."""
+        return hash(tuple(self._items.items()))
+
+    def __eq__(self, other: object) -> bool:
+        """Compare to a mapping by its items."""
+        if isinstance(other, Mapping):
+            return self._items == dict(other)
+        return NotImplemented
+
+    def __repr__(self) -> str:
+        """Get the items as a dict."""
+        return repr(self._items)
 
 
 def _oral(routes: "Sequence[Route]") -> frozenset[str]:
@@ -106,17 +144,15 @@ def _oral(routes: "Sequence[Route]") -> frozenset[str]:
     return frozenset(r.substance for r in routes if r.kind in ORAL)
 
 
-def _freeze(spec: "_Spec | None") -> "_Spec | None":
-    """Store a mapping as a tuple of pairs, so that the dataclass stays hashable."""
+def _freeze(spec: "PerSubstance | None") -> "PerSubstance | None":
+    """Store a mapping as a hashable read-only mapping."""
     if isinstance(spec, Mapping):
-        return tuple(spec.items())
+        return _FrozenMap(spec)
     return spec
 
 
-def _per_substance(spec: "_Spec", sid: str, default: Q) -> Q:
+def _per_substance(spec: PerSubstance, sid: str, default: Q) -> Q:
     """Get the value of a substance: the mapping entry (else `default`) or the scalar."""
-    if isinstance(spec, tuple):
-        return dict(spec).get(sid, default)
     if isinstance(spec, Mapping):
         return spec.get(sid, default)
     return spec
@@ -124,8 +160,8 @@ def _per_substance(spec: "_Spec", sid: str, default: Q) -> Q:
 
 def _check_keys(
     attribute: str,
-    spec: "_Spec | None",
-    definition: "PBPKDefinition",
+    spec: "PerSubstance | None",
+    known: frozenset[str],
     allowed: frozenset[str] | None,
 ) -> None:
     """Check that the keys of a per-substance mapping are substances (of `allowed` if set).
@@ -134,10 +170,9 @@ def _check_keys(
         ValueError: for a key which is no substance of the definition, or, if
             `allowed` is set, a substance which is not in it (no oral route).
     """
-    if not isinstance(spec, tuple):
+    if not isinstance(spec, Mapping):
         return
-    known = {s.sid for s in definition.substances}
-    for sid, _ in spec:
+    for sid in spec:
         if sid not in known:
             raise ValueError(
                 f"{attribute}: '{sid}' is no substance of the definition "
@@ -150,18 +185,18 @@ def _check_keys(
             )
 
 
-def _only(spec: "_Spec | None", oral: frozenset[str]) -> frozenset[str]:
+def _only(spec: "PerSubstance | None", oral: frozenset[str]) -> frozenset[str]:
     """The substances which get the parameter: the oral ones, the keys of a mapping among them."""
     if spec is None:
         return frozenset()
-    if isinstance(spec, tuple):
-        return frozenset(sid for sid, _ in spec) & oral
+    if isinstance(spec, Mapping):
+        return frozenset(spec) & oral
     return oral
 
 
 def _fabs_objects(
     definition: "PBPKDefinition",
-    fabs: "_Spec",
+    fabs: PerSubstance,
     substances: frozenset[str] | None = None,
     default: Q = 1.0,
 ) -> list[Sbase]:
@@ -188,7 +223,7 @@ def _fabs_objects(
 
 
 def _colon_objects(
-    definition: "PBPKDefinition", f_ka_colon: "_Spec", substances: frozenset[str]
+    definition: "PBPKDefinition", f_ka_colon: PerSubstance, substances: frozenset[str]
 ) -> list[Sbase]:
     """The factor of the absorption in the large intestine `f_ka_colon_<s>` of the substances."""
     return [
@@ -210,20 +245,17 @@ def _colon_objects(
     ]
 
 
-def _ka_value(ka: "_Spec | None", sid: str, oral: frozenset[str]) -> Q:
+def _ka_value(ka: "PerSubstance | None", sid: str, oral: frozenset[str]) -> Q:
     """The `ka` of a substance: its entry or the scalar, else the default (0 without oral route)."""
     default = value(DATA, "absorption", "ka")
-    if ka is None:
-        return default if sid in oral else 0.0
-    if isinstance(ka, tuple | Mapping):
-        entries = dict(ka)
-        if sid in entries:
-            return entries[sid]
-        return default if sid in oral else 0.0
-    return ka if sid in oral else 0.0
+    if isinstance(ka, Mapping) and sid in ka:
+        return ka[sid]
+    if sid not in oral:
+        return 0.0
+    return default if ka is None or isinstance(ka, Mapping) else ka
 
 
-def _ka_objects(definition: "PBPKDefinition", ka: "_Spec | None") -> list[Sbase]:
+def _ka_objects(definition: "PBPKDefinition", ka: "PerSubstance | None") -> list[Sbase]:
     """The absorption `ka_<s>` of every substance.
 
     A scalar `ka` is the value of every oral substance; a mapping gives its
@@ -232,7 +264,6 @@ def _ka_objects(definition: "PBPKDefinition", ka: "_Spec | None") -> list[Sbase]
     Every other substance has 0.
     """
     oral = _oral(definition.routes)
-    _check_keys("ka", ka, definition, None)
     return [
         annotate(
             value_parameter(
@@ -243,7 +274,7 @@ def _ka_objects(definition: "PBPKDefinition", ka: "_Spec | None") -> list[Sbase]
                 _SBO_PARAMETER,
                 "Absorption rate constant of the small intestine; a segment absorbs "
                 "with the factor of its area, `ka*f_area`; a model fits it."
-                if s.sid in oral or (isinstance(ka, tuple) and s.sid in dict(ka))
+                if s.sid in oral or (isinstance(ka, Mapping) and s.sid in ka)
                 else "No absorption: the substance has no oral route, it is not "
                 "reabsorbed after biliary excretion unless a model sets it.",
             ),
@@ -296,7 +327,7 @@ class SegmentedIntestine:
     f_ka_colon: "PerSubstance | None" = None
 
     def __post_init__(self) -> None:
-        """Store a mapping as a tuple of pairs, which keeps the dataclass hashable."""
+        """Store a mapping as a hashable read-only mapping."""
         for name in ("ka", "fabs", "f_ka_colon"):
             object.__setattr__(self, name, _freeze(getattr(self, name)))
 
@@ -306,22 +337,28 @@ class SegmentedIntestine:
         return GUT_ORGANS
 
     def _oral_sets(
-        self, definition: "PBPKDefinition"
+        self, sids: "Iterable[str]", routes: "Sequence[Route]"
     ) -> tuple[frozenset[str], frozenset[str]]:
         """The substances with `fabs_<s>` and with `f_ka_colon_<s>`, checked.
 
+        The one place which body_objects and build use, so that neither can
+        drop a key silently.
+
         Raises:
-            ValueError: for a key which is no substance of the definition or
-                has no oral route.
+            ValueError: for a key which is no substance or (`fabs`,
+                `f_ka_colon`) has no oral route.
         """
-        oral = _oral(definition.routes)
-        _check_keys("fabs", self.fabs, definition, oral)
-        _check_keys("f_ka_colon", self.f_ka_colon, definition, oral)
+        known, oral = frozenset(sids), _oral(routes)
+        _check_keys("ka", self.ka, known, None)
+        _check_keys("fabs", self.fabs, known, oral)
+        _check_keys("f_ka_colon", self.f_ka_colon, known, oral)
         return _only(self.fabs, oral), _only(self.f_ka_colon, oral)
 
     def body_objects(self, definition: "PBPKDefinition") -> list[Sbase]:
         """Get `ka_<s>` of every substance, `fabs_<s>` and `f_ka_colon_<s>` of the oral ones, `FED`."""
-        fabs, colon = self._oral_sets(definition)
+        fabs, colon = self._oral_sets(
+            (s.sid for s in definition.substances), definition.routes
+        )
         return [
             *_ka_objects(definition, self.ka),
             *(
@@ -358,14 +395,14 @@ class SegmentedIntestine:
                 of the large intestine, a custom reaction, a basolateral
                 transport of the mucosa.
         """
-        oral = _oral(ctx.routes)
+        fabs, colon = self._oral_sets((s.sid for s in ctx.substances), ctx.routes)
         return GutBuilder(
             ctx,
             self.name,
             segments(),
             single=False,
-            fabs=_only(self.fabs, oral),
-            colon=_only(self.f_ka_colon, oral),
+            fabs=fabs,
+            colon=colon,
         ).build()
 
 
@@ -403,7 +440,7 @@ class SingleLumen:
     fabs: "PerSubstance | None" = None
 
     def __post_init__(self) -> None:
-        """Store a mapping as a tuple of pairs, which keeps the dataclass hashable."""
+        """Store a mapping as a hashable read-only mapping."""
         for name in ("ka", "fabs"):
             object.__setattr__(self, name, _freeze(getattr(self, name)))
 
@@ -412,9 +449,19 @@ class SingleLumen:
         """The organs the intestine replaces: small and large intestine."""
         return GUT_ORGANS
 
+    def _check(self, sids: "Iterable[str]") -> None:
+        """Check the keys of the mappings (any substance has `fabs_<s>`).
+
+        Raises:
+            ValueError: for a key which is no substance.
+        """
+        known = frozenset(sids)
+        _check_keys("ka", self.ka, known, None)
+        _check_keys("fabs", self.fabs, known, None)
+
     def body_objects(self, definition: "PBPKDefinition") -> list[Sbase]:
         """Get `ka_<s>` and `fabs_<s>` of every substance."""
-        _check_keys("fabs", self.fabs, definition, None)
+        self._check(s.sid for s in definition.substances)
         return [
             *_ka_objects(definition, self.ka),
             *_fabs_objects(
@@ -428,8 +475,10 @@ class SingleLumen:
         """Build the model of the intestine and its boundary.
 
         Raises:
-            ValueError: for chemistry the intestine cannot place.
+            ValueError: for chemistry the intestine cannot place, or a key of
+                a mapping which is no substance.
         """
+        self._check(s.sid for s in ctx.substances)
         return GutBuilder(
             ctx,
             self.name,

@@ -8,6 +8,7 @@ intestine, the bile into the duodenum, the feces.
 
 import dataclasses
 import math
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -949,22 +950,89 @@ def test_a_per_substance_value_names_a_substance(
 def test_a_scalar_form_equals_a_mapping_of_every_oral_substance(
     tmp_path: Path,
 ) -> None:
-    """The scalar form is the mapping which gives every oral substance the value.
-
-    The SBML is the same file content, so the scalar form is unchanged by
-    the per-substance form (the existing tests pin the ids of the scalar form).
-    """
+    """The scalar form is the mapping which gives every oral substance the value."""
+    oral_ids = (S, M)
     scalar = _two_oral("same", ka=1.5, fabs=0.7, f_ka_colon=0.4)
-    both = {S: 1.0, M: 1.0}
     mapped = _two_oral(
         "same",
-        ka=dict.fromkeys(both, 1.5),
-        fabs=dict.fromkeys(both, 0.7),
-        f_ka_colon=dict.fromkeys(both, 0.4),
+        ka=dict.fromkeys(oral_ids, 1.5),
+        fabs=dict.fromkeys(oral_ids, 0.7),
+        f_ka_colon=dict.fromkeys(oral_ids, 0.4),
     )
     a = build(scalar, tmp_path / "a").flat_path.read_text()
     b = build(mapped, tmp_path / "b").flat_path.read_text()
     assert a == b
+
+
+# The flat model of `_scalar_reference()` built at pbpk-library 4f01f9d (before
+# the per-substance form): the ids of the parameters, the reactions of the
+# intestine and the values of the parameters of the oral absorption. Pinned as
+# ids and values, not as a hash of the file, which every unrelated change of
+# the library would move.
+_SCALAR_REFERENCE_VALUES = {
+    "ka_drg": 1.5,
+    "ka_drg_m": 0.0,
+    "fabs_drg": 0.7,
+    "f_ka_colon_drg": 0.4,
+}
+
+
+def test_a_scalar_form_is_unchanged_against_the_library_at_4f01f9d(
+    tmp_path: Path,
+) -> None:
+    """The scalar form creates the parameters and values it created at 4f01f9d.
+
+    `ka` for the oral drug only (0 for the metabolite), `fabs` and
+    `f_ka_colon` only for the oral drug, the feces reactions only for it.
+    """
+    d = _definition(
+        "scalar_ref",
+        routes=[Route.oral_solution(S)],
+        variants=Variants(
+            organs={
+                Organ.SMALL_INTESTINE: SegmentedIntestine(
+                    ka=1.5, fabs=0.7, f_ka_colon=0.4
+                )
+            }
+        ),
+    )
+    result = build(d, tmp_path)
+    r = load(result)
+    for pid, expected in _SCALAR_REFERENCE_VALUES.items():
+        assert r[pid] == pytest.approx(expected)
+    found = _sbml_ids(result.flat_path)
+    assert {i for i in found if i.startswith(("fabs_", "f_ka_colon_"))} == {
+        "fabs_drg",
+        "f_ka_colon_drg",
+    }
+    feces = {i for i in found if "J_feces_" in i}
+    assert feces
+    assert all(i.endswith("_drg") for i in feces)
+
+
+def test_a_mapping_reads_back_as_a_mapping() -> None:
+    """`.ka` is the mapping given, readable as a mapping."""
+    intestine = SegmentedIntestine(ka={S: 2.0}, fabs={M: 0.5})
+    assert isinstance(intestine.ka, Mapping)
+    assert isinstance(intestine.fabs, Mapping)
+    assert intestine.ka == {S: 2.0}
+    assert intestine.ka[S] == 2.0
+    assert dict(intestine.fabs.items()) == {M: 0.5}
+    assert dataclasses.replace(intestine, ka=intestine.ka) == intestine
+
+
+def test_the_single_lumen_fabs_may_name_a_substance_without_oral_route(
+    tmp_path: Path,
+) -> None:
+    """Any substance has `fabs_<s>` in the single lumen, so a key need not be oral."""
+    d = _definition(
+        "lumen_nonoral",
+        routes=[Route.oral_solution(S)],
+        variants=Variants(organs={Organ.SMALL_INTESTINE: SingleLumen(fabs={M: 0.4})}),
+    )
+    r = load(build(d, tmp_path))
+    assert r[ids.fraction_absorbed(M)] == pytest.approx(0.4)
+    assert r[ids.fraction_absorbed(S)] == pytest.approx(1.0)
 
 
 def test_the_per_substance_intestine_is_hashable() -> None:
