@@ -88,6 +88,7 @@ from pkpdsim.pbpk.impairment import (
     impairment_objects,
     physiology_factors,
     unbound_fraction,
+    unbound_fraction_notes,
 )
 from pkpdsim.pbpk.kp import kp_sources, kp_values
 from pkpdsim.pbpk.observers import (
@@ -1135,12 +1136,7 @@ class _Top:
             unbound_fraction(s),
             U.dimensionless,
             f"fraction unbound {sid}",
-            "Fraction unbound in plasma of the individual: the reference fraction "
-            "scaled with the binding protein under impairment (McNamara 2002, "
-            "`pkpdsim.pbpk.impairment`)."
-            if s.binding is not None
-            else "Fraction unbound in plasma of the individual; the substance does "
-            "not bind to plasma proteins.",
+            unbound_fraction_notes(s),
             "fu",
         )
         if s.excretion.urine:

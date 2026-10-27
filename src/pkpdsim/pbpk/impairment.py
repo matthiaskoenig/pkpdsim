@@ -96,6 +96,7 @@ __all__ = [
     "organ_activity",
     "physiology_factors",
     "unbound_fraction",
+    "unbound_fraction_notes",
 ]
 
 DATA = "impairment"
@@ -186,6 +187,37 @@ def physiology_factors() -> dict[str, str]:
         q = ids.organ_flow(o)
         factors[q] = ids.impairment_factor(q)
     return factors
+
+
+def unbound_fraction_notes(s: Substance) -> str:
+    """Get the notes of the fraction unbound in plasma of a substance.
+
+    The notes say what `unbound_fraction` gives: the reference fraction scaled
+    with the binding under impairment, the reference fraction itself where no
+    factor applies (an unknown protein without the CKD factor), or no binding.
+
+    Args:
+        s: the substance.
+
+    Returns:
+        The notes of `fu_<s>`.
+    """
+    if s.binding is None:
+        return (
+            "Fraction unbound in plasma of the individual; the substance does "
+            "not bind to plasma proteins."
+        )
+    if s.binding.protein == "unknown" and not s.binding.ckd:
+        return (
+            "Fraction unbound in plasma of the individual: equal to the reference "
+            "fraction, no impairment factor applies (the binding protein is "
+            "unknown and the binding has no CKD factor)."
+        )
+    return (
+        "Fraction unbound in plasma of the individual: the reference fraction "
+        "scaled with the binding protein under impairment (McNamara 2002, "
+        "`pkpdsim.pbpk.impairment`)."
+    )
 
 
 def unbound_fraction(s: Substance) -> str:
