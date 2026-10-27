@@ -334,10 +334,16 @@ def test_proteins_table() -> None:
         "ABCB1",
         "ABCG2",
         "ABCC2",
+        "ABCC3",
+        "ABCC4",
+        "SLC6A8",
     ]
     assert set(required) <= set(PROTEINS)
     assert PROTEINS["CYP3A4"].uniprot == "P08684"
     assert PROTEINS["SLC22A6"].ncit is None
+    assert PROTEINS["ABCC3"].uniprot == "O15438"
+    assert PROTEINS["ABCC4"].uniprot == "O15439"
+    assert PROTEINS["SLC6A8"].uniprot == "P48029"
     assert load("proteins")["source"] in sources()
 
 

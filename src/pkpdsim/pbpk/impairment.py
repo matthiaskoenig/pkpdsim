@@ -203,10 +203,13 @@ def unbound_fraction(s: Substance) -> str:
         (`fu ~ fimp_plasma_protein*fu_ref`), fu stays below 1; fu of a weakly
         bound substance rises less (fu_ref 0.5 at a factor 2.5: 0.71, not
         1.25). A binding with `ckd=False` has the factor of the binding
-        protein alone.
+        protein alone; with an unknown protein as well no factor applies and
+        the result is `fu_ref_<s>` itself.
     """
     fu_ref = ids.fu_ref(s.sid)
     if s.binding is None:
+        return fu_ref
+    if s.binding.protein == "unknown" and not s.binding.ckd:
         return fu_ref
     protein = {
         "albumin": ids.impairment_factor("albumin"),

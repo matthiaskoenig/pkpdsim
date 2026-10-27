@@ -214,6 +214,14 @@ def test_fu_follows_albumin(tmp_path: Path, fu_ref: float) -> None:
     assert unbound_fraction(substances[3]) == ids.fu_ref("free")
 
 
+def test_an_unbound_fraction_without_factor_is_the_reference() -> None:
+    """No protein and no CKD factor leaves no factor: fu is `fu_ref` itself."""
+    s = Substance(sid="x", name="x", mr=300.0, binding=Binding(0.4, ckd=False))
+    formula = unbound_fraction(s)
+    assert formula == ids.fu_ref("x")
+    assert "dimensionless" not in formula
+
+
 def test_binding_free_of_ckd(tmp_path: Path) -> None:
     """A binding with `ckd=False` ignores the CKD factor of the binding capacity.
 

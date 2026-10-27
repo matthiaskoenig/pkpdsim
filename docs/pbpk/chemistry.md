@@ -140,6 +140,9 @@ A protein is named once in the protein table of the library with its UniProt and
 | `ABCB1` | ATP-dependent translocase ABCB1 (P-glycoprotein) | [P08183](https://www.uniprot.org/uniprotkb/P08183) | `C17746` |
 | `ABCG2` | Broad substrate specificity ATP-binding cassette transporter ABCG2 | [Q9UNQ0](https://www.uniprot.org/uniprotkb/Q9UNQ0) | `C21253` |
 | `ABCC2` | ATP-binding cassette sub-family C member 2 (MRP2) | [Q92887](https://www.uniprot.org/uniprotkb/Q92887) | `C103884` |
+| `ABCC3` | ATP-binding cassette sub-family C member 3 (MRP3) | [O15438](https://www.uniprot.org/uniprotkb/O15438) | `C106023` |
+| `ABCC4` | ATP-binding cassette sub-family C member 4 (MRP4) | [O15439](https://www.uniprot.org/uniprotkb/O15439) | `C103881` |
+| `SLC6A8` | Sodium- and chloride-dependent creatine transporter 1 | [P48029](https://www.uniprot.org/uniprotkb/P48029) | `C153432` |
 
 Degradation rate `kdeg_<protein>` of the turnover state (1/hr): li 0.0193, si 0.0301, other 0.0193.
 

@@ -1,7 +1,7 @@
 # The enzymes and transporters of the PBPK models (human).
 # `uniprot` is the reviewed human UniProtKB accession (UniProt, checked against rest.uniprot.org
-# 2026-10-25); `ncit` the NCI Thesaurus concept of the protein (checked against the NCIt EVS API
-# 2026-10-25), left out where NCIt has no concept for the protein (SLC22A6, SLC22A8).
+# 2026-10-25, ABCC3, ABCC4 and SLC6A8 2026-10-27); `ncit` the NCI Thesaurus concept of the protein
+# (checked against the NCIt EVS API 2026-10-25, ABCC3, ABCC4 and SLC6A8 2026-10-27), left out where NCIt has no concept for the protein (SLC22A6, SLC22A8).
 
 source = "UniProt"
 
@@ -102,6 +102,21 @@ ncit = "C21253"
 name = "ATP-binding cassette sub-family C member 2 (MRP2)"
 uniprot = "Q92887"
 ncit = "C103884"
+
+[proteins.ABCC3]
+name = "ATP-binding cassette sub-family C member 3 (MRP3)"
+uniprot = "O15438"
+ncit = "C106023"
+
+[proteins.ABCC4]
+name = "ATP-binding cassette sub-family C member 4 (MRP4)"
+uniprot = "O15439"
+ncit = "C103881"
+
+[proteins.SLC6A8]
+name = "Sodium- and chloride-dependent creatine transporter 1"
+uniprot = "P48029"
+ncit = "C153432"
 
 # The degradation rate constant kdeg of a protein, the turnover of its amount
 # E (relative to baseline) under mechanism-based inhibition and induction,
