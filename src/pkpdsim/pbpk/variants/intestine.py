@@ -125,8 +125,8 @@ class _FrozenMap(Mapping[str, Q]):
         return len(self._items)
 
     def __hash__(self) -> int:
-        """Hash the items."""
-        return hash(tuple(self._items.items()))
+        """Hash the items, independent of their order as the equality is."""
+        return hash(frozenset(self._items.items()))
 
     def __eq__(self, other: object) -> bool:
         """Compare to a mapping by its items."""

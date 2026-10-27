@@ -1019,6 +1019,9 @@ def test_a_mapping_reads_back_as_a_mapping() -> None:
     assert intestine.ka[S] == 2.0
     assert dict(intestine.fabs.items()) == {M: 0.5}
     assert dataclasses.replace(intestine, ka=intestine.ka) == intestine
+    reordered = SegmentedIntestine(ka={S: 2.0, M: 1.0})
+    assert reordered.ka == SegmentedIntestine(ka={M: 1.0, S: 2.0}).ka
+    assert hash(reordered.ka) == hash(SegmentedIntestine(ka={M: 1.0, S: 2.0}).ka)
 
 
 def test_the_single_lumen_fabs_may_name_a_substance_without_oral_route(
