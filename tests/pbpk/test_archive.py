@@ -2,7 +2,9 @@
 
 import zipfile
 from pathlib import Path
+from typing import Any
 
+import pytest
 from pymetadata.omex import EntryFormat
 
 from pkpdsim.licenses import License, license_text
@@ -11,11 +13,16 @@ from pkpdsim.pbpk import create_archive
 from .conftest import definition
 
 COPYRIGHT = "2024-2026 Matthias König"
+MINIMAL_SBML = (
+    '<?xml version="1.0" encoding="UTF-8"?>\n'
+    '<sbml xmlns="http://www.sbml.org/sbml/level3/version2/core" level="3" version="2">'
+    '<model id="fluid"/></sbml>\n'
+)
 
 
 def _create(
     tmp_path: Path, *, extra: tuple[Path, ...] = (), readme: bool = True
-) -> dict:
+) -> dict[str, dict[str, Any]]:
     """Create the archive of the simple definition below `tmp_path`."""
     readme_path = tmp_path / "README.md"
     readme_path.write_text("# simple\n", encoding="utf-8")
@@ -69,7 +76,7 @@ def test_the_archive_carries_the_extra_models(tmp_path: Path) -> None:
     """An extra SBML file is an entry by its stem, after the others."""
     (tmp_path / "models").mkdir()
     extra = tmp_path / "models" / "simple_fluid.xml"
-    extra.write_text("<sbml/>", encoding="utf-8")
+    extra.write_text(MINIMAL_SBML, encoding="utf-8")
     results = _create(tmp_path, extra=(extra,))
     assert list(results)[-1] == "simple_fluid"
     entry = results["simple_fluid"]["entry"]
@@ -99,3 +106,12 @@ def test_the_archive_returns_the_entries_of_a_factory(tmp_path: Path) -> None:
     for info in results.values():
         assert set(info) == {"path", "entry"}
         assert isinstance(info["path"], Path)
+
+
+def test_an_extra_model_may_not_take_a_key_of_the_archive(tmp_path: Path) -> None:
+    """An extra model named like a built file is an error."""
+    (tmp_path / "models").mkdir()
+    extra = tmp_path / "models" / "simple_flat.xml"
+    extra.write_text(MINIMAL_SBML, encoding="utf-8")
+    with pytest.raises(ValueError, match="simple_flat"):
+        _create(tmp_path, extra=(extra,))

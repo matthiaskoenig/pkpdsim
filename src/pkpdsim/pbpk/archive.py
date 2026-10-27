@@ -43,6 +43,9 @@ def create_archive(
         extra_models: further SBML files (in L3V2) which are entries of the
             archive, e.g. a submodel which is simulated on its own.
 
+    Raises:
+        ValueError: if the stem of an extra model is the key of another entry.
+
     Returns:
         The files with their entries in the COMBINE archive, by the keys of a
         factory: `README`, `cc-by`, `mit`, the sid of the definition, `<sid>_flat`,
@@ -56,9 +59,8 @@ def create_archive(
     from pkpdsim.licenses import License, write_license
 
     def entry(
-        path: Path, fmt: EntryFormat, *, master: bool = False, name: str | None = None
+        location: str, fmt: EntryFormat, *, master: bool = False
     ) -> ManifestEntry:
-        location = name or f"./models/{path.name}"
         return ManifestEntry(location=location, format=fmt, master=master)
 
     model_output_dir.mkdir(parents=True, exist_ok=True)
@@ -76,38 +78,43 @@ def create_archive(
     if readme is not None:
         results["README"] = {
             "path": readme,
-            "entry": entry(readme, EntryFormat.MARKDOWN, name="./README.md"),
+            "entry": entry("./README.md", EntryFormat.MARKDOWN),
         }
     cc_by = write_license(parent, License.CC_BY_SA_4_0)
     mit = write_license(parent, License.MIT, copyright=copyright)
     results["cc-by"] = {
         "path": cc_by,
-        "entry": entry(cc_by, EntryFormat.TXT, name=f"./{cc_by.name}"),
+        "entry": entry(f"./{cc_by.name}", EntryFormat.TXT),
     }
     results["mit"] = {
         "path": mit,
-        "entry": entry(mit, EntryFormat.TXT, name=f"./{mit.name}"),
+        "entry": entry(f"./{mit.name}", EntryFormat.TXT),
     }
     results[definition.sid] = {
         "path": built.comp_path,
-        "entry": entry(built.comp_path, EntryFormat.SBML_L3V2),
+        "entry": entry(f"./models/{built.comp_path.name}", EntryFormat.SBML_L3V2),
     }
     results[f"{definition.sid}_flat"] = {
         "path": flat,
-        "entry": entry(flat, EntryFormat.SBML_L3V2, master=True),
+        "entry": entry(f"./models/{flat.name}", EntryFormat.SBML_L3V2, master=True),
     }
     results[f"{definition.sid}_flat_md"] = {
         "path": md_path,
-        "entry": entry(md_path, EntryFormat.MARKDOWN),
+        "entry": entry(f"./models/{md_path.name}", EntryFormat.MARKDOWN),
     }
     results[f"{definition.sid}_flat_ant"] = {
         "path": ant_path,
-        "entry": entry(ant_path, EntryFormat.ANTIMONY),
+        "entry": entry(f"./models/{ant_path.name}", EntryFormat.ANTIMONY),
     }
     for extra in extra_models:
+        if extra.stem in results:
+            raise ValueError(
+                f"The extra model {extra.name!r} has the key {extra.stem!r} of an "
+                "entry of the archive."
+            )
         results[extra.stem] = {
             "path": extra,
-            "entry": entry(extra, EntryFormat.SBML_L3V2),
+            "entry": entry(f"./models/{extra.name}", EntryFormat.SBML_L3V2),
         }
 
     omex = Omex()
