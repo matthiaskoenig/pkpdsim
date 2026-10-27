@@ -240,12 +240,13 @@ def test_importing_the_library_imports_no_simulator() -> None:
         "print(sorted(m for m in sys.modules "
         "if m.split('.')[0] in {'sbmlsim', 'roadrunner'} "
         "or m in {'pkpdsim.experiment', 'pkpdsim.pbpk.experiment'})); "
-        "from pkpdsim.pbpk import PBPKSimulationExperiment, ScaledRenalMap, "
-        "healthy_gfr; "
+        "from pkpdsim.pbpk import REFERENCE_GFR, PBPKSimulationExperiment, "
+        "ScaledRenalMap, healthy_gfr; "
         "from pkpdsim.pbpk import experiment; "
         "print(PBPKSimulationExperiment is experiment.PBPKSimulationExperiment "
         "and ScaledRenalMap is experiment.ScaledRenalMap "
-        "and healthy_gfr is experiment.healthy_gfr)"
+        "and healthy_gfr is experiment.healthy_gfr "
+        "and REFERENCE_GFR == experiment.REFERENCE_GFR == 101.0)"
     )
     result = subprocess.run(
         [sys.executable, "-c", code], capture_output=True, text=True, check=True
@@ -253,12 +254,14 @@ def test_importing_the_library_imports_no_simulator() -> None:
     assert result.stdout.split() == ["[]", "True"]
     import pkpdsim.pbpk
 
-    assert {"PBPKSimulationExperiment", "ScaledRenalMap", "healthy_gfr"} <= set(
-        pkpdsim.pbpk.__all__
-    )
-    assert {"PBPKSimulationExperiment", "ScaledRenalMap", "healthy_gfr"} <= set(
-        dir(pkpdsim.pbpk)
-    )
+    lazy = {
+        "REFERENCE_GFR",
+        "PBPKSimulationExperiment",
+        "ScaledRenalMap",
+        "healthy_gfr",
+    }
+    assert lazy <= set(pkpdsim.pbpk.__all__)
+    assert lazy <= set(dir(pkpdsim.pbpk))
     assert {"build", "Substance", "ids"} <= set(dir(pkpdsim.pbpk))
     with pytest.raises(AttributeError, match="no_such_name"):
         _ = pkpdsim.pbpk.no_such_name

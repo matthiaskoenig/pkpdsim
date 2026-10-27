@@ -1,8 +1,8 @@
 """The PBPK model library: the building blocks of the PBPK models of a substance.
 
 The base of the experiments of a model built on the library
-(`PBPKSimulationExperiment`, `ScaledRenalMap`, `healthy_gfr` of
-`pkpdsim.pbpk.experiment`) is exported lazily: it imports sbmlsim, which a
+(`PBPKSimulationExperiment`, `ScaledRenalMap`, `healthy_gfr`, `REFERENCE_GFR`
+of `pkpdsim.pbpk.experiment`) is exported lazily: it imports sbmlsim, which a
 factory does not need, so `import pkpdsim.pbpk` imports no simulator.
 """
 
@@ -58,6 +58,7 @@ from pkpdsim.pbpk.variants.liver_zonated import ZonatedLiver
 
 if TYPE_CHECKING:
     from pkpdsim.pbpk.experiment import (
+        REFERENCE_GFR,
         PBPKSimulationExperiment,
         ScaledRenalMap,
         healthy_gfr,
@@ -65,7 +66,7 @@ if TYPE_CHECKING:
 
 #: the names of `pkpdsim.pbpk.experiment`, imported on their first access
 _EXPERIMENT_NAMES = frozenset(
-    {"PBPKSimulationExperiment", "ScaledRenalMap", "healthy_gfr"}
+    {"REFERENCE_GFR", "PBPKSimulationExperiment", "ScaledRenalMap", "healthy_gfr"}
 )
 
 
@@ -91,6 +92,7 @@ __all__ = [
     "MM",
     "MODEL_UNITS",
     "PROTEINS",
+    "REFERENCE_GFR",
     "Binding",
     "Boundary",
     "BuildResult",
