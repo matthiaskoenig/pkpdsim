@@ -42,6 +42,7 @@ from pkpdsim.pbpk import (
 from pkpdsim.pbpk.chemistry import Direction, Membrane
 from pkpdsim.pbpk.impairment import GASTRIC_EMPTYING, SI_TRANSIT
 from pkpdsim.pbpk.variants import lookup, names
+from pkpdsim.pbpk.variants.intestine import PerSubstance
 
 from .conftest import (
     definition,
@@ -838,4 +839,136 @@ def test_segmented_fabs_and_colon(mucosa: bool, tmp_path: Path) -> None:
     r.simulate(6 * 60.0, 3 * DAY, 20)
     assert total_amount(r, S) + total_amount(r, M) + dose_amount(r, S) == (
         pytest.approx(10.0 / r[ids.mr(S)], rel=1e-6)
+    )
+
+
+def _two_oral(
+    sid: str,
+    *,
+    ka: "PerSubstance | None" = None,
+    fabs: "PerSubstance | None" = None,
+    f_ka_colon: "PerSubstance | None" = None,
+    intestine: str = "segmented",
+) -> PBPKDefinition:
+    """The drug and its metabolite, both with an oral solution, in the intestine variant."""
+    component: SegmentedIntestine | SingleLumen
+    if intestine == "segmented":
+        component = SegmentedIntestine(ka=ka, fabs=fabs, f_ka_colon=f_ka_colon)
+    else:
+        component = SingleLumen(ka=ka, fabs=fabs)
+    return _definition(
+        sid,
+        routes=[Route.oral_solution(S), Route.oral_solution(M)],
+        variants=Variants(organs={Organ.SMALL_INTESTINE: component}),
+    )
+
+
+def test_two_oral_substances_absorb_with_their_own_rates(tmp_path: Path) -> None:
+    """A mapping gives each oral substance its ka; fabs only for the substances named."""
+    d = _two_oral(
+        "two_oral",
+        ka={S: 2.0, M: 0.5},
+        fabs={S: 0.6},
+        f_ka_colon={M: 0.25},
+    )
+    result = build(d, tmp_path)
+    r = load(result)
+    assert r[ids.absorption(S)] == pytest.approx(2.0)
+    assert r[ids.absorption(M)] == pytest.approx(0.5)
+    assert r[ids.fraction_absorbed(S)] == pytest.approx(0.6)
+    assert r[ids.colon_absorption_factor(M)] == pytest.approx(0.25)
+    found = _sbml_ids(result.flat_path)
+    assert ids.fraction_absorbed(M) not in found
+    assert ids.colon_absorption_factor(S) not in found
+    feces = {i for i in found if "J_feces_" in i}
+    assert feces
+    assert not {i for i in feces if i.endswith(f"_{M}")}
+    assert all(i.endswith(f"_{S}") for i in feces)
+
+
+def test_a_missing_ka_is_the_default_of_the_data(tmp_path: Path) -> None:
+    """A substance missing from the `ka` mapping keeps the default of the data."""
+    ref = load(build(_two_oral("ka_default"), tmp_path / "a"))
+    r = load(build(_two_oral("ka_partial", ka={S: 2.0}), tmp_path / "b"))
+    assert r[ids.absorption(S)] == pytest.approx(2.0)
+    assert r[ids.absorption(M)] == pytest.approx(ref[ids.absorption(M)])
+
+
+def test_a_ka_for_a_substance_without_oral_route_is_allowed(tmp_path: Path) -> None:
+    """The reabsorption after biliary excretion: a `ka` of a substance without oral route."""
+    d = _definition(
+        "reabsorb",
+        routes=[Route.oral_solution(S)],
+        variants=Variants(
+            organs={Organ.SMALL_INTESTINE: SegmentedIntestine(ka={M: 0.3})}
+        ),
+    )
+    r = load(build(d, tmp_path))
+    assert r[ids.absorption(M)] == pytest.approx(0.3)
+
+
+def test_the_single_lumen_takes_a_mapping(tmp_path: Path) -> None:
+    """The single lumen: `ka` per substance, `fabs` 1 for a substance missing."""
+    d = _two_oral(
+        "lumen_two", ka={S: 2.0, M: 0.5}, fabs={S: 0.6}, intestine="single_lumen"
+    )
+    r = load(build(d, tmp_path))
+    assert r[ids.absorption(S)] == pytest.approx(2.0)
+    assert r[ids.absorption(M)] == pytest.approx(0.5)
+    assert r[ids.fraction_absorbed(S)] == pytest.approx(0.6)
+    assert r[ids.fraction_absorbed(M)] == pytest.approx(1.0)
+
+
+@pytest.mark.parametrize("intestine", ["segmented", "single_lumen"])
+def test_a_per_substance_value_names_a_substance(
+    tmp_path: Path, intestine: str
+) -> None:
+    """A key which is no substance, or a `fabs` of a substance without oral route, raises."""
+    with pytest.raises(ValueError, match="zz"):
+        build(_two_oral("bad_ka", ka={"zz": 1.0}, intestine=intestine), tmp_path)
+    d = _definition(
+        "bad_fabs",
+        routes=[Route.oral_solution(S)],
+        variants=Variants(
+            organs={Organ.SMALL_INTESTINE: SegmentedIntestine(fabs={M: 0.5})}
+        ),
+    )
+    with pytest.raises(ValueError, match=M):
+        build(d, tmp_path)
+    d = _definition(
+        "bad_colon",
+        routes=[Route.oral_solution(S)],
+        variants=Variants(
+            organs={Organ.SMALL_INTESTINE: SegmentedIntestine(f_ka_colon={M: 0.5})}
+        ),
+    )
+    with pytest.raises(ValueError, match=M):
+        build(d, tmp_path)
+
+
+def test_a_scalar_form_equals_a_mapping_of_every_oral_substance(
+    tmp_path: Path,
+) -> None:
+    """The scalar form is the mapping which gives every oral substance the value.
+
+    The SBML is the same file content, so the scalar form is unchanged by
+    the per-substance form (the existing tests pin the ids of the scalar form).
+    """
+    scalar = _two_oral("same", ka=1.5, fabs=0.7, f_ka_colon=0.4)
+    both = {S: 1.0, M: 1.0}
+    mapped = _two_oral(
+        "same",
+        ka=dict.fromkeys(both, 1.5),
+        fabs=dict.fromkeys(both, 0.7),
+        f_ka_colon=dict.fromkeys(both, 0.4),
+    )
+    a = build(scalar, tmp_path / "a").flat_path.read_text()
+    b = build(mapped, tmp_path / "b").flat_path.read_text()
+    assert a == b
+
+
+def test_the_per_substance_intestine_is_hashable() -> None:
+    """A mapping is stored so that the dataclass keeps its hash."""
+    assert hash(SegmentedIntestine(ka={S: 1.0})) == hash(
+        SegmentedIntestine(ka={S: 1.0})
     )

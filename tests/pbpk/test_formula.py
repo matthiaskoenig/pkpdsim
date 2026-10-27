@@ -356,3 +356,25 @@ def test_the_validation_skips_the_numbers_of_a_formula() -> None:
     )
     with pytest.raises(ValueError, match=r"ps 'li' must be in 1/min"):
         definition(substances=[wrong, metabolite]).validate()
+
+
+def test_a_formula_per_substance_in_the_segmented_intestine(tmp_path: Path) -> None:
+    """The `ka` of each oral substance is its own formula."""
+    d = definition(
+        routes=[Route.oral("drg"), Route.oral("drg_m")],
+        variants=Variants(
+            organs={
+                Organ.SMALL_INTESTINE: SegmentedIntestine(
+                    ka={
+                        "drg": Formula("1 per_hr * BW / 70 kg", U.per_hr),
+                        "drg_m": 0.5,
+                    }
+                )
+            }
+        ),
+    )
+    r = roadrunner.RoadRunner(str(build(d, tmp_path).flat_path))
+    r.setValue("init(BW)", 140.0)
+    r.reset()
+    assert r["ka_drg"] == pytest.approx(2.0)
+    assert r["ka_drg_m"] == pytest.approx(0.5)
