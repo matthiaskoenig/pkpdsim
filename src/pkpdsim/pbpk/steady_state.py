@@ -466,6 +466,7 @@ def kidney_arterial(
     substance: Substance,
     plasma: str,
     *,
+    eliminated: str | None = None,
     rate: str = "0",
     clearance: str = "0",
     secretion: Saturable | None = None,
@@ -474,13 +475,20 @@ def kidney_arterial(
     """Get the arterial plasma whose kidney plasma at the steady state is `plasma` [mM].
 
     The inverse of `kidney_plasma`: `Car = C + (clearance*C + S(C) - rate)/R`
-    with the flow past the filtrate `R = F - G`, e.g. the baseline of an
-    endogenous substance from the kidney plasma of its elimination
-    (`kidney_plasma(..., eliminated=...)`).
+    with the flow past the filtrate `R = F - G`. With the net excretion of
+    the kidney into the urine (`eliminated`, the `E` of `kidney_plasma`) it is
+    `Car = (E + R*C)/F` whatever the secretion, which reads the kidney plasma
+    once: the baseline of an endogenous substance which only the kidney
+    excretes, from the kidney plasma of its elimination, whose formula the
+    many starts of the substance read (the load time of a model grows with
+    every copy of a large formula).
 
     Args:
         substance: the substance.
         plasma: the kidney plasma at the steady state.
+        eliminated: the net excretion of the kidney into the urine at the
+            steady state (mmole/min); `rate`, `clearance` and `secretion` are
+            then not needed.
         rate: the net source of the kidney (mmole/min).
         clearance: the first order clearance of the kidney plasma (l/min).
         secretion: a saturable secretion of the kidney plasma.
@@ -489,8 +497,19 @@ def kidney_arterial(
 
     Returns:
         The formula.
+
+    Raises:
+        ValueError: for `eliminated` together with a rate, a clearance or a
+            secretion.
     """
-    _, _, rest = _kidney_flows(substance, variants)
+    flow, _, rest = _kidney_flows(substance, variants)
+    if eliminated is not None:
+        if rate != "0" or clearance != "0" or secretion is not None:
+            raise ValueError(
+                "With the elimination the arterial plasma needs no rate, "
+                "clearance or secretion: `(E + R*C)/F`."
+            )
+        return f"({eliminated} + ({rest}) * ({plasma})) / ({flow})"
     saturable = (
         "0"
         if secretion is None

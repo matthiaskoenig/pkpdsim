@@ -5,7 +5,8 @@ the kidney, filtered with a reabsorbed fraction and secreted from the kidney
 plasma with Michaelis-Menten kinetics (a custom reaction into the urine), as
 creatinine is. The kidney plasma of the elimination of the production is the
 root of a quadratic (`kidney_plasma(..., eliminated=..., secretion=...)`), the
-baseline the arterial plasma of that kidney plasma (`kidney_arterial`): with
+baseline the arterial plasma of that kidney plasma (`kidney_arterial` with the
+elimination, which reads the kidney plasma once): with
 them as starts every species stays at its start in the simulation, for the
 reference individual and changed ones.
 """
@@ -66,7 +67,7 @@ def _substance(erythrocytes: Erythrocytes | None = None) -> Substance:
         distribution=Kp(0.6, ftissue=6.0),
         excretion=Excretion(urine=True, fraction_reabsorbed=0.1),
     )
-    baseline = ss.kidney_arterial(s, "C_ki_0", secretion=SECRETION, variants=STANDARD)
+    baseline = ss.kidney_arterial(s, "C_ki_0", eliminated="k_prod", variants=STANDARD)
     return dataclasses.replace(s, baseline=Formula(baseline, U.mM))
 
 
@@ -161,13 +162,16 @@ def test_the_saturable_secretion_starts_stationary(
     # the secretion saturates: the kidney plasma is of the order of km
     assert 0.1 < cki / r["km_sec"] < 10
     assert car > cki
-    # the kidney plasma of the arterial form is that of the elimination
+    # the kidney plasma of the arterial form is that of the elimination, the
+    # arterial plasma of the secretion that of the elimination
     arterial = ss.kidney_plasma(
         s, arterial=ids.baseline(S), secretion=SECRETION, variants=STANDARD
     )
     names = [*r.model.getGlobalParameterIds(), *r.model.getCompartmentIds()]
     values = {n: r[n] for n in names}
     assert _evaluate(arterial, values) == pytest.approx(cki, rel=1e-12)
+    inverse = ss.kidney_arterial(s, "C_ki_0", secretion=SECRETION, variants=STANDARD)
+    assert _evaluate(inverse, values) == pytest.approx(car, rel=1e-12)
     # the excretion rate of the urine is the production
     assert r[ids.urine_rate(S)] == pytest.approx(r["k_prod"], rel=1e-10)
 
@@ -215,3 +219,7 @@ def test_without_a_saturable_secretion_the_form_is_linear() -> None:
     )
     assert "sqrt" not in alone
     assert ss.kidney_arterial(s, "C", variants=STANDARD) == "C"
+    with pytest.raises(ValueError, match="needs no rate"):
+        ss.kidney_arterial(
+            s, "C", eliminated="E", secretion=SECRETION, variants=STANDARD
+        )
