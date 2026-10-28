@@ -80,12 +80,12 @@ from pkpdsim.pbpk.organs import Organ
 from pkpdsim.pbpk.placement import value_parameter
 from pkpdsim.pbpk.routes import ORAL
 from pkpdsim.pbpk.units import U
-from pkpdsim.pbpk.values import Q
+from pkpdsim.pbpk.values import FrozenMap, Q
 from pkpdsim.pbpk.variants.gut import GUT_ORGANS, GutBuilder
 from pkpdsim.pbpk.variants.segments import DATA, segments, single_lumen
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Iterator, Sequence
+    from collections.abc import Iterable, Sequence
 
     from pkpdsim.pbpk.definition import PBPKDefinition
     from pkpdsim.pbpk.routes import Route
@@ -98,47 +98,6 @@ type PerSubstance = Q | Mapping[str, Q]
 """One value for every oral substance, or a mapping from substance id to value."""
 
 
-class _FrozenMap(Mapping[str, Q]):
-    """A read-only, hashable mapping from substance id to value.
-
-    A dict is unhashable, so a dataclass holding one cannot be hashed; this
-    copy reads back as a `Mapping` (`ka["a"]`, `.items()`) and is hashed by
-    its items.
-    """
-
-    __slots__ = ("_items",)
-
-    def __init__(self, items: Mapping[str, Q]) -> None:
-        """Copy the items."""
-        self._items: dict[str, Q] = dict(items)
-
-    def __getitem__(self, key: str) -> Q:
-        """Get the value of a substance."""
-        return self._items[key]
-
-    def __iter__(self) -> "Iterator[str]":
-        """Iterate over the substance ids."""
-        return iter(self._items)
-
-    def __len__(self) -> int:
-        """Get the number of substances."""
-        return len(self._items)
-
-    def __hash__(self) -> int:
-        """Hash the items, independent of their order as the equality is."""
-        return hash(frozenset(self._items.items()))
-
-    def __eq__(self, other: object) -> bool:
-        """Compare to a mapping by its items."""
-        if isinstance(other, Mapping):
-            return self._items == dict(other)
-        return NotImplemented
-
-    def __repr__(self) -> str:
-        """Get the items as a dict."""
-        return repr(self._items)
-
-
 def _oral(routes: "Sequence[Route]") -> frozenset[str]:
     """The substances with an oral route (tablet or solution)."""
     return frozenset(r.substance for r in routes if r.kind in ORAL)
@@ -147,7 +106,7 @@ def _oral(routes: "Sequence[Route]") -> frozenset[str]:
 def _freeze(spec: "PerSubstance | None") -> "PerSubstance | None":
     """Store a mapping as a hashable read-only mapping."""
     if isinstance(spec, Mapping):
-        return _FrozenMap(spec)
+        return FrozenMap(spec)
     return spec
 
 

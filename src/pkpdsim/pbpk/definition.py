@@ -28,7 +28,7 @@ from pkpdsim.pbpk.proteins import PROTEINS
 from pkpdsim.pbpk.routes import Route
 from pkpdsim.pbpk.substance import Erythrocytes, Kp, KpMethod, Mode, Substance
 from pkpdsim.pbpk.units import U
-from pkpdsim.pbpk.values import Formula, Q, Value
+from pkpdsim.pbpk.values import Formula, FrozenMap, Q, Value
 
 __all__ = ["ModelParameter", "PBPKDefinition", "Variants"]
 
@@ -189,8 +189,9 @@ class PBPKDefinition:
     deltas: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        """Normalise the sex to a `Sex` member."""
+        """Normalise the sex to a `Sex` member and freeze the starts."""
         object.__setattr__(self, "sex", as_member(Sex, self.sex, "PBPKDefinition.sex"))
+        object.__setattr__(self, "starts", FrozenMap(self.starts))
 
     @classmethod
     def combine(cls, *definitions: "PBPKDefinition", sid: str) -> "PBPKDefinition":

@@ -34,7 +34,13 @@ from pkpdsim.pbpk import (
     ids,
 )
 
-from .conftest import assert_reference_sbml, individual, load, reference_definition
+from .conftest import (
+    assert_reference_sbml,
+    individual,
+    load,
+    reference_definition,
+    simple_drug,
+)
 
 if TYPE_CHECKING:
     import roadrunner
@@ -233,3 +239,19 @@ def test_without_starts_the_model_is_unchanged(tmp_path: Path) -> None:
     """
     d = dataclasses.replace(reference_definition(), starts={})
     assert_reference_sbml(build(d, tmp_path))
+
+
+def test_the_starts_are_frozen_after_the_validation() -> None:
+    """The starts are a read-only mapping, as the values per substance are."""
+    d = PBPKDefinition(
+        sid="frozen",
+        substances=[simple_drug()],
+        starts={"MU__Cpl_drg": 0.1},
+    )
+    d.validate()
+    assert d.starts == {"MU__Cpl_drg": 0.1}
+    with pytest.raises(TypeError):
+        d.starts["MU__Cpl_drg"] = 0.2  # ty: ignore[invalid-assignment]
+    assert dataclasses.replace(d, starts={"MU__Cti_drg": 0.3}).starts == {
+        "MU__Cti_drg": 0.3
+    }

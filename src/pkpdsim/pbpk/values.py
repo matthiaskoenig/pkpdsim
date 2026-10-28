@@ -10,14 +10,22 @@ the initial assignment of its parameter.
 
 import functools
 import typing
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
 
 from sbmlutils.factory import Uncertainty
 from sbmlutils.factory.units import UnitType
 
-__all__ = ["Formula", "Q", "Value", "as_value", "check_literals", "fitted"]
+__all__ = [
+    "Formula",
+    "FrozenMap",
+    "Q",
+    "Value",
+    "as_value",
+    "check_literals",
+    "fitted",
+]
 
 
 @dataclass(frozen=True)
@@ -144,3 +152,46 @@ def _literal_fields(cls: type) -> tuple[tuple[str, tuple[object, ...]], ...]:
         for name, hint in typing.get_type_hints(cls).items()
         if typing.get_origin(hint) is Literal
     )
+
+
+class FrozenMap(Mapping[str, Q]):
+    """A read-only, hashable mapping from an id to a value.
+
+    The mapping fields of the frozen dataclasses of a definition (the values
+    per substance of the intestine, `PerSubstance`; the starts of the
+    species, `PBPKDefinition.starts`) are kept as this copy: it reads back as
+    a `Mapping` (`ka["a"]`, `.items()`), cannot be changed after the
+    validation and is hashed by its items (a dict is unhashable).
+    """
+
+    __slots__ = ("_items",)
+
+    def __init__(self, items: Mapping[str, Q]) -> None:
+        """Copy the items."""
+        self._items: dict[str, Q] = dict(items)
+
+    def __getitem__(self, key: str) -> Q:
+        """Get the value of a substance."""
+        return self._items[key]
+
+    def __iter__(self) -> Iterator[str]:
+        """Iterate over the substance ids."""
+        return iter(self._items)
+
+    def __len__(self) -> int:
+        """Get the number of substances."""
+        return len(self._items)
+
+    def __hash__(self) -> int:
+        """Hash the items, independent of their order as the equality is."""
+        return hash(frozenset(self._items.items()))
+
+    def __eq__(self, other: object) -> bool:
+        """Compare to a mapping by its items."""
+        if isinstance(other, Mapping):
+            return self._items == dict(other)
+        return NotImplemented
+
+    def __repr__(self) -> str:
+        """Get the items as a dict."""
+        return repr(self._items)
