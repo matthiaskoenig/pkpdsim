@@ -27,9 +27,11 @@ from pathlib import Path
 
 import libsbml
 import pytest
+from sbmlutils.factory import AssignmentRule, Model, Parameter, Port, PortType
 
 from pkpdsim.pbpk import (
     MM,
+    MODEL_UNITS,
     Binding,
     Direction,
     Erythrocytes,
@@ -45,10 +47,12 @@ from pkpdsim.pbpk import (
     Mode,
     Organ,
     PBPKDefinition,
+    PDComponent,
     Route,
     SegmentedIntestine,
     Substance,
     Transport,
+    U,
     Variants,
     WeibullDissolution,
     ZonatedLiver,
@@ -77,7 +81,8 @@ def standard() -> PBPKDefinition:
     `prm` (full form, kinetic erythrocytes, transport), `hil` (Hill kinetics
     in the kidney) and `inh` (a mechanism-based inhibitor and inducer of the
     CYP2D6 which metabolises it); `drg` inhibits CYP2C9 competitively;
-    `drg`, `prf` and `prm` have an endogenous baseline.
+    `drg`, `prf` and `prm` have an endogenous baseline; a PD component reads
+    the liver cells of `prm`.
     """
     return PBPKDefinition(
         sid="toy_standard",
@@ -172,7 +177,29 @@ def standard() -> PBPKDefinition:
             ),
         ],
         routes=[Route.iv("drg"), Route.oral("drg"), Route.oral_solution("prf")],
+        pd=[_cell_reader()],
     )
+
+
+def _cell_reader() -> PDComponent:
+    """Get a PD component which reads the concentration in the liver cells of `prm`."""
+    model = Model(
+        "cells",
+        units=U,
+        model_units=MODEL_UNITS,
+        objects=[
+            Parameter(
+                "C_cell",
+                0.0,
+                U.mM,
+                constant=False,
+                port=Port("C_cell_port", portType=PortType.INPUT_PORT),
+            ),
+            Parameter("E", None, U.mM, constant=False),
+            AssignmentRule("E", "C_cell", U.mM),
+        ],
+    )
+    return PDComponent(model=model, inputs={"C_cell": "LI__Cic_prm"}, outputs={})
 
 
 def variants() -> PBPKDefinition:

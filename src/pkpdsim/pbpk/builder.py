@@ -51,7 +51,7 @@ which replaces it, and the model the annotation of a PBPK model.
 import copy
 import re
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from sbmlutils.comp import flatten_sbml
@@ -451,12 +451,24 @@ def _body(
     submodels: list[Submodel] = []
     replaced: list[ReplacedElement] = []
     organ_models: list[ModelDefinition] = []
-    for organ in built_organs(definition):
+    organs = built_organs(definition)
+    reads = _organ_reads(definition, organs)
+    exposed: dict[str, str] = {}
+    for organ in organs:
         md, boundary = organ_component(definition, organ).build(
             organ_context(definition, organ, top.inputs())
         )
         if any(md.sid == other.sid for other in model_definitions):
             raise ValueError(f"Two organs build the model definition '{md.sid}'.")
+        species_outputs = _expose_species(md, organ, reads.get(organ, {}))
+        if species_outputs:
+            boundary = Boundary(
+                boundary.replacements, {**boundary.outputs, **species_outputs}
+            )
+            exposed |= {
+                ids.flat(organ, local): ids.organ_species(organ, local)
+                for local in reads[organ]
+            }
         _scope_port_metaids(md)
         model_definitions.append(md)
         organ_models.append(md)
@@ -467,11 +479,21 @@ def _body(
                 "of the top model."
             )
         submodels.append(Submodel(submodel, modelRef=md.sid, name=organ.name.lower()))
-        replaced += top.connect(organ, submodel, boundary)
+        replaced += top.connect(
+            organ, submodel, boundary, species=species_outputs.values()
+        )
     top.add(observer_objects(definition))
     outputs: list[str] = []
     for pd in definition.pd:
-        md, submodel, pd_replaced = top.couple(pd, (str(sm.sid) for sm in submodels))
+        coupled = replace(
+            pd,
+            inputs={
+                local: exposed.get(body, body) for local, body in pd.inputs.items()
+            },
+        )
+        md, submodel, pd_replaced = top.couple(
+            coupled, (str(sm.sid) for sm in submodels)
+        )
         if any(md.sid == other.sid for other in model_definitions):
             raise ValueError(
                 f"The PD component '{md.sid}' has the id of another model definition."
@@ -498,6 +520,92 @@ def _body(
         replaced,
     )
     return top, model_definitions, submodels, replaced
+
+
+def _organ_reads(
+    definition: PBPKDefinition, organs: Iterable[Organ]
+) -> dict[Organ, dict[str, list[str]]]:
+    """The species of the organs which the PD components read.
+
+    An input of a PD component which names an element of a built organ by its
+    flat id (`LI__Cic_api`, the prefix of the submodel of the organ) reads a
+    species of the organ, which the organ exposes (`_expose_species`).
+
+    Returns:
+        By organ, the local ids of the species with the descriptions of the
+        inputs which read them (`'<component>' input '<port>'`).
+    """
+    prefixes = {f"{ids.submodel(organ)}__": organ for organ in organs}
+    reads: dict[Organ, dict[str, list[str]]] = {}
+    for pd in definition.pd:
+        for local, body in pd.inputs.items():
+            for prefix, organ in prefixes.items():
+                if body.startswith(prefix):
+                    reads.setdefault(organ, {}).setdefault(
+                        body.removeprefix(prefix), []
+                    ).append(f"PD component '{pd.model.sid}': input '{local}'")
+    return reads
+
+
+def _expose_species(
+    md: ModelDefinition, organ: Organ, reads: Mapping[str, list[str]]
+) -> dict[str, str]:
+    """Expose species of an organ which PD components read as outputs of the organ.
+
+    Every read species gets a parameter of the organ with its assignment rule
+    and an output port, `C<o>_<part>_<s>` (`ids.organ_species`), which
+    replaces the parameter of the same id in the top model (`_Top.connect`),
+    which the component reads. The species keeps its id: the flat model has
+    the species `LI__Cic_<s>` and the parameter `Cli_ic_<s>` of its value.
+
+    Args:
+        md: the model definition of the organ, to which the outputs are added.
+        organ: the organ.
+        reads: the local ids of the read species with the inputs which read
+            them, see `_organ_reads`.
+
+    Raises:
+        ValueError: naming an input which reads no species of the organ.
+
+    Returns:
+        The outputs, local id -> id of the top model (the same id).
+    """
+    species = {str(sp.sid) for sp in md.species or []}
+    problems = [
+        f"{what} reads '{ids.flat(organ, local)}', which is no species of the "
+        f"organ '{organ.value}' (a PD component reads a concentration of an "
+        "organ by the flat id of its species)"
+        for local, inputs in sorted(reads.items())
+        if local not in species or not local.startswith("C")
+        for what in inputs
+    ]
+    if problems:
+        raise ValueError("; ".join(problems) + ".")
+    outputs: dict[str, str] = {}
+    for local in sorted(reads):
+        top_id = ids.organ_species(organ, local)
+        md.parameters = [
+            *(md.parameters or []),
+            annotate(
+                Parameter(
+                    top_id,
+                    None,
+                    U.mM,
+                    constant=False,
+                    name=f"concentration {local} of the organ {organ.name.lower()} "
+                    "[mM]",
+                    sboTerm=_SBO_PARAMETER,
+                    notes=f"The species `{local}` of the organ, an output which a "
+                    f"PD component reads.\n\n`{top_id} = {local}`",
+                    port=Port(f"{top_id}{PORT_SUFFIX}", portType=PortType.OUTPUT_PORT),
+                ),
+                "organ_concentration",
+                organ=organ,
+            ),
+        ]
+        md.rules = [*(md.rules or []), AssignmentRule(top_id, local, U.mM)]
+        outputs[top_id] = top_id
+    return outputs
 
 
 def _formula_cycles(objects: Iterable[Sbase]) -> list[str]:
@@ -1698,7 +1806,11 @@ class _Top:
         return md, submodel, replaced
 
     def connect(
-        self, organ: Organ, submodel: str, boundary: Boundary
+        self,
+        organ: Organ,
+        submodel: str,
+        boundary: Boundary,
+        species: Iterable[str] = (),
     ) -> list[ReplacedElement]:
         """The replacements of the boundary of an organ.
 
@@ -1706,11 +1818,20 @@ class _Top:
         the organ; every output of the organ replaces a parameter of the top
         model, which is created here: the outflow concentration
         `Cout_<o>_<s>`, the urinary excretion rate `Rurine_<s>` of the
-        kidney.
+        kidney, a species of the organ which a PD component reads
+        `C<o>_<part>_<s>` (`species`, see `_expose_species`).
 
         Raises:
-            ValueError: if the organ reads an element the body does not have.
+            ValueError: if the organ reads an element the body does not have,
+                or an exposed species has the id of an element of the body.
         """
+        exposed = set(species)
+        clash = sorted(exposed & self.known)
+        if clash:
+            raise ValueError(
+                f"The species of organ '{organ.value}' which a PD component reads "
+                f"have the ids of elements of the body: {clash}."
+            )
         missing = sorted(
             t for t in boundary.replacements.values() if t not in self.known
         )
@@ -1729,6 +1850,13 @@ class _Top:
                     "urine_rate",
                 )
                 text = "Rate of the urinary excretion, the sum of the fluxes of the "
+            elif top in exposed:
+                unit, name, kind = (
+                    U.mM,
+                    f"concentration {top} of an organ [mM]",
+                    "organ_concentration",
+                )
+                text = "Concentration of a species, read by a PD component, of the "
             else:
                 unit, name, kind = (
                     U.mM,

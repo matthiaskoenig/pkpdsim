@@ -12,6 +12,7 @@ The observers are assignment rules, no states: they read the pool species and th
 | tissue | `<O>__Cti_<s>`, `<O>__Cor_<s>`, `<O>__Cic_<s>`, ... | the species of the organs (concentrations) |
 | unbound tissue | `<O>__Cu_ti_<s>`, `<O>__Cu_ic_<s>`, ... | the unbound concentrations of the tissue parts, see [Standard organ](organ.md#kp-and-fu) |
 | outflow of an organ | `Cout_<o>_<s>` | the plasma leaving an organ |
+| species of an organ read by a PD component | `C<o>_<part>_<s>` | a species of an organ as a parameter of the top model, see below |
 | urine, feces | `Aurine_<s>`, `Afeces_<s>` | the amounts in the sinks |
 | urinary excretion rate | `Rurine_<s>` | the sum of the fluxes of the kidney into the urine (mmole/min), an output of the kidney, see [Standard organ](organ.md#kidney) |
 | bile | `Cbile_<s>` | the concentration in the bile |
@@ -152,3 +153,15 @@ except ValueError as error:
 ```
 
 An observer must read a state, directly or through other observers: a species, an observer of the library, an output of an organ or a PD component, a dynamic parameter (`PBPKDefinition.dynamic`) or `time`. An observer of constants only is rejected with the message above: its value is fixed before the simulation, and an assignment rule of constants slows the compile of the model (the structural guard of the load time, see [the overview](index.md)); such a value is computed from the results.
+
+## A species of an organ for a PD component
+
+A PD component reads the elements of the top model through its input ports (`PDComponent.inputs`); a species of an organ is local to its submodel and no element of the top model. An input which names a species of an organ by its flat id reads it all the same: `PDComponent(model, inputs={"C_ged": "LI__Cic_ged"}, outputs={})` reads the concentration in the cells of the liver, as an imaging signal of the liver does. The organ exposes the species as an output, a parameter of the organ with the assignment rule of the species, which replaces the parameter `C<o>_<part>_<s>` of the top model (`ids.organ_species`, `Cli_ic_ged`), as the outflow `Cout_<o>_<s>` of an organ does; the component reads that parameter. The species keeps its id in the flat model (`LI__Cic_ged`), the flat model has one assignment rule more, in the liver:
+
+```equations title="a species of the liver read by a PD component (local ids of the liver)"
+C<o>_ic_<s> = Cic_<s>
+```
+
+In the flat model it is `Cli_ic_<s> = LI__Cic_<s>`.
+
+The build refuses an input which names no species of a built organ (a compartment, a parameter, an unknown species), naming the input; an id with the prefix of an organ which is not built is an unknown id of the body. A component which reads only the top model adds nothing to the organs. The observers of a definition do not read the species of the organs (an id of an organ is no symbol of the top model, see above).

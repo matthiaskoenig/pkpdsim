@@ -638,6 +638,8 @@ KINDS: dict[str, Kind] = {
     # observers and the outflow of the organs
     "outflow": Kind(_P, "TOTAL_VENOUS_CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT"),
     "outflow_blood_cells": Kind(_P, "CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT"),
+    # a species of an organ which a PD component reads, exposed by the organ
+    "organ_concentration": Kind(_P, "CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT"),
     "plasma_concentration": Kind(_P, "CONCENTRATION_IN_PLASMA"),
     "free_concentration": Kind(_P, "UNBOUND_CONCENTRATION_IN_PLASMA"),
     "blood_concentration": Kind(_P, "CONCENTRATION_IN_BLOOD"),

@@ -138,6 +138,7 @@ __all__ = [
     "organ_mass",
     "organ_outflow",
     "organ_outflow_bc",
+    "organ_species",
     "organ_volume",
     "outflow_conc",
     "outflow_conc_bc",
@@ -498,6 +499,24 @@ def k_organ(s: str) -> str:
 def organ_outflow(organ: Organ, s: str) -> str:
     """The id of the plasma concentration leaving an organ, `Cout_li_<s>`."""
     return f"Cout_{organ.value}_{s}"
+
+
+def organ_species(organ: Organ, local: str) -> str:
+    """The id of the top model of a species of an organ which a PD component reads.
+
+    The organ exposes its species (a concentration, `C<part>_<s>`) as an
+    output, which replaces this parameter of the top model: `C<o>_<part>_<s>`,
+    `Cli_ic_api` for the cells of the liver (`LI__Cic_api` in the flat model).
+
+    Raises:
+        ValueError: if the local id is no concentration `C...`.
+    """
+    if not local.startswith("C") or len(local) < 2:
+        raise ValueError(
+            f"The species '{local}' of organ '{organ.value}' is no concentration "
+            "`C<part>_<s>`; a PD component reads a concentration of an organ."
+        )
+    return f"C{organ.value}_{local[1:]}"
 
 
 def organ_outflow_bc(organ: Organ, s: str) -> str:
