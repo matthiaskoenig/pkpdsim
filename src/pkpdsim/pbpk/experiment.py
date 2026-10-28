@@ -43,7 +43,9 @@ from pkpdsim.scan import start_values
 if TYPE_CHECKING:
     from sbmlsim.units import Quantity
 
-#: the healthy GFR the presets of `pkpdsim.impairment` are relative to [ml/min]
+#: the healthy GFR the presets of `pkpdsim.impairment` are relative to [ml/min];
+#: import it from `pkpdsim.pbpk` (`from pkpdsim.pbpk import REFERENCE_GFR`), the
+#: one path of the names of this module
 REFERENCE_GFR = 101.0
 
 
@@ -54,8 +56,8 @@ def healthy_gfr(
     height: float | None = None,
     hf_severity: float = 0.0,
     cp_severity: float = 0.0,
-) -> float:
-    """Get the healthy glomerular filtration rate of an individual [ml/min].
+) -> Quantity:
+    """Get the healthy glomerular filtration rate of an individual (ml/min).
 
     The GFR of an individual at renal function 1 (`GFR_base` of the library,
     `GFR = GFR_base * f_renal_function`): it scales with the body surface area
@@ -79,10 +81,11 @@ def healthy_gfr(
         cp_severity: the severity of cirrhosis `CP_severity` (0 to 3).
 
     Returns:
-        The GFR at renal function 1 [ml/min].
+        The GFR at renal function 1 in ml/min, a quantity as the renal
+        function of `PBPKSimulationExperiment.renal_function`.
     """
     path = Path(model_path)
-    return _healthy_gfr(
+    gfr = _healthy_gfr(
         path,
         path.stat().st_mtime_ns,
         bw,
@@ -90,6 +93,7 @@ def healthy_gfr(
         float(hf_severity),
         float(cp_severity),
     )
+    return Q(gfr, "ml/min")
 
 
 @cache
@@ -152,16 +156,16 @@ class ScaledRenalMap(Mapping[str, float]):
     def __init__(
         self,
         preset: Mapping[str, float],
-        gfr: Callable[[], float] | None = None,
+        gfr: Callable[[], Quantity] | None = None,
         reference: float = REFERENCE_GFR,
     ) -> None:
         """Get the classes of a preset at a healthy GFR.
 
         Args:
             preset: the renal function of the classes relative to `reference`.
-            gfr: the healthy GFR [ml/min], called on the first access to a
-                value; `None` for the `healthy_gfr` of the class the map is an
-                attribute of.
+            gfr: the healthy GFR (a quantity of a flow), called on the first
+                access to a value; `None` for the `healthy_gfr` of the class the
+                map is an attribute of.
             reference: the healthy GFR the preset is relative to [ml/min].
         """
         self._preset = dict(preset)
@@ -215,7 +219,7 @@ class ScaledRenalMap(Mapping[str, float]):
                     "The map has no healthy GFR: give `gfr` or make it an "
                     "attribute of a class with the classmethod `healthy_gfr`."
                 )
-            factor = self._reference / self._gfr()
+            factor = self._reference / float(self._gfr().m_as("ml/min"))
             self._values = {key: v * factor for key, v in self._preset.items()}
         return self._values
 
@@ -283,8 +287,8 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
         height: float | None = None,
         hf_severity: float = 0.0,
         cp_severity: float = 0.0,
-    ) -> float:
-        """Get the healthy glomerular filtration rate of an individual [ml/min].
+    ) -> Quantity:
+        """Get the healthy glomerular filtration rate of an individual (ml/min).
 
         `healthy_gfr` of the module for the model of the model object, cached
         for all experiments.
@@ -298,7 +302,7 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
             cp_severity: the severity of cirrhosis `CP_severity` (0 to 3).
 
         Returns:
-            The GFR at renal function 1 [ml/min].
+            The GFR at renal function 1 in ml/min, a quantity.
 
         Raises:
             TypeError: if the class has no model object (`pkpd_model`).
@@ -353,9 +357,10 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
         Raises:
             ValueError: for a renal function outside of `renal_function_range`.
         """
-        value = clearance / cls.healthy_gfr(
+        healthy = cls.healthy_gfr(
             bw=bw, height=height, hf_severity=hf_severity, cp_severity=cp_severity
         )
+        value = clearance / float(healthy.m_as("ml/min"))
         low, high = cls.renal_function_range
         if not low <= value <= high:
             raise ValueError(

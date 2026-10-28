@@ -7,7 +7,7 @@ import subprocess
 import sys
 from collections.abc import Callable
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import pytest
 from sbmlsim import Q
@@ -27,6 +27,9 @@ from pkpdsim.pbpk.experiment import (
 from pkpdsim.scan import start_values
 
 from .conftest import definition, individual
+
+if TYPE_CHECKING:
+    from sbmlsim.units import Quantity
 
 
 def _model(path: Path, model_path: Path) -> PKPDModel:
@@ -71,27 +74,35 @@ def _subclass(
     return cast("type[PBPKSimulationExperiment]", type(name, (base,), attributes))
 
 
+def _ml(gfr: "Quantity") -> float:
+    """Get a GFR in ml/min, the unit of `healthy_gfr`."""
+    assert str(gfr.units) == "milliliter / minute"
+    return float(gfr.m_as("ml/min"))
+
+
 def test_the_healthy_gfr_is_the_gfr_base(male: BuildResult) -> None:
     """The healthy GFR is `GFR_base` [l/min] of the flat model in ml/min."""
     path = male.flat_path
-    gfr = {bw: healthy_gfr(path, bw=bw) for bw in (50.0, 100.0)}
+    gfr = {bw: _ml(healthy_gfr(path, bw=bw)) for bw in (50.0, 100.0)}
     for bw, value in gfr.items():
         expected = individual(path, BW=bw)["GFR_base"] * 1000
         assert value == pytest.approx(expected, rel=1e-12)
     assert gfr[50.0] < gfr[100.0]
-    assert healthy_gfr(path) == pytest.approx(
+    assert _ml(healthy_gfr(path)) == pytest.approx(
         individual(path)["GFR_base"] * 1000, rel=1e-12
     )
-    assert healthy_gfr(path, bw=60.0, height=165.0) == pytest.approx(
+    assert _ml(healthy_gfr(path, bw=60.0, height=165.0)) == pytest.approx(
         individual(path, BW=60.0, HEIGHT=165.0)["GFR_base"] * 1000, rel=1e-12
     )
-    assert healthy_gfr(path, hf_severity=3.0) == pytest.approx(
+    assert _ml(healthy_gfr(path, hf_severity=3.0)) == pytest.approx(
         individual(path, HF_severity=3.0)["GFR_base"] * 1000, rel=1e-12
     )
-    assert healthy_gfr(path, hf_severity=3.0) < healthy_gfr(path)
+    assert _ml(healthy_gfr(path, hf_severity=3.0)) < _ml(healthy_gfr(path))
     cls = _experiment(male)
-    assert cls.healthy_gfr(bw=50.0) == gfr[50.0]
-    assert cls.healthy_gfr(hf_severity=3.0) == healthy_gfr(path, hf_severity=3.0)
+    assert _ml(cls.healthy_gfr(bw=50.0)) == gfr[50.0]
+    assert _ml(cls.healthy_gfr(hf_severity=3.0)) == _ml(
+        healthy_gfr(path, hf_severity=3.0)
+    )
 
 
 def test_the_healthy_gfr_is_cached(
@@ -99,7 +110,7 @@ def test_the_healthy_gfr_is_cached(
 ) -> None:
     """An individual is simulated once, however its arguments are given."""
     path = male.flat_path
-    healthy_gfr(path, bw=70.0)
+    _ml(healthy_gfr(path, bw=70.0))
     runs: list[object] = []
     run = Simulator.run
 
@@ -108,8 +119,8 @@ def test_the_healthy_gfr_is_cached(
         return run(self, *args, **kwargs)  # ty: ignore[invalid-argument-type]
 
     monkeypatch.setattr(Simulator, "run", counted)
-    healthy_gfr(path, bw=70.0)
-    healthy_gfr(Path(str(path)), bw=70.0, height=None, hf_severity=0.0)
+    _ml(healthy_gfr(path, bw=70.0))
+    _ml(healthy_gfr(Path(str(path)), bw=70.0, height=None, hf_severity=0.0))
     assert runs == []
 
 
@@ -117,13 +128,13 @@ def test_the_healthy_gfr_falls_with_the_cirrhosis(male: BuildResult) -> None:
     """At `CP_severity` 3 the healthy GFR is lower by the hepatorenal factor."""
     path = male.flat_path
     factor = load("impairment")["child_pugh"]["gfr"]["value"][2]
-    cirrhosis = healthy_gfr(path, cp_severity=3.0)
+    cirrhosis = _ml(healthy_gfr(path, cp_severity=3.0))
     assert cirrhosis == pytest.approx(
         individual(path, CP_severity=3.0)["GFR_base"] * 1000, rel=1e-12
     )
-    assert cirrhosis == pytest.approx(factor * healthy_gfr(path), rel=1e-12)
+    assert cirrhosis == pytest.approx(factor * _ml(healthy_gfr(path)), rel=1e-12)
     cls = _experiment(male)
-    assert cls.healthy_gfr(cp_severity=3.0) == cirrhosis
+    assert _ml(cls.healthy_gfr(cp_severity=3.0)) == cirrhosis
     f = cls.renal_function(30.0, bw=60.0, height=165.0, cp_severity=3.0)
     result = Simulator(n_workers=1).run(
         path,
@@ -150,11 +161,11 @@ def test_a_rebuilt_model_is_simulated_again(
     """The cache knows the modification time of the model file."""
     path = tmp_path / "model_flat.xml"
     shutil.copyfile(male.flat_path, path)
-    assert healthy_gfr(path) == pytest.approx(healthy_gfr(male.flat_path))
+    assert _ml(healthy_gfr(path)) == pytest.approx(_ml(healthy_gfr(male.flat_path)))
     mtime = path.stat().st_mtime_ns
     shutil.copyfile(female.flat_path, path)
     os.utime(path, ns=(mtime + 1_000_000_000, mtime + 1_000_000_000))
-    assert healthy_gfr(path) == pytest.approx(healthy_gfr(female.flat_path))
+    assert _ml(healthy_gfr(path)) == pytest.approx(_ml(healthy_gfr(female.flat_path)))
 
 
 def test_the_renal_function_gives_the_measured_clearance(male: BuildResult) -> None:
@@ -180,7 +191,7 @@ def test_the_renal_function_gives_the_measured_clearance(male: BuildResult) -> N
     )
     heart_failure = cls.renal_function(40.0, hf_severity=3.0)
     assert heart_failure.magnitude == pytest.approx(
-        40.0 / healthy_gfr(male.flat_path, hf_severity=3.0), rel=1e-12
+        40.0 / _ml(healthy_gfr(male.flat_path, hf_severity=3.0)), rel=1e-12
     )
 
 
@@ -192,7 +203,7 @@ def test_a_renal_function_outside_the_range_is_refused(male: BuildResult) -> Non
     with pytest.raises(
         ValueError, match=r"outside of the supported range 0\.0 to 2\.0"
     ):
-        cls.renal_function(2.1 * cls.healthy_gfr())
+        cls.renal_function(2.1 * _ml(cls.healthy_gfr()))
     with pytest.raises(ValueError, match="outside of the supported range"):
         cls.renal_function(-1.0)
 
@@ -209,7 +220,7 @@ def test_the_renal_map_is_lazy(
     calls: list[Path] = []
     original = pbpk_experiment.healthy_gfr
 
-    def counted(model_path: Path, **kwargs: float | None) -> float:
+    def counted(model_path: Path, **kwargs: float | None) -> "Quantity":
         calls.append(model_path)
         return original(model_path, **kwargs)  # ty: ignore[invalid-argument-type]
 
@@ -273,9 +284,9 @@ def test_the_renal_classes_keep_their_gfr(
     """A class has the GFR of its preset in ml/min in every model, per class."""
     men = _experiment(male)
     women = _experiment(female)
-    assert men.healthy_gfr() != pytest.approx(women.healthy_gfr(), rel=1e-3)
+    assert _ml(men.healthy_gfr()) != pytest.approx(_ml(women.healthy_gfr()), rel=1e-3)
     for cls in (men, women):
-        gfr = cls.healthy_gfr()
+        gfr = _ml(cls.healthy_gfr())
         assert list(cls.renal_map) == list(impairment.RENAL_FUNCTION_GFR)
         for key, preset in impairment.RENAL_FUNCTION_GFR.items():
             assert cls.renal_map[key] * gfr == pytest.approx(101.0 * preset, rel=1e-12)
@@ -291,7 +302,7 @@ def test_the_renal_classes_keep_their_gfr(
         men, "Midpoints", renal_map=ScaledRenalMap(impairment.RENAL_FUNCTION)
     )
 
-    gfr = men.healthy_gfr()
+    gfr = _ml(men.healthy_gfr())
     for key, preset in impairment.RENAL_FUNCTION.items():
         assert midpoints.renal_map[key] * gfr == pytest.approx(101.0 * preset)
     assert men.renal_map is not midpoints.renal_map
@@ -310,7 +321,7 @@ def test_the_maps_of_the_library(male: BuildResult) -> None:
 
 def test_a_scaled_renal_map_of_a_function() -> None:
     """A map with its own GFR function needs no class."""
-    gfr: Callable[[], float] = lambda: 120.0  # noqa: E731
+    gfr: Callable[[], Quantity] = lambda: Q(120.0, "ml/min")  # noqa: E731
     classes = ScaledRenalMap(impairment.RENAL_FUNCTION, gfr)
     for key, preset in impairment.RENAL_FUNCTION.items():
         assert classes[key] == pytest.approx(preset * 101.0 / 120.0, rel=1e-15)
@@ -343,4 +354,4 @@ def test_a_renal_map_is_picklable(male: BuildResult) -> None:
 def test_the_healthy_gfr_needs_a_model_object() -> None:
     """The base itself has no model object."""
     with pytest.raises(TypeError, match="has no model object"):
-        PBPKSimulationExperiment.healthy_gfr()
+        _ml(PBPKSimulationExperiment.healthy_gfr())
