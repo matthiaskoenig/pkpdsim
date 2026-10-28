@@ -50,6 +50,8 @@ the healthy one.
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
+from functools import cache
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
 from sbmlutils.factory import Parameter, Sbase, UnitDefinition
@@ -66,11 +68,13 @@ if TYPE_CHECKING:
 
 __all__ = [
     "DEFAULT_POPULATION",
+    "ReferenceIndividual",
     "Sex",
     "normal_gfr",
     "physiology_objects",
     "reference_fractions",
     "reference_hematocrit",
+    "reference_individual",
     "reference_tissue_volumes",
 ]
 
@@ -1032,3 +1036,53 @@ def reference_hematocrit(sex: Sex) -> float:
         The hematocrit of physiology_human.toml.
     """
     return _references(sex, load("physiology_human"))[ids.HCT].value
+
+
+@dataclass(frozen=True)
+class ReferenceIndividual:
+    """The reference individual of a sex (ICRP 89, `data/physiology_human.toml`).
+
+    The individual whose anatomy the physiology scales, the default
+    individual of the populations of ICRP 89: a model which states a value of
+    the hand-written models per litre of an organ or per kg of body weight
+    converts it with these numbers instead of copies of them.
+
+    Attributes:
+        sex: the sex.
+        bw: the body weight [kg], `BW` of the default individual.
+        height: the height [cm], `HEIGHT` of the default individual.
+        volumes: the organ volumes with their blood `V<o>` [l],
+            `M<o>/density + blood*Vblood` as in the model.
+        tissue_volumes: the tissue volumes without blood [l]
+            (`reference_tissue_volumes`).
+    """
+
+    sex: Sex
+    bw: float
+    height: float
+    volumes: Mapping[Organ, float]
+    tissue_volumes: Mapping[Organ, float]
+
+
+@cache
+def reference_individual(sex: Sex) -> ReferenceIndividual:
+    """The reference individual of a sex.
+
+    Args:
+        sex: the sex of the reference individual.
+
+    Returns:
+        Its body weight, height and organ volumes.
+    """
+    refs = _references(sex, load("physiology_human"))
+    tissue = reference_tissue_volumes(sex)
+    vblood = refs[ids.ref(ids.VBLOOD)].value
+    return ReferenceIndividual(
+        sex=sex,
+        bw=refs[ids.BW].value,
+        height=refs[ids.HEIGHT].value,
+        volumes=MappingProxyType(
+            {o: tissue[o] + refs[f"blood_{o}"].value * vblood for o in Organ}
+        ),
+        tissue_volumes=MappingProxyType(tissue),
+    )

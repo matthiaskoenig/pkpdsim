@@ -126,14 +126,31 @@ class _Exchange:
 class Kp(_Exchange):
     """A tissue to plasma coefficient of the whole tissue.
 
+    Every organ the substance enters has the coefficient of its override, else
+    the scale of `interstitial` times its interstitial share, else `value`.
+
     Attributes:
-        value: the coefficient of the substance.
+        value: the coefficient of the substance, `Kp_<s>`; `None` when every
+            organ the substance enters has an override or `interstitial` is
+            set (no `Kp_<s>` then).
         overrides: the coefficients of single organs, by `Organ` member, value
             or name (normalised to `Organ` members).
+        interstitial: the scale of the interstitial share, the extracellular
+            distribution of a substance which reaches the interstitial fluid
+            and not the cells (a contrast agent, a marker of the extracellular
+            volume, a highly bound acid): every organ without an override has
+            `Kp_<o>_<s> = fKp_<s> * share`, the share
+            `f_int*K_int_pls(fu)/(1 - f_vas)` of the organ at the fu of the
+            substance and the fractions of the reference individuals, the
+            larger of both sexes (`distribution.interstitial_share`, the lower
+            bound `check_kp` sets). The scale is the parameter `fKp_<s>`: a
+            number, a `Value` (fitted, `fitted(FITS.parameter("fKp_<s>"))`) or
+            a `Formula`. `None` (the default) creates no `fKp_<s>`.
     """
 
-    value: Q
+    value: Q | None = None
     overrides: Mapping[Organ, Q] = field(default_factory=dict)
+    interstitial: Q | None = None
 
     def __post_init__(self) -> None:
         """Normalise the organs, and the keys of `ps` and `overrides`."""

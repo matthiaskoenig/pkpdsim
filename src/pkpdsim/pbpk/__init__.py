@@ -22,6 +22,7 @@ from pkpdsim.pbpk.chemistry import (
 )
 from pkpdsim.pbpk.data import Source, cite, load, sources
 from pkpdsim.pbpk.definition import ModelParameter, PBPKDefinition, Variants
+from pkpdsim.pbpk.distribution import interstitial_share
 from pkpdsim.pbpk.observers import Observer
 from pkpdsim.pbpk.organ import (
     Boundary,
@@ -33,7 +34,12 @@ from pkpdsim.pbpk.organ import (
 from pkpdsim.pbpk.organs import Organ, Part, Pool
 from pkpdsim.pbpk.parts import Parts, parts_for
 from pkpdsim.pbpk.pd import PDComponent
-from pkpdsim.pbpk.physiology import Sex, physiology_objects
+from pkpdsim.pbpk.physiology import (
+    ReferenceIndividual,
+    Sex,
+    physiology_objects,
+    reference_individual,
+)
 from pkpdsim.pbpk.proteins import PROTEINS, Induction, Inhibition, Protein
 from pkpdsim.pbpk.routes import (
     DoseDependentDissolution,
@@ -127,6 +133,7 @@ __all__ = [
     "Pool",
     "Protein",
     "Q",
+    "ReferenceIndividual",
     "Route",
     "ScaledRenalMap",
     "SegmentedIntestine",
@@ -148,8 +155,10 @@ __all__ = [
     "create_archive",
     "fitted",
     "healthy_gfr",
+    "interstitial_share",
     "load",
     "parts_for",
     "physiology_objects",
+    "reference_individual",
     "sources",
 ]

@@ -79,7 +79,7 @@ from sbmlutils.factory.units import UnitType
 from sbmlutils.metadata import SBO
 from sbmlutils.validation import validate_doc
 
-from pkpdsim.pbpk import ids, variants
+from pkpdsim.pbpk import distribution, ids, variants
 from pkpdsim.pbpk.annotation import annotate, initial_assignment, model_annotations
 from pkpdsim.pbpk.chemistry import Membrane, Metabolism, Transport
 from pkpdsim.pbpk.data import cite
@@ -1614,7 +1614,7 @@ class _Top:
         objects = (
             self._kp_method(s, dist)
             if isinstance(dist, KpMethod)
-            else self._kp_value(sid, dist)
+            else self._kp_value(s, dist)
         )
         if dist.ftissue is not None:
             objects.append(
@@ -1659,22 +1659,31 @@ class _Top:
             )
         self.add(objects)
 
-    def _kp_value(self, sid: str, dist: Kp) -> list[Sbase]:
-        """The coefficient of a substance and the coefficients of single organs."""
-        objects: list[Sbase] = [
-            annotate(
-                value_parameter(
-                    ids.kp(sid),
-                    dist.value,
-                    U.dimensionless,
-                    f"tissue to plasma coefficient {sid}",
-                    _SBO_PARAMETER,
-                    "Whole-tissue (interstitial and intracellular) to plasma "
-                    "coefficient of the organs without an own value.",
-                ),
-                "kp",
+    def _kp_value(self, s: Substance, dist: Kp) -> list[Sbase]:
+        """The coefficient of a substance and the coefficients of single organs.
+
+        With `interstitial` every organ the substance enters without an
+        override has `Kp_<o>_<s> = fKp_<s> * share`, an initial assignment
+        with the interstitial share of the organ as number
+        (`distribution.interstitial_share`).
+        """
+        sid = s.sid
+        objects: list[Sbase] = []
+        if dist.value is not None:
+            objects.append(
+                annotate(
+                    value_parameter(
+                        ids.kp(sid),
+                        dist.value,
+                        U.dimensionless,
+                        f"tissue to plasma coefficient {sid}",
+                        _SBO_PARAMETER,
+                        "Whole-tissue (interstitial and intracellular) to plasma "
+                        "coefficient of the organs without an own value.",
+                    ),
+                    "kp",
+                )
             )
-        ]
         for organ, q in dist.overrides.items():
             objects.append(
                 annotate(
@@ -1690,6 +1699,67 @@ class _Top:
                     organ=organ,
                 )
             )
+        if dist.interstitial is not None:
+            objects += self._kp_interstitial(s, dist)
+        return objects
+
+    def _kp_interstitial(self, s: Substance, dist: Kp) -> list[Sbase]:
+        """The scale of the interstitial shares and the Kp of every other organ."""
+        sid, fkp = s.sid, ids.fkp(s.sid)
+        assert dist.interstitial is not None
+        fu = distribution.number(s.binding.fu) if s.binding is not None else 1.0
+        objects: list[Sbase] = [
+            annotate(
+                value_parameter(
+                    fkp,
+                    dist.interstitial,
+                    U.dimensionless,
+                    f"factor of the interstitial shares {sid}",
+                    _SBO_PARAMETER,
+                    "Factor on the interstitial share of every organ without an "
+                    "own Kp, the extracellular distribution, so that a fit scales "
+                    "all of them.",
+                ),
+                "kp_factor",
+            )
+        ]
+        organs = [
+            organ
+            for organ in built_organs(self.definition)
+            if (dist.organs is None or organ in dist.organs)
+            and organ not in dist.overrides
+        ]
+        for organ in organs:
+            pid = ids.kp_organ(organ, sid)
+            share = distribution.interstitial_share(organ, fu)
+            formula = f"{fkp} * {share!r} dimensionless"
+            objects += [
+                annotate(
+                    Parameter(
+                        pid,
+                        None,
+                        U.dimensionless,
+                        constant=True,
+                        name=f"tissue to plasma coefficient {sid} {organ.name.lower()}",
+                        sboTerm=_SBO_PARAMETER,
+                        notes="Whole-tissue to plasma coefficient of the organ, its "
+                        "interstitial share times the factor: "
+                        f"`f_int*K_int_pls(fu)/(1 - f_vas)` = {share:.6g} at fu "
+                        f"{fu:.6g} with the fractions of the reference individuals, "
+                        "the larger of both sexes; the substance reaches the "
+                        f"interstitial fluid and not the cells.\n\n`{pid} = "
+                        f"{formula}`",
+                    ),
+                    "kp_organ",
+                    organ=organ,
+                ),
+                initial_assignment(
+                    pid,
+                    formula,
+                    U.dimensionless,
+                    f"tissue to plasma coefficient {sid} {organ.name.lower()}",
+                ),
+            ]
         return objects
 
     def _kp_method(self, s: Substance, method: KpMethod) -> list[Sbase]:

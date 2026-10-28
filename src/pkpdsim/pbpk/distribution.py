@@ -15,6 +15,10 @@ plasma coefficient in every form of the organ:
 - flow-limited organ: `K_or = (Vpl + Vbc*Kbc + Vti*Kp)/V`, the organ to plasma
   coefficient of the well-stirred organ.
 
+The interstitial share `f_int*K_int_pls/(1 - f_vas)` of the reference
+individuals (`interstitial_share`) is the Kp of an extracellular substance,
+`Kp(interstitial=...)` scales it in every organ.
+
 Every formula is written once as a template, which gives the SBML rule (with
 ids) and the number (with values) alike.
 """
@@ -42,11 +46,13 @@ __all__ = [
     "check_kp",
     "constant",
     "constants",
+    "interstitial_share",
     "k_cell_pls",
     "k_cell_pls_value",
     "k_int_pls",
     "k_int_pls_value",
     "k_organ",
+    "kp_of_organ",
     "number",
 ]
 
@@ -142,6 +148,58 @@ def k_int_pls_value(fu: float) -> float:
     return _evaluate(_K_INT.format(fu=repr(fu), one="1", **values))
 
 
+def interstitial_share(organ: Organ, fu: float) -> float:
+    """The interstitial share of the whole tissue of an organ.
+
+    `f_int*K_int_pls(fu)/(1 - f_vas)`, the Kp of a substance which reaches the
+    whole interstitial fluid of the organ and not its cells, with the vascular
+    and interstitial fractions of the reference individuals
+    (`physiology.reference_fractions`), the larger of both sexes: the lower
+    bound of the Kp of the full form (`check_kp`) for both reference
+    individuals, and the coefficients of `Kp(interstitial=...)`.
+
+    Args:
+        organ: the organ.
+        fu: the fraction unbound in plasma.
+
+    Returns:
+        The interstitial share (dimensionless).
+    """
+    k_int = k_int_pls_value(fu)
+    return max(
+        f_int * k_int / (1.0 - f_vas)
+        for f_vas, f_int in reference_fractions(organ).values()
+    )
+
+
+def kp_of_organ(substance: Substance, organ: Organ) -> Q | None:
+    """The whole-tissue Kp which a `Kp` gives an organ, before the simulation.
+
+    Args:
+        substance: the substance, with a `Kp` as distribution.
+        organ: the organ.
+
+    Returns:
+        The override of the organ, else the scale times the interstitial share
+        (a number, `None` for a scale or an fu which is a `Formula`), else the
+        value of the substance.
+
+    Raises:
+        ValueError: if the distribution of the substance is no `Kp`.
+    """
+    dist = substance.distribution
+    if not isinstance(dist, Kp):
+        raise ValueError(f"{substance.sid}: the distribution is no Kp.")
+    if organ in dist.overrides:
+        return dist.overrides[organ]
+    if dist.interstitial is None:
+        return dist.value
+    fu = substance.binding.fu if substance.binding is not None else 1.0
+    if isinstance(fu, Formula) or isinstance(dist.interstitial, Formula):
+        return None
+    return number(dist.interstitial) * interstitial_share(organ, number(fu))
+
+
 def k_cell_pls(kp: str, k_int: str, f_vas: str, f_int: str) -> str:
     """The rule of the intracellular to plasma coefficient, floored at `K_CELL_FLOOR`.
 
@@ -208,18 +266,16 @@ def check_kp(substance: Substance, organ: Organ) -> None:
     dist = substance.distribution
     if dist is None:
         return
-    tied = [
-        substance.binding.fu if substance.binding is not None else None,
-        dist.overrides.get(organ, dist.value) if isinstance(dist, Kp) else dist.factor,
-    ]
-    if any(isinstance(q, Formula) for q in tied):
+    fu_q = substance.binding.fu if substance.binding is not None else 1.0
+    kp_q = kp_of_organ(substance, organ) if isinstance(dist, Kp) else dist.factor
+    if isinstance(fu_q, Formula) or kp_q is None or isinstance(kp_q, Formula):
         # a formula has no number before the simulation; `K_cell_pls` has the
         # lower bound 1e-6 in the model
         return
-    fu = number(substance.binding.fu) if substance.binding is not None else 1.0
+    fu = number(fu_q)
     for sex, (f_vas, f_int) in reference_fractions(organ).items():
         if isinstance(dist, Kp):
-            kp = number(dist.overrides.get(organ, dist.value))
+            kp = number(kp_q)
         else:
             kp = kp_values(substance, sex)[organ].value * number(dist.factor)
         if k_cell_pls_value(kp, fu, f_vas, f_int) <= 0:

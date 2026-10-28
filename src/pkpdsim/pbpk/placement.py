@@ -329,14 +329,18 @@ def kp_id(substance: Substance, organ: Organ) -> str | None:
         organ: the organ.
 
     Returns:
-        `Kp_<o>_<s>` for an organ with an override or a Kp method, `Kp_<s>`
-        otherwise, `None` if the substance does not enter the tissue of the
-        organ.
+        `Kp_<o>_<s>` for an organ with an override, a Kp method or the
+        interstitial shares, `Kp_<s>` otherwise, `None` if the substance does
+        not enter the tissue of the organ.
     """
     dist = substance.distribution
     if dist is None or (dist.organs is not None and organ not in dist.organs):
         return None
-    if isinstance(dist, KpMethod) or organ in dist.overrides:
+    if (
+        isinstance(dist, KpMethod)
+        or organ in dist.overrides
+        or dist.interstitial is not None
+    ):
         return ids.kp_organ(organ, substance.sid)
     return ids.kp(substance.sid)
 

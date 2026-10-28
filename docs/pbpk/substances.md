@@ -34,7 +34,7 @@ Without erythrocytes the substance stays in the plasma: the blood concentration 
 
 ## Tissue distribution
 
-`Kp(value, overrides={...}, organs=..., mode=..., ftissue=..., ps={...})` is the whole-tissue (interstitial and intracellular) to plasma coefficient of the substance, `Kp_<s>`, with the coefficients of single organs, `Kp_<o>_<s>` (`overrides={Organ.ADIPOSE: 0.4}`). An organ of `overrides`, `organs`, `ps` and of `Variants(organs=...)` may also be given by its value or name (`"ad"`, `"adipose"`) and the sex of the definition by its value (`sex="female"`): the same holds for the `mode` of a Kp and for the `organ`, `direction`, `membrane` and `part` of a process of the chemistry. The definition holds the enum members, and anything else raises an error which names the field and the allowed values, as does a text which is none of the choices of `Binding.protein`, `Erythrocytes.mode`, `KpMethod.method`/`compound`, `Inhibition.kind` or `Route.kind`. The Kp means the same in every form of the organ, so a fitted Kp keeps its meaning when the mode changes. The keyword-only options:
+`Kp(value, overrides={...}, interstitial=..., organs=..., mode=..., ftissue=..., ps={...})` is the whole-tissue (interstitial and intracellular) to plasma coefficient of the substance, `Kp_<s>`, with the coefficients of single organs, `Kp_<o>_<s>` (`overrides={Organ.ADIPOSE: 0.4}`). An organ of `overrides`, `organs`, `ps` and of `Variants(organs=...)` may also be given by its value or name (`"ad"`, `"adipose"`) and the sex of the definition by its value (`sex="female"`): the same holds for the `mode` of a Kp and for the `organ`, `direction`, `membrane` and `part` of a process of the chemistry. The definition holds the enum members, and anything else raises an error which names the field and the allowed values, as does a text which is none of the choices of `Binding.protein`, `Erythrocytes.mode`, `KpMethod.method`/`compound`, `Inhibition.kind` or `Route.kind`. The Kp means the same in every form of the organ, so a fitted Kp keeps its meaning when the mode changes. The keyword-only options:
 
 - `organs`: the organs the substance enters (`frozenset({Organ.LIVER, Organ.KIDNEY})`), all if `None`; in the other organs it stays in the blood.
 - `mode`: how plasma and tissue exchange (the collapsing of the [standard organ](organ.md#collapsing)):
@@ -46,6 +46,30 @@ Without erythrocytes the substance stays in the plasma: the blood concentration 
 
 !!! warning "ftissue is not the ftissue of the hand-written models"
     `ftissue_<s>` multiplies `fu*(C_p - C_t/Kp)`, the unbound plasma concentration and the tissue concentration as its plasma equivalent; in the hand-written models it multiplied the total concentrations. The id is the same, so the fit parameter set stays the same, but the fitted values differ and are refitted. For a highly bound substance (`fu` 0.005) the exchange of the liver from the share of `ftissue` can limit the metabolism; give the liver its own `ps`.
+
+### Extracellular distribution
+
+A substance which reaches the interstitial fluid of the tissues and not their cells (a contrast agent such as gadoxetate, a marker of the extracellular volume, a highly bound acid such as torasemide, which distributes with its albumin) has in every organ the Kp of the interstitial share of its whole tissue, `f_int*K_int_pls(fu)/(1 - f_vas)`: the interstitial fraction of the tissue without blood times the interstitial to plasma coefficient of its fu (Schmitt 2008). `Kp(interstitial=1.0, ftissue=...)` gives it to every organ the substance enters which has no override: `Kp_<o>_<s> = fKp_<s> * share`, the share a number of the build (`interstitial_share(organ, fu)`, the fractions of the reference individuals, the larger of both sexes, at the fu of the definition, which must be a number) and the scale `fKp_<s>` a number, a fitted `Value` (one fitted fraction of the interstitial fluid the substance reaches) or a `Formula` of a parameter of the definition. An override keeps its own value (an organ of the full form needs a Kp above its share, `check_kp`, so the scale 1 is refused there), and the value of the substance is not needed: a `Kp` without `value` has no `Kp_<s>`, which is also allowed when the overrides cover every organ the substance enters (else the validation names the organs without one). Without `interstitial` the model has no `fKp_<s>` and its SBML is unchanged.
+
+```python
+from pkpdsim.pbpk import Binding, Kp, Organ, Substance, interstitial_share
+
+contrast = Substance(
+    "ctr",
+    name="an extracellular contrast agent",
+    mr=725.7,
+    binding=Binding(fu=0.9, protein="albumin"),
+    distribution=Kp(interstitial=1.0, ftissue=1.0),
+)
+for organ in (Organ.BRAIN, Organ.MUSCLE, Organ.SKIN):
+    print(organ.name, round(interstitial_share(organ, 0.9), 4))
+```
+
+```text
+BRAIN 0.0045
+MUSCLE 0.1347
+SKIN 0.5386
+```
 
 `KpMethod("rodgers_rowland", logp=..., pka=(...), compound=...)` computes the coefficient of every organ when the model is built, from the lipophilicity, the ionisation and the tissue composition (Rodgers, Leahy & Rowland 2005, Rodgers & Rowland 2006, in the form of Yau 2020), and writes `Kp_<o>_<s> = fKp_<s>*value`: one factor `fKp_<s>` (`factor=`, default 1) scales all coefficients, so a fit can adjust them together. A base with a pKa of at least 7 binds to the acidic phospholipids, whose affinity follows from the erythrocytes, so it needs `Erythrocytes(bp=...)` or a `kbc`. The coefficients are numbers of the build: a change of `fu` by an impairment does not recompute them. The rat tissue composition is applied to the human tissues (Rodgers & Rowland 2007, Coutinho 2024).
 

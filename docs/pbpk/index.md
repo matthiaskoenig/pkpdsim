@@ -124,7 +124,8 @@ One id scheme for every model, built by the functions of `pkpdsim.pbpk.ids`, so 
 | `fu_ref_<s>` | the unbound fraction of the healthy individual (input) | `ids.fu_ref(s)` |
 | `fu_<s>` | the unbound fraction, `fu_ref_<s>` changed by the impairment | `ids.fu(s)` |
 | `Kp_<s>` | the tissue to plasma coefficient of the substance | `ids.kp(s)` |
-| `Kp_<o>_<s>` | the coefficient of one organ (an override or a Kp method) | `ids.kp_organ(o, s)` |
+| `Kp_<o>_<s>` | the coefficient of one organ (an override, a Kp method or the interstitial share) | `ids.kp_organ(o, s)` |
+| `fKp_<s>` | the factor of the coefficients of a Kp method or of the interstitial shares | `ids.fkp(s)` |
 | `ftissue_<s>` | the whole-body exchange between plasma and tissue | `ids.ftissue(s)` |
 | `PS_<s>` | the exchange of an organ (l/min, local id) | `ids.ps(s)` |
 | `kps_<s>` | the exchange of an organ per litre of organ (`ps`, 1/min, local id) | `ids.kps(s)` |

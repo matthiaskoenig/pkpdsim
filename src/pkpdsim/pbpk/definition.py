@@ -499,6 +499,8 @@ class PBPKDefinition:
         if dist is not None:
             if isinstance(dist, Kp | KpMethod):
                 problems += _check_distribution(s.sid, dist)
+            if isinstance(dist, Kp):
+                problems += self._check_kp_coverage(s, dist)
             problems += check_kp_method(s)
             if (
                 ery is not None
@@ -510,6 +512,42 @@ class PBPKDefinition:
                     "exchange, not mode 'perfusion'"
                 )
         return problems
+
+    def _check_kp_coverage(self, s: Substance, dist: Kp) -> list[str]:
+        """Check that a `Kp` gives every organ the substance enters a coefficient.
+
+        Without a value every entered organ which is built needs an override,
+        unless the interstitial shares give the others theirs; the shares need
+        the fu as a number.
+        """
+        if dist.interstitial is not None:
+            if s.binding is not None and isinstance(s.binding.fu, Formula):
+                return [
+                    f"{s.sid}: Kp interstitial needs the fu as a number, the "
+                    "interstitial shares are numbers of the reference individuals"
+                ]
+            return []
+        if dist.value is not None:
+            return []
+        # the builder imports the definition: imported on use
+        from pkpdsim.pbpk.builder import built_organs
+
+        try:
+            organs = built_organs(self)
+        except ValueError:
+            return []  # the variants are refused by the build
+        missing = sorted(
+            organ.value
+            for organ in organs
+            if (dist.organs is None or organ in dist.organs)
+            and organ not in dist.overrides
+        )
+        if missing:
+            return [
+                f"{s.sid}: Kp without a value needs an override of every organ it "
+                f"enters (or interstitial): {missing}"
+            ]
+        return []
 
     def _check_chemistry(self, known: set[str]) -> list[str]:
         """Check the processes of the chemistry."""
@@ -658,6 +696,7 @@ def _check_distribution(sid: str, dist: Kp | KpMethod) -> list[str]:
     if isinstance(dist, Kp):
         named["override"] = dist.overrides
         problems += _positive(sid, "Kp", dist.value)
+        problems += _positive(sid, "Kp interstitial", dist.interstitial)
         for organ, value in dist.overrides.items():
             problems += _positive(sid, f"Kp override '{organ.value}'", value)
     else:

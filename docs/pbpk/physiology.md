@@ -47,6 +47,19 @@ The organ masses, densities, blood contents and blood flows are those of the ICR
     - `ICRP89`: Valentin J (ed). Basic anatomical and physiological data for use in radiological protection: reference values. ICRP Publication 89. Ann ICRP 32(3-4), 2002. [doi:10.1016/S0146-6453(03)00002-2](https://doi.org/10.1016/S0146-6453(03)00002-2)
 <!-- end generated -->
 
+The numbers of the reference individuals are public, so that a model which states a value of a hand-written model per kg of body weight or per litre of an organ converts it with them and copies none: `reference_individual(Sex.MALE)` has the body weight `bw` (73 kg), the height `height` (176 cm), the organ volumes with their blood `volumes` (`V<o>`, the liver 2.33 l) and the tissue volumes without blood `tissue_volumes`, the values of the default individual of a male build (ICRP 89).
+
+```python
+from pkpdsim.pbpk import Organ, Sex, reference_individual
+
+man = reference_individual(Sex.MALE)
+print(man.bw, man.height, round(man.volumes[Organ.LIVER], 3))
+```
+
+```text
+73.0 176.0 2.33
+```
+
 ### Male reference individual
 
 <!-- generated: physiology-organs-male (scripts/pbpk_tables.py), do not edit -->

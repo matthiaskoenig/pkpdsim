@@ -612,7 +612,7 @@ def kp_organ(organ: Organ, s: str) -> str:
 
 
 def fkp(s: str) -> str:
-    """The id of the factor of the coefficients of a Kp method, `fKp_<s>`."""
+    """The id of the factor of a Kp method or of the interstitial shares, `fKp_<s>`."""
     return f"fKp_{s}"
 
 
