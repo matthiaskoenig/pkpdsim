@@ -237,6 +237,7 @@ def _runner(model: PKPDModel) -> ExperimentRunner:
         data_path=list(model.data_paths) or None,
         simulator=None,
         on_error="log",
+        jit_optimization=model.simulator.jit_optimization,
     )
 
 

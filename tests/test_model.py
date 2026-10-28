@@ -203,3 +203,10 @@ def test_the_model_of_the_toy_package() -> None:
     assert isinstance(MODEL, PKPDModel)
     assert MODEL.package == "pkpdsim_toy"
     assert MODEL.figures.formats == ("svg", "png")
+
+
+def test_the_jit_optimization_is_that_of_sbmlsim_by_default() -> None:
+    assert SimulatorSettings().jit_optimization is None
+    assert SimulatorSettings(jit_optimization="O0").jit_optimization == "O0"
+    with pytest.raises(ValueError, match="optimization level"):
+        SimulatorSettings(jit_optimization="O9")

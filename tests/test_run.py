@@ -145,6 +145,28 @@ def test_a_run_takes_other_simulator_settings(
     assert seen[-1] == MODEL.simulator
 
 
+def test_a_run_compiles_with_the_level_of_the_settings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The optimization level of the settings reaches the runner and its models."""
+    monkeypatch.delenv("SBMLSIM_JIT_OPTIMIZATION", raising=False)
+    levels: list[object] = []
+    original = ExperimentRunner.__init__
+
+    def init(self: ExperimentRunner, *args: Any, **kwargs: Any) -> None:  # noqa: ANN401
+        original(self, *args, **kwargs)
+        levels.append(self.jit_optimization)
+
+    monkeypatch.setattr(ExperimentRunner, "__init__", init)
+    MODEL.run_experiments(
+        ToyDecay,
+        output_dir=tmp_path,
+        simulator=SimulatorSettings(jit_optimization="O0"),
+    )
+    MODEL.run_experiments(ToyDecay, output_dir=tmp_path / "model")
+    assert [str(level) for level in levels] == ["O0", "O2"]
+
+
 def test_a_failing_experiment_is_reported_after_the_run(tmp_path: Path) -> None:
     with pytest.raises(ExperimentRunError) as info:
         MODEL.run_experiments(

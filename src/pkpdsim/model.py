@@ -129,18 +129,32 @@ class SimulatorSettings:
             every CPU for a scan of `sbmlsim.parallel.POOL_THRESHOLD` points or
             more, serially otherwise). A pool needs the guard
             `if __name__ == "__main__":` in a script which runs the model.
+        jit_optimization: the optimization level with which LLJIT compiles
+            the model for the runs of its experiments and the tests of
+            `pkpdsim.testing` (`sbmlsim.model.model_roadrunner.JitOptimization`,
+            `"O0"` to `"O3"`), `None` for the level of sbmlsim (`O2`, or the
+            environment variable `SBMLSIM_JIT_OPTIMIZATION`). `"O0"` compiles a
+            model with large initial assignments several times faster (the
+            creatinine model in 4.5 s instead of 24 s) and simulates a little
+            slower; the fits keep the level of sbmlsim.
     """
 
     absolute_tolerance: float | AbsoluteTolerance = 1e-10
     relative_tolerance: float = 1e-10
     n_workers: int | None = 1
+    jit_optimization: str | None = None
 
     def __post_init__(self) -> None:
-        """Check the number of processes.
+        """Check the number of processes and the optimization level.
 
         Raises:
-            ValueError: if `n_workers` is neither a positive int nor `None`.
+            ValueError: if `n_workers` is neither a positive int nor `None`, or
+                `jit_optimization` is no level of sbmlsim.
         """
+        if self.jit_optimization is not None:
+            from sbmlsim.model.model_roadrunner import resolve_jit_optimization
+
+            resolve_jit_optimization(self.jit_optimization)
         n = self.n_workers
         if n is not None and (isinstance(n, bool) or not isinstance(n, int) or n < 1):
             raise ValueError(
