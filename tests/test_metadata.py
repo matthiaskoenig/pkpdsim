@@ -256,6 +256,91 @@ def test_urine_without_a_site_is_not_applicable(tissue: Tissue) -> None:
     assert md.to_dict()["sampling_site"] == "NOT_APPLICABLE"
 
 
+#: every tissue by its class: a new member of `Tissue` fails
+#: `test_every_tissue_is_classified` until it is classified here and in the
+#: metadata
+VENOUS_BLOOD = (Tissue.PLASMA, Tissue.SERUM, Tissue.BLOOD)
+ARTERIAL_BLOOD = (Tissue.ARTERIAL_BLOOD, Tissue.ARTERIAL_PLASMA)
+NO_BLOOD = (
+    Tissue.SALIVA,
+    Tissue.URINE,
+    Tissue.FECES,
+    Tissue.FECES_URINE,
+    Tissue.BILE,
+    Tissue.NONE,
+)
+DEFAULT_SITE = {
+    **dict.fromkeys(VENOUS_BLOOD, SamplingSite.ARM_VEIN),
+    **dict.fromkeys(ARTERIAL_BLOOD, SamplingSite.ARTERIAL),
+    **dict.fromkeys(NO_BLOOD, SamplingSite.NOT_APPLICABLE),
+}
+
+
+def test_every_tissue_is_classified() -> None:
+    """Every member of `Tissue` is in exactly one class of this test."""
+    classes = VENOUS_BLOOD + ARTERIAL_BLOOD + NO_BLOOD
+    assert len(classes) == len(set(classes))
+    assert set(classes) == set(Tissue)
+
+
+@pytest.mark.parametrize("tissue", list(Tissue))
+def test_the_site_without_a_statement_follows_the_tissue(tissue: Tissue) -> None:
+    md = ModelMappingMetaData(
+        tissue=tissue, route=Route.PO, dosing=Dosing.SINGLE, health=Health.HEALTHY
+    )
+    assert md.sampling_site is None
+    assert md.resolved_sampling_site() is DEFAULT_SITE[tissue]
+    assert md.to_dict()["sampling_site"] == DEFAULT_SITE[tissue].name
+
+
+@pytest.mark.parametrize("tissue", list(Tissue))
+@pytest.mark.parametrize("site", list(SamplingSite))
+def test_a_stated_site_is_kept_or_refused(tissue: Tissue, site: SamplingSite) -> None:
+    """A tissue takes its own site; a venous blood tissue any blood site."""
+    if tissue in VENOUS_BLOOD:
+        allowed = set(SamplingSite) - {SamplingSite.NOT_APPLICABLE}
+    else:
+        allowed = {DEFAULT_SITE[tissue]}
+
+    def create() -> ModelMappingMetaData:
+        return ModelMappingMetaData(
+            tissue=tissue,
+            route=Route.PO,
+            dosing=Dosing.SINGLE,
+            health=Health.HEALTHY,
+            sampling_site=site,
+        )
+
+    if site in allowed:
+        assert create().resolved_sampling_site() is site
+    else:
+        with pytest.raises(ValueError, match=tissue.name):
+            create()
+
+
+@pytest.mark.parametrize(
+    "site",
+    sorted(set(SamplingSite) - {SamplingSite.ARTERIAL, SamplingSite.NOT_APPLICABLE}),
+)
+def test_a_non_arterial_site_on_arterial_blood_is_refused(site: SamplingSite) -> None:
+    with pytest.raises(ValueError, match="arterial"):
+        ModelMappingMetaData(
+            tissue=Tissue.ARTERIAL_PLASMA,
+            route=Route.PO,
+            dosing=Dosing.SINGLE,
+            health=Health.HEALTHY,
+            sampling_site=site,
+        )
+
+
+def test_replace_of_an_arterial_tissue_follows_its_site() -> None:
+    arterial = dataclasses.replace(minimal(), tissue=Tissue.ARTERIAL_BLOOD)
+    assert arterial.resolved_sampling_site() is SamplingSite.ARTERIAL
+    assert arterial.to_dict()["sampling_site"] == "ARTERIAL"
+    back = dataclasses.replace(arterial, tissue=Tissue.PLASMA)
+    assert back.resolved_sampling_site() is SamplingSite.ARM_VEIN
+
+
 @pytest.mark.parametrize("tissue", [Tissue.PLASMA, Tissue.SERUM, Tissue.BLOOD])
 def test_a_blood_tissue_keeps_an_explicit_site(tissue: Tissue) -> None:
     md = ModelMappingMetaData(
