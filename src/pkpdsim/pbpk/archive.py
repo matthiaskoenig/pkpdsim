@@ -17,7 +17,7 @@ from pkpdsim.pbpk.definition import PBPKDefinition
 #: the members of `pymetadata.omex.EntryFormat`
 EXTRA_FORMATS: dict[str, str] = {
     ".md": "MARKDOWN",
-    ".ant": "PLAIN",
+    ".ant": "ANTIMONY",
     ".txt": "PLAIN",
     ".png": "PNG",
     ".svg": "SVG",
@@ -58,14 +58,19 @@ def create_archive(
             archive, e.g. a submodel which is simulated on its own.
         extra_files: further files of other formats which are entries of the
             archive, e.g. the ODEs of an extra model (`.md`) or a figure
-            (`.png`); a file is below the parent of `model_output_dir`, its
-            location in the archive is its path relative to it and its format
-            the one of its suffix (`EXTRA_FORMATS`).
+            (`.png`), with the format of their suffix (`EXTRA_FORMATS`, the
+            antimony of `.ant` as the antimony of the flat model).
+
+    An extra model and an extra file have one location rule: a file is below
+    the parent of `model_output_dir`, and its location in the archive is its
+    path relative to it (a model in `model_output_dir` is `./models/<name>`,
+    as the built models are).
 
     Raises:
         ValueError: if the stem of an extra model or the key of an extra file
-            is the key of another entry, if an extra file is not below the
-            parent of `model_output_dir` or its suffix has no format.
+            is the key of another entry, if an extra model or file is not below
+            the parent of `model_output_dir` or the suffix of an extra file has
+            no format.
 
     Returns:
         The files with their entries in the COMBINE archive, by the keys of a
@@ -128,6 +133,18 @@ def create_archive(
         "path": ant_path,
         "entry": entry(f"./models/{ant_path.name}", EntryFormat.ANTIMONY),
     }
+
+    def location(extra: Path, what: str) -> str:
+        """The location of an extra file in the archive, its path below `parent`."""
+        try:
+            relative = extra.resolve().relative_to(parent.resolve())
+        except ValueError:
+            raise ValueError(
+                f"The extra {what} {str(extra)!r} is not below {str(parent)!r}, "
+                "the directory of the archive."
+            ) from None
+        return f"./{relative.as_posix()}"
+
     for extra in extra_models:
         if extra.stem in results:
             raise ValueError(
@@ -136,7 +153,7 @@ def create_archive(
             )
         results[extra.stem] = {
             "path": extra,
-            "entry": entry(f"./models/{extra.name}", EntryFormat.SBML_L3V2),
+            "entry": entry(location(extra, "model"), EntryFormat.SBML_L3V2),
         }
     for extra in extra_files:
         key = f"{extra.stem}_{extra.suffix.removeprefix('.')}"
@@ -151,16 +168,9 @@ def create_archive(
                 f"The extra file {extra.name!r} has the suffix {extra.suffix!r} of "
                 f"no format of the archive, one of {sorted(EXTRA_FORMATS)}."
             )
-        try:
-            location = extra.resolve().relative_to(parent.resolve())
-        except ValueError:
-            raise ValueError(
-                f"The extra file {str(extra)!r} is not below {str(parent)!r}, the "
-                "directory of the archive."
-            ) from None
         results[key] = {
             "path": extra,
-            "entry": entry(f"./{location.as_posix()}", getattr(EntryFormat, fmt)),
+            "entry": entry(location(extra, "file"), getattr(EntryFormat, fmt)),
         }
 
     omex = Omex()

@@ -177,3 +177,30 @@ def test_an_extra_file_outside_the_archive_is_an_error(tmp_path: Path) -> None:
             _create(tmp_path, files=(outside,))
     finally:
         outside.unlink()
+
+
+def test_an_extra_model_has_the_location_rule_of_an_extra_file(tmp_path: Path) -> None:
+    """An extra model below the parent is located by its path, outside it is an error."""
+    (tmp_path / "standalone").mkdir()
+    extra = tmp_path / "standalone" / "simple_liver.xml"
+    extra.write_text(MINIMAL_SBML, encoding="utf-8")
+    results = _create(tmp_path, extra=(extra,))
+    assert results["simple_liver"]["entry"].location == "./standalone/simple_liver.xml"
+    with zipfile.ZipFile(tmp_path / "simple_model.omex") as z:
+        assert "standalone/simple_liver.xml" in z.namelist()
+    outside = tmp_path.parent / f"{tmp_path.name}_outside.xml"
+    outside.write_text(MINIMAL_SBML, encoding="utf-8")
+    try:
+        with pytest.raises(ValueError, match=r"extra model .* not below"):
+            _create(tmp_path, extra=(outside,))
+    finally:
+        outside.unlink()
+
+
+def test_an_extra_antimony_file_is_antimony(tmp_path: Path) -> None:
+    """The antimony of an extra model has the format of the antimony of the flat model."""
+    (tmp_path / "models").mkdir()
+    ant = tmp_path / "models" / "simple_fluid.ant"
+    ant.write_text("model fluid()\nend\n", encoding="utf-8")
+    results = _create(tmp_path, files=(ant,))
+    assert results["simple_fluid_ant"]["entry"].format == EntryFormat.ANTIMONY
