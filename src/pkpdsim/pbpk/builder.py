@@ -770,18 +770,41 @@ def _expose_species(
             them, see `_organ_reads`.
 
     Raises:
-        ValueError: naming an input which reads no species of the organ.
+        ValueError: naming an input which reads no species of the organ, an
+            amount species or a species whose id is no concentration `C...`.
 
     Returns:
         The outputs, local id -> id of the top model (the same id).
     """
-    species = {str(sp.sid) for sp in md.species or []}
+    species = {str(sp.sid): sp for sp in md.species or []}
+
+    def problem(local: str) -> str | None:
+        """Why a local id cannot be read as a concentration, `None` if it can."""
+        flat = ids.flat(organ, local)
+        sp = species.get(local)
+        if sp is None:
+            return (
+                f"'{flat}', which is no species of the organ '{organ.value}' (a PD "
+                "component reads a concentration of an organ by the flat id of "
+                "its species)"
+            )
+        if getattr(sp, "hasOnlySubstanceUnits", False):
+            return (
+                f"'{flat}', an amount (hasOnlySubstanceUnits) of the organ "
+                f"'{organ.value}': a PD component reads a concentration (mM)"
+            )
+        if not local.startswith("C"):
+            return (
+                f"'{flat}', a species of the organ '{organ.value}' whose id is no "
+                "concentration of the id scheme, `C<part>_<s>`: the organ exposes "
+                "it as `C<o>_<part>_<s>` (ids.organ_species)"
+            )
+        return None
+
     problems = [
-        f"{what} reads '{ids.flat(organ, local)}', which is no species of the "
-        f"organ '{organ.value}' (a PD component reads a concentration of an "
-        "organ by the flat id of its species)"
+        f"{what} reads {why}"
         for local, inputs in sorted(reads.items())
-        if local not in species or not local.startswith("C")
+        if (why := problem(local)) is not None
         for what in inputs
     ]
     if problems:

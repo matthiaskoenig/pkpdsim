@@ -19,9 +19,19 @@ from sbmlutils.factory import (
     Parameter,
     Port,
     PortType,
+    Species,
 )
 
-from pkpdsim.pbpk import MODEL_UNITS, Organ, Part, PDComponent, Pool, U, ids
+from pkpdsim.pbpk import (
+    MODEL_UNITS,
+    CustomReaction,
+    Organ,
+    Part,
+    PDComponent,
+    Pool,
+    U,
+    ids,
+)
 from pkpdsim.pbpk.builder import build, compose
 
 from .conftest import cardiac_pd, definition, load
@@ -334,3 +344,36 @@ def test_pd_input_of_an_organ_raises(organ_species: str, match: str) -> None:
     """An input which names no species of a built organ raises, naming the id."""
     with pytest.raises(ValueError, match=match):
         compose(definition(pd=[_organ_reader(organ_species)]))
+
+
+@pytest.mark.parametrize(
+    ("local", "amount", "match"),
+    [
+        ("Apool_drg", True, r"'MU__Apool_drg', an amount \(hasOnlySubstanceUnits\)"),
+        ("Xpool_drg", False, r"'MU__Xpool_drg', a species .* no concentration"),
+    ],
+    ids=["amount", "no concentration id"],
+)
+def test_pd_input_of_a_species_which_is_no_concentration_raises(
+    local: str, amount: bool, match: str
+) -> None:
+    """A species of a custom reaction which is an amount or no `C...` id is named."""
+    pool = Species(
+        local,
+        "Vti",
+        initialConcentration=0.0,
+        substanceUnit=U.mmole,
+        hasOnlySubstanceUnits=amount,
+    )
+    reaction = CustomReaction(
+        "POOL",
+        Organ.MUSCLE,
+        Part.TISSUE,
+        f"Cti_drg -> {local}",
+        "0.001 l_per_min * Cti_drg",
+        species=[pool],
+    )
+    d = definition(pd=[_organ_reader(f"MU__{local}")])
+    d = dataclasses.replace(d, chemistry=[*d.chemistry, reaction])
+    with pytest.raises(ValueError, match=match):
+        compose(d)

@@ -164,4 +164,4 @@ C<o>_ic_<s> = Cic_<s>
 
 In the flat model it is `Cli_ic_<s> = LI__Cic_<s>`.
 
-The build refuses an input which names no species of a built organ (a compartment, a parameter, an unknown species), naming the input; an id with the prefix of an organ which is not built is an unknown id of the body. A component which reads only the top model adds nothing to the organs. The observers of a definition do not read the species of the organs (an id of an organ is no symbol of the top model, see above).
+The build refuses an input which names no species of a built organ (a compartment, a parameter, an unknown species), an amount species (`hasOnlySubstanceUnits`, e.g. a pool of a custom reaction) and a species whose id is no concentration of the id scheme (`C<part>_<s>`), naming the input and the reason; an id with the prefix of an organ which is not built is an unknown id of the body. A component which reads only the top model adds nothing to the organs. The observers of a definition do not read the species of the organs (an id of an organ is no symbol of the top model, see above).
