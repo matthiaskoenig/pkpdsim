@@ -61,9 +61,9 @@ from xml.etree import ElementTree
 import libsbml
 import numpy as np
 import pandas as pd
-import roadrunner
 from matplotlib.figure import Figure
 from sbmlsim import display, sensitivity
+from sbmlsim.model.model_roadrunner import JitOptimization, load_roadrunner
 from sbmlsim.result import ScanResult
 from sbmlsim.sensitivity import SensitivityResult
 from sbmlsim.sensitivity.classification import (
@@ -161,7 +161,10 @@ def parameters_from_sbml(
     Returns:
         The parameters, without bounds.
     """
-    r = roadrunner.RoadRunner(str(sbml_path))
+    # the values only: compiled with LLJIT at O0, which compiles fastest and
+    # gives the values of roadrunner's default MCJIT bitwise (the creatinine
+    # model of pkdb_models in 4.5 s instead of 48 s)
+    r = load_roadrunner(sbml_path, JitOptimization.O0)
     model: libsbml.Model = libsbml.readSBMLFromFile(str(sbml_path)).getModel()
     excluded = set(exclude_ids or ())
     parameters: list[SensitivityParameter] = []
