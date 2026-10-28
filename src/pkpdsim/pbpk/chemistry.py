@@ -168,7 +168,7 @@ class CustomReaction:
         part: the part of the organ it acts in.
         equation: the reaction equation.
         formula: the rate law.
-        parameters: the parameters of the rate law.
+        parameters: the parameters of the rate law, none by default.
         species: additional species of the reaction.
     """
 
@@ -177,7 +177,7 @@ class CustomReaction:
     part: Part
     equation: str
     formula: str
-    parameters: list[Parameter]
+    parameters: list[Parameter] = field(default_factory=list)
     species: list[Species] = field(default_factory=list)
 
     def __post_init__(self) -> None:

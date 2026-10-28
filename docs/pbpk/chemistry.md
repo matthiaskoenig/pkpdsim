@@ -88,7 +88,7 @@ The equations on this page are those which these processes generate in the toy m
 |---|---|---|
 | `Metabolism(sid, organ, substrate, products, kinetics, protein, profile)` | the part which holds the tissue of the substrate: intracellular in the full form, the merged tissue, the whole organ when flow-limited, the plasma without tissue | the products by their stoichiometric fractions (sum 1) into their equivalent part, else into the plasma; no products is an elimination |
 | `Transport(sid, organ, substance, direction, membrane, kinetics, protein)` | basolateral: between interstitium and cell; apical: between cell and the sink of the organ (bile, urine, intestinal lumen) | influx into the cell, efflux out of it; forces the full form of the substance in the organ |
-| `CustomReaction(sid, organ, part, equation, formula, parameters, species)` | the part it names | its formula as given, the escape hatch for a mechanism without a class (saturable binding, a deep tissue pool) |
+| `CustomReaction(sid, organ, part, equation, formula, parameters=[], species=[])` | the part it names | its formula as given (`parameters` the sbmlutils `Parameter`s of the rate law, none by default), the escape hatch for a mechanism without a class (saturable binding, a deep tissue pool) |
 
 The organs of the chemistry are those of `Organ`; the chemistry of the intestine is defined on `Organ.SMALL_INTESTINE` and the intestine places it into the mucosa of its segments (see [Intestine and routes](intestine.md)). The standard kidney refuses an apical influx from the urine (the urine is cumulative); a tubular reabsorption by a transporter needs the [nephron kidney](variants.md#nephron-kidney).
 

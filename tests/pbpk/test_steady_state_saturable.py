@@ -89,7 +89,6 @@ def _definition(s: Substance) -> PBPKDefinition:
                 Part.PLASMA,
                 f"Cpl_{S} -> Aurine_{S}",
                 f"V_sec * Cpl_{S} / (km_sec + Cpl_{S})",
-                [],
             ),
         ],
         parameters=[

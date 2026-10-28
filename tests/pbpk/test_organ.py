@@ -878,3 +878,13 @@ def test_kidney_filtration(distribution: Kp, source: str, carrier: str) -> None:
     )
     md, _ = _build(Organ.LIVER, substances=[_drug(distribution=distribution)])
     assert not [r for r in md.reactions or [] if r.sid == "J_gfr_drg"]
+
+
+def test_a_custom_reaction_has_no_parameters_by_default() -> None:
+    """The rate law of a custom reaction may read only ids of the model."""
+    from pkpdsim.pbpk import Part
+
+    first = CustomReaction("SRC", Organ.MUSCLE, Part.PLASMA, "-> Cpl_drg", "k_src")
+    second = CustomReaction("SRC2", Organ.MUSCLE, Part.PLASMA, "-> Cpl_drg", "k_src")
+    assert first.parameters == []
+    assert first.parameters is not second.parameters
