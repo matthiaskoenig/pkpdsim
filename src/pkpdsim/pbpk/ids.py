@@ -1102,3 +1102,13 @@ def species_of(s: str, ids: Iterable[str]) -> list[str]:
         rf"|Ctub_(?:{_TUBULE}))_{re.escape(s)}"
     )
     return [i for i in ids if pattern.fullmatch(i.rsplit("__", 1)[-1])]
+
+
+def start_value(sid: str) -> str:
+    """The id of the value of an observer at the start, `<sid>_0` (`PBPKDefinition.deltas`)."""
+    return f"{sid}_0"
+
+
+def delta(sid: str) -> str:
+    """The id of the change of an observer over its start, `<sid>_delta`."""
+    return f"{sid}_delta"

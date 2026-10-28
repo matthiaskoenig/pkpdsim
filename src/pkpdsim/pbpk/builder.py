@@ -293,6 +293,7 @@ def compose(definition: PBPKDefinition) -> Model:
             f"Invalid PBPK definition '{definition.sid}':\n- " + "\n- ".join(problems)
         )
     top.add(definition_observer_objects(definition.observers))
+    top.add(_delta_objects(definition, top))
 
     return Model(
         sid=definition.sid,
@@ -307,6 +308,87 @@ def compose(definition: PBPKDefinition) -> Model:
         submodels=submodels,
         replaced_elements=replaced,
     )
+
+
+def _delta_objects(definition: PBPKDefinition, top: "_Top") -> list[Sbase]:
+    """The start values and the changes of the observers of `PBPKDefinition.deltas`.
+
+    For every observer `<id>` (a parameter of the top model with an
+    assignment rule: an observer of the library or of the definition, an
+    output of an organ) the constant `<id>_0` with the initial assignment
+    `<id>`, its value at the start, and the observer `<id>_delta = <id> -
+    <id>_0`. The start value is evaluated after the changes of the
+    individual before the simulation, so the change is 0 at the start of
+    every simulation.
+
+    Raises:
+        ValueError: naming a delta which is no observer of the top model and
+            an id `<id>_0` or `<id>_delta` which the model has.
+    """
+    if not definition.deltas:
+        return []
+    ruled = {str(o.variable) for o in top.objects if isinstance(o, AssignmentRule)}
+    units = {str(o.sid): o.unit for o in top.objects if isinstance(o, Parameter)}
+    known = {
+        str(o.sid)
+        for o in top.objects
+        if isinstance(o, Parameter | Compartment | Species | Reaction)
+    }
+    unknown = [d for d in definition.deltas if d not in ruled or d not in units]
+    taken = [
+        x
+        for d in definition.deltas
+        for x in (ids.start_value(d), ids.delta(d))
+        if x in known
+    ]
+    problems = []
+    if unknown:
+        problems.append(
+            f"the deltas {unknown} are no observers of the top model (an observer "
+            "of the library or the definition, an output of an organ)"
+        )
+    if taken:
+        problems.append(f"the ids {taken} of the deltas are ids of the model")
+    if problems:
+        raise ValueError(
+            f"Invalid PBPK definition '{definition.sid}': " + "; ".join(problems) + "."
+        )
+    objects: list[Sbase] = []
+    for d in definition.deltas:
+        start, change, unit = ids.start_value(d), ids.delta(d), units[d]
+        objects += [
+            annotate(
+                Parameter(
+                    start,
+                    None,
+                    unit,
+                    constant=True,
+                    name=f"{d} at the start",
+                    sboTerm=_SBO_PARAMETER,
+                    notes=f"The value of `{d}` at the start of the simulation, after "
+                    "the changes before it (`PBPKDefinition.deltas`).\n\n"
+                    f"`{start} = {d}` (initial assignment)",
+                ),
+                "observer",
+            ),
+            initial_assignment(start, d, unit, f"{d} at the start"),
+            annotate(
+                Parameter(
+                    change,
+                    None,
+                    unit,
+                    constant=False,
+                    name=f"change of {d} over its start",
+                    sboTerm=_SBO_PARAMETER,
+                    notes=f"The change of `{d}` over its value at the start "
+                    "(`PBPKDefinition.deltas`).\n\n"
+                    f"`{change} = {d} - {start}`",
+                ),
+                "observer",
+            ),
+            AssignmentRule(change, f"{d} - {start}", unit, name=f"change of {d}"),
+        ]
+    return objects
 
 
 def observer_problems(definition: PBPKDefinition) -> list[str]:
@@ -463,12 +545,10 @@ def _body(
         )
         if any(md.sid == other.sid for other in model_definitions):
             raise ValueError(f"Two organs build the model definition '{md.sid}'.")
-        boundary = _apply_starts(md, boundary, organ, definition.starts, inputs)
-        started |= {
-            sid
-            for sid in definition.starts
-            if sid.startswith(f"{ids.submodel(organ)}__")
-        }
+        boundary, applied = _apply_starts(
+            md, boundary, organ, definition.starts, inputs
+        )
+        started |= applied
         species_outputs = _expose_species(md, organ, reads.get(organ, {}))
         if species_outputs:
             boundary = Boundary(
@@ -549,7 +629,7 @@ def _apply_starts(
     organ: Organ,
     starts: Mapping[str, Q],
     top: Mapping[str, tuple[str, UnitType]],
-) -> Boundary:
+) -> tuple[Boundary, set[str]]:
     """Give the species of an organ the starts of the definition.
 
     A start (`PBPKDefinition.starts`) names a species of the organ by its
@@ -569,12 +649,15 @@ def _apply_starts(
         top: the elements of the top model, id -> (kind, unit).
 
     Returns:
-        The boundary with the inputs the formulas add.
+        The boundary with the inputs the formulas add and the flat ids of the
+        starts given to a species of the organ; a start of the prefix of the
+        organ which names no species is left out, `compose` names every such
+        start of all organs at once.
 
     Raises:
-        ValueError: naming a start which is no species of the organ, a
-            formula which reads an id which is no constant of the top model
-            or an element of the organ which is no input under that id.
+        ValueError: naming a formula which reads an id which is no constant
+            of the top model or an element of the organ which is no input
+            under that id.
     """
     prefix = f"{ids.submodel(organ)}__"
     mine = {
@@ -582,14 +665,10 @@ def _apply_starts(
         for sid, q in starts.items()
         if sid.startswith(prefix)
     }
-    if not mine:
-        return boundary
     species = {str(sp.sid): sp for sp in md.species or []}
-    unknown = sorted(f"{prefix}{local}" for local in mine if local not in species)
-    if unknown:
-        raise ValueError(
-            f"The starts of {unknown} name no species of the organ '{organ.value}'."
-        )
+    mine = {local: q for local, q in mine.items() if local in species}
+    if not mine:
+        return boundary, set()
     replacements = dict(boundary.replacements)
     elements = {str(e.sid) for e in [*(md.parameters or []), *(md.compartments or [])]}
     problems: list[str] = []
@@ -645,7 +724,7 @@ def _apply_starts(
     if problems:
         raise ValueError("; ".join(problems) + ".")
     md.assignments = assignments
-    return Boundary(replacements, boundary.outputs)
+    return Boundary(replacements, boundary.outputs), {f"{prefix}{x}" for x in mine}
 
 
 def _organ_reads(

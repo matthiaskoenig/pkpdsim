@@ -32,6 +32,7 @@ from pkpdsim.pbpk import (
     Transport,
     U,
     Variants,
+    compose,
     ids,
     load,
 )
@@ -381,6 +382,24 @@ def test_urine_rate_is_net_of_a_reaction_from_the_urine(tmp_path: Path) -> None:
     assert np.trapezoid(s[:, 1], s[:, 0]) == pytest.approx(s[-1, 4], rel=1e-3)
 
 
+def test_urine_rate_is_unchanged_without_a_reaction_from_the_urine(
+    tmp_path: Path,
+) -> None:
+    """Without a reaction from the urine the rule of `Rurine_<s>` is that of before.
+
+    The formula sums the fluxes into the urine and the notes end as before
+    the net rate (the SBML of the existing models is byte-identical).
+    """
+    model = libsbml.readSBMLFromFile(
+        str(_build(tmp_path, chemistry=[_SECRETION]))
+    ).getModel()
+    rule = model.getAssignmentRuleByVariable(ids.urine_rate(S))
+    assert libsbml.formulaToL3String(rule.getMath()) == "KI__J_gfr_drg + KI__SEC"
+    notes = model.getParameter(ids.urine_rate(S)).getNotesString()
+    assert "the sum of the fluxes of the kidney into the urine." in notes
+    assert "less those out of it" not in notes
+
+
 def test_urine_rate_of_the_nephron_kidney(tmp_path: Path) -> None:
     """In the nephron kidney `Rurine_<s>` is the outflow of the collecting duct."""
     path = _build(
@@ -399,6 +418,73 @@ def test_urine_rate_only_for_the_urine(tmp_path: Path) -> None:
     model = libsbml.readSBMLFromFile(str(_build(tmp_path))).getModel()
     assert model.getParameter(ids.urine_rate(S)) is not None
     assert model.getParameter(ids.urine_rate("drg_m")) is None
+
+
+# --- the changes of observers over their start --------------------------------
+
+
+def _endogenous_drug() -> PBPKDefinition:
+    """The simple definition with a baseline of the drug (it decays from it)."""
+    d = definition(routes=[Route.iv(S)])
+    drug = dataclasses.replace(d.substances[0], baseline=0.01)
+    return dataclasses.replace(d, substances=[drug, *d.substances[1:]])
+
+
+def test_a_delta_is_the_change_of_an_observer_over_its_start(tmp_path: Path) -> None:
+    """`<id>_delta` is `<id> - <id>_0` with the value of the observer at the start.
+
+    The arm vein of an endogenous substance and an observer of the definition:
+    the change is 0 at the start, also for an individual changed before the
+    simulation (the start value is an initial assignment of the observer),
+    and follows the observer after it.
+    """
+    d = dataclasses.replace(
+        _endogenous_drug(),
+        observers=[
+            Observer("Ctwice_drg", f"2 dimensionless * {ids.arm(S)}", U.mM, "x")
+        ],
+        deltas=(ids.arm(S), "Ctwice_drg"),
+    )
+    path = build(d, tmp_path).flat_path
+    for changes in ({}, {"BW": 110.0, "f_renal_function": 0.3}):
+        r = individual(path, **changes)
+        r.integrator.absolute_tolerance = 1e-14
+        r.integrator.relative_tolerance = 1e-10
+        start = r[ids.arm(S)]
+        assert start > 0
+        assert r[ids.start_value(ids.arm(S))] == pytest.approx(start, rel=1e-12)
+        assert r[ids.delta(ids.arm(S))] == pytest.approx(0.0, abs=1e-15)
+        cols = [ids.arm(S), ids.delta(ids.arm(S)), ids.delta("Ctwice_drg")]
+        s = r.simulate(0, 600, 61, selections=cols)
+        np.testing.assert_allclose(s[:, 1], s[:, 0] - start, rtol=1e-9, atol=1e-15)
+        np.testing.assert_allclose(s[:, 2], 2 * s[:, 1], rtol=1e-9, atol=1e-15)
+        assert s[-1, 1] < 0  # the drug decays from its baseline
+
+
+def test_a_delta_of_no_observer_is_refused() -> None:
+    """A delta which is no observer of the top model or whose ids exist raises, naming them."""
+    with pytest.raises(ValueError, match=r"\['BW', 'Cnone_drg'\]"):
+        compose(dataclasses.replace(_endogenous_drug(), deltas=("BW", "Cnone_drg")))
+    d = dataclasses.replace(
+        _endogenous_drug(),
+        observers=[Observer("Carm_drg_0", f"{ids.arm(S)}", U.mM, "x")],
+        deltas=(ids.arm(S),),
+    )
+    with pytest.raises(ValueError, match="Carm_drg_0"):
+        compose(d)
+    with pytest.raises(ValueError, match="duplicate deltas"):
+        dataclasses.replace(_endogenous_drug(), deltas=("A", "A")).validate()
+
+
+def test_without_deltas_the_model_is_unchanged(tmp_path: Path) -> None:
+    """Empty deltas give the SBML of a definition without the field."""
+    from .conftest import dateless
+
+    a = build(_endogenous_drug(), tmp_path / "a").flat_path
+    b = build(
+        dataclasses.replace(_endogenous_drug(), deltas=()), tmp_path / "b"
+    ).flat_path
+    assert dateless(a.read_text()) == dateless(b.read_text())
 
 
 # --- the observers of a definition -------------------------------------------

@@ -178,10 +178,15 @@ def test_a_start_of_a_pool(tmp_path: Path) -> None:
 
 
 def test_a_start_of_no_species_is_refused() -> None:
-    """A start which names no species of the model raises, naming it."""
+    """A start which names no species of the model raises, naming all at once.
+
+    The starts of the organs and of the top model are collected before the
+    error: a start of the muscle, of the liver and of the top model.
+    """
     with pytest.raises(ValueError, match="MU__Cxx_end") as error:
-        compose(_definition({"MU__Cxx_end": 0.1, "Cxx_end": 0.1}))
-    assert "Cxx_end" in str(error.value)
+        compose(_definition({"MU__Cxx_end": 0.1, "LI__Czz_end": 0.1, "Cyy_end": 0.1}))
+    assert "LI__Czz_end" in str(error.value)
+    assert "'Cyy_end'" in str(error.value)
 
 
 def test_a_start_is_validated() -> None:
@@ -203,6 +208,20 @@ def test_a_start_formula_reads_the_top_model() -> None:
     """A formula of a start reads constants of the top model; an unknown id raises."""
     with pytest.raises(ValueError, match="unknown_id"):
         compose(_definition({f"MU__Cti_{S}": Formula("unknown_id * 1 mM", U.mM)}))
+
+
+@pytest.mark.parametrize(
+    "key", [f"MU__Cti_{S}", f"Cve_{S}"], ids=["organ species", "pool"]
+)
+def test_a_start_formula_refuses_a_state(key: str) -> None:
+    """A formula of a start which reads what changes during the simulation raises.
+
+    A species (`Car_<s>`) or an observer (`Carm_<s>`) would be read at its
+    value before the species start.
+    """
+    for state in (f"Car_{S}", f"Carm_{S}"):
+        with pytest.raises(ValueError, match=state):
+            compose(_definition({key: Formula(f"2 dimensionless * {state}", U.mM)}))
 
 
 def test_without_starts_the_model_is_unchanged(tmp_path: Path) -> None:

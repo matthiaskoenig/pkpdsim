@@ -160,7 +160,14 @@ class PBPKDefinition:
             organs which a production or an elimination of the chemistry
             moves away from the equilibrium with the baseline of an
             endogenous substance (`Substance.baseline`): their steady state,
-            so that the body starts stationary.
+            so that the body starts stationary (`pkpdsim.pbpk.steady_state`
+            gives the formulas of the organs of the library).
+        deltas: the observers of the top model (`Carm_<s>`, an observer of
+            the definition) whose change over their value at the start a
+            model reads: each gets the constant `<id>_0`, its value at the
+            start (an initial assignment), and the observer
+            `<id>_delta = <id> - <id>_0`, e.g. the increase of an endogenous
+            substance over the value before a dose.
     """
 
     sid: str
@@ -179,6 +186,7 @@ class PBPKDefinition:
     creators: Sequence[Creator] = ()
     parameters: Sequence[ModelParameter] = ()
     starts: Mapping[str, Q] = field(default_factory=dict)
+    deltas: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         """Normalise the sex to a `Sex` member."""
@@ -286,6 +294,7 @@ class PBPKDefinition:
                     lambda x: x[0],
                 )
             ),
+            deltas=tuple(dict.fromkeys(x for d in definitions for x in d.deltas)),
         )
 
     def validate(self, *, symbols: bool = True) -> None:
@@ -313,6 +322,7 @@ class PBPKDefinition:
         problems += self._check_observers()
         problems += self._check_parameters()
         problems += self._check_starts()
+        problems += self._check_deltas()
         if self.population not in POPULATIONS:
             problems.append(
                 f"population '{self.population}' is unknown, the populations are "
@@ -413,6 +423,23 @@ class PBPKDefinition:
             if x is not None and not x >= 0:
                 problems.append(f"start '{sid}': must not be negative, got {x}")
             problems += _unit(f"start '{sid}'", "value", q, U.mM)
+        return problems
+
+    def _check_deltas(self) -> list[str]:
+        """Check the ids of the deltas: SIds, each once.
+
+        That an id is an observer of the top model and that `<id>_0` and
+        `<id>_delta` are no ids of the model is checked by `compose`.
+        """
+        problems: list[str] = []
+        twice = sorted({d for d in self.deltas if self.deltas.count(d) > 1})
+        if twice:
+            problems.append(f"duplicate deltas: {twice}")
+        problems += [
+            f"delta '{d}': the id is not an SBML SId"
+            for d in self.deltas
+            if not _SID.fullmatch(d)
+        ]
         return problems
 
     def _check_substances(self) -> list[str]:
