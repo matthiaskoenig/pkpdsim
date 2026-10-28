@@ -19,10 +19,12 @@ ids of the top model, so that the model does not restate them:
 - `organ_plasma`, `organ_tissue`: the plasma leaving a standard organ and its
   merged tissue with a net source `rate` (mmole/min) and a clearance of the
   plasma;
-- `renal_filtration`, `kidney_plasma`, `renal_clearance`: the net filtrate of
-  the kidney, the kidney plasma with a secretion (a clearance of the kidney
-  plasma) and the renal clearance of the arterial plasma (glomerulus and
-  tubule in series);
+- `renal_filtration`, `kidney_plasma`, `kidney_arterial`, `renal_clearance`:
+  the net filtrate of the kidney, the kidney plasma with a secretion (a
+  clearance of the kidney plasma and a saturable secretion, `Saturable`, the
+  root of a quadratic) at a given arterial plasma or a given renal
+  elimination, the arterial plasma of a kidney plasma, and the renal
+  clearance of the arterial plasma (glomerulus and tubule in series);
 - `liver_plasma`: the liver plasma, fed by the hepatic artery and the portal
   vein past the shunt `f_shunt`, with a source of the liver;
 - `arm_vein`: the mix of the venous outflows of the arm vein of a preset.
@@ -43,20 +45,24 @@ equilibrium), the nephron kidney (its tubule starts empty, not at its steady
 state) and a source in the zonated liver (it refuses custom reactions). The
 functions of an organ which has variants take the variants of the definition
 (`variants=`, required), so a model with a variant never gets the formula of
-the standard organ silently.
+the standard organ silently. Every function which takes an inflow names it
+`arterial` (and `portal` for the liver).
 """
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 
 from pkpdsim.pbpk import ids
 from pkpdsim.pbpk.definition import Variants
 from pkpdsim.pbpk.observers import arm_vein_weights
 from pkpdsim.pbpk.organs import Organ, Pool
-from pkpdsim.pbpk.placement import kp_id
-from pkpdsim.pbpk.substance import Mode, Substance
+from pkpdsim.pbpk.placement import ONE, kp_id
+from pkpdsim.pbpk.substance import Kp, KpMethod, Mode, Substance
 
 __all__ = [
+    "Saturable",
     "arm_vein",
+    "kidney_arterial",
     "kidney_plasma",
     "liver_plasma",
     "organ_plasma",
@@ -67,9 +73,6 @@ __all__ = [
     "tissue_exchange",
     "tissue_volume",
 ]
-
-ONE = "1 dimensionless"
-"""The number one in a formula, with its unit (SBML unit checks)."""
 
 _GUT = frozenset({Organ.SMALL_INTESTINE, Organ.LARGE_INTESTINE})
 """The organs of the intestine."""
@@ -106,29 +109,50 @@ def _terms(*terms: str) -> str:
     return " + ".join(f"({t})" for t in kept) if kept else "0"
 
 
-def plasma_flow(substance: Substance, organ: Organ) -> str:
-    """Get the flow which carries the substance through a standard organ [l/min].
+def _check_gut(organ: Organ) -> None:
+    """Refuse the organs of the intestine."""
+    if organ in _GUT:
+        raise NotImplementedError(
+            f"No steady state of the organ '{organ.name.lower()}': the intestine refuses "
+            "custom reactions, its parts start at the equilibrium with the baseline."
+        )
+
+
+def _check_variant(organ: Organ, variants: Variants) -> None:
+    """Refuse an organ with a variant."""
+    if _variant(variants, organ) is not None:
+        raise NotImplementedError(
+            f"No steady state of the variant of the organ '{organ.name.lower()}'."
+        )
+
+
+def plasma_flow(substance: Substance, organ: Organ, *, variants: Variants) -> str:
+    """Get the flow which carries the substance through an organ [l/min].
 
     `Q<o>*(1 - HCT)`, the plasma flow, or `Q<o>*BP_<s>` with erythrocytes in
     equilibrium (the plasma species carries the blood); the liver is perfused
-    by `(1 - f_shunt)*Qh`.
+    by `(1 - f_shunt)*Qh`. The flows of the variants of the liver and the
+    kidney are those of the standard organ.
 
     Args:
         substance: the substance.
-        organ: the organ.
+        organ: the organ, not the intestine.
+        variants: the variants of the definition (`PBPKDefinition.variants`),
+            required.
 
     Returns:
         The formula.
 
     Raises:
-        NotImplementedError: with kinetic erythrocytes.
+        NotImplementedError: with kinetic erythrocytes, for the intestine.
     """
+    _check_gut(organ)
     if organ is Organ.LIVER:
         return f"({ONE} - {ids.F_SHUNT}) * " + _flow_of(substance, ids.QH)
     return _flow_of(substance, ids.organ_flow(organ))
 
 
-def tissue_volume(organ: Organ) -> str:
+def tissue_volume(organ: Organ, *, variants: Variants) -> str:
     """Get the volume of the merged tissue of a standard organ, `Vti` [l].
 
     `V<o>*(1 - f_vas_<o>)`, of the liver times `f_functional`: the local
@@ -136,36 +160,30 @@ def tissue_volume(organ: Organ) -> str:
     rate of a custom reaction per litre of tissue at the steady state.
 
     Args:
-        organ: the organ.
+        organ: the organ, a standard organ, not the intestine.
+        variants: the variants of the definition (`PBPKDefinition.variants`),
+            required: a variant is refused.
 
     Returns:
         The formula.
+
+    Raises:
+        NotImplementedError: for the intestine or a variant of the organ.
     """
+    _check_gut(organ)
+    _check_variant(organ, variants)
     tissue = f"{ids.organ_volume(organ)} * ({ONE} - {ids.vascular_fraction(organ)})"
     if organ is Organ.LIVER:
         tissue = f"{tissue} * {ids.F_FUNCTIONAL}"
     return tissue
 
 
-def tissue_exchange(substance: Substance, organ: Organ) -> str:
-    """Get the exchange of the merged tissue of an organ with its plasma, `PS*fu` [l/min].
-
-    The share of the whole-body exchange `ftissue_<s>` by the tissue volume of
-    the organ (of the liver times `f_functional`) relative to the reference
-    tissue volume, times the fraction unbound: the exchange
-    `PS*fu*(Cpl - Cti/Kp)` of the merged tissue (`Mode.TISSUE`).
-
-    Args:
-        substance: the substance.
-        organ: the organ.
-
-    Returns:
-        The formula.
+def _check_merged(substance: Substance, organ: Organ) -> Kp | KpMethod:
+    """Get the distribution of a substance which enters the merged tissue of an organ.
 
     Raises:
         ValueError: if the substance does not enter the tissue of the organ.
-        NotImplementedError: for another mode than `Mode.TISSUE` or an
-            exchange of the organ of its own (`ps`).
+        NotImplementedError: for another mode than `Mode.TISSUE`.
     """
     dist = substance.distribution
     if dist is None or kp_id(substance, organ) is None:
@@ -177,39 +195,59 @@ def tissue_exchange(substance: Substance, organ: Organ) -> str:
             f"{substance.sid}: no closed steady state of the tissue in mode "
             f"'{dist.mode.value}', only of the merged tissue (Mode.TISSUE)."
         )
+    return dist
+
+
+def tissue_exchange(substance: Substance, organ: Organ, *, variants: Variants) -> str:
+    """Get the exchange of the merged tissue of an organ with its plasma, `PS*fu` [l/min].
+
+    The share of the whole-body exchange `ftissue_<s>` by the tissue volume of
+    the organ (of the liver times `f_functional`) relative to the reference
+    tissue volume, times the fraction unbound: the exchange
+    `PS*fu*(Cpl - Cti/Kp)` of the merged tissue (`Mode.TISSUE`).
+
+    Args:
+        substance: the substance.
+        organ: the organ, a standard organ, not the intestine.
+        variants: the variants of the definition (`PBPKDefinition.variants`),
+            required: a variant is refused.
+
+    Returns:
+        The formula.
+
+    Raises:
+        ValueError: if the substance does not enter the tissue of the organ.
+        NotImplementedError: for another mode than `Mode.TISSUE`, an
+            exchange of the organ of its own (`ps`), the intestine or a variant
+            of the organ.
+    """
+    dist = _check_merged(substance, organ)
     if organ in dist.ps:
         raise NotImplementedError(
             f"{substance.sid}: the exchange of the organ '{organ.name.lower()}' is a "
             "value of the organ (ps), no constant of the top model."
         )
     return (
-        f"{ids.ftissue(substance.sid)} * {tissue_volume(organ)} / "
+        f"{ids.ftissue(substance.sid)} * {tissue_volume(organ, variants=variants)} / "
         f"{ids.tissue_volume_total_ref(substance.sid)} * {ids.fu(substance.sid)}"
     )
 
 
 def _check_standard(organ: Organ, variants: Variants) -> None:
     """Refuse the organs whose steady state the plasma of a standard organ is not."""
-    if organ in _GUT:
-        raise NotImplementedError(
-            f"No steady state of the organ '{organ.name.lower()}': the intestine refuses "
-            "custom reactions, its parts start at the equilibrium with the baseline."
-        )
+    _check_gut(organ)
     if organ is Organ.KIDNEY:
         raise ValueError("The kidney filters: use `kidney_plasma`.")
     if organ is Organ.LIVER:
         raise ValueError("The liver has two inflows and a shunt: use `liver_plasma`.")
-    if _variant(variants, organ) is not None:
-        raise NotImplementedError(
-            f"No steady state of the variant of the organ '{organ.name.lower()}'."
-        )
+    _check_variant(organ, variants)
 
 
 def organ_plasma(
     substance: Substance,
     organ: Organ,
     *,
-    inflow: str | None = None,
+    arterial: str | None = None,
     rate: str = "0",
     clearance: str = "0",
     variants: Variants,
@@ -225,8 +263,8 @@ def organ_plasma(
         substance: the substance.
         organ: the organ, not the kidney or the liver (`kidney_plasma`,
             `liver_plasma`) or the intestine.
-        inflow: the plasma flowing in, the baseline `baseline_<s>` (the
-            arterial plasma of the steady state) by default.
+        arterial: the arterial plasma flowing in, the baseline
+            `baseline_<s>` by default.
         rate: the net source of the organ at the steady state (mmole/min),
             negative for an uptake.
         clearance: the clearance of the plasma of the organ (l/min).
@@ -237,8 +275,8 @@ def organ_plasma(
         The formula.
     """
     _check_standard(organ, variants)
-    flow = plasma_flow(substance, organ)
-    c_in = ids.baseline(substance.sid) if inflow is None else inflow
+    flow = plasma_flow(substance, organ, variants=variants)
+    c_in = ids.baseline(substance.sid) if arterial is None else arterial
     return f"({_terms(f'{flow} * ({c_in})', rate)}) / ({_terms(flow, clearance)})"
 
 
@@ -269,32 +307,36 @@ def organ_tissue(
     Returns:
         The formula.
     """
-    if organ in _GUT:
-        _check_standard(organ, variants)
+    _check_gut(organ)
     variant = _variant(variants, organ)
     if variant is not None and not (organ is Organ.LIVER and rate == "0"):
         raise NotImplementedError(
             f"No steady state of a source in the variant of the organ '{organ.name.lower()}'."
         )
-    exchange = tissue_exchange(substance, organ)
+    _check_merged(substance, organ)
     kp = kp_id(substance, organ)
     if rate == "0":
         return f"{kp} * ({plasma})"
+    exchange = tissue_exchange(substance, organ, variants=variants)
     return f"{kp} * ({plasma} + ({rate}) / ({exchange}))"
 
 
-def renal_filtration(substance: Substance) -> str:
+def renal_filtration(substance: Substance, *, variants: Variants) -> str:
     """Get the net filtered plasma flow of the kidney, `fu*GFR*(1 - f_reabsorbed)` [l/min].
 
     Args:
         substance: the substance, with urinary excretion.
+        variants: the variants of the definition (`PBPKDefinition.variants`),
+            required: the nephron kidney is refused.
 
     Returns:
         The formula.
 
     Raises:
         ValueError: for a substance without urinary excretion.
+        NotImplementedError: for the nephron kidney.
     """
+    _check_kidney(variants)
     s = substance.sid
     if not substance.excretion.urine:
         raise ValueError(f"{s} is not filtered (Excretion(urine=False)).")
@@ -310,39 +352,157 @@ def _check_kidney(variants: Variants) -> None:
         )
 
 
+@dataclass(frozen=True)
+class Saturable:
+    """A saturable secretion of the kidney plasma at the steady state.
+
+    The rate `vmax*C/(km + C)` of the kidney plasma `C` (mmole/min), a
+    Michaelis-Menten secretion of a custom reaction of the kidney into the
+    urine, as formulas over ids of the top model.
+
+    Attributes:
+        vmax: the capacity of the whole kidney (mmole/min).
+        km: the Michaelis constant (mM).
+    """
+
+    vmax: str
+    km: str
+
+
+def _kidney_flows(substance: Substance, variants: Variants) -> tuple[str, str, str]:
+    """The plasma flow `F`, the net filtrate `G` and the flow past it `R = F - G`."""
+    _check_kidney(variants)
+    flow = plasma_flow(substance, Organ.KIDNEY, variants=variants)
+    if not substance.excretion.urine:
+        return flow, "0", flow
+    gfr = renal_filtration(substance, variants=variants)
+    return flow, gfr, f"{flow} - {gfr}"
+
+
+def _saturable_root(a: str, vmax: str, km: str, d: str) -> str:
+    """The positive root `C` of `a*C + vmax*C/(km + C) = d`.
+
+    `a*C^2 + b*C - d*km = 0` with `b = a*km + vmax - d`, in the form
+    `2*d*km/(b + sqrt(b^2 + 4*a*d*km))`, which has no cancellation for
+    `b >= 0` (the linear elimination and the capacity at least the load) and
+    no division by `a`.
+    """
+    b = f"({a}) * ({km}) + ({vmax}) - ({d})"
+    root = f"sqrt(({b})^2 + 4 dimensionless * ({a}) * ({d}) * ({km}))"
+    return f"2 dimensionless * ({d}) * ({km}) / ({b} + {root})"
+
+
 def kidney_plasma(
     substance: Substance,
     *,
     arterial: str | None = None,
+    eliminated: str | None = None,
     rate: str = "0",
     clearance: str = "0",
+    secretion: Saturable | None = None,
     variants: Variants,
 ) -> str:
     """Get the plasma of the kidney at its steady state [mM].
 
     The glomerulus filters the arterial plasma, the plasma leaving the
-    kidney lacks the net filtrate `CL_gfr` (`renal_filtration`, 0 without
-    urinary excretion), a secretion clears the kidney plasma (`clearance`) and
-    a source returns `rate` into it (a reabsorption): `Cpl = ((F - CL_gfr)*Car
-    + rate)/(F - CL_gfr + clearance)`.
+    kidney lacks the net filtrate `G` (`renal_filtration`, 0 without urinary
+    excretion), a secretion clears the kidney plasma (`clearance`, l/min, and
+    a saturable `secretion`, `S(C) = vmax*C/(km + C)`) and a source returns
+    `rate` into it (a reabsorption): with `R = F - G`
+
+    `R*(Car - C) + rate = clearance*C + S(C)`.
+
+    The kidney plasma `C` follows from the arterial plasma `Car`, or from
+    the amount the kidney eliminates into the urine (`eliminated`,
+    mmole/min): `E = G*Car + clearance*C + S(C) - rate`, the production of an
+    endogenous substance which only the kidney excretes, whose arterial plasma
+    is unknown (`kidney_arterial` gives it). Without `secretion` the formula
+    is linear in `C`; with it `C` is the positive root of a quadratic.
 
     Args:
         substance: the substance.
         arterial: the arterial plasma, the baseline by default.
+        eliminated: the net excretion of the kidney into the urine at the
+            steady state (mmole/min), instead of `arterial`.
         rate: the net source of the kidney (mmole/min).
-        clearance: the clearance of the kidney plasma (l/min).
+        clearance: the first order clearance of the kidney plasma (l/min).
+        secretion: a saturable secretion of the kidney plasma.
+        variants: the variants of the definition (`PBPKDefinition.variants`),
+            required: a variant without a closed steady state is refused.
+
+    Returns:
+        The formula.
+
+    Raises:
+        ValueError: for both `arterial` and `eliminated`, or `eliminated`
+            without an elimination of the kidney.
+    """
+    flow, gfr, rest = _kidney_flows(substance, variants)
+    if eliminated is None:
+        car = ids.baseline(substance.sid) if arterial is None else arterial
+        load = _terms(f"({rest}) * ({car})", rate)
+        linear = _terms(rest, clearance)
+        vmax = None if secretion is None else secretion.vmax
+    else:
+        if arterial is not None:
+            raise ValueError("Give the arterial plasma or the elimination, not both.")
+        if gfr == "0" and clearance == "0" and secretion is None:
+            raise ValueError(f"{substance.sid}: the kidney eliminates nothing.")
+        # the kidney plasma passes the arterial plasma on: Car = C + (CL*C +
+        # S(C) - rate)/R, so E = G*C + F/R*(CL*C + S(C) - rate)
+        ratio = f"({flow}) / ({rest})"
+        load = _terms(eliminated, f"{ratio} * ({rate})" if rate != "0" else "0")
+        linear = _terms(gfr, f"{ratio} * ({clearance})" if clearance != "0" else "0")
+        vmax = None if secretion is None else f"{ratio} * ({secretion.vmax})"
+    if secretion is None or vmax is None:
+        return f"({load}) / ({linear})"
+    if linear == "0":
+        # the saturable secretion alone: S(C) = load
+        return f"({load}) * ({secretion.km}) / ({vmax} - ({load}))"
+    return _saturable_root(linear, vmax, secretion.km, load)
+
+
+def kidney_arterial(
+    substance: Substance,
+    plasma: str,
+    *,
+    rate: str = "0",
+    clearance: str = "0",
+    secretion: Saturable | None = None,
+    variants: Variants,
+) -> str:
+    """Get the arterial plasma whose kidney plasma at the steady state is `plasma` [mM].
+
+    The inverse of `kidney_plasma`: `Car = C + (clearance*C + S(C) - rate)/R`
+    with the flow past the filtrate `R = F - G`, e.g. the baseline of an
+    endogenous substance from the kidney plasma of its elimination
+    (`kidney_plasma(..., eliminated=...)`).
+
+    Args:
+        substance: the substance.
+        plasma: the kidney plasma at the steady state.
+        rate: the net source of the kidney (mmole/min).
+        clearance: the first order clearance of the kidney plasma (l/min).
+        secretion: a saturable secretion of the kidney plasma.
         variants: the variants of the definition (`PBPKDefinition.variants`),
             required: a variant without a closed steady state is refused.
 
     Returns:
         The formula.
     """
-    _check_kidney(variants)
-    flow = plasma_flow(substance, Organ.KIDNEY)
-    if substance.excretion.urine:
-        flow = f"{flow} - {renal_filtration(substance)}"
-    car = ids.baseline(substance.sid) if arterial is None else arterial
-    return f"({_terms(f'({flow}) * ({car})', rate)}) / ({_terms(flow, clearance)})"
+    _, _, rest = _kidney_flows(substance, variants)
+    saturable = (
+        "0"
+        if secretion is None
+        else f"({secretion.vmax}) * ({plasma}) / ({secretion.km} + {plasma})"
+    )
+    linear = f"({clearance}) * ({plasma})" if clearance != "0" else "0"
+    removed = _terms(linear, saturable)
+    if rate != "0":
+        removed = f"{removed} - ({rate})" if removed != "0" else f"-({rate})"
+    if removed == "0":
+        return plasma
+    return f"{plasma} + ({removed}) / ({rest})"
 
 
 def renal_clearance(
@@ -354,7 +514,7 @@ def renal_clearance(
     """Get the renal clearance of the arterial plasma at the steady state [l/min].
 
     The filtration and a secretion of the kidney plasma (`clearance`) in
-    series: `CL_gfr + (F - CL_gfr)*CL/(F - CL_gfr + CL)`.
+    series: `G + (F - G)*CL/(F - G + CL)`.
 
     Args:
         substance: the substance.
@@ -365,12 +525,9 @@ def renal_clearance(
     Returns:
         The formula.
     """
-    _check_kidney(variants)
-    flow = plasma_flow(substance, Organ.KIDNEY)
-    gfr = renal_filtration(substance) if substance.excretion.urine else "0"
+    _, gfr, rest = _kidney_flows(substance, variants)
     if clearance == "0":
         return gfr
-    rest = f"{flow} - ({gfr})" if gfr != "0" else flow
     secreted = f"({rest}) * ({clearance}) / ({rest} + {clearance})"
     return _terms(gfr, secreted)
 
@@ -381,16 +538,18 @@ def liver_plasma(
     arterial: str | None = None,
     portal: str | None = None,
     rate: str = "0",
+    clearance: str = "0",
     variants: Variants,
 ) -> str:
     """Get the plasma of the liver at its steady state [mM].
 
     The liver is perfused by `(1 - f_shunt)` of the hepatic artery and the
     portal vein and drains `(1 - f_shunt)*Qh`; a source `rate` of the liver
-    (mmole/min) leaves with it:
-    `Cpl = ((1 - f_shunt)*(Qha*Car + Qpo*Cpo)*c + rate)/((1 - f_shunt)*Qh*c)`
-    with the carrier `c` (`plasma_flow`). The zonated liver (no source, it
-    refuses custom reactions) has the same plasma in every zone.
+    (mmole/min) leaves with it and a clearance of its plasma (l/min) removes
+    a part: `Cpl = ((1 - f_shunt)*(Qha*Car + Qpo*Cpo)*c + rate)/((1 -
+    f_shunt)*Qh*c + clearance)` with the carrier `c` (`plasma_flow`). The
+    zonated liver (no source and no clearance, it refuses custom reactions)
+    has the same plasma in every zone.
 
     Args:
         substance: the substance.
@@ -398,15 +557,18 @@ def liver_plasma(
         portal: the portal plasma, the baseline by default (the portal organs
             without a source).
         rate: the net source of the liver (mmole/min).
+        clearance: the clearance of the liver plasma (l/min).
         variants: the variants of the definition (`PBPKDefinition.variants`),
             required: a variant without a closed steady state is refused.
 
     Returns:
         The formula.
     """
-    if rate != "0" and _variant(variants, Organ.LIVER) is not None:
+    if (rate != "0" or clearance != "0") and _variant(
+        variants, Organ.LIVER
+    ) is not None:
         raise NotImplementedError(
-            "No steady state of a source in the variant of the liver."
+            "No steady state of a source or a clearance in the variant of the liver."
         )
     b = ids.baseline(substance.sid)
     car = b if arterial is None else arterial
@@ -414,12 +576,13 @@ def liver_plasma(
     perfused = f"({ONE} - {ids.F_SHUNT})"
     carrier = _carrier(substance)
     inflow = f"{perfused} * ({ids.QHA} * ({car}) + {ids.QPO} * ({cpo})) * {carrier}"
-    return f"({_terms(inflow, rate)}) / ({plasma_flow(substance, Organ.LIVER)})"
+    flow = plasma_flow(substance, Organ.LIVER, variants=variants)
+    return f"({_terms(inflow, rate)}) / ({_terms(flow, clearance)})"
 
 
 def arm_vein(
-    preset: str,
     substance: Substance,
+    preset: str,
     outflows: Mapping[Organ, str],
     *,
     arterial: str | None = None,
@@ -431,8 +594,8 @@ def arm_vein(
     organ not in `outflows` and the arterial plasma are at the baseline.
 
     Args:
-        preset: the preset of the arm vein, e.g. `pksim_default`.
         substance: the substance.
+        preset: the preset of the arm vein, e.g. `pksim_default`.
         outflows: the plasma leaving the organs at the steady state.
         arterial: the arterial plasma, the baseline by default.
 

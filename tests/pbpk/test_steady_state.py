@@ -95,7 +95,10 @@ def _substance(erythrocytes: Erythrocytes | None = None) -> Substance:
         distribution=Kp(0.6, ftissue=6.0, overrides={Organ.MUSCLE: 0.8}),
         excretion=Excretion(urine=True, fraction_reabsorbed=0.1),
     )
-    rest = f"{ss.plasma_flow(s, Organ.KIDNEY)} - {ss.renal_filtration(s)}"
+    rest = (
+        f"{ss.plasma_flow(s, Organ.KIDNEY, variants=STANDARD)} - "
+        f"{ss.renal_filtration(s, variants=STANDARD)}"
+    )
     passed = f"({rest}) / ({rest} + CL_sec)"
     return dataclasses.replace(
         s, baseline=Formula(f"(k_prod + k_syn + k_li + k_ki * {passed}) / CL_ar", U.mM)
@@ -208,7 +211,8 @@ def test_the_steady_state_of_the_organs_is_stationary(
     assert r[f"[Car_{S}]"] == pytest.approx(r[ids.baseline(S)], rel=1e-12)
     for organ in (Organ.MUSCLE, Organ.LIVER):
         volume = r[ids.flat(organ, "Vti")]
-        assert _evaluate(r, ss.tissue_volume(organ)) == pytest.approx(volume, rel=1e-12)
+        expected = ss.tissue_volume(organ, variants=STANDARD)
+        assert _evaluate(r, expected) == pytest.approx(volume, rel=1e-12)
 
 
 def test_the_arm_vein_of_the_steady_state_is_the_observer(tmp_path: Path) -> None:
@@ -221,7 +225,7 @@ def test_the_arm_vein_of_the_steady_state_is_the_observer(tmp_path: Path) -> Non
     for preset in ("pksim_default", "musther2015"):
         d = _definition(s, arm_vein=preset)
         r = individual(build(d, tmp_path / preset).flat_path, BW=90.0)
-        formula = ss.arm_vein(preset, s, {Organ.MUSCLE: _muscle_plasma(s)})
+        formula = ss.arm_vein(s, preset, {Organ.MUSCLE: _muscle_plasma(s)})
         for symbol in sorted(
             {"w_arm_sk", "w_arm_mu", "w_arm_ad", "w_arm_ar"} & set(formula.split())
         ):
@@ -314,9 +318,11 @@ def test_the_nephron_kidney_is_refused() -> None:
     """The tubule of the nephron kidney starts empty: no steady state of the kidney."""
     variants = Variants(organs={Organ.KIDNEY: "nephron"})
     s = _substance()
-    for f in (ss.kidney_plasma, ss.renal_clearance):
+    for f in (ss.kidney_plasma, ss.renal_clearance, ss.renal_filtration):
         with pytest.raises(NotImplementedError, match="nephron kidney"):
             f(s, variants=variants)
+    with pytest.raises(NotImplementedError, match="nephron kidney"):
+        ss.kidney_arterial(s, "1 mM", variants=variants)
     with pytest.raises(NotImplementedError, match="variant of the organ 'kidney'"):
         ss.organ_tissue(s, Organ.KIDNEY, "1 mM", variants=variants)
 
@@ -354,7 +360,7 @@ def test_the_forms_without_a_closed_steady_state_are_refused() -> None:
         ss.organ_plasma(_substance(), Organ.LIVER, variants=STANDARD)
     unfiltered = dataclasses.replace(_substance(), excretion=Excretion())
     with pytest.raises(ValueError, match="not filtered"):
-        ss.renal_filtration(unfiltered)
+        ss.renal_filtration(unfiltered, variants=STANDARD)
     # without filtration the kidney plasma is the arterial plasma with the
     # secretion alone, the renal clearance the secretion of the plasma flow
     assert "GFR" not in ss.kidney_plasma(
@@ -363,3 +369,44 @@ def test_the_forms_without_a_closed_steady_state_are_refused() -> None:
     assert "GFR" not in ss.renal_clearance(
         unfiltered, clearance="CL_sec", variants=STANDARD
     )
+
+
+def test_every_helper_takes_the_variants() -> None:
+    """A helper of an organ refuses its variant; the flows are those of the physiology."""
+    zonated = Variants(organs={Organ.LIVER: "zonated"})
+    s = _substance()
+    with pytest.raises(NotImplementedError, match="variant of the organ 'liver'"):
+        ss.tissue_volume(Organ.LIVER, variants=zonated)
+    with pytest.raises(NotImplementedError, match="variant of the organ 'liver'"):
+        ss.tissue_exchange(s, Organ.LIVER, variants=zonated)
+    with pytest.raises(NotImplementedError, match="variant of the liver"):
+        ss.liver_plasma(s, clearance="CL_sec", variants=zonated)
+    assert ss.plasma_flow(s, Organ.LIVER, variants=zonated) == ss.plasma_flow(
+        s, Organ.LIVER, variants=STANDARD
+    )
+    for f in (ss.plasma_flow, ss.tissue_exchange):
+        with pytest.raises(NotImplementedError, match="intestine refuses custom"):
+            f(s, Organ.SMALL_INTESTINE, variants=STANDARD)
+
+
+def test_the_liver_clearance_removes_a_part_of_the_inflow() -> None:
+    """`(inflow + rate)/(flow + clearance)` of the liver plasma."""
+    import libsbml
+
+    s = _substance()
+    formula = ss.liver_plasma(s, rate="k", clearance="CL", variants=STANDARD)
+    values = {
+        "f_shunt": 0.1,
+        "Qha": 0.4,
+        "Qpo": 1.1,
+        "Qh": 1.5,
+        "HCT": 0.45,
+        "baseline_end": 0.02,
+        "k": 0.001,
+        "CL": 0.3,
+    }
+    ast = libsbml.parseL3Formula(formula.replace(" dimensionless", ""))
+    expression = libsbml.formulaToL3String(ast).replace("^", "**")
+    plasma = 0.9 * 1.5 * 0.55
+    expected = (plasma * 0.02 + 0.001) / (plasma + 0.3)
+    assert eval(expression, {}, values) == pytest.approx(expected, rel=1e-14)
