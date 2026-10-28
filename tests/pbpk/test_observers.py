@@ -477,14 +477,15 @@ def test_a_delta_of_no_observer_is_refused() -> None:
 
 
 def test_without_deltas_the_model_is_unchanged(tmp_path: Path) -> None:
-    """Empty deltas give the SBML of a definition without the field."""
-    from .conftest import dateless
+    """Empty deltas give the SBML of before the field (the reference of f008d56).
 
-    a = build(_endogenous_drug(), tmp_path / "a").flat_path
-    b = build(
-        dataclasses.replace(_endogenous_drug(), deltas=()), tmp_path / "b"
-    ).flat_path
-    assert dateless(a.read_text()) == dateless(b.read_text())
+    The reference definition with `deltas=()` builds the stored comp and flat
+    SBML of f008d56, which predates the deltas, line by line.
+    """
+    from .conftest import assert_reference_sbml, reference_definition
+
+    d = dataclasses.replace(reference_definition(), deltas=())
+    assert_reference_sbml(build(d, tmp_path))
 
 
 # --- the observers of a definition -------------------------------------------

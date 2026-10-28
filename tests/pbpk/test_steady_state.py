@@ -43,17 +43,24 @@ if TYPE_CHECKING:
 S = "end"
 DAY = 24 * 60.0
 
-#: the production of the muscle, the supply of the liver (mmole/min), the
-#: secretion clearance of the kidney plasma (l/min)
+#: the production of the muscle, the supply of the liver plasma and tissue,
+#: a source of the kidney plasma (mmole/min), the secretion clearance of the
+#: kidney plasma (l/min)
 PARAMETERS = [
     ModelParameter("k_prod", 0.0074, U.mmole_per_min),
     ModelParameter("k_syn", 0.002, U.mmole_per_min),
+    ModelParameter("k_li", 0.001, U.mmole_per_min),
+    ModelParameter("k_ki", 0.0005, U.mmole_per_min),
     ModelParameter("CL_sec", 0.05, U.l_per_min),
 ]
+#: the variants of the standard organs
+STANDARD = Variants()
 
 CHEMISTRY = [
     CustomReaction("PROD", Organ.MUSCLE, Part.TISSUE, f"-> Cti_{S}", "k_prod", []),
     CustomReaction("SYN", Organ.LIVER, Part.PLASMA, f"-> Cpl_{S}", "k_syn", []),
+    CustomReaction("LISRC", Organ.LIVER, Part.TISSUE, f"-> Cti_{S}", "k_li", []),
+    CustomReaction("KISRC", Organ.KIDNEY, Part.PLASMA, f"-> Cpl_{S}", "k_ki", []),
     CustomReaction(
         "SEC",
         Organ.KIDNEY,
@@ -65,9 +72,21 @@ CHEMISTRY = [
 ]
 
 
+#: the source and the secretion of the kidney
+KIDNEY_SOURCE, SECRETION = CHEMISTRY[-2:]
+#: the sources of the muscle and the liver, the production of the muscle where
+#: the zonated liver refuses the sources of the liver
+ALL = "k_prod + k_syn + k_li"
+
+
 def _substance(erythrocytes: Erythrocytes | None = None) -> Substance:
-    """A bound substance, filtered with a reabsorbed fraction, at its steady state."""
-    return Substance(
+    """A bound substance, filtered with a reabsorbed fraction, at its steady state.
+
+    The baseline is the arterial plasma of the steady state: the sources over
+    the renal clearance of the arterial plasma, of the source of the kidney
+    the part which leaves the kidney plasma unsecreted.
+    """
+    s = Substance(
         S,
         name="endogenous substance",
         mr=113.1,
@@ -75,13 +94,16 @@ def _substance(erythrocytes: Erythrocytes | None = None) -> Substance:
         erythrocytes=erythrocytes,
         distribution=Kp(0.6, ftissue=6.0, overrides={Organ.MUSCLE: 0.8}),
         excretion=Excretion(urine=True, fraction_reabsorbed=0.1),
-        # production and supply over the renal clearance of the arterial plasma
-        baseline=Formula("(k_prod + k_syn) / CL_ar", U.mM),
+    )
+    rest = f"{ss.plasma_flow(s, Organ.KIDNEY)} - {ss.renal_filtration(s)}"
+    passed = f"({rest}) / ({rest} + CL_sec)"
+    return dataclasses.replace(
+        s, baseline=Formula(f"(k_prod + k_syn + k_li + k_ki * {passed}) / CL_ar", U.mM)
     )
 
 
 def _definition(
-    s: Substance, variants: Variants | None = None, **fields: object
+    s: Substance, variants: Variants = STANDARD, **fields: object
 ) -> PBPKDefinition:
     """The definition of the substance with the starts of the module."""
     starts = _starts(s, variants)
@@ -89,7 +111,7 @@ def _definition(
         sid="steady",
         substances=[s],
         chemistry=CHEMISTRY,
-        variants=variants or Variants(),
+        variants=variants,
         parameters=[
             *PARAMETERS,
             ModelParameter(
@@ -108,23 +130,34 @@ def _definition(
 
 def _muscle_plasma(s: Substance) -> str:
     """The plasma leaving the muscle with its production."""
-    return ss.organ_plasma(s, Organ.MUSCLE, rate="k_prod")
+    return ss.organ_plasma(s, Organ.MUSCLE, rate="k_prod", variants=STANDARD)
 
 
-def _starts(s: Substance, variants: Variants | None) -> dict[str, Formula]:
-    """The steady state of the muscle, the kidney and the liver."""
+def _starts(s: Substance, variants: Variants) -> dict[str, Formula]:
+    """The steady state of the muscle, the kidney and the liver.
+
+    The kidney with a source of its plasma and a secretion, the liver with a
+    source of its plasma and of its tissue (`tissue_exchange` with
+    `f_functional`).
+    """
     muscle = _muscle_plasma(s)
-    kidney = ss.kidney_plasma(s, clearance="CL_sec", variants=variants)
-    liver = ss.liver_plasma(s, rate="k_syn", variants=variants)
+    kidney = ss.kidney_plasma(s, rate="k_ki", clearance="CL_sec", variants=variants)
+    liver = ss.liver_plasma(s, rate="k_syn + k_li", variants=variants)
     return {
         f"MU__Cpl_{S}": Formula(muscle, U.mM),
         f"MU__Cti_{S}": Formula(
-            ss.organ_tissue(s, Organ.MUSCLE, muscle, rate="k_prod"), U.mM
+            ss.organ_tissue(s, Organ.MUSCLE, muscle, rate="k_prod", variants=variants),
+            U.mM,
         ),
         f"KI__Cpl_{S}": Formula(kidney, U.mM),
-        f"KI__Cti_{S}": Formula(ss.organ_tissue(s, Organ.KIDNEY, kidney), U.mM),
+        f"KI__Cti_{S}": Formula(
+            ss.organ_tissue(s, Organ.KIDNEY, kidney, variants=variants), U.mM
+        ),
         f"LI__Cpl_{S}": Formula(liver, U.mM),
-        f"LI__Cti_{S}": Formula(ss.organ_tissue(s, Organ.LIVER, liver), U.mM),
+        f"LI__Cti_{S}": Formula(
+            ss.organ_tissue(s, Organ.LIVER, liver, rate="k_li", variants=variants),
+            U.mM,
+        ),
     }
 
 
@@ -139,8 +172,14 @@ def _drift(r: "roadrunner.RoadRunner") -> dict[str, float]:
 
 @pytest.mark.parametrize(
     "changes",
-    [{}, {"BW": 110.0, "HEIGHT": 190.0}, {"f_renal_function": 0.3}],
-    ids=["reference", "body", "renal function"],
+    [
+        {},
+        {"BW": 110.0, "HEIGHT": 190.0},
+        {"f_renal_function": 0.3},
+        # the portosystemic shunt and the functional fraction of the liver
+        {"f_shunt": 0.3, "f_functional": 0.6},
+    ],
+    ids=["reference", "body", "renal function", "liver"],
 )
 @pytest.mark.parametrize(
     "erythrocytes",
@@ -154,8 +193,10 @@ def test_the_steady_state_of_the_organs_is_stationary(
 
     The muscle with its production (plasma flow, the share of ftissue of its
     tissue, its own Kp), the kidney with the filtration less the reabsorbed
-    fraction and a secretion, the liver with its supply past the shunt; the
-    baseline is the arterial plasma of the steady state (`renal_clearance`).
+    fraction, a source and a secretion, the liver with a supply of its plasma
+    and its tissue past the shunt (a shunt and a reduced functional fraction
+    in one case); the baseline is the arterial plasma of the steady state
+    (`renal_clearance`).
     """
     s = _substance(erythrocytes)
     r = individual(build(_definition(s), tmp_path).flat_path, **changes)
@@ -216,33 +257,38 @@ def test_the_zonated_liver_has_the_inflow_in_every_zone(tmp_path: Path) -> None:
     liver = ss.liver_plasma(s, variants=variants)
     with pytest.raises(NotImplementedError, match="variant of the liver"):
         ss.liver_plasma(s, rate="k_syn", variants=variants)
-    muscle = ss.organ_plasma(s, Organ.MUSCLE, rate="k_prod + k_syn")
-    kidney = ss.kidney_plasma(s, clearance="CL_sec")
+    muscle = ss.organ_plasma(s, Organ.MUSCLE, rate=ALL, variants=variants)
+    kidney = ss.kidney_plasma(s, rate="k_ki", clearance="CL_sec", variants=variants)
     d = PBPKDefinition(
         sid="zonated",
         substances=[s],
         chemistry=[
-            CustomReaction(
-                "PROD", Organ.MUSCLE, Part.TISSUE, f"-> Cti_{S}", "k_prod + k_syn", []
-            ),
-            CHEMISTRY[2],
+            CustomReaction("PROD", Organ.MUSCLE, Part.TISSUE, f"-> Cti_{S}", ALL, []),
+            KIDNEY_SOURCE,
+            SECRETION,
         ],
         variants=variants,
         parameters=[
             *PARAMETERS,
             ModelParameter(
                 "CL_ar",
-                Formula(ss.renal_clearance(s, clearance="CL_sec"), U.l_per_min),
+                Formula(
+                    ss.renal_clearance(s, clearance="CL_sec", variants=variants),
+                    U.l_per_min,
+                ),
                 U.l_per_min,
             ),
         ],
         starts={
             f"MU__Cpl_{S}": Formula(muscle, U.mM),
             f"MU__Cti_{S}": Formula(
-                ss.organ_tissue(s, Organ.MUSCLE, muscle, rate="k_prod + k_syn"), U.mM
+                ss.organ_tissue(s, Organ.MUSCLE, muscle, rate=ALL, variants=variants),
+                U.mM,
             ),
             f"KI__Cpl_{S}": Formula(kidney, U.mM),
-            f"KI__Cti_{S}": Formula(ss.organ_tissue(s, Organ.KIDNEY, kidney), U.mM),
+            f"KI__Cti_{S}": Formula(
+                ss.organ_tissue(s, Organ.KIDNEY, kidney, variants=variants), U.mM
+            ),
         },
     )
     r = individual(build(d, tmp_path).flat_path, f_renal_function=0.5)
@@ -280,34 +326,40 @@ def test_the_intestine_is_refused(organ: Organ) -> None:
     """The segmented intestine refuses custom reactions: its parts start at the equilibrium."""
     s = _substance()
     with pytest.raises(NotImplementedError, match="intestine refuses custom"):
-        ss.organ_plasma(s, organ, rate="k_prod")
+        ss.organ_plasma(s, organ, rate="k_prod", variants=STANDARD)
     with pytest.raises(NotImplementedError, match="intestine refuses custom"):
-        ss.organ_tissue(s, organ, "1 mM")
+        ss.organ_tissue(s, organ, "1 mM", variants=STANDARD)
 
 
 def test_the_forms_without_a_closed_steady_state_are_refused() -> None:
     """Kinetic erythrocytes, the full form, an exchange of the organ and the wrong helper."""
-    kinetic = _substance(Erythrocytes("kinetic", kbc=1.5, k_exchange=0.1))
+    kinetic = dataclasses.replace(
+        _substance(), erythrocytes=Erythrocytes("kinetic", kbc=1.5, k_exchange=0.1)
+    )
     with pytest.raises(NotImplementedError, match="kinetic erythrocytes"):
-        ss.organ_plasma(kinetic, Organ.MUSCLE)
+        ss.organ_plasma(kinetic, Organ.MUSCLE, variants=STANDARD)
     full = dataclasses.replace(
         _substance(), distribution=Kp(0.6, ftissue=6.0, mode=Mode.PERMEABILITY)
     )
     with pytest.raises(NotImplementedError, match="permeability"):
-        ss.organ_tissue(full, Organ.MUSCLE, "1 mM")
+        ss.organ_tissue(full, Organ.MUSCLE, "1 mM", variants=STANDARD)
     own = dataclasses.replace(
         _substance(), distribution=Kp(0.6, ftissue=6.0, ps={Organ.MUSCLE: 1.0})
     )
     with pytest.raises(NotImplementedError, match="value of the organ"):
-        ss.organ_tissue(own, Organ.MUSCLE, "1 mM", rate="k_prod")
+        ss.organ_tissue(own, Organ.MUSCLE, "1 mM", rate="k_prod", variants=STANDARD)
     with pytest.raises(ValueError, match="kidney_plasma"):
-        ss.organ_plasma(_substance(), Organ.KIDNEY)
+        ss.organ_plasma(_substance(), Organ.KIDNEY, variants=STANDARD)
     with pytest.raises(ValueError, match="liver_plasma"):
-        ss.organ_plasma(_substance(), Organ.LIVER)
+        ss.organ_plasma(_substance(), Organ.LIVER, variants=STANDARD)
     unfiltered = dataclasses.replace(_substance(), excretion=Excretion())
     with pytest.raises(ValueError, match="not filtered"):
         ss.renal_filtration(unfiltered)
     # without filtration the kidney plasma is the arterial plasma with the
     # secretion alone, the renal clearance the secretion of the plasma flow
-    assert "GFR" not in ss.kidney_plasma(unfiltered, clearance="CL_sec")
-    assert "GFR" not in ss.renal_clearance(unfiltered, clearance="CL_sec")
+    assert "GFR" not in ss.kidney_plasma(
+        unfiltered, clearance="CL_sec", variants=STANDARD
+    )
+    assert "GFR" not in ss.renal_clearance(
+        unfiltered, clearance="CL_sec", variants=STANDARD
+    )

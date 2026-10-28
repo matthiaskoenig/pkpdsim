@@ -40,7 +40,10 @@ raises `NotImplementedError` naming the reason: kinetic erythrocytes, the
 full form and the flow-limited organ, an exchange of the organ of its own
 (`ps`), the intestine (it refuses custom reactions, its parts start at the
 equilibrium), the nephron kidney (its tubule starts empty, not at its steady
-state) and a source in the zonated liver (it refuses custom reactions).
+state) and a source in the zonated liver (it refuses custom reactions). The
+functions of an organ which has variants take the variants of the definition
+(`variants=`, required), so a model with a variant never gets the formula of
+the standard organ silently.
 """
 
 from collections.abc import Mapping
@@ -72,10 +75,8 @@ _GUT = frozenset({Organ.SMALL_INTESTINE, Organ.LARGE_INTESTINE})
 """The organs of the intestine."""
 
 
-def _variant(variants: Variants | None, organ: Organ) -> object | None:
+def _variant(variants: Variants, organ: Organ) -> object | None:
     """The variant of an organ, `None` for the standard organ."""
-    if variants is None:
-        return None
     chosen = variants.organs.get(organ)
     name = getattr(chosen, "name", chosen)
     return None if name in (None, "standard") else chosen
@@ -187,7 +188,7 @@ def tissue_exchange(substance: Substance, organ: Organ) -> str:
     )
 
 
-def _check_standard(organ: Organ, variants: Variants | None) -> None:
+def _check_standard(organ: Organ, variants: Variants) -> None:
     """Refuse the organs whose steady state the plasma of a standard organ is not."""
     if organ in _GUT:
         raise NotImplementedError(
@@ -211,7 +212,7 @@ def organ_plasma(
     inflow: str | None = None,
     rate: str = "0",
     clearance: str = "0",
-    variants: Variants | None = None,
+    variants: Variants,
 ) -> str:
     """Get the plasma leaving a standard organ at its steady state [mM].
 
@@ -229,7 +230,8 @@ def organ_plasma(
         rate: the net source of the organ at the steady state (mmole/min),
             negative for an uptake.
         clearance: the clearance of the plasma of the organ (l/min).
-        variants: the variants of the definition.
+        variants: the variants of the definition (`PBPKDefinition.variants`),
+            required: a variant without a closed steady state is refused.
 
     Returns:
         The formula.
@@ -246,7 +248,7 @@ def organ_tissue(
     plasma: str,
     *,
     rate: str = "0",
-    variants: Variants | None = None,
+    variants: Variants,
 ) -> str:
     """Get the merged tissue of an organ at its steady state [mM].
 
@@ -260,8 +262,9 @@ def organ_tissue(
         plasma: the plasma of the organ at the steady state (`organ_plasma`,
             `kidney_plasma`, `liver_plasma`).
         rate: the net source of the tissue (mmole/min).
-        variants: the variants of the definition; a tissue of the zonated
-            liver (every zone) without a source.
+        variants: the variants of the definition (`PBPKDefinition.variants`),
+            required; a tissue of the zonated liver (every zone) without a
+            source.
 
     Returns:
         The formula.
@@ -298,7 +301,7 @@ def renal_filtration(substance: Substance) -> str:
     return f"{ids.fu(s)} * {ids.GFR} * ({ONE} - {ids.fraction_reabsorbed(s)})"
 
 
-def _check_kidney(variants: Variants | None) -> None:
+def _check_kidney(variants: Variants) -> None:
     """Refuse the nephron kidney."""
     if _variant(variants, Organ.KIDNEY) is not None:
         raise NotImplementedError(
@@ -313,7 +316,7 @@ def kidney_plasma(
     arterial: str | None = None,
     rate: str = "0",
     clearance: str = "0",
-    variants: Variants | None = None,
+    variants: Variants,
 ) -> str:
     """Get the plasma of the kidney at its steady state [mM].
 
@@ -328,7 +331,8 @@ def kidney_plasma(
         arterial: the arterial plasma, the baseline by default.
         rate: the net source of the kidney (mmole/min).
         clearance: the clearance of the kidney plasma (l/min).
-        variants: the variants of the definition.
+        variants: the variants of the definition (`PBPKDefinition.variants`),
+            required: a variant without a closed steady state is refused.
 
     Returns:
         The formula.
@@ -345,7 +349,7 @@ def renal_clearance(
     substance: Substance,
     *,
     clearance: str = "0",
-    variants: Variants | None = None,
+    variants: Variants,
 ) -> str:
     """Get the renal clearance of the arterial plasma at the steady state [l/min].
 
@@ -355,7 +359,8 @@ def renal_clearance(
     Args:
         substance: the substance.
         clearance: the clearance of the kidney plasma (l/min).
-        variants: the variants of the definition.
+        variants: the variants of the definition (`PBPKDefinition.variants`),
+            required: a variant without a closed steady state is refused.
 
     Returns:
         The formula.
@@ -376,7 +381,7 @@ def liver_plasma(
     arterial: str | None = None,
     portal: str | None = None,
     rate: str = "0",
-    variants: Variants | None = None,
+    variants: Variants,
 ) -> str:
     """Get the plasma of the liver at its steady state [mM].
 
@@ -393,7 +398,8 @@ def liver_plasma(
         portal: the portal plasma, the baseline by default (the portal organs
             without a source).
         rate: the net source of the liver (mmole/min).
-        variants: the variants of the definition.
+        variants: the variants of the definition (`PBPKDefinition.variants`),
+            required: a variant without a closed steady state is refused.
 
     Returns:
         The formula.

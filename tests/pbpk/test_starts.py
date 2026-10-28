@@ -9,6 +9,7 @@ plasma leaving the muscle carries the production, its tissue holds more than
 starts stationary.
 """
 
+import dataclasses
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -33,7 +34,7 @@ from pkpdsim.pbpk import (
     ids,
 )
 
-from .conftest import dateless, individual, load
+from .conftest import assert_reference_sbml, individual, load, reference_definition
 
 if TYPE_CHECKING:
     import roadrunner
@@ -225,7 +226,10 @@ def test_a_start_formula_refuses_a_state(key: str) -> None:
 
 
 def test_without_starts_the_model_is_unchanged(tmp_path: Path) -> None:
-    """Empty starts give the SBML of a definition without the field."""
-    a = build(_definition(), tmp_path / "a").flat_path
-    b = build(_definition({}), tmp_path / "b").flat_path
-    assert dateless(a.read_text()) == dateless(b.read_text())
+    """Empty starts give the SBML of before the field (the reference of f008d56).
+
+    The reference definition with `starts={}` builds the stored comp and flat
+    SBML of f008d56, which predates the starts, line by line.
+    """
+    d = dataclasses.replace(reference_definition(), starts={})
+    assert_reference_sbml(build(d, tmp_path))

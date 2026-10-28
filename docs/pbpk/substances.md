@@ -234,13 +234,13 @@ The steady state of the organs of the library is a closed form at a given inflow
 |---|---|
 | `plasma_flow(s, organ)` | the flow which carries the substance, `Q<o>*(1 - HCT)` (`Q<o>*BP_<s>` with erythrocytes in equilibrium; the liver `(1 - f_shunt)*Qh*...`) |
 | `tissue_exchange(s, organ)` | `PS*fu` of the merged tissue, the share of `ftissue_<s>` of the organ |
-| `organ_plasma(s, organ, inflow=, rate=, clearance=)` | the plasma leaving a standard organ with a net source `rate` (mmole/min) and a clearance of its plasma, `(F*Cin + rate)/(F + clearance)` |
-| `organ_tissue(s, organ, plasma, rate=)` | the merged tissue with a source of the tissue, `Kp*(Cpl + rate/(PS*fu))` |
-| `renal_filtration(s)`, `kidney_plasma(s, rate=, clearance=)`, `renal_clearance(s, clearance=)` | the net filtrate `fu*GFR*(1 - f_reabsorbed)`, the kidney plasma with a secretion (glomerulus and tubule in series) and the renal clearance of the arterial plasma |
-| `liver_plasma(s, rate=)` | the liver plasma, fed by the hepatic artery and the portal vein past the shunt, with a source of the liver |
+| `organ_plasma(s, organ, inflow=, rate=, clearance=, variants=)` | the plasma leaving a standard organ with a net source `rate` (mmole/min) and a clearance of its plasma, `(F*Cin + rate)/(F + clearance)` |
+| `organ_tissue(s, organ, plasma, rate=, variants=)` | the merged tissue with a source of the tissue, `Kp*(Cpl + rate/(PS*fu))` |
+| `renal_filtration(s)`, `kidney_plasma(s, rate=, clearance=, variants=)`, `renal_clearance(s, clearance=, variants=)` | the net filtrate `fu*GFR*(1 - f_reabsorbed)`, the kidney plasma with a secretion (glomerulus and tubule in series) and the renal clearance of the arterial plasma |
+| `liver_plasma(s, rate=, variants=)` | the liver plasma, fed by the hepatic artery and the portal vein past the shunt, with a source of the liver |
 | `arm_vein(preset, s, outflows)` | the arm vein of a preset, the mix of the outflows at the steady state |
 
-The inflow is the baseline by default (the arterial plasma of the steady state). The tests of the library build every function into the starts of a model with a production of the muscle, a supply of the liver and a secretion of the kidney and check that every species stays at its start, for another individual and with erythrocytes in equilibrium, and in the zonated liver (its zones at the inflow); where no closed form applies a function raises `NotImplementedError` with the reason: kinetic erythrocytes, the full form and the flow-limited organ, an exchange of the organ of its own (`ps`), the intestine (it refuses custom reactions, its parts start at the equilibrium), the nephron kidney (its tubule starts empty) and a source in the zonated liver. With the steady state of the muscle the example starts stationary:
+The inflow is the baseline by default (the arterial plasma of the steady state). The functions of an organ take the variants of the definition (`variants=`, required), so a model with a variant of the organ never gets the formula of the standard organ silently. The tests of the library build every function into the starts of a model with a production of the muscle, a supply of the liver plasma and tissue, a source and a secretion of the kidney and check that every species stays at its start, for another individual, a portosystemic shunt with a reduced functional liver and with erythrocytes in equilibrium, and in the zonated liver (its zones at the inflow); where no closed form applies a function raises `NotImplementedError` with the reason: kinetic erythrocytes, the full form and the flow-limited organ, an exchange of the organ of its own (`ps`), the intestine (it refuses custom reactions, its parts start at the equilibrium), the nephron kidney (its tubule starts empty) and a source in the zonated liver. With the steady state of the muscle the example starts stationary:
 
 ```python
 import dataclasses
@@ -248,13 +248,18 @@ import dataclasses
 from pkpdsim.pbpk import steady_state
 
 crtn = creatinine.substances[0]
-muscle = steady_state.organ_plasma(crtn, Organ.MUSCLE, rate="CRTNPROD_k")
+variants = creatinine.variants
+muscle = steady_state.organ_plasma(
+    crtn, Organ.MUSCLE, rate="CRTNPROD_k", variants=variants
+)
 stationary = dataclasses.replace(
     creatinine,
     starts={
         "MU__Cpl_crtn": Formula(muscle, U.mM),
         "MU__Cti_crtn": Formula(
-            steady_state.organ_tissue(crtn, Organ.MUSCLE, muscle, rate="CRTNPROD_k"),
+            steady_state.organ_tissue(
+                crtn, Organ.MUSCLE, muscle, rate="CRTNPROD_k", variants=variants
+            ),
             U.mM,
         ),
     },
