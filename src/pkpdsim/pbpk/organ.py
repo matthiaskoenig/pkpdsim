@@ -1001,10 +1001,12 @@ class StandardBuilder(OrganBuilder):
         """The urinary excretion rate `Rurine_<s>` of every substance which reaches the urine.
 
         A substance with urinary excretion or an apical transport of the
-        kidney: the sum of the fluxes of the reactions of the kidney into the
-        urine `Aurine_<s>` (the filtration and the apical efflux of the
-        standard kidney, the outflow of the collecting duct of the nephron
-        kidney), an output which replaces `Rurine_<s>` of the body.
+        kidney: the net flux of the reactions of the kidney into the urine
+        `Aurine_<s>`, the sum of the fluxes into it (the filtration and the
+        apical efflux of the standard kidney, the outflow of the collecting
+        duct of the nephron kidney) less those out of it (a custom reaction
+        which returns a part of the filtrate), an output which replaces
+        `Rurine_<s>` of the body.
         """
         apical = {
             p.substance
@@ -1024,14 +1026,20 @@ class StandardBuilder(OrganBuilder):
             ]
             if not fluxes:
                 continue
+            returned = [
+                str(r.sid)
+                for r in self.reactions
+                if any(p.species == urine for p in r.equation.reactants)
+            ]
             pid = ids.urine_rate(s.sid)
             self._rule(
                 pid,
-                " + ".join(fluxes),
+                " + ".join(fluxes) + "".join(f" - {r}" for r in returned),
                 U.mmole_per_min,
                 f"urinary excretion rate {s.sid} [mmole/min]",
                 "The rate of the urinary excretion: the sum of the fluxes of the "
-                "kidney into the urine.",
+                "kidney into the urine"
+                + (" less those out of it." if returned else "."),
                 port=Port(f"{pid}_port", portType=PortType.OUTPUT_PORT),
                 kind="urine_rate",
             )

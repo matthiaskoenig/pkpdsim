@@ -16,6 +16,7 @@ import numpy as np
 import pytest
 
 from pkpdsim.pbpk import (
+    CustomReaction,
     Direction,
     Erythrocytes,
     FirstOrder,
@@ -351,6 +352,33 @@ def test_urine_rate_sums_filtration_and_secretion(tmp_path: Path) -> None:
     s = _urine_run(path, [ids.urine_rate(S), gfr, sec])
     assert np.all(s[1:, 3] > 0)
     np.testing.assert_allclose(s[:, 1], s[:, 2] + s[:, 3], rtol=1e-12, atol=0)
+
+
+_REABSORPTION = CustomReaction(
+    "REABS",
+    Organ.KIDNEY,
+    Part.PLASMA,
+    f"Aurine_{S} -> Cpl_{S} [Car_{S}]",
+    f"0.5 dimensionless * fu_{S} * GFR * Car_{S}",
+    [],
+)
+"""A reabsorption of half the filtrate, a custom reaction from the urine of the kidney."""
+
+
+def test_urine_rate_is_net_of_a_reaction_from_the_urine(tmp_path: Path) -> None:
+    """A custom reaction which takes from the urine is subtracted from `Rurine_<s>`.
+
+    The rate is the net flux into the urine, which integrates to the amount
+    in the urine: the filtration less the reabsorption, half of it.
+    """
+    path = _build(tmp_path, chemistry=[_REABSORPTION])
+    gfr = ids.flat(Organ.KIDNEY, ids.filtration_reaction(S))
+    reabs = ids.flat(Organ.KIDNEY, "REABS")
+    s = _urine_run(path, [ids.urine_rate(S), gfr, reabs, ids.urine(S)])
+    assert np.all(s[1:, 3] > 0)
+    np.testing.assert_allclose(s[:, 1], s[:, 2] - s[:, 3], rtol=1e-12, atol=1e-15)
+    np.testing.assert_allclose(s[:, 1], 0.5 * s[:, 2], rtol=1e-9, atol=1e-15)
+    assert np.trapezoid(s[:, 1], s[:, 0]) == pytest.approx(s[-1, 4], rel=1e-3)
 
 
 def test_urine_rate_of_the_nephron_kidney(tmp_path: Path) -> None:

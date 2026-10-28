@@ -14,7 +14,7 @@ The observers are assignment rules, no states: they read the pool species and th
 | outflow of an organ | `Cout_<o>_<s>` | the plasma leaving an organ |
 | species of an organ read by a PD component | `C<o>_<part>_<s>` | a species of an organ as a parameter of the top model, see below |
 | urine, feces | `Aurine_<s>`, `Afeces_<s>` | the amounts in the sinks |
-| urinary excretion rate | `Rurine_<s>` | the sum of the fluxes of the kidney into the urine (mmole/min), an output of the kidney, see [Standard organ](organ.md#kidney) |
+| urinary excretion rate | `Rurine_<s>` | the net flux of the kidney into the urine (mmole/min), an output of the kidney, see [Standard organ](organ.md#kidney) |
 | bile | `Cbile_<s>` | the concentration in the bile |
 
 The equations of the top model, for a substance without erythrocytes and for one with kinetic erythrocytes (`prm`), with the preset `pksim_default`:
