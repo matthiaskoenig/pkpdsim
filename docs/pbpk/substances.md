@@ -226,23 +226,39 @@ The parameters are constants: a change before the simulation (`preinit_changes`)
 
 ### Starts of the species
 
-A production or an elimination of the chemistry moves the organs where it acts away from the equilibrium with the baseline: at the steady state the plasma leaving the muscle carries the production, and the tissue of the muscle holds more than `Kp` times its plasma, by the production over the exchange. `PBPKDefinition.starts` gives such a species its own start: the flat id of the species (`MU__Cpl_crtn`, a pool `Cve_crtn`, a species of a custom reaction such as a pool of the muscle) to its initial concentration in mM, a number, a `Value` or a `Formula` over the constants of the top model, which replaces the start at the equilibrium. The organ reads the ids of a formula through input ports under the same ids, as for a `Formula` of the organ, and the start is an initial assignment of the species, so it follows a change of the individual before the simulation. With the steady state of the muscle the example starts stationary:
+A production or an elimination of the chemistry moves the organs where it acts away from the equilibrium with the baseline: at the steady state the plasma leaving the muscle carries the production, and the tissue of the muscle holds more than `Kp` times its plasma, by the production over the exchange. `PBPKDefinition.starts` gives such a species its own start: the flat id of the species (`MU__Cpl_crtn`, a pool `Cve_crtn`, a species of a custom reaction such as a pool of the muscle) to its initial concentration in mM, a number, a `Value` or a `Formula` over the constants of the top model, which replaces the start at the equilibrium. The organ reads the ids of a formula through input ports under the same ids, as for a `Formula` of the organ, and the start is an initial assignment of the species, so it follows a change of the individual before the simulation.
+
+The steady state of the organs of the library is a closed form at a given inflow, and `pkpdsim.pbpk.steady_state` returns it as formulas over the ids of the top model, the ids the equations of the organs read, so a model does not restate the equations of the library:
+
+| function | the steady state |
+|---|---|
+| `plasma_flow(s, organ)` | the flow which carries the substance, `Q<o>*(1 - HCT)` (`Q<o>*BP_<s>` with erythrocytes in equilibrium; the liver `(1 - f_shunt)*Qh*...`) |
+| `tissue_exchange(s, organ)` | `PS*fu` of the merged tissue, the share of `ftissue_<s>` of the organ |
+| `organ_plasma(s, organ, inflow=, rate=, clearance=)` | the plasma leaving a standard organ with a net source `rate` (mmole/min) and a clearance of its plasma, `(F*Cin + rate)/(F + clearance)` |
+| `organ_tissue(s, organ, plasma, rate=)` | the merged tissue with a source of the tissue, `Kp*(Cpl + rate/(PS*fu))` |
+| `renal_filtration(s)`, `kidney_plasma(s, rate=, clearance=)`, `renal_clearance(s, clearance=)` | the net filtrate `fu*GFR*(1 - f_reabsorbed)`, the kidney plasma with a secretion (glomerulus and tubule in series) and the renal clearance of the arterial plasma |
+| `liver_plasma(s, rate=)` | the liver plasma, fed by the hepatic artery and the portal vein past the shunt, with a source of the liver |
+| `arm_vein(preset, s, outflows)` | the arm vein of a preset, the mix of the outflows at the steady state |
+
+The inflow is the baseline by default (the arterial plasma of the steady state). The tests of the library build every function into the starts of a model with a production of the muscle, a supply of the liver and a secretion of the kidney and check that every species stays at its start, for another individual and with erythrocytes in equilibrium, and in the zonated liver (its zones at the inflow); where no closed form applies a function raises `NotImplementedError` with the reason: kinetic erythrocytes, the full form and the flow-limited organ, an exchange of the organ of its own (`ps`), the intestine (it refuses custom reactions, its parts start at the equilibrium), the nephron kidney (its tubule starts empty) and a source in the zonated liver. With the steady state of the muscle the example starts stationary:
 
 ```python
 import dataclasses
 
-#: the plasma flow of the muscle and the exchange of its tissue (l/min)
-plasma_flow = "Qmu * (1 dimensionless - HCT)"
-exchange = "ftissue_crtn * Vmu * (1 dimensionless - f_vas_mu) / Vti_total_ref_crtn"
-muscle_plasma = f"baseline_crtn + CRTNPROD_k / ({plasma_flow})"
+from pkpdsim.pbpk import steady_state
+
+crtn = creatinine.substances[0]
+muscle = steady_state.organ_plasma(crtn, Organ.MUSCLE, rate="CRTNPROD_k")
 stationary = dataclasses.replace(
     creatinine,
     starts={
-        "MU__Cpl_crtn": Formula(muscle_plasma, U.mM),
+        "MU__Cpl_crtn": Formula(muscle, U.mM),
         "MU__Cti_crtn": Formula(
-            f"Kp_crtn * ({muscle_plasma} + CRTNPROD_k / ({exchange}))", U.mM
+            steady_state.organ_tissue(crtn, Organ.MUSCLE, muscle, rate="CRTNPROD_k"),
+            U.mM,
         ),
     },
+    deltas=("Carm_crtn",),
 )
 model = compose(stationary)
 print(sorted(stationary.starts))
@@ -252,6 +268,8 @@ print(sorted(stationary.starts))
 ['MU__Cpl_crtn', 'MU__Cti_crtn']
 ```
 
-In the build of this definition every species stays within 1e-6 of its start, for the reference individual as for another body weight or renal function (`tests/docs/test_substances_example.py`); the arm vein starts where the example without starts settled, 5.5 % above the baseline. The starts are the steady state of the equations of the library (the plasma flow `Q*(1 - HCT)` of an organ, its share of `ftissue`, the outflow of the kidney less the filtrate), which a model writes down for its organs; a stationarity test of the model (every species over a day, several individuals) checks them. The validation refuses an id which is no SBML SId, a negative number and a `Value` or `Formula` in another unit than mM; the build refuses a start which names no species of the model, and a formula which reads an id which is no constant of the top model. Without starts the SBML is that of a definition without the field.
+In the build of this definition every species stays within 1e-6 of its start, for the reference individual as for another body weight or renal function (`tests/docs/test_substances_example.py`); the arm vein starts where the example without starts settled, 5.5 % above the baseline. A start which the library cannot know (a pool of a custom reaction, the steady state of a nonlinear process) is written by the model; a stationarity test of the model (every species over a day, several individuals) checks the starts. The validation refuses an id which is no SBML SId, a negative number and a `Value` or `Formula` in another unit than mM; the build refuses a start which names no species of the model (all of them at once) and a formula which reads an id which is no constant of the top model (a species or an observer would be read before the species start). Without starts the SBML is that of a definition without the field.
+
+`PBPKDefinition.deltas` names observers (`Carm_crtn`, an observer of the definition) whose change over their value at the start a model reads, the increase of an endogenous substance over its value before a dose: each gets the constant `<id>_0`, the initial assignment of its value at the start (after the changes of the individual before the simulation), and the observer `<id>_delta = <id> - <id>_0`, which is 0 at the start of every simulation for any arm vein preset. The build refuses a delta which is no observer of the top model and an id `<id>_0` or `<id>_delta` which the model has; without deltas the SBML is unchanged.
 
 The validation (`PBPKDefinition.validate()`, called by `build`) refuses an id which is no SBML SId, contains `__`, starts with a token of the id scheme or is an id of the physiology, a duplicate id, a fraction outside its interval, a non-positive constant, a mode which needs `ftissue` without it (an entered organ without `ps`, named in the message), kinetic erythrocytes with a flow-limited distribution, and names every problem at once.

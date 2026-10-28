@@ -92,3 +92,6 @@ def test_the_starts_of_the_muscle_make_the_example_stationary(
     assert not moved, moved
     if not changes:
         assert r["Carm_crtn"] / r["baseline_crtn"] == pytest.approx(1.055, abs=0.001)
+    # the change of the arm vein over its start
+    assert r["Carm_crtn_delta"] == pytest.approx(0.0, abs=1e-15)
+    assert r["Carm_crtn_0"] == pytest.approx(r["Carm_crtn"], rel=1e-12)
