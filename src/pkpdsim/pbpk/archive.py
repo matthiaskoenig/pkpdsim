@@ -13,6 +13,19 @@ from typing import Any
 from pkpdsim.pbpk.builder import build
 from pkpdsim.pbpk.definition import PBPKDefinition
 
+#: the formats of the extra files of an archive by their suffix, the names of
+#: the members of `pymetadata.omex.EntryFormat`
+EXTRA_FORMATS: dict[str, str] = {
+    ".md": "MARKDOWN",
+    ".ant": "PLAIN",
+    ".txt": "PLAIN",
+    ".png": "PNG",
+    ".svg": "SVG",
+    ".csv": "CSV",
+    ".tsv": "TSV",
+    ".pdf": "PDF",
+}
+
 
 def create_archive(
     definition: PBPKDefinition,
@@ -22,6 +35,7 @@ def create_archive(
     copyright: str,
     readme: Path | None = None,
     extra_models: Sequence[Path] = (),
+    extra_files: Sequence[Path] = (),
 ) -> dict[str, dict[str, Any]]:
     """Build a definition and write its files and the COMBINE archive.
 
@@ -29,8 +43,8 @@ def create_archive(
     the flat model as markdown (`sbmlode`) and its antimony, the texts of CC
     BY-SA 4.0 and MIT (with the copyright) into the parent of the directory and
     the archive `<model>_model.omex` there, with the README, the licenses, the
-    comp model, the flat model (the master entry), the markdown, the antimony
-    and the extra models.
+    comp model, the flat model (the master entry), the markdown, the antimony,
+    the extra models and the extra files.
 
     Args:
         definition: the definition of the model.
@@ -42,14 +56,22 @@ def create_archive(
             `None`.
         extra_models: further SBML files (in L3V2) which are entries of the
             archive, e.g. a submodel which is simulated on its own.
+        extra_files: further files of other formats which are entries of the
+            archive, e.g. the ODEs of an extra model (`.md`) or a figure
+            (`.png`); a file is below the parent of `model_output_dir`, its
+            location in the archive is its path relative to it and its format
+            the one of its suffix (`EXTRA_FORMATS`).
 
     Raises:
-        ValueError: if the stem of an extra model is the key of another entry.
+        ValueError: if the stem of an extra model or the key of an extra file
+            is the key of another entry, if an extra file is not below the
+            parent of `model_output_dir` or its suffix has no format.
 
     Returns:
         The files with their entries in the COMBINE archive, by the keys of a
         factory: `README`, `cc-by`, `mit`, the sid of the definition, `<sid>_flat`,
-        `<sid>_flat_md`, `<sid>_flat_ant` and the stem of every extra model, each
+        `<sid>_flat_md`, `<sid>_flat_ant`, the stem of every extra model and
+        `<stem>_<suffix>` of every extra file (`fluid_md`), each
         `{"path": Path, "entry": ManifestEntry}`.
     """
     from pymetadata.omex import EntryFormat, ManifestEntry, Omex
@@ -115,6 +137,30 @@ def create_archive(
         results[extra.stem] = {
             "path": extra,
             "entry": entry(f"./models/{extra.name}", EntryFormat.SBML_L3V2),
+        }
+    for extra in extra_files:
+        key = f"{extra.stem}_{extra.suffix.removeprefix('.')}"
+        if key in results:
+            raise ValueError(
+                f"The extra file {extra.name!r} has the key {key!r} of an entry of "
+                "the archive."
+            )
+        fmt = EXTRA_FORMATS.get(extra.suffix.lower())
+        if fmt is None:
+            raise ValueError(
+                f"The extra file {extra.name!r} has the suffix {extra.suffix!r} of "
+                f"no format of the archive, one of {sorted(EXTRA_FORMATS)}."
+            )
+        try:
+            location = extra.resolve().relative_to(parent.resolve())
+        except ValueError:
+            raise ValueError(
+                f"The extra file {str(extra)!r} is not below {str(parent)!r}, the "
+                "directory of the archive."
+            ) from None
+        results[key] = {
+            "path": extra,
+            "entry": entry(f"./{location.as_posix()}", getattr(EntryFormat, fmt)),
         }
 
     omex = Omex()

@@ -21,7 +21,11 @@ MINIMAL_SBML = (
 
 
 def _create(
-    tmp_path: Path, *, extra: tuple[Path, ...] = (), readme: bool = True
+    tmp_path: Path,
+    *,
+    extra: tuple[Path, ...] = (),
+    files: tuple[Path, ...] = (),
+    readme: bool = True,
 ) -> dict[str, dict[str, Any]]:
     """Create the archive of the simple definition below `tmp_path`."""
     readme_path = tmp_path / "README.md"
@@ -33,6 +37,7 @@ def _create(
         copyright=COPYRIGHT,
         readme=readme_path if readme else None,
         extra_models=extra,
+        extra_files=files,
     )
 
 
@@ -115,3 +120,60 @@ def test_an_extra_model_may_not_take_a_key_of_the_archive(tmp_path: Path) -> Non
     extra.write_text(MINIMAL_SBML, encoding="utf-8")
     with pytest.raises(ValueError, match="simple_flat"):
         _create(tmp_path, extra=(extra,))
+
+
+def test_the_archive_carries_extra_files(tmp_path: Path) -> None:
+    """A further file (the ODEs of an extra model, a figure) is an entry by its name.
+
+    The key is the stem with the suffix (`simple_fluid_md`), the location the
+    path below the parent of the directory of the models, the format the one
+    of the suffix.
+    """
+    (tmp_path / "models").mkdir()
+    (tmp_path / "figures").mkdir()
+    extra = tmp_path / "models" / "simple_fluid.xml"
+    extra.write_text(MINIMAL_SBML, encoding="utf-8")
+    md = tmp_path / "models" / "simple_fluid.md"
+    md.write_text("# fluid\n", encoding="utf-8")
+    png = tmp_path / "figures" / "simple.png"
+    png.write_bytes(b"\x89PNG")
+    results = _create(tmp_path, extra=(extra,), files=(md, png))
+    assert list(results)[-3:] == ["simple_fluid", "simple_fluid_md", "simple_png"]
+    assert results["simple_fluid_md"]["entry"].location == "./models/simple_fluid.md"
+    assert results["simple_fluid_md"]["entry"].format == EntryFormat.MARKDOWN
+    assert results["simple_png"]["entry"].location == "./figures/simple.png"
+    assert results["simple_png"]["entry"].format == EntryFormat.PNG
+    assert not any(
+        results[k]["entry"].master for k in ("simple_fluid_md", "simple_png")
+    )
+    with zipfile.ZipFile(tmp_path / "simple_model.omex") as z:
+        names = set(z.namelist())
+    assert {"models/simple_fluid.md", "figures/simple.png"} <= names
+
+
+@pytest.mark.parametrize(
+    ("name", "match"),
+    [
+        ("simple_flat.md", "simple_flat_md"),
+        ("simple.unknown", r"suffix '\.unknown'"),
+    ],
+    ids=["key of the archive", "unknown suffix"],
+)
+def test_an_extra_file_is_checked(tmp_path: Path, name: str, match: str) -> None:
+    """An extra file with the key of an entry or a suffix of no format is an error."""
+    (tmp_path / "models").mkdir()
+    extra = tmp_path / "models" / name
+    extra.write_text("x\n", encoding="utf-8")
+    with pytest.raises(ValueError, match=match):
+        _create(tmp_path, files=(extra,))
+
+
+def test_an_extra_file_outside_the_archive_is_an_error(tmp_path: Path) -> None:
+    """A file which is not below the parent of the directory of the models has no location."""
+    outside = tmp_path.parent / f"{tmp_path.name}_outside.md"
+    outside.write_text("x\n", encoding="utf-8")
+    try:
+        with pytest.raises(ValueError, match="not below"):
+            _create(tmp_path, files=(outside,))
+    finally:
+        outside.unlink()
