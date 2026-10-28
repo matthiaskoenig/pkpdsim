@@ -271,8 +271,40 @@ def test_pd_reads_a_species_of_an_organ(tmp_path: Path) -> None:
     np.testing.assert_allclose(s["org__E"], 2 * s[top], rtol=1e-12, atol=0.0)
 
 
+def _organ_definitions(model: Model) -> dict[str, str]:
+    """Get the organ model definitions of a composed model, written as SBML.
+
+    The ports, parameters and rules of every model definition but the PD
+    components, by the id of the definition; the metaids and the history,
+    which differ between two builds, are left out.
+    """
+    result: dict[str, str] = {}
+    for md in model.model_definitions or []:
+        if str(md.sid) in {"eff", "org"}:
+            continue
+        ports = sorted(
+            f"{e.sid}:{getattr(e, 'port', None)}"
+            for name in ("compartments", "species", "parameters", "reactions")
+            for e in getattr(md, name) or []
+            if getattr(e, "port", None)
+        )
+        parameters = sorted(str(p.sid) for p in md.parameters or [])
+        rules = sorted(f"{r.variable}={r.value}" for r in md.rules or [])
+        result[str(md.sid)] = repr((ports, parameters, rules))
+    return result
+
+
 def test_pd_without_an_organ_input_is_unchanged(tmp_path: Path) -> None:
-    """A component which reads the body only adds no output to an organ."""
+    """A component which reads the body only adds no output to an organ.
+
+    The organ model definitions of a definition with a component which reads
+    the top model are those of the definition without it: no organ gains a
+    port, a parameter or a rule; and the flat model has no `C<o>_<part>_<s>`.
+    """
+    plain = _organ_definitions(compose(definition()))
+    with_reader = _organ_definitions(compose(definition(pd=[_reader()])))
+    assert plain
+    assert with_reader == plain
     result = build(definition(pd=[_reader()]), tmp_path)
     model = libsbml.readSBMLFromFile(str(result.flat_path)).getModel()
     organ_species = {
@@ -281,6 +313,12 @@ def test_pd_without_an_organ_input_is_unchanged(tmp_path: Path) -> None:
         for part in Part
     }
     assert not organ_species & {p.getId() for p in model.getListOfParameters()}
+    # an organ input adds exactly its output to the organ which it reads
+    with_organ = _organ_definitions(
+        compose(definition(pd=[_organ_reader("MU__Cti_drg")]))
+    )
+    changed = {sid for sid in plain if with_organ[sid] != plain[sid]}
+    assert changed == {sid for sid in plain if sid.endswith("_mu")}
 
 
 @pytest.mark.parametrize(
