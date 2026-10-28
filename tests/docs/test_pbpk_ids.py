@@ -34,6 +34,9 @@ NAMESPACE = {
     "part": Part.PLASMA,
     "protein": "CYP3A4",
     "seg": "du",
+    "zone": "z1",
+    "kind": "iv",
+    "tseg": "pt",
 }
 
 #: the placeholders of the patterns and the same values
@@ -46,7 +49,14 @@ PLACEHOLDERS = {
     "<protein>": "cyp3a4",
     "<seg>": "du",
     "<p>": "API2M",
+    "<zone>": "z1",
+    "<kind>": "iv",
+    "<tseg>": "pt",
 }
+
+#: the names of `ids.__all__` which make no id and have no row: the tokens of
+#: the segments and the list of the species of a substance
+NO_ROW = frozenset({"GUT_SEGMENTS", "TUBULE_SEGMENTS", "species_of"})
 
 
 def rows() -> list[re.Match[str]]:
@@ -70,3 +80,25 @@ def test_every_example_is_made_by_its_function() -> None:
         if made != pattern:
             problems.append(f"{row['call']} = {made}, the pattern gives {pattern}")
     assert not problems, "\n".join(problems)
+
+
+def test_every_id_of_the_scheme_has_a_row() -> None:
+    """Every name of `ids.__all__` is the call of a row, so a new id is documented."""
+    documented = {row["call"].removeprefix("ids.").split("(")[0] for row in rows()}
+    missing = sorted(set(ids.__all__) - documented - NO_ROW)
+    assert not missing, f"ids without a row in docs/pbpk/index.md: {missing}"
+    assert not NO_ROW & documented
+
+
+def test_every_public_name_of_the_ids_is_exported() -> None:
+    """The functions and constants of `pkpdsim.pbpk.ids` are its `__all__`."""
+    public = {
+        name
+        for name, value in vars(ids).items()
+        if not name.startswith("_")
+        and getattr(value, "__module__", ids.__name__) == ids.__name__
+        and (callable(value) or name.isupper())
+    }
+    assert public - {"annotations"} <= set(ids.__all__), sorted(
+        public - set(ids.__all__)
+    )

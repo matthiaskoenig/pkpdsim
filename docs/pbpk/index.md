@@ -166,4 +166,125 @@ One id scheme for every model, built by the functions of `pkpdsim.pbpk.ids`, so 
 
 </div>
 
-A process of the chemistry keeps the id its definition gives (`API2M2`), its parameters are `<p>_Vmax`, `<p>_Km`, `<p>_k`, `<p>_n` in the organ (`LI__API2M2_Vmax` in the flat model). The table is checked against `pkpdsim.pbpk.ids` by `tests/docs/test_pbpk_ids.py`.
+Every other id of the scheme, the ids a model rarely reads: the physiology, the intestine and the nephron, the dissolution and the doses, the protein turnover, the starts and deltas of the observers and the reactions and local ids of the organs (`<zone>` a zone token `z1`, `<tseg>` a tubule segment `pt`, `<kind>` a dose `iv`, `po` or `sol`):
+
+<div class="pbpk-ids" markdown>
+
+| id | what | made by |
+|---|---|---|
+| `AGE` | the age (yr), a covariate | `ids.AGE` |
+| `BMI` | the body mass index | `ids.BMI` |
+| `BSA` | the body surface area (m2) | `ids.BSA` |
+| `FFM` | the fat-free mass (kg) | `ids.FFM` |
+| `Mlean` | the mass of the lean organ tissues without their blood (kg) | `ids.MLEAN` |
+| `SV_tis` | the scaling factor of the lean tissues, the blood and the cardiac output | `ids.SV_TIS` |
+| `Vblood` | the total blood volume (l) | `ids.VBLOOD` |
+| `CO_base` | the cardiac output without impairment, of which the organ flows are fractions | `ids.CO_BASE` |
+| `Qh` | the total liver blood flow | `ids.QH` |
+| `Qha` | the blood flow of the hepatic artery | `ids.QHA` |
+| `Qpo` | the blood flow of the portal vein | `ids.QPO` |
+| `PS_vas` | the exchange of plasma and interstitium of an organ (local id) | `ids.PS_VAS` |
+| `eGFR` | the GFR per 1.73 m2 body surface area of the renal function, which gives the CKD stage | `ids.EGFR` |
+| `CKD_hepatic` | the switch (0 off, 1 on) of the hepatic changes of chronic kidney disease | `ids.CKD_HEPATIC` |
+| `FED` | the prandial state, 0 fasted (default) and 1 fed, which slows the gastric emptying | `ids.FED` |
+| `f_zone` | the volume fraction of a zone of a zonated organ, 1/n of n zones (local id) | `ids.F_ZONE` |
+| `GU` | the submodel of the intestine (the small intestine, or the intestine which replaces small and large intestine) | `ids.GUT` |
+| `Qgu` | the blood flow of small and large intestine (local id) | `ids.GUT_FLOW` |
+| `Qgu_wall` | the blood flow of the intestinal wall past the mucosa (local id) | `ids.GUT_WALL_FLOW` |
+| `Vgu` | the volume of the intestine which replaces small and large intestine (local id) | `ids.GUT_VOLUME` |
+| `f_vas_gu` | the vascular fraction of the intestine (local id) | `ids.GUT_VASCULAR_FRACTION` |
+| `f_int_gu` | the interstitial fraction of the intestine (local id) | `ids.GUT_INTERSTITIAL_FRACTION` |
+| `f_wall` | the fraction of the intestinal tissue without the mucosa (local id) | `ids.WALL_FRACTION` |
+| `f_mucosa_flow` | the fraction of the intestinal blood flow which perfuses the mucosa (local id) | `ids.F_MUCOSA_FLOW` |
+| `f_mucosa_volume` | the fraction of the intestinal tissue which is mucosa (local id) | `ids.F_MUCOSA_VOLUME` |
+| `Qmu_total` | the blood flow of the mucosa of all segments (local id) | `ids.MUCOSA_FLOW_TOTAL` |
+| `Vmu_total` | the volume of the mucosa of all segments (local id) | `ids.MUCOSA_VOLUME_TOTAL` |
+| `k_bile` | the rate of the transit of the bile into the intestinal lumen | `ids.K_BILE` |
+| `t_lumen` | the transit time of the single intestinal lumen into the feces (local id) | `ids.T_LUMEN` |
+| `T_st_fed` | the transit time of the stomach in the fed state (local id) | `ids.T_STOMACH_FED` |
+| `Vbile` | the volume of the bile, the compartment of `Cbile_<s>` | `ids.VBILE` |
+| `Vfeces` | the compartment of the feces amounts `Afeces_<s>` | `ids.VFECES` |
+| `Vlumen` | the volume of the single intestinal lumen, the compartment of `Clumen_<s>` (local id) | `ids.VLUMEN` |
+| `Vurine` | the compartment of the urine amounts `Aurine_<s>` | `ids.VURINE` |
+| `<O>` | the submodel of an organ | `ids.submodel(o)` |
+| `V<part>` | a compartment of an organ (local id) | `ids.compartment(part)` |
+| `V<part>_<zone>` | a compartment of a zone of a zonated organ (local id) | `ids.compartment(part, zone)` |
+| `z1` | the token of the first zone of a zonated organ | `ids.zone(1)` |
+| `Vti_wall` | a tissue compartment of the intestinal wall without the mucosa (local id) | `ids.wall_compartment(Part.TISSUE)` |
+| `V<pool>_<part>` | a compartment of a blood pool | `ids.pool_compartment(pool, part)` |
+| `V<pool>` | the volume of a blood pool | `ids.pool_volume(pool)` |
+| `fV<pool>` | the volume of a blood pool as fraction of the blood volume | `ids.pool_fraction(pool)` |
+| `V<pool>_pl_<s>` | the compartment of a pool species with erythrocytes in equilibrium | `ids.pool_capacity(pool, s)` |
+| `Vpl_<s>` | the compartment of the plasma species of an organ with erythrocytes in equilibrium (local id) | `ids.plasma_capacity(s)` |
+| `fQ<o>` | the blood flow of an organ as fraction of the cardiac output | `ids.flow_fraction(o)` |
+| `f_int_<o>` | the interstitial fraction of the organ volume | `ids.interstitial_fraction(o)` |
+| `GFR_ref` | the reference value of a parameter (`GFR_ref`, `Mli_ref`) | `ids.ref(ids.GFR)` |
+| `fimp_GFR` | the factor of all impairments on a quantity | `ids.impairment_factor(ids.GFR)` |
+| `fcp_albumin` | the factor of one condition (Child-Pugh, CKD) on a quantity | `ids.condition_factor('cp', 'albumin')` |
+| `Vti_total_ref_<s>` | the reference tissue volume of the organs the substance enters | `ids.tissue_volume_total_ref(s)` |
+| `K_int_pls_<s>` | the interstitial to plasma coefficient (local id) | `ids.k_int_pls(s)` |
+| `K_cell_pls_<s>` | the intracellular to plasma coefficient (local id) | `ids.k_cell_pls(s)` |
+| `K_or_<s>` | the organ to plasma coefficient of the flow-limited organ (local id) | `ids.k_organ(s)` |
+| `kex_bc_<s>` | the exchange rate between plasma and blood cells (kinetic erythrocytes) | `ids.kbc_exchange(s)` |
+| `Carm_blood_<s>` | the blood concentration of the arm vein | `ids.arm_blood(s)` |
+| `w_arm_sk` | the weight of an organ outflow (or a pool) in the arm vein (`w_arm_sk`) | `ids.arm_weight(Organ.SKIN)` |
+| `Chv_free_<s>` | the unbound concentration of the hepatic vein | `ids.hepatic_vein_free(s)` |
+| `Chv_blood_<s>` | the blood concentration of the hepatic vein | `ids.hepatic_vein_blood(s)` |
+| `Cout_<s>` | the concentration leaving an organ (local id) | `ids.outflow_conc(s)` |
+| `Cout_bc_<s>` | the blood cell concentration leaving an organ (local id) | `ids.outflow_conc_bc(s)` |
+| `Cout_<o>_bc_<s>` | the blood cell concentration leaving an organ | `ids.organ_outflow_bc(o, s)` |
+| `Kiv_<s>` | the rate of an intravenous injection | `ids.injection_rate(s)` |
+| `ti_<s>` | the half-life of an intravenous injection (s) | `ids.injection_time(s)` |
+| `Ka_sol_<s>` | the rate of the application of a solution | `ids.solution(s)` |
+| `fabs_<s>` | the fraction of the absorbed flux which enters the body | `ids.fraction_absorbed(s)` |
+| `f_ka_colon_<s>` | the factor of the absorption in the large intestine (segmented intestine) | `ids.colon_absorption_factor(s)` |
+| `J_dis_<seg>_<s>` | the dissolution in a lumen segment (local id) | `ids.dissolution_reaction(s, seg)` |
+| `kdis_<s>` | the dissolution rate of a tablet (1/min, local id) | `ids.dissolution_rate(s)` |
+| `f_dis_fed_<s>` | the factor of the dissolution rate in the fed state | `ids.dissolution_fed_factor(s)` |
+| `f_dis_release_<s>` | the factor of the dissolution rate of a modified-release formulation | `ids.dissolution_release_factor(s)` |
+| `lag_dis_<s>` | the lag time of a Weibull dissolution (min) | `ids.dissolution_lag(s)` |
+| `t50_dis_<s>` | the time of half dissolution of a Weibull dissolution (min) | `ids.dissolution_t50(s)` |
+| `shape_dis_<s>` | the shape of a Weibull dissolution | `ids.dissolution_shape(s)` |
+| `D50_dis_<s>` | the undissolved amount of half the dissolution rate (mg) | `ids.dissolution_dose50(s)` |
+| `age_dis_<s>` | the mean age of the undissolved dose (min, local id) | `ids.dissolution_age(s)` |
+| `W_dis_<s>` | the age-weighted undissolved amount (mmole*min, local id) | `ids.dissolution_clock(s)` |
+| `Asolid_<seg>_<s>` | the undissolved amount in a lumen segment (local id) | `ids.solid(s, seg)` |
+| `Vlumen_<seg>` | the volume of a lumen segment (local id) | `ids.lumen_volume(seg)` |
+| `T_<seg>` | the transit time of a lumen segment (local id) | `ids.transit_time(seg)` |
+| `f_area_<seg>` | the absorption scaling of a lumen segment (local id) | `ids.area_factor(seg)` |
+| `Vmu_<seg>` | the volume of the mucosa of a segment (local id) | `ids.mucosa_volume(seg)` |
+| `Qmu_<seg>` | the blood flow of the mucosa of a segment (local id) | `ids.mucosa_flow(seg)` |
+| `K_mu_<s>` | the mucosa to plasma coefficient (local id) | `ids.mucosa_coefficient(s)` |
+| `Cu_mu_<seg>_<s>` | the unbound concentration in the mucosa of a segment (local id) | `ids.mucosa_unbound(s, seg)` |
+| `Ctub_<tseg>_<s>` | the concentration in the lumen of a tubule segment of the nephron kidney (local id) | `ids.tubule(s, tseg)` |
+| `Vtub_<tseg>` | the volume of the lumen of a tubule segment (local id) | `ids.tubule_volume(tseg)` |
+| `f_tub_<tseg>` | the tubular flow leaving a segment as fraction of the GFR (local id) | `ids.tubule_flow_fraction(tseg)` |
+| `kdeg_<protein>` | the degradation rate of a protein in an organ (turnover) | `ids.kdeg(protein)` |
+| `Kiu_<protein>_<s>` | the uncompetitive constant of a mixed inhibition | `ids.kiu(protein, s)` |
+| `kinact_<protein>_<s>` | the maximal inactivation rate of a mechanism-based inhibition | `ids.kinact(protein, s)` |
+| `Emax_<protein>_<s>` | the maximal induction of a protein | `ids.emax(protein, s)` |
+| `EC50_<protein>_<s>` | the half-maximal inducing concentration | `ids.ec50(protein, s)` |
+| `p_cyp3a4_<zone>` | the relative abundance of a profile in a zone (local id) | `ids.placement_profile('cyp3a4', zone)` |
+| `w_cyp3a4_<seg>` | the share of a process in a segment or a zone (local id) | `ids.placement_weight('cyp3a4', seg)` |
+| `API2M_<seg>` | a process of the chemistry in a segment or a zone (local id) | `ids.segment_process('API2M', seg)` |
+| `Carm_api_0` | the value of an observer at the start (`PBPKDefinition.deltas`) | `ids.start_value('Carm_api')` |
+| `Carm_api_delta` | the change of an observer over its start (`PBPKDefinition.deltas`) | `ids.delta('Carm_api')` |
+| `J_<kind>_<s>` | the application of a dose state (`iv`, `po`, `sol`) | `ids.dose_reaction(kind, s)` |
+| `J_ti_<s>` | the passive exchange into a part of an organ (local id) | `ids.exchange_reaction(Part.TISSUE, s)` |
+| `J_in_ar_<part>_<s>` | the inflow from a pool into an organ (local id) | `ids.inflow_reaction(Pool.ARTERIAL, part, s)` |
+| `J_out_<part>_<s>` | the outflow from an organ into its pool (local id) | `ids.outflow_reaction(part, s)` |
+| `J_shunt_po_<part>_<s>` | the shunt from a pool past the liver (local id) | `ids.shunt_reaction(Pool.PORTAL, part, s)` |
+| `J_sin_<zone>_<part>_<s>` | the flow from a zone into the next one (local id) | `ids.sinusoid_reaction(part, s, zone)` |
+| `J_bc_<pool>_<s>` | the exchange between plasma and blood cells of a pool | `ids.pool_exchange_reaction(pool, s)` |
+| `J_gfr_<s>` | the glomerular filtration into the urine (local id) | `ids.filtration_reaction(s)` |
+| `J_bile_<s>` | the transit of the bile into the intestinal lumen | `ids.bile_reaction(s)` |
+| `J_abs_<seg>_<s>` | the absorption from a lumen segment (local id) | `ids.absorption_reaction(s, seg)` |
+| `J_feces_<seg>_<s>` | the unabsorbed fraction of the absorption into the feces (local id) | `ids.feces_reaction(s, seg)` |
+| `J_tr_<seg>_<s>` | the transit out of a lumen segment (local id) | `ids.transit_reaction(s, seg)` |
+| `J_mu_in_<seg>_<s>` | a flow of the mucosa of a segment (local id) | `ids.mucosa_reaction('in', s, seg)` |
+| `J_tub_<tseg>_<s>` | the tubular flow out of a tubule segment (local id) | `ids.tubule_reaction(s, tseg)` |
+| `J_reab_<s>` | the reabsorbed fraction out of the collecting duct (local id) | `ids.tubule_reabsorption_reaction(s)` |
+
+</div>
+
+A process of the chemistry keeps the id its definition gives (`API2M2`), its parameters are `<p>_Vmax`, `<p>_Km`, `<p>_k`, `<p>_n` in the organ (`LI__API2M2_Vmax` in the flat model). The tables are checked against `pkpdsim.pbpk.ids` by `tests/docs/test_pbpk_ids.py`: every row is made by its function, and every name of `ids.__all__` has a row (but the tuples of the segment tokens and `species_of`, which lists ids), so a new id of the scheme fails the test until it is documented.
