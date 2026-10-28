@@ -153,6 +153,14 @@ class PBPKDefinition:
         parameters: the constant parameters of the top model which the model
             package states (`ModelParameter`), read by the formulas, the
             observers and the custom reactions of the definition.
+        starts: the initial concentrations (mM) of species by their flat id
+            (`MU__Cpl_crtn`, a pool `Cve_crtn`, a species of a custom
+            reaction): a number, a `Value` or a `Formula` over the constants
+            of the top model, the initial assignment of the species. For the
+            organs which a production or an elimination of the chemistry
+            moves away from the equilibrium with the baseline of an
+            endogenous substance (`Substance.baseline`): their steady state,
+            so that the body starts stationary.
     """
 
     sid: str
@@ -170,6 +178,7 @@ class PBPKDefinition:
     observers: Sequence[Observer] = ()
     creators: Sequence[Creator] = ()
     parameters: Sequence[ModelParameter] = ()
+    starts: Mapping[str, Q] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         """Normalise the sex to a `Sex` member."""
@@ -269,6 +278,14 @@ class PBPKDefinition:
                 (x for d in definitions for x in d.parameters),
                 lambda x: x.sid,
             ),
+            starts=dict(
+                _union(
+                    sid,
+                    "start of the species",
+                    (x for d in definitions for x in d.starts.items()),
+                    lambda x: x[0],
+                )
+            ),
         )
 
     def validate(self, *, symbols: bool = True) -> None:
@@ -295,6 +312,7 @@ class PBPKDefinition:
         problems += self._check_dynamic()
         problems += self._check_observers()
         problems += self._check_parameters()
+        problems += self._check_starts()
         if self.population not in POPULATIONS:
             problems.append(
                 f"population '{self.population}' is unknown, the populations are "
@@ -378,6 +396,23 @@ class PBPKDefinition:
                     f"parameter '{p.sid}' is the id of an organ submodel of the library"
                 )
             problems += _unit(f"parameter '{p.sid}'", "value", p.value, p.unit)
+        return problems
+
+    def _check_starts(self) -> list[str]:
+        """Check the ids and the values of the starts of the species.
+
+        That an id is a species of the model is checked by `compose`
+        (`pkpdsim.pbpk.builder`).
+        """
+        problems: list[str] = []
+        for sid, q in self.starts.items():
+            if not _SID.fullmatch(sid):
+                problems.append(f"start '{sid}': the id is not an SBML SId")
+                continue
+            x = _number(q)
+            if x is not None and not x >= 0:
+                problems.append(f"start '{sid}': must not be negative, got {x}")
+            problems += _unit(f"start '{sid}'", "value", q, U.mM)
         return problems
 
     def _check_substances(self) -> list[str]:

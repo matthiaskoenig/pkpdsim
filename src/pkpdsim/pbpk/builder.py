@@ -118,6 +118,7 @@ from pkpdsim.pbpk.routes import ORAL, route_objects
 from pkpdsim.pbpk.sinks import sink_objects
 from pkpdsim.pbpk.substance import Kp, KpMethod, Substance
 from pkpdsim.pbpk.units import MODEL_UNITS, U
+from pkpdsim.pbpk.values import Formula, Q, Value
 
 __all__ = [
     "BuildResult",
@@ -454,12 +455,20 @@ def _body(
     organs = built_organs(definition)
     reads = _organ_reads(definition, organs)
     exposed: dict[str, str] = {}
+    started: set[str] = set(top.started)
     for organ in organs:
+        inputs = top.inputs()
         md, boundary = organ_component(definition, organ).build(
-            organ_context(definition, organ, top.inputs())
+            organ_context(definition, organ, inputs)
         )
         if any(md.sid == other.sid for other in model_definitions):
             raise ValueError(f"Two organs build the model definition '{md.sid}'.")
+        boundary = _apply_starts(md, boundary, organ, definition.starts, inputs)
+        started |= {
+            sid
+            for sid in definition.starts
+            if sid.startswith(f"{ids.submodel(organ)}__")
+        }
         species_outputs = _expose_species(md, organ, reads.get(organ, {}))
         if species_outputs:
             boundary = Boundary(
@@ -481,6 +490,13 @@ def _body(
         submodels.append(Submodel(submodel, modelRef=md.sid, name=organ.name.lower()))
         replaced += top.connect(
             organ, submodel, boundary, species=species_outputs.values()
+        )
+    unknown = sorted(set(definition.starts) - started)
+    if unknown:
+        raise ValueError(
+            f"Invalid PBPK definition '{definition.sid}': the starts of {unknown} "
+            "name no species of the model (a species of an organ by its flat id "
+            "`<ORGAN>__<species>`, a species of the top model by its id)."
         )
     top.add(observer_objects(definition))
     outputs: list[str] = []
@@ -520,6 +536,116 @@ def _body(
         replaced,
     )
     return top, model_definitions, submodels, replaced
+
+
+def _start_number(q: Q) -> float:
+    """The number of a start which is no formula, a plain float or a `Value` (mM)."""
+    return q.value if isinstance(q, Value) else float(q)  # ty: ignore[invalid-argument-type]
+
+
+def _apply_starts(
+    md: ModelDefinition,
+    boundary: Boundary,
+    organ: Organ,
+    starts: Mapping[str, Q],
+    top: Mapping[str, tuple[str, UnitType]],
+) -> Boundary:
+    """Give the species of an organ the starts of the definition.
+
+    A start (`PBPKDefinition.starts`) names a species of the organ by its
+    flat id `<ORGAN>__<species>`. It replaces the initial value of the
+    species: a number is its initial concentration, a `Formula` its initial
+    assignment (replacing the start at the equilibrium with the baseline).
+    Every id of a formula is a constant of the top model, which the organ
+    reads through an input port under the same id, as for a `Formula` of the
+    organ: an input the organ has under that id is used, else the input is
+    added to the model definition and the boundary.
+
+    Args:
+        md: the model definition of the organ, changed in place.
+        boundary: the boundary of the organ.
+        organ: the organ.
+        starts: the starts of the definition by flat id.
+        top: the elements of the top model, id -> (kind, unit).
+
+    Returns:
+        The boundary with the inputs the formulas add.
+
+    Raises:
+        ValueError: naming a start which is no species of the organ, a
+            formula which reads an id which is no constant of the top model
+            or an element of the organ which is no input under that id.
+    """
+    prefix = f"{ids.submodel(organ)}__"
+    mine = {
+        sid.removeprefix(prefix): q
+        for sid, q in starts.items()
+        if sid.startswith(prefix)
+    }
+    if not mine:
+        return boundary
+    species = {str(sp.sid): sp for sp in md.species or []}
+    unknown = sorted(f"{prefix}{local}" for local in mine if local not in species)
+    if unknown:
+        raise ValueError(
+            f"The starts of {unknown} name no species of the organ '{organ.value}'."
+        )
+    replacements = dict(boundary.replacements)
+    elements = {str(e.sid) for e in [*(md.parameters or []), *(md.compartments or [])]}
+    problems: list[str] = []
+    assignments = list(md.assignments or [])
+    for local, q in sorted(mine.items()):
+        sp = species[local]
+        assignments = [
+            a
+            for a in assignments
+            if not (isinstance(a, InitialAssignment) and str(a.symbol) == local)
+        ]
+        if not isinstance(q, Formula):
+            sp.initialConcentration = _start_number(q)
+            continue
+        where = f"The start of '{prefix}{local}' (`{q.expression}`)"
+        problems += formula_problems(where, q.expression, top)
+        for symbol in sorted(formula_ids(q.expression)):
+            kind, unit = top.get(symbol, ("", None))
+            if kind not in ("parameter", "compartment"):
+                continue
+            if symbol in elements or symbol in species:
+                if replacements.get(symbol) != symbol:
+                    problems.append(
+                        f"{where} reads '{symbol}', a local element of the organ"
+                    )
+                continue
+            port = Port(f"{symbol}{PORT_SUFFIX}", portType=PortType.INPUT_PORT)
+            text = f"{symbol} (start of {local})"
+            if kind == "compartment":
+                md.compartments = [
+                    *(md.compartments or []),
+                    Compartment(
+                        symbol, 1.0, U.litre, constant=True, name=text, port=port
+                    ),
+                ]
+            else:
+                md.parameters = [
+                    *(md.parameters or []),
+                    Parameter(
+                        symbol,
+                        1.0,
+                        unit,
+                        constant=True,
+                        name=text,
+                        sboTerm=_SBO_PARAMETER,
+                        port=port,
+                    ),
+                ]
+            elements.add(symbol)
+            replacements[symbol] = symbol
+        sp.initialConcentration = None
+        assignments.append(species_start(local, q.expression, str(sp.name)))
+    if problems:
+        raise ValueError("; ".join(problems) + ".")
+    md.assignments = assignments
+    return Boundary(replacements, boundary.outputs)
 
 
 def _organ_reads(
@@ -909,6 +1035,8 @@ class _Top:
         self.known: set[str] = {
             str(o.sid) for o in self.objects if isinstance(o, Parameter)
         }
+        #: the ids of `PBPKDefinition.starts` of species of the top model
+        self.started: set[str] = set()
 
     def add(self, objects: Iterable[Sbase]) -> None:
         """Add objects, recording the ids of compartments, species and parameters."""
@@ -1164,15 +1292,35 @@ class _Top:
 
         `start` is the initial concentration as formula (the baseline of an
         endogenous substance, `start_formula`), the initial assignment of
-        the species.
+        the species; a start of the definition (`PBPKDefinition.starts`)
+        replaces it.
+
+        Raises:
+            ValueError: if the formula of a start of the definition reads an
+                id which is no constant of the top model.
         """
+        initial = 0.0 if start is None else None
+        given = self.definition.starts.get(sid)
+        if given is not None:
+            self.started.add(sid)
+            if isinstance(given, Formula):
+                problems = formula_problems(
+                    f"The start of '{sid}' (`{given.expression}`)",
+                    given.expression,
+                    self.inputs(),
+                )
+                if problems:
+                    raise ValueError("; ".join(problems) + ".")
+                initial, start = None, given.expression
+            else:
+                initial, start = float(_start_number(given)), None
         self.add(
             [
                 annotate(
                     Species(
                         sid,
                         compartment,
-                        initialConcentration=0.0 if start is None else None,
+                        initialConcentration=initial,
                         substanceUnit=U.mmole,
                         hasOnlySubstanceUnits=False,
                         name=name,

@@ -220,8 +220,38 @@ print([p.sid for p in creatinine.parameters])
 ['CRTNPROD_k']
 ```
 
-The example starts every plasma species at `CRTNPROD_k / GFR`, the arterial plasma concentration at the steady state (the filtration clears `GFR*Car`, see [Organ](organ.md#kidney)). The body is not stationary at this start: the filtration takes its amount out of the plasma at once, while the production of the muscle reaches the plasma only as the tissue of the muscle rises. In a build of the example (`tests/docs/test_substances_example.py` checks these numbers) the arterial plasma drops about 17 % below the baseline within the first 20 minutes and is back within 0.2 % after two days; the arm vein plasma, which mixes the venous outflow of the muscle, settles about 5.5 % above the baseline. A model which needs a stationary start accounts for the distribution of the production in its baseline, or runs into the steady state before its experiment.
+The example starts every plasma species at `CRTNPROD_k / GFR`, the arterial plasma concentration at the steady state (the filtration clears `GFR*Car`, see [Organ](organ.md#kidney)). The body is not stationary at this start: the filtration takes its amount out of the plasma at once, while the production of the muscle reaches the plasma only as the tissue of the muscle rises. In a build of the example (`tests/docs/test_substances_example.py` checks these numbers) the arterial plasma drops about 17 % below the baseline within the first 20 minutes and is back within 0.2 % after two days; the arm vein plasma, which mixes the venous outflow of the muscle, settles about 5.5 % above the baseline. A model which needs a stationary start states the steady state of the producing organ as the [starts of its species](#starts-of-the-species).
 
 The parameters are constants: a change before the simulation (`preinit_changes`) moves every formula which reads them, and an id of `PBPKDefinition.dynamic` makes them variable. The validation refuses an id which is no SBML SId, contains `__`, is given twice or is an id of the physiology or an organ submodel, and a `Value` or `Formula` in another unit than `unit`; the build (`compose`) refuses an id which the body has (a parameter of a substance such as `fu_<s>` or `Kp_<s>`, a sink, an observer of the library, a PD component), the id of an observer of the definition and a local id of an organ which is no input under the same id (`Vti`, `<process>_Vmax`): a custom reaction there would read the element of the organ instead. Formulas which read each other in a cycle are refused, naming them. Without parameters the SBML is that of a definition without the field.
+
+### Starts of the species
+
+A production or an elimination of the chemistry moves the organs where it acts away from the equilibrium with the baseline: at the steady state the plasma leaving the muscle carries the production, and the tissue of the muscle holds more than `Kp` times its plasma, by the production over the exchange. `PBPKDefinition.starts` gives such a species its own start: the flat id of the species (`MU__Cpl_crtn`, a pool `Cve_crtn`, a species of a custom reaction such as a pool of the muscle) to its initial concentration in mM, a number, a `Value` or a `Formula` over the constants of the top model, which replaces the start at the equilibrium. The organ reads the ids of a formula through input ports under the same ids, as for a `Formula` of the organ, and the start is an initial assignment of the species, so it follows a change of the individual before the simulation. With the steady state of the muscle the example starts stationary:
+
+```python
+import dataclasses
+
+#: the plasma flow of the muscle and the exchange of its tissue (l/min)
+plasma_flow = "Qmu * (1 dimensionless - HCT)"
+exchange = "ftissue_crtn * Vmu * (1 dimensionless - f_vas_mu) / Vti_total_ref_crtn"
+muscle_plasma = f"baseline_crtn + CRTNPROD_k / ({plasma_flow})"
+stationary = dataclasses.replace(
+    creatinine,
+    starts={
+        "MU__Cpl_crtn": Formula(muscle_plasma, U.mM),
+        "MU__Cti_crtn": Formula(
+            f"Kp_crtn * ({muscle_plasma} + CRTNPROD_k / ({exchange}))", U.mM
+        ),
+    },
+)
+model = compose(stationary)
+print(sorted(stationary.starts))
+```
+
+```text
+['MU__Cpl_crtn', 'MU__Cti_crtn']
+```
+
+In the build of this definition every species stays within 1e-6 of its start, for the reference individual as for another body weight or renal function (`tests/docs/test_substances_example.py`); the arm vein starts where the example without starts settled, 5.5 % above the baseline. The starts are the steady state of the equations of the library (the plasma flow `Q*(1 - HCT)` of an organ, its share of `ftissue`, the outflow of the kidney less the filtrate), which a model writes down for its organs; a stationarity test of the model (every species over a day, several individuals) checks them. The validation refuses an id which is no SBML SId, a negative number and a `Value` or `Formula` in another unit than mM; the build refuses a start which names no species of the model, and a formula which reads an id which is no constant of the top model. Without starts the SBML is that of a definition without the field.
 
 The validation (`PBPKDefinition.validate()`, called by `build`) refuses an id which is no SBML SId, contains `__`, starts with a token of the id scheme or is an id of the physiology, a duplicate id, a fraction outside its interval, a non-positive constant, a mode which needs `ftissue` without it (an entered organ without `ps`, named in the message), kinetic erythrocytes with a flow-limited distribution, and names every problem at once.
