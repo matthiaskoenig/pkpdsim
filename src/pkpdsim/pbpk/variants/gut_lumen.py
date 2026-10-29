@@ -6,8 +6,6 @@ sets the attributes (the segments, the substances which reach the lumen,
 the mucosa) before it builds.
 """
 
-from typing import TYPE_CHECKING
-
 from sbmlutils.factory import (
     Compartment,
     Parameter,
@@ -35,10 +33,8 @@ from pkpdsim.pbpk.routes import (
 from pkpdsim.pbpk.substance import Substance
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import Value
+from pkpdsim.pbpk.variants.lumen_options import LumenConversion
 from pkpdsim.pbpk.variants.segments import DATA, SMALL, Segment
-
-if TYPE_CHECKING:
-    from pkpdsim.pbpk.variants.intestine import LumenConversion
 
 __all__ = ["LumenBuilder"]
 
@@ -71,7 +67,7 @@ class LumenBuilder(StandardBuilder):
     fabs: frozenset[str]
     colon: frozenset[str]
     regional: dict[str, frozenset[str]]
-    conversions: "tuple[LumenConversion, ...]"
+    conversions: tuple[LumenConversion, ...]
     oral: dict[tuple[str, str], Route]
     bile: set[str]
     luminal: set[str]

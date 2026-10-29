@@ -8,12 +8,14 @@ of a substance. Neither creates an element of the model unless it is set.
 
 import dataclasses
 import math
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import libsbml
 import numpy as np
 import pytest
+from sbmlutils.factory import Uncertainty, UncertParameter
 
 from pkpdsim.pbpk import (
     Excretion,
@@ -26,6 +28,7 @@ from pkpdsim.pbpk import (
     RegionalAbsorption,
     Route,
     SegmentedIntestine,
+    SingleLumen,
     Substance,
     U,
     Value,
@@ -40,6 +43,7 @@ from pkpdsim.pbpk.variants.segments import DATA, SEGMENTS
 from .conftest import (
     assert_reference_sbml,
     chemistry_reference_definition,
+    dateless,
     dose_amount,
     load,
     reference_definition,
@@ -167,21 +171,23 @@ def test_the_converted_fraction_over_several_segments(tmp_path: Path) -> None:
 def test_the_converted_fraction_of_a_tablet_in_the_stomach(tmp_path: Path) -> None:
     """A tablet: only the drug dissolved in the stomach converts there.
 
-    With the first order dissolution `kdis` (1/hr) the fraction which
-    dissolves in the stomach is `g = kdis/60*T/(1 + kdis/60*T)`, the
+    With the first order dissolution `Ka_dis` (1/hr) the fraction which
+    dissolves in the stomach is `g = Ka_dis/60*T/(1 + Ka_dis/60*T)`, the
     undissolved rest moves on; the converted fraction is
     `g * k/60*T/(1 + k/60*T)`.
     """
-    k, kdis = 0.5, 6.0
+    k, ka_dis = 0.5, 6.0
     intestine = SegmentedIntestine(
         ka=_NO_ABSORPTION, conversions=[LumenConversion(S, M, k, ("st",))]
     )
     d = _definition(
-        "conv_tablet", intestine, routes=[Route.oral(S, FirstOrderDissolution(k=kdis))]
+        "conv_tablet",
+        intestine,
+        routes=[Route.oral(S, FirstOrderDissolution(k=ka_dis))],
     )
     r = load(build(d, tmp_path))
     t = _transit("st")
-    g = kdis / 60 * t / (1 + kdis / 60 * t)
+    g = ka_dis / 60 * t / (1 + ka_dis / 60 * t)
     kt = k / 60 * t
     assert _converted(r, ids.po_dose(S), 10.0) == pytest.approx(
         g * kt / (1 + kt), rel=1e-5
@@ -413,7 +419,11 @@ def test_a_profile_and_the_colon_factor_multiply_outside_the_colon(
     ("make", "message"),
     [
         (lambda: RegionalAbsorption({"st": 0.5}), "stomach does not absorb"),
-        (lambda: RegionalAbsorption({"colon": 0.5}), "unknown segments"),
+        (lambda: RegionalAbsorption({"xyz": 0.5}), "unknown segments"),
+        (
+            lambda: RegionalAbsorption({"colon": 0.5, "asc": 0.2}),
+            r"segments \['asc'\] have a factor of their own and of the group",
+        ),
         (lambda: RegionalAbsorption({}), "no segments"),
         (lambda: RegionalAbsorption({"asc": -0.1}), "must not be negative"),
         (
@@ -447,14 +457,161 @@ def test_an_invalid_profile_is_refused(
             ),
             "both f_ka_colon and a regional factor of the large intestine",
         ),
+        (
+            SegmentedIntestine(
+                f_ka_colon=0.4, regional=RegionalAbsorption({"colon": 0.5})
+            ),
+            "both f_ka_colon and a regional factor of the large intestine",
+        ),
+        (
+            SegmentedIntestine(
+                ka={M: 1.0},
+                regional={M: RegionalAbsorption({"asc": 0.5})},
+                conversions=[LumenConversion(S, M, 0.1, ("st",))],
+            ),
+            "'drg_m' has no oral route",
+        ),
     ],
 )
 def test_an_invalid_regional_mapping_is_refused(
     intestine: SegmentedIntestine, message: str, tmp_path: Path
 ) -> None:
-    """A key without oral route or no substance, the colon factor twice."""
+    """A key without oral route or no substance, the colon factor twice.
+
+    The product of a conversion without an oral route takes no profile,
+    even with a `ka`, as `fabs` and `f_ka_colon`.
+    """
     with pytest.raises(ValueError, match=message):
         build(_definition("regional_bad", intestine), tmp_path)
+
+
+def test_the_group_colon_is_f_ka_colon(tmp_path: Path) -> None:
+    """`RegionalAbsorption({"colon": x})` and `f_ka_colon=x` build the same model.
+
+    One shared parameter `f_ka_colon_<s>` of every segment of the large
+    intestine, with a segment factor of the small intestine beside it.
+    """
+    texts = []
+    for name, intestine in (
+        (
+            "shorthand",
+            SegmentedIntestine(
+                f_ka_colon=0.3, regional=RegionalAbsorption({"ile2": 0.5})
+            ),
+        ),
+        (
+            "group",
+            SegmentedIntestine(
+                regional=RegionalAbsorption({"ile2": 0.5, "colon": 0.3})
+            ),
+        ),
+    ):
+        result = build(_definition("colon_group", intestine), tmp_path / name)
+        texts.append(
+            [dateless(p.read_text()) for p in (result.comp_path, result.flat_path)]
+        )
+    assert texts[0] == texts[1]
+    found = _sbml_ids(tmp_path / "group" / "colon_group_flat.xml")
+    assert {i for i in found if i.startswith("f_ka_")} == {
+        "f_ka_colon_drg",
+        "f_ka_ile2_drg",
+    }
+
+
+def test_fitted_factors_keep_their_uncertainty(tmp_path: Path) -> None:
+    """A fitted rate constant and a fitted factor are parameters with their distribution."""
+    k = _fitted(0.05, U.per_hr, "uniform(0.01, 0.1)")
+    factor = _fitted(0.4, U.dimensionless, "uniform(0.1, 1)")
+    intestine = SegmentedIntestine(
+        regional=RegionalAbsorption({"ile2": factor}),
+        conversions=[LumenConversion(S, M, k, ("st",))],
+    )
+    result = build(_definition("fitted", intestine), tmp_path)
+    model = libsbml.readSBMLFromFile(str(result.flat_path)).getModel()
+    for pid, number in (
+        (ids.lumen_conversion_rate(S, M), 0.05),
+        (ids.regional_absorption_factor(S, "ile2"), 0.4),
+    ):
+        p = model.getParameter(pid)
+        assert p.getValue() == number
+        plugin = p.getPlugin("distrib")
+        assert plugin is not None
+        assert plugin.getNumUncertainties() == 1
+        assert "Fitted value." in p.getNotesString()
+
+
+def _fitted(number: float, unit: object, distribution: str) -> Value:
+    """A fitted value with the uncertainty of a fit."""
+    return Value(
+        number,
+        unit,  # ty: ignore[invalid-argument-type]
+        source="fit",
+        uncertainties=[
+            Uncertainty(
+                uncertParameters=[
+                    UncertParameter(
+                        type=libsbml.DISTRIB_UNCERTTYPE_DISTRIBUTION,
+                        math=distribution,
+                        name="distribution of the draws",
+                    )
+                ],
+                name="fit F1",
+            )
+        ],
+    )
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"regional": RegionalAbsorption({"asc": 0.5})},
+        {"conversions": [LumenConversion(S, M, 0.1, ("st",))]},
+    ],
+)
+def test_the_single_lumen_refuses_the_options_of_the_segments(
+    fields: dict[str, object],
+) -> None:
+    """`SingleLumen` has no segments: a profile or a conversion is refused with a message."""
+    with pytest.raises(ValueError, match="need the lumen segments"):
+        SingleLumen(**fields)  # ty: ignore[invalid-argument-type]
+
+
+def _absorbed_from(r: "roadrunner.RoadRunner", amount: float) -> float:
+    """The absorbed part of an amount (mmole) in the lumen after two weeks."""
+    r.simulate(0, 14 * DAY, 100)
+    left = r[ids.feces(S)] + sum(
+        r[f"[{_gu(ids.lumen(S, seg))}]"] * r[_gu(ids.lumen_volume(seg))]
+        for seg in ids.GUT_SEGMENTS
+    )
+    return (amount - left) / amount
+
+
+def test_the_colon_absorption_of_the_docs(tmp_path: Path) -> None:
+    """The colonic absorption stated in the docs: 70 % (caecum), 64 % (colon ascendens).
+
+    A solution put into the lumen of the caecum or the colon ascendens is
+    absorbed to these fractions of the fraction absorbed of an oral solution,
+    at the default `ka` (1/hr) and the area factors of the data, no profile.
+    """
+    result = build(_definition("colon_docs", SegmentedIntestine()), tmp_path)
+    r = load(result)
+    assert r[ids.absorption(S)] == 1.0
+    r[ids.sol_dose(S)] = 10.0
+    oral = _absorbed_from(r, 10.0 / r[ids.mr(S)])
+    ratios = {}
+    for seg in ("cae", "asc"):
+        r = load(result)
+        r[f"[{_gu(ids.lumen(S, seg))}]"] = 1.0
+        ratios[seg] = _absorbed_from(r, r[_gu(ids.lumen_volume(seg))]) / oral
+    page = (Path(__file__).parents[2] / "docs" / "pbpk" / "intestine.md").read_text()
+    stated = re.search(
+        r"released in the caecum is absorbed to (\d+) % \(in the colon ascendens "
+        r"(\d+) %\)",
+        page,
+    )
+    assert stated is not None
+    assert round(100 * ratios["cae"]) == int(stated[1])
+    assert round(100 * ratios["asc"]) == int(stated[2])
 
 
 # --- the defaults ----------------------------------------------------------

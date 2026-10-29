@@ -12,7 +12,8 @@ comment (`# ...`) or an equation in the infix syntax of SBML L3:
 
 The ids are the local ids of an organ component (`Cpl_<s>`, `Q<o>`) or the
 ids of the top model (`Carm_<s>`), with the placeholders `<s>` for a
-substance and `<o>` for the token of an organ (`li`). The test builds the
+substance, `<m>` for a second substance (the product of a conversion) and
+`<o>` for the token of an organ (`li`). The test builds the
 toy definitions below and finds every equation, by its id, in the comp model
 of a toy: in an organ component (its model definition, `<o>` the organ of
 the component) or in the top model (`<o>` any organ), for some substance of
@@ -467,8 +468,15 @@ def _problems(name: str, contexts: list[Context]) -> list[str]:
             continue
         found: list[str] = []
         for context in contexts:
-            for s, o in itertools.product(context.substances, context.organs):
-                difference = _lookup(context.model, match, {"<s>": s, "<o>": o})
+            # `<m>` a second substance (the product of a conversion), only
+            # where the line has it
+            products = context.substances if "<m>" in line else ("",)
+            for s, m, o in itertools.product(
+                context.substances, products, context.organs
+            ):
+                difference = _lookup(
+                    context.model, match, {"<s>": s, "<m>": m, "<o>": o}
+                )
                 if difference == "":
                     break
                 if difference != "missing":

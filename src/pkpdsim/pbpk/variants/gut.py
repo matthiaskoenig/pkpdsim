@@ -8,7 +8,6 @@ mucosa and the chemistry of the small intestine are placed here.
 
 from collections.abc import Callable, Mapping
 from dataclasses import replace
-from typing import TYPE_CHECKING
 
 from sbmlutils.factory import ModelDefinition, Reaction
 from sbmlutils.metadata import SBO
@@ -42,10 +41,8 @@ from pkpdsim.pbpk.substance import Kp, Substance
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import Value
 from pkpdsim.pbpk.variants.gut_lumen import LumenBuilder
+from pkpdsim.pbpk.variants.lumen_options import LumenConversion, converted
 from pkpdsim.pbpk.variants.segments import DATA, Segment
-
-if TYPE_CHECKING:
-    from pkpdsim.pbpk.variants.intestine import LumenConversion
 
 __all__ = ["GUT_ORGANS", "GutBuilder"]
 
@@ -126,35 +123,6 @@ def _check_wall(substances: tuple[Substance, ...]) -> None:
             )
 
 
-def _converted(
-    conversions: "tuple[LumenConversion, ...]", luminal: set[str]
-) -> set[str]:
-    """The products of the conversions, which reach the lumen by them.
-
-    A product is the substrate of a further conversion in a chain.
-
-    Raises:
-        ValueError: for a conversion whose substrate never reaches the lumen.
-    """
-    reached = set(luminal)
-    changed = True
-    while changed:
-        changed = False
-        for c in conversions:
-            if c.substrate in reached and c.product not in reached:
-                reached.add(c.product)
-                changed = True
-    missing = [c for c in conversions if c.substrate not in reached]
-    if missing:
-        c = missing[0]
-        raise ValueError(
-            f"LumenConversion {c.substrate} -> {c.product}: '{c.substrate}' does "
-            "not reach the lumen (no oral route, biliary excretion, transport of "
-            "the intestine or conversion into it), it cannot convert there."
-        )
-    return reached - luminal
-
-
 class GutBuilder(LumenBuilder):
     """The SBML objects of the intestine: wall, lumen segments, mucosa and chemistry."""
 
@@ -168,7 +136,7 @@ class GutBuilder(LumenBuilder):
         fabs: frozenset[str] = frozenset(),
         colon: frozenset[str] = frozenset(),
         regional: Mapping[str, frozenset[str]] | None = None,
-        conversions: "tuple[LumenConversion, ...]" = (),
+        conversions: tuple[LumenConversion, ...] = (),
     ) -> None:
         """Start the collection of the elements of the intestine.
 
@@ -249,7 +217,7 @@ class GutBuilder(LumenBuilder):
             | {p.substance for p in processes if isinstance(p, Transport)}
             | {sid for sid, i in ctx.inhibitions if i.protein in influx}
         )
-        self.luminal |= _converted(conversions, self.luminal)
+        self.luminal |= converted(conversions, self.luminal)
 
     def build(self) -> tuple[ModelDefinition, Boundary]:
         """Build the model definition and the boundary."""

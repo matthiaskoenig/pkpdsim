@@ -66,14 +66,10 @@ from pkpdsim.pbpk.substance import (
 )
 from pkpdsim.pbpk.units import MODEL_UNITS, U
 from pkpdsim.pbpk.values import Formula, ModelParameter, Q, Value, as_value, fitted
-from pkpdsim.pbpk.variants.intestine import (
-    LumenConversion,
-    RegionalAbsorption,
-    SegmentedIntestine,
-    SingleLumen,
-)
+from pkpdsim.pbpk.variants.intestine import SegmentedIntestine, SingleLumen
 from pkpdsim.pbpk.variants.kidney_nephron import NephronKidney
 from pkpdsim.pbpk.variants.liver_zonated import ZonatedLiver
+from pkpdsim.pbpk.variants.lumen_options import LumenConversion, RegionalAbsorption
 
 if TYPE_CHECKING:
     from pkpdsim.pbpk.experiment import (
