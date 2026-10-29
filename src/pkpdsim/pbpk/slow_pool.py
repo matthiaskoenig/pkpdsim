@@ -25,7 +25,16 @@ from pkpdsim.pbpk.organs import Organ, as_organs
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import Q, check_positive, check_unit
 
-__all__ = ["SlowPool", "check_slow_pools"]
+__all__ = ["OrganCollection", "SlowPool", "check_slow_pools"]
+
+type OrganCollection = (
+    frozenset[Organ | str]
+    | set[Organ | str]
+    | list[Organ | str]
+    | tuple[Organ | str, ...]
+)
+"""The organs as `SlowPool.organs` takes them: a frozenset, set, list or tuple of
+`Organ` members, values or names (`as_organs`)."""
 
 
 @dataclass(frozen=True)
@@ -35,8 +44,10 @@ class SlowPool:
     Attributes:
         substance: the id of the substance.
         organs: the organs with a pool, standard organs in which the
-            substance has the merged tissue (`Mode.TISSUE`); given as members,
-            values or names, kept as a frozenset of `Organ` members.
+            substance has the merged tissue (`Mode.TISSUE`); a frozenset,
+            set, list or tuple of members, values or names
+            (`OrganCollection`), normalised to a frozenset of `Organ` members
+            in `__post_init__`, which is what the field holds afterwards.
         k: the exchange between the tissue and the pool per litre of tissue
             (1/min), `kslow_<s>`: a number, a `Value` (fitted) or a `Formula`.
         kp: the concentration of the pool to that of the tissue at
@@ -44,12 +55,12 @@ class SlowPool:
     """
 
     substance: str
-    organs: frozenset[Organ]
+    organs: OrganCollection
     k: Q
     kp: Q
 
     def __post_init__(self) -> None:
-        """Normalise the organs to `Organ` members."""
+        """Normalise the organs to a frozenset of `Organ` members."""
         object.__setattr__(self, "organs", as_organs(self.organs, "SlowPool.organs"))
 
 

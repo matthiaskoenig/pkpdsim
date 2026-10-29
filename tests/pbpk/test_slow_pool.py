@@ -278,8 +278,18 @@ def test_combine_takes_the_pools_of_the_definitions() -> None:
 
 
 def test_the_organs_are_normalised() -> None:
+    """Members, values and names in any collection are held as a frozenset."""
+    expected = frozenset({Organ.MUSCLE, Organ.SKIN})
+    for organs in (
+        ["mu", "skin"],
+        ("MUSCLE", Organ.SKIN),
+        {"mu", "sk"},
+        frozenset({Organ.MUSCLE, "skin"}),
+    ):
+        p = SlowPool("drg", organs, k=K, kp=KP)
+        assert isinstance(p.organs, frozenset)
+        assert p.organs == expected
     p = pool(organs=["mu", "skin"])
-    assert p.organs == frozenset({Organ.MUSCLE, Organ.SKIN})
     with pytest.raises(ValueError, match=r"SlowPool\.organs"):
         pool(organs=["nowhere"])
     assert dataclasses.replace(p, k=1.0).k == 1.0
