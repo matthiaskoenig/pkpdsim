@@ -235,23 +235,24 @@ def _literal_fields(cls: type) -> tuple[tuple[str, tuple[object, ...]], ...]:
     )
 
 
-class FrozenMap(Mapping[str, Q]):
+class FrozenMap[V = Q](Mapping[str, V]):
     """A read-only, hashable mapping from an id to a value.
 
     The mapping fields of the frozen dataclasses of a definition (the values
     per substance of the intestine, `PerSubstance`; the starts of the
-    species, `PBPKDefinition.starts`) are kept as this copy: it reads back as
+    species, `PBPKDefinition.starts`; the regional absorption profiles per
+    substance, whose values are profiles) are kept as this copy: it reads back as
     a `Mapping` (`ka["a"]`, `.items()`), cannot be changed after the
     validation and is hashed by its items (a dict is unhashable).
     """
 
     __slots__ = ("_items",)
 
-    def __init__(self, items: Mapping[str, Q]) -> None:
+    def __init__(self, items: Mapping[str, V]) -> None:
         """Copy the items."""
-        self._items: dict[str, Q] = dict(items)
+        self._items: dict[str, V] = dict(items)
 
-    def __getitem__(self, key: str) -> Q:
+    def __getitem__(self, key: str) -> V:
         """Get the value of a substance."""
         return self._items[key]
 

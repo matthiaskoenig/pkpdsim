@@ -29,7 +29,9 @@ enters the portal vein directly. Their parts:
   mucosal surface per lumen volume relative to the small intestine; the
   stomach does not absorb), a segment of the large intestine optionally
   times `f_ka_colon_<s>` (`SegmentedIntestine.f_ka_colon`, a substance
-  with an oral route); the single lumen absorbs with `ka_<s>`; of the
+  with an oral route), a segment of the regional absorption profile of a
+  substance times `f_ka_<seg>_<s>` (`RegionalAbsorption`); the single
+  lumen absorbs with `ka_<s>`; of the
   absorbed flux the fraction `fabs_<s>` enters the body and the rest the
   feces (the single lumen for every substance, the segments with
   `SegmentedIntestine.fabs` for a substance with an oral route);
@@ -63,9 +65,13 @@ placement weights of the protein.
 
 The bile of every substance drains: of a substance with lumen species into
 the duodenum (the single lumen), of any other into the feces.
+
+A conversion in the lumen (`LumenConversion`, the segmented intestine)
+converts a dissolved substance into another in chosen segments, first order
+with `kconv_<s>_<m>` (1/hr); the product gets lumen species.
 """
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -80,22 +86,185 @@ from pkpdsim.pbpk.organs import Organ
 from pkpdsim.pbpk.placement import value_parameter
 from pkpdsim.pbpk.routes import ORAL
 from pkpdsim.pbpk.units import U
-from pkpdsim.pbpk.values import FrozenMap, Q
+from pkpdsim.pbpk.values import FrozenMap, Q, check_unit, number
 from pkpdsim.pbpk.variants.gut import GUT_ORGANS, GutBuilder
-from pkpdsim.pbpk.variants.segments import DATA, segments, single_lumen
+from pkpdsim.pbpk.variants.segments import (
+    DATA,
+    SEGMENTS,
+    SMALL,
+    segments,
+    single_lumen,
+)
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Sequence
+    from collections.abc import Iterable
 
     from pkpdsim.pbpk.definition import PBPKDefinition
     from pkpdsim.pbpk.routes import Route
 
-__all__ = ["PerSubstance", "SegmentedIntestine", "SingleLumen"]
+__all__ = [
+    "LumenConversion",
+    "PerSubstance",
+    "RegionalAbsorption",
+    "SegmentedIntestine",
+    "SingleLumen",
+]
 
 _SBO_PARAMETER = SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER
 
 type PerSubstance = Q | Mapping[str, Q]
 """One value for every oral substance, or a mapping from substance id to value."""
+
+
+_ABSORBING = tuple(t for t in ids.GUT_SEGMENTS if t != "st")
+"""The lumen segments which absorb: every segment but the stomach."""
+
+_LARGE = tuple(t for t in ids.GUT_SEGMENTS if t != "st" and t not in SMALL)
+"""The lumen segments of the large intestine, caecum to rectum."""
+
+_LABELS = {t: key.replace("_", " ") for t, key in SEGMENTS.items()}
+"""The segments in names by token, `upper jejunum`."""
+
+_REGION = {
+    t: Organ.LARGE_INTESTINE if t in _LARGE else Organ.SMALL_INTESTINE
+    for t in _ABSORBING
+}
+"""The organ of an absorbing segment, for the annotation of its factor."""
+
+
+def _segment_problems(where: str, tokens: "Sequence[str]") -> list[str]:
+    """The problems of the segment tokens of an option: none, twice or unknown."""
+    if not tokens:
+        return [f"{where}: no segments, give the tokens {list(ids.GUT_SEGMENTS)}"]
+    problems = []
+    twice = sorted({t for t in tokens if list(tokens).count(t) > 1})
+    if twice:
+        problems.append(f"{where}: the segments {twice} more than once")
+    unknown = [t for t in tokens if t not in ids.GUT_SEGMENTS]
+    if unknown:
+        problems.append(
+            f"{where}: unknown segments {unknown}, the segments are "
+            f"{list(ids.GUT_SEGMENTS)}"
+        )
+    return problems
+
+
+def _raise(problems: list[str]) -> None:
+    """Raise the problems of an option, if any.
+
+    Raises:
+        ValueError: with every problem.
+    """
+    if problems:
+        raise ValueError("; ".join(problems))
+
+
+@dataclass(frozen=True)
+class RegionalAbsorption:
+    """The regional absorption profile of a substance in the segmented intestine.
+
+    A factor of a segment multiplies its absorption `ka_<s>*f_area_<seg>`:
+    the permeability of the segment relative to the small intestine, which
+    `ka_<s>` describes (the area factor holds the mucosal surface per lumen
+    volume, Helander 2014). Every factor is a parameter `f_ka_<seg>_<s>` of
+    the top model; a segment missing from the profile has none (1).
+
+    There is no generic default profile: the colonic absorption relative to
+    the small intestine depends on the substance, high for a highly
+    permeable drug (BCS class I, relative colonic bioavailability above 70
+    %) and low for a drug of low permeability (BCS III and IV, below 50 %;
+    Tannergren 2009, 42 drugs), so the default is no factor (1). A substance
+    whose regional absorption is measured (an intubation or a capsule
+    released in a segment, `Byon2018` for apixaban) takes its own profile.
+
+    Attributes:
+        factors: the factor of a segment by its token (`du` to `rec`, not
+            the stomach, which does not absorb): a number or a `Value`
+            (dimensionless), not negative.
+
+    Raises:
+        ValueError: for no segment, the stomach, an unknown token, a negative
+            factor or a `Value` which is not dimensionless.
+    """
+
+    factors: Mapping[str, Q]
+
+    def __post_init__(self) -> None:
+        """Store the factors as a hashable read-only mapping and check them."""
+        object.__setattr__(self, "factors", FrozenMap(self.factors))
+        where = "RegionalAbsorption"
+        problems = _segment_problems(where, list(self.factors))
+        if "st" in self.factors:
+            problems.append(
+                f"{where}: the stomach does not absorb, the segments are "
+                f"{list(_ABSORBING)}"
+            )
+        for seg, q in self.factors.items():
+            x = number(q)
+            if x is not None and x < 0:
+                problems.append(
+                    f"{where}: the factor of '{seg}' must not be negative, got {x}"
+                )
+            problems += check_unit(where, f"the factor of '{seg}'", q, U.dimensionless)
+        _raise(problems)
+
+
+@dataclass(frozen=True)
+class LumenConversion:
+    """A first order conversion of a substance into another in the lumen.
+
+    In every segment of the conversion the dissolved substrate converts into
+    the product, `J_conv_<seg>_<s>_<m> = kconv_<s>_<m>/60*Vlumen_<seg>*Clumen_<seg>_<s>`,
+    one mole of product per mole of substrate: a chemical conversion (the
+    cyclization of creatine to creatinine in the acid of the stomach), a
+    hydrolysis of a prodrug or a bacterial conversion in the colon. The
+    undissolved drug of a tablet does not convert. The product gets the
+    lumen species, transit and absorption of the intestine (its `ka_<m>` is
+    0 without an oral route, unless `SegmentedIntestine.ka` gives it one).
+
+    A solution in the stomach, a conversion in the stomach only: the
+    stomach does not absorb, so the converted fraction of the dose is
+    `f = k*T/(1 + k*T)` with `k = kconv/60` (1/min) and the transit time of
+    the stomach `T` (`T_st`, fasted 22.79 min), and `kconv = 60*f/((1 - f)*T)`;
+    a tablet with the first order dissolution `kdis` (1/hr) converts only
+    the part which dissolves in the stomach, `g = kd*T/(1 + kd*T)` with
+    `kd = kdis/60`, so `f = g*k*T/(1 + k*T)`. Over several segments without
+    absorption the drug survives each with `1/(1 + k*T_seg)`.
+
+    Attributes:
+        substrate: the id of the converted substance, which reaches the lumen
+            (an oral route, biliary excretion, a transport of the intestine
+            or the product of another conversion).
+        product: the id of the formed substance.
+        k: the rate constant (1/hr, the unit of `ka_<s>`), the parameter
+            `kconv_<s>_<m>` of the top model, not negative.
+        segments: the lumen segments it acts in, tokens of `ids.GUT_SEGMENTS`
+            (`st` the stomach to `rec` the rectum).
+
+    Raises:
+        ValueError: for a substrate which is the product, no segment, an
+            unknown token or one twice, a negative `k` or a `Value` which is
+            not in 1/hr.
+    """
+
+    substrate: str
+    product: str
+    k: Q
+    segments: Sequence[str]
+
+    def __post_init__(self) -> None:
+        """Store the segments as a tuple and check the conversion."""
+        object.__setattr__(self, "segments", tuple(self.segments))
+        where = f"LumenConversion {self.substrate} -> {self.product}"
+        problems = []
+        if self.substrate == self.product:
+            problems.append(f"{where}: converts '{self.substrate}' into itself")
+        problems += _segment_problems(where, self.segments)
+        x = number(self.k)
+        if x is not None and x < 0:
+            problems.append(f"{where}: k must not be negative, got {x}")
+        problems += check_unit(where, "k", self.k, U.per_hr)
+        _raise(problems)
 
 
 def _oral(routes: "Sequence[Route]") -> frozenset[str]:
@@ -119,7 +288,7 @@ def _per_substance(spec: PerSubstance, sid: str, default: Q) -> Q:
 
 def _check_keys(
     attribute: str,
-    spec: "PerSubstance | None",
+    spec: object,
     known: frozenset[str],
     allowed: frozenset[str] | None,
 ) -> None:
@@ -260,6 +429,11 @@ class SegmentedIntestine:
     `J_feces_<seg>_<s>`. Unlike `SingleLumen`, whose `fabs=None` is
     `fabs_<s> = 1` for every substance, `None` creates no parameter.
 
+    `regional` gives a substance with an oral route the regional absorption
+    profile (`RegionalAbsorption`), a factor `f_ka_<seg>_<s>` of the
+    absorption of a segment; `conversions` convert a substance into another
+    in the lumen (`LumenConversion`). Neither creates an element unless set.
+
     Attributes:
         name: the name of the component.
         ka: the absorption rate constant of a substance with an oral route,
@@ -273,22 +447,39 @@ class SegmentedIntestine:
             intestine (caecum to rectum), `f_ka_colon_<s>` of a substance
             with an oral route; none (1) if `None`; a mapping gives it only
             to the substances in it.
+        regional: the regional absorption profile of every substance with an
+            oral route, or a mapping from substance id to the profile of the
+            substances in it; none (every factor 1) if `None`, the default
+            (no generic profile, see `RegionalAbsorption`). A substance with
+            `f_ka_colon` may have a profile of the small intestine only.
+        conversions: the conversions in the lumen.
 
     Raises:
         ValueError: (on build) for a key of a mapping which is no substance of
-            the definition, or of `fabs` or `f_ka_colon` a substance without
-            an oral route.
+            the definition, or of `fabs`, `f_ka_colon` or `regional` a
+            substance without an oral route; for a substance with both
+            `f_ka_colon` and a factor of the large intestine; for a
+            conversion of a substance which is no substance of the
+            definition or never reaches the lumen, or two conversions of the
+            same substrate and product.
     """
 
     name: str = "segmented"
     ka: "PerSubstance | None" = None
     fabs: "PerSubstance | None" = None
     f_ka_colon: "PerSubstance | None" = None
+    regional: "RegionalAbsorption | Mapping[str, RegionalAbsorption] | None" = None
+    conversions: Sequence[LumenConversion] = ()
 
     def __post_init__(self) -> None:
-        """Store a mapping as a hashable read-only mapping."""
+        """Store a mapping as a hashable read-only mapping, the conversions as a tuple."""
         for name in ("ka", "fabs", "f_ka_colon"):
             object.__setattr__(self, name, _freeze(getattr(self, name)))
+        if isinstance(self.regional, Mapping):
+            object.__setattr__(
+                self, "regional", FrozenMap[RegionalAbsorption](self.regional)
+            )
+        object.__setattr__(self, "conversions", tuple(self.conversions))
 
     @property
     def replaces(self) -> tuple[Organ, ...]:
@@ -313,11 +504,112 @@ class SegmentedIntestine:
         _check_keys("f_ka_colon", self.f_ka_colon, known, oral)
         return _only(self.fabs, oral), _only(self.f_ka_colon, oral)
 
-    def body_objects(self, definition: "PBPKDefinition") -> list[Sbase]:
-        """Get `ka_<s>` of every substance, `fabs_<s>` and `f_ka_colon_<s>` of the oral ones, `FED`."""
-        fabs, colon = self._oral_sets(
-            (s.sid for s in definition.substances), definition.routes
+    def _profiles(
+        self, sids: "Iterable[str]", routes: "Sequence[Route]"
+    ) -> dict[str, RegionalAbsorption]:
+        """The regional absorption profiles by substance, checked.
+
+        Raises:
+            ValueError: for a key which is no substance or has no oral route,
+                or a substance with `f_ka_colon` and a factor of the large
+                intestine.
+        """
+        known, oral = frozenset(sids), _oral(routes)
+        _check_keys("regional", self.regional, known, oral)
+        if self.regional is None:
+            return {}
+        if isinstance(self.regional, Mapping):
+            profiles = {sid: p for sid, p in self.regional.items() if sid in oral}
+        else:
+            profiles = dict.fromkeys(sorted(oral), self.regional)
+        colon = _only(self.f_ka_colon, oral)
+        twice = sorted(
+            sid
+            for sid, p in profiles.items()
+            if sid in colon and any(seg in _LARGE for seg in p.factors)
         )
+        if twice:
+            raise ValueError(
+                f"regional: {twice} have both f_ka_colon and a regional factor of "
+                "the large intestine, which scale the same absorption; give the "
+                "large intestine by one of them"
+            )
+        return profiles
+
+    def _check_conversions(self, sids: "Iterable[str]") -> None:
+        """Check the substances of the conversions and that none is given twice.
+
+        Raises:
+            ValueError: for a substance which is no substance of the
+                definition, or two conversions of the same ids.
+        """
+        known = frozenset(sids)
+        problems = []
+        seen: set[str] = set()
+        for c in self.conversions:
+            where = f"LumenConversion {c.substrate} -> {c.product}"
+            for sid in (c.substrate, c.product):
+                if sid not in known:
+                    problems.append(
+                        f"{where}: '{sid}' is no substance of the definition "
+                        f"{sorted(known)}"
+                    )
+            rate = ids.lumen_conversion_rate(c.substrate, c.product)
+            if rate in seen:
+                problems.append(f"{where}: given twice (the id '{rate}')")
+            seen.add(rate)
+        _raise(problems)
+
+    def _regional_objects(
+        self, definition: "PBPKDefinition", profiles: Mapping[str, RegionalAbsorption]
+    ) -> list[Sbase]:
+        """The factors `f_ka_<seg>_<s>` of the profiles, in the order of the substances and segments."""
+        return [
+            annotate(
+                value_parameter(
+                    ids.regional_absorption_factor(s.sid, seg),
+                    profiles[s.sid].factors[seg],
+                    U.dimensionless,
+                    f"absorption factor {_LABELS[seg]} {s.sid}",
+                    _SBO_PARAMETER,
+                    "Factor of the absorption of the segment relative to the "
+                    f"small intestine, `ka*f_area_{seg}*f_ka_{seg}`: the regional "
+                    "absorption profile of the substance.",
+                ),
+                "regional_absorption",
+                organ=_REGION[seg],
+            )
+            for s in definition.substances
+            if s.sid in profiles
+            for seg in _ABSORBING
+            if seg in profiles[s.sid].factors
+        ]
+
+    def _conversion_objects(self) -> list[Sbase]:
+        """The rate constants `kconv_<s>_<m>` of the conversions."""
+        return [
+            annotate(
+                value_parameter(
+                    ids.lumen_conversion_rate(c.substrate, c.product),
+                    c.k,
+                    U.per_hr,
+                    f"conversion {c.substrate} to {c.product} in the lumen [1/hr]",
+                    SBO.FORWARD_RATE_CONSTANT,
+                    "First order rate constant of the conversion in the lumen "
+                    f"segments {list(c.segments)}, `kconv/60*V*C`.",
+                ),
+                "lumen_conversion_rate",
+                organ=Organ.SMALL_INTESTINE,
+            )
+            for c in self.conversions
+        ]
+
+    def body_objects(self, definition: "PBPKDefinition") -> list[Sbase]:
+        """Get `ka_<s>`, `fabs_<s>`, `f_ka_colon_<s>`, the regional factors, the conversion rates, `FED`."""
+        sids = [s.sid for s in definition.substances]
+        fabs, colon = self._oral_sets(sids, definition.routes)
+        profiles = self._profiles(sids, definition.routes)
+        self._check_conversions(sids)
         return [
             *_ka_objects(definition, self.ka),
             *(
@@ -330,6 +622,8 @@ class SegmentedIntestine:
                 if self.f_ka_colon is not None
                 else []
             ),
+            *self._regional_objects(definition, profiles),
+            *self._conversion_objects(),
             annotate(
                 Parameter(
                     ids.FED,
@@ -354,7 +648,10 @@ class SegmentedIntestine:
                 of the large intestine, a custom reaction, a basolateral
                 transport of the mucosa.
         """
-        fabs, colon = self._oral_sets((s.sid for s in ctx.substances), ctx.routes)
+        sids = [s.sid for s in ctx.substances]
+        fabs, colon = self._oral_sets(sids, ctx.routes)
+        profiles = self._profiles(sids, ctx.routes)
+        self._check_conversions(sids)
         return GutBuilder(
             ctx,
             self.name,
@@ -362,6 +659,8 @@ class SegmentedIntestine:
             single=False,
             fabs=fabs,
             colon=colon,
+            regional={sid: frozenset(p.factors) for sid, p in profiles.items()},
+            conversions=tuple(self.conversions),
         ).build()
 
 

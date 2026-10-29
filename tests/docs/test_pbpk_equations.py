@@ -43,6 +43,7 @@ from pkpdsim.pbpk import (
     Induction,
     Inhibition,
     Kp,
+    LumenConversion,
     Membrane,
     Metabolism,
     Mode,
@@ -50,6 +51,7 @@ from pkpdsim.pbpk import (
     PBPKDefinition,
     PDComponent,
     RateOf,
+    RegionalAbsorption,
     Route,
     SegmentedIntestine,
     SlowPool,
@@ -303,12 +305,26 @@ def variants() -> PBPKDefinition:
 
 
 def absorption() -> PBPKDefinition:
-    """Get the toy with the fraction absorbed and the colon factor of the segmented intestine."""
+    """Get the toy with the factors of the absorption and a conversion of the segmented intestine.
+
+    The fraction absorbed, the colon factor, a regional factor of the lower
+    ileum and the conversion of the drug into its product in the stomach.
+    """
     return PBPKDefinition(
         sid="toy_absorption",
-        substances=[Substance("drg", name="drug", mr=300.0)],
+        substances=[
+            Substance("drg", name="drug", mr=300.0),
+            Substance("drg_m", name="product", mr=316.0),
+        ],
         variants=Variants(
-            organs={Organ.SMALL_INTESTINE: SegmentedIntestine(fabs=0.8, f_ka_colon=0.5)}
+            organs={
+                Organ.SMALL_INTESTINE: SegmentedIntestine(
+                    fabs=0.8,
+                    f_ka_colon=0.5,
+                    regional=RegionalAbsorption({"ile2": 0.5}),
+                    conversions=[LumenConversion("drg", "drg_m", 0.02, ["st"])],
+                )
+            }
         ),
         routes=[
             Route.oral_solution("drg"),

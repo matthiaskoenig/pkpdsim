@@ -248,6 +248,9 @@ Every other id of the scheme, the ids a model rarely reads: the physiology, the 
 | `Ka_sol_<s>` | the rate of the application of a solution | `ids.solution(s)` |
 | `fabs_<s>` | the fraction of the absorbed flux which enters the body | `ids.fraction_absorbed(s)` |
 | `f_ka_colon_<s>` | the factor of the absorption in the large intestine (segmented intestine) | `ids.colon_absorption_factor(s)` |
+| `f_ka_<seg>_<s>` | the factor of the absorption in a lumen segment, the regional absorption profile (segmented intestine) | `ids.regional_absorption_factor(s, seg)` |
+| `kconv_<s>_<m>` | the rate constant (1/hr) of the conversion of `<s>` into the substance `<m>` in the lumen (segmented intestine) | `ids.lumen_conversion_rate(s, m)` |
+| `J_conv_<seg>_<s>_<m>` | the conversion of `<s>` into the substance `<m>` in a lumen segment (local id) | `ids.lumen_conversion_reaction(s, m, seg)` |
 | `J_dis_<seg>_<s>` | the dissolution in a lumen segment (local id) | `ids.dissolution_reaction(s, seg)` |
 | `kdis_<s>` | the dissolution rate of a tablet (1/min, local id) | `ids.dissolution_rate(s)` |
 | `f_dis_fed_<s>` | the factor of the dissolution rate in the fed state | `ids.dissolution_fed_factor(s)` |

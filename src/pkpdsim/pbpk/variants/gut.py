@@ -6,8 +6,9 @@ organ of small and large intestine, the lumen that of `LumenBuilder`, the
 mucosa and the chemistry of the small intestine are placed here.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import replace
+from typing import TYPE_CHECKING
 
 from sbmlutils.factory import ModelDefinition, Reaction
 from sbmlutils.metadata import SBO
@@ -42,6 +43,9 @@ from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import Value
 from pkpdsim.pbpk.variants.gut_lumen import LumenBuilder
 from pkpdsim.pbpk.variants.segments import DATA, Segment
+
+if TYPE_CHECKING:
+    from pkpdsim.pbpk.variants.intestine import LumenConversion
 
 __all__ = ["GUT_ORGANS", "GutBuilder"]
 
@@ -122,6 +126,35 @@ def _check_wall(substances: tuple[Substance, ...]) -> None:
             )
 
 
+def _converted(
+    conversions: "tuple[LumenConversion, ...]", luminal: set[str]
+) -> set[str]:
+    """The products of the conversions, which reach the lumen by them.
+
+    A product is the substrate of a further conversion in a chain.
+
+    Raises:
+        ValueError: for a conversion whose substrate never reaches the lumen.
+    """
+    reached = set(luminal)
+    changed = True
+    while changed:
+        changed = False
+        for c in conversions:
+            if c.substrate in reached and c.product not in reached:
+                reached.add(c.product)
+                changed = True
+    missing = [c for c in conversions if c.substrate not in reached]
+    if missing:
+        c = missing[0]
+        raise ValueError(
+            f"LumenConversion {c.substrate} -> {c.product}: '{c.substrate}' does "
+            "not reach the lumen (no oral route, biliary excretion, transport of "
+            "the intestine or conversion into it), it cannot convert there."
+        )
+    return reached - luminal
+
+
 class GutBuilder(LumenBuilder):
     """The SBML objects of the intestine: wall, lumen segments, mucosa and chemistry."""
 
@@ -134,6 +167,8 @@ class GutBuilder(LumenBuilder):
         single: bool,
         fabs: frozenset[str] = frozenset(),
         colon: frozenset[str] = frozenset(),
+        regional: Mapping[str, frozenset[str]] | None = None,
+        conversions: "tuple[LumenConversion, ...]" = (),
     ) -> None:
         """Start the collection of the elements of the intestine.
 
@@ -149,10 +184,14 @@ class GutBuilder(LumenBuilder):
                 `fabs_<s>`, the rest goes into the feces.
             colon: the substances which the large intestine absorbs with
                 `f_ka_colon_<s>`.
+            regional: the segments of a substance which absorb with its
+                factor `f_ka_<seg>_<s>`, by substance.
+            conversions: the conversions in the lumen.
 
         Raises:
-            ValueError: for chemistry the intestine cannot place, or a
-                distribution of the large intestine.
+            ValueError: for chemistry the intestine cannot place, a
+                distribution of the large intestine, or a conversion of a
+                substance which never reaches the lumen.
         """
         processes, rest = _gut_chemistry(ctx)
         _check_wall(ctx.substances)
@@ -169,6 +208,8 @@ class GutBuilder(LumenBuilder):
         self.single = single
         self.fabs = fabs
         self.colon = colon
+        self.regional = dict(regional or {})
+        self.conversions = conversions
         self.mucosa_segments = tuple(seg for seg in segments if seg.region)
         proteins = {p.protein for p in processes if p.protein is not None}
         mucosal = {
@@ -208,6 +249,7 @@ class GutBuilder(LumenBuilder):
             | {p.substance for p in processes if isinstance(p, Transport)}
             | {sid for sid, i in ctx.inhibitions if i.protein in influx}
         )
+        self.luminal |= _converted(conversions, self.luminal)
 
     def build(self) -> tuple[ModelDefinition, Boundary]:
         """Build the model definition and the boundary."""
@@ -224,6 +266,7 @@ class GutBuilder(LumenBuilder):
                 self._lumen(s, parts)
             else:
                 self._bile_to_feces(s)
+        self._conversions()
         self._chemistry()
         kind = "single lumen" if self.single else "segmented"
         notes = (

@@ -55,7 +55,7 @@ J_dis_du_<s>: Asolid_du_<s> -> Clumen_du_<s> = kdis_<s> * Asolid_du_<s>
 
 The lumen segments follow the anatomical segmentation of Thelen 2011, as PK-Sim: stomach `st`, duodenum `du`, upper and lower jejunum `jej1`, `jej2`, upper and lower ileum `ile1`, `ile2`, caecum `cae`, colon ascendens `asc`, transversum `tra`, descendens `des`, sigmoid `sig` and rectum `rec`, then the feces; the tokens in the order of the transit are `ids.GUT_SEGMENTS`, which a model reads instead of a list of its own. A substance which reaches the lumen (oral route, biliary excretion, transport into the lumen) has the dissolved concentration `Clumen_<seg>_<s>` in every segment, which moves on with the transit `V*C/T` of the segment and from the rectum into the feces `Afeces_<s>`. The fed state `FED = 1` slows the gastric emptying to the stomach transit time of the fed state.
 
-The absorption rate constant of the small intestine is `ka_<s>` (1/hr, 1 by default for a substance with an oral route, a choice of the library; 0 for any other); a segment absorbs with `ka_<s>*f_area_<seg>`, the mucosal surface per lumen volume relative to the small intestine (the stomach does not absorb); two optional factors change it (see [Fraction absorbed and colon absorption](#fraction-absorbed-and-colon-absorption)). Without chemistry of the intestine the substance is absorbed into the plasma of the intestinal wall:
+The absorption rate constant of the small intestine is `ka_<s>` (1/hr, 1 by default for a substance with an oral route, a choice of the library; 0 for any other); a segment absorbs with `ka_<s>*f_area_<seg>`, the mucosal surface per lumen volume relative to the small intestine (the stomach does not absorb); optional factors change it (see [Fraction absorbed and colon absorption](#fraction-absorbed-and-colon-absorption) and [Regional absorption](#regional-absorption)). Without chemistry of the intestine the substance is absorbed into the plasma of the intestinal wall:
 
 ```equations title="transit and absorption"
 J_tr_st_<s>: Clumen_st_<s> -> Clumen_du_<s> = Vlumen_st * Clumen_st_<s> / ((T_st + FED * (T_st_fed - T_st)) * fimp_t_stomach)
@@ -118,6 +118,37 @@ J_abs_asc_<s>: Clumen_asc_<s> -> Cpl_<s> = fabs_<s> * ka_<s> / 60 min_per_hr * f
 J_feces_asc_<s>: Clumen_asc_<s> -> Afeces_<s> = (1 - fabs_<s>) * ka_<s> / 60 min_per_hr * f_area_asc * f_ka_colon_<s> * Vlumen_asc * Clumen_asc_<s>
 ```
 
+### Regional absorption
+
+`SegmentedIntestine(regional=...)` gives a substance with an oral route a regional absorption profile, `RegionalAbsorption({"ile2": 0.5, "asc": 0.1})`: a factor `f_ka_<seg>_<s>` per segment (`du` to `rec`, the stomach does not absorb) which multiplies the absorption of the segment, `ka_<s>*f_area_<seg>*f_ka_<seg>_<s>`. The area factor holds the mucosal surface per lumen volume, the profile the permeability of the segment relative to the small intestine; a segment missing from the profile has no factor (1). One profile is that of every substance with an oral route, a mapping from the substance id gives each substance its own (`regional={"api": RegionalAbsorption(...)}`). A factor is a number or a `Value` (dimensionless, with its source or fitted). A substance with `f_ka_colon` may have a profile of the small intestine only (both would scale the absorption of the large intestine).
+
+There is no generic default profile, the default is no factor (1, the absorption above): the absorption in the colon relative to the small intestine is a property of the substance. Of 42 drugs released in the colon in humans the highly permeable ones (BCS class I) had a relative colonic bioavailability above 70 % and those of low permeability (BCS III and IV) below 50 % (Tannergren 2009); a single profile would be wrong for one of the two groups. With the area factors of the large intestine alone a solution released in the caecum is absorbed to 70 % (in the colon ascendens 64 %) of the fraction absorbed of an oral solution at the default `ka` (1/hr), the range of a highly permeable drug. A substance whose regional absorption is measured takes its profile from the study, e.g. apixaban released by a capsule in the distal small intestine and the ascending colon (Byon 2018: the AUC 60 % and 84 % lower than after the oral solution).
+
+```equations title="regional absorption (a factor of the lower ileum, with fabs)"
+J_abs_ile2_<s>: Clumen_ile2_<s> -> Cpl_<s> = fabs_<s> * ka_<s> / 60 min_per_hr * f_area_ile2 * f_ka_ile2_<s> * Vlumen_ile2 * Clumen_ile2_<s>
+```
+
+??? note "Sources"
+
+    - `Tannergren2009`: Tannergren C, Bergendal A, Lennernäs H, Abrahamsson B. Toward an increased understanding of the barriers to colonic drug absorption in humans: implications for early controlled release candidate assessment. Mol Pharm 6(1):60-73, 2009. [doi:10.1021/mp800261a](https://doi.org/10.1021/mp800261a)
+    - `Byon2018`: Byon W, Nepal S, Schuster AE, Shenker A, Frost CE. Regional gastrointestinal absorption of apixaban in healthy subjects. J Clin Pharmacol 58(7):965-971, 2018. [doi:10.1002/jcph.1097](https://doi.org/10.1002/jcph.1097)
+
+### Conversions in the lumen
+
+`SegmentedIntestine(conversions=[LumenConversion(substrate, product, k, segments)])` converts a dissolved substance into another in the chosen lumen segments, first order with the rate constant `kconv_<s>_<m>` (1/hr, the unit of `ka_<s>`, a parameter of the top model), one mole of the product per mole of the substrate: a chemical conversion (creatine to creatinine in the acid of the stomach), the hydrolysis of a prodrug, a bacterial conversion in the colon (the deconjugation of a glucuronide). The undissolved drug of a tablet does not convert. The substrate reaches the lumen (an oral route, biliary excretion, a transport of the intestine or another conversion); the product gets the lumen species, the transit and the absorption of the intestine (its `ka_<m>` is 0 without an oral route unless `ka` gives it one). Without conversions the model has no rate constant and no reaction.
+
+```equations title="conversion of drg into drg_m in the stomach"
+J_conv_st_drg_drg_m: Clumen_st_drg -> Clumen_st_drg_m = kconv_drg_drg_m / 60 min_per_hr * Vlumen_st * Clumen_st_drg
+```
+
+The stomach does not absorb, so the converted fraction `f` of an oral solution by a conversion in the stomach follows from the gastric transit time `T` (`T_st`, 22.79 min fasted, `T_st_fed` 63.48 min fed) and `k = kconv/60` (1/min): the dissolved drug leaves the stomach with `1/T` and converts with `k`,
+
+```text
+f = k*T / (1 + k*T)            kconv = 60 * f / ((1 - f) * T)
+```
+
+A tablet with the first order dissolution `Ka_dis` converts only what dissolves in the stomach, the fraction `g = kd*T/(1 + kd*T)` with `kd = Ka_dis/60`, so `f = g*k*T/(1 + k*T)`. Over several segments without absorption the drug survives each with `1/(1 + k*T_seg)`. A converted fraction of 0.0069 of a solution at the fasted transit is `kconv = 0.0183` 1/hr.
+
 ### Intestinal wall
 
 The wall is the standard organ of the volume `Vgu = Vsi + Vla`, with the volume-weighted vascular and interstitial fractions and the distribution of the small intestine (its Kp; a Kp override of the large intestine is refused). It receives the arterial inflow of both organs, `Qgu = Qsi + Qla`, and drains into the portal vein.
@@ -172,6 +203,6 @@ Every substance has the amounts in urine `Aurine_<s>` and feces `Afeces_<s>` (co
 
 ## Limitations
 
-- The deconjugation in the colon lumen (glucuronides back to the parent) is not implemented: a custom reaction of the intestine is refused, a hook for the chemistry of the lumen is open.
+- A conversion in the lumen is first order (`LumenConversion`): a saturable or enzyme-limited conversion in the lumen is not available, a custom reaction of the intestine is refused.
 - Only CYP3A4 has an expression profile along the intestine; every other protein is placed by mucosa volume over the small intestine, so a process expressed in the colon needs expression data (or a hook for the large intestine). The pH of the segments is data no process reads.
 - The gastric emptying and small intestinal transit factors of chronic kidney disease are 1 (see [Impairment](impairment.md#limitations)).

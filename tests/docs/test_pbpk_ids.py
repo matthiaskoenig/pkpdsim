@@ -29,6 +29,7 @@ NAMESPACE = {
     "Part": Part,
     "Pool": Pool,
     "s": "api",
+    "m": "api_m1",
     "o": Organ.LIVER,
     "pool": Pool.VENOUS,
     "part": Part.PLASMA,
@@ -42,6 +43,7 @@ NAMESPACE = {
 #: the placeholders of the patterns and the same values
 PLACEHOLDERS = {
     "<s>": "api",
+    "<m>": "api_m1",
     "<o>": "li",
     "<O>": "LI",
     "<pool>": "ve",

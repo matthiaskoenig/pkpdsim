@@ -6,6 +6,8 @@ sets the attributes (the segments, the substances which reach the lumen,
 the mucosa) before it builds.
 """
 
+from typing import TYPE_CHECKING
+
 from sbmlutils.factory import (
     Compartment,
     Parameter,
@@ -35,6 +37,9 @@ from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import Value
 from pkpdsim.pbpk.variants.segments import DATA, SMALL, Segment
 
+if TYPE_CHECKING:
+    from pkpdsim.pbpk.variants.intestine import LumenConversion
+
 __all__ = ["LumenBuilder"]
 
 _SBO_PARAMETER = SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER
@@ -51,6 +56,10 @@ class LumenBuilder(StandardBuilder):
             the feces.
         colon: the substances which the segments of the large intestine
             absorb with the factor `f_ka_colon_<s>`.
+        regional: the segments of a substance which absorb with its factor
+            `f_ka_<seg>_<s>` (`RegionalAbsorption`), by substance.
+        conversions: the conversions of a substance into another in the
+            lumen (`LumenConversion`).
         oral: the oral routes by (kind, substance).
         bile: the substances excreted into the bile.
         luminal: the substances which reach the lumen.
@@ -61,6 +70,8 @@ class LumenBuilder(StandardBuilder):
     single: bool
     fabs: frozenset[str]
     colon: frozenset[str]
+    regional: dict[str, frozenset[str]]
+    conversions: "tuple[LumenConversion, ...]"
     oral: dict[tuple[str, str], Route]
     bile: set[str]
     luminal: set[str]
@@ -242,8 +253,9 @@ class LumenBuilder(StandardBuilder):
 
         The rate `ka/60*f_area*V*C` (the single lumen without the area
         factor), in the large intestine times `f_ka_colon_<s>` (a substance
-        of `colon`); of a substance of `fabs` the fraction `fabs_<s>` of it
-        enters the body, the rest the feces.
+        of `colon`), in a segment of its regional profile times
+        `f_ka_<seg>_<s>`; of a substance of `fabs` the fraction `fabs_<s>` of
+        it enters the body, the rest the feces.
         """
         sid, v = s.sid, ids.lumen_volume(seg.token)
         into = self._absorbed_into(s, parts, seg)
@@ -256,6 +268,14 @@ class LumenBuilder(StandardBuilder):
                     ids.colon_absorption_factor(sid),
                     U.dimensionless,
                     f"absorption factor large intestine {sid}",
+                )
+            )
+        if seg.token in self.regional.get(sid, frozenset()):
+            factors.append(
+                self._input(
+                    ids.regional_absorption_factor(sid, str(seg.token)),
+                    U.dimensionless,
+                    f"absorption factor {seg.label} {sid}",
                 )
             )
         rate = " * ".join([*factors, v, c])
@@ -284,6 +304,34 @@ class LumenBuilder(StandardBuilder):
                 kind="fecal_excretion",
                 segment=seg.token,
             )
+
+    def _conversions(self) -> None:
+        """The conversions in the lumen segments, `kconv/60*V*C` of the substrate.
+
+        One mole of the product per mole of the substrate; the rate constant
+        `kconv_<s>_<m>` (1/hr) is an input of the body.
+        """
+        for c in self.conversions:
+            k = self._input(
+                ids.lumen_conversion_rate(c.substrate, c.product),
+                U.per_hr,
+                f"conversion {c.substrate} to {c.product} in the lumen [1/hr]",
+            )
+            for seg in self.segments:
+                if seg.token not in c.segments:
+                    continue
+                v = ids.lumen_volume(seg.token)
+                substrate = ids.lumen(c.substrate, seg.token)
+                self._reaction(
+                    ids.lumen_conversion_reaction(
+                        c.substrate, c.product, str(seg.token)
+                    ),
+                    f"{substrate} -> {ids.lumen(c.product, seg.token)}",
+                    f"{k} / 60 min_per_hr * {v} * {substrate}",
+                    f"conversion {c.substrate} to {c.product} lumen {seg.label}",
+                    kind="lumen_conversion",
+                    segment=seg.token,
+                )
 
     def _bile(self, s: Substance, into: str) -> None:
         """The transit of the bile of a substance into the duodenum (or the feces).

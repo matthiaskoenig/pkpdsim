@@ -84,6 +84,8 @@ PBPKO has no term for some of the quantities, compartments and processes of the 
 | prandial state (fed or fasted) | `MISCELLANEOUS_PARAMETER` |
 | intestinal mucosa and absorption geometry | `PHYSIOLOGICAL_PARAMETER` |
 | absorption factor of the large intestine | `PHYSIOLOGICAL_PARAMETER` |
+| relative absorption of a substance in an intestinal segment | `BIOCHEMICAL_PARAMETER` |
+| rate constant of a conversion in the intestinal lumen | `BIOCHEMICAL_PARAMETER` |
 | blood flow rate to intestinal mucosa | `BLOOD_FLOW_RATE_TO_COMPARTMENT` |
 | bile transit rate constant | `PHYSIOLOGICAL_PARAMETER` |
 | tubular flow fraction of the glomerular filtration rate | `PHYSIOLOGICAL_PARAMETER` |
@@ -100,6 +102,7 @@ PBPKO has no term for some of the quantities, compartments and processes of the 
 | amount of undissolved drug | `AMOUNT_IN_LUMEN` |
 | dissolution process | none, the terms of other ontologies only |
 | gastrointestinal transit process | none, the terms of other ontologies only |
+| conversion in the intestinal lumen | none, the terms of other ontologies only |
 | bone compartment | none, the terms of other ontologies only |
 | portal vein blood compartment | none, the terms of other ontologies only |
 

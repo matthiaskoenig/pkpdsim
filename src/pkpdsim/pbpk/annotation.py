@@ -653,6 +653,16 @@ KINDS: dict[str, Kind] = {
     "colon_absorption": Kind(
         _P, _PHYS, requested="absorption factor of the large intestine"
     ),
+    "regional_absorption": Kind(
+        _P,
+        _BIOCHEM,
+        requested="relative absorption of a substance in an intestinal segment",
+    ),
+    "lumen_conversion_rate": Kind(
+        SBO.FORWARD_RATE_CONSTANT,
+        _BIOCHEM,
+        requested="rate constant of a conversion in the intestinal lumen",
+    ),
     "arm_weight": Kind(
         _P, _PHYS, requested="weight of a tissue in the arm vein sampling site"
     ),
@@ -784,6 +794,14 @@ KINDS: dict[str, Kind] = {
         requested="gastrointestinal transit process",
     ),
     "fecal_excretion": Kind(_T, "FECAL_EXCRETION", terms=((BQB.IS, "go/GO:0007588"),)),
+    # a chemical or bacterial conversion of a substance in the lumen, not in the
+    # tissue: a version of the gut metabolism of PBPKO
+    "lumen_conversion": Kind(
+        SBO.BIOCHEMICAL_REACTION,
+        None,
+        terms=((BQB.IS_VERSION_OF, pbpko("GUT_METABOLISM")),),
+        requested="conversion in the intestinal lumen",
+    ),
     "bile_flow": Kind(
         _T, None, terms=((BQB.IS_PART_OF, pbpko("ENTEROHEPATIC_RECIRCULATION")),)
     ),

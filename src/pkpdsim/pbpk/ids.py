@@ -135,6 +135,8 @@ __all__ = [
     "kslow",
     "lumen",
     "lumen_amount",
+    "lumen_conversion_rate",
+    "lumen_conversion_reaction",
     "lumen_volume",
     "mr",
     "mucosa",
@@ -170,6 +172,7 @@ __all__ = [
     "reabsorption_n",
     "reabsorption_threshold",
     "ref",
+    "regional_absorption_factor",
     "segment_process",
     "shunt_reaction",
     "sinusoid_reaction",
@@ -884,6 +887,30 @@ def colon_absorption_factor(s: str) -> str:
     of the large intestine.
     """
     return f"f_ka_colon_{s}"
+
+
+def regional_absorption_factor(s: str, seg: str) -> str:
+    """The id of the factor of the absorption of `s` in a lumen segment, `f_ka_<seg>_<s>`.
+
+    Of the regional absorption profile of the segmented intestine
+    (`RegionalAbsorption`): scales `ka_<s>*f_area_<seg>` of the segment.
+    """
+    return f"f_ka_{seg}_{s}"
+
+
+def lumen_conversion_rate(substrate: str, product: str) -> str:
+    """The id of the rate constant of a conversion in the lumen (1/hr), `kconv_<s>_<m>`.
+
+    Of a `LumenConversion` of the segmented intestine, a parameter of the
+    top model: the substrate `<s>` converts into the product `<m>` with
+    `kconv/60*V*C` in every segment of the conversion.
+    """
+    return f"kconv_{substrate}_{product}"
+
+
+def lumen_conversion_reaction(substrate: str, product: str, seg: str) -> str:
+    """The local id of a conversion in a lumen segment, `J_conv_<seg>_<s>_<m>`."""
+    return f"J_conv_{seg}_{substrate}_{product}"
 
 
 def transit_reaction(s: str, seg: str | None = None, solid: bool = False) -> str:
