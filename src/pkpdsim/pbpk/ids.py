@@ -514,11 +514,13 @@ def organ_species(organ: Organ, local: str) -> str:
     """The id of the top model of an element of an organ which a PD component or an observer reads.
 
     The organ exposes the element as an output, which replaces this parameter
-    of the top model: the organ token follows the first letter of the local
-    id. A concentration `C<part>_<s>` is `C<o>_<part>_<s>`, `Cli_ic_api` for
-    the cells of the liver (`LI__Cic_api` in the flat model); an unbound
-    concentration `Cu_<part>_<s>` is `C<o>_u_<part>_<s>` (`Cli_u_ic_api`); an
-    amount `A<x>` is `A<o>_<x>` (`Asi_solid_du_api`).
+    of the top model: the organ token follows the prefix of the local id. A
+    concentration `C<part>_<s>` is `C<o>_<part>_<s>`, `Cli_ic_api` for the
+    cells of the liver (`LI__Cic_api` in the flat model); an unbound
+    concentration `Cu_<part>_<s>` is `Cu_<o>_<part>_<s>` (`Cu_li_ic_api`), the
+    one spelling of the unbound concentration of an organ (the pools keep
+    theirs, `C<pool>_free_<s>`); an amount `A<x>` is `A<o>_<x>`
+    (`Asi_solid_du_api`).
 
     Raises:
         ValueError: if the local id is no concentration `C...` and no amount
@@ -530,6 +532,8 @@ def organ_species(organ: Organ, local: str) -> str:
             "`C...` and no amount `A...` of the id scheme; a PD component or an "
             "observer reads a concentration or an amount of an organ."
         )
+    if local.startswith("Cu_"):
+        return f"Cu_{organ.value}_{local.removeprefix('Cu_')}"
     return f"{local[0]}{organ.value}_{local[1:]}"
 
 

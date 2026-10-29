@@ -411,11 +411,22 @@ def _readout_output(what: str, s: str) -> OrganOutput:
     )
 
 
+def _stoichiometry(part: object) -> float:
+    """The stoichiometry of a reactant or a product of a reaction, 1 if unset."""
+    value = getattr(part, "stoichiometry", None)
+    return 1.0 if value is None else float(value)
+
+
 def _flux_sum(md: ModelDefinition, what: str, s: str, lumen: set[str]) -> str:
     """The sum of the fluxes of the intestine of a readout, empty without any.
 
-    The wall of a substance: its mucosa species and its species of the parts
-    of the wall (`ids.species`).
+    The amount which the reactions move into the targets (the wall of the
+    absorption, the lumen of the efflux, the feces), each reaction weighted
+    by the net stoichiometry of the targets: the reactions of the absorption
+    take from the lumen, those of the efflux from the wall, any reaction
+    counts for the feces (and one out of the feces less). The wall of a
+    substance: its mucosa species and its species of the parts of the wall
+    (`ids.species`).
     """
     tokens = (None, *ids.GUT_SEGMENTS)
     wall = {ids.mucosa(s, seg) for seg in tokens} | {ids.species(p, s) for p in Part}
@@ -424,18 +435,23 @@ def _flux_sum(md: ModelDefinition, what: str, s: str, lumen: set[str]) -> str:
         "efflux": (wall, lumen),
         "feces": (None, {ids.feces(s)}),
     }[what]
-    into: list[str] = []
-    out: list[str] = []
+    terms: list[str] = []
     for r in md.reactions or []:
-        reactants = {p.species for p in r.equation.reactants}
-        products = {p.species for p in r.equation.products}
-        if products & targets and (sources is None or reactants & sources):
-            into.append(str(r.sid))
-        elif what == "feces" and reactants & targets:
-            out.append(str(r.sid))
-    if not into:
+        reactants = r.equation.reactants
+        if sources is not None and not {p.species for p in reactants} & sources:
+            continue
+        net = sum(
+            _stoichiometry(p) for p in r.equation.products if p.species in targets
+        )
+        net -= sum(_stoichiometry(p) for p in reactants if p.species in targets)
+        if net:
+            sign = "-" if net < 0 else "+"
+            factor = "" if abs(net) == 1 else f"{abs(net):g} dimensionless * "
+            terms.append(f"{sign} {factor}{r.sid}")
+    if not any(term.startswith("+") for term in terms):
         return ""
-    return " + ".join(into) + "".join(f" - {r}" for r in out)
+    terms.sort(key=lambda term: term.startswith("-"))
+    return " ".join(terms).removeprefix("+ ")
 
 
 def arm_vein_weights(preset: str) -> dict[Organ | Pool, Value]:

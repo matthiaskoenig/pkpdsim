@@ -99,6 +99,7 @@ from pkpdsim.pbpk.observers import (
     formula_symbols,
     intestine_readouts,
     observer_objects,
+    readout_ids,
 )
 from pkpdsim.pbpk.organ import Boundary, GutComponent, OrganComponent, OrganContext
 from pkpdsim.pbpk.organs import Organ, Part, Pool
@@ -120,7 +121,7 @@ from pkpdsim.pbpk.placement import (
 from pkpdsim.pbpk.routes import ORAL, route_objects
 from pkpdsim.pbpk.sinks import sink_objects
 from pkpdsim.pbpk.substance import Kp, KpMethod, Substance
-from pkpdsim.pbpk.units import MODEL_UNITS, U
+from pkpdsim.pbpk.units import EXTRA_UNITS, MODEL_UNITS, U
 from pkpdsim.pbpk.values import Formula, Q, Value
 
 __all__ = [
@@ -311,7 +312,7 @@ def compose(definition: PBPKDefinition) -> Model:
         annotations=model_annotations(definition.substances),
         notes=definition.notes,
         creators=list(definition.creators),
-        units=_units(observers),
+        units=_units(top.objects),
         model_units=MODEL_UNITS,
         objects=top.objects,
         model_definitions=model_definitions,
@@ -324,8 +325,9 @@ def _delta_objects(definition: PBPKDefinition, top: "_Top") -> list[Sbase]:
     """The start values and the changes of the observers of `PBPKDefinition.deltas`.
 
     For every observer `<id>` (a parameter of the top model with an
-    assignment rule: an observer of the library or of the definition, an
-    output of an organ) the constant `<id>_0` with the initial assignment
+    assignment rule, an observer of the library or of the definition, or one
+    which an output of an organ replaces: `Rurine_<s>`, a readout, an exposed
+    element of an organ) the constant `<id>_0` with the initial assignment
     `<id>`, its value at the start, and the observer `<id>_delta = <id> -
     <id>_0`. The start value is evaluated after the changes of the
     individual before the simulation, so the change is 0 at the start of
@@ -338,6 +340,11 @@ def _delta_objects(definition: PBPKDefinition, top: "_Top") -> list[Sbase]:
     if not definition.deltas:
         return []
     ruled = {str(o.variable) for o in top.objects if isinstance(o, AssignmentRule)}
+    ruled |= {
+        str(o.sid)
+        for o in top.objects
+        if isinstance(o, Parameter) and not o.constant and o.replacedBy is not None
+    }
     units = {str(o.sid): o.unit for o in top.objects if isinstance(o, Parameter)}
     known = {
         str(o.sid)
@@ -505,11 +512,19 @@ def _observer_problems(
         | {str(md.sid) for md in model_definitions}
     )
     symbols_of = _observer_symbols(observers)
+    readouts = readout_ids(s.sid for s in top.definition.substances)
     problems: list[str] = []
     for sid, symbols in symbols_of.items():
         if sid in body:
             problems.append(f"observer id '{sid}' is an id of the body")
-        unknown = sorted(symbols - values - set(symbols_of) - {TIME})
+        unknown = symbols - values - set(symbols_of) - {TIME}
+        unrequested = sorted(unknown & set(readouts))
+        unknown = sorted(unknown - set(readouts))
+        if unrequested:
+            problems.append(
+                f"observer '{sid}' reads the readouts {unrequested}, which the "
+                "definition does not request: add them to `PBPKDefinition.readouts`"
+            )
         if unknown:
             problems.append(
                 f"observer '{sid}' reads {unknown}, which are no values of the top "
@@ -606,6 +621,9 @@ def _body(
                 boundary.replacements,
                 {**boundary.outputs, **{sid: sid for sid in outputs}},
             )
+        units = _units([md])
+        if isinstance(units, list):
+            md.units = units
         _scope_port_metaids(md)
         model_definitions.append(md)
         organ_models.append(md)
@@ -818,6 +836,23 @@ def _readers(what: Iterable[str]) -> tuple[str, str]:
     return " and ".join(kinds), "reads" if len(kinds) == 1 else "read"
 
 
+_EXPOSED = {
+    "organ_concentration": (
+        "concentration",
+        "The species",
+        "Concentration of a species",
+    ),
+    "unbound_concentration": (
+        "unbound concentration",
+        "The unbound concentration",
+        "Unbound concentration",
+    ),
+    "organ_amount": ("amount", "The species", "Amount of a species"),
+}
+"""By the kind of an exposed element: the quantity in its names, the start of
+its notes in the organ and the start of its notes in the top model."""
+
+
 def _expose(
     md: ModelDefinition,
     organ: Organ,
@@ -829,7 +864,7 @@ def _expose(
     A read element is a species of the organ (a concentration `C<part>_<s>`
     or an amount `A<x>`, `hasOnlySubstanceUnits`) or an unbound concentration
     `Cu_<part>_<s>` of the organ. It gets a parameter of the organ with its
-    assignment rule and an output port, `C<o>_<part>_<s>`, `C<o>_u_<part>_<s>`
+    assignment rule and an output port, `C<o>_<part>_<s>`, `Cu_<o>_<part>_<s>`
     or `A<o>_<x>` (`ids.organ_species`), which replaces the parameter of the
     same id in the top model (`_Top.connect`), which the component and the
     observer read. The element keeps its id: the flat model has the species
@@ -908,37 +943,21 @@ def _expose(
         who, verb = _readers(reads[local])
         sp = species.get(local)
         if sp is None:
-            unit = U.mM
-            name = f"unbound concentration {local} of the organ {label} [mM]"
-            kind, what = "unbound_concentration", "An unbound concentration"
-            output = OrganOutput(
-                unit,
-                f"unbound concentration {top_id} of an organ [mM]",
-                kind,
-                f"Unbound concentration, read by {who}, of the ",
-            )
+            kind, unit = "unbound_concentration", U.mM
         elif getattr(sp, "hasOnlySubstanceUnits", False):
-            unit = getattr(sp, "substanceUnit", None) or U.mmole
-            uid = getattr(unit, "sid", unit)
-            name = f"amount {local} of the organ {label} [{uid}]"
-            kind, what = "organ_amount", "The species"
-            output = OrganOutput(
-                unit,
-                f"amount {top_id} of an organ [{uid}]",
-                kind,
-                f"Amount of a species, read by {who}, of the ",
-            )
+            kind, unit = "organ_amount", sp.substanceUnits or U.mmole
         else:
-            unit = U.mM
-            name = f"concentration {local} of the organ {label} [mM]"
-            kind, what = "organ_concentration", "The species"
-            output = OrganOutput(
-                unit,
-                f"concentration {top_id} of an organ [mM]",
-                kind,
-                f"Concentration of a species, read by {who}, of the ",
-            )
-        what = f"{what} `{local}` of the organ, an output which {who} {verb}."
+            kind, unit = "organ_concentration", U.mM
+        quantity, organ_text, top_text = _EXPOSED[kind]
+        uid = getattr(unit, "sid", unit)
+        output = OrganOutput(
+            unit,
+            f"{quantity} {top_id} of an organ [{uid}]",
+            kind,
+            f"{top_text}, read by {who}, of the ",
+        )
+        name = f"{quantity} {local} of the organ {label} [{uid}]"
+        what = f"{organ_text} `{local}` of the organ, an output which {who} {verb}."
         md.parameters = [
             *(md.parameters or []),
             annotate(
@@ -2343,21 +2362,60 @@ class _Top:
         ]
 
 
-def _units(observers: Iterable[Observer]) -> type[U] | list[UnitDefinition]:
-    """The unit definitions of the top model: `U`, and the units of the observers which `U` lacks.
+_NO_UNITS = frozenset(
+    {"sid", "name", "notes", "annotations", "sboTerm", "metaId", "port", "replacedBy"}
+)
+"""The fields of an element which name no unit (its ids, texts and annotations)."""
 
-    A model whose observers use only units of `U` has the units of `U`
-    (`MODEL_UNITS`); a unit outside it (`ML_PER_MIN_1P73M2`) is added after
-    them, once.
+
+def _unit_uses(obj: object, found: dict[str, UnitDefinition], tokens: set[str]) -> None:
+    """Collect the unit definitions and the identifiers which an element uses.
+
+    The unit of a parameter, compartment, species, rule or kinetic law (a
+    `UnitDefinition`) and the identifiers of its formulas, where a number
+    carries a unit (`1730 ml_per_min_1p73m2`); lists and the fields of the
+    objects of sbmlutils and of the library are followed.
+    """
+    pending: list[object] = [obj]
+    seen: set[int] = set()
+    while pending:
+        x = pending.pop()
+        if id(x) in seen:
+            continue
+        seen.add(id(x))
+        if isinstance(x, UnitDefinition):
+            found.setdefault(str(x.sid), x)
+        elif isinstance(x, str):
+            tokens |= set(_TOKEN.findall(x))
+        elif isinstance(x, list | tuple | set | frozenset):
+            pending.extend(x)
+        elif type(x).__module__.startswith(("sbmlutils.factory", "pkpdsim.pbpk")):
+            pending.extend(
+                v for k, v in getattr(x, "__dict__", {}).items() if k not in _NO_UNITS
+            )
+
+
+def _units(elements: Iterable[object]) -> type[U] | list[UnitDefinition]:
+    """The unit definitions of a model: `U`, and the units outside it which it uses.
+
+    Every unit of `U` is a unit definition of every model. A unit which `U`
+    lacks is added after them, once, when an element of the model uses it:
+    as its unit (a `UnitDefinition` of an observer, a parameter of the
+    definition, a species of a custom reaction, ...) or as the unit of a
+    number in a formula, by its id (`ML_PER_MIN_1P73M2`, `EXTRA_UNITS`). A
+    model which uses no such unit has the units of `U` unchanged.
     """
     units = [u for _, u in U.attributes() if isinstance(u, UnitDefinition)]
     known = {str(u.sid) for u in units}
-    extra: dict[str, UnitDefinition] = {}
-    for o in observers:
-        sid = str(o.unit.sid)
-        if sid not in known:
-            extra.setdefault(sid, o.unit)
-    return [*units, *extra.values()] if extra else U
+    found: dict[str, UnitDefinition] = {}
+    tokens: set[str] = set()
+    for element in elements:
+        _unit_uses(element, found, tokens)
+    for unit in EXTRA_UNITS:
+        if str(unit.sid) in tokens:
+            found.setdefault(str(unit.sid), unit)
+    extra = [u for sid, u in found.items() if sid not in known]
+    return [*units, *extra] if extra else U
 
 
 _UNIT_FIELDS = ("time", "extent", "substance", "length", "area", "volume")

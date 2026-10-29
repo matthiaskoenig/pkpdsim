@@ -312,11 +312,16 @@ class PBPKDefinition:
         """Check the definition.
 
         The observers of the definition are checked against the top model:
-        `validate` composes the model without them (`pkpdsim.pbpk.builder`)
-        and checks that an observer id is no id of the body nor of another
-        observer, that every symbol of its formula is an id of the top model
-        (or another observer) and that it reads a state; `compose` makes the
-        same check on the model it composes and calls `validate` without it.
+        `validate` composes the model without them (`pkpdsim.pbpk.builder`;
+        an element of an organ which an observer reads is exposed by the
+        organ) and checks that an observer id is no id of the body nor of
+        another observer, that every symbol of its formula is an id of the
+        top model, an exposed element of an organ, a requested readout or
+        another observer, and that the observers do not read each other in a
+        cycle; an observer
+        of constants only is accepted (a constant with an initial
+        assignment). `compose` makes the same check on the model it composes
+        and calls `validate` without it.
 
         Args:
             symbols: check the observers against the top model.

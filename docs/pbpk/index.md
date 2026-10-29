@@ -116,7 +116,7 @@ One id scheme for every model, built by the functions of `pkpdsim.pbpk.ids`, so 
 | `Chv_<s>` | the hepatic vein plasma concentration | `ids.hepatic_vein(s)` |
 | `Cout_<o>_<s>` | the plasma leaving an organ | `ids.organ_outflow(o, s)` |
 | `C<o>_<part>_<s>` | a species of an organ which a PD component or an observer reads (`Cli_ic_<s>`), an output of the organ | `ids.organ_species(o, ids.species(part, s))` |
-| `C<o>_u_<part>_<s>` | an unbound concentration of an organ part which a PD component or an observer reads (`Cli_u_ic_<s>`), an output of the organ | `ids.organ_species(o, ids.unbound(part, s))` |
+| `Cu_<o>_<part>_<s>` | an unbound concentration of an organ part which a PD component or an observer reads (`Cu_li_ic_<s>`), an output of the organ | `ids.organ_species(o, ids.unbound(part, s))` |
 | `Aurine_<s>` | the amount in urine | `ids.urine(s)` |
 | `Rurine_<s>` | the urinary excretion rate (mmole/min), an output of the kidney | `ids.urine_rate(s)` |
 | `Afeces_<s>` | the amount in feces | `ids.feces(s)` |

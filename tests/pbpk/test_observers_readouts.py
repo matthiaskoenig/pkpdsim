@@ -14,7 +14,7 @@ from pathlib import Path
 import libsbml
 import numpy as np
 import pytest
-from sbmlutils.factory import Species
+from sbmlutils.factory import ModelDefinition, Parameter, Reaction, Species
 
 from pkpdsim.pbpk import (
     CustomReaction,
@@ -22,6 +22,7 @@ from pkpdsim.pbpk import (
     Excretion,
     FirstOrder,
     Membrane,
+    ModelParameter,
     Observer,
     Organ,
     OrganComponent,
@@ -37,6 +38,7 @@ from pkpdsim.pbpk import (
     ids,
 )
 from pkpdsim.pbpk.builder import build
+from pkpdsim.pbpk.observers import _flux_sum
 from pkpdsim.pbpk.units import ML_PER_MIN_1P73M2
 from pkpdsim.pbpk.variants.segments import segments
 
@@ -113,7 +115,7 @@ def test_an_observer_and_a_pd_component_read_one_exposure(tmp_path: Path) -> Non
 
 
 def test_the_unbound_concentration_of_an_organ_part(tmp_path: Path) -> None:
-    """The unbound concentration of an organ part is exposed as `C<o>_u_<part>_<s>`.
+    """The unbound concentration of an organ part is exposed as `Cu_<o>_<part>_<s>`.
 
     It is the fu-weighted total, `fu/Kp*C` of the merged tissue, for an
     observer and for a PD component alike.
@@ -121,7 +123,7 @@ def test_the_unbound_concentration_of_an_organ_part(tmp_path: Path) -> None:
     unbound = ids.flat(Organ.LIVER, ids.unbound(Part.TISSUE, S))
     total = ids.flat(Organ.LIVER, ids.species(Part.TISSUE, S))
     top = ids.organ_species(Organ.LIVER, ids.unbound(Part.TISSUE, S))
-    assert top == "Cli_u_ti_drg"
+    assert top == "Cu_li_ti_drg"
     observer = Observer("Cli_unbound", unbound, U.mM, "unbound liver")
     path = _iv(tmp_path, observers=[observer], pd=[_organ_reader(unbound)])
     r = individual(path)
@@ -274,6 +276,48 @@ def test_the_unit_per_body_surface_area() -> None:
     }
 
 
+def test_the_unit_per_body_surface_area_is_defined_wherever_it_is_used(
+    tmp_path: Path,
+) -> None:
+    """A unit outside `U` is a unit definition of every model which uses it.
+
+    As the unit of a parameter of the definition, of a parameter of a custom
+    reaction of an organ, or only as the unit of a number of a formula.
+    """
+    unit = ML_PER_MIN_1P73M2.sid
+    reaction = dataclasses.replace(
+        _pool("Apool_drg"),
+        parameters=[Parameter("k_bsa", 1.0, ML_PER_MIN_1P73M2, constant=True)],
+    )
+    d = definition(
+        routes=[Route.iv(S)],
+        parameters=[
+            ModelParameter("eGFR_ref", 90.0, ML_PER_MIN_1P73M2, "reference eGFR")
+        ],
+        observers=[
+            Observer(
+                "Carm_one",
+                f"{ids.arm(S)} * 1 {unit} / 1 {unit}",
+                U.mM,
+                "arm vein",
+            )
+        ],
+    )
+    d = dataclasses.replace(d, chemistry=[*d.chemistry, reaction])
+    result = build(d, tmp_path)
+    comp = libsbml.readSBMLFromFile(str(result.comp_path))
+    assert comp.getModel().getUnitDefinition(unit) is not None
+    muscle = comp.getPlugin("comp").getModelDefinition("standard_mu")
+    assert muscle.getUnitDefinition(unit) is not None
+    flat = _model(result.flat_path)
+    assert flat.getParameter("eGFR_ref").getUnits() == unit
+    assert individual(result.flat_path)["eGFR_ref"] == 90.0
+    # only in a formula
+    only = definition(routes=[Route.iv(S)], observers=d.observers)
+    model = _model(build(only, tmp_path / "formula").flat_path)
+    assert model.getUnitDefinition(unit) is not None
+
+
 def test_an_observer_in_the_units_of_u_adds_no_unit(tmp_path: Path) -> None:
     """The unit definitions of a model with observers in `U` are those of `U`."""
     plain = _model(_iv(tmp_path / "plain"))
@@ -390,6 +434,46 @@ def test_the_intestine_readouts_are_the_sums_of_the_segments(
     assert integral == pytest.approx(fine[ids.feces(S)][-1], rel=1e-3)
 
 
+def test_the_intestine_readouts_close_the_mass_balance_of_the_lumen(
+    tmp_path: Path,
+) -> None:
+    """The dose is the lumen, what is absorbed net of the efflux and the feces.
+
+    `D = SOLDOSE/Mr + Alumen + int(Rabs - Reff) + Afeces` at every time, a
+    check of the readouts which is independent of how they select the fluxes.
+    """
+    r = load(build(_oral(SegmentedIntestine(fabs=0.8)), tmp_path))
+    r[ids.sol_dose(S)] = 10.0
+    mr = r[ids.mr(S)]
+    s = r.simulate(
+        0, 600, 6001, selections=["time", *READOUTS, ids.feces(S), ids.sol_dose(S)]
+    )
+    net = s[READOUTS[1]] - s[READOUTS[2]]
+    absorbed = np.concatenate(
+        [[0.0], np.cumsum(np.diff(s["time"]) * (net[1:] + net[:-1]) / 2)]
+    )
+    total = s[ids.sol_dose(S)] / mr + s[READOUTS[0]] + absorbed + s[ids.feces(S)]
+    assert s[READOUTS[2]].max() > 0
+    np.testing.assert_allclose(total, 10.0 / mr, rtol=1e-4)
+
+
+def test_the_flux_sums_weight_the_stoichiometry() -> None:
+    """A reaction counts with the net stoichiometry of the species it moves into."""
+    md = ModelDefinition(
+        "gu",
+        reactions=[
+            Reaction("R1", equation="Clumen_du_drg -> 2 Cmu_du_drg"),
+            Reaction("R2", equation="Cmu_du_drg -> Clumen_du_drg"),
+            Reaction("R3", equation="Clumen_rec_drg -> 3 Afeces_drg"),
+            Reaction("R4", equation="Afeces_drg -> Clumen_rec_drg"),
+        ],
+    )
+    lumen = {"Clumen_du_drg", "Clumen_rec_drg"}
+    assert _flux_sum(md, "absorption", S, lumen) == "2 dimensionless * R1"
+    assert _flux_sum(md, "efflux", S, lumen) == "R2"
+    assert _flux_sum(md, "feces", S, lumen) == "3 dimensionless * R3 - R4"
+
+
 def test_the_readouts_change_only_the_intestine() -> None:
     """The readouts add outputs to the intestine only; every other organ is unchanged."""
     plain = _organ_definitions(compose(_oral(SegmentedIntestine(), readouts=())))
@@ -432,6 +516,41 @@ def test_a_readout_the_intestine_cannot_compute_is_refused() -> None:
     )
     with pytest.raises(ValueError, match=r"'Reff_drg': .* no flux"):
         compose(no_efflux)
+
+
+def test_an_observer_of_an_unrequested_readout_names_the_request() -> None:
+    """An observer which reads a readout the definition does not request is told so."""
+    d = _oral(
+        SegmentedIntestine(),
+        readouts=(),
+        observers=[Observer("x", "2 dimensionless * Alumen_drg", U.mmole, "x")],
+    )
+    with pytest.raises(ValueError, match=r"\['Alumen_drg'\].*PBPKDefinition.readouts"):
+        compose(d)
+
+
+def test_a_delta_of_an_organ_output(tmp_path: Path) -> None:
+    """The urinary excretion rate and a readout, outputs of organs, take deltas."""
+    d = definition(routes=[Route.iv(S)])
+    drug = dataclasses.replace(d.substances[0], baseline=0.01)
+    d = dataclasses.replace(
+        d, substances=[drug, *d.substances[1:]], deltas=(ids.urine_rate(S),)
+    )
+    r = individual(build(d, tmp_path / "urine").flat_path)
+    start = r[ids.urine_rate(S)]
+    assert start > 0
+    assert r[ids.start_value(ids.urine_rate(S))] == pytest.approx(start, rel=1e-12)
+    s = r.simulate(
+        0, 600, 61, selections=[ids.urine_rate(S), ids.delta(ids.urine_rate(S))]
+    )
+    np.testing.assert_allclose(s[:, 1], s[:, 0] - start, rtol=1e-9, atol=1e-15)
+    assert s[-1, 1] < 0
+    oral = _oral(SegmentedIntestine(), deltas=(READOUTS[0],))
+    r = individual(build(oral, tmp_path / "lumen").flat_path)
+    r[ids.sol_dose(S)] = 10.0
+    s = r.simulate(0, 600, 61, selections=[READOUTS[0], ids.delta(READOUTS[0])])
+    assert s[:, 0].max() > 0
+    np.testing.assert_allclose(s[:, 1], s[:, 0], rtol=1e-12, atol=1e-15)
 
 
 def test_the_readouts_of_combined_definitions_are_their_union() -> None:

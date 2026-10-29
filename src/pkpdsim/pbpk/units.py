@@ -2,13 +2,13 @@
 
 Time is in min, substance in mmole, volume in litre and area in m2, the
 `model_units` of the models. Every unit of `U` is a unit definition of every
-model; a unit outside `U` (`ML_PER_MIN_1P73M2`) is one only of a model whose
-observers use it.
+model; a unit outside `U` (`EXTRA_UNITS`, `ML_PER_MIN_1P73M2`) is one only of
+a model which uses it.
 """
 
 from sbmlutils.factory import ModelUnits, UnitDefinition, Units
 
-__all__ = ["ML_PER_MIN_1P73M2", "MODEL_UNITS", "U"]
+__all__ = ["EXTRA_UNITS", "ML_PER_MIN_1P73M2", "MODEL_UNITS", "U"]
 
 
 class U(Units):
@@ -57,5 +57,10 @@ GFR per body surface area (eGFR, `CLrenal/BSA`).
 body surface area `BSA` (m2) is `1730` times the number in this unit, in
 consistent units `GFR / BSA * 1730 ml_per_min_1p73m2 * 1 m2 / 1 l_per_min`.
 Not a unit of `U`, so the models without it keep their unit definitions; a
-model defines it when an observer of its definition uses it.
+model defines it wherever it uses it (an observer, a parameter of the
+definition, a custom reaction, a number of a formula).
 """
+
+EXTRA_UNITS: tuple[UnitDefinition, ...] = (ML_PER_MIN_1P73M2,)
+"""The units of the library outside `U`: a model defines one when it uses it, as
+the unit of an element or by its id in a formula."""
