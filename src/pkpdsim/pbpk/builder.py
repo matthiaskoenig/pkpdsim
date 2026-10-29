@@ -2258,6 +2258,7 @@ class _Top:
             sid=sid,
             **{f: getattr(model, f) for f in _MODEL_FIELDS if getattr(model, f)},
         )
+        _extra_units(md)
         _scope_port_metaids(md)
         for local, body in pd.outputs.items():
             parameters[body].replacedBy = ReplacedBy(
@@ -2404,6 +2405,13 @@ def _units(elements: Iterable[object]) -> type[U] | list[UnitDefinition]:
     definition, a species of a custom reaction, ...) or as the unit of a
     number in a formula, by its id (`ML_PER_MIN_1P73M2`, `EXTRA_UNITS`). A
     model which uses no such unit has the units of `U` unchanged.
+
+    The units of the elements are not only those of `EXTRA_UNITS`: an
+    element carries its `UnitDefinition` (a unit which a model package
+    defines itself for a parameter of the definition or a custom reaction),
+    whose id the SBML references, so the model defines every such unit. A
+    formula names a unit by its id only, which is known for the units of the
+    library, so the ids of the formulas are matched against `EXTRA_UNITS`.
     """
     units = [u for _, u in U.attributes() if isinstance(u, UnitDefinition)]
     known = {str(u.sid) for u in units}
@@ -2416,6 +2424,33 @@ def _units(elements: Iterable[object]) -> type[U] | list[UnitDefinition]:
             found.setdefault(str(unit.sid), unit)
     extra = [u for sid, u in found.items() if sid not in known]
     return [*units, *extra] if extra else U
+
+
+def _extra_units(md: ModelDefinition) -> None:
+    """Add the units which a PD component uses and does not define.
+
+    A PD component brings the unit definitions of its model; a unit which an
+    element of the component uses (as its unit, or a unit of `EXTRA_UNITS` by
+    its id in a formula, see `_units`) and which the component does not
+    define is added after its units, as for an organ. A component which
+    defines every unit it uses keeps its units unchanged.
+    """
+    own = md.units or []
+    defined = (
+        list(own)
+        if isinstance(own, list)
+        else [u for _, u in own.attributes() if isinstance(u, UnitDefinition)]
+    )
+    known = {str(u.sid) for u in defined}
+    found: dict[str, UnitDefinition] = {}
+    tokens: set[str] = set()
+    _unit_uses(md, found, tokens)
+    for unit in EXTRA_UNITS:
+        if str(unit.sid) in tokens:
+            found.setdefault(str(unit.sid), unit)
+    missing = [u for sid, u in found.items() if sid not in known]
+    if missing:
+        md.units = [*defined, *missing]
 
 
 _UNIT_FIELDS = ("time", "extent", "substance", "length", "area", "volume")

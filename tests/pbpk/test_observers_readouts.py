@@ -8,6 +8,7 @@ absorption, efflux and loss to the feces on request
 an initial assignment, in a unit of its own (per body surface area).
 """
 
+import copy
 import dataclasses
 from pathlib import Path
 
@@ -44,6 +45,7 @@ from pkpdsim.pbpk.variants.segments import segments
 
 from .conftest import (
     assert_reference_sbml,
+    cardiac_pd,
     definition,
     individual,
     load,
@@ -316,6 +318,33 @@ def test_the_unit_per_body_surface_area_is_defined_wherever_it_is_used(
     only = definition(routes=[Route.iv(S)], observers=d.observers)
     model = _model(build(only, tmp_path / "formula").flat_path)
     assert model.getUnitDefinition(unit) is not None
+
+
+def test_a_pd_component_gets_the_unit_per_area_it_uses(tmp_path: Path) -> None:
+    """A PD component in the units of `U` which uses a unit outside `U` defines it.
+
+    As the unit of a parameter of its model, as an organ does; a component
+    which uses none keeps its units.
+    """
+    unit = ML_PER_MIN_1P73M2.sid
+    plain = cardiac_pd()
+    model = copy.copy(plain.model)
+    model.parameters = [
+        *(plain.model.parameters or []),
+        Parameter("eGFR_pd", 90.0, ML_PER_MIN_1P73M2, constant=True),
+    ]
+    pd = dataclasses.replace(plain, model=model)
+    result = build(definition(routes=[Route.iv(S)], pd=[pd]), tmp_path)
+    comp = libsbml.readSBMLFromFile(str(result.comp_path))
+    md = comp.getPlugin("comp").getModelDefinition(str(model.sid))
+    assert md.getUnitDefinition(unit) is not None
+    assert _model(result.flat_path).getParameter(f"{model.sid}__eGFR_pd") is not None
+    plain_result = build(
+        definition(routes=[Route.iv(S)], pd=[plain]), tmp_path / "plain"
+    )
+    comp = libsbml.readSBMLFromFile(str(plain_result.comp_path))
+    md = comp.getPlugin("comp").getModelDefinition(str(plain.model.sid))
+    assert md.getUnitDefinition(unit) is None
 
 
 def test_an_observer_in_the_units_of_u_adds_no_unit(tmp_path: Path) -> None:
