@@ -26,8 +26,7 @@ ids of the top model, so that the model does not restate them:
   elimination, the arterial plasma of a kidney plasma, and the renal
   clearance of the arterial plasma (glomerulus and tubule in series); a
   saturable reabsorption of the filtrate (`Excretion.reabsorption`, the
-  `pkpdsim.pbpk.Saturable` of the substance, not this `Saturable` of a
-  secretion) has the net filtrate of the arterial plasma and, without
+  `pkpdsim.pbpk.ThresholdReabsorption` of the substance) has the net filtrate of the arterial plasma and, without
   another process of the kidney, the kidney plasma at the arterial plasma;
 - `liver_plasma`: the liver plasma, fed by the hepatic artery and the portal
   vein past the shunt `f_shunt`, with a source of the liver;
@@ -364,7 +363,8 @@ def _saturable_fraction(substance: Substance, plasma: str) -> str:
     n = ids.reabsorption_n(s)
     threshold = ids.reabsorption_threshold(s)
     return (
-        f"{ONE} / ({ONE} + ({ids.fu(s)} * ({plasma}) / {threshold})^{n})^({ONE} / {n})"
+        f"{ONE} / ({ONE} + ({ids.fu(s)} * abs({plasma}) / {threshold})^{n})"
+        f"^({ONE} / {n})"
     )
 
 

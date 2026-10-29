@@ -34,7 +34,7 @@ the net filtrate at the outflow concentration,
 `Qki*(1-HCT)*Cout - fu*GFR*(1 - f_reabsorbed)*Cout`, so the filtration
 clearance of the arterial plasma is `fu*GFR*(1 - f_reabsorbed)` and a
 secretion clears the plasma flow less the filtrate. A saturable reabsorption
-(`Saturable`) replaces the constant fraction by the fraction
+(`ThresholdReabsorption`) replaces the constant fraction by the fraction
 `1/(1 + (fu*C/reab_threshold)^reab_n)^(1/reab_n)` at the concentration of
 each term (`Car` in the filtration, `Cout` in the outflow). Its
 metabolism and transport (the tubular processes) run with the tubular
@@ -698,10 +698,12 @@ class StandardBuilder(OrganBuilder):
         """The reabsorbed fraction of the filtrate of the plasma concentration `c`.
 
         The constant fraction `f_reabsorbed_<s>` (`Excretion.fraction_reabsorbed`),
-        or of a saturable reabsorption (`Excretion.reabsorption`, `Saturable`)
-        the fraction `1/(1 + (fu*c/reab_threshold_<s>)^reab_n_<s>)^(1/reab_n_<s>)`
+        or of a saturable reabsorption (`Excretion.reabsorption`, `ThresholdReabsorption`)
+        the fraction `1/(1 + (fu*|c|/reab_threshold_<s>)^reab_n_<s>)^(1/reab_n_<s>)`
         of the unbound concentration `fu*c` of the filtrate, at most 1, so the
-        reabsorption never exceeds the filtration.
+        reabsorption never exceeds the filtration (`|c|` keeps the power
+        defined for a concentration a little below 0, an undershoot of the
+        integrator).
         """
         saturable = s.excretion.reabsorption
         if saturable is None:
@@ -720,7 +722,9 @@ class StandardBuilder(OrganBuilder):
             f"sharpness of the renal threshold {s.sid}",
             "How sharp the renal threshold of the saturable reabsorption is.",
         )
-        return f"{ONE} / ({ONE} + ({fu} * {c} / {threshold})^{n})^({ONE} / {n})"
+        # abs: a concentration a little below 0 (an undershoot of the
+        # integrator) keeps the power of a non-integer n defined
+        return f"{ONE} / ({ONE} + ({fu} * abs({c}) / {threshold})^{n})^({ONE} / {n})"
 
     def _filtrate(self, s: Substance, fu: str, c: str) -> str:
         """The net filtrate of the plasma concentration `c`, `fu*GFR*c*(1 - f_reabsorbed)`.

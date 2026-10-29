@@ -18,8 +18,8 @@ __all__ = [
     "Kp",
     "KpMethod",
     "Mode",
-    "Saturable",
     "Substance",
+    "ThresholdReabsorption",
 ]
 
 
@@ -187,7 +187,7 @@ class KpMethod(_Exchange):
 
 
 @dataclass(frozen=True)
-class Saturable:
+class ThresholdReabsorption:
     """A reabsorption of the filtered load up to a renal threshold.
 
     The reabsorbed fraction of the filtrate at the plasma concentration `C`,
@@ -219,14 +219,14 @@ class Excretion:
         fraction_reabsorbed: the constant fraction of the filtrate which is
             reabsorbed, `f_reabsorbed_<s>`.
         reabsorption: a reabsorption which depends on the plasma
-            concentration instead of the constant fraction (`Saturable`), `None`
+            concentration instead of the constant fraction (`ThresholdReabsorption`), `None`
             for the constant fraction; with it `fraction_reabsorbed` stays 0
             and the substance has no `f_reabsorbed_<s>`.
     """
 
     urine: bool = False
     fraction_reabsorbed: Q = 0.0
-    reabsorption: Saturable | None = None
+    reabsorption: ThresholdReabsorption | None = None
 
 
 @dataclass(frozen=True)

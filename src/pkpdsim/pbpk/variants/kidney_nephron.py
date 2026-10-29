@@ -35,10 +35,14 @@ into the plasma of the kidney (`J_reab_<s>`), the rest is urine, so the
 renal clearance without transport is `fu*GFR*(1 - f_reabsorbed)` as in the
 standard kidney. With secretion the fraction acts on the secreted drug as
 well, the lumped `(fu*GFR + CL_sec)*(1 - F_reabs)` of the literature. A
-saturable reabsorption (`Excretion.reabsorption`, `Saturable`) returns the
-fraction of the standard kidney at the afferent plasma, the filtered load
-(`1/(1 + (fu*Car/reab_threshold)^reab_n)^(1/reab_n)`, `Car_<s>` a modifier),
-so at steady state the circulation sees the standard kidney with it as well.
+threshold reabsorption (`Excretion.reabsorption`, `ThresholdReabsorption`)
+returns the fraction of the standard kidney at the afferent plasma of the
+flow out of the collecting duct, up to the filtered load:
+`min(GFR*f_tub_cd*Ctub_cd, fu*GFR*Car)*f(Car)` with
+`f(Car) = 1/(1 + (fu*|Car|/reab_threshold)^reab_n)^(1/reab_n)` (`Car_<s>` a
+modifier). It never exceeds the filtration, also with a secretion into the
+tubule (the secreted drug leaves into the urine), and at steady state without
+a secretion the circulation sees the standard kidney.
 A reabsorption by a transporter is an apical influx instead.
 
 The chemistry of the kidney is placed by membrane: a metabolism in the cells
@@ -305,8 +309,9 @@ class NephronBuilder(StandardBuilder):
         `GFR*f_tub_<seg>*Ctub_<seg>_<s>` out of every segment into the next,
         out of the collecting duct into the urine; of a filtered substance
         the reabsorbed fraction of the flow out of the collecting duct
-        (`f_reabsorbed_<s>`, or of a saturable reabsorption at the afferent
-        plasma) returns into the plasma of the kidney instead.
+        (`f_reabsorbed_<s>`, or of a threshold reabsorption at the afferent
+        plasma, up to the filtered load) returns into the plasma of the
+        kidney instead.
         """
         gfr = self._gfr
         self._input_compartment(ids.VURINE, "urine")
@@ -356,13 +361,23 @@ class NephronBuilder(StandardBuilder):
             return
         parts = self.ctx.parts[s.sid]
         arterial = self._pool_species(Pool.ARTERIAL, Part.PLASMA, s, parts)
-        reabsorbed = self._reabsorbed(s, self._fu(s), arterial)
-        # a saturable reabsorption reads the filtered load, the afferent plasma
-        modifiers = (arterial,) if s.excretion.reabsorption is not None else ()
+        fu = self._fu(s)
+        fraction = self._reabsorbed(s, fu, arterial)
+        if s.excretion.reabsorption is None:
+            modifiers: tuple[str, ...] = ()
+            excreted = f"{leaving} * ({ONE} - {fraction})"
+            reabsorbed = f"{leaving} * {fraction}"
+        else:
+            # the threshold reabsorption reads the filtered load, the afferent
+            # plasma, and returns at most the filtered load: a secreted drug
+            # in the tubule is not reabsorbed beyond it
+            modifiers = (arterial,)
+            reabsorbed = f"min({leaving}, {fu} * {gfr} * {arterial}) * {fraction}"
+            excreted = f"{leaving} - {reabsorbed}"
         self._reaction(
             ids.tubule_reaction(s.sid, "cd"),
             with_modifiers(f"{cd} -> {urine}", modifiers),
-            f"{leaving} * ({ONE} - {reabsorbed})",
+            excreted,
             f"urinary excretion {s.sid} from the collecting duct",
             kind="tubular_flow",
             segment="cd",
@@ -371,7 +386,7 @@ class NephronBuilder(StandardBuilder):
         self._reaction(
             ids.tubule_reabsorption_reaction(s.sid),
             with_modifiers(f"{cd} -> {source}", modifiers),
-            f"{leaving} * {reabsorbed}",
+            reabsorbed,
             f"reabsorbed fraction {s.sid} from the collecting duct into the plasma",
             kind="reabsorption",
             segment="cd",

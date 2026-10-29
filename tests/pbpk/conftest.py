@@ -347,18 +347,70 @@ def chemistry_reference_definition(liver: str = "standard") -> PBPKDefinition:
     )
 
 
+def nephron_reference_definition() -> PBPKDefinition:
+    """The definition of the stored nephron reference: the nephron kidney without the options of Task 4.
+
+    `drg` filtered with a constant fraction reabsorbed (0.2) and secreted by
+    an apical efflux into the proximal tubule, `sec` secreted but not
+    filtered; the stored comp and flat SBML were built at pkpdsim 311895c,
+    before the threshold reabsorption.
+    """
+    return PBPKDefinition(
+        sid="nephron_reference",
+        substances=[
+            Substance(
+                sid="drg",
+                name="drug",
+                mr=300.0,
+                binding=Binding(fu=0.1, protein="albumin"),
+                distribution=Kp(2.0, ftissue=1.0),
+                excretion=Excretion(urine=True, fraction_reabsorbed=0.2),
+            ),
+            Substance(
+                sid="sec",
+                name="secreted drug",
+                mr=250.0,
+                binding=Binding(fu=0.5),
+                distribution=Kp(1.0, ftissue=1.0),
+            ),
+        ],
+        chemistry=[
+            Transport(
+                "DRGSEC",
+                Organ.KIDNEY,
+                "drg",
+                Direction.EFFLUX,
+                Membrane.APICAL,
+                FirstOrder(k=0.1, per_volume=False),
+            ),
+            Transport(
+                "SECSEC",
+                Organ.KIDNEY,
+                "sec",
+                Direction.EFFLUX,
+                Membrane.APICAL,
+                MM(vmax=1e-2, km=0.05),
+            ),
+        ],
+        variants=Variants(organs={Organ.KIDNEY: "nephron"}),
+        routes=[Route.iv("drg"), Route.iv("sec")],
+    )
+
+
 def dateless(text: str) -> list[str]:
     """The lines of an SBML text without the dates of the model history."""
     return [line for line in text.splitlines() if not _DATE.search(line)]
 
 
 def assert_reference_sbml(result: BuildResult) -> None:
-    """Assert that a build is the stored reference of f008d56, line by line.
+    """Assert that a build is its stored reference, line by line.
 
     The order of the elements counts. The references are
-    `tests/pbpk/data/<file>.gz` (`gzip -n`), built from
-    `reference_definition()` at f008d56; a change of the library which
-    changes the SBML of every model on purpose rebuilds them and says so.
+    `tests/pbpk/data/<file>.gz` (`gzip -n`): `reference_definition()` built
+    at f008d56, `chemistry_reference_definition()` at 0c538ca and
+    `nephron_reference_definition()` at 311895c; a change of the library
+    which changes the SBML of every model on purpose rebuilds them and says
+    so.
     """
     for path in (result.comp_path, result.flat_path):
         reference = gzip.decompress((REFERENCE / f"{path.name}.gz").read_bytes())

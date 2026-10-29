@@ -16,10 +16,13 @@ from typing import cast
 import numpy as np
 import pytest
 from sbmlsim import Q
+from sbmlsim.model import AbstractModel
 from sbmlsim.model.model_roadrunner import RoadrunnerSBMLModel
-from sbmlsim.simulation import Dimension, Scan, Simulation
+from sbmlsim.simulation import Change as TimedChange
+from sbmlsim.simulation import Dimension, Scan, Simulation, SteadyState
 from sbmlsim.simulation.definition import Value as Change
 from sbmlsim.simulator import Simulator
+from sbmlsim.task import Task
 
 from pkpdsim.model import PKPDModel
 from pkpdsim.pbpk import (
@@ -29,16 +32,17 @@ from pkpdsim.pbpk import (
     Organ,
     PBPKDefinition,
     Route,
-    Saturable,
     Substance,
+    ThresholdReabsorption,
     build,
     ids,
 )
 from pkpdsim.pbpk.builder import BuildResult
-from pkpdsim.pbpk.experiment import (
+from pkpdsim.pbpk.experiment import PBPKSimulationExperiment
+from pkpdsim.pbpk.kidney_validity import (
     KidneyOutflow,
-    PBPKSimulationExperiment,
     kidney_outflow,
+    simulated_individuals,
 )
 from pkpdsim.uncertainty import UNCERTAINTY_DIMENSION
 
@@ -93,7 +97,9 @@ def _definition() -> PBPKDefinition:
                 name="saturable",
                 mr=100.0,
                 binding=Binding(fu=FU),
-                excretion=Excretion(urine=True, reabsorption=Saturable(0.1, 2.0)),
+                excretion=Excretion(
+                    urine=True, reabsorption=ThresholdReabsorption(0.1, 2.0)
+                ),
             ),
             Substance("non", name="not filtered", mr=100.0),
         ],
@@ -179,6 +185,9 @@ def test_the_flows_of_every_carrier(built: BuildResult) -> None:
         assert outflows[s].filtered == pytest.approx(filtered, rel=1e-12)
         assert outflows[s].plasma_flow == pytest.approx(plasma_flow, rel=1e-12)
         assert outflows[s].valid
+    assert outflows["rea"].formula == "fu*GFR*(1 - f_reabsorbed)"
+    assert outflows["sat"].formula == "fu*GFR (threshold reabsorption)"
+    assert "'sat' fu*GFR (threshold reabsorption) " in outflows["sat"].text()
 
 
 def test_an_outflow_is_valid_below_the_plasma_flow() -> None:
@@ -315,13 +324,126 @@ def test_doses_and_draws_make_no_individual(
     assert len(runs) == 1
 
 
-def test_a_model_without_filtration_is_always_valid(tmp_path: Path) -> None:
-    """Without a filtered substance there is no limit."""
+@pytest.fixture(scope="module")
+def unfiltered(tmp_path_factory: pytest.TempPathFactory) -> BuildResult:
+    """A model without a filtered substance, built once."""
     definition = PBPKDefinition(
         sid="no_urine",
         substances=[Substance("non", name="not filtered", mr=100.0)],
         routes=[Route.iv("non")],
     )
-    result = build(definition, tmp_path)
-    assert kidney_outflow(result.flat_path) == ()
-    assert _experiment(result).renal_function_limits() == (0.0, float("inf"))
+    return build(definition, tmp_path_factory.mktemp("no_urine"))
+
+
+def test_a_model_without_filtration_is_always_valid(
+    unfiltered: BuildResult, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Without a filtered substance there is no limit, and nothing is simulated."""
+    runs: list[object] = []
+    monkeypatch.setattr(Simulator, "run", lambda *args, **kwargs: runs.append(args))
+    assert kidney_outflow(unfiltered.flat_path, _renal(100.0)) == ()
+    assert _experiment(unfiltered).renal_function_limits() == (0.0, float("inf"))
+    assert runs == []
+
+
+def test_every_task_is_checked_on_its_model(
+    built: BuildResult, unfiltered: BuildResult
+) -> None:
+    """A simulation of the model without filtration is valid at any renal function."""
+    base = _experiment(built)
+    high = base.renal_function_limits()[1]
+    simulation = Simulation(end=10, preinit_changes=_renal(2 * high))
+
+    def study(model: str) -> PBPKSimulationExperiment:
+        def models(self: PBPKSimulationExperiment) -> dict[str, AbstractModel]:
+            return {
+                "model": AbstractModel(source=built.flat_path),
+                "other": AbstractModel(source=unfiltered.flat_path),
+            }
+
+        def tasks(self: PBPKSimulationExperiment) -> dict[str, Task]:
+            return {"task_high": Task(model=model, simulation="high")}
+
+        cls = cast(
+            "type[PBPKSimulationExperiment]",
+            type(
+                f"TaskStudy{model}",
+                (base,),
+                {
+                    "simulations": lambda self: {"high": simulation},
+                    "models": models,
+                    "tasks": tasks,
+                },
+            ),
+        )
+        experiment = cls(base_path=base.pkpd_model.path)
+        experiment._models = {
+            "model": _model(built.flat_path),
+            "other": _model(unfiltered.flat_path),
+        }
+        return experiment
+
+    study("other").initialize()
+    with pytest.raises(ValueError, match="TaskStudymodel' simulates in 'high'"):
+        study("model").initialize()
+
+
+def test_the_individuals_of_simulations_and_scans(built: BuildResult) -> None:
+    """Presimulation, dimensions of simulations and values; not timed dimensions, models, draws."""
+    path = built.flat_path
+    bw: dict[str, Change] = {"BW": Q(70.0, "kg")}
+    dose: dict[str, Change] = {ids.iv_dose("pls"): Q(10.0, "mg")}
+
+    def individuals(simulation: Simulation | Scan) -> list[dict[str, Change]]:
+        return simulated_individuals(simulation, path)
+
+    # a dose is not part of the individual, a presimulation is
+    assert individuals(Simulation(end=10, preinit_changes={**bw, **dose})) == [bw]
+    presimulated = Simulation(
+        end=10,
+        preinit_changes=dose,
+        presimulation=SteadyState(preinit_changes=dict(bw)),
+    )
+    assert individuals(presimulated) == [bw]
+    # every simulation of a dimension of simulations
+    by_simulation = Scan(
+        Simulation(end=10),
+        [
+            Dimension(
+                "group",
+                simulations={
+                    "a": Simulation(end=10, preinit_changes=_renal(0.5)),
+                    "b": Simulation(end=10, preinit_changes=_renal(1.5)),
+                    "c": Simulation(end=10, preinit_changes={**_renal(1.5), **dose}),
+                },
+            )
+        ],
+    )
+    assert individuals(by_simulation) == [_renal(0.5), _renal(1.5)]
+    # every point of the values, as the change before the initialization
+    values = individuals(
+        Scan(
+            Simulation(end=10, preinit_changes=bw),
+            [Dimension("renal", values={ids.F_RENAL_FUNCTION: [0.5, 2.0]})],
+        )
+    )
+    assert [v[ids.F_RENAL_FUNCTION] for v in values] == [0.5, 2.0]
+    assert all(v["BW"] == bw["BW"] for v in values)
+    # a dimension with a time changes the simulation, not its start
+    timed = Scan(
+        Simulation(end=10),
+        [Dimension("late", values={ids.F_RENAL_FUNCTION: [0.5, 9.0]}, at=5.0)],
+    )
+    assert individuals(timed) == [{}]
+    # a change during the simulation is not read
+    changed = Simulation(end=10, changes=[TimedChange(times=5.0, values=_renal(9.0))])
+    assert individuals(changed) == [{}]
+    # the draws of the fitted parameters are not read
+    draws = Scan(
+        Simulation(end=10),
+        [Dimension(UNCERTAINTY_DIMENSION, values={ids.F_RENAL_FUNCTION: [9.0]})],
+    )
+    assert individuals(draws) == [{}]
+    # a scan over models has no individual of this model
+    models = Scan(Simulation(end=10), [Dimension("m", models={"a": path})])
+    assert individuals(models) == []

@@ -51,10 +51,10 @@ from pkpdsim.pbpk import (
     PDComponent,
     RateOf,
     Route,
-    Saturable,
     SegmentedIntestine,
     SlowPool,
     Substance,
+    ThresholdReabsorption,
     Transport,
     U,
     Value,
@@ -90,7 +90,7 @@ def standard() -> PBPKDefinition:
     capacity as a ratio of `PRMIN`; `drg` inhibits CYP2C9 competitively;
     `drg`, `prf` and `prm` have an endogenous baseline; a PD component reads
     the liver cells of `prm`; `drg` has a slow pool in muscle; `sat` is
-    reabsorbed up to a renal threshold (`Saturable`).
+    reabsorbed up to a renal threshold (`ThresholdReabsorption`).
     """
     return PBPKDefinition(
         sid="toy_standard",
@@ -150,7 +150,9 @@ def standard() -> PBPKDefinition:
                 name="drug reabsorbed up to a renal threshold",
                 mr=180.0,
                 binding=Binding(fu=0.8),
-                excretion=Excretion(urine=True, reabsorption=Saturable(0.2, 2.0)),
+                excretion=Excretion(
+                    urine=True, reabsorption=ThresholdReabsorption(0.2, 2.0)
+                ),
             ),
         ],
         chemistry=[
@@ -244,7 +246,7 @@ def _cell_reader() -> PDComponent:
 
 
 def variants() -> PBPKDefinition:
-    """Get the toy with the zonated liver, the nephron kidney and a gut metabolism."""
+    """Get the toy with the zonated liver, the nephron kidney (with a threshold reabsorption) and a gut metabolism."""
     return PBPKDefinition(
         sid="toy_variants",
         substances=[
@@ -257,6 +259,15 @@ def variants() -> PBPKDefinition:
                 excretion=Excretion(urine=True, fraction_reabsorbed=0.1),
             ),
             Substance("drg_m", name="metabolite", mr=316.0),
+            Substance(
+                "sat",
+                name="drug reabsorbed up to a renal threshold",
+                mr=180.0,
+                binding=Binding(fu=0.8),
+                excretion=Excretion(
+                    urine=True, reabsorption=ThresholdReabsorption(0.2, 2.0)
+                ),
+            ),
         ],
         chemistry=[
             Metabolism(

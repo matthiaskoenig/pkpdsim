@@ -1,4 +1,4 @@
-"""The saturable reabsorption of the filtrate (`Excretion(reabsorption=Saturable(...))`).
+"""The saturable reabsorption of the filtrate (`Excretion(reabsorption=ThresholdReabsorption(...))`).
 
 The reabsorbed fraction of the filtrate at the plasma concentration `C` is
 `1/(1 + (fu*C/threshold)^n)^(1/n)`: almost all of a filtrate below the renal
@@ -19,17 +19,21 @@ import pytest
 from pkpdsim.pbpk import (
     Binding,
     CustomReaction,
+    Direction,
     Excretion,
+    FirstOrder,
     Formula,
     Kp,
+    Membrane,
     ModelParameter,
     Organ,
     Part,
     PBPKDefinition,
     Pool,
     Route,
-    Saturable,
     Substance,
+    ThresholdReabsorption,
+    Transport,
     U,
     Value,
     Variants,
@@ -43,6 +47,7 @@ from .conftest import (
     chemistry_reference_definition,
     dose_amount,
     individual,
+    nephron_reference_definition,
     total_amount,
 )
 
@@ -52,7 +57,7 @@ if TYPE_CHECKING:
 S = "sat"
 FU = 0.5
 THRESHOLD = 0.2  # mM, of the filtrate
-N = 2.0
+N = 1.5  # not an integer: the power of a negative concentration needs abs
 DAY = 24 * 60.0
 STANDARD = Variants()
 NEPHRON = Variants(organs={Organ.KIDNEY: "nephron"})
@@ -67,7 +72,7 @@ def _substance(**fields: Any) -> Substance:  # noqa: ANN401
         "binding": Binding(fu=FU, protein="albumin"),
         "distribution": Kp(0.8, ftissue=2.0),
         "excretion": Excretion(
-            urine=True, reabsorption=Saturable(threshold=THRESHOLD, n=N)
+            urine=True, reabsorption=ThresholdReabsorption(threshold=THRESHOLD, n=N)
         ),
     }
     values.update(fields)
@@ -167,20 +172,77 @@ def test_the_saturable_reabsorption_conserves_the_amount(
 def test_the_nephron_kidney_reabsorbs_the_fraction_of_the_filtered_load(
     nephron: Path,
 ) -> None:
-    """The collecting duct returns the fraction of the afferent plasma, never more than leaves it."""
+    """The collecting duct returns the fraction of the afferent plasma, up to the filtered load.
+
+    With little drug in the duct (the tubule filling) the fraction of the
+    flow leaving it returns; with much (a secretion into the tubule) the
+    fraction of the filtered load, never more than the filtration nor than
+    the flow leaving the duct.
+    """
     r = _load(nephron)
     gfr = r[ids.GFR]
     arterial = ids.pool_species(Pool.ARTERIAL, S)
     duct = ids.flat(Organ.KIDNEY, ids.tubule(S, "cd"))
     reab = ids.flat(Organ.KIDNEY, ids.tubule_reabsorption_reaction(S))
     urine = ids.flat(Organ.KIDNEY, ids.tubule_reaction(S, "cd"))
-    r[f"[{duct}]"] = 1.0
-    leaving = gfr * r[ids.flat(Organ.KIDNEY, ids.tubule_flow_fraction("cd"))]
-    for c in CONCENTRATIONS:
-        r[f"[{arterial}]"] = c
-        assert r[reab] == pytest.approx(leaving * _fraction(c), rel=1e-12)
-        assert r[reab] + r[urine] == pytest.approx(leaving, rel=1e-12)
-        assert 0.0 <= r[reab] <= leaving
+    f_cd = r[ids.flat(Organ.KIDNEY, ids.tubule_flow_fraction("cd"))]
+    for duct_c in (1e-4, 1.0, 1e3):
+        r[f"[{duct}]"] = duct_c
+        leaving = gfr * f_cd * duct_c
+        for c in CONCENTRATIONS:
+            r[f"[{arterial}]"] = c
+            filtered = FU * gfr * c
+            expected = min(leaving, filtered) * _fraction(c)
+            assert r[reab] == pytest.approx(expected, rel=1e-12)
+            assert r[reab] + r[urine] == pytest.approx(leaving, rel=1e-12)
+            assert 0.0 <= r[reab] <= min(leaving, filtered)
+
+
+def test_a_secretion_is_not_reabsorbed_beyond_the_filtration(tmp_path: Path) -> None:
+    """In the nephron kidney with a secretion the dose is conserved and the urine gets the secreted drug.
+
+    At steady state of an infusion the reabsorption is the fraction of the
+    filtered load, so the excretion is at least the secretion.
+    """
+    definition = dataclasses.replace(
+        _definition(NEPHRON),
+        chemistry=[
+            Transport(
+                "SATSEC",
+                Organ.KIDNEY,
+                S,
+                Direction.EFFLUX,
+                Membrane.APICAL,
+                FirstOrder(k=0.2, per_volume=False),
+            )
+        ],
+    )
+    r = _load(build(definition, tmp_path).flat_path)
+    r[ids.iv_dose(S)] = 500.0
+    r.simulate(0, 600, 2)
+    amount = total_amount(r, S) + dose_amount(r, S)
+    assert amount == pytest.approx(500.0 / r[ids.mr(S)], rel=1e-9)
+    gfr = r[ids.GFR]
+    car = r[f"[{ids.pool_species(Pool.ARTERIAL, S)}]"]
+    reabsorbed = r[ids.flat(Organ.KIDNEY, ids.tubule_reabsorption_reaction(S))]
+    assert reabsorbed <= FU * gfr * car * _fraction(car) * (1 + 1e-12)
+
+
+def test_the_law_is_defined_below_zero(standard: Path, nephron: Path) -> None:
+    """A concentration a little below 0 (an undershoot) gives finite rates."""
+    for path in (standard, nephron):
+        r = _load(path)
+        r[f"[{ids.pool_species(Pool.ARTERIAL, S)}]"] = -1e-12
+        r[f"[{ids.flat(Organ.KIDNEY, ids.species(Part.PLASMA, S))}]"] = -1e-12
+        rates = np.asarray(r.model.getReactionRates())
+        assert np.all(np.isfinite(rates))
+
+
+def test_without_a_threshold_reabsorption_the_nephron_sbml_is_unchanged(
+    tmp_path: Path,
+) -> None:
+    """The nephron kidney with a constant fraction and a secretion is the SBML of 311895c."""
+    assert_reference_sbml(build(nephron_reference_definition(), tmp_path))
 
 
 def test_the_parameters_of_the_threshold(standard: Path, tmp_path: Path) -> None:
@@ -191,7 +253,7 @@ def test_the_parameters_of_the_threshold(standard: Path, tmp_path: Path) -> None
     assert ids.fraction_reabsorbed(S) not in parameters
     assert r[ids.reabsorption_threshold(S)] == THRESHOLD
     assert r[ids.reabsorption_n(S)] == N
-    fitted = Saturable(
+    fitted = ThresholdReabsorption(
         threshold=Value(0.3, U.mM, notes="The fitted threshold."),
         n=Value(3.0, U.dimensionless),
     )
@@ -217,31 +279,36 @@ def test_without_a_saturable_reabsorption_the_sbml_is_unchanged(
     ("excretion", "message"),
     [
         (
-            Excretion(urine=False, reabsorption=Saturable(THRESHOLD, N)),
+            Excretion(urine=False, reabsorption=ThresholdReabsorption(THRESHOLD, N)),
             r"sat \(saturable reabsorption\): no filtrate to reabsorb",
         ),
         (
             Excretion(
                 urine=True,
                 fraction_reabsorbed=0.2,
-                reabsorption=Saturable(THRESHOLD, N),
+                reabsorption=ThresholdReabsorption(THRESHOLD, N),
             ),
             r"fraction_reabsorbed must stay 0",
         ),
         (
-            Excretion(urine=True, reabsorption=Saturable(0.0, N)),
+            Excretion(urine=True, reabsorption=ThresholdReabsorption(0.0, N)),
             r"threshold must be positive",
         ),
         (
-            Excretion(urine=True, reabsorption=Saturable(THRESHOLD, -1.0)),
+            Excretion(urine=True, reabsorption=ThresholdReabsorption(THRESHOLD, -1.0)),
             r"n must be positive",
         ),
         (
-            Excretion(urine=True, reabsorption=Saturable(Value(0.2, U.mmole), N)),
+            Excretion(
+                urine=True, reabsorption=ThresholdReabsorption(Value(0.2, U.mmole), N)
+            ),
             r"threshold must be in mmole/liter, got mmole",
         ),
         (
-            Excretion(urine=True, reabsorption=Saturable(THRESHOLD, Value(2.0, U.mM))),
+            Excretion(
+                urine=True,
+                reabsorption=ThresholdReabsorption(THRESHOLD, Value(2.0, U.mM)),
+            ),
             r"n must be in dimensionless",
         ),
     ],
@@ -350,13 +417,13 @@ def test_the_steady_state_helpers_of_a_saturable_reabsorption() -> None:
     """The net filtrate reads the arterial plasma; what has no closed form is refused."""
     s = _substance(baseline=BASELINE)
     fraction = (
-        "1 dimensionless / (1 dimensionless + (fu_sat * (baseline_sat) / "
+        "1 dimensionless / (1 dimensionless + (fu_sat * abs(baseline_sat) / "
         "reab_threshold_sat)^reab_n_sat)^(1 dimensionless / reab_n_sat)"
     )
     assert ss.renal_filtration(s, variants=STANDARD) == (
         f"fu_sat * GFR * (1 dimensionless - {fraction})"
     )
-    assert "(Car_x)" in ss.renal_filtration(s, arterial="Car_x", variants=STANDARD)
+    assert "abs(Car_x)" in ss.renal_filtration(s, arterial="Car_x", variants=STANDARD)
     assert ss.renal_clearance(s, variants=STANDARD) == ss.renal_filtration(
         s, variants=STANDARD
     )

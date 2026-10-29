@@ -2,10 +2,13 @@
 
 The base of the experiments of a model built on the library
 (`PBPKSimulationExperiment`, `ScaledRenalMap`, `healthy_gfr`, `REFERENCE_GFR`
-of `pkpdsim.pbpk.experiment`) is exported lazily: it imports sbmlsim, which a
-factory does not need, so `import pkpdsim.pbpk` imports no simulator.
+of `pkpdsim.pbpk.experiment`) and the validity of the kidney outflow
+(`kidney_outflow`, `KidneyOutflow` of `pkpdsim.pbpk.kidney_validity`) are
+exported lazily: they import sbmlsim, which a factory does not need, so
+`import pkpdsim.pbpk` imports no simulator.
 """
 
+import importlib
 from typing import TYPE_CHECKING
 
 from pkpdsim.pbpk.archive import create_archive
@@ -58,8 +61,8 @@ from pkpdsim.pbpk.substance import (
     Kp,
     KpMethod,
     Mode,
-    Saturable,
     Substance,
+    ThresholdReabsorption,
 )
 from pkpdsim.pbpk.units import MODEL_UNITS, U
 from pkpdsim.pbpk.values import Formula, ModelParameter, Q, Value, as_value, fitted
@@ -70,42 +73,39 @@ from pkpdsim.pbpk.variants.liver_zonated import ZonatedLiver
 if TYPE_CHECKING:
     from pkpdsim.pbpk.experiment import (
         REFERENCE_GFR,
-        KidneyOutflow,
         PBPKSimulationExperiment,
         ScaledRenalMap,
         healthy_gfr,
-        kidney_outflow,
     )
+    from pkpdsim.pbpk.kidney_validity import KidneyOutflow, kidney_outflow
 
-#: the names of `pkpdsim.pbpk.experiment`, imported on their first access
-_EXPERIMENT_NAMES = frozenset(
-    {
-        "REFERENCE_GFR",
-        "KidneyOutflow",
-        "PBPKSimulationExperiment",
-        "ScaledRenalMap",
-        "healthy_gfr",
-        "kidney_outflow",
-    }
-)
+#: the names of the modules which import sbmlsim, imported on their first
+#: access: name -> module of `pkpdsim.pbpk`
+_LAZY_NAMES = {
+    "REFERENCE_GFR": "experiment",
+    "PBPKSimulationExperiment": "experiment",
+    "ScaledRenalMap": "experiment",
+    "healthy_gfr": "experiment",
+    "KidneyOutflow": "kidney_validity",
+    "kidney_outflow": "kidney_validity",
+}
 
 
 def __getattr__(name: str) -> object:
-    """Import a name of `pkpdsim.pbpk.experiment` on its first access (PEP 562).
+    """Import a name of a module which imports sbmlsim on its first access (PEP 562).
 
     Raises:
         AttributeError: for any other name.
     """
-    if name in _EXPERIMENT_NAMES:
-        from pkpdsim.pbpk import experiment
-
-        return getattr(experiment, name)
+    module = _LAZY_NAMES.get(name)
+    if module is not None:
+        return getattr(importlib.import_module(f"pkpdsim.pbpk.{module}"), name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def __dir__() -> list[str]:
     """List the names of the module with the names imported on their first access."""
-    return sorted({*globals(), *_EXPERIMENT_NAMES})
+    return sorted({*globals(), *_LAZY_NAMES})
 
 
 __all__ = [
@@ -153,7 +153,6 @@ __all__ = [
     "ReferenceIndividual",
     "Rest",
     "Route",
-    "Saturable",
     "ScaledRenalMap",
     "SegmentedIntestine",
     "Sex",
@@ -162,6 +161,7 @@ __all__ = [
     "Source",
     "StandardOrgan",
     "Substance",
+    "ThresholdReabsorption",
     "Transport",
     "U",
     "Value",
