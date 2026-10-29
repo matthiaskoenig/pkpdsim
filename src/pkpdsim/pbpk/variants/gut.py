@@ -27,8 +27,11 @@ from pkpdsim.pbpk.organs import Organ, Part, Pool
 from pkpdsim.pbpk.parts import Parts, parts_for
 from pkpdsim.pbpk.placement import (
     built_parts,
+    fraction_parameters,
+    fractions_are_constants,
     inhibitor_terms,
     process_kind,
+    product_reaction,
     rate_law,
     stoichiometry,
     with_modifiers,
@@ -679,13 +682,32 @@ class GutBuilder(LumenBuilder):
         """A process of the chemistry in the mucosa of a segment."""
         by_id = {s.sid: s for s in self.ctx.substances}
         name = seg.label
+        formed = []
         if isinstance(p, Metabolism):
             s = by_id[p.substrate]
             cu = self._mucosa_unbound(s, seg)
-            products = " + ".join(
-                stoichiometry(f, ids.mucosa(product, seg.token))
-                for product, f in p.products.items()
-            )
+            if fractions_are_constants(p):
+                for par in fraction_parameters(p, Organ.SMALL_INTESTINE):
+                    self.parameters.setdefault(str(par.sid), par)
+                formed = [
+                    product_reaction(
+                        p,
+                        product,
+                        ids.mucosa(product, seg.token),
+                        ids.mucosa_volume(seg.token),
+                        seg.token,
+                        Organ.SMALL_INTESTINE,
+                        segment=seg.token,
+                    )
+                    for product in p.products
+                ]
+                products = ""
+            else:
+                products = " + ".join(
+                    stoichiometry(f, ids.mucosa(product, seg.token))
+                    for product, f in p.products.items()
+                    if isinstance(f, float | int)
+                )
             equation = f"{ids.mucosa(s.sid, seg.token)} -> {products}"
             lumen, sbo = False, SBO.BIOCHEMICAL_REACTION
             what = f"{p.substrate} -> {', '.join(p.products) or 'elimination'}"
@@ -722,3 +744,4 @@ class GutBuilder(LumenBuilder):
                 protein=p.protein,
             )
         )
+        self.reactions += formed

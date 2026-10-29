@@ -57,6 +57,8 @@ PBPKO has no term for some of the quantities, compartments and processes of the 
 | impairment factor | `PHYSIOLOGICAL_PARAMETER` |
 | endogenous baseline plasma concentration | `CONCENTRATION_IN_PLASMA` |
 | factor of the partition coefficients | `BIOCHEMICAL_PARAMETER` |
+| ratio of the capacity of a process to another process | `BIOCHEMICAL_PARAMETER` |
+| fraction of a metabolism which forms a product | `BIOCHEMICAL_PARAMETER` |
 | tissue composition (water, protein, lipid fractions) | `PHYSIOLOGICAL_PARAMETER` |
 | permeability surface area product (exchange flow) | `BIOCHEMICAL_PARAMETER` |
 | exchange rate constant of plasma and blood cells | `BIOCHEMICAL_PARAMETER` |

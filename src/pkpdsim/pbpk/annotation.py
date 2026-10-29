@@ -572,6 +572,14 @@ KINDS: dict[str, Kind] = {
         terms=((BQB.IS_VERSION_OF, pbpko("CLEARANCE_RATE")),),
         requested="transport clearance per organ volume",
     ),
+    "rate_ratio": Kind(
+        _P,
+        _BIOCHEM,
+        requested="ratio of the capacity of a process to another process",
+    ),
+    "product_fraction": Kind(
+        _P, _BIOCHEM, requested="fraction of a metabolism which forms a product"
+    ),
     "custom_parameter": Kind(None, _MISC),
     "definition_parameter": Kind(None, _MISC),
     "custom_species": Kind(None, "CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT"),
@@ -717,6 +725,10 @@ KINDS: dict[str, Kind] = {
     ),
     "gut_metabolism": Kind(
         SBO.BIOCHEMICAL_REACTION, "GUT_METABOLISM", terms=((BQB.IS, "go/GO:0008152"),)
+    ),
+    # the formation of a product by its fraction of the rate of a metabolism
+    "metabolism_product": Kind(
+        SBO.BIOCHEMICAL_REACTION, None, terms=((BQB.IS_PART_OF, "go/GO:0008152"),)
     ),
     "transport": Kind(
         _T,

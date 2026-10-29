@@ -160,8 +160,11 @@ __all__ = [
     "pool_fraction",
     "pool_species",
     "pool_volume",
+    "product_fraction",
+    "product_reaction",
     "ps",
     "ps_ref",
+    "rate_ratio",
     "ref",
     "segment_process",
     "shunt_reaction",
@@ -886,6 +889,39 @@ def segment_process(pid: str, seg: str | None) -> str:
     (`CYP3A4_DRG_z1`).
     """
     return pid if seg is None else f"{pid}_{seg}"
+
+
+def rate_ratio(process: str, constant: str) -> str:
+    """The local id of the ratio of a constant of a process to another, `<p>_Vmax_ratio`.
+
+    The factor of `RateOf`: the constant `<p>_Vmax` (or `<p>_k`) of the
+    process is this ratio times the constant of the other process of the
+    organ.
+
+    Args:
+        process: the id of the process.
+        constant: the constant, `Vmax` or `k`.
+    """
+    return f"{process}_{constant}_ratio"
+
+
+def product_fraction(process: str, product: str) -> str:
+    """The local id of the fraction of a metabolism which forms a product, `f_<p>_<s>`.
+
+    A constant of the organ when the fractions of the metabolism are values
+    or the remainder `REST`, which is `1 - sum` of the others.
+    """
+    return f"f_{process}_{product}"
+
+
+def product_reaction(process: str, product: str) -> str:
+    """The local id of the formation of a product of a metabolism, `<p>_to_<s>`.
+
+    The reaction of a metabolism with product fractions as constants forms
+    the product with its fraction of the rate of the metabolism,
+    `f_<p>_<s> * <p>` (in a zone or a segment `<p>_to_<s>_<zone>`).
+    """
+    return f"{process}_to_{product}"
 
 
 def dissolution_rate(s: str) -> str:

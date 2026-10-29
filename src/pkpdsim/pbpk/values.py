@@ -5,7 +5,8 @@ comes from (a key of `data/sources.toml`, see `pkpdsim.pbpk.data`). A fitted
 value is a `Value` as well, from the keyword arguments of a fit record. A
 value which is tied to other parameters (a metabolite with the Kp of its
 parent, a fixed ratio) is a `Formula` over ids of the top model, written as
-the initial assignment of its parameter.
+the initial assignment of its parameter. A constant which no field of the
+library holds is a `ModelParameter` with such a value.
 """
 
 import functools
@@ -15,11 +16,12 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from sbmlutils.factory import Uncertainty
-from sbmlutils.factory.units import UnitType
+from sbmlutils.factory.units import UnitDefinition, UnitType
 
 __all__ = [
     "Formula",
     "FrozenMap",
+    "ModelParameter",
     "Q",
     "Value",
     "as_value",
@@ -77,6 +79,38 @@ class Formula:
 
 type Q = float | Value | Formula
 """A number, plain or with unit and provenance, or a formula."""
+
+
+@dataclass(frozen=True)
+class ModelParameter:
+    """A constant parameter which the model package states, with its provenance.
+
+    In `PBPKDefinition.parameters` a constant of the top model which no field
+    of the library holds (a production rate which the baseline of a
+    substance and a custom reaction of the muscle share): the formulas of the
+    definition, its observers and the custom reactions of the organs read it
+    under its id, an organ through an input port under the same id. In
+    `CustomReaction.parameters` a constant of the organ of the reaction (a
+    fitted constant of the mechanism): a local id of the organ, which the
+    reactions of the organ read, `<ORGAN>__<id>` in the flat model.
+
+    Attributes:
+        sid: the id of the parameter, an id of the top model which is no id
+            of the library, or a local id of the organ.
+        value: the number in `unit`, a `Value` (a fitted value with its
+            uncertainty, `fitted(FITS.parameter(pid, unit=...))`) or a
+            `Formula` over ids of the top model (its initial assignment); a
+            `Value` or a `Formula` is in `unit`.
+        unit: the unit of the parameter.
+        name: the name of the parameter, the id by default.
+        notes: the notes of the parameter, e.g. its meaning and source.
+    """
+
+    sid: str
+    value: Q
+    unit: UnitDefinition
+    name: str | None = None
+    notes: str | None = None
 
 
 def fitted(

@@ -86,9 +86,9 @@ The equations on this page are those which these processes generate in the toy m
 
 | process | acts in | placed |
 |---|---|---|
-| `Metabolism(sid, organ, substrate, products, kinetics, protein, profile)` | the part which holds the tissue of the substrate: intracellular in the full form, the merged tissue, the whole organ when flow-limited, the plasma without tissue | the products by their stoichiometric fractions (sum 1) into their equivalent part, else into the plasma; no products is an elimination |
+| `Metabolism(sid, organ, substrate, products, kinetics, protein, profile)` | the part which holds the tissue of the substrate: intracellular in the full form, the merged tissue, the whole organ when flow-limited, the plasma without tissue | the products by their fractions into their equivalent part, else into the plasma: numbers (sum 1) as the stoichiometry, values and the remainder `REST` as constants of the organ (see [Product fractions](#product-fractions)); no products is an elimination |
 | `Transport(sid, organ, substance, direction, membrane, kinetics, protein)` | basolateral: between interstitium and cell; apical: between cell and the sink of the organ (bile, urine, intestinal lumen) | influx into the cell, efflux out of it; forces the full form of the substance in the organ |
-| `CustomReaction(sid, organ, part, equation, formula, parameters=[], species=[])` | the part it names | its formula as given (`parameters` the sbmlutils `Parameter`s of the rate law, none by default), the escape hatch for a mechanism without a class (saturable binding, a deep tissue pool) |
+| `CustomReaction(sid, organ, part, equation, formula, parameters=[], species=[])` | the part it names | its formula as given (`parameters` the constants of the rate law, `ModelParameter`s with values and provenance or sbmlutils `Parameter`s, local ids of the organ, none by default), the escape hatch for a mechanism without a class (saturable binding, a deep tissue pool) |
 
 The organs of the chemistry are those of `Organ`; the chemistry of the intestine is defined on `Organ.SMALL_INTESTINE` and the intestine places it into the mucosa of its segments (see [Intestine and routes](intestine.md)). The standard kidney refuses an apical influx from the urine (the urine is cumulative); a tubular reabsorption by a transporter needs the [nephron kidney](variants.md#nephron-kidney).
 
@@ -110,6 +110,73 @@ PRMBIL: Cic_prm -> Cbile_prm = f_abcc2 * fimp_abcc2 * f_functional * PRMBIL_k * 
 ```
 
 The parameters of a process are constants of its organ with the process id as prefix (`DRG2M_Vmax`, `DRG2M_Km`, `PRFEL_k`, `HILEL_n`), so a fit of a Vmax uses the flat id `LI__DRG2M_Vmax`, as the hand-written models do. The tubular share is the constant `f_tubular` of the kidney (`KI__f_tubular`), with its provenance in the notes; an experiment may set it to test another hypothesis.
+
+## Shared capacities
+
+Two processes of an organ may share a capacity: two transporters of one substrate whose capacities have a fixed ratio (the protein abundance times the in vitro Vmax), of which one is fitted. The process takes its constant as a ratio of the same constant of the other process, `RateOf(process, factor)`, for the `vmax` of `MM` and `Hill` and the `k` of `FirstOrder`:
+
+```python
+from pkpdsim.pbpk import MM, Direction, Membrane, Organ, RateOf, Transport, U, Value
+
+oatp1b3 = Transport(
+    "PRMIN3",
+    Organ.LIVER,
+    "prm",
+    Direction.INFLUX,
+    Membrane.BASOLATERAL,
+    MM(
+        vmax=RateOf(
+            "PRMIN",
+            Value(0.5, U.dimensionless, notes="abundance times in vitro Vmax"),
+        ),
+        km=0.02,
+    ),
+    protein="SLCO1B3",
+)
+print(oatp1b3.kinetics.vmax)
+```
+
+```text
+RateOf(process='PRMIN', factor=Value(value=0.5, unit=dimensionless, source=None, notes='abundance times in vitro Vmax', uncertainties=None))
+```
+
+The ratio is the constant `<p>_Vmax_ratio` (`<p>_k_ratio`) of the organ with its provenance, the constant of the process its initial assignment, so a change of the other constant before the simulation (a fit of `LI__PRMIN_Vmax`) moves both:
+
+```equations title="a capacity as a ratio of another process, liver"
+PRMIN3_Vmax = PRMIN3_Vmax_ratio * PRMIN_Vmax
+```
+
+The other process is a metabolism or a transport of the same organ which states the same constant itself: a Vmax for a Vmax, a `k` with the same `per_volume` for a `k` (one unit), not a ratio itself; the factor is positive and dimensionless. `validate` refuses anything else with the process ids. In the variants the ratio is placed once for the organ (every zone and segment reads it), and an organ which does not place the other process refuses the ratio.
+
+## Product fractions
+
+The fractions of a metabolism which form its products are numbers which sum to 1 (the stoichiometry of the one reaction), or values: a `Value` with its provenance, a fitted value (`fitted(FITS.parameter("LI__f_TOR2M_tor_m1", unit=U.dimensionless))`), and for one product the remainder `REST`, one less the fractions of the others. With a value or the remainder every fraction is a constant of the organ, `f_<p>_<s>` (`LI__f_TOR2M_tor_m1` in the flat model), the reaction of the metabolism consumes the substrate and one reaction per product forms the product with its fraction of the rate, `<p>_to_<s>`:
+
+```python
+from pkpdsim.pbpk import REST, FirstOrder, Metabolism, Organ, U, Value
+
+split = Metabolism(
+    "SPL2M",
+    Organ.LIVER,
+    "spl",
+    {"spl_m1": Value(0.4, U.dimensionless), "spl_m2": REST},
+    FirstOrder(k=0.3),
+)
+print(split.products["spl_m2"])
+```
+
+```text
+Rest.REST
+```
+
+```equations title="a metabolism with product fractions, liver"
+SPL2M: Cti_spl -> = f_functional * SPL2M_k * Vli * fu_spl / Kp_spl * Cti_spl
+SPL2M_to_spl_m1: -> Cpl_spl_m1 = f_SPL2M_spl_m1 * SPL2M
+SPL2M_to_spl_m2: -> Cpl_spl_m2 = f_SPL2M_spl_m2 * SPL2M
+f_SPL2M_spl_m2 = 1 - f_SPL2M_spl_m1
+```
+
+The fractions never sum above 1, so the remainder is never negative and the substrate and its products keep their amount. `validate` takes the range of a fitted fraction from its value and the support of the distribution of its draws (the uncertainty of the fit, truncated to the bounds of the fit; `normal` and `lognormal` without bounds are unbounded, `lognormal` positive) and refuses fractions whose upper ends sum above 1, a range below 0, a remainder which is always 0, more than one remainder, a fitted fraction without a remainder (the sum would follow the fit) and a `Formula` (which cannot be bounded); numbers or values without a remainder sum to 1. An experiment which sets a fraction before the simulation keeps the remainder (an initial assignment), the fit bounds of a fraction keep their sum at most 1.
 
 ## Proteins
 
@@ -184,5 +251,35 @@ The chemistry is defined once per organ; the organ variant places it into its pa
 A custom reaction states its rate for the whole organ: the variants refuse it with an error which names the process, since an arbitrary formula cannot be split by volume.
 
 ## Custom reactions
+
+The constants of a custom reaction are its `parameters`: a `ModelParameter(sid, value, unit, name, notes)` with a number, a `Value` (a fitted value with the uncertainty of its fit as the `distrib` of the parameter, `fitted(FITS.parameter("MU__k_deep", unit=U.per_min))`, and its provenance in the notes, as every fitted value of the library) or a `Formula` over ids of the top model (its initial assignment, read through input ports), or a sbmlutils `Parameter` as it is. They are local ids of the organ (`k_deep` in the muscle, `MU__k_deep` in the flat model, the scheme of the constants `<p>_Vmax` of the processes), so the fitted constants of a mechanism are named by their organ; an id is defined once in an organ (the other custom reactions of the organ read it), and the same id in two organs is a constant of each. A constant which is no constant of one organ (a production rate which a baseline reads as well) stays a [parameter of the definition](substances.md#parameters-of-the-definition).
+
+```python
+from sbmlutils.factory import Species
+
+from pkpdsim.pbpk import CustomReaction, ModelParameter, Organ, Part, U, Value
+
+deep_pool = CustomReaction(
+    "DRGDEEP",
+    Organ.MUSCLE,
+    Part.TISSUE,
+    "Cti_drg <-> Cdeep_drg",
+    "k_deep * Vti * (Cti_drg - Cdeep_drg)",
+    parameters=[
+        ModelParameter(
+            "k_deep",
+            Value(1e-3, U.per_min, source="ModelChoice"),
+            U.per_min,
+            name="exchange of the deep pool",
+        )
+    ],
+    species=[Species("Cdeep_drg", "Vti", initialConcentration=0.0)],
+)
+print([p.sid for p in deep_pool.parameters])
+```
+
+```text
+['k_deep']
+```
 
 The formula of a custom reaction reads the elements of its organ (its species, compartments and parameters such as `Vti` and `Cti_<s>`, the parameters of the reaction) and the constant parameters and compartments of the top model, such as a [parameter of the definition](substances.md#parameters-of-the-definition) (`PBPKDefinition.parameters`) or a covariate: the organ reads such an id through an input port under the same id, as for the ids of a `Formula`, so a constant which two processes share (a production rate which the baseline reads as well) is defined once. An element of the organ comes first; the build refuses a parameter of the definition under a local id of an organ, and names every id of a custom reaction which is neither an element of the organ nor a constant of the top model (a species or an observer of the top model is not read by an organ, an unknown id).

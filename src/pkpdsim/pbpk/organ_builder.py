@@ -59,6 +59,7 @@ from pkpdsim.pbpk.parts import Parts
 from pkpdsim.pbpk.placement import (
     ONE,
     FormulaParameter,
+    OrganFormulaParameter,
     formula_assignment,
     formula_ids,
     formula_problems,
@@ -731,6 +732,29 @@ class OrganBuilder:
             raise ValueError("; ".join(problems) + ".")
         self.assignments.append(formula_assignment(p))
 
+    def _organ_formula(
+        self, p: OrganFormulaParameter, parameters: list[Parameter]
+    ) -> None:
+        """The initial assignment of a formula over constants of the organ.
+
+        Raises:
+            ValueError: if an id of the formula is no constant of the organ,
+                e.g. the capacity of a process which `RateOf` names and the
+                organ does not place.
+        """
+        constants = {str(q.sid) for q in parameters if q.constant}
+        missing = sorted(set(p.reads) - constants)
+        if missing:
+            raise ValueError(
+                f"The constant '{p.sid}' of organ '{self.organ.value}' "
+                f"(`{p.sid} = {p.expression}`) reads {missing}, which are no "
+                "constants of the organ: the process it names is not placed in "
+                "the organ."
+            )
+        self.assignments.append(
+            initial_assignment(str(p.sid), p.expression, p.unit, str(p.name))
+        )
+
     def _custom_inputs(self) -> None:
         """The inputs of the ids of the top model which the custom reactions read.
 
@@ -787,9 +811,11 @@ class OrganBuilder:
         Raises:
             ValueError: if a `Formula` of the organ reads an id which is no
                 parameter or compartment of the top model, or an element of
-                the organ which is no input, or a custom reaction reads an
-                id which is neither an element of the organ nor a parameter
-                or compartment of the top model.
+                the organ which is no input, a custom reaction reads an id
+                which is neither an element of the organ nor a parameter or
+                compartment of the top model, or a formula of the organ
+                (`RateOf`, `REST`) reads an id which is no constant of the
+                organ.
         """
         for sid, s, part, coefficient in self.starts:
             if part is not None:
@@ -804,6 +830,8 @@ class OrganBuilder:
         for p in parameters:
             if isinstance(p, FormulaParameter):
                 self._formula(p)
+            elif isinstance(p, OrganFormulaParameter):
+                self._organ_formula(p, parameters)
         return ModelDefinition(
             sid=f"{self.name}_{self.organ.value}",
             name=f"{label(self.organ)} ({self.name} organ)",

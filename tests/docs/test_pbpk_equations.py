@@ -32,6 +32,7 @@ from sbmlutils.factory import AssignmentRule, Model, Parameter, Port, PortType
 from pkpdsim.pbpk import (
     MM,
     MODEL_UNITS,
+    REST,
     Binding,
     Direction,
     Erythrocytes,
@@ -48,11 +49,13 @@ from pkpdsim.pbpk import (
     Organ,
     PBPKDefinition,
     PDComponent,
+    RateOf,
     Route,
     SegmentedIntestine,
     Substance,
     Transport,
     U,
+    Value,
     Variants,
     WeibullDissolution,
     ZonatedLiver,
@@ -80,7 +83,9 @@ def standard() -> PBPKDefinition:
     (flow-limited, erythrocytes in equilibrium, a Kp override of adipose),
     `prm` (full form, kinetic erythrocytes, transport), `hil` (Hill kinetics
     in the kidney) and `inh` (a mechanism-based inhibitor and inducer of the
-    CYP2D6 which metabolises it); `drg` inhibits CYP2C9 competitively;
+    CYP2D6 which metabolises it), `spl` (split by a fraction into `spl_m1`
+    and the remainder `spl_m2`); the OATP1B3 uptake `PRMIN3` of `prm` has a
+    capacity as a ratio of `PRMIN`; `drg` inhibits CYP2C9 competitively;
     `drg`, `prf` and `prm` have an endogenous baseline; a PD component reads
     the liver cells of `prm`.
     """
@@ -128,6 +133,15 @@ def standard() -> PBPKDefinition:
                 inhibits=(Inhibition("CYP2D6", "mechanism", ki=0.005, kinact=0.05),),
                 induces=(Induction("CYP2D6", emax=2.0, ec50=0.1),),
             ),
+            Substance(
+                "spl",
+                name="drug split into two metabolites",
+                mr=300.0,
+                binding=Binding(fu=0.5),
+                distribution=Kp(1.0, ftissue=1.0),
+            ),
+            Substance("spl_m1", name="metabolite 1", mr=316.0),
+            Substance("spl_m2", name="metabolite 2", mr=332.0),
         ],
         chemistry=[
             Metabolism(
@@ -174,6 +188,22 @@ def standard() -> PBPKDefinition:
                 Membrane.APICAL,
                 FirstOrder(k=0.1),
                 protein="ABCC2",
+            ),
+            Transport(
+                "PRMIN3",
+                Organ.LIVER,
+                "prm",
+                Direction.INFLUX,
+                Membrane.BASOLATERAL,
+                MM(vmax=RateOf("PRMIN", 0.5), km=0.02),
+                protein="SLCO1B3",
+            ),
+            Metabolism(
+                "SPL2M",
+                Organ.LIVER,
+                "spl",
+                {"spl_m1": Value(0.4, U.dimensionless), "spl_m2": REST},
+                FirstOrder(k=0.3),
             ),
         ],
         routes=[Route.iv("drg"), Route.oral("drg"), Route.oral_solution("prf")],

@@ -11,24 +11,38 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import pytest
-from sbmlutils.factory import AssignmentRule, Model, Parameter, Port, PortType
+from sbmlutils.factory import (
+    AssignmentRule,
+    Model,
+    Parameter,
+    Port,
+    PortType,
+    Species,
+)
 from sbmlutils.metadata import BQB, SBO
 
 from pkpdsim.pbpk import (
     MM,
     MODEL_UNITS,
     Binding,
+    CustomReaction,
+    Direction,
     Erythrocytes,
     Excretion,
+    FirstOrder,
     Kp,
+    Membrane,
     Metabolism,
     Mode,
     Organ,
+    Part,
     PBPKDefinition,
     PDComponent,
     Route,
     Substance,
+    Transport,
     U,
+    Variants,
     ids,
 )
 from pkpdsim.pbpk.builder import BuildResult
@@ -255,6 +269,81 @@ def reference_definition() -> PBPKDefinition:
             ),
         ],
         routes=[Route.iv("mrg"), Route.oral("mrg")],
+    )
+
+
+def chemistry_reference_definition(liver: str = "standard") -> PBPKDefinition:
+    """The definition of the stored chemistry reference: processes without the options of Task 2.
+
+    A metabolism into two products by numbers, a metabolism of the mucosa, a
+    basolateral uptake and an apical secretion, and a custom reaction with a
+    sbmlutils `Parameter` and a species, in the standard organs or with the
+    zonated liver (`liver="zonated"`); the stored comp and flat SBML were
+    built at pkpdsim 0c538ca, before the custom parameters with provenance,
+    the shared rates and the fitted product fractions.
+    """
+    zonated = liver == "zonated"
+    return PBPKDefinition(
+        sid="chemistry_reference" + ("_zonated" if zonated else ""),
+        substances=[
+            simple_drug(),
+            Substance("drg_m1", name="metabolite 1", mr=316.0),
+            Substance("drg_m2", name="metabolite 2", mr=332.0),
+        ],
+        chemistry=[
+            Metabolism(
+                "DRG2M",
+                Organ.LIVER,
+                "drg",
+                products={"drg_m1": 0.25, "drg_m2": 0.75},
+                kinetics=MM(vmax=1e-3, km=0.01),
+                protein="CYP3A4",
+            ),
+            Metabolism(
+                "DRG2MGU",
+                Organ.SMALL_INTESTINE,
+                "drg",
+                products={"drg_m1": 1.0},
+                kinetics=FirstOrder(k=0.05),
+                protein="CYP3A4",
+            ),
+            Transport(
+                "DRGIM",
+                Organ.LIVER,
+                "drg",
+                Direction.INFLUX,
+                Membrane.BASOLATERAL,
+                MM(vmax=1e-2, km=0.05),
+                protein="SLCO1B1",
+            ),
+            Transport(
+                "DRGSEC",
+                Organ.KIDNEY,
+                "drg",
+                Direction.EFFLUX,
+                Membrane.APICAL,
+                FirstOrder(k=0.1, per_volume=False),
+            ),
+            CustomReaction(
+                "DRGDEEP",
+                Organ.MUSCLE,
+                Part.TISSUE,
+                "Cti_drg <-> Cdeep_drg",
+                "k_deep * Vti * (Cti_drg - Cdeep_drg)",
+                parameters=[Parameter("k_deep", 1e-3, U.per_min)],
+                species=[
+                    Species(
+                        "Cdeep_drg",
+                        "Vti",
+                        initialConcentration=0.0,
+                        substanceUnit=U.mmole,
+                        hasOnlySubstanceUnits=False,
+                    )
+                ],
+            ),
+        ],
+        variants=Variants(organs={Organ.LIVER: liver}),
+        routes=[Route.iv("drg"), Route.oral("drg")],
     )
 
 

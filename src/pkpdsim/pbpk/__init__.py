@@ -12,16 +12,19 @@ from pkpdsim.pbpk.archive import create_archive
 from pkpdsim.pbpk.builder import BuildResult, build, compose
 from pkpdsim.pbpk.chemistry import (
     MM,
+    REST,
     CustomReaction,
     Direction,
     FirstOrder,
     Hill,
     Membrane,
     Metabolism,
+    RateOf,
+    Rest,
     Transport,
 )
 from pkpdsim.pbpk.data import Source, cite, load, sources
-from pkpdsim.pbpk.definition import ModelParameter, PBPKDefinition, Variants
+from pkpdsim.pbpk.definition import PBPKDefinition, Variants
 from pkpdsim.pbpk.distribution import interstitial_share
 from pkpdsim.pbpk.observers import Observer
 from pkpdsim.pbpk.organ import (
@@ -57,7 +60,7 @@ from pkpdsim.pbpk.substance import (
     Substance,
 )
 from pkpdsim.pbpk.units import MODEL_UNITS, U
-from pkpdsim.pbpk.values import Formula, Q, Value, as_value, fitted
+from pkpdsim.pbpk.values import Formula, ModelParameter, Q, Value, as_value, fitted
 from pkpdsim.pbpk.variants.intestine import SegmentedIntestine, SingleLumen
 from pkpdsim.pbpk.variants.kidney_nephron import NephronKidney
 from pkpdsim.pbpk.variants.liver_zonated import ZonatedLiver
@@ -99,6 +102,7 @@ __all__ = [
     "MODEL_UNITS",
     "PROTEINS",
     "REFERENCE_GFR",
+    "REST",
     "Binding",
     "Boundary",
     "BuildResult",
@@ -133,7 +137,9 @@ __all__ = [
     "Pool",
     "Protein",
     "Q",
+    "RateOf",
     "ReferenceIndividual",
+    "Rest",
     "Route",
     "ScaledRenalMap",
     "SegmentedIntestine",

@@ -272,6 +272,9 @@ Every other id of the scheme, the ids a model rarely reads: the physiology, the 
 | `p_cyp3a4_<zone>` | the relative abundance of a profile in a zone (local id) | `ids.placement_profile('cyp3a4', zone)` |
 | `w_cyp3a4_<seg>` | the share of a process in a segment or a zone (local id) | `ids.placement_weight('cyp3a4', seg)` |
 | `API2M_<seg>` | a process of the chemistry in a segment or a zone (local id) | `ids.segment_process('API2M', seg)` |
+| `<p>_Vmax_ratio` | the ratio of a constant of a process to the same constant of another process of the organ, `RateOf` (local id) | `ids.rate_ratio('API2M', 'Vmax')` |
+| `f_<p>_<s>` | the fraction of a metabolism which forms a product, a value or the remainder `REST` (local id) | `ids.product_fraction('API2M', s)` |
+| `<p>_to_<s>` | the formation of a product of a metabolism with product fractions (local id) | `ids.product_reaction('API2M', s)` |
 | `Asi_solid_<seg>_<s>` | an amount species of an organ which a PD component or an observer reads (`A<x>` as `A<o>_<x>`), an output of the organ | `ids.organ_species(Organ.SMALL_INTESTINE, ids.solid(s, seg))` |
 | `Carm_api_0` | the value of an observer at the start (`PBPKDefinition.deltas`) | `ids.start_value('Carm_api')` |
 | `Carm_api_delta` | the change of an observer over its start (`PBPKDefinition.deltas`) | `ids.delta('Carm_api')` |
@@ -293,4 +296,4 @@ Every other id of the scheme, the ids a model rarely reads: the physiology, the 
 
 </div>
 
-A process of the chemistry keeps the id its definition gives (`API2M2`), its parameters are `<p>_Vmax`, `<p>_Km`, `<p>_k`, `<p>_n` in the organ (`LI__API2M2_Vmax` in the flat model). The tables are checked against `pkpdsim.pbpk.ids` by `tests/docs/test_pbpk_ids.py`: every row is made by its function, and every name of `ids.__all__` has a row (but the tuples of the segment tokens and `species_of`, which lists ids), so a new id of the scheme fails the test until it is documented.
+A process of the chemistry keeps the id its definition gives (`API2M2`), its parameters are `<p>_Vmax`, `<p>_Km`, `<p>_k`, `<p>_n` in the organ (`LI__API2M2_Vmax` in the flat model), the ratio of a shared constant `<p>_Vmax_ratio`, the product fractions `f_<p>_<s>`, and the parameters of a custom reaction keep their ids in the organ (`MU__k_deep`). The tables are checked against `pkpdsim.pbpk.ids` by `tests/docs/test_pbpk_ids.py`: every row is made by its function, and every name of `ids.__all__` has a row (but the tuples of the segment tokens and `species_of`, which lists ids), so a new id of the scheme fails the test until it is documented.
