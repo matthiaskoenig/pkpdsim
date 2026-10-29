@@ -33,7 +33,9 @@ def test_k_cell_pls_gives_whole_tissue_kp() -> None:
 def test_check_kp() -> None:
     """A Kp below the interstitial share is refused, above it accepted."""
     drug = simple_drug()
-    distribution.check_kp(drug, Organ.SKIN)
+    distribution.check_kp(drug, Organ.SKIN, Sex.MALE)
     low = Kp(0.01, mode=Mode.PERMEABILITY, ftissue=1.0)
     with pytest.raises(ValueError, match=r"drg.*'sk'.*interstitial share"):
-        distribution.check_kp(dataclasses.replace(drug, distribution=low), Organ.SKIN)
+        distribution.check_kp(
+            dataclasses.replace(drug, distribution=low), Organ.SKIN, Sex.MALE
+        )

@@ -134,6 +134,9 @@ One id scheme for every model, built by the functions of `pkpdsim.pbpk.ids`, so 
 | `ftissue_<s>` | the whole-body exchange between plasma and tissue | `ids.ftissue(s)` |
 | `PS_<s>` | the exchange of an organ (l/min, local id) | `ids.ps(s)` |
 | `kps_<s>` | the exchange of an organ per litre of organ (`ps`, 1/min, local id) | `ids.kps(s)` |
+| `Cslow_<s>` | the slow (deep) pool of the tissue of an organ (`SlowPool`, local id) | `ids.slow_species(s)` |
+| `kslow_<s>` | the exchange of the slow pool per litre of tissue (1/min) | `ids.kslow(s)` |
+| `Kpslow_<s>` | the slow pool to tissue coefficient at equilibrium | `ids.kp_slow(s)` |
 | `PS_ref_<s>` | the exchange of the whole healthy liver (`ps` with `ps_per_volume=False`, l/min, local id) | `ids.ps_ref(s)` |
 | `BP_<s>` | the blood to plasma ratio | `ids.bp(s)` |
 | `Kbc_<s>` | the blood cell to plasma coefficient | `ids.kbc(s)` |
@@ -280,6 +283,7 @@ Every other id of the scheme, the ids a model rarely reads: the physiology, the 
 | `Carm_api_delta` | the change of an observer over its start (`PBPKDefinition.deltas`) | `ids.delta('Carm_api')` |
 | `J_<kind>_<s>` | the application of a dose state (`iv`, `po`, `sol`) | `ids.dose_reaction(kind, s)` |
 | `J_ti_<s>` | the passive exchange into a part of an organ (local id) | `ids.exchange_reaction(Part.TISSUE, s)` |
+| `J_slow_<s>` | the exchange between the tissue and its slow pool (local id) | `ids.slow_reaction(s)` |
 | `J_in_ar_<part>_<s>` | the inflow from a pool into an organ (local id) | `ids.inflow_reaction(Pool.ARTERIAL, part, s)` |
 | `J_out_<part>_<s>` | the outflow from an organ into its pool (local id) | `ids.outflow_reaction(part, s)` |
 | `J_shunt_po_<part>_<s>` | the shunt from a pool past the liver (local id) | `ids.shunt_reaction(Pool.PORTAL, part, s)` |

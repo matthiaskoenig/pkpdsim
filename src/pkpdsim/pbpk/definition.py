@@ -26,6 +26,7 @@ from pkpdsim.pbpk.physiology import DEFAULT_POPULATION, Sex
 from pkpdsim.pbpk.populations import POPULATIONS
 from pkpdsim.pbpk.proteins import PROTEINS
 from pkpdsim.pbpk.routes import Route
+from pkpdsim.pbpk.slow_pool import SlowPool, check_slow_pools
 from pkpdsim.pbpk.substance import Erythrocytes, Kp, KpMethod, Mode, Substance
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import (
@@ -154,6 +155,11 @@ class PBPKDefinition:
             `Rabs_<s>`, the efflux into the lumen `Reff_<s>` and the loss to
             the feces `Rfeces_<s>` (`ids.lumen_amount`, ...); a model without
             readouts has none of them.
+        slow_pools: the slow (deep) pools of the tissues (`SlowPool`), one
+            per substance: the species `Cslow_<s>` in the merged tissue of
+            each of its organs with the exchange
+            `kslow_<s>*Vti*(Kpslow_<s>*Cti_<s> - Cslow_<s>)`; a model without
+            them has none of their elements.
     """
 
     sid: str
@@ -174,6 +180,7 @@ class PBPKDefinition:
     starts: Mapping[str, Q] = field(default_factory=dict)
     deltas: tuple[str, ...] = ()
     readouts: tuple[str, ...] = ()
+    slow_pools: Sequence[SlowPool] = ()
 
     def __post_init__(self) -> None:
         """Normalise the sex to a `Sex` member and freeze the starts."""
@@ -186,9 +193,9 @@ class PBPKDefinition:
 
         The substances, the chemistry, the routes, the PD components, the
         dynamic parameters, the observers and parameters of the definitions,
-        the deltas, the readouts and the creators are the unions of the
-        definitions (the observers of the library follow
-        from the substances), the organ variants are merged; there is
+        the deltas, the readouts, the slow pools and the creators are the
+        unions of the definitions (the observers of the library follow from
+        the substances), the organ variants are merged; there is
         one physiology, so the definitions must agree on sex, population and
         the arm vein preset. Substance ids are unique over all packages, so
         nothing is renamed: an id which two definitions define is accepted
@@ -212,8 +219,8 @@ class PBPKDefinition:
             ValueError: if no definition is given, the definitions differ in
                 sex, population or arm vein preset, two definitions define an
                 id (substance, process, route, PD component, observer,
-                parameter) differently, or choose different variants of an organ; naming
-                the id.
+                parameter, the slow pool of a substance) differently, or
+                choose different variants of an organ; naming the id.
         """
         if not definitions:
             raise ValueError(f"Combine '{sid}': no definitions given.")
@@ -285,6 +292,12 @@ class PBPKDefinition:
             ),
             deltas=tuple(dict.fromkeys(x for d in definitions for x in d.deltas)),
             readouts=tuple(dict.fromkeys(x for d in definitions for x in d.readouts)),
+            slow_pools=_union(
+                sid,
+                "slow pool",
+                (x for d in definitions for x in d.slow_pools),
+                lambda x: x.substance,
+            ),
         )
 
     def validate(self, *, symbols: bool = True) -> None:
@@ -312,6 +325,7 @@ class PBPKDefinition:
         problems += self._check_substances()
         known = {s.sid for s in self.substances}
         problems += self._check_chemistry(known)
+        problems += self._check_slow_pools(known)
         problems += self._check_routes(known)
         problems += self._check_dynamic()
         problems += self._check_observers()
@@ -598,6 +612,57 @@ class PBPKDefinition:
                 problems.append(f"{p.sid}: unknown protein '{protein}'")
         return problems
 
+    def _check_slow_pools(self, known: set[str]) -> list[str]:
+        """Check the slow pools: each on its own, then its organs.
+
+        Every organ of a pool is built by the standard organ (not a variant,
+        not replaced by the intestine) and the substance has the merged tissue
+        there (`Mode.TISSUE`, no transport of the substance in the organ),
+        whose species `Cti_<s>` the pool exchanges with.
+        """
+        problems = check_slow_pools(self.slow_pools, known)
+        if problems or not self.slow_pools:
+            return problems
+        # the builder imports the definition: imported on use
+        from pkpdsim.pbpk.builder import built_organs, organ_component
+        from pkpdsim.pbpk.organ import StandardOrgan
+        from pkpdsim.pbpk.parts import parts_for
+
+        try:
+            built = built_organs(self)
+        except ValueError:
+            return []  # the variants are refused by the build
+        by_sid = {s.sid: s for s in self.substances}
+        for pool in self.slow_pools:
+            where = f"slow pool of '{pool.substance}'"
+            for organ in (o for o in Organ if o in pool.organs):
+                if organ not in built:
+                    problems.append(
+                        f"{where}: organ '{organ.value}' is not built, the "
+                        "intestine replaces it"
+                    )
+                    continue
+                try:
+                    component = organ_component(self, organ)
+                except ValueError:
+                    continue  # an unknown variant is refused by the build
+                if not isinstance(component, StandardOrgan):
+                    problems.append(
+                        f"{where}: organ '{organ.value}' is the variant "
+                        f"'{component.name}', the slow pool is placed in the "
+                        "standard organ"
+                    )
+                    continue
+                tissue = parts_for(by_sid[pool.substance], organ, self.chemistry).tissue
+                if tissue != "merged":
+                    problems.append(
+                        f"{where}: organ '{organ.value}' has no merged tissue of "
+                        f"the substance (its tissue is '{tissue}'), the pool "
+                        "exchanges with `Cti` of the merged tissue (Mode.TISSUE, "
+                        "no transport of the substance in the organ)"
+                    )
+        return problems
+
     def _check_dynamic(self) -> list[str]:
         """Check the names of the dynamic parameters.
 
@@ -712,6 +777,12 @@ def _check_distribution(sid: str, dist: Kp | KpMethod) -> list[str]:
         named["override"] = dist.overrides
         problems += check_positive(sid, "Kp", dist.value)
         problems += check_positive(sid, "Kp interstitial", dist.interstitial)
+        if dist.value is not None and dist.interstitial is not None:
+            problems.append(
+                f"{sid}: Kp value and interstitial exclude each other: with "
+                "interstitial every organ without an override has its share, no "
+                f"organ reads {ids.kp(sid)}"
+            )
         for organ, value in dist.overrides.items():
             problems += check_positive(sid, f"Kp override '{organ.value}'", value)
     else:

@@ -53,15 +53,42 @@ def parameters(path: Path) -> dict[str, tuple[float, str]]:
     }
 
 
-def test_the_share_is_the_larger_of_both_reference_individuals() -> None:
+def test_the_share_is_that_of_the_sex_of_the_build() -> None:
     k_int = distribution.k_int_pls_value(FU)
+    differs = False
     for organ in Organ:
-        shares = [
-            f_int * k_int / (1.0 - f_vas)
-            for f_vas, f_int in reference_fractions(organ).values()
-        ]
-        assert interstitial_share(organ, FU) == max(shares)
-        assert 0 < interstitial_share(organ, FU) < 1
+        fractions = reference_fractions(organ)
+        for sex, (f_vas, f_int) in fractions.items():
+            share = interstitial_share(organ, FU, sex)
+            assert share == f_int * k_int / (1.0 - f_vas)
+            assert 0 < share < 1
+        assert interstitial_share(organ, FU) == interstitial_share(organ, FU, Sex.MALE)
+        differs |= interstitial_share(organ, FU, Sex.FEMALE) != interstitial_share(
+            organ, FU, Sex.MALE
+        )
+    assert differs
+
+
+def test_the_female_build_has_the_female_share(tmp_path: Path) -> None:
+    """Each build gives every organ the share of its own sex (D18)."""
+    kp = Kp(interstitial=1.0, ftissue=1.0)
+    values: dict[Sex, dict[Organ, float]] = {}
+    for sex in Sex:
+        d = dataclasses.replace(with_kp(kp), sex=sex)
+        r = individual(build(d, tmp_path / sex.value).flat_path)
+        values[sex] = {
+            organ: r[ids.kp_organ(organ, "drg")] for organ in built_organs(d)
+        }
+        for organ, value in values[sex].items():
+            assert value == pytest.approx(interstitial_share(organ, FU, sex), rel=1e-15)
+    assert values[Sex.MALE] != values[Sex.FEMALE]
+
+
+def test_a_value_with_the_shares_is_refused() -> None:
+    """With `interstitial` no organ reads `Kp_<s>`: a value is refused."""
+    kp = Kp(2.0, interstitial=1.0, ftissue=1.0)
+    with pytest.raises(ValueError, match="drg: Kp value and interstitial exclude"):
+        with_kp(kp).validate()
 
 
 def test_every_organ_has_its_share_times_the_scale(tmp_path: Path) -> None:
@@ -79,7 +106,8 @@ def test_every_organ_has_its_share_times_the_scale(tmp_path: Path) -> None:
     for organ in organs:
         if organ is not Organ.LIVER:
             pid = ids.kp_organ(organ, "drg")
-            assert r[pid] == pytest.approx(interstitial_share(organ, FU), rel=1e-15)
+            share = interstitial_share(organ, FU, Sex.MALE)
+            assert r[pid] == pytest.approx(share, rel=1e-15)
 
 
 def test_the_scale_is_a_parameter_a_fit_changes(tmp_path: Path) -> None:
@@ -90,7 +118,7 @@ def test_the_scale_is_a_parameter_a_fit_changes(tmp_path: Path) -> None:
     assert value == 1.5
     assert "Fitted value." in notes
     skin = ids.kp_organ(Organ.SKIN, "drg")
-    share = interstitial_share(Organ.SKIN, FU)
+    share = interstitial_share(Organ.SKIN, FU, Sex.MALE)
     assert individual(result.flat_path)[skin] == pytest.approx(1.5 * share)
     changed = individual(result.flat_path, **{ids.fkp("drg"): 3.0})
     assert changed[skin] == pytest.approx(3.0 * share)
@@ -105,7 +133,7 @@ def test_the_scale_may_be_a_formula_of_a_definition_parameter(tmp_path: Path) ->
     )
     result = build(dataclasses.replace(with_kp(kp), parameters=[phi]), tmp_path)
     r = individual(result.flat_path)
-    share = interstitial_share(Organ.MUSCLE, FU)
+    share = interstitial_share(Organ.MUSCLE, FU, Sex.MALE)
     assert r[ids.kp_organ(Organ.MUSCLE, "drg")] == pytest.approx(share)
 
 
@@ -156,9 +184,30 @@ def test_the_full_form_at_the_share_is_refused() -> None:
     kp = Kp(interstitial=1.0, mode=Mode.PERMEABILITY, ftissue=1.0)
     drug = dataclasses.replace(simple_drug(), distribution=kp)
     with pytest.raises(ValueError, match=r"drg.*'sk'.*interstitial share"):
-        distribution.check_kp(drug, Organ.SKIN)
+        distribution.check_kp(drug, Organ.SKIN, Sex.MALE)
     above = dataclasses.replace(kp, interstitial=1.01)
-    distribution.check_kp(dataclasses.replace(drug, distribution=above), Organ.SKIN)
+    distribution.check_kp(
+        dataclasses.replace(drug, distribution=above), Organ.SKIN, Sex.MALE
+    )
+
+
+def test_the_full_form_is_checked_for_the_sex_of_the_build() -> None:
+    """A Kp between the shares of both sexes is valid for the sex with the smaller one."""
+    organ = max(
+        Organ,
+        key=lambda o: abs(
+            interstitial_share(o, FU, Sex.MALE) - interstitial_share(o, FU, Sex.FEMALE)
+        ),
+    )
+    low, high = sorted(Sex, key=lambda sex: interstitial_share(organ, FU, sex))
+    between = (
+        interstitial_share(organ, FU, low) + interstitial_share(organ, FU, high)
+    ) / 2
+    kp = Kp(between, mode=Mode.PERMEABILITY, ftissue=1.0)
+    drug = dataclasses.replace(simple_drug(), distribution=kp)
+    distribution.check_kp(drug, organ, low)
+    with pytest.raises(ValueError, match=rf"{high.value} reference individual"):
+        distribution.check_kp(drug, organ, high)
 
 
 def test_without_the_option_the_sbml_is_unchanged(tmp_path: Path) -> None:

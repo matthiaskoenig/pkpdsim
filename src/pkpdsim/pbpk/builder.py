@@ -264,8 +264,10 @@ def organ_context(
         chemistry=chemistry,
         inhibitions=tuple((s.sid, i) for s in substances for i in s.inhibits),
         inductions=tuple((s.sid, i) for s in substances for i in s.induces),
+        sex=definition.sex,
         routes=tuple(definition.routes),
         top=dict(top or {}),
+        slow_pools=tuple(definition.slow_pools),
     )
 
 
@@ -1604,7 +1606,7 @@ class _Top:
     # --- substances ------------------------------------------------------
 
     def substance(self, s: Substance) -> None:
-        """The parameters of a substance: Mr, fu, the distribution and the blood."""
+        """The parameters of a substance: Mr, fu, the distribution, the blood, the slow pool."""
         sid = s.sid
         self.add(
             [
@@ -1684,6 +1686,52 @@ class _Top:
         self._distribution(s)
         self._erythrocytes(s)
         self._interactions(s)
+        self._slow_pool(s)
+
+    def _slow_pool(self, s: Substance) -> None:
+        """The constants of the slow pool of a substance, `kslow_<s>` and `Kpslow_<s>`.
+
+        One value for every organ of the pool (`SlowPool`), read by the organs.
+        """
+        pool = next(
+            (p for p in self.definition.slow_pools if p.substance == s.sid), None
+        )
+        if pool is None:
+            return
+        organs = ", ".join(o.name.lower() for o in Organ if o in pool.organs)
+        self.add(
+            [
+                annotate(
+                    value_parameter(
+                        ids.kslow(s.sid),
+                        pool.k,
+                        U.per_min,
+                        f"exchange of the slow pool {s.sid} per litre of tissue "
+                        "[1/min]",
+                        _SBO_PARAMETER,
+                        "Exchange between the merged tissue and its slow (deep) "
+                        "pool per litre of tissue, "
+                        f"`{ids.kslow(s.sid)}*Vti*({ids.kp_slow(s.sid)}*Cti - "
+                        "Cslow)`, so it follows the tissue volume of the "
+                        f"individual; the organs of the pool: {organs}.",
+                    ),
+                    "slow_pool_exchange",
+                ),
+                annotate(
+                    value_parameter(
+                        ids.kp_slow(s.sid),
+                        pool.kp,
+                        U.dimensionless,
+                        f"slow pool to tissue coefficient {s.sid}",
+                        _SBO_PARAMETER,
+                        "Concentration of the slow (deep) pool of a tissue to that "
+                        "of the tissue at equilibrium, `Cslow = "
+                        f"{ids.kp_slow(s.sid)}*Cti`.",
+                    ),
+                    "partition",
+                ),
+            ]
+        )
 
     def _interactions(self, s: Substance) -> None:
         """The constants of the inhibitions and inductions of a substance.
@@ -1834,8 +1882,8 @@ class _Top:
 
         With `interstitial` every organ the substance enters without an
         override has `Kp_<o>_<s> = fKp_<s> * share`, an initial assignment
-        with the interstitial share of the organ as number
-        (`distribution.interstitial_share`).
+        with the interstitial share of the organ for the sex of the build as
+        number (`distribution.interstitial_share`).
         """
         sid = s.sid
         objects: list[Sbase] = []
@@ -1901,7 +1949,7 @@ class _Top:
         ]
         for organ in organs:
             pid = ids.kp_organ(organ, sid)
-            share = distribution.interstitial_share(organ, fu)
+            share = distribution.interstitial_share(organ, fu, self.definition.sex)
             formula = f"{fkp} * {share!r} dimensionless"
             objects += [
                 annotate(
@@ -1915,9 +1963,10 @@ class _Top:
                         notes="Whole-tissue to plasma coefficient of the organ, its "
                         "interstitial share times the factor: "
                         f"`f_int*K_int_pls(fu)/(1 - f_vas)` = {share:.6g} at fu "
-                        f"{fu:.6g} with the fractions of the reference individuals, "
-                        "the larger of both sexes; the substance reaches the "
-                        f"interstitial fluid and not the cells.\n\n`{pid} = "
+                        f"{fu:.6g} with the fractions of the "
+                        f"{self.definition.sex.value} reference individual; the "
+                        "substance reaches the interstitial fluid and not the "
+                        f"cells.\n\n`{pid} = "
                         f"{formula}`",
                     ),
                     "kp_organ",

@@ -8,16 +8,16 @@ plasma coefficient in every form of the organ:
   and the intracellular one is derived so that both together have the Kp,
   `K_cell_pls = (Kp*(f_int + f_cell) - f_int*K_int_pls)/f_cell`. A Kp at or
   below the interstitial share `f_int*K_int_pls/(f_int + f_cell)` has no
-  positive `K_cell_pls`: the build refuses it for the reference individuals,
-  and the rule floors `K_cell_pls` at `K_CELL_FLOOR` should a fit or another
-  individual reach it (the interstitial share is the lower bound of a fitted
-  Kp);
+  positive `K_cell_pls`: the build refuses it for the reference individual
+  of its sex, and the rule floors `K_cell_pls` at `K_CELL_FLOOR` should a fit
+  or another individual reach it (the interstitial share is the lower bound of
+  a fitted Kp);
 - flow-limited organ: `K_or = (Vpl + Vbc*Kbc + Vti*Kp)/V`, the organ to plasma
   coefficient of the well-stirred organ.
 
 The interstitial share `f_int*K_int_pls/(1 - f_vas)` of the reference
-individuals (`interstitial_share`) is the Kp of an extracellular substance,
-`Kp(interstitial=...)` scales it in every organ.
+individual of the sex of the build (`interstitial_share`) is the Kp of an
+extracellular substance, `Kp(interstitial=...)` scales it in every organ.
 
 Every formula is written once as a template, which gives the SBML rule (with
 ids) and the number (with values) alike.
@@ -33,7 +33,7 @@ from pkpdsim.pbpk.annotation import annotate
 from pkpdsim.pbpk.data import load
 from pkpdsim.pbpk.kp import kp_values
 from pkpdsim.pbpk.organs import Organ
-from pkpdsim.pbpk.physiology import reference_fractions
+from pkpdsim.pbpk.physiology import Sex, reference_fractions
 from pkpdsim.pbpk.placement import value_parameter
 from pkpdsim.pbpk.substance import Kp, Substance
 from pkpdsim.pbpk.units import U
@@ -148,36 +148,36 @@ def k_int_pls_value(fu: float) -> float:
     return _evaluate(_K_INT.format(fu=repr(fu), one="1", **values))
 
 
-def interstitial_share(organ: Organ, fu: float) -> float:
+def interstitial_share(organ: Organ, fu: float, sex: Sex = Sex.MALE) -> float:
     """The interstitial share of the whole tissue of an organ.
 
     `f_int*K_int_pls(fu)/(1 - f_vas)`, the Kp of a substance which reaches the
     whole interstitial fluid of the organ and not its cells, with the vascular
-    and interstitial fractions of the reference individuals
-    (`physiology.reference_fractions`), the larger of both sexes: the lower
-    bound of the Kp of the full form (`check_kp`) for both reference
-    individuals, and the coefficients of `Kp(interstitial=...)`.
+    and interstitial fractions of the reference individual of the sex
+    (`physiology.reference_fractions`): the lower bound of the Kp of the full
+    form (`check_kp`) and the coefficients of `Kp(interstitial=...)` of a
+    build of the sex.
 
     Args:
         organ: the organ.
         fu: the fraction unbound in plasma.
+        sex: the sex of the build, male by default (the default of
+            `PBPKDefinition`).
 
     Returns:
         The interstitial share (dimensionless).
     """
-    k_int = k_int_pls_value(fu)
-    return max(
-        f_int * k_int / (1.0 - f_vas)
-        for f_vas, f_int in reference_fractions(organ).values()
-    )
+    f_vas, f_int = reference_fractions(organ)[sex]
+    return f_int * k_int_pls_value(fu) / (1.0 - f_vas)
 
 
-def kp_of_organ(substance: Substance, organ: Organ) -> Q | None:
+def kp_of_organ(substance: Substance, organ: Organ, sex: Sex) -> Q | None:
     """The whole-tissue Kp which a `Kp` gives an organ, before the simulation.
 
     Args:
         substance: the substance, with a `Kp` as distribution.
         organ: the organ.
+        sex: the sex of the build, whose interstitial share a scale multiplies.
 
     Returns:
         The override of the organ, else the scale times the interstitial share
@@ -197,7 +197,7 @@ def kp_of_organ(substance: Substance, organ: Organ) -> Q | None:
     fu = substance.binding.fu if substance.binding is not None else 1.0
     if isinstance(fu, Formula) or isinstance(dist.interstitial, Formula):
         return None
-    return number(dist.interstitial) * interstitial_share(organ, number(fu))
+    return number(dist.interstitial) * interstitial_share(organ, number(fu), sex)
 
 
 def k_cell_pls(kp: str, k_int: str, f_vas: str, f_int: str) -> str:
@@ -248,16 +248,18 @@ def k_organ(f_vas: str, vascular: str, kp: str) -> str:
     return f"{f_vas} * {vascular} + ({_ONE} - {f_vas}) * {kp}"
 
 
-def check_kp(substance: Substance, organ: Organ) -> None:
+def check_kp(substance: Substance, organ: Organ, sex: Sex) -> None:
     """Check that the Kp of a substance leaves a positive `K_cell_pls` in an organ.
 
-    The check uses the fractions of the reference individuals of both sexes
-    and the fu of the definition; the Kp of a method is computed per sex (for
-    its reference hematocrit) and checked with the factor of the method.
+    The check uses the fractions of the reference individual of the sex of
+    the build and the fu of the definition; the Kp of a method is computed
+    for the sex (its reference hematocrit) and checked with the factor of the
+    method. A build of the other sex is checked when it is built.
 
     Args:
         substance: the substance.
         organ: the organ.
+        sex: the sex of the build.
 
     Raises:
         ValueError: if the Kp is not above the interstitial share of the
@@ -267,22 +269,22 @@ def check_kp(substance: Substance, organ: Organ) -> None:
     if dist is None:
         return
     fu_q = substance.binding.fu if substance.binding is not None else 1.0
-    kp_q = kp_of_organ(substance, organ) if isinstance(dist, Kp) else dist.factor
+    kp_q = kp_of_organ(substance, organ, sex) if isinstance(dist, Kp) else dist.factor
     if isinstance(fu_q, Formula) or kp_q is None or isinstance(kp_q, Formula):
         # a formula has no number before the simulation; `K_cell_pls` has the
         # lower bound 1e-6 in the model
         return
     fu = number(fu_q)
-    for sex, (f_vas, f_int) in reference_fractions(organ).items():
-        if isinstance(dist, Kp):
-            kp = number(kp_q)
-        else:
-            kp = kp_values(substance, sex)[organ].value * number(dist.factor)
-        if k_cell_pls_value(kp, fu, f_vas, f_int) <= 0:
-            share = f_int * k_int_pls_value(fu) / (1.0 - f_vas)
-            raise ValueError(
-                f"{substance.sid}: Kp {kp:.4g} in organ '{organ.value}' is not "
-                f"above the interstitial share {share:.4g} of the tissue "
-                f"({sex.value} reference individual), the full form would need "
-                f"K_cell_pls <= 0."
-            )
+    f_vas, f_int = reference_fractions(organ)[sex]
+    if isinstance(dist, Kp):
+        kp = number(kp_q)
+    else:
+        kp = kp_values(substance, sex)[organ].value * number(dist.factor)
+    if k_cell_pls_value(kp, fu, f_vas, f_int) <= 0:
+        share = f_int * k_int_pls_value(fu) / (1.0 - f_vas)
+        raise ValueError(
+            f"{substance.sid}: Kp {kp:.4g} in organ '{organ.value}' is not "
+            f"above the interstitial share {share:.4g} of the tissue "
+            f"({sex.value} reference individual), the full form would need "
+            f"K_cell_pls <= 0."
+        )

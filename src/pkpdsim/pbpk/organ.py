@@ -59,8 +59,9 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from sbmlutils.factory import ModelDefinition, Port, PortType, Sbase
+from sbmlutils.factory import ModelDefinition, Port, PortType, Sbase, Species
 from sbmlutils.factory.units import UnitType
+from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk import distribution, ids
 from pkpdsim.pbpk.annotation import annotate
@@ -81,6 +82,7 @@ from pkpdsim.pbpk.organ_builder import (
 )
 from pkpdsim.pbpk.organs import Organ, Part, Pool, inflow, outflow
 from pkpdsim.pbpk.parts import Parts
+from pkpdsim.pbpk.physiology import Sex
 from pkpdsim.pbpk.placement import (
     apical_sink,
     built_parts,
@@ -92,6 +94,7 @@ from pkpdsim.pbpk.placement import (
 )
 from pkpdsim.pbpk.proteins import Induction, Inhibition
 from pkpdsim.pbpk.routes import Route
+from pkpdsim.pbpk.slow_pool import SlowPool
 from pkpdsim.pbpk.substance import Substance
 from pkpdsim.pbpk.units import U
 
@@ -119,12 +122,16 @@ class OrganContext:
         chemistry: the processes of the definition.
         inhibitions: the inhibitions as (inhibitor id, inhibition).
         inductions: the inductions as (inducer id, induction).
+        sex: the sex of the build, whose reference individual the checks of
+            the organ use (`distribution.check_kp`).
         routes: the routes of administration (the intestine applies the
             oral doses).
         top: the parameters and compartments of the top model which exist
             when the organs are built, id -> (`parameter` or `compartment`,
             unit): the ids a `Formula` of the organ may read, through an
             input port each.
+        slow_pools: the slow pools of the definition (`SlowPool`); the
+            standard organ builds those of its organ.
     """
 
     organ: Organ
@@ -133,8 +140,10 @@ class OrganContext:
     chemistry: tuple[Metabolism | Transport | CustomReaction, ...]
     inhibitions: tuple[tuple[str, Inhibition], ...]
     inductions: tuple[tuple[str, Induction], ...]
+    sex: Sex
     routes: tuple[Route, ...] = ()
     top: Mapping[str, tuple[str, UnitType]] = field(default_factory=dict)
+    slow_pools: tuple[SlowPool, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -261,6 +270,7 @@ class StandardBuilder(OrganBuilder):
         for s in self.ctx.substances:
             self._substance(s)
         self._chemistry()
+        self._slow_pools()
         if self.organ is Organ.KIDNEY:
             self._urine_rates()
         md = self.model_definition(self._notes())
@@ -949,7 +959,7 @@ class StandardBuilder(OrganBuilder):
                 kind="partition",
             )
         else:
-            distribution.check_kp(s, self.organ)
+            distribution.check_kp(s, self.organ, self.ctx.sex)
             k_cell = self._initial(
                 ids.k_cell_pls(s.sid),
                 distribution.k_cell_pls(kp, k_int, self.f_vas, self.f_int),
@@ -996,6 +1006,66 @@ class StandardBuilder(OrganBuilder):
         )
         for p in processes:
             self.reactions += place(p, self.ctx, self.ctx.parts, capacity)
+
+    def _slow_pools(self) -> None:
+        """The slow pools of the organ: `Cslow_<s>` in the tissue and its exchange.
+
+        `kslow_<s>*Vti*(Kpslow_<s>*Cti_<s> - Cslow_<s>)` with the constants of
+        the top model (`SlowPool`); the pool of an endogenous substance starts
+        at its equilibrium, `Kpslow_<s>*Kp*baseline_<s>`.
+
+        Raises:
+            ValueError: if the substance has no merged tissue in the organ or
+                the organ has zones (`PBPKDefinition.validate` refuses both).
+        """
+        by_sid = {s.sid: s for s in self.ctx.substances}
+        for pool in self.ctx.slow_pools:
+            if self.organ not in pool.organs:
+                continue
+            s = by_sid[pool.substance]
+            if self.ctx.parts[s.sid].tissue != "merged" or self.zones:
+                raise ValueError(
+                    f"{s.sid}: the slow pool of organ '{self.organ.value}' needs "
+                    "the merged tissue of the standard organ."
+                )
+            k = self._input(
+                ids.kslow(s.sid),
+                U.per_min,
+                f"exchange of the slow pool {s.sid} per litre of tissue [1/min]",
+            )
+            kp = self._input(
+                ids.kp_slow(s.sid),
+                U.dimensionless,
+                f"slow pool to tissue coefficient {s.sid}",
+            )
+            vti = ids.compartment(Part.TISSUE)
+            cti = ids.species(Part.TISSUE, s.sid)
+            cslow = ids.slow_species(s.sid)
+            self.species[cslow] = self._annotate(
+                Species(
+                    cslow,
+                    vti,
+                    initialConcentration=0.0,
+                    substanceUnit=U.mmole,
+                    hasOnlySubstanceUnits=False,
+                    name=f"{s.name} (slow pool, {label(self.organ)})",
+                    sboTerm=SBO.SIMPLE_CHEMICAL,
+                    notes="The slow (deep) pool of the tissue, a concentration in "
+                    f"the tissue volume: at equilibrium `{cslow} = {kp}*{cti}`.",
+                    port=True,
+                ),
+                "concentration_tissue",
+                substance=s,
+            )
+            tissue_kp = self._kp(s)
+            self._defer_start(cslow, s, coefficient=f"{kp} * {tissue_kp}")
+            self._reaction(
+                ids.slow_reaction(s.sid),
+                f"{cti} <-> {cslow}",
+                f"{k} * {vti} * ({kp} * {cti} - {cslow})",
+                f"exchange {s.sid} tissue and slow pool",
+                kind="exchange",
+            )
 
     def _urine_rates(self) -> None:
         """The urinary excretion rate `Rurine_<s>` of every substance which reaches the urine.

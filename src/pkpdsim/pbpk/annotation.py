@@ -497,6 +497,11 @@ KINDS: dict[str, Kind] = {
     ),
     "kp_factor": Kind(_P, _BIOCHEM, requested="factor of the partition coefficients"),
     "partition": Kind(_P, "PARTITION_COEFFICIENT"),
+    "slow_pool_exchange": Kind(
+        _P,
+        _BIOCHEM,
+        requested="exchange rate constant of a slow tissue pool per tissue volume",
+    ),
     "tissue_composition": Kind(
         _P, _PHYS, requested="tissue composition (water, protein, lipid fractions)"
     ),

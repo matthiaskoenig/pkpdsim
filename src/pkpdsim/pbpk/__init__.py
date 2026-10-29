@@ -50,6 +50,7 @@ from pkpdsim.pbpk.routes import (
     Route,
     WeibullDissolution,
 )
+from pkpdsim.pbpk.slow_pool import SlowPool
 from pkpdsim.pbpk.substance import (
     Binding,
     Erythrocytes,
@@ -145,6 +146,7 @@ __all__ = [
     "SegmentedIntestine",
     "Sex",
     "SingleLumen",
+    "SlowPool",
     "Source",
     "StandardOrgan",
     "Substance",

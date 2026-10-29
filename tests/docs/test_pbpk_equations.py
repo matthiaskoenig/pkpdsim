@@ -52,6 +52,7 @@ from pkpdsim.pbpk import (
     RateOf,
     Route,
     SegmentedIntestine,
+    SlowPool,
     Substance,
     Transport,
     U,
@@ -87,7 +88,7 @@ def standard() -> PBPKDefinition:
     and the remainder `spl_m2`); the OATP1B3 uptake `PRMIN3` of `prm` has a
     capacity as a ratio of `PRMIN`; `drg` inhibits CYP2C9 competitively;
     `drg`, `prf` and `prm` have an endogenous baseline; a PD component reads
-    the liver cells of `prm`.
+    the liver cells of `prm`; `drg` has a slow pool in muscle.
     """
     return PBPKDefinition(
         sid="toy_standard",
@@ -208,6 +209,7 @@ def standard() -> PBPKDefinition:
         ],
         routes=[Route.iv("drg"), Route.oral("drg"), Route.oral_solution("prf")],
         pd=[_cell_reader()],
+        slow_pools=[SlowPool("drg", frozenset({Organ.MUSCLE}), k=1e-3, kp=1.5)],
     )
 
 

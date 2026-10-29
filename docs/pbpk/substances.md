@@ -49,10 +49,10 @@ Without erythrocytes the substance stays in the plasma: the blood concentration 
 
 ### Extracellular distribution
 
-A substance which reaches the interstitial fluid of the tissues and not their cells (a contrast agent such as gadoxetate, a marker of the extracellular volume, a highly bound acid such as torasemide, which distributes with its albumin) has in every organ the Kp of the interstitial share of its whole tissue, `f_int*K_int_pls(fu)/(1 - f_vas)`: the interstitial fraction of the tissue without blood times the interstitial to plasma coefficient of its fu (Schmitt 2008). `Kp(interstitial=1.0, ftissue=...)` gives it to every organ the substance enters which has no override: `Kp_<o>_<s> = fKp_<s> * share`, the share a number of the build (`interstitial_share(organ, fu)`, the fractions of the reference individuals, the larger of both sexes, at the fu of the definition, which must be a number) and the scale `fKp_<s>` a number, a fitted `Value` (one fitted fraction of the interstitial fluid the substance reaches) or a `Formula` of a parameter of the definition. An override keeps its own value (an organ of the full form needs a Kp above its share, `check_kp`, so the scale 1 is refused there), and the value of the substance is not needed: a `Kp` without `value` has no `Kp_<s>`, which is also allowed when the overrides cover every organ the substance enters (else the validation names the organs without one). Without `interstitial` the model has no `fKp_<s>` and its SBML is unchanged.
+A substance which reaches the interstitial fluid of the tissues and not their cells (a contrast agent such as gadoxetate, a marker of the extracellular volume, a highly bound acid such as torasemide, which distributes with its albumin) has in every organ the Kp of the interstitial share of its whole tissue, `f_int*K_int_pls(fu)/(1 - f_vas)`: the interstitial fraction of the tissue without blood times the interstitial to plasma coefficient of its fu (Schmitt 2008). `Kp(interstitial=1.0, ftissue=...)` gives it to every organ the substance enters which has no override: `Kp_<o>_<s> = fKp_<s> * share`, the share a number of the build (`interstitial_share(organ, fu, sex)`, the fractions of the reference individual of the sex of the build at the fu of the definition, which must be a number: a female build has the female share, a male build the male one) and the scale `fKp_<s>` a number, a fitted `Value` (one fitted fraction of the interstitial fluid the substance reaches) or a `Formula` of a parameter of the definition. An override keeps its own value (an organ of the full form needs a Kp above the share of the sex of the build, `check_kp`, so the scale 1 is refused there), and the value of the substance is not needed: a `Kp` without `value` has no `Kp_<s>`, which is also allowed when the overrides cover every organ the substance enters (else the validation names the organs without one); a `value` together with `interstitial` is refused, no organ would read it. Without `interstitial` the model has no `fKp_<s>` and its SBML is unchanged.
 
 ```python
-from pkpdsim.pbpk import Binding, Kp, Organ, Substance, interstitial_share
+from pkpdsim.pbpk import Binding, Kp, Organ, Sex, Substance, interstitial_share
 
 contrast = Substance(
     "ctr",
@@ -62,7 +62,7 @@ contrast = Substance(
     distribution=Kp(interstitial=1.0, ftissue=1.0),
 )
 for organ in (Organ.BRAIN, Organ.MUSCLE, Organ.SKIN):
-    print(organ.name, round(interstitial_share(organ, 0.9), 4))
+    print(organ.name, round(interstitial_share(organ, 0.9, Sex.MALE), 4))
 ```
 
 ```text
@@ -99,7 +99,30 @@ MUSCLE 5.6
 BRAIN 1.89
 ```
 
-The full form (`Mode.PERMEABILITY`) derives the intracellular coefficient from the Kp and the interstitial one (Schmitt 2008). A Kp at or below the interstitial share has no positive intracellular coefficient: the build refuses it for the reference individual, and the floor of `K_cell_pls_<s>` keeps a fit or another individual from crossing it. A highly bound, hydrophilic acid can lie below the interstitial share in adipose; such a substance uses the merged tissue or the flow-limited organ.
+The full form (`Mode.PERMEABILITY`) derives the intracellular coefficient from the Kp and the interstitial one (Schmitt 2008). A Kp at or below the interstitial share has no positive intracellular coefficient: the build refuses it for the reference individual of its sex, and the floor of `K_cell_pls_<s>` keeps a fit or another individual from crossing it. A highly bound, hydrophilic acid can lie below the interstitial share in adipose; such a substance uses the merged tissue or the flow-limited organ.
+
+### Slow tissue pool
+
+A substance whose terminal phase is the slow release from a deep compartment of the tissues (a marker of the extracellular volume in the hours after a dose, a contrast agent in the days after it) gets a slow pool in the merged tissue of some organs: `SlowPool(substance, organs, k, kp)` in `PBPKDefinition(slow_pools=[...])`, one per substance. Every organ of the pool has the species `Cslow_<s>` in its tissue compartment `Vti` and its exchange with the tissue `Cti_<s>`:
+
+```equations
+J_slow_<s>: Cti_<s> -> Cslow_<s> = kslow_<s> * Vti * (Kpslow_<s> * Cti_<s> - Cslow_<s>)
+```
+
+`kslow_<s>` is the exchange per litre of tissue (1/min), so the exchange of an organ follows the tissue volume of the individual, as the share of `ftissue` does; `Kpslow_<s>` is the concentration of the pool to that of the tissue at equilibrium, `Cslow = Kpslow*Cti`: the pool of an organ holds `Kpslow` times the amount of its tissue. Both are constants of the top model, one value for all organs of the pool, a number, a fitted `Value` or a `Formula`. The pool of an endogenous substance starts at its equilibrium, `Kpslow_<s>*Kp*baseline_<s>`; `ids.species_of` counts the pools (`MU__Cslow_<s>`) and an observer reads one as `C<o>_slow_<s>` (`Cmu_slow_<s>`). The validation refuses an organ which is not a standard organ (a variant, an organ the intestine replaces) or in which the substance has no merged tissue (`Mode.PERFUSION`, `Mode.PERMEABILITY`, an organ it does not enter, a transport of it in the organ). Without slow pools the model has none of their elements.
+
+```python
+from pkpdsim.pbpk import Excretion, Kp, Organ, SlowPool, Substance
+
+marker = Substance(
+    "mrk",
+    name="a marker of the extracellular volume",
+    mr=5000.0,
+    distribution=Kp(interstitial=1.0, ftissue=0.5),
+    excretion=Excretion(urine=True),
+)
+pool = SlowPool("mrk", frozenset({Organ.MUSCLE, Organ.SKIN}), k=1e-3, kp=1.0)
+```
 
 ## Excretion
 

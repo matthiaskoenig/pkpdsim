@@ -21,6 +21,7 @@ from pkpdsim.pbpk import (
     Mode,
     Organ,
     OrganContext,
+    Sex,
     Substance,
     Transport,
     Value,
@@ -91,6 +92,7 @@ def _ctx(
         chemistry=tuple(chemistry),
         inhibitions=(),
         inductions=(),
+        sex=Sex.MALE,
     )
 
 

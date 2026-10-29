@@ -132,7 +132,8 @@ class Kp(_Exchange):
     Attributes:
         value: the coefficient of the substance, `Kp_<s>`; `None` when every
             organ the substance enters has an override or `interstitial` is
-            set (no `Kp_<s>` then).
+            set (no `Kp_<s>` then; a value with `interstitial` is refused, no
+            organ would read it).
         overrides: the coefficients of single organs, by `Organ` member, value
             or name (normalised to `Organ` members).
         interstitial: the scale of the interstitial share, the extracellular
@@ -141,9 +142,9 @@ class Kp(_Exchange):
             volume, a highly bound acid): every organ without an override has
             `Kp_<o>_<s> = fKp_<s> * share`, the share
             `f_int*K_int_pls(fu)/(1 - f_vas)` of the organ at the fu of the
-            substance and the fractions of the reference individuals, the
-            larger of both sexes (`distribution.interstitial_share`, the lower
-            bound `check_kp` sets). The scale is the parameter `fKp_<s>`: a
+            substance and the fractions of the reference individual of the sex
+            of the build (`distribution.interstitial_share`, the lower bound
+            `check_kp` sets), so a female build has the female share. The scale is the parameter `fKp_<s>`: a
             number, a `Value` (fitted, `fitted(FITS.parameter("fKp_<s>"))`) or
             a `Formula`. `None` (the default) creates no `fKp_<s>`.
     """

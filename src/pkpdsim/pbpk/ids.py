@@ -130,7 +130,9 @@ __all__ = [
     "kiu",
     "kp",
     "kp_organ",
+    "kp_slow",
     "kps",
+    "kslow",
     "lumen",
     "lumen_amount",
     "lumen_volume",
@@ -169,6 +171,8 @@ __all__ = [
     "segment_process",
     "shunt_reaction",
     "sinusoid_reaction",
+    "slow_reaction",
+    "slow_species",
     "sol_dose",
     "solid",
     "solution",
@@ -491,6 +495,30 @@ def kps(s: str) -> str:
     `PS_<s> = kps_<s> * V<o>`.
     """
     return f"kps_{s}"
+
+
+def slow_species(s: str) -> str:
+    """The local id of the slow pool of `s` in the tissue of an organ, `Cslow_<s>`.
+
+    A concentration in the tissue compartment `Vti` (`SlowPool`), exposed to
+    the observers as `C<o>_slow_<s>` (`organ_species`).
+    """
+    return f"Cslow_{s}"
+
+
+def kslow(s: str) -> str:
+    """The id of the exchange of the slow pool of `s` per litre of tissue, `kslow_<s>` (1/min)."""
+    return f"kslow_{s}"
+
+
+def kp_slow(s: str) -> str:
+    """The id of the slow pool of `s` to the tissue at equilibrium, `Kpslow_<s>`."""
+    return f"Kpslow_{s}"
+
+
+def slow_reaction(s: str) -> str:
+    """The local id of the exchange of `s` between the tissue and its slow pool, `J_slow_<s>`."""
+    return f"J_slow_{s}"
 
 
 def k_int_pls(s: str) -> str:
@@ -1187,12 +1215,14 @@ def species_of(s: str, ids: Iterable[str]) -> list[str]:
         ids: the ids to select from.
 
     Returns:
-        The ids which are an organ species (of a zone as well), a pool
-        species, a blood cell pool species, a lumen, undissolved or mucosa
-        species, a tubule species of `s`, in the order of `ids`.
+        The ids which are an organ species (of a zone as well), a slow
+        pool of a tissue, a pool species, a blood cell pool species, a lumen,
+        undissolved or mucosa species, a tubule species of `s`, in the order
+        of `ids`.
     """
     pattern = re.compile(
-        rf"(?:C(?:(?:{_PARTS})(?:_z\d+)?|(?:{_POOLS})(?:_{Part.BLOOD_CELLS.value})?)"
+        rf"(?:C(?:(?:{_PARTS})(?:_z\d+)?|(?:{_POOLS})(?:_{Part.BLOOD_CELLS.value})?"
+        r"|slow)"
         rf"|(?:Clumen|Cmu|Asolid)(?:_(?:{_SEGMENTS}))?"
         rf"|Ctub_(?:{_TUBULE}))_{re.escape(s)}"
     )
