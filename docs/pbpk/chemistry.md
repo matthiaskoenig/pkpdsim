@@ -150,7 +150,7 @@ The other process is a metabolism or a transport of the same organ which states 
 
 ## Product fractions
 
-The fractions of a metabolism which form its products are numbers which sum to 1 (the stoichiometry of the one reaction), or values: a `Value` with its provenance, a fitted value (`fitted(FITS.parameter("LI__f_TOR2M_tor_m1", unit=U.dimensionless))`), and for one product the remainder `REST`, one less the fractions of the others. With a value or the remainder every fraction is a constant of the organ, `f_<p>_<s>` (`LI__f_TOR2M_tor_m1` in the flat model), the reaction of the metabolism consumes the substrate and one reaction per product forms the product with its fraction of the rate, `<p>_to_<s>`:
+The fractions of a metabolism which form its products are numbers which sum to 1 (the stoichiometry of the one reaction), or values: a `Value` with its provenance or a fitted value (`fitted(FITS.parameter("LI__f_SPL2M_spl_m1", unit=U.dimensionless))`), and then one product is the remainder `REST`, one less the fractions of the others. With a value every fraction is a constant of the organ, `f_<p>_<s>` (`LI__f_SPL2M_spl_m1` in the flat model), the reaction of the metabolism consumes the substrate and one reaction per product forms the product with its fraction of the rate, `<p>_to_<s>`:
 
 ```python
 from pkpdsim.pbpk import REST, FirstOrder, Metabolism, Organ, U, Value
@@ -176,7 +176,36 @@ SPL2M_to_spl_m2: -> Cpl_spl_m2 = f_SPL2M_spl_m2 * SPL2M
 f_SPL2M_spl_m2 = 1 - f_SPL2M_spl_m1
 ```
 
-The fractions never sum above 1, so the remainder is never negative and the substrate and its products keep their amount. `validate` takes the range of a fitted fraction from its value and the support of the distribution of its draws (the uncertainty of the fit, truncated to the bounds of the fit; `normal` and `lognormal` without bounds are unbounded, `lognormal` positive) and refuses fractions whose upper ends sum above 1, a range below 0, a remainder which is always 0, more than one remainder, a fitted fraction without a remainder (the sum would follow the fit) and a `Formula` (which cannot be bounded); numbers or values without a remainder sum to 1. An experiment which sets a fraction before the simulation keeps the remainder (an initial assignment), the fit bounds of a fraction keep their sum at most 1.
+The fractions never sum above 1, so the remainder is never negative and the substrate and its products keep their amount. A `Value` is a constant which a fit, a scan or an experiment may change, so a metabolism with a `Value` needs the remainder, which keeps the sum at 1 for every value (an experiment which sets a fraction before the simulation moves the remainder, an initial assignment); fixed fractions without a remainder are numbers, with their provenance in the notes of the model. `validate` takes the range of a fitted fraction from its value and the support of the distribution of its draws (the uncertainty of the fit, truncated to the bounds of the fit, `pkpdsim.distrib`; `normal` and `lognormal` without bounds are unbounded, `lognormal` positive) and refuses fractions whose upper ends sum above 1, a range below 0, a remainder which is always 0, more than one remainder, a `Value` without a remainder and a `Formula` (which cannot be bounded); numbers sum to 1. The bounds of a fit are checked twice: `run_fit` refuses a fit whose fitted fractions of a remainder can sum above 1 at their upper bounds (with the values of the fractions it does not fit) before it starts (`pkpdsim.fit.remainder_problems`), and the build refuses the adopted fit, whose distribution is truncated to the bounds.
+
+The fractions are those of one enzyme: the protein of a metabolism (its activity `f_<protein>`, the hepatic impairment `fimp_<protein>`, its inhibitors and inductions, a genotype which an experiment sets as the activity) multiplies the rate of the metabolism and so every product it forms. Branches of different enzymes (a CYP2C9 branch and a branch of an uncharacterized pathway) stay separate metabolisms, each with its protein and its own constant; where only their ratio is known, `RateOf` ties the constant of one branch to the fitted constant of the other, so a genotype of CYP2C9 scales only the CYP2C9 branch:
+
+```python
+from pkpdsim.pbpk import FirstOrder, Metabolism, Organ, RateOf
+
+branches = [
+    Metabolism(
+        "DRG2M1",
+        Organ.LIVER,
+        "drg",
+        {"drg_m1": 1.0},
+        FirstOrder(k=0.4),
+        protein="CYP2C9",
+    ),
+    Metabolism(
+        "DRG2M2",
+        Organ.LIVER,
+        "drg",
+        {"drg_m2": 1.0},
+        FirstOrder(k=RateOf("DRG2M1", 0.5)),
+    ),
+]
+print([b.protein for b in branches])
+```
+
+```text
+['CYP2C9', None]
+```
 
 ## Proteins
 
@@ -252,7 +281,7 @@ A custom reaction states its rate for the whole organ: the variants refuse it wi
 
 ## Custom reactions
 
-The constants of a custom reaction are its `parameters`: a `ModelParameter(sid, value, unit, name, notes)` with a number, a `Value` (a fitted value with the uncertainty of its fit as the `distrib` of the parameter, `fitted(FITS.parameter("MU__k_deep", unit=U.per_min))`, and its provenance in the notes, as every fitted value of the library) or a `Formula` over ids of the top model (its initial assignment, read through input ports), or a sbmlutils `Parameter` as it is. They are local ids of the organ (`k_deep` in the muscle, `MU__k_deep` in the flat model, the scheme of the constants `<p>_Vmax` of the processes), so the fitted constants of a mechanism are named by their organ; an id is defined once in an organ (the other custom reactions of the organ read it), and the same id in two organs is a constant of each. A constant which is no constant of one organ (a production rate which a baseline reads as well) stays a [parameter of the definition](substances.md#parameters-of-the-definition).
+The constants of a custom reaction are its `parameters`: a `ModelParameter(sid, value, unit, name, notes)` with a number, a `Value` (a fitted value with the uncertainty of its fit as the `distrib` of the parameter, `fitted(FITS.parameter("MU__k_deep", unit=U.per_min))`, and its provenance in the notes, as every fitted value of the library) or a `Formula` over ids of the top model (its initial assignment, read through input ports), or a sbmlutils `Parameter` as it is. They are local ids of the organ (`k_deep` in the muscle, `MU__k_deep` in the flat model, without the prefix of a process: the custom reactions of the organ share them), so the fitted constants of a mechanism are named by their organ; an id is defined once in an organ (the other custom reactions of the organ read it) and is no other element of the organ (`Vti`, `Kp_<s>`, a constant of a process: the build refuses it), and the same id in two organs is a constant of each. A constant which is no constant of one organ (a production rate which a baseline reads as well) stays a [parameter of the definition](substances.md#parameters-of-the-definition).
 
 ```python
 from sbmlutils.factory import Species

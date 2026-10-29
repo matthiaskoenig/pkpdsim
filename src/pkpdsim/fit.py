@@ -17,12 +17,13 @@ import re
 from collections.abc import Callable, Collection, Hashable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 from typing import TYPE_CHECKING, overload
 
 from sbmlsim.fit import FitMapping, FitMappingCollection, FitSettings
 from sbmlsim.fit.helpers import FitMappings, MappingFilter
 from sbmlsim.fit.methods import ReportContext
-from sbmlsim.fit.objects import MappingMetaData
+from sbmlsim.fit.objects import FitParameter, MappingMetaData
 from sbmlsim.fit.options import (
     DataAtChangeType,
     LossFunctionType,
@@ -400,6 +401,81 @@ def fit_subset(fit_id: str) -> str:
             f"'<subset>_<date>_<time>__<hash>', e.g. 'PK_20261016_185018__3efe3'."
         )
     return match["subset"]
+
+
+def remainder_problems(
+    sbml_path: Path,
+    parameters: Iterable[FitParameter],
+    fixed_values: Mapping[str, float] | None = None,
+) -> list[str]:
+    """Check that the fitted fractions of a remainder cannot sum above 1.
+
+    A remainder is the initial assignment `1 - a - b - ...` of a constant of
+    the model (the remainder `REST` of the product fractions of a metabolism
+    of `pkpdsim.pbpk`, `f_<p>_<s>`): it keeps the sum of the fractions at 1,
+    and is negative, a product formed at a negative rate, when the other
+    fractions sum above 1. `run_fit` refuses a fit whose bounds allow it
+    before it starts: the upper bounds of the fitted fractions of a remainder
+    and the values of the others (the fixed values of the adopted fits, else
+    those of the model) sum to at most 1.
+
+    Args:
+        sbml_path: the model the fit simulates.
+        parameters: the parameters of the fit.
+        fixed_values: the values of parameters the fit keeps fixed, by id.
+
+    Returns:
+        The problems, naming the remainder, the fitted parameters and their
+        upper bounds.
+    """
+    import libsbml
+
+    fixed_values = fixed_values or {}
+    upper = {p.pid: p.upper_bound for p in parameters}
+    doc = libsbml.readSBMLFromFile(str(sbml_path))
+    model = doc.getModel()
+    if model is None:
+        return []
+    problems: list[str] = []
+    for assignment in model.getListOfInitialAssignments():
+        terms = _remainder_terms(assignment.getMath())
+        if terms is None or not upper.keys() & set(terms):
+            continue
+        total = 0.0
+        for term in terms:
+            if term in upper:
+                total += upper[term]
+            elif term in fixed_values:
+                total += fixed_values[term]
+            elif (parameter := model.getParameter(term)) is not None:
+                total += parameter.getValue()
+        if not total <= 1.0 + 1e-9:
+            fitted = ", ".join(f"{t} <= {upper[t]:g}" for t in terms if t in upper)
+            problems.append(
+                f"the remainder '{assignment.getSymbol()}' = 1 - "
+                f"{' - '.join(terms)} can be negative: the fractions sum to "
+                f"{total:g} > 1 at the upper bounds of the fit ({fitted}); "
+                "lower the upper bounds so that they sum to at most 1"
+            )
+    return problems
+
+
+def _remainder_terms(ast: object) -> list[str] | None:
+    """The ids of a formula `1 - a - b - ...`, `None` for another formula."""
+    import libsbml
+
+    assert isinstance(ast, libsbml.ASTNode)
+    terms: list[str] = []
+    node = ast
+    while node.getType() == libsbml.AST_MINUS and node.getNumChildren() == 2:
+        right = node.getChild(1)
+        if right.getType() != libsbml.AST_NAME:
+            return None
+        terms.insert(0, right.getName())
+        node = node.getChild(0)
+    if not terms or not node.isNumber() or node.getValue() != 1.0:
+        return None
+    return terms
 
 
 #: the argument of the provenance of a fit which names the fixed adopted fits

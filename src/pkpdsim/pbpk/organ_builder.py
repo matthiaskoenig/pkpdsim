@@ -755,6 +755,44 @@ class OrganBuilder:
             initial_assignment(str(p.sid), p.expression, p.unit, str(p.name))
         )
 
+    def _custom_clashes(self, placed: set[str]) -> None:
+        """Refuse a parameter of a custom reaction under the id of another element of the organ.
+
+        A parameter of a custom reaction is a local id of the organ: an id of
+        a compartment, species, parameter or reaction of the organ (`Vti`,
+        `Kp_<s>`, `<p>_Vmax`) or of a parameter of another process would be
+        defined twice.
+
+        Raises:
+            ValueError: naming the reaction, the ids and the organ.
+        """
+        custom = {
+            p.sid for p in self.ctx.chemistry if isinstance(p, CustomReaction)
+        } & placed
+        for r in self.reactions:
+            if str(r.sid) not in custom:
+                continue
+            others = {
+                *self.parameters,
+                *self.compartments,
+                *self.species,
+                *placed,
+                *(
+                    str(q.sid)
+                    for o in self.reactions
+                    if o is not r
+                    for q in o.pars or []
+                ),
+            }
+            clash = sorted(str(q.sid) for q in r.pars or [] if str(q.sid) in others)
+            if clash:
+                raise ValueError(
+                    f"Custom reaction '{r.sid}' of organ '{self.organ.value}' has "
+                    f"the parameters {clash}, which are ids of other elements of "
+                    "the organ (a compartment, a species, a parameter of the organ "
+                    "or of another process); give them other ids."
+                )
+
     def _custom_inputs(self) -> None:
         """The inputs of the ids of the top model which the custom reactions read.
 
@@ -769,6 +807,7 @@ class OrganBuilder:
             ValueError: if an id is neither, naming the reaction and the ids.
         """
         placed = {str(r.sid) for r in self.reactions}
+        self._custom_clashes(placed)
         local = {
             *self.parameters,
             *self.compartments,

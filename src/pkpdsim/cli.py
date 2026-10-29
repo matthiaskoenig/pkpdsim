@@ -85,6 +85,7 @@ from pkpdsim.fit import (
     FIXED_FITS,
     current_fixed_fits,
     records_context,
+    remainder_problems,
     report_context,
 )
 from pkpdsim.model import PKPDModel, resolve
@@ -714,7 +715,8 @@ def fit_command(
         The finished fits by optimization id, none for `--adopt`.
     """
     definitions = model.load_fit_definitions()
-    options = fit_parser(model, definitions).parse_args(args)
+    parser = fit_parser(model, definitions)
+    options = parser.parse_args(args)
     log.enable_rich_logging()
     if options.adopt is not None:
         _adopt(model, options.output_dir / options.adopt, force=options.force)
@@ -762,6 +764,11 @@ def fit_command(
         for pid, parameter in records[fit_id_].parameters.items()
         if pid not in fitted
     }
+    remainders = remainder_problems(
+        model.model_path, definition.parameters, fixed_values
+    )
+    if remainders:
+        parser.error("; ".join(remainders))
     context = report_context(model, options.subset, definition, fixed_fits=fixed_fits)
 
     runs = run_fit(

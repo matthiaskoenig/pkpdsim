@@ -844,7 +844,7 @@ def place(
             f"Custom reaction '{process.sid}' cannot be placed in zone '{zone}': "
             "its rate is stated for the whole organ."
         )
-    return [_custom(process, parts)]
+    return [_custom(process, ctx, parts)]
 
 
 def _substance(ctx: "OrganContext", sid: str) -> Substance:
@@ -1381,8 +1381,20 @@ def _transport(
     )
 
 
-def _custom(process: CustomReaction, parts: Mapping[str, Parts]) -> Reaction:
-    """The reaction of a custom process in the part it names."""
+def _custom(
+    process: CustomReaction, ctx: "OrganContext", parts: Mapping[str, Parts]
+) -> Reaction:
+    """The reaction of a custom process in the part it names.
+
+    A parameter id which custom reactions of another organ use as well gets
+    the metaid of its flat id (`_custom_parameter`).
+    """
+    shared = {
+        str(q.sid)
+        for c in ctx.chemistry
+        if isinstance(c, CustomReaction) and c.organ is not process.organ
+        for q in c.parameters
+    }
     if process.part not in _built(parts.values()):
         raise ValueError(
             f"Custom reaction '{process.sid}' acts in part '{process.part.value}' "
@@ -1395,7 +1407,7 @@ def _custom(process: CustomReaction, parts: Mapping[str, Parts]) -> Reaction:
             formula=(process.formula, U.mmole_per_min),
             pars=[
                 annotate(
-                    _custom_parameter(par, process.organ),
+                    _custom_parameter(par, process.organ, str(par.sid) in shared),
                     "custom_parameter",
                     organ=process.organ,
                 )
@@ -1409,15 +1421,19 @@ def _custom(process: CustomReaction, parts: Mapping[str, Parts]) -> Reaction:
     )
 
 
-def _custom_parameter(par: ModelParameter | Parameter, organ: Organ) -> Parameter:
+def _custom_parameter(
+    par: ModelParameter | Parameter, organ: Organ, shared: bool
+) -> Parameter:
     """The parameter of a custom reaction in its organ.
 
     A `ModelParameter` is a constant with its provenance and the uncertainty
     of a fitted value (a `Formula` a `FormulaParameter`, whose initial
     assignment the organ adds with inputs of the ids it reads), with the
     metaid of its flat id (`meta_MU__<id>`), unique in the document when two
-    organs have a constant of the id; a sbmlutils `Parameter` is copied as
-    it is.
+    organs have a constant of the id. A sbmlutils `Parameter` is copied as
+    it is; when another organ uses its id (`shared`) and it has no metaid,
+    it gets the metaid of its flat id as well (the default metaid of its id
+    would be given twice, an invalid document).
     """
     if isinstance(par, ModelParameter):
         p = value_parameter(
@@ -1430,7 +1446,10 @@ def _custom_parameter(par: ModelParameter | Parameter, organ: Organ) -> Paramete
         )
         p.metaId = f"meta_{ids.flat(organ, par.sid)}"
         return p
-    return copy.copy(par)
+    p = copy.copy(par)
+    if shared and p.metaId is None:
+        p.metaId = f"meta_{ids.flat(organ, str(p.sid))}"
+    return p
 
 
 def _built(parts: Iterable[Parts]) -> set[Part]:

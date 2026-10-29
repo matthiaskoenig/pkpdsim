@@ -10,6 +10,7 @@ library holds is a `ModelParameter` with such a value.
 """
 
 import functools
+import re
 import typing
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
@@ -19,6 +20,7 @@ from sbmlutils.factory import Uncertainty
 from sbmlutils.factory.units import UnitDefinition, UnitType
 
 __all__ = [
+    "SID",
     "Formula",
     "FrozenMap",
     "ModelParameter",
@@ -26,8 +28,15 @@ __all__ = [
     "Value",
     "as_value",
     "check_literals",
+    "check_positive",
+    "check_unit",
     "fitted",
+    "number",
+    "unit_text",
 ]
+
+SID = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+"""An SBML SId, the ids of a definition (substances, processes, parameters)."""
 
 
 @dataclass(frozen=True)
@@ -151,6 +160,44 @@ def as_value(x: Q, unit: UnitType) -> Value | Formula:
     if isinstance(x, Value | Formula):
         return x
     return Value(x, unit)
+
+
+def number(q: Q | None) -> float | None:
+    """Get the number of a plain float or a `Value`, `None` for none or a `Formula`."""
+    if isinstance(q, Formula):
+        return None
+    return q.value if isinstance(q, Value) else q
+
+
+def check_positive(where: str, name: str, q: Q | None) -> list[str]:
+    """Check that a number is positive."""
+    x = number(q)
+    if x is not None and not x > 0:
+        return [f"{where}: {name} must be positive, got {x}"]
+    return []
+
+
+def check_unit(where: str, name: str, q: Q | None, unit: UnitType) -> list[str]:
+    """Check that a `Value` is given in the unit of its parameter.
+
+    The numbers of a definition are in the units of the model; a `Value` in
+    another unit (an exchange in l/min where one per litre of organ is meant)
+    would be taken as it is.
+    """
+    if not isinstance(q, Value | Formula) or q.unit is None:
+        return []
+    given, expected = unit_text(q.unit), unit_text(unit)
+    if given != expected:
+        return [f"{where}: {name} must be in {expected}, got {given}"]
+    return []
+
+
+def unit_text(unit: UnitType) -> str:
+    """The definition of a unit, e.g. `1/min`, the id of a unit of a kind (`dimensionless`)."""
+    definition = getattr(unit, "definition", unit)
+    if isinstance(definition, str):
+        return definition
+    return str(getattr(unit, "sid", definition))
 
 
 def check_literals(obj: object) -> None:

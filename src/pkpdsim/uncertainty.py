@@ -63,6 +63,8 @@ from sbmlsim.task import Task
 from sbmlsim.units import ureg
 from scipy import stats
 
+from pkpdsim import distrib
+
 if TYPE_CHECKING:
     from sbmlsim.experiment import SimulationExperiment
     from sbmlutils.factory import Uncertainty
@@ -642,16 +644,14 @@ class FitRecords:
 # ----------------------------------------------------------------------------
 # the distributions of a model
 # ----------------------------------------------------------------------------
-_CALL = re.compile(r"^\s*(\w+)\s*\((.*)\)\s*$")
-
-
 def distribution_from_formula(formula: str) -> Distribution:
     """Get the sbmlsim distribution of a formula of distrib.
 
     Args:
         formula: `lognormal(mu, sigma[, lower, upper])` (mu and sigma of the
             natural logarithm), `normal(mean, sd[, lower, upper])` or
-            `uniform(lower, upper)`, with numbers as arguments.
+            `uniform(lower, upper)`, with numbers as arguments (the grammar of
+            `pkpdsim.distrib`).
 
     Returns:
         The distribution, truncated if the formula has bounds.
@@ -659,31 +659,19 @@ def distribution_from_formula(formula: str) -> Distribution:
     Raises:
         ValueError: for another formula.
     """
-    match = _CALL.match(formula)
-    if match is None:
-        raise ValueError(f"The distribution '{formula}' is no function of numbers.")
-    name = match.group(1)
-    try:
-        args = [float(a) for a in match.group(2).split(",")]
-    except ValueError:
-        raise ValueError(
-            f"The distribution '{formula}' has arguments which are no numbers."
-        ) from None
-    inner: Distribution
-    if name == "uniform" and len(args) == 2:
+    parsed = distrib.parse(formula)
+    args = parsed.args
+    if parsed.name == "uniform":
         return Uniform(args[0], args[1])
-    if name == "lognormal" and len(args) in (2, 4):
+    inner: Distribution
+    if parsed.name == "lognormal":
         mu, sigma = args[0], args[1]
         inner = LogNormal(math.exp(mu), math.sqrt(math.expm1(sigma**2)))
-    elif name == "normal" and len(args) in (2, 4):
-        inner = Normal(args[0], args[1])
     else:
-        raise ValueError(
-            f"The distribution '{formula}' is not supported: lognormal and normal "
-            f"with two or four arguments, uniform with two."
-        )
-    if len(args) == 4:
-        return Truncated(inner, args[2], args[3])
+        inner = Normal(args[0], args[1])
+    bounds = parsed.bounds
+    if bounds is not None:
+        return Truncated(inner, *bounds)
     return inner
 
 

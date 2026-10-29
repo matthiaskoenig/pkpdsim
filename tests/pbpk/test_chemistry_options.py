@@ -382,6 +382,39 @@ def test_custom_parameters_of_two_organs_are_two_parameters(tmp_path: Path) -> N
     assert flat.getParameter("SK__k_deep").getValue() == 5e-3
 
 
+def test_raw_parameters_of_two_organs_get_unique_metaids(tmp_path: Path) -> None:
+    """A sbmlutils `Parameter` id in custom reactions of two organs builds a valid model.
+
+    Each copy gets the metaid of its flat id; an id of one organ keeps its
+    metaid (the chemistry reference, byte-identical).
+    """
+    muscle = _deep(
+        Parameter("k_deep", 2e-3, U.per_min, constant=True),
+        Parameter("Kp_deep", 1.5, U.dimensionless, constant=True),
+    )
+    skin = dataclasses.replace(muscle, sid="DRGDEEPSK", organ=Organ.SKIN)
+    flat = _flat(build(_definition([muscle, skin]), tmp_path))
+    assert flat.getParameter("MU__k_deep").getValue() == 2e-3
+    assert flat.getParameter("SK__k_deep").getValue() == 2e-3
+
+
+@pytest.mark.parametrize("sid", ["Vti", "Kp_drg", "M_MU_k"])
+def test_a_custom_parameter_under_an_id_of_the_organ_is_refused(
+    tmp_path: Path, sid: str
+) -> None:
+    """A custom parameter under the id of a compartment, a parameter or a process constant."""
+    elimination = Metabolism("M_MU", Organ.MUSCLE, "drg", {}, FirstOrder(k=0.1))
+    d = _definition(
+        [_deep(ModelParameter(sid, 1.0, U.dimensionless), _KP_DEEP), elimination]
+    )
+    with pytest.raises(ValueError) as err:
+        build(d, tmp_path)
+    message = str(err.value)
+    assert f"Custom reaction 'DRGDEEP' of organ 'mu' has the parameters ['{sid}']" in (
+        message
+    )
+
+
 # --- shared rates (D4) --------------------------------------------------------
 
 
@@ -634,8 +667,16 @@ _F_M1 = _fitted(0.3, "normal(0.3, 0.05, 0.01, 0.6)")
         ({"drg_m1": REST}, "DRG2M: the remainder REST needs another product"),
         (
             {"drg_m1": _F_M1, "drg_m2": 0.7},
-            "DRG2M: the fitted product fraction of 'drg_m1' needs a product which "
-            "is the remainder REST",
+            "DRG2M: the product fraction of 'drg_m1' is a Value, a constant which "
+            "a fit or an experiment may change: give one product the remainder REST",
+        ),
+        (
+            {
+                "drg_m1": Value(0.4, U.dimensionless),
+                "drg_m2": Value(0.6, U.dimensionless),
+            },
+            "DRG2M: the product fraction of 'drg_m1' is a Value, a constant which "
+            "a fit or an experiment may change: give one product the remainder REST",
         ),
         (
             {"drg_m1": Formula("0.3 dimensionless", U.dimensionless), "drg_m3": REST},
@@ -646,7 +687,7 @@ _F_M1 = _fitted(0.3, "normal(0.3, 0.05, 0.01, 0.6)")
             "DRG2M: product fraction of 'drg_m1' must be in dimensionless",
         ),
         (
-            {"drg_m1": Value(0.3, U.dimensionless), "drg_m2": 0.6},
+            {"drg_m1": 0.3, "drg_m2": 0.6},
             "DRG2M: product fractions sum to 0.9, not 1",
         ),
     ],
@@ -658,8 +699,9 @@ def test_fractions_which_can_exceed_one_are_refused(
 
     The range of a fitted fraction is its value and the support of the
     distribution of its draws (the bounds of the fit); without a remainder
-    the fractions are numbers or values which sum to 1, a fitted fraction
-    needs the remainder `REST`; a formula cannot be bounded.
+    the fractions are numbers which sum to 1, a `Value` (fixed or fitted, a
+    constant a fit or an experiment may change) needs the remainder `REST`;
+    a formula cannot be bounded.
     """
     assert match in _problems(_definition([_split(products)]))
 
@@ -792,6 +834,92 @@ def test_fitted_fractions_in_the_variants(tmp_path: Path, liver: str) -> None:
     assert flat.getParameter("GU__f_DRG2MGU_drg_m1") is not None
     zone = "_z1" if liver == "zonated" else ""
     assert flat.getReaction(f"LI__DRG2M_to_drg_m1{zone}") is not None
+
+
+def test_a_fit_whose_fractions_can_exceed_one_is_refused_before_it_starts(
+    tmp_path: Path,
+) -> None:
+    """The upper bounds of the fitted fractions of a remainder sum to at most 1.
+
+    `remainder_problems` (called by `run_fit` before the fit) adds the upper
+    bounds of the fitted fractions and the values of the others: the model's,
+    or the fixed values of the adopted fits.
+    """
+    from sbmlsim.fit.objects import FitParameter
+
+    from pkpdsim.fit import remainder_problems
+
+    d = _definition(
+        [
+            _split(
+                {
+                    "drg_m1": Value(0.3, U.dimensionless),
+                    "drg_m2": Value(0.2, U.dimensionless),
+                    "drg_m3": REST,
+                }
+            )
+        ]
+    )
+    path = build(d, tmp_path).flat_path
+
+    def fit(upper: float) -> list[FitParameter]:
+        return [
+            FitParameter("LI__f_DRG2M_drg_m1", 0.3, 0.01, upper, unit="dimensionless")
+        ]
+
+    assert remainder_problems(path, fit(0.8)) == []
+    problems = remainder_problems(path, fit(0.9))
+    assert len(problems) == 1
+    assert (
+        "the remainder 'LI__f_DRG2M_drg_m3' = 1 - LI__f_DRG2M_drg_m1 - "
+        "LI__f_DRG2M_drg_m2 can be negative: the fractions sum to 1.1 > 1"
+    ) in problems[0]
+    assert "LI__f_DRG2M_drg_m1 <= 0.9" in problems[0]
+    assert remainder_problems(path, fit(0.8), {"LI__f_DRG2M_drg_m2": 0.3}) != []
+    assert remainder_problems(path, [FitParameter("LI__DRG2M_k", 0.5, 0.0, 9.0)]) == []
+
+
+def test_branches_of_different_enzymes_stay_separate_metabolisms(
+    tmp_path: Path,
+) -> None:
+    """A branch with its own enzyme is a metabolism of its own, its rate tied by `RateOf`.
+
+    The activity of the protein of a metabolism scales its whole rate, so the
+    branches of different enzymes are separate metabolisms: a genotype of
+    CYP2C9 (`LI__f_cyp2c9`) scales only the CYP2C9 branch, the other branch
+    keeps its rate, which `RateOf` ties to the fitted rate of the first.
+    """
+    d = _definition(
+        [
+            Metabolism(
+                "DRG2M1",
+                Organ.LIVER,
+                "drg",
+                {"drg_m1": 1.0},
+                FirstOrder(
+                    k=_fitted(0.4, "lognormal(-0.9, 0.2, 0.01, 4.0)", U.per_min)
+                ),
+                protein="CYP2C9",
+            ),
+            Metabolism(
+                "DRG2M2",
+                Organ.LIVER,
+                "drg",
+                {"drg_m2": 1.0},
+                FirstOrder(k=RateOf("DRG2M1", 0.5)),
+            ),
+        ]
+    )
+    result = build(d, tmp_path)
+    ratios = []
+    for activity in (1.0, 0.25):
+        r = individual(result.flat_path, LI__f_cyp2c9=activity)
+        r[ids.iv_dose("drg")] = 10.0
+        r.simulate(0, 60, 10)
+        assert r["LI__DRG2M2_k"] == pytest.approx(0.2)
+        ratios.append(r["LI__DRG2M1"] / r["LI__DRG2M2"])
+    assert ratios[0] == pytest.approx(2.0, rel=1e-9)
+    assert ratios[1] == pytest.approx(0.5, rel=1e-9)
 
 
 # --- byte identity ------------------------------------------------------------

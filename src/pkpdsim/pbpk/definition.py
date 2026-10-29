@@ -1,24 +1,20 @@
 """The definition of a PBPK model: the substances, the chemistry and the choices."""
 
-import math
 import re
 from collections.abc import Callable, Hashable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 
-import libsbml
 from sbmlutils.factory import Creator
-from sbmlutils.factory.units import UnitType
 
 from pkpdsim.pbpk import ids
 from pkpdsim.pbpk.chemistry import (
-    MM,
     CustomReaction,
-    FirstOrder,
-    Hill,
     Metabolism,
-    RateOf,
-    Rest,
     Transport,
+    check_custom_parameters,
+    check_kinetics,
+    check_products,
+    check_rate_of,
 )
 from pkpdsim.pbpk.data import load
 from pkpdsim.pbpk.kp import check_kp_method
@@ -32,12 +28,20 @@ from pkpdsim.pbpk.proteins import PROTEINS
 from pkpdsim.pbpk.routes import Route
 from pkpdsim.pbpk.substance import Erythrocytes, Kp, KpMethod, Mode, Substance
 from pkpdsim.pbpk.units import U
-from pkpdsim.pbpk.values import Formula, FrozenMap, ModelParameter, Q, Value
+from pkpdsim.pbpk.values import (
+    SID,
+    Formula,
+    FrozenMap,
+    ModelParameter,
+    Q,
+    check_positive,
+    check_unit,
+    number,
+)
 
 __all__ = ["PBPKDefinition", "Variants"]
 
 
-_SID = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 _RESERVED = (
     *(p.value for p in Part),
     *(p.value for p in Pool),
@@ -348,7 +352,7 @@ class PBPKDefinition:
         if twice:
             problems.append(f"duplicate observer ids: {twice}")
         for o in self.observers:
-            if not _SID.fullmatch(o.sid):
+            if not SID.fullmatch(o.sid):
                 problems.append(f"observer id '{o.sid}' is not an SBML SId")
             elif "__" in o.sid:
                 problems.append(
@@ -382,7 +386,7 @@ class PBPKDefinition:
         taken = _physiology_ids()
         submodels = {ids.submodel(organ) for organ in Organ}
         for p in self.parameters:
-            if not _SID.fullmatch(p.sid):
+            if not SID.fullmatch(p.sid):
                 problems.append(f"parameter id '{p.sid}' is not an SBML SId")
             elif "__" in p.sid:
                 problems.append(
@@ -397,7 +401,7 @@ class PBPKDefinition:
                 problems.append(
                     f"parameter '{p.sid}' is the id of an organ submodel of the library"
                 )
-            problems += _unit(f"parameter '{p.sid}'", "value", p.value, p.unit)
+            problems += check_unit(f"parameter '{p.sid}'", "value", p.value, p.unit)
         return problems
 
     def _check_starts(self) -> list[str]:
@@ -408,13 +412,13 @@ class PBPKDefinition:
         """
         problems: list[str] = []
         for sid, q in self.starts.items():
-            if not _SID.fullmatch(sid):
+            if not SID.fullmatch(sid):
                 problems.append(f"start '{sid}': the id is not an SBML SId")
                 continue
-            x = _number(q)
+            x = number(q)
             if x is not None and not x >= 0:
                 problems.append(f"start '{sid}': must not be negative, got {x}")
-            problems += _unit(f"start '{sid}'", "value", q, U.mM)
+            problems += check_unit(f"start '{sid}'", "value", q, U.mM)
         return problems
 
     def _check_deltas(self) -> list[str]:
@@ -430,7 +434,7 @@ class PBPKDefinition:
         problems += [
             f"delta '{d}': the id is not an SBML SId"
             for d in self.deltas
-            if not _SID.fullmatch(d)
+            if not SID.fullmatch(d)
         ]
         return problems
 
@@ -463,7 +467,7 @@ class PBPKDefinition:
             problems.append(f"duplicate substance ids: {duplicates}")
         taken = _physiology_ids()
         for s in self.substances:
-            if not _SID.fullmatch(s.sid):
+            if not SID.fullmatch(s.sid):
                 problems.append(f"substance id '{s.sid}' is not an SBML SId")
             if "__" in s.sid:
                 problems.append(f"substance id '{s.sid}' contains '__'")
@@ -495,15 +499,15 @@ class PBPKDefinition:
             if ind.protein not in PROTEINS:
                 problems.append(f"{s.sid}: unknown protein '{ind.protein}' (induction)")
         problems += _check_interactions(s)
-        problems += _positive(s.sid, "mr", s.mr)
+        problems += check_positive(s.sid, "mr", s.mr)
         if s.binding is not None:
             problems += _in_unit_interval(s.sid, "fu", s.binding.fu, open_low=True)
         problems += _in_unit_interval(
             s.sid, "fraction_reabsorbed", s.excretion.fraction_reabsorbed
         )
         if s.baseline is not None:
-            problems += _positive(s.sid, "baseline", s.baseline)
-            problems += _unit(s.sid, "baseline", s.baseline, U.mM)
+            problems += check_positive(s.sid, "baseline", s.baseline)
+            problems += check_unit(s.sid, "baseline", s.baseline, U.mM)
         ery = s.erythrocytes
         if ery is not None:
             problems += _check_erythrocytes(s.sid, ery)
@@ -571,21 +575,21 @@ class PBPKDefinition:
         by_sid = {p.sid: p for p in self.chemistry}
         custom: dict[Organ, set[str]] = {}
         for p in self.chemistry:
-            if not _SID.fullmatch(p.sid):
+            if not SID.fullmatch(p.sid):
                 problems.append(f"process id '{p.sid}' is not an SBML SId")
             used: list[str] = []
             if isinstance(p, Metabolism):
                 used = [p.substrate, *p.products]
-                problems += _check_products(p)
+                problems += check_products(p)
             elif isinstance(p, Transport):
                 used = [p.substance]
             else:
-                problems += _check_custom_parameters(
+                problems += check_custom_parameters(
                     p, custom.setdefault(p.organ, set())
                 )
             if isinstance(p, Metabolism | Transport):
-                problems += _check_kinetics(p.sid, p.kinetics)
-                problems += _check_rate_of(p, by_sid)
+                problems += check_kinetics(p.sid, p.kinetics)
+                problems += check_rate_of(p, by_sid)
             unknown = sorted(u for u in used if u not in known)
             if unknown:
                 problems.append(f"{p.sid}: unknown substances {unknown}")
@@ -602,7 +606,7 @@ class PBPKDefinition:
         problems = [
             f"dynamic '{pid}' is not an SBML SId"
             for pid in self.dynamic
-            if not _SID.fullmatch(pid)
+            if not SID.fullmatch(pid)
         ]
         twice = sorted({p for p in self.dynamic if self.dynamic.count(p) > 1})
         if twice:
@@ -673,9 +677,9 @@ def _merge_variants(
 def _check_erythrocytes(sid: str, ery: Erythrocytes) -> list[str]:
     """Check the parameters of the erythrocytes of a substance."""
     problems = [
-        *_positive(sid, "bp", ery.bp),
-        *_positive(sid, "kbc", ery.kbc),
-        *_positive(sid, "k_exchange", ery.k_exchange),
+        *check_positive(sid, "bp", ery.bp),
+        *check_positive(sid, "kbc", ery.kbc),
+        *check_positive(sid, "k_exchange", ery.k_exchange),
     ]
     if problems:
         return problems
@@ -706,18 +710,18 @@ def _check_distribution(sid: str, dist: Kp | KpMethod) -> list[str]:
     named: dict[str, Mapping[Organ, Q]] = {"ps": dist.ps}
     if isinstance(dist, Kp):
         named["override"] = dist.overrides
-        problems += _positive(sid, "Kp", dist.value)
-        problems += _positive(sid, "Kp interstitial", dist.interstitial)
+        problems += check_positive(sid, "Kp", dist.value)
+        problems += check_positive(sid, "Kp interstitial", dist.interstitial)
         for organ, value in dist.overrides.items():
-            problems += _positive(sid, f"Kp override '{organ.value}'", value)
+            problems += check_positive(sid, f"Kp override '{organ.value}'", value)
     else:
-        problems += _positive(sid, "factor", dist.factor)
+        problems += check_positive(sid, "factor", dist.factor)
     if dist.ftissue is not None:
-        problems += _positive(sid, "ftissue", dist.ftissue)
+        problems += check_positive(sid, "ftissue", dist.ftissue)
     ps_unit = U.per_min if dist.ps_per_volume else U.l_per_min
     for organ, value in dist.ps.items():
-        problems += _positive(sid, f"ps '{organ.value}'", value)
-        problems += _unit(sid, f"ps '{organ.value}'", value, ps_unit)
+        problems += check_positive(sid, f"ps '{organ.value}'", value)
+        problems += check_unit(sid, f"ps '{organ.value}'", value, ps_unit)
     if entered is not None:
         for what, mapping in named.items():
             outside = sorted(o.value for o in mapping if o not in entered)
@@ -726,49 +730,11 @@ def _check_distribution(sid: str, dist: Kp | KpMethod) -> list[str]:
     return problems
 
 
-def _number(q: Q | None) -> float | None:
-    """Get the number of a plain float or a `Value`, `None` for none or a `Formula`."""
-    if isinstance(q, Formula):
-        return None
-    return q.value if isinstance(q, Value) else q
-
-
-def _positive(where: str, name: str, q: Q | None) -> list[str]:
-    """Check that a number is positive."""
-    x = _number(q)
-    if x is not None and not x > 0:
-        return [f"{where}: {name} must be positive, got {x}"]
-    return []
-
-
-def _unit(where: str, name: str, q: Q | None, unit: UnitType) -> list[str]:
-    """Check that a `Value` is given in the unit of its parameter.
-
-    The numbers of a definition are in the units of the model; a `Value` in
-    another unit (an exchange in l/min where one per litre of organ is meant)
-    would be taken as it is.
-    """
-    if not isinstance(q, Value | Formula) or q.unit is None:
-        return []
-    given, expected = _unit_text(q.unit), _unit_text(unit)
-    if given != expected:
-        return [f"{where}: {name} must be in {expected}, got {given}"]
-    return []
-
-
-def _unit_text(unit: UnitType) -> str:
-    """The definition of a unit, e.g. `1/min`, the id of a unit of a kind (`dimensionless`)."""
-    definition = getattr(unit, "definition", unit)
-    if isinstance(definition, str):
-        return definition
-    return str(getattr(unit, "sid", definition))
-
-
 def _in_unit_interval(
     where: str, name: str, q: Q | None, *, open_low: bool = False
 ) -> list[str]:
     """Check that a number is a fraction, in (0, 1] or [0, 1]."""
-    x = _number(q)
+    x = number(q)
     if x is None:
         return []
     low_ok = x > 0 if open_low else x >= 0
@@ -805,228 +771,9 @@ def _check_interactions(s: Substance) -> list[str]:
                 "and only there"
             )
         for name in ("ki", "kiu", "kinact"):
-            problems += _positive(where, name, getattr(inh, name))
+            problems += check_positive(where, name, getattr(inh, name))
     for ind in s.induces:
         where = f"{s.sid} (induction of {ind.protein})"
-        problems += _positive(where, "emax", ind.emax)
-        problems += _positive(where, "ec50", ind.ec50)
-    return problems
-
-
-def _check_kinetics(where: str, k: FirstOrder | MM | Hill) -> list[str]:
-    """Check that the parameters of a rate law are positive.
-
-    A `RateOf` is checked by `_check_rate_of`.
-    """
-    problems: list[str] = []
-    for name in ("k", "vmax", "km", "n"):
-        q = getattr(k, name, None)
-        if not isinstance(q, RateOf):
-            problems += _positive(where, name, q)
-    return problems
-
-
-def _check_rate_of(
-    p: Metabolism | Transport,
-    chemistry: Mapping[str, Metabolism | Transport | CustomReaction],
-) -> list[str]:
-    """Check a constant of a process which is a ratio of another process, `RateOf`.
-
-    The other process is a metabolism or transport of the same organ which
-    states the same constant itself (a Vmax for a Vmax, a first order `k`
-    with the same `per_volume` for a `k`, so that both have one unit), the
-    factor is positive and dimensionless.
-    """
-    problems: list[str] = []
-    for constant in ("vmax", "k"):
-        q = getattr(p.kinetics, constant, None)
-        if not isinstance(q, RateOf):
-            continue
-        problems += _positive(p.sid, "RateOf factor", q.factor)
-        problems += _unit(p.sid, "RateOf factor", q.factor, U.dimensionless)
-        other = chemistry.get(q.process)
-        where = f"{p.sid}: RateOf '{q.process}'"
-        if other is None:
-            problems.append(f"{where} names no process of the chemistry")
-            continue
-        if not isinstance(other, Metabolism | Transport):
-            problems.append(
-                f"{where} is no metabolism or transport, a custom reaction has no "
-                "constant of the library"
-            )
-            continue
-        if other.organ is not p.organ:
-            problems.append(
-                f"{where} is a process of organ '{other.organ.value}', not of "
-                f"'{p.organ.value}'"
-            )
-            continue
-        theirs = getattr(other.kinetics, constant, None)
-        if constant == "vmax":
-            what = "Vmax"
-        else:
-            per_volume = isinstance(p.kinetics, FirstOrder) and p.kinetics.per_volume
-            what = "first order constant k " + (
-                "per litre of organ" if per_volume else "of the whole organ"
-            )
-            if (
-                not isinstance(other.kinetics, FirstOrder)
-                or other.kinetics.per_volume != per_volume
-            ):
-                theirs = None
-        if theirs is None:
-            problems.append(f"{where} has no {what}")
-        elif isinstance(theirs, RateOf):
-            problems.append(
-                f"{where} is itself a ratio: the other process states its own constant"
-            )
-    return problems
-
-
-def _check_products(p: Metabolism) -> list[str]:
-    """Check the product fractions of a metabolism: their sum never exceeds 1.
-
-    Numbers or values without the remainder `REST` sum to 1; a fitted
-    fraction (a `Value` with uncertainties) needs the remainder, which is
-    never negative: the sum of the upper ends of the ranges of the fractions
-    (`_fraction_range`) is at most 1, and not always 1 (a remainder of 0).
-    Every fraction is positive and its range not negative; a `Formula` cannot
-    be bounded and is refused.
-    """
-    problems: list[str] = []
-    rest = [k for k, f in p.products.items() if isinstance(f, Rest)]
-    if len(rest) > 1:
-        problems.append(
-            f"{p.sid}: more than one product is the remainder REST: {sorted(rest)}"
-        )
-    elif rest and len(p.products) == 1:
-        problems.append(f"{p.sid}: the remainder REST needs another product")
-    low_sum = high_sum = total = 0.0
-    fitted: list[str] = []
-    ranges: list[str] = []
-    for product, f in p.products.items():
-        if isinstance(f, Rest):
-            continue
-        where = f"product fraction of '{product}'"
-        if not isinstance(f, float | int | Value):
-            problems.append(
-                f"{p.sid}: {where} is a {type(f).__name__}, which cannot be "
-                "bounded: a fraction is a number, a Value or REST"
-            )
-            continue
-        problems += _unit(p.sid, where, f, U.dimensionless)
-        x = _number(f)
-        low, high = _fraction_range(f)
-        if x is None or not x > 0:
-            problems.append(f"{p.sid}: {where} must be positive, got {x}")
-        elif low < 0:
-            ranges.append(
-                f"{p.sid}: {where} can be {low:g} (the support of the "
-                "distribution of its draws), a fraction is never negative"
-            )
-        total += x or 0.0
-        low_sum += low
-        high_sum += high
-        if isinstance(f, Value) and f.uncertainties:
-            fitted.append(product)
-    if problems:
-        return problems
-    problems += ranges
-    if rest:
-        if high_sum > 1.0 + 1e-9:
-            problems.append(
-                f"{p.sid}: the product fractions can sum to {high_sum:g} > 1 (the "
-                "upper ends of the ranges of the fitted fractions), the remainder "
-                f"REST of '{rest[0]}' would be negative"
-            )
-        elif low_sum >= 1.0 - 1e-9:
-            problems.append(
-                f"{p.sid}: the other fractions sum to {low_sum:g}, the remainder "
-                f"REST of '{rest[0]}' is 0"
-            )
-    elif fitted:
-        problems.append(
-            f"{p.sid}: the fitted product fraction of '{fitted[0]}' needs a product "
-            "which is the remainder REST, the fractions sum to 1 for every value "
-            "of the fit"
-        )
-    elif p.products and abs(total - 1.0) > 1e-9:
-        problems.append(f"{p.sid}: product fractions sum to {total:g}, not 1")
-    return problems
-
-
-_CALL = re.compile(r"\s*(\w+)\s*\((.*)\)\s*")
-
-
-def _fraction_range(f: float | Value) -> tuple[float, float]:
-    """The range of a fraction: its value and the support of the draws of a fit.
-
-    The distribution of the draws of a fitted value (the uncertainty of
-    `fitted`, truncated to the bounds of the fit) is the range a fit or an
-    uncertainty run gives the fraction: `normal` and `lognormal` with four
-    arguments and `uniform` have the bounds of their arguments, without bounds
-    `normal` is unbounded and `lognormal` positive; any other distribution is
-    unbounded.
-    """
-    if not isinstance(f, Value):
-        return float(f), float(f)
-    low = high = f.value
-    for u in f.uncertainties or []:
-        for child in u.uncertParameters or []:
-            if child.type != libsbml.DISTRIB_UNCERTTYPE_DISTRIBUTION or not child.math:
-                continue
-            lo, hi = _support(child.math)
-            low, high = min(low, lo), max(high, hi)
-    return low, high
-
-
-def _support(formula: str) -> tuple[float, float]:
-    """The support of a distribution of distrib, unbounded if it is unknown."""
-    unbounded = (-math.inf, math.inf)
-    match = _CALL.fullmatch(formula)
-    if match is None:
-        return unbounded
-    try:
-        args = [float(a) for a in match.group(2).split(",")]
-    except ValueError:
-        return unbounded
-    name = match.group(1)
-    bounded = {"normal": 4, "lognormal": 4, "uniform": 2}
-    if bounded.get(name) == len(args):
-        return args[-2], args[-1]
-    if name == "normal" and len(args) == 2:
-        return unbounded
-    if name == "lognormal" and len(args) == 2:
-        return 0.0, math.inf
-    return unbounded
-
-
-def _check_custom_parameters(p: CustomReaction, defined: set[str]) -> list[str]:
-    """Check the parameters of a custom reaction, local ids of its organ.
-
-    An SId without `__` (the separator of the flat ids), defined once in the
-    organ (`defined`, the ids of the other custom reactions of the organ: they
-    read it), a `ModelParameter` with a value in its unit.
-    """
-    problems: list[str] = []
-    for par in p.parameters:
-        sid = str(par.sid)
-        if not _SID.fullmatch(sid):
-            problems.append(f"{p.sid}: parameter id '{sid}' is not an SBML SId")
-        elif "__" in sid:
-            problems.append(
-                f"{p.sid}: parameter id '{sid}' contains '__', the separator of "
-                "the ids of the organs in the flat model"
-            )
-        elif sid in defined:
-            problems.append(
-                f"{p.sid}: parameter '{sid}' of organ '{p.organ.value}' is defined "
-                "twice: one custom reaction defines it, the others of the organ "
-                "read it"
-            )
-        defined.add(sid)
-        if isinstance(par, ModelParameter):
-            problems += _unit(
-                f"{p.sid}: parameter '{sid}'", "value", par.value, par.unit
-            )
+        problems += check_positive(where, "emax", ind.emax)
+        problems += check_positive(where, "ec50", ind.ec50)
     return problems

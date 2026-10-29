@@ -2415,6 +2415,17 @@ def _units(elements: Iterable[object]) -> type[U] | list[UnitDefinition]:
     """
     units = [u for _, u in U.attributes() if isinstance(u, UnitDefinition)]
     known = {str(u.sid) for u in units}
+    extra = [u for sid, u in _used_units(elements).items() if sid not in known]
+    return [*units, *extra] if extra else U
+
+
+def _used_units(elements: Iterable[object]) -> dict[str, UnitDefinition]:
+    """The units which elements use: as their units, or a unit of `EXTRA_UNITS` by id.
+
+    `_unit_uses` collects the unit definitions of the elements and the ids
+    of their formulas; an id of a formula is a unit of the library outside
+    `U` when it is the id of a unit of `EXTRA_UNITS`.
+    """
     found: dict[str, UnitDefinition] = {}
     tokens: set[str] = set()
     for element in elements:
@@ -2422,8 +2433,7 @@ def _units(elements: Iterable[object]) -> type[U] | list[UnitDefinition]:
     for unit in EXTRA_UNITS:
         if str(unit.sid) in tokens:
             found.setdefault(str(unit.sid), unit)
-    extra = [u for sid, u in found.items() if sid not in known]
-    return [*units, *extra] if extra else U
+    return found
 
 
 def _extra_units(md: ModelDefinition) -> None:
@@ -2442,13 +2452,7 @@ def _extra_units(md: ModelDefinition) -> None:
         else [u for _, u in own.attributes() if isinstance(u, UnitDefinition)]
     )
     known = {str(u.sid) for u in defined}
-    found: dict[str, UnitDefinition] = {}
-    tokens: set[str] = set()
-    _unit_uses(md, found, tokens)
-    for unit in EXTRA_UNITS:
-        if str(unit.sid) in tokens:
-            found.setdefault(str(unit.sid), unit)
-    missing = [u for sid, u in found.items() if sid not in known]
+    missing = [u for sid, u in _used_units([md]).items() if sid not in known]
     if missing:
         md.units = [*defined, *missing]
 
