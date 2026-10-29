@@ -1,12 +1,14 @@
 """The units of the PBPK models.
 
 Time is in min, substance in mmole, volume in litre and area in m2, the
-`model_units` of the models.
+`model_units` of the models. Every unit of `U` is a unit definition of every
+model; a unit outside `U` (`ML_PER_MIN_1P73M2`) is one only of a model whose
+observers use it.
 """
 
 from sbmlutils.factory import ModelUnits, UnitDefinition, Units
 
-__all__ = ["MODEL_UNITS", "U"]
+__all__ = ["ML_PER_MIN_1P73M2", "MODEL_UNITS", "U"]
 
 
 class U(Units):
@@ -43,3 +45,17 @@ MODEL_UNITS = ModelUnits(
     area=U.m2,
     volume=U.litre,
 )
+
+
+ML_PER_MIN_1P73M2 = UnitDefinition(
+    "ml_per_min_1p73m2", "ml/min/(1.73*meter^2)", name="ml/min/1.73 m2"
+)
+"""Millilitre per minute per 1.73 m2 body surface area, the unit of a clearance or a
+GFR per body surface area (eGFR, `CLrenal/BSA`).
+
+`1 ml/min/1.73 m2 = 1e-3/1.73 l/min/m2`: a quantity in l/min divided by the
+body surface area `BSA` (m2) is `1730` times the number in this unit, in
+consistent units `GFR / BSA * 1730 ml_per_min_1p73m2 * 1 m2 / 1 l_per_min`.
+Not a unit of `U`, so the models without it keep their unit definitions; a
+model defines it when an observer of its definition uses it.
+"""

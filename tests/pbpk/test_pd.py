@@ -349,15 +349,18 @@ def test_pd_input_of_an_organ_raises(organ_species: str, match: str) -> None:
 @pytest.mark.parametrize(
     ("local", "amount", "match"),
     [
-        ("Apool_drg", True, r"'MU__Apool_drg', an amount \(hasOnlySubstanceUnits\)"),
+        ("Xpool_drg", True, r"'MU__Xpool_drg', an amount .* no amount of the id"),
         ("Xpool_drg", False, r"'MU__Xpool_drg', a species .* no concentration"),
     ],
     ids=["amount", "no concentration id"],
 )
-def test_pd_input_of_a_species_which_is_no_concentration_raises(
+def test_pd_input_of_a_species_outside_the_id_scheme_raises(
     local: str, amount: bool, match: str
 ) -> None:
-    """A species of a custom reaction which is an amount or no `C...` id is named."""
+    """A species of a custom reaction whose id is no `A...` amount or `C...` concentration is named.
+
+    An amount `A<x>` is exposed in its unit (`test_observers_readouts`).
+    """
     pool = Species(
         local,
         "Vti",

@@ -12,9 +12,11 @@ The observers are assignment rules, no states: they read the pool species and th
 | tissue | `<O>__Cti_<s>`, `<O>__Cor_<s>`, `<O>__Cic_<s>`, ... | the species of the organs (concentrations) |
 | unbound tissue | `<O>__Cu_ti_<s>`, `<O>__Cu_ic_<s>`, ... | the unbound concentrations of the tissue parts, see [Standard organ](organ.md#kp-and-fu) |
 | outflow of an organ | `Cout_<o>_<s>` | the plasma leaving an organ |
-| species of an organ read by a PD component | `C<o>_<part>_<s>` | a species of an organ as a parameter of the top model, see below |
+| element of an organ read by a PD component or an observer | `C<o>_<part>_<s>`, `C<o>_u_<part>_<s>`, `A<o>_<x>` | a species or an unbound concentration of an organ as a parameter of the top model, see below |
 | urine, feces | `Aurine_<s>`, `Afeces_<s>` | the amounts in the sinks |
 | urinary excretion rate | `Rurine_<s>` | the net flux of the kidney into the urine (mmole/min), an output of the kidney, see [Standard organ](organ.md#kidney) |
+| lumen of the intestine | `Alumen_<s>` | the dissolved amount in the lumen, the sum over the segments (mmole), a readout, see below |
+| absorption, efflux, feces | `Rabs_<s>`, `Reff_<s>`, `Rfeces_<s>` | the summed fluxes of the intestine (mmole/min), readouts, see below |
 | bile | `Cbile_<s>` | the concentration in the bile |
 
 The equations of the top model, for a substance without erythrocytes and for one with kinetic erythrocytes (`prm`), with the preset `pksim_default`:
@@ -94,12 +96,13 @@ The urine and the feces are the amounts of the sinks; the bile `Cbile_<s>` drain
 
 ## Observers of a definition
 
-A definition adds observers of its own, `Observer(sid, formula, unit, name, notes)` in `PBPKDefinition.observers`: assignment rules of the top model, appended after the observers of the library, for what a model package reads which the library does not compute (the sum of two metabolites, a ratio, the amount in urine of a parent and its metabolites). The formula is SBML L3 infix over the ids of the top model: the pools, the sinks, the observers of the library and of the definition, the covariates, the [parameters of the definition](substances.md#parameters-of-the-definition) and the outputs of the organs (`Cout_<o>_<s>`, `Rurine_<s>`); an id of an organ (`LI__Cpl_<s>`) is not visible in the top model. `validate` checks every observer against the model composed without them, with the parser of libsbml: an id which is an id of the body or of another observer, a symbol which is no value of the top model (a submodel `LI` or its model definition is none), a call of a function which SBML L3 infix does not define (the models have no function definitions), observers which read each other in a cycle.
+A definition adds observers of its own, `Observer(sid, formula, unit, name, notes)` in `PBPKDefinition.observers`: parameters of the top model, appended after the observers of the library, for what a model package reads which the library does not compute (the sum of two metabolites, a ratio, the amount in urine of a parent and its metabolites, a tissue concentration in the unit of a study). The formula is SBML L3 infix over the ids of the top model: the pools, the sinks, the observers of the library and of the definition, the covariates, the [parameters of the definition](substances.md#parameters-of-the-definition), the outputs of the organs (`Cout_<o>_<s>`, `Rurine_<s>`) and the readouts; and a species or an unbound concentration of a built organ by its flat id (`MU__Cti_<s>`, `LI__Cu_ic_<s>`), which the organ exposes (see below). `validate` checks every observer against the model composed without them, with the parser of libsbml: an id which is an id of the body or of another observer, a symbol which is no value of the top model (a submodel `LI` or its model definition is none), a call of a function which SBML L3 infix does not define (the models have no function definitions), observers which read each other in a cycle.
 
 ```python
 from pkpdsim.pbpk import (
     Binding,
     Excretion,
+    Kp,
     Metabolism,
     MM,
     Observer,
@@ -108,7 +111,9 @@ from pkpdsim.pbpk import (
     Route,
     Substance,
     U,
+    compose,
 )
+from pkpdsim.pbpk.units import ML_PER_MIN_1P73M2
 
 definition = PBPKDefinition(
     sid="observed",
@@ -118,6 +123,7 @@ definition = PBPKDefinition(
             name="drug",
             mr=300.0,
             binding=Binding(fu=0.1),
+            distribution=Kp(2.0, ftissue=1.0),
             excretion=Excretion(urine=True),
         ),
         Substance(
@@ -134,34 +140,86 @@ definition = PBPKDefinition(
             "Aurine_drg + Aurine_drg_m",
             U.mmole,
             "drug and metabolite in urine [mmole]",
-        )
+        ),
+        Observer(
+            "Cmu_drg_unbound",
+            "MU__Cu_ti_drg",
+            U.mM,
+            "unbound drug in the muscle tissue [mM]",
+        ),
+        Observer(
+            "GFRbsa",
+            "GFR / BSA * 1730 ml_per_min_1p73m2 * 1 m2 / 1 l_per_min",
+            ML_PER_MIN_1P73M2,
+            "GFR per 1.73 m2 body surface area [ml/min/1.73 m2]",
+        ),
     ],
 )
 definition.validate()
-try:
-    PBPKDefinition(
-        sid="constant",
-        substances=definition.substances,
-        observers=[Observer("BW_g", "1000 dimensionless * BW", U.kg, "body weight")],
-    ).validate()
-except ValueError as error:
-    print(str(error).splitlines()[1][:40])
+model = compose(definition)
+observed = {"Cmu_drg_unbound", "GFRbsa"}
+print("rules:", sorted(observed & {str(r.variable) for r in model.rules}))
+print(
+    "initial assignments:",
+    sorted(observed & {str(a.symbol) for a in model.assignments}),
+)
 ```
 
 ```text
-- observer 'BW_g' reads constants only (
+rules: ['Cmu_drg_unbound']
+initial assignments: ['GFRbsa']
 ```
 
-An observer must read a state, directly or through other observers: a species, an observer of the library, an output of an organ or a PD component, a dynamic parameter (`PBPKDefinition.dynamic`) or `time`. An observer of constants only is rejected with the message above: its value is fixed before the simulation, and an assignment rule of constants slows the compile of the model (the structural guard of the load time, see [the overview](index.md)); such a value is computed from the results.
+An observer which reads a state, directly or through other observers (a species, an observer of the library, an output of an organ or a PD component, a readout, a dynamic parameter (`PBPKDefinition.dynamic`) or `time`), is an assignment rule. An observer of constants only (`GFRbsa` above, the GFR per body surface area) is a constant with an initial assignment: its value is fixed before the simulation and follows the changes of an experiment before it (sbmlsim evaluates the initial assignments again), and an assignment rule of constants would slow the compile of the model (the structural guard of the load time, see [the overview](index.md)). An observer of a constant observer is one too.
 
-## A species of an organ for a PD component
+The unit of an observer is a unit definition of the model. The units of `U` are those of every model; a unit outside `U` is added to the model whose observers use it, so a model without it keeps its unit definitions. `pkpdsim.pbpk.units` has the unit per body surface area of the clearances and the GFR, `ML_PER_MIN_1P73M2` (`ml_per_min_1p73m2`, ml/min per 1.73 m2, `1e-3/1.73 l/min/m2`); a quantity in l/min divided by `BSA` (m2) is `1730` times its number in this unit, in consistent units `GFR / BSA * 1730 ml_per_min_1p73m2 * 1 m2 / 1 l_per_min` (the build checks the units of every formula).
 
-A PD component reads the elements of the top model through its input ports (`PDComponent.inputs`); a species of an organ is local to its submodel and no element of the top model. An input which names a species of an organ by its flat id reads it all the same: `PDComponent(model, inputs={"C_ged": "LI__Cic_ged"}, outputs={})` reads the concentration in the cells of the liver, as an imaging signal of the liver does. The organ exposes the species as an output, a parameter of the organ with the assignment rule of the species, which replaces the parameter `C<o>_<part>_<s>` of the top model (`ids.organ_species`, `Cli_ic_ged`), as the outflow `Cout_<o>_<s>` of an organ does; the component reads that parameter. The species keeps its id in the flat model (`LI__Cic_ged`), the flat model has one assignment rule more, in the liver:
+## An element of an organ for a PD component or an observer
+
+A PD component reads the elements of the top model through its input ports (`PDComponent.inputs`), an observer through the ids of its formula; an element of an organ is local to its submodel and no element of the top model. An input or an observer which names an element of an organ by its flat id reads it all the same, by one rule: `PDComponent(model, inputs={"C_ged": "LI__Cic_ged"}, outputs={})` reads the concentration in the cells of the liver, as an imaging signal of the liver does, and so does `Observer("Cli_ged", "LI__Cic_ged", U.mM, "liver cells")`. The organ exposes the element as an output, a parameter of the organ with the assignment rule of the element, which replaces the parameter of the top model `ids.organ_species` gives (the organ token after the first letter of the local id), as the outflow `Cout_<o>_<s>` of an organ does; the component and the observer read that parameter, one output for both. The elements an organ exposes:
+
+| element of the organ | local id | id of the top model | unit |
+|---|---|---|---|
+| a concentration species | `C<part>_<s>` (`Cic_ged`) | `C<o>_<part>_<s>` (`Cli_ic_ged`) | mM |
+| an unbound concentration | `Cu_<part>_<s>` (`Cu_ic_ged`) | `C<o>_u_<part>_<s>` (`Cli_u_ic_ged`) | mM |
+| an amount species (`hasOnlySubstanceUnits`, a pool of a custom reaction) | `A<x>` (`Apool_crtn`) | `A<o>_<x>` (`Amu_pool_crtn`) | of the species (mmole) |
+
+The element keeps its id in the flat model (`LI__Cic_ged`), the flat model has one assignment rule more, in the liver:
 
 ```equations title="a species of the liver read by a PD component (local ids of the liver)"
 C<o>_ic_<s> = Cic_<s>
 ```
 
-In the flat model it is `Cli_ic_<s> = LI__Cic_<s>`.
+In the flat model it is `Cli_ic_<s> = LI__Cic_<s>`. The unbound concentration is that of the organ, `fu/K*C` of the part (see [Standard organ](organ.md#kp-and-fu)), the input of a PD effect on the unbound drug in an organ.
 
-The build refuses an input which names no species of a built organ (a compartment, a parameter, an unknown species), an amount species (`hasOnlySubstanceUnits`, e.g. a pool of a custom reaction) and a species whose id is no concentration of the id scheme (`C<part>_<s>`), naming the input and the reason; an id with the prefix of an organ which is not built is an unknown id of the body. A component which reads only the top model adds nothing to the organs. The observers of a definition do not read the species of the organs (an id of an organ is no symbol of the top model, see above).
+The build refuses an input or an observer which names no species and no unbound concentration of a built organ (a compartment, a parameter, an unknown species), a species which the organ reads from the body (a pool species, read it in the top model) and a species whose id is not of the id scheme (a concentration which is no `C...`, an amount which is no `A...`), naming the reader and the reason; an id with the prefix of an organ which is not built is an unknown id of the body. A component or an observer which reads only the top model adds nothing to the organs.
+
+## Readouts of the intestine
+
+The lumen and the fluxes of the intestine are spread over its segments (`ids.GUT_SEGMENTS`, the twelve tokens of the segmented intestine in the order of the transit) or its single lumen. A model which reads their sums names them in `PBPKDefinition.readouts`, by id; the intestine adds each as a parameter with its assignment rule and an output port, which replaces the parameter of its id in the top model, as the kidney does with `Rurine_<s>`. The sums are taken over the species and the reactions of the intestine, so the readouts have the same ids and meaning for the segmented intestine and the single lumen:
+
+| readout | id | the sum of |
+|---|---|---|
+| lumen | `Alumen_<s>` (`ids.lumen_amount`) | the dissolved amount of the lumen species, `sum Vlumen_<seg>*Clumen_<seg>_<s>` (mmole); the undissolved drug of a tablet (`PODOSE_<s>`, `Asolid_<seg>_<s>`) is not in it |
+| absorption | `Rabs_<s>` (`ids.absorption_rate`) | the fluxes from the lumen into the wall of the substance (the mucosa, else the plasma of the wall): the absorption of every segment and an apical influx (mmole/min) |
+| efflux | `Reff_<s>` (`ids.efflux_rate`) | the fluxes from the wall into the lumen, the apical efflux of every segment (mmole/min) |
+| feces | `Rfeces_<s>` (`ids.feces_rate`) | the net flux of the intestine into the feces (mmole/min): the transit out of the last segment, the unabsorbed fraction `1 - fabs_<s>`, the undissolved drug, the bile of a substance without lumen species; it integrates to `Afeces_<s>` |
+
+```python
+from pkpdsim.pbpk import ids
+
+oral = PBPKDefinition(
+    sid="oral",
+    substances=definition.substances,
+    routes=[Route.oral("drg")],
+    readouts=(ids.lumen_amount("drg"), ids.absorption_rate("drg")),
+)
+model = compose(oral)
+print([str(p.sid) for p in model.parameters if str(p.sid) in oral.readouts])
+```
+
+```text
+['Alumen_drg', 'Rabs_drg']
+```
+
+`validate` refuses a readout which is no readout of a substance of the definition and a readout given twice; the build refuses the readouts of an intestine without a lumen (the standard organs), `Alumen_<s>`, `Rabs_<s>` and `Reff_<s>` of a substance without lumen species and a readout without a flux (an efflux without an apical efflux of the small intestine), naming the readout. A model without readouts has none of them (its SBML is unchanged).

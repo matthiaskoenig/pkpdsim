@@ -61,6 +61,7 @@ __all__ = [
     "VURINE",
     "WALL_FRACTION",
     "absorption",
+    "absorption_rate",
     "absorption_reaction",
     "activity",
     "area_factor",
@@ -90,10 +91,12 @@ __all__ = [
     "dissolution_t50",
     "dose_reaction",
     "ec50",
+    "efflux_rate",
     "emax",
     "enzyme",
     "exchange_reaction",
     "feces",
+    "feces_rate",
     "feces_reaction",
     "filtration_reaction",
     "fkp",
@@ -129,6 +132,7 @@ __all__ = [
     "kp_organ",
     "kps",
     "lumen",
+    "lumen_amount",
     "lumen_volume",
     "mr",
     "mucosa",
@@ -507,21 +511,26 @@ def organ_outflow(organ: Organ, s: str) -> str:
 
 
 def organ_species(organ: Organ, local: str) -> str:
-    """The id of the top model of a species of an organ which a PD component reads.
+    """The id of the top model of an element of an organ which a PD component or an observer reads.
 
-    The organ exposes its species (a concentration, `C<part>_<s>`) as an
-    output, which replaces this parameter of the top model: `C<o>_<part>_<s>`,
-    `Cli_ic_api` for the cells of the liver (`LI__Cic_api` in the flat model).
+    The organ exposes the element as an output, which replaces this parameter
+    of the top model: the organ token follows the first letter of the local
+    id. A concentration `C<part>_<s>` is `C<o>_<part>_<s>`, `Cli_ic_api` for
+    the cells of the liver (`LI__Cic_api` in the flat model); an unbound
+    concentration `Cu_<part>_<s>` is `C<o>_u_<part>_<s>` (`Cli_u_ic_api`); an
+    amount `A<x>` is `A<o>_<x>` (`Asi_solid_du_api`).
 
     Raises:
-        ValueError: if the local id is no concentration `C...`.
+        ValueError: if the local id is no concentration `C...` and no amount
+            `A...`.
     """
-    if not local.startswith("C") or len(local) < 2:
+    if local[:1] not in ("C", "A") or len(local) < 2:
         raise ValueError(
-            f"The species '{local}' of organ '{organ.value}' is no concentration "
-            "`C<part>_<s>`; a PD component reads a concentration of an organ."
+            f"The element '{local}' of organ '{organ.value}' is no concentration "
+            "`C...` and no amount `A...` of the id scheme; a PD component or an "
+            "observer reads a concentration or an amount of an organ."
         )
-    return f"C{organ.value}_{local[1:]}"
+    return f"{local[0]}{organ.value}_{local[1:]}"
 
 
 def organ_outflow_bc(organ: Organ, s: str) -> str:
@@ -663,6 +672,47 @@ def urine_rate(s: str) -> str:
 def feces(s: str) -> str:
     """The id of the amount in feces, `Afeces_<s>`."""
     return f"Afeces_{s}"
+
+
+def feces_rate(s: str) -> str:
+    """The id of the fecal excretion rate, `Rfeces_<s>` (mmole/min).
+
+    A readout of the intestine (`PBPKDefinition.readouts`): the net flux of
+    the reactions of the intestine into the feces `Afeces_<s>`, an output of
+    the intestine which replaces the parameter of the top model.
+    """
+    return f"Rfeces_{s}"
+
+
+def lumen_amount(s: str) -> str:
+    """The id of the dissolved amount of `s` in the intestinal lumen, `Alumen_<s>` (mmole).
+
+    A readout of the intestine (`PBPKDefinition.readouts`): the sum over the
+    lumen segments of `Vlumen_<seg>*Clumen_<seg>_<s>`, an output of the
+    intestine; the undissolved drug of a tablet is not in it.
+    """
+    return f"Alumen_{s}"
+
+
+def absorption_rate(s: str) -> str:
+    """The id of the absorption rate of `s`, `Rabs_<s>` (mmole/min).
+
+    A readout of the intestine (`PBPKDefinition.readouts`): the sum of the
+    fluxes from the lumen into the intestinal wall (the mucosa, else the
+    wall), the absorption of every segment and an apical influx; not the
+    absorption rate constant `ka_<s>` (`absorption`).
+    """
+    return f"Rabs_{s}"
+
+
+def efflux_rate(s: str) -> str:
+    """The id of the efflux rate of `s` into the intestinal lumen, `Reff_<s>` (mmole/min).
+
+    A readout of the intestine (`PBPKDefinition.readouts`): the sum of the
+    fluxes from the intestinal wall into the lumen, the apical efflux of
+    every segment.
+    """
+    return f"Reff_{s}"
 
 
 def bile(s: str) -> str:

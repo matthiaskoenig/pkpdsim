@@ -24,26 +24,45 @@ in urine and feces the sink species, the urinary excretion rate
 `Rurine_<s>` an output of the kidney.
 
 A definition adds observers of its own (`Observer`, `PBPKDefinition.observers`,
-e.g. the sum of two metabolites): assignment rules of the top model over the
-ids of the top model, appended after the observers of the library. An
-observer reads a state, directly or through other observers (a species, an
-observer of the library, an output of an organ or a PD component, a dynamic
-parameter, `time`): an observer of constants only is rejected when the
-model is composed (`pkpdsim.pbpk.builder`), its value is fixed before the
-simulation and an assignment rule of constants slows the compile of the model
-(R53).
+e.g. the sum of two metabolites): parameters of the top model over the ids
+of the top model, appended after the observers of the library. An observer
+names a species or an unbound concentration of an organ by its flat id
+(`MU__Cti_<s>`, `LI__Cu_ic_<s>`, an amount `MU__A<x>`), which the organ
+exposes as a PD input is exposed (`pkpdsim.pbpk.builder`). An observer which
+reads a state, directly or through other observers (a species, an observer
+of the library, an output of an organ or a PD component, a dynamic
+parameter, `time`), is an assignment rule; an observer of constants only is
+a constant with an initial assignment, evaluated after the changes before
+the simulation (an assignment rule of constants would slow the compile of
+the model, R53).
+
+The intestine adds readouts on request (`PBPKDefinition.readouts`,
+`intestine_readouts`): the dissolved amount in its lumen `Alumen_<s>` and
+the summed fluxes of the absorption `Rabs_<s>`, the efflux into the lumen
+`Reff_<s>` and the loss to the feces `Rfeces_<s>`, outputs of the intestine
+as `Rurine_<s>` is one of the kidney.
 """
 
-from collections.abc import Iterable
+from collections.abc import Collection, Iterable, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import libsbml
-from sbmlutils.factory import AssignmentRule, Parameter, Sbase, UnitDefinition
+from sbmlutils.factory import (
+    PORT_SUFFIX,
+    AssignmentRule,
+    ModelDefinition,
+    Parameter,
+    Port,
+    PortType,
+    Sbase,
+    UnitDefinition,
+)
+from sbmlutils.factory.units import UnitType
 from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk import ids
-from pkpdsim.pbpk.annotation import annotate
+from pkpdsim.pbpk.annotation import annotate, initial_assignment
 from pkpdsim.pbpk.data import load, value
 from pkpdsim.pbpk.organs import Organ, Part, Pool
 from pkpdsim.pbpk.placement import value_parameter
@@ -56,11 +75,14 @@ if TYPE_CHECKING:
 
 __all__ = [
     "Observer",
+    "OrganOutput",
     "arm_vein_weights",
     "definition_observer_objects",
     "formula_functions",
     "formula_symbols",
+    "intestine_readouts",
     "observer_objects",
+    "readout_ids",
 ]
 
 _ONE = "1 dimensionless"
@@ -70,14 +92,18 @@ _OBSERVER = "An observer: an assignment rule which changes no state."
 
 @dataclass(frozen=True)
 class Observer:
-    """An observer of a definition: an assignment rule of the top model.
+    """An observer of a definition: a parameter of the top model with its formula.
 
     Attributes:
         sid: the id of the observer, an id of the top model.
         formula: the formula (SBML L3 infix) over the ids of the top model:
             the pools, the sinks, the observers of the library and of the
-            definition, the covariates, the outputs of the organs.
-        unit: the unit of the formula.
+            definition, the covariates, the outputs of the organs, the
+            readouts; and a species or an unbound concentration of an organ
+            by its flat id (`MU__Cti_<s>`), which the organ exposes.
+        unit: the unit of the formula; a unit which is no unit of `U` (the
+            unit per body surface area `ML_PER_MIN_1P73M2`) is a unit
+            definition of the model.
         name: the name of the observer.
         notes: the notes of the observer.
     """
@@ -87,6 +113,28 @@ class Observer:
     unit: UnitDefinition
     name: str
     notes: str | None = None
+
+
+@dataclass(frozen=True)
+class OrganOutput:
+    """An output of an organ which replaces the parameter of the top model of its id.
+
+    The parameter is created by the composition (`pkpdsim.pbpk.builder`):
+    an element of an organ which a PD component or an observer reads, a
+    readout of the intestine.
+
+    Attributes:
+        unit: the unit of the parameter.
+        name: the name of the parameter.
+        kind: the kind of its annotation (`pkpdsim.pbpk.annotation.KINDS`).
+        text: the start of its notes, followed by `organ <organ>, replaced
+            by the output of the organ`.
+    """
+
+    unit: UnitType
+    name: str
+    kind: str
+    text: str
 
 
 TIME = "time"
@@ -162,38 +210,232 @@ def _nodes(formula: str) -> list[libsbml.ASTNode]:
     return nodes
 
 
-def definition_observer_objects(observers: Iterable[Observer]) -> list[Sbase]:
-    """Get the parameters and the assignment rules of the observers of a definition.
+def definition_observer_objects(
+    observers: Iterable[Observer], constant: Collection[str] = ()
+) -> list[Sbase]:
+    """Get the parameters and the rules of the observers of a definition.
 
     The ids, the symbols of the formulas and whether an observer reads a
     state are checked when the model is composed (`pkpdsim.pbpk.builder`).
 
     Args:
-        observers: the observers of the definition.
+        observers: the observers of the definition, their formulas over the
+            ids of the top model.
+        constant: the ids of the observers which read constants only: a
+            constant with an initial assignment, every other observer an
+            assignment rule.
 
     Returns:
-        The parameters with their assignment rules, annotated as observers.
+        The parameters with their assignment rules or initial assignments,
+        annotated as observers.
     """
     objects: list[Sbase] = []
     for o in observers:
         text = f"{o.notes} " if o.notes else ""
+        fixed = o.sid in constant
+        what = (
+            "A constant of constants with an initial assignment, evaluated after "
+            "the changes before the simulation."
+            if fixed
+            else _OBSERVER
+        )
         objects += [
             annotate(
                 Parameter(
                     o.sid,
                     None,
                     o.unit,
-                    constant=False,
+                    constant=fixed,
                     name=o.name,
                     sboTerm=_SBO_PARAMETER,
-                    notes=f"{text}An observer of the definition. {_OBSERVER}\n\n"
+                    notes=f"{text}An observer of the definition. {what}\n\n"
                     f"`{o.sid} = {o.formula}`",
                 ),
                 "observer",
             ),
-            AssignmentRule(o.sid, o.formula, o.unit, name=o.name),
+            initial_assignment(o.sid, o.formula, o.unit, o.name)
+            if fixed
+            else AssignmentRule(o.sid, o.formula, o.unit, name=o.name),
         ]
     return objects
+
+
+_READOUT_KINDS = (
+    (ids.lumen_amount, "lumen"),
+    (ids.absorption_rate, "absorption"),
+    (ids.efflux_rate, "efflux"),
+    (ids.feces_rate, "feces"),
+)
+"""The readouts of the intestine by their id function and what they sum."""
+
+
+def readout_ids(substances: Iterable[str]) -> dict[str, tuple[str, str]]:
+    """Get the ids of the readouts of the intestine of substances.
+
+    Args:
+        substances: the substance ids.
+
+    Returns:
+        By readout id (`Alumen_<s>`, `Rabs_<s>`, `Reff_<s>`, `Rfeces_<s>`),
+        what it sums (`lumen`, `absorption`, `efflux`, `feces`) and its
+        substance.
+    """
+    return {f(s): (what, s) for s in substances for f, what in _READOUT_KINDS}
+
+
+def intestine_readouts(
+    md: ModelDefinition, readouts: Sequence[str], substances: Iterable[str]
+) -> dict[str, OrganOutput]:
+    """Add the readouts of a definition to the model definition of its intestine.
+
+    Every readout is a parameter of the intestine with its assignment rule
+    and an output port, which replaces the parameter of its id in the top
+    model, as the urinary excretion rate of the kidney does. The sums are
+    taken over the species and the reactions of the intestine, so that they
+    hold for every intestine with a lumen (segmented, single lumen):
+
+    - `Alumen_<s>`: the dissolved amount in the lumen, `sum V*C` of the
+      lumen species `Clumen_<seg>_<s>` (mmole);
+    - `Rabs_<s>`: the fluxes from a lumen species into the wall of the
+      substance (the mucosa `Cmu_<seg>_<s>`, else a species of the wall), the
+      absorption and an apical influx (mmole/min);
+    - `Reff_<s>`: the fluxes from the wall into the lumen, the apical efflux
+      (mmole/min);
+    - `Rfeces_<s>`: the net flux of the intestine into the feces `Afeces_<s>`
+      (mmole/min); with an intestine with a lumen every flux into the feces
+      is one of the intestine, so it integrates to `Afeces_<s>`.
+
+    Args:
+        md: the model definition of the intestine, changed in place.
+        readouts: the readouts of the definition (`PBPKDefinition.readouts`).
+        substances: the substance ids of the definition.
+
+    Returns:
+        The outputs by id.
+
+    Raises:
+        ValueError: naming a readout of a substance without lumen species, or
+            whose sum has no flux.
+    """
+    known = readout_ids(substances)
+    species = {str(sp.sid): sp for sp in md.species or []}
+    problems: list[str] = []
+    outputs: dict[str, OrganOutput] = {}
+    tokens = (None, *ids.GUT_SEGMENTS)
+    for rid in readouts:
+        what, s = known[rid]
+        lumen = [ids.lumen(s, seg) for seg in tokens if ids.lumen(s, seg) in species]
+        if what != "feces" and not lumen:
+            problems.append(
+                f"readout '{rid}': the substance '{s}' has no lumen species in the "
+                "intestine (it reaches the lumen by an oral route, the bile or a "
+                "transport of the intestine)"
+            )
+            continue
+        if what == "lumen":
+            formula = " + ".join(f"{species[c].compartment} * {c}" for c in lumen)
+        else:
+            formula = _flux_sum(md, what, s, set(lumen))
+            if not formula:
+                problems.append(
+                    f"readout '{rid}': the intestine has no flux {_FLUXES[what]} "
+                    f"of '{s}'"
+                )
+                continue
+        output = _readout_output(what, s)
+        md.parameters = [
+            *(md.parameters or []),
+            annotate(
+                Parameter(
+                    rid,
+                    None,
+                    output.unit,
+                    constant=False,
+                    name=output.name,
+                    sboTerm=_SBO_PARAMETER,
+                    notes=f"{_READOUT_NOTES[what]} A readout of the definition, an "
+                    f"output of the intestine.\n\n`{rid} = {formula}`",
+                    port=Port(f"{rid}{PORT_SUFFIX}", portType=PortType.OUTPUT_PORT),
+                ),
+                output.kind,
+                organ=Organ.SMALL_INTESTINE,
+            ),
+        ]
+        md.rules = [*(md.rules or []), AssignmentRule(rid, formula, output.unit)]
+        outputs[rid] = output
+    if problems:
+        raise ValueError("; ".join(problems) + ".")
+    return outputs
+
+
+_FLUXES = {
+    "absorption": "from the lumen into the wall",
+    "efflux": "from the wall into the lumen (an apical efflux of the small intestine)",
+    "feces": "into the feces",
+}
+"""What the fluxes of a readout are, in a message."""
+
+_READOUT_NOTES = {
+    "lumen": "The dissolved amount in the intestinal lumen, the sum over its "
+    "segments (the undissolved drug of a tablet is not in it).",
+    "absorption": "The rate of the absorption: the sum of the fluxes from the "
+    "lumen into the intestinal wall (the absorption of every segment and an "
+    "apical influx).",
+    "efflux": "The rate of the efflux into the lumen: the sum of the fluxes from "
+    "the intestinal wall into the lumen (the apical efflux of every segment).",
+    "feces": "The rate of the fecal excretion: the net flux of the intestine "
+    "into the feces.",
+}
+"""The notes of the parameter of a readout in the intestine."""
+
+
+def _readout_output(what: str, s: str) -> OrganOutput:
+    """The output of a readout: its unit, name, kind and the notes in the top model."""
+    if what == "lumen":
+        return OrganOutput(
+            U.mmole,
+            f"dissolved amount {s} in the intestinal lumen [mmole]",
+            "lumen_amount",
+            "Dissolved amount in the lumen, the sum over its segments, of the ",
+        )
+    process, kind = {
+        "absorption": ("absorption", "intestine_absorption"),
+        "efflux": ("efflux into the intestinal lumen", "intestine_efflux"),
+        "feces": ("fecal excretion", "feces_rate"),
+    }[what]
+    return OrganOutput(
+        U.mmole_per_min,
+        f"rate of the {process} {s} [mmole/min]",
+        kind,
+        f"Rate of the {process}, a sum of the fluxes, of the ",
+    )
+
+
+def _flux_sum(md: ModelDefinition, what: str, s: str, lumen: set[str]) -> str:
+    """The sum of the fluxes of the intestine of a readout, empty without any.
+
+    The wall of a substance: its mucosa species and its species of the parts
+    of the wall (`ids.species`).
+    """
+    tokens = (None, *ids.GUT_SEGMENTS)
+    wall = {ids.mucosa(s, seg) for seg in tokens} | {ids.species(p, s) for p in Part}
+    sources, targets = {
+        "absorption": (lumen, wall),
+        "efflux": (wall, lumen),
+        "feces": (None, {ids.feces(s)}),
+    }[what]
+    into: list[str] = []
+    out: list[str] = []
+    for r in md.reactions or []:
+        reactants = {p.species for p in r.equation.reactants}
+        products = {p.species for p in r.equation.products}
+        if products & targets and (sources is None or reactants & sources):
+            into.append(str(r.sid))
+        elif what == "feces" and reactants & targets:
+            out.append(str(r.sid))
+    if not into:
+        return ""
+    return " + ".join(into) + "".join(f" - {r}" for r in out)
 
 
 def arm_vein_weights(preset: str) -> dict[Organ | Pool, Value]:

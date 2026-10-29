@@ -436,10 +436,11 @@ def test_observer_with_unknown_symbol_is_rejected() -> None:
         _definition(observers=[Observer("x", "Cnope + 1 mM", U.mM, "x")]).validate()
 
 
-def test_observer_with_an_organ_id_is_rejected() -> None:
-    """An id of an organ (`LI__Cpl_api`) is not visible in the top model."""
-    observer = Observer("x", "LI__Cpl_api", U.mM, "x")
-    with pytest.raises(ValueError, match="LI__Cpl_api"):
+def test_observer_with_an_organ_id_which_is_not_exposed_is_rejected() -> None:
+    """An organ exposes its species (`LI__Cpl_api`) to an observer, no other element (`LI__Vpl`)."""
+    _definition(observers=[Observer("x", "LI__Cpl_api", U.mM, "x")]).validate()
+    observer = Observer("x", "LI__Vpl", U.mM, "x")
+    with pytest.raises(ValueError, match="'LI__Vpl', which is no species"):
         _definition(observers=[observer]).validate()
 
 

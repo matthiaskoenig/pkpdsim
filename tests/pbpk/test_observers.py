@@ -520,26 +520,23 @@ def test_observer_reads_another_observer(tmp_path: Path) -> None:
     np.testing.assert_allclose(s[1:, 1], 1000 * s[1:, 2] / s[1:, 3], rtol=1e-10, atol=0)
 
 
-def test_observer_of_constants_is_rejected() -> None:
-    """An observer which reads no state is rejected (R53): it would be a rule of constants."""
-    observer = Observer("BW_g", "1000 dimensionless * BW", U.kg, "body weight (g)")
-    with pytest.raises(ValueError, match=r"'BW_g' reads constants only \(\['BW'\]\)"):
-        definition(observers=[observer]).validate()
+def test_observer_of_constants_is_a_constant() -> None:
+    """An observer which reads no state is a constant with an initial assignment (R53).
 
-
-def test_observer_through_constant_observers_is_rejected() -> None:
-    """An observer which reads only an observer of constants reads no state either."""
+    So is an observer which reads only observers of constants; one which reads a
+    state as well is an assignment rule (`test_observers_readouts`).
+    """
     observers = [
         Observer("x1", "2 dimensionless * HEIGHT", U.cm, "x1"),
         Observer("x2", "x1 + Carm_drg * 0 cm / 1 mM", U.cm, "x2"),
         Observer("x3", "x1 / 2 dimensionless", U.cm, "x3"),
     ]
-    with pytest.raises(ValueError) as info:
-        definition(observers=observers).validate()
-    message = str(info.value)
-    assert "'x1' reads constants only" in message
-    assert "'x3' reads constants only" in message
-    assert "'x2'" not in message
+    model = compose(definition(observers=observers))
+    rules = {str(r.variable) for r in model.rules}
+    assignments = {str(a.symbol) for a in model.assignments}
+    assert {"x1", "x3"} <= assignments
+    assert "x2" in rules
+    assert not {"x1", "x3"} & rules
 
 
 def test_observer_cycle_is_rejected() -> None:

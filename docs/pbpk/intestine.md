@@ -53,7 +53,7 @@ J_dis_du_<s>: Asolid_du_<s> -> Clumen_du_<s> = kdis_<s> * Asolid_du_<s>
 --8<-- "pbpk/img/intestine.svg"
 </div>
 
-The lumen segments follow the anatomical segmentation of Thelen 2011, as PK-Sim: stomach `st`, duodenum `du`, upper and lower jejunum `jej1`, `jej2`, upper and lower ileum `ile1`, `ile2`, caecum `cae`, colon ascendens `asc`, transversum `tra`, descendens `des`, sigmoid `sig` and rectum `rec`, then the feces. A substance which reaches the lumen (oral route, biliary excretion, transport into the lumen) has the dissolved concentration `Clumen_<seg>_<s>` in every segment, which moves on with the transit `V*C/T` of the segment and from the rectum into the feces `Afeces_<s>`. The fed state `FED = 1` slows the gastric emptying to the stomach transit time of the fed state.
+The lumen segments follow the anatomical segmentation of Thelen 2011, as PK-Sim: stomach `st`, duodenum `du`, upper and lower jejunum `jej1`, `jej2`, upper and lower ileum `ile1`, `ile2`, caecum `cae`, colon ascendens `asc`, transversum `tra`, descendens `des`, sigmoid `sig` and rectum `rec`, then the feces; the tokens in the order of the transit are `ids.GUT_SEGMENTS`, which a model reads instead of a list of its own. A substance which reaches the lumen (oral route, biliary excretion, transport into the lumen) has the dissolved concentration `Clumen_<seg>_<s>` in every segment, which moves on with the transit `V*C/T` of the segment and from the rectum into the feces `Afeces_<s>`. The fed state `FED = 1` slows the gastric emptying to the stomach transit time of the fed state.
 
 The absorption rate constant of the small intestine is `ka_<s>` (1/hr, 1 by default for a substance with an oral route, a choice of the library; 0 for any other); a segment absorbs with `ka_<s>*f_area_<seg>`, the mucosal surface per lumen volume relative to the small intestine (the stomach does not absorb); two optional factors change it (see [Fraction absorbed and colon absorption](#fraction-absorbed-and-colon-absorption)). Without chemistry of the intestine the substance is absorbed into the plasma of the intestinal wall:
 
@@ -151,6 +151,10 @@ The number `0.0744792` is the transit share of the duodenum in the small intesti
 ## Single lumen
 
 `Variants(organs={Organ.SMALL_INTESTINE: "single_lumen"})` replaces the segments with one lumen, the fluid of the small intestine (105 ml, transit time 192 min): the first order absorption of most hand-written models, from the same interface. The lumen absorbs with `ka_<s>`, of which the fraction `fabs_<s>` enters the body and the rest the feces, and it keeps a physiological transit into the feces, so the fraction absorbed is `Fa = fabs*ka/(ka + 1/T)`: the fitted absorption constants of the hand-written models (which had no transit) do not carry over unchanged, a refit is expected anyway.
+
+## Readouts
+
+The lumen and the fluxes of the intestine are spread over its segments; a model which reads their sums names them in `PBPKDefinition.readouts`, and the intestine adds each as an output, as the kidney adds `Rurine_<s>`: the dissolved amount in the lumen `Alumen_<s>` and the summed fluxes of the absorption `Rabs_<s>`, of the efflux into the lumen `Reff_<s>` and of the loss to the feces `Rfeces_<s>`, the same ids for the segmented intestine and the single lumen (see [Observers](observers.md#readouts-of-the-intestine)). A model without readouts has none of them.
 
 ## Bile and enterohepatic circulation
 

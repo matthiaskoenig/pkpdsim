@@ -85,7 +85,7 @@ The [migration guide](migration.md) explains the move of a hand-written model of
 
 ## What is generated
 
-Every quantity which depends on parameters only (the physiology, the impairment, the compartments, `fu`, `BP`, the coefficients and exchanges of the organs) is a constant with an initial assignment: an experiment which changes `BW` before the simulation changes every organ volume and flow with it, because sbmlsim evaluates the initial assignments again after the changes of an experiment. A change during a simulation is not followed, unless the definition names the parameter in `PBPKDefinition.dynamic` (an impairment changed in the middle of a study, a PD output): then every quantity downstream of it is an assignment rule. The start of the species of an endogenous substance (`Substance.baseline`, and the starts of a definition at the steady state of a production, `PBPKDefinition.starts`) is an initial assignment as well, which stays one under a dynamic parameter (see [Substances](substances.md#endogenous-baseline)). Only what reads a species is always an assignment rule: the outflow concentrations of the organs, the urinary excretion rate and the observers; an observer of a definition must therefore read a state (see [Observers](observers.md#observers-of-a-definition)). A model loaded with plain roadrunner sets a covariate with `r.setValue("init(BW)", 100.0)` and resets, so that the initial assignments are evaluated again.
+Every quantity which depends on parameters only (the physiology, the impairment, the compartments, `fu`, `BP`, the coefficients and exchanges of the organs) is a constant with an initial assignment: an experiment which changes `BW` before the simulation changes every organ volume and flow with it, because sbmlsim evaluates the initial assignments again after the changes of an experiment. A change during a simulation is not followed, unless the definition names the parameter in `PBPKDefinition.dynamic` (an impairment changed in the middle of a study, a PD output): then every quantity downstream of it is an assignment rule. The start of the species of an endogenous substance (`Substance.baseline`, and the starts of a definition at the steady state of a production, `PBPKDefinition.starts`) is an initial assignment as well, which stays one under a dynamic parameter (see [Substances](substances.md#endogenous-baseline)). Only what reads a species is always an assignment rule: the outflow concentrations of the organs, the urinary excretion rate, the readouts and the observers; an observer of a definition which reads constants only is a constant with an initial assignment (see [Observers](observers.md#observers-of-a-definition)). A model loaded with plain roadrunner sets a covariate with `r.setValue("init(BW)", 100.0)` and resets, so that the initial assignments are evaluated again.
 
 Sex is a choice of the build (`PBPKDefinition.sex`): it selects the male or female reference values when the model is built, and a study of both sexes uses one model per sex. A sex switch inside the SBML made the models load about ten times slower.
 
@@ -115,10 +115,15 @@ One id scheme for every model, built by the functions of `pkpdsim.pbpk.ids`, so 
 | `Carm_free_<s>` | the unbound arm vein concentration | `ids.arm_free(s)` |
 | `Chv_<s>` | the hepatic vein plasma concentration | `ids.hepatic_vein(s)` |
 | `Cout_<o>_<s>` | the plasma leaving an organ | `ids.organ_outflow(o, s)` |
-| `C<o>_<part>_<s>` | a species of an organ which a PD component reads (`Cli_ic_<s>`), an output of the organ | `ids.organ_species(o, ids.species(part, s))` |
+| `C<o>_<part>_<s>` | a species of an organ which a PD component or an observer reads (`Cli_ic_<s>`), an output of the organ | `ids.organ_species(o, ids.species(part, s))` |
+| `C<o>_u_<part>_<s>` | an unbound concentration of an organ part which a PD component or an observer reads (`Cli_u_ic_<s>`), an output of the organ | `ids.organ_species(o, ids.unbound(part, s))` |
 | `Aurine_<s>` | the amount in urine | `ids.urine(s)` |
 | `Rurine_<s>` | the urinary excretion rate (mmole/min), an output of the kidney | `ids.urine_rate(s)` |
 | `Afeces_<s>` | the amount in feces | `ids.feces(s)` |
+| `Alumen_<s>` | the dissolved amount in the intestinal lumen, the sum over the segments (mmole), a readout of the intestine | `ids.lumen_amount(s)` |
+| `Rabs_<s>` | the absorption rate, the fluxes from the lumen into the intestinal wall (mmole/min), a readout of the intestine | `ids.absorption_rate(s)` |
+| `Reff_<s>` | the efflux rate, the fluxes from the intestinal wall into the lumen (mmole/min), a readout of the intestine | `ids.efflux_rate(s)` |
+| `Rfeces_<s>` | the fecal excretion rate, the net flux of the intestine into the feces (mmole/min), a readout of the intestine | `ids.feces_rate(s)` |
 | `Cbile_<s>` | the concentration in bile | `ids.bile(s)` |
 | `Mr_<s>` | the molecular weight | `ids.mr(s)` |
 | `fu_ref_<s>` | the unbound fraction of the healthy individual (input) | `ids.fu_ref(s)` |
@@ -267,6 +272,7 @@ Every other id of the scheme, the ids a model rarely reads: the physiology, the 
 | `p_cyp3a4_<zone>` | the relative abundance of a profile in a zone (local id) | `ids.placement_profile('cyp3a4', zone)` |
 | `w_cyp3a4_<seg>` | the share of a process in a segment or a zone (local id) | `ids.placement_weight('cyp3a4', seg)` |
 | `API2M_<seg>` | a process of the chemistry in a segment or a zone (local id) | `ids.segment_process('API2M', seg)` |
+| `Asi_solid_<seg>_<s>` | an amount species of an organ which a PD component or an observer reads (`A<x>` as `A<o>_<x>`), an output of the organ | `ids.organ_species(Organ.SMALL_INTESTINE, ids.solid(s, seg))` |
 | `Carm_api_0` | the value of an observer at the start (`PBPKDefinition.deltas`) | `ids.start_value('Carm_api')` |
 | `Carm_api_delta` | the change of an observer over its start (`PBPKDefinition.deltas`) | `ids.delta('Carm_api')` |
 | `J_<kind>_<s>` | the application of a dose state (`iv`, `po`, `sol`) | `ids.dose_reaction(kind, s)` |

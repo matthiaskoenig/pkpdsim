@@ -84,6 +84,9 @@ PBPKO has no term for some of the quantities, compartments and processes of the 
 | tubular flow fraction of the glomerular filtration rate | `PHYSIOLOGICAL_PARAMETER` |
 | weight of a tissue in the arm vein sampling site | `PHYSIOLOGICAL_PARAMETER` |
 | urinary excretion rate (amount of compound per time) | `OUTPUT_PARAMETER` |
+| intestinal absorption rate (amount of compound per time) | `OUTPUT_PARAMETER` |
+| intestinal efflux rate into the lumen (amount of compound per time) | `OUTPUT_PARAMETER` |
+| fecal excretion rate (amount of compound per time) | `OUTPUT_PARAMETER` |
 | `CONCENTRATION_IN_HEART` | `CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT` |
 | `CONCENTRATION_IN_PANCREAS` | `CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT` |
 | `CONCENTRATION_IN_MUSCLE` | `CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT` |

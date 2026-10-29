@@ -18,7 +18,7 @@ from pkpdsim.pbpk.chemistry import (
 )
 from pkpdsim.pbpk.data import load
 from pkpdsim.pbpk.kp import check_kp_method
-from pkpdsim.pbpk.observers import Observer, formula_functions
+from pkpdsim.pbpk.observers import Observer, formula_functions, readout_ids
 from pkpdsim.pbpk.organ import OrganComponent
 from pkpdsim.pbpk.organs import Organ, Part, Pool, as_member, as_organ_keys
 from pkpdsim.pbpk.pd import PDComponent
@@ -145,9 +145,10 @@ class PBPKDefinition:
             every other quantity follows a change before the simulation only.
         name: the name of the model.
         notes: the notes of the model.
-        observers: the observers of the definition, assignment rules of the
-            top model after the observers of the library (a sum of
-            metabolites, a ratio); each reads a state.
+        observers: the observers of the definition, parameters of the top
+            model after the observers of the library (a sum of metabolites, a
+            ratio, a species of an organ by its flat id): an assignment rule
+            if it reads a state, else a constant with an initial assignment.
         creators: the creators of the model, its model history (sbmlutils
             `Creator`).
         parameters: the constant parameters of the top model which the model
@@ -168,6 +169,12 @@ class PBPKDefinition:
             start (an initial assignment), and the observer
             `<id>_delta = <id> - <id>_0`, e.g. the increase of an endogenous
             substance over the value before a dose.
+        readouts: the readouts of the library which the model reads, by id,
+            outputs of the intestine with a lumen: the dissolved amount in
+            the lumen `Alumen_<s>` and the summed fluxes of the absorption
+            `Rabs_<s>`, the efflux into the lumen `Reff_<s>` and the loss to
+            the feces `Rfeces_<s>` (`ids.lumen_amount`, ...); a model without
+            readouts has none of them.
     """
 
     sid: str
@@ -187,6 +194,7 @@ class PBPKDefinition:
     parameters: Sequence[ModelParameter] = ()
     starts: Mapping[str, Q] = field(default_factory=dict)
     deltas: tuple[str, ...] = ()
+    readouts: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         """Normalise the sex to a `Sex` member and freeze the starts."""
@@ -198,8 +206,9 @@ class PBPKDefinition:
         """Couple the definitions of several packages into one physiology.
 
         The substances, the chemistry, the routes, the PD components, the
-        dynamic parameters, the observers and parameters of the definitions
-        and the creators are the unions of the definitions (the observers of the library follow
+        dynamic parameters, the observers and parameters of the definitions,
+        the deltas, the readouts and the creators are the unions of the
+        definitions (the observers of the library follow
         from the substances), the organ variants are merged; there is
         one physiology, so the definitions must agree on sex, population and
         the arm vein preset. Substance ids are unique over all packages, so
@@ -296,6 +305,7 @@ class PBPKDefinition:
                 )
             ),
             deltas=tuple(dict.fromkeys(x for d in definitions for x in d.deltas)),
+            readouts=tuple(dict.fromkeys(x for d in definitions for x in d.readouts)),
         )
 
     def validate(self, *, symbols: bool = True) -> None:
@@ -324,6 +334,7 @@ class PBPKDefinition:
         problems += self._check_parameters()
         problems += self._check_starts()
         problems += self._check_deltas()
+        problems += self._check_readouts()
         if self.population not in POPULATIONS:
             problems.append(
                 f"population '{self.population}' is unknown, the populations are "
@@ -440,6 +451,26 @@ class PBPKDefinition:
             f"delta '{d}': the id is not an SBML SId"
             for d in self.deltas
             if not _SID.fullmatch(d)
+        ]
+        return problems
+
+    def _check_readouts(self) -> list[str]:
+        """Check the readouts: readouts of a substance of the definition, each once.
+
+        That the intestine can compute them (a lumen, lumen species of the
+        substance, a flux) is checked by `compose`.
+        """
+        problems: list[str] = []
+        twice = sorted({r for r in self.readouts if self.readouts.count(r) > 1})
+        if twice:
+            problems.append(f"duplicate readouts: {twice}")
+        known = readout_ids(s.sid for s in self.substances)
+        problems += [
+            f"readout '{r}' is no readout of the library: `Alumen_<s>`, "
+            "`Rabs_<s>`, `Reff_<s>` or `Rfeces_<s>` of a substance of the "
+            "definition"
+            for r in dict.fromkeys(self.readouts)
+            if r not in known
         ]
         return problems
 
