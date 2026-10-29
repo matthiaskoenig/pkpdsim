@@ -519,6 +519,7 @@ class PBPKDefinition:
         problems += _in_unit_interval(
             s.sid, "fraction_reabsorbed", s.excretion.fraction_reabsorbed
         )
+        problems += _check_reabsorption(s)
         if s.baseline is not None:
             problems += check_positive(s.sid, "baseline", s.baseline)
             problems += check_unit(s.sid, "baseline", s.baseline, U.mM)
@@ -813,6 +814,33 @@ def _in_unit_interval(
         interval = "(0, 1]" if open_low else "[0, 1]"
         return [f"{where}: {name} must be in {interval}, got {x}"]
     return []
+
+
+def _check_reabsorption(s: Substance) -> list[str]:
+    """Check a saturable reabsorption: of a filtrate, alone, positive constants in their units."""
+    excretion = s.excretion
+    saturable = excretion.reabsorption
+    if saturable is None:
+        return []
+    where = f"{s.sid} (saturable reabsorption)"
+    problems: list[str] = []
+    if not excretion.urine:
+        problems.append(
+            f"{where}: no filtrate to reabsorb, the substance needs "
+            "Excretion(urine=True)"
+        )
+    if number(excretion.fraction_reabsorbed) != 0:
+        problems.append(
+            f"{where}: the constant fraction_reabsorbed must stay 0, the "
+            "reabsorption replaces it"
+        )
+    for name, q, unit in (
+        ("threshold", saturable.threshold, U.mM),
+        ("n", saturable.n, U.dimensionless),
+    ):
+        problems += check_positive(where, name, q)
+        problems += check_unit(where, name, q, unit)
+    return problems
 
 
 def _check_interactions(s: Substance) -> list[str]:

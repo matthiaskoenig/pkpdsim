@@ -18,6 +18,7 @@ __all__ = [
     "Kp",
     "KpMethod",
     "Mode",
+    "Saturable",
     "Substance",
 ]
 
@@ -186,16 +187,46 @@ class KpMethod(_Exchange):
 
 
 @dataclass(frozen=True)
+class Saturable:
+    """A reabsorption of the filtered load up to a renal threshold.
+
+    The reabsorbed fraction of the filtrate at the plasma concentration `C`,
+    `1/(1 + (fu*C/threshold)^n)^(1/n)`, of the unbound (filtered)
+    concentration `fu*C`: the reabsorption `fu*GFR*C/(1 + (fu*C/threshold)^n)^(1/n)`
+    takes almost all of a filtrate below the threshold and approaches the
+    transport maximum `GFR*threshold` above it, and it never exceeds the
+    filtration `fu*GFR*C` (the fraction is at most 1). `n` sets how sharp the
+    threshold is: far below it the excreted fraction of the filtrate is about
+    `(fu*C/threshold)^n/n`. The law of the reabsorption of creatine with its
+    renal threshold (`CRREABS` of the creatinine model).
+
+    Attributes:
+        threshold: the renal threshold, a concentration of the filtrate (mM),
+            `reab_threshold_<s>`.
+        n: the sharpness of the threshold (dimensionless), `reab_n_<s>`.
+    """
+
+    threshold: Q
+    n: Q
+
+
+@dataclass(frozen=True)
 class Excretion:
     """The excretion which is not a process of the chemistry.
 
     Attributes:
         urine: glomerular filtration `fu*GFR`.
-        fraction_reabsorbed: the fraction of the filtrate which is reabsorbed.
+        fraction_reabsorbed: the constant fraction of the filtrate which is
+            reabsorbed, `f_reabsorbed_<s>`.
+        reabsorption: a reabsorption which depends on the plasma
+            concentration instead of the constant fraction (`Saturable`), `None`
+            for the constant fraction; with it `fraction_reabsorbed` stays 0
+            and the substance has no `f_reabsorbed_<s>`.
     """
 
     urine: bool = False
     fraction_reabsorbed: Q = 0.0
+    reabsorption: Saturable | None = None
 
 
 @dataclass(frozen=True)

@@ -1646,7 +1646,8 @@ class _Top:
             unbound_fraction_notes(s),
             "fu",
         )
-        if s.excretion.urine:
+        saturable = s.excretion.reabsorption
+        if s.excretion.urine and saturable is None:
             self.add(
                 [
                     annotate(
@@ -1661,6 +1662,41 @@ class _Top:
                         ),
                         "fraction_reabsorbed",
                     )
+                ]
+            )
+        elif s.excretion.urine and saturable is not None:
+            self.add(
+                [
+                    annotate(
+                        value_parameter(
+                            ids.reabsorption_threshold(sid),
+                            saturable.threshold,
+                            U.mM,
+                            f"renal threshold {sid} [mM]",
+                            _SBO_PARAMETER,
+                            "Renal threshold of the saturable reabsorption of the "
+                            "filtrate, a concentration of the filtrate (the unbound "
+                            "plasma): the reabsorbed fraction of the filtrate is "
+                            f"`1/(1 + (fu*C/{ids.reabsorption_threshold(sid)})^n)^(1/n)`, "
+                            "almost all of it below the threshold, and the reabsorption "
+                            "approaches the transport maximum `GFR` times the threshold "
+                            "above it.",
+                        ),
+                        "reabsorption_threshold",
+                    ),
+                    annotate(
+                        value_parameter(
+                            ids.reabsorption_n(sid),
+                            saturable.n,
+                            U.dimensionless,
+                            f"sharpness of the renal threshold {sid}",
+                            _SBO_PARAMETER,
+                            "How sharp the renal threshold of the saturable "
+                            "reabsorption is: far below the threshold the excreted "
+                            "fraction of the filtrate is about `(fu*C/threshold)^n/n`.",
+                        ),
+                        "reabsorption_n",
+                    ),
                 ]
             )
         if s.baseline is not None:

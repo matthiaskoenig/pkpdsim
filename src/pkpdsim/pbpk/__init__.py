@@ -58,6 +58,7 @@ from pkpdsim.pbpk.substance import (
     Kp,
     KpMethod,
     Mode,
+    Saturable,
     Substance,
 )
 from pkpdsim.pbpk.units import MODEL_UNITS, U
@@ -69,14 +70,23 @@ from pkpdsim.pbpk.variants.liver_zonated import ZonatedLiver
 if TYPE_CHECKING:
     from pkpdsim.pbpk.experiment import (
         REFERENCE_GFR,
+        KidneyOutflow,
         PBPKSimulationExperiment,
         ScaledRenalMap,
         healthy_gfr,
+        kidney_outflow,
     )
 
 #: the names of `pkpdsim.pbpk.experiment`, imported on their first access
 _EXPERIMENT_NAMES = frozenset(
-    {"REFERENCE_GFR", "PBPKSimulationExperiment", "ScaledRenalMap", "healthy_gfr"}
+    {
+        "REFERENCE_GFR",
+        "KidneyOutflow",
+        "PBPKSimulationExperiment",
+        "ScaledRenalMap",
+        "healthy_gfr",
+        "kidney_outflow",
+    }
 )
 
 
@@ -119,6 +129,7 @@ __all__ = [
     "Hill",
     "Induction",
     "Inhibition",
+    "KidneyOutflow",
     "Kp",
     "KpMethod",
     "Membrane",
@@ -142,6 +153,7 @@ __all__ = [
     "ReferenceIndividual",
     "Rest",
     "Route",
+    "Saturable",
     "ScaledRenalMap",
     "SegmentedIntestine",
     "Sex",
@@ -164,6 +176,7 @@ __all__ = [
     "fitted",
     "healthy_gfr",
     "interstitial_share",
+    "kidney_outflow",
     "load",
     "parts_for",
     "physiology_objects",

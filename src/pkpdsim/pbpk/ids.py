@@ -167,6 +167,8 @@ __all__ = [
     "ps",
     "ps_ref",
     "rate_ratio",
+    "reabsorption_n",
+    "reabsorption_threshold",
     "ref",
     "segment_process",
     "shunt_reaction",
@@ -688,6 +690,16 @@ def kbc_exchange(s: str) -> str:
 def fraction_reabsorbed(s: str) -> str:
     """The id of the fraction of the filtrate which is reabsorbed, `f_reabsorbed_<s>`."""
     return f"f_reabsorbed_{s}"
+
+
+def reabsorption_threshold(s: str) -> str:
+    """The id of the renal threshold of a saturable reabsorption (mM), `reab_threshold_<s>`."""
+    return f"reab_threshold_{s}"
+
+
+def reabsorption_n(s: str) -> str:
+    """The id of the sharpness of the threshold of a saturable reabsorption, `reab_n_<s>`."""
+    return f"reab_n_{s}"
 
 
 def urine(s: str) -> str:

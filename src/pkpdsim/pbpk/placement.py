@@ -1336,8 +1336,8 @@ def _transport(
             raise ValueError(
                 f"Transport '{process.sid}': apical influx from the urine is not "
                 "part of the standard kidney (the urine is cumulative); "
-                "reabsorption is `Excretion.fraction_reabsorbed` or the nephron "
-                "variant."
+                "reabsorption is `Excretion.fraction_reabsorbed`, a saturable "
+                "`Excretion.reabsorption` or the nephron variant."
             )
         other = outside = sink.species
         where = {

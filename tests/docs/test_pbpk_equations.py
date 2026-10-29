@@ -51,6 +51,7 @@ from pkpdsim.pbpk import (
     PDComponent,
     RateOf,
     Route,
+    Saturable,
     SegmentedIntestine,
     SlowPool,
     Substance,
@@ -88,7 +89,8 @@ def standard() -> PBPKDefinition:
     and the remainder `spl_m2`); the OATP1B3 uptake `PRMIN3` of `prm` has a
     capacity as a ratio of `PRMIN`; `drg` inhibits CYP2C9 competitively;
     `drg`, `prf` and `prm` have an endogenous baseline; a PD component reads
-    the liver cells of `prm`; `drg` has a slow pool in muscle.
+    the liver cells of `prm`; `drg` has a slow pool in muscle; `sat` is
+    reabsorbed up to a renal threshold (`Saturable`).
     """
     return PBPKDefinition(
         sid="toy_standard",
@@ -143,6 +145,13 @@ def standard() -> PBPKDefinition:
             ),
             Substance("spl_m1", name="metabolite 1", mr=316.0),
             Substance("spl_m2", name="metabolite 2", mr=332.0),
+            Substance(
+                "sat",
+                name="drug reabsorbed up to a renal threshold",
+                mr=180.0,
+                binding=Binding(fu=0.8),
+                excretion=Excretion(urine=True, reabsorption=Saturable(0.2, 2.0)),
+            ),
         ],
         chemistry=[
             Metabolism(

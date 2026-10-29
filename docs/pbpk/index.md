@@ -140,7 +140,9 @@ One id scheme for every model, built by the functions of `pkpdsim.pbpk.ids`, so 
 | `PS_ref_<s>` | the exchange of the whole healthy liver (`ps` with `ps_per_volume=False`, l/min, local id) | `ids.ps_ref(s)` |
 | `BP_<s>` | the blood to plasma ratio | `ids.bp(s)` |
 | `Kbc_<s>` | the blood cell to plasma coefficient | `ids.kbc(s)` |
-| `f_reabsorbed_<s>` | the fraction of the filtrate which is reabsorbed | `ids.fraction_reabsorbed(s)` |
+| `f_reabsorbed_<s>` | the constant fraction of the filtrate which is reabsorbed | `ids.fraction_reabsorbed(s)` |
+| `reab_threshold_<s>` | the renal threshold of a saturable reabsorption, a concentration of the filtrate (mM) | `ids.reabsorption_threshold(s)` |
+| `reab_n_<s>` | the sharpness of the threshold of a saturable reabsorption | `ids.reabsorption_n(s)` |
 | `baseline_<s>` | the plasma concentration of an endogenous substance at the start (mM) | `ids.baseline(s)` |
 | `IVDOSE_<s>` | the intravenous dose state (mg) | `ids.iv_dose(s)` |
 | `Ri_<s>` | the intravenous infusion (mg/min) | `ids.infusion_rate(s)` |

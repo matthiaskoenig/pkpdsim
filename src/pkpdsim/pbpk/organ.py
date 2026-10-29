@@ -33,7 +33,10 @@ substance with urinary excretion into the urine,
 the net filtrate at the outflow concentration,
 `Qki*(1-HCT)*Cout - fu*GFR*(1 - f_reabsorbed)*Cout`, so the filtration
 clearance of the arterial plasma is `fu*GFR*(1 - f_reabsorbed)` and a
-secretion clears the plasma flow less the filtrate. Its
+secretion clears the plasma flow less the filtrate. A saturable reabsorption
+(`Saturable`) replaces the constant fraction by the fraction
+`1/(1 + (fu*C/reab_threshold)^reab_n)^(1/reab_n)` at the concentration of
+each term (`Car` in the filtration, `Cout` in the outflow). Its
 metabolism and transport (the tubular processes) run with the tubular
 capacity `1 - f_tubular + f_tubular*f_renal_function`, which follows the
 renal function (the intact nephron hypothesis, `f_tubular` 1). The kidney
@@ -592,12 +595,16 @@ class StandardBuilder(OrganBuilder):
         equilibrium; kinetic blood cells carry `Q*HCT*Cbc`. The plasma leaving
         the kidney carries the flow of its carrier less the net filtrate at
         the outflow concentration, `filtrate` (`_filtrate`):
-        `Q*(1-HCT)*Cout - fu*GFR*(1 - f_reabsorbed)*Cout`. The outflow is
-        valid while the net filtered plasma flow `fu*GFR*(1 - f_reabsorbed)`
-        is below the flow of the carrier `Q*(1-HCT)` (`Q*BP`), which holds for
-        every physiological GFR (about 0.125 against 0.76 l/min in the
-        reference individual), hyperfiltration and the classes of impairment
-        included; the library does not check it. The fraction
+        `Q*(1-HCT)*Cout - fu*GFR*(1 - f_reabsorbed)*Cout` (a saturable
+        reabsorption at `Cout`). The outflow is valid while the net filtered
+        plasma flow `fu*GFR*(1 - f_reabsorbed)` (`fu*GFR` for a saturable
+        reabsorption, whose fraction falls to 0) is below the flow of the
+        carrier `Q*(1-HCT)` (`Q*BP`), which holds for every physiological GFR
+        (about 0.125 against 0.76 l/min in the reference individual),
+        hyperfiltration and the classes of impairment included; the GFR, the
+        flow and the hematocrit are parameters which an experiment changes, so
+        `PBPKSimulationExperiment` checks it for every simulated individual
+        (`pkpdsim.pbpk.experiment.kidney_outflow`). The fraction
         `f_shunt` of the inflow of the liver bypasses it (portosystemic shunt)
         from the arterial and the portal pool directly into the venous pool;
         the liver is perfused by and drains `(1 - f_shunt)*Q`. The zones of a
@@ -678,8 +685,8 @@ class StandardBuilder(OrganBuilder):
                 pool=out_pool,
             )
 
-    def _reabsorbed(self, s: Substance) -> str:
-        """The fraction `f_reabsorbed_<s>` of the filtrate which is reabsorbed, an input."""
+    def _fraction_reabsorbed(self, s: Substance) -> str:
+        """The constant fraction `f_reabsorbed_<s>` of the filtrate which is reabsorbed, an input."""
         return self._input(
             ids.fraction_reabsorbed(s.sid),
             U.dimensionless,
@@ -687,17 +694,45 @@ class StandardBuilder(OrganBuilder):
             "The fraction of the filtrate which is reabsorbed.",
         )
 
+    def _reabsorbed(self, s: Substance, fu: str, c: str) -> str:
+        """The reabsorbed fraction of the filtrate of the plasma concentration `c`.
+
+        The constant fraction `f_reabsorbed_<s>` (`Excretion.fraction_reabsorbed`),
+        or of a saturable reabsorption (`Excretion.reabsorption`, `Saturable`)
+        the fraction `1/(1 + (fu*c/reab_threshold_<s>)^reab_n_<s>)^(1/reab_n_<s>)`
+        of the unbound concentration `fu*c` of the filtrate, at most 1, so the
+        reabsorption never exceeds the filtration.
+        """
+        saturable = s.excretion.reabsorption
+        if saturable is None:
+            return self._fraction_reabsorbed(s)
+        threshold = self._input(
+            ids.reabsorption_threshold(s.sid),
+            U.mM,
+            f"renal threshold {s.sid} [mM]",
+            "The renal threshold of the saturable reabsorption, a concentration "
+            "of the filtrate: above it the reabsorption approaches the transport "
+            "maximum `GFR` times the threshold.",
+        )
+        n = self._input(
+            ids.reabsorption_n(s.sid),
+            U.dimensionless,
+            f"sharpness of the renal threshold {s.sid}",
+            "How sharp the renal threshold of the saturable reabsorption is.",
+        )
+        return f"{ONE} / ({ONE} + ({fu} * {c} / {threshold})^{n})^({ONE} / {n})"
+
     def _filtrate(self, s: Substance, fu: str, c: str) -> str:
         """The net filtrate of the plasma concentration `c`, `fu*GFR*c*(1 - f_reabsorbed)`.
 
-        The unbound plasma is filtered with the GFR, the fraction
-        `f_reabsorbed_<s>` returns into the plasma: the glomerular filtration
-        of the afferent plasma (`_filtration`) and the filtrate which the
-        plasma leaving the kidney lacks at the outflow concentration
-        (`_blood_flows`).
+        The unbound plasma is filtered with the GFR, the reabsorbed fraction
+        (`_reabsorbed`, constant or saturable at `c`) returns into the plasma:
+        the glomerular filtration of the afferent plasma (`_filtration`) and
+        the filtrate which the plasma leaving the kidney lacks at the outflow
+        concentration (`_blood_flows`).
         """
         gfr = self._input(ids.GFR, U.l_per_min, "glomerular filtration rate [l/min]")
-        return f"{fu} * {gfr} * {c} * ({ONE} - {self._reabsorbed(s)})"
+        return f"{fu} * {gfr} * {c} * ({ONE} - {self._reabsorbed(s, fu, c)})"
 
     def _filtration(self, s: Substance, parts: Parts, fu: str) -> None:
         """The glomerular filtration into the urine, `fu*GFR*Car*(1 - f_reabsorbed)`.
@@ -706,8 +741,9 @@ class StandardBuilder(OrganBuilder):
         the afferent plasma, the arterial plasma concentration `Car_<s>` of
         the inflow (in every form and erythrocyte mode, a modifier), out of
         the plasma of the kidney (its organ species when flow-limited); the
-        fraction `f_reabsorbed_<s>` of the filtrate returns into the plasma
-        (it is not taken out). The plasma leaving the kidney lacks the net
+        reabsorbed fraction of the filtrate (`f_reabsorbed_<s>`, or of a
+        saturable reabsorption at `Car_<s>`) returns into the plasma (it is
+        not taken out). The plasma leaving the kidney lacks the net
         filtrate (`_blood_flows`): at pure filtration the kidney plasma is the
         arterial plasma and the clearance is `fu*GFR*(1 - f_reabsorbed)`, a
         secretion clears the plasma flow less the filtrate.

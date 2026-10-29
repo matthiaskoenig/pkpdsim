@@ -484,6 +484,14 @@ KINDS: dict[str, Kind] = {
     "molecular_weight": Kind(SBO.MOLECULAR_MASS, "MOLECULAR_WEIGHT"),
     "fu": Kind(_P, "FRACTION_UNBOUND_PLASMA"),
     "fraction_reabsorbed": Kind(_P, "RESORPTION"),
+    "reabsorption_threshold": Kind(
+        _P, _BIOCHEM, requested="renal threshold of a saturable reabsorption"
+    ),
+    "reabsorption_n": Kind(
+        _P,
+        _BIOCHEM,
+        requested="sharpness of the renal threshold of a saturable reabsorption",
+    ),
     "baseline": Kind(
         _P,
         "CONCENTRATION_IN_PLASMA",

@@ -196,21 +196,26 @@ def test_the_renal_function_gives_the_measured_clearance(male: BuildResult) -> N
 
 
 def test_a_renal_function_outside_the_range_is_refused(male: BuildResult) -> None:
-    """A clearance whose renal function leaves the range raises a ValueError."""
+    """A clearance whose renal function leaves the range raises a ValueError.
+
+    The range is that of the validity of the kidney outflow by default
+    (`renal_function_limits`), a model narrows it with `renal_function_range`.
+    """
     cls = _experiment(male)
-    assert cls.renal_function_range == (0.0, 2.0)
+    assert cls.renal_function_range is None
     assert cls.renal_function(0.0).magnitude == 0.0
-    with pytest.raises(
-        ValueError, match=r"outside of the supported range 0\.0 to 2\.0"
-    ):
-        cls.renal_function(2.1 * _ml(cls.healthy_gfr()))
-    with pytest.raises(ValueError, match="outside of the supported range"):
+    healthy = _ml(cls.healthy_gfr())
+    assert cls.renal_function(2.1 * healthy).magnitude == pytest.approx(2.1)
+    with pytest.raises(ValueError, match=r"outside of the supported range 0\.0 to inf"):
         cls.renal_function(-1.0)
 
     no_anuria = _subclass(cls, "NoAnuria", renal_function_range=(0.05, 2.0))
 
     with pytest.raises(ValueError, match=r"outside of the supported range 0\.05"):
         no_anuria.renal_function(0.0)
+    with pytest.raises(ValueError, match=r"supported range 0\.05 to 2\.0"):
+        no_anuria.renal_function(2.1 * healthy)
+    assert no_anuria.renal_function_limits() == (0.05, 2.0)
 
 
 def test_the_renal_map_is_lazy(

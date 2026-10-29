@@ -24,7 +24,11 @@ ids of the top model, so that the model does not restate them:
   clearance of the kidney plasma and a saturable secretion, `Saturable`, the
   root of a quadratic) at a given arterial plasma or a given renal
   elimination, the arterial plasma of a kidney plasma, and the renal
-  clearance of the arterial plasma (glomerulus and tubule in series);
+  clearance of the arterial plasma (glomerulus and tubule in series); a
+  saturable reabsorption of the filtrate (`Excretion.reabsorption`, the
+  `pkpdsim.pbpk.Saturable` of the substance, not this `Saturable` of a
+  secretion) has the net filtrate of the arterial plasma and, without
+  another process of the kidney, the kidney plasma at the arterial plasma;
 - `liver_plasma`: the liver plasma, fed by the hepatic artery and the portal
   vein past the shunt `f_shunt`, with a source of the liver;
 - `arm_vein`: the mix of the venous outflows of the arm vein of a preset.
@@ -33,7 +37,7 @@ Every formula is the steady state of an organ at a given inflow (the
 arterial plasma, the baseline by default): the standard organ is linear in
 its species at a fixed inflow, so it is a closed form. The formulas read the
 same ids as the equations of the organs (the flows, `HCT`, `BP_<s>`, `fu_<s>`,
-`GFR`, `f_reabsorbed_<s>`, the coefficients `Kp`, `ftissue_<s>`,
+`GFR`, `f_reabsorbed_<s>` (`reab_threshold_<s>`, `reab_n_<s>`), the coefficients `Kp`, `ftissue_<s>`,
 `Vti_total_ref_<s>`, the organ volume and its vascular fraction, `f_shunt`,
 `f_functional`), so they follow a change of the individual before the
 simulation, and the tests of the library check them against the equations of
@@ -321,11 +325,19 @@ def organ_tissue(
     return f"{kp} * ({plasma} + ({rate}) / ({exchange}))"
 
 
-def renal_filtration(substance: Substance, *, variants: Variants) -> str:
+def renal_filtration(
+    substance: Substance, *, arterial: str | None = None, variants: Variants
+) -> str:
     """Get the net filtered plasma flow of the kidney, `fu*GFR*(1 - f_reabsorbed)` [l/min].
+
+    With a saturable reabsorption (`Excretion.reabsorption`) the reabsorbed
+    fraction is that of the arterial plasma `Car`,
+    `fu*GFR*(1 - 1/(1 + (fu*Car/reab_threshold)^reab_n)^(1/reab_n))`.
 
     Args:
         substance: the substance, with urinary excretion.
+        arterial: the arterial plasma of a saturable reabsorption, the
+            baseline by default; a constant fraction does not read it.
         variants: the variants of the definition (`PBPKDefinition.variants`),
             required: the nephron kidney is refused.
 
@@ -340,7 +352,45 @@ def renal_filtration(substance: Substance, *, variants: Variants) -> str:
     s = substance.sid
     if not substance.excretion.urine:
         raise ValueError(f"{s} is not filtered (Excretion(urine=False)).")
-    return f"{ids.fu(s)} * {ids.GFR} * ({ONE} - {ids.fraction_reabsorbed(s)})"
+    if substance.excretion.reabsorption is None:
+        return f"{ids.fu(s)} * {ids.GFR} * ({ONE} - {ids.fraction_reabsorbed(s)})"
+    car = ids.baseline(s) if arterial is None else arterial
+    return f"{ids.fu(s)} * {ids.GFR} * ({ONE} - {_saturable_fraction(substance, car)})"
+
+
+def _saturable_fraction(substance: Substance, plasma: str) -> str:
+    """The reabsorbed fraction of a saturable reabsorption at a plasma concentration."""
+    s = substance.sid
+    n = ids.reabsorption_n(s)
+    threshold = ids.reabsorption_threshold(s)
+    return (
+        f"{ONE} / ({ONE} + ({ids.fu(s)} * ({plasma}) / {threshold})^{n})^({ONE} / {n})"
+    )
+
+
+def _check_saturable(substance: Substance, closed: bool) -> None:
+    """Refuse a saturable reabsorption where the steady state has no closed form.
+
+    The net filtrate of a saturable reabsorption depends on the concentration
+    (`Car` in the filtration, the kidney plasma in the outflow): without
+    another process the kidney plasma is the arterial plasma, with one the
+    balance of the kidney plasma is not linear in it.
+
+    Args:
+        substance: the substance.
+        closed: whether the steady state asked for is the one without
+            another process of the kidney, at a given arterial plasma.
+
+    Raises:
+        NotImplementedError: for a saturable reabsorption which is not closed.
+    """
+    if substance.excretion.reabsorption is not None and not closed:
+        raise NotImplementedError(
+            f"{substance.sid}: no closed steady state of a saturable reabsorption "
+            "with another process of the kidney (a rate, a clearance, a "
+            "secretion) or at a given elimination: its net filtrate depends on "
+            "the concentration, the balance of the kidney plasma is not linear."
+        )
 
 
 def _check_kidney(variants: Variants) -> None:
@@ -412,6 +462,13 @@ def kidney_plasma(
 
     `R*(Car - C) + rate = clearance*C + S(C)`.
 
+    With a saturable reabsorption (`Excretion.reabsorption`) the net
+    filtrate depends on the concentration: without another process of the
+    kidney its plasma is the arterial plasma (the filtration of `Car` and the
+    outflow lacking the net filtrate of `C` balance at `C = Car`); a rate, a
+    clearance, a secretion or a given elimination have no closed form and
+    are refused.
+
     The kidney plasma `C` follows from the arterial plasma `Car`, or from
     the amount the kidney eliminates into the urine (`eliminated`,
     mmole/min): `E = G*Car + clearance*C + S(C) - rate`, the production of an
@@ -436,8 +493,18 @@ def kidney_plasma(
     Raises:
         ValueError: for both `arterial` and `eliminated`, or `eliminated`
             without an elimination of the kidney.
+        NotImplementedError: for a saturable reabsorption with a rate, a
+            clearance, a secretion or `eliminated`.
     """
+    _check_saturable(
+        substance,
+        eliminated is None and rate == clearance == "0" and secretion is None,
+    )
     flow, gfr, rest = _kidney_flows(substance, variants)
+    if substance.excretion.reabsorption is not None:
+        # the outflow lacks the net filtrate of the kidney plasma: it is the
+        # arterial plasma
+        return ids.baseline(substance.sid) if arterial is None else arterial
     if eliminated is None:
         car = ids.baseline(substance.sid) if arterial is None else arterial
         load = _terms(f"({rest}) * ({car})", rate)
@@ -498,11 +565,23 @@ def kidney_arterial(
     Returns:
         The formula.
 
+    With a saturable reabsorption and no other process of the kidney the
+    arterial plasma is the kidney plasma; a rate, a clearance, a secretion or
+    `eliminated` are refused (see `kidney_plasma`).
+
     Raises:
         ValueError: for `eliminated` together with a rate, a clearance or a
             secretion.
+        NotImplementedError: for a saturable reabsorption with a rate, a
+            clearance, a secretion or `eliminated`.
     """
+    _check_saturable(
+        substance,
+        eliminated is None and rate == clearance == "0" and secretion is None,
+    )
     flow, _, rest = _kidney_flows(substance, variants)
+    if substance.excretion.reabsorption is not None:
+        return plasma
     if eliminated is not None:
         if rate != "0" or clearance != "0" or secretion is not None:
             raise ValueError(
@@ -528,22 +607,33 @@ def renal_clearance(
     substance: Substance,
     *,
     clearance: str = "0",
+    arterial: str | None = None,
     variants: Variants,
 ) -> str:
     """Get the renal clearance of the arterial plasma at the steady state [l/min].
 
     The filtration and a secretion of the kidney plasma (`clearance`) in
-    series: `G + (F - G)*CL/(F - G + CL)`.
+    series: `G + (F - G)*CL/(F - G + CL)`. With a saturable reabsorption the
+    clearance is the net filtered plasma flow at the arterial plasma
+    (`renal_filtration`), without a secretion.
 
     Args:
         substance: the substance.
         clearance: the clearance of the kidney plasma (l/min).
+        arterial: the arterial plasma of a saturable reabsorption, the
+            baseline by default; a constant fraction does not read it.
         variants: the variants of the definition (`PBPKDefinition.variants`),
             required: a variant without a closed steady state is refused.
 
     Returns:
         The formula.
+
+    Raises:
+        NotImplementedError: for a saturable reabsorption with a clearance.
     """
+    _check_saturable(substance, clearance == "0")
+    if substance.excretion.reabsorption is not None:
+        return renal_filtration(substance, arterial=arterial, variants=variants)
     _, gfr, rest = _kidney_flows(substance, variants)
     if clearance == "0":
         return gfr
