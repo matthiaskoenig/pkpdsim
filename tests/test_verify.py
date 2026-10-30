@@ -5,6 +5,7 @@ import dataclasses
 import importlib.metadata
 import json
 import math
+import os
 import pickle
 import re
 import shutil
@@ -1650,3 +1651,44 @@ def test_a_dump_without_builds_is_compared_without_them(
     new = written(tmp_path, "new.pkl", synthetic(builds={"E": {"task": "male"}}))
     assert verify(["compare", old, new]) == 0
     assert "builds: in the new dump only, not compared" in capsys.readouterr().out
+
+
+def test_a_dump_and_the_fits_load_at_the_level_of_the_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`jit_optimization` of the model reaches the runner of a dump and the fits."""
+    import sbmlsim.experiment
+    import sbmlsim.fit.cli
+
+    import pkpdsim_toy
+
+    simulator = dataclasses.replace(MODEL.simulator, jit_optimization="O0")
+    model = dataclasses.replace(MODEL, simulator=simulator)
+    monkeypatch.setattr(pkpdsim_toy, "MODEL", model)
+    assert describe("pkpdsim_toy").jit_optimization == "O0"
+
+    levels: list[object] = []
+    runner_init = sbmlsim.experiment.ExperimentRunner.__init__
+
+    def recording_init(self: object, *args: object, **kwargs: object) -> None:
+        levels.append(kwargs.get("jit_optimization"))
+        runner_init(self, *args, **kwargs)  # ty: ignore[invalid-argument-type]
+
+    monkeypatch.setattr(sbmlsim.experiment.ExperimentRunner, "__init__", recording_init)
+    root = ["--root", str(TESTS_DIR), "--model", "pkpdsim_toy"]
+    dump = ["dump", *root, "--out", str(tmp_path / "d.pkl"), "ToyDecay"]
+    assert verify(dump) == 0
+    assert levels == ["O0"]
+
+    variable = "SBMLSIM_JIT_OPTIMIZATION"
+    monkeypatch.delenv(variable, raising=False)
+    seen: list[str | None] = []
+
+    def recording_run_fit(*args: object, **kwargs: object) -> dict:
+        seen.append(os.environ.get(variable))
+        return {}
+
+    monkeypatch.setattr(sbmlsim.fit.cli, "run_fit", recording_run_fit)
+    assert verify(["fits", *root, "--out", str(tmp_path / "fits")]) == 0
+    assert seen == ["O0"]
+    assert variable not in os.environ

@@ -2,6 +2,7 @@ import argparse
 import copy
 import dataclasses
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -51,6 +52,7 @@ def test_the_options_of_the_fit_command() -> None:
         "--strategy",
         "--experiments",
         "--timeout",
+        "--start",
         "--output_dir",
         "--identifiability",
         "--no-identifiability",
@@ -352,3 +354,146 @@ def test_a_record_without_provenance_has_no_fixed_fits(tmp_path: Path) -> None:
     # state what was fixed
     assert records_context(model)("DECAY", definition, no_provenance).notes == ()
     assert records_context(model)("DECAY", definition, records).notes == ()
+
+
+#: a fit of one run without the figures of the mappings
+ONE_RUN = ("--runs", "1", "--no-mapping-figures")
+
+
+def _optimization(directory: Path) -> dict:
+    """Get the optimization result of the one fit in a directory."""
+    (result,) = directory.glob("*/optimization_result.json")
+    return json.loads(result.read_text(encoding="utf-8"))
+
+
+def test_a_fit_starts_from_a_parameters_file(tmp_path: Path) -> None:
+    """Least squares starts every run from the given point, not from a sample."""
+    start = tmp_path / "start.json"
+    start.write_text(json.dumps({"k": 0.3}), encoding="utf-8")
+    output = tmp_path / "fit"
+    fit_command(
+        MODEL,
+        [*ONE_RUN, "--start", str(start), "--output_dir", str(output)],
+    )
+    result = _optimization(output)
+    assert result["provenance"]["start_values"] == {"k": 0.3}
+    (run,) = result["fits"]
+    assert run["x0"] == [0.3]
+    assert result["provenance"]["arguments"]["start"] == str(start)
+    # the definition of the model keeps its own start value
+    (parameter,) = MODEL.load_fit_definitions()["DECAY"].parameters
+    assert parameter.start_value == 0.5
+
+
+def test_a_fit_starts_from_another_fit(toy_fit: Path) -> None:
+    """A fit id is the best parameters of a finished fit in the output directory."""
+    best = json.loads((toy_fit / "parameters.json").read_text(encoding="utf-8"))
+    k = best["sets"][0]["values"]["k"]
+    runs = fit_command(
+        MODEL,
+        [*ONE_RUN, "--start", toy_fit.name, "--output_dir", str(toy_fit.parent)],
+    )
+    (opid,) = runs
+    result = json.loads(
+        (toy_fit.parent / opid / "optimization_result.json").read_text("utf-8")
+    )
+    assert result["provenance"]["start_values"] == {"k": pytest.approx(k, rel=1e-12)}
+
+
+def test_a_fit_starts_from_an_adopted_fit(fits_dir: Path, tmp_path: Path) -> None:
+    """An adopted fit of the model is found by its id."""
+    (record,) = fits_dir.iterdir()
+    model = dataclasses.replace(MODEL, fits_path=fits_dir)
+    output = tmp_path / "fit"
+    fit_command(
+        model,
+        [*ONE_RUN, "--start", record.name, "--output_dir", str(output)],
+    )
+    best = json.loads((record / "parameters.json").read_text(encoding="utf-8"))
+    assert _optimization(output)["provenance"]["start_values"] == {
+        "k": pytest.approx(best["sets"][0]["values"]["k"], rel=1e-12)
+    }
+
+
+@pytest.mark.parametrize(
+    ("values", "extra", "message"),
+    [
+        ({"x": 0.3}, [], "not fitted"),
+        ({"k": 2.0}, [], "outside of its bounds"),
+        ({"k": "a"}, [], "not a number"),
+        ({"k": 0.3}, ["--runs", "2"], "identical"),
+        ({"k": 0.3}, ["--method", "DE"], "least squares"),
+    ],
+)
+def test_a_start_which_cannot_be_used_is_refused(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    values: dict,
+    extra: list[str],
+    message: str,
+) -> None:
+    start = tmp_path / "start.json"
+    start.write_text(json.dumps(values), encoding="utf-8")
+    with pytest.raises(SystemExit) as exc:
+        fit_command(MODEL, ["--runs", "1", *extra, "--start", str(start)])
+    assert exc.value.code == 2
+    assert message in capsys.readouterr().err
+
+
+def test_an_unknown_start_is_refused(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit):
+        fit_command(
+            MODEL, ["--runs", "1", "--start", "DECAY_nofit", "-o", str(tmp_path)]
+        )
+    assert "neither a json file nor a fit" in capsys.readouterr().err
+
+
+def test_the_fits_compile_at_the_level_of_the_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The processes of a fit load the models at `jit_optimization` of the model."""
+    import pkpdsim.cli
+
+    variable = "SBMLSIM_JIT_OPTIMIZATION"
+    monkeypatch.setenv(variable, "O3")
+    seen: list[str | None] = []
+
+    def recording_run_fit(*args: object, **kwargs: object) -> dict:
+        seen.append(os.environ.get(variable))
+        return {}
+
+    monkeypatch.setattr(pkpdsim.cli, "run_fit", recording_run_fit)
+    simulator = dataclasses.replace(MODEL.simulator, jit_optimization="O0")
+    model = dataclasses.replace(MODEL, simulator=simulator)
+    fit_command(model, ["--runs", "1", "--output_dir", str(tmp_path)])
+    assert seen == ["O0"]
+    assert os.environ[variable] == "O3"
+    # a model without a level leaves the environment as it is
+    fit_command(MODEL, ["--runs", "1", "--output_dir", str(tmp_path)])
+    assert seen == ["O0", "O3"]
+
+
+def test_the_reports_compile_at_the_level_of_the_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`run_report` and `run_identifiability` simulate the fit at the level too."""
+    import pkpdsim.cli
+
+    variable = "SBMLSIM_JIT_OPTIMIZATION"
+    monkeypatch.delenv(variable, raising=False)
+    seen: list[str | None] = []
+
+    def recording(*args: object, **kwargs: object) -> Path:
+        seen.append(os.environ.get(variable))
+        return tmp_path
+
+    monkeypatch.setattr(pkpdsim.cli, "report_cli", recording)
+    monkeypatch.setattr(pkpdsim.cli, "identifiability_cli", recording)
+    simulator = dataclasses.replace(MODEL.simulator, jit_optimization="O1")
+    model = dataclasses.replace(MODEL, simulator=simulator)
+    report_command(model, ["parameters.json"])
+    identifiability_command(model, ["parameters.json"])
+    assert seen == ["O1", "O1"]
+    assert variable not in os.environ

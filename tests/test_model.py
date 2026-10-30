@@ -15,6 +15,7 @@ from pkpdsim.model import (
     check_reference,
     resolve,
 )
+from pkpdsim.sex import Sex
 from pkpdsim_toy import MODEL, MODEL_BASE_PATH, TOY_PATH
 
 
@@ -210,3 +211,23 @@ def test_the_jit_optimization_is_that_of_sbmlsim_by_default() -> None:
     assert SimulatorSettings(jit_optimization="O0").jit_optimization == "O0"
     with pytest.raises(ValueError, match="optimization level"):
         SimulatorSettings(jit_optimization="O9")
+
+
+def test_a_test_loads_the_model_at_its_level(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`load_roadrunner` compiles the build of a sex at the level of the model."""
+    import sbmlsim.model.model_roadrunner as model_roadrunner
+
+    calls: list[tuple[object, object]] = []
+    load = model_roadrunner.load_roadrunner
+
+    def recording(source: object, optimization: object = None) -> object:
+        calls.append((source, optimization))
+        return load(source, optimization)  # ty: ignore[invalid-argument-type]
+
+    monkeypatch.setattr(model_roadrunner, "load_roadrunner", recording)
+    simulator = dataclasses.replace(MODEL.simulator, jit_optimization="O0")
+    r = dataclasses.replace(MODEL, simulator=simulator).load_roadrunner()
+    assert calls == [(MODEL.model_path, "O0")]
+    assert "k" in r.model.getGlobalParameterIds()
+    with pytest.raises(ValueError, match="no female build"):
+        MODEL.load_roadrunner(Sex.FEMALE)

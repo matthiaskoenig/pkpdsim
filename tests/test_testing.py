@@ -200,3 +200,24 @@ def test_the_initialization_compiles_with_the_level_of_the_model() -> None:
         MODEL, simulator=dataclasses.replace(MODEL.simulator, jit_optimization="O0")
     )
     assert str(testing._runner(model).jit_optimization) == "O0"
+
+
+def test_the_fits_start_at_the_level_of_the_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`start_fits` loads the fit problems at `jit_optimization` of the model."""
+    import os
+
+    variable = "SBMLSIM_JIT_OPTIMIZATION"
+    monkeypatch.delenv(variable, raising=False)
+    seen: list[str | None] = []
+
+    def recording_run_fit(*args: object, **kwargs: object) -> dict:
+        seen.append(os.environ.get(variable))
+        return {"run": object()}
+
+    monkeypatch.setattr(testing, "run_fit", recording_run_fit)
+    simulator = dataclasses.replace(MODEL.simulator, jit_optimization="O0")
+    testing.start_fits(dataclasses.replace(MODEL, simulator=simulator), tmp_path)
+    assert seen == ["O0"]
+    assert variable not in os.environ

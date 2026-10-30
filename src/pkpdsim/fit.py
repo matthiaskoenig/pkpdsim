@@ -12,6 +12,7 @@ validation data.
 
 from __future__ import annotations
 
+import copy
 import dataclasses
 import re
 from collections.abc import Callable, Collection, Hashable, Iterable, Mapping, Sequence
@@ -480,6 +481,108 @@ def _remainder_terms(ast: object) -> list[str] | None:
 
 #: the argument of the provenance of a fit which names the fixed adopted fits
 FIXED_FITS = "fixed_fits"
+
+
+def start_point(
+    model: PKPDModel, definition: FitDefinition, start: str, output_dir: Path
+) -> dict[str, float]:
+    """Get the parameters a fit starts from (`run_fit --start`).
+
+    The start is a json file of the values by parameter id, in the units of
+    the fit parameters (`FitParameter.unit`), or the id of a fit: an adopted
+    fit of the model (`PKPDModel.fits_dir`) or else a finished fit in the
+    output directory of the fits, whose best parameters (`parameters.json`, in
+    the units of the model) are converted into the units of the fit
+    parameters. A fit of another problem gives the parameters which the
+    definition fits. A parameter which the start does not give keeps its own
+    start value.
+
+    Args:
+        model: the model.
+        definition: the fit problem.
+        start: the json file or the fit id.
+        output_dir: the directory of the finished fits.
+
+    Returns:
+        The start value of every parameter the start gives which the
+        definition fits.
+
+    Raises:
+        ValueError: if the start is neither a file nor a fit, a value is not a
+            number, a parameter of the file is not fitted, or a value is
+            outside of the bounds of its parameter.
+    """
+    import json
+
+    from pkpdsim.uncertainty import _convert
+
+    parameters = {p.pid: p for p in definition.parameters}
+    path = Path(start)
+    values: dict[str, object]
+    if path.is_file():
+        values = dict(json.loads(path.read_text(encoding="utf-8")))
+        unknown = sorted(set(values) - set(parameters))
+        if unknown:
+            raise ValueError(
+                f"The start '{start}' gives parameters which are not fitted: "
+                f"{unknown}; the fitted parameters are {sorted(parameters)}."
+            )
+    else:
+        directory = next(
+            (
+                d / start
+                for d in (model.fits_dir, output_dir)
+                if (d / start / "parameters.json").is_file()
+            ),
+            None,
+        )
+        if directory is None:
+            raise ValueError(
+                f"The start '{start}' is neither a json file nor a fit of the "
+                f"model (adopted in {model.fits_dir} or finished in {output_dir})."
+            )
+        best = json.loads((directory / "parameters.json").read_text("utf-8"))
+        best = best["sets"][0]
+        units = dict(best.get("units") or {})
+        values = {
+            pid: _convert(float(value), units.get(pid), parameters[pid].unit)
+            for pid, value in best["values"].items()
+            if pid in parameters
+        }
+    point: dict[str, float] = {}
+    for pid, value in values.items():
+        if isinstance(value, bool) or not isinstance(value, int | float):
+            raise ValueError(f"The start value of '{pid}' is not a number: {value!r}.")
+        parameter = parameters[pid]
+        if not parameter.lower_bound <= value <= parameter.upper_bound:
+            raise ValueError(
+                f"The start value {value} of '{pid}' is outside of its bounds "
+                f"[{parameter.lower_bound}, {parameter.upper_bound}]."
+            )
+        point[pid] = float(value)
+    return point
+
+
+def with_start(definition: FitDefinition, point: Mapping[str, float]) -> FitDefinition:
+    """Get a fit problem whose parameters start from a point.
+
+    The parameters are copies, so the definition of the model keeps its start
+    values (the definitions are objects of the module of the model).
+
+    Args:
+        definition: the fit problem.
+        point: the start value by parameter id.
+
+    Returns:
+        The fit problem with the start values of the point.
+    """
+    parameters = []
+    for parameter in definition.parameters:
+        if parameter.pid in point:
+            parameter = copy.copy(parameter)
+            parameter.start_value = point[parameter.pid]
+        parameters.append(parameter)
+    return dataclasses.replace(definition, parameters=parameters)
 
 
 def current_fixed_fits(model: PKPDModel, subset: str) -> list[str]:

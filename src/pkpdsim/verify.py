@@ -200,6 +200,8 @@ class ModelInfo:
     relative_tolerance: object | None
     run_experiments: Callable[..., object] | None
     fit_definitions: Mapping[str, "FitDefinition"] | None
+    #: the optimization level of LLJIT of the model, `None` for the level of sbmlsim
+    jit_optimization: str | None = None
 
 
 def _outside_root(package: str, root: Path) -> str | None:
@@ -252,6 +254,7 @@ def describe(package: str) -> ModelInfo:
         fit_definitions=(
             dict(model.load_fit_definitions()) if model.fit_definitions else None
         ),
+        jit_optimization=model.simulator.jit_optimization,
     )
 
 
@@ -518,6 +521,8 @@ def dump(args: argparse.Namespace) -> int:
                 # an experiment which cannot be initialized raises and is
                 # recorded below; sbmlsim 0.9 only logs it by default
                 on_error="raise",
+                # the models compiled at the level of the model, as its runs do
+                jit_optimization=info.jit_optimization,
             )
             for sid, experiment in runner.experiments.items():
                 experiment.run(
@@ -2122,6 +2127,8 @@ def fits(args: argparse.Namespace) -> int:
     sys.path.insert(0, str(root))
     from sbmlsim.fit.cli import run_fit
 
+    from pkpdsim.model import jit_environment
+
     if message := _outside_root(args.model, root):
         print(message, file=sys.stderr)
         return 2
@@ -2135,14 +2142,16 @@ def fits(args: argparse.Namespace) -> int:
     status: dict[str, str] = {}
     for key in args.subsets or list(definitions):
         try:
-            run_fit(
-                definitions[key],
-                opid=f"smoke_{key}",
-                size=1,
-                seed=1234,
-                output_dir=Path(args.out),
-                max_nfev=args.max_nfev,
-            )
+            # the problems load their models at the level of the model
+            with jit_environment(info.jit_optimization):
+                run_fit(
+                    definitions[key],
+                    opid=f"smoke_{key}",
+                    size=1,
+                    seed=1234,
+                    output_dir=Path(args.out),
+                    max_nfev=args.max_nfev,
+                )
             status[key] = "ok"
         except Exception:  # every failing subset is reported
             traceback.print_exc()

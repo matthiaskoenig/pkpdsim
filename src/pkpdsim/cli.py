@@ -76,8 +76,9 @@ from sbmlsim.fit.cli import (
 )
 from sbmlsim.fit.fisher import FisherInformation
 from sbmlsim.fit.identifiability import IdentifiabilityResult, ProfileSettings
-from sbmlsim.fit.options import OptimizationStrategy
+from sbmlsim.fit.options import OptimizationAlgorithmType, OptimizationStrategy
 from sbmlsim.fit.result import fit_id
+from sbmlsim.fit.sampling import SamplingType
 from sbmlsim.utils import paths_text
 from sbmlutils.console import console
 
@@ -87,6 +88,8 @@ from pkpdsim.fit import (
     records_context,
     remainder_problems,
     report_context,
+    start_point,
+    with_start,
 )
 from pkpdsim.model import PKPDModel, resolve
 from pkpdsim.profiling import (
@@ -568,6 +571,17 @@ def fit_parser(
         help="seconds a single optimization may run, no limit by default",
     )
     fit.add_argument(
+        "--start",
+        metavar="JSON_OR_FIT_ID",
+        default=None,
+        help="start least squares from these parameters instead of samples of "
+        "the bounds: a json file of the values by parameter id in the units of "
+        "the fit parameters, or the id of a fit (adopted, or finished in the "
+        "output directory) whose best parameters are taken; every run starts "
+        "from the point, so the fit has one run (--runs 1); a parameter the "
+        "start does not give starts from its start value",
+    )
+    fit.add_argument(
         "-o",
         "--output_dir",
         type=Path,
@@ -724,6 +738,39 @@ def fit_command(
 
     definition = definitions[options.subset]
     algorithm = ALGORITHMS[options.method]
+    # the start of least squares: every run starts from the point (the sampling
+    # START of sbmlsim), the global optimizer draws its population itself
+    sampling: dict[str, SamplingType] = {}
+    if options.start is not None:
+        if algorithm != OptimizationAlgorithmType.LEAST_SQUARE:
+            parser.error(
+                "--start is the start of least squares; differential evolution "
+                "draws its population from the bounds."
+            )
+        if options.runs != 1:
+            parser.error(
+                "--start starts every run from the point, the runs would be "
+                "identical: give --runs 1."
+            )
+        try:
+            point = start_point(model, definition, options.start, options.output_dir)
+        except ValueError as err:
+            parser.error(str(err))
+        definition = with_start(definition, point)
+        sampling["sampling"] = SamplingType.START
+    with model.simulator.jit_environment():
+        return _fit(model, options, definition, sampling, parser)
+
+
+def _fit(
+    model: PKPDModel,
+    options: argparse.Namespace,
+    definition: FitDefinition,
+    sampling: Mapping[str, SamplingType],
+    parser: argparse.ArgumentParser,
+) -> dict[str, FitRun]:
+    """Run a fit of `fit_command`, the models loaded at the level of the model."""
+    algorithm = ALGORITHMS[options.method]
     # the id of the fit, created before it starts, so that the problem, its
     # result and the directory of its report carry the same key
     opid = fit_id(options.subset)
@@ -739,6 +786,7 @@ def fit_command(
             "runs": f"{options.runs} on {options.cores} core(s)",
             "seed": options.seed,
             "timeout": (f"{options.timeout} s per run" if options.timeout else "none"),
+            "start": options.start or "samples of the bounds",
             "identifiability": (
                 "profile likelihood"
                 + ("" if options.no_fisher else " and Fisher information")
@@ -793,9 +841,11 @@ def fit_command(
             "cores": options.cores,
             "method": options.method,
             "command": f"run_fit {model.package}",
+            "start": options.start,
             FIXED_FITS: fixed_fits,
         },
         fixed_values=fixed_values,
+        **sampling,
     )
 
     # the fit only optimizes, the report is created from its parameters and
@@ -862,17 +912,18 @@ def report_command(model: PKPDModel, args: Sequence[str] | None = None) -> Path:
             sys.exit(1)
         fit_display.key_values({d.name: d for d in directories})
         return options.output_dir
-    return report_cli(
-        dict(model.load_fit_definitions()),
-        args=with_output_dir(arguments, model.report_dir),
-        prog=f"run_report {model.package}",
-        description=(
-            "Report of a fit for stored parameters. `--adopted` instead writes "
-            "the report of every adopted fit of the model, without a "
-            "parameters file."
-        ),
-        context=records_context(model),
-    )
+    with model.simulator.jit_environment():
+        return report_cli(
+            dict(model.load_fit_definitions()),
+            args=with_output_dir(arguments, model.report_dir),
+            prog=f"run_report {model.package}",
+            description=(
+                "Report of a fit for stored parameters. `--adopted` instead "
+                "writes the report of every adopted fit of the model, without "
+                "a parameters file."
+            ),
+            context=records_context(model),
+        )
 
 
 def identifiability_command(
@@ -889,13 +940,14 @@ def identifiability_command(
     Returns:
         The directory of the report.
     """
-    return identifiability_cli(
-        dict(model.load_fit_definitions()),
-        args=with_output_dir(
-            sys.argv[1:] if args is None else args, model.identifiability_dir
-        ),
-        prog=f"run_identifiability {model.package}",
-    )
+    with model.simulator.jit_environment():
+        return identifiability_cli(
+            dict(model.load_fit_definitions()),
+            args=with_output_dir(
+                sys.argv[1:] if args is None else args, model.identifiability_dir
+            ),
+            prog=f"run_identifiability {model.package}",
+        )
 
 
 DOTTED_PACKAGE = re.compile(r"^[A-Za-z_]\w*(\.[A-Za-z_]\w*)*$")

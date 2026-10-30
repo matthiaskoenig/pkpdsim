@@ -37,8 +37,10 @@ therefore imports sbmlsim's plotting.
 
 from __future__ import annotations
 
+import contextlib
 import importlib
-from collections.abc import Callable, Mapping, Sequence
+import os
+from collections.abc import Callable, Generator, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -49,6 +51,7 @@ from pkpdsim.release.settings import ReleaseSettings
 from pkpdsim.sex import Sex
 
 if TYPE_CHECKING:
+    import roadrunner
     from sbmlsim.experiment import SimulationExperiment
     from sbmlsim.fit.cli import FitDefinition
     from sbmlsim.model.tolerances import AbsoluteTolerance
@@ -143,7 +146,13 @@ class SimulatorSettings:
             environment variable `SBMLSIM_JIT_OPTIMIZATION`). `"O0"` compiles a
             model with large initial assignments several times faster (the
             creatinine model in 4.5 s instead of 24 s) and simulates a little
-            slower; the fits keep the level of sbmlsim.
+            slower. The fits, their reports and the identifiability analysis
+            (`run_fit`, `run_report`, `run_identifiability`) and the
+            verification (`pkpdsim-verify`) load their models at the level
+            too: sbmlsim builds a fit problem without a level, so the commands
+            set the environment variable around it (`jit_environment`), which
+            the processes of a pool inherit; a test of a model loads its model
+            at the level with `PKPDModel.load_roadrunner`.
     """
 
     absolute_tolerance: float | AbsoluteTolerance = 1e-10
@@ -167,6 +176,45 @@ class SimulatorSettings:
             raise ValueError(
                 f"n_workers is a positive number of processes or None, not {n!r}."
             )
+
+    def jit_environment(self) -> contextlib.AbstractContextManager[None]:
+        """Load the models without a level of their own at `jit_optimization`.
+
+        See `jit_environment` of the module.
+        """
+        return jit_environment(self.jit_optimization)
+
+
+@contextlib.contextmanager
+def jit_environment(level: str | None) -> Generator[None]:
+    """Load the models without a level of their own at a level.
+
+    Sets the environment variable `SBMLSIM_JIT_OPTIMIZATION` of sbmlsim,
+    whose level a model takes which is loaded without one (the problems of a
+    fit), in the process and in the processes of a pool which start in it, and
+    restores the variable afterwards; without a level the environment stays as
+    it is.
+
+    Args:
+        level: the optimization level of LLJIT, e.g. `"O0"`, or `None`.
+
+    Yields:
+        Nothing, the models are loaded at the level within the context.
+    """
+    if level is None:
+        yield
+        return
+    from sbmlsim.model.model_roadrunner import JIT_OPTIMIZATION_VARIABLE
+
+    before = os.environ.get(JIT_OPTIMIZATION_VARIABLE)
+    os.environ[JIT_OPTIMIZATION_VARIABLE] = level
+    try:
+        yield
+    finally:
+        if before is None:
+            os.environ.pop(JIT_OPTIMIZATION_VARIABLE, None)
+        else:
+            os.environ[JIT_OPTIMIZATION_VARIABLE] = before
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -445,6 +493,28 @@ class PKPDModel:
                 "factory creates, or simulate the study on the male build."
             )
         return path
+
+    def load_roadrunner(self, sex: Sex = Sex.MALE) -> roadrunner.RoadRunner:
+        """Load the build of a sex in roadrunner at the level of the model.
+
+        The model is compiled with LLJIT at `SimulatorSettings.jit_optimization`
+        (`sbmlsim.model.model_roadrunner.load_roadrunner`), as its experiments
+        load it, and not with roadrunner's default MCJIT, which compiles a
+        model with large initial assignments much slower (48 s for
+        creatinine): the loader of the tests of a model.
+
+        Args:
+            sex: the sex of the build.
+
+        Returns:
+            The roadrunner instance.
+
+        Raises:
+            ValueError: if the model has no build of the sex.
+        """
+        from sbmlsim.model.model_roadrunner import load_roadrunner
+
+        return load_roadrunner(self.model_path_of(sex), self.simulator.jit_optimization)
 
     @property
     def results_dir(self) -> Path:
