@@ -30,7 +30,7 @@ instead of running out of its box.
 """
 
 import textwrap
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from xml.sax.saxutils import escape
@@ -57,7 +57,7 @@ from pkpdsim.pbpk.routes import (
     WeibullDissolution,
 )
 from pkpdsim.pbpk.substance import Kp, KpMethod, Mode, Substance
-from pkpdsim.pbpk.values import number
+from pkpdsim.pbpk.values import Formula, Q, Value, number
 from pkpdsim.pbpk.variants import DEFAULTS, lookup
 from pkpdsim.pbpk.variants.gut import bile_substances, luminal_substances, wall_parts
 from pkpdsim.pbpk.variants.intestine import SegmentedIntestine, SingleLumen
@@ -332,7 +332,13 @@ class _Figure:
             bile = bile_substances(definition.substances, definition.chemistry)
             self.luminal = [sid for sid in order if sid in reach]
             self.bile = [sid for sid in order if sid in bile]
-            self.absorbed = self.gut.absorption(definition)
+            # an absorption fixed at 0 cannot happen (`ka={"cr": 0.0}`, a
+            # substance which a transport takes up instead): not drawn
+            self.absorbed = {
+                sid: options
+                for sid, options in self.gut.absorption(definition).items()
+                if not _fixed_zero(_ka_of(self.gut, sid))
+            }
         else:
             self.luminal, self.bile, self.absorbed = [], [], {}
         self.canvas = _Canvas()
@@ -478,7 +484,7 @@ class _Figure:
                 f"{sid} ({', '.join(options)})" if options else sid
                 for sid, options in self.absorbed.items()
             ]
-            lines.append(("ABS", "into the intestinal wall: " + ", ".join(absorbed)))
+            lines.append(("ABS", "into the intestinal wall: " + "; ".join(absorbed)))
         if self.bile:
             entry = segments[1] if len(segments) > 1 else segments[0]
             lines.append(("BIL", f"bile into {entry}: " + ", ".join(self.bile)))
@@ -698,10 +704,9 @@ class _Figure:
             return x0 + max(_width(t, _SIZE) for k in keys for t in rows[k].title) + 30
 
         portal = [k for k in rows if k not in circulation and k != "lumen"]
-        columns_x = {
-            **dict.fromkeys(circulation, chips_x(_MX0, circulation)),
-            **dict.fromkeys(portal, chips_x(_PX0, portal)),
-        }
+        # one column of chips for all organ rows, after the longest title
+        column = max(chips_x(_MX0, circulation), chips_x(_PX0, portal))
+        columns_x = dict.fromkeys([*circulation, *portal], column)
         ve0, ve1 = _PAD, _PAD + _COLUMN
         ar0 = WIDTH - _PAD - _COLUMN
 
@@ -872,6 +877,22 @@ def _mode(mode: Mode) -> str:
         Mode.PERFUSION: "perfusion-limited",
         Mode.PERMEABILITY: "permeability-limited",
     }.get(mode, str(mode))
+
+
+def _ka_of(gut: SegmentedIntestine | SingleLumen, sid: str) -> Q | None:
+    """The `ka` which the definition gives a substance, `None` for the default."""
+    if isinstance(gut.ka, Mapping):
+        return gut.ka.get(sid)
+    return gut.ka
+
+
+def _fixed_zero(q: Q | None) -> bool:
+    """Whether a value is fixed at 0: a number or an unfitted `Value` of 0."""
+    if q is None or isinstance(q, Formula):
+        return False
+    if isinstance(q, Value) and q.uncertainties:
+        return False
+    return number(q) == 0.0
 
 
 def _organs(organs: Iterable[Organ]) -> str:

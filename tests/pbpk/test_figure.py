@@ -370,7 +370,7 @@ def test_the_figure_shows_the_processes_and_routes(tmp_path: Path) -> None:
         "nephron",
         "12 segments",
         "cr -> crtn in st",
-        "into the intestinal wall: api (colon factor), keto, cr",
+        "into the intestinal wall: api (colon factor); keto; cr",
         "bile into du: api_m7",
         "iv: api",
         "inhibits CYP3A4 (competitive)",
@@ -501,7 +501,7 @@ def test_the_options_of_the_absorption_are_per_substance(tmp_path: Path) -> None
     )
     texts = _texts(model_figure(d, tmp_path / "options.svg"))
     assert (
-        "into the intestinal wall: drg (colon factor), drg_m (fraction absorbed)"
+        "into the intestinal wall: drg (colon factor); drg_m (fraction absorbed)"
         in texts
     )
 
@@ -541,3 +541,30 @@ def test_the_text_of_the_legend_and_the_processes(tmp_path: Path) -> None:
     assert "SRC: -> Cti_drg" in text
     root, _ = _parse(path)
     assert len(list(root.iter(f"{SVG}circle"))) == len(d.substances)
+
+
+def test_an_absorption_fixed_at_zero_is_not_drawn(tmp_path: Path) -> None:
+    """A substance with `ka` fixed at 0 is not absorbed (creatinine's creatine).
+
+    Creatine enters only by a transport of the intestine, its `ka_cr` is 0:
+    the absorption names the other substance with its own options.
+    """
+    d = definition(
+        routes=[Route.oral_solution("drg"), Route.oral_solution("drg_m")],
+        variants=Variants(
+            {
+                Organ.SMALL_INTESTINE: SegmentedIntestine(
+                    ka={"drg": 0.0}, fabs={"drg_m": 0.5}
+                )
+            }
+        ),
+    )
+    texts = _texts(model_figure(d, tmp_path / "zero.svg"))
+    assert "into the intestinal wall: drg_m (fraction absorbed)" in texts
+    d = dataclasses.replace(
+        d,
+        variants=Variants({Organ.SMALL_INTESTINE: SegmentedIntestine(ka=0.0)}),
+    )
+    texts = _texts(model_figure(d, tmp_path / "none.svg"))
+    assert "ABS" not in texts
+    assert "absorption" not in texts
