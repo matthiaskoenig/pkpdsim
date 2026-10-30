@@ -9,7 +9,7 @@ Impaired organ function is a set of parameter vectors on the physiology, never a
 | condition | severity | classes | acts on |
 |---|---|---|---|
 | liver cirrhosis | `CP_severity` | 0 healthy, 1, 2, 3 the Child-Pugh classes A, B, C, interpolated linearly | functional liver `f_functional`, shunt `f_shunt`, hepatic artery and kidney flow, cardiac index, GFR, albumin and AGP (so fu), the enzymes and transporters of the liver; hematocrit (factor 1, see [Limitations](#limitations)) |
-| chronic kidney disease | `f_renal_function` | the GFR relative to healthy; its GFR per 1.73 m2 (`eGFR`) gives the stage | GFR, the binding capacity of the plasma proteins (so fu); hematocrit, kidney volume and flow, gastric emptying and small intestinal transit (factor 1, see [Limitations](#limitations)); with the switch `CKD_hepatic = 1` hepatic CYP2D6 and OATP1B |
+| chronic kidney disease | `f_renal_function` | the GFR relative to healthy; its GFR per 1.73 m2 (`eGFR`) gives the stage | GFR, the binding to albumin and AGP by their CKD profiles and to an unknown protein by the binding capacity of the plasma proteins (so fu); hematocrit, kidney volume and flow, gastric emptying and small intestinal transit (factor 1, see [Limitations](#limitations)); with the switch `CKD_hepatic = 1` hepatic CYP2D6 and OATP1B |
 | heart failure | `HF_severity` | 0 healthy, 1 to 4 the NYHA classes I to IV, interpolated linearly | the blood flows of liver and portal organs, kidney, skin, adipose and muscle; the cardiac output is their sum, the GFR follows the renal blood flow |
 
 Each condition has its factors `fcp_<key>`, `fckd_<key>`, `fhf_<key>`; the factor of all conditions on a quantity is `fimp_<id>`, their product (`fimp_GFR`, `fimp_Qki`, `fimp_HCT`), which the [physiology](physiology.md#scaling-to-the-individual) multiplies. Every organ flow is its fraction of the cardiac output without impairment (`CO_base`) times `fimp_Q<o>`, and the cardiac output is `CO_base*fimp_CO`, so the flows sum to it. A rate of a protein in the liver runs with `f_<protein>*fimp_<protein>`, the base activity of the organ (genotype, interactions of an experiment) times the impairment, so both act multiplicatively.
@@ -25,10 +25,10 @@ fimp_Qmu = fcp_rest_flow * fhf_peripheral_flow
 fimp_GFR = fcp_gfr * fhf_kidney_flow
 fimp_HCT = fcp_hematocrit * fckd_hematocrit
 fimp_li_cyp3a4 = fcp_cyp3a4 * (1 + CKD_hepatic * (fckd_cyp3a4 - 1))
-fu_<s> = 1 / (1 + fimp_albumin / fimp_plasma_protein * (1 - fu_ref_<s>) / fu_ref_<s>)
+fu_<s> = 1 / (1 + fimp_albumin * fimp_albumin_ckd * (1 - fu_ref_<s>) / fu_ref_<s>)
 ```
 
-The unbound fraction follows the binding (McNamara 2002): `fu = 1/(1 + f*(1 - fu_ref)/fu_ref)` with the binding factor `f`, the factor of the binding protein (`fimp_albumin`, `fimp_agp`, 1 for an unknown protein) over the CKD factor of the binding capacity `fimp_plasma_protein`. The fu of a strongly bound substance rises by the CKD factor, and fu stays below 1. A substance whose binding is measured unchanged in renal impairment (apixaban: 92-94 % bound in healthy and ESRD subjects, US label) opts out with `Binding(fu, protein, ckd=False)`: the formula then has no `fimp_plasma_protein`, `fu = 1/(1 + fimp_albumin * (1 - fu_ref)/fu_ref)`, so fu follows only the binding protein (cirrhosis still acts). With an unknown protein as well no factor is left and `fu = fu_ref`, the reference itself; an unknown protein with the CKD factor has the CKD factor alone. The notes of `fu_<s>` say which case applies (`unbound_fraction_notes`).
+The unbound fraction follows the binding (McNamara 2002): `fu = 1/(1 + f*(1 - fu_ref)/fu_ref)` with the binding factor `f`, the factor of the binding protein in cirrhosis (`fimp_albumin`, `fimp_agp`, 1 for an unknown protein) times the CKD factor of the binding: for albumin and AGP the CKD profile of the protein (`fimp_albumin_ckd`, `fimp_agp_ckd`, see [Binding in chronic kidney disease](#binding-in-chronic-kidney-disease)), for an unknown protein one over the factor of the binding capacity `fimp_plasma_protein`. fu of an albumin-bound substance rises in CKD, fu of an AGP-bound substance falls, and fu stays below 1. A substance whose binding is measured unchanged in renal impairment (apixaban: 92-94 % bound in healthy and ESRD subjects, US label) opts out with `Binding(fu, protein, ckd=False)`: the formula then has no CKD factor, `fu = 1/(1 + fimp_albumin * (1 - fu_ref)/fu_ref)`, so fu follows only the binding protein (cirrhosis still acts). With an unknown protein as well no factor is left and `fu = fu_ref`, the reference itself; an unknown protein with the CKD factor has the CKD factor alone. The notes of `fu_<s>` say which case applies (`unbound_fraction_notes`).
 
 ## Liver cirrhosis
 
@@ -100,8 +100,9 @@ A value marked `*` is a choice of the library, not a value of the source.
 
 The renal function scales the tubular capacity of the kidney as well, continuously and not by stage: every metabolism and transport of the kidney (a tubular secretion, a reabsorption by a transporter, a renal metabolism) runs with `1 - f_tubular + f_tubular*f_renal_function` of its healthy capacity (see [Chemistry](chemistry.md#kinetics)). The share `f_tubular` (a constant of the kidney, `KI__f_tubular`) is 1, the intact nephron hypothesis (Bricker 1960): the nephrons which remain in a diseased kidney work normally, so the tubular capacity falls with their number as the GFR does, as the secretion of a fraction of the GFR of the hand-written models did. The value is a choice of the library, the publication is not verified; the filtration `fu*GFR` follows the GFR itself.
 
-```equations title="the stage and the binding capacity (male build)"
+```equations title="the stage, the binding capacity and the CKD profile of albumin (male build)"
 eGFR = 0.114467156025102 l_per_min * f_renal_function
+fimp_albumin_ckd = fckd_albumin * fckd_albumin_binding
 fckd_plasma_protein = piecewise(1, eGFR >= 0.09, 1, eGFR >= 0.075, 1 + 0.45 * (0.075 - eGFR) / 0.03, eGFR >= 0.045, 1.45 + 0.75 * (0.045 - eGFR) / 0.0225, eGFR >= 0.0225, 2.2 + 0.3 * (0.0225 - eGFR) / 0.015, eGFR >= 0.0075, 2.5)
 ```
 
@@ -132,7 +133,9 @@ Share of the tubular capacity which follows the renal function (`f_tubular`, not
     - `Yoshida2016`: Yoshida K, Sun B, Zhang L, Zhao P, Abernethy DR, Nolin TD, Rostami-Hodjegan A, Zineh I, Huang SM. Systematic and quantitative assessment of the effect of chronic kidney disease on CYP2D6 and CYP3A4/5. Clin Pharmacol Ther 100(1):75-87, 2016. [doi:10.1002/cpt.337](https://doi.org/10.1002/cpt.337)
 <!-- end generated -->
 
-The binding effect is a factor on the binding capacity in the form of fu above, not a factor on fu: binding capacity is the mechanistic quantity and keeps fu below 1 (at `fu_ref` 0.5 the end stage gives fu 0.71). The hepatic proteins (switch `CKD_hepatic`, off by default) are the mean ratios of the unbound clearance of model drugs (Yoshida 2016, Tan 2018), taken as the activity of the pathway:
+The factor `plasma_protein` of the binding capacity acts on the binding to an unknown protein only (the binding to albumin and AGP has its profile, below). It is a factor on the binding capacity in the form of fu above, not a factor on fu: binding capacity is the mechanistic quantity and keeps fu below 1 (at `fu_ref` 0.5 the end stage gives fu 0.71). Its source is Table 3 of Alasmari 2023, the "correction factor for the effect of the CKD on the content of plasma proteins" of the PK-Sim plasma protein scale factor, taken from Malik 2020 (doi:10.1002/jcph.1713, paywalled, not read); its direction (the capacity falls by it) is a choice of the library. Malik 2020 parameterize CKD for drugs secreted by the organic cation system, which do not separate the proteins.
+
+The hepatic proteins (switch `CKD_hepatic`, off by default) are the mean ratios of the unbound clearance of model drugs (Yoshida 2016, Tan 2018), taken as the activity of the pathway:
 
 <!-- generated: impairment-ckd-proteins (scripts/pbpk_tables.py), do not edit -->
 *Generated from `data/impairment.toml` by `scripts/pbpk_tables.py`; the notes of every number are in the data file.*
@@ -150,6 +153,36 @@ A value marked `*` is a choice of the library, not a value of the source.
 
     - `Tan2018`: Tan ML, Yoshida K, Zhao P, Zhang L, Nolin TD, Piquette-Miller M, Galetin A, Huang SM. Effect of chronic kidney disease on nonrenal elimination pathways: a systematic assessment of CYP1A2, CYP2C8, CYP2C9, CYP2C19, and OATP. Clin Pharmacol Ther 103(5):854-867, 2018. [doi:10.1002/cpt.807](https://doi.org/10.1002/cpt.807)
     - `Yoshida2016`: Yoshida K, Sun B, Zhang L, Zhao P, Abernethy DR, Nolin TD, Rostami-Hodjegan A, Zineh I, Huang SM. Systematic and quantitative assessment of the effect of chronic kidney disease on CYP2D6 and CYP3A4/5. Clin Pharmacol Ther 100(1):75-87, 2016. [doi:10.1002/cpt.337](https://doi.org/10.1002/cpt.337)
+<!-- end generated -->
+
+### Binding in chronic kidney disease
+
+The binding to albumin and to alpha-1-acid glycoprotein has a CKD profile per protein, a factor on the binding of each stage, piecewise linear in the eGFR as the other factors; the factor of a protein (`fimp_albumin_ckd`, `fimp_agp_ckd`) is the product of its rows, and it multiplies the factor of cirrhosis in the binding factor of fu. Its parameters are created only when a substance binds to the protein with the CKD factor, so a model without such a substance keeps its SBML.
+
+- **Albumin, concentration** (`albumin`, Huang 2017, BMJ Open, doi:10.1136/bmjopen-2016-014294, full text, Table 1): serum albumin of 20 healthy controls 43.2 g/L, of non-dialysis CKD 3, 4 and 5 (eGFR 48.9, 24.7, 10.9 ml/min/1.73 m2; n = 32, 38, 25) 41.1, 40.7 and 39.1 g/L, so 0.951, 0.942 and 0.905 of the controls. The meta-analysis of Schmulenson 2018 (PAGE poster, not peer reviewed) gives 0.982, 0.953, 0.910 and 0.840 for mild CKD to end stage (with dialysis); Tan 2018 take 37.6 and 35.0 g/L of men and women in severe CKD against 44.9 and 41.8 g/L (0.84, from Rowland Yeo 2011, not read).
+- **Albumin, binding function** (`albumin_binding`, Klammt 2012, Nephrol Dial Transplant, doi:10.1093/ndt/gfr616, abstract): the albumin-binding capacity of site II (ABiC, the unbound fraction of dansylsarcosine in plasma diluted to an albumin concentration of 150 umol/l, relative to a pooled plasma, the method as Klinkmann 2022, doi:10.3390/medicina58121780, describe it) of 104 CKD patients is 118, 111, 99 and 79 % in the stages 1/2, 3, 4 and 5, with the protein-bound uraemic toxin indoxyl sulphate rising from 3.9 to 56.1 umol/l. Relative to the stages 1/2 it is 0.941, 0.839 and 0.669: a capacity of the albumin molecule, separate from the concentration, so the two multiply. The stages 1/2 are taken as healthy (the reference of the study is pooled plasma, not healthy subjects) and site II for every albumin-bound drug, choices of the library.
+- **AGP, concentration** (`agp`, Schmulenson 2018, the poster read): the weighted mean fractional changes of a systematic literature search, 1.137, 1.328 and 2.062 for moderate, severe CKD and end stage renal disease (no data for mild CKD). The peer-reviewed measurements read support the rise but not the stages: non-dialysed uremic patients 1.27 against 0.79 g/L of volunteers (Vasson 1991, doi:10.1177/039139889101400207, abstract), 1.20 against 0.83 g/L (Vasson 1993, doi:10.1159/000187492, abstract). No change of the binding function of AGP is applied: Kishino 1995 (doi:10.1097/00007691-199510000-00003, abstract) found fewer binding sites per AGP molecule in renal insufficiency, the dissociation constant unchanged, but the abstract gives no numbers.
+
+Mild CKD is measured by none of the sources: its value lies on the line from 1 at the eGFR 90 to the moderate value at 45 (albumin concentration, AGP), and the binding function of the stages 1/2 is 1, choices of the library. At the end stage the profile raises fu of a strongly bound albumin substance by 1/(0.905*0.669) = 1.65 (the binding capacity 2.5) and lowers fu of a strongly bound AGP substance to 0.485 of healthy (2.5 before). The measured rise of fu of highly bound acidic drugs in severe CKD reaches 2.71 (bumetanide, Tan 2022, doi:10.1002/cpt.2642, full text), while the concentration of albumin alone predicts at most 1.20 (Tan 2022); Vanholder 1988 (doi:10.1038/ki.1988.99, abstract) measured a falling binding of phenytoin, theophylline and methotrexate and a rising binding of the basic drugs propranolol, cimetidine and clonidine in dialysed patients.
+
+<!-- generated: impairment-ckd-binding (scripts/pbpk_tables.py), do not edit -->
+*Generated from `data/impairment.toml` by `scripts/pbpk_tables.py`; the notes of every number are in the data file.*
+
+| factor | mild | moderate | severe | end stage | source |
+| --- | ---: | ---: | ---: | ---: | --- |
+| `albumin` | 0.984* | 0.951 | 0.942 | 0.905 | `Huang2017` |
+| `albumin_binding` | 1* | 0.941 | 0.839 | 0.669 | `Klammt2012` |
+| `agp` | 1.046* | 1.137 | 1.328 | 2.062 | `Schmulenson2018` |
+
+A value marked `*` is a choice of the library, not a value of the source.
+
+The rows: `albumin` the plasma albumin concentration (protein `albumin`); `albumin_binding` the binding function of an albumin molecule (protein `albumin`); `agp` the plasma alpha-1-acid glycoprotein concentration (protein `agp`). The factor of a protein is the product of its rows.
+
+??? note "Sources"
+
+    - `Huang2017`: Huang MJ, Wei RB, Wang Y, Su TY, Di P, Li QP, Yang X, Li P, Chen XM. Blood coagulation system in patients with chronic kidney disease: a prospective observational study. BMJ Open 7(5):e014294, 2017. [doi:10.1136/bmjopen-2016-014294](https://doi.org/10.1136/bmjopen-2016-014294)
+    - `Klammt2012`: Klammt S, Wojak HJ, Mitzner A, Koball S, Rychly J, Reisinger EC, Mitzner S. Albumin-binding capacity (ABiC) is reduced in patients with chronic kidney disease along with an accumulation of protein-bound uraemic toxins. Nephrol Dial Transplant 27(6):2377-2383, 2012 (the abstract read). [doi:10.1093/ndt/gfr616](https://doi.org/10.1093/ndt/gfr616)
+    - `Schmulenson2018`: Schmulenson E, Schlender JF, Frechen S, Jaehde U. A physiologically-based pharmacokinetic modeling approach to assess the impact of chronic kidney disease. PAGE 27 (2018), Abstr 8630, poster IV-61, https://www.page-meeting.org/?abstract=8630 (the poster read: https://www.page-meeting.org/pdf_assets/1160-Schmulenson_PAGE2018.pdf).
 <!-- end generated -->
 
 ## Heart failure
@@ -209,6 +242,7 @@ The presimulation was chosen over a hidden pre-run of a duration from a negative
 - The physiological factors of the Child-Pugh classes are choices of the library from a review table (Alasmari 2024), not verified against Edginton & Willmann 2008.
 - The anaemia of cirrhosis and CKD: the publications read state absolute hematocrits without the healthy value of their population, so the hematocrit factors are 1 until a source with its healthy reference is read.
 - The kidney volume and blood flow and the gastric emptying and small intestinal transit of CKD are factor 1: the constants which reach a PBPK library only through the code of PK-Sim (GPL) are not shipped, and Malik 2020 was not read. A dropped effect is factor 1 with a note in the data file. The CKD physiology is thinner than that of PK-Sim until Malik 2020 is read.
-- The binding factor of CKD acts on the binding capacity, PK-Sim multiplies fu by it: the two differ for weakly bound drugs (at `fu_ref` 0.5 and the factor 1.45 of moderate CKD, fu 0.59 against 0.725).
+- The binding factor of CKD of an unknown protein acts on the binding capacity, PK-Sim multiplies fu by it: the two differ for weakly bound drugs (at `fu_ref` 0.5 and the factor 1.45 of moderate CKD, fu 0.59 against 0.725). Its source (Malik 2020) was not read.
+- The CKD profile of the binding is the mean of a population: the binding of a drug in CKD varies with its binding site and the uraemic toxins which displace it (Tan 2022: 1.0 to 2.7 times the fu of highly bound acidic drugs in severe CKD), so a drug with a measured fu in renal impairment keeps it (`Binding(ckd=False)` with the measured fu of the study). The profile of AGP rests on a meta-analysis published as a poster; the binding function of albumin is that of site II.
 - A Kp of a Kp method is a number of the build: a change of fu by an impairment does not recompute it.
 - The tubular capacity follows the renal function in proportion (`f_tubular` 1, the intact nephron hypothesis, Bricker 1960, not verified, a choice of the library); a transporter whose activity falls less or more than the GFR in CKD needs another share or an activity factor of the experiment.

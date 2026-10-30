@@ -30,8 +30,10 @@ class Binding:
     Attributes:
         fu: the fraction unbound in plasma.
         protein: the binding protein.
-        ckd: whether the CKD factor of the binding capacity
-            (`fimp_plasma_protein`) acts on the fu of the substance; `False`
+        ckd: whether the CKD factor of the binding acts on the fu of the
+            substance (the CKD profile of albumin or alpha-1-acid
+            glycoprotein, `fimp_albumin_ckd`, `fimp_agp_ckd`; the binding
+            capacity `fimp_plasma_protein` for an unknown protein); `False`
             for a substance whose binding is measured unchanged in renal
             impairment (fu then follows only the factor of its binding
             protein).

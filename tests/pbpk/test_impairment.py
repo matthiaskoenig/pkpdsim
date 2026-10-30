@@ -23,6 +23,7 @@ from pkpdsim.pbpk import (
     U,
     build,
     ids,
+    impairment,
     load,
 )
 from pkpdsim.pbpk.builder import BuildResult
@@ -36,13 +37,14 @@ from pkpdsim.pbpk.impairment import (
 from pkpdsim.pbpk.organs import PORTAL_ORGANS
 from pkpdsim.pbpk.physiology import Sex, physiology_objects
 
-from .conftest import definition, individual, simple_drug
+from .conftest import dateless, definition, individual, simple_drug
 from .conftest import load as load_model
 
 PARALLEL = [o for o in Organ if o is not Organ.LUNG]
 DATA = load("impairment")
 CP = DATA["child_pugh"]
 CKD = DATA["ckd"]
+BINDING = CKD["binding"]
 HF = DATA["heart_failure"]
 
 
@@ -173,6 +175,18 @@ def _fu(fu_ref: float, factor: float) -> float:
     return 1.0 / (1.0 + factor * (1.0 - fu_ref) / fu_ref)
 
 
+def _ckd_binding(protein: str, stage: int) -> float:
+    """The CKD factor of the binding to a protein at a stage (0 mild to 3 end stage).
+
+    The product of the rows of the protein in `[ckd.binding]` of the data.
+    """
+    factor = 1.0
+    for entry in BINDING.values():
+        if entry["protein"] == protein:
+            factor *= entry["value"][stage]
+    return factor
+
+
 @pytest.mark.parametrize("fu_ref", [0.001, 0.05, 0.3, 0.9])
 def test_fu_follows_albumin(tmp_path: Path, fu_ref: float) -> None:
     """fu follows the factor of its binding protein (McNamara 2002).
@@ -209,11 +223,15 @@ def test_fu_follows_albumin(tmp_path: Path, fu_ref: float) -> None:
     assert r[ids.fu("alb")] > fu_ref
     r = individual(path, f_renal_function=0.05)
     factor = CKD["plasma_protein"]["value"][3]
-    for sid in ("alb", "unk"):
-        assert r[ids.fu(sid)] == pytest.approx(_fu(fu_ref, 1.0 / factor), rel=1e-12)
-        assert fu_ref < r[ids.fu(sid)] < 1.0
+    assert r[ids.fu("unk")] == pytest.approx(_fu(fu_ref, 1.0 / factor), rel=1e-12)
+    assert fu_ref < r[ids.fu("unk")] < 1.0
     if fu_ref <= 0.001:
-        assert r[ids.fu("alb")] == pytest.approx(fu_ref * factor, rel=2e-3)
+        assert r[ids.fu("unk")] == pytest.approx(fu_ref * factor, rel=2e-3)
+    for sid, protein in (("alb", "albumin"), ("agp", "agp")):
+        expected = _fu(fu_ref, _ckd_binding(protein, 3))
+        assert r[ids.fu(sid)] == pytest.approx(expected, rel=1e-12)
+    assert fu_ref < r[ids.fu("alb")] < 1.0
+    assert r[ids.fu("agp")] < fu_ref
     assert unbound_fraction(substances[3]) == ids.fu_ref("free")
 
 
@@ -298,10 +316,154 @@ def test_binding_free_of_ckd(tmp_path: Path) -> None:
     assert r[ids.fu("keep")] == pytest.approx(_fu(fu_ref, albumin), rel=1e-12)
     keep, rise = (unbound_fraction(s) for s in substances)
     assert "fimp_plasma_protein" not in keep
+    assert "fimp_albumin_ckd" not in keep
     assert rise.replace(" ", "") == (
-        "1dimensionless/(1dimensionless+fimp_albumin/fimp_plasma_protein*"
+        "1dimensionless/(1dimensionless+fimp_albumin*fimp_albumin_ckd*"
         f"(1dimensionless-{ids.fu_ref('rise')})/{ids.fu_ref('rise')})"
     )
+
+
+def test_ckd_binding_profile_data() -> None:
+    """The CKD profile of the binding per protein, every row with its source.
+
+    Albumin falls in concentration (Huang 2017) and in the binding function of
+    its molecule (Klammt 2012), alpha-1-acid glycoprotein rises (Schmulenson
+    2018); the mild stage, which no source measures, is a model choice.
+    """
+    assert {e["protein"] for e in BINDING.values()} == {"albumin", "agp"}
+    assert {k: e["source"] for k, e in BINDING.items()} == {
+        "albumin": "Huang2017",
+        "albumin_binding": "Klammt2012",
+        "agp": "Schmulenson2018",
+    }
+    for key, entry in BINDING.items():
+        assert entry["choice"] == ["mild"], key
+        assert entry["unit"] == "dimensionless", key
+        values = [1.0, *entry["value"]]
+        pairs = list(itertools.pairwise(values))
+        if entry["protein"] == "albumin":
+            assert all(b <= a for a, b in pairs), key
+        else:
+            assert all(b >= a for a, b in pairs), key
+    # the end stage factors which the albumin and the AAG of a strongly bound
+    # substance multiply its fu with: about 1.65 and 0.48, against the 2.5 of
+    # the old factor of the binding capacity
+    assert 1.0 / _ckd_binding("albumin", 3) == pytest.approx(1.65, abs=0.01)
+    assert 1.0 / _ckd_binding("agp", 3) == pytest.approx(0.485, abs=0.01)
+
+
+@pytest.mark.parametrize("fu_ref", [0.01, 0.3])
+def test_ckd_binding_per_protein(tmp_path: Path, fu_ref: float) -> None:
+    """fu of an albumin and an AAG bound substance follows the CKD profile of its protein.
+
+    At the anchor of every stage the binding factor is the product of the
+    rows of the protein (albumin: concentration times binding function, AAG:
+    concentration): fu of albumin rises, fu of AAG falls. An unknown protein
+    keeps the old factor of the binding capacity, `ckd=False` none, and the
+    profile multiplies the factor of cirrhosis.
+    """
+    substances = [
+        Substance(
+            sid="alb", name="alb", mr=300.0, binding=Binding(fu_ref, protein="albumin")
+        ),
+        Substance(
+            sid="agp", name="agp", mr=300.0, binding=Binding(fu_ref, protein="agp")
+        ),
+        Substance(sid="unk", name="unk", mr=300.0, binding=Binding(fu_ref)),
+        Substance(
+            sid="keep",
+            name="keep",
+            mr=300.0,
+            binding=Binding(fu_ref, protein="agp", ckd=False),
+        ),
+    ]
+    path = build(
+        PBPKDefinition(sid="profile", substances=substances), tmp_path
+    ).flat_path
+    healthy = individual(path)
+    for egfr, stage in zip(ANCHORS, range(4), strict=True):
+        r = individual(path, f_renal_function=_stage_function(healthy, egfr))
+        for key, entry in BINDING.items():
+            assert r[ids.condition_factor("ckd", key)] == pytest.approx(
+                entry["value"][stage], rel=1e-12
+            ), (key, stage)
+        for sid, protein in (("alb", "albumin"), ("agp", "agp")):
+            assert r[ids.impairment_factor(f"{protein}_ckd")] == pytest.approx(
+                _ckd_binding(protein, stage), rel=1e-12
+            )
+            assert r[ids.fu(sid)] == pytest.approx(
+                _fu(fu_ref, _ckd_binding(protein, stage)), rel=1e-12
+            ), (sid, stage)
+        assert r[ids.fu("alb")] > fu_ref
+        assert r[ids.fu("agp")] < fu_ref
+        old = CKD["plasma_protein"]["value"][stage]
+        assert r[ids.fu("unk")] == pytest.approx(_fu(fu_ref, 1.0 / old), rel=1e-12)
+        assert r[ids.fu("keep")] == pytest.approx(fu_ref, rel=1e-12)
+    # cirrhosis and CKD multiply
+    r = individual(
+        path, CP_severity=2.0, f_renal_function=_stage_function(healthy, ANCHORS[3])
+    )
+    for sid, protein in (("alb", "albumin"), ("agp", "agp")):
+        cp = CP[protein]["value"][1]
+        expected = _fu(fu_ref, cp * _ckd_binding(protein, 3))
+        assert r[ids.fu(sid)] == pytest.approx(expected, rel=1e-12)
+
+
+def test_the_notes_of_an_unbound_fraction_with_the_ckd_profile() -> None:
+    """The notes of fu name the CKD profile of the protein, `ckd=False` keeps the old notes."""
+    profile = Substance(
+        sid="w", name="w", mr=300.0, binding=Binding(0.4, protein="albumin")
+    )
+    keep = Substance(
+        sid="v", name="v", mr=300.0, binding=Binding(0.4, protein="albumin", ckd=False)
+    )
+    assert "fimp_albumin_ckd" in unbound_fraction_notes(profile)
+    assert unbound_fraction_notes(keep) == (
+        "Fraction unbound in plasma of the individual: the reference fraction "
+        "scaled with the binding protein under impairment (McNamara 2002, "
+        "`pkpdsim.pbpk.impairment`)."
+    )
+
+
+def test_a_definition_without_a_profile_builds_as_before(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A definition without an albumin or AAG binding with the CKD factor is unchanged.
+
+    No substance binds to a protein of the profile with the CKD factor (no
+    binding, an unknown protein, `ckd=False`): the SBML is that of the data
+    without the profile, line by line but for the dates, and has none of its
+    ids.
+    """
+    substances = [
+        Substance(sid="unk", name="unk", mr=300.0, binding=Binding(0.2)),
+        Substance(
+            sid="alb",
+            name="alb",
+            mr=300.0,
+            binding=Binding(0.2, protein="albumin", ckd=False),
+        ),
+        Substance(
+            sid="agp",
+            name="agp",
+            mr=300.0,
+            binding=Binding(0.2, protein="agp", ckd=False),
+        ),
+        Substance(sid="free", name="free", mr=300.0),
+    ]
+    d = PBPKDefinition(sid="noprofile", substances=substances)
+    now = build(d, tmp_path / "now")
+    data = dict(DATA)
+    data["ckd"] = {k: v for k, v in DATA["ckd"].items() if k != "binding"}
+    monkeypatch.setattr(impairment, "_data", lambda: data)
+    before = build(d, tmp_path / "before")
+    for a, b in ((now.comp_path, before.comp_path), (now.flat_path, before.flat_path)):
+        text = a.read_text(encoding="utf-8")
+        assert dateless(text) == dateless(b.read_text(encoding="utf-8"))
+        for key in BINDING:
+            assert ids.condition_factor("ckd", key) not in text
+        for protein in ("albumin", "agp"):
+            assert ids.impairment_factor(f"{protein}_ckd") not in text
 
 
 def _stage_function(r: roadrunner.RoadRunner, egfr: float) -> float:
@@ -413,22 +575,32 @@ def test_ckd_fu_scan_is_continuous(tmp_path: Path) -> None:
     jump between neighbouring points is bounded by the steepest slope of the
     factor between the anchors times the step of the eGFR times the largest
     slope of fu in c, `k/(c + k)^2` at c = 1. The former staircase jumped by
-    0.021 at the limit of moderate CKD, 20 times more.
+    0.021 at the limit of moderate CKD, 20 times more. The bound is that of
+    the factor of the binding capacity (an unknown protein); the CKD profile
+    of albumin is continuous as well.
     """
     fu_ref = 0.05
     k = (1.0 - fu_ref) / fu_ref
-    substance = Substance(
-        sid="alb", name="alb", mr=300.0, binding=Binding(fu=fu_ref, protein="albumin")
-    )
-    d = PBPKDefinition(sid="fuscan", substances=[substance])
+    substances = [
+        Substance(sid="unk", name="unk", mr=300.0, binding=Binding(fu=fu_ref)),
+        Substance(
+            sid="alb",
+            name="alb",
+            mr=300.0,
+            binding=Binding(fu=fu_ref, protein="albumin"),
+        ),
+    ]
+    d = PBPKDefinition(sid="fuscan", substances=substances)
     path = build(d, tmp_path).flat_path
     n = 240
     steps = [i * 1.2 / n for i in range(n + 1)]
     egfr_step = 0.0
     fus = []
+    albumin = []
     for f in steps:
         r = individual(path, f_renal_function=f)
-        fus.append(r[ids.fu("alb")])
+        fus.append(r[ids.fu("unk")])
+        albumin.append(r[ids.fu("alb")])
         egfr_step = r[ids.EGFR] * 1000.0 / f if f else egfr_step
     egfr_step *= 1.2 / n
     xs = [LIMIT, *ANCHORS]
@@ -438,6 +610,10 @@ def test_ckd_fu_scan_is_continuous(tmp_path: Path) -> None:
     jumps = [abs(b - a) for a, b in itertools.pairwise(fus)]
     assert max(jumps) <= bound * (1.0 + 1e-9)
     assert max(jumps) < 0.001
+    assert max(abs(b - a) for a, b in itertools.pairwise(albumin)) < 0.001
+    assert albumin[0] == pytest.approx(
+        _fu(fu_ref, _ckd_binding("albumin", 3)), rel=1e-12
+    )
     # no step: the scan spans the factors 1 to the end stage value
     assert fus[0] == pytest.approx(_fu(fu_ref, 1.0 / ys[-1]), rel=1e-12)
     assert fus[-1] == pytest.approx(fu_ref, rel=1e-12)

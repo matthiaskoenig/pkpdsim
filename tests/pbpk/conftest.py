@@ -480,8 +480,10 @@ def assert_reference_sbml(result: BuildResult) -> None:
     at f008d56, `chemistry_reference_definition()` at 0c538ca,
     `nephron_reference_definition()` at 311895c (with the notes of `fu` of
     its unknown protein with the CKD factor of 5793173, the one line
-    replaced) and `endogenous_reference_definition()` at 87a5e79; a change
-    of the library
+    replaced) and `endogenous_reference_definition()` at 87a5e79, all
+    rebuilt with the CKD profile of the binding to albumin (their albumin
+    substances; the build without the profile is the former reference, line
+    by line but for the dates); a change of the library
     which changes the SBML of every model on purpose rebuilds them and says
     so.
     """

@@ -356,6 +356,18 @@ def impairment_ckd_proteins() -> str:
     return _generated("`data/impairment.toml`", [*lines, "", _CHOICE], cited)
 
 
+def impairment_ckd_binding() -> str:
+    """The CKD profile of the binding per protein."""
+    section = load("impairment")["ckd"]["binding"]
+    lines, cited = _vector_table(section, ["mild", "moderate", "severe", "end stage"])
+    rows = "; ".join(
+        f"`{key}` the {entry['quantity']} (protein `{entry['protein']}`)"
+        for key, entry in section.items()
+    )
+    tail = [f"The rows: {rows}. The factor of a protein is the product of its rows."]
+    return _generated("`data/impairment.toml`", [*lines, "", _CHOICE, "", *tail], cited)
+
+
 def impairment_heart_failure() -> str:
     """The factors of the NYHA classes on the blood flows."""
     section = load("impairment")["heart_failure"]
@@ -466,6 +478,7 @@ TABLES: dict[str, Callable[[], str]] = {
     "impairment-child-pugh": impairment_child_pugh,
     "impairment-child-pugh-proteins": impairment_child_pugh_proteins,
     "impairment-ckd": impairment_ckd,
+    "impairment-ckd-binding": impairment_ckd_binding,
     "impairment-ckd-proteins": impairment_ckd_proteins,
     "impairment-heart-failure": impairment_heart_failure,
     "arm-vein": arm_vein,

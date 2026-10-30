@@ -514,9 +514,12 @@ def test_the_baseline_is_annotated(tmp_path: Path) -> None:
 # the baseline): the numbers of species, parameters, initial assignments,
 # rules, reactions and compartments. Pinned as counts and values, not as a
 # hash of the file, which every unrelated change of the library would move.
+# The CKD profile of the binding to albumin added three parameters with their
+# initial assignments (`fckd_albumin`, `fckd_albumin_binding`,
+# `fimp_albumin_ckd`) to both.
 _PINNED = {
-    "comp": (9, 236, 145, 12, 3, 9),
-    "flat": (65, 404, 261, 68, 108, 77),
+    "comp": (9, 239, 148, 12, 3, 9),
+    "flat": (65, 407, 264, 68, 108, 77),
 }
 
 

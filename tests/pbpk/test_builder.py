@@ -182,7 +182,7 @@ def test_flat_ids_follow_scheme(simple: BuildResult) -> None:
         for a in model.getListOfInitialAssignments()
     }
     assert initial[ids.fu("drg")].replace(" ", "") == (
-        "1dimensionless/(1dimensionless+(fimp_albumin/fimp_plasma_protein)*"
+        "1dimensionless/(1dimensionless+fimp_albumin*fimp_albumin_ckd*"
         "(1dimensionless-fu_ref_drg)/fu_ref_drg)"
     )
     assert initial[ids.bp("drg")].replace(" ", "") == "1dimensionless-HCT"

@@ -23,7 +23,12 @@ choice):
   and fits; stage midpoints): 1 from 90 ml/min/1.73 m2, the mild value at 75,
   the moderate value at 45, the severe value at 22.5 and the end stage value
   at 7.5 and below, linear in between (from 90 to 75 from 1 to the mild
-  value), so a scan or fit of `f_renal_function` sees no step. The switch `CKD_hepatic` (0 off, 1 on) adds the reduced
+  value), so a scan or fit of `f_renal_function` sees no step. The binding
+  to albumin and alpha-1-acid glycoprotein follows the CKD profile of its
+  protein (`[ckd.binding]` of the data): albumin falls in concentration and
+  in the binding function of its molecule, AAG rises in concentration; the
+  binding to an unknown protein follows the binding capacity of the plasma
+  proteins (`plasma_protein`). The switch `CKD_hepatic` (0 off, 1 on) adds the reduced
   activity of hepatic CYP2D6 and OATP1B. The tubular capacity of the kidney
   (every metabolism and transport of the kidney) follows `f_renal_function`
   continuously, `1 - f_tubular + f_tubular*f_renal_function` with the share
@@ -49,12 +54,16 @@ fraction of the cardiac output without impairment (`CO_base`) times
 `fimp_Q<o>`, and the cardiac output is `CO_base` times
 `fimp_CO = sum fQ<o>*fimp_Q<o>`, so the flows sum to it.
 Plasma binding (McNamara 2002): `fu = 1/(1 + f*(1 - fu_ref)/fu_ref)` with the
-binding factor `f`, the factor of the binding protein (`fimp_albumin`,
-`fimp_agp`, 1 for an unknown protein) over the CKD factor of the binding
-capacity `fimp_plasma_protein`: fu of a strongly bound substance rises by the
-CKD factor, and fu stays below 1. A binding with `ckd=False` (measured
-unchanged in renal impairment) leaves out the CKD factor, so `f` is the factor
-of the binding protein alone. Enzymes and transporters: a rate of a
+binding factor `f`, the factor of the binding protein in cirrhosis
+(`fimp_albumin`, `fimp_agp`, 1 for an unknown protein) times the CKD factor of
+the binding: the CKD profile of the protein (`fimp_albumin_ckd`,
+`fimp_agp_ckd`, the product of its rows of `[ckd.binding]`), for an unknown
+protein one over the factor of the binding capacity `fimp_plasma_protein`
+(fu of a strongly bound substance rises by it). fu stays below 1. A binding
+with `ckd=False` (measured unchanged in renal impairment) leaves out the CKD
+factor, so `f` is the factor of the binding protein alone. The parameters of
+the CKD profile of a protein are created only when a substance binds to it
+with the CKD factor. Enzymes and transporters: a rate of a
 protein in the liver runs with `f_<protein>*fimp_<protein>`, the organ-local
 base activity (genotype, interactions of an experiment, `LI__f_cyp3a4`)
 times the input `fimp_<protein>` of the impairment (`fimp_li_<protein>` of
@@ -143,6 +152,25 @@ def _proteins() -> frozenset[str]:
     )
 
 
+def _binding_keys(protein: str) -> list[str]:
+    """The keys of the rows of the CKD profile of the binding to a protein.
+
+    Args:
+        protein: the binding protein, `albumin`, `agp` or `unknown`.
+
+    Returns:
+        The keys of `[ckd.binding]` of the data whose protein it is, in their
+        order; empty for a protein without a profile (an unknown protein).
+    """
+    rows = _data()["ckd"].get("binding", {})
+    return [key for key, row in rows.items() if row["protein"] == protein]
+
+
+def _ckd_binding(protein: str) -> str:
+    """The id of the CKD factor of the binding to a protein, `fimp_albumin_ckd`."""
+    return ids.impairment_factor(f"{protein}_ckd")
+
+
 def organ_activity(organ: Organ, protein: str) -> str | None:
     """Get the local input of the impairment on a protein in an organ.
 
@@ -222,6 +250,14 @@ def unbound_fraction_notes(s: Substance) -> str:
             "kidney disease, no factor of a binding protein applies (the binding "
             "protein is unknown; McNamara 2002, `pkpdsim.pbpk.impairment`)."
         )
+    if s.binding.ckd and _binding_keys(s.binding.protein):
+        return (
+            "Fraction unbound in plasma of the individual: the reference fraction "
+            "scaled with the binding protein under impairment, its factor of "
+            "cirrhosis times its profile of chronic kidney disease "
+            f"`{_ckd_binding(s.binding.protein)}` (McNamara 2002, "
+            "`pkpdsim.pbpk.impairment`)."
+        )
     return (
         "Fraction unbound in plasma of the individual: the reference fraction "
         "scaled with the binding protein under impairment (McNamara 2002, "
@@ -238,9 +274,11 @@ def unbound_fraction(s: Substance) -> str:
     Returns:
         `fu_ref_<s>` for a substance without binding, else the McNamara 2002
         scaling `1/(1 + f*(1 - fu_ref)/fu_ref)` with the binding factor `f`:
-        the factor of the binding protein (1 for an unknown protein) over the
-        CKD factor of the binding capacity `fimp_plasma_protein`. The CKD
-        factor raises fu of a strongly bound substance by itself
+        the factor of the binding protein in cirrhosis times the CKD profile
+        of the protein (`fimp_albumin_ckd`, `fimp_agp_ckd`); an unknown
+        protein has no factor of cirrhosis and its CKD factor is one over the
+        factor of the binding capacity `fimp_plasma_protein`, which raises fu
+        of a strongly bound substance by itself
         (`fu ~ fimp_plasma_protein*fu_ref`), fu stays below 1; fu of a weakly
         bound substance rises less (fu_ref 0.5 at a factor 2.5: 0.71, not
         1.25). A binding with `ckd=False` has the factor of the binding
@@ -257,7 +295,9 @@ def unbound_fraction(s: Substance) -> str:
         "agp": ids.impairment_factor("agp"),
     }.get(s.binding.protein, _ONE)
     binding = protein
-    if s.binding.ckd:
+    if s.binding.ckd and _binding_keys(s.binding.protein):
+        binding = f"{protein} * {_ckd_binding(s.binding.protein)}"
+    elif s.binding.ckd:
         binding = f"{protein} / {ids.impairment_factor('plasma_protein')}"
     return f"{_ONE} / ({_ONE} + {binding} * ({_ONE} - {fu_ref}) / {fu_ref})"
 
@@ -582,6 +622,18 @@ class _Impairment:
         }
         return sorted(p for p in section if p in used)
 
+    def binding_proteins(self) -> list[str]:
+        """The proteins with a CKD profile which a substance binds to with the CKD factor."""
+        return sorted(
+            {
+                s.binding.protein
+                for s in self.definition.substances
+                if s.binding is not None
+                and s.binding.ckd
+                and _binding_keys(s.binding.protein)
+            }
+        )
+
     # --- chronic kidney disease -----------------------------------------
 
     def ckd(self) -> None:
@@ -642,6 +694,14 @@ class _Impairment:
                 f"`{ids.CKD_HEPATIC}` = 1)",
                 limits,
             )
+        for protein in self.binding_proteins():
+            for key in _binding_keys(protein):
+                self._stage(
+                    key,
+                    _entry(ckd["binding"], key),
+                    f"on the {ckd['binding'][key]['quantity']}",
+                    limits,
+                )
 
     def _stage(
         self, key: str, entry: _Entry, text: str, limits: Sequence[float]
@@ -830,6 +890,21 @@ class _Impairment:
                     formula,
                     f"impairment factor {key}",
                     f"{text} {what}.",
+                    kind="impairment_factor",
+                )
+            )
+        for protein in self.binding_proteins():
+            keys = _binding_keys(protein)
+            self.add(
+                _initial(
+                    _ckd_binding(protein),
+                    " * ".join(ids.condition_factor("ckd", k) for k in keys),
+                    f"impairment factor {protein} ckd",
+                    "The factor of chronic kidney disease on the binding to "
+                    f"{protein}, the product of its rows of the CKD profile "
+                    f"({', '.join(keys)}); it multiplies the binding factor of fu "
+                    f"of a substance bound to {protein} with the CKD factor, in "
+                    f"place of `{ids.impairment_factor('plasma_protein')}`.",
                     kind="impairment_factor",
                 )
             )
