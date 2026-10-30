@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 
 from sbmlsim.fit.cli import load_fit_records, report_from_records
 
-from pkpdsim.fit import fit_subset, records_context
+from pkpdsim.fit import fit_subset, leveled_definitions, records_context
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -36,7 +36,7 @@ def adopted_record(model: PKPDModel, fit_id: str) -> Path:
         FileNotFoundError: if the record of the fit has no `parameters.json`.
     """
     subset = fit_subset(fit_id)
-    definitions = model.load_fit_definitions()
+    definitions = leveled_definitions(model)
     if subset not in definitions:
         raise ValueError(
             f"The subset '{subset}' of the adopted fit '{fit_id}' has no fit "
@@ -84,7 +84,7 @@ def adopted_reports(
     """
     if not model.fits:
         raise ValueError(f"The model '{model.name}' has no adopted fits.")
-    definitions = model.load_fit_definitions()
+    definitions = leveled_definitions(model)
     context = records_context(model)
     directories: list[Path] = []
     for fit_id in model.fits:

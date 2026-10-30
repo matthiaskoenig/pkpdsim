@@ -38,6 +38,7 @@ from sbmlsim.experiment import (
 )
 from sbmlsim.fit.cli import FitRun, run_fit
 
+from pkpdsim.fit import leveled_definitions
 from pkpdsim.model import resolve
 from pkpdsim.uncertainty import check_fit_parameters
 
@@ -322,17 +323,16 @@ def start_fits(
         AssertionError: if a fit definition did not run.
     """
     runs: dict[str, dict[str, FitRun]] = {}
-    for key, definition in model.load_fit_definitions().items():
-        # the problems load their models at the level of the model
-        with model.simulator.jit_environment():
-            runs[key] = run_fit(
-                definition,
-                opid=f"test_{key}",
-                size=1,
-                seed=1234,
-                output_dir=output_dir,
-                max_nfev=max_nfev,
-            )
+    # the problems load their models at the level of the model
+    for key, definition in leveled_definitions(model).items():
+        runs[key] = run_fit(
+            definition,
+            opid=f"test_{key}",
+            size=1,
+            seed=1234,
+            output_dir=output_dir,
+            max_nfev=max_nfev,
+        )
         if not runs[key]:
             raise AssertionError(f"the fit {key} did not run")
     return runs

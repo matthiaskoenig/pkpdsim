@@ -19,12 +19,14 @@ from collections.abc import Callable, Collection, Hashable, Iterable, Mapping, S
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, overload
+from typing import TYPE_CHECKING, overload, override
 
 from sbmlsim.fit import FitMapping, FitMappingCollection, FitSettings
+from sbmlsim.fit.cli import FitDefinition
 from sbmlsim.fit.helpers import FitMappings, MappingFilter
 from sbmlsim.fit.methods import ReportContext
 from sbmlsim.fit.objects import FitParameter, MappingMetaData
+from sbmlsim.fit.optimization import OptimizationProblem
 from sbmlsim.fit.options import (
     DataAtChangeType,
     LossFunctionType,
@@ -32,12 +34,13 @@ from sbmlsim.fit.options import (
     WeightingCurvesType,
     WeightingPointsType,
 )
+from sbmlsim.model.model_roadrunner import resolve_jit_optimization
 
 from pkpdsim.metadata import PKPDMappingMetaData, SamplingSite
 
 if TYPE_CHECKING:
     from sbmlsim.experiment import SimulationExperiment
-    from sbmlsim.fit.cli import FitDefinition, FitRecords
+    from sbmlsim.fit.cli import FitRecords
     from sbmlsim.model.tolerances import AbsoluteTolerance
 
     from pkpdsim.model import PKPDModel
@@ -481,6 +484,72 @@ def _remainder_terms(ast: object) -> list[str] | None:
 
 #: the argument of the provenance of a fit which names the fixed adopted fits
 FIXED_FITS = "fixed_fits"
+
+
+@dataclass
+class LeveledFitDefinition(FitDefinition):
+    """A fit definition whose problems load their models at an optimization level.
+
+    sbmlsim builds the problem of a definition without a level, so it takes the
+    level of the environment variable `SBMLSIM_JIT_OPTIMIZATION` of the process
+    which builds it. The problem resolves its level once and carries it into
+    every worker of a pool (`OptimizationProblem.__getstate__`), which loads the
+    models with it: the problems of this definition get the level of the model,
+    in the process and in every worker, whatever the environment of the
+    process and of a forkserver which started the workers.
+
+    Attributes:
+        jit_optimization: the level of LLJIT (`"O0"` to `"O3"`).
+    """
+
+    jit_optimization: str | None = None
+
+    @override
+    def problem(
+        self, opid: str, mapping_collections: list[FitMappingCollection] | None = None
+    ) -> OptimizationProblem:
+        problem = super().problem(opid, mapping_collections)
+        if self.jit_optimization is not None:
+            problem.jit_optimization = resolve_jit_optimization(self.jit_optimization)
+        return problem
+
+
+def at_level(definition: FitDefinition, level: str | None) -> FitDefinition:
+    """Get a fit definition whose problems load their models at a level.
+
+    Args:
+        definition: the fit definition of the model.
+        level: the optimization level of the model
+            (`SimulatorSettings.jit_optimization`), `None` for the level of
+            sbmlsim.
+
+    Returns:
+        The definition itself without a level, else a `LeveledFitDefinition`
+        with its fields.
+    """
+    if level is None:
+        return definition
+    fields = {
+        f.name: getattr(definition, f.name) for f in dataclasses.fields(definition)
+    }
+    fields["jit_optimization"] = level
+    return LeveledFitDefinition(**fields)
+
+
+def leveled_definitions(model: PKPDModel) -> dict[str, FitDefinition]:
+    """Get the fit definitions of a model at its optimization level, see `at_level`.
+
+    Args:
+        model: the model.
+
+    Returns:
+        The fit definitions by name.
+    """
+    level = model.simulator.jit_optimization
+    return {
+        name: at_level(definition, level)
+        for name, definition in model.load_fit_definitions().items()
+    }
 
 
 def start_point(

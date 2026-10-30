@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 import pytest
-from sbmlsim.fit.cli import load_fit_records
+from sbmlsim.fit.cli import FitDefinition, load_fit_records
 from sbmlsim.report.render import escape_typst
 
 from pkpdsim.cli import (
@@ -450,18 +450,29 @@ def test_an_unknown_start_is_refused(
     assert "neither a json file nor a fit" in capsys.readouterr().err
 
 
+def _level(definition: object) -> str:
+    """Get the level of the problem of a fit definition."""
+    assert isinstance(definition, FitDefinition)
+    return str(definition.problem(opid="level").jit_optimization)
+
+
 def test_the_fits_compile_at_the_level_of_the_model(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The processes of a fit load the models at `jit_optimization` of the model."""
+    """The problem of a fit has `jit_optimization` of the model, not the environment.
+
+    The problem carries its level into the workers of a pool
+    (`tests/test_fit.py::test_a_worker_loads_the_models_at_the_level_of_the_model`).
+    """
     import pkpdsim.cli
 
     variable = "SBMLSIM_JIT_OPTIMIZATION"
     monkeypatch.setenv(variable, "O3")
-    seen: list[str | None] = []
+    seen: list[str] = []
 
-    def recording_run_fit(*args: object, **kwargs: object) -> dict:
-        seen.append(os.environ.get(variable))
+    def recording_run_fit(definition: object, **kwargs: object) -> dict:
+        seen.append(_level(definition))
+        assert os.environ[variable] == "O3"
         return {}
 
     monkeypatch.setattr(pkpdsim.cli, "run_fit", recording_run_fit)
@@ -469,8 +480,7 @@ def test_the_fits_compile_at_the_level_of_the_model(
     model = dataclasses.replace(MODEL, simulator=simulator)
     fit_command(model, ["--runs", "1", "--output_dir", str(tmp_path)])
     assert seen == ["O0"]
-    assert os.environ[variable] == "O3"
-    # a model without a level leaves the environment as it is
+    # a model without a level takes the level of sbmlsim
     fit_command(MODEL, ["--runs", "1", "--output_dir", str(tmp_path)])
     assert seen == ["O0", "O3"]
 
@@ -478,15 +488,13 @@ def test_the_fits_compile_at_the_level_of_the_model(
 def test_the_reports_compile_at_the_level_of_the_model(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """`run_report` and `run_identifiability` simulate the fit at the level too."""
+    """`run_report` and `run_identifiability` build the problem at the level too."""
     import pkpdsim.cli
 
-    variable = "SBMLSIM_JIT_OPTIMIZATION"
-    monkeypatch.delenv(variable, raising=False)
-    seen: list[str | None] = []
+    seen: list[str] = []
 
-    def recording(*args: object, **kwargs: object) -> Path:
-        seen.append(os.environ.get(variable))
+    def recording(definitions: dict, **kwargs: object) -> Path:
+        seen.extend(_level(d) for d in definitions.values())
         return tmp_path
 
     monkeypatch.setattr(pkpdsim.cli, "report_cli", recording)
@@ -496,4 +504,3 @@ def test_the_reports_compile_at_the_level_of_the_model(
     report_command(model, ["parameters.json"])
     identifiability_command(model, ["parameters.json"])
     assert seen == ["O1", "O1"]
-    assert variable not in os.environ

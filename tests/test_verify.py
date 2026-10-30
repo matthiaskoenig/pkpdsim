@@ -5,7 +5,6 @@ import dataclasses
 import importlib.metadata
 import json
 import math
-import os
 import pickle
 import re
 import shutil
@@ -19,6 +18,7 @@ import pytest
 from figure_builders import FigureStudy, build_figures
 from PIL import Image
 from sbmlsim.experiment import SimulationExperiment
+from sbmlsim.fit.cli import FitDefinition
 from sbmlsim.plot import Figure
 from sbmlsim.simulation import Scan, Simulation
 from sbmlsim.simulation.sampling import local
@@ -1680,15 +1680,13 @@ def test_a_dump_and_the_fits_load_at_the_level_of_the_model(
     assert verify(dump) == 0
     assert levels == ["O0"]
 
-    variable = "SBMLSIM_JIT_OPTIMIZATION"
-    monkeypatch.delenv(variable, raising=False)
-    seen: list[str | None] = []
+    seen: list[str] = []
 
-    def recording_run_fit(*args: object, **kwargs: object) -> dict:
-        seen.append(os.environ.get(variable))
+    def recording_run_fit(definition: object, **kwargs: object) -> dict:
+        assert isinstance(definition, FitDefinition)
+        seen.append(str(definition.problem(opid="level").jit_optimization))
         return {}
 
     monkeypatch.setattr(sbmlsim.fit.cli, "run_fit", recording_run_fit)
     assert verify(["fits", *root, "--out", str(tmp_path / "fits")]) == 0
     assert seen == ["O0"]
-    assert variable not in os.environ

@@ -84,7 +84,9 @@ from sbmlutils.console import console
 
 from pkpdsim.fit import (
     FIXED_FITS,
+    at_level,
     current_fixed_fits,
+    leveled_definitions,
     records_context,
     remainder_problems,
     report_context,
@@ -736,7 +738,9 @@ def fit_command(
         _adopt(model, options.output_dir / options.adopt, force=options.force)
         return {}
 
-    definition = definitions[options.subset]
+    # the problems of the fit load the models at the level of the model, in the
+    # process and in every worker of a pool
+    definition = at_level(definitions[options.subset], model.simulator.jit_optimization)
     algorithm = ALGORITHMS[options.method]
     # the start of least squares: every run starts from the point (the sampling
     # START of sbmlsim), the global optimizer draws its population itself
@@ -758,19 +762,6 @@ def fit_command(
             parser.error(str(err))
         definition = with_start(definition, point)
         sampling["sampling"] = SamplingType.START
-    with model.simulator.jit_environment():
-        return _fit(model, options, definition, sampling, parser)
-
-
-def _fit(
-    model: PKPDModel,
-    options: argparse.Namespace,
-    definition: FitDefinition,
-    sampling: Mapping[str, SamplingType],
-    parser: argparse.ArgumentParser,
-) -> dict[str, FitRun]:
-    """Run a fit of `fit_command`, the models loaded at the level of the model."""
-    algorithm = ALGORITHMS[options.method]
     # the id of the fit, created before it starts, so that the problem, its
     # result and the directory of its report carry the same key
     opid = fit_id(options.subset)
@@ -912,18 +903,17 @@ def report_command(model: PKPDModel, args: Sequence[str] | None = None) -> Path:
             sys.exit(1)
         fit_display.key_values({d.name: d for d in directories})
         return options.output_dir
-    with model.simulator.jit_environment():
-        return report_cli(
-            dict(model.load_fit_definitions()),
-            args=with_output_dir(arguments, model.report_dir),
-            prog=f"run_report {model.package}",
-            description=(
-                "Report of a fit for stored parameters. `--adopted` instead "
-                "writes the report of every adopted fit of the model, without "
-                "a parameters file."
-            ),
-            context=records_context(model),
-        )
+    return report_cli(
+        leveled_definitions(model),
+        args=with_output_dir(arguments, model.report_dir),
+        prog=f"run_report {model.package}",
+        description=(
+            "Report of a fit for stored parameters. `--adopted` instead "
+            "writes the report of every adopted fit of the model, without "
+            "a parameters file."
+        ),
+        context=records_context(model),
+    )
 
 
 def identifiability_command(
@@ -940,14 +930,13 @@ def identifiability_command(
     Returns:
         The directory of the report.
     """
-    with model.simulator.jit_environment():
-        return identifiability_cli(
-            dict(model.load_fit_definitions()),
-            args=with_output_dir(
-                sys.argv[1:] if args is None else args, model.identifiability_dir
-            ),
-            prog=f"run_identifiability {model.package}",
-        )
+    return identifiability_cli(
+        leveled_definitions(model),
+        args=with_output_dir(
+            sys.argv[1:] if args is None else args, model.identifiability_dir
+        ),
+        prog=f"run_identifiability {model.package}",
+    )
 
 
 DOTTED_PACKAGE = re.compile(r"^[A-Za-z_]\w*(\.[A-Za-z_]\w*)*$")

@@ -2127,7 +2127,7 @@ def fits(args: argparse.Namespace) -> int:
     sys.path.insert(0, str(root))
     from sbmlsim.fit.cli import run_fit
 
-    from pkpdsim.model import jit_environment
+    from pkpdsim.fit import at_level
 
     if message := _outside_root(args.model, root):
         print(message, file=sys.stderr)
@@ -2143,15 +2143,14 @@ def fits(args: argparse.Namespace) -> int:
     for key in args.subsets or list(definitions):
         try:
             # the problems load their models at the level of the model
-            with jit_environment(info.jit_optimization):
-                run_fit(
-                    definitions[key],
-                    opid=f"smoke_{key}",
-                    size=1,
-                    seed=1234,
-                    output_dir=Path(args.out),
-                    max_nfev=args.max_nfev,
-                )
+            run_fit(
+                at_level(definitions[key], info.jit_optimization),
+                opid=f"smoke_{key}",
+                size=1,
+                seed=1234,
+                output_dir=Path(args.out),
+                max_nfev=args.max_nfev,
+            )
             status[key] = "ok"
         except Exception:  # every failing subset is reported
             traceback.print_exc()

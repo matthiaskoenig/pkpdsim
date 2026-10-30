@@ -4,6 +4,7 @@ import dataclasses
 from pathlib import Path
 
 import pytest
+from sbmlsim.fit.cli import FitDefinition
 
 from pkpdsim import testing
 from pkpdsim.model import CheckSettings
@@ -205,19 +206,14 @@ def test_the_initialization_compiles_with_the_level_of_the_model() -> None:
 def test_the_fits_start_at_the_level_of_the_model(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """`start_fits` loads the fit problems at `jit_optimization` of the model."""
-    import os
+    """`start_fits` builds the fit problems at `jit_optimization` of the model."""
+    seen: list[str] = []
 
-    variable = "SBMLSIM_JIT_OPTIMIZATION"
-    monkeypatch.delenv(variable, raising=False)
-    seen: list[str | None] = []
-
-    def recording_run_fit(*args: object, **kwargs: object) -> dict:
-        seen.append(os.environ.get(variable))
+    def recording_run_fit(definition: FitDefinition, **kwargs: object) -> dict:
+        seen.append(str(definition.problem(opid="level").jit_optimization))
         return {"run": object()}
 
     monkeypatch.setattr(testing, "run_fit", recording_run_fit)
     simulator = dataclasses.replace(MODEL.simulator, jit_optimization="O0")
     testing.start_fits(dataclasses.replace(MODEL, simulator=simulator), tmp_path)
     assert seen == ["O0"]
-    assert variable not in os.environ
