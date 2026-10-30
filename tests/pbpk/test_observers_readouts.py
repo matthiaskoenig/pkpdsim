@@ -568,7 +568,7 @@ def test_a_delta_of_an_organ_output(tmp_path: Path) -> None:
     r = individual(build(d, tmp_path / "urine").flat_path)
     start = r[ids.urine_rate(S)]
     assert start > 0
-    assert r[ids.start_value(ids.urine_rate(S))] == pytest.approx(start, rel=1e-12)
+    assert r[ids.delta_base(ids.urine_rate(S))] == pytest.approx(start, rel=1e-12)
     s = r.simulate(
         0, 600, 61, selections=[ids.urine_rate(S), ids.delta(ids.urine_rate(S))]
     )

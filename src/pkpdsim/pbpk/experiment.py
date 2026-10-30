@@ -619,7 +619,7 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
           an outflow which grows during the equilibration and is neither a
           sink of the library nor in `resets` is refused, named
           (`growing_states`, checked once per model file in a process).
-        - The start value `<id>_0` of a delta observer (`PBPKDefinition.deltas`)
+        - The base `<id>_0` of a delta observer (`PBPKDefinition.deltas`)
           is set at the start to the value after the equilibration, so the
           delta `<id>_delta` is 0 at the start of the simulation.
         - A model which reaches no steady state by `max_time` fails with the
@@ -677,17 +677,17 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
         )
         sink_prefixes = (ids.urine(""), ids.feces(""))
         sinks = sorted(s for s in symbols.species if s.startswith(sink_prefixes))
-        # the start values of the deltas, evaluated after the equilibration
+        # the bases of the deltas, evaluated after the equilibration
         deltas = sorted(
             sid
             for sid in symbols.parameters
-            if ids.start_value(sid) in symbols.parameters
+            if ids.delta_base(sid) in symbols.parameters
             and ids.delta(sid) in symbols.parameters
         )
         at_start: dict[str, float | Quantity | str] = {
             **dict.fromkeys(sinks, 0.0),
             **(resets or {}),
-            **{ids.start_value(sid): sid for sid in deltas},
+            **{ids.delta_base(sid): sid for sid in deltas},
         }
         steady_state = SteadyState(
             absolute_tolerance=absolute_tolerance,

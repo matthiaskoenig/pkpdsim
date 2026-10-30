@@ -336,14 +336,14 @@ def compose(definition: PBPKDefinition) -> Model:
 
 
 def _delta_objects(definition: PBPKDefinition, top: "_Top") -> list[Sbase]:
-    """The start values and the changes of the observers of `PBPKDefinition.deltas`.
+    """The bases and the changes of the observers of `PBPKDefinition.deltas`.
 
     For every observer `<id>` (a parameter of the top model with an
     assignment rule, an observer of the library or of the definition, or one
     which an output of an organ replaces: `Rurine_<s>`, a readout, an exposed
     element of an organ) the constant `<id>_0` with the initial assignment
     `<id>`, its value at the start, and the observer `<id>_delta = <id> -
-    <id>_0`. The start value is evaluated after the changes of the
+    <id>_0`, the base of the delta (`ids.delta_base`). The base is evaluated after the changes of the
     individual before the simulation, so the change is 0 at the start of
     every simulation.
 
@@ -369,7 +369,7 @@ def _delta_objects(definition: PBPKDefinition, top: "_Top") -> list[Sbase]:
     taken = [
         x
         for d in definition.deltas
-        for x in (ids.start_value(d), ids.delta(d))
+        for x in (ids.delta_base(d), ids.delta(d))
         if x in known
     ]
     problems = []
@@ -386,11 +386,11 @@ def _delta_objects(definition: PBPKDefinition, top: "_Top") -> list[Sbase]:
         )
     objects: list[Sbase] = []
     for d in definition.deltas:
-        start, change, unit = ids.start_value(d), ids.delta(d), units[d]
+        base, change, unit = ids.delta_base(d), ids.delta(d), units[d]
         objects += [
             annotate(
                 Parameter(
-                    start,
+                    base,
                     None,
                     unit,
                     constant=True,
@@ -398,11 +398,11 @@ def _delta_objects(definition: PBPKDefinition, top: "_Top") -> list[Sbase]:
                     sboTerm=_SBO_PARAMETER,
                     notes=f"The value of `{d}` at the start of the simulation, after "
                     "the changes before it (`PBPKDefinition.deltas`).\n\n"
-                    f"`{start} = {d}` (initial assignment)",
+                    f"`{base} = {d}` (initial assignment)",
                 ),
                 "observer",
             ),
-            initial_assignment(start, d, unit, f"{d} at the start"),
+            initial_assignment(base, d, unit, f"{d} at the start"),
             annotate(
                 Parameter(
                     change,
@@ -413,11 +413,11 @@ def _delta_objects(definition: PBPKDefinition, top: "_Top") -> list[Sbase]:
                     sboTerm=_SBO_PARAMETER,
                     notes=f"The change of `{d}` over its value at the start "
                     "(`PBPKDefinition.deltas`).\n\n"
-                    f"`{change} = {d} - {start}`",
+                    f"`{change} = {d} - {base}`",
                 ),
                 "observer",
             ),
-            AssignmentRule(change, f"{d} - {start}", unit, name=f"change of {d}"),
+            AssignmentRule(change, f"{d} - {base}", unit, name=f"change of {d}"),
         ]
     return objects
 

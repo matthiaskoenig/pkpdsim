@@ -292,7 +292,7 @@ Every other id of the scheme, the ids a model rarely reads: the physiology, the 
 | `f_<p>_<s>` | the fraction of a metabolism which forms a product, a value or the remainder `REST` (local id) | `ids.product_fraction('API2M', s)` |
 | `<p>_to_<s>` | the formation of a product of a metabolism with product fractions (local id) | `ids.product_reaction('API2M', s)` |
 | `Asi_solid_<seg>_<s>` | an amount species of an organ which a PD component or an observer reads (`A<x>` as `A<o>_<x>`), an output of the organ | `ids.organ_species(Organ.SMALL_INTESTINE, ids.solid(s, seg))` |
-| `Carm_api_0` | the value of an observer at the start (`PBPKDefinition.deltas`) | `ids.start_value('Carm_api')` |
+| `Carm_api_0` | the base of a delta, the value of an observer at the start (`PBPKDefinition.deltas`) | `ids.delta_base('Carm_api')` |
 | `Carm_api_delta` | the change of an observer over its start (`PBPKDefinition.deltas`) | `ids.delta('Carm_api')` |
 | `J_<kind>_<s>` | the application of a dose state (`iv`, `po`, `sol`) | `ids.dose_reaction(kind, s)` |
 | `J_ti_<s>` | the passive exchange into a part of an organ (local id) | `ids.exchange_reaction(Part.TISSUE, s)` |

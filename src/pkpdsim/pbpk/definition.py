@@ -151,7 +151,8 @@ class PBPKDefinition:
             the library.
         deltas: the observers of the top model (`Carm_<s>`, an observer of
             the definition) whose change over their value at the start a
-            model reads: each gets the constant `<id>_0`, its value at the
+            model reads: each gets the constant `<id>_0` (`ids.delta_base`, the
+            base of the delta), its value at the
             start (an initial assignment), and the observer
             `<id>_delta = <id> - <id>_0`, e.g. the increase of an endogenous
             substance over the value before a dose.

@@ -452,7 +452,7 @@ def test_a_delta_is_the_change_of_an_observer_over_its_start(tmp_path: Path) -> 
         r.integrator.relative_tolerance = 1e-10
         start = r[ids.arm(S)]
         assert start > 0
-        assert r[ids.start_value(ids.arm(S))] == pytest.approx(start, rel=1e-12)
+        assert r[ids.delta_base(ids.arm(S))] == pytest.approx(start, rel=1e-12)
         # 0 to the rounding of the observer, relative to its magnitude (the
         # rounding differs with the JIT level)
         atol = 1e-12 * start

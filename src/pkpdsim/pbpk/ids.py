@@ -78,6 +78,7 @@ __all__ = [
     "compartment",
     "condition_factor",
     "delta",
+    "delta_base",
     "dissolution",
     "dissolution_age",
     "dissolution_clock",
@@ -183,7 +184,6 @@ __all__ = [
     "solution",
     "species",
     "species_of",
-    "start_value",
     "steady_clearance",
     "steady_km",
     "steady_plasma",
@@ -1328,11 +1328,16 @@ def steady_plasma(organ: Organ, s: str) -> str:
     return f"Css_{organ.value}_{s}"
 
 
-def start_value(sid: str) -> str:
-    """The id of the value of an observer at the start, `<sid>_0` (`PBPKDefinition.deltas`)."""
+def delta_base(sid: str) -> str:
+    """The id of the base of a delta, `<sid>_0`: the value of an observer at the start.
+
+    The constant which `<sid>_delta` subtracts (`PBPKDefinition.deltas`). It
+    is no start of a species (`PBPKDefinition.starts`): the word "start" of
+    the library names the initial concentrations of the species only.
+    """
     return f"{sid}_0"
 
 
 def delta(sid: str) -> str:
-    """The id of the change of an observer over its start, `<sid>_delta`."""
+    """The id of the change of an observer over its base, `<sid>_delta`."""
     return f"{sid}_delta"
