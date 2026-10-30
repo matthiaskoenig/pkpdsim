@@ -22,6 +22,7 @@ from typing import Any
 
 from pkpdsim.pbpk.builder import build
 from pkpdsim.pbpk.definition import PBPKDefinition
+from pkpdsim.pbpk.figure import model_figure
 from pkpdsim.sex import Sex
 
 
@@ -70,6 +71,7 @@ def create_archive(
     extra_models: Sequence[Path] = (),
     extra_files: Sequence[Path] = (),
     sexes: Sequence[Sex] | None = None,
+    figure: bool = True,
 ) -> dict[str, dict[str, Any]]:
     """Build a definition and write its files and the COMBINE archive.
 
@@ -81,7 +83,10 @@ def create_archive(
     the extra models and the extra files. With `sexes` every sex is built
     (`sex_definition`), each with its comp model, flat model, markdown and
     antimony in the archive; the flat model of the sex of the definition stays
-    the master entry.
+    the master entry. With `figure` the figure of the definition
+    (`model_figure`, an SVG schematic of the organs, routes, substances and
+    processes) is written into `model_output_dir` as `<sid>.svg` and is an
+    entry of the archive.
 
     Args:
         definition: the definition of the model.
@@ -100,6 +105,9 @@ def create_archive(
         sexes: the sexes to build, the sex of the definition among them and
             each once, e.g. `(Sex.MALE, Sex.FEMALE)`; `None` builds the sex of
             the definition only.
+        figure: write the figure of the definition, `<sid>.svg` (the key
+            `<sid>_svg`); one figure for all sexes, which have the same organs,
+            substances and processes.
 
     Every file of the archive has one location rule: it is below the parent
     of `model_output_dir`, and its location in the archive is its path
@@ -121,7 +129,8 @@ def create_archive(
         The files with their entries in the COMBINE archive, by the keys of a
         factory: `README`, `cc-by`, `mit`, the sid of the definition, `<sid>_flat`,
         `<sid>_flat_md`, `<sid>_flat_ant` (and the same keys of the id of the
-        build of every other sex, `<sid>_female_flat`), the stem of every
+        build of every other sex, `<sid>_female_flat`), `<sid>_svg` of the
+        figure, the stem of every
         extra model and `<stem>_<suffix>` of every extra file (`fluid_md`),
         each `{"path": Path, "entry": ManifestEntry}`.
     """
@@ -162,6 +171,12 @@ def create_archive(
         builds.append((sexed.sid, built, md_path, ant_path))
 
     parent = model_output_dir.parent
+    if figure:
+        figure_path = model_figure(
+            definition, model_output_dir / f"{definition.sid}.svg"
+        )
+    else:
+        figure_path = None
 
     def location(path: Path, what: str) -> str:
         """The location of a file in the archive, its path below `parent`."""
@@ -210,6 +225,11 @@ def create_archive(
         results[f"{sid}_flat_ant"] = {
             "path": ant_path,
             "entry": entry(location(ant_path, "antimony"), EntryFormat.ANTIMONY),
+        }
+    if figure_path is not None:
+        results[f"{definition.sid}_svg"] = {
+            "path": figure_path,
+            "entry": entry(location(figure_path, "figure"), EntryFormat.SVG),
         }
 
     for extra in extra_models:
