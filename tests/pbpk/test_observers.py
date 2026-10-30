@@ -453,11 +453,14 @@ def test_a_delta_is_the_change_of_an_observer_over_its_start(tmp_path: Path) -> 
         start = r[ids.arm(S)]
         assert start > 0
         assert r[ids.start_value(ids.arm(S))] == pytest.approx(start, rel=1e-12)
-        assert r[ids.delta(ids.arm(S))] == pytest.approx(0.0, abs=1e-15)
+        # 0 to the rounding of the observer, relative to its magnitude (the
+        # rounding differs with the JIT level)
+        atol = 1e-12 * start
+        assert r[ids.delta(ids.arm(S))] == pytest.approx(0.0, abs=atol)
         cols = [ids.arm(S), ids.delta(ids.arm(S)), ids.delta("Ctwice_drg")]
         s = r.simulate(0, 600, 61, selections=cols)
-        np.testing.assert_allclose(s[:, 1], s[:, 0] - start, rtol=1e-9, atol=1e-15)
-        np.testing.assert_allclose(s[:, 2], 2 * s[:, 1], rtol=1e-9, atol=1e-15)
+        np.testing.assert_allclose(s[:, 1], s[:, 0] - start, rtol=1e-9, atol=atol)
+        np.testing.assert_allclose(s[:, 2], 2 * s[:, 1], rtol=1e-9, atol=2 * atol)
         assert s[-1, 1] < 0  # the drug decays from its baseline
 
 
