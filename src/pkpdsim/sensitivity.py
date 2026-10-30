@@ -444,15 +444,22 @@ def design_factors(
         The ratio of every parameter whose value differs, by its id.
 
     Raises:
-        ValueError: for a parameter whose value differs and whose bounds
-            cannot be taken relative to its value: a value of the table which
-            is zero or not finite, or a ratio which is not positive (another
-            sign); naming the parameter and both values.
+        ValueError: for a parameter which has no value in the build, and for
+            a parameter whose value differs and whose bounds cannot be taken
+            relative to its value: a value of the table which is zero or not
+            finite, or a ratio which is not positive (another sign); naming the
+            parameter and both values.
     """
+    missing = [p.uid for p in parameters if p.uid not in values]
+    if missing:
+        raise ValueError(
+            f"The varied parameter {', '.join(repr(m) for m in missing)} has no "
+            "value in the build, so the design has no counterpart in it."
+        )
     factors: dict[str, float] = {}
     problems: list[str] = []
     for p in parameters:
-        value = values.get(p.uid, p.value)
+        value = values[p.uid]
         if value == p.value:
             continue
         ratio = value / p.value if p.value != 0 else math.nan
@@ -2175,7 +2182,10 @@ def run_subfolders(
         )
 
     sexes = set().union(*(runners[key]._sexes(plans[key][0]) for key in keys))
-    builds = _builds(first.model, sexes, parameters[keys[0]])
+    # the values of every parameter of every subfolder (the tables are equal,
+    # the union keeps a parameter of any subfolder in the values)
+    union = list({p.uid: p for key in keys for p in parameters[key]}.values())
+    builds = _builds(first.model, sexes, union)
     for key in keys:
         run_names, varied = plans[key]
         runners[key]._check_designs(

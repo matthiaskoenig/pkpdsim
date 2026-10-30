@@ -1094,3 +1094,48 @@ def test_a_group_of_a_sex_without_a_build_is_refused(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="'women'") as error:
         runner(tmp_path, analyses={"local": LocalAnalysis(groups=[CONTROL, WOMEN])})
     assert "'toy' has no female build" in str(error.value)
+
+
+def test_subfolders_sample_women_around_the_female_build(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A0 differs by sex and is varied only in the second subfolder."""
+    from pkpdsim import sensitivity as module
+    from pkpdsim_sexes import FEMALE_A0
+
+    designs: dict[str, dict[str, np.ndarray]] = {}
+    scan = module._Context.scan
+
+    def recorded(self: Any, group: SensitivityGroup, design: Any) -> Any:  # noqa: ANN401
+        designs[group.uid] = {k: np.asarray(v) for k, v in design.values.items()}
+        return scan(self, group, design)
+
+    monkeypatch.setattr(module._Context, "scan", recorded)
+    # the first subfolder sets A0 in its group, so it does not vary it
+    fixed = SensitivityGroup("fixed", "Fixed", simulation({"A0": 1.0}), sex=Sex.FEMALE)
+    runners = {
+        "first": sexes_runner(
+            tmp_path,
+            analyses={"sampling": SamplingAnalysis(groups=[fixed], n=8)},
+            default=["sampling"],
+        ),
+        "second": sexes_runner(
+            tmp_path,
+            analyses={"sampling": SamplingAnalysis(groups=[CONTROL, WOMEN], n=8)},
+            default=["sampling"],
+        ),
+    }
+    path = run_subfolders(runners, ["sampling"], simulator=SERIAL)
+    assert "A0" not in designs["fixed"]
+    men, women = designs["control"], designs["women"]
+    np.testing.assert_allclose(women["A0"], FEMALE_A0 * men["A0"], rtol=1e-12)
+    table = pd.read_csv(path / "parameters.tsv", sep="\t").set_index("uid")
+    assert table.loc["A0", "value_female"] == pytest.approx(FEMALE_A0)
+
+
+def test_a_varied_parameter_without_a_value_in_the_build_is_refused() -> None:
+    from pkpdsim.sensitivity import design_factors
+
+    (a0,) = [p for p in sexes_parameters() if p.uid == "A0"]
+    with pytest.raises(ValueError, match="'A0' has no value in the build"):
+        design_factors([a0], {})
