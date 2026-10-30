@@ -914,10 +914,10 @@ def dosed(times: np.ndarray, rate: float = 0.5) -> np.ndarray:
 
 
 #: two adaptive grids of one simulation: other steps, the dose at 2 in both;
-#: their interpolants are within 4e-7 of the trajectory (the steps of an
-#: integrator at a relative tolerance of about 1e-8)
-GRID_A = np.concatenate([np.linspace(0, 2, 61), np.linspace(2, 10, 121)])
-GRID_B = np.concatenate([[0.0], np.geomspace(0.01, 2, 50), np.geomspace(2, 10, 100)])
+#: dense enough that the spread of their interpolants is below 1e-6 (the
+#: resolution which `compare` needs at its threshold)
+GRID_A = np.concatenate([np.linspace(0, 2, 801), np.linspace(2, 10, 3201)])
+GRID_B = np.concatenate([np.linspace(0, 2, 1001), np.linspace(2, 10, 4001)])
 
 
 def test_two_grids_of_one_trajectory_do_not_differ(
@@ -931,11 +931,13 @@ def test_two_grids_of_one_trajectory_do_not_differ(
     assert verify(["compare", new, old]) == 0
     out = capsys.readouterr().out
     assert "0 rows of the old dump without a time in the new dump" in out
-    # the common times are 0, the dose at 2 (twice) and 10
+    assert "0 unresolved on this grid" in out
+    match = matched_rows(GRID_B, GRID_A)
+    assert match.interpolated_old.size > GRID_B.size / 2
     assert (
-        f"rows at other times: {GRID_B.size - 4} rows of the old dump and "
-        f"{GRID_A.size - 4} of the new dump compared with the other dump "
-        "interpolated at their times" in out
+        f"rows at other times: {match.interpolated_old.size} rows of the old dump "
+        f"and {match.interpolated_new.size} of the new dump compared with the "
+        "other dump interpolated at their times" in out
     )
 
 
@@ -981,6 +983,42 @@ def test_the_noise_of_a_control_is_no_difference(tmp_path: Path) -> None:
     )
     other = tasks({"dose": dose, "control": [0, 1.1e-6, 0, 0]})
     assert verify(["compare", small, written(tmp_path, "m.pkl", other)]) == 1
+
+
+def bateman(times: np.ndarray, ke: float = 0.2) -> np.ndarray:
+    """An oral dose: absorption 3/hr, elimination `ke`."""
+    ka = 3.0
+    return ka / (ka - ke) * (np.exp(-ke * times) - np.exp(-ka * times))
+
+
+#: two coarse adaptive grids of an oral dose over 48 hr, 20 steps each
+COARSE_A = np.concatenate([[0.0], np.geomspace(0.01, 48, 20)])
+COARSE_B = np.concatenate([[0.0], np.geomspace(0.013, 48, 20)])
+
+
+@pytest.mark.parametrize("ke", [0.2, 0.2002])
+def test_an_array_which_the_grid_cannot_resolve_is_no_pass(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], ke: float
+) -> None:
+    """The interpolation of 20 steps resolves about 1e-2, not the threshold.
+
+    An elimination faster by 1e-3 (a change of 4.7e-4 of the scale) lies
+    within the range of the interpolants and is reported as unresolved, as is
+    the same trajectory: compare passes no array it cannot resolve.
+    """
+    old = written(tmp_path, "o.pkl", timecourse(COARSE_A, bateman(COARSE_A)))
+    new = written(tmp_path, "n.pkl", timecourse(COARSE_B, bateman(COARSE_B, ke)))
+    capsys.readouterr()
+    assert verify(["compare", old, new]) == 1
+    out = capsys.readouterr().out
+    assert "0 differ by more than 1e-06" in out
+    assert "1 unresolved on this grid" in out
+    (line,) = [x for x in out.splitlines() if "E/t/[A]" in x and "resolution" in x]
+    resolution = float(line.split()[0])
+    assert 1e-3 < resolution < 1e-1
+    # at a threshold above the resolution the array is resolved
+    threshold = str(2 * resolution) if ke == 0.2 else "1.0"
+    assert verify(["compare", old, new, "--threshold", threshold]) == 0
 
 
 def test_the_interpolation_does_not_cross_a_change() -> None:

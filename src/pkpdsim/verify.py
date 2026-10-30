@@ -10,7 +10,9 @@ them only where it is meant to. The subcommands make this checkable:
   output times, a row at a time which only one dump has (the steps of the
   integrator of another run) with the other dump interpolated at its time,
   relative to the scale of every array (a row outside of the times of the
-  other dump is a difference), everything else exactly; with `--renames FILE` the
+  other dump is a difference; an array whose interpolation cannot resolve the
+  threshold is unresolved, not equal), everything else exactly; with
+  `--renames FILE` the
   expected renames of a migration (metadata fields and members, added fields,
   texts such as legend keys, ids) and the expected differences are applied to
   the old dump first, see `load_renames`,
@@ -812,9 +814,19 @@ def matched_rows(old_times: np.ndarray, new_times: np.ndarray) -> RowMatch:
     )
 
 
+class InterpolationRange(NamedTuple):
+    """The range of a trajectory at times, from the interpolants of its steps."""
+
+    #: the lowest and the highest value of the range, (times, columns) each
+    low: np.ndarray
+    high: np.ndarray
+    #: the spread of the interpolants, the resolution of the interpolation
+    spread: np.ndarray
+
+
 def interpolation_envelope(
     times: np.ndarray, values: np.ndarray, at: np.ndarray
-) -> tuple[np.ndarray, np.ndarray]:
+) -> InterpolationRange:
     """Get the range of the trajectory of an output at times, from its interpolants.
 
     The rows of an adaptive output are the steps of the integrator, which are
@@ -828,11 +840,13 @@ def interpolation_envelope(
     one (PCHIP) and the cubic spline (not-a-knot), span the envelope of the
     trajectory, and their spread is the uncertainty of the interpolation: the
     range is the envelope widened by its width on both sides. A value within
-    it is no difference which the steps of the output can tell; on the two
-    runs of hctz no array differs by more than 1e-6, and a change of the
-    trajectory of 1e-5 between the common times is still found (tested). A
-    column with a value which is not finite in a segment is interpolated
-    linearly there.
+    it is no difference which the steps of the output can tell, and the
+    spread is the resolution which the interpolation reaches: it depends on
+    the density of the steps only, about 1e-2 of the scale of an oral dose on
+    20 steps over 48 hr and up to 4e-2 on the steps of hctz, so `compare`
+    reports an array whose resolution is coarser than its threshold as
+    unresolved, never as equal. A column with a value which is not finite in a
+    segment is interpolated linearly there.
 
     Args:
         times: the output times, ascending, a time of a change twice.
@@ -840,7 +854,7 @@ def interpolation_envelope(
         at: the times, each between two rows of a segment.
 
     Returns:
-        The lowest and the highest value of the range, (times, columns) each.
+        The range and the spread of the interpolants, (times, columns) each.
     """
     from scipy.interpolate import CubicSpline, PchipInterpolator
 
@@ -850,6 +864,7 @@ def interpolation_envelope(
     segment = np.cumsum(np.append(0, np.diff(times) == 0))
     lowest = np.full((at.size, values.shape[1]), np.nan)
     highest = np.full((at.size, values.shape[1]), np.nan)
+    spread = np.full((at.size, values.shape[1]), np.nan)
     for s in np.unique(segment[after]):
         rows = np.flatnonzero(segment == s)
         queries = np.flatnonzero(segment[after] == s)
@@ -866,7 +881,8 @@ def interpolation_envelope(
                 high[:, finite] = np.maximum(high[:, finite], curve)
         width = high - low
         lowest[queries], highest[queries] = low - width, high + width
-    return lowest, highest
+        spread[queries] = width
+    return InterpolationRange(lowest, highest, spread)
 
 
 def _squeezed(
@@ -1031,23 +1047,24 @@ def point_matches(old_times: np.ndarray, new_times: np.ndarray) -> list[PointMat
 
 def interpolated_pairs(
     found: Columns, match: PointMatch
-) -> list[tuple[np.ndarray, np.ndarray]]:
+) -> list[tuple[np.ndarray, np.ndarray, np.ndarray]]:
     """Get the rows of times only one dump has with the other dump at their times.
 
     A row of the old dump is paired with the nearest value of the range of
     the interpolants of the new dump at its time (`interpolation_envelope`),
     a row of the new dump with the nearest value of the range of the old
     dump, so the difference of a pair is the distance from the range, zero
-    within it. The old value comes first, the scale of a comparison.
+    within it. The old value comes first, the scale of a comparison, the
+    spread of the interpolants at the row third, the resolution of the pair.
 
     Args:
         found: the variable of a task in the two dumps.
         match: the match of the rows of points with the same times.
 
     Returns:
-        The pairs of the old and the new values, (rows, points) each.
+        The old and the new values and the spread, (rows, points) each.
     """
-    pairs: list[tuple[np.ndarray, np.ndarray]] = []
+    pairs: list[tuple[np.ndarray, np.ndarray, np.ndarray]] = []
     first = match.points[0]
     sides = (
         (found.old, found.old_times, match.rows_old, match.match.interpolated_old),
@@ -1059,13 +1076,15 @@ def interpolated_pairs(
         other_values, other_times, other_rows, _ = sides[1 - k]
         own_rows = rows[interpolated]
         own = values[np.ix_(own_rows, match.points)]
-        low, high = interpolation_envelope(
+        span = interpolation_envelope(
             other_times[other_rows, first],
             other_values[np.ix_(other_rows, match.points)],
             times[own_rows, first],
         )
-        nearest = np.clip(own, low, high)
-        pairs.append((own, nearest) if k == 0 else (nearest, own))
+        nearest = np.clip(own, span.low, span.high)
+        pairs.append(
+            (own, nearest, span.spread) if k == 0 else (nearest, own, span.spread)
+        )
     return pairs
 
 
@@ -1084,12 +1103,23 @@ def relative_difference(old: Dump, new: Dump, key: tuple[str, str, str]) -> floa
     other array exactly; the variable `time` is compared as the output times
     of the points of the task.
     """
-    return relative_differences(old, new, [key])[key]
+    return relative_differences(old, new, [key])[key].difference
+
+
+class ArrayDifference(NamedTuple):
+    """The difference of an array of two dumps and the resolution it was found at."""
+
+    #: max|new - old| / max|old| on the matched and the interpolated rows
+    difference: float
+    #: the largest spread of the interpolants of the interpolated rows relative
+    #: to the same scale, 0 without interpolated rows: a difference below it
+    #: cannot be told from the interpolation
+    resolution: float
 
 
 def relative_differences(
     old: Dump, new: Dump, keys: Iterable[tuple[str, str, str]]
-) -> dict[tuple[str, str, str], float]:
+) -> dict[tuple[str, str, str], ArrayDifference]:
     """Get the difference of every result array of keys, see `relative_difference`.
 
     The arrays of a task with the same output times are compared together, so
@@ -1098,7 +1128,9 @@ def relative_differences(
     largest scale of its variable in the tasks of its experiment among the
     keys: a variable which is zero in a task, e.g. the drug of a control
     without a dose, is the noise of the integrator there (1e-24 against 1e-4
-    of the doses in hctz), which differs with every other step.
+    of the doses in hctz), which differs with every other step. The resolution
+    of an array is the largest spread of the interpolants of its interpolated
+    rows (`interpolation_envelope`) relative to the same scale.
 
     Args:
         old: the old dump.
@@ -1106,16 +1138,17 @@ def relative_differences(
         keys: the arrays, (experiment, task, variable).
 
     Returns:
-        The difference of every array.
+        The difference and the resolution of every array.
     """
-    differences: dict[tuple[str, str, str], float] = {}
+    differences: dict[tuple[str, str, str], ArrayDifference] = {}
     batches: dict[tuple[object, ...], list[tuple[tuple[str, str, str], Columns]]] = {}
-    #: the NaN at different positions, the scale and the difference of an array
-    compared: dict[tuple[str, str, str], tuple[bool, float, float]] = {}
+    #: the NaN at different positions, the scale, the difference and the
+    #: spread of the interpolants of an array
+    compared: dict[tuple[str, str, str], tuple[bool, float, float, float]] = {}
     for key in keys:
         found = _compared_columns(old, new, key)
         if not isinstance(found, Columns):
-            differences[key] = found
+            differences[key] = ArrayDifference(found, 0.0)
             continue
         batch = (
             key[0],
@@ -1135,16 +1168,15 @@ def relative_differences(
         )
         width = stacked.old.shape[1]
         scale, difference = np.zeros(width), np.zeros(width)
+        spread = np.zeros(width)
         mismatch = np.zeros(width, dtype=bool)
         for match in point_matches(stacked.old_times, stacked.new_times):
-            pairs = [
-                (
-                    stacked.old[np.ix_(match.old, match.points)],
-                    stacked.new[np.ix_(match.new, match.points)],
-                ),
-                *interpolated_pairs(stacked, match),
-            ]
-            for x, y in pairs:
+            exact = (
+                stacked.old[np.ix_(match.old, match.points)],
+                stacked.new[np.ix_(match.new, match.points)],
+                np.zeros((match.old.size, match.points.size)),
+            )
+            for x, y, w in (exact, *interpolated_pairs(stacked, match)):
                 if not x.shape[0]:
                     continue
                 points = match.points
@@ -1154,6 +1186,9 @@ def relative_differences(
                 difference[points] = np.maximum(
                     difference[points], np.max(np.abs(x - y), axis=0)
                 )
+                spread[points] = np.maximum(
+                    spread[points], np.max(np.nan_to_num(w), axis=0)
+                )
         first = 0
         for key, found in entries:
             last = first + found.old.shape[1]
@@ -1161,19 +1196,22 @@ def relative_differences(
                 bool(mismatch[first:last].any()),
                 float(np.max(scale[first:last], initial=0.0)),
                 float(np.max(difference[first:last], initial=0.0)),
+                float(np.max(spread[first:last], initial=0.0)),
             )
             first = last
     variable_scales: dict[tuple[str, str], float] = {}
-    for (sid, _, variable), (_, s, _) in compared.items():
+    for (sid, _, variable), (_, s, _, _) in compared.items():
         variable_scales[sid, variable] = max(
             variable_scales.get((sid, variable), 0.0), s
         )
-    for key, (nan_mismatch, s, d) in compared.items():
+    for key, (nan_mismatch, s, d, w) in compared.items():
         s = max(s, SCALE_FLOOR * variable_scales[key[0], key[2]])
         if nan_mismatch:
-            differences[key] = math.inf
+            differences[key] = ArrayDifference(math.inf, 0.0)
+        elif s > 1e-300:
+            differences[key] = ArrayDifference(d / s, w / s)
         else:
-            differences[key] = d / s if s > 1e-300 else d
+            differences[key] = ArrayDifference(d, w)
     return differences
 
 
@@ -1846,9 +1884,12 @@ def compare(args: argparse.Namespace) -> int:
     counted; an expected difference which does not occur is counted. A row at a
     time which only one dump has is compared with the other dump interpolated
     at its time when the time lies between two rows of the other dump (the
-    steps of the integrator of another run, `matched_rows`); a row outside of
-    the times of the other dump, or a change the other dump does not have, is a
-    difference: one of the new dump is expected with the pattern of the
+    steps of the integrator of another run, `matched_rows`), and an array
+    whose resolution there (the spread of the interpolants,
+    `ArrayDifference.resolution`) is coarser than the threshold is unresolved
+    on this grid, which counts as a difference unless `expected` names it; a
+    row outside of the times of the other dump, or a change the other dump
+    does not have, is a difference: one of the new dump is expected with the pattern of the
     variable `time` of its task (`experiment/task/time`, a changed output
     grid), one of the old dump always counts.
     """
@@ -1912,23 +1953,31 @@ def compare(args: argparse.Namespace) -> int:
         print(
             f"{mark}array only in {'old' if key in keys_old else 'new'}: {'/'.join(key)}"
         )
-    rows = sorted(
-        (
-            (difference, key)
-            for key, difference in relative_differences(
-                old, new, keys_old & keys_new
-            ).items()
-        ),
-        reverse=True,
-    )
+    compared = relative_differences(old, new, keys_old & keys_new)
+    rows = sorted(((c.difference, key) for key, c in compared.items()), reverse=True)
     per_experiment: dict[str, float] = {}
     for difference, key in rows:
         per_experiment[key[0]] = max(per_experiment.get(key[0], 0.0), difference)
     above = [row for row in rows if row[0] > args.threshold]
     unexpected = [row for row in above if not expected.match("results", row[1])]
+    # an array within the threshold whose interpolated rows cannot resolve it is
+    # no pass: its difference may hide in the range of the interpolants
+    unresolved = sorted(
+        (
+            (c.resolution, key)
+            for key, c in compared.items()
+            if c.difference <= args.threshold and c.resolution > args.threshold
+        ),
+        reverse=True,
+    )
+    unexpected_unresolved = [
+        row for row in unresolved if not expected.match("results", row[1])
+    ]
     print(
         f"simulations: {len(rows)} arrays compared, {len(above)} differ by more "
         f"than {args.threshold:g} ({len(above) - len(unexpected)} expected), "
+        f"{len(unresolved)} unresolved on this grid "
+        f"({len(unresolved) - len(unexpected_unresolved)} expected), "
         f"{len(one_side)} in one dump only"
     )
     for sid, difference in sorted(per_experiment.items(), key=lambda t: -t[1]):
@@ -1939,7 +1988,18 @@ def compare(args: argparse.Namespace) -> int:
         for difference, key in rows[: args.top]:
             if difference > 0:
                 print(f"  {difference:.3e} {'/'.join(key)}")
-    differing += len(unexpected) + len(unexpected_side)
+    if unresolved:
+        print(
+            "unresolved on this grid: the resolution of the interpolation of the "
+            f"steps of the other dump is coarser than {args.threshold:g}, a "
+            "difference below it is not seen:"
+        )
+        for resolution, key in unresolved[: args.top]:
+            print(
+                f"  {resolution:.3e} resolution {'/'.join(key)} (difference "
+                f"{compared[key].difference:.3e})"
+            )
+    differing += len(unexpected) + len(unexpected_side) + len(unexpected_unresolved)
 
     # the rows at a change and at the times of one dump only
     ignored_old = ignored_new = unmatched = unmatched_new = expected_new = 0
