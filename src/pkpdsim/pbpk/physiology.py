@@ -1048,6 +1048,15 @@ class ReferenceIndividual:
             `M<o>/density + blood*Vblood` as in the model.
         tissue_volumes: the tissue volumes without blood [l]
             (`reference_tissue_volumes`).
+        intracellular_volumes: the volumes of the cells of the organs [l],
+            `V<o>*(1 - f_vas_<o> - f_int_<o>)` as in the model (the tissue
+            volume without its interstitial fraction), the intracellular space
+            `Vic` of the full form (the hepatocytes of the liver, 1.3859 l of a
+            man).
+        lumen_volumes: the fluid volumes of the lumen segments of the
+            segmented intestine by their token (`ids.GUT_SEGMENTS`) [l],
+            `Vlumen_<seg>`, the same for both sexes (the small intestine
+            `du` to `ile2` 0.105 l).
     """
 
     sex: Sex
@@ -1055,6 +1064,8 @@ class ReferenceIndividual:
     height: float
     volumes: Mapping[Organ, float]
     tissue_volumes: Mapping[Organ, float]
+    intracellular_volumes: Mapping[Organ, float]
+    lumen_volumes: Mapping[str, float]
 
 
 @cache
@@ -1065,17 +1076,25 @@ def reference_individual(sex: Sex) -> ReferenceIndividual:
         sex: the sex of the reference individual.
 
     Returns:
-        Its body weight, height and organ volumes.
+        Its body weight, height, organ, cell and lumen volumes.
     """
+    from pkpdsim.pbpk.data import value
+    from pkpdsim.pbpk.variants.segments import DATA, SEGMENTS
+
     refs = _references(sex, load("physiology_human"))
     tissue = reference_tissue_volumes(sex)
     vblood = refs[ids.ref(ids.VBLOOD)].value
+    volumes = {o: tissue[o] + refs[f"blood_{o}"].value * vblood for o in Organ}
     return ReferenceIndividual(
         sex=sex,
         bw=refs[ids.BW].value,
         height=refs[ids.HEIGHT].value,
-        volumes=MappingProxyType(
-            {o: tissue[o] + refs[f"blood_{o}"].value * vblood for o in Organ}
-        ),
+        volumes=MappingProxyType(volumes),
         tissue_volumes=MappingProxyType(tissue),
+        intracellular_volumes=MappingProxyType(
+            {o: tissue[o] * (1.0 - refs[f"fint_{o}"].value) for o in Organ}
+        ),
+        lumen_volumes=MappingProxyType(
+            {t: value(DATA, key, "volume").value for t, key in SEGMENTS.items()}
+        ),
     )

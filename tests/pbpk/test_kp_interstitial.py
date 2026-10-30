@@ -234,6 +234,38 @@ def test_the_reference_individual_is_the_default_individual(tmp_path: Path) -> N
         ref.volumes[Organ.LIVER] = 1.0  # ty: ignore[invalid-assignment]
 
 
+def test_the_reference_individual_has_the_cells_and_the_lumen(tmp_path: Path) -> None:
+    """The intracellular volumes and the lumen volumes are those of the built model.
+
+    A model converts a value per litre of the cells of an organ (the
+    hepatocytes of gdeobdtpa) or per litre of the lumen (the absorption of
+    creatine) with them instead of copies of the numbers.
+    """
+    ref = reference_individual(Sex.MALE)
+    r = individual(build(definition(), tmp_path).flat_path)
+    for organ in Organ:
+        cells = r[ids.organ_volume(organ)] * (
+            1.0 - r[ids.vascular_fraction(organ)] - r[ids.interstitial_fraction(organ)]
+        )
+        assert ref.intracellular_volumes[organ] == pytest.approx(cells, rel=1e-12)
+    assert ref.intracellular_volumes[Organ.LIVER] == pytest.approx(1.3859, abs=1e-4)
+    assert tuple(ref.lumen_volumes) == ids.GUT_SEGMENTS
+    for seg, volume in ref.lumen_volumes.items():
+        assert r[f"GU__{ids.lumen_volume(seg)}"] == pytest.approx(volume, rel=1e-12)
+    small = sum(
+        ref.lumen_volumes[seg] for seg in ("du", "jej1", "jej2", "ile1", "ile2")
+    )
+    assert small == pytest.approx(0.10499, abs=1e-5)
+    female = reference_individual(Sex.FEMALE)
+    assert female.lumen_volumes == ref.lumen_volumes
+    assert (
+        female.intracellular_volumes[Organ.LIVER]
+        != ref.intracellular_volumes[Organ.LIVER]
+    )
+    with pytest.raises(TypeError):
+        ref.lumen_volumes["du"] = 1.0  # ty: ignore[invalid-assignment]
+
+
 def test_a_substance_keeps_its_fields() -> None:
     """`Substance` with the option is the substance as given."""
     kp = Kp(interstitial=1.0, ftissue=1.0)
