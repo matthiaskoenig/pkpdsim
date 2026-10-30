@@ -266,38 +266,63 @@ def set_relative_bounds(
 
 
 def parameters_to_df(
-    parameters: Sequence[SensitivityParameter], sort: bool = True
+    parameters: Sequence[SensitivityParameter],
+    sort: bool = True,
+    builds: Mapping[Sex, Mapping[str, float]] | None = None,
 ) -> pd.DataFrame:
     """Get the table of the parameters.
 
     Args:
         parameters: the parameters.
         sort: sort the rows by the type and the id, as sbmlsim 0.8 did.
+        builds: the values of the parameters in other builds of the model than
+            the one of the table, by sex (`SensitivityRunner` gives those of the
+            sexes of its groups other than male); each is the column
+            `value_<sex>` after `value`.
 
     Returns:
-        One row per parameter, the columns `COLUMNS`, the type as its value.
+        One row per parameter, the columns `COLUMNS` (and `value_<sex>`), the
+        type as its value.
     """
-    rows = [{**asdict(p), "type": str(p.type)} for p in parameters]
-    df = pd.DataFrame(rows, columns=list(COLUMNS))
+    builds = builds or {}
+    columns = list(COLUMNS)
+    position = columns.index("value") + 1
+    columns[position:position] = [f"value_{sex}" for sex in builds]
+    rows = [
+        {
+            **asdict(p),
+            "type": str(p.type),
+            **{
+                f"value_{sex}": values.get(p.uid, math.nan)
+                for sex, values in builds.items()
+            },
+        }
+        for p in parameters
+    ]
+    df = pd.DataFrame(rows, columns=columns)
     if sort:
         df = df.sort_values(by=["type", "uid"], ascending=True, ignore_index=True)
     return df
 
 
 def write_parameters(
-    parameters: Sequence[SensitivityParameter], directory: Path
+    parameters: Sequence[SensitivityParameter],
+    directory: Path,
+    builds: Mapping[Sex, Mapping[str, float]] | None = None,
 ) -> pd.DataFrame:
     """Write the table of the parameters as `parameters.tsv` and `parameters.tex`.
 
     Args:
         parameters: the parameters.
         directory: the directory, created if it does not exist.
+        builds: the values in the other builds of the model, see
+            `parameters_to_df`.
 
     Returns:
         The table.
     """
     directory.mkdir(parents=True, exist_ok=True)
-    df = parameters_to_df(parameters)
+    df = parameters_to_df(parameters, builds=builds)
     df.to_csv(directory / "parameters.tsv", sep="\t", index=False)
     tex = df.to_latex(None, index=False, float_format="{:.3g}".format)
     (directory / "parameters.tex").write_text(tex.replace("_", r"\_"), encoding="utf-8")
@@ -377,6 +402,117 @@ def free_parameters(
         if p.uid in fixed:
             logger.info("Removing fixed parameter: %s", p.uid)
     return [p for p in parameters if p.uid not in fixed]
+
+
+def build_values(sbml_path: Path, uids: Iterable[str]) -> dict[str, float]:
+    """Get the values of parameters in a build of a model, as `parameters_from_sbml` reads them.
+
+    Args:
+        sbml_path: the SBML model, e.g. the female build.
+        uids: the ids of the parameters, compartments and species.
+
+    Returns:
+        The value after the initialization of every id the model has.
+    """
+    wanted = set(uids)
+    return {
+        p.uid: p.value
+        for p in parameters_from_sbml(sbml_path, exclude_na=False, exclude_zero=False)
+        if p.uid in wanted
+    }
+
+
+def design_factors(
+    parameters: Sequence[SensitivityParameter], values: Mapping[str, float]
+) -> dict[str, float]:
+    """Get the factors which carry a design of the table to the values of a build.
+
+    A global design draws the values of the parameters in their bounds around
+    the values of the table, which are those of the male build of the model. A
+    group of another build samples the same design relative to the values of
+    its build: every value of a parameter is multiplied with the ratio of its
+    value in the build to its value in the table, so a group of women varies
+    the body weight around the female body weight by the same factors as the
+    men around the male one. The bounds of the table are taken relative to its
+    values.
+
+    Args:
+        parameters: the parameters which a design varies.
+        values: the values of the parameters in the build of a group.
+
+    Returns:
+        The ratio of every parameter whose value differs, by its id.
+
+    Raises:
+        ValueError: for a parameter whose value differs and whose bounds
+            cannot be taken relative to its value: a value of the table which
+            is zero or not finite, or a ratio which is not positive (another
+            sign); naming the parameter and both values.
+    """
+    factors: dict[str, float] = {}
+    problems: list[str] = []
+    for p in parameters:
+        value = values.get(p.uid, p.value)
+        if value == p.value:
+            continue
+        ratio = value / p.value if p.value != 0 else math.nan
+        if not (math.isfinite(p.value) and math.isfinite(ratio) and ratio > 0):
+            problems.append(
+                f"'{p.uid}' ({p.value:g} in the table, {value:g} in the build)"
+            )
+            continue
+        factors[p.uid] = ratio
+    if problems:
+        raise ValueError(
+            f"The values of the parameters {', '.join(problems)} differ between "
+            "the table and the build, and their bounds cannot be taken relative "
+            "to the value of the table, so the design has no counterpart in the "
+            "build: give them a value in the table which is neither zero nor of "
+            "another sign, or leave them out of the analysis."
+        )
+    return factors
+
+
+def relative_design(design: Dimension, factors: Mapping[str, float]) -> Dimension:
+    """Get a design with the values of its parameters multiplied by factors.
+
+    The design of a group of another build, see `design_factors`; the bounds
+    of the uniform distributions of its record are multiplied as well.
+
+    Args:
+        design: the design over the values of the table.
+        factors: the factor of a parameter, by its id; 1 for the others.
+
+    Returns:
+        The design of the group, the given one without a factor.
+    """
+    factors = {uid: f for uid, f in factors.items() if uid in design.values}
+    if not factors:
+        return design
+    record = design.design
+    if record is not None:
+        distributions = {}
+        for uid, d in record.distributions.items():
+            if uid in factors:
+                d = {
+                    **d,
+                    **{
+                        key: d[key] * factors[uid]
+                        for key in ("lower", "upper")
+                        if isinstance(d.get(key), int | float)
+                    },
+                }
+            distributions[uid] = d
+        record = dataclasses.replace(record, distributions=distributions)
+    return Dimension(
+        design.id,
+        values={
+            uid: np.asarray(v) * factors.get(uid, 1.0)
+            for uid, v in design.values.items()
+        },
+        labels=design.labels,
+        design=record,
+    )
 
 
 #: the environment variable which replaces the number of samples of a global
@@ -483,10 +619,30 @@ class _Context:
     outputs: Sequence[SensitivityOutput]
     observables: Sequence[Observable]
     seed: int
+    #: the values of the parameters in the builds of the groups other than
+    #: the male one, which the table has, by sex
+    builds: Mapping[Sex, Mapping[str, float]] = MappingProxyType({})
 
     def model_path(self, group: SensitivityGroup) -> Path:
         """Get the build of the model which a group runs, the build of its sex."""
         return self.model.model_path_of(group.sex)
+
+    def design(
+        self,
+        group: SensitivityGroup,
+        design: Dimension,
+        varied: Sequence[SensitivityParameter],
+    ) -> Dimension:
+        """Get the global design of a group, around the values of its build.
+
+        The design of the table for a male group, the same relative design
+        around the values of the build of the group otherwise
+        (`design_factors`, `relative_design`).
+        """
+        values = self.builds.get(group.sex)
+        if values is None:
+            return design
+        return relative_design(design, design_factors(varied, values))
 
     def scan(self, group: SensitivityGroup, design: Dimension) -> ScanResult:
         """Run a design over the simulation of a group, the outputs per point."""
@@ -1216,7 +1372,7 @@ class SamplingAnalysis(_SampledAnalysis):
         results: dict[str, ScanResult] = {}
         for group in self.groups:
             group_path = self._group_path(path, group)
-            res = context.scan(group, design)
+            res = context.scan(group, context.design(group, design, varied))
             results[group.uid] = res
             res.ds[list(observables)].to_dataframe().rename(columns=observables).to_csv(
                 group_path / "samples.tsv", sep="\t"
@@ -1382,7 +1538,9 @@ class _GlobalAnalysis(_SampledAnalysis):
         design = self._design(varied, n, context.seed)
         for kg, group in enumerate(self.groups):
             group_path = self._group_path(path, group)
-            result = self._indices(context.scan(group, design))
+            result = self._indices(
+                context.scan(group, context.design(group, design, varied))
+            )
             context.write_indices(result, ["S1", "ST"], group_path)
             figures = f"{prefix}_sensitivity_{kg:>02}_{group.uid}"
             for ko, output in enumerate(context.outputs):
@@ -1514,12 +1672,27 @@ def _workers(text: str) -> int:
     return value
 
 
-def _write_table(parameters: Sequence[SensitivityParameter], path: Path) -> None:
+def _write_table(
+    parameters: Sequence[SensitivityParameter],
+    path: Path,
+    builds: Mapping[Sex, Mapping[str, float]] | None = None,
+) -> None:
     """Write the table of the parameters into a folder and print it."""
     path.mkdir(parents=True, exist_ok=True)
-    df_parameters = write_parameters(parameters, path)
+    df_parameters = write_parameters(parameters, path, builds)
     with pd.option_context("display.float_format", "{:.5g}".format):
         console.print(df_parameters)
+
+
+def _builds(
+    model: PKPDModel, sexes: Iterable[Sex], parameters: Sequence[SensitivityParameter]
+) -> dict[Sex, dict[str, float]]:
+    """Get the values of the parameters in the builds of the sexes, by sex."""
+    uids = [p.uid for p in parameters]
+    return {
+        sex: build_values(model.model_path_of(sex), uids)
+        for sex in sorted(sexes, key=list(Sex).index)
+    }
 
 
 def _report(items: Mapping[str, str], path: Path) -> None:
@@ -1660,7 +1833,9 @@ class SensitivityRunner:
                 raise
         return varied
 
-    def _context(self, simulator: Simulator) -> _Context:
+    def _context(
+        self, simulator: Simulator, builds: Mapping[Sex, Mapping[str, float]]
+    ) -> _Context:
         """Get the context of the analyses of a run."""
         return _Context(
             simulator=simulator,
@@ -1668,7 +1843,47 @@ class SensitivityRunner:
             outputs=self.outputs,
             observables=self.observables,
             seed=self.seed,
+            builds=builds,
         )
+
+    def _sexes(self, names: Sequence[str]) -> set[Sex]:
+        """Get the sexes of the groups of the named analyses other than male."""
+        return {
+            group.sex
+            for name in names
+            for group in self.analyses[name].groups
+            if group.sex is not Sex.MALE
+        }
+
+    def _check_designs(
+        self,
+        names: Sequence[str],
+        varied: Mapping[str, Sequence[SensitivityParameter]],
+        builds: Mapping[Sex, Mapping[str, float]],
+        where: str = "",
+    ) -> None:
+        """Check that the global designs of the named analyses carry to every build.
+
+        Raises:
+            ValueError: see `design_factors`, with a note naming the analysis
+                and the group.
+        """
+        for name in names:
+            analysis = self.analyses[name]
+            if isinstance(analysis, LocalAnalysis):
+                # a local design is drawn around the values of each build
+                continue
+            for group in analysis.groups:
+                if group.sex not in builds:
+                    continue
+                try:
+                    design_factors(varied[name], builds[group.sex])
+                except ValueError as err:
+                    err.add_note(
+                        f"The group '{group.uid}' of the analysis '{name}'{where} "
+                        f"runs the {group.sex} build."
+                    )
+                    raise
 
     def simulator_settings(self, workers: int | None) -> SimulatorSettings | None:
         """Get the settings of the simulator of a run which caps the processes.
@@ -1699,9 +1914,10 @@ class SensitivityRunner:
         varied: Mapping[str, Sequence[SensitivityParameter]],
         path: Path,
         simulator: Simulator,
+        builds: Mapping[Sex, Mapping[str, float]] | None = None,
     ) -> None:
         """Run the named analyses, every one into `path / <name>`."""
-        context = self._context(simulator)
+        context = self._context(simulator, builds or {})
         for name in names:
             self.analyses[name]._run(context, varied[name], path / name)
 
@@ -1716,8 +1932,11 @@ class SensitivityRunner:
         """Run analyses and write the table of the parameters.
 
         The names, the parameters (their distributions, whether an analysis
-        varies one) and the numbers of samples of a smoke run are checked
-        before anything is written.
+        varies one, whether a global design carries to the build of every
+        group, `design_factors`) and the numbers of samples of a smoke run are
+        checked before anything is written. The values of the table are those
+        of the male build; with groups of another sex the table has their
+        values as well (`value_<sex>`).
 
         Args:
             names: the names of the analyses, `default` if `None`.
@@ -1738,7 +1957,8 @@ class SensitivityRunner:
             TypeError: for names which are a string.
             ValueError: for a name which is no analysis or is given twice, a
                 subfolder which does not lie below `path`, and see
-                `distributions` and `sample_size`; before anything is written.
+                `distributions`, `sample_size` and `design_factors` (a global
+                design of a group of another sex); before anything is written.
         """
         names = self._names(names)
         if subfolder is not None:
@@ -1746,10 +1966,12 @@ class SensitivityRunner:
         path = self.model.results_dir / "sensitivity" if path is None else path
         parameters = list(self.parameters())
         varied = self._plan(names, parameters)
+        builds = _builds(self.model, self._sexes(names), parameters)
+        self._check_designs(names, varied, builds)
 
-        _write_table(parameters, path)
+        _write_table(parameters, path, builds)
         analyses_path = path if subfolder is None else path / subfolder
-        self._execute(names, varied, analyses_path, self._simulator(simulator))
+        self._execute(names, varied, analyses_path, self._simulator(simulator), builds)
         _report({"analyses": ", ".join(names)}, analyses_path)
         return path
 
@@ -1952,12 +2174,20 @@ def run_subfolders(
             runner._plan(run_names, parameters[key], f" of the subfolder '{key}'"),
         )
 
+    sexes = set().union(*(runners[key]._sexes(plans[key][0]) for key in keys))
+    builds = _builds(first.model, sexes, parameters[keys[0]])
+    for key in keys:
+        run_names, varied = plans[key]
+        runners[key]._check_designs(
+            run_names, varied, builds, f" of the subfolder '{key}'"
+        )
+
     path = first.model.results_dir / "sensitivity" if path is None else path
-    _write_table(parameters[keys[0]], path)
+    _write_table(parameters[keys[0]], path, builds)
     simulator_ = first._simulator(simulator)
     for key in keys:
         run_names, varied = plans[key]
-        runners[key]._execute(run_names, varied, path / key, simulator_)
+        runners[key]._execute(run_names, varied, path / key, simulator_, builds)
     _report(
         {
             "subfolders": ", ".join(keys),

@@ -10,7 +10,9 @@ A model with a build per sex builds the one definition for every sex
 `<sid>_flat.xml`, the master entry of the archive) and the build of another
 sex is the definition with that sex and the id `<sid>_<sex>`, e.g.
 `<sid>_female_flat.xml` next to the male `<sid>_flat.xml`. The model object
-holds both (`PKPDModel(model_path=..., female_model_path=...)`).
+holds both (`PKPDModel(model_path=..., female_model_path=...)`); its `model_path`
+is the male build, so a model with builds per sex keeps its definition male
+(the default), whose build is the master entry.
 """
 
 import dataclasses

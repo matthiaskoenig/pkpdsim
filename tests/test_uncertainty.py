@@ -442,15 +442,18 @@ def test_the_check_of_the_fit_parameters_sees_every_build(
 
 
 def test_the_draws_reach_a_female_experiment(toy_with_uncertainty: Path) -> None:
-    """The draws of the male build run on the female build, which has the same ids."""
-    from pkpdsim_sexes import FEMALE_MODEL_PATH
+    """The draws of the male build run on the female build, which has the same ids.
+
+    Every draw of the rate decays from the female start: A(t) = 0.8 exp(-k t).
+    """
+    from pkpdsim_sexes import FEMALE_A0, FEMALE_MODEL_PATH
     from pkpdsim_sexes.experiments.decay import SexesWomen
 
     run = draws_run(toy_with_uncertainty)
     runner = ExperimentRunner(
         experiment_classes=[SexesWomen],
         base_path=TOY_PATH,
-        simulator=None,
+        simulator=Simulator(n_workers=1),
         on_error="raise",
         uncertainty=run,
     )
@@ -459,6 +462,20 @@ def test_the_draws_reach_a_female_experiment(toy_with_uncertainty: Path) -> None
     simulation = exp._simulations["decay"]
     assert isinstance(simulation, Scan)
     assert [d.id for d in simulation.dimensions] == [UNCERTAINTY_DIMENSION]
+    exp.run(runner.simulator, output_path=None)
+    result = exp.results["task_decay"]
+    rates = np.asarray(run.dimension.values["k"], dtype=float)
+    assert len(set(rates)) == len(rates) == 3
+    for index, k in enumerate(rates):
+        times, values = point_timecourse(
+            result, "[A]", **{UNCERTAINTY_DIMENSION: index}
+        )
+        np.testing.assert_allclose(
+            np.asarray(values),
+            FEMALE_A0 * np.exp(-k * np.asarray(times)),
+            rtol=1e-6,
+            atol=1e-8,
+        )
 
 
 def test_the_settings_of_a_run() -> None:

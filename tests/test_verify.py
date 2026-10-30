@@ -22,7 +22,6 @@ from sbmlsim.simulation import Scan, Simulation
 from sbmlsim.simulation.sampling import local
 
 from pkpdsim.model import FigureSettings
-from pkpdsim.sex import Sex
 from pkpdsim.verify import (
     FIGURE_SETTINGS_08,
     NEW_FIGURE_SETTINGS,
@@ -1486,16 +1485,6 @@ def test_the_label_of_a_curve_across_versions_of_sbmlsim_is_its_name() -> None:
 
 
 # --- the builds per sex -----------------------------------------------------------
-
-
-def test_describe_a_model_with_a_build_per_sex() -> None:
-    from pkpdsim_sexes import MODEL as SEXES
-
-    info = describe("pkpdsim_sexes")
-    assert info.model_path == SEXES.model_path
-    assert info.model_paths == SEXES.model_paths
-    assert list(info.model_paths) == [Sex.MALE, Sex.FEMALE]
-    assert describe("pkpdsim_toy").model_paths == {Sex.MALE: MODEL_PATH}
 
 
 def test_a_dump_records_the_build_of_every_task(

@@ -330,3 +330,22 @@ def test_the_definition_of_a_build_of_another_sex() -> None:
     )
     assert sex_definition(definition(), Sex.FEMALE).name is None
     assert female.substances == named.substances
+
+
+def test_the_renal_function_of_a_mixed_study_follows_the_sex_of_the_experiment(
+    model: PKPDModel,
+) -> None:
+    """The group of women of a study of men passes its sex, else the male GFR."""
+    groups = _subclass(_base(model), "Groups", simulation_sexes={"women": Sex.FEMALE})
+    male = _ml(healthy_gfr(model.model_path))
+    female = _ml(healthy_gfr(model.model_path_of(Sex.FEMALE)))
+    women = float(groups.renal_function(60.0, sex=Sex.FEMALE).m_as("dimensionless"))
+    men = float(groups.renal_function(60.0).m_as("dimensionless"))
+    assert women == pytest.approx(60.0 / female, rel=1e-12)
+    assert men == pytest.approx(60.0 / male, rel=1e-12)
+    assert _ml(groups.healthy_gfr(sex=Sex.FEMALE)) == female
+    for key, preset in impairment.RENAL_FUNCTION_GFR.items():
+        assert groups.renal_map_of(Sex.FEMALE)[key] * female == pytest.approx(
+            101.0 * preset
+        )
+        assert groups.renal_map[key] * male == pytest.approx(101.0 * preset)

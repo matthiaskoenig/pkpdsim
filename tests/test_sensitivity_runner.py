@@ -9,7 +9,7 @@ import dataclasses
 import logging
 import math
 import re
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -733,10 +733,12 @@ def test_the_table_of_several_subfolders_is_written_once(
     write = module.write_parameters
 
     def counted(
-        parameters: Sequence[SensitivityParameter], directory: Path
+        parameters: Sequence[SensitivityParameter],
+        directory: Path,
+        builds: Mapping[Sex, Mapping[str, float]] | None = None,
     ) -> pd.DataFrame:
         tables.append(directory)
-        return write(parameters, directory)
+        return write(parameters, directory, builds)
 
     monkeypatch.setattr(module, "write_parameters", counted)
     path = run_subfolders(subfolder_runners(tmp_path), ["local"], simulator=SERIAL)
@@ -979,17 +981,38 @@ def test_an_undefined_value_has_no_class_and_an_infinite_one_the_highest() -> No
     assert _classes(math.inf, *u) == ("<***>", "high")
 
 
-def test_a_group_of_women_runs_on_the_female_build(tmp_path: Path) -> None:
-    """The same design runs on the build of the sex of every group."""
-    from pkpdsim_sexes import FEMALE_A0
+WOMEN = SensitivityGroup("women", "Women", simulation({}), sex=Sex.FEMALE)
+
+
+def sexes_parameters() -> list[SensitivityParameter]:
+    """The parameters of the toy model per sex, read from its male build."""
+    from pkpdsim_sexes import MODEL_PATH as SEXES_MALE
+
+    parameters = parameters_from_sbml(SEXES_MALE)
+    set_relative_bounds(parameters, 0.15)
+    return parameters
+
+
+def sexes_runner(tmp_path: Path, **kwargs: object) -> SensitivityRunner:
+    """A runner of the toy model per sex, its parameters with `A0` by sex."""
     from pkpdsim_sexes import MODEL as SEXES
 
-    women = SensitivityGroup("women", "Women", simulation({}), sex=Sex.FEMALE)
+    options: dict[str, Any] = {
+        "model": dataclasses.replace(SEXES, results_path=tmp_path),
+        "parameters": sexes_parameters,
+    }
+    options.update(kwargs)
+    return runner(tmp_path, **options)
+
+
+def test_a_group_of_women_samples_around_the_female_build(tmp_path: Path) -> None:
+    """The same relative design, around the values of the build of each group."""
+    from pkpdsim_sexes import FEMALE_A0
+
     assert CONTROL.sex is Sex.MALE
-    groups = [CONTROL, women]
-    path = runner(
+    groups = [CONTROL, WOMEN]
+    path = sexes_runner(
         tmp_path,
-        model=dataclasses.replace(SEXES, results_path=tmp_path),
         analyses={
             "sampling": SamplingAnalysis(groups=groups, n=8),
             "local": LocalAnalysis(groups=groups),
@@ -999,16 +1022,75 @@ def test_a_group_of_women_runs_on_the_female_build(tmp_path: Path) -> None:
         group: pd.read_csv(path / "sampling" / group / "samples.tsv", sep="\t")
         for group in ("control", "women")
     }
-    # the same rates, A starts lower in women
-    np.testing.assert_allclose(samples["women"]["k"], samples["control"]["k"])
-    np.testing.assert_allclose(
-        samples["women"]["A_auc"], FEMALE_A0 * samples["control"]["A_auc"], rtol=1e-6
-    )
+    men, women = samples["control"], samples["women"]
+    # A0 differs by sex: the women sample around 0.8 mM, the men around 1 mM
+    np.testing.assert_allclose(women["A0"], FEMALE_A0 * men["A0"], rtol=1e-12)
+    assert men["A0"].between(0.85, 1.15).all()
+    assert women["A0"].between(0.85 * FEMALE_A0, 1.15 * FEMALE_A0).all()
+    # k is the same in both builds, so is its design
+    np.testing.assert_allclose(women["k"], men["k"])
+    np.testing.assert_allclose(women["A_auc"], FEMALE_A0 * men["A_auc"], rtol=1e-6)
     assert (path / "local" / "local_d0.01_nvar3_01_women.tsv").is_file()
+    # the table has the value of every parameter in the female build
+    table = pd.read_csv(path / "parameters.tsv", sep="\t").set_index("uid")
+    assert table.loc["A0", "value"] == pytest.approx(1.0)
+    assert table.loc["A0", "value_female"] == pytest.approx(FEMALE_A0)
+    assert table.loc["k", "value_female"] == table.loc["k", "value"]
+
+
+@pytest.mark.parametrize(
+    "analysis",
+    [
+        SobolAnalysis(groups=[CONTROL, WOMEN], n=8),
+        FastAnalysis(groups=[CONTROL, WOMEN], n=65),
+    ],
+    ids=["sobol", "fast"],
+)
+def test_a_global_analysis_of_women_runs_around_the_female_build(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, analysis: object
+) -> None:
+    from pkpdsim import sensitivity as module
+    from pkpdsim_sexes import FEMALE_A0
+
+    designs: dict[str, dict[str, np.ndarray]] = {}
+    scan = module._Context.scan
+
+    def recorded(self: Any, group: SensitivityGroup, design: Any) -> Any:  # noqa: ANN401
+        designs[group.uid] = {k: np.asarray(v) for k, v in design.values.items()}
+        return scan(self, group, design)
+
+    monkeypatch.setattr(module._Context, "scan", recorded)
+    sexes_runner(tmp_path, analyses={"global": analysis}, default=["global"]).run(
+        ["global"], simulator=SERIAL
+    )
+    men, women = designs["control"], designs["women"]
+    np.testing.assert_allclose(women["A0"], FEMALE_A0 * men["A0"], rtol=1e-12)
+    np.testing.assert_array_equal(women["k"], men["k"])
+
+
+def test_a_design_which_cannot_be_relative_to_the_female_build_is_refused(
+    tmp_path: Path,
+) -> None:
+    """A value of 0 in the table cannot give the factor of the female build."""
+
+    def parameters() -> list[SensitivityParameter]:
+        table = sexes_parameters()
+        (a0,) = [p for p in table if p.uid == "A0"]
+        a0.value = 0.0
+        return table
+
+    with pytest.raises(ValueError, match="'A0'") as error:
+        sexes_runner(
+            tmp_path,
+            parameters=parameters,
+            analyses={"sampling": SamplingAnalysis(groups=[CONTROL, WOMEN], n=8)},
+            default=["sampling"],
+        ).run(["sampling"], simulator=SERIAL)
+    assert "0.8" in str(error.value)
+    assert not (tmp_path / "sensitivity").exists()
 
 
 def test_a_group_of_a_sex_without_a_build_is_refused(tmp_path: Path) -> None:
-    women = SensitivityGroup("women", "Women", simulation({}), sex=Sex.FEMALE)
     with pytest.raises(ValueError, match="'women'") as error:
-        runner(tmp_path, analyses={"local": LocalAnalysis(groups=[CONTROL, women])})
+        runner(tmp_path, analyses={"local": LocalAnalysis(groups=[CONTROL, WOMEN])})
     assert "'toy' has no female build" in str(error.value)

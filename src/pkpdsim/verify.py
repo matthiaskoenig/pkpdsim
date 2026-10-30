@@ -95,8 +95,6 @@ from typing import (
 import libsbml
 import numpy as np
 
-from pkpdsim.sex import Sex
-
 if TYPE_CHECKING:
     from sbmlsim.experiment import SimulationExperiment
     from sbmlsim.fit import FitData, FitMapping
@@ -193,8 +191,6 @@ class ModelInfo:
     package: str
     base_path: Path
     model_path: Path
-    #: the builds of the model by sex, see `PKPDModel.model_paths`
-    model_paths: Mapping[Sex, Path]
     data_path: Path | list[Path] | None
     experiments: Mapping[str, Sequence[type["SimulationExperiment"]]] | None
     absolute_tolerance: object | None
@@ -245,7 +241,6 @@ def describe(package: str) -> ModelInfo:
         package=package,
         base_path=model.path,
         model_path=model.model_path,
-        model_paths=model.model_paths,
         data_path=list(model.data_paths) or None,
         experiments=model.load_experiments() if model.experiments else None,
         absolute_tolerance=model.simulator.absolute_tolerance,

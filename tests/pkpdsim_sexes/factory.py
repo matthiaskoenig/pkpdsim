@@ -2,21 +2,28 @@
 
 from pathlib import Path
 
-from sbmlutils.factory import Model, create_model
+from sbmlutils.factory import InitialAssignment, Model, Parameter, create_model
 
 from pkpdsim.sex import Sex
 from pkpdsim_sexes import FEMALE_A0
-from pkpdsim_toy.factory import toy_model
+from pkpdsim_toy.factory import U, toy_model
 
 
 def sexes_model(sex: Sex) -> Model:
-    """Get the build of a sex: the toy model, A starts lower in women."""
+    """Get the build of a sex: the toy model, A starts at `A0`, lower in women.
+
+    `A0` is a parameter of the build whose value differs by sex, as the
+    reference values of a library model (the body weight, the hematocrit) do.
+    """
     model = toy_model()
     model.sid = "sexes" if sex is Sex.MALE else f"sexes_{sex}"
     model.name = f"toy decay model ({sex})"
-    if sex is Sex.FEMALE:
-        (species,) = model.species
-        species.initialConcentration = FEMALE_A0
+    a0 = FEMALE_A0 if sex is Sex.FEMALE else 1.0
+    model.parameters = [
+        *model.parameters,
+        Parameter("A0", a0, unit=U.mM, name="initial concentration of A"),
+    ]
+    model.assignments = [InitialAssignment("A", "A0", unit=U.mM)]
     return model
 
 
