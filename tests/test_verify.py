@@ -117,6 +117,35 @@ def test_a_simulation_on_a_grid() -> None:
     assert gridded_scan.dimensions == scan.dimensions
 
 
+def test_the_simulations_of_a_dimension_on_a_grid() -> None:
+    """Every simulation of a dimension of simulations gets its own grid."""
+    from sbmlsim import Q
+    from sbmlsim.simulation import Change, Dimension
+
+    from pkpdsim.verify import on_grid
+
+    short = Simulation(end=4, steps=100, changes=[Change(1.5, {"A": 1.0})])
+    long = Simulation(start=-2, end=8)
+    scan = Scan(
+        simulation=Simulation(end=10),
+        dimensions=[Dimension("dim_sim", simulations={"short": short, "long": long})],
+    )
+    gridded = on_grid(scan, 2)
+    assert isinstance(gridded, Scan)
+    assert gridded.simulation.times == (0.0, 5.0, 10.0)
+    (dimension,) = gridded.dimensions
+    assert dimension.id == "dim_sim"
+    assert dimension.simulations["short"].times == (0.0, 1.5, 2.0, 4.0)
+    assert dimension.simulations["short"].steps is None
+    assert dimension.simulations["long"].times == (-2.0, 3.0, 8.0)
+    # a quantity of a simulation without a time unit has no number on the grid
+    unknown = Simulation(end=4, changes=[Change(Q(1, "hr"), {"A": 1.0})])
+    with pytest.raises(ValueError, match="no time unit"):
+        on_grid(unknown, 2)
+    with pytest.raises(ValueError, match="no simulation or scan"):
+        on_grid("task", 2)  # ty: ignore[invalid-argument-type]
+
+
 def test_dumps_on_a_common_grid_compare_their_times_exactly(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

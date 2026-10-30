@@ -78,6 +78,7 @@ expected (`expected`).
 
 import argparse
 import ast
+import dataclasses
 import fnmatch
 import importlib
 import importlib.metadata
@@ -449,13 +450,19 @@ def mapping_range(
 
 
 def _time_number(time: object, time_unit: str | None) -> float:
-    """Get a time of a simulation as a number in its time unit."""
-    magnitude = getattr(time, "magnitude", None)
-    if magnitude is None:
+    """Get a time of a simulation as a number in its time unit.
+
+    Raises:
+        ValueError: for a quantity of a simulation without a time unit, whose
+            unit is that of the model, which the grid does not know.
+    """
+    if getattr(time, "magnitude", None) is None:
         return float(time)  # ty: ignore[invalid-argument-type]
-    if time_unit:
-        return float(time.m_as(time_unit))  # ty: ignore[unresolved-attribute]
-    return float(magnitude)
+    if not time_unit:
+        raise ValueError(
+            f"the time {time} is a quantity and the simulation has no time unit"
+        )
+    return float(time.m_as(time_unit))  # ty: ignore[unresolved-attribute]
 
 
 def on_grid(simulation: Simulation | Scan, n: int) -> Simulation | Scan:
@@ -470,20 +477,41 @@ def on_grid(simulation: Simulation | Scan, n: int) -> Simulation | Scan:
     matched exactly, without interpolation, so a compare resolves its
     threshold (a migration compare dumps both models with `--grid`).
 
+    A scan has its simulation on the grid and every simulation of a dimension
+    of simulations, each on the grid of its own start, end and changes.
+
     Args:
         simulation: the simulation or the scan.
         n: the number of intervals of the grid.
 
     Returns:
         The simulation or the scan on the grid, a new object.
+
+    Raises:
+        ValueError: for an object which is no simulation or scan, or a time
+            which is a quantity of a simulation without a time unit.
     """
     from sbmlsim.simulation import Scan, Simulation
+    from sbmlsim.simulation.scan import DimensionKind
 
     if isinstance(simulation, Scan):
         at = [d.at for d in simulation.dimensions if d.at is not None]
-        base = _on_grid(simulation.simulation, n, at)
-        return Scan(simulation=base, dimensions=simulation.dimensions)
-    assert isinstance(simulation, Simulation)
+        dimensions = [
+            dataclasses.replace(
+                d,
+                simulations={
+                    label: _on_grid(sim, n, at) for label, sim in d.simulations.items()
+                },
+            )
+            if d.kind == DimensionKind.SIMULATIONS
+            else d
+            for d in simulation.dimensions
+        ]
+        return Scan(
+            simulation=_on_grid(simulation.simulation, n, at), dimensions=dimensions
+        )
+    if not isinstance(simulation, Simulation):
+        raise ValueError(f"{simulation!r} is no simulation or scan")
     return _on_grid(simulation, n, [])
 
 
@@ -609,10 +637,16 @@ def dump(args: argparse.Namespace) -> int:
             for sid, experiment in runner.experiments.items():
                 if args.grid is not None:
                     # a common output grid instead of the steps of the integrator
-                    experiment._simulations = {
-                        key: on_grid(simulation, args.grid)
-                        for key, simulation in experiment._simulations.items()
-                    }
+                    gridded = {}
+                    for key, simulation in experiment._simulations.items():
+                        try:
+                            gridded[key] = on_grid(simulation, args.grid)
+                        except ValueError as err:
+                            raise ValueError(
+                                f"The simulation '{key}' of the experiment '{sid}' "
+                                f"cannot be put on the grid of --grid: {err}."
+                            ) from err
+                    experiment._simulations = gridded
                 experiment.run(
                     runner.simulator,
                     output_path=None,
