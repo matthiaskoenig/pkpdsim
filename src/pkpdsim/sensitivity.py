@@ -62,6 +62,7 @@ import libsbml
 import numpy as np
 import pandas as pd
 from matplotlib.figure import Figure
+from pkpdutils import NCAOptions
 from sbmlsim import display, sensitivity
 from sbmlsim.model.model_roadrunner import JitOptimization, load_roadrunner
 from sbmlsim.result import ScanResult
@@ -73,7 +74,15 @@ from sbmlsim.sensitivity.classification import (
     uncertainty_classification_symbol,
 )
 from sbmlsim.sensitivity.result import PARAMETER
-from sbmlsim.simulation import Dimension, Observable, Scan, Simulation, sampling
+from sbmlsim.simulation import (
+    PK,
+    Dimension,
+    Formula,
+    Observable,
+    Scan,
+    Simulation,
+    sampling,
+)
 from sbmlsim.simulation.sampling import Uniform
 from sbmlsim.simulator import Simulator
 from sbmlutils.console import console
@@ -525,6 +534,123 @@ def relative_design(design: Dimension, factors: Mapping[str, float]) -> Dimensio
 #: the environment variable which replaces the number of samples of a global
 #: analysis, for a smoke run of the sensitivity scripts
 SAMPLE_SIZE = "PKPDSIM_SENSITIVITY_N"
+
+
+def pk_observables(
+    prefix: str,
+    selection: str,
+    outputs: Mapping[str, str],
+    *,
+    dose: str | None = None,
+    route: str | None = None,
+    options: NCAOptions | None = None,
+    per_dose_mass: Collection[str] = (),
+    mr: str | None = None,
+    pk_id: str | None = None,
+) -> list[Observable]:
+    """Get the non-compartmental analysis of a concentration and its outputs.
+
+    The observables of a sensitivity analysis of the pharmacokinetics of a
+    substance: the analysis `pk_id` (sbmlsim `PK`) of the concentration
+    `selection` with the parameters of the outputs, then an observable
+    `<prefix>_<key>` of every output in its unit (sbmlsim `Formula`). The
+    dose of an analysis is a mass (`PODOSE_<s>` in mg), so an output whose
+    unit has the amount of the dose (`per_dose_mass`, e.g. `cl_f` and `vz_f`)
+    is divided by the molecular weight `mr` at the start (`at(Mr_<s>, 0)`, a
+    value per simulation like the parameter of the analysis); the molecular
+    weight of the dosed substance, also for a metabolite of it.
+
+    ```python
+    # not executed
+    OBSERVABLES = [
+        *pk_observables(
+            "tor",
+            "Carm_tor",
+            {"auc_inf_obs": "mM*min", "cl_f": "ml/min"},
+            dose="PODOSE_tor",
+            route="oral",
+            options=NCAOptions(lloq=LLOQ),
+            per_dose_mass={"cl_f", "vz_f"},
+            mr="Mr_tor",
+        ),
+        *pk_observables("Carm_tor_m5", "Carm_tor_m5", {"cmax": "mM"}, pk_id="pk_m5"),
+    ]
+    ```
+
+    Args:
+        prefix: the prefix of the ids of the outputs, e.g. the substance
+            `tor` (`tor_cmax`) or the concentration `Carm_api`
+            (`Carm_api_cmax`).
+        selection: the concentration, e.g. `Carm_tor`.
+        outputs: the unit of every output by the key of its parameter of the
+            analysis (`pkpdutils`, e.g. `auc_inf_obs`, `cmax`, `cl_f`).
+        dose: the dose state of the analysis, `None` for an analysis without
+            a dose (a metabolite), see `sbmlsim.simulation.PK`.
+        route: the route of the dose, e.g. `oral` or `iv_bolus`.
+        options: the options of the analysis, e.g. the limit of
+            quantification relative to the maximum (`NCAOptions(lloq=...)`).
+        per_dose_mass: the outputs whose unit has the amount of the dose.
+        mr: the id of the molecular weight of the dosed substance, which an
+            output of `per_dose_mass` is divided by, e.g. `Mr_tor`.
+        pk_id: the id of the analysis, `pk_<prefix>` by default; an id of the
+            model, e.g. a species `hctz`, is no id of an observable.
+
+    Returns:
+        The analysis and the outputs.
+
+    Raises:
+        ValueError: if an output per dose mass has no molecular weight.
+    """
+    pk = f"pk_{prefix}" if pk_id is None else pk_id
+    divided = [key for key in outputs if key in per_dose_mass]
+    if divided and mr is None:
+        raise ValueError(
+            f"The outputs {divided} of '{prefix}' have the amount of the dose in "
+            "their unit: give the molecular weight of the dosed substance, `mr`."
+        )
+    return [
+        PK(
+            pk,
+            selection,
+            dose=dose,
+            route=route,
+            options=options,
+            parameters=list(outputs),
+        ),
+        *(
+            Formula(
+                f"{prefix}_{key}",
+                f"{pk}.{key} / at({mr}, 0)" if key in per_dose_mass else f"{pk}.{key}",
+                unit=unit,
+            )
+            for key, unit in outputs.items()
+        ),
+    ]
+
+
+def max_after_dose(time: np.ndarray, values: Mapping[str, np.ndarray]) -> float:
+    """Get the maximum of a timecourse after the dose at the time 0.
+
+    The function of a `Custom` observable of one selection, e.g. the largest
+    diuresis after a dose of a simulation which starts before it:
+    `Custom("max_diuresis", max_after_dose, "ml/min", symbols=["FLUID__diuresis"])`.
+
+    Args:
+        time: the times of the timecourse.
+        values: the timecourse of the one selection of the observable.
+
+    Returns:
+        The maximum from the time 0 on.
+
+    Raises:
+        ValueError: for more or less than one selection.
+    """
+    if len(values) != 1:
+        raise ValueError(
+            f"The maximum after the dose is of one selection, not of {sorted(values)}."
+        )
+    (x,) = values.values()
+    return float(np.max(x[time >= 0]))
 
 
 def sample_size(n: int) -> int:

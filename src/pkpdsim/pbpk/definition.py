@@ -305,6 +305,49 @@ class PBPKDefinition:
             ),
         )
 
+    def parameter_value(self, sid: str) -> float:
+        """Get the number of a constant parameter of the definition (`parameters`).
+
+        A constant of a formulation or a dose, e.g. the factor of the
+        dissolution of a prolonged release tablet, is a parameter of the
+        definition, so the model and its archive carry it; the experiments
+        read it here, the one place of the number, and set the parameter of
+        the library from it (`f_dis_release_<s>` in the simulations of the
+        prolonged release):
+
+        ```python
+        # not executed
+        formulation_map = {
+            "immediate release": 1.0,
+            "prolonged release": DEFINITION.parameter_value("f_dis_pr_tor"),
+        }
+        ```
+
+        Args:
+            sid: the id of the parameter.
+
+        Returns:
+            The number in the unit of the parameter.
+
+        Raises:
+            ValueError: if the definition has no parameter of the id or its
+                value is a formula, whose number only the model has.
+        """
+        by_sid = {p.sid: p for p in self.parameters}
+        parameter = by_sid.get(sid)
+        if parameter is None:
+            raise ValueError(
+                f"The definition '{self.sid}' has no parameter '{sid}'; its "
+                f"parameters are {sorted(by_sid)}."
+            )
+        value = number(parameter.value)
+        if value is None:
+            raise ValueError(
+                f"The parameter '{sid}' of the definition '{self.sid}' is a formula, "
+                "whose number only the model has."
+            )
+        return float(value)
+
     def validate(self, *, symbols: bool = True) -> None:
         """Check the definition.
 

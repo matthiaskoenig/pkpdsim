@@ -42,7 +42,7 @@ The class attributes are the conventions of the experiments:
 | --- | --- |
 | `pkpd_model` | the model object, required: an experiment of a base without it raises a `TypeError` |
 | `selections` | the selections added to every task, e.g. `("time", "[Cve_hctz]")` |
-| `Mr` | the molecular weights of the substances for the conversion of the data, a `NamedTuple` of the model |
+| `Mr` | the molecular weights of the substances for the conversion of the data, a `NamedTuple` of the model; a model of the PBPK library reads them from its definition, `molecular_weights(DEFINITION)` of `pkpdsim.pbpk` (`Mapping[str, Quantity]` by substance, `self.Mr["tor"]`) |
 | `labels`, `units` | the labels and units of the observables by id |
 | `sex` | the sex of the subjects, whose build of the model the simulations run, `Sex.MALE` by default, see [Builds per sex](#builds-per-sex) |
 | `simulation_sexes` | the sex of single simulations which differs from `sex`, by the key of the simulation |
@@ -64,9 +64,15 @@ set by a simulation), `data` (the selections for every task),
 figure or table `Fig1` of the study, by default that of the experiment, read
 from the `data_path` of the experiment, a path or paths, with the unit of the
 geometric means in `gmean_unit`, `add_gmean_unit`; by substance without the
-rows which have none) and `figures_by_sid(*figures)`. A model
-overrides what it does differently, e.g. `default_changes` for a model whose
-simulations set a parameter.
+rows which have none), `figures_by_sid(*figures)`, `across()` (the dimension
+of the draws of the fitted parameters of a run over them, `None` without,
+which a figure of a scan leaves out of its dimensions) and
+`add_function(plot, task_id, y, label, color, linestyle="-")` (a function of
+the results of a task over the time as a curve of the width of the curves of
+the selections, the band of the draws in a run over them; `linestyle=None`
+leaves the line style to sbmlsim). A model overrides what it does
+differently, e.g. `default_changes` for a model whose simulations set a
+parameter.
 
 ## Builds per sex
 

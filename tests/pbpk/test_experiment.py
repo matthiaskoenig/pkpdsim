@@ -360,3 +360,25 @@ def test_the_healthy_gfr_needs_a_model_object() -> None:
     """The base itself has no model object."""
     with pytest.raises(TypeError, match="has no model object"):
         _ml(PBPKSimulationExperiment.healthy_gfr())
+
+
+def test_the_molecular_weights_of_a_definition() -> None:
+    """`Mr_<s>` of the substances and of the parameters of the definition."""
+    from pkpdsim.pbpk import U, Value, molecular_weights
+    from pkpdsim.pbpk.values import Formula, ModelParameter
+
+    renin = ModelParameter("Mr_ren", Value(45057.0, U.g_per_mole), U.g_per_mole)
+    weights = molecular_weights(definition(parameters=[renin]))
+    assert dict(weights) == {
+        "drg": Q(300.0, "g/mole"),
+        "drg_m": Q(316.0, "g/mole"),
+        "ren": Q(45057.0, "g/mole"),
+    }
+    with pytest.raises(TypeError):
+        weights["x"] = Q(1.0, "g/mole")  # ty: ignore[invalid-assignment]
+    other = ModelParameter("Mr_x", 1.0, U.dimensionless)
+    with pytest.raises(ValueError, match=r"'Mr_x'.*g/mole"):
+        molecular_weights(definition(parameters=[other]))
+    tied = ModelParameter("Mr_y", Formula("2 * Mr_drg", U.g_per_mole), U.g_per_mole)
+    with pytest.raises(ValueError, match=r"'Mr_y'.*formula"):
+        molecular_weights(definition(parameters=[tied]))

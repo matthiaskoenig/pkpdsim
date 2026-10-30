@@ -58,6 +58,7 @@ from typing import TYPE_CHECKING, ClassVar
 from sbmlsim.data import Data, load_pkdb_dataframe
 from sbmlsim.experiment import SimulationExperiment
 from sbmlsim.model import AbstractModel
+from sbmlsim.plot import Curve
 from sbmlsim.simulation import Change
 from sbmlsim.task import Task
 
@@ -67,7 +68,7 @@ from pkpdsim.uncertainty import UncertaintyRun, apply_uncertainty
 
 if TYPE_CHECKING:
     import pandas as pd
-    from sbmlsim.plot import Figure
+    from sbmlsim.plot import Figure, Plot
     from sbmlsim.units import Quantity, UnitRegistry
 
     from pkpdsim.model import PKPDModel
@@ -360,6 +361,69 @@ class PKPDSimulationExperiment(SimulationExperiment):
                 f"{run!r}."
             )
         return run
+
+    def across(self) -> str | None:
+        """Get the dimension of the draws of the fitted parameters, `None` without.
+
+        The dimension over which a run over the draws (`uncertainty`) varies
+        the fitted parameters, which a figure or an analysis of a scan of the
+        experiment leaves out of its own dimensions or makes a band of, e.g.
+        `pkpdsim.scan.point_band(result, ..., across=self.across())`.
+        """
+        run = self.uncertainty
+        return None if run is None else run.id
+
+    def add_function(
+        self,
+        plot: Plot,
+        task_id: str,
+        y: Data,
+        label: str | None,
+        color: str,
+        linestyle: str | None = "-",
+    ) -> None:
+        """Add a function of the results of a task over the time to a plot.
+
+        A curve of the line width of the curves of the selections (`add_data`,
+        2.0); in a run over the draws of the fitted parameters (`uncertainty`)
+        the band of the draws instead, with the quantiles of the run: the
+        function is no selection of a task, which the run makes a band of
+        itself.
+
+        Args:
+            plot: the plot.
+            task_id: the task whose results the function reads.
+            y: the function, a `Data` of a function of the selections of the
+                task.
+            label: the label of the curve or the band, `None` for none.
+            color: the color.
+            linestyle: the line style of the curve, `None` for the default of
+                sbmlsim (the curve has no line style of its own).
+        """
+        time = Data("time", task=task_id)
+        run = self.uncertainty
+        if run is not None:
+            plot.band(
+                x=time,
+                y=y,
+                across=run.id,
+                quantiles=run.quantiles,
+                name=label,
+                color=color,
+            )
+            return
+        if linestyle is None:
+            curve = Curve(x=time, y=y, label=label, color=color, linewidth=2.0)
+        else:
+            curve = Curve(
+                x=time,
+                y=y,
+                label=label,
+                color=color,
+                linestyle=linestyle,
+                linewidth=2.0,
+            )
+        plot.add_curve(curve)
 
     def data_unit_names(self) -> Mapping[str, str]:
         """Get the names of the units of the data, defining the units of `data_units` once.

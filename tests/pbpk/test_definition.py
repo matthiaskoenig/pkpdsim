@@ -19,6 +19,7 @@ from pkpdsim.pbpk import (
     Erythrocytes,
     Excretion,
     FirstOrder,
+    FirstOrderDissolution,
     Formula,
     Hill,
     Inhibition,
@@ -51,6 +52,7 @@ from pkpdsim.pbpk.builder import organ_component
 from .conftest import (
     assert_reference_sbml,
     dateless,
+    definition,
     individual,
     reference_definition,
 )
@@ -972,3 +974,39 @@ def test_a_definition_parameter_may_not_take_an_id_of_the_definition() -> None:
     )
     with pytest.raises(ValueError, match="parameter 'cardio' is an id of the PD"):
         compose(d)
+
+
+def test_a_constant_of_a_formulation_is_read_from_the_definition(
+    tmp_path: Path,
+) -> None:
+    """A constant of a formulation lives in the definition and the model (D14).
+
+    The experiments of a prolonged release set the factor of the dissolution
+    from the constant of the definition, which the archive carries.
+    """
+    released = definition(
+        routes=[Route.oral("drg", FirstOrderDissolution(k=2.0, release=1.0))],
+        parameters=[
+            ModelParameter(
+                "f_dis_pr_drg",
+                Value(0.27, U.dimensionless, notes="calibrated"),
+                U.dimensionless,
+                notes="The factor of the dissolution of the prolonged release.",
+            ),
+            ModelParameter(
+                "f_twice",
+                Formula("2 dimensionless * f_dis_pr_drg", U.dimensionless),
+                U.dimensionless,
+            ),
+        ],
+    )
+    assert released.parameter_value("f_dis_pr_drg") == 0.27
+    result = build(released, tmp_path)
+    r = roadrunner.RoadRunner(str(result.flat_path))
+    assert r["f_dis_pr_drg"] == 0.27
+    with pytest.raises(ValueError, match=r"no parameter 'f_dis_ir_drg'.*f_dis_pr_drg"):
+        released.parameter_value("f_dis_ir_drg")
+    with pytest.raises(ValueError, match="formula"):
+        released.parameter_value("f_twice")
+    plain = definition(parameters=[ModelParameter("f", 0.5, U.dimensionless)])
+    assert plain.parameter_value("f") == 0.5

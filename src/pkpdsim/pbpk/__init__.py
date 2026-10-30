@@ -1,8 +1,8 @@
 """The PBPK model library: the building blocks of the PBPK models of a substance.
 
 The base of the experiments of a model built on the library
-(`PBPKSimulationExperiment`, `ScaledRenalMap`, `healthy_gfr`, `REFERENCE_GFR`
-of `pkpdsim.pbpk.experiment`) and the validity of the kidney outflow
+(`PBPKSimulationExperiment`, `ScaledRenalMap`, `healthy_gfr`, `REFERENCE_GFR`,
+`molecular_weights` of `pkpdsim.pbpk.experiment`) and the validity of the kidney outflow
 (`kidney_outflow`, `KidneyOutflow` of `pkpdsim.pbpk.kidney_validity`) are
 exported lazily: they import sbmlsim, which a factory does not need, so
 `import pkpdsim.pbpk` imports no simulator.
@@ -79,6 +79,7 @@ if TYPE_CHECKING:
         PBPKSimulationExperiment,
         ScaledRenalMap,
         healthy_gfr,
+        molecular_weights,
     )
     from pkpdsim.pbpk.kidney_validity import KidneyOutflow, kidney_outflow
 
@@ -89,6 +90,7 @@ _LAZY_NAMES = {
     "PBPKSimulationExperiment": "experiment",
     "ScaledRenalMap": "experiment",
     "healthy_gfr": "experiment",
+    "molecular_weights": "experiment",
     "KidneyOutflow": "kidney_validity",
     "kidney_outflow": "kidney_validity",
 }
@@ -185,6 +187,7 @@ __all__ = [
     "interstitial_share",
     "kidney_outflow",
     "load",
+    "molecular_weights",
     "parts_for",
     "physiology_objects",
     "reference_individual",

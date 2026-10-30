@@ -323,3 +323,61 @@ def test_the_nonzero_local_analysis_varies_nonzero_values_only(tmp_path: Path) -
     }
     assert "CP_severity" not in varied
     assert "BW" in varied
+
+
+def test_the_pk_observables_of_a_substance() -> None:
+    """The analysis of a concentration and its outputs, as the copies of the models had them."""
+    from pkpdutils import NCAOptions
+    from sbmlsim.simulation import PK, Formula
+
+    from pkpdsim.sensitivity import pk_observables
+
+    outputs = {"auc_inf_obs": "mM*min", "cmax": "mM", "cl_f": "ml/min"}
+    options = NCAOptions(lloq=1e-6)
+    observables = pk_observables(
+        "gli",
+        "Carm_gli",
+        outputs,
+        dose="PODOSE_gli",
+        route="oral",
+        options=options,
+        per_dose_mass={"cl_f", "vz_f"},
+        mr="Mr_gli",
+    )
+    assert observables == [
+        PK(
+            "pk_gli",
+            "Carm_gli",
+            dose="PODOSE_gli",
+            route="oral",
+            options=options,
+            parameters=list(outputs),
+        ),
+        Formula("gli_auc_inf_obs", "pk_gli.auc_inf_obs", unit="mM*min"),
+        Formula("gli_cmax", "pk_gli.cmax", unit="mM"),
+        Formula("gli_cl_f", "pk_gli.cl_f / at(Mr_gli, 0)", unit="ml/min"),
+    ]
+    # a metabolite without a dose, its outputs named by the concentration
+    metabolite = pk_observables("Carm_m1", "Carm_m1", {"cmax": "mM"}, pk_id="pk_m1")
+    assert metabolite == [
+        PK("pk_m1", "Carm_m1", parameters=["cmax"]),
+        Formula("Carm_m1_cmax", "pk_m1.cmax", unit="mM"),
+    ]
+
+
+def test_an_output_per_dose_mass_needs_the_molecular_weight() -> None:
+    from pkpdsim.sensitivity import pk_observables
+
+    with pytest.raises(ValueError, match="molecular weight"):
+        pk_observables("gli", "Carm_gli", {"cl_f": "ml/min"}, per_dose_mass={"cl_f"})
+
+
+def test_the_maximum_after_the_dose() -> None:
+    """The maximum of the timecourse from the time of the dose, 0, on."""
+    from pkpdsim.sensitivity import max_after_dose
+
+    time = np.array([-2.0, -1.0, 0.0, 1.0, 2.0])
+    values = {"FLUID__diuresis": np.array([9.0, 5.0, 1.0, 3.0, 2.0])}
+    assert max_after_dose(time, values) == 3.0
+    with pytest.raises(ValueError, match="one selection"):
+        max_after_dose(time, {"a": time, "b": time})

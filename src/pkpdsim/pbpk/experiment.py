@@ -40,6 +40,7 @@ import functools
 import math
 from collections.abc import Callable, Iterator, Mapping
 from pathlib import Path
+from types import MappingProxyType
 from typing import TYPE_CHECKING, ClassVar, override
 
 from sbmlsim import Q
@@ -55,10 +56,14 @@ from pkpdsim.pbpk.kidney_validity import (
     kidney_outflow,
     simulated_individuals,
 )
+from pkpdsim.pbpk.units import U
+from pkpdsim.pbpk.values import number, unit_text
 from pkpdsim.sex import Sex
 
 if TYPE_CHECKING:
     from sbmlsim.units import Quantity
+
+    from pkpdsim.pbpk.definition import PBPKDefinition
 
 #: the healthy GFR the presets of `pkpdsim.impairment` are relative to [ml/min];
 #: import it from `pkpdsim.pbpk` (`from pkpdsim.pbpk import REFERENCE_GFR`), the
@@ -106,6 +111,61 @@ def healthy_gfr(
     changes = covariate_changes(bw, height, hf_severity, cp_severity)
     gfr = individual_values(Path(model_path), changes).ml_per_min(ids.GFR_BASE)
     return Q(gfr, "ml/min")
+
+
+def molecular_weights(definition: PBPKDefinition) -> Mapping[str, Quantity]:
+    """Get the molecular weights of a definition, for the conversion of the data.
+
+    The molecular weight `Mr_<s>` of every substance of the definition, and
+    of a substance of the data which is no substance of the model (the
+    substance of a measurement which the model reads in another form, e.g. a
+    protein of a PD readout) as a parameter of the definition `Mr_<x>` in
+    g/mole; the same numbers the model has. The base of the experiments of a
+    model reads them instead of a copy:
+
+    ```python
+    # not executed
+    class TorasemideSimulationExperiment(PBPKSimulationExperiment):
+        pkpd_model = MODEL
+        Mr: ClassVar[Mapping[str, Quantity]] = molecular_weights(DEFINITION)
+
+        def to_molar(self, dset: DataSet) -> DataSet:
+            dset.unit_conversion("mean", 1 / self.Mr["tor"])
+    ```
+
+    Args:
+        definition: the definition of the model.
+
+    Returns:
+        The molecular weight by the id of the substance (`tor`, without
+        `Mr_`), a read-only mapping of quantities in g/mole.
+
+    Raises:
+        ValueError: for a molecular weight which is a formula, or a parameter
+            `Mr_<x>` of another unit.
+    """
+    weights: dict[str, Quantity] = {}
+    entries = [
+        (s.sid, ids.mr(s.sid), s.mr, U.g_per_mole) for s in definition.substances
+    ]
+    entries += [
+        (p.sid.removeprefix(ids.mr("")), p.sid, p.value, p.unit)
+        for p in definition.parameters
+        if p.sid.startswith(ids.mr(""))
+    ]
+    for key, sid, q, unit in entries:
+        if unit_text(unit) != unit_text(U.g_per_mole):
+            raise ValueError(
+                f"The molecular weight '{sid}' is in {unit_text(unit)}, not in g/mole."
+            )
+        value = number(q)
+        if value is None:
+            raise ValueError(
+                f"The molecular weight '{sid}' is a formula, whose number only the "
+                "model has."
+            )
+        weights[key] = Q(float(value), "g/mole")
+    return MappingProxyType(weights)
 
 
 class ScaledRenalMap(Mapping[str, float]):
