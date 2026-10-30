@@ -85,6 +85,60 @@ def test_dump_and_compare(tmp_path: Path, capsys: pytest.CaptureFixture[str]) ->
     assert int(match.group(1)) == len(dumped["results"]) > 0
 
 
+def test_a_simulation_on_a_grid() -> None:
+    """The output times of `dump --grid`: equidistant, plus the times of the changes."""
+    from sbmlsim import Q
+    from sbmlsim.simulation import Change, Dimension
+
+    from pkpdsim.verify import on_grid
+
+    simulation = Simulation(
+        start=-24,
+        end=12,
+        time_unit="hr",
+        preinit_changes={"A": 1.0},
+        changes=[Change([0, 1.5], {"A": "A + 1"}), Change(Q(360, "min"), {"A": 0.0})],
+        steps=10,
+    )
+    gridded = on_grid(simulation, 4)
+    assert isinstance(gridded, Simulation)
+    assert gridded.steps is None
+    assert gridded.times == (-24.0, -15.0, -6.0, 0.0, 1.5, 3.0, 6.0, 12.0)
+    assert (gridded.start, gridded.end, gridded.time_unit) == (-24, 12, "hr")
+    assert gridded.preinit_changes == simulation.preinit_changes
+    assert gridded.changes == simulation.changes
+    scan = Scan(
+        simulation=Simulation(end=10),
+        dimensions=[Dimension("dim_a", values={"A": [1.0, 2.0]}, at=2.5)],
+    )
+    gridded_scan = on_grid(scan, 2)
+    assert isinstance(gridded_scan, Scan)
+    assert gridded_scan.simulation.times == (0.0, 2.5, 5.0, 10.0)
+    assert gridded_scan.dimensions == scan.dimensions
+
+
+def test_dumps_on_a_common_grid_compare_their_times_exactly(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Two dumps at other tolerances share their output times with `--grid`."""
+    dumps = []
+    for rtol in ("1e-10", "1e-9"):
+        out = tmp_path / f"grid_{rtol}.pkl"
+        args = ["--root", str(TESTS_DIR), "--model", "pkpdsim_toy", "--out", str(out)]
+        assert verify(["dump", *args, "--rtol", rtol, "--grid", "20", "ToyDecay"]) == 0
+        dumps.append(str(out))
+    dumped = pickle.loads(Path(dumps[0]).read_bytes())
+    assert dumped["grid"] == 20
+    (times,) = [v[1] for k, v in dumped["results"].items() if k[2] == "time"]
+    assert np.allclose(times.ravel(), np.linspace(0, 10, 21))
+    capsys.readouterr()
+    assert verify(["compare", *dumps]) == 0
+    out = capsys.readouterr().out
+    assert "0 unresolved on this grid" in out
+    assert "rows at other times: 0 rows of the old dump and 0 of the new dump" in out
+    assert "grid: old 20, new 20" in out
+
+
 def test_definitions(tmp_path: Path) -> None:
     out = tmp_path / "definitions.json"
     assert (

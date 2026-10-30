@@ -39,11 +39,19 @@ git worktree add --detach ../base develop
 (cd ../base && uv run python pkdb_models/models/hctz/models/factory.py)
 uv run python pkdb_models/models/hctz/models/factory.py
 uv run pkpdsim-verify dump --root ../base --model pkdb_models.models.hctz \
-    --out base.pkl --atol 1e-16 --rtol 1e-12
+    --out base.pkl --atol 1e-16 --rtol 1e-12 --grid 1000
 uv run pkpdsim-verify dump --root . --model pkdb_models.models.hctz \
-    --out new.pkl --order base.pkl --atol 1e-16 --rtol 1e-12
+    --out new.pkl --order base.pkl --atol 1e-16 --rtol 1e-12 --grid 1000
 uv run pkpdsim-verify compare base.pkl new.pkl
 ```
+
+`--grid N` outputs every simulation at `N + 1` equidistant times from its start
+to its end and at the times of its changes (`on_grid`) instead of the steps of
+the integrator, which differ between two models or tolerances: both dumps share
+their times and `compare` matches them exactly. Without it the rows of a time
+which only one dump has are compared by interpolation, which on the steps of a
+real model resolves about 1e-4 to 1e-3 (unresolved arrays are reported, not
+passed); a migration compare therefore dumps both models with the same grid.
 
 `--root` is the directory which is put first on the python path, e.g. a checkout
 of the repository of the model, so that its packages are imported. `--model` is
@@ -105,6 +113,7 @@ if TYPE_CHECKING:
     from sbmlsim.fit import FitData, FitMapping
     from sbmlsim.fit.cli import FitDefinition
     from sbmlsim.plot import Figure
+    from sbmlsim.simulation import Scan, Simulation
 
 ROOT_HELP = (
     "directory put first on the python path, e.g. a checkout of the repository "
@@ -184,6 +193,9 @@ class Dump(TypedDict):
     #: (`pkpdsim.experiment.PKPDSimulationExperiment.sex_of`), of the
     #: experiments of pkpdsim (since the builds per sex)
     builds: NotRequired[dict[str, dict[str, str]]]
+    #: the intervals of the common output grid of every simulation (`--grid`),
+    #: missing for the steps of the integrator
+    grid: NotRequired[int]
 
 
 # --- the experiments of a model -------------------------------------------------
@@ -436,6 +448,72 @@ def mapping_range(
         return f"{type(err).__name__}: {err}"
 
 
+def _time_number(time: object, time_unit: str | None) -> float:
+    """Get a time of a simulation as a number in its time unit."""
+    magnitude = getattr(time, "magnitude", None)
+    if magnitude is None:
+        return float(time)  # ty: ignore[invalid-argument-type]
+    if time_unit:
+        return float(time.m_as(time_unit))  # ty: ignore[unresolved-attribute]
+    return float(magnitude)
+
+
+def on_grid(simulation: Simulation | Scan, n: int) -> Simulation | Scan:
+    """Get a simulation with a common fixed output grid (`dump --grid`).
+
+    The output times are `n + 1` equidistant times from the start to the end
+    of the simulation and the times of its changes (and of the dimensions of a
+    scan with a time), in the time unit of the simulation; the steps or times
+    of the simulation are replaced, everything else stays. The output of the
+    integrator differs between two runs whose model or tolerances differ;
+    on this grid both dumps of a compare have the same times, which are
+    matched exactly, without interpolation, so a compare resolves its
+    threshold (a migration compare dumps both models with `--grid`).
+
+    Args:
+        simulation: the simulation or the scan.
+        n: the number of intervals of the grid.
+
+    Returns:
+        The simulation or the scan on the grid, a new object.
+    """
+    from sbmlsim.simulation import Scan, Simulation
+
+    if isinstance(simulation, Scan):
+        at = [d.at for d in simulation.dimensions if d.at is not None]
+        base = _on_grid(simulation.simulation, n, at)
+        return Scan(simulation=base, dimensions=simulation.dimensions)
+    assert isinstance(simulation, Simulation)
+    return _on_grid(simulation, n, [])
+
+
+def _on_grid(simulation: Simulation, n: int, at: Sequence[object]) -> Simulation:
+    """Put a simulation on a grid, see `on_grid`."""
+    from sbmlsim.simulation import Simulation
+
+    unit = simulation.time_unit
+    start = _time_number(simulation.start, unit)
+    end = _time_number(simulation.end, unit)
+    changes = [t for change in simulation.changes for t in change.times]
+    times = {float(t) for t in np.linspace(start, end, n + 1)}
+    times |= {
+        t for t in (_time_number(x, unit) for x in [*changes, *at]) if start <= t <= end
+    }
+    return Simulation(
+        time_unit=unit,
+        start=simulation.start,
+        end=simulation.end,
+        preinit_changes={
+            **simulation.preinit_changes,
+            **simulation.uncertain_preinit,
+        },
+        changes=list(simulation.changes),
+        presimulation=simulation.presimulation,
+        times=sorted(times),
+        time_shift=simulation.time_shift,
+    )
+
+
 def dump(args: argparse.Namespace) -> int:
     """Run the experiments of a model and store everything in a pickle."""
     root = Path(args.root).resolve()
@@ -511,6 +589,8 @@ def dump(args: argparse.Namespace) -> int:
         },
         builds={},
     )
+    if args.grid is not None:
+        result["grid"] = args.grid
     for cls in classes:
         try:
             runner = ExperimentRunner(
@@ -527,6 +607,12 @@ def dump(args: argparse.Namespace) -> int:
                 jit_optimization=info.jit_optimization,
             )
             for sid, experiment in runner.experiments.items():
+                if args.grid is not None:
+                    # a common output grid instead of the steps of the integrator
+                    experiment._simulations = {
+                        key: on_grid(simulation, args.grid)
+                        for key, simulation in experiment._simulations.items()
+                    }
                 experiment.run(
                     runner.simulator,
                     output_path=None,
@@ -1919,6 +2005,15 @@ def compare(args: argparse.Namespace) -> int:
     if len(builds) == 2:
         parts["builds"] = (_flat(old, "builds"), _flat(new, "builds"))
     expected = _Expected(renames.get("expected", {}))
+    grids = [dump_.get("grid") for dump_ in (old, new)]
+    if any(g is not None for g in grids):
+        print(
+            "grid: "
+            + ", ".join(
+                f"{label} {'the steps of the integrator' if g is None else g}"
+                for label, g in zip(("old", "new"), grids, strict=True)
+            )
+        )
     for label, dump_ in (("old", old), ("new", new)):
         if versions := dump_.get("versions"):
             print(
@@ -2671,6 +2766,16 @@ def parser() -> argparse.ArgumentParser:
         action="store_true",
         help="only the selections the experiments need, as a run of the model does",
     )
+    s.add_argument(
+        "--grid",
+        type=_positive_int,
+        default=None,
+        metavar="N",
+        help="output every simulation at N + 1 equidistant times from its start to "
+        "its end and the times of its changes instead of the steps of the "
+        "integrator, so two dumps share their times; a migration compare dumps "
+        "both models with the same grid",
+    )
     s.add_argument("experiments", nargs="*", help="only these experiment classes")
 
     s = command("compare", compare, "compare two dumps")
@@ -2735,6 +2840,14 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("old")
     s.add_argument("new")
     return p
+
+
+def _positive_int(text: str) -> int:
+    """Parse a positive integer of the command line."""
+    value = int(text)
+    if value < 1:
+        raise argparse.ArgumentTypeError(f"a positive number, not {text}")
+    return value
 
 
 def verify(args: Sequence[str] | None = None) -> int:
