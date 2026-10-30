@@ -193,8 +193,10 @@ def unbound_fraction_notes(s: Substance) -> str:
     """Get the notes of the fraction unbound in plasma of a substance.
 
     The notes say what `unbound_fraction` gives: the reference fraction scaled
-    with the binding under impairment, the reference fraction itself where no
-    factor applies (an unknown protein without the CKD factor), or no binding.
+    with the binding protein under impairment, scaled with the binding
+    capacity of chronic kidney disease alone (an unknown protein with the CKD
+    factor), the reference fraction itself where no factor applies (an
+    unknown protein without the CKD factor), or no binding.
 
     Args:
         s: the substance.
@@ -212,6 +214,13 @@ def unbound_fraction_notes(s: Substance) -> str:
             "Fraction unbound in plasma of the individual: equal to the reference "
             "fraction, no impairment factor applies (the binding protein is "
             "unknown and the binding has no CKD factor)."
+        )
+    if s.binding.protein == "unknown":
+        return (
+            "Fraction unbound in plasma of the individual: the reference fraction "
+            "scaled with the binding capacity of the plasma proteins in chronic "
+            "kidney disease, no factor of a binding protein applies (the binding "
+            "protein is unknown; McNamara 2002, `pkpdsim.pbpk.impairment`)."
         )
     return (
         "Fraction unbound in plasma of the individual: the reference fraction "

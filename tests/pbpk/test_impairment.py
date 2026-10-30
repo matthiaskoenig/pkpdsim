@@ -229,23 +229,33 @@ def test_the_notes_of_an_unbound_fraction_without_factor(tmp_path: Path) -> None
     """The notes of fu without a factor say it is fu_ref, not a scaling.
 
     An unknown protein without the CKD factor leaves no factor (fu is fu_ref),
-    a protein or the CKD factor scales fu under impairment, no binding is
-    named as such; the built model carries the notes.
+    an unknown protein with the CKD factor is scaled with the binding
+    capacity of CKD alone, a known protein scales fu under impairment, no
+    binding is named as such; the built model carries the notes.
     """
     none = Substance(sid="x", name="x", mr=300.0, binding=Binding(0.4, ckd=False))
-    scaled = Substance(sid="y", name="y", mr=300.0, binding=Binding(0.4))
+    ckd = Substance(sid="y", name="y", mr=300.0, binding=Binding(0.4))
+    scaled = Substance(
+        sid="w", name="w", mr=300.0, binding=Binding(0.4, protein="albumin")
+    )
     free = Substance(sid="z", name="z", mr=300.0)
     assert unbound_fraction_notes(none) == (
         "Fraction unbound in plasma of the individual: equal to the reference "
         "fraction, no impairment factor applies (the binding protein is "
         "unknown and the binding has no CKD factor)."
     )
+    assert unbound_fraction_notes(ckd) == (
+        "Fraction unbound in plasma of the individual: the reference fraction "
+        "scaled with the binding capacity of the plasma proteins in chronic "
+        "kidney disease, no factor of a binding protein applies (the binding "
+        "protein is unknown; McNamara 2002, `pkpdsim.pbpk.impairment`)."
+    )
     assert "scaled with the binding protein" in unbound_fraction_notes(scaled)
     assert "does not bind" in unbound_fraction_notes(free)
-    d = PBPKDefinition(sid="fu_notes", substances=[none, scaled, free])
+    d = PBPKDefinition(sid="fu_notes", substances=[none, ckd, scaled, free])
     path = build(d, tmp_path).flat_path
     model = libsbml.readSBMLFromFile(str(path)).getModel()
-    for s in (none, scaled, free):
+    for s in (none, ckd, scaled, free):
         root = ElementTree.fromstring(
             model.getParameter(ids.fu(s.sid)).getNotesString()
         )
