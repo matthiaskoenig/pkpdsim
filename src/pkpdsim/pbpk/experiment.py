@@ -38,13 +38,17 @@ from __future__ import annotations
 
 import functools
 import math
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, ClassVar, override
+from typing import TYPE_CHECKING, ClassVar, overload, override
 
 from sbmlsim import Q
 from sbmlsim.model import AbstractModel
+from sbmlsim.simulation import Change, Scan, Simulation, SteadyState
+from sbmlsim.simulation.scan import DimensionKind
+from sbmlsim.uncertainty import Uncertain
+from sbmlsim.units import Quantity
 
 from pkpdsim import impairment
 from pkpdsim.experiment import PKPDSimulationExperiment
@@ -61,9 +65,12 @@ from pkpdsim.pbpk.values import number, unit_text
 from pkpdsim.sex import Sex
 
 if TYPE_CHECKING:
-    from sbmlsim.units import Quantity
-
     from pkpdsim.pbpk.definition import PBPKDefinition
+
+#: the absolute and the relative tolerance of the rates of change (per minute)
+#: and the longest time (minutes) of the equilibration of a condition, see
+#: `PBPKSimulationExperiment.equilibrated`
+EQUILIBRATION_TOLERANCES: tuple[float, float, float] = (1e-12, 1e-10, 1e14)
 
 #: the healthy GFR the presets of `pkpdsim.impairment` are relative to [ml/min];
 #: import it from `pkpdsim.pbpk` (`from pkpdsim.pbpk import REFERENCE_GFR`), the
@@ -405,6 +412,158 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
             err.add_note(f"The experiment '{self.sid}' cannot be initialized.")
             raise
 
+    @overload
+    def equilibrated(
+        self,
+        simulation: Simulation,
+        *,
+        resets: Mapping[str, Quantity | float] | None = None,
+        model: str = "model",
+        absolute_tolerance: float = EQUILIBRATION_TOLERANCES[0],
+        relative_tolerance: float = EQUILIBRATION_TOLERANCES[1],
+        max_time: float = EQUILIBRATION_TOLERANCES[2],
+    ) -> Simulation: ...
+
+    @overload
+    def equilibrated(
+        self,
+        simulation: Scan,
+        *,
+        resets: Mapping[str, Quantity | float] | None = None,
+        model: str = "model",
+        absolute_tolerance: float = EQUILIBRATION_TOLERANCES[0],
+        relative_tolerance: float = EQUILIBRATION_TOLERANCES[1],
+        max_time: float = EQUILIBRATION_TOLERANCES[2],
+    ) -> Scan: ...
+
+    def equilibrated(
+        self,
+        simulation: Simulation | Scan,
+        *,
+        resets: Mapping[str, Quantity | float] | None = None,
+        model: str = "model",
+        absolute_tolerance: float = EQUILIBRATION_TOLERANCES[0],
+        relative_tolerance: float = EQUILIBRATION_TOLERANCES[1],
+        max_time: float = EQUILIBRATION_TOLERANCES[2],
+    ) -> Simulation | Scan:
+        """Get a simulation which starts from the drug-free steady state of its condition.
+
+        The state of a model at its start is the steady state of the healthy
+        reference individual; a condition of the simulation (an impairment, a
+        covariate, a PD component with a homeostasis) moves a slow state away
+        from it, which a study measures as the basal state of its subjects
+        before the first dose. The simulation equilibrates first: the
+        presimulation of sbmlsim (`SteadyState`) integrates the model with the
+        changes before the initialization of the simulation, the condition,
+        without the doses until the rates of change are within the
+        tolerances, and the simulation starts from that state.
+
+        - The doses of the changes before the initialization, the dose
+          states and infusion rates of the library (`PODOSE_<s>`,
+          `IVDOSE_<s>`, `SOLDOSE_<s>`, `Ri_<s>`), are given by a change at
+          the start instead, after the equilibration; the doses of the changes
+          at later times stay. A dose of zero moves as well, so a dimension of
+          a scan over it replaces it at the start.
+        - The sinks, whose amounts grow without a steady state (the urine and
+          the feces of the library, `Aurine_<s>`, `Afeces_<s>`, and what a PD
+          component accumulates, `resets`), are set back at the start: they
+          are in steady state when their rate is within the tolerances
+          relative to their amount, which they reach as well.
+
+        The presimulation is the choice over a hidden pre-run of a duration
+        from a negative start (tested on a homeostasis of 7 days: the pre-run
+        of 28 days leaves it 1.8 % off the steady state, the presimulation is
+        exact), and its default tolerances are tighter than those of sbmlsim:
+        the rates are per minute, the time unit of the model, so the relative
+        tolerance of sbmlsim, 1e-6, stops a homeostasis of 7 days 5e-5 off;
+        at 1e-10 a sink reaches the tolerance after 1e10 minutes, within
+        `max_time`.
+
+        Every point of a scan equilibrates in its own condition; a dimension
+        over a dose which the simulation does not give is refused (it would
+        be a dose before the equilibration). The changes of a fit (the fitted
+        parameters) and of a run over the draws of the fitted parameters are
+        changes before the initialization as well, so they apply during the
+        equilibration. The simulation runs on the build of its sex as every
+        simulation of the experiment; the builds have the same ids.
+
+        Args:
+            simulation: the simulation or the scan, in the condition.
+            resets: the values at the start of the further states which grow
+                without a steady state, e.g. the urine of a PD component.
+            model: the key of the loaded model whose ids are read, see
+                `add_doses`.
+            absolute_tolerance: the absolute tolerance of the rates of the
+                equilibration (per minute).
+            relative_tolerance: the relative tolerance of the rates.
+            max_time: the longest equilibration (minutes).
+
+        Returns:
+            The equilibrated simulation or scan, a new object.
+
+        Raises:
+            ValueError: if the model is not loaded, the simulation has a
+                presimulation, a dose is set before the initialization and by a
+                change at the start, or a dimension of a scan sets a dose which
+                the simulation does not give or varies simulations.
+        """
+        loaded = self._models.get(model)
+        symbols = getattr(loaded, "symbols", None)
+        if symbols is None:
+            raise ValueError(
+                f"The model '{model}' of the experiment '{self.sid}' is not loaded: "
+                "the equilibration is created in `simulations()` or later."
+            )
+        dose_prefixes = tuple(
+            f("") for f in (ids.po_dose, ids.iv_dose, ids.sol_dose, ids.infusion_rate)
+        )
+        sink_prefixes = (ids.urine(""), ids.feces(""))
+        sinks = sorted(s for s in symbols.species if s.startswith(sink_prefixes))
+        if isinstance(simulation, Scan):
+            base = _equilibrated(
+                simulation.simulation,
+                dose_prefixes,
+                sinks,
+                resets,
+                SteadyState(
+                    absolute_tolerance=absolute_tolerance,
+                    relative_tolerance=relative_tolerance,
+                    max_time=max_time,
+                ),
+            )
+            given = {target for change in base.changes for target in change.values}
+            for dimension in simulation.dimensions:
+                if dimension.kind != DimensionKind.VALUES:
+                    raise ValueError(
+                        f"The dimension '{dimension.id}' varies {dimension.kind}: "
+                        "equilibrate every simulation of it instead."
+                    )
+                missing = sorted(
+                    target
+                    for target in dimension.values
+                    if target.startswith(dose_prefixes)
+                    and dimension.at is None
+                    and target not in given
+                )
+                if missing:
+                    raise ValueError(
+                        f"The dimension '{dimension.id}' sets the doses {missing}, "
+                        "which the simulation does not give: they would be doses "
+                        "before the equilibration; give them in the simulation."
+                    )
+            return Scan(simulation=base, dimensions=simulation.dimensions)
+        return _equilibrated(
+            simulation,
+            dose_prefixes,
+            sinks,
+            resets,
+            SteadyState(
+                absolute_tolerance=absolute_tolerance,
+                relative_tolerance=relative_tolerance,
+                max_time=max_time,
+            ),
+        )
+
     def _check_kidney_outflow(self) -> None:
         """Check the kidney outflow of every individual the experiment simulates.
 
@@ -629,6 +788,71 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
         if Sex(sex) == Sex(cls.sex) or not isinstance(renal_map, ScaledRenalMap):
             return renal_map
         return renal_map.of_sex(sex)
+
+
+def _equilibrated(
+    simulation: Simulation,
+    dose_prefixes: tuple[str, ...],
+    sinks: Sequence[str],
+    resets: Mapping[str, Quantity | float] | None,
+    steady_state: SteadyState,
+) -> Simulation:
+    """Equilibrate a simulation, see `PBPKSimulationExperiment.equilibrated`.
+
+    Raises:
+        ValueError: for a simulation with a presimulation or a dose before the
+            initialization and in a change at the start.
+    """
+    if simulation.presimulation is not None:
+        raise ValueError(
+            "The simulation has a presimulation already; it is equilibrated once."
+        )
+    preinit = {**simulation.preinit_changes, **simulation.uncertain_preinit}
+    doses = {k: v for k, v in preinit.items() if k.startswith(dose_prefixes)}
+    condition = {k: v for k, v in preinit.items() if k not in doses}
+    start = simulation.start
+    at_start = {
+        target
+        for change in simulation.changes
+        if any(
+            math.isclose(
+                _minutes(simulation, t), _minutes(simulation, start), abs_tol=1e-12
+            )
+            for t in change.times
+        )
+        for target in change.values
+    }
+    twice = sorted(set(doses) & at_start)
+    if twice:
+        raise ValueError(
+            f"The doses {twice} are set before the initialization and by a change at "
+            "its start; give each dose once, the equilibration moves the doses "
+            "before the initialization to the start."
+        )
+    values: dict[str, float | Quantity | str | Uncertain] = {
+        **doses,
+        **dict.fromkeys(sinks, 0.0),
+        **(resets or {}),
+    }
+    return Simulation(
+        time_unit=simulation.time_unit,
+        start=start,
+        end=simulation.end,
+        preinit_changes=condition,
+        changes=[Change(start, values), *simulation.changes],
+        presimulation=steady_state,
+        times=None if simulation.times is None else list(simulation.times),
+        steps=simulation.steps,
+        time_shift=simulation.time_shift,
+    )
+
+
+def _minutes(simulation: Simulation, time: object) -> float:
+    """Get a time of a simulation as a number in its time unit."""
+    if isinstance(time, Quantity):
+        unit = simulation.time_unit
+        return float(time.m_as(unit) if unit else time.magnitude)
+    return float(time)  # ty: ignore[invalid-argument-type]
 
 
 def _model_path(model: AbstractModel | Path | str | None) -> Path | None:
