@@ -46,7 +46,7 @@ segment:
 
 import math
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, NamedTuple
 
 from sbmlutils.factory import (
     AssignmentRule,
@@ -76,7 +76,6 @@ __all__ = [
     "WeibullDissolution",
     "dissolution_inputs",
     "dissolution_rate",
-    "dissolution_reads_fed",
     "is_weibull",
     "route_objects",
 ]
@@ -188,6 +187,97 @@ def _formulation(route: Route) -> Formulation:
     return FirstOrderDissolution(k=value("routes", "oral", "Ka_dis"))
 
 
+class _DissolutionParameter(NamedTuple):
+    """A parameter of the dissolution of a tablet: the one place of its name."""
+
+    pid: str
+    value: Q
+    unit: UnitDefinition
+    name: str
+    notes: str
+
+
+def _dissolution_table(route: Route) -> list[_DissolutionParameter]:
+    """The parameters of the dissolution of a tablet with their values and texts."""
+    s = route.substance
+    f = _formulation(route)
+    P = _DissolutionParameter
+    if isinstance(f, WeibullDissolution):
+        return [
+            P(
+                ids.dissolution_t50(s),
+                f.t50,
+                U.min,
+                f"time of half dissolution {s} [min]",
+                "Weibull dissolution: the time of half dissolution after the lag time.",
+            ),
+            P(
+                ids.dissolution_shape(s),
+                f.shape,
+                U.dimensionless,
+                f"dissolution shape {s}",
+                "Weibull dissolution: the shape (1 is a first order dissolution).",
+            ),
+            P(
+                ids.dissolution_lag(s),
+                f.lag,
+                U.min,
+                f"dissolution lag time {s} [min]",
+                "Weibull dissolution: the time after the dose before the tablet "
+                "dissolves.",
+            ),
+        ]
+    table = [
+        P(
+            ids.dissolution(s),
+            f.k,
+            U.per_hr,
+            f"dissolution rate {s} [1/hr]",
+            "First order dissolution of the undissolved drug in every segment of "
+            "the intestine."
+            if isinstance(f, FirstOrderDissolution)
+            else "Dissolution rate of a small undissolved amount; it saturates "
+            "with the undissolved amount.",
+        )
+    ]
+    if isinstance(f, DoseDependentDissolution):
+        table.append(
+            P(
+                ids.dissolution_dose50(s),
+                f.dose50,
+                U.mg,
+                f"undissolved amount of half the dissolution rate {s} [mg]",
+                "The dissolution rate is `Ka_dis*D50/(D50 + D)` with the "
+                "undissolved amount `D`.",
+            )
+        )
+    if isinstance(f, FirstOrderDissolution):
+        if f.fed is not None:
+            table.append(
+                P(
+                    ids.dissolution_fed_factor(s),
+                    f.fed,
+                    U.dimensionless,
+                    f"dissolution factor fed {s}",
+                    "Factor of the dissolution rate in the fed state: the rate is "
+                    "`Ka_dis*(1 + FED*(f_dis_fed - 1))`.",
+                )
+            )
+        if f.release is not None:
+            table.append(
+                P(
+                    ids.dissolution_release_factor(s),
+                    f.release,
+                    U.dimensionless,
+                    f"dissolution factor release {s}",
+                    "Factor of the dissolution rate of a modified-release "
+                    "formulation (1 is the immediate-release tablet); the "
+                    "experiments of such a formulation set it.",
+                )
+            )
+    return table
+
+
 def dissolution_inputs(route: Route) -> list[tuple[str, UnitDefinition, str]]:
     """Get the parameters of the top model which the dissolution of a tablet reads.
 
@@ -197,43 +287,7 @@ def dissolution_inputs(route: Route) -> list[tuple[str, UnitDefinition, str]]:
     Returns:
         (id, unit, name) of every parameter of the formulation.
     """
-    s = route.substance
-    f = _formulation(route)
-    if isinstance(f, WeibullDissolution):
-        return [
-            (ids.dissolution_t50(s), U.min, f"time of half dissolution {s} [min]"),
-            (ids.dissolution_shape(s), U.dimensionless, f"dissolution shape {s}"),
-            (ids.dissolution_lag(s), U.min, f"dissolution lag time {s} [min]"),
-        ]
-    pars = [(ids.dissolution(s), U.per_hr, f"dissolution rate {s} [1/hr]")]
-    if isinstance(f, DoseDependentDissolution):
-        pars.append(
-            (
-                ids.dissolution_dose50(s),
-                U.mg,
-                f"undissolved amount of half the dissolution rate {s} [mg]",
-            )
-        )
-    if isinstance(f, FirstOrderDissolution):
-        if f.fed is not None:
-            pars.append(_fed_input(s))
-        if f.release is not None:
-            pars.append(_release_input(s))
-    return pars
-
-
-def _fed_input(s: str) -> tuple[str, UnitDefinition, str]:
-    """The input of the factor of the fed state."""
-    return ids.dissolution_fed_factor(s), U.dimensionless, f"dissolution factor fed {s}"
-
-
-def _release_input(s: str) -> tuple[str, UnitDefinition, str]:
-    """The input of the factor of the modified-release formulation."""
-    return (
-        ids.dissolution_release_factor(s),
-        U.dimensionless,
-        f"dissolution factor release {s}",
-    )
+    return [(p.pid, p.unit, p.name) for p in _dissolution_table(route)]
 
 
 def dissolution_reads_fed(route: Route) -> bool:
@@ -335,89 +389,10 @@ def _formulation_parameters(route: Route) -> list[Sbase]:
 
 def _dissolution_parameters(route: Route) -> list[Parameter]:
     """The parameters of the dissolution of a tablet, not annotated."""
-    s = route.substance
-    f = _formulation(route)
-    if isinstance(f, WeibullDissolution):
-        return [
-            value_parameter(
-                ids.dissolution_t50(s),
-                f.t50,
-                U.min,
-                f"time of half dissolution {s} [min]",
-                _SBO_PARAMETER,
-                "Weibull dissolution: the time of half dissolution after the lag time.",
-            ),
-            value_parameter(
-                ids.dissolution_shape(s),
-                f.shape,
-                U.dimensionless,
-                f"dissolution shape {s}",
-                _SBO_PARAMETER,
-                "Weibull dissolution: the shape (1 is a first order dissolution).",
-            ),
-            value_parameter(
-                ids.dissolution_lag(s),
-                f.lag,
-                U.min,
-                f"dissolution lag time {s} [min]",
-                _SBO_PARAMETER,
-                "Weibull dissolution: the time after the dose before the tablet "
-                "dissolves.",
-            ),
-        ]
-    pars: list[Parameter] = [
-        value_parameter(
-            ids.dissolution(s),
-            f.k,
-            U.per_hr,
-            f"dissolution rate {s} [1/hr]",
-            _SBO_PARAMETER,
-            "First order dissolution of the undissolved drug in every segment of "
-            "the intestine."
-            if isinstance(f, FirstOrderDissolution)
-            else "Dissolution rate of a small undissolved amount; it saturates "
-            "with the undissolved amount.",
-        )
+    return [
+        value_parameter(p.pid, p.value, p.unit, p.name, _SBO_PARAMETER, p.notes)
+        for p in _dissolution_table(route)
     ]
-    if isinstance(f, DoseDependentDissolution):
-        pars.append(
-            value_parameter(
-                ids.dissolution_dose50(s),
-                f.dose50,
-                U.mg,
-                f"undissolved amount of half the dissolution rate {s} [mg]",
-                _SBO_PARAMETER,
-                "The dissolution rate is `Ka_dis*D50/(D50 + D)` with the "
-                "undissolved amount `D`.",
-            )
-        )
-    if isinstance(f, FirstOrderDissolution):
-        if f.fed is not None:
-            pars.append(
-                value_parameter(
-                    ids.dissolution_fed_factor(s),
-                    f.fed,
-                    U.dimensionless,
-                    f"dissolution factor fed {s}",
-                    _SBO_PARAMETER,
-                    "Factor of the dissolution rate in the fed state: the rate is "
-                    "`Ka_dis*(1 + FED*(f_dis_fed - 1))`.",
-                )
-            )
-        if f.release is not None:
-            pars.append(
-                value_parameter(
-                    ids.dissolution_release_factor(s),
-                    f.release,
-                    U.dimensionless,
-                    f"dissolution factor release {s}",
-                    _SBO_PARAMETER,
-                    "Factor of the dissolution rate of a modified-release "
-                    "formulation (1 is the immediate-release tablet); the "
-                    "experiments of such a formulation set it.",
-                )
-            )
-    return pars
 
 
 def _dose(pid: str, name: str, text: str) -> Parameter:
