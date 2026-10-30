@@ -122,6 +122,7 @@ from pkpdsim.pbpk.routes import ORAL, route_objects
 from pkpdsim.pbpk.sinks import sink_objects
 from pkpdsim.pbpk.stationary import (
     SteadyPlan,
+    check_built,
     organ_exports,
     pool_start,
     solved_baseline,
@@ -1370,6 +1371,8 @@ def build(definition: PBPKDefinition, output_dir: Path) -> BuildResult:
         raise ValueError(
             f"The flat model '{flat_path}' has {validation.error_count} SBML errors."
         )
+    # a generated steady state which loads slowly or does not balance
+    check_built(steady_plan(definition), flat_path)
     return BuildResult(comp_path=comp_path, flat_path=flat_path)
 
 

@@ -30,15 +30,18 @@ from pkpdsim.pbpk import (
     Erythrocytes,
     Excretion,
     FirstOrder,
+    Formula,
     Kp,
     Membrane,
     Metabolism,
     Mode,
+    ModelParameter,
     Organ,
     Part,
     PBPKDefinition,
     PDComponent,
     Route,
+    SlowPool,
     Substance,
     Transport,
     U,
@@ -397,6 +400,73 @@ def nephron_reference_definition() -> PBPKDefinition:
     )
 
 
+def endogenous_reference_definition() -> PBPKDefinition:
+    """The definition of the stored endogenous reference: the starts at the equilibrium with the baseline.
+
+    Three substances with a baseline and no declared steady state: `end` in
+    the merged tissue, filtered, produced by an undeclared custom reaction of
+    the muscle, with a slow pool of the muscle, taken up from the lumen into
+    the mucosa (an apical influx) and given orally, with a start of the
+    definition; `kin` in the full form with kinetic erythrocytes; `prf`
+    flow-limited; the zonated liver and the nephron kidney. The stored comp
+    and flat SBML were built at pkpdsim 87a5e79, before the generated steady
+    state refactored the starts (the `Start` records of `_defer_start`, the
+    zones of the starts, the inputs of the custom reactions).
+    """
+    return PBPKDefinition(
+        sid="endogenous_reference",
+        substances=[
+            Substance(
+                "end",
+                name="endogenous substance",
+                mr=113.0,
+                binding=Binding(fu=0.5, protein="albumin"),
+                distribution=Kp(0.6, ftissue=6.0, overrides={Organ.MUSCLE: 0.8}),
+                excretion=Excretion(urine=True, fraction_reabsorbed=0.1),
+                baseline=0.02,
+            ),
+            Substance(
+                "kin",
+                name="kinetic substance",
+                mr=150.0,
+                erythrocytes=Erythrocytes("kinetic", kbc=2.0, k_exchange=1.0),
+                distribution=Kp(2.0, mode=Mode.PERMEABILITY, ftissue=1.0),
+                baseline=0.01,
+            ),
+            Substance(
+                "prf",
+                name="flow-limited substance",
+                mr=200.0,
+                distribution=Kp(1.5, mode=Mode.PERFUSION),
+                excretion=Excretion(urine=True),
+                baseline=0.005,
+            ),
+        ],
+        chemistry=[
+            CustomReaction(
+                "PROD",
+                Organ.MUSCLE,
+                Part.TISSUE,
+                "-> Cti_end",
+                "k_prod",
+            ),
+            Transport(
+                "ENDABS",
+                Organ.SMALL_INTESTINE,
+                "end",
+                Direction.INFLUX,
+                Membrane.APICAL,
+                MM(vmax=1e-3, km=0.1),
+            ),
+        ],
+        parameters=[ModelParameter("k_prod", 0.001, U.mmole_per_min)],
+        slow_pools=[SlowPool("end", frozenset({Organ.MUSCLE}), k=0.001, kp=2.0)],
+        variants=Variants(organs={Organ.LIVER: "zonated", Organ.KIDNEY: "nephron"}),
+        routes=[Route.oral("end")],
+        starts={"MU__Cpl_end": Formula("2 dimensionless * baseline_end", U.mM)},
+    )
+
+
 def dateless(text: str) -> list[str]:
     """The lines of an SBML text without the dates of the model history."""
     return [line for line in text.splitlines() if not _DATE.search(line)]
@@ -407,8 +477,9 @@ def assert_reference_sbml(result: BuildResult) -> None:
 
     The order of the elements counts. The references are
     `tests/pbpk/data/<file>.gz` (`gzip -n`): `reference_definition()` built
-    at f008d56, `chemistry_reference_definition()` at 0c538ca and
-    `nephron_reference_definition()` at 311895c; a change of the library
+    at f008d56, `chemistry_reference_definition()` at 0c538ca,
+    `nephron_reference_definition()` at 311895c and
+    `endogenous_reference_definition()` at 87a5e79; a change of the library
     which changes the SBML of every model on purpose rebuilds them and says
     so.
     """

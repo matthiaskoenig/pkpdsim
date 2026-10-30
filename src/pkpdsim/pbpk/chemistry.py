@@ -249,13 +249,16 @@ class Transport:
 class Saturable:
     """A Michaelis-Menten rate of a plasma species, `vmax*C/(km + C)`.
 
-    As the steady state of a custom reaction (`CustomReaction.stationary`):
-    its rate law is the saturable rate of the plasma species of its
-    substrate `C`, so its organ starts at the root of a quadratic; the
-    formulas are formulas of the organ, as the rate law (the elements of the
-    organ, the parameters of the reaction, constants of the top model). As an
-    argument of the formulas of `pkpdsim.pbpk.steady_state` (a saturable
-    secretion of the kidney plasma) the formulas read ids of the top model.
+    The formulas have two scopes, by where the class is used:
+
+    - the steady state of a custom reaction (`CustomReaction.stationary`):
+      its rate law is the saturable rate of the plasma species of its
+      substrate `C`, so its organ starts at the root of a quadratic; the
+      formulas read the ids of the organ, as the rate law (`Vti`, the
+      parameters of the reaction) and constants of the top model;
+    - an argument of the formulas of `pkpdsim.pbpk.steady_state` (a saturable
+      secretion of the kidney plasma, which a model writes into a parameter
+      of the definition): the formulas read the ids of the top model only.
 
     Attributes:
         vmax: the capacity of the whole organ (mmole/min), a formula.

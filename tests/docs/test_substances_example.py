@@ -125,7 +125,14 @@ def test_the_generated_example_is_stationary(
     r.integrator.relative_tolerance = 1e-13
     sids = [s for s in r.model.getFloatingSpeciesIds() if not s.startswith("A")]
     start = np.array([r[f"[{s}]"] for s in sids])
-    values = np.asarray(r.simulate(0, DAY, 9, selections=[f"[{s}]" for s in sids]))
+    selections = [f"[{s}]" for s in sids]
+    # densely in the first hour, where a wrong start of a fast part relaxes
+    values = np.vstack(
+        [
+            np.asarray(r.simulate(0, 60, 61, selections=selections)),
+            np.asarray(r.simulate(60, DAY, 24, selections=selections)),
+        ]
+    )
     scale = np.where(start > 0, start, 1.0)
     drift = np.max(np.abs(values - start), axis=0) / scale
     assert drift.max() < 1e-12, dict(zip(sids, drift, strict=True))

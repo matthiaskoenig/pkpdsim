@@ -60,8 +60,11 @@ substance a saturable process outside the systemic organs, two saturable
 processes or no elimination.
 """
 
+import warnings
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+from functools import cache
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import libsbml
@@ -90,10 +93,15 @@ if TYPE_CHECKING:
     from pkpdsim.pbpk.definition import PBPKDefinition
 
 __all__ = [
+    "BASELINE_SIZE_LIMIT",
+    "IMBALANCE_LIMIT",
     "OrganSteady",
     "SteadyPlan",
+    "SteadyStateWarning",
     "SteadyValue",
     "carrier",
+    "check_built",
+    "expanded_size",
     "linear_clearance",
     "organ_exports",
     "plasma_start",
@@ -235,7 +243,11 @@ def reduced(steady: OrganSteady, ps_fu: str | None, kp: str | None) -> tuple[str
     cl_ti = terms(*steady.clearances.get(Part.TISSUE, ()))
     if cl_ti == "0":
         return cl_pl, terms(r_pl, r_ti)
-    assert ps_fu is not None and kp is not None
+    if ps_fu is None or kp is None:
+        raise ValueError(
+            "A declared clearance of the tissue needs the merged tissue (its "
+            "exchange and Kp)."
+        )
     # the exchange and the clearance of the tissue in series, each read once
     # (roadrunner inlines every initial assignment a start reads)
     cleared = f"{ONE} / ({ONE} / ({kp} * ({cl_ti})) + {ONE} / ({ps_fu}))"
@@ -297,7 +309,10 @@ def tissue_start(
     """
     if rate == "0" and clearance == "0":
         return f"{kp} * {plasma}"
-    assert ps_fu is not None
+    if ps_fu is None:
+        raise ValueError(
+            "A declared process of the tissue needs the merged tissue (its exchange)."
+        )
     if clearance == "0":
         return f"{kp} * ({plasma} + ({rate}) / ({ps_fu}))"
     passed = terms(f"{ps_fu} * {plasma}", rate)
@@ -320,7 +335,9 @@ def _path(node: libsbml.ASTNode, name: str) -> list[list[int]]:
 def _linear_path(node: libsbml.ASTNode, path: Sequence[int]) -> bool:
     """Whether the ancestors of an occurrence keep the formula linear in it.
 
-    A product, the numerator of a quotient and a negation keep it linear.
+    A product and the numerator of a quotient keep it linear; a negation
+    is refused (a negative clearance is a production, `linear` is a
+    clearance of its substrate).
     """
     for k in path:
         kind = node.getType()
@@ -329,8 +346,6 @@ def _linear_path(node: libsbml.ASTNode, path: Sequence[int]) -> bool:
         elif kind == libsbml.AST_DIVIDE:
             if k != 0:
                 return False
-        elif kind == libsbml.AST_MINUS and node.getNumChildren() == 1:
-            pass
         else:
             return False
         node = node.getChild(k)
@@ -340,8 +355,8 @@ def _linear_path(node: libsbml.ASTNode, path: Sequence[int]) -> bool:
 def linear_clearance(formula: str, species: str) -> str | None:
     """Get the clearance of a rate law which is linear in a species.
 
-    The rate law `k*C` (a product with the species as one factor, the
-    numerator of a quotient, negated) with the species `C` once: the
+    The rate law `k*C` (a product with the species as one factor, or the
+    numerator of a quotient) with the species `C` once: the
     clearance is the rate law without the factor, `k` (l/min for a rate in
     mmole/min of a concentration in mM).
 
@@ -351,8 +366,8 @@ def linear_clearance(formula: str, species: str) -> str | None:
 
     Returns:
         The clearance, `None` if the rate law is not linear in the species
-        (it reads it more than once, in a sum, a denominator or a function,
-        or not at all).
+        (it reads it more than once, in a sum, a denominator, a function or
+        a negation, or not at all).
     """
     ast = libsbml.parseL3Formula(formula)
     if ast is None:
@@ -547,6 +562,11 @@ def _declared(
             )
     if problems:
         return problems
+    parts = [
+        (sid, nu, sub, place)
+        for sid, nu, sub, place in moved
+        if isinstance(place, Part)
+    ]
 
     def reads(expression: str, what: str) -> set[str]:
         """The substances whose species an expression reads, refusing the moved ones."""
@@ -563,12 +583,16 @@ def _declared(
     s = p.stationary
     if isinstance(s, Formula):
         others = reads(s.expression, "stationary formula")
-        for _, nu, sub, place in moved:
-            assert isinstance(place, Part)
+        for _, nu, sub, place in parts:
             collector.source(p.organ, sub, place, _times(nu, s.expression))
             depends[sub] |= others
         return problems
-    reactants = [(sid, nu, sub, place) for sid, nu, sub, place in moved if nu < 0]
+    if s != LINEAR and not isinstance(s, Saturable):
+        return [
+            f"{where}: stationary is a {type(s).__name__}, not a Formula, 'linear' "
+            "or a Saturable"
+        ]
+    reactants = [m for m in parts if m[1] < 0]
     if len(reactants) != 1:
         problems.append(
             f"{where}: a {'linear' if s == LINEAR else 'saturable'} steady state "
@@ -576,8 +600,7 @@ def _declared(
         )
         return problems
     substrate, nu, sub, place = reactants[0]
-    assert isinstance(place, Part)
-    products = [m for m in moved if m[1] > 0]
+    products = [m for m in parts if m[1] > 0]
     for sid, _, other, _ in products:
         if other == sub:
             problems.append(
@@ -599,7 +622,6 @@ def _declared(
         collector.clearance(p.organ, sub, place, _times(-nu, clearance))
         rate = f"({clearance}) * {substrate}"
     else:
-        assert isinstance(s, Saturable)
         if place is not Part.PLASMA:
             return [
                 f"{where}: a saturable steady state is a rate of the plasma, the "
@@ -621,7 +643,6 @@ def _declared(
         rate = f"({s.vmax}) * {substrate} / ({s.km} + {substrate})"
     depends[sub] |= others
     for _, nu_p, other, part in products:
-        assert isinstance(part, Part)
         collector.source(p.organ, other, part, _times(nu_p, rate))
         depends[other] |= {sub} | others
     return problems
@@ -966,7 +987,8 @@ def solved_baseline(
     ]
     if k is None:
         return values, f"{rate_id} / {cl_id}"
-    assert saturable is not None and k.vmax is not None and k.km is not None
+    if saturable is None or k.vmax is None or k.km is None:
+        raise RuntimeError(f"{sid}: the saturable organ of the solve has no constants.")
     r = k.leaving
     total = f"{cl_id} + {k.flow}"
     # `a*C + S(C) = d` of the organ, times `(CLss + F_k)/R_k`: the form which
@@ -1075,3 +1097,122 @@ def pool_start(
         removed.append(f"-({rate})")
     flow = f"{ids.organ_flow(Organ.LUNG)} * {carrier(s)}"
     return f"{car} + ({terms(*removed)}) / ({flow})"
+
+
+# --- the checks of the built model ---------------------------------------------
+
+BASELINE_SIZE_LIMIT = 20_000
+"""The expanded size (nodes) of a solved baseline above which the build warns.
+
+roadrunner inlines every initial assignment a start reads, without
+memoizing it: every species of the substance compiles a copy of the
+expanded baseline (a parameter in between is inlined as well, it is no
+cheaper). The baseline of creatinine expands to about 3,800 nodes (the model
+about 220,000, 4 s at LLJIT O0); a solved saturable process of a body which
+also eliminates in the liver and a portal organ reached 31,000 nodes and
+1.2 million in the model (37 s at O0)."""
+
+IMBALANCE_LIMIT = 1e-9
+"""The relative rate (1/min) of the venous pool of a pinned substance at the
+start above which the build warns that its declared rates do not balance at
+its baseline; a balanced start is stationary to the rounding (about 1e-16)."""
+
+
+class SteadyStateWarning(UserWarning):
+    """A generated steady state which loads slowly or does not balance."""
+
+
+def expanded_size(model: libsbml.Model, sid: str) -> int:
+    """Get the size of the expanded initial value of an id (nodes of its math tree).
+
+    Every id the math reads which has an initial assignment or an assignment
+    rule is replaced by its own expanded math, as roadrunner compiles it;
+    every other id and number counts one.
+
+    Args:
+        model: the flat model.
+        sid: the id.
+
+    Returns:
+        The number of nodes.
+    """
+    maths = {a.getSymbol(): a.getMath() for a in model.getListOfInitialAssignments()}
+    maths |= {
+        r.getVariable(): r.getMath()
+        for r in model.getListOfRules()
+        if r.isAssignment() and r.getVariable() not in maths
+    }
+
+    @cache
+    def size(x: str) -> int:
+        ast = maths.get(x)
+        if ast is None:
+            return 1
+        total, stack = 0, [ast]
+        while stack:
+            node = stack.pop()
+            total += size(node.getName()) if node.getType() == libsbml.AST_NAME else 1
+            stack.extend(node.getChild(k) for k in range(node.getNumChildren()))
+        return total
+
+    return size(sid)
+
+
+def check_built(plan: SteadyPlan, flat_path: Path) -> None:
+    """Warn about a generated steady state of a built model which loads slowly or does not balance.
+
+    A solved baseline whose expansion exceeds `BASELINE_SIZE_LIMIT`: every
+    start reads it, give the substance a baseline (pinned) or fewer declared
+    organs. A pinned substance whose venous pool moves at the start of the
+    reference individual (`IMBALANCE_LIMIT`): its declared rates do not
+    balance at its baseline by the net rate of the venous pool (mmole/min),
+    the model derives the rate which closes the balance (e.g. a supply) from
+    the baseline (the formulas of `pkpdsim.pbpk.steady_state`).
+
+    Args:
+        plan: the plan of the definition.
+        flat_path: the flat model.
+
+    Warns:
+        SteadyStateWarning: naming the substance and the size or the imbalance.
+    """
+    if not plan.substances:
+        return
+    model = libsbml.readSBMLFromFile(str(flat_path)).getModel()
+    for sid in sorted(plan.solved):
+        n = expanded_size(model, ids.baseline(sid))
+        if n > BASELINE_SIZE_LIMIT:
+            warnings.warn(
+                f"{sid}: the solved baseline expands to {n} nodes (above "
+                f"{BASELINE_SIZE_LIMIT}); roadrunner compiles a copy into every "
+                "start of the substance, the model loads slowly. Give the "
+                "substance a baseline (pinned) or declare fewer organs.",
+                SteadyStateWarning,
+                stacklevel=3,
+            )
+    if not plan.pinned:
+        return
+    # a factory without pinned substances loads no simulator
+    import roadrunner
+
+    options = roadrunner.LoadSBMLOptions()
+    options.setLLVMBackend(roadrunner.LoadSBMLOptions.LLJIT)
+    options.setLLJitOptimizationLevel(roadrunner.LoadSBMLOptions.NONE)
+    r = roadrunner.RoadRunner(str(flat_path), options)
+    rates = list(r.getRatesOfChange())
+    state = {r.model.getStateVectorId(i): rates[i] for i in range(len(rates))}
+    for sid in sorted(plan.pinned):
+        venous = ids.pool_species(Pool.VENOUS, sid)
+        amount = r.model[venous]
+        rate = state.get(venous, 0.0)
+        relative = abs(rate) / amount if amount > 0 else abs(rate)
+        if relative > IMBALANCE_LIMIT:
+            warnings.warn(
+                f"{sid}: the declared rates do not balance at the baseline: the "
+                f"venous pool changes by {rate:.4g} mmole/min ({relative:.3g} of "
+                "its amount per minute) at the start of the reference individual. "
+                "Derive the rate which closes the balance (e.g. a supply) from "
+                "the baseline (`pkpdsim.pbpk.steady_state`).",
+                SteadyStateWarning,
+                stacklevel=3,
+            )

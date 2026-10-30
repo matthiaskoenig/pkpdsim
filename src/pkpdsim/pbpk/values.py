@@ -74,6 +74,14 @@ class Formula:
     the simulation). The unit is the unit of the parameter, it is not inferred
     from the formula.
 
+    One exception reads the ids of an organ instead: the steady state of a
+    custom reaction (`CustomReaction.stationary`) is a `Formula` of the
+    organ, as its rate law, over the elements of the organ (`Vti`, the
+    parameters of the reaction, species of other substances at their start)
+    and constants of the top model; every other `Formula` (a value, a
+    parameter of the definition, a start of `PBPKDefinition.starts`, a
+    baseline) reads the ids of the top model only.
+
     Attributes:
         expression: the formula (SBML L3 infix), e.g. `Kp_gli` or
             `ftissue_gli * fu_ref_gli / fu_ref_gli_m1`.

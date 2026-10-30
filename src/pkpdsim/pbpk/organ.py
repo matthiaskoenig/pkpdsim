@@ -1199,7 +1199,11 @@ class StandardBuilder(OrganBuilder):
         steady = self._steady(s)
         if steady is None:
             return inflow
-        assert zone is None, "a custom reaction of a zonated organ"
+        if zone is not None:
+            raise ValueError(
+                f"{s.sid}: a declared process of the zonated organ "
+                f"'{self.organ.value}', which refuses custom reactions."
+            )
         parts = self.ctx.parts[s.sid]
         carrier = (
             self._bp(s) if parts.flow_carrier == "blood_bp" else f"({ONE} - {self.hct})"
@@ -1264,8 +1268,7 @@ class StandardBuilder(OrganBuilder):
         ):
             ps_fu, kp = self._steady_exchange(s)
             clearance, rate = reduced(steady, ps_fu, kp)
-            plan = self.ctx.steady
-            assert plan is not None
+            plan = self.ctx.steady or SteadyPlan()
             exports = organ_exports(plan, self.organ, sid)
             texts = {
                 cl_id: (
@@ -1327,7 +1330,10 @@ class StandardBuilder(OrganBuilder):
         (`pkpdsim.pbpk.stationary.tissue_start`).
         """
         kp = self._kp(s)
-        assert kp is not None
+        if kp is None:
+            raise ValueError(
+                f"{s.sid}: no tissue in the organ '{self.organ.value}' to start."
+            )
         plasma = ids.species(Part.PLASMA, s.sid, zone)
         steady = self._steady(s)
         rate = terms(*steady.sources.get(Part.TISSUE, ())) if steady else "0"

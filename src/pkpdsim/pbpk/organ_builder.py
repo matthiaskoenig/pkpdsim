@@ -128,9 +128,6 @@ COMPARTMENT_KINDS = {
 """The kind (`pkpdsim.pbpk.annotation`) of the compartment of a part of an organ."""
 
 
-"""The parts of a pool in names."""
-
-
 def stationary_ids(p: CustomReaction) -> set[str]:
     """Get the ids which the declared steady state of a custom reaction reads.
 
