@@ -750,12 +750,17 @@ class _Figure:
             bottom = lumen_top + self._draw_row(
                 rows["lumen"], _MX0, lumen_top, _MX1, lumen_cx, "pkf-lum"
             )
-            x = _PX0 + 24
-            c.arrow(x, lumen_top, x, y)
-            c.text(
-                x + 10, _baseline(y + 5, _SMALL), "absorption", "pkf-s pkf-dim", _SMALL
-            )
             if any(r.kind != "iv" for r in self.d.routes):
+                # only a substance with an oral route is absorbed (`ka_<s>`)
+                x = _PX0 + 24
+                c.arrow(x, lumen_top, x, y)
+                c.text(
+                    x + 10,
+                    _baseline(y + 5, _SMALL),
+                    "absorption",
+                    "pkf-s pkf-dim",
+                    _SMALL,
+                )
                 c.text(_PAD, _baseline(lumen_top + _VPAD, _SIZE), "oral")
                 mid = lumen_top + _VPAD + _LINE / 2
                 c.arrow(_PAD + _width("oral", _SIZE) + 6, mid, _MX0, mid)

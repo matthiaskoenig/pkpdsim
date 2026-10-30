@@ -379,3 +379,19 @@ def test_the_archive_carries_the_figure(tmp_path: Path) -> None:
     )
     assert "simple_svg" not in results
     assert not (plain / "models" / "simple.svg").exists()
+
+
+def test_without_an_oral_route_the_lumen_absorbs_nothing(tmp_path: Path) -> None:
+    """The lumen of a model without an oral route has no absorption and no oral arrow.
+
+    A substance without an oral route has `ka_<s> = 0`; the lumen only
+    carries the bile to the feces.
+    """
+    path = model_figure(definition(routes=[Route.iv("drg")]), tmp_path / "iv.svg")
+    texts = [label.text for label in _parse(path)[1]]
+    assert "lumen" in texts
+    assert "absorption" not in texts
+    assert "oral" not in texts
+    path = model_figure(definition(), tmp_path / "oral.svg")
+    texts = [label.text for label in _parse(path)[1]]
+    assert {"absorption", "oral"} <= set(texts)
