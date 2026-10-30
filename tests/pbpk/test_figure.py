@@ -6,6 +6,7 @@ overlapping. A label is a box from its position, its font size and the
 width of a character of the monospace fonts of the figure (`CHAR_WIDTH`).
 """
 
+import dataclasses
 from pathlib import Path
 from typing import NamedTuple
 from xml.etree import ElementTree
@@ -225,14 +226,36 @@ def _overlap(a: Label, b: Label) -> bool:
     return a.x0 < b.x1 and b.x0 < a.x1 and a.y0 < b.y1 and b.y0 < a.y1
 
 
+def _reabsorbed() -> PBPKDefinition:
+    """The drug given iv, its metabolite excreted into the bile and reabsorbed."""
+    bile = Transport(
+        "MBILE",
+        Organ.LIVER,
+        "drg_m",
+        Direction.EFFLUX,
+        Membrane.APICAL,
+        MM(vmax=1e-3, km=0.1),
+    )
+    return definition(
+        sid="reabsorbed",
+        routes=[Route.iv("drg")],
+        chemistry=[*definition().chemistry, bile],
+        variants=Variants(
+            {Organ.SMALL_INTESTINE: SegmentedIntestine(ka={"drg_m": 1.0})}
+        ),
+    )
+
+
 def _definitions() -> dict[str, PBPKDefinition]:
     """The definitions of the figure tests by id.
 
     The simple definition (segmented intestine, iv and oral), the seven
     substances, the single lumen with an oral route only, and the standard
-    intestine without a lumen (small and large intestine as organs).
+    intestine without a lumen (small and large intestine as organs), the
+    reabsorption after the bile (bile and absorption arrows).
     """
     return {
+        "reabsorbed": _reabsorbed(),
         "simple": definition(),
         "seven": seven_substances(),
         "single": definition(
@@ -248,7 +271,7 @@ def _definitions() -> dict[str, PBPKDefinition]:
     }
 
 
-@pytest.fixture(params=["simple", "seven", "single", "standard"])
+@pytest.fixture(params=["simple", "seven", "single", "standard", "reabsorbed"])
 def figure(
     request: pytest.FixtureRequest, tmp_path: Path
 ) -> tuple[PBPKDefinition, Path]:
@@ -347,7 +370,7 @@ def test_the_figure_shows_the_processes_and_routes(tmp_path: Path) -> None:
         "nephron",
         "12 segments",
         "cr -> crtn in st",
-        "into the intestinal wall: api, keto, cr (regional absorption)",
+        "into the intestinal wall: api (colon factor), keto, cr",
         "bile into du: api_m7",
         "iv: api",
         "inhibits CYP3A4 (competitive)",
@@ -384,16 +407,137 @@ def test_the_archive_carries_the_figure(tmp_path: Path) -> None:
 
 
 def test_without_an_oral_route_the_lumen_absorbs_nothing(tmp_path: Path) -> None:
-    """The lumen of a model without an oral route has no absorption and no oral arrow.
+    """The lumen of a model without an oral route and `ka` has no absorption.
 
     A substance without an oral route has `ka_<s> = 0`; the lumen only
     carries the bile to the feces.
     """
-    path = model_figure(definition(routes=[Route.iv("drg")]), tmp_path / "iv.svg")
-    texts = [label.text for label in _parse(path)[1]]
-    assert "lumen" in texts
-    assert "absorption" not in texts
+    bile = Transport(
+        "MBILE",
+        Organ.LIVER,
+        "drg_m",
+        Direction.EFFLUX,
+        Membrane.APICAL,
+        MM(vmax=1e-3, km=0.1),
+    )
+    d = definition(routes=[Route.iv("drg")], chemistry=[*definition().chemistry, bile])
+    texts = _texts(model_figure(d, tmp_path / "iv.svg"))
+    assert {"lumen", "bile", "BIL"} <= set(texts)
+    assert not {"absorption", "oral", "ABS"} & set(texts)
+    texts = _texts(model_figure(definition(), tmp_path / "oral.svg"))
+    assert {"absorption", "oral", "ABS"} <= set(texts)
+    assert "bile" not in texts
+
+
+def _texts(path: Path) -> list[str]:
+    """The texts of the labels of a figure."""
+    return [label.text for label in _parse(path)[1]]
+
+
+def test_the_reabsorption_after_the_bile_is_drawn(tmp_path: Path) -> None:
+    """A substance which a model reabsorbs after its biliary excretion is absorbed.
+
+    Given iv only, the metabolite goes into the bile (an apical efflux of the
+    liver) and `SegmentedIntestine(ka={...})` reabsorbs it (enterohepatic
+    circulation): the absorption, the bile and their arrows are drawn, as the
+    build has `ka_drg_m` (the rules of `luminal_substances`,
+    `bile_substances` and `absorbed_substances`).
+    """
+    d = _reabsorbed()
+    d.validate()
+    path = model_figure(d, tmp_path / "ehc.svg")
+    texts = _texts(path)
+    assert "into the intestinal wall: drg_m" in texts
+    assert {"ABS", "BIL", "absorption", "bile"} <= set(texts)
     assert "oral" not in texts
-    path = model_figure(definition(), tmp_path / "oral.svg")
-    texts = [label.text for label in _parse(path)[1]]
-    assert {"absorption", "oral"} <= set(texts)
+    root, _ = _parse(path)
+    assert len(list(root.iter(f"{SVG}polyline"))) == 1
+
+
+def test_a_custom_bile_reaction_and_an_intestinal_influx_are_drawn(
+    tmp_path: Path,
+) -> None:
+    """A custom reaction into the bile and an influx of the intestine reach the lumen."""
+    custom = CustomReaction(
+        "DRGBILE",
+        Organ.LIVER,
+        Part.TISSUE,
+        "Cti_drg -> Cbile_drg",
+        "k_bile * Cti_drg",
+    )
+    influx = Transport(
+        "MABS",
+        Organ.SMALL_INTESTINE,
+        "drg_m",
+        Direction.INFLUX,
+        Membrane.APICAL,
+        MM(vmax=1e-3, km=0.1),
+        protein="SLC6A8",
+    )
+    d = definition(
+        routes=[Route.iv("drg")],
+        chemistry=[*definition().chemistry, custom, influx],
+        parameters=[ModelParameter("k_bile", 1e-3, U.l_per_min)],
+    )
+    texts = _texts(model_figure(d, tmp_path / "custom.svg"))
+    assert "DRGBILE: Cti_drg -> Cbile_drg" in texts
+    assert "MABS: drg_m lumen -> cell by SLC6A8 (Michaelis-Menten)" in texts
+    assert "bile into du: drg" in texts
+    assert "from the last segment: drg, drg_m" in texts
+    assert "ABS" not in texts
+
+
+def test_the_options_of_the_absorption_are_per_substance(tmp_path: Path) -> None:
+    """`fabs` of one substance is named for that substance only (creatinine)."""
+    d = definition(
+        routes=[Route.oral_solution("drg"), Route.oral_solution("drg_m")],
+        variants=Variants(
+            {
+                Organ.SMALL_INTESTINE: SegmentedIntestine(
+                    fabs={"drg_m": 0.5}, f_ka_colon={"drg": 0.2}
+                )
+            }
+        ),
+    )
+    texts = _texts(model_figure(d, tmp_path / "options.svg"))
+    assert (
+        "into the intestinal wall: drg (colon factor), drg_m (fraction absorbed)"
+        in texts
+    )
+
+
+def test_a_lumen_which_nothing_reaches_is_not_drawn(tmp_path: Path) -> None:
+    """Without an oral route, bile or transport of the intestine there is no lumen."""
+    texts = _texts(
+        model_figure(definition(routes=[Route.iv("drg")]), tmp_path / "a.svg")
+    )
+    assert "lumen" not in texts
+    assert "intestine si la" in texts
+
+
+def test_the_text_of_the_legend_and_the_processes(tmp_path: Path) -> None:
+    """Legend dots (not the chips of the key), the distribution and a custom equation."""
+    drug = dataclasses.replace(
+        definition().substances[0],
+        distribution=Kp(
+            2.0,
+            ftissue=1.0,
+            organs=frozenset({Organ.LIVER, Organ.MUSCLE}),
+            overrides={Organ.MUSCLE: 3.0},
+            ps={Organ.LIVER: 40.0},
+        ),
+    )
+    source = CustomReaction("SRC", Organ.LIVER, Part.TISSUE, " -> Cti_drg", "k_src")
+    d = definition(
+        substances=[drug, definition().substances[1]],
+        chemistry=[*definition().chemistry, source],
+        parameters=[ModelParameter("k_src", 1e-6, U.mmole_per_min)],
+    )
+    path = model_figure(d, tmp_path / "legend.svg")
+    text = " ".join(_texts(path))
+    assert (
+        "Kp, tissue exchange, in li, mu only, own Kp in mu, own exchange in li" in text
+    )
+    assert "SRC: -> Cti_drg" in text
+    root, _ = _parse(path)
+    assert len(list(root.iter(f"{SVG}circle"))) == len(d.substances)

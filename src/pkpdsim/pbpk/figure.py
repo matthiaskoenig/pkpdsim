@@ -30,11 +30,12 @@ instead of running out of its box.
 """
 
 import textwrap
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from xml.sax.saxutils import escape
 
+from pkpdsim.pbpk import ids
 from pkpdsim.pbpk.chemistry import (
     MM,
     CustomReaction,
@@ -58,6 +59,7 @@ from pkpdsim.pbpk.routes import (
 from pkpdsim.pbpk.substance import Kp, KpMethod, Mode, Substance
 from pkpdsim.pbpk.values import number
 from pkpdsim.pbpk.variants import DEFAULTS, lookup
+from pkpdsim.pbpk.variants.gut import bile_substances, luminal_substances, wall_parts
 from pkpdsim.pbpk.variants.intestine import SegmentedIntestine, SingleLumen
 from pkpdsim.pbpk.variants.kidney_nephron import NephronKidney
 from pkpdsim.pbpk.variants.liver_zonated import ZonatedLiver
@@ -227,6 +229,20 @@ class _Canvas:
             f'y2="{_f(y2)}" marker-end="url(#pkf-arrow)"/>'
         )
 
+    def dot(self, x: float, y: float, color: str) -> None:
+        """Draw a dot of a color, centred at the point."""
+        self.elements.append(
+            f'<circle cx="{_f(x)}" cy="{_f(y)}" r="5" style="fill:{color}"/>'
+        )
+
+    def bend(self, points: Sequence[tuple[float, float]]) -> None:
+        """Draw an arrow along the points, ending at the last one."""
+        coordinates = " ".join(f"{_f(x)},{_f(y)}" for x, y in points)
+        self.elements.append(
+            f'<polyline class="pkf-line" points="{coordinates}" '
+            'marker-end="url(#pkf-arrow)"/>'
+        )
+
     def open(self, cls: str) -> None:
         """Open a group of a box and its labels."""
         self.elements.append(f'<g class="{cls}">')
@@ -305,6 +321,20 @@ class _Figure:
             )
         gut = self.components[Organ.SMALL_INTESTINE]
         self.gut = gut if isinstance(gut, SegmentedIntestine | SingleLumen) else None
+        order = [s.sid for s in definition.substances]
+        if self.gut is not None:
+            reach = luminal_substances(
+                definition.substances,
+                definition.chemistry,
+                definition.routes,
+                self.gut.conversions,
+            )
+            bile = bile_substances(definition.substances, definition.chemistry)
+            self.luminal = [sid for sid in order if sid in reach]
+            self.bile = [sid for sid in order if sid in bile]
+            self.absorbed = self.gut.absorption(definition)
+        else:
+            self.luminal, self.bile, self.absorbed = [], [], {}
         self.canvas = _Canvas()
         self.codes: set[str] = set()
 
@@ -326,11 +356,17 @@ class _Figure:
 
     def _chips(self, organ: Organ) -> list[tuple[str, str, bool]]:
         """The chips of the substances in an organ: id, color, enters the tissue."""
+        wall = self.gut is not None and organ in self.gut.replaces
         return [
             (
                 s.sid,
                 self.colors[s.sid],
-                parts_for(s, organ, self.d.chemistry).tissue != "none",
+                (
+                    wall_parts(s, self.d.chemistry)
+                    if wall
+                    else parts_for(s, organ, self.d.chemistry)
+                ).tissue
+                != "none",
             )
             for s in self.d.substances
         ]
@@ -378,7 +414,7 @@ class _Figure:
                 "TRA",
                 f"{p.sid}: {p.substance} {way}{carrier} ({self._kinetics(p.kinetics)})",
             )
-        return "CUS", f"{p.sid}: {p.equation}"
+        return "CUS", f"{p.sid}: {' '.join(p.equation.split())}"
 
     def _organ_lines(self, organs: Sequence[Organ]) -> list[tuple[str, str]]:
         """The badges and texts of the processes of organs."""
@@ -419,33 +455,14 @@ class _Figure:
             self._organ_lines(organs),
         )
 
-    def _lumen_substances(self) -> list[str]:
-        """The substances which reach the lumen, in the order of the definition."""
-        reach = {r.substance for r in self.d.routes if r.kind != "iv"}
-        reach |= {
-            p.substance
-            for p in self.d.chemistry
-            if isinstance(p, Transport)
-            and p.membrane is Membrane.APICAL
-            and p.direction is Direction.EFFLUX
-            and p.organ in (Organ.LIVER, Organ.SMALL_INTESTINE, Organ.LARGE_INTESTINE)
-        }
-        conversions = self.gut.conversions if self.gut is not None else ()
-        changed = True
-        while changed:
-            changed = False
-            for c in conversions:
-                if c.substrate in reach and c.product not in reach:
-                    reach.add(c.product)
-                    changed = True
-        return [s.sid for s in self.d.substances if s.sid in reach]
+    def _lumen_row(self, gut: SegmentedIntestine | SingleLumen) -> _Row:
+        """The row of the lumen: the segments, the routes and the fluxes.
 
-    def _lumen_row(self) -> _Row:
-        """The row of the lumen: the segments, the routes and the fluxes."""
-        assert self.gut is not None
-        if isinstance(self.gut, SegmentedIntestine):
-            from pkpdsim.pbpk import ids
-
+        Which substance reaches the lumen, is excreted into the bile and is
+        absorbed are the rules of the build (`luminal_substances`,
+        `bile_substances`, the `absorption` of the intestine variant).
+        """
+        if isinstance(gut, SegmentedIntestine):
             segments = [*ids.GUT_SEGMENTS]
         else:
             segments = ["lumen"]
@@ -456,37 +473,20 @@ class _Figure:
                 lines.append(("ORL", f"tablet {r.substance} ({_dissolution(r)})"))
             elif r.kind == "oral_solution":
                 lines.append(("ORL", f"solution {r.substance}"))
-        oral = list(dict.fromkeys(r.substance for r in self.d.routes if r.kind != "iv"))
-        if oral:
-            options = []
-            if self.gut.fabs is not None:
-                options.append("fraction absorbed")
-            if isinstance(self.gut, SegmentedIntestine) and (
-                self.gut.f_ka_colon is not None or self.gut.regional is not None
-            ):
-                options.append("regional absorption")
-            how = f" ({', '.join(options)})" if options else ""
-            lines.append(("ABS", "into the intestinal wall: " + ", ".join(oral) + how))
-        bile = [
-            p.substance
-            for p in self.d.chemistry
-            if isinstance(p, Transport)
-            and p.organ is Organ.LIVER
-            and p.membrane is Membrane.APICAL
-            and p.direction is Direction.EFFLUX
-        ]
-        if bile:
+        if self.absorbed:
+            absorbed = [
+                f"{sid} ({', '.join(options)})" if options else sid
+                for sid, options in self.absorbed.items()
+            ]
+            lines.append(("ABS", "into the intestinal wall: " + ", ".join(absorbed)))
+        if self.bile:
             entry = segments[1] if len(segments) > 1 else segments[0]
-            lines.append(
-                ("BIL", f"bile into {entry}: " + ", ".join(dict.fromkeys(bile)))
-            )
-        for c in self.gut.conversions:
+            lines.append(("BIL", f"bile into {entry}: " + ", ".join(self.bile)))
+        for c in gut.conversions:
             lines.append(
                 ("CNV", f"{c.substrate} -> {c.product} in {', '.join(c.segments)}")
             )
-        lumen = self._lumen_substances()
-        if lumen:
-            lines.append(("FEC", "from the last segment: " + ", ".join(lumen)))
+        lines.append(("FEC", "from the last segment: " + ", ".join(self.luminal)))
         title = f"{len(segments)} segments" if len(segments) > 1 else "one segment"
         return _Row(["lumen", title], chips, lines, chain=True)
 
@@ -503,13 +503,21 @@ class _Figure:
         if s.erythrocytes is not None:
             parts.append(f"erythrocytes ({s.erythrocytes.mode})")
         dist = s.distribution
-        if isinstance(dist, Kp):
-            if dist.interstitial is not None:
-                parts.append("extracellular (interstitial share)")
+        if dist is not None:
+            if isinstance(dist, KpMethod):
+                kind = f"Kp of {dist.method}"
+            elif dist.interstitial is not None:
+                kind = "extracellular (interstitial share)"
             else:
-                parts.append(f"Kp, {_mode(dist.mode)}")
-        elif isinstance(dist, KpMethod):
-            parts.append(f"Kp of {dist.method}, {_mode(dist.mode)}")
+                kind = "Kp"
+            words = [kind, _mode(dist.mode)]
+            if dist.organs is not None:
+                words.append(f"in {_organs(dist.organs)} only")
+            if isinstance(dist, Kp) and dist.overrides:
+                words.append(f"own Kp in {_organs(dist.overrides)}")
+            if dist.ps:
+                words.append(f"own exchange in {_organs(dist.ps)}")
+            parts.append(", ".join(words))
         if s.baseline is not None:
             parts.append("endogenous (baseline)")
         for i in s.inhibits:
@@ -554,10 +562,12 @@ class _Figure:
         y += 6
         c.text(_PAD, _baseline(y, _SIZE), "substances", "pkf-b")
         y += _LINE
-        chip_w = max((_tag_width(s.sid) for s in d.substances), default=0.0)
-        x_text = _PAD + chip_w + 10
+        # a dot of the color of the substance, not a chip of the key
+        sid_w = max((_width(s.sid, _SIZE) for s in d.substances), default=0.0)
+        x_text = _PAD + 16 + sid_w + 12
         for s in d.substances:
-            c.chip(_PAD, y, s.sid, self.colors[s.sid], tissue=True)
+            c.dot(_PAD + 5, y + _LINE / 2, self.colors[s.sid])
+            c.text(_PAD + 16, _baseline(y, _SIZE), s.sid, "pkf-b")
             y = self._paragraph(x_text, y, self._details(s))
         y = self._paragraph(_PAD, y + 4, self._route_text())
         for pd in d.pd:
@@ -677,14 +687,21 @@ class _Figure:
         self.codes = {code for row in rows.values() for code, _ in row.lines}
         y = self._legend(_PAD)
         y = self._key(y)
-        titles = [
-            line
-            for key, row in rows.items()
-            if key != "lumen"
-            for line in row.title[:1]
-        ]
-        title_w = max(_width(t, _SIZE) for t in titles) + 30
-        cx = max(_PX0 + title_w, _MX0 + 210.0)
+        circulation = {
+            Organ.LUNG.value,
+            *(o.value for o in _SYSTEMIC),
+            Organ.LIVER.value,
+        }
+
+        def chips_x(x0: float, keys: Iterable[str]) -> float:
+            """The column of the chips of rows: after their longest title."""
+            return x0 + max(_width(t, _SIZE) for k in keys for t in rows[k].title) + 30
+
+        portal = [k for k in rows if k not in circulation and k != "lumen"]
+        columns_x = {
+            **dict.fromkeys(circulation, chips_x(_MX0, circulation)),
+            **dict.fromkeys(portal, chips_x(_PX0, portal)),
+        }
         ve0, ve1 = _PAD, _PAD + _COLUMN
         ar0 = WIDTH - _PAD - _COLUMN
 
@@ -703,7 +720,7 @@ class _Figure:
         rows_top = body_top + 2 * _LINE + 14
 
         def place(key: str, x0: float, top: float, cls: str = "pkf-org") -> float:
-            return top + self._draw_row(rows[key], x0, top, _MX1, cx, cls)
+            return top + self._draw_row(rows[key], x0, top, _MX1, columns_x[key], cls)
 
         # the lung between the venous and the arterial blood
         bottom = place(Organ.LUNG.value, _MX0, rows_top)
@@ -719,7 +736,6 @@ class _Figure:
             top = bottom + _GAP
         venous_bottom = bottom
         # the portal vein from the organs of the portal circulation into the liver
-        portal = [k for k in rows if k in {o.value for o in _PORTAL} or k == "gu"]
         bar_top = venous_bottom + 24
         top = bar_top
         last = top
@@ -758,8 +774,9 @@ class _Figure:
             bottom = lumen_top + self._draw_row(
                 rows["lumen"], _MX0, lumen_top, _MX1, lumen_cx, "pkf-lum"
             )
-            if any(r.kind != "iv" for r in self.d.routes):
-                # only a substance with an oral route is absorbed (`ka_<s>`)
+            if self.absorbed:
+                # the absorption of `ka_<s>`: the oral substances and those a
+                # model reabsorbs after their biliary excretion
                 x = _PX0 + 24
                 c.arrow(x, lumen_top, x, y)
                 c.text(
@@ -769,9 +786,28 @@ class _Figure:
                     "pkf-s pkf-dim",
                     _SMALL,
                 )
+            if any(r.kind != "iv" for r in self.d.routes):
                 c.text(_PAD, _baseline(lumen_top + _VPAD, _SIZE), "oral")
                 mid = lumen_top + _VPAD + _LINE / 2
                 c.arrow(_PAD + _width("oral", _SIZE) + 6, mid, _MX0, mid)
+            if self.bile:
+                # the bile duct from the liver into the lumen, left of the
+                # portal vein, crossing no other arrow
+                channel = (ve1 + _MX0) / 2
+                below = y + 12
+                c.bend(
+                    [
+                        (_MX0 + 12, venous_bottom),
+                        (_MX0 + 12, venous_bottom + 10),
+                        (channel, venous_bottom + 10),
+                        (channel, below),
+                        (_MX0 + 40, below),
+                        (_MX0 + 40, lumen_top),
+                    ]
+                )
+                c.text(
+                    _MX0 + 48, _baseline(y + 5, _SMALL), "bile", "pkf-s pkf-dim", _SMALL
+                )
             y = bottom
         height = y + _PAD
         return "\n".join(
@@ -823,8 +859,9 @@ class _Figure:
                     rows["gu"] = self._row(list(self.gut.replaces), "intestine")
                 continue
             rows[o.value] = self._row([o], names[o])
-        if self.gut is not None:
-            rows["lumen"] = self._lumen_row()
+        if self.gut is not None and self.luminal:
+            # a lumen which no substance reaches is not drawn
+            rows["lumen"] = self._lumen_row(self.gut)
         return rows
 
 
@@ -835,6 +872,12 @@ def _mode(mode: Mode) -> str:
         Mode.PERFUSION: "perfusion-limited",
         Mode.PERMEABILITY: "permeability-limited",
     }.get(mode, str(mode))
+
+
+def _organs(organs: Iterable[Organ]) -> str:
+    """The ids of organs in the order of `Organ`."""
+    chosen = set(organs)
+    return ", ".join(o.value for o in Organ if o in chosen)
 
 
 def _dissolution(route: Route) -> str:
