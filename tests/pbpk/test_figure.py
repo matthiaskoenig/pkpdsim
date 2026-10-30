@@ -172,7 +172,8 @@ def seven_substances() -> PBPKDefinition:
                 Organ.LIVER: "zonated",
                 Organ.KIDNEY: "nephron",
                 Organ.SMALL_INTESTINE: SegmentedIntestine(
-                    conversions=[LumenConversion("cr", "crtn", 0.5, ["st"])]
+                    f_ka_colon={"api": 0.1},
+                    conversions=[LumenConversion("cr", "crtn", 0.5, ["st"])],
                 ),
             }
         ),
@@ -346,6 +347,7 @@ def test_the_figure_shows_the_processes_and_routes(tmp_path: Path) -> None:
         "nephron",
         "12 segments",
         "cr -> crtn in st",
+        "into the intestinal wall: api, keto, cr (regional absorption)",
         "bile into du: api_m7",
         "iv: api",
         "inhibits CYP3A4 (competitive)",

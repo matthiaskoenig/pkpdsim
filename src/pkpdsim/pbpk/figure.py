@@ -458,7 +458,15 @@ class _Figure:
                 lines.append(("ORL", f"solution {r.substance}"))
         oral = list(dict.fromkeys(r.substance for r in self.d.routes if r.kind != "iv"))
         if oral:
-            lines.append(("ABS", "into the intestinal wall: " + ", ".join(oral)))
+            options = []
+            if self.gut.fabs is not None:
+                options.append("fraction absorbed")
+            if isinstance(self.gut, SegmentedIntestine) and (
+                self.gut.f_ka_colon is not None or self.gut.regional is not None
+            ):
+                options.append("regional absorption")
+            how = f" ({', '.join(options)})" if options else ""
+            lines.append(("ABS", "into the intestinal wall: " + ", ".join(oral) + how))
         bile = [
             p.substance
             for p in self.d.chemistry
