@@ -6,7 +6,7 @@ organ of small and large intestine, the lumen that of `LumenBuilder`, the
 mucosa and the chemistry of the small intestine are placed here.
 """
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import replace
 
 from sbmlutils.factory import ModelDefinition, Reaction
@@ -36,7 +36,7 @@ from pkpdsim.pbpk.placement import (
     stoichiometry,
     with_modifiers,
 )
-from pkpdsim.pbpk.routes import ORAL
+from pkpdsim.pbpk.routes import ORAL, Route
 from pkpdsim.pbpk.substance import Kp, Substance
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import Value
@@ -44,7 +44,14 @@ from pkpdsim.pbpk.variants.gut_lumen import LumenBuilder
 from pkpdsim.pbpk.variants.lumen_options import LumenConversion, converted
 from pkpdsim.pbpk.variants.segments import DATA, Segment
 
-__all__ = ["GUT_ORGANS", "GutBuilder"]
+__all__ = [
+    "GUT_ORGANS",
+    "GutBuilder",
+    "bile_substances",
+    "gut_chemistry",
+    "luminal_substances",
+    "wall_parts",
+]
 
 GUT_ORGANS = (Organ.SMALL_INTESTINE, Organ.LARGE_INTESTINE)
 """The organs the intestine variants replace."""
@@ -65,12 +72,19 @@ _TISSUE = {
 """The parts of the wall the mucosa is carved out of, in names."""
 
 
-def _gut_chemistry(
-    ctx: OrganContext,
+def gut_chemistry(
+    chemistry: Sequence[Metabolism | Transport | CustomReaction],
 ) -> tuple[
     list[Metabolism | Transport], tuple[Metabolism | Transport | CustomReaction, ...]
 ]:
-    """The processes of the intestine and the others.
+    """Get the processes of the intestine (its mucosa) and the others.
+
+    Args:
+        chemistry: the processes of the definition.
+
+    Returns:
+        The processes of the small intestine, placed into the mucosa, and
+        the processes of every other organ.
 
     Raises:
         ValueError: for a process of the large intestine, a custom reaction or
@@ -78,7 +92,7 @@ def _gut_chemistry(
     """
     gut: list[Metabolism | Transport] = []
     rest = []
-    for p in ctx.chemistry:
+    for p in chemistry:
         if p.organ not in GUT_ORGANS:
             rest.append(p)
             continue
@@ -102,6 +116,96 @@ def _gut_chemistry(
             )
         gut.append(p)
     return gut, tuple(rest)
+
+
+def wall_parts(
+    substance: Substance, chemistry: Sequence[Metabolism | Transport | CustomReaction]
+) -> Parts:
+    """Get the parts of a substance in the wall of the intestine.
+
+    The wall is the standard organ of the small intestine without the
+    processes of the intestine, which are in the mucosa.
+
+    Args:
+        substance: the substance.
+        chemistry: the processes of the definition.
+
+    Returns:
+        The parts of the substance in the wall.
+    """
+    return parts_for(substance, Organ.SMALL_INTESTINE, gut_chemistry(chemistry)[1])
+
+
+def bile_substances(
+    substances: Iterable[Substance],
+    chemistry: Sequence[Metabolism | Transport | CustomReaction],
+) -> set[str]:
+    """Get the substances excreted into the bile, which drains into the lumen.
+
+    An apical efflux transport of the liver, or a custom reaction which
+    names the bile of the substance (`ids.bile`) in its equation.
+
+    Args:
+        substances: the substances of the definition.
+        chemistry: the processes of the definition.
+
+    Returns:
+        The ids of the substances.
+    """
+    return {
+        p.substance
+        for p in chemistry
+        if isinstance(p, Transport)
+        and p.organ is Organ.LIVER
+        and p.membrane is Membrane.APICAL
+        and p.direction is Direction.EFFLUX
+    } | {
+        s.sid
+        for s in substances
+        for p in chemistry
+        if isinstance(p, CustomReaction) and ids.bile(s.sid) in p.equation.split()
+    }
+
+
+def luminal_substances(
+    substances: Sequence[Substance],
+    chemistry: Sequence[Metabolism | Transport | CustomReaction],
+    routes: Iterable[Route],
+    conversions: Sequence[LumenConversion] = (),
+) -> set[str]:
+    """Get the substances which reach the lumen of the intestine.
+
+    A substance with an oral route, excreted into the bile
+    (`bile_substances`), transported by the intestine, an inhibitor of an
+    influx transporter of the intestine, and the products of the
+    conversions in the lumen of these.
+
+    Args:
+        substances: the substances of the definition.
+        chemistry: the processes of the definition.
+        routes: the routes of the definition.
+        conversions: the conversions in the lumen.
+
+    Returns:
+        The ids of the substances.
+
+    Raises:
+        ValueError: for chemistry the intestine cannot place, or a
+            conversion of a substance which never reaches the lumen.
+    """
+    processes = gut_chemistry(chemistry)[0]
+    influx = {
+        p.protein
+        for p in processes
+        if isinstance(p, Transport) and p.direction is Direction.INFLUX
+    }
+    luminal = (
+        {r.substance for r in routes if r.kind in ORAL}
+        | bile_substances(substances, chemistry)
+        | {p.substance for p in processes if isinstance(p, Transport)}
+        | {s.sid for s in substances for i in s.inhibits if i.protein in influx}
+    )
+    return luminal | converted(conversions, luminal)
 
 
 def _check_wall(substances: tuple[Substance, ...]) -> None:
@@ -161,13 +265,11 @@ class GutBuilder(LumenBuilder):
                 distribution of the large intestine, or a conversion of a
                 substance which never reaches the lumen.
         """
-        processes, rest = _gut_chemistry(ctx)
+        processes, rest = gut_chemistry(ctx.chemistry)
         _check_wall(ctx.substances)
         wall = replace(
             ctx,
-            parts={
-                s.sid: parts_for(s, Organ.SMALL_INTESTINE, rest) for s in ctx.substances
-            },
+            parts={s.sid: wall_parts(s, ctx.chemistry) for s in ctx.substances},
             chemistry=rest,
         )
         super().__init__(wall, name)
@@ -192,32 +294,11 @@ class GutBuilder(LumenBuilder):
         mucosal |= {sid for sid, i in ctx.inhibitions if i.protein in proteins}
         mucosal |= {sid for sid, i in ctx.inductions if i.protein in proteins}
         self.mucosal = mucosal
-        self.bile = {
-            p.substance
-            for p in ctx.chemistry
-            if isinstance(p, Transport)
-            and p.organ is Organ.LIVER
-            and p.membrane is Membrane.APICAL
-            and p.direction is Direction.EFFLUX
-        } | {
-            s.sid
-            for s in ctx.substances
-            for p in ctx.chemistry
-            if isinstance(p, CustomReaction) and ids.bile(s.sid) in p.equation.split()
-        }
-        influx = {
-            p.protein
-            for p in processes
-            if isinstance(p, Transport) and p.direction is Direction.INFLUX
-        }
+        self.bile = bile_substances(ctx.substances, ctx.chemistry)
         self.oral = {(r.kind, r.substance): r for r in ctx.routes if r.kind in ORAL}
-        self.luminal = (
-            {s for _, s in self.oral}
-            | self.bile
-            | {p.substance for p in processes if isinstance(p, Transport)}
-            | {sid for sid, i in ctx.inhibitions if i.protein in influx}
+        self.luminal = luminal_substances(
+            ctx.substances, ctx.chemistry, ctx.routes, conversions
         )
-        self.luminal |= converted(conversions, self.luminal)
 
     def build(self) -> tuple[ModelDefinition, Boundary]:
         """Build the model definition and the boundary."""

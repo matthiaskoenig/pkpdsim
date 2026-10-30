@@ -105,7 +105,7 @@ if TYPE_CHECKING:
     from pkpdsim.pbpk.definition import PBPKDefinition
     from pkpdsim.pbpk.routes import Route
 
-__all__ = ["PerSubstance", "SegmentedIntestine", "SingleLumen"]
+__all__ = ["PerSubstance", "SegmentedIntestine", "SingleLumen", "absorbed_substances"]
 
 _SBO_PARAMETER = SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER
 
@@ -233,6 +233,27 @@ def _ka_value(ka: "PerSubstance | None", sid: str, oral: frozenset[str]) -> Q:
     return default if ka is None or isinstance(ka, Mapping) else ka
 
 
+def absorbed_substances(
+    definition: "PBPKDefinition", ka: "PerSubstance | None"
+) -> list[str]:
+    """Get the substances which the intestine absorbs, `ka_<s>` of the definition.
+
+    Every substance with an oral route, and a substance which a mapping
+    `ka` names (also without oral route: the reabsorption after biliary
+    excretion); every other substance has `ka_<s> = 0`.
+
+    Args:
+        definition: the definition.
+        ka: the `ka` of the intestine variant.
+
+    Returns:
+        The ids, in the order of the substances.
+    """
+    oral = _oral(definition.routes)
+    named = frozenset(ka) if isinstance(ka, Mapping) else frozenset()
+    return [s.sid for s in definition.substances if s.sid in oral or s.sid in named]
+
+
 def _ka_objects(definition: "PBPKDefinition", ka: "PerSubstance | None") -> list[Sbase]:
     """The absorption `ka_<s>` of every substance.
 
@@ -242,6 +263,7 @@ def _ka_objects(definition: "PBPKDefinition", ka: "PerSubstance | None") -> list
     Every other substance has 0.
     """
     oral = _oral(definition.routes)
+    absorbed = absorbed_substances(definition, ka)
     return [
         annotate(
             value_parameter(
@@ -252,7 +274,7 @@ def _ka_objects(definition: "PBPKDefinition", ka: "PerSubstance | None") -> list
                 _SBO_PARAMETER,
                 "Absorption rate constant of the small intestine; a segment absorbs "
                 "with the factor of its area, `ka*f_area`; a model fits it."
-                if s.sid in oral or (isinstance(ka, Mapping) and s.sid in ka)
+                if s.sid in absorbed
                 else "No absorption: the substance has no oral route, it is not "
                 "reabsorbed after biliary excretion unless a model sets it.",
             ),
@@ -400,6 +422,34 @@ class SegmentedIntestine:
                 colon[sid] = p.factors[COLON]
         return _Absorption(_only(self.fabs, oral), colon, profiles)
 
+    def absorption(self, definition: "PBPKDefinition") -> dict[str, tuple[str, ...]]:
+        """Get the absorbed substances with the options of their absorption.
+
+        The substances of `absorbed_substances` with what the model gives
+        each of them (`_resolve`, as the build): `fraction absorbed`
+        (`fabs_<s>`), `colon factor` (`f_ka_colon_<s>`) and the regional
+        factors of segments (`f_ka_<seg>_<s>`).
+
+        Args:
+            definition: the definition.
+
+        Returns:
+            The options by substance id, in the order of the substances.
+        """
+        a = self._resolve((s.sid for s in definition.substances), definition.routes)
+        result = {}
+        for sid in absorbed_substances(definition, self.ka):
+            options = []
+            if sid in a.fabs:
+                options.append("fraction absorbed")
+            if sid in a.colon:
+                options.append("colon factor")
+            if sid in a.profiles and a.profiles[sid].segments:
+                own = [t for t in ids.GUT_SEGMENTS if t in a.profiles[sid].segments]
+                options.append("factors of " + ", ".join(own))
+            result[sid] = tuple(options)
+        return result
+
     def body_objects(self, definition: "PBPKDefinition") -> list[Sbase]:
         """Get `ka_<s>`, `fabs_<s>`, `f_ka_colon_<s>`, the regional factors, the conversion rates, `FED`."""
         a = self._resolve((s.sid for s in definition.substances), definition.routes)
@@ -522,6 +572,30 @@ class SingleLumen:
         known = frozenset(sids)
         _check_keys("ka", self.ka, known, None)
         _check_keys("fabs", self.fabs, known, None)
+
+    def absorption(self, definition: "PBPKDefinition") -> dict[str, tuple[str, ...]]:
+        """Get the absorbed substances with the options of their absorption.
+
+        The substances of `absorbed_substances`, `fraction absorbed` for a
+        substance whose `fabs_<s>` the model gives (every substance has one,
+        1 unless `fabs` sets it).
+
+        Args:
+            definition: the definition.
+
+        Returns:
+            The options by substance id, in the order of the substances.
+        """
+        self._check(s.sid for s in definition.substances)
+        fabs = self.fabs
+        return {
+            sid: (
+                ("fraction absorbed",)
+                if fabs is not None and (not isinstance(fabs, Mapping) or sid in fabs)
+                else ()
+            )
+            for sid in absorbed_substances(definition, self.ka)
+        }
 
     def body_objects(self, definition: "PBPKDefinition") -> list[Sbase]:
         """Get `ka_<s>` and `fabs_<s>` of every substance."""
