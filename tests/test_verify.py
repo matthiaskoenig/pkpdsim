@@ -4,6 +4,7 @@ import copy
 import dataclasses
 import importlib.metadata
 import json
+import math
 import pickle
 import re
 import shutil
@@ -797,8 +798,11 @@ def test_a_time_of_another_point_than_the_first_is_compared(
     )
     out = capsys.readouterr().out
     assert code == 1, out
-    assert "1 rows of the old dump without a time in the new dump" in out
-    assert "times of E/task_x: 1 rows only in old, at 3" in out
+    # the old row at 3 is compared with the new rows at 2 and 5 interpolated,
+    # the new row at 5 has no time of the old dump around it
+    assert "rows at other times: 1 rows of the old dump and 0 of the new" in out
+    assert "1 rows of the new dump without a time in the old dump" in out
+    assert "times of E/task_x: 1 rows only in new, at 5" in out
 
 
 def test_an_old_row_without_a_new_time_is_a_difference(
@@ -806,7 +810,8 @@ def test_an_old_row_without_a_new_time_is_a_difference(
 ) -> None:
     old = old_scan()
     times = T_OLD.copy()
-    times[2] = 2.5
+    # after the last time of the new dump: no interpolation
+    times[3] = 3.5
     old["results"]["E", "task_x", "time"] = (
         ("_point", "dim_k"),
         np.stack([times, times], axis=1),
@@ -825,7 +830,9 @@ def test_an_old_row_without_a_new_time_is_a_difference(
     )
 
 
-def timecourse(times: Sequence[float], values: Sequence[float]) -> Dump:
+def timecourse(
+    times: Sequence[float] | np.ndarray, values: Sequence[float] | np.ndarray
+) -> Dump:
     """A dump of one task with its output times and the values of A."""
     return synthetic(
         {
@@ -891,6 +898,119 @@ def test_a_new_output_time_is_a_difference(
     # a time only the old dump has is a difference, also with the pattern
     assert verify(["compare", new, old, "--renames", str(renames)]) == 1
     assert "  times of E/t: 1 rows only in old, at 4\n" in capsys.readouterr().out
+
+
+def dosed(times: np.ndarray, rate: float = 0.5) -> np.ndarray:
+    """A decay with a second dose at 2: a trajectory of an adaptive grid.
+
+    `times` has the time of the dose twice, the state before and after it.
+    """
+    before = np.exp(-rate * times)
+    after = (math.exp(-2 * rate) + 1.0) * np.exp(-rate * (times - 2.0))
+    values = np.where(times < 2.0, before, after)
+    values[int(np.flatnonzero(times == 2.0)[0])] = math.exp(-2 * rate)
+    return values
+
+
+#: two adaptive grids of one simulation: other steps, the dose at 2 in both;
+#: their interpolants are within 4e-7 of the trajectory (the steps of an
+#: integrator at a relative tolerance of about 1e-8)
+GRID_A = np.concatenate([np.linspace(0, 2, 61), np.linspace(2, 10, 121)])
+GRID_B = np.concatenate([[0.0], np.geomspace(0.01, 2, 50), np.geomspace(2, 10, 100)])
+
+
+def test_two_grids_of_one_trajectory_do_not_differ(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A row at a time only one dump has is compared with the other interpolated."""
+    old = written(tmp_path, "o.pkl", timecourse(GRID_A, dosed(GRID_A)))
+    new = written(tmp_path, "n.pkl", timecourse(GRID_B, dosed(GRID_B)))
+    capsys.readouterr()
+    assert verify(["compare", old, new]) == 0, capsys.readouterr().out
+    assert verify(["compare", new, old]) == 0
+    out = capsys.readouterr().out
+    assert "0 rows of the old dump without a time in the new dump" in out
+    # the common times are 0, the dose at 2 (twice) and 10
+    assert (
+        f"rows at other times: {GRID_B.size - 4} rows of the old dump and "
+        f"{GRID_A.size - 4} of the new dump compared with the other dump "
+        "interpolated at their times" in out
+    )
+
+
+def test_a_trajectory_on_another_grid_differs(tmp_path: Path) -> None:
+    """The interpolation leaves a difference of the trajectory: a slower decay."""
+    old = written(tmp_path, "o.pkl", timecourse(GRID_A, dosed(GRID_A)))
+    new = written(tmp_path, "n.pkl", timecourse(GRID_B, dosed(GRID_B, rate=0.501)))
+    assert verify(["compare", old, new]) == 1
+    assert verify(["compare", new, old]) == 1
+
+
+def test_a_difference_between_the_common_times_is_found(tmp_path: Path) -> None:
+    """A change of the trajectory of 1e-4 which vanishes at the common times."""
+    old = written(tmp_path, "o.pkl", timecourse(GRID_A, dosed(GRID_A)))
+    for eps, code in ((1e-4, 1), (1e-7, 0)):
+        bump = np.where(
+            GRID_B <= 2,
+            1 + eps * np.sin(np.pi * GRID_B / 2),
+            1 + eps * np.sin(np.pi * (GRID_B - 2) / 8),
+        )
+        new = written(tmp_path, "n.pkl", timecourse(GRID_B, dosed(GRID_B) * bump))
+        assert verify(["compare", old, new]) == code
+
+
+def tasks(values: dict[str, Sequence[float]]) -> Dump:
+    """A dump of tasks of one experiment with the output times 0 to 3."""
+    results: dict = {}
+    for task, task_values in values.items():
+        results["E", task, "time"] = (("time",), np.array([0.0, 1.0, 2.0, 3.0]))
+        results["E", task, "[A]"] = (("time",), np.array(task_values))
+    return synthetic(results)
+
+
+def test_the_noise_of_a_control_is_no_difference(tmp_path: Path) -> None:
+    """A variable which is zero in a task is compared at the scale of the experiment."""
+    dose = [1.0, 0.5, 0.25, 0.125]
+    old = written(tmp_path, "o.pkl", tasks({"dose": dose, "control": [0, 1e-24, 0, 0]}))
+    noise = tasks({"dose": dose, "control": [0, 3e-24, -1e-25, 0]})
+    assert verify(["compare", old, written(tmp_path, "n.pkl", noise)]) == 0
+    # a small value which is not noise is compared at its own scale
+    small = written(
+        tmp_path, "s.pkl", tasks({"dose": dose, "control": [0, 1e-6, 0, 0]})
+    )
+    other = tasks({"dose": dose, "control": [0, 1.1e-6, 0, 0]})
+    assert verify(["compare", small, written(tmp_path, "m.pkl", other)]) == 1
+
+
+def test_the_interpolation_does_not_cross_a_change() -> None:
+    """A row is interpolated between the rows of the segment of its time."""
+    old_times = np.array([0.0, 1.0, 2.0, 2.0, 3.0])
+    new_times = np.array([0.0, 0.5, 1.0, 1.5, 2.0, 2.0, 2.5, 3.0, 4.0])
+    match = matched_rows(old_times, new_times)
+    assert match.old.tolist() == [0, 1, 2, 3, 4]
+    assert match.interpolated_old.tolist() == []
+    # the new rows between the common times are interpolated in the old dump,
+    # the row after its last time is not
+    assert match.interpolated_new.tolist() == [1, 3, 6]
+    assert match.unmatched_new == 1
+    assert match.times_new.tolist() == [4.0]
+    # a repeated time which the other dump does not have is not interpolated
+    match = matched_rows(np.array([0.0, 1.0, 1.5, 1.5, 3.0]), np.array([0.0, 1, 3]))
+    assert match.interpolated_old.tolist() == []
+    assert match.unmatched == 2
+    # nor a row after the last time of the other dump
+    match = matched_rows(np.array([0.0, 1.0, 1.0, 2.0]), np.array([0.0, 0.5, 1.0]))
+    assert match.interpolated_old.tolist() == []
+    assert match.interpolated_new.tolist() == [1]
+    assert match.unmatched == 1
+
+
+def test_close_times_are_not_matched() -> None:
+    """Two rows of times 1e-7 apart are interpolated, not compared as one time."""
+    match = matched_rows(np.array([0.0, 1.0, 2.0]), np.array([0.0, 1.0 + 1e-7, 2.0]))
+    assert match.old.tolist() == [0, 2]
+    assert match.interpolated_old.tolist() == [1]
+    assert match.interpolated_new.tolist() == [1]
 
 
 def test_repeated_times_of_the_old_dump_are_left_out(

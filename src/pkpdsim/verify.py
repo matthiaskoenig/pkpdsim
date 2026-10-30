@@ -7,8 +7,10 @@ them only where it is meant to. The subcommands make this checkable:
 - `dump` runs the simulation experiments of a model in a checkout and stores the
   results, the datasets, the fit mappings and the figures in a pickle,
 - `compare` compares two dumps: the simulations on the matched rows of their
-  output times, relative to the scale of every array (a time which only one
-  dump has is a difference), everything else exactly; with `--renames FILE` the
+  output times, a row at a time which only one dump has (the steps of the
+  integrator of another run) with the other dump interpolated at its time,
+  relative to the scale of every array (a row outside of the times of the
+  other dump is a difference), everything else exactly; with `--renames FILE` the
   expected renames of a migration (metadata fields and members, added fields,
   texts such as legend keys, ids) and the expected differences are applied to
   the old dump first, see `load_renames`,
@@ -54,9 +56,10 @@ Across versions of sbmlsim (a dump of pkpdsim 0.4 with sbmlsim 0.8 and one of
 0.5 with 0.9) `compare` moves the time of every array first and matches the
 other dimensions by name, matches the rows of a repeated time from the last
 one, so that the state after a change, which is all sbmlsim 0.8 gave, is
-compared, and counts the rows of a time which only one dump has as differences
-(a new output time of a task is expected with the pattern of its variable
-`time`), and compares a figure of sbmlsim 0.8 with the one of sbmlsim 0.9 in the
+compared, compares a row of a time which only one dump has with the other dump
+interpolated at its time (`matched_rows`, `interpolation_envelope`) and counts
+a row outside of the times of the other dump as a difference (a new output
+time of a task is expected with the pattern of its variable `time`), and compares a figure of sbmlsim 0.8 with the one of sbmlsim 0.9 in the
 form of sbmlsim 0.9: the settings and the size it is rendered with, without the
 fields which only sbmlsim 0.9 has, which it lists (`align_figures`). The renames
 of a port are the ids which became SIds (`sids`) and the differences which are
@@ -693,6 +696,22 @@ class RowMatch(NamedTuple):
     #: the other way round
     times_old: np.ndarray
     times_new: np.ndarray
+    #: the rows of the old output at a time which the new output does not have
+    #: but whose segment contains it, compared with the new output interpolated
+    #: at their times (`interpolation_envelope`), and the other way round
+    interpolated_old: np.ndarray = np.arange(0)
+    interpolated_new: np.ndarray = np.arange(0)
+
+
+#: the smallest scale of an array relative to the largest scale of its variable in
+#: the tasks of its experiment, see `relative_differences`
+SCALE_FLOOR = 1e-12
+
+#: the resolution of the output times relative to the largest time: two times
+#: closer than it are one time, the same time computed in another order; two
+#: times further apart are two times of the steps of the integrator, which are
+#: compared by interpolation
+TIME_RESOLUTION = 1e-12
 
 
 def _runs(times: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -710,13 +729,24 @@ def _last_rows(ends: np.ndarray, counts: np.ndarray) -> np.ndarray:
 def matched_rows(old_times: np.ndarray, new_times: np.ndarray) -> RowMatch:
     """Match the rows of the output times of a task in two dumps.
 
-    The times are matched relative to the largest time 1e-6. The rows of a time
-    which an output has more than once (a change: the state before it, then the
-    state after it) are matched from the last one, the k-th last old row with
-    the k-th last new row, and the surplus rows of the output with more of them
-    are left out. So the state after a change is compared across versions
-    (sbmlsim 0.8 had only this one, sbmlsim 0.9 has the states before and after
-    it), and two dumps of sbmlsim 0.9 compare every row of their common times.
+    The times are matched relative to the largest time (`TIME_RESOLUTION`).
+    The rows of a time which an output has more than once (a change: the state
+    before it, then the state after it) are matched from the last one, the k-th
+    last old row with the k-th last new row, and the surplus rows of the output
+    with more of them are left out. So the state after a change is compared
+    across versions (sbmlsim 0.8 had only this one, sbmlsim 0.9 has the states
+    before and after it), and two dumps of sbmlsim 0.9 compare every row of
+    their common times.
+
+    The steps of the integrator differ between two runs whose model or
+    tolerances differ, so most times of an adaptive output are in one dump
+    only. A row at such a time is compared with the other output interpolated
+    at its time (`interpolated_old`, `interpolated_new`) if the time lies
+    between two rows of the other output (a segment between its changes,
+    `interpolation_envelope`) and occurs once in its own output (the states
+    before and after a change which the other output does not have are not
+    one value of it); every other row of a time only one output has is
+    unmatched.
 
     Args:
         old_times: the output times of the old dump.
@@ -747,7 +777,8 @@ def matched_rows(old_times: np.ndarray, new_times: np.ndarray) -> RowMatch:
     j = np.clip(np.searchsorted(b, a), 0, b.size - 1)
     previous = np.clip(j - 1, 0, b.size - 1)
     j = np.where(np.abs(b[previous] - a) < np.abs(b[j] - a), previous, j)
-    common = np.abs(b[j] - a) < 1e-6 * max(1.0, float(np.max(np.abs(a))))
+    scale = max(1.0, float(np.max(np.abs(a))), float(np.max(np.abs(b))))
+    common = np.abs(b[j] - a) < TIME_RESOLUTION * scale
     # a new time is matched with one old time only, the first close to it
     first = np.zeros(a.size, dtype=bool)
     first[np.unique(np.where(common, j, -1), return_index=True)[1]] = True
@@ -756,16 +787,81 @@ def matched_rows(old_times: np.ndarray, new_times: np.ndarray) -> RowMatch:
     n = np.minimum(counts_a[ka], counts_b[kb])
     only_a, only_b = np.ones(a.size, dtype=bool), np.ones(b.size, dtype=bool)
     only_a[ka], only_b[kb] = False, False
+    # a time of one output only which occurs once in it and lies between two
+    # rows of the other output is compared by interpolation
+    inside_a = only_a & (counts_a == 1) & (a > b[0]) & (a < b[-1])
+    inside_b = only_b & (counts_b == 1) & (b > a[0]) & (b < a[-1])
+    only_a &= ~inside_a
+    only_b &= ~inside_b
     return RowMatch(
         _last_rows(starts_a[ka] + counts_a[ka], n),
         _last_rows(starts_b[kb] + counts_b[kb], n),
         int(np.sum(counts_a[ka] - n)),
         int(np.sum(counts_b[kb] - n)),
-        int(old_times.size - np.sum(counts_a[ka])),
-        int(new_times.size - np.sum(counts_b[kb])),
+        int(np.sum(counts_a[only_a])),
+        int(np.sum(counts_b[only_b])),
         a[only_a],
         b[only_b],
+        starts_a[inside_a],
+        starts_b[inside_b],
     )
+
+
+def interpolation_envelope(
+    times: np.ndarray, values: np.ndarray, at: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """Get the range of the trajectory of an output at times, from its interpolants.
+
+    The rows of an adaptive output are the steps of the integrator, which are
+    too far apart for one interpolant to reach the threshold of a comparison:
+    between two runs of hctz whose steps differ (the relative tolerance 1e-9
+    and 1e-10), the linear interpolant is up to 4e-2 of the scale of an array
+    off the other run, the monotone cubic one 4e-3, the cubic spline swings
+    at a sharp transient (the concentration in the urine after it was emptied).
+    Three interpolants of every segment between the changes of the output
+    (the rows between two repeated times), the linear one, the monotone cubic
+    one (PCHIP) and the cubic spline (not-a-knot), span the envelope of the
+    trajectory, and their spread is the uncertainty of the interpolation: the
+    range is the envelope widened by its width on both sides. A value within
+    it is no difference which the steps of the output can tell; on the two
+    runs of hctz no array differs by more than 1e-6, and a change of the
+    trajectory of 1e-5 between the common times is still found (tested). A
+    column with a value which is not finite in a segment is interpolated
+    linearly there.
+
+    Args:
+        times: the output times, ascending, a time of a change twice.
+        values: the values of the rows, (rows, columns).
+        at: the times, each between two rows of a segment.
+
+    Returns:
+        The lowest and the highest value of the range, (times, columns) each.
+    """
+    from scipy.interpolate import CubicSpline, PchipInterpolator
+
+    # the row after every time and the segment of the rows, which a repeated
+    # time starts
+    after = np.searchsorted(times, at, side="right")
+    segment = np.cumsum(np.append(0, np.diff(times) == 0))
+    lowest = np.full((at.size, values.shape[1]), np.nan)
+    highest = np.full((at.size, values.shape[1]), np.nan)
+    for s in np.unique(segment[after]):
+        rows = np.flatnonzero(segment == s)
+        queries = np.flatnonzero(segment[after] == s)
+        t, v, q = times[rows], values[rows], at[queries]
+        k = np.searchsorted(t, q, side="right")
+        weight = ((q - t[k - 1]) / (t[k] - t[k - 1]))[:, None]
+        linear = v[k - 1] + weight * (v[k] - v[k - 1])
+        low, high = linear.copy(), linear.copy()
+        finite = np.all(np.isfinite(v), axis=0)
+        if t.size > 2 and finite.any():
+            for interpolant in (PchipInterpolator, CubicSpline):
+                curve = interpolant(t, v[:, finite], axis=0)(q)
+                low[:, finite] = np.minimum(low[:, finite], curve)
+                high[:, finite] = np.maximum(high[:, finite], curve)
+        width = high - low
+        lowest[queries], highest[queries] = low - width, high + width
+    return lowest, highest
 
 
 def _squeezed(
@@ -876,6 +972,9 @@ class PointMatch(NamedTuple):
     new: np.ndarray
     #: the match of the times of the points
     match: RowMatch
+    #: the rows of the old and of the new values with a time (not padding)
+    rows_old: np.ndarray = np.arange(0)
+    rows_new: np.ndarray = np.arange(0)
 
 
 def _same_columns(times: np.ndarray) -> bool:
@@ -913,9 +1012,56 @@ def point_matches(old_times: np.ndarray, new_times: np.ndarray) -> list[PointMat
         rows_a, rows_b = np.flatnonzero(~np.isnan(ta)), np.flatnonzero(~np.isnan(tb))
         match = matched_rows(ta[rows_a], tb[rows_b])
         matches.append(
-            PointMatch(np.array(group), rows_a[match.old], rows_b[match.new], match)
+            PointMatch(
+                np.array(group),
+                rows_a[match.old],
+                rows_b[match.new],
+                match,
+                rows_a,
+                rows_b,
+            )
         )
     return matches
+
+
+def interpolated_pairs(
+    found: Columns, match: PointMatch
+) -> list[tuple[np.ndarray, np.ndarray]]:
+    """Get the rows of times only one dump has with the other dump at their times.
+
+    A row of the old dump is paired with the nearest value of the range of
+    the interpolants of the new dump at its time (`interpolation_envelope`),
+    a row of the new dump with the nearest value of the range of the old
+    dump, so the difference of a pair is the distance from the range, zero
+    within it. The old value comes first, the scale of a comparison.
+
+    Args:
+        found: the variable of a task in the two dumps.
+        match: the match of the rows of points with the same times.
+
+    Returns:
+        The pairs of the old and the new values, (rows, points) each.
+    """
+    pairs: list[tuple[np.ndarray, np.ndarray]] = []
+    first = match.points[0]
+    sides = (
+        (found.old, found.old_times, match.rows_old, match.match.interpolated_old),
+        (found.new, found.new_times, match.rows_new, match.match.interpolated_new),
+    )
+    for k, (values, times, rows, interpolated) in enumerate(sides):
+        if not interpolated.size:
+            continue
+        other_values, other_times, other_rows, _ = sides[1 - k]
+        own_rows = rows[interpolated]
+        own = values[np.ix_(own_rows, match.points)]
+        low, high = interpolation_envelope(
+            other_times[other_rows, first],
+            other_values[np.ix_(other_rows, match.points)],
+            times[own_rows, first],
+        )
+        nearest = np.clip(own, low, high)
+        pairs.append((own, nearest) if k == 0 else (nearest, own))
+    return pairs
 
 
 def relative_difference(old: Dump, new: Dump, key: tuple[str, str, str]) -> float:
@@ -923,12 +1069,119 @@ def relative_difference(old: Dump, new: Dump, key: tuple[str, str, str]) -> floa
 
     The time is moved first, the other dimensions are matched by name (a
     dimension of size 1 which only one array has is left out), and the rows of
-    every point are matched by its own times (`point_matches`). The difference
-    is max|new - old| / max|old|; other dimensions and NaN at different
-    positions are an infinite difference. A numeric array without a time, e.g.
-    the values at the end of the points of a scan, is compared on the same
-    dimensions relative to its scale, any other array exactly; the variable
-    `time` is compared as the output times of the points of the task.
+    every point are matched by its own times (`point_matches`); a row at a
+    time which only one dump has is compared with the other dump interpolated
+    at its time, its distance from the range of the interpolants
+    (`interpolated_pairs`). The difference is max|new - old| / max|old|; other
+    dimensions and NaN at different positions are an infinite difference. A
+    numeric array without a time, e.g. the values at the end of the points of
+    a scan, is compared on the same dimensions relative to its scale, any
+    other array exactly; the variable `time` is compared as the output times
+    of the points of the task.
+    """
+    return relative_differences(old, new, [key])[key]
+
+
+def relative_differences(
+    old: Dump, new: Dump, keys: Iterable[tuple[str, str, str]]
+) -> dict[tuple[str, str, str], float]:
+    """Get the difference of every result array of keys, see `relative_difference`.
+
+    The arrays of a task with the same output times are compared together, so
+    that the interpolants of a segment are built once for all of them. An array
+    is compared relative to its scale, but at least to `SCALE_FLOOR` of the
+    largest scale of its variable in the tasks of its experiment among the
+    keys: a variable which is zero in a task, e.g. the drug of a control
+    without a dose, is the noise of the integrator there (1e-24 against 1e-4
+    of the doses in hctz), which differs with every other step.
+
+    Args:
+        old: the old dump.
+        new: the new dump.
+        keys: the arrays, (experiment, task, variable).
+
+    Returns:
+        The difference of every array.
+    """
+    differences: dict[tuple[str, str, str], float] = {}
+    batches: dict[tuple[object, ...], list[tuple[tuple[str, str, str], Columns]]] = {}
+    #: the NaN at different positions, the scale and the difference of an array
+    compared: dict[tuple[str, str, str], tuple[bool, float, float]] = {}
+    for key in keys:
+        found = _compared_columns(old, new, key)
+        if not isinstance(found, Columns):
+            differences[key] = found
+            continue
+        batch = (
+            key[0],
+            key[1],
+            found.old_times.shape,
+            found.old_times.tobytes(),
+            found.new_times.shape,
+            found.new_times.tobytes(),
+        )
+        batches.setdefault(batch, []).append((key, found))
+    for entries in batches.values():
+        stacked = Columns(
+            *(
+                np.hstack([getattr(f, field) for _, f in entries])
+                for field in Columns._fields
+            )
+        )
+        width = stacked.old.shape[1]
+        scale, difference = np.zeros(width), np.zeros(width)
+        mismatch = np.zeros(width, dtype=bool)
+        for match in point_matches(stacked.old_times, stacked.new_times):
+            pairs = [
+                (
+                    stacked.old[np.ix_(match.old, match.points)],
+                    stacked.new[np.ix_(match.new, match.points)],
+                ),
+                *interpolated_pairs(stacked, match),
+            ]
+            for x, y in pairs:
+                if not x.shape[0]:
+                    continue
+                points = match.points
+                mismatch[points] |= np.any(np.isnan(x) != np.isnan(y), axis=0)
+                x, y = np.nan_to_num(x), np.nan_to_num(y)
+                scale[points] = np.maximum(scale[points], np.max(np.abs(x), axis=0))
+                difference[points] = np.maximum(
+                    difference[points], np.max(np.abs(x - y), axis=0)
+                )
+        first = 0
+        for key, found in entries:
+            last = first + found.old.shape[1]
+            compared[key] = (
+                bool(mismatch[first:last].any()),
+                float(np.max(scale[first:last], initial=0.0)),
+                float(np.max(difference[first:last], initial=0.0)),
+            )
+            first = last
+    variable_scales: dict[tuple[str, str], float] = {}
+    for (sid, _, variable), (_, s, _) in compared.items():
+        variable_scales[sid, variable] = max(
+            variable_scales.get((sid, variable), 0.0), s
+        )
+    for key, (nan_mismatch, s, d) in compared.items():
+        s = max(s, SCALE_FLOOR * variable_scales[key[0], key[2]])
+        if nan_mismatch:
+            differences[key] = math.inf
+        else:
+            differences[key] = d / s if s > 1e-300 else d
+    return differences
+
+
+def _compared_columns(
+    old: Dump, new: Dump, key: tuple[str, str, str]
+) -> Columns | float:
+    """Get the columns of an array with times, or its difference without them.
+
+    Returns:
+        The columns, see `relative_difference`, or the difference of an array
+        which is not compared on its rows: a numeric array without a time
+        relative to its scale, any other array exactly, other dimensions or no
+        times an infinite difference.
     """
     (dims_a, a), (dims_b, b) = old["results"][key], new["results"][key]
     sid, task, variable = key
@@ -947,15 +1200,7 @@ def relative_difference(old: Dump, new: Dump, key: tuple[str, str, str]) -> floa
             same = a.shape == b.shape and np.array_equal(a, b)
             return 0.0 if same else math.inf
         found = columns(old, new, key)
-    if found is None:
-        return math.inf
-    return scaled_difference(
-        (
-            found.old[np.ix_(match.old, match.points)],
-            found.new[np.ix_(match.new, match.points)],
-        )
-        for match in point_matches(found.old_times, found.new_times)
-    )
+    return math.inf if found is None else found
 
 
 def scaled_difference(pairs: Iterable[tuple[np.ndarray, np.ndarray]]) -> float:
@@ -1594,10 +1839,13 @@ def compare(args: argparse.Namespace) -> int:
 
     An expected difference (`expected` of the renames) is printed and not
     counted; an expected difference which does not occur is counted. A row at a
-    time which only one dump has is a difference: one of the new dump is
-    expected with the pattern of the variable `time` of its task
-    (`experiment/task/time`, a changed output grid), one of the old dump always
-    counts.
+    time which only one dump has is compared with the other dump interpolated
+    at its time when the time lies between two rows of the other dump (the
+    steps of the integrator of another run, `matched_rows`); a row outside of
+    the times of the other dump, or a change the other dump does not have, is a
+    difference: one of the new dump is expected with the pattern of the
+    variable `time` of its task (`experiment/task/time`, a changed output
+    grid), one of the old dump always counts.
     """
     old, new = load(args.old), load(args.new)
     renames: Renames = {}
@@ -1660,7 +1908,12 @@ def compare(args: argparse.Namespace) -> int:
             f"{mark}array only in {'old' if key in keys_old else 'new'}: {'/'.join(key)}"
         )
     rows = sorted(
-        ((relative_difference(old, new, key), key) for key in keys_old & keys_new),
+        (
+            (difference, key)
+            for key, difference in relative_differences(
+                old, new, keys_old & keys_new
+            ).items()
+        ),
         reverse=True,
     )
     per_experiment: dict[str, float] = {}
@@ -1683,8 +1936,9 @@ def compare(args: argparse.Namespace) -> int:
                 print(f"  {difference:.3e} {'/'.join(key)}")
     differing += len(unexpected) + len(unexpected_side)
 
-    # the rows at a change
+    # the rows at a change and at the times of one dump only
     ignored_old = ignored_new = unmatched = unmatched_new = expected_new = 0
+    interpolated_old = interpolated_new = 0
     changes: dict[str, int] = {}
     other_times: list[str] = []
     for sid, task in sorted({(k[0], k[1]) for k in keys_old & keys_new}):
@@ -1693,6 +1947,8 @@ def compare(args: argparse.Namespace) -> int:
         for match in (m.match for m in matches):
             ignored_old += match.ignored_old
             ignored_new += match.ignored_new
+            interpolated_old += match.interpolated_old.size
+            interpolated_new += match.interpolated_new.size
             unmatched += match.unmatched
             unmatched_new += match.unmatched_new
             if match.ignored_new:
@@ -1715,6 +1971,12 @@ def compare(args: argparse.Namespace) -> int:
         f"the old dump left out (the states before a change), {unmatched} rows of "
         f"the old dump without a time in the new dump, {unmatched_new} rows of the "
         f"new dump without a time in the old dump ({expected_new} expected)"
+    )
+    print(
+        f"rows at other times: {interpolated_old} rows of the old dump and "
+        f"{interpolated_new} of the new dump compared with the other dump "
+        "interpolated at their times (the range of its linear, monotone cubic "
+        "and cubic spline interpolants)"
     )
     for sid, count in sorted(changes.items()):
         print(f"changes: {sid} {count} rows")
