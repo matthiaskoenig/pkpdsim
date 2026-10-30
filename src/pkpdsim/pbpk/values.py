@@ -9,6 +9,7 @@ the initial assignment of its parameter. A constant which no field of the
 library holds is a `ModelParameter` with such a value.
 """
 
+import dataclasses
 import functools
 import re
 import typing
@@ -30,6 +31,7 @@ __all__ = [
     "check_literals",
     "check_positive",
     "check_unit",
+    "equal_by_value",
     "fitted",
     "number",
     "unit_text",
@@ -152,6 +154,51 @@ def fitted(
         notes=notes,
         uncertainties=kwargs.get("uncertainties"),
     )
+
+
+def equal_by_value(a: object, b: object) -> bool:
+    """Compare two parts of a definition by their values.
+
+    The objects of sbmlutils which a definition holds (the `Uncertainty` of a
+    fitted value, a `Parameter` or `Species` of a custom reaction) have no
+    equality of their own and compare by identity, so two definitions which
+    take the same fitted value from a fit record (`fitted(FITS.parameter(...))`
+    creates new uncertainties at every call) would differ. Here a dataclass
+    is equal by its equality (`PDComponent` by the id of its model, its
+    inputs and outputs) or by its fields, a mapping by its items, a list or
+    tuple by its elements, and an object which compares by identity by the
+    fields of its `__dict__`, each by value; every other object (numbers,
+    strings, enum members, a `Creator`) by `==`.
+
+    Args:
+        a: the one object.
+        b: the other object.
+
+    Returns:
+        Whether they are equal by value.
+    """
+    if a is b:
+        return True
+    if isinstance(a, Mapping) and isinstance(b, Mapping):
+        return a.keys() == b.keys() and all(equal_by_value(a[k], b[k]) for k in a)
+    if isinstance(a, list | tuple) and isinstance(b, list | tuple):
+        return (
+            type(a) is type(b)
+            and len(a) == len(b)
+            and all(equal_by_value(x, y) for x, y in zip(a, b, strict=True))
+        )
+    if dataclasses.is_dataclass(a) and not isinstance(a, type):
+        return a == b or (
+            type(a) is type(b)
+            and all(
+                equal_by_value(getattr(a, f.name), getattr(b, f.name))
+                for f in dataclasses.fields(a)
+                if f.compare
+            )
+        )
+    if type(a).__eq__ is object.__eq__ and hasattr(a, "__dict__"):
+        return type(a) is type(b) and equal_by_value(vars(a), vars(b))
+    return a == b
 
 
 def as_value(x: Q, unit: UnitType) -> Value | Formula:

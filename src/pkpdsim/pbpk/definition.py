@@ -38,6 +38,7 @@ from pkpdsim.pbpk.values import (
     Q,
     check_positive,
     check_unit,
+    equal_by_value,
     number,
 )
 
@@ -204,9 +205,12 @@ class PBPKDefinition:
         one physiology, so the definitions must agree on sex, population and
         the arm vein preset. Substance ids are unique over all packages, so
         nothing is renamed: an id which two definitions define is accepted
-        only if both define equal objects (a shared metabolite; PD components
-        are equal by the id of their model, their inputs and outputs; a
-        creator is the same person when all its fields are equal). An
+        only if both define equal objects, compared by value (a shared
+        metabolite; a fitted value which both take from their fit records,
+        whose uncertainties are equal by their fields, `equal_by_value`; PD
+        components are equal by the id of their model, their inputs and
+        outputs; a creator is the same person when all its fields are
+        equal). An
         organ variant is a requirement: an organ which a definition leaves
         out (the default organ) means no requirement, so the coupled model
         takes the variant another definition chooses (e.g. its zonated
@@ -746,6 +750,11 @@ def _union[T](
 ) -> list[T]:
     """The union of the items of several definitions by their id, in order.
 
+    Two items of one id are the same item when they are equal by value
+    (`equal_by_value`): a fitted value which two packages take from their
+    fit records is the same value, although sbmlutils compares its
+    uncertainties by identity.
+
     Raises:
         ValueError: if two items of one id differ, naming the id and how
             they differ (`differs`).
@@ -753,7 +762,7 @@ def _union[T](
     result: dict[Hashable, T] = {}
     for item in items:
         k = key(item)
-        if k in result and result[k] != item:
+        if k in result and not equal_by_value(result[k], item):
             name = " ".join(k) if isinstance(k, tuple) else k
             raise ValueError(f"Combine '{sid}': the {what} '{name}' {differs}.")
         result.setdefault(k, item)
@@ -780,7 +789,7 @@ def _merge_variants(
     merged: dict[Organ, str | OrganComponent] = {}
     for v in variants:
         for organ, choice in v.organs.items():
-            if organ in merged and merged[organ] != choice:
+            if organ in merged and not equal_by_value(merged[organ], choice):
                 raise ValueError(
                     f"Combine '{sid}': the definitions choose different variants "
                     f"of organ '{organ.value}'."

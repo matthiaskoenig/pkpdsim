@@ -10,9 +10,10 @@ the rates of the processes of their protein.
 import dataclasses
 from pathlib import Path
 
+import libsbml
 import numpy as np
 import pytest
-from sbmlutils.factory import Creator
+from sbmlutils.factory import Creator, Uncertainty, UncertParameter
 
 from pkpdsim.pbpk import (
     MM,
@@ -21,6 +22,7 @@ from pkpdsim.pbpk import (
     Kp,
     Metabolism,
     Mode,
+    ModelParameter,
     Observer,
     Organ,
     Part,
@@ -30,6 +32,7 @@ from pkpdsim.pbpk import (
     Substance,
     U,
     Variants,
+    fitted,
     ids,
 )
 from pkpdsim.pbpk.builder import build, compose
@@ -139,6 +142,75 @@ def test_combine_shared_object_accepted() -> None:
     )
     d = PBPKDefinition.combine(a, b, sid="coupled")
     assert [s.sid for s in d.substances] == ["drg", "shared_m", "inh"]
+
+
+def _fit(value: float, sd: float) -> dict[str, object]:
+    """The keyword arguments of a fit record of a value, new objects at every call.
+
+    `FitRecords.parameter` creates its uncertainty anew for every call, so
+    two packages which take the same fitted value hold equal, not the same,
+    uncertainties.
+    """
+    return {
+        "value": value,
+        "unit": U.dimensionless,
+        "uncertainties": [
+            Uncertainty(
+                uncertParameters=[
+                    UncertParameter(
+                        type=libsbml.DISTRIB_UNCERTTYPE_DISTRIBUTION,
+                        math=f"normal({value}, {sd})",
+                    )
+                ]
+            )
+        ],
+    }
+
+
+def _fitted_metabolite(sd: float = 0.01) -> Substance:
+    """A shared metabolite with a fitted fraction unbound, built anew."""
+    return Substance(
+        sid="shared_m",
+        name="shared metabolite",
+        mr=200.0,
+        binding=Binding(fu=fitted(_fit(0.2, sd)), protein="albumin"),
+    )
+
+
+def _fitted_parameter(sd: float = 0.01) -> ModelParameter:
+    """A shared fitted parameter of the definitions, built anew."""
+    return ModelParameter("f_shared", fitted(_fit(0.5, sd)), U.dimensionless)
+
+
+def test_combine_equal_fitted_values_by_value() -> None:
+    """Two packages with an equal fitted value of a shared id combine.
+
+    The uncertainties of sbmlutils compare by identity, so the equality of
+    the definitions compares them by their fields (task 4a M1).
+    """
+    a = dataclasses.replace(
+        _drg_package(),
+        substances=[*_drg_package().substances, _fitted_metabolite()],
+        parameters=[_fitted_parameter()],
+    )
+    b = dataclasses.replace(
+        _inh_package(),
+        substances=[*_inh_package().substances, _fitted_metabolite()],
+        parameters=[_fitted_parameter()],
+    )
+    d = PBPKDefinition.combine(a, b, sid="coupled")
+    assert [s.sid for s in d.substances] == ["drg", "shared_m", "inh"]
+    assert [p.sid for p in d.parameters] == ["f_shared"]
+    # a different distribution of the fit is a different value
+    c = dataclasses.replace(
+        _inh_package(),
+        substances=[*_inh_package().substances, _fitted_metabolite(sd=0.02)],
+    )
+    with pytest.raises(ValueError, match="substance 'shared_m'"):
+        PBPKDefinition.combine(a, c, sid="coupled")
+    e = dataclasses.replace(_inh_package(), parameters=[_fitted_parameter(sd=0.02)])
+    with pytest.raises(ValueError, match="parameter 'f_shared'"):
+        PBPKDefinition.combine(a, e, sid="coupled")
 
 
 @pytest.mark.parametrize(
