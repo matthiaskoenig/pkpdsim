@@ -478,8 +478,10 @@ def assert_reference_sbml(result: BuildResult) -> None:
     The order of the elements counts. The references are
     `tests/pbpk/data/<file>.gz` (`gzip -n`): `reference_definition()` built
     at f008d56, `chemistry_reference_definition()` at 0c538ca,
-    `nephron_reference_definition()` at 311895c and
-    `endogenous_reference_definition()` at 87a5e79; a change of the library
+    `nephron_reference_definition()` at 311895c (with the notes of `fu` of
+    its unknown protein with the CKD factor of 5793173, the one line
+    replaced) and `endogenous_reference_definition()` at 87a5e79; a change
+    of the library
     which changes the SBML of every model on purpose rebuilds them and says
     so.
     """
