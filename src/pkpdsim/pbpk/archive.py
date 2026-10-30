@@ -101,10 +101,14 @@ def create_archive(
             each once, e.g. `(Sex.MALE, Sex.FEMALE)`; `None` builds the sex of
             the definition only.
 
-    An extra model and an extra file have one location rule: a file is below
-    the parent of `model_output_dir`, and its location in the archive is its
-    path relative to it (a model in `model_output_dir` is `./models/<name>`,
-    as the built models are).
+    Every file of the archive has one location rule: it is below the parent
+    of `model_output_dir`, and its location in the archive is its path
+    relative to it. The built models, their markdown and antimony are in
+    `model_output_dir` (`./models/<name>` for the directory `models` of a
+    model package), the licenses in the parent (`./mit.txt`), an extra model
+    or file where it lies (`./models/<sid>_fluid.xml`, `./figures/<x>.png`).
+    The README alone is placed, as `./README.md` of the archive, wherever
+    the file lies.
 
     Raises:
         ValueError: if the stem of an extra model or the key of an extra file
@@ -158,6 +162,18 @@ def create_archive(
         builds.append((sexed.sid, built, md_path, ant_path))
 
     parent = model_output_dir.parent
+
+    def location(path: Path, what: str) -> str:
+        """The location of a file in the archive, its path below `parent`."""
+        try:
+            relative = path.resolve().relative_to(parent.resolve())
+        except ValueError:
+            raise ValueError(
+                f"The {what} {str(path)!r} is not below {str(parent)!r}, "
+                "the directory of the archive."
+            ) from None
+        return f"./{relative.as_posix()}"
+
     results: dict[str, dict[str, Any]] = {}
     if readme is not None:
         results["README"] = {
@@ -168,44 +184,33 @@ def create_archive(
     mit = write_license(parent, License.MIT, copyright=copyright)
     results["cc-by"] = {
         "path": cc_by,
-        "entry": entry(f"./{cc_by.name}", EntryFormat.TXT),
+        "entry": entry(location(cc_by, "license"), EntryFormat.TXT),
     }
     results["mit"] = {
         "path": mit,
-        "entry": entry(f"./{mit.name}", EntryFormat.TXT),
+        "entry": entry(location(mit, "license"), EntryFormat.TXT),
     }
     for sid, built, md_path, ant_path in builds:
         flat = built.flat_path
         master = sid == definition.sid
         results[sid] = {
             "path": built.comp_path,
-            "entry": entry(f"./models/{built.comp_path.name}", EntryFormat.SBML_L3V2),
+            "entry": entry(location(built.comp_path, "model"), EntryFormat.SBML_L3V2),
         }
         results[f"{sid}_flat"] = {
             "path": flat,
             "entry": entry(
-                f"./models/{flat.name}", EntryFormat.SBML_L3V2, master=master
+                location(flat, "model"), EntryFormat.SBML_L3V2, master=master
             ),
         }
         results[f"{sid}_flat_md"] = {
             "path": md_path,
-            "entry": entry(f"./models/{md_path.name}", EntryFormat.MARKDOWN),
+            "entry": entry(location(md_path, "markdown"), EntryFormat.MARKDOWN),
         }
         results[f"{sid}_flat_ant"] = {
             "path": ant_path,
-            "entry": entry(f"./models/{ant_path.name}", EntryFormat.ANTIMONY),
+            "entry": entry(location(ant_path, "antimony"), EntryFormat.ANTIMONY),
         }
-
-    def location(extra: Path, what: str) -> str:
-        """The location of an extra file in the archive, its path below `parent`."""
-        try:
-            relative = extra.resolve().relative_to(parent.resolve())
-        except ValueError:
-            raise ValueError(
-                f"The extra {what} {str(extra)!r} is not below {str(parent)!r}, "
-                "the directory of the archive."
-            ) from None
-        return f"./{relative.as_posix()}"
 
     for extra in extra_models:
         if extra.stem in results:
@@ -215,7 +220,7 @@ def create_archive(
             )
         results[extra.stem] = {
             "path": extra,
-            "entry": entry(location(extra, "model"), EntryFormat.SBML_L3V2),
+            "entry": entry(location(extra, "extra model"), EntryFormat.SBML_L3V2),
         }
     for extra in extra_files:
         key = f"{extra.stem}_{extra.suffix.removeprefix('.')}"
@@ -232,7 +237,7 @@ def create_archive(
             )
         results[key] = {
             "path": extra,
-            "entry": entry(location(extra, "file"), getattr(EntryFormat, fmt)),
+            "entry": entry(location(extra, "extra file"), getattr(EntryFormat, fmt)),
         }
 
     omex = Omex()

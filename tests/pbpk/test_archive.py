@@ -204,3 +204,41 @@ def test_an_extra_antimony_file_is_antimony(tmp_path: Path) -> None:
     ant.write_text("model fluid()\nend\n", encoding="utf-8")
     results = _create(tmp_path, files=(ant,))
     assert results["simple_fluid_ant"]["entry"].format == EntryFormat.ANTIMONY
+
+
+def test_the_built_files_have_the_location_rule_of_the_extra_files(
+    tmp_path: Path,
+) -> None:
+    """Every file of the archive is located by its path below the parent of the models.
+
+    The built models, their markdown and antimony and an extra file in the
+    directory of the models share one rule, also when the directory is not
+    named `models`; the README is the `README.md` of the archive.
+    """
+    readme = tmp_path / "README.md"
+    readme.write_text("# simple\n", encoding="utf-8")
+    out = tmp_path / "sbml"
+    out.mkdir()
+    extra = out / "notes.md"
+    extra.write_text("notes\n", encoding="utf-8")
+    results = create_archive(
+        definition(),
+        out,
+        model="simple",
+        copyright=COPYRIGHT,
+        readme=readme,
+        extra_files=(extra,),
+    )
+    locations = {k: v["entry"].location for k, v in results.items()}
+    assert locations == {
+        "README": "./README.md",
+        "cc-by": "./cc-by-sa-4.0.txt",
+        "mit": "./mit.txt",
+        "simple": "./sbml/simple.xml",
+        "simple_flat": "./sbml/simple_flat.xml",
+        "simple_flat_md": "./sbml/simple_flat.md",
+        "simple_flat_ant": "./sbml/simple_flat.ant",
+        "notes_md": "./sbml/notes.md",
+    }
+    with zipfile.ZipFile(tmp_path / "simple_model.omex") as z:
+        assert "sbml/simple_flat.xml" in z.namelist()
