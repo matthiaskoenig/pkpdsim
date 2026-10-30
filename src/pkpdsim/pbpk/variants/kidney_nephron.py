@@ -311,7 +311,9 @@ class NephronBuilder(StandardBuilder):
         the reabsorbed fraction of the flow out of the collecting duct
         (`f_reabsorbed_<s>`, or of a threshold reabsorption at the afferent
         plasma, up to the filtered load) returns into the plasma of the
-        kidney instead.
+        kidney instead. The lumens start empty, of a filtered substance with
+        a generated steady state (`pkpdsim.pbpk.stationary`) at the steady
+        flow of the filtrate, `fu*Car/f_tub_<seg>`.
         """
         gfr = self._gfr
         self._input_compartment(ids.VURINE, "urine")
@@ -335,6 +337,16 @@ class NephronBuilder(StandardBuilder):
                 segment=seg,
                 substance=s,
             )
+            if s.excretion.urine and self._generated(s):
+                # at the steady state every segment passes the filtrate on:
+                # `GFR*f_tub_<seg>*Ctub = fu*GFR*Car`
+                parts = self.ctx.parts[s.sid]
+                car = self._pool_species(Pool.ARTERIAL, Part.PLASMA, s, parts)
+                self._defer_start(
+                    sid,
+                    s,
+                    steady=f"{self._fu(s)} * {car} / {ids.tubule_flow_fraction(seg)}",
+                )
         for (seg, _, name), (downstream, _, downstream_name) in itertools.pairwise(
             _SEGMENTS
         ):

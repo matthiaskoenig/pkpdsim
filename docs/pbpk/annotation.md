@@ -56,6 +56,7 @@ PBPKO has no term for some of the quantities, compartments and processes of the 
 | stage of chronic kidney disease | `PHYSIOLOGICAL_PARAMETER` |
 | impairment factor | `PHYSIOLOGICAL_PARAMETER` |
 | endogenous baseline plasma concentration | `CONCENTRATION_IN_PLASMA` |
+| net production rate at the steady state | `BIOCHEMICAL_PARAMETER` |
 | factor of the partition coefficients | `BIOCHEMICAL_PARAMETER` |
 | exchange rate constant of a slow tissue pool per tissue volume | `BIOCHEMICAL_PARAMETER` |
 | ratio of the capacity of a process to another process | `BIOCHEMICAL_PARAMETER` |

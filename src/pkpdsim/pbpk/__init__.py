@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 from pkpdsim.pbpk.archive import create_archive
 from pkpdsim.pbpk.builder import BuildResult, build, compose
 from pkpdsim.pbpk.chemistry import (
+    LINEAR,
     MM,
     REST,
     CustomReaction,
@@ -24,6 +25,7 @@ from pkpdsim.pbpk.chemistry import (
     Metabolism,
     RateOf,
     Rest,
+    Saturable,
     Transport,
 )
 from pkpdsim.pbpk.data import Source, cite, load, sources
@@ -110,6 +112,7 @@ def __dir__() -> list[str]:
 
 
 __all__ = [
+    "LINEAR",
     "MM",
     "MODEL_UNITS",
     "PROTEINS",
@@ -156,6 +159,7 @@ __all__ = [
     "RegionalAbsorption",
     "Rest",
     "Route",
+    "Saturable",
     "ScaledRenalMap",
     "SegmentedIntestine",
     "Sex",

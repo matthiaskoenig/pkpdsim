@@ -49,3 +49,7 @@ The organs of the PBPK library: the standard organ, its parts and coefficients, 
 ## steady_state
 
 ::: pkpdsim.pbpk.steady_state
+
+## stationary
+
+::: pkpdsim.pbpk.stationary

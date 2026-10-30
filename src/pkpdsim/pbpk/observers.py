@@ -129,12 +129,15 @@ class OrganOutput:
         kind: the kind of its annotation (`pkpdsim.pbpk.annotation.KINDS`).
         text: the start of its notes, followed by `organ <organ>, replaced
             by the output of the organ`.
+        constant: the output is a constant of the organ (a constant of the
+            generated steady state), not an assignment rule.
     """
 
     unit: UnitType
     name: str
     kind: str
     text: str
+    constant: bool = False
 
 
 TIME = "time"

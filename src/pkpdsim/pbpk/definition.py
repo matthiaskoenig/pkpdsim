@@ -15,6 +15,7 @@ from pkpdsim.pbpk.chemistry import (
     check_kinetics,
     check_products,
     check_rate_of,
+    check_stationary,
 )
 from pkpdsim.pbpk.data import load
 from pkpdsim.pbpk.kp import check_kp_method
@@ -141,8 +142,12 @@ class PBPKDefinition:
             organs which a production or an elimination of the chemistry
             moves away from the equilibrium with the baseline of an
             endogenous substance (`Substance.baseline`): their steady state,
-            so that the body starts stationary (`pkpdsim.pbpk.steady_state`
-            gives the formulas of the organs of the library).
+            so that the body starts stationary. The library generates it from
+            the declared rates of the custom reactions
+            (`CustomReaction.stationary`, `pkpdsim.pbpk.stationary`), a start
+            given here replaces the generated one; without declarations
+            `pkpdsim.pbpk.steady_state` gives the formulas of the organs of
+            the library.
         deltas: the observers of the top model (`Carm_<s>`, an observer of
             the definition) whose change over their value at the start a
             model reads: each gets the constant `<id>_0`, its value at the
@@ -602,6 +607,7 @@ class PBPKDefinition:
                 problems += check_custom_parameters(
                     p, custom.setdefault(p.organ, set())
                 )
+                problems += check_stationary(p)
             if isinstance(p, Metabolism | Transport):
                 problems += check_kinetics(p.sid, p.kinetics)
                 problems += check_rate_of(p, by_sid)

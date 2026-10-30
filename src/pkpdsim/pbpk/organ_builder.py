@@ -31,7 +31,7 @@ constants of the interactions (`Ki`, `Kiu`, `kinact`, `Emax`, `EC50`) are
 parameters of the body, read through a port.
 """
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 from sbmlutils.factory import (
     AssignmentRule,
@@ -51,7 +51,7 @@ from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk import ids
 from pkpdsim.pbpk.annotation import annotate, initial_assignment
-from pkpdsim.pbpk.chemistry import CustomReaction
+from pkpdsim.pbpk.chemistry import CustomReaction, Saturable
 from pkpdsim.pbpk.data import cite
 from pkpdsim.pbpk.impairment import organ_activity
 from pkpdsim.pbpk.organs import Organ, Part, Pool
@@ -81,7 +81,15 @@ from pkpdsim.pbpk.values import Q
 if TYPE_CHECKING:
     from pkpdsim.pbpk.organ import OrganContext
 
-__all__ = ["CAPACITY", "COMPARTMENT_KINDS", "ONE", "OrganBuilder", "label"]
+__all__ = [
+    "CAPACITY",
+    "COMPARTMENT_KINDS",
+    "ONE",
+    "OrganBuilder",
+    "Start",
+    "label",
+    "stationary_ids",
+]
 
 CAPACITY = (
     "Not a physical volume: the plasma-equivalent capacity of the blood of a "
@@ -119,7 +127,46 @@ COMPARTMENT_KINDS = {
 }
 """The kind (`pkpdsim.pbpk.annotation`) of the compartment of a part of an organ."""
 
+
 """The parts of a pool in names."""
+
+
+def stationary_ids(p: CustomReaction) -> set[str]:
+    """Get the ids which the declared steady state of a custom reaction reads.
+
+    A `Formula` of the rate, the formulas of a `Saturable`; `"linear"` reads
+    the rate law, none for none.
+    """
+    s = p.stationary
+    if isinstance(s, Saturable):
+        return formula_ids(s.vmax) | formula_ids(s.km)
+    expression = getattr(s, "expression", None)
+    return set() if expression is None else formula_ids(expression)
+
+
+class Start(NamedTuple):
+    """The start of a species of an endogenous substance, built with the model definition.
+
+    Attributes:
+        sid: the id of the species.
+        substance: the substance.
+        part: the part of the species, whose coefficient the start at the
+            equilibrium with the baseline reads, `None` for `coefficient`.
+        coefficient: the coefficient of a species of no part (the mucosa, a
+            slow pool) at the equilibrium with the baseline.
+        zone: the zone of the species, `None` for an organ without zones.
+        steady: the start of a substance with a generated steady state
+            (`pkpdsim.pbpk.stationary`) which the organ knows when it
+            records it, `None` for the start of its part
+            (`OrganBuilder._steady_start`).
+    """
+
+    sid: str
+    substance: Substance
+    part: Part | None
+    coefficient: str | None
+    zone: str | None
+    steady: str | None
 
 
 def label(organ: Organ) -> str:
@@ -159,7 +206,7 @@ class OrganBuilder:
         self.reactions: list[Reaction] = []
         self.replacements: dict[str, str] = {}
         self.outputs: dict[str, str] = {}
-        self.starts: list[tuple[str, Substance, Part | None, str | None]] = []
+        self.starts: list[Start] = []
 
     def _annotate[E: (Compartment, Parameter, Reaction, Species)](
         self,
@@ -394,7 +441,7 @@ class OrganBuilder:
             _SPECIES_KINDS[part],
             substance=s,
         )
-        self._defer_start(sid, s, part)
+        self._defer_start(sid, s, part, zone=zone)
 
     def _defer_start(
         self,
@@ -402,6 +449,9 @@ class OrganBuilder:
         s: Substance,
         part: Part | None = None,
         coefficient: str | None = None,
+        *,
+        zone: str | None = None,
+        steady: str | None = None,
     ) -> None:
         """Record the start of a species of an endogenous substance, built at the end.
 
@@ -419,9 +469,37 @@ class OrganBuilder:
                 (`_equilibrium`), `None` for `coefficient`.
             coefficient: the coefficient of a species of no part (the
                 mucosa).
+            zone: the zone of the species.
+            steady: the start of a substance with a generated steady state,
+                if the organ knows it here (`Start.steady`).
         """
         if s.baseline is not None:
-            self.starts.append((sid, s, part, coefficient))
+            self.starts.append(Start(sid, s, part, coefficient, zone, steady))
+
+    def _generated(self, s: Substance) -> bool:
+        """Whether a substance has a generated steady state (`pkpdsim.pbpk.stationary`)."""
+        steady = self.ctx.steady
+        return steady is not None and s.sid in steady.substances
+
+    def _steady_start(self, start: Start) -> str:
+        """The start of a species of a substance with a generated steady state.
+
+        The organ components with such substances implement it
+        (`StandardBuilder`).
+
+        Raises:
+            NotImplementedError: for a component without a steady state.
+        """
+        raise NotImplementedError(
+            f"{start.substance.sid}: the organ '{self.organ.value}' ({self.name}) "
+            f"has no steady state of the species '{start.sid}'."
+        )
+
+    def _set_start(self, sid: str, formula: str) -> None:
+        """Give a species of the organ its start, an initial assignment."""
+        species = self.species[sid]
+        species.initialConcentration = None
+        self.assignments.append(species_start(sid, formula, str(species.name)))
 
     def _equilibrium(self, part: Part, s: Substance) -> str | None:
         """The coefficient of a part to plasma at the equilibrium of its exchange.
@@ -796,7 +874,8 @@ class OrganBuilder:
     def _custom_inputs(self) -> None:
         """The inputs of the ids of the top model which the custom reactions read.
 
-        An id of the formula of a custom reaction is an element of the organ
+        An id of the formula of a custom reaction or of its declared steady
+        state (`CustomReaction.stationary`) is an element of the organ
         (its species, compartments, parameters, the parameters of the
         reaction), `time`, or a constant parameter or compartment of the top
         model (`OrganContext.top`, a parameter of the definition, a
@@ -819,8 +898,9 @@ class OrganBuilder:
         for p in self.ctx.chemistry:
             if not isinstance(p, CustomReaction) or p.sid not in placed:
                 continue
+            read = formula_ids(p.formula) | stationary_ids(p)
             refused: list[str] = []
-            for symbol in sorted(formula_ids(p.formula) - local):
+            for symbol in sorted(read - local):
                 kind, unit = self.ctx.top.get(symbol, ("", None))
                 if kind == "compartment":
                     self._input_compartment(symbol, f"{symbol} (read by {p.sid})")
@@ -836,7 +916,7 @@ class OrganBuilder:
                     "the definition, a covariate); a species or an observer of the "
                     "top model is not read by an organ"
                 )
-            local |= formula_ids(p.formula)
+            local |= read
 
     def model_definition(self, notes: str) -> ModelDefinition:
         """Get the model definition of the collected elements.
@@ -856,10 +936,17 @@ class OrganBuilder:
                 (`RateOf`, `REST`) reads an id which is no constant of the
                 organ.
         """
-        for sid, s, part, coefficient in self.starts:
-            if part is not None:
-                coefficient = self._equilibrium(part, s)
-            self._start(sid, s, coefficient)
+        for start in self.starts:
+            if self._generated(start.substance):
+                formula = start.steady
+                if formula is None:
+                    formula = self._steady_start(start)
+                self._set_start(start.sid, formula)
+                continue
+            coefficient = start.coefficient
+            if start.part is not None:
+                coefficient = self._equilibrium(start.part, start.substance)
+            self._start(start.sid, start.substance, coefficient)
         self.starts = []
         self._custom_inputs()
         parameters = [

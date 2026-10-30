@@ -535,8 +535,10 @@ class GutBuilder(LumenBuilder):
                 substance=s,
                 segment=seg.token,
             )
-            # the mucosa releases `Cmu/K_mu`: at equilibrium `K_mu*baseline`
-            self._defer_start(c, s, coefficient=k)
+            # the mucosa releases `Cmu/K_mu`: at equilibrium `K_mu*baseline`,
+            # at a generated steady state `K_mu*Car` (the intestine moves
+            # nothing of the substance)
+            self._defer_start(c, s, coefficient=k, steady=f"{k} * {car}")
             self._reaction(
                 ids.mucosa_reaction("in", sid, seg.token),
                 f"{car} -> {c}",

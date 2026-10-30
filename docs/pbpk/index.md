@@ -144,6 +144,12 @@ One id scheme for every model, built by the functions of `pkpdsim.pbpk.ids`, so 
 | `reab_threshold_<s>` | the renal threshold of a saturable reabsorption, a concentration of the filtrate (mM) | `ids.reabsorption_threshold(s)` |
 | `reab_n_<s>` | the sharpness of the threshold of a saturable reabsorption | `ids.reabsorption_n(s)` |
 | `baseline_<s>` | the plasma concentration of an endogenous substance at the start (mM) | `ids.baseline(s)` |
+| `CLss_<s>` | the clearance of the plasma of an organ at the generated steady state (l/min, local id); in the top model that of the arterial plasma by the body of a solved substance | `ids.steady_clearance(s)` |
+| `Rss_<s>` | the net source into the plasma of an organ at the generated steady state (mmole/min, local id); in the top model that of the body of a solved substance | `ids.steady_rate(s)` |
+| `Vss_<s>` | the capacity of the declared saturable rate of the plasma of an organ (mmole/min, local id) | `ids.steady_vmax(s)` |
+| `Kss_<s>` | the Michaelis constant of the declared saturable rate of the plasma of an organ (mM, local id) | `ids.steady_km(s)` |
+| `CLss_<o>_<s>` | a constant of the generated steady state of an organ in the top model, its output (`Rss_<o>_<s>`, `Vss_<o>_<s>`, `Kss_<o>_<s>` as well) | `ids.steady_clearance(s, o)` |
+| `Css_<o>_<s>` | the plasma of the organ of a saturable process at the solved steady state (mM) | `ids.steady_plasma(o, s)` |
 | `IVDOSE_<s>` | the intravenous dose state (mg) | `ids.iv_dose(s)` |
 | `Ri_<s>` | the intravenous infusion (mg/min) | `ids.infusion_rate(s)` |
 | `PODOSE_<s>` | the oral dose state of a tablet (mg) | `ids.po_dose(s)` |

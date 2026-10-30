@@ -120,6 +120,13 @@ from pkpdsim.pbpk.placement import (
 )
 from pkpdsim.pbpk.routes import ORAL, route_objects
 from pkpdsim.pbpk.sinks import sink_objects
+from pkpdsim.pbpk.stationary import (
+    SteadyPlan,
+    organ_exports,
+    pool_start,
+    solved_baseline,
+    steady_plan,
+)
 from pkpdsim.pbpk.substance import Kp, KpMethod, Substance
 from pkpdsim.pbpk.units import EXTRA_UNITS, MODEL_UNITS, U
 from pkpdsim.pbpk.values import Formula, Q, Value
@@ -242,6 +249,7 @@ def organ_context(
     definition: PBPKDefinition,
     organ: Organ,
     top: Mapping[str, tuple[str, UnitType]] | None = None,
+    steady: SteadyPlan | None = None,
 ) -> OrganContext:
     """Get the context of an organ: every substance flows through every organ.
 
@@ -250,6 +258,8 @@ def organ_context(
         organ: the organ.
         top: the parameters and compartments of the top model with their
             kind and unit, which a `Formula` of the organ may read.
+        steady: the generated steady state of the definition
+            (`pkpdsim.pbpk.stationary.steady_plan`), `None` for none.
 
     Returns:
         The substances with their parts in the organ, the chemistry and the
@@ -268,6 +278,7 @@ def organ_context(
         routes=tuple(definition.routes),
         top=dict(top or {}),
         slow_pools=tuple(definition.slow_pools),
+        steady=steady,
     )
 
 
@@ -573,8 +584,19 @@ def _body(
             "intestine need an intestine with a lumen (variant 'segmented' or "
             "'single_lumen'), the small intestine is a standard organ."
         )
+    plan = steady_plan(definition)
+    organs = built_organs(definition)
+    solved_values: list[Sbase] = []
+    if plan.solved:
+        definition, solved_values = _solved(definition, plan, organs)
     top = _Top(definition)
+    top.steady = plan
+    top.organs = organs
+    top.gut = gut.replaces if gut is not None else ()
     top.parameters()
+    # the constants of the solved baselines, which the organ of a saturable
+    # process reads (`Css_<o>_<s>`)
+    top.add(solved_values)
     for s in definition.substances:
         top.substance(s)
     for pool in Pool:
@@ -595,13 +617,12 @@ def _body(
     submodels: list[Submodel] = []
     replaced: list[ReplacedElement] = []
     organ_models: list[ModelDefinition] = []
-    organs = built_organs(definition)
     reads = _organ_reads(definition, organs)
     started: set[str] = set(top.started)
     for organ in organs:
         inputs = top.inputs()
         md, boundary = organ_component(definition, organ).build(
-            organ_context(definition, organ, inputs)
+            organ_context(definition, organ, inputs, plan)
         )
         if any(md.sid == other.sid for other in model_definitions):
             raise ValueError(f"Two organs build the model definition '{md.sid}'.")
@@ -636,7 +657,9 @@ def _body(
                 "of the top model."
             )
         submodels.append(Submodel(submodel, modelRef=md.sid, name=organ.name.lower()))
-        replaced += top.connect(organ, submodel, boundary, outputs)
+        replaced += top.connect(
+            organ, submodel, boundary, {**outputs, **_steady_outputs(plan, organ)}
+        )
     unknown = sorted(set(definition.starts) - started)
     if unknown:
         raise ValueError(
@@ -682,6 +705,87 @@ def _body(
         replaced,
     )
     return top, model_definitions, submodels, replaced
+
+
+def _solved(
+    definition: PBPKDefinition, plan: SteadyPlan, organs: Sequence[Organ]
+) -> tuple[PBPKDefinition, list[Sbase]]:
+    """The definition with the generated baselines of the solved substances.
+
+    The library solves the arterial plasma of the steady state of a
+    substance with a declared steady state and without a baseline
+    (`pkpdsim.pbpk.stationary.solved_baseline`) and writes it as its
+    baseline, from which every species starts.
+
+    Returns:
+        The definition and the constants of the top model which the
+        baselines read (`CLss_<s>`, `Rss_<s>`, `Css_<o>_<s>`).
+    """
+    objects: list[Sbase] = []
+    substances: list[Substance] = []
+    for s in definition.substances:
+        if s.sid not in plan.solved:
+            substances.append(s)
+            continue
+        values, formula = solved_baseline(s, plan, organs)
+        objects += [
+            annotate(
+                value_parameter(
+                    v.sid,
+                    Formula(v.formula, v.unit),
+                    v.unit,
+                    v.name,
+                    _SBO_PARAMETER,
+                    v.notes,
+                ),
+                v.kind,
+            )
+            for v in values
+        ]
+        baseline = Formula(
+            formula,
+            U.mM,
+            notes=(
+                "Generated: the arterial plasma of the steady state of the declared "
+                "rates of the custom reactions (`CustomReaction.stationary`), "
+                "solved by the library (`pkpdsim.pbpk.stationary.solved_baseline`)."
+            ),
+        )
+        substances.append(replace(s, baseline=baseline))
+    return replace(definition, substances=substances), objects
+
+
+_STEADY_OUTPUTS = {
+    "CLss": (U.l_per_min, "clearance", "steady_clearance"),
+    "Rss": (U.mmole_per_min, "net source", "steady_rate"),
+    "Vss": (U.mmole_per_min, "saturable capacity", "steady_vmax"),
+    "Kss": (U.mM, "saturable Michaelis constant", "steady_km"),
+}
+"""The constants of the steady state of an organ by the prefix of their ids:
+unit, quantity in the name, kind."""
+
+
+def _steady_outputs(plan: SteadyPlan, organ: Organ) -> dict[str, OrganOutput]:
+    """The constants of the steady state which an organ gives to the top model.
+
+    Constants (the parameter of the top model is constant, replaced by the
+    constant of the organ), which a generated baseline and the start of the
+    venous pool read (`pkpdsim.pbpk.stationary.organ_exports`).
+    """
+    found: dict[str, OrganOutput] = {}
+    for sid in sorted(plan.substances):
+        for top_id in organ_exports(plan, organ, sid).values():
+            unit, quantity, kind = _STEADY_OUTPUTS[top_id.split("_", 1)[0]]
+            uid = getattr(unit, "sid", unit)
+            found[top_id] = OrganOutput(
+                unit,
+                f"steady state {quantity} {top_id} [{uid}]",
+                kind,
+                f"The {quantity} of the plasma at the steady state of {sid} "
+                "(`pkpdsim.pbpk.stationary`), a constant of the ",
+                constant=True,
+            )
+    return found
 
 
 def _start_number(q: Q) -> float:
@@ -1288,6 +1392,11 @@ class _Top:
         #: the ids of the outputs in the top model of the elements of the
         #: organs which the PD components and the observers read, by flat id
         self.exposed: dict[str, str] = {}
+        #: the generated steady state, the built organs and the organs of the
+        #: intestine of a variant (the starts of the pools)
+        self.steady = SteadyPlan()
+        self.organs: Sequence[Organ] = ()
+        self.gut: Sequence[Organ] = ()
 
     def add(self, objects: Iterable[Sbase]) -> None:
         """Add objects, recording the ids of compartments, species and parameters."""
@@ -2204,13 +2313,16 @@ class _Top:
                     pool,
                 )
             cpl = ids.pool_species(pool, s.sid)
+            start = start_formula(s)
+            if s.sid in self.steady.substances:
+                start = pool_start(s, self.steady, pool, self.organs, self.gut) or start
             self._species(
                 cpl,
                 compartment,
                 f"{s.name} ({label} plasma)",
                 "concentration_plasma",
                 s,
-                start_formula(s),
+                start,
             )
             if ery is None or ery.mode != "kinetic":
                 continue
@@ -2398,6 +2510,7 @@ class _Top:
         cells = {ids.outflow_conc_bc(s.sid) for s in self.definition.substances}
         rates = {ids.urine_rate(s.sid) for s in self.definition.substances}
         for local, top in boundary.outputs.items():
+            constant = False
             if top in rates:
                 unit, name, kind = (
                     U.mmole_per_min,
@@ -2408,6 +2521,7 @@ class _Top:
             elif top in exposed:
                 out = exposed[top]
                 unit, name, kind, text = out.unit, out.name, out.kind, out.text
+                constant = out.constant
             else:
                 unit, name, kind = (
                     U.mM,
@@ -2422,7 +2536,7 @@ class _Top:
                             top,
                             0.0,
                             unit,
-                            constant=False,
+                            constant=constant,
                             name=name,
                             sboTerm=_SBO_PARAMETER,
                             notes=f"{text}organ {organ.name.lower()}, replaced by "

@@ -109,7 +109,7 @@ A substance whose terminal phase is the slow release from a deep compartment of 
 J_slow_<s>: Cti_<s> -> Cslow_<s> = kslow_<s> * Vti * (Kpslow_<s> * Cti_<s> - Cslow_<s>)
 ```
 
-`kslow_<s>` is the exchange per litre of tissue (1/min), so the exchange of an organ follows the tissue volume of the individual, as the share of `ftissue` does; `Kpslow_<s>` is the concentration of the pool to that of the tissue at equilibrium, `Cslow = Kpslow*Cti`: the pool of an organ holds `Kpslow` times the amount of its tissue. Both are constants of the top model, one value for all organs of the pool, a number, a fitted `Value` or a `Formula`. The pool of an endogenous substance starts at its equilibrium, `Kpslow_<s>*Kp*baseline_<s>`; `ids.species_of` counts the pools (`MU__Cslow_<s>`) and an observer reads one as `C<o>_slow_<s>` (`Cmu_slow_<s>`). The validation refuses an organ which is not a standard organ (a variant, an organ the intestine replaces) or in which the substance has no merged tissue (`Mode.PERFUSION`, `Mode.PERMEABILITY`, an organ it does not enter, a transport of it in the organ). Without slow pools the model has none of their elements.
+`kslow_<s>` is the exchange per litre of tissue (1/min), so the exchange of an organ follows the tissue volume of the individual, as the share of `ftissue` does; `Kpslow_<s>` is the concentration of the pool to that of the tissue at equilibrium, `Cslow = Kpslow*Cti`: the pool of an organ holds `Kpslow` times the amount of its tissue. Both are constants of the top model, one value for all organs of the pool, a number, a fitted `Value` or a `Formula`. The pool of an endogenous substance starts at its equilibrium, `Kpslow_<s>*Kp*baseline_<s>`, of a substance with a [generated steady state](#generated-steady-state) at `Kpslow_<s>` times the start of its tissue; `ids.species_of` counts the pools (`MU__Cslow_<s>`) and an observer reads one as `C<o>_slow_<s>` (`Cmu_slow_<s>`). The validation refuses an organ which is not a standard organ (a variant, an organ the intestine replaces) or in which the substance has no merged tissue (`Mode.PERFUSION`, `Mode.PERMEABILITY`, an organ it does not enter, a transport of it in the organ). Without slow pools the model has none of their elements.
 
 ```python
 from pkpdsim.pbpk import Excretion, Kp, Organ, SlowPool, Substance
@@ -273,7 +273,59 @@ The parameters are constants: a change before the simulation (`preinit_changes`)
 
 ### Starts of the species
 
-A production or an elimination of the chemistry moves the organs where it acts away from the equilibrium with the baseline: at the steady state the plasma leaving the muscle carries the production, and the tissue of the muscle holds more than `Kp` times its plasma, by the production over the exchange. `PBPKDefinition.starts` gives such a species its own start: the flat id of the species (`MU__Cpl_crtn`, a pool `Cve_crtn`, a species of a custom reaction such as a pool of the muscle) to its initial concentration in mM, a number, a `Value` or a `Formula` over the constants of the top model, which replaces the start at the equilibrium. The organ reads the ids of a formula through input ports under the same ids, as for a `Formula` of the organ, and the start is an initial assignment of the species, so it follows a change of the individual before the simulation. The definition keeps the starts as a read-only mapping, as it keeps the values per substance of the intestine.
+A production or an elimination of the chemistry moves the organs where it acts away from the equilibrium with the baseline: at the steady state the plasma leaving the muscle carries the production, and the tissue of the muscle holds more than `Kp` times its plasma, by the production over the exchange.
+
+#### Generated steady state
+
+A custom reaction declares its rate at the steady state (`CustomReaction.stationary`, `pkpdsim.pbpk.stationary`), and the library starts every species of the substances it moves at their steady state, so that a model writes only what the library cannot know:
+
+| declaration | the reaction at the steady state |
+|---|---|
+| `stationary=Formula("CRTNPROD_k", U.mmole_per_min)` | its rate (mmole/min), a formula of the organ as the rate law: the elements of the organ, the parameters of the reaction, the starts of species of other substances (a pool of a custom species at its start) and constants of the top model, never a species of a substance it moves |
+| `stationary="linear"` (`LINEAR`) | a first order clearance of its substrate, a plasma or tissue species of one substance: the rate law is linear in it (one factor of a product, the numerator of a quotient) and the library takes the clearance from it (`k * Vti * Cti_<s>` clears `k * Vti`); a product of another substance gets the rate at the start of the substrate |
+| `stationary=Saturable(vmax, km)` | a Michaelis-Menten rate `vmax*C/(km + C)` of the plasma species of its substrate, the formulas of the organ: the organ starts at the root of a quadratic |
+
+Every organ starts at the steady state of the equations of the library at its inflow (the arterial pool, the venous pool for the lung, the mix of the hepatic artery and the portal vein past the shunt for the liver, the zone upstream in the zonated liver): with the declared processes its plasma obeys `(R + CLss)*C + S(C) = R*Cin + Rss` (`R` the flow of the plasma leaving the organ, of the kidney the plasma flow less the net filtrate), with the clearance `CLss_<s>` and the net source `Rss_<s>` of plasma and tissue (the tissue at its steady state) and the saturable rate `Vss_<s>*C/(Kss_<s> + C)`, constants of the organ; without a process an organ passes its inflow on (the kidney filters the arterial plasma and its outflow lacks the net filtrate at its plasma: they balance at the arterial plasma, with a threshold reabsorption as well). Every other part starts at the equilibrium with the plasma of its organ (of its zone), the flow-limited organ with its inflow, a slow pool at `Kpslow_<s>` times the start of its tissue, the tubule of the nephron kidney at the flow of the filtrate, `fu*Car/f_tub_<seg>`, the mucosa at `K_mu_<s>*Car`, the lumen empty; the portal vein at the mix of its organs, the venous pool at the inflow of the lung whose plasma is the arterial plasma, the arterial pool at the baseline. A substance with a baseline is *pinned* at it: its declared rates must balance at the baseline (the model derives the rate which closes the balance, e.g. a supply, with the formulas below). A substance without a baseline is *solved*: the library writes `baseline_<s>`, the arterial plasma at which the eliminations of the organs sum to the sources (`CLss_<s>`, `Rss_<s>` of the top model, from the constants of the organs, `CLss_<o>_<s>`, ...; with a saturable process of a systemic organ the root of a quadratic in its plasma, `Css_<o>_<s>`).
+
+```text
+# the plasma of an organ with a declared process and its tissue
+Cpl_<s> = (R*Cin + Rss_<s>)/(R + CLss_<s>)
+Cti_<s> = Kp*(PS*fu*Cpl_<s> + r_ti)/(PS*fu + Kp*cl_ti)
+Cslow_<s> = Kpslow_<s> * Cti_<s>
+# a solved substance without a saturable process
+baseline_<s> = Rss_<s> / CLss_<s>
+```
+
+The starts are short initial assignments of the organs which read the species of their inflow, so every parameter set before the simulation (`preinit_changes`: the individual, a renal function, a parameter of a custom reaction such as an activity, `MU__f_slc6a8`) moves them, and the solved baseline reads the constants of the organs. A start of `PBPKDefinition.starts` (below) replaces the generated start of its species. roadrunner inlines every initial assignment a start reads, so the load time grows with the size of the baseline times the species which read it: the library writes the forms which read each deep quantity least (the organs in series, `1/(1/CLss + 1/R)`), a solved saturable process repeats the clearance and the source of the rest of the body in the root, and a pinned baseline is the cheapest.
+
+What has no closed form is refused with the reason, naming the reaction or the substance: a custom reaction which moves the substance without a declaration, a metabolism or transport of the library which moves it (the uptake from the empty lumen of the small intestine is kept), kinetic erythrocytes, a declared process in the full form, the flow-limited organ, the blood cells or a slow pool, a linear or saturable transfer between two parts of the substance, a declaration which reads a species of a substance the reaction moves, substances whose steady states read each other, a threshold reabsorption with a declared process of the kidney, and of a solved substance a threshold reabsorption, a saturable process outside the systemic organs (the lung, the liver, a portal organ), two saturable processes or nothing which eliminates it. The tests build the standard organs, the nephron kidney, the zonated liver, a slow pool, a lung which clears, a threshold reabsorption, erythrocytes in equilibrium, a product of a linear conversion, another individual and an activity of an organ set before the simulation, and check that every species stays within 1e-12 of its start over a day (`tests/pbpk/test_stationary.py`). The example with its production declared:
+
+```python
+import dataclasses
+
+generated = dataclasses.replace(
+    creatinine,
+    substances=[dataclasses.replace(creatinine.substances[0], baseline=None)],
+    chemistry=[
+        dataclasses.replace(
+            creatinine.chemistry[0],
+            stationary=Formula("CRTNPROD_k", U.mmole_per_min),
+        )
+    ],
+)
+model = compose(generated)
+print(sorted(generated.starts))
+```
+
+```text
+[]
+```
+
+The library solves its baseline, `CRTNPROD_k / (fu_crtn*GFR*(1 - f_reabsorbed_crtn))`, the `CRTNPROD_k / GFR` of the example, and every species stays within 1e-12 of its start for another body weight or renal function (`tests/docs/test_substances_example.py`).
+
+#### Starts given by the model
+
+`PBPKDefinition.starts` gives a species its own start: the flat id of the species (`MU__Cpl_crtn`, a pool `Cve_crtn`, a species of a custom reaction such as a pool of the muscle) to its initial concentration in mM, a number, a `Value` or a `Formula` over the constants of the top model, which replaces the start at the equilibrium. The organ reads the ids of a formula through input ports under the same ids, as for a `Formula` of the organ, and the start is an initial assignment of the species, so it follows a change of the individual before the simulation. The definition keeps the starts as a read-only mapping, as it keeps the values per substance of the intestine.
 
 The steady state of the organs of the library is a closed form at a given inflow, and `pkpdsim.pbpk.steady_state` returns it as formulas over the ids of the top model, the ids the equations of the organs read, so a model does not restate the equations of the library:
 

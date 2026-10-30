@@ -4,7 +4,11 @@ A process states its own constants, or takes its capacity as a ratio of
 another process of the organ (`RateOf`); a metabolism converts its substrate
 into its products by fractions, numbers or values with the remainder `REST`;
 a custom reaction has the constants of its mechanism as `ModelParameter`s, its
-own constants with provenance.
+own constants with provenance, and may declare its rate at the steady state
+(`stationary`): a `Formula` of the rate, `"linear"` for a rate law which is
+linear in its substrate, or `Saturable(vmax, km)` for a Michaelis-Menten rate
+of a plasma species; the builder then writes the starts of its substances at
+their steady state (`pkpdsim.pbpk.stationary`).
 
 The enum fields of a process (`organ`, `direction`, `membrane`, `part`) may be
 given as member, value or name (`"li"`, `"liver"`, `"basolateral"`): the
@@ -15,6 +19,7 @@ field and the allowed values.
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum, StrEnum
+from typing import Literal
 
 import libsbml
 from sbmlutils.factory import Parameter, Species
@@ -24,6 +29,7 @@ from pkpdsim.pbpk.organs import Organ, Part, as_member
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import (
     SID,
+    Formula,
     ModelParameter,
     Q,
     Value,
@@ -33,6 +39,7 @@ from pkpdsim.pbpk.values import (
 )
 
 __all__ = [
+    "LINEAR",
     "MM",
     "REST",
     "CustomReaction",
@@ -43,11 +50,14 @@ __all__ = [
     "Metabolism",
     "RateOf",
     "Rest",
+    "Saturable",
+    "Stationary",
     "Transport",
     "check_custom_parameters",
     "check_kinetics",
     "check_products",
     "check_rate_of",
+    "check_stationary",
     "fraction_range",
 ]
 
@@ -236,6 +246,36 @@ class Transport:
 
 
 @dataclass(frozen=True)
+class Saturable:
+    """A Michaelis-Menten rate of a plasma species, `vmax*C/(km + C)`.
+
+    As the steady state of a custom reaction (`CustomReaction.stationary`):
+    its rate law is the saturable rate of the plasma species of its
+    substrate `C`, so its organ starts at the root of a quadratic; the
+    formulas are formulas of the organ, as the rate law (the elements of the
+    organ, the parameters of the reaction, constants of the top model). As an
+    argument of the formulas of `pkpdsim.pbpk.steady_state` (a saturable
+    secretion of the kidney plasma) the formulas read ids of the top model.
+
+    Attributes:
+        vmax: the capacity of the whole organ (mmole/min), a formula.
+        km: the Michaelis constant (mM), a formula.
+    """
+
+    vmax: str
+    km: str
+
+
+LINEAR = "linear"
+"""The steady state of a custom reaction whose rate law is linear in its
+substrate (`CustomReaction.stationary`): a first order clearance of a plasma
+or tissue species."""
+
+type Stationary = Formula | Literal["linear"] | Saturable
+"""The steady state of a custom reaction (`CustomReaction.stationary`)."""
+
+
+@dataclass(frozen=True)
 class CustomReaction:
     """A mechanism the library has no class for, placed like any process.
 
@@ -252,6 +292,19 @@ class CustomReaction:
             sbmlutils `Parameter` as it is. An id is defined once in an organ,
             the other reactions of the organ read it.
         species: additional species of the reaction.
+        stationary: the rate of the reaction at the steady state of its
+            substances, which makes the builder start every organ part of
+            them at their steady state (`pkpdsim.pbpk.stationary`), `None`
+            for none: a `Formula` of the rate (mmole/min), a formula of the
+            organ as the rate law (it reads the elements of the organ, the
+            parameters of the reaction, the starts of species of other
+            substances and constants of the top model, never a species of a
+            substance it moves); `"linear"` (`LINEAR`), a rate law linear in
+            its substrate, a plasma or tissue species of one substance, whose
+            clearance the builder takes from the rate law; `Saturable(vmax,
+            km)`, a Michaelis-Menten rate of the plasma species of its
+            substrate. Every custom reaction which moves a substance with a
+            steady state declares its own.
     """
 
     sid: str
@@ -261,6 +314,7 @@ class CustomReaction:
     formula: str
     parameters: Sequence[ModelParameter | Parameter] = field(default_factory=list)
     species: list[Species] = field(default_factory=list)
+    stationary: Stationary | None = None
 
     def __post_init__(self) -> None:
         """Normalise organ and part to their enum members."""
@@ -450,6 +504,36 @@ def fraction_range(f: float | Value) -> tuple[float, float]:
             lo, hi = distrib.support(child.math)
             low, high = min(low, lo), max(high, hi)
     return low, high
+
+
+def check_stationary(p: CustomReaction) -> list[str]:
+    """Check the declared steady state of a custom reaction.
+
+    A `Formula` in mmole/min, the text `"linear"` or a `Saturable` with two
+    formulas; the build checks what the declaration reads and whether the
+    organs have a closed steady state (`pkpdsim.pbpk.stationary`).
+
+    Args:
+        p: the custom reaction.
+
+    Returns:
+        The problems, naming the reaction.
+    """
+    s = p.stationary
+    if s is None or s == LINEAR:
+        return []
+    if isinstance(s, Formula):
+        return check_unit(p.sid, "stationary", s, U.mmole_per_min)
+    if isinstance(s, Saturable):
+        return [
+            f"{p.sid}: the stationary Saturable has an empty {name}"
+            for name in ("vmax", "km")
+            if not str(getattr(s, name)).strip()
+        ]
+    return [
+        f"{p.sid}: stationary is a {type(s).__name__}, not a Formula of the rate "
+        "(mmole/min), 'linear' or a Saturable"
+    ]
 
 
 def check_custom_parameters(p: CustomReaction, defined: set[str]) -> list[str]:

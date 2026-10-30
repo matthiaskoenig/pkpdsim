@@ -95,3 +95,37 @@ def test_the_starts_of_the_muscle_make_the_example_stationary(
     # the change of the arm vein over its start
     assert r["Carm_crtn_delta"] == pytest.approx(0.0, abs=1e-15)
     assert r["Carm_crtn_0"] == pytest.approx(r["Carm_crtn"], rel=1e-12)
+
+
+@pytest.mark.parametrize(
+    "changes", [{}, {"BW": 110.0}, {"f_renal_function": 0.3}], ids=str
+)
+def test_the_generated_example_is_stationary(
+    tmp_path: Path, changes: dict[str, float]
+) -> None:
+    """With the production declared the library solves the baseline and every start.
+
+    The page: no starts, the baseline `CRTNPROD_k / (fu_crtn*GFR*(1 -
+    f_reabsorbed_crtn))`, the `CRTNPROD_k / GFR` of the example, and every
+    species within 1e-12 of its start for another body weight or renal
+    function.
+    """
+    from sbmlsim.model.model_roadrunner import RoadrunnerSBMLModel
+    from sbmlsim.model.symbols import TargetKind
+    from sbmlsim.simulator.plan import Assignment
+
+    result = build(_definition("generated"), tmp_path)
+    model = RoadrunnerSBMLModel(source=result.flat_path)
+    model.initialize(
+        [Assignment(k, TargetKind.PARAMETER, value=v) for k, v in changes.items()]
+    )
+    r = model.r_loaded
+    assert r["baseline_crtn"] == pytest.approx(r["CRTNPROD_k"] / r["GFR"], rel=1e-14)
+    r.integrator.absolute_tolerance = 1e-16
+    r.integrator.relative_tolerance = 1e-13
+    sids = [s for s in r.model.getFloatingSpeciesIds() if not s.startswith("A")]
+    start = np.array([r[f"[{s}]"] for s in sids])
+    values = np.asarray(r.simulate(0, DAY, 9, selections=[f"[{s}]" for s in sids]))
+    scale = np.where(start > 0, start, 1.0)
+    drift = np.max(np.abs(values - start), axis=0) / scale
+    assert drift.max() < 1e-12, dict(zip(sids, drift, strict=True))

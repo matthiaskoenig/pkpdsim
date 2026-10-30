@@ -497,6 +497,13 @@ KINDS: dict[str, Kind] = {
         "CONCENTRATION_IN_PLASMA",
         requested="endogenous baseline plasma concentration",
     ),
+    "steady_clearance": Kind(_P, "CLEARANCE_RATE"),
+    "steady_rate": Kind(
+        _P, _BIOCHEM, requested="net production rate at the steady state"
+    ),
+    "steady_vmax": Kind(SBO.MAXIMAL_VELOCITY, "MAXIMUM_RATE"),
+    "steady_km": Kind(SBO.MICHAELIS_CONSTANT, _BIOCHEM, requested="Michaelis constant"),
+    "steady_plasma": Kind(_P, "CONCENTRATION_IN_PLASMA"),
     "kp": Kind(_P, "TISSUE_PLASMA_PARTITION_COEFFICIENT"),
     "kp_organ": Kind(
         _P,

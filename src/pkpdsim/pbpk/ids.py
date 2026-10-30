@@ -184,6 +184,11 @@ __all__ = [
     "species",
     "species_of",
     "start_value",
+    "steady_clearance",
+    "steady_km",
+    "steady_plasma",
+    "steady_rate",
+    "steady_vmax",
     "submodel",
     "tissue_volume_total_ref",
     "transit_reaction",
@@ -1266,6 +1271,61 @@ def species_of(s: str, ids: Iterable[str]) -> list[str]:
         rf"|Ctub_(?:{_TUBULE}))_{re.escape(s)}"
     )
     return [i for i in ids if pattern.fullmatch(i.rsplit("__", 1)[-1])]
+
+
+def _steady(prefix: str, s: str, organ: Organ | None) -> str:
+    """An id of the generated steady state: local, of an organ in the top model."""
+    return f"{prefix}_{s}" if organ is None else f"{prefix}_{organ.value}_{s}"
+
+
+def steady_clearance(s: str, organ: Organ | None = None) -> str:
+    """The id of a clearance of the generated steady state, `CLss_<s>` [l/min].
+
+    In an organ (`organ` None) the clearance of its plasma at the steady state
+    of `s`, the declared clearances of its tissue included
+    (`pkpdsim.pbpk.stationary`); with `organ` its output in the top model,
+    `CLss_<o>_<s>`. In the top model `CLss_<s>` is the clearance of the
+    arterial plasma by the body at the steady state (without the organ of a
+    saturable process), of a substance whose baseline the library solves.
+    """
+    return _steady("CLss", s, organ)
+
+
+def steady_rate(s: str, organ: Organ | None = None) -> str:
+    """The id of a net source of the generated steady state, `Rss_<s>` [mmole/min].
+
+    In an organ the net source into its plasma at the steady state of `s`
+    (the declared rates of plasma and tissue), with `organ` its output in
+    the top model, `Rss_<o>_<s>`; in the top model `Rss_<s>` is the net
+    source of the body at the steady state (without the organ of a saturable
+    process), see `steady_clearance`.
+    """
+    return _steady("Rss", s, organ)
+
+
+def steady_vmax(s: str, organ: Organ | None = None) -> str:
+    """The id of the capacity of a saturable process at the steady state, `Vss_<s>` [mmole/min].
+
+    In an organ, with `organ` its output in the top model `Vss_<o>_<s>`.
+    """
+    return _steady("Vss", s, organ)
+
+
+def steady_km(s: str, organ: Organ | None = None) -> str:
+    """The id of the Michaelis constant of a saturable process at the steady state, `Kss_<s>` [mM].
+
+    In an organ, with `organ` its output in the top model `Kss_<o>_<s>`.
+    """
+    return _steady("Kss", s, organ)
+
+
+def steady_plasma(organ: Organ, s: str) -> str:
+    """The id of the plasma of the organ of a saturable process at the steady state, `Css_<o>_<s>` [mM].
+
+    A parameter of the top model, the root of the quadratic of the steady
+    state of a substance whose baseline the library solves.
+    """
+    return f"Css_{organ.value}_{s}"
 
 
 def start_value(sid: str) -> str:
