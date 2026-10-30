@@ -35,3 +35,5 @@ docs/superpowers/
 # the toy model of the tests, created by the test session, and what a run of it writes
 tests/pkpdsim_toy/models/
 tests/pkpdsim_toy/results/
+tests/pkpdsim_sexes/models/
+tests/pkpdsim_sexes/results/

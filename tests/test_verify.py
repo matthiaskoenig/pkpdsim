@@ -22,6 +22,7 @@ from sbmlsim.simulation import Scan, Simulation
 from sbmlsim.simulation.sampling import local
 
 from pkpdsim.model import FigureSettings
+from pkpdsim.sex import Sex
 from pkpdsim.verify import (
     FIGURE_SETTINGS_08,
     NEW_FIGURE_SETTINGS,
@@ -647,6 +648,7 @@ def synthetic(
     figures: dict | None = None,
     ranges: dict | None = None,
     versions: dict[str, str] | None = None,
+    builds: dict[str, dict[str, str]] | None = None,
 ) -> Dump:
     dump = Dump(
         model="m",
@@ -660,6 +662,8 @@ def synthetic(
     )
     if versions is not None:
         dump["versions"] = versions
+    if builds is not None:
+        dump["builds"] = builds
     return dump
 
 
@@ -1479,3 +1483,61 @@ def test_the_label_of_a_curve_across_versions_of_sbmlsim_is_its_name() -> None:
     other = synthetic(figures={"E": {"Fig1": _curve("d", label="x", color="k")}})
     aligned = align_figures(other, new)
     assert aligned.old["figures"]["E"]["Fig1"] != aligned.new["figures"]["E"]["Fig1"]
+
+
+# --- the builds per sex -----------------------------------------------------------
+
+
+def test_describe_a_model_with_a_build_per_sex() -> None:
+    from pkpdsim_sexes import MODEL as SEXES
+
+    info = describe("pkpdsim_sexes")
+    assert info.model_path == SEXES.model_path
+    assert info.model_paths == SEXES.model_paths
+    assert list(info.model_paths) == [Sex.MALE, Sex.FEMALE]
+    assert describe("pkpdsim_toy").model_paths == {Sex.MALE: MODEL_PATH}
+
+
+def test_a_dump_records_the_build_of_every_task(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A study which moves to the build of another sex is a difference."""
+    old = tmp_path / "old.pkl"
+    common = ["--root", str(TESTS_DIR), "--model", "pkpdsim_sexes"]
+    assert verify(["dump", *common, "--out", str(old)]) == 0
+    dumped = load(str(old))
+    assert dumped["builds"] == {
+        "SexesMen": {"task_decay": "male"},
+        "SexesWomen": {"task_decay": "female"},
+        "SexesGroups": {"task_men": "male", "task_women": "female"},
+    }
+    capsys.readouterr()
+    assert verify(["compare", str(old), str(old)]) == 0
+    assert "builds: 4 old, 4 new, 0 differ" in capsys.readouterr().out
+
+    moved = copy.deepcopy(dumped)
+    moved["builds"]["SexesWomen"]["task_decay"] = "male"
+    new = written(tmp_path, "new.pkl", moved)
+    assert verify(["compare", str(old), new]) == 1
+    out = capsys.readouterr().out
+    assert "builds: 4 old, 4 new, 1 differ (0 expected)" in out
+    assert "SexesWomen/task_decay" in out
+    assert "'female' -> 'male'" in out
+    renames = tmp_path / "renames.json"
+    renames.write_text(json.dumps({"expected": {"builds": ["SexesWomen/*"]}}))
+    assert verify(["compare", str(old), new, "--renames", str(renames)]) == 0
+
+
+def test_the_tasks_of_the_builds_are_renamed(tmp_path: Path) -> None:
+    dump = synthetic(builds={"E": {"task_a": "female"}})
+    renamed = apply_renames(dump, {"ids": {"task_a": "task_b"}})
+    assert renamed["builds"] == {"E": {"task_b": "female"}}
+
+
+def test_a_dump_without_builds_is_compared_without_them(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    old = written(tmp_path, "old.pkl", synthetic())
+    new = written(tmp_path, "new.pkl", synthetic(builds={"E": {"task": "male"}}))
+    assert verify(["compare", old, new]) == 0
+    assert "builds: in the new dump only, not compared" in capsys.readouterr().out

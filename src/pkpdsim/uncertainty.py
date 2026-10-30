@@ -64,6 +64,7 @@ from sbmlsim.units import ureg
 from scipy import stats
 
 from pkpdsim import distrib
+from pkpdsim.sex import Sex
 
 if TYPE_CHECKING:
     from sbmlsim.experiment import SimulationExperiment
@@ -800,6 +801,11 @@ class UncertaintyRun:
     def create(cls, model: PKPDModel, settings: UncertaintySettings) -> UncertaintyRun:
         """Draw the fitted parameters of a model.
 
+        The draws are those of the male build (`model_path`); every build has
+        the same fitted parameters with the same distributions
+        (`check_fit_parameters`), so the draws run on the experiments of every
+        build.
+
         Args:
             model: the model, whose `model_path` has the distributions.
             settings: the settings of the run.
@@ -1113,8 +1119,11 @@ def apply_uncertainty(experiment: SimulationExperiment, run: UncertaintyRun) -> 
 def check_fit_parameters(model: PKPDModel) -> list[str]:
     """Check that the model has the fitted values and the uncertainty of its adopted fits.
 
-    Every parameter of an adopted fit must be a parameter of the flat model
-    (`model_path`) with the value of the fit and a distribution of its draws.
+    Every parameter of an adopted fit must be a parameter of every build of the
+    model (`model_paths`, the flat models) with the value of the fit and a
+    distribution of its draws. The draws are those of the male build
+    (`UncertaintyRun.create`) and run on every build, so the distribution of a
+    parameter in another build is the one of the male build.
 
     Args:
         model: the model.
@@ -1128,29 +1137,41 @@ def check_fit_parameters(model: PKPDModel) -> list[str]:
         records = model.fit_records()
     except (FileNotFoundError, ValueError) as err:
         return [str(err)]
-    if not model.model_path.exists():
-        return [f"the model {model.model_path} does not exist"]
-    doc = libsbml.readSBMLFromFile(str(model.model_path))
-    sbml_model = doc.getModel()
-    distributions = parameter_distributions(model.model_path)
     problems: list[str] = []
-    for pid, parameter in records.parameters.items():
-        p = sbml_model.getParameter(pid)
-        if p is None:
-            problems.append(
-                f"the parameter '{pid}' of the fit '{parameter.fit_id}' is no "
-                f"parameter of {model.model_path.name}"
-            )
+    male: dict[str, Distribution] | None = None
+    for sex, path in model.model_paths.items():
+        build = "model" if len(model.model_paths) == 1 else f"{sex} build"
+        if not path.exists():
+            problems.append(f"the {build} {path} does not exist")
             continue
-        if not math.isclose(p.getValue(), parameter.value, rel_tol=VALUE_RTOL):
-            problems.append(
-                f"the parameter '{pid}' is {p.getValue()!r} in the model, the fit "
-                f"'{parameter.fit_id}' gives {parameter.value!r}: take it from the "
-                f"record (`FitRecords.parameter`)"
-            )
-        if pid not in distributions:
-            problems.append(
-                f"the parameter '{pid}' of the fit '{parameter.fit_id}' has no "
-                f"distribution in the model"
-            )
+        sbml_model = libsbml.readSBMLFromFile(str(path)).getModel()
+        distributions = parameter_distributions(path)
+        if sex is Sex.MALE:
+            male = distributions
+        where = "" if len(model.model_paths) == 1 else f" (the {build} {path.name})"
+        for pid, parameter in records.parameters.items():
+            p = sbml_model.getParameter(pid)
+            if p is None:
+                problems.append(
+                    f"the parameter '{pid}' of the fit '{parameter.fit_id}' is no "
+                    f"parameter of {path.name}{where}"
+                )
+                continue
+            if not math.isclose(p.getValue(), parameter.value, rel_tol=VALUE_RTOL):
+                problems.append(
+                    f"the parameter '{pid}' is {p.getValue()!r} in the model, the "
+                    f"fit '{parameter.fit_id}' gives {parameter.value!r}: take it "
+                    f"from the record (`FitRecords.parameter`){where}"
+                )
+            if pid not in distributions:
+                problems.append(
+                    f"the parameter '{pid}' of the fit '{parameter.fit_id}' has no "
+                    f"distribution in the model{where}"
+                )
+            elif male is not None and pid in male and distributions[pid] != male[pid]:
+                problems.append(
+                    f"the distribution of the parameter '{pid}' of the fit "
+                    f"'{parameter.fit_id}' differs from the male build{where}: "
+                    f"{distributions[pid]} instead of {male[pid]}"
+                )
     return problems

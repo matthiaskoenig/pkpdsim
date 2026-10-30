@@ -4,14 +4,45 @@ A model package builds its `PBPKDefinition` with `pkpdsim.pbpk.build` and
 writes next to the SBML the differential equations as markdown, the antimony
 of the flat model, the two license texts and the COMBINE archive.
 `create_archive` does all of it, so the factory of a model is one call.
+
+A model with a build per sex builds the one definition for every sex
+(`sexes`): the build of the sex of the definition keeps its id (`<sid>.xml`,
+`<sid>_flat.xml`, the master entry of the archive) and the build of another
+sex is the definition with that sex and the id `<sid>_<sex>`, e.g.
+`<sid>_female_flat.xml` next to the male `<sid>_flat.xml`. The model object
+holds both (`PKPDModel(model_path=..., female_model_path=...)`).
 """
 
+import dataclasses
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
 from pkpdsim.pbpk.builder import build
 from pkpdsim.pbpk.definition import PBPKDefinition
+from pkpdsim.sex import Sex
+
+
+def sex_definition(definition: PBPKDefinition, sex: Sex) -> PBPKDefinition:
+    """Get the definition of the build of a sex.
+
+    Args:
+        definition: the definition of the model.
+        sex: the sex of the build.
+
+    Returns:
+        The definition itself for its own sex, else the definition with the
+        sex, the id `<sid>_<sex>`, e.g. `hctz_female`, and the name with the
+        sex, `<name> (female)`.
+    """
+    sex = Sex(sex)
+    if sex is definition.sex:
+        return definition
+    name = None if definition.name is None else f"{definition.name} ({sex})"
+    return dataclasses.replace(
+        definition, sex=sex, sid=f"{definition.sid}_{sex}", name=name
+    )
+
 
 #: the formats of the extra files of an archive by their suffix, the names of
 #: the members of `pymetadata.omex.EntryFormat`
@@ -36,6 +67,7 @@ def create_archive(
     readme: Path | None = None,
     extra_models: Sequence[Path] = (),
     extra_files: Sequence[Path] = (),
+    sexes: Sequence[Sex] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Build a definition and write its files and the COMBINE archive.
 
@@ -44,7 +76,10 @@ def create_archive(
     BY-SA 4.0 and MIT (with the copyright) into the parent of the directory and
     the archive `<model>_model.omex` there, with the README, the licenses, the
     comp model, the flat model (the master entry), the markdown, the antimony,
-    the extra models and the extra files.
+    the extra models and the extra files. With `sexes` every sex is built
+    (`sex_definition`), each with its comp model, flat model, markdown and
+    antimony in the archive; the flat model of the sex of the definition stays
+    the master entry.
 
     Args:
         definition: the definition of the model.
@@ -60,6 +95,9 @@ def create_archive(
             archive, e.g. the ODEs of an extra model (`.md`) or a figure
             (`.png`), with the format of their suffix (`EXTRA_FORMATS`, the
             antimony of `.ant` as the antimony of the flat model).
+        sexes: the sexes to build, the sex of the definition among them and
+            each once, e.g. `(Sex.MALE, Sex.FEMALE)`; `None` builds the sex of
+            the definition only.
 
     An extra model and an extra file have one location rule: a file is below
     the parent of `model_output_dir`, and its location in the archive is its
@@ -70,14 +108,16 @@ def create_archive(
         ValueError: if the stem of an extra model or the key of an extra file
             is the key of another entry, if an extra model or file is not below
             the parent of `model_output_dir` or the suffix of an extra file has
-            no format.
+            no format, or if `sexes` leaves out the sex of the definition or
+            names a sex twice (before anything is written).
 
     Returns:
         The files with their entries in the COMBINE archive, by the keys of a
         factory: `README`, `cc-by`, `mit`, the sid of the definition, `<sid>_flat`,
-        `<sid>_flat_md`, `<sid>_flat_ant`, the stem of every extra model and
-        `<stem>_<suffix>` of every extra file (`fluid_md`), each
-        `{"path": Path, "entry": ManifestEntry}`.
+        `<sid>_flat_md`, `<sid>_flat_ant` (and the same keys of the id of the
+        build of every other sex, `<sid>_female_flat`), the stem of every
+        extra model and `<stem>_<suffix>` of every extra file (`fluid_md`),
+        each `{"path": Path, "entry": ManifestEntry}`.
     """
     from pymetadata.omex import EntryFormat, ManifestEntry, Omex
     from sbmlode import OdeSystem
@@ -90,15 +130,30 @@ def create_archive(
     ) -> ManifestEntry:
         return ManifestEntry(location=location, format=fmt, master=master)
 
+    sexes = (definition.sex,) if sexes is None else tuple(Sex(s) for s in sexes)
+    if definition.sex not in sexes:
+        raise ValueError(
+            f"The sexes {[str(s) for s in sexes]} of the archive of "
+            f"'{definition.sid}' leave out the sex of the definition "
+            f"'{definition.sex}', the build of the master entry."
+        )
+    repeated = sorted({str(s) for s in sexes if sexes.count(s) > 1})
+    if repeated:
+        raise ValueError(
+            f"The archive of '{definition.sid}' builds the sexes {repeated} twice."
+        )
     model_output_dir.mkdir(parents=True, exist_ok=True)
-    built = build(definition, model_output_dir)
-    flat = built.flat_path
-
-    # differential equations and antimony of the flat model
-    md_path = flat.with_suffix(".md")
-    OdeSystem.from_sbml(flat).write(md_path)
-    ant_path = flat.with_suffix(".ant")
-    ant_path.write_text(sbml_to_antimony(flat), encoding="utf-8")
+    builds = []
+    for sex in sexes:
+        sexed = sex_definition(definition, sex)
+        built = build(sexed, model_output_dir)
+        flat = built.flat_path
+        # differential equations and antimony of the flat model
+        md_path = flat.with_suffix(".md")
+        OdeSystem.from_sbml(flat).write(md_path)
+        ant_path = flat.with_suffix(".ant")
+        ant_path.write_text(sbml_to_antimony(flat), encoding="utf-8")
+        builds.append((sexed.sid, built, md_path, ant_path))
 
     parent = model_output_dir.parent
     results: dict[str, dict[str, Any]] = {}
@@ -117,22 +172,27 @@ def create_archive(
         "path": mit,
         "entry": entry(f"./{mit.name}", EntryFormat.TXT),
     }
-    results[definition.sid] = {
-        "path": built.comp_path,
-        "entry": entry(f"./models/{built.comp_path.name}", EntryFormat.SBML_L3V2),
-    }
-    results[f"{definition.sid}_flat"] = {
-        "path": flat,
-        "entry": entry(f"./models/{flat.name}", EntryFormat.SBML_L3V2, master=True),
-    }
-    results[f"{definition.sid}_flat_md"] = {
-        "path": md_path,
-        "entry": entry(f"./models/{md_path.name}", EntryFormat.MARKDOWN),
-    }
-    results[f"{definition.sid}_flat_ant"] = {
-        "path": ant_path,
-        "entry": entry(f"./models/{ant_path.name}", EntryFormat.ANTIMONY),
-    }
+    for sid, built, md_path, ant_path in builds:
+        flat = built.flat_path
+        master = sid == definition.sid
+        results[sid] = {
+            "path": built.comp_path,
+            "entry": entry(f"./models/{built.comp_path.name}", EntryFormat.SBML_L3V2),
+        }
+        results[f"{sid}_flat"] = {
+            "path": flat,
+            "entry": entry(
+                f"./models/{flat.name}", EntryFormat.SBML_L3V2, master=master
+            ),
+        }
+        results[f"{sid}_flat_md"] = {
+            "path": md_path,
+            "entry": entry(f"./models/{md_path.name}", EntryFormat.MARKDOWN),
+        }
+        results[f"{sid}_flat_ant"] = {
+            "path": ant_path,
+            "entry": entry(f"./models/{ant_path.name}", EntryFormat.ANTIMONY),
+        }
 
     def location(extra: Path, what: str) -> str:
         """The location of an extra file in the archive, its path below `parent`."""

@@ -49,7 +49,6 @@ the healthy one.
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from enum import StrEnum
 from functools import cache
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
@@ -62,6 +61,7 @@ from pkpdsim.pbpk.annotation import annotate, initial_assignment
 from pkpdsim.pbpk.data import cite, load
 from pkpdsim.pbpk.organs import PORTAL_ORGANS, Organ, Pool
 from pkpdsim.pbpk.units import U
+from pkpdsim.sex import Sex
 
 if TYPE_CHECKING:
     from pkpdsim.pbpk.populations import Population
@@ -77,13 +77,6 @@ __all__ = [
     "reference_individual",
     "reference_tissue_volumes",
 ]
-
-
-class Sex(StrEnum):
-    """The sex of the reference individual."""
-
-    MALE = "male"
-    FEMALE = "female"
 
 
 LEAN_ORGANS: tuple[Organ, ...] = tuple(o for o in Organ if o is not Organ.ADIPOSE)

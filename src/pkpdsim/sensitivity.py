@@ -81,6 +81,7 @@ from sbmlutils.report.units import udef_to_string
 
 from pkpdsim.model import PKPDModel, SimulatorSettings
 from pkpdsim.run import create_simulator
+from pkpdsim.sex import Sex
 
 logger = logging.getLogger(__name__)
 
@@ -461,12 +462,16 @@ class SensitivityGroup:
             compare the groups, a color of matplotlib; the color of the
             property cycle of matplotlib (`C0`, `C1`, ...) of its position if
             `None`.
+        sex: the sex of the group, whose build of the model it runs
+            (`PKPDModel.model_paths`), the male build by default; the design
+            of an analysis is the same for every group.
     """
 
     uid: str
     name: str
     simulation: Simulation
     color: str | None = None
+    sex: Sex = Sex.MALE
 
 
 @dataclass(frozen=True)
@@ -474,15 +479,19 @@ class _Context:
     """What a run hands to its analyses."""
 
     simulator: Simulator
-    model_path: Path
+    model: PKPDModel
     outputs: Sequence[SensitivityOutput]
     observables: Sequence[Observable]
     seed: int
 
+    def model_path(self, group: SensitivityGroup) -> Path:
+        """Get the build of the model which a group runs, the build of its sex."""
+        return self.model.model_path_of(group.sex)
+
     def scan(self, group: SensitivityGroup, design: Dimension) -> ScanResult:
         """Run a design over the simulation of a group, the outputs per point."""
         return self.simulator.run(
-            self.model_path,
+            self.model_path(group),
             Scan(group.simulation, [design]),
             self.observables,
             keep=[o.observable for o in self.outputs],
@@ -864,7 +873,7 @@ class LocalAnalysis(Analysis):
                         sampling.local(
                             targets,
                             delta=kv / self.n_var * self.delta,
-                            model=context.model_path,
+                            model=context.model_path(group),
                             simulation=group.simulation,
                         ),
                     )
@@ -1535,7 +1544,8 @@ class SensitivityRunner:
     of a run, before anything is written.
 
     Attributes:
-        model: the model object: the model which is simulated, the folder of
+        model: the model object: the models which are simulated (the build
+            of the sex of every group, `SensitivityGroup.sex`), the folder of
             the results and the settings of the simulator.
         parameters: the function which gives the parameters of the analyses
             with their bounds; it reads the model, so it is called by a run.
@@ -1565,7 +1575,8 @@ class SensitivityRunner:
             ValueError: for no output, two outputs of one id, name or
                 observable, an output whose observable is none of the
                 observables, no analysis, no default analysis, or a default
-                analysis which is none of the analyses or is given twice.
+                analysis which is none of the analyses or is given twice, or a
+                group of a sex which the model has no build of.
             TypeError: for a default which is a string.
         """
         object.__setattr__(self, "outputs", tuple(self.outputs))
@@ -1603,6 +1614,15 @@ class SensitivityRunner:
         repeated = _repeated(self.default)
         if repeated:
             raise ValueError(f"The default analyses {repeated} are given twice.")
+        for name, analysis in self.analyses.items():
+            for group in analysis.groups:
+                try:
+                    self.model.model_path_of(group.sex)
+                except ValueError as err:
+                    raise ValueError(
+                        f"The group '{group.uid}' of the analysis '{name}' runs "
+                        f"the {group.sex} build: {err}"
+                    ) from err
 
     def _names(self, names: Sequence[str] | None) -> tuple[str, ...]:
         """Get the names of the analyses of a run, `default` if `None`.
@@ -1644,7 +1664,7 @@ class SensitivityRunner:
         """Get the context of the analyses of a run."""
         return _Context(
             simulator=simulator,
-            model_path=self.model.model_path,
+            model=self.model,
             outputs=self.outputs,
             observables=self.observables,
             seed=self.seed,

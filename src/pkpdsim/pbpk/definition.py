@@ -111,8 +111,8 @@ class PBPKDefinition:
         pd: the pharmacodynamic components.
         sex: the sex of the model, chosen when it is built: its reference
             values and default individual; a study of both sexes uses one
-            model per sex. A `Sex` member or its value (`"female"`),
-            normalised to the member.
+            model per sex, the builds of `create_archive(..., sexes=...)`. A
+            `Sex` member or its value (`"female"`), normalised to the member.
         population: the population (`pkpdsim.pbpk.populations`), chosen when
             the model is built: its reference individual of the sex is the
             default individual (`BW`, `HEIGHT`, `AGE`); the reference anatomy

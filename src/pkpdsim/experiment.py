@@ -15,9 +15,11 @@ class HctzSimulationExperiment(PKPDSimulationExperiment):
     Mr: ClassVar[MolecularWeights] = MolecularWeights(hctz=Q(297.74, "g/mole"))
 ```
 
-The base simulates the model of the model object (`models`), creates a task per
-simulation (`tasks`), adds the selections to every task (`data`), loads the
-digitized data of the study (`load_dataframe`, with the unit of the geometric
+The base simulates the model of the model object (`models`), the build of the
+sex of the study (`sex`, the male build by default, the female build of a study
+of women; `simulation_sexes` for a study with a group of each sex), creates a
+task per simulation on the build of its sex (`tasks`), adds the selections to
+every task (`data`), loads the digitized data of the study (`load_dataframe`, with the unit of the geometric
 means, `add_gmean_unit`) and has the classes of impaired
 organ function (`pkpdsim.impairment`) and the labels of the pharmacokinetic
 parameters (`pkpdsim.pk`) as defaults. A model overrides what it does
@@ -60,6 +62,7 @@ from sbmlsim.simulation import Change
 from sbmlsim.task import Task
 
 from pkpdsim import impairment, pk
+from pkpdsim.sex import Sex
 from pkpdsim.uncertainty import UncertaintyRun, apply_uncertainty
 
 if TYPE_CHECKING:
@@ -245,6 +248,18 @@ class PKPDSimulationExperiment(SimulationExperiment):
         pk_units: the unit of a pharmacokinetic parameter.
         data_units: the units of the data which the experiment reads under a
             name of its own, see `define_unit`.
+        sex: the sex of the subjects of the study, the build of the model
+            object its simulations run (`PKPDModel.model_paths`): the male
+            build by default, the female build for a study of women. A group
+            whose majority is women is simulated on the female build, a mixed
+            group without a majority of women on the male one (the study
+            module states it). A model without a female build refuses a
+            female experiment.
+        simulation_sexes: the sex of single simulations which differs from
+            `sex`, by the key of the simulation, e.g. the group of women of a
+            study of a group of men and a group of women. The models of an
+            experiment are loaded before its simulations are created, so the
+            sexes are declared and not computed by `simulations`.
     """
 
     pkpd_model: ClassVar[PKPDModel]
@@ -263,6 +278,8 @@ class PKPDSimulationExperiment(SimulationExperiment):
     #: the name in the data -> the definition of the unit, "<name> = <expression>",
     #: e.g. {"IU": "IU_ramipril_renin = 0.6 * microgram"}, see `define_unit`
     data_units: ClassVar[Mapping[str, str]] = MappingProxyType({})
+    sex: ClassVar[Sex] = Sex.MALE
+    simulation_sexes: ClassVar[Mapping[str, Sex]] = MappingProxyType({})
 
     def __init__(
         self,
@@ -393,24 +410,86 @@ class PKPDSimulationExperiment(SimulationExperiment):
             )
         return sid
 
+    def sex_of(self, simulation: str) -> Sex:
+        """Get the sex of the subjects of a simulation: `simulation_sexes`, else `sex`.
+
+        Args:
+            simulation: the key of the simulation.
+
+        Returns:
+            The sex, whose build the simulation runs.
+
+        Raises:
+            ValueError: for a sex which is no `Sex`.
+        """
+        return Sex(self.simulation_sexes.get(simulation, self.sex))
+
+    def model_id(self, sex: Sex) -> str:
+        """Get the key of the build of a sex among the models of the experiment.
+
+        The build of `sex` is `model`, the model of an experiment without
+        builds per sex; the build of another sex is `model_<sex>`, e.g.
+        `model_female` in a study of men with a group of women.
+
+        Args:
+            sex: the sex.
+
+        Returns:
+            The key of the model.
+        """
+        sex = Sex(sex)
+        return "model" if sex == Sex(self.sex) else f"model_{sex}"
+
     def models(self) -> dict[str, AbstractModel | Path]:
-        """Get the SBML model of the model object, without changes."""
-        return {
-            "model": AbstractModel(
-                source=self.pkpd_model.model_path,
+        """Get the builds of the model object which the experiment simulates.
+
+        The build of `sex` as `model` and the build of every other sex of
+        `simulation_sexes` as `model_<sex>` (`model_id`), without changes; a
+        model without builds per sex has the one model `model`. Only the builds
+        which the experiment simulates are loaded.
+
+        Raises:
+            ValueError: if the model object has no build of a sex of the
+                experiment, naming the experiment.
+        """
+        sexes = dict.fromkeys(
+            [Sex(self.sex), *(Sex(s) for s in self.simulation_sexes.values())]
+        )
+        models: dict[str, AbstractModel | Path] = {}
+        for sex in sexes:
+            try:
+                path = self.pkpd_model.model_path_of(sex)
+            except ValueError as err:
+                raise ValueError(
+                    f"The experiment '{self.sid}' simulates subjects of the sex "
+                    f"'{sex}': {err}"
+                ) from err
+            models[self.model_id(sex)] = AbstractModel(
+                source=path,
                 language_type=AbstractModel.LanguageType.SBML,
                 changes={},
             )
-        }
+        return models
 
     def tasks(self) -> dict[str, Task]:
-        """Get a task of the model for every simulation.
+        """Get a task for every simulation, on the build of the sex of the simulation.
 
         `initialize` creates the simulations before the tasks, so they are not
         created a second time.
+
+        Raises:
+            ValueError: if `simulation_sexes` names a simulation which the
+                experiment does not have.
         """
+        unknown = sorted(set(self.simulation_sexes) - set(self._simulations))
+        if unknown:
+            raise ValueError(
+                f"The simulation_sexes of the experiment '{self.sid}' name "
+                f"simulations which it does not have: {unknown}; its "
+                f"simulations are {sorted(self._simulations)}."
+            )
         return {
-            f"task_{key}": Task(model="model", simulation=key)
+            f"task_{key}": Task(model=self.model_id(self.sex_of(key)), simulation=key)
             for key in self._simulations
         }
 

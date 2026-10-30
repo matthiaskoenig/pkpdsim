@@ -10,9 +10,9 @@ Windows a replace of a file which another process reads fails
 controller of the session, before the workers start, and the workers only read
 the cache.
 
-The SBML model of the toy model package (`tests/pkpdsim_toy`) is created in the
-controller of the session as well, before the workers start; the tests only read
-it.
+The SBML models of the toy model packages (`tests/pkpdsim_toy` and the toy
+model per sex `tests/pkpdsim_sexes`) are created in the controller of the
+session as well, before the workers start; the tests only read them.
 
 A short fit of the toy model with its identifiability, adopted into a folder of
 fits, is shared by the tests of the records (`toy_fit`, `fits_dir`); it is made
@@ -37,6 +37,8 @@ from pkpdsim.model import PKPDModel
 from pkpdsim.release import source as source_module
 from pkpdsim.release.settings import ReleaseSettings
 from pkpdsim.uncertainty import adopt_fit
+from pkpdsim_sexes import MODEL_BASE_PATH as SEXES_BASE_PATH
+from pkpdsim_sexes.factory import create_sexes_models
 from pkpdsim_toy import MODEL, MODEL_BASE_PATH
 from pkpdsim_toy.factory import create_toy_models
 
@@ -44,7 +46,7 @@ RELEASE_DATA = Path(__file__).parent / "data" / "release"
 
 
 def pytest_configure(config: pytest.Config) -> None:
-    """Load the registry of identifiers.org and create the toy model."""
+    """Load the registry of identifiers.org and create the toy models."""
     if hasattr(config, "workerinput"):
         # a worker of pytest-xdist, the controller has prepared the session
         return
@@ -53,6 +55,7 @@ def pytest_configure(config: pytest.Config) -> None:
     with suppress(WebserviceError):
         get_registry()
     create_toy_models(MODEL_BASE_PATH)
+    create_sexes_models(SEXES_BASE_PATH)
 
 
 @pytest.fixture

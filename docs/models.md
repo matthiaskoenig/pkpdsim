@@ -41,6 +41,46 @@ keyword arguments only, so the order of their fields is not API. A list of
 `data_paths` is stored as a tuple; a model is hashable unless its absolute
 tolerance is an `AbsoluteTolerance` of sbmlsim.
 
+## Builds per sex
+
+A model is built for one sex: the PBPK library takes the reference values of
+the sex when it builds a model (the ICRP 89 anatomy, the hematocrit, the
+partition coefficients, the GFR, see [Physiology](pbpk/physiology.md)). A model
+whose studies include women has a female build next to the male one, from the
+same definition (`create_archive(..., sexes=(Sex.MALE, Sex.FEMALE))`, see
+[PBPK library](pbpk/index.md#builds-per-sex)), and its model object holds both:
+
+```python
+# not executed
+MODEL_PATH = MODEL_BASE_PATH / "hctz_flat.xml"
+FEMALE_MODEL_PATH = MODEL_BASE_PATH / "hctz_female_flat.xml"
+
+MODEL = PKPDModel(
+    name="hctz",
+    ...,
+    model_path=MODEL_PATH,
+    female_model_path=FEMALE_MODEL_PATH,
+)
+```
+
+`model_path` is the male build, the model of every experiment and every caller
+which does not ask for a sex; `model_paths` maps every sex to its build (the
+male one only for a model without a female build) and `model_path_of(sex)`
+gives the build of a sex, with a `ValueError` naming the model for a sex it has
+no build of. The builds have the same ids, so the changes of an experiment and
+the parameters of a fit apply to both. An experiment chooses its build by the
+sex of its subjects (`sex`, see
+[Experiments and their metadata](experiments.md#builds-per-sex)), and the
+commands handle both builds:
+
+| command | the builds per sex |
+| --- | --- |
+| `run_simulation`, `run_report`, `pkpdsim.testing` | every task runs the build of the sex of its simulation |
+| `run_fit` | one parameter set for both builds; the remainders of the fitted fractions are checked in every build |
+| `--uncertainty` | the draws of the fitted parameters are those of the male build and run on every build; `check_fit_parameters` checks the fitted values and the distributions in every build |
+| sensitivity | a group runs the build of its sex (`SensitivityGroup(sex=...)`), with the design of the analysis |
+| `pkpdsim-verify` | a dump records the sex of the build of every task (`builds`), `compare` reports a task which moved to the build of another sex |
+
 ## References
 
 `factory`, `experiments` and `fit_definitions` are references
@@ -117,9 +157,9 @@ which do not import, experiments which run one at a time) are its `checks`, see
 [Experiments and their metadata](experiments.md#exceptions-of-the-tests).
 
 `check_model` also checks that the name of the model is the last component of its
-package (or that component ends with `_<name>`), that `model_path`, the factory
-directory and `archive_path` lie below the path of the model, and that the data
-paths exist.
+package (or that component ends with `_<name>`), that the builds (`model_path`,
+`female_model_path`), the factory directory and `archive_path` lie below the
+path of the model, and that the data paths exist.
 
 ## Verification of a change
 
@@ -146,7 +186,11 @@ migration to the old dump (see
 [Experiments and their metadata](experiments.md#renames-in-a-verification) and
 [Verification across versions of sbmlsim](#verification-across-versions-of-sbmlsim)).
 An experiment which cannot be initialized is recorded in the dump as an error and
-the command exits with 1 after the other experiments are stored.
+the command exits with 1 after the other experiments are stored. A dump records
+the sex of the build which every task of an experiment of pkpdsim ran
+(`builds`, see [Builds per sex](#builds-per-sex)); `compare` compares them
+exactly when both dumps have them, a difference is expected with the pattern
+`experiment/task` of the part `builds`.
 
 `settings` captures what a run of the experiments hands to sbmlsim, bound to the
 signatures: the arguments of `Simulator` (its tolerances and `n_workers`), of

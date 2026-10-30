@@ -24,6 +24,12 @@ import the `__init__.py` of their model, so the model object cannot import them,
 and importing a model package does not import its experiments. A module which
 starts with a dot is relative to `package`.
 
+A model whose studies include women has a female build next to the male one
+(`female_model_path`, the factory builds both from one definition, see
+`pkpdsim.pbpk.create_archive`): `model_path` stays the male build, the model of
+every caller which does not ask for a sex, and an experiment chooses the build
+of the sex of its subjects (`pkpdsim.experiment.PKPDSimulationExperiment.sex`).
+
 `FigureSettings` is the `sbmlsim.plot.FigureSettings` of sbmlsim with the
 formats of the figures and the resolution of the static images; the module
 therefore imports sbmlsim's plotting.
@@ -40,6 +46,7 @@ from typing import TYPE_CHECKING, Any
 from sbmlsim.plot import FigureSettings as SbmlsimFigureSettings
 
 from pkpdsim.release.settings import ReleaseSettings
+from pkpdsim.sex import Sex
 
 if TYPE_CHECKING:
     from sbmlsim.experiment import SimulationExperiment
@@ -307,7 +314,14 @@ class PKPDModel:
         title: the title of the model in the output of the commands.
         path: the directory of the model package, the base path of its
             experiments.
-        model_path: the SBML model the experiments simulate.
+        model_path: the SBML model the experiments simulate, the male build:
+            the model of every experiment and every caller which does not ask
+            for a sex.
+        female_model_path: the female build of the model, `None` for a model
+            without one; an experiment of women (`sex` of
+            `pkpdsim.experiment.PKPDSimulationExperiment`) simulates it. The
+            builds have the same ids, so a fit applies one parameter set to
+            both, see `model_paths`.
         factory: reference to the function which creates the models; it is
             called with the output directory.
         experiments: reference to the registry of the experiments, groups of
@@ -344,6 +358,7 @@ class PKPDModel:
     title: str
     path: Path
     model_path: Path
+    female_model_path: Path | None = None
     factory: str
     experiments: str | None = None
     fit_definitions: str | None = None
@@ -389,6 +404,47 @@ class PKPDModel:
             raise ValueError(
                 f"The extra actions of '{self.name}' repeat an action: {repeated}."
             )
+        if self.female_model_path == self.model_path:
+            raise ValueError(
+                f"The female build of '{self.name}' is the file of the male build "
+                f"{self.model_path}: a build per sex is a file per sex."
+            )
+
+    @property
+    def model_paths(self) -> dict[Sex, Path]:
+        """The builds of the model by sex, the male build first.
+
+        A model is built for one sex (the reference values of the PBPK library
+        are those of a sex, `pkpdsim.pbpk.PBPKDefinition.sex`); a model with a
+        female build has both, a model without one the male build only. The
+        builds have the same ids, so the changes of an experiment and the
+        parameters of a fit apply to both.
+        """
+        paths = {Sex.MALE: self.model_path}
+        if self.female_model_path is not None:
+            paths[Sex.FEMALE] = self.female_model_path
+        return paths
+
+    def model_path_of(self, sex: Sex) -> Path:
+        """Get the build of a sex.
+
+        Args:
+            sex: the sex.
+
+        Returns:
+            The SBML model of the sex.
+
+        Raises:
+            ValueError: if the model has no build of the sex.
+        """
+        path = self.model_paths.get(Sex(sex))
+        if path is None:
+            raise ValueError(
+                f"The model '{self.name}' has no {Sex(sex)} build: give the model "
+                f"object its {Sex(sex)} build (`{Sex(sex)}_model_path`), which the "
+                "factory creates, or simulate the study on the male build."
+            )
+        return path
 
     @property
     def results_dir(self) -> Path:

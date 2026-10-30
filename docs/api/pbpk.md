@@ -33,3 +33,7 @@ The PBPK library, see [PBPK library](../pbpk/index.md): the package and the clas
 ## builder
 
 ::: pkpdsim.pbpk.builder
+
+## archive
+
+::: pkpdsim.pbpk.archive

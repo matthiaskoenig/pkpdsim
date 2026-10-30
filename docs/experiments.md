@@ -44,6 +44,8 @@ The class attributes are the conventions of the experiments:
 | `selections` | the selections added to every task, e.g. `("time", "[Cve_hctz]")` |
 | `Mr` | the molecular weights of the substances for the conversion of the data, a `NamedTuple` of the model |
 | `labels`, `units` | the labels and units of the observables by id |
+| `sex` | the sex of the subjects, whose build of the model the simulations run, `Sex.MALE` by default, see [Builds per sex](#builds-per-sex) |
+| `simulation_sexes` | the sex of single simulations which differs from `sex`, by the key of the simulation |
 
 A base which annotates a convention keeps the type of `PKPDSimulationExperiment`,
 e.g. `labels: ClassVar[Mapping[str, str]]`, also for the maps of the impaired
@@ -52,8 +54,9 @@ type, `ClassVar[dict[str, str]]`, is an invalid override of a mutable attribute
 (ty, `invalid-mutable-override`). Only `Mr` has the type of the model, its
 `NamedTuple`, which `PKPDSimulationExperiment` does not declare for this reason.
 
-The base provides what is the same in every model: `models` (the SBML model of
-the model object, without changes), `tasks` (a task per simulation),
+The base provides what is the same in every model: `models` (the build of the
+model object which the experiment simulates, without changes), `tasks` (a task
+per simulation, on the build of its sex),
 `default_changes` (none, a fitted parameter is part of the model and must not be
 set by a simulation), `data` (the selections for every task),
 `load_dataframe(fig_id, study=None, *, na_values=None)` and
@@ -64,6 +67,49 @@ geometric means in `gmean_unit`, `add_gmean_unit`; by substance without the
 rows which have none) and `figures_by_sid(*figures)`. A model
 overrides what it does differently, e.g. `default_changes` for a model whose
 simulations set a parameter.
+
+## Builds per sex
+
+A model with a female build (`PKPDModel.female_model_path`, see
+[Models and their commands](models.md#builds-per-sex)) runs a study of women on
+it: the experiment sets the sex of its subjects, the class attribute `sex`, and
+every simulation runs the build of that sex. A study of a group of men and a
+group of women declares the sex of the simulations of the other sex,
+`simulation_sexes`, by the key of the simulation:
+
+```python
+# not executed
+from pkpdsim.sex import Sex
+
+
+class Smith2001(HctzSimulationExperiment):
+    """Hydrochlorothiazide in healthy women."""
+
+    sex = Sex.FEMALE
+
+
+class Jones2005(HctzSimulationExperiment):
+    """Hydrochlorothiazide in a group of men and a group of women."""
+
+    simulation_sexes: ClassVar[Mapping[str, Sex]] = {"po_women": Sex.FEMALE}
+```
+
+The build of `sex` is the model `model` of the experiment, as in a model with
+one build, so `add_doses` and the units of `Q` need no model key; the build of
+another sex of `simulation_sexes` is `model_<sex>` (`model_id(sex)`,
+`model_female`), and `sex_of(key)` gives the sex of a simulation. Only the
+builds the experiment simulates are loaded. The models of an experiment are
+loaded before its simulations are created, so the sexes are declared and not
+computed in `simulations`; a key of `simulation_sexes` which is no simulation
+of the experiment, and a sex the model has no build of, fail the experiment
+with a `ValueError` which names it. A group whose majority is women runs the
+female build, a mixed group without a majority of women the male one, which the
+study module states. The experiments of a model without a female build are
+unchanged.
+
+The experiments of the PBPK library take the healthy GFR, the renal function of
+a measured clearance and the renal classes of the build of their sex, see
+[Impairment](pbpk/impairment.md#classes-in-experiments).
 
 ## Keys
 

@@ -19,6 +19,9 @@ area (and falls with heart failure and cirrhosis). `healthy_gfr` reads it from
 the flat model, `PBPKSimulationExperiment.renal_function` gives the renal
 function of a measured clearance (the simulated GFR is the measured one), and
 the classes of renal impairment keep their GFR in ml/min (`ScaledRenalMap`).
+All of them are of the build of the sex of the experiment (`sex`, the female
+build for a study of women): the GFR of a woman is the GFR of the female
+build.
 
 The outflow of the kidney is valid while the net filtered plasma flow of a
 substance is below the plasma flow of the kidney
@@ -33,6 +36,7 @@ The module imports sbmlsim; `pkpdsim.pbpk` exports its names lazily, so
 
 from __future__ import annotations
 
+import functools
 import math
 from collections.abc import Callable, Iterator, Mapping
 from pathlib import Path
@@ -51,6 +55,7 @@ from pkpdsim.pbpk.kidney_validity import (
     kidney_outflow,
     simulated_individuals,
 )
+from pkpdsim.sex import Sex
 
 if TYPE_CHECKING:
     from sbmlsim.units import Quantity
@@ -81,10 +86,12 @@ def healthy_gfr(
     the initial assignments again (sbmlsim). It is cached per model file, its
     modification time and the individual, once for all experiments of a
     process; a model file which is created again is simulated again. The sex
-    is no parameter of the model (the library builds the model of one sex).
+    is no parameter of the model: the library builds the model of one sex, and
+    the GFR of a woman is the GFR of the female build.
 
     Args:
-        model_path: the flat SBML model of the library.
+        model_path: the flat SBML model of the library, the build of the sex
+            of the individual.
         bw: the body weight of the individual [kg], `None` for that of the
             model.
         height: the height of the individual [cm], `None` for that of the
@@ -115,8 +122,9 @@ class ScaledRenalMap(Mapping[str, float]):
     class (or an instance) gives the map of that class, on its classmethod
     `healthy_gfr`, one map per class, created on the first access. So the base
     of the experiments of every model, and every subclass with another model
-    object, gets the GFR of its own model, and a model overrides the preset in
-    its base:
+    object or another sex (a study of women gets the GFR of the female build),
+    gets the GFR of its own model, and a model overrides the preset in its
+    base:
 
     ```python
     # not executed
@@ -126,6 +134,10 @@ class ScaledRenalMap(Mapping[str, float]):
             impairment.RENAL_FUNCTION
         )
     ```
+
+    The map of a class for another sex than the sex of the class, e.g. the
+    group of women of a study of men, is `of_sex` (see
+    `PBPKSimulationExperiment.renal_map_of`).
     """
 
     def __init__(
@@ -153,10 +165,17 @@ class ScaledRenalMap(Mapping[str, float]):
         #: experiments live as long as their module), a cache which `pickle`
         #: leaves out (`__getstate__`)
         self._bound: dict[type, ScaledRenalMap] = {}
+        #: the classmethod `healthy_gfr` of the class a bound map is bound to
+        #: and the sex of the class, `None` for an unbound map or a map with
+        #: its own GFR
+        self._class_gfr: Callable[..., Quantity] | None = None
+        self._class_sex: Sex = Sex.MALE
+        #: the maps of the other sexes of a bound map, see `of_sex`
+        self._sexes: dict[Sex, ScaledRenalMap] = {}
 
     def __getstate__(self) -> dict[str, object]:
-        """Get the state to pickle: without the maps bound to classes."""
-        return {**self.__dict__, "_bound": {}}
+        """Get the state to pickle: without the maps bound to classes or of a sex."""
+        return {**self.__dict__, "_bound": {}, "_sexes": {}}
 
     def __get__(
         self, instance: object | None, owner: type | None = None
@@ -179,8 +198,46 @@ class ScaledRenalMap(Mapping[str, float]):
         bound = self._bound.get(owner)
         if bound is None:
             bound = ScaledRenalMap(self._preset, gfr, self._reference)
+            bound._class_gfr = gfr
+            bound._class_sex = Sex(getattr(owner, "sex", Sex.MALE))
             self._bound[owner] = bound
         return bound
+
+    def of_sex(self, sex: Sex) -> ScaledRenalMap:
+        """Get the map of a class at the healthy GFR of the build of a sex.
+
+        Args:
+            sex: the sex.
+
+        Returns:
+            The map of the class this map is bound to, on its `healthy_gfr` of
+            the sex: this map for the sex of the class, else a map created on
+            the first call.
+
+        Raises:
+            TypeError: for a map with its own GFR (of one build) or a map which
+                no class bound.
+        """
+        class_gfr = self._class_gfr
+        if class_gfr is None:
+            if self._gfr is not None:
+                raise TypeError(
+                    "A map with its own GFR is of one build, it has no map of "
+                    "another sex."
+                )
+            raise TypeError(
+                "The map has no class: get the map of a sex from the map of a "
+                "class (`renal_map_of`)."
+            )
+        sex = Sex(sex)
+        if sex == self._class_sex:
+            return self
+        other = self._sexes.get(sex)
+        if other is None:
+            gfr = functools.partial(class_gfr, sex=sex)
+            other = ScaledRenalMap(self._preset, gfr, self._reference)
+            self._sexes[sex] = other
+        return other
 
     def _scaled(self) -> dict[str, float]:
         """Get the renal functions, evaluating the healthy GFR once.
@@ -235,6 +292,12 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
     attribute, e.g. the classes by the midpoints of the GFR
     (`ScaledRenalMap(impairment.RENAL_FUNCTION)`), its own map of the heart
     failure or a narrower `renal_function_range`.
+
+    The healthy GFR, the renal function of a clearance, the range of the renal
+    functions and the renal classes are those of the build of the sex of the
+    experiment (`sex`, see `PKPDSimulationExperiment`); the methods take another
+    sex with `sex`, e.g. for the group of women of a study of men, whose renal
+    classes are `renal_map_of(Sex.FEMALE)`.
 
     The initialization refuses an experiment which simulates an individual
     outside the validity of the kidney outflow (`kidney_outflow`): the net
@@ -310,6 +373,21 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
                         )
 
     @classmethod
+    def _build(cls, sex: Sex | None) -> Path:
+        """Get the build of a sex of the model object, of `sex` of the class by default.
+
+        Raises:
+            TypeError: if the class has no model object (`pkpd_model`).
+            ValueError: if the model object has no build of the sex.
+        """
+        if not hasattr(cls, "pkpd_model"):
+            raise TypeError(
+                f"{cls.__name__} has no model object: set `pkpd_model` in the "
+                "base of the experiments of the model."
+            )
+        return cls.pkpd_model.model_path_of(cls.sex if sex is None else sex)
+
+    @classmethod
     def healthy_gfr(
         cls,
         *,
@@ -317,11 +395,12 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
         height: float | None = None,
         hf_severity: float = 0.0,
         cp_severity: float = 0.0,
+        sex: Sex | None = None,
     ) -> Quantity:
         """Get the healthy glomerular filtration rate of an individual (ml/min).
 
-        `healthy_gfr` of the module for the model of the model object, cached
-        for all experiments.
+        `healthy_gfr` of the module for the build of the sex of the model
+        object, cached for all experiments.
 
         Args:
             bw: the body weight of the individual [kg], `None` for that of the
@@ -330,20 +409,18 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
                 model.
             hf_severity: the severity of heart failure `HF_severity` (0 to 4).
             cp_severity: the severity of cirrhosis `CP_severity` (0 to 3).
+            sex: the sex of the individual, `None` for the sex of the
+                experiment (`sex`).
 
         Returns:
             The GFR at renal function 1 in ml/min, a quantity.
 
         Raises:
             TypeError: if the class has no model object (`pkpd_model`).
+            ValueError: if the model object has no build of the sex.
         """
-        if not hasattr(cls, "pkpd_model"):
-            raise TypeError(
-                f"{cls.__name__} has no model object: set `pkpd_model` in the "
-                "base of the experiments of the model."
-            )
         return healthy_gfr(
-            cls.pkpd_model.model_path,
+            cls._build(sex),
             bw=bw,
             height=height,
             hf_severity=hf_severity,
@@ -359,6 +436,7 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
         height: float | None = None,
         hf_severity: float = 0.0,
         cp_severity: float = 0.0,
+        sex: Sex | None = None,
     ) -> Quantity:
         """Get the renal function of a measured clearance.
 
@@ -380,6 +458,8 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
                 model.
             hf_severity: the severity of heart failure of the simulation.
             cp_severity: the severity of cirrhosis of the simulation.
+            sex: the sex of the subjects, `None` for the sex of the experiment
+                (`sex`); the GFR of a woman is the GFR of the female build.
 
         Returns:
             The renal function `f_renal_function`.
@@ -387,14 +467,19 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
         Raises:
             ValueError: for a renal function outside of the validity of the
                 kidney outflow (the message names the GFR and the plasma flow
-                of the kidney) or of the `renal_function_range` of the model.
+                of the kidney) or of the `renal_function_range` of the model,
+                or if the model object has no build of the sex.
         """
         healthy = cls.healthy_gfr(
-            bw=bw, height=height, hf_severity=hf_severity, cp_severity=cp_severity
+            bw=bw,
+            height=height,
+            hf_severity=hf_severity,
+            cp_severity=cp_severity,
+            sex=sex,
         )
         value = clearance / float(healthy.m_as("ml/min"))
         changes = covariate_changes(bw, height, hf_severity, cp_severity, value)
-        for outflow in kidney_outflow(cls.pkpd_model.model_path, changes):
+        for outflow in kidney_outflow(cls._build(sex), changes):
             if not outflow.valid:
                 raise ValueError(
                     f"The renal function {value:.3g} of a clearance of {clearance} "
@@ -419,6 +504,7 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
         height: float | None = None,
         hf_severity: float = 0.0,
         cp_severity: float = 0.0,
+        sex: Sex | None = None,
     ) -> tuple[float, float]:
         """Get the range of the renal functions of an individual which the model supports.
 
@@ -438,20 +524,18 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
                 model.
             hf_severity: the severity of heart failure of the individual.
             cp_severity: the severity of cirrhosis of the individual.
+            sex: the sex of the individual, `None` for the sex of the
+                experiment (`sex`).
 
         Returns:
             The lowest and the highest renal function.
 
         Raises:
             TypeError: if the class has no model object (`pkpd_model`).
+            ValueError: if the model object has no build of the sex.
         """
-        if not hasattr(cls, "pkpd_model"):
-            raise TypeError(
-                f"{cls.__name__} has no model object: set `pkpd_model` in the "
-                "base of the experiments of the model."
-            )
         changes = covariate_changes(bw, height, hf_severity, cp_severity, 1.0)
-        outflows = kidney_outflow(cls.pkpd_model.model_path, changes)
+        outflows = kidney_outflow(cls._build(sex), changes)
         high = min(
             (o.plasma_flow / o.filtered for o in outflows if o.filtered > 0),
             default=math.inf,
@@ -460,6 +544,31 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
             return 0.0, high
         low, own = cls.renal_function_range
         return low, min(own, high)
+
+    @classmethod
+    def renal_map_of(cls, sex: Sex) -> Mapping[str, float]:
+        """Get the renal classes of the subjects of a sex.
+
+        `renal_map` is of the sex of the experiment; the classes of the other
+        sex, e.g. of the group of women of a study of men, are those of the
+        same preset at the healthy GFR of the build of that sex
+        (`ScaledRenalMap.of_sex`). A map which is no `ScaledRenalMap` is not
+        relative to a healthy GFR and is the map of every sex.
+
+        Args:
+            sex: the sex.
+
+        Returns:
+            The renal function of every class.
+
+        Raises:
+            TypeError: for a `ScaledRenalMap` with its own GFR (of one build)
+                and another sex than the sex of the experiment.
+        """
+        renal_map = cls.renal_map
+        if Sex(sex) == Sex(cls.sex) or not isinstance(renal_map, ScaledRenalMap):
+            return renal_map
+        return renal_map.of_sex(sex)
 
 
 def _model_path(model: AbstractModel | Path | str | None) -> Path | None:

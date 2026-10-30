@@ -42,6 +42,7 @@ from pkpdsim.sensitivity import (
     run_subfolders,
     set_relative_bounds,
 )
+from pkpdsim.sex import Sex
 from pkpdsim_toy import MODEL, MODEL_PATH
 
 #: the simulations of the tests run in the process of the test
@@ -976,3 +977,38 @@ def test_an_undefined_value_has_no_class_and_an_infinite_one_the_highest() -> No
     assert _classes(0.6, *s) == ("+++", "high")
     assert _classes(-0.15, *s) == ("-", "low")
     assert _classes(math.inf, *u) == ("<***>", "high")
+
+
+def test_a_group_of_women_runs_on_the_female_build(tmp_path: Path) -> None:
+    """The same design runs on the build of the sex of every group."""
+    from pkpdsim_sexes import FEMALE_A0
+    from pkpdsim_sexes import MODEL as SEXES
+
+    women = SensitivityGroup("women", "Women", simulation({}), sex=Sex.FEMALE)
+    assert CONTROL.sex is Sex.MALE
+    groups = [CONTROL, women]
+    path = runner(
+        tmp_path,
+        model=dataclasses.replace(SEXES, results_path=tmp_path),
+        analyses={
+            "sampling": SamplingAnalysis(groups=groups, n=8),
+            "local": LocalAnalysis(groups=groups),
+        },
+    ).run(["sampling", "local"], simulator=SERIAL)
+    samples = {
+        group: pd.read_csv(path / "sampling" / group / "samples.tsv", sep="\t")
+        for group in ("control", "women")
+    }
+    # the same rates, A starts lower in women
+    np.testing.assert_allclose(samples["women"]["k"], samples["control"]["k"])
+    np.testing.assert_allclose(
+        samples["women"]["A_auc"], FEMALE_A0 * samples["control"]["A_auc"], rtol=1e-6
+    )
+    assert (path / "local" / "local_d0.01_nvar3_01_women.tsv").is_file()
+
+
+def test_a_group_of_a_sex_without_a_build_is_refused(tmp_path: Path) -> None:
+    women = SensitivityGroup("women", "Women", simulation({}), sex=Sex.FEMALE)
+    with pytest.raises(ValueError, match="'women'") as error:
+        runner(tmp_path, analyses={"local": LocalAnalysis(groups=[CONTROL, women])})
+    assert "'toy' has no female build" in str(error.value)

@@ -380,6 +380,87 @@ def test_the_check_of_the_fit_parameters(
     assert any("not adopted" in p for p in check_fit_parameters(missing))
 
 
+def _female_build(
+    path: Path, records: FitRecords, *, upper: float | None = None, fitted: bool = True
+) -> Path:
+    """Create a female build of the toy model with the fitted rate of the records.
+
+    Args:
+        path: the SBML file.
+        records: the adopted fits.
+        upper: another upper bound of the distribution of the draws.
+        fitted: give the rate the value and the uncertainty of the fit.
+
+    Returns:
+        The SBML file.
+    """
+    model = toy_model()
+    model.sid = "toy_female"
+    if fitted:
+        kwargs = records.parameter("k", unit=U.per_min)
+        if upper is not None:
+            uncertainty = dataclasses.replace(records["k"], upper_bound=upper)
+            kwargs["uncertainties"] = [uncertainty.uncertainty(U.per_min)]
+        model.parameters = [Parameter("k", **kwargs, name="rate")]
+    create_model(model=model, filepath=path, sbml_level=3, sbml_version=2)
+    return path
+
+
+def test_the_check_of_the_fit_parameters_sees_every_build(
+    fits_dir: Path, toy_fit: Path, toy_with_uncertainty: Path, tmp_path: Path
+) -> None:
+    """The female build has the fitted values and the distributions of the male one."""
+    records = FitRecords(fits_dir, [toy_fit.name])
+    model = dataclasses.replace(
+        MODEL,
+        fits=(toy_fit.name,),
+        fits_path=fits_dir,
+        model_path=toy_with_uncertainty,
+        female_model_path=_female_build(tmp_path / "female.xml", records),
+    )
+    assert check_fit_parameters(model) == []
+    stale = dataclasses.replace(
+        model,
+        female_model_path=_female_build(tmp_path / "stale.xml", records, fitted=False),
+    )
+    problems = check_fit_parameters(stale)
+    assert problems
+    assert all("female build stale.xml" in p for p in problems)
+    assert any("has no distribution" in p for p in problems)
+    assert any("take it from the record" in p for p in problems)
+    other = dataclasses.replace(
+        model,
+        female_model_path=_female_build(tmp_path / "other.xml", records, upper=5.0),
+    )
+    (problem,) = check_fit_parameters(other)
+    assert "distribution" in problem
+    assert "differs from the male build" in problem
+    missing = dataclasses.replace(model, female_model_path=tmp_path / "missing.xml")
+    assert check_fit_parameters(missing) == [
+        f"the female build {tmp_path / 'missing.xml'} does not exist"
+    ]
+
+
+def test_the_draws_reach_a_female_experiment(toy_with_uncertainty: Path) -> None:
+    """The draws of the male build run on the female build, which has the same ids."""
+    from pkpdsim_sexes import FEMALE_MODEL_PATH
+    from pkpdsim_sexes.experiments.decay import SexesWomen
+
+    run = draws_run(toy_with_uncertainty)
+    runner = ExperimentRunner(
+        experiment_classes=[SexesWomen],
+        base_path=TOY_PATH,
+        simulator=None,
+        on_error="raise",
+        uncertainty=run,
+    )
+    (exp,) = runner.experiments.values()
+    assert exp._models["model"].source.path == FEMALE_MODEL_PATH
+    simulation = exp._simulations["decay"]
+    assert isinstance(simulation, Scan)
+    assert [d.id for d in simulation.dimensions] == [UNCERTAINTY_DIMENSION]
+
+
 def test_the_settings_of_a_run() -> None:
     assert UncertaintySettings().quantiles == (0.05, 0.95)
     with pytest.raises(ValueError, match="two draws"):

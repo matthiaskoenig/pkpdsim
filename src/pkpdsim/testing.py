@@ -163,7 +163,8 @@ def check_model(model: PKPDModel) -> None:
     A slip in `package` or `path` of a model resolves the references of another
     model, or names the paths wrongly, without an error otherwise. The name is
     the last component of the package (or the component ends with `_<name>`),
-    `model_path`, the factory directory and `archive_path` lie below `path`,
+    the builds (`model_path`, `female_model_path`), the factory directory and
+    `archive_path` lie below `path`,
     the data paths exist, and every parameter of an adopted fit has its value
     and a distribution in the model (`pkpdsim.uncertainty.check_fit_parameters`).
 
@@ -189,6 +190,7 @@ def check_model(model: PKPDModel) -> None:
         )
     for label, path in [
         ("model_path", model.model_path),
+        ("female_model_path", model.female_model_path),
         ("the factory directory", model.factory_dir),
         ("archive_path", model.archive_path),
     ]:

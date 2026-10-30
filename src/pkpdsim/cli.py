@@ -764,8 +764,13 @@ def fit_command(
         for pid, parameter in records[fit_id_].parameters.items()
         if pid not in fitted
     }
-    remainders = remainder_problems(
-        model.model_path, definition.parameters, fixed_values
+    # every build which the experiments of the fit run has the remainders
+    remainders = list(
+        dict.fromkeys(
+            problem
+            for path in model.model_paths.values()
+            for problem in remainder_problems(path, definition.parameters, fixed_values)
+        )
     )
     if remainders:
         parser.error("; ".join(remainders))

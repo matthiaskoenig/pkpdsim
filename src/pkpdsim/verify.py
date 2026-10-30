@@ -95,6 +95,8 @@ from typing import (
 import libsbml
 import numpy as np
 
+from pkpdsim.sex import Sex
+
 if TYPE_CHECKING:
     from sbmlsim.experiment import SimulationExperiment
     from sbmlsim.fit import FitData, FitMapping
@@ -175,6 +177,10 @@ class Dump(TypedDict):
     ranges: dict[str, dict[str, tuple[float, float, float, float, str] | str]]
     #: the versions of the packages which made the dump (since pkpdsim 0.5)
     versions: NotRequired[dict[str, str]]
+    #: experiment -> task -> the sex of the build of the model the task ran
+    #: (`pkpdsim.experiment.PKPDSimulationExperiment.sex_of`), of the
+    #: experiments of pkpdsim (since the builds per sex)
+    builds: NotRequired[dict[str, dict[str, str]]]
 
 
 # --- the experiments of a model -------------------------------------------------
@@ -187,6 +193,8 @@ class ModelInfo:
     package: str
     base_path: Path
     model_path: Path
+    #: the builds of the model by sex, see `PKPDModel.model_paths`
+    model_paths: Mapping[Sex, Path]
     data_path: Path | list[Path] | None
     experiments: Mapping[str, Sequence[type["SimulationExperiment"]]] | None
     absolute_tolerance: object | None
@@ -237,6 +245,7 @@ def describe(package: str) -> ModelInfo:
         package=package,
         base_path=model.path,
         model_path=model.model_path,
+        model_paths=model.model_paths,
         data_path=list(model.data_paths) or None,
         experiments=model.load_experiments() if model.experiments else None,
         absolute_tolerance=model.simulator.absolute_tolerance,
@@ -497,6 +506,7 @@ def dump(args: argparse.Namespace) -> int:
             "sbmlsim": importlib.metadata.version("sbmlsim"),
             "pkpdsim": pkpdsim.__version__,
         },
+        builds={},
     )
     for cls in classes:
         try:
@@ -542,8 +552,18 @@ def store_experiment(
     """Store the results, datasets, fit mappings and figures of a run experiment.
 
     The time of a grid is a coordinate of a result of sbmlsim 0.9; it is stored
-    as the variable `time` over `("time",)`, which the comparison reads.
+    as the variable `time` over `("time",)`, which the comparison reads. The
+    sex of the build of every task is stored for an experiment of pkpdsim
+    (`builds`), so that a study which moves to the build of another sex is a
+    difference of its own.
     """
+    from pkpdsim.experiment import PKPDSimulationExperiment
+
+    if isinstance(experiment, PKPDSimulationExperiment):
+        result.setdefault("builds", {})[sid] = {
+            key: str(experiment.sex_of(task.simulation_id))
+            for key, task in experiment._tasks.items()
+        }
     for task, res in experiment.results.items():
         ds = res.ds
         for var in ds.data_vars:
@@ -656,6 +676,7 @@ EXPECTED_PARTS: tuple[str, ...] = (
     "mappings",
     "figures",
     "ranges",
+    "builds",
 )
 
 
@@ -998,7 +1019,7 @@ class Renames(TypedDict, total=False):
     #: `experiment/task/variable` (results; `experiment/task/time` also names
     #: the output times which only the new dump has),
     #: `experiment/dataset/column` (datasets), `experiment/figure` (figures),
-    #: `experiment/mapping` (mappings, ranges)
+    #: `experiment/mapping` (mappings, ranges), `experiment/task` (builds)
     expected: dict[str, list[str]]
 
 
@@ -1218,6 +1239,11 @@ def rename_ids(dump: Dump, rename: Callable[[str], str]) -> Dump:
         )
         for sid, figures in dump["figures"].items()
     }
+    if "builds" in dump:
+        result["builds"] = {
+            sid: _unique({rename(t): v for t, v in tasks.items()}, tasks, "builds")
+            for sid, tasks in dump["builds"].items()
+        }
     return result
 
 
@@ -1521,7 +1547,7 @@ class _Expected:
 
 
 def _flat(
-    dump: Dump, part: Literal["datasets", "mappings", "figures", "ranges"]
+    dump: Dump, part: Literal["datasets", "mappings", "figures", "ranges", "builds"]
 ) -> dict[str | tuple[str, ...], object]:
     """Get a part of a dump by the keys a comparison reports.
 
@@ -1544,10 +1570,10 @@ def _flat(
                     )
                 mappings[key] = description
         return mappings
-    if part in ("figures", "ranges"):
+    if part in ("figures", "ranges", "builds"):
         return {
             (sid, key): value
-            for sid, items in dump[part].items()
+            for sid, items in dump.get(part, {}).items()
             for key, value in items.items()
         }
     return dict(dump[part].items())
@@ -1599,6 +1625,10 @@ def compare(args: argparse.Namespace) -> int:
     except ValueError as err:
         print(err, file=sys.stderr)
         return 2
+    # the builds of a dump of pkpdsim before the builds per sex are unknown
+    builds = [label for label, d in (("old", old), ("new", new)) if "builds" in d]
+    if len(builds) == 2:
+        parts["builds"] = (_flat(old, "builds"), _flat(new, "builds"))
     expected = _Expected(renames.get("expected", {}))
     for label, dump_ in (("old", old), ("new", new)):
         if versions := dump_.get("versions"):
@@ -1729,6 +1759,8 @@ def compare(args: argparse.Namespace) -> int:
                 print(f"    {line}")
         differing += len(unexpected_keys)
 
+    if len(builds) == 1:
+        print(f"builds: in the {builds[0]} dump only, not compared")
     for part, pattern in expected.unused():
         print(f"expected difference which does not occur: {part}: {pattern}")
         differing += 1

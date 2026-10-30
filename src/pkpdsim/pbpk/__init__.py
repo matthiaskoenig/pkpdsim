@@ -11,7 +11,7 @@ exported lazily: they import sbmlsim, which a factory does not need, so
 import importlib
 from typing import TYPE_CHECKING
 
-from pkpdsim.pbpk.archive import create_archive
+from pkpdsim.pbpk.archive import create_archive, sex_definition
 from pkpdsim.pbpk.builder import BuildResult, build, compose
 from pkpdsim.pbpk.chemistry import (
     LINEAR,
@@ -188,5 +188,6 @@ __all__ = [
     "parts_for",
     "physiology_objects",
     "reference_individual",
+    "sex_definition",
     "sources",
 ]

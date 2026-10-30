@@ -73,4 +73,4 @@ convention = "google"  # Accepts: "google", "numpy", or "pep257".
 
 [lint.isort]
 # the toy model package of the tests is first party, like pkpdsim
-known-first-party = ["pkpdsim_toy"]
+known-first-party = ["pkpdsim_sexes", "pkpdsim_toy"]
