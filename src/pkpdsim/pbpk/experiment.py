@@ -38,15 +38,20 @@ from __future__ import annotations
 
 import functools
 import math
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping
+from functools import lru_cache
 from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, ClassVar, overload, override
 
+import libsbml
 from sbmlsim import Q
 from sbmlsim.model import AbstractModel
+from sbmlsim.model.model_roadrunner import RoadrunnerSBMLModel
 from sbmlsim.simulation import Change, Scan, Simulation, SteadyState
+from sbmlsim.simulation.definition import Value
 from sbmlsim.simulation.scan import DimensionKind
+from sbmlsim.simulator import Simulator
 from sbmlsim.uncertainty import Uncertain
 from sbmlsim.units import Quantity
 
@@ -62,6 +67,7 @@ from pkpdsim.pbpk.kidney_validity import (
 )
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import number, unit_text
+from pkpdsim.scan import start_values
 from pkpdsim.sex import Sex
 
 if TYPE_CHECKING:
@@ -118,6 +124,147 @@ def healthy_gfr(
     changes = covariate_changes(bw, height, hf_severity, cp_severity)
     gfr = individual_values(Path(model_path), changes).ml_per_min(ids.GFR_BASE)
     return Q(gfr, "ml/min")
+
+
+def accumulating_states(sbml: str) -> tuple[str, ...]:
+    """Get the states of a model which nothing drains: they only accumulate.
+
+    A state (the variable of a rate rule, a species which reactions change)
+    which no rate reads, neither a rate rule nor a kinetic law, directly or
+    through the assignment rules, and which no reaction consumes, e.g. the
+    urine and the feces of the library or the urine of a PD component: with an
+    inflow at the steady state of the rest of the model it grows without a
+    steady state. A species which a rate reads is read with its compartment.
+
+    Args:
+        sbml: the SBML of the model, flat.
+
+    Returns:
+        The ids, sorted.
+    """
+    model = libsbml.readSBMLFromString(sbml).getModel()
+
+    def names(ast: libsbml.ASTNode | None) -> set[str]:
+        found: set[str] = set()
+        stack = [] if ast is None else [ast]
+        while stack:
+            node = stack.pop()
+            if node.getType() == libsbml.AST_NAME:
+                found.add(node.getName())
+            stack.extend(node.getChild(k) for k in range(node.getNumChildren()))
+        return found
+
+    assigned: dict[str, set[str]] = {}
+    rated: dict[str, set[str]] = {}
+    for rule in model.getListOfRules():
+        if rule.isAssignment():
+            assigned[rule.getVariable()] = names(rule.getMath())
+        elif rule.isRate():
+            rated[rule.getVariable()] = names(rule.getMath())
+    read = set().union(*rated.values())
+    consumed: set[str] = set()
+    changed: set[str] = set()
+    for reaction in model.getListOfReactions():
+        law = reaction.getKineticLaw()
+        if law is not None:
+            local = {p.getId() for p in law.getListOfLocalParameters()}
+            read |= names(law.getMath()) - local
+        consumed |= {r.getSpecies() for r in reaction.getListOfReactants()}
+        changed |= {r.getSpecies() for r in reaction.getListOfProducts()}
+    # what the rates read through the assignment rules, and the compartments of
+    # the species they read
+    compartments = {s.getId(): s.getCompartment() for s in model.getListOfSpecies()}
+    stack = list(read)
+    while stack:
+        sid = stack.pop()
+        for further in (assigned.get(sid, set()) | {compartments.get(sid, "")}) - read:
+            if further:
+                read.add(further)
+                stack.append(further)
+    states = set(rated) | (changed - consumed)
+    return tuple(sorted(states - read - consumed))
+
+
+@lru_cache(maxsize=4)
+def _accumulation_model(
+    model_path: Path, mtime_ns: int
+) -> tuple[RoadrunnerSBMLModel, tuple[str, ...]]:
+    """Load a model once per process with its accumulating states as selections."""
+    states = accumulating_states(model_path.read_text(encoding="utf-8"))
+    model = RoadrunnerSBMLModel(
+        source=model_path, selections=["time", *states], jit_optimization="O0"
+    )
+    return model, states
+
+
+#: the growing states of a model file by its path, modification time and the
+#: tolerances of the equilibration, see `growing_states`
+_GROWING: dict[tuple[Path, int, float, float, float], tuple[str, ...]] = {}
+
+
+def growing_states(
+    model_path: Path,
+    condition: Mapping[str, Value],
+    steady_state: SteadyState,
+) -> tuple[str, ...]:
+    """Get the states which grow without a steady state during an equilibration.
+
+    The accumulating states of the model (`accumulating_states`) whose value
+    after the equilibration of the condition differs from their value at the
+    initialization by more than the absolute tolerance (and 1e-9 of the
+    value): an inflow at the steady state, which the presimulation reaches
+    only relative to their growing amount (after about `1/relative_tolerance`
+    minutes), so their value at the start of the simulation is meaningless
+    unless they are set back. They are found once per model file (and its
+    modification time) and tolerances in a process, in the condition of the
+    first equilibration: whether a state has no outflow is a property of the
+    model.
+
+    Args:
+        model_path: the flat SBML model.
+        condition: the changes before the initialization.
+        steady_state: the presimulation.
+
+    Returns:
+        The ids of the growing states.
+
+    Raises:
+        SteadyStateError: if the model reaches no steady state in the
+            condition by `max_time` (sbmlsim).
+    """
+    path = Path(model_path)
+    key = (
+        path,
+        path.stat().st_mtime_ns,
+        steady_state.absolute_tolerance,
+        steady_state.relative_tolerance,
+        steady_state.max_time,
+    )
+    if key not in _GROWING:
+        model, states = _accumulation_model(path, key[1])
+        if not states:
+            _GROWING[key] = ()
+            return ()
+        simulator = Simulator(n_workers=1)
+        initial = simulator.run(
+            model, Simulation(end=1, preinit_changes=dict(condition))
+        )
+        equilibrated = simulator.run(
+            model,
+            Simulation(
+                end=1, preinit_changes=dict(condition), presimulation=steady_state
+            ),
+        )
+        growing = []
+        for sid in states:
+            before = float(start_values(initial, sid).item())
+            after = float(start_values(equilibrated, sid).item())
+            if abs(after - before) > steady_state.absolute_tolerance + 1e-9 * abs(
+                before
+            ):
+                growing.append(sid)
+        _GROWING[key] = tuple(growing)
+    return _GROWING[key]
 
 
 def molecular_weights(definition: PBPKDefinition) -> Mapping[str, Quantity]:
@@ -468,7 +615,15 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
           the feces of the library, `Aurine_<s>`, `Afeces_<s>`, and what a PD
           component accumulates, `resets`), are set back at the start: they
           are in steady state when their rate is within the tolerances
-          relative to their amount, which they reach as well.
+          relative to their amount, which they reach as well. A state without
+          an outflow which grows during the equilibration and is neither a
+          sink of the library nor in `resets` is refused, named
+          (`growing_states`, checked once per model file in a process).
+        - The start value `<id>_0` of a delta observer (`PBPKDefinition.deltas`)
+          is set at the start to the value after the equilibration, so the
+          delta `<id>_delta` is 0 at the start of the simulation.
+        - A model which reaches no steady state by `max_time` fails with the
+          `SteadyStateError` of sbmlsim (within the `ScanError` of the run).
 
         The presimulation is the choice over a hidden pre-run of a duration
         from a negative start (tested on a homeostasis of 7 days: the pre-run
@@ -504,8 +659,11 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
         Raises:
             ValueError: if the model is not loaded, the simulation has a
                 presimulation, a dose is set before the initialization and by a
-                change at the start, or a dimension of a scan sets a dose which
+                change at the start, a state grows during the equilibration
+                which is not set back, or a dimension of a scan sets a dose which
                 the simulation does not give or varies simulations.
+            ScanError: if the model reaches no steady state in the condition
+                by `max_time` (a `SteadyStateError` of sbmlsim).
         """
         loaded = self._models.get(model)
         symbols = getattr(loaded, "symbols", None)
@@ -519,50 +677,60 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
         )
         sink_prefixes = (ids.urine(""), ids.feces(""))
         sinks = sorted(s for s in symbols.species if s.startswith(sink_prefixes))
-        if isinstance(simulation, Scan):
-            base = _equilibrated(
-                simulation.simulation,
-                dose_prefixes,
-                sinks,
-                resets,
-                SteadyState(
-                    absolute_tolerance=absolute_tolerance,
-                    relative_tolerance=relative_tolerance,
-                    max_time=max_time,
-                ),
-            )
-            given = {target for change in base.changes for target in change.values}
-            for dimension in simulation.dimensions:
-                if dimension.kind != DimensionKind.VALUES:
-                    raise ValueError(
-                        f"The dimension '{dimension.id}' varies {dimension.kind}: "
-                        "equilibrate every simulation of it instead."
-                    )
-                missing = sorted(
-                    target
-                    for target in dimension.values
-                    if target.startswith(dose_prefixes)
-                    and dimension.at is None
-                    and target not in given
-                )
-                if missing:
-                    raise ValueError(
-                        f"The dimension '{dimension.id}' sets the doses {missing}, "
-                        "which the simulation does not give: they would be doses "
-                        "before the equilibration; give them in the simulation."
-                    )
-            return Scan(simulation=base, dimensions=simulation.dimensions)
-        return _equilibrated(
-            simulation,
-            dose_prefixes,
-            sinks,
-            resets,
-            SteadyState(
-                absolute_tolerance=absolute_tolerance,
-                relative_tolerance=relative_tolerance,
-                max_time=max_time,
-            ),
+        # the start values of the deltas, evaluated after the equilibration
+        deltas = sorted(
+            sid
+            for sid in symbols.parameters
+            if ids.start_value(sid) in symbols.parameters
+            and ids.delta(sid) in symbols.parameters
         )
+        at_start: dict[str, float | Quantity | str] = {
+            **dict.fromkeys(sinks, 0.0),
+            **(resets or {}),
+            **{ids.start_value(sid): sid for sid in deltas},
+        }
+        steady_state = SteadyState(
+            absolute_tolerance=absolute_tolerance,
+            relative_tolerance=relative_tolerance,
+            max_time=max_time,
+        )
+        base = simulation.simulation if isinstance(simulation, Scan) else simulation
+        equilibrated = _equilibrated(base, dose_prefixes, at_start, steady_state)
+        path = _model_path(self.models().get(model))
+        if path is not None:
+            growing = sorted(
+                set(growing_states(path, equilibrated.preinit_changes, steady_state))
+                - set(at_start)
+            )
+            if growing:
+                raise ValueError(
+                    f"The states {growing} grow without a steady state during the "
+                    f"equilibration in the experiment '{self.sid}' (they have no "
+                    "outflow): give their values at the start in `resets`."
+                )
+        if not isinstance(simulation, Scan):
+            return equilibrated
+        given = {target for change in equilibrated.changes for target in change.values}
+        for dimension in simulation.dimensions:
+            if dimension.kind != DimensionKind.VALUES:
+                raise ValueError(
+                    f"The dimension '{dimension.id}' varies {dimension.kind}: "
+                    "equilibrate every simulation of it instead."
+                )
+            missing = sorted(
+                target
+                for target in dimension.values
+                if target.startswith(dose_prefixes)
+                and dimension.at is None
+                and target not in given
+            )
+            if missing:
+                raise ValueError(
+                    f"The dimension '{dimension.id}' sets the doses {missing}, "
+                    "which the simulation does not give: they would be doses "
+                    "before the equilibration; give them in the simulation."
+                )
+        return Scan(simulation=equilibrated, dimensions=simulation.dimensions)
 
     def _check_kidney_outflow(self) -> None:
         """Check the kidney outflow of every individual the experiment simulates.
@@ -793,11 +961,16 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
 def _equilibrated(
     simulation: Simulation,
     dose_prefixes: tuple[str, ...],
-    sinks: Sequence[str],
-    resets: Mapping[str, Quantity | float] | None,
+    at_start: Mapping[str, float | Quantity | str],
     steady_state: SteadyState,
 ) -> Simulation:
     """Equilibrate a simulation, see `PBPKSimulationExperiment.equilibrated`.
+
+    Args:
+        simulation: the simulation.
+        dose_prefixes: the prefixes of the ids of the doses.
+        at_start: the further values at the start, after the doses.
+        steady_state: the presimulation.
 
     Raises:
         ValueError: for a simulation with a presimulation or a dose before the
@@ -811,29 +984,27 @@ def _equilibrated(
     doses = {k: v for k, v in preinit.items() if k.startswith(dose_prefixes)}
     condition = {k: v for k, v in preinit.items() if k not in doses}
     start = simulation.start
-    at_start = {
+    at_the_start = {
         target
         for change in simulation.changes
         if any(
             math.isclose(
-                _minutes(simulation, t), _minutes(simulation, start), abs_tol=1e-12
+                _time_value(simulation, t),
+                _time_value(simulation, start),
+                abs_tol=1e-12,
             )
             for t in change.times
         )
         for target in change.values
     }
-    twice = sorted(set(doses) & at_start)
+    twice = sorted(set(doses) & at_the_start)
     if twice:
         raise ValueError(
             f"The doses {twice} are set before the initialization and by a change at "
             "its start; give each dose once, the equilibration moves the doses "
             "before the initialization to the start."
         )
-    values: dict[str, float | Quantity | str | Uncertain] = {
-        **doses,
-        **dict.fromkeys(sinks, 0.0),
-        **(resets or {}),
-    }
+    values: dict[str, float | Quantity | str | Uncertain] = {**doses, **at_start}
     return Simulation(
         time_unit=simulation.time_unit,
         start=start,
@@ -847,7 +1018,7 @@ def _equilibrated(
     )
 
 
-def _minutes(simulation: Simulation, time: object) -> float:
+def _time_value(simulation: Simulation, time: object) -> float:
     """Get a time of a simulation as a number in its time unit."""
     if isinstance(time, Quantity):
         unit = simulation.time_unit

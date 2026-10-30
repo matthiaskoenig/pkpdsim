@@ -2,9 +2,11 @@
 
 import copy
 import dataclasses
+import json
 import multiprocessing
 import os
 from concurrent.futures import ProcessPoolExecutor
+from pathlib import Path
 
 import pytest
 from sbmlsim.experiment import ExperimentRunner
@@ -30,6 +32,7 @@ from pkpdsim.fit import (
     observable_filter,
     observable_id,
     select_mappings,
+    start_point,
 )
 from pkpdsim.metadata import (
     Coadministration,
@@ -374,3 +377,19 @@ def test_a_worker_loads_the_models_at_the_level_of_the_model(
         .jit_optimization
         == "O2"
     )
+
+
+def test_a_start_without_the_unit_of_a_parameter_is_refused(tmp_path: Path) -> None:
+    """A value of a fit without its unit cannot be converted into the unit of the fit."""
+    definition = MODEL.load_fit_definitions()["DECAY"]
+    fit = tmp_path / "DECAY_20261030_120000__abcde"
+    fit.mkdir()
+    best: dict[str, object] = {"values": {"k": 12.0}}
+    (fit / "parameters.json").write_text(json.dumps({"sets": [best]}), "utf-8")
+    with pytest.raises(ValueError, match=r"has no unit of 'k'.*1/min"):
+        start_point(MODEL, definition, fit.name, tmp_path)
+    best["units"] = {"k": "1/hr"}
+    (fit / "parameters.json").write_text(json.dumps({"sets": [best]}), "utf-8")
+    assert start_point(MODEL, definition, fit.name, tmp_path) == {
+        "k": pytest.approx(0.2)
+    }

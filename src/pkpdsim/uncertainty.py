@@ -407,8 +407,18 @@ def _read_json(path: Path) -> dict[str, Any]:
         return json.load(f)
 
 
-def _convert(value: float, unit: str | None, target: str | None) -> float:
-    """Convert a number from one unit into another, both units of pint."""
+def convert_value(value: float, unit: str | None, target: str | None) -> float:
+    """Convert a number from one unit into another, both units of pint.
+
+    Args:
+        value: the number in `unit`.
+        unit: the unit of the number, `None` for the unit of the target.
+        target: the unit to convert into, `None` for the unit of the number.
+
+    Returns:
+        The number in `target`, the number itself if a unit is missing or
+        both are the same.
+    """
     if unit is None or target is None or unit == target:
         return float(value)
     return float(ureg.Quantity(value, unit).to(target).magnitude)
@@ -417,8 +427,8 @@ def _convert(value: float, unit: str | None, target: str | None) -> float:
 def _convert_optional(
     value: float | None, unit: str | None, target: str | None
 ) -> float | None:
-    """Convert a number which may be missing, see `_convert`."""
-    return None if value is None else _convert(value, unit, target)
+    """Convert a number which may be missing, see `convert_value`."""
+    return None if value is None else convert_value(value, unit, target)
 
 
 def _scale(name: str | None, default: ParameterScaleType) -> ParameterScaleType:
@@ -517,8 +527,8 @@ class FitRecord:
             unit = units.get(pid)
             fp_unit = fp.get("unit")
             scale = _scale(fp.get("scale"), default_scale)
-            lower_bound = _convert(float(fp["lower_bound"]), fp_unit, unit)
-            upper_bound = _convert(float(fp["upper_bound"]), fp_unit, unit)
+            lower_bound = convert_value(float(fp["lower_bound"]), fp_unit, unit)
+            upper_bound = convert_value(float(fp["upper_bound"]), fp_unit, unit)
             profile = profiles.get(pid)
             if profile is not None:
                 method = UncertaintyMethod.PROFILE

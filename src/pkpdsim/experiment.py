@@ -53,7 +53,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from tokenize import TokenError
 from types import MappingProxyType
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from sbmlsim.data import Data, load_pkdb_dataframe
 from sbmlsim.experiment import SimulationExperiment
@@ -412,18 +412,10 @@ class PKPDSimulationExperiment(SimulationExperiment):
                 color=color,
             )
             return
-        if linestyle is None:
-            curve = Curve(x=time, y=y, label=label, color=color, linewidth=2.0)
-        else:
-            curve = Curve(
-                x=time,
-                y=y,
-                label=label,
-                color=color,
-                linestyle=linestyle,
-                linewidth=2.0,
-            )
-        plot.add_curve(curve)
+        style: dict[str, Any] = {"color": color, "linewidth": 2.0}
+        if linestyle is not None:
+            style["linestyle"] = linestyle
+        plot.add_curve(Curve(x=time, y=y, label=label, **style))
 
     def data_unit_names(self) -> Mapping[str, str]:
         """Get the names of the units of the data, defining the units of `data_units` once.

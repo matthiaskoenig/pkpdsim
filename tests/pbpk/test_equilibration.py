@@ -7,6 +7,7 @@ the steady state of the healthy condition `f = 1` (`X = 100`); a condition
 `V' = kout*X` (the urine of a PD model), which has no steady state.
 """
 
+import dataclasses
 from collections.abc import Callable
 from typing import cast
 
@@ -24,15 +25,17 @@ from sbmlsim.simulation import (
     SteadyState,
 )
 from sbmlsim.simulator import Simulator
+from sbmlsim.simulator.executor import SteadyStateError
+from sbmlsim.simulator.simulator import ScanError
 from sbmlutils.factory import Model, Parameter, Port, PortType, RateRule, Sbase
 from sbmlutils.metadata import SBO
 
 from pkpdsim.model import PKPDModel
 from pkpdsim.pbpk import MODEL_UNITS, PDComponent, Sex, U, build, ids
 from pkpdsim.pbpk.builder import BuildResult
-from pkpdsim.pbpk.experiment import PBPKSimulationExperiment
+from pkpdsim.pbpk.experiment import PBPKSimulationExperiment, accumulating_states
 
-from .conftest import definition
+from .conftest import definition, endogenous_reference_definition
 
 #: the elimination of the homeostasis [1/min], a time constant of 7 days
 KOUT = 1e-4
@@ -73,6 +76,28 @@ def homeostasis(*, sink: bool) -> PDComponent:
     return PDComponent(model=model, inputs={"C_drug": ids.arm_free("drg")}, outputs={})
 
 
+def oscillator() -> PDComponent:
+    """Get a PD component which oscillates: it has no steady state."""
+    sbo = SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER
+    objects: list[Sbase] = [
+        Parameter(
+            "C_drug",
+            0.0,
+            U.mM,
+            constant=False,
+            sboTerm=sbo,
+            port=Port("C_drug_port", portType=PortType.INPUT_PORT),
+        ),
+        Parameter("w", 0.01, U.per_min, sboTerm=sbo),
+        Parameter("X", 1.0, U.dimensionless, constant=False, sboTerm=sbo),
+        Parameter("Y", 0.0, U.dimensionless, constant=False, sboTerm=sbo),
+        RateRule("X", "w * Y", U.per_min),
+        RateRule("Y", "-w * X", U.per_min),
+    ]
+    model = Model("OSC", units=U, model_units=MODEL_UNITS, objects=objects)
+    return PDComponent(model=model, inputs={"C_drug": ids.arm_free("drg")}, outputs={})
+
+
 @pytest.fixture(scope="module")
 def builds(tmp_path_factory: pytest.TempPathFactory) -> dict[str, BuildResult]:
     """The homeostasis without and with the sink, male; with the sink female."""
@@ -84,6 +109,13 @@ def builds(tmp_path_factory: pytest.TempPathFactory) -> dict[str, BuildResult]:
         "sink": build(definition(sid="sink", pd=[homeostasis(sink=True)]), out),
         "sink_female": build(
             definition(sid="sink_female", sex=Sex.FEMALE, pd=[homeostasis(sink=True)]),
+            out,
+        ),
+        "oscillator": build(definition(sid="oscillator", pd=[oscillator()]), out),
+        "endogenous": build(
+            dataclasses.replace(
+                endogenous_reference_definition(), deltas=(ids.arm("end"),)
+            ),
             out,
         ),
     }
@@ -105,12 +137,21 @@ def _run(
     model: PKPDModel,
     simulations: Callable[[PBPKSimulationExperiment], dict[str, Simulation | Scan]],
     sex: Sex = Sex.MALE,
+    selections: tuple[str, ...] = (
+        "time",
+        "HOMEO__X",
+        "Aurine_drg",
+        "Carm_drg",
+        "IVDOSE_drg",
+    ),
 ) -> PBPKSimulationExperiment:
     """Initialize and run an experiment of the simulations, as a run does."""
 
+    chosen = selections
+
     class Equilibration(PBPKSimulationExperiment):
         pkpd_model = model
-        selections = ("time", "HOMEO__X", "Aurine_drg", "Carm_drg", "IVDOSE_drg")
+        selections = chosen
 
         def simulations(self) -> dict[str, Simulation | Scan]:
             return simulations(self)
@@ -353,3 +394,81 @@ def test_a_model_must_be_loaded(builds: dict[str, BuildResult]) -> None:
 
     with pytest.raises(ValueError, match="not loaded"):
         _run(_model(builds["homeostasis"]), simulations)
+
+
+def test_the_accumulating_states_of_a_model(builds: dict[str, BuildResult]) -> None:
+    """The states which nothing drains: the sinks, not the homeostasis."""
+    sink = accumulating_states(builds["sink"].flat_path.read_text(encoding="utf-8"))
+    assert "HOMEO__V" in sink
+    assert {"Aurine_drg", "Afeces_drg"} <= set(sink)
+    assert "HOMEO__X" not in sink
+    plain = builds["homeostasis"].flat_path.read_text(encoding="utf-8")
+    assert "HOMEO__V" not in accumulating_states(plain)
+    # two states which read each other are no sinks
+    oscillating = builds["oscillator"].flat_path.read_text(encoding="utf-8")
+    assert not {"OSC__X", "OSC__Y"} & set(accumulating_states(oscillating))
+
+
+def test_a_growing_state_without_a_reset_is_refused(
+    builds: dict[str, BuildResult],
+) -> None:
+    """The urine of the PD component grows; without a reset its start is meaningless."""
+
+    def simulations(
+        experiment: PBPKSimulationExperiment,
+    ) -> dict[str, Simulation | Scan]:
+        return {"forgotten": experiment.equilibrated(_dosed())}
+
+    with pytest.raises(ValueError, match=r"\['HOMEO__V'\] grow without a steady"):
+        _run(_model(builds["sink"]), simulations)
+
+
+def test_a_model_without_a_steady_state_fails(builds: dict[str, BuildResult]) -> None:
+    """An oscillation reaches no steady state: sbmlsim's SteadyStateError."""
+
+    def simulations(
+        experiment: PBPKSimulationExperiment,
+    ) -> dict[str, Simulation | Scan]:
+        dosed = Simulation(end=60, preinit_changes={"IVDOSE_drg": Q(10, "mg")})
+        return {"oscillating": experiment.equilibrated(dosed, max_time=1e4)}
+
+    with pytest.raises(ScanError, match="did not reach a steady state") as raised:
+        _run(_model(builds["oscillator"]), simulations, selections=("time",))
+    causes = []
+    error: BaseException | None = raised.value
+    while error is not None:
+        causes.append(type(error))
+        error = error.__cause__
+    assert SteadyStateError in causes
+
+
+def test_a_delta_starts_after_the_equilibration(builds: dict[str, BuildResult]) -> None:
+    """The start value of a delta is the value after the equilibration, the delta 0."""
+    arm = ids.arm("end")
+
+    def simulations(
+        experiment: PBPKSimulationExperiment,
+    ) -> dict[str, Simulation | Scan]:
+        condition = Simulation(
+            end=60, preinit_changes={"f_renal_function": Q(0.5, "dimensionless")}
+        )
+        return {
+            "equilibrated": experiment.equilibrated(condition),
+            "plain": condition,
+        }
+
+    experiment = _run(
+        _model(builds["endogenous"]),
+        simulations,
+        selections=("time", arm, ids.delta(arm)),
+    )
+
+    def at_start(key: str, sid: str) -> float:
+        result = cast("TimecourseResult", experiment.results[f"task_{key}"])
+        return float(np.asarray(result[sid]).ravel()[0])
+
+    # the equilibration moves the arm vein concentration in the impairment
+    assert at_start("equilibrated", arm) > 1.05 * at_start("plain", arm)
+    assert at_start("equilibrated", ids.delta(arm)) == pytest.approx(
+        0.0, abs=1e-12 * at_start("equilibrated", arm)
+    )

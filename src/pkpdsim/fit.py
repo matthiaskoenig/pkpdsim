@@ -578,12 +578,13 @@ def start_point(
 
     Raises:
         ValueError: if the start is neither a file nor a fit, a value is not a
-            number, a parameter of the file is not fitted, or a value is
-            outside of the bounds of its parameter.
+            number, a parameter of the file is not fitted, a value of a fit has
+            no unit for a fit parameter with one, or a value is outside of the
+            bounds of its parameter.
     """
     import json
 
-    from pkpdsim.uncertainty import _convert
+    from pkpdsim.uncertainty import convert_value
 
     parameters = {p.pid: p for p in definition.parameters}
     path = Path(start)
@@ -613,11 +614,17 @@ def start_point(
         best = json.loads((directory / "parameters.json").read_text("utf-8"))
         best = best["sets"][0]
         units = dict(best.get("units") or {})
-        values = {
-            pid: _convert(float(value), units.get(pid), parameters[pid].unit)
-            for pid, value in best["values"].items()
-            if pid in parameters
-        }
+        values = {}
+        for pid, value in best["values"].items():
+            if pid not in parameters:
+                continue
+            unit, target = units.get(pid), parameters[pid].unit
+            if unit is None and target is not None:
+                raise ValueError(
+                    f"The fit '{start}' has no unit of '{pid}': its value cannot be "
+                    f"converted into the unit of the fit parameter, {target}."
+                )
+            values[pid] = convert_value(float(value), unit, target)
     point: dict[str, float] = {}
     for pid, value in values.items():
         if isinstance(value, bool) or not isinstance(value, int | float):
