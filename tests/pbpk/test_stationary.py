@@ -314,7 +314,7 @@ def test_a_lung_which_clears_a_solved_substance(tmp_path: Path) -> None:
 def test_an_activity_set_before_the_simulation_moves_the_steady_state(
     tmp_path: Path,
 ) -> None:
-    """A parameter of a custom reaction set before the simulation is read by the starts (D16).
+    """A parameter of a custom reaction set before the simulation is read by the starts.
 
     The activity `f_act` of the clearance of the liver tissue (a parameter
     of the organ, `LI__f_act`) at 2.5: the solved baseline falls, every

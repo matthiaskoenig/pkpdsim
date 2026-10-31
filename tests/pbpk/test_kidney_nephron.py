@@ -411,7 +411,7 @@ def test_unplaced_process_raises(tmp_path: Path) -> None:
     """A custom reaction of the kidney is refused, naming it; the nephron is a kidney only.
 
     A custom reaction states its rate for a part of the standard kidney, the
-    nephron kidney places metabolism and transport only (R34).
+    nephron kidney places metabolism and transport only.
     """
     custom = CustomReaction(
         sid="DRGC",
@@ -430,7 +430,7 @@ def test_unplaced_process_raises(tmp_path: Path) -> None:
 
 
 def test_standard_kidney_still_refuses_apical_influx() -> None:
-    """The apical influx from the urine stays refused in the standard kidney (R18)."""
+    """The apical influx from the urine stays refused in the standard kidney."""
     d = definition(
         substances=[_renal_drug(distribution=_KIDNEY_TISSUE)],
         chemistry=[_reabsorption()],

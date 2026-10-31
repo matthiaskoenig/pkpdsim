@@ -517,7 +517,7 @@ def test_the_baseline_is_annotated(tmp_path: Path) -> None:
 # The CKD profile of the binding to albumin added three parameters with their
 # initial assignments (`fckd_albumin`, `fckd_albumin_binding`,
 # `fimp_albumin_ckd`) to both. The transit time of the stomach of the
-# segmented intestine added `T_st_eff` (R41a): a parameter of the top model of
+# segmented intestine added `T_st_eff`: a parameter of the top model of
 # the comp model, a parameter with its initial assignment of the flat model.
 _PINNED = {
     "comp": (9, 240, 148, 12, 3, 9),

@@ -89,7 +89,7 @@ def _load(path: Path, **changes: float) -> "roadrunner.RoadRunner":
 
 
 def _kidney_plasma(r: "roadrunner.RoadRunner") -> float:
-    """The plasma concentration of the kidney (mM), `KI__Cpl_<s>` (R1)."""
+    """The plasma concentration of the kidney (mM), `KI__Cpl_<s>`."""
     return r[f"[{ids.flat(Organ.KIDNEY, ids.species(Part.PLASMA, S))}]"]
 
 
@@ -406,7 +406,7 @@ def _clearance(
     """The clearance (l/min) of a process: its rate over its unbound substrate.
 
     The model is initialized with the changes (sbmlsim evaluates the initial
-    assignments which read them again, R21), the substrate species is set
+    assignments which read them again), the substrate species is set
     and the rate read at that state; the unbound concentration is
     `fu*C/coefficient` with the values of the model (a CKD stage changes fu).
 

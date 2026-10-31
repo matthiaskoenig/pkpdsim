@@ -276,7 +276,7 @@ def reference_definition() -> PBPKDefinition:
 
 
 def chemistry_reference_definition(liver: str = "standard") -> PBPKDefinition:
-    """The definition of the stored chemistry reference: processes without the options of Task 2.
+    """The stored chemistry reference: processes without custom parameters, rates and fractions.
 
     A metabolism into two products by numbers, a metabolism of the mucosa, a
     basolateral uptake and an apical secretion, and a custom reaction with a
@@ -351,7 +351,7 @@ def chemistry_reference_definition(liver: str = "standard") -> PBPKDefinition:
 
 
 def nephron_reference_definition() -> PBPKDefinition:
-    """The definition of the stored nephron reference: the nephron kidney without the options of Task 4.
+    """The stored nephron reference: the nephron kidney without a threshold reabsorption.
 
     `drg` filtered with a constant fraction reabsorbed (0.2) and secreted by
     an apical efflux into the proximal tubule, `sec` secreted but not
@@ -484,7 +484,7 @@ def assert_reference_sbml(result: BuildResult) -> None:
     rebuilt with the CKD profile of the binding to albumin (their albumin
     substances; the build without the profile is the former reference, line
     by line but for the dates), and rebuilt with the output `T_st_eff` of the
-    segmented intestine (R41a, additions only: the parameter, its initial
+    segmented intestine (additions only: the parameter, its initial
     assignment and port, the inputs `FED` and `fimp_t_stomach` of an
     intestine without a lumen species, no line removed); a change of the
     library which changes the SBML of every model on purpose rebuilds them

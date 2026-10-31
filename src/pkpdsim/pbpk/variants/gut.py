@@ -697,7 +697,7 @@ class GutBuilder(LumenBuilder):
         `w = e*Vmu/sum(e*Vmu)` with the expression `e` of the protein of the
         data; a protein without expression data (or no protein) is placed by
         mucosa volume (`e = 1`) over the segments of the small intestine, the
-        organ of the process (R62); `None` where the protein is not placed.
+        organ of the process; `None` where the protein is not placed.
         """
         key = _UNIFORM if self.single else _PROFILED.get(protein or "", _UNIFORM)
 

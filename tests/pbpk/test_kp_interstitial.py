@@ -102,7 +102,7 @@ def test_the_share_is_that_of_the_sex_of_the_build() -> None:
 
 
 def test_the_sex_of_the_share_has_no_default() -> None:
-    """Every caller names the sex, so a female build never reads the male share (R2)."""
+    """Every caller names the sex, so a female build never reads the male share."""
     sex = inspect.signature(interstitial_share).parameters["sex"]
     assert sex.default is inspect.Parameter.empty
     with pytest.raises(TypeError, match="sex"):
@@ -133,7 +133,7 @@ def test_the_shares_of_the_sexes_differ_by_the_rounding_of_f_int(organ: Organ) -
 
 @pytest.mark.usefixtures("distinct_shares")
 def test_the_female_build_has_the_female_share(tmp_path: Path) -> None:
-    """Each build gives every organ the share of its own sex (D18)."""
+    """Each build gives every organ the share of its own sex."""
     kp = Kp(interstitial=1.0, ftissue=1.0)
     values: dict[Sex, dict[Organ, float]] = {}
     for sex in Sex:
@@ -277,7 +277,7 @@ def test_the_full_form_is_checked_for_the_sex_of_the_build() -> None:
         distribution.check_kp(drug, organ, high)
 
 
-# --- the floor of the cell partition in chronic kidney disease (ruling R26) -------
+# --- the floor of the cell partition in chronic kidney disease -------
 
 
 #: the fu of a metabolite of torasemide (M1), bound to albumin with the CKD profile

@@ -1,11 +1,11 @@
 """The options of the chemistry: custom parameters, shared rates, product fractions.
 
 - the parameters of a custom reaction as `ModelParameter`s, local ids of the
-  organ with value, provenance and the uncertainty of a fit (D3);
+  organ with value, provenance and the uncertainty of a fit;
 - the capacity of a process as a ratio of another process of the organ,
-  `RateOf` (D4);
+  `RateOf`;
 - the product fractions of a metabolism as values and fitted values with the
-  remainder `REST`, the parameters `f_<metabolism>_<product>` (D5);
+  remainder `REST`, the parameters `f_<metabolism>_<product>`;
 - a definition which uses none of them builds the SBML of 0c538ca.
 """
 
@@ -173,7 +173,7 @@ def _problems(d: PBPKDefinition) -> str:
     return str(err.value)
 
 
-# --- custom parameters (D3) ---------------------------------------------------
+# --- custom parameters ---------------------------------------------------
 
 
 def _deep(*parameters: ModelParameter | Parameter) -> CustomReaction:
@@ -294,7 +294,7 @@ def test_a_custom_parameter_of_a_formula_reads_the_top_model(tmp_path: Path) -> 
 def test_a_custom_parameter_of_a_formula_reads_the_constants_of_its_organ(
     tmp_path: Path,
 ) -> None:
-    """A `Formula` of a custom parameter reads local constants of its organ and top ids (R41d).
+    """A `Formula` of a custom parameter reads local constants of its organ and top ids.
 
     Creatinine's CRIM_Vmax reads the fitted local CRIM_Km and constants of
     the top model: `k_deep` reads the local `k_ref` (a parameter of the
@@ -500,7 +500,7 @@ def test_a_custom_parameter_under_an_id_of_the_organ_is_refused(
     )
 
 
-# --- shared rates (D4) --------------------------------------------------------
+# --- shared rates --------------------------------------------------------
 
 
 def _uptake(sid: str, vmax: float | Value | RateOf, km: float = 0.05) -> Transport:
@@ -694,7 +694,7 @@ def test_rate_of_a_custom_reaction_is_refused() -> None:
     assert "UP_MU: RateOf 'DRGDEEP' is no metabolism or transport" in _problems(d)
 
 
-# --- product fractions (D5) ---------------------------------------------------
+# --- product fractions ---------------------------------------------------
 
 
 def _split(

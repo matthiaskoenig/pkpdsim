@@ -595,7 +595,7 @@ def test_the_figure_shows_the_source_of_a_slow_pool(tmp_path: Path) -> None:
 def test_one_factor_of_a_segment_is_singular(
     tmp_path: Path, factors: dict[str, float], text: str
 ) -> None:
-    """ "factor of" for the factor of one segment, "factors of" for several (R36)."""
+    """ "factor of" for the factor of one segment, "factors of" for several."""
     d = definition(
         routes=[Route.oral_solution("drg")],
         variants=Variants(
@@ -617,7 +617,7 @@ def _title(path: Path) -> str:
 
 
 def test_the_title_names_the_builds_of_the_archive(tmp_path: Path) -> None:
-    """One build is "male build"; an archive of both sexes names both (R36)."""
+    """One build is "male build"; an archive of both sexes names both."""
     d = definition()
     one = create_archive(
         d, tmp_path / "one" / "models", model="simple", copyright="2026 M"
@@ -651,7 +651,7 @@ def test_the_figure_refuses_builds_without_the_sex_of_the_definition(
 def test_a_produced_substance_with_a_solved_baseline_is_endogenous(
     tmp_path: Path,
 ) -> None:
-    """A substance which a declared rate produces, baseline solved, is marked endogenous (R41c).
+    """A substance which a declared rate produces, baseline solved, is marked endogenous.
 
     Creatinine: produced in the muscle, without a baseline of its own; the
     library solves the baseline. A drug of the same definition is not marked.

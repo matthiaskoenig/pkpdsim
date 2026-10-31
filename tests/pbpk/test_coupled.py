@@ -271,7 +271,7 @@ def test_combine_pd_equal_by_model_id_and_ports() -> None:
     """The same PD component, constructed by each package for itself, is taken once.
 
     PD components are equal by the id of their model, their inputs and their
-    outputs (R50): two separately built `cardiac_pd()` merge, a component of
+    outputs: two separately built `cardiac_pd()` merge, a component of
     the same id with other inputs raises (the "pd" case of
     `test_combine_duplicate_ids_raises`).
     """

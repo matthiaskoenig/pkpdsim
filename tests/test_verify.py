@@ -1352,7 +1352,7 @@ FIGURES_08: dict[str, str] = json.loads(
 
 
 def setting_of_09(figure: Figure, name: str, value: object) -> None:
-    """Set a setting of a figure as sbmlsim 0.9 does (R1.5 of the port)."""
+    """Set a setting of a figure as sbmlsim 0.9 does."""
     figure.settings = {**figure.settings, name: value}
 
 

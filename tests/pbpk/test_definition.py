@@ -533,7 +533,7 @@ def _untyped[T](cls: Callable[..., T], *args: object, **kwargs: object) -> T:
     "organ", [Organ.ADIPOSE, "ad", "adipose", "Adipose", "ADIPOSE"]
 )
 def test_kp_overrides_accept_organ_texts(organ: object) -> None:
-    """The keys of `Kp.overrides` are organs, their values or their names (R60)."""
+    """The keys of `Kp.overrides` are organs, their values or their names."""
     kp = _untyped(Kp, 2.0, ftissue=0.5, overrides={organ: 0.4})
     assert kp.overrides == {Organ.ADIPOSE: 0.4}
     assert all(type(k) is Organ for k in kp.overrides)
@@ -587,7 +587,7 @@ _METHOD = {"method": "rodgers_rowland", "logp": 1.0, "pka": (), "compound": "neu
 def test_organ_fields_reject_other_values(
     cls: Callable[..., object], kwargs: dict[str, object], field: str
 ) -> None:
-    """Anything but an organ, its value or its name raises, naming the field (R60).
+    """Anything but an organ, its value or its name raises, naming the field.
 
     The message lists the allowed values, or says what is wrong with the
     collection (no mapping, no set, an organ given twice).
@@ -600,7 +600,7 @@ def test_organ_fields_reject_other_values(
 
 @pytest.mark.parametrize("sex", [Sex.FEMALE, "female", "FEMALE", "Female"])
 def test_sex_accepts_its_value(sex: object) -> None:
-    """The sex is a `Sex` member or its value (R60), also through `replace`."""
+    """The sex is a `Sex` member or its value, also through `replace`."""
     assert _definition(sex=sex).sex is Sex.FEMALE
     assert _untyped(dataclasses.replace, _definition(), sex=sex).sex is Sex.FEMALE
 
@@ -651,7 +651,7 @@ def _text_processes() -> tuple[Metabolism, Transport, CustomReaction]:
 
 
 def test_chemistry_enum_fields_accept_texts(tmp_path: Path) -> None:
-    """Organ, direction, membrane, part and mode given as text build the reactions (R61).
+    """Organ, direction, membrane, part and mode given as text build the reactions.
 
     Before, a process of a text organ was dropped from the model.
     """
@@ -704,7 +704,7 @@ def test_chemistry_enum_fields_accept_texts(tmp_path: Path) -> None:
 def test_chemistry_enum_fields_reject_other_texts(
     cls: Callable[..., object], args: tuple[object, ...], field: str
 ) -> None:
-    """An unknown text raises with the field and the allowed values (R61)."""
+    """An unknown text raises with the field and the allowed values."""
     kwargs = {"mode": "flow"} if cls is Kp else {}
     with pytest.raises(ValueError, match=re.escape(field)) as err:
         _untyped(cls, *args, **kwargs)
@@ -742,7 +742,7 @@ def test_basolateral_text_hits_the_gut_refusal() -> None:
     ],
 )
 def test_choices_reject_other_texts(make: Callable[[], object], field: str) -> None:
-    """A text which is none of the choices of a `Literal` field raises (R61).
+    """A text which is none of the choices of a `Literal` field raises.
 
     Before, a route of an unknown kind composed no doses and an unknown
     erythrocyte mode was taken for another.
@@ -979,7 +979,7 @@ def test_a_definition_parameter_may_not_take_an_id_of_the_definition() -> None:
 def test_a_constant_of_a_formulation_is_read_from_the_definition(
     tmp_path: Path,
 ) -> None:
-    """A constant of a formulation lives in the definition and the model (D14).
+    """A constant of a formulation lives in the definition and the model.
 
     The experiments of a prolonged release set the factor of the dissolution
     from the constant of the definition, which the archive carries.

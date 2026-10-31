@@ -197,7 +197,7 @@ def test_flat_ids_follow_scheme(simple: BuildResult) -> None:
 
 @pytest.mark.skipif(
     "PYTEST_XDIST_WORKER" in os.environ,
-    reason="CPU time inflates under the contention of the parallel workers (R53); "
+    reason="CPU time inflates under the contention of the parallel workers; "
     "runs serially: `pytest -n 0`, the second command of tox",
 )
 def test_load_time(simple: BuildResult) -> None:
@@ -229,7 +229,7 @@ def rules_without_state(doc: libsbml.SBMLDocument) -> list[str]:
     the assignment rules and reactions it reads, depends on constants only and
     belongs into an initial assignment: roadrunner inlines assignment rules,
     and the deep chains of the physiology as rules made the compile of the
-    simple model 14 times slower (R21). The rate of an intravenous injection
+    simple model 14 times slower. The rate of an intravenous injection
     `Kiv_<s>` is a rule by design (the dose protocol changes `ti_<s>` between
     doses) and is not reported.
 
@@ -284,7 +284,7 @@ def rules_without_state(doc: libsbml.SBMLDocument) -> list[str]:
 
 
 def test_rules_read_a_state(simple: BuildResult) -> None:
-    """No assignment rule of the flat model depends on constants only (R53).
+    """No assignment rule of the flat model depends on constants only.
 
     The deterministic guard of the load time: the cause of the slow compile
     (assignment rules over constants which should be initial assignments) is

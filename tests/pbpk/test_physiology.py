@@ -64,7 +64,7 @@ def _assert_balance(r: roadrunner.RoadRunner, sex: Sex) -> None:
     """Tissue masses and blood are the body weight, organ blood and pools the blood.
 
     The tissue mass of an organ is its volume without its blood times its density
-    (the organ volume includes its blood, R11, R12).
+    (the organ volume includes its blood).
     """
     p = _data(sex)
     vblood = r[ids.VBLOOD]
@@ -98,7 +98,7 @@ def test_reference_individual_reproduces_reference(
     """The reference individual has the reference volumes, flows and functions.
 
     Lean organs have the volume of their ICRP 89 tissue and blood, adipose the
-    remainder of the body weight (R2).
+    remainder of the body weight.
     """
     r = _rr(paths, sex)
     p = _data(sex)
@@ -133,13 +133,13 @@ def test_reference_individual_reproduces_reference(
 
 @pytest.mark.parametrize("sex", list(Sex))
 def test_volumes_sum_to_bodyweight(paths: dict[Sex, Path], sex: Sex) -> None:
-    """Tissue masses and blood mass are the body weight (R12)."""
+    """Tissue masses and blood mass are the body weight."""
     _assert_balance(_rr(paths, sex), sex)
 
 
 @pytest.mark.parametrize("sex", list(Sex))
 def test_flows_sum_to_cardiac_output(paths: dict[Sex, Path], sex: Sex) -> None:
-    """The flows are the ICRP 89 fractions renormalised to cardiac output (R9)."""
+    """The flows are the ICRP 89 fractions renormalised to cardiac output."""
     r = _rr(paths, sex)
     _assert_flows(r)
     organs = _data(sex)["organs"]
@@ -253,7 +253,7 @@ def test_covariates_are_initial_values(paths: dict[Sex, Path]) -> None:
 def test_reference_fractions(paths: dict[Sex, Path], sex: Sex) -> None:
     """The vascular and interstitial fractions of the reference are those of the data.
 
-    Adipose is the remainder of the body weight (R2), larger than its ICRP mass
+    Adipose is the remainder of the body weight, larger than its ICRP mass
     of the data, so its vascular fraction is smaller than the `f_vas` of the data.
     """
     r = _rr(paths, sex)

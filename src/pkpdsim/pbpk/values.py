@@ -66,7 +66,7 @@ class Formula:
     """A value tied to other parameters: a formula over ids of the top model.
 
     The parameter of the value gets the formula as its initial assignment, as
-    the covariates do (R21): a change of a parameter it reads before the
+    the covariates do: a change of a parameter it reads before the
     simulation is followed, and an id of `PBPKDefinition.dynamic` keeps it an
     assignment rule. The ids of the formula are constant parameters and
     compartments of the top model (the parameters of the substances, the

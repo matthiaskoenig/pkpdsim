@@ -635,7 +635,7 @@ ABSORBED = (ids.absorption_rate(S), ids.absorbed_amount(S), ids.absorbed_fractio
 def test_the_absorbed_amount_and_the_gross_absorbed_fraction(
     tmp_path: Path, intestine: OrganComponent, route: Route, above: float
 ) -> None:
-    """`Aabs_<s>` integrates `Rabs_<s>`; `Fa_<s>` is it over the oral dose given (R37).
+    """`Aabs_<s>` integrates `Rabs_<s>`; `Fa_<s>` is it over the oral dose given.
 
     Two doses, 10 mg at the start and 5 mg after 5 hours: the fraction is
     over 10 mg until the second dose and over 15 mg after it, 0 without a
@@ -756,7 +756,7 @@ def test_the_absorbed_fraction_needs_an_oral_dose() -> None:
 
 
 def test_the_unit_per_area_has_a_text_on_the_figures() -> None:
-    """An axis in `ml_per_min_1p73m2` reads `[ml/min/1.73 m²]`, its unit stays the id (R41b).
+    """An axis in `ml_per_min_1p73m2` reads `[ml/min/1.73 m²]`, its unit stays the id.
 
     sbmlsim writes a unit id of the model as it is; the axis helper of the
     library writes the text of the unit and keeps the unit of the conversion.

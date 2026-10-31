@@ -64,7 +64,7 @@ def _drug(method: KpMethod, **changes: object) -> Substance:
 # Left out: adipose, whose two lipid fractions their Table III exchanges (the
 # Kpu of adipose are computed with the exchanged values), and thymus, which is
 # no organ of the model. Rodgers & Rowland 2005/2006 were not accessible, so
-# their own examples are not reproduced (R44).
+# their own examples are not reproduced.
 _PUBLISHED: list[tuple[str, float, float, float, Organ, float]] = [
     # drug, pKa, fup, logP, organ, Kpu
     # itraconazole (Table S5), pKa 4.57, fup 0.002
@@ -438,7 +438,7 @@ def test_surrogate_tissues() -> None:
     assert composition(Organ.STOMACH).tissue == "gut"
     assert composition(Organ.LARGE_INTESTINE).tissue == "gut"
     assert composition(Organ.GONADS).tissue == "muscle"
-    # the acidic phospholipids and erythrocytes are ModelChoice (R43): only
+    # the acidic phospholipids and erythrocytes are ModelChoice: only
     # the tissue choice tells a surrogate from an organ of its own
     data = load("tissue_composition")["organs"]
     assert data["go"]["source"] == "ModelChoice"

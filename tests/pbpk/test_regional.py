@@ -1,4 +1,4 @@
-"""Tests of the derivation of a regional absorption profile with the model (R36b)."""
+"""Tests of the derivation of a regional absorption profile with the model."""
 
 from pathlib import Path
 from typing import TYPE_CHECKING

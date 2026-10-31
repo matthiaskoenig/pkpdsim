@@ -524,7 +524,7 @@ def test_observer_reads_another_observer(tmp_path: Path) -> None:
 
 
 def test_observer_of_constants_is_a_constant() -> None:
-    """An observer which reads no state is a constant with an initial assignment (R53).
+    """An observer which reads no state is a constant with an initial assignment.
 
     So is an observer which reads only observers of constants; one which reads a
     state as well is an assignment rule (`test_observers_readouts`).

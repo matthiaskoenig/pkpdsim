@@ -436,7 +436,7 @@ KINDS: dict[str, Kind] = {
     "hepatic_flow": Kind(_P, "HEPATIC_VEIN_BLOOD_FLOW"),
     "gfr": Kind(_P, "GLOMERULAR_FILTRATION_RATE"),
     # the GFR at renal function 1 is not the GFR of the individual (a CKD
-    # model has another): the broader term with a version of the GFR (R49)
+    # model has another): the broader term with a version of the GFR
     "gfr_base": Kind(
         _P,
         _PHYS,
@@ -579,7 +579,7 @@ KINDS: dict[str, Kind] = {
     "k_influx": Kind(SBO.KINETIC_CONSTANT, "CLEARANCE_RATE"),
     "k_efflux": Kind(SBO.KINETIC_CONSTANT, "CLEARANCE_RATE"),
     # a clearance per litre of organ (1/min) is no clearance (a volume per
-    # time) nor a rate constant of an amount: the broader term (R49)
+    # time) nor a rate constant of an amount: the broader term
     "k_metabolism_volume": Kind(
         SBO.KINETIC_CONSTANT,
         _BIOCHEM,

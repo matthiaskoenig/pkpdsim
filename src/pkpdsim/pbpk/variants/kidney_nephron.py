@@ -51,7 +51,7 @@ in the standard kidney; an apical transport between the cells and the lumen
 of the proximal tubule, an efflux secretes into it, an influx reabsorbs from
 it on the lumen concentration (the inhibitors of its protein act from the
 lumen of the proximal tubule). A custom reaction states its rate for a part
-of the standard kidney: the nephron kidney refuses it (R34). Every
+of the standard kidney: the nephron kidney refuses it. Every
 metabolism and transport runs with the tubular capacity of the standard
 kidney, `1 - f_tubular + f_tubular*f_renal_function`. A substance has
 the species of the tubule when it is filtered, transported apically in the

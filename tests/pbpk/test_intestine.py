@@ -291,7 +291,7 @@ def test_first_order_per_volume_in_segments(tmp_path: Path) -> None:
 
     A process without protein has in every mucosa segment of the small
     intestine the share `Vmu_<seg>/sum(Vmu)` of the capacity `k*Vsi` of the
-    standard organ, the colon segments carry none of it (R62): with the same
+    standard organ, the colon segments carry none of it: with the same
     mucosa concentration everywhere the segments together clear
     `k*Vsi*fu/K_mu*C`, and the clearance scales with the small intestine of the
     individual (BW).
@@ -382,7 +382,7 @@ def _with_transit_factors(path: Path, factor: float) -> "roadrunner.RoadRunner":
     """Load a flat model with the CKD factors of the transit times set to a value.
 
     The factors are initial assignments of the impairment (1 in every stage
-    of the data, R40); the test replaces them by a constant.
+    of the data); the test replaces them by a constant.
     """
     from sbmlsim.model.model_roadrunner import load_roadrunner
 
@@ -400,7 +400,7 @@ def test_longer_transit_factor_slows_transit(tmp_path: Path) -> None:
     """A transit time factor of 2 doubles the transit times: the drug moves slower.
 
     The factor multiplies the time `T*factor` of the stomach and the small
-    intestine, so the transit rate is `V*C/(T*factor)` (R55, the precedence
+    intestine, so the transit rate is `V*C/(T*factor)` (the precedence
     bug gave `V*C/T*factor`). After a solution the stomach keeps more drug and
     less reaches the colon.
     """

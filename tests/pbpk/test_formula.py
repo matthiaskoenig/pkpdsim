@@ -141,7 +141,7 @@ def test_an_organ_value_follows_a_parameter_of_the_top_model(tmp_path: Path) -> 
 
 
 def test_a_dynamic_id_keeps_the_formula_dynamic(tmp_path: Path) -> None:
-    """A formula which reads a dynamic id becomes an assignment rule (R21)."""
+    """A formula which reads a dynamic id becomes an assignment rule."""
     k = Formula("0.0001 per_min * BW / 1 kg", U.per_min)
     model = _model(build(_definition(k=k, dynamic=("BW",)), tmp_path).flat_path)
     assert model.getAssignmentRuleByVariable("LI__PMBIL_k") is not None

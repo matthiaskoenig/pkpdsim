@@ -479,8 +479,7 @@ def _constant_observers(observers: Sequence[Observer], top: "_Top") -> set[str]:
     variable parameter (a dynamic one), a reaction and `time`. An observer
     which reaches none of them reads constants only: its value is fixed
     before the simulation, so it is a constant with an initial assignment
-    (an assignment rule of constants would slow the compile of the model,
-    R53).
+    (an assignment rule of constants would slow the compile of the model).
     """
     states: set[str] = {TIME}
     for o in top.objects:

@@ -522,7 +522,7 @@ def test_a_delta_starts_after_the_equilibration(builds: dict[str, BuildResult]) 
     )
 
 
-# --- the species of the drugs start at exactly 0 (ruling R25) ---------------------
+# --- the species of the drugs start at exactly 0 ---------------------
 
 
 def _species(path: Path, *substances: str) -> set[str]:
@@ -732,7 +732,7 @@ def test_an_equilibrated_simulation_exports_to_petab(
         assert start[target] == 0.0, target
 
 
-# --- the equilibration outside an experiment (ruling R23) -------------------------
+# --- the equilibration outside an experiment -------------------------
 
 
 def _choose(scan: bool) -> Simulation | Scan:

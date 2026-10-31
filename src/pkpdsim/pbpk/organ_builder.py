@@ -792,7 +792,7 @@ class OrganBuilder:
         A formula of a parameter of a custom reaction (`ModelParameter` with a
         `Formula`) may read the constants of its organ which are no ids of the
         top model (another parameter of a custom reaction of the organ,
-        `Vti`), next to the constants of the top model (R41d).
+        `Vti`), next to the constants of the top model.
 
         Raises:
             ValueError: for formulas which read each other in a cycle.

@@ -681,7 +681,7 @@ def test_unset_options_leave_the_reference_sbml(tmp_path: Path) -> None:
 def test_the_notes_of_the_colon_factor_name_a_source(
     tmp_path: Path, factor: Value | float, says: str
 ) -> None:
-    """A sourced colon factor of a profile names its source, not a fit (R37)."""
+    """A sourced colon factor of a profile names its source, not a fit."""
     intestine = SegmentedIntestine(regional=RegionalAbsorption({"colon": factor}))
     result = build(_definition("colon_notes", intestine), tmp_path)
     model = libsbml.readSBMLFromFile(str(result.flat_path)).getModel()
@@ -696,7 +696,7 @@ def test_the_notes_of_the_colon_factor_name_a_source(
 
 
 def test_the_transit_of_the_stomach_is_an_id_of_the_top_model(tmp_path: Path) -> None:
-    """`T_st_eff`: the transit time of the stomach of the condition (R41a).
+    """`T_st_eff`: the transit time of the stomach of the condition.
 
     Fasted `T_st`, fed `T_st_fed`, times the factor of the gastric emptying
     of chronic kidney disease, the time the transit of the stomach reads;

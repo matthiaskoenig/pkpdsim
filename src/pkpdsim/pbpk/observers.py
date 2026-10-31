@@ -34,7 +34,7 @@ of the library, an output of an organ or a PD component, a dynamic
 parameter, `time`), is an assignment rule; an observer of constants only is
 a constant with an initial assignment, evaluated after the changes before
 the simulation (an assignment rule of constants would slow the compile of
-the model, R53).
+the model).
 
 The intestine adds readouts on request (`PBPKDefinition.readouts`,
 `intestine_readouts`): the dissolved amount in its lumen `Alumen_<s>` and

@@ -547,7 +547,7 @@ def test_product_with_tissue_stays_in_part() -> None:
 
 
 def test_product_into_equivalent_tissue_part() -> None:
-    """A product goes into its equivalent tissue part before plasma (R19)."""
+    """A product goes into its equivalent tissue part before plasma."""
     full = Kp(2.0, mode=Mode.PERMEABILITY, ftissue=1.0)
     merged = Kp(1.0, ftissue=1.0)
     perfusion = Kp(1.0, mode=Mode.PERFUSION)
@@ -686,7 +686,7 @@ def test_apical_influx_from_sink() -> None:
 
 
 def test_apical_influx_from_urine_raises() -> None:
-    """The standard kidney takes up nothing from the cumulative urine (R18)."""
+    """The standard kidney takes up nothing from the cumulative urine."""
     with pytest.raises(ValueError, match=r"'DRGT'.*fraction_reabsorbed.*nephron"):
         _build(
             Organ.KIDNEY,
@@ -827,7 +827,7 @@ def test_blood_capacities_not_physical() -> None:
 
 
 def test_ftissue_meaning_in_notes() -> None:
-    """The notes say that ftissue multiplies the unbound driving force (R20)."""
+    """The notes say that ftissue multiplies the unbound driving force."""
     md, _ = _build()
     pars = _parameters(md)
     for pid in ("ftissue_drg", "PS_drg"):
