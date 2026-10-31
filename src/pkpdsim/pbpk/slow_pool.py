@@ -25,6 +25,11 @@ source: at equilibrium `Cslow = Kpslow*Cti` (`Cslow = Kpslow*Cpl`), the pool
 holds `Kpslow` times the concentration of its source in the tissue volume.
 Both are constants of the top model, one value for every organ of the pool,
 which a fit changes.
+
+The plasma form reads the total plasma concentration, as the Kp of a tissue
+does: `Kpslow_<s>` is relative to the total plasma and the rate has no fu,
+so a change of fu (the CKD profile of the binding) changes neither the
+equilibrium nor the rate of the pool of a bound substance.
 """
 
 from collections.abc import Iterable
