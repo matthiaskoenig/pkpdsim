@@ -381,16 +381,15 @@ def unfiltered(tmp_path_factory: pytest.TempPathFactory) -> BuildResult:
     return build(definition, tmp_path_factory.mktemp("no_urine"))
 
 
-def test_a_model_without_filtration_is_bounded_by_the_water(
-    built: BuildResult, unfiltered: BuildResult
+def test_a_model_without_filtration_is_not_simulated(
+    unfiltered: BuildResult, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Without a filtered substance the GFR still filters the plasma water."""
-    (water,) = kidney_outflow(unfiltered.flat_path, _renal(100.0))
-    assert water.substance is None
-    assert not water.valid
-    assert _experiment(unfiltered).renal_function_limits() == pytest.approx(
-        _experiment(built).renal_function_limits(), rel=1e-12
-    )
+    """Without a filtered substance there is no outflow to check, nothing is simulated."""
+    runs: list[object] = []
+    monkeypatch.setattr(Simulator, "run", lambda *args, **kwargs: runs.append(args))
+    assert kidney_outflow(unfiltered.flat_path, _renal(100.0)) == ()
+    assert _experiment(unfiltered).renal_function_limits() == (0.0, float("inf"))
+    assert runs == []
 
 
 def test_a_model_without_a_kidney_is_not_simulated(

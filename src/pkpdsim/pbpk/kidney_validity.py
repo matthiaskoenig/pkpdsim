@@ -8,9 +8,10 @@ filtered plasma flow of every substance is below the flow which carries it,
 `fu*GFR*(1 - f_reabsorbed) < Qki*(1 - HCT)` (`Qki*BP` with erythrocytes in
 equilibrium, `fu*GFR` with a threshold reabsorption, whose fraction falls to
 0 at a high concentration). The water bounds the renal function of every
-model with a kidney (a PD component which filters the water at the GFR, the
-fluid of hctz, as well); with `fu <= 1` and `BP >= 1 - HCT` it is the tighter
-bound of the two. GFR, flow,
+model which filters a substance (a PD component which filters the water at
+the GFR, the fluid of hctz, as well); with `fu <= 1` and `BP >= 1 - HCT` it is
+the tighter bound of the two. A model without a filtered substance is not
+simulated and has no bound. GFR, flow,
 hematocrit and fu are initial assignments of the parameters of the
 individual, so `kidney_outflow` reads them for an individual, the changes of
 a simulation before its initialization, from a simulation of one minute
@@ -158,9 +159,10 @@ def kidney_outflow(
     The filtered plasma water first (`substance` `None`, `GFR` against
     `Qki*(1 - HCT)`), then one `KidneyOutflow` for every substance which the
     kidney filters (its filtration reaction is in the model), read from the
-    start values of the individual (`individual_values`); a model without the
-    GFR, the flow of the kidney and the hematocrit (no model of the library)
-    is not simulated.
+    start values of the individual (`individual_values`). A model without a
+    filtered substance has no outflow of its kidney to check and is not
+    simulated (its GFR is no flow of the library), nor is a model without the
+    GFR, the flow of the kidney and the hematocrit (no model of the library).
 
     Args:
         model_path: the flat SBML model of the library.
@@ -174,7 +176,7 @@ def kidney_outflow(
     """
     path = Path(model_path)
     model = _kidney_model(path, path.stat().st_mtime_ns)
-    if not model.water:
+    if not model.water or not model.filtered:
         return ()
     values = individual_values(path, changes or {})
     flow = values.ml_per_min(ids.organ_flow(Organ.KIDNEY))
