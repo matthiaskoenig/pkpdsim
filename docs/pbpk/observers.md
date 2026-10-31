@@ -174,6 +174,19 @@ An observer which reads a state, directly or through other observers (a species,
 
 The unit of an observer is a unit definition of the model. The units of `U` are those of every model; a unit outside `U` (`pkpdsim.pbpk.units.EXTRA_UNITS`) is added to every model (the top model, an organ) which uses it: as the unit of an observer, of a [parameter of the definition](substances.md#parameters-of-the-definition) or of a parameter of a custom reaction, or as the unit of a number of a formula; a model without it keeps its unit definitions. `pkpdsim.pbpk.units` has the unit per body surface area of the clearances and the GFR, `ML_PER_MIN_1P73M2` (`ml_per_min_1p73m2`, ml/min per 1.73 m2, `1e-3/1.73 l/min/m2`); a quantity in l/min divided by `BSA` (m2) is `1730` times its number in this unit, in consistent units `GFR / BSA * 1730 ml_per_min_1p73m2 * 1 m2 / 1 l_per_min` (the build checks the units of every formula).
 
+sbmlsim writes a unit which pint does not read, a unit id of the model, on an axis as it is given (`[ml_per_min_1p73m2]`). The text of such a unit on a figure is in `UNIT_LABELS` (`ml/min/1.73 m²`), and `axis(label, unit, **kwargs)` of `pkpdsim.pbpk` gives the axis of sbmlsim in the unit of the conversion with that text in its label (`unit_label`; any other unit gets the short form of sbmlsim):
+
+```python
+from pkpdsim.pbpk import axis
+
+clearance = axis("creatinine clearance", "ml_per_min_1p73m2", scale="log")
+print(clearance.unit, "|", clearance.name)
+```
+
+```text
+ml_per_min_1p73m2 | creatinine clearance [ml/min/1.73 m²]
+```
+
 ## An element of an organ for a PD component or an observer
 
 A PD component reads the elements of the top model through its input ports (`PDComponent.inputs`), an observer through the ids of its formula; an element of an organ is local to its submodel and no element of the top model. An input or an observer which names an element of an organ by its flat id reads it all the same, by one rule: `PDComponent(model, inputs={"C_ged": "LI__Cic_ged"}, outputs={})` reads the concentration in the cells of the liver, as an imaging signal of the liver does, and so does `Observer("Cli_ged", "LI__Cic_ged", U.mM, "liver cells")`. The organ exposes the element as an output, a parameter of the organ with the assignment rule of the element, which replaces the parameter of the top model `ids.organ_species` gives (the organ token after the prefix of the local id, `C`, `Cu_` or `A`), as the outflow `Cout_<o>_<s>` of an organ does; the component and the observer read that parameter, one output for both. The elements an organ exposes:

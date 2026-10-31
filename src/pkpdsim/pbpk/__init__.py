@@ -69,7 +69,7 @@ from pkpdsim.pbpk.substance import (
     Substance,
     ThresholdReabsorption,
 )
-from pkpdsim.pbpk.units import MODEL_UNITS, U
+from pkpdsim.pbpk.units import MODEL_UNITS, UNIT_LABELS, U, axis, unit_label
 from pkpdsim.pbpk.values import Formula, ModelParameter, Q, Value, as_value, fitted
 from pkpdsim.pbpk.variants.intestine import SegmentedIntestine, SingleLumen
 from pkpdsim.pbpk.variants.kidney_nephron import NephronKidney
@@ -125,6 +125,7 @@ __all__ = [
     "PROTEINS",
     "REFERENCE_GFR",
     "REST",
+    "UNIT_LABELS",
     "Binding",
     "Boundary",
     "BuildResult",
@@ -183,6 +184,7 @@ __all__ = [
     "WeibullDissolution",
     "ZonatedLiver",
     "as_value",
+    "axis",
     "build",
     "cite",
     "compose",
@@ -200,4 +202,5 @@ __all__ = [
     "reference_individual",
     "sex_definition",
     "sources",
+    "unit_label",
 ]

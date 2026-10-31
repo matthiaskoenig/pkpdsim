@@ -41,7 +41,13 @@ from pkpdsim.pbpk import (
 from pkpdsim.pbpk.builder import build
 from pkpdsim.pbpk.equilibration import accumulating_states
 from pkpdsim.pbpk.observers import _flux_sum, intestine_readouts
-from pkpdsim.pbpk.units import ML_PER_MIN_1P73M2
+from pkpdsim.pbpk.units import (
+    EXTRA_UNITS,
+    ML_PER_MIN_1P73M2,
+    UNIT_LABELS,
+    axis,
+    unit_label,
+)
 from pkpdsim.pbpk.variants.segments import segments
 
 from .conftest import (
@@ -694,3 +700,25 @@ def test_the_absorbed_fraction_needs_an_oral_dose() -> None:
     )
     with pytest.raises(ValueError, match=r"'Fa_drg': the substance 'drg' has no oral"):
         intestine_readouts(md, (ids.absorbed_fraction(S),), (S,))
+
+
+def test_the_unit_per_area_has_a_text_on_the_figures() -> None:
+    """An axis in `ml_per_min_1p73m2` reads `[ml/min/1.73 m²]`, its unit stays the id (R41b).
+
+    sbmlsim writes a unit id of the model as it is; the axis helper of the
+    library writes the text of the unit and keeps the unit of the conversion.
+    """
+    from sbmlsim.plot import Axis
+
+    assert Axis(label="GFR", unit=ML_PER_MIN_1P73M2.sid).name == (
+        "GFR [ml_per_min_1p73m2]"
+    )
+    gfr = axis("GFR", ML_PER_MIN_1P73M2.sid, scale="log")
+    assert gfr.name == "GFR [ml/min/1.73 m²]"
+    assert gfr.unit == ML_PER_MIN_1P73M2.sid
+    assert gfr.label == "GFR"
+    assert "log" in str(gfr.scale).lower()
+    assert unit_label(ML_PER_MIN_1P73M2.sid) == UNIT_LABELS["ml_per_min_1p73m2"]
+    assert axis("time", "hr").name == Axis(label="time", unit="hr").name
+    assert axis("fraction", "dimensionless").name == "fraction"
+    assert set(UNIT_LABELS) == {u.sid for u in EXTRA_UNITS}

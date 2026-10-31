@@ -6,9 +6,24 @@ model; a unit outside `U` (`EXTRA_UNITS`, `ML_PER_MIN_1P73M2`) is one only of
 a model which uses it.
 """
 
+from collections.abc import Mapping
+from types import MappingProxyType
+from typing import TYPE_CHECKING, Any
+
 from sbmlutils.factory import ModelUnits, UnitDefinition, Units
 
-__all__ = ["EXTRA_UNITS", "ML_PER_MIN_1P73M2", "MODEL_UNITS", "U"]
+if TYPE_CHECKING:
+    from sbmlsim.plot import Axis
+
+__all__ = [
+    "EXTRA_UNITS",
+    "ML_PER_MIN_1P73M2",
+    "MODEL_UNITS",
+    "UNIT_LABELS",
+    "U",
+    "axis",
+    "unit_label",
+]
 
 
 class U(Units):
@@ -64,3 +79,54 @@ definition, a custom reaction, a number of a formula).
 EXTRA_UNITS: tuple[UnitDefinition, ...] = (ML_PER_MIN_1P73M2,)
 """The units of the library outside `U`: a model defines one when it uses it, as
 the unit of an element or by its id in a formula."""
+
+UNIT_LABELS: Mapping[str, str] = MappingProxyType(
+    {"ml_per_min_1p73m2": "ml/min/1.73 m²"}
+)
+"""The text of a unit of `EXTRA_UNITS` on a figure, by the unit id.
+
+sbmlsim writes a unit which pint does not read (a unit id of the model,
+`ml_per_min_1p73m2`) on an axis as it is given; the figures show this text
+instead (`unit_label`, `axis`). The unit definition keeps its name in the
+SBML."""
+
+
+def unit_label(unit: str | None) -> str:
+    """The text of a unit on a figure.
+
+    Args:
+        unit: the unit of an axis, a unit id of the model or a unit which
+            pint reads.
+
+    Returns:
+        The text of `UNIT_LABELS` for a unit of `EXTRA_UNITS` by id, else the
+        short form of sbmlsim (`h` for `hr`, empty for `dimensionless`).
+    """
+    if unit is not None and unit in UNIT_LABELS:
+        return UNIT_LABELS[unit]
+    from sbmlsim.units import short_unit
+
+    return short_unit(unit)
+
+
+def axis(label: str, unit: str | None, **kwargs: Any) -> "Axis":  # noqa: ANN401
+    """An axis of sbmlsim in a unit, with the text of the unit on the figure.
+
+    The unit stays what the data and the model are converted to
+    (`ml_per_min_1p73m2`, a unit of the model), the label of the axis is
+    `<label> [<unit_label(unit)>]`: a clearance per body surface area reads
+    `[ml/min/1.73 m²]`, not the unit id which sbmlsim writes.
+
+    Args:
+        label: the label of the axis.
+        unit: the unit of the axis.
+        **kwargs: further arguments of `sbmlsim.plot.Axis` (`scale`, `min`, ...).
+
+    Returns:
+        The axis, its `name` the label with the text of the unit.
+    """
+    from sbmlsim.plot import Axis
+
+    text = unit_label(unit)
+    name = f"{label} [{text}]" if text else label
+    return Axis(label=label, unit=unit, name=name, **kwargs)
