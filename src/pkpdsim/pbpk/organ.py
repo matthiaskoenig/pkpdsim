@@ -1015,6 +1015,7 @@ class StandardBuilder(OrganBuilder):
             )
         else:
             distribution.check_kp(s, self.organ, self.ctx.sex)
+            distribution.warn_kp_floor(s, self.organ, self.ctx.sex)
             k_cell = self._initial(
                 ids.k_cell_pls(s.sid),
                 distribution.k_cell_pls(kp, k_int, self.f_vas, self.f_int),

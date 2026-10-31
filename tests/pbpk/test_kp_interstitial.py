@@ -1,12 +1,15 @@
 """The extracellular distribution: Kp at a scale of the interstitial shares."""
 
 import dataclasses
+import itertools
+import warnings
 from pathlib import Path
 
 import libsbml
 import pytest
 
 from pkpdsim.pbpk import (
+    Binding,
     Formula,
     Kp,
     Mode,
@@ -24,6 +27,8 @@ from pkpdsim.pbpk import (
     reference_individual,
 )
 from pkpdsim.pbpk.builder import built_organs
+from pkpdsim.pbpk.distribution import KCellFloorWarning
+from pkpdsim.pbpk.impairment import ckd_unbound_fractions
 from pkpdsim.pbpk.physiology import reference_fractions
 
 from .conftest import (
@@ -208,6 +213,86 @@ def test_the_full_form_is_checked_for_the_sex_of_the_build() -> None:
     distribution.check_kp(drug, organ, low)
     with pytest.raises(ValueError, match=rf"{high.value} reference individual"):
         distribution.check_kp(drug, organ, high)
+
+
+# --- the floor of the cell partition in chronic kidney disease (ruling R26) -------
+
+
+#: the fu of a metabolite of torasemide (M1), bound to albumin with the CKD profile
+FU_M1 = 0.14
+
+
+def _floor_drug(kp: float, *, ckd: bool = True) -> Substance:
+    """A drug of the full form in skin with a Kp just above its share there."""
+    return dataclasses.replace(
+        simple_drug(),
+        binding=Binding(fu=FU_M1, protein="albumin", ckd=ckd),
+        distribution=Kp(
+            10.0,
+            mode=Mode.PERMEABILITY,
+            ftissue=1.0,
+            overrides={Organ.SKIN: kp},
+        ),
+    )
+
+
+def _floor_definition(drug: Substance, sex: Sex = Sex.MALE) -> PBPKDefinition:
+    d = definition(sid=f"floor_{sex}", sex=sex)
+    return dataclasses.replace(d, substances=[drug, *d.substances[1:]])
+
+
+def _floor_warnings(record: list[warnings.WarningMessage]) -> list[str]:
+    return [str(w.message) for w in record if issubclass(w.category, KCellFloorWarning)]
+
+
+def test_the_fu_of_the_ckd_stages() -> None:
+    """The albumin profile raises fu at every stage, `ckd=False` and no binding none."""
+    fu = ckd_unbound_fractions(_floor_drug(1.0))
+    assert list(fu) == ["mild", "moderate", "severe", "end stage"]
+    # end stage: the albumin 0.905 times its binding function 0.669
+    factor = 0.905 * 0.669
+    assert fu["end stage"] == pytest.approx(
+        1 / (1 + factor * (1 - FU_M1) / FU_M1), rel=1e-12
+    )
+    assert fu["end stage"] == pytest.approx(0.212, abs=1e-3)
+    assert all(a <= b for a, b in itertools.pairwise(fu.values()))
+    assert ckd_unbound_fractions(_floor_drug(1.0, ckd=False)) == {}
+    assert ckd_unbound_fractions(dataclasses.replace(simple_drug(), binding=None)) == {}
+
+
+def test_a_kp_below_the_share_of_ckd_is_named(tmp_path: Path) -> None:
+    """The build warns: organ, substance, stages, the build's sex and the floor.
+
+    The Kp of skin is 1 % above its share at the reference fu, so the build
+    accepts it, and below the share at the fu of the late CKD stages, where
+    the rule floors `K_cell_pls` at `K_CELL_FLOOR`.
+    """
+    for sex in Sex:
+        share = interstitial_share(Organ.SKIN, FU_M1, sex)
+        drug = _floor_drug(1.01 * share)
+        stages = distribution.kp_floor_stages(drug, Organ.SKIN, sex)
+        assert [stage for stage, _, _ in stages][-1] == "end stage"
+        assert "mild" not in [stage for stage, _, _ in stages]
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            build(_floor_definition(drug, sex), tmp_path)
+        (message,) = _floor_warnings(record)
+        assert message.startswith("drg: the Kp ")
+        assert "organ 'sk'" in message
+        assert f"{sex.value} build" in message
+        assert "end stage" in message
+        assert f"floored at {distribution.K_CELL_FLOOR}" in message
+
+
+def test_a_kp_with_room_for_ckd_is_not_named(tmp_path: Path) -> None:
+    """A Kp above the share at the end stage, and the binding without CKD: no warning."""
+    share = interstitial_share(Organ.SKIN, FU_M1, Sex.MALE)
+    for drug in (_floor_drug(2.0 * share), _floor_drug(1.01 * share, ckd=False)):
+        assert distribution.kp_floor_stages(drug, Organ.SKIN, Sex.MALE) == []
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            build(_floor_definition(drug), tmp_path)
+        assert _floor_warnings(record) == []
 
 
 def test_without_the_option_the_sbml_is_unchanged(tmp_path: Path) -> None:

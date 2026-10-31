@@ -77,6 +77,7 @@ severities 0 give the healthy model: every factor is 1.
 """
 
 import itertools
+import math
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from functools import cache
@@ -94,6 +95,7 @@ from pkpdsim.pbpk.physiology import normal_gfr
 from pkpdsim.pbpk.proteins import PROTEINS
 from pkpdsim.pbpk.substance import Substance
 from pkpdsim.pbpk.units import U
+from pkpdsim.pbpk.values import number
 
 if TYPE_CHECKING:
     from pkpdsim.pbpk.definition import PBPKDefinition
@@ -300,6 +302,42 @@ def unbound_fraction(s: Substance) -> str:
     elif s.binding.ckd:
         binding = f"{protein} / {ids.impairment_factor('plasma_protein')}"
     return f"{_ONE} / ({_ONE} + {binding} * ({_ONE} - {fu_ref}) / {fu_ref})"
+
+
+def ckd_unbound_fractions(s: Substance) -> dict[str, float]:
+    """Get the fraction unbound of a substance at the CKD stages.
+
+    The fu of `unbound_fraction` without cirrhosis at the values of the
+    stages mild, moderate, severe and end stage of the CKD factor of its
+    binding (the profile of its protein, `[ckd.binding]`, or one over the
+    factor of the binding capacity `plasma_protein` of an unknown protein):
+    the factors are linear in the eGFR between the anchors of the stages and
+    constant below the end stage, so the fu of every renal function lies
+    between these values (and the reference fu of renal function 1).
+
+    Args:
+        s: the substance.
+
+    Returns:
+        The fu by stage; empty for a substance whose fu CKD does not change
+        (no binding, `ckd=False`) or whose fu is a `Formula`.
+    """
+    if s.binding is None or not s.binding.ckd:
+        return {}
+    fu = number(s.binding.fu)
+    if fu is None:
+        return {}
+    ckd = _data()["ckd"]
+    keys = _binding_keys(s.binding.protein)
+    if keys:
+        rows = [_entry(ckd["binding"], key).values for key in keys]
+        factors = [math.prod(row[k] for row in rows) for k in range(len(_STAGES))]
+    else:
+        factors = [1.0 / v for v in _entry(ckd, "plasma_protein").values]
+    return {
+        stage: 1.0 / (1.0 + f * (1.0 - fu) / fu)
+        for stage, f in zip(_STAGES, factors, strict=True)
+    }
 
 
 def _number(x: float) -> str:

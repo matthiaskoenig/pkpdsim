@@ -11,7 +11,9 @@ plasma coefficient in every form of the organ:
   positive `K_cell_pls`: the build refuses it for the reference individual
   of its sex, and the rule floors `K_cell_pls` at `K_CELL_FLOOR` should a fit
   or another individual reach it (the interstitial share is the lower bound of
-  a fitted Kp);
+  a fitted Kp). The fu of chronic kidney disease raises the share at a fixed
+  Kp: the build warns (`KCellFloorWarning`) when the share exceeds the Kp at
+  the fu of a CKD stage (`kp_floor_stages`), where the floor holds;
 - flow-limited organ: `K_or = (Vpl + Vbc*Kbc + Vti*Kp)/V`, the organ to plasma
   coefficient of the well-stirred organ.
 
@@ -23,6 +25,7 @@ Every formula is written once as a template, which gives the SBML rule (with
 ids) and the number (with values) alike.
 """
 
+import warnings
 from functools import cache
 
 import libsbml
@@ -31,6 +34,7 @@ from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk.annotation import annotate
 from pkpdsim.pbpk.data import load
+from pkpdsim.pbpk.impairment import ckd_unbound_fractions
 from pkpdsim.pbpk.kp import kp_values
 from pkpdsim.pbpk.organs import Organ
 from pkpdsim.pbpk.physiology import Sex, reference_fractions
@@ -43,6 +47,7 @@ __all__ = [
     "INTERSTITIAL",
     "K_CELL_FLOOR",
     "K_VAS",
+    "KCellFloorWarning",
     "check_kp",
     "constant",
     "constants",
@@ -52,8 +57,10 @@ __all__ = [
     "k_int_pls",
     "k_int_pls_value",
     "k_organ",
+    "kp_floor_stages",
     "kp_of_organ",
     "number",
+    "warn_kp_floor",
 ]
 
 INTERSTITIAL = ("f_water_int", "f_water_pls", "r_protein_int_pls")
@@ -64,6 +71,11 @@ K_VAS = "k_vas"
 
 K_CELL_FLOOR = 1e-6
 """The lower bound of `K_cell_pls` in the rule, against a Kp below the interstitial share."""
+
+
+class KCellFloorWarning(UserWarning):
+    """A Kp of the full form below the interstitial share at the fu of a CKD stage."""
+
 
 _ONE = "1 dimensionless"
 
@@ -246,6 +258,88 @@ def k_organ(f_vas: str, vascular: str, kp: str) -> str:
         `f_vas*vascular + (1 - f_vas)*Kp`, i.e. `(Vpl + Vbc*Kbc + Vti*Kp)/V`.
     """
     return f"{f_vas} * {vascular} + ({_ONE} - {f_vas}) * {kp}"
+
+
+def _full_form_kp(substance: Substance, organ: Organ, sex: Sex) -> float | None:
+    """The number of the Kp of the full form of an organ, `None` for a formula or none."""
+    dist = substance.distribution
+    if dist is None:
+        return None
+    kp_q = kp_of_organ(substance, organ, sex) if isinstance(dist, Kp) else dist.factor
+    if kp_q is None or isinstance(kp_q, Formula):
+        return None
+    if isinstance(dist, Kp):
+        return number(kp_q)
+    return kp_values(substance, sex)[organ].value * number(dist.factor)
+
+
+def kp_floor_stages(
+    substance: Substance, organ: Organ, sex: Sex
+) -> list[tuple[str, float, float]]:
+    """Get the CKD stages at whose fu the interstitial share exceeds the Kp of the full form.
+
+    The Kp of an organ is a number of the build, the interstitial to plasma
+    coefficient `K_int_pls` follows the fu of the individual: at the fu of a
+    stage of chronic kidney disease (`impairment.ckd_unbound_fractions`, the
+    CKD profile of the binding) the share `f_int*K_int_pls/(f_int + f_cell)`
+    of the reference individual of the sex can exceed a Kp which the build
+    accepts at the reference fu (the metabolites of torasemide in the kidney:
+    Kp 0.08 against the share 0.0746 at the reference fu). There the rule
+    floors `K_cell_pls` at `K_CELL_FLOOR`.
+
+    Args:
+        substance: the substance.
+        organ: the organ of the full form.
+        sex: the sex of the build.
+
+    Returns:
+        (stage, fu, share) of every such stage, in the order of the stages;
+        empty without a numeric Kp or a change of fu in CKD.
+    """
+    kp = _full_form_kp(substance, organ, sex)
+    if kp is None:
+        return []
+    f_vas, f_int = reference_fractions(organ)[sex]
+    return [
+        (stage, fu, f_int * k_int_pls_value(fu) / (1.0 - f_vas))
+        for stage, fu in ckd_unbound_fractions(substance).items()
+        if k_cell_pls_value(kp, fu, f_vas, f_int) <= 0
+    ]
+
+
+def warn_kp_floor(substance: Substance, organ: Organ, sex: Sex) -> None:
+    """Warn when the cell partition of the full form is floored in chronic kidney disease.
+
+    The build calls it for every organ of the full form with a Kp
+    (`kp_floor_stages`); a model may accept the floor, so it is no refusal.
+
+    Args:
+        substance: the substance.
+        organ: the organ.
+        sex: the sex of the build.
+
+    Warns:
+        KCellFloorWarning: naming the substance, the organ, the stages with
+            their fu and share, the sex and what the floor does.
+    """
+    stages = kp_floor_stages(substance, organ, sex)
+    if not stages:
+        return
+    kp = _full_form_kp(substance, organ, sex)
+    listed = ", ".join(
+        f"{stage} (fu {fu:.4g}, share {share:.4g})" for stage, fu, share in stages
+    )
+    warnings.warn(
+        f"{substance.sid}: the Kp {kp:.4g} of organ '{organ.value}' is below the "
+        "interstitial share of the tissue at the fu of chronic kidney disease, "
+        f"{listed}, of the {sex.value} build: there `K_cell_pls_{substance.sid}` "
+        f"is floored at {K_CELL_FLOOR}, the cells hold almost nothing and the "
+        "tissue holds its interstitial share, more than the Kp. A Kp above the "
+        "share at the fu of the end stage leaves room for the impairment; a "
+        "model which accepts the floor in renal impairment says so.",
+        KCellFloorWarning,
+        stacklevel=2,
+    )
 
 
 def check_kp(substance: Substance, organ: Organ, sex: Sex) -> None:
