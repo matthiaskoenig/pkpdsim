@@ -892,6 +892,48 @@ def test_a_reset_of_a_concentration_species_is_set_as_its_concentration(
         assert values["HOMEO__V"] == 0.0
 
 
+def test_a_build_is_parsed_and_compiled_once_for_both_checks(
+    builds: dict[str, BuildResult], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The equilibration and the validity of the kidney outflow share one model.
+
+    A copy of the build, new to the caches: its growing states and the
+    flows of its kidney are read from one parse and one compilation.
+    """
+    import shutil
+
+    from pkpdsim.pbpk import flat_model as flat_module
+    from pkpdsim.pbpk.equilibration import growing_states
+    from pkpdsim.pbpk.kidney_validity import kidney_outflow
+
+    path = tmp_path / "copy_flat.xml"
+    shutil.copyfile(builds["sink"].flat_path, path)
+    loaded: list[Path] = []
+    parsed: list[str] = []
+    compile_model = flat_module.RoadrunnerSBMLModel
+    read = flat_module.libsbml.readSBMLFromFile
+
+    def counted_compile(**kwargs: object) -> object:
+        loaded.append(Path(str(kwargs["source"])))
+        return compile_model(**kwargs)  # ty: ignore[invalid-argument-type]
+
+    def counted_read(name: str) -> object:
+        parsed.append(name)
+        return read(name)
+
+    monkeypatch.setattr(flat_module, "RoadrunnerSBMLModel", counted_compile)
+    monkeypatch.setattr(flat_module.libsbml, "readSBMLFromFile", counted_read)
+    growing = growing_states(path, CONDITION, SteadyState())
+    outflows = kidney_outflow(path, {ids.F_RENAL_FUNCTION: 0.5})
+    drug_free_zeros(path)
+    assert growing == ("HOMEO__V",)
+    assert len(outflows) == 2
+    assert loaded == [path]
+    assert parsed == [str(path)]
+    selections = flat_module.flat_model(path).selections
+    assert {"HOMEO__V", ids.GFR, ids.HCT} <= set(selections)
+
+
 def _custom(equation: str, rate: str, *, baseline: bool = True) -> PBPKDefinition:
     """`end` (with a baseline, or not) and `pre` (without) with a custom reaction in muscle."""
     return PBPKDefinition(

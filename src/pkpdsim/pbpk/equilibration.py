@@ -9,7 +9,8 @@ readouts of the intestine which nothing drains and the resets set back, the
 species of the drugs set to exactly 0
 (`drug_free_zeros`) and the states which grow without a steady state refused
 (`accumulating_states`, `growing_states`). A model file is parsed once per
-process (`_model_file`, by its path and modification time); the docs are
+process (`pkpdsim.pbpk.flat_model`, by its path and modification time, shared
+with the validity of the kidney outflow); the docs are
 the section "Equilibration of a condition" of the impairment page.
 
 The module imports sbmlsim; `pkpdsim.pbpk` exports its names lazily.
@@ -19,13 +20,10 @@ from __future__ import annotations
 
 import math
 from collections.abc import Collection, Iterable, Mapping
-from dataclasses import dataclass
-from functools import lru_cache
 from pathlib import Path
 from typing import overload
 
 import libsbml
-from sbmlsim.model.model_roadrunner import RoadrunnerSBMLModel
 from sbmlsim.simulation import Change, Scan, Simulation, SteadyState
 from sbmlsim.simulation.definition import Value
 from sbmlsim.simulation.scan import DimensionKind
@@ -34,6 +32,7 @@ from sbmlsim.uncertainty import Uncertain
 from sbmlsim.units import Quantity
 
 from pkpdsim.pbpk import ids
+from pkpdsim.pbpk.flat_model import accumulating, flat_model, loaded_model
 from pkpdsim.pbpk.organs import Organ
 from pkpdsim.scan import start_values
 
@@ -68,53 +67,7 @@ def accumulating_states(sbml: str) -> tuple[str, ...]:
     Returns:
         The ids, sorted.
     """
-    return _accumulating(libsbml.readSBMLFromString(sbml).getModel())
-
-
-def _accumulating(model: libsbml.Model) -> tuple[str, ...]:
-    """The accumulating states of a parsed model, see `accumulating_states`."""
-    names = _names
-    assigned: dict[str, set[str]] = {}
-    rated: dict[str, set[str]] = {}
-    for rule in model.getListOfRules():
-        if rule.isAssignment():
-            assigned[rule.getVariable()] = names(rule.getMath())
-        elif rule.isRate():
-            rated[rule.getVariable()] = names(rule.getMath())
-    read = set().union(*rated.values())
-    consumed: set[str] = set()
-    changed: set[str] = set()
-    for reaction in model.getListOfReactions():
-        law = reaction.getKineticLaw()
-        if law is not None:
-            local = {p.getId() for p in law.getListOfLocalParameters()}
-            read |= names(law.getMath()) - local
-        consumed |= {r.getSpecies() for r in reaction.getListOfReactants()}
-        changed |= {r.getSpecies() for r in reaction.getListOfProducts()}
-    # what the rates read through the assignment rules, and the compartments of
-    # the species they read
-    compartments = {s.getId(): s.getCompartment() for s in model.getListOfSpecies()}
-    stack = list(read)
-    while stack:
-        sid = stack.pop()
-        for further in (assigned.get(sid, set()) | {compartments.get(sid, "")}) - read:
-            if further:
-                read.add(further)
-                stack.append(further)
-    states = set(rated) | (changed - consumed)
-    return tuple(sorted(states - read - consumed))
-
-
-@lru_cache(maxsize=4)
-def _accumulation_model(
-    model_path: Path, mtime_ns: int
-) -> tuple[RoadrunnerSBMLModel, tuple[str, ...]]:
-    """Load a model once per process with its accumulating states as selections."""
-    states = _model_file(model_path, mtime_ns).accumulating
-    model = RoadrunnerSBMLModel(
-        source=model_path, selections=["time", *states], jit_optimization="O0"
-    )
-    return model, states
+    return accumulating(libsbml.readSBMLFromString(sbml).getModel())
 
 
 #: the growing states of a model file by its path, modification time and the
@@ -161,10 +114,11 @@ def growing_states(
         steady_state.max_time,
     )
     if key not in _GROWING:
-        model, states = _accumulation_model(path, key[1])
+        states = flat_model(path).accumulating
         if not states:
             _GROWING[key] = ()
             return ()
+        model = loaded_model(path)
         simulator = Simulator(n_workers=1)
         initial = simulator.run(
             model, Simulation(end=1, preinit_changes=dict(condition))
@@ -192,98 +146,6 @@ def growing_states(
 DOSE_PREFIXES: tuple[str, ...] = tuple(
     f("") for f in (ids.po_dose, ids.iv_dose, ids.sol_dose, ids.infusion_rate)
 )
-
-
-@dataclass(frozen=True)
-class _ModelFile:
-    """What the equilibration reads from a flat model file, parsed once per file.
-
-    Attributes:
-        species: the ids of the species.
-        parameters: the ids of the parameters.
-        accumulating: the states which nothing drains (`accumulating_states`).
-        candidates: the species of the substances without a baseline which
-            start at 0 (no initial assignment, no rule, not constant), see
-            `drug_free_zeros`.
-        started: the species with a start: an initial value other than 0,
-            an initial assignment or a rule.
-        concentrations: the species whose id means their concentration
-            (`hasOnlySubstanceUnits` false): a change sets them as `[sid]`.
-        reactions: (reactants, products, reversible, a source of a dose) of
-            every reaction; a reaction without reactants whose rate reads a
-            dose is a dose of the library, 0 without it.
-    """
-
-    species: frozenset[str]
-    parameters: frozenset[str]
-    accumulating: tuple[str, ...]
-    candidates: frozenset[str]
-    started: frozenset[str]
-    concentrations: frozenset[str]
-    reactions: tuple[tuple[frozenset[str], frozenset[str], bool, bool], ...]
-
-
-@lru_cache(maxsize=8)
-def _model_file(model_path: Path, mtime_ns: int) -> _ModelFile:
-    """Parse a flat model file once, `mtime_ns` a key of the cache."""
-    model = libsbml.readSBMLFromFile(str(model_path)).getModel()
-    parameters = {p.getId() for p in model.getListOfParameters()}
-    substances = {
-        pid.removeprefix("Mr_") for pid in parameters if pid.startswith("Mr_")
-    }
-    exogenous = {s for s in substances if ids.baseline(s) not in parameters}
-    assigned = {a.getSymbol() for a in model.getListOfInitialAssignments()}
-    ruled = {r.getVariable() for r in model.getListOfRules()}
-    species = list(model.getListOfSpecies())
-    all_ids = [sp.getId() for sp in species]
-    of_exogenous = {sid for s in exogenous for sid in ids.species_of(s, all_ids)}
-    candidates, started = set(), set()
-    for sp in species:
-        sid = sp.getId()
-        value = (
-            sp.getInitialConcentration()
-            if sp.isSetInitialConcentration()
-            else sp.getInitialAmount()
-        )
-        if sid in assigned or sid in ruled or value != 0.0:
-            started.add(sid)
-        elif (
-            sid in of_exogenous
-            and not sp.getConstant()
-            and not (sp.getBoundaryCondition())
-        ):
-            candidates.add(sid)
-    reactions = []
-    for reaction in model.getListOfReactions():
-        reactants = frozenset(r.getSpecies() for r in reaction.getListOfReactants())
-        products = frozenset(r.getSpecies() for r in reaction.getListOfProducts())
-        law = reaction.getKineticLaw()
-        reads = set() if law is None else _names(law.getMath())
-        dose = not reactants and any(n.startswith(DOSE_PREFIXES) for n in reads)
-        reactions.append((reactants, products, reaction.getReversible(), dose))
-    return _ModelFile(
-        species=frozenset(all_ids),
-        parameters=frozenset(parameters),
-        accumulating=_accumulating(model),
-        candidates=frozenset(candidates),
-        started=frozenset(started),
-        concentrations=frozenset(
-            sp.getId() for sp in species if not sp.getHasOnlySubstanceUnits()
-        ),
-        reactions=tuple(reactions),
-    )
-
-
-def _names(ast: libsbml.ASTNode | None) -> set[str]:
-    """The names a formula reads."""
-    found: set[str] = set()
-    stack = [] if ast is None else [ast]
-    while stack:
-        node = stack.pop()
-        if node.getType() == libsbml.AST_NAME:
-            found.add(node.getName())
-        stack.extend(node.getChild(k) for k in range(node.getNumChildren()))
-    return found
 
 
 def drug_free_zeros(model_path: Path, set_ids: Iterable[str] = ()) -> tuple[str, ...]:
@@ -317,12 +179,13 @@ def drug_free_zeros(model_path: Path, set_ids: Iterable[str] = ()) -> tuple[str,
         The ids, sorted.
     """
     path = Path(model_path)
-    graph = _model_file(path, path.stat().st_mtime_ns)
+    graph = flat_model(path)
     fed = set(graph.started) | ({_bare(sid) for sid in set_ids} & graph.candidates)
     changed = True
     while changed:
         changed = False
-        for reactants, products, reversible, dose in graph.reactions:
+        for reactants, products, reversible, reads in graph.reactions:
+            dose = not reactants and any(n.startswith(DOSE_PREFIXES) for n in reads)
             sides = reactants | products if reversible else reactants
             active = bool(sides & fed) or (not reactants and not dose)
             reached = (reactants | products if reversible else products) - fed
@@ -409,7 +272,7 @@ def equilibrated_simulation(
         ValueError: as `PBPKSimulationExperiment.equilibrated`.
     """
     path = Path(model_path)
-    parsed = _model_file(path, path.stat().st_mtime_ns)
+    parsed = flat_model(path)
     steady_state = SteadyState(
         absolute_tolerance=absolute_tolerance,
         relative_tolerance=relative_tolerance,

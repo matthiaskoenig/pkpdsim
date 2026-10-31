@@ -23,7 +23,8 @@ experiment simulates. `PBPKSimulationExperiment`
 What makes an individual is the changes of the ids which the flows depend on
 through initial assignments and assignment rules of the flat model, so a dose
 makes no individual. The values are cached per model file, its modification
-time and the individual, and the model is loaded once per process. The check
+time and the individual, and the model is parsed and loaded once per process
+(`pkpdsim.pbpk.flat_model`, shared with the equilibration). The check
 reads the start of a simulation: its changes before the initialization (of
 its presimulation as well) and the values of the dimensions of a scan without
 a time. It does not check a change during a simulation (`Simulation.changes`,
@@ -31,21 +32,19 @@ also at its start, of an id the definition names `dynamic`), a dimension with
 a time (`at`), a scan over models and the draws of the fitted parameters of a
 run over them (`pkpdsim.uncertainty`).
 
-The module imports sbmlsim and libsbml; `pkpdsim.pbpk` exports its names
+The module imports sbmlsim; `pkpdsim.pbpk` exports its names
 lazily, so `import pkpdsim.pbpk` (a factory) imports no simulator.
 """
 
 from __future__ import annotations
 
 import itertools
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
-from functools import cache, lru_cache
+from functools import cache
 from pathlib import Path
 
-import libsbml
 from sbmlsim import Q
-from sbmlsim.model.model_roadrunner import RoadrunnerSBMLModel
 from sbmlsim.simulation import Scan, Simulation
 from sbmlsim.simulation.definition import Value as Change
 from sbmlsim.simulation.scan import DimensionKind
@@ -53,7 +52,8 @@ from sbmlsim.simulator import Simulator
 from sbmlsim.units import Quantity
 
 from pkpdsim.pbpk import ids
-from pkpdsim.pbpk.organs import Organ, Part
+from pkpdsim.pbpk.flat_model import flat_model, loaded_model
+from pkpdsim.pbpk.organs import Organ
 from pkpdsim.scan import start_values
 from pkpdsim.uncertainty import UNCERTAINTY_DIMENSION
 
@@ -175,7 +175,7 @@ def kidney_outflow(
         of the model.
     """
     path = Path(model_path)
-    model = _kidney_model(path, path.stat().st_mtime_ns)
+    model = flat_model(path)
     if not model.water or not model.filtered:
         return ()
     values = individual_values(path, changes or {})
@@ -240,7 +240,7 @@ def individual_values(
     """
     path = Path(model_path)
     mtime = path.stat().st_mtime_ns
-    inputs = _kidney_model(path, mtime).inputs
+    inputs = flat_model(path).inputs
     relevant = {k: v for k, v in _plain(changes).items() if k in inputs}
     return _individual_values(path, mtime, _frozen(relevant))
 
@@ -270,7 +270,7 @@ def simulated_individuals(
     if scan.dimension(DimensionKind.MODELS) is not None:
         return []
     path = Path(model_path)
-    inputs = _kidney_model(path, path.stat().st_mtime_ns).inputs
+    inputs = flat_model(path).inputs
     dimensions = [
         d
         for d in scan.dimensions
@@ -316,106 +316,6 @@ def _plain(changes: Mapping[str, object]) -> dict[str, Change]:
     }
 
 
-@dataclass(frozen=True)
-class _Filtered:
-    """A filtered substance of a flat model.
-
-    Attributes:
-        sid: the substance.
-        kinetic: its erythrocytes are kinetic: the plasma carries it, else
-            `BP` does, which is `1 - HCT` without erythrocytes.
-        threshold: it has a threshold reabsorption (`reab_threshold_<s>`),
-            no `f_reabsorbed_<s>`.
-    """
-
-    sid: str
-    kinetic: bool
-    threshold: bool
-
-
-@dataclass(frozen=True)
-class _KidneyModel:
-    """What the validity of the outflow reads from a flat model.
-
-    Attributes:
-        filtered: the filtered substances.
-        water: the model has the GFR, the flow of the kidney and the
-            hematocrit, whose filtered plasma water is bounded.
-        quantities: the ids of the flows of the validity and `GFR_base`
-            which the model has, the selections of its simulations.
-        inputs: the ids which the quantities depend on, through initial
-            assignments and assignment rules (themselves included): the
-            changes of an individual.
-    """
-
-    filtered: tuple[_Filtered, ...]
-    water: bool
-    quantities: tuple[str, ...]
-    inputs: frozenset[str]
-
-
-@lru_cache(maxsize=8)
-def _kidney_model(model_path: Path, mtime_ns: int) -> _KidneyModel:
-    """Read the filtered substances and the inputs of the validity from a flat model.
-
-    `mtime_ns`, the modification time of the model file, is only a key of the
-    cache.
-    """
-    model = libsbml.readSBMLFromFile(str(model_path)).getModel()
-    prefix = ids.flat(Organ.KIDNEY, ids.filtration_reaction(""))
-    species = {sp.getId() for sp in model.getListOfSpecies()}
-    filtered = tuple(
-        _Filtered(
-            s,
-            ids.flat(Organ.KIDNEY, ids.species(Part.BLOOD_CELLS, s)) in species,
-            model.getParameter(ids.reabsorption_threshold(s)) is not None,
-        )
-        for s in (
-            reaction.getId().removeprefix(prefix)
-            for reaction in model.getListOfReactions()
-            if reaction.getId().startswith(prefix)
-        )
-    )
-    quantities = [ids.GFR, ids.GFR_BASE, ids.organ_flow(Organ.KIDNEY), ids.HCT]
-    for f in filtered:
-        quantities += [ids.fu(f.sid), ids.bp(f.sid), ids.fraction_reabsorbed(f.sid)]
-    present = tuple(q for q in quantities if model.getParameter(q) is not None)
-    water = {ids.GFR, ids.organ_flow(Organ.KIDNEY), ids.HCT} <= set(present)
-    return _KidneyModel(filtered, water, present, _dependencies(model, present))
-
-
-def _dependencies(model: libsbml.Model, roots: Iterable[str]) -> frozenset[str]:
-    """The ids which the roots depend on through initial assignments and rules."""
-    reads: dict[str, set[str]] = {}
-    for assignment in model.getListOfInitialAssignments():
-        reads.setdefault(assignment.getSymbol(), set()).update(
-            _names(assignment.getMath())
-        )
-    for rule in model.getListOfRules():
-        if rule.isAssignment():
-            reads.setdefault(rule.getVariable(), set()).update(_names(rule.getMath()))
-    seen: set[str] = set()
-    stack = list(roots)
-    while stack:
-        sid = stack.pop()
-        if sid not in seen:
-            seen.add(sid)
-            stack.extend(reads.get(sid, ()))
-    return frozenset(seen)
-
-
-def _names(math: libsbml.ASTNode | None) -> set[str]:
-    """The names a formula reads."""
-    names: set[str] = set()
-    stack = [] if math is None else [math]
-    while stack:
-        node = stack.pop()
-        if node.getType() == libsbml.AST_NAME:
-            names.add(node.getName())
-        stack.extend(node.getChild(k) for k in range(node.getNumChildren()))
-    return names
-
-
 #: a change of an individual, hashable: the target and its value, a number, a
 #: formula or the magnitude and the unit of a quantity
 _Frozen = tuple[str, float | str | tuple[float, str]]
@@ -446,27 +346,12 @@ def _individual_values(
     model_path: Path, mtime_ns: int, changes: tuple[_Frozen, ...]
 ) -> IndividualValues:
     """Simulate an individual for one minute and read its start values, once."""
-    quantities = _kidney_model(model_path, mtime_ns).quantities
+    quantities = flat_model(model_path).quantities
     result = Simulator(n_workers=1).run(
-        _loaded(model_path, mtime_ns),
+        loaded_model(model_path),
         Simulation(end=1, time_unit="min", preinit_changes=_thawed(changes)),
     )
     numbers = {sid: float(start_values(result, sid).item()) for sid in quantities}
     return IndividualValues(
         numbers, {sid: str(result.units[sid]) for sid in quantities}
-    )
-
-
-@lru_cache(maxsize=2)
-def _loaded(model_path: Path, mtime_ns: int) -> RoadrunnerSBMLModel:
-    """Load a model once per process for the simulations of individuals.
-
-    It selects only the quantities of the validity of the kidney outflow and
-    `GFR_base`, and it is compiled without optimization (`O0`), the fastest
-    compilation, since its simulations of one minute only evaluate the
-    initial assignments; the two models used last stay loaded.
-    """
-    quantities = _kidney_model(model_path, mtime_ns).quantities
-    return RoadrunnerSBMLModel(
-        source=model_path, selections=["time", *quantities], jit_optimization="O0"
     )
