@@ -161,7 +161,7 @@ def k_int_pls_value(fu: float) -> float:
     return _evaluate(_K_INT.format(fu=repr(fu), one="1", **values))
 
 
-def interstitial_share(organ: Organ, fu: float, sex: Sex = Sex.MALE) -> float:
+def interstitial_share(organ: Organ, fu: float, sex: Sex) -> float:
     """The interstitial share of the whole tissue of an organ.
 
     `f_int*K_int_pls(fu)/(1 - f_vas)`, the Kp of a substance which reaches the
@@ -171,11 +171,17 @@ def interstitial_share(organ: Organ, fu: float, sex: Sex = Sex.MALE) -> float:
     form (`check_kp`) and the coefficients of `Kp(interstitial=...)` of a
     build of the sex.
 
+    `f_int/(1 - f_vas)` is the interstitial fraction of the tissue without
+    blood (`Fint` of Schmitt 2008, one value per tissue and not per sex), so
+    the shares of the sexes agree to the rounding of the tabulated `f_int`
+    (4 significant digits, a relative difference below 5e-4); the vascular
+    fraction of the sex (its blood) does not enter the share.
+
     Args:
         organ: the organ.
         fu: the fraction unbound in plasma.
-        sex: the sex of the build, male by default (the default of
-            `PBPKDefinition`).
+        sex: the sex of the build, no default: a female build reads the
+            female share.
 
     Returns:
         The interstitial share (dimensionless).

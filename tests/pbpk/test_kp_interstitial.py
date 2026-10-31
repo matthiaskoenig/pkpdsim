@@ -1,7 +1,9 @@
 """The extracellular distribution: Kp at a scale of the interstitial shares."""
 
 import dataclasses
+import inspect
 import itertools
+import re
 import warnings
 from pathlib import Path
 
@@ -27,6 +29,7 @@ from pkpdsim.pbpk import (
     reference_individual,
 )
 from pkpdsim.pbpk.builder import built_organs
+from pkpdsim.pbpk.data import load
 from pkpdsim.pbpk.distribution import KCellFloorWarning
 from pkpdsim.pbpk.impairment import ckd_unbound_fractions
 from pkpdsim.pbpk.physiology import reference_fractions
@@ -67,11 +70,40 @@ def test_the_share_is_that_of_the_sex_of_the_build() -> None:
             share = interstitial_share(organ, FU, sex)
             assert share == f_int * k_int / (1.0 - f_vas)
             assert 0 < share < 1
-        assert interstitial_share(organ, FU) == interstitial_share(organ, FU, Sex.MALE)
         differs |= interstitial_share(organ, FU, Sex.FEMALE) != interstitial_share(
             organ, FU, Sex.MALE
         )
     assert differs
+
+
+def test_the_sex_of_the_share_has_no_default() -> None:
+    """Every caller names the sex, so a female build never reads the male share (R2)."""
+    sex = inspect.signature(interstitial_share).parameters["sex"]
+    assert sex.default is inspect.Parameter.empty
+    with pytest.raises(TypeError, match="sex"):
+        interstitial_share(Organ.MUSCLE, FU)  # ty: ignore[missing-argument]
+
+
+@pytest.mark.parametrize("organ", list(Organ))
+def test_the_shares_of_the_sexes_differ_by_the_rounding_of_f_int(organ: Organ) -> None:
+    """The share is `Fint*K_int`, `Fint` of Schmitt 2008 per tissue, not per sex.
+
+    `f_int = Fint*(1 - f_vas)` of each sex is tabulated to 4 significant
+    digits, so `f_int/(1 - f_vas)` gives back `Fint` of the notes of the data
+    to that rounding in both sexes; the shares of the sexes differ by it only.
+    """
+    data = load("physiology_human")
+    k_int = distribution.k_int_pls_value(FU)
+    for sex in Sex:
+        notes = data[sex.value]["organs"][organ]["f_int"]["notes"]
+        found = re.search(r"Fint = ([0-9.]+)", notes)
+        assert found is not None
+        f_int_tissue = float(found.group(1))
+        f_vas, f_int = reference_fractions(organ)[sex]
+        assert f_int / (1.0 - f_vas) == pytest.approx(f_int_tissue, rel=5e-4)
+        assert interstitial_share(organ, FU, sex) == pytest.approx(
+            f_int_tissue * k_int, rel=5e-4
+        )
 
 
 def test_the_female_build_has_the_female_share(tmp_path: Path) -> None:
