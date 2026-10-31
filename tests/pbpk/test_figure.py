@@ -21,6 +21,7 @@ from pkpdsim.pbpk import (
     Direction,
     Excretion,
     FirstOrderDissolution,
+    Formula,
     Inhibition,
     Kp,
     LumenConversion,
@@ -645,3 +646,36 @@ def test_the_figure_refuses_builds_without_the_sex_of_the_definition(
         model_figure(definition(), tmp_path / "f.svg", sexes=(Sex.FEMALE,))
     with pytest.raises(ValueError, match="each sex once"):
         model_figure(definition(), tmp_path / "f.svg", sexes=(Sex.MALE, Sex.MALE))
+
+
+def test_a_produced_substance_with_a_solved_baseline_is_endogenous(
+    tmp_path: Path,
+) -> None:
+    """A substance which a declared rate produces, baseline solved, is marked endogenous (R41c).
+
+    Creatinine: produced in the muscle, without a baseline of its own; the
+    library solves the baseline. A drug of the same definition is not marked.
+    """
+    end = Substance(
+        "end",
+        name="endogenous substance",
+        mr=113.1,
+        distribution=Kp(0.6, ftissue=6.0),
+        excretion=Excretion(urine=True),
+    )
+    production = CustomReaction(
+        "PROD",
+        Organ.MUSCLE,
+        Part.TISSUE,
+        "-> Cti_end",
+        "k_prod",
+        stationary=Formula("k_prod", U.mmole_per_min),
+    )
+    d = definition(
+        substances=[*definition().substances, end],
+        chemistry=[*definition().chemistry, production],
+        parameters=[ModelParameter("k_prod", 0.0074, U.mmole_per_min)],
+    )
+    text = " ".join(_texts(model_figure(d, tmp_path / "produced.svg")))
+    assert "endogenous (production, baseline solved)" in text
+    assert text.count("endogenous (") == 1
