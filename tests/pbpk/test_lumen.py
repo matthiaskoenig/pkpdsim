@@ -21,7 +21,9 @@ from pkpdsim.pbpk import (
     Excretion,
     FirstOrder,
     FirstOrderDissolution,
+    Formula,
     LumenConversion,
+    ModelParameter,
     Organ,
     PBPKDefinition,
     Pool,
@@ -38,6 +40,7 @@ from pkpdsim.pbpk import (
 )
 from pkpdsim.pbpk.chemistry import Direction, Membrane, Transport
 from pkpdsim.pbpk.data import value
+from pkpdsim.pbpk.impairment import GASTRIC_EMPTYING
 from pkpdsim.pbpk.variants.segments import DATA, SEGMENTS
 
 from .conftest import (
@@ -45,6 +48,7 @@ from .conftest import (
     chemistry_reference_definition,
     dateless,
     dose_amount,
+    individual,
     load,
     reference_definition,
     simple_drug,
@@ -74,7 +78,7 @@ def _transit(seg: str) -> float:
 
 def _definition(
     sid: str,
-    intestine: SegmentedIntestine,
+    intestine: SegmentedIntestine | SingleLumen,
     routes: list[Route] | None = None,
     chemistry: tuple[Transport, ...] = (),
 ) -> PBPKDefinition:
@@ -689,3 +693,51 @@ def test_the_notes_of_the_colon_factor_name_a_source(
         assert "its source Byon2018, not fitted" in notes
         assert "a model fits it" not in notes
         assert "Byon W" in notes  # the citation of the source
+
+
+def test_the_transit_of_the_stomach_is_an_id_of_the_top_model(tmp_path: Path) -> None:
+    """`T_st_eff`: the transit time of the stomach of the condition (R41a).
+
+    Fasted `T_st`, fed `T_st_fed`, times the factor of the gastric emptying
+    of chronic kidney disease, the time the transit of the stomach reads;
+    the single lumen has no stomach and no `T_st_eff`.
+    """
+    result = build(_definition("transit", SegmentedIntestine()), tmp_path)
+    fasted, fed = _transit("st"), value(DATA, "stomach", "transit_time_fed").value
+    for changes, expected in (
+        ({}, fasted),
+        ({ids.FED: 1.0}, fed),
+        ({GASTRIC_EMPTYING: 1.5}, 1.5 * fasted),
+        ({ids.FED: 1.0, GASTRIC_EMPTYING: 2.0}, 2.0 * fed),
+    ):
+        r = individual(result.flat_path, **changes)
+        assert r[ids.T_STOMACH] == pytest.approx(expected, rel=1e-14)
+    model = libsbml.readSBMLFromFile(str(result.flat_path)).getModel()
+    assert ids.T_STOMACH in {p.getId() for p in model.getListOfParameters()}
+    single = build(_definition("transit1", SingleLumen()), tmp_path / "single")
+    assert ids.T_STOMACH not in _sbml_ids(single.flat_path)
+
+
+def test_a_conversion_reads_the_transit_of_the_stomach(tmp_path: Path) -> None:
+    """A rate of a conversion in the stomach from `T_st_eff` keeps its fraction fed and fasted.
+
+    `kconv = 60*f/((1 - f)*T_st_eff)` converts the fraction `f` of a
+    solution in the stomach whatever the prandial state (creatinine's
+    conversion of creatine copied the fasted 22.79 min instead).
+    """
+    f = 0.2
+    k = Formula(
+        f"60 min_per_hr * f_conv / ((1 dimensionless - f_conv) * {ids.T_STOMACH})",
+        U.per_hr,
+    )
+    intestine = SegmentedIntestine(
+        ka=_NO_ABSORPTION, conversions=[LumenConversion(S, M, k, ["st"])]
+    )
+    d = dataclasses.replace(
+        _definition("conv_transit", intestine),
+        parameters=[ModelParameter("f_conv", f, U.dimensionless)],
+    )
+    result = build(d, tmp_path)
+    for changes in ({}, {ids.FED: 1.0}, {GASTRIC_EMPTYING: 1.5}):
+        r = individual(result.flat_path, **changes)
+        assert _converted(r, ids.sol_dose(S), 10.0) == pytest.approx(f, rel=1e-5)

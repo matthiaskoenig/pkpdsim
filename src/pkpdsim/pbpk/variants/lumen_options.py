@@ -186,7 +186,10 @@ class LumenConversion:
     A solution in the stomach, a conversion in the stomach only: the
     stomach does not absorb, so the converted fraction of the dose is
     `f = k*T/(1 + k*T)` with `k = kconv/60` (1/min) and the transit time of
-    the stomach `T` (`T_st`, fasted 22.79 min), and `kconv = 60*f/((1 - f)*T)`.
+    the stomach `T` (`T_st`, fasted 22.79 min), and `kconv = 60*f/((1 - f)*T)`;
+    the transit time of the stomach of the condition (fed, the factor of
+    chronic kidney disease) is the id `T_st_eff` of the top model
+    (`ids.T_STOMACH`), which a `Formula` of `k` reads.
     An immediate-release tablet with the first order dissolution `Ka_dis_<s>`
     (1/hr, without the factors `f_dis_fed_<s>` and `f_dis_release_<s>`)
     converts only the part which dissolves in the stomach,

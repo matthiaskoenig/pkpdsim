@@ -640,6 +640,8 @@ def _body(
             outputs |= intestine_readouts(
                 md, definition.readouts, (s.sid for s in definition.substances)
             )
+        if ids.T_STOMACH in boundary.outputs.values():
+            outputs[ids.T_STOMACH] = _STOMACH_TRANSIT
         if outputs:
             boundary = Boundary(
                 boundary.replacements,
@@ -764,6 +766,18 @@ _STEADY_OUTPUTS = {
 }
 """The constants of the steady state of an organ by the prefix of their ids:
 unit, quantity in the name, kind."""
+
+
+_STOMACH_TRANSIT = OrganOutput(
+    U.min,
+    "transit time stomach [min]",
+    "gastric_transit_time",
+    "The transit time of the stomach of the prandial state (`FED`) and the "
+    "impairment (the factor of the gastric emptying), which the transit of the "
+    "stomach reads, a constant of the ",
+    constant=True,
+)
+"""The output `T_st_eff` of the segmented intestine (`ids.T_STOMACH`)."""
 
 
 def _steady_outputs(plan: SteadyPlan, organ: Organ) -> dict[str, OrganOutput]:

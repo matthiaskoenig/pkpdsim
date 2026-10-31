@@ -223,6 +223,7 @@ Every other id of the scheme, the ids a model rarely reads: the physiology, the 
 | `k_bile` | the rate of the transit of the bile into the intestinal lumen | `ids.K_BILE` |
 | `t_lumen` | the transit time of the single intestinal lumen into the feces (local id) | `ids.T_LUMEN` |
 | `T_st_fed` | the transit time of the stomach in the fed state (local id) | `ids.T_STOMACH_FED` |
+| `T_st_eff` | the transit time of the stomach of the condition, `(T_st + FED*(T_st_fed - T_st))*fimp_t_stomach` (min), an output of the segmented intestine, an id of the top model | `ids.T_STOMACH` |
 | `Vbile` | the volume of the bile, the compartment of `Cbile_<s>` | `ids.VBILE` |
 | `Vfeces` | the compartment of the feces amounts `Afeces_<s>` | `ids.VFECES` |
 | `Vlumen` | the volume of the single intestinal lumen, the compartment of `Clumen_<s>` (local id) | `ids.VLUMEN` |

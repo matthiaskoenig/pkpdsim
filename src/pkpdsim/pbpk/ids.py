@@ -53,6 +53,7 @@ __all__ = [
     "SV_TIS",
     "TUBULE_SEGMENTS",
     "T_LUMEN",
+    "T_STOMACH",
     "T_STOMACH_FED",
     "VBILE",
     "VBLOOD",
@@ -304,6 +305,11 @@ F_MUCOSA_FLOW = "f_mucosa_flow"
 """The local fraction of the intestinal blood flow which perfuses the mucosa."""
 T_STOMACH_FED = "T_st_fed"
 """The local transit time of the stomach in the fed state."""
+T_STOMACH = "T_st_eff"
+"""The transit time of the stomach which the transit of the stomach reads: of
+the prandial state (`FED`, `T_st` fasted to `T_st_fed` fed) times the factor
+of the gastric emptying of chronic kidney disease, a constant of the segmented
+intestine and its output, an id of the top model (min)."""
 GUT_SEGMENTS: tuple[str, ...] = (
     "st",
     "du",

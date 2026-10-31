@@ -17,6 +17,7 @@ from sbmlutils.factory import Port as _Port
 from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk import ids
+from pkpdsim.pbpk.annotation import initial_assignment
 from pkpdsim.pbpk.data import cite, value
 from pkpdsim.pbpk.impairment import GASTRIC_EMPTYING, SI_TRANSIT
 from pkpdsim.pbpk.organ import StandardBuilder
@@ -149,6 +150,41 @@ class LumenBuilder(StandardBuilder):
             )
             return f"({t} * {factor})"
         return t
+
+    def _stomach_transit(self) -> None:
+        """The transit time of the stomach as a constant and an output, `T_st_eff`.
+
+        The formula of `_transit` of the stomach (the prandial state and the
+        factor of chronic kidney disease), an initial assignment: a model reads
+        the transit of the stomach of its condition from the top model (the
+        rate of a conversion in the stomach) instead of copying the fasted
+        value of the data. The transit of the stomach keeps its own formula.
+        """
+        seg = self.segments[0]
+        formula = self._transit(seg)[1:-1]
+        sid = ids.T_STOMACH
+        self.parameters[sid] = self._annotate(
+            Parameter(
+                sid,
+                None,
+                U.min,
+                constant=True,
+                name="transit time stomach [min]",
+                sboTerm=_SBO_PARAMETER,
+                notes="The transit time of the stomach of the prandial state and "
+                "the impairment, which its transit reads: `T_st` fasted, `T_st_fed` "
+                "fed (`FED = 1`), times the factor of the gastric emptying of "
+                "chronic kidney disease; an output of the intestine, an id of the "
+                f"top model.\n\n`{sid} = {formula}`",
+                port=_Port(f"{sid}_port", portType=PortType.OUTPUT_PORT),
+            ),
+            "gastric_transit_time",
+            segment=seg.token,
+        )
+        self.assignments.append(
+            initial_assignment(sid, formula, U.min, "transit time stomach")
+        )
+        self.outputs[sid] = sid
 
     def _gut_species(
         self,

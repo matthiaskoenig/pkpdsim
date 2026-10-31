@@ -317,6 +317,8 @@ class GutBuilder(LumenBuilder):
                 self._bile_to_feces(s)
         self._conversions()
         self._chemistry()
+        if not self.single:
+            self._stomach_transit()
         kind = "single lumen" if self.single else "segmented"
         notes = (
             f"The {kind} intestine, which replaces small and large intestine: "

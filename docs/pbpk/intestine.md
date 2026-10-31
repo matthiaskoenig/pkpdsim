@@ -66,7 +66,7 @@ J_trs_du_<s>: Asolid_du_<s> -> Asolid_jej1_<s> = Asolid_du_<s> / (T_du * fimp_t_
 J_trs_rec_<s>: Asolid_rec_<s> -> Afeces_<s> = Asolid_rec_<s> / T_rec
 ```
 
-The factors `fimp_t_stomach` and `fimp_t_si` are the factors of chronic kidney disease on the gastric emptying time and the small intestinal transit time: they multiply the transit time, a factor above 1 slows the transit. They are 1 until their source is read (see [Impairment](impairment.md#limitations)). The data of the segments:
+The factors `fimp_t_stomach` and `fimp_t_si` are the factors of chronic kidney disease on the gastric emptying time and the small intestinal transit time: they multiply the transit time, a factor above 1 slows the transit. They are 1 until their source is read (see [Impairment](impairment.md#limitations)). The transit time of the stomach of the condition, `(T_st + FED*(T_st_fed - T_st))*fimp_t_stomach`, is a constant of the top model as well, `T_st_eff` (`ids.T_STOMACH`, an output of the intestine evaluated after the changes before the simulation): a formula of the top model reads it, e.g. the rate of a conversion in the stomach which converts a given fraction of a solution, `kconv = 60*f/((1 - f)*T_st_eff)`, fasted and fed, instead of a copy of the fasted 22.79 min. The single lumen has no stomach and no `T_st_eff`. The data of the segments:
 
 <!-- generated: intestine-segments (scripts/pbpk_tables.py), do not edit -->
 *Generated from `data/intestine_human.toml` by `scripts/pbpk_tables.py`; the notes of every number are in the data file.*

@@ -483,9 +483,12 @@ def assert_reference_sbml(result: BuildResult) -> None:
     replaced) and `endogenous_reference_definition()` at 87a5e79, all
     rebuilt with the CKD profile of the binding to albumin (their albumin
     substances; the build without the profile is the former reference, line
-    by line but for the dates); a change of the library
-    which changes the SBML of every model on purpose rebuilds them and says
-    so.
+    by line but for the dates), and rebuilt with the output `T_st_eff` of the
+    segmented intestine (R41a, additions only: the parameter, its initial
+    assignment and port, the inputs `FED` and `fimp_t_stomach` of an
+    intestine without a lumen species, no line removed); a change of the
+    library which changes the SBML of every model on purpose rebuilds them
+    and says so.
     """
     for path in (result.comp_path, result.flat_path):
         reference = gzip.decompress((REFERENCE / f"{path.name}.gz").read_bytes())
