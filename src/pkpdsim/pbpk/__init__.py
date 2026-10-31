@@ -2,7 +2,7 @@
 
 The base of the experiments of a model built on the library
 (`PBPKSimulationExperiment`, `ScaledRenalMap`, `healthy_gfr`, `REFERENCE_GFR`,
-`molecular_weights` of `pkpdsim.pbpk.experiment`) and the validity of the kidney outflow
+`molecular_weights`, `equilibrated_simulation` of `pkpdsim.pbpk.experiment`) and the validity of the kidney outflow
 (`kidney_outflow`, `KidneyOutflow` of `pkpdsim.pbpk.kidney_validity`) are
 exported lazily: they import sbmlsim, which a factory does not need, so
 `import pkpdsim.pbpk` imports no simulator.
@@ -79,6 +79,7 @@ if TYPE_CHECKING:
         REFERENCE_GFR,
         PBPKSimulationExperiment,
         ScaledRenalMap,
+        equilibrated_simulation,
         healthy_gfr,
         molecular_weights,
     )
@@ -90,6 +91,7 @@ _LAZY_NAMES = {
     "REFERENCE_GFR": "experiment",
     "PBPKSimulationExperiment": "experiment",
     "ScaledRenalMap": "experiment",
+    "equilibrated_simulation": "experiment",
     "healthy_gfr": "experiment",
     "molecular_weights": "experiment",
     "KidneyOutflow": "kidney_validity",
@@ -183,6 +185,7 @@ __all__ = [
     "cite",
     "compose",
     "create_archive",
+    "equilibrated_simulation",
     "fitted",
     "healthy_gfr",
     "interstitial_share",

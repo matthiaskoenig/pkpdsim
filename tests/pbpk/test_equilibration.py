@@ -9,9 +9,12 @@ the steady state of the healthy condition `f = 1` (`X = 100`); a condition
 
 import dataclasses
 from collections.abc import Callable
-from typing import cast
+from pathlib import Path
+from typing import assert_type, cast
 
+import libsbml
 import numpy as np
+import pandas as pd
 import pytest
 from sbmlsim import Q
 from sbmlsim.experiment import ExperimentRunner
@@ -30,10 +33,31 @@ from sbmlsim.simulator.simulator import ScanError
 from sbmlutils.factory import Model, Parameter, Port, PortType, RateRule, Sbase
 from sbmlutils.metadata import SBO
 
-from pkpdsim.model import PKPDModel
-from pkpdsim.pbpk import MODEL_UNITS, PDComponent, Sex, U, build, ids
+from pkpdsim.model import PKPDModel, SimulatorSettings
+from pkpdsim.pbpk import (
+    MODEL_UNITS,
+    Excretion,
+    FirstOrder,
+    Kp,
+    Metabolism,
+    Organ,
+    PBPKDefinition,
+    PDComponent,
+    Pool,
+    Route,
+    Sex,
+    Substance,
+    U,
+    build,
+    ids,
+)
 from pkpdsim.pbpk.builder import BuildResult
-from pkpdsim.pbpk.experiment import PBPKSimulationExperiment, accumulating_states
+from pkpdsim.pbpk.experiment import (
+    PBPKSimulationExperiment,
+    accumulating_states,
+    drug_free_zeros,
+    equilibrated_simulation,
+)
 
 from .conftest import definition, endogenous_reference_definition
 
@@ -247,12 +271,14 @@ def test_the_doses_start_after_the_equilibration(
         assert equilibrated.presimulation is not None
         first, later = equilibrated.changes
         assert first.times == (0.0,)
+        zeros = drug_free_zeros(builds["sink"].flat_path)
         assert dict(first.values) == {
             "IVDOSE_drg": Q(10, "mg"),
             "Aurine_drg": 0.0,
             "Afeces_drg": 0.0,
             "Aurine_drg_m": 0.0,
             "Afeces_drg_m": 0.0,
+            **dict.fromkeys(zeros, 0.0),
             "HOMEO__V": 0.0,
         }
         assert later is simulation.changes[0]
@@ -472,3 +498,262 @@ def test_a_delta_starts_after_the_equilibration(builds: dict[str, BuildResult]) 
     assert at_start("equilibrated", ids.delta(arm)) == pytest.approx(
         0.0, abs=1e-12 * at_start("equilibrated", arm)
     )
+
+
+# --- the species of the drugs start at exactly 0 (ruling R25) ---------------------
+
+
+def _species(path: Path, *substances: str) -> set[str]:
+    model = libsbml.readSBMLFromFile(str(path)).getModel()
+    every = [s.getId() for s in model.getListOfSpecies()]
+    return {sid for s in substances for sid in ids.species_of(s, every)}
+
+
+def test_the_species_of_the_drugs_are_drug_free_zeros(
+    builds: dict[str, BuildResult],
+) -> None:
+    """The drug and its metabolite: every species of them, not the sinks or the PD."""
+    path = builds["sink"].flat_path
+    zeros = set(drug_free_zeros(path))
+    assert zeros == _species(path, "drg", "drg_m")
+    assert len(zeros) > 20
+    # a species which the condition sets holds a value, and so does what it feeds
+    venous = ids.pool_species(Pool.VENOUS, "drg")
+    assert venous in zeros
+    fed = set(drug_free_zeros(path, {venous}))
+    assert fed < zeros
+    # the venous blood reaches every organ, not the lumen of the intestine
+    assert all("lumen" in sid or "Asolid" in sid for sid in fed)
+    assert drug_free_zeros(path, {"HOMEO__f"}) == tuple(sorted(zeros))
+
+
+def test_an_endogenous_substance_and_its_products_are_no_zeros(
+    tmp_path: Path,
+) -> None:
+    """A baseline starts the substance, its metabolism feeds the metabolite."""
+    d = PBPKDefinition(
+        sid="endogenous_products",
+        substances=[
+            Substance(
+                "end",
+                name="endogenous substance",
+                mr=113.0,
+                distribution=Kp(0.6, ftissue=6.0),
+                excretion=Excretion(urine=True),
+                baseline=0.02,
+            ),
+            Substance("end_m", name="its metabolite", mr=100.0),
+            Substance("drg", name="drug", mr=300.0, distribution=Kp(2.0, ftissue=1.0)),
+        ],
+        chemistry=[
+            Metabolism(
+                "END2M",
+                Organ.LIVER,
+                "end",
+                {"end_m": 1.0},
+                FirstOrder(k=0.01),
+                protein="CYP3A4",
+            )
+        ],
+        routes=[Route.iv("drg"), Route.oral("end")],
+    )
+    path = build(d, tmp_path).flat_path
+    zeros = set(drug_free_zeros(path))
+    assert zeros == _species(path, "drg")
+    assert not zeros & _species(path, "end", "end_m")
+
+
+def test_the_drug_starts_at_exactly_zero_after_the_equilibration(
+    builds: dict[str, BuildResult],
+) -> None:
+    """A placebo in the condition: every species of the drug is 0, not a residue."""
+    path = builds["sink"].flat_path
+    zeros = drug_free_zeros(path)
+
+    def simulations(
+        experiment: PBPKSimulationExperiment,
+    ) -> dict[str, Simulation | Scan]:
+        placebo = Simulation(end=600, preinit_changes=CONDITION)
+        return {
+            "placebo": experiment.equilibrated(placebo, resets={"HOMEO__V": 0.0}),
+            "dosed": experiment.equilibrated(_dosed(), resets={"HOMEO__V": 0.0}),
+        }
+
+    experiment = _run(
+        _model(builds["sink"]),
+        simulations,
+        selections=("time", "HOMEO__X", "Carm_drg", *(f"[{z}]" for z in zeros)),
+    )
+    for key in ("placebo", "dosed"):
+        result = cast("TimecourseResult", experiment.results[f"task_{key}"])
+        for sid in ("Carm_drg", *(f"[{z}]" for z in zeros)):
+            assert float(np.asarray(result[sid]).ravel()[0]) == 0.0, (key, sid)
+    placebo = cast("TimecourseResult", experiment.results["task_placebo"])
+    assert np.all(np.asarray(placebo["Carm_drg"]).ravel() == 0.0)
+    assert _at_start(experiment, "placebo", "HOMEO__X") == pytest.approx(
+        STEADY_X, rel=1e-6
+    )
+
+
+def test_a_species_set_at_the_start_keeps_its_value(
+    builds: dict[str, BuildResult],
+) -> None:
+    """A change of the simulation at its start sets a species of the drug, no zero."""
+    venous = ids.pool_species(Pool.VENOUS, "drg")
+
+    def simulations(
+        experiment: PBPKSimulationExperiment,
+    ) -> dict[str, Simulation | Scan]:
+        start = Simulation(
+            end=60, preinit_changes=CONDITION, changes=[Change(0, {venous: 0.01})]
+        )
+        equilibrated = experiment.equilibrated(start, resets={"HOMEO__V": 0.0})
+        first, later = equilibrated.changes
+        assert venous not in first.values
+        assert later.values[venous] == 0.01
+        return {"start": equilibrated, "plain": start}
+
+    experiment = _run(
+        _model(builds["sink"]), simulations, selections=("time", f"[{venous}]")
+    )
+    value = _at_start(experiment, "start", f"[{venous}]")
+    assert value > 0.0
+    assert value == pytest.approx(_at_start(experiment, "plain", f"[{venous}]"))
+
+
+# --- the equilibration outside an experiment (ruling R23) -------------------------
+
+
+def _choose(scan: bool) -> Simulation | Scan:
+    """A simulation or a scan, typed as the union a caller with both holds."""
+    simulation = _dosed()
+    if scan:
+        return Scan(simulation, [Dimension("dim_f", values={"HOMEO__f": [0.5, 2.0]})])
+    return simulation
+
+
+def test_the_equilibration_of_a_union(builds: dict[str, BuildResult]) -> None:
+    """A caller with `Simulation | Scan` needs no match: the third overload."""
+
+    def simulations(
+        experiment: PBPKSimulationExperiment,
+    ) -> dict[str, Simulation | Scan]:
+        both = {
+            key: experiment.equilibrated(_choose(scan), resets={"HOMEO__V": 0.0})
+            for key, scan in (("simulation", False), ("scan", True))
+        }
+        assert_type(both["scan"], Simulation | Scan)
+        assert isinstance(both["simulation"], Simulation)
+        assert isinstance(both["scan"], Scan)
+        return dict(both)
+
+    experiment = _run(_model(builds["sink"]), simulations)
+    assert _at_start(experiment, "simulation", "HOMEO__X") == pytest.approx(
+        STEADY_X, rel=1e-6
+    )
+
+
+def test_a_simulation_of_a_model_file_is_equilibrated(
+    builds: dict[str, BuildResult],
+) -> None:
+    """`equilibrated_simulation` is the equilibration of an experiment, from the file."""
+    path = builds["sink"].flat_path
+    captured: dict[str, Simulation | Scan] = {}
+
+    def simulations(
+        experiment: PBPKSimulationExperiment,
+    ) -> dict[str, Simulation | Scan]:
+        captured["experiment"] = experiment.equilibrated(
+            _dosed(), resets={"HOMEO__V": 0.0}
+        )
+        return dict(captured)
+
+    _run(_model(builds["sink"]), simulations)
+    outside = equilibrated_simulation(_dosed(), path, resets={"HOMEO__V": 0.0})
+    inside = captured["experiment"]
+    assert isinstance(inside, Simulation)
+    assert dict(outside.preinit_changes) == dict(inside.preinit_changes)
+    assert dict(outside.changes[0].values) == dict(inside.changes[0].values)
+    assert outside.presimulation == inside.presimulation
+    result = Simulator(
+        n_workers=1, absolute_tolerance=1e-10, relative_tolerance=1e-10
+    ).run(path, outside)
+    from pkpdsim.scan import start_values
+
+    assert float(start_values(result, "HOMEO__X").item()) == pytest.approx(
+        STEADY_X, rel=1e-6
+    )
+    with pytest.raises(ValueError, match=r"of the model 'sink_flat.xml'"):
+        equilibrated_simulation(_dosed(), path)
+
+
+def test_a_sensitivity_group_runs_from_the_equilibrated_state(
+    builds: dict[str, BuildResult], tmp_path: Path
+) -> None:
+    """Every point of the design of an equilibrated group starts at its steady state.
+
+    The group without the equilibration starts at the healthy steady state
+    of the model (X 100), the equilibrated one at that of its condition (X
+    50), whatever the EC50 of the drug, which the design varies.
+    """
+    from sbmlsim.simulation import Formula
+
+    from pkpdsim.sensitivity import (
+        ParameterType,
+        SamplingAnalysis,
+        SensitivityGroup,
+        SensitivityOutput,
+        SensitivityParameter,
+        SensitivityRunner,
+    )
+
+    placebo = Simulation(end=60, preinit_changes=CONDITION)
+    groups = [
+        SensitivityGroup("plain", "Plain", placebo),
+        SensitivityGroup(
+            "equilibrated",
+            "Equilibrated",
+            placebo,
+            equilibrate=True,
+            resets={"HOMEO__V": 0.0},
+        ),
+    ]
+    runner = SensitivityRunner(
+        model=dataclasses.replace(_model(builds["sink"]), results_path=tmp_path),
+        parameters=lambda: [
+            SensitivityParameter(
+                uid="HOMEO__EC50",
+                name="EC50",
+                value=1e-3,
+                lower_bound=0.9e-3,
+                upper_bound=1.1e-3,
+                unit="mM",
+                type=ParameterType.NA,
+            )
+        ],
+        outputs=[SensitivityOutput("X_start", "X at the start")],
+        observables=[Formula("X_start", "at(HOMEO__X, 0)", unit="dimensionless")],
+        analyses={"sampling": SamplingAnalysis(groups=groups, n=8)},
+        default=("sampling",),
+    )
+    path = runner.run(
+        ["sampling"],
+        simulator=SimulatorSettings(
+            absolute_tolerance=1e-10, relative_tolerance=1e-10, n_workers=1
+        ),
+    )
+    starts = {
+        group.uid: pd.read_csv(path / "sampling" / group.uid / "samples.tsv", sep="\t")[
+            "X_start"
+        ].to_numpy()
+        for group in groups
+    }
+    assert np.allclose(starts["plain"], 100.0, rtol=1e-9)
+    assert np.allclose(starts["equilibrated"], STEADY_X, rtol=1e-6)
+
+
+def test_a_sensitivity_group_resets_only_when_it_equilibrates() -> None:
+    from pkpdsim.sensitivity import SensitivityGroup
+
+    with pytest.raises(ValueError, match="has resets but no equilibration"):
+        SensitivityGroup("g", "G", _dosed(), resets={"HOMEO__V": 0.0})
