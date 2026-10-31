@@ -715,7 +715,7 @@ def test_the_unit_per_area_has_a_text_on_the_figures() -> None:
         "GFR [ml_per_min_1p73m2]"
     )
     gfr = axis("GFR", ML_PER_MIN_1P73M2.sid, scale="log")
-    assert gfr.name == "GFR [ml/min/1.73 m²]"
+    assert gfr.name == "GFR [ml/min/1.73\u00a0m²]"
     assert gfr.unit == ML_PER_MIN_1P73M2.sid
     assert gfr.label == "GFR"
     assert "log" in str(gfr.scale).lower()
@@ -723,3 +723,22 @@ def test_the_unit_per_area_has_a_text_on_the_figures() -> None:
     assert axis("time", "hr").name == Axis(label="time", unit="hr").name
     assert axis("fraction", "dimensionless").name == "fraction"
     assert set(UNIT_LABELS) == {u.sid for u in EXTRA_UNITS}
+
+
+def test_the_text_of_a_unit_does_not_wrap() -> None:
+    """The words of a unit text are joined by a non-breaking space.
+
+    sbmlsim wraps a label longer than its axis at its spaces (`textwrap`,
+    `_wrap_label`), which broke `ml/min/1.73 m²` between `1.73` and `m²`.
+    Wrapped at any width, the unit text of an axis stays on one line.
+    """
+    import textwrap
+
+    for unit, text in UNIT_LABELS.items():
+        assert not any(c.isspace() and c != "\u00a0" for c in text), unit
+        name = axis("creatinine clearance", unit).name
+        assert name is not None
+        for width in range(1, len(name)):
+            lines = textwrap.fill(name, width, break_long_words=False).split("\n")
+            assert f"[{text}]" in lines, (unit, width)
+    assert UNIT_LABELS["ml_per_min_1p73m2"] == "ml/min/1.73\u00a0m²"

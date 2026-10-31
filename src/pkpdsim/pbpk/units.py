@@ -81,14 +81,16 @@ EXTRA_UNITS: tuple[UnitDefinition, ...] = (ML_PER_MIN_1P73M2,)
 the unit of an element or by its id in a formula."""
 
 UNIT_LABELS: Mapping[str, str] = MappingProxyType(
-    {"ml_per_min_1p73m2": "ml/min/1.73 m²"}
+    {"ml_per_min_1p73m2": "ml/min/1.73\u00a0m²"}
 )
 """The text of a unit of `EXTRA_UNITS` on a figure, by the unit id.
 
 sbmlsim writes a unit which pint does not read (a unit id of the model,
 `ml_per_min_1p73m2`) on an axis as it is given; the figures show this text
-instead (`unit_label`, `axis`). The unit definition keeps its name in the
-SBML."""
+instead (`unit_label`, `axis`). The words of a text are joined by a
+non-breaking space (U+00A0, `1.73 m²`): sbmlsim wraps a label which is longer
+than its axis at its spaces, and a unit is not broken. The unit definition
+keeps its name in the SBML."""
 
 
 def unit_label(unit: str | None) -> str:

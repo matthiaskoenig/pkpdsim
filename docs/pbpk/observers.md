@@ -174,7 +174,7 @@ An observer which reads a state, directly or through other observers (a species,
 
 The unit of an observer is a unit definition of the model. The units of `U` are those of every model; a unit outside `U` (`pkpdsim.pbpk.units.EXTRA_UNITS`) is added to every model (the top model, an organ) which uses it: as the unit of an observer, of a [parameter of the definition](substances.md#parameters-of-the-definition) or of a parameter of a custom reaction, or as the unit of a number of a formula; a model without it keeps its unit definitions. `pkpdsim.pbpk.units` has the unit per body surface area of the clearances and the GFR, `ML_PER_MIN_1P73M2` (`ml_per_min_1p73m2`, ml/min per 1.73 m2, `1e-3/1.73 l/min/m2`); a quantity in l/min divided by `BSA` (m2) is `1730` times its number in this unit, in consistent units `GFR / BSA * 1730 ml_per_min_1p73m2 * 1 m2 / 1 l_per_min` (the build checks the units of every formula).
 
-sbmlsim writes a unit which pint does not read, a unit id of the model, on an axis as it is given (`[ml_per_min_1p73m2]`). The text of such a unit on a figure is in `UNIT_LABELS` (`ml/min/1.73 m²`), and `axis(label, unit, **kwargs)` of `pkpdsim.pbpk` gives the axis of sbmlsim in the unit of the conversion with that text in its label (`unit_label`; any other unit gets the short form of sbmlsim):
+sbmlsim writes a unit which pint does not read, a unit id of the model, on an axis as it is given (`[ml_per_min_1p73m2]`). The text of such a unit on a figure is in `UNIT_LABELS` (`ml/min/1.73 m²`, its words joined by a non-breaking space, U+00A0, so that sbmlsim, which wraps a label longer than its axis at its spaces, does not break the unit), and `axis(label, unit, **kwargs)` of `pkpdsim.pbpk` gives the axis of sbmlsim in the unit of the conversion with that text in its label (`unit_label`; any other unit gets the short form of sbmlsim):
 
 ```python
 from pkpdsim.pbpk import axis
@@ -184,7 +184,7 @@ print(clearance.unit, "|", clearance.name)
 ```
 
 ```text
-ml_per_min_1p73m2 | creatinine clearance [ml/min/1.73 m²]
+ml_per_min_1p73m2 | creatinine clearance [ml/min/1.73 m²]
 ```
 
 ## An element of an organ for a PD component or an observer
