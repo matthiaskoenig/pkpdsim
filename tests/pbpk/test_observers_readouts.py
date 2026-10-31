@@ -780,17 +780,35 @@ def test_the_unit_per_area_has_a_text_on_the_figures() -> None:
 def test_the_text_of_a_unit_does_not_wrap() -> None:
     """The words of a unit text are joined by a non-breaking space.
 
-    sbmlsim wraps a label longer than its axis at its spaces (`textwrap`,
-    `_wrap_label`), which broke `ml/min/1.73 m²` between `1.73` and `m²`.
-    Wrapped at any width, the unit text of an axis stays on one line.
+    sbmlsim wraps a label longer than its axis at its spaces (`_wrap_label`
+    of its matplotlib serializer), which broke `ml/min/1.73 m²` between
+    `1.73` and `m²`. The label of an axis is wrapped by sbmlsim's own
+    wrapper on axes from one character to the full label long: the unit
+    text stays on one line.
     """
-    import textwrap
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+    from matplotlib.figure import Figure
+    from sbmlsim.plot.serialization_matplotlib import MatplotlibFigureSerializer
 
+    fig = Figure()
+    canvas = FigureCanvasAgg(fig)
+    renderer = canvas.get_renderer()
+    ax = fig.add_subplot()
     for unit, text in UNIT_LABELS.items():
         assert not any(c.isspace() and c != "\u00a0" for c in text), unit
         name = axis("creatinine clearance", unit).name
         assert name is not None
-        for width in range(1, len(name)):
-            lines = textwrap.fill(name, width, break_long_words=False).split("\n")
-            assert f"[{text}]" in lines, (unit, width)
+        ax.set_xlabel(name)
+        full = ax.xaxis.label.get_window_extent(renderer).width
+        wrapped = set()
+        for k in range(1, 41):
+            ax.set_xlabel(name)
+            MatplotlibFigureSerializer._wrap_label(
+                ax.xaxis.label, full * k / 40, False, renderer
+            )
+            lines = ax.xaxis.label.get_text().split("\n")
+            assert any(f"[{text}]" in line for line in lines), (unit, k, lines)
+            wrapped.add(len(lines))
+        # the label is wrapped into several lines on the short axes
+        assert max(wrapped) > 1, unit
     assert UNIT_LABELS["ml_per_min_1p73m2"] == "ml/min/1.73\u00a0m²"
