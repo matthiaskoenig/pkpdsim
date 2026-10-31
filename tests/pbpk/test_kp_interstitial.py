@@ -234,6 +234,24 @@ def test_the_reference_individual_is_the_default_individual(tmp_path: Path) -> N
         ref.volumes[Organ.LIVER] = 1.0  # ty: ignore[invalid-assignment]
 
 
+def test_the_reference_individual_has_the_healthy_gfr(tmp_path: Path) -> None:
+    """The GFR at renal function 1 is `healthy_gfr` of the build of each sex.
+
+    A model reads it instead of a literal (the GFR of the fluid model of hctz,
+    0.125 l/min): `GFR_base` of the default individual, in l/min.
+    """
+    from pkpdsim.pbpk.experiment import healthy_gfr
+
+    for sex in Sex:
+        ref = reference_individual(sex)
+        path = build(definition(sid=f"gfr_{sex}", sex=sex), tmp_path).flat_path
+        healthy = healthy_gfr(path).m_as("l/min")
+        assert ref.gfr == pytest.approx(healthy, rel=1e-12), sex
+        assert individual(path)[ids.GFR] == pytest.approx(ref.gfr, rel=1e-12)
+    assert reference_individual(Sex.MALE).gfr == pytest.approx(0.125, rel=1e-12)
+    assert reference_individual(Sex.FEMALE).gfr < reference_individual(Sex.MALE).gfr
+
+
 def test_the_reference_individual_has_the_cells_and_the_lumen(tmp_path: Path) -> None:
     """The intracellular volumes and the lumen volumes are those of the built model.
 

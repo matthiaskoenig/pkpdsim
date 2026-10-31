@@ -1044,6 +1044,12 @@ class ReferenceIndividual:
         sex: the sex.
         bw: the body weight [kg], `BW` of the default individual.
         height: the height [cm], `HEIGHT` of the default individual.
+        gfr: the healthy GFR [l/min], the GFR at renal function 1 of the
+            default individual (`GFR_base`, the reference GFR `GFR_ref` of
+            the sex at its own body surface area), which `healthy_gfr` of
+            the build of the sex gives in ml/min; the GFR of a component
+            which a model keeps outside the library (the fluid model of
+            hctz) reads it instead of a copy.
         volumes: the organ volumes with their blood `V<o>` [l],
             `M<o>/density + blood*Vblood` as in the model.
         tissue_volumes: the tissue volumes without blood [l]
@@ -1062,6 +1068,7 @@ class ReferenceIndividual:
     sex: Sex
     bw: float
     height: float
+    gfr: float
     volumes: Mapping[Organ, float]
     tissue_volumes: Mapping[Organ, float]
     intracellular_volumes: Mapping[Organ, float]
@@ -1076,7 +1083,7 @@ def reference_individual(sex: Sex) -> ReferenceIndividual:
         sex: the sex of the reference individual.
 
     Returns:
-        Its body weight, height, organ, cell and lumen volumes.
+        Its body weight, height, healthy GFR, organ, cell and lumen volumes.
     """
     from pkpdsim.pbpk.data import value
     from pkpdsim.pbpk.variants.segments import DATA, SEGMENTS
@@ -1089,6 +1096,8 @@ def reference_individual(sex: Sex) -> ReferenceIndividual:
         sex=sex,
         bw=refs[ids.BW].value,
         height=refs[ids.HEIGHT].value,
+        # GFR_base = GFR_ref*BSA/BSA_ref, at the reference body surface area
+        gfr=refs[ids.ref(ids.GFR)].value,
         volumes=MappingProxyType(volumes),
         tissue_volumes=MappingProxyType(tissue),
         intracellular_volumes=MappingProxyType(
