@@ -74,6 +74,7 @@ nav = [
     { "pbpk physiology" = "api/pbpk_physiology.md" },
     { "pbpk experiment" = "api/pbpk_experiment.md" },
     { "pbpk equilibration" = "api/pbpk_equilibration.md" },
+    { "pbpk regional absorption" = "api/pbpk_regional.md" },
     { "pbpk kidney validity" = "api/pbpk_kidney_validity.md" },
     { "pbpk ids and data" = "api/pbpk_ids.md" },
   ] },

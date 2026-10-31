@@ -52,6 +52,11 @@ from pkpdsim.pbpk.physiology import (
     reference_individual,
 )
 from pkpdsim.pbpk.proteins import PROTEINS, Induction, Inhibition, Protein
+from pkpdsim.pbpk.regional import (
+    derive_regional_absorption,
+    regional_key,
+    release_auc_ratios,
+)
 from pkpdsim.pbpk.routes import (
     DoseDependentDissolution,
     FirstOrderDissolution,
@@ -189,6 +194,7 @@ __all__ = [
     "cite",
     "compose",
     "create_archive",
+    "derive_regional_absorption",
     "equilibrated_simulation",
     "fitted",
     "healthy_gfr",
@@ -200,6 +206,8 @@ __all__ = [
     "parts_for",
     "physiology_objects",
     "reference_individual",
+    "regional_key",
+    "release_auc_ratios",
     "sex_definition",
     "sources",
     "unit_label",

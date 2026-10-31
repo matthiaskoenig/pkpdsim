@@ -124,6 +124,19 @@ J_feces_asc_<s>: Clumen_asc_<s> -> Afeces_<s> = (1 - fabs_<s>) * ka_<s> / 60 min
 
 There is no generic default profile, the default is no factor (1, the absorption above): the absorption in the colon relative to the small intestine is a property of the substance. Of 42 drugs released in the colon in humans the highly permeable ones (BCS class I) had a relative colonic bioavailability above 70 % and those of low permeability (BCS III and IV) below 50 % (Tannergren 2009); a single profile would be wrong for one of the two groups. With the area factors of the large intestine alone a solution released in the caecum is absorbed to 70 % (in the colon ascendens 64 %) of the fraction absorbed of an oral solution at the default `ka` (1/hr), the range of a highly permeable drug (simulated with the data of this version, `test_the_colon_absorption_of_the_docs`). A substance whose regional absorption is measured takes its profile from the study, e.g. apixaban released by a capsule in the distal small intestine and the ascending colon (Byon 2018: the AUC 60 % and 84 % lower than after the oral solution).
 
+A release study gives the exposure of a solution released in a segment relative to an oral solution, not the factors: they depend on the rest of the absorption of the model (`ka_<s>`, `fabs_<s>`, an efflux, the first pass), so they are derived with the model. `release_auc_ratios(r, substance, segments, dose)` simulates the oral solution (`SOLDOSE_<s>`) and the same dose dissolved in the lumen of each release segment (`GU__Clumen_<seg>_<s>`) and gives the AUC of the arm vein relative to the oral solution (14 days at one point per minute by default); `derive_regional_absorption(r, substance, targets, dose)` finds the factors which give the reported ratios, one factor per release segment (`regional_key`: the segment in the small intestine, the group `colon` in the large one), each the root of its ratio with the others fixed, in turns until no factor moves. The model needs an oral solution of the substance and a first value of each factor in its profile. Because the factors depend on the fitted absorption, a model derives them on its adopted fit, writes them into its profile (a `Value` with the source of the study) and fits again from the adopted fit, until the factors derived on the fit are those of the model (apixaban: Byon 2018, the lower ileum 0.40 and the colon ascendens 0.16 give `f_ka_ile2_api` 0.149 and `f_ka_colon_api` 0.0567).
+
+```python
+# not executed
+from pkdb_models.models.apixaban import MODEL
+from pkpdsim.pbpk import derive_regional_absorption
+
+r = MODEL.load_roadrunner()
+r.integrator.absolute_tolerance = 1e-14
+r.integrator.relative_tolerance = 1e-10
+factors = derive_regional_absorption(r, "api", {"ile2": 0.40, "asc": 0.16}, dose=2.5)
+```
+
 ```equations title="regional absorption (a factor of the lower ileum and of the group colon, with fabs)"
 J_abs_ile2_<s>: Clumen_ile2_<s> -> Cpl_<s> = fabs_<s> * ka_<s> / 60 min_per_hr * f_area_ile2 * f_ka_ile2_<s> * Vlumen_ile2 * Clumen_ile2_<s>
 J_abs_asc_<s>: Clumen_asc_<s> -> Cpl_<s> = fabs_<s> * ka_<s> / 60 min_per_hr * f_area_asc * f_ka_colon_<s> * Vlumen_asc * Clumen_asc_<s>
