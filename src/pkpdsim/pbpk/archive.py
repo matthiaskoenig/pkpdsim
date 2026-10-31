@@ -107,7 +107,7 @@ def create_archive(
             the definition only.
         figure: write the figure of the definition, `<sid>.svg` (the key
             `<sid>_svg`); one figure for all sexes, which have the same organs,
-            substances and processes.
+            substances and processes, its title names the builds.
 
     Every file of the archive has one location rule: it is below the parent
     of `model_output_dir`, and its location in the archive is its path
@@ -173,7 +173,7 @@ def create_archive(
     parent = model_output_dir.parent
     if figure:
         figure_path = model_figure(
-            definition, model_output_dir / f"{definition.sid}.svg"
+            definition, model_output_dir / f"{definition.sid}.svg", sexes
         )
     else:
         figure_path = None

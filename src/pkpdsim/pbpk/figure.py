@@ -64,6 +64,7 @@ from pkpdsim.pbpk.variants.gut import bile_substances, luminal_substances, wall_
 from pkpdsim.pbpk.variants.intestine import SegmentedIntestine, SingleLumen
 from pkpdsim.pbpk.variants.kidney_nephron import NephronKidney
 from pkpdsim.pbpk.variants.liver_zonated import ZonatedLiver
+from pkpdsim.sex import Sex
 
 __all__ = ["CHAR_WIDTH", "FONT", "model_figure"]
 
@@ -305,9 +306,10 @@ def _tag_width(label: str) -> float:
 class _Figure:
     """The layout of the figure of a definition."""
 
-    def __init__(self, definition: PBPKDefinition) -> None:
+    def __init__(self, definition: PBPKDefinition, sexes: Sequence[Sex]) -> None:
         """Collect what the figure shows."""
         self.d = definition
+        self.sexes = tuple(sexes)
         self.colors = {
             s.sid: _COLORS[i % len(_COLORS)]
             for i, s in enumerate(definition.substances)
@@ -568,7 +570,7 @@ class _Figure:
         y = self._paragraph(
             _PAD,
             y,
-            f"PBPK model {d.sid}: {d.sex} build, population {d.population}, "
+            f"PBPK model {d.sid}: {_builds(self.sexes)}, population {d.population}, "
             f"arm vein {d.arm_vein}",
             "pkf-dim",
         )
@@ -925,20 +927,45 @@ def _dissolution(route: Route) -> str:
     return "first order dissolution"
 
 
-def model_figure(definition: PBPKDefinition, path: Path) -> Path:
+def _builds(sexes: Sequence[Sex]) -> str:
+    """The builds of the figure in words: `male build`, `male and female builds`."""
+    if len(sexes) == 1:
+        return f"{sexes[0]} build"
+    return f"{', '.join(str(s) for s in sexes[:-1])} and {sexes[-1]} builds"
+
+
+def model_figure(
+    definition: PBPKDefinition, path: Path, sexes: Sequence[Sex] | None = None
+) -> Path:
     """Write the figure of a definition, an SVG schematic of the model.
 
     The circulation with the organs, the substances in each organ, the
     routes and the processes (see the module), deterministic and without a
-    dependency beyond the library.
+    dependency beyond the library. The builds of the sexes have the same
+    organs, substances and processes, so one figure shows them all; its
+    title names the builds (`male build`, `male and female builds`).
 
     Args:
         definition: the definition of the model.
         path: the SVG file to write.
+        sexes: the sexes which are built (`create_archive(..., sexes=...)`),
+            the sex of the definition among them; `None` is the sex of the
+            definition only.
 
     Returns:
         The path of the figure.
+
+    Raises:
+        ValueError: if `sexes` leaves out the sex of the definition or names
+            a sex twice.
     """
+    sexes = (definition.sex,) if sexes is None else tuple(Sex(s) for s in sexes)
+    if definition.sex not in sexes or len(set(sexes)) != len(sexes):
+        raise ValueError(
+            f"The figure of '{definition.sid}' names the builds "
+            f"{[str(s) for s in sexes]}: each sex once, the sex of the definition "
+            f"'{definition.sex}' among them."
+        )
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(_Figure(definition).draw(), encoding="utf-8")
+    path.write_text(_Figure(definition, sexes).draw(), encoding="utf-8")
     return path

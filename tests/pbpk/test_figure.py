@@ -31,8 +31,10 @@ from pkpdsim.pbpk import (
     Organ,
     Part,
     PBPKDefinition,
+    RegionalAbsorption,
     Route,
     SegmentedIntestine,
+    Sex,
     SlowPool,
     Substance,
     Transport,
@@ -579,3 +581,67 @@ def test_the_figure_shows_the_source_of_a_slow_pool(tmp_path: Path) -> None:
     )
     assert "slow pool of cr: plasma <-> pool" in text
     assert "tissue <-> pool" not in text
+
+
+@pytest.mark.parametrize(
+    ("factors", "text"),
+    [
+        ({"ile2": 0.5}, "drg (factor of ile2)"),
+        ({"ile2": 0.5, "asc": 0.2}, "drg (factors of ile2, asc)"),
+        ({"ile2": 0.5, "colon": 0.2}, "drg (colon factor, factor of ile2)"),
+    ],
+)
+def test_one_factor_of_a_segment_is_singular(
+    tmp_path: Path, factors: dict[str, float], text: str
+) -> None:
+    """ "factor of" for the factor of one segment, "factors of" for several (R36)."""
+    d = definition(
+        routes=[Route.oral_solution("drg")],
+        variants=Variants(
+            {
+                Organ.SMALL_INTESTINE: SegmentedIntestine(
+                    regional=RegionalAbsorption(factors)
+                )
+            }
+        ),
+    )
+    texts = " ".join(_texts(model_figure(d, tmp_path / "regional.svg")))
+    assert f"into the intestinal wall: {text}" in texts
+
+
+def _title(path: Path) -> str:
+    """The text of the figure up to the substances, its title and the builds."""
+    texts = _texts(path)
+    return " ".join(texts[: texts.index("substances")])
+
+
+def test_the_title_names_the_builds_of_the_archive(tmp_path: Path) -> None:
+    """One build is "male build"; an archive of both sexes names both (R36)."""
+    d = definition()
+    one = create_archive(
+        d, tmp_path / "one" / "models", model="simple", copyright="2026 M"
+    )
+    assert "simple: male build," in _title(one["simple_svg"]["path"])
+    both = create_archive(
+        d,
+        tmp_path / "both" / "models",
+        model="simple",
+        copyright="2026 M",
+        sexes=(Sex.MALE, Sex.FEMALE),
+    )
+    title = _title(both["simple_svg"]["path"])
+    assert "simple: male and female builds," in title
+    assert "male build," not in title
+    female = dataclasses.replace(d, sex=Sex.FEMALE)
+    path = model_figure(female, tmp_path / "female.svg")
+    assert "simple: female build," in _title(path)
+
+
+def test_the_figure_refuses_builds_without_the_sex_of_the_definition(
+    tmp_path: Path,
+) -> None:
+    """The builds of the figure contain the sex of the definition, each once."""
+    with pytest.raises(ValueError, match="each sex once, the sex of the definition"):
+        model_figure(definition(), tmp_path / "f.svg", sexes=(Sex.FEMALE,))
+    with pytest.raises(ValueError, match="each sex once"):
+        model_figure(definition(), tmp_path / "f.svg", sexes=(Sex.MALE, Sex.MALE))

@@ -428,7 +428,8 @@ class SegmentedIntestine:
         The substances of `absorbed_substances` with what the model gives
         each of them (`_resolve`, as the build): `fraction absorbed`
         (`fabs_<s>`), `colon factor` (`f_ka_colon_<s>`) and the regional
-        factors of segments (`f_ka_<seg>_<s>`).
+        factors of segments (`f_ka_<seg>_<s>`), `factor of ile2` for one
+        segment, `factors of ile2, asc` for several.
 
         Args:
             definition: the definition.
@@ -446,7 +447,8 @@ class SegmentedIntestine:
                 options.append("colon factor")
             if sid in a.profiles and a.profiles[sid].segments:
                 own = [t for t in ids.GUT_SEGMENTS if t in a.profiles[sid].segments]
-                options.append("factors of " + ", ".join(own))
+                noun = "factors" if len(own) > 1 else "factor"
+                options.append(f"{noun} of " + ", ".join(own))
             result[sid] = tuple(options)
         return result
 
