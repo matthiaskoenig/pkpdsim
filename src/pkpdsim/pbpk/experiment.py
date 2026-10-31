@@ -19,9 +19,10 @@ area (and falls with heart failure and cirrhosis). `healthy_gfr` reads it from
 the flat model, `PBPKSimulationExperiment.renal_function` gives the renal
 function of a measured clearance (the simulated GFR is the measured one), and
 the classes of renal impairment keep their GFR in ml/min (`ScaledRenalMap`).
-All of them are of the build of the sex of the experiment (`sex`, the female
-build for a study of women): the GFR of a woman is the GFR of the female
-build.
+All of them are of the build of the sex of the subjects (`sex` of the
+experiment, the female build for a study of women, or the sex of a
+simulation, `simulation=`, in a study of a group of each sex): the GFR of a
+woman is the GFR of the female build.
 
 The outflow of the kidney is valid while the filtered plasma water (the
 GFR) and the net filtered plasma flow of every substance are below the plasma
@@ -209,9 +210,10 @@ class ScaledRenalMap(Mapping[str, float]):
         )
     ```
 
-    The map of a class for another sex than the sex of the class, e.g. the
-    group of women of a study of men, is `of_sex` (see
-    `PBPKSimulationExperiment.renal_map_of`).
+    The map of a class is of the sex of the class (`sex`); the map for
+    another sex, e.g. the group of women of a study of men, is `of_sex` (see
+    `PBPKSimulationExperiment.renal_map_of`, which takes the key of the
+    simulation).
     """
 
     def __init__(
@@ -271,9 +273,12 @@ class ScaledRenalMap(Mapping[str, float]):
             return self
         bound = self._bound.get(owner)
         if bound is None:
-            bound = ScaledRenalMap(self._preset, gfr, self._reference)
+            sex = Sex(getattr(owner, "sex", Sex.MALE))
+            bound = ScaledRenalMap(
+                self._preset, functools.partial(gfr, sex=sex), self._reference
+            )
             bound._class_gfr = gfr
-            bound._class_sex = Sex(getattr(owner, "sex", Sex.MALE))
+            bound._class_sex = sex
             self._bound[owner] = bound
         return bound
 
@@ -369,9 +374,15 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
 
     The healthy GFR, the renal function of a clearance, the range of the renal
     functions and the renal classes are those of the build of the sex of the
-    experiment (`sex`, see `PKPDSimulationExperiment`); the methods take another
-    sex with `sex`, e.g. for the group of women of a study of men, whose renal
-    classes are `renal_map_of(Sex.FEMALE)`.
+    subjects: the sex of the experiment (`sex`, see
+    `PKPDSimulationExperiment`), or of a simulation by its key, `simulation=`
+    (`sex_of`, the sex of `simulation_sexes`), e.g.
+    `renal_function(60.0, simulation="po_women")` and
+    `renal_map_of(simulation="po_women")` for the group of women of a study of
+    men; `sex=` gives a sex directly. An experiment whose `simulation_sexes`
+    names another sex than `sex` refuses a call with neither, since the sex of
+    the subjects is not the sex of the experiment for every simulation (the
+    attribute `renal_map` stays the map of `sex`).
 
     The initialization refuses an experiment which simulates an individual
     outside the validity of the kidney outflow (`kidney_outflow`): the
@@ -598,19 +609,58 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
                         )
 
     @classmethod
-    def _build(cls, sex: Sex | None) -> Path:
-        """Get the build of a sex of the model object, of `sex` of the class by default.
+    def subjects_sex(cls, sex: Sex | None = None, simulation: str | None = None) -> Sex:
+        """Get the sex of the subjects of a call of the renal functions.
+
+        Args:
+            sex: the sex, `None` for the sex of `simulation`.
+            simulation: the key of the simulation whose subjects are meant
+                (`sex_of`), `None` for the sex of the experiment (`sex`).
+
+        Returns:
+            `sex`, else the sex of the simulation, else the sex of the experiment.
+
+        Raises:
+            ValueError: for both `sex` and `simulation`, and for neither in an
+                experiment whose `simulation_sexes` names another sex than
+                `sex` (its subjects have no one sex).
+        """
+        if sex is not None and simulation is not None:
+            raise ValueError(
+                f"{cls.__name__}: give the sex of the subjects (`sex`) or the key "
+                "of their simulation (`simulation`), not both."
+            )
+        if simulation is not None:
+            return cls.sex_of(simulation)
+        if sex is not None:
+            return Sex(sex)
+        own = Sex(cls.sex)
+        others = sorted(
+            {str(Sex(s)) for s in cls.simulation_sexes.values()} - {str(own)}
+        )
+        if others:
+            raise ValueError(
+                f"{cls.__name__} simulates subjects of another sex than its sex "
+                f"'{own}' ({', '.join(others)}, `simulation_sexes`): give the key of "
+                "the simulation (`simulation=`) or the sex (`sex=`)."
+            )
+        return own
+
+    @classmethod
+    def _build(cls, sex: Sex | None, simulation: str | None = None) -> Path:
+        """Get the build of the sex of the subjects of a call (`subjects_sex`).
 
         Raises:
             TypeError: if the class has no model object (`pkpd_model`).
-            ValueError: if the model object has no build of the sex.
+            ValueError: if the model object has no build of the sex, or the sex
+                is not given in an experiment of both sexes.
         """
         if not hasattr(cls, "pkpd_model"):
             raise TypeError(
                 f"{cls.__name__} has no model object: set `pkpd_model` in the "
                 "base of the experiments of the model."
             )
-        return cls.pkpd_model.model_path_of(cls.sex if sex is None else sex)
+        return cls.pkpd_model.model_path_of(cls.subjects_sex(sex, simulation))
 
     @classmethod
     def healthy_gfr(
@@ -621,11 +671,12 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
         hf_severity: float = 0.0,
         cp_severity: float = 0.0,
         sex: Sex | None = None,
+        simulation: str | None = None,
     ) -> Quantity:
         """Get the healthy glomerular filtration rate of an individual (ml/min).
 
-        `healthy_gfr` of the module for the build of the sex of the model
-        object, cached for all experiments.
+        `healthy_gfr` of the module for the build of the sex of the subjects
+        (`subjects_sex`), cached for all experiments.
 
         Args:
             bw: the body weight of the individual [kg], `None` for that of the
@@ -634,18 +685,20 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
                 model.
             hf_severity: the severity of heart failure `HF_severity` (0 to 4).
             cp_severity: the severity of cirrhosis `CP_severity` (0 to 3).
-            sex: the sex of the individual, `None` for the sex of the
-                experiment (`sex`).
+            sex: the sex of the individual, `None` for the sex of `simulation`.
+            simulation: the key of the simulation of the individual, `None`
+                for the sex of the experiment (`sex`).
 
         Returns:
             The GFR at renal function 1 in ml/min, a quantity.
 
         Raises:
             TypeError: if the class has no model object (`pkpd_model`).
-            ValueError: if the model object has no build of the sex.
+            ValueError: if the model object has no build of the sex, or the sex
+                is not given in an experiment of both sexes (`subjects_sex`).
         """
         return healthy_gfr(
-            cls._build(sex),
+            cls._build(sex, simulation),
             bw=bw,
             height=height,
             hf_severity=hf_severity,
@@ -662,6 +715,7 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
         hf_severity: float = 0.0,
         cp_severity: float = 0.0,
         sex: Sex | None = None,
+        simulation: str | None = None,
     ) -> Quantity:
         """Get the renal function of a measured clearance.
 
@@ -683,8 +737,11 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
                 model.
             hf_severity: the severity of heart failure of the simulation.
             cp_severity: the severity of cirrhosis of the simulation.
-            sex: the sex of the subjects, `None` for the sex of the experiment
-                (`sex`); the GFR of a woman is the GFR of the female build.
+            sex: the sex of the subjects, `None` for the sex of `simulation`;
+                the GFR of a woman is the GFR of the female build.
+            simulation: the key of the simulation of the subjects, whose sex
+                (`sex_of`) gives the build, `None` for the sex of the
+                experiment (`sex`).
 
         Returns:
             The renal function `f_renal_function`.
@@ -693,8 +750,10 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
             ValueError: for a renal function outside of the validity of the
                 kidney outflow (the message names the GFR and the plasma flow
                 of the kidney) or of the `renal_function_range` of the model,
-                or if the model object has no build of the sex.
+                if the model object has no build of the sex, or if the sex is
+                not given in an experiment of both sexes (`subjects_sex`).
         """
+        sex = cls.subjects_sex(sex, simulation)
         healthy = cls.healthy_gfr(
             bw=bw,
             height=height,
@@ -730,6 +789,7 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
         hf_severity: float = 0.0,
         cp_severity: float = 0.0,
         sex: Sex | None = None,
+        simulation: str | None = None,
     ) -> tuple[float, float]:
         """Get the range of the renal functions of an individual which the model supports.
 
@@ -752,18 +812,20 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
                 model.
             hf_severity: the severity of heart failure of the individual.
             cp_severity: the severity of cirrhosis of the individual.
-            sex: the sex of the individual, `None` for the sex of the
-                experiment (`sex`).
+            sex: the sex of the individual, `None` for the sex of `simulation`.
+            simulation: the key of the simulation of the individual, `None`
+                for the sex of the experiment (`sex`).
 
         Returns:
             The lowest and the highest renal function.
 
         Raises:
             TypeError: if the class has no model object (`pkpd_model`).
-            ValueError: if the model object has no build of the sex.
+            ValueError: if the model object has no build of the sex, or the sex
+                is not given in an experiment of both sexes (`subjects_sex`).
         """
         changes = covariate_changes(bw, height, hf_severity, cp_severity, 1.0)
-        outflows = kidney_outflow(cls._build(sex), changes)
+        outflows = kidney_outflow(cls._build(sex, simulation), changes)
         high = min(
             (o.plasma_flow / o.filtered for o in outflows if o.filtered > 0),
             default=math.inf,
@@ -774,17 +836,22 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
         return low, min(own, high)
 
     @classmethod
-    def renal_map_of(cls, sex: Sex) -> Mapping[str, float]:
-        """Get the renal classes of the subjects of a sex.
+    def renal_map_of(
+        cls, sex: Sex | None = None, *, simulation: str | None = None
+    ) -> Mapping[str, float]:
+        """Get the renal classes of the subjects of a sex or of a simulation.
 
         `renal_map` is of the sex of the experiment; the classes of the other
-        sex, e.g. of the group of women of a study of men, are those of the
-        same preset at the healthy GFR of the build of that sex
-        (`ScaledRenalMap.of_sex`). A map which is no `ScaledRenalMap` is not
-        relative to a healthy GFR and is the map of every sex.
+        sex, e.g. of the group of women of a study of men
+        (`renal_map_of(simulation="po_women")`), are those of the same preset
+        at the healthy GFR of the build of that sex (`ScaledRenalMap.of_sex`).
+        A map which is no `ScaledRenalMap` is not relative to a healthy GFR and
+        is the map of every sex.
 
         Args:
-            sex: the sex.
+            sex: the sex, `None` for the sex of `simulation`.
+            simulation: the key of the simulation of the subjects (`sex_of`),
+                `None` for the sex of the experiment (`sex`).
 
         Returns:
             The renal function of every class.
@@ -792,9 +859,12 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
         Raises:
             TypeError: for a `ScaledRenalMap` with its own GFR (of one build)
                 and another sex than the sex of the experiment.
+            ValueError: if the sex is not given in an experiment of both sexes
+                (`subjects_sex`).
         """
+        sex = cls.subjects_sex(sex, simulation)
         renal_map = cls.renal_map
-        if Sex(sex) == Sex(cls.sex) or not isinstance(renal_map, ScaledRenalMap):
+        if sex == Sex(cls.sex) or not isinstance(renal_map, ScaledRenalMap):
             return renal_map
         return renal_map.of_sex(sex)
 

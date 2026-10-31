@@ -114,11 +114,12 @@ study module states. The experiments of a model without a female build are
 unchanged.
 
 The experiments of the PBPK library take the healthy GFR, the renal function of
-a measured clearance and the renal classes of the build of their sex, see
-[Impairment](pbpk/impairment.md#classes-in-experiments). These are class
-methods of the experiment, so in a study of both sexes they follow `sex` of the
-experiment, not `simulation_sexes`: the simulation of the group of the other sex
-passes its sex, else it gets the renal function on the GFR of the wrong build:
+a measured clearance and the renal classes of the build of the sex of their
+subjects, see [Impairment](pbpk/impairment.md#classes-in-experiments). These are
+class methods of the experiment, so in a study of both sexes the call names the
+simulation of its group (`simulation=`), whose sex `simulation_sexes` declares;
+a call with neither the simulation nor the sex is refused in such a study,
+since its subjects have no one sex:
 
 ```python
 # not executed
@@ -126,11 +127,13 @@ class Jones2005(HctzSimulationExperiment):
     simulation_sexes: ClassVar[Mapping[str, Sex]] = {"po_women": Sex.FEMALE}
 
     def simulations(self) -> dict[str, Simulation]:
-        men = self.renal_function(45.0)  # the male build, `sex`
-        women = self.renal_function(38.0, sex=Sex.FEMALE)
-        classes = self.renal_map_of(Sex.FEMALE)  # the renal classes of women
+        men = self.renal_function(45.0, simulation="po_men")  # the male build
+        women = self.renal_function(38.0, simulation="po_women")  # the female build
+        classes = self.renal_map_of(simulation="po_women")  # the classes of women
         ...
 ```
+
+The attribute `renal_map` stays the map of `sex` of the experiment.
 
 ## Keys
 

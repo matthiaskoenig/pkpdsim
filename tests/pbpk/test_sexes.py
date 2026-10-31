@@ -333,20 +333,84 @@ def test_the_definition_of_a_build_of_another_sex() -> None:
     assert female.substances == named.substances
 
 
-def test_the_renal_function_of_a_mixed_study_follows_the_sex_of_the_experiment(
+def test_the_renal_functions_of_a_mixed_study_follow_the_sex_of_the_simulation(
     model: PKPDModel,
 ) -> None:
-    """The group of women of a study of men passes its sex, else the male GFR."""
+    """The group of women of a study of men gets the female GFR by its key.
+
+    The sex of a simulation is declared (`simulation_sexes`), so the renal
+    function of a group is resolved by the key of its simulation; a call with
+    neither the key nor the sex would be of no one sex and is refused.
+    """
     groups = _subclass(_base(model), "Groups", simulation_sexes={"women": Sex.FEMALE})
     male = _ml(healthy_gfr(model.model_path))
     female = _ml(healthy_gfr(model.model_path_of(Sex.FEMALE)))
-    women = float(groups.renal_function(60.0, sex=Sex.FEMALE).m_as("dimensionless"))
-    men = float(groups.renal_function(60.0).m_as("dimensionless"))
+    women = float(groups.renal_function(60.0, simulation="women").m_as("dimensionless"))
+    men = float(groups.renal_function(60.0, simulation="men").m_as("dimensionless"))
     assert women == pytest.approx(60.0 / female, rel=1e-12)
     assert men == pytest.approx(60.0 / male, rel=1e-12)
-    assert _ml(groups.healthy_gfr(sex=Sex.FEMALE)) == female
+    assert women == float(
+        groups.renal_function(60.0, sex=Sex.FEMALE).m_as("dimensionless")
+    )
+    assert _ml(groups.healthy_gfr(simulation="women")) == female
+    assert _ml(groups.healthy_gfr(simulation="men")) == male
+    assert groups.renal_function_limits(
+        simulation="women"
+    ) == groups.renal_function_limits(sex=Sex.FEMALE)
+    assert groups.renal_function_limits(
+        simulation="men"
+    ) == groups.renal_function_limits(sex=Sex.MALE)
     for key, preset in impairment.RENAL_FUNCTION_GFR.items():
-        assert groups.renal_map_of(Sex.FEMALE)[key] * female == pytest.approx(
+        assert groups.renal_map_of(simulation="women")[key] * female == pytest.approx(
+            101.0 * preset
+        )
+        assert groups.renal_map_of(simulation="men")[key] * male == pytest.approx(
             101.0 * preset
         )
         assert groups.renal_map[key] * male == pytest.approx(101.0 * preset)
+
+    # the subjects of an experiment of both sexes have no one sex
+    calls = (
+        lambda: groups.renal_function(60.0),
+        lambda: groups.healthy_gfr(),
+        lambda: groups.renal_function_limits(),
+        lambda: groups.renal_map_of(),
+    )
+    for call in calls:
+        with pytest.raises(ValueError, match="simulation="):
+            call()
+    with pytest.raises(ValueError, match="not both"):
+        groups.renal_function(60.0, sex=Sex.FEMALE, simulation="women")
+
+
+def test_the_group_of_women_of_a_study_of_men_is_simulated_at_its_clearance(
+    model: PKPDModel,
+) -> None:
+    """A two-sex study sets the renal function of each group by its key.
+
+    Each group has a measured clearance of 60 ml/min; the simulated GFR of
+    each group is that clearance, the women on the female build.
+    """
+
+    def simulations(self: PBPKSimulationExperiment) -> dict[str, Simulation]:
+        return {
+            key: Simulation(
+                end=10,
+                preinit_changes={
+                    ids.F_RENAL_FUNCTION: self.renal_function(60.0, simulation=key)
+                },
+            )
+            for key in ("men", "women")
+        }
+
+    groups = _run(
+        _subclass(
+            _base(model),
+            "Groups",
+            simulation_sexes={"women": Sex.FEMALE},
+            simulations=simulations,
+        )
+    )
+    for task in ("task_men", "task_women"):
+        assert _value(groups, task, ids.GFR) * 1000 == pytest.approx(60.0, rel=1e-9)
+    assert _value(groups, "task_women", "BW") == pytest.approx(60.0)

@@ -466,8 +466,13 @@ class PKPDSimulationExperiment(SimulationExperiment):
             )
         return sid
 
-    def sex_of(self, simulation: str) -> Sex:
+    @classmethod
+    def sex_of(cls, simulation: str) -> Sex:
         """Get the sex of the subjects of a simulation: `simulation_sexes`, else `sex`.
+
+        A class method, since the sexes are declared: the class methods of an
+        experiment (the renal function of a group, `pkpdsim.pbpk`) resolve the
+        sex of a simulation by its key as well.
 
         Args:
             simulation: the key of the simulation.
@@ -478,7 +483,7 @@ class PKPDSimulationExperiment(SimulationExperiment):
         Raises:
             ValueError: for a sex which is no `Sex`.
         """
-        return Sex(self.simulation_sexes.get(simulation, self.sex))
+        return Sex(cls.simulation_sexes.get(simulation, cls.sex))
 
     def model_id(self, sex: Sex) -> str:
         """Get the key of the build of a sex among the models of the experiment.
