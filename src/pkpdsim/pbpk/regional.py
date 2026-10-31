@@ -28,7 +28,8 @@ derived on the fit are those of the model. The model must have the factors
 substance.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Generator, Mapping, Sequence
+from contextlib import contextmanager
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -95,45 +96,48 @@ def _check(r: "roadrunner.RoadRunner", names: Sequence[str]) -> None:
         )
 
 
-def release_auc_ratios(
+@contextmanager
+def _condition(
+    r: "roadrunner.RoadRunner", changes: Mapping[str, float] | None
+) -> Generator[None]:
+    """Simulate in the condition of the study, then take it back.
+
+    The changes are initial values (`init(<id>)`), so a reset keeps them and
+    the initial assignments which read them follow (the volumes of a body
+    weight, `T_st_eff` of the fed state); at the end the initial values of
+    before are set again and every value is reset (`reset` of all values).
+    Setting an initial value compiles the model again (seconds per change and
+    call).
+    """
+    import roadrunner
+
+    changes = dict(changes or {})
+    _check(r, list(changes))
+    before = {sid: r.getValue(f"init({sid})") for sid in changes}
+    try:
+        for sid, value in changes.items():
+            r.setValue(f"init({sid})", float(value))
+        r.reset(roadrunner.SelectionRecord.ALL)
+        yield
+    finally:
+        for sid, value in before.items():
+            r.setValue(f"init({sid})", value)
+        r.reset(roadrunner.SelectionRecord.ALL)
+
+
+def _ratios(
     r: "roadrunner.RoadRunner",
     substance: str,
     segments: Sequence[str],
     dose: float,
-    *,
-    factors: Mapping[str, float] | None = None,
-    end: float = 14 * DAY,
-    points: int = 20161,
-    observable: str | None = None,
+    factors: Mapping[str, float] | None,
+    end: float,
+    points: int,
+    observable: str | None,
 ) -> dict[str, float]:
-    """Get the AUC of a solution released in each segment relative to the oral solution.
+    """The ratios of `release_auc_ratios` in the condition which `r` is in."""
+    import roadrunner
 
-    Every simulation starts from the origin of the model (`resetToOrigin`)
-    with the factors set; the oral solution is the dose state `SOLDOSE_<s>`,
-    a release the dose dissolved in the lumen of the segment
-    (`dose/Mr/Vlumen`). The AUC is the trapezoid of `observable` over
-    `points` equidistant times from 0 to `end`.
-
-    Args:
-        r: the model, a roadrunner of the flat model with the tolerances of
-            the derivation (e.g. absolute 1e-14, relative 1e-10).
-        substance: the substance id.
-        segments: the release segments (`ile2`, `asc`).
-        dose: the dose [mg].
-        factors: the factors of the profile by key (`regional_key`), those
-            of the model if `None`.
-        end: the end of the simulations [min], long enough for the AUC.
-        points: the number of time points.
-        observable: the id whose AUC is compared, the arm vein `Carm_<s>` by
-            default.
-
-    Returns:
-        The ratio by release segment.
-
-    Raises:
-        ValueError: for a segment which does not absorb, or a model without
-            the oral solution, a lumen or a factor.
-    """
     observable = observable or ids.arm(substance)
     for seg in segments:
         regional_key(seg)
@@ -155,7 +159,7 @@ def release_auc_ratios(
     )
 
     def start() -> None:
-        r.resetToOrigin()
+        r.reset(roadrunner.SelectionRecord.ALL)
         for key, x in (factors or {}).items():
             r[_factor_id(substance, key)] = x
 
@@ -174,12 +178,62 @@ def release_auc_ratios(
     return ratios
 
 
+def release_auc_ratios(
+    r: "roadrunner.RoadRunner",
+    substance: str,
+    segments: Sequence[str],
+    dose: float,
+    *,
+    factors: Mapping[str, float] | None = None,
+    changes: Mapping[str, float] | None = None,
+    end: float = 14 * DAY,
+    points: int = 20161,
+    observable: str | None = None,
+) -> dict[str, float]:
+    """Get the AUC of a solution released in each segment relative to the oral solution.
+
+    Every simulation starts from the initial values of the model in the
+    condition of the study (`changes`, set as initial values) with the
+    factors set; the oral solution is the dose state `SOLDOSE_<s>`, a release
+    the dose dissolved in the lumen of the segment (`dose/Mr/Vlumen`). The
+    AUC is the trapezoid of `observable` over `points` equidistant times from
+    0 to `end`. Afterwards the condition is taken back and every value of `r`
+    is reset to its initial value (`reset` of all values): a value set on
+    `r` before the call is kept only if it was set as an initial value.
+
+    Args:
+        r: the model, a roadrunner of the flat model with the tolerances of
+            the derivation (e.g. absolute 1e-14, relative 1e-10).
+        substance: the substance id.
+        segments: the release segments (`ile2`, `asc`).
+        dose: the dose [mg].
+        factors: the factors of the profile by key (`regional_key`), those
+            of the model if `None`.
+        changes: the condition of the study, initial values by id (`FED`,
+            `BW`, an activity); none if `None`.
+        end: the end of the simulations [min], long enough for the AUC.
+        points: the number of time points.
+        observable: the id whose AUC is compared, the arm vein `Carm_<s>` by
+            default.
+
+    Returns:
+        The ratio by release segment.
+
+    Raises:
+        ValueError: for a segment which does not absorb, or a model without
+            the oral solution, a lumen, a factor or a changed id.
+    """
+    with _condition(r, changes):
+        return _ratios(r, substance, segments, dose, factors, end, points, observable)
+
+
 def derive_regional_absorption(
     r: "roadrunner.RoadRunner",
     substance: str,
     targets: Mapping[str, float],
     dose: float,
     *,
+    changes: Mapping[str, float] | None = None,
     bounds: tuple[float, float] = (1e-4, 10.0),
     xtol: float = 1e-6,
     max_turns: int = 20,
@@ -194,7 +248,8 @@ def derive_regional_absorption(
     large intestine are refused), each the root of the ratio of its segment
     within `bounds` with the other factors fixed, in the order of `targets`
     and in turns, starting from the factors of the model, until no factor
-    moves by more than `xtol`.
+    moves by more than `xtol`. Afterwards `r` is reset as by
+    `release_auc_ratios`: the factors of the model, not the derived ones.
 
     Args:
         r: the model, see `release_auc_ratios`.
@@ -202,6 +257,7 @@ def derive_regional_absorption(
         targets: the reported AUC of the release relative to the oral
             solution by release segment (`{"ile2": 0.40, "asc": 0.16}`).
         dose: the dose of the study [mg].
+        changes: the condition of the study, see `release_auc_ratios`.
         bounds: the bracket of every factor.
         xtol: the tolerance of a factor.
         max_turns: the most turns over the factors.
@@ -228,38 +284,31 @@ def derive_regional_absorption(
             "one release segment per factor of the profile."
         )
     _check(r, [_factor_id(substance, k) for k in keys.values()])
-    r.resetToOrigin()
-    factors = {k: float(r[_factor_id(substance, k)]) for k in keys.values()}
+    with _condition(r, changes):
+        factors = {k: float(r[_factor_id(substance, k)]) for k in keys.values()}
 
-    def residual(x: float, seg: str) -> float:
-        trial = {**factors, keys[seg]: x}
-        ratio = release_auc_ratios(
-            r,
-            substance,
-            [seg],
-            dose,
-            factors=trial,
-            end=end,
-            points=points,
-            observable=observable,
-        )[seg]
-        return ratio - targets[seg]
+        def residual(x: float, seg: str) -> float:
+            trial = {**factors, keys[seg]: x}
+            ratio = _ratios(r, substance, [seg], dose, trial, end, points, observable)[
+                seg
+            ]
+            return ratio - targets[seg]
 
-    for _ in range(max_turns):
-        moved = 0.0
-        for seg in targets:
-            low, high = residual(bounds[0], seg), residual(bounds[1], seg)
-            if low * high > 0:
-                raise ValueError(
-                    f"No factor of '{keys[seg]}' within {bounds} gives the ratio "
-                    f"{targets[seg]} of '{seg}' (the ratios at the bounds "
-                    f"{low + targets[seg]:.4g} and {high + targets[seg]:.4g})."
-                )
-            x = float(brentq(residual, *bounds, args=(seg,), xtol=xtol))
-            moved = max(moved, abs(x - factors[keys[seg]]))
-            factors[keys[seg]] = x
-        if moved <= xtol:
-            return factors
+        for _ in range(max_turns):
+            moved = 0.0
+            for seg in targets:
+                low, high = residual(bounds[0], seg), residual(bounds[1], seg)
+                if low * high > 0:
+                    raise ValueError(
+                        f"No factor of '{keys[seg]}' within {bounds} gives the "
+                        f"ratio {targets[seg]} of '{seg}' (the ratios at the bounds "
+                        f"{low + targets[seg]:.4g} and {high + targets[seg]:.4g})."
+                    )
+                x = float(brentq(residual, *bounds, args=(seg,), xtol=xtol))
+                moved = max(moved, abs(x - factors[keys[seg]]))
+                factors[keys[seg]] = x
+            if moved <= xtol:
+                return factors
     raise RuntimeError(
         f"The factors {factors} of '{substance}' did not converge in {max_turns} turns."
     )

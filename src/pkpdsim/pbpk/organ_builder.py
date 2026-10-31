@@ -843,9 +843,15 @@ class OrganBuilder:
             top = {**top, **{s: ("parameter", None) for s in symbols if s not in top}}
         problems += formula_problems(where, p.formula.expression, top)
         clash: list[str] = []
+        # the parameters of the reactions (of a custom reaction) are elements
+        # of the organ as well: an input of their id would be a second element
+        pars = {str(q.sid) for r in self.reactions for q in (r.pars or [])}
         for symbol in sorted(formula_ids(p.formula.expression)):
             kind = self.ctx.top.get(symbol, ("", None))[0]
             if kind not in ("parameter", "compartment"):
+                continue
+            if symbol in pars:
+                clash.append(symbol)
                 continue
             if self.replacements.get(symbol) == symbol:
                 continue

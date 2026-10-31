@@ -78,6 +78,9 @@ def test_the_derived_factors_give_the_ratios(tmp_path: Path) -> None:
         r, S, ["ile2", "asc"], DOSE, factors=derived, end=END, points=POINTS
     )
     assert again == pytest.approx(ratios, rel=1e-6)
+    # the model keeps its own factors, not the derived ones
+    assert r["f_ka_ile2_drg"] == 0.5
+    assert r["f_ka_colon_drg"] == 0.3
 
 
 def test_what_the_derivation_cannot_do_is_refused(tmp_path: Path) -> None:
@@ -94,3 +97,34 @@ def test_what_the_derivation_cannot_do_is_refused(tmp_path: Path) -> None:
     tablet = _model(tmp_path / "tablet", routes=[Route.oral(S)])
     with pytest.raises(ValueError, match=r"has no \['SOLDOSE_drg'\]"):
         release_auc_ratios(tablet, S, ["ile2"], DOSE, end=END, points=POINTS)
+
+
+def test_the_condition_of_the_study_is_taken_back(tmp_path: Path) -> None:
+    """The ratios in a condition (`changes`, initial values); afterwards `r` is reset.
+
+    Fed and at 100 kg (the initial assignments follow: `T_st_eff`, the
+    volumes) the ratio differs from the fasted reference; afterwards the
+    initial values are those of before and every value is reset, so the
+    fasted ratio comes again.
+    """
+    r = _model(tmp_path)
+    fasted = release_auc_ratios(r, S, ["ile2"], DOSE, end=END, points=POINTS)
+    fed = release_auc_ratios(
+        r,
+        S,
+        ["ile2"],
+        DOSE,
+        changes={"FED": 1.0, "BW": 100.0},
+        end=END,
+        points=POINTS,
+    )
+    assert fed["ile2"] != pytest.approx(fasted["ile2"], rel=1e-6)
+    assert r["FED"] == 0.0
+    assert r["BW"] == pytest.approx(73.0)
+    assert r["T_st_eff"] == pytest.approx(22.79)
+    assert r["SOLDOSE_drg"] == 0.0
+    assert r["f_ka_ile2_drg"] == 0.5
+    again = release_auc_ratios(r, S, ["ile2"], DOSE, end=END, points=POINTS)
+    assert again == pytest.approx(fasted, rel=1e-12)
+    with pytest.raises(ValueError, match=r"has no \['X_nowhere'\]"):
+        release_auc_ratios(r, S, ["ile2"], DOSE, changes={"X_nowhere": 1.0})

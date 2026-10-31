@@ -135,13 +135,7 @@ class LumenBuilder(StandardBuilder):
         """
         t = ids.transit_time(seg.token)
         if seg.token == "st":
-            fed = self._input(ids.FED, U.dimensionless, "fed state (0 fasted, 1 fed)")
-            factor = self._input(
-                GASTRIC_EMPTYING,
-                U.dimensionless,
-                "impairment factor gastric emptying time",
-            )
-            return f"(({t} + {fed} * ({ids.T_STOMACH_FED} - {t})) * {factor})"
+            return f"({self._stomach_time()})"
         if seg.token is None or seg.token in SMALL:
             factor = self._input(
                 SI_TRANSIT,
@@ -150,6 +144,23 @@ class LumenBuilder(StandardBuilder):
             )
             return f"({t} * {factor})"
         return t
+
+    def _stomach_time(self) -> str:
+        """The transit time of the stomach of the condition, unbracketed.
+
+        `(T_st + FED*(T_st_fed - T_st))*fimp_t_stomach`: the prandial state
+        and the factor of the gastric emptying of chronic kidney disease
+        (inputs of the body); the one formula which the transit of the stomach
+        (`_transit`) and its output `T_st_eff` (`_stomach_transit`) read.
+        """
+        t = ids.transit_time("st")
+        fed = self._input(ids.FED, U.dimensionless, "fed state (0 fasted, 1 fed)")
+        factor = self._input(
+            GASTRIC_EMPTYING,
+            U.dimensionless,
+            "impairment factor gastric emptying time",
+        )
+        return f"({t} + {fed} * ({ids.T_STOMACH_FED} - {t})) * {factor}"
 
     def _stomach_transit(self) -> None:
         """The transit time of the stomach as a constant and an output, `T_st_eff`.
@@ -161,7 +172,10 @@ class LumenBuilder(StandardBuilder):
         value of the data. The transit of the stomach keeps its own formula.
         """
         seg = self.segments[0]
-        formula = self._transit(seg)[1:-1]
+        if seg.token != "st":
+            msg = f"The first segment of the segmented intestine is '{seg.token}', not the stomach."
+            raise ValueError(msg)
+        formula = self._stomach_time()
         sid = ids.T_STOMACH
         self.parameters[sid] = self._annotate(
             Parameter(

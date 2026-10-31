@@ -52,8 +52,9 @@ dependencies = [
     # imported directly, also the dependencies of the packages above
     "numpy>=2.5.3",
     "pandas>=3.0.6",
-    # the confidence intervals of the fit records (`pkpdsim.uncertainty`) and the
-    # interpolation of the steps of the integrator (`pkpdsim-verify compare`)
+    # the confidence intervals of the fit records (`pkpdsim.uncertainty`), the
+    # interpolation of the steps of the integrator (`pkpdsim-verify compare`) and the
+    # root search of a regional absorption profile (`pkpdsim.pbpk.regional`)
     "scipy>=1.18.1",
     # the templates of the files of a release repository (`pkpdsim.release`) and the
     # LaTeX table of the parameters of a sensitivity analysis (`DataFrame.to_latex`)

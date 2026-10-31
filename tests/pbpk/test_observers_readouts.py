@@ -620,16 +620,16 @@ ABSORBED = (ids.absorption_rate(S), ids.absorbed_amount(S), ids.absorbed_fractio
 
 
 @pytest.mark.parametrize(
-    ("intestine", "route"),
+    ("intestine", "route", "above"),
     [
-        (SegmentedIntestine(fabs=0.8), Route.oral_solution(S)),
-        (SegmentedIntestine(fabs=0.8), Route.oral(S)),
-        (SingleLumen(fabs=0.8), Route.oral_solution(S)),
+        (SegmentedIntestine(fabs=0.8), Route.oral_solution(S), 1.0),
+        (SegmentedIntestine(fabs=0.8), Route.oral(S), 1.0),
+        (SingleLumen(fabs=0.8), Route.oral_solution(S), 0.5),
     ],
     ids=["segmented solution", "segmented tablet", "single_lumen solution"],
 )
 def test_the_absorbed_amount_and_the_gross_absorbed_fraction(
-    tmp_path: Path, intestine: OrganComponent, route: Route
+    tmp_path: Path, intestine: OrganComponent, route: Route, above: float
 ) -> None:
     """`Aabs_<s>` integrates `Rabs_<s>`; `Fa_<s>` is it over the oral dose given (R37).
 
@@ -662,8 +662,9 @@ def test_the_absorbed_amount_and_the_gross_absorbed_fraction(
     integral = np.trapezoid(rate, time)
     assert second[ABSORBED[1]][-1] == pytest.approx(integral, rel=1e-4)
     # the efflux of the wall returns drug into the lumen, which is absorbed
-    # again: the gross fraction counts it every time (above 1 for the segments)
-    assert second[ABSORBED[2]][-1] > 0.5
+    # again: the gross fraction counts it every time, above 1 for the segments
+    # (the efflux of every mucosa segment), above 0.5 for the single lumen
+    assert second[ABSORBED[2]][-1] > above
     assert np.all(np.diff(first[ABSORBED[1]]) >= -1e-15)
 
 

@@ -347,6 +347,25 @@ def test_a_custom_formula_of_no_constant_of_the_organ_is_refused(
         build(_definition([_deep(k_deep, _KP_DEEP)]), tmp_path)
 
 
+def test_a_custom_formula_of_a_shadowed_top_id_is_refused(tmp_path: Path) -> None:
+    """A custom parameter under a top id, read by a custom formula: a named refusal.
+
+    The formula would read the top `BW` through an input of that id, which is
+    a second element `BW` of the organ next to the custom parameter (an SBML
+    error before); the build names the clash instead.
+    """
+    shadow = ModelParameter("BW", 70.0, U.kg)
+    k_deep = ModelParameter(
+        "k_deep", Formula("2e-3 per_min * BW / 70 kg", U.per_min), U.per_min
+    )
+    with pytest.raises(
+        ValueError,
+        match=r"reads ids of the top model which are local elements of the organ: "
+        r"\['BW'\]",
+    ):
+        build(_definition([_deep(shadow, k_deep, _KP_DEEP)]), tmp_path)
+
+
 def test_custom_formulas_which_read_each_other_are_refused(tmp_path: Path) -> None:
     """Two custom parameters whose formulas read each other have no initial value."""
     a = ModelParameter("k_a", Formula("1 dimensionless * k_deep", U.per_min), U.per_min)

@@ -61,19 +61,44 @@ def parameters(path: Path) -> dict[str, tuple[float, str]]:
     }
 
 
+FEMALE_INTERSTITIUM = 1.25
+"""The factor of the female interstitial fractions of `distinct_shares`."""
+
+
+@pytest.fixture
+def distinct_shares(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Give the female reference individual 1.25 times the interstitial fractions of the male.
+
+    The shares of the data differ between the sexes only by the rounding of
+    the tabulated `f_int` (`Fint` of Schmitt 2008 is one value per tissue), so
+    a test of the sex of the build reads fractions which differ by a factor:
+    it tests which sex is read, not the rounding.
+    """
+    original = distribution.reference_fractions
+
+    def fractions(organ: Organ) -> dict[Sex, tuple[float, float]]:
+        f_vas, f_int = original(organ)[Sex.MALE]
+        return {
+            Sex.MALE: (f_vas, f_int),
+            Sex.FEMALE: (f_vas, FEMALE_INTERSTITIUM * f_int),
+        }
+
+    monkeypatch.setattr(distribution, "reference_fractions", fractions)
+
+
+@pytest.mark.usefixtures("distinct_shares")
 def test_the_share_is_that_of_the_sex_of_the_build() -> None:
+    """The share reads the fractions of the sex it is given."""
     k_int = distribution.k_int_pls_value(FU)
-    differs = False
     for organ in Organ:
-        fractions = reference_fractions(organ)
+        fractions = distribution.reference_fractions(organ)
         for sex, (f_vas, f_int) in fractions.items():
             share = interstitial_share(organ, FU, sex)
             assert share == f_int * k_int / (1.0 - f_vas)
             assert 0 < share < 1
-        differs |= interstitial_share(organ, FU, Sex.FEMALE) != interstitial_share(
-            organ, FU, Sex.MALE
+        assert interstitial_share(organ, FU, Sex.FEMALE) == pytest.approx(
+            FEMALE_INTERSTITIUM * interstitial_share(organ, FU, Sex.MALE), rel=1e-14
         )
-    assert differs
 
 
 def test_the_sex_of_the_share_has_no_default() -> None:
@@ -106,6 +131,7 @@ def test_the_shares_of_the_sexes_differ_by_the_rounding_of_f_int(organ: Organ) -
         )
 
 
+@pytest.mark.usefixtures("distinct_shares")
 def test_the_female_build_has_the_female_share(tmp_path: Path) -> None:
     """Each build gives every organ the share of its own sex (D18)."""
     kp = Kp(interstitial=1.0, ftissue=1.0)
@@ -118,7 +144,10 @@ def test_the_female_build_has_the_female_share(tmp_path: Path) -> None:
         }
         for organ, value in values[sex].items():
             assert value == pytest.approx(interstitial_share(organ, FU, sex), rel=1e-15)
-    assert values[Sex.MALE] != values[Sex.FEMALE]
+    for organ, value in values[Sex.FEMALE].items():
+        assert value == pytest.approx(
+            FEMALE_INTERSTITIUM * values[Sex.MALE][organ], rel=1e-12
+        )
 
 
 def test_a_value_with_the_shares_is_refused() -> None:
@@ -228,6 +257,7 @@ def test_the_full_form_at_the_share_is_refused() -> None:
     )
 
 
+@pytest.mark.usefixtures("distinct_shares")
 def test_the_full_form_is_checked_for_the_sex_of_the_build() -> None:
     """A Kp between the shares of both sexes is valid for the sex with the smaller one."""
     organ = max(
