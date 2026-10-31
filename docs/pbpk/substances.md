@@ -103,13 +103,23 @@ The full form (`Mode.PERMEABILITY`) derives the intracellular coefficient from t
 
 ### Slow tissue pool
 
-A substance whose terminal phase is the slow release from a deep compartment of the tissues (a marker of the extracellular volume in the hours after a dose, a contrast agent in the days after it) gets a slow pool in the merged tissue of some organs: `SlowPool(substance, organs, k, kp)` in `PBPKDefinition(slow_pools=[...])`, one per substance. Every organ of the pool has the species `Cslow_<s>` in its tissue compartment `Vti` and its exchange with the tissue `Cti_<s>`:
+A substance whose terminal phase is the slow release from a deep compartment of the tissues (a marker of the extracellular volume in the hours after a dose, a contrast agent in the days after it) gets a slow pool in the merged tissue of some organs: `SlowPool(substance, organs, k, kp, source=Part.TISSUE)` in `PBPKDefinition(slow_pools=[...])`, one per substance. Every organ of the pool has the species `Cslow_<s>` in its tissue compartment `Vti` and, by default, its exchange with the tissue `Cti_<s>`:
 
 ```equations
 J_slow_<s>: Cti_<s> -> Cslow_<s> = kslow_<s> * Vti * (Kpslow_<s> * Cti_<s> - Cslow_<s>)
 ```
 
-`kslow_<s>` is the exchange per litre of tissue (1/min), so the exchange of an organ follows the tissue volume of the individual, as the share of `ftissue` does; `Kpslow_<s>` is the concentration of the pool to that of the tissue at equilibrium, `Cslow = Kpslow*Cti`: the pool of an organ holds `Kpslow` times the amount of its tissue. Both are constants of the top model, one value for all organs of the pool, a number, a fitted `Value` or a `Formula`. The pool of an endogenous substance starts at its equilibrium, `Kpslow_<s>*Kp*baseline_<s>`, of a substance with a [generated steady state](#generated-steady-state) at `Kpslow_<s>` times the start of its tissue; `ids.species_of` counts the pools (`MU__Cslow_<s>`) and an observer reads one as `C<o>_slow_<s>` (`Cmu_slow_<s>`). The validation refuses an organ which is not a standard organ (a variant, an organ the intestine replaces) or in which the substance has no merged tissue (`Mode.PERFUSION`, `Mode.PERMEABILITY`, an organ it does not enter, a transport of it in the organ). Without slow pools the model has none of their elements.
+`kslow_<s>` is the exchange per litre of tissue (1/min), so the exchange of an organ follows the tissue volume of the individual, as the share of `ftissue` does; `Kpslow_<s>` is the concentration of the pool to that of the tissue at equilibrium, `Cslow = Kpslow*Cti`: the pool of an organ holds `Kpslow` times the amount of its tissue. Both are constants of the top model, one value for all organs of the pool, a number, a fitted `Value` or a `Formula`.
+
+`source=Part.PLASMA` (or `"plasma"`) feeds the pool from the plasma of the organ instead, in parallel with the merged tissue: a deep extracellular space which the substance reaches through the capillary wall, not through the fast interstitium (the form of the inulin model before the library, the muscle pool of Odeh 1993). The ids, the scaling with the tissue volume and the units are the same; the equilibrium is `Cslow = Kpslow*Cpl`, so `Kpslow_<s>` is the pool relative to the plasma and independent of the Kp of the tissue:
+
+```equations
+J_slow_<s>: Cpl_<s> -> Cslow_<s> = kslow_<s> * Vti * (Kpslow_<s> * Cpl_<s> - Cslow_<s>)
+```
+
+A pool fed from the tissue sees the plasma only through the tissue: its release is limited by the exchange of the tissue (`ftissue`) as well, and the tissue and the pool fill one after the other. A pool fed from the plasma fills while the tissue does, and its volume relative to the plasma, `Kpslow*Vti`, does not change with a fitted Kp of the tissue. The validation refuses any other source (`SOURCES`: the tissue and the plasma). The model figure names the source of every pool (`SLW`, `slow pool of <s>: tissue <-> pool` or `plasma <-> pool`).
+
+The pool of an endogenous substance starts at its equilibrium, `Kpslow_<s>*Kp*baseline_<s>` (fed from the plasma `Kpslow_<s>*baseline_<s>`), of a substance with a [generated steady state](#generated-steady-state) at `Kpslow_<s>` times the start of its source; `ids.species_of` counts the pools (`MU__Cslow_<s>`) and an observer reads one as `C<o>_slow_<s>` (`Cmu_slow_<s>`). The validation refuses an organ which is not a standard organ (a variant, an organ the intestine replaces) or in which the substance has no merged tissue (`Mode.PERFUSION`, `Mode.PERMEABILITY`, an organ it does not enter, a transport of it in the organ). Without slow pools the model has none of their elements.
 
 ```python
 from pkpdsim.pbpk import Excretion, Kp, Organ, SlowPool, Substance
@@ -122,6 +132,7 @@ marker = Substance(
     excretion=Excretion(urine=True),
 )
 pool = SlowPool("mrk", frozenset({Organ.MUSCLE, Organ.SKIN}), k=1e-3, kp=1.0)
+deep = SlowPool("mrk", frozenset({Organ.MUSCLE}), k=1e-2, kp=0.15, source="plasma")
 ```
 
 ## Excretion
@@ -287,13 +298,13 @@ A custom reaction declares its rate at the steady state (`CustomReaction.station
 
 The formulas of a declaration have the scope of the rate law, the organ: they read `Vti`, the parameters of the reaction (`f_slc6a8`, not `MU__f_slc6a8`) and constants of the top model. Every other `Formula` of a definition (a value, a parameter of the definition, a baseline, a start of `starts`) and a `Saturable` passed to `steady_state.kidney_plasma` read the ids of the top model only; an id of the wrong scope fails the build with the reaction named.
 
-Every organ starts at the steady state of the equations of the library at its inflow (the arterial pool, the venous pool for the lung, the mix of the hepatic artery and the portal vein past the shunt for the liver, the zone upstream in the zonated liver): with the declared processes its plasma obeys `(R + CLss)*C + S(C) = R*Cin + Rss` (`R` the flow of the plasma leaving the organ, of the kidney the plasma flow less the net filtrate), with the clearance `CLss_<s>` and the net source `Rss_<s>` of plasma and tissue (the tissue at its steady state) and the saturable rate `Vss_<s>*C/(Kss_<s> + C)`, constants of the organ; without a process an organ passes its inflow on (the kidney filters the arterial plasma and its outflow lacks the net filtrate at its plasma: they balance at the arterial plasma, with a threshold reabsorption as well). Every other part starts at the equilibrium with the plasma of its organ (of its zone), the flow-limited organ with its inflow, a slow pool at `Kpslow_<s>` times the start of its tissue, the tubule of the nephron kidney at the flow of the filtrate, `fu*Car/f_tub_<seg>`, the mucosa at `K_mu_<s>*Car`, the lumen empty; the portal vein at the mix of its organs, the venous pool at the inflow of the lung whose plasma is the arterial plasma, the arterial pool at the baseline. A substance with a baseline is *pinned* at it: its declared rates must balance at the baseline (the model derives the rate which closes the balance, e.g. a supply, with the formulas below). A substance without a baseline is *solved*: the library writes `baseline_<s>`, the arterial plasma at which the eliminations of the organs sum to the sources (`CLss_<s>`, `Rss_<s>` of the top model, from the constants of the organs, `CLss_<o>_<s>`, ...; with a saturable process of a systemic organ the root of a quadratic in its plasma, `Css_<o>_<s>`).
+Every organ starts at the steady state of the equations of the library at its inflow (the arterial pool, the venous pool for the lung, the mix of the hepatic artery and the portal vein past the shunt for the liver, the zone upstream in the zonated liver): with the declared processes its plasma obeys `(R + CLss)*C + S(C) = R*Cin + Rss` (`R` the flow of the plasma leaving the organ, of the kidney the plasma flow less the net filtrate), with the clearance `CLss_<s>` and the net source `Rss_<s>` of plasma and tissue (the tissue at its steady state) and the saturable rate `Vss_<s>*C/(Kss_<s> + C)`, constants of the organ; without a process an organ passes its inflow on (the kidney filters the arterial plasma and its outflow lacks the net filtrate at its plasma: they balance at the arterial plasma, with a threshold reabsorption as well). Every other part starts at the equilibrium with the plasma of its organ (of its zone), the flow-limited organ with its inflow, a slow pool at `Kpslow_<s>` times the start of its source (the tissue or the plasma), the tubule of the nephron kidney at the flow of the filtrate, `fu*Car/f_tub_<seg>`, the mucosa at `K_mu_<s>*Car`, the lumen empty; the portal vein at the mix of its organs, the venous pool at the inflow of the lung whose plasma is the arterial plasma, the arterial pool at the baseline. A substance with a baseline is *pinned* at it: its declared rates must balance at the baseline (the model derives the rate which closes the balance, e.g. a supply, with the formulas below). A substance without a baseline is *solved*: the library writes `baseline_<s>`, the arterial plasma at which the eliminations of the organs sum to the sources (`CLss_<s>`, `Rss_<s>` of the top model, from the constants of the organs, `CLss_<o>_<s>`, ...; with a saturable process of a systemic organ the root of a quadratic in its plasma, `Css_<o>_<s>`).
 
 ```text
 # the plasma of an organ with a declared process and its tissue
 Cpl_<s> = (R*Cin + Rss_<s>)/(R + CLss_<s>)
 Cti_<s> = Kp*(PS*fu*Cpl_<s> + r_ti)/(PS*fu + Kp*cl_ti)
-Cslow_<s> = Kpslow_<s> * Cti_<s>
+Cslow_<s> = Kpslow_<s> * Cti_<s>   # fed from the plasma: Kpslow_<s> * Cpl_<s>
 # a solved substance without a saturable process
 baseline_<s> = Rss_<s> / CLss_<s>
 ```

@@ -508,6 +508,14 @@ def test_a_slow_pool_starts_at_its_tissue(tmp_path: Path) -> None:
     assert r[f"[MU__Cti_{S}]"] > 0.8 * r[f"[MU__Cpl_{S}]"]
 
 
+def test_a_slow_pool_fed_from_the_plasma_starts_at_its_plasma(tmp_path: Path) -> None:
+    """A pool fed from the plasma starts at `Kpslow` times the start of the plasma."""
+    pool = SlowPool(S, frozenset({Organ.MUSCLE}), k=0.001, kp=3.0, source=Part.PLASMA)
+    r = _load(_definition(slow_pools=[pool]), tmp_path)
+    _assert_stationary(r)
+    assert r[f"[MU__Cslow_{S}]"] == pytest.approx(3.0 * r[f"[MU__Cpl_{S}]"], rel=1e-14)
+
+
 def test_parts_without_a_process_start_at_their_inflow(tmp_path: Path) -> None:
     """The full form and the flow-limited organ start at their inflow, a plasma-only substance.
 

@@ -165,7 +165,9 @@ class PBPKDefinition:
         slow_pools: the slow (deep) pools of the tissues (`SlowPool`), one
             per substance: the species `Cslow_<s>` in the merged tissue of
             each of its organs with the exchange
-            `kslow_<s>*Vti*(Kpslow_<s>*Cti_<s> - Cslow_<s>)`; a model without
+            `kslow_<s>*Vti*(Kpslow_<s>*Cti_<s> - Cslow_<s>)` with the tissue
+            (the default) or `kslow_<s>*Vti*(Kpslow_<s>*Cpl_<s> - Cslow_<s>)`
+            with the plasma of the organ (`SlowPool.source`); a model without
             them has none of their elements.
     """
 
@@ -673,7 +675,8 @@ class PBPKDefinition:
         Every organ of a pool is built by the standard organ (not a variant,
         not replaced by the intestine) and the substance has the merged tissue
         there (`Mode.TISSUE`, no transport of the substance in the organ),
-        whose species `Cti_<s>` the pool exchanges with.
+        in whose volume `Vti` the pool lies, exchanging with its species
+        `Cti_<s>` or with the plasma `Cpl_<s>` of the organ.
         """
         problems = check_slow_pools(self.slow_pools, known)
         if problems or not self.slow_pools:
@@ -713,7 +716,7 @@ class PBPKDefinition:
                     problems.append(
                         f"{where}: organ '{organ.value}' has no merged tissue of "
                         f"the substance (its tissue is '{tissue}'), the pool "
-                        "exchanges with `Cti` of the merged tissue (Mode.TISSUE, "
+                        "lies in the volume of the merged tissue (Mode.TISSUE, "
                         "no transport of the substance in the organ)"
                     )
         return problems

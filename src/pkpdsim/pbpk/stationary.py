@@ -24,7 +24,7 @@ given arterial plasma `Car`:
   saturable rate `S(C) = Vss*C/(Kss + C)`: a closed form, the root of a
   quadratic with `S`. Every other part of the organ starts at the
   equilibrium with the plasma of the organ (or of its zone), a slow pool at
-  `Kpslow` times its tissue, the tubule of the nephron kidney at the flow of
+  `Kpslow` times its source (the tissue or the plasma), the tubule of the nephron kidney at the flow of
   the filtrate (`fu*Car/f_tub_<seg>`), the mucosa of the intestine at the
   equilibrium with the arterial plasma. The starts read the species of the
   inflow, so each is a short formula of its organ, and every parameter which

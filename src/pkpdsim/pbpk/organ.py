@@ -1065,11 +1065,13 @@ class StandardBuilder(OrganBuilder):
     def _slow_pools(self) -> None:
         """The slow pools of the organ: `Cslow_<s>` in the tissue and its exchange.
 
-        `kslow_<s>*Vti*(Kpslow_<s>*Cti_<s> - Cslow_<s>)` with the constants of
-        the top model (`SlowPool`); the pool of an endogenous substance starts
-        at its equilibrium, `Kpslow_<s>*Kp*baseline_<s>`, of a substance with
-        a generated steady state at `Kpslow_<s>*Cti_<s>` with the start of
-        its tissue.
+        `kslow_<s>*Vti*(Kpslow_<s>*Cti_<s> - Cslow_<s>)` with the tissue, or
+        `kslow_<s>*Vti*(Kpslow_<s>*Cpl_<s> - Cslow_<s>)` with the plasma of
+        the organ (`SlowPool.source`), with the constants of the top model;
+        the pool of an endogenous substance starts at its equilibrium,
+        `Kpslow_<s>*Kp*baseline_<s>` (the plasma: `Kpslow_<s>*baseline_<s>`),
+        of a substance with a generated steady state at `Kpslow_<s>` times the
+        start of its source.
 
         Raises:
             ValueError: if the substance has no merged tissue in the organ or
@@ -1090,13 +1092,14 @@ class StandardBuilder(OrganBuilder):
                 U.per_min,
                 f"exchange of the slow pool {s.sid} per litre of tissue [1/min]",
             )
+            plasma = pool.source is Part.PLASMA
             kp = self._input(
                 ids.kp_slow(s.sid),
                 U.dimensionless,
-                f"slow pool to tissue coefficient {s.sid}",
+                f"slow pool to {'plasma' if plasma else 'tissue'} coefficient {s.sid}",
             )
             vti = ids.compartment(Part.TISSUE)
-            cti = ids.species(Part.TISSUE, s.sid)
+            source = ids.species(Part.PLASMA if plasma else Part.TISSUE, s.sid)
             cslow = ids.slow_species(s.sid)
             self.species[cslow] = self._annotate(
                 Species(
@@ -1108,23 +1111,30 @@ class StandardBuilder(OrganBuilder):
                     name=f"{s.name} (slow pool, {label(self.organ)})",
                     sboTerm=SBO.SIMPLE_CHEMICAL,
                     notes="The slow (deep) pool of the tissue, a concentration in "
-                    f"the tissue volume: at equilibrium `{cslow} = {kp}*{cti}`.",
+                    f"the tissue volume: at equilibrium `{cslow} = {kp}*{source}`"
+                    + (
+                        ", reached from the plasma through the capillary wall in "
+                        "parallel with the tissue."
+                        if plasma
+                        else "."
+                    ),
                     port=True,
                 ),
                 "concentration_tissue",
                 substance=s,
             )
-            tissue_kp = self._kp(s)
-            # at its equilibrium with the tissue: of the baseline, or of the
-            # start of the tissue at a generated steady state
+            # at its equilibrium with its source: of the baseline (the plasma
+            # starts at it, the tissue at Kp times it), or of the start of the
+            # source at a generated steady state
+            coefficient = kp if plasma else f"{kp} * {self._kp(s)}"
             self._defer_start(
-                cslow, s, coefficient=f"{kp} * {tissue_kp}", steady=f"{kp} * {cti}"
+                cslow, s, coefficient=coefficient, steady=f"{kp} * {source}"
             )
             self._reaction(
                 ids.slow_reaction(s.sid),
-                f"{cti} <-> {cslow}",
-                f"{k} * {vti} * ({kp} * {cti} - {cslow})",
-                f"exchange {s.sid} tissue and slow pool",
+                f"{source} <-> {cslow}",
+                f"{k} * {vti} * ({kp} * {source} - {cslow})",
+                f"exchange {s.sid} {'plasma' if plasma else 'tissue'} and slow pool",
                 kind="exchange",
             )
 

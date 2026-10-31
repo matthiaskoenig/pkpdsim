@@ -49,6 +49,7 @@ from pkpdsim.pbpk import (
     Metabolism,
     Mode,
     Organ,
+    Part,
     PBPKDefinition,
     PDComponent,
     RateOf,
@@ -249,7 +250,10 @@ def _cell_reader() -> PDComponent:
 
 
 def variants() -> PBPKDefinition:
-    """Get the toy with the zonated liver, the nephron kidney (with a threshold reabsorption) and a gut metabolism."""
+    """Get the toy with the zonated liver, the nephron kidney (with a threshold reabsorption) and a gut metabolism.
+
+    `drg` has a slow pool in muscle fed from the plasma.
+    """
     return PBPKDefinition(
         sid="toy_variants",
         substances=[
@@ -301,6 +305,11 @@ def variants() -> PBPKDefinition:
         routes=[
             Route.iv("drg"),
             Route.oral("drg", WeibullDissolution(t50=30.0, shape=1.5)),
+        ],
+        slow_pools=[
+            SlowPool(
+                "drg", frozenset({Organ.MUSCLE}), k=1e-3, kp=1.5, source=Part.PLASMA
+            )
         ],
     )
 

@@ -293,3 +293,108 @@ def test_the_organs_are_normalised() -> None:
     with pytest.raises(ValueError, match=r"SlowPool\.organs"):
         pool(organs=["nowhere"])
     assert dataclasses.replace(p, k=1.0).k == 1.0
+
+
+# --- the pool fed from the plasma of the organ ------------------------------------
+
+
+def test_the_pool_exchanges_with_the_tissue_by_default() -> None:
+    assert pool().source is Part.TISSUE
+    for text in ("pl", "plasma", "PLASMA", Part.PLASMA):
+        assert pool(source=text).source is Part.PLASMA
+
+
+def test_a_plasma_pool_exchanges_with_the_plasma_of_the_organ(tmp_path: Path) -> None:
+    """`k*Vti*(kp*Cpl - Cslow)`: the pool in the tissue volume, fed from the plasma."""
+    result = build(with_pool(pool(source=Part.PLASMA)), tmp_path)
+    model = libsbml.readSBMLFromFile(str(result.flat_path)).getModel()
+    for organ in (Organ.MUSCLE, Organ.SKIN):
+        sid = ids.flat(organ, ids.slow_species("drg"))
+        assert model.getSpecies(sid).getCompartment() == ids.flat(organ, "Vti")
+        rid = ids.flat(organ, ids.slow_reaction("drg"))
+        assert reaction_formula(result.flat_path, rid) == (
+            f"kslow_drg * {ids.flat(organ, 'Vti')} * (Kpslow_drg * "
+            f"{ids.flat(organ, 'Cpl_drg')} - {sid})"
+        )
+        reaction = model.getReaction(rid)
+        assert [r.getSpecies() for r in reaction.getListOfReactants()] == [
+            ids.flat(organ, "Cpl_drg")
+        ]
+        assert [r.getSpecies() for r in reaction.getListOfProducts()] == [sid]
+    assert "Cpl" in model.getParameter(ids.kslow("drg")).getNotesString()
+    assert model.getParameter(ids.kp_slow("drg")).getName() == (
+        "slow pool to plasma coefficient drg"
+    )
+
+
+def test_a_plasma_pool_keeps_the_mass(tmp_path: Path) -> None:
+    """Dose = body + urine at every time with the pool fed from the plasma."""
+    r = individual(build(with_pool(pool(source=Part.PLASMA)), tmp_path).flat_path)
+    r.integrator.absolute_tolerance = 1e-14
+    r.integrator.relative_tolerance = 1e-10
+    r[ids.iv_dose("drg")] = 100.0
+    start = total_amount(r, "drg") + dose_amount(r, "drg")
+    pools = [ids.flat(o, ids.slow_species("drg")) for o in (Organ.MUSCLE, Organ.SKIN)]
+    for end in (10.0, 600.0, 6000.0):
+        r.simulate(0, end, 3)
+        assert total_amount(r, "drg") + dose_amount(r, "drg") == pytest.approx(
+            start, rel=1e-8
+        )
+        assert all(r[f"[{sid}]"] > 0 for sid in pools)
+        r.reset()
+        r[ids.iv_dose("drg")] = 100.0
+
+
+@pytest.mark.parametrize("source", [Part.TISSUE, Part.PLASMA])
+def test_the_pool_reaches_kp_times_its_source(tmp_path: Path, source: Part) -> None:
+    """Without elimination `Cslow = kp*Cti` (tissue) or `Cslow = kp*Cpl` (plasma)."""
+    d = with_pool(pool(k=0.05, source=source), substance=drug(excretion=Excretion()))
+    r = individual(build(d, tmp_path).flat_path)
+    r.integrator.absolute_tolerance = 1e-14
+    r.integrator.relative_tolerance = 1e-10
+    r[ids.iv_dose("drg")] = 10.0
+    r.simulate(0, 20000, 3)
+    for organ in (Organ.MUSCLE, Organ.SKIN):
+        c = r[f"[{ids.flat(organ, ids.species(source, 'drg'))}]"]
+        cti = r[f"[{ids.flat(organ, ids.species(Part.TISSUE, 'drg'))}]"]
+        cslow = r[f"[{ids.flat(organ, ids.slow_species('drg'))}]"]
+        assert c > 0
+        assert cslow == pytest.approx(KP * c, rel=1e-6)
+        if source is Part.PLASMA:
+            # the tissue at its Kp 2.0 of the plasma, the pool apart from it
+            assert cti == pytest.approx(2.0 * c, rel=1e-6)
+
+
+def test_an_endogenous_plasma_pool_starts_at_its_equilibrium(tmp_path: Path) -> None:
+    """With a baseline the pool starts at `Kpslow*baseline` and stays there."""
+    baseline = 0.01
+    d = with_pool(
+        pool(source=Part.PLASMA),
+        substance=drug(excretion=Excretion(), baseline=baseline),
+    )
+    r = individual(build(d, tmp_path).flat_path)
+    sid = f"[{ids.flat(Organ.MUSCLE, ids.slow_species('drg'))}]"
+    assert r[sid] == pytest.approx(KP * baseline, rel=1e-12)
+    r.simulate(0, 1000, 3)
+    assert r[sid] == pytest.approx(KP * baseline, rel=1e-8)
+
+
+def test_an_unknown_source_is_refused() -> None:
+    with pytest.raises(ValueError, match=r"SlowPool\.source"):
+        pool(source="nowhere")
+    for part in (Part.INTERSTITIAL, Part.INTRACELLULAR, Part.BLOOD_CELLS, Part.ORGAN):
+        with pytest.raises(
+            ValueError,
+            match=rf"slow pool of 'drg': the source '{part}' is neither the tissue "
+            "nor the plasma",
+        ):
+            with_pool(pool(source=part)).validate()
+
+
+def test_a_plasma_pool_needs_the_merged_tissue() -> None:
+    """The pool lies in the volume of the merged tissue in both forms."""
+    with pytest.raises(ValueError, match=r"organ 'mu' has no merged tissue"):
+        with_pool(
+            pool(source=Part.PLASMA),
+            substance=drug(distribution=Kp(2.0, mode=Mode.PERFUSION)),
+        ).validate()

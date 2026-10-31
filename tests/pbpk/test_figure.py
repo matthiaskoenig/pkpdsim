@@ -364,7 +364,7 @@ def test_the_figure_shows_the_processes_and_routes(tmp_path: Path) -> None:
         "APIM7BILE: api_m7 cell -> bile by ABCC2",
         "APIPGP: api cell -> lumen by ABCB1",
         "CR2CRTN: Cti_cr -> Cti_crtn",
-        "slow pool of cr",
+        "slow pool of cr: tissue <-> pool",
         "api_m2 (reabsorbed)",
         "zonated, 8 zones",
         "nephron",
@@ -568,3 +568,14 @@ def test_an_absorption_fixed_at_zero_is_not_drawn(tmp_path: Path) -> None:
     texts = _texts(model_figure(d, tmp_path / "none.svg"))
     assert "ABS" not in texts
     assert "absorption" not in texts
+
+
+def test_the_figure_shows_the_source_of_a_slow_pool(tmp_path: Path) -> None:
+    """A pool fed from the plasma has its exchange with the plasma."""
+    pool = SlowPool("cr", frozenset({Organ.MUSCLE}), k=0.001, kp=2.0, source="plasma")
+    d = dataclasses.replace(seven_substances(), slow_pools=[pool])
+    text = " ".join(
+        label.text for label in _parse(model_figure(d, tmp_path / "p.svg"))[1]
+    )
+    assert "slow pool of cr: plasma <-> pool" in text
+    assert "tissue <-> pool" not in text

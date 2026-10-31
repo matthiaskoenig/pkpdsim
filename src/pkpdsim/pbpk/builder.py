@@ -1847,6 +1847,21 @@ class _Top:
         if pool is None:
             return
         organs = ", ".join(o.name.lower() for o in Organ if o in pool.organs)
+        if pool.source is Part.PLASMA:
+            source, word, between, of = (
+                "Cpl",
+                "plasma",
+                "the plasma of an organ and the slow (deep) pool of its tissue, "
+                "reached through the capillary wall in parallel with the tissue,",
+                "the plasma of the organ",
+            )
+        else:
+            source, word, between, of = (
+                "Cti",
+                "tissue",
+                "the merged tissue and its slow (deep) pool",
+                "the tissue",
+            )
         self.add(
             [
                 annotate(
@@ -1857,9 +1872,8 @@ class _Top:
                         f"exchange of the slow pool {s.sid} per litre of tissue "
                         "[1/min]",
                         _SBO_PARAMETER,
-                        "Exchange between the merged tissue and its slow (deep) "
-                        "pool per litre of tissue, "
-                        f"`{ids.kslow(s.sid)}*Vti*({ids.kp_slow(s.sid)}*Cti - "
+                        f"Exchange between {between} per litre of tissue, "
+                        f"`{ids.kslow(s.sid)}*Vti*({ids.kp_slow(s.sid)}*{source} - "
                         "Cslow)`, so it follows the tissue volume of the "
                         f"individual; the organs of the pool: {organs}.",
                     ),
@@ -1870,11 +1884,11 @@ class _Top:
                         ids.kp_slow(s.sid),
                         pool.kp,
                         U.dimensionless,
-                        f"slow pool to tissue coefficient {s.sid}",
+                        f"slow pool to {word} coefficient {s.sid}",
                         _SBO_PARAMETER,
                         "Concentration of the slow (deep) pool of a tissue to that "
-                        "of the tissue at equilibrium, `Cslow = "
-                        f"{ids.kp_slow(s.sid)}*Cti`.",
+                        f"of {of} at equilibrium, `Cslow = "
+                        f"{ids.kp_slow(s.sid)}*{source}`.",
                     ),
                     "partition",
                 ),

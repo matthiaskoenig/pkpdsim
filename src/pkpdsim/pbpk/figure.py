@@ -16,7 +16,8 @@ COMBINE archive of a model carries it (`create_archive(..., figure=True)`):
   processes of the organ as badges: metabolism (`MET`, substrate, products
   and enzyme), transport (`TRA`, the side and the transporter), custom
   reaction (`CUS`, its equation), the excretion into the urine (`URI`, with
-  the reabsorption), the slow pool (`SLW`);
+  the reabsorption), the slow pool (`SLW`, the exchange with its source, the
+  tissue or the plasma);
 - the lumen of the intestine: its segments in the order of the transit to
   the feces, the oral routes (`ORL`), the absorption (`ABS`), the bile
   (`BIL`), the conversions in the lumen (`CNV`) and the feces (`FEC`).
@@ -48,7 +49,7 @@ from pkpdsim.pbpk.chemistry import (
 )
 from pkpdsim.pbpk.definition import PBPKDefinition
 from pkpdsim.pbpk.organ import OrganComponent
-from pkpdsim.pbpk.organs import Organ
+from pkpdsim.pbpk.organs import Organ, Part
 from pkpdsim.pbpk.parts import parts_for
 from pkpdsim.pbpk.routes import (
     DoseDependentDissolution,
@@ -441,7 +442,13 @@ class _Figure:
                 lines.append(("URI", "filtered into the urine: " + ", ".join(urine)))
         for pool in self.d.slow_pools:
             if any(o in pool.organs for o in organs):
-                lines.append(("SLW", f"slow pool of {pool.substance} in the tissue"))
+                lines.append(
+                    (
+                        "SLW",
+                        f"slow pool of {pool.substance}: "
+                        f"{Part(pool.source).name.lower()} <-> pool",
+                    )
+                )
         return lines
 
     def _title(self, organs: Sequence[Organ], name: str) -> list[str]:
