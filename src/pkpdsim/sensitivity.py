@@ -85,6 +85,7 @@ from sbmlsim.simulation import (
 )
 from sbmlsim.simulation.sampling import Uniform
 from sbmlsim.simulator import Simulator
+from sbmlsim.units import Quantity
 from sbmlutils.console import console
 from sbmlutils.report.units import udef_to_string
 
@@ -754,7 +755,7 @@ class SensitivityGroup:
     color: str | None = None
     sex: Sex = Sex.MALE
     equilibrate: bool = False
-    resets: Mapping[str, float] = dataclasses.field(
+    resets: Mapping[str, Quantity | float] = dataclasses.field(
         default_factory=lambda: MappingProxyType({})
     )
 
@@ -817,7 +818,7 @@ class _Context:
         scan = Scan(group.simulation, [design])
         if group.equilibrate:
             # the PBPK library imports its simulator part on use
-            from pkpdsim.pbpk.experiment import equilibrated_simulation
+            from pkpdsim.pbpk.equilibration import equilibrated_simulation
 
             scan = equilibrated_simulation(scan, path, resets=group.resets)
         return self.simulator.run(

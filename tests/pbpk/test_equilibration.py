@@ -36,11 +36,14 @@ from sbmlutils.metadata import SBO
 from pkpdsim.model import PKPDModel, SimulatorSettings
 from pkpdsim.pbpk import (
     MODEL_UNITS,
+    CustomReaction,
     Excretion,
     FirstOrder,
     Kp,
     Metabolism,
+    ModelParameter,
     Organ,
+    Part,
     PBPKDefinition,
     PDComponent,
     Pool,
@@ -52,12 +55,12 @@ from pkpdsim.pbpk import (
     ids,
 )
 from pkpdsim.pbpk.builder import BuildResult
-from pkpdsim.pbpk.experiment import (
-    PBPKSimulationExperiment,
+from pkpdsim.pbpk.equilibration import (
     accumulating_states,
     drug_free_zeros,
     equilibrated_simulation,
 )
+from pkpdsim.pbpk.experiment import PBPKSimulationExperiment
 
 from .conftest import definition, endogenous_reference_definition
 
@@ -757,3 +760,97 @@ def test_a_sensitivity_group_resets_only_when_it_equilibrates() -> None:
 
     with pytest.raises(ValueError, match="has resets but no equilibration"):
         SensitivityGroup("g", "G", _dosed(), resets={"HOMEO__V": 0.0})
+
+
+def test_the_names_of_the_equilibration_stay_in_the_experiment_module() -> None:
+    """The equilibration moved to its module; the names are importable as before."""
+    from pkpdsim.pbpk import equilibration
+    from pkpdsim.pbpk import experiment as experiment_module
+
+    for name in (
+        "EQUILIBRATION_TOLERANCES",
+        "DOSE_PREFIXES",
+        "accumulating_states",
+        "growing_states",
+        "drug_free_zeros",
+        "equilibrated_simulation",
+    ):
+        assert getattr(experiment_module, name) is getattr(equilibration, name), name
+
+
+def _custom(equation: str, rate: str, *, baseline: bool = True) -> PBPKDefinition:
+    """`end` (with a baseline, or not) and `pre` (without) with a custom reaction in muscle."""
+    return PBPKDefinition(
+        sid="custom_direction",
+        substances=[
+            Substance(
+                "end",
+                name="endogenous substance",
+                mr=113.0,
+                distribution=Kp(0.6, ftissue=6.0),
+                excretion=Excretion(urine=True),
+                baseline=0.02 if baseline else None,
+            ),
+            Substance(
+                "pre",
+                name="its precursor",
+                mr=100.0,
+                distribution=Kp(0.6, ftissue=6.0),
+                excretion=Excretion(urine=True),
+            ),
+        ],
+        chemistry=[CustomReaction("CONV", Organ.MUSCLE, Part.TISSUE, equation, rate)],
+        parameters=[ModelParameter("k_conv", 1e-3, U.l_per_min)],
+        routes=[Route.iv("pre")],
+    )
+
+
+def test_a_custom_reaction_runs_backwards_only_when_reversible(
+    tmp_path: Path,
+) -> None:
+    """The direction is the reversible flag: `A <-> B` feeds A from a started B.
+
+    The exchange `k*(Cti_pre - Cti_end)` runs backwards from the endogenous
+    `end` into `pre`. Written reversible, `pre` holds a value and is no zero;
+    written `->` the analysis takes the reaction one way and zeroes `pre`,
+    the convention the docs state.
+    """
+    rate = "k_conv * (Cti_pre - Cti_end)"
+    both = build(_custom("Cti_pre <-> Cti_end", rate), tmp_path / "both").flat_path
+    assert not set(drug_free_zeros(both)) & _species(both, "pre", "end")
+    one = build(_custom("Cti_pre -> Cti_end", rate), tmp_path / "one").flat_path
+    assert set(drug_free_zeros(one)) == _species(one, "pre")
+
+
+def test_a_product_of_a_source_keeps_its_value(tmp_path: Path) -> None:
+    """A substance without a baseline which a source (no dose) produces is no zero.
+
+    `end` has no baseline and is produced in muscle by the source `-> Cti_end`
+    (a production, not a dose): it starts at 0, reaches its steady state
+    during the equilibration and keeps it at the start, while `pre`, which
+    only its dose reaches, starts at exactly 0.
+    """
+    d = dataclasses.replace(
+        _custom("-> Cti_end", "k_conv * 1 mM", baseline=False),
+        parameters=[ModelParameter("k_conv", 1e-3, U.l_per_min)],
+    )
+    result = build(d, tmp_path)
+    path = result.flat_path
+    zeros = set(drug_free_zeros(path))
+    assert zeros == _species(path, "pre")
+
+    def simulations(
+        experiment: PBPKSimulationExperiment,
+    ) -> dict[str, Simulation | Scan]:
+        return {"production": experiment.equilibrated(Simulation(end=60))}
+
+    run = _run(
+        _model(result),
+        simulations,
+        selections=("time", ids.arm("end"), ids.arm("pre")),
+    )
+    end = cast("TimecourseResult", run.results["task_production"])
+    arm = np.asarray(end[ids.arm("end")]).ravel()
+    assert arm[0] > 0.0
+    assert arm[-1] == pytest.approx(arm[0], rel=1e-6)
+    assert _at_start(run, "production", ids.arm("pre")) == 0.0

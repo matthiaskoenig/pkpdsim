@@ -2,8 +2,10 @@
 
 The base of the experiments of a model built on the library
 (`PBPKSimulationExperiment`, `ScaledRenalMap`, `healthy_gfr`, `REFERENCE_GFR`,
-`molecular_weights`, `equilibrated_simulation` of `pkpdsim.pbpk.experiment`) and the validity of the kidney outflow
-(`kidney_outflow`, `KidneyOutflow` of `pkpdsim.pbpk.kidney_validity`) are
+`molecular_weights` of `pkpdsim.pbpk.experiment`), the equilibration outside
+an experiment (`equilibrated_simulation` of `pkpdsim.pbpk.equilibration`)
+and the validity of the kidney outflow (`kidney_outflow`, `KidneyOutflow` of
+`pkpdsim.pbpk.kidney_validity`) are
 exported lazily: they import sbmlsim, which a factory does not need, so
 `import pkpdsim.pbpk` imports no simulator.
 """
@@ -75,11 +77,11 @@ from pkpdsim.pbpk.variants.liver_zonated import ZonatedLiver
 from pkpdsim.pbpk.variants.lumen_options import LumenConversion, RegionalAbsorption
 
 if TYPE_CHECKING:
+    from pkpdsim.pbpk.equilibration import equilibrated_simulation
     from pkpdsim.pbpk.experiment import (
         REFERENCE_GFR,
         PBPKSimulationExperiment,
         ScaledRenalMap,
-        equilibrated_simulation,
         healthy_gfr,
         molecular_weights,
     )
@@ -91,7 +93,7 @@ _LAZY_NAMES = {
     "REFERENCE_GFR": "experiment",
     "PBPKSimulationExperiment": "experiment",
     "ScaledRenalMap": "experiment",
-    "equilibrated_simulation": "experiment",
+    "equilibrated_simulation": "equilibration",
     "healthy_gfr": "experiment",
     "molecular_weights": "experiment",
     "KidneyOutflow": "kidney_validity",
