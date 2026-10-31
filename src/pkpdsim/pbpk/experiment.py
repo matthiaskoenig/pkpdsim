@@ -23,9 +23,10 @@ All of them are of the build of the sex of the experiment (`sex`, the female
 build for a study of women): the GFR of a woman is the GFR of the female
 build.
 
-The outflow of the kidney is valid while the net filtered plasma flow of a
-substance is below the plasma flow of the kidney
-(`pkpdsim.pbpk.kidney_validity`): `PBPKSimulationExperiment` refuses an
+The outflow of the kidney is valid while the filtered plasma water (the
+GFR) and the net filtered plasma flow of every substance are below the plasma
+flow of the kidney (`pkpdsim.pbpk.kidney_validity`):
+`PBPKSimulationExperiment` refuses an
 experiment which simulates an individual outside of it, checked on the model
 of each task, and a renal function beyond it (`renal_function`,
 `renal_function_limits`).
@@ -514,9 +515,9 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
     classes are `renal_map_of(Sex.FEMALE)`.
 
     The initialization refuses an experiment which simulates an individual
-    outside the validity of the kidney outflow (`kidney_outflow`): the net
-    filtered plasma flow of a substance must stay below the plasma flow of
-    the kidney, at the start of every simulation and every point of a scan,
+    outside the validity of the kidney outflow (`kidney_outflow`): the
+    filtered plasma water (the GFR) and the net filtered plasma flow of a
+    substance must stay below the plasma flow of the kidney, at the start of every simulation and every point of a scan,
     each on the model its task runs (`simulated_individuals`; not checked: a
     change during a simulation, also of a `dynamic` id at its start, a
     dimension with a time, a scan over models and the draws of the fitted
@@ -526,8 +527,8 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
         renal_function_range: a narrower range of the renal functions the
             model supports, `None` (the default) for the range of the validity
             of the kidney outflow, from 0 (anuria, the substances leave by the
-            other routes alone) to the renal function at which the net
-            filtered plasma flow of a substance reaches the plasma flow of
+            other routes alone) to the renal function at which the GFR or the
+            net filtered plasma flow of a substance reaches the plasma flow of
             the kidney (`renal_function_limits`); a model whose urine is not
             defined without filtration starts above 0. The validity holds
             within the range as well.
@@ -754,9 +755,9 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
                         raise ValueError(
                             f"The experiment '{self.sid}' simulates in '{key}' an "
                             "individual outside the validity of the kidney "
-                            f"outflow: {outflow.text()}; the net filtered plasma "
-                            "flow must stay below the plasma flow. The changes of "
-                            f"the individual: {changes_text(changes)}."
+                            f"outflow: {outflow.text()}; the filtered flow must "
+                            "stay below the plasma flow. The changes of the "
+                            f"individual: {changes_text(changes)}."
                         )
 
     @classmethod
@@ -871,8 +872,8 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
                 raise ValueError(
                     f"The renal function {value:.3g} of a clearance of {clearance} "
                     f"ml/min is outside the validity of the kidney outflow: "
-                    f"{outflow.text()}; the net filtered plasma flow must stay "
-                    "below the plasma flow."
+                    f"{outflow.text()}; the filtered flow must stay below the "
+                    "plasma flow."
                 )
         low, high = cls.renal_function_range or (0.0, math.inf)
         if not low <= value <= high:
@@ -895,14 +896,17 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
     ) -> tuple[float, float]:
         """Get the range of the renal functions of an individual which the model supports.
 
-        From 0 to the renal function at which the net filtered plasma flow of
-        a filtered substance reaches the plasma flow of the kidney
+        From 0 to the smaller of the renal functions at which the filtered
+        plasma water, the GFR, reaches the plasma flow of the kidney
+        `Qki*(1 - HCT)` and at which the net filtered plasma flow of a
+        filtered substance reaches the flow which carries it
         (`kidney_outflow`), the flows of the individual at renal function 1
-        (the net filtered plasma flow is the GFR, `GFR_base*f_renal_function`,
-        times the factors of the substance, which do not change above renal
-        function 1, where the factors of chronic kidney disease are 1), the
-        upper end excluded; within the `renal_function_range` of the model if
-        it has one. Infinite without a filtered substance.
+        (the GFR is `GFR_base*f_renal_function`, the net filtered plasma flow
+        the GFR times the factors of the substance, which do not change above
+        renal function 1, where the factors of chronic kidney disease are 1),
+        the upper end excluded; within the `renal_function_range` of the
+        model if it has one. The water is the tighter bound (`fu <= 1`,
+        `BP >= 1 - HCT`); infinite for a model without a kidney.
 
         Args:
             bw: the body weight of the individual [kg], `None` for that of the

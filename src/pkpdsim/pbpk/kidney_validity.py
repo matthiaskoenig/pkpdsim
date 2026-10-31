@@ -1,10 +1,16 @@
 """The simulated individual and the validity of the kidney outflow.
 
 The plasma leaving the kidney lacks the net filtrate, so the outflow of the
-kidney is valid while the net filtered plasma flow of a substance is below
-the plasma flow of the kidney, `fu*GFR*(1 - f_reabsorbed) < Qki*(1 - HCT)`
-(`Qki*BP` with erythrocytes in equilibrium, `fu*GFR` with a threshold
-reabsorption, whose fraction falls to 0 at a high concentration). GFR, flow,
+kidney is valid while the filtered plasma water is below the plasma flow of
+the kidney, `GFR < Qki*(1 - HCT)` (the glomeruli filter the water of the
+plasma which flows through them, independent of the substances), and the net
+filtered plasma flow of every substance is below the flow which carries it,
+`fu*GFR*(1 - f_reabsorbed) < Qki*(1 - HCT)` (`Qki*BP` with erythrocytes in
+equilibrium, `fu*GFR` with a threshold reabsorption, whose fraction falls to
+0 at a high concentration). The water bounds the renal function of every
+model with a kidney (a PD component which filters the water at the GFR, the
+fluid of hctz, as well); with `fu <= 1` and `BP >= 1 - HCT` it is the tighter
+bound of the two. GFR, flow,
 hematocrit and fu are initial assignments of the parameters of the
 individual, so `kidney_outflow` reads them for an individual, the changes of
 a simulation before its initialization, from a simulation of one minute
@@ -96,13 +102,16 @@ def covariate_changes(
 
 @dataclass(frozen=True)
 class KidneyOutflow:
-    """The net filtered plasma flow of a substance and the plasma flow of the kidney.
+    """The net filtered plasma flow of a substance or the plasma water, and the plasma flow of the kidney.
 
     The outflow of the kidney is valid while the net filtered plasma flow is
-    below the plasma flow which carries the substance through the kidney.
+    below the plasma flow which carries the substance through the kidney;
+    the filtered plasma water (`substance` `None`, the `formula` `GFR`) is
+    valid while the GFR is below the plasma flow of the kidney.
 
     Attributes:
-        substance: the substance, filtered into the urine.
+        substance: the substance, filtered into the urine; `None` for the
+            water of the plasma, which the glomeruli filter at the GFR.
         gfr: the GFR of the individual [ml/min].
         filtered: the net filtered plasma flow [ml/min], see `formula`.
         plasma_flow: the flow which carries the substance through the kidney,
@@ -110,10 +119,11 @@ class KidneyOutflow:
             [ml/min].
         formula: the formula of the net filtered plasma flow:
             `fu*GFR*(1 - f_reabsorbed)`, `fu*GFR` with a threshold
-            reabsorption (its fraction falls to 0 at a high concentration).
+            reabsorption (its fraction falls to 0 at a high concentration),
+            `GFR` of the water.
     """
 
-    substance: str
+    substance: str | None
     gfr: float
     filtered: float
     plasma_flow: float
@@ -126,6 +136,12 @@ class KidneyOutflow:
 
     def text(self) -> str:
         """Describe the flows, for a message."""
+        if self.substance is None:
+            return (
+                f"the filtered plasma water {self.formula} {self.filtered:.4g} "
+                f"ml/min against the plasma flow of the kidney "
+                f"{self.plasma_flow:.4g} ml/min (Qki*(1 - HCT))"
+            )
         return (
             f"the net filtered plasma flow of '{self.substance}' {self.formula} "
             f"{self.filtered:.4g} ml/min at the GFR {self.gfr:.4g} ml/min against "
@@ -139,9 +155,12 @@ def kidney_outflow(
 ) -> tuple[KidneyOutflow, ...]:
     """Get the net filtered plasma flows and the plasma flow of the kidney of an individual.
 
-    One `KidneyOutflow` for every substance which the kidney filters (its
-    filtration reaction is in the model), read from the start values of the
-    individual (`individual_values`); a model without one is not simulated.
+    The filtered plasma water first (`substance` `None`, `GFR` against
+    `Qki*(1 - HCT)`), then one `KidneyOutflow` for every substance which the
+    kidney filters (its filtration reaction is in the model), read from the
+    start values of the individual (`individual_values`); a model without the
+    GFR, the flow of the kidney and the hematocrit (no model of the library)
+    is not simulated.
 
     Args:
         model_path: the flat SBML model of the library.
@@ -150,17 +169,18 @@ def kidney_outflow(
             or quantities.
 
     Returns:
-        The flows of every filtered substance, in the order of the model.
+        The flows of the water and of every filtered substance, in the order
+        of the model.
     """
     path = Path(model_path)
     model = _kidney_model(path, path.stat().st_mtime_ns)
-    if not model.filtered:
+    if not model.water:
         return ()
     values = individual_values(path, changes or {})
     flow = values.ml_per_min(ids.organ_flow(Organ.KIDNEY))
     hct = values.number(ids.HCT)
     gfr = values.ml_per_min(ids.GFR)
-    outflows = []
+    outflows = [KidneyOutflow(None, gfr, gfr, flow * (1.0 - hct), formula="GFR")]
     for f in model.filtered:
         carrier = 1.0 - hct if f.kinetic else values.number(ids.bp(f.sid))
         fu_gfr = values.number(ids.fu(f.sid)) * gfr
@@ -317,6 +337,8 @@ class _KidneyModel:
 
     Attributes:
         filtered: the filtered substances.
+        water: the model has the GFR, the flow of the kidney and the
+            hematocrit, whose filtered plasma water is bounded.
         quantities: the ids of the flows of the validity and `GFR_base`
             which the model has, the selections of its simulations.
         inputs: the ids which the quantities depend on, through initial
@@ -325,6 +347,7 @@ class _KidneyModel:
     """
 
     filtered: tuple[_Filtered, ...]
+    water: bool
     quantities: tuple[str, ...]
     inputs: frozenset[str]
 
@@ -355,7 +378,8 @@ def _kidney_model(model_path: Path, mtime_ns: int) -> _KidneyModel:
     for f in filtered:
         quantities += [ids.fu(f.sid), ids.bp(f.sid), ids.fraction_reabsorbed(f.sid)]
     present = tuple(q for q in quantities if model.getParameter(q) is not None)
-    return _KidneyModel(filtered, present, _dependencies(model, present))
+    water = {ids.GFR, ids.organ_flow(Organ.KIDNEY), ids.HCT} <= set(present)
+    return _KidneyModel(filtered, water, present, _dependencies(model, present))
 
 
 def _dependencies(model: libsbml.Model, roots: Iterable[str]) -> frozenset[str]:

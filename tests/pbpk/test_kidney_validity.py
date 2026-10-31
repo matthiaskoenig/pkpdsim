@@ -1,18 +1,22 @@
 """The validity of the kidney outflow (`pkpdsim.pbpk.experiment.kidney_outflow`).
 
 The plasma leaving the kidney lacks the net filtrate, so the outflow is valid
-while the net filtered plasma flow of a substance, `fu*GFR*(1 - f_reabsorbed)`
-(`fu*GFR` with a saturable reabsorption), is below the plasma flow of the
-kidney, `Qki*(1 - HCT)` (`Qki*BP` with erythrocytes in equilibrium).
+while the filtered plasma water, the GFR, is below the plasma flow of the
+kidney, `Qki*(1 - HCT)`, and the net filtered plasma flow of a substance,
+`fu*GFR*(1 - f_reabsorbed)` (`fu*GFR` with a saturable reabsorption), is
+below the flow which carries it, `Qki*(1 - HCT)` (`Qki*BP` with erythrocytes
+in equilibrium).
 `PBPKSimulationExperiment` refuses an experiment which simulates an individual
 outside of it and a renal function beyond it, and derives the range of the
 renal function from it.
 """
 
+import dataclasses
 from functools import cache
 from pathlib import Path
 from typing import cast
 
+import libsbml
 import numpy as np
 import pytest
 from sbmlsim import Q
@@ -32,6 +36,7 @@ from pkpdsim.pbpk import (
     Organ,
     PBPKDefinition,
     Route,
+    Sex,
     Substance,
     ThresholdReabsorption,
     build,
@@ -172,8 +177,9 @@ def test_the_flows_of_every_carrier(built: BuildResult) -> None:
         ids.F_RENAL_FUNCTION: Q(1.4, "dimensionless"),
     }
     outflows = {o.substance: o for o in kidney_outflow(built.flat_path, quantities)}
-    assert set(outflows) == {"pls", "kin", "equ", "rea", "sat"}
-    expected = {
+    assert list(outflows) == [None, "pls", "kin", "equ", "rea", "sat"]
+    expected: dict[str | None, tuple[float, float]] = {
+        None: (gfr, plasma),
         "pls": (FU * gfr, plasma),
         "kin": (FU * gfr, plasma),
         "equ": (FU * gfr, flow * 0.8),
@@ -188,6 +194,8 @@ def test_the_flows_of_every_carrier(built: BuildResult) -> None:
     assert outflows["rea"].formula == "fu*GFR*(1 - f_reabsorbed)"
     assert outflows["sat"].formula == "fu*GFR (threshold reabsorption)"
     assert "'sat' fu*GFR (threshold reabsorption) " in outflows["sat"].text()
+    assert outflows[None].formula == "GFR"
+    assert outflows[None].text().startswith("the filtered plasma water GFR ")
 
 
 def test_an_outflow_is_valid_below_the_plasma_flow() -> None:
@@ -196,19 +204,24 @@ def test_an_outflow_is_valid_below_the_plasma_flow() -> None:
 
 
 def test_the_range_of_the_renal_function_is_derived(built: BuildResult) -> None:
-    """The highest renal function is the one at which `fu*GFR` reaches the plasma flow.
+    """The highest renal function is the one at which the GFR reaches the plasma flow.
 
-    The substances which the plasma carries (`pls`, `kin`, `sat`, `fu*GFR`
-    against `Qki*(1 - HCT)`) limit it; the blood to plasma ratio 0.8 of `equ`
+    The filtered plasma water, `GFR` against `Qki*(1 - HCT)`, is the tighter
+    bound: the substances which the plasma carries (`pls`, `kin`, `sat`)
+    filter `fu*GFR` with `fu` 0.9, and the blood to plasma ratio 0.8 of `equ`
     is above the plasma share `1 - HCT`.
     """
     cls = _experiment(built)
     r = individual(built.flat_path, BW=60.0, HEIGHT=165.0)
-    plasma = r[ids.organ_flow(Organ.KIDNEY)] * min(1 - r[ids.HCT], 0.8)
-    expected = plasma / (FU * r[ids.GFR_BASE])
+    plasma = r[ids.organ_flow(Organ.KIDNEY)] * (1 - r[ids.HCT])
+    expected = plasma / r[ids.GFR_BASE]
+    substances = min(plasma, r[ids.organ_flow(Organ.KIDNEY)] * 0.8) / (
+        FU * r[ids.GFR_BASE]
+    )
     low, high = cls.renal_function_limits(bw=60.0, height=165.0)
     assert low == 0.0
     assert high == pytest.approx(expected, rel=1e-12)
+    assert high < substances
     assert 2.0 < high < 10.0
     healthy = float(cls.healthy_gfr(bw=60.0, height=165.0).m_as("ml/min"))
     below = cls.renal_function(0.999 * high * healthy, bw=60.0, height=165.0)
@@ -216,12 +229,46 @@ def test_the_range_of_the_renal_function_is_derived(built: BuildResult) -> None:
     with pytest.raises(
         ValueError,
         match=(
-            r"outside the validity of the kidney outflow: the net filtered plasma "
-            r"flow of '\w+' fu\*GFR\*\(1 - f_reabsorbed\) [\d.]+ ml/min at the GFR "
-            r"[\d.]+ ml/min against the plasma flow of the kidney [\d.]+ ml/min"
+            r"outside the validity of the kidney outflow: the filtered plasma "
+            r"water GFR [\d.]+ ml/min against the plasma flow of the kidney "
+            r"[\d.]+ ml/min \(Qki\*\(1 - HCT\)\); the filtered flow must stay "
+            r"below the plasma flow"
         ),
     ):
         cls.renal_function(1.001 * high * healthy, bw=60.0, height=165.0)
+
+
+def test_the_water_bounds_a_substance_in_the_erythrocytes(
+    tmp_path: Path,
+) -> None:
+    """A substance which the blood carries (BP 1.7, hctz) is bounded by the water.
+
+    Its own bound `Qki*BP/(fu*GFR)` (18.1 for hctz) lies far above the renal
+    function at which the GFR reaches the plasma flow `Qki*(1 - HCT)` (6.08
+    for hctz), beyond which the filtrate would exceed the plasma.
+    """
+    definition = PBPKDefinition(
+        sid="validity_blood",
+        substances=[
+            Substance(
+                "bld",
+                name="carried by the blood",
+                mr=300.0,
+                binding=Binding(fu=0.6),
+                erythrocytes=Erythrocytes("equilibrium", bp=1.7),
+                excretion=Excretion(urine=True),
+            )
+        ],
+        routes=[Route.iv("bld")],
+    )
+    result = build(definition, tmp_path)
+    r = individual(result.flat_path)
+    flow, gfr = r[ids.organ_flow(Organ.KIDNEY)], r[ids.GFR_BASE]
+    water = flow * (1 - r[ids.HCT]) / gfr
+    substance = flow * 1.7 / (0.6 * gfr)
+    assert substance > 2.5 * water
+    low, high = _experiment(result).renal_function_limits()
+    assert (low, high) == (0.0, pytest.approx(water, rel=1e-12))
 
 
 def test_an_individual_outside_the_validity_fails_the_initialization(
@@ -255,9 +302,8 @@ def test_an_individual_outside_the_validity_fails_the_initialization(
         ValueError,
         match=(
             r"The experiment 'HyperfiltrationStudy' simulates in 'high' an individual "
-            r"outside the validity of the kidney outflow: the net filtered plasma flow "
-            r"of '\w+' .* at the GFR [\d.]+ ml/min against the plasma flow of the "
-            r"kidney [\d.]+ ml/min"
+            r"outside the validity of the kidney outflow: the filtered plasma water "
+            r"GFR [\d.]+ ml/min against the plasma flow of the kidney [\d.]+ ml/min"
         ),
     ):
         simulation.initialize()
@@ -335,30 +381,61 @@ def unfiltered(tmp_path_factory: pytest.TempPathFactory) -> BuildResult:
     return build(definition, tmp_path_factory.mktemp("no_urine"))
 
 
-def test_a_model_without_filtration_is_always_valid(
-    unfiltered: BuildResult, monkeypatch: pytest.MonkeyPatch
+def test_a_model_without_filtration_is_bounded_by_the_water(
+    built: BuildResult, unfiltered: BuildResult
 ) -> None:
-    """Without a filtered substance there is no limit, and nothing is simulated."""
+    """Without a filtered substance the GFR still filters the plasma water."""
+    (water,) = kidney_outflow(unfiltered.flat_path, _renal(100.0))
+    assert water.substance is None
+    assert not water.valid
+    assert _experiment(unfiltered).renal_function_limits() == pytest.approx(
+        _experiment(built).renal_function_limits(), rel=1e-12
+    )
+
+
+def test_a_model_without_a_kidney_is_not_simulated(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A model without the flows of the kidney (no model of the library) has no limit."""
+    model = libsbml.SBMLDocument(3, 2)
+    model.createModel().setId("plain")
+    path = tmp_path / "plain.xml"
+    libsbml.writeSBMLToFile(model, str(path))
     runs: list[object] = []
     monkeypatch.setattr(Simulator, "run", lambda *args, **kwargs: runs.append(args))
-    assert kidney_outflow(unfiltered.flat_path, _renal(100.0)) == ()
-    assert _experiment(unfiltered).renal_function_limits() == (0.0, float("inf"))
+    assert kidney_outflow(path, _renal(100.0)) == ()
     assert runs == []
 
 
+@pytest.fixture(scope="module")
+def female(tmp_path_factory: pytest.TempPathFactory) -> BuildResult:
+    """The female build of the definition of the four carriers, built once."""
+    definition = dataclasses.replace(
+        _definition(), sid="validity_female", sex=Sex.FEMALE
+    )
+    return build(definition, tmp_path_factory.mktemp("validity_female"))
+
+
 def test_every_task_is_checked_on_its_model(
-    built: BuildResult, unfiltered: BuildResult
+    built: BuildResult, female: BuildResult
 ) -> None:
-    """A simulation of the model without filtration is valid at any renal function."""
+    """A renal function between the limits of two builds is valid on one of them."""
+    limits = {
+        "model": _experiment(built).renal_function_limits()[1],
+        "other": _experiment(female).renal_function_limits()[1],
+    }
+    assert limits["model"] != pytest.approx(limits["other"], rel=1e-3)
+    valid, invalid = sorted(limits, key=lambda key: -limits[key])
     base = _experiment(built)
-    high = base.renal_function_limits()[1]
-    simulation = Simulation(end=10, preinit_changes=_renal(2 * high))
+    simulation = Simulation(
+        end=10, preinit_changes=_renal(0.5 * (limits["model"] + limits["other"]))
+    )
 
     def study(model: str) -> PBPKSimulationExperiment:
         def models(self: PBPKSimulationExperiment) -> dict[str, AbstractModel]:
             return {
                 "model": AbstractModel(source=built.flat_path),
-                "other": AbstractModel(source=unfiltered.flat_path),
+                "other": AbstractModel(source=female.flat_path),
             }
 
         def tasks(self: PBPKSimulationExperiment) -> dict[str, Task]:
@@ -379,13 +456,13 @@ def test_every_task_is_checked_on_its_model(
         experiment = cls(base_path=base.pkpd_model.path)
         experiment._models = {
             "model": _model(built.flat_path),
-            "other": _model(unfiltered.flat_path),
+            "other": _model(female.flat_path),
         }
         return experiment
 
-    study("other").initialize()
-    with pytest.raises(ValueError, match="TaskStudymodel' simulates in 'high'"):
-        study("model").initialize()
+    study(valid).initialize()
+    with pytest.raises(ValueError, match=f"TaskStudy{invalid}' simulates in 'high'"):
+        study(invalid).initialize()
 
 
 def test_the_individuals_of_simulations_and_scans(built: BuildResult) -> None:
