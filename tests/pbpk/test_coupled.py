@@ -186,7 +186,7 @@ def test_combine_equal_fitted_values_by_value() -> None:
     """Two packages with an equal fitted value of a shared id combine.
 
     The uncertainties of sbmlutils compare by identity, so the equality of
-    the definitions compares them by their fields (task 4a M1).
+    the definitions compares them by their fields.
     """
     a = dataclasses.replace(
         _drg_package(),
