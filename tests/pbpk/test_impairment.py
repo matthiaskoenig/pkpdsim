@@ -191,10 +191,11 @@ def _ckd_binding(protein: str, stage: int) -> float:
 def test_fu_follows_albumin(tmp_path: Path, fu_ref: float) -> None:
     """fu follows the factor of its binding protein (McNamara 2002).
 
-    An unknown protein takes no factor, an unbound substance stays unbound.
-    The CKD factor is a factor of the binding capacity: it divides the
-    binding factor, so fu of a strongly bound substance rises by it, and fu
-    stays below 1.
+    An unknown protein takes no factor of cirrhosis, an unbound substance
+    stays unbound. In CKD an unknown protein follows the factor of the binding
+    capacity, which divides the binding factor, so fu of a strongly bound
+    substance rises by it; albumin and AGP follow their CKD profile, fu of
+    albumin rises and fu of AGP falls; fu stays below 1.
     """
     substances = [
         Substance(
