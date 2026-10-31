@@ -99,7 +99,7 @@ MUSCLE 5.6
 BRAIN 1.89
 ```
 
-The full form (`Mode.PERMEABILITY`) derives the intracellular coefficient from the Kp and the interstitial one (Schmitt 2008). A Kp at or below the interstitial share has no positive intracellular coefficient: the build refuses it for the reference individual of its sex, and the floor of `K_cell_pls_<s>` keeps a fit or another individual from crossing it. The fu of chronic kidney disease raises the share at the same Kp; where it crosses the Kp at the fu of a CKD stage the build warns (`KCellFloorWarning`, see [Impairment](impairment.md#limitations)). A highly bound, hydrophilic acid can lie below the interstitial share in adipose; such a substance uses the merged tissue or the flow-limited organ.
+The full form (`Mode.PERMEABILITY`) derives the intracellular coefficient from the Kp and the interstitial one (Schmitt 2008). A Kp at or below the interstitial share has no positive intracellular coefficient: the build refuses it for the reference individual of its sex, and the floor of `K_cell_pls_<s>` keeps a fit or another individual from crossing it. The fu of chronic kidney disease raises the share at the same Kp; where it crosses the Kp at the fu of a CKD stage the build warns (`KCellFloorWarning` of `pkpdsim.pbpk`, which a model filters or asserts, see [Impairment](impairment.md#limitations)). A highly bound, hydrophilic acid can lie below the interstitial share in adipose; such a substance uses the merged tissue or the flow-limited organ.
 
 ### Slow tissue pool
 

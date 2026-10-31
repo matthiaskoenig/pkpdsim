@@ -37,3 +37,11 @@ The PBPK library, see [PBPK library](../pbpk/index.md): the package and the clas
 ## archive
 
 ::: pkpdsim.pbpk.archive
+
+## figure
+
+::: pkpdsim.pbpk.figure
+
+## slow_pool
+
+::: pkpdsim.pbpk.slow_pool

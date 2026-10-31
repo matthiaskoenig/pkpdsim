@@ -32,7 +32,7 @@ from pkpdsim.pbpk.chemistry import (
 )
 from pkpdsim.pbpk.data import Source, cite, load, sources
 from pkpdsim.pbpk.definition import PBPKDefinition, Variants
-from pkpdsim.pbpk.distribution import interstitial_share
+from pkpdsim.pbpk.distribution import KCellFloorWarning, interstitial_share
 from pkpdsim.pbpk.figure import model_figure
 from pkpdsim.pbpk.observers import Observer
 from pkpdsim.pbpk.organ import (
@@ -146,6 +146,7 @@ __all__ = [
     "Hill",
     "Induction",
     "Inhibition",
+    "KCellFloorWarning",
     "KidneyOutflow",
     "Kp",
     "KpMethod",

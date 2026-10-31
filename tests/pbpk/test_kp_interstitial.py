@@ -13,6 +13,7 @@ import pytest
 from pkpdsim.pbpk import (
     Binding,
     Formula,
+    KCellFloorWarning,
     Kp,
     Mode,
     ModelParameter,
@@ -30,7 +31,6 @@ from pkpdsim.pbpk import (
 )
 from pkpdsim.pbpk.builder import built_organs
 from pkpdsim.pbpk.data import load
-from pkpdsim.pbpk.distribution import KCellFloorWarning
 from pkpdsim.pbpk.impairment import ckd_unbound_fractions
 from pkpdsim.pbpk.physiology import reference_fractions
 
