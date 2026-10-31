@@ -86,7 +86,7 @@ from pkpdsim.pbpk.organs import Organ
 from pkpdsim.pbpk.placement import value_parameter
 from pkpdsim.pbpk.routes import ORAL
 from pkpdsim.pbpk.units import U
-from pkpdsim.pbpk.values import FrozenMap, Q
+from pkpdsim.pbpk.values import FrozenMap, Q, Value
 from pkpdsim.pbpk.variants.gut import GUT_ORGANS, GutBuilder
 from pkpdsim.pbpk.variants.lumen_options import (
     COLON,
@@ -196,13 +196,33 @@ def _fabs_objects(
     ]
 
 
+def _colon_text(q: Q) -> str:
+    """The description of `f_ka_colon_<s>`: a sourced value names its source, else a fit.
+
+    A `Value` with a source (not `fit`) is a measured regional absorption
+    (`RegionalAbsorption({"colon": Value(..., source="Byon2018")})`), which
+    no fit sets; the notes of the value follow with the citation.
+    """
+    text = (
+        "Factor of the absorption of the segments of the large intestine, "
+        "`ka*f_area*f_ka_colon`"
+    )
+    if isinstance(q, Value) and q.source not in (None, "fit"):
+        return (
+            f"{text}: the regional absorption profile of the substance, the value "
+            f"of its source {q.source}, not fitted."
+        )
+    return f"{text}; a model fits it."
+
+
 def _colon_objects(
     definition: "PBPKDefinition", values: Mapping[str, Q]
 ) -> list[Sbase]:
     """The factor of the absorption in the large intestine `f_ka_colon_<s>` of the substances.
 
     The values by substance: of `f_ka_colon` or of the group `colon` of a
-    regional absorption profile, one parameter either way.
+    regional absorption profile, one parameter either way; the notes name the
+    source of a sourced value (`_colon_text`).
     """
     return [
         annotate(
@@ -212,8 +232,7 @@ def _colon_objects(
                 U.dimensionless,
                 f"absorption factor large intestine {s.sid}",
                 _SBO_PARAMETER,
-                "Factor of the absorption of the segments of the large "
-                "intestine, `ka*f_area*f_ka_colon`; a model fits it.",
+                _colon_text(values[s.sid]),
             ),
             "colon_absorption",
             organ=Organ.LARGE_INTESTINE,

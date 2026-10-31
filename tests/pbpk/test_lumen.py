@@ -663,3 +663,29 @@ def test_unset_options_leave_the_reference_sbml(tmp_path: Path) -> None:
             tmp_path / "chemistry",
         )
     )
+
+
+@pytest.mark.parametrize(
+    ("factor", "says"),
+    [
+        (Value(0.06, U.dimensionless, source="Byon2018"), "the value of its source"),
+        (0.06, "a model fits it"),
+        (_fitted(0.06, U.dimensionless, "uniform(0.01, 0.1)"), "a model fits it"),
+    ],
+    ids=["sourced", "number", "fitted"],
+)
+def test_the_notes_of_the_colon_factor_name_a_source(
+    tmp_path: Path, factor: Value | float, says: str
+) -> None:
+    """A sourced colon factor of a profile names its source, not a fit (R37)."""
+    intestine = SegmentedIntestine(regional=RegionalAbsorption({"colon": factor}))
+    result = build(_definition("colon_notes", intestine), tmp_path)
+    model = libsbml.readSBMLFromFile(str(result.flat_path)).getModel()
+    notes = model.getParameter(ids.colon_absorption_factor(S)).getNotesString()
+    assert says in notes
+    if says == "a model fits it":
+        assert "Byon2018" not in notes
+    else:
+        assert "its source Byon2018, not fitted" in notes
+        assert "a model fits it" not in notes
+        assert "Byon W" in notes  # the citation of the source
