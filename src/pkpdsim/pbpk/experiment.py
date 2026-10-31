@@ -47,25 +47,16 @@ from typing import TYPE_CHECKING, ClassVar, overload, override
 
 from sbmlsim import Q
 from sbmlsim.model import AbstractModel
-from sbmlsim.simulation import Scan, Simulation, SteadyState
+from sbmlsim.simulation import Scan, Simulation
 from sbmlsim.units import Quantity
 
 from pkpdsim import impairment
 from pkpdsim.experiment import PKPDSimulationExperiment
 from pkpdsim.pbpk import ids
-
-# the equilibration lives in its own module; its names stay importable here
-from pkpdsim.pbpk.equilibration import DOSE_PREFIXES as DOSE_PREFIXES
 from pkpdsim.pbpk.equilibration import (
     EQUILIBRATION_TOLERANCES,
-    _equilibrate,
+    equilibrated_simulation,
 )
-from pkpdsim.pbpk.equilibration import accumulating_states as accumulating_states
-from pkpdsim.pbpk.equilibration import drug_free_zeros as drug_free_zeros
-from pkpdsim.pbpk.equilibration import (
-    equilibrated_simulation as equilibrated_simulation,
-)
-from pkpdsim.pbpk.equilibration import growing_states as growing_states
 from pkpdsim.pbpk.kidney_validity import (
     changes_text,
     covariate_changes,
@@ -495,13 +486,18 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
           at later times stay. A dose of zero moves as well, so a dimension of
           a scan over it replaces it at the start.
         - The sinks, whose amounts grow without a steady state (the urine and
-          the feces of the library, `Aurine_<s>`, `Afeces_<s>`, and what a PD
+          the feces of the library, `Aurine_<s>`, `Afeces_<s>`, the readouts
+          of the intestine which nothing drains, the amount absorbed
+          `Aabs_<s>` and the oral dose applied `Aapp_<s>` (`GU__Aabs_<s>`,
+          `GU__Aapp_<s>` with the readout `Fa_<s>` alone), and what a PD
           component accumulates, `resets`), are set back at the start: they
           are in steady state when their rate is within the tolerances
           relative to their amount, which they reach as well. A state without
           an outflow which grows during the equilibration and is neither a
           sink of the library nor in `resets` is refused, named
-          (`growing_states`, checked once per model file in a process).
+          (`growing_states`, checked once per model file in a process). A
+          reset names a species by its id; a species whose id is its
+          concentration is set as `[sid]`, as the zeros are.
         - The species which are 0 without a dose, of the substances without a
           baseline (the drugs and their metabolites) which start at 0 and
           which no reaction feeds from a species with a start, are set to
@@ -532,10 +528,11 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
         parameters) and of a run over the draws of the fitted parameters are
         changes before the initialization as well, so they apply during the
         equilibration. The simulation runs on the build of its sex as every
-        simulation of the experiment; the builds have the same ids. Outside
-        an experiment (the groups of a sensitivity analysis) the same
-        equilibration is `equilibrated_simulation(simulation, model_path)`,
-        which reads the ids from the model file.
+        simulation of the experiment; the builds have the same ids. It is
+        `equilibrated_simulation(simulation, model_path)` of
+        `pkpdsim.pbpk.equilibration` on the file of the loaded model, the
+        equilibration outside an experiment as well (the groups of a
+        sensitivity analysis).
 
         Args:
             simulation: the simulation or the scan, in the condition.
@@ -552,34 +549,38 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
             The equilibrated simulation or scan, a new object.
 
         Raises:
-            ValueError: if the model is not loaded, the simulation has a
-                presimulation, a dose is set before the initialization and by a
-                change at the start, a state grows during the equilibration
-                which is not set back, or a dimension of a scan sets a dose which
-                the simulation does not give or varies simulations.
+            ValueError: if the model is not loaded or not a file, the
+                simulation has a presimulation, a dose is set before the
+                initialization and by a change at the start, a state grows
+                during the equilibration which is not set back, or a dimension
+                of a scan sets a dose which the simulation does not give or
+                varies simulations; the message is noted with the experiment.
             ScanError: if the model reaches no steady state in the condition
                 by `max_time` (a `SteadyStateError` of sbmlsim).
         """
-        loaded = self._models.get(model)
-        symbols = getattr(loaded, "symbols", None)
-        if symbols is None:
+        if getattr(self._models.get(model), "symbols", None) is None:
             raise ValueError(
                 f"The model '{model}' of the experiment '{self.sid}' is not loaded: "
                 "the equilibration is created in `simulations()` or later."
             )
-        return _equilibrate(
-            simulation,
-            species=symbols.species,
-            parameters=symbols.parameters,
-            path=_model_path(self.models().get(model)),
-            resets=resets,
-            steady_state=SteadyState(
+        path = _model_path(self.models().get(model))
+        if path is None:
+            raise ValueError(
+                f"The model '{model}' of the experiment '{self.sid}' is no file: "
+                "the equilibration reads the ids of the model from its file."
+            )
+        try:
+            return equilibrated_simulation(
+                simulation,
+                path,
+                resets=resets,
                 absolute_tolerance=absolute_tolerance,
                 relative_tolerance=relative_tolerance,
                 max_time=max_time,
-            ),
-            where=f"in the experiment '{self.sid}'",
-        )
+            )
+        except ValueError as err:
+            err.add_note(f"The equilibration in the experiment '{self.sid}'.")
+            raise
 
     def _check_kidney_outflow(self) -> None:
         """Check the kidney outflow of every individual the experiment simulates.

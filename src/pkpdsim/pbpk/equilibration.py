@@ -1,10 +1,12 @@
 """The drug-free equilibration of a condition of a model of the library.
 
-`PBPKSimulationExperiment.equilibrated` (`pkpdsim.pbpk.experiment`) and
-`equilibrated_simulation` outside an experiment (the groups of a sensitivity
-analysis) share `_equilibrate`: the presimulation of sbmlsim to the steady
-state of the condition, the doses moved to the start, the sinks and the
-resets set back, the species of the drugs set to exactly 0
+`equilibrated_simulation` equilibrates a simulation of a model file, the
+equilibration of `PBPKSimulationExperiment.equilibrated`
+(`pkpdsim.pbpk.experiment`, on the file of its loaded model) and of the groups
+of a sensitivity analysis: the presimulation of sbmlsim to the steady
+state of the condition, the doses moved to the start, the sinks, the
+readouts of the intestine which nothing drains and the resets set back, the
+species of the drugs set to exactly 0
 (`drug_free_zeros`) and the states which grow without a steady state refused
 (`accumulating_states`, `growing_states`). A model file is parsed once per
 process (`_model_file`, by its path and modification time); the docs are
@@ -32,6 +34,7 @@ from sbmlsim.uncertainty import Uncertain
 from sbmlsim.units import Quantity
 
 from pkpdsim.pbpk import ids
+from pkpdsim.pbpk.organs import Organ
 from pkpdsim.scan import start_values
 
 __all__ = [
@@ -376,21 +379,24 @@ def equilibrated_simulation(
 ) -> Simulation | Scan:
     """Get a simulation of a model file which starts from the drug-free steady state of its condition.
 
-    The equilibration of `PBPKSimulationExperiment.equilibrated` outside an
-    experiment, e.g. for the groups of a sensitivity analysis
+    The equilibration of `PBPKSimulationExperiment.equilibrated`, which calls
+    it with the file of its loaded model, and of a simulation outside an
+    experiment, e.g. the groups of a sensitivity analysis
     (`pkpdsim.sensitivity.SensitivityGroup(equilibrate=True)`): the ids of
-    the doses, the sinks and the deltas are read from the model file instead
-    of a loaded model, everything else is the same (the doses move to the
-    start, the sinks and `resets` are set back, the species of the drugs are
-    exactly 0, a growing state without a reset is refused, every point of a
-    scan equilibrates in its own condition). It replaces a long pre-run from
+    the doses, the sinks, the readouts of the intestine and the deltas are
+    read from the model file (the doses move to the start, the sinks, the
+    readouts which nothing drains and `resets` are set back, the species of
+    the drugs are exactly 0, a growing state without a reset is refused,
+    every point of a scan equilibrates in its own condition), see
+    `PBPKSimulationExperiment.equilibrated`. It replaces a long pre-run from
     a negative start, which leaves a slow state off its steady state.
 
     Args:
         simulation: the simulation or the scan, in the condition.
         model_path: the flat SBML model the simulation runs.
         resets: the values at the start of the further states which grow
-            without a steady state, e.g. the urine of a PD component.
+            without a steady state, e.g. the urine of a PD component; a
+            species by its id (a concentration species is set as `[sid]`).
         absolute_tolerance: the absolute tolerance of the rates of the
             equilibration (per minute).
         relative_tolerance: the relative tolerance of the rates.
@@ -404,92 +410,71 @@ def equilibrated_simulation(
     """
     path = Path(model_path)
     parsed = _model_file(path, path.stat().st_mtime_ns)
-    return _equilibrate(
-        simulation,
-        species=parsed.species,
-        parameters=parsed.parameters,
-        path=path,
-        resets=resets,
-        steady_state=SteadyState(
-            absolute_tolerance=absolute_tolerance,
-            relative_tolerance=relative_tolerance,
-            max_time=max_time,
-        ),
-        where=f"of the model '{path.name}'",
+    steady_state = SteadyState(
+        absolute_tolerance=absolute_tolerance,
+        relative_tolerance=relative_tolerance,
+        max_time=max_time,
     )
-
-
-def _equilibrate(
-    simulation: Simulation | Scan,
-    *,
-    species: Collection[str],
-    parameters: Collection[str],
-    path: Path | None,
-    resets: Mapping[str, Quantity | float] | None,
-    steady_state: SteadyState,
-    where: str,
-) -> Simulation | Scan:
-    """Equilibrate a simulation or a scan of a model, see `PBPKSimulationExperiment.equilibrated`.
-
-    Args:
-        simulation: the simulation or the scan.
-        species: the species of the model.
-        parameters: the parameters of the model.
-        path: the model file, `None` for SBML text: then no growing state is
-            refused and no species is set to 0.
-        resets: the further values at the start.
-        steady_state: the presimulation.
-        where: the experiment or the model, for the messages.
-    """
-    sinks = sorted(s for s in species if s.startswith((ids.urine(""), ids.feces(""))))
+    sinks = sorted(
+        s for s in parsed.species if s.startswith((ids.urine(""), ids.feces("")))
+    )
+    # the readouts of the intestine which nothing drains, the amount absorbed
+    # and the oral dose applied (`Fa_<s>`, in the intestine or at the top)
+    readouts = sorted(_intestine_readouts(parsed.parameters))
     # a species whose id is its concentration is set as `[sid]`: the same 0,
     # and the quantity of the species for PEtab (a condition of PEtab sets the
     # concentration of such a species, the amount of an amount species)
-    concentrations: frozenset[str] = frozenset()
+    concentrations = parsed.concentrations
     # the bases of the deltas, evaluated after the equilibration
     deltas = sorted(
         sid
-        for sid in parameters
-        if ids.delta_base(sid) in parameters and ids.delta(sid) in parameters
+        for sid in parsed.parameters
+        if ids.delta_base(sid) in parsed.parameters
+        and ids.delta(sid) in parsed.parameters
     )
     base = simulation.simulation if isinstance(simulation, Scan) else simulation
-    zeros: tuple[str, ...] = ()
-    if path is not None:
-        concentrations = _model_file(path, path.stat().st_mtime_ns).concentrations
-        # what a dimension of values or the condition sets is no zero
-        scanned = {
-            target
-            for dimension in (
-                simulation.dimensions if isinstance(simulation, Scan) else ()
-            )
-            if dimension.kind == DimensionKind.VALUES
-            for target in dimension.values
-        }
-        preinit = {**base.preinit_changes, **base.uncertain_preinit}
-        set_at_start = {_bare(target) for target in _set_at_start(base)}
-        zeros = tuple(
-            sid
-            for sid in drug_free_zeros(path, set(preinit) | scanned)
-            if sid not in set_at_start
-        )
+    # what a dimension of values or the condition sets is no zero
+    scanned = {
+        target
+        for dimension in (simulation.dimensions if isinstance(simulation, Scan) else ())
+        if dimension.kind == DimensionKind.VALUES
+        for target in dimension.values
+    }
+    preinit = {**base.preinit_changes, **base.uncertain_preinit}
+    set_at_start = {_bare(target) for target in _set_at_start(base)}
+    zeros = tuple(
+        sid
+        for sid in drug_free_zeros(path, set(preinit) | scanned)
+        if sid not in set_at_start
+    )
+    # a reset names a species by its id or as `[sid]`, set as the zeros are
+    reset = {
+        _quantities([_bare(target)], concentrations)[0]: value
+        for target, value in (resets or {}).items()
+    }
+    reset_ids = {_bare(target) for target in reset}
     at_start: dict[str, float | Quantity | str] = {
-        **dict.fromkeys(_quantities(sinks, concentrations), 0.0),
-        **dict.fromkeys(_quantities(zeros, concentrations), 0.0),
-        **(resets or {}),
+        **dict.fromkeys(
+            _quantities(
+                (s for s in (*sinks, *readouts, *zeros) if s not in reset_ids),
+                concentrations,
+            ),
+            0.0,
+        ),
+        **reset,
         **{ids.delta_base(sid): sid for sid in deltas},
     }
     equilibrated = _equilibrated(base, DOSE_PREFIXES, at_start, steady_state)
-    if path is not None:
-        growing = sorted(
-            set(growing_states(path, equilibrated.preinit_changes, steady_state))
-            - {_bare(target) for target in at_start}
+    growing = sorted(
+        set(growing_states(path, equilibrated.preinit_changes, steady_state))
+        - {_bare(target) for target in at_start}
+    )
+    if growing:
+        raise ValueError(
+            f"The states {growing} grow without a steady state during the "
+            f"equilibration of the model '{path.name}' (they have no outflow): "
+            "give their values at the start in `resets`."
         )
-        if growing:
-            raise ValueError(
-                f"The states {growing} grow without a steady state during the "
-                f"equilibration {where} (they have no outflow): give their values "
-                "at the start in `resets`."
-            )
     if not isinstance(simulation, Scan):
         return equilibrated
     given = {target for change in equilibrated.changes for target in change.values}
@@ -513,6 +498,28 @@ def _equilibrate(
                 "before the equilibration; give them in the simulation."
             )
     return Scan(simulation=equilibrated, dimensions=simulation.dimensions)
+
+
+def _intestine_readouts(parameters: Collection[str]) -> set[str]:
+    """The readouts of the intestine of a model which only accumulate.
+
+    The amount absorbed from the lumen `Aabs_<s>` and the oral dose applied
+    `Aapp_<s>` of every substance (`Mr_<s>`), of the intestine
+    (`GU__Aabs_<s>`, the readout `Fa_<s>` alone) or of the top model: states
+    which nothing drains, set back at the start as the sinks.
+    """
+    substances = [
+        sid.removeprefix(ids.mr("")) for sid in parameters if sid.startswith(ids.mr(""))
+    ]
+    locals_ = (
+        f(s) for s in substances for f in (ids.absorbed_amount, ids.oral_dose_applied)
+    )
+    return {
+        sid
+        for local in locals_
+        for sid in (local, ids.flat(Organ.SMALL_INTESTINE, local))
+        if sid in parameters
+    }
 
 
 def _bare(target: str) -> str:

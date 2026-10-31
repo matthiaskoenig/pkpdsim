@@ -869,20 +869,27 @@ def test_a_sensitivity_group_resets_only_when_it_equilibrates() -> None:
         SensitivityGroup("g", "G", _dosed(), resets={"HOMEO__V": 0.0})
 
 
-def test_the_names_of_the_equilibration_stay_in_the_experiment_module() -> None:
-    """The equilibration moved to its module; the names are importable as before."""
-    from pkpdsim.pbpk import equilibration
-    from pkpdsim.pbpk import experiment as experiment_module
+def test_a_reset_of_a_concentration_species_is_set_as_its_concentration(
+    builds: dict[str, BuildResult],
+) -> None:
+    """A reset by the id of a concentration species is set as `[sid]`, once.
 
-    for name in (
-        "EQUILIBRATION_TOLERANCES",
-        "DOSE_PREFIXES",
-        "accumulating_states",
-        "growing_states",
-        "drug_free_zeros",
-        "equilibrated_simulation",
-    ):
-        assert getattr(experiment_module, name) is getattr(equilibration, name), name
+    A condition of PEtab sets the concentration of such a species, as the
+    zeros of the drug are set; the reset of a species which is also a zero
+    replaces the zero and is not set twice.
+    """
+    path = builds["sink"].flat_path
+    venous = ids.pool_species(Pool.VENOUS, "drg")
+    assert venous in _concentrations(path)
+    assert venous in drug_free_zeros(path)
+    for target in (venous, f"[{venous}]"):
+        simulation = equilibrated_simulation(
+            _dosed(), path, resets={"HOMEO__V": 0.0, target: 0.002}
+        )
+        values = simulation.changes[0].values
+        assert values[f"[{venous}]"] == 0.002
+        assert venous not in values
+        assert values["HOMEO__V"] == 0.0
 
 
 def _custom(equation: str, rate: str, *, baseline: bool = True) -> PBPKDefinition:

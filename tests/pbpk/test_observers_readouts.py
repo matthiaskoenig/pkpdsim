@@ -15,6 +15,9 @@ from pathlib import Path
 import libsbml
 import numpy as np
 import pytest
+import roadrunner
+from sbmlsim.simulation import Simulation
+from sbmlsim.simulator import Simulator
 from sbmlutils.factory import ModelDefinition, Parameter, Reaction, Species
 
 from pkpdsim.pbpk import (
@@ -39,7 +42,7 @@ from pkpdsim.pbpk import (
     ids,
 )
 from pkpdsim.pbpk.builder import build
-from pkpdsim.pbpk.equilibration import accumulating_states
+from pkpdsim.pbpk.equilibration import accumulating_states, equilibrated_simulation
 from pkpdsim.pbpk.observers import _flux_sum, intestine_readouts
 from pkpdsim.pbpk.units import (
     EXTRA_UNITS,
@@ -49,6 +52,7 @@ from pkpdsim.pbpk.units import (
     unit_label,
 )
 from pkpdsim.pbpk.variants.segments import segments
+from pkpdsim.scan import end_values, start_values
 
 from .conftest import (
     assert_reference_sbml,
@@ -688,6 +692,54 @@ def test_the_absorbed_fraction_alone_keeps_its_amount_in_the_intestine(
     assert ids.absorbed_fraction(S) in found
     assert ids.absorbed_amount(S) not in found
     assert gu <= set(accumulating_states(result.flat_path.read_text()))
+
+
+@pytest.mark.parametrize(
+    "readouts",
+    [(ids.absorbed_fraction(S),), (ids.absorbed_amount(S), ids.absorbed_fraction(S))],
+    ids=["fraction alone", "amount and fraction"],
+)
+def test_the_equilibration_sets_back_the_absorbed_amount_of_an_endogenous_substance(
+    tmp_path: Path, readouts: tuple[str, ...]
+) -> None:
+    """An endogenous substance in the lumen at baseline: its readouts start at 0.
+
+    The apical efflux of the wall moves the endogenous substance into the
+    lumen at its baseline, and it is absorbed again, so its absorbed amount
+    grows during the equilibration without a steady state. The equilibration
+    sets it and the oral dose applied back at the start, as the sinks, so the
+    simulation starts at 0 and needs no reset.
+    """
+    drug = dataclasses.replace(simple_drug(), excretion=Excretion(), baseline=0.001)
+    d = _oral(
+        SegmentedIntestine(),
+        substances=[drug, *definition().substances[1:]],
+        readouts=readouts,
+    )
+    path = build(d, tmp_path).flat_path
+    states = set(accumulating_states(path.read_text(encoding="utf-8")))
+    amount, applied = (
+        sid
+        for local in (ids.absorbed_amount(S), ids.oral_dose_applied(S))
+        for sid in (local, ids.flat(Organ.SMALL_INTESTINE, local))
+        if sid in states
+    )
+    simulation = equilibrated_simulation(
+        Simulation(end=60, preinit_changes={ids.sol_dose(S): 0.0}), path
+    )
+    assert simulation.changes[0].values[amount] == 0.0
+    assert simulation.changes[0].values[applied] == 0.0
+    r = roadrunner.RoadRunner(str(path))
+    r.integrator.absolute_tolerance = 1e-14
+    r.integrator.relative_tolerance = 1e-10
+    before = r.simulate(0, 1e5, 2, selections=["time", amount])[amount][-1]
+    assert before > 1e-6
+    result = Simulator(
+        n_workers=1, absolute_tolerance=1e-14, relative_tolerance=1e-10
+    ).run(path, simulation)
+    assert float(start_values(result, amount).item()) == 0.0
+    assert float(start_values(result, applied).item()) == 0.0
+    assert float(end_values(result, amount).item()) > 0.0
 
 
 def test_the_absorbed_fraction_needs_an_oral_dose() -> None:
