@@ -85,7 +85,6 @@ from sbmlsim.simulation import (
 )
 from sbmlsim.simulation.sampling import Uniform
 from sbmlsim.simulator import Simulator
-from sbmlsim.units import Quantity
 from sbmlutils.console import console
 from sbmlutils.report.units import udef_to_string
 
@@ -735,18 +734,13 @@ class SensitivityGroup:
         sex: the sex of the group, whose build of the model it runs
             (`PKPDModel.model_paths`), the male build by default; the design
             of an analysis is the same for every group.
-        equilibrate: the simulations of the group start from the drug-free
-            steady state of their condition, every point of a design in its
-            own (`pkpdsim.pbpk.equilibrated_simulation` on the build of the
-            group, a model of the PBPK library): the doses before the
-            initialization move to the start, the sinks and `resets` are set
-            back, the species of the drugs are exactly 0. It replaces a long
-            pre-run from a negative start (hctz kept 14 days), which leaves a
-            slow state (the fluid of a PD component in renal impairment) off
-            its steady state.
-        resets: the values at the start of the further states which grow
-            without a steady state during the equilibration, e.g. the urine
-            of a PD component; only with `equilibrate`.
+        prepare: a function of the scan of the group over a design and the
+            build of the group (`(scan, model_path) -> scan`) which gives the
+            scan that runs, `None` for the scan as it is; e.g. the drug-free
+            equilibration of every point of a model of the PBPK library
+            (`pkpdsim.pbpk.Equilibration`), which replaces a long pre-run from
+            a negative start that leaves a slow state off its steady state.
+            The module knows no model: what the function does is the model's.
     """
 
     uid: str
@@ -754,24 +748,7 @@ class SensitivityGroup:
     simulation: Simulation
     color: str | None = None
     sex: Sex = Sex.MALE
-    equilibrate: bool = False
-    resets: Mapping[str, Quantity | float] = dataclasses.field(
-        default_factory=lambda: MappingProxyType({})
-    )
-
-    def __post_init__(self) -> None:
-        """Keep the resets read-only.
-
-        Raises:
-            ValueError: for resets without the equilibration.
-        """
-        if self.resets and not self.equilibrate:
-            raise ValueError(
-                f"The group '{self.uid}' has resets but no equilibration: the "
-                "resets are the values at the start of an equilibrated "
-                "simulation, set `equilibrate=True`."
-            )
-        object.__setattr__(self, "resets", MappingProxyType(dict(self.resets)))
+    prepare: Callable[[Scan, Path], Scan] | None = None
 
 
 @dataclass(frozen=True)
@@ -811,16 +788,13 @@ class _Context:
     def scan(self, group: SensitivityGroup, design: Dimension) -> ScanResult:
         """Run a design over the simulation of a group, the outputs per point.
 
-        A group which equilibrates runs every point from the drug-free steady
-        state of its condition (`SensitivityGroup.equilibrate`).
+        The scan of a group with `prepare` is the one the function gives on
+        the build of the group (`SensitivityGroup.prepare`).
         """
         path = self.model_path(group)
         scan = Scan(group.simulation, [design])
-        if group.equilibrate:
-            # the PBPK library imports its simulator part on use
-            from pkpdsim.pbpk.equilibration import equilibrated_simulation
-
-            scan = equilibrated_simulation(scan, path, resets=group.resets)
+        if group.prepare is not None:
+            scan = group.prepare(scan, path)
         return self.simulator.run(
             path, scan, self.observables, keep=[o.observable for o in self.outputs]
         )

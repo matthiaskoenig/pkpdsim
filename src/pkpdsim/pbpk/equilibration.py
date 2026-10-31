@@ -20,7 +20,9 @@ from __future__ import annotations
 
 import math
 from collections.abc import Collection, Iterable, Mapping
+from dataclasses import dataclass, field
 from pathlib import Path
+from types import MappingProxyType
 from typing import overload
 
 import libsbml
@@ -39,6 +41,7 @@ from pkpdsim.scan import start_values
 __all__ = [
     "DOSE_PREFIXES",
     "EQUILIBRATION_TOLERANCES",
+    "Equilibration",
     "accumulating_states",
     "drug_free_zeros",
     "equilibrated_simulation",
@@ -245,7 +248,7 @@ def equilibrated_simulation(
     The equilibration of `PBPKSimulationExperiment.equilibrated`, which calls
     it with the file of its loaded model, and of a simulation outside an
     experiment, e.g. the groups of a sensitivity analysis
-    (`pkpdsim.sensitivity.SensitivityGroup(equilibrate=True)`): the ids of
+    (`pkpdsim.sensitivity.SensitivityGroup(prepare=Equilibration(...))`): the ids of
     the doses, the sinks, the readouts of the intestine and the deltas are
     read from the model file (the doses move to the start, the sinks, the
     readouts which nothing drains and `resets` are set back, the species of
@@ -383,6 +386,63 @@ def _intestine_readouts(parameters: Collection[str]) -> set[str]:
         for sid in (local, ids.flat(Organ.SMALL_INTESTINE, local))
         if sid in parameters
     }
+
+
+@dataclass(frozen=True)
+class Equilibration:
+    """The drug-free equilibration of the scans of a group of a sensitivity analysis.
+
+    The function of a `pkpdsim.sensitivity.SensitivityGroup` which prepares
+    its scans (`prepare`): every point of a design starts from the drug-free
+    steady state of its condition on the build of the group
+    (`equilibrated_simulation`), which replaces a long pre-run from a
+    negative start:
+
+    ```python
+    # not executed
+    SensitivityGroup(
+        "renal_mild", "Mild renal impairment", simulation,
+        prepare=Equilibration(resets={"FLUID__Aurine_h2o": 0.0}),
+    )
+    ```
+
+    Attributes:
+        resets: the values at the start of the further states which grow
+            without a steady state, e.g. the urine of a PD component.
+        absolute_tolerance: the absolute tolerance of the rates (per minute).
+        relative_tolerance: the relative tolerance of the rates.
+        max_time: the longest equilibration (minutes).
+    """
+
+    resets: Mapping[str, Quantity | float] = field(
+        default_factory=lambda: MappingProxyType({})
+    )
+    absolute_tolerance: float = EQUILIBRATION_TOLERANCES[0]
+    relative_tolerance: float = EQUILIBRATION_TOLERANCES[1]
+    max_time: float = EQUILIBRATION_TOLERANCES[2]
+
+    def __post_init__(self) -> None:
+        """Keep the resets read-only."""
+        object.__setattr__(self, "resets", MappingProxyType(dict(self.resets)))
+
+    def __call__(self, scan: Scan, model_path: Path) -> Scan:
+        """Equilibrate the scan of a group on its build.
+
+        Args:
+            scan: the scan of the group over a design.
+            model_path: the build of the group.
+
+        Returns:
+            The equilibrated scan.
+        """
+        return equilibrated_simulation(
+            scan,
+            model_path,
+            resets=self.resets,
+            absolute_tolerance=self.absolute_tolerance,
+            relative_tolerance=self.relative_tolerance,
+            max_time=self.max_time,
+        )
 
 
 def _bare(target: str) -> str:

@@ -82,7 +82,7 @@ from pkpdsim.pbpk.variants.liver_zonated import ZonatedLiver
 from pkpdsim.pbpk.variants.lumen_options import LumenConversion, RegionalAbsorption
 
 if TYPE_CHECKING:
-    from pkpdsim.pbpk.equilibration import equilibrated_simulation
+    from pkpdsim.pbpk.equilibration import Equilibration, equilibrated_simulation
     from pkpdsim.pbpk.experiment import (
         REFERENCE_GFR,
         PBPKSimulationExperiment,
@@ -98,6 +98,7 @@ _LAZY_NAMES = {
     "REFERENCE_GFR": "experiment",
     "PBPKSimulationExperiment": "experiment",
     "ScaledRenalMap": "experiment",
+    "Equilibration": "equilibration",
     "equilibrated_simulation": "equilibration",
     "healthy_gfr": "experiment",
     "molecular_weights": "experiment",
@@ -137,6 +138,7 @@ __all__ = [
     "CustomReaction",
     "Direction",
     "DoseDependentDissolution",
+    "Equilibration",
     "Erythrocytes",
     "Excretion",
     "FirstOrder",

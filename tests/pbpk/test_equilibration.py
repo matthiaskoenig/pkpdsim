@@ -56,6 +56,7 @@ from pkpdsim.pbpk import (
 )
 from pkpdsim.pbpk.builder import BuildResult
 from pkpdsim.pbpk.equilibration import (
+    Equilibration,
     accumulating_states,
     drug_free_zeros,
     equilibrated_simulation,
@@ -824,8 +825,7 @@ def test_a_sensitivity_group_runs_from_the_equilibrated_state(
             "equilibrated",
             "Equilibrated",
             placebo,
-            equilibrate=True,
-            resets={"HOMEO__V": 0.0},
+            prepare=Equilibration(resets={"HOMEO__V": 0.0}),
         ),
     ]
     runner = SensitivityRunner(
@@ -862,11 +862,36 @@ def test_a_sensitivity_group_runs_from_the_equilibrated_state(
     assert np.allclose(starts["equilibrated"], STEADY_X, rtol=1e-6)
 
 
-def test_a_sensitivity_group_resets_only_when_it_equilibrates() -> None:
-    from pkpdsim.sensitivity import SensitivityGroup
+def test_the_equilibration_of_a_group_is_the_equilibration_of_its_scan(
+    builds: dict[str, BuildResult],
+) -> None:
+    """`Equilibration` is `equilibrated_simulation` of the scan on the build."""
+    path = builds["sink"].flat_path
+    scan = Scan(
+        _dosed(), [Dimension("dim", values={"HOMEO__EC50": Q([1e-3, 2e-3], "mM")})]
+    )
+    resets = {"HOMEO__V": 0.0}
+    prepared = Equilibration(resets=resets)(scan, path)
+    direct = equilibrated_simulation(scan, path, resets=resets)
+    assert dict(prepared.simulation.changes[0].values) == dict(
+        direct.simulation.changes[0].values
+    )
+    assert prepared.simulation.presimulation == direct.simulation.presimulation
 
-    with pytest.raises(ValueError, match="has resets but no equilibration"):
-        SensitivityGroup("g", "G", _dosed(), resets={"HOMEO__V": 0.0})
+
+def test_the_sensitivity_analyses_do_not_import_the_library() -> None:
+    """The generic analyses know no model: the PBPK layer gives the equilibration."""
+    import subprocess
+    import sys
+
+    code = (
+        "import sys, pkpdsim.sensitivity; "
+        "print(sorted(m for m in sys.modules if m.startswith('pkpdsim.pbpk')))"
+    )
+    out = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, check=True
+    )
+    assert out.stdout.strip() == "[]"
 
 
 def test_a_reset_of_a_concentration_species_is_set_as_its_concentration(
