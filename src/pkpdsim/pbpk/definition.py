@@ -158,10 +158,11 @@ class PBPKDefinition:
             substance over the value before a dose.
         readouts: the readouts of the library which the model reads, by id,
             outputs of the intestine with a lumen: the dissolved amount in
-            the lumen `Alumen_<s>` and the summed fluxes of the absorption
+            the lumen `Alumen_<s>`, the summed fluxes of the absorption
             `Rabs_<s>`, the efflux into the lumen `Reff_<s>` and the loss to
-            the feces `Rfeces_<s>` (`ids.lumen_amount`, ...); a model without
-            readouts has none of them.
+            the feces `Rfeces_<s>` (`ids.lumen_amount`, ...), the amount
+            absorbed `Aabs_<s>` and the gross absorbed fraction of the oral
+            dose `Fa_<s>`; a model without readouts has none of them.
         slow_pools: the slow (deep) pools of the tissues (`SlowPool`), one
             per substance: the species `Cslow_<s>` in the merged tissue of
             each of its organs with the exchange
@@ -520,8 +521,8 @@ class PBPKDefinition:
         known = readout_ids(s.sid for s in self.substances)
         problems += [
             f"readout '{r}' is no readout of the library: `Alumen_<s>`, "
-            "`Rabs_<s>`, `Reff_<s>` or `Rfeces_<s>` of a substance of the "
-            "definition"
+            "`Rabs_<s>`, `Reff_<s>`, `Rfeces_<s>`, `Aabs_<s>` or `Fa_<s>` of a "
+            "substance of the definition"
             for r in dict.fromkeys(self.readouts)
             if r not in known
         ]

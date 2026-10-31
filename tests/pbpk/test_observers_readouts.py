@@ -39,7 +39,8 @@ from pkpdsim.pbpk import (
     ids,
 )
 from pkpdsim.pbpk.builder import build
-from pkpdsim.pbpk.observers import _flux_sum
+from pkpdsim.pbpk.equilibration import accumulating_states
+from pkpdsim.pbpk.observers import _flux_sum, intestine_readouts
 from pkpdsim.pbpk.units import ML_PER_MIN_1P73M2
 from pkpdsim.pbpk.variants.segments import segments
 
@@ -606,3 +607,90 @@ def test_without_readouts_the_model_is_unchanged(tmp_path: Path) -> None:
     """Empty readouts and no observers give the SBML of the stored reference."""
     d = dataclasses.replace(reference_definition(), readouts=(), observers=())
     assert_reference_sbml(build(d, tmp_path))
+
+
+ABSORBED = (ids.absorption_rate(S), ids.absorbed_amount(S), ids.absorbed_fraction(S))
+"""The absorption rate, the amount absorbed and the gross absorbed fraction."""
+
+
+@pytest.mark.parametrize(
+    ("intestine", "route"),
+    [
+        (SegmentedIntestine(fabs=0.8), Route.oral_solution(S)),
+        (SegmentedIntestine(fabs=0.8), Route.oral(S)),
+        (SingleLumen(fabs=0.8), Route.oral_solution(S)),
+    ],
+    ids=["segmented solution", "segmented tablet", "single_lumen solution"],
+)
+def test_the_absorbed_amount_and_the_gross_absorbed_fraction(
+    tmp_path: Path, intestine: OrganComponent, route: Route
+) -> None:
+    """`Aabs_<s>` integrates `Rabs_<s>`; `Fa_<s>` is it over the oral dose given (R37).
+
+    Two doses, 10 mg at the start and 5 mg after 5 hours: the fraction is
+    over 10 mg until the second dose and over 15 mg after it, 0 without a
+    dose; gross, so the drug which the efflux of the wall returns into the
+    lumen and which is absorbed again counts again.
+    """
+    d = _oral(intestine, routes=[route], readouts=ABSORBED)
+    r = load(build(d, tmp_path))
+    dose = ids.po_dose(S) if route.kind == "oral" else ids.sol_dose(S)
+    mr = r[ids.mr(S)]
+    s = r.simulate(0, 600, 6001, selections=["time", *ABSORBED])
+    assert np.all(s[ABSORBED[1]] == 0.0)
+    assert np.all(s[ABSORBED[2]] == 0.0)
+    r.reset()
+    r[dose] = 10.0
+    first = r.simulate(0, 300, 3001, selections=["time", *ABSORBED])
+    r[dose] = r[dose] + 5.0
+    second = r.simulate(300, 1440, 11401, selections=["time", *ABSORBED])
+    for part, given in ((first, 10.0), (second, 15.0)):
+        np.testing.assert_allclose(
+            part[ABSORBED[2]][1:],
+            part[ABSORBED[1]][1:] / (given / mr),
+            rtol=1e-9,
+            atol=1e-14,
+        )
+    rate = np.concatenate([first[ABSORBED[0]], second[ABSORBED[0]][1:]])
+    time = np.concatenate([first["time"], second["time"][1:]])
+    integral = np.trapezoid(rate, time)
+    assert second[ABSORBED[1]][-1] == pytest.approx(integral, rel=1e-4)
+    # the efflux of the wall returns drug into the lumen, which is absorbed
+    # again: the gross fraction counts it every time (above 1 for the segments)
+    assert second[ABSORBED[2]][-1] > 0.5
+    assert np.all(np.diff(first[ABSORBED[1]]) >= -1e-15)
+
+
+def test_the_absorbed_fraction_alone_keeps_its_amount_in_the_intestine(
+    tmp_path: Path,
+) -> None:
+    """`Fa_<s>` alone: the amount and the applied dose are states of the intestine only.
+
+    The equilibration sets them back as the sinks, they accumulate.
+    """
+    result = build(
+        _oral(SegmentedIntestine(), readouts=(ids.absorbed_fraction(S),)), tmp_path
+    )
+    doc = libsbml.readSBMLFromFile(str(result.flat_path))
+    found = {p.getId() for p in doc.getModel().getListOfParameters()}
+    gu = {
+        ids.flat(Organ.SMALL_INTESTINE, ids.absorbed_amount(S)),
+        ids.flat(Organ.SMALL_INTESTINE, ids.oral_dose_applied(S)),
+    }
+    assert gu <= found
+    assert ids.absorbed_fraction(S) in found
+    assert ids.absorbed_amount(S) not in found
+    assert gu <= set(accumulating_states(result.flat_path.read_text()))
+
+
+def test_the_absorbed_fraction_needs_an_oral_dose() -> None:
+    """A substance in the lumen without an oral dose state has no absorbed fraction of it."""
+    md = ModelDefinition(
+        "gu",
+        species=[
+            Species("Clumen_du_drg", compartment="Vlumen_du", initialConcentration=0.0)
+        ],
+        reactions=[Reaction("J_abs_du_drg", equation="Clumen_du_drg -> Cmu_du_drg")],
+    )
+    with pytest.raises(ValueError, match=r"'Fa_drg': the substance 'drg' has no oral"):
+        intestine_readouts(md, (ids.absorbed_fraction(S),), (S,))

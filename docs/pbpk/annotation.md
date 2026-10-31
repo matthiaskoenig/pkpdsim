@@ -95,6 +95,9 @@ PBPKO has no term for some of the quantities, compartments and processes of the 
 | intestinal absorption rate (amount of compound per time) | `OUTPUT_PARAMETER` |
 | intestinal efflux rate into the lumen (amount of compound per time) | `OUTPUT_PARAMETER` |
 | fecal excretion rate (amount of compound per time) | `OUTPUT_PARAMETER` |
+| amount of compound absorbed from the intestinal lumen | `OUTPUT_PARAMETER` |
+| fraction of the oral dose absorbed from the intestinal lumen | `OUTPUT_PARAMETER` |
+| amount of the oral dose applied to the intestinal lumen | `OUTPUT_PARAMETER` |
 | `CONCENTRATION_IN_HEART` | `CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT` |
 | `CONCENTRATION_IN_PANCREAS` | `CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT` |
 | `CONCENTRATION_IN_MUSCLE` | `CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT` |

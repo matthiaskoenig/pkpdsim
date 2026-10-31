@@ -55,6 +55,7 @@ from sbmlutils.factory import (
     Parameter,
     Port,
     PortType,
+    RateRule,
     Sbase,
     UnitDefinition,
 )
@@ -268,6 +269,8 @@ _READOUT_KINDS = (
     (ids.absorption_rate, "absorption"),
     (ids.efflux_rate, "efflux"),
     (ids.feces_rate, "feces"),
+    (ids.absorbed_amount, "absorbed"),
+    (ids.absorbed_fraction, "fraction"),
 )
 """The readouts of the intestine by their id function and what they sum."""
 
@@ -279,9 +282,9 @@ def readout_ids(substances: Iterable[str]) -> dict[str, tuple[str, str]]:
         substances: the substance ids.
 
     Returns:
-        By readout id (`Alumen_<s>`, `Rabs_<s>`, `Reff_<s>`, `Rfeces_<s>`),
-        what it sums (`lumen`, `absorption`, `efflux`, `feces`) and its
-        substance.
+        By readout id (`Alumen_<s>`, `Rabs_<s>`, `Reff_<s>`, `Rfeces_<s>`,
+        `Aabs_<s>`, `Fa_<s>`), what it sums (`lumen`, `absorption`, `efflux`,
+        `feces`, `absorbed`, `fraction`) and its substance.
     """
     return {f(s): (what, s) for s in substances for f, what in _READOUT_KINDS}
 
@@ -306,7 +309,19 @@ def intestine_readouts(
       (mmole/min);
     - `Rfeces_<s>`: the net flux of the intestine into the feces `Afeces_<s>`
       (mmole/min); with an intestine with a lumen every flux into the feces
-      is one of the intestine, so it integrates to `Afeces_<s>`.
+      is one of the intestine, so it integrates to `Afeces_<s>`;
+    - `Aabs_<s>`: the amount absorbed since the start, the integral of the
+      fluxes of `Rabs_<s>`, a state of the intestine (mmole);
+    - `Fa_<s>`: the gross absorbed fraction of the oral dose, `Aabs_<s>`
+      over the oral dose given until then (the dose states `PODOSE_<s>` and
+      `SOLDOSE_<s>` over `Mr_<s>` plus what the intestine applied of them,
+      the state `Aapp_<s>`), 0 before a dose: before the first pass of the
+      wall and the liver, so above the bioavailability; the absorption of a
+      substance which reaches the lumen otherwise (the bile, an efflux)
+      counts as well, so it can exceed 1.
+
+    `Aabs_<s>` and `Aapp_<s>` are states which nothing drains (accumulating
+    states, which the equilibration sets back as it sets back the sinks).
 
     Args:
         md: the model definition of the intestine, changed in place.
@@ -325,6 +340,7 @@ def intestine_readouts(
     problems: list[str] = []
     outputs: dict[str, OrganOutput] = {}
     tokens = (None, *ids.GUT_SEGMENTS)
+    absorbed: dict[str, str] = {}
     for rid in readouts:
         what, s = known[rid]
         lumen = [ids.lumen(s, seg) for seg in tokens if ids.lumen(s, seg) in species]
@@ -337,6 +353,38 @@ def intestine_readouts(
             continue
         if what == "lumen":
             formula = " + ".join(f"{species[c].compartment} * {c}" for c in lumen)
+        elif what in ("absorbed", "fraction"):
+            if s not in absorbed:
+                rate = _flux_sum(md, "absorption", s, set(lumen))
+                if not rate:
+                    problems.append(
+                        f"readout '{rid}': the intestine has no flux "
+                        f"{_FLUXES['absorption']} of '{s}'"
+                    )
+                    continue
+                absorbed[s] = _state(
+                    md,
+                    ids.absorbed_amount(s),
+                    rate,
+                    f"amount absorbed {s} [mmole]",
+                    "The amount absorbed from the lumen into the intestinal wall "
+                    f"since the start, the integral of the absorption (`{rate}`).",
+                    port=ids.absorbed_amount(s) in readouts,
+                )
+            if what == "absorbed":
+                outputs[rid] = _readout_output(what, s)
+                continue
+            given = _oral_dose_given(md, s)
+            if given is None:
+                problems.append(
+                    f"readout '{rid}': the substance '{s}' has no oral route, the "
+                    "absorbed fraction is that of the oral dose"
+                )
+                continue
+            formula = (
+                f"piecewise({absorbed[s]} / {given}, {given} > 0 mmole, "
+                "0 dimensionless)"
+            )
         else:
             formula = _flux_sum(md, what, s, set(lumen))
             if not formula:
@@ -371,6 +419,80 @@ def intestine_readouts(
     return outputs
 
 
+def _state(
+    md: ModelDefinition,
+    sid: str,
+    rate: str,
+    name: str,
+    notes: str,
+    *,
+    port: bool,
+) -> str:
+    """Add an amount of the intestine which integrates a rate from 0 (mmole).
+
+    With `port` it is the readout of its id, an output of the intestine.
+    """
+    md.parameters = [
+        *(md.parameters or []),
+        annotate(
+            Parameter(
+                sid,
+                0.0,
+                U.mmole,
+                constant=False,
+                name=name,
+                sboTerm=_SBO_PARAMETER,
+                notes=f"{notes} A state which nothing drains."
+                + (
+                    f" {_READOUT_NOTES['absorbed']} A readout of the definition, "
+                    "an output of the intestine."
+                    if port
+                    else ""
+                )
+                + f"\n\n`d{sid}/dt = {rate}`",
+                port=Port(f"{sid}{PORT_SUFFIX}", portType=PortType.OUTPUT_PORT)
+                if port
+                else None,
+            ),
+            "absorbed_amount" if sid.startswith("Aabs_") else "oral_dose_applied",
+            organ=Organ.SMALL_INTESTINE,
+        ),
+    ]
+    md.rate_rules = [
+        *(md.rate_rules or []),
+        RateRule(sid, rate, U.mmole_per_min, name=name),
+    ]
+    return sid
+
+
+def _oral_dose_given(md: ModelDefinition, s: str) -> str | None:
+    """The oral dose of a substance given until the time (mmole), `None` without an oral route.
+
+    The dose states of the intestine (`PODOSE_<s>`, `SOLDOSE_<s>`, mg) over
+    `Mr_<s>` plus the state `Aapp_<s>`, the integral of the outflows of the
+    dose states (the negative of their rate rules over `Mr_<s>`): a dose
+    added to a dose state adds to it, what the intestine applies of it
+    moves from the state into `Aapp_<s>`.
+    """
+    doses = (ids.po_dose(s), ids.sol_dose(s))
+    rules = [r for r in md.rate_rules or [] if r.variable in doses]
+    if not rules:
+        return None
+    mr = ids.mr(s)
+    applied = _state(
+        md,
+        ids.oral_dose_applied(s),
+        " + ".join(f"-({r.value}) / {mr}" for r in rules),
+        f"oral dose applied {s} [mmole]",
+        "The oral dose which the intestine has applied: the outflows of the dose "
+        "states (the dissolution and the emptying of a tablet, the application "
+        "of a solution) since the start.",
+        port=False,
+    )
+    states = " + ".join(f"{r.variable} / {mr}" for r in rules)
+    return f"({states} + {applied})"
+
+
 _FLUXES = {
     "absorption": "from the lumen into the wall",
     "efflux": "from the wall into the lumen (an apical efflux of the small intestine)",
@@ -388,6 +510,13 @@ _READOUT_NOTES = {
     "the intestinal wall into the lumen (the apical efflux of every segment).",
     "feces": "The rate of the fecal excretion: the net flux of the intestine "
     "into the feces.",
+    "absorbed": "The amount absorbed: the integral of the fluxes from the lumen "
+    "into the intestinal wall since the start.",
+    "fraction": "The gross absorbed fraction of the oral dose: the amount "
+    "absorbed from the lumen over the oral dose given until then, 0 before a "
+    "dose; before the first pass of the wall and the liver (above the "
+    "bioavailability), and with the absorption of what reaches the lumen "
+    "otherwise (the bile, an efflux), which can make it exceed 1.",
 }
 """The notes of the parameter of a readout in the intestine."""
 
@@ -400,6 +529,20 @@ def _readout_output(what: str, s: str) -> OrganOutput:
             f"dissolved amount {s} in the intestinal lumen [mmole]",
             "lumen_amount",
             "Dissolved amount in the lumen, the sum over its segments, of the ",
+        )
+    if what == "absorbed":
+        return OrganOutput(
+            U.mmole,
+            f"amount absorbed {s} [mmole]",
+            "absorbed_amount",
+            "Amount absorbed from the lumen since the start, a state of the ",
+        )
+    if what == "fraction":
+        return OrganOutput(
+            U.dimensionless,
+            f"absorbed fraction of the oral dose {s} (gross)",
+            "absorbed_fraction",
+            "Gross absorbed fraction of the oral dose, of the ",
         )
     process, kind = {
         "absorption": ("absorption", "intestine_absorption"),

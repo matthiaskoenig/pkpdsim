@@ -186,7 +186,7 @@ The number `0.0744792` is the transit share of the duodenum in the small intesti
 
 ## Readouts
 
-The lumen and the fluxes of the intestine are spread over its segments; a model which reads their sums names them in `PBPKDefinition.readouts`, and the intestine adds each as an output, as the kidney adds `Rurine_<s>`: the dissolved amount in the lumen `Alumen_<s>` and the summed fluxes of the absorption `Rabs_<s>`, of the efflux into the lumen `Reff_<s>` and of the loss to the feces `Rfeces_<s>`, the same ids for the segmented intestine and the single lumen (see [Observers](observers.md#readouts-of-the-intestine)). A model without readouts has none of them.
+The lumen and the fluxes of the intestine are spread over its segments; a model which reads their sums names them in `PBPKDefinition.readouts`, and the intestine adds each as an output, as the kidney adds `Rurine_<s>`: the dissolved amount in the lumen `Alumen_<s>`, the summed fluxes of the absorption `Rabs_<s>`, of the efflux into the lumen `Reff_<s>` and of the loss to the feces `Rfeces_<s>`, the amount absorbed `Aabs_<s>` and the gross absorbed fraction of the oral dose `Fa_<s>` (absorbed from the lumen over the oral dose given, before the first pass, above the bioavailability), the same ids for the segmented intestine and the single lumen (see [Observers](observers.md#readouts-of-the-intestine)). A model without readouts has none of them.
 
 ## Bile and enterohepatic circulation
 

@@ -60,6 +60,8 @@ __all__ = [
     "VLUMEN",
     "VURINE",
     "WALL_FRACTION",
+    "absorbed_amount",
+    "absorbed_fraction",
     "absorption",
     "absorption_rate",
     "absorption_reaction",
@@ -146,6 +148,7 @@ __all__ = [
     "mucosa_reaction",
     "mucosa_unbound",
     "mucosa_volume",
+    "oral_dose_applied",
     "organ_flow",
     "organ_mass",
     "organ_outflow",
@@ -758,6 +761,38 @@ def absorption_rate(s: str) -> str:
     absorption rate constant `ka_<s>` (`absorption`).
     """
     return f"Rabs_{s}"
+
+
+def absorbed_amount(s: str) -> str:
+    """The id of the amount of `s` absorbed from the lumen, `Aabs_<s>` (mmole).
+
+    A readout of the intestine (`PBPKDefinition.readouts`): the integral of
+    the absorption rate `Rabs_<s>` (the fluxes from the lumen into the wall,
+    an apical influx included) since the start, a state of the intestine.
+    """
+    return f"Aabs_{s}"
+
+
+def absorbed_fraction(s: str) -> str:
+    """The id of the gross absorbed fraction of the oral dose of `s`, `Fa_<s>`.
+
+    A readout of the intestine (`PBPKDefinition.readouts`): the absorbed
+    amount `Aabs_<s>` over the oral dose given until then (tablet and
+    solution, mmole), 0 before a dose; gross, before the first pass of the
+    wall and the liver, so above the bioavailability.
+    """
+    return f"Fa_{s}"
+
+
+def oral_dose_applied(s: str) -> str:
+    """The local id of the oral dose of `s` which the intestine has applied, `Aapp_<s>` (mmole).
+
+    The integral of the outflows of the oral dose states (dissolution and
+    emptying of a tablet, the application of a solution), a state of the
+    intestine which `Fa_<s>` reads: with the dose states it is the oral dose
+    given, also over several doses.
+    """
+    return f"Aapp_{s}"
 
 
 def efflux_rate(s: str) -> str:

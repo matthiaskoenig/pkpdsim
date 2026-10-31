@@ -716,6 +716,23 @@ KINDS: dict[str, Kind] = {
         terms=((BQB.IS_VERSION_OF, pbpko("FECAL_EXCRETION")),),
         requested="fecal excretion rate (amount of compound per time)",
     ),
+    "absorbed_amount": Kind(
+        _P,
+        "OUTPUT_PARAMETER",
+        terms=((BQB.IS_VERSION_OF, pbpko("ABSORPTION")),),
+        requested="amount of compound absorbed from the intestinal lumen",
+    ),
+    "absorbed_fraction": Kind(
+        _P,
+        "OUTPUT_PARAMETER",
+        terms=((BQB.IS_VERSION_OF, pbpko("ABSORPTION")),),
+        requested="fraction of the oral dose absorbed from the intestinal lumen",
+    ),
+    "oral_dose_applied": Kind(
+        _P,
+        "OUTPUT_PARAMETER",
+        requested="amount of the oral dose applied to the intestinal lumen",
+    ),
     # an observer of a definition: what it computes is the definition's, the
     # library knows only that it is a result of the model
     "observer": Kind(_P, "OUTPUT_PARAMETER"),

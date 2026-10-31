@@ -126,6 +126,9 @@ One id scheme for every model, built by the functions of `pkpdsim.pbpk.ids`, so 
 | `Rabs_<s>` | the absorption rate, the fluxes from the lumen into the intestinal wall (mmole/min), a readout of the intestine | `ids.absorption_rate(s)` |
 | `Reff_<s>` | the efflux rate, the fluxes from the intestinal wall into the lumen (mmole/min), a readout of the intestine | `ids.efflux_rate(s)` |
 | `Rfeces_<s>` | the fecal excretion rate, the net flux of the intestine into the feces (mmole/min), a readout of the intestine | `ids.feces_rate(s)` |
+| `Aabs_<s>` | the amount absorbed from the lumen since the start, the integral of `Rabs_<s>` (mmole), a readout of the intestine | `ids.absorbed_amount(s)` |
+| `Fa_<s>` | the gross absorbed fraction of the oral dose, `Aabs_<s>` over the oral dose given, a readout of the intestine | `ids.absorbed_fraction(s)` |
+| `Aapp_<s>` | the oral dose which the intestine has applied, the integral of the outflows of the dose states (mmole), a local state of the intestine which `Fa_<s>` reads | `ids.oral_dose_applied(s)` |
 | `Cbile_<s>` | the concentration in bile | `ids.bile(s)` |
 | `Mr_<s>` | the molecular weight | `ids.mr(s)` |
 | `fu_ref_<s>` | the unbound fraction of the healthy individual (input) | `ids.fu_ref(s)` |
