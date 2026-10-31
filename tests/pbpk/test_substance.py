@@ -516,10 +516,12 @@ def test_the_baseline_is_annotated(tmp_path: Path) -> None:
 # hash of the file, which every unrelated change of the library would move.
 # The CKD profile of the binding to albumin added three parameters with their
 # initial assignments (`fckd_albumin`, `fckd_albumin_binding`,
-# `fimp_albumin_ckd`) to both.
+# `fimp_albumin_ckd`) to both. The transit time of the stomach of the
+# segmented intestine added `T_st_eff` (R41a): a parameter of the top model of
+# the comp model, a parameter with its initial assignment of the flat model.
 _PINNED = {
-    "comp": (9, 239, 148, 12, 3, 9),
-    "flat": (65, 407, 264, 68, 108, 77),
+    "comp": (9, 240, 148, 12, 3, 9),
+    "flat": (65, 408, 265, 68, 108, 77),
 }
 
 
