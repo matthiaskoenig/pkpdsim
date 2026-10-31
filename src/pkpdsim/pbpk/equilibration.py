@@ -204,6 +204,8 @@ class _ModelFile:
             `drug_free_zeros`.
         started: the species with a start: an initial value other than 0,
             an initial assignment or a rule.
+        concentrations: the species whose id means their concentration
+            (`hasOnlySubstanceUnits` false): a change sets them as `[sid]`.
         reactions: (reactants, products, reversible, a source of a dose) of
             every reaction; a reaction without reactants whose rate reads a
             dose is a dose of the library, 0 without it.
@@ -214,6 +216,7 @@ class _ModelFile:
     accumulating: tuple[str, ...]
     candidates: frozenset[str]
     started: frozenset[str]
+    concentrations: frozenset[str]
     reactions: tuple[tuple[frozenset[str], frozenset[str], bool, bool], ...]
 
 
@@ -261,6 +264,9 @@ def _model_file(model_path: Path, mtime_ns: int) -> _ModelFile:
         accumulating=_accumulating(model),
         candidates=frozenset(candidates),
         started=frozenset(started),
+        concentrations=frozenset(
+            sp.getId() for sp in species if not sp.getHasOnlySubstanceUnits()
+        ),
         reactions=tuple(reactions),
     )
 
@@ -301,14 +307,15 @@ def drug_free_zeros(model_path: Path, set_ids: Iterable[str] = ()) -> tuple[str,
         model_path: the flat SBML model.
         set_ids: the ids which a simulation sets before the equilibration
             (its condition, the dimensions of a scan): a species among them
-            holds what it is set to and feeds what it reaches.
+            holds what it is set to and feeds what it reaches; a
+            concentration `[sid]` is the species `sid`.
 
     Returns:
         The ids, sorted.
     """
     path = Path(model_path)
     graph = _model_file(path, path.stat().st_mtime_ns)
-    fed = set(graph.started) | (set(set_ids) & graph.candidates)
+    fed = set(graph.started) | ({_bare(sid) for sid in set_ids} & graph.candidates)
     changed = True
     while changed:
         changed = False
@@ -435,6 +442,10 @@ def _equilibrate(
         where: the experiment or the model, for the messages.
     """
     sinks = sorted(s for s in species if s.startswith((ids.urine(""), ids.feces(""))))
+    # a species whose id is its concentration is set as `[sid]`: the same 0,
+    # and the quantity of the species for PEtab (a condition of PEtab sets the
+    # concentration of such a species, the amount of an amount species)
+    concentrations: frozenset[str] = frozenset()
     # the bases of the deltas, evaluated after the equilibration
     deltas = sorted(
         sid
@@ -444,6 +455,7 @@ def _equilibrate(
     base = simulation.simulation if isinstance(simulation, Scan) else simulation
     zeros: tuple[str, ...] = ()
     if path is not None:
+        concentrations = _model_file(path, path.stat().st_mtime_ns).concentrations
         # what a dimension of values or the condition sets is no zero
         scanned = {
             target
@@ -454,14 +466,15 @@ def _equilibrate(
             for target in dimension.values
         }
         preinit = {**base.preinit_changes, **base.uncertain_preinit}
+        set_at_start = {_bare(target) for target in _set_at_start(base)}
         zeros = tuple(
             sid
             for sid in drug_free_zeros(path, set(preinit) | scanned)
-            if sid not in _set_at_start(base)
+            if sid not in set_at_start
         )
     at_start: dict[str, float | Quantity | str] = {
-        **dict.fromkeys(sinks, 0.0),
-        **dict.fromkeys(zeros, 0.0),
+        **dict.fromkeys(_quantities(sinks, concentrations), 0.0),
+        **dict.fromkeys(_quantities(zeros, concentrations), 0.0),
         **(resets or {}),
         **{ids.delta_base(sid): sid for sid in deltas},
     }
@@ -469,7 +482,7 @@ def _equilibrate(
     if path is not None:
         growing = sorted(
             set(growing_states(path, equilibrated.preinit_changes, steady_state))
-            - set(at_start)
+            - {_bare(target) for target in at_start}
         )
         if growing:
             raise ValueError(
@@ -500,6 +513,16 @@ def _equilibrate(
                 "before the equilibration; give them in the simulation."
             )
     return Scan(simulation=equilibrated, dimensions=simulation.dimensions)
+
+
+def _bare(target: str) -> str:
+    """The id of a target of a change, `sid` of a concentration `[sid]`."""
+    return target[1:-1] if target.startswith("[") and target.endswith("]") else target
+
+
+def _quantities(sids: Iterable[str], concentrations: Collection[str]) -> list[str]:
+    """The targets of changes which set the species, `[sid]` of a concentration."""
+    return [f"[{sid}]" if sid in concentrations else sid for sid in sids]
 
 
 def _set_at_start(simulation: Simulation) -> set[str]:

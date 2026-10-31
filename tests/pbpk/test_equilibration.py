@@ -203,6 +203,24 @@ def _at_start(experiment: PBPKSimulationExperiment, key: str, sid: str) -> float
     return float(np.asarray(result[sid]).ravel()[0])
 
 
+def _concentrations(path: Path) -> set[str]:
+    """The species of a model whose ids are their concentrations."""
+    model = libsbml.readSBMLFromFile(str(path)).getModel()
+    return {
+        sp.getId()
+        for sp in model.getListOfSpecies()
+        if not sp.getHasOnlySubstanceUnits()
+    }
+
+
+def _zero_targets(path: Path) -> list[str]:
+    """The targets of the drug-free zeros, `[sid]` for a concentration."""
+    concentrations = _concentrations(path)
+    return [
+        f"[{sid}]" if sid in concentrations else sid for sid in drug_free_zeros(path)
+    ]
+
+
 def _dosed(**kwargs: object) -> Simulation:
     """A dose of the drug in the condition, given before the initialization."""
     return Simulation(
@@ -274,7 +292,7 @@ def test_the_doses_start_after_the_equilibration(
         assert equilibrated.presimulation is not None
         first, later = equilibrated.changes
         assert first.times == (0.0,)
-        zeros = drug_free_zeros(builds["sink"].flat_path)
+        zeros = _zero_targets(builds["sink"].flat_path)
         assert dict(first.values) == {
             "IVDOSE_drg": Q(10, "mg"),
             "Aurine_drg": 0.0,
@@ -622,6 +640,95 @@ def test_a_species_set_at_the_start_keeps_its_value(
     value = _at_start(experiment, "start", f"[{venous}]")
     assert value > 0.0
     assert value == pytest.approx(_at_start(experiment, "plain", f"[{venous}]"))
+
+
+def test_an_equilibrated_simulation_exports_to_petab(
+    builds: dict[str, BuildResult], tmp_path: Path
+) -> None:
+    """The start changes of the equilibration have a representation in PEtab.
+
+    A condition of PEtab sets the concentration of a species whose id is its
+    concentration (`hasOnlySubstanceUnits` false) and the amount of an amount
+    species, so the zeros of the drug are written as `[sid]` for a
+    concentration and the sinks (amounts) by their ids; the exporter of
+    sbmlsim refused the zeros as amounts of concentration species once.
+    """
+    from sbmlsim.data import DataSet
+    from sbmlsim.fit import FitData, FitMapping, FitMappingCollection, FitParameter
+    from sbmlsim.fit.optimization import OptimizationProblem
+    from sbmlsim.fit.petab_v2 import to_petab
+
+    from pkpdsim.fit import default_fit_settings
+    from pkpdsim.metadata import Dosing, Health, PKPDMappingMetaData, Route, Tissue
+
+    path = builds["sink"].flat_path
+    model = _model(builds["sink"])
+    zeros = drug_free_zeros(path)
+    assert set(zeros) & _concentrations(path)
+    captured: dict[str, Simulation | Scan] = {}
+
+    class Exported(PBPKSimulationExperiment):
+        pkpd_model = model
+        selections = ("time", "Carm_drg")
+
+        def datasets(self) -> dict[str, DataSet]:
+            df = pd.DataFrame(
+                {
+                    "time": [60.0, 120.0, 240.0],
+                    "time_unit": "min",
+                    "drg": [0.02, 0.01, 0.005],
+                    "drg_unit": "mM",
+                    "count": 6,
+                }
+            )
+            return {"data_drg": DataSet.from_df(df, ureg=self.ureg)}
+
+        def simulations(self) -> dict[str, Simulation | Scan]:
+            captured["dosed"] = self.equilibrated(_dosed(), resets={"HOMEO__V": 0.0})
+            return dict(captured)
+
+        def fit_mappings(self) -> dict[str, FitMapping]:
+            return {
+                "fm_drg": FitMapping(
+                    self,
+                    reference=FitData(
+                        self, dataset="data_drg", xid="time", yid="drg", count="count"
+                    ),
+                    observable=FitData(
+                        self, task="task_dosed", xid="time", yid="Carm_drg"
+                    ),
+                    metadata=PKPDMappingMetaData(
+                        tissue=Tissue.PLASMA,
+                        route=Route.IV,
+                        dosing=Dosing.SINGLE,
+                        health=Health.HEALTHY,
+                    ),
+                )
+            }
+
+    problem = OptimizationProblem(
+        opid="exported",
+        mapping_collections=[FitMappingCollection(Exported, mappings=["fm_drg"])],
+        fit_parameters=[
+            FitParameter(
+                pid="Kp_drg",
+                start_value=2.0,
+                lower_bound=0.5,
+                upper_bound=5.0,
+                unit="dimensionless",
+            )
+        ],
+        base_path=path.parent,
+        data_path=path.parent,
+    )
+    problem.initialize(default_fit_settings(absolute_tolerance=1e-10))
+    yaml_file = to_petab(problem, tmp_path / "petab")
+    assert yaml_file.exists()
+    simulation = captured["dosed"]
+    assert isinstance(simulation, Simulation)
+    start = dict(simulation.changes[0].values)
+    for target in [*_zero_targets(path), "Aurine_drg", "Afeces_drg"]:
+        assert start[target] == 0.0, target
 
 
 # --- the equilibration outside an experiment (ruling R23) -------------------------
