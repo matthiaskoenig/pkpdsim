@@ -291,6 +291,72 @@ def test_a_custom_parameter_of_a_formula_reads_the_top_model(tmp_path: Path) -> 
     assert r[sid] == pytest.approx(4e-3)
 
 
+def test_a_custom_parameter_of_a_formula_reads_the_constants_of_its_organ(
+    tmp_path: Path,
+) -> None:
+    """A `Formula` of a custom parameter reads local constants of its organ and top ids (R41d).
+
+    Creatinine's CRIM_Vmax reads the fitted local CRIM_Km and constants of
+    the top model: `k_deep` reads the local `k_ref` (a parameter of the
+    reaction), the tissue `Vti` and the top `BW`; a change of `k_ref` or of
+    `BW` before the simulation moves it.
+    """
+    k_ref = ModelParameter("k_ref", 1e-3, U.per_min)
+    k_deep = ModelParameter(
+        "k_deep",
+        Formula("2 dimensionless * k_ref * BW / 70 kg * Vti / 1 litre", U.per_min),
+        U.per_min,
+    )
+    result = build(_definition([_deep(k_ref, k_deep, _KP_DEEP)]), tmp_path)
+    md = _comp_definition(result, Organ.MUSCLE)
+    assert "k_ref" in _assignment(md, "k_deep")
+    sid, ref = ids.flat(Organ.MUSCLE, "k_deep"), ids.flat(Organ.MUSCLE, "k_ref")
+    vti = ids.flat(Organ.MUSCLE, "Vti")
+    for changes, k in (({}, 1e-3), ({"BW": 140.0, ref: 2e-3}, 2e-3)):
+        r = individual(result.flat_path, **changes)
+        expected = 2 * k * r["BW"] / 70 * r[vti]
+        assert r[sid] == pytest.approx(expected, rel=1e-12)
+    assert r[vti] > 30.0  # the muscle of 140 kg
+    assert _flat(result).getParameter("k_ref") is None
+
+
+@pytest.mark.parametrize(
+    ("formula", "match"),
+    [
+        (
+            "2 dimensionless * k_deep",
+            r"read each other in a cycle: k_deep -> k_deep",
+        ),
+        (
+            "1 per_min * Cti_drg / 1 mM",
+            r"neither constants of the organ nor ids of the top model: \['Cti_drg'\]",
+        ),
+        (
+            "1 per_min * k_nowhere",
+            r"neither constants of the organ nor ids of the top model: \['k_nowhere'\]",
+        ),
+    ],
+    ids=["itself", "species", "unknown"],
+)
+def test_a_custom_formula_of_no_constant_of_the_organ_is_refused(
+    tmp_path: Path, formula: str, match: str
+) -> None:
+    """A formula which reads itself, a species of the organ or an unknown id is refused."""
+    k_deep = ModelParameter("k_deep", Formula(formula, U.per_min), U.per_min)
+    with pytest.raises(ValueError, match=match):
+        build(_definition([_deep(k_deep, _KP_DEEP)]), tmp_path)
+
+
+def test_custom_formulas_which_read_each_other_are_refused(tmp_path: Path) -> None:
+    """Two custom parameters whose formulas read each other have no initial value."""
+    a = ModelParameter("k_a", Formula("1 dimensionless * k_deep", U.per_min), U.per_min)
+    k_deep = ModelParameter(
+        "k_deep", Formula("1 dimensionless * k_a", U.per_min), U.per_min
+    )
+    with pytest.raises(ValueError, match=r"cycle: k_a -> k_deep -> k_a"):
+        build(_definition([_deep(a, k_deep, _KP_DEEP)]), tmp_path)
+
+
 def test_a_custom_parameter_simulates_as_a_sbmlutils_parameter(
     tmp_path: Path,
 ) -> None:

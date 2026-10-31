@@ -31,6 +31,7 @@ constants of the interactions (`Ki`, `Kiu`, `kinact`, `Emax`, `EC50`) are
 parameters of the body, read through a port.
 """
 
+from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, NamedTuple
 
 from sbmlutils.factory import (
@@ -761,7 +762,56 @@ class OrganBuilder:
         s = next(s for s in self.ctx.substances if s.sid == sid)
         return inhibitor_unbound(Part.INTRACELLULAR, s, self.organ, self.ctx.parts)
 
-    def _formula(self, p: FormulaParameter) -> None:
+    def _local_constants(self) -> set[str]:
+        """The constants of the organ: its constant parameters (those of the reactions) and compartments.
+
+        The inputs are among them under the ids of the top model.
+        """
+        parameters = [
+            *self.parameters.values(),
+            *(p for r in self.reactions for p in (r.pars or [])),
+        ]
+        return {str(p.sid) for p in parameters if p.constant is not False} | {
+            str(c.sid) for c in self.compartments.values() if c.constant is not False
+        }
+
+    def _custom_parameter_ids(self) -> set[str]:
+        """The ids of the parameters of the custom reactions of the organ."""
+        return {
+            str(par.sid)
+            for c in self.ctx.chemistry
+            if isinstance(c, CustomReaction) and c.organ == self.organ
+            for par in c.parameters
+        }
+
+    def _local_reads(
+        self, formulas: Sequence[FormulaParameter], custom: set[str]
+    ) -> dict[str, set[str]]:
+        """The local constants which the formula of each custom parameter reads.
+
+        A formula of a parameter of a custom reaction (`ModelParameter` with a
+        `Formula`) may read the constants of its organ which are no ids of the
+        top model (another parameter of a custom reaction of the organ,
+        `Vti`), next to the constants of the top model (R41d).
+
+        Raises:
+            ValueError: for formulas which read each other in a cycle.
+        """
+        local = self._local_constants() - set(self.ctx.top)
+        reads = {
+            str(p.sid): formula_ids(p.formula.expression) & local
+            for p in formulas
+            if str(p.sid) in custom
+        }
+        cycle = _cycle(reads)
+        if cycle:
+            raise ValueError(
+                f"The formulas of the parameters of organ '{self.organ.value}' read "
+                f"each other in a cycle: {' -> '.join(cycle)}."
+            )
+        return reads
+
+    def _formula(self, p: FormulaParameter, local: set[str] | None = None) -> None:
         """The initial assignment of a `Formula` of the organ and its inputs.
 
         Every id of the formula is a constant parameter or compartment of the
@@ -772,13 +822,26 @@ class OrganBuilder:
         whose local id differs from the id of the top model (the liver reads
         `fimp_li_cyp3a4` as `fimp_cyp3a4`) is no id of a formula, and a
         local element of the organ under the id of the top model is refused.
+        The formula of a parameter of a custom reaction reads the constants
+        of the organ as well (`local`, see `_local_reads`).
         """
         pid = str(p.sid)
         where = (
             f"The formula of '{pid}' in organ '{self.organ.value}' "
             f"(`{p.formula.expression}`)"
         )
-        problems = formula_problems(where, p.formula.expression, self.ctx.top)
+        problems: list[str] = []
+        top: Mapping[str, tuple[str, object]] = self.ctx.top
+        if local is not None:
+            symbols = formula_ids(p.formula.expression)
+            unknown = sorted(s for s in symbols - local if s not in top)
+            if unknown:
+                problems.append(
+                    f"{where} reads ids which are neither constants of the organ "
+                    f"nor ids of the top model: {unknown}"
+                )
+            top = {**top, **{s: ("parameter", None) for s in symbols if s not in top}}
+        problems += formula_problems(where, p.formula.expression, top)
         clash: list[str] = []
         for symbol in sorted(formula_ids(p.formula.expression)):
             kind = self.ctx.top.get(symbol, ("", None))[0]
@@ -950,9 +1013,13 @@ class OrganBuilder:
             *self.parameters.values(),
             *(p for r in self.reactions for p in (r.pars or [])),
         ]
+        local = self._local_reads(
+            [p for p in parameters if isinstance(p, FormulaParameter)],
+            self._custom_parameter_ids(),
+        )
         for p in parameters:
             if isinstance(p, FormulaParameter):
-                self._formula(p)
+                self._formula(p, local.get(str(p.sid)))
             elif isinstance(p, OrganFormulaParameter):
                 self._organ_formula(p, parameters)
         return ModelDefinition(
@@ -969,3 +1036,37 @@ class OrganBuilder:
             rate_rules=self.rate_rules,
             reactions=self.reactions,
         )
+
+
+def _cycle(reads: Mapping[str, set[str]]) -> list[str]:
+    """A cycle of ids which read each other, empty for none (the first found).
+
+    Args:
+        reads: the ids which each id reads.
+
+    Returns:
+        The ids of the cycle, the first one again at the end.
+    """
+    state: dict[str, int] = {}
+    path: list[str] = []
+
+    def visit(sid: str) -> list[str]:
+        state[sid] = 1
+        path.append(sid)
+        for other in sorted(reads.get(sid, set())):
+            if state.get(other) == 1:
+                return [*path[path.index(other) :], other]
+            if other not in state:
+                found = visit(other)
+                if found:
+                    return found
+        path.pop()
+        state[sid] = 2
+        return []
+
+    for sid in sorted(reads):
+        if sid not in state:
+            found = visit(sid)
+            if found:
+                return found
+    return []

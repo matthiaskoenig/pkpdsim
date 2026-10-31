@@ -80,9 +80,12 @@ class Formula:
     custom reaction (`CustomReaction.stationary`) is a `Formula` of the
     organ, as its rate law, over the elements of the organ (`Vti`, the
     parameters of the reaction, species of other substances at their start)
-    and constants of the top model; every other `Formula` (a value, a
-    parameter of the definition, a start of `PBPKDefinition.starts`, a
-    baseline) reads the ids of the top model only.
+    and constants of the top model; the `Formula` of a `ModelParameter` of a
+    custom reaction reads the constants of its organ which are no ids of the
+    top model as well (another parameter of a custom reaction of the organ,
+    `Vti`); every other `Formula` (a value, a parameter of the definition, a
+    start of `PBPKDefinition.starts`, a baseline) reads the ids of the top
+    model only.
 
     Attributes:
         expression: the formula (SBML L3 infix), e.g. `Kp_gli` or
