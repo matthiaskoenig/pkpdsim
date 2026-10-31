@@ -222,7 +222,9 @@ def test_the_full_form_is_checked_for_the_sex_of_the_build() -> None:
 FU_M1 = 0.14
 
 
-def _floor_drug(kp: float, *, ckd: bool = True) -> Substance:
+def _floor_drug(
+    kp: float, *, ckd: bool = True, accept: dict[Organ, str] | None = None
+) -> Substance:
     """A drug of the full form in skin with a Kp just above its share there."""
     return dataclasses.replace(
         simple_drug(),
@@ -232,6 +234,7 @@ def _floor_drug(kp: float, *, ckd: bool = True) -> Substance:
             mode=Mode.PERMEABILITY,
             ftissue=1.0,
             overrides={Organ.SKIN: kp},
+            ckd_floor=accept or {},
         ),
     )
 
@@ -293,6 +296,63 @@ def test_a_kp_with_room_for_ckd_is_not_named(tmp_path: Path) -> None:
             warnings.simplefilter("always")
             build(_floor_definition(drug), tmp_path)
         assert _floor_warnings(record) == []
+
+
+REASON = "the binding of the metabolite in renal impairment is not measured"
+
+
+def test_an_accepted_floor_is_silent_and_in_the_notes(tmp_path: Path) -> None:
+    """`ckd_floor` names the organ with its reason: no warning, the notes say why.
+
+    The acceptance is per organ: the same drug with the floor accepted in
+    another organ still warns of skin.
+    """
+    share = interstitial_share(Organ.SKIN, FU_M1, Sex.MALE)
+    accepted = _floor_drug(1.01 * share, accept={Organ.SKIN: REASON})
+    # the organs are normalised as those of `ps`
+    named = Kp(1.0, ckd_floor={"skin": REASON})  # ty: ignore[invalid-argument-type]
+    assert dict(named.ckd_floor) == {Organ.SKIN: REASON}
+    with warnings.catch_warnings(record=True) as record:
+        warnings.simplefilter("always")
+        result = build(_floor_definition(accepted), tmp_path / "accepted")
+    assert _floor_warnings(record) == []
+    notes = parameters(result.flat_path)[f"SK__{ids.k_cell_pls('drg')}"][1]
+    assert "The model accepts the floor" in notes
+    assert REASON in notes
+    assert "end stage (fu 0.2119" in notes
+    other = _floor_drug(1.01 * share, accept={Organ.MUSCLE: REASON})
+    with warnings.catch_warnings(record=True) as record:
+        warnings.simplefilter("always")
+        result = build(_floor_definition(other), tmp_path / "other")
+    (message,) = _floor_warnings(record)
+    assert "organ 'sk'" in message
+    assert "`ckd_floor`" in message
+    sk = parameters(result.flat_path)[f"SK__{ids.k_cell_pls('drg')}"][1]
+    assert "accepts the floor" not in sk
+
+
+def test_an_accepted_floor_needs_a_reason() -> None:
+    share = interstitial_share(Organ.SKIN, FU_M1, Sex.MALE)
+    with pytest.raises(ValueError, match=r"ckd_floor 'sk' needs the reason"):
+        _floor_definition(
+            _floor_drug(1.01 * share, accept={Organ.SKIN: " "})
+        ).validate()
+    with pytest.raises(ValueError, match=r"ckd_floor for organs not entered"):
+        d = _floor_definition(_floor_drug(1.01 * share))
+        drug = d.substances[0]
+        assert isinstance(drug.distribution, Kp)
+        entered = dataclasses.replace(
+            drug.distribution,
+            organs=frozenset({Organ.SKIN}),
+            ckd_floor={Organ.LIVER: REASON},
+        )
+        dataclasses.replace(
+            d,
+            substances=[
+                dataclasses.replace(drug, distribution=entered),
+                *d.substances[1:],
+            ],
+        ).validate()
 
 
 def test_without_the_option_the_sbml_is_unchanged(tmp_path: Path) -> None:

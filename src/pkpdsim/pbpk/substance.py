@@ -108,6 +108,12 @@ class _Exchange:
             the organ of the individual, as the share of `ftissue` and a
             `FirstOrder` per volume do; `False` keeps the exchange of the whole
             organ (l/min), which does not scale with the organ volume.
+        ckd_floor: the organs of the full form whose intracellular coefficient
+            the model accepts floored at `K_CELL_FLOOR` at the fu of chronic
+            kidney disease, with the reason (`distribution.kp_floor_stages`):
+            the build does not warn for them (`KCellFloorWarning`) and writes
+            the reason and the stages into the notes of `K_cell_pls_<s>` of
+            the organ. Keys as in `ps`; a reason must not be empty.
     """
 
     organs: frozenset[Organ] | None = None
@@ -115,14 +121,18 @@ class _Exchange:
     ftissue: Q | None = None
     ps: Mapping[Organ, Q] = field(default_factory=dict)
     ps_per_volume: bool = True
+    ckd_floor: Mapping[Organ, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        """Normalise the mode, the organs and the keys of `ps` to enum members."""
+        """Normalise the mode, the organs and the keys of `ps` and `ckd_floor` to enum members."""
         name = type(self).__name__
         object.__setattr__(self, "mode", as_member(Mode, self.mode, f"{name}.mode"))
         if self.organs is not None:
             object.__setattr__(self, "organs", as_organs(self.organs, f"{name}.organs"))
         object.__setattr__(self, "ps", as_organ_keys(self.ps, f"{name}.ps"))
+        object.__setattr__(
+            self, "ckd_floor", as_organ_keys(self.ckd_floor, f"{name}.ckd_floor")
+        )
 
 
 @dataclass(frozen=True)

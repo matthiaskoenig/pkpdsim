@@ -57,6 +57,7 @@ __all__ = [
     "k_int_pls",
     "k_int_pls_value",
     "k_organ",
+    "kp_floor_notes",
     "kp_floor_stages",
     "kp_of_organ",
     "number",
@@ -311,7 +312,9 @@ def warn_kp_floor(substance: Substance, organ: Organ, sex: Sex) -> None:
     """Warn when the cell partition of the full form is floored in chronic kidney disease.
 
     The build calls it for every organ of the full form with a Kp
-    (`kp_floor_stages`); a model may accept the floor, so it is no refusal.
+    (`kp_floor_stages`); a model may accept the floor, so it is no refusal:
+    an organ in `ckd_floor` of the distribution (`Kp`, `KpMethod`), with its
+    reason, is not warned of.
 
     Args:
         substance: the substance.
@@ -322,6 +325,9 @@ def warn_kp_floor(substance: Substance, organ: Organ, sex: Sex) -> None:
         KCellFloorWarning: naming the substance, the organ, the stages with
             their fu and share, the sex and what the floor does.
     """
+    dist = substance.distribution
+    if dist is not None and organ in dist.ckd_floor:
+        return
     stages = kp_floor_stages(substance, organ, sex)
     if not stages:
         return
@@ -336,9 +342,39 @@ def warn_kp_floor(substance: Substance, organ: Organ, sex: Sex) -> None:
         f"is floored at {K_CELL_FLOOR}, the cells hold almost nothing and the "
         "tissue holds its interstitial share, more than the Kp. A Kp above the "
         "share at the fu of the end stage leaves room for the impairment; a "
-        "model which accepts the floor in renal impairment says so.",
+        "model which accepts the floor names the organ with its reason in "
+        f"`ckd_floor` of the distribution of '{substance.sid}'.",
         KCellFloorWarning,
         stacklevel=2,
+    )
+
+
+def kp_floor_notes(substance: Substance, organ: Organ, sex: Sex) -> str:
+    """Get the notes of an accepted floor of the cell partition in an organ.
+
+    Args:
+        substance: the substance.
+        organ: the organ of the full form.
+        sex: the sex of the build.
+
+    Returns:
+        The reason of `ckd_floor` with the stages at which the floor holds in
+        the build of the sex; empty for an organ without an accepted floor.
+    """
+    dist = substance.distribution
+    if dist is None or organ not in dist.ckd_floor:
+        return ""
+    stages = kp_floor_stages(substance, organ, sex)
+    where = (
+        ", ".join(
+            f"{stage} (fu {fu:.4g}, share {share:.4g})" for stage, fu, share in stages
+        )
+        if stages
+        else f"no stage of the {sex.value} build"
+    )
+    return (
+        " The model accepts the floor at the fu of chronic kidney disease "
+        f"(`ckd_floor`, reached at: {where}): {dist.ckd_floor[organ]}"
     )
 
 
@@ -359,21 +395,14 @@ def check_kp(substance: Substance, organ: Organ, sex: Sex) -> None:
         ValueError: if the Kp is not above the interstitial share of the
             whole tissue, `f_int*K_int_pls/(f_int + f_cell)`.
     """
-    dist = substance.distribution
-    if dist is None:
-        return
     fu_q = substance.binding.fu if substance.binding is not None else 1.0
-    kp_q = kp_of_organ(substance, organ, sex) if isinstance(dist, Kp) else dist.factor
-    if isinstance(fu_q, Formula) or kp_q is None or isinstance(kp_q, Formula):
+    kp = _full_form_kp(substance, organ, sex)
+    if isinstance(fu_q, Formula) or kp is None:
         # a formula has no number before the simulation; `K_cell_pls` has the
         # lower bound 1e-6 in the model
         return
     fu = number(fu_q)
     f_vas, f_int = reference_fractions(organ)[sex]
-    if isinstance(dist, Kp):
-        kp = number(kp_q)
-    else:
-        kp = kp_values(substance, sex)[organ].value * number(dist.factor)
     if k_cell_pls_value(kp, fu, f_vas, f_int) <= 0:
         share = f_int * k_int_pls_value(fu) / (1.0 - f_vas)
         raise ValueError(

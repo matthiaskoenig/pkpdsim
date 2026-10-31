@@ -835,7 +835,16 @@ def _check_distribution(sid: str, dist: Kp | KpMethod) -> list[str]:
                 f"{sid}: mode '{dist.mode.value}' requires ftissue for the "
                 f"organs without ps: {shared}"
             )
-    named: dict[str, Mapping[Organ, Q]] = {"ps": dist.ps}
+    named: dict[str, Mapping[Organ, object]] = {
+        "ps": dist.ps,
+        "ckd_floor": dist.ckd_floor,
+    }
+    for organ, reason in dist.ckd_floor.items():
+        if not isinstance(reason, str) or not reason.strip():
+            problems.append(
+                f"{sid}: ckd_floor '{organ.value}' needs the reason why the model "
+                "accepts the floor of the cell partition in chronic kidney disease"
+            )
     if isinstance(dist, Kp):
         named["override"] = dist.overrides
         problems += check_positive(sid, "Kp", dist.value)

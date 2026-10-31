@@ -1027,7 +1027,8 @@ class StandardBuilder(OrganBuilder):
                 "The Kp must exceed the interstitial share "
                 "`f_int*K_int_pls/(f_int + f_cell)` (the lower bound of a fitted "
                 f"Kp); below it the coefficient is floored at "
-                f"{distribution.K_CELL_FLOOR}.",
+                f"{distribution.K_CELL_FLOOR}."
+                + distribution.kp_floor_notes(s, self.organ, self.ctx.sex),
                 kind="partition",
             )
         return k_int, k_cell
