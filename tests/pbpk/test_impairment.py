@@ -81,8 +81,9 @@ def _flows(r: roadrunner.RoadRunner) -> dict[Organ, float]:
 
 def test_child_pugh_class_values(model: BuildResult) -> None:
     """At `CP_severity` 1, 2, 3 every factor of cirrhosis equals the data."""
+    person = individuals(model.flat_path)
     for k in (1, 2, 3):
-        r = individual(model.flat_path, CP_severity=float(k))
+        r = person(CP_severity=float(k))
         for key in (
             "functional_liver",
             "hepatic_artery_flow",
@@ -118,8 +119,9 @@ def test_child_pugh_interpolates(model: BuildResult) -> None:
     """Between the classes every factor interpolates linearly, outside it is constant."""
     albumin = [1.0, *CP["albumin"]["value"]]
     shunt = [0.0, *CP["shunt"]["value"]]
+    person = individuals(model.flat_path)
     for severity in (0.5, 1.5, 2.25, 3.5):
-        r = individual(model.flat_path, CP_severity=severity)
+        r = person(CP_severity=severity)
         i = min(int(severity), 2)
         t = min(severity, 3.0) - i
         for key, points in (("albumin", albumin), ("shunt", shunt)):
@@ -149,8 +151,9 @@ def test_flows_renormalised_under_impairment(model: BuildResult) -> None:
     healthy = individual(model.flat_path)
     _assert_flows_sum(healthy)
     q0 = _flows(healthy)
+    person = individuals(model.flat_path)
     for k in (1, 2, 3):
-        r = individual(model.flat_path, CP_severity=float(k))
+        r = person(CP_severity=float(k))
         _assert_flows_sum(r)
         assert r[ids.CO] == pytest.approx(
             healthy[ids.CO] * CP["cardiac_index"]["value"][k - 1], rel=1e-12
@@ -174,7 +177,7 @@ def test_flows_renormalised_under_impairment(model: BuildResult) -> None:
         {"f_renal_function": 0.1},
         {"CP_severity": 3.0, "HF_severity": 3.0, "f_renal_function": 0.3},
     ):
-        _assert_flows_sum(individual(model.flat_path, **changes))
+        _assert_flows_sum(person(**changes))
 
 
 def _fu(fu_ref: float, factor: float) -> float:
@@ -219,17 +222,18 @@ def test_fu_follows_albumin(tmp_path: Path, fu_ref: float) -> None:
     ]
     d = PBPKDefinition(sid="binding", substances=substances)
     path = build(d, tmp_path).flat_path
-    healthy = individual(path)
+    person = individuals(path)
+    healthy = person()
     for sid in ("alb", "agp", "unk"):
         assert healthy[ids.fu(sid)] == pytest.approx(fu_ref, rel=1e-14)
-    r = individual(path, CP_severity=2.0)
+    r = person(CP_severity=2.0)
     albumin, agp = CP["albumin"]["value"][1], CP["agp"]["value"][1]
     assert r[ids.fu("alb")] == pytest.approx(_fu(fu_ref, albumin), rel=1e-12)
     assert r[ids.fu("agp")] == pytest.approx(_fu(fu_ref, agp), rel=1e-12)
     assert r[ids.fu("unk")] == pytest.approx(fu_ref, rel=1e-12)
     assert r[ids.fu("free")] == 1.0
     assert r[ids.fu("alb")] > fu_ref
-    r = individual(path, f_renal_function=0.05)
+    r = person(f_renal_function=0.05)
     factor = CKD["plasma_protein"]["value"][3]
     assert r[ids.fu("unk")] == pytest.approx(_fu(fu_ref, 1.0 / factor), rel=1e-12)
     assert fu_ref < r[ids.fu("unk")] < 1.0
@@ -313,14 +317,15 @@ def test_binding_free_of_ckd(tmp_path: Path) -> None:
     assert Binding(fu=fu_ref).ckd is True
     d = PBPKDefinition(sid="binding", substances=substances)
     path = build(d, tmp_path).flat_path
-    r = individual(path, f_renal_function=0.2)
+    person = individuals(path)
+    r = person(f_renal_function=0.2)
     assert r[ids.fu("keep")] == pytest.approx(fu_ref, rel=1e-12)
     assert r[ids.fu("rise")] > fu_ref * 1.2
-    r = individual(path, CP_severity=2.0)
+    r = person(CP_severity=2.0)
     albumin = CP["albumin"]["value"][1]
     assert r[ids.fu("keep")] == pytest.approx(_fu(fu_ref, albumin), rel=1e-12)
     assert r[ids.fu("keep")] > fu_ref
-    r = individual(path, CP_severity=2.0, f_renal_function=0.2)
+    r = person(CP_severity=2.0, f_renal_function=0.2)
     assert r[ids.fu("keep")] == pytest.approx(_fu(fu_ref, albumin), rel=1e-12)
     keep, rise = (unbound_fraction(s) for s in substances)
     assert "fimp_plasma_protein" not in keep
@@ -389,8 +394,9 @@ def test_ckd_binding_per_protein(tmp_path: Path, fu_ref: float) -> None:
         PBPKDefinition(sid="profile", substances=substances), tmp_path
     ).flat_path
     healthy = individual(path)
+    person = individuals(path)
     for egfr, stage in zip(ANCHORS, range(4), strict=True):
-        r = individual(path, f_renal_function=_stage_function(healthy, egfr))
+        r = person(f_renal_function=_stage_function(healthy, egfr))
         for key, entry in BINDING.items():
             assert r[ids.condition_factor("ckd", key)] == pytest.approx(
                 entry["value"][stage], rel=1e-12
@@ -408,9 +414,7 @@ def test_ckd_binding_per_protein(tmp_path: Path, fu_ref: float) -> None:
         assert r[ids.fu("unk")] == pytest.approx(_fu(fu_ref, 1.0 / old), rel=1e-12)
         assert r[ids.fu("keep")] == pytest.approx(fu_ref, rel=1e-12)
     # cirrhosis and CKD multiply
-    r = individual(
-        path, CP_severity=2.0, f_renal_function=_stage_function(healthy, ANCHORS[3])
-    )
+    r = person(CP_severity=2.0, f_renal_function=_stage_function(healthy, ANCHORS[3]))
     for sid, protein in (("alb", "albumin"), ("agp", "agp")):
         cp = CP[protein]["value"][1]
         expected = _fu(fu_ref, cp * _ckd_binding(protein, 3))
@@ -522,13 +526,14 @@ def test_ckd_factors_at_the_anchors(model: BuildResult) -> None:
     """At each anchor eGFR the factor is the value of the stage, 1 from 90."""
     healthy = individual(model.flat_path)
     assert healthy[ids.EGFR] * 1000.0 > LIMIT
+    person = individuals(model.flat_path)
     for egfr, stage in (
         (100.0, None),
         (LIMIT, None),
         *zip(ANCHORS, range(4), strict=True),
     ):
         f = _stage_function(healthy, egfr)
-        r = individual(model.flat_path, f_renal_function=f)
+        r = person(f_renal_function=f)
         assert r[ids.EGFR] * 1000.0 == pytest.approx(egfr, rel=1e-12)
         for key in PROTEIN_KEYS:
             expected = 1.0 if stage is None else CKD[key]["value"][stage]
@@ -543,11 +548,11 @@ def test_ckd_factors_at_the_anchors(model: BuildResult) -> None:
         cyp2d6 = 1.0 if stage is None else CKD["proteins"]["CYP2D6"]["value"][stage]
         liver_2d6 = ids.impairment_activity("CYP2D6", Organ.LIVER)
         assert r[liver_2d6] == 1.0
-        on = individual(model.flat_path, f_renal_function=f, CKD_hepatic=1.0)
+        on = person(f_renal_function=f, CKD_hepatic=1.0)
         assert on[liver_2d6] == pytest.approx(cyp2d6, rel=1e-12)
     # constant below the end stage anchor and above 90
     for egfr in (0.0, 1.0, 5.0):
-        r = individual(model.flat_path, f_renal_function=_stage_function(healthy, egfr))
+        r = person(f_renal_function=_stage_function(healthy, egfr))
         assert r[ids.condition_factor("ckd", "plasma_protein")] == pytest.approx(
             CKD["plasma_protein"]["value"][3], rel=1e-12
         )
@@ -556,10 +561,11 @@ def test_ckd_factors_at_the_anchors(model: BuildResult) -> None:
 def test_ckd_factors_interpolate_between_anchors(model: BuildResult) -> None:
     """Between two anchors (and from 90 to the mild one) the factor is linear."""
     healthy = individual(model.flat_path)
+    person = individuals(model.flat_path)
     liver_2d6 = ids.impairment_activity("CYP2D6", Organ.LIVER)
     for egfr in (89.0, 82.5, 70.0, 60.0, 59.9, 45.1, 33.0, 15.0, 10.0, 7.6):
         f = _stage_function(healthy, egfr)
-        r = individual(model.flat_path, f_renal_function=f, CKD_hepatic=1.0)
+        r = person(f_renal_function=f, CKD_hepatic=1.0)
         for key in ("plasma_protein", "hematocrit"):
             assert r[ids.condition_factor("ckd", key)] == pytest.approx(
                 _expected(CKD[key]["value"], egfr), rel=1e-12
@@ -568,12 +574,12 @@ def test_ckd_factors_interpolate_between_anchors(model: BuildResult) -> None:
             _expected(CKD["proteins"]["CYP2D6"]["value"], egfr), rel=1e-12
         )
     # no step at the former limit of moderate CKD (1 below, 1.45 above)
-    below = individual(model.flat_path, f_renal_function=_stage_function(healthy, 59.9))
-    above = individual(model.flat_path, f_renal_function=_stage_function(healthy, 60.1))
     pp = ids.condition_factor("ckd", "plasma_protein")
-    assert above[pp] == pytest.approx(_expected(CKD["plasma_protein"]["value"], 60.1))
-    assert below[pp] == pytest.approx(_expected(CKD["plasma_protein"]["value"], 59.9))
-    assert abs(above[pp] - below[pp]) < 5e-3
+    below = person(f_renal_function=_stage_function(healthy, 59.9))[pp]
+    above = person(f_renal_function=_stage_function(healthy, 60.1))[pp]
+    assert above == pytest.approx(_expected(CKD["plasma_protein"]["value"], 60.1))
+    assert below == pytest.approx(_expected(CKD["plasma_protein"]["value"], 59.9))
+    assert abs(above - below) < 5e-3
 
 
 def test_ckd_fu_scan_is_continuous(tmp_path: Path) -> None:
@@ -636,8 +642,9 @@ def test_heart_failure_redistribution(model: BuildResult) -> None:
     """
     healthy = individual(model.flat_path)
     q0 = _flows(healthy)
+    person = individuals(model.flat_path)
     for k in (1, 2, 3, 4):
-        r = individual(model.flat_path, HF_severity=float(k))
+        r = person(HF_severity=float(k))
         q = _flows(r)
         liver = HF["liver_flow"]["value"][k - 1]
         kidney = HF["kidney_flow"]["value"][k - 1]
@@ -651,7 +658,7 @@ def test_heart_failure_redistribution(model: BuildResult) -> None:
             assert q[o] == pytest.approx(q0[o], rel=1e-12)
         assert r[ids.CO] == pytest.approx(sum(q.values()), rel=1e-12)
         assert r[ids.GFR] / healthy[ids.GFR] == pytest.approx(kidney, rel=1e-12)
-    assert individual(model.flat_path, HF_severity=4.0)[ids.CO] < healthy[ids.CO]
+    assert person(HF_severity=4.0)[ids.CO] < healthy[ids.CO]
 
 
 def _values(path: Path) -> dict[str, float]:
@@ -771,8 +778,9 @@ def test_enzyme_factor_multiplies_activity(model: BuildResult) -> None:
     assert "LI__f_cyp3a4" in law
     assert ids.impairment_activity("CYP3A4", Organ.LIVER) in law
     rates = {}
+    person = individuals(model.flat_path)
     for f in (1.0, 0.5):
-        r = individual(model.flat_path, CP_severity=3.0, LI__f_cyp3a4=f)
+        r = person(CP_severity=3.0, LI__f_cyp3a4=f)
         r["[LI__Cti_drg]"] = 0.001
         rates[f] = r["LI__DRG2M"]
         assert r[ids.impairment_activity("CYP3A4", Organ.LIVER)] == pytest.approx(
@@ -836,10 +844,9 @@ def test_gfr_base_is_the_gfr_at_full_renal_function(
     (`fimp_GFR`) and the body surface area.
     """
     bases = []
+    person = individuals(model.flat_path)
     for f in (1.0, 0.3, 0.0):
-        r = individual(
-            model.flat_path, f_renal_function=f, CP_severity=cp_severity, BW=100.0
-        )
+        r = person(f_renal_function=f, CP_severity=cp_severity, BW=100.0)
         base = r[ids.GFR_BASE]
         assert r[ids.GFR] == pytest.approx(base * f, rel=1e-12, abs=1e-15)
         assert base == pytest.approx(

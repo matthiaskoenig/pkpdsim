@@ -37,7 +37,7 @@ from pkpdsim.pbpk import (
 from pkpdsim.pbpk.builder import BuildResult, build
 from pkpdsim.pbpk.proteins import turnover
 
-from .conftest import definition, individual, load, simple_drug
+from .conftest import definition, individuals, load, simple_drug
 
 if TYPE_CHECKING:
     import roadrunner
@@ -297,8 +297,9 @@ def test_activity_base_factor(tmp_path: Path) -> None:
     path = _build(tmp_path, _inhibitor(), FirstOrder(k, per_volume=False)).flat_path
     f = ids.flat(Organ.LIVER, ids.activity("CYP3A4"))
     clearance = {}
+    person = individuals(path)
     for activity in (1.0, 0.5):
-        r = individual(path, **{f: activity})
+        r = person(**{f: activity})
         r[ids.iv_dose(S)] = 10.0
         r.simulate(0, 60, 2)
         cu = r[ids.flat(Organ.LIVER, ids.unbound(Part.TISSUE, S))]

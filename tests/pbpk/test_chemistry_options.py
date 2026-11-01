@@ -48,6 +48,7 @@ from .conftest import (
     chemistry_reference_definition,
     dose_amount,
     individual,
+    individuals,
     load,
     simple_drug,
     total_amount,
@@ -312,8 +313,9 @@ def test_a_custom_parameter_of_a_formula_reads_the_constants_of_its_organ(
     assert "k_ref" in _assignment(md, "k_deep")
     sid, ref = ids.flat(Organ.MUSCLE, "k_deep"), ids.flat(Organ.MUSCLE, "k_ref")
     vti = ids.flat(Organ.MUSCLE, "Vti")
+    person = individuals(result.flat_path)
     for changes, k in (({}, 1e-3), ({"BW": 140.0, ref: 2e-3}, 2e-3)):
-        r = individual(result.flat_path, **changes)
+        r = person(**changes)
         expected = 2 * k * r["BW"] / 70 * r[vti]
         assert r[sid] == pytest.approx(expected, rel=1e-12)
     assert r[vti] > 30.0  # the muscle of 140 kg
@@ -862,9 +864,10 @@ def test_a_metabolism_with_fitted_fractions_keeps_the_mass_balance(
         ]
     )
     result = build(d, tmp_path)
+    person = individuals(result.flat_path)
     for f1, expected in ((None, 0.3), (0.5, 0.5)):
         changes = {} if f1 is None else {"LI__f_DRG2M_drg_m1": f1}
-        r = individual(result.flat_path, **changes)
+        r = person(**changes)
         r.integrator.absolute_tolerance = 1e-14
         r.integrator.relative_tolerance = 1e-10
         r[ids.iv_dose("drg")] = 10.0
@@ -997,8 +1000,9 @@ def test_branches_of_different_enzymes_stay_separate_metabolisms(
     )
     result = build(d, tmp_path)
     ratios = []
+    person = individuals(result.flat_path)
     for activity in (1.0, 0.25):
-        r = individual(result.flat_path, LI__f_cyp2c9=activity)
+        r = person(LI__f_cyp2c9=activity)
         r[ids.iv_dose("drg")] = 10.0
         r.simulate(0, 60, 10)
         assert r["LI__DRG2M2_k"] == pytest.approx(0.2)

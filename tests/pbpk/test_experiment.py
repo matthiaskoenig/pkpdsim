@@ -26,7 +26,7 @@ from pkpdsim.pbpk.experiment import (
 )
 from pkpdsim.scan import start_values
 
-from .conftest import definition, individual
+from .conftest import definition, individual, individuals
 
 if TYPE_CHECKING:
     from sbmlsim.units import Quantity
@@ -83,19 +83,20 @@ def _ml(gfr: "Quantity") -> float:
 def test_the_healthy_gfr_is_the_gfr_base(male: BuildResult) -> None:
     """The healthy GFR is `GFR_base` [l/min] of the flat model in ml/min."""
     path = male.flat_path
+    person = individuals(path)
     gfr = {bw: _ml(healthy_gfr(path, bw=bw)) for bw in (50.0, 100.0)}
     for bw, value in gfr.items():
-        expected = individual(path, BW=bw)["GFR_base"] * 1000
+        expected = person(BW=bw)["GFR_base"] * 1000
         assert value == pytest.approx(expected, rel=1e-12)
     assert gfr[50.0] < gfr[100.0]
     assert _ml(healthy_gfr(path)) == pytest.approx(
-        individual(path)["GFR_base"] * 1000, rel=1e-12
+        person()["GFR_base"] * 1000, rel=1e-12
     )
     assert _ml(healthy_gfr(path, bw=60.0, height=165.0)) == pytest.approx(
-        individual(path, BW=60.0, HEIGHT=165.0)["GFR_base"] * 1000, rel=1e-12
+        person(BW=60.0, HEIGHT=165.0)["GFR_base"] * 1000, rel=1e-12
     )
     assert _ml(healthy_gfr(path, hf_severity=3.0)) == pytest.approx(
-        individual(path, HF_severity=3.0)["GFR_base"] * 1000, rel=1e-12
+        person(HF_severity=3.0)["GFR_base"] * 1000, rel=1e-12
     )
     assert _ml(healthy_gfr(path, hf_severity=3.0)) < _ml(healthy_gfr(path))
     cls = _experiment(male)

@@ -32,6 +32,7 @@ from .conftest import (
     assert_reference_sbml,
     dose_amount,
     individual,
+    individuals,
     reference_definition,
     total_amount,
 )
@@ -139,8 +140,9 @@ def test_the_exchange_scales_with_the_tissue_volume(tmp_path: Path) -> None:
     vti = ids.flat(Organ.MUSCLE, "Vti")
     rid = ids.flat(Organ.MUSCLE, ids.slow_reaction("drg"))
     rates, volumes = [], []
+    person = individuals(path)
     for bw in (73.0, 110.0):
-        r = individual(path, **{ids.BW: bw})
+        r = person(**{ids.BW: bw})
         r[f"[{cti}]"] = 1.0
         rates.append(r[rid])
         volumes.append(r[vti])

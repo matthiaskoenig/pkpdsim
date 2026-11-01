@@ -59,6 +59,7 @@ from .conftest import (
     compiled,
     definition,
     individual,
+    individuals,
     load,
     reference_definition,
     simple_drug,
@@ -263,8 +264,9 @@ def test_an_observer_of_constants_is_an_initial_assignment(tmp_path: Path) -> No
         assert model.getAssignmentRuleByVariable(sid) is None
         assert model.getParameter(sid).getUnits() == ML_PER_MIN_1P73M2.sid
     assert model.getAssignmentRuleByVariable("Carm_gfr") is not None
+    person = individuals(path)
     for changes in ({}, {"BW": 100.0, "HEIGHT": 190.0, "f_renal_function": 0.5}):
-        r = individual(path, **changes)
+        r = person(**changes)
         expected = r[ids.GFR] / r[ids.BSA] * 1730.0
         if not changes:
             assert 60.0 < expected < 150.0  # a healthy GFR in ml/min/1.73 m2

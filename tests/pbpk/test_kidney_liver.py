@@ -39,9 +39,18 @@ from pkpdsim.pbpk import (
 )
 from pkpdsim.pbpk.builder import build
 
-from .conftest import definition, dose_amount, individual, simple_drug, total_amount
+from .conftest import (
+    definition,
+    dose_amount,
+    individuals,
+    initialized,
+    simple_drug,
+    total_amount,
+)
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     import roadrunner
 
 S = "drg"
@@ -80,9 +89,14 @@ def _renal(tmp_path: Path, fraction_reabsorbed: float = 0.0, fu: float = 0.5) ->
     return build(d, tmp_path).flat_path
 
 
-def _load(path: Path, **changes: float) -> "roadrunner.RoadRunner":
-    """Load a model with changes before its initialization, tight tolerances."""
-    r = individual(path, **changes)
+def _load(
+    model: "Path | Callable[..., roadrunner.RoadRunner]", **changes: float
+) -> "roadrunner.RoadRunner":
+    """Load a model with changes before its initialization, tight tolerances.
+
+    The model is a file or the `individuals` of one, loaded once for a test.
+    """
+    r = initialized(model, **changes)
     r.integrator.absolute_tolerance = 1e-12
     r.integrator.relative_tolerance = 1e-10
     return r
@@ -277,8 +291,9 @@ def test_shunt_bypasses_liver(tmp_path: Path) -> None:
     pool, so the amount is conserved at every shunt fraction.
     """
     path = _metabolized(tmp_path)
+    person = individuals(path)
     for f_shunt, metabolized in ((0.0, True), (0.5, True), (1.0, False)):
-        r = _load(path, f_shunt=f_shunt)
+        r = _load(person, f_shunt=f_shunt)
         r[ids.iv_dose(S)] = 10.0
         r.simulate(0, DAY, 50)
         amount = total_amount(r, S) + total_amount(r, "drg_m") + dose_amount(r, S)
@@ -314,8 +329,9 @@ def test_functional_fraction_scales_capacity(tmp_path: Path) -> None:
     """
     path = _metabolized(tmp_path)
     values = {}
+    person = individuals(path)
     for f in (1.0, 0.5):
-        r = _load(path, f_functional=f)
+        r = _load(person, f_functional=f)
         r["[LI__Cti_drg]"] = 0.001
         values[f] = (r["LI__DRG2M"], r["LI__Vti"], r["LI__Vpl"], r["LI__PS_drg"])
     rate, vti, vpl, ps = values[0.5]
@@ -366,8 +382,9 @@ def test_bile_reaches_lumen(tmp_path: Path) -> None:
 def test_hepatic_vein_observer(tmp_path: Path) -> None:
     """`Chv_<s>` is the flow-weighted mix of the liver outflow and the shunt."""
     path = _metabolized(tmp_path)
+    person = individuals(path)
     for f_shunt in (0.0, 0.3):
-        r = _load(path, f_shunt=f_shunt)
+        r = _load(person, f_shunt=f_shunt)
         r[ids.iv_dose(S)] = 10.0
         cols = [
             ids.hepatic_vein(S),

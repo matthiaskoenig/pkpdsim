@@ -39,9 +39,11 @@ from pkpdsim.pbpk import (
 from pkpdsim.pbpk.builder import build
 from pkpdsim.pbpk.observers import arm_vein_weights
 
-from .conftest import definition, individual, simple_drug
+from .conftest import definition, individual, individuals, initialized, simple_drug
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     import roadrunner
 
 S = "drg"
@@ -54,9 +56,17 @@ DEFAULT = arm_vein_weights("pksim_default")
 """The weights of the default preset of the arm vein, skin and muscle."""
 
 
-def _run(path: Path, cols: list[str], **changes: float) -> np.ndarray:
-    """Simulate an IV bolus of 10 mg, the columns without time."""
-    r = individual(path, **changes)
+def _run(
+    model: "Path | Callable[..., roadrunner.RoadRunner]",
+    cols: list[str],
+    **changes: float,
+) -> np.ndarray:
+    """Simulate an IV bolus of 10 mg, the columns without time.
+
+    The model is a file or the `individuals` of one, loaded once for the runs
+    of a test.
+    """
+    r = initialized(model, **changes)
     r.integrator.absolute_tolerance = 1e-12
     r.integrator.relative_tolerance = 1e-10
     r[ids.iv_dose(S)] = 10.0
@@ -201,12 +211,13 @@ def test_free_and_blood_observers(tmp_path: Path, ery: Erythrocytes | None) -> N
     path = _build(tmp_path, substances=[drug, *definition().substances[1:]])
     r = _rr(path)
     fu, bp, hct = r[ids.fu(S)], r[ids.bp(S)], r[ids.HCT]
+    runs = individuals(path)
     for pool in Pool:
         c = f"[{ids.pool_species(pool, S)}]"
         cols = [c, ids.free(pool, S), ids.blood(pool, S)]
         if ery is not None and ery.mode == "kinetic":
             cols.append(f"[{ids.pool_species(pool, S, part=Part.BLOOD_CELLS)}]")
-        result = _run(path, cols)
+        result = _run(runs, cols)
         np.testing.assert_allclose(result[:, 1], fu * result[:, 0], rtol=1e-12)
         if ery is not None and ery.mode == "kinetic":
             blood = (1 - hct) * result[:, 0] + hct * result[:, 3]
@@ -220,7 +231,7 @@ def test_free_and_blood_observers(tmp_path: Path, ery: Erythrocytes | None) -> N
             ids.organ_outflow_bc(Organ.SKIN, S),
             ids.organ_outflow_bc(Organ.MUSCLE, S),
         ]
-    result = _run(path, cols)
+    result = _run(runs, cols)
     np.testing.assert_allclose(result[:, 1], fu * result[:, 0], rtol=1e-12)
     if ery is not None and ery.mode == "kinetic":
         cbc = (
@@ -241,7 +252,7 @@ def test_free_and_blood_observers(tmp_path: Path, ery: Erythrocytes | None) -> N
             f"[{ids.pool_species(Pool.ARTERIAL, S, Part.BLOOD_CELLS)}]",
             f"[{ids.pool_species(Pool.PORTAL, S, Part.BLOOD_CELLS)}]",
         ]
-    result = _run(path, cols, f_shunt=f_shunt)
+    result = _run(runs, cols, f_shunt=f_shunt)
     np.testing.assert_allclose(result[:, 1], fu * result[:, 0], rtol=1e-12)
     if ery is not None and ery.mode == "kinetic":
         qh, qha, qpo = r[ids.QH], r[ids.QHA], r[ids.QPO]
@@ -283,6 +294,7 @@ def test_unbound_tissue_observers(tmp_path: Path) -> None:
     for i, (drug, coefficients) in enumerate(cases):
         path = _build(tmp_path / str(i), substances=[drug], chemistry=[])
         r = _rr(path)
+        runs = individuals(path)
         fu = r[ids.fu(S)]
         parameters = set(r.model.getGlobalParameterIds())
         for organ in (Organ.LIVER, Organ.MUSCLE):
@@ -290,7 +302,7 @@ def test_unbound_tissue_observers(tmp_path: Path) -> None:
                 c = f"[{ids.flat(organ, ids.species(part, S))}]"
                 cu = ids.flat(organ, ids.unbound(part, S))
                 coefficient = r[k] if k == ids.kp(S) else r[ids.flat(organ, k)]
-                result = _run(path, [c, cu])
+                result = _run(runs, [c, cu])
                 np.testing.assert_allclose(
                     result[:, 1], fu / coefficient * result[:, 0], rtol=1e-12
                 )
@@ -446,8 +458,9 @@ def test_a_delta_is_the_change_of_an_observer_over_its_start(tmp_path: Path) -> 
         deltas=(ids.arm(S), "Ctwice_drg"),
     )
     path = build(d, tmp_path).flat_path
+    person = individuals(path)
     for changes in ({}, {"BW": 110.0, "f_renal_function": 0.3}):
-        r = individual(path, **changes)
+        r = person(**changes)
         r.integrator.absolute_tolerance = 1e-14
         r.integrator.relative_tolerance = 1e-10
         start = r[ids.arm(S)]

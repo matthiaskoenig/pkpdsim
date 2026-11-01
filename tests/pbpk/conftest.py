@@ -248,8 +248,8 @@ def individuals(path: Path) -> "Callable[..., roadrunner.RoadRunner]":
     initializes it with its changes before the initialization, as sbmlsim
     initializes the loaded model of a scan for each of its points
     (`RoadrunnerSBMLModel.initialize` sets back the values of the earlier
-    initialization), and returns the same instance; a test reads an
-    individual before it initializes the next.
+    initialization), and returns the same instance; a test reads or
+    simulates an individual before it initializes the next.
 
     Args:
         path: the SBML file.
@@ -263,14 +263,38 @@ def individuals(path: Path) -> "Callable[..., roadrunner.RoadRunner]":
     from sbmlsim.simulator.plan import Assignment
 
     model = RoadrunnerSBMLModel(source=path, jit_optimization=JIT_OPTIMIZATION)
+    assert not model.symbols.events, "a model with events is loaded per individual"
+    first = True
 
     def initialized(**changes: float) -> "roadrunner.RoadRunner":
+        nonlocal first
+        if not first:
+            # a test may have simulated the instance: reset it as after a
+            # simulation (the built models have no events, which a reset
+            # without a simulation would queue again)
+            model.simulated()
+        first = False
         model.initialize(
             [Assignment(k, TargetKind.PARAMETER, value=v) for k, v in changes.items()]
         )
         return model.r_loaded
 
     return initialized
+
+
+def initialized(
+    model: "Path | Callable[..., roadrunner.RoadRunner]", **changes: float
+) -> "roadrunner.RoadRunner":
+    """Get an individual of a model file (`individual`) or of `individuals` of one.
+
+    Args:
+        model: the SBML file, or the `individuals` of a model loaded once.
+        **changes: the values of parameters by id, e.g. `BW=100.0`.
+
+    Returns:
+        The roadrunner instance of the initialized model.
+    """
+    return individual(model, **changes) if isinstance(model, Path) else model(**changes)
 
 
 def total_amount(r: "roadrunner.RoadRunner", sid: str) -> float:

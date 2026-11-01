@@ -48,7 +48,7 @@ from .conftest import (
     chemistry_reference_definition,
     dateless,
     dose_amount,
-    individual,
+    individuals,
     load,
     reference_definition,
     simple_drug,
@@ -704,13 +704,14 @@ def test_the_transit_of_the_stomach_is_an_id_of_the_top_model(tmp_path: Path) ->
     """
     result = build(_definition("transit", SegmentedIntestine()), tmp_path)
     fasted, fed = _transit("st"), value(DATA, "stomach", "transit_time_fed").value
+    person = individuals(result.flat_path)
     for changes, expected in (
         ({}, fasted),
         ({ids.FED: 1.0}, fed),
         ({GASTRIC_EMPTYING: 1.5}, 1.5 * fasted),
         ({ids.FED: 1.0, GASTRIC_EMPTYING: 2.0}, 2.0 * fed),
     ):
-        r = individual(result.flat_path, **changes)
+        r = person(**changes)
         assert r[ids.T_STOMACH] == pytest.approx(expected, rel=1e-14)
     model = libsbml.readSBMLFromFile(str(result.flat_path)).getModel()
     assert ids.T_STOMACH in {p.getId() for p in model.getListOfParameters()}
@@ -738,6 +739,7 @@ def test_a_conversion_reads_the_transit_of_the_stomach(tmp_path: Path) -> None:
         parameters=[ModelParameter("f_conv", f, U.dimensionless)],
     )
     result = build(d, tmp_path)
+    person = individuals(result.flat_path)
     for changes in ({}, {ids.FED: 1.0}, {GASTRIC_EMPTYING: 1.5}):
-        r = individual(result.flat_path, **changes)
+        r = person(**changes)
         assert _converted(r, ids.sol_dose(S), 10.0) == pytest.approx(f, rel=1e-5)

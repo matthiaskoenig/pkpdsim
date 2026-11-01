@@ -37,7 +37,14 @@ from pkpdsim.pbpk import (
 from pkpdsim.pbpk.placement import formula_ids
 from pkpdsim.pbpk.values import as_value
 
-from .conftest import compiled, definition, individual, simple_drug, total_amount
+from .conftest import (
+    compiled,
+    definition,
+    individual,
+    individuals,
+    simple_drug,
+    total_amount,
+)
 
 #: a fitted Kp of the parent with its uncertainty
 FITTED_KP = Value(
@@ -447,8 +454,9 @@ def test_a_custom_reaction_reads_a_definition_parameter(tmp_path: Path) -> None:
     assert flat.getParameter("MU__k_prod") is None
     reaction = flat.getReaction("MU__PRDPROD")
     assert libsbml.formulaToL3String(reaction.getKineticLaw().getMath()) == "k_prod"
+    person = individuals(result.flat_path)
     for k_prod in (0.002, 0.004):
-        r = individual(result.flat_path, k_prod=k_prod)
+        r = person(k_prod=k_prod)
         r.integrator.absolute_tolerance = 1e-12
         r.integrator.relative_tolerance = 1e-10
         r.simulate(0, 100)
@@ -483,8 +491,9 @@ def test_a_custom_reaction_reads_a_covariate_and_a_compartment(tmp_path: Path) -
     flat = _model(result.flat_path)
     assert flat.getCompartment("MU__Vurine") is None
     assert flat.getParameter("MU__BW") is None
+    person = individuals(result.flat_path)
     for bw in (70.0, 140.0):
-        r = individual(result.flat_path, BW=bw)
+        r = person(BW=bw)
         r.integrator.absolute_tolerance = 1e-12
         r.integrator.relative_tolerance = 1e-10
         r.simulate(0, 100)

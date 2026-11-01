@@ -49,7 +49,7 @@ from pkpdsim.pbpk.variants.intestine import PerSubstance
 from .conftest import (
     definition,
     dose_amount,
-    individual,
+    individuals,
     load,
     simple_drug,
     total_amount,
@@ -310,8 +310,9 @@ def test_first_order_per_volume_in_segments(tmp_path: Path) -> None:
     segments = SMALL
     c = 0.005
     totals = {}
+    person = individuals(path)
     for bw in (75.0, 150.0):
-        r = individual(path, BW=bw)
+        r = person(BW=bw)
         for seg in segments:
             r[f"[{_gu(ids.mucosa(S, seg))}]"] = c
         rates = np.array([r[_gu(ids.segment_process("DRGG", seg))] for seg in segments])
