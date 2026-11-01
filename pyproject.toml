@@ -62,10 +62,12 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "bump-my-version>=1.5.1",
-    "ruff>=0.17.0",
+    "ruff>=0.17.3",
     "pre-commit>=4.6.2",
-    "ty>=0.0.86",
-    "tox>=4.65.0",
+    "ty>=0.0.95",
+    # 4.67.5 refuses its package staging directory when it was created under
+    # umask 002, tox-dev/tox#4357
+    "tox>=4.65.0,!=4.67.5",
     "tox-uv>=1.35.0",
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
