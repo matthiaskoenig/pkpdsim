@@ -267,8 +267,10 @@ def test_gut_wall_metabolism_reduces_fg(tmp_path: Path) -> None:
 def test_placement_by_expression(tmp_path: Path) -> None:
     """CYP3A4 is placed by expression times mucosa volume, the shares sum to 1.
 
-    The colon has no CYP3A4 in the data: no reaction there; the duodenum has
-    the highest expression per volume.
+    The colon has no CYP3A4 in the data: no reaction there; the duodenum and
+    the upper jejunum (31 pmol/mg both, the jejunum taken as the duodenum)
+    have the highest expression per volume, equal to the last bits, which
+    differ between the levels of the JIT.
     """
     d = _definition("placement", chemistry=[_gut_metabolism()])
     result = build(d, tmp_path)
@@ -283,7 +285,10 @@ def test_placement_by_expression(tmp_path: Path) -> None:
     per_volume = {
         seg: r[weights[seg]] / r[_gu(ids.mucosa_volume(seg))] for seg in SMALL
     }
-    assert max(per_volume, key=lambda k: per_volume[k]) == "du"
+    highest = max(per_volume.values())
+    assert per_volume["du"] == pytest.approx(highest, rel=1e-12)
+    assert per_volume["jej1"] == pytest.approx(highest, rel=1e-12)
+    assert all(per_volume[seg] < 0.99 * highest for seg in SMALL[2:])
 
 
 def test_first_order_per_volume_in_segments(tmp_path: Path) -> None:
