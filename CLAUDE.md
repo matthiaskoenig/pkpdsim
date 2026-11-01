@@ -116,6 +116,8 @@ Documentation is [Zensical](https://zensical.org/): markdown sources in `docs/`,
 
 The tests of these modules run on the toy package `tests/pkpdsim_toy`; its SBML is created once per session by the controller (pytest-xdist), and a test writes only into `tmp_path`.
 
+The PBPK tests compile their models at `O0` (`JIT_OPTIMIZATION` of `tests/pbpk/conftest.py`, the helpers `load`, `compiled`, `individual` and an autouse fixture which sets the default level of sbmlsim, not its environment variable, which a forkserver would keep); the compilation at `O2` was most of the time of the suite. Several individuals of one model come from `individuals(path)` (one loaded model, initialized for one individual after the other), not from a load per individual; `test_load_time` measures at `O2`, the snippets of the docs run at `O0`.
+
 ## Conventions
 
 - Type checking is done with [ty](https://docs.astral.sh/ty/). `[tool.ty.terminal] error-on-warning = true` means warnings fail the check, so the tree must stay at zero diagnostics. Suppress a diagnostic with a rule-specific `# ty: ignore[rule-name]`, never a blanket `# type: ignore`. ty also runs as a pre-commit hook (`--extra dev`).
