@@ -7,7 +7,6 @@ from pathlib import Path
 
 import libsbml
 import pytest
-import roadrunner
 from sbmlutils.factory import Parameter, Uncertainty, UncertParameter
 
 from pkpdsim.pbpk import (
@@ -51,6 +50,7 @@ from pkpdsim.pbpk.builder import organ_component
 
 from .conftest import (
     assert_reference_sbml,
+    compiled,
     dateless,
     definition,
     individual,
@@ -258,7 +258,7 @@ def test_no_ftissue_when_every_entered_organ_has_its_own_ps(
     assert model.getParameter("LI__kps_m").getValue() == 1.0
     ia = model.getInitialAssignmentBySymbol("LI__PS_m")
     assert libsbml.formulaToL3String(ia.getMath()) == "LI__kps_m * Vli * f_functional"
-    r = roadrunner.RoadRunner(str(flat))
+    r = compiled(flat)
     r["IVDOSE_m"] = 1.0
     r.simulate(0, 600, 11)
     assert r["LI__PS_m"] == pytest.approx(r["Vli"] * r["f_functional"])
@@ -1002,7 +1002,7 @@ def test_a_constant_of_a_formulation_is_read_from_the_definition(
     )
     assert released.parameter_value("f_dis_pr_drg") == 0.27
     result = build(released, tmp_path)
-    r = roadrunner.RoadRunner(str(result.flat_path))
+    r = compiled(result.flat_path)
     assert r["f_dis_pr_drg"] == 0.27
     with pytest.raises(ValueError, match=r"no parameter 'f_dis_ir_drg'.*f_dis_pr_drg"):
         released.parameter_value("f_dis_ir_drg")

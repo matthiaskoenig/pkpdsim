@@ -15,7 +15,6 @@ from pathlib import Path
 import libsbml
 import numpy as np
 import pytest
-import roadrunner
 from sbmlsim.simulation import Simulation
 from sbmlsim.simulator import Simulator
 from sbmlutils.factory import ModelDefinition, Parameter, Reaction, Species
@@ -57,6 +56,7 @@ from pkpdsim.scan import end_values, start_values
 from .conftest import (
     assert_reference_sbml,
     cardiac_pd,
+    compiled,
     definition,
     individual,
     load,
@@ -729,7 +729,7 @@ def test_the_equilibration_sets_back_the_absorbed_amount_of_an_endogenous_substa
     )
     assert simulation.changes[0].values[amount] == 0.0
     assert simulation.changes[0].values[applied] == 0.0
-    r = roadrunner.RoadRunner(str(path))
+    r = compiled(path)
     r.integrator.absolute_tolerance = 1e-14
     r.integrator.relative_tolerance = 1e-10
     before = r.simulate(0, 1e5, 2, selections=["time", amount])[amount][-1]

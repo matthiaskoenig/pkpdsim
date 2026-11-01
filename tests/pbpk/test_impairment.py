@@ -37,7 +37,13 @@ from pkpdsim.pbpk.impairment import (
 from pkpdsim.pbpk.organs import PORTAL_ORGANS
 from pkpdsim.pbpk.physiology import Sex, physiology_objects
 
-from .conftest import dateless, definition, individual, simple_drug
+from .conftest import (
+    compiled,
+    dateless,
+    definition,
+    individual,
+    simple_drug,
+)
 from .conftest import load as load_model
 
 PARALLEL = [o for o in Organ if o is not Organ.LUNG]
@@ -648,7 +654,7 @@ def test_heart_failure_redistribution(model: BuildResult) -> None:
 
 def _values(path: Path) -> dict[str, float]:
     """The values of the parameters and compartments of a model."""
-    r = roadrunner.RoadRunner(str(path))
+    r = compiled(path)
     return {
         pid: r[pid]
         for pid in [

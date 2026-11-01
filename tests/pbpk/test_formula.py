@@ -5,7 +5,6 @@ from pathlib import Path
 
 import libsbml
 import pytest
-import roadrunner
 from sbmlutils.factory import Uncertainty, UncertParameter
 
 from pkpdsim.pbpk import (
@@ -38,7 +37,7 @@ from pkpdsim.pbpk import (
 from pkpdsim.pbpk.placement import formula_ids
 from pkpdsim.pbpk.values import as_value
 
-from .conftest import definition, individual, simple_drug, total_amount
+from .conftest import compiled, definition, individual, simple_drug, total_amount
 
 #: a fitted Kp of the parent with its uncertainty
 FITTED_KP = Value(
@@ -133,7 +132,7 @@ def test_an_organ_value_follows_a_parameter_of_the_top_model(tmp_path: Path) -> 
     notes = model.getParameter("LI__PMBIL_k").getNotesString()
     assert "Tied to the body weight." in notes
     assert "0.0001 per_min * BW / 1 kg" in notes
-    r = roadrunner.RoadRunner(str(flat))
+    r = compiled(flat)
     assert r["LI__PMBIL_k"] == pytest.approx(0.0001 * r["BW"])
     r.setValue("init(BW)", 100.0)
     r.reset()
@@ -162,7 +161,7 @@ def test_a_fitted_value_tied_by_a_formula_appears_once(tmp_path: Path) -> None:
         and p.getPlugin("distrib").getNumUncertainties()
     ]
     assert uncertain == [ids.kp("p")]
-    r = roadrunner.RoadRunner(str(flat))
+    r = compiled(flat)
     assert r[ids.kp("pm")] == pytest.approx(0.8)
     r.setValue(f"init({ids.kp('p')})", 0.5)
     r.reset()
@@ -238,7 +237,7 @@ def test_an_organ_formula_reads_the_id_of_the_top_model(tmp_path: Path) -> None:
         _liver_k(Formula("0.01 l_per_min * fimp_li_cyp3a4", U.l_per_min)),
         tmp_path / "top",
     ).flat_path
-    r = roadrunner.RoadRunner(str(flat))
+    r = compiled(flat)
     r.setValue("init(CP_severity)", 2.0)
     r.reset()
     assert r["fimp_li_cyp3a4"] < 1.0
@@ -273,7 +272,7 @@ def test_an_organ_formula_reads_a_compartment_of_the_top_model(tmp_path: Path) -
     doc = libsbml.readSBMLFromFile(str(result.comp_path))
     liver = doc.getPlugin("comp").getModelDefinition("standard_li")
     assert liver.getCompartment("Vurine") is not None
-    r = roadrunner.RoadRunner(str(result.flat_path))
+    r = compiled(result.flat_path)
     r.setValue("init(Vurine)", 2.0)
     r.reset()
     assert r["LI__DRG2M_k"] == pytest.approx(0.02)
@@ -296,7 +295,7 @@ def test_a_formula_in_the_zonated_liver(tmp_path: Path) -> None:
         chemistry=chemistry,
         variants=Variants(organs={Organ.LIVER: ZonatedLiver(n_zones=3)}),
     )
-    r = roadrunner.RoadRunner(str(build(d, tmp_path).flat_path))
+    r = compiled(build(d, tmp_path).flat_path)
     r.setValue("init(BW)", 140.0)
     r.reset()
     assert r["LI__DRG2M_Vmax"] == pytest.approx(0.002)
@@ -320,7 +319,7 @@ def test_a_formula_in_the_segmented_intestine(tmp_path: Path) -> None:
         chemistry=chemistry,
         variants=Variants(organs={Organ.SMALL_INTESTINE: SegmentedIntestine(ka=ka)}),
     )
-    r = roadrunner.RoadRunner(str(build(d, tmp_path).flat_path))
+    r = compiled(build(d, tmp_path).flat_path)
     r.setValue("init(BW)", 140.0)
     r.reset()
     assert r["GU__DRG2M_GU_k"] == pytest.approx(1.0)
@@ -377,7 +376,7 @@ def test_a_formula_per_substance_in_the_segmented_intestine(tmp_path: Path) -> N
             }
         ),
     )
-    r = roadrunner.RoadRunner(str(build(d, tmp_path).flat_path))
+    r = compiled(build(d, tmp_path).flat_path)
     r.setValue("init(BW)", 140.0)
     r.reset()
     assert r["ka_drg"] == pytest.approx(2.0)

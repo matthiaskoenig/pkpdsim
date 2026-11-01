@@ -210,10 +210,11 @@ def test_load_time(simple: BuildResult) -> None:
     (11 s observed among the workers), so the test runs only serially, in a
     run without pytest-xdist (`pytest -n 0`, the second command of tox and so
     of continuous integration); the structural guard
-    `test_rules_read_a_state` runs in every run.
+    `test_rules_read_a_state` runs in every run. The model is compiled at the
+    level of production, `O2`, not at the level of the tests.
     """
     start = time.process_time()
-    load(simple)
+    load(simple, "O2")
     assert time.process_time() - start < 10.0
 
 

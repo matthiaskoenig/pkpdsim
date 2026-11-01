@@ -2,6 +2,15 @@
 
 `simple_drug` and `definition` are plain functions (not fixtures), so a test
 varies them with arguments: `definition(routes=[Route.iv("drg")])`.
+
+The tests compile their models at `JIT_OPTIMIZATION` (`O0`): a test compiles
+a model to simulate it for a moment, and the compilation at the default level
+of sbmlsim (`O2`) is most of its time, up to minutes for a model whose starts
+read a solved steady state (164 s against 13 s at `O0` for the saturable
+secretion of `test_stationary.py`). `O0` gives the results of roadrunner's
+default JIT bitwise, the other levels differ from them in the last bits.
+`tests/pbpk/test_builder.py::test_load_time` measures the compilation at the
+level of production.
 """
 
 import difflib
@@ -163,14 +172,51 @@ def cardiac_pd(
     )
 
 
-def load(result: BuildResult) -> "roadrunner.RoadRunner":
-    """Load the flat model of a build as sbmlsim does, with tight integrator tolerances.
+#: the optimization level of the JIT the tests compile their models at
+JIT_OPTIMIZATION = "O0"
 
-    `load_roadrunner` of sbmlsim is the production path: LLJIT, always compiled.
+
+@pytest.fixture(autouse=True)
+def jit_optimization(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Compile what sbmlsim loads without a level at `JIT_OPTIMIZATION`.
+
+    The experiments, runners and functions of the library which load a model
+    without a level take the default of sbmlsim; it is set for the test, not
+    the environment variable of sbmlsim, which a pool started during the test
+    (its forkserver) would keep for the tests after it.
+    """
+    from sbmlsim.model import model_roadrunner
+
+    monkeypatch.setattr(
+        model_roadrunner,
+        "DEFAULT_JIT_OPTIMIZATION",
+        model_roadrunner.JitOptimization(JIT_OPTIMIZATION),
+    )
+
+
+def compiled(
+    path: Path, optimization: str = JIT_OPTIMIZATION
+) -> "roadrunner.RoadRunner":
+    """Load a model into roadrunner as it is, compiled at `optimization`.
+
+    `load_roadrunner` of sbmlsim: LLJIT, always compiled. roadrunner's own
+    default JIT (MCJIT) compiles slower than `O0`, which gives its results
+    bitwise.
     """
     from sbmlsim.model.model_roadrunner import load_roadrunner
 
-    r = load_roadrunner(result.flat_path)
+    return load_roadrunner(path, optimization)
+
+
+def load(
+    result: BuildResult, optimization: str = JIT_OPTIMIZATION
+) -> "roadrunner.RoadRunner":
+    """Load the flat model of a build as sbmlsim does, with tight integrator tolerances.
+
+    `load_roadrunner` of sbmlsim is the production path: LLJIT, always
+    compiled, here at `optimization`.
+    """
+    r = compiled(result.flat_path, optimization)
     r.integrator.absolute_tolerance = 1e-12
     r.integrator.relative_tolerance = 1e-10
     return r
@@ -194,7 +240,7 @@ def individual(path: Path, **changes: float) -> "roadrunner.RoadRunner":
     from sbmlsim.model.symbols import TargetKind
     from sbmlsim.simulator.plan import Assignment
 
-    model = RoadrunnerSBMLModel(source=path)
+    model = RoadrunnerSBMLModel(source=path, jit_optimization=JIT_OPTIMIZATION)
     model.initialize(
         [Assignment(k, TargetKind.PARAMETER, value=v) for k, v in changes.items()]
     )
