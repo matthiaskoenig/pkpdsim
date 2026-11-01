@@ -42,6 +42,7 @@ from .conftest import (
     dateless,
     definition,
     individual,
+    individuals,
     simple_drug,
 )
 from .conftest import load as load_model
@@ -598,14 +599,15 @@ def test_ckd_fu_scan_is_continuous(tmp_path: Path) -> None:
         ),
     ]
     d = PBPKDefinition(sid="fuscan", substances=substances)
-    path = build(d, tmp_path).flat_path
+    # one loaded model, initialized for every point as a scan does
+    scan = individuals(build(d, tmp_path).flat_path)
     n = 240
     steps = [i * 1.2 / n for i in range(n + 1)]
     egfr_step = 0.0
     fus = []
     albumin = []
     for f in steps:
-        r = individual(path, f_renal_function=f)
+        r = scan(f_renal_function=f)
         fus.append(r[ids.fu("unk")])
         albumin.append(r[ids.fu("alb")])
         egfr_step = r[ids.EGFR] * 1000.0 / f if f else egfr_step

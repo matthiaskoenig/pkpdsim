@@ -60,6 +60,8 @@ from pkpdsim.pbpk import (
 from pkpdsim.pbpk.builder import BuildResult
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     import roadrunner
 
 
@@ -236,15 +238,39 @@ def individual(path: Path, **changes: float) -> "roadrunner.RoadRunner":
     Returns:
         The roadrunner instance of the initialized model.
     """
+    return individuals(path)(**changes)
+
+
+def individuals(path: Path) -> "Callable[..., roadrunner.RoadRunner]":
+    """Load a model once and initialize it for one individual after the other.
+
+    The returned function is `individual` of the one loaded model: every call
+    initializes it with its changes before the initialization, as sbmlsim
+    initializes the loaded model of a scan for each of its points
+    (`RoadrunnerSBMLModel.initialize` sets back the values of the earlier
+    initialization), and returns the same instance; a test reads an
+    individual before it initializes the next.
+
+    Args:
+        path: the SBML file.
+
+    Returns:
+        The function of the changes, the values of parameters by id, which
+        returns the roadrunner instance of the initialized model.
+    """
     from sbmlsim.model.model_roadrunner import RoadrunnerSBMLModel
     from sbmlsim.model.symbols import TargetKind
     from sbmlsim.simulator.plan import Assignment
 
     model = RoadrunnerSBMLModel(source=path, jit_optimization=JIT_OPTIMIZATION)
-    model.initialize(
-        [Assignment(k, TargetKind.PARAMETER, value=v) for k, v in changes.items()]
-    )
-    return model.r_loaded
+
+    def initialized(**changes: float) -> "roadrunner.RoadRunner":
+        model.initialize(
+            [Assignment(k, TargetKind.PARAMETER, value=v) for k, v in changes.items()]
+        )
+        return model.r_loaded
+
+    return initialized
 
 
 def total_amount(r: "roadrunner.RoadRunner", sid: str) -> float:
