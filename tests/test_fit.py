@@ -347,7 +347,15 @@ def levels_in_worker(problem: OptimizationProblem, settings: FitSettings) -> tup
     )
 
 
-@pytest.mark.parametrize("start_method", ["forkserver", "spawn"])
+# windows has no forkserver
+@pytest.mark.parametrize(
+    "start_method",
+    [
+        m
+        for m in ("forkserver", "spawn")
+        if m in multiprocessing.get_all_start_methods()
+    ],
+)
 def test_a_worker_loads_the_models_at_the_level_of_the_model(
     monkeypatch: pytest.MonkeyPatch, start_method: str
 ) -> None:
