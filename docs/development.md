@@ -100,7 +100,7 @@ The interpreters of uv keep `libpython`, which the extension of libroadrunner li
 export LD_LIBRARY_PATH="$(uv run python -c 'import sys; print(sys.base_prefix)')/lib"
 ```
 
-The workflows do the same in `.github/actions/setup`.
+The workflows do the same in `.github/actions/setup`. tox needs none of this: its environments use the interpreters of uv only (`uv_python_preference = only-managed` in `tox.ini`, since the wheel of libroadrunner for python 3.15 needs an interpreter built with the experimental JIT, see [Installation](installation.md#dependencies)), and the inline plugin `toxfile.py` puts the `lib` directory of the interpreter of each environment first on `LD_LIBRARY_PATH`. `uv python upgrade` moves the installed interpreters to their latest patch release, `tox run-parallel -r` recreates the environments on them.
 
 ## Testing
 
