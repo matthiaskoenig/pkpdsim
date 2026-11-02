@@ -51,7 +51,13 @@ from pkpdsim.pbpk.physiology import (
     physiology_objects,
     reference_individual,
 )
-from pkpdsim.pbpk.proteins import PROTEINS, Induction, Inhibition, Protein
+from pkpdsim.pbpk.proteins import (
+    PROTEINS,
+    Induction,
+    Inhibition,
+    Protein,
+    Stabilisation,
+)
 from pkpdsim.pbpk.regional import (
     derive_regional_absorption,
     regional_key,
@@ -184,6 +190,7 @@ __all__ = [
     "SingleLumen",
     "SlowPool",
     "Source",
+    "Stabilisation",
     "StandardOrgan",
     "Substance",
     "ThresholdReabsorption",

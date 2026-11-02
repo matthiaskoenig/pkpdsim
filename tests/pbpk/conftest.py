@@ -40,6 +40,8 @@ from pkpdsim.pbpk import (
     Excretion,
     FirstOrder,
     Formula,
+    Induction,
+    Inhibition,
     Kp,
     Membrane,
     Metabolism,
@@ -575,6 +577,60 @@ def endogenous_reference_definition() -> PBPKDefinition:
     )
 
 
+def turnover_reference_definition() -> PBPKDefinition:
+    """The definition of the stored turnover reference: turnover states without its options.
+
+    `drg` metabolised by CYP3A4 in the liver and the small intestine and by
+    CYP2C19 in the liver; `inh` (fu 0.5, Kp 1.5, not eliminated) inactivates
+    CYP3A4 (mechanism-based) and induces CYP2C19, so both proteins have their
+    turnover state, without a degradation rate of the definition
+    (`PBPKDefinition.turnover`) and without a stabilisation. The stored comp
+    and flat SBML were built at pkpdsim f2d7c13, before both options.
+    """
+    return PBPKDefinition(
+        sid="turnover_reference",
+        substances=[
+            simple_drug(),
+            Substance(
+                "inh",
+                name="inhibitor",
+                mr=400.0,
+                binding=Binding(fu=0.5),
+                distribution=Kp(1.5, ftissue=1.0),
+                inhibits=(Inhibition("CYP3A4", "mechanism", 0.005, kinact=1e-3),),
+                induces=(Induction("CYP2C19", 2.0, 0.01),),
+            ),
+        ],
+        chemistry=[
+            Metabolism(
+                "DRG3A4",
+                Organ.LIVER,
+                "drg",
+                {},
+                MM(vmax=1e-3, km=0.01),
+                protein="CYP3A4",
+            ),
+            Metabolism(
+                "DRG2C19",
+                Organ.LIVER,
+                "drg",
+                {},
+                MM(vmax=5e-4, km=0.02),
+                protein="CYP2C19",
+            ),
+            Metabolism(
+                "DRGGU",
+                Organ.SMALL_INTESTINE,
+                "drg",
+                {},
+                MM(vmax=1e-3, km=0.01),
+                protein="CYP3A4",
+            ),
+        ],
+        routes=[Route.iv("drg"), Route.oral("drg"), Route.iv("inh")],
+    )
+
+
 def dateless(text: str) -> list[str]:
     """The lines of an SBML text without the dates of the model history."""
     return [line for line in text.splitlines() if not _DATE.search(line)]
@@ -596,7 +652,8 @@ def assert_reference_sbml(result: BuildResult) -> None:
     assignment and port, the inputs `FED` and `fimp_t_stomach` of an
     intestine without a lumen species, no line removed); a change of the
     library which changes the SBML of every model on purpose rebuilds them
-    and says so.
+    and says so. `turnover_reference_definition()` was built at f2d7c13,
+    before the degradation rate of a protein and the stabilisation.
     """
     for path in (result.comp_path, result.flat_path):
         reference = gzip.decompress((REFERENCE / f"{path.name}.gz").read_bytes())

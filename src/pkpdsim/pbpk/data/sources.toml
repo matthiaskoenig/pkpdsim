@@ -76,6 +76,10 @@ doi = "10.2174/138920009788498978"
 citation = "Fahmi OA, Maurer TS, Kish M, Cardenas E, Boldt S, Nettleton D. A combined model for predicting CYP3A4 clinical net drug-drug interaction based on CYP3A4 inhibition, inactivation, and induction determined in vitro. Drug Metab Dispos 36(8):1698-1708, 2008."
 doi = "10.1124/dmd.107.018663"
 
+[Roberts1995]
+citation = "Roberts BJ, Song BJ, Soh Y, Park SS, Shoaf SE. Ethanol induces CYP2E1 by protein stabilization: role of ubiquitin conjugation in the rapid degradation of CYP2E1. J Biol Chem 270(50):29632-29635, 1995."
+doi = "10.1074/jbc.270.50.29632"
+
 [RowlandYeo2011]
 citation = "Rowland Yeo K, Walsky RL, Jamei M, Rostami-Hodjegan A, Tucker GT. Prediction of time-dependent CYP3A4 drug-drug interactions by physiologically based pharmacokinetic modelling: impact of inactivation parameters and enzyme turnover. Eur J Pharm Sci 43(3):160-173, 2011."
 doi = "10.1016/j.ejps.2011.04.008"

@@ -8,7 +8,7 @@ from typing import Literal
 from sbmlutils.metadata import BQB
 
 from pkpdsim.pbpk.organs import Organ, as_member, as_organ_keys, as_organs
-from pkpdsim.pbpk.proteins import Induction, Inhibition
+from pkpdsim.pbpk.proteins import Induction, Inhibition, Stabilisation
 from pkpdsim.pbpk.values import Q, check_literals
 
 __all__ = [
@@ -257,6 +257,8 @@ class Substance:
         excretion: the excretion.
         inhibits: the inhibitions of proteins by the substance.
         induces: the inductions of proteins by the substance.
+        stabilises: the stabilisations of proteins by the substance (the
+            protection of a protein from its degradation).
         baseline: the plasma concentration (mM) of an endogenous substance at
             the start, `baseline_<s>`; `None` starts every species at 0.
             Every plasma species starts at it, every other species of the
@@ -277,4 +279,5 @@ class Substance:
     excretion: Excretion = field(default_factory=Excretion)
     inhibits: tuple[Inhibition, ...] = ()
     induces: tuple[Induction, ...] = ()
+    stabilises: tuple[Stabilisation, ...] = ()
     baseline: Q | None = None

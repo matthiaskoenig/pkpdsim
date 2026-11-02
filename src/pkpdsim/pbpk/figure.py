@@ -6,7 +6,8 @@ COMBINE archive of a model carries it (`create_archive(..., figure=True)`):
 - the title, the substances (a chip in the color of the substance, its name
   and its mechanisms: binding, erythrocytes, distribution, baseline (an
   endogenous substance: with a given baseline, or produced with the baseline
-  solved by the library), inhibitions and inductions), the routes, the PD components and the key;
+  solved by the library), inhibitions, inductions and stabilisations), the
+  routes, the PD components and the key;
 - the circulation: the venous blood on the left, the arterial blood on the
   right, the lung in series between them, the organs which the arterial
   blood perfuses and which drain into the venous blood, the liver with the
@@ -551,6 +552,8 @@ class _Figure:
             parts.append(f"inhibits {i.protein} ({i.kind})")
         for i in s.induces:
             parts.append(f"induces {i.protein}")
+        for i in s.stabilises:
+            parts.append(f"stabilises {i.protein}")
         return "; ".join(parts)
 
     def _route_text(self) -> str:

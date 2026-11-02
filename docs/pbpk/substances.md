@@ -13,6 +13,7 @@ A `Substance` is a short id, a name, a molecular weight and the mechanism flags 
 | `excretion` | `Excretion(urine, fraction_reabsorbed, reabsorption)` | the default `Excretion()`: no filtration | glomerular filtration `fu*GFR` into the urine, a constant reabsorbed fraction or a saturable reabsorption (`ThresholdReabsorption(threshold, n)`) |
 | `inhibits` | tuple of `Inhibition` | | the inhibition of proteins by the substance, see [Chemistry](chemistry.md) |
 | `induces` | tuple of `Induction` | | the induction of proteins by the substance |
+| `stabilises` | tuple of `Stabilisation` | | the stabilisation of proteins by the substance (a slower degradation), see [Chemistry](chemistry.md#inhibition-induction-and-stabilisation) |
 | `baseline` | number, `Value` or `Formula` (mM) | every species starts at 0 | an endogenous substance: every species starts at the equilibrium with the plasma concentration `baseline_<s>`, see [Endogenous baseline](#endogenous-baseline) |
 
 The routes are declared on the definition (`PBPKDefinition.routes`), not on the substance; the biliary and the intestinal excretion are processes of the chemistry (an apical efflux of the liver into the bile, of the intestine into the lumen).

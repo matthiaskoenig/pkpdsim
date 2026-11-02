@@ -1,14 +1,17 @@
-"""Tests of the activity of the proteins, their inhibition and induction.
+"""Tests of the activity of the proteins, their inhibition, induction and stabilisation.
 
 A process of a protein runs with the base activity `f_<protein>` of its organ;
 a reversible inhibitor enters the rate with its unbound concentration in the
 compartment of the process (competitive on Km, uncompetitive on Vmax and Km,
-noncompetitive on Vmax, mixed on both), a mechanism-based inhibitor or an
-inducer changes the turnover state `E_<protein>`, which multiplies the rates.
+noncompetitive on Vmax, mixed on both), a mechanism-based inhibitor, an
+inducer or a stabiliser changes the turnover state `E_<protein>`, which
+multiplies the rates; its degradation rate is that of the organ or that of
+the protein (`PBPKDefinition.turnover`).
 """
 
 import dataclasses
 import math
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -21,6 +24,7 @@ from pkpdsim.pbpk import (
     Binding,
     Direction,
     FirstOrder,
+    Formula,
     Hill,
     Induction,
     Inhibition,
@@ -29,15 +33,26 @@ from pkpdsim.pbpk import (
     Metabolism,
     Organ,
     Part,
+    PBPKDefinition,
     Route,
+    Stabilisation,
     Substance,
     Transport,
+    U,
+    Value,
     ids,
 )
 from pkpdsim.pbpk.builder import BuildResult, build
 from pkpdsim.pbpk.proteins import turnover
 
-from .conftest import definition, individuals, load, simple_drug
+from .conftest import (
+    assert_reference_sbml,
+    definition,
+    individuals,
+    load,
+    simple_drug,
+    turnover_reference_definition,
+)
 
 if TYPE_CHECKING:
     import roadrunner
@@ -59,6 +74,7 @@ def _inhibitor(
     inhibits: tuple[Inhibition, ...] = (),
     induces: tuple[Induction, ...] = (),
     distributes: bool = True,
+    stabilises: tuple[Stabilisation, ...] = (),
 ) -> Substance:
     """The inhibitor: fu 0.5, Kp 1.5 (merged tissue), not eliminated."""
     return Substance(
@@ -69,6 +85,7 @@ def _inhibitor(
         distribution=Kp(1.5, ftissue=1.0) if distributes else None,
         inhibits=inhibits,
         induces=induces,
+        stabilises=stabilises,
     )
 
 
@@ -493,3 +510,201 @@ def test_autoinhibition(tmp_path: Path) -> None:
     values = np.asarray(r.simulate(0, DAY, 50)[e])
     assert values[0] == 1.0
     assert values[-1] < 0.99
+
+
+KDEG_2C19 = 0.0267
+"""The degradation rate of CYP2C19 of the tests (1/hr), a half-life of 26 hr."""
+
+
+def _two_proteins(
+    tmp_path: Path,
+    inhibitor: Substance,
+    turnover: dict[str, float | Value | Formula] | None = None,
+) -> BuildResult:
+    """Build the substrate with its CYP3A4 and CYP2C19 liver metabolisms and the inhibitor."""
+    chemistry: list[Metabolism | Transport] = [
+        Metabolism(
+            sid=sid,
+            organ=Organ.LIVER,
+            substrate=S,
+            products={},
+            kinetics=MM(VMAX, KM),
+            protein=protein,
+        )
+        for sid, protein in (("DRG2M", "CYP3A4"), ("DRG2C19", "CYP2C19"))
+    ]
+    d = definition(
+        sid="turnover",
+        substances=[simple_drug(), inhibitor],
+        chemistry=chemistry,
+        routes=[Route.iv(S), Route.iv(INH)],
+        turnover=turnover or {},
+    )
+    return build(d, tmp_path)
+
+
+def test_a_protein_turnover_overrides_the_organ(tmp_path: Path) -> None:
+    """`turnover={"CYP2C19": 0.0267}` (1/hr) is `LI__kdeg_cyp2c19` in 1/min.
+
+    The other proteins keep the degradation rate of the organ.
+    """
+    inhibitor = _inhibitor(
+        (Inhibition("CYP3A4", "mechanism", KI, kinact=1e-3),),
+        stabilises=(Stabilisation("CYP2C19", KI),),
+    )
+    model = _model(_two_proteins(tmp_path, inhibitor, {"CYP2C19": KDEG_2C19}))
+    own = model.getParameter(ids.flat(Organ.LIVER, ids.kdeg("CYP2C19")))
+    organ = model.getParameter(ids.flat(Organ.LIVER, ids.kdeg("CYP3A4")))
+    assert own.getValue() == pytest.approx(KDEG_2C19 / 60.0, rel=1e-12)
+    assert own.getUnits() == organ.getUnits() == ids.flat(Organ.LIVER, "per_min")
+    assert f"{KDEG_2C19} 1/h" in own.getNotesString()
+    assert organ.getValue() == pytest.approx(turnover(Organ.LIVER).value, rel=1e-12)
+
+
+@pytest.mark.parametrize(
+    ("q", "per_min", "note"),
+    [
+        (
+            Value(KDEG_2C19, U.per_hr, source="Greenblatt2003"),
+            KDEG_2C19 / 60.0,
+            "10.1016/S0009-9236(03)00118-8",
+        ),
+        (Value(1e-3, U.per_min, notes="fitted in 1/min"), 1e-3, "fitted in 1/min"),
+    ],
+)
+def test_a_protein_turnover_value_carries_its_source(
+    tmp_path: Path, q: Value, per_min: float, note: str
+) -> None:
+    """A `Value` in 1/hr is converted with its source, one in 1/min is taken as it is."""
+    inhibitor = _inhibitor(stabilises=(Stabilisation("CYP2C19", KI),))
+    model = _model(_two_proteins(tmp_path, inhibitor, {"CYP2C19": q}))
+    p = model.getParameter(ids.flat(Organ.LIVER, ids.kdeg("CYP2C19")))
+    assert p.getValue() == pytest.approx(per_min, rel=1e-12)
+    assert note in p.getNotesString()
+
+
+def _enzyme_run(
+    r: "roadrunner.RoadRunner", start: float, end: float
+) -> tuple[np.ndarray, np.ndarray]:
+    """Follow the liver CYP2C19 state and the unbound inhibitor in the liver tissue."""
+    e = ids.flat(Organ.LIVER, ids.enzyme("CYP2C19"))
+    iu = ids.flat(Organ.LIVER, ids.unbound(Part.TISSUE, INH))
+    r.timeCourseSelections = ["time", e, iu]
+    result = r.simulate(start, end, 301)
+    return np.asarray(result[e]), np.asarray(result[iu])
+
+
+def test_a_stabilised_protein_approaches_its_steady_state(tmp_path: Path) -> None:
+    """A constant unbound stabiliser at `Ki` doubles the protein, `(1 + I/Ki)`.
+
+    The degradation `kdeg*E/(1 + I/Ki)`: the amount approaches 2, and after
+    the washout of the stabiliser it returns to 1 as
+    `1 + (E_w - 1)*exp(-kdeg*t)` with the degradation rate of the protein
+    (`PBPKDefinition.turnover`), not the default of the organ.
+    """
+    inhibitor = _inhibitor(stabilises=(Stabilisation("CYP2C19", KI),))
+    r = load(_two_proteins(tmp_path, inhibitor, {"CYP2C19": KDEG_2C19}))
+    r[ids.iv_dose(INH)] = 100.0
+    r.simulate(0, 5 * DAY, 2)
+    unbound = r[ids.flat(Organ.LIVER, ids.unbound(Part.TISSUE, INH))]
+    r[ids.kstab("CYP2C19", INH)] = unbound
+    e, iu = _enzyme_run(r, 5 * DAY, 35 * DAY)
+    assert iu == pytest.approx(unbound, rel=1e-6)
+    assert np.all(np.diff(e) >= -1e-12)
+    assert e[-1] == pytest.approx(2.0, rel=1e-4)
+    for sid in r.model.getFloatingSpeciesIds():
+        if sid.endswith(f"_{INH}"):
+            r[sid] = 0.0
+    e, iu = _enzyme_run(r, 35 * DAY, 38 * DAY)
+    assert np.abs(iu).max() < 1e-15
+    t = np.linspace(0.0, 3 * DAY, 301)
+    kdeg = KDEG_2C19 / 60.0
+    assert e == pytest.approx(1 + (e[0] - 1) * np.exp(-kdeg * t), rel=1e-6)
+    organ = turnover(Organ.LIVER).value
+    assert e[100] != pytest.approx(1 + (e[0] - 1) * np.exp(-organ * t[100]), rel=1e-3)
+
+
+def test_a_stabilisation_and_an_induction_multiply(tmp_path: Path) -> None:
+    """Induction and stabilisation: `E` approaches `(1 + Emax*I/(EC50 + I))*(1 + I/Ki)`."""
+    emax, ec50 = 4.0, 0.002
+    inhibitor = _inhibitor(
+        induces=(Induction("CYP2C19", emax, ec50),),
+        stabilises=(Stabilisation("CYP2C19", KI),),
+    )
+    r = load(_two_proteins(tmp_path, inhibitor, {"CYP2C19": KDEG_2C19}))
+    r[ids.iv_dose(INH)] = 100.0
+    e, iu = _enzyme_run(r, 0, 30 * DAY)
+    i = iu[-1]
+    assert e[-1] == pytest.approx((1 + emax * i / (ec50 + i)) * (1 + i / KI), rel=1e-6)
+    assert e[-1] > 1 + emax * i / (ec50 + i)
+
+
+def test_a_definition_without_turnover_or_stabilisation_is_unchanged(
+    tmp_path: Path,
+) -> None:
+    """Turnover states without the options: the SBML of f2d7c13, line by line.
+
+    The mechanism-based inhibition of CYP3A4 (liver and small intestine) and
+    the induction of CYP2C19 without a degradation rate of the definition
+    and without a stabilisation (`turnover_reference_definition`).
+    """
+    assert_reference_sbml(build(turnover_reference_definition(), tmp_path))
+
+
+@pytest.mark.parametrize(
+    ("turnover", "stabilises", "message"),
+    [
+        ({"CYP9Z9": 0.02}, (), "unknown protein 'CYP9Z9'"),
+        ({"CYP2C9": 0.02}, (), "CYP2C9 has no turnover state"),
+        ({"CYP2C19": -0.02}, (Stabilisation("CYP2C19", KI),), "must be positive"),
+        (
+            {"CYP2C19": Value(0.02, U.l_per_min)},
+            (Stabilisation("CYP2C19", KI),),
+            "must be in 1/hr or 1/min",
+        ),
+        (
+            {"CYP2C19": Formula("kdeg_x", U.per_hr)},
+            (Stabilisation("CYP2C19", KI),),
+            "a number or a Value",
+        ),
+        ({}, (Stabilisation("CYP2C19", -1.0),), "ki must be positive"),
+        ({}, (Stabilisation("CYP9Z9", KI),), "unknown protein 'CYP9Z9'"),
+        (
+            {},
+            (Stabilisation("CYP2C19", KI), Stabilisation("CYP2C19", 2 * KI)),
+            "several stabilisations",
+        ),
+    ],
+)
+def test_an_invalid_turnover_or_stabilisation(
+    turnover: dict[str, float | Value | Formula],
+    stabilises: tuple[Stabilisation, ...],
+    message: str,
+) -> None:
+    """A degradation rate of a protein with a turnover state, positive, in 1/hr or 1/min.
+
+    A stabilisation of a known protein with a positive constant, once per
+    protein and substance.
+    """
+    chemistry = [
+        Metabolism("DRG2C19", Organ.LIVER, S, {}, MM(VMAX, KM), protein="CYP2C19"),
+        Metabolism("DRG2C9", Organ.LIVER, S, {}, MM(VMAX, KM), protein="CYP2C9"),
+    ]
+    d = definition(
+        substances=[simple_drug(), _inhibitor(stabilises=stabilises)],
+        chemistry=chemistry,
+        turnover=turnover,
+    )
+    with pytest.raises(ValueError, match=re.escape(message)):
+        d.validate()
+
+
+def test_definitions_combine_their_turnover() -> None:
+    """The turnover of a protein of two definitions is one value, equal by value."""
+    a = definition(sid="a", turnover={"CYP2C19": KDEG_2C19})
+    b = definition(sid="b", turnover={"CYP2E1": 0.016})
+    combined = PBPKDefinition.combine(a, b, a, sid="ab")
+    assert dict(combined.turnover) == {"CYP2C19": KDEG_2C19, "CYP2E1": 0.016}
+    other = definition(sid="c", turnover={"CYP2C19": 0.02})
+    with pytest.raises(ValueError, match="turnover of the protein 'CYP2C19'"):
+        PBPKDefinition.combine(a, other, sid="ac")

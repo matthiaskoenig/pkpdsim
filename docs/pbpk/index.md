@@ -297,6 +297,7 @@ Every other id of the scheme, the ids a model rarely reads: the physiology, the 
 | `kinact_<protein>_<s>` | the maximal inactivation rate of a mechanism-based inhibition | `ids.kinact(protein, s)` |
 | `Emax_<protein>_<s>` | the maximal induction of a protein | `ids.emax(protein, s)` |
 | `EC50_<protein>_<s>` | the half-maximal inducing concentration | `ids.ec50(protein, s)` |
+| `Kstab_<protein>_<s>` | the stabilisation constant of a substance on a protein (halves the degradation) | `ids.kstab(protein, s)` |
 | `p_cyp3a4_<zone>` | the relative abundance of a profile in a zone (local id) | `ids.placement_profile('cyp3a4', zone)` |
 | `w_cyp3a4_<seg>` | the share of a process in a segment or a zone (local id) | `ids.placement_weight('cyp3a4', seg)` |
 | `API2M_<seg>` | a process of the chemistry in a segment or a zone (local id) | `ids.segment_process('API2M', seg)` |

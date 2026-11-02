@@ -31,6 +31,8 @@ from pkpdsim.pbpk import (
     Erythrocytes,
     Excretion,
     Formula,
+    Induction,
+    Inhibition,
     Kp,
     Metabolism,
     Mode,
@@ -41,6 +43,7 @@ from pkpdsim.pbpk import (
     Route,
     Saturable,
     SlowPool,
+    Stabilisation,
     Substance,
     ThresholdReabsorption,
     U,
@@ -733,6 +736,34 @@ def test_a_substance_without_a_closed_form_is_refused(
 ) -> None:
     """The properties of a substance whose steady state has no closed form."""
     _refused(_definition(chemistry, substances=[_substance(**fields)]), match)
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"stabilises": (Stabilisation("CYP3A4", 0.01),)},
+        {"induces": (Induction("CYP3A4", 2.0, 0.01),)},
+        {"inhibits": (Inhibition("CYP3A4", "mechanism", 0.01, kinact=1e-3),)},
+    ],
+    ids=["stabilisation", "induction", "inactivation"],
+)
+def test_a_substance_which_changes_a_turnover_is_refused(
+    fields: dict[str, object],
+) -> None:
+    """A turnover state starts at 1, not at its steady state at the start of the substance.
+
+    The generated substance stabilises, induces or inactivates CYP3A4, which
+    a metabolism of another substance uses.
+    """
+    drug = Substance("drg", name="drug", mr=300.0, distribution=Kp(2.0, ftissue=1.0))
+    m = Metabolism("DRG2M", Organ.LIVER, "drg", {}, MM(1e-3, 0.01), protein="CYP3A4")
+    d = PBPKDefinition(
+        sid="turnover",
+        substances=[_substance(**fields), drug],
+        chemistry=[*CHEMISTRY, m],
+        parameters=PARAMETERS,
+    )
+    _refused(d, "turnover state E_cyp3a4 starts at 1")
 
 
 def test_the_saturable_processes_of_a_solved_substance_are_refused() -> None:

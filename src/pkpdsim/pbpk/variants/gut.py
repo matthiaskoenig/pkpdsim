@@ -293,6 +293,7 @@ class GutBuilder(LumenBuilder):
         }
         mucosal |= {sid for sid, i in ctx.inhibitions if i.protein in proteins}
         mucosal |= {sid for sid, i in ctx.inductions if i.protein in proteins}
+        mucosal |= {sid for sid, i in ctx.stabilisations if i.protein in proteins}
         self.mucosal = mucosal
         self.bile = bile_substances(ctx.substances, ctx.chemistry)
         self.oral = {(r.kind, r.substance): r for r in ctx.routes if r.kind in ORAL}
