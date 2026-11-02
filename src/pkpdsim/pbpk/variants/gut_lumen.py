@@ -29,6 +29,7 @@ from pkpdsim.pbpk.routes import (
     dissolution_inputs,
     dissolution_rate,
     dissolution_reads_fed,
+    is_enteric,
     is_weibull,
 )
 from pkpdsim.pbpk.substance import Substance
@@ -435,9 +436,20 @@ class LumenBuilder(StandardBuilder):
         """The oral tablet: dissolution and transit of the undissolved drug.
 
         The dose state is the undissolved drug of the first segment; the
-        other segments have the undissolved amount `Asolid_<seg>_<s>`.
+        other segments have the undissolved amount `Asolid_<seg>_<s>`. An
+        enteric-coated tablet has no dissolution in the first segment, the
+        stomach: it only empties, undissolved, with the transit of the
+        stomach of the condition.
         """
         sid = s.sid
+        enteric = is_enteric(route)
+        if enteric and self.single:
+            msg = (
+                f"The tablet of {sid} is enteric-coated (it does not dissolve in "
+                "the stomach), but the single lumen has no stomach: use the "
+                "segmented intestine."
+            )
+            raise ValueError(msg)
         dose = self._dose_input(ids.po_dose(sid), f"oral dose {sid} (tablet) [mg]")
         mr = self._input(ids.mr(sid), U.g_per_mole, f"molecular weight {sid} [g/mole]")
         if dissolution_reads_fed(route):
@@ -476,15 +488,18 @@ class LumenBuilder(StandardBuilder):
             )
         else:
             kdis = f"({kdis})"
-        first = ids.dose_reaction("po", sid)
-        self._reaction(
-            first,
-            f"-> {lumen[0]}",
-            f"{kdis} * {dose} / {mr}",
-            f"dissolution {sid} (tablet) {self.segments[0].label}",
-            kind="dissolution_reaction",
-            segment=self.segments[0].token,
-        )
+        dissolved: list[str] = []
+        if not enteric:
+            first = ids.dose_reaction("po", sid)
+            self._reaction(
+                first,
+                f"-> {lumen[0]}",
+                f"{kdis} * {dose} / {mr}",
+                f"dissolution {sid} (tablet) {self.segments[0].label}",
+                kind="dissolution_reaction",
+                segment=self.segments[0].token,
+            )
+            dissolved.append(first)
         empty = ids.transit_reaction(sid, self.segments[0].token, solid=True)
         self._reaction(
             empty,
@@ -497,12 +512,12 @@ class LumenBuilder(StandardBuilder):
         self.rate_rules.append(
             RateRule(
                 dose,
-                f"-({first} + {empty}) * {mr}",
+                f"-({' + '.join([*dissolved, empty])}) * {mr}",
                 U.mg_per_min,
                 name=f"oral dose {sid} (tablet)",
             )
         )
-        dissolved, last = [first], empty
+        last = empty
         for i, seg in enumerate(self.segments[1:], start=1):
             a = solids[i - 1]
             dis = ids.dissolution_reaction(sid, str(seg.token))

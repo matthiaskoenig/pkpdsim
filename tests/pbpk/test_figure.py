@@ -19,6 +19,7 @@ from pkpdsim.pbpk import (
     Binding,
     CustomReaction,
     Direction,
+    DoseDependentDissolution,
     Excretion,
     FirstOrderDissolution,
     Formula,
@@ -679,3 +680,23 @@ def test_a_produced_substance_with_a_solved_baseline_is_endogenous(
     text = " ".join(_texts(model_figure(d, tmp_path / "produced.svg")))
     assert "endogenous (production, baseline solved)" in text
     assert text.count("endogenous (") == 1
+
+
+def test_the_figure_names_the_options_of_a_tablet(tmp_path: Path) -> None:
+    """The route of a tablet names its dissolution, the fed factor and the enteric coat."""
+    d = definition(
+        routes=[
+            Route.oral(
+                "drg",
+                DoseDependentDissolution(k=2.0, dose50=50.0, fed=0.5, enteric=True),
+            ),
+            Route.oral("drg_m", FirstOrderDissolution(k=2.0, release=1.0)),
+        ]
+    )
+    path = model_figure(d, tmp_path / "tablets.svg")
+    text = " ".join(label.text for label in _parse(path)[1])
+    for expected in (
+        "tablet drg (dose-dependent dissolution, fed factor, enteric-coated)",
+        "tablet drg_m (first order dissolution, release factor)",
+    ):
+        assert expected in text, expected

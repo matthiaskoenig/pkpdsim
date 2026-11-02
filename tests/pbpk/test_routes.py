@@ -1,11 +1,12 @@
-"""Tests of the depot routes: intramuscular, subcutaneous and rectal.
+"""Tests of the routes: the depot routes and the options of a tablet.
 
 A depot route applies its dose state (`IMDOSE_<s>`, `SCDOSE_<s>`,
 `RECDOSE_<s>`, mg) into a depot amount of the top model (`Aim_<s>`,
 `Asc_<s>`, `Arec_<s>`), which is absorbed with first order into the venous
 blood; the fraction `f_<k>_<s>` is absorbed, the rest leaves into a sink, and
 the rectal route sends the fraction `f_rec_portal_<s>` of the absorbed dose
-through the portal vein and the liver.
+through the portal vein and the liver. A tablet without the options of its
+dissolution (`fed`, `enteric`) builds the SBML it built before.
 """
 
 import dataclasses
@@ -18,8 +19,10 @@ import pytest
 
 from pkpdsim.pbpk import (
     Depot,
+    DoseDependentDissolution,
     Excretion,
     FirstOrder,
+    FirstOrderDissolution,
     Kp,
     Metabolism,
     Mode,
@@ -36,8 +39,10 @@ from pkpdsim.pbpk.builder import BuildResult, build
 from .conftest import (
     assert_reference_sbml,
     chemistry_reference_definition,
+    dateless,
     definition,
     dose_amount,
+    endogenous_reference_definition,
     load,
     reference_definition,
     simple_drug,
@@ -290,3 +295,55 @@ def test_a_depot_route_adds_only_its_own_elements(tmp_path: Path) -> None:
         ids.depot_absorption("im", S),
         ids.depot_loss_reaction("im", S),
     }
+
+
+def _flat_text(d: PBPKDefinition, path: Path) -> list[str]:
+    """The lines of the flat SBML of a definition, without the dates."""
+    return dateless(build(d, path).flat_path.read_text(encoding="utf-8"))
+
+
+def test_a_dissolution_without_the_options_is_unchanged(tmp_path: Path) -> None:
+    """Without `fed` and `enteric` a tablet builds the SBML it built before.
+
+    The stored references with the default tablet are unchanged; a
+    dose-dependent dissolution has no factor of the fed state, its rate is
+    `Ka_dis/60*D50/(D50 + D)` and the tablet dissolves in the stomach; the
+    defaults stated explicitly build the same SBML.
+    """
+    assert_reference_sbml(build(reference_definition(), tmp_path / "base"))
+    assert_reference_sbml(
+        build(endogenous_reference_definition(), tmp_path / "endogenous")
+    )
+    for name, plain, explicit in (
+        (
+            "first_order",
+            FirstOrderDissolution(k=2.0),
+            FirstOrderDissolution(k=2.0, fed=None, release=None, enteric=False),
+        ),
+        (
+            "dose_dependent",
+            DoseDependentDissolution(k=2.0, dose50=50.0),
+            DoseDependentDissolution(k=2.0, dose50=50.0, fed=None, enteric=False),
+        ),
+    ):
+        d = _depot([Route.oral(S, plain)], f"tablet_{name}")
+        same = dataclasses.replace(d, routes=[Route.oral(S, explicit)])
+        assert _flat_text(d, tmp_path / name) == _flat_text(
+            same, tmp_path / f"{name}_explicit"
+        )
+    result = build(
+        _depot([Route.oral(S, DoseDependentDissolution(k=2.0, dose50=50.0))], "dd"),
+        tmp_path / "dd",
+    )
+    found = _ids(result.flat_path)
+    assert not {i for i in found if i.startswith("f_dis_")}
+    gu = Organ.SMALL_INTESTINE
+    assert ids.flat(gu, ids.dose_reaction("po", S)) in found
+    model = libsbml.readSBMLFromFile(str(result.flat_path)).getModel()
+    rule = model.getAssignmentRuleByVariable(ids.flat(gu, ids.dissolution_rate(S)))
+    solids = " + ".join(ids.flat(gu, ids.solid(S, seg)) for seg in ids.GUT_SEGMENTS[1:])
+    k, d50 = ids.dissolution(S), ids.dissolution_dose50(S)
+    assert libsbml.formulaToL3String(rule.getMath()) == (
+        f"({k} / 60 GU__min_per_hr) * {d50} / ({d50} + {ids.po_dose(S)} + "
+        f"{ids.mr(S)} * ({solids}))"
+    )

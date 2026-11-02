@@ -325,7 +325,8 @@ def absorption() -> PBPKDefinition:
     """Get the toy with the factors of the absorption and a conversion of the segmented intestine.
 
     The fraction absorbed, the colon factor, a regional factor of the lower
-    ileum and the conversion of the drug into its product in the stomach.
+    ileum, the conversion of the drug into its product in the stomach and an
+    enteric-coated tablet of the product.
     """
     return PBPKDefinition(
         sid="toy_absorption",
@@ -346,6 +347,7 @@ def absorption() -> PBPKDefinition:
         routes=[
             Route.oral_solution("drg"),
             Route.oral("drg", FirstOrderDissolution(k=2.0, fed=0.5, release=0.2)),
+            Route.oral("drg_m", FirstOrderDissolution(k=2.0, enteric=True)),
         ],
     )
 

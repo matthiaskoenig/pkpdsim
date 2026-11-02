@@ -11,7 +11,10 @@ applied by a first order process, the conventions of the hand-written models:
   first segment of the intestine), which dissolves into the stomach lumen
   with the dissolution rate of the formulation and empties undissolved with
   the stomach; in the next segments the undissolved drug is a species of
-  its own, it dissolves there and leaves undissolved into the feces;
+  its own, it dissolves there and leaves undissolved into the feces; an
+  enteric-coated tablet (`enteric=True`) does not dissolve in the stomach,
+  it empties undissolved with the gastric emptying of the condition and
+  dissolves from the duodenum on;
 - oral solution: `SOLDOSE_<s>` enters the stomach lumen dissolved with the
   fast rate `Ka_sol_<s>` (1/hr);
 - depot routes, intramuscular, subcutaneous and rectal: `IMDOSE_<s>`,
@@ -50,9 +53,10 @@ segment:
   dose as if it were younger (not at all while the mean age is below the
   lag time), the new dose as if it were older; a dose given after the
   earlier one has dissolved is exact again;
-- `DoseDependentDissolution(k, dose50)`: `kdis = k*D50/(D50 + D)` with the
-  undissolved amount `D` (mg) of all segments, a dissolution which saturates
-  with the undissolved dose (solubility-limited), at most `k*D50`.
+- `DoseDependentDissolution(k, dose50, fed)`: `kdis = k*D50/(D50 + D)` with
+  the undissolved amount `D` (mg) of all segments, a dissolution which
+  saturates with the undissolved dose (solubility-limited), at most
+  `k*D50`, times `(1 + FED*(f_dis_fed_<s> - 1))` of the fed state if set.
 """
 
 import math
@@ -92,6 +96,7 @@ __all__ = [
     "depot_site",
     "dissolution_inputs",
     "dissolution_rate",
+    "is_enteric",
     "is_weibull",
     "route_objects",
 ]
@@ -111,11 +116,16 @@ class FirstOrderDissolution:
             parameter `f_dis_release_<s>` (the given value, set by the
             experiments of such a formulation; 1 for the immediate-release
             tablet), which multiplies the rate. No parameter if `None`.
+        enteric: an enteric-coated tablet, which does not dissolve in the
+            stomach: it empties undissolved with the gastric emptying of the
+            condition and dissolves from the duodenum on. The single lumen
+            has no stomach and raises.
     """
 
     k: Q
     fed: Q | None = None
     release: Q | None = None
+    enteric: bool = False
 
 
 @dataclass(frozen=True)
@@ -145,10 +155,18 @@ class DoseDependentDissolution:
     Attributes:
         k: the rate of the dissolution of a small dose (1/hr).
         dose50: the undissolved amount of half the rate (mg).
+        fed: the factor of the dissolution rate in the fed state (`FED = 1`),
+            the body parameter `f_dis_fed_<s>`; the rate is
+            `k*(1 + FED*(fed - 1))*dose50/(dose50 + D)`. No parameter if
+            `None`. The single lumen has no fed state and raises.
+        enteric: an enteric-coated tablet, which does not dissolve in the
+            stomach (see `FirstOrderDissolution`).
     """
 
     k: Q
     dose50: Q
+    fed: Q | None = None
+    enteric: bool = False
 
 
 type Formulation = FirstOrderDissolution | WeibullDissolution | DoseDependentDissolution
@@ -362,30 +380,34 @@ def _dissolution_table(route: Route) -> list[_DissolutionParameter]:
                 "undissolved amount `D`.",
             )
         )
-    if isinstance(f, FirstOrderDissolution):
-        if f.fed is not None:
-            table.append(
-                P(
-                    ids.dissolution_fed_factor(s),
-                    f.fed,
-                    U.dimensionless,
-                    f"dissolution factor fed {s}",
-                    "Factor of the dissolution rate in the fed state: the rate is "
-                    "`Ka_dis*(1 + FED*(f_dis_fed - 1))`.",
-                )
+    if f.fed is not None:
+        table.append(
+            P(
+                ids.dissolution_fed_factor(s),
+                f.fed,
+                U.dimensionless,
+                f"dissolution factor fed {s}",
+                "Factor of the dissolution rate in the fed state: the rate is "
+                "`Ka_dis*(1 + FED*(f_dis_fed - 1))`"
+                + (
+                    " times the saturation `D50/(D50 + D)`."
+                    if isinstance(f, DoseDependentDissolution)
+                    else "."
+                ),
             )
-        if f.release is not None:
-            table.append(
-                P(
-                    ids.dissolution_release_factor(s),
-                    f.release,
-                    U.dimensionless,
-                    f"dissolution factor release {s}",
-                    "Factor of the dissolution rate of a modified-release "
-                    "formulation (1 is the immediate-release tablet); the "
-                    "experiments of such a formulation set it.",
-                )
+        )
+    if isinstance(f, FirstOrderDissolution) and f.release is not None:
+        table.append(
+            P(
+                ids.dissolution_release_factor(s),
+                f.release,
+                U.dimensionless,
+                f"dissolution factor release {s}",
+                "Factor of the dissolution rate of a modified-release "
+                "formulation (1 is the immediate-release tablet); the "
+                "experiments of such a formulation set it.",
             )
+        )
     return table
 
 
@@ -404,7 +426,13 @@ def dissolution_inputs(route: Route) -> list[tuple[str, UnitDefinition, str]]:
 def dissolution_reads_fed(route: Route) -> bool:
     """Check whether the dissolution of a tablet depends on the fed state."""
     f = _formulation(route)
-    return isinstance(f, FirstOrderDissolution) and f.fed is not None
+    return not isinstance(f, WeibullDissolution) and f.fed is not None
+
+
+def is_enteric(route: Route) -> bool:
+    """Check whether a tablet is enteric-coated (it does not dissolve in the stomach)."""
+    f = _formulation(route)
+    return not isinstance(f, WeibullDissolution) and f.enteric
 
 
 def is_weibull(route: Route) -> bool:
@@ -427,12 +455,12 @@ def dissolution_rate(route: Route, undissolved: str, age: str) -> tuple[str, boo
     s = route.substance
     f = _formulation(route)
     k = f"{ids.dissolution(s)} / 60 min_per_hr"
+    if isinstance(f, FirstOrderDissolution) and f.release is not None:
+        k += f" * {ids.dissolution_release_factor(s)}"
+    if not isinstance(f, WeibullDissolution) and f.fed is not None:
+        fed = ids.dissolution_fed_factor(s)
+        k += f" * (1 dimensionless + {ids.FED} * ({fed} - 1 dimensionless))"
     if isinstance(f, FirstOrderDissolution):
-        if f.release is not None:
-            k += f" * {ids.dissolution_release_factor(s)}"
-        if f.fed is not None:
-            fed = ids.dissolution_fed_factor(s)
-            k += f" * (1 dimensionless + {ids.FED} * ({fed} - 1 dimensionless))"
         return k, False
     if isinstance(f, DoseDependentDissolution):
         d50 = ids.dissolution_dose50(s)
@@ -467,12 +495,18 @@ def route_objects(route: Route, substance: Substance) -> list[Sbase]:
     if route.kind in DEPOT:
         return _depot(route, substance)
     if route.kind == "oral":
+        fate = (
+            "which empties undissolved into the intestine (enteric-coated, it "
+            "does not dissolve in the stomach)."
+            if is_enteric(route)
+            else "which dissolves and empties into the intestine."
+        )
         objects: list[Sbase] = [
             _dose(
                 ids.po_dose(s),
                 f"oral dose {s} (tablet) [mg]",
                 f"Oral dose of {substance.name} as tablet: the undissolved drug in "
-                "the stomach, which dissolves and empties into the intestine.",
+                f"the stomach, {fate}",
             )
         ]
         return objects + _formulation_parameters(route)

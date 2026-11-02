@@ -937,16 +937,22 @@ def _dissolution(route: Route) -> str:
     f = route.formulation
     if isinstance(f, WeibullDissolution):
         return "Weibull dissolution"
-    if isinstance(f, DoseDependentDissolution):
-        return "dose-dependent dissolution"
-    if isinstance(f, FirstOrderDissolution):
-        factors = [
-            name
-            for name, q in (("fed factor", f.fed), ("release factor", f.release))
-            if q is not None
-        ]
-        return ", ".join(["first order dissolution", *factors])
-    return "first order dissolution"
+    if f is None:
+        return "first order dissolution"
+    release = f.release if isinstance(f, FirstOrderDissolution) else None
+    options = [
+        name
+        for name, q in (("fed factor", f.fed), ("release factor", release))
+        if q is not None
+    ]
+    if f.enteric:
+        options.append("enteric-coated")
+    kind = (
+        "dose-dependent dissolution"
+        if isinstance(f, DoseDependentDissolution)
+        else "first order dissolution"
+    )
+    return ", ".join([kind, *options])
 
 
 def _builds(sexes: Sequence[Sex]) -> str:
