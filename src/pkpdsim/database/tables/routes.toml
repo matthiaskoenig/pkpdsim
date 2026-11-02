@@ -1,8 +1,9 @@
 # The defaults of the routes of administration.
 #
-# A dose is a dose state in mg (`IVDOSE_<s>`, `PODOSE_<s>`, `SOLDOSE_<s>`)
-# which is applied by a first order process, so that a dose given on top of
-# the rest of an earlier one adds to it (`PKPDSimulationExperiment.add_doses`).
+# A dose is a dose state in mg (`IVDOSE_<s>`, `PODOSE_<s>`, `SOLDOSE_<s>`,
+# `IMDOSE_<s>`, `SCDOSE_<s>`, `RECDOSE_<s>`) which is applied by a first order
+# process, so that a dose given on top of the rest of an earlier one adds to
+# it (`PKPDSimulationExperiment.add_doses`).
 
 [iv]
 ti = { value = 10.0, unit = "s", source = "ModelChoice", notes = "half-life of the application of an intravenous bolus, the injection time of the hand-written models; fast against the distribution, the bolus is in the venous blood within a minute" }
@@ -10,3 +11,24 @@ ti = { value = 10.0, unit = "s", source = "ModelChoice", notes = "half-life of t
 [oral]
 Ka_dis = { value = 2.0, unit = "1/hr", source = "ModelChoice", notes = "first order dissolution of a tablet whose route states no formulation, the default of the hand-written models (Ka_dis_gli); a model sets the formulation or fits it" }
 Ka_sol = { value = 60.0, unit = "1/hr", source = "ModelChoice", notes = "application of an oral solution: swallowing and transfer into the intestinal lumen, fast against the absorption (half-life 0.7 min)" }
+
+# The depot routes: the dose is applied into the depot at the site of the
+# administration, from which the fraction `f` is absorbed with the first order
+# rate `ka`, the rest leaves into a sink (degraded at the site of an injection,
+# into the feces from the rectum).
+
+[depot]
+ti = { value = 10.0, unit = "s", source = "ModelChoice", notes = "half-life of the application of a dose into its depot (intramuscular, subcutaneous, rectal), the injection time of the intravenous bolus; fast against the absorption, so the depot holds the dose within a minute; a formulation which releases slowly (a suppository) sets it" }
+
+[im]
+ka = { value = 1.0, unit = "1/hr", source = "ModelChoice", notes = "absorption rate from the intramuscular depot of a route which states none; not verified: no generic value exists, the absorption from a muscle depot depends on the substance, its formulation and the injection site; of the order of the rates of the hand-written models (diazepam 1.3/hr, morphine 4.4/hr, both fitted); a model fits or sets it" }
+f = { value = 1.0, unit = "dimensionless", source = "ModelChoice", notes = "fraction of the intramuscular depot which is absorbed: complete absorption; a model fits or sets a smaller fraction (degradation at the site of the injection)" }
+
+[sc]
+ka = { value = 1.0, unit = "1/hr", source = "ModelChoice", notes = "absorption rate from the subcutaneous depot of a route which states none; not verified: no generic value exists, the absorption from the subcutis depends on the substance (small molecules into the blood, large ones through the lymph), its formulation and the injection site; of the order of the fitted rate of morphine in the hand-written models (4.0/hr); a model fits or sets it" }
+f = { value = 1.0, unit = "dimensionless", source = "ModelChoice", notes = "fraction of the subcutaneous depot which is absorbed: complete absorption; a model fits or sets a smaller fraction (degradation at the site of the injection, e.g. of a peptide)" }
+
+[rectal]
+ka = { value = 1.0, unit = "1/hr", source = "ModelChoice", notes = "absorption rate from the rectum of a route which states none; not verified: no generic value exists, the absorption from a suppository depends strongly on its base and the substance (de Boer 1982, doi:10.2165/00003088-198207040-00002); a model fits or sets it" }
+f = { value = 1.0, unit = "dimensionless", source = "ModelChoice", notes = "fraction of the rectal depot which is absorbed: complete absorption; a model fits or sets a smaller fraction, the rest leaves into the feces" }
+f_portal = { value = 0.45, unit = "dimensionless", source = "deBoer1979", notes = "fraction of the absorbed rectal dose which enters the portal vein (superior rectal vein) and passes the liver, the rest enters the systemic venous blood (middle and inferior rectal veins); lidocaine in 6 healthy subjects, 300 mg rectally and orally, 200 mg intravenously: the systemic availability from the plasma concentrations 0.71 rectally and 0.34 orally, repeated after 6 months 0.67 and 0.27; with complete absorption and the oral availability the hepatic availability, (1 - 0.71)/(1 - 0.34) = 0.44 and (1 - 0.67)/(1 - 0.27) = 0.45, the abstract: slightly more than half of the rectal dose bypasses the liver (the abstract read, the full text not available); one drug, and the fraction depends on the site in the rectum (de Leede 1983, rats); a model fits or sets it" }

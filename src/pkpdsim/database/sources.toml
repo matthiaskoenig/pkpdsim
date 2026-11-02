@@ -1161,3 +1161,7 @@ doi = "10.1152/japplphysiol.01124.2016"
 [MacDougall1989]
 citation = "MacDougall ML, Wiegmann TB. Urate excretion by the isolated perfused rat kidney and modification by drugs. Proc Soc Exp Biol Med 192(3):276-280, 1989."
 doi = "10.3181/00379727-192-42997"
+
+[deBoer1979]
+citation = "de Boer AG, Breimer DD, Mattie H, Pronk J, Gubbens-Stibbe JM. Rectal bioavailability of lidocaine in man: partial avoidance of \"first-pass\" metabolism. Clin Pharmacol Ther 26(6):701-709, 1979."
+doi = "10.1002/cpt1979266701"

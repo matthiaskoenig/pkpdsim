@@ -146,8 +146,9 @@ def growing_states(
 
 #: the prefixes of the ids of the doses of the library, which the
 #: equilibration moves to the start
-DOSE_PREFIXES: tuple[str, ...] = tuple(
-    f("") for f in (ids.po_dose, ids.iv_dose, ids.sol_dose, ids.infusion_rate)
+DOSE_PREFIXES: tuple[str, ...] = (
+    *(f("") for f in (ids.po_dose, ids.iv_dose, ids.sol_dose, ids.infusion_rate)),
+    *(ids.depot_dose(kind, "") for kind in ("im", "sc", "rectal")),
 )
 
 
@@ -161,7 +162,8 @@ def drug_free_zeros(model_path: Path, set_ids: Iterable[str] = ()) -> tuple[str,
     holds some (a reactant, or a product of a reversible reaction), a
     reaction without reactants (a source) feeds its products unless it is a
     dose of the library (its rate reads `PODOSE_<s>`, `IVDOSE_<s>`, ...,
-    which the equilibration moves to the start). The direction of a reaction
+    the depot doses `IMDOSE_<s>`, ..., which the equilibration moves to the
+    start). The direction of a reaction
     is its SBML `reversible` flag: a `CustomReaction` whose rate law can run
     backwards (an exchange `k*(A - B)`) must be written reversible
     (`A <-> B`), else a species it feeds backwards from a started product is
@@ -282,7 +284,16 @@ def equilibrated_simulation(
         max_time=max_time,
     )
     sinks = sorted(
-        s for s in parsed.species if s.startswith((ids.urine(""), ids.feces("")))
+        s
+        for s in parsed.species
+        if s.startswith(
+            (
+                ids.urine(""),
+                ids.feces(""),
+                ids.depot_loss("im", ""),
+                ids.depot_loss("sc", ""),
+            )
+        )
     )
     # the readouts of the intestine which nothing drains, the amount absorbed
     # and the oral dose applied (`Fa_<s>`, in the intestine or at the top)

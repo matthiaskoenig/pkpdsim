@@ -494,13 +494,15 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
 
         - The doses of the changes before the initialization, the dose
           states and infusion rates of the library (`PODOSE_<s>`,
-          `IVDOSE_<s>`, `SOLDOSE_<s>`, `Ri_<s>`), are given by a change at
+          `IVDOSE_<s>`, `SOLDOSE_<s>`, `Ri_<s>`, the depot routes
+          `IMDOSE_<s>`, `SCDOSE_<s>`, `RECDOSE_<s>`), are given by a change at
           the start instead, after the equilibration; the doses of the changes
           at later times stay. A dose of zero moves as well, so a dimension of
           a scan over it replaces it at the start.
         - The sinks, whose amounts grow without a steady state (the urine and
-          the feces of the library, `Aurine_<s>`, `Afeces_<s>`, the readouts
-          of the intestine which nothing drains, the amount absorbed
+          the feces of the library, `Aurine_<s>`, `Afeces_<s>`, what an
+          injected depot does not absorb, `Aloss_im_<s>`, `Aloss_sc_<s>`,
+          the readouts of the intestine which nothing drains, the amount absorbed
           `Aabs_<s>` and the oral dose applied `Aapp_<s>` (`GU__Aabs_<s>`,
           `GU__Aapp_<s>` with the readout `Fa_<s>` alone), and what a PD
           component accumulates, `resets`), are set back at the start: they

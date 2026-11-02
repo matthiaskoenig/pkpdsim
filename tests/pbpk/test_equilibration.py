@@ -1034,3 +1034,48 @@ def test_a_product_of_a_source_keeps_its_value(tmp_path: Path) -> None:
     assert arm[0] > 0.0
     assert arm[-1] == pytest.approx(arm[0], rel=1e-6)
     assert _at_start(run, "production", ids.arm("pre")) == 0.0
+
+
+def test_a_depot_dose_survives_the_equilibration(tmp_path: Path) -> None:
+    """A depot dose before the initialization moves to the start, as the other doses.
+
+    The intramuscular dose `IMDOSE_drg` of the condition is given after the
+    equilibration: the profile is the one without the equilibration (the
+    drug-free start is the steady state already); the depot `Aim_drg` is a
+    drug-free zero and its sink `Aloss_im_drg` is set back as the urine.
+    """
+    result = build(definition(sid="depot", routes=[Route.im("drg")]), tmp_path)
+    times = list(np.linspace(0, 600, 61))
+    dose = ids.depot_dose("im", "drg")
+    depot, loss = ids.depot("im", "drg"), ids.depot_loss("im", "drg")
+    assert depot in drug_free_zeros(result.flat_path)
+
+    def simulations(
+        experiment: PBPKSimulationExperiment,
+    ) -> dict[str, Simulation | Scan]:
+        plain = Simulation(end=600, preinit_changes={dose: Q(10, "mg")}, times=times)
+        equilibrated = experiment.equilibrated(plain)
+        assert dict(equilibrated.preinit_changes) == {}
+        (first,) = equilibrated.changes
+        assert first.times == (0.0,)
+        assert first.values[dose] == Q(10, "mg")
+        assert first.values[loss] == 0.0
+        return {"plain": plain, "equilibrated": equilibrated}
+
+    experiment = _run(
+        _model(result),
+        simulations,
+        selections=("time", "Carm_drg", depot, dose),
+    )
+    for sid in ("Carm_drg", depot):
+        values = {
+            key: np.asarray(experiment.results[f"task_{key}"][sid]).ravel()
+            for key in ("plain", "equilibrated")
+        }
+        assert values["plain"].max() > 0
+        assert np.allclose(
+            values["equilibrated"],
+            values["plain"],
+            rtol=1e-6,
+            atol=1e-6 * values["plain"].max(),
+        ), sid

@@ -1,6 +1,6 @@
 # Intestine and routes
 
-A route applies a dose of a substance: intravenous (bolus and infusion), oral tablet (with dissolution) and oral solution. A dose is a dose state in mg which an experiment sets or adds to (`PKPDSimulationExperiment.add_doses`, `"PODOSE_api + 10.0"`), applied by a first order process, the convention of the hand-written models; the dose in mg becomes mmole with the molecular weight `Mr_<s>`. The oral routes need an intestine with a lumen: the segmented intestine (the default) or the single lumen, which replace small and large intestine with one submodel `GU`, own the lumen, apply the oral doses and take the bile.
+A route applies a dose of a substance: intravenous (bolus and infusion), oral tablet (with dissolution), oral solution, intramuscular, subcutaneous and rectal. A dose is a dose state in mg which an experiment sets or adds to (`PKPDSimulationExperiment.add_doses`, `"PODOSE_api + 10.0"`), applied by a first order process, the convention of the hand-written models; the dose in mg becomes mmole with the molecular weight `Mr_<s>`. The oral routes need an intestine with a lumen: the segmented intestine (the default) or the single lumen, which replace small and large intestine with one submodel `GU`, own the lumen, apply the oral doses and take the bile.
 
 ## Routes
 
@@ -9,8 +9,11 @@ A route applies a dose of a substance: intravenous (bolus and infusion), oral ta
 | intravenous | `Route.iv("api")` | `IVDOSE_api` (mg) | `ti_api` (half-life of the injection, s), `Ri_api` (infusion, mg/min) | the venous plasma `Cve_api` |
 | oral tablet | `Route.oral("api", formulation)` | `PODOSE_api` (mg) | the dissolution of the formulation (`Ka_dis_api`, 1/hr, by default) | the stomach, undissolved |
 | oral solution | `Route.oral_solution("api")` | `SOLDOSE_api` (mg) | `Ka_sol_api` (1/hr) | the stomach lumen, dissolved |
+| intramuscular | `Route.im("api")` | `IMDOSE_api` (mg) | `ti_im_api` (s), `ka_im_api` (1/hr), `f_im_api` | the depot `Aim_api`, absorbed into the venous plasma `Cve_api` |
+| subcutaneous | `Route.sc("api")` | `SCDOSE_api` (mg) | `ti_sc_api` (s), `ka_sc_api` (1/hr), `f_sc_api` | the depot `Asc_api`, absorbed into the venous plasma `Cve_api` |
+| rectal | `Route.rectal("api")` | `RECDOSE_api` (mg) | `ti_rec_api` (s), `ka_rec_api` (1/hr), `f_rec_api`, `f_rec_portal_api` | the depot `Arec_api`, absorbed into the portal plasma `Cpo_api` and the venous plasma `Cve_api` |
 
-The dose states and the parameters of the routes are parameters of the top model; the intestine reads the oral ones through its ports and owns their reactions and rate rules. Subcutaneous, intramuscular, inhalation, sublingual and buccal, rectal, transdermal and vaginal routes and the glucose and insulin clamps are designed for (a route is a component with dose parameters) and implemented when the models which need them are migrated.
+The dose states and the parameters of the routes are parameters of the top model; the intestine reads the oral ones through its ports and owns their reactions and rate rules. Inhalation, sublingual and buccal, transdermal and vaginal routes and the glucose and insulin clamps are designed for (a route is a component with dose parameters) and implemented when the models which need them are migrated.
 
 ```equations title="intravenous (top model)"
 J_iv_<s>: -> Cve_<s> = Kiv_<s> * IVDOSE_<s> / Mr_<s>
@@ -27,6 +30,32 @@ d(PODOSE_<s>)/dt = -(J_po_<s> + J_trs_st_<s>) * Mr_<s>
 ```
 
 `PODOSE_<s>` is the undissolved tablet in the stomach: it dissolves into the stomach lumen and empties undissolved with the stomach into the duodenum. In the next segments the undissolved drug is a species of its own, `Asolid_<seg>_<s>`, which dissolves there and moves on undissolved into the feces.
+
+### Depot routes
+
+The intramuscular, subcutaneous and rectal routes give their dose into a depot at the site of the administration, an amount of the top model in a compartment of the route (`Aim_<s>` in `Vim`, `Asc_<s>` in `Vsc`, `Arec_<s>` in `Vrec`, mmole; the compartments are compartments of amounts with the nominal volume 1 l, as the urine). The dose state drains into the depot with the half-life of the application `ti_<k>_<s>` (10 s by default, as the intravenous bolus, a choice of the library), so a dose which an experiment adds to the dose state (`add_doses`, `"IMDOSE_api + 10.0"`) adds to the depot. The depot is absorbed with first order: the fraction `f_<k>_<s>` (1 by default) into the venous plasma, the rest into a sink, `Aloss_im_<s>` and `Aloss_sc_<s>` (degraded at the site of the injection, amounts in the depot compartment) or the feces `Afeces_<s>` (the rectal dose which is not absorbed). Of the absorbed rectal dose the fraction `f_rec_portal_<s>` enters the portal plasma and passes the liver (the superior rectal vein drains into the portal vein), the rest enters the venous plasma (the middle and inferior rectal veins drain into the vena cava).
+
+```equations title="intramuscular (subcutaneous: sc) and rectal (top model)"
+J_im_<s>: -> Aim_<s> = ln(2) / ti_im_<s> * 60 s_per_min * IMDOSE_<s> / Mr_<s>
+d(IMDOSE_<s>)/dt = -J_im_<s> * Mr_<s>
+J_im_abs_<s>: Aim_<s> -> Cve_<s> = f_im_<s> * ka_im_<s> / 60 min_per_hr * Aim_<s>
+J_im_loss_<s>: Aim_<s> -> Aloss_im_<s> = (1 - f_im_<s>) * ka_im_<s> / 60 min_per_hr * Aim_<s>
+J_rec_<s>: -> Arec_<s> = ln(2) / ti_rec_<s> * 60 s_per_min * RECDOSE_<s> / Mr_<s>
+d(RECDOSE_<s>)/dt = -J_rec_<s> * Mr_<s>
+J_rec_abs_<s>: Arec_<s> -> Cve_<s> = f_rec_<s> * (1 - f_rec_portal_<s>) * ka_rec_<s> / 60 min_per_hr * Arec_<s>
+J_rec_abs_po_<s>: Arec_<s> -> Cpo_<s> = f_rec_<s> * f_rec_portal_<s> * ka_rec_<s> / 60 min_per_hr * Arec_<s>
+J_rec_loss_<s>: Arec_<s> -> Afeces_<s> = (1 - f_rec_<s>) * ka_rec_<s> / 60 min_per_hr * Arec_<s>
+```
+
+The defaults are those of the data (`database/tables/routes.toml`): the absorption rates `ka_<k>_<s>` are 1/hr, a choice of the library which is not verified, since the absorption from a depot depends on the substance, its formulation and the site (the fitted rates of the hand-written models: diazepam intramuscularly 1.3/hr, morphine intramuscularly 4.4/hr and subcutaneously 4.0/hr); the portal fraction of the rectal route is 0.45, from the systemic availability of lidocaine rectally (0.71, repeated 0.67) and orally (0.34, 0.27) in de Boer 1979 (`(1 - F_rectal)/(1 - F_oral)` with complete absorption, the abstract: slightly more than half of the rectal dose bypasses the liver), one drug, and the fraction depends on the site in the rectum. A model sets or fits its own values with the arguments of the route, numbers, `Value`s with a source or fitted values, which are the fields of `Depot`:
+
+```python
+# not executed
+Route.im("mor", ka=fitted(FITS.parameter("ka_im_mor", unit=U.per_hr)))
+Route.rectal("mor", ka=1.2, fraction=0.6, portal=0.5, application=600.0)
+```
+
+A depot dose is a dose of the equilibration (`DOSE_PREFIXES`): given before the initialization it moves to the start; the depot is a drug-free zero and the sink of an injected depot is set back at the start as the urine.
 
 ### Dissolution
 

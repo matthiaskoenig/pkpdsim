@@ -126,13 +126,17 @@ def test_substance_id_collides_with_physiology_id(sid: str) -> None:
         "du_x",
         "z1_x",
         "z12_x",
+        "im_x",
+        "sc_x",
+        "rec_x",
     ],
 )
 def test_invalid_sid(sid: str) -> None:
     """Ids which are no SId, contain '__' or take a token of the id scheme.
 
-    The tokens of the parts, pools, observers, lumen segments (`du_`) and the
-    zones of a zonated organ (`z1_`), which precede the substance in an id.
+    The tokens of the parts, pools, observers, lumen segments (`du_`), the
+    zones of a zonated organ (`z1_`) and the depot routes (`im_`, `sc_`,
+    `rec_`), which precede the substance in an id.
     """
     with pytest.raises(ValueError, match=sid):
         _definition(substances=[_api(sid=sid)], chemistry=[], routes=[]).validate()

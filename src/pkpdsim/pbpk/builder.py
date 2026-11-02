@@ -122,7 +122,7 @@ from pkpdsim.pbpk.placement import (
     value_parameter,
 )
 from pkpdsim.pbpk.pregnancy import pregnancy_objects, pregnancy_physiology_factors
-from pkpdsim.pbpk.routes import ORAL, route_objects
+from pkpdsim.pbpk.routes import DEPOT, ORAL, depot_site, route_objects
 from pkpdsim.pbpk.sinks import sink_objects
 from pkpdsim.pbpk.stationary import (
     SteadyPlan,
@@ -2482,6 +2482,7 @@ class _Top:
         """
         by_id = {s.sid: s for s in self.definition.substances}
         seen: set[tuple[str, str]] = set()
+        sites: set[str] = set()
         for route in self.definition.routes:
             key = (route.kind, route.substance)
             if key in seen:
@@ -2490,6 +2491,10 @@ class _Top:
                     "given twice."
                 )
             seen.add(key)
+            # the compartment of the depots of a route kind, once
+            if route.kind in DEPOT and route.kind not in sites:
+                sites.add(route.kind)
+                self.add([depot_site(route)])
             self.add(route_objects(route, by_id[route.substance]))
 
     # --- organs ----------------------------------------------------------

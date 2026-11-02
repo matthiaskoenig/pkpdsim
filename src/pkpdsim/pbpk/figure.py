@@ -657,8 +657,10 @@ class _Figure:
                 words.append(f"iv {r.substance}")
             elif r.kind == "oral":
                 words.append(f"oral tablet {r.substance}")
-            else:
+            elif r.kind == "oral_solution":
                 words.append(f"oral solution {r.substance}")
+            else:
+                words.append(f"{r.kind} {r.substance}")
         return "routes: " + ("; ".join(words) if words else "none")
 
     # --- drawing -----------------------------------------------------------
@@ -940,12 +942,20 @@ class _Figure:
 
         body_top = y
         rows_top = body_top + 2 * self.k.line + 14
-        # the intravenous routes enter the venous blood from the band above the
-        # first row, so the blood columns start at the top
-        iv = list(dict.fromkeys(r.substance for r in self.d.routes if r.kind == "iv"))
+        # the intravenous and the depot routes enter the venous blood from the
+        # band above the first row, so the blood columns start at the top
+        entries = [
+            f"{kind}: " + ", ".join(sids)
+            for kind in ("iv", "im", "sc", "rectal")
+            if (
+                sids := list(
+                    dict.fromkeys(r.substance for r in self.d.routes if r.kind == kind)
+                )
+            )
+        ]
         band_x = self.k.mx0
-        if iv:
-            text = "iv: " + ", ".join(iv)
+        if entries:
+            text = "; ".join(entries)
             mid = body_top + 4 + self.k.line / 2
             c.elements.append(icons.syringe(self.k.mx0 + 13, mid, 22, rot=90))
             c.text(self.k.mx0 + 30, self.k.baseline(body_top + 4, _SIZE), text)

@@ -68,6 +68,7 @@ from pkpdsim.pbpk.regional import (
     release_auc_ratios,
 )
 from pkpdsim.pbpk.routes import (
+    Depot,
     DoseDependentDissolution,
     FirstOrderDissolution,
     Route,
@@ -160,6 +161,7 @@ __all__ = [
     "BuildResult",
     "Circadian",
     "CustomReaction",
+    "Depot",
     "Direction",
     "DoseDependentDissolution",
     "Equilibration",
