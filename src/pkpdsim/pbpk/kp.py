@@ -38,7 +38,8 @@ pKa_acid) + 10^(pKa_base - pH)` and binds to the acidic phospholipids if its
 basic pKa is >= 7, to albumin otherwise.
 
 The method applies the rat tissue composition to human tissues (Rodgers &
-Rowland 2007, Coutinho 2024); the inputs are the substance's reference `fu`
+Rowland 2007, Coutinho 2024; the acidic phospholipids and the erythrocytes
+of Utsey 2020); the inputs are the substance's reference `fu`
 (`Binding.fu`), its blood to plasma ratio (`Erythrocytes.bp`, or `1 - HCT +
 HCT*kbc`) and the reference hematocrit of the sex. The coefficients are
 numbers of the build: a change of `fu` by an impairment (the binding factor of

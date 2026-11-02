@@ -355,22 +355,22 @@ def test_rr_strong_base_by_hand() -> None:
     Base pKa 9, logP 1 (P = 10), fu 0.5, BP 1.0, HCT 0.45. Ionisation:
     X = 1 + 10^(9 - 7.0) = 101, Y = 1 + 10^(9 - 7.4) = 40.810717,
     X_bc = 1 + 10^(9 - 7.22) = 61.255959.
-    Erythrocytes (f_iw 0.63, f_nl 0.0033, f_np 0.0012, AP 0.5 mg/g):
+    Erythrocytes (f_iw 0.603, f_nl 0.0017, f_np 0.0029, AP 0.5 mg/g):
 
         Kpu_bc = (0.45 - 1 + 1.0)/(0.45*0.5) = 2.0
-        Ka     = (2.0 - 61.255959*0.63/40.810717
-                  - (10*0.0033 + 3.7*0.0012)/40.810717)
-                 * 40.810717/(0.5*60.255959) = 1.4270038
+        Ka     = (2.0 - 61.255959*0.603/40.810717
+                  - (10*0.0017 + 3.7*0.0029)/40.810717)
+                 * 40.810717/(0.5*60.255959) = 1.4822222
 
     Muscle (f_ew 0.118, f_iw 0.63, f_nl 0.01, f_np 0.0072, AP 1.53 mg/g):
 
         Kpu = 101*0.63/40.810717 + 0.118 + (10*0.01 + 3.7*0.0072)/40.810717
-              + 1.4270038*1.53*100/40.810717 = 7.0301113
-        Kp  = 0.5 * Kpu = 3.5150556
+              + 1.4822222*1.53*100/40.810717 = 7.2371262
+        Kp  = 0.5 * Kpu = 3.6185631
     """
     method = _method(logp=1.0, pka=(9.0,), compound="base")
     kp = rodgers_rowland(method, Organ.MUSCLE, 0.5, 1.0, 0.45)
-    assert kp == pytest.approx(3.5150556, rel=1e-7)
+    assert kp == pytest.approx(3.6185631, rel=1e-7)
 
 
 def test_rr_base_reproduces_erythrocytes(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -438,12 +438,13 @@ def test_surrogate_tissues() -> None:
     assert composition(Organ.STOMACH).tissue == "gut"
     assert composition(Organ.LARGE_INTESTINE).tissue == "gut"
     assert composition(Organ.GONADS).tissue == "muscle"
-    # the acidic phospholipids and erythrocytes are ModelChoice: only
-    # the tissue choice tells a surrogate from an organ of its own
+    # every number has a source of the literature: only the tissue choice
+    # of a surrogate is ModelChoice
     data = load("tissue_composition")["organs"]
     assert data["go"]["source"] == "ModelChoice"
     assert data["li"]["source"] == "Coutinho2024"
-    assert {"Yau2020", "Coutinho2024", "ModelChoice"} <= set(kp_sources(Organ.LIVER))
+    assert set(kp_sources(Organ.LIVER)) == {"Yau2020", "Coutinho2024", "Utsey2020"}
+    assert "ModelChoice" in kp_sources(Organ.GONADS)
     assert "Huisinga2012Supplement" not in kp_sources(Organ.LIVER)
     assert {composition(o).tissue for o in Organ} >= {"adipose", "liver", "skin"}
 
