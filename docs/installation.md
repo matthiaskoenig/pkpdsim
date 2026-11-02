@@ -52,7 +52,7 @@ libroadrunner ships binary wheels for Linux (x86_64), macOS and Windows. Its ext
 export LD_LIBRARY_PATH="$(uv run python -c 'import sys; print(sys.base_prefix)')/lib"
 ```
 
-An interpreter of the system or of conda is not affected, nor are macOS and Windows.
+An interpreter of the system or of conda is not affected, nor are macOS and Windows. On python 3.15 the wheel of libroadrunner 2.11.0 takes the symbol `__jit_debug_register_code` from `libpython`, which only an interpreter built with the experimental JIT defines: the interpreters of uv are, others may not be (deadsnakes on Ubuntu is not), and `import roadrunner` fails with `undefined symbol: __jit_debug_register_code` ([roadrunner#1406](https://github.com/sys-bio/roadrunner/issues/1406)); use an interpreter of uv there.
 
 ## Logging
 
