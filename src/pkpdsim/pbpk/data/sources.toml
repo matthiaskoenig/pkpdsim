@@ -199,3 +199,11 @@ doi = "10.1208/s12248-020-0418-7"
 [Coutinho2024]
 citation = "Coutinho AL, Cristofoletti R, Wu F, Al Shoyaib A, Dressman J, Polli JE. Relative performance of volume of distribution prediction methods for lipophilic drugs with uncertainty in LogP value. Pharm Res 41(6):1121-1138, 2024 (open access, CC BY 4.0)."
 doi = "10.1007/s11095-024-03703-4"
+
+[Utsey2020]
+citation = "Utsey K, Gastonguay MS, Russell S, Freling R, Riggs MM, Elmokadem A. Quantification of the impact of partition coefficient prediction methods on physiologically based pharmacokinetic model output using a standardized tissue composition. Drug Metab Dispos 48(10):903-916, 2020 (open access, CC BY 4.0); the Rodgers & Rowland tissue composition is the file data/tissue_comp_R&R.csv of the repository of the article, https://github.com/metrumresearchgroup/PBPK_PC (commit 75a594462625fd9cae29761716c1d282b779e8b9, accessed 2026-11-02)."
+doi = "10.1124/dmd.120.090498"
+
+[Ye2016]
+citation = "Ye M, Nagar S, Korzekwa K. A physiologically based pharmacokinetic model to predict the pharmacokinetics of highly protein-bound drugs and the impact of errors in plasma protein binding. Biopharm Drug Dispos 37(3):123-141, 2016 (author manuscript PMC4844798)."
+doi = "10.1002/bdd.1996"
