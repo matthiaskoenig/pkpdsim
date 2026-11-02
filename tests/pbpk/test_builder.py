@@ -182,7 +182,7 @@ def test_flat_ids_follow_scheme(simple: BuildResult) -> None:
         for a in model.getListOfInitialAssignments()
     }
     assert initial[ids.fu("drg")].replace(" ", "") == (
-        "1dimensionless/(1dimensionless+(fimp_albumin/fimp_plasma_protein)*"
+        "1dimensionless/(1dimensionless+fimp_albumin*fimp_albumin_ckd*"
         "(1dimensionless-fu_ref_drg)/fu_ref_drg)"
     )
     assert initial[ids.bp("drg")].replace(" ", "") == "1dimensionless-HCT"
@@ -197,7 +197,7 @@ def test_flat_ids_follow_scheme(simple: BuildResult) -> None:
 
 @pytest.mark.skipif(
     "PYTEST_XDIST_WORKER" in os.environ,
-    reason="CPU time inflates under the contention of the parallel workers (R53); "
+    reason="CPU time inflates under the contention of the parallel workers; "
     "runs serially: `pytest -n 0`, the second command of tox",
 )
 def test_load_time(simple: BuildResult) -> None:
@@ -210,10 +210,11 @@ def test_load_time(simple: BuildResult) -> None:
     (11 s observed among the workers), so the test runs only serially, in a
     run without pytest-xdist (`pytest -n 0`, the second command of tox and so
     of continuous integration); the structural guard
-    `test_rules_read_a_state` runs in every run.
+    `test_rules_read_a_state` runs in every run. The model is compiled at the
+    level of production, `O2`, not at the level of the tests.
     """
     start = time.process_time()
-    load(simple)
+    load(simple, "O2")
     assert time.process_time() - start < 10.0
 
 
@@ -229,7 +230,7 @@ def rules_without_state(doc: libsbml.SBMLDocument) -> list[str]:
     the assignment rules and reactions it reads, depends on constants only and
     belongs into an initial assignment: roadrunner inlines assignment rules,
     and the deep chains of the physiology as rules made the compile of the
-    simple model 14 times slower (R21). The rate of an intravenous injection
+    simple model 14 times slower. The rate of an intravenous injection
     `Kiv_<s>` is a rule by design (the dose protocol changes `ti_<s>` between
     doses) and is not reported.
 
@@ -284,7 +285,7 @@ def rules_without_state(doc: libsbml.SBMLDocument) -> list[str]:
 
 
 def test_rules_read_a_state(simple: BuildResult) -> None:
-    """No assignment rule of the flat model depends on constants only (R53).
+    """No assignment rule of the flat model depends on constants only.
 
     The deterministic guard of the load time: the cause of the slow compile
     (assignment rules over constants which should be initial assignments) is

@@ -102,11 +102,13 @@ def _run(
         classes = list(experiment_classes)
     else:
         classes = [experiment_classes]
+    simulator_settings = simulator or model.simulator
     runner = ExperimentRunner(
         experiment_classes=classes,
         data_path=list(model.data_paths) or None,
         base_path=model.path,
-        simulator=create_simulator(simulator or model.simulator),
+        simulator=create_simulator(simulator_settings),
+        jit_optimization=simulator_settings.jit_optimization,
         # an experiment which cannot be initialized is logged and reported
         on_error="log",
         **settings,

@@ -6,7 +6,7 @@ organ of small and large intestine, the lumen that of `LumenBuilder`, the
 mucosa and the chemistry of the small intestine are placed here.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import replace
 
 from sbmlutils.factory import ModelDefinition, Reaction
@@ -27,20 +27,31 @@ from pkpdsim.pbpk.organs import Organ, Part, Pool
 from pkpdsim.pbpk.parts import Parts, parts_for
 from pkpdsim.pbpk.placement import (
     built_parts,
+    fraction_parameters,
+    fractions_are_constants,
     inhibitor_terms,
     process_kind,
+    product_reaction,
     rate_law,
     stoichiometry,
     with_modifiers,
 )
-from pkpdsim.pbpk.routes import ORAL
+from pkpdsim.pbpk.routes import ORAL, Route
 from pkpdsim.pbpk.substance import Kp, Substance
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import Value
 from pkpdsim.pbpk.variants.gut_lumen import LumenBuilder
+from pkpdsim.pbpk.variants.lumen_options import LumenConversion, converted
 from pkpdsim.pbpk.variants.segments import DATA, Segment
 
-__all__ = ["GUT_ORGANS", "GutBuilder"]
+__all__ = [
+    "GUT_ORGANS",
+    "GutBuilder",
+    "bile_substances",
+    "gut_chemistry",
+    "luminal_substances",
+    "wall_parts",
+]
 
 GUT_ORGANS = (Organ.SMALL_INTESTINE, Organ.LARGE_INTESTINE)
 """The organs the intestine variants replace."""
@@ -61,12 +72,19 @@ _TISSUE = {
 """The parts of the wall the mucosa is carved out of, in names."""
 
 
-def _gut_chemistry(
-    ctx: OrganContext,
+def gut_chemistry(
+    chemistry: Sequence[Metabolism | Transport | CustomReaction],
 ) -> tuple[
     list[Metabolism | Transport], tuple[Metabolism | Transport | CustomReaction, ...]
 ]:
-    """The processes of the intestine and the others.
+    """Get the processes of the intestine (its mucosa) and the others.
+
+    Args:
+        chemistry: the processes of the definition.
+
+    Returns:
+        The processes of the small intestine, placed into the mucosa, and
+        the processes of every other organ.
 
     Raises:
         ValueError: for a process of the large intestine, a custom reaction or
@@ -74,7 +92,7 @@ def _gut_chemistry(
     """
     gut: list[Metabolism | Transport] = []
     rest = []
-    for p in ctx.chemistry:
+    for p in chemistry:
         if p.organ not in GUT_ORGANS:
             rest.append(p)
             continue
@@ -98,6 +116,96 @@ def _gut_chemistry(
             )
         gut.append(p)
     return gut, tuple(rest)
+
+
+def wall_parts(
+    substance: Substance, chemistry: Sequence[Metabolism | Transport | CustomReaction]
+) -> Parts:
+    """Get the parts of a substance in the wall of the intestine.
+
+    The wall is the standard organ of the small intestine without the
+    processes of the intestine, which are in the mucosa.
+
+    Args:
+        substance: the substance.
+        chemistry: the processes of the definition.
+
+    Returns:
+        The parts of the substance in the wall.
+    """
+    return parts_for(substance, Organ.SMALL_INTESTINE, gut_chemistry(chemistry)[1])
+
+
+def bile_substances(
+    substances: Iterable[Substance],
+    chemistry: Sequence[Metabolism | Transport | CustomReaction],
+) -> set[str]:
+    """Get the substances excreted into the bile, which drains into the lumen.
+
+    An apical efflux transport of the liver, or a custom reaction which
+    names the bile of the substance (`ids.bile`) in its equation.
+
+    Args:
+        substances: the substances of the definition.
+        chemistry: the processes of the definition.
+
+    Returns:
+        The ids of the substances.
+    """
+    return {
+        p.substance
+        for p in chemistry
+        if isinstance(p, Transport)
+        and p.organ is Organ.LIVER
+        and p.membrane is Membrane.APICAL
+        and p.direction is Direction.EFFLUX
+    } | {
+        s.sid
+        for s in substances
+        for p in chemistry
+        if isinstance(p, CustomReaction) and ids.bile(s.sid) in p.equation.split()
+    }
+
+
+def luminal_substances(
+    substances: Sequence[Substance],
+    chemistry: Sequence[Metabolism | Transport | CustomReaction],
+    routes: Iterable[Route],
+    conversions: Sequence[LumenConversion] = (),
+) -> set[str]:
+    """Get the substances which reach the lumen of the intestine.
+
+    A substance with an oral route, excreted into the bile
+    (`bile_substances`), transported by the intestine, an inhibitor of an
+    influx transporter of the intestine, and the products of the
+    conversions in the lumen of these.
+
+    Args:
+        substances: the substances of the definition.
+        chemistry: the processes of the definition.
+        routes: the routes of the definition.
+        conversions: the conversions in the lumen.
+
+    Returns:
+        The ids of the substances.
+
+    Raises:
+        ValueError: for chemistry the intestine cannot place, or a
+            conversion of a substance which never reaches the lumen.
+    """
+    processes = gut_chemistry(chemistry)[0]
+    influx = {
+        p.protein
+        for p in processes
+        if isinstance(p, Transport) and p.direction is Direction.INFLUX
+    }
+    luminal = (
+        {r.substance for r in routes if r.kind in ORAL}
+        | bile_substances(substances, chemistry)
+        | {p.substance for p in processes if isinstance(p, Transport)}
+        | {s.sid for s in substances for i in s.inhibits if i.protein in influx}
+    )
+    return luminal | converted(conversions, luminal)
 
 
 def _check_wall(substances: tuple[Substance, ...]) -> None:
@@ -131,6 +239,8 @@ class GutBuilder(LumenBuilder):
         single: bool,
         fabs: frozenset[str] = frozenset(),
         colon: frozenset[str] = frozenset(),
+        regional: Mapping[str, frozenset[str]] | None = None,
+        conversions: tuple[LumenConversion, ...] = (),
     ) -> None:
         """Start the collection of the elements of the intestine.
 
@@ -146,18 +256,20 @@ class GutBuilder(LumenBuilder):
                 `fabs_<s>`, the rest goes into the feces.
             colon: the substances which the large intestine absorbs with
                 `f_ka_colon_<s>`.
+            regional: the segments of a substance which absorb with its
+                factor `f_ka_<seg>_<s>`, by substance.
+            conversions: the conversions in the lumen.
 
         Raises:
-            ValueError: for chemistry the intestine cannot place, or a
-                distribution of the large intestine.
+            ValueError: for chemistry the intestine cannot place, a
+                distribution of the large intestine, or a conversion of a
+                substance which never reaches the lumen.
         """
-        processes, rest = _gut_chemistry(ctx)
+        processes, rest = gut_chemistry(ctx.chemistry)
         _check_wall(ctx.substances)
         wall = replace(
             ctx,
-            parts={
-                s.sid: parts_for(s, Organ.SMALL_INTESTINE, rest) for s in ctx.substances
-            },
+            parts={s.sid: wall_parts(s, ctx.chemistry) for s in ctx.substances},
             chemistry=rest,
         )
         super().__init__(wall, name)
@@ -166,6 +278,8 @@ class GutBuilder(LumenBuilder):
         self.single = single
         self.fabs = fabs
         self.colon = colon
+        self.regional = dict(regional or {})
+        self.conversions = conversions
         self.mucosa_segments = tuple(seg for seg in segments if seg.region)
         proteins = {p.protein for p in processes if p.protein is not None}
         mucosal = {
@@ -180,30 +294,10 @@ class GutBuilder(LumenBuilder):
         mucosal |= {sid for sid, i in ctx.inhibitions if i.protein in proteins}
         mucosal |= {sid for sid, i in ctx.inductions if i.protein in proteins}
         self.mucosal = mucosal
-        self.bile = {
-            p.substance
-            for p in ctx.chemistry
-            if isinstance(p, Transport)
-            and p.organ is Organ.LIVER
-            and p.membrane is Membrane.APICAL
-            and p.direction is Direction.EFFLUX
-        } | {
-            s.sid
-            for s in ctx.substances
-            for p in ctx.chemistry
-            if isinstance(p, CustomReaction) and ids.bile(s.sid) in p.equation.split()
-        }
-        influx = {
-            p.protein
-            for p in processes
-            if isinstance(p, Transport) and p.direction is Direction.INFLUX
-        }
+        self.bile = bile_substances(ctx.substances, ctx.chemistry)
         self.oral = {(r.kind, r.substance): r for r in ctx.routes if r.kind in ORAL}
-        self.luminal = (
-            {s for _, s in self.oral}
-            | self.bile
-            | {p.substance for p in processes if isinstance(p, Transport)}
-            | {sid for sid, i in ctx.inhibitions if i.protein in influx}
+        self.luminal = luminal_substances(
+            ctx.substances, ctx.chemistry, ctx.routes, conversions
         )
 
     def build(self) -> tuple[ModelDefinition, Boundary]:
@@ -221,7 +315,10 @@ class GutBuilder(LumenBuilder):
                 self._lumen(s, parts)
             else:
                 self._bile_to_feces(s)
+        self._conversions()
         self._chemistry()
+        if not self.single:
+            self._stomach_transit()
         kind = "single lumen" if self.single else "segmented"
         notes = (
             f"The {kind} intestine, which replaces small and large intestine: "
@@ -521,6 +618,10 @@ class GutBuilder(LumenBuilder):
                 substance=s,
                 segment=seg.token,
             )
+            # the mucosa releases `Cmu/K_mu`: at equilibrium `K_mu*baseline`,
+            # at a generated steady state `K_mu*Car` (the intestine moves
+            # nothing of the substance)
+            self._defer_start(c, s, coefficient=k, steady=f"{k} * {car}")
             self._reaction(
                 ids.mucosa_reaction("in", sid, seg.token),
                 f"{car} -> {c}",
@@ -596,7 +697,7 @@ class GutBuilder(LumenBuilder):
         `w = e*Vmu/sum(e*Vmu)` with the expression `e` of the protein of the
         data; a protein without expression data (or no protein) is placed by
         mucosa volume (`e = 1`) over the segments of the small intestine, the
-        organ of the process (R62); `None` where the protein is not placed.
+        organ of the process; `None` where the protein is not placed.
         """
         key = _UNIFORM if self.single else _PROFILED.get(protein or "", _UNIFORM)
 
@@ -677,13 +778,32 @@ class GutBuilder(LumenBuilder):
         """A process of the chemistry in the mucosa of a segment."""
         by_id = {s.sid: s for s in self.ctx.substances}
         name = seg.label
+        formed = []
         if isinstance(p, Metabolism):
             s = by_id[p.substrate]
             cu = self._mucosa_unbound(s, seg)
-            products = " + ".join(
-                stoichiometry(f, ids.mucosa(product, seg.token))
-                for product, f in p.products.items()
-            )
+            if fractions_are_constants(p):
+                for par in fraction_parameters(p, Organ.SMALL_INTESTINE):
+                    self.parameters.setdefault(str(par.sid), par)
+                formed = [
+                    product_reaction(
+                        p,
+                        product,
+                        ids.mucosa(product, seg.token),
+                        ids.mucosa_volume(seg.token),
+                        seg.token,
+                        Organ.SMALL_INTESTINE,
+                        segment=seg.token,
+                    )
+                    for product in p.products
+                ]
+                products = ""
+            else:
+                products = " + ".join(
+                    stoichiometry(f, ids.mucosa(product, seg.token))
+                    for product, f in p.products.items()
+                    if isinstance(f, float | int)
+                )
             equation = f"{ids.mucosa(s.sid, seg.token)} -> {products}"
             lumen, sbo = False, SBO.BIOCHEMICAL_REACTION
             what = f"{p.substrate} -> {', '.join(p.products) or 'elimination'}"
@@ -720,3 +840,4 @@ class GutBuilder(LumenBuilder):
                 protein=p.protein,
             )
         )
+        self.reactions += formed

@@ -45,3 +45,27 @@ The organs of the PBPK library: the standard organ, its parts and coefficients, 
 ## variants.intestine
 
 ::: pkpdsim.pbpk.variants.intestine
+
+## variants.lumen_options
+
+::: pkpdsim.pbpk.variants.lumen_options
+
+## variants.segments
+
+::: pkpdsim.pbpk.variants.segments
+
+## variants.gut
+
+::: pkpdsim.pbpk.variants.gut
+
+## variants.gut_lumen
+
+::: pkpdsim.pbpk.variants.gut_lumen
+
+## steady_state
+
+::: pkpdsim.pbpk.steady_state
+
+## stationary
+
+::: pkpdsim.pbpk.stationary

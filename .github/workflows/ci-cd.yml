@@ -22,7 +22,9 @@ concurrency:
 jobs:
   test:
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    # the tests of pkpdsim.pbpk build and compile about 500 models: about 40
+    # minutes on the hosted ubuntu runner, 50 on windows, 20 on macos
+    timeout-minutes: 75
     strategy:
       fail-fast: false
       matrix:

@@ -8,6 +8,7 @@ intestine, the bile into the duodenum, the feces.
 
 import dataclasses
 import math
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -20,6 +21,7 @@ from pkpdsim.pbpk import (
     DoseDependentDissolution,
     Excretion,
     FirstOrder,
+    FirstOrderDissolution,
     Induction,
     Inhibition,
     Kp,
@@ -42,11 +44,12 @@ from pkpdsim.pbpk import (
 from pkpdsim.pbpk.chemistry import Direction, Membrane
 from pkpdsim.pbpk.impairment import GASTRIC_EMPTYING, SI_TRANSIT
 from pkpdsim.pbpk.variants import lookup, names
+from pkpdsim.pbpk.variants.intestine import PerSubstance
 
 from .conftest import (
     definition,
     dose_amount,
-    individual,
+    individuals,
     load,
     simple_drug,
     total_amount,
@@ -264,8 +267,10 @@ def test_gut_wall_metabolism_reduces_fg(tmp_path: Path) -> None:
 def test_placement_by_expression(tmp_path: Path) -> None:
     """CYP3A4 is placed by expression times mucosa volume, the shares sum to 1.
 
-    The colon has no CYP3A4 in the data: no reaction there; the duodenum has
-    the highest expression per volume.
+    The colon has no CYP3A4 in the data: no reaction there; the duodenum and
+    the upper jejunum (31 pmol/mg both, the jejunum taken as the duodenum)
+    have the highest expression per volume, equal to the last bits, which
+    differ between the levels of the JIT.
     """
     d = _definition("placement", chemistry=[_gut_metabolism()])
     result = build(d, tmp_path)
@@ -280,7 +285,10 @@ def test_placement_by_expression(tmp_path: Path) -> None:
     per_volume = {
         seg: r[weights[seg]] / r[_gu(ids.mucosa_volume(seg))] for seg in SMALL
     }
-    assert max(per_volume, key=lambda k: per_volume[k]) == "du"
+    highest = max(per_volume.values())
+    assert per_volume["du"] == pytest.approx(highest, rel=1e-12)
+    assert per_volume["jej1"] == pytest.approx(highest, rel=1e-12)
+    assert all(per_volume[seg] < 0.99 * highest for seg in SMALL[2:])
 
 
 def test_first_order_per_volume_in_segments(tmp_path: Path) -> None:
@@ -288,7 +296,7 @@ def test_first_order_per_volume_in_segments(tmp_path: Path) -> None:
 
     A process without protein has in every mucosa segment of the small
     intestine the share `Vmu_<seg>/sum(Vmu)` of the capacity `k*Vsi` of the
-    standard organ, the colon segments carry none of it (R62): with the same
+    standard organ, the colon segments carry none of it: with the same
     mucosa concentration everywhere the segments together clear
     `k*Vsi*fu/K_mu*C`, and the clearance scales with the small intestine of the
     individual (BW).
@@ -302,8 +310,9 @@ def test_first_order_per_volume_in_segments(tmp_path: Path) -> None:
     segments = SMALL
     c = 0.005
     totals = {}
+    person = individuals(path)
     for bw in (75.0, 150.0):
-        r = individual(path, BW=bw)
+        r = person(BW=bw)
         for seg in segments:
             r[f"[{_gu(ids.mucosa(S, seg))}]"] = c
         rates = np.array([r[_gu(ids.segment_process("DRGG", seg))] for seg in segments])
@@ -379,7 +388,7 @@ def _with_transit_factors(path: Path, factor: float) -> "roadrunner.RoadRunner":
     """Load a flat model with the CKD factors of the transit times set to a value.
 
     The factors are initial assignments of the impairment (1 in every stage
-    of the data, R40); the test replaces them by a constant.
+    of the data); the test replaces them by a constant.
     """
     from sbmlsim.model.model_roadrunner import load_roadrunner
 
@@ -397,7 +406,7 @@ def test_longer_transit_factor_slows_transit(tmp_path: Path) -> None:
     """A transit time factor of 2 doubles the transit times: the drug moves slower.
 
     The factor multiplies the time `T*factor` of the stomach and the small
-    intestine, so the transit rate is `V*C/(T*factor)` (R55, the precedence
+    intestine, so the transit rate is `V*C/(T*factor)` (the precedence
     bug gave `V*C/T*factor`). After a solution the stomach keeps more drug and
     less reaches the colon.
     """
@@ -471,6 +480,79 @@ def test_dose_dependent_dissolution(tmp_path: Path) -> None:
         r.simulate(1e-3, 30, 5)
         fraction[dose] = 1 - r[ids.po_dose(S)] / dose
     assert fraction[500.0] < fraction[1.0]
+
+
+def _tablet_flux(r: "roadrunner.RoadRunner", fed: float = 0.0, **sets: float) -> float:
+    """The dissolution flux (mmole/min) of a tablet of 10 mg at its start."""
+    r.resetAll()
+    r[ids.FED] = fed
+    for pid, v in sets.items():
+        r[pid] = v
+    r[ids.po_dose(S)] = 10.0
+    return r[_gu(ids.dose_reaction("po", S))]
+
+
+def test_the_fed_state_scales_the_dissolution(tmp_path: Path) -> None:
+    """`fed=0.25`: the flux at `FED = 1` is 0.25 of that at `FED = 0` at the same amount."""
+    route = Route.oral(S, FirstOrderDissolution(k=2.0, fed=0.25))
+    r = _build(tmp_path, _definition("dis_fed", routes=[route]))
+    assert r[ids.dissolution_fed_factor(S)] == 0.25
+    assert ids.dissolution_release_factor(S) not in r.model.getGlobalParameterIds()
+    fasted = _tablet_flux(r)
+    assert fasted == pytest.approx(2.0 / 60 * 10.0 / r[ids.mr(S)], rel=1e-9)
+    assert _tablet_flux(r, fed=1.0) == pytest.approx(0.25 * fasted, rel=1e-9)
+
+
+def test_a_release_factor_slows_the_dissolution(tmp_path: Path) -> None:
+    """`release=1.0`: with `f_dis_release_<s> = 0.2` the tablet dissolves at 0.2 of the rate."""
+    route = Route.oral(S, FirstOrderDissolution(k=2.0, release=1.0))
+    r = _build(tmp_path, _definition("dis_release", routes=[route]))
+    assert r[ids.dissolution_release_factor(S)] == 1.0
+    assert ids.dissolution_fed_factor(S) not in r.model.getGlobalParameterIds()
+    immediate = _tablet_flux(r)
+    slow = _tablet_flux(r, **{ids.dissolution_release_factor(S): 0.2})
+    assert slow == pytest.approx(0.2 * immediate, rel=1e-9)
+
+
+def test_both_dissolution_factors_multiply(tmp_path: Path) -> None:
+    """The release factor and the fed factor act together on the rate."""
+    route = Route.oral(S, FirstOrderDissolution(k=2.0, fed=0.5, release=0.2))
+    r = _build(tmp_path, _definition("dis_both", routes=[route]))
+    fasted = _tablet_flux(r)
+    assert fasted == pytest.approx(0.2 * 2.0 / 60 * 10.0 / r[ids.mr(S)], rel=1e-9)
+    assert _tablet_flux(r, fed=1.0) == pytest.approx(0.5 * fasted, rel=1e-9)
+
+
+def test_a_dissolution_without_factors_is_unchanged(tmp_path: Path) -> None:
+    """Neither factor: no parameter of a factor, the rate is `Ka_dis/60*PODOSE/Mr`."""
+    for formulation in (None, FirstOrderDissolution(k=2.0)):
+        d = _definition("dis_plain", routes=[Route.oral(S, formulation)])
+        result = build(d, tmp_path)
+        found = _sbml_ids(result.flat_path)
+        assert not {i for i in found if i.startswith("f_dis_")}
+        assert {i for i in found if "dis" in i.lower() and "Ka_" in i} == {
+            ids.dissolution(S)
+        }
+        model = libsbml.readSBMLFromFile(str(result.flat_path)).getModel()
+        law = model.getReaction(_gu(ids.dose_reaction("po", S))).getKineticLaw()
+        assert (
+            libsbml.formulaToL3String(law.getMath())
+            == f"({ids.dissolution(S)} / 60 GU__min_per_hr) * {ids.po_dose(S)} / {ids.mr(S)}"
+        )
+
+
+def test_the_fed_factor_needs_the_segmented_intestine(tmp_path: Path) -> None:
+    """The single lumen has no fed state: a fed factor raises."""
+    route = Route.oral(S, FirstOrderDissolution(k=2.0, fed=0.5))
+    d = _definition(
+        "dis_single",
+        routes=[route],
+        variants=Variants(organs={Organ.SMALL_INTESTINE: SingleLumen()}),
+    )
+    with pytest.raises(ValueError, match="fed state"):
+        build(d, tmp_path)
+    release = Route.oral(S, FirstOrderDissolution(k=2.0, release=0.2))
+    build(dataclasses.replace(d, routes=[release]), tmp_path)
 
 
 def test_variant_registry() -> None:
@@ -838,4 +920,206 @@ def test_segmented_fabs_and_colon(mucosa: bool, tmp_path: Path) -> None:
     r.simulate(6 * 60.0, 3 * DAY, 20)
     assert total_amount(r, S) + total_amount(r, M) + dose_amount(r, S) == (
         pytest.approx(10.0 / r[ids.mr(S)], rel=1e-6)
+    )
+
+
+def _two_oral(
+    sid: str,
+    *,
+    ka: "PerSubstance | None" = None,
+    fabs: "PerSubstance | None" = None,
+    f_ka_colon: "PerSubstance | None" = None,
+    intestine: str = "segmented",
+) -> PBPKDefinition:
+    """The drug and its metabolite, both with an oral solution, in the intestine variant."""
+    component: SegmentedIntestine | SingleLumen
+    if intestine == "segmented":
+        component = SegmentedIntestine(ka=ka, fabs=fabs, f_ka_colon=f_ka_colon)
+    else:
+        component = SingleLumen(ka=ka, fabs=fabs)
+    return _definition(
+        sid,
+        routes=[Route.oral_solution(S), Route.oral_solution(M)],
+        variants=Variants(organs={Organ.SMALL_INTESTINE: component}),
+    )
+
+
+def test_two_oral_substances_absorb_with_their_own_rates(tmp_path: Path) -> None:
+    """A mapping gives each oral substance its ka; fabs only for the substances named."""
+    d = _two_oral(
+        "two_oral",
+        ka={S: 2.0, M: 0.5},
+        fabs={S: 0.6},
+        f_ka_colon={M: 0.25},
+    )
+    result = build(d, tmp_path)
+    r = load(result)
+    assert r[ids.absorption(S)] == pytest.approx(2.0)
+    assert r[ids.absorption(M)] == pytest.approx(0.5)
+    assert r[ids.fraction_absorbed(S)] == pytest.approx(0.6)
+    assert r[ids.colon_absorption_factor(M)] == pytest.approx(0.25)
+    found = _sbml_ids(result.flat_path)
+    assert ids.fraction_absorbed(M) not in found
+    assert ids.colon_absorption_factor(S) not in found
+    feces = {i for i in found if "J_feces_" in i}
+    assert feces
+    assert not {i for i in feces if i.endswith(f"_{M}")}
+    assert all(i.endswith(f"_{S}") for i in feces)
+
+
+def test_a_missing_ka_is_the_default_of_the_data(tmp_path: Path) -> None:
+    """A substance missing from the `ka` mapping keeps the default of the data."""
+    ref = load(build(_two_oral("ka_default"), tmp_path / "a"))
+    r = load(build(_two_oral("ka_partial", ka={S: 2.0}), tmp_path / "b"))
+    assert r[ids.absorption(S)] == pytest.approx(2.0)
+    assert r[ids.absorption(M)] == pytest.approx(ref[ids.absorption(M)])
+
+
+def test_a_ka_for_a_substance_without_oral_route_is_allowed(tmp_path: Path) -> None:
+    """The reabsorption after biliary excretion: a `ka` of a substance without oral route."""
+    d = _definition(
+        "reabsorb",
+        routes=[Route.oral_solution(S)],
+        variants=Variants(
+            organs={Organ.SMALL_INTESTINE: SegmentedIntestine(ka={M: 0.3})}
+        ),
+    )
+    r = load(build(d, tmp_path))
+    assert r[ids.absorption(M)] == pytest.approx(0.3)
+
+
+def test_the_single_lumen_takes_a_mapping(tmp_path: Path) -> None:
+    """The single lumen: `ka` per substance, `fabs` 1 for a substance missing."""
+    d = _two_oral(
+        "lumen_two", ka={S: 2.0, M: 0.5}, fabs={S: 0.6}, intestine="single_lumen"
+    )
+    r = load(build(d, tmp_path))
+    assert r[ids.absorption(S)] == pytest.approx(2.0)
+    assert r[ids.absorption(M)] == pytest.approx(0.5)
+    assert r[ids.fraction_absorbed(S)] == pytest.approx(0.6)
+    assert r[ids.fraction_absorbed(M)] == pytest.approx(1.0)
+
+
+@pytest.mark.parametrize("intestine", ["segmented", "single_lumen"])
+def test_a_per_substance_value_names_a_substance(
+    tmp_path: Path, intestine: str
+) -> None:
+    """A key which is no substance, or a `fabs` of a substance without oral route, raises."""
+    with pytest.raises(ValueError, match="zz"):
+        build(_two_oral("bad_ka", ka={"zz": 1.0}, intestine=intestine), tmp_path)
+    d = _definition(
+        "bad_fabs",
+        routes=[Route.oral_solution(S)],
+        variants=Variants(
+            organs={Organ.SMALL_INTESTINE: SegmentedIntestine(fabs={M: 0.5})}
+        ),
+    )
+    with pytest.raises(ValueError, match=M):
+        build(d, tmp_path)
+    d = _definition(
+        "bad_colon",
+        routes=[Route.oral_solution(S)],
+        variants=Variants(
+            organs={Organ.SMALL_INTESTINE: SegmentedIntestine(f_ka_colon={M: 0.5})}
+        ),
+    )
+    with pytest.raises(ValueError, match=M):
+        build(d, tmp_path)
+
+
+def test_a_scalar_form_equals_a_mapping_of_every_oral_substance(
+    tmp_path: Path,
+) -> None:
+    """The scalar form is the mapping which gives every oral substance the value."""
+    oral_ids = (S, M)
+    scalar = _two_oral("same", ka=1.5, fabs=0.7, f_ka_colon=0.4)
+    mapped = _two_oral(
+        "same",
+        ka=dict.fromkeys(oral_ids, 1.5),
+        fabs=dict.fromkeys(oral_ids, 0.7),
+        f_ka_colon=dict.fromkeys(oral_ids, 0.4),
+    )
+    a = build(scalar, tmp_path / "a").flat_path.read_text()
+    b = build(mapped, tmp_path / "b").flat_path.read_text()
+    assert a == b
+
+
+# The flat model of `_scalar_reference()` built at pbpk-library 4f01f9d (before
+# the per-substance form): the ids of the parameters, the reactions of the
+# intestine and the values of the parameters of the oral absorption. Pinned as
+# ids and values, not as a hash of the file, which every unrelated change of
+# the library would move.
+_SCALAR_REFERENCE_VALUES = {
+    "ka_drg": 1.5,
+    "ka_drg_m": 0.0,
+    "fabs_drg": 0.7,
+    "f_ka_colon_drg": 0.4,
+}
+
+
+def test_a_scalar_form_is_unchanged_against_the_library_at_4f01f9d(
+    tmp_path: Path,
+) -> None:
+    """The scalar form creates the parameters and values it created at 4f01f9d.
+
+    `ka` for the oral drug only (0 for the metabolite), `fabs` and
+    `f_ka_colon` only for the oral drug, the feces reactions only for it.
+    """
+    d = _definition(
+        "scalar_ref",
+        routes=[Route.oral_solution(S)],
+        variants=Variants(
+            organs={
+                Organ.SMALL_INTESTINE: SegmentedIntestine(
+                    ka=1.5, fabs=0.7, f_ka_colon=0.4
+                )
+            }
+        ),
+    )
+    result = build(d, tmp_path)
+    r = load(result)
+    for pid, expected in _SCALAR_REFERENCE_VALUES.items():
+        assert r[pid] == pytest.approx(expected)
+    found = _sbml_ids(result.flat_path)
+    assert {i for i in found if i.startswith(("fabs_", "f_ka_colon_"))} == {
+        "fabs_drg",
+        "f_ka_colon_drg",
+    }
+    feces = {i for i in found if "J_feces_" in i}
+    assert feces
+    assert all(i.endswith("_drg") for i in feces)
+
+
+def test_a_mapping_reads_back_as_a_mapping() -> None:
+    """`.ka` is the mapping given, readable as a mapping."""
+    intestine = SegmentedIntestine(ka={S: 2.0}, fabs={M: 0.5})
+    assert isinstance(intestine.ka, Mapping)
+    assert isinstance(intestine.fabs, Mapping)
+    assert intestine.ka == {S: 2.0}
+    assert intestine.ka[S] == 2.0
+    assert dict(intestine.fabs.items()) == {M: 0.5}
+    assert dataclasses.replace(intestine, ka=intestine.ka) == intestine
+    reordered = SegmentedIntestine(ka={S: 2.0, M: 1.0})
+    assert reordered.ka == SegmentedIntestine(ka={M: 1.0, S: 2.0}).ka
+    assert hash(reordered.ka) == hash(SegmentedIntestine(ka={M: 1.0, S: 2.0}).ka)
+
+
+def test_the_single_lumen_fabs_may_name_a_substance_without_oral_route(
+    tmp_path: Path,
+) -> None:
+    """Any substance has `fabs_<s>` in the single lumen, so a key need not be oral."""
+    d = _definition(
+        "lumen_nonoral",
+        routes=[Route.oral_solution(S)],
+        variants=Variants(organs={Organ.SMALL_INTESTINE: SingleLumen(fabs={M: 0.4})}),
+    )
+    r = load(build(d, tmp_path))
+    assert r[ids.fraction_absorbed(M)] == pytest.approx(0.4)
+    assert r[ids.fraction_absorbed(S)] == pytest.approx(1.0)
+
+
+def test_the_per_substance_intestine_is_hashable() -> None:
+    """A mapping is stored so that the dataclass keeps its hash."""
+    assert hash(SegmentedIntestine(ka={S: 1.0})) == hash(
+        SegmentedIntestine(ka={S: 1.0})
     )

@@ -2,11 +2,17 @@
 
 import copy
 import dataclasses
+import json
+import multiprocessing
+import os
+from concurrent.futures import ProcessPoolExecutor
+from pathlib import Path
 
 import pytest
 from sbmlsim.experiment import ExperimentRunner
 from sbmlsim.fit import FitMapping, FitMappingCollection, FitSettings, MappingKind
 from sbmlsim.fit.objects import MappingMetaData
+from sbmlsim.fit.optimization import OptimizationProblem
 from sbmlsim.fit.options import (
     DataAtChangeType,
     LossFunctionType,
@@ -17,6 +23,8 @@ from sbmlsim.fit.options import (
 from sbmlsim.model.tolerances import AbsoluteTolerance
 
 from pkpdsim.fit import (
+    at_level,
+    check_sampling_sites,
     default_fit_settings,
     fit_subset,
     mapping_metadata,
@@ -24,6 +32,7 @@ from pkpdsim.fit import (
     observable_filter,
     observable_id,
     select_mappings,
+    start_point,
 )
 from pkpdsim.metadata import (
     Coadministration,
@@ -32,6 +41,7 @@ from pkpdsim.metadata import (
     Health,
     PKPDMappingMetaData,
     Route,
+    SamplingSite,
     Tissue,
 )
 from pkpdsim_toy import DATA_PATHS, MODEL, TOY_PATH
@@ -288,3 +298,106 @@ def test_the_subset_of_a_fit_id(fit_id: str, subset: str) -> None:
 def test_an_invalid_fit_id_has_no_subset(fit_id: str) -> None:
     with pytest.raises(ValueError, match="not the id of a fit"):
         fit_subset(fit_id)
+
+
+def test_check_sampling_sites_names_every_mismatch(fit_mapping: FitMapping) -> None:
+    assert not check_sampling_sites([fit_mapping], {"A": SamplingSite.ARM_VEIN})
+    wrong = check_sampling_sites([fit_mapping], {"A": SamplingSite.VENOUS})
+    assert len(wrong) == 1
+    assert "'A'" in wrong[0]
+    assert "ARM_VEIN" in wrong[0]
+    assert "VENOUS" in wrong[0]
+    other = with_metadata(fit_mapping, sampling_site=SamplingSite.ARTERIAL)
+    problems = check_sampling_sites([fit_mapping, other], {"A": SamplingSite.ARM_VEIN})
+    assert len(problems) == 1
+    unknown = check_sampling_sites([fit_mapping, other], {"B": SamplingSite.ARM_VEIN})
+    assert len(unknown) == 2
+    assert all("no sampling site" in problem for problem in unknown)
+
+
+def test_a_filter_on_the_sampling_site_compares_the_resolved_site(
+    fit_mapping: FitMapping,
+) -> None:
+    arm = metadata_filter(sampling_site={SamplingSite.ARM_VEIN})
+    not_applicable = metadata_filter(sampling_site={SamplingSite.NOT_APPLICABLE})
+    assert arm("k", fit_mapping)
+    assert not not_applicable("k", fit_mapping)
+    urine = with_metadata(fit_mapping, tissue=Tissue.URINE)
+    assert not_applicable("k", urine)
+    assert not arm("k", urine)
+
+
+#: the environment variable of sbmlsim of the level of a model loaded without one
+JIT_VARIABLE = "SBMLSIM_JIT_OPTIMIZATION"
+
+
+def environment_level() -> str | None:
+    """Get the level of the environment of a process."""
+    return os.environ.get(JIT_VARIABLE)
+
+
+def levels_in_worker(problem: OptimizationProblem, settings: FitSettings) -> tuple:
+    """Get the levels a worker of a pool sees: of the problem, its environment, its models."""
+    problem.initialize(settings)
+    assert problem.runner is not None
+    return (
+        str(problem.jit_optimization),
+        os.environ.get(JIT_VARIABLE),
+        str(problem.runner.jit_optimization),
+    )
+
+
+# windows has no forkserver
+@pytest.mark.parametrize(
+    "start_method",
+    [
+        m
+        for m in ("forkserver", "spawn")
+        if m in multiprocessing.get_all_start_methods()
+    ],
+)
+def test_a_worker_loads_the_models_at_the_level_of_the_model(
+    monkeypatch: pytest.MonkeyPatch, start_method: str
+) -> None:
+    """The problem carries the level into a worker, whatever the environment of the pool.
+
+    A forkserver which started before, without the level, starts the workers
+    with its own environment, so the level cannot come from the environment
+    of the parent; the problem is pickled into every task of a pool with it.
+    """
+    monkeypatch.delenv(JIT_VARIABLE, raising=False)
+    context = multiprocessing.get_context(start_method)
+    with ProcessPoolExecutor(1, mp_context=context) as pool:
+        assert pool.submit(environment_level).result() is None
+    definition = MODEL.load_fit_definitions()["DECAY"]
+    problem = at_level(definition, "O0").problem(opid="levels")
+    assert problem.jit_optimization == "O0"
+    with ProcessPoolExecutor(1, mp_context=context) as pool:
+        levels = pool.submit(levels_in_worker, problem, definition.settings).result()
+    assert levels == ("O0", None, "O0")
+    # nothing of the level is left in the process
+    assert JIT_VARIABLE not in os.environ
+    # a definition without a level is the definition of the model
+    assert at_level(definition, None) is definition
+    assert (
+        dataclasses.replace(at_level(definition, "O1"), jit_optimization=None)
+        .problem(opid="default")
+        .jit_optimization
+        == "O2"
+    )
+
+
+def test_a_start_without_the_unit_of_a_parameter_is_refused(tmp_path: Path) -> None:
+    """A value of a fit without its unit cannot be converted into the unit of the fit."""
+    definition = MODEL.load_fit_definitions()["DECAY"]
+    fit = tmp_path / "DECAY_20261030_120000__abcde"
+    fit.mkdir()
+    best: dict[str, object] = {"values": {"k": 12.0}}
+    (fit / "parameters.json").write_text(json.dumps({"sets": [best]}), "utf-8")
+    with pytest.raises(ValueError, match=r"has no unit of 'k'.*1/min"):
+        start_point(MODEL, definition, fit.name, tmp_path)
+    best["units"] = {"k": "1/hr"}
+    (fit / "parameters.json").write_text(json.dumps({"sets": [best]}), "utf-8")
+    assert start_point(MODEL, definition, fit.name, tmp_path) == {
+        "k": pytest.approx(0.2)
+    }

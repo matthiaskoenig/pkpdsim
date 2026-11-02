@@ -7,8 +7,7 @@ from pathlib import Path
 
 import libsbml
 import pytest
-import roadrunner
-from sbmlutils.factory import Parameter
+from sbmlutils.factory import Parameter, Uncertainty, UncertParameter
 
 from pkpdsim.pbpk import (
     MM,
@@ -19,6 +18,8 @@ from pkpdsim.pbpk import (
     Erythrocytes,
     Excretion,
     FirstOrder,
+    FirstOrderDissolution,
+    Formula,
     Hill,
     Inhibition,
     Kp,
@@ -26,6 +27,7 @@ from pkpdsim.pbpk import (
     Membrane,
     Metabolism,
     Mode,
+    ModelParameter,
     Observer,
     Organ,
     Part,
@@ -45,6 +47,15 @@ from pkpdsim.pbpk import (
     sources,
 )
 from pkpdsim.pbpk.builder import organ_component
+
+from .conftest import (
+    assert_reference_sbml,
+    compiled,
+    dateless,
+    definition,
+    individual,
+    reference_definition,
+)
 
 
 def _api(**kwargs: object) -> Substance:
@@ -247,7 +258,7 @@ def test_no_ftissue_when_every_entered_organ_has_its_own_ps(
     assert model.getParameter("LI__kps_m").getValue() == 1.0
     ia = model.getInitialAssignmentBySymbol("LI__PS_m")
     assert libsbml.formulaToL3String(ia.getMath()) == "LI__kps_m * Vli * f_functional"
-    r = roadrunner.RoadRunner(str(flat))
+    r = compiled(flat)
     r["IVDOSE_m"] = 1.0
     r.simulate(0, 600, 11)
     assert r["LI__PS_m"] == pytest.approx(r["Vli"] * r["f_functional"])
@@ -334,10 +345,16 @@ def test_proteins_table() -> None:
         "ABCB1",
         "ABCG2",
         "ABCC2",
+        "ABCC3",
+        "ABCC4",
+        "SLC6A8",
     ]
     assert set(required) <= set(PROTEINS)
     assert PROTEINS["CYP3A4"].uniprot == "P08684"
     assert PROTEINS["SLC22A6"].ncit is None
+    assert PROTEINS["ABCC3"].uniprot == "O15438"
+    assert PROTEINS["ABCC4"].uniprot == "O15439"
+    assert PROTEINS["SLC6A8"].uniprot == "P48029"
     assert load("proteins")["source"] in sources()
 
 
@@ -421,10 +438,11 @@ def test_observer_with_unknown_symbol_is_rejected() -> None:
         _definition(observers=[Observer("x", "Cnope + 1 mM", U.mM, "x")]).validate()
 
 
-def test_observer_with_an_organ_id_is_rejected() -> None:
-    """An id of an organ (`LI__Cpl_api`) is not visible in the top model."""
-    observer = Observer("x", "LI__Cpl_api", U.mM, "x")
-    with pytest.raises(ValueError, match="LI__Cpl_api"):
+def test_observer_with_an_organ_id_which_is_not_exposed_is_rejected() -> None:
+    """An organ exposes its species (`LI__Cpl_api`) to an observer, no other element (`LI__Vpl`)."""
+    _definition(observers=[Observer("x", "LI__Cpl_api", U.mM, "x")]).validate()
+    observer = Observer("x", "LI__Vpl", U.mM, "x")
+    with pytest.raises(ValueError, match="'LI__Vpl', which is no species"):
         _definition(observers=[observer]).validate()
 
 
@@ -515,7 +533,7 @@ def _untyped[T](cls: Callable[..., T], *args: object, **kwargs: object) -> T:
     "organ", [Organ.ADIPOSE, "ad", "adipose", "Adipose", "ADIPOSE"]
 )
 def test_kp_overrides_accept_organ_texts(organ: object) -> None:
-    """The keys of `Kp.overrides` are organs, their values or their names (R60)."""
+    """The keys of `Kp.overrides` are organs, their values or their names."""
     kp = _untyped(Kp, 2.0, ftissue=0.5, overrides={organ: 0.4})
     assert kp.overrides == {Organ.ADIPOSE: 0.4}
     assert all(type(k) is Organ for k in kp.overrides)
@@ -569,7 +587,7 @@ _METHOD = {"method": "rodgers_rowland", "logp": 1.0, "pka": (), "compound": "neu
 def test_organ_fields_reject_other_values(
     cls: Callable[..., object], kwargs: dict[str, object], field: str
 ) -> None:
-    """Anything but an organ, its value or its name raises, naming the field (R60).
+    """Anything but an organ, its value or its name raises, naming the field.
 
     The message lists the allowed values, or says what is wrong with the
     collection (no mapping, no set, an organ given twice).
@@ -582,7 +600,7 @@ def test_organ_fields_reject_other_values(
 
 @pytest.mark.parametrize("sex", [Sex.FEMALE, "female", "FEMALE", "Female"])
 def test_sex_accepts_its_value(sex: object) -> None:
-    """The sex is a `Sex` member or its value (R60), also through `replace`."""
+    """The sex is a `Sex` member or its value, also through `replace`."""
     assert _definition(sex=sex).sex is Sex.FEMALE
     assert _untyped(dataclasses.replace, _definition(), sex=sex).sex is Sex.FEMALE
 
@@ -633,7 +651,7 @@ def _text_processes() -> tuple[Metabolism, Transport, CustomReaction]:
 
 
 def test_chemistry_enum_fields_accept_texts(tmp_path: Path) -> None:
-    """Organ, direction, membrane, part and mode given as text build the reactions (R61).
+    """Organ, direction, membrane, part and mode given as text build the reactions.
 
     Before, a process of a text organ was dropped from the model.
     """
@@ -686,7 +704,7 @@ def test_chemistry_enum_fields_accept_texts(tmp_path: Path) -> None:
 def test_chemistry_enum_fields_reject_other_texts(
     cls: Callable[..., object], args: tuple[object, ...], field: str
 ) -> None:
-    """An unknown text raises with the field and the allowed values (R61)."""
+    """An unknown text raises with the field and the allowed values."""
     kwargs = {"mode": "flow"} if cls is Kp else {}
     with pytest.raises(ValueError, match=re.escape(field)) as err:
         _untyped(cls, *args, **kwargs)
@@ -724,10 +742,271 @@ def test_basolateral_text_hits_the_gut_refusal() -> None:
     ],
 )
 def test_choices_reject_other_texts(make: Callable[[], object], field: str) -> None:
-    """A text which is none of the choices of a `Literal` field raises (R61).
+    """A text which is none of the choices of a `Literal` field raises.
 
     Before, a route of an unknown kind composed no doses and an unknown
     erythrocyte mode was taken for another.
     """
     with pytest.raises(ValueError, match=re.escape(field) + ".*allowed values"):
         make()
+
+
+# --- parameters of the definition ------------------------------------------
+
+#: a fitted production rate with its uncertainty, as `fitted(FITS.parameter(...))`
+K_PROD = Value(
+    0.002,
+    U.mmole_per_min,
+    "fit",
+    notes="The fitted production.",
+    uncertainties=[
+        Uncertainty(
+            uncertParameters=[
+                UncertParameter(
+                    type=libsbml.DISTRIB_UNCERTTYPE_DISTRIBUTION,
+                    math="normal(0.002, 0.0002)",
+                )
+            ]
+        )
+    ],
+)
+
+
+def _k_prod(value: float | Value = K_PROD) -> ModelParameter:
+    """The production rate `k_prod` of a definition."""
+    return ModelParameter(
+        "k_prod",
+        value,
+        U.mmole_per_min,
+        name="production rate",
+        notes="The production shared by the baseline and the muscle.",
+    )
+
+
+def test_a_definition_parameter_is_a_top_parameter(tmp_path: Path) -> None:
+    """A parameter of the definition is a constant parameter of the top model.
+
+    It keeps value, unit, name, notes and the uncertainty of a fitted value
+    (the distribution of `check_model`); a `Formula` parameter is the initial
+    assignment over top ids (another parameter of the definition, `BW`) and
+    follows a change before the simulation; an observer of the definition
+    reads the parameters.
+    """
+    d = _definition(
+        parameters=[
+            _k_prod(),
+            ModelParameter(
+                "k_scaled",
+                Formula("2 dimensionless * k_prod * BW / 70 kg", U.mmole_per_min),
+                U.mmole_per_min,
+            ),
+        ],
+        observers=[Observer("A_prod", "k_prod * time", U.mmole, "produced amount")],
+    )
+    d.validate()
+    result = build(d, tmp_path)
+    model = libsbml.readSBMLFromFile(str(result.flat_path)).getModel()
+    p = model.getParameter("k_prod")
+    assert p.getConstant()
+    assert p.getValue() == 0.002
+    assert p.getUnits() == "mmole_per_min"
+    assert p.getName() == "production rate"
+    notes = p.getNotesString()
+    assert "The production shared by the baseline and the muscle." in notes
+    assert "The fitted production." in notes
+    assert "Fitted value." in notes
+    distrib = p.getPlugin("distrib")
+    assert distrib is not None and distrib.getNumUncertainties() == 1
+    assert p.getSBOTermID() == "SBO:0000002"  # quantitative systems description
+    assert p.isSetMetaId() and p.getCVTerms().getSize() > 0
+    scaled = model.getParameter("k_scaled")
+    assert scaled.getName() == "k_scaled"
+    assert scaled.getConstant()
+    ia = model.getInitialAssignmentBySymbol("k_scaled")
+    assert "k_prod" in libsbml.formulaToL3String(ia.getMath())
+    r = individual(result.flat_path, k_prod=0.004, BW=70.0)
+    assert r["k_scaled"] == pytest.approx(0.008)
+    r.simulate(0, 10)
+    assert r["A_prod"] == pytest.approx(0.04)
+    # the parameter is no input of an organ which does not read it
+    comp = libsbml.readSBMLFromFile(str(result.comp_path))
+    plugin = comp.getPlugin("comp")
+    for k in range(plugin.getNumModelDefinitions()):
+        md = plugin.getModelDefinition(k)
+        assert md.getParameter("k_prod") is None, md.getId()
+
+
+@pytest.mark.parametrize(
+    ("sid", "where"),
+    [
+        ("GFR", "physiology"),
+        ("BW", "physiology"),
+        ("fu_api", "top model"),
+        ("Kp_api", "top model"),
+        ("Carm_api", "top model"),
+        ("Aurine_api", "top model"),
+        ("LI", "organ submodel"),
+        ("GU", "library"),
+        ("Vti", "organ"),
+        ("met_Vmax", "organ"),
+    ],
+)
+def test_a_definition_parameter_may_not_shadow_a_library_id(
+    sid: str, where: str
+) -> None:
+    """An id of the library is refused, naming it.
+
+    The ids of the physiology are refused by `validate`, every other id of
+    the top model (the parameters of the substances, the observers, the
+    sinks, the submodels) and the local ids of an organ (which a custom
+    reaction of the organ would read instead) when the model is composed.
+    """
+    d = _definition(parameters=[ModelParameter(sid, 1.0, U.dimensionless)])
+    with pytest.raises(ValueError, match=rf"parameter '{sid}'.*{where}"):
+        compose(d)
+
+
+def test_the_parameters_of_a_definition_are_validated() -> None:
+    """SIds without `__`, unique, a `Value` or `Formula` in the declared unit."""
+    d = _definition(
+        parameters=[
+            ModelParameter("a", 1.0, U.dimensionless),
+            ModelParameter("a", 2.0, U.dimensionless),
+            ModelParameter("1b", 1.0, U.dimensionless),
+            ModelParameter("c__d", 1.0, U.dimensionless),
+            ModelParameter("e", Value(1.0, U.mM), U.per_min),
+            ModelParameter("f", Formula("2 * a", U.mM), U.per_min),
+        ]
+    )
+    with pytest.raises(ValueError) as info:
+        d.validate()
+    message = str(info.value)
+    assert "duplicate parameter ids: ['a']" in message
+    assert "parameter id '1b' is not an SBML SId" in message
+    assert "parameter id 'c__d' contains '__'" in message
+    assert "parameter 'e': value must be in 1/min, got mmole/liter" in message
+    assert "parameter 'f': value must be in 1/min, got mmole/liter" in message
+
+
+def test_the_formulas_of_parameters_may_not_read_each_other_in_a_cycle() -> None:
+    """Two formulas which read each other are refused, naming them."""
+    d = _definition(
+        parameters=[
+            ModelParameter("a", Formula("2 * b", U.dimensionless), U.dimensionless),
+            ModelParameter("b", Formula("a / 2", U.dimensionless), U.dimensionless),
+        ]
+    )
+    with pytest.raises(ValueError, match=r"\['a', 'b'\] read each other in a cycle"):
+        compose(d)
+
+
+def test_a_custom_reaction_reads_no_unknown_id() -> None:
+    """An id of a custom reaction which neither the organ nor the top model has is named."""
+    custom = CustomReaction(
+        "PROD",
+        Organ.MUSCLE,
+        Part.TISSUE,
+        "-> Cti_api",
+        "k_unknown * k_prod",
+        parameters=[],
+    )
+    d = _definition(chemistry=[custom], parameters=[_k_prod()])
+    with pytest.raises(ValueError, match=r"'PROD'.*\['k_unknown'\]"):
+        compose(d)
+    observer = CustomReaction(
+        "PROD", Organ.MUSCLE, Part.TISSUE, "-> Cti_api", "Carm_api", parameters=[]
+    )
+    with pytest.raises(ValueError, match=r"'PROD'.*\['Carm_api'\]"):
+        compose(_definition(chemistry=[observer]))
+
+
+def test_combine_unites_the_parameters() -> None:
+    """Equal parameters of two definitions are taken once, different ones raise."""
+    a = _definition(parameters=[_k_prod()])
+    b = _definition(parameters=[_k_prod(), ModelParameter("x", 1.0, U.dimensionless)])
+    d = PBPKDefinition.combine(a, b, sid="coupled")
+    assert [p.sid for p in d.parameters] == ["k_prod", "x"]
+    with pytest.raises(ValueError, match="parameter 'k_prod'"):
+        PBPKDefinition.combine(a, _definition(parameters=[_k_prod(1.0)]), sid="c")
+
+
+def test_a_definition_without_parameters_is_unchanged(tmp_path: Path) -> None:
+    """Without parameters the SBML is that of f008d56, line by line.
+
+    With a parameter which nothing reads the models differ only by its
+    element in the top model.
+    """
+    plain = reference_definition()
+    assert plain.parameters == ()
+    plain_result = build(plain, tmp_path / "plain")
+    assert_reference_sbml(plain_result)
+    with_parameter = dataclasses.replace(
+        plain, parameters=[ModelParameter("k_prod", 0.002, U.mmole_per_min)]
+    )
+    result = build(with_parameter, tmp_path / "parameter")
+    for path, reference in (
+        (result.comp_path, plain_result.comp_path),
+        (result.flat_path, plain_result.flat_path),
+    ):
+        doc = libsbml.readSBMLFromFile(str(path))
+        assert doc.getModel().removeParameter("k_prod") is not None
+        assert dateless(libsbml.writeSBMLToString(doc)) == dateless(
+            reference.read_text(encoding="utf-8")
+        )
+
+
+def test_a_definition_parameter_may_not_take_an_id_of_the_definition() -> None:
+    """An observer of the definition or a PD component under the id is named as such."""
+    from .conftest import cardiac_pd
+
+    observer = Observer("A_prod", "1 mmole_per_min * time", U.mmole, "produced")
+    d = _definition(
+        parameters=[ModelParameter("A_prod", 1.0, U.mmole)], observers=[observer]
+    )
+    with pytest.raises(
+        ValueError,
+        match="parameter 'A_prod' is the id of an observer of the definition",
+    ):
+        compose(d)
+    d = _definition(
+        parameters=[ModelParameter("cardio", 1.0, U.dimensionless)],
+        pd=[cardiac_pd(reads="api")],
+    )
+    with pytest.raises(ValueError, match="parameter 'cardio' is an id of the PD"):
+        compose(d)
+
+
+def test_a_constant_of_a_formulation_is_read_from_the_definition(
+    tmp_path: Path,
+) -> None:
+    """A constant of a formulation lives in the definition and the model.
+
+    The experiments of a prolonged release set the factor of the dissolution
+    from the constant of the definition, which the archive carries.
+    """
+    released = definition(
+        routes=[Route.oral("drg", FirstOrderDissolution(k=2.0, release=1.0))],
+        parameters=[
+            ModelParameter(
+                "f_dis_pr_drg",
+                Value(0.27, U.dimensionless, notes="calibrated"),
+                U.dimensionless,
+                notes="The factor of the dissolution of the prolonged release.",
+            ),
+            ModelParameter(
+                "f_twice",
+                Formula("2 dimensionless * f_dis_pr_drg", U.dimensionless),
+                U.dimensionless,
+            ),
+        ],
+    )
+    assert released.parameter_value("f_dis_pr_drg") == 0.27
+    result = build(released, tmp_path)
+    r = compiled(result.flat_path)
+    assert r["f_dis_pr_drg"] == 0.27
+    with pytest.raises(ValueError, match=r"no parameter 'f_dis_ir_drg'.*f_dis_pr_drg"):
+        released.parameter_value("f_dis_ir_drg")
+    with pytest.raises(ValueError, match="formula"):
+        released.parameter_value("f_twice")
+    plain = definition(parameters=[ModelParameter("f", 0.5, U.dimensionless)])
+    assert plain.parameter_value("f") == 0.5

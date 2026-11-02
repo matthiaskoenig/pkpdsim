@@ -19,9 +19,19 @@ from sbmlutils.factory import (
     Parameter,
     Port,
     PortType,
+    Species,
 )
 
-from pkpdsim.pbpk import MODEL_UNITS, Organ, Part, PDComponent, Pool, U, ids
+from pkpdsim.pbpk import (
+    MODEL_UNITS,
+    CustomReaction,
+    Organ,
+    Part,
+    PDComponent,
+    Pool,
+    U,
+    ids,
+)
 from pkpdsim.pbpk.builder import build, compose
 
 from .conftest import cardiac_pd, definition, load
@@ -222,3 +232,151 @@ def test_pd_id_of_an_organ_submodel_raises() -> None:
     """A component with the id of an organ submodel (`LI`) raises, naming it."""
     with pytest.raises(ValueError, match=r"'LI'.*submodel of an organ"):
         compose(definition(pd=[cardiac_pd(sid=ids.submodel(Organ.LIVER))]))
+
+
+def _organ_reader(organ_species: str) -> PDComponent:
+    """A PD component which doubles a concentration of an organ (`C_organ`)."""
+    model = Model(
+        "org",
+        units=U,
+        model_units=MODEL_UNITS,
+        objects=[
+            Parameter(
+                "C_organ",
+                0.0,
+                U.mM,
+                constant=False,
+                port=Port("C_organ_port", portType=PortType.INPUT_PORT),
+            ),
+            Parameter("E", None, U.mM, constant=False),
+            AssignmentRule("E", "2 dimensionless * C_organ", U.mM),
+        ],
+    )
+    return PDComponent(model=model, inputs={"C_organ": organ_species}, outputs={})
+
+
+def test_pd_reads_a_species_of_an_organ(tmp_path: Path) -> None:
+    """A PD input names a species of an organ by its flat id (`MU__Cti_drg`).
+
+    The organ exposes the species as an output, the top model has it as the
+    parameter `C<o>_<part>_<s>` (`Cmu_ti_drg`), which the component reads; the
+    species keeps its id in the flat model. An imaging signal of the liver
+    reads the concentration in the liver cells this way.
+    """
+    local = ids.species(Part.TISSUE, "drg")
+    species = ids.flat(Organ.MUSCLE, local)
+    top = ids.organ_species(Organ.MUSCLE, local)
+    assert top == "Cmu_ti_drg"
+    result = build(definition(pd=[_organ_reader(species)]), tmp_path)
+    model = libsbml.readSBMLFromFile(str(result.flat_path)).getModel()
+    assert model.getSpecies(species) is not None
+    rule = model.getAssignmentRuleByVariable(top)
+    assert rule is not None
+    assert libsbml.formulaToL3String(rule.getMath()) == species
+    r = load(result)
+    r[ids.iv_dose("drg")] = 10.0
+    s = r.simulate(0, 600, 61, selections=["time", "org__E", top, f"[{species}]"])
+    assert s[f"[{species}]"].max() > 0
+    np.testing.assert_allclose(s[top], s[f"[{species}]"], rtol=1e-12, atol=0.0)
+    np.testing.assert_allclose(s["org__E"], 2 * s[top], rtol=1e-12, atol=0.0)
+
+
+def _organ_definitions(model: Model) -> dict[str, str]:
+    """Get the organ model definitions of a composed model, written as SBML.
+
+    The ports, parameters and rules of every model definition but the PD
+    components, by the id of the definition; the metaids and the history,
+    which differ between two builds, are left out.
+    """
+    result: dict[str, str] = {}
+    for md in model.model_definitions or []:
+        if str(md.sid) in {"eff", "org"}:
+            continue
+        ports = sorted(
+            f"{e.sid}:{getattr(e, 'port', None)}"
+            for name in ("compartments", "species", "parameters", "reactions")
+            for e in getattr(md, name) or []
+            if getattr(e, "port", None)
+        )
+        parameters = sorted(str(p.sid) for p in md.parameters or [])
+        rules = sorted(f"{r.variable}={r.value}" for r in md.rules or [])
+        result[str(md.sid)] = repr((ports, parameters, rules))
+    return result
+
+
+def test_pd_without_an_organ_input_is_unchanged(tmp_path: Path) -> None:
+    """A component which reads the body only adds no output to an organ.
+
+    The organ model definitions of a definition with a component which reads
+    the top model are those of the definition without it: no organ gains a
+    port, a parameter or a rule; and the flat model has no `C<o>_<part>_<s>`.
+    """
+    plain = _organ_definitions(compose(definition()))
+    with_reader = _organ_definitions(compose(definition(pd=[_reader()])))
+    assert plain
+    assert with_reader == plain
+    result = build(definition(pd=[_reader()]), tmp_path)
+    model = libsbml.readSBMLFromFile(str(result.flat_path)).getModel()
+    organ_species = {
+        ids.organ_species(organ, ids.species(part, "drg"))
+        for organ in Organ
+        for part in Part
+    }
+    assert not organ_species & {p.getId() for p in model.getListOfParameters()}
+    # an organ input adds exactly its output to the organ which it reads
+    with_organ = _organ_definitions(
+        compose(definition(pd=[_organ_reader("MU__Cti_drg")]))
+    )
+    changed = {sid for sid in plain if with_organ[sid] != plain[sid]}
+    assert changed == {sid for sid in plain if sid.endswith("_mu")}
+
+
+@pytest.mark.parametrize(
+    ("organ_species", "match"),
+    [
+        ("MU__Cnothing_drg", r"'MU__Cnothing_drg'.*no species of the organ"),
+        ("MU__Vti", r"'MU__Vti'.*no species of the organ"),
+        ("XX__Cti_drg", r"reads the unknown id 'XX__Cti_drg'"),
+    ],
+    ids=["unknown species", "compartment", "unknown submodel"],
+)
+def test_pd_input_of_an_organ_raises(organ_species: str, match: str) -> None:
+    """An input which names no species of a built organ raises, naming the id."""
+    with pytest.raises(ValueError, match=match):
+        compose(definition(pd=[_organ_reader(organ_species)]))
+
+
+@pytest.mark.parametrize(
+    ("local", "amount", "match"),
+    [
+        ("Xpool_drg", True, r"'MU__Xpool_drg', an amount .* no amount of the id"),
+        ("Xpool_drg", False, r"'MU__Xpool_drg', a species .* no concentration"),
+    ],
+    ids=["amount", "no concentration id"],
+)
+def test_pd_input_of_a_species_outside_the_id_scheme_raises(
+    local: str, amount: bool, match: str
+) -> None:
+    """A species of a custom reaction whose id is no `A...` amount or `C...` concentration is named.
+
+    An amount `A<x>` is exposed in its unit (`test_observers_readouts`).
+    """
+    pool = Species(
+        local,
+        "Vti",
+        initialConcentration=0.0,
+        substanceUnit=U.mmole,
+        hasOnlySubstanceUnits=amount,
+    )
+    reaction = CustomReaction(
+        "POOL",
+        Organ.MUSCLE,
+        Part.TISSUE,
+        f"Cti_drg -> {local}",
+        "0.001 l_per_min * Cti_drg",
+        species=[pool],
+    )
+    d = definition(pd=[_organ_reader(f"MU__{local}")])
+    d = dataclasses.replace(d, chemistry=[*d.chemistry, reaction])
+    with pytest.raises(ValueError, match=match):
+        compose(d)

@@ -53,6 +53,7 @@ __all__ = [
     "SV_TIS",
     "TUBULE_SEGMENTS",
     "T_LUMEN",
+    "T_STOMACH",
     "T_STOMACH_FED",
     "VBILE",
     "VBLOOD",
@@ -60,7 +61,10 @@ __all__ = [
     "VLUMEN",
     "VURINE",
     "WALL_FRACTION",
+    "absorbed_amount",
+    "absorbed_fraction",
     "absorption",
+    "absorption_rate",
     "absorption_reaction",
     "activity",
     "area_factor",
@@ -68,27 +72,35 @@ __all__ = [
     "arm_blood",
     "arm_free",
     "arm_weight",
+    "baseline",
     "bile",
     "bile_reaction",
     "blood",
     "bp",
+    "colon_absorption_factor",
     "compartment",
     "condition_factor",
+    "delta",
+    "delta_base",
     "dissolution",
     "dissolution_age",
     "dissolution_clock",
     "dissolution_dose50",
+    "dissolution_fed_factor",
     "dissolution_lag",
     "dissolution_rate",
     "dissolution_reaction",
+    "dissolution_release_factor",
     "dissolution_shape",
     "dissolution_t50",
     "dose_reaction",
     "ec50",
+    "efflux_rate",
     "emax",
     "enzyme",
     "exchange_reaction",
     "feces",
+    "feces_rate",
     "feces_reaction",
     "filtration_reaction",
     "fkp",
@@ -122,7 +134,13 @@ __all__ = [
     "kiu",
     "kp",
     "kp_organ",
+    "kp_slow",
+    "kps",
+    "kslow",
     "lumen",
+    "lumen_amount",
+    "lumen_conversion_rate",
+    "lumen_conversion_reaction",
     "lumen_volume",
     "mr",
     "mucosa",
@@ -131,10 +149,12 @@ __all__ = [
     "mucosa_reaction",
     "mucosa_unbound",
     "mucosa_volume",
+    "oral_dose_applied",
     "organ_flow",
     "organ_mass",
     "organ_outflow",
     "organ_outflow_bc",
+    "organ_species",
     "organ_volume",
     "outflow_conc",
     "outflow_conc_bc",
@@ -149,16 +169,30 @@ __all__ = [
     "pool_fraction",
     "pool_species",
     "pool_volume",
+    "product_fraction",
+    "product_reaction",
     "ps",
+    "ps_ref",
+    "rate_ratio",
+    "reabsorption_n",
+    "reabsorption_threshold",
     "ref",
+    "regional_absorption_factor",
     "segment_process",
     "shunt_reaction",
     "sinusoid_reaction",
+    "slow_reaction",
+    "slow_species",
     "sol_dose",
     "solid",
     "solution",
     "species",
     "species_of",
+    "steady_clearance",
+    "steady_km",
+    "steady_plasma",
+    "steady_rate",
+    "steady_vmax",
     "submodel",
     "tissue_volume_total_ref",
     "transit_reaction",
@@ -271,6 +305,11 @@ F_MUCOSA_FLOW = "f_mucosa_flow"
 """The local fraction of the intestinal blood flow which perfuses the mucosa."""
 T_STOMACH_FED = "T_st_fed"
 """The local transit time of the stomach in the fed state."""
+T_STOMACH = "T_st_eff"
+"""The transit time of the stomach which the transit of the stomach reads: of
+the prandial state (`FED`, `T_st` fasted to `T_st_fed` fed) times the factor
+of the gastric emptying of chronic kidney disease, a constant of the segmented
+intestine and its output, an id of the top model (min)."""
 GUT_SEGMENTS: tuple[str, ...] = (
     "st",
     "du",
@@ -477,6 +516,30 @@ def kps(s: str) -> str:
     return f"kps_{s}"
 
 
+def slow_species(s: str) -> str:
+    """The local id of the slow pool of `s` in the tissue of an organ, `Cslow_<s>`.
+
+    A concentration in the tissue compartment `Vti` (`SlowPool`), exposed to
+    the observers as `C<o>_slow_<s>` (`organ_species`).
+    """
+    return f"Cslow_{s}"
+
+
+def kslow(s: str) -> str:
+    """The id of the exchange of the slow pool of `s` per litre of tissue, `kslow_<s>` (1/min)."""
+    return f"kslow_{s}"
+
+
+def kp_slow(s: str) -> str:
+    """The id of the slow pool of `s` to the tissue at equilibrium, `Kpslow_<s>`."""
+    return f"Kpslow_{s}"
+
+
+def slow_reaction(s: str) -> str:
+    """The local id of the exchange of `s` between the tissue and its slow pool, `J_slow_<s>`."""
+    return f"J_slow_{s}"
+
+
 def k_int_pls(s: str) -> str:
     """The local id of the interstitial to plasma coefficient, `K_int_pls_<s>`."""
     return f"K_int_pls_{s}"
@@ -495,6 +558,33 @@ def k_organ(s: str) -> str:
 def organ_outflow(organ: Organ, s: str) -> str:
     """The id of the plasma concentration leaving an organ, `Cout_li_<s>`."""
     return f"Cout_{organ.value}_{s}"
+
+
+def organ_species(organ: Organ, local: str) -> str:
+    """The id of the top model of an element of an organ which a PD component or an observer reads.
+
+    The organ exposes the element as an output, which replaces this parameter
+    of the top model: the organ token follows the prefix of the local id. A
+    concentration `C<part>_<s>` is `C<o>_<part>_<s>`, `Cli_ic_api` for the
+    cells of the liver (`LI__Cic_api` in the flat model); an unbound
+    concentration `Cu_<part>_<s>` is `Cu_<o>_<part>_<s>` (`Cu_li_ic_api`), the
+    one spelling of the unbound concentration of an organ (the pools keep
+    theirs, `C<pool>_free_<s>`); an amount `A<x>` is `A<o>_<x>`
+    (`Asi_solid_du_api`).
+
+    Raises:
+        ValueError: if the local id is no concentration `C...` and no amount
+            `A...`.
+    """
+    if local[:1] not in ("C", "A") or len(local) < 2:
+        raise ValueError(
+            f"The element '{local}' of organ '{organ.value}' is no concentration "
+            "`C...` and no amount `A...` of the id scheme; a PD component or an "
+            "observer reads a concentration or an amount of an organ."
+        )
+    if local.startswith("Cu_"):
+        return f"Cu_{organ.value}_{local.removeprefix('Cu_')}"
+    return f"{local[0]}{organ.value}_{local[1:]}"
 
 
 def organ_outflow_bc(organ: Organ, s: str) -> str:
@@ -574,6 +664,11 @@ def fu_ref(s: str) -> str:
     return f"fu_ref_{s}"
 
 
+def baseline(s: str) -> str:
+    """The id of the plasma concentration of an endogenous substance at the start, `baseline_<s>`."""
+    return f"baseline_{s}"
+
+
 def kp(s: str) -> str:
     """The id of the tissue to plasma coefficient, `Kp_<s>`."""
     return f"Kp_{s}"
@@ -585,7 +680,7 @@ def kp_organ(organ: Organ, s: str) -> str:
 
 
 def fkp(s: str) -> str:
-    """The id of the factor of the coefficients of a Kp method, `fKp_<s>`."""
+    """The id of the factor of a Kp method or of the interstitial shares, `fKp_<s>`."""
     return f"fKp_{s}"
 
 
@@ -614,6 +709,16 @@ def fraction_reabsorbed(s: str) -> str:
     return f"f_reabsorbed_{s}"
 
 
+def reabsorption_threshold(s: str) -> str:
+    """The id of the renal threshold of a saturable reabsorption (mM), `reab_threshold_<s>`."""
+    return f"reab_threshold_{s}"
+
+
+def reabsorption_n(s: str) -> str:
+    """The id of the sharpness of the threshold of a saturable reabsorption, `reab_n_<s>`."""
+    return f"reab_n_{s}"
+
+
 def urine(s: str) -> str:
     """The id of the amount in urine, `Aurine_<s>`."""
     return f"Aurine_{s}"
@@ -631,6 +736,79 @@ def urine_rate(s: str) -> str:
 def feces(s: str) -> str:
     """The id of the amount in feces, `Afeces_<s>`."""
     return f"Afeces_{s}"
+
+
+def feces_rate(s: str) -> str:
+    """The id of the fecal excretion rate, `Rfeces_<s>` (mmole/min).
+
+    A readout of the intestine (`PBPKDefinition.readouts`): the net flux of
+    the reactions of the intestine into the feces `Afeces_<s>`, an output of
+    the intestine which replaces the parameter of the top model.
+    """
+    return f"Rfeces_{s}"
+
+
+def lumen_amount(s: str) -> str:
+    """The id of the dissolved amount of `s` in the intestinal lumen, `Alumen_<s>` (mmole).
+
+    A readout of the intestine (`PBPKDefinition.readouts`): the sum over the
+    lumen segments of `Vlumen_<seg>*Clumen_<seg>_<s>`, an output of the
+    intestine; the undissolved drug of a tablet is not in it.
+    """
+    return f"Alumen_{s}"
+
+
+def absorption_rate(s: str) -> str:
+    """The id of the absorption rate of `s`, `Rabs_<s>` (mmole/min).
+
+    A readout of the intestine (`PBPKDefinition.readouts`): the sum of the
+    fluxes from the lumen into the intestinal wall (the mucosa, else the
+    wall), the absorption of every segment and an apical influx; not the
+    absorption rate constant `ka_<s>` (`absorption`).
+    """
+    return f"Rabs_{s}"
+
+
+def absorbed_amount(s: str) -> str:
+    """The id of the amount of `s` absorbed from the lumen, `Aabs_<s>` (mmole).
+
+    A readout of the intestine (`PBPKDefinition.readouts`): the integral of
+    the absorption rate `Rabs_<s>` (the fluxes from the lumen into the wall,
+    an apical influx included) since the start, a state of the intestine.
+    """
+    return f"Aabs_{s}"
+
+
+def absorbed_fraction(s: str) -> str:
+    """The id of the gross absorbed fraction of the oral dose of `s`, `Fa_<s>`.
+
+    A readout of the intestine (`PBPKDefinition.readouts`): the absorbed
+    amount `Aabs_<s>` over the oral dose given until then (tablet and
+    solution, mmole), 0 before a dose; gross, before the first pass of the
+    wall and the liver, so above the bioavailability.
+    """
+    return f"Fa_{s}"
+
+
+def oral_dose_applied(s: str) -> str:
+    """The local id of the oral dose of `s` which the intestine has applied, `Aapp_<s>` (mmole).
+
+    The integral of the outflows of the oral dose states (dissolution and
+    emptying of a tablet, the application of a solution), a state of the
+    intestine which `Fa_<s>` reads: with the dose states it is the oral dose
+    given, also over several doses.
+    """
+    return f"Aapp_{s}"
+
+
+def efflux_rate(s: str) -> str:
+    """The id of the efflux rate of `s` into the intestinal lumen, `Reff_<s>` (mmole/min).
+
+    A readout of the intestine (`PBPKDefinition.readouts`): the sum of the
+    fluxes from the intestinal wall into the lumen, the apical efflux of
+    every segment.
+    """
+    return f"Reff_{s}"
 
 
 def bile(s: str) -> str:
@@ -757,6 +935,30 @@ def colon_absorption_factor(s: str) -> str:
     return f"f_ka_colon_{s}"
 
 
+def regional_absorption_factor(s: str, seg: str) -> str:
+    """The id of the factor of the absorption of `s` in a lumen segment, `f_ka_<seg>_<s>`.
+
+    Of the regional absorption profile of the segmented intestine
+    (`RegionalAbsorption`): scales `ka_<s>*f_area_<seg>` of the segment.
+    """
+    return f"f_ka_{seg}_{s}"
+
+
+def lumen_conversion_rate(substrate: str, product: str) -> str:
+    """The id of the rate constant of a conversion in the lumen (1/hr), `kconv_<s>_<m>`.
+
+    Of a `LumenConversion` of the segmented intestine, a parameter of the
+    top model: the substrate `<s>` converts into the product `<m>` with
+    `kconv/60*V*C` in every segment of the conversion.
+    """
+    return f"kconv_{substrate}_{product}"
+
+
+def lumen_conversion_reaction(substrate: str, product: str, seg: str) -> str:
+    """The local id of a conversion in a lumen segment, `J_conv_<seg>_<s>_<m>`."""
+    return f"J_conv_{seg}_{substrate}_{product}"
+
+
 def transit_reaction(s: str, seg: str | None = None, solid: bool = False) -> str:
     """The local id of the transit of `s` out of a lumen segment, `J_tr_du_<s>`.
 
@@ -800,6 +1002,39 @@ def segment_process(pid: str, seg: str | None) -> str:
     (`CYP3A4_DRG_z1`).
     """
     return pid if seg is None else f"{pid}_{seg}"
+
+
+def rate_ratio(process: str, constant: str) -> str:
+    """The local id of the ratio of a constant of a process to another, `<p>_Vmax_ratio`.
+
+    The factor of `RateOf`: the constant `<p>_Vmax` (or `<p>_k`) of the
+    process is this ratio times the constant of the other process of the
+    organ.
+
+    Args:
+        process: the id of the process.
+        constant: the constant, `Vmax` or `k`.
+    """
+    return f"{process}_{constant}_ratio"
+
+
+def product_fraction(process: str, product: str) -> str:
+    """The local id of the fraction of a metabolism which forms a product, `f_<p>_<s>`.
+
+    A constant of the organ when the fractions of the metabolism are values
+    or the remainder `REST`, which is `1 - sum` of the others.
+    """
+    return f"f_{process}_{product}"
+
+
+def product_reaction(process: str, product: str) -> str:
+    """The local id of the formation of a product of a metabolism, `<p>_to_<s>`.
+
+    The reaction of a metabolism with product fractions as constants forms
+    the product with its fraction of the rate of the metabolism,
+    `f_<p>_<s> * <p>` (in a zone or a segment `<p>_to_<s>_<zone>`).
+    """
+    return f"{process}_to_{product}"
 
 
 def dissolution_rate(s: str) -> str:
@@ -858,6 +1093,16 @@ def sol_dose(s: str) -> str:
 def dissolution(s: str) -> str:
     """The id of the rate of the dissolution of a tablet, `Ka_dis_<s>`."""
     return f"Ka_dis_{s}"
+
+
+def dissolution_fed_factor(s: str) -> str:
+    """The id of the factor of the dissolution rate in the fed state, `f_dis_fed_<s>`."""
+    return f"f_dis_fed_{s}"
+
+
+def dissolution_release_factor(s: str) -> str:
+    """The id of the factor of a modified-release formulation, `f_dis_release_<s>`."""
+    return f"f_dis_release_{s}"
 
 
 def dissolution_t50(s: str) -> str:
@@ -1055,13 +1300,85 @@ def species_of(s: str, ids: Iterable[str]) -> list[str]:
         ids: the ids to select from.
 
     Returns:
-        The ids which are an organ species (of a zone as well), a pool
-        species, a blood cell pool species, a lumen, undissolved or mucosa
-        species, a tubule species of `s`, in the order of `ids`.
+        The ids which are an organ species (of a zone as well), a slow
+        pool of a tissue, a pool species, a blood cell pool species, a lumen,
+        undissolved or mucosa species, a tubule species of `s`, in the order
+        of `ids`.
     """
     pattern = re.compile(
-        rf"(?:C(?:(?:{_PARTS})(?:_z\d+)?|(?:{_POOLS})(?:_{Part.BLOOD_CELLS.value})?)"
+        rf"(?:C(?:(?:{_PARTS})(?:_z\d+)?|(?:{_POOLS})(?:_{Part.BLOOD_CELLS.value})?"
+        r"|slow)"
         rf"|(?:Clumen|Cmu|Asolid)(?:_(?:{_SEGMENTS}))?"
         rf"|Ctub_(?:{_TUBULE}))_{re.escape(s)}"
     )
     return [i for i in ids if pattern.fullmatch(i.rsplit("__", 1)[-1])]
+
+
+def _steady(prefix: str, s: str, organ: Organ | None) -> str:
+    """An id of the generated steady state: local, of an organ in the top model."""
+    return f"{prefix}_{s}" if organ is None else f"{prefix}_{organ.value}_{s}"
+
+
+def steady_clearance(s: str, organ: Organ | None = None) -> str:
+    """The id of a clearance of the generated steady state, `CLss_<s>` [l/min].
+
+    In an organ (`organ` None) the clearance of its plasma at the steady state
+    of `s`, the declared clearances of its tissue included
+    (`pkpdsim.pbpk.stationary`); with `organ` its output in the top model,
+    `CLss_<o>_<s>`. In the top model `CLss_<s>` is the clearance of the
+    arterial plasma by the body at the steady state (without the organ of a
+    saturable process), of a substance whose baseline the library solves.
+    """
+    return _steady("CLss", s, organ)
+
+
+def steady_rate(s: str, organ: Organ | None = None) -> str:
+    """The id of a net source of the generated steady state, `Rss_<s>` [mmole/min].
+
+    In an organ the net source into its plasma at the steady state of `s`
+    (the declared rates of plasma and tissue), with `organ` its output in
+    the top model, `Rss_<o>_<s>`; in the top model `Rss_<s>` is the net
+    source of the body at the steady state (without the organ of a saturable
+    process), see `steady_clearance`.
+    """
+    return _steady("Rss", s, organ)
+
+
+def steady_vmax(s: str, organ: Organ | None = None) -> str:
+    """The id of the capacity of a saturable process at the steady state, `Vss_<s>` [mmole/min].
+
+    In an organ, with `organ` its output in the top model `Vss_<o>_<s>`.
+    """
+    return _steady("Vss", s, organ)
+
+
+def steady_km(s: str, organ: Organ | None = None) -> str:
+    """The id of the Michaelis constant of a saturable process at the steady state, `Kss_<s>` [mM].
+
+    In an organ, with `organ` its output in the top model `Kss_<o>_<s>`.
+    """
+    return _steady("Kss", s, organ)
+
+
+def steady_plasma(organ: Organ, s: str) -> str:
+    """The id of the plasma of the organ of a saturable process at the steady state, `Css_<o>_<s>` [mM].
+
+    A parameter of the top model, the root of the quadratic of the steady
+    state of a substance whose baseline the library solves.
+    """
+    return f"Css_{organ.value}_{s}"
+
+
+def delta_base(sid: str) -> str:
+    """The id of the base of a delta, `<sid>_0`: the value of an observer at the start.
+
+    The constant which `<sid>_delta` subtracts (`PBPKDefinition.deltas`). It
+    is no start of a species (`PBPKDefinition.starts`): the word "start" of
+    the library names the initial concentrations of the species only.
+    """
+    return f"{sid}_0"
+
+
+def delta(sid: str) -> str:
+    """The id of the change of an observer over its base, `<sid>_delta`."""
+    return f"{sid}_delta"

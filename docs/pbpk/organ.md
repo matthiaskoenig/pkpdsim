@@ -125,16 +125,36 @@ The hepatic venous concentration is an observer of the top model, the outflow of
 
 ## Kidney
 
-The kidney filters the unbound plasma concentration of a substance with urinary excretion into the urine, with the GFR of the physiology (scaled with the individual and the renal function):
+The kidney filters the unbound plasma concentration of a substance with urinary excretion into the urine, with the GFR of the physiology (scaled with the individual and the renal function). The glomerulus is upstream of the peritubular capillaries: it filters the afferent plasma, the arterial plasma `Car_<s>` of the inflow, and the plasma which flows on past the tubule (peritubular capillaries) and leaves the kidney lacks the filtrate, at the outflow concentration; the fraction reabsorbed stays in the plasma. This holds for every form of the kidney (vascular, merged tissue, full form, flow-limited with `Q*BP*Cout`) and every erythrocyte mode, and for the [nephron kidney](variants.md#nephron-kidney).
 
 ```equations title="kidney"
-J_gfr_<s>: Cpl_<s> -> Aurine_<s> = fu_<s> * GFR * Cpl_<s> * (1 - f_reabsorbed_<s>)
+J_gfr_<s>: Cpl_<s> -> Aurine_<s> = fu_<s> * GFR * Car_<s> * (1 - f_reabsorbed_<s>)
+J_out_pl_<s>: Cpl_<s> -> Cve_<s> = Qki * (1 - HCT) * Cout_<s> - fu_<s> * GFR * Cout_<s> * (1 - f_reabsorbed_<s>)
 Rurine_<s> = J_gfr_<s>
 ```
 
-The urinary excretion rate `Rurine_<s>` (mmole/min) is the sum of the fluxes of the kidney into the urine, the filtration and every apical efflux (`J_gfr_<s> + SEC` with a secretion `SEC`), for every substance with urinary excretion or an apical transport of the kidney; it is an output of the kidney which replaces `Rurine_<s>` of the top model, so experiments and observers read it there.
+With the net filtered plasma flow `CL_gfr = fu*GFR*(1 - f_reabsorbed)` and the plasma flow `Qpl = Qki*(1-HCT)` (`Qki*BP` with erythrocytes in equilibrium) the plasma of the kidney is in balance when `(Qpl - CL_gfr)*(Car - Cpl)` is what the other processes of the kidney take out. Without them the kidney plasma is the arterial plasma at steady state and the filtration clearance of the arterial plasma is `CL_gfr`, as in the hand-written models; it follows the GFR exactly. A secretion with the clearance `CL_sec` of the kidney plasma (unbound, through the cells into the urine) acts on the plasma flow less the filtrate, glomerulus and tubule in series: the renal clearance of the arterial plasma is `CL_gfr + (Qpl - CL_gfr)*CL_sec/(Qpl - CL_gfr + CL_sec)`.
 
 Tubular secretion is an apical efflux of the kidney into the urine (see [Chemistry](chemistry.md)); the standard kidney refuses an uptake from the urine, which is cumulative. Every metabolism and transport of the kidney runs with the tubular capacity `1 - f_tubular + f_tubular*f_renal_function`, which follows the renal function (the intact nephron hypothesis, see [Impairment](impairment.md#chronic-kidney-disease)). The [nephron kidney](variants.md#nephron-kidney) has the tubule with its segments, for secretion into and reabsorption from the tubular fluid.
+
+### Threshold reabsorption
+
+A reabsorption limited by a renal threshold, as that of creatine or glucose, replaces the constant fraction: `Excretion(urine=True, reabsorption=ThresholdReabsorption(threshold, n))`. The reabsorbed fraction of the filtrate at the plasma concentration `C` is `f(C) = 1/(1 + (fu*|C|/reab_threshold)^reab_n)^(1/reab_n)`, of the unbound concentration of the filtrate `fu*C` (`|C|` keeps the power defined for a concentration a little below 0, an undershoot of the integrator): below the threshold almost all of the filtrate is reabsorbed (the excreted fraction is about `(fu*C/reab_threshold)^reab_n/reab_n`), above it the reabsorption `fu*GFR*C*f(C)` approaches the transport maximum `GFR*reab_threshold`, and since `f(C)` is at most 1 the reabsorption never exceeds the filtration. The fraction takes the place of `f_reabsorbed_<s>` in both terms, at the arterial plasma in the filtration (the filtered load) and at the outflow concentration in the outflow, so without another process the kidney plasma is the arterial plasma at steady state, as with the constant fraction; the substance has `reab_threshold_<s>` (mM) and `reab_n_<s>` instead of `f_reabsorbed_<s>`, both fittable.
+
+```equations title="saturable reabsorption"
+J_gfr_<s>: Cpl_<s> -> Aurine_<s> = fu_<s> * GFR * Car_<s> * (1 - 1 / (1 + (fu_<s> * abs(Car_<s>) / reab_threshold_<s>)^reab_n_<s>)^(1 / reab_n_<s>))
+J_out_pl_<s>: Cpl_<s> -> Cve_<s> = Qki * (1 - HCT) * Cout_<s> - fu_<s> * GFR * Cout_<s> * (1 - 1 / (1 + (fu_<s> * abs(Cout_<s>) / reab_threshold_<s>)^reab_n_<s>)^(1 / reab_n_<s>))
+```
+
+The law is that of the reabsorption of creatine of the creatinine model (`GFR*C/(1 + (C/ct)^n)^(1/n)`, unbound), which a custom reaction from the urine wrote before; a custom reaction leaves the guarantee to the model. The [nephron kidney](variants.md#nephron-kidney) returns the same fraction of the afferent plasma at the end of the collecting duct, of the flow leaving it up to the filtered load, so a drug secreted into the tubule is not reabsorbed beyond the filtration. `steady_state.renal_filtration` and `renal_clearance` give the net filtrate at the arterial plasma and `kidney_plasma` the arterial plasma; with another process of the kidney the balance of its plasma is not linear and they raise `NotImplementedError` (see [Substances](substances.md#starts-of-the-species)).
+
+### Validity of the outflow
+
+The outflow is valid while the filtered plasma water is below the plasma flow of the kidney, `GFR < Qki*(1-HCT)` (the glomeruli filter the water of the plasma which flows through them, whatever the substances; a PD component which filters the water at the GFR, the fluid model of hctz, leans on it), and the net filtered plasma flow of every substance is below the flow of its carrier, `fu*GFR*(1 - f_reabsorbed) < Qki*(1-HCT)` (`Qki*BP` with erythrocytes in equilibrium, `fu*GFR` with a saturable reabsorption, whose fraction falls to 0 at a high concentration). With `fu <= 1` and `BP >= 1 - HCT` the water is the tighter bound: hctz (BP 1.7, fu 0.6) reaches the plasma flow with its water at renal function 6.08 and with itself only at 18.1. A model without a filtered substance has no outflow of the kidney to check and is not simulated. This holds for every physiological GFR (about 0.125 against 0.76 l/min in the reference individual), hyperfiltration and the classes of impairment included. GFR, flow and hematocrit are parameters which an experiment changes before the simulation, so the build cannot check it; `PBPKSimulationExperiment` checks it for every individual it simulates at the start of a simulation, each task on its model (`pkpdsim.pbpk.kidney_validity`, see [Impairment](impairment.md#classes-in-experiments), which lists what is not checked: a change during a simulation, a dimension with a time, a scan over models, the draws of the fitted parameters) and derives the range of the renal function from it.
+
+### Urinary excretion rate
+
+The urinary excretion rate `Rurine_<s>` (mmole/min) is the net flux of the kidney into the urine: the sum of the fluxes into the urine, the filtration and every apical efflux (`J_gfr_<s> + SEC` with a secretion `SEC`), less the fluxes out of it, a [custom reaction](chemistry.md#custom-reactions) which returns a part of the filtrate into the plasma (`J_gfr_<s> - REABS`, whose rate reads the filtered load `GFR*Car_<s>`, not the cumulative urine; the [saturable reabsorption](#threshold-reabsorption) is the library's form of it), for every substance with urinary excretion or an apical transport of the kidney; it is an output of the kidney which replaces `Rurine_<s>` of the top model, so experiments and observers read it there.
 
 ## Boundary
 

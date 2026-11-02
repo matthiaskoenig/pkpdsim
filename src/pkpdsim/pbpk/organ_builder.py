@@ -31,7 +31,8 @@ constants of the interactions (`Ki`, `Kiu`, `kinact`, `Emax`, `EC50`) are
 parameters of the body, read through a port.
 """
 
-from typing import TYPE_CHECKING
+from collections.abc import Mapping, Sequence
+from typing import TYPE_CHECKING, NamedTuple
 
 from sbmlutils.factory import (
     AssignmentRule,
@@ -51,6 +52,7 @@ from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk import ids
 from pkpdsim.pbpk.annotation import annotate, initial_assignment
+from pkpdsim.pbpk.chemistry import CustomReaction, Saturable
 from pkpdsim.pbpk.data import cite
 from pkpdsim.pbpk.impairment import organ_activity
 from pkpdsim.pbpk.organs import Organ, Part, Pool
@@ -58,6 +60,7 @@ from pkpdsim.pbpk.parts import Parts
 from pkpdsim.pbpk.placement import (
     ONE,
     FormulaParameter,
+    OrganFormulaParameter,
     formula_assignment,
     formula_ids,
     formula_problems,
@@ -67,6 +70,8 @@ from pkpdsim.pbpk.placement import (
     inhibitor_unbound,
     kp_id,
     species_compartment,
+    species_start,
+    start_formula,
     value_parameter,
 )
 from pkpdsim.pbpk.proteins import turnover
@@ -77,7 +82,15 @@ from pkpdsim.pbpk.values import Q
 if TYPE_CHECKING:
     from pkpdsim.pbpk.organ import OrganContext
 
-__all__ = ["CAPACITY", "COMPARTMENT_KINDS", "ONE", "OrganBuilder", "label"]
+__all__ = [
+    "CAPACITY",
+    "COMPARTMENT_KINDS",
+    "ONE",
+    "OrganBuilder",
+    "Start",
+    "label",
+    "stationary_ids",
+]
 
 CAPACITY = (
     "Not a physical volume: the plasma-equivalent capacity of the blood of a "
@@ -115,7 +128,43 @@ COMPARTMENT_KINDS = {
 }
 """The kind (`pkpdsim.pbpk.annotation`) of the compartment of a part of an organ."""
 
-"""The parts of a pool in names."""
+
+def stationary_ids(p: CustomReaction) -> set[str]:
+    """Get the ids which the declared steady state of a custom reaction reads.
+
+    A `Formula` of the rate, the formulas of a `Saturable`; `"linear"` reads
+    the rate law, none for none.
+    """
+    s = p.stationary
+    if isinstance(s, Saturable):
+        return formula_ids(s.vmax) | formula_ids(s.km)
+    expression = getattr(s, "expression", None)
+    return set() if expression is None else formula_ids(expression)
+
+
+class Start(NamedTuple):
+    """The start of a species of an endogenous substance, built with the model definition.
+
+    Attributes:
+        sid: the id of the species.
+        substance: the substance.
+        part: the part of the species, whose coefficient the start at the
+            equilibrium with the baseline reads, `None` for `coefficient`.
+        coefficient: the coefficient of a species of no part (the mucosa, a
+            slow pool) at the equilibrium with the baseline.
+        zone: the zone of the species, `None` for an organ without zones.
+        steady: the start of a substance with a generated steady state
+            (`pkpdsim.pbpk.stationary`) which the organ knows when it
+            records it, `None` for the start of its part
+            (`OrganBuilder._steady_start`).
+    """
+
+    sid: str
+    substance: Substance
+    part: Part | None
+    coefficient: str | None
+    zone: str | None
+    steady: str | None
 
 
 def label(organ: Organ) -> str:
@@ -155,6 +204,7 @@ class OrganBuilder:
         self.reactions: list[Reaction] = []
         self.replacements: dict[str, str] = {}
         self.outputs: dict[str, str] = {}
+        self.starts: list[Start] = []
 
     def _annotate[E: (Compartment, Parameter, Reaction, Species)](
         self,
@@ -389,6 +439,105 @@ class OrganBuilder:
             _SPECIES_KINDS[part],
             substance=s,
         )
+        self._defer_start(sid, s, part, zone=zone)
+
+    def _defer_start(
+        self,
+        sid: str,
+        s: Substance,
+        part: Part | None = None,
+        coefficient: str | None = None,
+        *,
+        zone: str | None = None,
+        steady: str | None = None,
+    ) -> None:
+        """Record the start of a species of an endogenous substance, built at the end.
+
+        The starts are built when the model definition is created
+        (`model_definition`), after every exchange: the elements they add
+        (the input `baseline_<s>`, a coefficient, the initial assignments)
+        come after those of the organ, which keep their order, so the model
+        of a substance without baseline is unchanged and that of one with a
+        baseline only gains elements.
+
+        Args:
+            sid: the id of the species.
+            s: the substance; nothing is recorded without baseline.
+            part: the part of the species, whose coefficient the start reads
+                (`_equilibrium`), `None` for `coefficient`.
+            coefficient: the coefficient of a species of no part (the
+                mucosa).
+            zone: the zone of the species.
+            steady: the start of a substance with a generated steady state,
+                if the organ knows it here (`Start.steady`).
+        """
+        if s.baseline is not None:
+            self.starts.append(Start(sid, s, part, coefficient, zone, steady))
+
+    def _generated(self, s: Substance) -> bool:
+        """Whether a substance has a generated steady state (`pkpdsim.pbpk.stationary`)."""
+        steady = self.ctx.steady
+        return steady is not None and s.sid in steady.substances
+
+    def _steady_start(self, start: Start) -> str:
+        """The start of a species of a substance with a generated steady state.
+
+        The organ components with such substances implement it
+        (`StandardBuilder`).
+
+        Raises:
+            NotImplementedError: for a component without a steady state.
+        """
+        raise NotImplementedError(
+            f"{start.substance.sid}: the organ '{self.organ.value}' ({self.name}) "
+            f"has no steady state of the species '{start.sid}'."
+        )
+
+    def _set_start(self, sid: str, formula: str) -> None:
+        """Give a species of the organ its start, an initial assignment."""
+        species = self.species[sid]
+        species.initialConcentration = None
+        self.assignments.append(species_start(sid, formula, str(species.name)))
+
+    def _equilibrium(self, part: Part, s: Substance) -> str | None:
+        """The coefficient of a part to plasma at the equilibrium of its exchange.
+
+        `Kbc` of the kinetic blood cells (`kex_bc*Vbc*(Cpl - Cbc/Kbc)`), the
+        Kp of the merged tissue (`PS*fu*(Cpl - Cti/Kp)`), `K_int_pls` of the
+        interstitium (`PS_vas*fu*(Cpl - Cis/K_int_pls)`), `K_cell_pls` of the
+        cells (`PS*(fu/K_int_pls*Cis - fu/K_cell_pls*Cic)`), `K_or` of the
+        flow-limited organ (it releases `Cor/K_or`); `None` for plasma.
+        """
+        if part is Part.BLOOD_CELLS:
+            return self._input(
+                ids.kbc(s.sid),
+                U.dimensionless,
+                f"blood cell to plasma coefficient {s.sid}",
+            )
+        if part is Part.TISSUE:
+            return self._kp(s)
+        if part is Part.INTERSTITIAL:
+            return ids.k_int_pls(s.sid)
+        if part is Part.INTRACELLULAR:
+            return ids.k_cell_pls(s.sid)
+        if part is Part.ORGAN:
+            return ids.k_organ(s.sid)
+        return None
+
+    def _start(self, sid: str, s: Substance, coefficient: str | None) -> None:
+        """The start of a species of an endogenous substance at its equilibrium with plasma.
+
+        The initial assignment `coefficient * baseline_<s>` (`baseline_<s>`
+        for plasma), the baseline an input of the organ; nothing for a
+        substance without baseline, whose species start at 0.
+        """
+        start = start_formula(s, coefficient)
+        if start is None:
+            return
+        self._input(ids.baseline(s.sid), U.mM, f"baseline {s.sid} [mM]")
+        species = self.species[sid]
+        species.initialConcentration = None
+        self.assignments.append(species_start(sid, start, str(species.name)))
 
     def _reaction(
         self,
@@ -613,7 +762,56 @@ class OrganBuilder:
         s = next(s for s in self.ctx.substances if s.sid == sid)
         return inhibitor_unbound(Part.INTRACELLULAR, s, self.organ, self.ctx.parts)
 
-    def _formula(self, p: FormulaParameter) -> None:
+    def _local_constants(self) -> set[str]:
+        """The constants of the organ: its constant parameters (those of the reactions) and compartments.
+
+        The inputs are among them under the ids of the top model.
+        """
+        parameters = [
+            *self.parameters.values(),
+            *(p for r in self.reactions for p in (r.pars or [])),
+        ]
+        return {str(p.sid) for p in parameters if p.constant is not False} | {
+            str(c.sid) for c in self.compartments.values() if c.constant is not False
+        }
+
+    def _custom_parameter_ids(self) -> set[str]:
+        """The ids of the parameters of the custom reactions of the organ."""
+        return {
+            str(par.sid)
+            for c in self.ctx.chemistry
+            if isinstance(c, CustomReaction) and c.organ == self.organ
+            for par in c.parameters
+        }
+
+    def _local_reads(
+        self, formulas: Sequence[FormulaParameter], custom: set[str]
+    ) -> dict[str, set[str]]:
+        """The local constants which the formula of each custom parameter reads.
+
+        A formula of a parameter of a custom reaction (`ModelParameter` with a
+        `Formula`) may read the constants of its organ which are no ids of the
+        top model (another parameter of a custom reaction of the organ,
+        `Vti`), next to the constants of the top model.
+
+        Raises:
+            ValueError: for formulas which read each other in a cycle.
+        """
+        local = self._local_constants() - set(self.ctx.top)
+        reads = {
+            str(p.sid): formula_ids(p.formula.expression) & local
+            for p in formulas
+            if str(p.sid) in custom
+        }
+        cycle = _cycle(reads)
+        if cycle:
+            raise ValueError(
+                f"The formulas of the parameters of organ '{self.organ.value}' read "
+                f"each other in a cycle: {' -> '.join(cycle)}."
+            )
+        return reads
+
+    def _formula(self, p: FormulaParameter, local: set[str] | None = None) -> None:
         """The initial assignment of a `Formula` of the organ and its inputs.
 
         Every id of the formula is a constant parameter or compartment of the
@@ -624,17 +822,36 @@ class OrganBuilder:
         whose local id differs from the id of the top model (the liver reads
         `fimp_li_cyp3a4` as `fimp_cyp3a4`) is no id of a formula, and a
         local element of the organ under the id of the top model is refused.
+        The formula of a parameter of a custom reaction reads the constants
+        of the organ as well (`local`, see `_local_reads`).
         """
         pid = str(p.sid)
         where = (
             f"The formula of '{pid}' in organ '{self.organ.value}' "
             f"(`{p.formula.expression}`)"
         )
-        problems = formula_problems(where, p.formula.expression, self.ctx.top)
+        problems: list[str] = []
+        top: Mapping[str, tuple[str, object]] = self.ctx.top
+        if local is not None:
+            symbols = formula_ids(p.formula.expression)
+            unknown = sorted(s for s in symbols - local if s not in top)
+            if unknown:
+                problems.append(
+                    f"{where} reads ids which are neither constants of the organ "
+                    f"nor ids of the top model: {unknown}"
+                )
+            top = {**top, **{s: ("parameter", None) for s in symbols if s not in top}}
+        problems += formula_problems(where, p.formula.expression, top)
         clash: list[str] = []
+        # the parameters of the reactions (of a custom reaction) are elements
+        # of the organ as well: an input of their id would be a second element
+        pars = {str(q.sid) for r in self.reactions for q in (r.pars or [])}
         for symbol in sorted(formula_ids(p.formula.expression)):
             kind = self.ctx.top.get(symbol, ("", None))[0]
             if kind not in ("parameter", "compartment"):
+                continue
+            if symbol in pars:
+                clash.append(symbol)
                 continue
             if self.replacements.get(symbol) == symbol:
                 continue
@@ -659,6 +876,114 @@ class OrganBuilder:
             raise ValueError("; ".join(problems) + ".")
         self.assignments.append(formula_assignment(p))
 
+    def _organ_formula(
+        self, p: OrganFormulaParameter, parameters: list[Parameter]
+    ) -> None:
+        """The initial assignment of a formula over constants of the organ.
+
+        Raises:
+            ValueError: if an id of the formula is no constant of the organ,
+                e.g. the capacity of a process which `RateOf` names and the
+                organ does not place.
+        """
+        constants = {str(q.sid) for q in parameters if q.constant}
+        missing = sorted(set(p.reads) - constants)
+        if missing:
+            raise ValueError(
+                f"The constant '{p.sid}' of organ '{self.organ.value}' "
+                f"(`{p.sid} = {p.expression}`) reads {missing}, which are no "
+                "constants of the organ: the process it names is not placed in "
+                "the organ."
+            )
+        self.assignments.append(
+            initial_assignment(str(p.sid), p.expression, p.unit, str(p.name))
+        )
+
+    def _custom_clashes(self, placed: set[str]) -> None:
+        """Refuse a parameter of a custom reaction under the id of another element of the organ.
+
+        A parameter of a custom reaction is a local id of the organ: an id of
+        a compartment, species, parameter or reaction of the organ (`Vti`,
+        `Kp_<s>`, `<p>_Vmax`) or of a parameter of another process would be
+        defined twice.
+
+        Raises:
+            ValueError: naming the reaction, the ids and the organ.
+        """
+        custom = {
+            p.sid for p in self.ctx.chemistry if isinstance(p, CustomReaction)
+        } & placed
+        for r in self.reactions:
+            if str(r.sid) not in custom:
+                continue
+            others = {
+                *self.parameters,
+                *self.compartments,
+                *self.species,
+                *placed,
+                *(
+                    str(q.sid)
+                    for o in self.reactions
+                    if o is not r
+                    for q in o.pars or []
+                ),
+            }
+            clash = sorted(str(q.sid) for q in r.pars or [] if str(q.sid) in others)
+            if clash:
+                raise ValueError(
+                    f"Custom reaction '{r.sid}' of organ '{self.organ.value}' has "
+                    f"the parameters {clash}, which are ids of other elements of "
+                    "the organ (a compartment, a species, a parameter of the organ "
+                    "or of another process); give them other ids."
+                )
+
+    def _custom_inputs(self) -> None:
+        """The inputs of the ids of the top model which the custom reactions read.
+
+        An id of the formula of a custom reaction or of its declared steady
+        state (`CustomReaction.stationary`) is an element of the organ
+        (its species, compartments, parameters, the parameters of the
+        reaction), `time`, or a constant parameter or compartment of the top
+        model (`OrganContext.top`, a parameter of the definition, a
+        covariate), which the organ reads through an input port under the
+        same id, as for the ids of a `Formula`.
+
+        Raises:
+            ValueError: if an id is neither, naming the reaction and the ids.
+        """
+        placed = {str(r.sid) for r in self.reactions}
+        self._custom_clashes(placed)
+        local = {
+            *self.parameters,
+            *self.compartments,
+            *self.species,
+            *placed,
+            *(str(p.sid) for r in self.reactions for p in r.pars or []),
+            "time",
+        }
+        for p in self.ctx.chemistry:
+            if not isinstance(p, CustomReaction) or p.sid not in placed:
+                continue
+            read = formula_ids(p.formula) | stationary_ids(p)
+            refused: list[str] = []
+            for symbol in sorted(read - local):
+                kind, unit = self.ctx.top.get(symbol, ("", None))
+                if kind == "compartment":
+                    self._input_compartment(symbol, f"{symbol} (read by {p.sid})")
+                elif kind == "parameter":
+                    self._input(symbol, unit, f"{symbol} (read by {p.sid})")
+                else:
+                    refused.append(symbol)
+            if refused:
+                raise ValueError(
+                    f"Custom reaction '{p.sid}' of organ '{self.organ.value}' reads "
+                    f"{refused}, which are no elements of the organ nor constant "
+                    "parameters or compartments of the top model (a parameter of "
+                    "the definition, a covariate); a species or an observer of the "
+                    "top model is not read by an organ"
+                )
+            local |= read
+
     def model_definition(self, notes: str) -> ModelDefinition:
         """Get the model definition of the collected elements.
 
@@ -671,15 +996,38 @@ class OrganBuilder:
         Raises:
             ValueError: if a `Formula` of the organ reads an id which is no
                 parameter or compartment of the top model, or an element of
-                the organ which is no input.
+                the organ which is no input, a custom reaction reads an id
+                which is neither an element of the organ nor a parameter or
+                compartment of the top model, or a formula of the organ
+                (`RateOf`, `REST`) reads an id which is no constant of the
+                organ.
         """
+        for start in self.starts:
+            if self._generated(start.substance):
+                formula = start.steady
+                if formula is None:
+                    formula = self._steady_start(start)
+                self._set_start(start.sid, formula)
+                continue
+            coefficient = start.coefficient
+            if start.part is not None:
+                coefficient = self._equilibrium(start.part, start.substance)
+            self._start(start.sid, start.substance, coefficient)
+        self.starts = []
+        self._custom_inputs()
         parameters = [
             *self.parameters.values(),
             *(p for r in self.reactions for p in (r.pars or [])),
         ]
+        local = self._local_reads(
+            [p for p in parameters if isinstance(p, FormulaParameter)],
+            self._custom_parameter_ids(),
+        )
         for p in parameters:
             if isinstance(p, FormulaParameter):
-                self._formula(p)
+                self._formula(p, local.get(str(p.sid)))
+            elif isinstance(p, OrganFormulaParameter):
+                self._organ_formula(p, parameters)
         return ModelDefinition(
             sid=f"{self.name}_{self.organ.value}",
             name=f"{label(self.organ)} ({self.name} organ)",
@@ -694,3 +1042,37 @@ class OrganBuilder:
             rate_rules=self.rate_rules,
             reactions=self.reactions,
         )
+
+
+def _cycle(reads: Mapping[str, set[str]]) -> list[str]:
+    """A cycle of ids which read each other, empty for none (the first found).
+
+    Args:
+        reads: the ids which each id reads.
+
+    Returns:
+        The ids of the cycle, the first one again at the end.
+    """
+    state: dict[str, int] = {}
+    path: list[str] = []
+
+    def visit(sid: str) -> list[str]:
+        state[sid] = 1
+        path.append(sid)
+        for other in sorted(reads.get(sid, set())):
+            if state.get(other) == 1:
+                return [*path[path.index(other) :], other]
+            if other not in state:
+                found = visit(other)
+                if found:
+                    return found
+        path.pop()
+        state[sid] = 2
+        return []
+
+    for sid in sorted(reads):
+        if sid not in state:
+            found = visit(sid)
+            if found:
+                return found
+    return []

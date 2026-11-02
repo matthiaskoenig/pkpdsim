@@ -2,32 +2,66 @@
 
 `simple_drug` and `definition` are plain functions (not fixtures), so a test
 varies them with arguments: `definition(routes=[Route.iv("drg")])`.
+
+The tests compile their models at `JIT_OPTIMIZATION` (`O0`): a test compiles
+a model to simulate it for a moment, and the compilation at the default level
+of sbmlsim (`O2`) is most of its time, up to minutes for a model whose starts
+read a solved steady state (164 s against 13 s at `O0` for the saturable
+secretion of `test_stationary.py`). `O0` gives the results of roadrunner's
+default JIT bitwise, the other levels differ from them in the last bits.
+`tests/pbpk/test_builder.py::test_load_time` measures the compilation at the
+level of production.
 """
 
+import difflib
+import gzip
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from sbmlutils.factory import AssignmentRule, Model, Parameter, Port, PortType
+import pytest
+from sbmlutils.factory import (
+    AssignmentRule,
+    Model,
+    Parameter,
+    Port,
+    PortType,
+    Species,
+)
 from sbmlutils.metadata import BQB, SBO
 
 from pkpdsim.pbpk import (
     MM,
     MODEL_UNITS,
     Binding,
+    CustomReaction,
+    Direction,
+    Erythrocytes,
     Excretion,
+    FirstOrder,
+    Formula,
     Kp,
+    Membrane,
     Metabolism,
+    Mode,
+    ModelParameter,
     Organ,
+    Part,
     PBPKDefinition,
     PDComponent,
     Route,
+    SlowPool,
     Substance,
+    Transport,
     U,
+    Variants,
     ids,
 )
 from pkpdsim.pbpk.builder import BuildResult
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     import roadrunner
 
 
@@ -140,14 +174,51 @@ def cardiac_pd(
     )
 
 
-def load(result: BuildResult) -> "roadrunner.RoadRunner":
-    """Load the flat model of a build as sbmlsim does, with tight integrator tolerances.
+#: the optimization level of the JIT the tests compile their models at
+JIT_OPTIMIZATION = "O0"
 
-    `load_roadrunner` of sbmlsim is the production path: LLJIT, always compiled.
+
+@pytest.fixture(autouse=True)
+def jit_optimization(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Compile what sbmlsim loads without a level at `JIT_OPTIMIZATION`.
+
+    The experiments, runners and functions of the library which load a model
+    without a level take the default of sbmlsim; it is set for the test, not
+    the environment variable of sbmlsim, which a pool started during the test
+    (its forkserver) would keep for the tests after it.
+    """
+    from sbmlsim.model import model_roadrunner
+
+    monkeypatch.setattr(
+        model_roadrunner,
+        "DEFAULT_JIT_OPTIMIZATION",
+        model_roadrunner.JitOptimization(JIT_OPTIMIZATION),
+    )
+
+
+def compiled(
+    path: Path, optimization: str = JIT_OPTIMIZATION
+) -> "roadrunner.RoadRunner":
+    """Load a model into roadrunner as it is, compiled at `optimization`.
+
+    `load_roadrunner` of sbmlsim: LLJIT, always compiled. roadrunner's own
+    default JIT (MCJIT) compiles slower than `O0`, which gives its results
+    bitwise.
     """
     from sbmlsim.model.model_roadrunner import load_roadrunner
 
-    r = load_roadrunner(result.flat_path)
+    return load_roadrunner(path, optimization)
+
+
+def load(
+    result: BuildResult, optimization: str = JIT_OPTIMIZATION
+) -> "roadrunner.RoadRunner":
+    """Load the flat model of a build as sbmlsim does, with tight integrator tolerances.
+
+    `load_roadrunner` of sbmlsim is the production path: LLJIT, always
+    compiled, here at `optimization`.
+    """
+    r = compiled(result.flat_path, optimization)
     r.integrator.absolute_tolerance = 1e-12
     r.integrator.relative_tolerance = 1e-10
     return r
@@ -167,15 +238,63 @@ def individual(path: Path, **changes: float) -> "roadrunner.RoadRunner":
     Returns:
         The roadrunner instance of the initialized model.
     """
+    return individuals(path)(**changes)
+
+
+def individuals(path: Path) -> "Callable[..., roadrunner.RoadRunner]":
+    """Load a model once and initialize it for one individual after the other.
+
+    The returned function is `individual` of the one loaded model: every call
+    initializes it with its changes before the initialization, as sbmlsim
+    initializes the loaded model of a scan for each of its points
+    (`RoadrunnerSBMLModel.initialize` sets back the values of the earlier
+    initialization), and returns the same instance; a test reads or
+    simulates an individual before it initializes the next.
+
+    Args:
+        path: the SBML file.
+
+    Returns:
+        The function of the changes, the values of parameters by id, which
+        returns the roadrunner instance of the initialized model.
+    """
     from sbmlsim.model.model_roadrunner import RoadrunnerSBMLModel
     from sbmlsim.model.symbols import TargetKind
     from sbmlsim.simulator.plan import Assignment
 
-    model = RoadrunnerSBMLModel(source=path)
-    model.initialize(
-        [Assignment(k, TargetKind.PARAMETER, value=v) for k, v in changes.items()]
-    )
-    return model.r_loaded
+    model = RoadrunnerSBMLModel(source=path, jit_optimization=JIT_OPTIMIZATION)
+    assert not model.symbols.events, "a model with events is loaded per individual"
+    first = True
+
+    def initialized(**changes: float) -> "roadrunner.RoadRunner":
+        nonlocal first
+        if not first:
+            # a test may have simulated the instance: reset it as after a
+            # simulation (the built models have no events, which a reset
+            # without a simulation would queue again)
+            model.simulated()
+        first = False
+        model.initialize(
+            [Assignment(k, TargetKind.PARAMETER, value=v) for k, v in changes.items()]
+        )
+        return model.r_loaded
+
+    return initialized
+
+
+def initialized(
+    model: "Path | Callable[..., roadrunner.RoadRunner]", **changes: float
+) -> "roadrunner.RoadRunner":
+    """Get an individual of a model file (`individual`) or of `individuals` of one.
+
+    Args:
+        model: the SBML file, or the `individuals` of a model loaded once.
+        **changes: the values of parameters by id, e.g. `BW=100.0`.
+
+    Returns:
+        The roadrunner instance of the initialized model.
+    """
+    return individual(model, **changes) if isinstance(model, Path) else model(**changes)
 
 
 def total_amount(r: "roadrunner.RoadRunner", sid: str) -> float:
@@ -212,3 +331,269 @@ def dose_amount(r: "roadrunner.RoadRunner", sid: str) -> float:
     doses = (ids.iv_dose(sid), ids.po_dose(sid), ids.sol_dose(sid))
     mg = sum(float(r[d]) for d in doses if d in r.model.getGlobalParameterIds())
     return mg / float(r[ids.mr(sid)])
+
+
+REFERENCE = Path(__file__).parent / "data"
+"""The comp and flat SBML of `reference_definition()` built at pkpdsim f008d56, gzipped."""
+
+_DATE = re.compile(r"<dcterms:(created|modified)\b|<dcterms:W3CDTF>")
+"""A line of the model history with a date, which changes with every build."""
+
+
+def reference_definition() -> PBPKDefinition:
+    """The definition of the stored reference: every option of the library unset.
+
+    `end` in the full form with kinetic erythrocytes (`Kbc`, `K_int_pls`,
+    `K_cell_pls`), `mrg` in the merged tissue with a Kp override and
+    erythrocytes in equilibrium (`Kp_<s>`, `Kp_ad_<s>`), with an IV and an
+    oral route; no baseline, no parameters of the definition.
+    """
+    return PBPKDefinition(
+        sid="baseline_reference",
+        substances=[
+            Substance(
+                "end",
+                name="endogenous substance",
+                mr=150.0,
+                binding=Binding(fu=0.5, protein="albumin"),
+                erythrocytes=Erythrocytes("kinetic", kbc=2.0, k_exchange=1.0),
+                distribution=Kp(2.0, mode=Mode.PERMEABILITY, ftissue=1.0),
+            ),
+            Substance(
+                "mrg",
+                name="merged substance",
+                mr=200.0,
+                erythrocytes=Erythrocytes("equilibrium", kbc=1.5),
+                distribution=Kp(2.0, overrides={Organ.ADIPOSE: 5.0}, ftissue=1.0),
+            ),
+        ],
+        routes=[Route.iv("mrg"), Route.oral("mrg")],
+    )
+
+
+def chemistry_reference_definition(liver: str = "standard") -> PBPKDefinition:
+    """The stored chemistry reference: processes without custom parameters, rates and fractions.
+
+    A metabolism into two products by numbers, a metabolism of the mucosa, a
+    basolateral uptake and an apical secretion, and a custom reaction with a
+    sbmlutils `Parameter` and a species, in the standard organs or with the
+    zonated liver (`liver="zonated"`); the stored comp and flat SBML were
+    built at pkpdsim 0c538ca, before the custom parameters with provenance,
+    the shared rates and the fitted product fractions.
+    """
+    zonated = liver == "zonated"
+    return PBPKDefinition(
+        sid="chemistry_reference" + ("_zonated" if zonated else ""),
+        substances=[
+            simple_drug(),
+            Substance("drg_m1", name="metabolite 1", mr=316.0),
+            Substance("drg_m2", name="metabolite 2", mr=332.0),
+        ],
+        chemistry=[
+            Metabolism(
+                "DRG2M",
+                Organ.LIVER,
+                "drg",
+                products={"drg_m1": 0.25, "drg_m2": 0.75},
+                kinetics=MM(vmax=1e-3, km=0.01),
+                protein="CYP3A4",
+            ),
+            Metabolism(
+                "DRG2MGU",
+                Organ.SMALL_INTESTINE,
+                "drg",
+                products={"drg_m1": 1.0},
+                kinetics=FirstOrder(k=0.05),
+                protein="CYP3A4",
+            ),
+            Transport(
+                "DRGIM",
+                Organ.LIVER,
+                "drg",
+                Direction.INFLUX,
+                Membrane.BASOLATERAL,
+                MM(vmax=1e-2, km=0.05),
+                protein="SLCO1B1",
+            ),
+            Transport(
+                "DRGSEC",
+                Organ.KIDNEY,
+                "drg",
+                Direction.EFFLUX,
+                Membrane.APICAL,
+                FirstOrder(k=0.1, per_volume=False),
+            ),
+            CustomReaction(
+                "DRGDEEP",
+                Organ.MUSCLE,
+                Part.TISSUE,
+                "Cti_drg <-> Cdeep_drg",
+                "k_deep * Vti * (Cti_drg - Cdeep_drg)",
+                parameters=[Parameter("k_deep", 1e-3, U.per_min)],
+                species=[
+                    Species(
+                        "Cdeep_drg",
+                        "Vti",
+                        initialConcentration=0.0,
+                        substanceUnit=U.mmole,
+                        hasOnlySubstanceUnits=False,
+                    )
+                ],
+            ),
+        ],
+        variants=Variants(organs={Organ.LIVER: liver}),
+        routes=[Route.iv("drg"), Route.oral("drg")],
+    )
+
+
+def nephron_reference_definition() -> PBPKDefinition:
+    """The stored nephron reference: the nephron kidney without a threshold reabsorption.
+
+    `drg` filtered with a constant fraction reabsorbed (0.2) and secreted by
+    an apical efflux into the proximal tubule, `sec` secreted but not
+    filtered; the stored comp and flat SBML were built at pkpdsim 311895c,
+    before the threshold reabsorption.
+    """
+    return PBPKDefinition(
+        sid="nephron_reference",
+        substances=[
+            Substance(
+                sid="drg",
+                name="drug",
+                mr=300.0,
+                binding=Binding(fu=0.1, protein="albumin"),
+                distribution=Kp(2.0, ftissue=1.0),
+                excretion=Excretion(urine=True, fraction_reabsorbed=0.2),
+            ),
+            Substance(
+                sid="sec",
+                name="secreted drug",
+                mr=250.0,
+                binding=Binding(fu=0.5),
+                distribution=Kp(1.0, ftissue=1.0),
+            ),
+        ],
+        chemistry=[
+            Transport(
+                "DRGSEC",
+                Organ.KIDNEY,
+                "drg",
+                Direction.EFFLUX,
+                Membrane.APICAL,
+                FirstOrder(k=0.1, per_volume=False),
+            ),
+            Transport(
+                "SECSEC",
+                Organ.KIDNEY,
+                "sec",
+                Direction.EFFLUX,
+                Membrane.APICAL,
+                MM(vmax=1e-2, km=0.05),
+            ),
+        ],
+        variants=Variants(organs={Organ.KIDNEY: "nephron"}),
+        routes=[Route.iv("drg"), Route.iv("sec")],
+    )
+
+
+def endogenous_reference_definition() -> PBPKDefinition:
+    """The definition of the stored endogenous reference: the starts at the equilibrium with the baseline.
+
+    Three substances with a baseline and no declared steady state: `end` in
+    the merged tissue, filtered, produced by an undeclared custom reaction of
+    the muscle, with a slow pool of the muscle, taken up from the lumen into
+    the mucosa (an apical influx) and given orally, with a start of the
+    definition; `kin` in the full form with kinetic erythrocytes; `prf`
+    flow-limited; the zonated liver and the nephron kidney. The stored comp
+    and flat SBML were built at pkpdsim 87a5e79, before the generated steady
+    state refactored the starts (the `Start` records of `_defer_start`, the
+    zones of the starts, the inputs of the custom reactions).
+    """
+    return PBPKDefinition(
+        sid="endogenous_reference",
+        substances=[
+            Substance(
+                "end",
+                name="endogenous substance",
+                mr=113.0,
+                binding=Binding(fu=0.5, protein="albumin"),
+                distribution=Kp(0.6, ftissue=6.0, overrides={Organ.MUSCLE: 0.8}),
+                excretion=Excretion(urine=True, fraction_reabsorbed=0.1),
+                baseline=0.02,
+            ),
+            Substance(
+                "kin",
+                name="kinetic substance",
+                mr=150.0,
+                erythrocytes=Erythrocytes("kinetic", kbc=2.0, k_exchange=1.0),
+                distribution=Kp(2.0, mode=Mode.PERMEABILITY, ftissue=1.0),
+                baseline=0.01,
+            ),
+            Substance(
+                "prf",
+                name="flow-limited substance",
+                mr=200.0,
+                distribution=Kp(1.5, mode=Mode.PERFUSION),
+                excretion=Excretion(urine=True),
+                baseline=0.005,
+            ),
+        ],
+        chemistry=[
+            CustomReaction(
+                "PROD",
+                Organ.MUSCLE,
+                Part.TISSUE,
+                "-> Cti_end",
+                "k_prod",
+            ),
+            Transport(
+                "ENDABS",
+                Organ.SMALL_INTESTINE,
+                "end",
+                Direction.INFLUX,
+                Membrane.APICAL,
+                MM(vmax=1e-3, km=0.1),
+            ),
+        ],
+        parameters=[ModelParameter("k_prod", 0.001, U.mmole_per_min)],
+        slow_pools=[SlowPool("end", frozenset({Organ.MUSCLE}), k=0.001, kp=2.0)],
+        variants=Variants(organs={Organ.LIVER: "zonated", Organ.KIDNEY: "nephron"}),
+        routes=[Route.oral("end")],
+        starts={"MU__Cpl_end": Formula("2 dimensionless * baseline_end", U.mM)},
+    )
+
+
+def dateless(text: str) -> list[str]:
+    """The lines of an SBML text without the dates of the model history."""
+    return [line for line in text.splitlines() if not _DATE.search(line)]
+
+
+def assert_reference_sbml(result: BuildResult) -> None:
+    """Assert that a build is its stored reference, line by line.
+
+    The order of the elements counts. The references are
+    `tests/pbpk/data/<file>.gz` (`gzip -n`): `reference_definition()` built
+    at f008d56, `chemistry_reference_definition()` at 0c538ca,
+    `nephron_reference_definition()` at 311895c (with the notes of `fu` of
+    its unknown protein with the CKD factor of 5793173, the one line
+    replaced) and `endogenous_reference_definition()` at 87a5e79, all
+    rebuilt with the CKD profile of the binding to albumin (their albumin
+    substances; the build without the profile is the former reference, line
+    by line but for the dates), and rebuilt with the output `T_st_eff` of the
+    segmented intestine (additions only: the parameter, its initial
+    assignment and port, the inputs `FED` and `fimp_t_stomach` of an
+    intestine without a lumen species, no line removed); a change of the
+    library which changes the SBML of every model on purpose rebuilds them
+    and says so.
+    """
+    for path in (result.comp_path, result.flat_path):
+        reference = gzip.decompress((REFERENCE / f"{path.name}.gz").read_bytes())
+        expected = dateless(reference.decode("utf-8"))
+        actual = dateless(path.read_text(encoding="utf-8"))
+        if actual != expected:
+            diff = list(
+                difflib.unified_diff(
+                    expected, actual, "f008d56", "now", n=0, lineterm=""
+                )
+            )
+            pytest.fail(f"{path.name} differs:\n" + "\n".join(diff[:40]))

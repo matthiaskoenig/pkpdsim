@@ -76,16 +76,22 @@ from sbmlsim.fit.cli import (
 )
 from sbmlsim.fit.fisher import FisherInformation
 from sbmlsim.fit.identifiability import IdentifiabilityResult, ProfileSettings
-from sbmlsim.fit.options import OptimizationStrategy
+from sbmlsim.fit.options import OptimizationAlgorithmType, OptimizationStrategy
 from sbmlsim.fit.result import fit_id
+from sbmlsim.fit.sampling import SamplingType
 from sbmlsim.utils import paths_text
 from sbmlutils.console import console
 
 from pkpdsim.fit import (
     FIXED_FITS,
+    at_level,
     current_fixed_fits,
+    leveled_definitions,
     records_context,
+    remainder_problems,
     report_context,
+    start_point,
+    with_start,
 )
 from pkpdsim.model import PKPDModel, resolve
 from pkpdsim.profiling import (
@@ -567,6 +573,17 @@ def fit_parser(
         help="seconds a single optimization may run, no limit by default",
     )
     fit.add_argument(
+        "--start",
+        metavar="JSON_OR_FIT_ID",
+        default=None,
+        help="start least squares from these parameters instead of samples of "
+        "the bounds: a json file of the values by parameter id in the units of "
+        "the fit parameters, or the id of a fit (adopted, or finished in the "
+        "output directory) whose best parameters are taken; every run starts "
+        "from the point, so the fit has one run (--runs 1); a parameter the "
+        "start does not give starts from its start value",
+    )
+    fit.add_argument(
         "-o",
         "--output_dir",
         type=Path,
@@ -714,14 +731,37 @@ def fit_command(
         The finished fits by optimization id, none for `--adopt`.
     """
     definitions = model.load_fit_definitions()
-    options = fit_parser(model, definitions).parse_args(args)
+    parser = fit_parser(model, definitions)
+    options = parser.parse_args(args)
     log.enable_rich_logging()
     if options.adopt is not None:
         _adopt(model, options.output_dir / options.adopt, force=options.force)
         return {}
 
-    definition = definitions[options.subset]
+    # the problems of the fit load the models at the level of the model, in the
+    # process and in every worker of a pool
+    definition = at_level(definitions[options.subset], model.simulator.jit_optimization)
     algorithm = ALGORITHMS[options.method]
+    # the start of least squares: every run starts from the point (the sampling
+    # START of sbmlsim), the global optimizer draws its population itself
+    sampling: dict[str, SamplingType] = {}
+    if options.start is not None:
+        if algorithm != OptimizationAlgorithmType.LEAST_SQUARE:
+            parser.error(
+                "--start is the start of least squares; differential evolution "
+                "draws its population from the bounds."
+            )
+        if options.runs != 1:
+            parser.error(
+                "--start starts every run from the point, the runs would be "
+                "identical: give --runs 1."
+            )
+        try:
+            point = start_point(model, definition, options.start, options.output_dir)
+        except ValueError as err:
+            parser.error(str(err))
+        definition = with_start(definition, point)
+        sampling["sampling"] = SamplingType.START
     # the id of the fit, created before it starts, so that the problem, its
     # result and the directory of its report carry the same key
     opid = fit_id(options.subset)
@@ -737,6 +777,7 @@ def fit_command(
             "runs": f"{options.runs} on {options.cores} core(s)",
             "seed": options.seed,
             "timeout": (f"{options.timeout} s per run" if options.timeout else "none"),
+            "start": options.start or "samples of the bounds",
             "identifiability": (
                 "profile likelihood"
                 + ("" if options.no_fisher else " and Fisher information")
@@ -762,6 +803,16 @@ def fit_command(
         for pid, parameter in records[fit_id_].parameters.items()
         if pid not in fitted
     }
+    # every build which the experiments of the fit run has the remainders
+    remainders = list(
+        dict.fromkeys(
+            problem
+            for path in model.model_paths.values()
+            for problem in remainder_problems(path, definition.parameters, fixed_values)
+        )
+    )
+    if remainders:
+        parser.error("; ".join(remainders))
     context = report_context(model, options.subset, definition, fixed_fits=fixed_fits)
 
     runs = run_fit(
@@ -781,9 +832,11 @@ def fit_command(
             "cores": options.cores,
             "method": options.method,
             "command": f"run_fit {model.package}",
+            "start": options.start,
             FIXED_FITS: fixed_fits,
         },
         fixed_values=fixed_values,
+        **sampling,
     )
 
     # the fit only optimizes, the report is created from its parameters and
@@ -851,13 +904,13 @@ def report_command(model: PKPDModel, args: Sequence[str] | None = None) -> Path:
         fit_display.key_values({d.name: d for d in directories})
         return options.output_dir
     return report_cli(
-        dict(model.load_fit_definitions()),
+        leveled_definitions(model),
         args=with_output_dir(arguments, model.report_dir),
         prog=f"run_report {model.package}",
         description=(
-            "Report of a fit for stored parameters. `--adopted` instead writes "
-            "the report of every adopted fit of the model, without a "
-            "parameters file."
+            "Report of a fit for stored parameters. `--adopted` instead "
+            "writes the report of every adopted fit of the model, without "
+            "a parameters file."
         ),
         context=records_context(model),
     )
@@ -878,7 +931,7 @@ def identifiability_command(
         The directory of the report.
     """
     return identifiability_cli(
-        dict(model.load_fit_definitions()),
+        leveled_definitions(model),
         args=with_output_dir(
             sys.argv[1:] if args is None else args, model.identifiability_dir
         ),

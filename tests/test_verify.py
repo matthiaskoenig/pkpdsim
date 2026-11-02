@@ -4,6 +4,7 @@ import copy
 import dataclasses
 import importlib.metadata
 import json
+import math
 import pickle
 import re
 import shutil
@@ -17,6 +18,7 @@ import pytest
 from figure_builders import FigureStudy, build_figures
 from PIL import Image
 from sbmlsim.experiment import SimulationExperiment
+from sbmlsim.fit.cli import FitDefinition
 from sbmlsim.plot import Figure
 from sbmlsim.simulation import Scan, Simulation
 from sbmlsim.simulation.sampling import local
@@ -81,6 +83,89 @@ def test_dump_and_compare(tmp_path: Path, capsys: pytest.CaptureFixture[str]) ->
     match = re.search(r"simulations: (\d+) arrays compared", capsys.readouterr().out)
     assert match
     assert int(match.group(1)) == len(dumped["results"]) > 0
+
+
+def test_a_simulation_on_a_grid() -> None:
+    """The output times of `dump --grid`: equidistant, plus the times of the changes."""
+    from sbmlsim import Q
+    from sbmlsim.simulation import Change, Dimension
+
+    from pkpdsim.verify import on_grid
+
+    simulation = Simulation(
+        start=-24,
+        end=12,
+        time_unit="hr",
+        preinit_changes={"A": 1.0},
+        changes=[Change([0, 1.5], {"A": "A + 1"}), Change(Q(360, "min"), {"A": 0.0})],
+        steps=10,
+    )
+    gridded = on_grid(simulation, 4)
+    assert isinstance(gridded, Simulation)
+    assert gridded.steps is None
+    assert gridded.times == (-24.0, -15.0, -6.0, 0.0, 1.5, 3.0, 6.0, 12.0)
+    assert (gridded.start, gridded.end, gridded.time_unit) == (-24, 12, "hr")
+    assert gridded.preinit_changes == simulation.preinit_changes
+    assert gridded.changes == simulation.changes
+    scan = Scan(
+        simulation=Simulation(end=10),
+        dimensions=[Dimension("dim_a", values={"A": [1.0, 2.0]}, at=2.5)],
+    )
+    gridded_scan = on_grid(scan, 2)
+    assert isinstance(gridded_scan, Scan)
+    assert gridded_scan.simulation.times == (0.0, 2.5, 5.0, 10.0)
+    assert gridded_scan.dimensions == scan.dimensions
+
+
+def test_the_simulations_of_a_dimension_on_a_grid() -> None:
+    """Every simulation of a dimension of simulations gets its own grid."""
+    from sbmlsim import Q
+    from sbmlsim.simulation import Change, Dimension
+
+    from pkpdsim.verify import on_grid
+
+    short = Simulation(end=4, steps=100, changes=[Change(1.5, {"A": 1.0})])
+    long = Simulation(start=-2, end=8)
+    scan = Scan(
+        simulation=Simulation(end=10),
+        dimensions=[Dimension("dim_sim", simulations={"short": short, "long": long})],
+    )
+    gridded = on_grid(scan, 2)
+    assert isinstance(gridded, Scan)
+    assert gridded.simulation.times == (0.0, 5.0, 10.0)
+    (dimension,) = gridded.dimensions
+    assert dimension.id == "dim_sim"
+    assert dimension.simulations["short"].times == (0.0, 1.5, 2.0, 4.0)
+    assert dimension.simulations["short"].steps is None
+    assert dimension.simulations["long"].times == (-2.0, 3.0, 8.0)
+    # a quantity of a simulation without a time unit has no number on the grid
+    unknown = Simulation(end=4, changes=[Change(Q(1, "hr"), {"A": 1.0})])
+    with pytest.raises(ValueError, match="no time unit"):
+        on_grid(unknown, 2)
+    with pytest.raises(ValueError, match="no simulation or scan"):
+        on_grid("task", 2)  # ty: ignore[invalid-argument-type]
+
+
+def test_dumps_on_a_common_grid_compare_their_times_exactly(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Two dumps at other tolerances share their output times with `--grid`."""
+    dumps = []
+    for rtol in ("1e-10", "1e-9"):
+        out = tmp_path / f"grid_{rtol}.pkl"
+        args = ["--root", str(TESTS_DIR), "--model", "pkpdsim_toy", "--out", str(out)]
+        assert verify(["dump", *args, "--rtol", rtol, "--grid", "20", "ToyDecay"]) == 0
+        dumps.append(str(out))
+    dumped = pickle.loads(Path(dumps[0]).read_bytes())
+    assert dumped["grid"] == 20
+    (times,) = [v[1] for k, v in dumped["results"].items() if k[2] == "time"]
+    assert np.allclose(times.ravel(), np.linspace(0, 10, 21))
+    capsys.readouterr()
+    assert verify(["compare", *dumps]) == 0
+    out = capsys.readouterr().out
+    assert "0 unresolved on this grid" in out
+    assert "rows at other times: 0 rows of the old dump and 0 of the new dump" in out
+    assert "grid: old 20, new 20" in out
 
 
 def test_definitions(tmp_path: Path) -> None:
@@ -647,6 +732,7 @@ def synthetic(
     figures: dict | None = None,
     ranges: dict | None = None,
     versions: dict[str, str] | None = None,
+    builds: dict[str, dict[str, str]] | None = None,
 ) -> Dump:
     dump = Dump(
         model="m",
@@ -660,6 +746,8 @@ def synthetic(
     )
     if versions is not None:
         dump["versions"] = versions
+    if builds is not None:
+        dump["builds"] = builds
     return dump
 
 
@@ -794,8 +882,11 @@ def test_a_time_of_another_point_than_the_first_is_compared(
     )
     out = capsys.readouterr().out
     assert code == 1, out
-    assert "1 rows of the old dump without a time in the new dump" in out
-    assert "times of E/task_x: 1 rows only in old, at 3" in out
+    # the old row at 3 is compared with the new rows at 2 and 5 interpolated,
+    # the new row at 5 has no time of the old dump around it
+    assert "rows at other times: 1 rows of the old dump and 0 of the new" in out
+    assert "1 rows of the new dump without a time in the old dump" in out
+    assert "times of E/task_x: 1 rows only in new, at 5" in out
 
 
 def test_an_old_row_without_a_new_time_is_a_difference(
@@ -803,7 +894,8 @@ def test_an_old_row_without_a_new_time_is_a_difference(
 ) -> None:
     old = old_scan()
     times = T_OLD.copy()
-    times[2] = 2.5
+    # after the last time of the new dump: no interpolation
+    times[3] = 3.5
     old["results"]["E", "task_x", "time"] = (
         ("_point", "dim_k"),
         np.stack([times, times], axis=1),
@@ -822,7 +914,9 @@ def test_an_old_row_without_a_new_time_is_a_difference(
     )
 
 
-def timecourse(times: Sequence[float], values: Sequence[float]) -> Dump:
+def timecourse(
+    times: Sequence[float] | np.ndarray, values: Sequence[float] | np.ndarray
+) -> Dump:
     """A dump of one task with its output times and the values of A."""
     return synthetic(
         {
@@ -888,6 +982,157 @@ def test_a_new_output_time_is_a_difference(
     # a time only the old dump has is a difference, also with the pattern
     assert verify(["compare", new, old, "--renames", str(renames)]) == 1
     assert "  times of E/t: 1 rows only in old, at 4\n" in capsys.readouterr().out
+
+
+def dosed(times: np.ndarray, rate: float = 0.5) -> np.ndarray:
+    """A decay with a second dose at 2: a trajectory of an adaptive grid.
+
+    `times` has the time of the dose twice, the state before and after it.
+    """
+    before = np.exp(-rate * times)
+    after = (math.exp(-2 * rate) + 1.0) * np.exp(-rate * (times - 2.0))
+    values = np.where(times < 2.0, before, after)
+    values[int(np.flatnonzero(times == 2.0)[0])] = math.exp(-2 * rate)
+    return values
+
+
+#: two adaptive grids of one simulation: other steps, the dose at 2 in both;
+#: dense enough that the spread of their interpolants is below 1e-6 (the
+#: resolution which `compare` needs at its threshold)
+GRID_A = np.concatenate([np.linspace(0, 2, 801), np.linspace(2, 10, 3201)])
+GRID_B = np.concatenate([np.linspace(0, 2, 1001), np.linspace(2, 10, 4001)])
+
+
+def test_two_grids_of_one_trajectory_do_not_differ(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A row at a time only one dump has is compared with the other interpolated."""
+    old = written(tmp_path, "o.pkl", timecourse(GRID_A, dosed(GRID_A)))
+    new = written(tmp_path, "n.pkl", timecourse(GRID_B, dosed(GRID_B)))
+    capsys.readouterr()
+    assert verify(["compare", old, new]) == 0, capsys.readouterr().out
+    assert verify(["compare", new, old]) == 0
+    out = capsys.readouterr().out
+    assert "0 rows of the old dump without a time in the new dump" in out
+    assert "0 unresolved on this grid" in out
+    match = matched_rows(GRID_B, GRID_A)
+    assert match.interpolated_old.size > GRID_B.size / 2
+    assert (
+        f"rows at other times: {match.interpolated_old.size} rows of the old dump "
+        f"and {match.interpolated_new.size} of the new dump compared with the "
+        "other dump interpolated at their times" in out
+    )
+
+
+def test_a_trajectory_on_another_grid_differs(tmp_path: Path) -> None:
+    """The interpolation leaves a difference of the trajectory: a slower decay."""
+    old = written(tmp_path, "o.pkl", timecourse(GRID_A, dosed(GRID_A)))
+    new = written(tmp_path, "n.pkl", timecourse(GRID_B, dosed(GRID_B, rate=0.501)))
+    assert verify(["compare", old, new]) == 1
+    assert verify(["compare", new, old]) == 1
+
+
+def test_a_difference_between_the_common_times_is_found(tmp_path: Path) -> None:
+    """A change of the trajectory of 1e-4 which vanishes at the common times."""
+    old = written(tmp_path, "o.pkl", timecourse(GRID_A, dosed(GRID_A)))
+    for eps, code in ((1e-4, 1), (1e-7, 0)):
+        bump = np.where(
+            GRID_B <= 2,
+            1 + eps * np.sin(np.pi * GRID_B / 2),
+            1 + eps * np.sin(np.pi * (GRID_B - 2) / 8),
+        )
+        new = written(tmp_path, "n.pkl", timecourse(GRID_B, dosed(GRID_B) * bump))
+        assert verify(["compare", old, new]) == code
+
+
+def tasks(values: dict[str, Sequence[float]]) -> Dump:
+    """A dump of tasks of one experiment with the output times 0 to 3."""
+    results: dict = {}
+    for task, task_values in values.items():
+        results["E", task, "time"] = (("time",), np.array([0.0, 1.0, 2.0, 3.0]))
+        results["E", task, "[A]"] = (("time",), np.array(task_values))
+    return synthetic(results)
+
+
+def test_the_noise_of_a_control_is_no_difference(tmp_path: Path) -> None:
+    """A variable which is zero in a task is compared at the scale of the experiment."""
+    dose = [1.0, 0.5, 0.25, 0.125]
+    old = written(tmp_path, "o.pkl", tasks({"dose": dose, "control": [0, 1e-24, 0, 0]}))
+    noise = tasks({"dose": dose, "control": [0, 3e-24, -1e-25, 0]})
+    assert verify(["compare", old, written(tmp_path, "n.pkl", noise)]) == 0
+    # a small value which is not noise is compared at its own scale
+    small = written(
+        tmp_path, "s.pkl", tasks({"dose": dose, "control": [0, 1e-6, 0, 0]})
+    )
+    other = tasks({"dose": dose, "control": [0, 1.1e-6, 0, 0]})
+    assert verify(["compare", small, written(tmp_path, "m.pkl", other)]) == 1
+
+
+def bateman(times: np.ndarray, ke: float = 0.2) -> np.ndarray:
+    """An oral dose: absorption 3/hr, elimination `ke`."""
+    ka = 3.0
+    return ka / (ka - ke) * (np.exp(-ke * times) - np.exp(-ka * times))
+
+
+#: two coarse adaptive grids of an oral dose over 48 hr, 20 steps each
+COARSE_A = np.concatenate([[0.0], np.geomspace(0.01, 48, 20)])
+COARSE_B = np.concatenate([[0.0], np.geomspace(0.013, 48, 20)])
+
+
+@pytest.mark.parametrize("ke", [0.2, 0.2002])
+def test_an_array_which_the_grid_cannot_resolve_is_no_pass(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], ke: float
+) -> None:
+    """The interpolation of 20 steps resolves about 1e-2, not the threshold.
+
+    An elimination faster by 1e-3 (a change of 4.7e-4 of the scale) lies
+    within the range of the interpolants and is reported as unresolved, as is
+    the same trajectory: compare passes no array it cannot resolve.
+    """
+    old = written(tmp_path, "o.pkl", timecourse(COARSE_A, bateman(COARSE_A)))
+    new = written(tmp_path, "n.pkl", timecourse(COARSE_B, bateman(COARSE_B, ke)))
+    capsys.readouterr()
+    assert verify(["compare", old, new]) == 1
+    out = capsys.readouterr().out
+    assert "0 differ by more than 1e-06" in out
+    assert "1 unresolved on this grid" in out
+    (line,) = [x for x in out.splitlines() if "E/t/[A]" in x and "resolution" in x]
+    resolution = float(line.split()[0])
+    assert 1e-3 < resolution < 1e-1
+    # at a threshold above the resolution the array is resolved
+    threshold = str(2 * resolution) if ke == 0.2 else "1.0"
+    assert verify(["compare", old, new, "--threshold", threshold]) == 0
+
+
+def test_the_interpolation_does_not_cross_a_change() -> None:
+    """A row is interpolated between the rows of the segment of its time."""
+    old_times = np.array([0.0, 1.0, 2.0, 2.0, 3.0])
+    new_times = np.array([0.0, 0.5, 1.0, 1.5, 2.0, 2.0, 2.5, 3.0, 4.0])
+    match = matched_rows(old_times, new_times)
+    assert match.old.tolist() == [0, 1, 2, 3, 4]
+    assert match.interpolated_old.tolist() == []
+    # the new rows between the common times are interpolated in the old dump,
+    # the row after its last time is not
+    assert match.interpolated_new.tolist() == [1, 3, 6]
+    assert match.unmatched_new == 1
+    assert match.times_new.tolist() == [4.0]
+    # a repeated time which the other dump does not have is not interpolated
+    match = matched_rows(np.array([0.0, 1.0, 1.5, 1.5, 3.0]), np.array([0.0, 1, 3]))
+    assert match.interpolated_old.tolist() == []
+    assert match.unmatched == 2
+    # nor a row after the last time of the other dump
+    match = matched_rows(np.array([0.0, 1.0, 1.0, 2.0]), np.array([0.0, 0.5, 1.0]))
+    assert match.interpolated_old.tolist() == []
+    assert match.interpolated_new.tolist() == [1]
+    assert match.unmatched == 1
+
+
+def test_close_times_are_not_matched() -> None:
+    """Two rows of times 1e-7 apart are interpolated, not compared as one time."""
+    match = matched_rows(np.array([0.0, 1.0, 2.0]), np.array([0.0, 1.0 + 1e-7, 2.0]))
+    assert match.old.tolist() == [0, 2]
+    assert match.interpolated_old.tolist() == [1]
+    assert match.interpolated_new.tolist() == [1]
 
 
 def test_repeated_times_of_the_old_dump_are_left_out(
@@ -1107,7 +1352,7 @@ FIGURES_08: dict[str, str] = json.loads(
 
 
 def setting_of_09(figure: Figure, name: str, value: object) -> None:
-    """Set a setting of a figure as sbmlsim 0.9 does (R1.5 of the port)."""
+    """Set a setting of a figure as sbmlsim 0.9 does."""
     figure.settings = {**figure.settings, name: value}
 
 
@@ -1479,3 +1724,90 @@ def test_the_label_of_a_curve_across_versions_of_sbmlsim_is_its_name() -> None:
     other = synthetic(figures={"E": {"Fig1": _curve("d", label="x", color="k")}})
     aligned = align_figures(other, new)
     assert aligned.old["figures"]["E"]["Fig1"] != aligned.new["figures"]["E"]["Fig1"]
+
+
+# --- the builds per sex -----------------------------------------------------------
+
+
+def test_a_dump_records_the_build_of_every_task(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A study which moves to the build of another sex is a difference."""
+    old = tmp_path / "old.pkl"
+    common = ["--root", str(TESTS_DIR), "--model", "pkpdsim_sexes"]
+    assert verify(["dump", *common, "--out", str(old)]) == 0
+    dumped = load(str(old))
+    assert dumped["builds"] == {
+        "SexesMen": {"task_decay": "male"},
+        "SexesWomen": {"task_decay": "female"},
+        "SexesGroups": {"task_men": "male", "task_women": "female"},
+    }
+    capsys.readouterr()
+    assert verify(["compare", str(old), str(old)]) == 0
+    assert "builds: 4 old, 4 new, 0 differ" in capsys.readouterr().out
+
+    moved = copy.deepcopy(dumped)
+    moved["builds"]["SexesWomen"]["task_decay"] = "male"
+    new = written(tmp_path, "new.pkl", moved)
+    assert verify(["compare", str(old), new]) == 1
+    out = capsys.readouterr().out
+    assert "builds: 4 old, 4 new, 1 differ (0 expected)" in out
+    assert "SexesWomen/task_decay" in out
+    assert "'female' -> 'male'" in out
+    renames = tmp_path / "renames.json"
+    renames.write_text(json.dumps({"expected": {"builds": ["SexesWomen/*"]}}))
+    assert verify(["compare", str(old), new, "--renames", str(renames)]) == 0
+
+
+def test_the_tasks_of_the_builds_are_renamed(tmp_path: Path) -> None:
+    dump = synthetic(builds={"E": {"task_a": "female"}})
+    renamed = apply_renames(dump, {"ids": {"task_a": "task_b"}})
+    assert renamed["builds"] == {"E": {"task_b": "female"}}
+
+
+def test_a_dump_without_builds_is_compared_without_them(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    old = written(tmp_path, "old.pkl", synthetic())
+    new = written(tmp_path, "new.pkl", synthetic(builds={"E": {"task": "male"}}))
+    assert verify(["compare", old, new]) == 0
+    assert "builds: in the new dump only, not compared" in capsys.readouterr().out
+
+
+def test_a_dump_and_the_fits_load_at_the_level_of_the_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`jit_optimization` of the model reaches the runner of a dump and the fits."""
+    import sbmlsim.experiment
+    import sbmlsim.fit.cli
+
+    import pkpdsim_toy
+
+    simulator = dataclasses.replace(MODEL.simulator, jit_optimization="O0")
+    model = dataclasses.replace(MODEL, simulator=simulator)
+    monkeypatch.setattr(pkpdsim_toy, "MODEL", model)
+    assert describe("pkpdsim_toy").jit_optimization == "O0"
+
+    levels: list[object] = []
+    runner_init = sbmlsim.experiment.ExperimentRunner.__init__
+
+    def recording_init(self: object, *args: object, **kwargs: object) -> None:
+        levels.append(kwargs.get("jit_optimization"))
+        runner_init(self, *args, **kwargs)  # ty: ignore[invalid-argument-type]
+
+    monkeypatch.setattr(sbmlsim.experiment.ExperimentRunner, "__init__", recording_init)
+    root = ["--root", str(TESTS_DIR), "--model", "pkpdsim_toy"]
+    dump = ["dump", *root, "--out", str(tmp_path / "d.pkl"), "ToyDecay"]
+    assert verify(dump) == 0
+    assert levels == ["O0"]
+
+    seen: list[str] = []
+
+    def recording_run_fit(definition: object, **kwargs: object) -> dict:
+        assert isinstance(definition, FitDefinition)
+        seen.append(str(definition.problem(opid="level").jit_optimization))
+        return {}
+
+    monkeypatch.setattr(sbmlsim.fit.cli, "run_fit", recording_run_fit)
+    assert verify(["fits", *root, "--out", str(tmp_path / "fits")]) == 0
+    assert seen == ["O0"]

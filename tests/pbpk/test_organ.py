@@ -21,6 +21,7 @@ from pkpdsim.pbpk import (
     Mode,
     Organ,
     OrganContext,
+    Sex,
     Substance,
     Transport,
     Value,
@@ -91,6 +92,7 @@ def _ctx(
         chemistry=tuple(chemistry),
         inhibitions=(),
         inductions=(),
+        sex=Sex.MALE,
     )
 
 
@@ -545,7 +547,7 @@ def test_product_with_tissue_stays_in_part() -> None:
 
 
 def test_product_into_equivalent_tissue_part() -> None:
-    """A product goes into its equivalent tissue part before plasma (R19)."""
+    """A product goes into its equivalent tissue part before plasma."""
     full = Kp(2.0, mode=Mode.PERMEABILITY, ftissue=1.0)
     merged = Kp(1.0, ftissue=1.0)
     perfusion = Kp(1.0, mode=Mode.PERFUSION)
@@ -684,7 +686,7 @@ def test_apical_influx_from_sink() -> None:
 
 
 def test_apical_influx_from_urine_raises() -> None:
-    """The standard kidney takes up nothing from the cumulative urine (R18)."""
+    """The standard kidney takes up nothing from the cumulative urine."""
     with pytest.raises(ValueError, match=r"'DRGT'.*fraction_reabsorbed.*nephron"):
         _build(
             Organ.KIDNEY,
@@ -825,7 +827,7 @@ def test_blood_capacities_not_physical() -> None:
 
 
 def test_ftissue_meaning_in_notes() -> None:
-    """The notes say that ftissue multiplies the unbound driving force (R20)."""
+    """The notes say that ftissue multiplies the unbound driving force."""
     md, _ = _build()
     pars = _parameters(md)
     for pid in ("ftissue_drg", "PS_drg"):
@@ -851,23 +853,40 @@ def test_liver_shunt_past_the_liver() -> None:
 
 
 @pytest.mark.parametrize(
-    ("distribution", "source", "plasma"),
+    ("distribution", "source", "carrier"),
     [
-        (Kp(2.0, ftissue=1.0), "Cpl_drg", "Cpl_drg"),
-        (Kp(2.0, mode=Mode.PERFUSION), "Cor_drg", "Cor_drg / K_or_drg"),
+        (Kp(2.0, ftissue=1.0), "Cpl_drg", "(1 dimensionless - HCT)"),
+        (Kp(2.0, mode=Mode.PERFUSION), "Cor_drg", "(1 dimensionless - HCT)"),
     ],
     ids=["merged", "perfusion"],
 )
-def test_kidney_filtration(distribution: Kp, source: str, plasma: str) -> None:
-    """The kidney filters `fu*GFR*Cpl*(1 - f_reabsorbed)` into the urine."""
+def test_kidney_filtration(distribution: Kp, source: str, carrier: str) -> None:
+    """The kidney filters the afferent plasma, `fu*GFR*Car*(1 - f_reabsorbed)`, into the urine.
+
+    The arterial plasma `Car_drg` is a modifier of the filtration; the plasma
+    leaving the kidney lacks the net filtrate at the outflow concentration.
+    """
     md, boundary = _build(Organ.KIDNEY, substances=[_drug(distribution=distribution)])
     reaction = _reaction(md, "J_gfr_drg")
     assert _equation(reaction) == ([(source, 1.0)], [("Aurine_drg", 1.0)])
-    assert _formula(reaction) == (
-        f"fu_drg * GFR * {plasma} * (1 dimensionless - f_reabsorbed_drg)"
+    assert [m.species for m in reaction.equation.modifiers] == ["Car_drg"]
+    filtrate = "fu_drg * GFR * {} * (1 dimensionless - f_reabsorbed_drg)"
+    assert _formula(reaction) == filtrate.format("Car_drg")
+    assert _formula(_reaction(md, "J_out_pl_drg")) == (
+        f"Qki * {carrier} * Cout_drg - {filtrate.format('Cout_drg')}"
     )
     assert {"GFR", "f_reabsorbed_drg", "Aurine_drg", "Vurine"} <= set(
         boundary.replacements
     )
     md, _ = _build(Organ.LIVER, substances=[_drug(distribution=distribution)])
     assert not [r for r in md.reactions or [] if r.sid == "J_gfr_drg"]
+
+
+def test_a_custom_reaction_has_no_parameters_by_default() -> None:
+    """The rate law of a custom reaction may read only ids of the model."""
+    from pkpdsim.pbpk import Part
+
+    first = CustomReaction("SRC", Organ.MUSCLE, Part.PLASMA, "-> Cpl_drg", "k_src")
+    second = CustomReaction("SRC2", Organ.MUSCLE, Part.PLASMA, "-> Cpl_drg", "k_src")
+    assert first.parameters == []
+    assert first.parameters is not second.parameters

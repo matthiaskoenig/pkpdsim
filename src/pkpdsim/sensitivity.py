@@ -50,19 +50,21 @@ import logging
 import math
 import os
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from enum import StrEnum
 from pathlib import Path
 from types import MappingProxyType
-from typing import NamedTuple
+from typing import NamedTuple, override
+from xml.etree import ElementTree
 
 import libsbml
 import numpy as np
 import pandas as pd
-import roadrunner
 from matplotlib.figure import Figure
+from pkpdutils import NCAOptions
 from sbmlsim import display, sensitivity
+from sbmlsim.model.model_roadrunner import JitOptimization, load_roadrunner
 from sbmlsim.result import ScanResult
 from sbmlsim.sensitivity import SensitivityResult
 from sbmlsim.sensitivity.classification import (
@@ -72,7 +74,15 @@ from sbmlsim.sensitivity.classification import (
     uncertainty_classification_symbol,
 )
 from sbmlsim.sensitivity.result import PARAMETER
-from sbmlsim.simulation import Dimension, Observable, Scan, Simulation, sampling
+from sbmlsim.simulation import (
+    PK,
+    Dimension,
+    Formula,
+    Observable,
+    Scan,
+    Simulation,
+    sampling,
+)
 from sbmlsim.simulation.sampling import Uniform
 from sbmlsim.simulator import Simulator
 from sbmlutils.console import console
@@ -80,6 +90,7 @@ from sbmlutils.report.units import udef_to_string
 
 from pkpdsim.model import PKPDModel, SimulatorSettings
 from pkpdsim.run import create_simulator
+from pkpdsim.sex import Sex
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +146,8 @@ def parameters_from_sbml(
     exclude_ids: Iterable[str] | None = None,
     exclude_na: bool = True,
     exclude_zero: bool = True,
+    *,
+    exclude_derived: bool = False,
 ) -> list[SensitivityParameter]:
     """Get the parameters of a model which an analysis varies, as sbmlsim 0.8 did.
 
@@ -142,18 +155,26 @@ def parameters_from_sbml(
     boundary species, in the order of the model, with their values after the
     initialization (the concentration of a species with only substance units).
     A parameter whose value is not a number (`exclude_na`) or is close to zero
-    (`exclude_zero`), and every id of `exclude_ids`, is left out.
+    (`exclude_zero`), and every id of `exclude_ids`, is left out; so is every
+    derived parameter, compartment and species (`exclude_derived`).
 
     Args:
         sbml_path: the SBML model.
         exclude_ids: the ids to leave out.
         exclude_na: leave out a parameter without a value.
         exclude_zero: leave out a parameter whose value is close to zero.
+        exclude_derived: leave out every parameter, compartment and species
+            with an initial assignment, e.g. the organ volumes and the
+            clearances which a library model derives from its covariates; the
+            covariates and the fitted parameters have none.
 
     Returns:
         The parameters, without bounds.
     """
-    r = roadrunner.RoadRunner(str(sbml_path))
+    # the values only: compiled with LLJIT at O0, which compiles fastest and
+    # gives the values of roadrunner's default MCJIT bitwise (the creatinine
+    # model of pkdb_models in 4.5 s instead of 48 s)
+    r = load_roadrunner(sbml_path, JitOptimization.O0)
     model: libsbml.Model = libsbml.readSBMLFromFile(str(sbml_path)).getModel()
     excluded = set(exclude_ids or ())
     parameters: list[SensitivityParameter] = []
@@ -201,6 +222,10 @@ def parameters_from_sbml(
             excluded.add(s.getId())
         if s.getConstant() or s.getBoundaryCondition():
             parameters.append(parameter(s))
+    if exclude_derived:
+        excluded.update(
+            p.uid for p in parameters if model.getInitialAssignmentBySymbol(p.uid)
+        )
     logger.info(
         "Excluded parameters: %s",
         sorted(p.uid for p in parameters if p.uid in excluded),
@@ -250,38 +275,63 @@ def set_relative_bounds(
 
 
 def parameters_to_df(
-    parameters: Sequence[SensitivityParameter], sort: bool = True
+    parameters: Sequence[SensitivityParameter],
+    sort: bool = True,
+    builds: Mapping[Sex, Mapping[str, float]] | None = None,
 ) -> pd.DataFrame:
     """Get the table of the parameters.
 
     Args:
         parameters: the parameters.
         sort: sort the rows by the type and the id, as sbmlsim 0.8 did.
+        builds: the values of the parameters in other builds of the model than
+            the one of the table, by sex (`SensitivityRunner` gives those of the
+            sexes of its groups other than male); each is the column
+            `value_<sex>` after `value`.
 
     Returns:
-        One row per parameter, the columns `COLUMNS`, the type as its value.
+        One row per parameter, the columns `COLUMNS` (and `value_<sex>`), the
+        type as its value.
     """
-    rows = [{**asdict(p), "type": str(p.type)} for p in parameters]
-    df = pd.DataFrame(rows, columns=list(COLUMNS))
+    builds = builds or {}
+    columns = list(COLUMNS)
+    position = columns.index("value") + 1
+    columns[position:position] = [f"value_{sex}" for sex in builds]
+    rows = [
+        {
+            **asdict(p),
+            "type": str(p.type),
+            **{
+                f"value_{sex}": values.get(p.uid, math.nan)
+                for sex, values in builds.items()
+            },
+        }
+        for p in parameters
+    ]
+    df = pd.DataFrame(rows, columns=columns)
     if sort:
         df = df.sort_values(by=["type", "uid"], ascending=True, ignore_index=True)
     return df
 
 
 def write_parameters(
-    parameters: Sequence[SensitivityParameter], directory: Path
+    parameters: Sequence[SensitivityParameter],
+    directory: Path,
+    builds: Mapping[Sex, Mapping[str, float]] | None = None,
 ) -> pd.DataFrame:
     """Write the table of the parameters as `parameters.tsv` and `parameters.tex`.
 
     Args:
         parameters: the parameters.
         directory: the directory, created if it does not exist.
+        builds: the values in the other builds of the model, see
+            `parameters_to_df`.
 
     Returns:
         The table.
     """
     directory.mkdir(parents=True, exist_ok=True)
-    df = parameters_to_df(parameters)
+    df = parameters_to_df(parameters, builds=builds)
     df.to_csv(directory / "parameters.tsv", sep="\t", index=False)
     tex = df.to_latex(None, index=False, float_format="{:.3g}".format)
     (directory / "parameters.tex").write_text(tex.replace("_", r"\_"), encoding="utf-8")
@@ -363,9 +413,244 @@ def free_parameters(
     return [p for p in parameters if p.uid not in fixed]
 
 
+def build_values(sbml_path: Path, uids: Iterable[str]) -> dict[str, float]:
+    """Get the values of parameters in a build of a model, as `parameters_from_sbml` reads them.
+
+    Args:
+        sbml_path: the SBML model, e.g. the female build.
+        uids: the ids of the parameters, compartments and species.
+
+    Returns:
+        The value after the initialization of every id the model has.
+    """
+    wanted = set(uids)
+    return {
+        p.uid: p.value
+        for p in parameters_from_sbml(sbml_path, exclude_na=False, exclude_zero=False)
+        if p.uid in wanted
+    }
+
+
+def design_factors(
+    parameters: Sequence[SensitivityParameter], values: Mapping[str, float]
+) -> dict[str, float]:
+    """Get the factors which carry a design of the table to the values of a build.
+
+    A global design draws the values of the parameters in their bounds around
+    the values of the table, which are those of the male build of the model. A
+    group of another build samples the same design relative to the values of
+    its build: every value of a parameter is multiplied with the ratio of its
+    value in the build to its value in the table, so a group of women varies
+    the body weight around the female body weight by the same factors as the
+    men around the male one. The bounds of the table are taken relative to its
+    values.
+
+    Args:
+        parameters: the parameters which a design varies.
+        values: the values of the parameters in the build of a group.
+
+    Returns:
+        The ratio of every parameter whose value differs, by its id.
+
+    Raises:
+        ValueError: for a parameter which has no value in the build, and for
+            a parameter whose value differs and whose bounds cannot be taken
+            relative to its value: a value of the table which is zero or not
+            finite, or a ratio which is not positive (another sign); naming the
+            parameter and both values.
+    """
+    missing = [p.uid for p in parameters if p.uid not in values]
+    if missing:
+        raise ValueError(
+            f"The varied parameter {', '.join(repr(m) for m in missing)} has no "
+            "value in the build, so the design has no counterpart in it."
+        )
+    factors: dict[str, float] = {}
+    problems: list[str] = []
+    for p in parameters:
+        value = values[p.uid]
+        if value == p.value:
+            continue
+        ratio = value / p.value if p.value != 0 else math.nan
+        if not (math.isfinite(p.value) and math.isfinite(ratio) and ratio > 0):
+            problems.append(
+                f"'{p.uid}' ({p.value:g} in the table, {value:g} in the build)"
+            )
+            continue
+        factors[p.uid] = ratio
+    if problems:
+        raise ValueError(
+            f"The values of the parameters {', '.join(problems)} differ between "
+            "the table and the build, and their bounds cannot be taken relative "
+            "to the value of the table, so the design has no counterpart in the "
+            "build: give them a value in the table which is neither zero nor of "
+            "another sign, or leave them out of the analysis."
+        )
+    return factors
+
+
+def relative_design(design: Dimension, factors: Mapping[str, float]) -> Dimension:
+    """Get a design with the values of its parameters multiplied by factors.
+
+    The design of a group of another build, see `design_factors`; the bounds
+    of the uniform distributions of its record are multiplied as well.
+
+    Args:
+        design: the design over the values of the table.
+        factors: the factor of a parameter, by its id; 1 for the others.
+
+    Returns:
+        The design of the group, the given one without a factor.
+    """
+    factors = {uid: f for uid, f in factors.items() if uid in design.values}
+    if not factors:
+        return design
+    record = design.design
+    if record is not None:
+        distributions = {}
+        for uid, d in record.distributions.items():
+            if uid in factors:
+                d = {
+                    **d,
+                    **{
+                        key: d[key] * factors[uid]
+                        for key in ("lower", "upper")
+                        if isinstance(d.get(key), int | float)
+                    },
+                }
+            distributions[uid] = d
+        record = dataclasses.replace(record, distributions=distributions)
+    return Dimension(
+        design.id,
+        values={
+            uid: np.asarray(v) * factors.get(uid, 1.0)
+            for uid, v in design.values.items()
+        },
+        labels=design.labels,
+        design=record,
+    )
+
+
 #: the environment variable which replaces the number of samples of a global
 #: analysis, for a smoke run of the sensitivity scripts
 SAMPLE_SIZE = "PKPDSIM_SENSITIVITY_N"
+
+
+def pk_observables(
+    prefix: str,
+    selection: str,
+    outputs: Mapping[str, str],
+    *,
+    dose: str | None = None,
+    route: str | None = None,
+    options: NCAOptions | None = None,
+    per_dose_mass: Collection[str] = (),
+    mr: str | None = None,
+    pk_id: str | None = None,
+) -> list[Observable]:
+    """Get the non-compartmental analysis of a concentration and its outputs.
+
+    The observables of a sensitivity analysis of the pharmacokinetics of a
+    substance: the analysis `pk_id` (sbmlsim `PK`) of the concentration
+    `selection` with the parameters of the outputs, then an observable
+    `<prefix>_<key>` of every output in its unit (sbmlsim `Formula`). The
+    dose of an analysis is a mass (`PODOSE_<s>` in mg), so an output whose
+    unit has the amount of the dose (`per_dose_mass`, e.g. `cl_f` and `vz_f`)
+    is divided by the molecular weight `mr` at the start (`at(Mr_<s>, 0)`, a
+    value per simulation like the parameter of the analysis); the molecular
+    weight of the dosed substance, also for a metabolite of it.
+
+    ```python
+    # not executed
+    OBSERVABLES = [
+        *pk_observables(
+            "tor",
+            "Carm_tor",
+            {"auc_inf_obs": "mM*min", "cl_f": "ml/min"},
+            dose="PODOSE_tor",
+            route="oral",
+            options=NCAOptions(lloq=LLOQ),
+            per_dose_mass={"cl_f", "vz_f"},
+            mr="Mr_tor",
+        ),
+        *pk_observables("Carm_tor_m5", "Carm_tor_m5", {"cmax": "mM"}, pk_id="pk_m5"),
+    ]
+    ```
+
+    Args:
+        prefix: the prefix of the ids of the outputs, e.g. the substance
+            `tor` (`tor_cmax`) or the concentration `Carm_api`
+            (`Carm_api_cmax`).
+        selection: the concentration, e.g. `Carm_tor`.
+        outputs: the unit of every output by the key of its parameter of the
+            analysis (`pkpdutils`, e.g. `auc_inf_obs`, `cmax`, `cl_f`).
+        dose: the dose state of the analysis, `None` for an analysis without
+            a dose (a metabolite), see `sbmlsim.simulation.PK`.
+        route: the route of the dose, e.g. `oral` or `iv_bolus`.
+        options: the options of the analysis, e.g. the limit of
+            quantification relative to the maximum (`NCAOptions(lloq=...)`).
+        per_dose_mass: the outputs whose unit has the amount of the dose.
+        mr: the id of the molecular weight of the dosed substance, which an
+            output of `per_dose_mass` is divided by, e.g. `Mr_tor`.
+        pk_id: the id of the analysis, `pk_<prefix>` by default; an id of the
+            model, e.g. a species `hctz`, is no id of an observable.
+
+    Returns:
+        The analysis and the outputs.
+
+    Raises:
+        ValueError: if an output per dose mass has no molecular weight.
+    """
+    pk = f"pk_{prefix}" if pk_id is None else pk_id
+    divided = [key for key in outputs if key in per_dose_mass]
+    if divided and mr is None:
+        raise ValueError(
+            f"The outputs {divided} of '{prefix}' have the amount of the dose in "
+            "their unit: give the molecular weight of the dosed substance, `mr`."
+        )
+    return [
+        PK(
+            pk,
+            selection,
+            dose=dose,
+            route=route,
+            options=options,
+            parameters=list(outputs),
+        ),
+        *(
+            Formula(
+                f"{prefix}_{key}",
+                f"{pk}.{key} / at({mr}, 0)" if key in per_dose_mass else f"{pk}.{key}",
+                unit=unit,
+            )
+            for key, unit in outputs.items()
+        ),
+    ]
+
+
+def max_after_dose(time: np.ndarray, values: Mapping[str, np.ndarray]) -> float:
+    """Get the maximum of a timecourse after the dose at the time 0.
+
+    The function of a `Custom` observable of one selection, e.g. the largest
+    diuresis after a dose of a simulation which starts before it:
+    `Custom("max_diuresis", max_after_dose, "ml/min", symbols=["FLUID__diuresis"])`.
+
+    Args:
+        time: the times of the timecourse.
+        values: the timecourse of the one selection of the observable.
+
+    Returns:
+        The maximum from the time 0 on.
+
+    Raises:
+        ValueError: for more or less than one selection.
+    """
+    if len(values) != 1:
+        raise ValueError(
+            f"The maximum after the dose is of one selection, not of {sorted(values)}."
+        )
+    (x,) = values.values()
+    return float(np.max(x[time >= 0]))
 
 
 def sample_size(n: int) -> int:
@@ -446,12 +731,24 @@ class SensitivityGroup:
             compare the groups, a color of matplotlib; the color of the
             property cycle of matplotlib (`C0`, `C1`, ...) of its position if
             `None`.
+        sex: the sex of the group, whose build of the model it runs
+            (`PKPDModel.model_paths`), the male build by default; the design
+            of an analysis is the same for every group.
+        prepare: a function of the scan of the group over a design and the
+            build of the group (`(scan, model_path) -> scan`) which gives the
+            scan that runs, `None` for the scan as it is; e.g. the drug-free
+            equilibration of every point of a model of the PBPK library
+            (`pkpdsim.pbpk.Equilibration`), which replaces a long pre-run from
+            a negative start that leaves a slow state off its steady state.
+            The module knows no model: what the function does is the model's.
     """
 
     uid: str
     name: str
     simulation: Simulation
     color: str | None = None
+    sex: Sex = Sex.MALE
+    prepare: Callable[[Scan, Path], Scan] | None = None
 
 
 @dataclass(frozen=True)
@@ -459,18 +756,47 @@ class _Context:
     """What a run hands to its analyses."""
 
     simulator: Simulator
-    model_path: Path
+    model: PKPDModel
     outputs: Sequence[SensitivityOutput]
     observables: Sequence[Observable]
     seed: int
+    #: the values of the parameters in the builds of the groups other than
+    #: the male one, which the table has, by sex
+    builds: Mapping[Sex, Mapping[str, float]] = MappingProxyType({})
+
+    def model_path(self, group: SensitivityGroup) -> Path:
+        """Get the build of the model which a group runs, the build of its sex."""
+        return self.model.model_path_of(group.sex)
+
+    def design(
+        self,
+        group: SensitivityGroup,
+        design: Dimension,
+        varied: Sequence[SensitivityParameter],
+    ) -> Dimension:
+        """Get the global design of a group, around the values of its build.
+
+        The design of the table for a male group, the same relative design
+        around the values of the build of the group otherwise
+        (`design_factors`, `relative_design`).
+        """
+        values = self.builds.get(group.sex)
+        if values is None:
+            return design
+        return relative_design(design, design_factors(varied, values))
 
     def scan(self, group: SensitivityGroup, design: Dimension) -> ScanResult:
-        """Run a design over the simulation of a group, the outputs per point."""
+        """Run a design over the simulation of a group, the outputs per point.
+
+        The scan of a group with `prepare` is the one the function gives on
+        the build of the group (`SensitivityGroup.prepare`).
+        """
+        path = self.model_path(group)
+        scan = Scan(group.simulation, [design])
+        if group.prepare is not None:
+            scan = group.prepare(scan, path)
         return self.simulator.run(
-            self.model_path,
-            Scan(group.simulation, [design]),
-            self.observables,
-            keep=[o.observable for o in self.outputs],
+            path, scan, self.observables, keep=[o.observable for o in self.outputs]
         )
 
     def write_indices(
@@ -849,7 +1175,7 @@ class LocalAnalysis(Analysis):
                         sampling.local(
                             targets,
                             delta=kv / self.n_var * self.delta,
-                            model=context.model_path,
+                            model=context.model_path(group),
                             simulation=group.simulation,
                         ),
                     )
@@ -938,6 +1264,162 @@ class LocalAnalysis(Analysis):
         return df.sort_values(
             by="|Sij|", ascending=False, na_position="last", ignore_index=True
         )
+
+
+#: the severities of the impairments of a library model, 0 in the healthy
+#: individual, by their largest value (Child-Pugh C, NYHA IV)
+SEVERITIES: Mapping[str, float] = MappingProxyType(
+    {"CP_severity": 3.0, "HF_severity": 4.0}
+)
+
+
+@dataclass(frozen=True, kw_only=True)
+class NonzeroLocalAnalysis(LocalAnalysis):
+    """The local analysis of the parameters whose value is not 0.
+
+    A local design changes a value relative to itself, so a severity at 0
+    (the healthy individual) is not changed and its sensitivity is 0/0; the
+    sampled analyses vary the severities within their bounds.
+    """
+
+    @override
+    def varied(
+        self, parameters: Sequence[SensitivityParameter]
+    ) -> list[SensitivityParameter]:
+        return [p for p in super().varied(parameters) if p.value != 0]
+
+
+def notes_sources(sbase: libsbml.SBase) -> list[str]:
+    """Get the sources in the notes of an element of a library model.
+
+    The library writes the sources of a value as a list after a paragraph
+    `Sources:` of its notes.
+
+    Args:
+        sbase: the element.
+
+    Returns:
+        The sources, one text per list item; empty without notes or sources.
+    """
+    if not sbase.isSetNotes():
+        return []
+    root = ElementTree.fromstring(sbase.getNotesString())
+    elements = list(root.iter())
+    for k, element in enumerate(elements):
+        if element.tag.endswith("}p") and "".join(element.itertext()).strip() == (
+            "Sources:"
+        ):
+            lists = [e for e in elements[k + 1 :] if e.tag.endswith("}ul")]
+            if lists:
+                return [
+                    " ".join("".join(item.itertext()).split())
+                    for item in lists[0]
+                    if item.tag.endswith("}li")
+                ]
+    return []
+
+
+def library_parameters(
+    model_path: Path,
+    ids: Sequence[str],
+    *,
+    fit_ids: Collection[str],
+    scaling_ids: Collection[str],
+    references: Mapping[str, str] = MappingProxyType({}),
+    relative: float = 0.15,
+) -> list[SensitivityParameter]:
+    """Get the parameters of the analyses of a model of the PBPK library.
+
+    A library model has hundreds of constants, most of them initial
+    assignments of the covariates, which an analysis of all constants would
+    vary as well; the analysis names the parameters it varies. They are the
+    `ids`, in this order, with these bounds:
+
+    - fitted parameters (`fit_ids`, type fitted): `value * (1 +- relative)`;
+    - scaling factors (`scaling_ids`, type scaling, 1 in the healthy
+      individual): `1 +- relative`;
+    - severities (`SEVERITIES`, type scaling): 0 to `relative * top`, since
+      relative bounds around 0 would be 0;
+    - any other parameter: `value * (1 +- relative)`.
+
+    The reference of a parameter is the sources of its notes (`;` separated),
+    replaced by the text in `references` (e.g. the guideline of the classes of
+    the renal function, whose notes give no source). A parameter of the type
+    not set with a reference is of the type data.
+
+    Args:
+        model_path: the SBML model.
+        ids: the parameters of the analysis.
+        fit_ids: the fitted parameters among the `ids`.
+        scaling_ids: the scaling factors among the `ids`.
+        references: references by id, which replace those of the notes.
+        relative: the relative half width of the bounds.
+
+    Returns:
+        The parameters of the `ids` with bounds, types and references.
+
+    Raises:
+        ValueError: naming every id which is no parameter of the model, and
+            every id of `fit_ids`, `scaling_ids` or `references` which is not
+            in `ids`.
+    """
+    by_uid = {
+        p.uid: p
+        for p in parameters_from_sbml(model_path, exclude_na=False, exclude_zero=False)
+    }
+    missing = [uid for uid in ids if uid not in by_uid]
+    if missing:
+        raise ValueError(
+            f"The parameters {missing} of the sensitivity analysis are no "
+            f"parameters of the model {model_path.name}."
+        )
+    outside = sorted(
+        {*fit_ids, *scaling_ids, *references}.difference(ids),
+    )
+    if outside:
+        raise ValueError(
+            f"The ids {outside} of the sensitivity analysis are not in its parameters."
+        )
+    parameters = [by_uid[uid] for uid in ids]
+
+    # the fitted parameters, their bounds are set relative to the value below
+    set_bounds(
+        parameters, [(uid, np.nan, np.nan, ParameterType.FIT) for uid in fit_ids]
+    )
+    # the scaling factors of the organ functions and of the protein activities
+    set_bounds(
+        parameters,
+        [
+            (uid, 1 - relative, 1 + relative, ParameterType.SCALING)
+            for uid in scaling_ids
+        ],
+    )
+    # the severities, whose relative bounds around 0 would be 0
+    set_bounds(
+        parameters,
+        [
+            (uid, 0.0, relative * top, ParameterType.SCALING)
+            for uid, top in SEVERITIES.items()
+        ],
+    )
+
+    # the references of the values, as the sources of their notes
+    model: libsbml.Model = libsbml.readSBMLFromFile(str(model_path)).getModel()
+    texts = {
+        uid: "; ".join(sources)
+        for uid in ids
+        if (sources := notes_sources(model.getParameter(uid)))
+    }
+    texts.update(references)
+    for uid, reference in texts.items():
+        p = by_uid[uid]
+        p.reference = reference
+        if p.type == ParameterType.NA:
+            p.type = ParameterType.DATA
+
+    # every parameter without bounds varies around its value
+    set_relative_bounds(parameters, relative)
+    return parameters
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1036,7 +1518,7 @@ class SamplingAnalysis(_SampledAnalysis):
         results: dict[str, ScanResult] = {}
         for group in self.groups:
             group_path = self._group_path(path, group)
-            res = context.scan(group, design)
+            res = context.scan(group, context.design(group, design, varied))
             results[group.uid] = res
             res.ds[list(observables)].to_dataframe().rename(columns=observables).to_csv(
                 group_path / "samples.tsv", sep="\t"
@@ -1202,7 +1684,9 @@ class _GlobalAnalysis(_SampledAnalysis):
         design = self._design(varied, n, context.seed)
         for kg, group in enumerate(self.groups):
             group_path = self._group_path(path, group)
-            result = self._indices(context.scan(group, design))
+            result = self._indices(
+                context.scan(group, context.design(group, design, varied))
+            )
             context.write_indices(result, ["S1", "ST"], group_path)
             figures = f"{prefix}_sensitivity_{kg:>02}_{group.uid}"
             for ko, output in enumerate(context.outputs):
@@ -1334,12 +1818,27 @@ def _workers(text: str) -> int:
     return value
 
 
-def _write_table(parameters: Sequence[SensitivityParameter], path: Path) -> None:
+def _write_table(
+    parameters: Sequence[SensitivityParameter],
+    path: Path,
+    builds: Mapping[Sex, Mapping[str, float]] | None = None,
+) -> None:
     """Write the table of the parameters into a folder and print it."""
     path.mkdir(parents=True, exist_ok=True)
-    df_parameters = write_parameters(parameters, path)
+    df_parameters = write_parameters(parameters, path, builds)
     with pd.option_context("display.float_format", "{:.5g}".format):
         console.print(df_parameters)
+
+
+def _builds(
+    model: PKPDModel, sexes: Iterable[Sex], parameters: Sequence[SensitivityParameter]
+) -> dict[Sex, dict[str, float]]:
+    """Get the values of the parameters in the builds of the sexes, by sex."""
+    uids = [p.uid for p in parameters]
+    return {
+        sex: build_values(model.model_path_of(sex), uids)
+        for sex in sorted(sexes, key=list(Sex).index)
+    }
 
 
 def _report(items: Mapping[str, str], path: Path) -> None:
@@ -1364,7 +1863,8 @@ class SensitivityRunner:
     of a run, before anything is written.
 
     Attributes:
-        model: the model object: the model which is simulated, the folder of
+        model: the model object: the models which are simulated (the build
+            of the sex of every group, `SensitivityGroup.sex`), the folder of
             the results and the settings of the simulator.
         parameters: the function which gives the parameters of the analyses
             with their bounds; it reads the model, so it is called by a run.
@@ -1394,7 +1894,8 @@ class SensitivityRunner:
             ValueError: for no output, two outputs of one id, name or
                 observable, an output whose observable is none of the
                 observables, no analysis, no default analysis, or a default
-                analysis which is none of the analyses or is given twice.
+                analysis which is none of the analyses or is given twice, or a
+                group of a sex which the model has no build of.
             TypeError: for a default which is a string.
         """
         object.__setattr__(self, "outputs", tuple(self.outputs))
@@ -1432,6 +1933,15 @@ class SensitivityRunner:
         repeated = _repeated(self.default)
         if repeated:
             raise ValueError(f"The default analyses {repeated} are given twice.")
+        for name, analysis in self.analyses.items():
+            for group in analysis.groups:
+                try:
+                    self.model.model_path_of(group.sex)
+                except ValueError as err:
+                    raise ValueError(
+                        f"The group '{group.uid}' of the analysis '{name}' runs "
+                        f"the {group.sex} build: {err}"
+                    ) from err
 
     def _names(self, names: Sequence[str] | None) -> tuple[str, ...]:
         """Get the names of the analyses of a run, `default` if `None`.
@@ -1469,15 +1979,57 @@ class SensitivityRunner:
                 raise
         return varied
 
-    def _context(self, simulator: Simulator) -> _Context:
+    def _context(
+        self, simulator: Simulator, builds: Mapping[Sex, Mapping[str, float]]
+    ) -> _Context:
         """Get the context of the analyses of a run."""
         return _Context(
             simulator=simulator,
-            model_path=self.model.model_path,
+            model=self.model,
             outputs=self.outputs,
             observables=self.observables,
             seed=self.seed,
+            builds=builds,
         )
+
+    def _sexes(self, names: Sequence[str]) -> set[Sex]:
+        """Get the sexes of the groups of the named analyses other than male."""
+        return {
+            group.sex
+            for name in names
+            for group in self.analyses[name].groups
+            if group.sex is not Sex.MALE
+        }
+
+    def _check_designs(
+        self,
+        names: Sequence[str],
+        varied: Mapping[str, Sequence[SensitivityParameter]],
+        builds: Mapping[Sex, Mapping[str, float]],
+        where: str = "",
+    ) -> None:
+        """Check that the global designs of the named analyses carry to every build.
+
+        Raises:
+            ValueError: see `design_factors`, with a note naming the analysis
+                and the group.
+        """
+        for name in names:
+            analysis = self.analyses[name]
+            if isinstance(analysis, LocalAnalysis):
+                # a local design is drawn around the values of each build
+                continue
+            for group in analysis.groups:
+                if group.sex not in builds:
+                    continue
+                try:
+                    design_factors(varied[name], builds[group.sex])
+                except ValueError as err:
+                    err.add_note(
+                        f"The group '{group.uid}' of the analysis '{name}'{where} "
+                        f"runs the {group.sex} build."
+                    )
+                    raise
 
     def simulator_settings(self, workers: int | None) -> SimulatorSettings | None:
         """Get the settings of the simulator of a run which caps the processes.
@@ -1508,9 +2060,10 @@ class SensitivityRunner:
         varied: Mapping[str, Sequence[SensitivityParameter]],
         path: Path,
         simulator: Simulator,
+        builds: Mapping[Sex, Mapping[str, float]] | None = None,
     ) -> None:
         """Run the named analyses, every one into `path / <name>`."""
-        context = self._context(simulator)
+        context = self._context(simulator, builds or {})
         for name in names:
             self.analyses[name]._run(context, varied[name], path / name)
 
@@ -1525,8 +2078,11 @@ class SensitivityRunner:
         """Run analyses and write the table of the parameters.
 
         The names, the parameters (their distributions, whether an analysis
-        varies one) and the numbers of samples of a smoke run are checked
-        before anything is written.
+        varies one, whether a global design carries to the build of every
+        group, `design_factors`) and the numbers of samples of a smoke run are
+        checked before anything is written. The values of the table are those
+        of the male build; with groups of another sex the table has their
+        values as well (`value_<sex>`).
 
         Args:
             names: the names of the analyses, `default` if `None`.
@@ -1547,7 +2103,8 @@ class SensitivityRunner:
             TypeError: for names which are a string.
             ValueError: for a name which is no analysis or is given twice, a
                 subfolder which does not lie below `path`, and see
-                `distributions` and `sample_size`; before anything is written.
+                `distributions`, `sample_size` and `design_factors` (a global
+                design of a group of another sex); before anything is written.
         """
         names = self._names(names)
         if subfolder is not None:
@@ -1555,10 +2112,12 @@ class SensitivityRunner:
         path = self.model.results_dir / "sensitivity" if path is None else path
         parameters = list(self.parameters())
         varied = self._plan(names, parameters)
+        builds = _builds(self.model, self._sexes(names), parameters)
+        self._check_designs(names, varied, builds)
 
-        _write_table(parameters, path)
+        _write_table(parameters, path, builds)
         analyses_path = path if subfolder is None else path / subfolder
-        self._execute(names, varied, analyses_path, self._simulator(simulator))
+        self._execute(names, varied, analyses_path, self._simulator(simulator), builds)
         _report({"analyses": ", ".join(names)}, analyses_path)
         return path
 
@@ -1761,12 +2320,23 @@ def run_subfolders(
             runner._plan(run_names, parameters[key], f" of the subfolder '{key}'"),
         )
 
+    sexes = set().union(*(runners[key]._sexes(plans[key][0]) for key in keys))
+    # the values of every parameter of every subfolder (the tables are equal,
+    # the union keeps a parameter of any subfolder in the values)
+    union = list({p.uid: p for key in keys for p in parameters[key]}.values())
+    builds = _builds(first.model, sexes, union)
+    for key in keys:
+        run_names, varied = plans[key]
+        runners[key]._check_designs(
+            run_names, varied, builds, f" of the subfolder '{key}'"
+        )
+
     path = first.model.results_dir / "sensitivity" if path is None else path
-    _write_table(parameters[keys[0]], path)
+    _write_table(parameters[keys[0]], path, builds)
     simulator_ = first._simulator(simulator)
     for key in keys:
         run_names, varied = plans[key]
-        runners[key]._execute(run_names, varied, path / key, simulator_)
+        runners[key]._execute(run_names, varied, path / key, simulator_, builds)
     _report(
         {
             "subfolders": ", ".join(keys),

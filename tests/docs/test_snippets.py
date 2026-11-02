@@ -89,7 +89,11 @@ def test_snippets(name: str, tmp_path: Path) -> None:
     blocks = executable_blocks(DOCS_DIR / name)
     (tmp_path / "blocks.json").write_text(json.dumps(blocks), encoding="utf-8")
     (tmp_path / "run_page.py").write_text(RUNNER, encoding="utf-8")
+    # the models of a page compile at `O0` of sbmlsim (unless the environment
+    # names a level): the pages compile more than they simulate, see the
+    # helpers of the PBPK tests (`tests/pbpk/conftest.py`)
     env = dict(os.environ, PYTHONUTF8="1")
+    env.setdefault("SBMLSIM_JIT_OPTIMIZATION", "O0")
     result = subprocess.run(
         [sys.executable, "-W", "error", "run_page.py"],
         cwd=tmp_path,

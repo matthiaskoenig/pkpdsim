@@ -39,6 +39,7 @@ def test_substance_parameters() -> None:
     assert ids.mr("api") == "Mr_api"
     assert ids.fu("api") == "fu_api"
     assert ids.fu_ref("api") == "fu_ref_api"
+    assert ids.baseline("api") == "baseline_api"
     assert ids.kp("api") == "Kp_api"
     assert ids.kp_organ(Organ.LIVER, "api") == "Kp_li_api"
     assert ids.ftissue("api") == "ftissue_api"
@@ -178,3 +179,9 @@ def test_species_of_tubule_exact_substance() -> None:
     assert ids.species_of("x", all_ids) == ["KI__Ctub_pt_x", "KI__Ctub_cd_x"]
     assert ids.species_of("pt_x", all_ids) == ["KI__Ctub_pt_pt_x"]
     assert ids.species_of("x_m", all_ids) == ["KI__Ctub_lh_x_m"]
+
+
+def test_dissolution_factor_ids() -> None:
+    """The factors of the dissolution rate of a tablet."""
+    assert ids.dissolution_fed_factor("api") == "f_dis_fed_api"
+    assert ids.dissolution_release_factor("api") == "f_dis_release_api"

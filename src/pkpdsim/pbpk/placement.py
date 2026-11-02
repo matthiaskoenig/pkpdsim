@@ -49,6 +49,15 @@ metabolism and transport into the parts of each of its zones (`zone`), with
 the ids of the zone (`Cti_z1_<s>`, `DRG2M_z1`) and the share of the zone of
 the capacity of the organ (`capacity`); the apical sink is that of the organ.
 
+A constant of a process given as `RateOf` is the initial assignment
+`<p>_Vmax = <p>_Vmax_ratio * <other>_Vmax` over local ids of the organ
+(`OrganFormulaParameter`). A metabolism whose product fractions are values or
+the remainder `REST` has them as the constants `f_<p>_<s>` of the organ: its
+reaction consumes the substrate, and one reaction per product forms the
+product with its fraction of the rate (`<p>_to_<s>`, rate `f_<p>_<s> * <p>`),
+so the products are formed by the fractions which a fit or an experiment
+sets; numbers which sum to 1 are the stoichiometry of the one reaction.
+
 A variant with a lumen of its own on the apical side of the cell gives it
 (`Apical`): the nephron kidney (`pkpdsim.pbpk.variants.kidney_nephron`)
 places the apical transport between the cells of the kidney and the lumen of
@@ -75,6 +84,8 @@ from pkpdsim.pbpk.chemistry import (
     Hill,
     Membrane,
     Metabolism,
+    RateOf,
+    Rest,
     Transport,
 )
 from pkpdsim.pbpk.data import cite
@@ -84,7 +95,7 @@ from pkpdsim.pbpk.parts import Parts
 from pkpdsim.pbpk.proteins import Inhibition
 from pkpdsim.pbpk.substance import KpMethod, Substance
 from pkpdsim.pbpk.units import U
-from pkpdsim.pbpk.values import Formula, Q, as_value
+from pkpdsim.pbpk.values import Formula, ModelParameter, Q, Value, as_value
 
 if TYPE_CHECKING:
     from pkpdsim.pbpk.organ import OrganContext
@@ -94,12 +105,16 @@ __all__ = [
     "Apical",
     "FormulaParameter",
     "Inhibitors",
+    "OrganFormulaParameter",
     "Sink",
+    "SpeciesStart",
     "apical_sink",
     "built_parts",
     "formula_assignment",
     "formula_ids",
     "formula_problems",
+    "fraction_parameters",
+    "fractions_are_constants",
     "has_turnover",
     "in_zone",
     "inhibition_parameters",
@@ -109,8 +124,11 @@ __all__ = [
     "metabolism_part",
     "place",
     "process_source",
+    "product_reaction",
     "rate_law",
     "species_compartment",
+    "species_start",
+    "start_formula",
     "stoichiometry",
     "unbound",
     "value_parameter",
@@ -270,6 +288,54 @@ def species_compartment(
     return ids.compartment(part, zone)
 
 
+def start_formula(substance: Substance, coefficient: str | None = None) -> str | None:
+    """Get the initial concentration of a species of an endogenous substance, as formula.
+
+    The species of a substance with a baseline start at the equilibrium of
+    their exchange with plasma: the plasma at the baseline, every other part
+    at the baseline times its coefficient to plasma (`Kbc`, `Kp`,
+    `K_int_pls`, `K_cell_pls`, `K_or`, `K_mu`).
+
+    Args:
+        substance: the substance.
+        coefficient: the coefficient of the part to plasma at the equilibrium
+            of its exchange (an id), `None` for plasma.
+
+    Returns:
+        `baseline_<s>` or `<coefficient> * baseline_<s>`; `None` for a
+        substance without baseline, whose species start at 0.
+    """
+    if substance.baseline is None:
+        return None
+    b = ids.baseline(substance.sid)
+    return b if coefficient is None else f"{coefficient} * {b}"
+
+
+class SpeciesStart(InitialAssignment):
+    """The initial assignment of a species of an endogenous substance (`start_formula`).
+
+    It stays an initial assignment when it reads a dynamic quantity
+    (`pkpdsim.pbpk.builder`): the species starts once, its reactions change
+    it afterwards.
+    """
+
+
+def species_start(sid: str, formula: str, name: str) -> SpeciesStart:
+    """Get the start of a species of an endogenous substance, with a name and an SBO term.
+
+    Args:
+        sid: the id of the species.
+        formula: the initial concentration (mM), `start_formula`.
+        name: the name of the species.
+
+    Returns:
+        The initial assignment.
+    """
+    return SpeciesStart(
+        sid, formula, U.mM, name=name, sboTerm=SBO.MATHEMATICAL_EXPRESSION
+    )
+
+
 def kp_id(substance: Substance, organ: Organ) -> str | None:
     """Get the id of the whole tissue to plasma coefficient of a substance in an organ.
 
@@ -278,14 +344,18 @@ def kp_id(substance: Substance, organ: Organ) -> str | None:
         organ: the organ.
 
     Returns:
-        `Kp_<o>_<s>` for an organ with an override or a Kp method, `Kp_<s>`
-        otherwise, `None` if the substance does not enter the tissue of the
-        organ.
+        `Kp_<o>_<s>` for an organ with an override, a Kp method or the
+        interstitial shares, `Kp_<s>` otherwise, `None` if the substance does
+        not enter the tissue of the organ.
     """
     dist = substance.distribution
     if dist is None or (dist.organs is not None and organ not in dist.organs):
         return None
-    if isinstance(dist, KpMethod) or organ in dist.overrides:
+    if (
+        isinstance(dist, KpMethod)
+        or organ in dist.overrides
+        or dist.interstitial is not None
+    ):
         return ids.kp_organ(organ, substance.sid)
     return ids.kp(substance.sid)
 
@@ -563,6 +633,45 @@ class FormulaParameter(Parameter):
         self.formula = formula
 
 
+class OrganFormulaParameter(Parameter):
+    """A constant of an organ whose value is a formula over other constants of the organ.
+
+    The capacity of a process which is a ratio of another (`RateOf`,
+    `<p>_Vmax_ratio * <other>_Vmax`) and the remainder of the product
+    fractions of a metabolism (`REST`, `1 - f_<p>_<a> - ...`): the parameter
+    has no value, the organ gives it the initial assignment of the formula
+    (`OrganBuilder.model_definition`) and refuses an id of the formula which
+    is no constant of the organ.
+
+    Attributes:
+        expression: the formula (SBML L3 infix) over local ids of the organ.
+        reads: the local ids of the formula.
+    """
+
+    def __init__(
+        self,
+        pid: str,
+        expression: str,
+        reads: tuple[str, ...],
+        unit: UnitDefinition,
+        name: str,
+        sbo: str,
+        notes: str,
+    ) -> None:
+        """Create the parameter of a formula of the organ."""
+        super().__init__(
+            pid,
+            None,
+            unit,
+            constant=True,
+            name=name,
+            sboTerm=sbo,
+            notes=f"{notes}\n\n`{pid} = {expression}`",
+        )
+        self.expression = expression
+        self.reads = reads
+
+
 def formula_ids(expression: str) -> set[str]:
     """Get the ids a formula reads (SBML L3 infix), `time` for the simulation time.
 
@@ -727,7 +836,7 @@ def place(
             f"of '{ctx.organ.value}'."
         )
     if isinstance(process, Metabolism):
-        return [_metabolism(process, ctx, parts, capacity, zone)]
+        return _metabolism(process, ctx, parts, capacity, zone)
     if isinstance(process, Transport):
         return [_transport(process, ctx, parts, capacity, zone, apical)]
     if zone is not None:
@@ -735,7 +844,7 @@ def place(
             f"Custom reaction '{process.sid}' cannot be placed in zone '{zone}': "
             "its rate is stated for the whole organ."
         )
-    return [_custom(process, parts)]
+    return [_custom(process, ctx, parts)]
 
 
 def _substance(ctx: "OrganContext", sid: str) -> Substance:
@@ -799,28 +908,28 @@ def rate_law(
             )
         if c:
             rate += f" / {c}"
-        return rate, [
-            annotate(
-                value_parameter(p_k, k.k, unit, name, SBO.KINETIC_CONSTANT, text),
-                kind,
-                organ=ctx.organ,
-                protein=process.protein,
-            )
-        ]
+        return rate, _rate_constant(
+            process,
+            ctx.organ,
+            "k",
+            k.k,
+            (unit, name, SBO.KINETIC_CONSTANT, text),
+            kind,
+        )
     vmax, km = f"{pid}_Vmax", f"{pid}_Km"
     pars = [
-        annotate(
-            value_parameter(
-                vmax,
-                k.vmax,
+        *_rate_constant(
+            process,
+            ctx.organ,
+            "Vmax",
+            k.vmax,
+            (
                 U.mmole_per_min_l,
                 f"Vmax {pid} [mmole/min/l]",
                 SBO.MAXIMAL_VELOCITY,
                 f"Maximal rate per litre of organ; the organ has `{vmax} * {v}`.",
             ),
             kinds["vmax"],
-            organ=ctx.organ,
-            protein=process.protein,
         ),
         annotate(
             value_parameter(
@@ -862,6 +971,176 @@ def rate_law(
     return (
         f"{factor}{vmax_app} * {v} * {x}^{n} / ({ONE} + {x}^{n})",
         pars,
+    )
+
+
+def _rate_constant(
+    process: Metabolism | Transport,
+    organ: Organ,
+    constant: str,
+    q: Q | RateOf,
+    describe: tuple[UnitDefinition, str, str, str],
+    kind: str,
+) -> list[Parameter]:
+    """The parameter of the `Vmax` or `k` of a process, and the ratio of a `RateOf`.
+
+    Args:
+        process: the metabolism or transport.
+        organ: the organ.
+        constant: `Vmax` or `k`, the suffix of the id `<p>_<constant>`.
+        q: the value of the constant, or the ratio to the constant of
+            another process of the organ.
+        describe: the unit, name, SBO term and description of the constant.
+        kind: the annotation kind of the constant.
+
+    Returns:
+        The constant with its value; for `RateOf` the constant with the
+        initial assignment `<p>_<constant>_ratio * <other>_<constant>` and
+        the ratio with its provenance.
+    """
+    pid = f"{process.sid}_{constant}"
+    unit, name, sbo, text = describe
+    if not isinstance(q, RateOf):
+        return [
+            annotate(
+                value_parameter(pid, q, unit, name, sbo, text),
+                kind,
+                organ=organ,
+                protein=process.protein,
+            )
+        ]
+    ratio = ids.rate_ratio(process.sid, constant)
+    other = f"{q.process}_{constant}"
+    return [
+        annotate(
+            OrganFormulaParameter(
+                pid,
+                f"{ratio} * {other}",
+                (ratio, other),
+                unit,
+                name,
+                sbo,
+                f"{text} A ratio of the {constant} of the process `{q.process}` "
+                "of the organ, which it follows.",
+            ),
+            kind,
+            organ=organ,
+            protein=process.protein,
+        ),
+        annotate(
+            value_parameter(
+                ratio,
+                q.factor,
+                U.dimensionless,
+                f"ratio {pid} to {other}",
+                SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
+                f"The ratio of the {constant} of `{process.sid}` to the {constant} "
+                f"of `{q.process}`: `{pid} = {ratio} * {other}`.",
+            ),
+            "rate_ratio",
+            organ=organ,
+            protein=process.protein,
+        ),
+    ]
+
+
+def fractions_are_constants(process: Metabolism) -> bool:
+    """Get whether the product fractions of a metabolism are constants of the organ.
+
+    A `Value` or the remainder `REST` makes every fraction a constant
+    `f_<p>_<s>`; numbers are the stoichiometry of the reaction.
+    """
+    return any(isinstance(f, Value | Rest) for f in process.products.values())
+
+
+def fraction_parameters(process: Metabolism, organ: Organ) -> list[Parameter]:
+    """The constants of the product fractions of a metabolism, `f_<p>_<s>`.
+
+    A number or a `Value` is a constant with its provenance (and the
+    uncertainty of a fit), the remainder `REST` the initial assignment
+    `1 - f_<p>_<a> - ...` of the fractions of the other products.
+    """
+    pids = {p: ids.product_fraction(process.sid, p) for p in process.products}
+    others = tuple(
+        pids[p] for p, f in process.products.items() if not isinstance(f, Rest)
+    )
+    pars: list[Parameter] = []
+    for product, f in process.products.items():
+        pid, name = pids[product], f"fraction {process.sid} -> {product}"
+        if isinstance(f, Rest):
+            par: Parameter = OrganFormulaParameter(
+                pid,
+                " - ".join((ONE, *others)),
+                others,
+                U.dimensionless,
+                name,
+                SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
+                f"The remainder of the fractions of `{process.sid}`: the fraction "
+                f"of the substrate which forms `{product}`, one less the "
+                "fractions of the other products.",
+            )
+        else:
+            par = value_parameter(
+                pid,
+                f,
+                U.dimensionless,
+                name,
+                SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
+                f"The fraction of the substrate of `{process.sid}` which forms "
+                f"`{product}`.",
+            )
+        pars.append(
+            annotate(par, "product_fraction", organ=organ, protein=process.protein)
+        )
+    return pars
+
+
+def product_reaction(
+    process: Metabolism,
+    product: str,
+    species: str,
+    compartment: str,
+    zone: str | None,
+    organ: Organ,
+    segment: str | None = None,
+) -> Reaction:
+    """The formation of a product of a metabolism with its fraction of the rate.
+
+    Args:
+        process: the metabolism, whose product fractions are constants.
+        product: the id of the product.
+        species: the species of the product which it forms.
+        compartment: the compartment of the species.
+        zone: the zone or the segment of the metabolism, `None` for the organ.
+        organ: the organ.
+        segment: the segment of the annotation (the mucosa of the intestine).
+
+    Returns:
+        The reaction `<p>_to_<s>` (in a zone or segment `<p>_to_<s>_<zone>`)
+        with the rate `f_<p>_<s> * <p>`, the fraction times the rate of the
+        reaction of the metabolism.
+    """
+    rate = ids.segment_process(process.sid, zone)
+    fraction = ids.product_fraction(process.sid, product)
+    return annotate(
+        Reaction(
+            sid=ids.segment_process(ids.product_reaction(process.sid, product), zone),
+            name=in_zone(
+                f"{process.substrate} -> {product}"
+                + (f" ({process.protein})" if process.protein else ""),
+                zone,
+            ),
+            equation=f"-> {species}",
+            formula=(f"{fraction} * {rate}", U.mmole_per_min),
+            compartment=compartment,
+            sboTerm=SBO.BIOCHEMICAL_REACTION,
+            notes=f"The formation of `{product}` by `{rate}`, the fraction "
+            f"`{fraction}` of its rate.",
+        ),
+        "metabolism_product",
+        organ=organ,
+        segment=segment,
+        protein=process.protein,
     )
 
 
@@ -954,24 +1233,34 @@ def _metabolism(
     parts: Mapping[str, Parts],
     capacity: str | None,
     zone: str | None,
-) -> Reaction:
+) -> list[Reaction]:
     """The reaction of a metabolism in the part of the tissue of its substrate.
 
     A product goes into the first part of `_EQUIVALENT_PARTS` of the part of
     the substrate in which it has a species: the same part, else the
     equivalent tissue part (intracellular, merged tissue, whole organ), else
-    plasma.
+    plasma. Product fractions which are constants of the organ give the
+    reaction of the substrate and one reaction per product
+    (`product_reaction`).
     """
     substrate = _substance(ctx, process.substrate)
     part = metabolism_part(parts[substrate.sid])
     cu = unbound(part, substrate, ctx.organ, zone)
+    constants = fractions_are_constants(process)
+    targets: dict[str, Part] = {}
     products = []
     for product, fraction in process.products.items():
         built = built_parts(parts[product])
-        target = next(t for t in _EQUIVALENT_PARTS[part] if t in built)
-        products.append(stoichiometry(fraction, ids.species(target, product, zone)))
+        targets[product] = next(t for t in _EQUIVALENT_PARTS[part] if t in built)
+        if not constants:
+            assert isinstance(fraction, float | int)
+            products.append(
+                stoichiometry(fraction, ids.species(targets[product], product, zone))
+            )
     inhibitors = _inhibitors(process, ctx, parts, zone)
     rate, pars = rate_law(process, ctx, cu, capacity, inhibitors)
+    if constants:
+        pars += fraction_parameters(process, ctx.organ)
     names = ", ".join(process.products) or "elimination"
     reaction = Reaction(
         sid=ids.segment_process(process.sid, zone),
@@ -993,12 +1282,27 @@ def _metabolism(
         notes=in_zone(f"Metabolism in the {_PART_NAMES[part]} part", zone)
         + f" on the unbound concentration `{cu}`.",
     )
-    return annotate(
-        reaction,
-        process_kind(process, ctx.organ),
-        organ=ctx.organ,
-        protein=process.protein,
-    )
+    reactions = [
+        annotate(
+            reaction,
+            process_kind(process, ctx.organ),
+            organ=ctx.organ,
+            protein=process.protein,
+        )
+    ]
+    if constants:
+        reactions += [
+            product_reaction(
+                process,
+                product,
+                ids.species(target, product, zone),
+                species_compartment(target, product, parts[product], zone),
+                zone,
+                ctx.organ,
+            )
+            for product, target in targets.items()
+        ]
+    return reactions
 
 
 def _transport(
@@ -1032,8 +1336,8 @@ def _transport(
             raise ValueError(
                 f"Transport '{process.sid}': apical influx from the urine is not "
                 "part of the standard kidney (the urine is cumulative); "
-                "reabsorption is `Excretion.fraction_reabsorbed` or the nephron "
-                "variant."
+                "reabsorption is `Excretion.fraction_reabsorbed`, a saturable "
+                "`Excretion.reabsorption` or the nephron variant."
             )
         other = outside = sink.species
         where = {
@@ -1077,8 +1381,20 @@ def _transport(
     )
 
 
-def _custom(process: CustomReaction, parts: Mapping[str, Parts]) -> Reaction:
-    """The reaction of a custom process in the part it names."""
+def _custom(
+    process: CustomReaction, ctx: "OrganContext", parts: Mapping[str, Parts]
+) -> Reaction:
+    """The reaction of a custom process in the part it names.
+
+    A parameter id which custom reactions of another organ use as well gets
+    the metaid of its flat id (`_custom_parameter`).
+    """
+    shared = {
+        str(q.sid)
+        for c in ctx.chemistry
+        if isinstance(c, CustomReaction) and c.organ is not process.organ
+        for q in c.parameters
+    }
     if process.part not in _built(parts.values()):
         raise ValueError(
             f"Custom reaction '{process.sid}' acts in part '{process.part.value}' "
@@ -1090,7 +1406,11 @@ def _custom(process: CustomReaction, parts: Mapping[str, Parts]) -> Reaction:
             equation=process.equation,
             formula=(process.formula, U.mmole_per_min),
             pars=[
-                annotate(copy.copy(par), "custom_parameter", organ=process.organ)
+                annotate(
+                    _custom_parameter(par, process.organ, str(par.sid) in shared),
+                    "custom_parameter",
+                    organ=process.organ,
+                )
                 for par in process.parameters
             ],
             compartment=ids.compartment(process.part),
@@ -1099,6 +1419,37 @@ def _custom(process: CustomReaction, parts: Mapping[str, Parts]) -> Reaction:
         "custom_reaction",
         organ=process.organ,
     )
+
+
+def _custom_parameter(
+    par: ModelParameter | Parameter, organ: Organ, shared: bool
+) -> Parameter:
+    """The parameter of a custom reaction in its organ.
+
+    A `ModelParameter` is a constant with its provenance and the uncertainty
+    of a fitted value (a `Formula` a `FormulaParameter`, whose initial
+    assignment the organ adds with inputs of the ids it reads), with the
+    metaid of its flat id (`meta_MU__<id>`), unique in the document when two
+    organs have a constant of the id. A sbmlutils `Parameter` is copied as
+    it is; when another organ uses its id (`shared`) and it has no metaid,
+    it gets the metaid of its flat id as well (the default metaid of its id
+    would be given twice, an invalid document).
+    """
+    if isinstance(par, ModelParameter):
+        p = value_parameter(
+            par.sid,
+            par.value,
+            par.unit,
+            par.name or par.sid,
+            SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
+            par.notes or "",
+        )
+        p.metaId = f"meta_{ids.flat(organ, par.sid)}"
+        return p
+    p = copy.copy(par)
+    if shared and p.metaId is None:
+        p.metaId = f"meta_{ids.flat(organ, str(p.sid))}"
+    return p
 
 
 def _built(parts: Iterable[Parts]) -> set[Part]:

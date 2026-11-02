@@ -1,7 +1,9 @@
 """Tests of the specifics of the standard kidney and liver and of the bile.
 
-The kidney filters the unbound plasma concentration into the urine,
-`fu*GFR*Cpl*(1 - f_reabsorbed)`; the liver has the portosystemic shunt
+The kidney filters the unbound afferent (arterial) plasma into the urine,
+`fu*GFR*Car*(1 - f_reabsorbed)`, and the plasma leaving it lacks the net
+filtrate at the outflow concentration, so the filtration clearance of the
+arterial plasma is `fu*GFR*(1 - f_reabsorbed)`; the liver has the portosystemic shunt
 `f_shunt`, which bypasses the sinusoids, and the functional fraction
 `f_functional`, which scales its tissue and the capacity of its processes;
 the apical efflux of the liver writes into the bile, which drains into the
@@ -25,6 +27,7 @@ from pkpdsim.pbpk import (
     Kp,
     Membrane,
     Metabolism,
+    Mode,
     Organ,
     Part,
     PBPKDefinition,
@@ -36,9 +39,18 @@ from pkpdsim.pbpk import (
 )
 from pkpdsim.pbpk.builder import build
 
-from .conftest import definition, dose_amount, individual, simple_drug, total_amount
+from .conftest import (
+    definition,
+    dose_amount,
+    individuals,
+    initialized,
+    simple_drug,
+    total_amount,
+)
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     import roadrunner
 
 S = "drg"
@@ -51,8 +63,8 @@ INFUSION = 1.0
 """The infusion rate of the steady state tests (mg/min)."""
 
 
-def _renal_drug(fraction_reabsorbed: float = 0.0) -> Substance:
-    """A vascular drug (fu 0.5) eliminated by filtration only.
+def _renal_drug(fraction_reabsorbed: float = 0.0, fu: float = 0.5) -> Substance:
+    """A vascular drug (fu 0.5 by default) eliminated by filtration only.
 
     Without tissue distribution the volume is the plasma, so the steady state
     of an infusion is reached within hours.
@@ -61,38 +73,86 @@ def _renal_drug(fraction_reabsorbed: float = 0.0) -> Substance:
         sid=S,
         name="drug",
         mr=300.0,
-        binding=Binding(fu=0.5, protein="albumin"),
+        binding=Binding(fu=fu, protein="albumin"),
         excretion=Excretion(urine=True, fraction_reabsorbed=fraction_reabsorbed),
     )
 
 
-def _renal(tmp_path: Path, fraction_reabsorbed: float = 0.0) -> Path:
+def _renal(tmp_path: Path, fraction_reabsorbed: float = 0.0, fu: float = 0.5) -> Path:
     """Build the renal drug, given intravenously, without chemistry."""
     d = definition(
         sid="renal",
-        substances=[_renal_drug(fraction_reabsorbed)],
+        substances=[_renal_drug(fraction_reabsorbed, fu)],
         chemistry=[],
         routes=[Route.iv(S)],
     )
     return build(d, tmp_path).flat_path
 
 
-def _load(path: Path, **changes: float) -> "roadrunner.RoadRunner":
-    """Load a model with changes before its initialization, tight tolerances."""
-    r = individual(path, **changes)
+def _load(
+    model: "Path | Callable[..., roadrunner.RoadRunner]", **changes: float
+) -> "roadrunner.RoadRunner":
+    """Load a model with changes before its initialization, tight tolerances.
+
+    The model is a file or the `individuals` of one, loaded once for a test.
+    """
+    r = initialized(model, **changes)
     r.integrator.absolute_tolerance = 1e-12
     r.integrator.relative_tolerance = 1e-10
     return r
 
 
 def _kidney_plasma(r: "roadrunner.RoadRunner") -> float:
-    """The plasma concentration of the kidney (mM), `KI__Cpl_<s>` (R1)."""
+    """The plasma concentration of the kidney (mM), `KI__Cpl_<s>`."""
     return r[f"[{ids.flat(Organ.KIDNEY, ids.species(Part.PLASMA, S))}]"]
 
 
 def _filtration(r: "roadrunner.RoadRunner") -> float:
     """The rate of the filtration into the urine (mmole/min)."""
     return r[ids.flat(Organ.KIDNEY, ids.filtration_reaction(S))]
+
+
+def _arterial(r: "roadrunner.RoadRunner") -> float:
+    """The arterial plasma concentration (mM), the afferent plasma of the kidney."""
+    return r[f"[{ids.pool_species(Pool.ARTERIAL, S)}]"]
+
+
+def _kidney_outflow(r: "roadrunner.RoadRunner") -> float:
+    """The plasma concentration of the blood leaving the kidney (mM), every form."""
+    return r[ids.organ_outflow(Organ.KIDNEY, S)]
+
+
+_ERYTHROCYTES = {
+    "none": None,
+    "equilibrium": Erythrocytes("equilibrium", bp=1.3),
+    "kinetic": Erythrocytes("kinetic", kbc=2.0, k_exchange=1.0),
+}
+"""The erythrocyte modes of the form tests."""
+
+_FORMS = [
+    (mode, ery)
+    for mode in Mode
+    for ery in _ERYTHROCYTES
+    if not (mode is Mode.PERFUSION and ery == "kinetic")
+]
+"""Every form of the standard kidney: the modes with the erythrocyte modes
+(the flow-limited organ has no kinetic blood cells)."""
+
+
+def _distributed(tmp_path: Path, mode: Mode, ery: str) -> Path:
+    """A distributed drug in a form of the kidney (fu 0.3, 20 % reabsorbed), IV, no chemistry."""
+    drug = dataclasses.replace(
+        _renal_drug(fraction_reabsorbed=0.2, fu=0.3),
+        distribution=Kp(1.5, mode=mode, ftissue=1.0),
+        erythrocytes=_ERYTHROCYTES[ery],
+    )
+    d = definition(
+        sid=f"form_{mode.value}_{ery}",
+        substances=[drug],
+        chemistry=[],
+        routes=[Route.iv(S)],
+    )
+    return build(d, tmp_path).flat_path
 
 
 def test_renal_clearance_fu_gfr(tmp_path: Path) -> None:
@@ -106,9 +166,77 @@ def test_renal_clearance_fu_gfr(tmp_path: Path) -> None:
     rate = _filtration(r)
     assert rate == pytest.approx(INFUSION / r[ids.mr(S)], rel=1e-8)
     assert rate / _kidney_plasma(r) == pytest.approx(
-        r[ids.fu(S)] * r[ids.GFR], rel=1e-10
+        r[ids.fu(S)] * r[ids.GFR], rel=1e-8
     )
     assert r[ids.urine(S)] > 0
+
+
+@pytest.mark.parametrize(
+    ("fu", "fraction_reabsorbed"), [(1.0, 0.0), (0.2, 0.3)], ids=["free", "bound"]
+)
+def test_filtration_clearance_of_the_arterial_plasma(
+    tmp_path: Path, fu: float, fraction_reabsorbed: float
+) -> None:
+    """The systemic filtration clearance is `fu*GFR*(1 - f_reabsorbed)`.
+
+    The glomerulus filters the afferent plasma and the plasma leaving the
+    kidney lacks the filtrate: at the steady state of an infusion the plasma
+    of the kidney is the arterial plasma, and the urine rate over the
+    arterial (and the arm vein) plasma is the clearance, not
+    `fu*GFR*Qp/(Qp + fu*GFR)` of a kidney which returns the whole plasma flow.
+    """
+    r = _load(_renal(tmp_path, fraction_reabsorbed, fu))
+    r[ids.infusion_rate(S)] = INFUSION
+    r.simulate(0, 4 * DAY, 2)
+    rate = r[ids.urine_rate(S)]
+    assert rate == pytest.approx(INFUSION / r[ids.mr(S)], rel=1e-8)
+    clearance = fu * r[ids.GFR] * (1 - fraction_reabsorbed)
+    arterial = _arterial(r)
+    assert rate / arterial == pytest.approx(clearance, rel=1e-6)
+    assert rate / r[ids.arm(S)] == pytest.approx(clearance, rel=1e-6)
+    assert _kidney_plasma(r) == pytest.approx(arterial, rel=1e-6)
+
+
+@pytest.mark.parametrize(("mode", "ery"), _FORMS)
+def test_filtration_clearance_in_every_form(
+    tmp_path: Path, mode: Mode, ery: str
+) -> None:
+    """The filtration clearance of the arterial plasma is `fu*GFR*(1 - f_reabsorbed)` in every form.
+
+    The filtration reads the afferent (arterial) plasma, the plasma leaving
+    the kidney carries the flow of its carrier (`Q*(1-HCT)`, `Q*BP`) less
+    the net filtrate at the outflow concentration: at the steady state of an
+    infusion the blood leaving the kidney has the arterial plasma
+    concentration, with tissue distribution and with either erythrocyte
+    mode, also in the flow-limited kidney (`Cor/K_or`). Since the filtration
+    reads `Car`, the clearance ratio is an identity of the formula: the
+    outflow law is pinned by `Cout == Car` and by the urine rate equal to
+    the infusion.
+    """
+    r = _load(_distributed(tmp_path, mode, ery))
+    r[ids.infusion_rate(S)] = INFUSION
+    r.simulate(0, 40 * DAY, 2)
+    rate = r[ids.urine_rate(S)]
+    assert rate == pytest.approx(INFUSION / r[ids.mr(S)], rel=1e-6)
+    clearance = 0.3 * r[ids.GFR] * 0.8
+    assert rate / _arterial(r) == pytest.approx(clearance, rel=1e-8)
+    assert _kidney_outflow(r) == pytest.approx(_arterial(r), rel=1e-8)
+
+
+@pytest.mark.parametrize(("mode", "ery"), _FORMS)
+def test_filtration_conserves_the_amount(tmp_path: Path, mode: Mode, ery: str) -> None:
+    """The kidney with filtration conserves the amount in every form.
+
+    The filtration takes the net filtrate out of the plasma of the kidney
+    into the urine and the outflow carries the rest of the plasma flow: body
+    and urine keep the dose of an IV bolus.
+    """
+    r = _load(_distributed(tmp_path, mode, ery))
+    r[ids.iv_dose(S)] = 10.0
+    r.simulate(0, 600, 2)
+    amount = total_amount(r, S) + dose_amount(r, S)
+    assert amount == pytest.approx(10.0 / r[ids.mr(S)], rel=1e-9)
+    assert r[ids.urine(S)] > 0.1 * amount
 
 
 def test_reabsorption_fraction(tmp_path: Path) -> None:
@@ -122,7 +250,7 @@ def test_reabsorption_fraction(tmp_path: Path) -> None:
     r[ids.iv_dose(S)] = 10.0
     r.simulate(0, 60, 2)
     clearance = r[ids.fu(S)] * r[ids.GFR] * 0.6
-    assert _filtration(r) / _kidney_plasma(r) == pytest.approx(clearance, rel=1e-10)
+    assert _filtration(r) / _arterial(r) == pytest.approx(clearance, rel=1e-10)
     r = _load(path, **{ids.fraction_reabsorbed(S): 1.0})
     r[ids.iv_dose(S)] = 10.0
     r.simulate(0, 60, 2)
@@ -163,8 +291,9 @@ def test_shunt_bypasses_liver(tmp_path: Path) -> None:
     pool, so the amount is conserved at every shunt fraction.
     """
     path = _metabolized(tmp_path)
+    person = individuals(path)
     for f_shunt, metabolized in ((0.0, True), (0.5, True), (1.0, False)):
-        r = _load(path, f_shunt=f_shunt)
+        r = _load(person, f_shunt=f_shunt)
         r[ids.iv_dose(S)] = 10.0
         r.simulate(0, DAY, 50)
         amount = total_amount(r, S) + total_amount(r, "drg_m") + dose_amount(r, S)
@@ -200,8 +329,9 @@ def test_functional_fraction_scales_capacity(tmp_path: Path) -> None:
     """
     path = _metabolized(tmp_path)
     values = {}
+    person = individuals(path)
     for f in (1.0, 0.5):
-        r = _load(path, f_functional=f)
+        r = _load(person, f_functional=f)
         r["[LI__Cti_drg]"] = 0.001
         values[f] = (r["LI__DRG2M"], r["LI__Vti"], r["LI__Vpl"], r["LI__PS_drg"])
     rate, vti, vpl, ps = values[0.5]
@@ -252,8 +382,9 @@ def test_bile_reaches_lumen(tmp_path: Path) -> None:
 def test_hepatic_vein_observer(tmp_path: Path) -> None:
     """`Chv_<s>` is the flow-weighted mix of the liver outflow and the shunt."""
     path = _metabolized(tmp_path)
+    person = individuals(path)
     for f_shunt in (0.0, 0.3):
-        r = _load(path, f_shunt=f_shunt)
+        r = _load(person, f_shunt=f_shunt)
         r[ids.iv_dose(S)] = 10.0
         cols = [
             ids.hepatic_vein(S),
@@ -292,7 +423,7 @@ def _clearance(
     """The clearance (l/min) of a process: its rate over its unbound substrate.
 
     The model is initialized with the changes (sbmlsim evaluates the initial
-    assignments which read them again, R21), the substrate species is set
+    assignments which read them again), the substrate species is set
     and the rate read at that state; the unbound concentration is
     `fu*C/coefficient` with the values of the model (a CKD stage changes fu).
 

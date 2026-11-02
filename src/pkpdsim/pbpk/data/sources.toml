@@ -104,6 +104,19 @@ doi = "10.1016/0016-5085(87)90837-7"
 citation = "Helander HF, Fändriks L. Surface area of the digestive tract - revisited. Scand J Gastroenterol 49(6):681-689, 2014."
 doi = "10.3109/00365521.2014.898326"
 
+# The regional absorption: no generic profile of the colonic absorption, which
+# depends on the permeability of the drug (`RegionalAbsorption`).
+[Tannergren2009]
+citation = "Tannergren C, Bergendal A, Lennernäs H, Abrahamsson B. Toward an increased understanding of the barriers to colonic drug absorption in humans: implications for early controlled release candidate assessment. Mol Pharm 6(1):60-73, 2009."
+doi = "10.1021/mp800261a"
+
+# The regional absorption of apixaban (Enterion capsules, 2.5 mg solution):
+# Cmax and AUC(0-t) about 60 % lower released in the distal small bowel, 90 %
+# and 84 % lower in the ascending colon than after the oral solution.
+[Byon2018]
+citation = "Byon W, Nepal S, Schuster AE, Shenker A, Frost CE. Regional gastrointestinal absorption of apixaban in healthy subjects. J Clin Pharmacol 58(7):965-971, 2018. Abstract read (Europe PMC, 2026-10-29); the full text is not open access."
+doi = "10.1002/jcph.1097"
+
 [Paine1997]
 citation = "Paine MF, Khalighi M, Fisher JM, Shen DD, Kunze KL, Marsh CL, Perkins JD, Thummel KE. Characterization of interintestinal and intraintestinal variations in human CYP3A-dependent metabolism. J Pharmacol Exp Ther 283(3):1552-1562, 1997."
 
@@ -153,6 +166,17 @@ doi = "10.1208/ps040104"
 [Alasmari2023]
 citation = "Alasmari F, Alasmari MS, Muwainea HM, Alomar HA, Alasmari AF, Alsanea S, Alshamsan A, Rasool MF, Alqahtani F. Physiologically-based pharmacokinetic modeling for single and multiple dosing regimens of ceftriaxone in healthy and chronic kidney disease populations: a tool for model-informed precision dosing. Front Pharmacol 14:1200828, 2023."
 doi = "10.3389/fphar.2023.1200828"
+
+[Huang2017]
+citation = "Huang MJ, Wei RB, Wang Y, Su TY, Di P, Li QP, Yang X, Li P, Chen XM. Blood coagulation system in patients with chronic kidney disease: a prospective observational study. BMJ Open 7(5):e014294, 2017."
+doi = "10.1136/bmjopen-2016-014294"
+
+[Klammt2012]
+citation = "Klammt S, Wojak HJ, Mitzner A, Koball S, Rychly J, Reisinger EC, Mitzner S. Albumin-binding capacity (ABiC) is reduced in patients with chronic kidney disease along with an accumulation of protein-bound uraemic toxins. Nephrol Dial Transplant 27(6):2377-2383, 2012 (the abstract read)."
+doi = "10.1093/ndt/gfr616"
+
+[Schmulenson2018]
+citation = "Schmulenson E, Schlender JF, Frechen S, Jaehde U. A physiologically-based pharmacokinetic modeling approach to assess the impact of chronic kidney disease. PAGE 27 (2018), Abstr 8630, poster IV-61, https://www.page-meeting.org/?abstract=8630 (the poster read: https://www.page-meeting.org/pdf_assets/1160-Schmulenson_PAGE2018.pdf)."
 
 [Ring2017]
 citation = "Ring CL, Pearce RG, Setzer RW, Wetmore BA, Wambaugh JF. Identifying populations sensitive to environmental chemicals by simulating toxicokinetic variability. Environ Int 106:105-118, 2017."

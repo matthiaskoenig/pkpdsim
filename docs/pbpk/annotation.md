@@ -55,7 +55,14 @@ PBPKO has no term for some of the quantities, compartments and processes of the 
 | severity of heart failure | `PHYSIOLOGICAL_PARAMETER` |
 | stage of chronic kidney disease | `PHYSIOLOGICAL_PARAMETER` |
 | impairment factor | `PHYSIOLOGICAL_PARAMETER` |
+| endogenous baseline plasma concentration | `CONCENTRATION_IN_PLASMA` |
+| net production rate at the steady state | `BIOCHEMICAL_PARAMETER` |
 | factor of the partition coefficients | `BIOCHEMICAL_PARAMETER` |
+| exchange rate constant of a slow tissue pool per tissue volume | `BIOCHEMICAL_PARAMETER` |
+| ratio of the capacity of a process to another process | `BIOCHEMICAL_PARAMETER` |
+| fraction of a metabolism which forms a product | `BIOCHEMICAL_PARAMETER` |
+| renal threshold of a saturable reabsorption | `BIOCHEMICAL_PARAMETER` |
+| sharpness of the renal threshold of a saturable reabsorption | `BIOCHEMICAL_PARAMETER` |
 | tissue composition (water, protein, lipid fractions) | `PHYSIOLOGICAL_PARAMETER` |
 | permeability surface area product (exchange flow) | `BIOCHEMICAL_PARAMETER` |
 | exchange rate constant of plasma and blood cells | `BIOCHEMICAL_PARAMETER` |
@@ -78,11 +85,19 @@ PBPKO has no term for some of the quantities, compartments and processes of the 
 | prandial state (fed or fasted) | `MISCELLANEOUS_PARAMETER` |
 | intestinal mucosa and absorption geometry | `PHYSIOLOGICAL_PARAMETER` |
 | absorption factor of the large intestine | `PHYSIOLOGICAL_PARAMETER` |
+| relative absorption of a substance in an intestinal segment | `BIOCHEMICAL_PARAMETER` |
+| rate constant of a conversion in the intestinal lumen | `BIOCHEMICAL_PARAMETER` |
 | blood flow rate to intestinal mucosa | `BLOOD_FLOW_RATE_TO_COMPARTMENT` |
 | bile transit rate constant | `PHYSIOLOGICAL_PARAMETER` |
 | tubular flow fraction of the glomerular filtration rate | `PHYSIOLOGICAL_PARAMETER` |
 | weight of a tissue in the arm vein sampling site | `PHYSIOLOGICAL_PARAMETER` |
 | urinary excretion rate (amount of compound per time) | `OUTPUT_PARAMETER` |
+| intestinal absorption rate (amount of compound per time) | `OUTPUT_PARAMETER` |
+| intestinal efflux rate into the lumen (amount of compound per time) | `OUTPUT_PARAMETER` |
+| fecal excretion rate (amount of compound per time) | `OUTPUT_PARAMETER` |
+| amount of compound absorbed from the intestinal lumen | `OUTPUT_PARAMETER` |
+| fraction of the oral dose absorbed from the intestinal lumen | `OUTPUT_PARAMETER` |
+| amount of the oral dose applied to the intestinal lumen | `OUTPUT_PARAMETER` |
 | `CONCENTRATION_IN_HEART` | `CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT` |
 | `CONCENTRATION_IN_PANCREAS` | `CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT` |
 | `CONCENTRATION_IN_MUSCLE` | `CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT` |
@@ -91,6 +106,7 @@ PBPKO has no term for some of the quantities, compartments and processes of the 
 | amount of undissolved drug | `AMOUNT_IN_LUMEN` |
 | dissolution process | none, the terms of other ontologies only |
 | gastrointestinal transit process | none, the terms of other ontologies only |
+| conversion in the intestinal lumen | none, the terms of other ontologies only |
 | bone compartment | none, the terms of other ontologies only |
 | portal vein blood compartment | none, the terms of other ontologies only |
 

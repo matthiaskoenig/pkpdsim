@@ -37,6 +37,10 @@ keywords = [
 dependencies = [
     # the factory, the metadata and the console of the models
     "sbmlutils>=0.17.0",
+    # the archive of a library model (`pkpdsim.pbpk.create_archive`): the ODEs as markdown
+    # and the COMBINE archive
+    "sbmlode>=0.3.0",
+    "pymetadata>=0.8.0",
     # the simulator, the initial values are selections of a roadrunner model
     "libroadrunner>=2.11.0",
     # the simulation experiments, their figures and reports, and the fits
@@ -48,6 +52,10 @@ dependencies = [
     # imported directly, also the dependencies of the packages above
     "numpy>=2.5.3",
     "pandas>=3.0.6",
+    # the confidence intervals of the fit records (`pkpdsim.uncertainty`), the
+    # interpolation of the steps of the integrator (`pkpdsim-verify compare`) and the
+    # root search of a regional absorption profile (`pkpdsim.pbpk.regional`)
+    "scipy>=1.18.1",
     # the templates of the files of a release repository (`pkpdsim.release`) and the
     # LaTeX table of the parameters of a sensitivity analysis (`DataFrame.to_latex`)
     "jinja2>=3.1.6",
@@ -100,6 +108,11 @@ path = "./src/pkpdsim/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pkpdsim"]
+
+[tool.uv]
+# the lock only: the PEtab export of sbmlsim 0.14.0 imports `petab.models`,
+# which petab 0.10.0 removed; the next release of sbmlsim reads petab 0.10
+constraint-dependencies = ["petab<0.10"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

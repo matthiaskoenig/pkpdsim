@@ -24,6 +24,12 @@ import the `__init__.py` of their model, so the model object cannot import them,
 and importing a model package does not import its experiments. A module which
 starts with a dot is relative to `package`.
 
+A model whose studies include women has a female build next to the male one
+(`female_model_path`, the factory builds both from one definition, see
+`pkpdsim.pbpk.create_archive`): `model_path` stays the male build, the model of
+every caller which does not ask for a sex, and an experiment chooses the build
+of the sex of its subjects (`pkpdsim.experiment.PKPDSimulationExperiment.sex`).
+
 `FigureSettings` is the `sbmlsim.plot.FigureSettings` of sbmlsim with the
 formats of the figures and the resolution of the static images; the module
 therefore imports sbmlsim's plotting.
@@ -40,8 +46,10 @@ from typing import TYPE_CHECKING, Any
 from sbmlsim.plot import FigureSettings as SbmlsimFigureSettings
 
 from pkpdsim.release.settings import ReleaseSettings
+from pkpdsim.sex import Sex
 
 if TYPE_CHECKING:
+    import roadrunner
     from sbmlsim.experiment import SimulationExperiment
     from sbmlsim.fit.cli import FitDefinition
     from sbmlsim.model.tolerances import AbsoluteTolerance
@@ -129,18 +137,41 @@ class SimulatorSettings:
             every CPU for a scan of `sbmlsim.parallel.POOL_THRESHOLD` points or
             more, serially otherwise). A pool needs the guard
             `if __name__ == "__main__":` in a script which runs the model.
+        jit_optimization: the optimization level with which LLJIT compiles
+            the model for the runs of its experiments and the tests of
+            `pkpdsim.testing` (`sbmlsim.model.model_roadrunner.JitOptimization`,
+            `"O0"` to `"O3"`), `None` for the level of sbmlsim (`O2`, or the
+            environment variable `SBMLSIM_JIT_OPTIMIZATION`). `"O0"` compiles a
+            model with large initial assignments several times faster (the
+            creatinine model in 4.5 s instead of 24 s) and simulates a little
+            slower. The problems of the fits, their reports and the
+            identifiability analysis (`run_fit`, `run_report`,
+            `run_identifiability`, `pkpdsim.testing.start_fits`,
+            `pkpdsim-verify fits`) load their models at the level, in the
+            process and in every worker of a pool: their fit definitions
+            carry it (`pkpdsim.fit.at_level`), and a problem carries its level
+            into its workers, so neither the environment of the process nor
+            that of a forkserver matters; `pkpdsim-verify dump` runs at it,
+            and a test of a model loads its model at it with
+            `PKPDModel.load_roadrunner`.
     """
 
     absolute_tolerance: float | AbsoluteTolerance = 1e-10
     relative_tolerance: float = 1e-10
     n_workers: int | None = 1
+    jit_optimization: str | None = None
 
     def __post_init__(self) -> None:
-        """Check the number of processes.
+        """Check the number of processes and the optimization level.
 
         Raises:
-            ValueError: if `n_workers` is neither a positive int nor `None`.
+            ValueError: if `n_workers` is neither a positive int nor `None`, or
+                `jit_optimization` is no level of sbmlsim.
         """
+        if self.jit_optimization is not None:
+            from sbmlsim.model.model_roadrunner import resolve_jit_optimization
+
+            resolve_jit_optimization(self.jit_optimization)
         n = self.n_workers
         if n is not None and (isinstance(n, bool) or not isinstance(n, int) or n < 1):
             raise ValueError(
@@ -293,7 +324,14 @@ class PKPDModel:
         title: the title of the model in the output of the commands.
         path: the directory of the model package, the base path of its
             experiments.
-        model_path: the SBML model the experiments simulate.
+        model_path: the SBML model the experiments simulate, the male build:
+            the model of every experiment and every caller which does not ask
+            for a sex.
+        female_model_path: the female build of the model, `None` for a model
+            without one; an experiment of women (`sex` of
+            `pkpdsim.experiment.PKPDSimulationExperiment`) simulates it. The
+            builds have the same ids, so a fit applies one parameter set to
+            both, see `model_paths`.
         factory: reference to the function which creates the models; it is
             called with the output directory.
         experiments: reference to the registry of the experiments, groups of
@@ -330,6 +368,7 @@ class PKPDModel:
     title: str
     path: Path
     model_path: Path
+    female_model_path: Path | None = None
     factory: str
     experiments: str | None = None
     fit_definitions: str | None = None
@@ -375,6 +414,69 @@ class PKPDModel:
             raise ValueError(
                 f"The extra actions of '{self.name}' repeat an action: {repeated}."
             )
+        if self.female_model_path == self.model_path:
+            raise ValueError(
+                f"The female build of '{self.name}' is the file of the male build "
+                f"{self.model_path}: a build per sex is a file per sex."
+            )
+
+    @property
+    def model_paths(self) -> dict[Sex, Path]:
+        """The builds of the model by sex, the male build first.
+
+        A model is built for one sex (the reference values of the PBPK library
+        are those of a sex, `pkpdsim.pbpk.PBPKDefinition.sex`); a model with a
+        female build has both, a model without one the male build only. The
+        builds have the same ids, so the changes of an experiment and the
+        parameters of a fit apply to both.
+        """
+        paths = {Sex.MALE: self.model_path}
+        if self.female_model_path is not None:
+            paths[Sex.FEMALE] = self.female_model_path
+        return paths
+
+    def model_path_of(self, sex: Sex) -> Path:
+        """Get the build of a sex.
+
+        Args:
+            sex: the sex.
+
+        Returns:
+            The SBML model of the sex.
+
+        Raises:
+            ValueError: if the model has no build of the sex.
+        """
+        path = self.model_paths.get(Sex(sex))
+        if path is None:
+            raise ValueError(
+                f"The model '{self.name}' has no {Sex(sex)} build: give the model "
+                f"object its {Sex(sex)} build (`{Sex(sex)}_model_path`), which the "
+                "factory creates, or simulate the study on the male build."
+            )
+        return path
+
+    def load_roadrunner(self, sex: Sex = Sex.MALE) -> roadrunner.RoadRunner:
+        """Load the build of a sex in roadrunner at the level of the model.
+
+        The model is compiled with LLJIT at `SimulatorSettings.jit_optimization`
+        (`sbmlsim.model.model_roadrunner.load_roadrunner`), as its experiments
+        load it, and not with roadrunner's default MCJIT, which compiles a
+        model with large initial assignments much slower (48 s for
+        creatinine): the loader of the tests of a model.
+
+        Args:
+            sex: the sex of the build.
+
+        Returns:
+            The roadrunner instance.
+
+        Raises:
+            ValueError: if the model has no build of the sex.
+        """
+        from sbmlsim.model.model_roadrunner import load_roadrunner
+
+        return load_roadrunner(self.model_path_of(sex), self.simulator.jit_optimization)
 
     @property
     def results_dir(self) -> Path:

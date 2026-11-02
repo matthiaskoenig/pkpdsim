@@ -51,9 +51,18 @@ from pkpdsim.pbpk import (
 from pkpdsim.pbpk.builder import build, organ_context
 from pkpdsim.pbpk.organ import OrganComponent
 
-from .conftest import definition, dose_amount, individual, simple_drug, total_amount
+from .conftest import (
+    definition,
+    dose_amount,
+    individuals,
+    initialized,
+    simple_drug,
+    total_amount,
+)
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     import roadrunner
 
 S = "drg"
@@ -153,9 +162,14 @@ def _model(
     return build(d, tmp_path / sid).flat_path
 
 
-def _load(path: Path, **changes: float) -> "roadrunner.RoadRunner":
-    """Load a model with changes before its initialization, tight tolerances."""
-    r = individual(path, **changes)
+def _load(
+    model: "Path | Callable[..., roadrunner.RoadRunner]", **changes: float
+) -> "roadrunner.RoadRunner":
+    """Load a model with changes before its initialization, tight tolerances.
+
+    The model is a file or the `individuals` of one, loaded once for a test.
+    """
+    r = initialized(model, **changes)
     r.integrator.absolute_tolerance = 1e-12
     r.integrator.relative_tolerance = 1e-10
     return r
@@ -467,13 +481,14 @@ def test_profile_preserves_total_capacity(tmp_path: Path) -> None:
             tmp_path / "named",
         ).flat_path,
     }
+    people = {key: individuals(path) for key, path in paths.items()}
     c = 0.005
     for f_functional in (1.0, 0.5):
-        r = _load(paths["standard"], f_functional=f_functional)
+        r = _load(people["standard"], f_functional=f_functional)
         r[f"[{_liver(ids.species(Part.TISSUE, S))}]"] = c
         standard = r[_liver("DRG2M")]
         for key, token in (("protein", "cyp3a4"), ("named", "pericentral")):
-            r = _load(paths[key], f_functional=f_functional)
+            r = _load(people[key], f_functional=f_functional)
             for z in _zones(8):
                 r[f"[{_liver(ids.species(Part.TISSUE, S, z))}]"] = c
             rates = [r[_liver(ids.segment_process("DRG2M", z))] for z in _zones(8)]
@@ -504,14 +519,15 @@ def test_first_order_per_volume_in_zones(tmp_path: Path) -> None:
             dataclasses.replace(d, variants=zonated), tmp_path / "zonated"
         ).flat_path,
     }
+    people = {key: individuals(path) for key, path in paths.items()}
     c = 0.005
     totals = {}
     for bw in (75.0, 150.0):
-        r = _load(paths["standard"], BW=bw)
+        r = _load(people["standard"], BW=bw)
         r[f"[{_liver(ids.species(Part.TISSUE, S))}]"] = c
         clearance = 0.5 * r["Vli"] * r[ids.fu(S)] / r[ids.kp(S)]
         assert r[_liver("DRGX")] == pytest.approx(clearance * c, rel=1e-12)
-        r = _load(paths["zonated"], BW=bw)
+        r = _load(people["zonated"], BW=bw)
         for z in _zones(4):
             r[f"[{_liver(ids.species(Part.TISSUE, S, z))}]"] = c
         rates = np.array([r[_liver(ids.segment_process("DRGX", z))] for z in _zones(4)])

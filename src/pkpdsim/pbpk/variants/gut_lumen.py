@@ -17,6 +17,7 @@ from sbmlutils.factory import Port as _Port
 from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk import ids
+from pkpdsim.pbpk.annotation import initial_assignment
 from pkpdsim.pbpk.data import cite, value
 from pkpdsim.pbpk.impairment import GASTRIC_EMPTYING, SI_TRANSIT
 from pkpdsim.pbpk.organ import StandardBuilder
@@ -27,11 +28,13 @@ from pkpdsim.pbpk.routes import (
     Route,
     dissolution_inputs,
     dissolution_rate,
+    dissolution_reads_fed,
     is_weibull,
 )
 from pkpdsim.pbpk.substance import Substance
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import Value
+from pkpdsim.pbpk.variants.lumen_options import LumenConversion
 from pkpdsim.pbpk.variants.segments import DATA, SMALL, Segment
 
 __all__ = ["LumenBuilder"]
@@ -50,6 +53,10 @@ class LumenBuilder(StandardBuilder):
             the feces.
         colon: the substances which the segments of the large intestine
             absorb with the factor `f_ka_colon_<s>`.
+        regional: the segments of a substance which absorb with its factor
+            `f_ka_<seg>_<s>` (`RegionalAbsorption`), by substance.
+        conversions: the conversions of a substance into another in the
+            lumen (`LumenConversion`).
         oral: the oral routes by (kind, substance).
         bile: the substances excreted into the bile.
         luminal: the substances which reach the lumen.
@@ -60,6 +67,8 @@ class LumenBuilder(StandardBuilder):
     single: bool
     fabs: frozenset[str]
     colon: frozenset[str]
+    regional: dict[str, frozenset[str]]
+    conversions: tuple[LumenConversion, ...]
     oral: dict[tuple[str, str], Route]
     bile: set[str]
     luminal: set[str]
@@ -126,13 +135,7 @@ class LumenBuilder(StandardBuilder):
         """
         t = ids.transit_time(seg.token)
         if seg.token == "st":
-            fed = self._input(ids.FED, U.dimensionless, "fed state (0 fasted, 1 fed)")
-            factor = self._input(
-                GASTRIC_EMPTYING,
-                U.dimensionless,
-                "impairment factor gastric emptying time",
-            )
-            return f"(({t} + {fed} * ({ids.T_STOMACH_FED} - {t})) * {factor})"
+            return f"({self._stomach_time()})"
         if seg.token is None or seg.token in SMALL:
             factor = self._input(
                 SI_TRANSIT,
@@ -141,6 +144,61 @@ class LumenBuilder(StandardBuilder):
             )
             return f"({t} * {factor})"
         return t
+
+    def _stomach_time(self) -> str:
+        """The transit time of the stomach of the condition, unbracketed.
+
+        `(T_st + FED*(T_st_fed - T_st))*fimp_t_stomach`: the prandial state
+        and the factor of the gastric emptying of chronic kidney disease
+        (inputs of the body); the one formula which the transit of the stomach
+        (`_transit`) and its output `T_st_eff` (`_stomach_transit`) read.
+        """
+        t = ids.transit_time("st")
+        fed = self._input(ids.FED, U.dimensionless, "fed state (0 fasted, 1 fed)")
+        factor = self._input(
+            GASTRIC_EMPTYING,
+            U.dimensionless,
+            "impairment factor gastric emptying time",
+        )
+        return f"({t} + {fed} * ({ids.T_STOMACH_FED} - {t})) * {factor}"
+
+    def _stomach_transit(self) -> None:
+        """The transit time of the stomach as a constant and an output, `T_st_eff`.
+
+        The formula of `_transit` of the stomach (the prandial state and the
+        factor of chronic kidney disease), an initial assignment: a model reads
+        the transit of the stomach of its condition from the top model (the
+        rate of a conversion in the stomach) instead of copying the fasted
+        value of the data. The transit of the stomach keeps its own formula.
+        """
+        seg = self.segments[0]
+        if seg.token != "st":
+            msg = f"The first segment of the segmented intestine is '{seg.token}', not the stomach."
+            raise ValueError(msg)
+        formula = self._stomach_time()
+        sid = ids.T_STOMACH
+        self.parameters[sid] = self._annotate(
+            Parameter(
+                sid,
+                None,
+                U.min,
+                constant=True,
+                name="transit time stomach [min]",
+                sboTerm=_SBO_PARAMETER,
+                notes="The transit time of the stomach of the prandial state and "
+                "the impairment, which its transit reads: `T_st` fasted, `T_st_fed` "
+                "fed (`FED = 1`), times the factor of the gastric emptying of "
+                "chronic kidney disease; an output of the intestine, an id of the "
+                f"top model.\n\n`{sid} = {formula}`",
+                port=_Port(f"{sid}_port", portType=PortType.OUTPUT_PORT),
+            ),
+            "gastric_transit_time",
+            segment=seg.token,
+        )
+        self.assignments.append(
+            initial_assignment(sid, formula, U.min, "transit time stomach")
+        )
+        self.outputs[sid] = sid
 
     def _gut_species(
         self,
@@ -241,8 +299,9 @@ class LumenBuilder(StandardBuilder):
 
         The rate `ka/60*f_area*V*C` (the single lumen without the area
         factor), in the large intestine times `f_ka_colon_<s>` (a substance
-        of `colon`); of a substance of `fabs` the fraction `fabs_<s>` of it
-        enters the body, the rest the feces.
+        of `colon`), in a segment of its regional profile times
+        `f_ka_<seg>_<s>`; of a substance of `fabs` the fraction `fabs_<s>` of
+        it enters the body, the rest the feces.
         """
         sid, v = s.sid, ids.lumen_volume(seg.token)
         into = self._absorbed_into(s, parts, seg)
@@ -255,6 +314,14 @@ class LumenBuilder(StandardBuilder):
                     ids.colon_absorption_factor(sid),
                     U.dimensionless,
                     f"absorption factor large intestine {sid}",
+                )
+            )
+        if seg.token in self.regional.get(sid, frozenset()):
+            factors.append(
+                self._input(
+                    ids.regional_absorption_factor(sid, str(seg.token)),
+                    U.dimensionless,
+                    f"absorption factor {seg.label} {sid}",
                 )
             )
         rate = " * ".join([*factors, v, c])
@@ -283,6 +350,34 @@ class LumenBuilder(StandardBuilder):
                 kind="fecal_excretion",
                 segment=seg.token,
             )
+
+    def _conversions(self) -> None:
+        """The conversions in the lumen segments, `kconv/60*V*C` of the substrate.
+
+        One mole of the product per mole of the substrate; the rate constant
+        `kconv_<s>_<m>` (1/hr) is an input of the body.
+        """
+        for c in self.conversions:
+            k = self._input(
+                ids.lumen_conversion_rate(c.substrate, c.product),
+                U.per_hr,
+                f"conversion {c.substrate} to {c.product} in the lumen [1/hr]",
+            )
+            for seg in self.segments:
+                if seg.token not in c.segments:
+                    continue
+                v = ids.lumen_volume(seg.token)
+                substrate = ids.lumen(c.substrate, seg.token)
+                self._reaction(
+                    ids.lumen_conversion_reaction(
+                        c.substrate, c.product, str(seg.token)
+                    ),
+                    f"{substrate} -> {ids.lumen(c.product, seg.token)}",
+                    f"{k} / 60 min_per_hr * {v} * {substrate}",
+                    f"conversion {c.substrate} to {c.product} lumen {seg.label}",
+                    kind="lumen_conversion",
+                    segment=seg.token,
+                )
 
     def _bile(self, s: Substance, into: str) -> None:
         """The transit of the bile of a substance into the duodenum (or the feces).
@@ -345,6 +440,14 @@ class LumenBuilder(StandardBuilder):
         sid = s.sid
         dose = self._dose_input(ids.po_dose(sid), f"oral dose {sid} (tablet) [mg]")
         mr = self._input(ids.mr(sid), U.g_per_mole, f"molecular weight {sid} [g/mole]")
+        if dissolution_reads_fed(route):
+            if self.single:
+                msg = (
+                    f"The dissolution of {sid} has a factor of the fed state, but "
+                    "the single lumen has no fed state: use the segmented intestine."
+                )
+                raise ValueError(msg)
+            self._input(ids.FED, U.dimensionless, "fed state (0 fasted, 1 fed)")
         for pid, unit, name in dissolution_inputs(route):
             self._input(pid, unit, name)
         solids = [

@@ -19,6 +19,7 @@ __all__ = [
     "KpMethod",
     "Mode",
     "Substance",
+    "ThresholdReabsorption",
 ]
 
 
@@ -29,8 +30,10 @@ class Binding:
     Attributes:
         fu: the fraction unbound in plasma.
         protein: the binding protein.
-        ckd: whether the CKD factor of the binding capacity
-            (`fimp_plasma_protein`) acts on the fu of the substance; `False`
+        ckd: whether the CKD factor of the binding acts on the fu of the
+            substance (the CKD profile of albumin or alpha-1-acid
+            glycoprotein, `fimp_albumin_ckd`, `fimp_agp_ckd`; the binding
+            capacity `fimp_plasma_protein` for an unknown protein); `False`
             for a substance whose binding is measured unchanged in renal
             impairment (fu then follows only the factor of its binding
             protein).
@@ -105,6 +108,12 @@ class _Exchange:
             the organ of the individual, as the share of `ftissue` and a
             `FirstOrder` per volume do; `False` keeps the exchange of the whole
             organ (l/min), which does not scale with the organ volume.
+        ckd_floor: the organs of the full form whose intracellular coefficient
+            the model accepts floored at `K_CELL_FLOOR` at the fu of chronic
+            kidney disease, with the reason (`distribution.kp_floor_stages`):
+            the build does not warn for them (`KCellFloorWarning`) and writes
+            the reason and the stages into the notes of `K_cell_pls_<s>` of
+            the organ. Keys as in `ps`; a reason must not be empty.
     """
 
     organs: frozenset[Organ] | None = None
@@ -112,28 +121,50 @@ class _Exchange:
     ftissue: Q | None = None
     ps: Mapping[Organ, Q] = field(default_factory=dict)
     ps_per_volume: bool = True
+    ckd_floor: Mapping[Organ, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        """Normalise the mode, the organs and the keys of `ps` to enum members."""
+        """Normalise the mode, the organs and the keys of `ps` and `ckd_floor` to enum members."""
         name = type(self).__name__
         object.__setattr__(self, "mode", as_member(Mode, self.mode, f"{name}.mode"))
         if self.organs is not None:
             object.__setattr__(self, "organs", as_organs(self.organs, f"{name}.organs"))
         object.__setattr__(self, "ps", as_organ_keys(self.ps, f"{name}.ps"))
+        object.__setattr__(
+            self, "ckd_floor", as_organ_keys(self.ckd_floor, f"{name}.ckd_floor")
+        )
 
 
 @dataclass(frozen=True)
 class Kp(_Exchange):
     """A tissue to plasma coefficient of the whole tissue.
 
+    Every organ the substance enters has the coefficient of its override, else
+    the scale of `interstitial` times its interstitial share, else `value`.
+
     Attributes:
-        value: the coefficient of the substance.
+        value: the coefficient of the substance, `Kp_<s>`; `None` when every
+            organ the substance enters has an override or `interstitial` is
+            set (no `Kp_<s>` then; a value with `interstitial` is refused, no
+            organ would read it).
         overrides: the coefficients of single organs, by `Organ` member, value
             or name (normalised to `Organ` members).
+        interstitial: the scale of the interstitial share, the extracellular
+            distribution of a substance which reaches the interstitial fluid
+            and not the cells (a contrast agent, a marker of the extracellular
+            volume, a highly bound acid): every organ without an override has
+            `Kp_<o>_<s> = fKp_<s> * share`, the share
+            `f_int*K_int_pls(fu)/(1 - f_vas)` of the organ at the fu of the
+            substance and the fractions of the reference individual of the sex
+            of the build (`distribution.interstitial_share`, the lower bound
+            `check_kp` sets), so a female build has the female share. The scale is the parameter `fKp_<s>`: a
+            number, a `Value` (fitted, `fitted(FITS.parameter("fKp_<s>"))`) or
+            a `Formula`. `None` (the default) creates no `fKp_<s>`.
     """
 
-    value: Q
+    value: Q | None = None
     overrides: Mapping[Organ, Q] = field(default_factory=dict)
+    interstitial: Q | None = None
 
     def __post_init__(self) -> None:
         """Normalise the organs, and the keys of `ps` and `overrides`."""
@@ -168,16 +199,46 @@ class KpMethod(_Exchange):
 
 
 @dataclass(frozen=True)
+class ThresholdReabsorption:
+    """A reabsorption of the filtered load up to a renal threshold.
+
+    The reabsorbed fraction of the filtrate at the plasma concentration `C`,
+    `1/(1 + (fu*C/threshold)^n)^(1/n)`, of the unbound (filtered)
+    concentration `fu*C`: the reabsorption `fu*GFR*C/(1 + (fu*C/threshold)^n)^(1/n)`
+    takes almost all of a filtrate below the threshold and approaches the
+    transport maximum `GFR*threshold` above it, and it never exceeds the
+    filtration `fu*GFR*C` (the fraction is at most 1). `n` sets how sharp the
+    threshold is: far below it the excreted fraction of the filtrate is about
+    `(fu*C/threshold)^n/n`. The law of the reabsorption of creatine with its
+    renal threshold (`CRREABS` of the creatinine model).
+
+    Attributes:
+        threshold: the renal threshold, a concentration of the filtrate (mM),
+            `reab_threshold_<s>`.
+        n: the sharpness of the threshold (dimensionless), `reab_n_<s>`.
+    """
+
+    threshold: Q
+    n: Q
+
+
+@dataclass(frozen=True)
 class Excretion:
     """The excretion which is not a process of the chemistry.
 
     Attributes:
         urine: glomerular filtration `fu*GFR`.
-        fraction_reabsorbed: the fraction of the filtrate which is reabsorbed.
+        fraction_reabsorbed: the constant fraction of the filtrate which is
+            reabsorbed, `f_reabsorbed_<s>`.
+        reabsorption: a reabsorption which depends on the plasma
+            concentration instead of the constant fraction (`ThresholdReabsorption`), `None`
+            for the constant fraction; with it `fraction_reabsorbed` stays 0
+            and the substance has no `f_reabsorbed_<s>`.
     """
 
     urine: bool = False
     fraction_reabsorbed: Q = 0.0
+    reabsorption: ThresholdReabsorption | None = None
 
 
 @dataclass(frozen=True)
@@ -196,6 +257,14 @@ class Substance:
         excretion: the excretion.
         inhibits: the inhibitions of proteins by the substance.
         induces: the inductions of proteins by the substance.
+        baseline: the plasma concentration (mM) of an endogenous substance at
+            the start, `baseline_<s>`; `None` starts every species at 0.
+            Every plasma species starts at it, every other species of the
+            blood and the tissue at the equilibrium of its exchange with
+            plasma (e.g. `Kp*baseline` in the merged tissue), the lumen, the
+            tubule and the sinks at 0. A `Formula` may read the parameters of
+            the top model and the observers of the definition (a production
+            over a clearance), not what changes during the simulation.
     """
 
     sid: str
@@ -208,3 +277,4 @@ class Substance:
     excretion: Excretion = field(default_factory=Excretion)
     inhibits: tuple[Inhibition, ...] = ()
     induces: tuple[Induction, ...] = ()
+    baseline: Q | None = None

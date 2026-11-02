@@ -7,8 +7,12 @@ them only where it is meant to. The subcommands make this checkable:
 - `dump` runs the simulation experiments of a model in a checkout and stores the
   results, the datasets, the fit mappings and the figures in a pickle,
 - `compare` compares two dumps: the simulations on the matched rows of their
-  output times, relative to the scale of every array (a time which only one
-  dump has is a difference), everything else exactly; with `--renames FILE` the
+  output times, a row at a time which only one dump has (the steps of the
+  integrator of another run) with the other dump interpolated at its time,
+  relative to the scale of every array (a row outside of the times of the
+  other dump is a difference; an array whose interpolation cannot resolve the
+  threshold is unresolved, not equal), everything else exactly; with
+  `--renames FILE` the
   expected renames of a migration (metadata fields and members, added fields,
   texts such as legend keys, ids) and the expected differences are applied to
   the old dump first, see `load_renames`,
@@ -35,11 +39,19 @@ git worktree add --detach ../base develop
 (cd ../base && uv run python pkdb_models/models/hctz/models/factory.py)
 uv run python pkdb_models/models/hctz/models/factory.py
 uv run pkpdsim-verify dump --root ../base --model pkdb_models.models.hctz \
-    --out base.pkl --atol 1e-16 --rtol 1e-12
+    --out base.pkl --atol 1e-16 --rtol 1e-12 --grid 1000
 uv run pkpdsim-verify dump --root . --model pkdb_models.models.hctz \
-    --out new.pkl --order base.pkl --atol 1e-16 --rtol 1e-12
+    --out new.pkl --order base.pkl --atol 1e-16 --rtol 1e-12 --grid 1000
 uv run pkpdsim-verify compare base.pkl new.pkl
 ```
+
+`--grid N` outputs every simulation at `N + 1` equidistant times from its start
+to its end and at the times of its changes (`on_grid`) instead of the steps of
+the integrator, which differ between two models or tolerances: both dumps share
+their times and `compare` matches them exactly. Without it the rows of a time
+which only one dump has are compared by interpolation, which on the steps of a
+real model resolves about 1e-4 to 1e-3 (unresolved arrays are reported, not
+passed); a migration compare therefore dumps both models with the same grid.
 
 `--root` is the directory which is put first on the python path, e.g. a checkout
 of the repository of the model, so that its packages are imported. `--model` is
@@ -54,9 +66,10 @@ Across versions of sbmlsim (a dump of pkpdsim 0.4 with sbmlsim 0.8 and one of
 0.5 with 0.9) `compare` moves the time of every array first and matches the
 other dimensions by name, matches the rows of a repeated time from the last
 one, so that the state after a change, which is all sbmlsim 0.8 gave, is
-compared, and counts the rows of a time which only one dump has as differences
-(a new output time of a task is expected with the pattern of its variable
-`time`), and compares a figure of sbmlsim 0.8 with the one of sbmlsim 0.9 in the
+compared, compares a row of a time which only one dump has with the other dump
+interpolated at its time (`matched_rows`, `interpolation_envelope`) and counts
+a row outside of the times of the other dump as a difference (a new output
+time of a task is expected with the pattern of its variable `time`), and compares a figure of sbmlsim 0.8 with the one of sbmlsim 0.9 in the
 form of sbmlsim 0.9: the settings and the size it is rendered with, without the
 fields which only sbmlsim 0.9 has, which it lists (`align_figures`). The renames
 of a port are the ids which became SIds (`sids`) and the differences which are
@@ -65,6 +78,7 @@ expected (`expected`).
 
 import argparse
 import ast
+import dataclasses
 import fnmatch
 import importlib
 import importlib.metadata
@@ -100,6 +114,7 @@ if TYPE_CHECKING:
     from sbmlsim.fit import FitData, FitMapping
     from sbmlsim.fit.cli import FitDefinition
     from sbmlsim.plot import Figure
+    from sbmlsim.simulation import Scan, Simulation
 
 ROOT_HELP = (
     "directory put first on the python path, e.g. a checkout of the repository "
@@ -175,6 +190,13 @@ class Dump(TypedDict):
     ranges: dict[str, dict[str, tuple[float, float, float, float, str] | str]]
     #: the versions of the packages which made the dump (since pkpdsim 0.5)
     versions: NotRequired[dict[str, str]]
+    #: experiment -> task -> the sex of the build of the model the task ran
+    #: (`pkpdsim.experiment.PKPDSimulationExperiment.sex_of`), of the
+    #: experiments of pkpdsim (since the builds per sex)
+    builds: NotRequired[dict[str, dict[str, str]]]
+    #: the intervals of the common output grid of every simulation (`--grid`),
+    #: missing for the steps of the integrator
+    grid: NotRequired[int]
 
 
 # --- the experiments of a model -------------------------------------------------
@@ -193,6 +215,8 @@ class ModelInfo:
     relative_tolerance: object | None
     run_experiments: Callable[..., object] | None
     fit_definitions: Mapping[str, "FitDefinition"] | None
+    #: the optimization level of LLJIT of the model, `None` for the level of sbmlsim
+    jit_optimization: str | None = None
 
 
 def _outside_root(package: str, root: Path) -> str | None:
@@ -245,6 +269,7 @@ def describe(package: str) -> ModelInfo:
         fit_definitions=(
             dict(model.load_fit_definitions()) if model.fit_definitions else None
         ),
+        jit_optimization=model.simulator.jit_optimization,
     )
 
 
@@ -424,6 +449,99 @@ def mapping_range(
         return f"{type(err).__name__}: {err}"
 
 
+def _time_number(time: object, time_unit: str | None) -> float:
+    """Get a time of a simulation as a number in its time unit.
+
+    Raises:
+        ValueError: for a quantity of a simulation without a time unit, whose
+            unit is that of the model, which the grid does not know.
+    """
+    if getattr(time, "magnitude", None) is None:
+        return float(time)  # ty: ignore[invalid-argument-type]
+    if not time_unit:
+        raise ValueError(
+            f"the time {time} is a quantity and the simulation has no time unit"
+        )
+    return float(time.m_as(time_unit))  # ty: ignore[unresolved-attribute]
+
+
+def on_grid(simulation: Simulation | Scan, n: int) -> Simulation | Scan:
+    """Get a simulation with a common fixed output grid (`dump --grid`).
+
+    The output times are `n + 1` equidistant times from the start to the end
+    of the simulation and the times of its changes (and of the dimensions of a
+    scan with a time), in the time unit of the simulation; the steps or times
+    of the simulation are replaced, everything else stays. The output of the
+    integrator differs between two runs whose model or tolerances differ;
+    on this grid both dumps of a compare have the same times, which are
+    matched exactly, without interpolation, so a compare resolves its
+    threshold (a migration compare dumps both models with `--grid`).
+
+    A scan has its simulation on the grid and every simulation of a dimension
+    of simulations, each on the grid of its own start, end and changes.
+
+    Args:
+        simulation: the simulation or the scan.
+        n: the number of intervals of the grid.
+
+    Returns:
+        The simulation or the scan on the grid, a new object.
+
+    Raises:
+        ValueError: for an object which is no simulation or scan, or a time
+            which is a quantity of a simulation without a time unit.
+    """
+    from sbmlsim.simulation import Scan, Simulation
+    from sbmlsim.simulation.scan import DimensionKind
+
+    if isinstance(simulation, Scan):
+        at = [d.at for d in simulation.dimensions if d.at is not None]
+        dimensions = [
+            dataclasses.replace(
+                d,
+                simulations={
+                    label: _on_grid(sim, n, at) for label, sim in d.simulations.items()
+                },
+            )
+            if d.kind == DimensionKind.SIMULATIONS
+            else d
+            for d in simulation.dimensions
+        ]
+        return Scan(
+            simulation=_on_grid(simulation.simulation, n, at), dimensions=dimensions
+        )
+    if not isinstance(simulation, Simulation):
+        raise ValueError(f"{simulation!r} is no simulation or scan")
+    return _on_grid(simulation, n, [])
+
+
+def _on_grid(simulation: Simulation, n: int, at: Sequence[object]) -> Simulation:
+    """Put a simulation on a grid, see `on_grid`."""
+    from sbmlsim.simulation import Simulation
+
+    unit = simulation.time_unit
+    start = _time_number(simulation.start, unit)
+    end = _time_number(simulation.end, unit)
+    changes = [t for change in simulation.changes for t in change.times]
+    times = {float(t) for t in np.linspace(start, end, n + 1)}
+    times |= {
+        t for t in (_time_number(x, unit) for x in [*changes, *at]) if start <= t <= end
+    }
+    return Simulation(
+        time_unit=unit,
+        start=simulation.start,
+        end=simulation.end,
+        preinit_changes={
+            **simulation.preinit_changes,
+            **simulation.uncertain_preinit,
+        },
+        changes=list(simulation.changes),
+        presimulation=simulation.presimulation,
+        times=sorted(times),
+        time_shift=simulation.time_shift,
+    )
+
+
 def dump(args: argparse.Namespace) -> int:
     """Run the experiments of a model and store everything in a pickle."""
     root = Path(args.root).resolve()
@@ -497,7 +615,10 @@ def dump(args: argparse.Namespace) -> int:
             "sbmlsim": importlib.metadata.version("sbmlsim"),
             "pkpdsim": pkpdsim.__version__,
         },
+        builds={},
     )
+    if args.grid is not None:
+        result["grid"] = args.grid
     for cls in classes:
         try:
             runner = ExperimentRunner(
@@ -510,8 +631,22 @@ def dump(args: argparse.Namespace) -> int:
                 # an experiment which cannot be initialized raises and is
                 # recorded below; sbmlsim 0.9 only logs it by default
                 on_error="raise",
+                # the models compiled at the level of the model, as its runs do
+                jit_optimization=info.jit_optimization,
             )
             for sid, experiment in runner.experiments.items():
+                if args.grid is not None:
+                    # a common output grid instead of the steps of the integrator
+                    gridded = {}
+                    for key, simulation in experiment._simulations.items():
+                        try:
+                            gridded[key] = on_grid(simulation, args.grid)
+                        except ValueError as err:
+                            raise ValueError(
+                                f"The simulation '{key}' of the experiment '{sid}' "
+                                f"cannot be put on the grid of --grid: {err}."
+                            ) from err
+                    experiment._simulations = gridded
                 experiment.run(
                     runner.simulator,
                     output_path=None,
@@ -542,8 +677,18 @@ def store_experiment(
     """Store the results, datasets, fit mappings and figures of a run experiment.
 
     The time of a grid is a coordinate of a result of sbmlsim 0.9; it is stored
-    as the variable `time` over `("time",)`, which the comparison reads.
+    as the variable `time` over `("time",)`, which the comparison reads. The
+    sex of the build of every task is stored for an experiment of pkpdsim
+    (`builds`), so that a study which moves to the build of another sex is a
+    difference of its own.
     """
+    from pkpdsim.experiment import PKPDSimulationExperiment
+
+    if isinstance(experiment, PKPDSimulationExperiment):
+        result.setdefault("builds", {})[sid] = {
+            key: str(experiment.sex_of(task.simulation_id))
+            for key, task in experiment._tasks.items()
+        }
     for task, res in experiment.results.items():
         ds = res.ds
         for var in ds.data_vars:
@@ -656,6 +801,7 @@ EXPECTED_PARTS: tuple[str, ...] = (
     "mappings",
     "figures",
     "ranges",
+    "builds",
 )
 
 
@@ -677,6 +823,22 @@ class RowMatch(NamedTuple):
     #: the other way round
     times_old: np.ndarray
     times_new: np.ndarray
+    #: the rows of the old output at a time which the new output does not have
+    #: but whose segment contains it, compared with the new output interpolated
+    #: at their times (`interpolation_envelope`), and the other way round
+    interpolated_old: np.ndarray = np.arange(0)
+    interpolated_new: np.ndarray = np.arange(0)
+
+
+#: the smallest scale of an array relative to the largest scale of its variable in
+#: the tasks of its experiment, see `relative_differences`
+SCALE_FLOOR = 1e-12
+
+#: the resolution of the output times relative to the largest time: two times
+#: closer than it are one time, the same time computed in another order; two
+#: times further apart are two times of the steps of the integrator, which are
+#: compared by interpolation
+TIME_RESOLUTION = 1e-12
 
 
 def _runs(times: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -694,13 +856,24 @@ def _last_rows(ends: np.ndarray, counts: np.ndarray) -> np.ndarray:
 def matched_rows(old_times: np.ndarray, new_times: np.ndarray) -> RowMatch:
     """Match the rows of the output times of a task in two dumps.
 
-    The times are matched relative to the largest time 1e-6. The rows of a time
-    which an output has more than once (a change: the state before it, then the
-    state after it) are matched from the last one, the k-th last old row with
-    the k-th last new row, and the surplus rows of the output with more of them
-    are left out. So the state after a change is compared across versions
-    (sbmlsim 0.8 had only this one, sbmlsim 0.9 has the states before and after
-    it), and two dumps of sbmlsim 0.9 compare every row of their common times.
+    The times are matched relative to the largest time (`TIME_RESOLUTION`).
+    The rows of a time which an output has more than once (a change: the state
+    before it, then the state after it) are matched from the last one, the k-th
+    last old row with the k-th last new row, and the surplus rows of the output
+    with more of them are left out. So the state after a change is compared
+    across versions (sbmlsim 0.8 had only this one, sbmlsim 0.9 has the states
+    before and after it), and two dumps of sbmlsim 0.9 compare every row of
+    their common times.
+
+    The steps of the integrator differ between two runs whose model or
+    tolerances differ, so most times of an adaptive output are in one dump
+    only. A row at such a time is compared with the other output interpolated
+    at its time (`interpolated_old`, `interpolated_new`) if the time lies
+    between two rows of the other output (a segment between its changes,
+    `interpolation_envelope`) and occurs once in its own output (the states
+    before and after a change which the other output does not have are not
+    one value of it); every other row of a time only one output has is
+    unmatched.
 
     Args:
         old_times: the output times of the old dump.
@@ -731,7 +904,8 @@ def matched_rows(old_times: np.ndarray, new_times: np.ndarray) -> RowMatch:
     j = np.clip(np.searchsorted(b, a), 0, b.size - 1)
     previous = np.clip(j - 1, 0, b.size - 1)
     j = np.where(np.abs(b[previous] - a) < np.abs(b[j] - a), previous, j)
-    common = np.abs(b[j] - a) < 1e-6 * max(1.0, float(np.max(np.abs(a))))
+    scale = max(1.0, float(np.max(np.abs(a))), float(np.max(np.abs(b))))
+    common = np.abs(b[j] - a) < TIME_RESOLUTION * scale
     # a new time is matched with one old time only, the first close to it
     first = np.zeros(a.size, dtype=bool)
     first[np.unique(np.where(common, j, -1), return_index=True)[1]] = True
@@ -740,16 +914,95 @@ def matched_rows(old_times: np.ndarray, new_times: np.ndarray) -> RowMatch:
     n = np.minimum(counts_a[ka], counts_b[kb])
     only_a, only_b = np.ones(a.size, dtype=bool), np.ones(b.size, dtype=bool)
     only_a[ka], only_b[kb] = False, False
+    # a time of one output only which occurs once in it and lies between two
+    # rows of the other output is compared by interpolation
+    inside_a = only_a & (counts_a == 1) & (a > b[0]) & (a < b[-1])
+    inside_b = only_b & (counts_b == 1) & (b > a[0]) & (b < a[-1])
+    only_a &= ~inside_a
+    only_b &= ~inside_b
     return RowMatch(
         _last_rows(starts_a[ka] + counts_a[ka], n),
         _last_rows(starts_b[kb] + counts_b[kb], n),
         int(np.sum(counts_a[ka] - n)),
         int(np.sum(counts_b[kb] - n)),
-        int(old_times.size - np.sum(counts_a[ka])),
-        int(new_times.size - np.sum(counts_b[kb])),
+        int(np.sum(counts_a[only_a])),
+        int(np.sum(counts_b[only_b])),
         a[only_a],
         b[only_b],
+        starts_a[inside_a],
+        starts_b[inside_b],
     )
+
+
+class InterpolationRange(NamedTuple):
+    """The range of a trajectory at times, from the interpolants of its steps."""
+
+    #: the lowest and the highest value of the range, (times, columns) each
+    low: np.ndarray
+    high: np.ndarray
+    #: the spread of the interpolants, the resolution of the interpolation
+    spread: np.ndarray
+
+
+def interpolation_envelope(
+    times: np.ndarray, values: np.ndarray, at: np.ndarray
+) -> InterpolationRange:
+    """Get the range of the trajectory of an output at times, from its interpolants.
+
+    The rows of an adaptive output are the steps of the integrator, which are
+    too far apart for one interpolant to reach the threshold of a comparison:
+    between two runs of hctz whose steps differ (the relative tolerance 1e-9
+    and 1e-10), the linear interpolant is up to 4e-2 of the scale of an array
+    off the other run, the monotone cubic one 4e-3, the cubic spline swings
+    at a sharp transient (the concentration in the urine after it was emptied).
+    Three interpolants of every segment between the changes of the output
+    (the rows between two repeated times), the linear one, the monotone cubic
+    one (PCHIP) and the cubic spline (not-a-knot), span the envelope of the
+    trajectory, and their spread is the uncertainty of the interpolation: the
+    range is the envelope widened by its width on both sides. A value within
+    it is no difference which the steps of the output can tell, and the
+    spread is the resolution which the interpolation reaches: it depends on
+    the density of the steps only, about 1e-2 of the scale of an oral dose on
+    20 steps over 48 hr and up to 4e-2 on the steps of hctz, so `compare`
+    reports an array whose resolution is coarser than its threshold as
+    unresolved, never as equal. A column with a value which is not finite in a
+    segment is interpolated linearly there.
+
+    Args:
+        times: the output times, ascending, a time of a change twice.
+        values: the values of the rows, (rows, columns).
+        at: the times, each between two rows of a segment.
+
+    Returns:
+        The range and the spread of the interpolants, (times, columns) each.
+    """
+    from scipy.interpolate import CubicSpline, PchipInterpolator
+
+    # the row after every time and the segment of the rows, which a repeated
+    # time starts
+    after = np.searchsorted(times, at, side="right")
+    segment = np.cumsum(np.append(0, np.diff(times) == 0))
+    lowest = np.full((at.size, values.shape[1]), np.nan)
+    highest = np.full((at.size, values.shape[1]), np.nan)
+    spread = np.full((at.size, values.shape[1]), np.nan)
+    for s in np.unique(segment[after]):
+        rows = np.flatnonzero(segment == s)
+        queries = np.flatnonzero(segment[after] == s)
+        t, v, q = times[rows], values[rows], at[queries]
+        k = np.searchsorted(t, q, side="right")
+        weight = ((q - t[k - 1]) / (t[k] - t[k - 1]))[:, None]
+        linear = v[k - 1] + weight * (v[k] - v[k - 1])
+        low, high = linear.copy(), linear.copy()
+        finite = np.all(np.isfinite(v), axis=0)
+        if t.size > 2 and finite.any():
+            for interpolant in (PchipInterpolator, CubicSpline):
+                curve = interpolant(t, v[:, finite], axis=0)(q)
+                low[:, finite] = np.minimum(low[:, finite], curve)
+                high[:, finite] = np.maximum(high[:, finite], curve)
+        width = high - low
+        lowest[queries], highest[queries] = low - width, high + width
+        spread[queries] = width
+    return InterpolationRange(lowest, highest, spread)
 
 
 def _squeezed(
@@ -860,6 +1113,9 @@ class PointMatch(NamedTuple):
     new: np.ndarray
     #: the match of the times of the points
     match: RowMatch
+    #: the rows of the old and of the new values with a time (not padding)
+    rows_old: np.ndarray = np.arange(0)
+    rows_new: np.ndarray = np.arange(0)
 
 
 def _same_columns(times: np.ndarray) -> bool:
@@ -897,9 +1153,59 @@ def point_matches(old_times: np.ndarray, new_times: np.ndarray) -> list[PointMat
         rows_a, rows_b = np.flatnonzero(~np.isnan(ta)), np.flatnonzero(~np.isnan(tb))
         match = matched_rows(ta[rows_a], tb[rows_b])
         matches.append(
-            PointMatch(np.array(group), rows_a[match.old], rows_b[match.new], match)
+            PointMatch(
+                np.array(group),
+                rows_a[match.old],
+                rows_b[match.new],
+                match,
+                rows_a,
+                rows_b,
+            )
         )
     return matches
+
+
+def interpolated_pairs(
+    found: Columns, match: PointMatch
+) -> list[tuple[np.ndarray, np.ndarray, np.ndarray]]:
+    """Get the rows of times only one dump has with the other dump at their times.
+
+    A row of the old dump is paired with the nearest value of the range of
+    the interpolants of the new dump at its time (`interpolation_envelope`),
+    a row of the new dump with the nearest value of the range of the old
+    dump, so the difference of a pair is the distance from the range, zero
+    within it. The old value comes first, the scale of a comparison, the
+    spread of the interpolants at the row third, the resolution of the pair.
+
+    Args:
+        found: the variable of a task in the two dumps.
+        match: the match of the rows of points with the same times.
+
+    Returns:
+        The old and the new values and the spread, (rows, points) each.
+    """
+    pairs: list[tuple[np.ndarray, np.ndarray, np.ndarray]] = []
+    first = match.points[0]
+    sides = (
+        (found.old, found.old_times, match.rows_old, match.match.interpolated_old),
+        (found.new, found.new_times, match.rows_new, match.match.interpolated_new),
+    )
+    for k, (values, times, rows, interpolated) in enumerate(sides):
+        if not interpolated.size:
+            continue
+        other_values, other_times, other_rows, _ = sides[1 - k]
+        own_rows = rows[interpolated]
+        own = values[np.ix_(own_rows, match.points)]
+        span = interpolation_envelope(
+            other_times[other_rows, first],
+            other_values[np.ix_(other_rows, match.points)],
+            times[own_rows, first],
+        )
+        nearest = np.clip(own, span.low, span.high)
+        pairs.append(
+            (own, nearest, span.spread) if k == 0 else (nearest, own, span.spread)
+        )
+    return pairs
 
 
 def relative_difference(old: Dump, new: Dump, key: tuple[str, str, str]) -> float:
@@ -907,12 +1213,138 @@ def relative_difference(old: Dump, new: Dump, key: tuple[str, str, str]) -> floa
 
     The time is moved first, the other dimensions are matched by name (a
     dimension of size 1 which only one array has is left out), and the rows of
-    every point are matched by its own times (`point_matches`). The difference
-    is max|new - old| / max|old|; other dimensions and NaN at different
-    positions are an infinite difference. A numeric array without a time, e.g.
-    the values at the end of the points of a scan, is compared on the same
-    dimensions relative to its scale, any other array exactly; the variable
-    `time` is compared as the output times of the points of the task.
+    every point are matched by its own times (`point_matches`); a row at a
+    time which only one dump has is compared with the other dump interpolated
+    at its time, its distance from the range of the interpolants
+    (`interpolated_pairs`). The difference is max|new - old| / max|old|; other
+    dimensions and NaN at different positions are an infinite difference. A
+    numeric array without a time, e.g. the values at the end of the points of
+    a scan, is compared on the same dimensions relative to its scale, any
+    other array exactly; the variable `time` is compared as the output times
+    of the points of the task.
+    """
+    return relative_differences(old, new, [key])[key].difference
+
+
+class ArrayDifference(NamedTuple):
+    """The difference of an array of two dumps and the resolution it was found at."""
+
+    #: max|new - old| / max|old| on the matched and the interpolated rows
+    difference: float
+    #: the largest spread of the interpolants of the interpolated rows relative
+    #: to the same scale, 0 without interpolated rows: a difference below it
+    #: cannot be told from the interpolation
+    resolution: float
+
+
+def relative_differences(
+    old: Dump, new: Dump, keys: Iterable[tuple[str, str, str]]
+) -> dict[tuple[str, str, str], ArrayDifference]:
+    """Get the difference of every result array of keys, see `relative_difference`.
+
+    The arrays of a task with the same output times are compared together, so
+    that the interpolants of a segment are built once for all of them. An array
+    is compared relative to its scale, but at least to `SCALE_FLOOR` of the
+    largest scale of its variable in the tasks of its experiment among the
+    keys: a variable which is zero in a task, e.g. the drug of a control
+    without a dose, is the noise of the integrator there (1e-24 against 1e-4
+    of the doses in hctz), which differs with every other step. The resolution
+    of an array is the largest spread of the interpolants of its interpolated
+    rows (`interpolation_envelope`) relative to the same scale.
+
+    Args:
+        old: the old dump.
+        new: the new dump.
+        keys: the arrays, (experiment, task, variable).
+
+    Returns:
+        The difference and the resolution of every array.
+    """
+    differences: dict[tuple[str, str, str], ArrayDifference] = {}
+    batches: dict[tuple[object, ...], list[tuple[tuple[str, str, str], Columns]]] = {}
+    #: the NaN at different positions, the scale, the difference and the
+    #: spread of the interpolants of an array
+    compared: dict[tuple[str, str, str], tuple[bool, float, float, float]] = {}
+    for key in keys:
+        found = _compared_columns(old, new, key)
+        if not isinstance(found, Columns):
+            differences[key] = ArrayDifference(found, 0.0)
+            continue
+        batch = (
+            key[0],
+            key[1],
+            found.old_times.shape,
+            found.old_times.tobytes(),
+            found.new_times.shape,
+            found.new_times.tobytes(),
+        )
+        batches.setdefault(batch, []).append((key, found))
+    for entries in batches.values():
+        stacked = Columns(
+            *(
+                np.hstack([getattr(f, field) for _, f in entries])
+                for field in Columns._fields
+            )
+        )
+        width = stacked.old.shape[1]
+        scale, difference = np.zeros(width), np.zeros(width)
+        spread = np.zeros(width)
+        mismatch = np.zeros(width, dtype=bool)
+        for match in point_matches(stacked.old_times, stacked.new_times):
+            exact = (
+                stacked.old[np.ix_(match.old, match.points)],
+                stacked.new[np.ix_(match.new, match.points)],
+                np.zeros((match.old.size, match.points.size)),
+            )
+            for x, y, w in (exact, *interpolated_pairs(stacked, match)):
+                if not x.shape[0]:
+                    continue
+                points = match.points
+                mismatch[points] |= np.any(np.isnan(x) != np.isnan(y), axis=0)
+                x, y = np.nan_to_num(x), np.nan_to_num(y)
+                scale[points] = np.maximum(scale[points], np.max(np.abs(x), axis=0))
+                difference[points] = np.maximum(
+                    difference[points], np.max(np.abs(x - y), axis=0)
+                )
+                spread[points] = np.maximum(
+                    spread[points], np.max(np.nan_to_num(w), axis=0)
+                )
+        first = 0
+        for key, found in entries:
+            last = first + found.old.shape[1]
+            compared[key] = (
+                bool(mismatch[first:last].any()),
+                float(np.max(scale[first:last], initial=0.0)),
+                float(np.max(difference[first:last], initial=0.0)),
+                float(np.max(spread[first:last], initial=0.0)),
+            )
+            first = last
+    variable_scales: dict[tuple[str, str], float] = {}
+    for (sid, _, variable), (_, s, _, _) in compared.items():
+        variable_scales[sid, variable] = max(
+            variable_scales.get((sid, variable), 0.0), s
+        )
+    for key, (nan_mismatch, s, d, w) in compared.items():
+        s = max(s, SCALE_FLOOR * variable_scales[key[0], key[2]])
+        if nan_mismatch:
+            differences[key] = ArrayDifference(math.inf, 0.0)
+        elif s > 1e-300:
+            differences[key] = ArrayDifference(d / s, w / s)
+        else:
+            differences[key] = ArrayDifference(d, w)
+    return differences
+
+
+def _compared_columns(
+    old: Dump, new: Dump, key: tuple[str, str, str]
+) -> Columns | float:
+    """Get the columns of an array with times, or its difference without them.
+
+    Returns:
+        The columns, see `relative_difference`, or the difference of an array
+        which is not compared on its rows: a numeric array without a time
+        relative to its scale, any other array exactly, other dimensions or no
+        times an infinite difference.
     """
     (dims_a, a), (dims_b, b) = old["results"][key], new["results"][key]
     sid, task, variable = key
@@ -931,15 +1363,7 @@ def relative_difference(old: Dump, new: Dump, key: tuple[str, str, str]) -> floa
             same = a.shape == b.shape and np.array_equal(a, b)
             return 0.0 if same else math.inf
         found = columns(old, new, key)
-    if found is None:
-        return math.inf
-    return scaled_difference(
-        (
-            found.old[np.ix_(match.old, match.points)],
-            found.new[np.ix_(match.new, match.points)],
-        )
-        for match in point_matches(found.old_times, found.new_times)
-    )
+    return math.inf if found is None else found
 
 
 def scaled_difference(pairs: Iterable[tuple[np.ndarray, np.ndarray]]) -> float:
@@ -998,7 +1422,7 @@ class Renames(TypedDict, total=False):
     #: `experiment/task/variable` (results; `experiment/task/time` also names
     #: the output times which only the new dump has),
     #: `experiment/dataset/column` (datasets), `experiment/figure` (figures),
-    #: `experiment/mapping` (mappings, ranges)
+    #: `experiment/mapping` (mappings, ranges), `experiment/task` (builds)
     expected: dict[str, list[str]]
 
 
@@ -1218,6 +1642,11 @@ def rename_ids(dump: Dump, rename: Callable[[str], str]) -> Dump:
         )
         for sid, figures in dump["figures"].items()
     }
+    if "builds" in dump:
+        result["builds"] = {
+            sid: _unique({rename(t): v for t, v in tasks.items()}, tasks, "builds")
+            for sid, tasks in dump["builds"].items()
+        }
     return result
 
 
@@ -1521,7 +1950,7 @@ class _Expected:
 
 
 def _flat(
-    dump: Dump, part: Literal["datasets", "mappings", "figures", "ranges"]
+    dump: Dump, part: Literal["datasets", "mappings", "figures", "ranges", "builds"]
 ) -> dict[str | tuple[str, ...], object]:
     """Get a part of a dump by the keys a comparison reports.
 
@@ -1544,10 +1973,10 @@ def _flat(
                     )
                 mappings[key] = description
         return mappings
-    if part in ("figures", "ranges"):
+    if part in ("figures", "ranges", "builds"):
         return {
             (sid, key): value
-            for sid, items in dump[part].items()
+            for sid, items in dump.get(part, {}).items()
             for key, value in items.items()
         }
     return dict(dump[part].items())
@@ -1573,10 +2002,16 @@ def compare(args: argparse.Namespace) -> int:
 
     An expected difference (`expected` of the renames) is printed and not
     counted; an expected difference which does not occur is counted. A row at a
-    time which only one dump has is a difference: one of the new dump is
-    expected with the pattern of the variable `time` of its task
-    (`experiment/task/time`, a changed output grid), one of the old dump always
-    counts.
+    time which only one dump has is compared with the other dump interpolated
+    at its time when the time lies between two rows of the other dump (the
+    steps of the integrator of another run, `matched_rows`), and an array
+    whose resolution there (the spread of the interpolants,
+    `ArrayDifference.resolution`) is coarser than the threshold is unresolved
+    on this grid, which counts as a difference unless `expected` names it; a
+    row outside of the times of the other dump, or a change the other dump
+    does not have, is a difference: one of the new dump is expected with the pattern of the
+    variable `time` of its task (`experiment/task/time`, a changed output
+    grid), one of the old dump always counts.
     """
     old, new = load(args.old), load(args.new)
     renames: Renames = {}
@@ -1599,7 +2034,20 @@ def compare(args: argparse.Namespace) -> int:
     except ValueError as err:
         print(err, file=sys.stderr)
         return 2
+    # the builds of a dump of pkpdsim before the builds per sex are unknown
+    builds = [label for label, d in (("old", old), ("new", new)) if "builds" in d]
+    if len(builds) == 2:
+        parts["builds"] = (_flat(old, "builds"), _flat(new, "builds"))
     expected = _Expected(renames.get("expected", {}))
+    grids = [dump_.get("grid") for dump_ in (old, new)]
+    if any(g is not None for g in grids):
+        print(
+            "grid: "
+            + ", ".join(
+                f"{label} {'the steps of the integrator' if g is None else g}"
+                for label, g in zip(("old", "new"), grids, strict=True)
+            )
+        )
     for label, dump_ in (("old", old), ("new", new)):
         if versions := dump_.get("versions"):
             print(
@@ -1634,18 +2082,31 @@ def compare(args: argparse.Namespace) -> int:
         print(
             f"{mark}array only in {'old' if key in keys_old else 'new'}: {'/'.join(key)}"
         )
-    rows = sorted(
-        ((relative_difference(old, new, key), key) for key in keys_old & keys_new),
-        reverse=True,
-    )
+    compared = relative_differences(old, new, keys_old & keys_new)
+    rows = sorted(((c.difference, key) for key, c in compared.items()), reverse=True)
     per_experiment: dict[str, float] = {}
     for difference, key in rows:
         per_experiment[key[0]] = max(per_experiment.get(key[0], 0.0), difference)
     above = [row for row in rows if row[0] > args.threshold]
     unexpected = [row for row in above if not expected.match("results", row[1])]
+    # an array within the threshold whose interpolated rows cannot resolve it is
+    # no pass: its difference may hide in the range of the interpolants
+    unresolved = sorted(
+        (
+            (c.resolution, key)
+            for key, c in compared.items()
+            if c.difference <= args.threshold and c.resolution > args.threshold
+        ),
+        reverse=True,
+    )
+    unexpected_unresolved = [
+        row for row in unresolved if not expected.match("results", row[1])
+    ]
     print(
         f"simulations: {len(rows)} arrays compared, {len(above)} differ by more "
         f"than {args.threshold:g} ({len(above) - len(unexpected)} expected), "
+        f"{len(unresolved)} unresolved on this grid "
+        f"({len(unresolved) - len(unexpected_unresolved)} expected), "
         f"{len(one_side)} in one dump only"
     )
     for sid, difference in sorted(per_experiment.items(), key=lambda t: -t[1]):
@@ -1656,10 +2117,22 @@ def compare(args: argparse.Namespace) -> int:
         for difference, key in rows[: args.top]:
             if difference > 0:
                 print(f"  {difference:.3e} {'/'.join(key)}")
-    differing += len(unexpected) + len(unexpected_side)
+    if unresolved:
+        print(
+            "unresolved on this grid: the resolution of the interpolation of the "
+            f"steps of the other dump is coarser than {args.threshold:g}, a "
+            "difference below it is not seen:"
+        )
+        for resolution, key in unresolved[: args.top]:
+            print(
+                f"  {resolution:.3e} resolution {'/'.join(key)} (difference "
+                f"{compared[key].difference:.3e})"
+            )
+    differing += len(unexpected) + len(unexpected_side) + len(unexpected_unresolved)
 
-    # the rows at a change
+    # the rows at a change and at the times of one dump only
     ignored_old = ignored_new = unmatched = unmatched_new = expected_new = 0
+    interpolated_old = interpolated_new = 0
     changes: dict[str, int] = {}
     other_times: list[str] = []
     for sid, task in sorted({(k[0], k[1]) for k in keys_old & keys_new}):
@@ -1668,6 +2141,8 @@ def compare(args: argparse.Namespace) -> int:
         for match in (m.match for m in matches):
             ignored_old += match.ignored_old
             ignored_new += match.ignored_new
+            interpolated_old += match.interpolated_old.size
+            interpolated_new += match.interpolated_new.size
             unmatched += match.unmatched
             unmatched_new += match.unmatched_new
             if match.ignored_new:
@@ -1690,6 +2165,12 @@ def compare(args: argparse.Namespace) -> int:
         f"the old dump left out (the states before a change), {unmatched} rows of "
         f"the old dump without a time in the new dump, {unmatched_new} rows of the "
         f"new dump without a time in the old dump ({expected_new} expected)"
+    )
+    print(
+        f"rows at other times: {interpolated_old} rows of the old dump and "
+        f"{interpolated_new} of the new dump compared with the other dump "
+        "interpolated at their times (the range of its linear, monotone cubic "
+        "and cubic spline interpolants)"
     )
     for sid, count in sorted(changes.items()):
         print(f"changes: {sid} {count} rows")
@@ -1729,6 +2210,8 @@ def compare(args: argparse.Namespace) -> int:
                 print(f"    {line}")
         differing += len(unexpected_keys)
 
+    if len(builds) == 1:
+        print(f"builds: in the {builds[0]} dump only, not compared")
     for part, pattern in expected.unused():
         print(f"expected difference which does not occur: {part}: {pattern}")
         differing += 1
@@ -1833,6 +2316,8 @@ def fits(args: argparse.Namespace) -> int:
     sys.path.insert(0, str(root))
     from sbmlsim.fit.cli import run_fit
 
+    from pkpdsim.fit import at_level
+
     if message := _outside_root(args.model, root):
         print(message, file=sys.stderr)
         return 2
@@ -1846,8 +2331,9 @@ def fits(args: argparse.Namespace) -> int:
     status: dict[str, str] = {}
     for key in args.subsets or list(definitions):
         try:
+            # the problems load their models at the level of the model
             run_fit(
-                definitions[key],
+                at_level(definitions[key], info.jit_optimization),
                 opid=f"smoke_{key}",
                 size=1,
                 seed=1234,
@@ -2314,6 +2800,16 @@ def parser() -> argparse.ArgumentParser:
         action="store_true",
         help="only the selections the experiments need, as a run of the model does",
     )
+    s.add_argument(
+        "--grid",
+        type=_positive_int,
+        default=None,
+        metavar="N",
+        help="output every simulation at N + 1 equidistant times from its start to "
+        "its end and the times of its changes instead of the steps of the "
+        "integrator, so two dumps share their times; a migration compare dumps "
+        "both models with the same grid",
+    )
     s.add_argument("experiments", nargs="*", help="only these experiment classes")
 
     s = command("compare", compare, "compare two dumps")
@@ -2378,6 +2874,14 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("old")
     s.add_argument("new")
     return p
+
+
+def _positive_int(text: str) -> int:
+    """Parse a positive integer of the command line."""
+    value = int(text)
+    if value < 1:
+        raise argparse.ArgumentTypeError(f"a positive number, not {text}")
+    return value
 
 
 def verify(args: Sequence[str] | None = None) -> int:

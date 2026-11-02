@@ -38,6 +38,7 @@ from sbmlsim.experiment import (
 )
 from sbmlsim.fit.cli import FitRun, run_fit
 
+from pkpdsim.fit import leveled_definitions
 from pkpdsim.model import resolve
 from pkpdsim.uncertainty import check_fit_parameters
 
@@ -163,7 +164,8 @@ def check_model(model: PKPDModel) -> None:
     A slip in `package` or `path` of a model resolves the references of another
     model, or names the paths wrongly, without an error otherwise. The name is
     the last component of the package (or the component ends with `_<name>`),
-    `model_path`, the factory directory and `archive_path` lie below `path`,
+    the builds (`model_path`, `female_model_path`), the factory directory and
+    `archive_path` lie below `path`,
     the data paths exist, and every parameter of an adopted fit has its value
     and a distribution in the model (`pkpdsim.uncertainty.check_fit_parameters`).
 
@@ -189,6 +191,7 @@ def check_model(model: PKPDModel) -> None:
         )
     for label, path in [
         ("model_path", model.model_path),
+        ("female_model_path", model.female_model_path),
         ("the factory directory", model.factory_dir),
         ("archive_path", model.archive_path),
     ]:
@@ -237,6 +240,7 @@ def _runner(model: PKPDModel) -> ExperimentRunner:
         data_path=list(model.data_paths) or None,
         simulator=None,
         on_error="log",
+        jit_optimization=model.simulator.jit_optimization,
     )
 
 
@@ -319,7 +323,8 @@ def start_fits(
         AssertionError: if a fit definition did not run.
     """
     runs: dict[str, dict[str, FitRun]] = {}
-    for key, definition in model.load_fit_definitions().items():
+    # the problems load their models at the level of the model
+    for key, definition in leveled_definitions(model).items():
         runs[key] = run_fit(
             definition,
             opid=f"test_{key}",

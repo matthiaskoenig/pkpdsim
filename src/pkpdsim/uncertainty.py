@@ -63,6 +63,9 @@ from sbmlsim.task import Task
 from sbmlsim.units import ureg
 from scipy import stats
 
+from pkpdsim import distrib
+from pkpdsim.sex import Sex
+
 if TYPE_CHECKING:
     from sbmlsim.experiment import SimulationExperiment
     from sbmlutils.factory import Uncertainty
@@ -404,8 +407,18 @@ def _read_json(path: Path) -> dict[str, Any]:
         return json.load(f)
 
 
-def _convert(value: float, unit: str | None, target: str | None) -> float:
-    """Convert a number from one unit into another, both units of pint."""
+def convert_value(value: float, unit: str | None, target: str | None) -> float:
+    """Convert a number from one unit into another, both units of pint.
+
+    Args:
+        value: the number in `unit`.
+        unit: the unit of the number, `None` for the unit of the target.
+        target: the unit to convert into, `None` for the unit of the number.
+
+    Returns:
+        The number in `target`, the number itself if a unit is missing or
+        both are the same.
+    """
     if unit is None or target is None or unit == target:
         return float(value)
     return float(ureg.Quantity(value, unit).to(target).magnitude)
@@ -414,8 +427,8 @@ def _convert(value: float, unit: str | None, target: str | None) -> float:
 def _convert_optional(
     value: float | None, unit: str | None, target: str | None
 ) -> float | None:
-    """Convert a number which may be missing, see `_convert`."""
-    return None if value is None else _convert(value, unit, target)
+    """Convert a number which may be missing, see `convert_value`."""
+    return None if value is None else convert_value(value, unit, target)
 
 
 def _scale(name: str | None, default: ParameterScaleType) -> ParameterScaleType:
@@ -514,8 +527,8 @@ class FitRecord:
             unit = units.get(pid)
             fp_unit = fp.get("unit")
             scale = _scale(fp.get("scale"), default_scale)
-            lower_bound = _convert(float(fp["lower_bound"]), fp_unit, unit)
-            upper_bound = _convert(float(fp["upper_bound"]), fp_unit, unit)
+            lower_bound = convert_value(float(fp["lower_bound"]), fp_unit, unit)
+            upper_bound = convert_value(float(fp["upper_bound"]), fp_unit, unit)
             profile = profiles.get(pid)
             if profile is not None:
                 method = UncertaintyMethod.PROFILE
@@ -642,16 +655,14 @@ class FitRecords:
 # ----------------------------------------------------------------------------
 # the distributions of a model
 # ----------------------------------------------------------------------------
-_CALL = re.compile(r"^\s*(\w+)\s*\((.*)\)\s*$")
-
-
 def distribution_from_formula(formula: str) -> Distribution:
     """Get the sbmlsim distribution of a formula of distrib.
 
     Args:
         formula: `lognormal(mu, sigma[, lower, upper])` (mu and sigma of the
             natural logarithm), `normal(mean, sd[, lower, upper])` or
-            `uniform(lower, upper)`, with numbers as arguments.
+            `uniform(lower, upper)`, with numbers as arguments (the grammar of
+            `pkpdsim.distrib`).
 
     Returns:
         The distribution, truncated if the formula has bounds.
@@ -659,31 +670,19 @@ def distribution_from_formula(formula: str) -> Distribution:
     Raises:
         ValueError: for another formula.
     """
-    match = _CALL.match(formula)
-    if match is None:
-        raise ValueError(f"The distribution '{formula}' is no function of numbers.")
-    name = match.group(1)
-    try:
-        args = [float(a) for a in match.group(2).split(",")]
-    except ValueError:
-        raise ValueError(
-            f"The distribution '{formula}' has arguments which are no numbers."
-        ) from None
-    inner: Distribution
-    if name == "uniform" and len(args) == 2:
+    parsed = distrib.parse(formula)
+    args = parsed.args
+    if parsed.name == "uniform":
         return Uniform(args[0], args[1])
-    if name == "lognormal" and len(args) in (2, 4):
+    inner: Distribution
+    if parsed.name == "lognormal":
         mu, sigma = args[0], args[1]
         inner = LogNormal(math.exp(mu), math.sqrt(math.expm1(sigma**2)))
-    elif name == "normal" and len(args) in (2, 4):
-        inner = Normal(args[0], args[1])
     else:
-        raise ValueError(
-            f"The distribution '{formula}' is not supported: lognormal and normal "
-            f"with two or four arguments, uniform with two."
-        )
-    if len(args) == 4:
-        return Truncated(inner, args[2], args[3])
+        inner = Normal(args[0], args[1])
+    bounds = parsed.bounds
+    if bounds is not None:
+        return Truncated(inner, *bounds)
     return inner
 
 
@@ -811,6 +810,11 @@ class UncertaintyRun:
     @classmethod
     def create(cls, model: PKPDModel, settings: UncertaintySettings) -> UncertaintyRun:
         """Draw the fitted parameters of a model.
+
+        The draws are those of the male build (`model_path`); every build has
+        the same fitted parameters with the same distributions
+        (`check_fit_parameters`), so the draws run on the experiments of every
+        build.
 
         Args:
             model: the model, whose `model_path` has the distributions.
@@ -1125,8 +1129,11 @@ def apply_uncertainty(experiment: SimulationExperiment, run: UncertaintyRun) -> 
 def check_fit_parameters(model: PKPDModel) -> list[str]:
     """Check that the model has the fitted values and the uncertainty of its adopted fits.
 
-    Every parameter of an adopted fit must be a parameter of the flat model
-    (`model_path`) with the value of the fit and a distribution of its draws.
+    Every parameter of an adopted fit must be a parameter of every build of the
+    model (`model_paths`, the flat models) with the value of the fit and a
+    distribution of its draws. The draws are those of the male build
+    (`UncertaintyRun.create`) and run on every build, so the distribution of a
+    parameter in another build is the one of the male build.
 
     Args:
         model: the model.
@@ -1140,29 +1147,41 @@ def check_fit_parameters(model: PKPDModel) -> list[str]:
         records = model.fit_records()
     except (FileNotFoundError, ValueError) as err:
         return [str(err)]
-    if not model.model_path.exists():
-        return [f"the model {model.model_path} does not exist"]
-    doc = libsbml.readSBMLFromFile(str(model.model_path))
-    sbml_model = doc.getModel()
-    distributions = parameter_distributions(model.model_path)
     problems: list[str] = []
-    for pid, parameter in records.parameters.items():
-        p = sbml_model.getParameter(pid)
-        if p is None:
-            problems.append(
-                f"the parameter '{pid}' of the fit '{parameter.fit_id}' is no "
-                f"parameter of {model.model_path.name}"
-            )
+    male: dict[str, Distribution] | None = None
+    for sex, path in model.model_paths.items():
+        build = "model" if len(model.model_paths) == 1 else f"{sex} build"
+        if not path.exists():
+            problems.append(f"the {build} {path} does not exist")
             continue
-        if not math.isclose(p.getValue(), parameter.value, rel_tol=VALUE_RTOL):
-            problems.append(
-                f"the parameter '{pid}' is {p.getValue()!r} in the model, the fit "
-                f"'{parameter.fit_id}' gives {parameter.value!r}: take it from the "
-                f"record (`FitRecords.parameter`)"
-            )
-        if pid not in distributions:
-            problems.append(
-                f"the parameter '{pid}' of the fit '{parameter.fit_id}' has no "
-                f"distribution in the model"
-            )
+        sbml_model = libsbml.readSBMLFromFile(str(path)).getModel()
+        distributions = parameter_distributions(path)
+        if sex is Sex.MALE:
+            male = distributions
+        where = "" if len(model.model_paths) == 1 else f" (the {build} {path.name})"
+        for pid, parameter in records.parameters.items():
+            p = sbml_model.getParameter(pid)
+            if p is None:
+                problems.append(
+                    f"the parameter '{pid}' of the fit '{parameter.fit_id}' is no "
+                    f"parameter of {path.name}{where}"
+                )
+                continue
+            if not math.isclose(p.getValue(), parameter.value, rel_tol=VALUE_RTOL):
+                problems.append(
+                    f"the parameter '{pid}' is {p.getValue()!r} in the model, the "
+                    f"fit '{parameter.fit_id}' gives {parameter.value!r}: take it "
+                    f"from the record (`FitRecords.parameter`){where}"
+                )
+            if pid not in distributions:
+                problems.append(
+                    f"the parameter '{pid}' of the fit '{parameter.fit_id}' has no "
+                    f"distribution in the model{where}"
+                )
+            elif male is not None and pid in male and distributions[pid] != male[pid]:
+                problems.append(
+                    f"the distribution of the parameter '{pid}' of the fit "
+                    f"'{parameter.fit_id}' differs from the male build{where}: "
+                    f"{distributions[pid]} instead of {male[pid]}"
+                )
     return problems

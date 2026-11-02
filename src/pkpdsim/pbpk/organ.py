@@ -27,8 +27,16 @@ The liver has a portosystemic shunt, the fraction `f_shunt` of its arterial
 and portal inflow which flows past it into the venous pool, and a functional
 fraction `f_functional` of its tissue, which scales the tissue volumes and
 the capacity of its processes (both inputs of the top model, healthy 0 and 1).
-The kidney filters the unbound plasma concentration of a substance with
-urinary excretion into the urine, `fu*GFR*Cpl*(1 - f_reabsorbed)`; its
+The kidney filters the unbound afferent (arterial) plasma concentration of a
+substance with urinary excretion into the urine,
+`J_gfr = fu*GFR*Car*(1 - f_reabsorbed)`; the plasma leaving the kidney lacks
+the net filtrate at the outflow concentration,
+`Qki*(1-HCT)*Cout - fu*GFR*(1 - f_reabsorbed)*Cout`, so the filtration
+clearance of the arterial plasma is `fu*GFR*(1 - f_reabsorbed)` and a
+secretion clears the plasma flow less the filtrate. A saturable reabsorption
+(`ThresholdReabsorption`) replaces the constant fraction by the fraction
+`1/(1 + (fu*C/reab_threshold)^reab_n)^(1/reab_n)` at the concentration of
+each term (`Car` in the filtration, `Cout` in the outflow). Its
 metabolism and transport (the tubular processes) run with the tubular
 capacity `1 - f_tubular + f_tubular*f_renal_function`, which follows the
 renal function (the intact nephron hypothesis, `f_tubular` 1). The kidney
@@ -54,8 +62,9 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from sbmlutils.factory import ModelDefinition, Port, PortType, Sbase
+from sbmlutils.factory import ModelDefinition, Port, PortType, Sbase, Species
 from sbmlutils.factory.units import UnitType
+from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk import distribution, ids
 from pkpdsim.pbpk.annotation import annotate
@@ -72,10 +81,12 @@ from pkpdsim.pbpk.organ_builder import (
     COMPARTMENT_KINDS,
     ONE,
     OrganBuilder,
+    Start,
     label,
 )
 from pkpdsim.pbpk.organs import Organ, Part, Pool, inflow, outflow
 from pkpdsim.pbpk.parts import Parts
+from pkpdsim.pbpk.physiology import Sex
 from pkpdsim.pbpk.placement import (
     apical_sink,
     built_parts,
@@ -83,9 +94,21 @@ from pkpdsim.pbpk.placement import (
     kp_id,
     place,
     unbound,
+    with_modifiers,
 )
 from pkpdsim.pbpk.proteins import Induction, Inhibition
 from pkpdsim.pbpk.routes import Route
+from pkpdsim.pbpk.slow_pool import SlowPool
+from pkpdsim.pbpk.stationary import (
+    OrganSteady,
+    SteadyPlan,
+    organ_exports,
+    plasma_start,
+    portal_moves,
+    reduced,
+    terms,
+    tissue_start,
+)
 from pkpdsim.pbpk.substance import Substance
 from pkpdsim.pbpk.units import U
 
@@ -113,12 +136,19 @@ class OrganContext:
         chemistry: the processes of the definition.
         inhibitions: the inhibitions as (inhibitor id, inhibition).
         inductions: the inductions as (inducer id, induction).
+        sex: the sex of the build, whose reference individual the checks of
+            the organ use (`distribution.check_kp`).
         routes: the routes of administration (the intestine applies the
             oral doses).
         top: the parameters and compartments of the top model which exist
             when the organs are built, id -> (`parameter` or `compartment`,
             unit): the ids a `Formula` of the organ may read, through an
             input port each.
+        slow_pools: the slow pools of the definition (`SlowPool`); the
+            standard organ builds those of its organ.
+        steady: the generated steady state of the definition
+            (`pkpdsim.pbpk.stationary.steady_plan`): the species of its
+            substances start at their steady state, `None` for none.
     """
 
     organ: Organ
@@ -127,8 +157,11 @@ class OrganContext:
     chemistry: tuple[Metabolism | Transport | CustomReaction, ...]
     inhibitions: tuple[tuple[str, Inhibition], ...]
     inductions: tuple[tuple[str, Induction], ...]
+    sex: Sex
     routes: tuple[Route, ...] = ()
     top: Mapping[str, tuple[str, UnitType]] = field(default_factory=dict)
+    slow_pools: tuple[SlowPool, ...] = ()
+    steady: SteadyPlan | None = None
 
 
 @dataclass(frozen=True)
@@ -255,6 +288,7 @@ class StandardBuilder(OrganBuilder):
         for s in self.ctx.substances:
             self._substance(s)
         self._chemistry()
+        self._slow_pools()
         if self.organ is Organ.KIDNEY:
             self._urine_rates()
         md = self.model_definition(self._notes())
@@ -481,12 +515,15 @@ class StandardBuilder(OrganBuilder):
                 kind="outflow_blood_cells",
             )
             self.outputs[out_bc] = ids.organ_outflow_bc(self.organ, s.sid)
-        self._blood_flows(s, parts, k_organ)
+        filters = self.organ is Organ.KIDNEY and s.excretion.urine
+        self._blood_flows(
+            s, parts, k_organ, self._filtrate(s, fu, out) if filters else None
+        )
         if parts.blood_cells:
             for zone in self._each_zone:
                 self._blood_cells(s, zone)
-        if self.organ is Organ.KIDNEY and s.excretion.urine:
-            self._filtration(s, parts, fu, cout)
+        if filters:
+            self._filtration(s, parts, fu)
         for zone in self._each_zone:
             if parts.tissue == "merged":
                 self._merged(s, fu, zone)
@@ -560,11 +597,29 @@ class StandardBuilder(OrganBuilder):
             kind="partition",
         )
 
-    def _blood_flows(self, s: Substance, parts: Parts, k_organ: str | None) -> None:
+    def _blood_flows(
+        self,
+        s: Substance,
+        parts: Parts,
+        k_organ: str | None,
+        filtrate: str | None = None,
+    ) -> None:
         """The inflow from the pools and the outflow into the pool, plasma and blood cells.
 
         The plasma carries `Q*(1-HCT)*C`, or `Q*BP*C` with erythrocytes in
-        equilibrium; kinetic blood cells carry `Q*HCT*Cbc`. The fraction
+        equilibrium; kinetic blood cells carry `Q*HCT*Cbc`. The plasma leaving
+        the kidney carries the flow of its carrier less the net filtrate at
+        the outflow concentration, `filtrate` (`_filtrate`):
+        `Q*(1-HCT)*Cout - fu*GFR*(1 - f_reabsorbed)*Cout` (a saturable
+        reabsorption at `Cout`). The outflow is valid while the net filtered
+        plasma flow `fu*GFR*(1 - f_reabsorbed)` (`fu*GFR` for a saturable
+        reabsorption, whose fraction falls to 0) is below the flow of the
+        carrier `Q*(1-HCT)` (`Q*BP`), which holds for every physiological GFR
+        (about 0.125 against 0.76 l/min in the reference individual),
+        hyperfiltration and the classes of impairment included; the GFR, the
+        flow and the hematocrit are parameters which an experiment changes, so
+        `PBPKSimulationExperiment` checks it for every simulated individual
+        (`pkpdsim.pbpk.experiment.kidney_outflow`). The fraction
         `f_shunt` of the inflow of the liver bypasses it (portosystemic shunt)
         from the arterial and the portal pool directly into the venous pool;
         the liver is perfused by and drains `(1 - f_shunt)*Q`. The zones of a
@@ -633,30 +688,85 @@ class StandardBuilder(OrganBuilder):
                 if part is Part.PLASMA
                 else ids.outflow_conc_bc(s.sid)
             )
+            rate = f"{perfused}{self._flow(out_flow)} * {share} * {leaving}"
+            if part is Part.PLASMA and filtrate is not None:
+                rate = f"{rate} - {filtrate}"
             self._reaction(
                 ids.outflow_reaction(part, s.sid),
                 f"{ids.species(local_part, s.sid, last)} -> {out}",
-                f"{perfused}{self._flow(out_flow)} * {share} * {leaving}",
+                rate,
                 f"outflow {s.sid}{what} into {out_pool.name.lower()} pool",
                 kind="blood_flow",
                 pool=out_pool,
             )
 
-    def _filtration(self, s: Substance, parts: Parts, fu: str, cplasma: str) -> None:
-        """The glomerular filtration into the urine, `fu*GFR*Cpl*(1 - f_reabsorbed)`.
-
-        The unbound plasma concentration is filtered, the fraction
-        `f_reabsorbed_<s>` of the filtrate returns into the plasma (it is not
-        taken out); the flow-limited kidney filters the plasma concentration of
-        its outflow.
-        """
-        gfr = self._input(ids.GFR, U.l_per_min, "glomerular filtration rate [l/min]")
-        reabsorbed = self._input(
+    def _fraction_reabsorbed(self, s: Substance) -> str:
+        """The constant fraction `f_reabsorbed_<s>` of the filtrate which is reabsorbed, an input."""
+        return self._input(
             ids.fraction_reabsorbed(s.sid),
             U.dimensionless,
             f"fraction reabsorbed {s.sid}",
             "The fraction of the filtrate which is reabsorbed.",
         )
+
+    def _reabsorbed(self, s: Substance, fu: str, c: str) -> str:
+        """The reabsorbed fraction of the filtrate of the plasma concentration `c`.
+
+        The constant fraction `f_reabsorbed_<s>` (`Excretion.fraction_reabsorbed`),
+        or of a saturable reabsorption (`Excretion.reabsorption`, `ThresholdReabsorption`)
+        the fraction `1/(1 + (fu*|c|/reab_threshold_<s>)^reab_n_<s>)^(1/reab_n_<s>)`
+        of the unbound concentration `fu*c` of the filtrate, at most 1, so the
+        reabsorption never exceeds the filtration (`|c|` keeps the power
+        defined for a concentration a little below 0, an undershoot of the
+        integrator).
+        """
+        saturable = s.excretion.reabsorption
+        if saturable is None:
+            return self._fraction_reabsorbed(s)
+        threshold = self._input(
+            ids.reabsorption_threshold(s.sid),
+            U.mM,
+            f"renal threshold {s.sid} [mM]",
+            "The renal threshold of the saturable reabsorption, a concentration "
+            "of the filtrate: above it the reabsorption approaches the transport "
+            "maximum `GFR` times the threshold.",
+        )
+        n = self._input(
+            ids.reabsorption_n(s.sid),
+            U.dimensionless,
+            f"sharpness of the renal threshold {s.sid}",
+            "How sharp the renal threshold of the saturable reabsorption is.",
+        )
+        # abs: a concentration a little below 0 (an undershoot of the
+        # integrator) keeps the power of a non-integer n defined
+        return f"{ONE} / ({ONE} + ({fu} * abs({c}) / {threshold})^{n})^({ONE} / {n})"
+
+    def _filtrate(self, s: Substance, fu: str, c: str) -> str:
+        """The net filtrate of the plasma concentration `c`, `fu*GFR*c*(1 - f_reabsorbed)`.
+
+        The unbound plasma is filtered with the GFR, the reabsorbed fraction
+        (`_reabsorbed`, constant or saturable at `c`) returns into the plasma:
+        the glomerular filtration of the afferent plasma (`_filtration`) and
+        the filtrate which the plasma leaving the kidney lacks at the outflow
+        concentration (`_blood_flows`).
+        """
+        gfr = self._input(ids.GFR, U.l_per_min, "glomerular filtration rate [l/min]")
+        return f"{fu} * {gfr} * {c} * ({ONE} - {self._reabsorbed(s, fu, c)})"
+
+    def _filtration(self, s: Substance, parts: Parts, fu: str) -> None:
+        """The glomerular filtration into the urine, `fu*GFR*Car*(1 - f_reabsorbed)`.
+
+        The glomerulus is upstream of the peritubular capillaries: it filters
+        the afferent plasma, the arterial plasma concentration `Car_<s>` of
+        the inflow (in every form and erythrocyte mode, a modifier), out of
+        the plasma of the kidney (its organ species when flow-limited); the
+        reabsorbed fraction of the filtrate (`f_reabsorbed_<s>`, or of a
+        saturable reabsorption at `Car_<s>`) returns into the plasma (it is
+        not taken out). The plasma leaving the kidney lacks the net
+        filtrate (`_blood_flows`): at pure filtration the kidney plasma is the
+        arterial plasma and the clearance is `fu*GFR*(1 - f_reabsorbed)`, a
+        secretion clears the plasma flow less the filtrate.
+        """
         self._input_compartment(ids.VURINE, "urine")
         urine = self._input_species(
             ids.urine(s.sid), ids.VURINE, f"{s.name} (urine)", amount=True
@@ -664,10 +774,11 @@ class StandardBuilder(OrganBuilder):
         source = ids.species(
             Part.ORGAN if parts.tissue == "organ" else Part.PLASMA, s.sid
         )
+        arterial = self._pool_species(Pool.ARTERIAL, Part.PLASMA, s, parts)
         self._reaction(
             ids.filtration_reaction(s.sid),
-            f"{source} -> {urine}",
-            f"{fu} * {gfr} * {cplasma} * ({ONE} - {reabsorbed})",
+            with_modifiers(f"{source} -> {urine}", (arterial,)),
+            self._filtrate(s, fu, arterial),
             f"glomerular filtration {s.sid}",
             kind="filtration",
         )
@@ -903,7 +1014,8 @@ class StandardBuilder(OrganBuilder):
                 kind="partition",
             )
         else:
-            distribution.check_kp(s, self.organ)
+            distribution.check_kp(s, self.organ, self.ctx.sex)
+            distribution.warn_kp_floor(s, self.organ, self.ctx.sex)
             k_cell = self._initial(
                 ids.k_cell_pls(s.sid),
                 distribution.k_cell_pls(kp, k_int, self.f_vas, self.f_int),
@@ -915,7 +1027,8 @@ class StandardBuilder(OrganBuilder):
                 "The Kp must exceed the interstitial share "
                 "`f_int*K_int_pls/(f_int + f_cell)` (the lower bound of a fitted "
                 f"Kp); below it the coefficient is floored at "
-                f"{distribution.K_CELL_FLOOR}.",
+                f"{distribution.K_CELL_FLOOR}."
+                + distribution.kp_floor_notes(s, self.organ, self.ctx.sex),
                 kind="partition",
             )
         return k_int, k_cell
@@ -951,14 +1064,307 @@ class StandardBuilder(OrganBuilder):
         for p in processes:
             self.reactions += place(p, self.ctx, self.ctx.parts, capacity)
 
+    def _slow_pools(self) -> None:
+        """The slow pools of the organ: `Cslow_<s>` in the tissue and its exchange.
+
+        `kslow_<s>*Vti*(Kpslow_<s>*Cti_<s> - Cslow_<s>)` with the tissue, or
+        `kslow_<s>*Vti*(Kpslow_<s>*Cpl_<s> - Cslow_<s>)` with the plasma of
+        the organ (`SlowPool.source`), with the constants of the top model;
+        the pool of an endogenous substance starts at its equilibrium,
+        `Kpslow_<s>*Kp*baseline_<s>` (the plasma: `Kpslow_<s>*baseline_<s>`),
+        of a substance with a generated steady state at `Kpslow_<s>` times the
+        start of its source.
+
+        Raises:
+            ValueError: if the substance has no merged tissue in the organ or
+                the organ has zones (`PBPKDefinition.validate` refuses both).
+        """
+        by_sid = {s.sid: s for s in self.ctx.substances}
+        for pool in self.ctx.slow_pools:
+            if self.organ not in pool.organs:
+                continue
+            s = by_sid[pool.substance]
+            if self.ctx.parts[s.sid].tissue != "merged" or self.zones:
+                raise ValueError(
+                    f"{s.sid}: the slow pool of organ '{self.organ.value}' needs "
+                    "the merged tissue of the standard organ."
+                )
+            k = self._input(
+                ids.kslow(s.sid),
+                U.per_min,
+                f"exchange of the slow pool {s.sid} per litre of tissue [1/min]",
+            )
+            plasma = pool.source is Part.PLASMA
+            kp = self._input(
+                ids.kp_slow(s.sid),
+                U.dimensionless,
+                f"slow pool to {'plasma' if plasma else 'tissue'} coefficient {s.sid}",
+            )
+            vti = ids.compartment(Part.TISSUE)
+            source = ids.species(Part.PLASMA if plasma else Part.TISSUE, s.sid)
+            cslow = ids.slow_species(s.sid)
+            self.species[cslow] = self._annotate(
+                Species(
+                    cslow,
+                    vti,
+                    initialConcentration=0.0,
+                    substanceUnit=U.mmole,
+                    hasOnlySubstanceUnits=False,
+                    name=f"{s.name} (slow pool, {label(self.organ)})",
+                    sboTerm=SBO.SIMPLE_CHEMICAL,
+                    notes="The slow (deep) pool of the tissue, a concentration in "
+                    f"the tissue volume: at equilibrium `{cslow} = {kp}*{source}`"
+                    + (
+                        ", reached from the plasma through the capillary wall in "
+                        "parallel with the tissue."
+                        if plasma
+                        else "."
+                    ),
+                    port=True,
+                ),
+                "concentration_tissue",
+                substance=s,
+            )
+            # at its equilibrium with its source: of the baseline (the plasma
+            # starts at it, the tissue at Kp times it), or of the start of the
+            # source at a generated steady state
+            coefficient = kp if plasma else f"{kp} * {self._kp(s)}"
+            self._defer_start(
+                cslow, s, coefficient=coefficient, steady=f"{kp} * {source}"
+            )
+            self._reaction(
+                ids.slow_reaction(s.sid),
+                f"{source} <-> {cslow}",
+                f"{k} * {vti} * ({kp} * {source} - {cslow})",
+                f"exchange {s.sid} {'plasma' if plasma else 'tissue'} and slow pool",
+                kind="exchange",
+            )
+
+    # --- the generated steady state (`pkpdsim.pbpk.stationary`) -------------
+
+    def _steady(self, s: Substance) -> OrganSteady | None:
+        """The declared steady state of a substance in the organ, `None` for none."""
+        plan = self.ctx.steady
+        return None if plan is None else plan.of(self.organ, s.sid)
+
+    def _steady_start(self, start: Start) -> str:
+        """The start of a species of a substance with a generated steady state.
+
+        The plasma of the organ (of a zone) at its steady state, the merged
+        tissue with its declared rates, every other part at its equilibrium
+        with the plasma of the zone, the flow-limited organ with its inflow.
+
+        Raises:
+            NotImplementedError: for a part without a closed steady state
+                (the kinetic blood cells, which the plan refuses).
+        """
+        s, part, zone = start.substance, start.part, start.zone
+        if part is Part.PLASMA:
+            return self._steady_plasma(s, zone)
+        if part is Part.TISSUE:
+            return self._steady_tissue(s, zone)
+        if part is Part.ORGAN:
+            return f"{ids.k_organ(s.sid)} * {self._steady_inflow(s, zone)}"
+        if part in (Part.INTERSTITIAL, Part.INTRACELLULAR):
+            coefficient = self._equilibrium(part, s)
+            return f"{coefficient} * {ids.species(Part.PLASMA, s.sid, zone)}"
+        return super()._steady_start(start)
+
+    def _steady_inflow(self, s: Substance, zone: str | None) -> str:
+        """The plasma flowing into the organ (into a zone) at the steady state.
+
+        The pool of its inflow, the mix of the hepatic artery and the portal
+        vein of the liver; in a zone the plasma leaving the zone upstream.
+        """
+        zones = self._each_zone
+        parts = self.ctx.parts[s.sid]
+        if zone is not None and zone != zones[0]:
+            upstream = zones[zones.index(zone) - 1]
+            k_organ = ids.k_organ(s.sid) if parts.tissue == "organ" else None
+            return self._leaving(s, Part.PLASMA, upstream, k_organ)
+        inflows, out_flow = self._flows(s)
+        plan = self.ctx.steady
+        if len(inflows) > 1 and plan is not None and not portal_moves(plan, s.sid):
+            # the portal vein starts at the arterial plasma
+            # (`stationary.pool_start`), so does the mix: read once
+            inflows = [(Pool.ARTERIAL, out_flow)]
+        if len(inflows) == 1:
+            return self._pool_species(inflows[0][0], Part.PLASMA, s, parts)
+        mix = " + ".join(
+            f"{self._flow(flow)} * {self._pool_species(pool, Part.PLASMA, s, parts)}"
+            for pool, flow in inflows
+        )
+        return f"({mix}) / {self._flow(out_flow)}"
+
+    def _steady_plasma(self, s: Substance, zone: str | None) -> str:
+        """The plasma of the organ (of a zone) at its steady state.
+
+        Its inflow without a declared process (the kidney filters the
+        arterial plasma and its outflow lacks the net filtrate at the plasma
+        of the kidney: they balance at the arterial plasma, also with a
+        threshold reabsorption); with one `(R + CLss)*C + S(C) = R*Cin + Rss`
+        (`pkpdsim.pbpk.stationary.plasma_start`), `R` the flow of the plasma
+        leaving the organ, the plasma flow less the net filtrate of the
+        kidney.
+        """
+        inflow = self._steady_inflow(s, zone)
+        steady = self._steady(s)
+        if steady is None:
+            return inflow
+        if zone is not None:
+            raise ValueError(
+                f"{s.sid}: a declared process of the zonated organ "
+                f"'{self.organ.value}', which refuses custom reactions."
+            )
+        parts = self.ctx.parts[s.sid]
+        carrier = (
+            self._bp(s) if parts.flow_carrier == "blood_bp" else f"({ONE} - {self.hct})"
+        )
+        _, out_flow = self._flows(s)
+        flow = f"{self._flow(out_flow)} * {carrier}"
+        if self.organ is Organ.LIVER:
+            shunt = self._input(ids.F_SHUNT, U.dimensionless, "portosystemic shunt")
+            flow = f"({ONE} - {shunt}) * {flow}"
+        if self.organ is Organ.KIDNEY and s.excretion.urine:
+            gfr = self._input(
+                ids.GFR, U.l_per_min, "glomerular filtration rate [l/min]"
+            )
+            filtrate = (
+                f"{self._fu(s)} * {gfr} * ({ONE} - {self._fraction_reabsorbed(s)})"
+            )
+            flow = f"({flow} - {filtrate})"
+        clearance, rate, saturable = self._steady_constants(s, steady)
+        plan = self.ctx.steady
+        if saturable is not None and plan is not None and s.sid in plan.solved:
+            # the root which the top model solves with the baseline
+            # (`stationary.solved_baseline`), read once instead of a second
+            # root of the arterial plasma: roadrunner inlines every initial
+            # assignment a start reads (the load time)
+            return self._input(
+                ids.steady_plasma(self.organ, s.sid),
+                U.mM,
+                f"plasma at the steady state {s.sid} [mM]",
+                "The plasma of the organ at the steady state, solved with the "
+                "baseline in the top model.",
+            )
+        return plasma_start(flow, inflow, clearance, rate, saturable)
+
+    def _steady_exchange(self, s: Substance) -> tuple[str | None, str | None]:
+        """The exchange `PS*fu` and the Kp of the merged tissue, `None` without it."""
+        if self.ctx.parts[s.sid].tissue != "merged":
+            return None, None
+        return f"{self._ps(s)} * {self._fu(s)}", self._kp(s)
+
+    def _steady_constants(
+        self, s: Substance, steady: OrganSteady
+    ) -> tuple[str, str, tuple[str, str] | None]:
+        """The constants of the steady state of the plasma: `CLss`, `Rss` and a saturable rate.
+
+        Constants of the organ with their initial assignments, created once:
+        the clearance and the net source of the plasma with the tissue at its
+        steady state (`pkpdsim.pbpk.stationary.reduced`), `Vss` and `Kss` of a
+        saturable rate; the organ gives them to the top model when the plan
+        needs them there (`organ_exports`).
+
+        Returns:
+            The ids of the clearance and the net source (`0` for none) and of
+            the saturable rate (`None` for none).
+        """
+        sid = s.sid
+        cl_id, rate_id = ids.steady_clearance(sid), ids.steady_rate(sid)
+        vmax_id, km_id = ids.steady_vmax(sid), ids.steady_km(sid)
+        if (
+            cl_id not in self.parameters
+            and rate_id not in self.parameters
+            and (vmax_id not in self.parameters)
+        ):
+            ps_fu, kp = self._steady_exchange(s)
+            clearance, rate = reduced(steady, ps_fu, kp)
+            plan = self.ctx.steady or SteadyPlan()
+            exports = organ_exports(plan, self.organ, sid)
+            texts = {
+                cl_id: (
+                    clearance,
+                    U.l_per_min,
+                    f"clearance of the plasma at the steady state {sid} [l/min]",
+                    "steady_clearance",
+                    "The first order clearance of the plasma of the organ at the "
+                    "steady state, the declared clearances of the plasma and of "
+                    "the tissue at its steady state (`pkpdsim.pbpk.stationary`).",
+                ),
+                rate_id: (
+                    rate,
+                    U.mmole_per_min,
+                    f"net source of the plasma at the steady state {sid} [mmole/min]",
+                    "steady_rate",
+                    "The declared rates into the plasma and the tissue of the "
+                    "organ at the steady state which leave with the plasma "
+                    "(`pkpdsim.pbpk.stationary`).",
+                ),
+            }
+            if steady.saturable is not None:
+                texts[vmax_id] = (
+                    steady.saturable.vmax,
+                    U.mmole_per_min,
+                    f"capacity of the saturable rate of the plasma {sid} [mmole/min]",
+                    "steady_vmax",
+                    "The capacity of the declared saturable rate of the plasma "
+                    "of the organ at the steady state (`pkpdsim.pbpk.stationary`).",
+                )
+                texts[km_id] = (
+                    steady.saturable.km,
+                    U.mM,
+                    f"Michaelis constant of the saturable rate of the plasma {sid} [mM]",
+                    "steady_km",
+                    "The Michaelis constant of the declared saturable rate of "
+                    "the plasma of the organ (`pkpdsim.pbpk.stationary`).",
+                )
+            for pid, (formula, unit, name, kind, text) in texts.items():
+                if formula == "0":
+                    continue
+                self._initial(pid, formula, unit, name, text, kind=kind)
+                top = exports.get(pid)
+                if top is not None:
+                    self.parameters[pid].port = Port(
+                        f"{pid}_port", portType=PortType.OUTPUT_PORT
+                    )
+                    self.outputs[pid] = top
+        clearance = cl_id if cl_id in self.parameters else "0"
+        rate = rate_id if rate_id in self.parameters else "0"
+        saturable = (vmax_id, km_id) if vmax_id in self.parameters else None
+        return clearance, rate, saturable
+
+    def _steady_tissue(self, s: Substance, zone: str | None) -> str:
+        """The merged tissue of the organ (of a zone) at its steady state.
+
+        `Kp*Cpl` at the plasma of the organ, with the declared rate and
+        clearance of the tissue `Kp*(PS*fu*Cpl + r)/(PS*fu + Kp*cl)`
+        (`pkpdsim.pbpk.stationary.tissue_start`).
+        """
+        kp = self._kp(s)
+        if kp is None:
+            raise ValueError(
+                f"{s.sid}: no tissue in the organ '{self.organ.value}' to start."
+            )
+        plasma = ids.species(Part.PLASMA, s.sid, zone)
+        steady = self._steady(s)
+        rate = terms(*steady.sources.get(Part.TISSUE, ())) if steady else "0"
+        clearance = terms(*steady.clearances.get(Part.TISSUE, ())) if steady else "0"
+        if rate == "0" and clearance == "0":
+            return tissue_start(kp, plasma, None, "0", "0")
+        ps_fu, _ = self._steady_exchange(s)
+        return tissue_start(kp, plasma, ps_fu, rate, clearance)
+
     def _urine_rates(self) -> None:
         """The urinary excretion rate `Rurine_<s>` of every substance which reaches the urine.
 
         A substance with urinary excretion or an apical transport of the
-        kidney: the sum of the fluxes of the reactions of the kidney into the
-        urine `Aurine_<s>` (the filtration and the apical efflux of the
-        standard kidney, the outflow of the collecting duct of the nephron
-        kidney), an output which replaces `Rurine_<s>` of the body.
+        kidney: the net flux of the reactions of the kidney into the urine
+        `Aurine_<s>`, the sum of the fluxes into it (the filtration and the
+        apical efflux of the standard kidney, the outflow of the collecting
+        duct of the nephron kidney) less those out of it (a custom reaction
+        which returns a part of the filtrate), an output which replaces
+        `Rurine_<s>` of the body.
         """
         apical = {
             p.substance
@@ -978,14 +1384,20 @@ class StandardBuilder(OrganBuilder):
             ]
             if not fluxes:
                 continue
+            returned = [
+                str(r.sid)
+                for r in self.reactions
+                if any(p.species == urine for p in r.equation.reactants)
+            ]
             pid = ids.urine_rate(s.sid)
             self._rule(
                 pid,
-                " + ".join(fluxes),
+                " + ".join(fluxes) + "".join(f" - {r}" for r in returned),
                 U.mmole_per_min,
                 f"urinary excretion rate {s.sid} [mmole/min]",
                 "The rate of the urinary excretion: the sum of the fluxes of the "
-                "kidney into the urine.",
+                "kidney into the urine"
+                + (" less those out of it." if returned else "."),
                 port=Port(f"{pid}_port", portType=PortType.OUTPUT_PORT),
                 kind="urine_rate",
             )

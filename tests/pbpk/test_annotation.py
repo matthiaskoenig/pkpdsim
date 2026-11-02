@@ -369,7 +369,7 @@ def test_pbpko_resource_format(built: BuildResult) -> None:
     `collection/term` (the format of `pkpdsim.annotations`), written as the
     identifiers.org url; identifiers.org does not register PBPKO, so a PBPKO
     term is `https://bioregistry.io/PBPKO:<5 digits>` of the pinned PBPKO,
-    written as given (R48).
+    written as given.
     """
     for resource in _table_resources():
         if "PBPKO" in resource:
@@ -430,7 +430,7 @@ def test_compartment_terms_resolved() -> None:
 
 
 def test_clearance_per_volume_is_no_clearance(built: BuildResult) -> None:
-    """A first order clearance per litre of organ is not asserted as a clearance (R49).
+    """A first order clearance per litre of organ is not asserted as a clearance.
 
     It is a kinetic constant and a `BIOCHEMICAL_PARAMETER` which is a version
     of the (intrinsic) clearance; the clearance of a whole organ
@@ -472,7 +472,7 @@ def test_outputs_of_the_model_are_output_parameters(built: BuildResult) -> None:
     """The urinary excretion rate and an observer of the definition are output parameters.
 
     PBPKO's urinary rate is a biochemical parameter (an input): the rate is
-    a version of it, not asserted as it (R49).
+    a version of it, not asserted as it.
     """
     doc = libsbml.readSBMLFromFile(str(built.comp_path))
     model = doc.getModel()

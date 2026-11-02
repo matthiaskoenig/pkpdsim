@@ -5,12 +5,12 @@ from pathlib import Path
 
 import libsbml
 import pytest
-import roadrunner
 from sbmlutils.factory import Uncertainty, UncertParameter
 
 from pkpdsim.pbpk import (
     MM,
     Binding,
+    CustomReaction,
     Direction,
     Excretion,
     FirstOrder,
@@ -18,8 +18,11 @@ from pkpdsim.pbpk import (
     Kp,
     Membrane,
     Metabolism,
+    ModelParameter,
     Organ,
+    Part,
     PBPKDefinition,
+    Pool,
     Route,
     SegmentedIntestine,
     Substance,
@@ -34,7 +37,14 @@ from pkpdsim.pbpk import (
 from pkpdsim.pbpk.placement import formula_ids
 from pkpdsim.pbpk.values import as_value
 
-from .conftest import definition, simple_drug
+from .conftest import (
+    compiled,
+    definition,
+    individual,
+    individuals,
+    simple_drug,
+    total_amount,
+)
 
 #: a fitted Kp of the parent with its uncertainty
 FITTED_KP = Value(
@@ -129,7 +139,7 @@ def test_an_organ_value_follows_a_parameter_of_the_top_model(tmp_path: Path) -> 
     notes = model.getParameter("LI__PMBIL_k").getNotesString()
     assert "Tied to the body weight." in notes
     assert "0.0001 per_min * BW / 1 kg" in notes
-    r = roadrunner.RoadRunner(str(flat))
+    r = compiled(flat)
     assert r["LI__PMBIL_k"] == pytest.approx(0.0001 * r["BW"])
     r.setValue("init(BW)", 100.0)
     r.reset()
@@ -137,7 +147,7 @@ def test_an_organ_value_follows_a_parameter_of_the_top_model(tmp_path: Path) -> 
 
 
 def test_a_dynamic_id_keeps_the_formula_dynamic(tmp_path: Path) -> None:
-    """A formula which reads a dynamic id becomes an assignment rule (R21)."""
+    """A formula which reads a dynamic id becomes an assignment rule."""
     k = Formula("0.0001 per_min * BW / 1 kg", U.per_min)
     model = _model(build(_definition(k=k, dynamic=("BW",)), tmp_path).flat_path)
     assert model.getAssignmentRuleByVariable("LI__PMBIL_k") is not None
@@ -158,7 +168,7 @@ def test_a_fitted_value_tied_by_a_formula_appears_once(tmp_path: Path) -> None:
         and p.getPlugin("distrib").getNumUncertainties()
     ]
     assert uncertain == [ids.kp("p")]
-    r = roadrunner.RoadRunner(str(flat))
+    r = compiled(flat)
     assert r[ids.kp("pm")] == pytest.approx(0.8)
     r.setValue(f"init({ids.kp('p')})", 0.5)
     r.reset()
@@ -234,7 +244,7 @@ def test_an_organ_formula_reads_the_id_of_the_top_model(tmp_path: Path) -> None:
         _liver_k(Formula("0.01 l_per_min * fimp_li_cyp3a4", U.l_per_min)),
         tmp_path / "top",
     ).flat_path
-    r = roadrunner.RoadRunner(str(flat))
+    r = compiled(flat)
     r.setValue("init(CP_severity)", 2.0)
     r.reset()
     assert r["fimp_li_cyp3a4"] < 1.0
@@ -269,7 +279,7 @@ def test_an_organ_formula_reads_a_compartment_of_the_top_model(tmp_path: Path) -
     doc = libsbml.readSBMLFromFile(str(result.comp_path))
     liver = doc.getPlugin("comp").getModelDefinition("standard_li")
     assert liver.getCompartment("Vurine") is not None
-    r = roadrunner.RoadRunner(str(result.flat_path))
+    r = compiled(result.flat_path)
     r.setValue("init(Vurine)", 2.0)
     r.reset()
     assert r["LI__DRG2M_k"] == pytest.approx(0.02)
@@ -292,7 +302,7 @@ def test_a_formula_in_the_zonated_liver(tmp_path: Path) -> None:
         chemistry=chemistry,
         variants=Variants(organs={Organ.LIVER: ZonatedLiver(n_zones=3)}),
     )
-    r = roadrunner.RoadRunner(str(build(d, tmp_path).flat_path))
+    r = compiled(build(d, tmp_path).flat_path)
     r.setValue("init(BW)", 140.0)
     r.reset()
     assert r["LI__DRG2M_Vmax"] == pytest.approx(0.002)
@@ -316,7 +326,7 @@ def test_a_formula_in_the_segmented_intestine(tmp_path: Path) -> None:
         chemistry=chemistry,
         variants=Variants(organs={Organ.SMALL_INTESTINE: SegmentedIntestine(ka=ka)}),
     )
-    r = roadrunner.RoadRunner(str(build(d, tmp_path).flat_path))
+    r = compiled(build(d, tmp_path).flat_path)
     r.setValue("init(BW)", 140.0)
     r.reset()
     assert r["GU__DRG2M_GU_k"] == pytest.approx(1.0)
@@ -356,3 +366,159 @@ def test_the_validation_skips_the_numbers_of_a_formula() -> None:
     )
     with pytest.raises(ValueError, match=r"ps 'li' must be in 1/min"):
         definition(substances=[wrong, metabolite]).validate()
+
+
+def test_a_formula_per_substance_in_the_segmented_intestine(tmp_path: Path) -> None:
+    """The `ka` of each oral substance is its own formula."""
+    d = definition(
+        routes=[Route.oral("drg"), Route.oral("drg_m")],
+        variants=Variants(
+            organs={
+                Organ.SMALL_INTESTINE: SegmentedIntestine(
+                    ka={
+                        "drg": Formula("1 per_hr * BW / 70 kg", U.per_hr),
+                        "drg_m": 0.5,
+                    }
+                )
+            }
+        ),
+    )
+    r = compiled(build(d, tmp_path).flat_path)
+    r.setValue("init(BW)", 140.0)
+    r.reset()
+    assert r["ka_drg"] == pytest.approx(2.0)
+    assert r["ka_drg_m"] == pytest.approx(0.5)
+
+
+def _k_prod(value: float = 0.025) -> ModelParameter:
+    """The constant `k_prod` of a definition (mM)."""
+    return ModelParameter("k_prod", value, U.mM, name="production constant")
+
+
+def test_a_formula_baseline_reads_a_definition_parameter(tmp_path: Path) -> None:
+    """A baseline `2 * k_prod` reads the parameter of the definition.
+
+    A change of `k_prod` before the simulation (`preinit_changes`) moves the
+    baseline and every start with it.
+    """
+    s = Substance(
+        "end",
+        "endogenous substance",
+        150.0,
+        distribution=Kp(2.0, ftissue=1.0),
+        baseline=Formula("2 dimensionless * k_prod", U.mM),
+    )
+    d = PBPKDefinition(sid="bl_parameter", substances=[s], parameters=[_k_prod()])
+    path = build(d, tmp_path).flat_path
+    plain = individual(path)
+    doubled = individual(path, k_prod=0.05)
+    venous = f"[{ids.pool_species(Pool.VENOUS, 'end')}]"
+    assert plain[ids.baseline("end")] == pytest.approx(0.05)
+    assert plain[venous] == pytest.approx(0.05)
+    assert plain["[MU__Cti_end]"] == pytest.approx(0.1)
+    assert doubled[ids.baseline("end")] == pytest.approx(0.1)
+    assert doubled[venous] == pytest.approx(0.1)
+    assert doubled["[MU__Cti_end]"] == pytest.approx(0.2)
+
+
+def test_a_custom_reaction_reads_a_definition_parameter(tmp_path: Path) -> None:
+    """A production in the muscle reads `k_prod` of the definition through an input port.
+
+    The substance is not eliminated, so the body holds `k_prod * t`; a
+    change of `k_prod` before the simulation doubles it. The muscle reads
+    the parameter under its id, the flat model has no `MU__k_prod`.
+    """
+    s = Substance("prd", "produced substance", 150.0, distribution=Kp(2.0, ftissue=1.0))
+    production = CustomReaction(
+        "PRDPROD",
+        Organ.MUSCLE,
+        Part.TISSUE,
+        "-> Cti_prd",
+        "k_prod",
+        parameters=[],
+    )
+    d = PBPKDefinition(
+        sid="custom_parameter",
+        substances=[s],
+        chemistry=[production],
+        parameters=[
+            ModelParameter("k_prod", 0.002, U.mmole_per_min, name="production rate")
+        ],
+    )
+    result = build(d, tmp_path)
+    comp = libsbml.readSBMLFromFile(str(result.comp_path))
+    muscle = comp.getPlugin("comp").getModelDefinition("standard_mu")
+    port = muscle.getPlugin("comp").getPort("k_prod_port")
+    assert port is not None and port.getIdRef() == "k_prod"
+    flat = _model(result.flat_path)
+    assert flat.getParameter("MU__k_prod") is None
+    reaction = flat.getReaction("MU__PRDPROD")
+    assert libsbml.formulaToL3String(reaction.getKineticLaw().getMath()) == "k_prod"
+    person = individuals(result.flat_path)
+    for k_prod in (0.002, 0.004):
+        r = person(k_prod=k_prod)
+        r.integrator.absolute_tolerance = 1e-12
+        r.integrator.relative_tolerance = 1e-10
+        r.simulate(0, 100)
+        assert total_amount(r, "prd") == pytest.approx(k_prod * 100, rel=1e-6)
+
+
+def test_a_custom_reaction_reads_a_covariate_and_a_compartment(tmp_path: Path) -> None:
+    """A custom reaction reads `BW` and the compartment `Vurine` of the top model.
+
+    The muscle reads the covariate through a parameter input and the
+    compartment through a compartment input, each under its id; a change of
+    `BW` before the simulation doubles the production.
+    """
+    s = Substance("prd", "produced substance", 150.0, distribution=Kp(2.0, ftissue=1.0))
+    production = CustomReaction(
+        "PRDPROD",
+        Organ.MUSCLE,
+        Part.TISSUE,
+        "-> Cti_prd",
+        "0.002 mmole_per_min * BW / 70 kg * Vurine / Vurine",
+        parameters=[],
+    )
+    d = PBPKDefinition(sid="custom_top", substances=[s], chemistry=[production])
+    result = build(d, tmp_path)
+    comp = libsbml.readSBMLFromFile(str(result.comp_path))
+    muscle = comp.getPlugin("comp").getModelDefinition("standard_mu")
+    assert muscle.getCompartment("Vurine") is not None
+    assert muscle.getParameter("BW") is not None
+    ports = muscle.getPlugin("comp")
+    assert ports.getPort("Vurine_port").getIdRef() == "Vurine"
+    assert ports.getPort("BW_port").getIdRef() == "BW"
+    flat = _model(result.flat_path)
+    assert flat.getCompartment("MU__Vurine") is None
+    assert flat.getParameter("MU__BW") is None
+    person = individuals(result.flat_path)
+    for bw in (70.0, 140.0):
+        r = person(BW=bw)
+        r.integrator.absolute_tolerance = 1e-12
+        r.integrator.relative_tolerance = 1e-10
+        r.simulate(0, 100)
+        expected = 0.002 * bw / 70.0 * 100
+        assert total_amount(r, "prd") == pytest.approx(expected, rel=1e-6)
+
+
+def test_an_organ_formula_reads_a_definition_parameter(tmp_path: Path) -> None:
+    """A kinetic constant of the liver is a formula over a parameter of the definition.
+
+    The liver reads `k_bl` through an input port under its id; a change
+    before the simulation is followed.
+    """
+    k = Formula("2 dimensionless * k_bl", U.per_min)
+    d = dataclasses.replace(
+        _definition(k=k),
+        parameters=[ModelParameter("k_bl", 0.005, U.per_min, name="bile constant")],
+    )
+    result = build(d, tmp_path)
+    comp = libsbml.readSBMLFromFile(str(result.comp_path))
+    liver = comp.getPlugin("comp").getModelDefinition("standard_li")
+    assert liver.getPlugin("comp").getPort("k_bl_port").getIdRef() == "k_bl"
+    model = _model(result.flat_path)
+    assert formula_ids(str(_formula(model, "LI__PMBIL_k"))) == {"k_bl"}
+    r = individual(result.flat_path)
+    assert r["LI__PMBIL_k"] == pytest.approx(0.01)
+    r = individual(result.flat_path, k_bl=0.01)
+    assert r["LI__PMBIL_k"] == pytest.approx(0.02)

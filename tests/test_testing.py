@@ -4,6 +4,7 @@ import dataclasses
 from pathlib import Path
 
 import pytest
+from sbmlsim.fit.cli import FitDefinition
 
 from pkpdsim import testing
 from pkpdsim.model import CheckSettings
@@ -193,3 +194,26 @@ def test_every_failure_of_a_run_one_at_a_time_is_named(tmp_path: Path) -> None:
     assert ToyRefusedUnit.__name__ in message
     # the experiment after a failing one (ToyFigureFails) ran and wrote its report
     assert list((tmp_path / "ToyCannotInitialize").glob("**/*.html"))
+
+
+def test_the_initialization_compiles_with_the_level_of_the_model() -> None:
+    model = dataclasses.replace(
+        MODEL, simulator=dataclasses.replace(MODEL.simulator, jit_optimization="O0")
+    )
+    assert str(testing._runner(model).jit_optimization) == "O0"
+
+
+def test_the_fits_start_at_the_level_of_the_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`start_fits` builds the fit problems at `jit_optimization` of the model."""
+    seen: list[str] = []
+
+    def recording_run_fit(definition: FitDefinition, **kwargs: object) -> dict:
+        seen.append(str(definition.problem(opid="level").jit_optimization))
+        return {"run": object()}
+
+    monkeypatch.setattr(testing, "run_fit", recording_run_fit)
+    simulator = dataclasses.replace(MODEL.simulator, jit_optimization="O0")
+    testing.start_fits(dataclasses.replace(MODEL, simulator=simulator), tmp_path)
+    assert seen == ["O0"]

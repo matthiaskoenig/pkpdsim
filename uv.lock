@@ -10,6 +10,9 @@ resolution-markers = [
     "python_full_version < '3.15' and sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
 
+[manifest]
+constraints = [{ name = "petab", specifier = "<0.10" }]
+
 [[package]]
 name = "annotated-types"
 version = "0.8.0"
@@ -1277,7 +1280,7 @@ wheels = [
 
 [[package]]
 name = "petab"
-version = "0.10.0"
+version = "0.9.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "antlr4-python3-runtime" },
@@ -1291,7 +1294,7 @@ dependencies = [
     { name = "sbmlmath" },
     { name = "sympy" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/73/ff/8a3eb5dcbd4fde6de1e2c03024eeed284412f6fdaec61b81e917dbf86e1a/petab-0.10.0.tar.gz", hash = "sha256:211b60a0667335fd9df6db1f9ea84c89941088933f86f1052e002787993b660a", size = 186813, upload-time = "2026-10-26T15:07:52.656Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c8/8b/25f8c89cdfa62e31d07a621c5600022c2364db7906741407ead28691759d/petab-0.9.0.tar.gz", hash = "sha256:d5def7b78f98325c27dae0a838c4bbfedd90435541867cf46f9130ae2d93136a", size = 164764, upload-time = "2026-09-07T13:26:50.771Z" }
 
 [[package]]
 name = "pillow"
@@ -1394,9 +1397,12 @@ dependencies = [
     { name = "pillow" },
     { name = "pkdb" },
     { name = "pkpdutils" },
+    { name = "pymetadata" },
     { name = "python-libsbml" },
+    { name = "sbmlode" },
     { name = "sbmlsim" },
     { name = "sbmlutils" },
+    { name = "scipy" },
 ]
 
 [package.optional-dependencies]
@@ -1429,14 +1435,17 @@ requires-dist = [
     { name = "pkdb", specifier = ">=0.12.17" },
     { name = "pkpdutils", specifier = ">=1.3.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=4.6.2" },
+    { name = "pymetadata", specifier = ">=0.8.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.1.1" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=7.1.0" },
     { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.8.0" },
     { name = "python-libsbml", specifier = ">=5.21.2" },
     { name = "pyyaml", marker = "extra == 'dev'", specifier = ">=6.0.3" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.17.3" },
+    { name = "sbmlode", specifier = ">=0.3.0" },
     { name = "sbmlsim", specifier = ">=0.14.0,<0.15" },
     { name = "sbmlutils", specifier = ">=0.17.0" },
+    { name = "scipy", specifier = ">=1.18.1" },
     { name = "tox", marker = "extra == 'dev'", specifier = ">=4.65.0,!=4.67.5" },
     { name = "tox-uv", marker = "extra == 'dev'", specifier = ">=1.35.0" },
     { name = "ty", marker = "extra == 'dev'", specifier = ">=0.0.95" },

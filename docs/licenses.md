@@ -30,7 +30,7 @@ The files are named after the license, `cc-by-sa-4.0.txt` and `mit.txt`, and are
 
 ## The COMBINE archive of a model
 
-The factory of a model writes the texts next to its models and adds them to the entries of the archive, here with [pymetadata](https://github.com/matthiaskoenig/pymetadata):
+A model of the PBPK library writes the texts and the archive with one call, `pkpdsim.pbpk.create_archive(definition, model_output_dir, model=..., copyright="2024-2026 Matthias König", readme=...)` (the licenses are written next to the models, the archive `<model>_model.omex` has the licenses, the README and the models as entries, the flat model as master). The factory of another model writes the texts next to its models and adds them to the entries of the archive, here with [pymetadata](https://github.com/matthiaskoenig/pymetadata):
 
 ```python
 # not executed: a fragment of the factory of a model

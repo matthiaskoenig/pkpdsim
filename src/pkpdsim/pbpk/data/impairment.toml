@@ -67,7 +67,14 @@
 # transit) are 1 with a note. The plasma protein factor is read in Alasmari
 # 2023 (Front Pharmacol 14:1200828, Table 3, CC BY 4.0,
 # doi:10.3389/fphar.2023.1200828), which tabulates it for the stages 3 to 5
-# from Malik 2020. The hepatic proteins (switch `CKD_hepatic`) are the mean
+# from Malik 2020; it acts on the binding to an unknown protein only. The
+# binding to albumin and alpha-1-acid glycoprotein has the CKD profile of its
+# protein (`[ckd.binding]`, a row per quantity with its source and the protein
+# it belongs to; the factor of a protein is the product of its rows): the
+# albumin concentration of non-dialysis CKD against healthy controls (Huang
+# 2017), the binding function of the albumin molecule (site II, Klammt 2012)
+# and the concentration of alpha-1-acid glycoprotein (the meta-analysis of
+# Schmulenson 2018, a poster). The hepatic proteins (switch `CKD_hepatic`) are the mean
 # ratios of the unbound clearance of model drugs (Yoshida 2016, Tan 2018),
 # clearances of the drugs, taken as activity of the pathway. The tubular
 # capacity (`tubular_capacity`, a number, not a vector of the stages) is the
@@ -125,6 +132,11 @@ CYP2D6 = { value = [1.0, 0.53, 0.41, 0.50], choice = ["mild"], unit = "dimension
 CYP3A4 = { value = [1.0, 1.0, 1.0, 1.0], unit = "dimensionless", source = "Yoshida2016", notes = "no apparent relationship between the severity of CKD and the clearance of CYP3A4/5 model drugs (mean ratios of the unbound clearance 0.84, 1.05, 0.79, 0.99), taken as unchanged" }
 SLCO1B1 = { value = [0.68, 0.56, 0.54, 0.45], unit = "dimensionless", source = "Tan2018", notes = "Table 2, mean ratio of the unbound clearance of the OATP model drugs of mild, moderate, severe and end stage CKD (off dialysis) to the control" }
 SLCO1B3 = { value = [0.68, 0.56, 0.54, 0.45], unit = "dimensionless", source = "Tan2018", notes = "Table 2, the OATP model drugs (OATP1B1 and OATP1B3 are not separated), as SLCO1B1" }
+
+[ckd.binding]
+albumin = { value = [0.984, 0.951, 0.942, 0.905], choice = ["mild"], protein = "albumin", quantity = "plasma albumin concentration", unit = "dimensionless", source = "Huang2017", notes = "Table 1: serum albumin of 20 healthy controls (eGFR 101.4 ml/min/1.73 m2) 43.2 g/L and of non-dialysis CKD 3 (n = 32, eGFR 48.9), CKD 4 (n = 38, eGFR 24.7) and CKD 5 (n = 25, eGFR 10.9) 41.1, 40.7 and 39.1 g/L, the ratios 0.951, 0.942 and 0.905 to the controls; mild CKD (stage 2) is not measured: 0.984, the line from 1 at the eGFR 90 to the moderate value at 45 at the mild anchor 75 (model choice); Schmulenson 2018 (a meta-analysis, PAGE poster) give 0.982, 0.953, 0.910 and 0.840 (end stage with dialysis) for mild to end stage" }
+albumin_binding = { value = [1.0, 0.941, 0.839, 0.669], choice = ["mild"], protein = "albumin", quantity = "binding function of an albumin molecule", unit = "dimensionless", source = "Klammt2012", notes = "Results (abstract): the albumin-binding capacity (ABiC, binding site II, dansylsarcosine, measured at a fixed albumin concentration of 150 umol/l as the method of the group describes it, Klinkmann 2022, doi:10.3390/medicina58121780) of 104 CKD patients, 118, 111, 99 and 79 % of a pooled plasma reference for the stages 1/2, 3, 4 and 5 (stage 5 with dialysis patients); the ratios 0.941, 0.839 and 0.669 to the stages 1/2, which are taken as the healthy binding function and as mild CKD, 1 (model choice: the reference of the study is pooled plasma, not healthy subjects); site II taken for every drug bound to albumin (model choice); the binding function multiplies the concentration, the capacity of the albumin of the plasma" }
+agp = { value = [1.046, 1.137, 1.328, 2.062], choice = ["mild"], protein = "agp", quantity = "plasma alpha-1-acid glycoprotein concentration", unit = "dimensionless", source = "Schmulenson2018", notes = "the weighted mean fractional changes of the alpha-1-acid glycoprotein of a systematic literature search (a meta-analysis, PAGE 2018 poster, not peer reviewed) of moderate, severe CKD and end stage renal disease, 1.137, 1.328 and 2.062 (95 % CI 0.962-1.312, 1.215-1.441, 1.599-2.525); mild CKD has no data: 1.046, the line from 1 at the eGFR 90 to the moderate value at 45 at the mild anchor 75 (model choice); Vasson 1991 (doi:10.1177/039139889101400207, abstract) measured 1.27 against 0.79 g/L of volunteers in non-dialysed uremic patients (1.61), Vasson 1993 (doi:10.1159/000187492, abstract) 1.20 against 0.83 g/L (1.45); no change of the binding function per molecule is applied: Kishino 1995 (doi:10.1097/00007691-199510000-00003, abstract) found fewer binding sites per AAG molecule of disopyramide in renal insufficiency, the dissociation constant unchanged, without numbers in the abstract" }
 
 [heart_failure]
 liver_flow = { value = [1.0, 0.765, 0.538, 0.463], choice = ["I"], unit = "dimensionless", source = "Rasool2015", notes = "hepatic blood flow of NYHA I to IV relative to healthy: the reductions 23.5, 46.2 and 53.7 % of mild, moderate and severe heart failure (NYHA II, III, IV) measured by Leithe 1984 (ICG clearance, doi:10.1161/01.CIR.69.1.57); NYHA I (no limitation of physical activity) has no data and is taken as healthy (model choice); it acts on the hepatic artery and the portal organs, whose flows follow the hepatic flow (Gu 2025)" }

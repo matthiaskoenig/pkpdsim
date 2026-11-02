@@ -32,9 +32,15 @@ d(PODOSE_<s>)/dt = -(J_po_<s> + J_trs_st_<s>) * Mr_<s>
 
 The dissolution rate `kdis` (1/min) acts on the undissolved amount of every segment; the formulation of the tablet decides it:
 
-- `FirstOrderDissolution(k)`: `kdis = k` (`Ka_dis_<s>`, 1/hr); the default (2/hr, the default of the hand-written models, a choice of the library) when the route states no formulation;
+- `FirstOrderDissolution(k, fed, release)`: `kdis = k` (`Ka_dis_<s>`, 1/hr), with two optional factors (see below); the default (2/hr, the default of the hand-written models, a choice of the library) when the route states no formulation;
 - `WeibullDissolution(t50, shape, lag)`: the fraction dissolved `F = 1 - exp(-ln2*((t - lag)/t50)^shape)` after the lag time, applied as its hazard on the undissolved amount, with the time since the dose the mean age of the undissolved drug (`age_dis_<s>`); exact for one dose, doses which overlap share one clock (the amount-weighted mean age);
 - `DoseDependentDissolution(k, dose50)`: `kdis = k*D50/(D50 + D)` with the undissolved amount `D` (mg) of all segments, a dissolution which saturates with the dose (solubility-limited).
+
+The first order dissolution has two optional factors, each creating a dimensionless parameter of the body only if it is set (without them the model has neither parameter and the rate is `Ka_dis_<s>`): `fed` creates `f_dis_fed_<s>`, the factor of the rate in the fed state (`FED = 1`; food slows the dissolution), and `release` creates `f_dis_release_<s>`, the factor of a modified-release formulation (the given value, 1 for the immediate-release tablet; the experiments of a prolonged-release tablet set it, e.g. 0.2). The single lumen has no fed state, a `fed` factor there raises.
+
+```equations title="first order dissolution with the factors of the formulation and the fed state"
+J_po_<s>: -> Clumen_st_<s> = Ka_dis_<s> / 60 min_per_hr * f_dis_release_<s> * (1 + FED * (f_dis_fed_<s> - 1)) * PODOSE_<s> / Mr_<s>
+```
 
 ```equations title="Weibull dissolution (t50, shape, lag of the tablet)"
 kdis_<s> = piecewise(0, age_dis_<s> <= lag_dis_<s>, 0.693147180559945 * shape_dis_<s> / t50_dis_<s> * ((age_dis_<s> - lag_dis_<s>) / t50_dis_<s> + 1e-9)^(shape_dis_<s> - 1))
@@ -47,9 +53,9 @@ J_dis_du_<s>: Asolid_du_<s> -> Clumen_du_<s> = kdis_<s> * Asolid_du_<s>
 --8<-- "pbpk/img/intestine.svg"
 </div>
 
-The lumen segments follow the anatomical segmentation of Thelen 2011, as PK-Sim: stomach `st`, duodenum `du`, upper and lower jejunum `jej1`, `jej2`, upper and lower ileum `ile1`, `ile2`, caecum `cae`, colon ascendens `asc`, transversum `tra`, descendens `des`, sigmoid `sig` and rectum `rec`, then the feces. A substance which reaches the lumen (oral route, biliary excretion, transport into the lumen) has the dissolved concentration `Clumen_<seg>_<s>` in every segment, which moves on with the transit `V*C/T` of the segment and from the rectum into the feces `Afeces_<s>`. The fed state `FED = 1` slows the gastric emptying to the stomach transit time of the fed state.
+The lumen segments follow the anatomical segmentation of Thelen 2011, as PK-Sim: stomach `st`, duodenum `du`, upper and lower jejunum `jej1`, `jej2`, upper and lower ileum `ile1`, `ile2`, caecum `cae`, colon ascendens `asc`, transversum `tra`, descendens `des`, sigmoid `sig` and rectum `rec`, then the feces; the tokens in the order of the transit are `ids.GUT_SEGMENTS`, which a model reads instead of a list of its own. A substance which reaches the lumen (oral route, biliary excretion, transport into the lumen) has the dissolved concentration `Clumen_<seg>_<s>` in every segment, which moves on with the transit `V*C/T` of the segment and from the rectum into the feces `Afeces_<s>`. The fed state `FED = 1` slows the gastric emptying to the stomach transit time of the fed state.
 
-The absorption rate constant of the small intestine is `ka_<s>` (1/hr, 1 by default for a substance with an oral route, a choice of the library; 0 for any other); a segment absorbs with `ka_<s>*f_area_<seg>`, the mucosal surface per lumen volume relative to the small intestine (the stomach does not absorb); two optional factors change it (see [Fraction absorbed and colon absorption](#fraction-absorbed-and-colon-absorption)). Without chemistry of the intestine the substance is absorbed into the plasma of the intestinal wall:
+The absorption rate constant of the small intestine is `ka_<s>` (1/hr, 1 by default for a substance with an oral route, a choice of the library; 0 for any other); a segment absorbs with `ka_<s>*f_area_<seg>`, the mucosal surface per lumen volume relative to the small intestine (the stomach does not absorb); optional factors change it (see [Fraction absorbed and colon absorption](#fraction-absorbed-and-colon-absorption) and [Regional absorption](#regional-absorption)). Without chemistry of the intestine the substance is absorbed into the plasma of the intestinal wall:
 
 ```equations title="transit and absorption"
 J_tr_st_<s>: Clumen_st_<s> -> Clumen_du_<s> = Vlumen_st * Clumen_st_<s> / ((T_st + FED * (T_st_fed - T_st)) * fimp_t_stomach)
@@ -60,7 +66,7 @@ J_trs_du_<s>: Asolid_du_<s> -> Asolid_jej1_<s> = Asolid_du_<s> / (T_du * fimp_t_
 J_trs_rec_<s>: Asolid_rec_<s> -> Afeces_<s> = Asolid_rec_<s> / T_rec
 ```
 
-The factors `fimp_t_stomach` and `fimp_t_si` are the factors of chronic kidney disease on the gastric emptying time and the small intestinal transit time: they multiply the transit time, a factor above 1 slows the transit. They are 1 until their source is read (see [Impairment](impairment.md#limitations)). The data of the segments:
+The factors `fimp_t_stomach` and `fimp_t_si` are the factors of chronic kidney disease on the gastric emptying time and the small intestinal transit time: they multiply the transit time, a factor above 1 slows the transit. They are 1 until their source is read (see [Impairment](impairment.md#limitations)). The transit time of the stomach of the condition, `(T_st + FED*(T_st_fed - T_st))*fimp_t_stomach`, is a constant of the top model as well, `T_st_eff` (`ids.T_STOMACH`, an output of the intestine evaluated after the changes before the simulation): a formula of the top model reads it, e.g. the rate of a conversion in the stomach which converts a given fraction of a solution, `kconv = 60*f/((1 - f)*T_st_eff)`, fasted and fed, instead of a copy of the fasted 22.79 min. The single lumen has no stomach and no `T_st_eff`. The data of the segments:
 
 <!-- generated: intestine-segments (scripts/pbpk_tables.py), do not edit -->
 *Generated from `data/intestine_human.toml` by `scripts/pbpk_tables.py`; the notes of every number are in the data file.*
@@ -101,9 +107,9 @@ The small intestinal transit time is split onto duodenum, jejunum and ileum by t
 Two optional attributes of `SegmentedIntestine` change the absorption of the segments, both `None` by default. Without them the model has neither parameter nor reaction, and the absorption is the one above.
 
 - `fabs`: the fraction of the absorbed flux of every segment which enters the body, the parameter `fabs_<s>` of the top model (as in the single lumen). The rest, `1 - fabs_<s>`, goes from the lumen of the segment into the feces (`J_feces_<seg>_<s>`). The lumen empties as fast as without it, so the onset of the absorption stays and less of the drug enters the body: for a substance with incomplete absorption and a fast onset, which a smaller `ka_<s>` cannot give (it delays the onset and moves the absorption down the intestine).
-- `f_ka_colon`: the factor `f_ka_colon_<s>` of the absorption of the segments of the large intestine (caecum to rectum, the segments of the region `Organ.LARGE_INTESTINE`), relative to `ka_<s>*f_area_<seg>`; the area factors stay. For a substance which the colon absorbs less than its area factor gives, or not at all (0): its slow transit otherwise adds a late absorption of what the small intestine left.
+- `f_ka_colon`: the factor `f_ka_colon_<s>` of the absorption of the segments of the large intestine (caecum to rectum, the segments of the region `Organ.LARGE_INTESTINE`; the shorthand of the group `colon` of a [regional profile](#regional-absorption)), relative to `ka_<s>*f_area_<seg>`; the area factors stay. For a substance which the colon absorbs less than its area factor gives, or not at all (0): its slow transit otherwise adds a late absorption of what the small intestine left.
 
-A set attribute is one value for every substance with an oral route (the substances whose `ka_<s>` has the default of the data); a model fits the parameter of its substance by id (`fabs_api`, `f_ka_colon_api`). A substance without an oral route (a metabolite which reaches the lumen by the bile, `ka_<s> = 0`) gets neither parameter and no `J_feces_<seg>_<s>`, its absorption stays `ka_<s>*f_area_<seg>`. A value of 1 gives the model without the attribute numerically. `SingleLumen.fabs` differs: its `None` is `fabs_<s> = 1`, a parameter of every substance.
+A set attribute is one value for every substance with an oral route (the substances whose `ka_<s>` has the default of the data), or a mapping from the substance id to a value (`ka={"cr": 2.0, "crtn": 0.5}`, `fabs={"cr": 0.6}`) for a model with several oral substances. In a mapping `ka` of a substance which is missing is the default of the data, `fabs_<s>` and `f_ka_colon_<s>` exist only for the substances of the mapping, and a key which is no substance of the definition (or, for `fabs` and `f_ka_colon`, a substance without an oral route) raises a `ValueError`; a `ka` for a substance without an oral route is allowed (its reabsorption after biliary excretion). The same holds for `ka` and `fabs` of the single lumen, where a substance missing from `fabs` has `fabs_<s> = 1`. A model fits the parameter of its substance by id (`fabs_api`, `f_ka_colon_api`). A substance without an oral route (a metabolite which reaches the lumen by the bile, `ka_<s> = 0`) gets neither parameter and no `J_feces_<seg>_<s>`, its absorption stays `ka_<s>*f_area_<seg>`. A value of 1 gives the model without the attribute numerically. `SingleLumen.fabs` differs: its `None` is `fabs_<s> = 1`, a parameter of every substance.
 
 ```equations title="absorption with fabs and f_ka_colon"
 J_abs_du_<s>: Clumen_du_<s> -> Cpl_<s> = fabs_<s> * ka_<s> / 60 min_per_hr * f_area_du * Vlumen_du * Clumen_du_<s>
@@ -111,6 +117,51 @@ J_feces_du_<s>: Clumen_du_<s> -> Afeces_<s> = (1 - fabs_<s>) * ka_<s> / 60 min_p
 J_abs_asc_<s>: Clumen_asc_<s> -> Cpl_<s> = fabs_<s> * ka_<s> / 60 min_per_hr * f_area_asc * f_ka_colon_<s> * Vlumen_asc * Clumen_asc_<s>
 J_feces_asc_<s>: Clumen_asc_<s> -> Afeces_<s> = (1 - fabs_<s>) * ka_<s> / 60 min_per_hr * f_area_asc * f_ka_colon_<s> * Vlumen_asc * Clumen_asc_<s>
 ```
+
+### Regional absorption
+
+`SegmentedIntestine(regional=...)` gives a substance with an oral route a regional absorption profile, `RegionalAbsorption({"ile2": 0.5, "asc": 0.1})`: a factor `f_ka_<seg>_<s>` per segment (`du` to `rec`, the stomach does not absorb) which multiplies the absorption of the segment, `ka_<s>*f_area_<seg>*f_ka_<seg>_<s>`. The area factor holds the mucosal surface per lumen volume, the profile the permeability of the segment relative to the small intestine; a segment missing from the profile has no factor (1). One profile is that of every substance with an oral route, a mapping from the substance id gives each substance its own (`regional={"api": RegionalAbsorption(...)}`). A factor is a number or a `Value` (dimensionless, with its source or fitted). The group `colon` gives the segments of the large intestine (caecum to rectum) one shared factor, the parameter `f_ka_colon_<s>`: `f_ka_colon=x` is the shorthand of `RegionalAbsorption({"colon": x})`, both make the same model. A segment of the group with a factor of its own as well, or a substance with `f_ka_colon` and a factor of the large intestine in its profile, is refused (two factors of one absorption). A measured colonic absorption goes into the group (`RegionalAbsorption({"ile2": ..., "colon": Value(..., source="Byon2018")})`), a segment factor where the study resolves the segment. The notes of `f_ka_colon_<s>` say where its value comes from: of a `Value` with a source the regional absorption profile, the value of that source, not fitted (and its citation); of a number or a fitted value that a model fits it.
+
+There is no generic default profile, the default is no factor (1, the absorption above): the absorption in the colon relative to the small intestine is a property of the substance. Of 42 drugs released in the colon in humans the highly permeable ones (BCS class I) had a relative colonic bioavailability above 70 % and those of low permeability (BCS III and IV) below 50 % (Tannergren 2009); a single profile would be wrong for one of the two groups. With the area factors of the large intestine alone a solution released in the caecum is absorbed to 70 % (in the colon ascendens 64 %) of the fraction absorbed of an oral solution at the default `ka` (1/hr), the range of a highly permeable drug (simulated with the data of this version, `test_the_colon_absorption_of_the_docs`). A substance whose regional absorption is measured takes its profile from the study, e.g. apixaban released by a capsule in the distal small intestine and the ascending colon (Byon 2018: the AUC 60 % and 84 % lower than after the oral solution).
+
+A release study gives the exposure of a solution released in a segment relative to an oral solution, not the factors: they depend on the rest of the absorption of the model (`ka_<s>`, `fabs_<s>`, an efflux, the first pass), so they are derived with the model. `release_auc_ratios(r, substance, segments, dose)` simulates the oral solution (`SOLDOSE_<s>`) and the same dose dissolved in the lumen of each release segment (`GU__Clumen_<seg>_<s>`) and gives the AUC of the arm vein relative to the oral solution (14 days at one point per minute by default); `derive_regional_absorption(r, substance, targets, dose)` finds the factors which give the reported ratios, one factor per release segment (`regional_key`: the segment in the small intestine, the group `colon` in the large one), each the root of its ratio with the others fixed, in turns until no factor moves. A study in another condition than the reference (fed, a body weight, an impairment) passes it as `changes`, initial values by id, which the initial assignments follow; afterwards the condition is taken back and every value of the roadrunner is reset to its initial value (the factors of the model, not the derived ones). The model needs an oral solution of the substance and a first value of each factor in its profile. Because the factors depend on the fitted absorption, a model derives them on its adopted fit, writes them into its profile (a `Value` with the source of the study) and fits again from the adopted fit, until the factors derived on the fit are those of the model (apixaban: Byon 2018, the lower ileum 0.40 and the colon ascendens 0.16 give `f_ka_ile2_api` 0.149 and `f_ka_colon_api` 0.0567).
+
+```python
+# not executed
+from pkdb_models.models.apixaban import MODEL
+from pkpdsim.pbpk import derive_regional_absorption
+
+r = MODEL.load_roadrunner()
+r.integrator.absolute_tolerance = 1e-14
+r.integrator.relative_tolerance = 1e-10
+factors = derive_regional_absorption(r, "api", {"ile2": 0.40, "asc": 0.16}, dose=2.5)
+```
+
+```equations title="regional absorption (a factor of the lower ileum and of the group colon, with fabs)"
+J_abs_ile2_<s>: Clumen_ile2_<s> -> Cpl_<s> = fabs_<s> * ka_<s> / 60 min_per_hr * f_area_ile2 * f_ka_ile2_<s> * Vlumen_ile2 * Clumen_ile2_<s>
+J_abs_asc_<s>: Clumen_asc_<s> -> Cpl_<s> = fabs_<s> * ka_<s> / 60 min_per_hr * f_area_asc * f_ka_colon_<s> * Vlumen_asc * Clumen_asc_<s>
+```
+
+??? note "Sources"
+
+    - `Tannergren2009`: Tannergren C, Bergendal A, Lennernäs H, Abrahamsson B. Toward an increased understanding of the barriers to colonic drug absorption in humans: implications for early controlled release candidate assessment. Mol Pharm 6(1):60-73, 2009. [doi:10.1021/mp800261a](https://doi.org/10.1021/mp800261a)
+    - `Byon2018`: Byon W, Nepal S, Schuster AE, Shenker A, Frost CE. Regional gastrointestinal absorption of apixaban in healthy subjects. J Clin Pharmacol 58(7):965-971, 2018. Abstract read (Europe PMC, 2026-10-29); the full text is not open access. [doi:10.1002/jcph.1097](https://doi.org/10.1002/jcph.1097)
+
+### Conversions in the lumen
+
+`SegmentedIntestine(conversions=[LumenConversion(substrate, product, k, segments)])` converts a dissolved substance into another in the chosen lumen segments, first order with the rate constant `kconv_<s>_<m>` (1/hr, the unit of `ka_<s>`, a parameter of the top model), one mole of the product per mole of the substrate: a chemical conversion (creatine to creatinine in the acid of the stomach), the hydrolysis of a prodrug, a bacterial conversion in the colon (the deconjugation of a glucuronide). The undissolved drug of a tablet does not convert. The substrate reaches the lumen (an oral route, biliary excretion, a transport of the intestine or another conversion); the product gets the lumen species, the transit and the absorption of the intestine (its `ka_<m>` is 0 without an oral route unless `ka` gives it one). Without conversions the model has no rate constant and no reaction.
+
+```equations title="conversion of <s> into <m> in the stomach"
+J_conv_st_<s>_<m>: Clumen_st_<s> -> Clumen_st_<m> = kconv_<s>_<m> / 60 min_per_hr * Vlumen_st * Clumen_st_<s>
+```
+
+The stomach does not absorb, so the converted fraction `f` of an oral solution by a conversion in the stomach follows from the gastric transit time `T` (`T_st`, 22.79 min fasted, `T_st_fed` 63.48 min fed) and `k = kconv/60` (1/min): the dissolved drug leaves the stomach with `1/T` and converts with `k`,
+
+```text
+f = k*T / (1 + k*T)            kconv = 60 * f / ((1 - f) * T)
+```
+
+An immediate-release tablet with the first order dissolution `Ka_dis_<s>` (1/hr, without the factors `f_dis_fed_<s>` and `f_dis_release_<s>`) converts only what dissolves in the stomach, the fraction `g = kd*T/(1 + kd*T)` with `kd = Ka_dis/60` (1/min; not the rate `kdis_<s>` of a Weibull or dose-dependent dissolution, which is in 1/min already), so `f = g*k*T/(1 + k*T)`. Over several segments without absorption the drug survives each with `1/(1 + k*T_seg)`. A converted fraction of 0.0069 of a solution at the fasted transit is `kconv = 0.0183` 1/hr.
 
 ### Intestinal wall
 
@@ -146,6 +197,10 @@ The number `0.0744792` is the transit share of the duodenum in the small intesti
 
 `Variants(organs={Organ.SMALL_INTESTINE: "single_lumen"})` replaces the segments with one lumen, the fluid of the small intestine (105 ml, transit time 192 min): the first order absorption of most hand-written models, from the same interface. The lumen absorbs with `ka_<s>`, of which the fraction `fabs_<s>` enters the body and the rest the feces, and it keeps a physiological transit into the feces, so the fraction absorbed is `Fa = fabs*ka/(ka + 1/T)`: the fitted absorption constants of the hand-written models (which had no transit) do not carry over unchanged, a refit is expected anyway.
 
+## Readouts
+
+The lumen and the fluxes of the intestine are spread over its segments; a model which reads their sums names them in `PBPKDefinition.readouts`, and the intestine adds each as an output, as the kidney adds `Rurine_<s>`: the dissolved amount in the lumen `Alumen_<s>`, the summed fluxes of the absorption `Rabs_<s>`, of the efflux into the lumen `Reff_<s>` and of the loss to the feces `Rfeces_<s>`, the amount absorbed `Aabs_<s>` and the gross absorbed fraction of the oral dose `Fa_<s>` (absorbed from the lumen over the oral dose given, before the first pass, above the bioavailability), the same ids for the segmented intestine and the single lumen (see [Observers](observers.md#readouts-of-the-intestine)). A model without readouts has none of them.
+
 ## Bile and enterohepatic circulation
 
 The bile `Cbile_<s>` (compartment `Vbile`) collects the apical efflux of the liver and drains with the first order `k_bile` (0.01 1/min, a choice of the library) into the duodenum, of a substance without lumen species into the feces:
@@ -162,6 +217,8 @@ Every substance has the amounts in urine `Aurine_<s>` and feces `Afeces_<s>` (co
 
 ## Limitations
 
-- The deconjugation in the colon lumen (glucuronides back to the parent) is not implemented: a custom reaction of the intestine is refused, a hook for the chemistry of the lumen is open.
+- A conversion in the lumen is first order (`LumenConversion`): a saturable or enzyme-limited conversion in the lumen is not available, a custom reaction of the intestine is refused.
+- The single lumen has no segments: `SingleLumen(regional=...)` and `SingleLumen(conversions=...)` are refused with a message, a regional profile and the conversions in the lumen need the segmented intestine.
+- A regional profile is given to a substance with an oral route (as `fabs` and `f_ka_colon`): the product of a conversion without an oral route absorbs with `ka_<m>*f_area_<seg>` only.
 - Only CYP3A4 has an expression profile along the intestine; every other protein is placed by mucosa volume over the small intestine, so a process expressed in the colon needs expression data (or a hook for the large intestine). The pH of the segments is data no process reads.
 - The gastric emptying and small intestinal transit factors of chronic kidney disease are 1 (see [Impairment](impairment.md#limitations)).

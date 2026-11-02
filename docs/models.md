@@ -41,6 +41,46 @@ keyword arguments only, so the order of their fields is not API. A list of
 `data_paths` is stored as a tuple; a model is hashable unless its absolute
 tolerance is an `AbsoluteTolerance` of sbmlsim.
 
+## Builds per sex
+
+A model is built for one sex: the PBPK library takes the reference values of
+the sex when it builds a model (the ICRP 89 anatomy, the hematocrit, the
+partition coefficients, the GFR, see [Physiology](pbpk/physiology.md)). A model
+whose studies include women has a female build next to the male one, from the
+same definition (`create_archive(..., sexes=(Sex.MALE, Sex.FEMALE))`, see
+[PBPK library](pbpk/index.md#builds-per-sex)), and its model object holds both:
+
+```python
+# not executed
+MODEL_PATH = MODEL_BASE_PATH / "hctz_flat.xml"
+FEMALE_MODEL_PATH = MODEL_BASE_PATH / "hctz_female_flat.xml"
+
+MODEL = PKPDModel(
+    name="hctz",
+    ...,
+    model_path=MODEL_PATH,
+    female_model_path=FEMALE_MODEL_PATH,
+)
+```
+
+`model_path` is the male build, the model of every experiment and every caller
+which does not ask for a sex; `model_paths` maps every sex to its build (the
+male one only for a model without a female build) and `model_path_of(sex)`
+gives the build of a sex, with a `ValueError` naming the model for a sex it has
+no build of. The builds have the same ids, so the changes of an experiment and
+the parameters of a fit apply to both. An experiment chooses its build by the
+sex of its subjects (`sex`, see
+[Experiments and their metadata](experiments.md#builds-per-sex)), and the
+commands handle both builds:
+
+| command | the builds per sex |
+| --- | --- |
+| `run_simulation`, `run_report`, `pkpdsim.testing` | every task runs the build of the sex of its simulation |
+| `run_fit` | one parameter set for both builds; the remainders of the fitted fractions are checked in every build |
+| `--uncertainty` | the draws of the fitted parameters are those of the male build and run on every build; `check_fit_parameters` checks the fitted values and the distributions in every build |
+| sensitivity | a group runs the build of its sex (`SensitivityGroup(sex=...)`): a local analysis varies the values of that build, a global design (sampling, Sobol, FAST) is the same relative design around the values of that build (the values of the table, read from the male build, times the ratio of the value in the build, `design_factors`; a value of the table which is zero or of another sign is refused before anything runs), and the table of the parameters has the column `value_female` |
+| `pkpdsim-verify` | a dump records the sex of the build of every task (`builds`), `compare` reports a task which moved to the build of another sex |
+
 ## References
 
 `factory`, `experiments` and `fit_definitions` are references
@@ -56,7 +96,7 @@ them; a module which starts with a dot is relative to `package`.
 
 ## Settings
 
-- `SimulatorSettings`: the absolute tolerance (one value, or an `AbsoluteTolerance` of sbmlsim per kind and state), the relative tolerance and the processes of a scan, `n_workers`. A run creates an sbmlsim `Simulator` from them.
+- `SimulatorSettings`: the absolute tolerance (one value, or an `AbsoluteTolerance` of sbmlsim per kind and state), the relative tolerance, the processes of a scan, `n_workers`, and the optimization level of the compilation, `jit_optimization` (`None` for the level of sbmlsim, `O2` or the environment variable `SBMLSIM_JIT_OPTIMIZATION`; `"O0"` to `"O3"`). A run creates an sbmlsim `Simulator` from them and compiles the model at the level, as the tests of `pkpdsim.testing` do; the problems of the fits, their reports and the identifiability analysis and `pkpdsim-verify` load their models at the level too, in the process and in every worker (`pkpdsim.fit.at_level`: the fit definition carries the level into its problems, which carry it into their workers), and a test of a model loads the model at the level with `MODEL.load_roadrunner(sex)` instead of a plain `roadrunner.RoadRunner`. sbmlsim compiles every model with LLJIT: `O0` compiles a model with large initial assignments several times faster and simulates a little slower (the creatinine model of pkdb_models loads in 4.5 s at `O0`, 24 s at `O2` and 53 s with the MCJIT of a plain `roadrunner.RoadRunner`), so a model whose runs compile more than they simulate sets `SimulatorSettings(jit_optimization="O0")`.
 - `FigureSettings`: sbmlsim's `FigureSettings` (the resolution, the sizes of the panels, the fonts and the legends, with the defaults of sbmlsim) and the two fields of a model, the `formats` of the figures (`svg`, `png`, `html`; SVG only by default) and the resolution of the static images (`savefig_dpi`). A run hands the settings of sbmlsim to every figure; an experiment (`figure_settings`) and a figure (`Figure(settings=...)`) override them. Nothing is applied to the process, so nothing has to be restored after a run.
 - `reduced_selections`, `save_results`, `fit_identifiability`: what a run simulates, whether it stores its results, whether a fit analyses the identifiability of its parameters by default.
 - `fits`, `fits_path`: the ids of the adopted fits, whose records in `fits_dir` (`fits` next to the output directory of the factory by default) give the fitted values and their uncertainty to the factory (`fit_records()`), see [Uncertainty of the fitted parameters](uncertainty.md).
@@ -117,9 +157,9 @@ which do not import, experiments which run one at a time) are its `checks`, see
 [Experiments and their metadata](experiments.md#exceptions-of-the-tests).
 
 `check_model` also checks that the name of the model is the last component of its
-package (or that component ends with `_<name>`), that `model_path`, the factory
-directory and `archive_path` lie below the path of the model, and that the data
-paths exist.
+package (or that component ends with `_<name>`), that the builds (`model_path`,
+`female_model_path`), the factory directory and `archive_path` lie below the
+path of the model, and that the data paths exist.
 
 ## Verification of a change
 
@@ -146,7 +186,11 @@ migration to the old dump (see
 [Experiments and their metadata](experiments.md#renames-in-a-verification) and
 [Verification across versions of sbmlsim](#verification-across-versions-of-sbmlsim)).
 An experiment which cannot be initialized is recorded in the dump as an error and
-the command exits with 1 after the other experiments are stored.
+the command exits with 1 after the other experiments are stored. A dump records
+the sex of the build which every task of an experiment of pkpdsim ran
+(`builds`, see [Builds per sex](#builds-per-sex)); `compare` compares them
+exactly when both dumps have them, a difference is expected with the pattern
+`experiment/task` of the part `builds`.
 
 `settings` captures what a run of the experiments hands to sbmlsim, bound to the
 signatures: the arguments of `Simulator` (its tolerances and `n_workers`), of

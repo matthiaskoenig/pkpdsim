@@ -9,7 +9,7 @@ import pandas as pd
 import pytest
 from sbmlsim.experiment import ExperimentRunner
 from sbmlsim.model import AbstractModel
-from sbmlsim.plot import Figure
+from sbmlsim.plot import Figure, Plot
 from sbmlsim.simulation import Simulation
 from sbmlsim.units import Quantity, ureg
 
@@ -467,3 +467,55 @@ def test_rows_without_a_substance_are_in_no_frame(tmp_path: Path) -> None:
     frames = initialized(ToyStudy, tmp_path).load_dataframes_by_substance("Fig5")
     assert list(frames) == ["x"]
     assert frames["x"]["A"].tolist() == [1.0]
+
+
+def _plot() -> Plot:
+    """A plot of a new figure."""
+    return Figure(experiment=None, sid="fig", num_rows=1, num_cols=1).create_plots()[0]
+
+
+def test_a_function_of_a_task_is_a_curve() -> None:
+    """`add_function` draws a function of the results of a task over the time."""
+    from sbmlsim.data import Data
+
+    experiment = initialized(ToyDecay)
+    assert experiment.across() is None
+    plot = _plot()
+    y = Data(
+        index="twice_A", function="2 * A", variables={"A": Data("A", task="task_decay")}
+    )
+    experiment.add_function(plot, "task_decay", y, label="2A", color="black")
+    experiment.add_function(plot, "task_decay", y, None, "tab:blue", linestyle="--")
+    experiment.add_function(plot, "task_decay", y, "plain", "red", linestyle=None)
+    first, second, _ = plot.curves
+    assert (first.name, first.x.index, first.y.index) == ("2A", "time", "twice_A")
+    assert first.style is not None
+    assert second.name is None
+    styles = [c.kwargs for c in plot.curves]
+    assert styles[0] == {"color": "black", "linestyle": "-", "linewidth": 2.0}
+    assert styles[1] == {"color": "tab:blue", "linestyle": "--", "linewidth": 2.0}
+    # without a linestyle the curve has the default of sbmlsim
+    assert styles[2] == {"color": "red", "linewidth": 2.0}
+
+
+def test_a_function_of_a_task_is_a_band_over_the_draws() -> None:
+    """In a run over the draws of the fitted parameters the function is a band."""
+    from sbmlsim import Q
+    from sbmlsim.data import Data
+    from sbmlsim.simulation import Dimension
+
+    from pkpdsim.uncertainty import UncertaintyRun, UncertaintySettings
+
+    experiment = initialized(ToyDecay)
+    draws = Dimension("dim_draws", values={"k": Q([0.1, 0.2], "1/min")})
+    experiment.settings["uncertainty"] = UncertaintyRun(UncertaintySettings(), draws)
+    assert experiment.across() == "dim_draws"
+    plot = _plot()
+    y = Data(
+        index="twice_A", function="2 * A", variables={"A": Data("A", task="task_decay")}
+    )
+    experiment.add_function(plot, "task_decay", y, label="2A", color="black")
+    assert not plot.curves
+    (band,) = plot.bands
+    assert band.across == "dim_draws"
+    assert band.quantiles == (0.05, 0.95)

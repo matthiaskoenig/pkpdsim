@@ -12,7 +12,8 @@ comment (`# ...`) or an equation in the infix syntax of SBML L3:
 
 The ids are the local ids of an organ component (`Cpl_<s>`, `Q<o>`) or the
 ids of the top model (`Carm_<s>`), with the placeholders `<s>` for a
-substance and `<o>` for the token of an organ (`li`). The test builds the
+substance, `<m>` for a second substance (the product of a conversion) and
+`<o>` for the token of an organ (`li`). The test builds the
 toy definitions below and finds every equation, by its id, in the comp model
 of a toy: in an organ component (its model definition, `<o>` the organ of
 the component) or in the top model (`<o>` any organ), for some substance of
@@ -27,27 +28,40 @@ from pathlib import Path
 
 import libsbml
 import pytest
+from sbmlutils.factory import AssignmentRule, Model, Parameter, Port, PortType
 
 from pkpdsim.pbpk import (
     MM,
+    MODEL_UNITS,
+    REST,
     Binding,
     Direction,
     Erythrocytes,
     Excretion,
     FirstOrder,
+    FirstOrderDissolution,
     Hill,
     Induction,
     Inhibition,
     Kp,
+    LumenConversion,
     Membrane,
     Metabolism,
     Mode,
     Organ,
+    Part,
     PBPKDefinition,
+    PDComponent,
+    RateOf,
+    RegionalAbsorption,
     Route,
     SegmentedIntestine,
+    SlowPool,
     Substance,
+    ThresholdReabsorption,
     Transport,
+    U,
+    Value,
     Variants,
     WeibullDissolution,
     ZonatedLiver,
@@ -75,7 +89,12 @@ def standard() -> PBPKDefinition:
     (flow-limited, erythrocytes in equilibrium, a Kp override of adipose),
     `prm` (full form, kinetic erythrocytes, transport), `hil` (Hill kinetics
     in the kidney) and `inh` (a mechanism-based inhibitor and inducer of the
-    CYP2D6 which metabolises it); `drg` inhibits CYP2C9 competitively.
+    CYP2D6 which metabolises it), `spl` (split by a fraction into `spl_m1`
+    and the remainder `spl_m2`); the OATP1B3 uptake `PRMIN3` of `prm` has a
+    capacity as a ratio of `PRMIN`; `drg` inhibits CYP2C9 competitively;
+    `drg`, `prf` and `prm` have an endogenous baseline; a PD component reads
+    the liver cells of `prm`; `drg` has a slow pool in muscle; `sat` is
+    reabsorbed up to a renal threshold (`ThresholdReabsorption`).
     """
     return PBPKDefinition(
         sid="toy_standard",
@@ -88,6 +107,7 @@ def standard() -> PBPKDefinition:
                 distribution=Kp(2.0, ftissue=1.0),
                 excretion=Excretion(urine=True, fraction_reabsorbed=0.1),
                 inhibits=(Inhibition("CYP2C9", "competitive", ki=0.01),),
+                baseline=0.01,
             ),
             Substance("drg_m", name="metabolite", mr=316.0),
             Substance(
@@ -99,6 +119,7 @@ def standard() -> PBPKDefinition:
                 distribution=Kp(
                     3.0, mode=Mode.PERFUSION, overrides={Organ.ADIPOSE: 10.0}
                 ),
+                baseline=0.02,
             ),
             Substance(
                 "prm",
@@ -107,6 +128,7 @@ def standard() -> PBPKDefinition:
                 binding=Binding(fu=0.2),
                 erythrocytes=Erythrocytes("kinetic", kbc=1.5, k_exchange=0.1),
                 distribution=Kp(4.0, mode=Mode.PERMEABILITY, ftissue=0.5),
+                baseline=0.03,
             ),
             Substance("hil", name="drug", mr=200.0, distribution=Kp(1.5, ftissue=1.0)),
             Substance(
@@ -117,6 +139,24 @@ def standard() -> PBPKDefinition:
                 distribution=Kp(1.0, ftissue=1.0),
                 inhibits=(Inhibition("CYP2D6", "mechanism", ki=0.005, kinact=0.05),),
                 induces=(Induction("CYP2D6", emax=2.0, ec50=0.1),),
+            ),
+            Substance(
+                "spl",
+                name="drug split into two metabolites",
+                mr=300.0,
+                binding=Binding(fu=0.5),
+                distribution=Kp(1.0, ftissue=1.0),
+            ),
+            Substance("spl_m1", name="metabolite 1", mr=316.0),
+            Substance("spl_m2", name="metabolite 2", mr=332.0),
+            Substance(
+                "sat",
+                name="drug reabsorbed up to a renal threshold",
+                mr=180.0,
+                binding=Binding(fu=0.8),
+                excretion=Excretion(
+                    urine=True, reabsorption=ThresholdReabsorption(0.2, 2.0)
+                ),
             ),
         ],
         chemistry=[
@@ -165,13 +205,55 @@ def standard() -> PBPKDefinition:
                 FirstOrder(k=0.1),
                 protein="ABCC2",
             ),
+            Transport(
+                "PRMIN3",
+                Organ.LIVER,
+                "prm",
+                Direction.INFLUX,
+                Membrane.BASOLATERAL,
+                MM(vmax=RateOf("PRMIN", 0.5), km=0.02),
+                protein="SLCO1B3",
+            ),
+            Metabolism(
+                "SPL2M",
+                Organ.LIVER,
+                "spl",
+                {"spl_m1": Value(0.4, U.dimensionless), "spl_m2": REST},
+                FirstOrder(k=0.3),
+            ),
         ],
         routes=[Route.iv("drg"), Route.oral("drg"), Route.oral_solution("prf")],
+        pd=[_cell_reader()],
+        slow_pools=[SlowPool("drg", frozenset({Organ.MUSCLE}), k=1e-3, kp=1.5)],
     )
 
 
+def _cell_reader() -> PDComponent:
+    """Get a PD component which reads the concentration in the liver cells of `prm`."""
+    model = Model(
+        "cells",
+        units=U,
+        model_units=MODEL_UNITS,
+        objects=[
+            Parameter(
+                "C_cell",
+                0.0,
+                U.mM,
+                constant=False,
+                port=Port("C_cell_port", portType=PortType.INPUT_PORT),
+            ),
+            Parameter("E", None, U.mM, constant=False),
+            AssignmentRule("E", "C_cell", U.mM),
+        ],
+    )
+    return PDComponent(model=model, inputs={"C_cell": "LI__Cic_prm"}, outputs={})
+
+
 def variants() -> PBPKDefinition:
-    """Get the toy with the zonated liver, the nephron kidney and a gut metabolism."""
+    """Get the toy with the zonated liver, the nephron kidney (with a threshold reabsorption) and a gut metabolism.
+
+    `drg` has a slow pool in muscle fed from the plasma.
+    """
     return PBPKDefinition(
         sid="toy_variants",
         substances=[
@@ -184,6 +266,15 @@ def variants() -> PBPKDefinition:
                 excretion=Excretion(urine=True, fraction_reabsorbed=0.1),
             ),
             Substance("drg_m", name="metabolite", mr=316.0),
+            Substance(
+                "sat",
+                name="drug reabsorbed up to a renal threshold",
+                mr=180.0,
+                binding=Binding(fu=0.8),
+                excretion=Excretion(
+                    urine=True, reabsorption=ThresholdReabsorption(0.2, 2.0)
+                ),
+            ),
         ],
         chemistry=[
             Metabolism(
@@ -215,18 +306,40 @@ def variants() -> PBPKDefinition:
             Route.iv("drg"),
             Route.oral("drg", WeibullDissolution(t50=30.0, shape=1.5)),
         ],
+        slow_pools=[
+            SlowPool(
+                "drg", frozenset({Organ.MUSCLE}), k=1e-3, kp=1.5, source=Part.PLASMA
+            )
+        ],
     )
 
 
 def absorption() -> PBPKDefinition:
-    """Get the toy with the fraction absorbed and the colon factor of the segmented intestine."""
+    """Get the toy with the factors of the absorption and a conversion of the segmented intestine.
+
+    The fraction absorbed, the colon factor, a regional factor of the lower
+    ileum and the conversion of the drug into its product in the stomach.
+    """
     return PBPKDefinition(
         sid="toy_absorption",
-        substances=[Substance("drg", name="drug", mr=300.0)],
+        substances=[
+            Substance("drg", name="drug", mr=300.0),
+            Substance("drg_m", name="product", mr=316.0),
+        ],
         variants=Variants(
-            organs={Organ.SMALL_INTESTINE: SegmentedIntestine(fabs=0.8, f_ka_colon=0.5)}
+            organs={
+                Organ.SMALL_INTESTINE: SegmentedIntestine(
+                    fabs=0.8,
+                    f_ka_colon=0.5,
+                    regional=RegionalAbsorption({"ile2": 0.5}),
+                    conversions=[LumenConversion("drg", "drg_m", 0.02, ["st"])],
+                )
+            }
         ),
-        routes=[Route.oral_solution("drg")],
+        routes=[
+            Route.oral_solution("drg"),
+            Route.oral("drg", FirstOrderDissolution(k=2.0, fed=0.5, release=0.2)),
+        ],
     )
 
 
@@ -364,8 +477,15 @@ def _problems(name: str, contexts: list[Context]) -> list[str]:
             continue
         found: list[str] = []
         for context in contexts:
-            for s, o in itertools.product(context.substances, context.organs):
-                difference = _lookup(context.model, match, {"<s>": s, "<o>": o})
+            # `<m>` a second substance (the product of a conversion), only
+            # where the line has it
+            products = context.substances if "<m>" in line else ("",)
+            for s, m, o in itertools.product(
+                context.substances, products, context.organs
+            ):
+                difference = _lookup(
+                    context.model, match, {"<s>": s, "<m>": m, "<o>": o}
+                )
                 if difference == "":
                     break
                 if difference != "missing":

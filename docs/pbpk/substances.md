@@ -10,15 +10,16 @@ A `Substance` is a short id, a name, a molecular weight and the mechanism flags 
 | `binding` | `Binding(fu, protein, ckd=True)` | `fu = 1` | protein binding: `fu_ref_<s>`, and `fu_<s>` which follows the binding protein in impairment |
 | `erythrocytes` | `Erythrocytes(mode, bp, kbc, k_exchange)` | no blood cells, `BP = 1 - HCT` | the distribution into the erythrocytes, in equilibrium or kinetic |
 | `distribution` | `Kp(...)` or `KpMethod(...)` | vascular only | the distribution into the tissues: one Kp with overrides, or a Kp method |
-| `excretion` | `Excretion(urine, fraction_reabsorbed)` | the default `Excretion()`: no filtration | glomerular filtration `fu*GFR` into the urine |
+| `excretion` | `Excretion(urine, fraction_reabsorbed, reabsorption)` | the default `Excretion()`: no filtration | glomerular filtration `fu*GFR` into the urine, a constant reabsorbed fraction or a saturable reabsorption (`ThresholdReabsorption(threshold, n)`) |
 | `inhibits` | tuple of `Inhibition` | | the inhibition of proteins by the substance, see [Chemistry](chemistry.md) |
 | `induces` | tuple of `Induction` | | the induction of proteins by the substance |
+| `baseline` | number, `Value` or `Formula` (mM) | every species starts at 0 | an endogenous substance: every species starts at the equilibrium with the plasma concentration `baseline_<s>`, see [Endogenous baseline](#endogenous-baseline) |
 
 The routes are declared on the definition (`PBPKDefinition.routes`), not on the substance; the biliary and the intestinal excretion are processes of the chemistry (an apical efflux of the liver into the bile, of the intestine into the lumen).
 
 ## Protein binding
 
-`Binding(fu=0.13, protein="albumin")` gives the fraction unbound in plasma of the healthy individual, `fu_ref_<s>`, and the binding protein: `albumin`, `agp` (alpha-1-acid glycoprotein) or `unknown`. The unbound fraction which every rate reads, `fu_<s>`, is an initial assignment of `fu_ref_<s>` and the impairment: the binding protein falls in liver cirrhosis and the binding capacity in chronic kidney disease, so fu rises (see [Impairment](impairment.md)); `ckd=False` keeps the substance free of the CKD factor of the binding capacity, for a substance whose binding is measured unchanged in renal impairment (apixaban: 92-94 % bound in healthy and ESRD subjects), so that only the factor of its binding protein (cirrhosis) acts on fu; healthy, `fu_<s> = fu_ref_<s>`. Fit `fu_ref_<s>`, not `fu_<s>`.
+`Binding(fu=0.13, protein="albumin")` gives the fraction unbound in plasma of the healthy individual, `fu_ref_<s>`, and the binding protein: `albumin`, `agp` (alpha-1-acid glycoprotein) or `unknown`. The unbound fraction which every rate reads, `fu_<s>`, is an initial assignment of `fu_ref_<s>` and the impairment: the binding protein falls in liver cirrhosis, and in chronic kidney disease the binding follows the CKD profile of the protein (albumin falls, so fu rises; alpha-1-acid glycoprotein rises, so fu falls) or, for an unknown protein, the binding capacity of the plasma proteins (see [Impairment](impairment.md#binding-in-chronic-kidney-disease)); `ckd=False` keeps the substance free of the CKD factor of the binding, for a substance whose binding is measured unchanged in renal impairment (apixaban: 92-94 % bound in healthy and ESRD subjects), so that only the factor of its binding protein (cirrhosis) acts on fu; healthy, `fu_<s> = fu_ref_<s>`. Fit `fu_ref_<s>`, not `fu_<s>`.
 
 ## Erythrocytes
 
@@ -33,7 +34,7 @@ Without erythrocytes the substance stays in the plasma: the blood concentration 
 
 ## Tissue distribution
 
-`Kp(value, overrides={...}, organs=..., mode=..., ftissue=..., ps={...})` is the whole-tissue (interstitial and intracellular) to plasma coefficient of the substance, `Kp_<s>`, with the coefficients of single organs, `Kp_<o>_<s>` (`overrides={Organ.ADIPOSE: 0.4}`). An organ of `overrides`, `organs`, `ps` and of `Variants(organs=...)` may also be given by its value or name (`"ad"`, `"adipose"`) and the sex of the definition by its value (`sex="female"`): the same holds for the `mode` of a Kp and for the `organ`, `direction`, `membrane` and `part` of a process of the chemistry. The definition holds the enum members, and anything else raises an error which names the field and the allowed values, as does a text which is none of the choices of `Binding.protein`, `Erythrocytes.mode`, `KpMethod.method`/`compound`, `Inhibition.kind` or `Route.kind`. The Kp means the same in every form of the organ, so a fitted Kp keeps its meaning when the mode changes. The keyword-only options:
+`Kp(value, overrides={...}, interstitial=..., organs=..., mode=..., ftissue=..., ps={...})` is the whole-tissue (interstitial and intracellular) to plasma coefficient of the substance, `Kp_<s>`, with the coefficients of single organs, `Kp_<o>_<s>` (`overrides={Organ.ADIPOSE: 0.4}`). An organ of `overrides`, `organs`, `ps` and of `Variants(organs=...)` may also be given by its value or name (`"ad"`, `"adipose"`) and the sex of the definition by its value (`sex="female"`): the same holds for the `mode` of a Kp and for the `organ`, `direction`, `membrane` and `part` of a process of the chemistry. The definition holds the enum members, and anything else raises an error which names the field and the allowed values, as does a text which is none of the choices of `Binding.protein`, `Erythrocytes.mode`, `KpMethod.method`/`compound`, `Inhibition.kind` or `Route.kind`. The Kp means the same in every form of the organ, so a fitted Kp keeps its meaning when the mode changes. The keyword-only options:
 
 - `organs`: the organs the substance enters (`frozenset({Organ.LIVER, Organ.KIDNEY})`), all if `None`; in the other organs it stays in the blood.
 - `mode`: how plasma and tissue exchange (the collapsing of the [standard organ](organ.md#collapsing)):
@@ -45,6 +46,30 @@ Without erythrocytes the substance stays in the plasma: the blood concentration 
 
 !!! warning "ftissue is not the ftissue of the hand-written models"
     `ftissue_<s>` multiplies `fu*(C_p - C_t/Kp)`, the unbound plasma concentration and the tissue concentration as its plasma equivalent; in the hand-written models it multiplied the total concentrations. The id is the same, so the fit parameter set stays the same, but the fitted values differ and are refitted. For a highly bound substance (`fu` 0.005) the exchange of the liver from the share of `ftissue` can limit the metabolism; give the liver its own `ps`.
+
+### Extracellular distribution
+
+A substance which reaches the interstitial fluid of the tissues and not their cells (a contrast agent such as gadoxetate, a marker of the extracellular volume, a highly bound acid such as torasemide, which distributes with its albumin) has in every organ the Kp of the interstitial share of its whole tissue, `f_int*K_int_pls(fu)/(1 - f_vas)`: the interstitial fraction of the tissue without blood times the interstitial to plasma coefficient of its fu (Schmitt 2008). `Kp(interstitial=1.0, ftissue=...)` gives it to every organ the substance enters which has no override: `Kp_<o>_<s> = fKp_<s> * share`, the share a number of the build (`interstitial_share(organ, fu, sex)`, the fractions of the reference individual of the sex of the build at the fu of the definition, which must be a number: a female build has the female share, a male build the male one; the sex has no default. `f_int/(1 - f_vas)` is the interstitial fraction of the tissue without blood, `Fint` of Schmitt 2008, one value per tissue: the shares of the sexes differ only by the rounding of the tabulated `f_int`, by less than 5e-4 relative, the vascular fraction of the sex does not enter them) and the scale `fKp_<s>` a number, a fitted `Value` (one fitted fraction of the interstitial fluid the substance reaches) or a `Formula` of a parameter of the definition. An override keeps its own value (an organ of the full form needs a Kp above the share of the sex of the build, `check_kp`, so the scale 1 is refused there), and the value of the substance is not needed: a `Kp` without `value` has no `Kp_<s>`, which is also allowed when the overrides cover every organ the substance enters (else the validation names the organs without one); a `value` together with `interstitial` is refused, no organ would read it. Without `interstitial` the model has no `fKp_<s>` and its SBML is unchanged.
+
+```python
+from pkpdsim.pbpk import Binding, Kp, Organ, Sex, Substance, interstitial_share
+
+contrast = Substance(
+    "ctr",
+    name="an extracellular contrast agent",
+    mr=725.7,
+    binding=Binding(fu=0.9, protein="albumin"),
+    distribution=Kp(interstitial=1.0, ftissue=1.0),
+)
+for organ in (Organ.BRAIN, Organ.MUSCLE, Organ.SKIN):
+    print(organ.name, round(interstitial_share(organ, 0.9, Sex.MALE), 4))
+```
+
+```text
+BRAIN 0.0045
+MUSCLE 0.1347
+SKIN 0.5386
+```
 
 `KpMethod("rodgers_rowland", logp=..., pka=(...), compound=...)` computes the coefficient of every organ when the model is built, from the lipophilicity, the ionisation and the tissue composition (Rodgers, Leahy & Rowland 2005, Rodgers & Rowland 2006, in the form of Yau 2020), and writes `Kp_<o>_<s> = fKp_<s>*value`: one factor `fKp_<s>` (`factor=`, default 1) scales all coefficients, so a fit can adjust them together. A base with a pKa of at least 7 binds to the acidic phospholipids, whose affinity follows from the erythrocytes, so it needs `Erythrocytes(bp=...)` or a `kbc`. The coefficients are numbers of the build: a change of `fu` by an impairment does not recompute them. The rat tissue composition is applied to the human tissues (Rodgers & Rowland 2007, Coutinho 2024).
 
@@ -74,11 +99,76 @@ MUSCLE 5.6
 BRAIN 1.89
 ```
 
-The full form (`Mode.PERMEABILITY`) derives the intracellular coefficient from the Kp and the interstitial one (Schmitt 2008). A Kp at or below the interstitial share has no positive intracellular coefficient: the build refuses it for the reference individual, and the floor of `K_cell_pls_<s>` keeps a fit or another individual from crossing it. A highly bound, hydrophilic acid can lie below the interstitial share in adipose; such a substance uses the merged tissue or the flow-limited organ.
+The full form (`Mode.PERMEABILITY`) derives the intracellular coefficient from the Kp and the interstitial one (Schmitt 2008). A Kp at or below the interstitial share has no positive intracellular coefficient: the build refuses it for the reference individual of its sex, and the floor of `K_cell_pls_<s>` keeps a fit or another individual from crossing it. The fu of chronic kidney disease raises the share at the same Kp; where it crosses the Kp at the fu of a CKD stage the build warns (`KCellFloorWarning` of `pkpdsim.pbpk`, which a model filters or asserts, see [Impairment](impairment.md#limitations)). A highly bound, hydrophilic acid can lie below the interstitial share in adipose; such a substance uses the merged tissue or the flow-limited organ.
+
+### Slow tissue pool
+
+A substance whose terminal phase is the slow release from a deep compartment of the tissues (a marker of the extracellular volume in the hours after a dose, a contrast agent in the days after it) gets a slow pool in the merged tissue of some organs: `SlowPool(substance, organs, k, kp, source=Part.TISSUE)` in `PBPKDefinition(slow_pools=[...])`, one per substance. Every organ of the pool has the species `Cslow_<s>` in its tissue compartment `Vti` and, by default, its exchange with the tissue `Cti_<s>`:
+
+```equations
+J_slow_<s>: Cti_<s> -> Cslow_<s> = kslow_<s> * Vti * (Kpslow_<s> * Cti_<s> - Cslow_<s>)
+```
+
+`kslow_<s>` is the exchange per litre of tissue (1/min), so the exchange of an organ follows the tissue volume of the individual, as the share of `ftissue` does; `Kpslow_<s>` is the concentration of the pool to that of the tissue at equilibrium, `Cslow = Kpslow*Cti`: the pool of an organ holds `Kpslow` times the amount of its tissue. Both are constants of the top model, one value for all organs of the pool, a number, a fitted `Value` or a `Formula`.
+
+`source=Part.PLASMA` (or `"plasma"`) feeds the pool from the plasma of the organ instead, in parallel with the merged tissue: a deep extracellular space which the substance reaches through the capillary wall, not through the fast interstitium (the form of the inulin model before the library, the muscle pool of Odeh 1993). The ids, the scaling with the tissue volume and the units are the same; the equilibrium is `Cslow = Kpslow*Cpl`, so `Kpslow_<s>` is the pool relative to the plasma and independent of the Kp of the tissue:
+
+```equations
+J_slow_<s>: Cpl_<s> -> Cslow_<s> = kslow_<s> * Vti * (Kpslow_<s> * Cpl_<s> - Cslow_<s>)
+```
+
+The plasma form reads the total plasma concentration `Cpl_<s>`, bound and unbound, as the Kp of a tissue does: `Kpslow_<s>` is relative to the total plasma, and the rate `kslow_<s>*Vti` has no fu. For a bound substance a change of fu (the CKD profile of the binding, cirrhosis) therefore changes neither the equilibrium nor the rate of the pool, while the exchange of the merged tissue, `PS*fu*(Cpl - Cti/Kp)`, speeds up with fu (its equilibrium stays `Kp*Cpl`). A pool which only the unbound substance reaches would follow fu; the library keeps the total form of the hand-written model it replaces (inulin, not bound, fu 1, where both are the same), so a bound substance with a plasma pool in renal impairment has the pool of the healthy binding. A pool fed from the tissue sees the plasma only through the tissue: its release is limited by the exchange of the tissue (`ftissue`) as well, and the tissue and the pool fill one after the other. A pool fed from the plasma fills while the tissue does, and its volume relative to the plasma, `Kpslow*Vti`, does not change with a fitted Kp of the tissue. The validation refuses any other source (`SOURCES`: the tissue and the plasma). The model figure names the source of every pool (`SLW`, `slow pool of <s>: tissue <-> pool` or `plasma <-> pool`).
+
+The pool of an endogenous substance starts at its equilibrium, `Kpslow_<s>*Kp*baseline_<s>` (fed from the plasma `Kpslow_<s>*baseline_<s>`), of a substance with a [generated steady state](#generated-steady-state) at `Kpslow_<s>` times the start of its source; `ids.species_of` counts the pools (`MU__Cslow_<s>`) and an observer reads one as `C<o>_slow_<s>` (`Cmu_slow_<s>`). The validation refuses an organ which is not a standard organ (a variant, an organ the intestine replaces) or in which the substance has no merged tissue (`Mode.PERFUSION`, `Mode.PERMEABILITY`, an organ it does not enter, a transport of it in the organ). Without slow pools the model has none of their elements.
+
+```python
+from pkpdsim.pbpk import Excretion, Kp, Organ, SlowPool, Substance
+
+marker = Substance(
+    "mrk",
+    name="a marker of the extracellular volume",
+    mr=5000.0,
+    distribution=Kp(interstitial=1.0, ftissue=0.5),
+    excretion=Excretion(urine=True),
+)
+pool = SlowPool("mrk", frozenset({Organ.MUSCLE, Organ.SKIN}), k=1e-3, kp=1.0)
+deep = SlowPool("mrk", frozenset({Organ.MUSCLE}), k=1e-2, kp=0.15, source="plasma")
+```
 
 ## Excretion
 
-`Excretion(urine=True)` filters the unbound plasma concentration in the kidney, `fu*GFR*C_p`, into `Aurine_<s>`; `fraction_reabsorbed` (`f_reabsorbed_<s>`) returns a fraction of the filtrate, so the renal clearance without transport is `fu*GFR*(1 - f_reabsorbed)`. Tubular secretion and transporter-mediated reabsorption are transport chemistry of the kidney (the standard kidney refuses an uptake from the cumulative urine; a reabsorption by a transporter needs the [nephron kidney](variants.md#nephron-kidney)). The fecal excretion is what leaves the last lumen segment of the intestine.
+`Excretion(urine=True)` filters the unbound plasma concentration in the kidney, `fu*GFR*C_p`, into `Aurine_<s>`; `fraction_reabsorbed` (`f_reabsorbed_<s>`) returns a fraction of the filtrate, so the renal clearance without transport is `fu*GFR*(1 - f_reabsorbed)`. A reabsorption up to a renal threshold (creatine, glucose) is `reabsorption=ThresholdReabsorption(threshold, n)` instead of the constant fraction (`reab_threshold_<s>` in mM, a concentration of the filtrate, and `reab_n_<s>`): the reabsorbed fraction `1/(1 + (fu*C/threshold)^n)^(1/n)` takes almost all of the filtrate below the threshold and approaches the transport maximum `GFR*threshold` above it, never more than the filtration (see [Standard organ](organ.md#threshold-reabsorption)); `validate` refuses it without urinary excretion, with a `fraction_reabsorbed` other than 0 and with constants which are not positive or not in mM and dimensionless. Tubular secretion and transporter-mediated reabsorption are transport chemistry of the kidney (the standard kidney refuses an uptake from the cumulative urine; a reabsorption by a transporter needs the [nephron kidney](variants.md#nephron-kidney)). The fecal excretion is what leaves the last lumen segment of the intestine.
+
+## Endogenous baseline
+
+An endogenous substance (creatinine, creatine, glucose) is in the body before any dose. `baseline=0.05` gives its plasma concentration (mM) at the start, the parameter `baseline_<s>`, and every species of the substance starts at the equilibrium of its exchange with plasma: the plasma at the baseline, every other part of the blood and the tissue at the baseline times its coefficient to plasma, which sets the net exchange of the library to zero. Without a baseline every species starts at 0 and the model has no `baseline_<s>`.
+
+| species | start | the exchange it balances |
+|---|---|---|
+| plasma of an organ `Cpl_<s>`, pools `Cve_<s>`, `Car_<s>`, `Cpo_<s>` | `baseline_<s>` | the blood flows carry the same concentration in and out |
+| kinetic blood cells `Cbc_<s>`, `Cve_bc_<s>` (pools) | `Kbc_<s>*baseline_<s>` | `kex_bc*Vbc*(Cpl - Cbc/Kbc)` |
+| merged tissue `Cti_<s>` | `Kp*baseline_<s>` (`Kp_<s>` or `Kp_<o>_<s>`) | `PS*fu*(Cpl - Cti/Kp)` |
+| interstitium `Cis_<s>` | `K_int_pls_<s>*baseline_<s>` | `PS_vas*fu*(Cpl - Cis/K_int_pls)` |
+| intracellular space `Cic_<s>` | `K_cell_pls_<s>*baseline_<s>` | `PS*(fu/K_int_pls*Cis - fu/K_cell_pls*Cic)` |
+| flow-limited organ `Cor_<s>` | `K_or_<s>*baseline_<s>` | the organ releases `Cor/K_or` |
+| intestinal mucosa `Cmu_<seg>_<s>` | `K_mu_<s>*baseline_<s>` | the mucosa releases `Cmu/K_mu` |
+| lumen, tubule, urine, feces, bile, dose states | 0 | |
+
+With erythrocytes in equilibrium the plasma species live in the capacity `V*BP` and start at the baseline as well; the zones of the zonated liver, the wall of the intestine and the nephron kidney start as the standard organ. The arm vein `Carm_<s>`, a mean of venous outflows, is then at the baseline. The starts are initial assignments of the species, which read the coefficients and `baseline_<s>`: an impairment or a covariate changed before the simulation (`preinit_changes`) moves `fu`, the coefficients and the volumes, and every species follows, so the body without production and elimination stays where it starts. A substance which is eliminated (filtration, metabolism) and has no production decays from its baseline; its production is chemistry of the model (a `CustomReaction`), which balances the elimination at the baseline.
+
+```equations
+# the start of an endogenous substance at the equilibrium with its baseline
+Cpl_<s> = baseline_<s>
+Cve_<s> = baseline_<s>
+Cbc_<s> = Kbc_<s> * baseline_<s>
+Cve_bc_<s> = Kbc_<s> * baseline_<s>
+Cti_<s> = Kp_<s> * baseline_<s>
+Cis_<s> = K_int_pls_<s> * baseline_<s>
+Cic_<s> = K_cell_pls_<s> * baseline_<s>
+Cor_<s> = K_or_<s> * baseline_<s>
+```
+
+A `Formula` baseline is the initial assignment of `baseline_<s>`, so a model can state it as a production over a clearance, e.g. `Formula("0.006 mmole_per_min / GFR", U.mM)` or, with the production as a [parameter of the definition](#parameters-of-the-definition) which a custom reaction reads as well, `Formula("CRTNPROD_k / GFR", U.mM)`: a change of the renal function before the simulation moves the baseline and with it every species. Besides the parameters and compartments of the top model it may read the observers of the definition, which are evaluated at the start (a clearance observer which reads a dynamic GFR); what it reads, directly or through the observers, must not change during the simulation (species, reactions, the observers of the library, the outputs of the organs, and a parameter which a PD output replaces with everything that reads it, such as `CO` under a PD of the cardiac function), since the species start at the baseline, and the build names every such id. With a dynamic parameter `baseline_<s>` may become an assignment rule (it reads the parameter); the species keep their initial assignments and start once. The validation refuses a baseline which is not positive and a `Value` in another unit than mM.
 
 ## Values, fits and ids
 
@@ -124,6 +214,181 @@ print(m1.distribution.value.expression)
 Kp_gli
 ```
 
-The parameter of a formula (`Kp_gli_m1`) has the formula as its initial assignment and names it in its notes, as the covariates do: a change of a parameter it reads before the simulation (`preinit_changes`, `init(Kp_gli)`) is followed, and an id of `PBPKDefinition.dynamic` makes it an assignment rule. The ids of the formula are constant parameters and compartments of the top model (the parameters of the substances such as `Kp_<s>`, `fu_ref_<s>` and `ftissue_<s>`, the covariates, the physiology), also for a value of an organ (`ps`, a kinetic constant): the organ reads each of them through an input port under the same id, so in the flat model the formula of `LI__kps_<s>` reads `BW`, not an id of the liver. A local id of an organ is no id of a formula, also not that of an input whose local id differs from the id of the top model (the liver reads `fimp_li_cyp3a4` of the top model as `fimp_cyp3a4`; a formula reads `fimp_li_cyp3a4`). An organ reads the parameters and compartments which the top model has before the organs are built. The build names every id of a formula which the top model does not have, and refuses species and observers (and every element with a rule, such as the outflow of an organ): they change during the simulation, and a formula, evaluated before it, would freeze them at their initial values. The unit is the declared unit of the parameter, it is not inferred from the formula. A formula has no number before the simulation: the validation skips the positivity and interval checks of such a value, the check that a Kp leaves a positive `K_cell_pls` is skipped (the model bounds `K_cell_pls` below by 1e-6), and the Kp method, which computes with `fu`, `bp` and `kbc`, refuses a formula there.
+The parameter of a formula (`Kp_gli_m1`) has the formula as its initial assignment and names it in its notes, as the covariates do: a change of a parameter it reads before the simulation (`preinit_changes`, `init(Kp_gli)`) is followed, and an id of `PBPKDefinition.dynamic` makes it an assignment rule. The ids of the formula are constant parameters and compartments of the top model (the parameters of the substances such as `Kp_<s>`, `fu_ref_<s>` and `ftissue_<s>`, the covariates, the physiology, the [parameters of the definition](#parameters-of-the-definition)), also for a value of an organ (`ps`, a kinetic constant): the organ reads each of them through an input port under the same id, so in the flat model the formula of `LI__kps_<s>` reads `BW`, not an id of the liver. A local id of an organ is no id of a formula, also not that of an input whose local id differs from the id of the top model (the liver reads `fimp_li_cyp3a4` of the top model as `fimp_cyp3a4`; a formula reads `fimp_li_cyp3a4`). An organ reads the parameters and compartments which the top model has before the organs are built. The build names every id of a formula which the top model does not have, and refuses species and observers (and every element with a rule, such as the outflow of an organ): they change during the simulation, and a formula, evaluated before it, would freeze them at their initial values. The unit is the declared unit of the parameter, it is not inferred from the formula. A formula has no number before the simulation: the validation skips the positivity and interval checks of such a value, the check that a Kp leaves a positive `K_cell_pls` is skipped (the model bounds `K_cell_pls` below by 1e-6), and the Kp method, which computes with `fu`, `bp` and `kbc`, refuses a formula there.
+
+### Parameters of the definition
+
+A constant of the model which no field of the library holds is a parameter of the definition, `ModelParameter(sid, value, unit, name=None, notes=None)` in `PBPKDefinition.parameters`: a constant parameter of the top model under its id, e.g. the production rate of creatinine, which its baseline (production over clearance) and the production in the muscle (a custom reaction) share. The value is a number in `unit`, a `Value` (a fitted value, `fitted(FITS.parameter("CRTNPROD_k", unit=U.mmole_per_min))`, gets the provenance in the notes and the uncertainty of the fit as the `distrib` of the parameter, as every fitted value of the library, so `check_model` checks it against the record) or a `Formula` over ids of the top model (its initial assignment, which may read another parameter of the definition); a `Value` or a `Formula` is in `unit`. The formulas of the definition (a baseline, a Kp, a kinetic constant) and its observers read the parameter like any parameter of the top model, and so does the formula of a custom reaction: the organ reads it through an input port under the same id (see [Chemistry](chemistry.md#custom-reactions)), so in the flat model the reaction reads `CRTNPROD_k`, not an id of the muscle. A constant which only one custom reaction reads (a fitted constant of its mechanism) is a parameter of the reaction instead, a local id of its organ (`MU__CRIM_Km`, see [Chemistry](chemistry.md#custom-reactions)).
+
+```python
+from pkpdsim.pbpk import (
+    CustomReaction,
+    Excretion,
+    Formula,
+    Kp,
+    ModelParameter,
+    Organ,
+    Part,
+    PBPKDefinition,
+    Substance,
+    U,
+    compose,
+)
+
+creatinine = PBPKDefinition(
+    sid="creatinine_body",
+    substances=[
+        Substance(
+            "crtn",
+            name="creatinine",
+            mr=113.1,
+            distribution=Kp(1.0, ftissue=1.0),
+            excretion=Excretion(urine=True),
+            # production over filtration: the steady state of the arterial plasma
+            baseline=Formula("CRTNPROD_k / GFR", U.mM),
+        )
+    ],
+    chemistry=[
+        CustomReaction(
+            "CRTNPROD",
+            Organ.MUSCLE,
+            Part.TISSUE,
+            "-> Cti_crtn",
+            "CRTNPROD_k",
+            parameters=[],
+        )
+    ],
+    parameters=[
+        ModelParameter(
+            "CRTNPROD_k",
+            0.0074,
+            U.mmole_per_min,
+            name="creatinine production",
+            notes="About 1.2 g/day.",
+        )
+    ],
+)
+# build composes the model and checks every id against it; validate checks
+# the definition alone (no clash with an id of a substance, sink or organ)
+model = compose(creatinine)
+print([p.sid for p in creatinine.parameters])
+```
+
+```text
+['CRTNPROD_k']
+```
+
+The example starts every plasma species at `CRTNPROD_k / GFR`, the arterial plasma concentration at the steady state (the filtration clears `GFR*Car`, see [Organ](organ.md#kidney)). The body is not stationary at this start: the filtration takes its amount out of the plasma at once, while the production of the muscle reaches the plasma only as the tissue of the muscle rises. In a build of the example (`tests/docs/test_substances_example.py` checks these numbers) the arterial plasma drops about 17 % below the baseline within the first 20 minutes and is back within 0.2 % after two days; the arm vein plasma, which mixes the venous outflow of the muscle, settles about 5.5 % above the baseline. A model which needs a stationary start states the steady state of the producing organ as the [starts of its species](#starts-of-the-species).
+
+The parameters are constants: a change before the simulation (`preinit_changes`) moves every formula which reads them, and an id of `PBPKDefinition.dynamic` makes them variable. The validation refuses an id which is no SBML SId, contains `__`, is given twice or is an id of the physiology or an organ submodel, and a `Value` or `Formula` in another unit than `unit`; the build (`compose`) refuses an id which the body has (a parameter of a substance such as `fu_<s>` or `Kp_<s>`, a sink, an observer of the library, a PD component), the id of an observer of the definition and a local id of an organ which is no input under the same id (`Vti`, `<process>_Vmax`): a custom reaction there would read the element of the organ instead. Formulas which read each other in a cycle are refused, naming them. Without parameters the SBML is that of a definition without the field.
+
+### Starts of the species
+
+A production or an elimination of the chemistry moves the organs where it acts away from the equilibrium with the baseline: at the steady state the plasma leaving the muscle carries the production, and the tissue of the muscle holds more than `Kp` times its plasma, by the production over the exchange.
+
+#### Generated steady state
+
+A custom reaction declares its rate at the steady state (`CustomReaction.stationary`, `pkpdsim.pbpk.stationary`), and the library starts every species of the substances it moves at their steady state, so that a model writes only what the library cannot know:
+
+| declaration | the reaction at the steady state |
+|---|---|
+| `stationary=Formula("CRTNPROD_k", U.mmole_per_min)` | its rate (mmole/min), a formula of the organ as the rate law: the elements of the organ, the parameters of the reaction, the starts of species of other substances (a pool of a custom species at its start) and constants of the top model, never a species of a substance it moves |
+| `stationary="linear"` (`LINEAR`) | a first order clearance of its substrate, a plasma or tissue species of one substance: the rate law is linear in it (one factor of a product, the numerator of a quotient) and the library takes the clearance from it (`k * Vti * Cti_<s>` clears `k * Vti`); a product of another substance gets the rate at the start of the substrate |
+| `stationary=Saturable(vmax, km)` | a Michaelis-Menten rate `vmax*C/(km + C)` of the plasma species of its substrate, the formulas of the organ: the organ starts at the root of a quadratic |
+
+The formulas of a declaration have the scope of the rate law, the organ: they read `Vti`, the parameters of the reaction (`f_slc6a8`, not `MU__f_slc6a8`) and constants of the top model. Every other `Formula` of a definition (a value, a parameter of the definition, a baseline, a start of `starts`) and a `Saturable` passed to `steady_state.kidney_plasma` read the ids of the top model only; an id of the wrong scope fails the build with the reaction named.
+
+Every organ starts at the steady state of the equations of the library at its inflow (the arterial pool, the venous pool for the lung, the mix of the hepatic artery and the portal vein past the shunt for the liver, the zone upstream in the zonated liver): with the declared processes its plasma obeys `(R + CLss)*C + S(C) = R*Cin + Rss` (`R` the flow of the plasma leaving the organ, of the kidney the plasma flow less the net filtrate), with the clearance `CLss_<s>` and the net source `Rss_<s>` of plasma and tissue (the tissue at its steady state) and the saturable rate `Vss_<s>*C/(Kss_<s> + C)`, constants of the organ; without a process an organ passes its inflow on (the kidney filters the arterial plasma and its outflow lacks the net filtrate at its plasma: they balance at the arterial plasma, with a threshold reabsorption as well). Every other part starts at the equilibrium with the plasma of its organ (of its zone), the flow-limited organ with its inflow, a slow pool at `Kpslow_<s>` times the start of its source (the tissue or the plasma), the tubule of the nephron kidney at the flow of the filtrate, `fu*Car/f_tub_<seg>`, the mucosa at `K_mu_<s>*Car`, the lumen empty; the portal vein at the mix of its organs, the venous pool at the inflow of the lung whose plasma is the arterial plasma, the arterial pool at the baseline. A substance with a baseline is *pinned* at it: its declared rates must balance at the baseline (the model derives the rate which closes the balance, e.g. a supply, with the formulas below). A substance without a baseline is *solved*: the library writes `baseline_<s>`, the arterial plasma at which the eliminations of the organs sum to the sources (`CLss_<s>`, `Rss_<s>` of the top model, from the constants of the organs, `CLss_<o>_<s>`, ...; with a saturable process of a systemic organ the root of a quadratic in its plasma, `Css_<o>_<s>`).
+
+```text
+# the plasma of an organ with a declared process and its tissue
+Cpl_<s> = (R*Cin + Rss_<s>)/(R + CLss_<s>)
+Cti_<s> = Kp*(PS*fu*Cpl_<s> + r_ti)/(PS*fu + Kp*cl_ti)
+Cslow_<s> = Kpslow_<s> * Cti_<s>   # fed from the plasma: Kpslow_<s> * Cpl_<s>
+# a solved substance without a saturable process
+baseline_<s> = Rss_<s> / CLss_<s>
+```
+
+The starts are short initial assignments of the organs which read the species of their inflow, so every parameter set before the simulation (`preinit_changes`: the individual, a renal function, a parameter of a custom reaction such as an activity, `MU__f_slc6a8`) moves them, and the solved baseline reads the constants of the organs. A start of `PBPKDefinition.starts` (below) replaces the generated start of its species. roadrunner inlines every initial assignment a start reads, so the load time grows with the size of the baseline times the species which read it: the library writes the forms which read each deep quantity least (the organs in series, `1/(1/CLss + 1/R)`), a solved saturable process repeats the clearance and the source of the rest of the body in the root, and a pinned baseline is the cheapest. A parameter in between does not help: roadrunner inlines it as well (a chain of five initial assignments of 20 terms each, every one read three times by the next, took 16 s to compile for one reader). The build warns (`SteadyStateWarning`) when a solved baseline expands to more than `BASELINE_SIZE_LIMIT` nodes (20,000; creatinine about 3,800, a saturable kidney with a liver and a portal organ which also eliminate 31,000, 1.2 million in the model and 37 s at LLJIT O0): give the substance a baseline or declare fewer organs. It warns as well when the declared rates of a pinned substance do not balance at its baseline, with the imbalance, the net rate of the venous pool at the start of the reference individual (it loads the model once at O0, only for a definition with a pinned substance).
+
+What has no closed form is refused with the reason, naming the reaction or the substance: a custom reaction which moves the substance without a declaration, a metabolism or transport of the library which moves it (the uptake from the empty lumen of the small intestine is kept), kinetic erythrocytes, a declared process in the full form, the flow-limited organ, the blood cells or a slow pool, a linear or saturable transfer between two parts of the substance, a declaration which reads a species of a substance the reaction moves, substances whose steady states read each other, a threshold reabsorption with a declared process of the kidney, and of a solved substance a threshold reabsorption, a saturable process outside the systemic organs (the lung, the liver, a portal organ), two saturable processes or nothing which eliminates it. The tests build the standard organs, the nephron kidney, the zonated liver, a slow pool, a lung which clears, a threshold reabsorption, erythrocytes in equilibrium, a product of a linear conversion, another individual and an activity of an organ set before the simulation, and check that every species stays within 1e-12 of its start over a day (`tests/pbpk/test_stationary.py`). The example with its production declared:
+
+```python
+import dataclasses
+
+generated = dataclasses.replace(
+    creatinine,
+    substances=[dataclasses.replace(creatinine.substances[0], baseline=None)],
+    chemistry=[
+        dataclasses.replace(
+            creatinine.chemistry[0],
+            stationary=Formula("CRTNPROD_k", U.mmole_per_min),
+        )
+    ],
+)
+model = compose(generated)
+print(sorted(generated.starts))
+```
+
+```text
+[]
+```
+
+The library solves its baseline, `CRTNPROD_k / (fu_crtn*GFR*(1 - f_reabsorbed_crtn))`, the `CRTNPROD_k / GFR` of the example, and every species stays within 1e-12 of its start for another body weight or renal function (`tests/docs/test_substances_example.py`).
+
+#### Starts given by the model
+
+`PBPKDefinition.starts` gives a species its own start: the flat id of the species (`MU__Cpl_crtn`, a pool `Cve_crtn`, a species of a custom reaction such as a pool of the muscle) to its initial concentration in mM, a number, a `Value` or a `Formula` over the constants of the top model, which replaces the start at the equilibrium. The organ reads the ids of a formula through input ports under the same ids, as for a `Formula` of the organ, and the start is an initial assignment of the species, so it follows a change of the individual before the simulation. The definition keeps the starts as a read-only mapping, as it keeps the values per substance of the intestine.
+
+The steady state of the organs of the library is a closed form at a given inflow, and `pkpdsim.pbpk.steady_state` returns it as formulas over the ids of the top model, the ids the equations of the organs read, so a model does not restate the equations of the library:
+
+| function | the steady state |
+|---|---|
+| `plasma_flow(s, organ, variants=)` | the flow which carries the substance, `Q<o>*(1 - HCT)` (`Q<o>*BP_<s>` with erythrocytes in equilibrium; the liver `(1 - f_shunt)*Qh*...`) |
+| `tissue_volume(organ, variants=)`, `tissue_exchange(s, organ, variants=)` | the merged tissue `Vti` and its exchange `PS*fu`, the share of `ftissue_<s>` of the organ |
+| `organ_plasma(s, organ, arterial=, rate=, clearance=, variants=)` | the plasma leaving a standard organ with a net source `rate` (mmole/min) and a clearance of its plasma, `(F*Car + rate)/(F + clearance)` |
+| `organ_tissue(s, organ, plasma, rate=, variants=)` | the merged tissue with a source of the tissue, `Kp*(Cpl + rate/(PS*fu))` |
+| `renal_filtration(s, arterial=, variants=)`, `renal_clearance(s, clearance=, arterial=, variants=)` | the net filtrate `G = fu*GFR*(1 - f_reabsorbed)` and the renal clearance of the arterial plasma with a secretion (glomerulus and tubule in series); with a saturable reabsorption `G` has the fraction of the arterial plasma (`arterial`, the baseline by default) and the clearance is `G`, a secretion has no closed form |
+| `kidney_plasma(s, arterial=, eliminated=, rate=, clearance=, secretion=, variants=)` | the kidney plasma `C` of `R*(Car - C) + rate = clearance*C + S(C)` (`R = F - G`), at a given arterial plasma or at a given net excretion into the urine (`eliminated`, the production of an endogenous substance which only the kidney excretes); a saturable secretion `secretion=Saturable(vmax, km)`, `S(C) = vmax*C/(km + C)`, makes `C` the positive root of a quadratic; with a saturable reabsorption the kidney plasma is the arterial plasma, with a rate, a clearance, a secretion or `eliminated` it has no closed form |
+| `kidney_arterial(s, plasma, eliminated=, rate=, clearance=, secretion=, variants=)` | the arterial plasma of a kidney plasma, `C + (clearance*C + S(C) - rate)/R`; with the renal elimination `(E + R*C)/F`, which reads the kidney plasma once (the baseline of the elimination, read by every start of the substance) |
+| `liver_plasma(s, arterial=, portal=, rate=, clearance=, variants=)` | the liver plasma, fed by the hepatic artery and the portal vein past the shunt, with a source and a clearance of the liver |
+| `arm_vein(s, preset, outflows, arterial=)` | the arm vein of a preset, the mix of the outflows at the steady state |
+
+The arterial plasma is the baseline by default. The functions take the variants of the definition (`variants=`, required), so a model with a variant of an organ never gets the formula of the standard organ silently (the flows of the variants are those of the physiology). An endogenous substance produced at a rate `P` and excreted only by the kidney with a saturable secretion (creatinine) has the kidney plasma `kidney_plasma(s, eliminated="P", secretion=Saturable("V", "km"), variants=...)` (a parameter of the definition, e.g. `C_ki_0`) and the baseline `kidney_arterial(s, "C_ki_0", eliminated="P", variants=...)`. The tests of the library build every function into the starts of a model with a production of the muscle, a supply of the liver plasma and tissue, a source and a secretion of the kidney and check that every species stays at its start, for another individual, a portosystemic shunt with a reduced functional liver and with erythrocytes in equilibrium, and in the zonated liver (its zones at the inflow), and the kidney with a saturable secretion of a production of the muscle (every species within 1e-9 of its start, `tests/pbpk/test_steady_state_saturable.py`); where no closed form applies a function raises `NotImplementedError` with the reason: kinetic erythrocytes, the full form and the flow-limited organ, an exchange of the organ of its own (`ps`), the intestine (it refuses custom reactions, its parts start at the equilibrium), the nephron kidney (its tubule starts empty), a source in the zonated liver and a saturable reabsorption with another process of the kidney (its net filtrate depends on the concentration, `tests/pbpk/test_reabsorption.py` checks the starts of the saturable reabsorption of a production of the muscle). With the steady state of the muscle the example starts stationary:
+
+```python
+import dataclasses
+
+from pkpdsim.pbpk import steady_state
+
+crtn = creatinine.substances[0]
+variants = creatinine.variants
+muscle = steady_state.organ_plasma(
+    crtn, Organ.MUSCLE, rate="CRTNPROD_k", variants=variants
+)
+stationary = dataclasses.replace(
+    creatinine,
+    starts={
+        "MU__Cpl_crtn": Formula(muscle, U.mM),
+        "MU__Cti_crtn": Formula(
+            steady_state.organ_tissue(
+                crtn, Organ.MUSCLE, muscle, rate="CRTNPROD_k", variants=variants
+            ),
+            U.mM,
+        ),
+    },
+    deltas=("Carm_crtn",),
+)
+model = compose(stationary)
+print(sorted(stationary.starts))
+```
+
+```text
+['MU__Cpl_crtn', 'MU__Cti_crtn']
+```
+
+In the build of this definition every species stays within 1e-6 of its start, for the reference individual as for another body weight or renal function (`tests/docs/test_substances_example.py`); the arm vein starts where the example without starts settled, 5.5 % above the baseline. A start which the library cannot know (a pool of a custom reaction, the steady state of a nonlinear process) is written by the model; a stationarity test of the model (every species over a day, several individuals) checks the starts. The validation refuses an id which is no SBML SId, a negative number and a `Value` or `Formula` in another unit than mM; the build refuses a start which names no species of the model (all of them at once) and a formula which reads an id which is no constant of the top model (a species or an observer would be read before the species start). Without starts the SBML is that of a definition without the field.
+
+`PBPKDefinition.deltas` names observers (`Carm_crtn`, an observer of the definition, or an output of an organ: `Rurine_<s>`, a readout of the intestine, an exposed element of an organ) whose change over their value at the start a model reads, the increase of an endogenous substance over its value before a dose: each gets the constant `<id>_0`, the initial assignment of its value at the start (after the changes of the individual before the simulation), and the observer `<id>_delta = <id> - <id>_0`, which is 0 at the start of every simulation for any arm vein preset. The build refuses a delta which is no observer of the top model and an id `<id>_0` or `<id>_delta` which the model has; without deltas the SBML is unchanged.
 
 The validation (`PBPKDefinition.validate()`, called by `build`) refuses an id which is no SBML SId, contains `__`, starts with a token of the id scheme or is an id of the physiology, a duplicate id, a fraction outside its interval, a non-positive constant, a mode which needs `ftissue` without it (an entered organ without `ps`, named in the message), kinetic erythrocytes with a flow-limited distribution, and names every problem at once.

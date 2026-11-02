@@ -15,9 +15,11 @@ class HctzSimulationExperiment(PKPDSimulationExperiment):
     Mr: ClassVar[MolecularWeights] = MolecularWeights(hctz=Q(297.74, "g/mole"))
 ```
 
-The base simulates the model of the model object (`models`), creates a task per
-simulation (`tasks`), adds the selections to every task (`data`), loads the
-digitized data of the study (`load_dataframe`, with the unit of the geometric
+The base simulates the model of the model object (`models`), the build of the
+sex of the study (`sex`, the male build by default, the female build of a study
+of women; `simulation_sexes` for a study with a group of each sex), creates a
+task per simulation on the build of its sex (`tasks`), adds the selections to
+every task (`data`), loads the digitized data of the study (`load_dataframe`, with the unit of the geometric
 means, `add_gmean_unit`) and has the classes of impaired
 organ function (`pkpdsim.impairment`) and the labels of the pharmacokinetic
 parameters (`pkpdsim.pk`) as defaults. A model overrides what it does
@@ -51,20 +53,22 @@ from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from tokenize import TokenError
 from types import MappingProxyType
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from sbmlsim.data import Data, load_pkdb_dataframe
 from sbmlsim.experiment import SimulationExperiment
 from sbmlsim.model import AbstractModel
+from sbmlsim.plot import Curve
 from sbmlsim.simulation import Change
 from sbmlsim.task import Task
 
 from pkpdsim import impairment, pk
+from pkpdsim.sex import Sex
 from pkpdsim.uncertainty import UncertaintyRun, apply_uncertainty
 
 if TYPE_CHECKING:
     import pandas as pd
-    from sbmlsim.plot import Figure
+    from sbmlsim.plot import Figure, Plot
     from sbmlsim.units import Quantity, UnitRegistry
 
     from pkpdsim.model import PKPDModel
@@ -245,6 +249,18 @@ class PKPDSimulationExperiment(SimulationExperiment):
         pk_units: the unit of a pharmacokinetic parameter.
         data_units: the units of the data which the experiment reads under a
             name of its own, see `define_unit`.
+        sex: the sex of the subjects of the study, the build of the model
+            object its simulations run (`PKPDModel.model_paths`): the male
+            build by default, the female build for a study of women. A group
+            whose majority is women is simulated on the female build, a mixed
+            group without a majority of women on the male one (the study
+            module states it). A model without a female build refuses a
+            female experiment.
+        simulation_sexes: the sex of single simulations which differs from
+            `sex`, by the key of the simulation, e.g. the group of women of a
+            study of a group of men and a group of women. The models of an
+            experiment are loaded before its simulations are created, so the
+            sexes are declared and not computed by `simulations`.
     """
 
     pkpd_model: ClassVar[PKPDModel]
@@ -263,6 +279,8 @@ class PKPDSimulationExperiment(SimulationExperiment):
     #: the name in the data -> the definition of the unit, "<name> = <expression>",
     #: e.g. {"IU": "IU_ramipril_renin = 0.6 * microgram"}, see `define_unit`
     data_units: ClassVar[Mapping[str, str]] = MappingProxyType({})
+    sex: ClassVar[Sex] = Sex.MALE
+    simulation_sexes: ClassVar[Mapping[str, Sex]] = MappingProxyType({})
 
     def __init__(
         self,
@@ -344,6 +362,61 @@ class PKPDSimulationExperiment(SimulationExperiment):
             )
         return run
 
+    def across(self) -> str | None:
+        """Get the dimension of the draws of the fitted parameters, `None` without.
+
+        The dimension over which a run over the draws (`uncertainty`) varies
+        the fitted parameters, which a figure or an analysis of a scan of the
+        experiment leaves out of its own dimensions or makes a band of, e.g.
+        `pkpdsim.scan.point_band(result, ..., across=self.across())`.
+        """
+        run = self.uncertainty
+        return None if run is None else run.id
+
+    def add_function(
+        self,
+        plot: Plot,
+        task_id: str,
+        y: Data,
+        label: str | None,
+        color: str,
+        linestyle: str | None = "-",
+    ) -> None:
+        """Add a function of the results of a task over the time to a plot.
+
+        A curve of the line width of the curves of the selections (`add_data`,
+        2.0); in a run over the draws of the fitted parameters (`uncertainty`)
+        the band of the draws instead, with the quantiles of the run: the
+        function is no selection of a task, which the run makes a band of
+        itself.
+
+        Args:
+            plot: the plot.
+            task_id: the task whose results the function reads.
+            y: the function, a `Data` of a function of the selections of the
+                task.
+            label: the label of the curve or the band, `None` for none.
+            color: the color.
+            linestyle: the line style of the curve, `None` for the default of
+                sbmlsim (the curve has no line style of its own).
+        """
+        time = Data("time", task=task_id)
+        run = self.uncertainty
+        if run is not None:
+            plot.band(
+                x=time,
+                y=y,
+                across=run.id,
+                quantiles=run.quantiles,
+                name=label,
+                color=color,
+            )
+            return
+        style: dict[str, Any] = {"color": color, "linewidth": 2.0}
+        if linestyle is not None:
+            style["linestyle"] = linestyle
+        plot.add_curve(Curve(x=time, y=y, label=label, **style))
+
     def data_unit_names(self) -> Mapping[str, str]:
         """Get the names of the units of the data, defining the units of `data_units` once.
 
@@ -393,24 +466,91 @@ class PKPDSimulationExperiment(SimulationExperiment):
             )
         return sid
 
+    @classmethod
+    def sex_of(cls, simulation: str) -> Sex:
+        """Get the sex of the subjects of a simulation: `simulation_sexes`, else `sex`.
+
+        A class method, since the sexes are declared: the class methods of an
+        experiment (the renal function of a group, `pkpdsim.pbpk`) resolve the
+        sex of a simulation by its key as well.
+
+        Args:
+            simulation: the key of the simulation.
+
+        Returns:
+            The sex, whose build the simulation runs.
+
+        Raises:
+            ValueError: for a sex which is no `Sex`.
+        """
+        return Sex(cls.simulation_sexes.get(simulation, cls.sex))
+
+    def model_id(self, sex: Sex) -> str:
+        """Get the key of the build of a sex among the models of the experiment.
+
+        The build of `sex` is `model`, the model of an experiment without
+        builds per sex; the build of another sex is `model_<sex>`, e.g.
+        `model_female` in a study of men with a group of women.
+
+        Args:
+            sex: the sex.
+
+        Returns:
+            The key of the model.
+        """
+        sex = Sex(sex)
+        return "model" if sex == Sex(self.sex) else f"model_{sex}"
+
     def models(self) -> dict[str, AbstractModel | Path]:
-        """Get the SBML model of the model object, without changes."""
-        return {
-            "model": AbstractModel(
-                source=self.pkpd_model.model_path,
+        """Get the builds of the model object which the experiment simulates.
+
+        The build of `sex` as `model` and the build of every other sex of
+        `simulation_sexes` as `model_<sex>` (`model_id`), without changes; a
+        model without builds per sex has the one model `model`. Only the builds
+        which the experiment simulates are loaded.
+
+        Raises:
+            ValueError: if the model object has no build of a sex of the
+                experiment, naming the experiment.
+        """
+        sexes = dict.fromkeys(
+            [Sex(self.sex), *(Sex(s) for s in self.simulation_sexes.values())]
+        )
+        models: dict[str, AbstractModel | Path] = {}
+        for sex in sexes:
+            try:
+                path = self.pkpd_model.model_path_of(sex)
+            except ValueError as err:
+                raise ValueError(
+                    f"The experiment '{self.sid}' simulates subjects of the sex "
+                    f"'{sex}': {err}"
+                ) from err
+            models[self.model_id(sex)] = AbstractModel(
+                source=path,
                 language_type=AbstractModel.LanguageType.SBML,
                 changes={},
             )
-        }
+        return models
 
     def tasks(self) -> dict[str, Task]:
-        """Get a task of the model for every simulation.
+        """Get a task for every simulation, on the build of the sex of the simulation.
 
         `initialize` creates the simulations before the tasks, so they are not
         created a second time.
+
+        Raises:
+            ValueError: if `simulation_sexes` names a simulation which the
+                experiment does not have.
         """
+        unknown = sorted(set(self.simulation_sexes) - set(self._simulations))
+        if unknown:
+            raise ValueError(
+                f"The simulation_sexes of the experiment '{self.sid}' name "
+                f"simulations which it does not have: {unknown}; its "
+                f"simulations are {sorted(self._simulations)}."
+            )
         return {
-            f"task_{key}": Task(model="model", simulation=key)
+            f"task_{key}": Task(model=self.model_id(self.sex_of(key)), simulation=key)
             for key in self._simulations
         }
 

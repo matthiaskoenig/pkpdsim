@@ -42,8 +42,10 @@ The class attributes are the conventions of the experiments:
 | --- | --- |
 | `pkpd_model` | the model object, required: an experiment of a base without it raises a `TypeError` |
 | `selections` | the selections added to every task, e.g. `("time", "[Cve_hctz]")` |
-| `Mr` | the molecular weights of the substances for the conversion of the data, a `NamedTuple` of the model |
+| `Mr` | the molecular weights of the substances for the conversion of the data, a `NamedTuple` of the model; a model of the PBPK library reads them from its definition, `molecular_weights(DEFINITION)` of `pkpdsim.pbpk` (`Mapping[str, Quantity]` by substance, `self.Mr["tor"]`) |
 | `labels`, `units` | the labels and units of the observables by id |
+| `sex` | the sex of the subjects, whose build of the model the simulations run, `Sex.MALE` by default, see [Builds per sex](#builds-per-sex) |
+| `simulation_sexes` | the sex of single simulations which differs from `sex`, by the key of the simulation |
 
 A base which annotates a convention keeps the type of `PKPDSimulationExperiment`,
 e.g. `labels: ClassVar[Mapping[str, str]]`, also for the maps of the impaired
@@ -52,8 +54,9 @@ type, `ClassVar[dict[str, str]]`, is an invalid override of a mutable attribute
 (ty, `invalid-mutable-override`). Only `Mr` has the type of the model, its
 `NamedTuple`, which `PKPDSimulationExperiment` does not declare for this reason.
 
-The base provides what is the same in every model: `models` (the SBML model of
-the model object, without changes), `tasks` (a task per simulation),
+The base provides what is the same in every model: `models` (the build of the
+model object which the experiment simulates, without changes), `tasks` (a task
+per simulation, on the build of its sex),
 `default_changes` (none, a fitted parameter is part of the model and must not be
 set by a simulation), `data` (the selections for every task),
 `load_dataframe(fig_id, study=None, *, na_values=None)` and
@@ -61,9 +64,76 @@ set by a simulation), `data` (the selections for every task),
 figure or table `Fig1` of the study, by default that of the experiment, read
 from the `data_path` of the experiment, a path or paths, with the unit of the
 geometric means in `gmean_unit`, `add_gmean_unit`; by substance without the
-rows which have none) and `figures_by_sid(*figures)`. A model
-overrides what it does differently, e.g. `default_changes` for a model whose
-simulations set a parameter.
+rows which have none), `figures_by_sid(*figures)`, `across()` (the dimension
+of the draws of the fitted parameters of a run over them, `None` without,
+which a figure of a scan leaves out of its dimensions) and
+`add_function(plot, task_id, y, label, color, linestyle="-")` (a function of
+the results of a task over the time as a curve of the width of the curves of
+the selections, the band of the draws in a run over them; `linestyle=None`
+leaves the line style to sbmlsim). A model overrides what it does
+differently, e.g. `default_changes` for a model whose simulations set a
+parameter.
+
+## Builds per sex
+
+A model with a female build (`PKPDModel.female_model_path`, see
+[Models and their commands](models.md#builds-per-sex)) runs a study of women on
+it: the experiment sets the sex of its subjects, the class attribute `sex`, and
+every simulation runs the build of that sex. A study of a group of men and a
+group of women declares the sex of the simulations of the other sex,
+`simulation_sexes`, by the key of the simulation:
+
+```python
+# not executed
+from pkpdsim.sex import Sex
+
+
+class Smith2001(HctzSimulationExperiment):
+    """Hydrochlorothiazide in healthy women."""
+
+    sex = Sex.FEMALE
+
+
+class Jones2005(HctzSimulationExperiment):
+    """Hydrochlorothiazide in a group of men and a group of women."""
+
+    simulation_sexes: ClassVar[Mapping[str, Sex]] = {"po_women": Sex.FEMALE}
+```
+
+The build of `sex` is the model `model` of the experiment, as in a model with
+one build, so `add_doses` and the units of `Q` need no model key; the build of
+another sex of `simulation_sexes` is `model_<sex>` (`model_id(sex)`,
+`model_female`), and `sex_of(key)` gives the sex of a simulation. Only the
+builds the experiment simulates are loaded. The models of an experiment are
+loaded before its simulations are created, so the sexes are declared and not
+computed in `simulations`; a key of `simulation_sexes` which is no simulation
+of the experiment, and a sex the model has no build of, fail the experiment
+with a `ValueError` which names it. A group whose majority is women runs the
+female build, a mixed group without a majority of women the male one, which the
+study module states. The experiments of a model without a female build are
+unchanged.
+
+The experiments of the PBPK library take the healthy GFR, the renal function of
+a measured clearance and the renal classes of the build of the sex of their
+subjects, see [Impairment](pbpk/impairment.md#classes-in-experiments). These are
+class methods of the experiment, so in a study of both sexes the call names the
+simulation of its group (`simulation=`), whose sex `simulation_sexes` declares;
+a call with neither the simulation nor the sex is refused in such a study,
+since its subjects have no one sex:
+
+```python
+# not executed
+class Jones2005(HctzSimulationExperiment):
+    simulation_sexes: ClassVar[Mapping[str, Sex]] = {"po_women": Sex.FEMALE}
+
+    def simulations(self) -> dict[str, Simulation]:
+        men = self.renal_function(45.0, simulation="po_men")  # the male build
+        women = self.renal_function(38.0, simulation="po_women")  # the female build
+        classes = self.renal_map_of(simulation="po_women")  # the classes of women
+        ...
+```
+
+The attribute `renal_map` stays the map of `sex` of the experiment.
 
 ## Keys
 
@@ -209,9 +279,13 @@ not to the model.
 A model uses `PKPDMappingMetaData`, which has the fields `tissue`, `route`,
 `application_form` (default `NR`), `dosing`, `fasting` (default `NR`), `health`,
 `coadministration` (default `NONE`), `genotype`, `phenotype`, `administration_site`,
-`data` and `data_type` (default `NR`) and `sampling_site` (default `ARM_VEIN`:
-plasma and blood are typically drawn from an arm vein, so data without a stated
-site are arm-vein samples; `NOT_APPLICABLE` for urine and feces). All fields
+`data` and `data_type` (default `NR`) and `sampling_site` (stated or `None`; read the
+site with `resolved_sampling_site()`. Without a stated site it follows the tissue:
+plasma, serum and blood are typically drawn from an arm vein, so they are
+`ARM_VEIN`; arterial blood and plasma are `ARTERIAL`; saliva, urine, feces, feces
+and urine, bile and no tissue have no blood sample and are `NOT_APPLICABLE`; a blood
+site on such a tissue, `NOT_APPLICABLE` on a blood tissue and a site other than
+`ARTERIAL` on arterial blood or plasma are a `ValueError`). All fields
 are keyword-only, so a field without a default may follow the defaults:
 
 ```python
@@ -264,7 +338,7 @@ values. `observable_filter(observables)` selects by the index of the data of the
 observable (`observable_id`, i.e. `Data.index` of the `y` of the mapping: the
 selection of the model without its brackets and without the task, `Cve_hctz` for
 the selection `[Cve_hctz]`; a filter of `[Cve_hctz]` selects nothing). Both are callables of sbmlsim's
-`MappingFilter` and have a readable `repr`. An unknown field, a class which is no
+`MappingFilter` and have a readable `repr`. `check_sampling_sites(fit_mappings, sites)` checks the `sampling_site` of every mapping against a table of the site of each observable id and returns one problem per mismatch or unknown observable. An unknown field, a class which is no
 dataclass or is an instance, a filter without clauses, an empty set of allowed
 values (it selects nothing) or of excluded values (it excludes nothing) and values
 which are no collection raise when the module of the filters is imported. A single

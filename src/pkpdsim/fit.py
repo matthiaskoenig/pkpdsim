@@ -12,17 +12,21 @@ validation data.
 
 from __future__ import annotations
 
+import copy
 import dataclasses
 import re
 from collections.abc import Callable, Collection, Hashable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING, overload
+from pathlib import Path
+from typing import TYPE_CHECKING, overload, override
 
 from sbmlsim.fit import FitMapping, FitMappingCollection, FitSettings
+from sbmlsim.fit.cli import FitDefinition
 from sbmlsim.fit.helpers import FitMappings, MappingFilter
 from sbmlsim.fit.methods import ReportContext
-from sbmlsim.fit.objects import MappingMetaData
+from sbmlsim.fit.objects import FitParameter, MappingMetaData
+from sbmlsim.fit.optimization import OptimizationProblem
 from sbmlsim.fit.options import (
     DataAtChangeType,
     LossFunctionType,
@@ -30,12 +34,13 @@ from sbmlsim.fit.options import (
     WeightingCurvesType,
     WeightingPointsType,
 )
+from sbmlsim.model.model_roadrunner import resolve_jit_optimization
 
-from pkpdsim.metadata import PKPDMappingMetaData
+from pkpdsim.metadata import PKPDMappingMetaData, SamplingSite
 
 if TYPE_CHECKING:
     from sbmlsim.experiment import SimulationExperiment
-    from sbmlsim.fit.cli import FitDefinition, FitRecords
+    from sbmlsim.fit.cli import FitRecords
     from sbmlsim.model.tolerances import AbsoluteTolerance
 
     from pkpdsim.model import PKPDModel
@@ -128,6 +133,58 @@ def observable_id(fit_mapping: FitMapping) -> str:
     return fit_mapping.observable.y.index
 
 
+def check_sampling_sites(
+    fit_mappings: FitMappings | Iterable[FitMapping],
+    sites: Mapping[str, SamplingSite],
+    metadata_type: type[PKPDMappingMetaData] = PKPDMappingMetaData,
+) -> list[str]:
+    """Check the sampling site of the mappings against their observable.
+
+    Args:
+        fit_mappings: the fit mappings, or the instantiated experiments of a
+            model (`FitMappings`, every fit mapping of every experiment).
+        sites: the sampling site of every observable by observable id, e.g.
+            `Carm_hctz` is `ARM_VEIN` and `Aurine_hctz` is `NOT_APPLICABLE`.
+        metadata_type: the metadata class, `PKPDMappingMetaData` unless a model
+            extends it.
+
+    Returns:
+        One problem per mapping whose site differs from the site of its
+        observable or whose observable is not in `sites`; empty if all fit.
+    """
+    if isinstance(fit_mappings, FitMappings):
+        mappings: list[tuple[str, FitMapping]] = [
+            (f"{experiment_id}.{key}", fit_mapping)
+            for experiment_id, experiment in fit_mappings.experiments.items()
+            for key, fit_mapping in experiment._fit_mappings.items()
+        ]
+    else:
+        mappings = [(str(fm), fm) for fm in fit_mappings]
+    problems: list[str] = []
+    for name, fit_mapping in mappings:
+        observable = observable_id(fit_mapping)
+        site = mapping_metadata(fit_mapping, metadata_type).resolved_sampling_site()
+        if observable not in sites:
+            problems.append(f"{name}: observable '{observable}' has no sampling site")
+        elif site is not sites[observable]:
+            problems.append(
+                f"{name}: sampling site {site.name} of '{observable}' "
+                f"differs from {sites[observable].name}"
+            )
+    return problems
+
+
+def _value(metadata: MappingMetaData, name: str) -> Hashable:
+    """Get the value of a field of the metadata the filters compare.
+
+    The sampling site is the resolved one, which follows the tissue if it is not
+    stated.
+    """
+    if name == "sampling_site" and isinstance(metadata, PKPDMappingMetaData):
+        return metadata.resolved_sampling_site()
+    return getattr(metadata, name)
+
+
 def _show(values: frozenset[Hashable]) -> str:
     """Show values sorted, enum members by their name."""
     names = sorted(v.name if isinstance(v, Enum) else repr(v) for v in values)
@@ -172,9 +229,9 @@ class MetadataFilter:
         """Check a fit mapping, see `sbmlsim.fit.helpers.MappingFilter`."""
         metadata = mapping_metadata(fit_mapping, self.metadata_type)
         return all(
-            getattr(metadata, name) in values for name, values in self.allowed
+            _value(metadata, name) in values for name, values in self.allowed
         ) and not any(
-            getattr(metadata, name) in values for name, values in self.excluded
+            _value(metadata, name) in values for name, values in self.excluded
         )
 
     def __repr__(self) -> str:
@@ -350,8 +407,258 @@ def fit_subset(fit_id: str) -> str:
     return match["subset"]
 
 
+def remainder_problems(
+    sbml_path: Path,
+    parameters: Iterable[FitParameter],
+    fixed_values: Mapping[str, float] | None = None,
+) -> list[str]:
+    """Check that the fitted fractions of a remainder cannot sum above 1.
+
+    A remainder is the initial assignment `1 - a - b - ...` of a constant of
+    the model (the remainder `REST` of the product fractions of a metabolism
+    of `pkpdsim.pbpk`, `f_<p>_<s>`): it keeps the sum of the fractions at 1,
+    and is negative, a product formed at a negative rate, when the other
+    fractions sum above 1. `run_fit` refuses a fit whose bounds allow it
+    before it starts: the upper bounds of the fitted fractions of a remainder
+    and the values of the others (the fixed values of the adopted fits, else
+    those of the model) sum to at most 1.
+
+    Args:
+        sbml_path: the model the fit simulates.
+        parameters: the parameters of the fit.
+        fixed_values: the values of parameters the fit keeps fixed, by id.
+
+    Returns:
+        The problems, naming the remainder, the fitted parameters and their
+        upper bounds.
+    """
+    import libsbml
+
+    fixed_values = fixed_values or {}
+    upper = {p.pid: p.upper_bound for p in parameters}
+    doc = libsbml.readSBMLFromFile(str(sbml_path))
+    model = doc.getModel()
+    if model is None:
+        return []
+    problems: list[str] = []
+    for assignment in model.getListOfInitialAssignments():
+        terms = _remainder_terms(assignment.getMath())
+        if terms is None or not upper.keys() & set(terms):
+            continue
+        total = 0.0
+        for term in terms:
+            if term in upper:
+                total += upper[term]
+            elif term in fixed_values:
+                total += fixed_values[term]
+            elif (parameter := model.getParameter(term)) is not None:
+                total += parameter.getValue()
+        if not total <= 1.0 + 1e-9:
+            fitted = ", ".join(f"{t} <= {upper[t]:g}" for t in terms if t in upper)
+            problems.append(
+                f"the remainder '{assignment.getSymbol()}' = 1 - "
+                f"{' - '.join(terms)} can be negative: the fractions sum to "
+                f"{total:g} > 1 at the upper bounds of the fit ({fitted}); "
+                "lower the upper bounds so that they sum to at most 1"
+            )
+    return problems
+
+
+def _remainder_terms(ast: object) -> list[str] | None:
+    """The ids of a formula `1 - a - b - ...`, `None` for another formula."""
+    import libsbml
+
+    assert isinstance(ast, libsbml.ASTNode)
+    terms: list[str] = []
+    node = ast
+    while node.getType() == libsbml.AST_MINUS and node.getNumChildren() == 2:
+        right = node.getChild(1)
+        if right.getType() != libsbml.AST_NAME:
+            return None
+        terms.insert(0, right.getName())
+        node = node.getChild(0)
+    if not terms or not node.isNumber() or node.getValue() != 1.0:
+        return None
+    return terms
+
+
 #: the argument of the provenance of a fit which names the fixed adopted fits
 FIXED_FITS = "fixed_fits"
+
+
+@dataclass
+class LeveledFitDefinition(FitDefinition):
+    """A fit definition whose problems load their models at an optimization level.
+
+    sbmlsim builds the problem of a definition without a level, so it takes the
+    level of the environment variable `SBMLSIM_JIT_OPTIMIZATION` of the process
+    which builds it. The problem resolves its level once and carries it into
+    every worker of a pool (`OptimizationProblem.__getstate__`), which loads the
+    models with it: the problems of this definition get the level of the model,
+    in the process and in every worker, whatever the environment of the
+    process and of a forkserver which started the workers.
+
+    Attributes:
+        jit_optimization: the level of LLJIT (`"O0"` to `"O3"`).
+    """
+
+    jit_optimization: str | None = None
+
+    @override
+    def problem(
+        self, opid: str, mapping_collections: list[FitMappingCollection] | None = None
+    ) -> OptimizationProblem:
+        problem = super().problem(opid, mapping_collections)
+        if self.jit_optimization is not None:
+            problem.jit_optimization = resolve_jit_optimization(self.jit_optimization)
+        return problem
+
+
+def at_level(definition: FitDefinition, level: str | None) -> FitDefinition:
+    """Get a fit definition whose problems load their models at a level.
+
+    Args:
+        definition: the fit definition of the model.
+        level: the optimization level of the model
+            (`SimulatorSettings.jit_optimization`), `None` for the level of
+            sbmlsim.
+
+    Returns:
+        The definition itself without a level, else a `LeveledFitDefinition`
+        with its fields.
+    """
+    if level is None:
+        return definition
+    fields = {
+        f.name: getattr(definition, f.name) for f in dataclasses.fields(definition)
+    }
+    fields["jit_optimization"] = level
+    return LeveledFitDefinition(**fields)
+
+
+def leveled_definitions(model: PKPDModel) -> dict[str, FitDefinition]:
+    """Get the fit definitions of a model at its optimization level, see `at_level`.
+
+    Args:
+        model: the model.
+
+    Returns:
+        The fit definitions by name.
+    """
+    level = model.simulator.jit_optimization
+    return {
+        name: at_level(definition, level)
+        for name, definition in model.load_fit_definitions().items()
+    }
+
+
+def start_point(
+    model: PKPDModel, definition: FitDefinition, start: str, output_dir: Path
+) -> dict[str, float]:
+    """Get the parameters a fit starts from (`run_fit --start`).
+
+    The start is a json file of the values by parameter id, in the units of
+    the fit parameters (`FitParameter.unit`), or the id of a fit: an adopted
+    fit of the model (`PKPDModel.fits_dir`) or else a finished fit in the
+    output directory of the fits, whose best parameters (`parameters.json`, in
+    the units of the model) are converted into the units of the fit
+    parameters. A fit of another problem gives the parameters which the
+    definition fits. A parameter which the start does not give keeps its own
+    start value.
+
+    Args:
+        model: the model.
+        definition: the fit problem.
+        start: the json file or the fit id.
+        output_dir: the directory of the finished fits.
+
+    Returns:
+        The start value of every parameter the start gives which the
+        definition fits.
+
+    Raises:
+        ValueError: if the start is neither a file nor a fit, a value is not a
+            number, a parameter of the file is not fitted, a value of a fit has
+            no unit for a fit parameter with one, or a value is outside of the
+            bounds of its parameter.
+    """
+    import json
+
+    from pkpdsim.uncertainty import convert_value
+
+    parameters = {p.pid: p for p in definition.parameters}
+    path = Path(start)
+    values: dict[str, object]
+    if path.is_file():
+        values = dict(json.loads(path.read_text(encoding="utf-8")))
+        unknown = sorted(set(values) - set(parameters))
+        if unknown:
+            raise ValueError(
+                f"The start '{start}' gives parameters which are not fitted: "
+                f"{unknown}; the fitted parameters are {sorted(parameters)}."
+            )
+    else:
+        directory = next(
+            (
+                d / start
+                for d in (model.fits_dir, output_dir)
+                if (d / start / "parameters.json").is_file()
+            ),
+            None,
+        )
+        if directory is None:
+            raise ValueError(
+                f"The start '{start}' is neither a json file nor a fit of the "
+                f"model (adopted in {model.fits_dir} or finished in {output_dir})."
+            )
+        best = json.loads((directory / "parameters.json").read_text("utf-8"))
+        best = best["sets"][0]
+        units = dict(best.get("units") or {})
+        values = {}
+        for pid, value in best["values"].items():
+            if pid not in parameters:
+                continue
+            unit, target = units.get(pid), parameters[pid].unit
+            if unit is None and target is not None:
+                raise ValueError(
+                    f"The fit '{start}' has no unit of '{pid}': its value cannot be "
+                    f"converted into the unit of the fit parameter, {target}."
+                )
+            values[pid] = convert_value(float(value), unit, target)
+    point: dict[str, float] = {}
+    for pid, value in values.items():
+        if isinstance(value, bool) or not isinstance(value, int | float):
+            raise ValueError(f"The start value of '{pid}' is not a number: {value!r}.")
+        parameter = parameters[pid]
+        if not parameter.lower_bound <= value <= parameter.upper_bound:
+            raise ValueError(
+                f"The start value {value} of '{pid}' is outside of its bounds "
+                f"[{parameter.lower_bound}, {parameter.upper_bound}]."
+            )
+        point[pid] = float(value)
+    return point
+
+
+def with_start(definition: FitDefinition, point: Mapping[str, float]) -> FitDefinition:
+    """Get a fit problem whose parameters start from a point.
+
+    The parameters are copies, so the definition of the model keeps its start
+    values (the definitions are objects of the module of the model).
+
+    Args:
+        definition: the fit problem.
+        point: the start value by parameter id.
+
+    Returns:
+        The fit problem with the start values of the point.
+    """
+    parameters = []
+    for parameter in definition.parameters:
+        if parameter.pid in point:
+            parameter = copy.copy(parameter)
+            parameter.start_value = point[parameter.pid]
+        parameters.append(parameter)
+    return dataclasses.replace(definition, parameters=parameters)
 
 
 def current_fixed_fits(model: PKPDModel, subset: str) -> list[str]:

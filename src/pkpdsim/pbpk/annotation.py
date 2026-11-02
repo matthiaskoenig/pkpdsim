@@ -436,7 +436,7 @@ KINDS: dict[str, Kind] = {
     "hepatic_flow": Kind(_P, "HEPATIC_VEIN_BLOOD_FLOW"),
     "gfr": Kind(_P, "GLOMERULAR_FILTRATION_RATE"),
     # the GFR at renal function 1 is not the GFR of the individual (a CKD
-    # model has another): the broader term with a version of the GFR (R49)
+    # model has another): the broader term with a version of the GFR
     "gfr_base": Kind(
         _P,
         _PHYS,
@@ -484,6 +484,26 @@ KINDS: dict[str, Kind] = {
     "molecular_weight": Kind(SBO.MOLECULAR_MASS, "MOLECULAR_WEIGHT"),
     "fu": Kind(_P, "FRACTION_UNBOUND_PLASMA"),
     "fraction_reabsorbed": Kind(_P, "RESORPTION"),
+    "reabsorption_threshold": Kind(
+        _P, _BIOCHEM, requested="renal threshold of a saturable reabsorption"
+    ),
+    "reabsorption_n": Kind(
+        _P,
+        _BIOCHEM,
+        requested="sharpness of the renal threshold of a saturable reabsorption",
+    ),
+    "baseline": Kind(
+        _P,
+        "CONCENTRATION_IN_PLASMA",
+        requested="endogenous baseline plasma concentration",
+    ),
+    "steady_clearance": Kind(_P, "CLEARANCE_RATE"),
+    "steady_rate": Kind(
+        _P, _BIOCHEM, requested="net production rate at the steady state"
+    ),
+    "steady_vmax": Kind(SBO.MAXIMAL_VELOCITY, "MAXIMUM_RATE"),
+    "steady_km": Kind(SBO.MICHAELIS_CONSTANT, _BIOCHEM, requested="Michaelis constant"),
+    "steady_plasma": Kind(_P, "CONCENTRATION_IN_PLASMA"),
     "kp": Kind(_P, "TISSUE_PLASMA_PARTITION_COEFFICIENT"),
     "kp_organ": Kind(
         _P,
@@ -492,6 +512,11 @@ KINDS: dict[str, Kind] = {
     ),
     "kp_factor": Kind(_P, _BIOCHEM, requested="factor of the partition coefficients"),
     "partition": Kind(_P, "PARTITION_COEFFICIENT"),
+    "slow_pool_exchange": Kind(
+        _P,
+        _BIOCHEM,
+        requested="exchange rate constant of a slow tissue pool per tissue volume",
+    ),
     "tissue_composition": Kind(
         _P, _PHYS, requested="tissue composition (water, protein, lipid fractions)"
     ),
@@ -554,7 +579,7 @@ KINDS: dict[str, Kind] = {
     "k_influx": Kind(SBO.KINETIC_CONSTANT, "CLEARANCE_RATE"),
     "k_efflux": Kind(SBO.KINETIC_CONSTANT, "CLEARANCE_RATE"),
     # a clearance per litre of organ (1/min) is no clearance (a volume per
-    # time) nor a rate constant of an amount: the broader term (R49)
+    # time) nor a rate constant of an amount: the broader term
     "k_metabolism_volume": Kind(
         SBO.KINETIC_CONSTANT,
         _BIOCHEM,
@@ -567,7 +592,16 @@ KINDS: dict[str, Kind] = {
         terms=((BQB.IS_VERSION_OF, pbpko("CLEARANCE_RATE")),),
         requested="transport clearance per organ volume",
     ),
+    "rate_ratio": Kind(
+        _P,
+        _BIOCHEM,
+        requested="ratio of the capacity of a process to another process",
+    ),
+    "product_fraction": Kind(
+        _P, _BIOCHEM, requested="fraction of a metabolism which forms a product"
+    ),
     "custom_parameter": Kind(None, _MISC),
+    "definition_parameter": Kind(None, _MISC),
     "custom_species": Kind(None, "CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT"),
     "custom_amount": Kind(None, "AMOUNT_OF_COMPOUND_IN_COMPARTMENT"),
     # routes, intestine, sinks
@@ -626,12 +660,26 @@ KINDS: dict[str, Kind] = {
     "colon_absorption": Kind(
         _P, _PHYS, requested="absorption factor of the large intestine"
     ),
+    "regional_absorption": Kind(
+        _P,
+        _BIOCHEM,
+        requested="relative absorption of a substance in an intestinal segment",
+    ),
+    "lumen_conversion_rate": Kind(
+        SBO.FORWARD_RATE_CONSTANT,
+        _BIOCHEM,
+        requested="rate constant of a conversion in the intestinal lumen",
+    ),
     "arm_weight": Kind(
         _P, _PHYS, requested="weight of a tissue in the arm vein sampling site"
     ),
     # observers and the outflow of the organs
     "outflow": Kind(_P, "TOTAL_VENOUS_CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT"),
     "outflow_blood_cells": Kind(_P, "CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT"),
+    # a species of an organ which a PD component or an observer reads, exposed
+    # by the organ
+    "organ_concentration": Kind(_P, "CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT"),
+    "organ_amount": Kind(_P, "AMOUNT_OF_COMPOUND_IN_COMPARTMENT"),
     "plasma_concentration": Kind(_P, "CONCENTRATION_IN_PLASMA"),
     "free_concentration": Kind(_P, "UNBOUND_CONCENTRATION_IN_PLASMA"),
     "blood_concentration": Kind(_P, "CONCENTRATION_IN_BLOOD"),
@@ -645,6 +693,45 @@ KINDS: dict[str, Kind] = {
         "OUTPUT_PARAMETER",
         terms=((BQB.IS_VERSION_OF, pbpko("URINARY_RATE")),),
         requested="urinary excretion rate (amount of compound per time)",
+    ),
+    # the readouts of the intestine (`PBPKDefinition.readouts`): the dissolved
+    # amount in the lumen and the summed fluxes, results of the model (the
+    # rates are versions of their processes, as the urinary rate)
+    "lumen_amount": Kind(_P, "AMOUNT_IN_LUMEN"),
+    "intestine_absorption": Kind(
+        _P,
+        "OUTPUT_PARAMETER",
+        terms=((BQB.IS_VERSION_OF, pbpko("ABSORPTION")),),
+        requested="intestinal absorption rate (amount of compound per time)",
+    ),
+    "intestine_efflux": Kind(
+        _P,
+        "OUTPUT_PARAMETER",
+        terms=((BQB.IS_VERSION_OF, pbpko("DISTRIBUTION_PROCESS")),),
+        requested="intestinal efflux rate into the lumen (amount of compound per time)",
+    ),
+    "feces_rate": Kind(
+        _P,
+        "OUTPUT_PARAMETER",
+        terms=((BQB.IS_VERSION_OF, pbpko("FECAL_EXCRETION")),),
+        requested="fecal excretion rate (amount of compound per time)",
+    ),
+    "absorbed_amount": Kind(
+        _P,
+        "OUTPUT_PARAMETER",
+        terms=((BQB.IS_VERSION_OF, pbpko("ABSORPTION")),),
+        requested="amount of compound absorbed from the intestinal lumen",
+    ),
+    "absorbed_fraction": Kind(
+        _P,
+        "OUTPUT_PARAMETER",
+        terms=((BQB.IS_VERSION_OF, pbpko("ABSORPTION")),),
+        requested="fraction of the oral dose absorbed from the intestinal lumen",
+    ),
+    "oral_dose_applied": Kind(
+        _P,
+        "OUTPUT_PARAMETER",
+        requested="amount of the oral dose applied to the intestinal lumen",
     ),
     # an observer of a definition: what it computes is the definition's, the
     # library knows only that it is a result of the model
@@ -685,6 +772,10 @@ KINDS: dict[str, Kind] = {
     ),
     "gut_metabolism": Kind(
         SBO.BIOCHEMICAL_REACTION, "GUT_METABOLISM", terms=((BQB.IS, "go/GO:0008152"),)
+    ),
+    # the formation of a product by its fraction of the rate of a metabolism
+    "metabolism_product": Kind(
+        SBO.BIOCHEMICAL_REACTION, None, terms=((BQB.IS_PART_OF, "go/GO:0008152"),)
     ),
     "transport": Kind(
         _T,
@@ -727,6 +818,14 @@ KINDS: dict[str, Kind] = {
         requested="gastrointestinal transit process",
     ),
     "fecal_excretion": Kind(_T, "FECAL_EXCRETION", terms=((BQB.IS, "go/GO:0007588"),)),
+    # a chemical or bacterial conversion of a substance in the lumen, not in the
+    # tissue: a version of the gut metabolism of PBPKO
+    "lumen_conversion": Kind(
+        SBO.BIOCHEMICAL_REACTION,
+        None,
+        terms=((BQB.IS_VERSION_OF, pbpko("GUT_METABOLISM")),),
+        requested="conversion in the intestinal lumen",
+    ),
     "bile_flow": Kind(
         _T, None, terms=((BQB.IS_PART_OF, pbpko("ENTEROHEPATIC_RECIRCULATION")),)
     ),
