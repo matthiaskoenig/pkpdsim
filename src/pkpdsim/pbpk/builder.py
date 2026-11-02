@@ -1438,8 +1438,9 @@ def _flatten(doc: libsbml.SBMLDocument, comp_path: Path) -> None:
 
     libsbml's flattening converter validates the comp document by default, with
     strict units, which was half the time of a build; the comp model was
-    validated before (`build`), so the converter does not validate it again.
-    The flat model is the same.
+    validated before (`flat_model`), so the converter does not validate it
+    again. The flat model is the same (matthiaskoenig/sbmlutils#521 proposes
+    the option for `flatten_sbml`).
 
     Args:
         doc: the comp document, the flat document afterwards.

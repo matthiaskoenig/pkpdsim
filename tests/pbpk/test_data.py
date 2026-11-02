@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 
 from pkpdsim.pbpk import cite, sources
-from pkpdsim.pbpk.data import value
+from pkpdsim.pbpk.data import load, value
 from pkpdsim.pbpk.units import U
 
 
@@ -64,3 +64,11 @@ def test_value_of_data_file() -> None:
     ti = value("routes", "iv", "ti")
     assert (ti.value, ti.unit, ti.source) == (10.0, U.second, "ModelChoice")
     assert ti.notes
+
+
+def test_a_loaded_file_is_a_copy() -> None:
+    """A caller which changes a loaded file changes no later load of it."""
+    data = load("physiology_human")
+    data.clear()
+    assert load("physiology_human")
+    assert load("physiology_human") is not load("physiology_human")
