@@ -1,7 +1,7 @@
 # The enzymes and transporters of the PBPK models (human).
 # `uniprot` is the reviewed human UniProtKB accession (UniProt, checked against rest.uniprot.org
-# 2026-10-25, ABCC3, ABCC4 and SLC6A8 2026-10-27); `ncit` the NCI Thesaurus concept of the protein
-# (checked against the NCIt EVS API 2026-10-25, ABCC3, ABCC4 and SLC6A8 2026-10-27), left out where NCIt has no concept for the protein (SLC22A6, SLC22A8).
+# 2026-10-25, ABCC3, ABCC4 and SLC6A8 2026-10-27, CES1, CYP2E1, UGT2B15 and UGT1A3 2026-11-02); `ncit` the NCI Thesaurus concept of the protein
+# (checked against the NCIt EVS API 2026-10-25, ABCC3, ABCC4 and SLC6A8 2026-10-27, CES1, CYP2E1, UGT2B15 and UGT1A3 2026-11-02), left out where NCIt has no concept for the protein (SLC22A6, SLC22A8, UGT1A3).
 
 source = "UniProt"
 
@@ -127,3 +127,22 @@ ncit = "C153432"
 li = { value = 0.0193, unit = "1/hr", source = "RowlandYeo2011", notes = "hepatic CYP3A4 (half-life 35.9 h): of the two values tested (0.0193 and 0.0077 1/h), the one which predicted 29 clinical mechanism-based CYP3A4 interactions with less bias and higher precision" }
 si = { value = 0.0301, unit = "1/hr", source = "Greenblatt2003", notes = "derived: ln(2)/23 h, the recovery half-life of intestinal CYP3A after a single dose of grapefruit juice (midazolam AUC ratios 26 to 74 h after the juice)" }
 other = { value = 0.0193, unit = "1/hr", source = "ModelChoice", notes = "the hepatic value (Rowland Yeo 2011) for the organs without an in vivo estimate of the turnover" }
+
+[proteins.CES1]
+name = "Liver carboxylesterase 1"
+uniprot = "P23141"
+ncit = "C116036"
+
+[proteins.CYP2E1]
+name = "Cytochrome P450 2E1"
+uniprot = "P05181"
+ncit = "C16485"
+
+[proteins.UGT2B15]
+name = "UDP-glucuronosyltransferase 2B15"
+uniprot = "P54855"
+ncit = "C105422"
+
+[proteins.UGT1A3]
+name = "UDP-glucuronosyltransferase 1A3"
+uniprot = "P35503"

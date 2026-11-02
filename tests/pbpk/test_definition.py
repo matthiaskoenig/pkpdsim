@@ -348,6 +348,10 @@ def test_proteins_table() -> None:
         "ABCC3",
         "ABCC4",
         "SLC6A8",
+        "CES1",
+        "CYP2E1",
+        "UGT2B15",
+        "UGT1A3",
     ]
     assert set(required) <= set(PROTEINS)
     assert PROTEINS["CYP3A4"].uniprot == "P08684"
