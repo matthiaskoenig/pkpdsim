@@ -7,6 +7,7 @@ observers and the fits agree on them. A flat id is `<ORGAN>__<local id>`
 
 import re
 from collections.abc import Iterable
+from typing import Literal
 
 from pkpdsim.pbpk.organs import Organ, Part, Pool
 
@@ -82,6 +83,16 @@ __all__ = [
     "condition_factor",
     "delta",
     "delta_base",
+    "depot",
+    "depot_absorption",
+    "depot_absorption_rate",
+    "depot_application",
+    "depot_application_time",
+    "depot_compartment",
+    "depot_dose",
+    "depot_fraction",
+    "depot_loss",
+    "depot_loss_reaction",
     "dissolution",
     "dissolution_age",
     "dissolution_clock",
@@ -176,6 +187,7 @@ __all__ = [
     "rate_ratio",
     "reabsorption_n",
     "reabsorption_threshold",
+    "rectal_portal_fraction",
     "ref",
     "regional_absorption_factor",
     "segment_process",
@@ -1090,6 +1102,84 @@ def sol_dose(s: str) -> str:
     return f"SOLDOSE_{s}"
 
 
+type _DepotKind = Literal["im", "sc", "rectal"]
+"""The kinds of the depot routes (`Route.kind`)."""
+
+_DEPOT_TOKENS: dict[str, str] = {"im": "im", "sc": "sc", "rectal": "rec"}
+"""The token of a depot route in its ids: intramuscular, subcutaneous, rectal."""
+
+
+def depot_dose(kind: _DepotKind, s: str) -> str:
+    """The id of the dose state of a depot route (mg), `IMDOSE_<s>`, `SCDOSE_<s>`, `RECDOSE_<s>`."""
+    return f"{_DEPOT_TOKENS[kind].upper()}DOSE_{s}"
+
+
+def depot(kind: _DepotKind, s: str) -> str:
+    """The id of the depot of a depot route (mmole), `Aim_<s>`, `Asc_<s>`, `Arec_<s>`.
+
+    The amount at the site of the administration (muscle, subcutis, rectum)
+    which the dose state applies and which is absorbed from there, a
+    species of the top model in the depot compartment of the route.
+    """
+    return f"A{_DEPOT_TOKENS[kind]}_{s}"
+
+
+def depot_compartment(kind: _DepotKind) -> str:
+    """The id of the compartment of the depots of a route, `Vim`, `Vsc`, `Vrec`.
+
+    A compartment of amounts with the nominal volume 1 l, as the urine.
+    """
+    return f"V{_DEPOT_TOKENS[kind]}"
+
+
+def depot_application_time(kind: _DepotKind, s: str) -> str:
+    """The id of the half-life of the application of a depot dose (s), `ti_im_<s>`."""
+    return f"ti_{_DEPOT_TOKENS[kind]}_{s}"
+
+
+def depot_absorption_rate(kind: _DepotKind, s: str) -> str:
+    """The id of the rate of the absorption from a depot (1/hr), `ka_im_<s>`, `ka_rec_<s>`."""
+    return f"ka_{_DEPOT_TOKENS[kind]}_{s}"
+
+
+def depot_fraction(kind: _DepotKind, s: str) -> str:
+    """The id of the fraction of a depot which is absorbed, `f_im_<s>`, `f_rec_<s>`."""
+    return f"f_{_DEPOT_TOKENS[kind]}_{s}"
+
+
+def rectal_portal_fraction(s: str) -> str:
+    """The id of the fraction of the absorbed rectal dose which enters the portal vein, `f_rec_portal_<s>`."""
+    return f"f_rec_portal_{s}"
+
+
+def depot_loss(kind: _DepotKind, s: str) -> str:
+    """The id of the amount of an injected depot which is not absorbed (mmole), `Aloss_im_<s>`.
+
+    The sink of the intramuscular and the subcutaneous depot (degraded at
+    the site of the injection); the rectal depot which is not absorbed
+    leaves into the feces `Afeces_<s>`, which this function gives for it.
+    """
+    if kind == "rectal":
+        return feces(s)
+    return f"Aloss_{_DEPOT_TOKENS[kind]}_{s}"
+
+
+def depot_application(kind: _DepotKind, s: str) -> str:
+    """The id of the application of a depot dose into the depot, `J_im_<s>`, `J_rec_<s>`."""
+    return dose_reaction(_DEPOT_TOKENS[kind], s)
+
+
+def depot_absorption(kind: _DepotKind, s: str, portal: bool = False) -> str:
+    """The id of the absorption from a depot, `J_im_abs_<s>`; `J_rec_abs_po_<s>` into the portal vein."""
+    suffix = "_po" if portal else ""
+    return f"J_{_DEPOT_TOKENS[kind]}_abs{suffix}_{s}"
+
+
+def depot_loss_reaction(kind: _DepotKind, s: str) -> str:
+    """The id of the part of a depot which is not absorbed, into its sink, `J_im_loss_<s>`."""
+    return f"J_{_DEPOT_TOKENS[kind]}_loss_{s}"
+
+
 def dissolution(s: str) -> str:
     """The id of the rate of the dissolution of a tablet, `Ka_dis_<s>`."""
     return f"Ka_dis_{s}"
@@ -1302,14 +1392,16 @@ def species_of(s: str, ids: Iterable[str]) -> list[str]:
     Returns:
         The ids which are an organ species (of a zone as well), a slow
         pool of a tissue, a pool species, a blood cell pool species, a lumen,
-        undissolved or mucosa species, a tubule species of `s`, in the order
-        of `ids`.
+        undissolved or mucosa species, a tubule species or the depot of a
+        depot route (`Aim_<s>`) of `s`, in the order of `ids`.
     """
+    depots = "|".join(_DEPOT_TOKENS.values())
     pattern = re.compile(
         rf"(?:C(?:(?:{_PARTS})(?:_z\d+)?|(?:{_POOLS})(?:_{Part.BLOOD_CELLS.value})?"
         r"|slow)"
         rf"|(?:Clumen|Cmu|Asolid)(?:_(?:{_SEGMENTS}))?"
-        rf"|Ctub_(?:{_TUBULE}))_{re.escape(s)}"
+        rf"|Ctub_(?:{_TUBULE})"
+        rf"|A(?:{depots}))_{re.escape(s)}"
     )
     return [i for i in ids if pattern.fullmatch(i.rsplit("__", 1)[-1])]
 

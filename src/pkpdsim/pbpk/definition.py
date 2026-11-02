@@ -51,9 +51,12 @@ _RESERVED = (
     "free",
     "blood",
     *ids.GUT_SEGMENTS,
+    "im",
+    "sc",
 )
 """The tokens of the id scheme which a substance id must not start with (the
-segment tokens follow `Clumen_`, `Cmu_` and `Asolid_`)."""
+segment tokens follow `Clumen_`, `Cmu_` and `Asolid_`, the tokens of the depot
+routes `ka_`, `f_` and `ti_`: `ka_im_<s>`, `f_rec_<s>`)."""
 
 _ZONE = re.compile(r"z\d+_")
 """The zone tokens (`z1_`) of the id scheme, which follow the part in the ids

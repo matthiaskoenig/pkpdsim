@@ -222,7 +222,14 @@ def standard() -> PBPKDefinition:
                 FirstOrder(k=0.3),
             ),
         ],
-        routes=[Route.iv("drg"), Route.oral("drg"), Route.oral_solution("prf")],
+        routes=[
+            Route.iv("drg"),
+            Route.oral("drg"),
+            Route.oral_solution("prf"),
+            Route.im("drg"),
+            Route.sc("prf"),
+            Route.rectal("drg"),
+        ],
         pd=[_cell_reader()],
         slow_pools=[SlowPool("drg", frozenset({Organ.MUSCLE}), k=1e-3, kp=1.5)],
     )

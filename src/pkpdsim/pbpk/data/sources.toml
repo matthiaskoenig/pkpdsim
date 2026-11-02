@@ -207,3 +207,7 @@ doi = "10.1124/dmd.120.090498"
 [Ye2016]
 citation = "Ye M, Nagar S, Korzekwa K. A physiologically based pharmacokinetic model to predict the pharmacokinetics of highly protein-bound drugs and the impact of errors in plasma protein binding. Biopharm Drug Dispos 37(3):123-141, 2016 (author manuscript PMC4844798)."
 doi = "10.1002/bdd.1996"
+
+[deBoer1979]
+citation = "de Boer AG, Breimer DD, Mattie H, Pronk J, Gubbens-Stibbe JM. Rectal bioavailability of lidocaine in man: partial avoidance of \"first-pass\" metabolism. Clin Pharmacol Ther 26(6):701-709, 1979."
+doi = "10.1002/cpt1979266701"
