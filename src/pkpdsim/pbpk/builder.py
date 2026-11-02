@@ -78,7 +78,7 @@ from sbmlutils.factory import (
 from sbmlutils.factory.units import UnitType
 from sbmlutils.io import read_sbml, write_sbml
 from sbmlutils.metadata import SBO
-from sbmlutils.validation import validate_doc
+from sbmlutils.validation import ValidationOptions, validate_doc
 
 from pkpdsim.pbpk import distribution, ids, variants
 from pkpdsim.pbpk.annotation import annotate, initial_assignment, model_annotations
@@ -1376,43 +1376,91 @@ def build(definition: PBPKDefinition, output_dir: Path) -> BuildResult:
         filepath=comp_path,
         sbml_level=3,
         sbml_version=2,
-        validate=True,
-        raise_on_error=True,
+        validate=False,
     )
-    doc = _flatten(comp_path, flat_path)
-    validation = validate_doc(doc, title=flat_path.name)
-    if validation.error_count:
-        raise ValueError(
-            f"The flat model '{flat_path}' has {validation.error_count} SBML errors."
-        )
+    flat_model(comp_path, flat_path)
     # a generated steady state which loads slowly or does not balance
     check_built(steady_plan(definition), flat_path)
     return BuildResult(comp_path=comp_path, flat_path=flat_path)
 
 
-def _flatten(comp_path: Path, flat_path: Path) -> libsbml.SBMLDocument:
-    """Flatten the comp model into the flat model, without validating it again.
+def flat_model(comp_path: Path, flat_path: Path) -> None:
+    """Validate a comp model and write its flat model.
 
-    `flatten_sbml` of sbmlutils lets the flattening converter of libsbml
-    validate the comp model before it flattens it (`performValidation`), 2.5
-    of the 6 s of the build of the reference model of the tests; the comp model
-    is validated when it is created and the flat model after the flattening,
-    and the flat model is the same (matthiaskoenig/sbmlutils#521 proposes the
-    option for `flatten_sbml`).
+    The comp model is read once, validated without the units and flattened in
+    memory; the flat model is validated with strict units. libsbml checks the
+    units of a comp document only in its top model, not in the model
+    definitions of the organs, so the flat model, which holds the math of every
+    organ, is where the units are checked. The written file is checked, as
+    `create_model` checks it: libsbml checks a constructed comp document
+    differently from one it read.
+
+    The flat model depends on the content of the comp model alone, which the
+    cache of the builds of the tests uses (`tests/conftest.py`).
+
+    Args:
+        comp_path: the file of the comp model.
+        flat_path: the file of the flat model.
+
+    Raises:
+        ValueError: if a model has SBML errors, or libsbml cannot flatten the
+            comp model.
+    """
+    doc = read_sbml(comp_path)
+    _validate(doc, comp_path, ValidationOptions.fast())
+    _flatten(doc, comp_path)
+    write_sbml(doc, filepath=flat_path)
+    _validate(doc, flat_path, ValidationOptions())
+
+
+def _validate(
+    doc: libsbml.SBMLDocument, path: Path, options: ValidationOptions
+) -> None:
+    """Validate a document of a build.
+
+    Args:
+        doc: the document.
+        path: the file of the document, which the report and the error name.
+        options: the checks.
+
+    Raises:
+        ValueError: if the document has SBML errors.
+    """
+    validation = validate_doc(doc, options=options, title=str(path))
+    if validation.error_count:
+        raise ValueError(
+            f"The model '{path}' has {validation.error_count} SBML errors."
+        )
+
+
+def _flatten(doc: libsbml.SBMLDocument, comp_path: Path) -> None:
+    """Flatten the validated comp model in place.
+
+    libsbml's flattening converter validates the comp document by default, with
+    strict units, which was half the time of a build; the comp model was
+    validated before (`flat_model`), so the converter does not validate it
+    again. The flat model is the same (matthiaskoenig/sbmlutils#521 proposes
+    the option for `flatten_sbml`).
+
+    Args:
+        doc: the comp document, the flat document afterwards.
+        comp_path: the file of the comp model, which an error names.
 
     Raises:
         ValueError: if libsbml cannot flatten the comp model.
     """
-    doc = read_sbml(source=comp_path)
     props = libsbml.ConversionProperties()
     props.addOption("flatten comp", True)
     props.addOption("leave_ports", True)
     props.addOption("abortIfUnflattenable", "none")
     props.addOption("performValidation", False)
     if doc.convert(props) != libsbml.LIBSBML_OPERATION_SUCCESS:
-        raise ValueError(f"The comp model '{comp_path}' cannot be flattened.")
-    write_sbml(doc, filepath=flat_path)
-    return doc
+        errors = [
+            doc.getError(i).getMessage().strip() for i in range(doc.getNumErrors())
+        ]
+        raise ValueError(
+            f"The comp model '{comp_path}' cannot be flattened: " + " ".join(errors)
+        )
 
 
 class _Top:

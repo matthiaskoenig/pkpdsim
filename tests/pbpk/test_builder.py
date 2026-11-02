@@ -11,6 +11,7 @@ import libsbml
 import pytest
 import roadrunner
 from sbmlutils.factory import Creator, create_model
+from sbmlutils.io import read_sbml
 
 from pkpdsim.pbpk import (
     Direction,
@@ -32,6 +33,7 @@ from pkpdsim.pbpk import (
     Transport,
     Variants,
     WeibullDissolution,
+    builder,
     ids,
 )
 from pkpdsim.pbpk.builder import (
@@ -134,7 +136,7 @@ def test_an_unflattenable_comp_model_is_refused(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     with pytest.raises(ValueError, match="cannot be flattened"):
-        _flatten(comp_path, tmp_path / "flat.xml")
+        _flatten(read_sbml(comp_path), comp_path)
 
 
 def test_comp_model_without_warnings(tmp_path: Path) -> None:
@@ -329,6 +331,7 @@ def test_rules_of_constants_are_found(simple: BuildResult) -> None:
     assert rules_without_state(doc) == sorted([ids.BMI, ids.BSA, ids.CO, ids.FFM])
 
 
+@pytest.mark.uncached_build
 def test_build_logs_no_sbmlutils_warning(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -366,6 +369,34 @@ def test_build_logs_no_sbmlutils_warning(
         r.getMessage() for r in caplog.records if r.name.startswith("sbmlutils")
     ]
     assert warnings == []
+
+
+@pytest.mark.uncached_build
+def test_a_wrong_unit_in_an_organ_fails_the_build(
+    simple: BuildResult, tmp_path: Path
+) -> None:
+    """The units of the organs are checked in the flat model.
+
+    libsbml checks the units of a comp document only in its top model: a
+    parameter of an organ with a wrong unit passes the check of the comp model
+    and fails the strict check of the flat model.
+    """
+    doc = libsbml.readSBMLFromFile(str(simple.comp_path))
+    organ = doc.getPlugin("comp").getModelDefinition(0)
+    ports = {p.getIdRef() for p in organ.getPlugin("comp").getListOfPorts()}
+    parameter = next(
+        p
+        for p in organ.getListOfParameters()
+        if p.getId() not in ports and p.getUnits() not in ("", "mg")
+    )
+    parameter.setUnits("mg")
+    comp_path = tmp_path / simple.comp_path.name
+    libsbml.writeSBMLToFile(doc, str(comp_path))
+    comp = libsbml.readSBMLFromFile(str(comp_path))
+    comp.setConsistencyChecks(libsbml.LIBSBML_CAT_UNITS_CONSISTENCY, True)
+    assert comp.checkConsistencyWithStrictUnits() == 0
+    with pytest.raises(ValueError, match=r"_flat\.xml' has \d+ SBML errors"):
+        builder.flat_model(comp_path, tmp_path / simple.flat_path.name)
 
 
 def test_covariate_change_propagates(simple: BuildResult) -> None:
