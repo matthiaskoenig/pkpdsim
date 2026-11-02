@@ -3,15 +3,12 @@ revision = 5
 requires-python = ">=3.14"
 resolution-markers = [
     "python_full_version >= '3.15' and sys_platform == 'win32'",
-    "python_full_version < '3.15' and sys_platform == 'win32'",
     "python_full_version >= '3.15' and sys_platform == 'emscripten'",
-    "python_full_version < '3.15' and sys_platform == 'emscripten'",
     "python_full_version >= '3.15' and sys_platform != 'emscripten' and sys_platform != 'win32'",
+    "python_full_version < '3.15' and sys_platform == 'win32'",
+    "python_full_version < '3.15' and sys_platform == 'emscripten'",
     "python_full_version < '3.15' and sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
-
-[manifest]
-constraints = [{ name = "petab", specifier = "<0.10" }]
 
 [[package]]
 name = "annotated-types"
@@ -589,6 +586,23 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/41/8c/bbe98f813722b4873818a8db3e15aa3e625b59278566905ac439725e8070/h5py-3.16.0-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:346df559a0f7dcb31cf8e44805319e2ab24b8957c45e7708ce503b2ec79ba725", size = 5300253, upload-time = "2026-03-06T13:49:02.033Z" },
     { url = "https://files.pythonhosted.org/packages/32/9e/87e6705b4d6890e7cecdf876e2a7d3e40654a2ae37482d79a6f1b87f7b92/h5py-3.16.0-cp314-cp314t-win_amd64.whl", hash = "sha256:4c6ab014ab704b4feaa719ae783b86522ed0bf1f82184704ed3c9e4e3228796e", size = 3381671, upload-time = "2026-03-06T13:49:04.351Z" },
     { url = "https://files.pythonhosted.org/packages/96/91/9fad90cfc5f9b2489c7c26ad897157bce82f0e9534a986a221b99760b23b/h5py-3.16.0-cp314-cp314t-win_arm64.whl", hash = "sha256:faca8fb4e4319c09d83337adc80b2ca7d5c5a343c2d6f1b6388f32cfecca13c1", size = 2740706, upload-time = "2026-03-06T13:49:06.347Z" },
+]
+
+[[package]]
+name = "hdf5plugin"
+version = "7.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "h5py" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/79/80/abb8ca79a3fde2991703d8832f47954363333ee948cbdf32d3337c36edb4/hdf5plugin-7.1.0.tar.gz", hash = "sha256:dc4aa9576bf5770d773be9309a060ccf2f0ce2f0031f2b369f566d2662ec2fb3", size = 74761431, upload-time = "2026-09-01T14:39:07.699Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1f/f4/f6ddc8b802d0025459429d20a3ff75264da7dd9a248a17baf43035a8c618/hdf5plugin-7.1.0-py3-none-macosx_10_13_x86_64.whl", hash = "sha256:8e9e2011f5394d0516b67756b79a7a4eda389e9e628badbbad191bd211b3a4e3", size = 7156241, upload-time = "2026-09-01T14:38:43.742Z" },
+    { url = "https://files.pythonhosted.org/packages/f3/af/8244d480b2096e8ce79e22c1d1472bf43ad10fb1e55a044334b0b2a69456/hdf5plugin-7.1.0-py3-none-macosx_11_0_arm64.whl", hash = "sha256:af2347557359a1f45e703e6465aa033336cc0f10dc8a3b4d5e11c7721cb1faa6", size = 6059333, upload-time = "2026-09-01T14:38:45.964Z" },
+    { url = "https://files.pythonhosted.org/packages/35/54/870f7481eb44431d5b713383a2ecca9c3c6d406b4c921fba032e6b59bd89/hdf5plugin-7.1.0-py3-none-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:5d81d24069e4c3368f18f5bd067f58c4ee625fe6b91a7ed18212fde95cdcb9c9", size = 43813008, upload-time = "2026-09-01T14:38:49.726Z" },
+    { url = "https://files.pythonhosted.org/packages/1a/97/5994c288a8987bd289ad518b8bf9c64468bd1795b43493ff432fdaf87b60/hdf5plugin-7.1.0-py3-none-manylinux_2_27_ppc64le.manylinux_2_28_ppc64le.whl", hash = "sha256:059266f69c61d929e1ba7d860aa3c977dbcbf513a3c84f5637e6cde3a59ad36d", size = 46549915, upload-time = "2026-09-01T14:38:54.536Z" },
+    { url = "https://files.pythonhosted.org/packages/26/56/3f788afb8d7fc451d20a66a64ea58bbe189f6f11780b28ba09148974fb33/hdf5plugin-7.1.0-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:9d4cf36434819fae53e4da432f0287ebaeb02386ab97b73d261092efbab12247", size = 46397731, upload-time = "2026-09-01T14:38:59.387Z" },
+    { url = "https://files.pythonhosted.org/packages/a9/3e/b3a66a07d99b52cfaf9d64ccaf7667ce7d75ec733d6c0ab6755eaa3944a1/hdf5plugin-7.1.0-py3-none-win_amd64.whl", hash = "sha256:fb4555696340a0dceb16f48ae5b65479f6a92ca90190ffeafc41905f17f5e325", size = 3682141, upload-time = "2026-09-01T14:39:02.131Z" },
 ]
 
 [[package]]
@@ -1280,7 +1294,7 @@ wheels = [
 
 [[package]]
 name = "petab"
-version = "0.9.0"
+version = "0.10.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "antlr4-python3-runtime" },
@@ -1294,7 +1308,7 @@ dependencies = [
     { name = "sbmlmath" },
     { name = "sympy" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c8/8b/25f8c89cdfa62e31d07a621c5600022c2364db7906741407ead28691759d/petab-0.9.0.tar.gz", hash = "sha256:d5def7b78f98325c27dae0a838c4bbfedd90435541867cf46f9130ae2d93136a", size = 164764, upload-time = "2026-09-07T13:26:50.771Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/73/ff/8a3eb5dcbd4fde6de1e2c03024eeed284412f6fdaec61b81e917dbf86e1a/petab-0.10.0.tar.gz", hash = "sha256:211b60a0667335fd9df6db1f9ea84c89941088933f86f1052e002787993b660a", size = 186813, upload-time = "2026-10-26T15:07:52.656Z" }
 
 [[package]]
 name = "pillow"
@@ -1443,7 +1457,7 @@ requires-dist = [
     { name = "pyyaml", marker = "extra == 'dev'", specifier = ">=6.0.3" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.17.3" },
     { name = "sbmlode", specifier = ">=0.3.0" },
-    { name = "sbmlsim", specifier = ">=0.14.0,<0.15" },
+    { name = "sbmlsim", specifier = ">=0.14.1,<0.15" },
     { name = "sbmlutils", specifier = ">=0.17.1" },
     { name = "scipy", specifier = ">=1.18.1" },
     { name = "tox", marker = "extra == 'dev'", specifier = ">=4.65.0,!=4.67.5" },
@@ -2045,12 +2059,13 @@ wheels = [
 
 [[package]]
 name = "sbmlsim"
-version = "0.14.0"
+version = "0.14.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "certifi" },
     { name = "h5netcdf" },
     { name = "h5py" },
+    { name = "hdf5plugin" },
     { name = "jinja2" },
     { name = "latex2mathml" },
     { name = "libroadrunner" },
@@ -2058,6 +2073,7 @@ dependencies = [
     { name = "numpy" },
     { name = "pandas" },
     { name = "petab" },
+    { name = "pillow" },
     { name = "pint" },
     { name = "pkpdutils" },
     { name = "pydantic" },
@@ -2074,9 +2090,9 @@ dependencies = [
     { name = "typst" },
     { name = "xarray" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/0b/d1/d6e46c23d5212a8de48b6b7ebb60edaedd0ceb7f9fb71673b30e45386c36/sbmlsim-0.14.0.tar.gz", hash = "sha256:95b9d8df03b274883629b4b4d01a3f506a0c13b4ff8653105a251089af991cbd", size = 3685852, upload-time = "2026-10-24T22:18:13.061Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f4/4d/7a115bde633bdfea02dcb2abe79e4f126008fdc574b18c1bdfafa66cf53c/sbmlsim-0.14.1.tar.gz", hash = "sha256:c3a02a326e051e14f94a372cd0b2c4748138328865fb1b462b549bdbb5f43568", size = 3696596, upload-time = "2026-11-02T06:37:03.573Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ae/17/d149028c4d9ea414dfacaa447396bc176235af4040d7c3f4df76d9d237b1/sbmlsim-0.14.0-py3-none-any.whl", hash = "sha256:d960eaf057fb365540bc91ccd4c0083f1b331ad7ca87f9f15c3e98db327bc5c2", size = 806134, upload-time = "2026-10-24T22:18:11.425Z" },
+    { url = "https://files.pythonhosted.org/packages/be/99/e9c8ef3173392b4c4d8934f95cc684ee3006418f7c22618c0a856d765b5f/sbmlsim-0.14.1-py3-none-any.whl", hash = "sha256:c41fecc15171ec85eb8d276850cbaee0490d13f020f11903d0140ce6dfb96e9a", size = 809949, upload-time = "2026-11-02T06:37:01.717Z" },
 ]
 
 [[package]]
