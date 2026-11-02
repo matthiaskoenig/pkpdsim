@@ -143,7 +143,12 @@ class _FlatModelCache:
         # written in full before it is visible to the other workers
         partial = entry.with_suffix(f".{os.getpid()}.partial")
         shutil.copyfile(flat_path, partial)
-        partial.replace(entry)
+        try:
+            partial.replace(entry)
+        except OSError:
+            # Windows refuses to replace a file which another worker reads;
+            # that worker has written the same flat model
+            partial.unlink(missing_ok=True)
 
 
 @pytest.fixture(scope="session", autouse=True)
