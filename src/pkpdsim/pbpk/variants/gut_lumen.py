@@ -495,7 +495,9 @@ class LumenBuilder(StandardBuilder):
         other segments have the undissolved amount `Asolid_<seg>_<s>`. An
         enteric-coated tablet has no dissolution in the first segment, the
         stomach: it only empties, undissolved, with the transit of the
-        stomach of the condition.
+        stomach of the condition, and the undissolved amount which saturates
+        a dose-dependent dissolution leaves the coated tablet in the stomach
+        out.
         """
         sid = s.sid
         enteric = is_enteric(route)
@@ -530,7 +532,14 @@ class LumenBuilder(StandardBuilder):
             )
             for seg in self.segments[1:]
         ]
-        undissolved = f"({dose} + {mr} * ({' + '.join(solids)}))" if solids else dose
+        # the coated tablet in the stomach is not exposed to the intestinal
+        # fluid: it does not saturate the dissolution of the emptied drug
+        if enteric:
+            undissolved = f"({mr} * ({' + '.join(solids)}))"
+        elif solids:
+            undissolved = f"({dose} + {mr} * ({' + '.join(solids)}))"
+        else:
+            undissolved = dose
         age = ids.dissolution_age(sid)
         kdis, reads = dissolution_rate(route, undissolved, age)
         if reads:
