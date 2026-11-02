@@ -239,6 +239,10 @@ A protein is named once in the protein table of the library with its UniProt and
 | `ABCC3` | ATP-binding cassette sub-family C member 3 (MRP3) | [O15438](https://www.uniprot.org/uniprotkb/O15438) | `C106023` |
 | `ABCC4` | ATP-binding cassette sub-family C member 4 (MRP4) | [O15439](https://www.uniprot.org/uniprotkb/O15439) | `C103881` |
 | `SLC6A8` | Sodium- and chloride-dependent creatine transporter 1 | [P48029](https://www.uniprot.org/uniprotkb/P48029) | `C153432` |
+| `CES1` | Liver carboxylesterase 1 | [P23141](https://www.uniprot.org/uniprotkb/P23141) | `C116036` |
+| `CYP2E1` | Cytochrome P450 2E1 | [P05181](https://www.uniprot.org/uniprotkb/P05181) | `C16485` |
+| `UGT2B15` | UDP-glucuronosyltransferase 2B15 | [P54855](https://www.uniprot.org/uniprotkb/P54855) | `C105422` |
+| `UGT1A3` | UDP-glucuronosyltransferase 1A3 | [P35503](https://www.uniprot.org/uniprotkb/P35503) |  |
 
 Degradation rate `kdeg_<protein>` of the turnover state (1/hr): li 0.0193, si 0.0301, other 0.0193.
 
