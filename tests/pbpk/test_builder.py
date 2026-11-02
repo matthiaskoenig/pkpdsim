@@ -36,6 +36,7 @@ from pkpdsim.pbpk import (
 )
 from pkpdsim.pbpk.builder import (
     BuildResult,
+    _flatten,
     build,
     built_organs,
     compose,
@@ -114,6 +115,26 @@ def test_build_validates_and_flattens(simple: BuildResult) -> None:
         assert errors == [], path.name
     r = load(simple)
     r.simulate(0, 10, 5)
+
+
+def test_an_unflattenable_comp_model_is_refused(tmp_path: Path) -> None:
+    """The flattening, which does not validate again, refuses what it cannot flatten."""
+    comp_path = tmp_path / "comp.xml"
+    comp_path.write_text(
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<sbml xmlns="http://www.sbml.org/sbml/level3/version2/core" '
+        'xmlns:comp="http://www.sbml.org/sbml/level3/version1/comp/version1" '
+        'level="3" version="2" comp:required="true">'
+        '<model id="top"><comp:listOfSubmodels>'
+        '<comp:submodel comp:id="sub" comp:modelRef="missing"/>'
+        "</comp:listOfSubmodels></model>"
+        "<comp:listOfExternalModelDefinitions>"
+        '<comp:externalModelDefinition comp:id="missing" comp:source="missing.xml"/>'
+        "</comp:listOfExternalModelDefinitions></sbml>",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="cannot be flattened"):
+        _flatten(comp_path, tmp_path / "flat.xml")
 
 
 def test_comp_model_without_warnings(tmp_path: Path) -> None:

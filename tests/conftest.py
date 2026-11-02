@@ -20,6 +20,9 @@ once per module which uses it.
 
 The tests of the release share git repositories (`git_env`, `source_repo_model`,
 `remote_and_clone`, `release_settings`, see `release_git`).
+
+`--shard I/N` runs the share `I` of `N` of the tests, a job of the matrix of
+the CI each (see `sharding`).
 """
 
 import dataclasses
@@ -31,6 +34,7 @@ import pytest
 from pymetadata.webservices.registry import get_registry
 from pymetadata.webservices.webservice import WebserviceError
 from release_git import GIT_ENV, git, init_repo
+from sharding import in_shard, parse_shard
 
 from pkpdsim.cli import fit_command
 from pkpdsim.model import PKPDModel
@@ -45,8 +49,38 @@ from pkpdsim_toy.factory import create_toy_models
 RELEASE_DATA = Path(__file__).parent / "data" / "release"
 
 
+def pytest_addoption(parser: pytest.Parser) -> None:
+    """Add `--shard`, the share of the tests which runs."""
+    parser.addoption(
+        "--shard",
+        default=None,
+        metavar="I/N",
+        help="run the share I of N of the tests (1 <= I <= N), by a hash of the test id",
+    )
+
+
+def pytest_collection_modifyitems(
+    config: pytest.Config, items: list[pytest.Item]
+) -> None:
+    """Deselect the tests outside of the share of `--shard`."""
+    text = config.getoption("--shard")
+    if text is None:
+        return
+    index, count = parse_shard(text)
+    deselected = [item for item in items if not in_shard(item.nodeid, index, count)]
+    if deselected:
+        config.hook.pytest_deselected(items=deselected)
+        items[:] = [item for item in items if in_shard(item.nodeid, index, count)]
+
+
 def pytest_configure(config: pytest.Config) -> None:
-    """Load the registry of identifiers.org and create the toy models."""
+    """Check `--shard`, load the registry of identifiers.org and create the toy models."""
+    text = config.getoption("--shard")
+    if text is not None:
+        try:
+            parse_shard(text)
+        except ValueError as err:
+            raise pytest.UsageError(str(err)) from None
     if hasattr(config, "workerinput"):
         # a worker of pytest-xdist, the controller has prepared the session
         return

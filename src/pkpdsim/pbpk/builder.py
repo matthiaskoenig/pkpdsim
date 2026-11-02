@@ -54,7 +54,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from sbmlutils.comp import flatten_sbml
+import libsbml
 from sbmlutils.factory import (
     PORT_SUFFIX,
     AssignmentRule,
@@ -76,6 +76,7 @@ from sbmlutils.factory import (
     create_model,
 )
 from sbmlutils.factory.units import UnitType
+from sbmlutils.io import read_sbml, write_sbml
 from sbmlutils.metadata import SBO
 from sbmlutils.validation import validate_doc
 
@@ -1378,7 +1379,7 @@ def build(definition: PBPKDefinition, output_dir: Path) -> BuildResult:
         validate=True,
         raise_on_error=True,
     )
-    doc = flatten_sbml(comp_path, flat_path)
+    doc = _flatten(comp_path, flat_path)
     validation = validate_doc(doc, title=flat_path.name)
     if validation.error_count:
         raise ValueError(
@@ -1387,6 +1388,31 @@ def build(definition: PBPKDefinition, output_dir: Path) -> BuildResult:
     # a generated steady state which loads slowly or does not balance
     check_built(steady_plan(definition), flat_path)
     return BuildResult(comp_path=comp_path, flat_path=flat_path)
+
+
+def _flatten(comp_path: Path, flat_path: Path) -> libsbml.SBMLDocument:
+    """Flatten the comp model into the flat model, without validating it again.
+
+    `flatten_sbml` of sbmlutils lets the flattening converter of libsbml
+    validate the comp model before it flattens it (`performValidation`), 2.5
+    of the 6 s of the build of the reference model of the tests; the comp model
+    is validated when it is created and the flat model after the flattening,
+    and the flat model is the same (matthiaskoenig/sbmlutils#521 proposes the
+    option for `flatten_sbml`).
+
+    Raises:
+        ValueError: if libsbml cannot flatten the comp model.
+    """
+    doc = read_sbml(source=comp_path)
+    props = libsbml.ConversionProperties()
+    props.addOption("flatten comp", True)
+    props.addOption("leave_ports", True)
+    props.addOption("abortIfUnflattenable", "none")
+    props.addOption("performValidation", False)
+    if doc.convert(props) != libsbml.LIBSBML_OPERATION_SUCCESS:
+        raise ValueError(f"The comp model '{comp_path}' cannot be flattened.")
+    write_sbml(doc, filepath=flat_path)
+    return doc
 
 
 class _Top:

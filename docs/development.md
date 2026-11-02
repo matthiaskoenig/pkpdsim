@@ -118,7 +118,7 @@ and the complete matrix, including the `ty` environment, in parallel with
 tox run-parallel
 ```
 
-This needs the interpreters to be available, which uv installs with `uv python install 3.14 3.15`. The tox environments build the wheel and install it, so the tests run against the package as it is published. It is the complete test and is run before a pull request is opened: continuous integration runs only `py3.14`, on linux, macos and windows, as `uvx --with tox-uv tox -e py3.14 -- --durations=15`, which lists the slowest tests in the log.
+This needs the interpreters to be available, which uv installs with `uv python install 3.14 3.15`. The tox environments build the wheel and install it, so the tests run against the package as it is published. It is the complete test and is run before a pull request is opened: continuous integration runs only `py3.14`, on linux, macos and windows, as `uvx --with tox-uv tox -e py3.14 -- --durations=15 --shard I/4`, which lists the slowest tests in the log. `--shard I/N` (`tests/conftest.py`, `tests/sharding.py`) runs the share `I` of `N` of the tests, chosen by a hash of the test id, so every platform runs its tests in four jobs of the matrix at the same time: in one job the suite took 30 minutes on the hosted ubuntu runner and 55 on windows.
 
 To run the tests directly against the development environment use
 
