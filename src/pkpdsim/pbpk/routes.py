@@ -56,7 +56,9 @@ segment:
 - `DoseDependentDissolution(k, dose50, fed)`: `kdis = k*D50/(D50 + D)` with
   the undissolved amount `D` (mg) of all segments, a dissolution which
   saturates with the undissolved dose (solubility-limited), at most
-  `k*D50`, times `(1 + FED*(f_dis_fed_<s> - 1))` of the fed state if set.
+  `k*D50`, times `(1 + FED*(f_dis_fed_<s> - 1))` of the fed state if set;
+  of an enteric-coated tablet `D` leaves out the coated tablet in the
+  stomach (`PODOSE_<s>`), which is not exposed to the intestinal fluid.
 """
 
 import math
@@ -160,7 +162,8 @@ class DoseDependentDissolution:
             `k*(1 + FED*(fed - 1))*dose50/(dose50 + D)`. No parameter if
             `None`. The single lumen has no fed state and raises.
         enteric: an enteric-coated tablet, which does not dissolve in the
-            stomach (see `FirstOrderDissolution`).
+            stomach (see `FirstOrderDissolution`); `D` is the undissolved
+            amount outside the stomach, without the coated tablet.
     """
 
     k: Q

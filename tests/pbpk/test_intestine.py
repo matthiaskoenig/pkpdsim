@@ -621,6 +621,30 @@ def test_an_enteric_tablet_does_not_dissolve_in_the_stomach(
         assert undissolved < 1e-9 * 10.0 / mr
 
 
+def test_the_coated_tablet_does_not_saturate_the_dissolution(tmp_path: Path) -> None:
+    """The saturation of an enteric tablet counts the drug outside the stomach only.
+
+    The coated tablet in the stomach is not exposed to the intestinal fluid:
+    right after the first amount reaches the duodenum its dissolution flux is
+    `k*D50/(D50 + D_solid)*Asolid_du` with `D_solid` the undissolved amount
+    outside the stomach (mg), not the dose in the stomach as well.
+    """
+    route = Route.oral(S, DoseDependentDissolution(k=2.0, dose50=50.0, enteric=True))
+    r = _build(tmp_path, _definition("enteric_saturation", routes=[route]))
+    mr = r[ids.mr(S)]
+    solids = [_gu(ids.solid(S, seg)) for seg in ids.GUT_SEGMENTS[1:]]
+    r[ids.po_dose(S)] = 500.0
+    r.simulate(0, 0.5, 5)
+    assert r[ids.po_dose(S)] > 480.0
+    d_solid = mr * sum(r[a] for a in solids)
+    assert 0 < d_solid < 20.0
+    kdis = 2.0 / 60 * 50.0 / (50.0 + d_solid)
+    assert r[_gu(ids.dissolution_rate(S))] == pytest.approx(kdis, rel=1e-9)
+    du = _gu(ids.solid(S, "du"))
+    flux = r[_gu(ids.dissolution_reaction(S, "du"))]
+    assert flux == pytest.approx(kdis * r[du], rel=1e-9)
+
+
 def test_the_enteric_tablet_needs_the_segmented_intestine(tmp_path: Path) -> None:
     """The single lumen has no stomach: an enteric tablet raises, naming the substance."""
     d = _definition(
