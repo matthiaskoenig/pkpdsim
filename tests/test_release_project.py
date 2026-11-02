@@ -264,9 +264,9 @@ def test_workflows_are_yaml(context: ProjectContext) -> None:
 def test_uv_version(context: ProjectContext) -> None:
     """The Docker image and the workflows use one uv, at least the fix of the
     CA store (GHSA-hq85-5cpj-mr62)."""
-    assert UV_VERSION == "0.13.4"
+    assert UV_VERSION == "0.13.6"
     dockerfile = render("Dockerfile.j2", context)
-    assert "COPY --from=ghcr.io/astral-sh/uv:0.13.4 /uv /bin/uv\n" in dockerfile
+    assert "COPY --from=ghcr.io/astral-sh/uv:0.13.6 /uv /bin/uv\n" in dockerfile
     for name in ("ci.yml.j2", "docs.yml.j2"):
         workflow = yaml.safe_load(render(f"workflows/{name}", context))
         steps = [
@@ -276,7 +276,7 @@ def test_uv_version(context: ProjectContext) -> None:
             if step.get("uses", "").startswith("astral-sh/setup-uv@")
         ]
         assert steps, name
-        assert {step["with"]["version"] for step in steps} == {"0.13.4"}, name
+        assert {step["with"]["version"] for step in steps} == {"0.13.6"}, name
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="the workflow runs on linux")
