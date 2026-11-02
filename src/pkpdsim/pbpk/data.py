@@ -5,6 +5,7 @@ The data are TOML files in `pkpdsim/pbpk/data`. A number is a table
 `sources.toml`, so every number states where it comes from.
 """
 
+import copy
 import tomllib
 from dataclasses import dataclass
 from functools import cache
@@ -51,8 +52,14 @@ def load(name: str) -> dict[str, Any]:
         name: the name of the file without extension, e.g. `sources`.
 
     Returns:
-        The content of `data/<name>.toml`.
+        The content of `data/<name>.toml`, a copy the caller may change.
     """
+    return copy.deepcopy(_parsed(name))
+
+
+@cache
+def _parsed(name: str) -> dict[str, Any]:
+    """Parse a data file once: a build reads the data files about 90 times."""
     text = (
         resources.files("pkpdsim.pbpk")
         .joinpath("data", f"{name}.toml")
