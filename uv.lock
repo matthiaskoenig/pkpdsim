@@ -3,10 +3,10 @@ revision = 5
 requires-python = ">=3.14"
 resolution-markers = [
     "python_full_version >= '3.15' and sys_platform == 'win32'",
-    "python_full_version >= '3.15' and sys_platform == 'emscripten'",
-    "python_full_version >= '3.15' and sys_platform != 'emscripten' and sys_platform != 'win32'",
     "python_full_version < '3.15' and sys_platform == 'win32'",
+    "python_full_version >= '3.15' and sys_platform == 'emscripten'",
     "python_full_version < '3.15' and sys_platform == 'emscripten'",
+    "python_full_version >= '3.15' and sys_platform != 'emscripten' and sys_platform != 'win32'",
     "python_full_version < '3.15' and sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
 
@@ -442,11 +442,11 @@ wheels = [
 
 [[package]]
 name = "filelock"
-version = "4.2.6"
+version = "4.2.7"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/35/6c/730b340182f1fd74d4ef8d3f35431ce84f8f97b1a1f2afd145174b7bb047/filelock-4.2.6.tar.gz", hash = "sha256:ee7af8ede36dcaf12e1016d9f7c3a63ecd5497d46f85dab21b8c779b8f944e97", size = 661339, upload-time = "2026-10-31T15:10:16.889Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e0/14/73688a22e91cfcfc6837a011ffa572e2ba3c348765f7bd482d8436fa9b6f/filelock-4.2.7.tar.gz", hash = "sha256:31f6f7e3a8b6f0bd89114d30c5d5218ea1cfb63e5c4aa695b7559314a209bc7f", size = 661450, upload-time = "2026-11-02T16:09:15.119Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b7/8d/3f849fcb79359259737bc2d8ddcaee6149ffb773239a260c9ff20179736f/filelock-4.2.6-py3-none-any.whl", hash = "sha256:fd7d4fca497bf3e3d0945a13261f8e684f2aef12ce7cf76aef26e13bf7388b88", size = 164378, upload-time = "2026-10-31T15:10:15.322Z" },
+    { url = "https://files.pythonhosted.org/packages/1d/1a/1fcf0d3886bad15b92459a0e529dd86a1ec4d9ef30e789df48044fd3698c/filelock-4.2.7-py3-none-any.whl", hash = "sha256:d08972bbca2b8767ee552aff877b091dd111ffb1d22de7de885766ea7d719d5e", size = 164345, upload-time = "2026-11-02T16:09:13.588Z" },
 ]
 
 [[package]]
@@ -1457,7 +1457,7 @@ requires-dist = [
     { name = "pyyaml", marker = "extra == 'dev'", specifier = ">=6.0.3" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.17.3" },
     { name = "sbmlode", specifier = ">=0.3.0" },
-    { name = "sbmlsim", specifier = ">=0.14.1,<0.15" },
+    { name = "sbmlsim", specifier = ">=0.15.0,<0.16" },
     { name = "sbmlutils", specifier = ">=0.17.1" },
     { name = "scipy", specifier = ">=1.18.1" },
     { name = "tox", marker = "extra == 'dev'", specifier = ">=4.65.0,!=4.67.5" },
@@ -1712,14 +1712,14 @@ wheels = [
 
 [[package]]
 name = "pyproject-api"
-version = "1.12.2"
+version = "1.12.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "packaging" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a6/af/5ac3c74655469fd52c6d496d728a85e5db454abb15682be5e620735a2349/pyproject_api-1.12.2.tar.gz", hash = "sha256:ad2a72516abcc950877222e9eff760c9120d2086f0d9fce6aef4f16985a3e946", size = 64095, upload-time = "2026-10-28T01:32:31.862Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/58/f5/a33fb12cca9037a8329f303193a064992e3ddbc5b9ef79e500f8658b9695/pyproject_api-1.12.3.tar.gz", hash = "sha256:5bf1f90a915c83831f035cf15998ef98e48e619ff8334fe4dd8110a29aa82af1", size = 68099, upload-time = "2026-11-02T16:08:40.757Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e6/21/fffda71ec623408a54db66e1892bb2e76de729f9170f157c47ed9d677299/pyproject_api-1.12.2-py3-none-any.whl", hash = "sha256:b832f139e5b5e6a01a67e55e38603e8a99cd43556fc2f6fc5659946da25c5f54", size = 14230, upload-time = "2026-10-28T01:32:30.488Z" },
+    { url = "https://files.pythonhosted.org/packages/cd/de/c1ebb46f939f501eafb8bba190b1014c356d7c9fadad365cfba079d3941f/pyproject_api-1.12.3-py3-none-any.whl", hash = "sha256:04a24d61982c9b0e97d07120dcdc1ceab6a16431fbc43df18544846e30b1ca9d", size = 14302, upload-time = "2026-11-02T16:08:39.404Z" },
 ]
 
 [[package]]
@@ -1779,14 +1779,14 @@ wheels = [
 
 [[package]]
 name = "python-discovery"
-version = "1.9.0"
+version = "1.9.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "filelock" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/86/15/0405206e0cfe0c14b91ac038d31f30d1dd78139b3b2a285e6be41bf6e5af/python_discovery-1.9.0.tar.gz", hash = "sha256:88beb57e51b919c30f303b053ec41359298ca349192035b0a802c76347ae96d7", size = 125151, upload-time = "2026-10-30T23:24:24.91Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e9/a2/c98905e39dfe464612b8032014fbe7b8b6e939217cd705d0152b981aeba6/python_discovery-1.9.1.tar.gz", hash = "sha256:83e3c0024b93e256809dc9cd053537a37df6d3badc3b68aa03006a224336b21f", size = 126369, upload-time = "2026-11-02T15:58:19.766Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/cb/3c/da1cae963a076132dbc4d3c1f0292dd2f373b9d3e072d42f4620801159c1/python_discovery-1.9.0-py3-none-any.whl", hash = "sha256:fb65edfff3541b7ceb3a39be334a0f69f4cb5148287a053e1874748742fda93b", size = 39841, upload-time = "2026-10-30T23:24:23.452Z" },
+    { url = "https://files.pythonhosted.org/packages/68/48/098829df5400ca16bea46ba81d1e185069a0efcbd12721c6789ebabb29de/python_discovery-1.9.1-py3-none-any.whl", hash = "sha256:a78322b3b70c5d61dddc2f37ca1beffa9a5ce01cedf3526444e01bfc94f50b35", size = 40027, upload-time = "2026-11-02T15:58:18.222Z" },
 ]
 
 [[package]]
@@ -2059,7 +2059,7 @@ wheels = [
 
 [[package]]
 name = "sbmlsim"
-version = "0.14.1"
+version = "0.15.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "certifi" },
@@ -2090,14 +2090,14 @@ dependencies = [
     { name = "typst" },
     { name = "xarray" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/f4/4d/7a115bde633bdfea02dcb2abe79e4f126008fdc574b18c1bdfafa66cf53c/sbmlsim-0.14.1.tar.gz", hash = "sha256:c3a02a326e051e14f94a372cd0b2c4748138328865fb1b462b549bdbb5f43568", size = 3696596, upload-time = "2026-11-02T06:37:03.573Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/13/b0/d78daf3ddbb67a40b220500c896240a95147c01344cc8e4d890f98ba48bd/sbmlsim-0.15.0.tar.gz", hash = "sha256:ecdd07503bead72994bc134e63b9b6fb43879723905d3cadd9445e564cb9305a", size = 3731418, upload-time = "2026-11-02T12:04:43.472Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/be/99/e9c8ef3173392b4c4d8934f95cc684ee3006418f7c22618c0a856d765b5f/sbmlsim-0.14.1-py3-none-any.whl", hash = "sha256:c41fecc15171ec85eb8d276850cbaee0490d13f020f11903d0140ce6dfb96e9a", size = 809949, upload-time = "2026-11-02T06:37:01.717Z" },
+    { url = "https://files.pythonhosted.org/packages/c6/c1/1b245b2fcaba3cc2b76f199ab796decbd037060f5fc1f39b2282ce36613f/sbmlsim-0.15.0-py3-none-any.whl", hash = "sha256:5df6b14ea382a23c83d76e9abd0a348c16119f5e8de0ef93b2d75e586eb784e0", size = 823768, upload-time = "2026-11-02T12:04:41.306Z" },
 ]
 
 [[package]]
 name = "sbmlutils"
-version = "0.17.1"
+version = "0.17.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "antimony" },
@@ -2116,9 +2116,9 @@ dependencies = [
     { name = "sbmlode" },
     { name = "xmltodict" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/30/bf/5e9b06bba991a77ba4e4a72130c99985588521cda0d8ad5f47ea7ae733d4/sbmlutils-0.17.1.tar.gz", hash = "sha256:cb0a8ad64dcf890a9ace61039741487aa04cd6aa0081529d018fb6a1639235c8", size = 3744053, upload-time = "2026-11-01T22:52:54.312Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/83/03/c1c7b4e5c9c1beeed547c653c79323adab2fb0c9b9124bfccb9189655d9b/sbmlutils-0.17.2.tar.gz", hash = "sha256:937be3420081e7b0f63fdddaba893efcbabba5c20cb71208ab9eeda3cc9f8822", size = 3746091, upload-time = "2026-11-02T15:51:45.215Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c6/14/887a00bf2da4f822a3d24b359676f7ee048e82f40008a660452383ffb13a/sbmlutils-0.17.1-py3-none-any.whl", hash = "sha256:a51e1f2bf20841a9f84e4be1371eb97c514bca4429aff925120d16d2b4b871b4", size = 3631763, upload-time = "2026-11-01T22:52:52.202Z" },
+    { url = "https://files.pythonhosted.org/packages/89/d1/e3337e2f8f057683e8f51df1ec2a716e5b571e4762bfbb2d83fd82df9857/sbmlutils-0.17.2-py3-none-any.whl", hash = "sha256:96743bd1904f4fb2c5b2785fdf68a97e645837c6e3a819797dfd17d4f0caa451", size = 3632706, upload-time = "2026-11-02T15:51:42.98Z" },
 ]
 
 [[package]]
@@ -2263,7 +2263,7 @@ wheels = [
 
 [[package]]
 name = "tox"
-version = "4.67.4"
+version = "4.67.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cachetools" },
@@ -2277,9 +2277,9 @@ dependencies = [
     { name = "tomli-w" },
     { name = "virtualenv" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/64/bf/c0eb714b28d21c225eec423efc4243d806de64b5678fec6a15e03a361c09/tox-4.67.4.tar.gz", hash = "sha256:6f97945d3ca1c204337aeecd858b178b30fc5cf9d0b0c15aacea12d1c5eb0946", size = 351271, upload-time = "2026-10-28T06:33:30.12Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/0a/62/03cd11b877dfe18ef6eb357b52a974123f8035a02d5179d0623cf7c8d07e/tox-4.67.6.tar.gz", hash = "sha256:1cba926b4ca816d3ab999834c336da80b6bdfd0c93653fdde37edc06d86397de", size = 418589, upload-time = "2026-11-02T17:16:38.615Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/27/0e/1a4927a8b5b6bc34a6dec3020094daca52605f2050ecd921cfe36a37c480/tox-4.67.4-py3-none-any.whl", hash = "sha256:e1be08d3dbeb44c7a87ec6b4f0be840b0a0db375013c3c801e5bb428c5607361", size = 239419, upload-time = "2026-10-28T06:33:28.487Z" },
+    { url = "https://files.pythonhosted.org/packages/1b/08/3df0f5fe2a25f8542467b9b42a2de1da155516a2d8ac71edcd37332c8384/tox-4.67.6-py3-none-any.whl", hash = "sha256:b2d00ec5fc51a9e03a7ceafebc50fe60351d562ce563ea1001a4d0f9f77df965", size = 259778, upload-time = "2026-11-02T17:16:36.927Z" },
 ]
 
 [[package]]

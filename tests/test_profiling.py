@@ -16,12 +16,13 @@ needs_profiler = pytest.mark.skipif(
     not profiler_available(), reason="the sampling profiler of python 3.15"
 )
 
-#: the sampling profiler of python 3.15.1 crashes now and then while it writes
-#: a sample of the binary profile (`UnicodeEncodeError: ... surrogates not
-#: allowed` in `binary_collector.write_sample`), 3.15.0 does not
+#: the sampling profiler of python 3.15.1 and 3.15.2 crashes now and then while
+#: it writes a sample of the binary profile (`UnicodeEncodeError: ... surrogates
+#: not allowed` in `binary_collector.write_sample`, more often under load), and
+#: the replay refuses the truncated profile; 3.15.0 does not
 profiler_of_3151 = pytest.mark.xfail(
-    sys.version_info[:3] == (3, 15, 1),
-    reason="the sampling profiler of python 3.15.1 crashes writing a sample",
+    sys.version_info[:3] >= (3, 15, 1),
+    reason="the sampling profiler of python 3.15.1 and later crashes writing a sample",
     strict=False,
 )
 
