@@ -394,6 +394,7 @@ def test_pbpko_resource_format(built: BuildResult) -> None:
     assert all(url.rsplit("/", 1)[1] in PBPKO for url in pbpko_urls)
 
 
+@pytest.mark.uncached_build
 def test_build_logs_no_annotation_errors(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:

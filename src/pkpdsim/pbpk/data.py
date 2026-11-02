@@ -5,6 +5,7 @@ The data are TOML files in `pkpdsim/pbpk/data`. A number is a table
 `sources.toml`, so every number states where it comes from.
 """
 
+import copy
 import tomllib
 from dataclasses import dataclass
 from functools import cache
@@ -51,7 +52,20 @@ def load(name: str) -> dict[str, Any]:
         name: the name of the file without extension, e.g. `sources`.
 
     Returns:
-        The content of `data/<name>.toml`.
+        The content of `data/<name>.toml`, a copy which the caller may change.
+    """
+    return copy.deepcopy(_parsed(name))
+
+
+@cache
+def _parsed(name: str) -> dict[str, Any]:
+    """Parse a data file once per process; the content must not be changed.
+
+    Args:
+        name: the name of the file without extension, e.g. `sources`.
+
+    Returns:
+        The content of `data/<name>.toml`, shared by every caller.
     """
     text = (
         resources.files("pkpdsim.pbpk")
@@ -75,7 +89,7 @@ def value(name: str, section: str, key: str) -> Value:
     Raises:
         ValueError: if the unit of the number is not a unit of the model.
     """
-    entry = load(name)[section][key]
+    entry = _parsed(name)[section][key]
     try:
         unit = _UNITS[entry["unit"]]
     except KeyError:
@@ -91,7 +105,7 @@ def sources() -> dict[str, Source]:
     """Get the sources by their key."""
     return {
         key: Source(key=key, citation=entry["citation"], doi=entry.get("doi"))
-        for key, entry in load("sources").items()
+        for key, entry in _parsed("sources").items()
     }
 
 

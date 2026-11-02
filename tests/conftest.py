@@ -18,14 +18,29 @@ A short fit of the toy model with its identifiability, adopted into a folder of
 fits, is shared by the tests of the records (`toy_fit`, `fits_dir`); it is made
 once per module which uses it.
 
+A PBPK build writes its flat model through `pkpdsim.pbpk.builder.flat_model`,
+which validates the comp model, flattens it and validates the flat model, most
+of the time of a build. The flat model depends on the content of the comp model
+alone, and many tests build the same model, so the flat models are cached by
+the content of their comp model (without the dates of the model history) in a
+folder of the session which every worker shares (`flat_model_cache`): a comp
+model which another test has flattened is not validated and flattened again. A
+test which checks what the validation or the flattening logs is marked
+`uncached_build`.
+
 The tests of the release share git repositories (`git_env`, `source_repo_model`,
 `remote_and_clone`, `release_settings`, see `release_git`).
 """
 
 import dataclasses
+import hashlib
+import os
+import re
 import shutil
+import sys
 from contextlib import suppress
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 from pymetadata.webservices.registry import get_registry
@@ -42,6 +57,9 @@ from pkpdsim_sexes.factory import create_sexes_models
 from pkpdsim_toy import MODEL, MODEL_BASE_PATH
 from pkpdsim_toy.factory import create_toy_models
 
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterator
+
 RELEASE_DATA = Path(__file__).parent / "data" / "release"
 
 
@@ -56,6 +74,81 @@ def pytest_configure(config: pytest.Config) -> None:
         get_registry()
     create_toy_models(MODEL_BASE_PATH)
     create_sexes_models(SEXES_BASE_PATH)
+
+
+_HISTORY_DATE = re.compile(rb"<dcterms:W3CDTF>[^<]*</dcterms:W3CDTF>")
+"""A date of the model history, which changes with every build."""
+
+
+class _FlatModelCache:
+    """The flat models of the session by the content of their comp model.
+
+    Only a flat model which was validated is cached, so a comp model with
+    errors fails in every test.
+    """
+
+    def __init__(
+        self, folder: Path, flat_model: "Callable[[Path, Path], None]"
+    ) -> None:
+        self.folder = folder
+        self.flat_model = flat_model
+        #: off in a test marked `uncached_build`
+        self.enabled = True
+
+    def __call__(self, comp_path: Path, flat_path: Path) -> None:
+        """Write the flat model of a comp model, from the cache if it is there."""
+        if not self.enabled:
+            self.flat_model(comp_path, flat_path)
+            return
+        content = _HISTORY_DATE.sub(b"", comp_path.read_bytes())
+        entry = self.folder / f"{hashlib.sha256(content).hexdigest()}.xml"
+        if entry.is_file():
+            shutil.copyfile(entry, flat_path)
+            return
+        self.flat_model(comp_path, flat_path)
+        # written in full before it is visible to the other workers
+        partial = entry.with_suffix(f".{os.getpid()}.partial")
+        shutil.copyfile(flat_path, partial)
+        partial.replace(entry)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def flat_model_cache(
+    pytestconfig: pytest.Config, tmp_path_factory: pytest.TempPathFactory
+) -> "Iterator[_FlatModelCache | None]":
+    """Take the flat models of the PBPK builds from the cache of the session.
+
+    Session-scoped, so the builds of the fixtures of a module are cached as
+    well. The test modules which build have imported the builder when they
+    were collected, before the first test; without them nothing is built.
+    """
+    builder = sys.modules.get("pkpdsim.pbpk.builder")
+    if builder is None:
+        yield None
+        return
+    base = tmp_path_factory.getbasetemp()
+    if hasattr(pytestconfig, "workerinput"):
+        # the folder of a worker of pytest-xdist lies in the one of the session
+        base = base.parent
+    folder = base / "flat_models"
+    folder.mkdir(exist_ok=True)
+    cache = _FlatModelCache(folder, builder.flat_model)
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(builder, "flat_model", cache)
+        yield cache
+
+
+@pytest.fixture(autouse=True)
+def uncached_build(
+    request: pytest.FixtureRequest,
+    monkeypatch: pytest.MonkeyPatch,
+    flat_model_cache: "_FlatModelCache | None",
+) -> None:
+    """Validate and flatten every build of a test marked `uncached_build`."""
+    if flat_model_cache is not None and request.node.get_closest_marker(
+        "uncached_build"
+    ):
+        monkeypatch.setattr(flat_model_cache, "enabled", False)
 
 
 @pytest.fixture

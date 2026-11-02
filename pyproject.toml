@@ -115,7 +115,10 @@ packages = ["src/pkpdsim"]
 testpaths = ["tests"]
 # the tests run in parallel (pytest-xdist), `pytest -n 0` runs them in one process
 addopts = "-n auto"
-markers = ["slow: slow tests, deselect with -m \"not slow\""]
+markers = [
+    "slow: slow tests, deselect with -m \"not slow\"",
+    "uncached_build: a test whose PBPK builds validate and flatten, without the cache of the flat models",
+]
 
 [tool.ty.environment]
 # the package lives in the src layout, the scripts are a package at the root of
