@@ -109,6 +109,11 @@ path = "./src/pkpdsim/__init__.py"
 [tool.hatch.build.targets.wheel]
 packages = ["src/pkpdsim"]
 
+[tool.uv]
+# the lock only: the PEtab export of sbmlsim 0.14.0 imports `petab.models`,
+# which petab 0.10.0 removed; the next release of sbmlsim reads petab 0.10
+constraint-dependencies = ["petab<0.10"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 # the tests run in parallel (pytest-xdist), `pytest -n 0` runs them in one process
