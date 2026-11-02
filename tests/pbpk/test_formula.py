@@ -14,6 +14,7 @@ from pkpdsim.pbpk import (
     Direction,
     Excretion,
     FirstOrder,
+    FirstOrderDissolution,
     Formula,
     Kp,
     Membrane,
@@ -388,6 +389,94 @@ def test_a_formula_per_substance_in_the_segmented_intestine(tmp_path: Path) -> N
     r.reset()
     assert r["ka_drg"] == pytest.approx(2.0)
     assert r["ka_drg_m"] == pytest.approx(0.5)
+
+
+def test_a_formula_fabs_follows_the_fed_state(tmp_path: Path) -> None:
+    """The fraction absorbed of a substance is a formula over `FED` or a definition parameter.
+
+    `fabs_drg = 0.9 - 0.4*FED` follows the fed state set before the
+    simulation, `fabs_drg_m = 2*f_ref` the parameter of the definition.
+    """
+    d = definition(
+        routes=[Route.oral("drg"), Route.oral("drg_m")],
+        parameters=[ModelParameter("f_ref", 0.3, U.dimensionless, name="reference")],
+        variants=Variants(
+            organs={
+                Organ.SMALL_INTESTINE: SegmentedIntestine(
+                    fabs={
+                        "drg": Formula(
+                            "0.9 dimensionless - 0.4 dimensionless * FED",
+                            U.dimensionless,
+                        ),
+                        "drg_m": Formula("2 dimensionless * f_ref", U.dimensionless),
+                    }
+                )
+            }
+        ),
+    )
+    person = individuals(build(d, tmp_path).flat_path)
+    r = person()
+    assert r[ids.fraction_absorbed("drg")] == pytest.approx(0.9)
+    assert r[ids.fraction_absorbed("drg_m")] == pytest.approx(0.6)
+    r = person(FED=1.0, f_ref=0.4)
+    assert r[ids.fraction_absorbed("drg")] == pytest.approx(0.5)
+    assert r[ids.fraction_absorbed("drg_m")] == pytest.approx(0.8)
+
+
+def test_a_formula_release_follows_a_definition_parameter(tmp_path: Path) -> None:
+    """The release factor of a tablet is a formula over a parameter of the definition.
+
+    `f_dis_release_drg = f_mr`: a change of `f_mr` before the simulation
+    changes the factor and the dissolution of the tablet with it.
+    """
+    release = Formula("f_mr", U.dimensionless, notes="The release of the tablet.")
+    d = definition(
+        routes=[Route.oral("drg", FirstOrderDissolution(k=2.0, release=release))],
+        parameters=[ModelParameter("f_mr", 1.0, U.dimensionless, name="release")],
+    )
+    flat = build(d, tmp_path).flat_path
+    assert _formula(_model(flat), ids.dissolution_release_factor("drg")) == "f_mr"
+    person = individuals(flat)
+    flux = {}
+    for f_mr in (1.0, 0.2):
+        r = person(f_mr=f_mr)
+        assert r[ids.dissolution_release_factor("drg")] == pytest.approx(f_mr)
+        r[ids.po_dose("drg")] = 10.0
+        flux[f_mr] = r[ids.flat(Organ.SMALL_INTESTINE, ids.dose_reaction("po", "drg"))]
+        mr = r[ids.mr("drg")]
+    assert flux[1.0] == pytest.approx(2.0 / 60 * 10.0 / mr, rel=1e-9)
+    assert flux[0.2] == pytest.approx(0.2 * flux[1.0], rel=1e-9)
+
+
+def test_a_formula_rate_reads_a_definition_parameter(tmp_path: Path) -> None:
+    """A first order rate of the intestinal wall is a formula over a definition parameter.
+
+    The intestine reads `k_gu` through an input port under its id; a change
+    before the simulation is followed.
+    """
+    chemistry = [
+        Metabolism(
+            sid="DRG2M_GU",
+            organ=Organ.SMALL_INTESTINE,
+            substrate="drg",
+            products={"drg_m": 1.0},
+            kinetics=FirstOrder(
+                k=Formula("2 dimensionless * k_gu", U.l_per_min), per_volume=False
+            ),
+            protein="CYP3A4",
+        )
+    ]
+    d = definition(
+        chemistry=chemistry,
+        parameters=[ModelParameter("k_gu", 0.25, U.l_per_min, name="gut constant")],
+    )
+    result = build(d, tmp_path)
+    flat = _model(result.flat_path)
+    assert flat.getParameter("GU__k_gu") is None
+    assert formula_ids(str(_formula(flat, "GU__DRG2M_GU_k"))) == {"k_gu"}
+    person = individuals(result.flat_path)
+    assert person()["GU__DRG2M_GU_k"] == pytest.approx(0.5)
+    assert person(k_gu=0.5)["GU__DRG2M_GU_k"] == pytest.approx(1.0)
 
 
 def _k_prod(value: float = 0.025) -> ModelParameter:

@@ -21,7 +21,9 @@ enters the portal vein directly. Their parts:
   `Afeces_<s>`; an oral tablet has the undissolved amount `Asolid_<seg>_<s>`
   (in the first segment the dose state `PODOSE_<s>`), which dissolves with
   the dissolution of its formulation (`pkpdsim.pbpk.routes`) and moves with
-  the transit too; the bile drains into the duodenum (the single lumen);
+  the transit too; an enteric-coated tablet does not dissolve in the
+  stomach, it empties undissolved and dissolves from the duodenum on; the
+  bile drains into the duodenum (the single lumen);
   the fed state `FED = 1` slows the gastric emptying (the stomach transit
   time of the fed state);
 - the absorption: `ka_<s>` (1/hr) is the absorption rate constant of the
@@ -549,7 +551,9 @@ class SingleLumen:
 
     The single lumen has no segments: a regional absorption profile and the
     conversions in the lumen need the segmented intestine, `regional` and
-    `conversions` are refused with that message.
+    `conversions` are refused with that message; it has no stomach and no
+    fed state, so an enteric-coated tablet and a factor of the dissolution
+    in the fed state are refused on build, naming the substance.
 
     Attributes:
         name: the name of the component.
@@ -563,7 +567,8 @@ class SingleLumen:
 
     Raises:
         ValueError: for `regional` or `conversions`; (on build) for a key of
-            a mapping which is no substance of the definition.
+            a mapping which is no substance of the definition, an
+            enteric-coated tablet or a fed factor of a dissolution.
     """
 
     name: str = "single_lumen"
@@ -643,8 +648,9 @@ class SingleLumen:
         """Build the model of the intestine and its boundary.
 
         Raises:
-            ValueError: for chemistry the intestine cannot place, or a key of
-                a mapping which is no substance.
+            ValueError: for chemistry the intestine cannot place, a key of
+                a mapping which is no substance, an enteric-coated tablet or
+                a fed factor of a dissolution.
         """
         self._check(s.sid for s in ctx.substances)
         return GutBuilder(

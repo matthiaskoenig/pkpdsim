@@ -29,7 +29,7 @@ J_trs_st_<s>: -> Asolid_du_<s> = PODOSE_<s> / Mr_<s> / ((T_st + FED * (T_st_fed 
 d(PODOSE_<s>)/dt = -(J_po_<s> + J_trs_st_<s>) * Mr_<s>
 ```
 
-`PODOSE_<s>` is the undissolved tablet in the stomach: it dissolves into the stomach lumen and empties undissolved with the stomach into the duodenum. In the next segments the undissolved drug is a species of its own, `Asolid_<seg>_<s>`, which dissolves there and moves on undissolved into the feces.
+`PODOSE_<s>` is the undissolved tablet in the stomach: it dissolves into the stomach lumen and empties undissolved with the stomach into the duodenum. In the next segments the undissolved drug is a species of its own, `Asolid_<seg>_<s>`, which dissolves there and moves on undissolved into the feces. An enteric-coated tablet does not dissolve in the stomach (see [Dissolution](#dissolution)).
 
 ### Depot routes
 
@@ -63,9 +63,9 @@ The dissolution rate `kdis` (1/min) acts on the undissolved amount of every segm
 
 - `FirstOrderDissolution(k, fed, release)`: `kdis = k` (`Ka_dis_<s>`, 1/hr), with two optional factors (see below); the default (2/hr, the default of the hand-written models, a choice of the library) when the route states no formulation;
 - `WeibullDissolution(t50, shape, lag)`: the fraction dissolved `F = 1 - exp(-ln2*((t - lag)/t50)^shape)` after the lag time, applied as its hazard on the undissolved amount, with the time since the dose the mean age of the undissolved drug (`age_dis_<s>`); exact for one dose, doses which overlap share one clock (the amount-weighted mean age);
-- `DoseDependentDissolution(k, dose50)`: `kdis = k*D50/(D50 + D)` with the undissolved amount `D` (mg) of all segments, a dissolution which saturates with the dose (solubility-limited).
+- `DoseDependentDissolution(k, dose50, fed)`: `kdis = k*D50/(D50 + D)` with the undissolved amount `D` (mg) of all segments, a dissolution which saturates with the dose (solubility-limited), with the optional factor of the fed state.
 
-The first order dissolution has two optional factors, each creating a dimensionless parameter of the body only if it is set (without them the model has neither parameter and the rate is `Ka_dis_<s>`): `fed` creates `f_dis_fed_<s>`, the factor of the rate in the fed state (`FED = 1`; food slows the dissolution), and `release` creates `f_dis_release_<s>`, the factor of a modified-release formulation (the given value, 1 for the immediate-release tablet; the experiments of a prolonged-release tablet set it, e.g. 0.2). The single lumen has no fed state, a `fed` factor there raises.
+The first order dissolution has two optional factors, each creating a dimensionless parameter of the body only if it is set (without them the model has neither parameter and the rate is `Ka_dis_<s>`): `fed` creates `f_dis_fed_<s>`, the factor of the rate in the fed state (`FED = 1`; food slows the dissolution), and `release` creates `f_dis_release_<s>`, the factor of a modified-release formulation (the given value, 1 for the immediate-release tablet; the experiments of a prolonged-release tablet set it, e.g. 0.2). The dose-dependent dissolution has the factor of the fed state as well, `kdis = Ka_dis*(1 + FED*(f_dis_fed - 1))*D50/(D50 + D)`. The single lumen has no fed state, a `fed` factor there raises.
 
 ```equations title="first order dissolution with the factors of the formulation and the fed state"
 J_po_<s>: -> Clumen_st_<s> = Ka_dis_<s> / 60 min_per_hr * f_dis_release_<s> * (1 + FED * (f_dis_fed_<s> - 1)) * PODOSE_<s> / Mr_<s>
@@ -74,6 +74,13 @@ J_po_<s>: -> Clumen_st_<s> = Ka_dis_<s> / 60 min_per_hr * f_dis_release_<s> * (1
 ```equations title="Weibull dissolution (t50, shape, lag of the tablet)"
 kdis_<s> = piecewise(0, age_dis_<s> <= lag_dis_<s>, 0.693147180559945 * shape_dis_<s> / t50_dis_<s> * ((age_dis_<s> - lag_dis_<s>) / t50_dis_<s> + 1e-9)^(shape_dis_<s> - 1))
 J_dis_du_<s>: Asolid_du_<s> -> Clumen_du_<s> = kdis_<s> * Asolid_du_<s>
+```
+
+An enteric-coated tablet does not dissolve in the stomach: `FirstOrderDissolution(..., enteric=True)` and `DoseDependentDissolution(..., enteric=True)` leave out the dissolution in the stomach, `J_po_<s>`, so the stomach has no dissolution rate of the tablet (it is 0, not a reaction with the rate 0). The undissolved tablet leaves the stomach with the gastric emptying of the condition, the transit time `(T_st + FED*(T_st_fed - T_st))*fimp_t_stomach` (`T_st_eff`), as the undissolved drug of every tablet does, and dissolves from the duodenum on with the dissolution of its formulation. The coat creates no parameter; without it the model is unchanged. The emptying is first order with the mean transit time of the stomach (of liquids, see the data of the segments); a tablet which does not disintegrate empties with the migrating motor complex, which the model does not have. The single lumen has no stomach, an enteric tablet there raises.
+
+```equations title="enteric-coated tablet: the stomach only empties"
+d(PODOSE_<s>)/dt = -J_trs_st_<s> * Mr_<s>
+J_trs_st_<s>: -> Asolid_du_<s> = PODOSE_<s> / Mr_<s> / ((T_st + FED * (T_st_fed - T_st)) * fimp_t_stomach)
 ```
 
 ## Segmented intestine
