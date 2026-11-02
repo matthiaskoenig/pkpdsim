@@ -175,6 +175,7 @@ __all__ = [
     "kp_slow",
     "kps",
     "kslow",
+    "kstab",
     "lumen",
     "lumen_amount",
     "lumen_conversion_rate",
@@ -1482,6 +1483,15 @@ def emax(protein: str, s: str) -> str:
 def ec50(protein: str, s: str) -> str:
     """The id of the half-maximal inducing concentration of `s`, `EC50_cyp3a4_<s>`."""
     return f"EC50_{protein.lower()}_{s}"
+
+
+def kstab(protein: str, s: str) -> str:
+    """The id of the stabilisation constant of `s` on a protein, `Kstab_cyp2e1_<s>`.
+
+    The unbound concentration of the stabiliser which halves the degradation
+    of the protein, `kdeg*E/(1 + I/Kstab)`.
+    """
+    return f"Kstab_{protein.lower()}_{s}"
 
 
 _PARTS = "|".join(p.value for p in Part)

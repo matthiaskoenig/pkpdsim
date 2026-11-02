@@ -62,6 +62,7 @@ from pkpdsim.pbpk import (
     SegmentedIntestine,
     Sex,
     SlowPool,
+    Stabilisation,
     Substance,
     ThresholdReabsorption,
     Transport,
@@ -93,8 +94,9 @@ def standard() -> PBPKDefinition:
     `drg` (merged tissue, urine), its metabolite `drg_m` (vascular), `prf`
     (flow-limited, erythrocytes in equilibrium, a Kp override of adipose),
     `prm` (full form, kinetic erythrocytes, transport), `hil` (Hill kinetics
-    in the kidney) and `inh` (a mechanism-based inhibitor and inducer of the
-    CYP2D6 which metabolises it), `spl` (split by a fraction into `spl_m1`
+    in the kidney) and `inh` (a mechanism-based inhibitor, inducer and
+    stabiliser of the CYP2D6 which metabolises it, whose degradation rate is
+    that of the definition), `spl` (split by a fraction into `spl_m1`
     and the remainder `spl_m2`); the OATP1B3 uptake `PRMIN3` of `prm` has a
     capacity as a ratio of `PRMIN`; `drg` inhibits CYP2C9 competitively;
     `drg`, `prf` and `prm` have an endogenous baseline; a PD component reads
@@ -144,6 +146,7 @@ def standard() -> PBPKDefinition:
                 distribution=Kp(1.0, ftissue=1.0),
                 inhibits=(Inhibition("CYP2D6", "mechanism", ki=0.005, kinact=0.05),),
                 induces=(Induction("CYP2D6", emax=2.0, ec50=0.1),),
+                stabilises=(Stabilisation("CYP2D6", ki=0.05),),
             ),
             Substance(
                 "spl",
@@ -237,6 +240,7 @@ def standard() -> PBPKDefinition:
         ],
         pd=[_cell_reader()],
         slow_pools=[SlowPool("drg", frozenset({Organ.MUSCLE}), k=1e-3, kp=1.5)],
+        turnover={"CYP2D6": 0.0267},
     )
 
 

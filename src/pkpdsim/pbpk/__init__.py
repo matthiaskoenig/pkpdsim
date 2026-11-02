@@ -61,7 +61,13 @@ from pkpdsim.pbpk.physiology import (
     reference_individual,
 )
 from pkpdsim.pbpk.pregnancy import Pregnancy
-from pkpdsim.pbpk.proteins import PROTEINS, Induction, Inhibition, Protein
+from pkpdsim.pbpk.proteins import (
+    PROTEINS,
+    Induction,
+    Inhibition,
+    Protein,
+    Stabilisation,
+)
 from pkpdsim.pbpk.regional import (
     derive_regional_absorption,
     regional_key,
@@ -210,6 +216,7 @@ __all__ = [
     "SlowPool",
     "Source",
     "Species",
+    "Stabilisation",
     "StandardOrgan",
     "Substance",
     "ThresholdReabsorption",

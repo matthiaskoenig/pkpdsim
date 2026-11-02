@@ -15,6 +15,7 @@ from pkpdsim.pbpk import (
     Membrane,
     Metabolism,
     Organ,
+    Stabilisation,
     Substance,
     Transport,
 )
@@ -40,7 +41,8 @@ chemistry = [
     ),
     # kidney: elimination of hil with Hill kinetics, no protein
     Metabolism("HILEL", Organ.KIDNEY, "hil", {}, Hill(vmax=1e-3, km=0.01, n=2.0)),
-    # liver: elimination of inh by the CYP2D6 it inactivates and induces
+    # liver: elimination of inh by the CYP2D6 it inactivates, induces and
+    # stabilises
     Metabolism(
         "INHEL", Organ.LIVER, "inh", {}, MM(vmax=1e-3, km=0.02), protein="CYP2D6"
     ),
@@ -72,6 +74,7 @@ inhibitor = Substance(
     distribution=Kp(1.0, ftissue=1.0),
     inhibits=(Inhibition("CYP2D6", "mechanism", ki=0.005, kinact=0.05),),
     induces=(Induction("CYP2D6", emax=2.0, ec50=0.1),),
+    stabilises=(Stabilisation("CYP2D6", ki=0.05),),
 )
 print([p.sid for p in chemistry], [i.kind for i in inhibitor.inhibits])
 ```
@@ -254,9 +257,9 @@ Degradation rate `kdeg_<protein>` of the turnover state (1/hr): li 0.0193, si 0.
     - `UniProt`: The UniProt Consortium. UniProt: the Universal Protein Knowledgebase in 2023. Nucleic Acids Res 51(D1):D523-D531, 2023. [doi:10.1093/nar/gkac1052](https://doi.org/10.1093/nar/gkac1052)
 <!-- end generated -->
 
-## Inhibition and induction
+## Inhibition, induction and stabilisation
 
-An inhibition or an induction is declared on the inhibitor (`Substance.inhibits`, `Substance.induces`), and acts on every process of the protein in every organ, with the unbound concentration of the inhibitor in the compartment from which the process takes its substrate (the part of the substrate of a metabolism, the interstitium of a basolateral influx, the cell of an efflux): `Inhibition(protein, kind, ki, kiu, kinact)` with the kinds `competitive`, `noncompetitive`, `uncompetitive`, `mixed` and `mechanism` (mechanism-based), and `Induction(protein, emax, ec50)`. The constants are parameters of the top model, `Ki_<protein>_<s>`, `Kiu_<protein>_<s>`, `kinact_<protein>_<s>`, `Emax_<protein>_<s>`, `EC50_<protein>_<s>`. A substance inhibits a protein once and induces it once.
+An inhibition, an induction or a stabilisation is declared on the substance which acts (`Substance.inhibits`, `Substance.induces`, `Substance.stabilises`), and acts on every process of the protein in every organ, with the unbound concentration of the inhibitor in the compartment from which the process takes its substrate (the part of the substrate of a metabolism, the interstitium of a basolateral influx, the cell of an efflux): `Inhibition(protein, kind, ki, kiu, kinact)` with the kinds `competitive`, `noncompetitive`, `uncompetitive`, `mixed` and `mechanism` (mechanism-based), `Induction(protein, emax, ec50)` and `Stabilisation(protein, ki)`. The constants are parameters of the top model, `Ki_<protein>_<s>`, `Kiu_<protein>_<s>`, `kinact_<protein>_<s>`, `Emax_<protein>_<s>`, `EC50_<protein>_<s>`, `Kstab_<protein>_<s>`. A substance inhibits a protein once, induces it once and stabilises it once.
 
 The rate laws of mutually exclusive inhibitors (Segel 1975), with the competitive sum `c = sum I/Ki` (competitive, mixed with its competitive constant, noncompetitive, and mechanism-based with `Ki = KI`) and the uncompetitive sum `u = sum I/Kiu` (uncompetitive, mixed, noncompetitive), are `Vmax*V*C/(Km*(1 + c) + C*(1 + u))` for Michaelis-Menten, the Hill law with `Vmax_app = Vmax/(1 + u)` and `Km_app = Km*(1 + c)/(1 + u)`, and `k*C/(1 + c)` for first order (`k*V*C/(1 + c)` per volume; the limit `C << Km`, which an uncompetitive inhibitor does not change). The competitive inhibition of CYP2C9 by `drg`:
 
@@ -264,12 +267,20 @@ The rate laws of mutually exclusive inhibitors (Segel 1975), with the competitiv
 PRFEL: Cor_prf -> = f_cyp2c9 * fimp_cyp2c9 * f_functional * PRFEL_k * Vli * fu_prf / K_or_prf * Cor_prf / (1 + fu_drg / Kp_drg * Cti_drg / Ki_cyp2c9_drg)
 ```
 
-A mechanism-based inhibition or an induction gives the organ the turnover state `E_<protein>`, the amount of the protein relative to its baseline (initially 1), which multiplies the rates of the protein (Mayhew 2000, Almond 2009, Fahmi 2008); the degradation rate `kdeg_<protein>` is that of hepatic CYP3A4 (Rowland Yeo 2011) in every organ but the intestine (Greenblatt 2003), a choice of the library for the proteins without their own estimate. `inh` inactivates and induces the CYP2D6 which metabolises it:
+A mechanism-based inhibition, an induction or a stabilisation gives the organ the turnover state `E_<protein>`, the amount of the protein relative to its baseline (initially 1), which multiplies the rates of the protein (Mayhew 2000, Almond 2009, Fahmi 2008):
 
-```equations title="turnover of CYP2D6 under mechanism-based inhibition and induction"
-d(E_cyp2d6)/dt = kdeg_cyp2d6 * (1 + Emax_cyp2d6_inh * (fu_inh / Kp_inh) * Cti_inh / (EC50_cyp2d6_inh + fu_inh / Kp_inh * Cti_inh)) - kdeg_cyp2d6 * E_cyp2d6 - kinact_cyp2d6_inh * (fu_inh / Kp_inh) * Cti_inh / (Ki_cyp2d6_inh + fu_inh / Kp_inh * Cti_inh) * E_cyp2d6
+```
+dE/dt = kdeg*(1 + sum Emax*I/(EC50 + I)) - kdeg*E/(1 + sum I/Kstab) - sum kinact*I/(KI + I)*E
+```
+
+The induction raises the synthesis, the stabilisation slows the degradation (the bound substance protects the protein, ethanol and CYP2E1, Roberts 1995), so that without an inactivation the amount approaches `(1 + sum Emax*I/(EC50 + I))*(1 + sum I/Kstab)`; without a stabilisation the degradation is `kdeg*E`. The degradation rate `kdeg_<protein>` is that of hepatic CYP3A4 (Rowland Yeo 2011) in every organ but the intestine (Greenblatt 2003), a choice of the library for the proteins without their own estimate; a protein with its own estimate gets it in `PBPKDefinition.turnover` (a number or a `Value` in 1/hr with its source, as the table above, or a `Value` in 1/min, a fitted value of `kdeg_<protein>` with its uncertainty), which replaces the value of the organ in every organ where the protein has a turnover state, `turnover={"CYP2C19": Value(0.0267, U.per_hr, source=...)}` gives `LI__kdeg_cyp2c19` 0.0267/60 1/min (a half-life of 26 hr). `inh` inactivates, induces and stabilises the CYP2D6 which metabolises it (`turnover={"CYP2D6": 0.0267}`):
+
+```equations title="turnover of CYP2D6 under mechanism-based inhibition, induction and stabilisation"
+d(E_cyp2d6)/dt = kdeg_cyp2d6 * (1 + Emax_cyp2d6_inh * (fu_inh / Kp_inh) * Cti_inh / (EC50_cyp2d6_inh + fu_inh / Kp_inh * Cti_inh)) - kdeg_cyp2d6 * E_cyp2d6 / (1 + fu_inh / Kp_inh * Cti_inh / Kstab_cyp2d6_inh) - kinact_cyp2d6_inh * (fu_inh / Kp_inh) * Cti_inh / (Ki_cyp2d6_inh + fu_inh / Kp_inh * Cti_inh) * E_cyp2d6
 INHEL: Cti_inh -> = f_cyp2d6 * fimp_cyp2d6 * E_cyp2d6 * f_functional * INHEL_Vmax * Vli * (fu_inh / Kp_inh * Cti_inh) / (INHEL_Km * (1 + fu_inh / Kp_inh * Cti_inh / Ki_cyp2d6_inh) + fu_inh / Kp_inh * Cti_inh)
 ```
+
+A substance with a generated steady state (`CustomReaction.stationary`) which inactivates, induces or stabilises a protein is refused: the turnover state starts at 1, not at its steady state at the start of the substance.
 
 Models whose interactions are factors in the experiments (`LI__f_cyp3a4` set by a coadministration) keep them as factors; the declared inhibition is what makes interactions work across packages in a coupled physiology (`PBPKDefinition.combine`).
 

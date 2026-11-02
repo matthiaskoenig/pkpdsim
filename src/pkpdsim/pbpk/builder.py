@@ -267,8 +267,9 @@ def organ_context(
             (`pkpdsim.pbpk.stationary.steady_plan`), `None` for none.
 
     Returns:
-        The substances with their parts in the organ, the chemistry and the
-        inhibitions and inductions of the substances.
+        The substances with their parts in the organ, the chemistry, the
+        inhibitions, inductions and stabilisations of the substances and the
+        degradation rate constants of the proteins of the definition.
     """
     chemistry = tuple(definition.chemistry)
     substances = tuple(definition.substances)
@@ -279,6 +280,8 @@ def organ_context(
         chemistry=chemistry,
         inhibitions=tuple((s.sid, i) for s in substances for i in s.inhibits),
         inductions=tuple((s.sid, i) for s in substances for i in s.induces),
+        stabilisations=tuple((s.sid, i) for s in substances for i in s.stabilises),
+        turnover=definition.turnover,
         sex=definition.sex,
         species=definition.species,
         routes=tuple(definition.routes),
@@ -2001,11 +2004,11 @@ class _Top:
         )
 
     def _interactions(self, s: Substance) -> None:
-        """The constants of the inhibitions and inductions of a substance.
+        """The constants of the inhibitions, inductions and stabilisations of a substance.
 
         Only of a protein which a process of the definition uses: the organs
         with such a process read them (`Ki`, `Kiu`, `kinact`, `Emax`,
-        `EC50`), one value for every organ.
+        `EC50`, `Kstab`), one value for every organ.
         """
         used = {
             p.protein
@@ -2087,6 +2090,29 @@ class _Top:
                         "ec50",
                         protein=ind.protein,
                     ),
+                ]
+            )
+        for stab in s.stabilises:
+            if stab.protein not in used:
+                continue
+            self.add(
+                [
+                    annotate(
+                        value_parameter(
+                            ids.kstab(stab.protein, s.sid),
+                            stab.ki,
+                            U.mM,
+                            f"Kstab {stab.protein} {s.sid}",
+                            SBO.INHIBITORY_CONSTANT,
+                            f"Unbound concentration of {s.sid} which halves the "
+                            f"degradation of {stab.protein}, `kdeg*E/(1 + I/Kstab)`: "
+                            "the bound substance protects the protein from its "
+                            "degradation.\n\nSource of the mechanism: "
+                            f"{cite('Roberts1995')}",
+                        ),
+                        "ki",
+                        protein=stab.protein,
+                    )
                 ]
             )
 

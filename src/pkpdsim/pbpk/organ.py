@@ -96,7 +96,7 @@ from pkpdsim.pbpk.placement import (
     unbound,
     with_modifiers,
 )
-from pkpdsim.pbpk.proteins import Induction, Inhibition
+from pkpdsim.pbpk.proteins import Induction, Inhibition, Stabilisation
 from pkpdsim.pbpk.routes import Route
 from pkpdsim.pbpk.slow_pool import SlowPool
 from pkpdsim.pbpk.stationary import (
@@ -111,6 +111,7 @@ from pkpdsim.pbpk.stationary import (
 )
 from pkpdsim.pbpk.substance import Substance
 from pkpdsim.pbpk.units import U
+from pkpdsim.pbpk.values import Q
 from pkpdsim.species import Species as BuildSpecies
 
 if TYPE_CHECKING:
@@ -152,6 +153,11 @@ class OrganContext:
         steady: the generated steady state of the definition
             (`pkpdsim.pbpk.stationary.steady_plan`): the species of its
             substances start at their steady state, `None` for none.
+        stabilisations: the stabilisations as (stabiliser id,
+            stabilisation).
+        turnover: the degradation rate constants of the proteins of the
+            definition by protein id (`PBPKDefinition.turnover`), which
+            replace the value of the organ.
     """
 
     organ: Organ
@@ -166,6 +172,8 @@ class OrganContext:
     top: Mapping[str, tuple[str, UnitType]] = field(default_factory=dict)
     slow_pools: tuple[SlowPool, ...] = ()
     steady: SteadyPlan | None = None
+    stabilisations: tuple[tuple[str, Stabilisation], ...] = ()
+    turnover: Mapping[str, Q] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

@@ -40,6 +40,8 @@ from pkpdsim.pbpk import (
     Excretion,
     FirstOrder,
     Formula,
+    Induction,
+    Inhibition,
     Kp,
     Membrane,
     Metabolism,
@@ -608,6 +610,60 @@ def endogenous_reference_definition() -> PBPKDefinition:
     )
 
 
+def turnover_reference_definition() -> PBPKDefinition:
+    """The definition of the stored turnover reference: turnover states without its options.
+
+    `drg` metabolised by CYP3A4 in the liver and the small intestine and by
+    CYP2C19 in the liver; `inh` (fu 0.5, Kp 1.5, not eliminated) inactivates
+    CYP3A4 (mechanism-based) and induces CYP2C19, so both proteins have their
+    turnover state, without a degradation rate of the definition
+    (`PBPKDefinition.turnover`) and without a stabilisation. The stored comp
+    and flat SBML were built at pkpdsim f2d7c13, before both options.
+    """
+    return PBPKDefinition(
+        sid="turnover_reference",
+        substances=[
+            simple_drug(),
+            Substance(
+                "inh",
+                name="inhibitor",
+                mr=400.0,
+                binding=Binding(fu=0.5),
+                distribution=Kp(1.5, ftissue=1.0),
+                inhibits=(Inhibition("CYP3A4", "mechanism", 0.005, kinact=1e-3),),
+                induces=(Induction("CYP2C19", 2.0, 0.01),),
+            ),
+        ],
+        chemistry=[
+            Metabolism(
+                "DRG3A4",
+                Organ.LIVER,
+                "drg",
+                {},
+                MM(vmax=1e-3, km=0.01),
+                protein="CYP3A4",
+            ),
+            Metabolism(
+                "DRG2C19",
+                Organ.LIVER,
+                "drg",
+                {},
+                MM(vmax=5e-4, km=0.02),
+                protein="CYP2C19",
+            ),
+            Metabolism(
+                "DRGGU",
+                Organ.SMALL_INTESTINE,
+                "drg",
+                {},
+                MM(vmax=1e-3, km=0.01),
+                protein="CYP3A4",
+            ),
+        ],
+        routes=[Route.iv("drg"), Route.oral("drg"), Route.iv("inh")],
+    )
+
+
 def dateless(text: str) -> list[str]:
     """The lines of an SBML text without the dates of the model history."""
     return [line for line in text.splitlines() if not _DATE.search(line)]
@@ -637,7 +693,7 @@ def assert_reference_sbml(result: BuildResult) -> None:
     and with the heart failure factors of the consensus (Leithe 1984), the
     kidney volume and transit of CKD of Malik 2020 and the cirrhosis factors
     cited from Edginton 2008 (factors, notes and sources only), and all rebuilt with the factors of the sex of the female build and the constant factors of the age of a build without the physiology over age (`PBPKDefinition.age`, which is not the default: the reference values and the factors are those of the individual of 35 years, as before, and the parameters `fage_*` are their constant 1; the values of the default individual unchanged); a change of the library which changes the
-    SBML of every model on purpose rebuilds them and says so, and all rebuilt with the notes of the age table read from the primary publications (`age_human.toml`; the notes of the age factors and the two sources Fomon 1982 and Jopling 2009 only, no value changed) and with the citation of NHANES which names the script of the waist regression (the one line of the sources of the hematocrit and the albumin; the waist itself belongs to the adipose option, which these references do not have), and with the citation of `ModelChoice` which names both libraries of pkpdsim, the PBPK and the machine perfusion library (that text only).
+    SBML of every model on purpose rebuilds them and says so, and all rebuilt with the notes of the age table read from the primary publications (`age_human.toml`; the notes of the age factors and the two sources Fomon 1982 and Jopling 2009 only, no value changed) and with the citation of NHANES which names the script of the waist regression (the one line of the sources of the hematocrit and the albumin; the waist itself belongs to the adipose option, which these references do not have), and with the citation of `ModelChoice` which names both libraries of pkpdsim, the PBPK and the machine perfusion library (that text only). `turnover_reference_definition()` was built at the commit before the degradation rate of a protein and the stabilisation, with the library of this branch.
     """
     for path in (result.comp_path, result.flat_path):
         reference = gzip.decompress((REFERENCE / f"{path.name}.gz").read_bytes())
