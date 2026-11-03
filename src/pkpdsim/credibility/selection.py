@@ -102,11 +102,14 @@ class Selections:
             context.
         unclaimed: the validation points of no evidence and no limitation, with
             the columns `fit`, `experiment`, `mapping` and `n` (the points).
+        limitation_evidence: the selection of every limitation, the ones of the
+            model first, with the context `""`, then the ones of the contexts.
     """
 
     evidence: tuple[EvidenceSelection, ...]
     limitations: pd.Index
     unclaimed: pd.DataFrame
+    limitation_evidence: tuple[EvidenceSelection, ...] = ()
 
 
 class SelectionError(ValueError):
@@ -303,17 +306,34 @@ def select(credibility: Credibility, fits: FitTable) -> Selections:
         SelectionError: with every problem of the selection.
     """
     selector = _Selector(fits)
+    limitation_evidence: list[EvidenceSelection] = []
+
+    def limitation(context: str, evidence: Evidence, who: str) -> _Mask:
+        """Get the rows of a limitation and keep its selection."""
+        mask = selector.limitation(evidence, who)
+        limitation_evidence.append(
+            EvidenceSelection(
+                context=context,
+                evidence=evidence,
+                rows=selector.rows(mask),
+                outliers_dropped=0,
+                limitation_subtracted=0,
+            )
+        )
+        return mask
+
     model_limitations = selector.none()
     for evidence in credibility.limitations:
-        model_limitations |= selector.limitation(
-            evidence, f"model limitation '{evidence.name}'"
+        model_limitations |= limitation(
+            "", evidence, f"model limitation '{evidence.name}'"
         )
     limitations: dict[str, _Mask] = {}
     quantities: dict[str, _Mask] = {}
     for cou in credibility.contexts:
         mask = model_limitations.copy()
         for evidence in cou.limitations:
-            mask |= selector.limitation(
+            mask |= limitation(
+                cou.id,
                 evidence,
                 f"context of use '{cou.id}': the limitation '{evidence.name}'",
             )
@@ -398,6 +418,7 @@ def select(credibility: Credibility, fits: FitTable) -> Selections:
         evidence=tuple(selected[key] for key in sorted(selected)),
         limitations=selector.rows(all_limitations),
         unclaimed=_count(fits.table, unclaimed),
+        limitation_evidence=tuple(limitation_evidence),
     )
 
 

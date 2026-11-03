@@ -1,0 +1,333 @@
+"""Tests of the assessment of the contexts of use."""
+
+import dataclasses
+import json
+import math
+from pathlib import Path
+
+import pytest
+from credibility_tables import fit_table
+from pkpdsim_credibility.credibility import CREDIBILITY
+from pkpdsim_credibility.fitting import DOSE, ZERO
+
+from pkpdsim.credibility import (
+    UNCLAIMED,
+    ContextOfUse,
+    ContextResult,
+    CouLevel,
+    Coverage,
+    CoverageEntry,
+    Credibility,
+    CredibilityAssessment,
+    Domain,
+    Evidence,
+    EvidenceRole,
+    FactorStatus,
+    FitTable,
+    Provenance,
+    Unclaimed,
+    Verdict,
+    assess,
+    assess_table,
+    describe_selection,
+)
+from pkpdsim.credibility.factors import FACTORS
+from pkpdsim.fit import metadata_filter, named_filter
+from pkpdsim.metadata import Health, Route
+from pkpdsim.model import PKPDModel
+
+PROVENANCE = Provenance(
+    model="credibility",
+    title="Toy model with every kind of evidence",
+    fits=["DECAY_fit"],
+    versions={"pkpdsim": "0.0.0"},
+    commit=None,
+    dirty=None,
+    date="2026-11-03T12:00:00+01:00",
+)
+
+
+def _assess(
+    fits: FitTable, credibility: Credibility = CREDIBILITY
+) -> CredibilityAssessment:
+    """Assess a declaration on a table."""
+    return assess_table(credibility, fits, PROVENANCE)
+
+
+def _with(*contexts: ContextOfUse) -> Credibility:
+    """Get the declaration of the test package with other contexts."""
+    return dataclasses.replace(CREDIBILITY, contexts=contexts)
+
+
+def _context(assessment: CredibilityAssessment, id: str) -> ContextResult:
+    """Get the result of a context of use."""
+    (result,) = (c for c in assessment.contexts if c.id == id)
+    return result
+
+
+def _coverage(
+    assessment: CredibilityAssessment, context: str, field: str, value: str
+) -> CoverageEntry:
+    """Get the coverage of a value of a context of use."""
+    (entry,) = (
+        e
+        for e in assessment.coverage
+        if (e.context, e.field, e.value) == (context, field, value)
+    )
+    return entry
+
+
+def test_a_supported_context() -> None:
+    dose = _context(_assess(fit_table()), "dose")
+    assert dose.verdict is Verdict.SUPPORTED
+    assert dose.verdict.label == "supported"
+    assert dose.acceptance
+    assert all(result["met"] is True for result in dose.acceptance)
+    # fm_dose and fm_subject, 5 points each
+    assert dose.n_decisive == 10
+
+
+def test_a_not_supported_context() -> None:
+    dose = _context(_assess(fit_table(3.0)), "dose")
+    assert dose.verdict is Verdict.NOT_SUPPORTED
+    assert dose.verdict.label == "not supported"
+    assert any(result["met"] is False for result in dose.acceptance)
+
+
+def test_an_uncovered_value_without_extrapolation() -> None:
+    fits = fit_table()
+    table = fits.table.assign(
+        health=fits.table.health.replace("RENAL_IMPAIRMENT", "HEALTHY")
+    )
+    fits = dataclasses.replace(fits, table=table)
+    assessment = _assess(fits)
+    renal = _context(assessment, "renal")
+    assert renal.verdict is Verdict.INSUFFICIENT_EVIDENCE
+    assert all(result["met"] is True for result in renal.acceptance)
+    uncovered = _coverage(assessment, "renal", "health", "RENAL_IMPAIRMENT")
+    assert uncovered.coverage is Coverage.UNCOVERED
+    assert uncovered.claimed
+    assert uncovered.n_points == 0
+    healthy = _coverage(assessment, "renal", "health", "HEALTHY")
+    assert healthy.coverage is Coverage.VALIDATED
+    assert healthy.n_points == 5
+
+    cou = dataclasses.replace(
+        CREDIBILITY.context("renal"), extrapolation="the kidney is a clearance"
+    )
+    renal = _context(_assess(fits, _with(cou)), "renal")
+    assert renal.verdict is Verdict.SUPPORTED_WITH_EXTRAPOLATION
+    assert renal.verdict.label == "supported with extrapolation"
+
+
+def test_a_criterion_without_applicable_points() -> None:
+    cou = dataclasses.replace(
+        CREDIBILITY.context("dose"),
+        domain=Domain(),
+        evidence=(Evidence("zeros", EvidenceRole.VALIDATION, named_filter(ZERO)),),
+    )
+    result = _context(_assess(fit_table(), _with(cou)), "dose")
+    (within,) = (r for r in result.acceptance if r["name"] == "within_2fold")
+    assert within["met"] is None
+    assert math.isnan(within["value"])
+    assert result.n_decisive == 5
+    assert result.verdict is Verdict.INSUFFICIENT_EVIDENCE
+    assert result.verdict.label == "insufficient evidence"
+
+
+def test_no_decisive_evidence_is_insufficient() -> None:
+    cou = dataclasses.replace(
+        CREDIBILITY.context("dose"),
+        domain=Domain(),
+        evidence=(
+            Evidence(
+                "fitted", EvidenceRole.CALIBRATION, metadata_filter(route={Route.IV})
+            ),
+        ),
+        extrapolation="the decay is linear",
+    )
+    result = _context(_assess(fit_table(), _with(cou)), "dose")
+    assert result.n_decisive == 0
+    assert result.verdict is Verdict.INSUFFICIENT_EVIDENCE
+
+
+def test_c1_decides_on_calibration() -> None:
+    cou = dataclasses.replace(
+        CREDIBILITY.context("describe"),
+        domain=Domain(metadata={"route": (Route.IV,)}),
+    )
+    assessment = _assess(fit_table(), _with(cou))
+    describe = _context(assessment, "describe")
+    assert describe.verdict is Verdict.SUPPORTED
+    # CredA.fm_train and CredB.fm_dose
+    assert describe.n_decisive == 10
+    iv = _coverage(assessment, "describe", "route", "IV")
+    assert iv.coverage is Coverage.CALIBRATED
+    assert iv.n_points == 10
+
+    # a C2 context on the same evidence is not decided on calibration
+    interpolate = dataclasses.replace(
+        cou, level=CouLevel.C2, extrapolation="the decay is linear"
+    )
+    result = _context(_assess(fit_table(), _with(interpolate)), "describe")
+    assert result.n_decisive == 0
+    assert result.verdict is Verdict.INSUFFICIENT_EVIDENCE
+
+
+def test_the_limitations_are_reported_apart() -> None:
+    assessment = _assess(fit_table())
+    (limitation,) = assessment.limitations
+    assert limitation.context == ""
+    assert limitation.name == "scaled data"
+    assert limitation.role is EvidenceRole.LIMITATION
+    assert limitation.n_points == 2
+    assert limitation.n_mappings == 1
+    assert limitation.metrics["within_2fold"] == 0.0
+    for factor in (0.01, 1.0, 3.0, 100.0):
+        other = _assess(fit_table(factors={("CredA", "fm_limit"): factor}))
+        assert [c.acceptance for c in other.contexts] == [
+            c.acceptance for c in assessment.contexts
+        ]
+
+
+def test_the_limitations_of_a_context() -> None:
+    cou = dataclasses.replace(
+        CREDIBILITY.context("dose"),
+        limitations=(
+            Evidence(
+                "scaled",
+                EvidenceRole.LIMITATION,
+                named_filter({"CredA": {"fm_limit"}}),
+            ),
+        ),
+    )
+    assessment = _assess(fit_table(), _with(cou))
+    assert [(e.context, e.name) for e in assessment.limitations] == [
+        ("", "scaled data"),
+        ("dose", "scaled"),
+    ]
+
+
+def test_the_evidence() -> None:
+    assessment = _assess(fit_table())
+    (doses,) = (e for e in assessment.evidence if e.name == "doses")
+    assert doses.context == "dose"
+    assert doses.role is EvidenceRole.VALIDATION
+    assert doses.selection == "CredA: fm_dose"
+    assert (doses.n_points, doses.n_mappings, doses.n_studies) == (5, 1, 1)
+    assert doses.metrics["GMFE"] == 1.0
+    assert doses.metrics["within_2fold"] == 100.0
+    (other,) = (e for e in assessment.evidence if e.name == "other healthy data")
+    # the limitation is healthy and intravenous as well
+    assert other.limitation_subtracted == 2
+    (fitted,) = (e for e in assessment.evidence if e.context == "describe")
+    assert (fitted.n_mappings, fitted.n_studies) == (2, 2)
+    assert assessment.unclaimed == [
+        {"fit": "DECAY", "experiment": "CredB", "mapping": "fm_zero", "n": 5}
+    ]
+
+
+def test_the_values_outside_the_claim() -> None:
+    cou = dataclasses.replace(
+        CREDIBILITY.context("dose"),
+        evidence=(
+            Evidence(
+                "doses",
+                EvidenceRole.VALIDATION,
+                named_filter({"CredA": {"fm_dose", "fm_renal"}}),
+            ),
+        ),
+    )
+    assessment = _assess(fit_table(), _with(cou))
+    outside = _coverage(assessment, "dose", "health", "RENAL_IMPAIRMENT")
+    assert outside == CoverageEntry(
+        context="dose",
+        field="health",
+        value="RENAL_IMPAIRMENT",
+        coverage=None,
+        claimed=False,
+        n_points=5,
+    )
+    assert _coverage(assessment, "dose", "health", "HEALTHY").claimed
+
+
+def test_the_factors() -> None:
+    assessment = _assess(fit_table())
+    assert len(FACTORS) == 13
+    for context in assessment.contexts:
+        assert [f["id"] for f in context.factors] == [f.id for f in FACTORS]
+        assert [f["status"] for f in context.factors] == [
+            f.status.value for f in FACTORS
+        ]
+    statuses = {f.id: (f.status, f.step) for f in FACTORS}
+    assert statuses["numerical_code_verification"] == (FactorStatus.PLATFORM, None)
+    assert statuses["model_inputs"] == (FactorStatus.NOT_ASSESSED, 4)
+    assert statuses["output_comparison"] == (FactorStatus.ASSESSED, None)
+
+
+def test_the_json_round_trip(tmp_path: Path) -> None:
+    cou = dataclasses.replace(
+        CREDIBILITY.context("dose"),
+        domain=Domain(),
+        evidence=(Evidence("zeros", EvidenceRole.VALIDATION, named_filter(ZERO)),),
+    )
+    assessment = _assess(fit_table(), _with(cou, CREDIBILITY.context("describe")))
+    (zeros,) = (e for e in assessment.evidence if e.name == "zeros")
+    assert math.isnan(zeros.metrics["GMFE"])
+    path = tmp_path / "credibility.json"
+    assessment.to_json(path)
+    data = json.loads(path.read_text())
+    (written,) = (e for e in data["evidence"] if e["name"] == "zeros")
+    assert written["metrics"]["GMFE"] is None
+    read = CredibilityAssessment.from_json(path)
+    assert read.to_dict() == assessment.to_dict()
+    (zeros,) = (e for e in read.evidence if e.name == "zeros")
+    assert math.isnan(zeros.metrics["GMFE"])
+    assert read.contexts[0].verdict is Verdict.INSUFFICIENT_EVIDENCE
+    assert read.provenance == PROVENANCE
+
+
+def test_describe_selection() -> None:
+    assert (
+        describe_selection(
+            named_filter({"CredB": {"fm_zero", "fm_dose"}, "CredA": {"fm_dose"}})
+        )
+        == "CredA: fm_dose; CredB: fm_dose, fm_zero"
+    )
+    assert (
+        describe_selection(
+            metadata_filter(
+                route={Route.PO, Route.IV}, excluded={"health": {Health.HEALTHY}}
+            )
+        )
+        == "route in [IV, PO] and health not in [HEALTHY]"
+    )
+    assert describe_selection(UNCLAIMED) == "unclaimed validation data"
+    assert (
+        describe_selection(Unclaimed(within=named_filter(DOSE)))
+        == "unclaimed validation data within CredA: fm_dose"
+    )
+
+    def by_key(key: str, fit_mapping: object) -> bool:
+        return key == "fm_dose"
+
+    assert describe_selection(by_key) == by_key.__qualname__
+
+
+def test_assess_the_test_package(credibility_model: PKPDModel) -> None:
+    assessment = assess(credibility_model)
+    assert [c.id for c in assessment.contexts] == ["describe", "dose", "renal"]
+    assert assessment.provenance.fits == list(credibility_model.fits)
+    assert assessment.provenance.model == credibility_model.name
+    assert set(assessment.provenance.versions) == {
+        "pkpdsim",
+        "sbmlsim",
+        "sbmlutils",
+        "libroadrunner",
+    }
+    assert {c.verdict for c in assessment.contexts} <= set(Verdict)
+
+
+@pytest.mark.parametrize("verdict", list(Verdict))
+def test_the_labels(verdict: Verdict) -> None:
+    assert verdict.label == verdict.value.replace("_", " ")

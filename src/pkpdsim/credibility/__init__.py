@@ -4,9 +4,26 @@ A model declares what it is used for (`ContextOfUse`), how risky a wrong answer
 is, which evidence supports it and when it is accepted (`Credibility`). The
 evidence is selected from the data points of the adopted fits (`evaluate_fits`,
 `mapping_table`) with the kinds their records store (`select`,
-`check_declaration`).
+`check_declaration`). The assessment (`assess`, `CredibilityAssessment`) gives
+every context of use its metrics, acceptance, domain coverage, verdict and the
+factors of V&V 40 (`FACTORS`) as plain data, written as JSON.
 """
 
+from pkpdsim.credibility.assessment import (
+    AcceptanceRecord,
+    ContextResult,
+    Coverage,
+    CoverageEntry,
+    CredibilityAssessment,
+    EvidenceResult,
+    Provenance,
+    QuantityRecord,
+    UnclaimedRecord,
+    Verdict,
+    assess,
+    assess_table,
+    describe_selection,
+)
 from pkpdsim.credibility.check import check_declaration
 from pkpdsim.credibility.declaration import (
     UNCLAIMED,
@@ -30,6 +47,7 @@ from pkpdsim.credibility.declaration import (
     Selection,
     Unclaimed,
 )
+from pkpdsim.credibility.factors import FACTORS, Factor, FactorRecord, FactorStatus
 from pkpdsim.credibility.records import (
     FitTable,
     KindMismatchError,
@@ -55,35 +73,52 @@ from pkpdsim.credibility.selection import (
 
 __all__ = [
     "DEFAULT_ACCEPTANCE",
+    "FACTORS",
     "RISK_TABLE",
     "UNCLAIMED",
     "Acceptance",
+    "AcceptanceRecord",
     "AcceptanceResult",
     "AcceptanceRule",
     "AfeRange",
     "Consequence",
     "ContextOfUse",
+    "ContextResult",
     "CouLevel",
+    "Coverage",
+    "CoverageEntry",
     "Credibility",
+    "CredibilityAssessment",
     "DeclarationError",
     "Domain",
     "Evidence",
+    "EvidenceResult",
     "EvidenceRole",
     "EvidenceSelection",
+    "Factor",
+    "FactorRecord",
+    "FactorStatus",
     "FitTable",
     "Influence",
     "KindMismatchError",
     "Level",
     "MappingLookup",
     "MaxGmfe",
+    "Provenance",
     "QuantityOfInterest",
+    "QuantityRecord",
     "Risk",
     "Selection",
     "SelectionError",
     "Selections",
     "Unclaimed",
+    "UnclaimedRecord",
+    "Verdict",
+    "assess",
+    "assess_table",
     "check_declaration",
     "default_acceptance",
+    "describe_selection",
     "evaluate_fits",
     "kind_differences",
     "mapping_table",

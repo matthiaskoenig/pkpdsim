@@ -6,13 +6,9 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
-from pkpdsim_credibility import MODEL
+from credibility_tables import KINDS, fit_table
 from pkpdsim_credibility.credibility import CREDIBILITY
-from pkpdsim_credibility.experiments import CredA, CredB
 from pkpdsim_credibility.fitting import DOSE
-from sbmlsim.fit import FitMapping
-from sbmlsim.fit.helpers import FitMappings
-from sbmlsim.fit.metrics import metadata_dict
 
 from pkpdsim.credibility import (
     UNCLAIMED,
@@ -41,53 +37,13 @@ from pkpdsim.fit import metadata_filter, named_filter
 from pkpdsim.metadata import Health, Route
 from pkpdsim.model import PKPDModel
 
-#: the kinds of the adopted fit of the test package, see `test_credibility_package`
-KINDS = {
-    ("CredA", "fm_train"): "training",
-    ("CredA", "fm_dose"): "validation",
-    ("CredA", "fm_renal"): "validation",
-    ("CredA", "fm_limit"): "validation",
-    ("CredA", "fm_subject"): "validation",
-    ("CredA", "fm_outlier"): "outlier",
-    ("CredB", "fm_dose"): "training",
-    ("CredB", "fm_zero"): "validation",
-}
-#: the number of data points of a mapping of the hand-built table
-POINTS = {("CredA", "fm_limit"): 2, ("CredA", "fm_outlier"): 3}
 _A = (QuantityOfInterest("A", "the concentration of A"),)
 
 
 @pytest.fixture(scope="module")
 def fits() -> FitTable:
     """Get a table of the data points of the kinds of the test package."""
-    mappings = FitMappings(
-        experiment_classes=[CredA, CredB],
-        base_path=MODEL.path,
-        data_path=list(MODEL.data_paths),
-    )
-
-    def lookup(experiment: str, mapping: str) -> FitMapping:
-        return mappings.experiments[experiment]._fit_mappings[mapping]
-
-    rows = [
-        {
-            "fit": "DECAY",
-            "experiment": experiment,
-            "mapping": mapping,
-            "kind": kind,
-            "observable": "[A]",
-            **metadata_dict(lookup(experiment, mapping).metadata, mapping),
-            "DV": 1.0,
-        }
-        for (experiment, mapping), kind in KINDS.items()
-        for _ in range(POINTS.get((experiment, mapping), 5))
-    ]
-    table = pd.DataFrame(rows)
-    return FitTable(
-        table=table,
-        lookup=lookup,
-        recorded_kinds={("DECAY", e, m): k for (e, m), k in KINDS.items()},
-    )
+    return fit_table()
 
 
 def _credibility(
