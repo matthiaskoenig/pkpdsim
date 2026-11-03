@@ -49,6 +49,8 @@ import logging
 import math
 import re
 import shutil
+import subprocess
+import sys
 import tempfile
 import time
 from collections.abc import Mapping, Sequence
@@ -75,6 +77,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "ABSOLUTE_TOLERANCE",
+    "AMICI_TIMEOUT",
     "BATTERY_CHECKS",
     "BOUND_MARGIN",
     "DOSE",
@@ -118,6 +121,8 @@ ABSOLUTE_TOLERANCE: Final = 1e-16
 MASS_LIMIT: Final = 1e-6
 #: the largest change of a state without a dose relative to its start
 STEADY_LIMIT: Final = 1e-6
+#: the longest compilation of a build by AMICI (s), see `_amici_model`
+AMICI_TIMEOUT: Final = 900.0
 #: the share of the range of a bound (in the scale of the fit) within which a
 #: fitted value lies at the bound
 BOUND_MARGIN: Final = 1e-3
@@ -1102,10 +1107,31 @@ def _rebuild(model: PKPDModel) -> BatteryResult:
     return collector.result(Check.REBUILD, statement)
 
 
+#: the compilation of a build by AMICI, in a process of its own
+_COMPILE: Final = (
+    "import sys\n"
+    "from amici.importers.sbml import SbmlImporter\n"
+    "SbmlImporter(sys.argv[1]).sbml2amici(sys.argv[2], sys.argv[3], verbose=False)\n"
+)
+
+
+class _CompileTimeout(Exception):
+    """AMICI did not compile a build within `AMICI_TIMEOUT`."""
+
+
 def _amici_model(build: FlatBuild) -> Any:  # noqa: ANN401  # amici is optional and untyped
-    """Compile a build with AMICI once, cached by the SBML and the AMICI version."""
+    """Compile a build with AMICI once, cached by the SBML and the AMICI version.
+
+    The compilation runs in a process of its own, stopped after
+    `AMICI_TIMEOUT`: the symbolic code generation of AMICI takes a minute and a
+    half for a PBPK model, but more than an hour for the deeply nested
+    formulas of a solved baseline.
+
+    Raises:
+        _CompileTimeout: if the compilation takes longer.
+        RuntimeError: if the compilation fails.
+    """
     import amici
-    from amici.importers.sbml import SbmlImporter
 
     content = build.path.read_bytes()
     digest = hashlib.sha256(content).hexdigest()[:16]
@@ -1114,7 +1140,20 @@ def _amici_model(build: FlatBuild) -> Any:  # noqa: ANN401  # amici is optional 
     if not (directory / ".complete").exists():
         shutil.rmtree(directory, ignore_errors=True)
         start = time.perf_counter()
-        SbmlImporter(str(build.path)).sbml2amici(name, directory, verbose=False)
+        try:
+            result = subprocess.run(
+                [sys.executable, "-c", _COMPILE, str(build.path), name, str(directory)],
+                capture_output=True,
+                text=True,
+                timeout=AMICI_TIMEOUT,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as err:
+            shutil.rmtree(directory, ignore_errors=True)
+            raise _CompileTimeout from err
+        if result.returncode != 0:
+            last = (result.stderr.strip().splitlines() or ["no output"])[-1]
+            raise RuntimeError(last)
         (directory / ".complete").touch()
         logger.info(
             "Compile the %s build '%s' with AMICI in %.1f s",
@@ -1139,11 +1178,15 @@ def _cross_simulator(runners: Sequence[_Runner]) -> BatteryResult:
             "AMICI is not installed, install pkpdsim with the extra 'amici'.",
         )
     collector = _Collector()
+    skipped: list[str] = []
     times = np.linspace(0.0, HORIZON, STEPS + 1)
     for runner in runners:
         build = runner.build
         try:
             model = _amici_model(build)
+        except _CompileTimeout:
+            skipped.append(build.name)
+            continue
         except Exception as err:  # a model AMICI cannot compile is the result
             collector.problems.append(
                 f"{build.name}: AMICI cannot compile the build: {type(err).__name__}: {err}"
@@ -1220,6 +1263,15 @@ def _cross_simulator(runners: Sequence[_Runner]) -> BatteryResult:
                     f"{build.name} {case}: '{ids[k]}' differs between AMICI and "
                     f"roadrunner by {largest[k]:.2g}"
                 )
+    if skipped:
+        late = (
+            f"AMICI did not compile the {' and '.join(skipped)} "
+            f"{'build' if len(skipped) == 1 else 'builds'} within "
+            f"{AMICI_TIMEOUT / 60:g} min."
+        )
+        if not collector.cases and not collector.problems:
+            return _not_applicable(Check.CROSS_SIMULATOR, late)
+        statement = f"{statement} {late}"
     return collector.result(Check.CROSS_SIMULATOR, statement)
 
 

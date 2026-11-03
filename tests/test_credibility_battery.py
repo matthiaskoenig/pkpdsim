@@ -476,3 +476,25 @@ def test_a_fate_round_trip() -> None:
         imbalance=1e-15,
     )
     assert Fate.from_dict(fate.to_dict()) == fate
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec("amici") is None, reason="AMICI is not installed"
+)
+def test_a_compilation_which_takes_too_long(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from pkpdsim.credibility import battery
+
+    monkeypatch.setattr(battery.tempfile, "gettempdir", lambda: str(tmp_path / "tmp"))
+    monkeypatch.setattr(battery, "AMICI_TIMEOUT", 0.1)
+    build = FlatBuild.read("male", _model(tmp_path).model_path)
+    with pytest.raises(battery._CompileTimeout):
+        battery._amici_model(build)
+    model = _model(tmp_path)
+    result = run_battery(model, rebuild=False).result(Check.CROSS_SIMULATOR)
+    assert result.status is BatteryStatus.NOT_APPLICABLE
+    assert (
+        result.statement
+        == "AMICI did not compile the male build within 0.00166667 min."
+    )
