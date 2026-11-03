@@ -4,18 +4,22 @@
 
 - `credibility.json`: the assessment, see `CredibilityAssessment.to_json`.
 - `contexts.tsv`: one row per context of use with its level, influence,
-  consequence, risk, verdict, the decisive and the evaluable points and per
-  acceptance rule its value (`<name>`) and limit (`<name>_limit`).
+  consequence, risk, verdict, the decisive and the evaluable points, the
+  minimum of evaluable points, the uncovered quantities and per acceptance rule
+  its value (`<name>`) and limit (`<name>_limit`).
 - `evidence.tsv`: one row per context of use and evidence and per limitation
   (the limitations of the model with the context `""`): the role, the points
   (`n`), mappings and studies, GMFE, AFE and the criteria.
 - `domain.tsv`: one row per context of use, field and value of the domain:
   whether it is claimed, its coverage and its points (`n`).
+- `quantities.tsv`: one row per context of use and quantity of interest: its
+  description, whether it is a ratio, its coverage and its points.
 - `index.html`: the report (`render_html`), which extends `report_base.html`
   of `sbmlsim.report.templates` and loads nothing from the network.
 
-`print_summary` prints the table of the contexts of use, their verdicts and
-the role of the evidence which decides them.
+`print_summary` prints the table of the contexts of use, their verdicts, the
+role of the evidence which decides them and the evaluable points with their
+minimum.
 """
 
 from __future__ import annotations
@@ -41,11 +45,13 @@ from pkpdsim.credibility.assessment import (
     EvidenceResult,
     Verdict,
 )
+from pkpdsim.credibility.risk import DEFAULT_MIN_POINTS
 
 __all__ = [
     "CONTEXT_COLUMNS",
     "DOMAIN_COLUMNS",
     "EVIDENCE_COLUMNS",
+    "QUANTITY_COLUMNS",
     "RECORD",
     "TEMPLATE",
     "TEMPLATE_DIR",
@@ -53,6 +59,7 @@ __all__ = [
     "domain_table",
     "evidence_table",
     "print_summary",
+    "quantities_table",
     "render_html",
     "write_outputs",
 ]
@@ -85,6 +92,8 @@ CONTEXT_COLUMNS: Final = (
     "verdict",
     "n_decisive",
     "n_evaluable",
+    "minimum_points",
+    "uncovered_quantities",
 )
 #: the leading columns of `evidence_table`, the metrics follow
 EVIDENCE_COLUMNS: Final = (
@@ -100,6 +109,15 @@ EVIDENCE_COLUMNS: Final = (
 )
 #: the columns of `domain_table`
 DOMAIN_COLUMNS: Final = ("context", "field", "value", "claimed", "coverage", "n")
+#: the columns of `quantities_table`
+QUANTITY_COLUMNS: Final = (
+    "context",
+    "quantity",
+    "description",
+    "ratio",
+    "coverage",
+    "n_points",
+)
 
 
 def contexts_table(assessment: CredibilityAssessment) -> pd.DataFrame:
@@ -110,8 +128,10 @@ def contexts_table(assessment: CredibilityAssessment) -> pd.DataFrame:
 
     Returns:
         The columns `id`, `title`, `level`, `influence`, `consequence`,
-        `risk`, `verdict`, `n_decisive`, `n_evaluable` and per acceptance rule
-        `<name>` and `<name>_limit`, empty for a context without the rule.
+        `risk`, `verdict`, `n_decisive`, `n_evaluable`, `minimum_points`,
+        `uncovered_quantities` (the ids, comma separated, empty without) and
+        per acceptance rule `<name>` and `<name>_limit`, empty for a context
+        without the rule.
     """
     rows: list[dict[str, object]] = []
     for c in assessment.contexts:
@@ -125,6 +145,8 @@ def contexts_table(assessment: CredibilityAssessment) -> pd.DataFrame:
             "verdict": c.verdict.value,
             "n_decisive": c.n_decisive,
             "n_evaluable": c.n_evaluable,
+            "minimum_points": c.minimum_points,
+            "uncovered_quantities": ",".join(c.uncovered_quantities),
         }
         for result in c.acceptance:
             row[result["name"]] = result["value"]
@@ -197,6 +219,31 @@ def domain_table(assessment: CredibilityAssessment) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=list(DOMAIN_COLUMNS))
 
 
+def quantities_table(assessment: CredibilityAssessment) -> pd.DataFrame:
+    """Get one row per context of use and quantity of interest.
+
+    Args:
+        assessment: the assessment.
+
+    Returns:
+        The columns `context`, `quantity`, `description`, `ratio`, `coverage`
+        (empty for a ratio) and `n_points`, see `QuantityRecord`.
+    """
+    rows = [
+        {
+            "context": c.id,
+            "quantity": q["id"],
+            "description": q["description"],
+            "ratio": q["ratio"],
+            "coverage": q["coverage"],
+            "n_points": q["n_points"],
+        }
+        for c in assessment.contexts
+        for q in c.quantities
+    ]
+    return pd.DataFrame(rows, columns=list(QUANTITY_COLUMNS))
+
+
 def _number(value: float) -> str:
     """Show a metric with three significant digits, `n/a` if not evaluable."""
     if math.isnan(value):
@@ -257,6 +304,7 @@ def render_html(assessment: CredibilityAssessment) -> str:
             v: sum(c.verdict is v for c in assessment.contexts) for v in verdicts
         },
         model_limitations=[e for e in assessment.limitations if not e.context],
+        default_min_points=[(risk.value, n) for risk, n in DEFAULT_MIN_POINTS.items()],
         limitation_metrics=_metric_names(assessment.limitations),
     )
 
@@ -299,6 +347,7 @@ def write_outputs(assessment: CredibilityAssessment, output_dir: Path) -> Path:
         "contexts.tsv": _tsv(contexts_table(assessment)),
         "evidence.tsv": _tsv(evidence_table(assessment)),
         "domain.tsv": _tsv(domain_table(assessment)),
+        "quantities.tsv": _tsv(quantities_table(assessment)),
         "index.html": render_html(assessment),
     }
     if output_dir.is_dir():
@@ -320,9 +369,11 @@ def print_summary(assessment: CredibilityAssessment) -> None:
     table = Table(
         title=f"Credibility of {escape(assessment.provenance.title)}",
         box=box.SIMPLE_HEAD,
-        # one space between the columns, the table fits 80 columns
+        # one space between the columns and no edges, the table fits 79
+        # columns, the width of a console of windows
         padding=0,
         pad_edge=False,
+        show_edge=False,
     )
     # an id and the longest verdict are not cut, a column which does not fit
     # folds its text
@@ -341,6 +392,7 @@ def print_summary(assessment: CredibilityAssessment) -> None:
     # a description (C1) is decided on the data it was fitted to
     table.add_column("decided on", no_wrap=True)
     table.add_column("points", justify="right", no_wrap=True)
+    # the evaluable points and their minimum
     table.add_column("evaluable", justify="right", no_wrap=True)
     for c in assessment.contexts:
         table.add_row(
@@ -350,6 +402,9 @@ def print_summary(assessment: CredibilityAssessment) -> None:
             f"[{_VERDICT_STYLES[c.verdict]}]{c.verdict.label}[/]",
             c.decisive_role.value,
             str(c.n_decisive),
-            str(c.n_evaluable),
+            # a record of pkpdsim 0.17 has no minimum
+            f"{c.n_evaluable}/{c.minimum_points}"
+            if c.minimum_points
+            else str(c.n_evaluable),
         )
     console.print(table)

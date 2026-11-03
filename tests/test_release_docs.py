@@ -429,6 +429,10 @@ def test_the_credibility_page_shows_the_domain(
     renal = page[page.index("## renal") :]
     assert "`A_ratio`" in renal
     assert "ratio, assessed in step 3" in renal
+    assert "| Quantity of interest | Description | Kind | Coverage | Points |" in renal
+    assert "| `[A]` | the concentration of A | absolute | covered | 5 |" in renal
+    assert "| ratio, assessed in step 3 | n/a | n/a |" in renal
+    assert "5 of 5 decisive points evaluable (minimum 20)" in renal
 
 
 def test_the_credibility_page_escapes_a_table_cell(

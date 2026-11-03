@@ -4,6 +4,7 @@ import dataclasses
 import json
 import math
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 from credibility_tables import fit_table
@@ -29,6 +30,7 @@ from pkpdsim.credibility import (
     FitTable,
     Provenance,
     QuantityOfInterest,
+    QuantityRecord,
     Unclaimed,
     Verdict,
     assess,
@@ -117,8 +119,11 @@ def test_an_uncovered_value_without_extrapolation() -> None:
     assert healthy.coverage is Coverage.VALIDATED
     assert healthy.n_points == 5
 
+    # the 5 points of fm_renal are below the minimum of 20 of a high risk
     cou = dataclasses.replace(
-        CREDIBILITY.context("renal"), extrapolation="the kidney is a clearance"
+        CREDIBILITY.context("renal"),
+        extrapolation="the kidney is a clearance",
+        min_points=5,
     )
     renal = _context(_assess(fits, _with(cou)), "renal")
     assert renal.verdict is Verdict.SUPPORTED_WITH_EXTRAPOLATION
@@ -154,9 +159,39 @@ def test_the_verdict_of_a_level() -> None:
             if level is CouLevel.C4
             else Verdict.SUPPORTED
         )
-        assert verdict(10, met, True, "argued", level=level) is expected
-    assert verdict(10, met, False, "", level=CouLevel.C2) is (
-        Verdict.INSUFFICIENT_EVIDENCE
+        assert (
+            verdict(10, met, True, "argued", level=level, n_evaluable=10, minimum=10)
+            is expected
+        )
+    assert verdict(
+        10, met, False, "", level=CouLevel.C2, n_evaluable=10, minimum=10
+    ) is (Verdict.INSUFFICIENT_EVIDENCE)
+
+
+def test_the_order_of_the_verdict() -> None:
+    """No point, a failed rule, a rule not evaluable, too few points, the coverage."""
+    met = [AcceptanceResult("within_2fold", 100.0, ">= 70", True)]
+    failed = [AcceptanceResult("within_2fold", 10.0, ">= 70", False)]
+    unknown = [AcceptanceResult("GMFE", math.nan, "<= 1.5", None)]
+    c2 = CouLevel.C2
+
+    def decide(
+        n: int, rules: list[AcceptanceResult], covered: bool, argued: str = ""
+    ) -> Verdict:
+        return verdict(n, rules, covered, argued, level=c2, n_evaluable=n, minimum=10)
+
+    assert decide(0, met, True, "argued") is Verdict.INSUFFICIENT_EVIDENCE
+    # a failure on few points is still a failure
+    assert decide(2, [*met, *failed, *unknown], True) is Verdict.NOT_SUPPORTED
+    assert decide(20, [*met, *unknown], True) is Verdict.INSUFFICIENT_EVIDENCE
+    assert decide(9, met, True, "argued") is Verdict.INSUFFICIENT_EVIDENCE
+    assert decide(10, met, True) is Verdict.SUPPORTED
+    assert decide(10, met, False, "argued") is Verdict.SUPPORTED_WITH_EXTRAPOLATION
+    assert decide(10, met, False) is Verdict.INSUFFICIENT_EVIDENCE
+    # the evaluable points decide the minimum, not the decisive ones
+    assert (
+        verdict(12, met, True, "", level=c2, n_evaluable=9, minimum=10)
+        is Verdict.INSUFFICIENT_EVIDENCE
     )
 
 
@@ -168,11 +203,16 @@ def test_a_ratio_quantity_is_recorded() -> None:
     )
     assessment = _assess(fit_table(), _with(cou))
     dose = _context(assessment, "dose")
+    # a ratio has no coverage, it is assessed in step 3
     assert dose.quantities[-1] == {
         "id": "A_ratio",
         "description": "impaired over healthy",
         "ratio": True,
+        "coverage": None,
+        "n_points": 0,
     }
+    assert dose.quantities[0]["coverage"] == "covered"
+    assert dose.uncovered_quantities == []
     assert dose.verdict is Verdict.SUPPORTED
     assert dose.n_decisive == _context(_assess(fit_table()), "dose").n_decisive
 
@@ -214,8 +254,8 @@ def test_a_criterion_without_applicable_points(
     assert result.verdict.label == "insufficient evidence"
 
 
-def _without_ratios(
-    fits: FitTable, mapping: str, column: str, value: float
+def _with_value(
+    fits: FitTable, mapping: str, column: str, value: float | str
 ) -> FitTable:
     """Get the table with a value of a column for the rows of a mapping of CredA."""
     table = fits.table.copy()
@@ -243,7 +283,7 @@ def test_points_without_a_ratio_cover_nothing(column: str, value: float) -> None
             ),
         ),
     )
-    fits = _without_ratios(fit_table(), "fm_renal", column, value)
+    fits = _with_value(fit_table(), "fm_renal", column, value)
     assessment = _assess(fits, _with(cou))
     renal = _context(assessment, "renal")
     impaired = _coverage(assessment, "renal", "health", "RENAL_IMPAIRMENT")
@@ -254,8 +294,142 @@ def test_points_without_a_ratio_cover_nothing(column: str, value: float) -> None
     assert all(result["met"] is True for result in renal.acceptance)
     assert renal.verdict is Verdict.INSUFFICIENT_EVIDENCE
 
-    covered = _assess(fit_table(), _with(cou))
+    # the 10 points are below the minimum of 20 of a high risk
+    covered = _assess(fit_table(), _with(dataclasses.replace(cou, min_points=10)))
     assert _context(covered, "renal").verdict is Verdict.SUPPORTED
+
+
+def _quantity(result: ContextResult, id: str) -> QuantityRecord:
+    """Get the record of a quantity of interest of a context of use."""
+    (quantity,) = (q for q in result.quantities if q["id"] == id)
+    return quantity
+
+
+#: the quantity of the renal data in the tables of the quantity coverage
+_B = QuantityOfInterest("B", "the concentration of B")
+
+
+def _two_quantities(**kw: object) -> ContextOfUse:
+    """Get the dose context with A and B, validated by the doses and the renal data."""
+    return dataclasses.replace(
+        CREDIBILITY.context("dose"),
+        quantities=(*CREDIBILITY.context("dose").quantities, _B),
+        evidence=(
+            Evidence(
+                "doses and renal",
+                EvidenceRole.VALIDATION,
+                named_filter({"CredA": {"fm_dose", "fm_renal"}}),
+            ),
+        ),
+        **kw,
+    )
+
+
+def test_a_quantity_outside_the_claimed_domain_is_uncovered() -> None:
+    """B is validated only in renal impairment, the domain claims healthy subjects."""
+    fits = _with_value(fit_table(), "fm_renal", "observable", "[B]")
+    assessment = _assess(fits, _with(_two_quantities()))
+    dose = _context(assessment, "dose")
+    assert _quantity(dose, "B")["coverage"] == "uncovered"
+    assert _quantity(dose, "B")["n_points"] == 0
+    assert _quantity(dose, "[A]")["coverage"] == "covered"
+    assert _quantity(dose, "[A]")["n_points"] == 5
+    assert dose.uncovered_quantities == ["B"]
+    # every claimed value is validated, the rules are met on enough points
+    assert all(
+        e.coverage is Coverage.VALIDATED
+        for e in assessment.coverage
+        if e.context == "dose" and e.claimed
+    )
+    assert all(result["met"] is True for result in dose.acceptance)
+    assert (dose.n_evaluable, dose.minimum_points) == (10, 10)
+    assert dose.verdict is Verdict.INSUFFICIENT_EVIDENCE
+
+    argued = _two_quantities(extrapolation="B follows A")
+    dose = _context(_assess(fits, _with(argued)), "dose")
+    assert dose.verdict is Verdict.SUPPORTED_WITH_EXTRAPOLATION
+
+    # with the renal impairment claimed, B is covered
+    domain = Domain(
+        metadata={
+            "route": (Route.IV,),
+            "health": (Health.HEALTHY, Health.RENAL_IMPAIRMENT),
+        }
+    )
+    dose = _context(_assess(fits, _with(_two_quantities(domain=domain))), "dose")
+    assert (_quantity(dose, "B")["coverage"], _quantity(dose, "B")["n_points"]) == (
+        "covered",
+        5,
+    )
+    assert dose.verdict is Verdict.SUPPORTED
+
+
+def test_a_quantity_without_applicable_points_is_uncovered() -> None:
+    fits = _with_value(fit_table(), "fm_renal", "observable", "[B]")
+    fits = _with_value(fits, "fm_renal", "health", "HEALTHY")
+    covered = _context(_assess(fits, _with(_two_quantities())), "dose")
+    assert _quantity(covered, "B")["coverage"] == "covered"
+    assert covered.verdict is Verdict.SUPPORTED
+
+    failed = _with_value(fits, "fm_renal", "IPRED", math.nan)
+    cou = _two_quantities(min_points=5)
+    dose = _context(_assess(failed, _with(cou)), "dose")
+    assert (_quantity(dose, "B")["coverage"], _quantity(dose, "B")["n_points"]) == (
+        "uncovered",
+        0,
+    )
+    assert (dose.n_decisive, dose.n_evaluable) == (10, 5)
+    assert all(result["met"] is True for result in dose.acceptance)
+    assert dose.verdict is Verdict.INSUFFICIENT_EVIDENCE
+
+
+def test_the_minimum_of_evaluable_points() -> None:
+    """The doses alone are 5 points, the minimum of a medium risk is 10."""
+    cou = dataclasses.replace(
+        CREDIBILITY.context("dose"),
+        evidence=(Evidence("doses", EvidenceRole.VALIDATION, named_filter(DOSE)),),
+    )
+    dose = _context(_assess(fit_table(), _with(cou)), "dose")
+    assert (dose.n_evaluable, dose.minimum_points) == (5, 10)
+    assert all(result["met"] is True for result in dose.acceptance)
+    assert dose.verdict is Verdict.INSUFFICIENT_EVIDENCE
+
+    # a failure on few points is still a failure
+    failed = _context(_assess(fit_table(3.0), _with(cou)), "dose")
+    assert failed.verdict is Verdict.NOT_SUPPORTED
+
+    fewer = dataclasses.replace(cou, min_points=5)
+    dose = _context(_assess(fit_table(), _with(fewer)), "dose")
+    assert dose.minimum_points == 5
+    assert dose.verdict is Verdict.SUPPORTED
+
+
+def test_the_minimum_of_the_test_package() -> None:
+    assessment = _assess(fit_table())
+    assert {c.id: (c.n_evaluable, c.minimum_points) for c in assessment.contexts} == {
+        "describe": (10, 5),
+        "dose": (10, 10),
+        "renal": (5, 20),
+    }
+
+
+def test_a_record_of_0_17_is_read(tmp_path: Path) -> None:
+    """A record without the minimum and the coverage of the quantities."""
+    data = _assess(fit_table()).to_dict()
+    for context in cast("list[dict[str, Any]]", data["contexts"]):
+        del context["minimum_points"]
+        for quantity in context["quantities"]:
+            del quantity["coverage"]
+            del quantity["n_points"]
+    path = tmp_path / "credibility.json"
+    path.write_text(json.dumps(data))
+    read = CredibilityAssessment.from_json(path)
+    for context in read.contexts:
+        assert context.minimum_points == 0
+        assert {(q["coverage"], q["n_points"]) for q in context.quantities} == {
+            (None, 0)
+        }
+        assert context.uncovered_quantities == []
 
 
 def test_no_decisive_evidence_is_insufficient() -> None:
@@ -270,6 +444,9 @@ def test_no_decisive_evidence_is_insufficient() -> None:
     )
     result = _context(_assess(fit_table(), _with(cou)), "dose")
     assert result.n_decisive == 0
+    # the calibration points of A lie in the claimed domain, a C2 context does
+    # not decide on them
+    assert result.quantities[0]["coverage"] == "uncovered"
     assert result.verdict is Verdict.INSUFFICIENT_EVIDENCE
 
 
@@ -446,7 +623,8 @@ def test_assess_the_test_package(credibility_model: PKPDModel) -> None:
         "sbmlutils",
         "libroadrunner",
     }
-    # renal claims healthy subjects, its evidence is of renal impairment only
+    # renal claims healthy subjects, its evidence is of renal impairment only,
+    # and it has 5 evaluable points of the 20 of its high risk
     assert {c.id: c.verdict for c in assessment.contexts} == {
         "describe": Verdict.SUPPORTED,
         "dose": Verdict.SUPPORTED,

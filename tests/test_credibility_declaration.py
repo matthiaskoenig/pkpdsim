@@ -8,6 +8,7 @@ import pytest
 from sbmlsim.fit.evaluation import Fold
 
 from pkpdsim.credibility import (
+    DEFAULT_MIN_POINTS,
     UNCLAIMED,
     Acceptance,
     AfeRange,
@@ -95,6 +96,31 @@ def test_a_cou_takes_the_default_of_its_risk() -> None:
     cou = _cou(influence=M, consequence=L)
     assert cou.risk is L
     assert cou.rules == default_acceptance(L)
+
+
+def test_the_default_minimum_of_points() -> None:
+    assert dict(DEFAULT_MIN_POINTS) == {L: 5, M: 10, H: 20}
+    for (influence, consequence), expected in (
+        ((L, L), 5),
+        ((M, M), 10),
+        ((M, H), 20),
+    ):
+        cou = _cou(influence=influence, consequence=consequence)
+        assert cou.min_points is None
+        assert cou.minimum_points == expected
+
+
+def test_a_cou_overrides_the_minimum_of_points() -> None:
+    cou = _cou(influence=H, consequence=H, min_points=3)
+    assert Credibility(contexts=(cou,)).context("dose").minimum_points == 3
+
+
+@pytest.mark.parametrize("min_points", [0, -1])
+def test_a_minimum_of_points_is_positive(min_points: int) -> None:
+    (problem,) = _problems(_cou(min_points=min_points))
+    assert f"'dose': the minimum of points must be at least 1, not {min_points}" in (
+        problem
+    )
 
 
 def test_the_declaration_reports_every_problem() -> None:

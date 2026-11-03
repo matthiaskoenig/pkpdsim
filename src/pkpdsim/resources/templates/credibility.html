@@ -38,10 +38,10 @@
   padding: 0 9px; font-size: 12px; font-weight: 600; line-height: 1.6; white-space: nowrap;
   background: color-mix(in srgb, currentColor 10%, transparent);
 }
-.verdict.supported, .state.met, .state.validated, .state.assessed { color: var(--supported); }
+.verdict.supported, .state.met, .state.validated, .state.covered, .state.assessed { color: var(--supported); }
 .verdict.supported_with_extrapolation, .state.calibrated, .state.platform { color: var(--extrapolated); }
 .verdict.not_supported, .state.not_met, .state.uncovered { color: var(--not-supported); }
-.verdict.insufficient_evidence, .state.not_evaluable { color: var(--insufficient); }
+.verdict.insufficient_evidence, .state.not_evaluable, .state.below { color: var(--insufficient); }
 .state.outside, .state.not_assessed { color: var(--muted); }
 .chip[aria-pressed="true"] { color: var(--on-state); }
 .chip[data-kind="supported"][aria-pressed="true"] { background: var(--supported); }
@@ -101,7 +101,7 @@ td.status .soft { font-size: 12.5px; }
 {% block content %}
 <section id="overview">
   <h2>Overview</h2>
-  <p class="note">The contexts of use of the model, their model risk from the influence of the model on the decision and the consequence of a wrong decision, and their verdict on the decisive evidence (decided on): the calibration data, the data the model was fitted to, for a description (C1), else the validation data. The evaluable points are the decisive points which the fold criteria can evaluate.</p>
+  <p class="note">The contexts of use of the model, their model risk from the influence of the model on the decision and the consequence of a wrong decision, and their verdict on the decisive evidence (decided on): the calibration data, the data the model was fitted to, for a description (C1), else the validation data. The evaluable points are the decisive points which the fold criteria can evaluate; a verdict needs at least the minimum of them, by default {% for risk, n in default_min_points %}{{ n }} for a {{ risk }} risk{% if loop.revindex > 2 %}, {% elif loop.revindex == 2 %} and {% endif %}{% endfor %}.</p>
   <div class="card scroll">
     <table data-filter="row">
       <thead><tr>
@@ -111,6 +111,7 @@ td.status .soft { font-size: 12.5px; }
         <th data-sort="text">level</th><th data-sort="text">risk</th>
         <th class="num" data-sort="num">decisive points</th>
         <th class="num" data-sort="num">evaluable points</th>
+        <th class="num" data-sort="num">minimum points</th>
       </tr></thead>
       <tbody>
       {% for view in contexts %}
@@ -124,6 +125,7 @@ td.status .soft { font-size: 12.5px; }
         <td>{{ c.risk.value }}</td>
         <td class="num">{{ c.n_decisive }}</td>
         <td class="num">{{ c.n_evaluable }}</td>
+        <td class="num">{{ c.minimum_points if c.minimum_points else "" }}</td>
       </tr>
       {% endfor %}
       </tbody>
@@ -167,17 +169,23 @@ td.status .soft { font-size: 12.5px; }
       <dt>model risk</dt><dd>{{ c.risk.value }}</dd>
       <dt>decided on</dt><dd>{{ c.decisive_role.value }} evidence</dd>
       <dt>decisive points</dt><dd>{{ c.n_decisive }}</dd>
-      <dt>evaluable points</dt><dd>{{ c.n_evaluable }}</dd>
+      <dt>evaluable points</dt><dd>{{ c.n_evaluable }}{% if c.minimum_points %} (minimum {{ c.minimum_points }}){% if c.n_evaluable < c.minimum_points %} <span class="state below">below the minimum</span>{% endif %}{% endif %}</dd>
       {% if c.rationale %}<dt>rationale</dt><dd>{{ c.rationale }}</dd>{% endif %}
     </dl>
 
     <h4>Quantities of interest</h4>
+    <p class="note">A quantity is covered by the evaluable decisive points of its observable inside the claimed domain.</p>
     <div class="scroll">
       <table class="compact">
-        <thead><tr><th>quantity</th><th>description</th><th>kind</th></tr></thead>
+        <thead><tr><th>quantity</th><th>description</th><th>kind</th><th>coverage</th><th class="num">points</th></tr></thead>
         <tbody>
         {% for q in c.quantities %}
-        <tr><td class="mono">{{ q.id }}</td><td>{{ q.description }}</td><td>{% if q.ratio %}<span class="state not_assessed">ratio, assessed in step 3</span>{% else %}absolute{% endif %}</td></tr>
+        <tr>
+          <td class="mono">{{ q.id }}</td><td class="named">{{ q.description }}</td>
+          <td>{% if q.ratio %}<span class="state not_assessed">ratio, assessed in step 3</span>{% else %}absolute{% endif %}</td>
+          <td>{% if q.coverage %}<span class="state {{ q.coverage }}">{{ q.coverage }}</span>{% else %}<span class="soft">n/a</span>{% endif %}</td>
+          <td class="num">{% if q.coverage %}{{ q.n_points }}{% else %}<span class="soft">n/a</span>{% endif %}</td>
+        </tr>
         {% endfor %}
         </tbody>
       </table>

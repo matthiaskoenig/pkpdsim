@@ -15,12 +15,12 @@ The assessment of the contexts of use of the model against its adopted fits. A c
 
 **Question:** {{ context.question }}
 
-**Verdict:** {{ context.verdict_label }}, decided on the {{ context.decided_on }} evidence, level {{ context.level }}, model risk {{ context.risk }} (influence {{ context.influence }}, consequence {{ context.consequence }}), {{ context.n_evaluable }} of {{ context.n_decisive }} decisive points evaluable.
+**Verdict:** {{ context.verdict_label }}, decided on the {{ context.decided_on }} evidence, level {{ context.level }}, model risk {{ context.risk }} (influence {{ context.influence }}, consequence {{ context.consequence }}), {{ context.n_evaluable }} of {{ context.n_decisive }} decisive points evaluable{% if context.minimum_points %} (minimum {{ context.minimum_points }}){% endif %}.
 
-| Quantity of interest | Description | Kind |
-| --- | --- | --- |
+| Quantity of interest | Description | Kind | Coverage | Points |
+| --- | --- | --- | --- | --- |
 {% for quantity in context.quantities %}
-| `{{ quantity.id }}` | {{ quantity.description | cell }} | {{ "ratio, assessed in step 3" if quantity.ratio else "absolute" }} |
+| `{{ quantity.id }}` | {{ quantity.description | cell }} | {{ "ratio, assessed in step 3" if quantity.ratio else "absolute" }} | {{ quantity.coverage or "n/a" }} | {{ quantity.n_points if quantity.coverage else "n/a" }} |
 {% endfor %}
 
 {% if context.coverage %}
