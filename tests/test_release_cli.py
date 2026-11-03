@@ -19,6 +19,7 @@ from sbmlutils.console import console
 
 from pkpdsim.fit import fit_subset
 from pkpdsim.model import PKPDModel
+from pkpdsim.release import cli as cli_module
 from pkpdsim.release import source as source_module
 from pkpdsim.release.cli import main, release
 from pkpdsim.release.manifest import BUILD_MARKER, MANIFEST_FILE
@@ -220,6 +221,31 @@ def test_no_publish_stops_before_commit(model: PKPDModel, clone: Path) -> None:
     assert (clone / "fit" / model.fits[0] / "index.html").is_file()
     assert (clone / "fit" / model.fits[0] / "report.pdf").is_file()
     assert not (clone / "run_toy.py").exists()
+
+
+def test_the_build_knows_the_source_commit(
+    model: PKPDModel, clone: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The build gets the commit of the source, which run_credibility records."""
+    commits: list[str | None] = []
+
+    def build(
+        model: PKPDModel,
+        release_path: Path,
+        runner: Runner,
+        workers: str,
+        *,
+        source_commit: str | None = None,
+    ) -> list[Path]:
+        commits.append(source_commit)
+        return original(
+            model, release_path, runner, workers, source_commit=source_commit
+        )
+
+    original = cli_module.build
+    monkeypatch.setattr(cli_module, "build", build)
+    do_release(model, clone, publish=False)
+    assert commits == [git(model.path, "rev-parse", "HEAD").strip()]
 
 
 def test_stage_lines(

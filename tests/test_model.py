@@ -231,3 +231,18 @@ def test_a_test_loads_the_model_at_its_level(monkeypatch: pytest.MonkeyPatch) ->
     assert "k" in r.model.getGlobalParameterIds()
     with pytest.raises(ValueError, match="no female build"):
         MODEL.load_roadrunner(Sex.FEMALE)
+
+
+def test_a_model_without_credibility() -> None:
+    with pytest.raises(ValueError, match="toy"):
+        MODEL.load_credibility()
+
+
+def test_the_credibility_dir() -> None:
+    assert MODEL.credibility_dir == MODEL.results_dir / "credibility"
+
+
+def test_a_credibility_which_is_no_declaration() -> None:
+    model = dataclasses.replace(MODEL, credibility="pkpdsim_toy:MODEL")
+    with pytest.raises(TypeError, match="not a Credibility"):
+        model.load_credibility()

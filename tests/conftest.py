@@ -46,6 +46,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
+from pkpdsim_credibility import MODEL as CREDIBILITY_MODEL
 from pymetadata.webservices.registry import get_registry
 from pymetadata.webservices.webservice import WebserviceError
 from release_git import GIT_ENV, git, init_repo
@@ -236,6 +237,37 @@ def fits_dir(toy_fit: Path, tmp_path_factory: pytest.TempPathFactory) -> Path:
     directory = tmp_path_factory.mktemp("fits")
     adopt_fit(toy_fit, directory)
     return directory
+
+
+@pytest.fixture(scope="session")
+def credibility_model(tmp_path_factory: pytest.TempPathFactory) -> PKPDModel:
+    """Get the credibility test model with its adopted fit of every kind of evidence.
+
+    Session-scoped: a process, every worker of pytest-xdist, fits it once.
+    """
+    base = tmp_path_factory.mktemp("credibility")
+    runs = fit_command(
+        CREDIBILITY_MODEL,
+        [
+            "--runs",
+            "1",
+            "--identifiability",
+            "--max-points",
+            "5",
+            "--no-fisher",
+            "--no-mapping-figures",
+            "--output_dir",
+            str(base / "fit"),
+        ],
+    )
+    (opid,) = runs
+    adopt_fit(base / "fit" / opid, base / "fits")
+    return dataclasses.replace(
+        CREDIBILITY_MODEL,
+        fits=[opid],
+        fits_path=base / "fits",
+        results_path=base / "results",
+    )
 
 
 @pytest.fixture

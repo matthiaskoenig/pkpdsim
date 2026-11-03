@@ -9,9 +9,12 @@ from pathlib import Path
 from urllib.parse import quote
 
 import pytest
+from credibility_tables import fit_table
+from pkpdsim_credibility.credibility import CREDIBILITY
 
+from pkpdsim.credibility import CredibilityAssessment, Provenance, assess_table
 from pkpdsim.release.build import BuildPaths
-from pkpdsim.release.docs import PAGES, write_docs
+from pkpdsim.release.docs import PAGES, pages, write_docs
 from pkpdsim.release.notes import fits_prefix
 from pkpdsim.release.project import ProjectContext, write_project_files
 from pkpdsim.uncertainty import FitRecord, adopt_fit
@@ -71,6 +74,7 @@ def test_docs_pages(release: tuple[ProjectContext, Path]) -> None:
     context, path = release
     write_project_files(context, path)
     written = write_docs(context, path)
+    assert pages(context, path) == PAGES
     assert {p.name for p in (path / "docs").glob("*.md")} == {f"{p}.md" for p in PAGES}
     assert path / "README.md" in written
     nav = tomllib.loads((path / "zensical.toml").read_text())["project"]["nav"]
@@ -343,3 +347,121 @@ def test_zensical_strict(release: tuple[ProjectContext, Path]) -> None:
     texts = [page.read_text() for page in site.rglob("*.html")]
     assert any("Simulation report with the confidence interval" in t for t in texts)
     assert any("Fit report" in t for t in texts)
+
+
+def _write_credibility(path: Path) -> CredibilityAssessment:
+    provenance = Provenance(
+        model="credibility",
+        title="Toy",
+        fits=["DECAY_fit"],
+        versions={"pkpdsim": "0.0.0"},
+        commit="0123abc",
+        dirty=False,
+        date="2026-11-03T12:00:00+01:00",
+    )
+    assessment = assess_table(CREDIBILITY, fit_table(), provenance)
+    (path / BuildPaths.CREDIBILITY).mkdir(parents=True)
+    assessment.to_json(path / BuildPaths.CREDIBILITY / "credibility.json")
+    return assessment
+
+
+def test_the_credibility_page(release: tuple[ProjectContext, Path]) -> None:
+    context, path = release
+    context = dataclasses.replace(
+        context,
+        model=dataclasses.replace(
+            context.model, credibility="pkpdsim_toy.credibility:CREDIBILITY"
+        ),
+    )
+    assessment = _write_credibility(path)
+    write_project_files(context, path)
+    assert pages(context, path)[-2:] == ("credibility", "release-notes")
+    write_docs(context, path)
+    page = (path / "docs" / "credibility.md").read_text()
+    assert page.startswith("# Credibility\n")
+    for result in assessment.contexts:
+        assert result.id in page
+        assert result.verdict.label in page
+        assert result.question in page
+    assert f"{SETTINGS.site_url}credibility/index.html" in page
+    assert "| Context of use | Title | Level | Risk | Verdict |" in page
+    assert "within_2fold" in page
+    assert f"{SETTINGS.site_url}credibility.html" in (path / "README.md").read_text()
+    nav = tomllib.loads((path / "zensical.toml").read_text())["project"]["nav"]
+    assert {"Credibility": "credibility.md"} in nav
+    assert (
+        nav.index({"Credibility": "credibility.md"}) == nav.index({"Fit": "fit.md"}) + 1
+    )
+
+
+def test_the_credibility_page_shows_the_domain(
+    release: tuple[ProjectContext, Path],
+) -> None:
+    """The claimed coverage, the statement, the ratios and what decides a verdict."""
+    context, path = release
+    context = dataclasses.replace(
+        context,
+        model=dataclasses.replace(
+            context.model, credibility="pkpdsim_toy.credibility:CREDIBILITY"
+        ),
+    )
+    assessment = _write_credibility(path)
+    write_project_files(context, path)
+    write_docs(context, path)
+    page = (path / "docs" / "credibility.md").read_text()
+    assert "| Context of use | Title | Level | Risk | Verdict | Decided on |" in page
+    assert (
+        "| `describe` | Describe the decay | C1 | low | supported | calibration |"
+        in (page)
+    )
+    dose = page[page.index("## dose") : page.index("## renal")]
+    assert "| Field | Value | Coverage | Points |" in dose
+    claimed = [e for e in assessment.coverage if e.context == "dose" and e.claimed]
+    assert claimed
+    for entry in claimed:
+        assert entry.coverage is not None
+        line = (
+            f"| `{entry.field}` | `{entry.value}` | {entry.coverage.value} "
+            f"| {entry.n_points} |"
+        )
+        assert line in dose
+    assert "the single doses of the data (statement, not assessed)" in dose
+    renal = page[page.index("## renal") :]
+    assert "`A_ratio`" in renal
+    assert "ratio, assessed in step 3" in renal
+
+
+def test_the_credibility_page_escapes_a_table_cell(
+    release: tuple[ProjectContext, Path],
+) -> None:
+    context, path = release
+    context = dataclasses.replace(
+        context,
+        model=dataclasses.replace(
+            context.model, credibility="pkpdsim_toy.credibility:CREDIBILITY"
+        ),
+    )
+    assessment = _write_credibility(path)
+    piped = dataclasses.replace(
+        assessment,
+        contexts=[
+            dataclasses.replace(assessment.contexts[0], title="Decay | elimination")
+        ],
+    )
+    piped.to_json(path / BuildPaths.CREDIBILITY / "credibility.json")
+    write_project_files(context, path)
+    write_docs(context, path)
+    page = (path / "docs" / "credibility.md").read_text()
+    assert "| Decay \\| elimination |" in page
+
+
+def test_no_credibility_page_without_a_record(
+    release: tuple[ProjectContext, Path],
+) -> None:
+    context, path = release
+    write_project_files(context, path)
+    assert "credibility" not in pages(context, path)
+    write_docs(context, path)
+    assert not (path / "docs" / "credibility.md").exists()
+    assert "credibility" not in (path / "README.md").read_text().lower()
+    assert "credibility" not in (path / "zensical.toml").read_text().lower()

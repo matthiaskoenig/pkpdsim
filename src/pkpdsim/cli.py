@@ -1,6 +1,6 @@
 """The commands of the models.
 
-pkpdsim installs four console scripts which take the dotted name of a model
+pkpdsim installs five console scripts which take the dotted name of a model
 package first and the options of the command for that model after it
 (`main`, `resolve_model`):
 
@@ -15,6 +15,8 @@ run_fit pkdb_models.models.hctz --adopt PK_<fit id>
 run_report pkdb_models.models.hctz --subset PK results/fit/PK_<fit id>/parameters.json
 run_report pkdb_models.models.hctz --adopted
 run_identifiability pkdb_models.models.hctz --subset PK results/fit/PK_<fit id>/parameters.json
+run_credibility pkdb_models.models.hctz
+run_credibility pkdb_models.models.hctz --from-json results/credibility/credibility.json -o /tmp/credibility
 ```
 
 The package is imported and its model object `MODEL` gives everything which
@@ -41,7 +43,11 @@ the adopted fits of the model, whose values and uncertainty the factory takes
 `identifiability_command`) work on the `parameters.json` of an earlier fit
 (`sbmlsim.fit.cli.report_cli`, `identifiability_cli`);
 `run_report <package> --adopted` writes the report of every adopted fit of the
-model from its record (`pkpdsim.reports.adopted_reports`). All write into the
+model from its record (`pkpdsim.reports.adopted_reports`).
+`run_credibility` (`credibility_command`) assesses the contexts of use of the
+model against its adopted fits (`pkpdsim.credibility.assess`) and writes the
+record, the tables and the report (`pkpdsim.credibility.report`); with
+`--from-json` it writes them again from a written record. All write into the
 results of the model unless `--output_dir` is given.
 
 `--profile` anywhere after the model package runs a command under the
@@ -82,6 +88,14 @@ from sbmlsim.fit.sampling import SamplingType
 from sbmlsim.utils import paths_text
 from sbmlutils.console import console
 
+from pkpdsim.credibility import (
+    CredibilityAssessment,
+    DeclarationError,
+    KindMismatchError,
+    SelectionError,
+    assess,
+)
+from pkpdsim.credibility.report import print_summary, write_outputs
 from pkpdsim.fit import (
     FIXED_FITS,
     at_level,
@@ -939,6 +953,103 @@ def identifiability_command(
     )
 
 
+def credibility_command(model: PKPDModel, args: Sequence[str] | None = None) -> Path:
+    """Assess the contexts of use of a model against its adopted fits.
+
+    The adopted fits are evaluated on the current model and data
+    (`pkpdsim.credibility.assess`), `--from-json` instead reads a written
+    record without evaluating a fit. `--source-commit` records the commit of
+    the source repository in the provenance, which a release passes, since it
+    assesses the model in its release repository. The outputs replace an
+    earlier assessment in the directory, see
+    `pkpdsim.credibility.report.write_outputs`; an error of the declaration,
+    the evidence, the records or the directory is printed and exits with 1.
+
+    Args:
+        model: the model.
+        args: command line arguments, `sys.argv[1:]` by default.
+
+    Returns:
+        The directory of the outputs.
+    """
+    p = argparse.ArgumentParser(
+        prog=f"run_credibility {model.package}",
+        description=(
+            f"Assess the contexts of use of the {model.title} against its "
+            "adopted fits: the record credibility.json, the tables contexts.tsv, "
+            "evidence.tsv and domain.tsv and the report index.html."
+        ),
+    )
+    p.add_argument(
+        "-o",
+        "--output_dir",
+        type=Path,
+        default=model.credibility_dir,
+        help="directory of the outputs, replaced if it holds an earlier "
+        "assessment (default: %(default)s)",
+    )
+    p.add_argument(
+        "--from-json",
+        type=Path,
+        metavar="PATH",
+        help="write the outputs again from a written credibility.json, without "
+        "evaluating the fits",
+    )
+    p.add_argument(
+        "--source-commit",
+        metavar="SHA",
+        help="the commit of the source repository of the model, recorded in the "
+        "provenance instead of the commit of the working directory (whether its "
+        "tree was clean is not known); a release passes it",
+    )
+    options = p.parse_args(sys.argv[1:] if args is None else list(args))
+    if options.from_json is not None and options.source_commit is not None:
+        p.error("--source-commit is the provenance of an assessment, not of a record")
+    try:
+        assessment = (
+            assess(model, options.source_commit)
+            if options.from_json is None
+            else _read_assessment(options.from_json)
+        )
+        output_dir = write_outputs(assessment, options.output_dir)
+    except (
+        DeclarationError,
+        SelectionError,
+        KindMismatchError,
+        FileNotFoundError,
+        FileExistsError,
+        ValueError,
+        TypeError,
+    ) as err:
+        console.print(str(err), style="error")
+        sys.exit(1)
+    print_summary(assessment)
+    display.key_values({"report": output_dir / "index.html"})
+    return output_dir
+
+
+def _read_assessment(path: Path) -> CredibilityAssessment:
+    """Read a written assessment, see `CredibilityAssessment.from_json`.
+
+    Args:
+        path: the record, a `credibility.json`.
+
+    Returns:
+        The assessment.
+
+    Raises:
+        FileNotFoundError: if the file does not exist.
+        ValueError: if the file is no JSON or no assessment.
+    """
+    try:
+        return CredibilityAssessment.from_json(path)
+    except (KeyError, TypeError, AttributeError) as err:
+        raise ValueError(
+            f"The record '{path}' is no assessment of the contexts of use "
+            f"({err!r}); write it again with run_credibility."
+        ) from err
+
+
 DOTTED_PACKAGE = re.compile(r"^[A-Za-z_]\w*(\.[A-Za-z_]\w*)*$")
 """The form of a dotted package, e.g. `pkdb_models.models.hctz`."""
 
@@ -1040,6 +1151,13 @@ COMMANDS: dict[str, Command] = {
             function=identifiability_command,
             fits=True,
         ),
+        Command(
+            name="run_credibility",
+            description="Assess the contexts of use of a model against its "
+            "adopted fits.",
+            function=credibility_command,
+            fits=True,
+        ),
     )
 }
 """The commands by the names of their console scripts."""
@@ -1136,6 +1254,11 @@ def run_report_main(argv: Sequence[str] | None = None) -> None:
 def run_identifiability_main(argv: Sequence[str] | None = None) -> None:
     """The console script `run_identifiability`, see `identifiability_command`."""
     main("run_identifiability", argv)
+
+
+def run_credibility_main(argv: Sequence[str] | None = None) -> None:
+    """The console script `run_credibility`, see `credibility_command`."""
+    main("run_credibility", argv)
 
 
 if __name__ == "__main__":

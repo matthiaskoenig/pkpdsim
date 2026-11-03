@@ -13,8 +13,10 @@ import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, cast
 from urllib.parse import quote
 
+from pkpdsim.credibility import CredibilityAssessment
 from pkpdsim.release.build import BuildPaths
 from pkpdsim.release.notes import NOTES_DIR, fits_prefix
 from pkpdsim.release.project import ProjectContext, render
@@ -22,7 +24,11 @@ from pkpdsim.release.source import ReleaseError
 from pkpdsim.uncertainty import FitRecord
 
 PAGES = ("index", "running", "models", "simulations", "fit", "release-notes")
-"""The pages of the site, the entries of its navigation."""
+"""The pages of the site, the entries of its navigation.
+
+The page `credibility` of a model with an assessment of its contexts of use
+comes before `release-notes`, see `pages`.
+"""
 
 _IMAGES = "images"
 _HEADING = re.compile(r"^(#+ )", re.MULTILINE)
@@ -200,6 +206,59 @@ def _fit_entries(context: ProjectContext, release_path: Path) -> list[FitEntry]:
     return entries
 
 
+def pages(context: ProjectContext, release_path: Path) -> tuple[str, ...]:
+    """Get the pages of the site of a release.
+
+    Args:
+        context: the project context.
+        release_path: the folder of the release repository.
+
+    Returns:
+        `PAGES`, with `credibility` before `release-notes` if the release has the
+        record of the assessment of the contexts of use.
+    """
+    if not _credibility_file(release_path).is_file():
+        return PAGES
+    index = PAGES.index("release-notes")
+    return (*PAGES[:index], "credibility", *PAGES[index:])
+
+
+def _credibility_file(release_path: Path) -> Path:
+    return release_path / BuildPaths.CREDIBILITY / "credibility.json"
+
+
+def _credibility(release_path: Path) -> dict[str, Any] | None:
+    """Read the assessment of the contexts of use as the page shows it.
+
+    Returns:
+        The assessment as plain data with, for every context, the verdict in words
+        (`verdict_label`), the role of the evidence which decides it
+        (`decided_on`) and the coverage of its claimed values (`coverage`);
+        `None` for a release without one.
+
+    Raises:
+        ReleaseError: if the record cannot be read.
+    """
+    file = _credibility_file(release_path)
+    if not file.is_file():
+        return None
+    try:
+        assessment = CredibilityAssessment.from_json(file)
+    except (ValueError, KeyError, TypeError) as err:
+        raise ReleaseError(f"The assessment '{file}' is not readable: {err}") from err
+    data = assessment.to_dict()
+    contexts = cast("list[dict[str, Any]]", data["contexts"])
+    for context, result in zip(contexts, assessment.contexts, strict=True):
+        context["verdict_label"] = result.verdict.label
+        context["decided_on"] = result.decisive_role.value
+        context["coverage"] = [
+            entry.to_dict()
+            for entry in assessment.coverage
+            if entry.context == result.id and entry.claimed
+        ]
+    return data
+
+
 def _copy_image(release_path: Path, name: str, images: Path) -> bool:
     """Copy a figure of the release into the images of the site, if it exists."""
     source = release_path / BuildPaths.FIGURES / name
@@ -273,7 +332,8 @@ def write_docs(context: ProjectContext, release_path: Path) -> list[Path]:
         The written files: the pages, the README and the images of the site.
 
     Raises:
-        ReleaseError: if the record of an adopted fit cannot be read.
+        ReleaseError: if the record of an adopted fit or the assessment of the
+            contexts of use cannot be read.
     """
     docs = release_path / "docs"
     if docs.exists():
@@ -294,10 +354,11 @@ def write_docs(context: ProjectContext, release_path: Path) -> list[Path]:
         "fits": _fit_entries(context, release_path),
         "fit_ids": list(context.model.fits),
         "notes": _release_notes(release_path),
+        "credibility": _credibility(release_path),
     }
 
     written = []
-    for page in PAGES:
+    for page in pages(context, release_path):
         path = docs / f"{page}.md"
         path.write_text(
             render(f"docs/{page}.md.j2", context, extra), "utf-8", newline="\n"

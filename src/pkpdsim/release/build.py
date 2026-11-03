@@ -28,6 +28,7 @@ class BuildPaths:
     SIMULATIONS = "simulations"
     UNCERTAINTY = "simulations_uncertainty"
     FITS = "fit"
+    CREDIBILITY = "credibility"
     RESULTS = "results"
 
 
@@ -105,17 +106,25 @@ def build(
     release_path: Path,
     runner: Runner = run,
     workers: str = "auto",
+    *,
+    source_commit: str | None = None,
 ) -> list[Path]:
     """Build the models, simulations and fit reports in the release repository.
 
     All commands run with `release_path` as working directory. The results of the
     runs are written to the ignored folder `results` and copied to the tracked
     folders `models`, `figures`, `simulations`, `simulations_uncertainty` and
-    `fit`; `fit` is replaced, so reports of fits which are no longer adopted
+    `fit` and, for a model with a declaration of its contexts of use,
+    `credibility`; `fit` is replaced, so reports of fits which are no longer adopted
     disappear. The simulations with the confidence interval need the
     distributions of the adopted fits, a model without adopted fits has no
     `simulations_uncertainty`. `run_report <package> --adopted` writes the report of every
     adopted fit into a folder named by its id, which becomes `fit/<fit id>`.
+    `run_credibility <package>` assesses the contexts of use against the adopted
+    fits and writes the record and the report, which become `credibility`; a
+    model without a declaration has no such folder. It runs in the release
+    repository, so it gets the commit of the source repository for its
+    provenance (`--source-commit`).
 
     A declared output is required, an undeclared one is optional: the factory must
     create at least one SBML model and, if `model.archive_path` is set, the
@@ -127,6 +136,8 @@ def build(
         release_path: the release repository, with the package already exported.
         runner: runs the commands.
         workers: the number of workers of the simulations, `auto` by default.
+        source_commit: the commit of the source repository the release is
+            built from, recorded by the assessment of the contexts of use.
 
     Returns:
         The written paths, relative to `release_path`, with the new `uv.lock`.
@@ -210,4 +221,21 @@ def build(
             fits_dir / fit_id,
         )
         written.append(Path(BuildPaths.FITS) / fit_id)
+
+    credibility_dir = release_path / BuildPaths.CREDIBILITY
+    if credibility_dir.exists():
+        shutil.rmtree(credibility_dir)
+    _clear(release_path / results / "credibility")
+    if model.credibility is not None:
+        stage("Credibility")
+        credibility = ["uv", "run", "run_credibility", package]
+        credibility += ["-o", f"{results}/credibility"]
+        if source_commit is not None:
+            credibility += ["--source-commit", source_commit]
+        _step(runner, credibility, release_path)
+        _replace(
+            _require(release_path / results / "credibility", "run_credibility"),
+            credibility_dir,
+        )
+        written.append(Path(BuildPaths.CREDIBILITY))
     return written

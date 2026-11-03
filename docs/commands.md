@@ -1,11 +1,12 @@
 # Commands
 
-pkpdsim installs five commands which work with every model package. The model is the first argument of a command, the dotted name of its package; everything after it are the options of the command for that model:
+pkpdsim installs six commands which work with every model package. The model is the first argument of a command, the dotted name of its package; everything after it are the options of the command for that model:
 
 - `run_simulation` creates the models with the factory, runs the simulation experiments and the extra actions of the model.
 - `run_fit` fits the parameters of a fit problem, analyses their identifiability, or adopts a finished fit.
 - `run_report` writes the report of a fit for stored parameter sets.
 - `run_identifiability` analyses the identifiability of a stored parameter set.
+- `run_credibility` assesses the contexts of use of a model against its adopted fits.
 - `pkpd_release` makes the complete release of the repository of a model.
 
 ```bash
@@ -13,6 +14,7 @@ run_simulation pkdb_models.models.hctz --action simulate --experiments all
 run_fit pkdb_models.models.hctz --subset PK --runs 10 --cores 10
 run_report pkdb_models.models.hctz --subset PK results/fit/PK_<fit id>/parameters.json
 run_identifiability pkdb_models.models.hctz --subset PK results/fit/PK_<fit id>/parameters.json
+run_credibility pkdb_models.models.hctz
 pkpd_release pkdb_models.models.hctz --version 0.8.0 --no-publish
 ```
 
@@ -132,6 +134,18 @@ run_report pkdb_models.models.hctz --adopted
 
 Every fit has a report of its own in `MODEL.report_dir/<fit id>` (`--output_dir` replaces `MODEL.report_dir`). It is the report which `run_report <package> --subset <subset> --name <fit id> <record>/parameters.json` writes for the record: the complete report of sbmlsim with the title of the model, the description of the fit and its parameters, the adopted fits whose parameters were fixed as the provenance of the record names them, and the provenance of the record (a record without it states that it was not recorded and names no fixed fits). The subset of a fit is the part of its id before the date, `PK` for `PK_20261016_185018__3efe3`, and must have a fit definition. There is no report which merges the fits of a model.
 
+## run_credibility
+
+Assesses the contexts of use a model declares (`PKPDModel.credibility`, see [Context of use and credibility](credibility.md)) against its adopted fits. The adopted fits are evaluated on the current model and data, the kinds of their mappings are those of their records; the command needs a declaration and at least one adopted fit:
+
+```bash
+run_credibility pkdb_models.models.hctz
+run_credibility pkdb_models.models.hctz --output_dir results/credibility
+run_credibility pkdb_models.models.hctz --from-json results/credibility/credibility.json
+```
+
+It writes `credibility.json` (the assessment), `contexts.tsv`, `evidence.tsv`, `domain.tsv` and the report `index.html` into `MODEL.credibility_dir` (`results/credibility`) and prints a table of the contexts of use with their verdicts and the role of the evidence which decided them (decided on: calibration for a description, C1, else validation). `--output_dir` (`-o`) replaces the directory. `--from-json` writes the outputs again from a written `credibility.json` without evaluating the fits. `--source-commit SHA` records the commit of the source repository in the provenance instead of the commit of the working directory, with the dirty state unknown; `pkpd_release` passes it, since it runs the assessment in the release repository. Without it the provenance is the commit of the repository of the model and whether the folder of the model has changes. A directory that holds a `credibility.json` is replaced, so no file of an earlier assessment survives (e.g. of a context of use that was removed); a non-empty directory without one is refused and left as it is. An error of the declaration, of the evidence (a validation on fitted data, an evidence without a point), of the records (a split that differs from the kinds the adopted fits recorded, a record without the kinds of its mappings), of a `credibility.json` that is no assessment or of the directory is printed and ends the command with exit code 1.
+
 ## pkpd_release
 
 `pkpd_release` makes the complete release of the repository of a model (`hctz-model`) from its package: export, build of the models, simulations and fit reports, release notes, docs, commit, tag, push, Docker image and GitHub release. `--no-publish` stops before the commit, so the build can be reviewed; a later run without the flag publishes the reviewed build:
@@ -164,6 +178,7 @@ Every command writes into the folders of the model object unless an option names
 - `run_fit --adopt`: `MODEL.fits_dir` (`fits` next to the output of the factory).
 - `run_report`: `MODEL.report_dir` (`results/report`), `--output_dir` replaces it; with `--adopted` one folder per adopted fit below it.
 - `run_identifiability`: `MODEL.identifiability_dir` (`results/identifiability`), `--output_dir` replaces it.
+- `run_credibility`: `MODEL.credibility_dir` (`results/credibility`), `--output_dir` replaces it.
 
 `results` is `MODEL.results_dir`, the folder `results` of the model package unless the model object sets `results_path`; so every result stays in the folder of its model.
 

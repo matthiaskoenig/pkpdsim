@@ -345,6 +345,62 @@ def observable_filter(observables: Collection[str]) -> ObservableFilter:
     return ObservableFilter(frozenset(str(i) for i in ids))
 
 
+#: the keys of fit mappings by study: the keys of the mappings are SIds of their
+#: experiment, which two studies can share, so a named mapping is named with its
+#: study
+type NamedMappings = dict[str, set[str]]
+
+
+def study(fit_mapping: FitMapping) -> str:
+    """Get the study of a fit mapping, the id of its experiment."""
+    return fit_mapping.reference.experiment.sid
+
+
+def named(
+    mappings: NamedMappings, fit_mapping_key: str, fit_mapping: FitMapping
+) -> bool:
+    """Check whether a fit mapping is one of the named mappings of its study.
+
+    The key alone is not enough: two studies can share a key, so it counts only
+    for the study it is named with.
+    """
+    return fit_mapping_key in mappings.get(study(fit_mapping), set())
+
+
+@dataclass(frozen=True)
+class NamedFilter:
+    """A filter of fit mappings by their key and study, see `named`.
+
+    Attributes:
+        mappings: the study ids with their mapping keys, sorted, so that the
+            filter compares, pickles and describes the same for equal mappings.
+    """
+
+    mappings: tuple[tuple[str, frozenset[str]], ...]
+
+    def __call__(self, fit_mapping_key: str, fit_mapping: FitMapping) -> bool:
+        """Check a fit mapping, see `sbmlsim.fit.helpers.MappingFilter`."""
+        return named(
+            {sid: set(keys) for sid, keys in self.mappings},
+            fit_mapping_key,
+            fit_mapping,
+        )
+
+
+def named_filter(mappings: NamedMappings) -> NamedFilter:
+    """Build a filter of the fit mappings named with their study.
+
+    Args:
+        mappings: the mapping keys by study id.
+
+    Returns:
+        The filter.
+    """
+    return NamedFilter(
+        tuple((sid, frozenset(keys)) for sid, keys in sorted(mappings.items()))
+    )
+
+
 def select_mappings(
     model: PKPDModel,
     experiment_classes: Iterable[type[SimulationExperiment]],

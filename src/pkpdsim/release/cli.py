@@ -146,7 +146,7 @@ def _build(
         written: list[Path] = export_package(model, settings, source, path, runner)
         stage("Project files")
         written += write_project_files(context, path)
-        written += build(model, path, runner, workers)
+        written += build(model, path, runner, workers, source_commit=source.commit)
         stage("Release notes")
         written.append(write_release_notes(context, target, model, source, runner))
         stage("Docs and README")
