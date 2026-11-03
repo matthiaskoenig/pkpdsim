@@ -1006,6 +1006,13 @@ def credibility_command(model: PKPDModel, args: Sequence[str] | None = None) -> 
         "of the verification are then not assessed",
     )
     p.add_argument(
+        "--lock",
+        action="store_true",
+        help="write the lock of the evidence, credibility.lock.json in the folder "
+        "of the model, instead of comparing the evidence with it: the splits "
+        "fixed for review",
+    )
+    p.add_argument(
         "--source-commit",
         metavar="SHA",
         help="the commit of the source repository of the model, recorded in the "
@@ -1017,12 +1024,15 @@ def credibility_command(model: PKPDModel, args: Sequence[str] | None = None) -> 
         p.error("--source-commit is the provenance of an assessment, not of a record")
     if options.from_json is not None and options.no_verification:
         p.error("--no-verification is an option of an assessment, not of a record")
+    if options.from_json is not None and options.lock:
+        p.error("--lock is an option of an assessment, not of a record")
     try:
         assessment = (
             assess(
                 model,
                 options.source_commit,
                 verification=not options.no_verification,
+                lock=options.lock,
             )
             if options.from_json is None
             else _read_assessment(options.from_json)

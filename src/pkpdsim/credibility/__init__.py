@@ -63,6 +63,7 @@ from pkpdsim.credibility.declaration import (
     Unclaimed,
 )
 from pkpdsim.credibility.factors import FACTORS, Factor, FactorRecord, FactorStatus
+from pkpdsim.credibility.lock import LockMismatchError, lock_differences, write_lock
 from pkpdsim.credibility.ratios import RatioRecord, guest_limit, ratio_pairs
 from pkpdsim.credibility.records import (
     FitTable,
@@ -138,6 +139,7 @@ __all__ = [
     "Influence",
     "KindMismatchError",
     "Level",
+    "LockMismatchError",
     "MappingLookup",
     "MaxGmfe",
     "Provenance",
@@ -163,6 +165,7 @@ __all__ = [
     "evaluate_fits",
     "guest_limit",
     "kind_differences",
+    "lock_differences",
     "mapping_table",
     "model_risk",
     "normalize_observable",
@@ -171,4 +174,5 @@ __all__ = [
     "run_battery",
     "select",
     "verify",
+    "write_lock",
 ]
