@@ -83,7 +83,7 @@ commands handle both builds:
 
 ## References
 
-`factory`, `experiments` and `fit_definitions` are references
+`factory`, `experiments`, `fit_definitions` and `credibility` are references
 `"module:attribute"`, resolved when a command uses them. The experiments of a
 model import its `__init__.py` for the paths, so the model object cannot import
 them; a module which starts with a dot is relative to `package`.
@@ -93,6 +93,7 @@ them; a module which starts with a dot is relative to `package`.
 | `factory` | a function which creates the models in a directory |
 | `experiments` | the registry: groups of experiment classes by name, with the group `all` |
 | `fit_definitions` | the fit problems by name (`sbmlsim.fit.cli.FitDefinition`) |
+| `credibility` | the declaration of the contexts of use (`pkpdsim.credibility.Credibility`), e.g. `".credibility:CREDIBILITY"`; `None` for a model without one |
 
 ## Settings
 
@@ -100,6 +101,7 @@ them; a module which starts with a dot is relative to `package`.
 - `FigureSettings`: sbmlsim's `FigureSettings` (the resolution, the sizes of the panels, the fonts and the legends, with the defaults of sbmlsim) and the two fields of a model, the `formats` of the figures (`svg`, `png`, `html`; SVG only by default) and the resolution of the static images (`savefig_dpi`). A run hands the settings of sbmlsim to every figure; an experiment (`figure_settings`) and a figure (`Figure(settings=...)`) override them. Nothing is applied to the process, so nothing has to be restored after a run.
 - `reduced_selections`, `save_results`, `fit_identifiability`: what a run simulates, whether it stores its results, whether a fit analyses the identifiability of its parameters by default.
 - `fits`, `fits_path`: the ids of the adopted fits, whose records in `fits_dir` (`fits` next to the output directory of the factory by default) give the fitted values and their uncertainty to the factory (`fit_records()`), see [Uncertainty of the fitted parameters](uncertainty.md).
+- `credibility` (see above) is loaded by `load_credibility()` and assessed by `run_credibility`, which writes into `credibility_dir` (`results/credibility`); see [Context of use and credibility](credibility.md).
 - `release`: the release metadata of the model (`ReleaseSettings`: the repository, the Docker image, the authors, ...), which `pkpd_release` needs to make the release of its model repository, see [Release of a model repository](release.md); `None` (the default) for a model without a release repository.
 
 The scans run serially by default (`n_workers=1`), and then sbmlsim runs the experiments of a run in a pool: a worker per four experiments, at most one per CPU, a few experiments serially, every experiment with its scans in its worker (sbmlsim 0.13; the 28 experiments of HCTZ take 12 s instead of 21 s). A pool needs the guard `if __name__ == "__main__":` in the script which runs the model (the processes of the pool import it again; the commands of pkpdsim have it), and the memory of a run grows with every process, about 330 MB for a PBPK model. `n_workers=4` runs a pool of four processes for a scan, `n_workers=None` leaves the choice to sbmlsim (a pool of every CPU for a scan of 256 points or more, serially below); a run whose scans have a pool runs its experiments serially, so the scans keep it:
