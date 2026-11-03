@@ -192,6 +192,10 @@ def test_the_report_shows_the_quantity_coverage_and_the_minimum(
     assert "below the minimum" not in dose
     overview = html[html.index('id="overview"') : html.index('id="contexts"')]
     assert "minimum points" in overview
+    assert (
+        "by default 5 for a low risk, 10 for a medium risk and 20 for a high risk."
+        in overview
+    )
     (row,) = (r for r in overview.split("<tr") if 'href="#cou-renal"' in r)
     assert '<td class="num">20</td>' in row
 
@@ -273,6 +277,23 @@ def test_print_summary(
     assert dose.endswith(" 10/10")
     (renal,) = (line for line in out.splitlines() if "renal " in line)
     assert renal.endswith(" 5/20")
+
+
+def test_print_summary_of_a_record_of_0_17(
+    assessment: CredibilityAssessment, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A record without the minimum shows the evaluable points alone."""
+    old = dataclasses.replace(
+        assessment,
+        contexts=[
+            dataclasses.replace(c, minimum_points=0) for c in assessment.contexts
+        ],
+    )
+    print_summary(old)
+    out = capsys.readouterr().out
+    assert "/" not in out.split("evaluable", 1)[1]
+    (dose,) = (line for line in out.splitlines() if line.startswith("dose "))
+    assert dose.endswith(" 10")
 
 
 def test_print_summary_escapes_the_id(

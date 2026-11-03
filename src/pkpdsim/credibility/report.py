@@ -45,6 +45,7 @@ from pkpdsim.credibility.assessment import (
     EvidenceResult,
     Verdict,
 )
+from pkpdsim.credibility.risk import DEFAULT_MIN_POINTS
 
 __all__ = [
     "CONTEXT_COLUMNS",
@@ -303,6 +304,7 @@ def render_html(assessment: CredibilityAssessment) -> str:
             v: sum(c.verdict is v for c in assessment.contexts) for v in verdicts
         },
         model_limitations=[e for e in assessment.limitations if not e.context],
+        default_min_points=[(risk.value, n) for risk, n in DEFAULT_MIN_POINTS.items()],
         limitation_metrics=_metric_names(assessment.limitations),
     )
 
@@ -400,6 +402,9 @@ def print_summary(assessment: CredibilityAssessment) -> None:
             f"[{_VERDICT_STYLES[c.verdict]}]{c.verdict.label}[/]",
             c.decisive_role.value,
             str(c.n_decisive),
-            f"{c.n_evaluable}/{c.minimum_points}",
+            # a record of pkpdsim 0.17 has no minimum
+            f"{c.n_evaluable}/{c.minimum_points}"
+            if c.minimum_points
+            else str(c.n_evaluable),
         )
     console.print(table)

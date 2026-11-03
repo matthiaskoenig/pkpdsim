@@ -444,6 +444,9 @@ def test_no_decisive_evidence_is_insufficient() -> None:
     )
     result = _context(_assess(fit_table(), _with(cou)), "dose")
     assert result.n_decisive == 0
+    # the calibration points of A lie in the claimed domain, a C2 context does
+    # not decide on them
+    assert result.quantities[0]["coverage"] == "uncovered"
     assert result.verdict is Verdict.INSUFFICIENT_EVIDENCE
 
 
@@ -620,7 +623,8 @@ def test_assess_the_test_package(credibility_model: PKPDModel) -> None:
         "sbmlutils",
         "libroadrunner",
     }
-    # renal claims healthy subjects, its evidence is of renal impairment only
+    # renal claims healthy subjects, its evidence is of renal impairment only,
+    # and it has 5 evaluable points of the 20 of its high risk
     assert {c.id: c.verdict for c in assessment.contexts} == {
         "describe": Verdict.SUPPORTED,
         "dose": Verdict.SUPPORTED,

@@ -101,7 +101,7 @@ td.status .soft { font-size: 12.5px; }
 {% block content %}
 <section id="overview">
   <h2>Overview</h2>
-  <p class="note">The contexts of use of the model, their model risk from the influence of the model on the decision and the consequence of a wrong decision, and their verdict on the decisive evidence (decided on): the calibration data, the data the model was fitted to, for a description (C1), else the validation data. The evaluable points are the decisive points which the fold criteria can evaluate; a verdict needs at least the minimum of them, by default 5, 10 and 20 for a low, medium and high risk.</p>
+  <p class="note">The contexts of use of the model, their model risk from the influence of the model on the decision and the consequence of a wrong decision, and their verdict on the decisive evidence (decided on): the calibration data, the data the model was fitted to, for a description (C1), else the validation data. The evaluable points are the decisive points which the fold criteria can evaluate; a verdict needs at least the minimum of them, by default {% for risk, n in default_min_points %}{{ n }} for a {{ risk }} risk{% if loop.revindex > 2 %}, {% elif loop.revindex == 2 %} and {% endif %}{% endfor %}.</p>
   <div class="card scroll">
     <table data-filter="row">
       <thead><tr>

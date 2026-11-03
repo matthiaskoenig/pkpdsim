@@ -155,7 +155,9 @@ FACTORS: Final[tuple[Factor, ...]] = (
         status=FactorStatus.NOT_ASSESSED,
         statement=(
             "Whether the quantities of the evidence answer the question, e.g. the "
-            "ratios of a special population."
+            "ratios of a special population. Step 1 checks only that every claimed "
+            "quantity which is no ratio has decisive points in the claimed domain, "
+            "see the relevance of the validation activities."
         ),
         step=3,
     ),
