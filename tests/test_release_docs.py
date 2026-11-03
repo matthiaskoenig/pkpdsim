@@ -9,10 +9,15 @@ from pathlib import Path
 from urllib.parse import quote
 
 import pytest
-from credibility_tables import fit_table
+from credibility_tables import fit_table, verification_of
 from pkpdsim_credibility.credibility import CREDIBILITY
 
-from pkpdsim.credibility import CredibilityAssessment, Provenance, assess_table
+from pkpdsim.credibility import (
+    Check,
+    CredibilityAssessment,
+    Provenance,
+    assess_table,
+)
 from pkpdsim.release.build import BuildPaths
 from pkpdsim.release.docs import PAGES, pages, write_docs
 from pkpdsim.release.notes import fits_prefix
@@ -349,7 +354,7 @@ def test_zensical_strict(release: tuple[ProjectContext, Path]) -> None:
     assert any("Fit report" in t for t in texts)
 
 
-def _write_credibility(path: Path) -> CredibilityAssessment:
+def _write_credibility(path: Path, *, verified: bool = False) -> CredibilityAssessment:
     provenance = Provenance(
         model="credibility",
         title="Toy",
@@ -359,7 +364,17 @@ def _write_credibility(path: Path) -> CredibilityAssessment:
         dirty=False,
         date="2026-11-03T12:00:00+01:00",
     )
-    assessment = assess_table(CREDIBILITY, fit_table(), provenance)
+    fits = fit_table()
+    verification = (
+        verification_of(
+            fits,
+            factors={Check.INTEGRATOR: 1.02},
+            problems=("the male build 'toy.xml' | has 1 issue",),
+        )
+        if verified
+        else None
+    )
+    assessment = assess_table(CREDIBILITY, fits, provenance, verification)
     (path / BuildPaths.CREDIBILITY).mkdir(parents=True)
     assessment.to_json(path / BuildPaths.CREDIBILITY / "credibility.json")
     return assessment
@@ -433,6 +448,34 @@ def test_the_credibility_page_shows_the_domain(
     assert "| `[A]` | the concentration of A | absolute | covered | 5 |" in renal
     assert "| ratio, assessed in step 3 | n/a | n/a |" in renal
     assert "5 of 5 decisive points evaluable (minimum 20)" in renal
+
+
+def test_the_credibility_page_shows_the_verification(
+    release: tuple[ProjectContext, Path],
+) -> None:
+    context, path = release
+    context = dataclasses.replace(
+        context,
+        model=dataclasses.replace(
+            context.model, credibility="pkpdsim_toy.credibility:CREDIBILITY"
+        ),
+    )
+    _write_credibility(path, verified=True)
+    write_project_files(context, path)
+    write_docs(context, path)
+    page = (path / "docs" / "credibility.md").read_text()
+    dose = page[page.index("## dose") : page.index("## renal")]
+    assert "| Verification | Factor | Points | Largest difference | Result |" in dose
+    assert "| tolerances | `discretization_error` | 10 | 0 | passed |" in dose
+    assert (
+        "| second integration method | `numerical_solver_error` | 10 | 0.02 | failed |"
+        in dose
+    )
+    assert (
+        "| setup of the simulations | `use_error` | 10 |  | failed: the male build "
+        "'toy.xml' \\| has 1 issue |" in dose
+    )
+    assert "not verified" in page
 
 
 def test_the_credibility_page_escapes_a_table_cell(

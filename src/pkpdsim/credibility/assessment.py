@@ -21,6 +21,10 @@ table without a model. Per context of use:
   an applicable decisive point of its observable inside the claimed domain
   (every claimed field of the point has a claimed value), `uncovered` without.
 - The minimum of evaluable points, `ContextOfUse.minimum_points`.
+- The verification of the decisive predictions, when the assessment is
+  verified (`pkpdsim.credibility.verification`): per check whether it passed,
+  the largest relative difference of the alternative predictions and whether
+  the acceptance changes with them.
 - The verdict, see `verdict`, and the factors of V&V 40 (`FACTORS`).
 
 The ratio quantities and the statement of the domain are recorded and shown,
@@ -33,6 +37,7 @@ with `NaN` as `null`.
 
 from __future__ import annotations
 
+import dataclasses
 import importlib.metadata
 import json
 import logging
@@ -66,6 +71,18 @@ from pkpdsim.credibility.selection import (
     EvidenceSelection,
     normalize_observable,
     select,
+)
+from pkpdsim.credibility.verification import (
+    NUMERICAL_CHECKS,
+    TIGHTENING,
+    Check,
+    CheckRecord,
+    Verification,
+    VerificationSummary,
+    check_record_from_dict,
+    check_record_to_dict,
+    relative_differences,
+    verify,
 )
 from pkpdsim.fit import MetadataFilter, NamedFilter
 
@@ -105,6 +122,7 @@ _VERDICT_LABELS: Final = {
     "supported_with_extrapolation": "supported with extrapolation",
     "not_supported": "not supported",
     "insufficient_evidence": "insufficient evidence",
+    "not_verified": "not verified",
 }
 
 
@@ -116,6 +134,7 @@ class Verdict(StrEnum):
     SUPPORTED_WITH_EXTRAPOLATION = "supported_with_extrapolation"
     NOT_SUPPORTED = "not_supported"
     INSUFFICIENT_EVIDENCE = "insufficient_evidence"
+    NOT_VERIFIED = "not_verified"
 
     @property
     def label(self) -> str:
@@ -337,6 +356,9 @@ class ContextResult:
             `applicable`.
         minimum_points: the evaluable points the verdict needs, see
             `ContextOfUse.minimum_points`; 0 in a record of pkpdsim 0.17.
+        verification: the checks of the verification of the decisive
+            predictions, in the order of `Check`; empty if the assessment was
+            not verified.
     """
 
     id: str
@@ -356,6 +378,14 @@ class ContextResult:
     n_decisive: int
     n_evaluable: int
     minimum_points: int
+    verification: list[CheckRecord] = dataclasses.field(default_factory=list)
+
+    @property
+    def verified(self) -> bool | None:
+        """Get whether every check passed, `None` if not verified."""
+        if not self.verification:
+            return None
+        return all(record["passed"] for record in self.verification)
 
     @property
     def decisive_role(self) -> EvidenceRole:
@@ -387,6 +417,7 @@ class ContextResult:
             "n_decisive": self.n_decisive,
             "n_evaluable": self.n_evaluable,
             "minimum_points": self.minimum_points,
+            "verification": [check_record_to_dict(r) for r in self.verification],
         }
 
     @classmethod
@@ -440,6 +471,10 @@ class ContextResult:
             n_decisive=data["n_decisive"],
             n_evaluable=data["n_evaluable"],
             minimum_points=data.get("minimum_points", 0),
+            # a record of pkpdsim 0.17 was not verified
+            verification=[
+                check_record_from_dict(r) for r in data.get("verification", ())
+            ],
         )
 
 
@@ -505,6 +540,8 @@ class CredibilityAssessment:
         unclaimed: the validation points which no evidence and no limitation
             selects, per fit and mapping (`fit`, `experiment`, `mapping`, `n`).
         notes: the notes of the declaration.
+        verification: what the verification compared, `None` if the
+            assessment was not verified.
     """
 
     provenance: Provenance
@@ -514,6 +551,7 @@ class CredibilityAssessment:
     limitations: list[EvidenceResult]
     unclaimed: list[UnclaimedRecord]
     notes: str
+    verification: VerificationSummary | None = None
 
     def to_dict(self) -> dict[str, object]:
         """Get the assessment as plain data, `NaN` as `None`."""
@@ -525,6 +563,9 @@ class CredibilityAssessment:
             "limitations": [e.to_dict() for e in self.limitations],
             "unclaimed": [dict(u) for u in self.unclaimed],
             "notes": self.notes,
+            "verification": (
+                None if self.verification is None else self.verification.to_dict()
+            ),
         }
 
     @classmethod
@@ -546,6 +587,11 @@ class CredibilityAssessment:
                 for u in data["unclaimed"]
             ],
             notes=data["notes"],
+            verification=(
+                None
+                if data.get("verification") is None
+                else VerificationSummary.from_dict(data["verification"])
+            ),
         )
 
     def to_json(self, path: Path) -> None:
@@ -779,11 +825,14 @@ def verdict(
     level: CouLevel,
     n_evaluable: int,
     minimum: int,
+    verified: bool | None = None,
 ) -> Verdict:
     """Get the verdict of a context of use.
 
-    In this order: no decisive point is insufficient evidence; a rule which is
-    not met is not supported, also on few points; a rule which is not evaluable
+    In this order: no decisive point is insufficient evidence; a failed check
+    of the verification is not verified, since the comparison of the
+    predictions with the data is not to be trusted; a rule which is not met is
+    not supported, also on few points; a rule which is not evaluable
     is insufficient evidence; fewer evaluable points than the minimum is
     insufficient evidence; every claimed value and every quantity which is no
     ratio covered is supported, for C4 supported with extrapolation (a C4
@@ -800,12 +849,16 @@ def verdict(
         level: the level of the context.
         n_evaluable: the decisive points which are applicable.
         minimum: the evaluable points the verdict needs.
+        verified: whether every check of the verification passed, `None` if
+            the assessment is not verified.
 
     Returns:
         The verdict.
     """
     if n_decisive == 0:
         return Verdict.INSUFFICIENT_EVIDENCE
+    if verified is False:
+        return Verdict.NOT_VERIFIED
     if any(result.met is False for result in acceptance):
         return Verdict.NOT_SUPPORTED
     if any(result.met is None for result in acceptance):
@@ -824,14 +877,49 @@ def _count(n: int, singular: str, plural: str | None = None) -> str:
     return f"{n} {singular if n == 1 else plural or singular + 's'}"
 
 
+def _check_statement(record: CheckRecord, tightening: float) -> str:
+    """Get the statement of the factor of a check of the verification."""
+    result = "passed" if record["passed"] else "failed"
+    if record["check"] == Check.SETUP.value:
+        text = (
+            "The builds are valid SBML with consistent units and the "
+            f"{_count(record['n_points'], 'decisive prediction')} are finite"
+            if not record["problems"]
+            else "; ".join(record["problems"])
+        )
+        return f"{text}: {result}."
+    compared = (
+        f"the tolerances of the fits divided by {tightening:g}"
+        if record["check"] == Check.TOLERANCES.value
+        else "the BDF of CVODE of at most order 2 at the tightened tolerances"
+    )
+    if record["n_points"] == 0:
+        difference = "no decisive prediction to compare"
+    else:
+        difference = (
+            f"largest relative difference {record['max_difference']:.2g} of "
+            f"{_count(record['n_points'], 'decisive prediction')} with {compared}, "
+            f"at {record['at']}, acceptance "
+            f"{'changed' if record['acceptance_changed'] else 'unchanged'}"
+        )
+    problems = "".join(f"; {problem}" for problem in record["problems"])
+    return f"{difference[0].upper()}{difference[1:]}{problems}: {result}."
+
+
 def _factors(
     cou: ContextOfUse,
     decisive: pd.DataFrame,
     acceptance: Sequence[AcceptanceResult],
     coverage: Sequence[CoverageEntry],
     quantities: Sequence[QuantityRecord],
+    checks: Sequence[CheckRecord] = (),
+    tightening: float = TIGHTENING,
 ) -> list[FactorRecord]:
-    """Get the factors of V&V 40 of a context, the assessed ones with its results."""
+    """Get the factors of V&V 40 of a context, the assessed ones with its results.
+
+    The factors of the checks of the verification are assessed when the
+    assessment was verified, else they keep their status of `FACTORS`.
+    """
     role = cou.decisive_role.value
     n_points, n_mappings, n_studies = _counts(decisive)
     claimed = [e for e in coverage if e.claimed]
@@ -862,19 +950,102 @@ def _factors(
             "of interest covered."
         ),
     }
+    verified = {record["factor"]: record for record in checks}
     factors: list[FactorRecord] = []
     for factor in FACTORS:
         data = factor.to_dict()
         if factor.status is FactorStatus.ASSESSED:
             data["statement"] = statements[factor.id]
+        elif factor.id in verified:
+            data["status"] = FactorStatus.ASSESSED.value
+            data["statement"] = _check_statement(verified[factor.id], tightening)
+            data["step"] = None
         factors.append(data)
     return factors
+
+
+def _at(point: pd.Series) -> str:
+    """Name a data point, `experiment.mapping at x` (without `x` if it has none)."""
+    name = f"{point['experiment']}.{point['mapping']}"
+    x = point.get("x")
+    return name if x is None or pd.isna(x) else f"{name} at {float(x):g}"
+
+
+def _check_records(
+    cou: ContextOfUse,
+    table: pd.DataFrame,
+    decisive: pd.DataFrame,
+    acceptance: Sequence[AcceptanceResult],
+    verification: Verification,
+) -> list[CheckRecord]:
+    """Get the checks of the verification of the decisive predictions of a context.
+
+    A numerical check passes when its evaluation of every fit of the decisive
+    points succeeded, the largest relative difference of a decisive prediction
+    is at most the limit of the verification and no rule of the acceptance
+    changes; the setup passes when the builds have no issues and every decisive
+    prediction is finite.
+    """
+    summary = verification.summary
+    fits = set(decisive["fit"].astype(str)) if "fit" in decisive.columns else set()
+    records: list[CheckRecord] = []
+    for check in NUMERICAL_CHECKS:
+        predictions = verification.predictions[check]
+        differences = relative_differences(table, predictions, summary.scale_floor)
+        compared = differences.loc[decisive.index].dropna()
+        alternative = decisive.assign(IPRED=predictions.loc[decisive.index])
+        changed = any(
+            rule.evaluate(alternative).met != result.met
+            for rule, result in zip(cou.rules, acceptance, strict=True)
+        )
+        problems = [
+            message
+            for fit, message in verification.failures[check].items()
+            if fit in fits
+        ]
+        largest = float(compared.max()) if len(compared) else math.nan
+        records.append(
+            CheckRecord(
+                check=check.value,
+                factor=check.factor,
+                n_points=len(compared),
+                max_difference=largest,
+                at=_at(decisive.loc[compared.idxmax()]) if len(compared) else "",
+                acceptance_changed=changed,
+                passed=not problems and not changed and not (largest > summary.limit),
+                problems=problems,
+            )
+        )
+    ipred = decisive["IPRED"].to_numpy(dtype=float)
+    failed = decisive.loc[~np.isfinite(ipred)]
+    problems = list(summary.problems)
+    if len(failed):
+        mappings = failed[["experiment", "mapping"]].drop_duplicates()
+        problems.append(
+            f"{len(failed)} of {_count(len(decisive), 'decisive prediction')} "
+            f"{'is' if len(failed) == 1 else 'are'} not finite, of "
+            + ", ".join(f"{e}.{m}" for e, m in mappings.itertuples(index=False))
+        )
+    records.append(
+        CheckRecord(
+            check=Check.SETUP.value,
+            factor=Check.SETUP.factor,
+            n_points=len(decisive),
+            max_difference=math.nan,
+            at="",
+            acceptance_changed=None,
+            passed=not problems,
+            problems=problems,
+        )
+    )
+    return records
 
 
 def _context_result(
     cou: ContextOfUse,
     table: pd.DataFrame,
     selections: Sequence[EvidenceSelection],
+    verification: Verification | None = None,
 ) -> tuple[ContextResult, list[CoverageEntry]]:
     """Get the result and the coverage of a context of use."""
     decisive = _points(
@@ -887,6 +1058,12 @@ def _context_result(
         q["coverage"] == COVERED for q in quantities if not q["ratio"]
     )
     n_evaluable = len(applicable(decisive))
+    checks = (
+        []
+        if verification is None
+        else _check_records(cou, table, decisive, acceptance, verification)
+    )
+    verified = None if not checks else all(record["passed"] for record in checks)
     result = ContextResult(
         id=cou.id,
         title=cou.title,
@@ -911,17 +1088,30 @@ def _context_result(
             level=cou.level,
             n_evaluable=n_evaluable,
             minimum=cou.minimum_points,
+            verified=verified,
         ),
-        factors=_factors(cou, decisive, acceptance, coverage, quantities),
+        factors=_factors(
+            cou,
+            decisive,
+            acceptance,
+            coverage,
+            quantities,
+            checks,
+            TIGHTENING if verification is None else verification.summary.tightening,
+        ),
         n_decisive=len(decisive),
         n_evaluable=n_evaluable,
         minimum_points=cou.minimum_points,
+        verification=checks,
     )
     return result, coverage
 
 
 def assess_table(
-    credibility: Credibility, fits: FitTable, provenance: Provenance
+    credibility: Credibility,
+    fits: FitTable,
+    provenance: Provenance,
+    verification: Verification | None = None,
 ) -> CredibilityAssessment:
     """Assess the contexts of use of a declaration on the data points of the fits.
 
@@ -930,6 +1120,9 @@ def assess_table(
         fits: the data points of the adopted fits with `DV`, `IPRED` and
             `DV_SD`, see `evaluate_fits`.
         provenance: what the table was computed from.
+        verification: the alternative predictions of the table and the issues
+            of the builds, see `pkpdsim.credibility.verification.verify`; the
+            assessment is not verified without.
 
     Returns:
         The assessment.
@@ -945,7 +1138,7 @@ def assess_table(
     for cou in credibility.contexts:
         own = [s for s in selections.evidence if s.context == cou.id]
         evidence.extend(_evidence_result(s, table, cou.rules) for s in own)
-        result, entries = _context_result(cou, table, own)
+        result, entries = _context_result(cou, table, own, verification)
         contexts.append(result)
         coverage.extend(entries)
     limitations = [
@@ -971,6 +1164,7 @@ def assess_table(
         limitations=limitations,
         unclaimed=unclaimed,
         notes=credibility.notes,
+        verification=None if verification is None else verification.summary,
     )
 
 
@@ -1028,16 +1222,21 @@ def provenance(model: PKPDModel, source_commit: str | None = None) -> Provenance
     )
 
 
-def assess(model: PKPDModel, source_commit: str | None = None) -> CredibilityAssessment:
+def assess(
+    model: PKPDModel, source_commit: str | None = None, *, verification: bool = True
+) -> CredibilityAssessment:
     """Assess the contexts of use of a model on its adopted fits.
 
     The fits are evaluated fresh on the current model and data, see
-    `evaluate_fits`.
+    `evaluate_fits`, and, with `verification`, again with the alternatives of
+    the checks of `pkpdsim.credibility.verification`.
 
     Args:
         model: the model with a declaration and adopted fits.
         source_commit: the commit of the source repository of a release, see
             `provenance`.
+        verification: verify the decisive predictions; the factors of the
+            verification are not assessed without.
 
     Returns:
         The assessment.
@@ -1049,5 +1248,6 @@ def assess(model: PKPDModel, source_commit: str | None = None) -> CredibilityAss
     """
     credibility = model.load_credibility()
     fits = evaluate_fits(model)
+    checks = verify(model, fits) if verification else None
     logger.info("Assess the contexts of use of '%s'", model.name)
-    return assess_table(credibility, fits, provenance(model, source_commit))
+    return assess_table(credibility, fits, provenance(model, source_commit), checks)

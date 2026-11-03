@@ -6,7 +6,9 @@ evidence is selected from the data points of the adopted fits (`evaluate_fits`,
 `mapping_table`) with the kinds their records store (`select`,
 `check_declaration`). The assessment (`assess`, `CredibilityAssessment`) gives
 every context of use its metrics, acceptance, domain coverage, verdict and the
-factors of V&V 40 (`FACTORS`) as plain data, written as JSON.
+factors of V&V 40 (`FACTORS`) as plain data, written as JSON. The verification
+(`verify`) evaluates the fits again with tightened tolerances and a second
+integration method and checks the builds, for the factors of the verification.
 """
 
 from pkpdsim.credibility.assessment import (
@@ -71,6 +73,13 @@ from pkpdsim.credibility.selection import (
     normalize_observable,
     select,
 )
+from pkpdsim.credibility.verification import (
+    Check,
+    CheckRecord,
+    Verification,
+    VerificationSummary,
+    verify,
+)
 
 __all__ = [
     "DEFAULT_ACCEPTANCE",
@@ -83,6 +92,8 @@ __all__ = [
     "AcceptanceResult",
     "AcceptanceRule",
     "AfeRange",
+    "Check",
+    "CheckRecord",
     "Consequence",
     "ContextOfUse",
     "ContextResult",
@@ -116,6 +127,8 @@ __all__ = [
     "Unclaimed",
     "UnclaimedRecord",
     "Verdict",
+    "Verification",
+    "VerificationSummary",
     "assess",
     "assess_table",
     "check_declaration",
@@ -128,4 +141,5 @@ __all__ = [
     "normalize_observable",
     "recorded_kinds",
     "select",
+    "verify",
 ]

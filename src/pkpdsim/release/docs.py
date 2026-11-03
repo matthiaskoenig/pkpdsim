@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, cast
 from urllib.parse import quote
 
-from pkpdsim.credibility import CredibilityAssessment
+from pkpdsim.credibility import Check, CredibilityAssessment
 from pkpdsim.release.build import BuildPaths
 from pkpdsim.release.notes import NOTES_DIR, fits_prefix
 from pkpdsim.release.project import ProjectContext, render
@@ -233,7 +233,8 @@ def _credibility(release_path: Path) -> dict[str, Any] | None:
     Returns:
         The assessment as plain data with, for every context, the verdict in words
         (`verdict_label`), the role of the evidence which decides it
-        (`decided_on`) and the coverage of its claimed values (`coverage`);
+        (`decided_on`), the coverage of its claimed values (`coverage`) and
+        its checks of the verification with their names (`label`);
         `None` for a release without one.
 
     Raises:
@@ -255,6 +256,10 @@ def _credibility(release_path: Path) -> dict[str, Any] | None:
             entry.to_dict()
             for entry in assessment.coverage
             if entry.context == result.id and entry.claimed
+        ]
+        context["verification"] = [
+            {**record, "label": Check(record["check"]).label}
+            for record in cast("list[dict[str, Any]]", context["verification"])
         ]
     return data
 

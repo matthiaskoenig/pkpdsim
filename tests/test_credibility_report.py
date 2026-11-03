@@ -27,6 +27,7 @@ FILES = {
     "evidence.tsv",
     "domain.tsv",
     "quantities.tsv",
+    "verification.tsv",
     "index.html",
 }
 
@@ -424,3 +425,18 @@ def test_the_command_reports_a_malformed_record_of_a_fit(
     out = "".join(capsys.readouterr().out.split())
     assert "metrics_mappings.tsv" in out
     assert "adoptthefitagain" in out
+
+
+def test_print_summary_fits_with_a_long_id(
+    assessment: CredibilityAssessment, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The numbers are not cut beside an id of 11 characters, e.g. `interaction`."""
+    contexts = [
+        dataclasses.replace(c, id=f"{c.id:x<11}"[:11]) for c in assessment.contexts
+    ]
+    print_summary(dataclasses.replace(assessment, contexts=contexts))
+    out = capsys.readouterr().out
+    assert max(len(line) for line in out.splitlines()) <= 79
+    assert "evaluable" in out
+    (dose,) = (line for line in out.splitlines() if "dosexxxxxxx " in line)
+    assert dose.endswith(" 10/10")

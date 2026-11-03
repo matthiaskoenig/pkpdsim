@@ -45,6 +45,14 @@ The assessment of the contexts of use of the model against its adopted fits. A c
 {% endfor %}
 
 {% endif %}
+{% if context.verification %}
+| Verification | Factor | Points | Largest difference | Result |
+| --- | --- | --- | --- | --- |
+{% for check in context.verification %}
+| {{ check.label }} | `{{ check.factor }}` | {{ check.n_points }} | {{ "%.2g" % check.max_difference if check.max_difference is not none else "" }} | {{ "passed" if check.passed else "failed" }}{% if check.problems %}: {{ check.problems | join("; ") | cell }}{% endif %} |
+{% endfor %}
+
+{% endif %}
 {% if context.extrapolation %}
 **Extrapolation:** {{ context.extrapolation }}
 

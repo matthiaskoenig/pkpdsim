@@ -1,6 +1,7 @@
 """Hand-built tables of the data points of the credibility test package."""
 
 from collections.abc import Mapping
+from types import MappingProxyType
 
 import pandas as pd
 from pkpdsim_credibility import MODEL
@@ -9,7 +10,8 @@ from sbmlsim.fit import FitMapping
 from sbmlsim.fit.helpers import FitMappings
 from sbmlsim.fit.metrics import metadata_dict
 
-from pkpdsim.credibility import FitTable
+from pkpdsim.credibility import Check, FitTable, Verification, VerificationSummary
+from pkpdsim.credibility.verification import LIMIT, SCALE_FLOOR, TIGHTENING
 
 #: the kinds of the adopted fit of the test package, see `test_credibility_package`
 KINDS = {
@@ -71,4 +73,47 @@ def fit_table(
         table=pd.DataFrame(rows),
         lookup=lookup,
         recorded_kinds={("DECAY", e, m): k for (e, m), k in KINDS.items()},
+    )
+
+
+def verification_of(
+    fits: FitTable,
+    factor: float = 1.0,
+    *,
+    factors: dict[Check, float] | None = None,
+    failures: dict[Check, dict[str, str]] | None = None,
+    problems: tuple[str, ...] = (),
+    limit: float = LIMIT,
+) -> Verification:
+    """Get a verification whose alternatives are the reference times a factor."""
+    factors = factors or {}
+    failures = failures or {}
+    ipred = fits.table["IPRED"].astype(float)
+    return Verification(
+        predictions=MappingProxyType(
+            {
+                check: ipred * factors.get(check, factor)
+                for check in (Check.TOLERANCES, Check.INTEGRATOR)
+            }
+        ),
+        failures=MappingProxyType(
+            {
+                check: MappingProxyType(failures.get(check, {}))
+                for check in (Check.TOLERANCES, Check.INTEGRATOR)
+            }
+        ),
+        summary=VerificationSummary(
+            tightening=TIGHTENING,
+            limit=limit,
+            scale_floor=SCALE_FLOOR,
+            fits=[
+                {
+                    "fit": "DECAY",
+                    "reference": "CVODE BDF, rtol 1e-06",
+                    "tolerances": "CVODE BDF, rtol 1e-08",
+                    "integrator": "CVODE BDF of order at most 2, rtol 1e-08",
+                }
+            ],
+            problems=list(problems),
+        ),
     )
