@@ -4,7 +4,7 @@ The fit metrics of a model pool its validation data: one GMFE and one percentage
 
 ## The frame
 
-The frame is that of ASME V&V 40 (2018), which the FDA guidance on the credibility of computational modeling (2023) and ICH M15 on model-informed drug development (Step 4, 2026) took over, and which the EMA guideline on the reporting of PBPK modelling and simulation (2018) uses for the qualification of a platform. For PBPK models it is worked out by Kuemmel et al. (2020) and Musuamba et al. (2021); the rules of credible practice of Erdemir et al. (2020) and the two-fold criterion of Guest et al. (2011) is the base of the default acceptance.
+The frame is that of ASME V&V 40 (2018), which the FDA guidance on the credibility of computational modeling (2023) and ICH M15 on model-informed drug development (Step 4, 2026) took over, and which the EMA guideline on the reporting of PBPK modelling and simulation (2018) uses for the qualification of a platform. For PBPK models it is worked out by Kuemmel et al. (2020) and Musuamba et al. (2021), and Erdemir et al. (2020) give the rules of credible practice. The default acceptance uses fold criteria on the predictions of the validation data; for ratios between arms, e.g. impaired over healthy, a fixed fold is too lenient near 1, and Guest et al. (2011) define the limits which step 3 uses.
 
 - The **question of interest** is what a decision needs to know, e.g. "Does the model predict the plasma concentration of the drug in renal impairment?".
 - The **context of use** (COU) states the role of the model in answering the question: its quantities of interest and the domain it is claimed for.
@@ -52,7 +52,7 @@ The thresholds are a starting point of this repository and not taken from a guid
 
 ## Declaring the contexts of use
 
-A model package gets a module `credibility.py` with the object `CREDIBILITY`, a `Credibility`, and references it in its model object like the experiments and the fit definitions, `credibility=".credibility:CREDIBILITY"` (see [Models and their commands](models.md)); it is resolved when a command uses it. A declaration is plain python, a tree of frozen dataclasses. This is the module of the test model of pkpdsim, a decay with an intravenous dose, which has calibration data, held-out doses, a renal impairment study and data the model does not describe:
+A model package gets a module `credibility.py` with the object `CREDIBILITY`, a `Credibility`, and references it in its model object like the experiments and the fit definitions, `credibility=".credibility:CREDIBILITY"` (see [Models and their commands](models.md)); it is resolved when a command uses it. A declaration is plain python, a tree of frozen dataclasses. This is the declaration of the test model of pkpdsim, a decay with an intravenous dose, which has calibration data, held-out doses, a renal impairment study and data the model does not describe:
 
 ```python
 # not executed (the example is the module of the test package tests/pkpdsim_credibility)
@@ -100,7 +100,10 @@ CREDIBILITY = Credibility(
             influence=Level.MEDIUM,
             consequence=Level.MEDIUM,
             quantities=_A,
-            domain=Domain(metadata={"route": (Route.IV,), "health": (Health.HEALTHY,)}),
+            domain=Domain(
+                metadata={"route": (Route.IV,), "health": (Health.HEALTHY,)},
+                statement="the single doses of the data",
+            ),
             evidence=(
                 Evidence("doses", EvidenceRole.VALIDATION, named_filter(DOSE)),
                 Evidence(
@@ -121,7 +124,14 @@ CREDIBILITY = Credibility(
             level=CouLevel.C3,
             influence=Level.MEDIUM,
             consequence=Level.HIGH,
-            quantities=_A,
+            quantities=(
+                *_A,
+                QuantityOfInterest(
+                    "A_ratio",
+                    "the concentration in renal impairment over the healthy one",
+                    ratio=True,
+                ),
+            ),
             domain=Domain(
                 metadata={"health": (Health.HEALTHY, Health.RENAL_IMPAIRMENT)}
             ),
@@ -145,15 +155,26 @@ CREDIBILITY = Credibility(
 )
 ```
 
-- `ContextOfUse`: `id` (a slug, unique in the model), `title`, `question` (one sentence ending with `?`), `level`, `influence`, `consequence`, `quantities`, `domain`, `evidence`, and optional `acceptance` (empty means the default of the risk), `rationale` (why this level, influence and consequence) and `extrapolation` (see the verdicts). `ContextOfUse.risk` is derived.
-- `QuantityOfInterest(id, description)`: an observable of the fit mappings (`Cve_hctz`) or the observable of a value per simulation (`pk.cmax`). The observable column of the data holds the selection, `[Cve_hctz]` for a concentration, so a quantity is matched after the brackets are removed (`[A]` and `A` are the same quantity); a quantity which matches no observable of the fits is an error. A quantity restricts the evidence of its COU to its observables. `ratio=True` marks a ratio, which step 1 records and reports as assessed in a later step.
-- `Domain`: `metadata`, the claimed values by field of the metadata (`route`, `health`, `genotype`, `phenotype`, `coadministration`, `dosing`, `fasting`, `application_form`, `tissue`; members of the enums of `pkpdsim.metadata`), and `statement`, a sentence for what the metadata cannot say (dose range, duration). The dose is not a field of the metadata, so a dose range is a statement only.
+- `ContextOfUse`: `id` (a slug matching `^[a-z][a-z0-9_]*$`, unique in the model), `title`, `question` (one sentence ending with `?`), `level`, `influence`, `consequence`, `quantities`, `domain`, `evidence`, and optional `acceptance` (empty means the default of the risk), `limitations` (evidence of role `LIMITATION` of this COU, subtracted like the limitations of the model), `rationale` (why this level, influence and consequence) and `extrapolation` (see the verdicts). `ContextOfUse.risk` and `ContextOfUse.decisive_role` (calibration for C1, else validation) are derived.
+- `QuantityOfInterest(id, description)`: an observable of the fit mappings (`Cve_hctz`) or the observable of a value per simulation (`pk.cmax`). The observable column of the data holds the selection, `[Cve_hctz]` for a concentration, so a quantity is matched after the brackets are removed (`[A]` and `A` are the same quantity); a quantity which matches no observable of the fits is an error. A quantity restricts the evidence of its COU to its observables. `ratio=True` marks a ratio between arms (impaired over healthy), which is assessed in step 3: it is matched against no observable, restricts no evidence and is shown as "ratio, assessed in step 3". Step 1 assesses the absolute quantities, so a COU has at least one quantity which is no ratio.
+- `Domain`: `metadata`, the claimed values by field of the metadata (`route`, `health`, `genotype`, `phenotype`, `coadministration`, `dosing`, `fasting`, `application_form`, `tissue`; members of the enums of `pkpdsim.metadata`), and `statement`, a sentence for what the metadata cannot say (dose range, duration). The dose is not a field of the metadata, so a dose range is a statement only. The coverage is assessed on the metadata; the statement is shown, marked "statement, not assessed". A COU above C1 claims at least one value of the metadata, without one its domain would be covered by any data.
 - `Evidence(name, role, selection, description, fit=None)`: the selection is a filter of fit mappings (`named_filter` of a `NamedMappings`, the mapping keys by study id, or `metadata_filter`, both of `pkpdsim.fit`) or `Unclaimed`; `fit` restricts the evidence to one subset of the adopted fits (`"PK"` or `"PD"`), and a subset the adopted fits do not have is an error naming the subsets they have.
-- `Credibility(contexts, limitations, notes)`: the limitations are evidence of the whole model which is subtracted from every COU.
+- `Credibility(contexts, limitations, notes)`: the limitations are evidence of the whole model. A limitation, of the model or of a COU, is data the model does not describe and is subtracted from the evidence of every COU.
 
 ## The checks of a declaration
 
-A declaration is validated when it is built (`DeclarationError` lists every problem): unique ids, a question that ends with `?`, the evidence of `limitations` has the role `LIMITATION`, a C1 COU has calibration evidence, every other COU has validation evidence or an `extrapolation` text (a C4 COU has no validation data by definition), the claimed metadata values are members of the enums. The assessment checks the declaration against the data on top of that, and any failure is an error and not an empty result:
+A declaration is validated when it is built (`DeclarationError` lists every problem):
+
+- the ids match `^[a-z][a-z0-9_]*$` and are unique;
+- a question ends with `?`;
+- a COU has at least one quantity of interest which is no ratio;
+- a COU of level C2 to C5 claims at least one value of the metadata in its domain, a C1 COU may claim none;
+- the evidence of `limitations`, of the model and of a COU, has the role `LIMITATION`;
+- a C1 COU has calibration evidence, a C4 COU has an `extrapolation` text (it has no validation data of its condition by definition), every other COU has validation evidence or an `extrapolation` text;
+- `Unclaimed` is validation evidence and at most once per COU;
+- the claimed metadata values are members of the enums.
+
+ The assessment checks the declaration against the data on top of that, and any failure is an error and not an empty result:
 
 - A quantity which matches no observable.
 - An evidence which selects no point, named with its COU, evidence and the fits searched.
@@ -168,9 +189,9 @@ A declaration is validated when it is built (`DeclarationError` lists every prob
 |---|---|---|
 | `CALIBRATION` | the training points of the selection | decides a C1 COU; for every other level it is reported and never decides |
 | `VALIDATION` | held-out points | decides the acceptance of every level but C1; a training point is an error, an outlier is dropped and counted |
-| `LIMITATION` | data the model does not describe | subtracted from every other evidence, reported apart, never in an acceptance |
+| `LIMITATION` | data the model does not describe | subtracted from every other evidence of every COU, reported apart, never in an acceptance |
 
-A limitation stays a validation mapping for the fit (the kinds of sbmlsim are not changed); for the credibility it is a limitation. The points a limitation removes from an evidence are counted per evidence and shown in the report.
+A limitation stays a validation mapping for the fit (the kinds of sbmlsim are not changed); for the credibility it is a limitation. The points a limitation removes from an evidence are counted per evidence and shown in the report; a calibration keeps only training points, so it counts only the removed points it would have kept.
 
 `Unclaimed(within=...)` is for validation data which is computed instead of named, e.g. held-out subjects: it takes the validation points which no other evidence of the model selects (the selected points of the other evidence, of any COU) and no limitation, restricted to the mappings `within` accepts. It is allowed once per COU and only as validation evidence. Without `within` it would take every validation point nobody claims, so a model gives it the metadata of the data it means. Two `Unclaimed` of different COUs may share points. A mapping which is training data in any adopted fit counts as fitted in every fit, so `Unclaimed` and the unclaimed report exclude it.
 
@@ -184,12 +205,12 @@ Per COU, on the union of its validation evidence (each point once; the calibrati
 
 | verdict | meaning |
 |---|---|
-| `supported` | the acceptance is met and every claimed value of the domain is covered by validation data |
-| `supported_with_extrapolation` | the acceptance is met, some claimed value is not validated, and the COU has an `extrapolation` text which says why the claim holds |
+| `supported` | the acceptance is met and every claimed value of the domain is covered by validation data (for C1 by calibration data) |
+| `supported_with_extrapolation` | the acceptance is met, some claimed value is not validated, and the COU has an `extrapolation` text which says why the claim holds; a C4 COU, which extrapolates by definition, is never plainly `supported` but at best this |
 | `not_supported` | an acceptance rule is not met |
 | `insufficient_evidence` | no evidence that can be evaluated, or claimed values not validated and no `extrapolation` text |
 
-Coverage counts only the points the criteria can evaluate: a fold error needs a finite `DV` and `IPRED`, both greater than 0. The numbers are reported as `n_decisive` (the points of the deciding evidence) and `n_evaluable`; a rule without an evaluable point has the value `NaN` and `met` of `None`, is not evaluable, and gives `insufficient_evidence`, never `supported`. A `not_supported` verdict is a finding to keep and explain, not a reason to loosen the acceptance.
+Coverage counts only the points the criteria can evaluate: a fold error needs a finite `DV` and `IPRED`, both greater than 0. The numbers are reported as `n_decisive` (the points of the deciding evidence) and `n_evaluable`; a rule without an evaluable point has the value `NaN` and `met` of `None`, is not evaluable, and gives `insufficient_evidence`, never `supported`. A `not_supported` verdict is a finding to keep and explain, not a reason to loosen the acceptance. A `supported` C1 COU rests on the data the model was fitted to, so the console, the report and the release page show next to every verdict what decided it (decided on: calibration or validation).
 
 Domain coverage is per claimed (field, value): `validated` when validation points with the value exist, `calibrated` when only calibration points exist (this counts as covered for a C1 COU), `uncovered` otherwise. The values of the points outside of the claimed domain are reported as well; evidence that does not fit the claim is a smell of the declaration.
 
@@ -200,12 +221,13 @@ run_credibility pkdb_models.models.hctz
 run_credibility pkdb_models.models.hctz --from-json results/credibility/credibility.json
 ```
 
-The console shows a table of the COUs and verdicts; see [Commands](commands.md). `index.html` of the report (one page, no network) has:
+The console shows a table of the COUs, their verdicts and what decided them; see [Commands](commands.md). `index.html` of the report (one page, no network) has:
 
-- the **overview**: the COUs with level, risk and verdict (in words and in a colour) and the limitations of the model;
-- a **section per COU**: question, rationale, quantities, the claimed domain with its coverage, the evidence table (role, points, mappings, studies, GMFE, AFE, the percentages of the criteria, the points removed by limitations and outliers), the acceptance table (value, limit, met), the table of the credibility factors and the extrapolation text;
-- the **limitations**: their metrics, explicitly outside of any acceptance, and the unclaimed validation points per fit (held-out data which answers no declared question);
-- the **provenance**: the versions of pkpdsim, sbmlsim, sbmlutils and libroadrunner, the commit of the model repository and whether it was dirty, the adopted fits and the date.
+- the **overview**: the COUs with level, risk, verdict (in words and in a colour) and the role of the evidence which decided it, and the limitations of the model;
+- a **section per COU**: question, rationale, quantities (a ratio marked as assessed in step 3), the claimed domain with its coverage and the statement (not assessed), the evidence table (role, points, mappings, studies, GMFE, AFE, the percentages of the criteria, the points removed by limitations and outliers), the acceptance table (value, limit, met), the table of the credibility factors and the extrapolation text;
+- the **limitations**: their metrics, explicitly outside of any acceptance;
+- the **unclaimed validation data**: the validation points per fit which no evidence and no limitation selects (held-out data which answers no declared question);
+- the **provenance**: the versions of pkpdsim, sbmlsim, sbmlutils and libroadrunner, the commit of the model repository and whether the folder of the model had changes (`git status` of the model folder), the adopted fits and the date. A release passes the commit of its source repository (`--source-commit`), the assessment then records it and leaves the dirty state unknown.
 
 The factors of V&V 40 are listed per COU with a status: `assessed` (output comparison, test samples, test conditions and the relevance of the validation activities, from the metrics, the evidence and the coverage), `platform` (a statement which holds for the whole stack, e.g. the code verification by the SBML Test Suite and the PEtab suites of sbmlsim) or `not_assessed` with the step which will assess it, so a reader sees what is missing.
 
