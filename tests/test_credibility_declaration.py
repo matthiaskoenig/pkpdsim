@@ -10,6 +10,7 @@ from sbmlsim.fit.evaluation import Fold
 from pkpdsim.credibility import (
     UNCLAIMED,
     Acceptance,
+    AfeRange,
     ContextOfUse,
     CouLevel,
     Credibility,
@@ -20,6 +21,7 @@ from pkpdsim.credibility import (
     Level,
     MaxGmfe,
     QuantityOfInterest,
+    Unclaimed,
     default_acceptance,
     model_risk,
 )
@@ -41,7 +43,7 @@ def _cou(**kw: object) -> ContextOfUse:
         "influence": M,
         "consequence": M,
         "quantities": (QuantityOfInterest("Cve", "plasma"),),
-        "domain": Domain(),
+        "domain": Domain(metadata={"route": (Route.PO,)}),
         "evidence": (Evidence("v", EvidenceRole.VALIDATION, _select),),
     }
     args.update(kw)
@@ -152,3 +154,105 @@ def test_a_c4_cou_needs_only_its_extrapolation() -> None:
 def test_the_label_of_a_level() -> None:
     assert CouLevel.C2.label == "interpolate"
     assert CouLevel.C2.title() == "C2"
+
+
+def _problems(cou: ContextOfUse) -> list[str]:
+    """Get the problems of a declaration of one context of use."""
+    with pytest.raises(DeclarationError) as err:
+        Credibility(contexts=(cou,))
+    return err.value.problems
+
+
+def test_a_question_ends_with_a_question_mark() -> None:
+    (problem,) = _problems(_cou(question="What? A statement."))
+    assert "the question must be a question" in problem
+    cou = _cou(question="What follows from a dose?  ")
+    assert Credibility(contexts=(cou,)).context("dose") is cou
+
+
+def test_a_cou_needs_a_quantity_which_is_no_ratio() -> None:
+    ratio = QuantityOfInterest("Cve_ratio", "impaired over healthy", ratio=True)
+    (problem,) = _problems(_cou(quantities=(ratio,)))
+    assert "'dose': at least one quantity of interest which is no ratio" in problem
+    cou = _cou(quantities=(QuantityOfInterest("Cve", "plasma"), ratio))
+    assert Credibility(contexts=(cou,)).context("dose") is cou
+
+
+@pytest.mark.parametrize("level", [CouLevel.C2, CouLevel.C3, CouLevel.C4, CouLevel.C5])
+def test_a_cou_above_c1_claims_metadata(level: CouLevel) -> None:
+    (problem,) = _problems(
+        _cou(level=level, domain=Domain(statement="12.5 to 100 mg"), extrapolation="x")
+    )
+    assert f"'dose': a {level} context claims at least one value" in problem
+
+
+def test_a_c1_cou_may_claim_no_metadata() -> None:
+    cou = _cou(
+        level=CouLevel.C1,
+        domain=Domain(),
+        evidence=(Evidence("c", EvidenceRole.CALIBRATION, _select),),
+    )
+    assert Credibility(contexts=(cou,)).context("dose") is cou
+
+
+def test_a_c5_cou() -> None:
+    cou = _cou(level=CouLevel.C5, quantities=(QuantityOfInterest("SBP", "pressure"),))
+    assert Credibility(contexts=(cou,)).context("dose").level is CouLevel.C5
+    (problem,) = _problems(
+        _cou(
+            level=CouLevel.C5,
+            evidence=(Evidence("c", EvidenceRole.CALIBRATION, _select),),
+        )
+    )
+    assert "a C5 context needs validation evidence" in problem
+
+
+def test_a_c2_cou_with_extrapolation_and_no_validation() -> None:
+    cou = _cou(
+        evidence=(Evidence("c", EvidenceRole.CALIBRATION, _select),),
+        extrapolation="the decay is linear in the dose",
+    )
+    assert Credibility(contexts=(cou,)).context("dose") is cou
+
+
+def test_an_unclaimed_evidence_once_and_as_validation() -> None:
+    within = Unclaimed(within=_select)
+    cou = _cou(evidence=(Evidence("rest", EvidenceRole.VALIDATION, within),))
+    assert Credibility(contexts=(cou,)).context("dose") is cou
+
+
+def test_the_decisive_role() -> None:
+    assert _cou(level=CouLevel.C1).decisive_role is EvidenceRole.CALIBRATION
+    for level in (CouLevel.C2, CouLevel.C3, CouLevel.C4, CouLevel.C5):
+        assert _cou(level=level).decisive_role is EvidenceRole.VALIDATION
+
+
+def test_an_unknown_context_is_a_key_error() -> None:
+    credibility = Credibility(contexts=(_cou(),))
+    with pytest.raises(KeyError, match=r"known: \['dose'\]"):
+        credibility.context("renal")
+
+
+@pytest.mark.parametrize(
+    ("ipred", "met"),
+    [
+        pytest.param(0.8, True, id="the low bound"),
+        pytest.param(1.25, True, id="the high bound"),
+        pytest.param(1.0, True, id="inside"),
+        pytest.param(0.79, False, id="below"),
+        pytest.param(1.26, False, id="above"),
+    ],
+)
+def test_the_afe_range_includes_its_bounds(ipred: float, met: bool) -> None:
+    points = pd.DataFrame({"DV": [1.0, 1.0], "IPRED": [ipred, ipred], "DV_SD": np.nan})
+    result = AfeRange(0.8, 1.25).evaluate(points)
+    assert result.value == pytest.approx(ipred)
+    assert result.met is met
+    assert result.limit == "0.8 to 1.25"
+
+
+def test_an_afe_range_without_applicable_points_is_not_evaluable() -> None:
+    points = pd.DataFrame({"DV": [0.0, -1.0], "IPRED": [1.0, 1.0], "DV_SD": np.nan})
+    result = AfeRange(0.8, 1.25).evaluate(points)
+    assert math.isnan(result.value)
+    assert result.met is None

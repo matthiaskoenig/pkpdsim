@@ -14,9 +14,13 @@ table without a model. Per context of use:
   of calibration evidence only, `uncovered` without; a C1 context counts
   `calibrated` as covered. A point is applicable when the fold criteria can
   evaluate it, a positive and finite value and prediction (`applicable`): the
-  points of a failed simulation or of zeros cover nothing. The values of the points outside the claimed domain are reported
-  as unclaimed values.
+  points of a failed simulation or of zeros cover nothing. The values of the
+  points outside the claimed domain are reported as unclaimed values, a point
+  without the field has none.
 - The verdict, see `verdict`, and the factors of V&V 40 (`FACTORS`).
+
+The ratio quantities and the statement of the domain are recorded and shown,
+not assessed: the ratios in step 3, the statement not at all.
 
 The limitations are reported apart, with their metrics, and enter no
 acceptance. The assessment writes and reads JSON (`to_json`, `from_json`),
@@ -321,6 +325,11 @@ class ContextResult:
     factors: list[FactorRecord]
     n_decisive: int
     n_evaluable: int
+
+    @property
+    def decisive_role(self) -> EvidenceRole:
+        """Get the role of the evidence which decides, see `CouLevel.decisive_role`."""
+        return self.level.decisive_role
 
     def to_dict(self) -> dict[str, object]:
         """Get the result as plain data, `NaN` as `None`."""
@@ -666,7 +675,8 @@ def _coverage(
                 n_points=int(outside[value]),
             )
             for value in sorted(outside.index)
-            if value not in names
+            # a point without the field reports no value
+            if value and value not in names
         )
     return entries
 
@@ -683,12 +693,16 @@ def verdict(
     acceptance: Sequence[AcceptanceResult],
     covered: bool,
     extrapolation: str,
+    *,
+    level: CouLevel,
 ) -> Verdict:
     """Get the verdict of a context of use.
 
     In this order: no decisive point is insufficient evidence; a rule which is
     not met is not supported; a rule which is not evaluable is insufficient
-    evidence; every claimed value covered is supported; an extrapolation
+    evidence; every claimed value covered is supported, for C4 supported with
+    extrapolation (a C4 context extrapolates without data of its condition by
+    definition, its extrapolation argument is required); an extrapolation
     argument is supported with extrapolation; else insufficient evidence.
 
     Args:
@@ -696,6 +710,7 @@ def verdict(
         acceptance: the results of the acceptance rules.
         covered: whether every claimed value is covered.
         extrapolation: the extrapolation argument of the context.
+        level: the level of the context.
 
     Returns:
         The verdict.
@@ -706,7 +721,7 @@ def verdict(
         return Verdict.NOT_SUPPORTED
     if any(result.met is None for result in acceptance):
         return Verdict.INSUFFICIENT_EVIDENCE
-    if covered:
+    if covered and level is not CouLevel.C4:
         return Verdict.SUPPORTED
     if extrapolation:
         return Verdict.SUPPORTED_WITH_EXTRAPOLATION
@@ -790,7 +805,9 @@ def _context_result(
             AcceptanceRecord(name=a.name, value=a.value, limit=a.limit, met=a.met)
             for a in acceptance
         ],
-        verdict=verdict(len(decisive), acceptance, covered, cou.extrapolation),
+        verdict=verdict(
+            len(decisive), acceptance, covered, cou.extrapolation, level=cou.level
+        ),
         factors=_factors(cou, decisive, acceptance, coverage),
         n_decisive=len(decisive),
         n_evaluable=len(applicable(decisive)),
@@ -867,19 +884,31 @@ def _git(model: PKPDModel, *args: str) -> str | None:
     return result.stdout if result.returncode == 0 else None
 
 
-def provenance(model: PKPDModel) -> Provenance:
+def provenance(model: PKPDModel, source_commit: str | None = None) -> Provenance:
     """Get the provenance of an assessment of a model now.
 
     Args:
         model: the model.
+        source_commit: the commit of the source repository of the model, given
+            by a release, which assesses the model in its release repository:
+            the commit is recorded and whether its tree was clean is not known.
 
     Returns:
-        The versions of `VERSIONED_PACKAGES`, the commit of the repository of
-        the model and whether it has changes (`None` outside a repository), the
-        adopted fits and the date with the local time zone.
+        The versions of `VERSIONED_PACKAGES`, the commit and whether the folder
+        of the model has changes (`git status --porcelain -- .` in `model.path`;
+        `None` outside a repository, the dirty state `None` with a
+        `source_commit`), the adopted fits and the date with the local time
+        zone.
     """
-    commit = _git(model, "rev-parse", "HEAD")
-    status = _git(model, "status", "--porcelain")
+    if source_commit is None:
+        commit = _git(model, "rev-parse", "HEAD")
+        status = (
+            None if commit is None else _git(model, "status", "--porcelain", "--", ".")
+        )
+        commit = None if commit is None else commit.strip()
+        dirty = None if status is None else bool(status.strip())
+    else:
+        commit, dirty = source_commit, None
     return Provenance(
         model=model.name,
         title=model.title,
@@ -888,13 +917,13 @@ def provenance(model: PKPDModel) -> Provenance:
             package: importlib.metadata.version(package)
             for package in VERSIONED_PACKAGES
         },
-        commit=None if commit is None else commit.strip(),
-        dirty=None if status is None else bool(status.strip()),
+        commit=commit,
+        dirty=dirty,
         date=datetime.now().astimezone().isoformat(timespec="seconds"),
     )
 
 
-def assess(model: PKPDModel) -> CredibilityAssessment:
+def assess(model: PKPDModel, source_commit: str | None = None) -> CredibilityAssessment:
     """Assess the contexts of use of a model on its adopted fits.
 
     The fits are evaluated fresh on the current model and data, see
@@ -902,6 +931,8 @@ def assess(model: PKPDModel) -> CredibilityAssessment:
 
     Args:
         model: the model with a declaration and adopted fits.
+        source_commit: the commit of the source repository of a release, see
+            `provenance`.
 
     Returns:
         The assessment.
@@ -914,4 +945,4 @@ def assess(model: PKPDModel) -> CredibilityAssessment:
     credibility = model.load_credibility()
     fits = evaluate_fits(model)
     logger.info("Assess the contexts of use of '%s'", model.name)
-    return assess_table(credibility, fits, provenance(model))
+    return assess_table(credibility, fits, provenance(model, source_commit))

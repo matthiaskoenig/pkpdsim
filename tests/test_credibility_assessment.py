@@ -7,11 +7,14 @@ from pathlib import Path
 
 import pytest
 from credibility_tables import fit_table
+from pkpdsim_credibility import MODEL
 from pkpdsim_credibility.credibility import CREDIBILITY
 from pkpdsim_credibility.fitting import DOSE, ZERO
+from release_git import git, init_repo
 
 from pkpdsim.credibility import (
     UNCLAIMED,
+    AcceptanceResult,
     ContextOfUse,
     ContextResult,
     CouLevel,
@@ -25,12 +28,14 @@ from pkpdsim.credibility import (
     FactorStatus,
     FitTable,
     Provenance,
+    QuantityOfInterest,
     Unclaimed,
     Verdict,
     assess,
     assess_table,
     describe_selection,
 )
+from pkpdsim.credibility.assessment import provenance, verdict
 from pkpdsim.credibility.factors import FACTORS
 from pkpdsim.fit import NamedMappings, metadata_filter, named_filter
 from pkpdsim.metadata import Health, Route
@@ -120,6 +125,69 @@ def test_an_uncovered_value_without_extrapolation() -> None:
     assert renal.verdict.label == "supported with extrapolation"
 
 
+def test_a_c4_context_is_never_plainly_supported() -> None:
+    """A C4 context extrapolates by definition, even on validation evidence."""
+    cou = dataclasses.replace(
+        CREDIBILITY.context("dose"),
+        level=CouLevel.C4,
+        extrapolation="the qualification of the platform",
+    )
+    assessment = _assess(fit_table(), _with(cou))
+    dose = _context(assessment, "dose")
+    assert all(result["met"] is True for result in dose.acceptance)
+    assert all(
+        e.coverage is Coverage.VALIDATED
+        for e in assessment.coverage
+        if e.context == "dose"
+    )
+    assert dose.verdict is Verdict.SUPPORTED_WITH_EXTRAPOLATION
+
+    failed = _context(_assess(fit_table(3.0), _with(cou)), "dose")
+    assert failed.verdict is Verdict.NOT_SUPPORTED
+
+
+def test_the_verdict_of_a_level() -> None:
+    met = [AcceptanceResult("within_2fold", 100.0, ">= 70", True)]
+    for level in CouLevel:
+        expected = (
+            Verdict.SUPPORTED_WITH_EXTRAPOLATION
+            if level is CouLevel.C4
+            else Verdict.SUPPORTED
+        )
+        assert verdict(10, met, True, "argued", level=level) is expected
+    assert verdict(10, met, False, "", level=CouLevel.C2) is (
+        Verdict.INSUFFICIENT_EVIDENCE
+    )
+
+
+def test_a_ratio_quantity_is_recorded() -> None:
+    ratio = QuantityOfInterest("A_ratio", "impaired over healthy", ratio=True)
+    cou = dataclasses.replace(
+        CREDIBILITY.context("dose"),
+        quantities=(*CREDIBILITY.context("dose").quantities, ratio),
+    )
+    assessment = _assess(fit_table(), _with(cou))
+    dose = _context(assessment, "dose")
+    assert dose.quantities[-1] == {
+        "id": "A_ratio",
+        "description": "impaired over healthy",
+        "ratio": True,
+    }
+    assert dose.verdict is Verdict.SUPPORTED
+    assert dose.n_decisive == _context(_assess(fit_table()), "dose").n_decisive
+
+
+def test_a_point_without_the_field_is_no_value_outside_the_claim() -> None:
+    fits = fit_table()
+    table = fits.table.copy()
+    subject = (table.experiment == "CredA") & (table.mapping == "fm_subject")
+    table["health"] = table["health"].astype(object)
+    table.loc[subject, "health"] = None
+    assessment = _assess(dataclasses.replace(fits, table=table))
+    assert not [e for e in assessment.coverage if e.value == ""]
+    assert _coverage(assessment, "dose", "health", "HEALTHY").n_points == 5
+
+
 @pytest.mark.parametrize(
     ("selected", "factors"),
     [
@@ -132,7 +200,6 @@ def test_a_criterion_without_applicable_points(
 ) -> None:
     cou = dataclasses.replace(
         CREDIBILITY.context("dose"),
-        domain=Domain(),
         evidence=(
             Evidence("no ratios", EvidenceRole.VALIDATION, named_filter(selected)),
         ),
@@ -194,7 +261,6 @@ def test_points_without_a_ratio_cover_nothing(column: str, value: float) -> None
 def test_no_decisive_evidence_is_insufficient() -> None:
     cou = dataclasses.replace(
         CREDIBILITY.context("dose"),
-        domain=Domain(),
         evidence=(
             Evidence(
                 "fitted", EvidenceRole.CALIBRATION, metadata_filter(route={Route.IV})
@@ -324,7 +390,6 @@ def test_the_factors() -> None:
 def test_the_json_round_trip(tmp_path: Path) -> None:
     cou = dataclasses.replace(
         CREDIBILITY.context("dose"),
-        domain=Domain(),
         evidence=(Evidence("zeros", EvidenceRole.VALIDATION, named_filter(ZERO)),),
     )
     assessment = _assess(fit_table(), _with(cou, CREDIBILITY.context("describe")))
@@ -397,3 +462,29 @@ def test_assess_the_test_package(credibility_model: PKPDModel) -> None:
 @pytest.mark.parametrize("verdict", list(Verdict))
 def test_the_labels(verdict: Verdict) -> None:
     assert verdict.label == verdict.value.replace("_", " ")
+
+
+def test_the_provenance_of_a_release() -> None:
+    """In a release the source commit is given, whether its tree was clean is unknown."""
+    result = provenance(MODEL, source_commit="0123abc")
+    assert (result.commit, result.dirty) == ("0123abc", None)
+    assert result.model == MODEL.name
+
+
+@pytest.mark.usefixtures("git_env")
+def test_the_provenance_is_of_the_folder_of_the_model(tmp_path: Path) -> None:
+    root = tmp_path / "repository"
+    init_repo(root)
+    package = root / "model"
+    package.mkdir()
+    (package / "credibility.py").write_text("CREDIBILITY = None\n")
+    git(root, "add", "-A")
+    git(root, "commit", "-m", "init")
+    model = dataclasses.replace(MODEL, path=package)
+    (root / "other.txt").write_text("a change outside the model\n")
+    result = provenance(model)
+    assert result.commit == git(root, "rev-parse", "HEAD").strip()
+    assert result.dirty is False
+    (package / "notes.txt").write_text("a change of the model\n")
+    assert provenance(model).dirty is True
+    assert provenance(dataclasses.replace(model, path=tmp_path)).commit is None

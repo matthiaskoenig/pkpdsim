@@ -239,9 +239,12 @@ def fits_dir(toy_fit: Path, tmp_path_factory: pytest.TempPathFactory) -> Path:
     return directory
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def credibility_model(tmp_path_factory: pytest.TempPathFactory) -> PKPDModel:
-    """Get the credibility test model with its adopted fit of every kind of evidence."""
+    """Get the credibility test model with its adopted fit of every kind of evidence.
+
+    Session-scoped: a process, every worker of pytest-xdist, fits it once.
+    """
     base = tmp_path_factory.mktemp("credibility")
     runs = fit_command(
         CREDIBILITY_MODEL,

@@ -73,6 +73,13 @@ class CouLevel(StrEnum):
         """Get the name of the level, e.g. `interpolate`."""
         return _COU_LABELS[self.value]
 
+    @property
+    def decisive_role(self) -> EvidenceRole:
+        """Get the role of the evidence which decides: calibration for C1, else validation."""
+        if self is CouLevel.C1:
+            return EvidenceRole.CALIBRATION
+        return EvidenceRole.VALIDATION
+
 
 @unique
 class Level(StrEnum):
@@ -138,9 +145,11 @@ class QuantityOfInterest:
     """A quantity a context of use is asked for.
 
     Attributes:
-        id: the observable of the fit mappings, e.g. `Cve_hctz` or `pk.cmax`.
+        id: the observable of the fit mappings, e.g. `Cve_hctz` or `pk.cmax`;
+            for a ratio its name, it is matched against no observable.
         description: what the quantity is.
-        ratio: whether the quantity is a ratio, assessed in a later step.
+        ratio: whether the quantity is a ratio between arms, which is recorded
+            and assessed in step 3; it restricts no evidence.
     """
 
     id: str
@@ -360,8 +369,9 @@ class ContextOfUse:
         level: the level on the ladder.
         influence: the influence of the model on the decision.
         consequence: the consequence of a wrong decision.
-        quantities: the quantities asked for.
-        domain: the domain claimed.
+        quantities: the quantities asked for, at least one which is no ratio.
+        domain: the domain claimed, at least one value of the metadata above
+            C1.
         evidence: the evidence.
         acceptance: the rules, empty for the default of the risk.
         limitations: the evidence of what the model does not describe.
@@ -399,10 +409,8 @@ class ContextOfUse:
 
     @property
     def decisive_role(self) -> EvidenceRole:
-        """Get the role of the evidence which decides: calibration for C1, else validation."""
-        if self.level is CouLevel.C1:
-            return EvidenceRole.CALIBRATION
-        return EvidenceRole.VALIDATION
+        """Get the role of the evidence which decides, see `CouLevel.decisive_role`."""
+        return self.level.decisive_role
 
     def problems(self) -> list[str]:
         """Get the problems of the context of use, each naming the context."""
@@ -410,10 +418,19 @@ class ContextOfUse:
         found: list[str] = []
         if not ID_PATTERN.match(self.id):
             found.append(f"{who}: the id must match {ID_PATTERN.pattern}")
-        if "?" not in self.question:
-            found.append(f"{who}: the question must be a question, with a '?'")
-        if not self.quantities:
-            found.append(f"{who}: at least one quantity of interest is required")
+        if not self.question.rstrip().endswith("?"):
+            found.append(f"{who}: the question must be a question, ending with '?'")
+        if not any(not q.ratio for q in self.quantities):
+            # step 1 assesses the absolute quantities, a ratio is assessed in step 3
+            found.append(
+                f"{who}: at least one quantity of interest which is no ratio "
+                "is required"
+            )
+        if self.level is not CouLevel.C1 and not any(self.domain.metadata.values()):
+            found.append(
+                f"{who}: a {self.level} context claims at least one value of the "
+                "metadata in its domain"
+            )
         roles = {e.role for e in self.evidence}
         if self.level is CouLevel.C1:
             if EvidenceRole.CALIBRATION not in roles:

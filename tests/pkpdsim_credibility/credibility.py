@@ -44,7 +44,10 @@ CREDIBILITY = Credibility(
             influence=Level.MEDIUM,
             consequence=Level.MEDIUM,
             quantities=_A,
-            domain=Domain(metadata={"route": (Route.IV,), "health": (Health.HEALTHY,)}),
+            domain=Domain(
+                metadata={"route": (Route.IV,), "health": (Health.HEALTHY,)},
+                statement="the single doses of the data",
+            ),
             evidence=(
                 Evidence("doses", EvidenceRole.VALIDATION, named_filter(DOSE)),
                 Evidence(
@@ -65,7 +68,14 @@ CREDIBILITY = Credibility(
             level=CouLevel.C3,
             influence=Level.MEDIUM,
             consequence=Level.HIGH,
-            quantities=_A,
+            quantities=(
+                *_A,
+                QuantityOfInterest(
+                    "A_ratio",
+                    "the concentration in renal impairment over the healthy one",
+                    ratio=True,
+                ),
+            ),
             domain=Domain(
                 metadata={"health": (Health.HEALTHY, Health.RENAL_IMPAIRMENT)}
             ),
@@ -99,7 +109,7 @@ BROKEN = Credibility(
             influence=Level.LOW,
             consequence=Level.LOW,
             quantities=_A,
-            domain=Domain(),
+            domain=Domain(metadata={"route": (Route.IV,)}),
             evidence=(
                 Evidence(
                     "fitted dose",

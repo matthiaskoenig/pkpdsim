@@ -46,6 +46,28 @@ def fits() -> FitTable:
     return fit_table()
 
 
+def _cou(
+    id: str,
+    *evidence: Evidence,
+    quantities: tuple[QuantityOfInterest, ...] = _A,
+    limitations: tuple[Evidence, ...] = (),
+) -> ContextOfUse:
+    """Get a context of use of intravenous doses with the evidence."""
+    return ContextOfUse(
+        id=id,
+        title="Dose",
+        question="What follows from a dose?",
+        level=CouLevel.C2,
+        influence=Level.LOW,
+        consequence=Level.LOW,
+        quantities=quantities,
+        domain=Domain(metadata={"route": (Route.IV,)}),
+        evidence=evidence,
+        limitations=limitations,
+        extrapolation="the decay is linear",
+    )
+
+
 def _credibility(
     *evidence: Evidence,
     limitations: tuple[Evidence, ...] = (),
@@ -53,20 +75,7 @@ def _credibility(
 ) -> Credibility:
     """Get a declaration of one context of use with the evidence."""
     return Credibility(
-        contexts=(
-            ContextOfUse(
-                id="dose",
-                title="Dose",
-                question="What follows from a dose?",
-                level=CouLevel.C2,
-                influence=Level.LOW,
-                consequence=Level.LOW,
-                quantities=quantities,
-                domain=Domain(),
-                evidence=evidence,
-                extrapolation="the decay is linear",
-            ),
-        ),
+        contexts=(_cou("dose", *evidence, quantities=quantities),),
         limitations=limitations,
     )
 
@@ -200,6 +209,64 @@ def test_the_limitations_of_a_context_are_subtracted(fits: FitTable) -> None:
     (dose,) = selections.evidence
     assert _pairs(fits, dose.rows) == {("CredA", "fm_dose")}
     assert dose.limitation_subtracted == 2
+
+
+def test_a_limitation_of_another_context_is_subtracted(fits: FitTable) -> None:
+    """A limitation of one context of use is no evidence of another one."""
+    scaled = Evidence(
+        "scaled", EvidenceRole.LIMITATION, named_filter({"CredA": {"fm_limit"}})
+    )
+    limited = _cou(
+        "limited",
+        Evidence("doses", EvidenceRole.VALIDATION, named_filter(DOSE)),
+        limitations=(scaled,),
+    )
+    other = _cou(
+        "other",
+        Evidence(
+            "doses and scaled",
+            EvidenceRole.VALIDATION,
+            named_filter({"CredA": {"fm_dose", "fm_limit"}}),
+        ),
+    )
+    selections = select(Credibility(contexts=(limited, other)), fits)
+    (_, evidence) = selections.evidence
+    assert evidence.context == "other"
+    assert _pairs(fits, evidence.rows) == {("CredA", "fm_dose")}
+    assert len(evidence.rows) == _n(fits, "CredA", "fm_dose")
+    assert evidence.limitation_subtracted == _n(fits, "CredA", "fm_limit") == 2
+
+
+def test_a_calibration_counts_no_subtracted_validation(fits: FitTable) -> None:
+    """A calibration keeps training points only, the limitation it meets is none."""
+    selections = select(
+        _credibility(
+            Evidence(
+                "intravenous",
+                EvidenceRole.CALIBRATION,
+                metadata_filter(route={Route.IV}),
+            ),
+            limitations=(
+                Evidence(
+                    "scaled",
+                    EvidenceRole.LIMITATION,
+                    named_filter({"CredA": {"fm_limit"}}),
+                ),
+            ),
+        ),
+        fits,
+    )
+    (calibration,) = selections.evidence
+    assert calibration.limitation_subtracted == 0
+
+
+def test_a_ratio_quantity_does_not_restrict_the_evidence(fits: FitTable) -> None:
+    """A ratio is assessed in step 3: it matches no observable and selects nothing."""
+    doses = Evidence("doses", EvidenceRole.VALIDATION, named_filter(DOSE))
+    ratio = QuantityOfInterest("A_ratio", "impaired over healthy", ratio=True)
+    (dose,) = select(_credibility(doses, quantities=(*_A, ratio)), fits).evidence
+    assert _pairs(fits, dose.rows) == {("CredA", "fm_dose")}
+    assert len(dose.rows) == _n(fits, "CredA", "fm_dose")
 
 
 def test_a_fitted_limitation_is_an_error(fits: FitTable) -> None:
