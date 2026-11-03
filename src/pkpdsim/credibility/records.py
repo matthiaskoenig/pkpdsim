@@ -54,6 +54,11 @@ METRICS_MAPPINGS: Final = "metrics_mappings.tsv"
 #: the columns of a table of the fits before the metadata of the mappings
 KEY_COLUMNS: Final = ("fit", "experiment", "mapping", "kind", "observable")
 
+#: the remedy of a kind which differs from the recorded one
+KIND_REMEDY: Final = (
+    "Refit and adopt the fit again; the kinds of an adopted fit are never overridden."
+)
+
 #: gets the fit mapping of an experiment by its key
 type MappingLookup = Callable[[str, str], FitMapping]
 
@@ -99,8 +104,7 @@ class KindMismatchError(ValueError):
             "The kinds of the fit mappings differ from the kinds the adopted fits "
             "recorded:\n"
             + "\n".join(f"- {problem}" for problem in self.problems)
-            + "\nRefit and adopt the fit again; the kinds of an adopted fit are "
-            "never overridden."
+            + f"\n{KIND_REMEDY}"
         )
 
 

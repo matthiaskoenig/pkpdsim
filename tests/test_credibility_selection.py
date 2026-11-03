@@ -353,6 +353,43 @@ def test_the_fit_of_an_evidence_restricts_it(fits: FitTable) -> None:
     assert len(dose.rows) == _n(fits, "CredA", "fm_dose")
 
 
+def test_a_mapping_fitted_in_one_fit_is_fitted_in_every_fit(fits: FitTable) -> None:
+    # CredA fm_train is training of DECAY and validation of PD
+    other = fits.table.assign(fit="PD")
+    other.loc[other.mapping == "fm_train", "kind"] = "validation"
+    table = pd.concat([fits.table, other], ignore_index=True)
+    both = dataclasses.replace(fits, table=table)
+    train = named_filter({"CredA": {"fm_train"}})
+
+    for fit in ("PD", None):
+        message = _problems(
+            _credibility(Evidence("fitted", EvidenceRole.VALIDATION, train, fit=fit)),
+            both,
+        )
+        assert "CredA.fm_train (PD, training in DECAY)" in message
+
+    selections = select(
+        _credibility(
+            Evidence("doses", EvidenceRole.VALIDATION, named_filter(DOSE)),
+            Evidence("the rest", EvidenceRole.VALIDATION, UNCLAIMED),
+        ),
+        both,
+    )
+    (_, rest) = selections.evidence
+    assert ("CredA", "fm_train") not in _pairs(both, rest.rows)
+    assert ("CredA", "fm_subject") in _pairs(both, rest.rows)
+    assert "fm_train" not in set(selections.unclaimed.mapping)
+
+    message = _problems(
+        _credibility(
+            Evidence("doses", EvidenceRole.VALIDATION, named_filter(DOSE)),
+            limitations=(Evidence("fitted", EvidenceRole.LIMITATION, train, fit="PD"),),
+        ),
+        both,
+    )
+    assert "training in DECAY" in message
+
+
 def test_an_empty_evidence_is_an_error(fits: FitTable) -> None:
     message = _problems(
         _credibility(
@@ -472,6 +509,10 @@ def test_check_declaration_of_the_test_package(
     messages = check_declaration(edited)
     assert any("CredA.fm_dose" in m and "training" in m for m in messages)
     assert any("CredB.fm_dose" in m for m in messages)
+    assert len([m for m in messages if "adopt the fit again" in m]) == 1
+
+    (message,) = check_declaration(dataclasses.replace(credibility_model, fits=[]))
+    assert "no adopted fits" in message
 
     missing = tmp_path / "missing"
     shutil.copytree(credibility_model.fits_dir, missing)
@@ -481,3 +522,15 @@ def test_check_declaration_of_the_test_package(
         dataclasses.replace(credibility_model, fits_path=missing)
     )
     assert "adopt the fit again" in message
+
+    twice = tmp_path / "twice"
+    shutil.copytree(credibility_model.fits_dir, twice)
+    path = twice / fit_id / "metrics_mappings.tsv"
+    table = pd.read_csv(path, sep="\t")
+    pd.concat([table, table.assign(kind="training")]).to_csv(
+        path, sep="\t", index=False
+    )
+    (message,) = check_declaration(
+        dataclasses.replace(credibility_model, fits_path=twice)
+    )
+    assert "a mapping has one kind" in message

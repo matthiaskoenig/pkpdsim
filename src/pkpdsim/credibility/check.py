@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from pkpdsim.credibility.declaration import Credibility, DeclarationError
-from pkpdsim.credibility.records import kind_differences, mapping_table
+from pkpdsim.credibility.records import KIND_REMEDY, kind_differences, mapping_table
 from pkpdsim.credibility.selection import SelectionError, select
 
 if TYPE_CHECKING:
@@ -20,7 +20,10 @@ def check_declaration(model: PKPDModel) -> list[str]:
     The declaration must be valid, the kinds of the mappings of the current
     selection of the fit definitions must be the recorded kinds of the adopted
     fits, and the evidence must select valid data (see `select`), all from the
-    fit definitions and the records, without a simulation.
+    fit definitions and the records, without a simulation. A problem of the
+    records, e.g. a record without the kinds of its mappings, two kinds of one
+    mapping, no adopted fits or a subset adopted twice, is a problem as well,
+    after which the kinds and the evidence are not checked.
 
     Args:
         model: the model with a declaration and adopted fits.
@@ -29,7 +32,7 @@ def check_declaration(model: PKPDModel) -> list[str]:
         Every problem, empty if the declaration holds.
 
     Raises:
-        ValueError: if the model has no declaration or no adopted fits.
+        ValueError: if the model has no declaration.
     """
     problems: list[str] = []
     credibility: Credibility | None = None
@@ -39,9 +42,15 @@ def check_declaration(model: PKPDModel) -> list[str]:
         problems.extend(err.problems)
     try:
         fits = mapping_table(model)
-    except FileNotFoundError as err:
+    except (FileNotFoundError, ValueError) as err:
         return [*problems, str(err)]
-    problems.extend(kind_differences(fits.table, fits.recorded_kinds))
+    differences = kind_differences(fits.table, fits.recorded_kinds)
+    if differences:
+        problems.extend(differences)
+        problems.append(
+            "The kinds of the fit mappings differ from the kinds the adopted fits "
+            f"recorded. {KIND_REMEDY}"
+        )
     if credibility is not None:
         try:
             select(credibility, fits)

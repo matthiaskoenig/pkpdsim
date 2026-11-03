@@ -6,6 +6,10 @@ validation points which no evidence claims. Everything is keyed by the
 experiment and the key of a mapping, never by the key alone, which two studies
 can share. The rules:
 
+- A mapping which is training data of one adopted fit is fitted data in every
+  fit: its points in another fit, where it may be validation data, are no
+  validation either.
+
 - The quantities of a context of use restrict its evidence to their observables,
   compared without the brackets of a concentration (`[A]` is `A`).
 - The limitations, of the model and of a context, are subtracted from every
@@ -13,7 +17,8 @@ can share. The rules:
 - A validation of fitted data is an error, its outliers are dropped and counted.
 - A calibration keeps the fitted points of its selection.
 - `Unclaimed` takes the validation points which no limitation and no other
-  evidence of any context selects.
+  evidence of any context selects; two `Unclaimed` of different contexts may
+  take the same points.
 - An evidence which selects no point is an error, and so is an evidence of a
   fit the model has not adopted.
 """
@@ -150,6 +155,16 @@ class _Selector:
         self.outlier: _Mask = kinds == "outlier"
         self.pairs = list(zip(self.experiments, self.mappings, strict=True))
         self.unique_pairs = list(dict.fromkeys(self.pairs))
+        # the fits a mapping is training data of, it is fitted in every fit
+        self.trained_in: dict[tuple[str, str], set[str]] = {}
+        for pair, fit, training in zip(
+            self.pairs, self.fit, self.training, strict=True
+        ):
+            if training:
+                self.trained_in.setdefault(pair, set()).add(str(fit))
+        self.fitted: _Mask = np.fromiter(
+            (p in self.trained_in for p in self.pairs), bool, self.size
+        )
 
     def none(self) -> _Mask:
         """Get the mask of no row."""
@@ -163,6 +178,20 @@ class _Selector:
         """Get the mappings of the rows of a mask, e.g. `CredA.fm_dose (DECAY)`."""
         names = {
             f"{experiment}.{mapping} ({fit})"
+            for experiment, mapping, fit in zip(
+                self.experiments[mask], self.mappings[mask], self.fit[mask], strict=True
+            )
+        }
+        return ", ".join(sorted(names))
+
+    def describe_fitted(self, mask: _Mask) -> str:
+        """Get the fitted mappings of the rows of a mask with the fits they are trained in.
+
+        E.g. `CredB.fm_dose (PD, training in PK)`.
+        """
+        names = {
+            f"{experiment}.{mapping} ({fit}, training in "
+            f"{', '.join(sorted(self.trained_in[(experiment, mapping)]))})"
             for experiment, mapping, fit in zip(
                 self.experiments[mask], self.mappings[mask], self.fit[mask], strict=True
             )
@@ -234,11 +263,11 @@ class _Selector:
                 f"{who}: the limitation selects no point of the fits "
                 f"{self.searched(evidence)}"
             )
-        fitted = mask & self.training
+        fitted = mask & self.fitted
         if fitted.any():
             self.problems.append(
                 f"{who}: a limitation is data the model does not describe, but "
-                f"it selects fitted data: {self.describe(fitted)}"
+                f"it selects fitted data: {self.describe_fitted(fitted)}"
             )
         return mask
 
@@ -253,6 +282,13 @@ class _Selector:
 
 def select(credibility: Credibility, fits: FitTable) -> Selections:
     """Select the data points of the evidence of every context of use.
+
+    A mapping (its experiment and key) which is training data of any adopted fit
+    counts as fitted in every fit: a validation which selects its points, in
+    any fit, is an error which names the fits it is training data of, and
+    neither `Unclaimed` nor the unclaimed validation points take them. Two
+    `Unclaimed` of different contexts may take the same points. See the module
+    for the other rules.
 
     Args:
         credibility: the declaration.
@@ -309,13 +345,14 @@ def select(credibility: Credibility, fits: FitTable) -> Selections:
             outliers = selector.none()
             fitted = selector.none()
             if evidence.role is EvidenceRole.VALIDATION:
-                fitted = rows & selector.training
+                fitted = rows & selector.fitted
                 if fitted.any():
                     selector.problems.append(
-                        f"{who} validates on fitted data: {selector.describe(fitted)}"
+                        f"{who} validates on fitted data: "
+                        f"{selector.describe_fitted(fitted)}"
                     )
-                outliers = rows & selector.outlier
-                rows = rows & selector.validation
+                outliers = rows & selector.outlier & ~selector.fitted
+                rows = rows & selector.validation & ~selector.fitted
             else:
                 rows = rows & selector.training
             if not fitted.any():
@@ -330,7 +367,8 @@ def select(credibility: Credibility, fits: FitTable) -> Selections:
                 limitation_subtracted=int(subtracted.sum()),
             )
 
-    unclaimed = selector.validation & ~all_limitations & ~claimed
+    # the validation points of a mapping which another fit fitted are fitted
+    unclaimed = selector.validation & ~selector.fitted & ~all_limitations & ~claimed
     for i, cou in enumerate(credibility.contexts):
         for j, evidence in enumerate(cou.evidence):
             if not isinstance(evidence.selection, Unclaimed):
@@ -339,7 +377,7 @@ def select(credibility: Credibility, fits: FitTable) -> Selections:
             fit = selector.of_fit(evidence, who)
             if fit is None:
                 continue
-            base = quantities[cou.id] & selector.validation & fit
+            base = quantities[cou.id] & selector.validation & ~selector.fitted & fit
             within = evidence.selection.within
             if within is not None:
                 base &= selector.accepted(within)
