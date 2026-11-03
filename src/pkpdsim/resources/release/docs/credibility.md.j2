@@ -1,0 +1,36 @@
+# Credibility
+
+[Credibility report]({{ settings.site_url }}credibility/index.html)
+
+The assessment of the contexts of use of the model against its adopted fits.
+
+| Context of use | Title | Level | Risk | Verdict |
+| --- | --- | --- | --- | --- |
+{% for context in credibility.contexts %}
+| `{{ context.id }}` | {{ context.title }} | {{ context.level }} | {{ context.risk }} | {{ context.verdict_label }} |
+{% endfor %}
+
+{% for context in credibility.contexts %}
+## {{ context.id }}: {{ context.title }}
+
+**Question:** {{ context.question }}
+
+**Verdict:** {{ context.verdict_label }}, level {{ context.level }}, model risk {{ context.risk }} (influence {{ context.influence }}, consequence {{ context.consequence }}), {{ context.n_evaluable }} of {{ context.n_decisive }} decisive points evaluable.
+
+{% if context.domain_statement %}
+**Claimed domain:** {{ context.domain_statement }}
+
+{% endif %}
+{% if context.acceptance %}
+| Acceptance criterion | Value | Limit | Met |
+| --- | --- | --- | --- |
+{% for rule in context.acceptance %}
+| `{{ rule.name }}` | {{ "%.4g" % rule.value if rule.value is not none else "n/a" }} | {{ rule.limit }} | {{ "n/a" if rule.met is none else ("yes" if rule.met else "no") }} |
+{% endfor %}
+
+{% endif %}
+{% if context.extrapolation %}
+**Extrapolation:** {{ context.extrapolation }}
+
+{% endif %}
+{% endfor %}

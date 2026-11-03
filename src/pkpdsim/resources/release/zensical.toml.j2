@@ -19,6 +19,9 @@ nav = [
   { "Models" = "models.md" },
   { "Simulations" = "simulations.md" },
   { "Fit" = "fit.md" },
+{% if model.credibility is not none %}
+  { "Credibility" = "credibility.md" },
+{% endif %}
   { "Release notes" = "release-notes.md" },
 ]
 

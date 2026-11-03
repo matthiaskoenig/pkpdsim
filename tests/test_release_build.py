@@ -14,6 +14,7 @@ FIT_ID = "FIT_20260101_000000__abcde"
 OTHER_FIT_ID = "OTHER_20260102_000000__bcdef"
 FIT_IDS = [FIT_ID, OTHER_FIT_ID]
 ARCHIVE = MODEL.path / "toy.omex"
+CREDIBILITY_REFERENCE = "pkpdsim_toy.credibility:CREDIBILITY"
 MODEL_WITH_FIT = dataclasses.replace(MODEL, fits=FIT_IDS, archive_path=ARCHIVE)
 
 
@@ -25,11 +26,13 @@ class FakeRunner:
         fail_on: str | None = None,
         no_archive: bool = False,
         no_sim: bool = False,
+        no_credibility: bool = False,
         reported: Sequence[str] = tuple(FIT_IDS),
     ) -> None:
         self.reported = reported
         self.no_archive = no_archive
         self.no_sim = no_sim
+        self.no_credibility = no_credibility
         self.commands: list[list[str]] = []
         self.streamed: list[list[str]] = []
         self.fail_on = fail_on
@@ -59,6 +62,10 @@ class FakeRunner:
             self._write(cwd / "results/simulation_uncertainty/all/Exp/index.html")
         elif "--action simulate" in joined and not self.no_sim:
             self._write(cwd / "results/simulation/all/Exp/index.html")
+        elif "run_credibility" in command:
+            if self.no_credibility:
+                return ""
+            self._write(cwd / "results/credibility/credibility.json")
         elif "run_report" in command:
             # `run_report --adopted` writes a report per adopted fit
             for fit_id in self.reported:
@@ -182,3 +189,30 @@ def test_build_without_fits_writes_no_reports(tmp_path: Path) -> None:
 def test_build_requires_the_report_of_every_fit(tmp_path: Path) -> None:
     with pytest.raises(ReleaseError, match=OTHER_FIT_ID):
         build(MODEL_WITH_FIT, tmp_path, runner=FakeRunner(reported=[FIT_ID]))
+
+
+def test_build_runs_run_credibility_for_a_declared_model(tmp_path: Path) -> None:
+    runner = FakeRunner()
+    model = dataclasses.replace(MODEL_WITH_FIT, credibility=CREDIBILITY_REFERENCE)
+    written = build(model, tmp_path, runner=runner)
+    credibility = ["uv", "run", "run_credibility", "pkpdsim_toy"]
+    assert runner.commands[-1] == [*credibility, "-o", "results/credibility"]
+    assert (tmp_path / "credibility/credibility.json").is_file()
+    assert Path("credibility") in written
+
+
+def test_build_without_a_declaration_removes_credibility(tmp_path: Path) -> None:
+    stale = tmp_path / "credibility"
+    stale.mkdir()
+    (stale / "credibility.json").write_text("{}")
+    runner = FakeRunner()
+    written = build(MODEL_WITH_FIT, tmp_path, runner=runner)
+    assert not any("run_credibility" in command for command in runner.commands)
+    assert not stale.exists()
+    assert Path("credibility") not in written
+
+
+def test_build_requires_the_credibility_folder(tmp_path: Path) -> None:
+    model = dataclasses.replace(MODEL_WITH_FIT, credibility=CREDIBILITY_REFERENCE)
+    with pytest.raises(ReleaseError, match="run_credibility"):
+        build(model, tmp_path, runner=FakeRunner(no_credibility=True))
