@@ -234,11 +234,14 @@ def test_load_time(simple: BuildResult) -> None:
     run without pytest-xdist (`pytest -n 0`, the second command of tox and so
     of continuous integration); the structural guard
     `test_rules_read_a_state` runs in every run. The model is compiled at the
-    level of production, `O2`, not at the level of the tests.
+    level of production, `O2`, not at the level of the tests. The serial
+    compile took 10.6 s of CPU time on a windows runner of continuous
+    integration, so the limit is 15 s, still half of the 28.8 s it guards
+    against.
     """
     start = time.process_time()
     load(simple, "O2")
-    assert time.process_time() - start < 10.0
+    assert time.process_time() - start < 15.0
 
 
 def rules_without_state(doc: libsbml.SBMLDocument) -> list[str]:

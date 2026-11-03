@@ -264,13 +264,15 @@ def test_print_summary(
     for context in assessment.contexts:
         assert context.id in out
         assert context.verdict.label in out
-    (describe,) = (line for line in out.splitlines() if " describe " in line)
+    # the table fits a console of windows, 79 columns
+    assert max(len(line) for line in out.splitlines()) <= 79
+    (describe,) = (line for line in out.splitlines() if "describe " in line)
     assert "calibration" in describe
-    (dose,) = (line for line in out.splitlines() if " dose " in line)
+    (dose,) = (line for line in out.splitlines() if line.startswith("dose "))
     assert "validation" in dose
-    assert " 10/10" in dose
-    (renal,) = (line for line in out.splitlines() if " renal " in line)
-    assert " 5/20" in renal
+    assert dose.endswith(" 10/10")
+    (renal,) = (line for line in out.splitlines() if "renal " in line)
+    assert renal.endswith(" 5/20")
 
 
 def test_print_summary_escapes_the_id(

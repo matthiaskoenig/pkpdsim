@@ -367,9 +367,11 @@ def print_summary(assessment: CredibilityAssessment) -> None:
     table = Table(
         title=f"Credibility of {escape(assessment.provenance.title)}",
         box=box.SIMPLE_HEAD,
-        # one space between the columns, the table fits 80 columns
+        # one space between the columns and no edges, the table fits 79
+        # columns, the width of a console of windows
         padding=0,
         pad_edge=False,
+        show_edge=False,
     )
     # an id and the longest verdict are not cut, a column which does not fit
     # folds its text
