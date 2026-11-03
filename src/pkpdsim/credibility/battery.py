@@ -1124,8 +1124,8 @@ def _amici_model(build: FlatBuild) -> Any:  # noqa: ANN401  # amici is optional 
 
     The compilation runs in a process of its own, stopped after
     `AMICI_TIMEOUT`: the symbolic code generation of AMICI takes a minute and a
-    half for a PBPK model, but more than an hour for the deeply nested
-    formulas of a solved baseline.
+    half for a PBPK model, but more than 45 min for the large nested formulas
+    of the starts of the creatinine model of pkdb_models.
 
     Raises:
         _CompileTimeout: if the compilation takes longer.
