@@ -447,10 +447,10 @@ def test_the_credibility_page_shows_the_domain(
     assert "the single doses of the data (statement, not assessed)" in dose
     renal = page[page.index("## renal") :]
     assert "`A_ratio`" in renal
-    assert "ratio, assessed in step 3" in renal
+    assert "ratio, no pairing declared" in renal
     assert "| Quantity of interest | Description | Kind | Coverage | Points |" in renal
     assert "| `[A]` | the concentration of A | absolute | covered | 5 |" in renal
-    assert "| ratio, assessed in step 3 | n/a | n/a |" in renal
+    assert "| ratio, no pairing declared | n/a | n/a |" in renal
     assert "5 of 5 decisive points evaluable (minimum 20)" in renal
 
 
@@ -512,6 +512,34 @@ def test_the_credibility_page_shows_the_battery(
     assert (
         "| second simulator | `numerical_code_verification` |  |  | not applicable: "
         "The check cross_simulator. |" in battery
+    )
+
+
+def test_the_credibility_page_shows_the_ratio_pairs(
+    release: tuple[ProjectContext, Path],
+) -> None:
+    from test_credibility_ratios import PROVENANCE, _renal
+
+    context, path = release
+    context = dataclasses.replace(
+        context,
+        model=dataclasses.replace(
+            context.model, credibility="pkpdsim_toy.credibility:CREDIBILITY"
+        ),
+    )
+    fits = fit_table(factors={("CredA", "fm_renal"): 1.1}, times=True)
+    assessment = assess_table(_renal(), fits, PROVENANCE)
+    (path / BuildPaths.CREDIBILITY).mkdir(parents=True)
+    assessment.to_json(path / BuildPaths.CREDIBILITY / "credibility.json")
+    write_project_files(context, path)
+    write_docs(context, path)
+    page = (path / "docs" / "credibility.md").read_text()
+    renal = page[page.index("## renal") :]
+    assert "| `A_ratio` | the concentration in renal impairment" in renal
+    assert "| ratio | covered | 1 |" in renal
+    assert "| `Guest` (ratio pairs) | 100 | >= 80 | yes |" in renal
+    assert (
+        "| `A_ratio` | CredA | `fm_renal` / `fm_dose` | 1 | 1.1 | 1.25 | yes |" in renal
     )
 
 

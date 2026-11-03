@@ -1,4 +1,4 @@
-"""The model risk, the default acceptance and the default minimum of points.
+"""The model risk, the default acceptances and the default minimum of points.
 
 The model risk follows ICH M15 and V&V 40 as a lookup of the influence of the
 model on the decision and the consequence of a wrong decision. It is a table
@@ -11,11 +11,18 @@ from typing import Final
 
 from sbmlsim.fit.evaluation import Fold
 
-from pkpdsim.credibility.declaration import Acceptance, AcceptanceRule, Level, MaxGmfe
+from pkpdsim.credibility.declaration import (
+    Acceptance,
+    AcceptanceRule,
+    GuestAcceptance,
+    Level,
+    MaxGmfe,
+)
 
 __all__ = [
     "DEFAULT_ACCEPTANCE",
     "DEFAULT_MIN_POINTS",
+    "DEFAULT_RATIO_ACCEPTANCE",
     "RISK_TABLE",
     "default_acceptance",
     "model_risk",
@@ -49,6 +56,16 @@ DEFAULT_ACCEPTANCE: Final[Mapping[Level, tuple[AcceptanceRule, ...]]] = (
             ),
         }
     )
+)
+
+#: the acceptance of the ratio pairs of a context of use which does not declare
+#: its own, by risk: the percentage of the pairs within the limits of Guest et al.
+DEFAULT_RATIO_ACCEPTANCE: Final[Mapping[Level, GuestAcceptance]] = MappingProxyType(
+    {
+        Level.LOW: GuestAcceptance(50.0),
+        Level.MEDIUM: GuestAcceptance(67.0),
+        Level.HIGH: GuestAcceptance(80.0),
+    }
 )
 
 #: the evaluable points a context of use which does not declare its own minimum

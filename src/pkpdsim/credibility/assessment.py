@@ -68,9 +68,11 @@ from pkpdsim.credibility.declaration import (
     Unclaimed,
 )
 from pkpdsim.credibility.factors import FACTORS, FactorRecord, FactorStatus
-from pkpdsim.credibility.records import evaluate_fits
+from pkpdsim.credibility.ratios import RatioRecord, ratio_pairs
+from pkpdsim.credibility.records import MappingLookup, evaluate_fits
 from pkpdsim.credibility.selection import (
     EvidenceSelection,
+    SelectionError,
     normalize_observable,
     select,
 )
@@ -165,12 +167,15 @@ class QuantityRecord(TypedDict):
     Attributes:
         id: the id of the quantity.
         description: what the quantity is.
-        ratio: whether the quantity is a ratio, assessed in step 3.
+        ratio: whether the quantity is a ratio between arms.
         coverage: `covered` with an applicable decisive point of the quantity
-            inside the claimed domain, else `uncovered`; `None` for a ratio
-            and in a record of pkpdsim 0.17, which did not assess it.
+            inside the claimed domain, an assessed ratio with an evaluable
+            pair whose numerator lies inside it, else `uncovered`; `None` for
+            a ratio without a pairing and in a record of pkpdsim 0.17, which
+            did not assess it.
         n_points: the applicable decisive points of the quantity inside the
-            claimed domain, 0 for a ratio.
+            claimed domain, the evaluable pairs of an assessed ratio, 0 for a
+            ratio without a pairing.
     """
 
     id: str
@@ -361,6 +366,11 @@ class ContextResult:
         verification: the checks of the verification of the decisive
             predictions, in the order of `Check`; empty if the assessment was
             not verified.
+        ratios: the pairs of the arms of the assessed ratio quantities, see
+            `pkpdsim.credibility.ratios`; empty without one and in a record of
+            pkpdsim 0.18 or earlier.
+        ratio_acceptance: the result of the rule of the ratio pairs
+            (`ContextOfUse.ratio_rule`), `None` without an assessed ratio.
     """
 
     id: str
@@ -381,6 +391,8 @@ class ContextResult:
     n_evaluable: int
     minimum_points: int
     verification: list[CheckRecord] = dataclasses.field(default_factory=list)
+    ratios: list[RatioRecord] = dataclasses.field(default_factory=list)
+    ratio_acceptance: AcceptanceRecord | None = None
 
     @property
     def verified(self) -> bool | None:
@@ -420,6 +432,23 @@ class ContextResult:
             "n_evaluable": self.n_evaluable,
             "minimum_points": self.minimum_points,
             "verification": [check_record_to_dict(r) for r in self.verification],
+            "ratios": [
+                {
+                    **r,
+                    "observed": _write(r["observed"]),
+                    "predicted": _write(r["predicted"]),
+                    "limit": _write(r["limit"]),
+                }
+                for r in self.ratios
+            ],
+            "ratio_acceptance": (
+                None
+                if self.ratio_acceptance is None
+                else {
+                    **self.ratio_acceptance,
+                    "value": _write(self.ratio_acceptance["value"]),
+                }
+            ),
         }
 
     @classmethod
@@ -427,7 +456,8 @@ class ContextResult:
         """Get the result from plain data, `None` as `NaN`.
 
         A record of pkpdsim 0.17 has no minimum of points, read as 0, and no
-        coverage of the quantities, read as `None` with 0 points.
+        coverage of the quantities, read as `None` with 0 points; a record of
+        0.18 or earlier has no ratio pairs.
         """
         return cls(
             id=data["id"],
@@ -477,6 +507,31 @@ class ContextResult:
             verification=[
                 check_record_from_dict(r) for r in data.get("verification", ())
             ],
+            # a record of pkpdsim 0.18 or earlier assessed no ratio
+            ratios=[
+                RatioRecord(
+                    quantity=r["quantity"],
+                    fit=r["fit"],
+                    experiment=r["experiment"],
+                    numerator=r["numerator"],
+                    denominator=r["denominator"],
+                    observed=_read(r["observed"]),
+                    predicted=_read(r["predicted"]),
+                    limit=_read(r["limit"]),
+                    within=r["within"],
+                )
+                for r in data.get("ratios", ())
+            ],
+            ratio_acceptance=(
+                None
+                if data.get("ratio_acceptance") is None
+                else AcceptanceRecord(
+                    name=data["ratio_acceptance"]["name"],
+                    value=_read(data["ratio_acceptance"]["value"]),
+                    limit=data["ratio_acceptance"]["limit"],
+                    met=data["ratio_acceptance"]["met"],
+                )
+            ),
         )
 
 
@@ -788,13 +843,36 @@ def _in_domain(cou: ContextOfUse, points: pd.DataFrame) -> pd.DataFrame:
     return points.loc[inside]
 
 
-def _quantities(cou: ContextOfUse, decisive: pd.DataFrame) -> list[QuantityRecord]:
-    """Get the quantities of interest with their coverage by the decisive points."""
+def _quantities(
+    cou: ContextOfUse, decisive: pd.DataFrame, pairs: Sequence[RatioRecord] = ()
+) -> list[QuantityRecord]:
+    """Get the quantities of interest with their coverage by the decisive points.
+
+    An assessed ratio is covered by an evaluable pair whose numerator has a
+    decisive point inside the claimed domain, its points are these pairs; a
+    declared ratio without a pairing has no coverage.
+    """
     inside = _in_domain(cou, applicable(decisive))
     observables = inside["observable"].astype(str).map(normalize_observable)
+    claimed = set(
+        zip(
+            inside["fit"].astype(str),
+            inside["experiment"].astype(str),
+            inside["mapping"].astype(str),
+            strict=True,
+        )
+    )
     records: list[QuantityRecord] = []
     for q in cou.quantities:
-        if q.ratio:
+        if q.pairing is not None:
+            n = sum(
+                p["quantity"] == q.id
+                and p["within"] is not None
+                and (p["fit"], p["experiment"], p["numerator"]) in claimed
+                for p in pairs
+            )
+            coverage = COVERED if n else UNCOVERED
+        elif q.ratio:
             coverage, n = None, 0
         else:
             n = int((observables == normalize_observable(q.id)).sum())
@@ -803,12 +881,30 @@ def _quantities(cou: ContextOfUse, decisive: pd.DataFrame) -> list[QuantityRecor
             QuantityRecord(
                 id=q.id,
                 description=q.description,
-                ratio=q.ratio,
+                ratio=bool(q.ratio),
                 coverage=coverage,
                 n_points=n,
             )
         )
     return records
+
+
+def _ratio_pairs(
+    cou: ContextOfUse, decisive: pd.DataFrame, lookup: MappingLookup
+) -> list[RatioRecord]:
+    """Get the pairs of the assessed ratio quantities of a context."""
+    pairs: list[RatioRecord] = []
+    for q in cou.ratios:
+        if q.pairing is None:
+            continue
+        found, problems = ratio_pairs(
+            q.id, q.pairing, decisive, lookup, cou.ratio_rule.delta
+        )
+        if problems:
+            # `select` refuses an ambiguous pairing first
+            raise SelectionError([f"context of use '{cou.id}': {p}" for p in problems])
+        pairs.extend(found)
+    return pairs
 
 
 def _covered(cou: ContextOfUse, entry: CoverageEntry) -> bool:
@@ -925,11 +1021,14 @@ def _factors(
     quantities: Sequence[QuantityRecord],
     checks: Sequence[CheckRecord] = (),
     tightening: float = TIGHTENING,
+    pairs: Sequence[RatioRecord] = (),
 ) -> list[FactorRecord]:
     """Get the factors of V&V 40 of a context, the assessed ones with its results.
 
     The factors of the checks of the verification are assessed when the
-    assessment was verified, else they keep their status of `FACTORS`.
+    assessment was verified, else they keep their status of `FACTORS`; the
+    relevance of the quantities of interest is assessed when the context has
+    an assessed ratio, by its pairs.
     """
     role = cou.decisive_role.value
     n_points, n_mappings, n_studies = _counts(decisive)
@@ -982,6 +1081,20 @@ def _factors(
                 ]
             )
             data["step"] = None
+        elif factor.id == "relevance_of_quantities" and cou.ratios:
+            evaluable = [p for p in pairs if p["within"] is not None]
+            within = sum(p["within"] is True for p in evaluable)
+            ratios = [q for q in quantities if q["id"] in {r.id for r in cou.ratios}]
+            covered_ratios = sum(q["coverage"] == COVERED for q in ratios)
+            data["status"] = FactorStatus.ASSESSED.value
+            data["statement"] = (
+                f"{within} of {_count(len(evaluable), 'ratio pair')} within the "
+                f"limits of Guest et al. ({cou.ratio_rule.limit} %), "
+                f"{covered_ratios} of "
+                f"{_count(len(ratios), 'ratio quantity', 'ratio quantities')} "
+                "covered."
+            )
+            data["step"] = None
         factors.append(data)
     return factors
 
@@ -999,6 +1112,7 @@ def _check_records(
     decisive: pd.DataFrame,
     acceptance: Sequence[AcceptanceResult],
     verification: Verification,
+    lookup: MappingLookup | None = None,
 ) -> list[CheckRecord]:
     """Get the checks of the verification of the decisive predictions of a context.
 
@@ -1016,9 +1130,16 @@ def _check_records(
         differences = relative_differences(table, predictions, summary.scale_floor)
         compared = differences.loc[decisive.index].dropna()
         alternative = decisive.assign(IPRED=predictions.loc[decisive.index])
+        alternatives = [rule.evaluate(alternative) for rule in cou.rules]
+        if cou.ratios and lookup is not None:
+            alternatives.append(
+                cou.ratio_rule.evaluate(
+                    [p["within"] for p in _ratio_pairs(cou, alternative, lookup)]
+                )
+            )
         changed = any(
-            rule.evaluate(alternative).met != result.met
-            for rule, result in zip(cou.rules, acceptance, strict=True)
+            other.met != result.met
+            for other, result in zip(alternatives, acceptance, strict=True)
         )
         problems = [
             message
@@ -1083,22 +1204,44 @@ def _context_result(
     table: pd.DataFrame,
     selections: Sequence[EvidenceSelection],
     verification: Verification | None = None,
+    lookup: MappingLookup | None = None,
 ) -> tuple[ContextResult, list[CoverageEntry]]:
-    """Get the result and the coverage of a context of use."""
+    """Get the result and the coverage of a context of use.
+
+    The lookup of the fit mappings pairs the arms of the assessed ratio
+    quantities; a context without one needs none.
+    """
     decisive = _points(
         table, (s for s in selections if s.evidence.role is cou.decisive_role)
     )
     acceptance = [rule.evaluate(decisive) for rule in cou.rules]
+    pairs: list[RatioRecord] = []
+    ratio_result: AcceptanceResult | None = None
+    if cou.ratios:
+        if lookup is None:
+            raise ValueError(
+                f"The context of use '{cou.id}' has a ratio, which needs the "
+                "lookup of the fit mappings."
+            )
+        pairs = _ratio_pairs(cou, decisive, lookup)
+        ratio_result = cou.ratio_rule.evaluate([p["within"] for p in pairs])
     coverage = _coverage(cou, table, selections)
-    quantities = _quantities(cou, decisive)
+    quantities = _quantities(cou, decisive, pairs)
     covered = all(_covered(cou, e) for e in coverage if e.claimed) and all(
-        q["coverage"] == COVERED for q in quantities if not q["ratio"]
+        q["coverage"] == COVERED for q in quantities if q["coverage"] is not None
     )
     n_evaluable = len(applicable(decisive))
     checks = (
         []
         if verification is None
-        else _check_records(cou, table, decisive, acceptance, verification)
+        else _check_records(
+            cou,
+            table,
+            decisive,
+            [*acceptance, *([] if ratio_result is None else [ratio_result])],
+            verification,
+            lookup,
+        )
     )
     verified = None if not checks else all(record["passed"] for record in checks)
     result = ContextResult(
@@ -1119,7 +1262,7 @@ def _context_result(
         ],
         verdict=verdict(
             len(decisive),
-            acceptance,
+            [*acceptance, *([] if ratio_result is None else [ratio_result])],
             covered,
             cou.extrapolation,
             level=cou.level,
@@ -1130,16 +1273,28 @@ def _context_result(
         factors=_factors(
             cou,
             decisive,
-            acceptance,
+            [*acceptance, *([] if ratio_result is None else [ratio_result])],
             coverage,
             quantities,
             checks,
             TIGHTENING if verification is None else verification.summary.tightening,
+            pairs,
         ),
         n_decisive=len(decisive),
         n_evaluable=n_evaluable,
         minimum_points=cou.minimum_points,
         verification=checks,
+        ratios=pairs,
+        ratio_acceptance=(
+            None
+            if ratio_result is None
+            else AcceptanceRecord(
+                name=ratio_result.name,
+                value=ratio_result.value,
+                limit=ratio_result.limit,
+                met=ratio_result.met,
+            )
+        ),
     )
     return result, coverage
 
@@ -1175,7 +1330,7 @@ def assess_table(
     for cou in credibility.contexts:
         own = [s for s in selections.evidence if s.context == cou.id]
         evidence.extend(_evidence_result(s, table, cou.rules) for s in own)
-        result, entries = _context_result(cou, table, own, verification)
+        result, entries = _context_result(cou, table, own, verification, fits.lookup)
         contexts.append(result)
         coverage.extend(entries)
     limitations = [

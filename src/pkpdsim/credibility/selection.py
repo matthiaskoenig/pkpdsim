@@ -10,8 +10,10 @@ can share. The rules:
   fit: its points in another fit, where it may be validation data, are no
   validation either.
 - The quantities of a context of use restrict its evidence to their observables,
-  compared without the brackets of a concentration (`[A]` is `A`); a ratio
-  quantity is assessed in step 3 and restricts nothing.
+  compared without the brackets of a concentration (`[A]` is `A`); an assessed
+  ratio quantity by the observable of its arms, a declared ratio without a
+  pairing restricts nothing. A study of a ratio with more than one mapping of
+  the denominator in the decisive points is an error.
 - The limitations, of the model and of every context, are data the model does
   not describe: they are subtracted from every other evidence of every context
   and counted; a limitation of fitted data is an error.
@@ -231,8 +233,8 @@ class _Selector:
     def quantities(self, cou: ContextOfUse) -> _Mask:
         """Get the rows of the quantities of a context, a problem per unknown one.
 
-        A ratio quantity is assessed in step 3, it is matched against no
-        observable.
+        A ratio quantity is matched by the observable of its arms, a declared
+        ratio without a pairing against no observable.
         """
         known = set(self.observables)
         absolute = [q for q in cou.quantities if not q.ratio]
@@ -243,6 +245,17 @@ class _Selector:
             for q in absolute
             if normalize_observable(q.id) not in known
         )
+        for q in cou.ratios:
+            if q.pairing is None:
+                continue
+            observable = normalize_observable(q.pairing.observable)
+            ids.add(observable)
+            if observable not in known:
+                self.problems.append(
+                    f"context of use '{cou.id}': the ratio '{q.id}' matches no "
+                    f"observable of the fits with '{q.pairing.observable}', the "
+                    f"observables are {sorted(known)}"
+                )
         return np.isin(self.observables, sorted(ids))
 
     def base(self, evidence: Evidence, who: str, quantities: _Mask) -> _Mask | None:
@@ -415,6 +428,7 @@ def select(credibility: Credibility, fits: FitTable) -> Selections:
                 limitation_subtracted=int((base & limitations).sum()),
             )
 
+    _check_pairings(credibility, fits, selected, selector)
     if selector.problems:
         raise SelectionError(selector.problems)
     return Selections(
@@ -423,6 +437,36 @@ def select(credibility: Credibility, fits: FitTable) -> Selections:
         unclaimed=_count(fits.table, unclaimed),
         limitation_evidence=tuple(limitation_evidence),
     )
+
+
+def _check_pairings(
+    credibility: Credibility,
+    fits: FitTable,
+    selected: dict[tuple[int, int], EvidenceSelection],
+    selector: _Selector,
+) -> None:
+    """Add a problem for every study of a ratio with more than one denominator.
+
+    The arms are formed from the decisive points of the context, see
+    `pkpdsim.credibility.ratios.pairings`.
+    """
+    from pkpdsim.credibility.ratios import pairings
+
+    for i, cou in enumerate(credibility.contexts):
+        if not cou.ratios:
+            continue
+        rows = pd.Index([])
+        for (k, _), selection in selected.items():
+            if k == i and selection.evidence.role is cou.decisive_role:
+                rows = rows.union(selection.rows)
+        decisive = fits.table.loc[rows]
+        for q in cou.ratios:
+            if q.pairing is None:
+                continue
+            _, problems = pairings(q.id, q.pairing, decisive, fits.lookup)
+            selector.problems.extend(
+                f"context of use '{cou.id}': {problem}" for problem in problems
+            )
 
 
 def _count(table: pd.DataFrame, mask: _Mask) -> pd.DataFrame:

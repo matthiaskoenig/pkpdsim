@@ -28,6 +28,7 @@ FILES = {
     "domain.tsv",
     "quantities.tsv",
     "verification.tsv",
+    "ratios.tsv",
     "battery.tsv",
     "fates.tsv",
     "index.html",
@@ -152,7 +153,7 @@ def test_the_report_shows_what_is_not_assessed(
     html = render_html(assessment)
     # the ratio quantity of renal and the domain statement of dose
     assert "A_ratio" in html
-    assert "ratio, assessed in step 3" in html
+    assert "ratio, no pairing declared" in html
     assert "the single doses of the data" in html
     assert "statement, not assessed" in html
 

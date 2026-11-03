@@ -179,7 +179,7 @@ td.status .soft { font-size: 12.5px; }
     </dl>
 
     <h4>Quantities of interest</h4>
-    <p class="note">A quantity is covered by the evaluable decisive points of its observable inside the claimed domain.</p>
+    <p class="note">A quantity is covered by the evaluable decisive points of its observable inside the claimed domain, a ratio by its evaluable pairs whose numerator lies inside the claimed domain.</p>
     <div class="scroll">
       <table class="compact">
         <thead><tr><th>quantity</th><th>description</th><th>kind</th><th>coverage</th><th class="num">points</th></tr></thead>
@@ -187,7 +187,7 @@ td.status .soft { font-size: 12.5px; }
         {% for q in c.quantities %}
         <tr>
           <td class="mono">{{ q.id }}</td><td class="named">{{ q.description }}</td>
-          <td>{% if q.ratio %}<span class="state not_assessed">ratio, assessed in step 3</span>{% else %}absolute{% endif %}</td>
+          <td>{% if q.ratio and q.coverage %}ratio{% elif q.ratio %}<span class="state not_assessed">ratio, no pairing declared</span>{% else %}absolute{% endif %}</td>
           <td>{% if q.coverage %}<span class="state {{ q.coverage }}">{{ q.coverage }}</span>{% else %}<span class="soft">n/a</span>{% endif %}</td>
           <td class="num">{% if q.coverage %}{{ q.n_points }}{% else %}<span class="soft">n/a</span>{% endif %}</td>
         </tr>
@@ -284,11 +284,47 @@ td.status .soft { font-size: 12.5px; }
           <td>{% if a.met is none %}<span class="state not_evaluable">not evaluable</span>{% elif a.met %}<span class="state met">met</span>{% else %}<span class="state not_met">not met</span>{% endif %}</td>
         </tr>
         {% endfor %}
+        {% if c.ratio_acceptance %}{% set a = c.ratio_acceptance %}
+        <tr>
+          <td class="mono">{{ a.name }} <span class="soft">ratio pairs</span></td>
+          <td class="num">{{ a.value | number }}</td>
+          <td class="mono">{{ a.limit }}</td>
+          <td>{% if a.met is none %}<span class="state not_evaluable">not evaluable</span>{% elif a.met %}<span class="state met">met</span>{% else %}<span class="state not_met">not met</span>{% endif %}</td>
+        </tr>
+        {% endif %}
         </tbody>
       </table>
     </div>
     {% else %}
     <p class="empty">No acceptance rules.</p>
+    {% endif %}
+
+    {% if c.ratio_acceptance %}
+    <h4>Ratio pairs</h4>
+    <p class="note">The ratio of the summary of an arm over the one of its reference arm in the same study, of the data and of the predictions; a pair is within when the predicted ratio lies within the limit of Guest et al. (2011) of the observed ratio, 1.25 at a ratio of 1 and towards 2 for a large ratio.</p>
+    {% if c.ratios %}
+    <div class="scroll">
+      <table class="compact">
+        <thead><tr><th>quantity</th><th>fit</th><th>study</th><th>arms</th><th class="num">observed</th><th class="num">predicted</th><th class="num">limit</th><th>result</th></tr></thead>
+        <tbody>
+        {% for r in c.ratios %}
+        <tr>
+          <td class="mono">{{ r.quantity }}</td>
+          <td class="mono">{{ r.fit }}</td>
+          <td>{{ r.experiment }}</td>
+          <td class="mono wrap">{{ r.numerator }} / {{ r.denominator }}</td>
+          <td class="num">{{ r.observed | number }}</td>
+          <td class="num">{{ r.predicted | number }}</td>
+          <td class="num">{{ r.limit | number }}</td>
+          <td>{% if r.within is none %}<span class="state not_evaluable">not evaluable</span>{% elif r.within %}<span class="state met">within</span>{% else %}<span class="state not_met">outside</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="empty">No study has both arms of a ratio in the decisive points.</p>
+    {% endif %}
     {% endif %}
 
     <h4>Verification</h4>

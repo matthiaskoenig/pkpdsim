@@ -15,6 +15,9 @@
   whether it is claimed, its coverage and its points (`n`).
 - `quantities.tsv`: one row per context of use and quantity of interest: its
   description, whether it is a ratio, its coverage and its points.
+- `ratios.tsv`: one row per context of use and pair of the arms of a ratio
+  quantity: the fit, the study, the arms, the observed and the predicted
+  ratio, the limit of Guest et al. and whether the pair is within.
 - `verification.tsv`: one row per context of use and check of the
   verification, empty if the assessment was not verified: the factor, the
   compared points (`n`), the largest relative difference and its point,
@@ -57,6 +60,7 @@ from pkpdsim.credibility.assessment import (
     EvidenceResult,
     Verdict,
 )
+from pkpdsim.credibility.ratios import RATIO_COLUMNS
 from pkpdsim.credibility.risk import DEFAULT_MIN_POINTS
 from pkpdsim.credibility.verification import NUMERICAL_CHECKS, Check
 
@@ -78,6 +82,7 @@ __all__ = [
     "fates_table",
     "print_summary",
     "quantities_table",
+    "ratios_table",
     "render_html",
     "verification_table",
     "write_outputs",
@@ -187,8 +192,8 @@ def contexts_table(assessment: CredibilityAssessment) -> pd.DataFrame:
         `risk`, `verdict`, `n_decisive`, `n_evaluable`, `minimum_points`,
         `uncovered_quantities` (the ids, comma separated, empty without),
         `verified` (empty if the assessment was not verified) and per
-        acceptance rule `<name>` and `<name>_limit`, empty for a context
-        without the rule.
+        acceptance rule, the rule of the ratio pairs (`Guest`) included,
+        `<name>` and `<name>_limit`, empty for a context without the rule.
     """
     rows: list[dict[str, object]] = []
     for c in assessment.contexts:
@@ -206,7 +211,10 @@ def contexts_table(assessment: CredibilityAssessment) -> pd.DataFrame:
             "uncovered_quantities": ",".join(c.uncovered_quantities),
             "verified": c.verified,
         }
-        for result in c.acceptance:
+        for result in [
+            *c.acceptance,
+            *([] if c.ratio_acceptance is None else [c.ratio_acceptance]),
+        ]:
             row[result["name"]] = result["value"]
             row[f"{result['name']}_limit"] = result["limit"]
         rows.append(row)
@@ -328,6 +336,20 @@ def verification_table(assessment: CredibilityAssessment) -> pd.DataFrame:
         for r in c.verification
     ]
     return pd.DataFrame(rows, columns=list(VERIFICATION_COLUMNS))
+
+
+def ratios_table(assessment: CredibilityAssessment) -> pd.DataFrame:
+    """Get one row per context of use and pair of the arms of a ratio quantity.
+
+    Args:
+        assessment: the assessment.
+
+    Returns:
+        The column `context` and the columns of `RATIO_COLUMNS`, see
+        `RatioRecord`; no rows without an assessed ratio.
+    """
+    rows = [{"context": c.id, **r} for c in assessment.contexts for r in c.ratios]
+    return pd.DataFrame(rows, columns=["context", *RATIO_COLUMNS])
 
 
 def battery_table(assessment: CredibilityAssessment) -> pd.DataFrame:
@@ -496,6 +518,7 @@ def write_outputs(assessment: CredibilityAssessment, output_dir: Path) -> Path:
         "evidence.tsv": _tsv(evidence_table(assessment)),
         "domain.tsv": _tsv(domain_table(assessment)),
         "quantities.tsv": _tsv(quantities_table(assessment)),
+        "ratios.tsv": _tsv(ratios_table(assessment)),
         "verification.tsv": _tsv(verification_table(assessment)),
         "battery.tsv": _tsv(battery_table(assessment)),
         "fates.tsv": _tsv(fates_table(assessment)),
