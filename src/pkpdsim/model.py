@@ -54,6 +54,7 @@ if TYPE_CHECKING:
     from sbmlsim.fit.cli import FitDefinition
     from sbmlsim.model.tolerances import AbsoluteTolerance
 
+    from pkpdsim.credibility import Credibility
     from pkpdsim.uncertainty import FitRecords, UncertaintySettings
 
 #: the actions of the `run` command of a model, see `pkpdsim.cli`
@@ -338,6 +339,8 @@ class PKPDModel:
             experiment classes by name with the group `all`.
         fit_definitions: reference to the fit problems by name
             (`sbmlsim.fit.cli.FitDefinition`).
+        credibility: reference to the declaration of the contexts of use
+            (`pkpdsim.credibility.Credibility`), `None` for a model without one.
         data_paths: the directories of the study data.
         results_path: the directory of the results, `<path>/results` by default.
         factory_path: the output directory of the factory, the directory of
@@ -372,6 +375,7 @@ class PKPDModel:
     factory: str
     experiments: str | None = None
     fit_definitions: str | None = None
+    credibility: str | None = None
     data_paths: Sequence[Path] = ()
     results_path: Path | None = None
     factory_path: Path | None = None
@@ -402,6 +406,7 @@ class PKPDModel:
             self.factory,
             self.experiments,
             self.fit_definitions,
+            self.credibility,
             self.extra_arguments,
             *(action.function for action in self.extra_actions),
         ]
@@ -509,6 +514,11 @@ class PKPDModel:
         return self.results_dir / "identifiability"
 
     @property
+    def credibility_dir(self) -> Path:
+        """The directory of the credibility assessments."""
+        return self.results_dir / "credibility"
+
+    @property
     def factory_dir(self) -> Path:
         """The output directory of the factory."""
         return self.factory_path or self.model_path.parent
@@ -541,6 +551,25 @@ class PKPDModel:
         if self.fit_definitions is None:
             raise ValueError(f"The model '{self.name}' has no fit definitions.")
         return resolve(self.fit_definitions, self.package)
+
+    def load_credibility(self) -> Credibility:
+        """Get the declaration of the contexts of use.
+
+        Raises:
+            ValueError: if the model has no declaration.
+            TypeError: if the reference is no `Credibility`.
+        """
+        from pkpdsim.credibility import Credibility
+
+        if self.credibility is None:
+            raise ValueError(f"The model '{self.name}' has no credibility declaration.")
+        declaration = resolve(self.credibility, self.package)
+        if not isinstance(declaration, Credibility):
+            raise TypeError(
+                f"The credibility of '{self.name}' ({self.credibility}) is a "
+                f"{type(declaration).__name__}, not a Credibility."
+            )
+        return declaration
 
     def create_models(self, output_dir: Path | None = None) -> Path:
         """Create the models with the factory.
