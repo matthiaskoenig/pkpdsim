@@ -24,6 +24,7 @@ from sbmlsim.fit.helpers import MappingFilter
 from pkpdsim.metadata import PKPDMappingMetaData
 
 __all__ = [
+    "DOMAIN_FIELDS",
     "GUEST_DELTA",
     "UNCLAIMED",
     "Acceptance",
@@ -203,21 +204,24 @@ class QuantityOfInterest:
         return self.ratio if isinstance(self.ratio, Ratio) else None
 
 
+#: the fields of the metadata which a domain can claim
+DOMAIN_FIELDS: Final = (
+    "tissue",
+    "route",
+    "application_form",
+    "dosing",
+    "fasting",
+    "health",
+    "coadministration",
+    "genotype",
+    "phenotype",
+)
+
+
 def _domain_fields() -> dict[str, type]:
     """Get the fields of the metadata which a domain can claim, with their enum."""
     hints = get_type_hints(PKPDMappingMetaData)
-    allowed = (
-        "tissue",
-        "route",
-        "application_form",
-        "dosing",
-        "fasting",
-        "health",
-        "coadministration",
-        "genotype",
-        "phenotype",
-    )
-    return {name: hints[name] for name in allowed}
+    return {name: hints[name] for name in DOMAIN_FIELDS}
 
 
 @dataclass(frozen=True)

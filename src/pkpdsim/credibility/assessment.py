@@ -519,6 +519,7 @@ class ContextResult:
                     predicted=_read(r["predicted"]),
                     limit=_read(r["limit"]),
                     within=r["within"],
+                    metadata=dict(r.get("metadata", {})),
                 )
                 for r in data.get("ratios", ())
             ],
