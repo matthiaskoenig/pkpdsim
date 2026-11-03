@@ -49,7 +49,7 @@ __all__ = [
 #: the pattern of the id of a context of use
 ID_PATTERN: Final = re.compile(r"^[a-z][a-z0-9_]*$")
 
-_COU_TITLES: Final = {
+_COU_LABELS: Final = {
     "C1": "describe",
     "C2": "interpolate",
     "C3": "extrapolate with data",
@@ -69,9 +69,9 @@ class CouLevel(StrEnum):
     C5 = "C5"
 
     @property
-    def title(self) -> str:  # ty: ignore[invalid-property-type-override]
+    def label(self) -> str:
         """Get the name of the level, e.g. `interpolate`."""
-        return _COU_TITLES[self.value]
+        return _COU_LABELS[self.value]
 
 
 @unique

@@ -147,3 +147,8 @@ def test_a_c4_cou_needs_only_its_extrapolation() -> None:
         domain=Domain(metadata={"route": [Route.PO], "health": [Health.HEALTHY]}),
     )
     assert Credibility(contexts=(cou,)).context("dose") is cou
+
+
+def test_the_label_of_a_level() -> None:
+    assert CouLevel.C2.label == "interpolate"
+    assert CouLevel.C2.title() == "C2"
