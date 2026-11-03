@@ -9,10 +9,12 @@ table without a model. Per context of use:
 - The acceptance: the rules on the union of the points of the decisive
   evidence (`ContextOfUse.decisive_role`, calibration for C1, else
   validation), each row of the table once.
-- The coverage of every claimed value of the domain: `validated` with points
-  of validation evidence, `calibrated` with points of calibration evidence
-  only, `uncovered` without points; a C1 context counts `calibrated` as
-  covered. The values of the points outside the claimed domain are reported
+- The coverage of every claimed value of the domain: `validated` with
+  applicable points of validation evidence, `calibrated` with applicable points
+  of calibration evidence only, `uncovered` without; a C1 context counts
+  `calibrated` as covered. A point is applicable when the fold criteria can
+  evaluate it, a positive and finite value and prediction (`applicable`): the
+  points of a failed simulation or of zeros cover nothing. The values of the points outside the claimed domain are reported
   as unclaimed values.
 - The verdict, see `verdict`, and the factors of V&V 40 (`FACTORS`).
 
@@ -35,8 +37,9 @@ from enum import Enum, StrEnum, unique
 from itertools import chain
 from typing import TYPE_CHECKING, Any, Final, Self, TypedDict
 
+import numpy as np
 import pandas as pd
-from sbmlsim.fit.evaluation import criteria_metrics
+from sbmlsim.fit.evaluation import Fold, criteria_metrics
 
 from pkpdsim.credibility.declaration import (
     AcceptanceResult,
@@ -72,6 +75,7 @@ __all__ = [
     "QuantityRecord",
     "UnclaimedRecord",
     "Verdict",
+    "applicable",
     "assess",
     "assess_table",
     "describe_selection",
@@ -237,9 +241,10 @@ class CoverageEntry:
             the claimed domain.
         claimed: whether the domain claims the value; the values of the points
             of the evidence outside the claim are not claimed.
-        n_points: the points with the value: of the validation evidence for
-            a validated value, of the calibration evidence for a calibrated
-            one, of all the evidence for a value outside the claim.
+        n_points: the points with the value: the applicable points of the
+            validation evidence for a validated value, of the calibration
+            evidence for a calibrated one, every point of the evidence for a
+            value outside the claim.
     """
 
     context: str
@@ -296,6 +301,8 @@ class ContextResult:
         factors: the factors of V&V 40 (`id`, `name`, `status`, `statement`,
             `step`), in the order of `FACTORS`.
         n_decisive: the points of the decisive evidence, each row once.
+        n_evaluable: the decisive points which are applicable, see
+            `applicable`.
     """
 
     id: str
@@ -313,6 +320,7 @@ class ContextResult:
     verdict: Verdict
     factors: list[FactorRecord]
     n_decisive: int
+    n_evaluable: int
 
     def to_dict(self) -> dict[str, object]:
         """Get the result as plain data, `NaN` as `None`."""
@@ -332,6 +340,7 @@ class ContextResult:
             "verdict": self.verdict.value,
             "factors": [dict(f) for f in self.factors],
             "n_decisive": self.n_decisive,
+            "n_evaluable": self.n_evaluable,
         }
 
     @classmethod
@@ -375,6 +384,7 @@ class ContextResult:
                 for f in data["factors"]
             ],
             n_decisive=data["n_decisive"],
+            n_evaluable=data["n_evaluable"],
         )
 
 
@@ -547,6 +557,22 @@ def _points(
     return table.loc[table.index.isin(rows)]
 
 
+def applicable(points: pd.DataFrame) -> pd.DataFrame:
+    """Get the points the fold criteria can evaluate.
+
+    The predicate of the ratio criteria of sbmlsim (`Fold`, GMFE, AFE): a
+    positive and finite value (`DV`) and prediction (`IPRED`).
+
+    Args:
+        points: the data points.
+
+    Returns:
+        The applicable points.
+    """
+    accepted = Fold(2.0).accepted(points).to_numpy()
+    return points.loc[np.isfinite(accepted)]
+
+
 def _metrics(points: pd.DataFrame, rules: Sequence[AcceptanceRule]) -> dict[str, float]:
     """Get `criteria_metrics` and the values of the rules on points."""
     metrics = criteria_metrics(points)
@@ -594,11 +620,17 @@ def _coverage(
     cou: ContextOfUse, table: pd.DataFrame, selections: Sequence[EvidenceSelection]
 ) -> list[CoverageEntry]:
     """Get the coverage of the claimed values and the values outside the claim."""
-    validation = _points(
-        table, (s for s in selections if s.evidence.role is EvidenceRole.VALIDATION)
+    validation = applicable(
+        _points(
+            table,
+            (s for s in selections if s.evidence.role is EvidenceRole.VALIDATION),
+        )
     )
-    calibration = _points(
-        table, (s for s in selections if s.evidence.role is EvidenceRole.CALIBRATION)
+    calibration = applicable(
+        _points(
+            table,
+            (s for s in selections if s.evidence.role is EvidenceRole.CALIBRATION),
+        )
     )
     evidence = _points(table, selections)
     entries: list[CoverageEntry] = []
@@ -698,7 +730,8 @@ def _factors(
     statements = {
         "test_samples": (
             f"{n_points} points of {n_mappings} mappings of {n_studies} studies "
-            f"of the {role} evidence decide."
+            f"of the {role} evidence decide, {len(applicable(decisive))} of them "
+            "evaluable."
         ),
         "test_conditions": (
             f"{len(claimed)} claimed values of the metadata, {len(outside)} values "
@@ -755,6 +788,7 @@ def _context_result(
         verdict=verdict(len(decisive), acceptance, covered, cou.extrapolation),
         factors=_factors(cou, decisive, acceptance, coverage),
         n_decisive=len(decisive),
+        n_evaluable=len(applicable(decisive)),
     )
     return result, coverage
 

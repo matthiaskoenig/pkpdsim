@@ -32,7 +32,7 @@ from pkpdsim.credibility import (
     describe_selection,
 )
 from pkpdsim.credibility.factors import FACTORS
-from pkpdsim.fit import metadata_filter, named_filter
+from pkpdsim.fit import NamedMappings, metadata_filter, named_filter
 from pkpdsim.metadata import Health, Route
 from pkpdsim.model import PKPDModel
 
@@ -120,19 +120,75 @@ def test_an_uncovered_value_without_extrapolation() -> None:
     assert renal.verdict.label == "supported with extrapolation"
 
 
-def test_a_criterion_without_applicable_points() -> None:
+@pytest.mark.parametrize(
+    ("selected", "factors"),
+    [
+        pytest.param(ZERO, {}, id="zeros"),
+        pytest.param(DOSE, {("CredA", "fm_dose"): math.nan}, id="failed simulations"),
+    ],
+)
+def test_a_criterion_without_applicable_points(
+    selected: NamedMappings, factors: dict[tuple[str, str], float]
+) -> None:
     cou = dataclasses.replace(
         CREDIBILITY.context("dose"),
         domain=Domain(),
-        evidence=(Evidence("zeros", EvidenceRole.VALIDATION, named_filter(ZERO)),),
+        evidence=(
+            Evidence("no ratios", EvidenceRole.VALIDATION, named_filter(selected)),
+        ),
     )
-    result = _context(_assess(fit_table(), _with(cou)), "dose")
+    result = _context(_assess(fit_table(factors=factors), _with(cou)), "dose")
     (within,) = (r for r in result.acceptance if r["name"] == "within_2fold")
     assert within["met"] is None
     assert math.isnan(within["value"])
     assert result.n_decisive == 5
+    assert result.n_evaluable == 0
     assert result.verdict is Verdict.INSUFFICIENT_EVIDENCE
     assert result.verdict.label == "insufficient evidence"
+
+
+def _without_ratios(
+    fits: FitTable, mapping: str, column: str, value: float
+) -> FitTable:
+    """Get the table with a value of a column for the rows of a mapping of CredA."""
+    table = fits.table.copy()
+    table.loc[(table.experiment == "CredA") & (table.mapping == mapping), column] = (
+        value
+    )
+    return dataclasses.replace(fits, table=table)
+
+
+@pytest.mark.parametrize(
+    ("column", "value"),
+    [
+        pytest.param("IPRED", math.nan, id="failed simulations"),
+        pytest.param("DV", 0.0, id="zeros"),
+    ],
+)
+def test_points_without_a_ratio_cover_nothing(column: str, value: float) -> None:
+    cou = dataclasses.replace(
+        CREDIBILITY.context("renal"),
+        evidence=(
+            Evidence(
+                "doses and renal",
+                EvidenceRole.VALIDATION,
+                named_filter({"CredA": {"fm_dose", "fm_renal"}}),
+            ),
+        ),
+    )
+    fits = _without_ratios(fit_table(), "fm_renal", column, value)
+    assessment = _assess(fits, _with(cou))
+    renal = _context(assessment, "renal")
+    impaired = _coverage(assessment, "renal", "health", "RENAL_IMPAIRMENT")
+    assert impaired.coverage is Coverage.UNCOVERED
+    assert impaired.n_points == 0
+    assert _coverage(assessment, "renal", "health", "HEALTHY").n_points == 5
+    assert (renal.n_decisive, renal.n_evaluable) == (10, 5)
+    assert all(result["met"] is True for result in renal.acceptance)
+    assert renal.verdict is Verdict.INSUFFICIENT_EVIDENCE
+
+    covered = _assess(fit_table(), _with(cou))
+    assert _context(covered, "renal").verdict is Verdict.SUPPORTED
 
 
 def test_no_decisive_evidence_is_insufficient() -> None:
@@ -325,7 +381,17 @@ def test_assess_the_test_package(credibility_model: PKPDModel) -> None:
         "sbmlutils",
         "libroadrunner",
     }
-    assert {c.verdict for c in assessment.contexts} <= set(Verdict)
+    # renal claims healthy subjects, its evidence is of renal impairment only
+    assert {c.id: c.verdict for c in assessment.contexts} == {
+        "describe": Verdict.SUPPORTED,
+        "dose": Verdict.SUPPORTED,
+        "renal": Verdict.INSUFFICIENT_EVIDENCE,
+    }
+    renal = _context(assessment, "renal")
+    assert all(result["met"] is True for result in renal.acceptance)
+    assert _coverage(assessment, "renal", "health", "HEALTHY").coverage is (
+        Coverage.UNCOVERED
+    )
 
 
 @pytest.mark.parametrize("verdict", list(Verdict))
