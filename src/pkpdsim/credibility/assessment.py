@@ -17,6 +17,10 @@ table without a model. Per context of use:
   points of a failed simulation or of zeros cover nothing. The values of the
   points outside the claimed domain are reported as unclaimed values, a point
   without the field has none.
+- The coverage of every quantity of interest which is no ratio: `covered` with
+  an applicable decisive point of its observable inside the claimed domain
+  (every claimed field of the point has a claimed value), `uncovered` without.
+- The minimum of evaluable points, `ContextOfUse.minimum_points`.
 - The verdict, see `verdict`, and the factors of V&V 40 (`FACTORS`).
 
 The ratio quantities and the statement of the domain are recorded and shown,
@@ -58,7 +62,11 @@ from pkpdsim.credibility.declaration import (
 )
 from pkpdsim.credibility.factors import FACTORS, FactorRecord, FactorStatus
 from pkpdsim.credibility.records import evaluate_fits
-from pkpdsim.credibility.selection import EvidenceSelection, select
+from pkpdsim.credibility.selection import (
+    EvidenceSelection,
+    normalize_observable,
+    select,
+)
 from pkpdsim.fit import MetadataFilter, NamedFilter
 
 if TYPE_CHECKING:
@@ -124,12 +132,31 @@ class Coverage(StrEnum):
     UNCOVERED = "uncovered"
 
 
+#: a quantity of interest with an applicable decisive point in the claimed domain
+COVERED: Final = "covered"
+#: a quantity of interest without one
+UNCOVERED: Final = "uncovered"
+
+
 class QuantityRecord(TypedDict):
-    """A quantity of interest as plain data, see `QuantityOfInterest`."""
+    """A quantity of interest as plain data, see `QuantityOfInterest`.
+
+    Attributes:
+        id: the id of the quantity.
+        description: what the quantity is.
+        ratio: whether the quantity is a ratio, assessed in step 3.
+        coverage: `covered` with an applicable decisive point of the quantity
+            inside the claimed domain, else `uncovered`; `None` for a ratio
+            and in a record of pkpdsim 0.17, which did not assess it.
+        n_points: the applicable decisive points of the quantity inside the
+            claimed domain, 0 for a ratio.
+    """
 
     id: str
     description: str
     ratio: bool
+    coverage: str | None
+    n_points: int
 
 
 class AcceptanceRecord(TypedDict):
@@ -298,7 +325,8 @@ class ContextResult:
         rationale: why this level, influence and consequence.
         extrapolation: the argument for a domain without validation evidence.
         domain_statement: what the domain claims beyond the metadata.
-        quantities: the quantities of interest (`id`, `description`, `ratio`).
+        quantities: the quantities of interest (`id`, `description`, `ratio`,
+            `coverage`, `n_points`, see `QuantityRecord`).
         acceptance: the results of the acceptance rules (`name`, `value`,
             `limit`, `met`, see `AcceptanceResult`).
         verdict: the verdict.
@@ -307,6 +335,8 @@ class ContextResult:
         n_decisive: the points of the decisive evidence, each row once.
         n_evaluable: the decisive points which are applicable, see
             `applicable`.
+        minimum_points: the evaluable points the verdict needs, see
+            `ContextOfUse.minimum_points`; 0 in a record of pkpdsim 0.17.
     """
 
     id: str
@@ -325,11 +355,17 @@ class ContextResult:
     factors: list[FactorRecord]
     n_decisive: int
     n_evaluable: int
+    minimum_points: int
 
     @property
     def decisive_role(self) -> EvidenceRole:
         """Get the role of the evidence which decides, see `CouLevel.decisive_role`."""
         return self.level.decisive_role
+
+    @property
+    def uncovered_quantities(self) -> list[str]:
+        """Get the ids of the quantities of interest which are uncovered."""
+        return [q["id"] for q in self.quantities if q["coverage"] == UNCOVERED]
 
     def to_dict(self) -> dict[str, object]:
         """Get the result as plain data, `NaN` as `None`."""
@@ -350,11 +386,16 @@ class ContextResult:
             "factors": [dict(f) for f in self.factors],
             "n_decisive": self.n_decisive,
             "n_evaluable": self.n_evaluable,
+            "minimum_points": self.minimum_points,
         }
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> Self:
-        """Get the result from plain data, `None` as `NaN`."""
+        """Get the result from plain data, `None` as `NaN`.
+
+        A record of pkpdsim 0.17 has no minimum of points, read as 0, and no
+        coverage of the quantities, read as `None` with 0 points.
+        """
         return cls(
             id=data["id"],
             title=data["title"],
@@ -368,7 +409,11 @@ class ContextResult:
             domain_statement=data["domain_statement"],
             quantities=[
                 QuantityRecord(
-                    id=q["id"], description=q["description"], ratio=q["ratio"]
+                    id=q["id"],
+                    description=q["description"],
+                    ratio=q["ratio"],
+                    coverage=q.get("coverage"),
+                    n_points=q.get("n_points", 0),
                 )
                 for q in data["quantities"]
             ],
@@ -394,6 +439,7 @@ class ContextResult:
             ],
             n_decisive=data["n_decisive"],
             n_evaluable=data["n_evaluable"],
+            minimum_points=data.get("minimum_points", 0),
         )
 
 
@@ -681,6 +727,42 @@ def _coverage(
     return entries
 
 
+def _in_domain(cou: ContextOfUse, points: pd.DataFrame) -> pd.DataFrame:
+    """Get the points inside the claimed domain: a claimed value of every claimed field.
+
+    A field without claimed values claims nothing and restricts no point.
+    """
+    inside = pd.Series(True, index=points.index)
+    for field, claimed in cou.domain.metadata.items():
+        if claimed:
+            names = [value.name for value in claimed]
+            inside &= _values(points, field).isin(names)
+    return points.loc[inside]
+
+
+def _quantities(cou: ContextOfUse, decisive: pd.DataFrame) -> list[QuantityRecord]:
+    """Get the quantities of interest with their coverage by the decisive points."""
+    inside = _in_domain(cou, applicable(decisive))
+    observables = inside["observable"].astype(str).map(normalize_observable)
+    records: list[QuantityRecord] = []
+    for q in cou.quantities:
+        if q.ratio:
+            coverage, n = None, 0
+        else:
+            n = int((observables == normalize_observable(q.id)).sum())
+            coverage = COVERED if n else UNCOVERED
+        records.append(
+            QuantityRecord(
+                id=q.id,
+                description=q.description,
+                ratio=q.ratio,
+                coverage=coverage,
+                n_points=n,
+            )
+        )
+    return records
+
+
 def _covered(cou: ContextOfUse, entry: CoverageEntry) -> bool:
     """Check whether a claimed value is covered: validated, for C1 also calibrated."""
     if entry.coverage is Coverage.VALIDATED:
@@ -695,22 +777,29 @@ def verdict(
     extrapolation: str,
     *,
     level: CouLevel,
+    n_evaluable: int,
+    minimum: int,
 ) -> Verdict:
     """Get the verdict of a context of use.
 
     In this order: no decisive point is insufficient evidence; a rule which is
-    not met is not supported; a rule which is not evaluable is insufficient
-    evidence; every claimed value covered is supported, for C4 supported with
-    extrapolation (a C4 context extrapolates without data of its condition by
-    definition, its extrapolation argument is required); an extrapolation
-    argument is supported with extrapolation; else insufficient evidence.
+    not met is not supported, also on few points; a rule which is not evaluable
+    is insufficient evidence; fewer evaluable points than the minimum is
+    insufficient evidence; every claimed value and every quantity which is no
+    ratio covered is supported, for C4 supported with extrapolation (a C4
+    context extrapolates without data of its condition by definition, its
+    extrapolation argument is required); an extrapolation argument is
+    supported with extrapolation; else insufficient evidence.
 
     Args:
         n_decisive: the points of the decisive evidence.
         acceptance: the results of the acceptance rules.
-        covered: whether every claimed value is covered.
+        covered: whether every claimed value and every quantity which is no
+            ratio is covered.
         extrapolation: the extrapolation argument of the context.
         level: the level of the context.
+        n_evaluable: the decisive points which are applicable.
+        minimum: the evaluable points the verdict needs.
 
     Returns:
         The verdict.
@@ -720,6 +809,8 @@ def verdict(
     if any(result.met is False for result in acceptance):
         return Verdict.NOT_SUPPORTED
     if any(result.met is None for result in acceptance):
+        return Verdict.INSUFFICIENT_EVIDENCE
+    if n_evaluable < minimum:
         return Verdict.INSUFFICIENT_EVIDENCE
     if covered and level is not CouLevel.C4:
         return Verdict.SUPPORTED
@@ -738,6 +829,7 @@ def _factors(
     decisive: pd.DataFrame,
     acceptance: Sequence[AcceptanceResult],
     coverage: Sequence[CoverageEntry],
+    quantities: Sequence[QuantityRecord],
 ) -> list[FactorRecord]:
     """Get the factors of V&V 40 of a context, the assessed ones with its results."""
     role = cou.decisive_role.value
@@ -747,11 +839,14 @@ def _factors(
     met = sum(result.met is True for result in acceptance)
     evaluable = sum(result.met is not None for result in acceptance)
     covered = sum(_covered(cou, e) for e in claimed)
+    absolute = [q for q in quantities if not q["ratio"]]
+    covered_quantities = sum(q["coverage"] == COVERED for q in absolute)
     statements = {
         "test_samples": (
             f"{_count(n_points, 'point')} of {_count(n_mappings, 'mapping')} of "
             f"{_count(n_studies, 'study', 'studies')} of the {role} evidence "
-            f"decide, {len(applicable(decisive))} of them evaluable."
+            f"decide, {len(applicable(decisive))} of them evaluable "
+            f"(minimum {cou.minimum_points})."
         ),
         "test_conditions": (
             f"{_count(len(claimed), 'claimed value')} of the metadata, "
@@ -762,7 +857,9 @@ def _factors(
             f"{role} evidence, {len(acceptance) - evaluable} not evaluable."
         ),
         "relevance_of_validation": (
-            f"{covered} of {_count(len(claimed), 'claimed value')} covered."
+            f"{covered} of {_count(len(claimed), 'claimed value')} and "
+            f"{covered_quantities} of {_count(len(absolute), 'quantity', 'quantities')} "
+            "of interest covered."
         ),
     }
     factors: list[FactorRecord] = []
@@ -785,7 +882,11 @@ def _context_result(
     )
     acceptance = [rule.evaluate(decisive) for rule in cou.rules]
     coverage = _coverage(cou, table, selections)
-    covered = all(_covered(cou, e) for e in coverage if e.claimed)
+    quantities = _quantities(cou, decisive)
+    covered = all(_covered(cou, e) for e in coverage if e.claimed) and all(
+        q["coverage"] == COVERED for q in quantities if not q["ratio"]
+    )
+    n_evaluable = len(applicable(decisive))
     result = ContextResult(
         id=cou.id,
         title=cou.title,
@@ -797,20 +898,24 @@ def _context_result(
         rationale=cou.rationale,
         extrapolation=cou.extrapolation,
         domain_statement=cou.domain.statement,
-        quantities=[
-            QuantityRecord(id=q.id, description=q.description, ratio=q.ratio)
-            for q in cou.quantities
-        ],
+        quantities=quantities,
         acceptance=[
             AcceptanceRecord(name=a.name, value=a.value, limit=a.limit, met=a.met)
             for a in acceptance
         ],
         verdict=verdict(
-            len(decisive), acceptance, covered, cou.extrapolation, level=cou.level
+            len(decisive),
+            acceptance,
+            covered,
+            cou.extrapolation,
+            level=cou.level,
+            n_evaluable=n_evaluable,
+            minimum=cou.minimum_points,
         ),
-        factors=_factors(cou, decisive, acceptance, coverage),
+        factors=_factors(cou, decisive, acceptance, coverage, quantities),
         n_decisive=len(decisive),
-        n_evaluable=len(applicable(decisive)),
+        n_evaluable=n_evaluable,
+        minimum_points=cou.minimum_points,
     )
     return result, coverage
 

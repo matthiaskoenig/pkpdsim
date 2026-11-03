@@ -377,6 +377,8 @@ class ContextOfUse:
         limitations: the evidence of what the model does not describe.
         rationale: why this level, influence and consequence.
         extrapolation: the argument for a domain without validation evidence.
+        min_points: the evaluable decisive points the verdict needs, at least
+            1; `None` for the default of the risk, see `minimum_points`.
     """
 
     id: str
@@ -392,6 +394,7 @@ class ContextOfUse:
     limitations: tuple[Evidence, ...] = ()
     rationale: str = ""
     extrapolation: str = ""
+    min_points: int | None = None
 
     @property
     def risk(self) -> Level:
@@ -406,6 +409,15 @@ class ContextOfUse:
         from pkpdsim.credibility.risk import default_acceptance
 
         return self.acceptance or default_acceptance(self.risk)
+
+    @property
+    def minimum_points(self) -> int:
+        """Get the evaluable points the verdict needs: the declared or the default of the risk."""
+        from pkpdsim.credibility.risk import DEFAULT_MIN_POINTS
+
+        if self.min_points is not None:
+            return self.min_points
+        return DEFAULT_MIN_POINTS[self.risk]
 
     @property
     def decisive_role(self) -> EvidenceRole:
@@ -442,6 +454,11 @@ class ContextOfUse:
             found.append(
                 f"{who}: a {self.level} context needs validation evidence "
                 "or an extrapolation argument"
+            )
+        if self.min_points is not None and self.min_points < 1:
+            found.append(
+                f"{who}: the minimum of points must be at least 1, not "
+                f"{self.min_points}"
             )
         unclaimed = [e for e in self.evidence if isinstance(e.selection, Unclaimed)]
         if len(unclaimed) > 1:

@@ -14,13 +14,21 @@ from pkpdsim.cli import credibility_command
 from pkpdsim.credibility import (
     CredibilityAssessment,
     Provenance,
+    QuantityRecord,
     Verdict,
     assess_table,
 )
 from pkpdsim.credibility.report import print_summary, render_html, write_outputs
 from pkpdsim.model import PKPDModel
 
-FILES = {"credibility.json", "contexts.tsv", "evidence.tsv", "domain.tsv", "index.html"}
+FILES = {
+    "credibility.json",
+    "contexts.tsv",
+    "evidence.tsv",
+    "domain.tsv",
+    "quantities.tsv",
+    "index.html",
+}
 
 PROVENANCE = Provenance(
     model="credibility",
@@ -61,7 +69,7 @@ def test_write_outputs(assessment: CredibilityAssessment, tmp_path: Path) -> Non
     contexts = _tsv(output_dir / "contexts.tsv")
     assert list(contexts["id"]) == [c.id for c in assessment.contexts]
     assert list(contexts["verdict"]) == [c.verdict.value for c in assessment.contexts]
-    assert list(contexts.columns[:9]) == [
+    assert list(contexts.columns[:11]) == [
         "id",
         "title",
         "level",
@@ -71,7 +79,13 @@ def test_write_outputs(assessment: CredibilityAssessment, tmp_path: Path) -> Non
         "verdict",
         "n_decisive",
         "n_evaluable",
+        "minimum_points",
+        "uncovered_quantities",
     ]
+    assert list(contexts["minimum_points"]) == [
+        c.minimum_points for c in assessment.contexts
+    ]
+    assert set(contexts["uncovered_quantities"]) == {""}
     dose = contexts.set_index("id").loc["dose"]
     assert dose["within_2fold_limit"] == ">= 80"
     assert dose["GMFE_limit"] == "<= 1.5"
@@ -96,6 +110,27 @@ def test_write_outputs(assessment: CredibilityAssessment, tmp_path: Path) -> Non
         "n",
     ]
     assert len(domain) == len(assessment.coverage)
+
+    quantities = _tsv(output_dir / "quantities.tsv")
+    assert list(quantities.columns) == [
+        "context",
+        "quantity",
+        "description",
+        "ratio",
+        "coverage",
+        "n_points",
+    ]
+    assert len(quantities) == sum(len(c.quantities) for c in assessment.contexts)
+    (ratio,) = quantities[quantities["quantity"] == "A_ratio"].itertuples()
+    assert (ratio.context, ratio.ratio, ratio.coverage, ratio.n_points) == (
+        "renal",
+        True,
+        "",
+        0,
+    )
+    renal = quantities[(quantities["context"] == "renal") & ~quantities["ratio"]]
+    assert list(renal["coverage"]) == ["covered"]
+    assert list(renal["n_points"]) == [5]
 
     html = (output_dir / "index.html").read_text(encoding="utf-8")
     for context in assessment.contexts:
@@ -127,6 +162,60 @@ def test_the_report_shows_what_decides(assessment: CredibilityAssessment) -> Non
     for context, role in (("describe", "calibration"), ("dose", "validation")):
         (row,) = (r for r in rows if f'href="#cou-{context}"' in r)
         assert f'class="decided">{role}<' in row
+
+
+def test_the_report_shows_the_quantity_coverage_and_the_minimum(
+    assessment: CredibilityAssessment,
+) -> None:
+    uncovered = dataclasses.replace(
+        assessment.contexts[1],
+        id="uncovered",
+        quantities=[
+            QuantityRecord(
+                id="[B]",
+                description="the concentration of B",
+                ratio=False,
+                coverage="uncovered",
+                n_points=0,
+            )
+        ],
+    )
+    html = render_html(dataclasses.replace(assessment, contexts=[uncovered]))
+    assert 'class="state uncovered">uncovered<' in html
+    html = render_html(assessment)
+    assert 'class="state covered">covered<' in html
+    renal = html[html.index('id="cou-renal"') :]
+    assert "<dd>5 (minimum 20)" in renal
+    assert 'class="state below">below the minimum<' in renal
+    dose = html[html.index('id="cou-dose"') : html.index('id="cou-renal"')]
+    assert "<dd>10 (minimum 10)" in dose
+    assert "below the minimum" not in dose
+    overview = html[html.index('id="overview"') : html.index('id="contexts"')]
+    assert "minimum points" in overview
+    (row,) = (r for r in overview.split("<tr") if 'href="#cou-renal"' in r)
+    assert '<td class="num">20</td>' in row
+
+
+def test_the_report_of_a_record_of_0_17(assessment: CredibilityAssessment) -> None:
+    """A record without the minimum and the coverage of the quantities renders."""
+    old = dataclasses.replace(
+        assessment,
+        contexts=[
+            dataclasses.replace(
+                c,
+                minimum_points=0,
+                quantities=[
+                    q | {"coverage": None, "n_points": 0} for q in c.quantities
+                ],
+            )
+            for c in assessment.contexts
+        ],
+    )
+    html = render_html(old)
+    dose = html[html.index('id="cou-dose"') : html.index('id="cou-renal"')]
+    assert "<dt>evaluable points</dt><dd>10</dd>" in dose
+    assert "below the minimum" not in html
+    assert 'class="state covered"' not in html
 
 
 def test_the_verdict_is_a_word_with_a_colour(assessment: CredibilityAssessment) -> None:
@@ -179,6 +268,9 @@ def test_print_summary(
     assert "calibration" in describe
     (dose,) = (line for line in out.splitlines() if " dose " in line)
     assert "validation" in dose
+    assert " 10/10" in dose
+    (renal,) = (line for line in out.splitlines() if " renal " in line)
+    assert " 5/20" in renal
 
 
 def test_print_summary_escapes_the_id(

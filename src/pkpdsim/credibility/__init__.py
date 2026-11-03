@@ -59,6 +59,7 @@ from pkpdsim.credibility.records import (
 )
 from pkpdsim.credibility.risk import (
     DEFAULT_ACCEPTANCE,
+    DEFAULT_MIN_POINTS,
     RISK_TABLE,
     default_acceptance,
     model_risk,
@@ -73,6 +74,7 @@ from pkpdsim.credibility.selection import (
 
 __all__ = [
     "DEFAULT_ACCEPTANCE",
+    "DEFAULT_MIN_POINTS",
     "FACTORS",
     "RISK_TABLE",
     "UNCLAIMED",

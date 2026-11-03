@@ -1,4 +1,4 @@
-"""The model risk and the default acceptance of a context of use.
+"""The model risk, the default acceptance and the default minimum of points.
 
 The model risk follows ICH M15 and V&V 40 as a lookup of the influence of the
 model on the decision and the consequence of a wrong decision. It is a table
@@ -13,7 +13,13 @@ from sbmlsim.fit.evaluation import Fold
 
 from pkpdsim.credibility.declaration import Acceptance, AcceptanceRule, Level, MaxGmfe
 
-__all__ = ["DEFAULT_ACCEPTANCE", "RISK_TABLE", "default_acceptance", "model_risk"]
+__all__ = [
+    "DEFAULT_ACCEPTANCE",
+    "DEFAULT_MIN_POINTS",
+    "RISK_TABLE",
+    "default_acceptance",
+    "model_risk",
+]
 
 #: the model risk by influence and consequence
 RISK_TABLE: Final[Mapping[tuple[Level, Level], Level]] = MappingProxyType(
@@ -43,6 +49,12 @@ DEFAULT_ACCEPTANCE: Final[Mapping[Level, tuple[AcceptanceRule, ...]]] = (
             ),
         }
     )
+)
+
+#: the evaluable points a context of use which does not declare its own minimum
+#: needs, by risk
+DEFAULT_MIN_POINTS: Final[Mapping[Level, int]] = MappingProxyType(
+    {Level.LOW: 5, Level.MEDIUM: 10, Level.HIGH: 20}
 )
 
 

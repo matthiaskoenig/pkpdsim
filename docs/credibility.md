@@ -28,7 +28,7 @@ A COU has one level, `CouLevel`. A model typically has two to five COUs.
 
 `CouLevel.label` gives the name of a level (`describe`, `interpolate`, ...). C1 is the only level decided on calibration evidence, since its question is whether the model describes the data it was fitted to. Every other level is decided on validation evidence only.
 
-## Model risk and the default acceptance
+## Model risk, the default acceptance and the minimum of points
 
 `Influence` and `Consequence` of a COU are `Level.LOW`, `Level.MEDIUM` or `Level.HIGH`; `ContextOfUse.risk` is the lookup `RISK_TABLE`:
 
@@ -49,6 +49,16 @@ A COU which declares no `acceptance` takes the default of its risk (`DEFAULT_ACC
 | high | `within_2fold` >= 90 %, `within_1.5fold` >= 70 % and GMFE <= 1.3 |
 
 The thresholds are a starting point of this repository and not taken from a guideline, which leaves them to the COU. A COU overrides them with its own rules: `Acceptance(criterion, minimum)` (the percentage of the points a criterion of `sbmlsim.fit.evaluation`, e.g. `Fold(2.0)`, accepts is at least `minimum`), `MaxGmfe(maximum)` and `AfeRange(low, high)` (the bias).
+
+A percentage of a few points says little, so a verdict also needs a minimum of evaluable decisive points. A COU which declares no `min_points` takes the default of its risk (`DEFAULT_MIN_POINTS`, `ContextOfUse.minimum_points`):
+
+| risk | minimum of evaluable points |
+|---|---|
+| low | 5 |
+| medium | 10 |
+| high | 20 |
+
+A COU overrides it with `min_points` (at least 1), e.g. for a pharmacodynamic endpoint of which a study reports a few values only; the rationale of the COU says why.
 
 ## Declaring the contexts of use
 
@@ -155,7 +165,7 @@ CREDIBILITY = Credibility(
 )
 ```
 
-- `ContextOfUse`: `id` (a slug matching `^[a-z][a-z0-9_]*$`, unique in the model), `title`, `question` (one sentence ending with `?`), `level`, `influence`, `consequence`, `quantities`, `domain`, `evidence`, and optional `acceptance` (empty means the default of the risk), `limitations` (evidence of role `LIMITATION` of this COU, subtracted like the limitations of the model), `rationale` (why this level, influence and consequence) and `extrapolation` (see the verdicts). `ContextOfUse.risk` and `ContextOfUse.decisive_role` (calibration for C1, else validation) are derived.
+- `ContextOfUse`: `id` (a slug matching `^[a-z][a-z0-9_]*$`, unique in the model), `title`, `question` (one sentence ending with `?`), `level`, `influence`, `consequence`, `quantities`, `domain`, `evidence`, and optional `acceptance` (empty means the default of the risk), `limitations` (evidence of role `LIMITATION` of this COU, subtracted like the limitations of the model), `rationale` (why this level, influence and consequence), `extrapolation` (see the verdicts) and `min_points` (`None` means the default of the risk). `ContextOfUse.risk`, `ContextOfUse.minimum_points` and `ContextOfUse.decisive_role` (calibration for C1, else validation) are derived.
 - `QuantityOfInterest(id, description)`: an observable of the fit mappings (`Cve_hctz`) or the observable of a value per simulation (`pk.cmax`). The observable column of the data holds the selection, `[Cve_hctz]` for a concentration, so a quantity is matched after the brackets are removed (`[A]` and `A` are the same quantity); a quantity which matches no observable of the fits is an error. A quantity restricts the evidence of its COU to its observables. `ratio=True` marks a ratio between arms (impaired over healthy), which is assessed in step 3: it is matched against no observable, restricts no evidence and is shown as "ratio, assessed in step 3". Step 1 assesses the absolute quantities, so a COU has at least one quantity which is no ratio.
 - `Domain`: `metadata`, the claimed values by field of the metadata (`route`, `health`, `genotype`, `phenotype`, `coadministration`, `dosing`, `fasting`, `application_form`, `tissue`; members of the enums of `pkpdsim.metadata`), and `statement`, a sentence for what the metadata cannot say (dose range, duration). The dose is not a field of the metadata, so a dose range is a statement only. The coverage is assessed on the metadata; the statement is shown, marked "statement, not assessed". A COU above C1 claims at least one value of the metadata, without one its domain would be covered by any data.
 - `Evidence(name, role, selection, description, fit=None)`: the selection is a filter of fit mappings (`named_filter` of a `NamedMappings`, the mapping keys by study id, or `metadata_filter`, both of `pkpdsim.fit`) or `Unclaimed`; `fit` restricts the evidence to one subset of the adopted fits (`"PK"` or `"PD"`), and a subset the adopted fits do not have is an error naming the subsets they have.
@@ -172,6 +182,7 @@ A declaration is validated when it is built (`DeclarationError` lists every prob
 - the evidence of `limitations`, of the model and of a COU, has the role `LIMITATION`;
 - a C1 COU has calibration evidence, a C4 COU has an `extrapolation` text (it has no validation data of its condition by definition), every other COU has validation evidence or an `extrapolation` text;
 - `Unclaimed` is validation evidence and at most once per COU;
+- a declared `min_points` is at least 1;
 - the claimed metadata values are members of the enums.
 
  The assessment checks the declaration against the data on top of that, and any failure is an error and not an empty result:
@@ -205,14 +216,26 @@ Per COU, on the union of its validation evidence (each point once; the calibrati
 
 | verdict | meaning |
 |---|---|
-| `supported` | the acceptance is met and every claimed value of the domain is covered by validation data (for C1 by calibration data) |
-| `supported_with_extrapolation` | the acceptance is met, some claimed value is not validated, and the COU has an `extrapolation` text which says why the claim holds; a C4 COU, which extrapolates by definition, is never plainly `supported` but at best this |
+| `supported` | the acceptance is met on at least the minimum of evaluable points, every claimed value of the domain is covered by validation data (for C1 by calibration data) and every quantity of interest which is no ratio is covered |
+| `supported_with_extrapolation` | the acceptance is met on at least the minimum of evaluable points, some claimed value or quantity is not covered, and the COU has an `extrapolation` text which says why the claim holds; a C4 COU, which extrapolates by definition, is never plainly `supported` but at best this |
 | `not_supported` | an acceptance rule is not met |
-| `insufficient_evidence` | no evidence that can be evaluated, or claimed values not validated and no `extrapolation` text |
+| `insufficient_evidence` | no evidence that can be evaluated, fewer evaluable points than the minimum, or claimed values or quantities not covered and no `extrapolation` text |
 
-Coverage counts only the points the criteria can evaluate: a fold error needs a finite `DV` and `IPRED`, both greater than 0. The numbers are reported as `n_decisive` (the points of the deciding evidence) and `n_evaluable`; a rule without an evaluable point has the value `NaN` and `met` of `None`, is not evaluable, and gives `insufficient_evidence`, never `supported`. A `not_supported` verdict is a finding to keep and explain, not a reason to loosen the acceptance. A `supported` C1 COU rests on the data the model was fitted to, so the console, the report and the release page show next to every verdict what decided it (decided on: calibration or validation).
+The verdict is decided in this order, the first step which applies decides:
+
+1. no decisive point: `insufficient_evidence`;
+2. an acceptance rule not met: `not_supported` (a failure on few points is still a failure);
+3. an acceptance rule not evaluable: `insufficient_evidence`;
+4. fewer evaluable points than `minimum_points`: `insufficient_evidence`;
+5. every claimed value and every quantity which is no ratio covered: `supported` (C4: `supported_with_extrapolation`);
+6. an `extrapolation` text: `supported_with_extrapolation`;
+7. else `insufficient_evidence`.
+
+Coverage counts only the points the criteria can evaluate: a fold error needs a finite `DV` and `IPRED`, both greater than 0. The numbers are reported as `n_decisive` (the points of the deciding evidence), `n_evaluable` and `minimum_points`; a rule without an evaluable point has the value `NaN` and `met` of `None`, is not evaluable, and gives `insufficient_evidence`, never `supported`. A `not_supported` verdict is a finding to keep and explain, not a reason to loosen the acceptance. A `supported` C1 COU rests on the data the model was fitted to, so the console, the report and the release page show next to every verdict what decided it (decided on: calibration or validation).
 
 Domain coverage is per claimed (field, value): `validated` when validation points with the value exist, `calibrated` when only calibration points exist (this counts as covered for a C1 COU), `uncovered` otherwise. The values of the points outside of the claimed domain are reported as well; evidence that does not fit the claim is a smell of the declaration.
+
+Quantity coverage is per quantity of interest which is no ratio: `covered` when an evaluable decisive point of its observable lies inside the claimed domain, i.e. for every claimed field of the metadata the value of the point is one of the claimed values, `uncovered` otherwise. A quantity validated only outside the claim, e.g. a coagulation ratio validated by a fed study for a fasted claim, is uncovered, although every claimed value may be validated by the points of other quantities. A ratio quantity has no coverage, it is assessed in step 3. The coverage is computed for every level, C4 included, and the coverage of combinations of values is not assessed (each claimed value on its own).
 
 ## Running and reading the report
 
@@ -221,17 +244,17 @@ run_credibility pkdb_models.models.hctz
 run_credibility pkdb_models.models.hctz --from-json results/credibility/credibility.json
 ```
 
-The console shows a table of the COUs, their verdicts and what decided them; see [Commands](commands.md). `index.html` of the report (one page, no network) has:
+The console shows a table of the COUs, their verdicts, what decided them and the evaluable points as `evaluable/minimum`; see [Commands](commands.md). `index.html` of the report (one page, no network) has:
 
-- the **overview**: the COUs with level, risk, verdict (in words and in a colour) and the role of the evidence which decided it, and the limitations of the model;
-- a **section per COU**: question, rationale, quantities (a ratio marked as assessed in step 3), the claimed domain with its coverage and the statement (not assessed), the evidence table (role, points, mappings, studies, GMFE, AFE, the percentages of the criteria, the points removed by limitations and outliers), the acceptance table (value, limit, met), the table of the credibility factors and the extrapolation text;
+- the **overview**: the COUs with level, risk, verdict (in words and in a colour), the role of the evidence which decided it and the decisive and evaluable points with the minimum, and the limitations of the model;
+- a **section per COU**: question, rationale, the evaluable points with their minimum, quantities with their coverage and points (a ratio marked as assessed in step 3), the claimed domain with its coverage and the statement (not assessed), the evidence table (role, points, mappings, studies, GMFE, AFE, the percentages of the criteria, the points removed by limitations and outliers), the acceptance table (value, limit, met), the table of the credibility factors and the extrapolation text;
 - the **limitations**: their metrics, explicitly outside of any acceptance;
 - the **unclaimed validation data**: the validation points per fit which no evidence and no limitation selects (held-out data which answers no declared question);
 - the **provenance**: the versions of pkpdsim, sbmlsim, sbmlutils and libroadrunner, the commit of the model repository and whether the folder of the model had changes (`git status` of the model folder), the adopted fits and the date. A release passes the commit of its source repository (`--source-commit`), the assessment then records it and leaves the dirty state unknown.
 
 The factors of V&V 40 are listed per COU with a status: `assessed` (output comparison, test samples, test conditions and the relevance of the validation activities, from the metrics, the evidence and the coverage), `platform` (a statement which holds for the whole stack, e.g. the code verification by the SBML Test Suite and the PEtab suites of sbmlsim) or `not_assessed` with the step which will assess it, so a reader sees what is missing.
 
-The record `credibility.json` holds everything, and the tables `contexts.tsv`, `evidence.tsv` and `domain.tsv` are one row per COU, per COU and evidence and per COU, field and value. A release of a model repository carries the assessment, see [Release of a model repository](release.md).
+The record `credibility.json` holds everything, and the tables `contexts.tsv`, `evidence.tsv`, `domain.tsv` and `quantities.tsv` are one row per COU, per COU and evidence, per COU, field and value and per COU and quantity. `contexts.tsv` has the decisive and the evaluable points, the minimum (`minimum_points`) and the uncovered quantities (`uncovered_quantities`, the ids comma separated, empty without); `quantities.tsv` has the columns `context`, `quantity`, `description`, `ratio`, `coverage` (empty for a ratio) and `n_points`. A record written by pkpdsim 0.17 is still read (`--from-json`): it has no minimum (read as 0) and no quantity coverage. A release of a model repository carries the assessment, see [Release of a model repository](release.md).
 
 ## What the later steps add
 
