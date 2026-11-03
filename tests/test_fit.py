@@ -5,6 +5,7 @@ import dataclasses
 import json
 import multiprocessing
 import os
+import pickle
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
@@ -29,6 +30,7 @@ from pkpdsim.fit import (
     fit_subset,
     mapping_metadata,
     metadata_filter,
+    named_filter,
     observable_filter,
     observable_id,
     select_mappings,
@@ -211,6 +213,21 @@ def test_the_observable_filter(fit_mapping: FitMapping) -> None:
     assert pk_filter("fm_decay_A", fit_mapping)
     assert not observable_filter({"B"})("fm_decay_A", fit_mapping)
     assert repr(pk_filter) == "ObservableFilter(A, B)"
+
+
+def test_named_filter_selects_the_keys_of_their_study(fit_mapping: FitMapping) -> None:
+    assert named_filter({"ToyDecay": {"fm_decay_A"}})("fm_decay_A", fit_mapping) is True
+    assert named_filter({"Other": {"fm_decay_A"}})("fm_decay_A", fit_mapping) is False
+
+
+def test_named_filter_pickles() -> None:
+    f = named_filter({"ToyDecay": {"fm_decay_A"}})
+    assert pickle.loads(pickle.dumps(f)) == f
+
+
+def test_named_filter_is_sorted() -> None:
+    f = named_filter({"B": {"y", "x"}, "A": {"z"}})
+    assert f.mappings == (("A", frozenset({"z"})), ("B", frozenset({"x", "y"})))
 
 
 def training(collections: dict[str, list[FitMappingCollection]]) -> list[list[str]]:
