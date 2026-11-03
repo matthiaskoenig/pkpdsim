@@ -9,10 +9,11 @@ from pathlib import Path
 from urllib.parse import quote
 
 import pytest
-from credibility_tables import fit_table, verification_of
+from credibility_tables import battery_of, fit_table, verification_of
 from pkpdsim_credibility.credibility import CREDIBILITY
 
 from pkpdsim.credibility import (
+    Battery,
     Check,
     CredibilityAssessment,
     Provenance,
@@ -354,7 +355,9 @@ def test_zensical_strict(release: tuple[ProjectContext, Path]) -> None:
     assert any("Fit report" in t for t in texts)
 
 
-def _write_credibility(path: Path, *, verified: bool = False) -> CredibilityAssessment:
+def _write_credibility(
+    path: Path, *, verified: bool = False, battery: Battery | None = None
+) -> CredibilityAssessment:
     provenance = Provenance(
         model="credibility",
         title="Toy",
@@ -370,6 +373,7 @@ def _write_credibility(path: Path, *, verified: bool = False) -> CredibilityAsse
             fits,
             factors={Check.INTEGRATOR: 1.02},
             problems=("the male build 'toy.xml' | has 1 issue",),
+            battery=battery,
         )
         if verified
         else None
@@ -476,6 +480,39 @@ def test_the_credibility_page_shows_the_verification(
         "'toy.xml' \\| has 1 issue |" in dose
     )
     assert "not verified" in page
+    assert "## Battery of the builds" not in page
+
+
+def test_the_credibility_page_shows_the_battery(
+    release: tuple[ProjectContext, Path],
+) -> None:
+    """The battery is a section of its own, not rows of every context."""
+    context, path = release
+    context = dataclasses.replace(
+        context,
+        model=dataclasses.replace(
+            context.model, credibility="pkpdsim_toy.credibility:CREDIBILITY"
+        ),
+    )
+    _write_credibility(path, verified=True, battery=battery_of(Check.STEADY_STATE))
+    write_project_files(context, path)
+    write_docs(context, path)
+    page = (path / "docs" / "credibility.md").read_text()
+    contexts, battery = page.split("## Battery of the builds")
+    assert "mass balance" not in contexts
+    assert "| Check | Factor | Cases | Largest deviation | Result |" in battery
+    assert (
+        "| mass balance | `numerical_code_verification` | 4 | 1e-09 | passed |"
+        in battery
+    )
+    assert (
+        "| physiological steady state | `numerical_code_verification` | 4 | 1e-09 | "
+        "failed: broken |" in battery
+    )
+    assert (
+        "| second simulator | `numerical_code_verification` |  |  | not applicable: "
+        "The check cross_simulator. |" in battery
+    )
 
 
 def test_the_credibility_page_escapes_a_table_cell(

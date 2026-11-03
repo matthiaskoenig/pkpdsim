@@ -411,6 +411,7 @@ which is gone) fails the test, so the list cannot go stale:
 | `not_registered` | experiment classes which are not in the group `all` of the registry on purpose, class name to reason |
 | `not_importable` | modules below the package which do not import in the test environment (an optional dependency), name relative to the package to reason |
 | `one_at_a_time` | the reason why the registered experiments run one at a time (the memory a run of all of them needs), `None` to run them together; an empty reason is an error |
+| `battery` | the checks of the battery of the builds which fail, the id of the check (`steady_state`) to reason, see [Battery of the builds](credibility.md#battery-of-the-builds); an id which is no check of the battery and an empty reason are errors |
 
 ```python
 from pkpdsim.model import CheckSettings
@@ -419,6 +420,7 @@ checks = CheckSettings(
     not_registered={"Anderson1961Scan": "a scan which takes hours"},
     not_importable={"experiments.zonation.plot_pyvista": "needs pyvista"},
     one_at_a_time="a run of all experiments needs 20 GB",
+    battery={"steady_state": "the fluid model starts away from its steady state"},
 )
 print(checks)
 ```

@@ -8,7 +8,10 @@ evidence is selected from the data points of the adopted fits (`evaluate_fits`,
 every context of use its metrics, acceptance, domain coverage, verdict and the
 factors of V&V 40 (`FACTORS`) as plain data, written as JSON. The verification
 (`verify`) evaluates the fits again with tightened tolerances and a second
-integration method and checks the builds, for the factors of the verification.
+integration method and checks the builds, for the factors of the verification,
+and runs the battery of the checks of the builds (`run_battery`): mass
+balance, non-negativity, zero dose, steady state, superposition, a second
+simulator, plausibility and rebuild.
 """
 
 from pkpdsim.credibility.assessment import (
@@ -25,6 +28,13 @@ from pkpdsim.credibility.assessment import (
     assess,
     assess_table,
     describe_selection,
+)
+from pkpdsim.credibility.battery import (
+    Battery,
+    BatteryResult,
+    BatteryStatus,
+    Fate,
+    run_battery,
 )
 from pkpdsim.credibility.check import check_declaration
 from pkpdsim.credibility.declaration import (
@@ -74,6 +84,7 @@ from pkpdsim.credibility.selection import (
     select,
 )
 from pkpdsim.credibility.verification import (
+    BATTERY_CHECKS,
     Check,
     CheckRecord,
     Verification,
@@ -82,6 +93,7 @@ from pkpdsim.credibility.verification import (
 )
 
 __all__ = [
+    "BATTERY_CHECKS",
     "DEFAULT_ACCEPTANCE",
     "DEFAULT_MIN_POINTS",
     "FACTORS",
@@ -92,6 +104,9 @@ __all__ = [
     "AcceptanceResult",
     "AcceptanceRule",
     "AfeRange",
+    "Battery",
+    "BatteryResult",
+    "BatteryStatus",
     "Check",
     "CheckRecord",
     "Consequence",
@@ -111,6 +126,7 @@ __all__ = [
     "Factor",
     "FactorRecord",
     "FactorStatus",
+    "Fate",
     "FitTable",
     "Influence",
     "KindMismatchError",
@@ -140,6 +156,7 @@ __all__ = [
     "model_risk",
     "normalize_observable",
     "recorded_kinds",
+    "run_battery",
     "select",
     "verify",
 ]

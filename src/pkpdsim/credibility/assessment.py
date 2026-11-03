@@ -24,7 +24,9 @@ table without a model. Per context of use:
 - The verification of the decisive predictions, when the assessment is
   verified (`pkpdsim.credibility.verification`): per check whether it passed,
   the largest relative difference of the alternative predictions and whether
-  the acceptance changes with them.
+  the acceptance changes with them, and the checks of the battery of the
+  builds of the model (`pkpdsim.credibility.battery`), the same for every
+  context.
 - The verdict, see `verdict`, and the factors of V&V 40 (`FACTORS`).
 
 The ratio quantities and the statement of the domain are recorded and shown,
@@ -880,6 +882,15 @@ def _count(n: int, singular: str, plural: str | None = None) -> str:
 def _check_statement(record: CheckRecord, tightening: float) -> str:
     """Get the statement of the factor of a check of the verification."""
     result = "passed" if record["passed"] else "failed"
+    if record["check"] not in {c.value for c in (*NUMERICAL_CHECKS, Check.SETUP)}:
+        label = Check(record["check"]).label
+        text = f"{label[0].upper()}{label[1:]} of {_count(record['n_points'], 'case')}"
+        if not math.isnan(record["max_difference"]):
+            text += f", largest deviation {record['max_difference']:.2g}"
+            if record["at"]:
+                text += f" at {record['at']}"
+        problems = "".join(f"; {problem}" for problem in record["problems"])
+        return f"{text}{problems}: {result}."
     if record["check"] == Check.SETUP.value:
         text = (
             "The builds are valid SBML with consistent units and the "
@@ -950,15 +961,26 @@ def _factors(
             "of interest covered."
         ),
     }
-    verified = {record["factor"]: record for record in checks}
+    verified: dict[str, list[CheckRecord]] = {}
+    for record in checks:
+        verified.setdefault(record["factor"], []).append(record)
     factors: list[FactorRecord] = []
     for factor in FACTORS:
         data = factor.to_dict()
         if factor.status is FactorStatus.ASSESSED:
             data["statement"] = statements[factor.id]
         elif factor.id in verified:
+            # a platform statement stays, the checks of the model follow it
+            platform = (
+                factor.statement if factor.status is FactorStatus.PLATFORM else ""
+            )
             data["status"] = FactorStatus.ASSESSED.value
-            data["statement"] = _check_statement(verified[factor.id], tightening)
+            data["statement"] = " ".join(
+                [
+                    *([platform] if platform else []),
+                    *(_check_statement(r, tightening) for r in verified[factor.id]),
+                ]
+            )
             data["step"] = None
         factors.append(data)
     return factors
@@ -1038,6 +1060,21 @@ def _check_records(
             problems=problems,
         )
     )
+    if summary.battery is not None:
+        records.extend(
+            CheckRecord(
+                check=result.check.value,
+                factor=result.check.factor,
+                n_points=result.cases,
+                max_difference=result.largest,
+                at=result.at,
+                acceptance_changed=None,
+                passed=bool(result.passed),
+                problems=list(result.problems),
+            )
+            for result in summary.battery.results
+            if result.passed is not None
+        )
     return records
 
 

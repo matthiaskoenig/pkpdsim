@@ -17,6 +17,7 @@ from typing import Any, cast
 from urllib.parse import quote
 
 from pkpdsim.credibility import Check, CredibilityAssessment
+from pkpdsim.credibility.verification import BATTERY_CHECKS
 from pkpdsim.release.build import BuildPaths
 from pkpdsim.release.notes import NOTES_DIR, fits_prefix
 from pkpdsim.release.project import ProjectContext, render
@@ -234,8 +235,9 @@ def _credibility(release_path: Path) -> dict[str, Any] | None:
         The assessment as plain data with, for every context, the verdict in words
         (`verdict_label`), the role of the evidence which decides it
         (`decided_on`), the coverage of its claimed values (`coverage`) and
-        its checks of the verification with their names (`label`);
-        `None` for a release without one.
+        its checks of the predictions with their names (`label`), and the
+        checks of the battery of the builds with their names (`battery`,
+        empty if it did not run); `None` for a release without one.
 
     Raises:
         ReleaseError: if the record cannot be read.
@@ -260,7 +262,15 @@ def _credibility(release_path: Path) -> dict[str, Any] | None:
         context["verification"] = [
             {**record, "label": Check(record["check"]).label}
             for record in cast("list[dict[str, Any]]", context["verification"])
+            if Check(record["check"]) not in BATTERY_CHECKS
         ]
+    battery = (
+        None if assessment.verification is None else assessment.verification.battery
+    )
+    data["battery"] = [
+        {**result.to_dict(), "label": result.check.label, "factor": result.check.factor}
+        for result in ([] if battery is None else battery.results)
+    ]
     return data
 
 

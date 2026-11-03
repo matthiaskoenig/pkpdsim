@@ -70,6 +70,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# the second simulator of the battery of `pkpdsim.credibility`: AMICI is built
+# from source and compiles every model with cmake and ninja
+amici = [
+    "amici>=1.2.0",
+    "cmake>=4.4.4",
+    "ninja>=1.13.2",
+]
 dev = [
     "bump-my-version>=1.5.1",
     "ruff>=0.17.3",
@@ -130,6 +137,12 @@ root = ["./src", ".", "./tests"]
 
 [tool.ty.src]
 include = ["src", "tests", "scripts"]
+
+[tool.ty.analysis]
+# AMICI, the second simulator of the battery of `pkpdsim.credibility`, is the
+# optional extra `amici`, built from source, and not in the environment of the
+# check
+allowed-unresolved-imports = ["amici", "amici.**"]
 
 [tool.ty.terminal]
 # warnings are failures: keep the codebase free of any diagnostic

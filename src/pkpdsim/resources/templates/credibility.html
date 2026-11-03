@@ -45,7 +45,7 @@
 .verdict.insufficient_evidence, .state.not_evaluable, .state.below { color: var(--insufficient); }
 .verdict.not_verified { color: var(--not-verified); }
 .state.passed { color: var(--supported); }
-.state.outside, .state.not_assessed { color: var(--muted); }
+.state.outside, .state.not_assessed, .state.not_applicable { color: var(--muted); }
 .chip[aria-pressed="true"] { color: var(--on-state); }
 .chip[data-kind="supported"][aria-pressed="true"] { background: var(--supported); }
 .chip[data-kind="supported_with_extrapolation"][aria-pressed="true"] { background: var(--extrapolated); }
@@ -301,7 +301,8 @@ td.status .soft { font-size: 12.5px; }
           <th>at</th><th>acceptance</th><th>result</th>
         </tr></thead>
         <tbody>
-        {% for r in c.verification %}
+        {% set battery = c.verification | rejectattr("check", "in", prediction_checks) | list %}
+        {% for r in c.verification if r.check in prediction_checks %}
         <tr>
           <td class="named">{{ check_labels[r.check] }}{% for problem in r.problems %}<br><span class="soft">{{ problem }}</span>{% endfor %}</td>
           <td class="mono">{{ r.factor }}</td>
@@ -312,6 +313,18 @@ td.status .soft { font-size: 12.5px; }
           <td><span class="state {{ 'passed' if r.passed else 'failed' }}">{{ "passed" if r.passed else "failed" }}</span></td>
         </tr>
         {% endfor %}
+        {% if battery %}
+        {% set failed = battery | rejectattr("passed") | list %}
+        <tr>
+          <td class="named"><a href="#battery">battery of the builds</a>, {{ battery | length }} checks{% for r in failed %}<br><span class="soft">{{ check_labels[r.check] }} failed</span>{% endfor %}</td>
+          <td class="mono">{{ battery | map(attribute="factor") | unique | join(", ") }}</td>
+          <td class="num"></td>
+          <td class="num"></td>
+          <td></td>
+          <td></td>
+          <td><span class="state {{ 'failed' if failed else 'passed' }}">{{ "failed" if failed else "passed" }}</span></td>
+        </tr>
+        {% endif %}
         </tbody>
       </table>
     </div>
@@ -437,6 +450,50 @@ td.status .soft { font-size: 12.5px; }
     <p class="empty">Every build is valid SBML with consistent units.</p>
   {% endif %}
   </div>
+
+  <h3 id="battery">Battery of the builds</h3>
+  {% if verification.battery %}
+  <p class="note">The builds of the model are checked without data, the same for every context of use: {{ verification.battery.settings }} A check which is not applicable assesses nothing.</p>
+  <div class="card scroll">
+    <table>
+      <thead><tr><th>check</th><th>factor</th><th class="num">cases</th><th class="num">largest deviation</th><th>at</th><th>result</th></tr></thead>
+      <tbody>
+      {% for r in verification.battery.results %}
+      <tr>
+        <td class="named">{{ check_labels[r.check.value] }}<br><span class="soft">{{ r.statement }}</span>{% for problem in r.problems %}<br><span class="soft">{{ problem }}</span>{% endfor %}</td>
+        <td class="mono">{{ r.check.factor }}</td>
+        <td class="num">{{ r.cases if r.passed is not none else "" }}</td>
+        <td class="num">{{ r.largest | number if r.passed is not none and r.largest == r.largest else "" }}</td>
+        <td class="mono wrap">{{ r.at }}</td>
+        <td><span class="state {{ r.status.value }}">{{ r.status.value | replace("_", " ") }}</span></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if verification.battery.fates %}
+  <h3>Fate of the doses</h3>
+  <p class="note">Where a dose is at the end of the simulation, as a share of the dose, relative to the simulation without a dose: in the body, in the urine and the feces, not yet applied (dose) and moved by every reaction which reads no dose (negative an elimination, positive a production, e.g. of a metabolite).</p>
+  <div class="card scroll">
+    <table class="compact">
+      <thead><tr><th>build</th><th>dose</th><th class="num">mmole</th><th>parts</th><th class="num">imbalance</th></tr></thead>
+      <tbody>
+      {% for f in verification.battery.fates %}
+      <tr>
+        <td>{{ f.build }}</td>
+        <td class="mono">{{ f.dose }}</td>
+        <td class="num">{{ f.amount | number }}</td>
+        <td class="mono wrap">{% for name, value in f.parts.items() %}{{ name }} {{ (value / f.amount) | number }}{% if not loop.last %}, {% endif %}{% endfor %}</td>
+        <td class="num">{{ f.imbalance | number }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+  {% else %}
+  <div class="card"><p class="empty">The battery of the builds did not run.</p></div>
+  {% endif %}
   {% else %}
   <div class="card"><p class="empty">The assessment was not verified: the factors of the verification are not assessed.</p></div>
   {% endif %}

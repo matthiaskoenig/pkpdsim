@@ -28,6 +28,8 @@ FILES = {
     "domain.tsv",
     "quantities.tsv",
     "verification.tsv",
+    "battery.tsv",
+    "fates.tsv",
     "index.html",
 }
 

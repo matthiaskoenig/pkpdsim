@@ -277,25 +277,45 @@ class CheckSettings:
         one_at_a_time: why the tests run the registered experiments one at a
             time (the memory a run of all of them needs), `None` to run them
             together.
+        battery: the checks of the battery of the builds which fail, by the
+            id of the check (`pkpdsim.credibility.battery.BATTERY_CHECKS`,
+            e.g. `steady_state`), see `pkpdsim.testing.check_battery`; a
+            credibility assessment shows a known failure with its reason and
+            still fails it.
     """
 
     not_registered: Mapping[str, str] = field(default_factory=dict)
     not_importable: Mapping[str, str] = field(default_factory=dict)
     one_at_a_time: str | None = None
+    battery: Mapping[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        """Copy the mappings and check the reason to run one at a time.
+        """Copy the mappings and check the reasons.
 
         Raises:
-            ValueError: if one_at_a_time is an empty reason.
+            ValueError: if one_at_a_time is an empty reason, or a failure of
+                the battery is no check of the battery or has no reason.
         """
+        from pkpdsim.credibility.verification import BATTERY_CHECKS
+
         object.__setattr__(self, "not_registered", dict(self.not_registered))
         object.__setattr__(self, "not_importable", dict(self.not_importable))
+        object.__setattr__(self, "battery", dict(self.battery))
         if self.one_at_a_time is not None and not self.one_at_a_time.strip():
             raise ValueError(
                 "one_at_a_time needs a reason, e.g. the memory a run of all "
                 "experiments needs; None runs them together."
             )
+        for check, reason in self.battery.items():
+            if check not in {c.value for c in BATTERY_CHECKS}:
+                raise ValueError(
+                    f"The failure of the battery '{check}' is no check of the "
+                    f"battery, one of {', '.join(c.value for c in BATTERY_CHECKS)}."
+                )
+            if not reason.strip():
+                raise ValueError(
+                    f"The failure of the battery '{check}' needs a reason."
+                )
 
     def __hash__(self) -> int:
         """Hash the settings by their content."""
@@ -304,6 +324,7 @@ class CheckSettings:
                 tuple(sorted(self.not_registered.items())),
                 tuple(sorted(self.not_importable.items())),
                 self.one_at_a_time,
+                tuple(sorted(self.battery.items())),
             )
         )
 
