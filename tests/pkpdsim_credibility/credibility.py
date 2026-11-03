@@ -87,3 +87,26 @@ CREDIBILITY = Credibility(
         ),
     ),
 )
+
+#: a declaration which validates on fitted data, CredB `fm_dose` is training data
+BROKEN = Credibility(
+    contexts=(
+        ContextOfUse(
+            id="fitted",
+            title="Validation on fitted data",
+            question="Does the model predict the data it was fitted on?",
+            level=CouLevel.C2,
+            influence=Level.LOW,
+            consequence=Level.LOW,
+            quantities=_A,
+            domain=Domain(),
+            evidence=(
+                Evidence(
+                    "fitted dose",
+                    EvidenceRole.VALIDATION,
+                    named_filter({"CredB": {"fm_dose"}}),
+                ),
+            ),
+        ),
+    ),
+)
