@@ -394,6 +394,67 @@ def test_the_credibility_page(release: tuple[ProjectContext, Path]) -> None:
     )
 
 
+def test_the_credibility_page_shows_the_domain(
+    release: tuple[ProjectContext, Path],
+) -> None:
+    """The claimed coverage, the statement, the ratios and what decides a verdict."""
+    context, path = release
+    context = dataclasses.replace(
+        context,
+        model=dataclasses.replace(
+            context.model, credibility="pkpdsim_toy.credibility:CREDIBILITY"
+        ),
+    )
+    assessment = _write_credibility(path)
+    write_project_files(context, path)
+    write_docs(context, path)
+    page = (path / "docs" / "credibility.md").read_text()
+    assert "| Context of use | Title | Level | Risk | Verdict | Decided on |" in page
+    assert (
+        "| `describe` | Describe the decay | C1 | low | supported | calibration |"
+        in (page)
+    )
+    dose = page[page.index("## dose") : page.index("## renal")]
+    assert "| Field | Value | Coverage | Points |" in dose
+    claimed = [e for e in assessment.coverage if e.context == "dose" and e.claimed]
+    assert claimed
+    for entry in claimed:
+        assert entry.coverage is not None
+        line = (
+            f"| `{entry.field}` | `{entry.value}` | {entry.coverage.value} "
+            f"| {entry.n_points} |"
+        )
+        assert line in dose
+    assert "the single doses of the data (statement, not assessed)" in dose
+    renal = page[page.index("## renal") :]
+    assert "`A_ratio`" in renal
+    assert "ratio, assessed in step 3" in renal
+
+
+def test_the_credibility_page_escapes_a_table_cell(
+    release: tuple[ProjectContext, Path],
+) -> None:
+    context, path = release
+    context = dataclasses.replace(
+        context,
+        model=dataclasses.replace(
+            context.model, credibility="pkpdsim_toy.credibility:CREDIBILITY"
+        ),
+    )
+    assessment = _write_credibility(path)
+    piped = dataclasses.replace(
+        assessment,
+        contexts=[
+            dataclasses.replace(assessment.contexts[0], title="Decay | elimination")
+        ],
+    )
+    piped.to_json(path / BuildPaths.CREDIBILITY / "credibility.json")
+    write_project_files(context, path)
+    write_docs(context, path)
+    page = (path / "docs" / "credibility.md").read_text()
+    assert "| Decay \\| elimination |" in page
+
+
 def test_no_credibility_page_without_a_record(
     release: tuple[ProjectContext, Path],
 ) -> None:

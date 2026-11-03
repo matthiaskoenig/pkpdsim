@@ -2,6 +2,7 @@
 
 import dataclasses
 import re
+import shutil
 from pathlib import Path
 
 import pandas as pd
@@ -107,6 +108,27 @@ def test_write_outputs(assessment: CredibilityAssessment, tmp_path: Path) -> Non
     assert not external.search(html)
 
 
+def test_the_report_shows_what_is_not_assessed(
+    assessment: CredibilityAssessment,
+) -> None:
+    html = render_html(assessment)
+    # the ratio quantity of renal and the domain statement of dose
+    assert "A_ratio" in html
+    assert "ratio, assessed in step 3" in html
+    assert "the single doses of the data" in html
+    assert "statement, not assessed" in html
+
+
+def test_the_report_shows_what_decides(assessment: CredibilityAssessment) -> None:
+    html = render_html(assessment)
+    overview = html[html.index('id="overview"') : html.index('id="contexts"')]
+    assert "decided on" in overview
+    rows = overview.split("<tr")
+    for context, role in (("describe", "calibration"), ("dose", "validation")):
+        (row,) = (r for r in rows if f'href="#cou-{context}"' in r)
+        assert f'class="decided">{role}<' in row
+
+
 def test_the_verdict_is_a_word_with_a_colour(assessment: CredibilityAssessment) -> None:
     html = render_html(assessment)
     for verdict in Verdict:
@@ -149,15 +171,31 @@ def test_print_summary(
 ) -> None:
     print_summary(assessment)
     out = capsys.readouterr().out
+    assert "decided on" in out
     for context in assessment.contexts:
         assert context.id in out
         assert context.verdict.label in out
+    (describe,) = (line for line in out.splitlines() if " describe " in line)
+    assert "calibration" in describe
+    (dose,) = (line for line in out.splitlines() if " dose " in line)
+    assert "validation" in dose
+
+
+def test_print_summary_escapes_the_id(
+    assessment: CredibilityAssessment, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An id of a record is text, not the markup of the console."""
+    marked = dataclasses.replace(assessment.contexts[0], id="[bold]x")
+    print_summary(dataclasses.replace(assessment, contexts=[marked]))
+    assert "[bold]x" in capsys.readouterr().out
 
 
 def test_the_command(credibility_model: PKPDModel, tmp_path: Path) -> None:
     output_dir = tmp_path / "assessed"
-    assert credibility_command(credibility_model, ["-o", str(output_dir)]) == output_dir
-    assert (output_dir / "credibility.json").exists()
+    args = ["-o", str(output_dir), "--source-commit", "0123abc"]
+    assert credibility_command(credibility_model, args) == output_dir
+    record = CredibilityAssessment.from_json(output_dir / "credibility.json")
+    assert (record.provenance.commit, record.provenance.dirty) == ("0123abc", None)
     assert {p.name for p in output_dir.iterdir()} == FILES
     again = tmp_path / "again"
     assert (
@@ -216,3 +254,58 @@ def test_the_command_reports_a_missing_record(
     assert exit_info.value.code == 1
     # the console folds a long path at its width
     assert "missing.json" in "".join(capsys.readouterr().out.split())
+
+
+def test_the_command_refuses_a_source_commit_of_a_record(
+    credibility_model: PKPDModel, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    record = tmp_path / "credibility.json"
+    with pytest.raises(SystemExit) as exit_info:
+        credibility_command(
+            credibility_model,
+            ["--from-json", str(record), "--source-commit", "0123abc"],
+        )
+    assert exit_info.value.code == 2
+    assert "--source-commit" in capsys.readouterr().err
+
+
+def test_the_command_reports_a_malformed_record(
+    credibility_model: PKPDModel, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    record = tmp_path / "credibility.json"
+    record.write_text('{"contexts": []}', encoding="utf-8")
+    with pytest.raises(SystemExit) as exit_info:
+        credibility_command(
+            credibility_model, ["--from-json", str(record), "-o", str(tmp_path / "o")]
+        )
+    assert exit_info.value.code == 1
+    out = "".join(capsys.readouterr().out.split())
+    assert "credibility.json" in out
+    assert "isnoassessment" in out
+
+
+def test_the_command_reports_a_declaration_of_another_type(
+    credibility_model: PKPDModel, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    other = dataclasses.replace(credibility_model, credibility=".fitting:DOSE")
+    with pytest.raises(SystemExit) as exit_info:
+        credibility_command(other, ["-o", str(tmp_path / "other")])
+    assert exit_info.value.code == 1
+    assert "not a Credibility" in capsys.readouterr().out
+
+
+def test_the_command_reports_a_malformed_record_of_a_fit(
+    credibility_model: PKPDModel, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    fits = tmp_path / "fits"
+    shutil.copytree(credibility_model.fits_dir, fits)
+    (fit_id,) = credibility_model.fits
+    path = fits / fit_id / "metrics_mappings.tsv"
+    pd.read_csv(path, sep="\t").drop(columns="kind").to_csv(path, sep="\t", index=False)
+    model = dataclasses.replace(credibility_model, fits_path=fits)
+    with pytest.raises(SystemExit) as exit_info:
+        credibility_command(model, ["-o", str(tmp_path / "out")])
+    assert exit_info.value.code == 1
+    out = "".join(capsys.readouterr().out.split())
+    assert "metrics_mappings.tsv" in out
+    assert "adoptthefitagain" in out

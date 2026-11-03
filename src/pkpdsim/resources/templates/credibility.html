@@ -101,11 +101,12 @@ td.status .soft { font-size: 12.5px; }
 {% block content %}
 <section id="overview">
   <h2>Overview</h2>
-  <p class="note">The contexts of use of the model, their model risk from the influence of the model on the decision and the consequence of a wrong decision, and their verdict on the decisive evidence: the calibration data for a description (C1), else the validation data. The evaluable points are the decisive points which the fold criteria can evaluate.</p>
+  <p class="note">The contexts of use of the model, their model risk from the influence of the model on the decision and the consequence of a wrong decision, and their verdict on the decisive evidence (decided on): the calibration data, the data the model was fitted to, for a description (C1), else the validation data. The evaluable points are the decisive points which the fold criteria can evaluate.</p>
   <div class="card scroll">
     <table data-filter="row">
       <thead><tr>
         <th data-sort="text">context of use</th><th data-sort="text">verdict</th>
+        <th data-sort="text">decided on</th>
         <th data-sort="text">title</th>
         <th data-sort="text">level</th><th data-sort="text">risk</th>
         <th class="num" data-sort="num">decisive points</th>
@@ -117,6 +118,7 @@ td.status .soft { font-size: 12.5px; }
       <tr data-kind="{{ c.verdict.value }}">
         <td class="mono"><a href="#cou-{{ c.id }}">{{ c.id }}</a></td>
         <td>{{ verdict(c.verdict) }}</td>
+        <td><span class="decided">{{ c.decisive_role.value }}</span></td>
         <td>{{ c.title }}</td>
         <td>{{ level(c.level) }}</td>
         <td>{{ c.risk.value }}</td>
@@ -163,6 +165,7 @@ td.status .soft { font-size: 12.5px; }
       <dt>influence</dt><dd>{{ c.influence.value }}</dd>
       <dt>consequence</dt><dd>{{ c.consequence.value }}</dd>
       <dt>model risk</dt><dd>{{ c.risk.value }}</dd>
+      <dt>decided on</dt><dd>{{ c.decisive_role.value }} evidence</dd>
       <dt>decisive points</dt><dd>{{ c.n_decisive }}</dd>
       <dt>evaluable points</dt><dd>{{ c.n_evaluable }}</dd>
       {% if c.rationale %}<dt>rationale</dt><dd>{{ c.rationale }}</dd>{% endif %}
@@ -171,17 +174,17 @@ td.status .soft { font-size: 12.5px; }
     <h4>Quantities of interest</h4>
     <div class="scroll">
       <table class="compact">
-        <thead><tr><th>quantity</th><th>description</th><th>ratio</th></tr></thead>
+        <thead><tr><th>quantity</th><th>description</th><th>kind</th></tr></thead>
         <tbody>
         {% for q in c.quantities %}
-        <tr><td class="mono">{{ q.id }}</td><td>{{ q.description }}</td><td>{{ "yes" if q.ratio else "no" }}</td></tr>
+        <tr><td class="mono">{{ q.id }}</td><td>{{ q.description }}</td><td>{% if q.ratio %}<span class="state not_assessed">ratio, assessed in step 3</span>{% else %}absolute{% endif %}</td></tr>
         {% endfor %}
         </tbody>
       </table>
     </div>
 
     <h4>Claimed domain</h4>
-    {% if c.domain_statement %}<p class="text">{{ c.domain_statement }}</p>{% endif %}
+    {% if c.domain_statement %}<p class="text">{{ c.domain_statement }} <span class="state not_assessed">statement, not assessed</span></p>{% endif %}
     {% if view.coverage %}
     <div class="scroll">
       <table class="compact">

@@ -201,6 +201,15 @@ def test_build_runs_run_credibility_for_a_declared_model(tmp_path: Path) -> None
     assert Path("credibility") in written
 
 
+def test_build_passes_the_source_commit_to_run_credibility(tmp_path: Path) -> None:
+    """The assessment runs in the release repository, its provenance is the source."""
+    runner = FakeRunner()
+    model = dataclasses.replace(MODEL_WITH_FIT, credibility=CREDIBILITY_REFERENCE)
+    build(model, tmp_path, runner=runner, source_commit="0123abc")
+    (command,) = (c for c in runner.commands if "run_credibility" in c)
+    assert command[-2:] == ["--source-commit", "0123abc"]
+
+
 def test_build_without_a_declaration_removes_credibility(tmp_path: Path) -> None:
     stale = tmp_path / "credibility"
     stale.mkdir()

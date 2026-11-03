@@ -106,6 +106,8 @@ def build(
     release_path: Path,
     runner: Runner = run,
     workers: str = "auto",
+    *,
+    source_commit: str | None = None,
 ) -> list[Path]:
     """Build the models, simulations and fit reports in the release repository.
 
@@ -120,7 +122,9 @@ def build(
     adopted fit into a folder named by its id, which becomes `fit/<fit id>`.
     `run_credibility <package>` assesses the contexts of use against the adopted
     fits and writes the record and the report, which become `credibility`; a
-    model without a declaration has no such folder.
+    model without a declaration has no such folder. It runs in the release
+    repository, so it gets the commit of the source repository for its
+    provenance (`--source-commit`).
 
     A declared output is required, an undeclared one is optional: the factory must
     create at least one SBML model and, if `model.archive_path` is set, the
@@ -132,6 +136,8 @@ def build(
         release_path: the release repository, with the package already exported.
         runner: runs the commands.
         workers: the number of workers of the simulations, `auto` by default.
+        source_commit: the commit of the source repository the release is
+            built from, recorded by the assessment of the contexts of use.
 
     Returns:
         The written paths, relative to `release_path`, with the new `uv.lock`.
@@ -222,11 +228,11 @@ def build(
     _clear(release_path / results / "credibility")
     if model.credibility is not None:
         stage("Credibility")
-        _step(
-            runner,
-            ["uv", "run", "run_credibility", package, "-o", f"{results}/credibility"],
-            release_path,
-        )
+        credibility = ["uv", "run", "run_credibility", package]
+        credibility += ["-o", f"{results}/credibility"]
+        if source_commit is not None:
+            credibility += ["--source-commit", source_commit]
+        _step(runner, credibility, release_path)
         _replace(
             _require(release_path / results / "credibility", "run_credibility"),
             credibility_dir,

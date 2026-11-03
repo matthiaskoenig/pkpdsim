@@ -135,7 +135,8 @@ def recorded_kinds(record: Path, fit: str) -> dict[tuple[str, str, str], str]:
 
     Raises:
         FileNotFoundError: if the record has no metrics of its mappings.
-        ValueError: if the record stores two kinds of one mapping.
+        ValueError: if the metrics lack the experiment, the mapping or the kind,
+            or store two kinds of one mapping.
     """
     path = record / METRICS_MAPPINGS
     if not path.exists():
@@ -144,6 +145,12 @@ def recorded_kinds(record: Path, fit: str) -> dict[tuple[str, str, str], str]:
             f"with the kinds of its mappings; adopt the fit again."
         )
     table = pd.read_csv(path, sep="\t", dtype=str)
+    missing = [c for c in ("experiment", "mapping", "kind") if c not in table.columns]
+    if missing:
+        raise ValueError(
+            f"The {METRICS_MAPPINGS} of the record '{record}' of the adopted fit "
+            f"lacks the columns {missing}; adopt the fit again."
+        )
     found: dict[tuple[str, str, str], set[str]] = {}
     for experiment, mapping, kind in zip(
         table["experiment"], table["mapping"], table["kind"], strict=True

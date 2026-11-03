@@ -958,10 +958,12 @@ def credibility_command(model: PKPDModel, args: Sequence[str] | None = None) -> 
 
     The adopted fits are evaluated on the current model and data
     (`pkpdsim.credibility.assess`), `--from-json` instead reads a written
-    record without evaluating a fit. The outputs replace an earlier assessment
-    in the directory, see `pkpdsim.credibility.report.write_outputs`; an error
-    of the declaration, the evidence, the records or the directory is printed
-    and exits with 1.
+    record without evaluating a fit. `--source-commit` records the commit of
+    the source repository in the provenance, which a release passes, since it
+    assesses the model in its release repository. The outputs replace an
+    earlier assessment in the directory, see
+    `pkpdsim.credibility.report.write_outputs`; an error of the declaration,
+    the evidence, the records or the directory is printed and exits with 1.
 
     Args:
         model: the model.
@@ -993,12 +995,21 @@ def credibility_command(model: PKPDModel, args: Sequence[str] | None = None) -> 
         help="write the outputs again from a written credibility.json, without "
         "evaluating the fits",
     )
+    p.add_argument(
+        "--source-commit",
+        metavar="SHA",
+        help="the commit of the source repository of the model, recorded in the "
+        "provenance instead of the commit of the working directory (whether its "
+        "tree was clean is not known); a release passes it",
+    )
     options = p.parse_args(sys.argv[1:] if args is None else list(args))
+    if options.from_json is not None and options.source_commit is not None:
+        p.error("--source-commit is the provenance of an assessment, not of a record")
     try:
         assessment = (
-            assess(model)
+            assess(model, options.source_commit)
             if options.from_json is None
-            else CredibilityAssessment.from_json(options.from_json)
+            else _read_assessment(options.from_json)
         )
         output_dir = write_outputs(assessment, options.output_dir)
     except (
@@ -1008,12 +1019,35 @@ def credibility_command(model: PKPDModel, args: Sequence[str] | None = None) -> 
         FileNotFoundError,
         FileExistsError,
         ValueError,
+        TypeError,
     ) as err:
         console.print(str(err), style="error")
         sys.exit(1)
     print_summary(assessment)
     display.key_values({"report": output_dir / "index.html"})
     return output_dir
+
+
+def _read_assessment(path: Path) -> CredibilityAssessment:
+    """Read a written assessment, see `CredibilityAssessment.from_json`.
+
+    Args:
+        path: the record, a `credibility.json`.
+
+    Returns:
+        The assessment.
+
+    Raises:
+        FileNotFoundError: if the file does not exist.
+        ValueError: if the file is no JSON or no assessment.
+    """
+    try:
+        return CredibilityAssessment.from_json(path)
+    except (KeyError, TypeError, AttributeError) as err:
+        raise ValueError(
+            f"The record '{path}' is no assessment of the contexts of use "
+            f"({err!r}); write it again with run_credibility."
+        ) from err
 
 
 DOTTED_PACKAGE = re.compile(r"^[A-Za-z_]\w*(\.[A-Za-z_]\w*)*$")

@@ -14,7 +14,8 @@
 - `index.html`: the report (`render_html`), which extends `report_base.html`
   of `sbmlsim.report.templates` and loads nothing from the network.
 
-`print_summary` prints the table of the contexts of use and their verdicts.
+`print_summary` prints the table of the contexts of use, their verdicts and
+the role of the evidence which decides them.
 """
 
 from __future__ import annotations
@@ -319,6 +320,9 @@ def print_summary(assessment: CredibilityAssessment) -> None:
     table = Table(
         title=f"Credibility of {escape(assessment.provenance.title)}",
         box=box.SIMPLE_HEAD,
+        # one space between the columns, the table fits 80 columns
+        padding=0,
+        pad_edge=False,
     )
     # an id and the longest verdict are not cut, a column which does not fit
     # folds its text
@@ -334,14 +338,17 @@ def print_summary(assessment: CredibilityAssessment) -> None:
         no_wrap=True,
         min_width=max(len(v.label) for v in Verdict),
     )
+    # a description (C1) is decided on the data it was fitted to
+    table.add_column("decided on", no_wrap=True)
     table.add_column("points", justify="right", no_wrap=True)
     table.add_column("evaluable", justify="right", no_wrap=True)
     for c in assessment.contexts:
         table.add_row(
-            c.id,
+            escape(c.id),
             c.level.value,
             c.risk.value,
             f"[{_VERDICT_STYLES[c.verdict]}]{c.verdict.label}[/]",
+            c.decisive_role.value,
             str(c.n_decisive),
             str(c.n_evaluable),
         )

@@ -218,6 +218,11 @@ def _query_value(value: object) -> str:
     return quote(str(value), safe="")
 
 
+def _markdown_cell(value: object) -> str:
+    """Get a value as the text of a cell of a markdown table: `|` escaped, one line."""
+    return " ".join(str(value).split()).replace("|", "\\|")
+
+
 def _environment() -> Environment:
     environment = Environment(
         undefined=StrictUndefined,
@@ -227,6 +232,7 @@ def _environment() -> Environment:
     )
     environment.filters["toml"] = _toml_string
     environment.filters["query"] = _query_value
+    environment.filters["cell"] = _markdown_cell
     return environment
 
 
