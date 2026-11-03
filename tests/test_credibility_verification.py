@@ -160,7 +160,7 @@ def test_a_verified_context() -> None:
     assert assessment.verification.limit == LIMIT
 
 
-def test_an_assessment_withoutverification_of() -> None:
+def test_an_assessment_without_verification() -> None:
     assessment = _assess(fit_table(), None)
     assert assessment.verification is None
     for context in assessment.contexts:
@@ -284,7 +284,7 @@ def test_the_json_round_trip_of_a_verified_assessment(tmp_path: Path) -> None:
     assert all(c.verified is None for c in old.contexts)
 
 
-def test_the_report_of_averification_of() -> None:
+def test_the_report_of_a_verification() -> None:
     fits = fit_table()
     verification = verification_of(fits, factors={Check.INTEGRATOR: 1.02})
     assessment = _assess(fits, verification)
@@ -334,7 +334,7 @@ def test_verify_the_test_package(credibility_model: PKPDModel) -> None:
     ]
 
 
-def test_the_command_withoutverification_of(
+def test_the_command_without_verification(
     credibility_model: PKPDModel, tmp_path: Path
 ) -> None:
     output_dir = credibility_command(
