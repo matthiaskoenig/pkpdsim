@@ -9,7 +9,9 @@ import pytest
 from pkpdsim.cli import (
     COMMANDS,
     ModelNotFoundError,
+    main,
     resolve_model,
+    run_credibility_main,
     run_fit_main,
     run_identifiability_main,
     run_report_main,
@@ -24,6 +26,7 @@ MAINS: dict[str, Main] = {
     "run_fit": run_fit_main,
     "run_report": run_report_main,
     "run_identifiability": run_identifiability_main,
+    "run_credibility": run_credibility_main,
 }
 
 
@@ -138,7 +141,9 @@ def test_a_command_without_a_model_is_a_usage_error(
     assert message in err
 
 
-@pytest.mark.parametrize("name", ["run_fit", "run_report", "run_identifiability"])
+@pytest.mark.parametrize(
+    "name", ["run_fit", "run_report", "run_identifiability", "run_credibility"]
+)
 def test_the_fit_commands_need_fit_definitions(
     packages: Path, name: str, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -146,6 +151,17 @@ def test_the_fit_commands_need_fit_definitions(
         MAINS[name](["nofits", "--help"])
     assert exit_info.value.code == 2
     assert "the model 'toy' (nofits) has no fit definitions" in capsys.readouterr().err
+
+
+def test_the_help_of_run_credibility(capsys: pytest.CaptureFixture[str]) -> None:
+    assert "run_credibility" in COMMANDS
+    with pytest.raises(SystemExit) as exit_info:
+        main("run_credibility", ["pkpdsim_credibility", "--help"])
+    assert exit_info.value.code == 0
+    out = capsys.readouterr().out
+    assert out.startswith("usage: run_credibility pkpdsim_credibility ")
+    assert "--from-json" in out
+    assert "--output_dir" in out
 
 
 def test_the_simulation_of_a_model_without_fit_definitions_runs(

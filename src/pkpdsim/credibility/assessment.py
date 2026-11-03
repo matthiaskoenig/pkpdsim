@@ -713,6 +713,11 @@ def verdict(
     return Verdict.INSUFFICIENT_EVIDENCE
 
 
+def _count(n: int, singular: str, plural: str | None = None) -> str:
+    """Get a number of things in words, e.g. `1 point` and `2 points`."""
+    return f"{n} {singular if n == 1 else plural or singular + 's'}"
+
+
 def _factors(
     cou: ContextOfUse,
     decisive: pd.DataFrame,
@@ -729,20 +734,20 @@ def _factors(
     covered = sum(_covered(cou, e) for e in claimed)
     statements = {
         "test_samples": (
-            f"{n_points} points of {n_mappings} mappings of {n_studies} studies "
-            f"of the {role} evidence decide, {len(applicable(decisive))} of them "
-            "evaluable."
+            f"{_count(n_points, 'point')} of {_count(n_mappings, 'mapping')} of "
+            f"{_count(n_studies, 'study', 'studies')} of the {role} evidence "
+            f"decide, {len(applicable(decisive))} of them evaluable."
         ),
         "test_conditions": (
-            f"{len(claimed)} claimed values of the metadata, {len(outside)} values "
-            "of the evidence outside the claim."
+            f"{_count(len(claimed), 'claimed value')} of the metadata, "
+            f"{_count(len(outside), 'value')} of the evidence outside the claim."
         ),
         "output_comparison": (
-            f"{met} of {len(acceptance)} acceptance rules met on the {role} "
-            f"evidence, {len(acceptance) - evaluable} not evaluable."
+            f"{met} of {_count(len(acceptance), 'acceptance rule')} met on the "
+            f"{role} evidence, {len(acceptance) - evaluable} not evaluable."
         ),
         "relevance_of_validation": (
-            f"{covered} of {len(claimed)} claimed values covered."
+            f"{covered} of {_count(len(claimed), 'claimed value')} covered."
         ),
     }
     factors: list[FactorRecord] = []

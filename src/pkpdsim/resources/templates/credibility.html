@@ -1,0 +1,386 @@
+{% extends "report_base.html" %}
+{#
+  The report of the credibility assessment of a model, see
+  `pkpdsim.credibility.report.render_html`. It extends the base of the reports
+  of sbmlsim and fills its blocks. Sections: the overview, one card per context
+  of use, the limitations, the unclaimed validation data and the provenance.
+  A verdict, a coverage and the result of a rule are words with a colour class
+  (`verdict`, `state`), never only a colour. Nothing loads from the network.
+#}
+
+{% macro verdict(v) %}<span class="verdict {{ v.value }}">{{ v.label }}</span>{% endmacro %}
+{% macro limitation_context(e) %}{% if e.context %}<a class="mono" href="#cou-{{ e.context }}">{{ e.context }}</a>{% else %}<span class="soft">the model</span>{% endif %}{% endmacro %}
+{% macro level(l) %}<span class="mono">{{ l.value }}</span> <span class="soft">{{ l.label }}</span>{% endmacro %}
+
+{% block title %}Credibility of {{ provenance.title }}{% endblock %}
+{% block items %}contexts of use{% endblock %}
+{% block heading %}Credibility{% endblock %}
+{% block subtitle %}{{ provenance.title }} <span class="mono">{{ provenance.model }}</span>{% endblock %}
+{% block placeholder %}Search contexts of use, evidence, studies …{% endblock %}
+
+{% block badges %}<span class="badge">contexts of use <b>{{ contexts | length }}</b></span>{% for v in verdicts %}<span class="badge">{{ v.label }} <b>{{ verdict_counts[v] }}</b></span>{% endfor %}{% endblock %}
+
+{% block head %}
+<style>
+:root {
+  --supported: #2b8a3e; --extrapolated: #1864ab; --not-supported: #c92a2a;
+  --insufficient: #a35200; --muted: #5b6472; --on-state: #ffffff;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --supported: #69db7c; --extrapolated: #74c0fc; --not-supported: #ff8787;
+    --insufficient: #ffc078; --muted: #9aa4b2; --on-state: #14171c;
+  }
+}
+.soft { color: var(--fg-soft); }
+.verdict, .state {
+  display: inline-block; border: 1px solid currentColor; border-radius: 999px;
+  padding: 0 9px; font-size: 12px; font-weight: 600; line-height: 1.6; white-space: nowrap;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+.verdict.supported, .state.met, .state.validated, .state.assessed { color: var(--supported); }
+.verdict.supported_with_extrapolation, .state.calibrated, .state.platform { color: var(--extrapolated); }
+.verdict.not_supported, .state.not_met, .state.uncovered { color: var(--not-supported); }
+.verdict.insufficient_evidence, .state.not_evaluable { color: var(--insufficient); }
+.state.outside, .state.not_assessed { color: var(--muted); }
+.chip[aria-pressed="true"] { color: var(--on-state); }
+.chip[data-kind="supported"][aria-pressed="true"] { background: var(--supported); }
+.chip[data-kind="supported_with_extrapolation"][aria-pressed="true"] { background: var(--extrapolated); }
+.chip[data-kind="not_supported"][aria-pressed="true"] { background: var(--not-supported); }
+.chip[data-kind="insufficient_evidence"][aria-pressed="true"] { background: var(--insufficient); }
+/* a wide table scrolls inside its card, never the page */
+.scroll { overflow-x: auto; }
+.scroll + h4, .scroll + p { margin-top: 22px; }
+.wrap { overflow-wrap: anywhere; min-width: 14em; }
+/* a name with its description keeps a width to read */
+td.named { min-width: 12em; }
+.cou { scroll-margin-top: 150px; }
+.cou > header { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; margin-bottom: 8px; }
+.cou > header .name { font-weight: 650; }
+.cou > header .cou-title { font-weight: 600; font-size: 16px; }
+.cou > header .verdict { margin-left: auto; font-size: 13px; }
+.cou .question { font-size: 15.5px; margin: 4px 0 14px; }
+.cou h4 { font-size: 13px; font-weight: 600; color: var(--fg-soft); margin: 22px 0 6px;
+          text-transform: uppercase; letter-spacing: .04em; }
+.cou .kv { margin-bottom: 4px; }
+/* a table of a few columns does not stretch its columns over the card */
+table.compact { width: auto; min-width: min(100%, 560px); }
+td.status { white-space: nowrap; vertical-align: top; width: 1%; padding-right: 18px; }
+td.status .soft { font-size: 12.5px; }
+.factor { font-weight: 600; }
+.cou .empty { padding: 2px 0; margin: 4px 0; }
+.card > ul { margin: 0; padding-left: 1.2em; }
+.card > ul li + li { margin-top: 4px; }
+.text { white-space: pre-line; margin: 6px 0; max-width: 960px; }
+.note { color: var(--fg-soft); font-size: 13.5px; margin: 0 0 12px; max-width: 960px; }
+@media (max-width: 700px) {
+  .cou { scroll-margin-top: 16px; }
+  .cou > header .verdict { margin-left: 0; }
+  .kv { grid-template-columns: 1fr; gap: 0; }
+  .kv dd { margin-bottom: 6px; }
+}
+</style>
+{% endblock %}
+
+{% block nav %}
+    <a href="#overview" class="active">Overview</a>
+    <a href="#contexts">Contexts of use</a>
+    <a href="#limitations">Limitations</a>
+    <a href="#unclaimed">Unclaimed data</a>
+    <a href="#provenance">Provenance</a>
+{% endblock %}
+
+{% block chips %}
+    {% for v in verdicts %}
+    <button class="chip" data-kind="{{ v.value }}" aria-pressed="true">{{ v.label }}</button>
+    {% endfor %}
+{% endblock %}
+
+{% block footer %}created by pkpdsim {{ provenance.versions.get("pkpdsim", "") }} on {{ provenance.date }}{% endblock %}
+
+{% block content %}
+<section id="overview">
+  <h2>Overview</h2>
+  <p class="note">The contexts of use of the model, their model risk from the influence of the model on the decision and the consequence of a wrong decision, and their verdict on the decisive evidence: the calibration data for a description (C1), else the validation data. The evaluable points are the decisive points which the fold criteria can evaluate.</p>
+  <div class="card scroll">
+    <table data-filter="row">
+      <thead><tr>
+        <th data-sort="text">context of use</th><th data-sort="text">verdict</th>
+        <th data-sort="text">title</th>
+        <th data-sort="text">level</th><th data-sort="text">risk</th>
+        <th class="num" data-sort="num">decisive points</th>
+        <th class="num" data-sort="num">evaluable points</th>
+      </tr></thead>
+      <tbody>
+      {% for view in contexts %}
+      {% set c = view.result %}
+      <tr data-kind="{{ c.verdict.value }}">
+        <td class="mono"><a href="#cou-{{ c.id }}">{{ c.id }}</a></td>
+        <td>{{ verdict(c.verdict) }}</td>
+        <td>{{ c.title }}</td>
+        <td>{{ level(c.level) }}</td>
+        <td>{{ c.risk.value }}</td>
+        <td class="num">{{ c.n_decisive }}</td>
+        <td class="num">{{ c.n_evaluable }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Limitations of the model</h3>
+  <div class="card">
+  {% if model_limitations %}
+    <ul>
+    {% for e in model_limitations %}
+      <li><b>{{ e.name }}</b>{% if e.description %}: {{ e.description }}{% endif %} <span class="soft">({{ e.n_points }} {{ "point" if e.n_points == 1 else "points" }} of {{ e.n_studies }} {{ "study" if e.n_studies == 1 else "studies" }})</span></li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty">The model declares no limitations.</p>
+  {% endif %}
+  </div>
+  {% if assessment.notes %}
+
+  <h3>Notes</h3>
+  <div class="card"><p class="text">{{ assessment.notes }}</p></div>
+  {% endif %}
+</section>
+
+<section id="contexts">
+  <h2>Contexts of use</h2>
+  {% for view in contexts %}
+  {% set c = view.result %}
+  <article class="card cou" id="cou-{{ c.id }}" data-filter="card" data-kind="{{ c.verdict.value }}">
+    <header>
+      <span class="mono name">{{ c.id }}</span>
+      <span class="cou-title">{{ c.title }}</span>
+      {{ verdict(c.verdict) }}
+    </header>
+    <p class="question">{{ c.question }}</p>
+    <dl class="kv">
+      <dt>level</dt><dd>{{ level(c.level) }}</dd>
+      <dt>influence</dt><dd>{{ c.influence.value }}</dd>
+      <dt>consequence</dt><dd>{{ c.consequence.value }}</dd>
+      <dt>model risk</dt><dd>{{ c.risk.value }}</dd>
+      <dt>decisive points</dt><dd>{{ c.n_decisive }}</dd>
+      <dt>evaluable points</dt><dd>{{ c.n_evaluable }}</dd>
+      {% if c.rationale %}<dt>rationale</dt><dd>{{ c.rationale }}</dd>{% endif %}
+    </dl>
+
+    <h4>Quantities of interest</h4>
+    <div class="scroll">
+      <table class="compact">
+        <thead><tr><th>quantity</th><th>description</th><th>ratio</th></tr></thead>
+        <tbody>
+        {% for q in c.quantities %}
+        <tr><td class="mono">{{ q.id }}</td><td>{{ q.description }}</td><td>{{ "yes" if q.ratio else "no" }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <h4>Claimed domain</h4>
+    {% if c.domain_statement %}<p class="text">{{ c.domain_statement }}</p>{% endif %}
+    {% if view.coverage %}
+    <div class="scroll">
+      <table class="compact">
+        <thead><tr>
+          <th data-sort="text">field</th><th data-sort="text">value</th>
+          <th data-sort="text">coverage</th><th class="num" data-sort="num">points</th>
+        </tr></thead>
+        <tbody>
+        {% for e in view.coverage %}
+        <tr>
+          <td class="mono">{{ e.field }}</td><td class="mono">{{ e.value }}</td>
+          <td>{% if e.coverage is none %}<span class="state outside">outside the claim</span>{% else %}<span class="state {{ e.coverage.value }}">{{ e.coverage.value }}</span>{% endif %}</td>
+          <td class="num">{{ e.n_points }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% elif not c.domain_statement %}
+    <p class="empty">The domain claims no values of the metadata.</p>
+    {% endif %}
+
+    <h4>Evidence</h4>
+    {% if view.evidence %}
+    <div class="scroll">
+      <table>
+        <thead><tr>
+          <th data-sort="text">evidence</th><th data-sort="text">role</th>
+          <th data-sort="text">selection</th>
+          <th class="num" data-sort="num">points</th><th class="num" data-sort="num">mappings</th>
+          <th class="num" data-sort="num">studies</th>
+          <th class="num" data-sort="num">outliers dropped</th>
+          <th class="num" data-sort="num">limitation subtracted</th>
+        </tr></thead>
+        <tbody>
+        {% for e in view.evidence %}
+        <tr>
+          <td class="named">{{ e.name }}{% if e.description %}<br><span class="soft">{{ e.description }}</span>{% endif %}</td>
+          <td>{{ e.role.value }}</td>
+          <td class="mono wrap">{{ e.selection }}</td>
+          <td class="num">{{ e.n_points }}</td><td class="num">{{ e.n_mappings }}</td>
+          <td class="num">{{ e.n_studies }}</td>
+          <td class="num">{{ e.outliers_dropped }}</td>
+          <td class="num">{{ e.limitation_subtracted }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <h4>Metrics of the evidence</h4>
+    <p class="note">The fold errors (GMFE, AFE) and the percentage of the points within a fold or a number of standard deviations of the data, n/a without an evaluable point.</p>
+    <div class="scroll">
+      <table class="compact">
+        <thead><tr>
+          <th data-sort="text">evidence</th>
+          {% for name in view.metrics %}<th class="num" data-sort="num">{{ name }}</th>{% endfor %}
+        </tr></thead>
+        <tbody>
+        {% for e in view.evidence %}
+        <tr>
+          <td>{{ e.name }}</td>
+          {% for name in view.metrics %}<td class="num">{{ e.metrics[name] | number if name in e.metrics else "" }}</td>{% endfor %}
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="empty">No evidence.</p>
+    {% endif %}
+
+    <h4>Acceptance</h4>
+    {% if c.acceptance %}
+    <div class="scroll">
+      <table class="compact">
+        <thead><tr><th>rule</th><th class="num">value</th><th>limit</th><th>result</th></tr></thead>
+        <tbody>
+        {% for a in c.acceptance %}
+        <tr>
+          <td class="mono">{{ a.name }}</td>
+          <td class="num">{{ a.value | number }}</td>
+          <td class="mono">{{ a.limit }}</td>
+          <td>{% if a.met is none %}<span class="state not_evaluable">not evaluable</span>{% elif a.met %}<span class="state met">met</span>{% else %}<span class="state not_met">not met</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="empty">No acceptance rules.</p>
+    {% endif %}
+
+    <h4>Factors of V&amp;V 40</h4>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>status</th><th>factor</th></tr></thead>
+        <tbody>
+        {% for f in c.factors %}
+        <tr>
+          <td class="status"><span class="state {{ f.status }}">{{ f.status | replace("_", " ") }}</span>{% if f.step is not none %}<br><span class="soft">in step {{ f.step }}</span>{% endif %}</td>
+          <td><b class="factor">{{ f.name }}</b><br><span class="soft">{{ f.statement }}</span></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <h4>Extrapolation</h4>
+    {% if c.extrapolation %}<p class="text">{{ c.extrapolation }}</p>{% else %}<p class="empty">No extrapolation is argued.</p>{% endif %}
+  </article>
+  {% endfor %}
+  <p class="empty hidden" data-empty>No context of use matches the search.</p>
+</section>
+
+<section id="limitations">
+  <h2>Limitations</h2>
+  <p class="note">The data the model does not describe, of the model and of a context of use. Their metrics are reported for information and are outside every acceptance; their points are subtracted from the evidence.</p>
+  {% if assessment.limitations %}
+  <div class="card scroll">
+    <table data-filter="row">
+      <thead><tr>
+        <th data-sort="text">context of use</th><th data-sort="text">limitation</th>
+        <th data-sort="text">selection</th>
+        <th class="num" data-sort="num">points</th><th class="num" data-sort="num">mappings</th>
+        <th class="num" data-sort="num">studies</th>
+      </tr></thead>
+      <tbody>
+      {% for e in assessment.limitations %}
+      <tr>
+        <td>{{ limitation_context(e) }}</td>
+        <td class="named">{{ e.name }}{% if e.description %}<br><span class="soft">{{ e.description }}</span>{% endif %}</td>
+        <td class="mono wrap">{{ e.selection }}</td>
+        <td class="num">{{ e.n_points }}</td><td class="num">{{ e.n_mappings }}</td>
+        <td class="num">{{ e.n_studies }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Metrics of the limitations</h3>
+  <div class="card scroll">
+    <table data-filter="row" class="compact">
+      <thead><tr>
+        <th data-sort="text">context of use</th><th data-sort="text">limitation</th>
+        {% for name in limitation_metrics %}<th class="num" data-sort="num">{{ name }}</th>{% endfor %}
+      </tr></thead>
+      <tbody>
+      {% for e in assessment.limitations %}
+      <tr>
+        <td>{{ limitation_context(e) }}</td>
+        <td>{{ e.name }}</td>
+        {% for name in limitation_metrics %}<td class="num">{{ e.metrics[name] | number if name in e.metrics else "" }}</td>{% endfor %}
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="card"><p class="empty">No limitations are declared.</p></div>
+  {% endif %}
+</section>
+
+<section id="unclaimed">
+  <h2>Unclaimed validation data</h2>
+  <p class="note">The validation points of the adopted fits which no evidence and no limitation selects.</p>
+  <div class="card scroll">
+  {% if assessment.unclaimed %}
+    <table data-filter="row" class="compact">
+      <thead><tr>
+        <th data-sort="text">fit</th><th data-sort="text">study</th>
+        <th data-sort="text">mapping</th><th class="num" data-sort="num">points</th>
+      </tr></thead>
+      <tbody>
+      {% for u in assessment.unclaimed %}
+      <tr><td class="mono">{{ u.fit }}</td><td class="mono">{{ u.experiment }}</td><td class="mono wrap">{{ u.mapping }}</td><td class="num">{{ u.n }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="empty">Every validation point is claimed.</p>
+  {% endif %}
+  </div>
+</section>
+
+<section id="provenance">
+  <h2>Provenance</h2>
+  <div class="card">
+    <dl class="kv">
+      <dt>model</dt><dd class="mono">{{ provenance.model }}</dd>
+      <dt>title</dt><dd>{{ provenance.title }}</dd>
+      <dt>adopted fits</dt><dd class="mono">{{ provenance.fits | join("\n") if provenance.fits else "none" }}</dd>
+      {% for package, version in provenance.versions.items() %}
+      <dt>{{ package }}</dt><dd class="mono">{{ version }}</dd>
+      {% endfor %}
+      <dt>commit</dt><dd class="mono">{% if provenance.commit %}{{ provenance.commit }}{% if provenance.dirty %} <span class="warn">with uncommitted changes</span>{% endif %}{% else %}outside a repository{% endif %}</dd>
+      <dt>date</dt><dd class="mono">{{ provenance.date }}</dd>
+    </dl>
+  </div>
+</section>
+{% endblock %}
