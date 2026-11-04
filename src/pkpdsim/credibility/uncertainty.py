@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, TypedDict
@@ -58,10 +59,12 @@ __all__ = [
     "Propagation",
     "QuantityBand",
     "RuleProbability",
+    "SensitivityIndex",
     "UncertaintyRecord",
     "UncertaintySettings",
     "parameter_draws",
     "propagate",
+    "sensitivity_indices",
 ]
 
 
@@ -413,6 +416,68 @@ class QuantityBand(TypedDict):
     coverage: float | None
 
 
+class SensitivityIndex(TypedDict):
+    """The first-order sensitivity index of a target to a fitted parameter.
+
+    Attributes:
+        target: a quantity of interest or an acceptance rule.
+        kind: `quantity` or `rule`.
+        fit: the subset of the fit of the parameter.
+        parameter: the fitted parameter.
+        index: the share of the variance of the target over the draws which
+            the parameter explains alone, given data (Plischke 2013), `None`
+            without variance or with fewer than 8 draws.
+    """
+
+    target: str
+    kind: str
+    fit: str
+    parameter: str
+    index: float | None
+
+
+def sensitivity_indices(
+    target: str,
+    kind: str,
+    y: np.ndarray,
+    draws: Mapping[str, FitDraws],
+) -> list[SensitivityIndex]:
+    """Get the first-order indices of a target over the draws of the parameters.
+
+    The indices are estimated from the draws of the propagation, without
+    further simulations (`sbmlsim.uncertainty.statistics.first_order_given_data`);
+    the index of a parameter correlated with another includes the effect of
+    the other, so the indices of correlated parameters do not add up.
+
+    Args:
+        target: the quantity or the rule.
+        kind: `quantity` or `rule`.
+        y: the value of the target on every draw, `NaN` for a failed draw.
+        draws: the draws of the fits of the target, by subset; the draw `k` of
+            every fit belongs to the value `k`.
+
+    Returns:
+        One index per parameter of the fits, in their order.
+    """
+    from sbmlsim.uncertainty.statistics import first_order_given_data
+
+    indices: list[SensitivityIndex] = []
+    for fit, fit_draws in draws.items():
+        for i, pid in enumerate(fit_draws.pids):
+            # the estimate bins by the ranks of the input, any scale is one
+            value = first_order_given_data(fit_draws.values[:, i], y)
+            indices.append(
+                SensitivityIndex(
+                    target=target,
+                    kind=kind,
+                    fit=fit,
+                    parameter=pid,
+                    index=None if math.isnan(value) else value,
+                )
+            )
+    return indices
+
+
 class UncertaintyRecord(TypedDict):
     """The parameter uncertainty of the decisive predictions of a context of use.
 
@@ -427,6 +492,9 @@ class UncertaintyRecord(TypedDict):
         coverage: the share of them whose observation is inside the band.
         quantities: the bands of the quantities which are no ratio.
         rules: the probability of every acceptance rule, the ratio rule last.
+        sensitivity: the first-order indices of every quantity (the mean log
+            ratio of its predictions to the reference predictions) and of the
+            value of every rule to every fitted parameter of the draws.
     """
 
     n_draws: int
@@ -439,6 +507,7 @@ class UncertaintyRecord(TypedDict):
     coverage: float | None
     quantities: list[QuantityBand]
     rules: list[RuleProbability]
+    sensitivity: list[SensitivityIndex]
 
 
 def rule_probability(

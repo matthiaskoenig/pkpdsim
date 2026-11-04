@@ -85,10 +85,12 @@ from pkpdsim.credibility.uncertainty import (
     Propagation,
     QuantityBand,
     RuleProbability,
+    SensitivityIndex,
     UncertaintyRecord,
     UncertaintySettings,
     propagate,
     rule_probability,
+    sensitivity_indices,
 )
 from pkpdsim.credibility.verification import (
     NUMERICAL_CHECKS,
@@ -594,6 +596,7 @@ def _uncertainty_from_dict(data: Mapping[str, Any] | None) -> UncertaintyRecord 
         coverage=data["coverage"],
         quantities=[QuantityBand(**q) for q in data["quantities"]],
         rules=[RuleProbability(**r) for r in data["rules"]],
+        sensitivity=[SensitivityIndex(**i) for i in data.get("sensitivity", ())],
     )
 
 
@@ -1237,6 +1240,21 @@ def _percent(value: float | None) -> str:
     return "n/a" if value is None else f"{100 * value:.0f} %"
 
 
+def _leading(indices: Sequence[SensitivityIndex], kind: str) -> str:
+    """Get the parameter of the largest first-order index of every target."""
+    best: dict[str, SensitivityIndex] = {}
+    for i in indices:
+        if i["kind"] != kind or i["index"] is None:
+            continue
+        current = best.get(i["target"])
+        if current is None or i["index"] > (current["index"] or 0.0):
+            best[i["target"]] = i
+    return ", ".join(
+        f"{target}: {i['fit']}.{i['parameter']} ({i['index']:.2f})"
+        for target, i in best.items()
+    )
+
+
 def _uncertainty_statement(uncertainty: UncertaintyRecord) -> str:
     """Get the statement of the factor model inputs from the uncertainty."""
     fits = uncertainty["fits"]
@@ -1255,6 +1273,9 @@ def _uncertainty_statement(uncertainty: UncertaintyRecord) -> str:
         f"quantities and hold {_percent(uncertainty['coverage'])} of the "
         f"{_count(uncertainty['n_points'], 'evaluable decisive observation')}.",
     ]
+    leading = _leading(uncertainty["sensitivity"], "quantity")
+    if leading:
+        parts.append(f"The variance of the quantities is carried most by {leading}.")
     rules = uncertainty["rules"]
     if rules:
         decided = ", ".join(
@@ -1304,11 +1325,24 @@ def _uncertainty(
     dv = banded["DV"].to_numpy(dtype=float)
     inside = (dv >= band["low"].to_numpy()) & (dv <= band["high"].to_numpy())
     observables = banded["observable"].astype(str).map(normalize_observable)
+    fits = sorted(set(decisive["fit"].astype(str))) if "fit" in decisive.columns else []
+    drawn = {fit: propagation.draws[fit] for fit in fits if fit in propagation.draws}
+    shifts = np.log(
+        predictions.loc[banded.index].to_numpy(dtype=float)
+        / banded["IPRED"].to_numpy(dtype=float)[:, None]
+    )
+    sensitivity: list[SensitivityIndex] = []
     bands_of: list[QuantityBand] = []
     for q in quantities:
         if q["ratio"]:
             continue
         mask = (observables == normalize_observable(q["id"])).to_numpy()
+        if mask.any():
+            with warnings.catch_warnings():
+                # a failed draw has no shift
+                warnings.simplefilter("ignore", RuntimeWarning)
+                shift = np.mean(shifts[mask], axis=0)
+            sensitivity.extend(sensitivity_indices(q["id"], "quantity", shift, drawn))
         lows, highs = band["low"].to_numpy()[mask], band["high"].to_numpy()[mask]
         positive = lows > 0
         bands_of.append(
@@ -1329,10 +1363,12 @@ def _uncertainty(
     ]
     if ratio:
         rules.append((cou.ratio_rule.name, cou.ratio_rule.limit, []))
+    values_of: list[list[float]] = [[] for _ in rules]
     for k, column in enumerate(predictions.columns):
         if failed[k]:
-            for _, _, met in rules:
+            for (_, _, met), value in zip(rules, values_of, strict=True):
                 met.append(None)
+                value.append(math.nan)
             continue
         alternative = decisive.assign(IPRED=predictions[column])
         results = [rule.evaluate(alternative) for rule in cou.rules]
@@ -1343,9 +1379,13 @@ def _uncertainty(
                     [p["within"] for p in _ratio_pairs(cou, alternative, lookup)]
                 )
             )
-        for (_, _, met), result in zip(rules, results, strict=True):
+        for (_, _, met), value, result in zip(rules, values_of, results, strict=True):
             met.append(result.met)
-    fits = sorted(set(decisive["fit"].astype(str))) if "fit" in decisive.columns else []
+            value.append(float(result.value))
+    for (name, _, _), value in zip(rules, values_of, strict=True):
+        sensitivity.extend(
+            sensitivity_indices(name, "rule", np.array(value, dtype=float), drawn)
+        )
     return UncertaintyRecord(
         n_draws=settings.draws,
         seed=settings.seed,
@@ -1361,8 +1401,7 @@ def _uncertainty(
                 note=draws.note,
                 n_failed=int(propagation.failed.get(fit, 0)),
             )
-            for fit in fits
-            if (draws := propagation.draws.get(fit)) is not None
+            for fit, draws in drawn.items()
         ],
         n_points=len(banded),
         coverage=float(inside.mean()) if len(banded) else None,
@@ -1371,6 +1410,7 @@ def _uncertainty(
             rule_probability(name, limit, met, settings, len(rules))
             for name, limit, met in rules
         ],
+        sensitivity=sensitivity,
     )
 
 

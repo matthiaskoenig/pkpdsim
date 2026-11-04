@@ -34,6 +34,9 @@
 - `uncertainty_quantities.tsv`: one row per context of use and quantity of
   interest which is no ratio: the points, the median fold width of the
   prediction bands and their coverage of the observations.
+- `uncertainty_sensitivity.tsv`: one row per context of use, target (a
+  quantity or a rule) and fitted parameter: the first-order index of the
+  target over the parameter draws.
 - `studies.tsv`: one row per study with points in the adopted fits, the
   provenance of its data: the folder, the fits and points, the record of its
   collection (the days of the first and the latest collection and how the
@@ -107,6 +110,7 @@ __all__ = [
     "quantities_table",
     "ratios_table",
     "render_html",
+    "sensitivity_table",
     "studies_table",
     "temporal_table",
     "uncertainty_quantities_table",
@@ -477,6 +481,29 @@ def uncertainty_quantities_table(assessment: CredibilityAssessment) -> pd.DataFr
     return pd.DataFrame(rows, columns=list(UNCERTAINTY_QUANTITY_COLUMNS))
 
 
+#: the columns of `uncertainty_sensitivity.tsv`
+SENSITIVITY_COLUMNS = ("context", "target", "kind", "fit", "parameter", "index")
+
+
+def sensitivity_table(assessment: CredibilityAssessment) -> pd.DataFrame:
+    """Get one row per context of use, target and parameter of the draws.
+
+    Args:
+        assessment: the assessment.
+
+    Returns:
+        The columns of `SENSITIVITY_COLUMNS`, see `SensitivityIndex`; no rows
+        without the propagation.
+    """
+    rows = [
+        {"context": c.id, **i}
+        for c in assessment.contexts
+        if c.uncertainty is not None
+        for i in c.uncertainty["sensitivity"]
+    ]
+    return pd.DataFrame(rows, columns=list(SENSITIVITY_COLUMNS))
+
+
 def studies_table(assessment: CredibilityAssessment) -> pd.DataFrame:
     """Get one row per study with points in the adopted fits.
 
@@ -689,6 +716,7 @@ def write_outputs(assessment: CredibilityAssessment, output_dir: Path) -> Path:
         "studies.tsv": _tsv(studies_table(assessment)),
         "uncertainty.tsv": _tsv(uncertainty_table(assessment)),
         "uncertainty_quantities.tsv": _tsv(uncertainty_quantities_table(assessment)),
+        "uncertainty_sensitivity.tsv": _tsv(sensitivity_table(assessment)),
         "cross_validation.tsv": _tsv(cross_validation_table(assessment)),
         "verification.tsv": _tsv(verification_table(assessment)),
         "battery.tsv": _tsv(battery_table(assessment)),

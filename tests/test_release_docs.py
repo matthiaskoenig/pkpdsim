@@ -631,6 +631,7 @@ def test_the_credibility_page_shows_the_parameter_uncertainty(
     dose = page[page.index("## dose") : page.index("## renal")]
     assert "Parameter uncertainty, the adopted fits at 256 draws" in dose
     assert "| `GMFE` | <= 1.5 | 1 | accepted |" in dose
+    assert "| `GMFE` (rule) | `DECAY.k` 0." in dose
 
 
 def test_the_credibility_page_escapes_a_table_cell(

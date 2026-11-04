@@ -413,6 +413,23 @@ td.status .soft { font-size: 12.5px; }
       </table>
     </div>
     {% endif %}
+    {% if u.sensitivity %}
+    <p class="note">The parameters which carry the variance of a quantity (the mean log ratio of its predictions to the adopted ones) and of the value of a rule over the draws: the first-order indices, estimated from the draws without further simulations (Plischke 2013), up to three of at least 0.05 per target; the index of a parameter includes the effect of the parameters it is correlated with.</p>
+    <div class="scroll">
+      <table class="compact">
+        <thead><tr><th>target</th><th>leading parameters</th></tr></thead>
+        <tbody>
+        {% for target, group in u.sensitivity | groupby("target") %}
+        {% set leading = group | rejectattr("index", "none") | selectattr("index", "ge", 0.05) | sort(attribute="index", reverse=True) | list %}
+        <tr>
+          <td class="mono">{{ target }}{% if group[0].kind == "rule" %} <span class="soft">rule</span>{% endif %}</td>
+          <td>{% for i in leading[:3] %}<span class="mono nowrap">{{ i.fit }}.{{ i.parameter }}</span> {{ i.index | number }}{% if not loop.last %}, {% endif %}{% else %}<span class="soft">none of at least 0.05</span>{% endfor %}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
     {% for f in u.fits %}
     <p class="note"><span class="mono">{{ f.fit }}</span>: {{ f.n_parameters }} {{ "parameter" if f.n_parameters == 1 else "parameters" }}, {{ f.note }}{% if f.n_failed %}, <span class="warn">{{ f.n_failed }} failed draws</span>{% endif %}.</p>
     {% endfor %}

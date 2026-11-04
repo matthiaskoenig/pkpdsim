@@ -34,6 +34,7 @@ FILES = {
     "studies.tsv",
     "uncertainty.tsv",
     "uncertainty_quantities.tsv",
+    "uncertainty_sensitivity.tsv",
     "battery.tsv",
     "fates.tsv",
     "index.html",

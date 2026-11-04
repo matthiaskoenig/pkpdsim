@@ -90,6 +90,15 @@ Parameter uncertainty, the adopted fits at {{ context.uncertainty.n_draws }} dra
 | `{{ quantity.quantity }}` | {{ quantity.n_points }} | {{ "%.3g" % quantity.band_fold if quantity.band_fold is not none else "n/a" }} | {{ "%.0f" % (100 * quantity.coverage) if quantity.coverage is not none else "n/a" }} |
 {% endfor %}
 
+{% if context.uncertainty.sensitivity %}
+| Target | Leading parameters (first-order index) |
+| --- | --- |
+{% for target, group in context.uncertainty.sensitivity | groupby("target") %}
+{% set leading = group | rejectattr("index", "none") | selectattr("index", "ge", 0.05) | sort(attribute="index", reverse=True) | list %}
+| `{{ target }}`{% if group[0].kind == "rule" %} (rule){% endif %} | {% for i in leading[:3] %}`{{ i.fit }}.{{ i.parameter }}` {{ "%.2f" % i.index }}{% if not loop.last %}, {% endif %}{% else %}none of at least 0.05{% endfor %} |
+{% endfor %}
+
+{% endif %}
 {% endif %}
 {% if context.verification %}
 | Verification | Factor | Points | Largest difference | Result |
