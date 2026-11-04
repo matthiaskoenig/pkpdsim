@@ -304,6 +304,19 @@ The mass balance records the fate of every dose (`Fate`): at the end of the two 
 
 A failed check of the battery makes every context of use `not_verified`. Its checks are rows of the verification of every context, and the factors numerical code verification and software quality assurance are `assessed` with their platform statement followed by the results of the battery. A model whose build fails a check for a reason it accepts declares it with the reason, `CheckSettings(battery={"steady_state": "..."})`: `pkpdsim.testing.check_battery` (the test of a repository of models over its models) then passes, fails when the known failure no longer applies, and an assessment shows the reason and still fails the check.
 
+## Across models: scorecard and qualification
+
+Every model is assessed on its own. The scorecard reads the records of many models (`credibility.json`) into one table, one row per model and COU with the level, the risk, the verdict, the points, whether it is verified, the failed checks and the value of every acceptance rule (`pkpdsim.credibility.scorecard`, `scorecard`). Stored as a TSV it is the baseline of a repository of models: a change of the shared library, of sbmlsim or of the data which makes a COU worse shows across all models at once (`compare`): a COU of the baseline which is missing, a worse verdict (supported, supported with extrapolation, insufficient evidence, not verified, not supported), a COU which is no longer verified and a rule whose value got worse by more than the tolerance (5 points of a percentage, 5 % of a GMFE, an AFE 5 % further from 1; a value which is no longer evaluable). A new model, COU or rule is no regression.
+
+The qualification pools the ratio pairs of all models by a value of the metadata of their numerator arm (`qualification`, by default the field `health`): per value, e.g. `RENAL_IMPAIRMENT` or `CIRRHOSIS`, the evaluable pairs of every model and of all models, how many lie within the limits of Guest et al. and the GMFE of the predicted over the observed ratios. The renal and hepatic scaling of `pkpdsim.pbpk.impairment` is shared by the models; it is qualified for a population when the ratios of the drugs are predicted across drugs, not only for one. A pair counts once even when two COUs of a model share it, and a numerator whose value is not reported (`NR`) counts for no value.
+
+```bash
+pkpdsim-verify scorecard results/ --out scorecard.tsv --qualification qualification.tsv
+pkpdsim-verify scorecard results/ --baseline scorecard.tsv
+```
+
+The command prints the verdicts, the pooled qualification and the regressions against `--baseline`; it exits with 1 for a regression and 2 for a record or baseline it cannot read. `--field` pools by another field of the metadata (`genotype`, `coadministration`), `--tolerance` sets the tolerance.
+
 ## Running and reading the report
 
 ```bash

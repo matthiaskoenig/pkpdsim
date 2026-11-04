@@ -169,8 +169,9 @@ path of the model, and that the data paths exist.
 ## Verification of a change
 
 `pkpdsim-verify` dumps the experiments of a model in two checkouts and compares
-them, writes the fit definitions and the settings of a run as json, and compares
-figures and SBML:
+them, writes the fit definitions and the settings of a run as json, compares
+figures and SBML, and compares the credibility of many models with a baseline
+(`scorecard`, see [Across models](credibility.md#across-models-scorecard-and-qualification)):
 
 ```bash
 pkpdsim-verify dump --root ../base --model pkdb_models.models.hctz --out base.pkl --atol model

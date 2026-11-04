@@ -37,7 +37,7 @@ from typing import TYPE_CHECKING, Final, TypedDict
 import numpy as np
 import pandas as pd
 
-from pkpdsim.credibility.declaration import GUEST_DELTA, Ratio, Summary
+from pkpdsim.credibility.declaration import DOMAIN_FIELDS, GUEST_DELTA, Ratio, Summary
 from pkpdsim.credibility.selection import normalize_observable
 
 if TYPE_CHECKING:
@@ -82,6 +82,9 @@ class RatioRecord(TypedDict):
         limit: the limit of Guest et al. for the observed ratio.
         within: whether the predicted ratio lies within the limits, `None` if
             the pair is not evaluable.
+        metadata: the values of the fields of the domain of the numerator
+            (`DOMAIN_FIELDS`, by name), e.g. `{"health": "RENAL_IMPAIRMENT"}`,
+            which the qualification across models groups by.
     """
 
     quantity: str
@@ -93,6 +96,7 @@ class RatioRecord(TypedDict):
     predicted: float
     limit: float
     within: bool | None
+    metadata: dict[str, str]
 
 
 def guest_limit(observed: float, delta: float = GUEST_DELTA) -> float:
@@ -256,9 +260,8 @@ def ratio_pairs(
             study[study["mapping"] == arms.denominator], ratio.summary
         )
         for numerator in arms.numerators:
-            dv_num, ipred_num = summarize(
-                study[study["mapping"] == numerator], ratio.summary
-            )
+            arm = study[study["mapping"] == numerator]
+            dv_num, ipred_num = summarize(arm, ratio.summary)
             observed = _ratio(dv_num, dv_den)
             predicted = _ratio(ipred_num, ipred_den)
             limit = guest_limit(observed, delta)
@@ -278,6 +281,11 @@ def ratio_pairs(
                         if evaluable
                         else None
                     ),
+                    metadata={
+                        field: str(arm[field].iloc[0])
+                        for field in DOMAIN_FIELDS
+                        if field in arm.columns and pd.notna(arm[field].iloc[0])
+                    },
                 )
             )
     return pairs, problems

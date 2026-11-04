@@ -27,7 +27,11 @@ them only where it is meant to. The subcommands make this checkable:
   that the settings of two checkouts are compared with `diff`,
 - `png` compares the PNG figures of two directories pixel by pixel,
 - `sbml` compares SBML models by their elements, ignoring the order and the
-  annotations.
+  annotations,
+- `scorecard` reads the credibility records of many models (`credibility.json`
+  of `run_credibility`) into one table, pools their ratio pairs by a value of
+  the metadata (the qualification of a scaling across drugs) and compares the
+  table with a baseline, see `pkpdsim.credibility.scorecard`.
 
 A model before and after a change, with tight tolerances so that the solver does
 not hide a difference:
@@ -2759,6 +2763,68 @@ def sbml(args: argparse.Namespace) -> int:
     return 1 if differing else 0
 
 
+# --- scorecard ------------------------------------------------------------------
+
+
+def scorecard_command(options: argparse.Namespace) -> int:
+    """Read the credibility records of many models, compare and qualify them.
+
+    Prints the scorecard (model, context of use, verdict, verified), the pooled
+    qualification and the regressions against a baseline.
+
+    Returns:
+        0, 1 for a regression against the baseline, 2 for records or a baseline
+        which cannot be read.
+    """
+    import pandas as pd
+
+    from pkpdsim.credibility.scorecard import (
+        compare,
+        load_records,
+        qualification,
+        scorecard,
+    )
+
+    try:
+        records = load_records(Path(path) for path in options.records)
+        baseline = (
+            None
+            if options.baseline is None
+            else pd.read_csv(options.baseline, sep="\t", keep_default_na=False)
+        )
+    except (FileNotFoundError, ValueError, KeyError) as err:
+        print(f"error: {err}", file=sys.stderr)
+        return 2
+    table = scorecard(records)
+    qualified = qualification(records, options.field)
+    if options.out:
+        table.to_csv(options.out, sep="\t", index=False, lineterminator="\n")
+    if options.qualification:
+        qualified.to_csv(
+            options.qualification, sep="\t", index=False, lineterminator="\n"
+        )
+    print(f"{len(records)} models, {len(table)} contexts of use")
+    for row in table.to_dict("records"):
+        verified = "" if row["verified"] is None else f", verified {row['verified']}"
+        print(f"  {row['model']}/{row['context']}: {row['verdict']}{verified}")
+    pooled = qualified[qualified["model"] == "all"]
+    if len(pooled):
+        print(f"qualification by {options.field}:")
+        for row in pooled.to_dict("records"):
+            print(
+                f"  {row['value']}: {row['n_within']} of {row['n_pairs']} ratio "
+                f"pairs within the limits of Guest ({row['within']:.0f} %), GMFE "
+                f"{row['gmfe']:.3g}"
+            )
+    if baseline is None:
+        return 0
+    regressions = compare(baseline, table, options.tolerance)
+    print(f"{len(regressions)} regressions against {options.baseline}")
+    for regression in regressions:
+        print(f"  {regression}")
+    return 1 if regressions else 0
+
+
 # --- command line ---------------------------------------------------------------
 
 
@@ -2873,6 +2939,32 @@ def parser() -> argparse.ArgumentParser:
     s = command("sbml", sbml, "compare two SBML files or the SBML files of two dirs")
     s.add_argument("old")
     s.add_argument("new")
+
+    s = command(
+        "scorecard",
+        scorecard_command,
+        "the credibility of many models: the scorecard, the qualification of the "
+        "ratios across models and the regressions against a baseline",
+    )
+    s.add_argument(
+        "records", nargs="+", help="credibility.json files or directories with them"
+    )
+    s.add_argument(
+        "--baseline", help="a scorecard TSV to compare with, a regression exits 1"
+    )
+    s.add_argument("--out", help="TSV file the scorecard is written to")
+    s.add_argument("--qualification", help="TSV file the qualification is written to")
+    s.add_argument(
+        "--field",
+        default="health",
+        help="the field of the metadata of the numerator the ratios are pooled by",
+    )
+    s.add_argument(
+        "--tolerance",
+        type=float,
+        default=0.05,
+        help="the change of a metric which is no regression, default 0.05",
+    )
     return p
 
 
