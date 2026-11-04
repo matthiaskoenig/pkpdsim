@@ -22,7 +22,10 @@ generated from its columns which is unique across the sources of the study,
 the interventions in the natural order of format 2 (`GEM,SIM`), the counts as
 integers, the time and the interventions of both axes of a scatter. What the
 curation should look at is a `CollectionWarning` (a label which is no SId,
-the same output in two sources). Format 2 has no collection intervals (no
+the same output in two sources). Beside the tables the collection writes the
+record of the study (`StudyRecord`, `.<study>_study.json`): the date the
+model first collected it and the release of the study in PK-DB, which the
+temporal validation of `pkpdsim.credibility.temporal` reads. Format 2 has no collection intervals (no
 `tstart` and `tend` of format 1) and no columns of its own of a table, so
 neither have the tables. A study of format 1 is copied as it is.
 `database_differences` compares the studies with the ones uploaded to a
@@ -36,10 +39,11 @@ import re
 import shutil
 import warnings
 from collections import defaultdict
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Final, Self
 
 import numpy as np
 import pandas as pd
@@ -57,6 +61,110 @@ if TYPE_CHECKING:
 
 PKDB_DATA = "PKDB_DATA"
 """The environment variable with the path of a checkout of pkdb_data."""
+
+
+#: the record of a study in the data of a model, `.<study>_study.json`
+STUDY_RECORD: Final = ".{study}_study.json"
+
+
+@dataclass(frozen=True, kw_only=True)
+class StudyRecord:
+    """When a model collected a study and when PK-DB released it.
+
+    The record lies beside the tables of the study in the data folder of the
+    model (`study_record_path`), so it travels with the data into a release
+    repository; `write_study_tables` writes it.
+
+    Attributes:
+        study: the name of the study.
+        collected: the date the model first collected the study, kept by every
+            later collection; `None` for a study collected before the record
+            existed, whose date is not known.
+        released: the date PK-DB released the study (`release.date` of its
+            `study.json`), `None` for a study which is not released.
+        pkdb_id: the identifier of the release in PK-DB, `None` for a study
+            which is not released.
+    """
+
+    study: str
+    collected: date | None
+    released: date | None = None
+    pkdb_id: str | None = None
+
+    def to_dict(self) -> dict[str, str | None]:
+        """Get the record as plain data, the dates in ISO format."""
+        return {
+            "study": self.study,
+            "collected": _iso(self.collected),
+            "released": _iso(self.released),
+            "pkdb_id": self.pkdb_id,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> Self:
+        """Get the record from plain data.
+
+        Raises:
+            ValueError: if a date is not in ISO format.
+        """
+        pkdb_id = data.get("pkdb_id")
+        return cls(
+            study=str(data["study"]),
+            collected=_date(data.get("collected")),
+            released=_date(data.get("released")),
+            pkdb_id=None if pkdb_id is None else str(pkdb_id),
+        )
+
+
+def _iso(value: date | None) -> str | None:
+    """Get a date in ISO format, `None` for a missing one."""
+    return None if value is None else value.isoformat()
+
+
+def _date(value: object) -> date | None:
+    """Get a date of ISO format, `None` for a missing one."""
+    return None if value is None else date.fromisoformat(str(value))
+
+
+def study_record_path(folder: Path) -> Path:
+    """Get the path of the record of a study in the data of a model.
+
+    Args:
+        folder: the folder of the study in the data folder of the model.
+
+    Returns:
+        `folder/.<study>_study.json`.
+    """
+    return folder / STUDY_RECORD.format(study=folder.name)
+
+
+def read_study_record(folder: Path) -> StudyRecord | None:
+    """Read the record of a study in the data of a model.
+
+    Args:
+        folder: the folder of the study in the data folder of the model.
+
+    Returns:
+        The record, `None` for a folder without one.
+
+    Raises:
+        ValueError: if the record is not readable.
+    """
+    path = study_record_path(folder)
+    if not path.is_file():
+        return None
+    try:
+        return StudyRecord.from_dict(json.loads(path.read_text(encoding="utf-8")))
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError) as err:
+        raise ValueError(f"The study record '{path}' is not readable: {err}") from err
+
+
+def _release(study_folder: Path) -> tuple[date | None, str | None]:
+    """Get the date and the identifier of the release of a study of pkdb_data."""
+    study = json.loads((study_folder / "study.json").read_text(encoding="utf-8"))
+    release = study.get("release") or {}
+    pkdb_id = release.get("pkdb_id")
+    return _date(release.get("date")), None if pkdb_id is None else str(pkdb_id)
 
 
 class CollectionWarning(UserWarning):
@@ -901,6 +1009,12 @@ def write_study_tables(
     earlier collection of the study are replaced, so a source which the study
     no longer has leaves no file behind. Other files of the folder stay.
 
+    The record of the study (`StudyRecord`, `study_record_path`) is written
+    last: the release of `study.json` and the date of the first collection,
+    today for a new folder, the date of an earlier record, and `None` for a
+    folder with tables of the study and no record, which was collected on an
+    unknown day.
+
     Args:
         study_folder: the folder of a study of format 2.
         target_dir: the data folder of the model.
@@ -909,11 +1023,18 @@ def write_study_tables(
             ones of PK-DB; they are removed by default.
 
     Returns:
-        The written files.
+        The written files, the record last.
     """
     name = study_folder.name
     tables = study_tables(study_folder)
     folder = target_dir / name
+    earlier = read_study_record(folder)
+    if earlier is not None:
+        collected = earlier.collected
+    elif any(folder.glob(f".{name}_*.tsv")):
+        collected = None
+    else:
+        collected = date.today()
     if folder.is_dir() and not keep_files:
         for old in folder.glob(f".{name}_*.tsv"):
             old.unlink()
@@ -923,6 +1044,15 @@ def write_study_tables(
         path = folder / f".{name}_{source}.tsv"
         df.to_csv(path, sep="\t", index=False, na_rep="NA")
         paths.append(path)
+    released, pkdb_id = _release(study_folder)
+    record = StudyRecord(
+        study=name, collected=collected, released=released, pkdb_id=pkdb_id
+    )
+    path = study_record_path(folder)
+    path.write_text(
+        json.dumps(record.to_dict(), indent=2) + "\n", encoding="utf-8", newline="\n"
+    )
+    paths.append(path)
     return paths
 
 

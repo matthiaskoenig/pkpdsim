@@ -56,6 +56,25 @@ The assessment of the contexts of use of the model against its adopted fits. A c
 {% endfor %}
 
 {% endif %}
+{% if context.temporal and context.temporal.studies %}
+Temporal validation, the decisive studies the model collected after its fit ({{ context.temporal.n_evaluable }} evaluable points):
+
+| Acceptance criterion (new studies) | Value | Limit | Met |
+| --- | --- | --- | --- |
+{% for rule in context.temporal.acceptance %}
+| `{{ rule.name }}` | {{ "%.4g" % rule.value if rule.value is not none else "n/a" }} | {{ rule.limit }} | {{ "n/a" if rule.met is none else ("yes" if rule.met else "no") }} |
+{% endfor %}
+
+| Study | Fit | Fit ran | Collected | Released | Points |
+| --- | --- | --- | --- | --- | --- |
+{% for study in context.temporal.studies %}
+| {{ study.study }} | `{{ study.fit }}` | {{ study.fit_date }} | {{ study.collected }} | {{ study.released or "not released" }} | {{ study.n_points }} |
+{% endfor %}
+
+{% elif context.temporal %}
+Temporal validation: no decisive study was collected after its fit ({{ context.temporal.n_known }} collected before{% if context.temporal.undated %}, {{ context.temporal.undated | length }} without a date{% endif %}).
+
+{% endif %}
 {% if context.verification %}
 | Verification | Factor | Points | Largest difference | Result |
 | --- | --- | --- | --- | --- |

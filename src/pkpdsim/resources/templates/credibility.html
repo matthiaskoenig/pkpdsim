@@ -56,6 +56,8 @@
 .scroll { overflow-x: auto; }
 .scroll + h4, .scroll + p { margin-top: 22px; }
 .wrap { overflow-wrap: anywhere; min-width: 14em; }
+/* a limit or a day is read as one */
+.nowrap { white-space: nowrap; }
 /* a name with its description keeps a width to read */
 td.named { min-width: 12em; }
 .cou { scroll-margin-top: 150px; }
@@ -281,7 +283,7 @@ td.status .soft { font-size: 12.5px; }
         <tr>
           <td class="mono">{{ a.name }}</td>
           <td class="num">{{ a.value | number }}</td>
-          <td class="mono">{{ a.limit }}</td>
+          <td class="mono nowrap">{{ a.limit }}</td>
           <td>{% if a.met is none %}<span class="state not_evaluable">not evaluable</span>{% elif a.met %}<span class="state met">met</span>{% else %}<span class="state not_met">not met</span>{% endif %}</td>
         </tr>
         {% endfor %}
@@ -289,7 +291,7 @@ td.status .soft { font-size: 12.5px; }
         <tr>
           <td class="mono">{{ a.name }} <span class="soft">ratio pairs</span></td>
           <td class="num">{{ a.value | number }}</td>
-          <td class="mono">{{ a.limit }}</td>
+          <td class="mono nowrap">{{ a.limit }}</td>
           <td>{% if a.met is none %}<span class="state not_evaluable">not evaluable</span>{% elif a.met %}<span class="state met">met</span>{% else %}<span class="state not_met">not met</span>{% endif %}</td>
         </tr>
         {% endif %}
@@ -325,6 +327,52 @@ td.status .soft { font-size: 12.5px; }
     </div>
     {% else %}
     <p class="empty">No study has both arms of a ratio in the decisive points.</p>
+    {% endif %}
+    {% endif %}
+
+    {% if c.temporal is not none %}{% set t = c.temporal %}
+    <h4>Temporal validation</h4>
+    <p class="note">The decisive points of the studies the model collected after the day its fit ran, data which did not exist for the model when it was fitted; the day of the collection is the record of the study in the data of the model. The points are part of the acceptance above, the verdict does not change.</p>
+    {% if t.studies %}
+    <div class="scroll">
+      <table class="compact">
+        <thead><tr><th>rule</th><th class="num">value</th><th>limit</th><th>result</th></tr></thead>
+        <tbody>
+        {% for a in t.acceptance %}
+        <tr>
+          <td class="mono">{{ a.name }} <span class="soft">new studies</span></td>
+          <td class="num">{{ a.value | number }}</td>
+          <td class="mono nowrap">{{ a.limit }}</td>
+          <td>{% if a.met is none %}<span class="state not_evaluable">not evaluable</span>{% elif a.met %}<span class="state met">met</span>{% else %}<span class="state not_met">not met</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="note">{{ t.n_evaluable }} evaluable points of the new studies, the minimum of the verdict is {{ c.minimum_points }}; {{ t.n_known }} decisive {{ "study was" if t.n_known == 1 else "studies were" }} collected before {{ "its" if t.n_known == 1 else "their" }} fit.</p>
+    <div class="scroll">
+      <table class="compact">
+        <thead><tr><th>study</th><th>fit</th><th>fit ran</th><th>collected</th><th>released</th><th class="num">points</th><th class="num">evaluable</th></tr></thead>
+        <tbody>
+        {% for s in t.studies %}
+        <tr>
+          <td>{{ s.study }}</td>
+          <td class="mono">{{ s.fit }}</td>
+          <td class="mono nowrap">{{ s.fit_date }}</td>
+          <td class="mono nowrap">{{ s.collected }}</td>
+          <td class="mono nowrap">{% if s.released %}{{ s.released }} <span class="soft">{{ s.pkdb_id }}</span>{% else %}<span class="soft">not released</span>{% endif %}</td>
+          <td class="num">{{ s.n_points }}</td>
+          <td class="num">{{ s.n_evaluable }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="empty">No decisive study was collected after its fit: {{ t.n_known }} collected before{% if t.undated %}, {{ t.undated | length }} without a date{% endif %}.</p>
+    {% endif %}
+    {% if t.undated %}
+    <p class="note">Without a day of collection (collected before the records of the studies existed, or without a record): {{ t.undated | join(", ") }}.</p>
     {% endif %}
     {% endif %}
 

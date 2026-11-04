@@ -77,6 +77,7 @@ from pkpdsim.credibility.selection import (
     normalize_observable,
     select,
 )
+from pkpdsim.credibility.temporal import Chronology, TemporalRecord, TemporalStudy
 from pkpdsim.credibility.verification import (
     NUMERICAL_CHECKS,
     TIGHTENING,
@@ -372,6 +373,10 @@ class ContextResult:
             pkpdsim 0.18 or earlier.
         ratio_acceptance: the result of the rule of the ratio pairs
             (`ContextOfUse.ratio_rule`), `None` without an assessed ratio.
+        temporal: the decisive points of the studies the model collected
+            after their fit, see `pkpdsim.credibility.temporal`; `None` for a
+            context decided on calibration data, an assessment without the
+            chronology of the model and a record of pkpdsim 0.18 or earlier.
     """
 
     id: str
@@ -394,6 +399,7 @@ class ContextResult:
     verification: list[CheckRecord] = dataclasses.field(default_factory=list)
     ratios: list[RatioRecord] = dataclasses.field(default_factory=list)
     ratio_acceptance: AcceptanceRecord | None = None
+    temporal: TemporalRecord | None = None
 
     @property
     def verified(self) -> bool | None:
@@ -450,6 +456,18 @@ class ContextResult:
                     "value": _write(self.ratio_acceptance["value"]),
                 }
             ),
+            "temporal": (
+                None
+                if self.temporal is None
+                else {
+                    **self.temporal,
+                    "studies": [dict(t) for t in self.temporal["studies"]],
+                    "acceptance": [
+                        {**a, "value": _write(a["value"])}
+                        for a in self.temporal["acceptance"]
+                    ],
+                }
+            ),
         }
 
     @classmethod
@@ -458,7 +476,7 @@ class ContextResult:
 
         A record of pkpdsim 0.17 has no minimum of points, read as 0, and no
         coverage of the quantities, read as `None` with 0 points; a record of
-        0.18 or earlier has no ratio pairs.
+        0.18 or earlier has no ratio pairs and no temporal record.
         """
         return cls(
             id=data["id"],
@@ -534,7 +552,39 @@ class ContextResult:
                     met=data["ratio_acceptance"]["met"],
                 )
             ),
+            temporal=_temporal_from_dict(data.get("temporal")),
         )
+
+
+def _temporal_from_dict(data: Mapping[str, Any] | None) -> TemporalRecord | None:
+    """Get the temporal record of a context from plain data, `None` as `NaN`."""
+    if data is None:
+        return None
+    return TemporalRecord(
+        studies=[
+            TemporalStudy(
+                study=t["study"],
+                fit=t["fit"],
+                fit_date=t["fit_date"],
+                collected=t["collected"],
+                released=t["released"],
+                pkdb_id=t["pkdb_id"],
+                n_points=t["n_points"],
+                n_evaluable=t["n_evaluable"],
+            )
+            for t in data["studies"]
+        ],
+        n_points=data["n_points"],
+        n_evaluable=data["n_evaluable"],
+        acceptance=[
+            AcceptanceRecord(
+                name=a["name"], value=_read(a["value"]), limit=a["limit"], met=a["met"]
+            )
+            for a in data["acceptance"]
+        ],
+        n_known=data["n_known"],
+        undated=list(data["undated"]),
+    )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1040,6 +1090,7 @@ def _factors(
     tightening: float = TIGHTENING,
     pairs: Sequence[RatioRecord] = (),
     cross_validations: Sequence[CrossValidation] = (),
+    temporal: TemporalRecord | None = None,
 ) -> list[FactorRecord]:
     """Get the factors of V&V 40 of a context, the assessed ones with its results.
 
@@ -1047,7 +1098,8 @@ def _factors(
     assessment was verified, else they keep their status of `FACTORS`; the
     relevance of the quantities of interest is assessed when the context has
     an assessed ratio, by its pairs, and the model form when an adopted fit
-    of its decisive evidence is cross-validated.
+    of its decisive evidence is cross-validated. The output comparison names
+    the acceptance on the points of the studies collected after their fit.
     """
     role = cou.decisive_role.value
     n_points, n_mappings, n_studies = _counts(decisive)
@@ -1072,6 +1124,7 @@ def _factors(
         "output_comparison": (
             f"{met} of {_count(len(acceptance), 'acceptance rule')} met on the "
             f"{role} evidence, {len(acceptance) - evaluable} not evaluable."
+            + _temporal_statement(temporal, cou.minimum_points)
         ),
         "relevance_of_validation": (
             f"{covered} of {_count(len(claimed), 'claimed value')} and "
@@ -1120,6 +1173,73 @@ def _factors(
             data["step"] = None
         factors.append(data)
     return factors
+
+
+def _temporal_statement(temporal: TemporalRecord | None, minimum: int) -> str:
+    """Describe the acceptance on the studies collected after their fit."""
+    if temporal is None:
+        return ""
+    before = f"{temporal['n_known']} collected before" + (
+        f", {len(temporal['undated'])} without a date" if temporal["undated"] else ""
+    )
+    if not temporal["studies"]:
+        return f" No decisive study was collected after its fit ({before})."
+    rules = temporal["acceptance"]
+    met = sum(a["met"] is True for a in rules)
+    n_studies = len({t["study"] for t in temporal["studies"]})
+    few = (
+        f", fewer than the minimum of {minimum}"
+        if temporal["n_evaluable"] < minimum
+        else ""
+    )
+    return (
+        f" Studies collected after their fit: "
+        f"{_count(n_studies, 'study', 'studies')} ({before}), "
+        f"{_count(temporal['n_evaluable'], 'evaluable point')}{few}, "
+        f"{met} of {_count(len(rules), 'rule')} met."
+    )
+
+
+def _temporal(
+    cou: ContextOfUse, decisive: pd.DataFrame, chronology: Chronology | None
+) -> TemporalRecord | None:
+    """Get the decisive points of a context which are new for their fit.
+
+    `None` without a chronology and for a context decided on calibration
+    data, which are never new for their fit.
+    """
+    if chronology is None or cou.decisive_role is not EvidenceRole.VALIDATION:
+        return None
+    new = chronology.new(decisive)
+    points = decisive.loc[new]
+    studies: list[TemporalStudy] = []
+    for (fit, study), group in points.groupby(["fit", "experiment"], sort=True):
+        record = chronology.studies[str(study)]
+        studies.append(
+            TemporalStudy(
+                study=str(study),
+                fit=str(fit),
+                fit_date=chronology.fits[str(fit)].isoformat(),
+                collected=str(record.collected),
+                released=None if record.released is None else str(record.released),
+                pkdb_id=record.pkdb_id,
+                n_points=len(group),
+                n_evaluable=len(applicable(group)),
+            )
+        )
+    old = {str(study) for study in decisive.loc[~new, "experiment"]}
+    undated = sorted(s for s in old if chronology.collected(s) is None)
+    return TemporalRecord(
+        studies=studies,
+        n_points=len(points),
+        n_evaluable=len(applicable(points)),
+        acceptance=[
+            AcceptanceRecord(name=a.name, value=a.value, limit=a.limit, met=a.met)
+            for a in (rule.evaluate(points) for rule in cou.rules)
+        ],
+        n_known=len(old) - len(undated),
+        undated=undated,
+    )
 
 
 def _at(point: pd.Series) -> str:
@@ -1229,11 +1349,13 @@ def _context_result(
     verification: Verification | None = None,
     lookup: MappingLookup | None = None,
     cross_validations: Sequence[CrossValidation] = (),
+    chronology: Chronology | None = None,
 ) -> tuple[ContextResult, list[CoverageEntry]]:
     """Get the result and the coverage of a context of use.
 
     The lookup of the fit mappings pairs the arms of the assessed ratio
-    quantities; a context without one needs none.
+    quantities; a context without one needs none. The chronology splits the
+    decisive points by whether their study is new for their fit.
     """
     decisive = _points(
         table, (s for s in selections if s.evidence.role is cou.decisive_role)
@@ -1268,6 +1390,7 @@ def _context_result(
         )
     )
     verified = None if not checks else all(record["passed"] for record in checks)
+    temporal = _temporal(cou, decisive, chronology)
     result = ContextResult(
         id=cou.id,
         title=cou.title,
@@ -1310,6 +1433,7 @@ def _context_result(
             ]
             if "fit" in decisive.columns
             else [],
+            temporal,
         ),
         n_decisive=len(decisive),
         n_evaluable=n_evaluable,
@@ -1326,6 +1450,7 @@ def _context_result(
                 met=ratio_result.met,
             )
         ),
+        temporal=temporal,
     )
     return result, coverage
 
@@ -1336,6 +1461,7 @@ def assess_table(
     provenance: Provenance,
     verification: Verification | None = None,
     cross_validations: Sequence[CrossValidation] = (),
+    chronology: Chronology | None = None,
 ) -> CredibilityAssessment:
     """Assess the contexts of use of a declaration on the data points of the fits.
 
@@ -1349,6 +1475,9 @@ def assess_table(
             assessment is not verified without.
         cross_validations: the cross-validations of the adopted fits, which
             assess the factor model form.
+        chronology: when the adopted fits ran and the model collected its
+            studies, see `pkpdsim.credibility.temporal`; no context has a
+            temporal record without.
 
     Returns:
         The assessment.
@@ -1365,7 +1494,7 @@ def assess_table(
         own = [s for s in selections.evidence if s.context == cou.id]
         evidence.extend(_evidence_result(s, table, cou.rules) for s in own)
         result, entries = _context_result(
-            cou, table, own, verification, fits.lookup, cross_validations
+            cou, table, own, verification, fits.lookup, cross_validations, chronology
         )
         contexts.append(result)
         coverage.extend(entries)
@@ -1466,7 +1595,9 @@ def assess(
 
     The fits are evaluated fresh on the current model and data, see
     `evaluate_fits`, and, with `verification`, again with the alternatives of
-    the checks of `pkpdsim.credibility.verification`.
+    the checks of `pkpdsim.credibility.verification`; the cross-validations of
+    the adopted fits and the chronology of the model and its studies
+    (`pkpdsim.credibility.temporal`) are read.
 
     Args:
         model: the model with a declaration and adopted fits.
@@ -1492,6 +1623,7 @@ def assess(
         lock_differences,
         write_lock,
     )
+    from pkpdsim.credibility.temporal import chronology
 
     credibility = model.load_credibility()
     fits = evaluate_fits(model)
@@ -1513,4 +1645,5 @@ def assess(
         provenance(model, source_commit, state),
         checks,
         list(read_cross_validations(model).values()),
+        chronology(model),
     )

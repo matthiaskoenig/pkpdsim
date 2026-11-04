@@ -17,6 +17,7 @@ import dataclasses
 import re
 from collections.abc import Callable, Collection, Hashable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from datetime import date, datetime
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, overload, override
@@ -435,7 +436,7 @@ def select_mappings(
     return selection.collections
 
 
-FIT_ID = re.compile(r"^(?P<subset>.+)_\d{8}_\d{6}__[0-9a-f]{5}$")
+FIT_ID = re.compile(r"^(?P<subset>.+)_(?P<date>\d{8})_\d{6}__[0-9a-f]{5}$")
 """The form of the id of a fit, `<subset>_<date>_<time>__<hash>`."""
 
 
@@ -461,6 +462,28 @@ def fit_subset(fit_id: str) -> str:
             f"'<subset>_<date>_<time>__<hash>', e.g. 'PK_20261016_185018__3efe3'."
         )
     return match["subset"]
+
+
+def fit_date(fit_id: str) -> date:
+    """Get the day a fit ran from its id.
+
+    Args:
+        fit_id: the id of a fit, e.g. `PK_20261016_185018__3efe3`.
+
+    Returns:
+        The date of the id, e.g. 2026-10-16.
+
+    Raises:
+        ValueError: if the id does not have the form of the id of a fit, see
+            `fit_subset`, or its date is no date.
+    """
+    fit_subset(fit_id)
+    match = FIT_ID.match(fit_id)
+    text = "" if match is None else match["date"]
+    try:
+        return datetime.strptime(text, "%Y%m%d").date()
+    except ValueError as err:
+        raise ValueError(f"The date of the fit '{fit_id}' is no date.") from err
 
 
 def remainder_problems(
