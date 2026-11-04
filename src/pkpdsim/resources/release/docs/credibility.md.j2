@@ -75,6 +75,22 @@ Temporal validation, the decisive studies the model collected after its fit ({{ 
 Temporal validation: no decisive study was collected after its fit ({{ context.temporal.n_known }} collected before{% if context.temporal.undated %}, {{ context.temporal.undated | length }} without a date{% endif %}).
 
 {% endif %}
+{% if context.uncertainty %}
+Parameter uncertainty, the adopted fits at {{ context.uncertainty.n_draws }} draws of their parameters; a rule is robust when it is met with a probability of at least {{ context.uncertainty.threshold }}:
+
+| Acceptance criterion | Limit | P(met) | Decision |
+| --- | --- | --- | --- |
+{% for rule in context.uncertainty.rules %}
+| `{{ rule.name }}` | {{ rule.limit }} | {{ "%.3g" % rule.estimate if rule.estimate is not none else "n/a" }} | {{ rule.decision | replace("_", " ") }} |
+{% endfor %}
+
+| Quantity of interest | Points | Band fold | Coverage (%) |
+| --- | --- | --- | --- |
+{% for quantity in context.uncertainty.quantities %}
+| `{{ quantity.quantity }}` | {{ quantity.n_points }} | {{ "%.3g" % quantity.band_fold if quantity.band_fold is not none else "n/a" }} | {{ "%.0f" % (100 * quantity.coverage) if quantity.coverage is not none else "n/a" }} |
+{% endfor %}
+
+{% endif %}
 {% if context.verification %}
 | Verification | Factor | Points | Largest difference | Result |
 | --- | --- | --- | --- | --- |

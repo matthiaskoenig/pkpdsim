@@ -45,6 +45,7 @@ import json
 import logging
 import math
 import subprocess
+import warnings
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
@@ -79,6 +80,16 @@ from pkpdsim.credibility.selection import (
 )
 from pkpdsim.credibility.studies import StudyData, study_data
 from pkpdsim.credibility.temporal import Chronology, TemporalRecord, TemporalStudy
+from pkpdsim.credibility.uncertainty import (
+    FitUncertainty,
+    Propagation,
+    QuantityBand,
+    RuleProbability,
+    UncertaintyRecord,
+    UncertaintySettings,
+    propagate,
+    rule_probability,
+)
 from pkpdsim.credibility.verification import (
     NUMERICAL_CHECKS,
     TIGHTENING,
@@ -378,6 +389,9 @@ class ContextResult:
             after their fit, see `pkpdsim.credibility.temporal`; `None` for a
             context decided on calibration data, an assessment without the
             chronology of the model and a record of pkpdsim 0.18 or earlier.
+        uncertainty: the parameter uncertainty of the decisive predictions,
+            see `pkpdsim.credibility.uncertainty`; `None` for an assessment
+            without the propagation and a record of pkpdsim 0.18 or earlier.
     """
 
     id: str
@@ -401,6 +415,7 @@ class ContextResult:
     ratios: list[RatioRecord] = dataclasses.field(default_factory=list)
     ratio_acceptance: AcceptanceRecord | None = None
     temporal: TemporalRecord | None = None
+    uncertainty: UncertaintyRecord | None = None
 
     @property
     def verified(self) -> bool | None:
@@ -469,6 +484,11 @@ class ContextResult:
                     ],
                 }
             ),
+            "uncertainty": (
+                None
+                if self.uncertainty is None
+                else json.loads(json.dumps(self.uncertainty))
+            ),
         }
 
     @classmethod
@@ -477,7 +497,8 @@ class ContextResult:
 
         A record of pkpdsim 0.17 has no minimum of points, read as 0, and no
         coverage of the quantities, read as `None` with 0 points; a record of
-        0.18 or earlier has no ratio pairs and no temporal record.
+        0.18 or earlier has no ratio pairs, no temporal record and no
+        uncertainty.
         """
         return cls(
             id=data["id"],
@@ -554,7 +575,26 @@ class ContextResult:
                 )
             ),
             temporal=_temporal_from_dict(data.get("temporal")),
+            uncertainty=_uncertainty_from_dict(data.get("uncertainty")),
         )
+
+
+def _uncertainty_from_dict(data: Mapping[str, Any] | None) -> UncertaintyRecord | None:
+    """Get the uncertainty record of a context from plain data."""
+    if data is None:
+        return None
+    return UncertaintyRecord(
+        n_draws=int(data["n_draws"]),
+        seed=int(data["seed"]),
+        quantiles=[float(q) for q in data["quantiles"]],
+        threshold=float(data["threshold"]),
+        level=float(data["level"]),
+        fits=[FitUncertainty(**f) for f in data["fits"]],
+        n_points=int(data["n_points"]),
+        coverage=data["coverage"],
+        quantities=[QuantityBand(**q) for q in data["quantities"]],
+        rules=[RuleProbability(**r) for r in data["rules"]],
+    )
 
 
 def _temporal_from_dict(data: Mapping[str, Any] | None) -> TemporalRecord | None:
@@ -1098,6 +1138,7 @@ def _factors(
     pairs: Sequence[RatioRecord] = (),
     cross_validations: Sequence[CrossValidation] = (),
     temporal: TemporalRecord | None = None,
+    uncertainty: UncertaintyRecord | None = None,
 ) -> list[FactorRecord]:
     """Get the factors of V&V 40 of a context, the assessed ones with its results.
 
@@ -1160,6 +1201,10 @@ def _factors(
                 ]
             )
             data["step"] = None
+        elif factor.id == "model_inputs" and uncertainty is not None:
+            data["status"] = FactorStatus.ASSESSED.value
+            data["statement"] = _uncertainty_statement(uncertainty)
+            data["step"] = None
         elif factor.id == "model_form" and cross_validations:
             data["status"] = FactorStatus.ASSESSED.value
             data["statement"] = " ".join(c.statement() for c in cross_validations)
@@ -1180,6 +1225,153 @@ def _factors(
             data["step"] = None
         factors.append(data)
     return factors
+
+
+def _fold(value: float | None) -> str:
+    """Get a band fold, a share or a probability in words."""
+    return "n/a" if value is None else f"{value:.3g}"
+
+
+def _percent(value: float | None) -> str:
+    """Get a share in percent in words."""
+    return "n/a" if value is None else f"{100 * value:.0f} %"
+
+
+def _uncertainty_statement(uncertainty: UncertaintyRecord) -> str:
+    """Get the statement of the factor model inputs from the uncertainty."""
+    fits = uncertainty["fits"]
+    correlated = sum(f["correlated"] for f in fits)
+    failed = sum(f["n_failed"] for f in fits)
+    low, high = uncertainty["quantiles"]
+    folds = [q["band_fold"] for q in uncertainty["quantities"] if q["band_fold"]]
+    parts = [
+        f"The parameter uncertainty of {_count(len(fits), 'adopted fit')} "
+        f"({correlated} with the correlation of the Fisher information) "
+        f"propagated with {uncertainty['n_draws']} draws"
+        + (f" ({failed} failed)" if failed else "")
+        + ".",
+        f"The {100 * (high - low):g} % bands of the predictions have a median "
+        f"fold width of up to {_fold(max(folds) if folds else None)} over the "
+        f"quantities and hold {_percent(uncertainty['coverage'])} of the "
+        f"{_count(uncertainty['n_points'], 'evaluable decisive observation')}.",
+    ]
+    rules = uncertainty["rules"]
+    if rules:
+        decided = ", ".join(
+            f"{r['name']} {r['limit']}: P = {_fold(r['estimate'])}, "
+            f"{r['decision'].replace('_', ' ')}"
+            for r in rules
+        )
+        parts.append(
+            f"The acceptance with probability at least "
+            f"{uncertainty['threshold']:g}: {decided}."
+        )
+    return " ".join(parts)
+
+
+def _uncertainty(
+    cou: ContextOfUse,
+    decisive: pd.DataFrame,
+    quantities: Sequence[QuantityRecord],
+    propagation: Propagation | None,
+    lookup: MappingLookup | None,
+) -> UncertaintyRecord | None:
+    """Get the parameter uncertainty of the decisive predictions of a context.
+
+    A draw on which a decisive prediction is not finite where the reference is
+    finite failed for every rule; the bands are the quantiles of the finite
+    predictions of a point.
+    """
+    if propagation is None:
+        return None
+    settings = propagation.settings
+    predictions = propagation.predictions.loc[decisive.index]
+    values = predictions.to_numpy(dtype=float)
+    reference = np.isfinite(decisive["IPRED"].to_numpy(dtype=float))
+    failed = (~np.isfinite(values) & reference[:, None]).any(axis=0)
+    low_q, high_q = settings.quantiles
+    finite = np.where(np.isfinite(values), values, np.nan)
+    with warnings.catch_warnings():
+        # a point without a finite prediction has no band
+        warnings.simplefilter("ignore", RuntimeWarning)
+        low = np.nanquantile(finite, low_q, axis=1) if len(finite) else finite[:, 0]
+        high = np.nanquantile(finite, high_q, axis=1) if len(finite) else finite[:, 0]
+    bands = pd.DataFrame({"low": low, "high": high}, index=decisive.index)
+    evaluable = applicable(decisive)
+    band = bands.loc[evaluable.index]
+    has_band = (np.isfinite(band["low"]) & np.isfinite(band["high"])).to_numpy()
+    banded, band = evaluable.loc[has_band], band.loc[has_band]
+    dv = banded["DV"].to_numpy(dtype=float)
+    inside = (dv >= band["low"].to_numpy()) & (dv <= band["high"].to_numpy())
+    observables = banded["observable"].astype(str).map(normalize_observable)
+    bands_of: list[QuantityBand] = []
+    for q in quantities:
+        if q["ratio"]:
+            continue
+        mask = (observables == normalize_observable(q["id"])).to_numpy()
+        lows, highs = band["low"].to_numpy()[mask], band["high"].to_numpy()[mask]
+        positive = lows > 0
+        bands_of.append(
+            QuantityBand(
+                quantity=q["id"],
+                n_points=int(mask.sum()),
+                band_fold=(
+                    float(np.median(highs[positive] / lows[positive]))
+                    if positive.any()
+                    else None
+                ),
+                coverage=float(inside[mask].mean()) if mask.any() else None,
+            )
+        )
+    ratio = bool(cou.ratios) and lookup is not None
+    rules: list[tuple[str, str, list[bool | None]]] = [
+        (rule.name, rule.limit, []) for rule in cou.rules
+    ]
+    if ratio:
+        rules.append((cou.ratio_rule.name, cou.ratio_rule.limit, []))
+    for k, column in enumerate(predictions.columns):
+        if failed[k]:
+            for _, _, met in rules:
+                met.append(None)
+            continue
+        alternative = decisive.assign(IPRED=predictions[column])
+        results = [rule.evaluate(alternative) for rule in cou.rules]
+        if ratio:
+            assert lookup is not None
+            results.append(
+                cou.ratio_rule.evaluate(
+                    [p["within"] for p in _ratio_pairs(cou, alternative, lookup)]
+                )
+            )
+        for (_, _, met), result in zip(rules, results, strict=True):
+            met.append(result.met)
+    fits = sorted(set(decisive["fit"].astype(str))) if "fit" in decisive.columns else []
+    return UncertaintyRecord(
+        n_draws=settings.draws,
+        seed=settings.seed,
+        quantiles=[low_q, high_q],
+        threshold=settings.threshold,
+        level=settings.level,
+        fits=[
+            FitUncertainty(
+                fit=fit,
+                fit_id=draws.fit_id,
+                n_parameters=len(draws.pids),
+                correlated=draws.correlated,
+                note=draws.note,
+                n_failed=int(propagation.failed.get(fit, 0)),
+            )
+            for fit in fits
+            if (draws := propagation.draws.get(fit)) is not None
+        ],
+        n_points=len(banded),
+        coverage=float(inside.mean()) if len(banded) else None,
+        quantities=bands_of,
+        rules=[
+            rule_probability(name, limit, met, settings, len(rules))
+            for name, limit, met in rules
+        ],
+    )
 
 
 def _temporal_statement(temporal: TemporalRecord | None, minimum: int) -> str:
@@ -1357,6 +1549,7 @@ def _context_result(
     lookup: MappingLookup | None = None,
     cross_validations: Sequence[CrossValidation] = (),
     chronology: Chronology | None = None,
+    propagation: Propagation | None = None,
 ) -> tuple[ContextResult, list[CoverageEntry]]:
     """Get the result and the coverage of a context of use.
 
@@ -1398,6 +1591,7 @@ def _context_result(
     )
     verified = None if not checks else all(record["passed"] for record in checks)
     temporal = _temporal(cou, decisive, chronology)
+    uncertainty = _uncertainty(cou, decisive, quantities, propagation, lookup)
     result = ContextResult(
         id=cou.id,
         title=cou.title,
@@ -1441,6 +1635,7 @@ def _context_result(
             if "fit" in decisive.columns
             else [],
             temporal,
+            uncertainty,
         ),
         n_decisive=len(decisive),
         n_evaluable=n_evaluable,
@@ -1458,6 +1653,7 @@ def _context_result(
             )
         ),
         temporal=temporal,
+        uncertainty=uncertainty,
     )
     return result, coverage
 
@@ -1470,6 +1666,7 @@ def assess_table(
     cross_validations: Sequence[CrossValidation] = (),
     chronology: Chronology | None = None,
     studies: Sequence[StudyData] = (),
+    propagation: Propagation | None = None,
 ) -> CredibilityAssessment:
     """Assess the contexts of use of a declaration on the data points of the fits.
 
@@ -1488,6 +1685,9 @@ def assess_table(
             temporal record without.
         studies: the provenance of the study data of the points, see
             `pkpdsim.credibility.studies.study_data`, recorded as it is.
+        propagation: the predictions at the draws of the parameters of the
+            fits, see `pkpdsim.credibility.uncertainty.propagate`; no context
+            has an uncertainty record without.
 
     Returns:
         The assessment.
@@ -1504,7 +1704,14 @@ def assess_table(
         own = [s for s in selections.evidence if s.context == cou.id]
         evidence.extend(_evidence_result(s, table, cou.rules) for s in own)
         result, entries = _context_result(
-            cou, table, own, verification, fits.lookup, cross_validations, chronology
+            cou,
+            table,
+            own,
+            verification,
+            fits.lookup,
+            cross_validations,
+            chronology,
+            propagation,
         )
         contexts.append(result)
         coverage.extend(entries)
@@ -1601,6 +1808,7 @@ def assess(
     *,
     verification: bool = True,
     lock: bool = False,
+    uncertainty: UncertaintySettings | None = None,
 ) -> CredibilityAssessment:
     """Assess the contexts of use of a model on its adopted fits.
 
@@ -1619,6 +1827,10 @@ def assess(
             verification are not assessed without.
         lock: write the lock of the evidence (`pkpdsim.credibility.lock`)
             instead of comparing the evidence with it.
+        uncertainty: propagate the parameter uncertainty of the adopted fits
+            to the decisive predictions with these settings, see
+            `pkpdsim.credibility.uncertainty`; the factor model inputs is not
+            assessed without.
 
     Returns:
         The assessment.
@@ -1650,6 +1862,7 @@ def assess(
             raise LockMismatchError(differences)
         state = None if differences is None else "matched"
     checks = verify(model, fits) if verification else None
+    propagation = None if uncertainty is None else propagate(model, fits, uncertainty)
     logger.info("Assess the contexts of use of '%s'", model.name)
     return assess_table(
         credibility,
@@ -1659,4 +1872,5 @@ def assess(
         list(read_cross_validations(model).values()),
         chronology(model),
         study_data(model, fits.table),
+        propagation,
     )

@@ -32,6 +32,8 @@ FILES = {
     "cross_validation.tsv",
     "temporal.tsv",
     "studies.tsv",
+    "uncertainty.tsv",
+    "uncertainty_quantities.tsv",
     "battery.tsv",
     "fates.tsv",
     "index.html",

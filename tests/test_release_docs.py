@@ -608,6 +608,31 @@ def test_the_credibility_page_shows_the_study_data(
     assert "| CredB | 10 | no data folder of the study | | | | |" in section
 
 
+def test_the_credibility_page_shows_the_parameter_uncertainty(
+    release: tuple[ProjectContext, Path],
+) -> None:
+    from test_credibility_uncertainty import PROVENANCE, _propagation
+
+    context, path = release
+    context = dataclasses.replace(
+        context,
+        model=dataclasses.replace(
+            context.model, credibility="pkpdsim_toy.credibility:CREDIBILITY"
+        ),
+    )
+    assessment = assess_table(
+        CREDIBILITY, fit_table(), PROVENANCE, propagation=_propagation(0.01)
+    )
+    (path / BuildPaths.CREDIBILITY).mkdir(parents=True)
+    assessment.to_json(path / BuildPaths.CREDIBILITY / "credibility.json")
+    write_project_files(context, path)
+    write_docs(context, path)
+    page = (path / "docs" / "credibility.md").read_text()
+    dose = page[page.index("## dose") : page.index("## renal")]
+    assert "Parameter uncertainty, the adopted fits at 256 draws" in dose
+    assert "| `GMFE` | <= 1.5 | 1 | accepted |" in dose
+
+
 def test_the_credibility_page_escapes_a_table_cell(
     release: tuple[ProjectContext, Path],
 ) -> None:

@@ -377,6 +377,47 @@ td.status .soft { font-size: 12.5px; }
     {% endif %}
     {% endif %}
 
+    {% if c.uncertainty is not none %}{% set u = c.uncertainty %}
+    {% set states = {"accepted": "met", "rejected": "not_met", "equivalent": "not_evaluable", "undecided": "not_evaluable", "not_evaluable": "outside"} %}
+    <h4>Parameter uncertainty</h4>
+    <p class="note">The adopted fits evaluated at {{ u.n_draws }} draws of their fitted parameters (the profile or Fisher uncertainty of their records{% if u.fits | selectattr("correlated") | list %}, with the correlation of the Fisher information{% endif %}). A rule is robust when it is met with a probability of at least {{ u.threshold }} over the draws, decided at the level {{ u.level }} for the rules of the context together; the verdict is the acceptance at the adopted parameters and does not change.</p>
+    {% if u.rules %}
+    <div class="scroll">
+      <table class="compact">
+        <thead><tr><th>rule</th><th>limit</th><th class="num">P(met)</th><th class="num">sequence</th><th class="num">draws</th><th>decision</th></tr></thead>
+        <tbody>
+        {% for r in u.rules %}
+        <tr>
+          <td class="mono">{{ r.name }}</td>
+          <td class="mono nowrap">{{ r.limit }}</td>
+          <td class="num">{{ r.estimate | number }}</td>
+          <td class="num nowrap">{% if r.low is not none %}{{ r.low | number }} to {{ r.high | number }}{% endif %}</td>
+          <td class="num nowrap">{{ r.n }}{% if r.n_failed %} <span class="soft">+{{ r.n_failed }} failed</span>{% endif %}</td>
+          <td><span class="state {{ states[r.decision] }}">{{ r.decision | replace("_", " ") }}</span>{% if r.n_needed %} <span class="soft">about {{ r.n_needed }} draws</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+    <p class="note">The {{ ((u.quantiles[1] - u.quantiles[0]) * 100) | round | int }} % bands of the predictions hold {{ "n/a" if u.coverage is none else ((u.coverage * 100) | round | int) ~ " %" }} of the {{ u.n_points }} evaluable decisive observations; a band of the parameter uncertainty holds the prediction of the mean, the variability between the subjects and the error of the measurements lie outside it.</p>
+    {% if u.quantities %}
+    <div class="scroll">
+      <table class="compact">
+        <thead><tr><th>quantity</th><th class="num">points</th><th class="num">band fold</th><th class="num">coverage %</th></tr></thead>
+        <tbody>
+        {% for q in u.quantities %}
+        <tr><td class="mono">{{ q.quantity }}</td><td class="num">{{ q.n_points }}</td><td class="num">{{ q.band_fold | number }}</td><td class="num">{{ "n/a" if q.coverage is none else (q.coverage * 100) | round | int }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+    {% for f in u.fits %}
+    <p class="note"><span class="mono">{{ f.fit }}</span>: {{ f.n_parameters }} {{ "parameter" if f.n_parameters == 1 else "parameters" }}, {{ f.note }}{% if f.n_failed %}, <span class="warn">{{ f.n_failed }} failed draws</span>{% endif %}.</p>
+    {% endfor %}
+    {% endif %}
+
     <h4>Verification</h4>
     {% if c.verification %}
     <div class="scroll">
