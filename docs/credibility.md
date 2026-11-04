@@ -304,6 +304,16 @@ The mass balance records the fate of every dose (`Fate`): at the end of the two 
 
 A failed check of the battery makes every context of use `not_verified`. Its checks are rows of the verification of every context, and the factors numerical code verification and software quality assurance are `assessed` with their platform statement followed by the results of the battery. A model whose build fails a check for a reason it accepts declares it with the reason, `CheckSettings(battery={"steady_state": "..."})`: `pkpdsim.testing.check_battery` (the test of a repository of models over its models) then passes, fails when the known failure no longer applies, and an assessment shows the reason and still fails the check.
 
+## Locked splits
+
+A validation counts only if its data was set apart before the predictions were seen. The kinds of the mappings (training, validation) are fixed by the records of the adopted fits, a changed kind is refused (`KindMismatchError`); which validation data answers which question is fixed by the declaration, which can be changed after a verdict was seen. The lock fixes it as well (`pkpdsim.credibility.lock`): `run_credibility <package> --lock` writes `credibility.lock.json` into the folder of the model, the mappings (`fit/experiment/mapping`) of every evidence and every limitation by `context/name` (a limitation of the model `/name`), to be committed and reviewed with the declaration. Afterwards:
+
+- `run_credibility` compares the evidence with the lock before it evaluates anything and refuses a difference (`LockMismatchError`), naming every evidence which is new, gone or selects other mappings with the added (`+`) and removed (`-`) mappings; `check_declaration`, the test of a repository of models, reports the same.
+- A changed split is renewed explicitly with `--lock`, so the change is a reviewed diff of the lock in the history of the repository.
+- The record says whether the evidence matched the lock (`Provenance.lock`: `matched`, `written` when the lock was written with the assessment, `None` without a lock), the report shows it in the provenance.
+
+A model without a lock is assessed as before.
+
 ## Across models: scorecard and qualification
 
 Every model is assessed on its own. The scorecard reads the records of many models (`credibility.json`) into one table, one row per model and COU with the level, the risk, the verdict, the points, whether it is verified, the failed checks and the value of every acceptance rule (`pkpdsim.credibility.scorecard`, `scorecard`). Stored as a TSV it is the baseline of a repository of models: a change of the shared library, of sbmlsim or of the data which makes a COU worse shows across all models at once (`compare`): a COU of the baseline which is missing, a worse verdict (supported, supported with extrapolation, insufficient evidence, not verified, not supported), a COU which is no longer verified and a rule whose value got worse by more than the tolerance (5 points of a percentage, 5 % of a GMFE, an AFE 5 % further from 1; a value which is no longer evaluable). A new model, COU or rule is no regression.

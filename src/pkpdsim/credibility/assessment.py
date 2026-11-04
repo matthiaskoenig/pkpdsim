@@ -548,6 +548,9 @@ class Provenance:
         commit: the commit of the repository of the model, `None` outside one.
         dirty: whether the repository has changes, `None` outside one.
         date: the date of the assessment, ISO 8601 with the time zone.
+        lock: whether the evidence matched the lock of the declaration
+            (`matched`), the lock was written with the assessment (`written`),
+            or `None` without a lock, see `pkpdsim.credibility.lock`.
     """
 
     model: str
@@ -557,6 +560,7 @@ class Provenance:
     commit: str | None
     dirty: bool | None
     date: str
+    lock: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         """Get the provenance as plain data."""
@@ -568,6 +572,7 @@ class Provenance:
             "commit": self.commit,
             "dirty": self.dirty,
             "date": self.date,
+            "lock": self.lock,
         }
 
     @classmethod
@@ -581,6 +586,8 @@ class Provenance:
             commit=data["commit"],
             dirty=data["dirty"],
             date=data["date"],
+            # a record of pkpdsim 0.18 or earlier knew no lock
+            lock=data.get("lock"),
         )
 
 
@@ -1376,7 +1383,9 @@ def _git(model: PKPDModel, *args: str) -> str | None:
     return result.stdout if result.returncode == 0 else None
 
 
-def provenance(model: PKPDModel, source_commit: str | None = None) -> Provenance:
+def provenance(
+    model: PKPDModel, source_commit: str | None = None, lock: str | None = None
+) -> Provenance:
     """Get the provenance of an assessment of a model now.
 
     Args:
@@ -1384,13 +1393,14 @@ def provenance(model: PKPDModel, source_commit: str | None = None) -> Provenance
         source_commit: the commit of the source repository of the model, given
             by a release, which assesses the model in its release repository:
             the commit is recorded and whether its tree was clean is not known.
+        lock: the state of the lock of the evidence, see `Provenance.lock`.
 
     Returns:
         The versions of `VERSIONED_PACKAGES`, the commit and whether the folder
         of the model has changes (`git status --porcelain -- .` in `model.path`;
         `None` outside a repository, the dirty state `None` with a
-        `source_commit`), the adopted fits and the date with the local time
-        zone.
+        `source_commit`), the adopted fits, the date with the local time
+        zone and the state of the lock.
     """
     if source_commit is None:
         commit = _git(model, "rev-parse", "HEAD")
@@ -1412,11 +1422,16 @@ def provenance(model: PKPDModel, source_commit: str | None = None) -> Provenance
         commit=commit,
         dirty=dirty,
         date=datetime.now().astimezone().isoformat(timespec="seconds"),
+        lock=lock,
     )
 
 
 def assess(
-    model: PKPDModel, source_commit: str | None = None, *, verification: bool = True
+    model: PKPDModel,
+    source_commit: str | None = None,
+    *,
+    verification: bool = True,
+    lock: bool = False,
 ) -> CredibilityAssessment:
     """Assess the contexts of use of a model on its adopted fits.
 
@@ -1430,6 +1445,8 @@ def assess(
             `provenance`.
         verification: verify the decisive predictions; the factors of the
             verification are not assessed without.
+        lock: write the lock of the evidence (`pkpdsim.credibility.lock`)
+            instead of comparing the evidence with it.
 
     Returns:
         The assessment.
@@ -1438,9 +1455,28 @@ def assess(
         ValueError: if the model has no declaration or no adopted fits.
         KindMismatchError: if a kind differs from the recorded one.
         SelectionError: if the evidence selects invalid data.
+        LockMismatchError: if the evidence differs from the lock.
     """
+    from pkpdsim.credibility.lock import (
+        LockMismatchError,
+        lock_differences,
+        write_lock,
+    )
+
     credibility = model.load_credibility()
     fits = evaluate_fits(model)
+    selections = select(credibility, fits)
+    state: str | None
+    if lock:
+        logger.info("Write the lock '%s'", write_lock(model, selections, fits))
+        state = "written"
+    else:
+        differences = lock_differences(model, selections, fits)
+        if differences:
+            raise LockMismatchError(differences)
+        state = None if differences is None else "matched"
     checks = verify(model, fits) if verification else None
     logger.info("Assess the contexts of use of '%s'", model.name)
-    return assess_table(credibility, fits, provenance(model, source_commit), checks)
+    return assess_table(
+        credibility, fits, provenance(model, source_commit, state), checks
+    )

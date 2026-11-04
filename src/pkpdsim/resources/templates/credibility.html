@@ -547,6 +547,7 @@ td.status .soft { font-size: 12.5px; }
       {% endfor %}
       <dt>commit</dt><dd class="mono">{% if provenance.commit %}{{ provenance.commit }}{% if provenance.dirty %} <span class="warn">with uncommitted changes</span>{% endif %}{% else %}outside a repository{% endif %}</dd>
       <dt>date</dt><dd class="mono">{{ provenance.date }}</dd>
+      <dt>lock</dt><dd>{% if provenance.lock == "matched" %}the evidence matches the lock of the declaration{% elif provenance.lock == "written" %}the lock of the evidence was written with this assessment{% else %}<span class="soft">the declaration has no lock</span>{% endif %}</dd>
     </dl>
   </div>
 </section>
