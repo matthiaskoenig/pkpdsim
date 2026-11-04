@@ -5,6 +5,7 @@ import json
 import shutil
 import subprocess
 import tomllib
+from datetime import timedelta
 from pathlib import Path
 from urllib.parse import quote
 
@@ -541,6 +542,37 @@ def test_the_credibility_page_shows_the_ratio_pairs(
     assert (
         "| `A_ratio` | CredA | `fm_renal` / `fm_dose` | 1 | 1.1 | 1.25 | yes |" in renal
     )
+
+
+def test_the_credibility_page_shows_the_temporal_validation(
+    release: tuple[ProjectContext, Path],
+) -> None:
+    from test_credibility_temporal import FIT_DAY, PROVENANCE, _chronology
+
+    context, path = release
+    context = dataclasses.replace(
+        context,
+        model=dataclasses.replace(
+            context.model, credibility="pkpdsim_toy.credibility:CREDIBILITY"
+        ),
+    )
+    assessment = assess_table(
+        CREDIBILITY,
+        fit_table(),
+        PROVENANCE,
+        chronology=_chronology(FIT_DAY + timedelta(days=1)),
+    )
+    (path / BuildPaths.CREDIBILITY).mkdir(parents=True)
+    assessment.to_json(path / BuildPaths.CREDIBILITY / "credibility.json")
+    write_project_files(context, path)
+    write_docs(context, path)
+    page = (path / "docs" / "credibility.md").read_text()
+    dose = page[page.index("## dose") : page.index("## renal")]
+    assert "Temporal validation, the decisive studies the model collected" in dose
+    assert "| `GMFE` | 1 | <= 1.5 | yes |" in dose
+    assert "| CredA | `DECAY` | 2026-10-01 | 2026-10-02 | 2026-09-01 |" in dose
+    describe = page[page.index("## describe") : page.index("## dose")]
+    assert "Temporal validation" not in describe
 
 
 def test_the_credibility_page_escapes_a_table_cell(

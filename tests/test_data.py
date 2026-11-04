@@ -1,9 +1,11 @@
 import csv
+import json
 import math
 import re
 import shutil
 import warnings
 from collections.abc import Callable
+from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -20,15 +22,18 @@ from pkpdsim.data import (
     PKDB_DATA,
     SCATTER_COLUMNS,
     CollectionWarning,
+    StudyRecord,
     _label,
     _statistics,
     collect_tsv_files,
     database_differences,
     mean_of_individuals,
     prepare_study,
+    read_study_record,
     sampling_times,
     studies_dir,
     study_format,
+    study_record_path,
     study_tables,
     write_study_tables,
 )
@@ -447,6 +452,7 @@ def test_collect_a_study_of_format_2(source_dir: Path, tmp_path: Path) -> None:
     collect_tsv_files(source_dir=source_dir, target_dir=target_dir)
     assert {path for path in tree(target_dir) if path.startswith("Patel1984/")} == {
         "Patel1984/notes.md",
+        "Patel1984/.Patel1984_study.json",
         *(
             f"Patel1984/.Patel1984_{source}.tsv"
             for source in (
@@ -852,3 +858,73 @@ def test_a_scatter_of_partly_repeated_points_is_a_warning(tmp_path: Path) -> Non
         and "volunteers" in message
         for message in messages
     )
+
+
+def test_the_record_of_a_new_study(tmp_path: Path) -> None:
+    """A new study is recorded with the day of its collection and its release."""
+    paths = write_study_tables(PATEL1984, tmp_path)
+    folder = tmp_path / "Patel1984"
+    assert paths[-1] == study_record_path(folder)
+    assert paths[-1].name == ".Patel1984_study.json"
+    record = read_study_record(folder)
+    assert record == StudyRecord(
+        study="Patel1984",
+        collected=date.today(),
+        released=date(2024, 3, 26),
+        pkdb_id="PKDB00759",
+    )
+    assert StudyRecord.from_dict(record.to_dict()) == record
+
+
+def test_a_later_collection_keeps_the_date(tmp_path: Path) -> None:
+    """The day of the first collection stays, the release is updated."""
+    folder = tmp_path / "Patel1984"
+    folder.mkdir()
+    first = StudyRecord(study="Patel1984", collected=date(2020, 1, 2))
+    study_record_path(folder).write_text(json.dumps(first.to_dict()), encoding="utf-8")
+    write_study_tables(PATEL1984, tmp_path)
+    record = read_study_record(folder)
+    assert record is not None
+    assert record.collected == date(2020, 1, 2)
+    assert record.pkdb_id == "PKDB00759"
+
+
+def test_tables_without_a_record_were_collected_on_an_unknown_day(
+    tmp_path: Path,
+) -> None:
+    """A study collected before the records existed gets no date."""
+    folder = tmp_path / "Patel1984"
+    folder.mkdir()
+    (folder / ".Patel1984_Fig1.tsv").write_text("old", encoding="utf-8")
+    write_study_tables(PATEL1984, tmp_path)
+    record = read_study_record(folder)
+    assert record is not None
+    assert record.collected is None
+    # and stays without one
+    write_study_tables(PATEL1984, tmp_path)
+    assert read_study_record(folder) == record
+
+
+def test_an_unreleased_study(tmp_path: Path) -> None:
+    """A study without a release block has no release date and identifier."""
+    from pkdb.studyformat.formatter import format_folder
+
+    study = tmp_path / "source" / "Patel1984"
+    shutil.copytree(PATEL1984, study)
+    data = json.loads((study / "study.json").read_text(encoding="utf-8"))
+    del data["release"]
+    data["access"] = "private"
+    (study / "study.json").write_text(json.dumps(data), encoding="utf-8")
+    format_folder(study)
+    write_study_tables(study, tmp_path / "data")
+    record = read_study_record(tmp_path / "data" / "Patel1984")
+    assert record is not None
+    assert (record.released, record.pkdb_id) == (None, None)
+
+
+def test_a_record_which_is_not_readable(tmp_path: Path) -> None:
+    """A broken record is an error naming the file."""
+    assert read_study_record(tmp_path) is None
+    study_record_path(tmp_path).write_text('{"study": "A", "collected": "May"}')
+    with pytest.raises(ValueError, match="is not readable"):
+        read_study_record(tmp_path)

@@ -23,6 +23,9 @@
   compared points (`n`), the largest relative difference and its point,
   whether the acceptance changed, whether the check passed and its problems;
   the checks of the battery are rows of every context of use.
+- `temporal.tsv`: one row per context of use and study the model collected
+  after the fit of its decisive points: the fit, the day of the fit, of the
+  collection and of the release in PK-DB, the points and the evaluable points.
 - `cross_validation.tsv`: one row per cross-validated adopted fit and held-out
   study: its points, the GMFE and the share within 2-fold of the held-out and
   of the fitted predictions, the cost of the refit.
@@ -65,6 +68,7 @@ from pkpdsim.credibility.assessment import (
 )
 from pkpdsim.credibility.ratios import RATIO_COLUMNS
 from pkpdsim.credibility.risk import DEFAULT_MIN_POINTS
+from pkpdsim.credibility.temporal import TEMPORAL_COLUMNS
 from pkpdsim.credibility.verification import NUMERICAL_CHECKS, Check
 
 __all__ = [
@@ -89,6 +93,7 @@ __all__ = [
     "quantities_table",
     "ratios_table",
     "render_html",
+    "temporal_table",
     "verification_table",
     "write_outputs",
 ]
@@ -369,6 +374,25 @@ def ratios_table(assessment: CredibilityAssessment) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=["context", *RATIO_COLUMNS])
 
 
+def temporal_table(assessment: CredibilityAssessment) -> pd.DataFrame:
+    """Get one row per context of use and study collected after its fit.
+
+    Args:
+        assessment: the assessment.
+
+    Returns:
+        The column `context` and the columns of `TEMPORAL_COLUMNS`, see
+        `TemporalStudy`; no rows without a new study.
+    """
+    rows = [
+        {"context": c.id, **study}
+        for c in assessment.contexts
+        if c.temporal is not None
+        for study in c.temporal["studies"]
+    ]
+    return pd.DataFrame(rows, columns=["context", *TEMPORAL_COLUMNS])
+
+
 def cross_validation_table(assessment: CredibilityAssessment) -> pd.DataFrame:
     """Get one row per cross-validated fit and held-out study.
 
@@ -554,6 +578,7 @@ def write_outputs(assessment: CredibilityAssessment, output_dir: Path) -> Path:
         "domain.tsv": _tsv(domain_table(assessment)),
         "quantities.tsv": _tsv(quantities_table(assessment)),
         "ratios.tsv": _tsv(ratios_table(assessment)),
+        "temporal.tsv": _tsv(temporal_table(assessment)),
         "cross_validation.tsv": _tsv(cross_validation_table(assessment)),
         "verification.tsv": _tsv(verification_table(assessment)),
         "battery.tsv": _tsv(battery_table(assessment)),

@@ -30,6 +30,7 @@ FILES = {
     "verification.tsv",
     "ratios.tsv",
     "cross_validation.tsv",
+    "temporal.tsv",
     "battery.tsv",
     "fates.tsv",
     "index.html",

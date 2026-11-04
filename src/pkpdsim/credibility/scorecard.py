@@ -19,13 +19,16 @@ import math
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final
+from typing import TYPE_CHECKING, Final
 
 import numpy as np
 import pandas as pd
 
 from pkpdsim.credibility.assessment import CredibilityAssessment, Verdict
 from pkpdsim.credibility.report import RECORD
+
+if TYPE_CHECKING:
+    from pkpdsim.credibility.temporal import TemporalRecord
 
 __all__ = [
     "QUALIFICATION_COLUMNS",
@@ -51,6 +54,8 @@ SCORECARD_COLUMNS: Final = (
     "n_evaluable",
     "verified",
     "failed_checks",
+    "temporal_points",
+    "temporal_met",
 )
 #: the columns of the qualification
 QUALIFICATION_COLUMNS: Final = (
@@ -126,8 +131,11 @@ def scorecard(records: Mapping[str, CredibilityAssessment]) -> pd.DataFrame:
     Returns:
         The columns of `SCORECARD_COLUMNS` (`verified` empty without
         verification, `failed_checks` the failed checks of the verification
-        comma separated) and per acceptance rule its value, the rule of the
-        ratio pairs `Guest` included.
+        comma separated, `temporal_points` the evaluable points of the studies
+        collected after their fit and `temporal_met` whether every rule is met
+        on them, both empty without a temporal record, `temporal_met` also
+        without an evaluable rule) and per acceptance rule its value, the rule
+        of the ratio pairs `Guest` included.
     """
     rows: list[dict[str, object]] = []
     for model, assessment in records.items():
@@ -145,6 +153,10 @@ def scorecard(records: Mapping[str, CredibilityAssessment]) -> pd.DataFrame:
                 "failed_checks": ",".join(
                     r["check"] for r in c.verification if not r["passed"]
                 ),
+                "temporal_points": (
+                    None if c.temporal is None else c.temporal["n_evaluable"]
+                ),
+                "temporal_met": _temporal_met(c.temporal),
             }
             rules = [
                 *c.acceptance,
@@ -159,6 +171,14 @@ def scorecard(records: Mapping[str, CredibilityAssessment]) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=columns)
 
 
+def _temporal_met(temporal: TemporalRecord | None) -> bool | None:
+    """Get whether every rule is met on the new points, `None` if none is evaluable."""
+    if temporal is None:
+        return None
+    results = [a["met"] for a in temporal["acceptance"] if a["met"] is not None]
+    return all(results) if results else None
+
+
 @dataclass(frozen=True, kw_only=True)
 class Regression:
     """A context of use of a model which got worse than its baseline.
@@ -166,8 +186,8 @@ class Regression:
     Attributes:
         model: the model.
         context: the context of use.
-        what: what got worse: `missing`, `verdict`, `verified` or the name of
-            an acceptance rule.
+        what: what got worse: `missing`, `verdict`, `verified`,
+            `temporal_met` or the name of an acceptance rule.
         baseline: the value of the baseline, as text.
         current: the current value, as text.
     """
@@ -209,7 +229,8 @@ def compare(
 
     A context of the baseline which is missing is a regression, and so is a
     worse verdict (`VERDICT_RANK`), a verified context which is no longer
-    verified and the value of a rule of both which got worse by more than the
+    verified, a context whose rules were met on the studies collected after
+    their fit and no longer are, and the value of a rule of both which got worse by more than the
     tolerance: a percentage by `100 * tolerance` points, a GMFE by the share
     `tolerance`, an AFE by `tolerance` further from 1. A value which is no
     longer evaluable is worse, a new context or rule is none.
@@ -262,6 +283,17 @@ def compare(
                     what="verified",
                     baseline="True",
                     current=str(after["verified"]),
+                )
+            )
+        # a baseline of pkpdsim 0.18 or earlier has no temporal column
+        if _true(before.get("temporal_met")) and not _true(after["temporal_met"]):
+            found.append(
+                Regression(
+                    model=key[0],
+                    context=key[1],
+                    what="temporal_met",
+                    baseline="True",
+                    current=str(after["temporal_met"]),
                 )
             )
         for rule in rules:

@@ -11,7 +11,9 @@ factors of V&V 40 (`FACTORS`) as plain data, written as JSON. The verification
 integration method and checks the builds, for the factors of the verification,
 and runs the battery of the checks of the builds (`run_battery`): mass
 balance, non-negativity, zero dose, steady state, superposition, a second
-simulator, plausibility and rebuild.
+simulator, plausibility and rebuild. The temporal validation (`chronology`)
+splits the decisive points by whether the model collected their study after
+the fit.
 """
 
 from pkpdsim.credibility.assessment import (
@@ -89,6 +91,12 @@ from pkpdsim.credibility.selection import (
     normalize_observable,
     select,
 )
+from pkpdsim.credibility.temporal import (
+    Chronology,
+    TemporalRecord,
+    TemporalStudy,
+    chronology,
+)
 from pkpdsim.credibility.verification import (
     BATTERY_CHECKS,
     Check,
@@ -116,6 +124,7 @@ __all__ = [
     "BatteryStatus",
     "Check",
     "CheckRecord",
+    "Chronology",
     "Consequence",
     "ContextOfUse",
     "ContextResult",
@@ -152,6 +161,8 @@ __all__ = [
     "SelectionError",
     "Selections",
     "Summary",
+    "TemporalRecord",
+    "TemporalStudy",
     "Unclaimed",
     "UnclaimedRecord",
     "Verdict",
@@ -160,6 +171,7 @@ __all__ = [
     "assess",
     "assess_table",
     "check_declaration",
+    "chronology",
     "default_acceptance",
     "describe_selection",
     "evaluate_fits",

@@ -144,9 +144,9 @@ FACTORS: Final[tuple[Factor, ...]] = (
         status=FactorStatus.NOT_ASSESSED,
         statement=(
             "Whether the inputs of the simulations of the evidence are the ones of "
-            "the context of use."
+            "the context of use: the individuals and their variability."
         ),
-        step=3,
+        step=4,
     ),
     Factor(
         id="output_comparison",
