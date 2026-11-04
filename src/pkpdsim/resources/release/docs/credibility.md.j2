@@ -102,6 +102,22 @@ Every adopted fit is refitted once per training study without the study and pred
 {% endfor %}
 
 {% endif %}
+{% if credibility.studies %}
+## Study data
+
+The data of every study with points in the adopted fits, as the simulations read it, and the record of its collection from pkdb_data.
+
+| Study | Points | First collected | Latest collection | Released | pkdb_data | Tables |
+| --- | --- | --- | --- | --- | --- | --- |
+{% for study in credibility.studies %}
+{% if study.recorded %}
+| {{ study.study }} | {{ study.n_points }} | {{ study.collected or "unknown" }}{% if study.dating == "git" %} (git){% endif %} | {{ study.updated or "unknown" }} | {{ study.released or "not released" }}{% if study.pkdb_id %} `{{ study.pkdb_id }}`{% endif %} | {% if study.pkdb_data_commit %}`{{ study.pkdb_data_commit[:12] }}`{% if study.pkdb_data_dirty %} with uncommitted changes{% endif %}{% else %}unknown{% endif %} | {% if study.changed is none %}no digests{% elif study.changed %}changed: {{ study.changed | join(", ") | cell }}{% else %}{{ study.n_tables }} as collected{% endif %} |
+{% else %}
+| {{ study.study }} | {{ study.n_points }} | {{ "no record of the collection" if study.folder else "no data folder of the study" }} | | | | |
+{% endif %}
+{% endfor %}
+
+{% endif %}
 {% if credibility.battery %}
 ## Battery of the builds
 

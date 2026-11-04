@@ -35,6 +35,7 @@ from pkpdsim.data import (
     study_format,
     study_record_path,
     study_tables,
+    table_digests,
     write_study_tables,
 )
 
@@ -144,8 +145,17 @@ def test_collect_tsv_files(source_dir: Path, tmp_path: Path) -> None:
     assert tree(target_dir) == {
         "Boulton1996a/.Boulton1996a_Fig1.tsv",
         "Boulton1996a/.Boulton1996a_Tab1.tsv",
+        "Boulton1996a/.Boulton1996a_study.json",
         "Hindle1992/.Hindle1992_Fig2.tsv",
+        "Hindle1992/.Hindle1992_study.json",
     }
+    # a copied study of format 1 is recorded as well, without a digest
+    record = read_study_record(target_dir / "Hindle1992")
+    assert record is not None
+    assert (record.collected, record.dating) == (date.today(), "collection")
+    assert record.source_digest is None
+    assert list(record.tables) == [".Hindle1992_Fig2.tsv"]
+    assert record.changed_tables(target_dir / "Hindle1992") == []
     # a study without data gets no folder
     assert not (target_dir / "Ward2000").exists()
     copy = target_dir / "Hindle1992" / ".Hindle1992_Fig2.tsv"
@@ -160,7 +170,10 @@ def test_collect_tsv_files_filter(source_dir: Path, tmp_path: Path) -> None:
         target_dir=target_dir,
         filter_study=lambda name: name.startswith("Hindle"),
     )
-    assert tree(target_dir) == {"Hindle1992/.Hindle1992_Fig2.tsv"}
+    assert tree(target_dir) == {
+        "Hindle1992/.Hindle1992_Fig2.tsv",
+        "Hindle1992/.Hindle1992_study.json",
+    }
 
 
 def test_collect_tsv_files_again(source_dir: Path, tmp_path: Path) -> None:
@@ -861,31 +874,94 @@ def test_a_scatter_of_partly_repeated_points_is_a_warning(tmp_path: Path) -> Non
 
 
 def test_the_record_of_a_new_study(tmp_path: Path) -> None:
-    """A new study is recorded with the day of its collection and its release."""
+    """A new study is recorded with the day of its collection and its source."""
     paths = write_study_tables(PATEL1984, tmp_path)
     folder = tmp_path / "Patel1984"
     assert paths[-1] == study_record_path(folder)
     assert paths[-1].name == ".Patel1984_study.json"
     record = read_study_record(folder)
-    assert record == StudyRecord(
-        study="Patel1984",
-        collected=date.today(),
-        released=date(2024, 3, 26),
-        pkdb_id="PKDB00759",
+    assert record is not None
+    assert record.study == "Patel1984"
+    assert (record.collected, record.dating, record.dating_commit) == (
+        date.today(),
+        "collection",
+        None,
     )
+    assert record.updated == date.today()
+    assert (record.released, record.pkdb_id) == (date(2024, 3, 26), "PKDB00759")
+    assert record.source_digest == prepare_study(PATEL1984).source_digest
+    # the copy of pkdb_data of the tests lies in the repository of pkpdsim
+    assert record.pkdb_data_commit is not None
+    assert len(record.pkdb_data_commit) == 40
+    assert set(record.tables) == {path.name for path in paths[:-1]}
+    assert set(record.versions) == {"pkpdsim", "pkdb"}
     assert StudyRecord.from_dict(record.to_dict()) == record
+
+
+def test_a_study_outside_of_a_git_checkout(tmp_path: Path) -> None:
+    """A study folder outside of git has no commit and no dirty state."""
+    study = tmp_path / "source" / "Patel1984"
+    shutil.copytree(PATEL1984, study)
+    write_study_tables(study, tmp_path / "data")
+    record = read_study_record(tmp_path / "data" / "Patel1984")
+    assert record is not None
+    assert (record.pkdb_data_commit, record.pkdb_data_dirty) == (None, None)
+
+
+def test_a_table_changed_after_the_collection(tmp_path: Path) -> None:
+    """The record finds a table which was changed, removed or added by hand."""
+    write_study_tables(PATEL1984, tmp_path)
+    folder = tmp_path / "Patel1984"
+    record = read_study_record(folder)
+    assert record is not None
+    assert record.changed_tables(folder) == []
+    (folder / ".Patel1984_Fig1.tsv").write_text("edited", encoding="utf-8")
+    (folder / ".Patel1984_Tab2.tsv").unlink()
+    (folder / ".Patel1984_Extra.tsv").write_text("", encoding="utf-8")
+    assert record.changed_tables(folder) == [
+        ".Patel1984_Fig1.tsv",
+        "-.Patel1984_Tab2.tsv",
+        "+.Patel1984_Extra.tsv",
+    ]
+    assert table_digests(folder).keys() == {
+        ".Patel1984_Extra.tsv",
+        *(name for name in record.tables if name != ".Patel1984_Tab2.tsv"),
+    }
+    # a record without the digests of its tables cannot tell
+    assert StudyRecord(study="A", collected=None).changed_tables(folder) is None
+
+
+def test_the_dating_of_a_record() -> None:
+    """A day needs a dating, and the dating is one of the known."""
+    with pytest.raises(ValueError, match="needs a dating"):
+        StudyRecord(study="A", collected=date(2020, 1, 2))
+    with pytest.raises(ValueError, match="needs a dating"):
+        StudyRecord(study="A", collected=None, dating="git")
+    with pytest.raises(ValueError, match="is none of collection, git"):
+        StudyRecord(study="A", collected=date(2020, 1, 2), dating="guess")
+    # a record of the first form has a day and no dating
+    read = StudyRecord.from_dict({"study": "A", "collected": "2020-01-02"})
+    assert read.dating == "collection"
+    assert read.tables == {}
 
 
 def test_a_later_collection_keeps_the_date(tmp_path: Path) -> None:
     """The day of the first collection stays, the release is updated."""
     folder = tmp_path / "Patel1984"
     folder.mkdir()
-    first = StudyRecord(study="Patel1984", collected=date(2020, 1, 2))
+    first = StudyRecord(
+        study="Patel1984",
+        collected=date(2020, 1, 2),
+        dating="git",
+        dating_commit="abc",
+    )
     study_record_path(folder).write_text(json.dumps(first.to_dict()), encoding="utf-8")
     write_study_tables(PATEL1984, tmp_path)
     record = read_study_record(folder)
     assert record is not None
     assert record.collected == date(2020, 1, 2)
+    assert (record.dating, record.dating_commit) == ("git", "abc")
+    assert record.updated == date.today()
     assert record.pkdb_id == "PKDB00759"
 
 
@@ -899,7 +975,8 @@ def test_tables_without_a_record_were_collected_on_an_unknown_day(
     write_study_tables(PATEL1984, tmp_path)
     record = read_study_record(folder)
     assert record is not None
-    assert record.collected is None
+    assert (record.collected, record.dating) == (None, None)
+    assert record.updated == date.today()
     # and stays without one
     write_study_tables(PATEL1984, tmp_path)
     assert read_study_record(folder) == record

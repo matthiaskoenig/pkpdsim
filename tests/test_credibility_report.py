@@ -31,6 +31,7 @@ FILES = {
     "ratios.tsv",
     "cross_validation.tsv",
     "temporal.tsv",
+    "studies.tsv",
     "battery.tsv",
     "fates.tsv",
     "index.html",

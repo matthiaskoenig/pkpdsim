@@ -26,6 +26,11 @@
 - `temporal.tsv`: one row per context of use and study the model collected
   after the fit of its decisive points: the fit, the day of the fit, of the
   collection and of the release in PK-DB, the points and the evaluable points.
+- `studies.tsv`: one row per study with points in the adopted fits, the
+  provenance of its data: the folder, the fits and points, the record of its
+  collection (the days of the first and the latest collection and how the
+  first is known, the release in PK-DB, the source digest, the commit of
+  pkdb_data) and the tables which differ from the record.
 - `cross_validation.tsv`: one row per cross-validated adopted fit and held-out
   study: its points, the GMFE and the share within 2-fold of the held-out and
   of the fitted predictions, the cost of the refit.
@@ -68,6 +73,7 @@ from pkpdsim.credibility.assessment import (
 )
 from pkpdsim.credibility.ratios import RATIO_COLUMNS
 from pkpdsim.credibility.risk import DEFAULT_MIN_POINTS
+from pkpdsim.credibility.studies import STUDY_COLUMNS
 from pkpdsim.credibility.temporal import TEMPORAL_COLUMNS
 from pkpdsim.credibility.verification import NUMERICAL_CHECKS, Check
 
@@ -93,6 +99,7 @@ __all__ = [
     "quantities_table",
     "ratios_table",
     "render_html",
+    "studies_table",
     "temporal_table",
     "verification_table",
     "write_outputs",
@@ -393,6 +400,29 @@ def temporal_table(assessment: CredibilityAssessment) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=["context", *TEMPORAL_COLUMNS])
 
 
+def studies_table(assessment: CredibilityAssessment) -> pd.DataFrame:
+    """Get one row per study with points in the adopted fits.
+
+    Args:
+        assessment: the assessment.
+
+    Returns:
+        The columns of `STUDY_COLUMNS`, see `StudyData`; the fits and the
+        changed tables joined by `;`.
+    """
+    rows = [
+        {
+            **study,
+            "fits": ";".join(study["fits"]),
+            "changed": (
+                None if study["changed"] is None else ";".join(study["changed"])
+            ),
+        }
+        for study in assessment.studies
+    ]
+    return pd.DataFrame(rows, columns=list(STUDY_COLUMNS))
+
+
 def cross_validation_table(assessment: CredibilityAssessment) -> pd.DataFrame:
     """Get one row per cross-validated fit and held-out study.
 
@@ -579,6 +609,7 @@ def write_outputs(assessment: CredibilityAssessment, output_dir: Path) -> Path:
         "quantities.tsv": _tsv(quantities_table(assessment)),
         "ratios.tsv": _tsv(ratios_table(assessment)),
         "temporal.tsv": _tsv(temporal_table(assessment)),
+        "studies.tsv": _tsv(studies_table(assessment)),
         "cross_validation.tsv": _tsv(cross_validation_table(assessment)),
         "verification.tsv": _tsv(verification_table(assessment)),
         "battery.tsv": _tsv(battery_table(assessment)),
