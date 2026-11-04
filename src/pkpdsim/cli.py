@@ -1048,6 +1048,27 @@ def credibility_command(model: PKPDModel, args: Sequence[str] | None = None) -> 
         "fixed for review",
     )
     p.add_argument(
+        "--uncertainty",
+        action="store_true",
+        help="propagate the parameter uncertainty of the adopted fits to the "
+        "decisive predictions: every fit is evaluated at the draws of its "
+        "parameters, the factor model inputs is then assessed",
+    )
+    p.add_argument(
+        "--draws",
+        type=int,
+        default=None,
+        metavar="N",
+        help="the draws of every fit of --uncertainty (default 128)",
+    )
+    p.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        metavar="SEED",
+        help="the seed of the draws of --uncertainty (default 1234)",
+    )
+    p.add_argument(
         "--source-commit",
         metavar="SHA",
         help="the commit of the source repository of the model, recorded in the "
@@ -1061,6 +1082,24 @@ def credibility_command(model: PKPDModel, args: Sequence[str] | None = None) -> 
         p.error("--no-verification is an option of an assessment, not of a record")
     if options.from_json is not None and options.lock:
         p.error("--lock is an option of an assessment, not of a record")
+    if options.from_json is not None and options.uncertainty:
+        p.error("--uncertainty is an option of an assessment, not of a record")
+    if not options.uncertainty and (
+        options.draws is not None or options.seed is not None
+    ):
+        p.error("--draws and --seed are options of --uncertainty")
+    uncertainty = None
+    if options.uncertainty:
+        from pkpdsim.credibility.uncertainty import UncertaintySettings
+
+        defaults = UncertaintySettings()
+        try:
+            uncertainty = UncertaintySettings(
+                draws=defaults.draws if options.draws is None else options.draws,
+                seed=defaults.seed if options.seed is None else options.seed,
+            )
+        except ValueError as err:
+            p.error(str(err))
     try:
         assessment = (
             assess(
@@ -1068,6 +1107,7 @@ def credibility_command(model: PKPDModel, args: Sequence[str] | None = None) -> 
                 options.source_commit,
                 verification=not options.no_verification,
                 lock=options.lock,
+                uncertainty=uncertainty,
             )
             if options.from_json is None
             else _read_assessment(options.from_json)

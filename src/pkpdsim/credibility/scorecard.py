@@ -29,6 +29,7 @@ from pkpdsim.credibility.report import RECORD
 
 if TYPE_CHECKING:
     from pkpdsim.credibility.temporal import TemporalRecord
+    from pkpdsim.credibility.uncertainty import UncertaintyRecord
 
 __all__ = [
     "QUALIFICATION_COLUMNS",
@@ -56,6 +57,8 @@ SCORECARD_COLUMNS: Final = (
     "failed_checks",
     "temporal_points",
     "temporal_met",
+    "uncertainty_robust",
+    "band_fold",
 )
 #: the columns of the qualification
 QUALIFICATION_COLUMNS: Final = (
@@ -134,8 +137,12 @@ def scorecard(records: Mapping[str, CredibilityAssessment]) -> pd.DataFrame:
         comma separated, `temporal_points` the evaluable points of the studies
         collected after their fit and `temporal_met` whether every rule is met
         on them, both empty without a temporal record, `temporal_met` also
-        without an evaluable rule) and per acceptance rule its value, the rule
-        of the ratio pairs `Guest` included.
+        without an evaluable rule, `uncertainty_robust` whether every rule is
+        met with the threshold probability over the parameter draws (False
+        if one is shown below it, empty if one is undecided or without the
+        propagation) and `band_fold` the largest median fold width of the
+        prediction bands of the quantities) and per acceptance rule its value,
+        the rule of the ratio pairs `Guest` included.
     """
     rows: list[dict[str, object]] = []
     for model, assessment in records.items():
@@ -157,6 +164,8 @@ def scorecard(records: Mapping[str, CredibilityAssessment]) -> pd.DataFrame:
                     None if c.temporal is None else c.temporal["n_evaluable"]
                 ),
                 "temporal_met": _temporal_met(c.temporal),
+                "uncertainty_robust": _robust(c.uncertainty),
+                "band_fold": _band_fold(c.uncertainty),
             }
             rules = [
                 *c.acceptance,
@@ -179,6 +188,29 @@ def _temporal_met(temporal: TemporalRecord | None) -> bool | None:
     return all(results) if results else None
 
 
+def _robust(uncertainty: UncertaintyRecord | None) -> bool | None:
+    """Get whether every rule is met robustly over the parameter draws.
+
+    Returns:
+        True if every rule is accepted, False if one is rejected, `None`
+        without the propagation, a rule or with an undecided one.
+    """
+    if uncertainty is None or not uncertainty["rules"]:
+        return None
+    decisions = {r["decision"] for r in uncertainty["rules"]}
+    if "rejected" in decisions:
+        return False
+    return True if decisions == {"accepted"} else None
+
+
+def _band_fold(uncertainty: UncertaintyRecord | None) -> float | None:
+    """Get the largest band fold of the quantities, `None` without."""
+    if uncertainty is None:
+        return None
+    folds = [q["band_fold"] for q in uncertainty["quantities"] if q["band_fold"]]
+    return max(folds) if folds else None
+
+
 @dataclass(frozen=True, kw_only=True)
 class Regression:
     """A context of use of a model which got worse than its baseline.
@@ -187,7 +219,8 @@ class Regression:
         model: the model.
         context: the context of use.
         what: what got worse: `missing`, `verdict`, `verified`,
-            `temporal_met` or the name of an acceptance rule.
+            `temporal_met`, `uncertainty_robust` or the name of an acceptance
+            rule.
         baseline: the value of the baseline, as text.
         current: the current value, as text.
     """
@@ -294,6 +327,19 @@ def compare(
                     what="temporal_met",
                     baseline="True",
                     current=str(after["temporal_met"]),
+                )
+            )
+        # a baseline of pkpdsim 0.18 or earlier has no uncertainty column
+        if _true(before.get("uncertainty_robust")) and not _true(
+            after["uncertainty_robust"]
+        ):
+            found.append(
+                Regression(
+                    model=key[0],
+                    context=key[1],
+                    what="uncertainty_robust",
+                    baseline="True",
+                    current=str(after["uncertainty_robust"]),
                 )
             )
         for rule in rules:

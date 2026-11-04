@@ -26,6 +26,14 @@
 - `temporal.tsv`: one row per context of use and study the model collected
   after the fit of its decisive points: the fit, the day of the fit, of the
   collection and of the release in PK-DB, the points and the evaluable points.
+- `uncertainty.tsv`: one row per context of use and acceptance rule over the
+  parameter draws of the adopted fits, empty without the propagation: the
+  probability that the rule is met with its anytime-valid sequence, the
+  decision of the statement at the threshold, the draws and the failed and
+  needed draws.
+- `uncertainty_quantities.tsv`: one row per context of use and quantity of
+  interest which is no ratio: the points, the median fold width of the
+  prediction bands and their coverage of the observations.
 - `studies.tsv`: one row per study with points in the adopted fits, the
   provenance of its data: the folder, the fits and points, the record of its
   collection (the days of the first and the latest collection and how the
@@ -101,6 +109,8 @@ __all__ = [
     "render_html",
     "studies_table",
     "temporal_table",
+    "uncertainty_quantities_table",
+    "uncertainty_table",
     "verification_table",
     "write_outputs",
 ]
@@ -400,6 +410,73 @@ def temporal_table(assessment: CredibilityAssessment) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=["context", *TEMPORAL_COLUMNS])
 
 
+#: the columns of `uncertainty.tsv`
+UNCERTAINTY_COLUMNS = (
+    "context",
+    "rule",
+    "limit",
+    "estimate",
+    "low",
+    "high",
+    "threshold",
+    "decision",
+    "n",
+    "n_failed",
+    "n_needed",
+)
+#: the columns of `uncertainty_quantities.tsv`
+UNCERTAINTY_QUANTITY_COLUMNS = (
+    "context",
+    "quantity",
+    "n_points",
+    "band_fold",
+    "coverage",
+)
+
+
+def uncertainty_table(assessment: CredibilityAssessment) -> pd.DataFrame:
+    """Get one row per context of use and rule over the parameter draws.
+
+    Args:
+        assessment: the assessment.
+
+    Returns:
+        The columns of `UNCERTAINTY_COLUMNS`, see `RuleProbability`; no rows
+        without the propagation.
+    """
+    rows = [
+        {
+            "context": c.id,
+            "rule": r["name"],
+            "threshold": c.uncertainty["threshold"],
+            **{k: v for k, v in r.items() if k != "name"},
+        }
+        for c in assessment.contexts
+        if c.uncertainty is not None
+        for r in c.uncertainty["rules"]
+    ]
+    return pd.DataFrame(rows, columns=list(UNCERTAINTY_COLUMNS))
+
+
+def uncertainty_quantities_table(assessment: CredibilityAssessment) -> pd.DataFrame:
+    """Get one row per context of use and quantity with its prediction band.
+
+    Args:
+        assessment: the assessment.
+
+    Returns:
+        The columns of `UNCERTAINTY_QUANTITY_COLUMNS`, see `QuantityBand`; no
+        rows without the propagation.
+    """
+    rows = [
+        {"context": c.id, **q}
+        for c in assessment.contexts
+        if c.uncertainty is not None
+        for q in c.uncertainty["quantities"]
+    ]
+    return pd.DataFrame(rows, columns=list(UNCERTAINTY_QUANTITY_COLUMNS))
+
+
 def studies_table(assessment: CredibilityAssessment) -> pd.DataFrame:
     """Get one row per study with points in the adopted fits.
 
@@ -499,9 +576,9 @@ def fates_table(assessment: CredibilityAssessment) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=list(FATE_COLUMNS))
 
 
-def _number(value: float) -> str:
+def _number(value: float | None) -> str:
     """Show a metric with three significant digits, `n/a` if not evaluable."""
-    if math.isnan(value):
+    if value is None or math.isnan(value):
         return "n/a"
     return f"{value:.3g}" if abs(value) < 1000 else f"{value:.0f}"
 
@@ -610,6 +687,8 @@ def write_outputs(assessment: CredibilityAssessment, output_dir: Path) -> Path:
         "ratios.tsv": _tsv(ratios_table(assessment)),
         "temporal.tsv": _tsv(temporal_table(assessment)),
         "studies.tsv": _tsv(studies_table(assessment)),
+        "uncertainty.tsv": _tsv(uncertainty_table(assessment)),
+        "uncertainty_quantities.tsv": _tsv(uncertainty_quantities_table(assessment)),
         "cross_validation.tsv": _tsv(cross_validation_table(assessment)),
         "verification.tsv": _tsv(verification_table(assessment)),
         "battery.tsv": _tsv(battery_table(assessment)),

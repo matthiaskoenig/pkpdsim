@@ -14,7 +14,10 @@ balance, non-negativity, zero dose, steady state, superposition, a second
 simulator, plausibility and rebuild. The temporal validation (`chronology`)
 splits the decisive points by whether the model collected their study after
 the fit, and the provenance of the study data (`study_data`) names the
-collection every study with points was written by.
+collection every study with points was written by. The parameter
+uncertainty of the adopted fits is propagated to the decisive predictions
+(`propagate`, `UncertaintySettings`), the probability that the acceptance is
+met over the draws of the parameters.
 """
 
 from pkpdsim.credibility.assessment import (
@@ -99,6 +102,12 @@ from pkpdsim.credibility.temporal import (
     TemporalStudy,
     chronology,
 )
+from pkpdsim.credibility.uncertainty import (
+    Propagation,
+    UncertaintyRecord,
+    UncertaintySettings,
+    propagate,
+)
 from pkpdsim.credibility.verification import (
     BATTERY_CHECKS,
     Check,
@@ -153,6 +162,7 @@ __all__ = [
     "LockMismatchError",
     "MappingLookup",
     "MaxGmfe",
+    "Propagation",
     "Provenance",
     "QuantityOfInterest",
     "QuantityRecord",
@@ -166,6 +176,8 @@ __all__ = [
     "Summary",
     "TemporalRecord",
     "TemporalStudy",
+    "UncertaintyRecord",
+    "UncertaintySettings",
     "Unclaimed",
     "UnclaimedRecord",
     "Verdict",
@@ -184,6 +196,7 @@ __all__ = [
     "mapping_table",
     "model_risk",
     "normalize_observable",
+    "propagate",
     "ratio_pairs",
     "recorded_kinds",
     "run_battery",
