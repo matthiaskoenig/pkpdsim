@@ -4,7 +4,9 @@ Every factor is reported for every context of use, also the ones the
 assessment does not assess, so a reader sees what is missing: `assessed` from
 the evidence of the context, `platform` for a statement which holds for the
 whole stack and `not_assessed` with the step of the credibility work which will
-assess it.
+assess it. The factors of the verification (discretization error, numerical
+solver error, use error) are assessed when an assessment is verified, see
+`pkpdsim.credibility.verification`.
 """
 
 from __future__ import annotations
@@ -94,14 +96,17 @@ FACTORS: Final[tuple[Factor, ...]] = (
         id="numerical_solver_error",
         name="Numerical solver error",
         status=FactorStatus.NOT_ASSESSED,
-        statement="The results against a second simulator and the mass balance.",
+        statement="The results with a second integration method of the integrator.",
         step=2,
     ),
     Factor(
         id="use_error",
         name="Use error",
         status=FactorStatus.NOT_ASSESSED,
-        statement="The checks of the setup of the simulations, e.g. doses and units.",
+        statement=(
+            "The validity and the units of the builds and the finite predictions "
+            "of the evidence."
+        ),
         step=2,
     ),
     Factor(

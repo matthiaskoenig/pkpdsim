@@ -958,7 +958,9 @@ def credibility_command(model: PKPDModel, args: Sequence[str] | None = None) -> 
 
     The adopted fits are evaluated on the current model and data
     (`pkpdsim.credibility.assess`), `--from-json` instead reads a written
-    record without evaluating a fit. `--source-commit` records the commit of
+    record without evaluating a fit. The decisive predictions are verified
+    (`pkpdsim.credibility.verification`) unless `--no-verification` is given.
+    `--source-commit` records the commit of
     the source repository in the provenance, which a release passes, since it
     assesses the model in its release repository. The outputs replace an
     earlier assessment in the directory, see
@@ -976,8 +978,9 @@ def credibility_command(model: PKPDModel, args: Sequence[str] | None = None) -> 
         prog=f"run_credibility {model.package}",
         description=(
             f"Assess the contexts of use of the {model.title} against its "
-            "adopted fits: the record credibility.json, the tables contexts.tsv, "
-            "evidence.tsv and domain.tsv and the report index.html."
+            "adopted fits, with the verification of the decisive predictions: "
+            "the record credibility.json, the tables contexts.tsv, evidence.tsv, "
+            "domain.tsv and verification.tsv and the report index.html."
         ),
     )
     p.add_argument(
@@ -996,6 +999,13 @@ def credibility_command(model: PKPDModel, args: Sequence[str] | None = None) -> 
         "evaluating the fits",
     )
     p.add_argument(
+        "--no-verification",
+        action="store_true",
+        help="do not verify the decisive predictions with tightened tolerances, "
+        "a second integration method and the checks of the builds; the factors "
+        "of the verification are then not assessed",
+    )
+    p.add_argument(
         "--source-commit",
         metavar="SHA",
         help="the commit of the source repository of the model, recorded in the "
@@ -1005,9 +1015,15 @@ def credibility_command(model: PKPDModel, args: Sequence[str] | None = None) -> 
     options = p.parse_args(sys.argv[1:] if args is None else list(args))
     if options.from_json is not None and options.source_commit is not None:
         p.error("--source-commit is the provenance of an assessment, not of a record")
+    if options.from_json is not None and options.no_verification:
+        p.error("--no-verification is an option of an assessment, not of a record")
     try:
         assessment = (
-            assess(model, options.source_commit)
+            assess(
+                model,
+                options.source_commit,
+                verification=not options.no_verification,
+            )
             if options.from_json is None
             else _read_assessment(options.from_json)
         )

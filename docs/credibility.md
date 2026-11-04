@@ -220,16 +220,18 @@ Per COU, on the union of its validation evidence (each point once; the calibrati
 | `supported_with_extrapolation` | the acceptance is met on at least the minimum of evaluable points, some claimed value or quantity is not covered, and the COU has an `extrapolation` text which says why the claim holds; a C4 COU, which extrapolates by definition, is never plainly `supported` but at best this |
 | `not_supported` | an acceptance rule is not met |
 | `insufficient_evidence` | no evidence that can be evaluated, fewer evaluable points than the minimum, or claimed values or quantities not covered and no `extrapolation` text |
+| `not_verified` | a check of the verification failed: the decisive predictions change with tighter tolerances or another integration method, or the setup has a problem, so the comparison with the data is not to be trusted |
 
 The verdict is decided in this order, the first step which applies decides:
 
 1. no decisive point: `insufficient_evidence`;
-2. an acceptance rule not met: `not_supported` (a failure on few points is still a failure);
-3. an acceptance rule not evaluable: `insufficient_evidence`;
-4. fewer evaluable points than `minimum_points`: `insufficient_evidence`;
-5. every claimed value and every quantity which is no ratio covered: `supported` (C4: `supported_with_extrapolation`);
-6. an `extrapolation` text: `supported_with_extrapolation`;
-7. else `insufficient_evidence`.
+2. a failed check of the verification: `not_verified` (see [Verification](#verification));
+3. an acceptance rule not met: `not_supported` (a failure on few points is still a failure);
+4. an acceptance rule not evaluable: `insufficient_evidence`;
+5. fewer evaluable points than `minimum_points`: `insufficient_evidence`;
+6. every claimed value and every quantity which is no ratio covered: `supported` (C4: `supported_with_extrapolation`);
+7. an `extrapolation` text: `supported_with_extrapolation`;
+8. else `insufficient_evidence`.
 
 Coverage counts only the points the criteria can evaluate: a fold error needs a finite `DV` and `IPRED`, both greater than 0. The numbers are reported as `n_decisive` (the points of the deciding evidence), `n_evaluable` and `minimum_points`; a rule without an evaluable point has the value `NaN` and `met` of `None`, is not evaluable, and gives `insufficient_evidence`, never `supported`. A `not_supported` verdict is a finding to keep and explain, not a reason to loosen the acceptance. A `supported` C1 COU rests on the data the model was fitted to, so the console, the report and the release page show next to every verdict what decided it (decided on: calibration or validation).
 
@@ -237,28 +239,44 @@ Domain coverage is per claimed (field, value): `validated` when validation point
 
 Quantity coverage is per quantity of interest which is no ratio: `covered` when an evaluable decisive point of its observable lies inside the claimed domain, i.e. for every claimed field of the metadata the value of the point is one of the claimed values, `uncovered` otherwise. A quantity validated only outside the claim, e.g. the PT ratio (an observable, no ratio between arms) validated only by a fed study for a fasted claim, is uncovered, although every claimed value may be validated by the points of other quantities. A ratio quantity has no coverage, it is assessed in step 3. The coverage is computed for every level, C4 included, and the coverage of combinations of values is not assessed (each claimed value on its own).
 
+## Verification
+
+A verdict compares the predictions of the adopted fits (`IPRED`) with the data. Whether these numbers are the solution of the model, and not of the settings of the integrator or of a broken setup, are three factors of V&V 40: the discretization error, the numerical solver error and the use error. `run_credibility` verifies the decisive predictions of every COU with one check per factor (`pkpdsim.credibility.verification`):
+
+| check | factor | what is compared |
+|---|---|---|
+| `tolerances` | discretization error | every adopted fit evaluated again at its reference parameters with the absolute and the relative tolerance of its settings divided by 100 (`TIGHTENING`; every kind and override of an `AbsoluteTolerance`) |
+| `integrator` | numerical solver error | the same at the tightened tolerances with the BDF of CVODE of at most order 2 (`SECOND_METHOD_ORDER`) instead of order 5, a second integration method: another formula with its own local error, which stays stable on a stiff model |
+| `setup` | use error | every build of the model is valid SBML with consistent units (the consistency checks of libsbml with the units, every issue of severity warning or above) and every decisive prediction is finite |
+
+The difference of a prediction is relative, `|alt - ref| / max(|ref|, |alt|, floor)`, with the floor `1e-6` (`SCALE_FLOOR`) of the largest reference prediction of its mapping: a difference below a millionth of the peak of the curve is none, and a point at zero compares with the curve. A numerical check of a COU passes when the largest difference of its decisive predictions is at most `0.01` (`LIMIT`, more than an order below the narrowest default criterion, 1.5-fold and a GMFE of 1.3) and no acceptance rule changes its result with the alternative predictions; a prediction which is finite in the reference and not in the alternative is an infinite difference, and an evaluation of a fit which fails is a failed check with its message. A failed check makes the verdict `not_verified`; the three factors are `assessed` with the result as their statement.
+
+The checks run with every assessment and evaluate every adopted fit twice more; `--no-verification` skips them for a quick look, the three factors are then `not_assessed` and the verdicts are those of the comparison alone. The non-stiff method of CVODE (Adams-Moulton) is no second method for these models: on the stiff PBPK models it takes too many steps (hctz: `CV_TOO_MUCH_WORK` on its long simulations), while the BDF of order 2 is A-stable. What the verification does not do: a second simulator (the experiments of sbmlsim run on roadrunner), the explicit Runge-Kutta integrator of roadrunner (sbmlsim sets the settings of CVODE only, and an explicit method is no method for a stiff model), a mass balance per model (the equations of the PBPK library are mass balanced by its tests, a balance per model needs the accounting of every source and elimination) and a check of the doses of the simulations against the interventions of the data (the link of a simulation to an intervention is not declared).
+
 ## Running and reading the report
 
 ```bash
 run_credibility pkdb_models.models.hctz
+run_credibility pkdb_models.models.hctz --no-verification
 run_credibility pkdb_models.models.hctz --from-json results/credibility/credibility.json
 ```
 
-The console shows a table of the COUs, their verdicts, what decided them and the evaluable points as `evaluable/minimum`; see [Commands](commands.md). `index.html` of the report (one page, no network) has:
+The console shows a table of the COUs, their verdicts, what decided them and the evaluable points as `evaluable/minimum`, and below it how many COUs are verified; see [Commands](commands.md). `index.html` of the report (one page, no network) has:
 
 - the **overview**: the COUs with level, risk, verdict (in words and in a colour), the role of the evidence which decided it and the decisive and evaluable points with the minimum, and the limitations of the model;
-- a **section per COU**: question, rationale, the evaluable points with their minimum, quantities with their coverage and points (a ratio marked as assessed in step 3), the claimed domain with its coverage and the statement (not assessed), the evidence table (role, points, mappings, studies, GMFE, AFE, the percentages of the criteria, the points removed by limitations and outliers), the acceptance table (value, limit, met), the table of the credibility factors and the extrapolation text;
+- a **section per COU**: question, rationale, the evaluable points with their minimum, quantities with their coverage and points (a ratio marked as assessed in step 3), the claimed domain with its coverage and the statement (not assessed), the evidence table (role, points, mappings, studies, GMFE, AFE, the percentages of the criteria, the points removed by limitations and outliers), the acceptance table (value, limit, met), the checks of the verification (points, largest difference and its point, whether the acceptance changed, the result and the problems), the table of the credibility factors and the extrapolation text;
 - the **limitations**: their metrics, explicitly outside of any acceptance;
 - the **unclaimed validation data**: the validation points per fit which no evidence and no limitation selects (held-out data which answers no declared question);
+- the **verification**: the settings of the integrator of every adopted fit and of its alternatives, and the issues of the builds;
 - the **provenance**: the versions of pkpdsim, sbmlsim, sbmlutils and libroadrunner, the commit of the model repository and whether the folder of the model had changes (`git status` of the model folder), the adopted fits and the date. A release passes the commit of its source repository (`--source-commit`), the assessment then records it and leaves the dirty state unknown.
 
-The factors of V&V 40 are listed per COU with a status: `assessed` (output comparison, test samples, test conditions and the relevance of the validation activities, from the metrics, the evidence and the coverage), `platform` (a statement which holds for the whole stack, e.g. the code verification by the SBML Test Suite and the PEtab suites of sbmlsim) or `not_assessed` with the step which will assess it, so a reader sees what is missing. Step 1 checks that every claimed quantity which is no ratio has decisive points in the claimed domain (the quantity coverage, under the relevance of the validation activities); whether the quantities answer the question, e.g. the ratios of a special population, is the relevance of the quantities of interest of step 3.
+The factors of V&V 40 are listed per COU with a status: `assessed` (output comparison, test samples, test conditions and the relevance of the validation activities, from the metrics, the evidence and the coverage; the discretization error, the numerical solver error and the use error from the verification), `platform` (a statement which holds for the whole stack, e.g. the code verification by the SBML Test Suite and the PEtab suites of sbmlsim) or `not_assessed` with the step which will assess it, so a reader sees what is missing. Step 1 checks that every claimed quantity which is no ratio has decisive points in the claimed domain (the quantity coverage, under the relevance of the validation activities); whether the quantities answer the question, e.g. the ratios of a special population, is the relevance of the quantities of interest of step 3.
 
-The record `credibility.json` holds everything, and the tables `contexts.tsv`, `evidence.tsv`, `domain.tsv` and `quantities.tsv` are one row per COU, per COU and evidence, per COU, field and value and per COU and quantity. `contexts.tsv` has the decisive and the evaluable points, the minimum (`minimum_points`) and the uncovered quantities (`uncovered_quantities`, the ids comma separated, empty without); `quantities.tsv` has the columns `context`, `quantity`, `description`, `ratio`, `coverage` (empty for a ratio) and `n_points`. A record written by pkpdsim 0.17 is still read (`--from-json`): it has no minimum (read as 0) and no quantity coverage. A release of a model repository carries the assessment, see [Release of a model repository](release.md).
+The record `credibility.json` holds everything, and the tables `contexts.tsv`, `evidence.tsv`, `domain.tsv`, `quantities.tsv` and `verification.tsv` are one row per COU, per COU and evidence, per COU, field and value, per COU and quantity and per COU and check. `contexts.tsv` has the decisive and the evaluable points, the minimum (`minimum_points`), the uncovered quantities (`uncovered_quantities`, the ids comma separated, empty without) and whether the COU is verified (`verified`, empty without verification); `quantities.tsv` has the columns `context`, `quantity`, `description`, `ratio`, `coverage` (empty for a ratio) and `n_points`; `verification.tsv` the columns `context`, `check`, `factor`, `n`, `max_difference`, `at`, `acceptance_changed`, `passed` and `problems` (joined by `; `), no rows without verification. A record written by pkpdsim 0.17 is still read (`--from-json`): it has no minimum (read as 0), no quantity coverage and no verification; a record of 0.18 has no verification. A release of a model repository carries the assessment, see [Release of a model repository](release.md).
 
 ## What the later steps add
 
-Step 1 is this page. The next steps plug into the same declarations and the same report: verification checks (mass balance, convergence of the tolerances, cross-simulator comparison) for the factors shown as not assessed; ratio metrics between arms (impaired over healthy), leave-one-study-out cross-validation and the qualification of the platform across models, which a C3 and a C4 COU need; and the uncertainty and sensitivity of the quantities of interest.
+Steps 1 and 2 (the verification) are this page. The next steps plug into the same declarations and the same report: ratio metrics between arms (impaired over healthy), leave-one-study-out cross-validation and the qualification of the platform across models, which a C3 and a C4 COU need; and the uncertainty and sensitivity of the quantities of interest.
 
 ## References
 

@@ -17,7 +17,8 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable, Iterator, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Final
 
 import pandas as pd
@@ -33,6 +34,7 @@ if TYPE_CHECKING:
 
     from sbmlsim.experiment import SimulationExperiment
     from sbmlsim.fit.cli import FitDefinition
+    from sbmlsim.fit.report import FitReport
 
     from pkpdsim.model import PKPDModel
 
@@ -79,11 +81,17 @@ class FitTable:
         lookup: the fit mapping of an experiment and a key.
         recorded_kinds: the kinds the records of the adopted fits store, by
             the subset of the fit, the experiment and the key of the mapping.
+        reports: the reports the data points were evaluated with, by the
+            subset of the fit (`evaluate_fits`), which the verification
+            evaluates again with other settings; none for `mapping_table`.
     """
 
     table: pd.DataFrame
     lookup: MappingLookup
     recorded_kinds: Kinds
+    reports: Mapping[str, FitReport] = field(
+        default_factory=lambda: MappingProxyType({})
+    )
 
 
 class KindMismatchError(ValueError):
@@ -254,7 +262,8 @@ def evaluate_fits(model: PKPDModel) -> FitTable:
         model: the model, its `fits` are evaluated.
 
     Returns:
-        The data points of every fit with the column `fit`, the subset.
+        The data points of every fit with the column `fit`, the subset, and the
+        report of every fit.
 
     Raises:
         ValueError: if the model has no adopted fits, see `_adopted_fits`.
@@ -266,6 +275,7 @@ def evaluate_fits(model: PKPDModel) -> FitTable:
     tables: list[pd.DataFrame] = []
     experiments: dict[str, SimulationExperiment] = {}
     recorded: dict[tuple[str, str, str], str] = {}
+    reports: dict[str, FitReport] = {}
     for subset, record, definition in _adopted_fits(model):
         recorded.update(recorded_kinds(record, subset))
         logger.info("Evaluate the adopted fit '%s' of '%s'", subset, model.name)
@@ -275,13 +285,19 @@ def evaluate_fits(model: PKPDModel) -> FitTable:
         points = report.metrics(report.reference_set).datapoints_df()
         points.insert(0, "fit", subset)
         tables.append(points)
+        reports[subset] = report
         # two fits of one experiment hold equal mappings, either serves
         experiments.update(report.problem.runner_initialized.experiments)
     table = pd.concat(tables, ignore_index=True)
     differences = kind_differences(table, recorded)
     if differences:
         raise KindMismatchError(differences)
-    return FitTable(table=table, lookup=_Lookup(experiments), recorded_kinds=recorded)
+    return FitTable(
+        table=table,
+        lookup=_Lookup(experiments),
+        recorded_kinds=recorded,
+        reports=MappingProxyType(reports),
+    )
 
 
 def mapping_table(model: PKPDModel) -> FitTable:
