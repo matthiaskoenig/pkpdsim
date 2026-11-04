@@ -111,7 +111,7 @@ The problem of the fit, of its identifiability analysis and of its report loads 
 
 The report of the fit carries the title of the model (`PKPDModel.title`), the description of the fit (`FitDefinition.description`) and of its parameters (`FitParameter.description`), and a note on the adopted fits of the other subsets of the model, whose parameters were fixed at their fitted values. The provenance of the fit records the arguments of the command (`subset`, `runs`, `cores`, `method`, `command`, `start` and `fixed_fits`, the ids of the fixed adopted fits), the start values of the parameters and the fixed values, i.e. the values of the parameters of the fixed adopted fits which the fit does not optimize itself.
 
-`--adopt <fit id>` copies the record of the finished fit `<fit id>` from the output folder into the adopted fits of the model (`MODEL.fits_dir`) instead of fitting, `--force` replaces an adopted record of the same id; the id then goes into `fits` of the model object, see [Uncertainty of the fitted parameters](uncertainty.md).
+`--cross-validation <fit id>` cross-validates an adopted fit instead of fitting: a refit per training study without it, stored in the record of the fit, see [Cross-validation](credibility.md#cross-validation). `--adopt <fit id>` copies the record of the finished fit `<fit id>` from the output folder into the adopted fits of the model (`MODEL.fits_dir`) instead of fitting, `--force` replaces an adopted record of the same id; the id then goes into `fits` of the model object, see [Uncertainty of the fitted parameters](uncertainty.md).
 
 ## run_report and run_identifiability
 

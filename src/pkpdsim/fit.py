@@ -717,6 +717,33 @@ def with_start(definition: FitDefinition, point: Mapping[str, float]) -> FitDefi
     return dataclasses.replace(definition, parameters=parameters)
 
 
+def fixed_values(
+    model: PKPDModel, subset: str, definition: FitDefinition
+) -> tuple[list[str], dict[str, float]]:
+    """Get what a fit of a subset keeps fixed: the adopted fits of the other problems.
+
+    Args:
+        model: the model.
+        subset: the fit problem, e.g. `PK`.
+        definition: its definition, whose parameters are fitted and not fixed.
+
+    Returns:
+        The adopted fits of the other subsets (`current_fixed_fits`) and the
+        values of their parameters in the units of the model, without the
+        parameters the definition fits.
+    """
+    fixed_fits = current_fixed_fits(model, subset)
+    records = model.fit_records().records
+    fitted = {p.pid for p in definition.parameters}
+    values = {
+        pid: parameter.value
+        for fit_id_ in fixed_fits
+        for pid, parameter in records[fit_id_].parameters.items()
+        if pid not in fitted
+    }
+    return fixed_fits, values
+
+
 def current_fixed_fits(model: PKPDModel, subset: str) -> list[str]:
     """Get the adopted fits whose parameters a fit of a subset keeps fixed.
 

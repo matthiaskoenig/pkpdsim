@@ -56,6 +56,7 @@ import numpy as np
 import pandas as pd
 from sbmlsim.fit.evaluation import Fold, criteria_metrics
 
+from pkpdsim.credibility.cross_validation import CrossValidation
 from pkpdsim.credibility.declaration import (
     AcceptanceResult,
     AcceptanceRule,
@@ -607,6 +608,9 @@ class CredibilityAssessment:
         notes: the notes of the declaration.
         verification: what the verification compared, `None` if the
             assessment was not verified.
+        cross_validations: the leave-one-study-out cross-validations of the
+            adopted fits, see `pkpdsim.credibility.cross_validation`; empty
+            without one and in a record of pkpdsim 0.18 or earlier.
     """
 
     provenance: Provenance
@@ -617,6 +621,7 @@ class CredibilityAssessment:
     unclaimed: list[UnclaimedRecord]
     notes: str
     verification: VerificationSummary | None = None
+    cross_validations: list[CrossValidation] = dataclasses.field(default_factory=list)
 
     def to_dict(self) -> dict[str, object]:
         """Get the assessment as plain data, `NaN` as `None`."""
@@ -631,6 +636,7 @@ class CredibilityAssessment:
             "verification": (
                 None if self.verification is None else self.verification.to_dict()
             ),
+            "cross_validations": [c.to_dict() for c in self.cross_validations],
         }
 
     @classmethod
@@ -657,6 +663,9 @@ class CredibilityAssessment:
                 if data.get("verification") is None
                 else VerificationSummary.from_dict(data["verification"])
             ),
+            cross_validations=[
+                CrossValidation.from_dict(c) for c in data.get("cross_validations", ())
+            ],
         )
 
     def to_json(self, path: Path) -> None:
@@ -1030,13 +1039,15 @@ def _factors(
     checks: Sequence[CheckRecord] = (),
     tightening: float = TIGHTENING,
     pairs: Sequence[RatioRecord] = (),
+    cross_validations: Sequence[CrossValidation] = (),
 ) -> list[FactorRecord]:
     """Get the factors of V&V 40 of a context, the assessed ones with its results.
 
     The factors of the checks of the verification are assessed when the
     assessment was verified, else they keep their status of `FACTORS`; the
     relevance of the quantities of interest is assessed when the context has
-    an assessed ratio, by its pairs.
+    an assessed ratio, by its pairs, and the model form when an adopted fit
+    of its decisive evidence is cross-validated.
     """
     role = cou.decisive_role.value
     n_points, n_mappings, n_studies = _counts(decisive)
@@ -1088,6 +1099,10 @@ def _factors(
                     *(_check_statement(r, tightening) for r in verified[factor.id]),
                 ]
             )
+            data["step"] = None
+        elif factor.id == "model_form" and cross_validations:
+            data["status"] = FactorStatus.ASSESSED.value
+            data["statement"] = " ".join(c.statement() for c in cross_validations)
             data["step"] = None
         elif factor.id == "relevance_of_quantities" and cou.ratios:
             evaluable = [p for p in pairs if p["within"] is not None]
@@ -1213,6 +1228,7 @@ def _context_result(
     selections: Sequence[EvidenceSelection],
     verification: Verification | None = None,
     lookup: MappingLookup | None = None,
+    cross_validations: Sequence[CrossValidation] = (),
 ) -> tuple[ContextResult, list[CoverageEntry]]:
     """Get the result and the coverage of a context of use.
 
@@ -1287,6 +1303,13 @@ def _context_result(
             checks,
             TIGHTENING if verification is None else verification.summary.tightening,
             pairs,
+            [
+                c
+                for c in cross_validations
+                if c.subset in set(decisive["fit"].astype(str))
+            ]
+            if "fit" in decisive.columns
+            else [],
         ),
         n_decisive=len(decisive),
         n_evaluable=n_evaluable,
@@ -1312,6 +1335,7 @@ def assess_table(
     fits: FitTable,
     provenance: Provenance,
     verification: Verification | None = None,
+    cross_validations: Sequence[CrossValidation] = (),
 ) -> CredibilityAssessment:
     """Assess the contexts of use of a declaration on the data points of the fits.
 
@@ -1323,6 +1347,8 @@ def assess_table(
         verification: the alternative predictions of the table and the issues
             of the builds, see `pkpdsim.credibility.verification.verify`; the
             assessment is not verified without.
+        cross_validations: the cross-validations of the adopted fits, which
+            assess the factor model form.
 
     Returns:
         The assessment.
@@ -1338,7 +1364,9 @@ def assess_table(
     for cou in credibility.contexts:
         own = [s for s in selections.evidence if s.context == cou.id]
         evidence.extend(_evidence_result(s, table, cou.rules) for s in own)
-        result, entries = _context_result(cou, table, own, verification, fits.lookup)
+        result, entries = _context_result(
+            cou, table, own, verification, fits.lookup, cross_validations
+        )
         contexts.append(result)
         coverage.extend(entries)
     limitations = [
@@ -1365,6 +1393,7 @@ def assess_table(
         unclaimed=unclaimed,
         notes=credibility.notes,
         verification=None if verification is None else verification.summary,
+        cross_validations=list(cross_validations),
     )
 
 
@@ -1457,6 +1486,7 @@ def assess(
         SelectionError: if the evidence selects invalid data.
         LockMismatchError: if the evidence differs from the lock.
     """
+    from pkpdsim.credibility.cross_validation import read_cross_validations
     from pkpdsim.credibility.lock import (
         LockMismatchError,
         lock_differences,
@@ -1478,5 +1508,9 @@ def assess(
     checks = verify(model, fits) if verification else None
     logger.info("Assess the contexts of use of '%s'", model.name)
     return assess_table(
-        credibility, fits, provenance(model, source_commit, state), checks
+        credibility,
+        fits,
+        provenance(model, source_commit, state),
+        checks,
+        list(read_cross_validations(model).values()),
     )

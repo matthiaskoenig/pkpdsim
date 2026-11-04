@@ -29,6 +29,7 @@ FILES = {
     "quantities.tsv",
     "verification.tsv",
     "ratios.tsv",
+    "cross_validation.tsv",
     "battery.tsv",
     "fates.tsv",
     "index.html",

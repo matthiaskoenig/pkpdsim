@@ -92,6 +92,7 @@ td.status .soft { font-size: 12.5px; }
     <a href="#limitations">Limitations</a>
     <a href="#unclaimed">Unclaimed data</a>
     <a href="#verification">Verification</a>
+    {% if assessment.cross_validations %}<a href="#cross-validation">Cross-validation</a>{% endif %}
     <a href="#provenance">Provenance</a>
 {% endblock %}
 
@@ -534,6 +535,27 @@ td.status .soft { font-size: 12.5px; }
   <div class="card"><p class="empty">The assessment was not verified: the factors of the verification are not assessed.</p></div>
   {% endif %}
 </section>
+
+{% if assessment.cross_validations %}
+<section id="cross-validation">
+  <h2>Cross-validation</h2>
+  <p class="note">Every adopted fit is refitted once per training study without the study, from its adopted parameters, and predicts the held-out study. A GMFE of the held-out predictions close to the one of the fitted predictions of the same points is a model form which carries across studies.</p>
+  {% for cv in assessment.cross_validations %}
+  <h3>{{ cv.subset }} <span class="soft mono">{{ cv.fit }}</span></h3>
+  <p class="text">{{ cv.statement() }}</p>
+  <div class="card scroll">
+    <table class="compact">
+      <thead><tr><th>study</th><th class="num">points</th><th class="num">GMFE held out</th><th class="num">GMFE fitted</th><th class="num">within 2-fold held out</th><th class="num">within 2-fold fitted</th></tr></thead>
+      <tbody>
+      {% for s in cv.studies %}
+      <tr><td>{{ s.study }}</td><td class="num">{{ s.n_points }}</td><td class="num">{{ s.gmfe_held_out | number }}</td><td class="num">{{ s.gmfe_fitted | number }}</td><td class="num">{{ s.within_2fold_held_out | number }}</td><td class="num">{{ s.within_2fold_fitted | number }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
 
 <section id="provenance">
   <h2>Provenance</h2>
