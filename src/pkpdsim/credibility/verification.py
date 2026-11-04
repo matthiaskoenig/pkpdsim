@@ -46,10 +46,12 @@ if TYPE_CHECKING:
     from sbmlsim.fit.options import FitSettings
     from sbmlsim.fit.report import FitReport
 
+    from pkpdsim.credibility.battery import Battery
     from pkpdsim.credibility.records import FitTable
     from pkpdsim.model import PKPDModel
 
 __all__ = [
+    "BATTERY_CHECKS",
     "LIMIT",
     "LISTED_ISSUES",
     "NUMERICAL_CHECKS",
@@ -88,21 +90,51 @@ _LABELS: Final = {
     "tolerances": "tolerances",
     "integrator": "second integration method",
     "setup": "setup of the simulations",
+    "mass_balance": "mass balance",
+    "non_negativity": "non-negativity",
+    "zero_dose": "zero dose",
+    "steady_state": "physiological steady state",
+    "superposition": "superposition",
+    "cross_simulator": "second simulator",
+    "plausibility": "plausibility of the values",
+    "rebuild": "rebuild",
 }
 _FACTORS: Final = {
     "tolerances": "discretization_error",
     "integrator": "numerical_solver_error",
     "setup": "use_error",
+    "mass_balance": "numerical_code_verification",
+    "non_negativity": "numerical_code_verification",
+    "zero_dose": "numerical_code_verification",
+    "steady_state": "numerical_code_verification",
+    "superposition": "numerical_code_verification",
+    "cross_simulator": "numerical_code_verification",
+    "plausibility": "use_error",
+    "rebuild": "software_quality_assurance",
 }
 
 
 @unique
 class Check(StrEnum):
-    """A check of the verification, one per factor of V&V 40."""
+    """A check of the verification and the factor of V&V 40 it assesses.
+
+    The checks of the predictions (`tolerances`, `integrator`, `setup`)
+    compare the decisive predictions of a context of use; the checks of the
+    battery (`pkpdsim.credibility.battery`) check the builds of the model,
+    for every context of use alike.
+    """
 
     TOLERANCES = "tolerances"
     INTEGRATOR = "integrator"
     SETUP = "setup"
+    MASS_BALANCE = "mass_balance"
+    NON_NEGATIVITY = "non_negativity"
+    ZERO_DOSE = "zero_dose"
+    STEADY_STATE = "steady_state"
+    SUPERPOSITION = "superposition"
+    CROSS_SIMULATOR = "cross_simulator"
+    PLAUSIBILITY = "plausibility"
+    REBUILD = "rebuild"
 
     @property
     def label(self) -> str:
@@ -117,22 +149,40 @@ class Check(StrEnum):
 
 #: the checks which compare alternative predictions with the reference
 NUMERICAL_CHECKS: Final = (Check.TOLERANCES, Check.INTEGRATOR)
+#: the checks of the battery of the builds, in the order of the report, see
+#: `pkpdsim.credibility.battery`
+BATTERY_CHECKS: Final = (
+    Check.MASS_BALANCE,
+    Check.NON_NEGATIVITY,
+    Check.ZERO_DOSE,
+    Check.STEADY_STATE,
+    Check.SUPERPOSITION,
+    Check.CROSS_SIMULATOR,
+    Check.PLAUSIBILITY,
+    Check.REBUILD,
+)
 
 
 class CheckRecord(TypedDict):
     """The result of a check for a context of use.
 
+    A check of the battery (`pkpdsim.credibility.battery`) is a check of the
+    builds of the model, the same for every context.
+
     Attributes:
         check: the check, see `Check`.
         factor: the id of the factor of V&V 40 the check assesses.
-        n_points: the decisive points compared.
+        n_points: the decisive points compared, the cases of a check of the
+            battery.
         max_difference: the largest relative difference of a decisive
-            prediction, `NaN` for the setup and without a point.
+            prediction, `NaN` for the setup and without a point; the largest
+            deviation of a check of the battery.
         at: the point of the largest difference, `experiment.mapping at x`,
-            empty without one.
+            empty without one; the case of the largest deviation of a check of
+            the battery.
         acceptance_changed: whether a rule of the acceptance is met with the
             alternative predictions and not with the reference or the other
-            way, `None` for the setup.
+            way, `None` for the setup and the battery.
         passed: whether the check passed.
         problems: what failed beyond the numbers, e.g. a failed evaluation or
             an issue of a build.
@@ -204,6 +254,8 @@ class VerificationSummary:
         fits: the settings of every adopted fit and of its alternatives.
         problems: the issues of the builds of the model, see
             `build_problems`.
+        battery: the checks of the builds of the model, see
+            `pkpdsim.credibility.battery`, `None` if it did not run.
     """
 
     tightening: float
@@ -211,6 +263,7 @@ class VerificationSummary:
     scale_floor: float
     fits: list[FitSettingsRecord]
     problems: list[str]
+    battery: Battery | None = None
 
     def to_dict(self) -> dict[str, object]:
         """Get the summary as plain data."""
@@ -220,11 +273,15 @@ class VerificationSummary:
             "scale_floor": self.scale_floor,
             "fits": [dict(f) for f in self.fits],
             "problems": list(self.problems),
+            "battery": None if self.battery is None else self.battery.to_dict(),
         }
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> Self:
         """Get the summary from plain data."""
+        from pkpdsim.credibility.battery import Battery
+
+        battery = data.get("battery")
         return cls(
             tightening=float(data["tightening"]),
             limit=float(data["limit"]),
@@ -239,6 +296,7 @@ class VerificationSummary:
                 for f in data["fits"]
             ],
             problems=list(data["problems"]),
+            battery=None if battery is None else Battery.from_dict(battery),
         )
 
 
@@ -485,8 +543,37 @@ def build_problems(paths: Mapping[str, Path]) -> list[str]:
     return problems
 
 
+def _battery(model: PKPDModel) -> Battery:
+    """Run the battery of the checks of the builds of a model.
+
+    A failed check which the model knows (`CheckSettings.battery`) gets its
+    reason as a further problem and stays failed.
+    """
+    from pkpdsim.credibility.battery import run_battery
+
+    logger.info("Run the battery of the checks of the builds of '%s'", model.name)
+    battery = run_battery(model)
+    known = model.checks.battery
+    return dataclasses.replace(
+        battery,
+        results=tuple(
+            dataclasses.replace(
+                result,
+                problems=(*result.problems, f"known failure: {known[result.check]}"),
+            )
+            if result.passed is False and result.check.value in known
+            else result
+            for result in battery.results
+        ),
+    )
+
+
 def verify(
-    model: PKPDModel, fits: FitTable, tightening: float = TIGHTENING
+    model: PKPDModel,
+    fits: FitTable,
+    tightening: float = TIGHTENING,
+    *,
+    battery: bool = True,
 ) -> Verification:
     """Evaluate the adopted fits of a model with the alternatives of the checks.
 
@@ -495,9 +582,11 @@ def verify(
         fits: the data points of the adopted fits with their reports, see
             `pkpdsim.credibility.records.evaluate_fits`.
         tightening: the factor the tolerances are divided by.
+        battery: run the battery of the checks of the builds, see
+            `pkpdsim.credibility.battery.run_battery`.
 
     Returns:
-        The alternative predictions and the issues of the builds.
+        The alternative predictions, the issues of the builds and the battery.
 
     Raises:
         ValueError: if the table of the fits has no reports.
@@ -532,6 +621,7 @@ def verify(
         problems=build_problems(
             {sex.value: path for sex, path in model.model_paths.items()}
         ),
+        battery=_battery(model) if battery else None,
     )
     return Verification(
         predictions=MappingProxyType(predictions),

@@ -154,8 +154,11 @@ references resolve (`check_model`), the experiments initialize
 fit starts (`start_fits`). A function which checks several things raises one
 `AssertionError` which names every failure, not only the first.
 
+`check_battery` runs the battery of the checks of the builds (mass balance, non-negativity, zero dose, steady state, superposition, a second simulator, plausibility and rebuild, see [Battery of the builds](credibility.md#battery-of-the-builds)) and fails for every failed check the model does not know, `checks.battery`.
+
 The known exceptions of a model (experiments which are not registered, modules
-which do not import, experiments which run one at a time) are its `checks`, see
+which do not import, experiments which run one at a time, checks of the battery
+which fail) are its `checks`, see
 [Experiments and their metadata](experiments.md#exceptions-of-the-tests).
 
 `check_model` also checks that the name of the model is the last component of its

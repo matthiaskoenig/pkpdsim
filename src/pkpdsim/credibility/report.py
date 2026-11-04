@@ -18,7 +18,14 @@
 - `verification.tsv`: one row per context of use and check of the
   verification, empty if the assessment was not verified: the factor, the
   compared points (`n`), the largest relative difference and its point,
-  whether the acceptance changed, whether the check passed and its problems.
+  whether the acceptance changed, whether the check passed and its problems;
+  the checks of the battery are rows of every context of use.
+- `battery.tsv`: one row per check of the battery of the builds, empty if it
+  did not run: the factor, the status, the cases, the largest deviation and
+  where, the statement and the problems.
+- `fates.tsv`: one row per build, dose and part of the fate of the dose of the
+  battery: the substance, the dose (mmole), the part (mmole) and its share of
+  the dose.
 - `index.html`: the report (`render_html`), which extends `report_base.html`
   of `sbmlsim.report.templates` and loads nothing from the network.
 
@@ -51,20 +58,24 @@ from pkpdsim.credibility.assessment import (
     Verdict,
 )
 from pkpdsim.credibility.risk import DEFAULT_MIN_POINTS
-from pkpdsim.credibility.verification import Check
+from pkpdsim.credibility.verification import NUMERICAL_CHECKS, Check
 
 __all__ = [
+    "BATTERY_COLUMNS",
     "CONTEXT_COLUMNS",
     "DOMAIN_COLUMNS",
     "EVIDENCE_COLUMNS",
+    "FATE_COLUMNS",
     "QUANTITY_COLUMNS",
     "RECORD",
     "TEMPLATE",
     "TEMPLATE_DIR",
     "VERIFICATION_COLUMNS",
+    "battery_table",
     "contexts_table",
     "domain_table",
     "evidence_table",
+    "fates_table",
     "print_summary",
     "quantities_table",
     "render_html",
@@ -139,6 +150,29 @@ VERIFICATION_COLUMNS: Final = (
     "acceptance_changed",
     "passed",
     "problems",
+)
+
+
+#: the columns of `battery_table`
+BATTERY_COLUMNS: Final = (
+    "check",
+    "factor",
+    "status",
+    "cases",
+    "largest",
+    "at",
+    "statement",
+    "problems",
+)
+#: the columns of `fates_table`
+FATE_COLUMNS: Final = (
+    "build",
+    "dose",
+    "substance",
+    "amount",
+    "part",
+    "value",
+    "share",
 )
 
 
@@ -296,6 +330,64 @@ def verification_table(assessment: CredibilityAssessment) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=list(VERIFICATION_COLUMNS))
 
 
+def battery_table(assessment: CredibilityAssessment) -> pd.DataFrame:
+    """Get one row per check of the battery of the builds of the model.
+
+    Args:
+        assessment: the assessment.
+
+    Returns:
+        The columns of `BATTERY_COLUMNS`, see `BatteryResult`, the problems
+        joined by `; `; no rows if the battery did not run.
+    """
+    battery = (
+        None if assessment.verification is None else assessment.verification.battery
+    )
+    rows = [
+        {
+            "check": r.check.value,
+            "factor": r.check.factor,
+            "status": r.status.value,
+            "cases": r.cases,
+            "largest": r.largest,
+            "at": r.at,
+            "statement": r.statement,
+            "problems": "; ".join(r.problems),
+        }
+        for r in ([] if battery is None else battery.results)
+    ]
+    return pd.DataFrame(rows, columns=list(BATTERY_COLUMNS))
+
+
+def fates_table(assessment: CredibilityAssessment) -> pd.DataFrame:
+    """Get one row per build, dose and part of the fates of the doses of the battery.
+
+    Args:
+        assessment: the assessment.
+
+    Returns:
+        The columns of `FATE_COLUMNS`, see `Fate`: the dose and the part in
+        mmole and the share of the part in the dose; no rows without.
+    """
+    battery = (
+        None if assessment.verification is None else assessment.verification.battery
+    )
+    rows = [
+        {
+            "build": f.build,
+            "dose": f.dose,
+            "substance": f.substance,
+            "amount": f.amount,
+            "part": part,
+            "value": value,
+            "share": value / f.amount,
+        }
+        for f in ([] if battery is None else battery.fates)
+        for part, value in f.parts.items()
+    ]
+    return pd.DataFrame(rows, columns=list(FATE_COLUMNS))
+
+
 def _number(value: float) -> str:
     """Show a metric with three significant digits, `n/a` if not evaluable."""
     if math.isnan(value):
@@ -361,6 +453,7 @@ def render_html(assessment: CredibilityAssessment) -> str:
         limitation_metrics=_metric_names(assessment.limitations),
         verification=assessment.verification,
         check_labels={check.value: check.label for check in Check},
+        prediction_checks=[c.value for c in (*NUMERICAL_CHECKS, Check.SETUP)],
     )
 
 
@@ -404,6 +497,8 @@ def write_outputs(assessment: CredibilityAssessment, output_dir: Path) -> Path:
         "domain.tsv": _tsv(domain_table(assessment)),
         "quantities.tsv": _tsv(quantities_table(assessment)),
         "verification.tsv": _tsv(verification_table(assessment)),
+        "battery.tsv": _tsv(battery_table(assessment)),
+        "fates.tsv": _tsv(fates_table(assessment)),
         "index.html": render_html(assessment),
     }
     if output_dir.is_dir():
@@ -423,8 +518,18 @@ def _verification_line(assessment: CredibilityAssessment) -> str:
     verified = sum(c.verified is True for c in assessment.contexts)
     n = len(assessment.contexts)
     style = "green" if verified == n else "magenta"
-    checks = ", ".join(check.value for check in Check)
-    return f"[{style}]{verified} of {n} contexts of use verified[/] ({checks})."
+    checks = ", ".join(check.value for check in (*NUMERICAL_CHECKS, Check.SETUP))
+    line = f"[{style}]{verified} of {n} contexts of use verified[/] ({checks}"
+    battery = assessment.verification.battery
+    if battery is None:
+        return f"{line}; the battery of the builds did not run)."
+    applied = [r for r in battery.results if r.passed is not None]
+    passed = sum(r.passed is True for r in applied)
+    failed = ", ".join(r.check.value for r in applied if r.passed is False)
+    return (
+        f"{line}; battery of the builds: {passed} of {len(applied)} applicable "
+        f"checks passed{f', failed: {failed}' if failed else ''})."
+    )
 
 
 def print_summary(assessment: CredibilityAssessment) -> None:

@@ -58,3 +58,14 @@ The assessment of the contexts of use of the model against its adopted fits. A c
 
 {% endif %}
 {% endfor %}
+{% if credibility.battery %}
+## Battery of the builds
+
+The builds of the model are checked without data, the same for every context of use; a failed check makes every context not verified.
+
+| Check | Factor | Cases | Largest deviation | Result |
+| --- | --- | --- | --- | --- |
+{% for check in credibility.battery %}
+| {{ check.label }} | `{{ check.factor }}` | {{ check.cases if check.status != "not_applicable" else "" }} | {{ "%.2g" % check.largest if check.largest is not none and check.status != "not_applicable" else "" }} | {{ check.status | replace("_", " ") }}{% if check.status == "not_applicable" %}: {{ check.statement | cell }}{% elif check.problems %}: {{ check.problems | join("; ") | cell }}{% endif %} |
+{% endfor %}
+{% endif %}

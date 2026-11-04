@@ -23,6 +23,14 @@ uv pip install pkpdsim
 pip install pkpdsim
 ```
 
+## AMICI, the second simulator
+
+The battery of the checks of a model compares its builds with [AMICI](https://github.com/AMICI-dev/AMICI) when it is installed, see [Battery of the builds](credibility.md#battery-of-the-builds). AMICI is the optional extra `amici`; it is built from source and compiles every model, so it needs a C++ compiler (cmake and ninja come with the extra):
+
+```bash
+uv pip install "pkpdsim[amici]"
+```
+
 ## Development version
 
 The current state of the `develop` branch is installed directly from GitHub:

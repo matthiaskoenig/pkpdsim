@@ -10,7 +10,17 @@ from sbmlsim.fit import FitMapping
 from sbmlsim.fit.helpers import FitMappings
 from sbmlsim.fit.metrics import metadata_dict
 
-from pkpdsim.credibility import Check, FitTable, Verification, VerificationSummary
+from pkpdsim.credibility import (
+    BATTERY_CHECKS,
+    Battery,
+    BatteryResult,
+    BatteryStatus,
+    Check,
+    Fate,
+    FitTable,
+    Verification,
+    VerificationSummary,
+)
 from pkpdsim.credibility.verification import LIMIT, SCALE_FLOOR, TIGHTENING
 
 #: the kinds of the adopted fit of the test package, see `test_credibility_package`
@@ -84,6 +94,7 @@ def verification_of(
     failures: dict[Check, dict[str, str]] | None = None,
     problems: tuple[str, ...] = (),
     limit: float = LIMIT,
+    battery: Battery | None = None,
 ) -> Verification:
     """Get a verification whose alternatives are the reference times a factor."""
     factors = factors or {}
@@ -115,5 +126,50 @@ def verification_of(
                 }
             ],
             problems=list(problems),
+            battery=battery,
         ),
+    )
+
+
+def battery_of(failed: Check | None = None) -> Battery:
+    """Get a battery without a simulation: the second simulator is not applicable.
+
+    Args:
+        failed: a check which fails with the problem `broken`, every other
+            check passes.
+    """
+    results = []
+    for check in BATTERY_CHECKS:
+        if check is Check.CROSS_SIMULATOR:
+            status = BatteryStatus.NOT_APPLICABLE
+        elif check is failed:
+            status = BatteryStatus.FAILED
+        else:
+            status = BatteryStatus.PASSED
+        results.append(
+            BatteryResult(
+                check=check,
+                status=status,
+                cases=0 if status is BatteryStatus.NOT_APPLICABLE else 4,
+                largest=float("nan")
+                if status is BatteryStatus.NOT_APPLICABLE
+                else 1e-9,
+                at="" if status is BatteryStatus.NOT_APPLICABLE else "male IVDOSE_d",
+                problems=("broken",) if status is BatteryStatus.FAILED else (),
+                statement=f"The check {check.value}.",
+            )
+        )
+    return Battery(
+        results=tuple(results),
+        fates=(
+            Fate(
+                build="male",
+                dose="IVDOSE_d",
+                substance="d",
+                amount=0.1,
+                parts={"body": 0.01, "urine": 0.04, "ELIM": -0.05},
+                imbalance=1e-15,
+            ),
+        ),
+        settings="roadrunner CVODE BDF.",
     )

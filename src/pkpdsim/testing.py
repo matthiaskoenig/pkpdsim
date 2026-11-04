@@ -13,7 +13,8 @@ def test_experiments_registered(model: PKPDModel) -> None:
 
 The known exceptions of the tests (experiments which are not registered on
 purpose, modules which do not import, the reason to run the experiments one at
-a time) are the `checks` of the model object, each with its reason.
+a time, the checks of the battery which fail) are the `checks` of the model
+object, each with its reason.
 
 The functions raise `AssertionError` with a message which names every problem,
 also for experiments which fail to initialize or to run.
@@ -43,6 +44,7 @@ from pkpdsim.model import resolve
 from pkpdsim.uncertainty import check_fit_parameters
 
 if TYPE_CHECKING:
+    from pkpdsim.credibility.battery import Battery
     from pkpdsim.model import PKPDModel
 
 
@@ -304,6 +306,47 @@ def run_all_experiments(model: PKPDModel, output_dir: Path) -> None:
             failures.append("the run of all experiments wrote no report")
     if failures:
         raise AssertionError("\n".join(failures))
+
+
+def check_battery(
+    model: PKPDModel, *, rebuild: bool = True, cross_simulator: bool = True
+) -> Battery:
+    """Run the battery of the checks of the builds of a model.
+
+    A failed check is a problem unless the model knows it
+    (`CheckSettings.battery`); a known failure whose check passes or is not
+    applicable no longer applies and is a problem as well.
+
+    Args:
+        model: the model.
+        rebuild: rebuild the model with its factory.
+        cross_simulator: compare the builds with AMICI when it is installed,
+            see `pkpdsim.credibility.battery.run_battery`.
+
+    Returns:
+        The battery.
+
+    Raises:
+        AssertionError: naming every problem.
+    """
+    from pkpdsim.credibility.battery import run_battery
+
+    battery = run_battery(model, rebuild=rebuild, cross_simulator=cross_simulator)
+    known = model.checks.battery
+    problems: list[str] = []
+    for result in battery.results:
+        if result.passed is False and result.check.value not in known:
+            problems.append(f"the check '{result.check}' failed:")
+            problems += [f"  {problem}" for problem in result.problems]
+        elif result.passed is not False and result.check.value in known:
+            problems.append(
+                f"the known failure of the check '{result.check}' no longer "
+                f"applies, it {result.status.value.replace('_', ' ')}: remove it "
+                f"from `checks.battery`"
+            )
+    if problems:
+        raise AssertionError("\n".join(problems))
+    return battery
 
 
 def start_fits(

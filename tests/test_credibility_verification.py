@@ -38,6 +38,7 @@ from pkpdsim.credibility.report import (
 )
 from pkpdsim.credibility.verification import (
     LIMIT,
+    NUMERICAL_CHECKS,
     SCALE_FLOOR,
     build_problems,
     relative_differences,
@@ -46,6 +47,9 @@ from pkpdsim.credibility.verification import (
 )
 from pkpdsim.model import PKPDModel
 from pkpdsim_toy import MODEL_PATH
+
+#: the checks of the predictions, one record per context of use
+PREDICTIONS = (*NUMERICAL_CHECKS, Check.SETUP)
 
 PROVENANCE = Provenance(
     model="credibility",
@@ -139,7 +143,7 @@ def test_a_verified_context() -> None:
     dose = _context(assessment, "dose")
     assert dose.verdict is Verdict.SUPPORTED
     assert dose.verified is True
-    assert [r["check"] for r in dose.verification] == [c.value for c in Check]
+    assert [r["check"] for r in dose.verification] == [c.value for c in PREDICTIONS]
     tolerances = _check(dose, Check.TOLERANCES)
     assert tolerances["factor"] == "discretization_error"
     assert tolerances["n_points"] == dose.n_decisive == 10
@@ -290,7 +294,7 @@ def test_the_report_of_a_verification() -> None:
     assessment = _assess(fits, verification)
     table = verification_table(assessment)
     assert list(table.columns) == list(VERIFICATION_COLUMNS)
-    assert len(table) == len(assessment.contexts) * len(Check)
+    assert len(table) == len(assessment.contexts) * len(PREDICTIONS)
     html = render_html(assessment)
     section = html[html.index('id="verification"') : html.index('id="provenance"')]
     assert "CVODE BDF of order at most 2, rtol 1e-08" in section
