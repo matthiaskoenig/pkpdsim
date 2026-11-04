@@ -15,6 +15,7 @@ import re
 from collections.abc import Collection, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum, unique
+from types import MappingProxyType
 from typing import Final, Protocol, get_type_hints
 
 import pandas as pd
@@ -24,6 +25,7 @@ from sbmlsim.fit.helpers import MappingFilter
 from pkpdsim.metadata import PKPDMappingMetaData
 
 __all__ = [
+    "DEFAULT_COVARIATES",
     "DOMAIN_FIELDS",
     "GUEST_DELTA",
     "UNCLAIMED",
@@ -50,6 +52,13 @@ __all__ = [
     "Summary",
     "Unclaimed",
 ]
+
+#: the covariates of the subjects whose simulated values are checked against
+#: the reported ones: the target of the model and the measurement type of PK-DB,
+#: see `pkpdsim.credibility.inputs`
+DEFAULT_COVARIATES: Final[Mapping[str, str]] = MappingProxyType(
+    {"BW": "weight", "HEIGHT": "height"}
+)
 
 #: the pattern of the id of a context of use
 ID_PATTERN: Final = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -613,6 +622,13 @@ class Credibility:
         contexts: the contexts of use.
         limitations: the model limitations, evidence of what it does not describe.
         notes: notes on the declaration.
+        covariates: the covariates of the subjects whose simulated values the
+            equivalency of the inputs checks against the reported ones, the
+            target of the model and the measurement type of PK-DB of its
+            reported value (`DEFAULT_COVARIATES`, the body weight and the
+            height), see `pkpdsim.credibility.inputs`; a model whose targets
+            have other ids or which simulates further covariates declares
+            them.
 
     Raises:
         DeclarationError: with every problem of the declaration.
@@ -621,6 +637,7 @@ class Credibility:
     contexts: tuple[ContextOfUse, ...]
     limitations: tuple[Evidence, ...] = ()
     notes: str = ""
+    covariates: Mapping[str, str] = field(default=DEFAULT_COVARIATES, hash=False)
 
     def __post_init__(self) -> None:
         """Check the declaration.
@@ -640,8 +657,20 @@ class Credibility:
             for e in self.limitations
             if e.role is not EvidenceRole.LIMITATION
         )
+        found.extend(
+            f"covariate '{target}': the target and the measurement type must be "
+            "texts which are not empty"
+            for target, measurement in self.covariates.items()
+            if not (
+                isinstance(target, str)
+                and target.strip()
+                and isinstance(measurement, str)
+                and measurement.strip()
+            )
+        )
         if found:
             raise DeclarationError(found)
+        object.__setattr__(self, "covariates", MappingProxyType(dict(self.covariates)))
 
     def context(self, id: str) -> ContextOfUse:
         """Get a context of use by its id.

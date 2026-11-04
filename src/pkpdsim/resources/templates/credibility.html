@@ -435,6 +435,49 @@ td.status .soft { font-size: 12.5px; }
     {% endfor %}
     {% endif %}
 
+    {% if c.inputs is not none and c.inputs.n_checked %}{% set inp = c.inputs %}
+    <h4>Inputs</h4>
+    <p class="note">The simulated covariates of the subjects and the doses of {{ inp.n_checked }} of the {{ inp.n_mappings }} decisive mappings against the groups, individuals and interventions their studies report. A covariate is equivalent within 10&nbsp;% of the reported mean (the value of an individual) and in the range within the reported minimum and maximum (else two standard deviations around the mean), a dose is equivalent within 2&nbsp;% of a reported dose; the simulated range is what the evidence covers.</p>
+    <div class="scroll">
+      <table class="compact">
+        <thead><tr><th>input</th><th class="num">mappings</th><th class="num">simulated</th><th class="num">equivalent</th><th class="num">in range</th><th class="num">differ</th><th class="num">not reported</th></tr></thead>
+        <tbody>
+        {% for s in inp.inputs %}
+        <tr>
+          <td class="mono">{{ s.target }}{% if s.kind == "dose" %} <span class="soft">dose</span>{% endif %}</td>
+          <td class="num">{{ s.n_mappings }}</td>
+          <td class="num nowrap">{% if s.low == s.high %}{{ s.low | number }}{% else %}{{ s.low | number }} to {{ s.high | number }}{% endif %} <span class="soft">{{ s.unit }}</span></td>
+          <td class="num">{{ s.n_equivalent }}</td>
+          <td class="num">{{ s.n_in_range }}</td>
+          <td class="num">{% if s.n_differs %}<span class="warn">{{ s.n_differs }}</span>{% else %}0{% endif %}</td>
+          <td class="num">{{ s.n_not_reported }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if inp.differs %}
+    <p class="note">The inputs which differ from the reported ones, the ratio is the simulated over the reported value{% if inp.differs | selectattr("source", "equalto", "model") | list %}; <span class="soft">model</span> marks the value of the model, which the simulation does not set{% endif %}:</p>
+    <div class="scroll">
+      <table class="compact">
+        <thead><tr><th>mapping</th><th>input</th><th class="num">simulated</th><th class="num">reported</th><th>reported by</th><th class="num">ratio</th></tr></thead>
+        <tbody>
+        {% for d in inp.differs %}
+        <tr>
+          <td class="mono wrap">{{ d.experiment }}/{{ d.mapping }}</td>
+          <td class="mono">{{ d.target }}{% if d.source == "model" %} <span class="soft">model</span>{% endif %}</td>
+          <td class="num nowrap">{{ d.simulated | number }} <span class="soft">{{ d.unit }}</span></td>
+          <td class="num nowrap">{{ d.reported | number }} <span class="soft">{{ d.unit }}{% if d.low is not none %}, {{ d.low | number }} to {{ d.high | number }}{% endif %}</span></td>
+          <td>{{ d.reported_by | join(", ") }}</td>
+          <td class="num"><span class="state not_met">{{ d.ratio | number }}</span></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+    {% endif %}
+
     <h4>Verification</h4>
     {% if c.verification %}
     <div class="scroll">

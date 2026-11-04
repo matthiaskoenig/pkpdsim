@@ -59,6 +59,7 @@ SCORECARD_COLUMNS: Final = (
     "temporal_met",
     "uncertainty_robust",
     "band_fold",
+    "inputs_differ",
 )
 #: the columns of the qualification
 QUALIFICATION_COLUMNS: Final = (
@@ -141,8 +142,10 @@ def scorecard(records: Mapping[str, CredibilityAssessment]) -> pd.DataFrame:
         met with the threshold probability over the parameter draws (False
         if one is shown below it, empty if one is undecided or without the
         propagation) and `band_fold` the largest median fold width of the
-        prediction bands of the quantities) and per acceptance rule its value,
-        the rule of the ratio pairs `Guest` included.
+        prediction bands of the quantities, `inputs_differ` the simulated
+        inputs of the decisive mappings which differ from the reported ones,
+        empty without the checks of the inputs) and per acceptance rule its
+        value, the rule of the ratio pairs `Guest` included.
     """
     rows: list[dict[str, object]] = []
     for model, assessment in records.items():
@@ -166,6 +169,9 @@ def scorecard(records: Mapping[str, CredibilityAssessment]) -> pd.DataFrame:
                 "temporal_met": _temporal_met(c.temporal),
                 "uncertainty_robust": _robust(c.uncertainty),
                 "band_fold": _band_fold(c.uncertainty),
+                "inputs_differ": (
+                    None if c.inputs is None else len(c.inputs["differs"])
+                ),
             }
             rules = [
                 *c.acceptance,

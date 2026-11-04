@@ -37,6 +37,12 @@
 - `uncertainty_sensitivity.tsv`: one row per context of use, target (a
   quantity or a rule) and fitted parameter: the first-order index of the
   target over the parameter draws.
+- `inputs.tsv`: one row per mapping of the adopted fits and simulated input
+  (a covariate of the subjects or a dose): the simulated value and where it
+  comes from, the reported value and range it is compared with, by which
+  groups, individuals or interventions, the status and the ratio.
+- `input_ranges.tsv`: one row per context of use and input of its decisive
+  mappings: the mappings, the simulated range and the counts of the statuses.
 - `studies.tsv`: one row per study with points in the adopted fits, the
   provenance of its data: the folder, the fits and points, the record of its
   collection (the days of the first and the latest collection and how the
@@ -82,6 +88,7 @@ from pkpdsim.credibility.assessment import (
     EvidenceResult,
     Verdict,
 )
+from pkpdsim.credibility.inputs import INPUT_COLUMNS
 from pkpdsim.credibility.ratios import RATIO_COLUMNS
 from pkpdsim.credibility.risk import DEFAULT_MIN_POINTS
 from pkpdsim.credibility.studies import STUDY_COLUMNS
@@ -95,6 +102,7 @@ __all__ = [
     "DOMAIN_COLUMNS",
     "EVIDENCE_COLUMNS",
     "FATE_COLUMNS",
+    "INPUT_RANGE_COLUMNS",
     "QUANTITY_COLUMNS",
     "RECORD",
     "TEMPLATE",
@@ -106,6 +114,8 @@ __all__ = [
     "domain_table",
     "evidence_table",
     "fates_table",
+    "input_ranges_table",
+    "inputs_table",
     "print_summary",
     "quantities_table",
     "ratios_table",
@@ -504,6 +514,58 @@ def sensitivity_table(assessment: CredibilityAssessment) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=list(SENSITIVITY_COLUMNS))
 
 
+def inputs_table(assessment: CredibilityAssessment) -> pd.DataFrame:
+    """Get one row per mapping of the adopted fits and simulated input.
+
+    Args:
+        assessment: the assessment.
+
+    Returns:
+        The columns of `INPUT_COLUMNS`, see `InputCheck`; the reporting
+        groups, individuals and interventions joined by `;`.
+    """
+    rows = [
+        {**check, "reported_by": ";".join(check["reported_by"])}
+        for check in assessment.inputs
+    ]
+    return pd.DataFrame(rows, columns=list(INPUT_COLUMNS))
+
+
+#: the columns of `input_ranges.tsv`
+INPUT_RANGE_COLUMNS = (
+    "context",
+    "target",
+    "kind",
+    "unit",
+    "n_mappings",
+    "low",
+    "high",
+    "n_equivalent",
+    "n_in_range",
+    "n_differs",
+    "n_not_reported",
+)
+
+
+def input_ranges_table(assessment: CredibilityAssessment) -> pd.DataFrame:
+    """Get one row per context of use and input of its decisive mappings.
+
+    Args:
+        assessment: the assessment.
+
+    Returns:
+        The columns of `INPUT_RANGE_COLUMNS`, see `InputSummary`; no rows
+        without the checks of the inputs.
+    """
+    rows = [
+        {"context": c.id, **summary}
+        for c in assessment.contexts
+        if c.inputs is not None
+        for summary in c.inputs["inputs"]
+    ]
+    return pd.DataFrame(rows, columns=list(INPUT_RANGE_COLUMNS))
+
+
 def studies_table(assessment: CredibilityAssessment) -> pd.DataFrame:
     """Get one row per study with points in the adopted fits.
 
@@ -713,6 +775,8 @@ def write_outputs(assessment: CredibilityAssessment, output_dir: Path) -> Path:
         "quantities.tsv": _tsv(quantities_table(assessment)),
         "ratios.tsv": _tsv(ratios_table(assessment)),
         "temporal.tsv": _tsv(temporal_table(assessment)),
+        "inputs.tsv": _tsv(inputs_table(assessment)),
+        "input_ranges.tsv": _tsv(input_ranges_table(assessment)),
         "studies.tsv": _tsv(studies_table(assessment)),
         "uncertainty.tsv": _tsv(uncertainty_table(assessment)),
         "uncertainty_quantities.tsv": _tsv(uncertainty_quantities_table(assessment)),

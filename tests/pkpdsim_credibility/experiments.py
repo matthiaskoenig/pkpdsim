@@ -20,6 +20,9 @@ def _data(values: list[float], ureg: object) -> DataSet:
             "A": values,
             "A_unit": "mM",
             "count": 4,
+            # the group and the intervention of the study tables
+            "group": "all",
+            "intervention": "A1",
         }
     )
     return DataSet.from_df(df, ureg=ureg)  # ty: ignore[invalid-argument-type]

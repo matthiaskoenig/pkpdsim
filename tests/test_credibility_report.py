@@ -31,6 +31,8 @@ FILES = {
     "ratios.tsv",
     "cross_validation.tsv",
     "temporal.tsv",
+    "inputs.tsv",
+    "input_ranges.tsv",
     "studies.tsv",
     "uncertainty.tsv",
     "uncertainty_quantities.tsv",

@@ -100,6 +100,24 @@ Parameter uncertainty, the adopted fits at {{ context.uncertainty.n_draws }} dra
 
 {% endif %}
 {% endif %}
+{% if context.inputs and context.inputs.n_checked %}
+Inputs, the simulated covariates of the subjects and the doses of {{ context.inputs.n_checked }} of the {{ context.inputs.n_mappings }} decisive mappings against the ones their studies report:
+
+| Input | Mappings | Simulated | Equivalent | In range | Differ | Not reported |
+| --- | --- | --- | --- | --- | --- | --- |
+{% for input in context.inputs.inputs %}
+| `{{ input.target }}`{% if input.kind == "dose" %} (dose){% endif %} | {{ input.n_mappings }} | {{ "%.3g" % input.low }}{% if input.high != input.low %} to {{ "%.3g" % input.high }}{% endif %} {{ input.unit }} | {{ input.n_equivalent }} | {{ input.n_in_range }} | {{ input.n_differs }} | {{ input.n_not_reported }} |
+{% endfor %}
+
+{% if context.inputs.differs %}
+| Mapping | Input | Simulated | Reported | Reported by |
+| --- | --- | --- | --- | --- |
+{% for check in context.inputs.differs %}
+| {{ check.experiment }}/{{ check.mapping | cell }} | `{{ check.target }}` | {{ "%.3g" % check.simulated }} {{ check.unit }} | {{ "%.3g" % check.reported if check.reported is not none else "n/a" }} {{ check.unit }} | {{ check.reported_by | join(", ") | cell }} |
+{% endfor %}
+
+{% endif %}
+{% endif %}
 {% if context.verification %}
 | Verification | Factor | Points | Largest difference | Result |
 | --- | --- | --- | --- | --- |

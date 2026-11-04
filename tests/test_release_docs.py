@@ -634,6 +634,37 @@ def test_the_credibility_page_shows_the_parameter_uncertainty(
     assert "| `GMFE` (rule) | `DECAY.k` 0." in dose
 
 
+def test_the_credibility_page_shows_the_inputs(
+    release: tuple[ProjectContext, Path],
+) -> None:
+    from test_credibility_inputs import PROVENANCE, _check
+
+    context, path = release
+    context = dataclasses.replace(
+        context,
+        model=dataclasses.replace(
+            context.model, credibility="pkpdsim_toy.credibility:CREDIBILITY"
+        ),
+    )
+    checks = [
+        _check("fm_dose", "BW", 72.0, "equivalent"),
+        _check("fm_dose", "PODOSE_a", 25.0, "differs"),
+    ]
+    assessment = assess_table(CREDIBILITY, fit_table(), PROVENANCE, inputs=checks)
+    (path / BuildPaths.CREDIBILITY).mkdir(parents=True)
+    assessment.to_json(path / BuildPaths.CREDIBILITY / "credibility.json")
+    write_project_files(context, path)
+    write_docs(context, path)
+    page = (path / "docs" / "credibility.md").read_text()
+    dose = page[page.index("## dose") : page.index("## renal")]
+    assert (
+        "Inputs, the simulated covariates of the subjects and the doses of 1 of" in dose
+    )
+    assert "| `BW` | 1 | 72 kg | 1 | 0 | 0 | 0 |" in dose
+    assert "| `PODOSE_a` (dose) | 1 | 25 mg | 0 | 0 | 1 | 0 |" in dose
+    assert "| CredA/fm_dose | `PODOSE_a` | 25 mg | 70 mg | group all |" in dose
+
+
 def test_the_credibility_page_escapes_a_table_cell(
     release: tuple[ProjectContext, Path],
 ) -> None:
