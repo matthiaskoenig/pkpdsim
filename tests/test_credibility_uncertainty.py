@@ -34,6 +34,7 @@ from pkpdsim.credibility.uncertainty import (
     UncertaintySettings,
     parameter_draws,
     rule_probability,
+    sensitivity_indices,
 )
 from pkpdsim.model import PKPDModel
 from pkpdsim.uncertainty import ParameterUncertainty, UncertaintyMethod
@@ -125,6 +126,20 @@ def test_the_settings() -> None:
         UncertaintySettings(threshold=1.0)
 
 
+def test_the_sensitivity_indices() -> None:
+    parameters = [_parameter("a", 1.0), _parameter("b", 2.0)]
+    settings = UncertaintySettings(draws=512, seed=2)
+    draws = parameter_draws("PK_20261001_120000__abcde", parameters, None, settings)
+    y = np.log(draws.values[:, 0])
+    y[:3] = np.nan
+    a, b = sensitivity_indices("Cve", "quantity", y, {"PK": draws})
+    assert (a["parameter"], b["parameter"]) == ("a", "b")
+    assert (a["index"] or 0.0) > 0.8
+    assert (b["index"] or 0.0) < 0.05
+    (constant, _) = sensitivity_indices("C", "quantity", np.ones(512), {"PK": draws})
+    assert constant["index"] is None
+
+
 def test_a_rule_probability() -> None:
     accepted = rule_probability("GMFE", "<= 1.5", [True] * 256, SETTINGS, 1)
     assert (accepted["estimate"], accepted["decision"]) == (1.0, "accepted")
@@ -186,6 +201,15 @@ def test_the_record_of_a_context() -> None:
     assert factor["status"] == "assessed"
     statement = str(factor["statement"])
     assert "propagated with 256 draws" in statement
+    assert "carried most by" in statement
+    # the one parameter carries the variance of the quantity and of the rules
+    by_target = {i["target"]: i for i in record["sensitivity"]}
+    assert set(by_target) == {
+        quantity["quantity"],
+        *(r["name"] for r in record["rules"]),
+    }
+    assert by_target[quantity["quantity"]]["kind"] == "quantity"
+    assert (by_target[quantity["quantity"]]["index"] or 0.0) > 0.8
     assert "accepted" in statement
     # the verdicts do not change, the factor is not assessed without
     plain = assess_table(CREDIBILITY, fit_table(), PROVENANCE)
@@ -235,7 +259,10 @@ def test_the_record_and_the_outputs(tmp_path: Path) -> None:
         "band_fold",
         "coverage",
     ]
+    sensitivity = pd.read_csv(output / "uncertainty_sensitivity.tsv", sep="\t")
+    assert set(sensitivity["parameter"]) == {"k"}
     html = (output / "index.html").read_text()
+    assert "leading parameters" in html
     assert "Parameter uncertainty" in html
     assert "P(met)" in html
 
