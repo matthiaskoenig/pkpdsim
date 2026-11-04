@@ -100,6 +100,17 @@ from pkpdsim.credibility.uncertainty import (
     rule_probability,
     sensitivity_indices,
 )
+from pkpdsim.credibility.variability import (
+    VPC_COLUMNS,
+    PredictiveChecks,
+    QuantityCoverage,
+    VariabilityRecord,
+    VariabilitySettings,
+    VpcPoint,
+    predictive_checks,
+    variability_record,
+    variability_statement,
+)
 from pkpdsim.credibility.verification import (
     NUMERICAL_CHECKS,
     TIGHTENING,
@@ -405,6 +416,10 @@ class ContextResult:
         inputs: the equivalency of the inputs of the decisive mappings, see
             `pkpdsim.credibility.inputs`; `None` for an assessment without the
             checks of the inputs and a record of pkpdsim 0.18 or earlier.
+        variability: the predictive check of the decisive points with the
+            declared variability of the subjects, see
+            `pkpdsim.credibility.variability`; `None` without it and in a
+            record of pkpdsim 0.18 or earlier.
     """
 
     id: str
@@ -430,6 +445,7 @@ class ContextResult:
     temporal: TemporalRecord | None = None
     uncertainty: UncertaintyRecord | None = None
     inputs: InputsRecord | None = None
+    variability: VariabilityRecord | None = None
 
     @property
     def verified(self) -> bool | None:
@@ -506,6 +522,11 @@ class ContextResult:
             "inputs": (
                 None if self.inputs is None else json.loads(json.dumps(self.inputs))
             ),
+            "variability": (
+                None
+                if self.variability is None
+                else json.loads(json.dumps(self.variability))
+            ),
         }
 
     @classmethod
@@ -515,7 +536,7 @@ class ContextResult:
         A record of pkpdsim 0.17 has no minimum of points, read as 0, and no
         coverage of the quantities, read as `None` with 0 points; a record of
         0.18 or earlier has no ratio pairs, no temporal record, no
-        uncertainty and no equivalency of the inputs.
+        uncertainty, no equivalency of the inputs and no predictive check.
         """
         return cls(
             id=data["id"],
@@ -594,7 +615,34 @@ class ContextResult:
             temporal=_temporal_from_dict(data.get("temporal")),
             uncertainty=_uncertainty_from_dict(data.get("uncertainty")),
             inputs=_inputs_from_dict(data.get("inputs")),
+            variability=_variability_from_dict(data.get("variability")),
         )
+
+
+def _variability_from_dict(data: Mapping[str, Any] | None) -> VariabilityRecord | None:
+    """Get the predictive check of a context from plain data."""
+    if data is None:
+        return None
+    return VariabilityRecord(
+        subjects=int(data["subjects"]),
+        studies=int(data["studies"]),
+        vectors=int(data["vectors"]),
+        groups=int(data["groups"]),
+        seed=int(data["seed"]),
+        targets=dict(data["targets"]),
+        between=dict(data["between"]),
+        quantiles=[float(q) for q in data["quantiles"]],
+        expected=float(data["expected"]),
+        n_points=int(data["n_points"]),
+        n_groups=int(data["n_groups"]),
+        coverage=data["coverage"],
+        low=data["low"],
+        high=data["high"],
+        level=float(data["level"]),
+        agreement=data["agreement"],
+        quantities=[QuantityCoverage(**q) for q in data["quantities"]],
+        failed=int(data["failed"]),
+    )
 
 
 def _inputs_from_dict(data: Mapping[str, Any] | None) -> InputsRecord | None:
@@ -740,6 +788,9 @@ class CredibilityAssessment:
             adopted fits against the reported ones, see
             `pkpdsim.credibility.inputs`; empty without and in a record of
             pkpdsim 0.18 or earlier.
+        vpc: every data point of the adopted fits with the band of its
+            predictive check, see `pkpdsim.credibility.variability`; empty
+            without the check and in a record of pkpdsim 0.18 or earlier.
     """
 
     provenance: Provenance
@@ -753,6 +804,7 @@ class CredibilityAssessment:
     cross_validations: list[CrossValidation] = dataclasses.field(default_factory=list)
     studies: list[StudyData] = dataclasses.field(default_factory=list)
     inputs: list[InputCheck] = dataclasses.field(default_factory=list)
+    vpc: list[VpcPoint] = dataclasses.field(default_factory=list)
 
     def to_dict(self) -> dict[str, object]:
         """Get the assessment as plain data, `NaN` as `None`."""
@@ -770,6 +822,7 @@ class CredibilityAssessment:
             "cross_validations": [c.to_dict() for c in self.cross_validations],
             "studies": [dict(study) for study in self.studies],
             "inputs": [dict(check) for check in self.inputs],
+            "vpc": json.loads(json.dumps(self.vpc)),
         }
 
     @classmethod
@@ -801,6 +854,7 @@ class CredibilityAssessment:
             ],
             studies=[StudyData(**study) for study in data.get("studies", ())],
             inputs=[InputCheck(**check) for check in data.get("inputs", ())],
+            vpc=[VpcPoint(**point) for point in data.get("vpc", ())],
         )
 
     def to_json(self, path: Path) -> None:
@@ -1178,6 +1232,7 @@ def _factors(
     temporal: TemporalRecord | None = None,
     uncertainty: UncertaintyRecord | None = None,
     inputs: InputsRecord | None = None,
+    variability: VariabilityRecord | None = None,
 ) -> list[FactorRecord]:
     """Get the factors of V&V 40 of a context, the assessed ones with its results.
 
@@ -1240,9 +1295,24 @@ def _factors(
                 ]
             )
             data["step"] = None
-        elif factor.id == "equivalency_of_inputs" and inputs and inputs["n_checked"]:
+        elif factor.id == "equivalency_of_inputs" and (
+            (inputs and inputs["n_checked"]) or variability is not None
+        ):
             data["status"] = FactorStatus.ASSESSED.value
-            data["statement"] = inputs_statement(inputs)
+            data["statement"] = " ".join(
+                [
+                    *(
+                        [inputs_statement(inputs)]
+                        if inputs and inputs["n_checked"]
+                        else []
+                    ),
+                    *(
+                        []
+                        if variability is None
+                        else [variability_statement(variability)]
+                    ),
+                ]
+            )
             data["step"] = None
         elif factor.id == "model_inputs" and uncertainty is not None:
             data["status"] = FactorStatus.ASSESSED.value
@@ -1631,6 +1701,7 @@ def _context_result(
     chronology: Chronology | None = None,
     propagation: Propagation | None = None,
     inputs: Sequence[InputCheck] | None = None,
+    checks_of_variability: PredictiveChecks | None = None,
 ) -> tuple[ContextResult, list[CoverageEntry]]:
     """Get the result and the coverage of a context of use.
 
@@ -1674,6 +1745,13 @@ def _context_result(
     temporal = _temporal(cou, decisive, chronology)
     uncertainty = _uncertainty(cou, decisive, quantities, propagation, lookup)
     inputs_of = None if inputs is None else inputs_record(inputs, decisive)
+    variability = (
+        None
+        if checks_of_variability is None
+        else variability_record(
+            checks_of_variability, decisive, applicable(decisive).index, quantities
+        )
+    )
     result = ContextResult(
         id=cou.id,
         title=cou.title,
@@ -1719,6 +1797,7 @@ def _context_result(
             temporal,
             uncertainty,
             inputs_of,
+            variability,
         ),
         n_decisive=len(decisive),
         n_evaluable=n_evaluable,
@@ -1738,6 +1817,7 @@ def _context_result(
         temporal=temporal,
         uncertainty=uncertainty,
         inputs=inputs_of,
+        variability=variability,
     )
     return result, coverage
 
@@ -1752,6 +1832,7 @@ def assess_table(
     studies: Sequence[StudyData] = (),
     propagation: Propagation | None = None,
     inputs: Sequence[InputCheck] | None = None,
+    variability: PredictiveChecks | None = None,
 ) -> CredibilityAssessment:
     """Assess the contexts of use of a declaration on the data points of the fits.
 
@@ -1776,6 +1857,9 @@ def assess_table(
         inputs: the checks of the simulated inputs of the mappings against the
             reported ones, see `pkpdsim.credibility.inputs.input_checks`; no
             context has a record of the equivalency of its inputs without.
+        variability: the predictive checks of the fits with the declared
+            variability, see `pkpdsim.credibility.variability`; no context
+            has a predictive check without.
 
     Returns:
         The assessment.
@@ -1801,6 +1885,7 @@ def assess_table(
             chronology,
             propagation,
             inputs,
+            variability,
         )
         contexts.append(result)
         coverage.extend(entries)
@@ -1831,7 +1916,37 @@ def assess_table(
         cross_validations=list(cross_validations),
         studies=list(studies),
         inputs=[] if inputs is None else list(inputs),
+        vpc=[] if variability is None else _vpc_points(table, variability),
     )
+
+
+def _vpc_points(table: pd.DataFrame, checks: PredictiveChecks) -> list[VpcPoint]:
+    """Get every point of the fits with the band of its predictive check."""
+    keys = table.reindex(columns=["fit", "experiment", "mapping", "x", "DV"])
+    points = keys.join(checks.points, how="inner")
+    return [
+        VpcPoint(
+            fit=str(row["fit"]),
+            experiment=str(row["experiment"]),
+            mapping=str(row["mapping"]),
+            x=_optional(row["x"]),
+            DV=float(row["DV"]),
+            N=int(row["N"]),
+            statistic=str(row["statistic"]),
+            PRED=float(row["PRED"]),
+            low=_optional(row["low"]),
+            median=_optional(row["median"]),
+            high=_optional(row["high"]),
+            inside=None if pd.isna(row["inside"]) else bool(row["inside"]),
+        )
+        for row in points[list(VPC_COLUMNS)].to_dict("records")
+    ]
+
+
+def _optional(value: object) -> float | None:
+    """Get a finite number, `None` for a missing or not finite one."""
+    number = float(value)  # ty: ignore[invalid-argument-type]
+    return number if math.isfinite(number) else None
 
 
 def _git(model: PKPDModel, *args: str) -> str | None:
@@ -1899,6 +2014,7 @@ def assess(
     verification: bool = True,
     lock: bool = False,
     uncertainty: UncertaintySettings | None = None,
+    variability: VariabilitySettings | None = None,
 ) -> CredibilityAssessment:
     """Assess the contexts of use of a model on its adopted fits.
 
@@ -1923,12 +2039,18 @@ def assess(
             to the decisive predictions with these settings, see
             `pkpdsim.credibility.uncertainty`; the factor model inputs is not
             assessed without.
+        variability: check the decisive points with the declared variability
+            of the subjects (`Credibility.variability`) with these settings,
+            nested in the draws of the parameters with `uncertainty`, see
+            `pkpdsim.credibility.variability`.
 
     Returns:
         The assessment.
 
     Raises:
-        ValueError: if the model has no declaration or no adopted fits.
+        ValueError: if the model has no declaration or no adopted fits, or the
+            settings of the variability are given for a declaration without a
+            variability.
         KindMismatchError: if a kind differs from the recorded one.
         SelectionError: if the evidence selects invalid data.
         LockMismatchError: if the evidence differs from the lock.
@@ -1942,6 +2064,11 @@ def assess(
     from pkpdsim.credibility.temporal import chronology
 
     credibility = model.load_credibility()
+    if variability is not None and credibility.variability is None:
+        raise ValueError(
+            f"The credibility of '{model.name}' declares no variability of the "
+            "subjects (`Credibility.variability`), which the predictive check needs."
+        )
     fits = evaluate_fits(model)
     selections = select(credibility, fits)
     state: str | None
@@ -1955,6 +2082,13 @@ def assess(
         state = None if differences is None else "matched"
     checks = verify(model, fits) if verification else None
     propagation = None if uncertainty is None else propagate(model, fits, uncertainty)
+    checks_of_variability = (
+        None
+        if variability is None or credibility.variability is None
+        else predictive_checks(
+            model, fits, credibility.variability, variability, propagation
+        )
+    )
     logger.info("Assess the contexts of use of '%s'", model.name)
     return assess_table(
         credibility,
@@ -1966,4 +2100,5 @@ def assess(
         study_data(model, fits.table),
         propagation,
         input_checks(model, fits, credibility.covariates),
+        checks_of_variability,
     )

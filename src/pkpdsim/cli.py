@@ -1069,6 +1069,29 @@ def credibility_command(model: PKPDModel, args: Sequence[str] | None = None) -> 
         help="the seed of the draws of --uncertainty (default 1234)",
     )
     p.add_argument(
+        "--variability",
+        action="store_true",
+        help="check the decisive points with the variability of the subjects the "
+        "declaration has (Credibility.variability): the visual predictive check, "
+        "a mean of a group against the means of virtual groups of its size, "
+        "nested in the draws of --uncertainty",
+    )
+    p.add_argument(
+        "--subjects",
+        type=int,
+        default=None,
+        metavar="N",
+        help="the subjects of every study of --variability (default 64)",
+    )
+    p.add_argument(
+        "--studies",
+        type=int,
+        default=None,
+        metavar="N",
+        help="the studies of every parameter vector of --variability with a "
+        "variability between the studies (default 16)",
+    )
+    p.add_argument(
         "--source-commit",
         metavar="SHA",
         help="the commit of the source repository of the model, recorded in the "
@@ -1084,6 +1107,12 @@ def credibility_command(model: PKPDModel, args: Sequence[str] | None = None) -> 
         p.error("--lock is an option of an assessment, not of a record")
     if options.from_json is not None and options.uncertainty:
         p.error("--uncertainty is an option of an assessment, not of a record")
+    if options.from_json is not None and options.variability:
+        p.error("--variability is an option of an assessment, not of a record")
+    if not options.variability and (
+        options.subjects is not None or options.studies is not None
+    ):
+        p.error("--subjects and --studies are options of --variability")
     if not options.uncertainty and (
         options.draws is not None or options.seed is not None
     ):
@@ -1100,6 +1129,22 @@ def credibility_command(model: PKPDModel, args: Sequence[str] | None = None) -> 
             )
         except ValueError as err:
             p.error(str(err))
+    variability = None
+    if options.variability:
+        from pkpdsim.credibility.variability import VariabilitySettings
+
+        defaults = VariabilitySettings()
+        try:
+            variability = VariabilitySettings(
+                subjects=(
+                    defaults.subjects if options.subjects is None else options.subjects
+                ),
+                studies=defaults.studies
+                if options.studies is None
+                else options.studies,
+            )
+        except ValueError as err:
+            p.error(str(err))
     try:
         assessment = (
             assess(
@@ -1108,6 +1153,7 @@ def credibility_command(model: PKPDModel, args: Sequence[str] | None = None) -> 
                 verification=not options.no_verification,
                 lock=options.lock,
                 uncertainty=uncertainty,
+                variability=variability,
             )
             if options.from_json is None
             else _read_assessment(options.from_json)

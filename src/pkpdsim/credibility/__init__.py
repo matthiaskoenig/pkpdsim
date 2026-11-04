@@ -19,7 +19,9 @@ uncertainty of the adopted fits is propagated to the decisive predictions
 (`propagate`, `UncertaintySettings`), the probability that the acceptance is
 met over the draws of the parameters. The simulated inputs of the mappings,
 the covariates of the subjects and the doses, are checked against the reported
-ones of their studies (`input_checks`), the equivalency of the inputs.
+ones of their studies (`input_checks`), the equivalency of the inputs, and
+the decisive points with the declared variability of the subjects
+(`predictive_checks`, `VariabilitySettings`), the visual predictive check.
 """
 
 from pkpdsim.credibility.assessment import (
@@ -117,6 +119,12 @@ from pkpdsim.credibility.uncertainty import (
     UncertaintySettings,
     propagate,
 )
+from pkpdsim.credibility.variability import (
+    PredictiveChecks,
+    VariabilityRecord,
+    VariabilitySettings,
+    predictive_checks,
+)
 from pkpdsim.credibility.verification import (
     BATTERY_CHECKS,
     Check,
@@ -175,6 +183,7 @@ __all__ = [
     "LockMismatchError",
     "MappingLookup",
     "MaxGmfe",
+    "PredictiveChecks",
     "Propagation",
     "Provenance",
     "QuantityOfInterest",
@@ -193,6 +202,8 @@ __all__ = [
     "UncertaintySettings",
     "Unclaimed",
     "UnclaimedRecord",
+    "VariabilityRecord",
+    "VariabilitySettings",
     "Verdict",
     "Verification",
     "VerificationSummary",
@@ -210,6 +221,7 @@ __all__ = [
     "mapping_table",
     "model_risk",
     "normalize_observable",
+    "predictive_checks",
     "propagate",
     "ratio_pairs",
     "recorded_kinds",

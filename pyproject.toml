@@ -44,7 +44,7 @@ dependencies = [
     # the simulator, the initial values are selections of a roadrunner model
     "libroadrunner>=2.11.0",
     # the simulation experiments, their figures and reports, and the fits
-    "sbmlsim>=0.15.0,<0.16",
+    "sbmlsim>=0.16.0,<0.17",
     # the non-compartmental analysis of the scans of a model (`pkpdsim.pk`)
     "pkpdutils>=1.4.0",
     # the study folders of format 2 of PK-DB, read as `pkdb check` reads them (`pkpdsim.data`)

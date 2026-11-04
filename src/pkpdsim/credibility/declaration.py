@@ -16,13 +16,16 @@ from collections.abc import Collection, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum, unique
 from types import MappingProxyType
-from typing import Final, Protocol, get_type_hints
+from typing import TYPE_CHECKING, Final, Protocol, get_type_hints
 
 import pandas as pd
 from sbmlsim.fit.evaluation import Criterion, afe, criteria_metrics, gmfe
 from sbmlsim.fit.helpers import MappingFilter
 
 from pkpdsim.metadata import PKPDMappingMetaData
+
+if TYPE_CHECKING:
+    from sbmlsim.fit.variability import Variability
 
 __all__ = [
     "DEFAULT_COVARIATES",
@@ -629,6 +632,11 @@ class Credibility:
             height), see `pkpdsim.credibility.inputs`; a model whose targets
             have other ids or which simulates further covariates declares
             them.
+        variability: the variability between the subjects, relative
+            distributions of targets (`sbmlsim.fit.variability.Variability`),
+            the input of the predictive check of the decisive points, see
+            `pkpdsim.credibility.variability`; `None` for a model which
+            declares none.
 
     Raises:
         DeclarationError: with every problem of the declaration.
@@ -638,6 +646,7 @@ class Credibility:
     limitations: tuple[Evidence, ...] = ()
     notes: str = ""
     covariates: Mapping[str, str] = field(default=DEFAULT_COVARIATES, hash=False)
+    variability: Variability | None = field(default=None, hash=False)
 
     def __post_init__(self) -> None:
         """Check the declaration.
@@ -668,6 +677,14 @@ class Credibility:
                 and measurement.strip()
             )
         )
+        if self.variability is not None:
+            from sbmlsim.fit.variability import Variability
+
+            if not isinstance(self.variability, Variability):
+                found.append(
+                    "the variability must be a sbmlsim.fit.variability.Variability, "
+                    f"not {type(self.variability).__name__}"
+                )
         if found:
             raise DeclarationError(found)
         object.__setattr__(self, "covariates", MappingProxyType(dict(self.covariates)))

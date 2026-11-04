@@ -478,6 +478,44 @@ td.status .soft { font-size: 12.5px; }
     {% endif %}
     {% endif %}
 
+    {% if c.variability is not none %}{% set v = c.variability %}
+    {% set agreements = {"consistent": "met", "narrow": "not_met", "wide": "not_evaluable"} %}
+    <h4>Variability</h4>
+    <p class="note">The visual predictive check of the decisive points with the variability of the subjects the model declares ({% for t, d in v.targets.items() %}<span class="mono nowrap">{{ t }} {{ d }}</span>{% if not loop.last %}, {% endif %}{% endfor %}){% if v.between %} and between the studies ({% for t, d in v.between.items() %}<span class="mono nowrap">{{ t }} {{ d }}</span>{% if not loop.last %}, {% endif %}{% endfor %}){% endif %}: {% if v.between %}{{ v.studies }} studies of {% endif %}{{ v.subjects }} subjects {% if v.vectors > 1 %}nested in {{ v.vectors }} draws of the parameters{% else %}at the adopted parameters{% endif %}, the subjects of every study group varying around its inputs. A mean of a group of N subjects is compared with the means of {{ v.groups }} virtual groups of N subjects{% if v.between %} of a study{% endif %}, an individual with the subjects; the verdict does not change.</p>
+    {% if v.coverage is not none %}
+    <div class="scroll">
+      <table class="compact">
+        <thead><tr><th class="num">points</th><th class="num">means of groups</th><th class="num">coverage %</th><th class="num">interval %</th><th class="num">expected %</th><th>agreement</th></tr></thead>
+        <tbody>
+        <tr>
+          <td class="num">{{ v.n_points }}</td>
+          <td class="num">{{ v.n_groups }}</td>
+          <td class="num">{{ (v.coverage * 100) | round | int }}</td>
+          <td class="num nowrap">{{ (v.low * 100) | round | int }} to {{ (v.high * 100) | round | int }}</td>
+          <td class="num">{{ (v.expected * 100) | round | int }}</td>
+          <td><span class="state {{ agreements[v.agreement] }}">{{ v.agreement }}</span>{% if v.failed %} <span class="warn">{{ v.failed }} failed subjects</span>{% endif %}</td>
+        </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">The interval is the Wilson interval of the coverage at the level {{ v.level }}. Narrow: the bands hold fewer observations than expected, the declared variability with the uncertainty of the parameters does not explain the scatter of the data, or the typical predictions are biased; wide: they hold more, the variability is larger than the one of the data.</p>
+    {% if v.quantities %}
+    <div class="scroll">
+      <table class="compact">
+        <thead><tr><th>quantity</th><th class="num">points</th><th class="num">coverage %</th></tr></thead>
+        <tbody>
+        {% for q in v.quantities %}
+        <tr><td class="mono">{{ q.quantity }}</td><td class="num">{{ q.n_points }}</td><td class="num">{{ "n/a" if q.coverage is none else (q.coverage * 100) | round | int }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+    {% else %}
+    <p class="empty">No evaluable decisive point has a band.</p>
+    {% endif %}
+    {% endif %}
+
     <h4>Verification</h4>
     {% if c.verification %}
     <div class="scroll">
