@@ -60,6 +60,8 @@ SCORECARD_COLUMNS: Final = (
     "uncertainty_robust",
     "band_fold",
     "inputs_differ",
+    "vpc_coverage",
+    "vpc_agreement",
 )
 #: the columns of the qualification
 QUALIFICATION_COLUMNS: Final = (
@@ -144,7 +146,9 @@ def scorecard(records: Mapping[str, CredibilityAssessment]) -> pd.DataFrame:
         propagation) and `band_fold` the largest median fold width of the
         prediction bands of the quantities, `inputs_differ` the simulated
         inputs of the decisive mappings which differ from the reported ones,
-        empty without the checks of the inputs) and per acceptance rule its
+        empty without the checks of the inputs, `vpc_coverage` and
+        `vpc_agreement` the coverage of the predictive check and its agreement
+        with the expected coverage, empty without the check) and per acceptance rule its
         value, the rule of the ratio pairs `Guest` included.
     """
     rows: list[dict[str, object]] = []
@@ -171,6 +175,12 @@ def scorecard(records: Mapping[str, CredibilityAssessment]) -> pd.DataFrame:
                 "band_fold": _band_fold(c.uncertainty),
                 "inputs_differ": (
                     None if c.inputs is None else len(c.inputs["differs"])
+                ),
+                "vpc_coverage": (
+                    None if c.variability is None else c.variability["coverage"]
+                ),
+                "vpc_agreement": (
+                    None if c.variability is None else c.variability["agreement"]
                 ),
             }
             rules = [

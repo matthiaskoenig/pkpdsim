@@ -118,6 +118,23 @@ Inputs, the simulated covariates of the subjects and the doses of {{ context.inp
 
 {% endif %}
 {% endif %}
+{% if context.variability %}
+{% set v = context.variability %}
+Variability, the visual predictive check of the decisive points with the variability of the subjects ({% for t, d in v.targets.items() %}`{{ t }}` {{ d }}{% if not loop.last %}, {% endif %}{% endfor %}){% if v.between %} and between the studies ({% for t, d in v.between.items() %}`{{ t }}` {{ d }}{% if not loop.last %}, {% endif %}{% endfor %}){% endif %}, {% if v.between %}{{ v.studies }} studies of {% endif %}{{ v.subjects }} subjects {% if v.vectors > 1 %}nested in {{ v.vectors }} draws of the parameters{% else %}at the adopted parameters{% endif %}:
+
+| Points | Means of groups | Coverage (%) | Interval (%) | Expected (%) | Agreement |
+| --- | --- | --- | --- | --- | --- |
+| {{ v.n_points }} | {{ v.n_groups }} | {{ "%.0f" % (100 * v.coverage) if v.coverage is not none else "n/a" }} | {{ "%.0f to %.0f" % (100 * v.low, 100 * v.high) if v.low is not none else "n/a" }} | {{ "%.0f" % (100 * v.expected) }} | {{ v.agreement or "n/a" }} |
+
+{% if v.quantities %}
+| Quantity of interest | Points | Coverage (%) |
+| --- | --- | --- |
+{% for q in v.quantities %}
+| `{{ q.quantity }}` | {{ q.n_points }} | {{ "%.0f" % (100 * q.coverage) if q.coverage is not none else "n/a" }} |
+{% endfor %}
+
+{% endif %}
+{% endif %}
 {% if context.verification %}
 | Verification | Factor | Points | Largest difference | Result |
 | --- | --- | --- | --- | --- |

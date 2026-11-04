@@ -43,6 +43,16 @@
   groups, individuals or interventions, the status and the ratio.
 - `input_ranges.tsv`: one row per context of use and input of its decisive
   mappings: the mappings, the simulated range and the counts of the statuses.
+- `variability.tsv`: one row per context of use with the predictive check of
+  its decisive points with the declared variability of the subjects, empty
+  without: the subjects, the parameter vectors, the points and the means of
+  groups, the coverage with its Wilson interval, the expected coverage and the
+  agreement.
+- `variability_quantities.tsv`: one row per context of use and quantity of
+  interest which is no ratio: the points with a band and their coverage.
+- `vpc.tsv`: one row per data point of the adopted fits with the band of its
+  predictive check, empty without: the subjects of the observation, the
+  statistic, the typical prediction, the quantiles and whether it is inside.
 - `studies.tsv`: one row per study with points in the adopted fits, the
   provenance of its data: the folder, the fits and points, the record of its
   collection (the days of the first and the latest collection and how the
@@ -93,6 +103,7 @@ from pkpdsim.credibility.ratios import RATIO_COLUMNS
 from pkpdsim.credibility.risk import DEFAULT_MIN_POINTS
 from pkpdsim.credibility.studies import STUDY_COLUMNS
 from pkpdsim.credibility.temporal import TEMPORAL_COLUMNS
+from pkpdsim.credibility.variability import VPC_COLUMNS
 from pkpdsim.credibility.verification import NUMERICAL_CHECKS, Check
 
 __all__ = [
@@ -107,6 +118,7 @@ __all__ = [
     "RECORD",
     "TEMPLATE",
     "TEMPLATE_DIR",
+    "VARIABILITY_COLUMNS",
     "VERIFICATION_COLUMNS",
     "battery_table",
     "contexts_table",
@@ -125,7 +137,10 @@ __all__ = [
     "temporal_table",
     "uncertainty_quantities_table",
     "uncertainty_table",
+    "variability_quantities_table",
+    "variability_table",
     "verification_table",
+    "vpc_table",
     "write_outputs",
 ]
 
@@ -566,6 +581,90 @@ def input_ranges_table(assessment: CredibilityAssessment) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=list(INPUT_RANGE_COLUMNS))
 
 
+#: the columns of `variability.tsv`
+VARIABILITY_COLUMNS = (
+    "context",
+    "subjects",
+    "studies",
+    "vectors",
+    "groups",
+    "seed",
+    "targets",
+    "between",
+    "n_points",
+    "n_groups",
+    "coverage",
+    "low",
+    "high",
+    "level",
+    "expected",
+    "agreement",
+    "failed",
+)
+
+
+def variability_table(assessment: CredibilityAssessment) -> pd.DataFrame:
+    """Get one row per context of use with its predictive check.
+
+    Args:
+        assessment: the assessment.
+
+    Returns:
+        The columns of `VARIABILITY_COLUMNS`, see `VariabilityRecord`, the
+        targets of the subjects and between the studies as `target
+        distribution` joined by `;`; no rows without the predictive check.
+    """
+    rows = [
+        {
+            "context": c.id,
+            **{k: v for k, v in c.variability.items() if k in VARIABILITY_COLUMNS},
+            "targets": ";".join(
+                f"{t} {d}" for t, d in c.variability["targets"].items()
+            ),
+            "between": ";".join(
+                f"{t} {d}" for t, d in c.variability["between"].items()
+            ),
+        }
+        for c in assessment.contexts
+        if c.variability is not None
+    ]
+    return pd.DataFrame(rows, columns=list(VARIABILITY_COLUMNS))
+
+
+def variability_quantities_table(assessment: CredibilityAssessment) -> pd.DataFrame:
+    """Get one row per context of use and quantity of its predictive check.
+
+    Args:
+        assessment: the assessment.
+
+    Returns:
+        The columns `context`, `quantity`, `n_points` and `coverage`; no rows
+        without the predictive check.
+    """
+    rows = [
+        {"context": c.id, **q}
+        for c in assessment.contexts
+        if c.variability is not None
+        for q in c.variability["quantities"]
+    ]
+    return pd.DataFrame(rows, columns=["context", "quantity", "n_points", "coverage"])
+
+
+def vpc_table(assessment: CredibilityAssessment) -> pd.DataFrame:
+    """Get one row per data point of the adopted fits with its band.
+
+    Args:
+        assessment: the assessment.
+
+    Returns:
+        The columns of `VPC_COLUMNS`, see `VpcPoint`; no rows without the
+        predictive check.
+    """
+    return pd.DataFrame(
+        [dict(point) for point in assessment.vpc], columns=list(VPC_COLUMNS)
+    )
+
+
 def studies_table(assessment: CredibilityAssessment) -> pd.DataFrame:
     """Get one row per study with points in the adopted fits.
 
@@ -777,6 +876,9 @@ def write_outputs(assessment: CredibilityAssessment, output_dir: Path) -> Path:
         "temporal.tsv": _tsv(temporal_table(assessment)),
         "inputs.tsv": _tsv(inputs_table(assessment)),
         "input_ranges.tsv": _tsv(input_ranges_table(assessment)),
+        "variability.tsv": _tsv(variability_table(assessment)),
+        "variability_quantities.tsv": _tsv(variability_quantities_table(assessment)),
+        "vpc.tsv": _tsv(vpc_table(assessment)),
         "studies.tsv": _tsv(studies_table(assessment)),
         "uncertainty.tsv": _tsv(uncertainty_table(assessment)),
         "uncertainty_quantities.tsv": _tsv(uncertainty_quantities_table(assessment)),

@@ -1,5 +1,10 @@
 """The contexts of use of the credibility test model."""
 
+import dataclasses
+
+from sbmlsim.fit.variability import Variability
+from sbmlsim.simulation.sampling import LogNormal
+
 from pkpdsim.credibility import (
     ContextOfUse,
     CouLevel,
@@ -119,4 +124,9 @@ BROKEN = Credibility(
             ),
         ),
     ),
+)
+
+#: the declaration with a variability of the rate of the decay between subjects
+CREDIBILITY_VARIABILITY = dataclasses.replace(
+    CREDIBILITY, variability=Variability({"k": LogNormal(cv=0.2)})
 )
