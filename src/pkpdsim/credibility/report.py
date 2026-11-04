@@ -23,6 +23,9 @@
   compared points (`n`), the largest relative difference and its point,
   whether the acceptance changed, whether the check passed and its problems;
   the checks of the battery are rows of every context of use.
+- `cross_validation.tsv`: one row per cross-validated adopted fit and held-out
+  study: its points, the GMFE and the share within 2-fold of the held-out and
+  of the fitted predictions, the cost of the refit.
 - `battery.tsv`: one row per check of the battery of the builds, empty if it
   did not run: the factor, the status, the cases, the largest deviation and
   where, the statement and the problems.
@@ -67,6 +70,7 @@ from pkpdsim.credibility.verification import NUMERICAL_CHECKS, Check
 __all__ = [
     "BATTERY_COLUMNS",
     "CONTEXT_COLUMNS",
+    "CROSS_VALIDATION_COLUMNS",
     "DOMAIN_COLUMNS",
     "EVIDENCE_COLUMNS",
     "FATE_COLUMNS",
@@ -77,6 +81,7 @@ __all__ = [
     "VERIFICATION_COLUMNS",
     "battery_table",
     "contexts_table",
+    "cross_validation_table",
     "domain_table",
     "evidence_table",
     "fates_table",
@@ -158,6 +163,18 @@ VERIFICATION_COLUMNS: Final = (
 )
 
 
+#: the columns of `cross_validation_table`
+CROSS_VALIDATION_COLUMNS: Final = (
+    "fit",
+    "subset",
+    "study",
+    "n_points",
+    "gmfe_held_out",
+    "gmfe_fitted",
+    "within_2fold_held_out",
+    "within_2fold_fitted",
+    "cost",
+)
 #: the columns of `battery_table`
 BATTERY_COLUMNS: Final = (
     "check",
@@ -352,6 +369,24 @@ def ratios_table(assessment: CredibilityAssessment) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=["context", *RATIO_COLUMNS])
 
 
+def cross_validation_table(assessment: CredibilityAssessment) -> pd.DataFrame:
+    """Get one row per cross-validated fit and held-out study.
+
+    Args:
+        assessment: the assessment.
+
+    Returns:
+        The columns `fit`, `subset` and the fields of `HeldOutStudy`; no rows
+        without a cross-validation.
+    """
+    rows = [
+        {"fit": cv.fit, "subset": cv.subset, **study.to_dict()}
+        for cv in assessment.cross_validations
+        for study in cv.studies
+    ]
+    return pd.DataFrame(rows, columns=list(CROSS_VALIDATION_COLUMNS))
+
+
 def battery_table(assessment: CredibilityAssessment) -> pd.DataFrame:
     """Get one row per check of the battery of the builds of the model.
 
@@ -519,6 +554,7 @@ def write_outputs(assessment: CredibilityAssessment, output_dir: Path) -> Path:
         "domain.tsv": _tsv(domain_table(assessment)),
         "quantities.tsv": _tsv(quantities_table(assessment)),
         "ratios.tsv": _tsv(ratios_table(assessment)),
+        "cross_validation.tsv": _tsv(cross_validation_table(assessment)),
         "verification.tsv": _tsv(verification_table(assessment)),
         "battery.tsv": _tsv(battery_table(assessment)),
         "fates.tsv": _tsv(fates_table(assessment)),

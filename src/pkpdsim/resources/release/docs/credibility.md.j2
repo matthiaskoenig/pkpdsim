@@ -69,6 +69,20 @@ The assessment of the contexts of use of the model against its adopted fits. A c
 
 {% endif %}
 {% endfor %}
+{% if credibility.cross_validations %}
+## Cross-validation
+
+Every adopted fit is refitted once per training study without the study and predicts the held-out study.
+
+| Fit | Study | Points | GMFE held out | GMFE fitted |
+| --- | --- | --- | --- | --- |
+{% for cv in credibility.cross_validations %}
+{% for study in cv.studies %}
+| {{ cv.subset }} | {{ study.study }} | {{ study.n_points }} | {{ "%.3g" % study.gmfe_held_out if study.gmfe_held_out is not none else "n/a" }} | {{ "%.3g" % study.gmfe_fitted if study.gmfe_fitted is not none else "n/a" }} |
+{% endfor %}
+{% endfor %}
+
+{% endif %}
 {% if credibility.battery %}
 ## Battery of the builds
 

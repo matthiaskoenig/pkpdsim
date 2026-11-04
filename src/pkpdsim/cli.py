@@ -99,7 +99,7 @@ from pkpdsim.credibility.report import print_summary, write_outputs
 from pkpdsim.fit import (
     FIXED_FITS,
     at_level,
-    current_fixed_fits,
+    fixed_values,
     leveled_definitions,
     records_context,
     remainder_problems,
@@ -620,6 +620,16 @@ def fit_parser(
         action="store_true",
         help="replace the record of an adopted fit of the same id",
     )
+    adopt.add_argument(
+        "--cross-validation",
+        metavar="FIT_ID",
+        default=None,
+        help="cross-validate the adopted fit FIT_ID instead of fitting: refit "
+        "its problem once per training study without the study, from the "
+        "adopted parameters, and store the predictions of the held-out studies "
+        "in its record (cross_validation.json); --experiments limits the "
+        "studies, --cores and --seed are those of the refits",
+    )
 
     identifiability = p.add_argument_group("identifiability")
     identifiability.add_argument(
@@ -751,6 +761,9 @@ def fit_command(
     if options.adopt is not None:
         _adopt(model, options.output_dir / options.adopt, force=options.force)
         return {}
+    if options.cross_validation is not None:
+        _cross_validate(model, options)
+        return {}
 
     # the problems of the fit load the models at the level of the model, in the
     # process and in every worker of a pool
@@ -808,21 +821,13 @@ def fit_command(
 
     # the adopted fits of the other subsets and the values of their parameters,
     # in the units of the model, which this fit does not optimize itself
-    fixed_fits = current_fixed_fits(model, options.subset)
-    records = model.fit_records().records
-    fitted = {p.pid for p in definition.parameters}
-    fixed_values = {
-        pid: parameter.value
-        for fit_id_ in fixed_fits
-        for pid, parameter in records[fit_id_].parameters.items()
-        if pid not in fitted
-    }
+    fixed_fits, fixed = fixed_values(model, options.subset, definition)
     # every build which the experiments of the fit run has the remainders
     remainders = list(
         dict.fromkeys(
             problem
             for path in model.model_paths.values()
-            for problem in remainder_problems(path, definition.parameters, fixed_values)
+            for problem in remainder_problems(path, definition.parameters, fixed)
         )
     )
     if remainders:
@@ -849,7 +854,7 @@ def fit_command(
             "start": options.start,
             FIXED_FITS: fixed_fits,
         },
-        fixed_values=fixed_values,
+        fixed_values=fixed,
         **sampling,
     )
 
@@ -871,6 +876,36 @@ def fit_command(
             context=context,
         )
     return runs
+
+
+def _cross_validate(model: PKPDModel, options: argparse.Namespace) -> None:
+    """Cross-validate an adopted fit and store the result in its record."""
+    from pkpdsim.credibility.cross_validation import (
+        cross_validate,
+        write_cross_validation,
+    )
+
+    try:
+        result = cross_validate(
+            model,
+            options.cross_validation,
+            options.experiments,
+            output_dir=options.output_dir / "cross_validation",
+            seed=options.seed if options.seed is not None else 1234,
+            n_cores=options.cores,
+        )
+    except (ValueError, KeyError, FileNotFoundError) as err:
+        console.print(str(err), style="error")
+        sys.exit(1)
+    path = write_cross_validation(model, result)
+    fit_display.section("Cross-validation", icon=fit_display.ICON_FIT)
+    for study in result.studies:
+        console.print(
+            f"{study.study}: GMFE {study.gmfe_held_out:.3g} held out, "
+            f"{study.gmfe_fitted:.3g} fitted ({study.n_points} points)"
+        )
+    console.print(result.statement())
+    display.key_values({"cross-validation": path})
 
 
 def report_command(model: PKPDModel, args: Sequence[str] | None = None) -> Path:
