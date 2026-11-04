@@ -95,6 +95,7 @@ td.status .soft { font-size: 12.5px; }
     <a href="#unclaimed">Unclaimed data</a>
     <a href="#verification">Verification</a>
     {% if assessment.cross_validations %}<a href="#cross-validation">Cross-validation</a>{% endif %}
+    {% if assessment.studies %}<a href="#studies">Study data</a>{% endif %}
     <a href="#provenance">Provenance</a>
 {% endblock %}
 
@@ -602,6 +603,39 @@ td.status .soft { font-size: 12.5px; }
     </table>
   </div>
   {% endfor %}
+</section>
+{% endif %}
+
+{% if assessment.studies %}
+{% set unrecorded = assessment.studies | rejectattr("recorded") | list %}
+{% set changed = assessment.studies | selectattr("changed") | list %}
+<section id="studies">
+  <h2>Study data</h2>
+  <p class="note">The data of every study with points in the adopted fits, as the simulations read it from the data folders of the model, and the record of its collection from pkdb_data: the day of the first collection (from the collection itself or from the git history of the model), the day of the latest collection, the release in PK-DB and the commit of the checkout. A table which differs from the record was changed after the collection.</p>
+  <p class="text">{{ assessment.studies | length }} studies, {{ assessment.studies | length - unrecorded | length }} with a record of their collection{% if changed %}, <span class="warn">{{ changed | length }} with tables changed after the collection</span>{% endif %}.</p>
+  <div class="card scroll">
+    <table class="compact">
+      <thead><tr><th>study</th><th class="num">points</th><th>first collected</th><th>latest collection</th><th>released</th><th>pkdb_data</th><th>source digest</th><th>tables</th></tr></thead>
+      <tbody>
+      {% for s in assessment.studies %}
+      <tr>
+        <td>{{ s.study }}{% if s.folder %}<div class="soft mono">{{ s.folder }}</div>{% endif %}</td>
+        <td class="num">{{ s.n_points }}</td>
+        {% if s.recorded %}
+        <td class="nowrap">{{ s.collected or "unknown" }}{% if s.dating == "git" %} <span class="soft">(git)</span>{% endif %}</td>
+        <td class="nowrap">{{ s.updated or "unknown" }}</td>
+        <td class="nowrap">{% if s.released %}{{ s.released }} <span class="soft mono">{{ s.pkdb_id }}</span>{% else %}<span class="soft">not released</span>{% endif %}</td>
+        <td class="mono nowrap">{% if s.pkdb_data_commit %}{{ s.pkdb_data_commit[:12] }}{% if s.pkdb_data_dirty %} <span class="warn">with uncommitted changes</span>{% endif %}{% else %}<span class="soft">unknown</span>{% endif %}</td>
+        <td class="mono">{{ s.source_digest[:12] if s.source_digest else "" }}</td>
+        <td>{% if s.changed is none %}<span class="soft">no digests</span>{% elif s.changed %}<span class="warn">changed: {{ s.changed | join(", ") }}</span>{% else %}{{ s.n_tables }} as collected{% endif %}</td>
+        {% else %}
+        <td colspan="6"><span class="soft">{% if s.folder %}no record of the collection{% else %}no data folder of the study{% endif %}</span></td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </section>
 {% endif %}
 

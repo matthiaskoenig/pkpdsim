@@ -77,6 +77,7 @@ from pkpdsim.credibility.selection import (
     normalize_observable,
     select,
 )
+from pkpdsim.credibility.studies import StudyData, study_data
 from pkpdsim.credibility.temporal import Chronology, TemporalRecord, TemporalStudy
 from pkpdsim.credibility.verification import (
     NUMERICAL_CHECKS,
@@ -661,6 +662,9 @@ class CredibilityAssessment:
         cross_validations: the leave-one-study-out cross-validations of the
             adopted fits, see `pkpdsim.credibility.cross_validation`; empty
             without one and in a record of pkpdsim 0.18 or earlier.
+        studies: the provenance of the data of every study with points in the
+            adopted fits, see `pkpdsim.credibility.studies`; empty in a record
+            of pkpdsim 0.18 or earlier.
     """
 
     provenance: Provenance
@@ -672,6 +676,7 @@ class CredibilityAssessment:
     notes: str
     verification: VerificationSummary | None = None
     cross_validations: list[CrossValidation] = dataclasses.field(default_factory=list)
+    studies: list[StudyData] = dataclasses.field(default_factory=list)
 
     def to_dict(self) -> dict[str, object]:
         """Get the assessment as plain data, `NaN` as `None`."""
@@ -687,6 +692,7 @@ class CredibilityAssessment:
                 None if self.verification is None else self.verification.to_dict()
             ),
             "cross_validations": [c.to_dict() for c in self.cross_validations],
+            "studies": [dict(study) for study in self.studies],
         }
 
     @classmethod
@@ -716,6 +722,7 @@ class CredibilityAssessment:
             cross_validations=[
                 CrossValidation.from_dict(c) for c in data.get("cross_validations", ())
             ],
+            studies=[StudyData(**study) for study in data.get("studies", ())],
         )
 
     def to_json(self, path: Path) -> None:
@@ -1462,6 +1469,7 @@ def assess_table(
     verification: Verification | None = None,
     cross_validations: Sequence[CrossValidation] = (),
     chronology: Chronology | None = None,
+    studies: Sequence[StudyData] = (),
 ) -> CredibilityAssessment:
     """Assess the contexts of use of a declaration on the data points of the fits.
 
@@ -1478,6 +1486,8 @@ def assess_table(
         chronology: when the adopted fits ran and the model collected its
             studies, see `pkpdsim.credibility.temporal`; no context has a
             temporal record without.
+        studies: the provenance of the study data of the points, see
+            `pkpdsim.credibility.studies.study_data`, recorded as it is.
 
     Returns:
         The assessment.
@@ -1523,6 +1533,7 @@ def assess_table(
         notes=credibility.notes,
         verification=None if verification is None else verification.summary,
         cross_validations=list(cross_validations),
+        studies=list(studies),
     )
 
 
@@ -1596,8 +1607,9 @@ def assess(
     The fits are evaluated fresh on the current model and data, see
     `evaluate_fits`, and, with `verification`, again with the alternatives of
     the checks of `pkpdsim.credibility.verification`; the cross-validations of
-    the adopted fits and the chronology of the model and its studies
-    (`pkpdsim.credibility.temporal`) are read.
+    the adopted fits, the chronology of the model and its studies
+    (`pkpdsim.credibility.temporal`) and the provenance of the study data
+    (`pkpdsim.credibility.studies`) are read.
 
     Args:
         model: the model with a declaration and adopted fits.
@@ -1646,4 +1658,5 @@ def assess(
         checks,
         list(read_cross_validations(model).values()),
         chronology(model),
+        study_data(model, fits.table),
     )

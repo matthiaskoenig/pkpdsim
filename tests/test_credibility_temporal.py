@@ -48,10 +48,13 @@ def _chronology(a: date | None, b: date | None = FIT_DAY) -> Chronology:
             "CredA": StudyRecord(
                 study="CredA",
                 collected=a,
+                dating=None if a is None else "collection",
                 released=date(2026, 9, 1),
                 pkdb_id="PKDB09999",
             ),
-            "CredB": StudyRecord(study="CredB", collected=b),
+            "CredB": StudyRecord(
+                study="CredB", collected=b, dating=None if b is None else "collection"
+            ),
         },
     )
 
@@ -209,6 +212,14 @@ def test_the_scorecard() -> None:
     assert not [r for r in compare(old, after) if r.what == "temporal_met"]
 
 
+def _record(study: str, collected: date | None) -> StudyRecord:
+    return StudyRecord(
+        study=study,
+        collected=collected,
+        dating=None if collected is None else "collection",
+    )
+
+
 def _write_record(data: Path, record: StudyRecord) -> None:
     folder = data / record.study
     folder.mkdir(parents=True, exist_ok=True)
@@ -217,10 +228,10 @@ def _write_record(data: Path, record: StudyRecord) -> None:
 
 def test_the_chronology_of_a_model(tmp_path: Path) -> None:
     first, second = tmp_path / "a", tmp_path / "b"
-    _write_record(first, StudyRecord(study="CredA", collected=date(2026, 10, 5)))
-    _write_record(second, StudyRecord(study="CredA", collected=date(2026, 10, 3)))
-    _write_record(first, StudyRecord(study="CredB", collected=date(2026, 10, 5)))
-    _write_record(second, StudyRecord(study="CredB", collected=None))
+    _write_record(first, _record("CredA", date(2026, 10, 5)))
+    _write_record(second, _record("CredA", date(2026, 10, 3)))
+    _write_record(first, _record("CredB", date(2026, 10, 5)))
+    _write_record(second, _record("CredB", None))
     (first / "Other").mkdir()
     model = dataclasses.replace(
         MODEL,
@@ -240,7 +251,7 @@ def test_the_assessment_reads_the_chronology(
 ) -> None:
     (fit_id,) = credibility_model.fits
     later = fit_date(fit_id) + timedelta(days=1)
-    _write_record(tmp_path, StudyRecord(study="CredA", collected=later))
+    _write_record(tmp_path, _record("CredA", later))
     model = dataclasses.replace(credibility_model, data_paths=(tmp_path,))
     assessment = assess(model, verification=False)
     dose = _context(assessment, "dose")
@@ -248,3 +259,9 @@ def test_the_assessment_reads_the_chronology(
     assert [(s["study"], s["fit"]) for s in dose.temporal["studies"]] == [
         ("CredA", fit_subset(fit_id))
     ]
+    # the provenance of the study data names the record of CredA
+    studies = {s["study"]: s for s in assessment.studies}
+    assert set(studies) == {"CredA", "CredB"}
+    assert studies["CredA"]["recorded"]
+    assert studies["CredA"]["collected"] == later.isoformat()
+    assert not studies["CredB"]["recorded"]

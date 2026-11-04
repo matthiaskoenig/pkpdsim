@@ -23,9 +23,13 @@ the interventions in the natural order of format 2 (`GEM,SIM`), the counts as
 integers, the time and the interventions of both axes of a scatter. What the
 curation should look at is a `CollectionWarning` (a label which is no SId,
 the same output in two sources). Beside the tables the collection writes the
-record of the study (`StudyRecord`, `.<study>_study.json`): the date the
-model first collected it and the release of the study in PK-DB, which the
-temporal validation of `pkpdsim.credibility.temporal` reads. Format 2 has no collection intervals (no
+record of the study (`StudyRecord`, `.<study>_study.json`), the provenance of
+the data the simulations run on: the day the model first collected the study
+(which the temporal validation of `pkpdsim.credibility.temporal` reads), the
+day of the latest collection, the release of the study in PK-DB, its source
+digest, the commit of the checkout of pkdb_data and the sha256 of every
+table, which the credibility assessment compares with the tables the model
+holds. Format 2 has no collection intervals (no
 `tstart` and `tend` of format 1) and no columns of its own of a table, so
 neither have the tables. A study of format 1 is copied as it is.
 `database_differences` compares the studies with the ones uploaded to a
@@ -33,14 +37,16 @@ PK-DB server; `mean_of_individuals` and `sampling_times` prepare the tables
 for an experiment.
 """
 
+import hashlib
 import json
 import os
 import re
 import shutil
+import subprocess
 import warnings
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, Self
@@ -67,53 +73,170 @@ PKDB_DATA = "PKDB_DATA"
 STUDY_RECORD: Final = ".{study}_study.json"
 
 
+#: how the day of the first collection of a study is known
+DATINGS: Final = ("collection", "git")
+
+
 @dataclass(frozen=True, kw_only=True)
 class StudyRecord:
-    """When a model collected a study and when PK-DB released it.
+    """Which data of a study a model holds, and since when.
 
     The record lies beside the tables of the study in the data folder of the
     model (`study_record_path`), so it travels with the data into a release
-    repository; `write_study_tables` writes it.
+    repository; `write_study_tables` and `collect_tsv_files` write it. It is
+    the provenance of the data the simulations of the model run on: the
+    version of the study in pkdb_data the tables were written from and the
+    digest of every table, so a later change of a table by hand is found
+    (`StudyRecord.changed_tables`).
 
     Attributes:
         study: the name of the study.
-        collected: the date the model first collected the study, kept by every
+        collected: the day the model first collected the study, kept by every
             later collection; `None` for a study collected before the record
-            existed, whose date is not known.
-        released: the date PK-DB released the study (`release.date` of its
+            existed, whose day is not known.
+        dating: how `collected` is known: `"collection"` for the day the
+            collection wrote the first record, `"git"` for the day of the
+            commit which first added the tables to the repository of the
+            model (`scripts/backfill_study_records.py`), `None` without a day.
+        dating_commit: the commit of the dating `"git"`.
+        updated: the day of the latest collection, `None` if not known.
+        released: the day PK-DB released the study (`release.date` of its
             `study.json`), `None` for a study which is not released.
         pkdb_id: the identifier of the release in PK-DB, `None` for a study
             which is not released.
+        source_digest: the digest of the source files of the study of format 2
+            as PK-DB computes it (`source_digest` of `pkdb.prepare`), the
+            version in the database; `None` for format 1 or if not known.
+        pkdb_data_commit: the commit of the checkout of pkdb_data of the
+            latest collection, `None` outside a git repository.
+        pkdb_data_dirty: whether the study folder had changes not committed in
+            that checkout, `None` if not known.
+        tables: the sha256 of every table of the latest collection, by its
+            file name; empty if not known.
+        versions: the versions of pkpdsim and pkdb which wrote the tables.
     """
 
     study: str
     collected: date | None
+    dating: str | None = None
+    dating_commit: str | None = None
+    updated: date | None = None
     released: date | None = None
     pkdb_id: str | None = None
+    source_digest: str | None = None
+    pkdb_data_commit: str | None = None
+    pkdb_data_dirty: bool | None = None
+    tables: Mapping[str, str] = field(default_factory=dict)
+    versions: Mapping[str, str] = field(default_factory=dict)
 
-    def to_dict(self) -> dict[str, str | None]:
-        """Get the record as plain data, the dates in ISO format."""
+    def __post_init__(self) -> None:
+        """Check the dating.
+
+        Raises:
+            ValueError: for an unknown dating, a day without a dating or a
+                dating without a day.
+        """
+        if self.dating is not None and self.dating not in DATINGS:
+            raise ValueError(
+                f"The dating '{self.dating}' of the study '{self.study}' is none "
+                f"of {', '.join(DATINGS)}."
+            )
+        if (self.dating is None) != (self.collected is None):
+            raise ValueError(
+                f"The study '{self.study}' needs a dating exactly when it has a "
+                f"day of collection."
+            )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Get the record as plain data, the days in ISO format."""
         return {
             "study": self.study,
             "collected": _iso(self.collected),
+            "dating": self.dating,
+            "dating_commit": self.dating_commit,
+            "updated": _iso(self.updated),
             "released": _iso(self.released),
             "pkdb_id": self.pkdb_id,
+            "source_digest": self.source_digest,
+            "pkdb_data_commit": self.pkdb_data_commit,
+            "pkdb_data_dirty": self.pkdb_data_dirty,
+            "tables": dict(sorted(self.tables.items())),
+            "versions": dict(self.versions),
         }
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> Self:
         """Get the record from plain data.
 
+        A record without a dating which has a day was written by the
+        collection.
+
         Raises:
-            ValueError: if a date is not in ISO format.
+            ValueError: if a day is not in ISO format or the dating is invalid.
         """
-        pkdb_id = data.get("pkdb_id")
+        collected = _date(data.get("collected"))
+        dating = data.get("dating")
+        if dating is None and collected is not None:
+            dating = "collection"
+        dirty = data.get("pkdb_data_dirty")
         return cls(
             study=str(data["study"]),
-            collected=_date(data.get("collected")),
+            collected=collected,
+            dating=dating,
+            dating_commit=_text(data.get("dating_commit")),
+            updated=_date(data.get("updated")),
             released=_date(data.get("released")),
-            pkdb_id=None if pkdb_id is None else str(pkdb_id),
+            pkdb_id=_text(data.get("pkdb_id")),
+            source_digest=_text(data.get("source_digest")),
+            pkdb_data_commit=_text(data.get("pkdb_data_commit")),
+            pkdb_data_dirty=None if dirty is None else bool(dirty),
+            tables={str(k): str(v) for k, v in (data.get("tables") or {}).items()},
+            versions={str(k): str(v) for k, v in (data.get("versions") or {}).items()},
         )
+
+    def changed_tables(self, folder: Path) -> list[str] | None:
+        """Get the tables of the study which differ from the record.
+
+        Args:
+            folder: the folder of the study in the data folder of the model.
+
+        Returns:
+            The file names of the tables whose sha256 differs, which the
+            record has and the folder not (`-<name>`) or the folder has and the
+            record not (`+<name>`), sorted; `None` for a record without the
+            digests of its tables.
+        """
+        if not self.tables:
+            return None
+        current = table_digests(folder)
+        changed = [
+            name
+            for name in sorted(set(current) & set(self.tables))
+            if current[name] != self.tables[name]
+        ]
+        changed += [f"-{name}" for name in sorted(set(self.tables) - set(current))]
+        changed += [f"+{name}" for name in sorted(set(current) - set(self.tables))]
+        return changed
+
+
+def table_digests(folder: Path) -> dict[str, str]:
+    """Get the sha256 of every table of a study in the data of a model.
+
+    Args:
+        folder: the folder of the study in the data folder of the model.
+
+    Returns:
+        The sha256 of every file `.<study>_*.tsv`, by its file name.
+    """
+    return {
+        path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in sorted(folder.glob(f".{folder.name}_*.tsv"))
+    }
+
+
+def _text(value: object) -> str | None:
+    """Get a text, `None` for a missing one."""
+    return None if value is None else str(value)
 
 
 def _iso(value: date | None) -> str | None:
@@ -160,11 +283,110 @@ def read_study_record(folder: Path) -> StudyRecord | None:
 
 
 def _release(study_folder: Path) -> tuple[date | None, str | None]:
-    """Get the date and the identifier of the release of a study of pkdb_data."""
-    study = json.loads((study_folder / "study.json").read_text(encoding="utf-8"))
+    """Get the date and the identifier of the release of a study of pkdb_data.
+
+    A folder without `study.json` (format 1) or without a release has neither.
+    """
+    path = study_folder / "study.json"
+    if not path.is_file():
+        return None, None
+    study = json.loads(path.read_text(encoding="utf-8"))
     release = study.get("release") or {}
     pkdb_id = release.get("pkdb_id")
     return _date(release.get("date")), None if pkdb_id is None else str(pkdb_id)
+
+
+def _git(folder: Path, *args: str) -> str | None:
+    """Get the output of a git command in a folder, `None` if it fails."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(folder), *args],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return None
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
+def _checkout(study_folder: Path) -> tuple[str | None, bool | None]:
+    """Get the commit of the checkout of a study folder and whether it changed.
+
+    Returns:
+        The commit of `HEAD` and whether the folder has changes which are not
+        committed; `None` for both outside a git repository.
+    """
+    commit = _git(study_folder, "rev-parse", "HEAD")
+    if commit is None:
+        return None, None
+    status = _git(study_folder, "status", "--porcelain", "--", ".")
+    return commit, None if status is None else bool(status)
+
+
+def _versions() -> dict[str, str]:
+    """Get the versions of pkpdsim and pkdb, which write the tables."""
+    from importlib.metadata import version
+
+    from pkpdsim import __version__
+
+    return {"pkpdsim": __version__, "pkdb": version("pkdb")}
+
+
+def _first_collection(folder: Path) -> StudyRecord | None:
+    """Get the earlier record of a study, before a collection rewrites its tables.
+
+    Returns:
+        The record of the folder; for a folder with tables of the study and no
+        record a record without a day (collected on an unknown day); `None`
+        for a new study.
+    """
+    earlier = read_study_record(folder)
+    if earlier is None and any(folder.glob(f".{folder.name}_*.tsv")):
+        return StudyRecord(study=folder.name, collected=None)
+    return earlier
+
+
+def _write_record(
+    study_folder: Path,
+    folder: Path,
+    earlier: StudyRecord | None,
+    source_digest: str | None,
+) -> Path:
+    """Write the record of a collection of a study into its data folder.
+
+    Args:
+        study_folder: the study folder of pkdb_data.
+        folder: the folder of the study in the data folder of the model, with
+            the tables written.
+        earlier: the record before the collection, see `_first_collection`.
+        source_digest: the digest of the source files of a study of format 2.
+
+    Returns:
+        The path of the record.
+    """
+    today = date.today()
+    released, pkdb_id = _release(study_folder)
+    commit, dirty = _checkout(study_folder)
+    record = StudyRecord(
+        study=folder.name,
+        collected=today if earlier is None else earlier.collected,
+        dating="collection" if earlier is None else earlier.dating,
+        dating_commit=None if earlier is None else earlier.dating_commit,
+        updated=today,
+        released=released,
+        pkdb_id=pkdb_id,
+        source_digest=source_digest,
+        pkdb_data_commit=commit,
+        pkdb_data_dirty=dirty,
+        tables=table_digests(folder),
+        versions=_versions(),
+    )
+    path = study_record_path(folder)
+    path.write_text(
+        json.dumps(record.to_dict(), indent=2) + "\n", encoding="utf-8", newline="\n"
+    )
+    return path
 
 
 class CollectionWarning(UserWarning):
@@ -988,8 +1210,11 @@ def study_tables(study_folder: Path) -> dict[str, pd.DataFrame]:
     Returns:
         The tables by source.
     """
-    name = study_folder.name
-    study = prepare_study(study_folder)
+    return _tables(prepare_study(study_folder), study_folder.name)
+
+
+def _tables(study: CanonicalStudy, name: str) -> dict[str, pd.DataFrame]:
+    """Get the tables of format 1 of a study read by PK-DB, see `study_tables`."""
     tables = _measurement_tables(study, name)
     for source, df in _scatter_tables(study, name).items():
         tables[f"{source}Scatter" if source in tables else source] = df
@@ -1010,10 +1235,12 @@ def write_study_tables(
     no longer has leaves no file behind. Other files of the folder stay.
 
     The record of the study (`StudyRecord`, `study_record_path`) is written
-    last: the release of `study.json` and the date of the first collection,
-    today for a new folder, the date of an earlier record, and `None` for a
-    folder with tables of the study and no record, which was collected on an
-    unknown day.
+    last: the day of the first collection (today for a new folder, the day of
+    an earlier record, and `None` for a folder with tables of the study and no
+    record, which was collected on an unknown day), today as the day of the
+    latest collection, the release of `study.json`, the source digest of
+    PK-DB, the commit of the checkout of pkdb_data and the sha256 of the
+    tables.
 
     Args:
         study_folder: the folder of a study of format 2.
@@ -1026,15 +1253,10 @@ def write_study_tables(
         The written files, the record last.
     """
     name = study_folder.name
-    tables = study_tables(study_folder)
+    study = prepare_study(study_folder)
+    tables = _tables(study, name)
     folder = target_dir / name
-    earlier = read_study_record(folder)
-    if earlier is not None:
-        collected = earlier.collected
-    elif any(folder.glob(f".{name}_*.tsv")):
-        collected = None
-    else:
-        collected = date.today()
+    earlier = _first_collection(folder)
     if folder.is_dir() and not keep_files:
         for old in folder.glob(f".{name}_*.tsv"):
             old.unlink()
@@ -1044,15 +1266,7 @@ def write_study_tables(
         path = folder / f".{name}_{source}.tsv"
         df.to_csv(path, sep="\t", index=False, na_rep="NA")
         paths.append(path)
-    released, pkdb_id = _release(study_folder)
-    record = StudyRecord(
-        study=name, collected=collected, released=released, pkdb_id=pkdb_id
-    )
-    path = study_record_path(folder)
-    path.write_text(
-        json.dumps(record.to_dict(), indent=2) + "\n", encoding="utf-8", newline="\n"
-    )
-    paths.append(path)
+    paths.append(_write_record(study_folder, folder, earlier, study.source_digest))
     return paths
 
 
@@ -1135,6 +1349,7 @@ def collect_tsv_files(
 
         tsv_files = sorted(study_folder.glob(".*.tsv"))
         if tsv_files:
+            earlier = _first_collection(dest_study_folder)
             dest_study_folder.mkdir(exist_ok=True)
             console.rule(f"{dest_study_folder}", style="white", align="left")
 
@@ -1142,6 +1357,8 @@ def collect_tsv_files(
                 dest_file = dest_study_folder / tsv_file.name
                 shutil.copy2(tsv_file, dest_file)
                 console.print(f"'{tsv_file}' -> '{dest_file}'")
+            path = _write_record(study_folder, dest_study_folder, earlier, None)
+            console.print(f"'{study_folder}' -> '{path}'")
 
 
 def mean_of_individuals(

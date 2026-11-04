@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, TypedDict
 
 import pandas as pd
 
+from pkpdsim.credibility.studies import study_folders
 from pkpdsim.data import StudyRecord, read_study_record
 from pkpdsim.fit import fit_date, fit_subset
 
@@ -161,17 +162,13 @@ def chronology(model: PKPDModel) -> Chronology:
             `pkpdsim.data.read_study_record`.
     """
     studies: dict[str, StudyRecord] = {}
-    for data_path in model.data_paths:
-        if not data_path.is_dir():
-            continue
-        for folder in sorted(p for p in data_path.iterdir() if p.is_dir()):
+    for name, folders in study_folders(model).items():
+        for folder in folders:
             record = read_study_record(folder)
             if record is None:
                 continue
-            earlier = studies.get(record.study)
-            studies[record.study] = (
-                record if earlier is None else _merged(earlier, record)
-            )
+            earlier = studies.get(name)
+            studies[name] = record if earlier is None else _merged(earlier, record)
     return Chronology(
         fits={fit_subset(fit_id): fit_date(fit_id) for fit_id in model.fits},
         studies=studies,

@@ -13,7 +13,8 @@ and runs the battery of the checks of the builds (`run_battery`): mass
 balance, non-negativity, zero dose, steady state, superposition, a second
 simulator, plausibility and rebuild. The temporal validation (`chronology`)
 splits the decisive points by whether the model collected their study after
-the fit.
+the fit, and the provenance of the study data (`study_data`) names the
+collection every study with points was written by.
 """
 
 from pkpdsim.credibility.assessment import (
@@ -91,6 +92,7 @@ from pkpdsim.credibility.selection import (
     normalize_observable,
     select,
 )
+from pkpdsim.credibility.studies import StudyData, study_data
 from pkpdsim.credibility.temporal import (
     Chronology,
     TemporalRecord,
@@ -160,6 +162,7 @@ __all__ = [
     "Selection",
     "SelectionError",
     "Selections",
+    "StudyData",
     "Summary",
     "TemporalRecord",
     "TemporalStudy",
@@ -185,6 +188,7 @@ __all__ = [
     "recorded_kinds",
     "run_battery",
     "select",
+    "study_data",
     "verify",
     "write_lock",
 ]
