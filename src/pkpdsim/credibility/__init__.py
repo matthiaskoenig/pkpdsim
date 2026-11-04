@@ -17,7 +17,9 @@ the fit, and the provenance of the study data (`study_data`) names the
 collection every study with points was written by. The parameter
 uncertainty of the adopted fits is propagated to the decisive predictions
 (`propagate`, `UncertaintySettings`), the probability that the acceptance is
-met over the draws of the parameters.
+met over the draws of the parameters. The simulated inputs of the mappings,
+the covariates of the subjects and the doses, are checked against the reported
+ones of their studies (`input_checks`), the equivalency of the inputs.
 """
 
 from pkpdsim.credibility.assessment import (
@@ -44,6 +46,7 @@ from pkpdsim.credibility.battery import (
 )
 from pkpdsim.credibility.check import check_declaration
 from pkpdsim.credibility.declaration import (
+    DEFAULT_COVARIATES,
     UNCLAIMED,
     Acceptance,
     AcceptanceResult,
@@ -69,6 +72,12 @@ from pkpdsim.credibility.declaration import (
     Unclaimed,
 )
 from pkpdsim.credibility.factors import FACTORS, Factor, FactorRecord, FactorStatus
+from pkpdsim.credibility.inputs import (
+    InputCheck,
+    InputsRecord,
+    InputStatus,
+    input_checks,
+)
 from pkpdsim.credibility.lock import LockMismatchError, lock_differences, write_lock
 from pkpdsim.credibility.ratios import RatioRecord, guest_limit, ratio_pairs
 from pkpdsim.credibility.records import (
@@ -120,6 +129,7 @@ from pkpdsim.credibility.verification import (
 __all__ = [
     "BATTERY_CHECKS",
     "DEFAULT_ACCEPTANCE",
+    "DEFAULT_COVARIATES",
     "DEFAULT_MIN_POINTS",
     "DEFAULT_RATIO_ACCEPTANCE",
     "FACTORS",
@@ -157,6 +167,9 @@ __all__ = [
     "FitTable",
     "GuestAcceptance",
     "Influence",
+    "InputCheck",
+    "InputStatus",
+    "InputsRecord",
     "KindMismatchError",
     "Level",
     "LockMismatchError",
@@ -191,6 +204,7 @@ __all__ = [
     "describe_selection",
     "evaluate_fits",
     "guest_limit",
+    "input_checks",
     "kind_differences",
     "lock_differences",
     "mapping_table",

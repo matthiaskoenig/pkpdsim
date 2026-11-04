@@ -70,6 +70,14 @@ from pkpdsim.credibility.declaration import (
     Unclaimed,
 )
 from pkpdsim.credibility.factors import FACTORS, FactorRecord, FactorStatus
+from pkpdsim.credibility.inputs import (
+    InputCheck,
+    InputsRecord,
+    InputSummary,
+    input_checks,
+    inputs_record,
+    inputs_statement,
+)
 from pkpdsim.credibility.ratios import RatioRecord, ratio_pairs
 from pkpdsim.credibility.records import MappingLookup, evaluate_fits
 from pkpdsim.credibility.selection import (
@@ -394,6 +402,9 @@ class ContextResult:
         uncertainty: the parameter uncertainty of the decisive predictions,
             see `pkpdsim.credibility.uncertainty`; `None` for an assessment
             without the propagation and a record of pkpdsim 0.18 or earlier.
+        inputs: the equivalency of the inputs of the decisive mappings, see
+            `pkpdsim.credibility.inputs`; `None` for an assessment without the
+            checks of the inputs and a record of pkpdsim 0.18 or earlier.
     """
 
     id: str
@@ -418,6 +429,7 @@ class ContextResult:
     ratio_acceptance: AcceptanceRecord | None = None
     temporal: TemporalRecord | None = None
     uncertainty: UncertaintyRecord | None = None
+    inputs: InputsRecord | None = None
 
     @property
     def verified(self) -> bool | None:
@@ -491,6 +503,9 @@ class ContextResult:
                 if self.uncertainty is None
                 else json.loads(json.dumps(self.uncertainty))
             ),
+            "inputs": (
+                None if self.inputs is None else json.loads(json.dumps(self.inputs))
+            ),
         }
 
     @classmethod
@@ -499,8 +514,8 @@ class ContextResult:
 
         A record of pkpdsim 0.17 has no minimum of points, read as 0, and no
         coverage of the quantities, read as `None` with 0 points; a record of
-        0.18 or earlier has no ratio pairs, no temporal record and no
-        uncertainty.
+        0.18 or earlier has no ratio pairs, no temporal record, no
+        uncertainty and no equivalency of the inputs.
         """
         return cls(
             id=data["id"],
@@ -578,7 +593,20 @@ class ContextResult:
             ),
             temporal=_temporal_from_dict(data.get("temporal")),
             uncertainty=_uncertainty_from_dict(data.get("uncertainty")),
+            inputs=_inputs_from_dict(data.get("inputs")),
         )
+
+
+def _inputs_from_dict(data: Mapping[str, Any] | None) -> InputsRecord | None:
+    """Get the equivalency of the inputs of a context from plain data."""
+    if data is None:
+        return None
+    return InputsRecord(
+        n_mappings=int(data["n_mappings"]),
+        n_checked=int(data["n_checked"]),
+        inputs=[InputSummary(**i) for i in data["inputs"]],
+        differs=[InputCheck(**c) for c in data["differs"]],
+    )
 
 
 def _uncertainty_from_dict(data: Mapping[str, Any] | None) -> UncertaintyRecord | None:
@@ -708,6 +736,10 @@ class CredibilityAssessment:
         studies: the provenance of the data of every study with points in the
             adopted fits, see `pkpdsim.credibility.studies`; empty in a record
             of pkpdsim 0.18 or earlier.
+        inputs: the checks of the simulated inputs of every mapping of the
+            adopted fits against the reported ones, see
+            `pkpdsim.credibility.inputs`; empty without and in a record of
+            pkpdsim 0.18 or earlier.
     """
 
     provenance: Provenance
@@ -720,6 +752,7 @@ class CredibilityAssessment:
     verification: VerificationSummary | None = None
     cross_validations: list[CrossValidation] = dataclasses.field(default_factory=list)
     studies: list[StudyData] = dataclasses.field(default_factory=list)
+    inputs: list[InputCheck] = dataclasses.field(default_factory=list)
 
     def to_dict(self) -> dict[str, object]:
         """Get the assessment as plain data, `NaN` as `None`."""
@@ -736,6 +769,7 @@ class CredibilityAssessment:
             ),
             "cross_validations": [c.to_dict() for c in self.cross_validations],
             "studies": [dict(study) for study in self.studies],
+            "inputs": [dict(check) for check in self.inputs],
         }
 
     @classmethod
@@ -766,6 +800,7 @@ class CredibilityAssessment:
                 CrossValidation.from_dict(c) for c in data.get("cross_validations", ())
             ],
             studies=[StudyData(**study) for study in data.get("studies", ())],
+            inputs=[InputCheck(**check) for check in data.get("inputs", ())],
         )
 
     def to_json(self, path: Path) -> None:
@@ -1142,6 +1177,7 @@ def _factors(
     cross_validations: Sequence[CrossValidation] = (),
     temporal: TemporalRecord | None = None,
     uncertainty: UncertaintyRecord | None = None,
+    inputs: InputsRecord | None = None,
 ) -> list[FactorRecord]:
     """Get the factors of V&V 40 of a context, the assessed ones with its results.
 
@@ -1203,6 +1239,10 @@ def _factors(
                     *(_check_statement(r, tightening) for r in verified[factor.id]),
                 ]
             )
+            data["step"] = None
+        elif factor.id == "equivalency_of_inputs" and inputs and inputs["n_checked"]:
+            data["status"] = FactorStatus.ASSESSED.value
+            data["statement"] = inputs_statement(inputs)
             data["step"] = None
         elif factor.id == "model_inputs" and uncertainty is not None:
             data["status"] = FactorStatus.ASSESSED.value
@@ -1590,6 +1630,7 @@ def _context_result(
     cross_validations: Sequence[CrossValidation] = (),
     chronology: Chronology | None = None,
     propagation: Propagation | None = None,
+    inputs: Sequence[InputCheck] | None = None,
 ) -> tuple[ContextResult, list[CoverageEntry]]:
     """Get the result and the coverage of a context of use.
 
@@ -1632,6 +1673,7 @@ def _context_result(
     verified = None if not checks else all(record["passed"] for record in checks)
     temporal = _temporal(cou, decisive, chronology)
     uncertainty = _uncertainty(cou, decisive, quantities, propagation, lookup)
+    inputs_of = None if inputs is None else inputs_record(inputs, decisive)
     result = ContextResult(
         id=cou.id,
         title=cou.title,
@@ -1676,6 +1718,7 @@ def _context_result(
             else [],
             temporal,
             uncertainty,
+            inputs_of,
         ),
         n_decisive=len(decisive),
         n_evaluable=n_evaluable,
@@ -1694,6 +1737,7 @@ def _context_result(
         ),
         temporal=temporal,
         uncertainty=uncertainty,
+        inputs=inputs_of,
     )
     return result, coverage
 
@@ -1707,6 +1751,7 @@ def assess_table(
     chronology: Chronology | None = None,
     studies: Sequence[StudyData] = (),
     propagation: Propagation | None = None,
+    inputs: Sequence[InputCheck] | None = None,
 ) -> CredibilityAssessment:
     """Assess the contexts of use of a declaration on the data points of the fits.
 
@@ -1728,6 +1773,9 @@ def assess_table(
         propagation: the predictions at the draws of the parameters of the
             fits, see `pkpdsim.credibility.uncertainty.propagate`; no context
             has an uncertainty record without.
+        inputs: the checks of the simulated inputs of the mappings against the
+            reported ones, see `pkpdsim.credibility.inputs.input_checks`; no
+            context has a record of the equivalency of its inputs without.
 
     Returns:
         The assessment.
@@ -1752,6 +1800,7 @@ def assess_table(
             cross_validations,
             chronology,
             propagation,
+            inputs,
         )
         contexts.append(result)
         coverage.extend(entries)
@@ -1781,6 +1830,7 @@ def assess_table(
         verification=None if verification is None else verification.summary,
         cross_validations=list(cross_validations),
         studies=list(studies),
+        inputs=[] if inputs is None else list(inputs),
     )
 
 
@@ -1857,7 +1907,9 @@ def assess(
     the checks of `pkpdsim.credibility.verification`; the cross-validations of
     the adopted fits, the chronology of the model and its studies
     (`pkpdsim.credibility.temporal`) and the provenance of the study data
-    (`pkpdsim.credibility.studies`) are read.
+    (`pkpdsim.credibility.studies`) are read, and the simulated inputs of the
+    mappings are checked against the reported ones
+    (`pkpdsim.credibility.inputs`).
 
     Args:
         model: the model with a declaration and adopted fits.
@@ -1913,4 +1965,5 @@ def assess(
         chronology(model),
         study_data(model, fits.table),
         propagation,
+        input_checks(model, fits, credibility.covariates),
     )
