@@ -20,7 +20,7 @@ The assessment of the contexts of use of the model against its adopted fits. A c
 | Quantity of interest | Description | Kind | Coverage | Points |
 | --- | --- | --- | --- | --- |
 {% for quantity in context.quantities %}
-| `{{ quantity.id }}` | {{ quantity.description | cell }} | {{ "ratio, assessed in step 3" if quantity.ratio else "absolute" }} | {{ quantity.coverage or "n/a" }} | {{ quantity.n_points if quantity.coverage else "n/a" }} |
+| `{{ quantity.id }}` | {{ quantity.description | cell }} | {{ ("ratio" if quantity.coverage else "ratio, no pairing declared") if quantity.ratio else "absolute" }} | {{ quantity.coverage or "n/a" }} | {{ quantity.n_points if quantity.coverage else "n/a" }} |
 {% endfor %}
 
 {% if context.coverage %}
@@ -42,6 +42,17 @@ The assessment of the contexts of use of the model against its adopted fits. A c
 | --- | --- | --- | --- |
 {% for rule in context.acceptance %}
 | `{{ rule.name }}` | {{ "%.4g" % rule.value if rule.value is not none else "n/a" }} | {{ rule.limit }} | {{ "n/a" if rule.met is none else ("yes" if rule.met else "no") }} |
+{% endfor %}
+{% if context.ratio_acceptance %}
+| `{{ context.ratio_acceptance.name }}` (ratio pairs) | {{ "%.4g" % context.ratio_acceptance.value if context.ratio_acceptance.value is not none else "n/a" }} | {{ context.ratio_acceptance.limit }} | {{ "n/a" if context.ratio_acceptance.met is none else ("yes" if context.ratio_acceptance.met else "no") }} |
+{% endif %}
+
+{% endif %}
+{% if context.ratios %}
+| Ratio | Study | Arms | Observed | Predicted | Limit | Within |
+| --- | --- | --- | --- | --- | --- | --- |
+{% for pair in context.ratios %}
+| `{{ pair.quantity }}` | {{ pair.experiment }} | `{{ pair.numerator }}` / `{{ pair.denominator }}` | {{ "%.3g" % pair.observed if pair.observed is not none else "n/a" }} | {{ "%.3g" % pair.predicted if pair.predicted is not none else "n/a" }} | {{ "%.3g" % pair.limit if pair.limit is not none else "n/a" }} | {{ "n/a" if pair.within is none else ("yes" if pair.within else "no") }} |
 {% endfor %}
 
 {% endif %}

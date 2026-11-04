@@ -41,7 +41,10 @@ VALUES = {("CredA", "fm_limit"): 3.0, ("CredB", "fm_zero"): 0.0}
 
 
 def fit_table(
-    factor: float = 1.0, factors: Mapping[tuple[str, str], float] | None = None
+    factor: float = 1.0,
+    factors: Mapping[tuple[str, str], float] | None = None,
+    *,
+    times: bool = False,
 ) -> FitTable:
     """Get a table of the data points of the kinds of the test package.
 
@@ -50,6 +53,7 @@ def fit_table(
     Args:
         factor: the factor of the predictions.
         factors: the factor of the predictions of a mapping instead of `factor`.
+        times: give the points of a mapping the times `x` 0, 1, 2, ...
 
     Returns:
         The table with the columns `DV`, `IPRED` and `DV_SD`.
@@ -75,9 +79,10 @@ def fit_table(
             "DV": VALUES.get((experiment, mapping), 1.0),
             "IPRED": factors.get((experiment, mapping), factor),
             "DV_SD": 0.1,
+            **({"x": float(k)} if times else {}),
         }
         for (experiment, mapping), kind in KINDS.items()
-        for _ in range(POINTS.get((experiment, mapping), 5))
+        for k in range(POINTS.get((experiment, mapping), 5))
     ]
     return FitTable(
         table=pd.DataFrame(rows),

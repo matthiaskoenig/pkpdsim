@@ -24,6 +24,7 @@ from sbmlsim.fit.helpers import MappingFilter
 from pkpdsim.metadata import PKPDMappingMetaData
 
 __all__ = [
+    "GUEST_DELTA",
     "UNCLAIMED",
     "Acceptance",
     "AcceptanceResult",
@@ -37,12 +38,15 @@ __all__ = [
     "Domain",
     "Evidence",
     "EvidenceRole",
+    "GuestAcceptance",
     "Influence",
     "Level",
     "MaxGmfe",
     "QuantityOfInterest",
+    "Ratio",
     "Risk",
     "Selection",
+    "Summary",
     "Unclaimed",
 ]
 
@@ -140,6 +144,41 @@ UNCLAIMED: Final = Unclaimed()
 type Selection = MappingFilter | Unclaimed
 
 
+@unique
+class Summary(StrEnum):
+    """How the points of an arm of a ratio are summarized, see `Ratio`."""
+
+    AUC = "auc"
+    VALUE = "value"
+
+
+#: the accepted variability of a ratio of 1 of the limits of Guest et al. (2011)
+GUEST_DELTA: Final = 1.25
+
+
+@dataclass(frozen=True, kw_only=True)
+class Ratio:
+    """The arms of a ratio quantity: a numerator over its reference in a study.
+
+    See `pkpdsim.credibility.ratios`: per fit and study (the experiment) every
+    decisive mapping of the observable which `numerator` selects is paired
+    with the one which `denominator` selects, and the ratio of their summaries
+    is compared for the data and the predictions.
+
+    Attributes:
+        observable: the observable of the arms, e.g. `Carm_hctz`; compared
+            without the brackets of a concentration.
+        numerator: selects the mappings of the arms, e.g. the renal impairment.
+        denominator: selects the mapping of the reference arm, e.g. healthy.
+        summary: how the points of an arm are summarized.
+    """
+
+    observable: str
+    numerator: MappingFilter
+    denominator: MappingFilter
+    summary: Summary = Summary.AUC
+
+
 @dataclass(frozen=True)
 class QuantityOfInterest:
     """A quantity a context of use is asked for.
@@ -148,13 +187,20 @@ class QuantityOfInterest:
         id: the observable of the fit mappings, e.g. `Cve_hctz` or `pk.cmax`;
             for a ratio its name, it is matched against no observable.
         description: what the quantity is.
-        ratio: whether the quantity is a ratio between arms, which is recorded
-            and assessed in step 3; it restricts no evidence.
+        ratio: whether the quantity is a ratio between arms: `True` is
+            declared and recorded, not assessed; a `Ratio` pairs the arms and
+            is assessed with the limits of Guest et al., its observable
+            restricts the evidence like the id of an absolute quantity.
     """
 
     id: str
     description: str
-    ratio: bool = field(default=False, kw_only=True)
+    ratio: bool | Ratio = field(default=False, kw_only=True)
+
+    @property
+    def pairing(self) -> Ratio | None:
+        """Get the pairing of an assessed ratio, `None` otherwise."""
+        return self.ratio if isinstance(self.ratio, Ratio) else None
 
 
 def _domain_fields() -> dict[str, type]:
@@ -358,6 +404,58 @@ class AfeRange:
         return _result(self.name, value, self.limit, self.low <= value <= self.high)
 
 
+@dataclass(frozen=True)
+class GuestAcceptance:
+    """The percentage of the ratio pairs within the limits of Guest et al. is at least `minimum`.
+
+    Attributes:
+        minimum: the minimum percentage (0 to 100).
+        delta: the accepted variability at a ratio of 1, see
+            `pkpdsim.credibility.ratios.guest_limit`.
+    """
+
+    minimum: float
+    delta: float = GUEST_DELTA
+
+    @property
+    def name(self) -> str:
+        """Get the name of the rule."""
+        return "Guest"
+
+    @property
+    def limit(self) -> str:
+        """Get the limit, e.g. `>= 80`."""
+        return f">= {self.minimum:g}"
+
+    def evaluate(self, pairs: Collection[bool | None]) -> AcceptanceResult:
+        """Evaluate the percentage of the evaluable pairs within the limits.
+
+        Args:
+            pairs: whether every pair is within, `None` for one which is not
+                evaluable.
+
+        Returns:
+            The result, not evaluable without an evaluable pair.
+        """
+        evaluable = [within for within in pairs if within is not None]
+        value = 100.0 * sum(evaluable) / len(evaluable) if evaluable else math.nan
+        return _result(self.name, value, self.limit, value >= self.minimum)
+
+    def problems(self) -> list[str]:
+        """Get the problems of the rule: a minimum outside 0 to 100, a delta not above 1."""
+        found: list[str] = []
+        if not 0 <= self.minimum <= 100:
+            found.append(
+                f"the minimum of the ratio acceptance must be between 0 and 100, "
+                f"not {self.minimum:g}"
+            )
+        if not self.delta > 1:
+            found.append(
+                f"the delta of the ratio acceptance must be above 1, not {self.delta:g}"
+            )
+        return found
+
+
 @dataclass(frozen=True, kw_only=True)
 class ContextOfUse:
     """What a model is used for: the question, the domain, the evidence and the acceptance.
@@ -379,6 +477,8 @@ class ContextOfUse:
         extrapolation: the argument for a domain without validation evidence.
         min_points: the evaluable decisive points the verdict needs, at least
             1; `None` for the default of the risk, see `minimum_points`.
+        ratio_acceptance: the rule of the pairs of the assessed ratio
+            quantities, `None` for the default of the risk, see `ratio_rule`.
     """
 
     id: str
@@ -395,6 +495,7 @@ class ContextOfUse:
     rationale: str = ""
     extrapolation: str = ""
     min_points: int | None = None
+    ratio_acceptance: GuestAcceptance | None = None
 
     @property
     def risk(self) -> Level:
@@ -409,6 +510,18 @@ class ContextOfUse:
         from pkpdsim.credibility.risk import default_acceptance
 
         return self.acceptance or default_acceptance(self.risk)
+
+    @property
+    def ratio_rule(self) -> GuestAcceptance:
+        """Get the rule of the ratio pairs: the declared or the default of the risk."""
+        from pkpdsim.credibility.risk import DEFAULT_RATIO_ACCEPTANCE
+
+        return self.ratio_acceptance or DEFAULT_RATIO_ACCEPTANCE[self.risk]
+
+    @property
+    def ratios(self) -> tuple[QuantityOfInterest, ...]:
+        """Get the assessed ratio quantities, those with a `Ratio`."""
+        return tuple(q for q in self.quantities if q.pairing is not None)
 
     @property
     def minimum_points(self) -> int:
@@ -433,7 +546,7 @@ class ContextOfUse:
         if not self.question.rstrip().endswith("?"):
             found.append(f"{who}: the question must be a question, ending with '?'")
         if not any(not q.ratio for q in self.quantities):
-            # step 1 assesses the absolute quantities, a ratio is assessed in step 3
+            # the absolute quantities decide the verdict, a ratio adds to it
             found.append(
                 f"{who}: at least one quantity of interest which is no ratio "
                 "is required"
@@ -478,6 +591,13 @@ class ContextOfUse:
             if e.role is not EvidenceRole.LIMITATION
         )
         found.extend(f"{who}: {problem}" for problem in self.domain.problems())
+        if self.ratio_acceptance is not None:
+            found.extend(f"{who}: {p}" for p in self.ratio_acceptance.problems())
+        found.extend(
+            f"{who}: the ratio '{q.id}' needs the observable of its arms"
+            for q in self.ratios
+            if q.pairing is not None and not q.pairing.observable.strip()
+        )
         return found
 
 
