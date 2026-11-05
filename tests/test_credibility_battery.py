@@ -33,6 +33,8 @@ from sbmlsim.project_checks import check_battery
 
 from pkpdsim.credibility import EXTENSIONS, PK_BATTERY, PK_CHECKS
 from pkpdsim.credibility.battery import (
+    _BOLUS,
+    _INFUSION,
     DOSE,
     HORIZON,
     STEPS,
@@ -292,6 +294,43 @@ def test_a_dose_through_the_stomach(tmp_path: Path) -> None:
     }
     assert build.inputs == {"iv_d", "po_d"}
     assert _battery(model).result("mass_balance").status is BatteryStatus.PASSED
+
+
+def test_the_dose_states_of_the_library_are_doses_of_the_battery() -> None:
+    """Every dose state the PBPK library creates is a dose of the battery.
+
+    The library names the dose states and the infusion rate of its routes in
+    one place; a route the battery does not know would leave its dose out of
+    the mass balance, the superposition and the fates without a word.
+    """
+    from pkpdsim.pbpk.equilibration import DOSE_PREFIXES
+
+    assert set(DOSE_PREFIXES) == {f"{prefix}_" for prefix in (*_BOLUS, _INFUSION)}
+
+
+def test_an_injected_depot(tmp_path: Path) -> None:
+    """The dose of a depot route is a dose, and its loss a part of the fate."""
+    model = _model(
+        tmp_path,
+        "unit mg = 1e-3 gram; IMDOSE_d = 0; IMDOSE_d has mg;"
+        " substanceOnly species Aim_d in Vve = 0;"
+        " substanceOnly species Aloss_im_d in Vve = 0;"
+        " ti_im = 10; ka_im = 0.5; f_im = 0.8;"
+        " IMDOSE_d' = -ti_im*IMDOSE_d;"
+        " im_app_d: => Aim_d; ti_im*IMDOSE_d/Mr_d;"
+        " im_abs_d: Aim_d => Cve_d; f_im*ka_im*Aim_d;"
+        " im_loss_d: Aim_d => Aloss_im_d; (1 - f_im)*ka_im*Aim_d;",
+    )
+    build = FlatBuild.read("male", model.model_path)
+    assert build.dose_states["IMDOSE_d"] == "d"
+    assert build.doses["IMDOSE_d"] == "d"
+    battery = _battery(model)
+    assert battery.result("mass_balance").status is BatteryStatus.PASSED
+    # the run without a dose and one per dose, the intramuscular one included
+    assert battery.result("mass_balance").cases == 5
+    fate = {f.dose: f for f in _fates(battery)}["IMDOSE_d"]
+    assert fate.parts["loss"] == pytest.approx(0.2 * fate.amount, rel=1e-6)
+    assert fate.parts["urine"] > 0
 
 
 def test_a_species_by_its_prefix(tmp_path: Path) -> None:

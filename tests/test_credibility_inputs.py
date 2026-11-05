@@ -36,6 +36,7 @@ from pkpdsim.credibility import (
     input_checks,
 )
 from pkpdsim.credibility.inputs import (
+    DOSE_PREFIXES,
     InputCheck,
     InputsRecord,
     Reported,
@@ -183,6 +184,17 @@ def test_the_doses() -> None:
     assert (
         reported_doses(StudyTables(*(pd.DataFrame(),) * 3), ["D25"], "mg", ureg) == []
     )
+
+
+def test_the_dose_prefixes_are_those_of_the_library() -> None:
+    """Every dose state of the PBPK library is a dose of the equivalency.
+
+    The infusion rate of the library is no dose: it is a rate in mg/min and
+    the reported interventions give a dose.
+    """
+    from pkpdsim.pbpk.equilibration import DOSE_PREFIXES as LIBRARY
+
+    assert set(DOSE_PREFIXES) == set(LIBRARY) - {"Ri_"}
 
 
 def test_the_values_of_the_changes() -> None:

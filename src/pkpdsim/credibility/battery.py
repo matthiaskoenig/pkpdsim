@@ -31,12 +31,13 @@ small doses of the superposition) and the order of the checks in the report.
 
 The battery reads the conventions of the models of pkdb_models from the flat
 SBML (`FlatBuild`): a substance has its molecular weight `Mr_<s>`, its doses
-are the states `IVDOSE_<s>`, `PODOSE_<s>` and `SOLDOSE_<s>` (mg) and the
-infusion rate `Ri_<s>` (mg/min), and a species belongs to the substance its
-id (the part after the last `__`) ends with, `_<s>`, or else starts with,
-`<s>_` (the lumen of the intestine of some models, `mid_lumen`). A check
-without what it needs, e.g. a model without doses, is not applicable and
-assesses nothing.
+are the states `IVDOSE_<s>`, `PODOSE_<s>`, `SOLDOSE_<s>`, `IMDOSE_<s>`,
+`SCDOSE_<s>` and `RECDOSE_<s>` (mg, the dose states of the PBPK library,
+`pkpdsim.pbpk.equilibration.DOSE_PREFIXES`) and the infusion rate `Ri_<s>`
+(mg/min), and a species belongs to the substance its id (the part after the
+last `__`) ends with, `_<s>`, or else starts with, `<s>_` (the lumen of the
+intestine of some models, `mid_lumen`). A check without what it needs, e.g. a
+model without doses, is not applicable and assesses nothing.
 """
 
 from __future__ import annotations
@@ -118,11 +119,12 @@ MASS_LIMIT: Final = 1e-6
 #: the largest change of a state without a dose relative to its start
 STEADY_LIMIT: Final = 1e-6
 
-#: the prefixes of the dose states (mg) and of the infusion rate (mg/min)
-_BOLUS: Final = ("IVDOSE", "PODOSE", "SOLDOSE")
+#: the prefixes of the dose states (mg) and of the infusion rate (mg/min),
+#: the dose states of `pkpdsim.pbpk.equilibration.DOSE_PREFIXES`
+_BOLUS: Final = ("IVDOSE", "PODOSE", "SOLDOSE", "IMDOSE", "SCDOSE", "RECDOSE")
 _INFUSION: Final = "Ri"
 #: the prefixes of the sinks of a substance, by the name of their part of a fate
-_SINKS: Final = {"urine": "Aurine_", "feces": "Afeces_"}
+_SINKS: Final = {"urine": "Aurine_", "feces": "Afeces_", "loss": "Aloss_"}
 #: the prefix of the parameters which integrate the flows of the reactions
 _FLOW: Final = "battery_flow_"
 #: why a check of the PK battery or the steady state does not apply to a model
@@ -169,8 +171,9 @@ class Fate:
         substance: the dosed substance.
         amount: the dose (mmole).
         parts: the parts of the dose (mmole) by name: `body` (the species
-            which are no sink), `urine` and `feces` (the sinks), `dose` (not
-            yet applied) and a reaction which does not read a dose by its id
+            which are no sink), `urine`, `feces` and `loss` (the sinks: the
+            last what an injected depot does not absorb), `dose` (not yet
+            applied) and a reaction which does not read a dose by its id
             (negative for an elimination, positive for a production).
         imbalance: the imbalance of the dose simulation relative to the
             largest term of its balance.
@@ -583,7 +586,7 @@ def _mr(runner: _Runner, substance: str) -> float:
 def _amount(runner: _Runner, result: np.ndarray, row: int) -> dict[str, float]:
     """Get the amounts (mmole) of a row by part: body, sinks and doses."""
     build = runner.build
-    parts: dict[str, float] = {"body": 0.0, "urine": 0.0, "feces": 0.0, "dose": 0.0}
+    parts: dict[str, float] = {"body": 0.0, **dict.fromkeys(_SINKS, 0.0), "dose": 0.0}
     for sid in build.tracked:
         local = sid.rsplit("__", 1)[-1]
         part = next((k for k, p in _SINKS.items() if local.startswith(p)), "body")
@@ -919,7 +922,8 @@ class PKBattery(BatteryHook):
         if not any(sims.runner.build.doses for sims in simulations):
             reason = (
                 "The model has no dose state or infusion rate of a substance, "
-                "`IVDOSE_<s>`, `PODOSE_<s>`, `SOLDOSE_<s>` or `Ri_<s>`."
+                "`IVDOSE_<s>`, `PODOSE_<s>`, `SOLDOSE_<s>`, `IMDOSE_<s>`, "
+                "`SCDOSE_<s>`, `RECDOSE_<s>` or `Ri_<s>`."
             )
             for check in (MASS_BALANCE, SUPERPOSITION):
                 results[check.id] = not_applicable_result(check, reason)

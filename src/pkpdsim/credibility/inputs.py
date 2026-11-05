@@ -115,8 +115,17 @@ DEFAULT_COVARIATES: Final[Mapping[str, str]] = MappingProxyType(
     {"BW": "weight", "HEIGHT": "height"}
 )
 
-#: the prefixes of the targets of the doses
-DOSE_PREFIXES: tuple[str, ...] = ("PODOSE_", "IVDOSE_", "SOLDOSE_")
+#: the prefixes of the targets of the doses, the dose states of
+#: `pkpdsim.pbpk.equilibration.DOSE_PREFIXES` without the infusion rate
+#: (`Ri_<s>` is a rate in mg/min and no dose)
+DOSE_PREFIXES: tuple[str, ...] = (
+    "PODOSE_",
+    "IVDOSE_",
+    "SOLDOSE_",
+    "IMDOSE_",
+    "SCDOSE_",
+    "RECDOSE_",
+)
 
 #: the relative difference of a covariate from the reported central value
 #: within which it is equivalent
