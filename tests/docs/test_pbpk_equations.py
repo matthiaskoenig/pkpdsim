@@ -361,6 +361,42 @@ def absorption() -> PBPKDefinition:
     )
 
 
+def mucosa() -> PBPKDefinition:
+    """Get the toy with the permeability-limited mucosa of the segmented intestine.
+
+    `drg` has a gut metabolism of CYP3A4 into `drg_m` and the exchange
+    `kps_mu_drg` between the mucosal blood and the enterocytes
+    (`SegmentedIntestine(mucosa_ps=...)`, the Qgut model).
+    """
+    return PBPKDefinition(
+        sid="toy_mucosa",
+        substances=[
+            Substance(
+                "drg",
+                name="drug",
+                mr=300.0,
+                binding=Binding(fu=0.1),
+                distribution=Kp(2.0, ftissue=1.0),
+            ),
+            Substance("drg_m", name="metabolite", mr=316.0),
+        ],
+        chemistry=[
+            Metabolism(
+                "DRGGU",
+                Organ.SMALL_INTESTINE,
+                "drg",
+                {"drg_m": 1.0},
+                FirstOrder(k=0.05),
+                protein="CYP3A4",
+            )
+        ],
+        variants=Variants(
+            organs={Organ.SMALL_INTESTINE: SegmentedIntestine(mucosa_ps={"drg": 0.5})}
+        ),
+        routes=[Route.oral_solution("drg")],
+    )
+
+
 @dataclass(frozen=True)
 class Context:
     """A model of a toy in which an equation is looked up.
@@ -415,6 +451,7 @@ def contexts(tmp_path_factory: pytest.TempPathFactory) -> list[Context]:
         losing,
         variants(),
         absorption(),
+        mucosa(),
     ):
         paths = build(definition, directory)
         doc = libsbml.readSBMLFromFile(str(paths.comp_path))

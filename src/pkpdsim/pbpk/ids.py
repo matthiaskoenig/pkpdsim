@@ -185,6 +185,10 @@ __all__ = [
     "mucosa",
     "mucosa_coefficient",
     "mucosa_flow",
+    "mucosa_kps",
+    "mucosa_ps",
+    "mucosa_ps_ref",
+    "mucosa_qgut",
     "mucosa_reaction",
     "mucosa_unbound",
     "mucosa_volume",
@@ -1035,6 +1039,47 @@ def mucosa_coefficient(s: str) -> str:
     return f"K_mu_{s}"
 
 
+def mucosa_kps(s: str) -> str:
+    """The local id of the exchange of the mucosa per litre of mucosa, `kps_mu_<s>`.
+
+    The permeability-surface product of the mucosa of a substance given per
+    litre of mucosa (`mucosa_ps` of the intestine with
+    `mucosa_ps_per_volume`, 1/min): a segment has
+    `PS_mu_<seg>_<s> = kps_mu_<s> * Vmu_<seg>`.
+    """
+    return f"kps_mu_{s}"
+
+
+def mucosa_ps_ref(s: str) -> str:
+    """The local id of the exchange of the whole mucosa, `PS_mu_ref_<s>`.
+
+    The permeability-surface product of the mucosa of all segments in l/min
+    (`mucosa_ps` of the intestine with `mucosa_ps_per_volume=False`, the
+    `CLperm` of the Qgut model): a segment has its share of it by mucosa
+    volume.
+    """
+    return f"PS_mu_ref_{s}"
+
+
+def mucosa_ps(s: str, seg: str | None = None) -> str:
+    """The local id of the exchange of the mucosa of a segment, `PS_mu_du_<s>`.
+
+    The permeability-surface product between the mucosal blood and the
+    enterocytes of the segment (l/min), of the permeability-limited mucosa.
+    """
+    return _segment("PS_mu", s, seg)
+
+
+def mucosa_qgut(s: str, seg: str | None = None) -> str:
+    """The local id of the hybrid flow of the mucosa of a segment, `Qgut_du_<s>`.
+
+    The `Qgut` of the Qgut model (Yang 2007) of the permeability-limited
+    mucosa, the series of the mucosal blood flow and the permeability
+    clearance of the unbound drug (l/min).
+    """
+    return _segment("Qgut", s, seg)
+
+
 def transit_time(seg: str | None = None) -> str:
     """The local id of the transit time of a lumen segment, `T_du` (single: `t_lumen`)."""
     return T_LUMEN if seg is None else f"T_{seg}"
@@ -1099,8 +1144,10 @@ def dissolution_reaction(s: str, seg: str) -> str:
 def mucosa_reaction(kind: str, s: str, seg: str | None = None) -> str:
     """The local id of a flow of the mucosa of a segment, `J_mu_in_du_<s>`.
 
-    `kind` is `in` (arterial inflow), `out` (outflow into the portal vein)
-    or `bc` (the blood cells of the mucosal blood, which pass it).
+    `kind` is `in` (the arterial inflow of the mucosa), `out` (its outflow
+    into the portal vein), `bc` (the blood cells of the mucosal blood, which
+    pass it) or `blood` (of the permeability-limited mucosa: the mucosal blood
+    which passes the enterocytes, from the artery into the portal vein).
     """
     return _segment(f"J_mu_{kind}", s, seg)
 

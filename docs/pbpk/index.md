@@ -326,6 +326,10 @@ Every other id of the scheme, the ids a model rarely reads: the physiology, the 
 | `Qmu_<seg>` | the blood flow of the mucosa of a segment (local id) | `ids.mucosa_flow(seg)` |
 | `K_mu_<s>` | the mucosa to plasma coefficient (local id) | `ids.mucosa_coefficient(s)` |
 | `Cu_mu_<seg>_<s>` | the unbound concentration in the mucosa of a segment (local id) | `ids.mucosa_unbound(s, seg)` |
+| `kps_mu_<s>` | the exchange between the mucosal blood and the enterocytes per litre of mucosa (local id) | `ids.mucosa_kps(s)` |
+| `PS_mu_ref_<s>` | the exchange between the mucosal blood and the enterocytes of the whole mucosa (local id) | `ids.mucosa_ps_ref(s)` |
+| `PS_mu_<seg>_<s>` | the exchange between the mucosal blood and the enterocytes of a segment (local id) | `ids.mucosa_ps(s, seg)` |
+| `Qgut_<seg>_<s>` | the hybrid flow of the permeability-limited mucosa of a segment (local id) | `ids.mucosa_qgut(s, seg)` |
 | `Ctub_<tseg>_<s>` | the concentration in the lumen of a tubule segment of the nephron kidney (local id) | `ids.tubule(s, tseg)` |
 | `Vtub_<tseg>` | the volume of the lumen of a tubule segment (local id) | `ids.tubule_volume(tseg)` |
 | `f_tub_<tseg>` | the tubular flow leaving a segment as fraction of the GFR (local id) | `ids.tubule_flow_fraction(tseg)` |

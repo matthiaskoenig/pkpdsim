@@ -39,7 +39,7 @@ from pkpdsim.pbpk.placement import (
 from pkpdsim.pbpk.routes import ORAL, Route
 from pkpdsim.pbpk.substance import Kp, Substance
 from pkpdsim.pbpk.units import U
-from pkpdsim.pbpk.values import Value
+from pkpdsim.pbpk.values import Q, Value
 from pkpdsim.pbpk.variants.gut_lumen import LumenBuilder
 from pkpdsim.pbpk.variants.lumen_options import LumenConversion, converted
 from pkpdsim.pbpk.variants.segments import Segment
@@ -50,6 +50,7 @@ __all__ = [
     "bile_substances",
     "gut_chemistry",
     "luminal_substances",
+    "mucosal_substances",
     "wall_parts",
 ]
 
@@ -112,7 +113,9 @@ def gut_chemistry(
         if isinstance(p, Transport) and p.membrane is Membrane.BASOLATERAL:
             raise ValueError(
                 f"Transport '{p.sid}' is basolateral: the mucosa of the intestine "
-                "is flow-limited, it has apical transport (lumen) only."
+                "exchanges with the mucosal blood passively (flow-limited, or "
+                "through the permeability of 'mucosa_ps'), it has apical transport "
+                "(lumen) only."
             )
         gut.append(p)
     return gut, tuple(rest)
@@ -208,6 +211,44 @@ def luminal_substances(
     return luminal | converted(conversions, luminal)
 
 
+def mucosal_substances(
+    substances: Iterable[Substance],
+    chemistry: Sequence[Metabolism | Transport | CustomReaction],
+) -> set[str]:
+    """Get the substances with mucosa species in the intestine.
+
+    A substrate, a product or a transported substance of a process of the
+    small intestine, and an inhibitor, inducer or stabiliser of a protein of
+    such a process.
+
+    Args:
+        substances: the substances of the definition.
+        chemistry: the processes of the definition.
+
+    Returns:
+        The ids of the substances.
+
+    Raises:
+        ValueError: for chemistry the intestine cannot place
+            (`gut_chemistry`).
+    """
+    processes = gut_chemistry(chemistry)[0]
+    proteins = {p.protein for p in processes if p.protein is not None}
+    mucosal = {
+        sid
+        for p in processes
+        for sid in (
+            [p.substrate, *p.products] if isinstance(p, Metabolism) else [p.substance]
+        )
+    }
+    return mucosal | {
+        s.sid
+        for s in substances
+        for d in (*s.inhibits, *s.induces, *s.stabilises)
+        if d.protein in proteins
+    }
+
+
 def _check_wall(substances: tuple[Substance, ...]) -> None:
     """Check that no substance gives the large intestine a distribution of its own.
 
@@ -241,6 +282,8 @@ class GutBuilder(LumenBuilder):
         colon: frozenset[str] = frozenset(),
         regional: Mapping[str, frozenset[str]] | None = None,
         conversions: tuple[LumenConversion, ...] = (),
+        mucosa_ps: Mapping[str, Q] | None = None,
+        mucosa_ps_per_volume: bool = True,
     ) -> None:
         """Start the collection of the elements of the intestine.
 
@@ -259,6 +302,13 @@ class GutBuilder(LumenBuilder):
             regional: the segments of a substance which absorb with its
                 factor `f_ka_<seg>_<s>`, by substance.
             conversions: the conversions in the lumen.
+            mucosa_ps: the exchange between the mucosal blood and the
+                enterocytes of a substance, which makes its mucosa
+                permeability-limited; the others keep the flow-limited
+                mucosa.
+            mucosa_ps_per_volume: the values of `mucosa_ps` are per litre of
+                mucosa (1/min), else the exchange of the whole mucosa
+                (l/min).
 
         Raises:
             ValueError: for chemistry the intestine cannot place, a
@@ -281,21 +331,10 @@ class GutBuilder(LumenBuilder):
         self.colon = colon
         self.regional = dict(regional or {})
         self.conversions = conversions
+        self.mucosa_ps = dict(mucosa_ps or {})
+        self.mucosa_ps_per_volume = mucosa_ps_per_volume
         self.mucosa_segments = tuple(seg for seg in segments if seg.region)
-        proteins = {p.protein for p in processes if p.protein is not None}
-        mucosal = {
-            sid
-            for p in processes
-            for sid in (
-                [p.substrate, *p.products]
-                if isinstance(p, Metabolism)
-                else [p.substance]
-            )
-        }
-        mucosal |= {sid for sid, i in ctx.inhibitions if i.protein in proteins}
-        mucosal |= {sid for sid, i in ctx.inductions if i.protein in proteins}
-        mucosal |= {sid for sid, i in ctx.stabilisations if i.protein in proteins}
-        self.mucosal = mucosal
+        self.mucosal = mucosal_substances(ctx.substances, ctx.chemistry)
         self.bile = bile_substances(ctx.substances, ctx.chemistry)
         self.oral = {(r.kind, r.substance): r for r in ctx.routes if r.kind in ORAL}
         self.luminal = luminal_substances(
@@ -591,7 +630,12 @@ class GutBuilder(LumenBuilder):
         """The mucosa species of a substance and their arterial perfusion.
 
         Flow-limited: `Qmu*carrier*Car` in, `Qmu*carrier*Cmu/K_mu` out into
-        the portal vein; the kinetic blood cells of the mucosal blood pass it.
+        the portal vein. Permeability-limited (`mucosa_ps`): the same two
+        flows with the hybrid flow `Qgut` of the Qgut model in place of the
+        mucosal blood flow, and the rest of the mucosal blood,
+        `(Qmu*carrier - Qgut)*Car`, passes the enterocytes from the artery
+        into the portal vein. The kinetic blood cells of the mucosal blood
+        pass it either way.
         """
         sid = s.sid
         kp = self._kp(s)
@@ -611,7 +655,7 @@ class GutBuilder(LumenBuilder):
         car = self._pool_species(Pool.ARTERIAL, Part.PLASMA, s, parts)
         cpo = self._pool_species(Pool.PORTAL, Part.PLASMA, s, parts)
         for seg in self.mucosa_segments:
-            q = ids.mucosa_flow(seg.token)
+            blood = f"{ids.mucosa_flow(seg.token)} * {carrier}"
             c = self._gut_species(
                 ids.mucosa(sid, seg.token),
                 ids.mucosa_volume(seg.token),
@@ -624,10 +668,15 @@ class GutBuilder(LumenBuilder):
             # at a generated steady state `K_mu*Car` (the intestine moves
             # nothing of the substance)
             self._defer_start(c, s, coefficient=k, steady=f"{k} * {car}")
+            # the flow of the mucosa: the mucosal blood flow, or the hybrid
+            # flow of the Qgut model, whose bypass takes the rest of the blood
+            flow = blood
+            if sid in self.mucosa_ps:
+                flow = self._mucosa_bypass(s, seg, blood, car, cpo)
             self._reaction(
                 ids.mucosa_reaction("in", sid, seg.token),
                 f"{car} -> {c}",
-                f"{q} * {carrier} * {car}",
+                f"{flow} * {car}",
                 f"inflow {sid} into mucosa {seg.label}",
                 kind="blood_flow",
                 pool=Pool.ARTERIAL,
@@ -636,7 +685,7 @@ class GutBuilder(LumenBuilder):
             self._reaction(
                 ids.mucosa_reaction("out", sid, seg.token),
                 f"{c} -> {cpo}",
-                f"{q} * {carrier} * {c} / {k}",
+                f"{flow} * {c} / {k}",
                 f"outflow {sid} from mucosa {seg.label}",
                 kind="blood_flow",
                 pool=Pool.PORTAL,
@@ -658,11 +707,113 @@ class GutBuilder(LumenBuilder):
                 self._reaction(
                     ids.mucosa_reaction("bc", sid, seg.token),
                     f"{car_bc} -> {cpo_bc}",
-                    f"{q} * {self.hct} * {car_bc}",
+                    f"{ids.mucosa_flow(seg.token)} * {self.hct} * {car_bc}",
                     f"blood cells {sid} past mucosa {seg.label}",
                     kind="blood_flow",
                     segment=seg.token,
                 )
+
+    def _mucosa_exchange(self, s: Substance, seg: Segment) -> str:
+        """The exchange between the mucosal blood and the enterocytes of a segment.
+
+        `PS_mu_<seg>_<s>` (l/min), the permeability-surface product of the
+        basolateral membrane: the exchange per litre of mucosa times the
+        mucosa of the segment (`mucosa_ps_per_volume`, so it follows the
+        mucosa of the individual), else the share of the exchange of the whole
+        mucosa by its volume.
+        """
+        sid, vmu = s.sid, ids.mucosa_volume(seg.token)
+        whole = (
+            "Permeability-surface product between the mucosal blood and the "
+            "enterocytes (the `CLperm` of the Qgut model), on the unbound "
+            "concentrations"
+        )
+        if self.mucosa_ps_per_volume:
+            kps = self._constant(
+                ids.mucosa_kps(sid),
+                self.mucosa_ps[sid],
+                U.per_min,
+                f"exchange per volume mucosal blood and mucosa {sid} [1/min]",
+                f"{whole}, per litre of mucosa; a segment has "
+                f"`{ids.mucosa_kps(sid)} * {ids.mucosa_volume()}_<seg>`.",
+                kind="permeability",
+            )
+            formula = f"{kps} * {vmu}"
+            text = (
+                "Exchange between the mucosal blood and the enterocytes of the "
+                "segment: the exchange per litre of mucosa times the mucosa of "
+                "the segment, so it follows the mucosa of the individual."
+            )
+        else:
+            ref = self._constant(
+                ids.mucosa_ps_ref(sid),
+                self.mucosa_ps[sid],
+                U.l_per_min,
+                f"exchange mucosal blood and mucosa {sid} [l/min]",
+                f"{whole}, of the mucosa of all segments.",
+                kind="permeability",
+            )
+            formula = f"{ref} * {vmu} / {ids.MUCOSA_VOLUME_TOTAL}"
+            text = (
+                "Exchange between the mucosal blood and the enterocytes of the "
+                "segment: the share of the exchange of the whole mucosa by the "
+                "mucosa volume of the segment."
+            )
+        return self._initial(
+            ids.mucosa_ps(sid, seg.token),
+            formula,
+            U.l_per_min,
+            f"exchange mucosal blood and mucosa {seg.label} {sid} [l/min]",
+            text,
+            kind="permeability",
+            segment=seg.token,
+        )
+
+    def _mucosa_bypass(
+        self, s: Substance, seg: Segment, blood: str, car: str, cpo: str
+    ) -> str:
+        """The hybrid flow of the permeability-limited mucosa of a segment and the bypass.
+
+        The mucosal blood exchanges with the enterocytes through the
+        permeability-surface product of the basolateral membrane on the
+        unbound concentrations. Its volume is a fraction of the mucosa, so it
+        is in quasi steady state, which leaves the hybrid flow of the Qgut
+        model (Yang 2007),
+        `Qgut = Qmu*carrier*fu*PS/(Qmu*carrier + fu*PS)`: the enterocytes see
+        this flow instead of the mucosal blood flow, and the rest of the
+        mucosal blood, `(Qmu*carrier - Qgut)*Car`, passes them from the artery
+        into the portal vein (`J_mu_blood_<seg>_<s>`). A large `PS` is the
+        flow-limited mucosa, whose flows this returns to.
+
+        Returns:
+            The id of the hybrid flow, the flow of the mucosa of the segment.
+        """
+        sid = s.sid
+        fu = self._fu(s)
+        ps = self._mucosa_exchange(s, seg)
+        qgut = self._initial(
+            ids.mucosa_qgut(sid, seg.token),
+            f"{blood} * {fu} * {ps} / ({blood} + {fu} * {ps})",
+            U.l_per_min,
+            f"hybrid flow {sid} mucosa {seg.label} [l/min]",
+            "The mucosal blood flow and the permeability clearance of the unbound "
+            f"substance in series, the `Qgut` of the Qgut model ({cite('Yang2007')}): "
+            "the clearance with which the enterocytes exchange with the arterial "
+            "plasma. It is the blood flow of the mucosa for a large exchange (the "
+            "flow-limited mucosa) and the permeability clearance for a small one.",
+            kind="mucosa_flow",
+            segment=seg.token,
+        )
+        self._reaction(
+            ids.mucosa_reaction("blood", sid, seg.token),
+            f"{car} -> {cpo}",
+            f"({blood} - {qgut}) * {car}",
+            f"mucosal blood {sid} past the mucosa {seg.label}",
+            kind="blood_flow",
+            pool=Pool.PORTAL,
+            segment=seg.token,
+        )
+        return qgut
 
     def _mucosa_unbound(self, s: Substance, seg: Segment) -> str:
         """The unbound concentration of a substance in the mucosa of a segment."""
