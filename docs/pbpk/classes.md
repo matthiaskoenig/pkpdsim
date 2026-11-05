@@ -2392,12 +2392,15 @@ print([CHILD_PUGH_CLASSES.color_of(x) for x in grid])
 # not executed
 from sbmlsim.simulation import Scan
 
+
 class HepatorenalScan(HctzSimulationExperiment):
     """A dose of 25 mg over the grid of cirrhosis and renal function."""
 
     def simulations(self) -> dict[str, Scan]:
         dose = Simulation(end=48 * 60, preinit_changes={"PODOSE_hctz": Q(25, "mg")})
-        cirrhosis = self.impairment_dimension("cirrhosis", cp_severity=np.linspace(0, 3, 13))
+        cirrhosis = self.impairment_dimension(
+            "cirrhosis", cp_severity=np.linspace(0, 3, 13)
+        )
         kidney = self.impairment_dimension("kidney", egfr=np.linspace(120, 5, 24))
         return {"scan_hepatorenal": Scan(dose, [cirrhosis, kidney])}
 ```
