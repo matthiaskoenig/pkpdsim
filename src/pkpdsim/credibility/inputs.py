@@ -17,7 +17,7 @@ simulation:
   reported range (the minimum and the maximum, else the mean with `SPREAD`
   standard deviations), else it `differs`; a group without the measurement
   reads the one of its parent, an individual without it the one of its group;
-- a dose (a target of `DOSE_PREFIXES`, in the pre-initialization changes or in
+- a dose (a target of `dose_prefixes`, in the pre-initialization changes or in
   a change) is `equivalent` within `DOSE_TOLERANCE` of a dose of the reported
   interventions of the data, a dose per body weight times the simulated body
   weight, else it `differs`;
@@ -51,6 +51,7 @@ import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
+from functools import cache
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Final, TypedDict, override
 
@@ -81,7 +82,6 @@ if TYPE_CHECKING:
 __all__ = [
     "COVARIATE_TOLERANCE",
     "DEFAULT_COVARIATES",
-    "DOSE_PREFIXES",
     "DOSE_TOLERANCE",
     "INPUTS",
     "INPUT_COLUMNS",
@@ -97,6 +97,7 @@ __all__ = [
     "StudyTables",
     "check_covariate",
     "check_dose",
+    "dose_prefixes",
     "input_checks",
     "inputs_record",
     "inputs_statement",
@@ -113,18 +114,6 @@ logger = logging.getLogger(__name__)
 #: type of PK-DB
 DEFAULT_COVARIATES: Final[Mapping[str, str]] = MappingProxyType(
     {"BW": "weight", "HEIGHT": "height"}
-)
-
-#: the prefixes of the targets of the doses, the dose states of
-#: `pkpdsim.pbpk.equilibration.DOSE_PREFIXES` without the infusion rate
-#: (`Ri_<s>` is a rate in mg/min and no dose)
-DOSE_PREFIXES: tuple[str, ...] = (
-    "PODOSE_",
-    "IVDOSE_",
-    "SOLDOSE_",
-    "IMDOSE_",
-    "SCDOSE_",
-    "RECDOSE_",
 )
 
 #: the relative difference of a covariate from the reported central value
@@ -290,6 +279,24 @@ class StudyTables:
     groups: pd.DataFrame
     individuals: pd.DataFrame
     interventions: pd.DataFrame
+
+
+@cache
+def dose_prefixes() -> tuple[str, ...]:
+    """Get the prefixes of the targets which are a dose.
+
+    The dose states of the models, `pkpdsim.credibility.battery.dose_states`:
+    the ones the PBPK library creates and the ones of the models which are
+    not built with it. The infusion rate is none of them, it is a rate in
+    mg/min and no dose. The battery imports the library inside the function,
+    so that `pkpdsim.credibility` imports without it, and so does this.
+
+    Returns:
+        The prefixes, the library's first.
+    """
+    from pkpdsim.credibility.battery import dose_states
+
+    return dose_states()
 
 
 def _read(folder: Path, study: str, name: str) -> pd.DataFrame:
@@ -742,7 +749,7 @@ def _mapping_checks(
         values.extend(change.values.items())
     doses: dict[str, list[float]] = {}
     for target, value in values:
-        if not target.startswith(DOSE_PREFIXES):
+        if not target.startswith(dose_prefixes()):
             continue
         unit = uinfo.get(target)
         if unit is None:

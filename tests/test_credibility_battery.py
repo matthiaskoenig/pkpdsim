@@ -33,17 +33,21 @@ from sbmlsim.project_checks import check_battery
 
 from pkpdsim.credibility import EXTENSIONS, PK_BATTERY, PK_CHECKS
 from pkpdsim.credibility.battery import (
-    _BOLUS,
     _INFUSION,
+    _SINKS,
     DOSE,
     HORIZON,
+    LEGACY_DOSE_STATES,
     STEPS,
     Fate,
     FlatBuild,
+    _bolus,
     dose_cases,
     fates_table,
 )
 from pkpdsim.model import PKPDModel
+from pkpdsim.pbpk import ids
+from pkpdsim.pbpk.equilibration import DOSE_PREFIXES as LIBRARY_DOSES
 from pkpdsim_toy import MODEL as TOY
 
 #: a drug model of the conventions: the doses enter the venous blood, the drug
@@ -299,13 +303,55 @@ def test_a_dose_through_the_stomach(tmp_path: Path) -> None:
 def test_the_dose_states_of_the_library_are_doses_of_the_battery() -> None:
     """Every dose state the PBPK library creates is a dose of the battery.
 
-    The library names the dose states and the infusion rate of its routes in
-    one place; a route the battery does not know would leave its dose out of
-    the mass balance, the superposition and the fates without a word.
+    A subset and not an equality: the battery also knows the dose states of
+    the models which are not built with the library
+    (`LEGACY_DOSE_STATES`). A route the battery does not know would leave its
+    dose out of the mass balance, the superposition and the fates.
     """
-    from pkpdsim.pbpk.equilibration import DOSE_PREFIXES
+    assert set(LIBRARY_DOSES) <= {f"{prefix}_" for prefix in (*_bolus(), _INFUSION)}
+    # the battery spells the infusion rate itself, the library names it
+    assert f"{_INFUSION}_" == ids.infusion_rate("")
+    # a legacy state is a dose and names its model
+    assert set(LEGACY_DOSE_STATES) <= {f"{prefix}_" for prefix in _bolus()}
+    assert all(LEGACY_DOSE_STATES.values())
 
-    assert set(DOSE_PREFIXES) == {f"{prefix}_" for prefix in (*_BOLUS, _INFUSION)}
+
+def test_the_sinks_of_the_library_are_sinks_of_a_fate() -> None:
+    """Every sink the PBPK library writes is a part of a fate of its own.
+
+    Without this, a rename of an id of the library would move the sink into
+    the `body` of every fate with the suite green. The bile of the library
+    (`Cbile_<s>`) is no sink: it transits into the intestinal lumen.
+    """
+    sinks = {
+        ids.urine(""),
+        ids.feces(""),
+        ids.depot_loss("im", ""),
+        ids.depot_loss("sc", ""),
+    }
+    assert all(
+        any(sink.startswith(prefix) for prefix in _SINKS.values()) for sink in sinks
+    ), (sinks, _SINKS)
+
+
+def test_a_dose_state_the_battery_does_not_know_is_reported(tmp_path: Path) -> None:
+    """An unknown state in mg which a reaction reads is reported, not skipped.
+
+    The failure mode of an unlisted dose state is a silent one: its dose is
+    simulated by nothing and no fate is recorded. The mass balance names it.
+    """
+    model = _model(
+        tmp_path,
+        "unit mg = 1e-3 gram; XDOSE_d = 0; XDOSE_d has mg; kx = 0.3;"
+        " XDOSE_d' = -kx*XDOSE_d;"
+        " x_d: => Cve_d; kx*XDOSE_d/Mr_d;",
+    )
+    build = FlatBuild.read("male", model.model_path)
+    assert build.unknown_doses == ("XDOSE_d",)
+    assert "XDOSE_d" not in build.doses
+    result = _battery(model).result("mass_balance")
+    assert result.status is BatteryStatus.FAILED
+    assert any("XDOSE_d" in problem for problem in result.problems), result.problems
 
 
 def test_an_injected_depot(tmp_path: Path) -> None:
@@ -331,6 +377,71 @@ def test_an_injected_depot(tmp_path: Path) -> None:
     fate = {f.dose: f for f in _fates(battery)}["IMDOSE_d"]
     assert fate.parts["loss"] == pytest.approx(0.2 * fate.amount, rel=1e-6)
     assert fate.parts["urine"] > 0
+
+
+def test_the_depot_routes_of_a_build_of_the_library(tmp_path: Path) -> None:
+    """The fates of the depot doses of a build of the PBPK library.
+
+    `test_an_injected_depot` imitates the ids of the library in antimony;
+    this one builds them, so a rename of `ids.depot_loss` or of a dose state
+    fails here instead of moving the loss of a depot back into the body.
+    """
+    from pkpdsim.pbpk import Binding, Excretion, Kp, PBPKDefinition, Route, Substance
+    from pkpdsim.pbpk.builder import build
+
+    definition = PBPKDefinition(
+        sid="depots",
+        substances=[
+            Substance(
+                sid="drg",
+                name="drug",
+                mr=300.0,
+                binding=Binding(fu=0.1, protein="albumin"),
+                distribution=Kp(2.0, ftissue=1.0),
+                excretion=Excretion(urine=True),
+            )
+        ],
+        chemistry=[],
+        routes=[
+            Route.iv("drg"),
+            Route.im("drg", ka=0.5, fraction=0.8),
+            Route.sc("drg", ka=0.3, fraction=0.7),
+            Route.rectal("drg", ka=0.4, fraction=0.6, portal=0.3),
+        ],
+    )
+    flat = build(definition, tmp_path).flat_path
+    model = PKPDModel(
+        name="depots",
+        package="depots",
+        title="depots",
+        path=tmp_path,
+        model_path=flat,
+        factory="depots:create_depots_models",
+    )
+    build_read = FlatBuild.read("male", flat)
+    assert build_read.unknown_doses == ()
+    battery = _battery(model)
+    mass = battery.result("mass_balance")
+    assert mass.status is BatteryStatus.PASSED, mass.problems
+    fates = {f.dose: f for f in _fates(battery)}
+    assert {"IVDOSE_drg", "IMDOSE_drg", "SCDOSE_drg", "RECDOSE_drg"} <= set(fates)
+    # the fraction which is not absorbed is the loss of an injected depot
+    for dose, absorbed in (("IMDOSE_drg", 0.8), ("SCDOSE_drg", 0.7)):
+        fate = fates[dose]
+        assert fate.parts["loss"] == pytest.approx(
+            (1 - absorbed) * fate.amount, rel=1e-4
+        ), dose
+    # the unabsorbed rectal dose leaves into the feces, it has no loss
+    rectal = fates["RECDOSE_drg"]
+    assert "loss" not in rectal.parts
+    assert rectal.parts["feces"] == pytest.approx(0.4 * rectal.amount, rel=1e-4)
+    assert "loss" not in fates["IVDOSE_drg"].parts
+    # the amounts account for the whole dose: the model has no elimination
+    # reaction, its urine is a species
+    parts = {"body", "urine", "feces", "loss", "dose"}
+    for dose, fate in fates.items():
+        total = sum(v for k, v in fate.parts.items() if k in parts)
+        assert total == pytest.approx(fate.amount, rel=1e-6), dose
 
 
 def test_a_species_by_its_prefix(tmp_path: Path) -> None:

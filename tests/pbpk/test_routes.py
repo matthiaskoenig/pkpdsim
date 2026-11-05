@@ -12,6 +12,7 @@ dissolution (`fed`, `enteric`) builds the SBML it built before.
 import dataclasses
 import math
 from pathlib import Path
+from typing import Literal
 
 import libsbml
 import numpy as np
@@ -35,6 +36,8 @@ from pkpdsim.pbpk import (
     ids,
 )
 from pkpdsim.pbpk.builder import BuildResult, build
+from pkpdsim.pbpk.equilibration import DOSE_PREFIXES
+from pkpdsim.pbpk.routes import DEPOT
 
 from .conftest import (
     assert_reference_sbml,
@@ -84,6 +87,23 @@ def _ids(path: Path) -> set[str]:
     ):
         found |= {e.getId() for e in elements}
     return found
+
+
+def test_every_depot_kind_is_a_dose_of_the_equilibration() -> None:
+    """Every depot kind of a route has its dose state in `DOSE_PREFIXES`.
+
+    `DOSE_PREFIXES` names the kinds itself, so a kind added to `Route` would
+    otherwise be invisible to the equilibration, which moves a dose given
+    before the initialization to the start, and to the battery of the
+    credibility assessment, which reads the dose states of a model from that
+    list.
+    """
+    kinds: tuple[Literal["im", "sc", "rectal"], ...] = ("im", "sc", "rectal")
+    assert set(kinds) == DEPOT
+    for kind in kinds:
+        assert ids.depot_dose(kind, "") in DOSE_PREFIXES, kind
+    for dose in (ids.po_dose, ids.iv_dose, ids.sol_dose, ids.infusion_rate):
+        assert dose("") in DOSE_PREFIXES
 
 
 def test_the_ids_of_the_depot_routes() -> None:
