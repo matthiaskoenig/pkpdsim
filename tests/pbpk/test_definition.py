@@ -335,6 +335,7 @@ def test_proteins_table() -> None:
         "CYP2C19",
         "CYP2D6",
         "CYP3A4",
+        "CYP3A5",
         "UGT1A1",
         "UGT1A9",
         "UGT2B7",
@@ -359,6 +360,10 @@ def test_proteins_table() -> None:
     ]
     assert set(required) <= set(PROTEINS)
     assert PROTEINS["CYP3A4"].uniprot == "P08684"
+    assert (PROTEINS["CYP3A5"].uniprot, PROTEINS["CYP3A5"].ncit) == (
+        "P20815",
+        "C45999",
+    )
     assert PROTEINS["SLC22A6"].ncit is None
     assert PROTEINS["ABCC3"].uniprot == "O15438"
     assert PROTEINS["ABCC4"].uniprot == "O15439"

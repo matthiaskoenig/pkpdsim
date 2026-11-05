@@ -1177,3 +1177,15 @@ doi = "10.2174/138920007782109733"
 [Gertz2010]
 citation = "Gertz M, Harrison A, Houston JB, Galetin A. Prediction of human intestinal first-pass metabolism of 25 CYP3A substrates from in vitro clearance and permeability data. Drug Metab Dispos 38(7):1147-1158, 2010. PMID 20368326. Abstract read (Europe PMC, 2026-11-04); the full text is not open access."
 doi = "10.1124/dmd.110.032649"
+
+[Paine2006]
+citation = "Paine MF, Hart HL, Ludington SS, Haining RL, Rettie AE, Zeldin DC. The human intestinal cytochrome P450 'pie'. Drug Metab Dispos 34(5):880-886, 2006. PMID 16467132, free full text PMC2222892."
+doi = "10.1124/dmd.105.008672"
+
+[Lin2002]
+citation = "Lin YS, Dowling AL, Quigley SD, Farin FM, Zhang J, Lamba J, Schuetz EG, Thummel KE. Co-regulation of CYP3A4 and CYP3A5 and contribution to hepatic and intestinal midazolam metabolism. Mol Pharmacol 62(1):162-172, 2002. PMID 12065767. Abstract read (Europe PMC, 2026-11-04); the full text is not open access."
+doi = "10.1124/mol.62.1.162"
+
+[Kuehl2001]
+citation = "Kuehl P, Zhang J, Lin Y, Lamba J, Assem M, Schuetz J, Watkins PB, Daly A, Wrighton SA, Hall SD, Maurel P, Relling M, Brimer C, Yasuda K, Venkataramanan R, Strom S, Thummel K, Boguski MS, Schuetz E. Sequence diversity in CYP3A promoters and characterization of the genetic basis of polymorphic CYP3A5 expression. Nat Genet 27(4):383-391, 2001. PMID 11279519. Abstract read (Europe PMC, 2026-11-04); the full text is not open access."
+doi = "10.1038/86882"

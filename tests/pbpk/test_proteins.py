@@ -34,6 +34,7 @@ from pkpdsim.pbpk import (
     Organ,
     Part,
     PBPKDefinition,
+    RateOf,
     Route,
     Stabilisation,
     Substance,
@@ -402,6 +403,77 @@ def test_kdeg_of_liver_and_intestine(tmp_path: Path) -> None:
         ids.flat(Organ.SMALL_INTESTINE, ids.kdeg("CYP3A4"))
     ).getNotesString()
     assert "10.1016/S0009-9236(03)00118-8" in notes
+
+
+def test_cyp3a5_is_a_protein_of_the_liver_and_the_intestine(tmp_path: Path) -> None:
+    """A metabolism of CYP3A5 validates and builds in liver and small intestine.
+
+    The second CYP3A: its hepatic capacity is a ratio of the CYP3A4 branch
+    (`RateOf`, the one quantity the literature gives), the gut branch its own
+    rate. Both organs get the activity `f_cyp3a5` (1, as every protein has;
+    the reference genotype, which the frequent `CYP3A5*3/*3` does not express,
+    belongs to the model), and the gut process is placed by mucosa volume over
+    the segments of the small intestine, as every protein but CYP3A4.
+    """
+    d = definition(
+        sid="cyp3a5",
+        substances=[simple_drug(), Substance(sid="drg_m", name="metabolite", mr=316.0)],
+        chemistry=[
+            Metabolism(
+                "DRG2M",
+                Organ.LIVER,
+                S,
+                {"drg_m": 1.0},
+                FirstOrder(k=0.1),
+                protein="CYP3A4",
+            ),
+            Metabolism(
+                "DRG2M5",
+                Organ.LIVER,
+                S,
+                {"drg_m": 1.0},
+                FirstOrder(k=RateOf("DRG2M", 0.46)),
+                protein="CYP3A5",
+            ),
+            Metabolism(
+                "DRGGU5",
+                Organ.SMALL_INTESTINE,
+                S,
+                {"drg_m": 1.0},
+                FirstOrder(k=0.05),
+                protein="CYP3A5",
+            ),
+        ],
+        routes=[Route.iv(S), Route.oral_solution(S)],
+    )
+    d.validate()
+    result = build(d, tmp_path)
+    r = load(result)
+    for organ in (Organ.LIVER, Organ.SMALL_INTESTINE):
+        assert r[ids.flat(organ, ids.activity("CYP3A5"))] == 1.0
+    assert r[ids.flat(Organ.LIVER, ids.rate_ratio("DRG2M5", "k"))] == pytest.approx(
+        0.46
+    )
+    doc = libsbml.readSBMLFromFile(str(result.flat_path))
+    reactions = {x.getId() for x in doc.getModel().getListOfReactions()}
+    small = ("du", "jej1", "jej2", "ile1", "ile2")
+    assert {
+        ids.flat(Organ.SMALL_INTESTINE, ids.segment_process("DRGGU5", seg))
+        for seg in small
+    } <= reactions
+    # by mucosa volume over the small intestine: the shares sum to 1 and
+    # differ as the mucosa volumes of the segments do
+    weights = [
+        r[ids.flat(Organ.SMALL_INTESTINE, ids.placement_weight("uniform", seg))]
+        for seg in small
+    ]
+    volumes = [
+        r[ids.flat(Organ.SMALL_INTESTINE, ids.mucosa_volume(seg))] for seg in small
+    ]
+    assert sum(weights) == pytest.approx(1.0, rel=1e-12)
+    np.testing.assert_allclose(
+        np.array(weights), np.array(volumes) / sum(volumes), rtol=1e-12
+    )
 
 
 def test_interactions_only_where_a_process_uses_the_protein(tmp_path: Path) -> None:

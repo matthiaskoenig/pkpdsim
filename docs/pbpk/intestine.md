@@ -227,7 +227,7 @@ w_cyp3a4_du = 31 * Vmu_du / (31 * Vmu_du + 31 * Vmu_jej1 + 24 * Vmu_jej2 + 17 * 
 DRGGU_du: Cmu_du_drg -> Cmu_du_drg_m = f_cyp3a4 * fimp_cyp3a4 * w_cyp3a4_du * DRGGU_Vmax * Vsi * (fu_drg / K_mu_drg * Cmu_du_drg) / (DRGGU_Km + fu_drg / K_mu_drg * Cmu_du_drg)
 ```
 
-The number `0.0744792` is the transit share of the duodenum in the small intestine. A protein which a substance inactivates or induces has one turnover state for the intestine, driven by the unbound mucosa concentration weighted by the placement of the protein. ABCB1, ABCG2 and every protein but CYP3A4 are placed by mucosa volume over the small intestine until their abundances along the intestine (Drozdzik 2014) are transcribed and verified.
+The number `0.0744792` is the transit share of the duodenum in the small intestine. A protein which a substance inactivates or induces has one turnover state for the intestine, driven by the unbound mucosa concentration weighted by the placement of the protein. ABCB1, ABCG2, CYP3A5 and every protein but CYP3A4 are placed by mucosa volume over the small intestine until their abundances along the intestine (Drozdzik 2014) are transcribed and verified.
 
 ### Permeability-limited mucosa
 

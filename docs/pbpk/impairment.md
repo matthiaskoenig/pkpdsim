@@ -134,18 +134,23 @@ The enzymes and transporters of the liver are the consensus of the studies of th
 | `ABCC3` | 0.474 | 0.4243 | 0.7358 | `Drozdzik2020`, `ElKhateeb2021`, `Wang2016` |
 | `ABCC4` | 0.3636 | 0.6364 | 0.2727 | `ElKhateeb2021` |
 | `ABCG2` | 0.75 | 1.25 | 0.973 | `ElKhateeb2021`, `Wang2016` |
+| `CES1` | 0.5288 | 0.2765 | 0.168 | `ElKhateeb2021`, `Prasad2018` |
 | `CYP1A2` | 0.481 | 0.536 | 0.1869 | `Drozdzik2021`, `ElKhateeb2021`, `Prasad2018` |
 | `CYP2C19` | 0.793 | 0.1162 | 0.2467 | `Drozdzik2021`, `ElKhateeb2021` |
 | `CYP2C8` | 0.6561 | 0.3706 | 0.3428 | `Drozdzik2021`, `ElKhateeb2021`, `Prasad2018` |
 | `CYP2C9` | 0.9053 | 0.7152 | 0.415 | `Drozdzik2021`, `ElKhateeb2021`, `Prasad2018` |
 | `CYP2D6` | 0.824 | 0.7194 | 0.5954 | `Drozdzik2021`, `ElKhateeb2021`, `Prasad2018` |
+| `CYP2E1` | 0.5138 | 0.4192 | 0.2703 | `Drozdzik2021`, `ElKhateeb2021`, `Prasad2018` |
 | `CYP3A4` | 0.5981 | 0.3449 | 0.195 | `Drozdzik2021`, `ElKhateeb2021`, `Prasad2018` |
+| `CYP3A5` | 0.5281 | 0.06068 | 0.5778 | `ElKhateeb2021` |
 | `SLC22A1` | 0.4822 | 0.3041 | 0.2935 | `Drozdzik2020`, `ElKhateeb2021`, `Wang2016` |
 | `SLC47A1` | 1.037* | 1.075* | 1.112 | `Wang2016` |
 | `SLCO1B1` | 0.5187 | 0.4601 | 0.4826 | `Drozdzik2020`, `ElKhateeb2021`, `Wang2016` |
 | `SLCO1B3` | 0.9863 | 0.3484 | 0.2852 | `Drozdzik2020`, `ElKhateeb2021`, `Wang2016` |
 | `UGT1A1` | 1.49 | 1.204 | 0.9976 | `Drozdzik2021`, `ElKhateeb2021` |
+| `UGT1A3` | 0.4279 | 0.6337 | 0.4518 | `Drozdzik2021`, `ElKhateeb2021` |
 | `UGT1A9` | 1.356 | 0.4759 | 0.2799 | `ElKhateeb2021` |
+| `UGT2B15` | 0.6701 | 0.6507 | 0.4335 | `Drozdzik2021`, `ElKhateeb2021`, `Prasad2018` |
 | `UGT2B7` | 0.7633 | 0.4251 | 0.2091 | `Drozdzik2021`, `ElKhateeb2021`, `Prasad2018` |
 
 The consensus of the studies of the database on the abundance per amount of liver tissue over the controls, see [the database](../database.md); a value marked `*` is the interpolation of a class without a study, a choice of the library.
@@ -398,6 +403,7 @@ Kp(
     },
 )
 ```
+- A protein without a consensus of cirrhosis in the database has no factor of a Child-Pugh class, and a protein without a row in `[ckd.proteins]` of the data none of CKD, so the condition leaves its activity at 1. The enzymes added for the hand-written models have a consensus of cirrhosis (CES1, CYP2E1, CYP3A5, UGT1A3 and UGT2B15 of [El Khateeb 2021](#ref-ElKhateeb2021), [Drozdzik 2021](#ref-Drozdzik2021) and [Prasad 2018](#ref-Prasad2018)) but no factor of CKD, which [Yoshida 2016](#ref-Yoshida2016) tabulates for CYP2D6 and the CYP3A4/5 model drugs together only. A model which needs the impairment of such a protein sets its activity `f_<protein>` itself and says so.
 - The tubular capacity follows the renal function in proportion (`f_tubular` 1, the intact nephron hypothesis, [Bricker 1960](#ref-Bricker1960), not verified, a choice of the library); a transporter whose activity falls less or more than the GFR in CKD needs another share or an activity factor of the experiment.
 
 ## References

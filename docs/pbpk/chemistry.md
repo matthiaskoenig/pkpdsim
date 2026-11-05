@@ -214,6 +214,8 @@ print([b.protein for b in branches])
 
 A protein is named once in the protein table of the library with its UniProt and NCIT annotation; a process names it by its key. In every organ where a process uses it, the protein has the activity factor `f_<protein>` (1, a constant of the organ, `LI__f_cyp3a4` in the flat model): genotype, interactions of an experiment and other factors act on it, as `f_cyp3a4` and `f_cyp2c9` of the hand-written models. In the liver the impairment multiplies it by `fimp_<protein>` (the input `fimp_li_<protein>` of the body, see [Impairment](impairment.md)).
 
+The table holds no abundances: the capacity of a process is a rate of the model, and the ratio of two enzymes of one pathway is a `RateOf` of the first (see [Shared capacities](#shared-capacities)). The activity of every protein is 1, which means "the normal of the subjects of the model", so a model whose reference subjects do not express a polymorphic protein (`CYP3A5*3/*3`, the frequent non-expressor: CYP3A5 is expressed in 60 % of African American and 33 % of Caucasian livers, Kuehl 2001) writes that genotype into the rate of its definition and keeps `f_<protein>` for the interactions; a bare simulation of the model is then its reference genotype. The abundances which the sources of such a protein give are those of the expressors, and the notes of `database/tables/proteins.toml` carry them with their sources. A protein without an expression profile along the intestine is placed by mucosa volume over the small intestine (only CYP3A4 has one, see [Mucosa](intestine.md#mucosa)), and a protein without a row in `[ckd.proteins]` of the impairment data has no factor of CKD (CYP3A5, UGT1A3, see [Impairment](impairment.md)).
+
 <!-- generated: proteins (scripts/pbpk_tables.py), do not edit -->
 *Generated from `database/tables/proteins.toml` by `scripts/pbpk_tables.py`; the notes of every number are in the database.*
 
@@ -225,6 +227,7 @@ A protein is named once in the protein table of the library with its UniProt and
 | `CYP2C19` | Cytochrome P450 2C19 | [P33261](https://www.uniprot.org/uniprotkb/P33261) | `C25948` |
 | `CYP2D6` | Cytochrome P450 2D6 | [P10635](https://www.uniprot.org/uniprotkb/P10635) | `C17287` |
 | `CYP3A4` | Cytochrome P450 3A4 | [P08684](https://www.uniprot.org/uniprotkb/P08684) | `C17573` |
+| `CYP3A5` | Cytochrome P450 3A5 | [P20815](https://www.uniprot.org/uniprotkb/P20815) | `C45999` |
 | `UGT1A1` | UDP-glucuronosyltransferase 1A1 | [P22309](https://www.uniprot.org/uniprotkb/P22309) | `C28288` |
 | `UGT1A9` | UDP-glucuronosyltransferase 1A9 | [O60656](https://www.uniprot.org/uniprotkb/O60656) | `C105864` |
 | `UGT2B7` | UDP-glucuronosyltransferase 2B7 | [P16662](https://www.uniprot.org/uniprotkb/P16662) | `C105577` |
