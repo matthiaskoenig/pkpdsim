@@ -1,0 +1,9 @@
+entity	group	n	mean	sd	notes
+agp	controls	30	0.98331	0.28657	Figure 2, printed 983.31 +- 286.57 mg/l
+agp	creatinine_1_5	11	1.0601	0.29976	Figure 2, printed 1060.12 +- 299.76 mg/l
+agp	creatinine_5_7	14	1.1036	0.29021	Figure 2, printed 1103.63 +- 290.21 mg/l
+agp	creatinine_7_10	12	1.1042	0.31827	Figure 2, printed 1104.23 +- 318.27 mg/l
+agp	creatinine_gt10	17	1.3047	0.29464	Figure 2, printed 1304.73 +- 294.64 mg/l
+agp	lpd	40	1.2272	0.44542	Figure 3, printed 1227.23 +- 445.42 mg/l
+agp	hd	53	1.2736	0.37833	Figure 3, printed 1273.6 +- 378.33 mg/l
+agp	anephric	5	1.3501	0.47776	Figure 3, printed 1350.12 +- 477.76 mg/l

@@ -1,0 +1,28 @@
+# Published parameterizations of the impairments, for comparison with the
+# factors of the library (`docs/pbpk/impairment.md`); no factor of the
+# library is read from this table. A value is the printed control and the
+# classes in order, `[control, A, B, C]`.
+#
+# [johnson2010]: Johnson 2010 (Clin Pharmacokinet 49:189, Table III, the
+# publication read), the parameters of the cirrhosis populations of the Simcyp
+# Simulator from a meta-analysis of the literature; the CYP abundance per mg of
+# microsomal protein of the functional liver (the liver volume fraction is the
+# functional hepatocyte volume).
+
+[johnson2010.child_pugh]
+liver_volume = { value = [1.0, 0.81, 0.65, 0.53], unit = "dimensionless", source = "Johnson2010", library = "functional_liver", notes = "liver volume fraction (functional hepatocyte volume)" }
+albumin = { value = [44.7, 41.1, 33.9, 26.3], unit = "g/L", source = "Johnson2010", library = "albumin", notes = "albumin" }
+agp = { value = [0.80, 0.57, 0.52, 0.46], unit = "g/L", source = "Johnson2010", library = "agp", notes = "alpha-1-acid glycoprotein" }
+hematocrit = { value = [40.9, 36.6, 32.9, 31.9], unit = "%", source = "Johnson2010", library = "hematocrit", notes = "haematocrit" }
+cardiac_output = { value = [306.0, 355.0, 403.0, 431.0], unit = "L/h", source = "Johnson2010", library = "cardiac_index", notes = "cardiac output" }
+hepatic_arterial_flow = { value = [19.9, 28.0, 32.3, 38.1], unit = "L/h", source = "Johnson2010", library = "hepatic_artery_flow", notes = "hepatic arterial blood flow" }
+gfr = { value = [120.0, 83.7, 69.9, 66.5], unit = "mL/min", source = "Johnson2010", library = "gfr", notes = "GFR" }
+CYP1A2 = { value = [52.0, 32.9, 13.6, 6.10], unit = "pmol/mg", source = "Johnson2010", library = "CYP1A2", notes = "CYP1A2 abundance" }
+CYP2A6 = { value = [20.0, 17.7, 12.3, 6.40], unit = "pmol/mg", source = "Johnson2010", library = "CYP2A6", notes = "CYP2A6 abundance" }
+CYP2B6 = { value = [17.0, 17.0, 15.3, 13.6], unit = "pmol/mg", source = "Johnson2010", library = "CYP2B6", notes = "CYP2B6 abundance" }
+CYP2C8 = { value = [24.0, 16.6, 12.5, 7.90], unit = "pmol/mg", source = "Johnson2010", library = "CYP2C8", notes = "CYP2C8 abundance" }
+CYP2C9 = { value = [73.0, 50.4, 38.0, 24.1], unit = "pmol/mg", source = "Johnson2010", library = "CYP2C9", notes = "CYP2C9 abundance" }
+CYP2C19 = { value = [14.0, 4.50, 3.60, 1.70], unit = "pmol/mg", source = "Johnson2010", library = "CYP2C19", notes = "CYP2C19 abundance" }
+CYP2D6 = { value = [8.0, 6.10, 2.60, 0.84], unit = "pmol/mg", source = "Johnson2010", library = "CYP2D6", notes = "CYP2D6 abundance" }
+CYP2E1 = { value = [61.0, 45.1, 29.3, 6.71], unit = "pmol/mg", source = "Johnson2010", library = "CYP2E1", notes = "CYP2E1 abundance" }
+CYP3A4 = { value = [137.0, 80.8, 53.2, 34.2], unit = "pmol/mg", source = "Johnson2010", library = "CYP3A4", notes = "CYP3A4 abundance" }

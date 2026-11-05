@@ -94,7 +94,7 @@ Cirrhosis is the end stage of chronic liver injury (alcohol, viral hepatitis, me
 - **Portosystemic shunting.** The fibrosis raises the resistance of the liver to the portal blood, the portal pressure rises (portal hypertension) and collaterals and intrahepatic shunts carry part of the portal blood around the hepatocytes ([Iwakiri 2014](#ref-Iwakiri2014)). The capillarization of the sinusoids (the loss of their fenestrae) hinders the exchange between blood and hepatocytes as well. The hepatic artery partly compensates the lost portal flow (the hepatic arterial buffer response).
 - **Systemic consequences.** The synthesis of albumin and of the clotting factors falls (hypoalbuminaemia, a prolonged INR), the splanchnic vasodilation leads to a hyperdynamic circulation with a raised cardiac output, the renal perfusion and the GFR fall up to the hepatorenal syndrome ([Ginès 2018](#ref-Gines2018)), and anaemia and ascites are common.
 
-Which of these dominates depends on the drug. The well-stirred model of the liver ([Wilkinson 1975](#ref-Wilkinson1975)), `CL_H = Q*fu*CL_int/(Q + fu*CL_int)`, separates the cases: a drug of high extraction (`fu*CL_int >> Q`) is cleared at the blood flow, and the shunt lets its oral dose bypass the first pass, so its bioavailability can rise several-fold; a drug of low extraction is cleared at `fu*CL_int`, which falls with the enzymes and rises with the fu of a lower albumin. The library has each of these mechanisms as a factor of the severity: the functional fraction `f_functional` and the factors of every protein, the shunt `f_shunt`, the hepatic arterial and renal blood flow, the cardiac index, the GFR, the albumin and AGP of the binding and the hematocrit ([Impairment](impairment.md#liver-cirrhosis)). The physiology-based models of cirrhosis of PK-Sim and Simcyp are built in the same way ([Edginton 2008](#ref-Edginton2008), [Johnson 2010](#ref-Johnson2010)).
+Which of these dominates depends on the drug. The well-stirred model of the liver ([Wilkinson 1975](#ref-Wilkinson1975)), `CL_H = Q*fu*CL_int/(Q + fu*CL_int)`, separates the cases: a drug of high extraction (`fu*CL_int >> Q`) is cleared at the blood flow, and the shunt lets its oral dose bypass the first pass, so its bioavailability can rise several-fold; a drug of low extraction is cleared at `fu*CL_int`, which falls with the enzymes and rises with the fu of a lower albumin. The library has each of these mechanisms as a factor of the severity: the amount of liver tissue `f_functional` (the liver volume) times the abundance of every protein per amount of tissue, which counts the loss of hepatocytes once (the abundance per gram of cirrhotic tissue already holds it), the shunt `f_shunt`, the hepatic arterial and renal blood flow, the cardiac index, the GFR, the albumin and AGP of the binding and the hematocrit ([Impairment](impairment.md#liver-cirrhosis)). The physiology-based models of cirrhosis of PK-Sim and Simcyp are built in the same way ([Edginton 2008](#ref-Edginton2008), [Johnson 2010](#ref-Johnson2010)).
 
 ### Child-Pugh classification
 
@@ -199,11 +199,11 @@ The physiological factors of each condition over its severity, a panel per facto
 <rect x="112" y="125" width="34" height="5" fill="#045a8d" fill-opacity="0.9"><title>Child-Pugh C</title></rect>
 <line x1="10" x2="146" y1="57.19" y2="57.19" stroke="currentColor" stroke-opacity="0.35" stroke-dasharray="3 3"/>
 <text x="149" y="60.19" font-size="11" opacity="0.7">1</text>
-<polyline points="27,57.19 61,77.28 95,86.35 129,103.9" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-<circle cx="61" cy="77.28" r="3.5" fill="currentColor"><title>A: 0.69</title></circle>
-<circle cx="95" cy="86.35" r="3.5" fill="currentColor"><title>B: 0.55</title></circle>
-<circle cx="129" cy="103.9" r="3.5" fill="currentColor"><title>C: 0.28</title></circle>
-<text x="149" y="106.9" font-size="11" opacity="0.7">0.28</text>
+<polyline points="27,57.19 61,63.78 95,71.09 129,78.87" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+<circle cx="61" cy="63.78" r="3.5" fill="currentColor"><title>A: 0.8982</title></circle>
+<circle cx="95" cy="71.09" r="3.5" fill="currentColor"><title>B: 0.7854</title></circle>
+<circle cx="129" cy="78.87" r="3.5" fill="currentColor"><title>C: 0.6655</title></circle>
+<text x="149" y="81.87" font-size="11" opacity="0.7">0.6655</text>
 <text x="190" y="45" font-size="13">shunt</text>
 <rect x="190" y="125" width="34" height="5" fill="#9e9e9e" fill-opacity="0.35"><title>Healthy</title></rect>
 <rect x="224" y="125" width="34" height="5" fill="#74a9cf" fill-opacity="0.9"><title>Child-Pugh A</title></rect>
@@ -375,13 +375,14 @@ The physiological factors of each condition over its severity, a panel per facto
 <rect x="95" y="235" width="17" height="5" fill="#238b45" fill-opacity="0.9"><title>G3b moderate-severe</title></rect>
 <rect x="112" y="235" width="17" height="5" fill="#006d2c" fill-opacity="0.9"><title>G4 severe</title></rect>
 <rect x="129" y="235" width="17" height="5" fill="#00441b" fill-opacity="0.9"><title>G5 kidney failure</title></rect>
-<line x1="10" x2="146" y1="167.2" y2="167.2" stroke="currentColor" stroke-opacity="0.35" stroke-dasharray="3 3"/>
-<text x="149" y="170.2" font-size="11" opacity="0.7">1</text>
-<polyline points="10,167.2 44,167.2 61,167.2 95,167.2 120.5,167.2 137.5,167.2 146,167.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-<circle cx="61" cy="167.2" r="3.5" fill="currentColor"><title>mild: 1</title></circle>
-<circle cx="95" cy="167.2" r="3.5" fill="currentColor"><title>moderate: 1</title></circle>
-<circle cx="120.5" cy="167.2" r="3.5" fill="currentColor"><title>severe: 1</title></circle>
-<circle cx="137.5" cy="167.2" r="3.5" fill="currentColor"><title>end stage: 1</title></circle>
+<line x1="10" x2="146" y1="191.5" y2="191.5" stroke="currentColor" stroke-opacity="0.35" stroke-dasharray="3 3"/>
+<text x="149" y="194.5" font-size="11" opacity="0.7">1</text>
+<polyline points="10,191.5 44,191.5 61,191.5 95,191.5 120.5,167.2 137.5,167.2 146,167.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+<circle cx="61" cy="191.5" r="3.5" fill="currentColor"><title>mild: 1</title></circle>
+<circle cx="95" cy="191.5" r="3.5" fill="currentColor"><title>moderate: 1</title></circle>
+<circle cx="120.5" cy="167.2" r="3.5" fill="currentColor"><title>severe: 1.6</title></circle>
+<circle cx="137.5" cy="167.2" r="3.5" fill="currentColor"><title>end stage: 1.6</title></circle>
+<text x="149" y="170.2" font-size="11" opacity="0.7">1.6</text>
 <text x="190" y="155" font-size="13">si_transit_time</text>
 <rect x="190" y="235" width="34" height="5" fill="#9e9e9e" fill-opacity="0.35"><title>G1 normal</title></rect>
 <rect x="224" y="235" width="34" height="5" fill="#66c2a4" fill-opacity="0.9"><title>G2 mild</title></rect>
@@ -389,13 +390,14 @@ The physiological factors of each condition over its severity, a panel per facto
 <rect x="275" y="235" width="17" height="5" fill="#238b45" fill-opacity="0.9"><title>G3b moderate-severe</title></rect>
 <rect x="292" y="235" width="17" height="5" fill="#006d2c" fill-opacity="0.9"><title>G4 severe</title></rect>
 <rect x="309" y="235" width="17" height="5" fill="#00441b" fill-opacity="0.9"><title>G5 kidney failure</title></rect>
-<line x1="190" x2="326" y1="167.2" y2="167.2" stroke="currentColor" stroke-opacity="0.35" stroke-dasharray="3 3"/>
-<text x="329" y="170.2" font-size="11" opacity="0.7">1</text>
-<polyline points="190,167.2 224,167.2 241,167.2 275,167.2 300.5,167.2 317.5,167.2 326,167.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-<circle cx="241" cy="167.2" r="3.5" fill="currentColor"><title>mild: 1</title></circle>
-<circle cx="275" cy="167.2" r="3.5" fill="currentColor"><title>moderate: 1</title></circle>
-<circle cx="300.5" cy="167.2" r="3.5" fill="currentColor"><title>severe: 1</title></circle>
-<circle cx="317.5" cy="167.2" r="3.5" fill="currentColor"><title>end stage: 1</title></circle>
+<line x1="190" x2="326" y1="185.7" y2="185.7" stroke="currentColor" stroke-opacity="0.35" stroke-dasharray="3 3"/>
+<text x="329" y="188.7" font-size="11" opacity="0.7">1</text>
+<polyline points="190,185.7 224,185.7 241,185.7 275,185.7 300.5,167.2 317.5,167.2 326,167.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+<circle cx="241" cy="185.7" r="3.5" fill="currentColor"><title>mild: 1</title></circle>
+<circle cx="275" cy="185.7" r="3.5" fill="currentColor"><title>moderate: 1</title></circle>
+<circle cx="300.5" cy="167.2" r="3.5" fill="currentColor"><title>severe: 1.4</title></circle>
+<circle cx="317.5" cy="167.2" r="3.5" fill="currentColor"><title>end stage: 1.4</title></circle>
+<text x="329" y="170.2" font-size="11" opacity="0.7">1.4</text>
 <text x="370" y="155" font-size="13">binding: albumin</text>
 <rect x="370" y="235" width="34" height="5" fill="#9e9e9e" fill-opacity="0.35"><title>G1 normal</title></rect>
 <rect x="404" y="235" width="34" height="5" fill="#66c2a4" fill-opacity="0.9"><title>G2 mild</title></rect>
@@ -405,11 +407,11 @@ The physiological factors of each condition over its severity, a panel per facto
 <rect x="489" y="235" width="17" height="5" fill="#00441b" fill-opacity="0.9"><title>G5 kidney failure</title></rect>
 <line x1="370" x2="506" y1="167.2" y2="167.2" stroke="currentColor" stroke-opacity="0.35" stroke-dasharray="3 3"/>
 <text x="509" y="170.2" font-size="11" opacity="0.7">1</text>
-<polyline points="370,167.2 404,167.2 421,169.4 455,171.7 480.5,172.9 497.5,176.5 506,176.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+<polyline points="370,167.2 404,167.2 421,169.4 455,171.7 480.5,172.9 497.5,176.6 506,176.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
 <circle cx="421" cy="169.4" r="3.5" fill="currentColor"><title>mild: 0.9654</title></circle>
-<circle cx="455" cy="171.7" r="3.5" fill="currentColor"><title>moderate: 0.9309</title></circle>
-<circle cx="480.5" cy="172.9" r="3.5" fill="currentColor"><title>severe: 0.9124</title></circle>
-<circle cx="497.5" cy="176.5" r="3.5" fill="currentColor"><title>end stage: 0.8557</title></circle>
+<circle cx="455" cy="171.7" r="3.5" fill="currentColor"><title>moderate: 0.9308</title></circle>
+<circle cx="480.5" cy="172.9" r="3.5" fill="currentColor"><title>severe: 0.912</title></circle>
+<circle cx="497.5" cy="176.6" r="3.5" fill="currentColor"><title>end stage: 0.8553</title></circle>
 <text x="550" y="155" font-size="13">binding: albumin_binding</text>
 <rect x="550" y="235" width="34" height="5" fill="#9e9e9e" fill-opacity="0.35"><title>G1 normal</title></rect>
 <rect x="584" y="235" width="34" height="5" fill="#66c2a4" fill-opacity="0.9"><title>G2 mild</title></rect>
@@ -457,12 +459,12 @@ The physiological factors of each condition over its severity, a panel per facto
 <rect x="118.8" y="125" width="27.2" height="5" fill="#67001F" fill-opacity="0.9"><title>NYHA IV</title></rect>
 <line x1="10" x2="146" y1="57.19" y2="57.19" stroke="currentColor" stroke-opacity="0.35" stroke-dasharray="3 3"/>
 <text x="149" y="60.19" font-size="11" opacity="0.7">1</text>
-<polyline points="23.6,57.19 50.8,57.19 78,72.42 105.2,87.13 132.4,91.99" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-<circle cx="50.8" cy="57.19" r="3.5" fill="currentColor"><title>I: 1</title></circle>
-<circle cx="78" cy="72.42" r="3.5" fill="currentColor"><title>II: 0.765</title></circle>
-<circle cx="105.2" cy="87.13" r="3.5" fill="currentColor"><title>III: 0.538</title></circle>
-<circle cx="132.4" cy="91.99" r="3.5" fill="currentColor"><title>IV: 0.463</title></circle>
-<text x="149" y="94.99" font-size="11" opacity="0.7">0.463</text>
+<polyline points="23.6,57.19 50.8,65.43 78,73.67 105.2,87.86 132.4,91.78" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+<circle cx="50.8" cy="65.43" r="3.5" fill="currentColor"><title>I: 0.8728</title></circle>
+<circle cx="78" cy="73.67" r="3.5" fill="currentColor"><title>II: 0.7456</title></circle>
+<circle cx="105.2" cy="87.86" r="3.5" fill="currentColor"><title>III: 0.5267</title></circle>
+<circle cx="132.4" cy="91.78" r="3.5" fill="currentColor"><title>IV: 0.4662</title></circle>
+<text x="149" y="94.78" font-size="11" opacity="0.7">0.4662</text>
 <text x="190" y="45" font-size="13">kidney_flow</text>
 <rect x="190" y="125" width="27.2" height="5" fill="#9e9e9e" fill-opacity="0.35"><title>Healthy</title></rect>
 <rect x="217.2" y="125" width="27.2" height="5" fill="#FDDBC7" fill-opacity="0.9"><title>NYHA I</title></rect>
@@ -471,12 +473,12 @@ The physiological factors of each condition over its severity, a panel per facto
 <rect x="298.8" y="125" width="27.2" height="5" fill="#67001F" fill-opacity="0.9"><title>NYHA IV</title></rect>
 <line x1="190" x2="326" y1="57.19" y2="57.19" stroke="currentColor" stroke-opacity="0.35" stroke-dasharray="3 3"/>
 <text x="329" y="60.19" font-size="11" opacity="0.7">1</text>
-<polyline points="203.6,57.19 230.8,57.19 258,71.57 285.2,86.35 312.4,81.23" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-<circle cx="230.8" cy="57.19" r="3.5" fill="currentColor"><title>I: 1</title></circle>
-<circle cx="258" cy="71.57" r="3.5" fill="currentColor"><title>II: 0.778</title></circle>
-<circle cx="285.2" cy="86.35" r="3.5" fill="currentColor"><title>III: 0.55</title></circle>
-<circle cx="312.4" cy="81.23" r="3.5" fill="currentColor"><title>IV: 0.629</title></circle>
-<text x="329" y="89.35" font-size="11" opacity="0.7">0.55</text>
+<polyline points="203.6,57.19 230.8,65.01 258,72.84 285.2,86.4 312.4,81.18" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+<circle cx="230.8" cy="65.01" r="3.5" fill="currentColor"><title>I: 0.8792</title></circle>
+<circle cx="258" cy="72.84" r="3.5" fill="currentColor"><title>II: 0.7584</title></circle>
+<circle cx="285.2" cy="86.4" r="3.5" fill="currentColor"><title>III: 0.5492</title></circle>
+<circle cx="312.4" cy="81.18" r="3.5" fill="currentColor"><title>IV: 0.6298</title></circle>
+<text x="329" y="89.4" font-size="11" opacity="0.7">0.5492</text>
 <text x="370" y="45" font-size="13">peripheral_flow</text>
 <rect x="370" y="125" width="27.2" height="5" fill="#9e9e9e" fill-opacity="0.35"><title>Healthy</title></rect>
 <rect x="397.2" y="125" width="27.2" height="5" fill="#FDDBC7" fill-opacity="0.9"><title>NYHA I</title></rect>
@@ -485,12 +487,12 @@ The physiological factors of each condition over its severity, a panel per facto
 <rect x="478.8" y="125" width="27.2" height="5" fill="#67001F" fill-opacity="0.9"><title>NYHA IV</title></rect>
 <line x1="370" x2="506" y1="57.19" y2="57.19" stroke="currentColor" stroke-opacity="0.35" stroke-dasharray="3 3"/>
 <text x="509" y="60.19" font-size="11" opacity="0.7">1</text>
-<polyline points="383.6,57.19 410.8,57.19 438,85.06 465.2,93.48 492.4,103.9" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-<circle cx="410.8" cy="57.19" r="3.5" fill="currentColor"><title>I: 1</title></circle>
-<circle cx="438" cy="85.06" r="3.5" fill="currentColor"><title>II: 0.57</title></circle>
-<circle cx="465.2" cy="93.48" r="3.5" fill="currentColor"><title>III: 0.44</title></circle>
-<circle cx="492.4" cy="103.9" r="3.5" fill="currentColor"><title>IV: 0.28</title></circle>
-<text x="509" y="106.9" font-size="11" opacity="0.7">0.28</text>
+<polyline points="383.6,57.19 410.8,68.57 438,79.95 465.2,85 492.4,91.84" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+<circle cx="410.8" cy="68.57" r="3.5" fill="currentColor"><title>I: 0.8244</title></circle>
+<circle cx="438" cy="79.95" r="3.5" fill="currentColor"><title>II: 0.6488</title></circle>
+<circle cx="465.2" cy="85" r="3.5" fill="currentColor"><title>III: 0.5709</title></circle>
+<circle cx="492.4" cy="91.84" r="3.5" fill="currentColor"><title>IV: 0.4654</title></circle>
+<text x="509" y="94.84" font-size="11" opacity="0.7">0.4654</text>
 </svg>
 </div>
 <!-- end generated -->
@@ -1129,581 +1131,581 @@ The conditions occur together: cirrhosis lowers the GFR up to the hepatorenal sy
 <text x="300" y="18" font-weight="600">renal blood flow, cardiorenal</text>
 <text transform="translate(272 140) rotate(-90)" text-anchor="middle" font-size="12">eGFR (ml/min/1.73 m2)</text>
 <rect x="300" y="40" width="8.633" height="8.633" fill="#08306b"><title>HF_severity 0, eGFR 117.5: 1</title></rect>
-<rect x="308.3" y="40" width="8.633" height="8.633" fill="#08306b"><title>HF_severity 0.174, eGFR 117.5: 1</title></rect>
-<rect x="316.7" y="40" width="8.633" height="8.633" fill="#08306b"><title>HF_severity 0.348, eGFR 117.5: 1</title></rect>
-<rect x="325" y="40" width="8.633" height="8.633" fill="#08306b"><title>HF_severity 0.522, eGFR 117.5: 1</title></rect>
-<rect x="333.3" y="40" width="8.633" height="8.633" fill="#08306b"><title>HF_severity 0.696, eGFR 117.5: 1</title></rect>
-<rect x="341.7" y="40" width="8.633" height="8.633" fill="#08306b"><title>HF_severity 0.87, eGFR 117.5: 1</title></rect>
-<rect x="350" y="40" width="8.633" height="8.633" fill="#09336f"><title>HF_severity 1.043, eGFR 117.5: 0.99</title></rect>
-<rect x="358.3" y="40" width="8.633" height="8.633" fill="#0e3f7d"><title>HF_severity 1.217, eGFR 117.5: 0.952</title></rect>
-<rect x="366.7" y="40" width="8.633" height="8.633" fill="#134c8b"><title>HF_severity 1.391, eGFR 117.5: 0.913</title></rect>
-<rect x="375" y="40" width="8.633" height="8.633" fill="#175899"><title>HF_severity 1.565, eGFR 117.5: 0.875</title></rect>
-<rect x="383.3" y="40" width="8.633" height="8.633" fill="#1c64a7"><title>HF_severity 1.739, eGFR 117.5: 0.836</title></rect>
-<rect x="391.7" y="40" width="8.633" height="8.633" fill="#2171b5"><title>HF_severity 1.913, eGFR 117.5: 0.797</title></rect>
-<rect x="400" y="40" width="8.633" height="8.633" fill="#2f7dbb"><title>HF_severity 2.087, eGFR 117.5: 0.758</title></rect>
-<rect x="408.3" y="40" width="8.633" height="8.633" fill="#3e89c2"><title>HF_severity 2.261, eGFR 117.5: 0.719</title></rect>
-<rect x="416.7" y="40" width="8.633" height="8.633" fill="#4c94c8"><title>HF_severity 2.435, eGFR 117.5: 0.679</title></rect>
-<rect x="425" y="40" width="8.633" height="8.633" fill="#5aa0cf"><title>HF_severity 2.609, eGFR 117.5: 0.639</title></rect>
-<rect x="433.3" y="40" width="8.633" height="8.633" fill="#69acd5"><title>HF_severity 2.783, eGFR 117.5: 0.6</title></rect>
-<rect x="441.7" y="40" width="8.633" height="8.633" fill="#7ab5da"><title>HF_severity 2.957, eGFR 117.5: 0.56</title></rect>
+<rect x="308.3" y="40" width="8.633" height="8.633" fill="#0b3773"><title>HF_severity 0.174, eGFR 117.5: 0.979</title></rect>
+<rect x="316.7" y="40" width="8.633" height="8.633" fill="#0d3d7a"><title>HF_severity 0.348, eGFR 117.5: 0.958</title></rect>
+<rect x="325" y="40" width="8.633" height="8.633" fill="#104482"><title>HF_severity 0.522, eGFR 117.5: 0.937</title></rect>
+<rect x="333.3" y="40" width="8.633" height="8.633" fill="#124b8a"><title>HF_severity 0.696, eGFR 117.5: 0.916</title></rect>
+<rect x="341.7" y="40" width="8.633" height="8.633" fill="#155291"><title>HF_severity 0.87, eGFR 117.5: 0.895</title></rect>
+<rect x="350" y="40" width="8.633" height="8.633" fill="#175899"><title>HF_severity 1.043, eGFR 117.5: 0.874</title></rect>
+<rect x="358.3" y="40" width="8.633" height="8.633" fill="#1a5fa1"><title>HF_severity 1.217, eGFR 117.5: 0.853</title></rect>
+<rect x="366.7" y="40" width="8.633" height="8.633" fill="#1d66a8"><title>HF_severity 1.391, eGFR 117.5: 0.832</title></rect>
+<rect x="375" y="40" width="8.633" height="8.633" fill="#1f6cb0"><title>HF_severity 1.565, eGFR 117.5: 0.811</title></rect>
+<rect x="383.3" y="40" width="8.633" height="8.633" fill="#2373b6"><title>HF_severity 1.739, eGFR 117.5: 0.79</title></rect>
+<rect x="391.7" y="40" width="8.633" height="8.633" fill="#2b79ba"><title>HF_severity 1.913, eGFR 117.5: 0.769</title></rect>
+<rect x="400" y="40" width="8.633" height="8.633" fill="#3682be"><title>HF_severity 2.087, eGFR 117.5: 0.74</title></rect>
+<rect x="408.3" y="40" width="8.633" height="8.633" fill="#438dc4"><title>HF_severity 2.261, eGFR 117.5: 0.704</title></rect>
+<rect x="416.7" y="40" width="8.633" height="8.633" fill="#5098ca"><title>HF_severity 2.435, eGFR 117.5: 0.667</title></rect>
+<rect x="425" y="40" width="8.633" height="8.633" fill="#5da3d0"><title>HF_severity 2.609, eGFR 117.5: 0.631</title></rect>
+<rect x="433.3" y="40" width="8.633" height="8.633" fill="#6baed6"><title>HF_severity 2.783, eGFR 117.5: 0.595</title></rect>
+<rect x="441.7" y="40" width="8.633" height="8.633" fill="#7bb6da"><title>HF_severity 2.957, eGFR 117.5: 0.558</title></rect>
 <rect x="450" y="40" width="8.633" height="8.633" fill="#7ab5da"><title>HF_severity 3.13, eGFR 117.5: 0.56</title></rect>
 <rect x="458.3" y="40" width="8.633" height="8.633" fill="#74b2d8"><title>HF_severity 3.304, eGFR 117.5: 0.574</title></rect>
 <rect x="466.7" y="40" width="8.633" height="8.633" fill="#6eafd7"><title>HF_severity 3.478, eGFR 117.5: 0.588</title></rect>
-<rect x="475" y="40" width="8.633" height="8.633" fill="#68acd5"><title>HF_severity 3.652, eGFR 117.5: 0.602</title></rect>
-<rect x="483.3" y="40" width="8.633" height="8.633" fill="#63a8d2"><title>HF_severity 3.826, eGFR 117.5: 0.615</title></rect>
-<rect x="491.7" y="40" width="8.633" height="8.633" fill="#5ea3d0"><title>HF_severity 4, eGFR 117.5: 0.629</title></rect>
+<rect x="475" y="40" width="8.633" height="8.633" fill="#68abd5"><title>HF_severity 3.652, eGFR 117.5: 0.602</title></rect>
+<rect x="483.3" y="40" width="8.633" height="8.633" fill="#63a7d2"><title>HF_severity 3.826, eGFR 117.5: 0.616</title></rect>
+<rect x="491.7" y="40" width="8.633" height="8.633" fill="#5ea3d0"><title>HF_severity 4, eGFR 117.5: 0.63</title></rect>
 <rect x="300" y="48.33" width="8.633" height="8.633" fill="#08306b"><title>HF_severity 0, eGFR 112.5: 1</title></rect>
-<rect x="308.3" y="48.33" width="8.633" height="8.633" fill="#08306b"><title>HF_severity 0.174, eGFR 112.5: 1</title></rect>
-<rect x="316.7" y="48.33" width="8.633" height="8.633" fill="#08306b"><title>HF_severity 0.348, eGFR 112.5: 1</title></rect>
-<rect x="325" y="48.33" width="8.633" height="8.633" fill="#08306b"><title>HF_severity 0.522, eGFR 112.5: 1</title></rect>
-<rect x="333.3" y="48.33" width="8.633" height="8.633" fill="#08306b"><title>HF_severity 0.696, eGFR 112.5: 1</title></rect>
-<rect x="341.7" y="48.33" width="8.633" height="8.633" fill="#08306b"><title>HF_severity 0.87, eGFR 112.5: 1</title></rect>
-<rect x="350" y="48.33" width="8.633" height="8.633" fill="#09336f"><title>HF_severity 1.043, eGFR 112.5: 0.99</title></rect>
-<rect x="358.3" y="48.33" width="8.633" height="8.633" fill="#0e3f7d"><title>HF_severity 1.217, eGFR 112.5: 0.952</title></rect>
-<rect x="366.7" y="48.33" width="8.633" height="8.633" fill="#134c8b"><title>HF_severity 1.391, eGFR 112.5: 0.913</title></rect>
-<rect x="375" y="48.33" width="8.633" height="8.633" fill="#175899"><title>HF_severity 1.565, eGFR 112.5: 0.875</title></rect>
-<rect x="383.3" y="48.33" width="8.633" height="8.633" fill="#1c64a7"><title>HF_severity 1.739, eGFR 112.5: 0.836</title></rect>
-<rect x="391.7" y="48.33" width="8.633" height="8.633" fill="#2171b5"><title>HF_severity 1.913, eGFR 112.5: 0.797</title></rect>
-<rect x="400" y="48.33" width="8.633" height="8.633" fill="#2f7dbb"><title>HF_severity 2.087, eGFR 112.5: 0.758</title></rect>
-<rect x="408.3" y="48.33" width="8.633" height="8.633" fill="#3e89c2"><title>HF_severity 2.261, eGFR 112.5: 0.719</title></rect>
-<rect x="416.7" y="48.33" width="8.633" height="8.633" fill="#4c94c8"><title>HF_severity 2.435, eGFR 112.5: 0.679</title></rect>
-<rect x="425" y="48.33" width="8.633" height="8.633" fill="#5aa0cf"><title>HF_severity 2.609, eGFR 112.5: 0.639</title></rect>
-<rect x="433.3" y="48.33" width="8.633" height="8.633" fill="#69acd5"><title>HF_severity 2.783, eGFR 112.5: 0.6</title></rect>
-<rect x="441.7" y="48.33" width="8.633" height="8.633" fill="#7ab5da"><title>HF_severity 2.957, eGFR 112.5: 0.56</title></rect>
+<rect x="308.3" y="48.33" width="8.633" height="8.633" fill="#0b3773"><title>HF_severity 0.174, eGFR 112.5: 0.979</title></rect>
+<rect x="316.7" y="48.33" width="8.633" height="8.633" fill="#0d3d7a"><title>HF_severity 0.348, eGFR 112.5: 0.958</title></rect>
+<rect x="325" y="48.33" width="8.633" height="8.633" fill="#104482"><title>HF_severity 0.522, eGFR 112.5: 0.937</title></rect>
+<rect x="333.3" y="48.33" width="8.633" height="8.633" fill="#124b8a"><title>HF_severity 0.696, eGFR 112.5: 0.916</title></rect>
+<rect x="341.7" y="48.33" width="8.633" height="8.633" fill="#155291"><title>HF_severity 0.87, eGFR 112.5: 0.895</title></rect>
+<rect x="350" y="48.33" width="8.633" height="8.633" fill="#175899"><title>HF_severity 1.043, eGFR 112.5: 0.874</title></rect>
+<rect x="358.3" y="48.33" width="8.633" height="8.633" fill="#1a5fa1"><title>HF_severity 1.217, eGFR 112.5: 0.853</title></rect>
+<rect x="366.7" y="48.33" width="8.633" height="8.633" fill="#1d66a8"><title>HF_severity 1.391, eGFR 112.5: 0.832</title></rect>
+<rect x="375" y="48.33" width="8.633" height="8.633" fill="#1f6cb0"><title>HF_severity 1.565, eGFR 112.5: 0.811</title></rect>
+<rect x="383.3" y="48.33" width="8.633" height="8.633" fill="#2373b6"><title>HF_severity 1.739, eGFR 112.5: 0.79</title></rect>
+<rect x="391.7" y="48.33" width="8.633" height="8.633" fill="#2b79ba"><title>HF_severity 1.913, eGFR 112.5: 0.769</title></rect>
+<rect x="400" y="48.33" width="8.633" height="8.633" fill="#3682be"><title>HF_severity 2.087, eGFR 112.5: 0.74</title></rect>
+<rect x="408.3" y="48.33" width="8.633" height="8.633" fill="#438dc4"><title>HF_severity 2.261, eGFR 112.5: 0.704</title></rect>
+<rect x="416.7" y="48.33" width="8.633" height="8.633" fill="#5098ca"><title>HF_severity 2.435, eGFR 112.5: 0.667</title></rect>
+<rect x="425" y="48.33" width="8.633" height="8.633" fill="#5da3d0"><title>HF_severity 2.609, eGFR 112.5: 0.631</title></rect>
+<rect x="433.3" y="48.33" width="8.633" height="8.633" fill="#6baed6"><title>HF_severity 2.783, eGFR 112.5: 0.595</title></rect>
+<rect x="441.7" y="48.33" width="8.633" height="8.633" fill="#7bb6da"><title>HF_severity 2.957, eGFR 112.5: 0.558</title></rect>
 <rect x="450" y="48.33" width="8.633" height="8.633" fill="#7ab5da"><title>HF_severity 3.13, eGFR 112.5: 0.56</title></rect>
 <rect x="458.3" y="48.33" width="8.633" height="8.633" fill="#74b2d8"><title>HF_severity 3.304, eGFR 112.5: 0.574</title></rect>
 <rect x="466.7" y="48.33" width="8.633" height="8.633" fill="#6eafd7"><title>HF_severity 3.478, eGFR 112.5: 0.588</title></rect>
-<rect x="475" y="48.33" width="8.633" height="8.633" fill="#68acd5"><title>HF_severity 3.652, eGFR 112.5: 0.602</title></rect>
-<rect x="483.3" y="48.33" width="8.633" height="8.633" fill="#63a8d2"><title>HF_severity 3.826, eGFR 112.5: 0.615</title></rect>
-<rect x="491.7" y="48.33" width="8.633" height="8.633" fill="#5ea3d0"><title>HF_severity 4, eGFR 112.5: 0.629</title></rect>
+<rect x="475" y="48.33" width="8.633" height="8.633" fill="#68abd5"><title>HF_severity 3.652, eGFR 112.5: 0.602</title></rect>
+<rect x="483.3" y="48.33" width="8.633" height="8.633" fill="#63a7d2"><title>HF_severity 3.826, eGFR 112.5: 0.616</title></rect>
+<rect x="491.7" y="48.33" width="8.633" height="8.633" fill="#5ea3d0"><title>HF_severity 4, eGFR 112.5: 0.63</title></rect>
 <rect x="300" y="56.67" width="8.633" height="8.633" fill="#08306b"><title>HF_severity 0, eGFR 107.5: 1</title></rect>
-<rect x="308.3" y="56.67" width="8.633" height="8.633" fill="#08306b"><title>HF_severity 0.174, eGFR 107.5: 1</title></rect>
-<rect x="316.7" y="56.67" width="8.633" height="8.633" fill="#08306b"><title>HF_severity 0.348, eGFR 107.5: 1</title></rect>
-<rect x="325" y="56.67" width="8.633" height="8.633" fill="#08306b"><title>HF_severity 0.522, eGFR 107.5: 1</title></rect>
-<rect x="333.3" y="56.67" width="8.633" height="8.633" fill="#08306b"><title>HF_severity 0.696, eGFR 107.5: 1</title></rect>
-<rect x="341.7" y="56.67" width="8.633" height="8.633" fill="#08306b"><title>HF_severity 0.87, eGFR 107.5: 1</title></rect>
-<rect x="350" y="56.67" width="8.633" height="8.633" fill="#09336f"><title>HF_severity 1.043, eGFR 107.5: 0.99</title></rect>
-<rect x="358.3" y="56.67" width="8.633" height="8.633" fill="#0e3f7d"><title>HF_severity 1.217, eGFR 107.5: 0.952</title></rect>
-<rect x="366.7" y="56.67" width="8.633" height="8.633" fill="#134c8b"><title>HF_severity 1.391, eGFR 107.5: 0.913</title></rect>
-<rect x="375" y="56.67" width="8.633" height="8.633" fill="#175899"><title>HF_severity 1.565, eGFR 107.5: 0.875</title></rect>
-<rect x="383.3" y="56.67" width="8.633" height="8.633" fill="#1c64a7"><title>HF_severity 1.739, eGFR 107.5: 0.836</title></rect>
-<rect x="391.7" y="56.67" width="8.633" height="8.633" fill="#2171b5"><title>HF_severity 1.913, eGFR 107.5: 0.797</title></rect>
-<rect x="400" y="56.67" width="8.633" height="8.633" fill="#2f7dbb"><title>HF_severity 2.087, eGFR 107.5: 0.758</title></rect>
-<rect x="408.3" y="56.67" width="8.633" height="8.633" fill="#3e89c2"><title>HF_severity 2.261, eGFR 107.5: 0.719</title></rect>
-<rect x="416.7" y="56.67" width="8.633" height="8.633" fill="#4c94c8"><title>HF_severity 2.435, eGFR 107.5: 0.679</title></rect>
-<rect x="425" y="56.67" width="8.633" height="8.633" fill="#5aa0cf"><title>HF_severity 2.609, eGFR 107.5: 0.639</title></rect>
-<rect x="433.3" y="56.67" width="8.633" height="8.633" fill="#69acd5"><title>HF_severity 2.783, eGFR 107.5: 0.6</title></rect>
-<rect x="441.7" y="56.67" width="8.633" height="8.633" fill="#7ab5da"><title>HF_severity 2.957, eGFR 107.5: 0.56</title></rect>
+<rect x="308.3" y="56.67" width="8.633" height="8.633" fill="#0b3773"><title>HF_severity 0.174, eGFR 107.5: 0.979</title></rect>
+<rect x="316.7" y="56.67" width="8.633" height="8.633" fill="#0d3d7a"><title>HF_severity 0.348, eGFR 107.5: 0.958</title></rect>
+<rect x="325" y="56.67" width="8.633" height="8.633" fill="#104482"><title>HF_severity 0.522, eGFR 107.5: 0.937</title></rect>
+<rect x="333.3" y="56.67" width="8.633" height="8.633" fill="#124b8a"><title>HF_severity 0.696, eGFR 107.5: 0.916</title></rect>
+<rect x="341.7" y="56.67" width="8.633" height="8.633" fill="#155291"><title>HF_severity 0.87, eGFR 107.5: 0.895</title></rect>
+<rect x="350" y="56.67" width="8.633" height="8.633" fill="#175899"><title>HF_severity 1.043, eGFR 107.5: 0.874</title></rect>
+<rect x="358.3" y="56.67" width="8.633" height="8.633" fill="#1a5fa1"><title>HF_severity 1.217, eGFR 107.5: 0.853</title></rect>
+<rect x="366.7" y="56.67" width="8.633" height="8.633" fill="#1d66a8"><title>HF_severity 1.391, eGFR 107.5: 0.832</title></rect>
+<rect x="375" y="56.67" width="8.633" height="8.633" fill="#1f6cb0"><title>HF_severity 1.565, eGFR 107.5: 0.811</title></rect>
+<rect x="383.3" y="56.67" width="8.633" height="8.633" fill="#2373b6"><title>HF_severity 1.739, eGFR 107.5: 0.79</title></rect>
+<rect x="391.7" y="56.67" width="8.633" height="8.633" fill="#2b79ba"><title>HF_severity 1.913, eGFR 107.5: 0.769</title></rect>
+<rect x="400" y="56.67" width="8.633" height="8.633" fill="#3682be"><title>HF_severity 2.087, eGFR 107.5: 0.74</title></rect>
+<rect x="408.3" y="56.67" width="8.633" height="8.633" fill="#438dc4"><title>HF_severity 2.261, eGFR 107.5: 0.704</title></rect>
+<rect x="416.7" y="56.67" width="8.633" height="8.633" fill="#5098ca"><title>HF_severity 2.435, eGFR 107.5: 0.667</title></rect>
+<rect x="425" y="56.67" width="8.633" height="8.633" fill="#5da3d0"><title>HF_severity 2.609, eGFR 107.5: 0.631</title></rect>
+<rect x="433.3" y="56.67" width="8.633" height="8.633" fill="#6baed6"><title>HF_severity 2.783, eGFR 107.5: 0.595</title></rect>
+<rect x="441.7" y="56.67" width="8.633" height="8.633" fill="#7bb6da"><title>HF_severity 2.957, eGFR 107.5: 0.558</title></rect>
 <rect x="450" y="56.67" width="8.633" height="8.633" fill="#7ab5da"><title>HF_severity 3.13, eGFR 107.5: 0.56</title></rect>
 <rect x="458.3" y="56.67" width="8.633" height="8.633" fill="#74b2d8"><title>HF_severity 3.304, eGFR 107.5: 0.574</title></rect>
 <rect x="466.7" y="56.67" width="8.633" height="8.633" fill="#6eafd7"><title>HF_severity 3.478, eGFR 107.5: 0.588</title></rect>
-<rect x="475" y="56.67" width="8.633" height="8.633" fill="#68acd5"><title>HF_severity 3.652, eGFR 107.5: 0.602</title></rect>
-<rect x="483.3" y="56.67" width="8.633" height="8.633" fill="#63a8d2"><title>HF_severity 3.826, eGFR 107.5: 0.615</title></rect>
-<rect x="491.7" y="56.67" width="8.633" height="8.633" fill="#5ea3d0"><title>HF_severity 4, eGFR 107.5: 0.629</title></rect>
+<rect x="475" y="56.67" width="8.633" height="8.633" fill="#68abd5"><title>HF_severity 3.652, eGFR 107.5: 0.602</title></rect>
+<rect x="483.3" y="56.67" width="8.633" height="8.633" fill="#63a7d2"><title>HF_severity 3.826, eGFR 107.5: 0.616</title></rect>
+<rect x="491.7" y="56.67" width="8.633" height="8.633" fill="#5ea3d0"><title>HF_severity 4, eGFR 107.5: 0.63</title></rect>
 <rect x="300" y="65" width="8.633" height="8.633" fill="#08306b"><title>HF_severity 0, eGFR 102.5: 1</title></rect>
-<rect x="308.3" y="65" width="8.633" height="8.633" fill="#08306b"><title>HF_severity 0.174, eGFR 102.5: 1</title></rect>
-<rect x="316.7" y="65" width="8.633" height="8.633" fill="#08306b"><title>HF_severity 0.348, eGFR 102.5: 1</title></rect>
-<rect x="325" y="65" width="8.633" height="8.633" fill="#08306b"><title>HF_severity 0.522, eGFR 102.5: 1</title></rect>
-<rect x="333.3" y="65" width="8.633" height="8.633" fill="#08306b"><title>HF_severity 0.696, eGFR 102.5: 1</title></rect>
-<rect x="341.7" y="65" width="8.633" height="8.633" fill="#08306b"><title>HF_severity 0.87, eGFR 102.5: 1</title></rect>
-<rect x="350" y="65" width="8.633" height="8.633" fill="#09336f"><title>HF_severity 1.043, eGFR 102.5: 0.99</title></rect>
-<rect x="358.3" y="65" width="8.633" height="8.633" fill="#0e3f7d"><title>HF_severity 1.217, eGFR 102.5: 0.952</title></rect>
-<rect x="366.7" y="65" width="8.633" height="8.633" fill="#134c8b"><title>HF_severity 1.391, eGFR 102.5: 0.913</title></rect>
-<rect x="375" y="65" width="8.633" height="8.633" fill="#175899"><title>HF_severity 1.565, eGFR 102.5: 0.875</title></rect>
-<rect x="383.3" y="65" width="8.633" height="8.633" fill="#1c64a7"><title>HF_severity 1.739, eGFR 102.5: 0.836</title></rect>
-<rect x="391.7" y="65" width="8.633" height="8.633" fill="#2171b5"><title>HF_severity 1.913, eGFR 102.5: 0.797</title></rect>
-<rect x="400" y="65" width="8.633" height="8.633" fill="#2f7dbb"><title>HF_severity 2.087, eGFR 102.5: 0.758</title></rect>
-<rect x="408.3" y="65" width="8.633" height="8.633" fill="#3e89c2"><title>HF_severity 2.261, eGFR 102.5: 0.719</title></rect>
-<rect x="416.7" y="65" width="8.633" height="8.633" fill="#4c94c8"><title>HF_severity 2.435, eGFR 102.5: 0.679</title></rect>
-<rect x="425" y="65" width="8.633" height="8.633" fill="#5aa0cf"><title>HF_severity 2.609, eGFR 102.5: 0.639</title></rect>
-<rect x="433.3" y="65" width="8.633" height="8.633" fill="#69acd5"><title>HF_severity 2.783, eGFR 102.5: 0.6</title></rect>
-<rect x="441.7" y="65" width="8.633" height="8.633" fill="#7ab5da"><title>HF_severity 2.957, eGFR 102.5: 0.56</title></rect>
+<rect x="308.3" y="65" width="8.633" height="8.633" fill="#0b3773"><title>HF_severity 0.174, eGFR 102.5: 0.979</title></rect>
+<rect x="316.7" y="65" width="8.633" height="8.633" fill="#0d3d7a"><title>HF_severity 0.348, eGFR 102.5: 0.958</title></rect>
+<rect x="325" y="65" width="8.633" height="8.633" fill="#104482"><title>HF_severity 0.522, eGFR 102.5: 0.937</title></rect>
+<rect x="333.3" y="65" width="8.633" height="8.633" fill="#124b8a"><title>HF_severity 0.696, eGFR 102.5: 0.916</title></rect>
+<rect x="341.7" y="65" width="8.633" height="8.633" fill="#155291"><title>HF_severity 0.87, eGFR 102.5: 0.895</title></rect>
+<rect x="350" y="65" width="8.633" height="8.633" fill="#175899"><title>HF_severity 1.043, eGFR 102.5: 0.874</title></rect>
+<rect x="358.3" y="65" width="8.633" height="8.633" fill="#1a5fa1"><title>HF_severity 1.217, eGFR 102.5: 0.853</title></rect>
+<rect x="366.7" y="65" width="8.633" height="8.633" fill="#1d66a8"><title>HF_severity 1.391, eGFR 102.5: 0.832</title></rect>
+<rect x="375" y="65" width="8.633" height="8.633" fill="#1f6cb0"><title>HF_severity 1.565, eGFR 102.5: 0.811</title></rect>
+<rect x="383.3" y="65" width="8.633" height="8.633" fill="#2373b6"><title>HF_severity 1.739, eGFR 102.5: 0.79</title></rect>
+<rect x="391.7" y="65" width="8.633" height="8.633" fill="#2b79ba"><title>HF_severity 1.913, eGFR 102.5: 0.769</title></rect>
+<rect x="400" y="65" width="8.633" height="8.633" fill="#3682be"><title>HF_severity 2.087, eGFR 102.5: 0.74</title></rect>
+<rect x="408.3" y="65" width="8.633" height="8.633" fill="#438dc4"><title>HF_severity 2.261, eGFR 102.5: 0.704</title></rect>
+<rect x="416.7" y="65" width="8.633" height="8.633" fill="#5098ca"><title>HF_severity 2.435, eGFR 102.5: 0.667</title></rect>
+<rect x="425" y="65" width="8.633" height="8.633" fill="#5da3d0"><title>HF_severity 2.609, eGFR 102.5: 0.631</title></rect>
+<rect x="433.3" y="65" width="8.633" height="8.633" fill="#6baed6"><title>HF_severity 2.783, eGFR 102.5: 0.595</title></rect>
+<rect x="441.7" y="65" width="8.633" height="8.633" fill="#7bb6da"><title>HF_severity 2.957, eGFR 102.5: 0.558</title></rect>
 <rect x="450" y="65" width="8.633" height="8.633" fill="#7ab5da"><title>HF_severity 3.13, eGFR 102.5: 0.56</title></rect>
 <rect x="458.3" y="65" width="8.633" height="8.633" fill="#74b2d8"><title>HF_severity 3.304, eGFR 102.5: 0.574</title></rect>
 <rect x="466.7" y="65" width="8.633" height="8.633" fill="#6eafd7"><title>HF_severity 3.478, eGFR 102.5: 0.588</title></rect>
-<rect x="475" y="65" width="8.633" height="8.633" fill="#68acd5"><title>HF_severity 3.652, eGFR 102.5: 0.602</title></rect>
-<rect x="483.3" y="65" width="8.633" height="8.633" fill="#63a8d2"><title>HF_severity 3.826, eGFR 102.5: 0.615</title></rect>
-<rect x="491.7" y="65" width="8.633" height="8.633" fill="#5ea3d0"><title>HF_severity 4, eGFR 102.5: 0.629</title></rect>
+<rect x="475" y="65" width="8.633" height="8.633" fill="#68abd5"><title>HF_severity 3.652, eGFR 102.5: 0.602</title></rect>
+<rect x="483.3" y="65" width="8.633" height="8.633" fill="#63a7d2"><title>HF_severity 3.826, eGFR 102.5: 0.616</title></rect>
+<rect x="491.7" y="65" width="8.633" height="8.633" fill="#5ea3d0"><title>HF_severity 4, eGFR 102.5: 0.63</title></rect>
 <rect x="300" y="73.33" width="8.633" height="8.633" fill="#08306b"><title>HF_severity 0, eGFR 97.5: 1</title></rect>
-<rect x="308.3" y="73.33" width="8.633" height="8.633" fill="#08306b"><title>HF_severity 0.174, eGFR 97.5: 1</title></rect>
-<rect x="316.7" y="73.33" width="8.633" height="8.633" fill="#08306b"><title>HF_severity 0.348, eGFR 97.5: 1</title></rect>
-<rect x="325" y="73.33" width="8.633" height="8.633" fill="#08306b"><title>HF_severity 0.522, eGFR 97.5: 1</title></rect>
-<rect x="333.3" y="73.33" width="8.633" height="8.633" fill="#08306b"><title>HF_severity 0.696, eGFR 97.5: 1</title></rect>
-<rect x="341.7" y="73.33" width="8.633" height="8.633" fill="#08306b"><title>HF_severity 0.87, eGFR 97.5: 1</title></rect>
-<rect x="350" y="73.33" width="8.633" height="8.633" fill="#09336f"><title>HF_severity 1.043, eGFR 97.5: 0.99</title></rect>
-<rect x="358.3" y="73.33" width="8.633" height="8.633" fill="#0e3f7d"><title>HF_severity 1.217, eGFR 97.5: 0.952</title></rect>
-<rect x="366.7" y="73.33" width="8.633" height="8.633" fill="#134c8b"><title>HF_severity 1.391, eGFR 97.5: 0.913</title></rect>
-<rect x="375" y="73.33" width="8.633" height="8.633" fill="#175899"><title>HF_severity 1.565, eGFR 97.5: 0.875</title></rect>
-<rect x="383.3" y="73.33" width="8.633" height="8.633" fill="#1c64a7"><title>HF_severity 1.739, eGFR 97.5: 0.836</title></rect>
-<rect x="391.7" y="73.33" width="8.633" height="8.633" fill="#2171b5"><title>HF_severity 1.913, eGFR 97.5: 0.797</title></rect>
-<rect x="400" y="73.33" width="8.633" height="8.633" fill="#2f7dbb"><title>HF_severity 2.087, eGFR 97.5: 0.758</title></rect>
-<rect x="408.3" y="73.33" width="8.633" height="8.633" fill="#3e89c2"><title>HF_severity 2.261, eGFR 97.5: 0.719</title></rect>
-<rect x="416.7" y="73.33" width="8.633" height="8.633" fill="#4c94c8"><title>HF_severity 2.435, eGFR 97.5: 0.679</title></rect>
-<rect x="425" y="73.33" width="8.633" height="8.633" fill="#5aa0cf"><title>HF_severity 2.609, eGFR 97.5: 0.639</title></rect>
-<rect x="433.3" y="73.33" width="8.633" height="8.633" fill="#69acd5"><title>HF_severity 2.783, eGFR 97.5: 0.6</title></rect>
-<rect x="441.7" y="73.33" width="8.633" height="8.633" fill="#7ab5da"><title>HF_severity 2.957, eGFR 97.5: 0.56</title></rect>
+<rect x="308.3" y="73.33" width="8.633" height="8.633" fill="#0b3773"><title>HF_severity 0.174, eGFR 97.5: 0.979</title></rect>
+<rect x="316.7" y="73.33" width="8.633" height="8.633" fill="#0d3d7a"><title>HF_severity 0.348, eGFR 97.5: 0.958</title></rect>
+<rect x="325" y="73.33" width="8.633" height="8.633" fill="#104482"><title>HF_severity 0.522, eGFR 97.5: 0.937</title></rect>
+<rect x="333.3" y="73.33" width="8.633" height="8.633" fill="#124b8a"><title>HF_severity 0.696, eGFR 97.5: 0.916</title></rect>
+<rect x="341.7" y="73.33" width="8.633" height="8.633" fill="#155291"><title>HF_severity 0.87, eGFR 97.5: 0.895</title></rect>
+<rect x="350" y="73.33" width="8.633" height="8.633" fill="#175899"><title>HF_severity 1.043, eGFR 97.5: 0.874</title></rect>
+<rect x="358.3" y="73.33" width="8.633" height="8.633" fill="#1a5fa1"><title>HF_severity 1.217, eGFR 97.5: 0.853</title></rect>
+<rect x="366.7" y="73.33" width="8.633" height="8.633" fill="#1d66a8"><title>HF_severity 1.391, eGFR 97.5: 0.832</title></rect>
+<rect x="375" y="73.33" width="8.633" height="8.633" fill="#1f6cb0"><title>HF_severity 1.565, eGFR 97.5: 0.811</title></rect>
+<rect x="383.3" y="73.33" width="8.633" height="8.633" fill="#2373b6"><title>HF_severity 1.739, eGFR 97.5: 0.79</title></rect>
+<rect x="391.7" y="73.33" width="8.633" height="8.633" fill="#2b79ba"><title>HF_severity 1.913, eGFR 97.5: 0.769</title></rect>
+<rect x="400" y="73.33" width="8.633" height="8.633" fill="#3682be"><title>HF_severity 2.087, eGFR 97.5: 0.74</title></rect>
+<rect x="408.3" y="73.33" width="8.633" height="8.633" fill="#438dc4"><title>HF_severity 2.261, eGFR 97.5: 0.704</title></rect>
+<rect x="416.7" y="73.33" width="8.633" height="8.633" fill="#5098ca"><title>HF_severity 2.435, eGFR 97.5: 0.667</title></rect>
+<rect x="425" y="73.33" width="8.633" height="8.633" fill="#5da3d0"><title>HF_severity 2.609, eGFR 97.5: 0.631</title></rect>
+<rect x="433.3" y="73.33" width="8.633" height="8.633" fill="#6baed6"><title>HF_severity 2.783, eGFR 97.5: 0.595</title></rect>
+<rect x="441.7" y="73.33" width="8.633" height="8.633" fill="#7bb6da"><title>HF_severity 2.957, eGFR 97.5: 0.558</title></rect>
 <rect x="450" y="73.33" width="8.633" height="8.633" fill="#7ab5da"><title>HF_severity 3.13, eGFR 97.5: 0.56</title></rect>
 <rect x="458.3" y="73.33" width="8.633" height="8.633" fill="#74b2d8"><title>HF_severity 3.304, eGFR 97.5: 0.574</title></rect>
 <rect x="466.7" y="73.33" width="8.633" height="8.633" fill="#6eafd7"><title>HF_severity 3.478, eGFR 97.5: 0.588</title></rect>
-<rect x="475" y="73.33" width="8.633" height="8.633" fill="#68acd5"><title>HF_severity 3.652, eGFR 97.5: 0.602</title></rect>
-<rect x="483.3" y="73.33" width="8.633" height="8.633" fill="#63a8d2"><title>HF_severity 3.826, eGFR 97.5: 0.615</title></rect>
-<rect x="491.7" y="73.33" width="8.633" height="8.633" fill="#5ea3d0"><title>HF_severity 4, eGFR 97.5: 0.629</title></rect>
+<rect x="475" y="73.33" width="8.633" height="8.633" fill="#68abd5"><title>HF_severity 3.652, eGFR 97.5: 0.602</title></rect>
+<rect x="483.3" y="73.33" width="8.633" height="8.633" fill="#63a7d2"><title>HF_severity 3.826, eGFR 97.5: 0.616</title></rect>
+<rect x="491.7" y="73.33" width="8.633" height="8.633" fill="#5ea3d0"><title>HF_severity 4, eGFR 97.5: 0.63</title></rect>
 <rect x="300" y="81.67" width="8.633" height="8.633" fill="#08306b"><title>HF_severity 0, eGFR 92.5: 1</title></rect>
-<rect x="308.3" y="81.67" width="8.633" height="8.633" fill="#08306b"><title>HF_severity 0.174, eGFR 92.5: 1</title></rect>
-<rect x="316.7" y="81.67" width="8.633" height="8.633" fill="#08306b"><title>HF_severity 0.348, eGFR 92.5: 1</title></rect>
-<rect x="325" y="81.67" width="8.633" height="8.633" fill="#08306b"><title>HF_severity 0.522, eGFR 92.5: 1</title></rect>
-<rect x="333.3" y="81.67" width="8.633" height="8.633" fill="#08306b"><title>HF_severity 0.696, eGFR 92.5: 1</title></rect>
-<rect x="341.7" y="81.67" width="8.633" height="8.633" fill="#08306b"><title>HF_severity 0.87, eGFR 92.5: 1</title></rect>
-<rect x="350" y="81.67" width="8.633" height="8.633" fill="#09336f"><title>HF_severity 1.043, eGFR 92.5: 0.99</title></rect>
-<rect x="358.3" y="81.67" width="8.633" height="8.633" fill="#0e3f7d"><title>HF_severity 1.217, eGFR 92.5: 0.952</title></rect>
-<rect x="366.7" y="81.67" width="8.633" height="8.633" fill="#134c8b"><title>HF_severity 1.391, eGFR 92.5: 0.913</title></rect>
-<rect x="375" y="81.67" width="8.633" height="8.633" fill="#175899"><title>HF_severity 1.565, eGFR 92.5: 0.875</title></rect>
-<rect x="383.3" y="81.67" width="8.633" height="8.633" fill="#1c64a7"><title>HF_severity 1.739, eGFR 92.5: 0.836</title></rect>
-<rect x="391.7" y="81.67" width="8.633" height="8.633" fill="#2171b5"><title>HF_severity 1.913, eGFR 92.5: 0.797</title></rect>
-<rect x="400" y="81.67" width="8.633" height="8.633" fill="#2f7dbb"><title>HF_severity 2.087, eGFR 92.5: 0.758</title></rect>
-<rect x="408.3" y="81.67" width="8.633" height="8.633" fill="#3e89c2"><title>HF_severity 2.261, eGFR 92.5: 0.719</title></rect>
-<rect x="416.7" y="81.67" width="8.633" height="8.633" fill="#4c94c8"><title>HF_severity 2.435, eGFR 92.5: 0.679</title></rect>
-<rect x="425" y="81.67" width="8.633" height="8.633" fill="#5aa0cf"><title>HF_severity 2.609, eGFR 92.5: 0.639</title></rect>
-<rect x="433.3" y="81.67" width="8.633" height="8.633" fill="#69acd5"><title>HF_severity 2.783, eGFR 92.5: 0.6</title></rect>
-<rect x="441.7" y="81.67" width="8.633" height="8.633" fill="#7ab5da"><title>HF_severity 2.957, eGFR 92.5: 0.56</title></rect>
+<rect x="308.3" y="81.67" width="8.633" height="8.633" fill="#0b3773"><title>HF_severity 0.174, eGFR 92.5: 0.979</title></rect>
+<rect x="316.7" y="81.67" width="8.633" height="8.633" fill="#0d3d7a"><title>HF_severity 0.348, eGFR 92.5: 0.958</title></rect>
+<rect x="325" y="81.67" width="8.633" height="8.633" fill="#104482"><title>HF_severity 0.522, eGFR 92.5: 0.937</title></rect>
+<rect x="333.3" y="81.67" width="8.633" height="8.633" fill="#124b8a"><title>HF_severity 0.696, eGFR 92.5: 0.916</title></rect>
+<rect x="341.7" y="81.67" width="8.633" height="8.633" fill="#155291"><title>HF_severity 0.87, eGFR 92.5: 0.895</title></rect>
+<rect x="350" y="81.67" width="8.633" height="8.633" fill="#175899"><title>HF_severity 1.043, eGFR 92.5: 0.874</title></rect>
+<rect x="358.3" y="81.67" width="8.633" height="8.633" fill="#1a5fa1"><title>HF_severity 1.217, eGFR 92.5: 0.853</title></rect>
+<rect x="366.7" y="81.67" width="8.633" height="8.633" fill="#1d66a8"><title>HF_severity 1.391, eGFR 92.5: 0.832</title></rect>
+<rect x="375" y="81.67" width="8.633" height="8.633" fill="#1f6cb0"><title>HF_severity 1.565, eGFR 92.5: 0.811</title></rect>
+<rect x="383.3" y="81.67" width="8.633" height="8.633" fill="#2373b6"><title>HF_severity 1.739, eGFR 92.5: 0.79</title></rect>
+<rect x="391.7" y="81.67" width="8.633" height="8.633" fill="#2b79ba"><title>HF_severity 1.913, eGFR 92.5: 0.769</title></rect>
+<rect x="400" y="81.67" width="8.633" height="8.633" fill="#3682be"><title>HF_severity 2.087, eGFR 92.5: 0.74</title></rect>
+<rect x="408.3" y="81.67" width="8.633" height="8.633" fill="#438dc4"><title>HF_severity 2.261, eGFR 92.5: 0.704</title></rect>
+<rect x="416.7" y="81.67" width="8.633" height="8.633" fill="#5098ca"><title>HF_severity 2.435, eGFR 92.5: 0.667</title></rect>
+<rect x="425" y="81.67" width="8.633" height="8.633" fill="#5da3d0"><title>HF_severity 2.609, eGFR 92.5: 0.631</title></rect>
+<rect x="433.3" y="81.67" width="8.633" height="8.633" fill="#6baed6"><title>HF_severity 2.783, eGFR 92.5: 0.595</title></rect>
+<rect x="441.7" y="81.67" width="8.633" height="8.633" fill="#7bb6da"><title>HF_severity 2.957, eGFR 92.5: 0.558</title></rect>
 <rect x="450" y="81.67" width="8.633" height="8.633" fill="#7ab5da"><title>HF_severity 3.13, eGFR 92.5: 0.56</title></rect>
 <rect x="458.3" y="81.67" width="8.633" height="8.633" fill="#74b2d8"><title>HF_severity 3.304, eGFR 92.5: 0.574</title></rect>
 <rect x="466.7" y="81.67" width="8.633" height="8.633" fill="#6eafd7"><title>HF_severity 3.478, eGFR 92.5: 0.588</title></rect>
-<rect x="475" y="81.67" width="8.633" height="8.633" fill="#68acd5"><title>HF_severity 3.652, eGFR 92.5: 0.602</title></rect>
-<rect x="483.3" y="81.67" width="8.633" height="8.633" fill="#63a8d2"><title>HF_severity 3.826, eGFR 92.5: 0.615</title></rect>
-<rect x="491.7" y="81.67" width="8.633" height="8.633" fill="#5ea3d0"><title>HF_severity 4, eGFR 92.5: 0.629</title></rect>
+<rect x="475" y="81.67" width="8.633" height="8.633" fill="#68abd5"><title>HF_severity 3.652, eGFR 92.5: 0.602</title></rect>
+<rect x="483.3" y="81.67" width="8.633" height="8.633" fill="#63a7d2"><title>HF_severity 3.826, eGFR 92.5: 0.616</title></rect>
+<rect x="491.7" y="81.67" width="8.633" height="8.633" fill="#5ea3d0"><title>HF_severity 4, eGFR 92.5: 0.63</title></rect>
 <rect x="300" y="90" width="8.633" height="8.633" fill="#0d3c79"><title>HF_severity 0, eGFR 87.5: 0.962</title></rect>
-<rect x="308.3" y="90" width="8.633" height="8.633" fill="#0d3c79"><title>HF_severity 0.174, eGFR 87.5: 0.962</title></rect>
-<rect x="316.7" y="90" width="8.633" height="8.633" fill="#0d3c79"><title>HF_severity 0.348, eGFR 87.5: 0.962</title></rect>
-<rect x="325" y="90" width="8.633" height="8.633" fill="#0d3c79"><title>HF_severity 0.522, eGFR 87.5: 0.962</title></rect>
-<rect x="333.3" y="90" width="8.633" height="8.633" fill="#0d3c79"><title>HF_severity 0.696, eGFR 87.5: 0.962</title></rect>
-<rect x="341.7" y="90" width="8.633" height="8.633" fill="#0d3c79"><title>HF_severity 0.87, eGFR 87.5: 0.962</title></rect>
-<rect x="350" y="90" width="8.633" height="8.633" fill="#0e3f7c"><title>HF_severity 1.043, eGFR 87.5: 0.953</title></rect>
-<rect x="358.3" y="90" width="8.633" height="8.633" fill="#124b8a"><title>HF_severity 1.217, eGFR 87.5: 0.915</title></rect>
-<rect x="366.7" y="90" width="8.633" height="8.633" fill="#175797"><title>HF_severity 1.391, eGFR 87.5: 0.878</title></rect>
-<rect x="375" y="90" width="8.633" height="8.633" fill="#1c63a5"><title>HF_severity 1.565, eGFR 87.5: 0.841</title></rect>
-<rect x="383.3" y="90" width="8.633" height="8.633" fill="#206fb2"><title>HF_severity 1.739, eGFR 87.5: 0.804</title></rect>
-<rect x="391.7" y="90" width="8.633" height="8.633" fill="#2c7aba"><title>HF_severity 1.913, eGFR 87.5: 0.767</title></rect>
-<rect x="400" y="90" width="8.633" height="8.633" fill="#3a85c0"><title>HF_severity 2.087, eGFR 87.5: 0.729</title></rect>
-<rect x="408.3" y="90" width="8.633" height="8.633" fill="#4791c6"><title>HF_severity 2.261, eGFR 87.5: 0.691</title></rect>
-<rect x="416.7" y="90" width="8.633" height="8.633" fill="#559ccc"><title>HF_severity 2.435, eGFR 87.5: 0.653</title></rect>
-<rect x="425" y="90" width="8.633" height="8.633" fill="#63a8d3"><title>HF_severity 2.609, eGFR 87.5: 0.615</title></rect>
-<rect x="433.3" y="90" width="8.633" height="8.633" fill="#73b2d8"><title>HF_severity 2.783, eGFR 87.5: 0.577</title></rect>
-<rect x="441.7" y="90" width="8.633" height="8.633" fill="#84badd"><title>HF_severity 2.957, eGFR 87.5: 0.539</title></rect>
-<rect x="450" y="90" width="8.633" height="8.633" fill="#83badd"><title>HF_severity 3.13, eGFR 87.5: 0.539</title></rect>
+<rect x="308.3" y="90" width="8.633" height="8.633" fill="#0f4380"><title>HF_severity 0.174, eGFR 87.5: 0.942</title></rect>
+<rect x="316.7" y="90" width="8.633" height="8.633" fill="#124988"><title>HF_severity 0.348, eGFR 87.5: 0.921</title></rect>
+<rect x="325" y="90" width="8.633" height="8.633" fill="#14508f"><title>HF_severity 0.522, eGFR 87.5: 0.901</title></rect>
+<rect x="333.3" y="90" width="8.633" height="8.633" fill="#175696"><title>HF_severity 0.696, eGFR 87.5: 0.881</title></rect>
+<rect x="341.7" y="90" width="8.633" height="8.633" fill="#195c9e"><title>HF_severity 0.87, eGFR 87.5: 0.861</title></rect>
+<rect x="350" y="90" width="8.633" height="8.633" fill="#1c63a5"><title>HF_severity 1.043, eGFR 87.5: 0.841</title></rect>
+<rect x="358.3" y="90" width="8.633" height="8.633" fill="#1e69ac"><title>HF_severity 1.217, eGFR 87.5: 0.82</title></rect>
+<rect x="366.7" y="90" width="8.633" height="8.633" fill="#2170b4"><title>HF_severity 1.391, eGFR 87.5: 0.8</title></rect>
+<rect x="375" y="90" width="8.633" height="8.633" fill="#2776b8"><title>HF_severity 1.565, eGFR 87.5: 0.78</title></rect>
+<rect x="383.3" y="90" width="8.633" height="8.633" fill="#2e7cbb"><title>HF_severity 1.739, eGFR 87.5: 0.76</title></rect>
+<rect x="391.7" y="90" width="8.633" height="8.633" fill="#3682be"><title>HF_severity 1.913, eGFR 87.5: 0.74</title></rect>
+<rect x="400" y="90" width="8.633" height="8.633" fill="#408ac3"><title>HF_severity 2.087, eGFR 87.5: 0.712</title></rect>
+<rect x="408.3" y="90" width="8.633" height="8.633" fill="#4d95c8"><title>HF_severity 2.261, eGFR 87.5: 0.677</title></rect>
+<rect x="416.7" y="90" width="8.633" height="8.633" fill="#599fce"><title>HF_severity 2.435, eGFR 87.5: 0.642</title></rect>
+<rect x="425" y="90" width="8.633" height="8.633" fill="#66aad4"><title>HF_severity 2.609, eGFR 87.5: 0.607</title></rect>
+<rect x="433.3" y="90" width="8.633" height="8.633" fill="#75b3d9"><title>HF_severity 2.783, eGFR 87.5: 0.572</title></rect>
+<rect x="441.7" y="90" width="8.633" height="8.633" fill="#84badd"><title>HF_severity 2.957, eGFR 87.5: 0.537</title></rect>
+<rect x="450" y="90" width="8.633" height="8.633" fill="#84badd"><title>HF_severity 3.13, eGFR 87.5: 0.538</title></rect>
 <rect x="458.3" y="90" width="8.633" height="8.633" fill="#7eb7db"><title>HF_severity 3.304, eGFR 87.5: 0.552</title></rect>
 <rect x="466.7" y="90" width="8.633" height="8.633" fill="#78b4d9"><title>HF_severity 3.478, eGFR 87.5: 0.565</title></rect>
 <rect x="475" y="90" width="8.633" height="8.633" fill="#72b1d8"><title>HF_severity 3.652, eGFR 87.5: 0.579</title></rect>
-<rect x="483.3" y="90" width="8.633" height="8.633" fill="#6caed6"><title>HF_severity 3.826, eGFR 87.5: 0.592</title></rect>
-<rect x="491.7" y="90" width="8.633" height="8.633" fill="#67abd4"><title>HF_severity 4, eGFR 87.5: 0.605</title></rect>
+<rect x="483.3" y="90" width="8.633" height="8.633" fill="#6baed6"><title>HF_severity 3.826, eGFR 87.5: 0.592</title></rect>
+<rect x="491.7" y="90" width="8.633" height="8.633" fill="#66aad4"><title>HF_severity 4, eGFR 87.5: 0.606</title></rect>
 <rect x="300" y="98.33" width="8.633" height="8.633" fill="#165595"><title>HF_severity 0, eGFR 82.5: 0.886</title></rect>
-<rect x="308.3" y="98.33" width="8.633" height="8.633" fill="#165595"><title>HF_severity 0.174, eGFR 82.5: 0.886</title></rect>
-<rect x="316.7" y="98.33" width="8.633" height="8.633" fill="#165595"><title>HF_severity 0.348, eGFR 82.5: 0.886</title></rect>
-<rect x="325" y="98.33" width="8.633" height="8.633" fill="#165595"><title>HF_severity 0.522, eGFR 82.5: 0.886</title></rect>
-<rect x="333.3" y="98.33" width="8.633" height="8.633" fill="#165595"><title>HF_severity 0.696, eGFR 82.5: 0.886</title></rect>
-<rect x="341.7" y="98.33" width="8.633" height="8.633" fill="#165595"><title>HF_severity 0.87, eGFR 82.5: 0.886</title></rect>
-<rect x="350" y="98.33" width="8.633" height="8.633" fill="#175798"><title>HF_severity 1.043, eGFR 82.5: 0.877</title></rect>
-<rect x="358.3" y="98.33" width="8.633" height="8.633" fill="#1b62a4"><title>HF_severity 1.217, eGFR 82.5: 0.843</title></rect>
-<rect x="366.7" y="98.33" width="8.633" height="8.633" fill="#206db1"><title>HF_severity 1.391, eGFR 82.5: 0.809</title></rect>
-<rect x="375" y="98.33" width="8.633" height="8.633" fill="#2978b9"><title>HF_severity 1.565, eGFR 82.5: 0.774</title></rect>
-<rect x="383.3" y="98.33" width="8.633" height="8.633" fill="#3682be"><title>HF_severity 1.739, eGFR 82.5: 0.74</title></rect>
-<rect x="391.7" y="98.33" width="8.633" height="8.633" fill="#428cc4"><title>HF_severity 1.913, eGFR 82.5: 0.706</title></rect>
-<rect x="400" y="98.33" width="8.633" height="8.633" fill="#4f97c9"><title>HF_severity 2.087, eGFR 82.5: 0.671</title></rect>
-<rect x="408.3" y="98.33" width="8.633" height="8.633" fill="#5ba1cf"><title>HF_severity 2.261, eGFR 82.5: 0.636</title></rect>
-<rect x="416.7" y="98.33" width="8.633" height="8.633" fill="#68acd5"><title>HF_severity 2.435, eGFR 82.5: 0.601</title></rect>
-<rect x="425" y="98.33" width="8.633" height="8.633" fill="#77b4d9"><title>HF_severity 2.609, eGFR 82.5: 0.566</title></rect>
-<rect x="433.3" y="98.33" width="8.633" height="8.633" fill="#87bcde"><title>HF_severity 2.783, eGFR 82.5: 0.531</title></rect>
-<rect x="441.7" y="98.33" width="8.633" height="8.633" fill="#97c4e2"><title>HF_severity 2.957, eGFR 82.5: 0.496</title></rect>
+<rect x="308.3" y="98.33" width="8.633" height="8.633" fill="#185b9b"><title>HF_severity 0.174, eGFR 82.5: 0.867</title></rect>
+<rect x="316.7" y="98.33" width="8.633" height="8.633" fill="#1b60a2"><title>HF_severity 0.348, eGFR 82.5: 0.848</title></rect>
+<rect x="325" y="98.33" width="8.633" height="8.633" fill="#1d66a9"><title>HF_severity 0.522, eGFR 82.5: 0.83</title></rect>
+<rect x="333.3" y="98.33" width="8.633" height="8.633" fill="#1f6cb0"><title>HF_severity 0.696, eGFR 82.5: 0.811</title></rect>
+<rect x="341.7" y="98.33" width="8.633" height="8.633" fill="#2272b6"><title>HF_severity 0.87, eGFR 82.5: 0.793</title></rect>
+<rect x="350" y="98.33" width="8.633" height="8.633" fill="#2978b9"><title>HF_severity 1.043, eGFR 82.5: 0.774</title></rect>
+<rect x="358.3" y="98.33" width="8.633" height="8.633" fill="#307dbc"><title>HF_severity 1.217, eGFR 82.5: 0.755</title></rect>
+<rect x="366.7" y="98.33" width="8.633" height="8.633" fill="#3783bf"><title>HF_severity 1.391, eGFR 82.5: 0.737</title></rect>
+<rect x="375" y="98.33" width="8.633" height="8.633" fill="#3e89c2"><title>HF_severity 1.565, eGFR 82.5: 0.718</title></rect>
+<rect x="383.3" y="98.33" width="8.633" height="8.633" fill="#448ec5"><title>HF_severity 1.739, eGFR 82.5: 0.7</title></rect>
+<rect x="391.7" y="98.33" width="8.633" height="8.633" fill="#4b94c8"><title>HF_severity 1.913, eGFR 82.5: 0.681</title></rect>
+<rect x="400" y="98.33" width="8.633" height="8.633" fill="#549bcc"><title>HF_severity 2.087, eGFR 82.5: 0.656</title></rect>
+<rect x="408.3" y="98.33" width="8.633" height="8.633" fill="#60a5d1"><title>HF_severity 2.261, eGFR 82.5: 0.623</title></rect>
+<rect x="416.7" y="98.33" width="8.633" height="8.633" fill="#6caed6"><title>HF_severity 2.435, eGFR 82.5: 0.591</title></rect>
+<rect x="425" y="98.33" width="8.633" height="8.633" fill="#7ab6da"><title>HF_severity 2.609, eGFR 82.5: 0.559</title></rect>
+<rect x="433.3" y="98.33" width="8.633" height="8.633" fill="#89bdde"><title>HF_severity 2.783, eGFR 82.5: 0.527</title></rect>
+<rect x="441.7" y="98.33" width="8.633" height="8.633" fill="#97c4e2"><title>HF_severity 2.957, eGFR 82.5: 0.494</title></rect>
 <rect x="450" y="98.33" width="8.633" height="8.633" fill="#97c4e2"><title>HF_severity 3.13, eGFR 82.5: 0.496</title></rect>
 <rect x="458.3" y="98.33" width="8.633" height="8.633" fill="#91c1e0"><title>HF_severity 3.304, eGFR 82.5: 0.508</title></rect>
 <rect x="466.7" y="98.33" width="8.633" height="8.633" fill="#8cbedf"><title>HF_severity 3.478, eGFR 82.5: 0.521</title></rect>
 <rect x="475" y="98.33" width="8.633" height="8.633" fill="#86bbdd"><title>HF_severity 3.652, eGFR 82.5: 0.533</title></rect>
-<rect x="483.3" y="98.33" width="8.633" height="8.633" fill="#81b9dc"><title>HF_severity 3.826, eGFR 82.5: 0.545</title></rect>
-<rect x="491.7" y="98.33" width="8.633" height="8.633" fill="#7bb6db"><title>HF_severity 4, eGFR 82.5: 0.557</title></rect>
+<rect x="483.3" y="98.33" width="8.633" height="8.633" fill="#80b9dc"><title>HF_severity 3.826, eGFR 82.5: 0.545</title></rect>
+<rect x="491.7" y="98.33" width="8.633" height="8.633" fill="#7bb6da"><title>HF_severity 4, eGFR 82.5: 0.558</title></rect>
 <rect x="300" y="106.7" width="8.633" height="8.633" fill="#1f6db0"><title>HF_severity 0, eGFR 77.5: 0.809</title></rect>
-<rect x="308.3" y="106.7" width="8.633" height="8.633" fill="#1f6db0"><title>HF_severity 0.174, eGFR 77.5: 0.809</title></rect>
-<rect x="316.7" y="106.7" width="8.633" height="8.633" fill="#1f6db0"><title>HF_severity 0.348, eGFR 77.5: 0.809</title></rect>
-<rect x="325" y="106.7" width="8.633" height="8.633" fill="#1f6db0"><title>HF_severity 0.522, eGFR 77.5: 0.809</title></rect>
-<rect x="333.3" y="106.7" width="8.633" height="8.633" fill="#1f6db0"><title>HF_severity 0.696, eGFR 77.5: 0.809</title></rect>
-<rect x="341.7" y="106.7" width="8.633" height="8.633" fill="#1f6db0"><title>HF_severity 0.87, eGFR 77.5: 0.809</title></rect>
-<rect x="350" y="106.7" width="8.633" height="8.633" fill="#206fb3"><title>HF_severity 1.043, eGFR 77.5: 0.802</title></rect>
-<rect x="358.3" y="106.7" width="8.633" height="8.633" fill="#2b79b9"><title>HF_severity 1.217, eGFR 77.5: 0.77</title></rect>
-<rect x="366.7" y="106.7" width="8.633" height="8.633" fill="#3682be"><title>HF_severity 1.391, eGFR 77.5: 0.739</title></rect>
-<rect x="375" y="106.7" width="8.633" height="8.633" fill="#418cc3"><title>HF_severity 1.565, eGFR 77.5: 0.708</title></rect>
-<rect x="383.3" y="106.7" width="8.633" height="8.633" fill="#4d95c9"><title>HF_severity 1.739, eGFR 77.5: 0.677</title></rect>
-<rect x="391.7" y="106.7" width="8.633" height="8.633" fill="#589ece"><title>HF_severity 1.913, eGFR 77.5: 0.645</title></rect>
-<rect x="400" y="106.7" width="8.633" height="8.633" fill="#64a8d3"><title>HF_severity 2.087, eGFR 77.5: 0.614</title></rect>
-<rect x="408.3" y="106.7" width="8.633" height="8.633" fill="#70b1d7"><title>HF_severity 2.261, eGFR 77.5: 0.582</title></rect>
-<rect x="416.7" y="106.7" width="8.633" height="8.633" fill="#7fb8db"><title>HF_severity 2.435, eGFR 77.5: 0.549</title></rect>
-<rect x="425" y="106.7" width="8.633" height="8.633" fill="#8dbfdf"><title>HF_severity 2.609, eGFR 77.5: 0.517</title></rect>
-<rect x="433.3" y="106.7" width="8.633" height="8.633" fill="#9cc6e3"><title>HF_severity 2.783, eGFR 77.5: 0.485</title></rect>
-<rect x="441.7" y="106.7" width="8.633" height="8.633" fill="#aacde7"><title>HF_severity 2.957, eGFR 77.5: 0.453</title></rect>
+<rect x="308.3" y="106.7" width="8.633" height="8.633" fill="#2372b6"><title>HF_severity 0.174, eGFR 77.5: 0.792</title></rect>
+<rect x="316.7" y="106.7" width="8.633" height="8.633" fill="#2977b8"><title>HF_severity 0.348, eGFR 77.5: 0.775</title></rect>
+<rect x="325" y="106.7" width="8.633" height="8.633" fill="#2f7dbb"><title>HF_severity 0.522, eGFR 77.5: 0.758</title></rect>
+<rect x="333.3" y="106.7" width="8.633" height="8.633" fill="#3582be"><title>HF_severity 0.696, eGFR 77.5: 0.741</title></rect>
+<rect x="341.7" y="106.7" width="8.633" height="8.633" fill="#3b87c1"><title>HF_severity 0.87, eGFR 77.5: 0.724</title></rect>
+<rect x="350" y="106.7" width="8.633" height="8.633" fill="#428cc4"><title>HF_severity 1.043, eGFR 77.5: 0.707</title></rect>
+<rect x="358.3" y="106.7" width="8.633" height="8.633" fill="#4891c6"><title>HF_severity 1.217, eGFR 77.5: 0.69</title></rect>
+<rect x="366.7" y="106.7" width="8.633" height="8.633" fill="#4e96c9"><title>HF_severity 1.391, eGFR 77.5: 0.673</title></rect>
+<rect x="375" y="106.7" width="8.633" height="8.633" fill="#549bcc"><title>HF_severity 1.565, eGFR 77.5: 0.656</title></rect>
+<rect x="383.3" y="106.7" width="8.633" height="8.633" fill="#5aa0cf"><title>HF_severity 1.739, eGFR 77.5: 0.639</title></rect>
+<rect x="391.7" y="106.7" width="8.633" height="8.633" fill="#60a5d1"><title>HF_severity 1.913, eGFR 77.5: 0.622</title></rect>
+<rect x="400" y="106.7" width="8.633" height="8.633" fill="#69acd5"><title>HF_severity 2.087, eGFR 77.5: 0.599</title></rect>
+<rect x="408.3" y="106.7" width="8.633" height="8.633" fill="#76b3d9"><title>HF_severity 2.261, eGFR 77.5: 0.57</title></rect>
+<rect x="416.7" y="106.7" width="8.633" height="8.633" fill="#83badd"><title>HF_severity 2.435, eGFR 77.5: 0.54</title></rect>
+<rect x="425" y="106.7" width="8.633" height="8.633" fill="#90c0e0"><title>HF_severity 2.609, eGFR 77.5: 0.511</title></rect>
+<rect x="433.3" y="106.7" width="8.633" height="8.633" fill="#9dc7e4"><title>HF_severity 2.783, eGFR 77.5: 0.481</title></rect>
+<rect x="441.7" y="106.7" width="8.633" height="8.633" fill="#aacde7"><title>HF_severity 2.957, eGFR 77.5: 0.452</title></rect>
 <rect x="450" y="106.7" width="8.633" height="8.633" fill="#aacde7"><title>HF_severity 3.13, eGFR 77.5: 0.453</title></rect>
-<rect x="458.3" y="106.7" width="8.633" height="8.633" fill="#a5cbe6"><title>HF_severity 3.304, eGFR 77.5: 0.465</title></rect>
-<rect x="466.7" y="106.7" width="8.633" height="8.633" fill="#a0c8e5"><title>HF_severity 3.478, eGFR 77.5: 0.476</title></rect>
+<rect x="458.3" y="106.7" width="8.633" height="8.633" fill="#a5cbe6"><title>HF_severity 3.304, eGFR 77.5: 0.464</title></rect>
+<rect x="466.7" y="106.7" width="8.633" height="8.633" fill="#a0c8e4"><title>HF_severity 3.478, eGFR 77.5: 0.476</title></rect>
 <rect x="475" y="106.7" width="8.633" height="8.633" fill="#9bc6e3"><title>HF_severity 3.652, eGFR 77.5: 0.487</title></rect>
 <rect x="483.3" y="106.7" width="8.633" height="8.633" fill="#96c3e2"><title>HF_severity 3.826, eGFR 77.5: 0.498</title></rect>
-<rect x="491.7" y="106.7" width="8.633" height="8.633" fill="#91c1e0"><title>HF_severity 4, eGFR 77.5: 0.509</title></rect>
+<rect x="491.7" y="106.7" width="8.633" height="8.633" fill="#90c1e0"><title>HF_severity 4, eGFR 77.5: 0.51</title></rect>
 <rect x="300" y="115" width="8.633" height="8.633" fill="#317ebc"><title>HF_severity 0, eGFR 72.5: 0.753</title></rect>
-<rect x="308.3" y="115" width="8.633" height="8.633" fill="#317ebc"><title>HF_severity 0.174, eGFR 72.5: 0.753</title></rect>
-<rect x="316.7" y="115" width="8.633" height="8.633" fill="#317ebc"><title>HF_severity 0.348, eGFR 72.5: 0.753</title></rect>
-<rect x="325" y="115" width="8.633" height="8.633" fill="#317ebc"><title>HF_severity 0.522, eGFR 72.5: 0.753</title></rect>
-<rect x="333.3" y="115" width="8.633" height="8.633" fill="#317ebc"><title>HF_severity 0.696, eGFR 72.5: 0.753</title></rect>
-<rect x="341.7" y="115" width="8.633" height="8.633" fill="#317ebc"><title>HF_severity 0.87, eGFR 72.5: 0.753</title></rect>
-<rect x="350" y="115" width="8.633" height="8.633" fill="#3380bd"><title>HF_severity 1.043, eGFR 72.5: 0.746</title></rect>
-<rect x="358.3" y="115" width="8.633" height="8.633" fill="#3e89c2"><title>HF_severity 1.217, eGFR 72.5: 0.717</title></rect>
-<rect x="366.7" y="115" width="8.633" height="8.633" fill="#4992c7"><title>HF_severity 1.391, eGFR 72.5: 0.688</title></rect>
-<rect x="375" y="115" width="8.633" height="8.633" fill="#539acb"><title>HF_severity 1.565, eGFR 72.5: 0.659</title></rect>
-<rect x="383.3" y="115" width="8.633" height="8.633" fill="#5ea3d0"><title>HF_severity 1.739, eGFR 72.5: 0.63</title></rect>
-<rect x="391.7" y="115" width="8.633" height="8.633" fill="#68acd5"><title>HF_severity 1.913, eGFR 72.5: 0.601</title></rect>
-<rect x="400" y="115" width="8.633" height="8.633" fill="#75b3d9"><title>HF_severity 2.087, eGFR 72.5: 0.571</title></rect>
-<rect x="408.3" y="115" width="8.633" height="8.633" fill="#82badc"><title>HF_severity 2.261, eGFR 72.5: 0.541</title></rect>
-<rect x="416.7" y="115" width="8.633" height="8.633" fill="#90c0e0"><title>HF_severity 2.435, eGFR 72.5: 0.511</title></rect>
-<rect x="425" y="115" width="8.633" height="8.633" fill="#9dc7e4"><title>HF_severity 2.609, eGFR 72.5: 0.482</title></rect>
-<rect x="433.3" y="115" width="8.633" height="8.633" fill="#abcde7"><title>HF_severity 2.783, eGFR 72.5: 0.452</title></rect>
-<rect x="441.7" y="115" width="8.633" height="8.633" fill="#b8d4eb"><title>HF_severity 2.957, eGFR 72.5: 0.422</title></rect>
+<rect x="308.3" y="115" width="8.633" height="8.633" fill="#3783bf"><title>HF_severity 0.174, eGFR 72.5: 0.737</title></rect>
+<rect x="316.7" y="115" width="8.633" height="8.633" fill="#3c88c1"><title>HF_severity 0.348, eGFR 72.5: 0.722</title></rect>
+<rect x="325" y="115" width="8.633" height="8.633" fill="#428cc4"><title>HF_severity 0.522, eGFR 72.5: 0.706</title></rect>
+<rect x="333.3" y="115" width="8.633" height="8.633" fill="#4891c6"><title>HF_severity 0.696, eGFR 72.5: 0.69</title></rect>
+<rect x="341.7" y="115" width="8.633" height="8.633" fill="#4e96c9"><title>HF_severity 0.87, eGFR 72.5: 0.674</title></rect>
+<rect x="350" y="115" width="8.633" height="8.633" fill="#539acb"><title>HF_severity 1.043, eGFR 72.5: 0.658</title></rect>
+<rect x="358.3" y="115" width="8.633" height="8.633" fill="#599fce"><title>HF_severity 1.217, eGFR 72.5: 0.643</title></rect>
+<rect x="366.7" y="115" width="8.633" height="8.633" fill="#5fa4d1"><title>HF_severity 1.391, eGFR 72.5: 0.627</title></rect>
+<rect x="375" y="115" width="8.633" height="8.633" fill="#65a9d3"><title>HF_severity 1.565, eGFR 72.5: 0.611</title></rect>
+<rect x="383.3" y="115" width="8.633" height="8.633" fill="#6aadd6"><title>HF_severity 1.739, eGFR 72.5: 0.595</title></rect>
+<rect x="391.7" y="115" width="8.633" height="8.633" fill="#71b1d8"><title>HF_severity 1.913, eGFR 72.5: 0.579</title></rect>
+<rect x="400" y="115" width="8.633" height="8.633" fill="#7bb6da"><title>HF_severity 2.087, eGFR 72.5: 0.558</title></rect>
+<rect x="408.3" y="115" width="8.633" height="8.633" fill="#87bcde"><title>HF_severity 2.261, eGFR 72.5: 0.53</title></rect>
+<rect x="416.7" y="115" width="8.633" height="8.633" fill="#94c2e1"><title>HF_severity 2.435, eGFR 72.5: 0.503</title></rect>
+<rect x="425" y="115" width="8.633" height="8.633" fill="#a0c8e5"><title>HF_severity 2.609, eGFR 72.5: 0.475</title></rect>
+<rect x="433.3" y="115" width="8.633" height="8.633" fill="#accee8"><title>HF_severity 2.783, eGFR 72.5: 0.448</title></rect>
+<rect x="441.7" y="115" width="8.633" height="8.633" fill="#b8d4eb"><title>HF_severity 2.957, eGFR 72.5: 0.421</title></rect>
 <rect x="450" y="115" width="8.633" height="8.633" fill="#b8d4eb"><title>HF_severity 3.13, eGFR 72.5: 0.422</title></rect>
 <rect x="458.3" y="115" width="8.633" height="8.633" fill="#b3d2ea"><title>HF_severity 3.304, eGFR 72.5: 0.432</title></rect>
-<rect x="466.7" y="115" width="8.633" height="8.633" fill="#afcfe9"><title>HF_severity 3.478, eGFR 72.5: 0.443</title></rect>
+<rect x="466.7" y="115" width="8.633" height="8.633" fill="#aecfe9"><title>HF_severity 3.478, eGFR 72.5: 0.443</title></rect>
 <rect x="475" y="115" width="8.633" height="8.633" fill="#aacde7"><title>HF_severity 3.652, eGFR 72.5: 0.453</title></rect>
-<rect x="483.3" y="115" width="8.633" height="8.633" fill="#a5cbe6"><title>HF_severity 3.826, eGFR 72.5: 0.463</title></rect>
-<rect x="491.7" y="115" width="8.633" height="8.633" fill="#a1c9e5"><title>HF_severity 4, eGFR 72.5: 0.474</title></rect>
+<rect x="483.3" y="115" width="8.633" height="8.633" fill="#a5cbe6"><title>HF_severity 3.826, eGFR 72.5: 0.464</title></rect>
+<rect x="491.7" y="115" width="8.633" height="8.633" fill="#a0c8e5"><title>HF_severity 4, eGFR 72.5: 0.474</title></rect>
 <rect x="300" y="123.3" width="8.633" height="8.633" fill="#3e89c2"><title>HF_severity 0, eGFR 67.5: 0.718</title></rect>
-<rect x="308.3" y="123.3" width="8.633" height="8.633" fill="#3e89c2"><title>HF_severity 0.174, eGFR 67.5: 0.718</title></rect>
-<rect x="316.7" y="123.3" width="8.633" height="8.633" fill="#3e89c2"><title>HF_severity 0.348, eGFR 67.5: 0.718</title></rect>
-<rect x="325" y="123.3" width="8.633" height="8.633" fill="#3e89c2"><title>HF_severity 0.522, eGFR 67.5: 0.718</title></rect>
-<rect x="333.3" y="123.3" width="8.633" height="8.633" fill="#3e89c2"><title>HF_severity 0.696, eGFR 67.5: 0.718</title></rect>
-<rect x="341.7" y="123.3" width="8.633" height="8.633" fill="#3e89c2"><title>HF_severity 0.87, eGFR 67.5: 0.718</title></rect>
-<rect x="350" y="123.3" width="8.633" height="8.633" fill="#408bc3"><title>HF_severity 1.043, eGFR 67.5: 0.711</title></rect>
-<rect x="358.3" y="123.3" width="8.633" height="8.633" fill="#4a93c7"><title>HF_severity 1.217, eGFR 67.5: 0.683</title></rect>
-<rect x="366.7" y="123.3" width="8.633" height="8.633" fill="#559ccc"><title>HF_severity 1.391, eGFR 67.5: 0.655</title></rect>
-<rect x="375" y="123.3" width="8.633" height="8.633" fill="#5fa4d0"><title>HF_severity 1.565, eGFR 67.5: 0.628</title></rect>
-<rect x="383.3" y="123.3" width="8.633" height="8.633" fill="#69acd5"><title>HF_severity 1.739, eGFR 67.5: 0.6</title></rect>
-<rect x="391.7" y="123.3" width="8.633" height="8.633" fill="#75b3d9"><title>HF_severity 1.913, eGFR 67.5: 0.572</title></rect>
-<rect x="400" y="123.3" width="8.633" height="8.633" fill="#81b9dc"><title>HF_severity 2.087, eGFR 67.5: 0.544</title></rect>
-<rect x="408.3" y="123.3" width="8.633" height="8.633" fill="#8ebfe0"><title>HF_severity 2.261, eGFR 67.5: 0.516</title></rect>
-<rect x="416.7" y="123.3" width="8.633" height="8.633" fill="#9bc6e3"><title>HF_severity 2.435, eGFR 67.5: 0.487</title></rect>
-<rect x="425" y="123.3" width="8.633" height="8.633" fill="#a7cce7"><title>HF_severity 2.609, eGFR 67.5: 0.459</title></rect>
-<rect x="433.3" y="123.3" width="8.633" height="8.633" fill="#b4d2ea"><title>HF_severity 2.783, eGFR 67.5: 0.43</title></rect>
-<rect x="441.7" y="123.3" width="8.633" height="8.633" fill="#c1d8ee"><title>HF_severity 2.957, eGFR 67.5: 0.402</title></rect>
+<rect x="308.3" y="123.3" width="8.633" height="8.633" fill="#438dc4"><title>HF_severity 0.174, eGFR 67.5: 0.702</title></rect>
+<rect x="316.7" y="123.3" width="8.633" height="8.633" fill="#4992c7"><title>HF_severity 0.348, eGFR 67.5: 0.687</title></rect>
+<rect x="325" y="123.3" width="8.633" height="8.633" fill="#4e96c9"><title>HF_severity 0.522, eGFR 67.5: 0.672</title></rect>
+<rect x="333.3" y="123.3" width="8.633" height="8.633" fill="#549bcc"><title>HF_severity 0.696, eGFR 67.5: 0.657</title></rect>
+<rect x="341.7" y="123.3" width="8.633" height="8.633" fill="#599fce"><title>HF_severity 0.87, eGFR 67.5: 0.642</title></rect>
+<rect x="350" y="123.3" width="8.633" height="8.633" fill="#5fa4d1"><title>HF_severity 1.043, eGFR 67.5: 0.627</title></rect>
+<rect x="358.3" y="123.3" width="8.633" height="8.633" fill="#64a8d3"><title>HF_severity 1.217, eGFR 67.5: 0.612</title></rect>
+<rect x="366.7" y="123.3" width="8.633" height="8.633" fill="#6aadd5"><title>HF_severity 1.391, eGFR 67.5: 0.597</title></rect>
+<rect x="375" y="123.3" width="8.633" height="8.633" fill="#70b1d7"><title>HF_severity 1.565, eGFR 67.5: 0.582</title></rect>
+<rect x="383.3" y="123.3" width="8.633" height="8.633" fill="#77b4d9"><title>HF_severity 1.739, eGFR 67.5: 0.567</title></rect>
+<rect x="391.7" y="123.3" width="8.633" height="8.633" fill="#7eb7db"><title>HF_severity 1.913, eGFR 67.5: 0.552</title></rect>
+<rect x="400" y="123.3" width="8.633" height="8.633" fill="#87bcde"><title>HF_severity 2.087, eGFR 67.5: 0.531</title></rect>
+<rect x="408.3" y="123.3" width="8.633" height="8.633" fill="#93c2e1"><title>HF_severity 2.261, eGFR 67.5: 0.505</title></rect>
+<rect x="416.7" y="123.3" width="8.633" height="8.633" fill="#9ec7e4"><title>HF_severity 2.435, eGFR 67.5: 0.479</title></rect>
+<rect x="425" y="123.3" width="8.633" height="8.633" fill="#aacde7"><title>HF_severity 2.609, eGFR 67.5: 0.453</title></rect>
+<rect x="433.3" y="123.3" width="8.633" height="8.633" fill="#b6d3ea"><title>HF_severity 2.783, eGFR 67.5: 0.427</title></rect>
+<rect x="441.7" y="123.3" width="8.633" height="8.633" fill="#c1d9ee"><title>HF_severity 2.957, eGFR 67.5: 0.401</title></rect>
 <rect x="450" y="123.3" width="8.633" height="8.633" fill="#c1d8ee"><title>HF_severity 3.13, eGFR 67.5: 0.402</title></rect>
 <rect x="458.3" y="123.3" width="8.633" height="8.633" fill="#bcd6ec"><title>HF_severity 3.304, eGFR 67.5: 0.412</title></rect>
 <rect x="466.7" y="123.3" width="8.633" height="8.633" fill="#b8d4eb"><title>HF_severity 3.478, eGFR 67.5: 0.422</title></rect>
-<rect x="475" y="123.3" width="8.633" height="8.633" fill="#b4d2ea"><title>HF_severity 3.652, eGFR 67.5: 0.432</title></rect>
-<rect x="483.3" y="123.3" width="8.633" height="8.633" fill="#afd0e9"><title>HF_severity 3.826, eGFR 67.5: 0.441</title></rect>
-<rect x="491.7" y="123.3" width="8.633" height="8.633" fill="#abcee8"><title>HF_severity 4, eGFR 67.5: 0.451</title></rect>
-<rect x="300" y="131.7" width="8.633" height="8.633" fill="#4b94c8"><title>HF_severity 0, eGFR 62.5: 0.682</title></rect>
-<rect x="308.3" y="131.7" width="8.633" height="8.633" fill="#4b94c8"><title>HF_severity 0.174, eGFR 62.5: 0.682</title></rect>
-<rect x="316.7" y="131.7" width="8.633" height="8.633" fill="#4b94c8"><title>HF_severity 0.348, eGFR 62.5: 0.682</title></rect>
-<rect x="325" y="131.7" width="8.633" height="8.633" fill="#4b94c8"><title>HF_severity 0.522, eGFR 62.5: 0.682</title></rect>
-<rect x="333.3" y="131.7" width="8.633" height="8.633" fill="#4b94c8"><title>HF_severity 0.696, eGFR 62.5: 0.682</title></rect>
-<rect x="341.7" y="131.7" width="8.633" height="8.633" fill="#4b94c8"><title>HF_severity 0.87, eGFR 62.5: 0.682</title></rect>
-<rect x="350" y="131.7" width="8.633" height="8.633" fill="#4d95c9"><title>HF_severity 1.043, eGFR 62.5: 0.675</title></rect>
-<rect x="358.3" y="131.7" width="8.633" height="8.633" fill="#579dcd"><title>HF_severity 1.217, eGFR 62.5: 0.649</title></rect>
-<rect x="366.7" y="131.7" width="8.633" height="8.633" fill="#60a5d1"><title>HF_severity 1.391, eGFR 62.5: 0.623</title></rect>
-<rect x="375" y="131.7" width="8.633" height="8.633" fill="#6aadd6"><title>HF_severity 1.565, eGFR 62.5: 0.596</title></rect>
-<rect x="383.3" y="131.7" width="8.633" height="8.633" fill="#76b3d9"><title>HF_severity 1.739, eGFR 62.5: 0.57</title></rect>
-<rect x="391.7" y="131.7" width="8.633" height="8.633" fill="#81b9dc"><title>HF_severity 1.913, eGFR 62.5: 0.544</title></rect>
-<rect x="400" y="131.7" width="8.633" height="8.633" fill="#8dbfdf"><title>HF_severity 2.087, eGFR 62.5: 0.517</title></rect>
-<rect x="408.3" y="131.7" width="8.633" height="8.633" fill="#99c5e3"><title>HF_severity 2.261, eGFR 62.5: 0.49</title></rect>
-<rect x="416.7" y="131.7" width="8.633" height="8.633" fill="#a6cbe6"><title>HF_severity 2.435, eGFR 62.5: 0.463</title></rect>
-<rect x="425" y="131.7" width="8.633" height="8.633" fill="#b2d1e9"><title>HF_severity 2.609, eGFR 62.5: 0.436</title></rect>
-<rect x="433.3" y="131.7" width="8.633" height="8.633" fill="#bed7ed"><title>HF_severity 2.783, eGFR 62.5: 0.409</title></rect>
-<rect x="441.7" y="131.7" width="8.633" height="8.633" fill="#c8dcf0"><title>HF_severity 2.957, eGFR 62.5: 0.382</title></rect>
+<rect x="475" y="123.3" width="8.633" height="8.633" fill="#b3d2ea"><title>HF_severity 3.652, eGFR 67.5: 0.432</title></rect>
+<rect x="483.3" y="123.3" width="8.633" height="8.633" fill="#afd0e9"><title>HF_severity 3.826, eGFR 67.5: 0.442</title></rect>
+<rect x="491.7" y="123.3" width="8.633" height="8.633" fill="#aacde7"><title>HF_severity 4, eGFR 67.5: 0.452</title></rect>
+<rect x="300" y="131.7" width="8.633" height="8.633" fill="#4b93c8"><title>HF_severity 0, eGFR 62.5: 0.682</title></rect>
+<rect x="308.3" y="131.7" width="8.633" height="8.633" fill="#5098ca"><title>HF_severity 0.174, eGFR 62.5: 0.668</title></rect>
+<rect x="316.7" y="131.7" width="8.633" height="8.633" fill="#559ccc"><title>HF_severity 0.348, eGFR 62.5: 0.653</title></rect>
+<rect x="325" y="131.7" width="8.633" height="8.633" fill="#5aa0cf"><title>HF_severity 0.522, eGFR 62.5: 0.639</title></rect>
+<rect x="333.3" y="131.7" width="8.633" height="8.633" fill="#60a5d1"><title>HF_severity 0.696, eGFR 62.5: 0.625</title></rect>
+<rect x="341.7" y="131.7" width="8.633" height="8.633" fill="#65a9d3"><title>HF_severity 0.87, eGFR 62.5: 0.61</title></rect>
+<rect x="350" y="131.7" width="8.633" height="8.633" fill="#6aadd6"><title>HF_severity 1.043, eGFR 62.5: 0.596</title></rect>
+<rect x="358.3" y="131.7" width="8.633" height="8.633" fill="#70b1d7"><title>HF_severity 1.217, eGFR 62.5: 0.582</title></rect>
+<rect x="366.7" y="131.7" width="8.633" height="8.633" fill="#77b4d9"><title>HF_severity 1.391, eGFR 62.5: 0.567</title></rect>
+<rect x="375" y="131.7" width="8.633" height="8.633" fill="#7db7db"><title>HF_severity 1.565, eGFR 62.5: 0.553</title></rect>
+<rect x="383.3" y="131.7" width="8.633" height="8.633" fill="#84badd"><title>HF_severity 1.739, eGFR 62.5: 0.539</title></rect>
+<rect x="391.7" y="131.7" width="8.633" height="8.633" fill="#8abdde"><title>HF_severity 1.913, eGFR 62.5: 0.524</title></rect>
+<rect x="400" y="131.7" width="8.633" height="8.633" fill="#93c2e1"><title>HF_severity 2.087, eGFR 62.5: 0.505</title></rect>
+<rect x="408.3" y="131.7" width="8.633" height="8.633" fill="#9ec7e4"><title>HF_severity 2.261, eGFR 62.5: 0.48</title></rect>
+<rect x="416.7" y="131.7" width="8.633" height="8.633" fill="#a9cde7"><title>HF_severity 2.435, eGFR 62.5: 0.455</title></rect>
+<rect x="425" y="131.7" width="8.633" height="8.633" fill="#b4d2ea"><title>HF_severity 2.609, eGFR 62.5: 0.43</title></rect>
+<rect x="433.3" y="131.7" width="8.633" height="8.633" fill="#bfd8ed"><title>HF_severity 2.783, eGFR 62.5: 0.405</title></rect>
+<rect x="441.7" y="131.7" width="8.633" height="8.633" fill="#c8dcf0"><title>HF_severity 2.957, eGFR 62.5: 0.381</title></rect>
 <rect x="450" y="131.7" width="8.633" height="8.633" fill="#c8dcf0"><title>HF_severity 3.13, eGFR 62.5: 0.382</title></rect>
-<rect x="458.3" y="131.7" width="8.633" height="8.633" fill="#c6dbef"><title>HF_severity 3.304, eGFR 62.5: 0.391</title></rect>
+<rect x="458.3" y="131.7" width="8.633" height="8.633" fill="#c5dbef"><title>HF_severity 3.304, eGFR 62.5: 0.391</title></rect>
 <rect x="466.7" y="131.7" width="8.633" height="8.633" fill="#c1d9ee"><title>HF_severity 3.478, eGFR 62.5: 0.401</title></rect>
 <rect x="475" y="131.7" width="8.633" height="8.633" fill="#bdd7ed"><title>HF_severity 3.652, eGFR 62.5: 0.41</title></rect>
-<rect x="483.3" y="131.7" width="8.633" height="8.633" fill="#b9d5eb"><title>HF_severity 3.826, eGFR 62.5: 0.42</title></rect>
-<rect x="491.7" y="131.7" width="8.633" height="8.633" fill="#b5d2ea"><title>HF_severity 4, eGFR 62.5: 0.429</title></rect>
+<rect x="483.3" y="131.7" width="8.633" height="8.633" fill="#b9d4eb"><title>HF_severity 3.826, eGFR 62.5: 0.42</title></rect>
+<rect x="491.7" y="131.7" width="8.633" height="8.633" fill="#b4d2ea"><title>HF_severity 4, eGFR 62.5: 0.429</title></rect>
 <rect x="300" y="140" width="8.633" height="8.633" fill="#589ecd"><title>HF_severity 0, eGFR 57.5: 0.646</title></rect>
-<rect x="308.3" y="140" width="8.633" height="8.633" fill="#589ecd"><title>HF_severity 0.174, eGFR 57.5: 0.646</title></rect>
-<rect x="316.7" y="140" width="8.633" height="8.633" fill="#589ecd"><title>HF_severity 0.348, eGFR 57.5: 0.646</title></rect>
-<rect x="325" y="140" width="8.633" height="8.633" fill="#589ecd"><title>HF_severity 0.522, eGFR 57.5: 0.646</title></rect>
-<rect x="333.3" y="140" width="8.633" height="8.633" fill="#589ecd"><title>HF_severity 0.696, eGFR 57.5: 0.646</title></rect>
-<rect x="341.7" y="140" width="8.633" height="8.633" fill="#589ecd"><title>HF_severity 0.87, eGFR 57.5: 0.646</title></rect>
-<rect x="350" y="140" width="8.633" height="8.633" fill="#5aa0ce"><title>HF_severity 1.043, eGFR 57.5: 0.64</title></rect>
-<rect x="358.3" y="140" width="8.633" height="8.633" fill="#63a8d3"><title>HF_severity 1.217, eGFR 57.5: 0.615</title></rect>
-<rect x="366.7" y="140" width="8.633" height="8.633" fill="#6dafd6"><title>HF_severity 1.391, eGFR 57.5: 0.59</title></rect>
-<rect x="375" y="140" width="8.633" height="8.633" fill="#78b4da"><title>HF_severity 1.565, eGFR 57.5: 0.565</title></rect>
-<rect x="383.3" y="140" width="8.633" height="8.633" fill="#83badd"><title>HF_severity 1.739, eGFR 57.5: 0.54</title></rect>
-<rect x="391.7" y="140" width="8.633" height="8.633" fill="#8ebfe0"><title>HF_severity 1.913, eGFR 57.5: 0.515</title></rect>
-<rect x="400" y="140" width="8.633" height="8.633" fill="#99c5e3"><title>HF_severity 2.087, eGFR 57.5: 0.49</title></rect>
-<rect x="408.3" y="140" width="8.633" height="8.633" fill="#a5cbe6"><title>HF_severity 2.261, eGFR 57.5: 0.464</title></rect>
-<rect x="416.7" y="140" width="8.633" height="8.633" fill="#b0d0e9"><title>HF_severity 2.435, eGFR 57.5: 0.439</title></rect>
-<rect x="425" y="140" width="8.633" height="8.633" fill="#bcd6ec"><title>HF_severity 2.609, eGFR 57.5: 0.413</title></rect>
-<rect x="433.3" y="140" width="8.633" height="8.633" fill="#c7dbef"><title>HF_severity 2.783, eGFR 57.5: 0.387</title></rect>
-<rect x="441.7" y="140" width="8.633" height="8.633" fill="#cde0f1"><title>HF_severity 2.957, eGFR 57.5: 0.362</title></rect>
+<rect x="308.3" y="140" width="8.633" height="8.633" fill="#5da2d0"><title>HF_severity 0.174, eGFR 57.5: 0.633</title></rect>
+<rect x="316.7" y="140" width="8.633" height="8.633" fill="#62a6d2"><title>HF_severity 0.348, eGFR 57.5: 0.619</title></rect>
+<rect x="325" y="140" width="8.633" height="8.633" fill="#67aad4"><title>HF_severity 0.522, eGFR 57.5: 0.605</title></rect>
+<rect x="333.3" y="140" width="8.633" height="8.633" fill="#6caed6"><title>HF_severity 0.696, eGFR 57.5: 0.592</title></rect>
+<rect x="341.7" y="140" width="8.633" height="8.633" fill="#72b1d8"><title>HF_severity 0.87, eGFR 57.5: 0.578</title></rect>
+<rect x="350" y="140" width="8.633" height="8.633" fill="#78b4da"><title>HF_severity 1.043, eGFR 57.5: 0.565</title></rect>
+<rect x="358.3" y="140" width="8.633" height="8.633" fill="#7eb7db"><title>HF_severity 1.217, eGFR 57.5: 0.551</title></rect>
+<rect x="366.7" y="140" width="8.633" height="8.633" fill="#84badd"><title>HF_severity 1.391, eGFR 57.5: 0.537</title></rect>
+<rect x="375" y="140" width="8.633" height="8.633" fill="#8abddf"><title>HF_severity 1.565, eGFR 57.5: 0.524</title></rect>
+<rect x="383.3" y="140" width="8.633" height="8.633" fill="#90c0e0"><title>HF_severity 1.739, eGFR 57.5: 0.51</title></rect>
+<rect x="391.7" y="140" width="8.633" height="8.633" fill="#96c3e2"><title>HF_severity 1.913, eGFR 57.5: 0.497</title></rect>
+<rect x="400" y="140" width="8.633" height="8.633" fill="#9fc7e4"><title>HF_severity 2.087, eGFR 57.5: 0.478</title></rect>
+<rect x="408.3" y="140" width="8.633" height="8.633" fill="#a9cde7"><title>HF_severity 2.261, eGFR 57.5: 0.455</title></rect>
+<rect x="416.7" y="140" width="8.633" height="8.633" fill="#b4d2ea"><title>HF_severity 2.435, eGFR 57.5: 0.431</title></rect>
+<rect x="425" y="140" width="8.633" height="8.633" fill="#bed7ed"><title>HF_severity 2.609, eGFR 57.5: 0.408</title></rect>
+<rect x="433.3" y="140" width="8.633" height="8.633" fill="#c7dcef"><title>HF_severity 2.783, eGFR 57.5: 0.384</title></rect>
+<rect x="441.7" y="140" width="8.633" height="8.633" fill="#cde0f1"><title>HF_severity 2.957, eGFR 57.5: 0.361</title></rect>
 <rect x="450" y="140" width="8.633" height="8.633" fill="#cddff1"><title>HF_severity 3.13, eGFR 57.5: 0.362</title></rect>
 <rect x="458.3" y="140" width="8.633" height="8.633" fill="#cbdef1"><title>HF_severity 3.304, eGFR 57.5: 0.371</title></rect>
-<rect x="466.7" y="140" width="8.633" height="8.633" fill="#c9ddf0"><title>HF_severity 3.478, eGFR 57.5: 0.38</title></rect>
+<rect x="466.7" y="140" width="8.633" height="8.633" fill="#c8ddf0"><title>HF_severity 3.478, eGFR 57.5: 0.38</title></rect>
 <rect x="475" y="140" width="8.633" height="8.633" fill="#c6dbef"><title>HF_severity 3.652, eGFR 57.5: 0.389</title></rect>
-<rect x="483.3" y="140" width="8.633" height="8.633" fill="#c3d9ee"><title>HF_severity 3.826, eGFR 57.5: 0.398</title></rect>
-<rect x="491.7" y="140" width="8.633" height="8.633" fill="#bfd7ed"><title>HF_severity 4, eGFR 57.5: 0.406</title></rect>
+<rect x="483.3" y="140" width="8.633" height="8.633" fill="#c2d9ee"><title>HF_severity 3.826, eGFR 57.5: 0.398</title></rect>
+<rect x="491.7" y="140" width="8.633" height="8.633" fill="#bed7ed"><title>HF_severity 4, eGFR 57.5: 0.407</title></rect>
 <rect x="300" y="148.3" width="8.633" height="8.633" fill="#65a9d3"><title>HF_severity 0, eGFR 52.5: 0.61</title></rect>
-<rect x="308.3" y="148.3" width="8.633" height="8.633" fill="#65a9d3"><title>HF_severity 0.174, eGFR 52.5: 0.61</title></rect>
-<rect x="316.7" y="148.3" width="8.633" height="8.633" fill="#65a9d3"><title>HF_severity 0.348, eGFR 52.5: 0.61</title></rect>
-<rect x="325" y="148.3" width="8.633" height="8.633" fill="#65a9d3"><title>HF_severity 0.522, eGFR 52.5: 0.61</title></rect>
-<rect x="333.3" y="148.3" width="8.633" height="8.633" fill="#65a9d3"><title>HF_severity 0.696, eGFR 52.5: 0.61</title></rect>
-<rect x="341.7" y="148.3" width="8.633" height="8.633" fill="#65a9d3"><title>HF_severity 0.87, eGFR 52.5: 0.61</title></rect>
-<rect x="350" y="148.3" width="8.633" height="8.633" fill="#67abd4"><title>HF_severity 1.043, eGFR 52.5: 0.604</title></rect>
-<rect x="358.3" y="148.3" width="8.633" height="8.633" fill="#71b1d8"><title>HF_severity 1.217, eGFR 52.5: 0.581</title></rect>
-<rect x="366.7" y="148.3" width="8.633" height="8.633" fill="#7bb6da"><title>HF_severity 1.391, eGFR 52.5: 0.557</title></rect>
-<rect x="375" y="148.3" width="8.633" height="8.633" fill="#86bbdd"><title>HF_severity 1.565, eGFR 52.5: 0.534</title></rect>
-<rect x="383.3" y="148.3" width="8.633" height="8.633" fill="#90c0e0"><title>HF_severity 1.739, eGFR 52.5: 0.51</title></rect>
-<rect x="391.7" y="148.3" width="8.633" height="8.633" fill="#9bc6e3"><title>HF_severity 1.913, eGFR 52.5: 0.487</title></rect>
-<rect x="400" y="148.3" width="8.633" height="8.633" fill="#a6cbe6"><title>HF_severity 2.087, eGFR 52.5: 0.463</title></rect>
-<rect x="408.3" y="148.3" width="8.633" height="8.633" fill="#b0d0e9"><title>HF_severity 2.261, eGFR 52.5: 0.439</title></rect>
-<rect x="416.7" y="148.3" width="8.633" height="8.633" fill="#bbd6ec"><title>HF_severity 2.435, eGFR 52.5: 0.414</title></rect>
-<rect x="425" y="148.3" width="8.633" height="8.633" fill="#c6dbef"><title>HF_severity 2.609, eGFR 52.5: 0.39</title></rect>
-<rect x="433.3" y="148.3" width="8.633" height="8.633" fill="#ccdff1"><title>HF_severity 2.783, eGFR 52.5: 0.366</title></rect>
-<rect x="441.7" y="148.3" width="8.633" height="8.633" fill="#d2e3f3"><title>HF_severity 2.957, eGFR 52.5: 0.342</title></rect>
+<rect x="308.3" y="148.3" width="8.633" height="8.633" fill="#69add5"><title>HF_severity 0.174, eGFR 52.5: 0.598</title></rect>
+<rect x="316.7" y="148.3" width="8.633" height="8.633" fill="#6fb0d7"><title>HF_severity 0.348, eGFR 52.5: 0.585</title></rect>
+<rect x="325" y="148.3" width="8.633" height="8.633" fill="#75b3d9"><title>HF_severity 0.522, eGFR 52.5: 0.572</title></rect>
+<rect x="333.3" y="148.3" width="8.633" height="8.633" fill="#7ab6da"><title>HF_severity 0.696, eGFR 52.5: 0.559</title></rect>
+<rect x="341.7" y="148.3" width="8.633" height="8.633" fill="#80b8dc"><title>HF_severity 0.87, eGFR 52.5: 0.546</title></rect>
+<rect x="350" y="148.3" width="8.633" height="8.633" fill="#86bbdd"><title>HF_severity 1.043, eGFR 52.5: 0.533</title></rect>
+<rect x="358.3" y="148.3" width="8.633" height="8.633" fill="#8cbedf"><title>HF_severity 1.217, eGFR 52.5: 0.521</title></rect>
+<rect x="366.7" y="148.3" width="8.633" height="8.633" fill="#91c1e1"><title>HF_severity 1.391, eGFR 52.5: 0.508</title></rect>
+<rect x="375" y="148.3" width="8.633" height="8.633" fill="#97c4e2"><title>HF_severity 1.565, eGFR 52.5: 0.495</title></rect>
+<rect x="383.3" y="148.3" width="8.633" height="8.633" fill="#9dc7e4"><title>HF_severity 1.739, eGFR 52.5: 0.482</title></rect>
+<rect x="391.7" y="148.3" width="8.633" height="8.633" fill="#a3c9e5"><title>HF_severity 1.913, eGFR 52.5: 0.469</title></rect>
+<rect x="400" y="148.3" width="8.633" height="8.633" fill="#aacde7"><title>HF_severity 2.087, eGFR 52.5: 0.452</title></rect>
+<rect x="408.3" y="148.3" width="8.633" height="8.633" fill="#b4d2ea"><title>HF_severity 2.261, eGFR 52.5: 0.43</title></rect>
+<rect x="416.7" y="148.3" width="8.633" height="8.633" fill="#bed7ed"><title>HF_severity 2.435, eGFR 52.5: 0.407</title></rect>
+<rect x="425" y="148.3" width="8.633" height="8.633" fill="#c7dcef"><title>HF_severity 2.609, eGFR 52.5: 0.385</title></rect>
+<rect x="433.3" y="148.3" width="8.633" height="8.633" fill="#cddff1"><title>HF_severity 2.783, eGFR 52.5: 0.363</title></rect>
+<rect x="441.7" y="148.3" width="8.633" height="8.633" fill="#d2e3f3"><title>HF_severity 2.957, eGFR 52.5: 0.341</title></rect>
 <rect x="450" y="148.3" width="8.633" height="8.633" fill="#d2e3f3"><title>HF_severity 3.13, eGFR 52.5: 0.342</title></rect>
 <rect x="458.3" y="148.3" width="8.633" height="8.633" fill="#d0e1f2"><title>HF_severity 3.304, eGFR 52.5: 0.35</title></rect>
 <rect x="466.7" y="148.3" width="8.633" height="8.633" fill="#cee0f1"><title>HF_severity 3.478, eGFR 52.5: 0.359</title></rect>
-<rect x="475" y="148.3" width="8.633" height="8.633" fill="#ccdff1"><title>HF_severity 3.652, eGFR 52.5: 0.367</title></rect>
-<rect x="483.3" y="148.3" width="8.633" height="8.633" fill="#caddf0"><title>HF_severity 3.826, eGFR 52.5: 0.376</title></rect>
-<rect x="491.7" y="148.3" width="8.633" height="8.633" fill="#c8dcf0"><title>HF_severity 4, eGFR 52.5: 0.384</title></rect>
-<rect x="300" y="156.7" width="8.633" height="8.633" fill="#74b2d8"><title>HF_severity 0, eGFR 47.5: 0.575</title></rect>
-<rect x="308.3" y="156.7" width="8.633" height="8.633" fill="#74b2d8"><title>HF_severity 0.174, eGFR 47.5: 0.575</title></rect>
-<rect x="316.7" y="156.7" width="8.633" height="8.633" fill="#74b2d8"><title>HF_severity 0.348, eGFR 47.5: 0.575</title></rect>
-<rect x="325" y="156.7" width="8.633" height="8.633" fill="#74b2d8"><title>HF_severity 0.522, eGFR 47.5: 0.575</title></rect>
-<rect x="333.3" y="156.7" width="8.633" height="8.633" fill="#74b2d8"><title>HF_severity 0.696, eGFR 47.5: 0.575</title></rect>
-<rect x="341.7" y="156.7" width="8.633" height="8.633" fill="#74b2d8"><title>HF_severity 0.87, eGFR 47.5: 0.575</title></rect>
-<rect x="350" y="156.7" width="8.633" height="8.633" fill="#76b3d9"><title>HF_severity 1.043, eGFR 47.5: 0.569</title></rect>
-<rect x="358.3" y="156.7" width="8.633" height="8.633" fill="#80b8dc"><title>HF_severity 1.217, eGFR 47.5: 0.547</title></rect>
-<rect x="366.7" y="156.7" width="8.633" height="8.633" fill="#8abdde"><title>HF_severity 1.391, eGFR 47.5: 0.525</title></rect>
-<rect x="375" y="156.7" width="8.633" height="8.633" fill="#94c2e1"><title>HF_severity 1.565, eGFR 47.5: 0.502</title></rect>
-<rect x="383.3" y="156.7" width="8.633" height="8.633" fill="#9ec7e4"><title>HF_severity 1.739, eGFR 47.5: 0.48</title></rect>
-<rect x="391.7" y="156.7" width="8.633" height="8.633" fill="#a8cce7"><title>HF_severity 1.913, eGFR 47.5: 0.458</title></rect>
-<rect x="400" y="156.7" width="8.633" height="8.633" fill="#b2d1e9"><title>HF_severity 2.087, eGFR 47.5: 0.436</title></rect>
-<rect x="408.3" y="156.7" width="8.633" height="8.633" fill="#bcd6ec"><title>HF_severity 2.261, eGFR 47.5: 0.413</title></rect>
-<rect x="416.7" y="156.7" width="8.633" height="8.633" fill="#c6dbef"><title>HF_severity 2.435, eGFR 47.5: 0.39</title></rect>
-<rect x="425" y="156.7" width="8.633" height="8.633" fill="#ccdff1"><title>HF_severity 2.609, eGFR 47.5: 0.367</title></rect>
-<rect x="433.3" y="156.7" width="8.633" height="8.633" fill="#d1e2f3"><title>HF_severity 2.783, eGFR 47.5: 0.344</title></rect>
-<rect x="441.7" y="156.7" width="8.633" height="8.633" fill="#d7e6f4"><title>HF_severity 2.957, eGFR 47.5: 0.322</title></rect>
-<rect x="450" y="156.7" width="8.633" height="8.633" fill="#d7e6f4"><title>HF_severity 3.13, eGFR 47.5: 0.322</title></rect>
+<rect x="475" y="148.3" width="8.633" height="8.633" fill="#cbdff1"><title>HF_severity 3.652, eGFR 52.5: 0.367</title></rect>
+<rect x="483.3" y="148.3" width="8.633" height="8.633" fill="#c9ddf0"><title>HF_severity 3.826, eGFR 52.5: 0.376</title></rect>
+<rect x="491.7" y="148.3" width="8.633" height="8.633" fill="#c7dcef"><title>HF_severity 4, eGFR 52.5: 0.384</title></rect>
+<rect x="300" y="156.7" width="8.633" height="8.633" fill="#73b2d8"><title>HF_severity 0, eGFR 47.5: 0.575</title></rect>
+<rect x="308.3" y="156.7" width="8.633" height="8.633" fill="#79b5da"><title>HF_severity 0.174, eGFR 47.5: 0.563</title></rect>
+<rect x="316.7" y="156.7" width="8.633" height="8.633" fill="#7eb7db"><title>HF_severity 0.348, eGFR 47.5: 0.55</title></rect>
+<rect x="325" y="156.7" width="8.633" height="8.633" fill="#84badd"><title>HF_severity 0.522, eGFR 47.5: 0.538</title></rect>
+<rect x="333.3" y="156.7" width="8.633" height="8.633" fill="#89bdde"><title>HF_severity 0.696, eGFR 47.5: 0.526</title></rect>
+<rect x="341.7" y="156.7" width="8.633" height="8.633" fill="#8ec0e0"><title>HF_severity 0.87, eGFR 47.5: 0.514</title></rect>
+<rect x="350" y="156.7" width="8.633" height="8.633" fill="#94c2e1"><title>HF_severity 1.043, eGFR 47.5: 0.502</title></rect>
+<rect x="358.3" y="156.7" width="8.633" height="8.633" fill="#99c5e3"><title>HF_severity 1.217, eGFR 47.5: 0.49</title></rect>
+<rect x="366.7" y="156.7" width="8.633" height="8.633" fill="#9fc8e4"><title>HF_severity 1.391, eGFR 47.5: 0.478</title></rect>
+<rect x="375" y="156.7" width="8.633" height="8.633" fill="#a4cae6"><title>HF_severity 1.565, eGFR 47.5: 0.466</title></rect>
+<rect x="383.3" y="156.7" width="8.633" height="8.633" fill="#a9cde7"><title>HF_severity 1.739, eGFR 47.5: 0.454</title></rect>
+<rect x="391.7" y="156.7" width="8.633" height="8.633" fill="#afd0e9"><title>HF_severity 1.913, eGFR 47.5: 0.442</title></rect>
+<rect x="400" y="156.7" width="8.633" height="8.633" fill="#b6d3eb"><title>HF_severity 2.087, eGFR 47.5: 0.425</title></rect>
+<rect x="408.3" y="156.7" width="8.633" height="8.633" fill="#c0d8ed"><title>HF_severity 2.261, eGFR 47.5: 0.404</title></rect>
+<rect x="416.7" y="156.7" width="8.633" height="8.633" fill="#c8dcf0"><title>HF_severity 2.435, eGFR 47.5: 0.383</title></rect>
+<rect x="425" y="156.7" width="8.633" height="8.633" fill="#cddff1"><title>HF_severity 2.609, eGFR 47.5: 0.363</title></rect>
+<rect x="433.3" y="156.7" width="8.633" height="8.633" fill="#d2e3f3"><title>HF_severity 2.783, eGFR 47.5: 0.342</title></rect>
+<rect x="441.7" y="156.7" width="8.633" height="8.633" fill="#d7e6f4"><title>HF_severity 2.957, eGFR 47.5: 0.321</title></rect>
+<rect x="450" y="156.7" width="8.633" height="8.633" fill="#d6e6f4"><title>HF_severity 3.13, eGFR 47.5: 0.322</title></rect>
 <rect x="458.3" y="156.7" width="8.633" height="8.633" fill="#d5e5f4"><title>HF_severity 3.304, eGFR 47.5: 0.33</title></rect>
 <rect x="466.7" y="156.7" width="8.633" height="8.633" fill="#d3e3f3"><title>HF_severity 3.478, eGFR 47.5: 0.338</title></rect>
-<rect x="475" y="156.7" width="8.633" height="8.633" fill="#d1e2f3"><title>HF_severity 3.652, eGFR 47.5: 0.346</title></rect>
+<rect x="475" y="156.7" width="8.633" height="8.633" fill="#d1e2f2"><title>HF_severity 3.652, eGFR 47.5: 0.346</title></rect>
 <rect x="483.3" y="156.7" width="8.633" height="8.633" fill="#cfe1f2"><title>HF_severity 3.826, eGFR 47.5: 0.354</title></rect>
-<rect x="491.7" y="156.7" width="8.633" height="8.633" fill="#cde0f1"><title>HF_severity 4, eGFR 47.5: 0.361</title></rect>
+<rect x="491.7" y="156.7" width="8.633" height="8.633" fill="#cddff1"><title>HF_severity 4, eGFR 47.5: 0.362</title></rect>
 <rect x="300" y="165" width="8.633" height="8.633" fill="#82badc"><title>HF_severity 0, eGFR 42.5: 0.541</title></rect>
-<rect x="308.3" y="165" width="8.633" height="8.633" fill="#82badc"><title>HF_severity 0.174, eGFR 42.5: 0.541</title></rect>
-<rect x="316.7" y="165" width="8.633" height="8.633" fill="#82badc"><title>HF_severity 0.348, eGFR 42.5: 0.541</title></rect>
-<rect x="325" y="165" width="8.633" height="8.633" fill="#82badc"><title>HF_severity 0.522, eGFR 42.5: 0.541</title></rect>
-<rect x="333.3" y="165" width="8.633" height="8.633" fill="#82badc"><title>HF_severity 0.696, eGFR 42.5: 0.541</title></rect>
-<rect x="341.7" y="165" width="8.633" height="8.633" fill="#82badc"><title>HF_severity 0.87, eGFR 42.5: 0.541</title></rect>
-<rect x="350" y="165" width="8.633" height="8.633" fill="#85bbdd"><title>HF_severity 1.043, eGFR 42.5: 0.536</title></rect>
-<rect x="358.3" y="165" width="8.633" height="8.633" fill="#8ebfe0"><title>HF_severity 1.217, eGFR 42.5: 0.515</title></rect>
-<rect x="366.7" y="165" width="8.633" height="8.633" fill="#97c4e2"><title>HF_severity 1.391, eGFR 42.5: 0.494</title></rect>
-<rect x="375" y="165" width="8.633" height="8.633" fill="#a1c9e5"><title>HF_severity 1.565, eGFR 42.5: 0.473</title></rect>
-<rect x="383.3" y="165" width="8.633" height="8.633" fill="#aacde7"><title>HF_severity 1.739, eGFR 42.5: 0.452</title></rect>
-<rect x="391.7" y="165" width="8.633" height="8.633" fill="#b4d2ea"><title>HF_severity 1.913, eGFR 42.5: 0.432</title></rect>
-<rect x="400" y="165" width="8.633" height="8.633" fill="#bdd7ed"><title>HF_severity 2.087, eGFR 42.5: 0.41</title></rect>
-<rect x="408.3" y="165" width="8.633" height="8.633" fill="#c6dbef"><title>HF_severity 2.261, eGFR 42.5: 0.389</title></rect>
-<rect x="416.7" y="165" width="8.633" height="8.633" fill="#ccdff1"><title>HF_severity 2.435, eGFR 42.5: 0.367</title></rect>
-<rect x="425" y="165" width="8.633" height="8.633" fill="#d1e2f2"><title>HF_severity 2.609, eGFR 42.5: 0.346</title></rect>
-<rect x="433.3" y="165" width="8.633" height="8.633" fill="#d6e5f4"><title>HF_severity 2.783, eGFR 42.5: 0.325</title></rect>
-<rect x="441.7" y="165" width="8.633" height="8.633" fill="#dbe9f6"><title>HF_severity 2.957, eGFR 42.5: 0.303</title></rect>
+<rect x="308.3" y="165" width="8.633" height="8.633" fill="#87bcde"><title>HF_severity 0.174, eGFR 42.5: 0.53</title></rect>
+<rect x="316.7" y="165" width="8.633" height="8.633" fill="#8cbfdf"><title>HF_severity 0.348, eGFR 42.5: 0.519</title></rect>
+<rect x="325" y="165" width="8.633" height="8.633" fill="#92c1e1"><title>HF_severity 0.522, eGFR 42.5: 0.507</title></rect>
+<rect x="333.3" y="165" width="8.633" height="8.633" fill="#97c4e2"><title>HF_severity 0.696, eGFR 42.5: 0.496</title></rect>
+<rect x="341.7" y="165" width="8.633" height="8.633" fill="#9cc6e3"><title>HF_severity 0.87, eGFR 42.5: 0.484</title></rect>
+<rect x="350" y="165" width="8.633" height="8.633" fill="#a1c9e5"><title>HF_severity 1.043, eGFR 42.5: 0.473</title></rect>
+<rect x="358.3" y="165" width="8.633" height="8.633" fill="#a6cbe6"><title>HF_severity 1.217, eGFR 42.5: 0.462</title></rect>
+<rect x="366.7" y="165" width="8.633" height="8.633" fill="#abcee8"><title>HF_severity 1.391, eGFR 42.5: 0.45</title></rect>
+<rect x="375" y="165" width="8.633" height="8.633" fill="#b0d0e9"><title>HF_severity 1.565, eGFR 42.5: 0.439</title></rect>
+<rect x="383.3" y="165" width="8.633" height="8.633" fill="#b5d3ea"><title>HF_severity 1.739, eGFR 42.5: 0.428</title></rect>
+<rect x="391.7" y="165" width="8.633" height="8.633" fill="#bad5ec"><title>HF_severity 1.913, eGFR 42.5: 0.416</title></rect>
+<rect x="400" y="165" width="8.633" height="8.633" fill="#c1d9ee"><title>HF_severity 2.087, eGFR 42.5: 0.401</title></rect>
+<rect x="408.3" y="165" width="8.633" height="8.633" fill="#c8dcf0"><title>HF_severity 2.261, eGFR 42.5: 0.381</title></rect>
+<rect x="416.7" y="165" width="8.633" height="8.633" fill="#cde0f1"><title>HF_severity 2.435, eGFR 42.5: 0.361</title></rect>
+<rect x="425" y="165" width="8.633" height="8.633" fill="#d2e3f3"><title>HF_severity 2.609, eGFR 42.5: 0.342</title></rect>
+<rect x="433.3" y="165" width="8.633" height="8.633" fill="#d6e6f4"><title>HF_severity 2.783, eGFR 42.5: 0.322</title></rect>
+<rect x="441.7" y="165" width="8.633" height="8.633" fill="#dbe9f6"><title>HF_severity 2.957, eGFR 42.5: 0.302</title></rect>
 <rect x="450" y="165" width="8.633" height="8.633" fill="#dbe9f6"><title>HF_severity 3.13, eGFR 42.5: 0.303</title></rect>
 <rect x="458.3" y="165" width="8.633" height="8.633" fill="#d9e8f5"><title>HF_severity 3.304, eGFR 42.5: 0.311</title></rect>
 <rect x="466.7" y="165" width="8.633" height="8.633" fill="#d7e6f5"><title>HF_severity 3.478, eGFR 42.5: 0.318</title></rect>
-<rect x="475" y="165" width="8.633" height="8.633" fill="#d6e5f4"><title>HF_severity 3.652, eGFR 42.5: 0.326</title></rect>
-<rect x="483.3" y="165" width="8.633" height="8.633" fill="#d4e4f4"><title>HF_severity 3.826, eGFR 42.5: 0.333</title></rect>
-<rect x="491.7" y="165" width="8.633" height="8.633" fill="#d2e3f3"><title>HF_severity 4, eGFR 42.5: 0.34</title></rect>
+<rect x="475" y="165" width="8.633" height="8.633" fill="#d5e5f4"><title>HF_severity 3.652, eGFR 42.5: 0.326</title></rect>
+<rect x="483.3" y="165" width="8.633" height="8.633" fill="#d4e4f3"><title>HF_severity 3.826, eGFR 42.5: 0.333</title></rect>
+<rect x="491.7" y="165" width="8.633" height="8.633" fill="#d2e3f3"><title>HF_severity 4, eGFR 42.5: 0.341</title></rect>
 <rect x="300" y="173.3" width="8.633" height="8.633" fill="#90c0e0"><title>HF_severity 0, eGFR 37.5: 0.511</title></rect>
-<rect x="308.3" y="173.3" width="8.633" height="8.633" fill="#90c0e0"><title>HF_severity 0.174, eGFR 37.5: 0.511</title></rect>
-<rect x="316.7" y="173.3" width="8.633" height="8.633" fill="#90c0e0"><title>HF_severity 0.348, eGFR 37.5: 0.511</title></rect>
-<rect x="325" y="173.3" width="8.633" height="8.633" fill="#90c0e0"><title>HF_severity 0.522, eGFR 37.5: 0.511</title></rect>
-<rect x="333.3" y="173.3" width="8.633" height="8.633" fill="#90c0e0"><title>HF_severity 0.696, eGFR 37.5: 0.511</title></rect>
-<rect x="341.7" y="173.3" width="8.633" height="8.633" fill="#90c0e0"><title>HF_severity 0.87, eGFR 37.5: 0.511</title></rect>
-<rect x="350" y="173.3" width="8.633" height="8.633" fill="#92c1e1"><title>HF_severity 1.043, eGFR 37.5: 0.506</title></rect>
-<rect x="358.3" y="173.3" width="8.633" height="8.633" fill="#9bc6e3"><title>HF_severity 1.217, eGFR 37.5: 0.486</title></rect>
-<rect x="366.7" y="173.3" width="8.633" height="8.633" fill="#a4cae6"><title>HF_severity 1.391, eGFR 37.5: 0.466</title></rect>
-<rect x="375" y="173.3" width="8.633" height="8.633" fill="#adcfe8"><title>HF_severity 1.565, eGFR 37.5: 0.447</title></rect>
-<rect x="383.3" y="173.3" width="8.633" height="8.633" fill="#b6d3eb"><title>HF_severity 1.739, eGFR 37.5: 0.427</title></rect>
-<rect x="391.7" y="173.3" width="8.633" height="8.633" fill="#bfd7ed"><title>HF_severity 1.913, eGFR 37.5: 0.407</title></rect>
-<rect x="400" y="173.3" width="8.633" height="8.633" fill="#c7dcef"><title>HF_severity 2.087, eGFR 37.5: 0.387</title></rect>
-<rect x="408.3" y="173.3" width="8.633" height="8.633" fill="#ccdff1"><title>HF_severity 2.261, eGFR 37.5: 0.367</title></rect>
-<rect x="416.7" y="173.3" width="8.633" height="8.633" fill="#d1e2f2"><title>HF_severity 2.435, eGFR 37.5: 0.347</title></rect>
-<rect x="425" y="173.3" width="8.633" height="8.633" fill="#d5e5f4"><title>HF_severity 2.609, eGFR 37.5: 0.326</title></rect>
-<rect x="433.3" y="173.3" width="8.633" height="8.633" fill="#dae8f6"><title>HF_severity 2.783, eGFR 37.5: 0.306</title></rect>
-<rect x="441.7" y="173.3" width="8.633" height="8.633" fill="#dfebf7"><title>HF_severity 2.957, eGFR 37.5: 0.286</title></rect>
+<rect x="308.3" y="173.3" width="8.633" height="8.633" fill="#95c3e1"><title>HF_severity 0.174, eGFR 37.5: 0.5</title></rect>
+<rect x="316.7" y="173.3" width="8.633" height="8.633" fill="#9ac5e3"><title>HF_severity 0.348, eGFR 37.5: 0.489</title></rect>
+<rect x="325" y="173.3" width="8.633" height="8.633" fill="#9ec7e4"><title>HF_severity 0.522, eGFR 37.5: 0.478</title></rect>
+<rect x="333.3" y="173.3" width="8.633" height="8.633" fill="#a3cae5"><title>HF_severity 0.696, eGFR 37.5: 0.468</title></rect>
+<rect x="341.7" y="173.3" width="8.633" height="8.633" fill="#a8cce7"><title>HF_severity 0.87, eGFR 37.5: 0.457</title></rect>
+<rect x="350" y="173.3" width="8.633" height="8.633" fill="#adcfe8"><title>HF_severity 1.043, eGFR 37.5: 0.446</title></rect>
+<rect x="358.3" y="173.3" width="8.633" height="8.633" fill="#b2d1e9"><title>HF_severity 1.217, eGFR 37.5: 0.435</title></rect>
+<rect x="366.7" y="173.3" width="8.633" height="8.633" fill="#b6d3eb"><title>HF_severity 1.391, eGFR 37.5: 0.425</title></rect>
+<rect x="375" y="173.3" width="8.633" height="8.633" fill="#bbd6ec"><title>HF_severity 1.565, eGFR 37.5: 0.414</title></rect>
+<rect x="383.3" y="173.3" width="8.633" height="8.633" fill="#c0d8ed"><title>HF_severity 1.739, eGFR 37.5: 0.403</title></rect>
+<rect x="391.7" y="173.3" width="8.633" height="8.633" fill="#c5daef"><title>HF_severity 1.913, eGFR 37.5: 0.393</title></rect>
+<rect x="400" y="173.3" width="8.633" height="8.633" fill="#c9ddf0"><title>HF_severity 2.087, eGFR 37.5: 0.378</title></rect>
+<rect x="408.3" y="173.3" width="8.633" height="8.633" fill="#cde0f1"><title>HF_severity 2.261, eGFR 37.5: 0.359</title></rect>
+<rect x="416.7" y="173.3" width="8.633" height="8.633" fill="#d2e3f3"><title>HF_severity 2.435, eGFR 37.5: 0.341</title></rect>
+<rect x="425" y="173.3" width="8.633" height="8.633" fill="#d6e6f4"><title>HF_severity 2.609, eGFR 37.5: 0.322</title></rect>
+<rect x="433.3" y="173.3" width="8.633" height="8.633" fill="#dbe9f6"><title>HF_severity 2.783, eGFR 37.5: 0.304</title></rect>
+<rect x="441.7" y="173.3" width="8.633" height="8.633" fill="#dfecf7"><title>HF_severity 2.957, eGFR 37.5: 0.285</title></rect>
 <rect x="450" y="173.3" width="8.633" height="8.633" fill="#dfebf7"><title>HF_severity 3.13, eGFR 37.5: 0.286</title></rect>
 <rect x="458.3" y="173.3" width="8.633" height="8.633" fill="#ddeaf7"><title>HF_severity 3.304, eGFR 37.5: 0.293</title></rect>
 <rect x="466.7" y="173.3" width="8.633" height="8.633" fill="#dce9f6"><title>HF_severity 3.478, eGFR 37.5: 0.3</title></rect>
 <rect x="475" y="173.3" width="8.633" height="8.633" fill="#dae8f6"><title>HF_severity 3.652, eGFR 37.5: 0.307</title></rect>
 <rect x="483.3" y="173.3" width="8.633" height="8.633" fill="#d8e7f5"><title>HF_severity 3.826, eGFR 37.5: 0.314</title></rect>
-<rect x="491.7" y="173.3" width="8.633" height="8.633" fill="#d7e6f4"><title>HF_severity 4, eGFR 37.5: 0.321</title></rect>
+<rect x="491.7" y="173.3" width="8.633" height="8.633" fill="#d6e6f4"><title>HF_severity 4, eGFR 37.5: 0.322</title></rect>
 <rect x="300" y="181.7" width="8.633" height="8.633" fill="#9ec7e4"><title>HF_severity 0, eGFR 32.5: 0.48</title></rect>
-<rect x="308.3" y="181.7" width="8.633" height="8.633" fill="#9ec7e4"><title>HF_severity 0.174, eGFR 32.5: 0.48</title></rect>
-<rect x="316.7" y="181.7" width="8.633" height="8.633" fill="#9ec7e4"><title>HF_severity 0.348, eGFR 32.5: 0.48</title></rect>
-<rect x="325" y="181.7" width="8.633" height="8.633" fill="#9ec7e4"><title>HF_severity 0.522, eGFR 32.5: 0.48</title></rect>
-<rect x="333.3" y="181.7" width="8.633" height="8.633" fill="#9ec7e4"><title>HF_severity 0.696, eGFR 32.5: 0.48</title></rect>
-<rect x="341.7" y="181.7" width="8.633" height="8.633" fill="#9ec7e4"><title>HF_severity 0.87, eGFR 32.5: 0.48</title></rect>
-<rect x="350" y="181.7" width="8.633" height="8.633" fill="#a0c8e5"><title>HF_severity 1.043, eGFR 32.5: 0.475</title></rect>
-<rect x="358.3" y="181.7" width="8.633" height="8.633" fill="#a8cce7"><title>HF_severity 1.217, eGFR 32.5: 0.457</title></rect>
-<rect x="366.7" y="181.7" width="8.633" height="8.633" fill="#b1d0e9"><title>HF_severity 1.391, eGFR 32.5: 0.438</title></rect>
-<rect x="375" y="181.7" width="8.633" height="8.633" fill="#b9d5eb"><title>HF_severity 1.565, eGFR 32.5: 0.42</title></rect>
-<rect x="383.3" y="181.7" width="8.633" height="8.633" fill="#c1d9ee"><title>HF_severity 1.739, eGFR 32.5: 0.401</title></rect>
-<rect x="391.7" y="181.7" width="8.633" height="8.633" fill="#c8dcf0"><title>HF_severity 1.913, eGFR 32.5: 0.383</title></rect>
-<rect x="400" y="181.7" width="8.633" height="8.633" fill="#ccdff1"><title>HF_severity 2.087, eGFR 32.5: 0.364</title></rect>
-<rect x="408.3" y="181.7" width="8.633" height="8.633" fill="#d1e2f3"><title>HF_severity 2.261, eGFR 32.5: 0.345</title></rect>
-<rect x="416.7" y="181.7" width="8.633" height="8.633" fill="#d6e5f4"><title>HF_severity 2.435, eGFR 32.5: 0.326</title></rect>
-<rect x="425" y="181.7" width="8.633" height="8.633" fill="#dae8f6"><title>HF_severity 2.609, eGFR 32.5: 0.307</title></rect>
-<rect x="433.3" y="181.7" width="8.633" height="8.633" fill="#dfebf7"><title>HF_severity 2.783, eGFR 32.5: 0.288</title></rect>
-<rect x="441.7" y="181.7" width="8.633" height="8.633" fill="#e3eef9"><title>HF_severity 2.957, eGFR 32.5: 0.269</title></rect>
+<rect x="308.3" y="181.7" width="8.633" height="8.633" fill="#a2c9e5"><title>HF_severity 0.174, eGFR 32.5: 0.47</title></rect>
+<rect x="316.7" y="181.7" width="8.633" height="8.633" fill="#a7cce6"><title>HF_severity 0.348, eGFR 32.5: 0.46</title></rect>
+<rect x="325" y="181.7" width="8.633" height="8.633" fill="#abcee8"><title>HF_severity 0.522, eGFR 32.5: 0.45</title></rect>
+<rect x="333.3" y="181.7" width="8.633" height="8.633" fill="#b0d0e9"><title>HF_severity 0.696, eGFR 32.5: 0.439</title></rect>
+<rect x="341.7" y="181.7" width="8.633" height="8.633" fill="#b4d2ea"><title>HF_severity 0.87, eGFR 32.5: 0.429</title></rect>
+<rect x="350" y="181.7" width="8.633" height="8.633" fill="#b9d5eb"><title>HF_severity 1.043, eGFR 32.5: 0.419</title></rect>
+<rect x="358.3" y="181.7" width="8.633" height="8.633" fill="#bdd7ed"><title>HF_severity 1.217, eGFR 32.5: 0.409</title></rect>
+<rect x="366.7" y="181.7" width="8.633" height="8.633" fill="#c2d9ee"><title>HF_severity 1.391, eGFR 32.5: 0.399</title></rect>
+<rect x="375" y="181.7" width="8.633" height="8.633" fill="#c6dbef"><title>HF_severity 1.565, eGFR 32.5: 0.389</title></rect>
+<rect x="383.3" y="181.7" width="8.633" height="8.633" fill="#c9ddf0"><title>HF_severity 1.739, eGFR 32.5: 0.379</title></rect>
+<rect x="391.7" y="181.7" width="8.633" height="8.633" fill="#cbdef1"><title>HF_severity 1.913, eGFR 32.5: 0.369</title></rect>
+<rect x="400" y="181.7" width="8.633" height="8.633" fill="#cee0f2"><title>HF_severity 2.087, eGFR 32.5: 0.355</title></rect>
+<rect x="408.3" y="181.7" width="8.633" height="8.633" fill="#d3e3f3"><title>HF_severity 2.261, eGFR 32.5: 0.338</title></rect>
+<rect x="416.7" y="181.7" width="8.633" height="8.633" fill="#d7e6f4"><title>HF_severity 2.435, eGFR 32.5: 0.32</title></rect>
+<rect x="425" y="181.7" width="8.633" height="8.633" fill="#dbe9f6"><title>HF_severity 2.609, eGFR 32.5: 0.303</title></rect>
+<rect x="433.3" y="181.7" width="8.633" height="8.633" fill="#dfebf7"><title>HF_severity 2.783, eGFR 32.5: 0.285</title></rect>
+<rect x="441.7" y="181.7" width="8.633" height="8.633" fill="#e3eef9"><title>HF_severity 2.957, eGFR 32.5: 0.268</title></rect>
 <rect x="450" y="181.7" width="8.633" height="8.633" fill="#e3eef9"><title>HF_severity 3.13, eGFR 32.5: 0.269</title></rect>
 <rect x="458.3" y="181.7" width="8.633" height="8.633" fill="#e2edf8"><title>HF_severity 3.304, eGFR 32.5: 0.275</title></rect>
-<rect x="466.7" y="181.7" width="8.633" height="8.633" fill="#e0ecf8"><title>HF_severity 3.478, eGFR 32.5: 0.282</title></rect>
-<rect x="475" y="181.7" width="8.633" height="8.633" fill="#dfebf7"><title>HF_severity 3.652, eGFR 32.5: 0.289</title></rect>
+<rect x="466.7" y="181.7" width="8.633" height="8.633" fill="#e0ecf7"><title>HF_severity 3.478, eGFR 32.5: 0.282</title></rect>
+<rect x="475" y="181.7" width="8.633" height="8.633" fill="#deebf7"><title>HF_severity 3.652, eGFR 32.5: 0.289</title></rect>
 <rect x="483.3" y="181.7" width="8.633" height="8.633" fill="#ddeaf6"><title>HF_severity 3.826, eGFR 32.5: 0.295</title></rect>
 <rect x="491.7" y="181.7" width="8.633" height="8.633" fill="#dbe9f6"><title>HF_severity 4, eGFR 32.5: 0.302</title></rect>
 <rect x="300" y="190" width="8.633" height="8.633" fill="#accee8"><title>HF_severity 0, eGFR 27.5: 0.449</title></rect>
-<rect x="308.3" y="190" width="8.633" height="8.633" fill="#accee8"><title>HF_severity 0.174, eGFR 27.5: 0.449</title></rect>
-<rect x="316.7" y="190" width="8.633" height="8.633" fill="#accee8"><title>HF_severity 0.348, eGFR 27.5: 0.449</title></rect>
-<rect x="325" y="190" width="8.633" height="8.633" fill="#accee8"><title>HF_severity 0.522, eGFR 27.5: 0.449</title></rect>
-<rect x="333.3" y="190" width="8.633" height="8.633" fill="#accee8"><title>HF_severity 0.696, eGFR 27.5: 0.449</title></rect>
-<rect x="341.7" y="190" width="8.633" height="8.633" fill="#accee8"><title>HF_severity 0.87, eGFR 27.5: 0.449</title></rect>
-<rect x="350" y="190" width="8.633" height="8.633" fill="#aecfe8"><title>HF_severity 1.043, eGFR 27.5: 0.445</title></rect>
-<rect x="358.3" y="190" width="8.633" height="8.633" fill="#b5d3ea"><title>HF_severity 1.217, eGFR 27.5: 0.427</title></rect>
-<rect x="366.7" y="190" width="8.633" height="8.633" fill="#bdd7ed"><title>HF_severity 1.391, eGFR 27.5: 0.41</title></rect>
-<rect x="375" y="190" width="8.633" height="8.633" fill="#c5daef"><title>HF_severity 1.565, eGFR 27.5: 0.393</title></rect>
-<rect x="383.3" y="190" width="8.633" height="8.633" fill="#caddf0"><title>HF_severity 1.739, eGFR 27.5: 0.375</title></rect>
-<rect x="391.7" y="190" width="8.633" height="8.633" fill="#cee0f2"><title>HF_severity 1.913, eGFR 27.5: 0.358</title></rect>
-<rect x="400" y="190" width="8.633" height="8.633" fill="#d2e3f3"><title>HF_severity 2.087, eGFR 27.5: 0.34</title></rect>
-<rect x="408.3" y="190" width="8.633" height="8.633" fill="#d6e6f4"><title>HF_severity 2.261, eGFR 27.5: 0.323</title></rect>
-<rect x="416.7" y="190" width="8.633" height="8.633" fill="#dbe8f6"><title>HF_severity 2.435, eGFR 27.5: 0.305</title></rect>
-<rect x="425" y="190" width="8.633" height="8.633" fill="#dfebf7"><title>HF_severity 2.609, eGFR 27.5: 0.287</title></rect>
-<rect x="433.3" y="190" width="8.633" height="8.633" fill="#e3eef9"><title>HF_severity 2.783, eGFR 27.5: 0.269</title></rect>
+<rect x="308.3" y="190" width="8.633" height="8.633" fill="#b0d0e9"><title>HF_severity 0.174, eGFR 27.5: 0.44</title></rect>
+<rect x="316.7" y="190" width="8.633" height="8.633" fill="#b4d2ea"><title>HF_severity 0.348, eGFR 27.5: 0.43</title></rect>
+<rect x="325" y="190" width="8.633" height="8.633" fill="#b8d4eb"><title>HF_severity 0.522, eGFR 27.5: 0.421</title></rect>
+<rect x="333.3" y="190" width="8.633" height="8.633" fill="#bcd6ec"><title>HF_severity 0.696, eGFR 27.5: 0.411</title></rect>
+<rect x="341.7" y="190" width="8.633" height="8.633" fill="#c1d8ee"><title>HF_severity 0.87, eGFR 27.5: 0.402</title></rect>
+<rect x="350" y="190" width="8.633" height="8.633" fill="#c5daef"><title>HF_severity 1.043, eGFR 27.5: 0.392</title></rect>
+<rect x="358.3" y="190" width="8.633" height="8.633" fill="#c8dcf0"><title>HF_severity 1.217, eGFR 27.5: 0.383</title></rect>
+<rect x="366.7" y="190" width="8.633" height="8.633" fill="#cadef0"><title>HF_severity 1.391, eGFR 27.5: 0.374</title></rect>
+<rect x="375" y="190" width="8.633" height="8.633" fill="#ccdff1"><title>HF_severity 1.565, eGFR 27.5: 0.364</title></rect>
+<rect x="383.3" y="190" width="8.633" height="8.633" fill="#cfe1f2"><title>HF_severity 1.739, eGFR 27.5: 0.355</title></rect>
+<rect x="391.7" y="190" width="8.633" height="8.633" fill="#d1e2f3"><title>HF_severity 1.913, eGFR 27.5: 0.345</title></rect>
+<rect x="400" y="190" width="8.633" height="8.633" fill="#d4e4f4"><title>HF_severity 2.087, eGFR 27.5: 0.332</title></rect>
+<rect x="408.3" y="190" width="8.633" height="8.633" fill="#d8e7f5"><title>HF_severity 2.261, eGFR 27.5: 0.316</title></rect>
+<rect x="416.7" y="190" width="8.633" height="8.633" fill="#dce9f6"><title>HF_severity 2.435, eGFR 27.5: 0.3</title></rect>
+<rect x="425" y="190" width="8.633" height="8.633" fill="#e0ecf7"><title>HF_severity 2.609, eGFR 27.5: 0.283</title></rect>
+<rect x="433.3" y="190" width="8.633" height="8.633" fill="#e4eef9"><title>HF_severity 2.783, eGFR 27.5: 0.267</title></rect>
 <rect x="441.7" y="190" width="8.633" height="8.633" fill="#e8f1fa"><title>HF_severity 2.957, eGFR 27.5: 0.251</title></rect>
-<rect x="450" y="190" width="8.633" height="8.633" fill="#e7f1fa"><title>HF_severity 3.13, eGFR 27.5: 0.252</title></rect>
+<rect x="450" y="190" width="8.633" height="8.633" fill="#e7f1fa"><title>HF_severity 3.13, eGFR 27.5: 0.251</title></rect>
 <rect x="458.3" y="190" width="8.633" height="8.633" fill="#e6f0f9"><title>HF_severity 3.304, eGFR 27.5: 0.258</title></rect>
-<rect x="466.7" y="190" width="8.633" height="8.633" fill="#e5eff9"><title>HF_severity 3.478, eGFR 27.5: 0.264</title></rect>
+<rect x="466.7" y="190" width="8.633" height="8.633" fill="#e4eff9"><title>HF_severity 3.478, eGFR 27.5: 0.264</title></rect>
 <rect x="475" y="190" width="8.633" height="8.633" fill="#e3eef8"><title>HF_severity 3.652, eGFR 27.5: 0.27</title></rect>
-<rect x="483.3" y="190" width="8.633" height="8.633" fill="#e2edf8"><title>HF_severity 3.826, eGFR 27.5: 0.276</title></rect>
-<rect x="491.7" y="190" width="8.633" height="8.633" fill="#e0ecf8"><title>HF_severity 4, eGFR 27.5: 0.282</title></rect>
-<rect x="300" y="198.3" width="8.633" height="8.633" fill="#bad5ec"><title>HF_severity 0, eGFR 22.5: 0.418</title></rect>
-<rect x="308.3" y="198.3" width="8.633" height="8.633" fill="#bad5ec"><title>HF_severity 0.174, eGFR 22.5: 0.418</title></rect>
-<rect x="316.7" y="198.3" width="8.633" height="8.633" fill="#bad5ec"><title>HF_severity 0.348, eGFR 22.5: 0.418</title></rect>
-<rect x="325" y="198.3" width="8.633" height="8.633" fill="#bad5ec"><title>HF_severity 0.522, eGFR 22.5: 0.418</title></rect>
-<rect x="333.3" y="198.3" width="8.633" height="8.633" fill="#bad5ec"><title>HF_severity 0.696, eGFR 22.5: 0.418</title></rect>
-<rect x="341.7" y="198.3" width="8.633" height="8.633" fill="#bad5ec"><title>HF_severity 0.87, eGFR 22.5: 0.418</title></rect>
-<rect x="350" y="198.3" width="8.633" height="8.633" fill="#bbd6ec"><title>HF_severity 1.043, eGFR 22.5: 0.414</title></rect>
-<rect x="358.3" y="198.3" width="8.633" height="8.633" fill="#c3d9ee"><title>HF_severity 1.217, eGFR 22.5: 0.398</title></rect>
-<rect x="366.7" y="198.3" width="8.633" height="8.633" fill="#c8dcf0"><title>HF_severity 1.391, eGFR 22.5: 0.382</title></rect>
-<rect x="375" y="198.3" width="8.633" height="8.633" fill="#ccdff1"><title>HF_severity 1.565, eGFR 22.5: 0.366</title></rect>
-<rect x="383.3" y="198.3" width="8.633" height="8.633" fill="#d0e1f2"><title>HF_severity 1.739, eGFR 22.5: 0.35</title></rect>
-<rect x="391.7" y="198.3" width="8.633" height="8.633" fill="#d4e4f3"><title>HF_severity 1.913, eGFR 22.5: 0.334</title></rect>
-<rect x="400" y="198.3" width="8.633" height="8.633" fill="#d8e7f5"><title>HF_severity 2.087, eGFR 22.5: 0.317</title></rect>
-<rect x="408.3" y="198.3" width="8.633" height="8.633" fill="#dce9f6"><title>HF_severity 2.261, eGFR 22.5: 0.301</title></rect>
-<rect x="416.7" y="198.3" width="8.633" height="8.633" fill="#e0ecf7"><title>HF_severity 2.435, eGFR 22.5: 0.284</title></rect>
-<rect x="425" y="198.3" width="8.633" height="8.633" fill="#e4eef9"><title>HF_severity 2.609, eGFR 22.5: 0.267</title></rect>
-<rect x="433.3" y="198.3" width="8.633" height="8.633" fill="#e8f1fa"><title>HF_severity 2.783, eGFR 22.5: 0.251</title></rect>
+<rect x="483.3" y="190" width="8.633" height="8.633" fill="#e1edf8"><title>HF_severity 3.826, eGFR 27.5: 0.277</title></rect>
+<rect x="491.7" y="190" width="8.633" height="8.633" fill="#e0ecf7"><title>HF_severity 4, eGFR 27.5: 0.283</title></rect>
+<rect x="300" y="198.3" width="8.633" height="8.633" fill="#b9d5ec"><title>HF_severity 0, eGFR 22.5: 0.418</title></rect>
+<rect x="308.3" y="198.3" width="8.633" height="8.633" fill="#bdd7ed"><title>HF_severity 0.174, eGFR 22.5: 0.41</title></rect>
+<rect x="316.7" y="198.3" width="8.633" height="8.633" fill="#c1d9ee"><title>HF_severity 0.348, eGFR 22.5: 0.401</title></rect>
+<rect x="325" y="198.3" width="8.633" height="8.633" fill="#c5dbef"><title>HF_severity 0.522, eGFR 22.5: 0.392</title></rect>
+<rect x="333.3" y="198.3" width="8.633" height="8.633" fill="#c8dcf0"><title>HF_severity 0.696, eGFR 22.5: 0.383</title></rect>
+<rect x="341.7" y="198.3" width="8.633" height="8.633" fill="#caddf0"><title>HF_severity 0.87, eGFR 22.5: 0.374</title></rect>
+<rect x="350" y="198.3" width="8.633" height="8.633" fill="#ccdff1"><title>HF_severity 1.043, eGFR 22.5: 0.366</title></rect>
+<rect x="358.3" y="198.3" width="8.633" height="8.633" fill="#cee0f2"><title>HF_severity 1.217, eGFR 22.5: 0.357</title></rect>
+<rect x="366.7" y="198.3" width="8.633" height="8.633" fill="#d0e2f2"><title>HF_severity 1.391, eGFR 22.5: 0.348</title></rect>
+<rect x="375" y="198.3" width="8.633" height="8.633" fill="#d2e3f3"><title>HF_severity 1.565, eGFR 22.5: 0.339</title></rect>
+<rect x="383.3" y="198.3" width="8.633" height="8.633" fill="#d4e4f4"><title>HF_severity 1.739, eGFR 22.5: 0.33</title></rect>
+<rect x="391.7" y="198.3" width="8.633" height="8.633" fill="#d6e6f4"><title>HF_severity 1.913, eGFR 22.5: 0.322</title></rect>
+<rect x="400" y="198.3" width="8.633" height="8.633" fill="#d9e8f5"><title>HF_severity 2.087, eGFR 22.5: 0.31</title></rect>
+<rect x="408.3" y="198.3" width="8.633" height="8.633" fill="#ddeaf7"><title>HF_severity 2.261, eGFR 22.5: 0.294</title></rect>
+<rect x="416.7" y="198.3" width="8.633" height="8.633" fill="#e1ecf8"><title>HF_severity 2.435, eGFR 22.5: 0.279</title></rect>
+<rect x="425" y="198.3" width="8.633" height="8.633" fill="#e4eff9"><title>HF_severity 2.609, eGFR 22.5: 0.264</title></rect>
+<rect x="433.3" y="198.3" width="8.633" height="8.633" fill="#e8f1fa"><title>HF_severity 2.783, eGFR 22.5: 0.249</title></rect>
 <rect x="441.7" y="198.3" width="8.633" height="8.633" fill="#ecf4fb"><title>HF_severity 2.957, eGFR 22.5: 0.234</title></rect>
 <rect x="450" y="198.3" width="8.633" height="8.633" fill="#ecf4fb"><title>HF_severity 3.13, eGFR 22.5: 0.234</title></rect>
 <rect x="458.3" y="198.3" width="8.633" height="8.633" fill="#eaf3fb"><title>HF_severity 3.304, eGFR 22.5: 0.24</title></rect>
 <rect x="466.7" y="198.3" width="8.633" height="8.633" fill="#e9f2fa"><title>HF_severity 3.478, eGFR 22.5: 0.246</title></rect>
 <rect x="475" y="198.3" width="8.633" height="8.633" fill="#e7f1fa"><title>HF_severity 3.652, eGFR 22.5: 0.252</title></rect>
-<rect x="483.3" y="198.3" width="8.633" height="8.633" fill="#e6f0f9"><title>HF_severity 3.826, eGFR 22.5: 0.257</title></rect>
+<rect x="483.3" y="198.3" width="8.633" height="8.633" fill="#e6f0f9"><title>HF_severity 3.826, eGFR 22.5: 0.258</title></rect>
 <rect x="491.7" y="198.3" width="8.633" height="8.633" fill="#e5eff9"><title>HF_severity 4, eGFR 22.5: 0.263</title></rect>
 <rect x="300" y="206.7" width="8.633" height="8.633" fill="#c6dbef"><title>HF_severity 0, eGFR 17.5: 0.39</title></rect>
-<rect x="308.3" y="206.7" width="8.633" height="8.633" fill="#c6dbef"><title>HF_severity 0.174, eGFR 17.5: 0.39</title></rect>
-<rect x="316.7" y="206.7" width="8.633" height="8.633" fill="#c6dbef"><title>HF_severity 0.348, eGFR 17.5: 0.39</title></rect>
-<rect x="325" y="206.7" width="8.633" height="8.633" fill="#c6dbef"><title>HF_severity 0.522, eGFR 17.5: 0.39</title></rect>
-<rect x="333.3" y="206.7" width="8.633" height="8.633" fill="#c6dbef"><title>HF_severity 0.696, eGFR 17.5: 0.39</title></rect>
-<rect x="341.7" y="206.7" width="8.633" height="8.633" fill="#c6dbef"><title>HF_severity 0.87, eGFR 17.5: 0.39</title></rect>
-<rect x="350" y="206.7" width="8.633" height="8.633" fill="#c7dcef"><title>HF_severity 1.043, eGFR 17.5: 0.387</title></rect>
-<rect x="358.3" y="206.7" width="8.633" height="8.633" fill="#cbdef0"><title>HF_severity 1.217, eGFR 17.5: 0.371</title></rect>
-<rect x="366.7" y="206.7" width="8.633" height="8.633" fill="#cee0f2"><title>HF_severity 1.391, eGFR 17.5: 0.356</title></rect>
-<rect x="375" y="206.7" width="8.633" height="8.633" fill="#d2e3f3"><title>HF_severity 1.565, eGFR 17.5: 0.341</title></rect>
-<rect x="383.3" y="206.7" width="8.633" height="8.633" fill="#d5e5f4"><title>HF_severity 1.739, eGFR 17.5: 0.326</title></rect>
-<rect x="391.7" y="206.7" width="8.633" height="8.633" fill="#d9e7f5"><title>HF_severity 1.913, eGFR 17.5: 0.311</title></rect>
-<rect x="400" y="206.7" width="8.633" height="8.633" fill="#ddeaf6"><title>HF_severity 2.087, eGFR 17.5: 0.296</title></rect>
-<rect x="408.3" y="206.7" width="8.633" height="8.633" fill="#e1ecf8"><title>HF_severity 2.261, eGFR 17.5: 0.28</title></rect>
-<rect x="416.7" y="206.7" width="8.633" height="8.633" fill="#e4eff9"><title>HF_severity 2.435, eGFR 17.5: 0.265</title></rect>
-<rect x="425" y="206.7" width="8.633" height="8.633" fill="#e8f1fa"><title>HF_severity 2.609, eGFR 17.5: 0.25</title></rect>
-<rect x="433.3" y="206.7" width="8.633" height="8.633" fill="#ecf4fb"><title>HF_severity 2.783, eGFR 17.5: 0.234</title></rect>
-<rect x="441.7" y="206.7" width="8.633" height="8.633" fill="#eff6fd"><title>HF_severity 2.957, eGFR 17.5: 0.219</title></rect>
-<rect x="450" y="206.7" width="8.633" height="8.633" fill="#eff6fd"><title>HF_severity 3.13, eGFR 17.5: 0.219</title></rect>
+<rect x="308.3" y="206.7" width="8.633" height="8.633" fill="#c8dcf0"><title>HF_severity 0.174, eGFR 17.5: 0.382</title></rect>
+<rect x="316.7" y="206.7" width="8.633" height="8.633" fill="#cadef0"><title>HF_severity 0.348, eGFR 17.5: 0.374</title></rect>
+<rect x="325" y="206.7" width="8.633" height="8.633" fill="#ccdff1"><title>HF_severity 0.522, eGFR 17.5: 0.366</title></rect>
+<rect x="333.3" y="206.7" width="8.633" height="8.633" fill="#cee0f2"><title>HF_severity 0.696, eGFR 17.5: 0.358</title></rect>
+<rect x="341.7" y="206.7" width="8.633" height="8.633" fill="#d0e1f2"><title>HF_severity 0.87, eGFR 17.5: 0.349</title></rect>
+<rect x="350" y="206.7" width="8.633" height="8.633" fill="#d2e3f3"><title>HF_severity 1.043, eGFR 17.5: 0.341</title></rect>
+<rect x="358.3" y="206.7" width="8.633" height="8.633" fill="#d4e4f3"><title>HF_severity 1.217, eGFR 17.5: 0.333</title></rect>
+<rect x="366.7" y="206.7" width="8.633" height="8.633" fill="#d6e5f4"><title>HF_severity 1.391, eGFR 17.5: 0.325</title></rect>
+<rect x="375" y="206.7" width="8.633" height="8.633" fill="#d8e7f5"><title>HF_severity 1.565, eGFR 17.5: 0.317</title></rect>
+<rect x="383.3" y="206.7" width="8.633" height="8.633" fill="#dae8f5"><title>HF_severity 1.739, eGFR 17.5: 0.308</title></rect>
+<rect x="391.7" y="206.7" width="8.633" height="8.633" fill="#dce9f6"><title>HF_severity 1.913, eGFR 17.5: 0.3</title></rect>
+<rect x="400" y="206.7" width="8.633" height="8.633" fill="#deebf7"><title>HF_severity 2.087, eGFR 17.5: 0.289</title></rect>
+<rect x="408.3" y="206.7" width="8.633" height="8.633" fill="#e2edf8"><title>HF_severity 2.261, eGFR 17.5: 0.275</title></rect>
+<rect x="416.7" y="206.7" width="8.633" height="8.633" fill="#e5eff9"><title>HF_severity 2.435, eGFR 17.5: 0.261</title></rect>
+<rect x="425" y="206.7" width="8.633" height="8.633" fill="#e9f2fa"><title>HF_severity 2.609, eGFR 17.5: 0.246</title></rect>
+<rect x="433.3" y="206.7" width="8.633" height="8.633" fill="#ecf4fb"><title>HF_severity 2.783, eGFR 17.5: 0.232</title></rect>
+<rect x="441.7" y="206.7" width="8.633" height="8.633" fill="#eff6fd"><title>HF_severity 2.957, eGFR 17.5: 0.218</title></rect>
+<rect x="450" y="206.7" width="8.633" height="8.633" fill="#eff6fc"><title>HF_severity 3.13, eGFR 17.5: 0.218</title></rect>
 <rect x="458.3" y="206.7" width="8.633" height="8.633" fill="#eef5fc"><title>HF_severity 3.304, eGFR 17.5: 0.224</title></rect>
 <rect x="466.7" y="206.7" width="8.633" height="8.633" fill="#edf4fc"><title>HF_severity 3.478, eGFR 17.5: 0.229</title></rect>
-<rect x="475" y="206.7" width="8.633" height="8.633" fill="#ecf4fb"><title>HF_severity 3.652, eGFR 17.5: 0.235</title></rect>
+<rect x="475" y="206.7" width="8.633" height="8.633" fill="#ebf3fb"><title>HF_severity 3.652, eGFR 17.5: 0.235</title></rect>
 <rect x="483.3" y="206.7" width="8.633" height="8.633" fill="#eaf3fb"><title>HF_severity 3.826, eGFR 17.5: 0.24</title></rect>
 <rect x="491.7" y="206.7" width="8.633" height="8.633" fill="#e9f2fa"><title>HF_severity 4, eGFR 17.5: 0.246</title></rect>
 <rect x="300" y="215" width="8.633" height="8.633" fill="#cddff1"><title>HF_severity 0, eGFR 12.5: 0.362</title></rect>
-<rect x="308.3" y="215" width="8.633" height="8.633" fill="#cddff1"><title>HF_severity 0.174, eGFR 12.5: 0.362</title></rect>
-<rect x="316.7" y="215" width="8.633" height="8.633" fill="#cddff1"><title>HF_severity 0.348, eGFR 12.5: 0.362</title></rect>
-<rect x="325" y="215" width="8.633" height="8.633" fill="#cddff1"><title>HF_severity 0.522, eGFR 12.5: 0.362</title></rect>
-<rect x="333.3" y="215" width="8.633" height="8.633" fill="#cddff1"><title>HF_severity 0.696, eGFR 12.5: 0.362</title></rect>
-<rect x="341.7" y="215" width="8.633" height="8.633" fill="#cddff1"><title>HF_severity 0.87, eGFR 12.5: 0.362</title></rect>
-<rect x="350" y="215" width="8.633" height="8.633" fill="#cee0f1"><title>HF_severity 1.043, eGFR 12.5: 0.359</title></rect>
-<rect x="358.3" y="215" width="8.633" height="8.633" fill="#d1e2f3"><title>HF_severity 1.217, eGFR 12.5: 0.345</title></rect>
-<rect x="366.7" y="215" width="8.633" height="8.633" fill="#d4e4f4"><title>HF_severity 1.391, eGFR 12.5: 0.331</title></rect>
-<rect x="375" y="215" width="8.633" height="8.633" fill="#d8e7f5"><title>HF_severity 1.565, eGFR 12.5: 0.317</title></rect>
-<rect x="383.3" y="215" width="8.633" height="8.633" fill="#dbe9f6"><title>HF_severity 1.739, eGFR 12.5: 0.303</title></rect>
-<rect x="391.7" y="215" width="8.633" height="8.633" fill="#deebf7"><title>HF_severity 1.913, eGFR 12.5: 0.289</title></rect>
-<rect x="400" y="215" width="8.633" height="8.633" fill="#e2edf8"><title>HF_severity 2.087, eGFR 12.5: 0.275</title></rect>
-<rect x="408.3" y="215" width="8.633" height="8.633" fill="#e5eff9"><title>HF_severity 2.261, eGFR 12.5: 0.26</title></rect>
-<rect x="416.7" y="215" width="8.633" height="8.633" fill="#e9f2fa"><title>HF_severity 2.435, eGFR 12.5: 0.246</title></rect>
-<rect x="425" y="215" width="8.633" height="8.633" fill="#ecf4fc"><title>HF_severity 2.609, eGFR 12.5: 0.232</title></rect>
-<rect x="433.3" y="215" width="8.633" height="8.633" fill="#f0f6fd"><title>HF_severity 2.783, eGFR 12.5: 0.217</title></rect>
-<rect x="441.7" y="215" width="8.633" height="8.633" fill="#f3f9fe"><title>HF_severity 2.957, eGFR 12.5: 0.203</title></rect>
-<rect x="450" y="215" width="8.633" height="8.633" fill="#f3f9fe"><title>HF_severity 3.13, eGFR 12.5: 0.203</title></rect>
+<rect x="308.3" y="215" width="8.633" height="8.633" fill="#cee1f2"><title>HF_severity 0.174, eGFR 12.5: 0.355</title></rect>
+<rect x="316.7" y="215" width="8.633" height="8.633" fill="#d0e2f2"><title>HF_severity 0.348, eGFR 12.5: 0.347</title></rect>
+<rect x="325" y="215" width="8.633" height="8.633" fill="#d2e3f3"><title>HF_severity 0.522, eGFR 12.5: 0.34</title></rect>
+<rect x="333.3" y="215" width="8.633" height="8.633" fill="#d4e4f4"><title>HF_severity 0.696, eGFR 12.5: 0.332</title></rect>
+<rect x="341.7" y="215" width="8.633" height="8.633" fill="#d6e5f4"><title>HF_severity 0.87, eGFR 12.5: 0.324</title></rect>
+<rect x="350" y="215" width="8.633" height="8.633" fill="#d8e7f5"><title>HF_severity 1.043, eGFR 12.5: 0.317</title></rect>
+<rect x="358.3" y="215" width="8.633" height="8.633" fill="#dae8f5"><title>HF_severity 1.217, eGFR 12.5: 0.309</title></rect>
+<rect x="366.7" y="215" width="8.633" height="8.633" fill="#dbe9f6"><title>HF_severity 1.391, eGFR 12.5: 0.301</title></rect>
+<rect x="375" y="215" width="8.633" height="8.633" fill="#ddeaf7"><title>HF_severity 1.565, eGFR 12.5: 0.294</title></rect>
+<rect x="383.3" y="215" width="8.633" height="8.633" fill="#dfebf7"><title>HF_severity 1.739, eGFR 12.5: 0.286</title></rect>
+<rect x="391.7" y="215" width="8.633" height="8.633" fill="#e1edf8"><title>HF_severity 1.913, eGFR 12.5: 0.279</title></rect>
+<rect x="400" y="215" width="8.633" height="8.633" fill="#e3eef9"><title>HF_severity 2.087, eGFR 12.5: 0.268</title></rect>
+<rect x="408.3" y="215" width="8.633" height="8.633" fill="#e7f0fa"><title>HF_severity 2.261, eGFR 12.5: 0.255</title></rect>
+<rect x="416.7" y="215" width="8.633" height="8.633" fill="#eaf2fb"><title>HF_severity 2.435, eGFR 12.5: 0.242</title></rect>
+<rect x="425" y="215" width="8.633" height="8.633" fill="#edf4fc"><title>HF_severity 2.609, eGFR 12.5: 0.229</title></rect>
+<rect x="433.3" y="215" width="8.633" height="8.633" fill="#f0f6fd"><title>HF_severity 2.783, eGFR 12.5: 0.215</title></rect>
+<rect x="441.7" y="215" width="8.633" height="8.633" fill="#f3f9fe"><title>HF_severity 2.957, eGFR 12.5: 0.202</title></rect>
+<rect x="450" y="215" width="8.633" height="8.633" fill="#f3f8fe"><title>HF_severity 3.13, eGFR 12.5: 0.203</title></rect>
 <rect x="458.3" y="215" width="8.633" height="8.633" fill="#f2f8fd"><title>HF_severity 3.304, eGFR 12.5: 0.208</title></rect>
 <rect x="466.7" y="215" width="8.633" height="8.633" fill="#f1f7fd"><title>HF_severity 3.478, eGFR 12.5: 0.213</title></rect>
-<rect x="475" y="215" width="8.633" height="8.633" fill="#f0f6fd"><title>HF_severity 3.652, eGFR 12.5: 0.218</title></rect>
+<rect x="475" y="215" width="8.633" height="8.633" fill="#eff6fd"><title>HF_severity 3.652, eGFR 12.5: 0.218</title></rect>
 <rect x="483.3" y="215" width="8.633" height="8.633" fill="#eef5fc"><title>HF_severity 3.826, eGFR 12.5: 0.223</title></rect>
-<rect x="491.7" y="215" width="8.633" height="8.633" fill="#edf5fc"><title>HF_severity 4, eGFR 12.5: 0.228</title></rect>
-<rect x="300" y="223.3" width="8.633" height="8.633" fill="#d4e4f3"><title>HF_severity 0, eGFR 7.5: 0.334</title></rect>
-<rect x="308.3" y="223.3" width="8.633" height="8.633" fill="#d4e4f3"><title>HF_severity 0.174, eGFR 7.5: 0.334</title></rect>
-<rect x="316.7" y="223.3" width="8.633" height="8.633" fill="#d4e4f3"><title>HF_severity 0.348, eGFR 7.5: 0.334</title></rect>
-<rect x="325" y="223.3" width="8.633" height="8.633" fill="#d4e4f3"><title>HF_severity 0.522, eGFR 7.5: 0.334</title></rect>
-<rect x="333.3" y="223.3" width="8.633" height="8.633" fill="#d4e4f3"><title>HF_severity 0.696, eGFR 7.5: 0.334</title></rect>
-<rect x="341.7" y="223.3" width="8.633" height="8.633" fill="#d4e4f3"><title>HF_severity 0.87, eGFR 7.5: 0.334</title></rect>
-<rect x="350" y="223.3" width="8.633" height="8.633" fill="#d4e4f4"><title>HF_severity 1.043, eGFR 7.5: 0.331</title></rect>
-<rect x="358.3" y="223.3" width="8.633" height="8.633" fill="#d7e6f5"><title>HF_severity 1.217, eGFR 7.5: 0.318</title></rect>
-<rect x="366.7" y="223.3" width="8.633" height="8.633" fill="#dbe8f6"><title>HF_severity 1.391, eGFR 7.5: 0.305</title></rect>
-<rect x="375" y="223.3" width="8.633" height="8.633" fill="#deeaf7"><title>HF_severity 1.565, eGFR 7.5: 0.292</title></rect>
-<rect x="383.3" y="223.3" width="8.633" height="8.633" fill="#e1ecf8"><title>HF_severity 1.739, eGFR 7.5: 0.28</title></rect>
-<rect x="391.7" y="223.3" width="8.633" height="8.633" fill="#e4eef9"><title>HF_severity 1.913, eGFR 7.5: 0.267</title></rect>
-<rect x="400" y="223.3" width="8.633" height="8.633" fill="#e7f1fa"><title>HF_severity 2.087, eGFR 7.5: 0.254</title></rect>
-<rect x="408.3" y="223.3" width="8.633" height="8.633" fill="#eaf3fb"><title>HF_severity 2.261, eGFR 7.5: 0.24</title></rect>
-<rect x="416.7" y="223.3" width="8.633" height="8.633" fill="#edf5fc"><title>HF_severity 2.435, eGFR 7.5: 0.227</title></rect>
-<rect x="425" y="223.3" width="8.633" height="8.633" fill="#f1f7fd"><title>HF_severity 2.609, eGFR 7.5: 0.214</title></rect>
-<rect x="433.3" y="223.3" width="8.633" height="8.633" fill="#f4f9fe"><title>HF_severity 2.783, eGFR 7.5: 0.2</title></rect>
+<rect x="491.7" y="215" width="8.633" height="8.633" fill="#edf4fc"><title>HF_severity 4, eGFR 12.5: 0.228</title></rect>
+<rect x="300" y="223.3" width="8.633" height="8.633" fill="#d3e4f3"><title>HF_severity 0, eGFR 7.5: 0.334</title></rect>
+<rect x="308.3" y="223.3" width="8.633" height="8.633" fill="#d5e5f4"><title>HF_severity 0.174, eGFR 7.5: 0.327</title></rect>
+<rect x="316.7" y="223.3" width="8.633" height="8.633" fill="#d7e6f4"><title>HF_severity 0.348, eGFR 7.5: 0.32</title></rect>
+<rect x="325" y="223.3" width="8.633" height="8.633" fill="#d8e7f5"><title>HF_severity 0.522, eGFR 7.5: 0.313</title></rect>
+<rect x="333.3" y="223.3" width="8.633" height="8.633" fill="#dae8f6"><title>HF_severity 0.696, eGFR 7.5: 0.306</title></rect>
+<rect x="341.7" y="223.3" width="8.633" height="8.633" fill="#dce9f6"><title>HF_severity 0.87, eGFR 7.5: 0.299</title></rect>
+<rect x="350" y="223.3" width="8.633" height="8.633" fill="#deeaf7"><title>HF_severity 1.043, eGFR 7.5: 0.292</title></rect>
+<rect x="358.3" y="223.3" width="8.633" height="8.633" fill="#dfebf7"><title>HF_severity 1.217, eGFR 7.5: 0.285</title></rect>
+<rect x="366.7" y="223.3" width="8.633" height="8.633" fill="#e1edf8"><title>HF_severity 1.391, eGFR 7.5: 0.278</title></rect>
+<rect x="375" y="223.3" width="8.633" height="8.633" fill="#e3eef8"><title>HF_severity 1.565, eGFR 7.5: 0.271</title></rect>
+<rect x="383.3" y="223.3" width="8.633" height="8.633" fill="#e4eff9"><title>HF_severity 1.739, eGFR 7.5: 0.264</title></rect>
+<rect x="391.7" y="223.3" width="8.633" height="8.633" fill="#e6f0f9"><title>HF_severity 1.913, eGFR 7.5: 0.257</title></rect>
+<rect x="400" y="223.3" width="8.633" height="8.633" fill="#e8f1fa"><title>HF_severity 2.087, eGFR 7.5: 0.248</title></rect>
+<rect x="408.3" y="223.3" width="8.633" height="8.633" fill="#ebf3fb"><title>HF_severity 2.261, eGFR 7.5: 0.235</title></rect>
+<rect x="416.7" y="223.3" width="8.633" height="8.633" fill="#eef5fc"><title>HF_severity 2.435, eGFR 7.5: 0.223</title></rect>
+<rect x="425" y="223.3" width="8.633" height="8.633" fill="#f1f7fd"><title>HF_severity 2.609, eGFR 7.5: 0.211</title></rect>
+<rect x="433.3" y="223.3" width="8.633" height="8.633" fill="#f4f9fe"><title>HF_severity 2.783, eGFR 7.5: 0.199</title></rect>
 <rect x="441.7" y="223.3" width="8.633" height="8.633" fill="#f7fbff"><title>HF_severity 2.957, eGFR 7.5: 0.187</title></rect>
 <rect x="450" y="223.3" width="8.633" height="8.633" fill="#f7fbff"><title>HF_severity 3.13, eGFR 7.5: 0.187</title></rect>
 <rect x="458.3" y="223.3" width="8.633" height="8.633" fill="#f6faff"><title>HF_severity 3.304, eGFR 7.5: 0.192</title></rect>
-<rect x="466.7" y="223.3" width="8.633" height="8.633" fill="#f5fafe"><title>HF_severity 3.478, eGFR 7.5: 0.197</title></rect>
-<rect x="475" y="223.3" width="8.633" height="8.633" fill="#f4f9fe"><title>HF_severity 3.652, eGFR 7.5: 0.201</title></rect>
-<rect x="483.3" y="223.3" width="8.633" height="8.633" fill="#f3f8fe"><title>HF_severity 3.826, eGFR 7.5: 0.206</title></rect>
-<rect x="491.7" y="223.3" width="8.633" height="8.633" fill="#f1f7fd"><title>HF_severity 4, eGFR 7.5: 0.21</title></rect>
-<rect x="300" y="231.7" width="8.633" height="8.633" fill="#d4e4f3"><title>HF_severity 0, eGFR 2.5: 0.334</title></rect>
-<rect x="308.3" y="231.7" width="8.633" height="8.633" fill="#d4e4f3"><title>HF_severity 0.174, eGFR 2.5: 0.334</title></rect>
-<rect x="316.7" y="231.7" width="8.633" height="8.633" fill="#d4e4f3"><title>HF_severity 0.348, eGFR 2.5: 0.334</title></rect>
-<rect x="325" y="231.7" width="8.633" height="8.633" fill="#d4e4f3"><title>HF_severity 0.522, eGFR 2.5: 0.334</title></rect>
-<rect x="333.3" y="231.7" width="8.633" height="8.633" fill="#d4e4f3"><title>HF_severity 0.696, eGFR 2.5: 0.334</title></rect>
-<rect x="341.7" y="231.7" width="8.633" height="8.633" fill="#d4e4f3"><title>HF_severity 0.87, eGFR 2.5: 0.334</title></rect>
-<rect x="350" y="231.7" width="8.633" height="8.633" fill="#d4e4f4"><title>HF_severity 1.043, eGFR 2.5: 0.331</title></rect>
-<rect x="358.3" y="231.7" width="8.633" height="8.633" fill="#d7e6f5"><title>HF_severity 1.217, eGFR 2.5: 0.318</title></rect>
-<rect x="366.7" y="231.7" width="8.633" height="8.633" fill="#dbe8f6"><title>HF_severity 1.391, eGFR 2.5: 0.305</title></rect>
-<rect x="375" y="231.7" width="8.633" height="8.633" fill="#deeaf7"><title>HF_severity 1.565, eGFR 2.5: 0.292</title></rect>
-<rect x="383.3" y="231.7" width="8.633" height="8.633" fill="#e1ecf8"><title>HF_severity 1.739, eGFR 2.5: 0.28</title></rect>
-<rect x="391.7" y="231.7" width="8.633" height="8.633" fill="#e4eef9"><title>HF_severity 1.913, eGFR 2.5: 0.267</title></rect>
-<rect x="400" y="231.7" width="8.633" height="8.633" fill="#e7f1fa"><title>HF_severity 2.087, eGFR 2.5: 0.254</title></rect>
-<rect x="408.3" y="231.7" width="8.633" height="8.633" fill="#eaf3fb"><title>HF_severity 2.261, eGFR 2.5: 0.24</title></rect>
-<rect x="416.7" y="231.7" width="8.633" height="8.633" fill="#edf5fc"><title>HF_severity 2.435, eGFR 2.5: 0.227</title></rect>
-<rect x="425" y="231.7" width="8.633" height="8.633" fill="#f1f7fd"><title>HF_severity 2.609, eGFR 2.5: 0.214</title></rect>
-<rect x="433.3" y="231.7" width="8.633" height="8.633" fill="#f4f9fe"><title>HF_severity 2.783, eGFR 2.5: 0.2</title></rect>
+<rect x="466.7" y="223.3" width="8.633" height="8.633" fill="#f5f9fe"><title>HF_severity 3.478, eGFR 7.5: 0.197</title></rect>
+<rect x="475" y="223.3" width="8.633" height="8.633" fill="#f3f9fe"><title>HF_severity 3.652, eGFR 7.5: 0.201</title></rect>
+<rect x="483.3" y="223.3" width="8.633" height="8.633" fill="#f2f8fd"><title>HF_severity 3.826, eGFR 7.5: 0.206</title></rect>
+<rect x="491.7" y="223.3" width="8.633" height="8.633" fill="#f1f7fd"><title>HF_severity 4, eGFR 7.5: 0.211</title></rect>
+<rect x="300" y="231.7" width="8.633" height="8.633" fill="#d3e4f3"><title>HF_severity 0, eGFR 2.5: 0.334</title></rect>
+<rect x="308.3" y="231.7" width="8.633" height="8.633" fill="#d5e5f4"><title>HF_severity 0.174, eGFR 2.5: 0.327</title></rect>
+<rect x="316.7" y="231.7" width="8.633" height="8.633" fill="#d7e6f4"><title>HF_severity 0.348, eGFR 2.5: 0.32</title></rect>
+<rect x="325" y="231.7" width="8.633" height="8.633" fill="#d8e7f5"><title>HF_severity 0.522, eGFR 2.5: 0.313</title></rect>
+<rect x="333.3" y="231.7" width="8.633" height="8.633" fill="#dae8f6"><title>HF_severity 0.696, eGFR 2.5: 0.306</title></rect>
+<rect x="341.7" y="231.7" width="8.633" height="8.633" fill="#dce9f6"><title>HF_severity 0.87, eGFR 2.5: 0.299</title></rect>
+<rect x="350" y="231.7" width="8.633" height="8.633" fill="#deeaf7"><title>HF_severity 1.043, eGFR 2.5: 0.292</title></rect>
+<rect x="358.3" y="231.7" width="8.633" height="8.633" fill="#dfebf7"><title>HF_severity 1.217, eGFR 2.5: 0.285</title></rect>
+<rect x="366.7" y="231.7" width="8.633" height="8.633" fill="#e1edf8"><title>HF_severity 1.391, eGFR 2.5: 0.278</title></rect>
+<rect x="375" y="231.7" width="8.633" height="8.633" fill="#e3eef8"><title>HF_severity 1.565, eGFR 2.5: 0.271</title></rect>
+<rect x="383.3" y="231.7" width="8.633" height="8.633" fill="#e4eff9"><title>HF_severity 1.739, eGFR 2.5: 0.264</title></rect>
+<rect x="391.7" y="231.7" width="8.633" height="8.633" fill="#e6f0f9"><title>HF_severity 1.913, eGFR 2.5: 0.257</title></rect>
+<rect x="400" y="231.7" width="8.633" height="8.633" fill="#e8f1fa"><title>HF_severity 2.087, eGFR 2.5: 0.248</title></rect>
+<rect x="408.3" y="231.7" width="8.633" height="8.633" fill="#ebf3fb"><title>HF_severity 2.261, eGFR 2.5: 0.235</title></rect>
+<rect x="416.7" y="231.7" width="8.633" height="8.633" fill="#eef5fc"><title>HF_severity 2.435, eGFR 2.5: 0.223</title></rect>
+<rect x="425" y="231.7" width="8.633" height="8.633" fill="#f1f7fd"><title>HF_severity 2.609, eGFR 2.5: 0.211</title></rect>
+<rect x="433.3" y="231.7" width="8.633" height="8.633" fill="#f4f9fe"><title>HF_severity 2.783, eGFR 2.5: 0.199</title></rect>
 <rect x="441.7" y="231.7" width="8.633" height="8.633" fill="#f7fbff"><title>HF_severity 2.957, eGFR 2.5: 0.187</title></rect>
 <rect x="450" y="231.7" width="8.633" height="8.633" fill="#f7fbff"><title>HF_severity 3.13, eGFR 2.5: 0.187</title></rect>
 <rect x="458.3" y="231.7" width="8.633" height="8.633" fill="#f6faff"><title>HF_severity 3.304, eGFR 2.5: 0.192</title></rect>
-<rect x="466.7" y="231.7" width="8.633" height="8.633" fill="#f5fafe"><title>HF_severity 3.478, eGFR 2.5: 0.197</title></rect>
-<rect x="475" y="231.7" width="8.633" height="8.633" fill="#f4f9fe"><title>HF_severity 3.652, eGFR 2.5: 0.201</title></rect>
-<rect x="483.3" y="231.7" width="8.633" height="8.633" fill="#f3f8fe"><title>HF_severity 3.826, eGFR 2.5: 0.206</title></rect>
-<rect x="491.7" y="231.7" width="8.633" height="8.633" fill="#f1f7fd"><title>HF_severity 4, eGFR 2.5: 0.21</title></rect>
+<rect x="466.7" y="231.7" width="8.633" height="8.633" fill="#f5f9fe"><title>HF_severity 3.478, eGFR 2.5: 0.197</title></rect>
+<rect x="475" y="231.7" width="8.633" height="8.633" fill="#f3f9fe"><title>HF_severity 3.652, eGFR 2.5: 0.201</title></rect>
+<rect x="483.3" y="231.7" width="8.633" height="8.633" fill="#f2f8fd"><title>HF_severity 3.826, eGFR 2.5: 0.206</title></rect>
+<rect x="491.7" y="231.7" width="8.633" height="8.633" fill="#f1f7fd"><title>HF_severity 4, eGFR 2.5: 0.211</title></rect>
 <line x1="296" x2="300" y1="90" y2="90" stroke="currentColor"/>
 <text x="294" y="94" text-anchor="end" font-size="11">90</text>
 <line x1="296" x2="300" y1="140" y2="140" stroke="currentColor"/>
@@ -1770,7 +1772,7 @@ The conditions occur together: cirrhosis lowers the GFR up to the hepatorenal sy
 <rect x="716.7" y="40" width="8.633" height="8.633" fill="#aacde7"><title>CP_severity 2.609, eGFR 117.5: 1.71</title></rect>
 <rect x="725" y="40" width="8.633" height="8.633" fill="#9ec7e4"><title>CP_severity 2.739, eGFR 117.5: 1.78</title></rect>
 <rect x="733.3" y="40" width="8.633" height="8.633" fill="#91c1e0"><title>CP_severity 2.87, eGFR 117.5: 1.86</title></rect>
-<rect x="741.7" y="40" width="8.633" height="8.633" fill="#82badc"><title>CP_severity 3, eGFR 117.5: 1.94</title></rect>
+<rect x="741.7" y="40" width="8.633" height="8.633" fill="#83badc"><title>CP_severity 3, eGFR 117.5: 1.94</title></rect>
 <rect x="550" y="48.33" width="8.633" height="8.633" fill="#f7fbff"><title>CP_severity 0, eGFR 112.5: 1</title></rect>
 <rect x="558.3" y="48.33" width="8.633" height="8.633" fill="#f5fafe"><title>CP_severity 0.13, eGFR 112.5: 1.02</title></rect>
 <rect x="566.7" y="48.33" width="8.633" height="8.633" fill="#f4f9fe"><title>CP_severity 0.261, eGFR 112.5: 1.03</title></rect>
@@ -1794,7 +1796,7 @@ The conditions occur together: cirrhosis lowers the GFR up to the hepatorenal sy
 <rect x="716.7" y="48.33" width="8.633" height="8.633" fill="#aacde7"><title>CP_severity 2.609, eGFR 112.5: 1.71</title></rect>
 <rect x="725" y="48.33" width="8.633" height="8.633" fill="#9ec7e4"><title>CP_severity 2.739, eGFR 112.5: 1.78</title></rect>
 <rect x="733.3" y="48.33" width="8.633" height="8.633" fill="#91c1e0"><title>CP_severity 2.87, eGFR 112.5: 1.86</title></rect>
-<rect x="741.7" y="48.33" width="8.633" height="8.633" fill="#82badc"><title>CP_severity 3, eGFR 112.5: 1.94</title></rect>
+<rect x="741.7" y="48.33" width="8.633" height="8.633" fill="#83badc"><title>CP_severity 3, eGFR 112.5: 1.94</title></rect>
 <rect x="550" y="56.67" width="8.633" height="8.633" fill="#f7fbff"><title>CP_severity 0, eGFR 107.5: 1</title></rect>
 <rect x="558.3" y="56.67" width="8.633" height="8.633" fill="#f5fafe"><title>CP_severity 0.13, eGFR 107.5: 1.02</title></rect>
 <rect x="566.7" y="56.67" width="8.633" height="8.633" fill="#f4f9fe"><title>CP_severity 0.261, eGFR 107.5: 1.03</title></rect>
@@ -1818,7 +1820,7 @@ The conditions occur together: cirrhosis lowers the GFR up to the hepatorenal sy
 <rect x="716.7" y="56.67" width="8.633" height="8.633" fill="#aacde7"><title>CP_severity 2.609, eGFR 107.5: 1.71</title></rect>
 <rect x="725" y="56.67" width="8.633" height="8.633" fill="#9ec7e4"><title>CP_severity 2.739, eGFR 107.5: 1.78</title></rect>
 <rect x="733.3" y="56.67" width="8.633" height="8.633" fill="#91c1e0"><title>CP_severity 2.87, eGFR 107.5: 1.86</title></rect>
-<rect x="741.7" y="56.67" width="8.633" height="8.633" fill="#82badc"><title>CP_severity 3, eGFR 107.5: 1.94</title></rect>
+<rect x="741.7" y="56.67" width="8.633" height="8.633" fill="#83badc"><title>CP_severity 3, eGFR 107.5: 1.94</title></rect>
 <rect x="550" y="65" width="8.633" height="8.633" fill="#f7fbff"><title>CP_severity 0, eGFR 102.5: 1</title></rect>
 <rect x="558.3" y="65" width="8.633" height="8.633" fill="#f5fafe"><title>CP_severity 0.13, eGFR 102.5: 1.02</title></rect>
 <rect x="566.7" y="65" width="8.633" height="8.633" fill="#f4f9fe"><title>CP_severity 0.261, eGFR 102.5: 1.03</title></rect>
@@ -1842,7 +1844,7 @@ The conditions occur together: cirrhosis lowers the GFR up to the hepatorenal sy
 <rect x="716.7" y="65" width="8.633" height="8.633" fill="#aacde7"><title>CP_severity 2.609, eGFR 102.5: 1.71</title></rect>
 <rect x="725" y="65" width="8.633" height="8.633" fill="#9ec7e4"><title>CP_severity 2.739, eGFR 102.5: 1.78</title></rect>
 <rect x="733.3" y="65" width="8.633" height="8.633" fill="#91c1e0"><title>CP_severity 2.87, eGFR 102.5: 1.86</title></rect>
-<rect x="741.7" y="65" width="8.633" height="8.633" fill="#82badc"><title>CP_severity 3, eGFR 102.5: 1.94</title></rect>
+<rect x="741.7" y="65" width="8.633" height="8.633" fill="#83badc"><title>CP_severity 3, eGFR 102.5: 1.94</title></rect>
 <rect x="550" y="73.33" width="8.633" height="8.633" fill="#f7fbff"><title>CP_severity 0, eGFR 97.5: 1</title></rect>
 <rect x="558.3" y="73.33" width="8.633" height="8.633" fill="#f5fafe"><title>CP_severity 0.13, eGFR 97.5: 1.02</title></rect>
 <rect x="566.7" y="73.33" width="8.633" height="8.633" fill="#f4f9fe"><title>CP_severity 0.261, eGFR 97.5: 1.03</title></rect>
@@ -1866,7 +1868,7 @@ The conditions occur together: cirrhosis lowers the GFR up to the hepatorenal sy
 <rect x="716.7" y="73.33" width="8.633" height="8.633" fill="#aacde7"><title>CP_severity 2.609, eGFR 97.5: 1.71</title></rect>
 <rect x="725" y="73.33" width="8.633" height="8.633" fill="#9ec7e4"><title>CP_severity 2.739, eGFR 97.5: 1.78</title></rect>
 <rect x="733.3" y="73.33" width="8.633" height="8.633" fill="#91c1e0"><title>CP_severity 2.87, eGFR 97.5: 1.86</title></rect>
-<rect x="741.7" y="73.33" width="8.633" height="8.633" fill="#82badc"><title>CP_severity 3, eGFR 97.5: 1.94</title></rect>
+<rect x="741.7" y="73.33" width="8.633" height="8.633" fill="#83badc"><title>CP_severity 3, eGFR 97.5: 1.94</title></rect>
 <rect x="550" y="81.67" width="8.633" height="8.633" fill="#f7fbff"><title>CP_severity 0, eGFR 92.5: 1</title></rect>
 <rect x="558.3" y="81.67" width="8.633" height="8.633" fill="#f5fafe"><title>CP_severity 0.13, eGFR 92.5: 1.02</title></rect>
 <rect x="566.7" y="81.67" width="8.633" height="8.633" fill="#f4f9fe"><title>CP_severity 0.261, eGFR 92.5: 1.03</title></rect>
@@ -1890,7 +1892,7 @@ The conditions occur together: cirrhosis lowers the GFR up to the hepatorenal sy
 <rect x="716.7" y="81.67" width="8.633" height="8.633" fill="#aacde7"><title>CP_severity 2.609, eGFR 92.5: 1.71</title></rect>
 <rect x="725" y="81.67" width="8.633" height="8.633" fill="#9ec7e4"><title>CP_severity 2.739, eGFR 92.5: 1.78</title></rect>
 <rect x="733.3" y="81.67" width="8.633" height="8.633" fill="#91c1e0"><title>CP_severity 2.87, eGFR 92.5: 1.86</title></rect>
-<rect x="741.7" y="81.67" width="8.633" height="8.633" fill="#82badc"><title>CP_severity 3, eGFR 92.5: 1.94</title></rect>
+<rect x="741.7" y="81.67" width="8.633" height="8.633" fill="#83badc"><title>CP_severity 3, eGFR 92.5: 1.94</title></rect>
 <rect x="550" y="90" width="8.633" height="8.633" fill="#f7fbff"><title>CP_severity 0, eGFR 87.5: 1.01</title></rect>
 <rect x="558.3" y="90" width="8.633" height="8.633" fill="#f5fafe"><title>CP_severity 0.13, eGFR 87.5: 1.02</title></rect>
 <rect x="566.7" y="90" width="8.633" height="8.633" fill="#f3f9fe"><title>CP_severity 0.261, eGFR 87.5: 1.04</title></rect>
@@ -1911,7 +1913,7 @@ The conditions occur together: cirrhosis lowers the GFR up to the hepatorenal sy
 <rect x="691.7" y="90" width="8.633" height="8.633" fill="#c7dcef"><title>CP_severity 2.217, eGFR 87.5: 1.53</title></rect>
 <rect x="700" y="90" width="8.633" height="8.633" fill="#bed7ed"><title>CP_severity 2.348, eGFR 87.5: 1.59</title></rect>
 <rect x="708.3" y="90" width="8.633" height="8.633" fill="#b4d2ea"><title>CP_severity 2.478, eGFR 87.5: 1.65</title></rect>
-<rect x="716.7" y="90" width="8.633" height="8.633" fill="#a8cce7"><title>CP_severity 2.609, eGFR 87.5: 1.72</title></rect>
+<rect x="716.7" y="90" width="8.633" height="8.633" fill="#a9cce7"><title>CP_severity 2.609, eGFR 87.5: 1.72</title></rect>
 <rect x="725" y="90" width="8.633" height="8.633" fill="#9cc6e4"><title>CP_severity 2.739, eGFR 87.5: 1.79</title></rect>
 <rect x="733.3" y="90" width="8.633" height="8.633" fill="#8fc0e0"><title>CP_severity 2.87, eGFR 87.5: 1.87</title></rect>
 <rect x="741.7" y="90" width="8.633" height="8.633" fill="#81b9dc"><title>CP_severity 3, eGFR 87.5: 1.95</title></rect>
@@ -1983,10 +1985,10 @@ The conditions occur together: cirrhosis lowers the GFR up to the hepatorenal sy
 <rect x="691.7" y="115" width="8.633" height="8.633" fill="#bfd7ed"><title>CP_severity 2.217, eGFR 72.5: 1.59</title></rect>
 <rect x="700" y="115" width="8.633" height="8.633" fill="#b5d2ea"><title>CP_severity 2.348, eGFR 72.5: 1.64</title></rect>
 <rect x="708.3" y="115" width="8.633" height="8.633" fill="#aacde7"><title>CP_severity 2.478, eGFR 72.5: 1.71</title></rect>
-<rect x="716.7" y="115" width="8.633" height="8.633" fill="#9ec7e4"><title>CP_severity 2.609, eGFR 72.5: 1.78</title></rect>
+<rect x="716.7" y="115" width="8.633" height="8.633" fill="#9fc7e4"><title>CP_severity 2.609, eGFR 72.5: 1.78</title></rect>
 <rect x="725" y="115" width="8.633" height="8.633" fill="#92c1e1"><title>CP_severity 2.739, eGFR 72.5: 1.85</title></rect>
 <rect x="733.3" y="115" width="8.633" height="8.633" fill="#84bbdd"><title>CP_severity 2.87, eGFR 72.5: 1.93</title></rect>
-<rect x="741.7" y="115" width="8.633" height="8.633" fill="#75b3d9"><title>CP_severity 3, eGFR 72.5: 2.02</title></rect>
+<rect x="741.7" y="115" width="8.633" height="8.633" fill="#76b3d9"><title>CP_severity 3, eGFR 72.5: 2.02</title></rect>
 <rect x="550" y="123.3" width="8.633" height="8.633" fill="#f2f8fd"><title>CP_severity 0, eGFR 67.5: 1.06</title></rect>
 <rect x="558.3" y="123.3" width="8.633" height="8.633" fill="#f0f7fd"><title>CP_severity 0.13, eGFR 67.5: 1.08</title></rect>
 <rect x="566.7" y="123.3" width="8.633" height="8.633" fill="#eef5fc"><title>CP_severity 0.261, eGFR 67.5: 1.09</title></rect>
@@ -2030,7 +2032,7 @@ The conditions occur together: cirrhosis lowers the GFR up to the hepatorenal sy
 <rect x="683.3" y="131.7" width="8.633" height="8.633" fill="#c0d8ed"><title>CP_severity 2.087, eGFR 62.5: 1.58</title></rect>
 <rect x="691.7" y="131.7" width="8.633" height="8.633" fill="#b7d3eb"><title>CP_severity 2.217, eGFR 62.5: 1.63</title></rect>
 <rect x="700" y="131.7" width="8.633" height="8.633" fill="#accee8"><title>CP_severity 2.348, eGFR 62.5: 1.69</title></rect>
-<rect x="708.3" y="131.7" width="8.633" height="8.633" fill="#a1c9e5"><title>CP_severity 2.478, eGFR 62.5: 1.76</title></rect>
+<rect x="708.3" y="131.7" width="8.633" height="8.633" fill="#a2c9e5"><title>CP_severity 2.478, eGFR 62.5: 1.76</title></rect>
 <rect x="716.7" y="131.7" width="8.633" height="8.633" fill="#96c3e2"><title>CP_severity 2.609, eGFR 62.5: 1.83</title></rect>
 <rect x="725" y="131.7" width="8.633" height="8.633" fill="#89bdde"><title>CP_severity 2.739, eGFR 62.5: 1.91</title></rect>
 <rect x="733.3" y="131.7" width="8.633" height="8.633" fill="#7bb6da"><title>CP_severity 2.87, eGFR 62.5: 1.99</title></rect>
@@ -2046,7 +2048,7 @@ The conditions occur together: cirrhosis lowers the GFR up to the hepatorenal sy
 <rect x="616.7" y="140" width="8.633" height="8.633" fill="#dfecf7"><title>CP_severity 1.043, eGFR 57.5: 1.26</title></rect>
 <rect x="625" y="140" width="8.633" height="8.633" fill="#dceaf6"><title>CP_severity 1.174, eGFR 57.5: 1.3</title></rect>
 <rect x="633.3" y="140" width="8.633" height="8.633" fill="#d9e7f5"><title>CP_severity 1.304, eGFR 57.5: 1.33</title></rect>
-<rect x="641.7" y="140" width="8.633" height="8.633" fill="#d5e5f4"><title>CP_severity 1.435, eGFR 57.5: 1.37</title></rect>
+<rect x="641.7" y="140" width="8.633" height="8.633" fill="#d6e5f4"><title>CP_severity 1.435, eGFR 57.5: 1.37</title></rect>
 <rect x="650" y="140" width="8.633" height="8.633" fill="#d2e3f3"><title>CP_severity 1.565, eGFR 57.5: 1.41</title></rect>
 <rect x="658.3" y="140" width="8.633" height="8.633" fill="#cee0f2"><title>CP_severity 1.696, eGFR 57.5: 1.45</title></rect>
 <rect x="666.7" y="140" width="8.633" height="8.633" fill="#cadef0"><title>CP_severity 1.826, eGFR 57.5: 1.5</title></rect>
@@ -2076,13 +2078,13 @@ The conditions occur together: cirrhosis lowers the GFR up to the hepatorenal sy
 <rect x="666.7" y="148.3" width="8.633" height="8.633" fill="#c8dcf0"><title>CP_severity 1.826, eGFR 52.5: 1.52</title></rect>
 <rect x="675" y="148.3" width="8.633" height="8.633" fill="#c1d9ee"><title>CP_severity 1.957, eGFR 52.5: 1.57</title></rect>
 <rect x="683.3" y="148.3" width="8.633" height="8.633" fill="#b8d4eb"><title>CP_severity 2.087, eGFR 52.5: 1.62</title></rect>
-<rect x="691.7" y="148.3" width="8.633" height="8.633" fill="#aecfe8"><title>CP_severity 2.217, eGFR 52.5: 1.68</title></rect>
+<rect x="691.7" y="148.3" width="8.633" height="8.633" fill="#aecfe9"><title>CP_severity 2.217, eGFR 52.5: 1.68</title></rect>
 <rect x="700" y="148.3" width="8.633" height="8.633" fill="#a4cae6"><title>CP_severity 2.348, eGFR 52.5: 1.74</title></rect>
 <rect x="708.3" y="148.3" width="8.633" height="8.633" fill="#99c5e3"><title>CP_severity 2.478, eGFR 52.5: 1.81</title></rect>
 <rect x="716.7" y="148.3" width="8.633" height="8.633" fill="#8cbfdf"><title>CP_severity 2.609, eGFR 52.5: 1.88</title></rect>
 <rect x="725" y="148.3" width="8.633" height="8.633" fill="#7fb8dc"><title>CP_severity 2.739, eGFR 52.5: 1.96</title></rect>
 <rect x="733.3" y="148.3" width="8.633" height="8.633" fill="#71b1d8"><title>CP_severity 2.87, eGFR 52.5: 2.05</title></rect>
-<rect x="741.7" y="148.3" width="8.633" height="8.633" fill="#63a7d2"><title>CP_severity 3, eGFR 52.5: 2.14</title></rect>
+<rect x="741.7" y="148.3" width="8.633" height="8.633" fill="#63a8d3"><title>CP_severity 3, eGFR 52.5: 2.14</title></rect>
 <rect x="550" y="156.7" width="8.633" height="8.633" fill="#ecf4fb"><title>CP_severity 0, eGFR 47.5: 1.12</title></rect>
 <rect x="558.3" y="156.7" width="8.633" height="8.633" fill="#eaf2fb"><title>CP_severity 0.13, eGFR 47.5: 1.14</title></rect>
 <rect x="566.7" y="156.7" width="8.633" height="8.633" fill="#e8f1fa"><title>CP_severity 0.261, eGFR 47.5: 1.16</title></rect>
@@ -2126,7 +2128,7 @@ The conditions occur together: cirrhosis lowers the GFR up to the hepatorenal sy
 <rect x="683.3" y="165" width="8.633" height="8.633" fill="#aecfe8"><title>CP_severity 2.087, eGFR 42.5: 1.68</title></rect>
 <rect x="691.7" y="165" width="8.633" height="8.633" fill="#a4cae6"><title>CP_severity 2.217, eGFR 42.5: 1.74</title></rect>
 <rect x="700" y="165" width="8.633" height="8.633" fill="#99c5e3"><title>CP_severity 2.348, eGFR 42.5: 1.81</title></rect>
-<rect x="708.3" y="165" width="8.633" height="8.633" fill="#8ebfdf"><title>CP_severity 2.478, eGFR 42.5: 1.88</title></rect>
+<rect x="708.3" y="165" width="8.633" height="8.633" fill="#8ebfe0"><title>CP_severity 2.478, eGFR 42.5: 1.88</title></rect>
 <rect x="716.7" y="165" width="8.633" height="8.633" fill="#81b9dc"><title>CP_severity 2.609, eGFR 42.5: 1.95</title></rect>
 <rect x="725" y="165" width="8.633" height="8.633" fill="#73b2d8"><title>CP_severity 2.739, eGFR 42.5: 2.03</title></rect>
 <rect x="733.3" y="165" width="8.633" height="8.633" fill="#66aad4"><title>CP_severity 2.87, eGFR 42.5: 2.12</title></rect>
@@ -2152,11 +2154,11 @@ The conditions occur together: cirrhosis lowers the GFR up to the hepatorenal sy
 <rect x="700" y="173.3" width="8.633" height="8.633" fill="#91c1e0"><title>CP_severity 2.348, eGFR 37.5: 1.86</title></rect>
 <rect x="708.3" y="173.3" width="8.633" height="8.633" fill="#85bbdd"><title>CP_severity 2.478, eGFR 37.5: 1.93</title></rect>
 <rect x="716.7" y="173.3" width="8.633" height="8.633" fill="#78b5da"><title>CP_severity 2.609, eGFR 37.5: 2</title></rect>
-<rect x="725" y="173.3" width="8.633" height="8.633" fill="#6aaed6"><title>CP_severity 2.739, eGFR 37.5: 2.09</title></rect>
+<rect x="725" y="173.3" width="8.633" height="8.633" fill="#6baed6"><title>CP_severity 2.739, eGFR 37.5: 2.09</title></rect>
 <rect x="733.3" y="173.3" width="8.633" height="8.633" fill="#5ea3d0"><title>CP_severity 2.87, eGFR 37.5: 2.18</title></rect>
 <rect x="741.7" y="173.3" width="8.633" height="8.633" fill="#5198ca"><title>CP_severity 3, eGFR 37.5: 2.27</title></rect>
 <rect x="550" y="181.7" width="8.633" height="8.633" fill="#e4eef9"><title>CP_severity 0, eGFR 32.5: 1.21</title></rect>
-<rect x="558.3" y="181.7" width="8.633" height="8.633" fill="#e2edf8"><title>CP_severity 0.13, eGFR 32.5: 1.23</title></rect>
+<rect x="558.3" y="181.7" width="8.633" height="8.633" fill="#e2edf8"><title>CP_severity 0.13, eGFR 32.5: 1.24</title></rect>
 <rect x="566.7" y="181.7" width="8.633" height="8.633" fill="#e0ecf7"><title>CP_severity 0.261, eGFR 32.5: 1.26</title></rect>
 <rect x="575" y="181.7" width="8.633" height="8.633" fill="#deebf7"><title>CP_severity 0.391, eGFR 32.5: 1.28</title></rect>
 <rect x="583.3" y="181.7" width="8.633" height="8.633" fill="#dce9f6"><title>CP_severity 0.522, eGFR 32.5: 1.3</title></rect>
@@ -2168,8 +2170,8 @@ The conditions occur together: cirrhosis lowers the GFR up to the hepatorenal sy
 <rect x="633.3" y="181.7" width="8.633" height="8.633" fill="#cbdff1"><title>CP_severity 1.304, eGFR 32.5: 1.48</title></rect>
 <rect x="641.7" y="181.7" width="8.633" height="8.633" fill="#c8dcf0"><title>CP_severity 1.435, eGFR 32.5: 1.52</title></rect>
 <rect x="650" y="181.7" width="8.633" height="8.633" fill="#c2d9ee"><title>CP_severity 1.565, eGFR 32.5: 1.57</title></rect>
-<rect x="658.3" y="181.7" width="8.633" height="8.633" fill="#bad5ec"><title>CP_severity 1.696, eGFR 32.5: 1.61</title></rect>
-<rect x="666.7" y="181.7" width="8.633" height="8.633" fill="#b1d1e9"><title>CP_severity 1.826, eGFR 32.5: 1.66</title></rect>
+<rect x="658.3" y="181.7" width="8.633" height="8.633" fill="#bad5ec"><title>CP_severity 1.696, eGFR 32.5: 1.62</title></rect>
+<rect x="666.7" y="181.7" width="8.633" height="8.633" fill="#b1d1e9"><title>CP_severity 1.826, eGFR 32.5: 1.67</title></rect>
 <rect x="675" y="181.7" width="8.633" height="8.633" fill="#a8cce7"><title>CP_severity 1.957, eGFR 32.5: 1.72</title></rect>
 <rect x="683.3" y="181.7" width="8.633" height="8.633" fill="#9ec7e4"><title>CP_severity 2.087, eGFR 32.5: 1.78</title></rect>
 <rect x="691.7" y="181.7" width="8.633" height="8.633" fill="#94c2e1"><title>CP_severity 2.217, eGFR 32.5: 1.84</title></rect>
@@ -2178,11 +2180,11 @@ The conditions occur together: cirrhosis lowers the GFR up to the hepatorenal sy
 <rect x="716.7" y="181.7" width="8.633" height="8.633" fill="#6fb0d7"><title>CP_severity 2.609, eGFR 32.5: 2.06</title></rect>
 <rect x="725" y="181.7" width="8.633" height="8.633" fill="#63a7d2"><title>CP_severity 2.739, eGFR 32.5: 2.14</title></rect>
 <rect x="733.3" y="181.7" width="8.633" height="8.633" fill="#569dcd"><title>CP_severity 2.87, eGFR 32.5: 2.23</title></rect>
-<rect x="741.7" y="181.7" width="8.633" height="8.633" fill="#4892c7"><title>CP_severity 3, eGFR 32.5: 2.33</title></rect>
+<rect x="741.7" y="181.7" width="8.633" height="8.633" fill="#4892c7"><title>CP_severity 3, eGFR 32.5: 2.34</title></rect>
 <rect x="550" y="190" width="8.633" height="8.633" fill="#e0ecf8"><title>CP_severity 0, eGFR 27.5: 1.25</title></rect>
 <rect x="558.3" y="190" width="8.633" height="8.633" fill="#deebf7"><title>CP_severity 0.13, eGFR 27.5: 1.27</title></rect>
-<rect x="566.7" y="190" width="8.633" height="8.633" fill="#ddeaf6"><title>CP_severity 0.261, eGFR 27.5: 1.29</title></rect>
-<rect x="575" y="190" width="8.633" height="8.633" fill="#dae8f6"><title>CP_severity 0.391, eGFR 27.5: 1.31</title></rect>
+<rect x="566.7" y="190" width="8.633" height="8.633" fill="#dceaf6"><title>CP_severity 0.261, eGFR 27.5: 1.29</title></rect>
+<rect x="575" y="190" width="8.633" height="8.633" fill="#dae8f6"><title>CP_severity 0.391, eGFR 27.5: 1.32</title></rect>
 <rect x="583.3" y="190" width="8.633" height="8.633" fill="#d8e7f5"><title>CP_severity 0.522, eGFR 27.5: 1.34</title></rect>
 <rect x="591.7" y="190" width="8.633" height="8.633" fill="#d6e6f4"><title>CP_severity 0.652, eGFR 27.5: 1.36</title></rect>
 <rect x="600" y="190" width="8.633" height="8.633" fill="#d4e4f4"><title>CP_severity 0.783, eGFR 27.5: 1.39</title></rect>
@@ -2220,13 +2222,13 @@ The conditions occur together: cirrhosis lowers the GFR up to the hepatorenal sy
 <rect x="666.7" y="198.3" width="8.633" height="8.633" fill="#a1c9e5"><title>CP_severity 1.826, eGFR 22.5: 1.76</title></rect>
 <rect x="675" y="198.3" width="8.633" height="8.633" fill="#97c4e2"><title>CP_severity 1.957, eGFR 22.5: 1.82</title></rect>
 <rect x="683.3" y="198.3" width="8.633" height="8.633" fill="#8dbfdf"><title>CP_severity 2.087, eGFR 22.5: 1.88</title></rect>
-<rect x="691.7" y="198.3" width="8.633" height="8.633" fill="#82b9dc"><title>CP_severity 2.217, eGFR 22.5: 1.94</title></rect>
+<rect x="691.7" y="198.3" width="8.633" height="8.633" fill="#82b9dc"><title>CP_severity 2.217, eGFR 22.5: 1.95</title></rect>
 <rect x="700" y="198.3" width="8.633" height="8.633" fill="#76b4d9"><title>CP_severity 2.348, eGFR 22.5: 2.02</title></rect>
 <rect x="708.3" y="198.3" width="8.633" height="8.633" fill="#6aadd5"><title>CP_severity 2.478, eGFR 22.5: 2.09</title></rect>
 <rect x="716.7" y="198.3" width="8.633" height="8.633" fill="#5ea4d0"><title>CP_severity 2.609, eGFR 22.5: 2.17</title></rect>
 <rect x="725" y="198.3" width="8.633" height="8.633" fill="#529acb"><title>CP_severity 2.739, eGFR 22.5: 2.26</title></rect>
 <rect x="733.3" y="198.3" width="8.633" height="8.633" fill="#458fc5"><title>CP_severity 2.87, eGFR 22.5: 2.36</title></rect>
-<rect x="741.7" y="198.3" width="8.633" height="8.633" fill="#3783bf"><title>CP_severity 3, eGFR 22.5: 2.46</title></rect>
+<rect x="741.7" y="198.3" width="8.633" height="8.633" fill="#3783bf"><title>CP_severity 3, eGFR 22.5: 2.47</title></rect>
 <rect x="550" y="206.7" width="8.633" height="8.633" fill="#d3e3f3"><title>CP_severity 0, eGFR 17.5: 1.4</title></rect>
 <rect x="558.3" y="206.7" width="8.633" height="8.633" fill="#d1e2f2"><title>CP_severity 0.13, eGFR 17.5: 1.42</title></rect>
 <rect x="566.7" y="206.7" width="8.633" height="8.633" fill="#cee0f2"><title>CP_severity 0.261, eGFR 17.5: 1.45</title></rect>
@@ -2237,8 +2239,8 @@ The conditions occur together: cirrhosis lowers the GFR up to the hepatorenal sy
 <rect x="608.3" y="206.7" width="8.633" height="8.633" fill="#bfd8ed"><title>CP_severity 0.913, eGFR 17.5: 1.58</title></rect>
 <rect x="616.7" y="206.7" width="8.633" height="8.633" fill="#b9d5ec"><title>CP_severity 1.043, eGFR 17.5: 1.62</title></rect>
 <rect x="625" y="206.7" width="8.633" height="8.633" fill="#b2d1ea"><title>CP_severity 1.174, eGFR 17.5: 1.66</title></rect>
-<rect x="633.3" y="206.7" width="8.633" height="8.633" fill="#abcde7"><title>CP_severity 1.304, eGFR 17.5: 1.7</title></rect>
-<rect x="641.7" y="206.7" width="8.633" height="8.633" fill="#a3c9e5"><title>CP_severity 1.435, eGFR 17.5: 1.75</title></rect>
+<rect x="633.3" y="206.7" width="8.633" height="8.633" fill="#aacde7"><title>CP_severity 1.304, eGFR 17.5: 1.7</title></rect>
+<rect x="641.7" y="206.7" width="8.633" height="8.633" fill="#a2c9e5"><title>CP_severity 1.435, eGFR 17.5: 1.75</title></rect>
 <rect x="650" y="206.7" width="8.633" height="8.633" fill="#9ac5e3"><title>CP_severity 1.565, eGFR 17.5: 1.8</title></rect>
 <rect x="658.3" y="206.7" width="8.633" height="8.633" fill="#91c1e0"><title>CP_severity 1.696, eGFR 17.5: 1.86</title></rect>
 <rect x="666.7" y="206.7" width="8.633" height="8.633" fill="#87bcde"><title>CP_severity 1.826, eGFR 17.5: 1.91</title></rect>
@@ -2271,14 +2273,14 @@ The conditions occur together: cirrhosis lowers the GFR up to the hepatorenal sy
 <rect x="691.7" y="215" width="8.633" height="8.633" fill="#4d95c9"><title>CP_severity 2.217, eGFR 12.5: 2.3</title></rect>
 <rect x="700" y="215" width="8.633" height="8.633" fill="#428cc4"><title>CP_severity 2.348, eGFR 12.5: 2.38</title></rect>
 <rect x="708.3" y="215" width="8.633" height="8.633" fill="#3682be"><title>CP_severity 2.478, eGFR 12.5: 2.47</title></rect>
-<rect x="716.7" y="215" width="8.633" height="8.633" fill="#2978b9"><title>CP_severity 2.609, eGFR 12.5: 2.56</title></rect>
+<rect x="716.7" y="215" width="8.633" height="8.633" fill="#2978b9"><title>CP_severity 2.609, eGFR 12.5: 2.57</title></rect>
 <rect x="725" y="215" width="8.633" height="8.633" fill="#1f6caf"><title>CP_severity 2.739, eGFR 12.5: 2.67</title></rect>
 <rect x="733.3" y="215" width="8.633" height="8.633" fill="#1a5ea0"><title>CP_severity 2.87, eGFR 12.5: 2.78</title></rect>
 <rect x="741.7" y="215" width="8.633" height="8.633" fill="#14508f"><title>CP_severity 3, eGFR 12.5: 2.9</title></rect>
 <rect x="550" y="223.3" width="8.633" height="8.633" fill="#aecfe8"><title>CP_severity 0, eGFR 7.5: 1.68</title></rect>
 <rect x="558.3" y="223.3" width="8.633" height="8.633" fill="#a9cde7"><title>CP_severity 0.13, eGFR 7.5: 1.71</title></rect>
 <rect x="566.7" y="223.3" width="8.633" height="8.633" fill="#a4cae6"><title>CP_severity 0.261, eGFR 7.5: 1.74</title></rect>
-<rect x="575" y="223.3" width="8.633" height="8.633" fill="#a0c8e4"><title>CP_severity 0.391, eGFR 7.5: 1.77</title></rect>
+<rect x="575" y="223.3" width="8.633" height="8.633" fill="#9fc8e4"><title>CP_severity 0.391, eGFR 7.5: 1.77</title></rect>
 <rect x="583.3" y="223.3" width="8.633" height="8.633" fill="#9ac5e3"><title>CP_severity 0.522, eGFR 7.5: 1.8</title></rect>
 <rect x="591.7" y="223.3" width="8.633" height="8.633" fill="#95c3e2"><title>CP_severity 0.652, eGFR 7.5: 1.83</title></rect>
 <rect x="600" y="223.3" width="8.633" height="8.633" fill="#8fc0e0"><title>CP_severity 0.783, eGFR 7.5: 1.87</title></rect>
@@ -2291,18 +2293,18 @@ The conditions occur together: cirrhosis lowers the GFR up to the hepatorenal sy
 <rect x="658.3" y="223.3" width="8.633" height="8.633" fill="#589ece"><title>CP_severity 1.696, eGFR 7.5: 2.22</title></rect>
 <rect x="666.7" y="223.3" width="8.633" height="8.633" fill="#4f97c9"><title>CP_severity 1.826, eGFR 7.5: 2.29</title></rect>
 <rect x="675" y="223.3" width="8.633" height="8.633" fill="#458fc5"><title>CP_severity 1.957, eGFR 7.5: 2.36</title></rect>
-<rect x="683.3" y="223.3" width="8.633" height="8.633" fill="#3b86c0"><title>CP_severity 2.087, eGFR 7.5: 2.43</title></rect>
+<rect x="683.3" y="223.3" width="8.633" height="8.633" fill="#3b86c0"><title>CP_severity 2.087, eGFR 7.5: 2.44</title></rect>
 <rect x="691.7" y="223.3" width="8.633" height="8.633" fill="#2f7dbb"><title>CP_severity 2.217, eGFR 7.5: 2.52</title></rect>
 <rect x="700" y="223.3" width="8.633" height="8.633" fill="#2373b6"><title>CP_severity 2.348, eGFR 7.5: 2.61</title></rect>
 <rect x="708.3" y="223.3" width="8.633" height="8.633" fill="#1d68aa"><title>CP_severity 2.478, eGFR 7.5: 2.7</title></rect>
-<rect x="716.7" y="223.3" width="8.633" height="8.633" fill="#195b9c"><title>CP_severity 2.609, eGFR 7.5: 2.8</title></rect>
-<rect x="725" y="223.3" width="8.633" height="8.633" fill="#144e8d"><title>CP_severity 2.739, eGFR 7.5: 2.91</title></rect>
-<rect x="733.3" y="223.3" width="8.633" height="8.633" fill="#0e407d"><title>CP_severity 2.87, eGFR 7.5: 3.03</title></rect>
-<rect x="741.7" y="223.3" width="8.633" height="8.633" fill="#08306b"><title>CP_severity 3, eGFR 7.5: 3.16</title></rect>
+<rect x="716.7" y="223.3" width="8.633" height="8.633" fill="#195b9c"><title>CP_severity 2.609, eGFR 7.5: 2.81</title></rect>
+<rect x="725" y="223.3" width="8.633" height="8.633" fill="#144e8d"><title>CP_severity 2.739, eGFR 7.5: 2.92</title></rect>
+<rect x="733.3" y="223.3" width="8.633" height="8.633" fill="#0e407d"><title>CP_severity 2.87, eGFR 7.5: 3.04</title></rect>
+<rect x="741.7" y="223.3" width="8.633" height="8.633" fill="#08306b"><title>CP_severity 3, eGFR 7.5: 3.17</title></rect>
 <rect x="550" y="231.7" width="8.633" height="8.633" fill="#aecfe8"><title>CP_severity 0, eGFR 2.5: 1.68</title></rect>
 <rect x="558.3" y="231.7" width="8.633" height="8.633" fill="#a9cde7"><title>CP_severity 0.13, eGFR 2.5: 1.71</title></rect>
 <rect x="566.7" y="231.7" width="8.633" height="8.633" fill="#a4cae6"><title>CP_severity 0.261, eGFR 2.5: 1.74</title></rect>
-<rect x="575" y="231.7" width="8.633" height="8.633" fill="#a0c8e4"><title>CP_severity 0.391, eGFR 2.5: 1.77</title></rect>
+<rect x="575" y="231.7" width="8.633" height="8.633" fill="#9fc8e4"><title>CP_severity 0.391, eGFR 2.5: 1.77</title></rect>
 <rect x="583.3" y="231.7" width="8.633" height="8.633" fill="#9ac5e3"><title>CP_severity 0.522, eGFR 2.5: 1.8</title></rect>
 <rect x="591.7" y="231.7" width="8.633" height="8.633" fill="#95c3e2"><title>CP_severity 0.652, eGFR 2.5: 1.83</title></rect>
 <rect x="600" y="231.7" width="8.633" height="8.633" fill="#8fc0e0"><title>CP_severity 0.783, eGFR 2.5: 1.87</title></rect>
@@ -2315,14 +2317,14 @@ The conditions occur together: cirrhosis lowers the GFR up to the hepatorenal sy
 <rect x="658.3" y="231.7" width="8.633" height="8.633" fill="#589ece"><title>CP_severity 1.696, eGFR 2.5: 2.22</title></rect>
 <rect x="666.7" y="231.7" width="8.633" height="8.633" fill="#4f97c9"><title>CP_severity 1.826, eGFR 2.5: 2.29</title></rect>
 <rect x="675" y="231.7" width="8.633" height="8.633" fill="#458fc5"><title>CP_severity 1.957, eGFR 2.5: 2.36</title></rect>
-<rect x="683.3" y="231.7" width="8.633" height="8.633" fill="#3b86c0"><title>CP_severity 2.087, eGFR 2.5: 2.43</title></rect>
+<rect x="683.3" y="231.7" width="8.633" height="8.633" fill="#3b86c0"><title>CP_severity 2.087, eGFR 2.5: 2.44</title></rect>
 <rect x="691.7" y="231.7" width="8.633" height="8.633" fill="#2f7dbb"><title>CP_severity 2.217, eGFR 2.5: 2.52</title></rect>
 <rect x="700" y="231.7" width="8.633" height="8.633" fill="#2373b6"><title>CP_severity 2.348, eGFR 2.5: 2.61</title></rect>
 <rect x="708.3" y="231.7" width="8.633" height="8.633" fill="#1d68aa"><title>CP_severity 2.478, eGFR 2.5: 2.7</title></rect>
-<rect x="716.7" y="231.7" width="8.633" height="8.633" fill="#195b9c"><title>CP_severity 2.609, eGFR 2.5: 2.8</title></rect>
-<rect x="725" y="231.7" width="8.633" height="8.633" fill="#144e8d"><title>CP_severity 2.739, eGFR 2.5: 2.91</title></rect>
-<rect x="733.3" y="231.7" width="8.633" height="8.633" fill="#0e407d"><title>CP_severity 2.87, eGFR 2.5: 3.03</title></rect>
-<rect x="741.7" y="231.7" width="8.633" height="8.633" fill="#08306b"><title>CP_severity 3, eGFR 2.5: 3.16</title></rect>
+<rect x="716.7" y="231.7" width="8.633" height="8.633" fill="#195b9c"><title>CP_severity 2.609, eGFR 2.5: 2.81</title></rect>
+<rect x="725" y="231.7" width="8.633" height="8.633" fill="#144e8d"><title>CP_severity 2.739, eGFR 2.5: 2.92</title></rect>
+<rect x="733.3" y="231.7" width="8.633" height="8.633" fill="#0e407d"><title>CP_severity 2.87, eGFR 2.5: 3.04</title></rect>
+<rect x="741.7" y="231.7" width="8.633" height="8.633" fill="#08306b"><title>CP_severity 3, eGFR 2.5: 3.17</title></rect>
 <line x1="546" x2="550" y1="90" y2="90" stroke="currentColor"/>
 <text x="544" y="94" text-anchor="end" font-size="11">90</text>
 <line x1="546" x2="550" y1="140" y2="140" stroke="currentColor"/>

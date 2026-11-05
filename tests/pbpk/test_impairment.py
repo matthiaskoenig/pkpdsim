@@ -81,7 +81,8 @@ def _resolved(section: str, table: dict[str, Any]) -> dict[str, Any]:
 CKD = _resolved("ckd", DATA["ckd"])
 """The factors of the CKD stages, of the table or the consensus of the database."""
 BINDING = CKD["binding"]
-HF = DATA["heart_failure"]
+HF = _resolved("heart_failure", DATA["heart_failure"])
+"""The factors of the NYHA classes, of the table or the consensus of the database."""
 
 
 def _impaired_definition(**overrides: Any) -> PBPKDefinition:  # noqa: ANN401
@@ -581,7 +582,8 @@ def test_ckd_factors_at_the_anchors(model: BuildResult) -> None:
         anaemia = 1.0 if stage is None else CKD["hematocrit"]["value"][stage]
         assert r[ids.HCT] == pytest.approx(healthy[ids.HCT] * anaemia, rel=1e-12)
         mki = ids.organ_mass(Organ.KIDNEY)
-        assert r[mki] == healthy[mki]
+        shrink = 1.0 if stage is None else CKD["kidney_volume"]["value"][stage]
+        assert r[mki] == pytest.approx(healthy[mki] * shrink, rel=1e-12)
         assert r[ids.GFR] == pytest.approx(healthy[ids.GFR] * f, rel=1e-12)
         _assert_flows_sum(r)
         cyp2d6 = 1.0 if stage is None else CKD["proteins"]["CYP2D6"]["value"][stage]
@@ -981,14 +983,18 @@ def test_model_choices_are_cited_as_such(model: BuildResult) -> None:
     provenance, sources = entry.provenance(("A", "B", "C"))
     assert "A, B: a model choice" in provenance
     assert "ModelChoice" in sources
-    for key in ("agp", "shunt"):
-        notes = (
-            doc.getModel()
-            .getParameter(ids.condition_factor("cp", key))
-            .getNotesString()
-        )
-        assert "not verified" in notes
-        assert "Edginton AN" not in notes
+    shunt = (
+        doc.getModel()
+        .getParameter(ids.condition_factor("cp", "shunt"))
+        .getNotesString()
+    )
+    assert "not verified" in shunt
+    # the factors of Edginton & Willmann 2008, read, cite it
+    agp = (
+        doc.getModel().getParameter(ids.condition_factor("cp", "agp")).getNotesString()
+    )
+    assert "Table I" in agp
+    assert "Edginton AN" in agp
     notes = (
         doc.getModel()
         .getParameter(ids.condition_factor("cp", "albumin"))
@@ -1003,7 +1009,7 @@ def test_class_factors_of_the_table_and_of_the_consensus() -> None:
     """A factor states its values or is the consensus of the studies on its quantity."""
     kidney = class_factors("child_pugh", "kidney_flow")
     assert kidney.values == tuple(DATA["child_pugh"]["kidney_flow"]["value"])
-    assert kidney.sources == ("ModelChoice",)
+    assert kidney.sources == ("Edginton2008",)
     for key in ("albumin", "hematocrit", "cardiac_index"):
         assert DATA["child_pugh"][key]["consensus"] == key
         factors = class_factors("child_pugh", key)

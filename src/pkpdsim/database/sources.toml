@@ -572,5 +572,9 @@ citation = "Wan X, Wang W, Liu J, Tong T. Estimating the sample mean and standar
 doi = "10.1186/1471-2288-14-135"
 
 [Malik2020]
-citation = "Malik PRV, Yeung CHT, Ismaeil S, Advani U, Djie S, Edginton AN. A physiological approach to pharmacokinetics in chronic kidney disease. J Clin Pharmacol 60(S1), 2020 (not read, paywalled)."
+citation = "Malik PRV, Yeung CHT, Ismaeil S, Advani U, Djie S, Edginton AN. A physiological approach to pharmacokinetics in chronic kidney disease. J Clin Pharmacol 60(S1):S52-S62, 2020."
 doi = "10.1002/jcph.1713"
+
+[Docci1985]
+citation = "Docci D, Bilancioni R, Pistocchi E, Mosconi G, Turci F, Salvi G, Baldrati L, Orsi C. Serum alpha-1-acid glycoprotein in chronic renal failure. Nephron 39(3):160-163, 1985."
+doi = "10.1159/000183364"

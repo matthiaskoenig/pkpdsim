@@ -356,6 +356,58 @@ def impairment_child_pugh() -> str:
     return _generated(_SOURCES, [*lines, "", _CONSENSUS], cited)
 
 
+def impairment_child_pugh_comparison() -> str:
+    """The factors of the library against the Simcyp cirrhosis populations."""
+    table = load("comparisons")["johnson2010"]["child_pugh"]
+    cp = load("impairment")["child_pugh"]
+    volume = class_factors("child_pugh", "functional_liver").values
+    johnson_volume = [
+        v / table["liver_volume"]["value"][0]
+        for v in table["liver_volume"]["value"][1:]
+    ]
+    rows = []
+    for entry in table.values():
+        control, *classes = entry["value"]
+        ratios = [v / control for v in classes]
+        library = entry["library"]
+        if library in cp:
+            factors = list(class_factors("child_pugh", library).values)
+            what = "physiology"
+        else:
+            try:
+                factors = list(child_pugh_protein(library).values)
+            except ValueError:
+                continue
+            # the capacity of the liver: abundance times the liver tissue
+            factors = [f * v for f, v in zip(factors, volume, strict=True)]
+            ratios = [r * v for r, v in zip(ratios, johnson_volume, strict=True)]
+            what = "capacity"
+        rows.append(
+            [
+                f"`{library}`",
+                what,
+                " / ".join(_number(round(f, 3)) for f in factors),
+                " / ".join(_number(round(r, 3)) for r in ratios),
+            ]
+        )
+    lines = _table(
+        ["factor", "kind", "library A / B / C", "Johnson 2010 A / B / C"], rows
+    )
+    note = (
+        "The physiological factors relative to healthy; for an enzyme the "
+        "capacity of the liver relative to healthy, the abundance per amount of "
+        "tissue times the liver volume in the library (`functional_liver`), the "
+        "abundance per mg of microsomal protein times the functional hepatocyte "
+        "volume in Johnson 2010 (Table III, the parameters of the Simcyp "
+        "cirrhosis populations)."
+    )
+    return _generated(
+        "`database/tables/comparisons.toml` and the factors of the library",
+        [*lines, "", note],
+        ["Johnson2010"],
+    )
+
+
 def impairment_meld() -> str:
     """The MELD scores of the severities of cirrhosis, the anchors of the mapping."""
     rows = []
@@ -1333,6 +1385,7 @@ TABLES: dict[str, Callable[[], str]] = {
     "impairment-child-pugh": impairment_child_pugh,
     "impairment-child-pugh-proteins": impairment_child_pugh_proteins,
     "impairment-meld": impairment_meld,
+    "impairment-child-pugh-comparison": impairment_child_pugh_comparison,
     "database-physiology": database_physiology,
     "database-physiology-ckd": database_physiology_ckd,
     "database-physiology-heart-failure": database_physiology_heart_failure,
