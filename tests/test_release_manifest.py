@@ -204,12 +204,12 @@ def test_unfinished_build_accepts_its_changes(
     assert not changed_by_build(root, "0.8.0")
     marker = root / ".git" / "pkpd_release_build"
     start_build(root, "0.9.0")
-    assert json.loads(marker.read_text()) == {"version": "0.9.0"}
+    assert json.loads(marker.read_text(encoding="utf-8")) == {"version": "0.9.0"}
     # a killed build recorded no paths, every change may be its change
     assert changed_by_build(root, "0.8.0")
     assert changed_by_build(root, "1.0.0")
     stop_build(root)
-    assert "extra.txt" in json.loads(marker.read_text())["changed"]
+    assert "extra.txt" in json.loads(marker.read_text(encoding="utf-8"))["changed"]
     assert changed_by_build(root, "1.0.0")
     write(root, "added_by_hand.txt")
     assert not changed_by_build(root, "1.0.0")

@@ -271,7 +271,7 @@ def test_the_json_round_trip_of_a_verified_assessment(tmp_path: Path) -> None:
     assessment = _assess(fits, verification_of(fits))
     path = tmp_path / "credibility.json"
     assessment.to_json(path)
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding="utf-8"))
     (setup,) = (r for r in data["contexts"][0]["verification"] if r["check"] == "setup")
     assert setup["max_difference"] is None
     read = CredibilityAssessment.from_json(path)
@@ -346,9 +346,9 @@ def test_the_command_without_verification(
     )
     record = CredibilityAssessment.from_json(output_dir / "credibility.json")
     assert record.verification is None
-    assert (output_dir / "verification.tsv").read_text().strip() == "\t".join(
-        VERIFICATION_COLUMNS
-    )
+    assert (output_dir / "verification.tsv").read_text(
+        encoding="utf-8"
+    ).strip() == "\t".join(VERIFICATION_COLUMNS)
     with pytest.raises(SystemExit) as exc:
         credibility_command(
             credibility_model,

@@ -964,7 +964,11 @@ def test_the_figures_of_an_analysis_do_not_use_pyplot(
 def test_pkpdsim_does_not_import_pyplot() -> None:
     source = Path(__file__).parents[1] / "src" / "pkpdsim"
     imports = re.compile(r"^\s*(import|from) matplotlib(\.pyplot| import pyplot)", re.M)
-    users = [p.name for p in source.rglob("*.py") if imports.search(p.read_text())]
+    users = [
+        p.name
+        for p in source.rglob("*.py")
+        if imports.search(p.read_text(encoding="utf-8"))
+    ]
     assert users == []
 
 

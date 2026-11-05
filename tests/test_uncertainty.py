@@ -184,7 +184,9 @@ def test_fit_adopt_command(toy_fit: Path, tmp_path: Path) -> None:
 def test_the_record_of_the_toy_fit(fits_dir: Path, toy_fit: Path) -> None:
     record = FitRecord.load(fits_dir / toy_fit.name)
     k = record.parameters["k"]
-    best = json.loads((toy_fit / "parameters.json").read_text())["sets"][0]
+    best = json.loads((toy_fit / "parameters.json").read_text(encoding="utf-8"))[
+        "sets"
+    ][0]
     assert k.value == best["values"]["k"]
     assert k.method == UncertaintyMethod.PROFILE
     assert (k.lower_bound, k.upper_bound) == (0.01, 1.0)
@@ -334,7 +336,7 @@ def test_a_fit_which_is_not_adopted_raises(tmp_path: Path) -> None:
 
 
 def test_the_model_has_the_uncertainty(toy_with_uncertainty: Path) -> None:
-    text = toy_with_uncertainty.read_text()
+    text = toy_with_uncertainty.read_text(encoding="utf-8")
     assert "distrib:uncertainty" in text
     assert 'distrib:type="confidenceInterval"' in text
     assert 'distrib:type="standardError"' in text

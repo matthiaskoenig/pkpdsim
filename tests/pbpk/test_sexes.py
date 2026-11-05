@@ -158,12 +158,13 @@ def test_the_male_build_of_an_archive_is_the_build_of_the_definition(
     )
     assert set(single) == {k for k in archive if "female" not in k}
     for key in ("simple", "simple_flat", "simple_flat_md", "simple_flat_ant"):
-        assert single[key]["path"].read_text() == archive[key]["path"].read_text()
+        assert single[key]["path"].read_text(encoding="utf-8") == archive[key][
+            "path"
+        ].read_text(encoding="utf-8")
     female = build(definition(sex=Sex.FEMALE, sid="simple_female"), tmp_path / "f")
-    assert (
-        female.flat_path.read_text()
-        == archive["simple_female_flat"]["path"].read_text()
-    )
+    assert female.flat_path.read_text(encoding="utf-8") == archive[
+        "simple_female_flat"
+    ]["path"].read_text(encoding="utf-8")
 
 
 @pytest.mark.parametrize(

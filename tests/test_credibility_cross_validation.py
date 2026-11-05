@@ -87,10 +87,12 @@ def test_cross_validate(model: PKPDModel, tmp_path: Path) -> None:
     assessment.to_json(record)
     assert CredibilityAssessment.from_json(record).cross_validations[0].fit == fit_id
     output = write_outputs(assessment, tmp_path / "out")
-    table = (output / "cross_validation.tsv").read_text().splitlines()
+    table = (output / "cross_validation.tsv").read_text(encoding="utf-8").splitlines()
     assert table[0].startswith("fit\tsubset\tstudy\tn_points")
     assert len(table) == 3
-    assert 'id="cross-validation"' in (output / "index.html").read_text()
+    assert 'id="cross-validation"' in (output / "index.html").read_text(
+        encoding="utf-8"
+    )
 
 
 def test_the_studies_must_be_training_studies(model: PKPDModel, tmp_path: Path) -> None:

@@ -67,7 +67,7 @@ def test_a_cached_flat_model_is_the_flattened_one(
         folder = tmp_path / name
         folder.mkdir()
         results.append(build(d, folder))
-    first, second = (r.flat_path.read_text() for r in results)
+    first, second = (r.flat_path.read_text(encoding="utf-8") for r in results)
     assert "<dcterms:W3CDTF>" in first
     assert len(flattened) == 1
     assert dateless(second) == dateless(first)

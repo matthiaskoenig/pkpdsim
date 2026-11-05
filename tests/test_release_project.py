@@ -190,17 +190,18 @@ def test_workflows_replaced(context: ProjectContext, tmp_path: Path) -> None:
     assert not (workflows / "python.yml").exists()
     assert {p.name for p in workflows.iterdir()} == {"ci.yml", "docs.yml"}
     assert tmp_path / ".zenodo.json" in written
-    assert (tmp_path / ".python-version").read_text() == "3.14\n"
-    dockerfile = (tmp_path / "Dockerfile").read_text()
+    assert (tmp_path / ".python-version").read_text(encoding="utf-8") == "3.14\n"
+    dockerfile = (tmp_path / "Dockerfile").read_text(encoding="utf-8")
     assert dockerfile.startswith(
         "# The image is built and pushed by pkpd_release.\n\nFROM python:3.14-slim\n"
     )
     assert "docker build" not in dockerfile
-    assert (
-        "${{ steps.deployment.outputs.page_url }}"
-        in (workflows / "docs.yml").read_text()
-    )
-    zensical = tomllib.loads((tmp_path / "zensical.toml").read_text())["project"]
+    assert "${{ steps.deployment.outputs.page_url }}" in (
+        workflows / "docs.yml"
+    ).read_text(encoding="utf-8")
+    zensical = tomllib.loads((tmp_path / "zensical.toml").read_text(encoding="utf-8"))[
+        "project"
+    ]
     assert zensical["nav"]
     assert zensical["site_author"] == "Jane Doe"
     assert zensical["copyright"].endswith(" Jane Doe")
@@ -233,9 +234,11 @@ def test_strict_undefined(
 
 def test_zenodo_file_is_json(context: ProjectContext, tmp_path: Path) -> None:
     write_project_files(context, tmp_path)
-    zenodo = json.loads((tmp_path / ".zenodo.json").read_text())
+    zenodo = json.loads((tmp_path / ".zenodo.json").read_text(encoding="utf-8"))
     assert zenodo["title"] == "Toy model of the decay of a substance"
-    site_name = tomllib.loads((tmp_path / "zensical.toml").read_text())["project"]
+    site_name = tomllib.loads((tmp_path / "zensical.toml").read_text(encoding="utf-8"))[
+        "project"
+    ]
     assert site_name["site_name"] == "Toy model of the decay of a substance"
 
 
@@ -301,7 +304,7 @@ def test_ci_workflow_puts_libpython_on_the_library_path(
         env={**os.environ, "GITHUB_ENV": str(env)},
     )
     assert result.returncode == 0, result.stderr
-    (line,) = env.read_text().splitlines()
+    (line,) = env.read_text(encoding="utf-8").splitlines()
     assert line.startswith("LD_LIBRARY_PATH=/")
     assert line.split("=", 1)[1].split(":")[0].endswith("/lib")
 
@@ -334,7 +337,7 @@ def test_docs_workflow_copies_existing_reports(
 
 def test_gitignore(context: ProjectContext, tmp_path: Path) -> None:
     write_project_files(context, tmp_path)
-    ignored = (tmp_path / ".gitignore").read_text().splitlines()
+    ignored = (tmp_path / ".gitignore").read_text(encoding="utf-8").splitlines()
     assert {"/results/", "/build/", "/dist/", "/site/", ".venv/", ".idea/"} <= set(
         ignored
     )
@@ -346,10 +349,10 @@ def test_readme_for_the_build(context: ProjectContext, tmp_path: Path) -> None:
     written = write_project_files(context, tmp_path)
     readme = tmp_path / "README.md"
     assert readme in written
-    assert readme.read_text() == f"# {SETTINGS.title}\n"
+    assert readme.read_text(encoding="utf-8") == f"# {SETTINGS.title}\n"
     readme.write_text("the README of the last release\n")
     assert readme not in write_project_files(context, tmp_path)
-    assert readme.read_text() == "the README of the last release\n"
+    assert readme.read_text(encoding="utf-8") == "the README of the last release\n"
 
 
 @pytest.mark.parametrize(
@@ -362,7 +365,9 @@ def test_copyright_years(
     context = dataclasses.replace(context, settings=settings, year=2026)
     assert context.copyright_years == years
     write_project_files(context, tmp_path)
-    zensical = tomllib.loads((tmp_path / "zensical.toml").read_text())["project"]
+    zensical = tomllib.loads((tmp_path / "zensical.toml").read_text(encoding="utf-8"))[
+        "project"
+    ]
     assert zensical["copyright"] == f"Copyright &copy; {years} Jane Doe"
 
 

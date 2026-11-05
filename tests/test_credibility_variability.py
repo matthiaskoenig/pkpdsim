@@ -138,7 +138,7 @@ def test_the_record_of_a_context(tmp_path: Path) -> None:
     assert read.to_dict() == assessment.to_dict()
     assert len(read.vpc) == len(fit_table().table)
     # a record of pkpdsim 0.18 has no predictive check
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding="utf-8"))
     del data["vpc"]
     for context in data["contexts"]:
         del context["variability"]
@@ -155,7 +155,7 @@ def test_the_record_of_a_context(tmp_path: Path) -> None:
     output = write_outputs(assessment, tmp_path / "out")
     for name in ("variability.tsv", "variability_quantities.tsv", "vpc.tsv"):
         assert (output / name).is_file()
-    html = (output / "index.html").read_text()
+    html = (output / "index.html").read_text(encoding="utf-8")
     assert "<h4>Variability</h4>" in html
     assert "k LogNormal(cv=0.2)" in html
 

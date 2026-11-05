@@ -164,7 +164,7 @@ def test_the_record_and_the_outputs(tmp_path: Path) -> None:
     read = CredibilityAssessment.from_json(path)
     assert read.to_dict() == assessment.to_dict()
     # a record of pkpdsim 0.18 has no temporal record
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding="utf-8"))
     for context in data["contexts"]:
         del context["temporal"]
     assert all(
@@ -174,8 +174,12 @@ def test_the_record_and_the_outputs(tmp_path: Path) -> None:
     assert set(table["context"]) == {"dose", "renal"}
     assert set(table["study"]) == {"CredA"}
     output = write_outputs(assessment, tmp_path / "out")
-    assert (output / "temporal.tsv").read_text().startswith("context\tstudy\tfit")
-    html = (output / "index.html").read_text()
+    assert (
+        (output / "temporal.tsv")
+        .read_text(encoding="utf-8")
+        .startswith("context\tstudy\tfit")
+    )
+    html = (output / "index.html").read_text(encoding="utf-8")
     assert "Temporal validation" in html
     assert "PKDB09999" in html
 
