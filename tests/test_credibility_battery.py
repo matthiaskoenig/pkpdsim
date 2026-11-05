@@ -31,7 +31,7 @@ from sbmlsim.credibility.report import battery_table, write_outputs
 from sbmlsim.project import CheckSettings, Project
 from sbmlsim.project_checks import check_battery
 
-from pkpdsim.credibility import EXTENSIONS, PK_BATTERY, PK_CHECKS
+from pkpdsim.credibility import DOSE_STATES, EXTENSIONS, PK_BATTERY, PK_CHECKS
 from pkpdsim.credibility.battery import (
     _INFUSION,
     _SINKS,
@@ -111,6 +111,7 @@ def test_a_sound_model_passes(tmp_path: Path) -> None:
     assert [r.check.id for r in battery.results] == list(PK_BATTERY.order)
     status = {r.check.id: r.status for r in battery.results}
     for check in (
+        "dose_states",
         "mass_balance",
         "non_negativity",
         "zero_dose",
@@ -241,6 +242,8 @@ def test_a_model_without_a_substance(tmp_path: Path) -> None:
     assert battery.result("non_negativity").status is BatteryStatus.PASSED
     assert battery.result("plausibility").status is BatteryStatus.PASSED
     assert battery.result("cross_simulator").statement == "Not run."
+    # the dose states of a build are read without a substance
+    assert battery.result("dose_states").status is BatteryStatus.PASSED
     assert _fates(battery) == []
 
 
@@ -335,10 +338,13 @@ def test_the_sinks_of_the_library_are_sinks_of_a_fate() -> None:
 
 
 def test_a_dose_state_the_battery_does_not_know_is_reported(tmp_path: Path) -> None:
-    """An unknown state in mg which a reaction reads is reported, not skipped.
+    """An unknown state in mg which a reaction reads fails its own check.
 
     The failure mode of an unlisted dose state is a silent one: its dose is
-    simulated by nothing and no fate is recorded. The mass balance names it.
+    simulated by nothing and no fate is recorded. The check `dose_states`
+    names it while the mass balance, whose arithmetic holds, passes. The case
+    which asked for the split is `ethinylestradiol` of pkdb_models: its patch
+    and ring depots are unknown and its amounts balance to 2.3e-15.
     """
     model = _model(
         tmp_path,
@@ -349,9 +355,40 @@ def test_a_dose_state_the_battery_does_not_know_is_reported(tmp_path: Path) -> N
     build = FlatBuild.read("male", model.model_path)
     assert build.unknown_doses == ("XDOSE_d",)
     assert "XDOSE_d" not in build.doses
-    result = _battery(model).result("mass_balance")
+    battery = _battery(model)
+    result = battery.result("dose_states")
     assert result.status is BatteryStatus.FAILED
+    assert result.cases == 1
     assert any("XDOSE_d" in problem for problem in result.problems), result.problems
+    mass = battery.result("mass_balance")
+    assert mass.status is BatteryStatus.PASSED, mass.problems
+    assert mass.largest < 1e-10
+
+
+def test_a_dose_which_disappears_fails_only_the_mass_balance(tmp_path: Path) -> None:
+    """A dose of a known prefix which is not conserved fails the arithmetic.
+
+    The other side of the split: the mass balance fails and the dose states
+    of the model are all known. The case is the inhaled route of `albuterol`
+    of pkdb_models, which drops the fraction of the dose that stays in the
+    device or is exhaled without a species, 0.279 of the dose.
+    """
+    model = _model(
+        tmp_path,
+        "unit mg = 1e-3 gram; IMDOSE_d = 0; IMDOSE_d has mg; kim = 0.3;"
+        " f_lost = 0.25;"
+        " IMDOSE_d' = -kim*IMDOSE_d;"
+        " im_d: => Cve_d; (1 - f_lost)*kim*IMDOSE_d/Mr_d;",
+    )
+    build = FlatBuild.read("male", model.model_path)
+    assert build.unknown_doses == ()
+    assert build.dose_states["IMDOSE_d"] == "d"
+    battery = _battery(model)
+    assert battery.result("dose_states").status is BatteryStatus.PASSED
+    mass = battery.result("mass_balance")
+    assert mass.status is BatteryStatus.FAILED
+    assert mass.largest == pytest.approx(0.25, rel=1e-2)
+    assert any("IMDOSE_d" in problem for problem in mass.problems), mass.problems
 
 
 def test_an_injected_depot(tmp_path: Path) -> None:
@@ -531,7 +568,8 @@ def test_the_outputs_of_the_battery(tmp_path: Path) -> None:
     html = (output / "index.html").read_text(encoding="utf-8")
     assert "Battery of the variants" in html
     assert "Fate of the doses" in html
-    assert "battery of the variants</a>, 6 checks" in html
+    # the applicable checks of the drug model, the dose states included
+    assert "battery of the variants</a>, 7 checks" in html
     assert (output / "fates.tsv").read_text(encoding="utf-8").startswith("build\tdose")
 
 
@@ -621,9 +659,14 @@ def test_the_battery_hook_of_a_model() -> None:
         "value",
         "share",
     ]
+    assert PK_CHECKS[0] is DOSE_STATES
     for check in PK_CHECKS:
         assert CHECKS[check.id] == check
-        assert check.factor == "numerical_code_verification"
+        # the dose states are a use error, the others verify the numerics
+        expected = (
+            "use_error" if check is DOSE_STATES else "numerical_code_verification"
+        )
+        assert check.factor == expected
     assert sorted(PK_BATTERY.order) == sorted(
         [*(c.id for c in core.BATTERY_CHECKS), *(c.id for c in PK_CHECKS)]
     )

@@ -8,6 +8,9 @@ battery hook of every `PKPDModel`) adds what every PBPK model must fulfil, on
 the simulations of every build with roadrunner without a dose and with a dose
 of every route of every substance:
 
+- `dose_states`: every state in mg which a reaction reads is a dose state
+  the battery knows, so every dose of the model is checked and none is
+  simulated by nothing (`FlatBuild.unknown_doses`).
 - `mass_balance`: the amount of the substances in the model, in its sinks and
   in its dose states changes by the infusion and by the flows of the reactions
   which do not read a dose (eliminations and productions) alone, so a dose
@@ -43,10 +46,11 @@ model without doses, is not applicable and assesses nothing.
 `LEGACY_DOSE_STATES`, the dose states of the models which are not built with
 the library (an inhaled, buccal, legacy rectal or sublingual dose, an oral
 solution). A state in mg which a reaction reads and which is neither is a
-dose state or a depot of a dose the battery does not know: the mass balance
-reports it (`FlatBuild.unknown_doses`) instead of leaving it out in silence,
-so it is given its prefix or the check is declared as a known failure with
-its reason (`CheckSettings.battery`).
+dose state or a depot of a dose the battery does not know: the check
+`dose_states` reports it (`FlatBuild.unknown_doses`) instead of leaving it
+out in silence, so it is given its prefix or the check is declared as a
+known failure with its reason (`CheckSettings.battery`). The mass balance
+keeps its arithmetic meaning and does not fail for it.
 """
 
 from __future__ import annotations
@@ -86,9 +90,11 @@ if TYPE_CHECKING:
 __all__ = [
     "ABSOLUTE_TOLERANCE",
     "DOSE",
+    "DOSE_STATES",
     "FATE_COLUMNS",
     "HORIZON",
     "INFUSION",
+    "LEGACY_DOSE_STATES",
     "MASS_BALANCE",
     "MASS_LIMIT",
     "PK_BATTERY",
@@ -103,6 +109,7 @@ __all__ = [
     "Fate",
     "FlatBuild",
     "PKBattery",
+    "dose_states",
 ]
 
 logger = logging.getLogger(__name__)
@@ -152,6 +159,9 @@ _NO_SUBSTANCE: Final = (
     "convention of the PBPK models the checks of the simulations read."
 )
 
+DOSE_STATES: Final = register_check(
+    Check("dose_states", "dose states of the model", "use_error")
+)
 MASS_BALANCE: Final = register_check(
     Check("mass_balance", "mass balance", "numerical_code_verification")
 )
@@ -161,8 +171,9 @@ ZERO_DOSE: Final = register_check(
 SUPERPOSITION: Final = register_check(
     Check("superposition", "superposition", "numerical_code_verification")
 )
-#: the checks of the PK battery
-PK_CHECKS: Final = (MASS_BALANCE, ZERO_DOSE, SUPERPOSITION)
+#: the checks of the PK battery, the dose states first: the check says what
+#: the others cover
+PK_CHECKS: Final = (DOSE_STATES, MASS_BALANCE, ZERO_DOSE, SUPERPOSITION)
 
 #: the columns of `fates.tsv`
 FATE_COLUMNS: Final = (
@@ -315,8 +326,14 @@ class FlatBuild:
             rules and transitively.
         unknown_doses: the states in mg which a reaction reads and which are
             no dose of any prefix of `dose_states`, so they are a dose state
-            or a depot of a dose which the battery does not know; the mass
-            balance reports them instead of leaving them out in silence.
+            or a depot of a dose which the battery does not know; the check
+            `dose_states` reports them instead of leaving them out in
+            silence. A heuristic: a parameter with a rate rule, in mg, which
+            a reaction reads is what every dose state of the models looks
+            like, and it has no false positive over the tracked builds of
+            pkdb_models, but a model may have such a state which is no dose;
+            a dose state in another unit, one which is a species and a
+            constant parameter without a rate rule are not found.
         flows: the net change of the amount of the tracked species per unit of
             the rate of every reaction which changes it, by reaction id.
         inputs: the reactions of `flows` which read a state of the dose or
@@ -449,7 +466,8 @@ class FlatBuild:
         dosing = {**doses, **dose_states}
         # a state in mg which a reaction reads and which is no dose of any
         # prefix looks like a dose state the battery does not know: it would
-        # otherwise be left out of every check without a word
+        # otherwise be left out of every check without a word. A heuristic,
+        # which the check `dose_states` reports and nothing else acts on
         unknown_doses = tuple(
             sorted(
                 pid
@@ -722,14 +740,6 @@ def _mass_balance(
                 f"{build.name}: the species '{sid}' is changed by a rule or an "
                 f"event, outside of the reactions"
             )
-        for pid in build.unknown_doses:
-            collector.problems.append(
-                f"{build.name}: the state '{pid}' is in mg and a reaction reads "
-                f"it, so it is a dose state or a depot of a dose which the "
-                f"battery does not know and nothing checks; add its prefix to "
-                f"the dose states of the library or to `LEGACY_DOSE_STATES`, or "
-                f"declare the check as a known failure with its reason"
-            )
         # the amount of the smallest dose is the floor of the largest term
         smallest = min(
             (DOSE / _mr(runner, s) for s in build.doses.values()),
@@ -866,6 +876,10 @@ def _superposition(
 
 
 _STATEMENTS: Final = {
+    DOSE_STATES.id: (
+        "Every state in mg which a reaction reads is a dose state the battery "
+        "knows, so every dose of the model is checked."
+    ),
     MASS_BALANCE.id: (
         "The amounts of the substances, of their sinks and doses change by the "
         "infusion and the flows of the reactions which read no dose alone, at "
@@ -915,17 +929,48 @@ def fates_table(fates: Sequence[Mapping[str, Any]]) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=list(FATE_COLUMNS))
 
 
+def _dose_states(builds: Sequence[FlatBuild]) -> BatteryResult:
+    """Check that the battery knows every dose state of every build.
+
+    A dose state the battery does not know is simulated by nothing: it has no
+    mass balance, no superposition and no fate, and the model is not told.
+    This check is what tells it, one case per build. It needs no simulation
+    and no substance with a molecular weight, so a build without one has it.
+
+    Args:
+        builds: the builds of the model.
+
+    Returns:
+        The result of the check `dose_states`.
+    """
+    collector = BatteryCollector()
+    for build in builds:
+        collector.cases += 1
+        for pid in build.unknown_doses:
+            collector.problems.append(
+                f"{build.name}: the state '{pid}' is in mg and a reaction reads "
+                f"it, so it is a dose state or a depot of a dose which the "
+                f"battery does not know and nothing checks; add its prefix to "
+                f"the dose states of the library or to `LEGACY_DOSE_STATES`, or "
+                f"declare the check as a known failure with its reason"
+            )
+    return collector.result(DOSE_STATES, _statement(DOSE_STATES))
+
+
 class PKBattery(BatteryHook):
     """The battery hook of the PBPK models, see the module.
 
     Reads every build as a `FlatBuild`, simulates the SBML which integrates
     the flows of the reactions with the cases of the doses (`dose_cases`) and
     adds the checks `PK_CHECKS` with the fates of the doses (section `fates`).
+    The check `dose_states` needs no simulation, so a build without a
+    substance with a molecular weight has it as well.
     """
 
     name = "pk"
     checks = PK_CHECKS
     order = (
+        "dose_states",
         "mass_balance",
         "non_negativity",
         "zero_dose",
@@ -987,17 +1032,20 @@ class PKBattery(BatteryHook):
 
     @override
     def contribute(self, runs: Sequence[BatteryRun]) -> BatteryContribution:
-        """Check the mass balance, the zero dose and the superposition of the builds."""
+        """Check the dose states, the mass balance, the zero dose and the superposition."""
         builds = [run.build.data for run in runs]
-        if not any(isinstance(b, FlatBuild) and b.substances for b in builds):
+        flat = [b for b in builds if isinstance(b, FlatBuild)]
+        results: dict[str, BatteryResult] = {DOSE_STATES.id: _dose_states(flat)}
+        if not any(b.substances for b in flat):
+            # the dose states need no simulation and no molecular weight
             return BatteryContribution(
                 results=tuple(
-                    not_applicable_result(check, _NO_SUBSTANCE) for check in PK_CHECKS
+                    results.get(check.id, not_applicable_result(check, _NO_SUBSTANCE))
+                    for check in PK_CHECKS
                 ),
                 sections={"fates": []},
             )
         simulations = [_Simulations.of(run) for run in runs]
-        results: dict[str, BatteryResult] = {}
         fates: list[Fate] = []
         if not any(sims.runner.build.doses for sims in simulations):
             reason = (

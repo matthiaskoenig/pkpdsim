@@ -31,7 +31,7 @@ from test_credibility_battery import _model
 from test_credibility_ratios import _renal
 
 from pkpdsim.cli import credibility_command
-from pkpdsim.credibility import EXTENSIONS, PK_BATTERY
+from pkpdsim.credibility import DOSE_STATES, EXTENSIONS, PK_BATTERY
 from pkpdsim.credibility.ratios import section_pairs
 from pkpdsim.data import StudyRecord, study_record_path, table_digests
 from pkpdsim.model import PKPDModel
@@ -82,6 +82,30 @@ SBMLSIM_TEXTS = {
         "assesses it by the evidence extension of the pairing;"
     ),
 }
+
+
+#: the checks pkpdsim added after 0.19: a record of 0.19 has neither their
+#: result nor their sentence in the statement of their factor, so the stored
+#: records are compared without them and the rest exactly. `dose_states` is
+#: the check of 0.22, the dose states of a model the battery does not know
+#: (matthiaskoenig/pkpdsim#115)
+CHECKS_AFTER_0_19 = (DOSE_STATES,)
+
+#: the sentences of `CHECKS_AFTER_0_19` in the statement of a factor, as
+#: sbmlsim words them: the label of the check, its cases, its deviation and
+#: its problems, up to its result
+AFTER_0_19 = re.compile(
+    "|".join(
+        rf"{c.label[0].upper()}{re.escape(c.label[1:])} of \d+ cases?.*?"
+        r": (?:passed|failed)\. "
+        for c in CHECKS_AFTER_0_19
+    )
+)
+
+
+def _before(statement: str) -> str:
+    """Get a statement without the sentences of the checks added after 0.19."""
+    return AFTER_0_19.sub("", statement)
 
 
 def _worded(statement: str) -> str:
@@ -234,7 +258,7 @@ def _compare(
                 b["name"],
                 b["step"],
             )
-            assert _same_statement(a["statement"], _worded(b["statement"])), (
+            assert _same_statement(_before(a["statement"]), _worded(b["statement"])), (
                 a["id"],
                 a["statement"],
                 b["statement"],
@@ -273,8 +297,10 @@ def test_the_assessment_gives_the_verdicts_of_pkpdsim_0_19(
     battery = {r.check.id: r.status.value for r in new.verification.battery.results}
     assert list(battery) == list(PK_BATTERY.order)
     # the toy has no substance with a molecular weight and does not start at
-    # its steady state; the generic non-negativity runs on every model
+    # its steady state; the generic non-negativity runs on every model, and the
+    # dose states need neither a substance nor a simulation
     assert battery == {
+        "dose_states": "passed",
         "mass_balance": "not_applicable",
         "non_negativity": "passed",
         "zero_dose": "not_applicable",
@@ -429,8 +455,11 @@ def test_the_battery_of_the_drug_model_of_pkpdsim_0_19(tmp_path: Path) -> None:
         json.loads((DATA / "battery-drug-0.19.json").read_text(encoding="utf-8"))
     )
     new = run_battery(_model(tmp_path), rebuild=False, cross_simulator=False)
-    assert [r.check.id for r in new.results] == [r.check.id for r in old.results]
-    for before, after in zip(old.results, new.results, strict=True):
+    added = {c.id for c in CHECKS_AFTER_0_19}
+    assert added <= {r.check.id for r in new.results}
+    results = [r for r in new.results if r.check.id not in added]
+    assert [r.check.id for r in results] == [r.check.id for r in old.results]
+    for before, after in zip(old.results, results, strict=True):
         assert (after.status, after.cases) == (before.status, before.cases), after
         assert _same_noise(after.largest, before.largest), (
             after.check.id,
