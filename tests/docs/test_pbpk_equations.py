@@ -361,15 +361,17 @@ def absorption() -> PBPKDefinition:
     )
 
 
-def mucosa() -> PBPKDefinition:
+def mucosa(per_volume: bool = True) -> PBPKDefinition:
     """Get the toy with the permeability-limited mucosa of the segmented intestine.
 
-    `drg` has a gut metabolism of CYP3A4 into `drg_m` and the exchange
-    `kps_mu_drg` between the mucosal blood and the enterocytes
-    (`SegmentedIntestine(mucosa_ps=...)`, the Qgut model).
+    `drg` has a gut metabolism of CYP3A4 into `drg_m` and the exchange between
+    the mucosal blood and the enterocytes (`SegmentedIntestine(mucosa_ps=...)`,
+    the Qgut model): per litre of mucosa (`kps_mu_drg`) or, with
+    `per_volume=False`, of the mucosa of the small intestine
+    (`PS_mu_ref_drg`), the two forms of the option.
     """
     return PBPKDefinition(
-        sid="toy_mucosa",
+        sid="toy_mucosa" + ("" if per_volume else "_whole"),
         substances=[
             Substance(
                 "drg",
@@ -391,7 +393,12 @@ def mucosa() -> PBPKDefinition:
             )
         ],
         variants=Variants(
-            organs={Organ.SMALL_INTESTINE: SegmentedIntestine(mucosa_ps={"drg": 0.5})}
+            organs={
+                Organ.SMALL_INTESTINE: SegmentedIntestine(
+                    mucosa_ps={"drg": 0.5 if per_volume else 1.0},
+                    mucosa_ps_per_volume=per_volume,
+                )
+            }
         ),
         routes=[Route.oral_solution("drg")],
     )
@@ -452,6 +459,7 @@ def contexts(tmp_path_factory: pytest.TempPathFactory) -> list[Context]:
         variants(),
         absorption(),
         mucosa(),
+        mucosa(per_volume=False),
     ):
         paths = build(definition, directory)
         doc = libsbml.readSBMLFromFile(str(paths.comp_path))

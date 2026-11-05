@@ -296,7 +296,9 @@ def test_the_exchange_of_the_whole_mucosa_is_that_of_the_small_intestine(
     (its mucosa is 56.9 % of the small intestinal mucosa). The single lumen,
     whose one mucosa is that of the small intestine, gets the whole value, and
     its hybrid flow is that of the segments of the small intestine within
-    0.5 % (`Qgut` is not additive).
+    1e-5: `Qgut` is additive over the segments of one region, because the
+    blood flow and the mucosa volume of a segment carry the same transit
+    share, and the residue is the rounding of those shares in the formulas.
     """
     r = load(
         build(
@@ -328,8 +330,13 @@ def test_the_exchange_of_the_whole_mucosa_is_that_of_the_small_intestine(
         )
     )
     assert single[_gu(ids.mucosa_ps(S))] == pytest.approx(CLPERM, rel=1e-12)
+    # every mucosa segment of the single lumen is of the small intestine, so
+    # the volume of the whole mucosa is that of the small intestine: no second
+    # parameter for the normalisation
+    assert _gu(ids.MUCOSA_VOLUME_SMALL) in set(r.model.getGlobalParameterIds())
+    assert _gu(ids.MUCOSA_VOLUME_SMALL) not in set(single.model.getGlobalParameterIds())
     assert sum(r[_gu(ids.mucosa_qgut(S, seg))] for seg in SMALL) == pytest.approx(
-        single[_gu(ids.mucosa_qgut(S))], rel=5e-3
+        single[_gu(ids.mucosa_qgut(S))], rel=1e-5
     )
 
 
@@ -339,10 +346,13 @@ def test_the_mucosa_holds_the_absorbed_drug_for_its_time_constant(
     """The enterocytes are a compartment behind a barrier, in every segment alike.
 
     The absorbed drug leaves the mucosa of a segment with the time constant
-    `Vmu_<seg>*K_mu_<s>/Qgut_<seg>_<s>`, which is the same in every segment
-    because the exchange per litre of mucosa is: about 0.47 minutes per unit
-    of `K_mu_<s>` at a `CLperm` of 100 l/hr (0.0008 minutes with the
-    flow-limited mucosa, which is why the lag comes with the option).
+    `Vmu_<seg>*K_mu_<s>/Qgut_<seg>_<s>`: about 0.47 minutes per unit of
+    `K_mu_<s>` at a `CLperm` of 100 l/hr (0.0008 minutes with the flow-limited
+    mucosa, which is why the lag comes with the option). It is nearly the same
+    in every segment because the exchange per litre of mucosa is (that
+    equality is exact, see the test above); `Qgut` mixes in the mucosal blood
+    flow, whose density per litre of mucosa differs between small and large
+    intestine, so the segments spread by about 1e-3 relative.
     """
     r = load(
         build(
@@ -355,7 +365,7 @@ def test_the_mucosa_holds_the_absorbed_drug_for_its_time_constant(
         r[_gu(ids.mucosa_volume(seg))] * k / r[_gu(ids.mucosa_qgut(S, seg))]
         for seg in SMALL + COLON
     ]
-    np.testing.assert_allclose(times, times[0], rtol=1e-3)
+    np.testing.assert_allclose(times, times[0], rtol=1e-2)
     assert times[0] / k == pytest.approx(0.47, abs=0.02)
 
 
@@ -474,18 +484,34 @@ def test_a_permeability_which_is_no_mapping_is_refused() -> None:
         SegmentedIntestine(mucosa_ps=1.0)  # ty: ignore[invalid-argument-type]
 
 
+@pytest.mark.parametrize("per_volume", [True, False])
 @pytest.mark.parametrize("value", [-0.5, 0.0])
-def test_a_permeability_which_is_not_positive_is_refused(value: float) -> None:
+def test_a_permeability_which_is_not_positive_is_refused(
+    value: float, per_volume: bool
+) -> None:
     """An exchange which is not positive is refused when the intestine is created.
 
     A negative exchange gives a negative hybrid flow, so the flows of the
     mucosa run backwards and the bypass exceeds the mucosal blood flow; zero
     cuts the enterocytes off from the blood without a message (and zero is
-    reachable from the bound of a fit).
+    reachable from the bound of a fit). Both intestines, both forms of the
+    option, a number and a `Value`.
     """
     for kind in (SegmentedIntestine, SingleLumen):
-        with pytest.raises(ValueError, match="must be positive"):
-            kind(mucosa_ps={S: value})
+        for q in (value, Value(value, U.per_min if per_volume else U.l_per_min)):
+            with pytest.raises(
+                ValueError, match=f"the exchange of '{S}' must be positive"
+            ):
+                kind(mucosa_ps={S: q}, mucosa_ps_per_volume=per_volume)
+
+
+def test_every_substance_of_the_permeability_is_checked() -> None:
+    """The refusal names every substance of the mapping whose exchange is wrong."""
+    with pytest.raises(ValueError) as problem:
+        SegmentedIntestine(mucosa_ps={S: -1.0, M: 0.5, OTHER: 0.0})
+    assert f"the exchange of '{S}' must be positive, got -1.0" in str(problem.value)
+    assert f"the exchange of '{OTHER}' must be positive, got 0.0" in str(problem.value)
+    assert f"'{M}'" not in str(problem.value)
 
 
 @pytest.mark.parametrize(

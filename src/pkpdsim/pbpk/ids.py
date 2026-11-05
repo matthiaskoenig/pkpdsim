@@ -403,8 +403,10 @@ MUCOSA_VOLUME_TOTAL = "Vmu_total"
 """The local volume of the mucosa of all segments."""
 MUCOSA_VOLUME_SMALL = "Vmu_si"
 """The local volume of the mucosa of the segments of the small intestine, over
-which the exchange of the whole mucosa of a permeability-limited mucosa is
-normalised (`PS_mu_ref_<s>`)."""
+which the exchange of the mucosa of the small intestine of a
+permeability-limited mucosa is normalised (`PS_mu_ref_<s>`); an intestine whose
+whole mucosa is that of the small intestine (the single lumen) uses
+`Vmu_total`."""
 WALL_FRACTION = "f_wall"
 """The local fraction of the intestinal tissue without the mucosa, `1 - Vmu_total/Vti`."""
 F_MUCOSA_VOLUME = "f_mucosa_volume"
@@ -1056,12 +1058,15 @@ def mucosa_kps(s: str) -> str:
 
 
 def mucosa_ps_ref(s: str) -> str:
-    """The local id of the exchange of the whole mucosa, `PS_mu_ref_<s>`.
+    """The local id of the exchange of the mucosa of the small intestine, `PS_mu_ref_<s>`.
 
-    The permeability-surface product of the mucosa of all segments in l/min
-    (`mucosa_ps` of the intestine with `mucosa_ps_per_volume=False`, the
-    `CLperm` of the Qgut model): a segment has its share of it by mucosa
-    volume.
+    The permeability-surface product of the mucosa of the small intestine in
+    l/min (`mucosa_ps` of the intestine with `mucosa_ps_per_volume=False`, the
+    `CLperm` of the Qgut model, which the literature measures for that organ):
+    a segment has its share of it by mucosa volume relative to the mucosa of
+    the small intestine (`PS_mu_ref_<s>*Vmu_<seg>/Vmu_si`), so the segments of
+    the small intestine sum to it and the colon has its own share at the same
+    exchange per litre of mucosa.
     """
     return f"PS_mu_ref_{s}"
 

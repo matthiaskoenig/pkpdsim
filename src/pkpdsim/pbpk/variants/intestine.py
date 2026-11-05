@@ -172,9 +172,12 @@ def _mucosa_map(
 
     The values are checked as the `ps` of an organ is
     (`PBPKDefinition.validate`): positive, and a `Value` in the unit of the
-    form (1/min per litre of mucosa, l/min of the whole mucosa). A negative
-    exchange gives a negative hybrid flow, so the flows of the mucosa run
-    backwards; zero cuts the enterocytes off from the blood.
+    form (1/min per litre of mucosa, l/min of the mucosa of the small
+    intestine). A negative exchange gives a negative hybrid flow, so the flows
+    of the mucosa run backwards; zero cuts the enterocytes off from the blood.
+    A `Formula` passes both checks: its value is only known when the model is
+    built, as for the `ps` of an organ, so a formula which can turn negative
+    is the model's responsibility.
 
     Args:
         spec: the exchange of the mucosa by substance id, or `None`.
@@ -194,14 +197,16 @@ def _mucosa_map(
     if not isinstance(per_volume, bool):
         raise ValueError(
             f"mucosa_ps_per_volume: must be a bool, got {per_volume!r}: the exchange "
-            "is given per litre of mucosa (True) or of the whole mucosa (False)"
+            "is given per litre of mucosa (True) or of the mucosa of the small "
+            "intestine (False)"
         )
     if spec is None:
         if not per_volume:
             raise ValueError(
                 "mucosa_ps_per_volume: without mucosa_ps it changes nothing, the "
                 "mucosa of every substance is flow-limited; name the substances "
-                "with their exchange of the whole mucosa in mucosa_ps"
+                "with the exchange of the mucosa of their small intestine in "
+                "mucosa_ps"
             )
         return None
     if not isinstance(spec, Mapping):
@@ -475,8 +480,13 @@ class SegmentedIntestine:
         mucosa_ps_per_volume: the values of `mucosa_ps` are per litre of
             mucosa (`kps_mu_<s>`, 1/min), so the exchange of a segment follows
             the mucosa of the individual; `False` takes them as the exchange
-            of the whole mucosa (`PS_mu_ref_<s>`, l/min, the `CLperm` of the
-            Qgut model), of which a segment has its share by mucosa volume.
+            of the mucosa of the small intestine (`PS_mu_ref_<s>`, l/min, the
+            `CLperm` of the Qgut model, which the literature measures for that
+            organ), of which a segment has its share by mucosa volume relative
+            to the mucosa of the small intestine: the segments of the small
+            intestine sum to the given value and the colon has its own share
+            at the same exchange per litre of mucosa. Both forms are the one
+            quantity `PS_mu_ref_<s>/Vmu_si`.
 
     Raises:
         ValueError: (on build) for a key of a mapping which is no substance of
@@ -697,7 +707,8 @@ class SingleLumen:
             permeability-limited (as of `SegmentedIntestine`; the one mucosa
             of the single lumen is that of the small intestine).
         mucosa_ps_per_volume: the values of `mucosa_ps` are per litre of
-            mucosa (1/min), else the exchange of the whole mucosa (l/min).
+            mucosa (1/min), else the exchange of the mucosa of the small
+            intestine (l/min), which the one mucosa of the single lumen is.
 
     Raises:
         ValueError: for `regional` or `conversions`; (on build) for a key of

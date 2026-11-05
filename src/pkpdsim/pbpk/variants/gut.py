@@ -307,8 +307,9 @@ class GutBuilder(LumenBuilder):
                 permeability-limited; the others keep the flow-limited
                 mucosa.
             mucosa_ps_per_volume: the values of `mucosa_ps` are per litre of
-                mucosa (1/min), else the exchange of the whole mucosa
-                (l/min).
+                mucosa (1/min), else the exchange of the mucosa of the small
+                intestine (l/min), of which a segment has its share by mucosa
+                volume.
 
         Raises:
             ValueError: for chemistry the intestine cannot place, a
@@ -716,28 +717,32 @@ class GutBuilder(LumenBuilder):
     def _mucosa_volume_small(self) -> str:
         """The volume of the mucosa of the segments of the small intestine.
 
-        `Vmu_si`, the volume over which a `CLperm` of the whole mucosa is
-        normalised: the literature gives it for the small intestine, which is
-        also where the library places the chemistry of a protein without an
-        expression profile. Created only for such a `CLperm` (the single lumen
-        has one mucosa segment, the mucosa of the small intestine, so it is
-        that volume).
+        `Vmu_si`, the volume over which the exchange of the mucosa of the
+        small intestine is normalised (`mucosa_ps_per_volume=False`): the
+        literature measures `CLperm` for the small intestine, which is also
+        where the library places the chemistry of a protein without an
+        expression profile. Created only for that form, and only for an
+        intestine with a mucosa outside the small intestine: the one mucosa
+        segment of the single lumen is the mucosa of the small intestine, so
+        `Vmu_total` is that volume there and no second parameter is made.
         """
-        pid = ids.MUCOSA_VOLUME_SMALL
-        if pid in self.parameters:
-            return pid
         volumes = [
             ids.mucosa_volume(seg.token)
             for seg in self.mucosa_segments
             if seg.region is Organ.SMALL_INTESTINE
         ]
+        if len(volumes) == len(self.mucosa_segments):
+            return ids.MUCOSA_VOLUME_TOTAL
+        pid = ids.MUCOSA_VOLUME_SMALL
+        if pid in self.parameters:
+            return pid
         return self._initial(
             pid,
             " + ".join(volumes),
             U.litre,
             "volume mucosa small intestine [l]",
             "Volume of the mucosa of the segments of the small intestine, over "
-            "which the exchange of the whole mucosa is normalised.",
+            "which the exchange of the mucosa of the small intestine is normalised.",
             kind="mucosa_volume",
         )
 
@@ -785,7 +790,12 @@ class GutBuilder(LumenBuilder):
                 "literature measures it for and the organ of the gut chemistry); "
                 "a segment has its share of it by mucosa volume, so the segments "
                 "of the small intestine sum to it and the colon adds its share at "
-                "the same exchange per litre of mucosa.",
+                "the same exchange per litre of mucosa. The colonic share is an "
+                "extrapolation of that density: the colon has no villi, so its "
+                "surface per litre of mucosa is smaller and its permeability is "
+                "overestimated, which moves it towards the flow-limited mucosa; "
+                "an exchange of zero there would trap the drug absorbed in the "
+                "colon in its enterocytes.",
                 kind="permeability",
             )
             formula = f"{ref} * {vmu} / {self._mucosa_volume_small()}"
