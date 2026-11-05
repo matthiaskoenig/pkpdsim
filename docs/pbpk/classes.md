@@ -434,14 +434,14 @@ The physiological factors of each condition over its severity, a panel per facto
 <rect x="95" y="345" width="17" height="5" fill="#238b45" fill-opacity="0.9"><title>G3b moderate-severe</title></rect>
 <rect x="112" y="345" width="17" height="5" fill="#006d2c" fill-opacity="0.9"><title>G4 severe</title></rect>
 <rect x="129" y="345" width="17" height="5" fill="#00441b" fill-opacity="0.9"><title>G5 kidney failure</title></rect>
-<line x1="10" x2="146" y1="310.6" y2="310.6" stroke="currentColor" stroke-opacity="0.35" stroke-dasharray="3 3"/>
-<text x="149" y="313.6" font-size="11" opacity="0.7">1</text>
-<polyline points="10,310.6 44,310.6 61,309.1 95,306.3 120.5,300.3 137.5,277.2 146,277.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-<circle cx="61" cy="309.1" r="3.5" fill="currentColor"><title>mild: 1.046</title></circle>
-<circle cx="95" cy="306.3" r="3.5" fill="currentColor"><title>moderate: 1.137</title></circle>
-<circle cx="120.5" cy="300.3" r="3.5" fill="currentColor"><title>severe: 1.328</title></circle>
-<circle cx="137.5" cy="277.2" r="3.5" fill="currentColor"><title>end stage: 2.062</title></circle>
-<text x="149" y="280.2" font-size="11" opacity="0.7">2.062</text>
+<line x1="10" x2="146" y1="297.4" y2="297.4" stroke="currentColor" stroke-opacity="0.35" stroke-dasharray="3 3"/>
+<text x="149" y="300.4" font-size="11" opacity="0.7">1</text>
+<polyline points="10,297.4 44,297.4 61,292.4 95,287.3 120.5,282.2 137.5,277.2 146,277.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+<circle cx="61" cy="292.4" r="3.5" fill="currentColor"><title>mild: 1.113</title></circle>
+<circle cx="95" cy="287.3" r="3.5" fill="currentColor"><title>moderate: 1.227</title></circle>
+<circle cx="120.5" cy="282.2" r="3.5" fill="currentColor"><title>severe: 1.341</title></circle>
+<circle cx="137.5" cy="277.2" r="3.5" fill="currentColor"><title>end stage: 1.454</title></circle>
+<text x="149" y="280.2" font-size="11" opacity="0.7">1.454</text>
 </svg>
 </div>
 <!-- end generated -->

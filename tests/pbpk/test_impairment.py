@@ -378,18 +378,24 @@ def test_ckd_binding_profile_data() -> None:
 
     Albumin falls in concentration (the consensus of Huang 2017, Lin 2017 and
     Zakiyanov 2013) and in the binding function of its molecule (Klammt
-    2012), alpha-1-acid glycoprotein rises (Schmulenson 2018); the mild stage,
-    which no source measures, is a model choice.
+    2012), alpha-1-acid glycoprotein rises (the consensus of Docci 1985 and
+    Zakiyanov 2013, the end stage only); a stage which no source measures is
+    a model choice.
     """
     assert {e["protein"] for e in BINDING.values()} == {"albumin", "agp"}
     sources = {k: set(class_factors("ckd.binding", k).sources) for k in BINDING}
     assert sources == {
         "albumin": {"Huang2017", "Lin2017", "Zakiyanov2013"},
         "albumin_binding": {"Klammt2012"},
-        "agp": {"Schmulenson2018"},
+        "agp": {"Docci1985", "Zakiyanov2013"},
+    }
+    choices = {k: class_factors("ckd.binding", k).choice for k in BINDING}
+    assert choices == {
+        "albumin": ("mild",),
+        "albumin_binding": ("mild",),
+        "agp": ("mild", "moderate", "severe"),
     }
     for key, entry in BINDING.items():
-        assert class_factors("ckd.binding", key).choice == ("mild",), key
         values = [1.0, *entry["value"]]
         pairs = list(itertools.pairwise(values))
         if entry["protein"] == "albumin":
@@ -397,10 +403,10 @@ def test_ckd_binding_profile_data() -> None:
         else:
             assert all(b >= a for a, b in pairs), key
     # the end stage factors which the albumin and the AAG of a strongly bound
-    # substance multiply its fu with: about 1.75 and 0.48, against the 2.5 of
+    # substance multiply its fu with: about 1.75 and 0.69, against the 2.5 of
     # the old factor of the binding capacity
     assert 1.0 / _ckd_binding("albumin", 3) == pytest.approx(1.75, abs=0.01)
-    assert 1.0 / _ckd_binding("agp", 3) == pytest.approx(0.485, abs=0.01)
+    assert 1.0 / _ckd_binding("agp", 3) == pytest.approx(0.688, abs=0.01)
 
 
 @pytest.mark.parametrize("fu_ref", [0.01, 0.3])
