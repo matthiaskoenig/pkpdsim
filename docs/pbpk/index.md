@@ -260,6 +260,7 @@ Every other id of the scheme, the ids a model rarely reads: the physiology, the 
 | `f_mucosa_volume` | the fraction of the intestinal tissue which is mucosa (local id) | `ids.F_MUCOSA_VOLUME` |
 | `Qmu_total` | the blood flow of the mucosa of all segments (local id) | `ids.MUCOSA_FLOW_TOTAL` |
 | `Vmu_total` | the volume of the mucosa of all segments (local id) | `ids.MUCOSA_VOLUME_TOTAL` |
+| `Vmu_si` | the volume of the mucosa of the segments of the small intestine (local id) | `ids.MUCOSA_VOLUME_SMALL` |
 | `k_bile` | the rate of the transit of the bile into the intestinal lumen | `ids.K_BILE` |
 | `t_lumen` | the transit time of the single intestinal lumen into the feces (local id) | `ids.T_LUMEN` |
 | `T_st_fed` | the transit time of the stomach in the fed state (local id) | `ids.T_STOMACH_FED` |

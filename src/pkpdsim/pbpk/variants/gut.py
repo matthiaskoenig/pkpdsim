@@ -713,14 +713,45 @@ class GutBuilder(LumenBuilder):
                     segment=seg.token,
                 )
 
+    def _mucosa_volume_small(self) -> str:
+        """The volume of the mucosa of the segments of the small intestine.
+
+        `Vmu_si`, the volume over which a `CLperm` of the whole mucosa is
+        normalised: the literature gives it for the small intestine, which is
+        also where the library places the chemistry of a protein without an
+        expression profile. Created only for such a `CLperm` (the single lumen
+        has one mucosa segment, the mucosa of the small intestine, so it is
+        that volume).
+        """
+        pid = ids.MUCOSA_VOLUME_SMALL
+        if pid in self.parameters:
+            return pid
+        volumes = [
+            ids.mucosa_volume(seg.token)
+            for seg in self.mucosa_segments
+            if seg.region is Organ.SMALL_INTESTINE
+        ]
+        return self._initial(
+            pid,
+            " + ".join(volumes),
+            U.litre,
+            "volume mucosa small intestine [l]",
+            "Volume of the mucosa of the segments of the small intestine, over "
+            "which the exchange of the whole mucosa is normalised.",
+            kind="mucosa_volume",
+        )
+
     def _mucosa_exchange(self, s: Substance, seg: Segment) -> str:
         """The exchange between the mucosal blood and the enterocytes of a segment.
 
         `PS_mu_<seg>_<s>` (l/min), the permeability-surface product of the
         basolateral membrane: the exchange per litre of mucosa times the
         mucosa of the segment (`mucosa_ps_per_volume`, so it follows the
-        mucosa of the individual), else the share of the exchange of the whole
-        mucosa by its volume.
+        mucosa of the individual), else the same exchange per litre of mucosa
+        derived from the exchange of the mucosa of the small intestine
+        (`PS_mu_ref_<s>*Vmu_<seg>/Vmu_si`): the segments of the small
+        intestine then sum to the given value and the colon has its share at
+        that density, so the drug absorbed there reaches the blood as well.
         """
         sid, vmu = s.sid, ids.mucosa_volume(seg.token)
         whole = (
@@ -750,14 +781,19 @@ class GutBuilder(LumenBuilder):
                 self.mucosa_ps[sid],
                 U.l_per_min,
                 f"exchange mucosal blood and mucosa {sid} [l/min]",
-                f"{whole}, of the mucosa of all segments.",
+                f"{whole}, of the mucosa of the small intestine (the organ the "
+                "literature measures it for and the organ of the gut chemistry); "
+                "a segment has its share of it by mucosa volume, so the segments "
+                "of the small intestine sum to it and the colon adds its share at "
+                "the same exchange per litre of mucosa.",
                 kind="permeability",
             )
-            formula = f"{ref} * {vmu} / {ids.MUCOSA_VOLUME_TOTAL}"
+            formula = f"{ref} * {vmu} / {self._mucosa_volume_small()}"
             text = (
                 "Exchange between the mucosal blood and the enterocytes of the "
-                "segment: the share of the exchange of the whole mucosa by the "
-                "mucosa volume of the segment."
+                "segment: the share of the exchange of the mucosa of the small "
+                "intestine by the mucosa volume of the segment, so every segment "
+                "has the same exchange per litre of mucosa."
             )
         return self._initial(
             ids.mucosa_ps(sid, seg.token),
@@ -801,7 +837,7 @@ class GutBuilder(LumenBuilder):
             "the clearance with which the enterocytes exchange with the arterial "
             "plasma. It is the blood flow of the mucosa for a large exchange (the "
             "flow-limited mucosa) and the permeability clearance for a small one.",
-            kind="mucosa_flow",
+            kind="permeability",
             segment=seg.token,
         )
         self._reaction(

@@ -246,8 +246,13 @@ def test_inhibitors_add(tmp_path: Path) -> None:
 
 
 def _model(result: BuildResult) -> libsbml.Model:
-    """The flat model of a build."""
-    return libsbml.readSBMLFromFile(str(result.flat_path)).getModel()
+    """The flat model of a build, a copy which outlives its document.
+
+    `getModel()` of a document which is freed right away leaves a dangling
+    pointer (it segfaulted a worker of pytest), so the model is cloned: the
+    clone is owned by python.
+    """
+    return libsbml.readSBMLFromFile(str(result.flat_path)).getModel().clone()
 
 
 def _kinetic_law(result: BuildResult, organ: Organ, rid: str) -> str:

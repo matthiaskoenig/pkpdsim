@@ -16,6 +16,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import numpy as np
 import pytest
 
 from pkpdsim.pbpk import (
@@ -30,6 +31,8 @@ from pkpdsim.pbpk import (
     SegmentedIntestine,
     SingleLumen,
     Substance,
+    U,
+    Value,
     Variants,
     build,
     ids,
@@ -194,7 +197,10 @@ def test_the_mucosa_without_the_option_is_flow_limited(tmp_path: Path) -> None:
 
     The default creates no exchange (`kps_mu_<s>`, `PS_mu_<s>`, `Qgut_<s>`)
     and no bypass of the mucosal blood (`J_mu_blood_<s>`), and keeps the
-    arterial inflow and the outflow into the portal vein of the mucosa.
+    arterial inflow and the outflow into the portal vein of the mucosa. That
+    the SBML is byte-identical is checked by the stored references of the
+    library (`assert_reference_sbml`, whose definitions carry an 11-segment
+    mucosa) and by the rebuild of the library models of pkdb_models, not here.
     """
     r = load(build(_definition("flow", CLINT_FLOW), tmp_path))
     created = {
@@ -277,14 +283,20 @@ def test_the_permeability_limited_mucosa_frees_the_systemic_clearance(
     assert cl_flow == pytest.approx(20.6, abs=0.5)
 
 
-def test_the_segments_share_the_permeability_of_the_whole_mucosa(
+def test_the_exchange_of_the_whole_mucosa_is_that_of_the_small_intestine(
     tmp_path: Path,
 ) -> None:
-    """A `CLperm` of the whole mucosa is split over the segments by mucosa volume.
+    """A `CLperm` of the whole mucosa is the permeability of the small intestine.
 
-    The segmented intestine has the exchange and the hybrid flow per segment;
-    the exchanges sum to the given value, and each hybrid flow is below the
-    blood flow of its segment.
+    The literature gives `CLperm` for the small intestine, where the library
+    also places the chemistry of a protein without an expression profile: the
+    segments of the small intestine sum to the given value, every segment has
+    the same exchange per litre of mucosa (the colon too, so the drug absorbed
+    there reaches the blood), and the colon adds its share at that density
+    (its mucosa is 56.9 % of the small intestinal mucosa). The single lumen,
+    whose one mucosa is that of the small intestine, gets the whole value, and
+    its hybrid flow is that of the segments of the small intestine within
+    0.5 % (`Qgut` is not additive).
     """
     r = load(
         build(
@@ -295,11 +307,122 @@ def test_the_segments_share_the_permeability_of_the_whole_mucosa(
         )
     )
     segments = SMALL + COLON
-    total = sum(r[_gu(ids.mucosa_ps(S, seg))] for seg in segments)
-    assert total == pytest.approx(CLPERM, rel=1e-12)
+    assert sum(r[_gu(ids.mucosa_ps(S, seg))] for seg in SMALL) == pytest.approx(
+        CLPERM, rel=1e-12
+    )
+    assert sum(r[_gu(ids.mucosa_ps(S, seg))] for seg in COLON) == pytest.approx(
+        0.569 * CLPERM, rel=0.01
+    )
+    density = [
+        r[_gu(ids.mucosa_ps(S, seg))] / r[_gu(ids.mucosa_volume(seg))]
+        for seg in segments
+    ]
+    np.testing.assert_allclose(density, density[0], rtol=1e-12)
     for seg in segments:
         qgut = r[_gu(ids.mucosa_qgut(S, seg))]
         assert 0.0 < qgut < r[_gu(ids.mucosa_flow(seg))] * r[ids.bp(S)]
+    single = load(
+        build(
+            _definition("one", CLINT_PERMEABILITY, mucosa_ps={S: CLPERM}),
+            tmp_path,
+        )
+    )
+    assert single[_gu(ids.mucosa_ps(S))] == pytest.approx(CLPERM, rel=1e-12)
+    assert sum(r[_gu(ids.mucosa_qgut(S, seg))] for seg in SMALL) == pytest.approx(
+        single[_gu(ids.mucosa_qgut(S))], rel=5e-3
+    )
+
+
+def test_the_mucosa_holds_the_absorbed_drug_for_its_time_constant(
+    tmp_path: Path,
+) -> None:
+    """The enterocytes are a compartment behind a barrier, in every segment alike.
+
+    The absorbed drug leaves the mucosa of a segment with the time constant
+    `Vmu_<seg>*K_mu_<s>/Qgut_<seg>_<s>`, which is the same in every segment
+    because the exchange per litre of mucosa is: about 0.47 minutes per unit
+    of `K_mu_<s>` at a `CLperm` of 100 l/hr (0.0008 minutes with the
+    flow-limited mucosa, which is why the lag comes with the option).
+    """
+    r = load(
+        build(
+            _definition("lag", CLINT_PERMEABILITY, mucosa_ps={S: CLPERM}, single=False),
+            tmp_path,
+        )
+    )
+    k = r[_gu(ids.mucosa_coefficient(S))]
+    times = [
+        r[_gu(ids.mucosa_volume(seg))] * k / r[_gu(ids.mucosa_qgut(S, seg))]
+        for seg in SMALL + COLON
+    ]
+    np.testing.assert_allclose(times, times[0], rtol=1e-3)
+    assert times[0] / k == pytest.approx(0.47, abs=0.02)
+
+
+def test_the_option_is_per_substance(tmp_path: Path) -> None:
+    """A substance which `mucosa_ps` does not name keeps the flow-limited mucosa.
+
+    The gut metabolite has a mucosa as the product of the gut metabolism: it
+    gets no exchange, no hybrid flow and no bypass, and its mucosa releases
+    the drug with the mucosal blood flow.
+    """
+    r = load(
+        build(
+            _definition("per_substance", CLINT_PERMEABILITY, mucosa_ps={S: CLPERM}),
+            tmp_path,
+        )
+    )
+    present = set(r.model.getGlobalParameterIds()) | set(r.model.getReactionIds())
+    assert _gu(ids.mucosa_qgut(S)) in present
+    assert (
+        not {
+            _gu(i)
+            for i in (
+                ids.mucosa_kps(M),
+                ids.mucosa_ps_ref(M),
+                ids.mucosa_ps(M),
+                ids.mucosa_qgut(M),
+                ids.mucosa_reaction("blood", M),
+            )
+        }
+        & present
+    )
+    c = 1e-3
+    r[f"[{_gu(ids.mucosa(M))}]"] = c
+    flow = r[_gu(ids.mucosa_flow(None))] * (1.0 - r[ids.HCT])
+    assert r[_gu(ids.mucosa_reaction("out", M))] == pytest.approx(
+        flow * c / r[_gu(ids.mucosa_coefficient(M))], rel=1e-12
+    )
+
+
+def test_the_three_flows_of_the_mucosa_balance(tmp_path: Path) -> None:
+    """The mucosal blood of the permeability-limited mucosa is conserved.
+
+    At an arbitrary state, the inflow into the enterocytes and the bypass are
+    the arterial inflow of the mucosal blood, `Qmu*carrier*Car`; the outflow
+    of the enterocytes and the bypass are its outflow into the portal vein,
+    `Qmu*carrier*Cmu_pl` of the mucosal blood in quasi steady state; and the
+    net flux of the enterocytes is the exchange `fu*PS*(Cmu_pl - Cmu/K_mu)`.
+    """
+    r = load(
+        build(
+            _definition("balance", CLINT_PERMEABILITY, mucosa_ps={S: CLPERM}),
+            tmp_path,
+        )
+    )
+    car, cmu = 2e-4, 7e-3
+    r[f"[{ids.pool_species(Pool.ARTERIAL, S)}]"] = car
+    r[f"[{_gu(ids.mucosa(S))}]"] = cmu
+    a = r[_gu(ids.mucosa_flow(None))] * r[ids.bp(S)]
+    b = r[ids.fu(S)] * r[_gu(ids.mucosa_ps(S))]
+    k = r[_gu(ids.mucosa_coefficient(S))]
+    cmu_pl = (a * car + b * cmu / k) / (a + b)
+    j_in = r[_gu(ids.mucosa_reaction("in", S))]
+    j_out = r[_gu(ids.mucosa_reaction("out", S))]
+    j_blood = r[_gu(ids.mucosa_reaction("blood", S))]
+    assert j_in + j_blood == pytest.approx(a * car, rel=1e-10)
+    assert j_out + j_blood == pytest.approx(a * cmu_pl, rel=1e-10)
+    assert j_in - j_out == pytest.approx(b * (cmu_pl - cmu / k), rel=1e-10)
 
 
 def test_an_exchange_per_litre_of_mucosa_follows_the_individual(
@@ -349,6 +472,46 @@ def test_a_permeability_which_is_no_mapping_is_refused() -> None:
     """The option is per substance: a single value for every substance is refused."""
     with pytest.raises(ValueError, match="mucosa_ps: a mapping from substance id"):
         SegmentedIntestine(mucosa_ps=1.0)  # ty: ignore[invalid-argument-type]
+
+
+@pytest.mark.parametrize("value", [-0.5, 0.0])
+def test_a_permeability_which_is_not_positive_is_refused(value: float) -> None:
+    """An exchange which is not positive is refused when the intestine is created.
+
+    A negative exchange gives a negative hybrid flow, so the flows of the
+    mucosa run backwards and the bypass exceeds the mucosal blood flow; zero
+    cuts the enterocytes off from the blood without a message (and zero is
+    reachable from the bound of a fit).
+    """
+    for kind in (SegmentedIntestine, SingleLumen):
+        with pytest.raises(ValueError, match="must be positive"):
+            kind(mucosa_ps={S: value})
+
+
+@pytest.mark.parametrize(
+    ("unit", "per_volume", "expected"),
+    [(U.l_per_min, True, "1/min"), (U.per_min, False, "l/min")],
+)
+def test_a_permeability_in_the_wrong_unit_is_refused(
+    unit: object, per_volume: bool, expected: str
+) -> None:
+    """A `Value` of `mucosa_ps` is in the unit of its form, as `ps` of an organ is."""
+    with pytest.raises(ValueError, match=f"must be in {expected}"):
+        SegmentedIntestine(
+            mucosa_ps={S: Value(0.5, unit)},  # ty: ignore[invalid-argument-type]
+            mucosa_ps_per_volume=per_volume,
+        )
+
+
+def test_the_form_of_the_permeability_without_a_permeability_is_refused() -> None:
+    """`mucosa_ps_per_volume` alone changes nothing, and only a bool is a form."""
+    with pytest.raises(ValueError, match="mucosa_ps_per_volume: without mucosa_ps"):
+        SegmentedIntestine(mucosa_ps_per_volume=False)
+    with pytest.raises(ValueError, match="mucosa_ps_per_volume: must be a bool"):
+        SingleLumen(
+            mucosa_ps={S: 0.5},
+            mucosa_ps_per_volume="yes",  # ty: ignore[invalid-argument-type]
+        )
 
 
 def test_the_intestine_with_the_option_is_hashable() -> None:

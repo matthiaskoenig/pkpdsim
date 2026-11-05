@@ -61,6 +61,7 @@ __all__ = [
     "LBW",
     "MLEAN",
     "MUCOSA_FLOW_TOTAL",
+    "MUCOSA_VOLUME_SMALL",
     "MUCOSA_VOLUME_TOTAL",
     "PS_VAS",
     "QH",
@@ -400,6 +401,10 @@ MUCOSA_FLOW_TOTAL = "Qmu_total"
 """The local blood flow of the mucosa of all segments."""
 MUCOSA_VOLUME_TOTAL = "Vmu_total"
 """The local volume of the mucosa of all segments."""
+MUCOSA_VOLUME_SMALL = "Vmu_si"
+"""The local volume of the mucosa of the segments of the small intestine, over
+which the exchange of the whole mucosa of a permeability-limited mucosa is
+normalised (`PS_mu_ref_<s>`)."""
 WALL_FRACTION = "f_wall"
 """The local fraction of the intestinal tissue without the mucosa, `1 - Vmu_total/Vti`."""
 F_MUCOSA_VOLUME = "f_mucosa_volume"

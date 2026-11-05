@@ -88,7 +88,7 @@ from pkpdsim.pbpk.organs import Organ
 from pkpdsim.pbpk.placement import value_parameter
 from pkpdsim.pbpk.routes import ORAL
 from pkpdsim.pbpk.units import U
-from pkpdsim.pbpk.values import FrozenMap, Q, Value
+from pkpdsim.pbpk.values import FrozenMap, Q, Value, check_positive, check_unit
 from pkpdsim.pbpk.variants.gut import GUT_ORGANS, GutBuilder, mucosal_substances
 from pkpdsim.pbpk.variants.lumen_options import (
     COLON,
@@ -165,26 +165,57 @@ def _check_keys(
             )
 
 
-def _mucosa_map(spec: "Mapping[str, Q] | None") -> "FrozenMap[Q] | None":
-    """Store `mucosa_ps` as a hashable read-only mapping.
+def _mucosa_map(
+    spec: "Mapping[str, Q] | None", per_volume: bool
+) -> "FrozenMap[Q] | None":
+    """Store `mucosa_ps` as a hashable read-only mapping, its values checked.
+
+    The values are checked as the `ps` of an organ is
+    (`PBPKDefinition.validate`): positive, and a `Value` in the unit of the
+    form (1/min per litre of mucosa, l/min of the whole mucosa). A negative
+    exchange gives a negative hybrid flow, so the flows of the mucosa run
+    backwards; zero cuts the enterocytes off from the blood.
 
     Args:
         spec: the exchange of the mucosa by substance id, or `None`.
+        per_volume: the values are per litre of mucosa
+            (`mucosa_ps_per_volume`).
 
     Returns:
         The read-only copy, `None` for `None`.
 
     Raises:
-        ValueError: for anything but a mapping: the permeability-limited
-            mucosa is opt-in per substance, there is no value for all of them.
+        ValueError: for a form which is no bool or is given without
+            `mucosa_ps`, for anything but a mapping (the permeability-limited
+            mucosa is opt-in per substance, there is no value for all of
+            them), and for a value which is not positive or is a `Value` in
+            another unit.
     """
+    if not isinstance(per_volume, bool):
+        raise ValueError(
+            f"mucosa_ps_per_volume: must be a bool, got {per_volume!r}: the exchange "
+            "is given per litre of mucosa (True) or of the whole mucosa (False)"
+        )
     if spec is None:
+        if not per_volume:
+            raise ValueError(
+                "mucosa_ps_per_volume: without mucosa_ps it changes nothing, the "
+                "mucosa of every substance is flow-limited; name the substances "
+                "with their exchange of the whole mucosa in mucosa_ps"
+            )
         return None
     if not isinstance(spec, Mapping):
         raise ValueError(
             f"mucosa_ps: a mapping from substance id to its exchange, not {spec!r}: "
             "the permeability-limited mucosa is given per substance"
         )
+    unit = U.per_min if per_volume else U.l_per_min
+    problems: list[str] = []
+    for sid, q in spec.items():
+        problems += check_positive("mucosa_ps", f"the exchange of '{sid}'", q)
+        problems += check_unit("mucosa_ps", f"the exchange of '{sid}'", q, unit)
+    if problems:
+        raise ValueError("; ".join(problems))
     return FrozenMap(spec)
 
 
@@ -476,7 +507,9 @@ class SegmentedIntestine:
                 self, "regional", FrozenMap[RegionalAbsorption](self.regional)
             )
         object.__setattr__(self, "conversions", tuple(self.conversions))
-        object.__setattr__(self, "mucosa_ps", _mucosa_map(self.mucosa_ps))
+        object.__setattr__(
+            self, "mucosa_ps", _mucosa_map(self.mucosa_ps, self.mucosa_ps_per_volume)
+        )
 
     @property
     def replaces(self) -> tuple[Organ, ...]:
@@ -696,7 +729,9 @@ class SingleLumen:
                 "intestine (SegmentedIntestine), the single lumen has one lumen"
             )
         object.__setattr__(self, "conversions", ())
-        object.__setattr__(self, "mucosa_ps", _mucosa_map(self.mucosa_ps))
+        object.__setattr__(
+            self, "mucosa_ps", _mucosa_map(self.mucosa_ps, self.mucosa_ps_per_volume)
+        )
 
     @property
     def replaces(self) -> tuple[Organ, ...]:
