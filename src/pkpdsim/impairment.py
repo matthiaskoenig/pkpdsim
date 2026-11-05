@@ -26,6 +26,7 @@ and draws them with `class_simulations` and `add_classes` of
 `pkpdsim.pbpk.PBPKSimulationExperiment` (docs page `pbpk/classes.md`).
 """
 
+import itertools
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 
@@ -220,6 +221,51 @@ class Classification:
     def colors(self) -> dict[str, str]:
         """The colors of the classes by label, for a legend."""
         return {c.label: c.color for c in self.classes}
+
+    def color_of(self, value: float) -> str:
+        """Get the color of a continuous value of the parameter of the classes.
+
+        The color is interpolated in RGB between the colors of the two classes
+        whose values enclose it, so a continuous scan is drawn in the colors
+        of its classes; a class without a value (G1, the reference of the
+        model) is at the lower limit of its range, a value beyond the first
+        or the last class has its color.
+
+        Args:
+            value: the value, e.g. `CP_severity` 1.5 or an eGFR of 40.
+
+        Returns:
+            The color as `#rrggbb`.
+        """
+        points = []
+        for c in self.classes:
+            x = c.value
+            if x is None and c.limits is not None:
+                x = c.limits[0] if c.limits[0] is not None else c.limits[1]
+            if x is not None:
+                points.append((x, _rgb(c.color)))
+        points.sort(key=lambda p: p[0])
+        if value <= points[0][0]:
+            return _hex(points[0][1])
+        for (x0, c0), (x1, c1) in itertools.pairwise(points):
+            if value <= x1:
+                t = (value - x0) / (x1 - x0)
+                return _hex(tuple(a + t * (b - a) for a, b in zip(c0, c1, strict=True)))
+        return _hex(points[-1][1])
+
+
+_NAMED = {"black": "#000000"}
+
+
+def _rgb(color: str) -> tuple[float, float, float]:
+    """The RGB of a color `#rrggbb` (or `black`), 0 to 255."""
+    code = _NAMED.get(color, color).lstrip("#")
+    return (int(code[0:2], 16), int(code[2:4], 16), int(code[4:6], 16))
+
+
+def _hex(rgb: tuple[float, ...]) -> str:
+    """The `#rrggbb` of an RGB."""
+    return "#" + "".join(f"{round(v):02x}" for v in rgb)
 
 
 CHILD_PUGH_CLASSES = Classification(

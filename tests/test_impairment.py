@@ -213,3 +213,19 @@ def test_the_gfr_categories_tile_the_egfr() -> None:
         assert c.limits is not None and c.value is not None
         lo, hi = c.limits
         assert (lo or 0.0) <= c.value < hi  # ty: ignore[unsupported-operator]
+
+
+def test_a_continuous_value_has_the_color_of_its_classes() -> None:
+    """The color of a value is interpolated between the colors of its classes."""
+    cp = impairment.CHILD_PUGH_CLASSES
+    assert cp.color_of(1.0) == cp["A"].color
+    assert cp.color_of(3.0) == cp.color_of(5.0) == cp["C"].color
+    between = cp.color_of(1.5)
+    assert between not in (cp["A"].color, cp["B"].color)
+    kdigo = impairment.KDIGO_GFR_CLASSES
+    assert kdigo.color_of(120.0) == "#000000"
+    assert kdigo.color_of(22.5) == kdigo["G4"].color
+    assert (
+        impairment.NYHA_CLASSES.color_of(4.0)
+        == impairment.NYHA_CLASSES["IV"].color.lower()
+    )

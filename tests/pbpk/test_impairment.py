@@ -1092,3 +1092,51 @@ def test_the_ckd_factors_of_the_consensus(
             assert stage in factors.choice
     assert list(factors.values) == sorted(factors.values, reverse=True)
     assert all(v < 1 for v in factors.values)
+
+
+def test_the_conditions_combine_continuously(model: BuildResult) -> None:
+    """Between the classes every factor interpolates, the conditions multiply.
+
+    Cirrhosis at CP_severity 2.5, CKD at an eGFR between two anchors and
+    heart failure at HF_severity 1.5 together: the factor of a condition is
+    the midpoint of its neighbouring classes (the eGFR on its line between
+    the anchors), the factor of a quantity is their product, e.g. the GFR of
+    the hepatorenal and cardiorenal decline.
+    """
+    healthy = individual(model.flat_path)
+    egfr = (ANCHORS[1] + ANCHORS[2]) / 2
+    f = _stage_function(healthy, egfr)
+    r = individual(
+        model.flat_path, CP_severity=2.5, f_renal_function=f, HF_severity=1.5
+    )
+
+    def mid(values: list[float], k: int) -> float:
+        return (values[k] + values[k + 1]) / 2
+
+    cp = {k: mid(v["value"], 1) for k, v in CP.items()}
+    ckd = {k: mid(CKD[k]["value"], 1) for k in ("hematocrit", "kidney_flow")}
+    hf = {k: mid([1.0, *HF[k]["value"]], 1) for k in ("kidney_flow",)}
+    for key, value in cp.items():
+        assert r[ids.condition_factor("cp", key)] == pytest.approx(value, rel=1e-12)
+    for key, value in ckd.items():
+        assert r[ids.condition_factor("ckd", key)] == pytest.approx(value, rel=1e-12)
+    assert r[ids.condition_factor("hf", "kidney_flow")] == pytest.approx(
+        hf["kidney_flow"], rel=1e-12
+    )
+    # the products of the conditions
+    assert r[ids.impairment_factor(ids.HCT)] == pytest.approx(
+        cp["hematocrit"] * ckd["hematocrit"], rel=1e-12
+    )
+    assert r[ids.impairment_factor(ids.GFR)] == pytest.approx(
+        cp["gfr"] * hf["kidney_flow"], rel=1e-12
+    )
+    qki = ids.impairment_factor(ids.organ_flow(Organ.KIDNEY))
+    assert r[qki] == pytest.approx(
+        cp["kidney_flow"] * ckd["kidney_flow"] * hf["kidney_flow"], rel=1e-12
+    )
+    # the GFR: the intrinsic renal function times the functional decline
+    gfr_base = healthy[ids.GFR] / healthy[ids.impairment_factor(ids.GFR)]
+    assert r[ids.GFR] == pytest.approx(
+        gfr_base * r[ids.impairment_factor(ids.GFR)] * f, rel=1e-6
+    )
+    _assert_flows_sum(r)

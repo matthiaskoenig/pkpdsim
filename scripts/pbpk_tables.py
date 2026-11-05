@@ -24,6 +24,7 @@ uv run python scripts/pbpk_tables.py
 `tests/docs/test_pbpk_tables.py` fails while a page is out of date.
 """
 
+import itertools
 import re
 from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
@@ -1146,6 +1147,184 @@ def factors_heart_failure() -> str:
     )
 
 
+def _piecewise(points: list[tuple[float, float]], x: float) -> float:
+    """The linear interpolation of points `(x, y)` sorted by x, constant outside."""
+    if x <= points[0][0]:
+        return points[0][1]
+    for (x0, y0), (x1, y1) in itertools.pairwise(points):
+        if x <= x1:
+            return y0 + (y1 - y0) * (x - x0) / (x1 - x0)
+    return points[-1][1]
+
+
+def _cp_factor(key: str, section: str = "child_pugh") -> Callable[[float], float]:
+    """A factor of cirrhosis as a function of `CP_severity`."""
+    healthy = 0.0 if key == "shunt" else 1.0
+    values = class_factors(section, key).values
+    points = [(0.0, healthy), *((i + 1.0, v) for i, v in enumerate(values))]
+    return lambda cp: _piecewise(points, cp)
+
+
+def _ckd_factor(key: str, section: str = "ckd") -> Callable[[float], float]:
+    """A factor of CKD as a function of the eGFR (ml/min/1.73 m2)."""
+    table = load("impairment")["ckd"]
+    anchors = [float(v) for v in table["stage_anchor"]["value"]]
+    normal = float(table["stage_gfr"]["value"][0])
+    values = class_factors(section, key).values
+    points = sorted([(normal, 1.0), *zip(anchors, values, strict=True)])
+    return lambda egfr: _piecewise(points, egfr)
+
+
+_RAMP = ("#f7fbff", "#c6dbef", "#6baed6", "#2171b5", "#08306b")
+"""The sequential blue of the heat maps, light (low) to dark (high)."""
+
+
+def _ramp(t: float) -> str:
+    """The color of a fraction 0 to 1 of the ramp."""
+    t = min(max(t, 0.0), 1.0) * (len(_RAMP) - 1)
+    i = min(int(t), len(_RAMP) - 2)
+    a, b = _RAMP[i].lstrip("#"), _RAMP[i + 1].lstrip("#")
+    f = t - i
+    rgb = [
+        round(
+            int(a[k : k + 2], 16) + f * (int(b[k : k + 2], 16) - int(a[k : k + 2], 16))
+        )
+        for k in (0, 2, 4)
+    ]
+    return "#" + "".join(f"{v:02x}" for v in rgb)
+
+
+def _heatmap(
+    x0: float,
+    title: str,
+    xlabel: str,
+    xs: list[float],
+    xticks: list[tuple[float, str]],
+    value: Callable[[float, float], float],
+) -> list[str]:
+    """A heat map of a quantity over a severity (x) and the eGFR (y, 120 to 0)."""
+    w, h, top = 200.0, 200.0, 40.0
+    egfrs = [120.0 - 120.0 * (j + 0.5) / 24 for j in range(24)]
+    grid = [[value(x, e) for x in xs] for e in egfrs]
+    hi = max(max(row) for row in grid)
+    lo = min(min(row) for row in grid)
+    cw, ch = w / len(xs), h / len(egfrs)
+    out = [
+        f'<text x="{_number(x0)}" y="18" font-weight="600">{title}</text>',
+        f'<text transform="translate({_number(x0 - 28)} {_number(top + h / 2)}) '
+        'rotate(-90)" text-anchor="middle" font-size="12">eGFR (ml/min/1.73 m2)'
+        "</text>",
+    ]
+    for j, (e, row) in enumerate(zip(egfrs, grid, strict=True)):
+        for i, (x, v) in enumerate(zip(xs, row, strict=True)):
+            t = (v - lo) / (hi - lo) if hi > lo else 0.0
+            out.append(
+                f'<rect x="{_number(x0 + i * cw)}" y="{_number(top + j * ch)}" '
+                f'width="{_number(cw + 0.3)}" height="{_number(ch + 0.3)}" '
+                f'fill="{_ramp(t)}"><title>{xlabel} {_number(round(x, 3))}, eGFR '
+                f"{_number(round(e, 1))}: {v:.3g}</title></rect>"
+            )
+    for egfr in (90, 60, 30, 15):
+        y = top + (120 - egfr) / 120 * h
+        out.append(
+            f'<line x1="{_number(x0 - 4)}" x2="{_number(x0)}" y1="{_number(y)}" '
+            f'y2="{_number(y)}" stroke="currentColor"/>'
+        )
+        out.append(
+            f'<text x="{_number(x0 - 6)}" y="{_number(y + 4)}" text-anchor="end" '
+            f'font-size="11">{egfr}</text>'
+        )
+    span = xs[-1] - xs[0]
+    for x, label in xticks:
+        px = x0 + (x - xs[0]) / span * (w - cw) + cw / 2
+        out.append(
+            f'<line x1="{_number(px)}" x2="{_number(px)}" y1="{_number(top + h)}" '
+            f'y2="{_number(top + h + 4)}" stroke="currentColor"/>'
+        )
+        out.append(
+            f'<text x="{_number(px)}" y="{_number(top + h + 17)}" text-anchor="middle" '
+            f'font-size="11">{label}</text>'
+        )
+    out.append(
+        f'<text x="{_number(x0 + w / 2)}" y="{_number(top + h + 33)}" '
+        f'text-anchor="middle" font-size="12">{xlabel}</text>'
+    )
+    # the color bar
+    for k in range(20):
+        out.append(
+            f'<rect x="{_number(x0 + k * w / 20)}" y="{_number(top + h + 42)}" '
+            f'width="{_number(w / 20 + 0.3)}" height="8" fill="{_ramp(k / 19)}"/>'
+        )
+    out.append(
+        f'<text x="{_number(x0)}" y="{_number(top + h + 64)}" font-size="11">'
+        f"{lo:.2g}</text>"
+    )
+    out.append(
+        f'<text x="{_number(x0 + w)}" y="{_number(top + h + 64)}" font-size="11" '
+        f'text-anchor="end">{hi:.2g}</text>'
+    )
+    return out
+
+
+def combinations_figure() -> str:
+    """Quantities of combined impairments over the severities, heat maps."""
+    normal = 114.5
+    cp_gfr = _cp_factor("gfr")
+    cp_alb = _cp_factor("albumin")
+    hf_kf = _hf_factor("kidney_flow")
+    ckd_kf = _ckd_factor("kidney_flow")
+    ckd_alb = _ckd_factor("albumin", "ckd.binding")
+    ckd_bind = _ckd_factor("albumin_binding", "ckd.binding")
+    fu_ref = 0.05
+
+    def fu(cp: float, egfr: float) -> float:
+        f = cp_alb(cp) * ckd_alb(egfr) * ckd_bind(egfr)
+        return 1 / (1 + f * (1 - fu_ref) / fu_ref) / fu_ref
+
+    cps = [3.0 * i / 23 for i in range(24)]
+    hfs = [4.0 * i / 23 for i in range(24)]
+    cp_ticks = [(0.0, "0"), (1.0, "A"), (2.0, "B"), (3.0, "C")]
+    hf_ticks = [(0.0, "0"), (1.0, "I"), (2.0, "II"), (3.0, "III"), (4.0, "IV")]
+    body: list[str] = []
+    body += _heatmap(
+        50,
+        "GFR, hepatorenal",
+        "CP_severity",
+        cps,
+        cp_ticks,
+        lambda cp, e: cp_gfr(cp) * e / normal,
+    )
+    body += _heatmap(
+        300,
+        "renal blood flow, cardiorenal",
+        "HF_severity",
+        hfs,
+        hf_ticks,
+        lambda h, e: hf_kf(h) * ckd_kf(e),
+    )
+    body += _heatmap(
+        550,
+        "fu of an albumin-bound drug",
+        "CP_severity",
+        cps,
+        cp_ticks,
+        fu,
+    )
+    return _svg(
+        760,
+        310,
+        "Combined impairments: GFR, renal blood flow and fu relative to healthy",
+        body,
+    )
+
+
+def _hf_factor(key: str) -> Callable[[float], float]:
+    """A factor of heart failure as a function of `HF_severity`."""
+    values = class_factors("heart_failure", key).values
+    points = [(0.0, 1.0), *((i + 1.0, v) for i, v in enumerate(values))]
+    return lambda hf: _piecewise(points, hf)
+
+
 TABLES: dict[str, Callable[[], str]] = {
     "physiology-general": physiology_general,
     "physiology-organs-male": physiology_organs_male,
@@ -1174,6 +1353,7 @@ TABLES: dict[str, Callable[[], str]] = {
     "factors-child-pugh": factors_child_pugh,
     "factors-ckd": factors_ckd,
     "factors-heart-failure": factors_heart_failure,
+    "combinations-figure": combinations_figure,
 }
 """The tables by the name of their region."""
 

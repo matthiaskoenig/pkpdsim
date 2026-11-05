@@ -474,3 +474,61 @@ def test_the_classes_are_drawn_with_their_labels_and_colors(male: BuildResult) -
         (c.label, c.color) for c in impairment.CHILD_PUGH_CLASSES
     ]
     assert {c["yid"] for c in plot.curves} == {"[Cve_d]"}
+
+
+def test_the_continuous_severities(male: BuildResult) -> None:
+    """A severity is given directly or by its clinical measure, any value of its range."""
+    from pkpdsim.pbpk.impairment import cp_severity_of_meld
+    from pkpdsim.pbpk.physiology import normal_gfr
+
+    cls = _experiment(male)
+    values = cls.severity_values(meld=[6.43, 15.0, 30.0], egfr=[90.0, 40.0, 10.0])
+    assert values["CP_severity"].tolist() == [
+        0.0,
+        cp_severity_of_meld(15.0),
+        3.0,
+    ]
+    normal = normal_gfr(Sex.MALE) * 1e3
+    assert values["f_renal_function"].tolist() == pytest.approx(
+        [90.0 / normal, 40.0 / normal, 10.0 / normal], rel=1e-15
+    )
+    changes = cls.severity_changes(cp_severity=1.5, hf_severity=2.25)
+    assert {k: v.m_as("dimensionless") for k, v in changes.items()} == {
+        "CP_severity": 1.5,
+        "HF_severity": 2.25,
+    }
+    for kwargs, match in (
+        ({}, "at least one"),
+        ({"cp_severity": 1.0, "meld": 10.0}, "not both"),
+        ({"egfr": 50.0, "renal_function": 0.5}, "not both"),
+        ({"cp_severity": [1.0, 2.0], "hf_severity": [1.0]}, "one length"),
+        ({"cp_severity": 3.5}, "outside"),
+        ({"hf_severity": -0.1}, "outside"),
+        ({"egfr": float("nan")}, "not finite"),
+    ):
+        with pytest.raises(ValueError, match=match):
+            cls.severity_values(**kwargs)  # ty: ignore[invalid-argument-type]
+
+
+def test_a_scan_of_the_combined_impairments(male: BuildResult) -> None:
+    """A dimension is a course of severities, two dimensions their grid."""
+    from sbmlsim.simulation import Scan
+
+    from pkpdsim.pbpk.kidney_validity import simulated_individuals
+
+    cls = _experiment(male)
+    # a course: cirrhosis and its hepatorenal decline together
+    course = cls.impairment_dimension(
+        "hepatorenal", cp_severity=[0.0, 1.5, 3.0], egfr=[110.0, 60.0, 25.0]
+    )
+    assert set(course.values) == {"CP_severity", "f_renal_function"}
+    assert course.coordinates["egfr"].tolist() == [110.0, 60.0, 25.0]
+    # a grid: every severity of heart failure with every renal function
+    hf = cls.impairment_dimension("hf", hf_severity=[0.0, 2.0, 4.0])
+    renal = cls.impairment_dimension("renal", renal_function=[1.0, 0.5])
+    dose = Simulation(end=60, steps=10)
+    individuals_ = simulated_individuals(Scan(dose, [hf, renal]), male.flat_path)
+    points = {(c["HF_severity"], c["f_renal_function"]) for c in individuals_}
+    assert {(round(float(a), 12), round(float(b), 12)) for a, b in points} == {
+        (h, f) for h in (0.0, 2.0, 4.0) for f in (1.0, 0.5)
+    }

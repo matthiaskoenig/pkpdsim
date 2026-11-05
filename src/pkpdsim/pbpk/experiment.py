@@ -45,9 +45,10 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, ClassVar, overload, override
 
+import numpy as np
 from sbmlsim import Q
 from sbmlsim.model import AbstractModel
-from sbmlsim.simulation import Scan, Simulation
+from sbmlsim.simulation import Dimension, Scan, Simulation
 from sbmlsim.units import Quantity
 
 from pkpdsim import impairment
@@ -912,6 +913,196 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
             return {ids.F_RENAL_FUNCTION: Q(1.0, "dimensionless")}
         normal = normal_gfr(cls.subjects_sex(sex, simulation)) * 1e3
         return {ids.F_RENAL_FUNCTION: Q(c.value / normal, "dimensionless")}
+
+    @classmethod
+    def severity_values(
+        cls,
+        *,
+        cp_severity: Sequence[float] | float | None = None,
+        meld: Sequence[float] | float | None = None,
+        egfr: Sequence[float] | float | None = None,
+        renal_function: Sequence[float] | float | None = None,
+        hf_severity: Sequence[float] | float | None = None,
+        sex: Sex | None = None,
+        simulation: str | None = None,
+    ) -> dict[str, np.ndarray]:
+        """Get the values of the severities of a continuous course of the impairments.
+
+        The conditions are continuous: every factor of the library is
+        piecewise linear in its severity between the classes (`CP_severity`,
+        `HF_severity`) or the stage anchors of the eGFR (`f_renal_function`),
+        and the conditions combine, the factor of a quantity is the product
+        of the factors of the conditions (`fimp_<id>`), e.g. the GFR of
+        cirrhosis and CKD together (hepatorenal) or of heart failure and CKD
+        (cardiorenal). A severity is given directly or by its clinical
+        measure: `meld` the MELD score (`cp_severity_of_meld`), `egfr` the
+        eGFR in ml/min/1.73 m2 of the intrinsic renal function, which
+        `f_renal_function` sets relative to the eGFR of the normal function
+        of the build of the subjects (`normal_gfr`).
+
+        Args:
+            cp_severity: the severity of cirrhosis, 0 to 3.
+            meld: the MELD score instead of `cp_severity`.
+            egfr: the eGFR (ml/min/1.73 m2) of the renal function.
+            renal_function: `f_renal_function` instead of `egfr`.
+            hf_severity: the severity of heart failure, 0 to 4.
+            sex: the sex of the subjects of an eGFR (`subjects_sex`).
+            simulation: the key of the simulation of the subjects.
+
+        Returns:
+            The values by parameter (`CP_severity`, `f_renal_function`,
+            `HF_severity`), arrays of one length, the points of a course.
+
+        Raises:
+            ValueError: for no severity, two ways of one severity, sequences
+                of different lengths, a value outside of its range or not
+                finite.
+        """
+        given = {
+            k: v
+            for k, v in {
+                "cp_severity": cp_severity,
+                "meld": meld,
+                "egfr": egfr,
+                "renal_function": renal_function,
+                "hf_severity": hf_severity,
+            }.items()
+            if v is not None
+        }
+        if not given:
+            raise ValueError(f"{cls.__name__}: give at least one severity.")
+        for a, b in (("cp_severity", "meld"), ("egfr", "renal_function")):
+            if a in given and b in given:
+                raise ValueError(f"{cls.__name__}: give `{a}` or `{b}`, not both.")
+        arrays = {
+            k: np.atleast_1d(np.asarray(v, dtype=float)) for k, v in given.items()
+        }
+        lengths = {len(v) for v in arrays.values()}
+        if len(lengths) != 1 or 0 in lengths:
+            raise ValueError(
+                f"{cls.__name__}: the severities of a course have one length > 0, "
+                f"not {sorted(lengths)}."
+            )
+        for key, values in arrays.items():
+            if not np.all(np.isfinite(values)):
+                raise ValueError(f"{cls.__name__}: `{key}` is not finite: {values}.")
+        ranges = {
+            "cp_severity": (0.0, 3.0),
+            "hf_severity": (0.0, 4.0),
+            "egfr": (0.0, math.inf),
+            "renal_function": (0.0, math.inf),
+        }
+        for key, (lo, hi) in ranges.items():
+            if key in arrays and (arrays[key].min() < lo or arrays[key].max() > hi):
+                raise ValueError(
+                    f"{cls.__name__}: `{key}` {arrays[key]} is outside of {lo} to {hi}."
+                )
+        out: dict[str, np.ndarray] = {}
+        if "meld" in arrays:
+            from pkpdsim.pbpk.impairment import cp_severity_of_meld
+
+            out[ids.CP_SEVERITY] = np.array(
+                [cp_severity_of_meld(m) for m in arrays["meld"]]
+            )
+        elif "cp_severity" in arrays:
+            out[ids.CP_SEVERITY] = arrays["cp_severity"]
+        if "egfr" in arrays:
+            normal = normal_gfr(cls.subjects_sex(sex, simulation)) * 1e3
+            out[ids.F_RENAL_FUNCTION] = arrays["egfr"] / normal
+        elif "renal_function" in arrays:
+            out[ids.F_RENAL_FUNCTION] = arrays["renal_function"]
+        if "hf_severity" in arrays:
+            out[ids.HF_SEVERITY] = arrays["hf_severity"]
+        return out
+
+    @classmethod
+    def severity_changes(
+        cls,
+        *,
+        cp_severity: float | None = None,
+        meld: float | None = None,
+        egfr: float | None = None,
+        renal_function: float | None = None,
+        hf_severity: float | None = None,
+        sex: Sex | None = None,
+        simulation: str | None = None,
+    ) -> dict[str, Quantity]:
+        """Get the changes of one point of the continuous severities of the impairments.
+
+        The continuous counterpart of `class_changes`, for `preinit_changes`;
+        the arguments are those of `severity_values`, one number each.
+
+        Args:
+            cp_severity: the severity of cirrhosis, 0 to 3.
+            meld: the MELD score instead of `cp_severity`.
+            egfr: the eGFR (ml/min/1.73 m2) of the renal function.
+            renal_function: `f_renal_function` instead of `egfr`.
+            hf_severity: the severity of heart failure, 0 to 4.
+            sex: the sex of the subjects of an eGFR (`subjects_sex`).
+            simulation: the key of the simulation of the subjects.
+
+        Returns:
+            The changes, `{parameter: value}`.
+        """
+        values = cls.severity_values(
+            cp_severity=cp_severity,
+            meld=meld,
+            egfr=egfr,
+            renal_function=renal_function,
+            hf_severity=hf_severity,
+            sex=sex,
+            simulation=simulation,
+        )
+        return {k: Q(float(v[0]), "dimensionless") for k, v in values.items()}
+
+    @classmethod
+    def impairment_dimension(
+        cls,
+        dimension: str,
+        *,
+        cp_severity: Sequence[float] | None = None,
+        meld: Sequence[float] | None = None,
+        egfr: Sequence[float] | None = None,
+        renal_function: Sequence[float] | None = None,
+        hf_severity: Sequence[float] | None = None,
+        sex: Sex | None = None,
+        simulation: str | None = None,
+    ) -> Dimension:
+        """Get the dimension of a scan over a continuous course of the impairments.
+
+        The severities given change together along the dimension (a course,
+        e.g. cirrhosis and its hepatorenal decline of the renal function); a
+        scan of two dimensions (`Scan(simulation, [d1, d2])`) is the grid of
+        both, e.g. every severity of cirrhosis with every eGFR. The values are
+        set before the initialization of every point (a dimension without a
+        time), the given measures (`meld`, `egfr`, ...) are coordinates of the
+        result.
+
+        Args:
+            dimension: the id of the dimension.
+            cp_severity: the severity of cirrhosis, 0 to 3.
+            meld: the MELD score instead of `cp_severity`.
+            egfr: the eGFR (ml/min/1.73 m2) of the renal function.
+            renal_function: `f_renal_function` instead of `egfr`.
+            hf_severity: the severity of heart failure, 0 to 4.
+            sex: the sex of the subjects of an eGFR (`subjects_sex`).
+            simulation: the key of the simulation of the subjects.
+
+        Returns:
+            The dimension of values.
+        """
+        given = {
+            "cp_severity": cp_severity,
+            "meld": meld,
+            "egfr": egfr,
+            "renal_function": renal_function,
+            "hf_severity": hf_severity,
+        }
+        values = cls.severity_values(**given, sex=sex, simulation=simulation)
+        coordinates = {
+            k: np.asarray(v, dtype=float) for k, v in given.items() if v is not None
+        }
+        return Dimension(dimension, values=values, coordinates=coordinates)
 
     def class_simulations(
         self,
