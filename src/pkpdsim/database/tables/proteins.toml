@@ -49,9 +49,10 @@ ncit = "C17573"
 # the small intestine of 11 of 31 donors CYP3A5 was 4.9 to 25 (mean 16) pmol/mg
 # microsomal protein, against 8.8 to 150 pmol/mg of CYP3A4 and a mean total
 # CYP3A of 50 pmol/mg (Paine 2006, doi:10.1124/dmd.105.008672, PMID 16467132,
-# free full text PMC2222892); in the livers and jejuna of donors with a
-# CYP3A5*1 allele CYP3A5 was more than half of the total CYP3A (Lin 2002,
-# doi:10.1124/mol.62.1.162, PMID 12065767, abstract read). These abundances are
+# free full text PMC2222892); in the livers and the jejunal mucosa of white
+# donors with a CYP3A5*1 allele CYP3A5 was more than half of the total CYP3A
+# (Lin 2002, doi:10.1124/mol.62.1.162, PMID 12065767, abstract read). These
+# abundances are
 # those of expressors: CYP3A5*3 and *6 abolish the protein, and CYP3A5 is
 # expressed in 60 % of African American and 33 % of Caucasian livers (Kuehl
 # 2001, doi:10.1038/86882, PMID 11279519, abstract read), so the reference
