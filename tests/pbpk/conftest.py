@@ -586,9 +586,10 @@ def assert_reference_sbml(result: BuildResult) -> None:
     references rebuilt with the factors of cirrhosis on CYP3A4 and SLCO1B1
     of the consensus of the parameter database (`pkpdsim.database`, the
     factors and their notes only), and all rebuilt with the factors of
-    cirrhosis on the albumin, the hematocrit and the cardiac index of the
-    consensus of the database (the factors, their notes and sources only); a
-    change of the library which changes the
+    cirrhosis on the albumin, the hematocrit and the cardiac index and of CKD
+    on the hematocrit, the renal blood flow and the albumin of the binding of
+    the consensus of the database (the factors, their notes and sources only);
+    a change of the library which changes the
     SBML of every model on purpose rebuilds them and says so.
     """
     for path in (result.comp_path, result.flat_path):

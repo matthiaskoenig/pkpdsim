@@ -1,0 +1,5 @@
+entity	group	n	mean	sd	se	median	q1	q3	notes
+renal_parenchymal_volume	controls	90	285.1	49.7					the spread not named, taken as SD
+renal_parenchymal_volume	ckd_1	14	295.2	43.9					the spread not named, taken as SD
+renal_parenchymal_volume	ckd_2_3	39	264	77.8					the spread not named, taken as SD
+renal_parenchymal_volume	ckd_4_5	47	105.2	75.8					the spread not named, taken as SD

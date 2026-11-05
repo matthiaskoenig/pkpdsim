@@ -1,0 +1,5 @@
+entity	group	n	mean	sd	se	median	notes
+effective_renal_plasma_flow	controls	14	627	86.6			
+effective_renal_plasma_flow	chf	20	191.5	54.4			20 studies of 17 patients
+gfr_measured	controls	14	103	12.8			
+gfr_measured	chf	20	66.8	13.2			20 studies of 17 patients

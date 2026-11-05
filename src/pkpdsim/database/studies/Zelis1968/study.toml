@@ -1,0 +1,18 @@
+source = "Zelis1968"
+tissue = "body"
+control = "controls"
+notes = "Congestive heart failure of NYHA III or IV (mostly rheumatic) and normal subjects; forearm and calf blood flow by venous occlusion strain gauge plethysmography, supine, basal; Results (free full text), mean and SE, per 100 g of tissue taken as per 100 mL; transcribed from the full text by the literature search of the database (2026-11-05)."
+
+[measurements.physiology]
+file = "physiology.tsv"
+kind = "physiology"
+method = "venous occlusion plethysmography"
+location = "Results"
+
+[groups.controls]
+condition = "control"
+description = "normal subjects"
+
+[groups.nyha_3_4]
+condition = "heart_failure"
+description = "NYHA III-IV"

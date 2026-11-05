@@ -1,0 +1,29 @@
+source = "Wang2016"
+tissue = "liver"
+control = "controls"
+notes = "Hepatobiliary transporters of the livers of 27 recipients with end-stage alcoholic and 30 with hepatitis C cirrhosis (the livers of Prasad 2018) and of 36 non-cirrhotic controls of the liver bank of the University of Washington (Prasad 2016). The numbers are not tabulated: the box plots of Figures 2 and 3 of the accepted manuscript (median, quartiles, the whiskers of the non-outlier range and the mean as +) were digitized from the images of the PDF (`scripts/database/digitize_boxplot.py`, `scripts/database/wang2016`, every panel calibrated by its lowest and highest tick), the lower panels, per gram of liver (the abundance per mg of membrane protein times the yield of membrane protein of each liver, which cirrhosis lowers, Figure 1); the whiskers are no range and are given in the notes. The digitized means reproduce the changes the text states per gram of liver: in alcoholic cirrhosis NTCP 37 % and OATP1B3 73 % lower (the range 37-73 % of the text), MRP3 34 % higher (text 32 %); in HCV cirrhosis OCT1 56 % and MRP2 33 % lower (the range 32-56 %), MATE1 52 % higher (text 46 %). MRP4 was below the limit of quantification in every liver and has no record."
+
+[measurements.protein]
+file = "protein.tsv"
+kind = "protein"
+unit = "pmol/g liver"
+method = "targeted quantitative proteomics (LC-MS/MS) of the membrane fraction, per gram of liver by the yield of membrane protein of each liver"
+location = "Figures 2 and 3 (lower panels), digitized"
+
+[groups.controls]
+condition = "control"
+description = "non-cirrhotic livers of the human liver bank of the University of Washington"
+
+[groups.ald]
+condition = "cirrhosis"
+child_pugh = "C"
+etiology = "alcoholic liver disease"
+description = "end-stage alcoholic cirrhosis, liver transplantation"
+assumption = "Child-Pugh class C assumed for end-stage liver disease, as for the same livers in Prasad 2018; the mean laboratory values of Table 2 (bilirubin 9.5 mg/dL, albumin 2.9 g/dL, INR 2.6) alone give 8 of the points of the Child-Pugh score, class C with at least mild ascites or encephalopathy"
+
+[groups.hcv]
+condition = "cirrhosis"
+child_pugh = "C"
+etiology = "hepatitis C"
+description = "end-stage HCV cirrhosis, liver transplantation"
+assumption = "Child-Pugh class C assumed for end-stage liver disease, as for the same livers in Prasad 2018; the mean laboratory values of Table 2 (bilirubin 3.6 mg/dL, albumin 2.6 g/dL, INR 1.7) alone give 8 of the points of the Child-Pugh score, class C with at least mild ascites or encephalopathy"

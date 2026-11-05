@@ -1,0 +1,7 @@
+entity	group	n	mean	sd	se	median	notes
+cardiac_index	nyha_1	23	2.79	0.69			the spread not named, taken as SD
+cardiac_index	nyha_2	19	2.78	0.85			the spread not named, taken as SD
+cardiac_index	nyha_3	9	2.24	0.45			the spread not named, taken as SD
+leg_blood_flow_per_bsa	nyha_1	23	0.26	0.08			the spread not named, taken as SD
+leg_blood_flow_per_bsa	nyha_2	19	0.26	0.1			the spread not named, taken as SD
+leg_blood_flow_per_bsa	nyha_3	9	0.32	0.35			the spread not named, taken as SD

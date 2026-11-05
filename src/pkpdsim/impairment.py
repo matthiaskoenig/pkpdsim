@@ -16,9 +16,18 @@ failure, 0 healthy and 1 to 4 the NYHA classes I to IV). Their maps are
 `CHILD_PUGH` (colors `CIRRHOSIS_COLORS`), the `RENAL_FUNCTION` presets and
 `HEART_FAILURE` (colors `HEART_FAILURE_COLORS`); the maps of the other models
 keep their values and meaning.
+
+The clinical classes of the conditions are `Classification`s with their
+definitions, colors and the value of the library parameter of every class:
+`CHILD_PUGH_CLASSES` (Child-Pugh, `CP_severity`), `KDIGO_GFR_CLASSES` (the GFR
+categories of KDIGO 2012, the eGFR of the library) and `NYHA_CLASSES` (the NYHA
+functional classes, `HF_severity`), together `CLASSIFICATIONS`; a model scans
+and draws them with `class_simulations` and `add_classes` of
+`pkpdsim.pbpk.PBPKSimulationExperiment` (docs page `pbpk/classes.md`).
 """
 
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from dataclasses import dataclass
 
 #: the renal function by the midpoints of the classes of the glomerular
 #: filtration rate, relative to a normal rate of 101 ml/min
@@ -129,3 +138,248 @@ HEART_FAILURE_COLORS: Mapping[str, str] = {
     "NYHA III": "#D6604D",
     "NYHA IV": "#67001F",
 }
+
+
+@dataclass(frozen=True)
+class ImpairmentClass:
+    """A clinical class of an impaired organ function.
+
+    Attributes:
+        key: the key of the class, e.g. `A`, `G3a`, `III`; `healthy` for the
+            reference without the condition.
+        label: the label of the class in a legend.
+        color: the color of the class in every figure.
+        definition: the clinical definition of the class.
+        value: the value of the parameter of its classification which
+            represents the class in a model (`CP_severity`, `HF_severity`, or
+            the eGFR in ml/min/1.73 m2 for the GFR categories); `None` for the
+            reference of the model (the renal function 1 of the build).
+        limits: the range of the quantity which defines the class (the
+            Child-Pugh score, the eGFR), `(lower, upper)` with an open end
+            `None`; `None` for a class defined by symptoms.
+    """
+
+    key: str
+    label: str
+    color: str
+    definition: str
+    value: float | None
+    limits: tuple[float | None, float | None] | None = None
+
+
+@dataclass(frozen=True)
+class Classification:
+    """The clinical classes of a condition with the parameter which sets them.
+
+    Attributes:
+        key: the key of the classification, e.g. `child_pugh`.
+        name: the name, e.g. `Child-Pugh classification`.
+        condition: the condition the classes grade.
+        parameter: the parameter of the models built on the PBPK library whose
+            value represents a class (`CP_severity`, `HF_severity`, or `eGFR`
+            for the GFR categories, which `f_renal_function` sets).
+        quantity: the quantity of the `limits` of the classes and its unit.
+        reference: the publication of the definition.
+        classes: the classes in the order of the severity, the reference
+            without the condition first.
+    """
+
+    key: str
+    name: str
+    condition: str
+    parameter: str
+    quantity: str
+    reference: str
+    classes: tuple[ImpairmentClass, ...]
+
+    def __iter__(self) -> Iterator[ImpairmentClass]:
+        """Iterate over the classes in the order of the severity."""
+        return iter(self.classes)
+
+    def __len__(self) -> int:
+        """The number of classes."""
+        return len(self.classes)
+
+    def __getitem__(self, key: str) -> ImpairmentClass:
+        """Get a class by its key.
+
+        Raises:
+            KeyError: for an unknown key, naming the keys.
+        """
+        for c in self.classes:
+            if c.key == key:
+                return c
+        raise KeyError(
+            f"No class '{key}' of {self.name}, the classes are {self.keys()}."
+        )
+
+    def keys(self) -> list[str]:
+        """The keys of the classes in the order of the severity."""
+        return [c.key for c in self.classes]
+
+    def colors(self) -> dict[str, str]:
+        """The colors of the classes by label, for a legend."""
+        return {c.label: c.color for c in self.classes}
+
+
+CHILD_PUGH_CLASSES = Classification(
+    key="child_pugh",
+    name="Child-Pugh classification",
+    condition="liver cirrhosis",
+    parameter="CP_severity",
+    quantity="Child-Pugh score (points)",
+    reference="Pugh RN, Murray-Lyon IM, Dawson JL, Pietroni MC, Williams R. "
+    "Transection of the oesophagus for bleeding oesophageal varices. Br J Surg "
+    "60(8):646-649, 1973. doi:10.1002/bjs.1800600817",
+    classes=(
+        ImpairmentClass(
+            "healthy",
+            "Healthy",
+            "black",
+            "no liver disease",
+            0.0,
+        ),
+        ImpairmentClass(
+            "A",
+            "Child-Pugh A",
+            "#74a9cf",
+            "well-compensated cirrhosis, score 5-6",
+            1.0,
+            (5.0, 6.0),
+        ),
+        ImpairmentClass(
+            "B",
+            "Child-Pugh B",
+            "#2b8cbe",
+            "significant functional compromise, score 7-9",
+            2.0,
+            (7.0, 9.0),
+        ),
+        ImpairmentClass(
+            "C",
+            "Child-Pugh C",
+            "#045a8d",
+            "decompensated cirrhosis, score 10-15",
+            3.0,
+            (10.0, 15.0),
+        ),
+    ),
+)
+"""The Child-Pugh classes of liver cirrhosis (`CP_severity` 0 to 3)."""
+
+KDIGO_GFR_CLASSES = Classification(
+    key="kdigo_gfr",
+    name="KDIGO GFR categories",
+    condition="chronic kidney disease",
+    parameter="eGFR",
+    quantity="eGFR (ml/min/1.73 m2)",
+    reference="Kidney Disease: Improving Global Outcomes (KDIGO) CKD Work Group. "
+    "KDIGO 2012 clinical practice guideline for the evaluation and management of "
+    "chronic kidney disease. Kidney Int Suppl 3(1):1-150, 2013. "
+    "doi:10.1038/kisup.2012.73",
+    classes=(
+        ImpairmentClass(
+            "G1",
+            "G1 normal",
+            "black",
+            "normal or high, eGFR >= 90",
+            None,
+            (90.0, None),
+        ),
+        ImpairmentClass(
+            "G2",
+            "G2 mild",
+            "#66c2a4",
+            "mildly decreased, eGFR 60-89",
+            75.0,
+            (60.0, 90.0),
+        ),
+        ImpairmentClass(
+            "G3a",
+            "G3a mild-moderate",
+            "#41ae76",
+            "mildly to moderately decreased, eGFR 45-59",
+            52.0,
+            (45.0, 60.0),
+        ),
+        ImpairmentClass(
+            "G3b",
+            "G3b moderate-severe",
+            "#238b45",
+            "moderately to severely decreased, eGFR 30-44",
+            37.0,
+            (30.0, 45.0),
+        ),
+        ImpairmentClass(
+            "G4",
+            "G4 severe",
+            "#006d2c",
+            "severely decreased, eGFR 15-29",
+            22.5,
+            (15.0, 30.0),
+        ),
+        ImpairmentClass(
+            "G5",
+            "G5 kidney failure",
+            "#00441b",
+            "kidney failure, eGFR < 15 (not on dialysis in the library)",
+            7.5,
+            (None, 15.0),
+        ),
+    ),
+)
+"""The GFR categories of chronic kidney disease (KDIGO 2012), by the eGFR in
+ml/min/1.73 m2 at the midpoint of each category (G5 at 7.5, the end-stage
+anchor of the library); G1 is the renal function of the reference individual."""
+
+NYHA_CLASSES = Classification(
+    key="nyha",
+    name="NYHA functional classification",
+    condition="chronic heart failure",
+    parameter="HF_severity",
+    quantity="symptoms at physical activity",
+    reference="The Criteria Committee of the New York Heart Association. "
+    "Nomenclature and Criteria for Diagnosis of Diseases of the Heart and Great "
+    "Vessels. 9th ed. Boston, Little, Brown & Co, 1994",
+    classes=(
+        ImpairmentClass("healthy", "Healthy", "black", "no heart failure", 0.0),
+        ImpairmentClass(
+            "I",
+            "NYHA I",
+            "#FDDBC7",
+            "no limitation of physical activity; ordinary activity causes no "
+            "undue fatigue, palpitation or dyspnoea",
+            1.0,
+        ),
+        ImpairmentClass(
+            "II",
+            "NYHA II",
+            "#F4A582",
+            "slight limitation; comfortable at rest, ordinary activity causes "
+            "fatigue, palpitation or dyspnoea",
+            2.0,
+        ),
+        ImpairmentClass(
+            "III",
+            "NYHA III",
+            "#D6604D",
+            "marked limitation; comfortable at rest, less than ordinary activity "
+            "causes symptoms",
+            3.0,
+        ),
+        ImpairmentClass(
+            "IV",
+            "NYHA IV",
+            "#67001F",
+            "unable to carry on any physical activity without discomfort; "
+            "symptoms at rest",
+            4.0,
+        ),
+    ),
+)
+"""The NYHA functional classes of chronic heart failure (`HF_severity` 0 to 4)."""
+
+CLASSIFICATIONS: Mapping[str, Classification] = {
+    c.key: c for c in (CHILD_PUGH_CLASSES, KDIGO_GFR_CLASSES, NYHA_CLASSES)
+}
+"""The classifications by key."""

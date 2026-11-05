@@ -322,3 +322,129 @@ doi = "10.1186/s12880-020-00519-7"
 [Zhu1999]
 citation = "Zhu JY, Leng XS, Dong N, Qi GY, Du RY. Measurement of liver volume and its clinical significance in cirrhotic portal hypertensive patients. World J Gastroenterol 5(6):525-526, 1999."
 doi = "10.3748/wjg.v5.i6.525"
+
+[Wang2016]
+citation = "Wang L, Collins C, Kelly EJ, Chu X, Ray AS, Salphati L, Xiao G, Lee C, Lai Y, Liao M, Mathias A, Evers R, Humphreys W, Hop CE, Kumer SC, Unadkat JD. Transporter Expression in Liver Tissue from Subjects with Alcoholic or Hepatitis C Cirrhosis Quantified by Targeted Quantitative Proteomics. Drug Metab Dispos 44(11):1752-1758, 2016."
+doi = "10.1124/dmd.116.071050"
+
+# The studies of the physiology of chronic kidney disease by its stage, open
+# access; the DOIs as the full texts give them (2026-11-05).
+
+[Lin2017]
+citation = "Lin HY, Lee YL, Lin KD, Chiu YW, Shin SJ, Hwang SJ, Chen HC, Hung CC. Association of Renal Elasticity and Renal Function Progression in Patients with Chronic Kidney Disease Evaluated by Real-Time Ultrasound Elastography. Sci Rep 7:43303, 2017."
+doi = "10.1038/srep43303"
+
+[Panjeta2017]
+citation = "Panjeta M, Tahirović I, Sofić E, Ćorić J, Dervišević A. Interpretation of Erythropoietin and Haemoglobin Levels in Patients with Various Stages of Chronic Kidney Disease. J Med Biochem 36(2):145-152, 2017."
+doi = "10.1515/jomb-2017-0014"
+
+[Zakiyanov2013]
+citation = "Zakiyanov O, Kriha V, Vachek J, Zima T, Tesar V, Kalousova M. Placental growth factor, pregnancy-associated plasma protein-A, soluble receptor for advanced glycation end products, extracellular newly identified receptor for receptor for advanced glycation end products binding protein and high mobility group box 1 levels in patients with acute kidney injury: a cross sectional study. BMC Nephrol 14:245, 2013."
+doi = "10.1186/1471-2369-14-245"
+
+[Kang2017]
+citation = "Kang E, Han M, Kim H, Park SK, Lee J, Hyun YY, Kim YS, Chung W, Kim HJ, Oh YK, Ahn C, Oh KH. Baseline General Characteristics of the Korean Chronic Kidney Disease: Report from the KoreaN Cohort Study for Outcomes in Patients With Chronic Kidney Disease (KNOW-CKD). J Korean Med Sci 32(2):221-230, 2017."
+doi = "10.3346/jkms.2017.32.2.221"
+
+[Kim2017]
+citation = "Kim H, Yoo TH, Choi KH, Oh KH, Lee J, Kim SW, Kim TH, Sung S, Han SH; KNOW-CKD Group. Baseline Cardiovascular Characteristics of Adult Patients with Chronic Kidney Disease from the KoreaN Cohort Study for Outcomes in Patients With Chronic Kidney Disease (KNOW-CKD). J Korean Med Sci 32(2):231-239, 2017."
+doi = "10.3346/jkms.2017.32.2.231"
+
+[Taal2023]
+citation = "Taal MW, Lucas B, Roderick P, Cockwell P, Wheeler DC, Saleem MA, Fraser SDS, Banks RE, Johnson T, Hale LJ, Andag U, Skroblin P, Bayerlova M, Unwin R, Vuilleumier N, Dusaulcy R, Robertson F, Colby E, Pitcher D, Braddon F, Benavente M, Davies E, Nation M, Kalra PA. Associations with age and glomerular filtration rate in a referred population with chronic kidney disease: methods and baseline data from a UK multicentre cohort study (NURTuRE-CKD). Nephrol Dial Transplant 38(11):2617-2626, 2023."
+doi = "10.1093/ndt/gfad110"
+
+[Lash2009]
+citation = "Lash JP, Go AS, Appel LJ, He J, Ojo A, Rahman M, Townsend RR, Xie D, Cifelli D, Cohan J, Fink JC, Fischer MJ, Gadegbeku C, Hamm LL, Kusek JW, Landis JR, Narva A, Robinson N, Teal V, Feldman HI; CRIC Study Group. Chronic Renal Insufficiency Cohort (CRIC) Study: baseline characteristics and associations with kidney function. Clin J Am Soc Nephrol 4(8):1302-1311, 2009."
+doi = "10.2215/CJN.00070109"
+
+[ZhangX2024]
+citation = "Zhang X, Ye C, Lu F, Yang J, Xu Y, Wang C. Evaluation of renal oxygenation and perfusion in patients with chronic kidney disease: a preliminary prospective study based on functional magnetic resonance. Ren Fail 46(2):2428337, 2024."
+doi = "10.1080/0886022X.2024.2428337"
+
+[Brown2020]
+citation = "Brown RS, Sun MRM, Stillman IE, Russell TL, Rosas SE, Wei JL. The utility of magnetic resonance imaging for noninvasive evaluation of diabetic nephropathy. Nephrol Dial Transplant 35(6):970-978, 2020."
+doi = "10.1093/ndt/gfz066"
+
+[LiLP2017]
+citation = "Li LP, Tan H, Thacker JM, Li W, Zhou Y, Kohn O, Sprague SM, Prasad PV. Evaluation of Renal Blood Flow in Chronic Kidney Disease Using Arterial Spin Labeling Perfusion Magnetic Resonance Imaging. Kidney Int Rep 2(1):36-43, 2017."
+doi = "10.1016/j.ekir.2016.09.003"
+
+[Cox2017]
+citation = "Cox EF, Buchanan CE, Bradley CR, Prestwich B, Mahmoud H, Taal M, Selby NM, Francis ST. Multiparametric Renal Magnetic Resonance Imaging: Validation, Interventions, and Alterations in Chronic Kidney Disease. Front Physiol 8:696, 2017."
+doi = "10.3389/fphys.2017.00696"
+
+[Buchanan2020]
+citation = "Buchanan CE, Mahmoud H, Cox EF, McCulloch T, Prestwich BL, Taal MW, Selby NM, Francis ST. Quantitative assessment of renal structural and functional changes in chronic kidney disease using multi-parametric magnetic resonance imaging. Nephrol Dial Transplant 35(6):955-964, 2020."
+doi = "10.1093/ndt/gfz129"
+
+[VukmirovicPapuga2022]
+citation = "Vukmirović Papuga M, Bukumirić Z, Ilinčić B, Mijović R, Šašić Ostojić T, Žeravica R. Serum Uromodulin, a Potential Biomarker of Tubulointerstitial Damage, Correlates Well with Measured GFR and ERPF in Patients with Obstructive Nephropathy. Medicina (Kaunas) 58(12):1729, 2022."
+doi = "10.3390/medicina58121729"
+
+[Ilincic2025]
+citation = "Ilinčić B, Žeravica R, Mijović R, Isenović E, Burić D, Žuvić D, Čabarkapa V. Tubular functional capacity and maladaptive parathyroid hormone response in early-stage chronic kidney disease. Biomol Biomed 26(8):1357-1367, 2025."
+doi = "10.17305/bb.2025.13395"
+
+[Prasad2015]
+citation = "Prasad PV, Thacker J, Li LP, Haque M, Li W, Koenigs H, Zhou Y, Sprague SM. Multi-Parametric Evaluation of Chronic Kidney Disease by MRI: A Preliminary Cross-Sectional Study. PLoS One 10(10):e0139661, 2015."
+doi = "10.1371/journal.pone.0139661"
+
+[Luo2024]
+citation = "Luo H, Li J, Huang H, Jiao L, Zheng S, Ying Y, Li Q. AI-based segmentation of renal enhanced CT images for quantitative evaluate of chronic kidney disease. Sci Rep 14:16890, 2024."
+doi = "10.1038/s41598-024-67658-7"
+
+[Guo2026]
+citation = "Guo L, Ran L, Wu Q, Zhang Y, Gao Y, Zhou X, Li J, Li J. Shear wave elastography and ultrasonic multi-parameter score for the identification of moderate-to-severe chronic kidney disease. BMC Med Imaging 26:452, 2026."
+doi = "10.1186/s12880-026-02439-4"
+
+[ZhangDL2024]
+citation = "Zhang DL, Chen S, Xu JM, Na-Lin, Wu HY, Zhou JM, Chen ZP, Huang XR, Wei LX, Liu DX. The value of tissue quantitative diffusion analysis of ultrasound elastography in the diagnosis of early-stage chronic kidney disease. BMC Nephrol 25:328, 2024."
+doi = "10.1186/s12882-024-03762-0"
+
+[SallesJunior2013]
+citation = "Salles Junior LD, Santos PR, dos Santos AA, de Souza MHLP. Dyspepsia and gastric emptying in end-stage renal disease patients on hemodialysis. BMC Nephrol 14:275, 2013."
+doi = "10.1186/1471-2369-14-275"
+
+# The studies of the physiology of chronic heart failure, open access or free
+# full text; the DOIs as the full texts give them (2026-11-05).
+
+[Aquilani2017]
+citation = "Aquilani R, La Rovere MT, Corbellini D, Pasini E, Verri M, Barbieri A, Condino AM, Boschi F. Plasma Amino Acid Abnormalities in Chronic Heart Failure. Mechanisms, Potential Risks and Targets in Human Myocardium Metabolism. Nutrients 9(11):1251, 2017."
+doi = "10.3390/nu9111251"
+
+[Yamabe1992]
+citation = "Yamabe H, Itoh K, Yasaka Y, Kakimoto T, Yokoyama M. The distribution of the blood flow during exercise in chronic heart failure: compensatory mechanism to the decreased cardiac output. Jpn Circ J 56(5):494-499, 1992."
+doi = "10.1253/jcj.56.494"
+
+[Wojciechowska2014]
+citation = "Wojciechowska C, Romuk E, Tomasik A, Skrzep-Poloczek B, Nowalany-Kozielska E, Birkner E, Jacheć W. Oxidative stress markers and C-reactive protein are related to severity of heart failure in patients with dilated cardiomyopathy. Mediators Inflamm 2014:147040, 2014."
+doi = "10.1155/2014/147040"
+
+[Carlsson2012]
+citation = "Carlsson M, Andersson R, Bloch KM, Steding-Ehrenborg K, Mosén H, Stahlberg F, Ekmehag B, Arheden H. Cardiac output and cardiac index measured with cardiovascular magnetic resonance in healthy subjects, elite athletes and patients with congestive heart failure. J Cardiovasc Magn Reson 14(1):51, 2012."
+doi = "10.1186/1532-429X-14-51"
+
+[Myers1948]
+citation = "Myers JD, Hickam JB. An estimation of the hepatic blood flow and splanchnic oxygen consumption in heart failure. J Clin Invest 27(5):620-627, 1948."
+doi = "10.1172/JCI102008"
+
+[Muller1992]
+citation = "Muller AF, Batin P, Evans S, Hawkins M, Cowley AJ. Regional blood flow in chronic heart failure: the reason for the lack of correlation between patients' exercise tolerance and cardiac output? Br Heart J 67(6):478-481, 1992."
+doi = "10.1136/hrt.67.6.478"
+
+[Mokotoff1948]
+citation = "Mokotoff R, Ross G, Leiter L. Renal plasma flow and sodium reabsorption and excretion in congestive heart failure. J Clin Invest 27(1):1-9, 1948."
+doi = "10.1172/JCI101911"
+
+[Jung2021]
+citation = "Jung S, Bosch A, Kolwelter J, Striepe K, Kannenkeril D, Schuster T, Ott C, Achenbach S, Schmieder RE. Renal and intraglomerular haemodynamics in chronic heart failure with preserved and reduced ejection fraction. ESC Heart Fail 8(2):1562-1570, 2021."
+doi = "10.1002/ehf2.13257"
+
+[Zelis1968]
+citation = "Zelis R, Mason DT, Braunwald E. A comparison of the effects of vasodilator stimuli on peripheral resistance vessels in normal subjects and in patients with congestive heart failure. J Clin Invest 47(4):960-970, 1968."
+doi = "10.1172/JCI105788"
+
+[Mason1964]
+citation = "Mason DT, Braunwald E. Studies on digitalis. X. Effects of ouabain on forearm vascular resistance and venous tone in normal subjects and in patients in heart failure. J Clin Invest 43(3):532-543, 1964."
+doi = "10.1172/JCI104939"

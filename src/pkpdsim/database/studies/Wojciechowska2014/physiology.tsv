@@ -1,0 +1,5 @@
+entity	group	n	mean	sd	se	median	notes
+cardiac_index	nyha_1_2	66	2.32	0.44			
+cardiac_index	nyha_3_4	43	2.01	0.66			
+hemoglobin	nyha_1_2	66	138.3	26.5			
+hemoglobin	nyha_3_4	43	127.6	40.8			the SD as printed, large

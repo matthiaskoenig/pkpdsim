@@ -65,9 +65,11 @@ from pkpdsim.database.tables import sources
 
 __all__ = [
     "CHILD_PUGH",
+    "CKD_STAGES",
     "CONDITIONS",
     "ETIOLOGIES",
     "KINDS",
+    "NYHA",
     "QUANTITIES",
     "Group",
     "Measurement",
@@ -129,6 +131,67 @@ QUANTITIES: dict[str, Quantity] = {
     "hepatic_ecv": Quantity(
         "extracellular volume fraction of the liver (MRI or CT)", "%"
     ),
+    "hemoglobin": Quantity("blood hemoglobin concentration", "g/L"),
+    "agp": Quantity("plasma alpha-1-acid glycoprotein (orosomucoid)", "g/L"),
+    "renal_cortical_perfusion": Quantity(
+        "perfusion of the renal cortex per tissue mass (arterial spin labelling)",
+        "mL/min/100 g",
+    ),
+    "renal_medullary_perfusion": Quantity(
+        "perfusion of the renal medulla per tissue mass (arterial spin labelling)",
+        "mL/min/100 g",
+    ),
+    "renal_artery_flow": Quantity(
+        "blood flow of the renal arteries of both kidneys (phase-contrast MRI)",
+        "mL/min",
+    ),
+    "renal_artery_flow_one_kidney": Quantity(
+        "blood flow of the renal artery of one kidney (phase-contrast MRI)", "mL/min"
+    ),
+    "effective_renal_plasma_flow": Quantity(
+        "effective renal plasma flow per body surface area (hippuran clearance)",
+        "mL/min/1.73m2",
+    ),
+    "kidney_volume": Quantity("total volume of both kidneys (MRI)", "mL"),
+    "kidney_volume_per_bsa": Quantity(
+        "total volume of both kidneys per body surface area", "mL/m2"
+    ),
+    "renal_parenchymal_volume": Quantity(
+        "volume of the renal parenchyma of both kidneys (MRI or CT)", "mL"
+    ),
+    "kidney_length": Quantity("length of a kidney (ultrasound or MRI)", "mm"),
+    "gastric_emptying_half_time": Quantity(
+        "half time of gastric emptying (breath test or scintigraphy)", "min"
+    ),
+    "cardiac_output": Quantity("cardiac output", "L/min"),
+    "hepatic_blood_flow_per_bsa": Quantity(
+        "hepatic blood flow per body surface area (bromsulphalein or ICG)",
+        "mL/min/m2",
+    ),
+    "superior_mesenteric_artery_flow": Quantity(
+        "blood flow of the superior mesenteric artery (Doppler)", "mL/min"
+    ),
+    "renal_blood_flow_per_bsa": Quantity(
+        "renal blood flow per body surface area (PAH clearance and hematocrit)",
+        "mL/min/1.73m2",
+    ),
+    "gfr_measured": Quantity(
+        "GFR measured by an exogenous marker per body surface area (inulin, "
+        "iohexol, mannitol)",
+        "mL/min/1.73m2",
+    ),
+    "forearm_blood_flow": Quantity(
+        "forearm blood flow per tissue volume (venous occlusion plethysmography)",
+        "mL/min/100 mL",
+    ),
+    "calf_blood_flow": Quantity(
+        "calf blood flow per tissue volume (venous occlusion plethysmography)",
+        "mL/min/100 mL",
+    ),
+    "leg_blood_flow_per_bsa": Quantity(
+        "blood flow of one leg per body surface area (femoral vein thermodilution)",
+        "L/min/m2",
+    ),
 }
 """The quantities of the kind `physiology`, the entities of its records, in
 the unit of each (`1` dimensionless)."""
@@ -136,11 +199,32 @@ the unit of each (`1` dimensionless)."""
 CONDITIONS: dict[str, str] = {
     "control": "the control group of a study, the healthy reference of its ratios",
     "cirrhosis": "liver cirrhosis or chronic liver disease",
+    "ckd": "chronic kidney disease",
+    "heart_failure": "chronic heart failure",
 }
 """The conditions of the groups."""
 
 CHILD_PUGH = ("A", "B", "C")
 """The Child-Pugh classes of cirrhosis."""
+
+CKD_STAGES: dict[str, str] = {
+    "mild": "eGFR 60-89 ml/min/1.73 m2 (KDIGO G2)",
+    "moderate": "eGFR 30-59 ml/min/1.73 m2 (G3a and G3b)",
+    "severe": "eGFR 15-29 ml/min/1.73 m2 (G4)",
+    "end stage": "eGFR < 15 ml/min/1.73 m2, not on dialysis (G5)",
+    "dialysis": "end stage on dialysis (G5D)",
+}
+"""The stages of chronic kidney disease, those of the library and dialysis."""
+
+NYHA = ("I", "II", "III", "IV")
+"""The NYHA classes of heart failure."""
+
+_CLASSES: dict[str, tuple[str, tuple[str, ...]]] = {
+    "child_pugh": ("cirrhosis", CHILD_PUGH),
+    "ckd_stage": ("ckd", tuple(CKD_STAGES)),
+    "nyha": ("heart_failure", NYHA),
+}
+"""The field of the class of a condition: its condition and its classes."""
 
 ETIOLOGIES: dict[str, str] = {
     "mixed": "the groups of several etiologies together",
@@ -177,7 +261,15 @@ _COLUMNS = (
 )
 """The columns a TSV file of records may have."""
 
-_GROUP_FIELDS = {"condition", "child_pugh", "etiology", "description", "assumption"}
+_GROUP_FIELDS = {
+    "condition",
+    "child_pugh",
+    "ckd_stage",
+    "nyha",
+    "etiology",
+    "description",
+    "assumption",
+}
 _MEASUREMENT_FIELDS = {"file", "kind", "unit", "method", "location", "notes"}
 _STUDY_FIELDS = {
     "source",
@@ -197,7 +289,10 @@ class Group:
     Attributes:
         id: the key of the group in its study.
         condition: the condition, a key of `CONDITIONS`.
-        child_pugh: the Child-Pugh class of a cirrhosis group, `None` without.
+        child_pugh: the Child-Pugh class of a cirrhosis group, `None` without
+            (also for a group of several classes).
+        ckd_stage: the stage of a CKD group, a key of `CKD_STAGES`.
+        nyha: the NYHA class of a heart failure group.
         etiology: the etiology of a liver disease, a key of `ETIOLOGIES`.
         description: the description of the group.
         assumption: the assumption on the group which its source does not
@@ -209,14 +304,18 @@ class Group:
     condition: str
     child_pugh: str | None = None
     etiology: str | None = None
+    ckd_stage: str | None = None
+    nyha: str | None = None
     description: str = ""
     assumption: str | None = None
 
     def fields(self) -> dict[str, str]:
         """The fields which describe the subjects: condition, class and etiology."""
         out = {"condition": self.condition}
-        if self.child_pugh is not None:
-            out["child_pugh"] = self.child_pugh
+        for key in _CLASSES:
+            value = getattr(self, key)
+            if value is not None:
+                out[key] = value
         if self.etiology is not None:
             out["etiology"] = self.etiology
         return out
@@ -429,23 +528,33 @@ def _group(key: str, data: dict[str, Any], where: str) -> Group:
         raise ValueError(
             f"{where}: group '{key}' has the unknown condition {condition!r}."
         )
-    child_pugh = data.get("child_pugh")
-    if child_pugh is not None and child_pugh not in CHILD_PUGH:
-        raise ValueError(
-            f"{where}: group '{key}' has the unknown class {child_pugh!r}."
-        )
+    for field, (of, classes) in _CLASSES.items():
+        value = data.get(field)
+        if value is None:
+            continue
+        if condition != of:
+            raise ValueError(
+                f"{where}: group '{key}' of the condition '{condition}' has a "
+                f"{field}, a class of '{of}'."
+            )
+        if value not in classes:
+            raise ValueError(
+                f"{where}: group '{key}' has the unknown {field} {value!r}."
+            )
     etiology = data.get("etiology")
     if etiology is not None and etiology not in ETIOLOGIES:
         raise ValueError(
             f"{where}: group '{key}' has the unknown etiology {etiology!r}."
         )
-    if condition == "control" and (child_pugh or etiology):
-        raise ValueError(f"{where}: the control group '{key}' has a class or etiology.")
+    if condition == "control" and etiology:
+        raise ValueError(f"{where}: the control group '{key}' has an etiology.")
     return Group(
         id=key,
         condition=condition,
-        child_pugh=child_pugh,
+        child_pugh=data.get("child_pugh"),
         etiology=etiology,
+        ckd_stage=data.get("ckd_stage"),
+        nyha=data.get("nyha"),
         description=data.get("description", ""),
         assumption=data.get("assumption"),
     )

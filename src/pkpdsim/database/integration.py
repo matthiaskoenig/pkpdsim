@@ -238,13 +238,17 @@ def sigma_log(summary: Summary) -> float | None:
         summary: the statistics of the group.
 
     Returns:
-        `sqrt(ln(1 + CV^2))` of the mean and SD or the CV, else
-        `(ln(q3) - ln(q1))/1.349` of positive quartiles; `None` without a
-        positive spread.
+        `sqrt(ln(1 + CV^2))` of the mean and SD (the SD of the standard error
+        of the mean times the root of n, `se*sqrt(n)`, for a group which
+        reports the SE alone) or the CV, else `(ln(q3) - ln(q1))/1.349` of
+        positive quartiles; `None` without a positive spread.
     """
     cv = None
-    if summary.mean and summary.mean > 0 and summary.sd:
-        cv = summary.sd / summary.mean
+    sd = summary.sd
+    if not sd and summary.se and summary.n:
+        sd = summary.se * math.sqrt(summary.n)
+    if summary.mean and summary.mean > 0 and sd:
+        cv = sd / summary.mean
     elif summary.cv:
         cv = summary.cv
     if cv:

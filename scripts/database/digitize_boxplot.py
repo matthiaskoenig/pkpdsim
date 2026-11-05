@@ -11,13 +11,25 @@ median span the box (the median thicker), the whisker caps half the box, the
 horizontal stroke of the mean "+" less. A cap hidden by a box edge (no
 whisker) is the edge; a "+" hidden by the median or an edge has no mean.
 
+A figure of another plotting program (Excel, SigmaPlot) draws the median as
+thick as the box edges: its configuration sets `"thick"` above the thickness
+of every line, and the median is the middle one of three box lines (with two,
+the median lies on an edge and is not separable). `"min_run"` is the shortest
+horizontal run which counts as a line (longer than the width of a whisker at
+the resolution of the image), `"dark"` the gray value below which a pixel is
+dark (a scan of 1 bit has 0 and 255) and `"box_fraction"` the width of a box
+over the distance of the groups (0.8 in R). A line longer than 1.3 boxes (an
+axis, the bracket of a significance) is none of the box.
+
     uv run python scripts/database/digitize_boxplot.py CONFIG.json IMAGE_DIR
 
 writes `<config>.out.json` next to the configuration (the values of every
 group of every panel and the raw rows). `scripts/database/drozdzik2020` holds
 the configurations of Drozdzik 2020 (Figures 1, 2, 5 and 6 of the accepted
 manuscript, images `fig-000.png`, `fig-001.png`, `fig-004.png` and
-`fig-005.png` of `pdfimages`).
+`fig-005.png` of `pdfimages`), `scripts/database/wang2016` those of Wang
+2016 (the lower panels, per gram of liver, of Figures 2 and 3 of the accepted
+manuscript, `fig-001.png` and `fig-002.png`).
 """
 
 import json
@@ -50,9 +62,9 @@ class Segment:
         return self.v_bottom + (self.y_bottom - y) * scale
 
 
-def load(path: Path) -> np.ndarray:
+def load(path: Path, dark: int = DARK) -> np.ndarray:
     """The dark pixels of an image."""
-    return np.array(Image.open(path).convert("L")) < DARK
+    return np.array(Image.open(path).convert("L")) < dark
 
 
 def runs(arr: np.ndarray) -> list[tuple[int, int]]:
@@ -122,14 +134,14 @@ def run_through(img: np.ndarray, y: int, cx: int, reach: int = 3) -> int:
 
 
 def line_segments(
-    img: np.ndarray, cx: float, y0: float, y1: float
+    img: np.ndarray, cx: float, y0: float, y1: float, min_run: int = 8
 ) -> list[tuple[float, int, int]]:
     """The horizontal lines through a center: (mean row, thickness, length)."""
     out: list[list[tuple[int, int]]] = []
     current: list[tuple[int, int]] = []
     for y in range(int(y0), int(y1) + 1):
         n = run_through(img, y, round(cx))
-        if n >= 8:
+        if n >= min_run:
             if current and (y - current[-1][0] > 1 or abs(n - current[-1][1]) > 6):
                 out.append(current)
                 current = []
@@ -144,20 +156,53 @@ def line_segments(
     ]
 
 
+def _adjacent_merged(lines: list[tuple[float, int, int]]) -> list[float]:
+    """The mean rows of lines, those of adjacent rows merged into one."""
+    merged: list[list[tuple[float, int, int]]] = []
+    for line in sorted(lines):
+        if merged:
+            last = merged[-1][-1]
+            if line[0] - last[0] <= (line[1] + last[1]) / 2 + 1:
+                merged[-1].append(line)
+                continue
+        merged.append([line])
+    return [
+        sum(r * t for r, t, _ in group) / sum(t for _, t, _ in group)
+        for group in merged
+    ]
+
+
 def digitize_group(
-    img: np.ndarray, cx: float, box_width: float, y0: float, y1: float
+    img: np.ndarray,
+    cx: float,
+    box_width: float,
+    y0: float,
+    y1: float,
+    min_run: int = 8,
+    thick_rows: int = 4,
 ) -> dict[str, Any]:
     """The rows of the median, the quartiles, the whisker ends and the mean of a group."""
-    lines = line_segments(img, cx, y0, y1)
-    wide = [s for s in lines if s[2] >= 0.7 * box_width]
+    lines = line_segments(img, cx, y0, y1, min_run)
+    # longer than the box: an axis or the bracket of a significance
+    wide = [s for s in lines if 0.7 * box_width <= s[2] <= 1.3 * box_width]
     caps = [s for s in lines if 0.3 * box_width <= s[2] < 0.7 * box_width]
-    plus = [s for s in lines if 10 <= s[2] < 0.3 * box_width]
+    plus = [s for s in lines if max(10, min_run) <= s[2] < 0.3 * box_width]
     result: dict[str, Any] = {"notes": [], "lines": lines}
-    thick = [s for s in wide if s[1] >= 4]
-    edges = sorted(s[0] for s in wide if s[1] < 4)
+    thick = [s for s in wide if s[1] >= thick_rows]
+    edges = sorted(s[0] for s in wide if s[1] < thick_rows)
     if thick:
         result["median"] = max(thick, key=lambda s: s[1])[0]
         edges = sorted([*edges, result["median"]])
+    else:
+        # the median as thick as the box edges: the middle one; a line which
+        # the image splits into adjacent rows of different length is one
+        edges = _adjacent_merged([s for s in wide if s[1] < thick_rows])
+        if len(edges) == 3:
+            result["median"] = edges[1]
+        elif len(edges) == 2:
+            result["notes"].append("the median is not separable from a box edge")
+        elif len(edges) > 3:
+            result["notes"].append(f"{len(edges)} lines of the box")
     if edges:
         result["q3"], result["q1"] = edges[0], edges[-1]
     q3, q1 = result.get("q3"), result.get("q1")
@@ -187,7 +232,9 @@ def digitize_group(
 
 def digitize(config: dict[str, Any], image_dir: Path) -> list[dict[str, Any]]:
     """Digitize every panel of a configuration."""
-    img = load(image_dir / config["image"])
+    img = load(image_dir / config["image"], config.get("dark", DARK))
+    min_run = config.get("min_run", 8)
+    thick_rows = config.get("thick", 4)
     out = []
     known: dict[int, list[float]] = {}
     for panel in config["panels"]:
@@ -205,13 +252,15 @@ def digitize(config: dict[str, Any], image_dir: Path) -> list[dict[str, Any]]:
             centers = known[panel["x_axis"] // 10]
             y_axis_line = round(y_bottom) + 15
         known[panel["x_axis"] // 10] = centers
-        box_width = 0.8 * (
+        box_width = config.get("box_fraction", 0.8) * (
             float(np.median(np.diff(centers))) if len(centers) > 1 else 100.0
         )
         lower = segments[-1]
         pixel = abs((lower.v_top - lower.v_bottom) / (lower.y_bottom - lower.y_top))
         for group, cx in zip(panel["groups"], centers, strict=True):
-            res = digitize_group(img, cx, box_width, y_top - 5, y_axis_line - 2)
+            res = digitize_group(
+                img, cx, box_width, y_top - 5, y_axis_line - 2, min_run, thick_rows
+            )
             row = {
                 "panel": panel["name"],
                 "entity": panel["entity"],

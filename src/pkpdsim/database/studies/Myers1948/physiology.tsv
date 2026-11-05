@@ -1,0 +1,5 @@
+entity	group	n	mean	sd	se	median	notes
+hepatic_blood_flow_per_bsa	controls	14	850	170	45		
+hepatic_blood_flow_per_bsa	chf	12	535	170	49		
+cardiac_index	controls	14	4.1	0.5	0.17		
+cardiac_index	chf	13	2.2	0.5	0.14		

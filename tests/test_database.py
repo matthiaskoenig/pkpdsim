@@ -117,6 +117,15 @@ def test_a_mean_and_sd_alone_give_the_geometric_mean() -> None:
     assert loc.se == pytest.approx(math.sqrt(sigma2) / 5)
 
 
+def test_a_mean_and_its_standard_error_give_the_sd() -> None:
+    """A group which reports the SE of its mean has the SD `se*sqrt(n)`."""
+    by_se = log_location(record(Summary(n=25, mean=309.0, se=240.2 / 5)))
+    by_sd = log_location(record(Summary(n=25, mean=309.0, sd=240.2)))
+    assert not isinstance(by_se, str) and not isinstance(by_sd, str)
+    assert (by_se.y, by_se.se) == pytest.approx((by_sd.y, by_sd.se))
+    assert not by_se.imputed
+
+
 def test_a_group_without_spread_is_imputed_and_without_location_excluded() -> None:
     """A group without a spread takes the one of its study; a median of 0 has no log."""
     loc = log_location(record(Summary(n=6, median=4.7)))
@@ -320,6 +329,33 @@ def test_the_digitized_means_of_drozdzik2020_are_those_of_its_text(
     assert mean / control == pytest.approx(text, abs=0.03 * max(1.0, text))
 
 
+@pytest.mark.parametrize(
+    ("entity", "group", "text"),
+    [
+        # Results, per gram of liver: alcoholic cirrhosis 37-73 % lower (NTCP
+        # and OATP1B3 the ends), MRP3 32 % higher; HCV cirrhosis 32-56 % lower
+        # (MRP2 and OCT1 the ends)
+        ("SLC10A1", "ald", 1 - 0.37),
+        ("SLCO1B3", "ald", 1 - 0.73),
+        ("ABCC3", "ald", 1.32),
+        ("ABCC2", "hcv", 1 - 0.32),
+        ("SLC22A1", "hcv", 1 - 0.56),
+    ],
+)
+def test_the_digitized_means_of_wang2016_are_those_of_its_text(
+    entity: str, group: str, text: float
+) -> None:
+    """The ratio of the digitized means to the controls is the change the text states."""
+    rows = {
+        r.group.id: r.summary
+        for r in studies.records(kind="protein", entity=entity)
+        if r.study == "Wang2016"
+    }
+    mean, control = rows[group].mean, rows["controls"].mean
+    assert mean is not None and control is not None
+    assert mean / control == pytest.approx(text, abs=0.02)
+
+
 def test_physiology_records_are_in_the_unit_of_their_quantity() -> None:
     """Every record of a quantity of the subjects is in the unit of the quantity."""
     found = studies.records(kind="physiology")
@@ -405,3 +441,55 @@ def test_the_physiology_of_cirrhosis_worsens_with_the_class() -> None:
             assert c is not None
             values.append(sign * c.value)
         assert values == sorted(values), quantity
+
+
+def test_a_class_belongs_to_its_condition(tmp_path: Path) -> None:
+    """A CKD stage or a NYHA class is a field of the groups of its condition only."""
+    folder = tmp_path / "Viani1992"
+    _write_study(folder, "g/L")
+    text = folder.joinpath("study.toml").read_text(encoding="utf-8")
+    folder.joinpath("study.toml").write_text(
+        text.replace('child_pugh = "A"', 'nyha = "II"'), encoding="utf-8"
+    )
+    with pytest.raises(ValueError, match="has a nyha, a class of 'heart_failure'"):
+        studies._study(folder)
+    folder.joinpath("study.toml").write_text(
+        text.replace(
+            'condition = "cirrhosis"\nchild_pugh = "A"',
+            'condition = "ckd"\nckd_stage = "G3"',
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="unknown ckd_stage 'G3'"):
+        studies._study(folder)
+
+
+def test_the_consensus_of_a_ckd_stage_pools_its_studies() -> None:
+    """The ratio of a stage pools the studies with controls; a group of stages is none."""
+    condition = {"condition": "ckd", "ckd_stage": "end stage"}
+    hb = integration.consensus(
+        "hemoglobin", condition, kind="physiology", tissue="body"
+    )
+    assert hb is not None
+    assert set(hb.sources) == {"Lin2017", "Panjeta2017", "Zakiyanov2013"}
+    assert 0.6 < hb.value < 0.8
+    flow = integration.consensus(
+        "renal_cortical_perfusion", condition, kind="physiology", tissue="body"
+    )
+    assert flow is not None and set(flow.sources) == {"Brown2020", "ZhangX2024"}
+    # the groups of CKD 3-4 have no stage: Cox 2017 and Buchanan 2020 give none
+    moderate = integration.consensus(
+        "renal_cortical_perfusion",
+        {"condition": "ckd", "ckd_stage": "moderate"},
+        kind="physiology",
+        tissue="body",
+    )
+    assert moderate is not None
+    assert not {"Cox2017", "Buchanan2020"} & set(moderate.sources)
+    whole = integration.consensus(
+        "renal_cortical_perfusion",
+        {"condition": "ckd"},
+        kind="physiology",
+        tissue="body",
+    )
+    assert whole is not None and {"Cox2017", "Buchanan2020"} <= set(whole.sources)

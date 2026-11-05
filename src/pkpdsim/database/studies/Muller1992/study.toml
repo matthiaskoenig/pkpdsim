@@ -1,0 +1,18 @@
+source = "Muller1992"
+tissue = "body"
+control = "controls"
+notes = "Chronic heart failure of NYHA II-III (aged 67, on furosemide) and younger healthy volunteers (aged 49); cardiac output by indirect Fick, superior mesenteric and right renal artery flow by Doppler, calf flow by venous occlusion plethysmography; Results (free full text), mean and SE; transcribed from the full text by the literature search of the database (2026-11-05)."
+
+[measurements.physiology]
+file = "physiology.tsv"
+kind = "physiology"
+method = "Doppler ultrasound, plethysmography, CO2 rebreathing"
+location = "Results"
+
+[groups.controls]
+condition = "control"
+description = "healthy volunteers"
+
+[groups.nyha_2_3]
+condition = "heart_failure"
+description = "NYHA II-III"

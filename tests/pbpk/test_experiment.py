@@ -383,3 +383,94 @@ def test_the_molecular_weights_of_a_definition() -> None:
     tied = ModelParameter("Mr_y", Formula("2 * Mr_drg", U.g_per_mole), U.g_per_mole)
     with pytest.raises(ValueError, match=r"'Mr_y'.*formula"):
         molecular_weights(definition(parameters=[tied]))
+
+
+@pytest.mark.parametrize(
+    ("classification", "key", "parameter", "value"),
+    [
+        (impairment.CHILD_PUGH_CLASSES, "healthy", "CP_severity", 0.0),
+        (impairment.CHILD_PUGH_CLASSES, "B", "CP_severity", 2.0),
+        (impairment.NYHA_CLASSES, "III", "HF_severity", 3.0),
+        (impairment.KDIGO_GFR_CLASSES, "G1", "f_renal_function", 1.0),
+    ],
+)
+def test_the_changes_of_a_class(
+    male: BuildResult,
+    classification: impairment.Classification,
+    key: str,
+    parameter: str,
+    value: float,
+) -> None:
+    """A class sets the severity of its condition before the initialization."""
+    changes = _experiment(male).class_changes(classification, key)
+    assert list(changes) == [parameter]
+    assert changes[parameter].m_as("dimensionless") == value
+
+
+@pytest.mark.parametrize("key", ["G2", "G3a", "G3b", "G4", "G5"])
+def test_a_gfr_category_sets_the_egfr_of_the_class(
+    male: BuildResult, female: BuildResult, key: str
+) -> None:
+    """The renal function of a GFR category gives the eGFR of the class, per build."""
+    egfr = impairment.KDIGO_GFR_CLASSES[key].value
+    assert egfr is not None
+    for result, sex in ((male, Sex.MALE), (female, Sex.FEMALE)):
+        experiment = _subclass(_experiment(result), "Study", sex=sex)
+        changes = experiment.class_changes(impairment.KDIGO_GFR_CLASSES, key)
+        f = changes["f_renal_function"].m_as("dimensionless")
+        r = individual(result.flat_path, f_renal_function=f)
+        assert r["eGFR"] * 1e3 == pytest.approx(egfr, rel=1e-12)
+
+
+def test_the_simulations_of_the_classes(male: BuildResult) -> None:
+    """A simulation per class with the changes of the class, keys by the prefix."""
+    cls = _experiment(male)
+    experiment = cls()
+    dose = Simulation(end=60, preinit_changes={"BW": Q(80.0, "kg")}, steps=10)
+    sims = experiment.class_simulations(
+        dose, impairment.NYHA_CLASSES, prefix="po_hf", keys=["healthy", "II", "IV"]
+    )
+    assert list(sims) == ["po_hf_healthy", "po_hf_II", "po_hf_IV"]
+    for key, sim in zip(["healthy", "II", "IV"], sims.values(), strict=True):
+        assert sim.preinit_changes["BW"] == Q(80.0, "kg")
+        assert sim.preinit_changes["HF_severity"] == Q(
+            impairment.NYHA_CLASSES[key].value, "dimensionless"
+        )
+        assert (sim.start, sim.end, sim.steps) == (dose.start, dose.end, dose.steps)
+    assert "HF_severity" not in dose.preinit_changes
+    every = experiment.class_simulations(
+        dose, impairment.KDIGO_GFR_CLASSES, prefix="iv"
+    )
+    assert list(every) == [f"iv_{c.key}" for c in impairment.KDIGO_GFR_CLASSES]
+    own = Simulation(end=60, preinit_changes={"CP_severity": Q(1.0, "dimensionless")})
+    with pytest.raises(ValueError, match="sets 'CP_severity' itself"):
+        experiment.class_simulations(own, impairment.CHILD_PUGH_CLASSES, prefix="x")
+
+
+def test_the_classes_are_drawn_with_their_labels_and_colors(male: BuildResult) -> None:
+    """A curve per class from the task of its simulation."""
+
+    class Plot:
+        def __init__(self) -> None:
+            self.curves: list[dict[str, object]] = []
+
+        def add_data(self, **kwargs: object) -> None:
+            self.curves.append(kwargs)
+
+    plot = Plot()
+    _experiment(male)().add_classes(
+        plot,  # ty: ignore[invalid-argument-type]
+        impairment.CHILD_PUGH_CLASSES,
+        prefix="po_cp",
+        yid="[Cve_d]",
+    )
+    assert [c["task"] for c in plot.curves] == [
+        "task_po_cp_healthy",
+        "task_po_cp_A",
+        "task_po_cp_B",
+        "task_po_cp_C",
+    ]
+    assert [(c["label"], c["color"]) for c in plot.curves] == [
+        (c.label, c.color) for c in impairment.CHILD_PUGH_CLASSES
+    ]
+    assert {c["yid"] for c in plot.curves} == {"[Cve_d]"}

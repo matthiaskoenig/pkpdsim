@@ -1,0 +1,38 @@
+source = "Kang2017"
+tissue = "body"
+notes = "The KNOW-CKD cohort before dialysis by the stages of the MDRD eGFR (aged 20-75), no control group; Table 3 (open access, CC BY-NC), mean and SD; the albumin of the same participants is Kim 2017; transcribed from the full text by the literature search of the database (2026-11-05)."
+
+[measurements.physiology]
+file = "physiology.tsv"
+kind = "physiology"
+method = "laboratory values at enrolment"
+location = "Table 3"
+
+[groups.g1]
+condition = "ckd"
+description = "CKD G1 (eGFR >= 90 with kidney damage)"
+
+[groups.g2]
+condition = "ckd"
+ckd_stage = "mild"
+description = "CKD G2"
+
+[groups.g3a]
+condition = "ckd"
+ckd_stage = "moderate"
+description = "CKD G3a"
+
+[groups.g3b]
+condition = "ckd"
+ckd_stage = "moderate"
+description = "CKD G3b"
+
+[groups.g4]
+condition = "ckd"
+ckd_stage = "severe"
+description = "CKD G4"
+
+[groups.g5]
+condition = "ckd"
+ckd_stage = "end stage"
+description = "CKD G5 before dialysis"

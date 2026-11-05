@@ -1,0 +1,141 @@
+{
+ "image": "fig-002.png",
+ "dark": 128,
+ "min_run": 20,
+ "thick": 1000,
+ "panels": [
+  {
+   "name": "BCRP",
+   "entity": "ABCG2",
+   "kind": "protein",
+   "x_axis": 473,
+   "x_end": 1615,
+   "groups": [
+    "controls",
+    "ald",
+    "hcv"
+   ],
+   "segments": [
+    {
+     "y_top": 1893.0,
+     "v_top": 10,
+     "y_bottom": 2373.0,
+     "v_bottom": 0,
+     "y_min": 1853.0,
+     "y_max": 2373.0
+    }
+   ]
+  },
+  {
+   "name": "BSEP",
+   "entity": "ABCB11",
+   "kind": "protein",
+   "x_axis": 1465,
+   "x_end": 2607,
+   "groups": [
+    "controls",
+    "ald",
+    "hcv"
+   ],
+   "segments": [
+    {
+     "y_top": 1895.0,
+     "v_top": 200,
+     "y_bottom": 2375.0,
+     "v_bottom": 0,
+     "y_min": 1855.0,
+     "y_max": 2375.0
+    }
+   ]
+  },
+  {
+   "name": "MATE1",
+   "entity": "SLC47A1",
+   "kind": "protein",
+   "x_axis": 2531,
+   "x_end": 3673,
+   "groups": [
+    "controls",
+    "ald",
+    "hcv"
+   ],
+   "segments": [
+    {
+     "y_top": 1894.0,
+     "v_top": 40,
+     "y_bottom": 2374.0,
+     "v_bottom": 0,
+     "y_min": 1854.0,
+     "y_max": 2374.0
+    }
+   ]
+  },
+  {
+   "name": "MRP2",
+   "entity": "ABCC2",
+   "kind": "protein",
+   "x_axis": 3501,
+   "x_end": 4643,
+   "groups": [
+    "controls",
+    "ald",
+    "hcv"
+   ],
+   "segments": [
+    {
+     "y_top": 1894.0,
+     "v_top": 120,
+     "y_bottom": 2374.0,
+     "v_bottom": 0,
+     "y_min": 1854.0,
+     "y_max": 2374.0
+    }
+   ]
+  },
+  {
+   "name": "MRP3",
+   "entity": "ABCC3",
+   "kind": "protein",
+   "x_axis": 4457,
+   "x_end": 5599,
+   "groups": [
+    "controls",
+    "ald",
+    "hcv"
+   ],
+   "segments": [
+    {
+     "y_top": 1900.0,
+     "v_top": 60,
+     "y_bottom": 2379.0,
+     "v_bottom": 0,
+     "y_min": 1860.0,
+     "y_max": 2379.0
+    }
+   ]
+  },
+  {
+   "name": "P-gp",
+   "entity": "ABCB1",
+   "kind": "protein",
+   "x_axis": 5447,
+   "x_end": 6589,
+   "groups": [
+    "controls",
+    "ald",
+    "hcv"
+   ],
+   "segments": [
+    {
+     "y_top": 1895.0,
+     "v_top": 50,
+     "y_bottom": 2375.0,
+     "v_bottom": 0,
+     "y_min": 1855.0,
+     "y_max": 2375.0
+    }
+   ]
+  }
+ ],
+ "box_fraction": 0.7
+}

@@ -1,0 +1,5 @@
+entity	group	n	mean	sd	se	median	q1	q3	notes
+renal_cortical_perfusion	controls	30	207.3	41.8					
+renal_cortical_perfusion	ckd_3	33	108.4	36.4					
+renal_medullary_perfusion	controls	26	42.6	15.8					
+renal_medullary_perfusion	ckd_3	33	23.2	8.9					

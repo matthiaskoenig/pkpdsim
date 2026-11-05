@@ -1,0 +1,10 @@
+entity	group	n	mean	sd	se	median	q1	q3	notes
+hemoglobin	controls	39	141	10					
+hemoglobin	ckd_5	42	102	19					
+hemoglobin	hd	31	108	10					
+albumin	controls	39	43.6	2.4					
+albumin	ckd_5	42	35.5	7.1					
+albumin	hd	31	40.7	3.3					
+agp	controls	39	0.78	0.19					
+agp	ckd_5	42	1.38	0.47					
+agp	hd	31	1.7	0.38					

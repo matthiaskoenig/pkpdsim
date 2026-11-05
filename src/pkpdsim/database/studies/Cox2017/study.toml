@@ -1,0 +1,22 @@
+source = "Cox2017"
+tissue = "body"
+control = "controls_over40"
+notes = "Healthy volunteers below and above 40 years (the control of the ratios those above 40, aged 60 +- 9, against the patients aged 52 +- 14) and patients with CKD 3-4 of glomerular disease (eGFR 51 +- 15); the flow of a single renal artery by phase-contrast MRI, the cortical perfusion by FAIR ASL, the total kidney volume by MRI; Table 5 (open access, CC BY), mean and SD with the n of each measure; transcribed from the full text by the literature search of the database (2026-11-05)."
+
+[measurements.physiology]
+file = "physiology.tsv"
+kind = "physiology"
+method = "multiparametric renal MRI"
+location = "Table 5"
+
+[groups.controls_over40]
+condition = "control"
+description = "healthy volunteers above 40 years"
+
+[groups.controls_under40]
+condition = "control"
+description = "healthy volunteers below 40 years"
+
+[groups.ckd_3_4]
+condition = "ckd"
+description = "CKD G3-4 of glomerular disease"

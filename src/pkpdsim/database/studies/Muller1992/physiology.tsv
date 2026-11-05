@@ -1,0 +1,9 @@
+entity	group	n	mean	sd	se	median	notes
+cardiac_output	controls	10	4.1		0.4		sitting
+cardiac_output	nyha_2_3	30	3.3		0.1		sitting
+superior_mesenteric_artery_flow	controls	10	446		40		
+superior_mesenteric_artery_flow	nyha_2_3	30	332		12		
+renal_artery_flow_one_kidney	controls	10	452		50		right renal artery
+renal_artery_flow_one_kidney	nyha_2_3	15	317		26		right renal artery, a signal in 15 of 30
+calf_blood_flow	controls	10	2.7		0.3		
+calf_blood_flow	nyha_2_3	30	1.9		0.1		

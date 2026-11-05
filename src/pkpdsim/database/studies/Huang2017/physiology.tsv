@@ -1,0 +1,5 @@
+entity	group	n	mean	sd	se	median	q1	q3	notes
+albumin	controls	20	43.2						
+albumin	ckd_3	32	41.1						
+albumin	ckd_4	38	40.7						
+albumin	ckd_5	25	39.1						

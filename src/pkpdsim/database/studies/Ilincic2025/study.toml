@@ -1,0 +1,28 @@
+source = "Ilincic2025"
+tissue = "body"
+notes = "Patients with chronic tubulointerstitial CKD (albuminuria A1-A2) by the stage of the GFR measured with 99mTc-DTPA: 1 (96), 2 (77), 3a (52), 3b (38.5), no control group; ERPF by 131I-hippuran clearance; Table 2 (open access, CC BY), median and interquartile range (Ilinčić and Vukmirović Papuga 2022 are of one centre and method); transcribed from the full text by the literature search of the database (2026-11-05)."
+
+[measurements.physiology]
+file = "physiology.tsv"
+kind = "physiology"
+method = "131I-hippuran clearance"
+location = "Table 2"
+
+[groups.g1]
+condition = "ckd"
+description = "CKD G1 by the measured GFR"
+
+[groups.g2]
+condition = "ckd"
+ckd_stage = "mild"
+description = "CKD G2"
+
+[groups.g3a]
+condition = "ckd"
+ckd_stage = "moderate"
+description = "CKD G3a"
+
+[groups.g3b]
+condition = "ckd"
+ckd_stage = "moderate"
+description = "CKD G3b"

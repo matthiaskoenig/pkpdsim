@@ -1,0 +1,3 @@
+entity	group	n	mean	sd	se	median	q1	q3	notes
+renal_parenchymal_volume	controls	19	329.63	66.42		324.31			
+renal_parenchymal_volume	ckd_2_5	23	257.14	86.96		257.53			

@@ -1,0 +1,18 @@
+source = "ZhangDL2024"
+tissue = "body"
+control = "controls"
+notes = "Healthy subjects of a check-up and patients with early CKD (GFR > 60, G1 and G2 together); the length of the kidney by ultrasound; Table 2 (open access, CC BY-NC-ND), mean and SD; transcribed from the full text by the literature search of the database (2026-11-05)."
+
+[measurements.physiology]
+file = "physiology.tsv"
+kind = "physiology"
+method = "B-mode ultrasound"
+location = "Table 2"
+
+[groups.controls]
+condition = "control"
+description = "healthy subjects"
+
+[groups.ckd_1_2]
+condition = "ckd"
+description = "CKD G1-G2"

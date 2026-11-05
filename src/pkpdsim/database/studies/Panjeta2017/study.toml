@@ -1,0 +1,35 @@
+source = "Panjeta2017"
+tissue = "body"
+control = "controls"
+notes = "Healthy controls without anaemia matched by age and sex (GFR >= 90) and CKD patients by the MDRD GFR, which the paper numbers stage 1 to 4 (GFR 60-89.99, 30-59.99, 15-29.99, <= 14.99, the KDIGO categories G2 to G5). Results text (open access, CC BY-NC-ND): the median with a range in brackets whose kind the text does not name, taken as the interquartile range; transcribed from the full text by the literature search of the database (2026-11-05)."
+
+[measurements.physiology]
+file = "physiology.tsv"
+kind = "physiology"
+method = "haemoglobin of the blood count"
+location = "Results (haemoglobin)"
+
+[groups.controls]
+condition = "control"
+description = "healthy subjects, GFR >= 90"
+
+[groups.ckd_1]
+condition = "ckd"
+ckd_stage = "mild"
+description = "GFR 60-89.99 (the paper's stage 1)"
+
+[groups.ckd_2]
+condition = "ckd"
+ckd_stage = "moderate"
+description = "GFR 30-59.99 (stage 2)"
+
+[groups.ckd_3]
+condition = "ckd"
+ckd_stage = "severe"
+description = "GFR 15-29.99 (stage 3)"
+
+[groups.ckd_4]
+condition = "ckd"
+ckd_stage = "end stage"
+description = "GFR <= 14.99 (stage 4)"
+assumption = "not on dialysis assumed: the study does not state the dialysis of the group"

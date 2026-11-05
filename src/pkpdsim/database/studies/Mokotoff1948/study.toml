@@ -1,0 +1,18 @@
+source = "Mokotoff1948"
+tissue = "body"
+control = "controls"
+notes = "Advanced chronic congestive failure with edema at rest, mostly rheumatic heart disease (17 patients, 20 studies), and controls without heart failure or renal disease; renal plasma flow by PAH and GFR by mannitol clearance per 1.73 m2; Table I (free full text), mean and SD (sigma); the n of the patients is the number of studies; transcribed from the full text by the literature search of the database (2026-11-05)."
+
+[measurements.physiology]
+file = "physiology.tsv"
+kind = "physiology"
+method = "PAH and mannitol clearance"
+location = "Table I"
+
+[groups.controls]
+condition = "control"
+description = "subjects without heart failure or renal disease"
+
+[groups.chf]
+condition = "heart_failure"
+description = "advanced congestive heart failure with edema at rest"

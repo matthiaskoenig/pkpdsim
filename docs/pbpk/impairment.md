@@ -9,7 +9,7 @@ Impaired organ function is a set of parameter vectors on the physiology, never a
 | condition | severity | classes | acts on |
 |---|---|---|---|
 | liver cirrhosis | `CP_severity` | 0 healthy, 1, 2, 3 the Child-Pugh classes A, B, C, interpolated linearly | functional liver `f_functional`, shunt `f_shunt`, hepatic artery and kidney flow, cardiac index, GFR, albumin and AGP (so fu), the hematocrit, the enzymes and transporters of the liver; a MELD score gives the severity ([The MELD score](#the-meld-score)) |
-| chronic kidney disease | `f_renal_function` | the GFR relative to healthy; its GFR per 1.73 m2 (`eGFR`) gives the stage | GFR, the binding to albumin and AGP by their CKD profiles and to an unknown protein by the binding capacity of the plasma proteins (so fu); hematocrit, kidney volume and flow, gastric emptying and small intestinal transit (factor 1, see [Limitations](#limitations)); with the switch `CKD_hepatic = 1` hepatic CYP2D6 and OATP1B |
+| chronic kidney disease | `f_renal_function` | the GFR relative to healthy; its GFR per 1.73 m2 (`eGFR`) gives the stage | GFR, the binding to albumin and AGP by their CKD profiles and to an unknown protein by the binding capacity of the plasma proteins (so fu); the hematocrit and the renal blood flow; kidney volume, gastric emptying and small intestinal transit (factor 1, see [Limitations](#limitations)); with the switch `CKD_hepatic = 1` hepatic CYP2D6 and OATP1B |
 | heart failure | `HF_severity` | 0 healthy, 1 to 4 the NYHA classes I to IV, interpolated linearly | the blood flows of liver and portal organs, kidney, skin, adipose and muscle; the cardiac output is their sum, the GFR follows the renal blood flow |
 
 Each condition has its factors `fcp_<key>`, `fckd_<key>`, `fhf_<key>`; the factor of all conditions on a quantity is `fimp_<id>`, their product (`fimp_GFR`, `fimp_Qki`, `fimp_HCT`), which the [physiology](physiology.md#scaling-to-the-individual) multiplies. Every organ flow is its fraction of the cardiac output without impairment (`CO_base`) times `fimp_Q<o>`, and the cardiac output is `CO_base*fimp_CO`, so the flows sum to it. A rate of a protein in the liver runs with `f_<protein>*fimp_<protein>`, the base activity of the organ (genotype, interactions of an experiment) times the impairment, so both act multiplicatively.
@@ -56,7 +56,7 @@ The organs without a factor of their own (heart, muscle, skin, adipose, bone, go
 | `agp` | 0.6 | 0.56 | 0.3 | `ModelChoice` |
 | `hematocrit` | 0.9232 | 0.7411 | 0.7232 | consensus of `hematocrit`: `Mesropyan2022`, `Wong2001`, `Boker2000` |
 
-A factor with a consensus is that of the studies of the database on the quantity, the ratio of the class to the controls of each study pooled over the studies, see [the database](../database.md); a value marked `*` is a choice of the library.
+A factor with a consensus is that of the studies of the database on the quantity, the ratio of the class to the controls of each study pooled over the studies, see [the database](../database.md); a value marked `*` is a choice of the library (for a consensus the interpolation of a class without a study).
 
 ??? note "Sources"
 
@@ -73,7 +73,7 @@ A factor with a consensus is that of the studies of the database on the quantity
     - `Yang2020`: Yang M, Zhang Y, Zhao W, Cheng W, Wang H, Guo S. Evaluation of liver function using liver parenchyma, spleen and portal vein signal intensities during the hepatobiliary phase in Gd-EOB-D TPA-enhanced MRI. BMC Med Imaging 20(1):119, 2020. [doi:10.1186/s12880-020-00519-7](https://doi.org/10.1186/s12880-020-00519-7)
 <!-- end generated -->
 
-The factors on the albumin, the hematocrit and the cardiac index are the consensus of the studies of the [parameter database](../database.md#physiology-and-the-meld-score) with a control group (`child_pugh_factor` of `pkpdsim.pbpk.impairment`; the entry of the table names the quantity, `consensus = "albumin"`): the ratio of each class to the controls of each study, pooled by the random-effects meta-analysis as for the proteins. They agree with the values of Edginton & Willmann 2008 for the albumin (0.81, 0.68, 0.50) and the cardiac index (1.11, 1.27, 1.36); the hematocrit falls (a factor of 1 before). The other physiological factors are those which Alasmari 2024 (Table 3) attribute to Edginton & Willmann 2008. Edginton 2008 was not read, so they are choices of the library, not verified against the paper, and are named in the notes as such; the factors of the hepatic arterial flow are the ratios of the arterial perfusion per volume of liver of Annet 2003, larger than the absolute arterial flow of Sudhamshu 2006 and the perfusion of the database times its liver volume (the notes give both). The shunt and the portal blood flow describe the same portal blood which does not reach the sinusoids; applied together they would count it twice. The library takes the shunt: the shunt fractions are the degrees of cirrhosis of the Child-Pugh classes of `pkpdsim.impairment.CIRRHOSIS` (the ICG models of the König lab, a choice of the library), the splanchnic flow of the portal organs is not reduced, and the fraction `f_shunt` of the liver inflow bypasses the liver, so the portal blood which perfuses the liver is 0.60, 0.30 and 0.19 of healthy (Edginton 2008: 0.40, 0.36, 0.04). The shunt acts on the hepatic arterial inflow as well.
+The factors on the albumin, the hematocrit and the cardiac index are the consensus of the studies of the [parameter database](../database.md#physiology-and-the-meld-score) with a control group (`class_factors` of `pkpdsim.pbpk.impairment`; the entry of the table names the quantity, `consensus = "albumin"`): the ratio of each class to the controls of each study, pooled by the random-effects meta-analysis as for the proteins. They agree with the values of Edginton & Willmann 2008 for the albumin (0.81, 0.68, 0.50) and the cardiac index (1.11, 1.27, 1.36); the hematocrit falls (a factor of 1 before). The other physiological factors are those which Alasmari 2024 (Table 3) attribute to Edginton & Willmann 2008. Edginton 2008 was not read, so they are choices of the library, not verified against the paper, and are named in the notes as such; the factors of the hepatic arterial flow are the ratios of the arterial perfusion per volume of liver of Annet 2003, larger than the absolute arterial flow of Sudhamshu 2006 and the perfusion of the database times its liver volume (the notes give both). The shunt and the portal blood flow describe the same portal blood which does not reach the sinusoids; applied together they would count it twice. The library takes the shunt: the shunt fractions are the degrees of cirrhosis of the Child-Pugh classes of `pkpdsim.impairment.CIRRHOSIS` (the ICG models of the König lab, a choice of the library), the splanchnic flow of the portal organs is not reduced, and the fraction `f_shunt` of the liver inflow bypasses the liver, so the portal blood which perfuses the liver is 0.60, 0.30 and 0.19 of healthy (Edginton 2008: 0.40, 0.36, 0.04). The shunt acts on the hepatic arterial inflow as well.
 
 The enzymes and transporters of the liver are the consensus of the studies of the [parameter database](../database.md): the ratio of the abundance per amount of liver tissue of each Child-Pugh class to the controls of each study on the log scale, pooled over the studies by a random-effects meta-analysis (El-Khateeb 2021, Drozdzik 2020, Drozdzik 2021 and Prasad 2018, whose end-stage livers are assumed to be class C), the mRNA expression only for a protein without an abundance. The notes of every factor give the consensus of each class with its 95 % confidence interval and the ratio of every study. A class without a study is the interpolation between its neighbours (healthy 1) or the last class with a study, a choice of the library. Johnson 2010 (the abundance factors of the Simcyp cirrhosis populations) was not accessible and is not used.
 
@@ -82,20 +82,21 @@ The enzymes and transporters of the liver are the consensus of the studies of th
 
 | protein | A | B | C | studies |
 | --- | ---: | ---: | ---: | --- |
-| `ABCB1` | 1.317 | 1.174 | 1.224 | `ElKhateeb2021`, `Drozdzik2020` |
-| `ABCC2` | 0.2696 | 0.2959 | 0.1771 | `Drozdzik2020`, `ElKhateeb2021` |
-| `ABCC3` | 0.474 | 0.4243 | 0.5212 | `Drozdzik2020`, `ElKhateeb2021` |
+| `ABCB1` | 1.317 | 1.174 | 1.027 | `ElKhateeb2021`, `Drozdzik2020`, `Wang2016` |
+| `ABCC2` | 0.2696 | 0.2959 | 0.265 | `Drozdzik2020`, `ElKhateeb2021`, `Wang2016` |
+| `ABCC3` | 0.474 | 0.4243 | 0.7358 | `Drozdzik2020`, `ElKhateeb2021`, `Wang2016` |
 | `ABCC4` | 0.3636 | 0.6364 | 0.2727 | `ElKhateeb2021` |
-| `ABCG2` | 0.75 | 1.25 | 1 | `ElKhateeb2021` |
+| `ABCG2` | 0.75 | 1.25 | 0.973 | `ElKhateeb2021`, `Wang2016` |
 | `CYP1A2` | 0.481 | 0.536 | 0.1869 | `Drozdzik2021`, `ElKhateeb2021`, `Prasad2018` |
 | `CYP2C19` | 0.793 | 0.1162 | 0.2467 | `Drozdzik2021`, `ElKhateeb2021` |
 | `CYP2C8` | 0.6561 | 0.3706 | 0.3428 | `Drozdzik2021`, `ElKhateeb2021`, `Prasad2018` |
 | `CYP2C9` | 0.9053 | 0.7152 | 0.415 | `Drozdzik2021`, `ElKhateeb2021`, `Prasad2018` |
 | `CYP2D6` | 0.824 | 0.7194 | 0.5954 | `Drozdzik2021`, `ElKhateeb2021`, `Prasad2018` |
 | `CYP3A4` | 0.5981 | 0.3449 | 0.195 | `Drozdzik2021`, `ElKhateeb2021`, `Prasad2018` |
-| `SLC22A1` | 0.4822 | 0.3041 | 0.2795 | `Drozdzik2020`, `ElKhateeb2021` |
-| `SLCO1B1` | 0.5187 | 0.4601 | 0.3746 | `Drozdzik2020`, `ElKhateeb2021` |
-| `SLCO1B3` | 0.9863 | 0.3484 | 0.2445 | `Drozdzik2020`, `ElKhateeb2021` |
+| `SLC22A1` | 0.4822 | 0.3041 | 0.2935 | `Drozdzik2020`, `ElKhateeb2021`, `Wang2016` |
+| `SLC47A1` | 1.037* | 1.075* | 1.112 | `Wang2016` |
+| `SLCO1B1` | 0.5187 | 0.4601 | 0.4826 | `Drozdzik2020`, `ElKhateeb2021`, `Wang2016` |
+| `SLCO1B3` | 0.9863 | 0.3484 | 0.2852 | `Drozdzik2020`, `ElKhateeb2021`, `Wang2016` |
 | `UGT1A1` | 1.49 | 1.204 | 0.9976 | `Drozdzik2021`, `ElKhateeb2021` |
 | `UGT1A9` | 1.356 | 0.4759 | 0.2799 | `ElKhateeb2021` |
 | `UGT2B7` | 0.7633 | 0.4251 | 0.2091 | `Drozdzik2021`, `ElKhateeb2021`, `Prasad2018` |
@@ -108,6 +109,7 @@ The consensus of the studies of the database on the abundance per amount of live
     - `Drozdzik2021`: Drozdzik M, Lapczuk-Romanska J, Wenzel C, Szelag-Pieniek S, Post M, Skalski Ł, Kurzawski M, Oswald S. Gene expression and protein abundance of hepatic drug metabolizing enzymes in liver pathology. Pharmaceutics 13(9):1334, 2021. [doi:10.3390/pharmaceutics13091334](https://doi.org/10.3390/pharmaceutics13091334)
     - `ElKhateeb2021`: El-Khateeb E, Achour B, Al-Majdoub ZM, Barber J, Rostami-Hodjegan A. Non-uniformity of changes in drug-metabolizing enzymes and transporters in liver cirrhosis: implications for drug dosage adjustment. Mol Pharm 18(9):3563-3577, 2021. [doi:10.1021/acs.molpharmaceut.1c00462](https://doi.org/10.1021/acs.molpharmaceut.1c00462)
     - `Prasad2018`: Prasad B, Bhatt DK, Johnson K, Chapa R, Chu X, Salphati L, Xiao G, Lee C, Hop CE, Mathias A, Lai Y, Liao M, Humphreys WG, Kumer SC, Unadkat JD. Abundance of phase 1 and 2 drug-metabolizing enzymes in alcoholic and hepatitis C cirrhotic livers: a quantitative targeted proteomics study. Drug Metab Dispos 46(7):943-952, 2018. [doi:10.1124/dmd.118.080523](https://doi.org/10.1124/dmd.118.080523)
+    - `Wang2016`: Wang L, Collins C, Kelly EJ, Chu X, Ray AS, Salphati L, Xiao G, Lee C, Lai Y, Liao M, Mathias A, Evers R, Humphreys W, Hop CE, Kumer SC, Unadkat JD. Transporter Expression in Liver Tissue from Subjects with Alcoholic or Hepatitis C Cirrhosis Quantified by Targeted Quantitative Proteomics. Drug Metab Dispos 44(11):1752-1758, 2016. [doi:10.1124/dmd.116.071050](https://doi.org/10.1124/dmd.116.071050)
 <!-- end generated -->
 
 ### The MELD score
@@ -153,7 +155,7 @@ fckd_plasma_protein = piecewise(1, eGFR >= 0.09, 1, eGFR >= 0.075, 1 + 0.45 * (0
 ```
 
 <!-- generated: impairment-ckd (scripts/pbpk_tables.py), do not edit -->
-*Generated from `database/tables/impairment.toml` by `scripts/pbpk_tables.py`; the notes of every number are in the database.*
+*Generated from `database/tables/impairment.toml` and the studies of `pkpdsim/database` by `scripts/pbpk_tables.py`; the notes of every number are in the database.*
 
 Stage limits of the GFR per 1.73 m2 (ml/min/1.73 m2): 90, 60, 30, 15 (`Yoshida2016`).
 
@@ -162,21 +164,27 @@ Anchors of the interpolation, the eGFR (ml/min/1.73 m2) of the values of mild, m
 | factor | mild | moderate | severe | end stage | source |
 | --- | ---: | ---: | ---: | ---: | --- |
 | `plasma_protein` | 1* | 1.45 | 2.2 | 2.5 | `Alasmari2023` |
-| `hematocrit` | 1 | 1 | 1 | 1 | `ModelChoice` |
+| `hematocrit` | 0.9349 | 0.8857 | 0.7909 | 0.7106 | consensus of `hemoglobin`: `Panjeta2017`, `Lin2017`, `Zakiyanov2013` |
 | `kidney_volume` | 1 | 1 | 1 | 1 | `ModelChoice` |
-| `kidney_flow` | 1 | 1 | 1 | 1 | `ModelChoice` |
+| `kidney_flow` | 0.7712 | 0.5567 | 0.4183 | 0.3344 | consensus of `renal_cortical_perfusion`: `Brown2020`, `ZhangX2024`, `LiLP2017` |
 | `gastric_emptying_time` | 1 | 1 | 1 | 1 | `ModelChoice` |
 | `si_transit_time` | 1 | 1 | 1 | 1 | `ModelChoice` |
 
-A value marked `*` is a choice of the library, not a value of the source.
+A factor with a consensus is that of the studies of the database on the quantity, the ratio of the class to the controls of each study pooled over the studies, see [the database](../database.md); a value marked `*` is a choice of the library (for a consensus the interpolation of a class without a study).
 
 Share of the tubular capacity which follows the renal function (`f_tubular`, not per stage): 1 (`ModelChoice`).
 
 ??? note "Sources"
 
     - `Alasmari2023`: Alasmari F, Alasmari MS, Muwainea HM, Alomar HA, Alasmari AF, Alsanea S, Alshamsan A, Rasool MF, Alqahtani F. Physiologically-based pharmacokinetic modeling for single and multiple dosing regimens of ceftriaxone in healthy and chronic kidney disease populations: a tool for model-informed precision dosing. Front Pharmacol 14:1200828, 2023. [doi:10.3389/fphar.2023.1200828](https://doi.org/10.3389/fphar.2023.1200828)
+    - `Brown2020`: Brown RS, Sun MRM, Stillman IE, Russell TL, Rosas SE, Wei JL. The utility of magnetic resonance imaging for noninvasive evaluation of diabetic nephropathy. Nephrol Dial Transplant 35(6):970-978, 2020. [doi:10.1093/ndt/gfz066](https://doi.org/10.1093/ndt/gfz066)
+    - `LiLP2017`: Li LP, Tan H, Thacker JM, Li W, Zhou Y, Kohn O, Sprague SM, Prasad PV. Evaluation of Renal Blood Flow in Chronic Kidney Disease Using Arterial Spin Labeling Perfusion Magnetic Resonance Imaging. Kidney Int Rep 2(1):36-43, 2017. [doi:10.1016/j.ekir.2016.09.003](https://doi.org/10.1016/j.ekir.2016.09.003)
+    - `Lin2017`: Lin HY, Lee YL, Lin KD, Chiu YW, Shin SJ, Hwang SJ, Chen HC, Hung CC. Association of Renal Elasticity and Renal Function Progression in Patients with Chronic Kidney Disease Evaluated by Real-Time Ultrasound Elastography. Sci Rep 7:43303, 2017. [doi:10.1038/srep43303](https://doi.org/10.1038/srep43303)
     - `ModelChoice`: Choice of the pkpdsim PBPK library, not a value of the literature; the notes of the value give the reasoning.
+    - `Panjeta2017`: Panjeta M, Tahirović I, Sofić E, Ćorić J, Dervišević A. Interpretation of Erythropoietin and Haemoglobin Levels in Patients with Various Stages of Chronic Kidney Disease. J Med Biochem 36(2):145-152, 2017. [doi:10.1515/jomb-2017-0014](https://doi.org/10.1515/jomb-2017-0014)
     - `Yoshida2016`: Yoshida K, Sun B, Zhang L, Zhao P, Abernethy DR, Nolin TD, Rostami-Hodjegan A, Zineh I, Huang SM. Systematic and quantitative assessment of the effect of chronic kidney disease on CYP2D6 and CYP3A4/5. Clin Pharmacol Ther 100(1):75-87, 2016. [doi:10.1002/cpt.337](https://doi.org/10.1002/cpt.337)
+    - `Zakiyanov2013`: Zakiyanov O, Kriha V, Vachek J, Zima T, Tesar V, Kalousova M. Placental growth factor, pregnancy-associated plasma protein-A, soluble receptor for advanced glycation end products, extracellular newly identified receptor for receptor for advanced glycation end products binding protein and high mobility group box 1 levels in patients with acute kidney injury: a cross sectional study. BMC Nephrol 14:245, 2013. [doi:10.1186/1471-2369-14-245](https://doi.org/10.1186/1471-2369-14-245)
+    - `ZhangX2024`: Zhang X, Ye C, Lu F, Yang J, Xu Y, Wang C. Evaluation of renal oxygenation and perfusion in patients with chronic kidney disease: a preliminary prospective study based on functional magnetic resonance. Ren Fail 46(2):2428337, 2024. [doi:10.1080/0886022X.2024.2428337](https://doi.org/10.1080/0886022X.2024.2428337)
 <!-- end generated -->
 
 The factor `plasma_protein` of the binding capacity acts on the binding to an unknown protein only (the binding to albumin and AGP has its profile, below). It is a factor on the binding capacity in the form of fu above, not a factor on fu: binding capacity is the mechanistic quantity and keeps fu below 1 (at `fu_ref` 0.5 the end stage gives fu 0.71). Its source is Table 3 of Alasmari 2023, the "correction factor for the effect of the CKD on the content of plasma proteins" of the PK-Sim plasma protein scale factor, taken from Malik 2020 (doi:10.1002/jcph.1713, paywalled, not read); its direction (the capacity falls by it) is a choice of the library. Malik 2020 parameterize CKD for drugs secreted by the organic cation system, which do not separate the proteins.
@@ -212,15 +220,15 @@ The binding to albumin and to alpha-1-acid glycoprotein has a CKD profile per pr
 The end stage values mix the populations: the albumin concentration is of non-dialysis CKD 5 (Huang 2017), the albumin binding function (Klammt 2012, stage 5) and AGP (Schmulenson 2018, ESRD) include dialysis patients, whose binding differs between and on the days of dialysis. The library's end stage is CKD off dialysis. Mild CKD is measured by none of the sources: its value lies on the line from 1 at the eGFR 90 to the moderate value at 45 (albumin concentration, AGP), and the binding function of the stages 1/2 is 1, choices of the library. At the end stage the profile raises fu of a strongly bound albumin substance by 1/(0.905*0.669) = 1.65 (the binding capacity 2.5) and lowers fu of a strongly bound AGP substance to 0.485 of healthy (2.5 before). The measured rise of fu of highly bound acidic drugs in severe CKD reaches 2.71 (bumetanide, Tan 2022, doi:10.1002/cpt.2642, full text), while the concentration of albumin alone predicts at most 1.20 (Tan 2022); Vanholder 1988 (doi:10.1038/ki.1988.99, abstract) measured a falling binding of phenytoin, theophylline and methotrexate and a rising binding of the basic drugs propranolol, cimetidine and clonidine in dialysed patients.
 
 <!-- generated: impairment-ckd-binding (scripts/pbpk_tables.py), do not edit -->
-*Generated from `database/tables/impairment.toml` by `scripts/pbpk_tables.py`; the notes of every number are in the database.*
+*Generated from `database/tables/impairment.toml` and the studies of `pkpdsim/database` by `scripts/pbpk_tables.py`; the notes of every number are in the database.*
 
 | factor | mild | moderate | severe | end stage | source |
 | --- | ---: | ---: | ---: | ---: | --- |
-| `albumin` | 0.984* | 0.951 | 0.942 | 0.905 | `Huang2017` |
+| `albumin` | 0.9654* | 0.9309 | 0.9124 | 0.8557 | consensus of `albumin`: `Huang2017`, `Lin2017`, `Zakiyanov2013` |
 | `albumin_binding` | 1* | 0.941 | 0.839 | 0.669 | `Klammt2012` |
 | `agp` | 1.046* | 1.137 | 1.328 | 2.062 | `Schmulenson2018` |
 
-A value marked `*` is a choice of the library, not a value of the source.
+A factor with a consensus is that of the studies of the database on the quantity, the ratio of the class to the controls of each study pooled over the studies, see [the database](../database.md); a value marked `*` is a choice of the library (for a consensus the interpolation of a class without a study).
 
 The rows: `albumin` the plasma albumin concentration (protein `albumin`); `albumin_binding` the binding function of an albumin molecule (protein `albumin`); `agp` the plasma alpha-1-acid glycoprotein concentration (protein `agp`). The factor of a protein is the product of its rows.
 
@@ -228,7 +236,9 @@ The rows: `albumin` the plasma albumin concentration (protein `albumin`); `album
 
     - `Huang2017`: Huang MJ, Wei RB, Wang Y, Su TY, Di P, Li QP, Yang X, Li P, Chen XM. Blood coagulation system in patients with chronic kidney disease: a prospective observational study. BMJ Open 7(5):e014294, 2017. [doi:10.1136/bmjopen-2016-014294](https://doi.org/10.1136/bmjopen-2016-014294)
     - `Klammt2012`: Klammt S, Wojak HJ, Mitzner A, Koball S, Rychly J, Reisinger EC, Mitzner S. Albumin-binding capacity (ABiC) is reduced in patients with chronic kidney disease along with an accumulation of protein-bound uraemic toxins. Nephrol Dial Transplant 27(6):2377-2383, 2012 (the abstract read). [doi:10.1093/ndt/gfr616](https://doi.org/10.1093/ndt/gfr616)
+    - `Lin2017`: Lin HY, Lee YL, Lin KD, Chiu YW, Shin SJ, Hwang SJ, Chen HC, Hung CC. Association of Renal Elasticity and Renal Function Progression in Patients with Chronic Kidney Disease Evaluated by Real-Time Ultrasound Elastography. Sci Rep 7:43303, 2017. [doi:10.1038/srep43303](https://doi.org/10.1038/srep43303)
     - `Schmulenson2018`: Schmulenson E, Schlender JF, Frechen S, Jaehde U. A physiologically-based pharmacokinetic modeling approach to assess the impact of chronic kidney disease. PAGE 27 (2018), Abstr 8630, poster IV-61, https://www.page-meeting.org/?abstract=8630 (the poster read: https://www.page-meeting.org/pdf_assets/1160-Schmulenson_PAGE2018.pdf).
+    - `Zakiyanov2013`: Zakiyanov O, Kriha V, Vachek J, Zima T, Tesar V, Kalousova M. Placental growth factor, pregnancy-associated plasma protein-A, soluble receptor for advanced glycation end products, extracellular newly identified receptor for receptor for advanced glycation end products binding protein and high mobility group box 1 levels in patients with acute kidney injury: a cross sectional study. BMC Nephrol 14:245, 2013. [doi:10.1186/1471-2369-14-245](https://doi.org/10.1186/1471-2369-14-245)
 <!-- end generated -->
 
 ## Heart failure
@@ -236,7 +246,7 @@ The rows: `albumin` the plasma albumin concentration (protein `albumin`); `album
 The flows of the organs are multiplied by the factors of the NYHA class and the cardiac output is their sum (Gu 2025, Table 1). The renal blood flow is not monotonic in the class (NYHA IV above NYHA III, as measured by Leithe 1984), and the GFR follows it.
 
 <!-- generated: impairment-heart-failure (scripts/pbpk_tables.py), do not edit -->
-*Generated from `database/tables/impairment.toml` by `scripts/pbpk_tables.py`; the notes of every number are in the database.*
+*Generated from `database/tables/impairment.toml` and the studies of `pkpdsim/database` by `scripts/pbpk_tables.py`; the notes of every number are in the database.*
 
 | factor | I | II | III | IV | source |
 | --- | ---: | ---: | ---: | ---: | --- |
@@ -244,7 +254,7 @@ The flows of the organs are multiplied by the factors of the NYHA class and the 
 | `kidney_flow` | 1* | 0.778 | 0.55 | 0.629 | `Rasool2015` |
 | `peripheral_flow` | 1* | 0.57 | 0.44 | 0.28 | `Gu2025` |
 
-A value marked `*` is a choice of the library, not a value of the source.
+A factor with a consensus is that of the studies of the database on the quantity, the ratio of the class to the controls of each study pooled over the studies, see [the database](../database.md); a value marked `*` is a choice of the library (for a consensus the interpolation of a class without a study).
 
 ??? note "Sources"
 
@@ -289,12 +299,13 @@ The presimulation was chosen over a hidden pre-run of a duration from a negative
 ## Limitations
 
 - The physiological factors of the Child-Pugh classes but the albumin, the hematocrit and the cardiac index are choices of the library from a review table (Alasmari 2024), not verified against Edginton & Willmann 2008.
-- The anaemia of CKD: the publications read state absolute hematocrits without the healthy value of their population, so the hematocrit factor of CKD is 1 until a source with its healthy reference is read.
+- The anaemia of CKD is the consensus of the hemoglobin against healthy controls (Panjeta 2017, Lin 2017, Zakiyanov 2013), the hematocrit taken proportional to the hemoglobin; the renal blood flow of CKD is the consensus of the cortical perfusion by arterial spin labelling (Zhang 2024, Brown 2020, Li 2017) at an unchanged kidney volume, a model choice: the database has no kidney volume per stage against controls.
+- The factors of heart failure are those of Leithe 1984 (through Rasool 2015 and Gu 2025): the open studies of the database give the flows of heart failure against controls only for groups of several NYHA classes (the notes of the factors compare them), no consensus per class.
 - The MELD score maps onto the Child-Pugh classes through the mean MELD of the patients of a class: a patient's MELD and class are correlated, not equivalent (the MELD of the classes overlaps), and a MELD beyond the mean of class C is class C.
-- The kidney volume and blood flow and the gastric emptying and small intestinal transit of CKD are factor 1: the constants which reach a PBPK library only through the code of PK-Sim (GPL) are not shipped, and Malik 2020 was not read. A dropped effect is factor 1 with a note in the data file. The CKD physiology is thinner than that of PK-Sim until Malik 2020 is read.
+- The kidney volume, the gastric emptying and the small intestinal transit of CKD are factor 1: the constants which reach a PBPK library only through the code of PK-Sim (GPL) are not shipped, and Malik 2020 was not read. A dropped effect is factor 1 with a note in the data file. The CKD physiology is thinner than that of PK-Sim until Malik 2020 is read.
 - The binding factor of CKD of an unknown protein acts on the binding capacity, PK-Sim multiplies fu by it: the two differ for weakly bound drugs (at `fu_ref` 0.5 and the factor 1.45 of moderate CKD, fu 0.59 against 0.725). Its source (Malik 2020) was not read.
 - The CKD profile of the binding is the mean of a population: the binding of a drug in CKD varies with its binding site and the uraemic toxins which displace it (Tan 2022: 1.0 to 2.7 times the fu of highly bound acidic drugs in severe CKD), so a drug whose fu is measured in renal impairment validates the profile with it. `Binding(ckd=False)` is only for a fraction unbound which is no binding measurement (a fitted renal factor) or whose binding is measured unchanged in renal impairment (apixaban); a drug with a measured change of fu in renal impairment keeps the CKD profile, and a measured change which differs from the profile is a finding of the model for its TODO, not a reason to switch the profile off. The profile of AGP rests on a meta-analysis published as a poster; the binding function of albumin is that of site II.
-- A Kp of a Kp method is a number of the build: a change of fu by an impairment does not recompute it. The interstitial to plasma coefficient of the full form does follow fu, so the interstitial share of a tissue rises with the fu of CKD while its Kp stays: where the share exceeds the Kp, the intracellular coefficient `K_cell_pls_<s>` is floored at `K_CELL_FLOOR` (1e-6), the cells hold almost nothing and the tissue holds its interstitial share, more than its Kp. The build warns (`KCellFloorWarning` of `pkpdsim.pbpk.distribution`, naming the substance, the organ, the stages with their fu and share and the sex of the build) when this happens at the fu of a CKD stage of its binding profile (`kp_floor_stages`, the fu of the stages from `ckd_unbound_fractions` of `pkpdsim.pbpk.impairment`); each build checks its own sex. It does not refuse: a model gives the Kp room for the fu of the end stage, or accepts the floor in an organ with its reason, `ckd_floor={organ: reason}` of the distribution (`Kp` or `KpMethod`). An accepted organ is not warned of, and the notes of its `K_cell_pls_<s>` carry the reason and the stages at which the floor holds in the build, so the archive records the decision; the acceptance is per substance and organ, every other organ is still checked, and a reason must not be empty (`validate`). The metabolite M1 of torasemide in the kidney reaches the floor at the end stage (Kp 0.08 against the share 0.0746 at the reference fu 0.14 and 0.0815 at the fu 0.212):
+- A Kp of a Kp method is a number of the build: a change of fu by an impairment does not recompute it. The interstitial to plasma coefficient of the full form does follow fu, so the interstitial share of a tissue rises with the fu of CKD while its Kp stays: where the share exceeds the Kp, the intracellular coefficient `K_cell_pls_<s>` is floored at `K_CELL_FLOOR` (1e-6), the cells hold almost nothing and the tissue holds its interstitial share, more than its Kp. The build warns (`KCellFloorWarning` of `pkpdsim.pbpk.distribution`, naming the substance, the organ, the stages with their fu and share and the sex of the build) when this happens at the fu of a CKD stage of its binding profile (`kp_floor_stages`, the fu of the stages from `ckd_unbound_fractions` of `pkpdsim.pbpk.impairment`); each build checks its own sex. It does not refuse: a model gives the Kp room for the fu of the end stage, or accepts the floor in an organ with its reason, `ckd_floor={organ: reason}` of the distribution (`Kp` or `KpMethod`). An accepted organ is not warned of, and the notes of its `K_cell_pls_<s>` carry the reason and the stages at which the floor holds in the build, so the archive records the decision; the acceptance is per substance and organ, every other organ is still checked, and a reason must not be empty (`validate`). The metabolite M1 of torasemide in the kidney reaches the floor at the end stage (Kp 0.08 against the share 0.0746 at the reference fu 0.14 and 0.0825 at the fu 0.221):
 
 ```python
 # not executed

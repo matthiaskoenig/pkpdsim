@@ -111,9 +111,9 @@ __all__ = [
     "SI_TRANSIT",
     "ImpairmentFactors",
     "MeldAnchor",
-    "child_pugh_factor",
     "child_pugh_protein",
     "child_pugh_proteins",
+    "class_factors",
     "cp_severity_of_meld",
     "impairment_objects",
     "meld_anchors",
@@ -339,13 +339,12 @@ def ckd_unbound_fractions(s: Substance) -> dict[str, float]:
     fu = number(s.binding.fu)
     if fu is None:
         return {}
-    ckd = _data()["ckd"]
     keys = _binding_keys(s.binding.protein)
     if keys:
-        rows = [_entry(ckd["binding"], key).values for key in keys]
+        rows = [class_factors("ckd.binding", key).values for key in keys]
         factors = [math.prod(row[k] for row in rows) for k in range(len(_STAGES))]
     else:
-        factors = [1.0 / v for v in _entry(ckd, "plasma_protein").values]
+        factors = [1.0 / v for v in class_factors("ckd", "plasma_protein").values]
     return {
         stage: 1.0 / (1.0 + f * (1.0 - fu) / fu)
         for stage, f in zip(_STAGES, factors, strict=True)
@@ -523,17 +522,21 @@ def _cp_consensus(protein: str, cls: str) -> integration.Consensus | None:
     )
 
 
-def _cp_factors(
-    found: dict[str, integration.Consensus | None], what: str, notes: str = ""
+def _consensus_factors(
+    found: dict[str, integration.Consensus | None],
+    classes: Sequence[str],
+    what: str,
+    notes: str = "",
 ) -> ImpairmentFactors:
-    """The factors of the Child-Pugh classes of the consensus of every class.
+    """The factors of the classes of a condition of the consensus of every class.
 
     A class without a consensus is the linear interpolation between its
-    neighbours (healthy 1 at severity 0) and the last class with a consensus
-    beyond it, a model choice.
+    neighbours (healthy 1 before the first class) and the last class with a
+    consensus beyond it, a model choice.
 
     Args:
         found: the consensus by class, `None` for a class without a study.
+        classes: the classes in the order of their severity.
         what: the quantity of the ratios, for the notes.
         notes: further notes before the consensus of the classes.
 
@@ -546,13 +549,13 @@ def _cp_factors(
     # four significant digits, far within the confidence of the consensus
     known = [(0, 1.0)] + [
         (i + 1, float(f"{f.value:.4g}"))
-        for i, c in enumerate(_CP_CLASSES)
+        for i, c in enumerate(classes)
         if (f := found[c]) is not None
     ]
     if len(known) == 1:
-        raise ValueError(f"No consensus of cirrhosis for {what}.")
+        raise ValueError(f"No consensus of the classes {list(classes)} for {what}.")
     values = []
-    for i in range(1, len(_CP_CLASSES) + 1):
+    for i in range(1, len(classes) + 1):
         below = max((k for k in known if k[0] <= i), key=lambda k: k[0])
         above = [k for k in known if k[0] >= i]
         if below[0] == i or not above:
@@ -562,10 +565,10 @@ def _cp_factors(
         value = below[1] + (hi[1] - below[1]) * (i - below[0]) / (hi[0] - below[0])
         values.append(float(f"{value:.4g}"))
     texts = []
-    for c in _CP_CLASSES:
+    for c in classes:
         f = found[c]
         texts.append(f"{c} {f.text()}" if f is not None else f"{c} no study")
-    choice = tuple(c for c in _CP_CLASSES if found[c] is None)
+    choice = tuple(c for c in classes if found[c] is None)
     sources = tuple(
         dict.fromkeys(s for f in found.values() if f is not None for s in f.sources)
     )
@@ -603,45 +606,66 @@ def child_pugh_protein(protein: str) -> ImpairmentFactors:
     Raises:
         ValueError: if no class of the protein has a consensus.
     """
-    return _cp_factors(
+    return _consensus_factors(
         {c: _cp_consensus(protein, c) for c in _CP_CLASSES},
+        _CP_CLASSES,
         f"the abundance per amount of liver tissue of {protein}",
     )
 
 
-def child_pugh_factor(key: str) -> ImpairmentFactors:
-    """The factors of the Child-Pugh classes on a quantity of the physiology.
+_SECTIONS: dict[str, tuple[tuple[str, ...], str, str]] = {
+    "child_pugh": (_CP_CLASSES, "cirrhosis", "child_pugh"),
+    "ckd": (_STAGES, "ckd", "ckd_stage"),
+    "heart_failure": (_HF_CLASSES, "heart_failure", "nyha"),
+}
+"""The conditions of the table: their classes and the condition and the field
+of the class of the groups of the studies."""
 
-    An entry of `[child_pugh]` of the table `impairment` states its values
-    (`value`), or names the quantity of the studies of the database whose
-    consensus they are (`consensus`, a key of
-    `pkpdsim.database.studies.QUANTITIES`): the ratio of the class to the
-    controls of each study, pooled over the studies, a class without a study
-    interpolated as for the proteins (`child_pugh_protein`).
+
+def class_factors(section: str, key: str) -> ImpairmentFactors:
+    """The factors of the classes of a condition on a quantity.
+
+    An entry of the table `impairment` states its values (`value`), or names
+    the quantity of the studies of the database whose consensus they are
+    (`consensus`, a key of `pkpdsim.database.studies.QUANTITIES`): the ratio of
+    the class to the controls of each study, pooled over the studies, a class
+    without a study interpolated as for the proteins (`child_pugh_protein`).
+    The classes are the Child-Pugh classes A, B, C (`child_pugh`), the CKD
+    stages mild, moderate, severe and end stage (`ckd`, `ckd.binding`) and
+    the NYHA classes I to IV (`heart_failure`).
 
     Args:
+        section: the section of the table, e.g. `child_pugh` or `ckd.binding`.
         key: the key of the factor, e.g. `albumin`.
 
     Returns:
-        The factors of the classes A, B, C with their provenance.
+        The factors of the classes with their provenance.
 
     Raises:
-        KeyError: for a key which is no factor of `[child_pugh]`.
+        KeyError: for a section or a key which is no factor of the table.
     """
-    entry = _data()["child_pugh"][key]
+    path = section.split(".")
+    if path[0] not in _SECTIONS:
+        raise KeyError(f"No section '{section}' of the impairment, {list(_SECTIONS)}.")
+    table: dict[str, Any] = _data()
+    for part in path:
+        table = table[part]
+    entry = table[key]
     quantity = entry.get("consensus")
     if quantity is None:
-        return _entry(_data()["child_pugh"], key)
-    return _cp_factors(
+        return _entry(table, key)
+    classes, condition, field = _SECTIONS[path[0]]
+    return _consensus_factors(
         {
             c: integration.consensus(
                 quantity,
-                {"condition": "cirrhosis", "child_pugh": c},
+                {"condition": condition, field: c},
                 kind="physiology",
                 tissue="body",
             )
-            for c in _CP_CLASSES
+            for c in classes
         },
+        classes,
         f"the {studies.QUANTITIES[quantity].description} ({quantity})",
         entry.get("notes", ""),
     )
@@ -844,7 +868,7 @@ class _Impairment:
         ):
             self._cp(
                 key,
-                child_pugh_factor(key),
+                class_factors("child_pugh", key),
                 f"Factor of liver cirrhosis on the {key.replace('_', ' ')}",
             )
         shunt = self._cp(
@@ -994,7 +1018,10 @@ class _Impairment:
             "si_transit_time",
         ):
             self._stage(
-                key, _entry(ckd, key), f"on the {key.replace('_', ' ')}", limits
+                key,
+                class_factors("ckd", key),
+                f"on the {key.replace('_', ' ')}",
+                limits,
             )
         for protein in self.liver_proteins(ckd["proteins"]):
             self._stage(
@@ -1008,7 +1035,7 @@ class _Impairment:
             for key in _binding_keys(protein):
                 self._stage(
                     key,
-                    _entry(ckd["binding"], key),
+                    class_factors("ckd.binding", key),
                     f"on the {ckd['binding'][key]['quantity']}",
                     limits,
                 )
@@ -1063,13 +1090,13 @@ class _Impairment:
         The renal blood flow is not monotonic in the class (Leithe 1984: NYHA
         IV above NYHA III), and the GFR follows it.
         """
-        hf = self.data["heart_failure"]
         for key in _HF_ORGANS:
-            provenance, sources = _entry(hf, key).provenance(_HF_CLASSES)
+            factors = class_factors("heart_failure", key)
+            provenance, sources = factors.provenance(_HF_CLASSES)
             self.add(
                 _initial(
                     ids.condition_factor("hf", key),
-                    _interpolation(ids.HF_SEVERITY, [1.0, *_entry(hf, key).values]),
+                    _interpolation(ids.HF_SEVERITY, [1.0, *factors.values]),
                     f"heart failure factor {key.replace('_', ' ')}",
                     f"Factor of heart failure on the {key.replace('_', ' ')} of "
                     "the organs "

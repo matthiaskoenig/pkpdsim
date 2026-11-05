@@ -40,7 +40,7 @@ from __future__ import annotations
 
 import functools
 import math
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, ClassVar, overload, override
@@ -64,11 +64,14 @@ from pkpdsim.pbpk.kidney_validity import (
     kidney_outflow,
     simulated_individuals,
 )
+from pkpdsim.pbpk.physiology import normal_gfr
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import number, unit_text
 from pkpdsim.sex import Sex
 
 if TYPE_CHECKING:
+    from sbmlsim.plot import Plot
+
     from pkpdsim.pbpk.definition import PBPKDefinition
 
 #: the healthy GFR the presets of `pkpdsim.impairment` are relative to [ml/min];
@@ -868,6 +871,137 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
         if sex == Sex(cls.sex) or not isinstance(renal_map, ScaledRenalMap):
             return renal_map
         return renal_map.of_sex(sex)
+
+    @classmethod
+    def class_changes(
+        cls,
+        classification: impairment.Classification,
+        key: str,
+        *,
+        sex: Sex | None = None,
+        simulation: str | None = None,
+    ) -> dict[str, Quantity]:
+        """Get the changes of a clinical class of a condition.
+
+        The changes set the parameter of the class (`Classification.parameter`)
+        before the initialization: `CP_severity` and `HF_severity` to the value
+        of the class, and for a GFR category (`eGFR`) `f_renal_function` to the
+        eGFR of the class over the eGFR of the normal renal function of the
+        build of the subjects (`normal_gfr`, the GFR per 1.73 m2 of its
+        reference individual), so the CKD factors of the library take the
+        values of the class; the category of the normal function (G1) is the
+        renal function 1.
+
+        Args:
+            classification: the classification, e.g.
+                `pkpdsim.impairment.NYHA_CLASSES`.
+            key: the key of the class, e.g. `III`.
+            sex: the sex of the subjects of a GFR category (`subjects_sex`).
+            simulation: the key of the simulation of the subjects.
+
+        Returns:
+            The changes, `{parameter: value}`, for `preinit_changes`.
+
+        Raises:
+            KeyError: for a key which is no class of the classification.
+        """
+        c = classification[key]
+        if classification.parameter != "eGFR":
+            return {classification.parameter: Q(c.value, "dimensionless")}
+        if c.value is None:
+            return {ids.F_RENAL_FUNCTION: Q(1.0, "dimensionless")}
+        normal = normal_gfr(cls.subjects_sex(sex, simulation)) * 1e3
+        return {ids.F_RENAL_FUNCTION: Q(c.value / normal, "dimensionless")}
+
+    def class_simulations(
+        self,
+        simulation: Simulation,
+        classification: impairment.Classification,
+        *,
+        prefix: str,
+        keys: Sequence[str] | None = None,
+    ) -> dict[str, Simulation]:
+        """Get a simulation per clinical class of a condition.
+
+        Every simulation is `simulation` with the changes of its class
+        (`class_changes`) before the initialization; its key is
+        `<prefix>_<class key>` (`to_sid`), its task `task_<key>`, which
+        `add_classes` draws. A condition with a homeostasis of a PD component
+        equilibrates each simulation (`equilibrated`).
+
+        Args:
+            simulation: the simulation of the healthy subjects, e.g. a dose.
+            classification: the classification, e.g.
+                `pkpdsim.impairment.CHILD_PUGH_CLASSES`.
+            prefix: the prefix of the keys of the simulations.
+            keys: the keys of the classes, `None` for every class.
+
+        Returns:
+            The simulations by key, in the order of the classes.
+
+        Raises:
+            ValueError: if `simulation` sets the parameter of the classes
+                itself.
+        """
+        parameter = (
+            ids.F_RENAL_FUNCTION
+            if classification.parameter == "eGFR"
+            else classification.parameter
+        )
+        if parameter in simulation.preinit_changes:
+            raise ValueError(
+                f"{type(self).__name__}: the simulation of the classes of "
+                f"{classification.name} sets '{parameter}' itself, which the "
+                "classes set."
+            )
+        out = {}
+        for key in classification.keys() if keys is None else keys:
+            changes = self.class_changes(classification, key)
+            out[self.to_sid(f"{prefix}_{key}")] = Simulation(
+                time_unit=simulation.time_unit,
+                start=simulation.start,
+                end=simulation.end,
+                preinit_changes={**simulation.preinit_changes, **changes},
+                changes=list(simulation.changes),
+                presimulation=simulation.presimulation,
+                times=None if simulation.times is None else list(simulation.times),
+                steps=simulation.steps,
+                time_shift=simulation.time_shift,
+            )
+        return out
+
+    def add_classes(
+        self,
+        plot: Plot,
+        classification: impairment.Classification,
+        *,
+        prefix: str,
+        yid: str,
+        xid: str = "time",
+        keys: Sequence[str] | None = None,
+    ) -> None:
+        """Draw a selection of the simulations of the classes of a condition.
+
+        One curve per class from the task of its simulation of
+        `class_simulations`, labelled and colored by the class.
+
+        Args:
+            plot: the plot.
+            classification: the classification of the simulations.
+            prefix: the prefix of the keys of the simulations.
+            yid: the selection on the y axis, e.g. `[Cve_hctz]`.
+            xid: the selection on the x axis.
+            keys: the keys of the classes, `None` for every class.
+        """
+        for key in classification.keys() if keys is None else keys:
+            c = classification[key]
+            plot.add_data(
+                task=f"task_{self.to_sid(f'{prefix}_{key}')}",
+                xid=xid,
+                yid=yid,
+                label=c.label,
+                color=c.color,
+            )
 
 
 def _model_path(model: AbstractModel | Path | str | None) -> Path | None:

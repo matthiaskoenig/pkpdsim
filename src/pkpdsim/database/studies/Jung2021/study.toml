@@ -1,0 +1,18 @@
+source = "Jung2021"
+tissue = "body"
+control = "controls"
+notes = "Clinically stable euvolaemic chronic heart failure with preserved and reduced ejection fraction (NYHA IV excluded, the class not reported further; aged 74) and younger healthy controls (aged 43); GFR by iohexol infusion, renal plasma flow by PAH clearance, renal blood flow from it and the hematocrit, per 1.73 m2; Tables 1-3 (open access, CC BY-NC-ND), mean and SD; transcribed from the full text by the literature search of the database (2026-11-05)."
+
+[measurements.physiology]
+file = "physiology.tsv"
+kind = "physiology"
+method = "iohexol and PAH clearance"
+location = "Tables 2 and 3"
+
+[groups.controls]
+condition = "control"
+description = "healthy subjects"
+
+[groups.chf]
+condition = "heart_failure"
+description = "stable chronic heart failure, NYHA I-III"

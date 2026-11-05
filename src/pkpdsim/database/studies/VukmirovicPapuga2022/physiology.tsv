@@ -1,0 +1,4 @@
+entity	group	n	mean	sd	se	median	q1	q3	notes
+effective_renal_plasma_flow	controls	25	449.8	59					
+effective_renal_plasma_flow	gfr_gt60	26	393.8	12.6					the SD as printed, 12.6, small against the other groups (possibly the SE)
+effective_renal_plasma_flow	gfr_le60	31	251.6	60.2					

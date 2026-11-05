@@ -1,0 +1,7 @@
+entity	group	n	mean	sd	se	median	q1	q3	notes
+gastric_emptying_half_time	hd_dyspepsia	34	238	92.9					
+gastric_emptying_half_time	hd	16	185.5	45.5					
+hemoglobin	hd_dyspepsia	34	98	21					printed 9.8 +- 2.1 g/dl
+hemoglobin	hd	16	109	15					printed 10.9 +- 1.5 g/dl
+albumin	hd_dyspepsia	34	41	7					printed 4.1 +- 0.7 g/dl
+albumin	hd	16	42	8					printed 4.2 +- 0.8 g/dl

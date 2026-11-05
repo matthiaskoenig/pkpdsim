@@ -1,0 +1,5 @@
+entity	group	n	mean	sd	se	median	q1	q3	notes
+effective_renal_plasma_flow	g1	25				520	510	534	
+effective_renal_plasma_flow	g2	30				436	351	490	
+effective_renal_plasma_flow	g3a	26				298.5	255	313	
+effective_renal_plasma_flow	g3b	30				235	217	260	

@@ -1,0 +1,18 @@
+source = "Prasad2015"
+tissue = "body"
+control = "controls"
+notes = "Healthy subjects (eGFR 91.7 +- 12.8) and CKD patients of the stages 2 to 5 together (eGFR 43.3 +- 23.4); the renal parenchymal volume by manual tracing of 3D MRI, both kidneys by its magnitude; Table 2 (open access, CC BY), mean, SD, median and range; transcribed from the full text by the literature search of the database (2026-11-05)."
+
+[measurements.physiology]
+file = "physiology.tsv"
+kind = "physiology"
+method = "MRI, manual tracing"
+location = "Table 2"
+
+[groups.controls]
+condition = "control"
+description = "healthy subjects"
+
+[groups.ckd_2_5]
+condition = "ckd"
+description = "CKD stages 2-5 together"

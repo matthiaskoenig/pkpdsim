@@ -4,6 +4,10 @@ The values are those of the models of pkdb_models, written with the same
 expressions, so that a model which takes a preset simulates exactly as before.
 """
 
+import itertools
+
+import pytest
+
 from pkpdsim import impairment, pk
 
 
@@ -158,3 +162,54 @@ def test_the_labels_and_units_of_the_pk_parameters() -> None:
         ("lambda_z", "1/hr"),
         ("vz_f", "l"),
     ]
+
+
+@pytest.mark.parametrize("classification", list(impairment.CLASSIFICATIONS.values()))
+def test_the_classes_of_a_classification(
+    classification: impairment.Classification,
+) -> None:
+    """The classes are unique, ordered by their severity and look themselves up."""
+    keys = classification.keys()
+    assert len(set(keys)) == len(keys) == len(classification)
+    assert len({c.label for c in classification}) == len(keys)
+    values = [c.value for c in classification if c.value is not None]
+    assert values == sorted(values, reverse=classification.parameter == "eGFR")
+    for c in classification:
+        assert classification[c.key] is c
+        assert c.definition
+    assert impairment.CLASSIFICATIONS[classification.key] is classification
+    assert list(classification.colors().values()) == [c.color for c in classification]
+    with pytest.raises(KeyError, match="nope"):
+        classification["nope"]
+
+
+def test_the_classes_keep_the_colors_of_the_maps() -> None:
+    """The Child-Pugh and NYHA classes have the colors of the severity maps."""
+    for classification, severity, colors in (
+        (
+            impairment.CHILD_PUGH_CLASSES,
+            impairment.CHILD_PUGH,
+            impairment.CIRRHOSIS_COLORS,
+        ),
+        (
+            impairment.NYHA_CLASSES,
+            impairment.HEART_FAILURE,
+            impairment.HEART_FAILURE_COLORS,
+        ),
+    ):
+        assert [c.value for c in classification] == list(severity.values())
+        assert [c.color for c in classification] == list(colors.values())
+
+
+def test_the_gfr_categories_tile_the_egfr() -> None:
+    """The limits of the KDIGO categories meet, the value of a class within them."""
+    classes = list(impairment.KDIGO_GFR_CLASSES)
+    assert classes[0].limits == (90.0, None)
+    assert classes[-1].limits == (None, 15.0)
+    for upper, lower in itertools.pairwise(classes):
+        assert upper.limits is not None and lower.limits is not None
+        assert lower.limits[1] == upper.limits[0]
+    for c in classes[1:]:
+        assert c.limits is not None and c.value is not None
+        lo, hi = c.limits
+        assert (lo or 0.0) <= c.value < hi  # ty: ignore[unsupported-operator]

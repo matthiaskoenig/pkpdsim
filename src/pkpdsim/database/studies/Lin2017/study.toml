@@ -1,0 +1,35 @@
+source = "Lin2017"
+tissue = "body"
+control = "controls"
+notes = "Outpatients of a CKD clinic and non-CKD outpatients (eGFR 97.0 +- 24.7, 38.5 % diabetic), CKD stages by the simplified MDRD eGFR: 3a (50.7 +- 5.9), 3b (38.3 +- 3.9), 4 (21.9 +- 4.2), 5 (7.7 +- 3.7); about 73 % of the CKD patients diabetic. Table 1 (open access, CC BY), mean and spread; the footnote names the spread a standard error, its size (2.0 g/dl of hemoglobin in 44 patients) is that of a standard deviation, taken as SD. Kidney length by B-mode ultrasound; transcribed from the full text by the literature search of the database (2026-11-05)."
+
+[measurements.physiology]
+file = "physiology.tsv"
+kind = "physiology"
+method = "laboratory values and B-mode ultrasound of the outpatients"
+location = "Table 1"
+
+[groups.controls]
+condition = "control"
+description = "non-CKD outpatients"
+
+[groups.ckd_3a]
+condition = "ckd"
+ckd_stage = "moderate"
+description = "CKD G3a"
+
+[groups.ckd_3b]
+condition = "ckd"
+ckd_stage = "moderate"
+description = "CKD G3b"
+
+[groups.ckd_4]
+condition = "ckd"
+ckd_stage = "severe"
+description = "CKD G4"
+
+[groups.ckd_5]
+condition = "ckd"
+ckd_stage = "end stage"
+description = "CKD G5"
+assumption = "not on dialysis assumed: the study does not state the dialysis of the group"
