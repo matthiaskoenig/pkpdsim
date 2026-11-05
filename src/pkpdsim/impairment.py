@@ -180,7 +180,8 @@ class Classification:
             value represents a class (`CP_severity`, `HF_severity`, or `eGFR`
             for the GFR categories, which `f_renal_function` sets).
         quantity: the quantity of the `limits` of the classes and its unit.
-        reference: the publication of the definition.
+        reference: the key of the publication of the definition in the sources
+            of the parameter database (`pkpdsim/database/sources.toml`).
         classes: the classes in the order of the severity, the reference
             without the condition first.
     """
@@ -274,9 +275,7 @@ CHILD_PUGH_CLASSES = Classification(
     condition="liver cirrhosis",
     parameter="CP_severity",
     quantity="Child-Pugh score (points)",
-    reference="Pugh RN, Murray-Lyon IM, Dawson JL, Pietroni MC, Williams R. "
-    "Transection of the oesophagus for bleeding oesophageal varices. Br J Surg "
-    "60(8):646-649, 1973. doi:10.1002/bjs.1800600817",
+    reference="Pugh1973",
     classes=(
         ImpairmentClass(
             "healthy",
@@ -319,10 +318,7 @@ KDIGO_GFR_CLASSES = Classification(
     condition="chronic kidney disease",
     parameter="eGFR",
     quantity="eGFR (ml/min/1.73 m2)",
-    reference="Kidney Disease: Improving Global Outcomes (KDIGO) CKD Work Group. "
-    "KDIGO 2012 clinical practice guideline for the evaluation and management of "
-    "chronic kidney disease. Kidney Int Suppl 3(1):1-150, 2013. "
-    "doi:10.1038/kisup.2012.73",
+    reference="KDIGO2012",
     classes=(
         ImpairmentClass(
             "G1",
@@ -384,9 +380,7 @@ NYHA_CLASSES = Classification(
     condition="chronic heart failure",
     parameter="HF_severity",
     quantity="symptoms at physical activity",
-    reference="The Criteria Committee of the New York Heart Association. "
-    "Nomenclature and Criteria for Diagnosis of Diseases of the Heart and Great "
-    "Vessels. 9th ed. Boston, Little, Brown & Co, 1994",
+    reference="NYHA1994",
     classes=(
         ImpairmentClass("healthy", "Healthy", "black", "no heart failure", 0.0),
         ImpairmentClass(

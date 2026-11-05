@@ -58,3 +58,28 @@ def test_an_unknown_table_is_refused() -> None:
         assert "nothing" in str(err)
     else:
         raise AssertionError("an unknown table was accepted")
+
+
+def test_every_citation_is_a_reference() -> None:
+    """A page which cites a source has the region of its references, listing it."""
+    script = _script()
+    for page in script.PAGES:
+        text = page.read_text(encoding="utf-8")
+        cited = set(script._CITATION.findall(text))
+        if not cited:
+            continue
+        assert script.begin_marker(script.REFERENCES) in text, page.name
+        for key in cited:
+            assert f'<span id="ref-{key}"></span>' in text, (page.name, key)
+
+
+def test_a_citation_of_an_unknown_source_is_refused() -> None:
+    """A page which cites a key that is no source fails to render."""
+    script = _script()
+    page = f"[x](#ref-Nobody1900)\n{script.begin_marker(script.REFERENCES)}\n{script.END}\n"
+    try:
+        script.render_page(page)
+    except KeyError as err:
+        assert "Nobody1900" in str(err)
+    else:
+        raise AssertionError("an unknown citation was accepted")

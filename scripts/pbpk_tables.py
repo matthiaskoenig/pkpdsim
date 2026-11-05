@@ -1373,11 +1373,50 @@ def render_page(text: str) -> str:
 
     def replace(match: re.Match[str]) -> str:
         name = match["name"]
+        if name == REFERENCES:
+            return f"{begin_marker(name)}\n{references(text)}\n{END}"
         if name not in TABLES:
             raise KeyError(f"No table '{name}', the tables are {sorted(TABLES)}.")
         return f"{begin_marker(name)}\n{TABLES[name]()}\n{END}"
 
     return _REGION.sub(replace, text)
+
+
+REFERENCES = "references"
+"""The region of the references of a page, the sources its text cites."""
+
+_CITATION = re.compile(r"\]\(#ref-(?P<key>[A-Za-z0-9_]+)\)")
+"""A citation in the text of a page, a link `[Pugh 1973](#ref-Pugh1973)` to the
+anchor of a source of the parameter database."""
+
+
+def references(text: str) -> str:
+    """The references of a page: every source its text cites, by key.
+
+    A citation is a link to `#ref-<key>` of a source of
+    `pkpdsim/database/sources.toml`; the list gives each source once with the
+    anchor of its key, in the order of the keys.
+
+    Args:
+        text: the markdown of the page.
+
+    Returns:
+        The list of the references.
+
+    Raises:
+        KeyError: for a citation of a key which is no source.
+    """
+    known = sources()
+    keys = sorted(set(_CITATION.findall(text)), key=str.lower)
+    unknown = [k for k in keys if k not in known]
+    if unknown:
+        raise KeyError(f"The page cites the unknown sources {unknown}.")
+    lines = []
+    for key in keys:
+        source = known[key]
+        doi = f" [doi:{source.doi}](https://doi.org/{source.doi})" if source.doi else ""
+        lines.append(f'- <span id="ref-{key}"></span>{source.citation}{doi}')
+    return "\n".join(lines)
 
 
 def main() -> None:

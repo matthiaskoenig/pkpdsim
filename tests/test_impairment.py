@@ -229,3 +229,11 @@ def test_a_continuous_value_has_the_color_of_its_classes() -> None:
         impairment.NYHA_CLASSES.color_of(4.0)
         == impairment.NYHA_CLASSES["IV"].color.lower()
     )
+
+
+def test_the_reference_of_a_classification_is_a_source() -> None:
+    """The definition of every classification cites a source of the database."""
+    from pkpdsim.database.tables import sources
+
+    for classification in impairment.CLASSIFICATIONS.values():
+        assert classification.reference in sources()
