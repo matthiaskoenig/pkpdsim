@@ -7,19 +7,24 @@
 # (the notes give the choice), the SBML notes cite ModelChoice for them.
 #
 # [child_pugh]: the classes A, B, C (`CP_severity` 1, 2, 3; 0 is healthy); a
-# severity between the classes interpolates linearly. The physiological
-# factors are those which Alasmari 2024 (Pharmaceutics 16:1540, Table 3, CC BY
-# 4.0, doi:10.3390/pharmaceutics16121540, the publication read) attribute to
-# Edginton & Willmann 2008 (doi:10.2165/00003088-200847110-00005, not read);
-# they are model choices, not verified. The enzymes and transporters are no
-# numbers of this table: they are the consensus of the studies of the database
-# (`pkpdsim/database/studies`, `pkpdsim.database.integration`), the ratio of
-# the abundance per amount of liver tissue of each class to the controls of
-# each study, pooled over the studies (El-Khateeb 2021, Drozdzik 2021 and
-# Prasad 2018, whose end-stage livers are assumed to be class C). Johnson 2010
-# (Clin Pharmacokinet 49:189, doi:10.2165/11318160-000000000-00000), the
-# abundance factors of the Simcyp cirrhosis populations, was not accessible
-# and is not used.
+# severity between the classes interpolates linearly. A factor which states
+# `consensus` (albumin, hematocrit, cardiac index) is the consensus of the
+# studies of the database on that quantity (`pkpdsim/database/studies`, the
+# kind `physiology`, `pkpdsim.pbpk.impairment.child_pugh_factor`): the ratio
+# of each class to the controls of each study, pooled over the studies. The
+# other physiological factors are those which Alasmari 2024 (Pharmaceutics
+# 16:1540, Table 3, CC BY 4.0, doi:10.3390/pharmaceutics16121540, the
+# publication read) attribute to Edginton & Willmann 2008
+# (doi:10.2165/00003088-200847110-00005, not read); they are model choices, not
+# verified. The enzymes and transporters are no numbers of this table: they
+# are the consensus of the studies of the database on the abundance per amount
+# of liver tissue of each class over the controls (El-Khateeb 2021, Drozdzik
+# 2020, Drozdzik 2021 and Prasad 2018, whose end-stage livers are assumed to
+# be class C). The MELD score of the classes, the anchors of
+# `pkpdsim.pbpk.impairment.cp_severity_of_meld`, is the consensus of the
+# cohorts of the database as well. Johnson 2010 (Clin Pharmacokinet 49:189,
+# doi:10.2165/11318160-000000000-00000), the abundance factors of the Simcyp
+# cirrhosis populations, was not accessible and is not used.
 #
 # The shunt and the portal blood flow (reconciliation): the shunt fractions
 # are the degrees of cirrhosis of the Child-Pugh classes of
@@ -38,10 +43,12 @@
 #
 # The hematocrit: cirrhosis and CKD reduce it (anaemia), and the two factors
 # would combine multiplicatively on the hematocrit of the sex of the build
-# (`HCT = HCT_ref*fimp_HCT`). The publications read state absolute hematocrits
-# without the healthy value of their population, so no factor relative to the
-# source's healthy value can be derived: both factors are 1 until a source
-# with its healthy reference is read.
+# (`HCT = HCT_ref*fimp_HCT`). The factor of cirrhosis is the consensus of the
+# studies with a healthy control group (Mesropyan 2022, Wong 2001, Boker
+# 2000). The publications read on CKD state absolute hematocrits without the
+# healthy value of their population, so no factor relative to the source's
+# healthy value can be derived: the factor of CKD is 1 until a source with its
+# healthy reference is read.
 #
 # [ckd]: the stages by the GFR per 1.73 m2 of the renal function
 # (`f_renal_function` times the healthy GFR per 1.73 m2 of the reference
@@ -83,13 +90,13 @@
 [child_pugh]
 functional_liver = { value = [0.69, 0.55, 0.28], unit = "dimensionless", source = "ModelChoice", notes = "functional liver mass of the classes A, B, C relative to healthy, the functional fraction `f_functional`: the values of Edginton & Willmann 2008 as tabulated in Alasmari 2024, Table 3 (doi:10.3390/pharmaceutics16121540, the publication read); not verified; the ICG models keep 1 - f_cirrhosis = 0.60, 0.30, 0.19 of the parenchyma" }
 shunt = { value = [0.3994897959183674, 0.6979591836734694, 0.8127551020408164], unit = "dimensionless", source = "ModelChoice", notes = "portosystemic shunt `f_shunt` of the classes A, B, C (healthy 0): the values of pkpdsim.impairment.CIRRHOSIS (bit-identical here; the MathML of the SBML writes 15 significant digits), the degrees of cirrhosis of the Child-Pugh classes of the hand-written ICG models; their publication is not verified; replaces the reduced portal vein flow of Edginton 2008 (0.40, 0.36, 0.04), see the header" }
-hepatic_artery_flow = { value = [1.3, 2.3, 3.4], unit = "dimensionless", source = "ModelChoice", notes = "hepatic arterial blood flow relative to healthy (hepatic arterial buffer response): the values of Edginton & Willmann 2008 as tabulated in Alasmari 2024, Table 3 (the publication read); not verified" }
+hepatic_artery_flow = { value = [1.3, 2.3, 3.4], unit = "dimensionless", source = "ModelChoice", notes = "hepatic arterial blood flow relative to healthy (hepatic arterial buffer response): the values of Edginton & Willmann 2008 as tabulated in Alasmari 2024, Table 3 (the publication read); not verified. They are the ratios of the mean hepatic arterial perfusion per volume of liver of Annet 2003 (1.29, 2.35, 3.42); the consensus of the database on the arterial perfusion (Annet 2003, Van Beers 2001: 1.13, 2.07, 3.26) times that on the liver volume per body weight (0.90, 0.79, 0.67) gives 1.01, 1.63, 2.17, and the absolute flow of the hepatic artery of Sudhamshu 2006 gives 1.40, 1.56, 1.80 (`pkpdsim.database.integration.consensus`); kept until the flow of the hepatic artery is decided together with the shunt and the functional liver" }
 kidney_flow = { value = [0.88, 0.65, 0.48], unit = "dimensionless", source = "ModelChoice", notes = "renal blood flow relative to healthy: the values of Edginton & Willmann 2008 as tabulated in Alasmari 2024, Table 3 (the publication read); not verified" }
-cardiac_index = { value = [1.11, 1.27, 1.36], unit = "dimensionless", source = "ModelChoice", notes = "cardiac index relative to healthy (hyperdynamic circulation): the values of Edginton & Willmann 2008 as tabulated in Alasmari 2024, Table 3 (the publication read); not verified; the flows of the organs without a factor of their own (heart, muscle, skin, adipose, bone, gonads) close the cardiac output to it; Alasmari 2024 give 1.75, 2.25 and 2.75 for the flow of the other organs, which with the organ flows of the library would exceed the cardiac index and is not used" }
+cardiac_index = { consensus = "cardiac_index", notes = "cardiac index relative to healthy (hyperdynamic circulation); the flows of the organs without a factor of their own (heart, muscle, skin, adipose, bone, gonads) close the cardiac output to it; Edginton & Willmann 2008 (as tabulated in Alasmari 2024, Table 3) give 1.11, 1.27 and 1.36, and 1.75, 2.25 and 2.75 for the flow of the other organs, which with the organ flows of the library would exceed the cardiac index and is not used" }
 gfr = { value = [1.0, 0.70, 0.36], unit = "dimensionless", source = "ModelChoice", notes = "glomerular filtration rate relative to healthy (hepatorenal reduction): the values of Edginton & Willmann 2008 as tabulated in Alasmari 2024, Table 3 (the publication read); not verified" }
-albumin = { value = [0.81, 0.68, 0.50], unit = "dimensionless", source = "ModelChoice", notes = "plasma albumin relative to healthy, the binding protein factor of fu: the values of Edginton & Willmann 2008 as tabulated in Alasmari 2024, Table 3 (the publication read); not verified" }
+albumin = { consensus = "albumin", notes = "plasma albumin relative to healthy, the binding protein factor of fu; Edginton & Willmann 2008 (as tabulated in Alasmari 2024, Table 3) give 0.81, 0.68 and 0.50" }
 agp = { value = [0.60, 0.56, 0.30], unit = "dimensionless", source = "ModelChoice", notes = "plasma alpha-1-acid glycoprotein relative to healthy, the binding protein factor of fu: the values of Edginton & Willmann 2008 as tabulated in Alasmari 2024, Table 3 (the publication read); not verified" }
-hematocrit = { value = [1.0, 1.0, 1.0], unit = "dimensionless", source = "ModelChoice", notes = "hematocrit relative to healthy: 1 until a source with its healthy value is read; Alasmari 2024 (Table 3, the publication read) tabulate absolute hematocrits of 0.39, 0.37 and 0.35 for the classes A, B, C (attributed to Edginton & Willmann 2008, not read) without the healthy hematocrit of the population, so no relative factor can be derived" }
+hematocrit = { consensus = "hematocrit", notes = "hematocrit relative to healthy (the anaemia of cirrhosis); Alasmari 2024 (Table 3) tabulate absolute hematocrits of 0.39, 0.37 and 0.35 for the classes A, B, C (attributed to Edginton & Willmann 2008) without the healthy hematocrit of the population" }
 
 [ckd]
 stage_gfr = { value = [90.0, 60.0, 30.0, 15.0], unit = "ml/min/1.73 m2", source = "Yoshida2016", notes = "lower limits of the GFR per 1.73 m2 of normal function and of mild, moderate and severe CKD (Methods: mild 60-89, moderate 30-59, severe 15-29, end stage < 15 ml/min/1.73 m2, the classes of the FDA guidance)" }

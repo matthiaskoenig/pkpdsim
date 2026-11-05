@@ -1,0 +1,13 @@
+entity	group	n	mean	sd	se	unit	notes
+portal_vein_flow	controls	15	644.91	213.23		mL/min	
+portal_vein_flow	cirrhosis_A	10	744.2	429.0		mL/min	
+portal_vein_flow	cirrhosis_B	13	964.28	632.23		mL/min	
+portal_vein_flow	cirrhosis_C	8	669.8	600.89		mL/min	
+portal_perfusion	controls	15	56.39	27.82		mL/min/dL	calculated by Li 2015 from the hepatic and the arterial perfusion
+portal_perfusion	cirrhosis_A	10	22.43	9.2		mL/min/dL	calculated by Li 2015 from the hepatic and the arterial perfusion
+portal_perfusion	cirrhosis_B	13	20.22	18.06		mL/min/dL	calculated by Li 2015 from the hepatic and the arterial perfusion
+portal_perfusion	cirrhosis_C	8	2.01	2.96		mL/min/dL	calculated by Li 2015 from the hepatic and the arterial perfusion
+hepatic_arterial_perfusion	controls	15	8.78	5.38		mL/min/dL	calculated by Li 2015 from the hepatic perfusion and the arterial fraction
+hepatic_arterial_perfusion	cirrhosis_A	10	11.35	10.45		mL/min/dL	calculated by Li 2015 from the hepatic perfusion and the arterial fraction
+hepatic_arterial_perfusion	cirrhosis_B	13	20.59	15.06		mL/min/dL	calculated by Li 2015 from the hepatic perfusion and the arterial fraction
+hepatic_arterial_perfusion	cirrhosis_C	8	30.06	18.75		mL/min/dL	calculated by Li 2015 from the hepatic perfusion and the arterial fraction

@@ -8,7 +8,7 @@ Impaired organ function is a set of parameter vectors on the physiology, never a
 
 | condition | severity | classes | acts on |
 |---|---|---|---|
-| liver cirrhosis | `CP_severity` | 0 healthy, 1, 2, 3 the Child-Pugh classes A, B, C, interpolated linearly | functional liver `f_functional`, shunt `f_shunt`, hepatic artery and kidney flow, cardiac index, GFR, albumin and AGP (so fu), the enzymes and transporters of the liver; hematocrit (factor 1, see [Limitations](#limitations)) |
+| liver cirrhosis | `CP_severity` | 0 healthy, 1, 2, 3 the Child-Pugh classes A, B, C, interpolated linearly | functional liver `f_functional`, shunt `f_shunt`, hepatic artery and kidney flow, cardiac index, GFR, albumin and AGP (so fu), the hematocrit, the enzymes and transporters of the liver; a MELD score gives the severity ([The MELD score](#the-meld-score)) |
 | chronic kidney disease | `f_renal_function` | the GFR relative to healthy; its GFR per 1.73 m2 (`eGFR`) gives the stage | GFR, the binding to albumin and AGP by their CKD profiles and to an unknown protein by the binding capacity of the plasma proteins (so fu); hematocrit, kidney volume and flow, gastric emptying and small intestinal transit (factor 1, see [Limitations](#limitations)); with the switch `CKD_hepatic = 1` hepatic CYP2D6 and OATP1B |
 | heart failure | `HF_severity` | 0 healthy, 1 to 4 the NYHA classes I to IV, interpolated linearly | the blood flows of liver and portal organs, kidney, skin, adipose and muscle; the cardiac output is their sum, the GFR follows the renal blood flow |
 
@@ -42,7 +42,7 @@ fcp_rest_flow = 1 + (fcp_cardiac_index - 1 - (fQli * (fcp_hepatic_artery_flow - 
 The organs without a factor of their own (heart, muscle, skin, adipose, bone, gonads) close the cardiac output to the cardiac index of the class (`fcp_rest_flow`). The brain (autoregulation of the cerebral blood flow, a choice of the library) and the portal organs (the shunt represents the portal blood which does not reach the liver) keep their flow.
 
 <!-- generated: impairment-child-pugh (scripts/pbpk_tables.py), do not edit -->
-*Generated from `database/tables/impairment.toml` by `scripts/pbpk_tables.py`; the notes of every number are in the database.*
+*Generated from `database/tables/impairment.toml` and the studies of `pkpdsim/database` by `scripts/pbpk_tables.py`; the notes of every number are in the database.*
 
 | factor | A | B | C | source |
 | --- | ---: | ---: | ---: | --- |
@@ -50,29 +50,41 @@ The organs without a factor of their own (heart, muscle, skin, adipose, bone, go
 | `shunt` | 0.3995 | 0.698 | 0.8128 | `ModelChoice` |
 | `hepatic_artery_flow` | 1.3 | 2.3 | 3.4 | `ModelChoice` |
 | `kidney_flow` | 0.88 | 0.65 | 0.48 | `ModelChoice` |
-| `cardiac_index` | 1.11 | 1.27 | 1.36 | `ModelChoice` |
+| `cardiac_index` | 1.099 | 1.21 | 1.36 | consensus of `cardiac_index`: `Dincer2005`, `Henriksen2001`, `Iwao1997` |
 | `gfr` | 1 | 0.7 | 0.36 | `ModelChoice` |
-| `albumin` | 0.81 | 0.68 | 0.5 | `ModelChoice` |
+| `albumin` | 0.8645 | 0.6798 | 0.4892 | consensus of `albumin`: `Chawla1998`, `Mesropyan2022`, `Viani1992`, `Yang2020`, `Froomes1999` |
 | `agp` | 0.6 | 0.56 | 0.3 | `ModelChoice` |
-| `hematocrit` | 1 | 1 | 1 | `ModelChoice` |
+| `hematocrit` | 0.9232 | 0.7411 | 0.7232 | consensus of `hematocrit`: `Mesropyan2022`, `Wong2001`, `Boker2000` |
+
+A factor with a consensus is that of the studies of the database on the quantity, the ratio of the class to the controls of each study pooled over the studies, see [the database](../database.md); a value marked `*` is a choice of the library.
 
 ??? note "Sources"
 
+    - `Boker2000`: Böker KH, Franzen A, Wrobel M, Bahr MJ, Tietge U, Manns MP. Regulation of hepatic blood flow in patients with liver cirrhosis and after liver transplantation. Pathophysiology 6(4):251-260, 2000. [doi:10.1016/s0928-4680(99)00024-3](https://doi.org/10.1016/s0928-4680(99)00024-3)
+    - `Chawla1998`: Chawla Y, Radha NS, Jang KD, Dilawari B. Portal Hemodynamics by Duplex Doppler Sonography in Different Grades of Cirrhosis. Dig Dis Sci 43(2):354-357, 1998. [doi:10.1023/a:1018814624307](https://doi.org/10.1023/a:1018814624307)
+    - `Dincer2005`: Dincer D, Besisk F, Demirkol O, Demir K, Kaymakoglu S, Cakaloglu Y, Okten A. Relationships between hemodynamic alterations and Child-Pugh Score in patients with cirrhosis. Hepatogastroenterology 52(65):1521-1525, 2005. PMID 16201110.
+    - `Froomes1999`: Froomes PR, Morgan DJ, Smallwood RA, Angus PW. Comparative effects of oxygen supplementation on theophylline and acetaminophen clearance in human cirrhosis. Gastroenterology 116(4):915-920, 1999. [doi:10.1016/s0016-5085(99)70075-2](https://doi.org/10.1016/s0016-5085(99)70075-2)
+    - `Henriksen2001`: Henriksen JH, Bendtsen F, Møller S. Normal red cell cardiac output in the hyperkinetic syndrome of alcoholic cirrhosis. J Hepatol 34(5):782-783, 2001. [doi:10.1016/s0168-8278(01)00019-8](https://doi.org/10.1016/s0168-8278(01)00019-8)
+    - `Iwao1997`: Iwao T, Oho K, Sakai T, Tayama C, Sato M, Nakano R, Yamawaki M, Toyonaga A, Tanikawa K. Splanchnic and extrasplanchnic arterial hemodynamics in patients with cirrhosis. J Hepatol 27(5):817-823, 1997. [doi:10.1016/s0168-8278(97)80318-2](https://doi.org/10.1016/s0168-8278(97)80318-2)
+    - `Mesropyan2022`: Mesropyan N, Kupczyk PA, Dold L, Praktiknjo M, Chang J, Isaak A, Endler C, Kravchenko D, Bischoff LM, Sprinkart AM, Pieper CC, Kuetting D, Jansen C, Attenberger UI, Luetkens JA. Assessment of liver cirrhosis severity with extracellular volume fraction MRI. Sci Rep 12(1):9422, 2022. [doi:10.1038/s41598-022-13340-9](https://doi.org/10.1038/s41598-022-13340-9)
     - `ModelChoice`: Choice of the pkpdsim PBPK library, not a value of the literature; the notes of the value give the reasoning.
+    - `Viani1992`: Viani A, Rizzo G, Carrai M, Pacifici GM. Interindividual variability in the concentrations of albumin and alpha-1-acid glycoprotein in patients with renal or liver disease, newborns and healthy subjects: implications for binding of drugs. Int J Clin Pharmacol Ther Toxicol 30(4):128-133, 1992. PMID 1572757.
+    - `Wong2001`: Wong F, Girgrah N, Graba J, Allidina Y, Liu P, Blendis L. The cardiac response to exercise in cirrhosis. Gut 49(2):268-275, 2001. [doi:10.1136/gut.49.2.268](https://doi.org/10.1136/gut.49.2.268)
+    - `Yang2020`: Yang M, Zhang Y, Zhao W, Cheng W, Wang H, Guo S. Evaluation of liver function using liver parenchyma, spleen and portal vein signal intensities during the hepatobiliary phase in Gd-EOB-D TPA-enhanced MRI. BMC Med Imaging 20(1):119, 2020. [doi:10.1186/s12880-020-00519-7](https://doi.org/10.1186/s12880-020-00519-7)
 <!-- end generated -->
 
-The physiological factors are those which Alasmari 2024 (Table 3) attribute to Edginton & Willmann 2008. Edginton 2008 was not read, so they are choices of the library, not verified against the paper, and are named in the notes as such. The shunt and the portal blood flow describe the same portal blood which does not reach the sinusoids; applied together they would count it twice. The library takes the shunt: the shunt fractions are the degrees of cirrhosis of the Child-Pugh classes of `pkpdsim.impairment.CIRRHOSIS` (the ICG models of the König lab, a choice of the library), the splanchnic flow of the portal organs is not reduced, and the fraction `f_shunt` of the liver inflow bypasses the liver, so the portal blood which perfuses the liver is 0.60, 0.30 and 0.19 of healthy (Edginton 2008: 0.40, 0.36, 0.04). The shunt acts on the hepatic arterial inflow as well.
+The factors on the albumin, the hematocrit and the cardiac index are the consensus of the studies of the [parameter database](../database.md#physiology-and-the-meld-score) with a control group (`child_pugh_factor` of `pkpdsim.pbpk.impairment`; the entry of the table names the quantity, `consensus = "albumin"`): the ratio of each class to the controls of each study, pooled by the random-effects meta-analysis as for the proteins. They agree with the values of Edginton & Willmann 2008 for the albumin (0.81, 0.68, 0.50) and the cardiac index (1.11, 1.27, 1.36); the hematocrit falls (a factor of 1 before). The other physiological factors are those which Alasmari 2024 (Table 3) attribute to Edginton & Willmann 2008. Edginton 2008 was not read, so they are choices of the library, not verified against the paper, and are named in the notes as such; the factors of the hepatic arterial flow are the ratios of the arterial perfusion per volume of liver of Annet 2003, larger than the absolute arterial flow of Sudhamshu 2006 and the perfusion of the database times its liver volume (the notes give both). The shunt and the portal blood flow describe the same portal blood which does not reach the sinusoids; applied together they would count it twice. The library takes the shunt: the shunt fractions are the degrees of cirrhosis of the Child-Pugh classes of `pkpdsim.impairment.CIRRHOSIS` (the ICG models of the König lab, a choice of the library), the splanchnic flow of the portal organs is not reduced, and the fraction `f_shunt` of the liver inflow bypasses the liver, so the portal blood which perfuses the liver is 0.60, 0.30 and 0.19 of healthy (Edginton 2008: 0.40, 0.36, 0.04). The shunt acts on the hepatic arterial inflow as well.
 
-The enzymes and transporters of the liver are the consensus of the studies of the [parameter database](../database.md): the ratio of the abundance per amount of liver tissue of each Child-Pugh class to the controls of each study on the log scale, pooled over the studies by a random-effects meta-analysis (El-Khateeb 2021, Drozdzik 2021 and Prasad 2018, whose end-stage livers are assumed to be class C), the mRNA expression only for a protein without an abundance. The notes of every factor give the consensus of each class with its 95 % confidence interval and the ratio of every study. A class without a study is the interpolation between its neighbours (healthy 1) or the last class with a study, a choice of the library. Johnson 2010 (the abundance factors of the Simcyp cirrhosis populations) was not accessible and is not used.
+The enzymes and transporters of the liver are the consensus of the studies of the [parameter database](../database.md): the ratio of the abundance per amount of liver tissue of each Child-Pugh class to the controls of each study on the log scale, pooled over the studies by a random-effects meta-analysis (El-Khateeb 2021, Drozdzik 2020, Drozdzik 2021 and Prasad 2018, whose end-stage livers are assumed to be class C), the mRNA expression only for a protein without an abundance. The notes of every factor give the consensus of each class with its 95 % confidence interval and the ratio of every study. A class without a study is the interpolation between its neighbours (healthy 1) or the last class with a study, a choice of the library. Johnson 2010 (the abundance factors of the Simcyp cirrhosis populations) was not accessible and is not used.
 
 <!-- generated: impairment-child-pugh-proteins (scripts/pbpk_tables.py), do not edit -->
 *Generated from the studies of `pkpdsim/database` by `scripts/pbpk_tables.py`; the notes of every number are in the database.*
 
 | protein | A | B | C | studies |
 | --- | ---: | ---: | ---: | --- |
-| `ABCB1` | 1.317 | 0.6098 | 0.5488 | `ElKhateeb2021` |
-| `ABCC2` | 0.4558 | 0.3401 | 0.1837 | `ElKhateeb2021` |
-| `ABCC3` | 0.8111 | 0.5556 | 0.5556 | `ElKhateeb2021` |
+| `ABCB1` | 1.317 | 1.174 | 1.224 | `ElKhateeb2021`, `Drozdzik2020` |
+| `ABCC2` | 0.2696 | 0.2959 | 0.1771 | `Drozdzik2020`, `ElKhateeb2021` |
+| `ABCC3` | 0.474 | 0.4243 | 0.5212 | `Drozdzik2020`, `ElKhateeb2021` |
 | `ABCC4` | 0.3636 | 0.6364 | 0.2727 | `ElKhateeb2021` |
 | `ABCG2` | 0.75 | 1.25 | 1 | `ElKhateeb2021` |
 | `CYP1A2` | 0.481 | 0.536 | 0.1869 | `Drozdzik2021`, `ElKhateeb2021`, `Prasad2018` |
@@ -80,10 +92,10 @@ The enzymes and transporters of the liver are the consensus of the studies of th
 | `CYP2C8` | 0.6561 | 0.3706 | 0.3428 | `Drozdzik2021`, `ElKhateeb2021`, `Prasad2018` |
 | `CYP2C9` | 0.9053 | 0.7152 | 0.415 | `Drozdzik2021`, `ElKhateeb2021`, `Prasad2018` |
 | `CYP2D6` | 0.824 | 0.7194 | 0.5954 | `Drozdzik2021`, `ElKhateeb2021`, `Prasad2018` |
-| `CYP3A4` | 0.5981 | 0.3449 | 0.1816 | `Drozdzik2021`, `ElKhateeb2021`, `Prasad2018` |
-| `SLC22A1` | 0.4498 | 0.2307 | 0.1845 | `ElKhateeb2021` |
-| `SLCO1B1` | 0.4545 | 0.4182 | 0.297 | `ElKhateeb2021` |
-| `SLCO1B3` | 0.6037* | 0.2074 | 0.08889 | `ElKhateeb2021` |
+| `CYP3A4` | 0.5981 | 0.3449 | 0.195 | `Drozdzik2021`, `ElKhateeb2021`, `Prasad2018` |
+| `SLC22A1` | 0.4822 | 0.3041 | 0.2795 | `Drozdzik2020`, `ElKhateeb2021` |
+| `SLCO1B1` | 0.5187 | 0.4601 | 0.3746 | `Drozdzik2020`, `ElKhateeb2021` |
+| `SLCO1B3` | 0.9863 | 0.3484 | 0.2445 | `Drozdzik2020`, `ElKhateeb2021` |
 | `UGT1A1` | 1.49 | 1.204 | 0.9976 | `Drozdzik2021`, `ElKhateeb2021` |
 | `UGT1A9` | 1.356 | 0.4759 | 0.2799 | `ElKhateeb2021` |
 | `UGT2B7` | 0.7633 | 0.4251 | 0.2091 | `Drozdzik2021`, `ElKhateeb2021`, `Prasad2018` |
@@ -92,9 +104,40 @@ The consensus of the studies of the database on the abundance per amount of live
 
 ??? note "Sources"
 
+    - `Drozdzik2020`: Drozdzik M, Szelag-Pieniek S, Post M, Zeair S, Wrzesinski M, Kurzawski M, Prieto J, Oswald S. Protein abundance of hepatic drug transporters in patients with different forms of liver damage. Clin Pharmacol Ther 107(5):1138-1148, 2020. [doi:10.1002/cpt.1717](https://doi.org/10.1002/cpt.1717)
     - `Drozdzik2021`: Drozdzik M, Lapczuk-Romanska J, Wenzel C, Szelag-Pieniek S, Post M, Skalski Ł, Kurzawski M, Oswald S. Gene expression and protein abundance of hepatic drug metabolizing enzymes in liver pathology. Pharmaceutics 13(9):1334, 2021. [doi:10.3390/pharmaceutics13091334](https://doi.org/10.3390/pharmaceutics13091334)
     - `ElKhateeb2021`: El-Khateeb E, Achour B, Al-Majdoub ZM, Barber J, Rostami-Hodjegan A. Non-uniformity of changes in drug-metabolizing enzymes and transporters in liver cirrhosis: implications for drug dosage adjustment. Mol Pharm 18(9):3563-3577, 2021. [doi:10.1021/acs.molpharmaceut.1c00462](https://doi.org/10.1021/acs.molpharmaceut.1c00462)
     - `Prasad2018`: Prasad B, Bhatt DK, Johnson K, Chapa R, Chu X, Salphati L, Xiao G, Lee C, Hop CE, Mathias A, Lai Y, Liao M, Humphreys WG, Kumer SC, Unadkat JD. Abundance of phase 1 and 2 drug-metabolizing enzymes in alcoholic and hepatitis C cirrhotic livers: a quantitative targeted proteomics study. Drug Metab Dispos 46(7):943-952, 2018. [doi:10.1124/dmd.118.080523](https://doi.org/10.1124/dmd.118.080523)
+<!-- end generated -->
+
+### The MELD score
+
+A MELD score gives the severity of cirrhosis: `cp_severity_of_meld(meld)` of `pkpdsim.pbpk.impairment` is piecewise linear in the MELD through anchors, the MELD of healthy subjects at severity 0 and the MELD of each Child-Pugh class at its severity, and `meld_of_cp_severity(severity)` its inverse (`meld_anchors()` the anchors). Healthy is 6.43, the smallest score of the formula `3.78 ln(bilirubin) + 11.2 ln(INR) + 9.57 ln(creatinine) + 6.43`, whose laboratory values are bounded below by 1 (`MELD_HEALTHY`); the MELD of a class is the consensus of the cohorts of the database on the MELD of its patients (`integration.level`). Between the anchors the factors and the MELD are both linear in the severity, a choice of the library; a MELD below 6.43 is healthy and one above the MELD of class C is class C, since the library has no factors beyond it. A model sets `CP_severity` of a subject or a group of reported MELD from it:
+
+```python
+from pkpdsim.pbpk.impairment import cp_severity_of_meld, meld_of_cp_severity
+
+print(f"MELD 15: CP_severity {cp_severity_of_meld(15):.3f}")
+print(f"class B: MELD {meld_of_cp_severity(2):.3g}")
+```
+
+<!-- generated: impairment-meld (scripts/pbpk_tables.py), do not edit -->
+*Generated from the studies of `pkpdsim/database` by `scripts/pbpk_tables.py`; the notes of every number are in the database.*
+
+| `CP_severity` | class | MELD | 95 % CI | studies (MELD) |
+| ---: | --- | ---: | --- | --- |
+| 0 | healthy | 6.43 |  |  |
+| 1 | A | 7.909 | 7.554-8.265 | `Hong2025` 8, `Kim2020` 8, `Mesropyan2022` 9.3, `Xu2026` 8, `Yang2020` 7.5 |
+| 2 | B | 12.78 | 10.8-14.76 | `Hong2025` 14, `Kim2020` 13, `Mesropyan2022` 11.9, `Xu2026` 15, `Yang2020` 10.04 |
+| 3 | C | 20.5 | 17.01-23.99 | `Hong2025` 22.1, `Kim2020` 22, `Mesropyan2022` 17.9, `Xu2026` 24, `Yang2020` 16.33 |
+
+??? note "Sources"
+
+    - `Hong2025`: Hong SJ, Kim JE, Cho JM, Choi HC, Park MJ, Choi HY, Shin HS, Won JH, Yang W, Kim HO. Dual Energy CT-Derived Liver Extracellular Volume Fraction for Assessing Liver Functional Reserve in Patients with Liver Cirrhosis. Medicina 61(9):1561, 2025. [doi:10.3390/medicina61091561](https://doi.org/10.3390/medicina61091561)
+    - `Kim2020`: Kim TH, Yun SG, Choi J, Goh HG, Lee HA, Yim SY, Choi SJ, Lee YS, Yoon EL, Jung YK, Seo YS, Kim JH, Yim HJ, Yeon JE, Byun KS, Um SH. Differential Impact of Serum 25-Hydroxyvitamin D3 Levels on the Prognosis of Patients with Liver Cirrhosis According to MELD and Child-Pugh Scores. J Korean Med Sci 35(19):e129, 2020. [doi:10.3346/jkms.2020.35.e129](https://doi.org/10.3346/jkms.2020.35.e129)
+    - `Mesropyan2022`: Mesropyan N, Kupczyk PA, Dold L, Praktiknjo M, Chang J, Isaak A, Endler C, Kravchenko D, Bischoff LM, Sprinkart AM, Pieper CC, Kuetting D, Jansen C, Attenberger UI, Luetkens JA. Assessment of liver cirrhosis severity with extracellular volume fraction MRI. Sci Rep 12(1):9422, 2022. [doi:10.1038/s41598-022-13340-9](https://doi.org/10.1038/s41598-022-13340-9)
+    - `Xu2026`: Xu L, Jiang B, Ma Y, Pan J, Liang M, Du Q, Wu H, Cheng Z, Lu D. Comparison of Child-Pugh and MELD scores in predicting survival of hepatocellular carcinoma patients with splenomegaly undergoing TACE: a real-world study. Front Med 13:1804646, 2026. [doi:10.3389/fmed.2026.1804646](https://doi.org/10.3389/fmed.2026.1804646)
+    - `Yang2020`: Yang M, Zhang Y, Zhao W, Cheng W, Wang H, Guo S. Evaluation of liver function using liver parenchyma, spleen and portal vein signal intensities during the hepatobiliary phase in Gd-EOB-D TPA-enhanced MRI. BMC Med Imaging 20(1):119, 2020. [doi:10.1186/s12880-020-00519-7](https://doi.org/10.1186/s12880-020-00519-7)
 <!-- end generated -->
 
 ## Chronic kidney disease
@@ -245,8 +288,9 @@ The presimulation was chosen over a hidden pre-run of a duration from a negative
 
 ## Limitations
 
-- The physiological factors of the Child-Pugh classes are choices of the library from a review table (Alasmari 2024), not verified against Edginton & Willmann 2008.
-- The anaemia of cirrhosis and CKD: the publications read state absolute hematocrits without the healthy value of their population, so the hematocrit factors are 1 until a source with its healthy reference is read.
+- The physiological factors of the Child-Pugh classes but the albumin, the hematocrit and the cardiac index are choices of the library from a review table (Alasmari 2024), not verified against Edginton & Willmann 2008.
+- The anaemia of CKD: the publications read state absolute hematocrits without the healthy value of their population, so the hematocrit factor of CKD is 1 until a source with its healthy reference is read.
+- The MELD score maps onto the Child-Pugh classes through the mean MELD of the patients of a class: a patient's MELD and class are correlated, not equivalent (the MELD of the classes overlaps), and a MELD beyond the mean of class C is class C.
 - The kidney volume and blood flow and the gastric emptying and small intestinal transit of CKD are factor 1: the constants which reach a PBPK library only through the code of PK-Sim (GPL) are not shipped, and Malik 2020 was not read. A dropped effect is factor 1 with a note in the data file. The CKD physiology is thinner than that of PK-Sim until Malik 2020 is read.
 - The binding factor of CKD of an unknown protein acts on the binding capacity, PK-Sim multiplies fu by it: the two differ for weakly bound drugs (at `fu_ref` 0.5 and the factor 1.45 of moderate CKD, fu 0.59 against 0.725). Its source (Malik 2020) was not read.
 - The CKD profile of the binding is the mean of a population: the binding of a drug in CKD varies with its binding site and the uraemic toxins which displace it (Tan 2022: 1.0 to 2.7 times the fu of highly bound acidic drugs in severe CKD), so a drug whose fu is measured in renal impairment validates the profile with it. `Binding(ckd=False)` is only for a fraction unbound which is no binding measurement (a fitted renal factor) or whose binding is measured unchanged in renal impairment (apixaban); a drug with a measured change of fu in renal impairment keeps the CKD profile, and a measured change which differs from the profile is a finding of the model for its TODO, not a reason to switch the profile off. The profile of AGP rests on a meta-analysis published as a poster; the binding function of albumin is that of site II.

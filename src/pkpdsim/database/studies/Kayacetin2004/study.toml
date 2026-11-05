@@ -1,0 +1,32 @@
+source = "Kayacetin2004"
+via = "Li2015"
+tissue = "body"
+control = "controls"
+notes = "Doppler portal and splenic vein flow of healthy subjects and cirrhotic patients by Child-Pugh class; the numbers as Li 2015 tabulate them for their meta-analysis (Supplementary Materials, Physiological and biological values used in meta-analysis, PMC4505828, CC BY-NC); the primary publication was not read."
+
+[measurements.physiology]
+file = "physiology.tsv"
+kind = "physiology"
+location = "Li 2015, Supplementary Materials, Physiological and biological values used in meta-analysis"
+
+[groups.controls]
+condition = "control"
+description = "healthy subjects"
+
+[groups.cirrhosis_A]
+condition = "cirrhosis"
+child_pugh = "A"
+etiology = "mixed"
+description = "Child-Pugh class A"
+
+[groups.cirrhosis_B]
+condition = "cirrhosis"
+child_pugh = "B"
+etiology = "mixed"
+description = "Child-Pugh class B"
+
+[groups.cirrhosis_C]
+condition = "cirrhosis"
+child_pugh = "C"
+etiology = "mixed"
+description = "Child-Pugh class C"

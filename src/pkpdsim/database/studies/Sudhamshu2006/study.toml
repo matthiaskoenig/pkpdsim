@@ -1,0 +1,32 @@
+source = "Sudhamshu2006"
+via = "Li2015"
+tissue = "body"
+control = "controls"
+notes = "Doppler hemodynamics of 100 cirrhotic patients and 60 controls without cirrhosis; the controls of Li 2015 are the 30 patients with a normal liver (NLP). The study measured the flow of the portal trunk and of the right portal vein (abstract); the portal flow which Li 2015 tabulate is that of the right portal vein, the flow of the trunk is not in the database. The hepatic arterial flow is calculated by Li 2015 from the diameter and velocity of the proper hepatic artery; the numbers as Li 2015 tabulate them for their meta-analysis (Supplementary Materials, Physiological and biological values used in meta-analysis, PMC4505828, CC BY-NC); the primary publication was not read."
+
+[measurements.physiology]
+file = "physiology.tsv"
+kind = "physiology"
+location = "Li 2015, Supplementary Materials, Physiological and biological values used in meta-analysis"
+
+[groups.controls]
+condition = "control"
+description = "patients with a normal liver (NLP)"
+
+[groups.cirrhosis_A]
+condition = "cirrhosis"
+child_pugh = "A"
+etiology = "mixed"
+description = "Child-Pugh class A"
+
+[groups.cirrhosis_B]
+condition = "cirrhosis"
+child_pugh = "B"
+etiology = "mixed"
+description = "Child-Pugh class B"
+
+[groups.cirrhosis_C]
+condition = "cirrhosis"
+child_pugh = "C"
+etiology = "mixed"
+description = "Child-Pugh class C"

@@ -1,0 +1,27 @@
+source = "Kim2020"
+tissue = "body"
+notes = "155 patients with cirrhosis by Child-Pugh class (A 32, B 51, C 72), median and interquartile range of Table 1 (open access, CC BY-NC); no control group. Albumin printed in g/dL."
+
+[measurements.physiology]
+file = "physiology.tsv"
+kind = "physiology"
+method = "laboratory values at enrolment"
+location = "Table 1"
+
+[groups.cirrhosis_A]
+condition = "cirrhosis"
+child_pugh = "A"
+etiology = "mixed"
+description = "Child-Pugh class A"
+
+[groups.cirrhosis_B]
+condition = "cirrhosis"
+child_pugh = "B"
+etiology = "mixed"
+description = "Child-Pugh class B"
+
+[groups.cirrhosis_C]
+condition = "cirrhosis"
+child_pugh = "C"
+etiology = "mixed"
+description = "Child-Pugh class C"

@@ -1,0 +1,4 @@
+entity	group	n	mean	sd	se	unit	notes
+hematocrit	controls	12	41	3.46		%	
+hematocrit	cirrhosis_A	18	39	4.24		%	
+hematocrit	cirrhosis_BC	21	35	4.58		%	

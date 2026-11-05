@@ -2,6 +2,7 @@
 
 import dataclasses
 import itertools
+import math
 from pathlib import Path
 from typing import Any
 from xml.etree import ElementTree
@@ -30,8 +31,13 @@ from pkpdsim.pbpk import (
 from pkpdsim.pbpk.builder import BuildResult
 from pkpdsim.pbpk.chemistry import MM
 from pkpdsim.pbpk.impairment import (
+    MELD_HEALTHY,
+    child_pugh_factor,
     child_pugh_protein,
+    cp_severity_of_meld,
     impairment_objects,
+    meld_anchors,
+    meld_of_cp_severity,
     physiology_factors,
     unbound_fraction,
     unbound_fraction_notes,
@@ -51,7 +57,8 @@ from .conftest import load as load_model
 
 PARALLEL = [o for o in Organ if o is not Organ.LUNG]
 DATA = load("impairment")
-CP = DATA["child_pugh"]
+CP = {key: {"value": list(child_pugh_factor(key).values)} for key in DATA["child_pugh"]}
+"""The factors of the Child-Pugh classes, of the table or the consensus of the database."""
 CKD = DATA["ckd"]
 BINDING = CKD["binding"]
 HF = DATA["heart_failure"]
@@ -927,8 +934,8 @@ def test_model_choices_are_cited_as_such(model: BuildResult) -> None:
 
     The factor of a protein cites the studies of its consensus; a class
     without a study is the interpolation between its neighbours, a model
-    choice (OATP1B3 of class A, whose only study detects it in too few
-    samples).
+    choice (ADH1A of the classes A and B, whose only study is of class C).
+    A factor of the physiology with a consensus (albumin) cites its studies.
     """
     import libsbml
 
@@ -942,13 +949,16 @@ def test_model_choices_are_cited_as_such(model: BuildResult) -> None:
         assert author in notes
     assert "random-effects meta-analysis" in notes
     assert "a model choice" not in notes
-    entry = child_pugh_protein("SLCO1B3")
-    assert entry.choice == ("A",)
-    assert entry.values[0] == pytest.approx((1.0 + entry.values[1]) / 2)
+    entry = child_pugh_protein("ADH1A")
+    assert entry.choice == ("A", "B")
+    c = entry.values[2]
+    assert entry.values[:2] == pytest.approx(
+        (1.0 + (c - 1.0) / 3, 1.0 + 2 * (c - 1.0) / 3), rel=1e-3
+    )
     provenance, sources = entry.provenance(("A", "B", "C"))
-    assert "A: a model choice" in provenance
+    assert "A, B: a model choice" in provenance
     assert "ModelChoice" in sources
-    for key in ("albumin", "shunt"):
+    for key in ("agp", "shunt"):
         notes = (
             doc.getModel()
             .getParameter(ids.condition_factor("cp", key))
@@ -956,3 +966,77 @@ def test_model_choices_are_cited_as_such(model: BuildResult) -> None:
         )
         assert "not verified" in notes
         assert "Edginton AN" not in notes
+    notes = (
+        doc.getModel()
+        .getParameter(ids.condition_factor("cp", "albumin"))
+        .getNotesString()
+    )
+    for author in ("Viani", "Chawla", "Mesropyan"):
+        assert author in notes
+    assert "random-effects meta-analysis" in notes
+
+
+def test_child_pugh_factor_of_the_table_and_of_the_consensus() -> None:
+    """A factor states its values or is the consensus of the studies on its quantity."""
+    kidney = child_pugh_factor("kidney_flow")
+    assert kidney.values == tuple(DATA["child_pugh"]["kidney_flow"]["value"])
+    assert kidney.sources == ("ModelChoice",)
+    for key in ("albumin", "hematocrit", "cardiac_index"):
+        assert DATA["child_pugh"][key]["consensus"] == key
+        factors = child_pugh_factor(key)
+        consensus = integration.consensus(
+            key,
+            {"condition": "cirrhosis", "child_pugh": "C"},
+            kind="physiology",
+            tissue="body",
+        )
+        assert consensus is not None
+        assert factors.values[2] == float(f"{consensus.value:.4g}")
+        assert set(factors.sources) >= set(consensus.sources)
+        assert factors.choice == ()
+    # cirrhosis lowers albumin and the hematocrit and raises the cardiac index
+    assert all(v < 1 for v in child_pugh_factor("albumin").values)
+    assert all(v < 1 for v in child_pugh_factor("hematocrit").values)
+    assert all(v > 1 for v in child_pugh_factor("cardiac_index").values)
+    with pytest.raises(KeyError):
+        child_pugh_factor("nope")
+
+
+def test_meld_anchors() -> None:
+    """Healthy is the smallest MELD of the formula, the classes the consensus of the cohorts."""
+    anchors = meld_anchors()
+    assert [a.severity for a in anchors] == [0.0, 1.0, 2.0, 3.0]
+    assert anchors[0].meld == MELD_HEALTHY == 6.43
+    assert anchors[0].level is None
+    melds = [a.meld for a in anchors]
+    assert melds == sorted(melds)
+    for anchor, cls in zip(anchors[1:], "ABC", strict=True):
+        level = integration.level("meld", {"condition": "cirrhosis", "child_pugh": cls})
+        assert level is not None
+        assert anchor.level == level
+        assert anchor.meld == float(f"{level.value:.4g}")
+        assert len(level.estimates) >= 4
+
+
+@pytest.mark.parametrize("severity", [0.0, 0.5, 1.0, 1.7, 2.0, 2.25, 3.0])
+def test_meld_and_severity_are_inverse(severity: float) -> None:
+    """The MELD of a severity maps back onto the severity."""
+    meld = meld_of_cp_severity(severity)
+    assert cp_severity_of_meld(meld) == pytest.approx(severity, abs=1e-12)
+
+
+def test_cp_severity_of_meld() -> None:
+    """The severity is linear between the anchors and bounded by healthy and class C."""
+    anchors = meld_anchors()
+    for a in anchors:
+        assert cp_severity_of_meld(a.meld) == pytest.approx(a.severity, abs=1e-12)
+    a, b = anchors[1], anchors[2]
+    assert cp_severity_of_meld((a.meld + b.meld) / 2) == pytest.approx(1.5)
+    assert cp_severity_of_meld(6.0) == 0.0
+    assert cp_severity_of_meld(40.0) == 3.0
+    for meld in (math.nan, math.inf):
+        with pytest.raises(ValueError, match="not finite"):
+            cp_severity_of_meld(meld)
+    for severity in (-0.1, 3.1):
+        with pytest.raises(ValueError, match="outside"):
+            meld_of_cp_severity(severity)

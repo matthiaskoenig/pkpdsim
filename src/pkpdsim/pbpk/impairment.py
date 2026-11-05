@@ -90,7 +90,7 @@ from typing import TYPE_CHECKING, Any
 from sbmlutils.factory import Parameter, Sbase, UnitDefinition
 from sbmlutils.metadata import SBO
 
-from pkpdsim.database import integration
+from pkpdsim.database import integration, studies
 from pkpdsim.pbpk import ids
 from pkpdsim.pbpk.annotation import annotate, initial_assignment
 from pkpdsim.pbpk.chemistry import Metabolism, Transport
@@ -107,11 +107,17 @@ if TYPE_CHECKING:
 
 __all__ = [
     "GASTRIC_EMPTYING",
+    "MELD_HEALTHY",
     "SI_TRANSIT",
     "ImpairmentFactors",
+    "MeldAnchor",
+    "child_pugh_factor",
     "child_pugh_protein",
     "child_pugh_proteins",
+    "cp_severity_of_meld",
     "impairment_objects",
+    "meld_anchors",
+    "meld_of_cp_severity",
     "organ_activity",
     "physiology_factors",
     "unbound_fraction",
@@ -517,23 +523,26 @@ def _cp_consensus(protein: str, cls: str) -> integration.Consensus | None:
     )
 
 
-def child_pugh_protein(protein: str) -> ImpairmentFactors:
-    """The factors of a protein of the Child-Pugh classes from the consensus of the database.
+def _cp_factors(
+    found: dict[str, integration.Consensus | None], what: str, notes: str = ""
+) -> ImpairmentFactors:
+    """The factors of the Child-Pugh classes of the consensus of every class.
 
     A class without a consensus is the linear interpolation between its
     neighbours (healthy 1 at severity 0) and the last class with a consensus
     beyond it, a model choice.
 
     Args:
-        protein: the gene symbol of the protein.
+        found: the consensus by class, `None` for a class without a study.
+        what: the quantity of the ratios, for the notes.
+        notes: further notes before the consensus of the classes.
 
     Returns:
-        The factors of the classes A, B, C with the studies of every class.
+        The factors with the studies of every class.
 
     Raises:
-        ValueError: if no class of the protein has a consensus.
+        ValueError: if no class has a consensus.
     """
-    found = {c: _cp_consensus(protein, c) for c in _CP_CLASSES}
     # four significant digits, far within the confidence of the consensus
     known = [(0, 1.0)] + [
         (i + 1, float(f"{f.value:.4g}"))
@@ -541,7 +550,7 @@ def child_pugh_protein(protein: str) -> ImpairmentFactors:
         if (f := found[c]) is not None
     ]
     if len(known) == 1:
-        raise ValueError(f"No consensus of cirrhosis for the protein {protein}.")
+        raise ValueError(f"No consensus of cirrhosis for {what}.")
     values = []
     for i in range(1, len(_CP_CLASSES) + 1):
         below = max((k for k in known if k[0] <= i), key=lambda k: k[0])
@@ -560,20 +569,191 @@ def child_pugh_protein(protein: str) -> ImpairmentFactors:
     sources = tuple(
         dict.fromkeys(s for f in found.values() if f is not None for s in f.sources)
     )
-    notes = (
+    text = (
         "the consensus of the studies of the parameter database "
-        "(`pkpdsim.database.integration`): the ratio of the abundance per amount "
-        "of liver tissue of the class to the controls of each study on the log "
-        "scale, pooled by a random-effects meta-analysis; " + "; ".join(texts)
+        f"(`pkpdsim.database.integration`): the ratio of {what} of the class to "
+        "the controls of each study on the log scale, pooled by a random-effects "
+        "meta-analysis; " + "; ".join(texts)
     )
+    if notes:
+        text = f"{notes}; {text}"
     if choice:
-        notes += (
+        text += (
             "; a class without a study is the linear interpolation between its "
             "neighbours (healthy 1) or the last class with a study, a model choice"
         )
     return ImpairmentFactors(
-        values=tuple(values), sources=sources, notes=notes, choice=choice
+        values=tuple(values), sources=sources, notes=text, choice=choice
     )
+
+
+def child_pugh_protein(protein: str) -> ImpairmentFactors:
+    """The factors of a protein of the Child-Pugh classes from the consensus of the database.
+
+    A class without a consensus is the linear interpolation between its
+    neighbours (healthy 1 at severity 0) and the last class with a consensus
+    beyond it, a model choice.
+
+    Args:
+        protein: the gene symbol of the protein.
+
+    Returns:
+        The factors of the classes A, B, C with the studies of every class.
+
+    Raises:
+        ValueError: if no class of the protein has a consensus.
+    """
+    return _cp_factors(
+        {c: _cp_consensus(protein, c) for c in _CP_CLASSES},
+        f"the abundance per amount of liver tissue of {protein}",
+    )
+
+
+def child_pugh_factor(key: str) -> ImpairmentFactors:
+    """The factors of the Child-Pugh classes on a quantity of the physiology.
+
+    An entry of `[child_pugh]` of the table `impairment` states its values
+    (`value`), or names the quantity of the studies of the database whose
+    consensus they are (`consensus`, a key of
+    `pkpdsim.database.studies.QUANTITIES`): the ratio of the class to the
+    controls of each study, pooled over the studies, a class without a study
+    interpolated as for the proteins (`child_pugh_protein`).
+
+    Args:
+        key: the key of the factor, e.g. `albumin`.
+
+    Returns:
+        The factors of the classes A, B, C with their provenance.
+
+    Raises:
+        KeyError: for a key which is no factor of `[child_pugh]`.
+    """
+    entry = _data()["child_pugh"][key]
+    quantity = entry.get("consensus")
+    if quantity is None:
+        return _entry(_data()["child_pugh"], key)
+    return _cp_factors(
+        {
+            c: integration.consensus(
+                quantity,
+                {"condition": "cirrhosis", "child_pugh": c},
+                kind="physiology",
+                tissue="body",
+            )
+            for c in _CP_CLASSES
+        },
+        f"the {studies.QUANTITIES[quantity].description} ({quantity})",
+        entry.get("notes", ""),
+    )
+
+
+MELD_HEALTHY = 6.43
+"""The MELD score of `CP_severity` 0: the smallest score of the formula
+(`3.78 ln(bilirubin) + 11.2 ln(INR) + 9.57 ln(creatinine) + 6.43`, every
+laboratory value bounded below by 1 mg/dL or 1), which subjects with a normal
+bilirubin, INR and creatinine have (Yang 2020: 6.43 in every quartile of the
+patients with a normal liver function)."""
+
+
+@dataclass(frozen=True)
+class MeldAnchor:
+    """The MELD score of a severity of cirrhosis.
+
+    Attributes:
+        severity: the severity `CP_severity`, 0 healthy, 1, 2, 3 the classes.
+        meld: the MELD score of the severity.
+        level: the consensus of the studies on the MELD of the class, `None`
+            for the healthy severity (`MELD_HEALTHY`).
+    """
+
+    severity: float
+    meld: float
+    level: integration.Level | None
+
+
+@cache
+def meld_anchors() -> tuple[MeldAnchor, ...]:
+    """The MELD scores of the severities of cirrhosis, the anchors of the mapping.
+
+    Severity 0 is `MELD_HEALTHY`; the classes A, B, C (severity 1, 2, 3) have
+    the consensus of the studies of the database on the MELD of the patients
+    of the class (`pkpdsim.database.integration.level`, the mean or median of
+    each study pooled by a random-effects meta-analysis), to four significant
+    digits.
+
+    Returns:
+        The anchors in the order of the severities, the MELD increasing.
+
+    Raises:
+        ValueError: if a class has no MELD in the database or the MELD of the
+            anchors does not increase with the severity.
+    """
+    anchors = [MeldAnchor(0.0, MELD_HEALTHY, None)]
+    for i, c in enumerate(_CP_CLASSES, start=1):
+        found = integration.level("meld", {"condition": "cirrhosis", "child_pugh": c})
+        if found is None:
+            raise ValueError(f"No MELD of the Child-Pugh class {c} in the database.")
+        anchors.append(MeldAnchor(float(i), float(f"{found.value:.4g}"), found))
+    melds = [a.meld for a in anchors]
+    if any(b <= a for a, b in itertools.pairwise(melds)):
+        raise ValueError(f"The MELD of the severities does not increase: {melds}.")
+    return tuple(anchors)
+
+
+def cp_severity_of_meld(meld: float) -> float:
+    """Get the severity of cirrhosis `CP_severity` of a MELD score.
+
+    The severity is piecewise linear in the MELD through the anchors of
+    `meld_anchors` (a model choice: the MELD of a class is the consensus of
+    the patients of the class, between the classes the factors and the MELD
+    are both linear in the severity). A MELD at or below `MELD_HEALTHY` is
+    healthy (0), one at or above the MELD of class C is class C (3), since the
+    library has no factors beyond the class.
+
+    Args:
+        meld: the MELD score.
+
+    Returns:
+        The severity, from 0 to 3.
+
+    Raises:
+        ValueError: for a MELD which is not finite.
+    """
+    if not math.isfinite(meld):
+        raise ValueError(f"The MELD {meld} is not finite.")
+    anchors = meld_anchors()
+    if meld <= anchors[0].meld:
+        return 0.0
+    for lo, hi in itertools.pairwise(anchors):
+        if meld <= hi.meld:
+            fraction = (meld - lo.meld) / (hi.meld - lo.meld)
+            return lo.severity + fraction * (hi.severity - lo.severity)
+    return anchors[-1].severity
+
+
+def meld_of_cp_severity(severity: float) -> float:
+    """Get the MELD score of a severity of cirrhosis, the inverse of `cp_severity_of_meld`.
+
+    Args:
+        severity: the severity `CP_severity`, from 0 to 3.
+
+    Returns:
+        The MELD, piecewise linear in the severity through `meld_anchors`.
+
+    Raises:
+        ValueError: for a severity outside of 0 to 3.
+    """
+    anchors = meld_anchors()
+    if not anchors[0].severity <= severity <= anchors[-1].severity:
+        raise ValueError(
+            f"The severity {severity} is outside of {anchors[0].severity} to "
+            f"{anchors[-1].severity}."
+        )
+    for lo, hi in itertools.pairwise(anchors):
+        if severity <= hi.severity:
+            fraction = (severity - lo.severity) / (hi.severity - lo.severity)
+            return lo.meld + fraction * (hi.meld - lo.meld)
+    return anchors[-1].meld
 
 
 def _proteins() -> frozenset[str]:
@@ -664,7 +844,7 @@ class _Impairment:
         ):
             self._cp(
                 key,
-                _entry(cp, key),
+                child_pugh_factor(key),
                 f"Factor of liver cirrhosis on the {key.replace('_', ' ')}",
             )
         shunt = self._cp(

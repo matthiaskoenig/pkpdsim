@@ -1,0 +1,5 @@
+entity	group	n	mean	sd	se	unit	notes
+albumin	controls	84	50.42	5.98		g/L	
+albumin	cirrhosis_A	12	42.34	5.33		g/L	
+albumin	cirrhosis_B	22	33.68	8.49		g/L	
+albumin	cirrhosis_C	13	22.06	4.48		g/L	

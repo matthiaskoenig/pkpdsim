@@ -1,0 +1,65 @@
+source = "Drozdzik2020"
+tissue = "liver"
+control = "controls"
+notes = "Livers of 77 patients undergoing liver transplantation for HCV (21), ALD (20), AIH (20), PBC (10) and PSC (6), classified by Child-Pugh (A 18, B 29, C 28), and 20 controls; the cohort of Drozdzik 2021, whose drug transporters these are. The numbers of the supplementary Tables S2 and S3 are not in the accepted manuscript (the PDF read); the box plots of Figures 1, 2, 5 and 6 (median, quartiles, the smallest and largest value and the mean as +) were digitized from the images of the PDF (`scripts/database/digitize_boxplot.py`, the calibration of every panel by two ticks of its y axis, a broken axis by the ticks of each segment), to the resolution of a pixel of the panel (given in the notes of each record). The digitized means reproduce the changes the text states (P-gp of class C 260 % of the controls, MRP2 30 %, NTCP 34 %, OCT1 35 %, OATP1B1 46 %, OATP2B1 27 %), and those of the etiologies; for OATP1B1, OATP1B3, OATP2B1 and NTCP in ALD and OATP2B1 in HCV the text writes 'to' for a reduction by the percentage it gives (OATP1B1 of ALD 'to 61 %' is 39 % of the controls in Figure 6). The n of a record is the size of its group; the controls of Figures 5 and 6 are those of Figures 1 and 2."
+
+[measurements.protein]
+file = "protein.tsv"
+kind = "protein"
+unit = "fmol/mg tissue"
+method = "targeted proteomics, LC-MS/MS of the tissue homogenate"
+location = "Figures 1, 2, 5 and 6 (right panels), digitized"
+
+[measurements.mrna]
+file = "mrna.tsv"
+kind = "mrna"
+unit = "relative to the mean of the controls (RQ)"
+method = "qRT-PCR, relative to the mean of five housekeeping genes"
+location = "Figures 1, 2, 5 and 6 (left panels), digitized"
+
+[groups.controls]
+condition = "control"
+description = "liver tissue of patients with colorectal cancer metastases, at least 5 cm from the tumour, without pathological signs in histology"
+
+[groups.cirrhosis_A]
+condition = "cirrhosis"
+child_pugh = "A"
+etiology = "mixed"
+description = "all diseases, Child-Pugh class A"
+
+[groups.cirrhosis_B]
+condition = "cirrhosis"
+child_pugh = "B"
+etiology = "mixed"
+description = "all diseases, Child-Pugh class B"
+
+[groups.cirrhosis_C]
+condition = "cirrhosis"
+child_pugh = "C"
+etiology = "mixed"
+description = "all diseases, Child-Pugh class C"
+
+[groups.hcv]
+condition = "cirrhosis"
+etiology = "hepatitis C"
+description = "HCV, the classes A, B and C together"
+
+[groups.ald]
+condition = "cirrhosis"
+etiology = "alcoholic liver disease"
+description = "ALD, the classes A, B and C together"
+
+[groups.pbc]
+condition = "cirrhosis"
+etiology = "primary biliary cholangitis"
+description = "PBC, the classes A, B and C together"
+
+[groups.psc]
+condition = "cirrhosis"
+etiology = "primary sclerosing cholangitis"
+description = "PSC, the classes A, B and C together"
+
+[groups.aih]
+condition = "cirrhosis"
+etiology = "autoimmune hepatitis"
+description = "AIH, the classes A, B and C together"

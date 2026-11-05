@@ -1,0 +1,26 @@
+source = "Froomes1999"
+via = "Li2015"
+tissue = "body"
+control = "controls"
+notes = "albumin of cirrhotic patients and healthy subjects; the numbers as Li 2015 tabulate them for their meta-analysis (Supplementary Materials, Physiological and biological values used in meta-analysis, PMC4505828, CC BY-NC); the primary publication was not read."
+
+[measurements.physiology]
+file = "physiology.tsv"
+kind = "physiology"
+location = "Li 2015, Supplementary Materials, Physiological and biological values used in meta-analysis"
+
+[groups.controls]
+condition = "control"
+description = "healthy subjects"
+
+[groups.cirrhosis_B]
+condition = "cirrhosis"
+child_pugh = "B"
+etiology = "mixed"
+description = "Child-Pugh class B"
+
+[groups.cirrhosis_C]
+condition = "cirrhosis"
+child_pugh = "C"
+etiology = "mixed"
+description = "Child-Pugh class C"

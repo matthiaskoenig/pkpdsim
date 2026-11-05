@@ -80,6 +80,7 @@ nav = [
     { "pbpk equilibration" = "api/pbpk_equilibration.md" },
     { "pbpk regional absorption" = "api/pbpk_regional.md" },
     { "pbpk kidney validity" = "api/pbpk_kidney_validity.md" },
+    { "pbpk impairment" = "api/pbpk_impairment.md" },
     { "pbpk ids and data" = "api/pbpk_ids.md" },
   ] },
   { "Contributing" = "development.md" },

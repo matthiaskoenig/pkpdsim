@@ -38,8 +38,16 @@ location = "Table S3"
 
 The columns of a TSV file are `entity` and `group` (required), `name` (the
 name in the source), `n`, `n_detected` (the samples above the limit of
-quantification), `mean`, `sd`, `se`, `cv_percent`, `median`, `min`, `max`,
-`ci_low`, `ci_high` (the 95 % confidence interval of the median) and `notes`.
+quantification), `mean`, `sd`, `se`, `cv_percent`, `median`, `q1`, `q3`
+(the quartiles), `min`, `max`, `unit` (of a record whose unit is not that
+of its measurement), `ci_low`, `ci_high` (the 95 % confidence interval of the
+median) and `notes`. The entity of a protein or an mRNA is its HGNC symbol,
+that of the kind `physiology` a key of `QUANTITIES` (e.g. `albumin`, `meld`)
+in the unit of the quantity (a measurement of the kind has no `unit`).
+A study without a control group (`control` left out) gives levels and no
+ratios; a study whose numbers are read from a review states the review as
+`via`. Numbers digitized from a figure say so
+in their notes, with the resolution of a pixel.
 """
 
 import csv
@@ -60,8 +68,10 @@ __all__ = [
     "CONDITIONS",
     "ETIOLOGIES",
     "KINDS",
+    "QUANTITIES",
     "Group",
     "Measurement",
+    "Quantity",
     "Record",
     "Study",
     "Summary",
@@ -73,8 +83,55 @@ __all__ = [
 KINDS: dict[str, str] = {
     "protein": "protein abundance per amount of tissue",
     "mrna": "mRNA expression",
+    "physiology": "a physiological or clinical quantity of the subjects",
 }
 """The kinds of measurement."""
+
+
+@dataclass(frozen=True)
+class Quantity:
+    """A quantity of the kind `physiology`.
+
+    Attributes:
+        description: what the quantity is.
+        unit: the unit of every record of the quantity; a source which reports
+            another unit is converted when its numbers are entered, the note of
+            the record gives the printed numbers.
+    """
+
+    description: str
+    unit: str
+
+
+QUANTITIES: dict[str, Quantity] = {
+    "albumin": Quantity("plasma (serum) albumin concentration", "g/L"),
+    "hematocrit": Quantity("hematocrit", "%"),
+    "bilirubin": Quantity("serum total bilirubin", "mg/dL"),
+    "creatinine": Quantity("serum creatinine", "mg/dL"),
+    "inr": Quantity("international normalized ratio of the prothrombin time", "1"),
+    "meld": Quantity("MELD score (model for end-stage liver disease)", "1"),
+    "cardiac_index": Quantity("cardiac output per body surface area", "L/min/m2"),
+    "portal_vein_flow": Quantity("blood flow of the portal vein", "mL/min"),
+    "portal_perfusion": Quantity(
+        "portal perfusion of the liver per volume of liver", "mL/min/dL"
+    ),
+    "splenic_vein_flow": Quantity("blood flow of the splenic vein", "mL/min"),
+    "hepatic_artery_flow": Quantity("blood flow of the hepatic artery", "mL/min"),
+    "hepatic_arterial_perfusion": Quantity(
+        "arterial perfusion of the liver per volume of liver", "mL/min/dL"
+    ),
+    "liver_volume_per_bw": Quantity("liver volume per body weight", "cm3/kg"),
+    "liver_volume_per_height": Quantity("liver volume per body height", "cm3/m"),
+    "hepatocyte_volume_per_bw": Quantity("hepatocyte volume per body weight", "cm3/kg"),
+    "functional_liver_volume_per_bw": Quantity(
+        "functional liver volume per body weight (99mTc-GSA scintigraphy)", "cm3/kg"
+    ),
+    "hepatic_ecv": Quantity(
+        "extracellular volume fraction of the liver (MRI or CT)", "%"
+    ),
+}
+"""The quantities of the kind `physiology`, the entities of its records, in
+the unit of each (`1` dimensionless)."""
 
 CONDITIONS: dict[str, str] = {
     "control": "the control group of a study, the healthy reference of its ratios",
@@ -96,7 +153,7 @@ ETIOLOGIES: dict[str, str] = {
 """The etiologies of the liver diseases."""
 
 _ENTITY = re.compile(r"^[A-Z][A-Z0-9-]*$")
-"""A gene symbol of HGNC."""
+"""A gene symbol of HGNC, the entity of a protein or mRNA."""
 
 _COLUMNS = (
     "entity",
@@ -109,8 +166,11 @@ _COLUMNS = (
     "se",
     "cv_percent",
     "median",
+    "q1",
+    "q3",
     "min",
     "max",
+    "unit",
     "ci_low",
     "ci_high",
     "notes",
@@ -119,7 +179,15 @@ _COLUMNS = (
 
 _GROUP_FIELDS = {"condition", "child_pugh", "etiology", "description", "assumption"}
 _MEASUREMENT_FIELDS = {"file", "kind", "unit", "method", "location", "notes"}
-_STUDY_FIELDS = {"source", "tissue", "control", "notes", "groups", "measurements"}
+_STUDY_FIELDS = {
+    "source",
+    "via",
+    "tissue",
+    "control",
+    "notes",
+    "groups",
+    "measurements",
+}
 
 
 @dataclass(frozen=True)
@@ -166,6 +234,8 @@ class Summary:
         se: the standard error of the mean.
         cv: the coefficient of variation, a fraction.
         median: the median.
+        q1: the first quartile.
+        q3: the third quartile.
         min: the smallest value.
         max: the largest value.
         ci: the 95 % confidence interval of the median.
@@ -178,6 +248,8 @@ class Summary:
     se: float | None = None
     cv: float | None = None
     median: float | None = None
+    q1: float | None = None
+    q3: float | None = None
     min: float | None = None
     max: float | None = None
     ci: tuple[float, float] | None = None
@@ -201,6 +273,8 @@ class Summary:
             "se",
             "cv",
             "median",
+            "q1",
+            "q3",
             "min",
             "max",
         ):
@@ -213,8 +287,15 @@ class Summary:
                 problems.append(
                     f"the CV {100 * self.cv:g} % is not SD/mean {100 * cv:.1f} %"
                 )
+        if (
+            self.q1 is not None
+            and self.q3 is not None
+            and self.median is not None
+            and not self.q1 - 1e-9 <= self.median <= self.q3 + 1e-9
+        ):
+            problems.append(f"the median {self.median:g} is outside the quartiles")
         if self.min is not None and self.max is not None:
-            for name in ("mean", "median"):
+            for name in ("mean", "median", "q1", "q3"):
                 v = getattr(self, name)
                 if v is not None and not self.min - 1e-9 <= v <= self.max + 1e-9:
                     problems.append(f"the {name} {v:g} is outside the range")
@@ -265,7 +346,9 @@ class Measurement:
     Attributes:
         key: the key of the measurement in its study.
         kind: the kind, a key of `KINDS`.
-        unit: the unit of the values.
+        unit: the unit of the values (a record may state its own); empty for
+            the kind `physiology`, whose records are in the unit of their
+            quantity.
         method: the method of the measurement.
         location: where the values are in the source, e.g. `Table S3`.
         notes: a remark on the measurement.
@@ -287,19 +370,24 @@ class Study:
 
     Attributes:
         key: the key of the study, the key of its source in `sources.toml`.
-        tissue: the tissue of the measurements.
-        control: the control group, the reference of every ratio.
+        tissue: the tissue of the measurements, `body` for the quantities of
+            the subjects.
+        control: the control group, the reference of every ratio, `None` for a
+            study without (its records give levels, no ratios).
         groups: the groups by key.
         measurements: the measurements by key.
         notes: a remark on the study.
+        via: the key of the source the numbers are read from when it is not
+            the study itself (a table of a review), `None` for the study.
     """
 
     key: str
     tissue: str
-    control: str
+    control: str | None
     groups: dict[str, Group]
     measurements: dict[str, Measurement]
     notes: str
+    via: str | None = None
 
 
 def _root() -> Traversable:
@@ -386,7 +474,20 @@ def _records(
     for line, row in enumerate(reader, start=2):
         at = f"{where}:{line}"
         entity, group = row["entity"].strip(), row["group"].strip()
-        if not _ENTITY.match(entity):
+        unit = (row.get("unit") or "").strip() or data.get("unit", "")
+        if data["kind"] == "physiology":
+            if entity not in QUANTITIES:
+                raise ValueError(f"{at}: '{entity}' is no quantity of QUANTITIES.")
+            expected = QUANTITIES[entity].unit
+            if unit and unit != expected:
+                raise ValueError(
+                    f"{at}: {entity} in '{unit}', the unit of the quantity is "
+                    f"'{expected}' (convert the numbers, the note gives the printed)."
+                )
+            unit = expected
+        elif not unit:
+            raise ValueError(f"{at}: the record has no unit.")
+        elif not _ENTITY.match(entity):
             raise ValueError(f"{at}: '{entity}' is no gene symbol.")
         if group not in groups:
             raise ValueError(f"{at}: the group '{group}' is not a group of the study.")
@@ -406,6 +507,8 @@ def _records(
             se=_number(row.get("se", "") or "", at),
             cv=cv / 100 if cv is not None else None,
             median=_number(row.get("median", "") or "", at),
+            q1=_number(row.get("q1", "") or "", at),
+            q3=_number(row.get("q3", "") or "", at),
             min=_number(row.get("min", "") or "", at),
             max=_number(row.get("max", "") or "", at),
             ci=(ci_low, ci_high)
@@ -418,7 +521,7 @@ def _records(
                 measurement=key,
                 kind=data["kind"],
                 tissue=tissue,
-                unit=data["unit"],
+                unit=unit,
                 entity=entity,
                 name=(row.get("name") or "").strip() or entity,
                 group=groups[group],
@@ -444,9 +547,14 @@ def _study(folder: Traversable) -> Study:
     if key not in sources():
         raise ValueError(f"{where}: '{key}' is no source of sources.toml.")
     groups = {k: _group(k, g, where) for k, g in data.get("groups", {}).items()}
-    control = str(data.get("control"))
-    if control not in groups or groups[control].condition != "control":
+    control = data.get("control")
+    if control is not None and (
+        control not in groups or groups[control].condition != "control"
+    ):
         raise ValueError(f"{where}: the control {control!r} is no control group.")
+    via = data.get("via")
+    if via is not None and via not in sources():
+        raise ValueError(f"{where}: the source {via!r} of `via` is unknown.")
     measurements = {}
     for k, m in data.get("measurements", {}).items():
         unknown = set(m) - _MEASUREMENT_FIELDS
@@ -462,7 +570,7 @@ def _study(folder: Traversable) -> Study:
         measurements[k] = Measurement(
             key=k,
             kind=m["kind"],
-            unit=m["unit"],
+            unit=m.get("unit", ""),
             method=m.get("method", ""),
             location=m.get("location", ""),
             notes=m.get("notes", ""),
@@ -475,6 +583,7 @@ def _study(folder: Traversable) -> Study:
         groups=groups,
         measurements=measurements,
         notes=data.get("notes", ""),
+        via=via,
     )
 
 

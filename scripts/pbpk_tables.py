@@ -32,9 +32,14 @@ from typing import Any
 from sbmlutils.factory import UnitDefinition
 
 from pkpdsim.database import integration
-from pkpdsim.database.studies import KINDS, studies
+from pkpdsim.database.studies import KINDS, QUANTITIES, studies
 from pkpdsim.pbpk.data import load, sources
-from pkpdsim.pbpk.impairment import child_pugh_protein, child_pugh_proteins
+from pkpdsim.pbpk.impairment import (
+    child_pugh_factor,
+    child_pugh_protein,
+    child_pugh_proteins,
+    meld_anchors,
+)
 from pkpdsim.pbpk.organs import Organ
 from pkpdsim.pbpk.physiology import Sex
 from pkpdsim.pbpk.populations import POPULATIONS
@@ -314,8 +319,62 @@ _CHOICE = "A value marked `*` is a choice of the library, not a value of the sou
 
 def impairment_child_pugh() -> str:
     """The factors of the Child-Pugh classes on the physiology."""
-    lines, cited = _vector_table(load("impairment")["child_pugh"], ["A", "B", "C"])
-    return _generated("`database/tables/impairment.toml`", lines, cited)
+    rows = []
+    cited: list[str] = []
+    for key, entry in load("impairment")["child_pugh"].items():
+        if not isinstance(entry, dict):
+            continue
+        factors = child_pugh_factor(key)
+        cells = [
+            _number(v) + ("*" if c in factors.choice else "")
+            for v, c in zip(factors.values, ("A", "B", "C"), strict=True)
+        ]
+        cited += factors.sources
+        source = (
+            f"consensus of `{entry['consensus']}`: " if "consensus" in entry else ""
+        ) + ", ".join(f"`{s}`" for s in factors.sources)
+        rows.append([f"`{key}`", *cells, source])
+    lines = _table(["factor", "A", "B", "C", "source"], rows)
+    note = (
+        "A factor with a consensus is that of the studies of the database on the "
+        "quantity, the ratio of the class to the controls of each study pooled "
+        "over the studies, see [the database](../database.md); a value marked `*` "
+        "is a choice of the library."
+    )
+    return _generated(
+        "`database/tables/impairment.toml` and the studies of `pkpdsim/database`",
+        [*lines, "", note],
+        cited,
+    )
+
+
+def impairment_meld() -> str:
+    """The MELD scores of the severities of cirrhosis, the anchors of the mapping."""
+    rows = []
+    cited: list[str] = []
+    for anchor in meld_anchors():
+        if anchor.level is None:
+            rows.append(
+                [_number(anchor.severity), "healthy", _number(anchor.meld), "", ""]
+            )
+            continue
+        lo, hi = anchor.level.ci
+        cited += anchor.level.sources
+        rows.append(
+            [
+                _number(anchor.severity),
+                "ABC"[int(anchor.severity) - 1],
+                _number(anchor.meld),
+                f"{_number(lo)}-{_number(hi)}",
+                ", ".join(
+                    f"`{e.study}` {_number(e.value)}" for e in anchor.level.estimates
+                ),
+            ]
+        )
+    lines = _table(
+        ["`CP_severity`", "class", "MELD", "95 % CI", "studies (MELD)"], rows
+    )
+    return _generated("the studies of `pkpdsim/database`", lines, cited)
 
 
 def _consensus_cell(c: integration.Consensus | None) -> str:
@@ -323,7 +382,7 @@ def _consensus_cell(c: integration.Consensus | None) -> str:
     if c is None:
         return ""
     lo, hi = c.ci
-    mark = "" if c.kind == "protein" else " (mRNA)"
+    mark = " (mRNA)" if c.kind == "mrna" else ""
     return (
         f"{_number(c.value)} [{_number(lo)}-{_number(hi)}] ({len(c.estimates)}){mark}"
     )
@@ -406,6 +465,55 @@ def database_cirrhosis() -> str:
         [*lines, "", note],
         cited,
     )
+
+
+def _level_cell(level: integration.Level | None) -> str:
+    """A cell of a level: the value, its 95 % CI and the number of studies."""
+    if level is None:
+        return ""
+    lo, hi = level.ci
+    return (
+        f"{_number(level.value)} [{_number(lo)}-{_number(hi)}] ({len(level.estimates)})"
+    )
+
+
+def database_physiology() -> str:
+    """The levels and the consensus of the quantities of the physiology in cirrhosis."""
+    rows = []
+    cited: list[str] = []
+    for quantity, q in QUANTITIES.items():
+        controls = integration.level(quantity, {"condition": "control"})
+        levels = []
+        ratios = []
+        for cls in ("A", "B", "C"):
+            condition = {"condition": "cirrhosis", "child_pugh": cls}
+            lv = integration.level(quantity, condition)
+            c = integration.consensus(
+                quantity, condition, kind="physiology", tissue="body"
+            )
+            levels.append(_level_cell(lv))
+            ratios.append(_consensus_cell(c))
+            cited += [*(lv.sources if lv else ()), *(c.sources if c else ())]
+        if controls is not None:
+            cited += controls.sources
+        rows.append(
+            [
+                f"`{quantity}` [{q.unit}]",
+                _level_cell(controls),
+                *(
+                    f"{lv}<br>{r}" if r else lv
+                    for lv, r in zip(levels, ratios, strict=True)
+                ),
+            ]
+        )
+    lines = _table(["quantity", "controls", "A", "B", "C"], rows)
+    note = (
+        "Per cell the level, the mean or median of the groups pooled over the "
+        "studies on the linear scale, and below it the ratio to the controls of "
+        "the studies with a control group, pooled on the log scale; each with "
+        "its 95 % confidence interval and the number of studies."
+    )
+    return _generated("the studies of `pkpdsim/database`", [*lines, "", note], cited)
 
 
 def impairment_ckd() -> str:
@@ -569,6 +677,8 @@ TABLES: dict[str, Callable[[], str]] = {
     "populations": populations,
     "impairment-child-pugh": impairment_child_pugh,
     "impairment-child-pugh-proteins": impairment_child_pugh_proteins,
+    "impairment-meld": impairment_meld,
+    "database-physiology": database_physiology,
     "impairment-ckd": impairment_ckd,
     "impairment-ckd-binding": impairment_ckd_binding,
     "impairment-ckd-proteins": impairment_ckd_proteins,

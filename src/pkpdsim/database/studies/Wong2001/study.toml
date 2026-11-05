@@ -1,0 +1,25 @@
+source = "Wong2001"
+via = "Li2015"
+tissue = "body"
+control = "controls"
+notes = "hematocrit of healthy subjects and cirrhotic patients; the classes B and C are one group; every SD is the square root of n, so Li 2015 converted an SE of 1 % (as for Boker 2000, whose SE they state); the numbers as Li 2015 tabulate them for their meta-analysis (Supplementary Materials, Physiological and biological values used in meta-analysis, PMC4505828, CC BY-NC); the primary publication was not read."
+
+[measurements.physiology]
+file = "physiology.tsv"
+kind = "physiology"
+location = "Li 2015, Supplementary Materials, Physiological and biological values used in meta-analysis"
+
+[groups.controls]
+condition = "control"
+description = "healthy subjects"
+
+[groups.cirrhosis_A]
+condition = "cirrhosis"
+child_pugh = "A"
+etiology = "mixed"
+description = "Child-Pugh class A"
+
+[groups.cirrhosis_BC]
+condition = "cirrhosis"
+etiology = "mixed"
+description = "Child-Pugh classes B and C together, as the study groups them"

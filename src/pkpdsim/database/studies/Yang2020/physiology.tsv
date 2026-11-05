@@ -1,0 +1,13 @@
+entity	group	n	mean	sd	median	q1	q3	notes
+meld	controls	41			6.43	6.43	6.43	
+meld	cirrhosis_A	50			7.5	7.12	7.97	
+meld	cirrhosis_B	21			10.04	8.55	10.5	
+meld	cirrhosis_C	8			16.33	15.34	16.69	
+albumin	controls	41			46	44.1	47.1	printed in g/dL: 4.60 (4.41-4.71)
+albumin	cirrhosis_A	50			42	41	44	printed in g/dL: 4.20 (4.10-4.40)
+albumin	cirrhosis_B	21			35	29.7	38.2	printed in g/dL: 3.50 (2.97-3.82)
+albumin	cirrhosis_C	8			26.1	23.9	26.4	printed in g/dL: 2.61 (2.39-2.64)
+creatinine	controls	41			0.71	0.65	0.77	
+creatinine	cirrhosis_A	50			0.76	0.69	0.9	
+creatinine	cirrhosis_B	21			0.72	0.64	0.78	
+creatinine	cirrhosis_C	8			0.76	0.7	0.95	

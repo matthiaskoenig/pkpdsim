@@ -1,0 +1,5 @@
+entity	group	n	mean	sd	se	unit	notes
+liver_volume_per_bw	cirrhosis_A	17	18.71	3.97		cm3/kg	
+liver_volume_per_bw	cirrhosis_B	6	17.1	4.75		cm3/kg	
+hepatocyte_volume_per_bw	cirrhosis_A	17	15.86	4.31		cm3/kg	
+hepatocyte_volume_per_bw	cirrhosis_B	6	13.67	5.95		cm3/kg	

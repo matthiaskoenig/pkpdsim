@@ -1,0 +1,359 @@
+{
+ "image": "fig-000.png",
+ "panels": [
+  {
+   "name": "ABCB1",
+   "entity": "ABCB1",
+   "kind": "mrna",
+   "x_axis": 60,
+   "x_end": 600,
+   "groups": [
+    "controls",
+    "cirrhosis_A",
+    "cirrhosis_B",
+    "cirrhosis_C"
+   ],
+   "segments": [
+    {
+     "y_top": 75,
+     "v_top": 5,
+     "y_bottom": 457,
+     "v_bottom": 0,
+     "y_min": 60,
+     "y_max": 458
+    }
+   ]
+  },
+  {
+   "name": "P-gp",
+   "entity": "ABCB1",
+   "kind": "protein",
+   "x_axis": 660,
+   "x_end": 1200,
+   "groups": [
+    "controls",
+    "cirrhosis_A",
+    "cirrhosis_B",
+    "cirrhosis_C"
+   ],
+   "segments": [
+    {
+     "y_top": 75,
+     "v_top": 40,
+     "y_bottom": 457,
+     "v_bottom": 0,
+     "y_min": 60,
+     "y_max": 458
+    }
+   ]
+  },
+  {
+   "name": "ABCB11",
+   "entity": "ABCB11",
+   "kind": "mrna",
+   "x_axis": 60,
+   "x_end": 600,
+   "groups": [
+    "controls",
+    "cirrhosis_A",
+    "cirrhosis_B",
+    "cirrhosis_C"
+   ],
+   "segments": [
+    {
+     "y_top": 624,
+     "v_top": 4,
+     "y_bottom": 1006.5,
+     "v_bottom": 0,
+     "y_min": 610,
+     "y_max": 1007
+    }
+   ]
+  },
+  {
+   "name": "BSEP",
+   "entity": "ABCB11",
+   "kind": "protein",
+   "x_axis": 660,
+   "x_end": 1200,
+   "groups": [
+    "controls",
+    "cirrhosis_A",
+    "cirrhosis_B",
+    "cirrhosis_C"
+   ],
+   "segments": [
+    {
+     "y_top": 624,
+     "v_top": 400,
+     "y_bottom": 1006.5,
+     "v_bottom": 0,
+     "y_min": 610,
+     "y_max": 1007
+    }
+   ]
+  },
+  {
+   "name": "ABCC1",
+   "entity": "ABCC1",
+   "kind": "mrna",
+   "x_axis": 60,
+   "x_end": 600,
+   "groups": [
+    "controls",
+    "cirrhosis_A",
+    "cirrhosis_B",
+    "cirrhosis_C"
+   ],
+   "segments": [
+    {
+     "y_top": 1172,
+     "v_top": 8,
+     "y_bottom": 1555,
+     "v_bottom": 0,
+     "y_min": 1158,
+     "y_max": 1556
+    }
+   ]
+  },
+  {
+   "name": "MRP1",
+   "entity": "ABCC1",
+   "kind": "protein",
+   "x_axis": 660,
+   "x_end": 1200,
+   "groups": [
+    "controls",
+    "cirrhosis_A",
+    "cirrhosis_B",
+    "cirrhosis_C"
+   ],
+   "segments": [
+    {
+     "y_top": 1181,
+     "v_top": 120,
+     "y_bottom": 1287,
+     "v_bottom": 40,
+     "y_min": 1158,
+     "y_max": 1310
+    },
+    {
+     "y_top": 1364,
+     "v_top": 10,
+     "y_bottom": 1555,
+     "v_bottom": 0,
+     "y_min": 1325,
+     "y_max": 1556
+    }
+   ]
+  },
+  {
+   "name": "ABCC2",
+   "entity": "ABCC2",
+   "kind": "mrna",
+   "x_axis": 60,
+   "x_end": 600,
+   "groups": [
+    "controls",
+    "cirrhosis_A",
+    "cirrhosis_B",
+    "cirrhosis_C"
+   ],
+   "segments": [
+    {
+     "y_top": 1721,
+     "v_top": 3.0,
+     "y_bottom": 2104,
+     "v_bottom": 0,
+     "y_min": 1707,
+     "y_max": 2104
+    }
+   ]
+  },
+  {
+   "name": "MRP2",
+   "entity": "ABCC2",
+   "kind": "protein",
+   "x_axis": 660,
+   "x_end": 1200,
+   "groups": [
+    "controls",
+    "cirrhosis_A",
+    "cirrhosis_B",
+    "cirrhosis_C"
+   ],
+   "segments": [
+    {
+     "y_top": 1721,
+     "v_top": 350,
+     "y_bottom": 2104,
+     "v_bottom": 0,
+     "y_min": 1707,
+     "y_max": 2104
+    }
+   ]
+  },
+  {
+   "name": "ABCC3",
+   "entity": "ABCC3",
+   "kind": "mrna",
+   "x_axis": 60,
+   "x_end": 600,
+   "groups": [
+    "controls",
+    "cirrhosis_A",
+    "cirrhosis_B",
+    "cirrhosis_C"
+   ],
+   "segments": [
+    {
+     "y_top": 2270,
+     "v_top": 3.0,
+     "y_bottom": 2652,
+     "v_bottom": 0,
+     "y_min": 2256,
+     "y_max": 2653
+    }
+   ]
+  },
+  {
+   "name": "MRP3",
+   "entity": "ABCC3",
+   "kind": "protein",
+   "x_axis": 660,
+   "x_end": 1200,
+   "groups": [
+    "controls",
+    "cirrhosis_A",
+    "cirrhosis_B",
+    "cirrhosis_C"
+   ],
+   "segments": [
+    {
+     "y_top": 2270,
+     "v_top": 200,
+     "y_bottom": 2397,
+     "v_bottom": 160,
+     "y_min": 2256,
+     "y_max": 2418
+    },
+    {
+     "y_top": 2499,
+     "v_top": 40,
+     "y_bottom": 2652,
+     "v_bottom": 0,
+     "y_min": 2436,
+     "y_max": 2653
+    }
+   ]
+  },
+  {
+   "name": "ABCC4",
+   "entity": "ABCC4",
+   "kind": "mrna",
+   "x_axis": 60,
+   "x_end": 600,
+   "groups": [
+    "controls",
+    "cirrhosis_A",
+    "cirrhosis_B",
+    "cirrhosis_C"
+   ],
+   "segments": [
+    {
+     "y_top": 2818,
+     "v_top": 10,
+     "y_bottom": 3200.5,
+     "v_bottom": 0,
+     "y_min": 2804,
+     "y_max": 3202
+    }
+   ]
+  },
+  {
+   "name": "MRP4",
+   "entity": "ABCC4",
+   "kind": "protein",
+   "x_axis": 660,
+   "x_end": 1200,
+   "groups": [
+    "controls",
+    "cirrhosis_A",
+    "cirrhosis_B",
+    "cirrhosis_C"
+   ],
+   "segments": [
+    {
+     "y_top": 2818,
+     "v_top": 20,
+     "y_bottom": 2885.5,
+     "v_bottom": 19,
+     "y_min": 2804,
+     "y_max": 2908
+    },
+    {
+     "y_top": 2945.5,
+     "v_top": 10,
+     "y_bottom": 3200.5,
+     "v_bottom": 0,
+     "y_min": 2928,
+     "y_max": 3202
+    }
+   ]
+  },
+  {
+   "name": "ABCG2",
+   "entity": "ABCG2",
+   "kind": "mrna",
+   "x_axis": 60,
+   "x_end": 600,
+   "groups": [
+    "controls",
+    "cirrhosis_A",
+    "cirrhosis_B",
+    "cirrhosis_C"
+   ],
+   "segments": [
+    {
+     "y_top": 3366.5,
+     "v_top": 4,
+     "y_bottom": 3749,
+     "v_bottom": 0,
+     "y_min": 3352,
+     "y_max": 3750
+    }
+   ]
+  },
+  {
+   "name": "BCRP",
+   "entity": "ABCG2",
+   "kind": "protein",
+   "x_axis": 660,
+   "x_end": 1200,
+   "groups": [
+    "controls",
+    "cirrhosis_A",
+    "cirrhosis_B",
+    "cirrhosis_C"
+   ],
+   "segments": [
+    {
+     "y_top": 3366.5,
+     "v_top": 24,
+     "y_bottom": 3535,
+     "v_bottom": 16,
+     "y_min": 3352,
+     "y_max": 3555
+    },
+    {
+     "y_top": 3596,
+     "v_top": 2,
+     "y_bottom": 3749,
+     "v_bottom": 0,
+     "y_min": 3572,
+     "y_max": 3750
+    }
+   ]
+  }
+ ]
+}

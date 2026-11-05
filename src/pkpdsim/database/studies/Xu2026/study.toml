@@ -1,0 +1,27 @@
+source = "Xu2026"
+tissue = "body"
+notes = "306 patients with hepatocellular carcinoma and splenomegaly before transarterial chemoembolization by Child-Pugh class (A 183, B 92, C 31), Table 1 (open access, CC BY): the MELD and creatinine as median and interquartile range, albumin as mean and SD; no control group. Creatinine printed in umol/L, converted with 88.42 umol/L per mg/dL."
+
+[measurements.physiology]
+file = "physiology.tsv"
+kind = "physiology"
+method = "laboratory values before the first TACE"
+location = "Table 1"
+
+[groups.cirrhosis_A]
+condition = "cirrhosis"
+child_pugh = "A"
+etiology = "mixed"
+description = "Child-Pugh class A"
+
+[groups.cirrhosis_B]
+condition = "cirrhosis"
+child_pugh = "B"
+etiology = "mixed"
+description = "Child-Pugh class B"
+
+[groups.cirrhosis_C]
+condition = "cirrhosis"
+child_pugh = "C"
+etiology = "mixed"
+description = "Child-Pugh class C"

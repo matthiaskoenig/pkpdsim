@@ -137,6 +137,10 @@ citation = "Huang W, Isoherranen N. Development of a dynamic physiologically bas
 doi = "10.1002/psp4.12321"
 
 
+[Drozdzik2020]
+citation = "Drozdzik M, Szelag-Pieniek S, Post M, Zeair S, Wrzesinski M, Kurzawski M, Prieto J, Oswald S. Protein abundance of hepatic drug transporters in patients with different forms of liver damage. Clin Pharmacol Ther 107(5):1138-1148, 2020."
+doi = "10.1002/cpt.1717"
+
 [Drozdzik2021]
 citation = "Drozdzik M, Lapczuk-Romanska J, Wenzel C, Szelag-Pieniek S, Post M, Skalski Ł, Kurzawski M, Oswald S. Gene expression and protein abundance of hepatic drug metabolizing enzymes in liver pathology. Pharmaceutics 13(9):1334, 2021."
 doi = "10.3390/pharmaceutics13091334"
@@ -215,3 +219,106 @@ doi = "10.1002/bdd.1996"
 [Prasad2018]
 citation = "Prasad B, Bhatt DK, Johnson K, Chapa R, Chu X, Salphati L, Xiao G, Lee C, Hop CE, Mathias A, Lai Y, Liao M, Humphreys WG, Kumer SC, Unadkat JD. Abundance of phase 1 and 2 drug-metabolizing enzymes in alcoholic and hepatitis C cirrhotic livers: a quantitative targeted proteomics study. Drug Metab Dispos 46(7):943-952, 2018."
 doi = "10.1124/dmd.118.080523"
+
+# The studies of the physiology of cirrhosis: the primary studies which Li 2015
+# tabulate (their supplement, read through `via = "Li2015"`) and the cohorts with
+# the MELD score by Child-Pugh class. The DOIs were checked against Crossref and the
+# PubMed ids of the sources without a DOI against PubMed (2026-11-05).
+
+[Li2015]
+citation = "Li R, Barton H, Maurer T. A Mechanistic Pharmacokinetic Model for Liver Transporter Substrates Under Liver Cirrhosis Conditions. CPT Pharmacometrics Syst Pharmacol 4(6):338-349, 2015."
+doi = "10.1002/psp4.39"
+
+[Alberino2001]
+citation = "Alberino F, Gatta A, Amodio P, Merkel C, Di Pascoli L, Boffo G, Caregaro L. Nutrition and survival in patients with liver cirrhosis. Nutrition 17(6):445-450, 2001."
+doi = "10.1016/s0899-9007(01)00521-4"
+
+[Annet2003]
+citation = "Annet L, Materne R, Danse E, Jamart J, Horsmans Y, Van Beers BE. Hepatic Flow Parameters Measured with MR Imaging and Doppler US: Correlations with Degree of Cirrhosis and Portal Hypertension. Radiology 229(2):409-414, 2003."
+doi = "10.1148/radiol.2292021128"
+
+[Boker2000]
+citation = "Böker KH, Franzen A, Wrobel M, Bahr MJ, Tietge U, Manns MP. Regulation of hepatic blood flow in patients with liver cirrhosis and after liver transplantation. Pathophysiology 6(4):251-260, 2000."
+doi = "10.1016/s0928-4680(99)00024-3"
+
+[Chawla1998]
+citation = "Chawla Y, Radha NS, Jang KD, Dilawari B. Portal Hemodynamics by Duplex Doppler Sonography in Different Grades of Cirrhosis. Dig Dis Sci 43(2):354-357, 1998."
+doi = "10.1023/a:1018814624307"
+
+[Dincer2005]
+citation = "Dincer D, Besisk F, Demirkol O, Demir K, Kaymakoglu S, Cakaloglu Y, Okten A. Relationships between hemodynamic alterations and Child-Pugh Score in patients with cirrhosis. Hepatogastroenterology 52(65):1521-1525, 2005. PMID 16201110."
+
+[Froomes1999]
+citation = "Froomes PR, Morgan DJ, Smallwood RA, Angus PW. Comparative effects of oxygen supplementation on theophylline and acetaminophen clearance in human cirrhosis. Gastroenterology 116(4):915-920, 1999."
+doi = "10.1016/s0016-5085(99)70075-2"
+
+[Henriksen2001]
+citation = "Henriksen JH, Bendtsen F, Møller S. Normal red cell cardiac output in the hyperkinetic syndrome of alcoholic cirrhosis. J Hepatol 34(5):782-783, 2001."
+doi = "10.1016/s0168-8278(01)00019-8"
+
+[Hong2025]
+citation = "Hong SJ, Kim JE, Cho JM, Choi HC, Park MJ, Choi HY, Shin HS, Won JH, Yang W, Kim HO. Dual Energy CT-Derived Liver Extracellular Volume Fraction for Assessing Liver Functional Reserve in Patients with Liver Cirrhosis. Medicina 61(9):1561, 2025."
+doi = "10.3390/medicina61091561"
+
+[Iwao1997]
+citation = "Iwao T, Oho K, Sakai T, Tayama C, Sato M, Nakano R, Yamawaki M, Toyonaga A, Tanikawa K. Splanchnic and extrasplanchnic arterial hemodynamics in patients with cirrhosis. J Hepatol 27(5):817-823, 1997."
+doi = "10.1016/s0168-8278(97)80318-2"
+
+[Kayacetin2004]
+citation = "Kayacetin E, Efe D, Doğan C. Portal and splenic hemodynamics in cirrhotic patients: relationship between esophageal variceal bleeding and the severity of hepatic failure. J Gastroenterol 39(7):661-667, 2004."
+doi = "10.1007/s00535-003-1362-x"
+
+[Kim2020]
+citation = "Kim TH, Yun SG, Choi J, Goh HG, Lee HA, Yim SY, Choi SJ, Lee YS, Yoon EL, Jung YK, Seo YS, Kim JH, Yim HJ, Yeon JE, Byun KS, Um SH. Differential Impact of Serum 25-Hydroxyvitamin D3 Levels on the Prognosis of Patients with Liver Cirrhosis According to MELD and Child-Pugh Scores. J Korean Med Sci 35(19):e129, 2020."
+doi = "10.3346/jkms.2020.35.e129"
+
+[Kwon2001]
+citation = "Kwon HA, Matsui Y, Ha-Kawa SK, Kamiyama Y. Functional Hepatic Volume Measured by Technetium-99M-Galactosyl-Human Serum Albumin Liver Scintigraphy: Comparison Between Hepatocyte Volume and Liver Volume by Computed Tomography. Am J Gastroenterol 96(2):541-546, 2001."
+doi = "10.1111/j.1572-0241.2001.03556.x"
+
+
+[Lin1998]
+citation = "Lin XZ, Sun YN, Liu YH, Sheu BS, Cheng BN, Chen CY, Tsai HM, Shen CL. Liver volume in patients with or without chronic liver diseases. Hepatogastroenterology 45(22):1069-1074, 1998. PMID 9756008."
+
+[Liu2006]
+citation = "Liu T, Wong W, Hou M, Lin H, Chang F, Lee S. Hemorheology in patients with liver cirrhosis: Special emphasis on its relation to severity of esophageal variceal bleeding. J Gastroenterol Hepatol 21(5):908-913, 2006."
+doi = "10.1111/j.1440-1746.2006.04266.x"
+
+[Matsui1996]
+citation = "Matsui Y, Tu W, Kitade H, Nakagawa A, Kamiya T, Kwon A, Uetsuji S, Kamiyama Y. Hepatocyte volume as an indicator of hepatic functional reserve in cirrhotic patients with liver tumours. J Gastroenterol Hepatol 11(6):540-545, 1996."
+doi = "10.1111/j.1440-1746.1996.tb01699.x"
+
+[Mesropyan2022]
+citation = "Mesropyan N, Kupczyk PA, Dold L, Praktiknjo M, Chang J, Isaak A, Endler C, Kravchenko D, Bischoff LM, Sprinkart AM, Pieper CC, Kuetting D, Jansen C, Attenberger UI, Luetkens JA. Assessment of liver cirrhosis severity with extracellular volume fraction MRI. Sci Rep 12(1):9422, 2022."
+doi = "10.1038/s41598-022-13340-9"
+
+[Sudhamshu2006]
+citation = "Sudhamshu KC, Matsutani S, Maruyama H, Akiike T, Saisho H. Doppler study of hepatic vein in cirrhotic patients: Correlation with liver dysfunction and hepatic hemodynamics. World J Gastroenterol 12(36):5853-5858, 2006."
+doi = "10.3748/wjg.v12.i36.5853"
+
+[VanBeers2001]
+citation = "Van Beers BE, Leconte I, Materne R, Smith AM, Jamart J, Horsmans Y. Hepatic Perfusion Parameters in Chronic Liver Disease. AJR Am J Roentgenol 176(3):667-673, 2001."
+doi = "10.2214/ajr.176.3.1760667"
+
+[Viani1992]
+citation = "Viani A, Rizzo G, Carrai M, Pacifici GM. Interindividual variability in the concentrations of albumin and alpha-1-acid glycoprotein in patients with renal or liver disease, newborns and healthy subjects: implications for binding of drugs. Int J Clin Pharmacol Ther Toxicol 30(4):128-133, 1992. PMID 1572757."
+
+[Woitas2000]
+citation = "Woitas RP, Stoffel-Wagner B, Flommersfeld S, Poege U, Schiedermaier P, Klehr HU, Spengler U, Bidlingmaier F, Sauerbruch T. Correlation of Serum Concentrations of Cystatin C and Creatinine to Inulin Clearance in Liver Cirrhosis. Clin Chem 46(5):712-715, 2000."
+doi = "10.1093/clinchem/46.5.712"
+
+[Wong2001]
+citation = "Wong F, Girgrah N, Graba J, Allidina Y, Liu P, Blendis L. The cardiac response to exercise in cirrhosis. Gut 49(2):268-275, 2001."
+doi = "10.1136/gut.49.2.268"
+
+[Xu2026]
+citation = "Xu L, Jiang B, Ma Y, Pan J, Liang M, Du Q, Wu H, Cheng Z, Lu D. Comparison of Child-Pugh and MELD scores in predicting survival of hepatocellular carcinoma patients with splenomegaly undergoing TACE: a real-world study. Front Med 13:1804646, 2026."
+doi = "10.3389/fmed.2026.1804646"
+
+[Yang2020]
+citation = "Yang M, Zhang Y, Zhao W, Cheng W, Wang H, Guo S. Evaluation of liver function using liver parenchyma, spleen and portal vein signal intensities during the hepatobiliary phase in Gd-EOB-D TPA-enhanced MRI. BMC Med Imaging 20(1):119, 2020."
+doi = "10.1186/s12880-020-00519-7"
+
+[Zhu1999]
+citation = "Zhu JY, Leng XS, Dong N, Qi GY, Du RY. Measurement of liver volume and its clinical significance in cirrhotic portal hypertensive patients. World J Gastroenterol 5(6):525-526, 1999."
+doi = "10.3748/wjg.v5.i6.525"

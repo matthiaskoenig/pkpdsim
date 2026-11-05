@@ -1,0 +1,4 @@
+entity	group	n	mean	sd	se	unit	notes
+albumin	cirrhosis_A	48	38.3	4.6		g/L	
+albumin	cirrhosis_B	85	32.6	5.6		g/L	
+albumin	cirrhosis_C	79	27.3	5.3		g/L	

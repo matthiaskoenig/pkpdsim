@@ -11,6 +11,10 @@ report both.
    statistics its source reports, in this order:
    - the median with its 95 % confidence interval: `ln(median)`, the standard
      error `(ln(upper) - ln(lower))/(2*1.96)`;
+   - the median with its quartiles (a box plot): the SD of the log of the
+     interquartile range of a normal distribution of the log,
+     `sigma = (ln(q3) - ln(q1))/1.349`, the standard error of the log of a
+     median `sqrt(pi/2)*sigma/sqrt(n)`;
    - the median with the mean and SD: the log-normal SD of the log
      `sigma = sqrt(ln(1 + CV^2))` (CV = SD/mean), the standard error of the
      log of a median `sqrt(pi/2)*sigma/sqrt(n)`;
@@ -21,6 +25,16 @@ report both.
    all studies of the kind, and is marked as imputed. A group whose location
    is not positive (a median or mean of 0, below the limit of quantification
    in most samples) has no log and is excluded with the reason.
+
+   A group with many samples below the limit of quantification (counted as
+   0) is no log-normal group: its median and quartiles sit on the limit and
+   their ratio says nothing. Where a group of a comparison is such a group (a
+   first quartile or a median of 0, or fewer than 3/4 of its samples
+   detected), both groups of the comparison take their arithmetic means,
+   `ln(mean)` with the standard error `CV/sqrt(n)` (the delta method, the CV
+   of the SD over the mean, imputed as above without), the ratio of the
+   means. A group with at most a quarter of its samples detected (a third
+   quartile of 0) says nothing of a ratio: its comparison is excluded.
 2. The estimate of a study: the groups of the study which match the
    condition (every field of the condition equal), the group without an
    etiology (or `mixed`) if the study has one, else every matching group,
@@ -48,19 +62,28 @@ __all__ = [
     "Consensus",
     "Estimate",
     "Exclusion",
+    "Level",
+    "LevelEstimate",
     "LogLocation",
     "Z",
     "consensus",
     "entities",
     "factor",
+    "level",
     "log_location",
+    "mean_location",
+    "mostly_undetected",
     "random_effects",
     "sigma_log",
     "study_estimate",
+    "zero_inflated",
 ]
 
 Z = 1.959963984540054
 """The 97.5 % quantile of the standard normal distribution."""
+
+_Z_QUARTILE = 0.6744897501960817
+"""The 75 % quantile of the standard normal distribution."""
 
 _MIXED = (None, "mixed")
 """The etiologies of a group which is no stratum of an etiology."""
@@ -209,22 +232,27 @@ class Consensus:
 
 
 def sigma_log(summary: Summary) -> float | None:
-    """The SD of the log of a log-normal group of its mean and SD (or CV).
+    """The SD of the log of a log-normal group of its mean and SD (or CV), or its quartiles.
 
     Args:
         summary: the statistics of the group.
 
     Returns:
-        `sqrt(ln(1 + CV^2))`, `None` without a positive spread.
+        `sqrt(ln(1 + CV^2))` of the mean and SD or the CV, else
+        `(ln(q3) - ln(q1))/1.349` of positive quartiles; `None` without a
+        positive spread.
     """
     cv = None
     if summary.mean and summary.mean > 0 and summary.sd:
         cv = summary.sd / summary.mean
     elif summary.cv:
         cv = summary.cv
-    if not cv:
-        return None
-    return math.sqrt(math.log1p(cv**2))
+    if cv:
+        return math.sqrt(math.log1p(cv**2))
+    q1, q3 = summary.q1, summary.q3
+    if q1 is not None and q3 is not None and q1 > 0 and q3 > q1:
+        return (math.log(q3) - math.log(q1)) / (2 * _Z_QUARTILE)
+    return None
 
 
 @cache
@@ -266,6 +294,20 @@ def log_location(record: Record) -> LogLocation | str:
     n = s.n
     if not n:
         return "no number of samples"
+    if (
+        s.median is not None
+        and s.median > 0
+        and s.q1 is not None
+        and s.q3 is not None
+        and s.q1 > 0
+        and s.q3 > s.q1
+    ):
+        sigma_iqr = (math.log(s.q3) - math.log(s.q1)) / (2 * _Z_QUARTILE)
+        return LogLocation(
+            y=math.log(s.median),
+            se=math.sqrt(math.pi / 2) * sigma_iqr / math.sqrt(n),
+            statistic="median with the log-normal SD of its quartiles",
+        )
     median = s.median if s.median is not None and s.median > 0 else None
     mean = s.mean if s.mean is not None and s.mean > 0 else None
     if median is None and mean is None:
@@ -289,6 +331,97 @@ def log_location(record: Record) -> LogLocation | str:
         y=math.log(mean) - sigma**2 / 2,
         se=sigma / math.sqrt(n),
         statistic="geometric mean of the log-normal mean and SD",
+        imputed=imputed,
+    )
+
+
+def mostly_undetected(summary: Summary) -> bool:
+    """Whether at most a quarter of the samples of a group are detected.
+
+    Args:
+        summary: the statistics of the group.
+
+    Returns:
+        A third quartile of 0, or fewer than a quarter of the samples detected.
+    """
+    if summary.q3 is not None and summary.q3 <= 0:
+        return True
+    return (
+        summary.n is not None
+        and summary.n_detected is not None
+        and summary.n_detected < 0.25 * summary.n
+    )
+
+
+def zero_inflated(summary: Summary) -> bool:
+    """Whether a group has many samples below the limit of quantification.
+
+    Args:
+        summary: the statistics of the group.
+
+    Returns:
+        A first quartile or a median of 0, or fewer than 3/4 of the samples
+        detected.
+    """
+    if summary.q1 is not None and summary.q1 <= 0:
+        return True
+    if summary.median is not None and summary.median <= 0:
+        return True
+    return (
+        summary.n is not None
+        and summary.n_detected is not None
+        and summary.n_detected < 0.75 * summary.n
+    )
+
+
+@cache
+def _cvs(study: str | None, measurement: str | None, kind: str) -> float | None:
+    """The median CV (SD over mean) of the records of a measurement, or of a kind."""
+    found = [
+        r.summary.sd / r.summary.mean
+        for r in records(kind=kind)
+        if (study is None or r.study == study)
+        and (measurement is None or r.measurement == measurement)
+        and r.summary.mean
+        and r.summary.mean > 0
+        and r.summary.sd
+    ]
+    return statistics.median(found) if found else None
+
+
+def mean_location(record: Record) -> LogLocation | str:
+    """Get the log of the arithmetic mean of a record with its standard error.
+
+    Args:
+        record: the record of a group.
+
+    Returns:
+        `ln(mean)` with the standard error `CV/sqrt(n)` (the CV imputed from
+        its measurement or kind without an SD), or the reason why the record
+        has none.
+    """
+    s = record.summary
+    if not s.n:
+        return "no number of samples"
+    if s.mean is None or s.mean <= 0:
+        return "no positive mean"
+    imputed = False
+    if s.sd:
+        cv = s.sd / s.mean
+    elif s.cv:
+        cv = s.cv
+    else:
+        found = _cvs(record.study, record.measurement, record.kind) or _cvs(
+            None, None, record.kind
+        )
+        if found is None:
+            return "no spread and none to impute"
+        cv = found
+        imputed = True
+    return LogLocation(
+        y=math.log(s.mean),
+        se=cv / math.sqrt(s.n),
+        statistic="arithmetic mean (samples below the limit of quantification)",
         imputed=imputed,
     )
 
@@ -345,17 +478,27 @@ def study_estimate(
         return None, []
     aggregate = [r for r in matching if r.group.etiology in _MIXED]
     chosen = aggregate or matching
+    undetected = [r for r in [*chosen, control] if mostly_undetected(r.summary)]
+    if undetected:
+        return None, [
+            Exclusion(
+                study.key, r.group.id, "at most a quarter of the samples detected"
+            )
+            for r in undetected
+        ]
+    by_mean = any(zero_inflated(r.summary) for r in [*chosen, control])
+    locate = mean_location if by_mean else log_location
     excluded: list[Exclusion] = []
     locations: list[LogLocation] = []
     used: list[Record] = []
     for r in chosen:
-        loc = log_location(r)
+        loc = locate(r)
         if isinstance(loc, str):
             excluded.append(Exclusion(study.key, r.group.id, loc))
             continue
         locations.append(loc)
         used.append(r)
-    ref = log_location(control)
+    ref = locate(control)
     if isinstance(ref, str):
         excluded.append(Exclusion(study.key, control.group.id, ref))
         return None, excluded
@@ -526,3 +669,200 @@ def entities(
             if r.group.condition == condition
         }
     )
+
+
+@dataclass(frozen=True)
+class LevelEstimate:
+    """The level of a quantity in the groups of a condition of a study.
+
+    Attributes:
+        study: the key of the study.
+        groups: the keys of the groups.
+        value: the level, the mean (or the median) of the groups.
+        se: its standard error.
+        statistic: the statistics of the level.
+        n: the samples of the groups.
+        unit: the unit of the level.
+    """
+
+    study: str
+    groups: tuple[str, ...]
+    value: float
+    se: float
+    statistic: str
+    n: int | None
+    unit: str
+
+
+@dataclass(frozen=True)
+class Level:
+    """The consensus of the studies on the level of a quantity in a condition.
+
+    Attributes:
+        kind: the kind of measurement.
+        entity: the entity, a gene symbol or a quantity.
+        tissue: the tissue.
+        condition: the condition, `(field, value)` pairs.
+        unit: the unit of the levels.
+        estimates: the levels of the studies.
+        value: the pooled level.
+        se: its standard error.
+        tau2: the between-study variance, 0 for a single study.
+    """
+
+    kind: str
+    entity: str
+    tissue: str
+    condition: tuple[tuple[str, str], ...]
+    unit: str
+    estimates: tuple[LevelEstimate, ...]
+    value: float
+    se: float
+    tau2: float
+
+    @property
+    def ci(self) -> tuple[float, float]:
+        """The 95 % confidence interval of the pooled level."""
+        return self.value - Z * self.se, self.value + Z * self.se
+
+    @property
+    def sources(self) -> tuple[str, ...]:
+        """The keys of the studies of the estimates."""
+        return tuple(e.study for e in self.estimates)
+
+    def text(self) -> str:
+        """A short statement of the level with its interval and studies."""
+        lo, hi = self.ci
+        n = len(self.estimates)
+        return (
+            f"{self.value:.3g} {self.unit} (95 % CI {lo:.3g}-{hi:.3g}; {n} "
+            f"{'study' if n == 1 else 'studies'}: "
+            + ", ".join(f"{e.study} {e.value:.3g}" for e in self.estimates)
+            + ")"
+        )
+
+
+def _level_of(record: Record) -> tuple[float, float, str] | None:
+    """The level of a group with its standard error, `None` without a spread or n.
+
+    The mean with its SE (or SD over the root of n); else the median with the
+    SE of a median of the SD of its quartiles, `sqrt(pi/2)*(q3 - q1)/1.349/sqrt(n)`.
+    """
+    s = record.summary
+    if s.mean is not None:
+        if s.se:
+            return s.mean, s.se, "mean and SE"
+        if s.sd is not None and s.n:
+            return s.mean, max(s.sd, 0.0) / math.sqrt(s.n), "mean and SD"
+    if s.median is not None and s.q1 is not None and s.q3 is not None and s.n:
+        sd = (s.q3 - s.q1) / (2 * _Z_QUARTILE)
+        return (
+            s.median,
+            math.sqrt(math.pi / 2) * sd / math.sqrt(s.n),
+            "median and quartiles",
+        )
+    return None
+
+
+@cache
+def _level(
+    kind: str, entity: str, tissue: str, condition: tuple[tuple[str, str], ...]
+) -> Level | None:
+    """The cached level of a hashable condition."""
+    estimates: list[LevelEstimate] = []
+    units: set[str] = set()
+    for study in studies().values():
+        if study.tissue != tissue:
+            continue
+        rows = [
+            r
+            for m in study.measurements.values()
+            if m.kind == kind
+            for r in m.records
+            if r.entity == entity and _matches(r.group.fields(), dict(condition))
+        ]
+        aggregate = [r for r in rows if r.group.etiology in _MIXED]
+        chosen = aggregate or rows
+        found = [
+            (r, lv) for r in chosen if (lv := _level_of(r)) is not None and lv[1] > 0
+        ]
+        if not found:
+            continue
+        weights = [1 / lv[1] ** 2 for _, lv in found]
+        total = sum(weights)
+        value = (
+            sum(w * lv[0] for w, (_, lv) in zip(weights, found, strict=True)) / total
+        )
+        ns = [r.summary.n for r, _ in found]
+        units |= {r.unit for r, _ in found}
+        estimates.append(
+            LevelEstimate(
+                study=study.key,
+                groups=tuple(r.group.id for r, _ in found),
+                value=value,
+                se=math.sqrt(1 / total),
+                statistic="; ".join(sorted({lv[2] for _, lv in found})),
+                n=sum(n for n in ns if n is not None) if all(ns) else None,
+                unit=found[0][0].unit,
+            )
+        )
+    if not estimates:
+        return None
+    if len(units) > 1:
+        raise ValueError(f"The levels of {entity} have several units {sorted(units)}.")
+    y = [e.value for e in estimates]
+    v = [e.se**2 for e in estimates]
+    if len(estimates) == 1:
+        mu, se, tau2 = y[0], math.sqrt(v[0]), 0.0
+    else:
+        w = [1 / vi for vi in v]
+        sw = sum(w)
+        fixed = sum(wi * yi for wi, yi in zip(w, y, strict=True)) / sw
+        q = sum(wi * (yi - fixed) ** 2 for wi, yi in zip(w, y, strict=True))
+        c = sw - sum(wi**2 for wi in w) / sw
+        tau2 = max(0.0, (q - (len(y) - 1)) / c)
+        ws = [1 / (vi + tau2) for vi in v]
+        mu = sum(wi * yi for wi, yi in zip(ws, y, strict=True)) / sum(ws)
+        se = math.sqrt(1 / sum(ws))
+    return Level(
+        kind=kind,
+        entity=entity,
+        tissue=tissue,
+        condition=condition,
+        unit=units.pop(),
+        estimates=tuple(estimates),
+        value=mu,
+        se=se,
+        tau2=tau2,
+    )
+
+
+def level(
+    entity: str,
+    condition: Mapping[str, str],
+    *,
+    kind: str = "physiology",
+    tissue: str = "body",
+) -> Level | None:
+    """Get the consensus of the studies on the level of a quantity in a condition.
+
+    The level of a study is the mean (or the median) of its group of the
+    condition, its strata pooled by their inverse variance; the levels of the
+    studies are pooled by the random-effects meta-analysis of DerSimonian and
+    Laird on the linear scale, e.g. the MELD score of the Child-Pugh classes.
+
+    Args:
+        entity: the entity, a quantity of the kind `physiology` (e.g. `meld`).
+        condition: the fields of the groups, e.g. `{"condition": "control"}`.
+        kind: the kind of measurement.
+        tissue: the tissue, `body` for the quantities of the subjects.
+
+    Returns:
+        The level, `None` if no study reports the quantity in the condition.
+
+    Raises:
+        ValueError: for an unknown kind, or levels of several units.
+    """
+    if kind not in KINDS:
+        raise ValueError(f"Unknown kind '{kind}', the kinds are {sorted(KINDS)}.")
+    return _level(kind, entity, tissue, _key(condition))

@@ -1,0 +1,5 @@
+entity	group	n	mean	sd	se	unit	notes
+cardiac_index	controls	10	3.68	0.16		L/min/m2	
+cardiac_index	cirrhosis_A	8	4.39	0.58		L/min/m2	
+cardiac_index	cirrhosis_B	11	4.75	0.68		L/min/m2	
+cardiac_index	cirrhosis_C	11	5.25	0.7		L/min/m2	

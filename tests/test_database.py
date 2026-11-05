@@ -2,6 +2,7 @@
 
 import math
 from collections import defaultdict
+from pathlib import Path
 
 import libsbml
 import pytest
@@ -254,3 +255,153 @@ def test_an_entry_names_an_unknown_source() -> None:
         ),
     )
     assert e.source in tables.sources()
+
+
+def test_a_median_with_its_quartiles_takes_their_spread() -> None:
+    """The median of a box plot with its quartiles: the SD of the log of the IQR."""
+    loc = log_location(record(Summary(n=16, median=100.0, q1=50.0, q3=200.0)))
+    assert not isinstance(loc, str)
+    sigma = math.log(4) / (2 * 0.6744897501960817)
+    assert loc.y == pytest.approx(math.log(100))
+    assert loc.se == pytest.approx(math.sqrt(math.pi / 2) * sigma / 4)
+
+
+def test_groups_below_the_limit_of_quantification_compare_their_means() -> None:
+    """P-gp of Drozdzik 2020: the controls have a first quartile of 0, so the means compare.
+
+    The ratio of the means of class C to the controls is the 260 % of the
+    text; the ratio of the medians (0.52 of the controls) would be 16-fold.
+    """
+    study = studies.studies()["Drozdzik2020"]
+    found, _ = integration.study_estimate(study, "protein", "ABCB1", CIRRHOSIS_C)
+    assert found is not None
+    assert found.statistic.startswith("arithmetic mean")
+    assert found.ratio == pytest.approx(2.6, abs=0.1)
+
+
+def test_a_mostly_undetected_group_has_no_ratio() -> None:
+    """BCRP of Drozdzik 2020 is below the limit in most livers: no ratio."""
+    study = studies.studies()["Drozdzik2020"]
+    found, excluded = integration.study_estimate(study, "protein", "ABCG2", CIRRHOSIS_C)
+    assert found is None
+    assert excluded
+
+
+@pytest.mark.parametrize(
+    ("entity", "group", "text"),
+    [
+        ("ABCB1", "cirrhosis_C", 2.60),
+        ("ABCC2", "cirrhosis_C", 0.30),
+        ("SLC10A1", "cirrhosis_C", 0.34),
+        ("SLC22A1", "cirrhosis_C", 0.35),
+        ("SLCO1B1", "cirrhosis_C", 0.46),
+        ("SLCO2B1", "cirrhosis_C", 0.27),
+        ("ABCC2", "ald", 0.30),
+        ("ABCC2", "aih", 0.18),
+        ("ABCB1", "pbc", 3.50),
+        ("ABCB1", "psc", 2.87),
+        ("ABCB1", "aih", 4.10),
+        ("SLC22A1", "hcv", 0.30),
+        ("SLC22A1", "pbc", 0.38),
+        ("SLC22A7", "ald", 0.26),
+    ],
+)
+def test_the_digitized_means_of_drozdzik2020_are_those_of_its_text(
+    entity: str, group: str, text: float
+) -> None:
+    """The ratio of the digitized means to the controls is the change the text states."""
+    rows = {
+        r.group.id: r.summary
+        for r in studies.records(kind="protein", entity=entity)
+        if r.study == "Drozdzik2020"
+    }
+    mean, control = rows[group].mean, rows["controls"].mean
+    assert mean is not None and control is not None
+    assert mean / control == pytest.approx(text, abs=0.03 * max(1.0, text))
+
+
+def test_physiology_records_are_in_the_unit_of_their_quantity() -> None:
+    """Every record of a quantity of the subjects is in the unit of the quantity."""
+    found = studies.records(kind="physiology")
+    assert {r.entity for r in found} == set(studies.QUANTITIES)
+    for r in found:
+        assert r.unit == studies.QUANTITIES[r.entity].unit
+        assert r.tissue == "body"
+    via = {s.via for s in studies.studies().values() if s.via}
+    assert via == {"Li2015"}
+
+
+def _write_study(folder: Path, unit: str) -> None:
+    """A study of the albumin of one group, its record in the unit given."""
+    folder.mkdir()
+    folder.joinpath("study.toml").write_text(
+        'source = "Viani1992"\ntissue = "body"\nnotes = ""\n\n'
+        '[measurements.physiology]\nfile = "physiology.tsv"\nkind = "physiology"\n\n'
+        '[groups.cirrhosis_A]\ncondition = "cirrhosis"\nchild_pugh = "A"\n',
+        encoding="utf-8",
+    )
+    folder.joinpath("physiology.tsv").write_text(
+        f"entity\tgroup\tn\tmean\tsd\tunit\nalbumin\tcirrhosis_A\t10\t4.0\t0.5\t{unit}\n",
+        encoding="utf-8",
+    )
+
+
+def test_a_physiology_record_in_another_unit_is_refused(tmp_path: Path) -> None:
+    """A source which prints another unit is converted when its numbers are entered."""
+    _write_study(tmp_path / "Viani1992", "g/dL")
+    with pytest.raises(ValueError, match="the unit of the quantity is 'g/L'"):
+        studies._study(tmp_path / "Viani1992")
+
+
+def test_a_physiology_record_takes_the_unit_of_its_quantity(tmp_path: Path) -> None:
+    """A record without a unit is in the unit of its quantity."""
+    _write_study(tmp_path / "Viani1992", "")
+    study = studies._study(tmp_path / "Viani1992")
+    (r,) = study.measurements["physiology"].records
+    assert r.unit == "g/L"
+    assert study.control is None
+
+
+def test_a_level_pools_the_means_and_the_medians_of_the_studies() -> None:
+    """The MELD of a class pools the mean of one cohort and the medians of the others."""
+    meld = integration.level("meld", {"condition": "cirrhosis", "child_pugh": "B"})
+    assert meld is not None
+    assert meld.unit == "1"
+    by_study = {e.study: e for e in meld.estimates}
+    assert set(by_study) == {
+        "Hong2025",
+        "Kim2020",
+        "Mesropyan2022",
+        "Xu2026",
+        "Yang2020",
+    }
+    assert by_study["Mesropyan2022"].statistic == "mean and SD"
+    assert by_study["Mesropyan2022"].se == pytest.approx(4.2 / math.sqrt(32))
+    kim = by_study["Kim2020"]
+    assert kim.statistic == "median and quartiles"
+    assert kim.value == 13
+    assert kim.se == pytest.approx(
+        math.sqrt(math.pi / 2) * (15 - 11) / (2 * 0.6744897501960817) / math.sqrt(51)
+    )
+    assert min(e.value for e in meld.estimates) < meld.value
+    assert meld.value < max(e.value for e in meld.estimates)
+    assert meld.tau2 > 0
+    lo, hi = meld.ci
+    assert lo < meld.value < hi
+    assert (
+        integration.level("meld", {"condition": "cirrhosis", "etiology": "nope"})
+        is None
+    )
+
+
+def test_the_physiology_of_cirrhosis_worsens_with_the_class() -> None:
+    """Albumin falls and the MELD and the cardiac index rise from class A to C."""
+    for quantity, sign in (("albumin", -1), ("meld", 1), ("cardiac_index", 1)):
+        values = []
+        for cls in "ABC":
+            c = integration.level(
+                quantity, {"condition": "cirrhosis", "child_pugh": cls}
+            )
+            assert c is not None
+            values.append(sign * c.value)
+        assert values == sorted(values), quantity
