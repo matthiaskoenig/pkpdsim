@@ -12,7 +12,7 @@ dissolution (`fed`, `enteric`) builds the SBML it built before.
 import dataclasses
 import math
 from pathlib import Path
-from typing import Literal
+from typing import get_args, get_type_hints
 
 import libsbml
 import numpy as np
@@ -89,21 +89,30 @@ def _ids(path: Path) -> set[str]:
     return found
 
 
-def test_every_depot_kind_is_a_dose_of_the_equilibration() -> None:
-    """Every depot kind of a route has its dose state in `DOSE_PREFIXES`.
+def test_every_route_kind_is_a_dose_of_the_equilibration() -> None:
+    """Every kind of a route has its dose state in `DOSE_PREFIXES`.
 
     `DOSE_PREFIXES` names the kinds itself, so a kind added to `Route` would
     otherwise be invisible to the equilibration, which moves a dose given
     before the initialization to the start, and to the battery of the
     credibility assessment, which reads the dose states of a model from that
-    list.
+    list. The kinds come from the `Literal` of the field, so a route of any
+    kind, not only a depot one, fails this until its dose state is listed.
     """
-    kinds: tuple[Literal["im", "sc", "rectal"], ...] = ("im", "sc", "rectal")
-    assert set(kinds) == DEPOT
-    for kind in kinds:
-        assert ids.depot_dose(kind, "") in DOSE_PREFIXES, kind
-    for dose in (ids.po_dose, ids.iv_dose, ids.sol_dose, ids.infusion_rate):
-        assert dose("") in DOSE_PREFIXES
+    prefixes: dict[str, str] = {
+        "iv": ids.iv_dose(""),
+        "oral": ids.po_dose(""),
+        "oral_solution": ids.sol_dose(""),
+        "im": ids.depot_dose("im", ""),
+        "sc": ids.depot_dose("sc", ""),
+        "rectal": ids.depot_dose("rectal", ""),
+    }
+    kinds = set(get_args(get_type_hints(Route)["kind"]))
+    assert kinds == set(prefixes)
+    assert kinds >= DEPOT
+    assert set(prefixes.values()) <= set(DOSE_PREFIXES)
+    # the infusion rate belongs to the intravenous route
+    assert ids.infusion_rate("") in DOSE_PREFIXES
 
 
 def test_the_ids_of_the_depot_routes() -> None:

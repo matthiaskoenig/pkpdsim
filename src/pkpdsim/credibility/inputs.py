@@ -285,7 +285,7 @@ class StudyTables:
 def dose_prefixes() -> tuple[str, ...]:
     """Get the prefixes of the targets which are a dose.
 
-    The dose states of the models, `pkpdsim.credibility.battery.dose_states`:
+    The dose states of the models, `pkpdsim.credibility.battery.dose_prefixes`:
     the ones the PBPK library creates and the ones of the models which are
     not built with it. The infusion rate is none of them, it is a rate in
     mg/min and no dose. The battery imports the library inside the function,
@@ -294,9 +294,9 @@ def dose_prefixes() -> tuple[str, ...]:
     Returns:
         The prefixes, the library's first.
     """
-    from pkpdsim.credibility.battery import dose_states
+    from pkpdsim.credibility.battery import dose_prefixes as prefixes
 
-    return dose_states()
+    return prefixes()
 
 
 def _read(folder: Path, study: str, name: str) -> pd.DataFrame:

@@ -9,8 +9,9 @@ the simulations of every build with roadrunner without a dose and with a dose
 of every route of every substance:
 
 - `dose_states`: every state in mg which a reaction reads is a dose state
-  the battery knows, so every dose of the model is checked and none is
-  simulated by nothing (`FlatBuild.unknown_doses`).
+  the battery knows, so no dose of that shape is simulated by nothing
+  (`FlatBuild.unknown_doses`, a heuristic: a dose in another unit, one which
+  is a species and one which is a constant are not found).
 - `mass_balance`: the amount of the substances in the model, in its sinks and
   in its dose states changes by the infusion and by the flows of the reactions
   which do not read a dose (eliminations and productions) alone, so a dose
@@ -34,13 +35,13 @@ small doses of the superposition) and the order of the checks in the report.
 
 The battery reads the conventions of the models of pkdb_models from the flat
 SBML (`FlatBuild`): a substance has its molecular weight `Mr_<s>`, its doses
-are the dose states of `dose_states` (mg) and the infusion rate `Ri_<s>`
+are the dose states of `dose_prefixes` (mg) and the infusion rate `Ri_<s>`
 (mg/min), and a species belongs to the substance its id (the part after the
 last `__`) ends with, `_<s>`, or else starts with, `<s>_` (the lumen of the
 intestine of some models, `mid_lumen`). A check without what it needs, e.g. a
 model without doses, is not applicable and assesses nothing.
 
-`dose_states` is the dose states of the PBPK library
+`dose_prefixes` is the dose states of the PBPK library
 (`pkpdsim.pbpk.equilibration.DOSE_PREFIXES`, `IVDOSE_<s>`, `PODOSE_<s>`,
 `SOLDOSE_<s>` and the depots `IMDOSE_<s>`, `SCDOSE_<s>`, `RECDOSE_<s>`) and
 `LEGACY_DOSE_STATES`, the dose states of the models which are not built with
@@ -109,7 +110,7 @@ __all__ = [
     "Fate",
     "FlatBuild",
     "PKBattery",
-    "dose_states",
+    "dose_prefixes",
 ]
 
 logger = logging.getLogger(__name__)
@@ -188,7 +189,7 @@ FATE_COLUMNS: Final = (
 
 
 @cache
-def dose_states() -> tuple[str, ...]:
+def dose_prefixes() -> tuple[str, ...]:
     """Get the prefixes of the dose states (mg) of the models, with the `_`.
 
     The dose states of the PBPK library come from the library itself
@@ -217,8 +218,40 @@ def dose_states() -> tuple[str, ...]:
 
 @cache
 def _bolus() -> tuple[str, ...]:
-    """Get the dose states of `dose_states` without their trailing `_`."""
-    return tuple(prefix.removesuffix("_") for prefix in dose_states())
+    """Get the dose states of `dose_prefixes` without their trailing `_`."""
+    return tuple(prefix.removesuffix("_") for prefix in dose_prefixes())
+
+
+def _local(sid: str) -> str:
+    """Get an id without the qualifier of its submodel, `GU__PODOSE_d` to `PODOSE_d`.
+
+    A flattened comp model qualifies the ids of a submodel with
+    `<SUBMODEL>__`, and a dose state of a submodel is a dose state of the
+    model, since a flat model is what every simulation runs, as a species of
+    a submodel belongs to its substance (`_substance_of`).
+
+    Args:
+        sid: the id of an element of a flat build.
+
+    Returns:
+        The id without the qualifier of a submodel.
+    """
+    return sid.rsplit("__", 1)[-1]
+
+
+def _is_bolus(sid: str) -> bool:
+    """Get whether an id is a dose state (mg), the qualifier of a submodel aside.
+
+    A dose of a dose state is added to it and a dose of an infusion rate
+    (mg/min) replaces it, so the two are told apart by the prefix of the id.
+
+    Args:
+        sid: the id of a dose state or of an infusion rate.
+
+    Returns:
+        Whether the id is a dose state.
+    """
+    return _local(sid).split("_")[0] in _bolus()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -325,15 +358,19 @@ class FlatBuild:
             the drug in the stomach of a model, also through the assignment
             rules and transitively.
         unknown_doses: the states in mg which a reaction reads and which are
-            no dose of any prefix of `dose_states`, so they are a dose state
+            no dose of any prefix of `dose_prefixes`, so they are a dose state
             or a depot of a dose which the battery does not know; the check
             `dose_states` reports them instead of leaving them out in
-            silence. A heuristic: a parameter with a rate rule, in mg, which
-            a reaction reads is what every dose state of the models looks
-            like, and it has no false positive over the tracked builds of
-            pkdb_models, but a model may have such a state which is no dose;
-            a dose state in another unit, one which is a species and a
-            constant parameter without a rate rule are not found.
+            silence. A heuristic in both directions, and not a guarantee that
+            no dose is skipped: it finds a parameter with a rate rule, in mg,
+            which a reaction reads, which is what every dose state of the
+            models looks like. It has no false positive over the tracked
+            builds of pkdb_models, but a model may have such a state which is
+            no dose; and it does not find a dose state in another unit, one
+            which is a species, or one which is a constant parameter without
+            a rate rule, each of which stays skipped in silence and needs a
+            reader of its own (none of the three occurs in the tracked
+            builds).
         flows: the net change of the amount of the tracked species per unit of
             the rate of every reaction which changes it, by reaction id.
         inputs: the reactions of `flows` which read a state of the dose or
@@ -418,15 +455,14 @@ class FlatBuild:
             for sid in species
             if (s := _substance_of(sid, substances)) is not None
         }
-        bolus = _bolus()
         doses = {
             pid: s
             for pid in parameters
-            for prefix in (*bolus, _INFUSION)
+            for prefix in (*_bolus(), _INFUSION)
             for s in substances
-            if pid == f"{prefix}_{s}"
+            if _local(pid) == f"{prefix}_{s}"
         }
-        dose_states = {pid: s for pid, s in doses.items() if pid.split("_")[0] in bolus}
+        dose_states = {pid: s for pid, s in doses.items() if _is_bolus(pid)}
         # a parameter in mg whose rate rule reads the dose, e.g. the drug in the
         # stomach, is a state of the dose while a reaction or the rate rule of
         # another state of the dose reads it, not a sum of the given doses
@@ -466,8 +502,10 @@ class FlatBuild:
         dosing = {**doses, **dose_states}
         # a state in mg which a reaction reads and which is no dose of any
         # prefix looks like a dose state the battery does not know: it would
-        # otherwise be left out of every check without a word. A heuristic,
-        # which the check `dose_states` reports and nothing else acts on
+        # otherwise be left out of every check without a word. A heuristic in
+        # both directions (see `unknown_doses`), which the check `dose_states`
+        # reports and nothing else acts on: a dose state in another unit, a
+        # species or a constant parameter is not found
         unknown_doses = tuple(
             sorted(
                 pid
@@ -557,7 +595,7 @@ class FlatBuild:
 
 def _dose_changes(dose: str, amount: float, at: float) -> dict[float, dict[str, float]]:
     """Get the changes of a dose given at a time, an infusion over `INFUSION`."""
-    if dose.split("_")[0] == _INFUSION:
+    if _local(dose).split("_")[0] == _INFUSION:
         return {at: {dose: amount / INFUSION}, at + INFUSION: {dose: 0.0}}
     return {at: {dose: amount}}
 
@@ -578,10 +616,7 @@ def _case(
 ) -> BatteryCase:
     """Get a case of the battery, a dose state increased by its change."""
     added = frozenset(
-        sid
-        for values in changes.values()
-        for sid in values
-        if sid.split("_")[0] in _bolus()
+        sid for values in changes.values() for sid in values if _is_bolus(sid)
     )
     return BatteryCase(
         name=name, changes=changes, added=added, cross_simulator=repeated
@@ -706,7 +741,7 @@ def _balance(
     end = _amount(runner, result, -1)
     # a bolus is in the dose state of the first row, an infusion enters from outside
     infused = 0.0
-    if dose is not None and dose.split("_")[0] == _INFUSION:
+    if dose is not None and _local(dose).split("_")[0] == _INFUSION:
         infused = DOSE / _mr(runner, build.doses[dose])
     flows = {
         rid: float(result[-1, runner.index[f"{_FLOW}{rid}"]])
@@ -1051,7 +1086,7 @@ class PKBattery(BatteryHook):
             reason = (
                 "The model has no dose state or infusion rate of a substance, "
                 "one of "
-                + ", ".join(f"`{p}<s>`" for p in dose_states())
+                + ", ".join(f"`{p}<s>`" for p in dose_prefixes())
                 + f" or `{_INFUSION}_<s>`."
             )
             for check in (MASS_BALANCE, SUPERPOSITION):

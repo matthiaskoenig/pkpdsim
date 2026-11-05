@@ -310,6 +310,12 @@ def test_the_dose_states_of_the_library_are_doses_of_the_battery() -> None:
     the models which are not built with the library
     (`LEGACY_DOSE_STATES`). A route the battery does not know would leave its
     dose out of the mass balance, the superposition and the fates.
+
+    What each line pins: the first cannot fail while `dose_prefixes` is
+    derived from the list of the library, and says that it must stay derived;
+    the second pins the one id the battery spells itself, the infusion rate;
+    the third and the fourth pin the legacy list, which is written by hand
+    and is what a future entry is added to.
     """
     assert set(LIBRARY_DOSES) <= {f"{prefix}_" for prefix in (*_bolus(), _INFUSION)}
     # the battery spells the infusion rate itself, the library names it
@@ -356,13 +362,15 @@ def test_a_dose_state_the_battery_does_not_know_is_reported(tmp_path: Path) -> N
     assert build.unknown_doses == ("XDOSE_d",)
     assert "XDOSE_d" not in build.doses
     battery = _battery(model)
+    # the arithmetic of the mass balance holds and is asserted first, so the
+    # test fails here with the behaviour of the round before the split
+    mass = battery.result("mass_balance")
+    assert mass.status is BatteryStatus.PASSED, mass.problems
+    assert mass.largest < 1e-10
     result = battery.result("dose_states")
     assert result.status is BatteryStatus.FAILED
     assert result.cases == 1
     assert any("XDOSE_d" in problem for problem in result.problems), result.problems
-    mass = battery.result("mass_balance")
-    assert mass.status is BatteryStatus.PASSED, mass.problems
-    assert mass.largest < 1e-10
 
 
 def test_a_dose_which_disappears_fails_only_the_mass_balance(tmp_path: Path) -> None:
@@ -384,11 +392,68 @@ def test_a_dose_which_disappears_fails_only_the_mass_balance(tmp_path: Path) -> 
     assert build.unknown_doses == ()
     assert build.dose_states["IMDOSE_d"] == "d"
     battery = _battery(model)
-    assert battery.result("dose_states").status is BatteryStatus.PASSED
     mass = battery.result("mass_balance")
     assert mass.status is BatteryStatus.FAILED
     assert mass.largest == pytest.approx(0.25, rel=1e-2)
     assert any("IMDOSE_d" in problem for problem in mass.problems), mass.problems
+    assert battery.result("dose_states").status is BatteryStatus.PASSED
+
+
+def test_a_dose_state_of_a_submodel(tmp_path: Path) -> None:
+    """A dose state behind the qualifier of a flattened submodel is a dose.
+
+    A flat model qualifies the ids of a submodel with `<SUBMODEL>__`, and a
+    dose state of a submodel is a dose state of the model, as a species of a
+    submodel belongs to its substance. Before the strip, `GU__PODOSE_d` with
+    the prefix `PODOSE_` listed and `Mr_d` present was reported as unknown
+    and the remedy the message named, adding the prefix, was already
+    satisfied (`GU__PODOSE_ethanol` of chlorzoxazone is the live case).
+    """
+    model = _model(
+        tmp_path,
+        "unit mg = 1e-3 gram; GU__PODOSE_d = 0; GU__PODOSE_d has mg; kg = 0.4;"
+        " GU__PODOSE_d' = -kg*GU__PODOSE_d;"
+        " gu_d: => Cve_d; kg*GU__PODOSE_d/Mr_d;",
+    )
+    build = FlatBuild.read("male", model.model_path)
+    assert build.unknown_doses == ()
+    assert build.doses["GU__PODOSE_d"] == "d"
+    assert build.dose_states["GU__PODOSE_d"] == "d"
+    battery = _battery(model)
+    assert battery.result("dose_states").status is BatteryStatus.PASSED
+    mass = battery.result("mass_balance")
+    assert mass.status is BatteryStatus.PASSED, mass.problems
+    # the qualified dose has its own fate, and the run without a dose and one
+    # per dose are the cases
+    fates = {f.dose: f for f in _fates(battery)}
+    assert "GU__PODOSE_d" in fates
+    assert mass.cases == 5
+    assert fates["GU__PODOSE_d"].parts["urine"] > 0
+
+
+def test_a_qualified_dose_is_added_and_not_set(tmp_path: Path) -> None:
+    """The superposition adds a dose to a qualified dose state.
+
+    A dose of a dose state is added to its value, a dose of an infusion rate
+    replaces it; the decision reads the prefix of the id, which is `GU` for a
+    qualified id unless the qualifier is stripped, so the second dose of the
+    superposition would have replaced the first.
+    """
+    model = _model(
+        tmp_path,
+        "unit mg = 1e-3 gram; GU__PODOSE_d = 0; GU__PODOSE_d has mg; kg = 0.4;"
+        " GU__PODOSE_d' = -kg*GU__PODOSE_d;"
+        " gu_d: => Cve_d; kg*GU__PODOSE_d/Mr_d;",
+    )
+    # imported here and not at the top of the module, so that the module
+    # imports with the battery of the round before the strip and
+    # `test_a_dose_state_of_a_submodel` fails on its behaviour there
+    from pkpdsim.credibility.battery import _is_bolus
+
+    assert _is_bolus("GU__PODOSE_d")
+    assert not _is_bolus("GU__Ri_d")
+    result = _battery(model).result("superposition")
+    assert result.status is BatteryStatus.PASSED, result.problems
 
 
 def test_an_injected_depot(tmp_path: Path) -> None:
