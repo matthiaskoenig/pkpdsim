@@ -13,7 +13,7 @@ organs and changes nothing, so it conserves mass. Per substance `<s>`:
   `Chv_free_<s>` and `Chv_blood_<s>`;
 - `Carm_<s> = sum w*C`, the arm vein (peripheral venous) sampling site: the
   venous plasma outflows of organs and the arterial plasma mixed with the
-  weights `w_arm_<site>` of a preset of `data/arm_vein.toml`
+  weights `w_arm_<site>` of a preset of `database/tables/arm_vein.toml`
   (`PBPKDefinition.arm_vein`, by default the mix of skin and muscle of the
   PK-Sim documentation); `Carm_free_<s>` and `Carm_blood_<s>` as for the
   pools.

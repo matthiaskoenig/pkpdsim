@@ -34,13 +34,13 @@ def test_every_source_has_citation() -> None:
 
 
 def test_every_data_value_has_known_source() -> None:
-    """Every number of every data file has a source of sources.toml."""
+    """Every number of every table of the database has a source of sources.toml."""
     known = sources()
-    data = resources.files("pkpdsim.pbpk").joinpath("data")
+    data = resources.files("pkpdsim.database").joinpath("tables")
     files = [*data.iterdir(), *data.joinpath("populations").iterdir()]
     checked = set()
     for path in files:
-        if not path.name.endswith(".toml") or path.name == "sources.toml":
+        if not path.name.endswith(".toml"):
             continue
         checked.add(path.name)
         for table in _tables(tomllib.loads(path.read_text("utf-8"))):

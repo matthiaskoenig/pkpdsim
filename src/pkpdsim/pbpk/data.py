@@ -1,23 +1,19 @@
-"""The data files of the PBPK library.
+"""The numbers of the PBPK library from the parameter database.
 
-The data are TOML files in `pkpdsim/pbpk/data`. A number is a table
-`{ value = 1.8, unit = "kg", source = "ICRP89" }` whose `source` is a key of
-`sources.toml`, so every number states where it comes from.
+The library holds no numbers of its own: they are the tables and the studies
+of `pkpdsim.database`. This module reads them for the library, `value` as a
+`Value` with the unit of the model, its source and its uncertainty.
 """
 
-import copy
-import tomllib
-from dataclasses import dataclass
-from functools import cache
-from importlib import resources
-from typing import Any
+import libsbml
+from sbmlutils.factory import Uncertainty as SbmlUncertainty
+from sbmlutils.factory import UncertParameter, UncertSpan, UnitDefinition
 
-from sbmlutils.factory import UnitDefinition
-
+from pkpdsim.database.tables import Source, Uncertainty, cite, entry, load, sources
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import Value
 
-__all__ = ["Source", "cite", "load", "sources", "value"]
+__all__ = ["Source", "cite", "load", "sbml_uncertainty", "sources", "value"]
 
 _UNITS: dict[str, UnitDefinition] = {
     "dimensionless": U.dimensionless,
@@ -27,104 +23,98 @@ _UNITS: dict[str, UnitDefinition] = {
     "1/min": U.per_min,
     "1/hr": U.per_hr,
 }
-"""The units of the model for the units of the data files read by `value`."""
+"""The units of the model for the units of the tables read by `value`."""
 
 
-@dataclass(frozen=True)
-class Source:
-    """A publication a number is taken from.
-
-    Attributes:
-        key: the key of the source, e.g. `ICRP89`.
-        citation: the citation.
-        doi: the DOI of the publication.
-    """
-
-    key: str
-    citation: str
-    doi: str | None = None
-
-
-def load(name: str) -> dict[str, Any]:
-    """Load a data file.
+def sbml_uncertainty(
+    uncertainty: Uncertainty, unit: UnitDefinition, source: str
+) -> SbmlUncertainty:
+    """Get the SBML uncertainty of a number of the database.
 
     Args:
-        name: the name of the file without extension, e.g. `sources`.
+        uncertainty: the uncertainty the source states.
+        unit: the unit of the number in the model.
+        source: the key of the source.
 
     Returns:
-        The content of `data/<name>.toml`, a copy which the caller may change.
+        The distrib uncertainty: the standard deviation, the standard error,
+        the coefficient of variation, the sample size and the 95 % confidence
+        interval which the source states.
     """
-    return copy.deepcopy(_parsed(name))
-
-
-@cache
-def _parsed(name: str) -> dict[str, Any]:
-    """Parse a data file once per process; the content must not be changed.
-
-    Args:
-        name: the name of the file without extension, e.g. `sources`.
-
-    Returns:
-        The content of `data/<name>.toml`, shared by every caller.
-    """
-    text = (
-        resources.files("pkpdsim.pbpk")
-        .joinpath("data", f"{name}.toml")
-        .read_text("utf-8")
-    )
-    return tomllib.loads(text)
+    children: list[UncertParameter | UncertSpan] = []
+    if uncertainty.sd is not None:
+        children.append(
+            UncertParameter(
+                type=libsbml.DISTRIB_UNCERTTYPE_STANDARDDEVIATION,
+                value=uncertainty.sd,
+                unit=unit,
+            )
+        )
+    if uncertainty.se is not None:
+        children.append(
+            UncertParameter(
+                type=libsbml.DISTRIB_UNCERTTYPE_STANDARDERROR,
+                value=uncertainty.se,
+                unit=unit,
+            )
+        )
+    if uncertainty.cv is not None:
+        children.append(
+            UncertParameter(
+                type=libsbml.DISTRIB_UNCERTTYPE_COEFFIENTOFVARIATION,
+                value=uncertainty.cv,
+                unit=U.dimensionless,
+            )
+        )
+    if uncertainty.n is not None:
+        children.append(
+            UncertParameter(
+                type=libsbml.DISTRIB_UNCERTTYPE_SAMPLESIZE,
+                value=float(uncertainty.n),
+                unit=U.dimensionless,
+            )
+        )
+    if uncertainty.ci is not None:
+        children.append(
+            UncertSpan(
+                type=libsbml.DISTRIB_UNCERTTYPE_CONFIDENCEINTERVAL,
+                valueLower=uncertainty.ci[0],
+                valueUpper=uncertainty.ci[1],
+                unit=unit,
+                name="95 % confidence interval",
+            )
+        )
+    return SbmlUncertainty(uncertParameters=children, name=f"source {source}")
 
 
 def value(name: str, section: str, key: str) -> Value:
-    """Get a number of a data file with its unit, source and notes.
+    """Get a number of a table with its unit, source, notes and uncertainty.
 
     Args:
-        name: the name of the file without extension, e.g. `routes`.
+        name: the name of the table without extension, e.g. `routes`.
         section: the table of the number.
         key: the key of the number in the table.
 
     Returns:
-        The value.
+        The value, with the uncertainty its source states.
 
     Raises:
-        ValueError: if the unit of the number is not a unit of the model.
+        ValueError: if the unit of the number is not a unit of the model or
+            the number is a vector.
     """
-    entry = _parsed(name)[section][key]
+    e = entry(name, section, key)
     try:
-        unit = _UNITS[entry["unit"]]
+        unit = _UNITS[e.unit]
     except KeyError:
         raise ValueError(
-            f"{name}.toml [{section}] {key}: unit '{entry['unit']}' is not a unit "
+            f"tables/{name}.toml [{section}] {key}: unit '{e.unit}' is not a unit "
             "of the model."
         ) from None
-    return Value(entry["value"], unit, entry["source"], entry.get("notes"))
-
-
-@cache
-def sources() -> dict[str, Source]:
-    """Get the sources by their key."""
-    return {
-        key: Source(key=key, citation=entry["citation"], doi=entry.get("doi"))
-        for key, entry in _parsed("sources").items()
-    }
-
-
-def cite(key: str) -> str:
-    """Get the citation of a source with its DOI.
-
-    Args:
-        key: the key of the source.
-
-    Returns:
-        The citation, followed by the DOI if the source has one.
-
-    Raises:
-        KeyError: if no source has the key.
-    """
-    try:
-        source = sources()[key]
-    except KeyError:
-        raise KeyError(f"Unknown source '{key}', see data/sources.toml.") from None
-    if source.doi:
-        return f"{source.citation} doi:{source.doi}"
-    return source.citation
+    if isinstance(e.value, tuple):
+        raise ValueError(f"tables/{name}.toml [{section}] {key}: a vector, no number.")
+    uncertainties = (
+        [sbml_uncertainty(e.uncertainty, unit, e.source)]
+        if e.uncertainty is not None
+        else None
+    )
+    return Value(e.value, unit, e.source, e.notes, uncertainties)

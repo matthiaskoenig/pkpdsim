@@ -3,7 +3,7 @@
 `scripts/pbpk_tables.py` writes the tables (reference physiology,
 populations, impairment, arm vein presets, intestine, nephron) into the
 marked regions of the pages of `docs/pbpk/` from the TOML files of
-`pkpdsim/pbpk/data`. The test renders the pages again, so a change of a data
+`pkpdsim/database/tables`. The test renders the pages again, so a change of a data
 file or of the script fails until the pages are written again.
 """
 
@@ -30,7 +30,7 @@ def test_the_tables_are_current() -> None:
     script = _script()
     stale = [
         page.name
-        for page in sorted(script.PBPK_DIR.glob("*.md"))
+        for page in script.PAGES
         if script.render_page(page.read_text(encoding="utf-8"))
         != page.read_text(encoding="utf-8")
     ]
@@ -43,9 +43,7 @@ def test_the_tables_are_current() -> None:
 def test_every_table_is_on_a_page() -> None:
     """Every table of the script has a region on a page, and only one."""
     script = _script()
-    text = "".join(
-        p.read_text(encoding="utf-8") for p in sorted(script.PBPK_DIR.glob("*.md"))
-    )
+    text = "".join(p.read_text(encoding="utf-8") for p in script.PAGES)
     counts = {name: text.count(script.begin_marker(name)) for name in script.TABLES}
     assert counts == dict.fromkeys(script.TABLES, 1)
 

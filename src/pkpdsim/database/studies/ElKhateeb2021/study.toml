@@ -1,0 +1,34 @@
+source = "ElKhateeb2021"
+tissue = "liver"
+control = "controls"
+notes = "Human liver microsomes of 14 controls and 32 cirrhotic livers classified by Child-Pugh (A 6, B 13, C 13; NAFLD, alcoholic and HCV cirrhosis, cholestasis, PBC and PSC, with and without hepatocellular carcinoma), the abundance per mg microsomal protein scaled to the liver tissue by the MPPGL of each sample; the statistics of Table S8 of the supporting information as printed (mean with SD, median with its 95 % confidence interval). The n of a record is the size of its group: the supporting information does not give the samples in which a protein was detected, an SD 'ND' or '± 0' marks a protein detected in too few samples for a spread. Extracted from the text of the supporting information (Europe PMC, PMC8424631) row by row; P-gp (MDR1) is the row of two lines."
+
+[measurements.protein]
+file = "protein.tsv"
+kind = "protein"
+unit = "pmol/g liver tissue"
+method = "QconCAT-based targeted proteomics (LC-MS/MS) of human liver microsomes, scaled by the microsomal protein per gram liver of each sample"
+location = "Table S8 of the supporting information"
+notes = "the caption gives pmol/g liver tissue, the column headers pmol/mg liver tissue; a ratio to the control does not depend on it"
+
+[groups.controls]
+condition = "control"
+description = "histologically normal liver tissue adjacent to tumours (colorectal cancer metastases and other tumours), Table S1"
+
+[groups.cirrhosis_A]
+condition = "cirrhosis"
+child_pugh = "A"
+etiology = "mixed"
+description = "mild cirrhosis, Child-Pugh class A (Table S2)"
+
+[groups.cirrhosis_B]
+condition = "cirrhosis"
+child_pugh = "B"
+etiology = "mixed"
+description = "moderate cirrhosis, Child-Pugh class B (Table S2)"
+
+[groups.cirrhosis_C]
+condition = "cirrhosis"
+child_pugh = "C"
+etiology = "mixed"
+description = "severe cirrhosis, Child-Pugh class C (Table S2)"

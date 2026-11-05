@@ -65,7 +65,7 @@ __all__ = [
 ]
 
 INTERSTITIAL = ("f_water_int", "f_water_pls", "r_protein_int_pls")
-"""The local ids of the constants of `K_int_pls`, keys of `data/distribution.toml`."""
+"""The local ids of the constants of `K_int_pls`, keys of `database/tables/distribution.toml`."""
 
 K_VAS = "k_vas"
 """The local id of the exchange between plasma and interstitium per organ volume."""
@@ -88,7 +88,7 @@ _DATA_UNITS: dict[str, UnitDefinition] = {
     "dimensionless": U.dimensionless,
     "1/min": U.per_min,
 }
-"""The units of the model for the units of `data/distribution.toml`."""
+"""The units of the model for the units of `database/tables/distribution.toml`."""
 
 _NAMES = {
     "f_water_int": "water fraction interstitial fluid",
@@ -100,7 +100,7 @@ _NAMES = {
 
 @cache
 def constants() -> dict[str, Value]:
-    """The constants of `data/distribution.toml` by key, values with their source."""
+    """The constants of `database/tables/distribution.toml` by key, values with their source."""
     return {
         key: Value(e["value"], _DATA_UNITS[e["unit"]], e["source"], e.get("notes"))
         for table in load("distribution").values()
@@ -109,7 +109,7 @@ def constants() -> dict[str, Value]:
 
 
 def constant(key: str) -> Parameter:
-    """The parameter of a constant of `data/distribution.toml`, with its source."""
+    """The parameter of a constant of `database/tables/distribution.toml`, with its source."""
     value = constants()[key]
     assert isinstance(value.unit, UnitDefinition)
     return annotate(

@@ -12,6 +12,7 @@ import roadrunner
 from sbmlutils.factory import Model, create_model
 
 from pkpdsim import impairment as presets
+from pkpdsim.database import integration
 from pkpdsim.pbpk import (
     MODEL_UNITS,
     Binding,
@@ -29,6 +30,7 @@ from pkpdsim.pbpk import (
 from pkpdsim.pbpk.builder import BuildResult
 from pkpdsim.pbpk.chemistry import MM
 from pkpdsim.pbpk.impairment import (
+    child_pugh_protein,
     impairment_objects,
     physiology_factors,
     unbound_fraction,
@@ -103,10 +105,17 @@ def test_child_pugh_class_values(model: BuildResult) -> None:
             CP["functional_liver"]["value"][k - 1], rel=1e-12
         )
         for protein in ("CYP3A4", "CYP2D6"):
-            expected = CP["proteins"][protein]["value"][k - 1]
-            assert r[ids.condition_factor("cp", protein)] == pytest.approx(expected)
+            consensus = integration.factor(
+                protein, {"condition": "cirrhosis", "child_pugh": "ABC"[k - 1]}
+            )
+            assert consensus is not None
+            # the factors have four significant digits of the consensus
+            expected = consensus.value
+            assert r[ids.condition_factor("cp", protein)] == pytest.approx(
+                expected, rel=5e-4
+            )
             assert r[ids.impairment_activity(protein, Organ.LIVER)] == pytest.approx(
-                expected
+                expected, rel=5e-4
             )
 
 
@@ -783,8 +792,12 @@ def test_enzyme_factor_multiplies_activity(model: BuildResult) -> None:
         r = person(CP_severity=3.0, LI__f_cyp3a4=f)
         r["[LI__Cti_drg]"] = 0.001
         rates[f] = r["LI__DRG2M"]
+        consensus = integration.factor(
+            "CYP3A4", {"condition": "cirrhosis", "child_pugh": "C"}
+        )
+        assert consensus is not None
         assert r[ids.impairment_activity("CYP3A4", Organ.LIVER)] == pytest.approx(
-            CP["proteins"]["CYP3A4"]["value"][2]
+            consensus.value, rel=5e-4
         )
     assert rates[0.5] == pytest.approx(0.5 * rates[1.0], rel=1e-12)
 
@@ -910,7 +923,13 @@ def test_dynamic_severity(tmp_path: Path, severity: str, value: float) -> None:
 
 
 def test_model_choices_are_cited_as_such(model: BuildResult) -> None:
-    """A vector with model-choice classes cites ModelChoice in the SBML notes."""
+    """A factor cites its studies, a model choice cites ModelChoice in the SBML notes.
+
+    The factor of a protein cites the studies of its consensus; a class
+    without a study is the interpolation between its neighbours, a model
+    choice (OATP1B3 of class A, whose only study detects it in too few
+    samples).
+    """
     import libsbml
 
     doc = libsbml.readSBMLFromFile(str(model.flat_path))
@@ -919,9 +938,16 @@ def test_model_choices_are_cited_as_such(model: BuildResult) -> None:
         .getParameter(ids.condition_factor("cp", "CYP3A4"))
         .getNotesString()
     )
-    assert "El-Khateeb" in notes
-    assert "A: a model choice" in notes
-    assert "Choice of the pkpdsim PBPK library" in notes
+    for author in ("El-Khateeb", "Drozdzik", "Prasad"):
+        assert author in notes
+    assert "random-effects meta-analysis" in notes
+    assert "a model choice" not in notes
+    entry = child_pugh_protein("SLCO1B3")
+    assert entry.choice == ("A",)
+    assert entry.values[0] == pytest.approx((1.0 + entry.values[1]) / 2)
+    provenance, sources = entry.provenance(("A", "B", "C"))
+    assert "A: a model choice" in provenance
+    assert "ModelChoice" in sources
     for key in ("albumin", "shunt"):
         notes = (
             doc.getModel()

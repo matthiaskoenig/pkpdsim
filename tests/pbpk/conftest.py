@@ -582,9 +582,11 @@ def assert_reference_sbml(result: BuildResult) -> None:
     by line but for the dates), and rebuilt with the output `T_st_eff` of the
     segmented intestine (additions only: the parameter, its initial
     assignment and port, the inputs `FED` and `fimp_t_stomach` of an
-    intestine without a lumen species, no line removed); a change of the
-    library which changes the SBML of every model on purpose rebuilds them
-    and says so.
+    intestine without a lumen species, no line removed), and the chemistry
+    references rebuilt with the factors of cirrhosis on CYP3A4 and SLCO1B1
+    of the consensus of the parameter database (`pkpdsim.database`, the
+    factors and their notes only); a change of the library which changes the
+    SBML of every model on purpose rebuilds them and says so.
     """
     for path in (result.comp_path, result.flat_path):
         reference = gzip.decompress((REFERENCE / f"{path.name}.gz").read_bytes())

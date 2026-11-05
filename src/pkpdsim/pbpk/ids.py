@@ -349,7 +349,7 @@ def condition_factor(condition: str, key: str) -> str:
     Args:
         condition: the condition, `cp` (Child-Pugh), `ckd` (chronic kidney
             disease) or `hf` (heart failure).
-        key: the key of the factor in `data/impairment.toml`, a protein in
+        key: the key of the factor in `database/tables/impairment.toml`, a protein in
             lower case.
     """
     return f"f{condition}_{key.lower()}"

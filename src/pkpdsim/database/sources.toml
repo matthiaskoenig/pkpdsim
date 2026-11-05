@@ -137,6 +137,10 @@ citation = "Huang W, Isoherranen N. Development of a dynamic physiologically bas
 doi = "10.1002/psp4.12321"
 
 
+[Drozdzik2021]
+citation = "Drozdzik M, Lapczuk-Romanska J, Wenzel C, Szelag-Pieniek S, Post M, Skalski Ł, Kurzawski M, Oswald S. Gene expression and protein abundance of hepatic drug metabolizing enzymes in liver pathology. Pharmaceutics 13(9):1334, 2021."
+doi = "10.3390/pharmaceutics13091334"
+
 [ElKhateeb2021]
 citation = "El-Khateeb E, Achour B, Al-Majdoub ZM, Barber J, Rostami-Hodjegan A. Non-uniformity of changes in drug-metabolizing enzymes and transporters in liver cirrhosis: implications for drug dosage adjustment. Mol Pharm 18(9):3563-3577, 2021."
 doi = "10.1021/acs.molpharmaceut.1c00462"
@@ -207,3 +211,7 @@ doi = "10.1124/dmd.120.090498"
 [Ye2016]
 citation = "Ye M, Nagar S, Korzekwa K. A physiologically based pharmacokinetic model to predict the pharmacokinetics of highly protein-bound drugs and the impact of errors in plasma protein binding. Biopharm Drug Dispos 37(3):123-141, 2016 (author manuscript PMC4844798)."
 doi = "10.1002/bdd.1996"
+
+[Prasad2018]
+citation = "Prasad B, Bhatt DK, Johnson K, Chapa R, Chu X, Salphati L, Xiao G, Lee C, Hop CE, Mathias A, Lai Y, Liao M, Humphreys WG, Kumer SC, Unadkat JD. Abundance of phase 1 and 2 drug-metabolizing enzymes in alcoholic and hepatitis C cirrhotic livers: a quantitative targeted proteomics study. Drug Metab Dispos 46(7):943-952, 2018."
+doi = "10.1124/dmd.118.080523"

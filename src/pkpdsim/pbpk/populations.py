@@ -1,10 +1,10 @@
 """The populations: the reference individual and the distributions of the covariates.
 
-A population is a set of data of the library (`data/populations/<key>.toml`):
+A population is a set of data of the library (`database/tables/populations/<key>.toml`):
 the reference covariates of each sex (body weight, height and, where the data
 give it, the age), which become the default individual of a model, and the
 distributions of the covariates for a later sampler of virtual individuals.
-The reference anatomy stays ICRP 89 (`data/physiology_human.toml`): the organ
+The reference anatomy stays ICRP 89 (`database/tables/physiology_human.toml`): the organ
 volumes and flows of a population's reference individual follow from the
 covariate scaling of `pkpdsim.pbpk.physiology` (Huisinga 2012) at its body
 weight and height. The population is chosen when the model is built
@@ -33,15 +33,14 @@ statistics of 2015). Its primary data were not read, so the library has no
 the distributions of `east_asian_tanaka`.
 """
 
-import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import cache
-from importlib import resources
 from typing import Any, Literal
 
 from sbmlutils.factory import UnitDefinition
 
+from pkpdsim.database.tables import load_folder
 from pkpdsim.pbpk import ids
 from pkpdsim.pbpk.data import load
 from pkpdsim.pbpk.physiology import AGE_DEFAULT, DEFAULT_POPULATION, MODEL_DEFAULT, Sex
@@ -80,7 +79,7 @@ class Distribution:
         mean: the mean.
         sd: the standard deviation.
         unit: the unit of mean and standard deviation.
-        source: the key of the source in `data/sources.toml`.
+        source: the key of the source in `database/sources.toml`.
         notes: where the numbers come from.
     """
 
@@ -99,7 +98,7 @@ class Population:
     Attributes:
         key: the key of the population, `PBPKDefinition.population`.
         name: the name.
-        source: the key of the source of the population in `data/sources.toml`.
+        source: the key of the source of the population in `database/sources.toml`.
         reference: the reference covariates (`BW`, `HEIGHT`, `AGE`) of each
             sex, the default individual of a model.
         covariates: the distributions of the covariates of each sex.
@@ -196,14 +195,8 @@ def _population(key: str, data: Mapping[str, Any]) -> Population:
 
 @cache
 def _populations() -> dict[str, Population]:
-    """All populations of `data/populations`, by key."""
-    folder = resources.files("pkpdsim.pbpk").joinpath("data", "populations")
-    found: dict[str, Population] = {}
-    for path in sorted(folder.iterdir(), key=lambda p: p.name):
-        if path.name.endswith(".toml"):
-            key = path.name.removesuffix(".toml")
-            found[key] = _population(key, tomllib.loads(path.read_text("utf-8")))
-    return found
+    """All populations of the tables `populations` of the database, by key."""
+    return {key: _population(key, data) for key, data in load_folder("populations")}
 
 
 POPULATIONS: dict[str, Population] = _populations()

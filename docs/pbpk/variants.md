@@ -93,7 +93,7 @@ J_reab_<s>: Ctub_cd_<s> -> Cpl_<s> = min(GFR * f_tub_cd * Ctub_cd_<s>, fu_<s> * 
  An apical efflux of the kidney secretes into the proximal tubule, an apical influx reabsorbs from it, with the inhibitors of its protein acting from the lumen. The urinary excretion rate `Rurine_<s>` is the outflow of the collecting duct, the output of the standard kidney with the same id.
 
 <!-- generated: nephron-segments (scripts/pbpk_tables.py), do not edit -->
-*Generated from `data/kidney_human.toml` by `scripts/pbpk_tables.py`; the notes of every number are in the data file.*
+*Generated from `database/tables/kidney_human.toml` by `scripts/pbpk_tables.py`; the notes of every number are in the database.*
 
 | segment | flow leaving, fraction of GFR [-] | volume [l] |
 | --- | ---: | ---: |

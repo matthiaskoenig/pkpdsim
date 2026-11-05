@@ -3,7 +3,7 @@
 The observers read the pool species and the outflow concentrations of the
 organs: the unbound and the blood concentration of every pool, the hepatic
 vein and the arm vein, the flow-weighted mix of the venous outflows of the
-organs of a preset of `data/arm_vein.toml`. The kidney exposes the urinary
+organs of a preset of `database/tables/arm_vein.toml`. The kidney exposes the urinary
 excretion rate `Rurine_<s>`, and a definition adds observers of its own.
 """
 

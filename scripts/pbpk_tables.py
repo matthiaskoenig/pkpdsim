@@ -1,10 +1,11 @@
-"""Write the data tables of the pages of the PBPK library from its data files.
+"""Write the data tables of the pages of the PBPK library and the database.
 
 The pages of `docs/pbpk/` show the reference physiology, the populations, the
 impairment vectors, the arm vein presets, the intestine, the nephron and the
-proteins as tables. The numbers are those of the TOML files of
-`pkpdsim/pbpk/data`, never typed by hand: a page marks the region of a table
-with
+proteins as tables, `docs/database.md` the studies of the database and their
+consensus. The numbers are those of the parameter database
+`pkpdsim/database` (its tables and the consensus of its studies), never typed
+by hand: a page marks the region of a table with
 
 ```
 <!-- generated: <name> (scripts/pbpk_tables.py), do not edit -->
@@ -30,13 +31,19 @@ from typing import Any
 
 from sbmlutils.factory import UnitDefinition
 
+from pkpdsim.database import integration
+from pkpdsim.database.studies import KINDS, studies
 from pkpdsim.pbpk.data import load, sources
+from pkpdsim.pbpk.impairment import child_pugh_protein, child_pugh_proteins
 from pkpdsim.pbpk.organs import Organ
 from pkpdsim.pbpk.physiology import Sex
 from pkpdsim.pbpk.populations import POPULATIONS
+from pkpdsim.pbpk.proteins import PROTEINS
 
 REPO_DIR: Path = Path(__file__).parent.parent
 PBPK_DIR: Path = REPO_DIR / "docs" / "pbpk"
+PAGES: list[Path] = [*sorted(PBPK_DIR.glob("*.md")), REPO_DIR / "docs" / "database.md"]
+"""The pages with generated tables."""
 
 END = "<!-- end generated -->"
 _REGION = re.compile(
@@ -109,7 +116,7 @@ def _generated(files: str, lines: list[str], cited: Iterable[str]) -> str:
         references.append(f"- `{key}`: {source.citation}{doi}")
     notice = (
         f"*Generated from {files} by `scripts/pbpk_tables.py`; "
-        "the notes of every number are in the data file.*"
+        "the notes of every number are in the database.*"
     )
     parts = [notice, "", *lines]
     if references:
@@ -207,7 +214,7 @@ def physiology_general() -> str:
         rows.append([label, _unit(tables, key), _value(male), _value(female)])
         cited += [male["source"], female["source"]]
     lines = _table(["quantity", "unit", "male", "female"], rows)
-    return _generated("`data/physiology_human.toml`", lines, cited)
+    return _generated("`database/tables/physiology_human.toml`", lines, cited)
 
 
 def _organs(sex: Sex) -> str:
@@ -231,7 +238,7 @@ def _organs(sex: Sex) -> str:
     columns = {k: k for k in ("mass", "density", "blood", "f_vas", "f_int", "flow")}
     line, cited = _column_sources(organs.values(), columns)
     lines = [*_table(header, rows), "", line]
-    return _generated("`data/physiology_human.toml`", lines, cited)
+    return _generated("`database/tables/physiology_human.toml`", lines, cited)
 
 
 def physiology_organs_male() -> str:
@@ -280,7 +287,7 @@ def populations() -> str:
         "covariates",
     ]
     lines = _table(header, rows)
-    return _generated("`data/populations/*.toml`", lines, cited)
+    return _generated("`database/tables/populations/*.toml`", lines, cited)
 
 
 def _vector_table(
@@ -308,14 +315,97 @@ _CHOICE = "A value marked `*` is a choice of the library, not a value of the sou
 def impairment_child_pugh() -> str:
     """The factors of the Child-Pugh classes on the physiology."""
     lines, cited = _vector_table(load("impairment")["child_pugh"], ["A", "B", "C"])
-    return _generated("`data/impairment.toml`", lines, cited)
+    return _generated("`database/tables/impairment.toml`", lines, cited)
+
+
+def _consensus_cell(c: integration.Consensus | None) -> str:
+    """A cell of a consensus: the ratio, its 95 % CI and the number of studies."""
+    if c is None:
+        return ""
+    lo, hi = c.ci
+    mark = "" if c.kind == "protein" else " (mRNA)"
+    return (
+        f"{_number(c.value)} [{_number(lo)}-{_number(hi)}] ({len(c.estimates)}){mark}"
+    )
 
 
 def impairment_child_pugh_proteins() -> str:
-    """The factors of the Child-Pugh classes on the proteins of the liver."""
-    section = load("impairment")["child_pugh"]["proteins"]
-    lines, cited = _vector_table(section, ["A", "B", "C"], first="protein")
-    return _generated("`data/impairment.toml`", [*lines, "", _CHOICE], cited)
+    """The factors of the Child-Pugh classes on the proteins of the library in the liver."""
+    rows = []
+    cited: list[str] = []
+    for protein in sorted(child_pugh_proteins() & set(PROTEINS)):
+        entry = child_pugh_protein(protein)
+        cells = [
+            _number(v) + ("*" if c in entry.choice else "")
+            for v, c in zip(entry.values, ("A", "B", "C"), strict=True)
+        ]
+        cited += entry.sources
+        rows.append(
+            [f"`{protein}`", *cells, ", ".join(f"`{s}`" for s in entry.sources)]
+        )
+    lines = _table(["protein", "A", "B", "C", "studies"], rows)
+    note = (
+        "The consensus of the studies of the database on the abundance per amount "
+        "of liver tissue over the controls, see [the database](../database.md); "
+        "a value marked `*` is the interpolation of a class without a study, a "
+        "choice of the library."
+    )
+    return _generated("the studies of `pkpdsim/database`", [*lines, "", note], cited)
+
+
+def database_studies() -> str:
+    """The studies of the database with their measurements and groups."""
+    rows = []
+    for key, study in studies().items():
+        for m in study.measurements.values():
+            groups = sorted({r.group.id for r in m.records} - {study.control})
+            rows.append(
+                [
+                    f"`{key}`",
+                    KINDS[m.kind],
+                    m.unit,
+                    str(len({r.entity for r in m.records})),
+                    str(len(m.records)),
+                    str(len(groups) + 1),
+                    m.location,
+                ]
+            )
+    lines = _table(
+        ["study", "measurement", "unit", "entities", "records", "groups", "location"],
+        rows,
+    )
+    return _generated("`pkpdsim/database/studies`", lines, list(studies()))
+
+
+def database_cirrhosis() -> str:
+    """The consensus of every entity of the liver in the Child-Pugh classes."""
+    rows = []
+    cited: list[str] = []
+    for entity in sorted(
+        set(integration.entities("protein")) | set(integration.entities("mrna"))
+    ):
+        cells = []
+        for cls in ("A", "B", "C"):
+            c = integration.factor(
+                entity, {"condition": "cirrhosis", "child_pugh": cls}
+            )
+            cells.append(_consensus_cell(c))
+            if c is not None:
+                cited += c.sources
+        if any(cells):
+            rows.append([f"`{entity}`", *cells])
+    lines = _table(["entity", "A", "B", "C"], rows)
+    note = (
+        "The ratio of the class to the controls with its 95 % confidence "
+        "interval and the number of studies, the protein abundance per amount "
+        "of liver tissue, `(mRNA)` the mRNA expression of an entity without a "
+        "protein abundance."
+    )
+    return _generated(
+        "the studies of `pkpdsim/database`",
+        [*lines, "", note],
+        cited,
+    )
 
 
 def impairment_ckd() -> str:
@@ -342,7 +432,7 @@ def impairment_ckd() -> str:
         f"(`{tubular['source']}`).",
     ]
     return _generated(
-        "`data/impairment.toml`",
+        "`database/tables/impairment.toml`",
         [*head, *lines, "", _CHOICE, "", *tail],
         [*cited, stages["source"], anchors["source"], tubular["source"]],
     )
@@ -353,7 +443,7 @@ def impairment_ckd_proteins() -> str:
     section = load("impairment")["ckd"]["proteins"]
     stages = ["mild", "moderate", "severe", "end stage"]
     lines, cited = _vector_table(section, stages, first="protein")
-    return _generated("`data/impairment.toml`", [*lines, "", _CHOICE], cited)
+    return _generated("`database/tables/impairment.toml`", [*lines, "", _CHOICE], cited)
 
 
 def impairment_ckd_binding() -> str:
@@ -365,14 +455,16 @@ def impairment_ckd_binding() -> str:
         for key, entry in section.items()
     )
     tail = [f"The rows: {rows}. The factor of a protein is the product of its rows."]
-    return _generated("`data/impairment.toml`", [*lines, "", _CHOICE, "", *tail], cited)
+    return _generated(
+        "`database/tables/impairment.toml`", [*lines, "", _CHOICE, "", *tail], cited
+    )
 
 
 def impairment_heart_failure() -> str:
     """The factors of the NYHA classes on the blood flows."""
     section = load("impairment")["heart_failure"]
     lines, cited = _vector_table(section, ["I", "II", "III", "IV"])
-    return _generated("`data/impairment.toml`", [*lines, "", _CHOICE], cited)
+    return _generated("`database/tables/impairment.toml`", [*lines, "", _CHOICE], cited)
 
 
 def arm_vein() -> str:
@@ -392,7 +484,7 @@ def arm_vein() -> str:
             ]
         )
     lines = _table(["preset", *sites, "source"], rows)
-    return _generated("`data/arm_vein.toml`", lines, cited)
+    return _generated("`database/tables/arm_vein.toml`", lines, cited)
 
 
 def intestine_segments() -> str:
@@ -419,7 +511,7 @@ def intestine_segments() -> str:
     header = ["segment", *(_header(label, entries, k) for k, label in columns.items())]
     line, cited = _column_sources(segments.values(), columns)
     lines = [*_table(header, rows), "", line]
-    return _generated("`data/intestine_human.toml`", lines, cited)
+    return _generated("`database/tables/intestine_human.toml`", lines, cited)
 
 
 def nephron_segments() -> str:
@@ -442,7 +534,7 @@ def nephron_segments() -> str:
     columns = {"flow_fraction": "flow", "volume": "volume"}
     line, cited = _column_sources(data.values(), columns)
     lines = [*_table(header, rows), "", line]
-    return _generated("`data/kidney_human.toml`", lines, cited)
+    return _generated("`database/tables/kidney_human.toml`", lines, cited)
 
 
 def proteins() -> str:
@@ -467,7 +559,7 @@ def proteins() -> str:
         + ".",
     ]
     cited = [data["source"], *(e["source"] for e in turnover.values())]
-    return _generated("`data/proteins.toml`", lines, cited)
+    return _generated("`database/tables/proteins.toml`", lines, cited)
 
 
 TABLES: dict[str, Callable[[], str]] = {
@@ -485,6 +577,8 @@ TABLES: dict[str, Callable[[], str]] = {
     "intestine-segments": intestine_segments,
     "nephron-segments": nephron_segments,
     "proteins": proteins,
+    "database-studies": database_studies,
+    "database-cirrhosis": database_cirrhosis,
 }
 """The tables by the name of their region."""
 
@@ -512,8 +606,8 @@ def render_page(text: str) -> str:
 
 
 def main() -> None:
-    """Write the tables into the pages of `docs/pbpk/`."""
-    for page in sorted(PBPK_DIR.glob("*.md")):
+    """Write the tables into the pages of `docs/pbpk/` and `docs/database.md`."""
+    for page in PAGES:
         text = page.read_text(encoding="utf-8")
         rendered = render_page(text)
         if rendered != text:

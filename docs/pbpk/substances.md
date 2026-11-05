@@ -71,7 +71,7 @@ MUSCLE 0.1347
 SKIN 0.5386
 ```
 
-`KpMethod("rodgers_rowland", logp=..., pka=(...), compound=...)` computes the coefficient of every organ when the model is built, from the lipophilicity, the ionisation and the tissue composition (Rodgers, Leahy & Rowland 2005, Rodgers & Rowland 2006, in the form of Yau 2020), and writes `Kp_<o>_<s> = fKp_<s>*value`: one factor `fKp_<s>` (`factor=`, default 1) scales all coefficients, so a fit can adjust them together. A base with a pKa of at least 7 binds to the acidic phospholipids, whose affinity follows from the erythrocytes, so it needs `Erythrocytes(bp=...)` or a `kbc`. The coefficients are numbers of the build: a change of `fu` by an impairment does not recompute them. The rat tissue composition is applied to the human tissues (Rodgers & Rowland 2007, Coutinho 2024), the acidic phospholipids and the erythrocytes are the rat values of Utsey 2020 as well, so every number of `data/tissue_composition.toml` has a source of the literature.
+`KpMethod("rodgers_rowland", logp=..., pka=(...), compound=...)` computes the coefficient of every organ when the model is built, from the lipophilicity, the ionisation and the tissue composition (Rodgers, Leahy & Rowland 2005, Rodgers & Rowland 2006, in the form of Yau 2020), and writes `Kp_<o>_<s> = fKp_<s>*value`: one factor `fKp_<s>` (`factor=`, default 1) scales all coefficients, so a fit can adjust them together. A base with a pKa of at least 7 binds to the acidic phospholipids, whose affinity follows from the erythrocytes, so it needs `Erythrocytes(bp=...)` or a `kbc`. The coefficients are numbers of the build: a change of `fu` by an impairment does not recompute them. The rat tissue composition is applied to the human tissues (Rodgers & Rowland 2007, Coutinho 2024), the acidic phospholipids and the erythrocytes are the rat values of Utsey 2020 as well, so every number of `database/tables/tissue_composition.toml` has a source of the literature.
 
 ```python
 from pkpdsim.pbpk import Binding, Erythrocytes, KpMethod, Organ, Sex, Substance
@@ -172,7 +172,7 @@ A `Formula` baseline is the initial assignment of `baseline_<s>`, so a model can
 
 ## Values, fits and ids
 
-A number of a substance is a plain float in the units of the model or a `Value` with unit and source (a key of `data/sources.toml` of the library); a fitted number is `fitted(FITS.parameter(pid, unit=...))`, which carries the distrib uncertainty of the fit into the SBML parameter (`notes=` adds a remark to the notes of the parameter, e.g. the literature of a process):
+A number of a substance is a plain float in the units of the model or a `Value` with unit and source (a key of `database/sources.toml` of the library); a fitted number is `fitted(FITS.parameter(pid, unit=...))`, which carries the distrib uncertainty of the fit into the SBML parameter (`notes=` adds a remark to the notes of the parameter, e.g. the literature of a process):
 
 ```python
 # not executed: FITS are the adopted fits of a model package

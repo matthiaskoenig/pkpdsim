@@ -38,10 +38,10 @@ Carm_blood_prm = (1 - HCT) * Carm_prm + HCT * (w_arm_sk * Cout_sk_bc_prm + w_arm
 
 ## Arm vein
 
-Plasma and blood are typically sampled from an antecubital or forearm vein, whose blood is the venous outflow of the tissues of the arm, not the mixed venous blood of the venous pool. The arm vein observer is the flow-weighted mix of the venous plasma outflows of organs (and the arterial plasma) with the weights `w_arm_<site>` of a preset of `data/arm_vein.toml`, selected by `PBPKDefinition.arm_vein`. The default `pksim_default` is the mix of skin and muscle of the PK-Sim documentation ("about 70 %" skin and "30 %" muscle), taken as 0.7 and 0.3 as documented and not from the database of PK-Sim; the presets of Levitt 2004 and Musther 2015 add the arteriovenous shunt of the hand, and `arterialised` (a heated hand vein) is the arterial plasma.
+Plasma and blood are typically sampled from an antecubital or forearm vein, whose blood is the venous outflow of the tissues of the arm, not the mixed venous blood of the venous pool. The arm vein observer is the flow-weighted mix of the venous plasma outflows of organs (and the arterial plasma) with the weights `w_arm_<site>` of a preset of `database/tables/arm_vein.toml`, selected by `PBPKDefinition.arm_vein`. The default `pksim_default` is the mix of skin and muscle of the PK-Sim documentation ("about 70 %" skin and "30 %" muscle), taken as 0.7 and 0.3 as documented and not from the database of PK-Sim; the presets of Levitt 2004 and Musther 2015 add the arteriovenous shunt of the hand, and `arterialised` (a heated hand vein) is the arterial plasma.
 
 <!-- generated: arm-vein (scripts/pbpk_tables.py), do not edit -->
-*Generated from `data/arm_vein.toml` by `scripts/pbpk_tables.py`; the notes of every number are in the data file.*
+*Generated from `database/tables/arm_vein.toml` by `scripts/pbpk_tables.py`; the notes of every number are in the database.*
 
 | preset | adipose | arterial | muscle | skin | source |
 | --- | ---: | ---: | ---: | ---: | --- |

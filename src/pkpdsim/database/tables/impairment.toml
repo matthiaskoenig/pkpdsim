@@ -11,22 +11,15 @@
 # factors are those which Alasmari 2024 (Pharmaceutics 16:1540, Table 3, CC BY
 # 4.0, doi:10.3390/pharmaceutics16121540, the publication read) attribute to
 # Edginton & Willmann 2008 (doi:10.2165/00003088-200847110-00005, not read);
-# they are model choices, not verified. The enzymes and transporters are the
-# median abundances per g liver of El-Khateeb 2021 (Figures 1, 2 and 4, the
-# percentages of change from the control which the figures annotate; open
-# access, CC BY 4.0), the only source with all three classes; a class the
-# figures do not annotate (no significant change, CP-A has n = 6) is the
-# linear interpolation between healthy and the next annotated class, a model
-# choice (`choice`). Johnson 2010 (Clin Pharmacokinet 49:189,
-# doi:10.2165/11318160-000000000-00000), the abundance factors of the Simcyp
-# cirrhosis populations, was not accessible and is not used. Prasad 2018 (Drug
-# Metab Dispos 46:943, doi:10.1124/dmd.118.080523, Table 3) measured
-# end-stage (assumed Child-Pugh C) alcoholic and HCV cirrhotic livers: the
-# ratios to the control (alcoholic, HCV) CYP3A4 0.12, 0.23; CYP1A2 0.17, 0.22;
-# CYP2E1 0.27, 0.41; CYP2C9 0.45, 0.42; CYP2C8 0.41, 0.46; CYP2A6 0.36, 0.31;
-# CYP2D6 0.72, 0.64; UGT2B7 0.14, 0.16 agree with El-Khateeb 2021 for class C
-# within the variability, but for CYP2D6, CYP2C8 and CYP2C9, which El-Khateeb
-# 2021 find more reduced (they discuss it).
+# they are model choices, not verified. The enzymes and transporters are no
+# numbers of this table: they are the consensus of the studies of the database
+# (`pkpdsim/database/studies`, `pkpdsim.database.integration`), the ratio of
+# the abundance per amount of liver tissue of each class to the controls of
+# each study, pooled over the studies (El-Khateeb 2021, Drozdzik 2021 and
+# Prasad 2018, whose end-stage livers are assumed to be class C). Johnson 2010
+# (Clin Pharmacokinet 49:189, doi:10.2165/11318160-000000000-00000), the
+# abundance factors of the Simcyp cirrhosis populations, was not accessible
+# and is not used.
 #
 # The shunt and the portal blood flow (reconciliation): the shunt fractions
 # are the degrees of cirrhosis of the Child-Pugh classes of
@@ -97,24 +90,6 @@ gfr = { value = [1.0, 0.70, 0.36], unit = "dimensionless", source = "ModelChoice
 albumin = { value = [0.81, 0.68, 0.50], unit = "dimensionless", source = "ModelChoice", notes = "plasma albumin relative to healthy, the binding protein factor of fu: the values of Edginton & Willmann 2008 as tabulated in Alasmari 2024, Table 3 (the publication read); not verified" }
 agp = { value = [0.60, 0.56, 0.30], unit = "dimensionless", source = "ModelChoice", notes = "plasma alpha-1-acid glycoprotein relative to healthy, the binding protein factor of fu: the values of Edginton & Willmann 2008 as tabulated in Alasmari 2024, Table 3 (the publication read); not verified" }
 hematocrit = { value = [1.0, 1.0, 1.0], unit = "dimensionless", source = "ModelChoice", notes = "hematocrit relative to healthy: 1 until a source with its healthy value is read; Alasmari 2024 (Table 3, the publication read) tabulate absolute hematocrits of 0.39, 0.37 and 0.35 for the classes A, B, C (attributed to Edginton & Willmann 2008, not read) without the healthy hematocrit of the population, so no relative factor can be derived" }
-
-[child_pugh.proteins]
-CYP1A2 = { value = [0.69, 0.38, 0.13], choice = ["A"], unit = "dimensionless", source = "ElKhateeb2021", notes = "Figure 1: B -62 %, C -87 % of control; A not annotated, the midpoint of healthy and B (model choice)" }
-CYP2A6 = { value = [0.725, 0.45, 0.28], choice = ["A"], unit = "dimensionless", source = "ElKhateeb2021", notes = "Figure 1: B -55 %, C -72 %; A the midpoint of healthy and B (model choice)" }
-CYP2B6 = { value = [1.0, 1.0, 1.0], unit = "dimensionless", source = "ElKhateeb2021", notes = "Figure 1 and Results: no significant change in any class" }
-CYP2C8 = { value = [0.685, 0.37, 0.25], choice = ["A"], unit = "dimensionless", source = "ElKhateeb2021", notes = "Figure 1: B -63 %, C -75 %; A the midpoint of healthy and B (model choice)" }
-CYP2C9 = { value = [0.73, 0.46, 0.23], choice = ["A"], unit = "dimensionless", source = "ElKhateeb2021", notes = "Figure 1: B -54 %, C -77 %; A the midpoint of healthy and B (model choice)" }
-CYP2C18 = { value = [0.8, 0.6, 0.40], choice = ["A", "B"], unit = "dimensionless", source = "ElKhateeb2021", notes = "Figure 1: C -60 %; A and B not annotated, the linear interpolation between healthy and C (model choice)" }
-CYP2C19 = { value = [0.51, 0.02, 0.05], choice = ["A"], unit = "dimensionless", source = "ElKhateeb2021", notes = "Figure 1: B -98 %, C -95 %; A the midpoint of healthy and B (model choice)" }
-CYP2D6 = { value = [0.70, 0.40, 0.30], choice = ["A"], unit = "dimensionless", source = "ElKhateeb2021", notes = "Figure 1: B -60 %, C -70 %; A the midpoint of healthy and B (model choice)" }
-CYP2E1 = { value = [0.695, 0.39, 0.14], choice = ["A"], unit = "dimensionless", source = "ElKhateeb2021", notes = "Figure 1: B -61 %, C -86 %; A the midpoint of healthy and B (model choice)" }
-CYP3A4 = { value = [0.615, 0.23, 0.20], choice = ["A"], unit = "dimensionless", source = "ElKhateeb2021", notes = "Figure 1: B -77 %, C -80 %; A the midpoint of healthy and B (model choice)" }
-UGT1A1 = { value = [1.0, 1.0, 1.0], unit = "dimensionless", source = "ElKhateeb2021", notes = "Figure 2: no significant change in any class" }
-UGT1A9 = { value = [0.74, 0.48, 0.28], choice = ["A"], unit = "dimensionless", source = "ElKhateeb2021", notes = "Figure 2: B -52 %, C -72 %; A the midpoint of healthy and B (model choice)" }
-UGT2B7 = { value = [0.65, 0.30, 0.13], choice = ["A"], unit = "dimensionless", source = "ElKhateeb2021", notes = "Figure 2: B -70 %, C -87 %; A the midpoint of healthy and B (model choice)" }
-SLCO1B1 = { value = [0.46, 0.42, 0.30], unit = "dimensionless", source = "ElKhateeb2021", notes = "Figure 4 (OATP1B1): A -54 %, B -58 %, C -70 %" }
-SLCO1B3 = { value = [1.0, 1.0, 1.0], unit = "dimensionless", source = "ElKhateeb2021", notes = "Results (OATP1B3): no significant change in any class" }
-ABCC2 = { value = [0.46, 0.34, 0.18], unit = "dimensionless", source = "ElKhateeb2021", notes = "Figure 4 (MRP2): A -54 %, B -66 %, C -82 %; P-gp (ABCB1) and OCT1 (SLC22A1) are not included, the annotations of their panels do not name the compared classes unambiguously" }
 
 [ckd]
 stage_gfr = { value = [90.0, 60.0, 30.0, 15.0], unit = "ml/min/1.73 m2", source = "Yoshida2016", notes = "lower limits of the GFR per 1.73 m2 of normal function and of mild, moderate and severe CKD (Methods: mild 60-89, moderate 30-59, severe 15-29, end stage < 15 ml/min/1.73 m2, the classes of the FDA guidance)" }

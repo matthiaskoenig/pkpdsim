@@ -1,6 +1,6 @@
 # Impairment
 
-Impaired organ function is a set of parameter vectors on the physiology, never a structurally different model: three severities of the top model set factors on the quantities of the healthy individual, the liver and the binding to plasma proteins. All severities 0 give the healthy model, every factor is 1. The numbers are those of `data/impairment.toml`, every number with its source; a number which no publication read gives is a choice of the library (`ModelChoice`) with a note.
+Impaired organ function is a set of parameter vectors on the physiology, never a structurally different model: three severities of the top model set factors on the quantities of the healthy individual, the liver and the binding to plasma proteins. All severities 0 give the healthy model, every factor is 1. The numbers are those of `database/tables/impairment.toml`, every number with its source; a number which no publication read gives is a choice of the library (`ModelChoice`) with a note.
 
 <div class="pbpk-figure" markdown="0">
 --8<-- "pbpk/img/impairment.svg"
@@ -42,7 +42,7 @@ fcp_rest_flow = 1 + (fcp_cardiac_index - 1 - (fQli * (fcp_hepatic_artery_flow - 
 The organs without a factor of their own (heart, muscle, skin, adipose, bone, gonads) close the cardiac output to the cardiac index of the class (`fcp_rest_flow`). The brain (autoregulation of the cerebral blood flow, a choice of the library) and the portal organs (the shunt represents the portal blood which does not reach the liver) keep their flow.
 
 <!-- generated: impairment-child-pugh (scripts/pbpk_tables.py), do not edit -->
-*Generated from `data/impairment.toml` by `scripts/pbpk_tables.py`; the notes of every number are in the data file.*
+*Generated from `database/tables/impairment.toml` by `scripts/pbpk_tables.py`; the notes of every number are in the database.*
 
 | factor | A | B | C | source |
 | --- | ---: | ---: | ---: | --- |
@@ -63,35 +63,38 @@ The organs without a factor of their own (heart, muscle, skin, adipose, bone, go
 
 The physiological factors are those which Alasmari 2024 (Table 3) attribute to Edginton & Willmann 2008. Edginton 2008 was not read, so they are choices of the library, not verified against the paper, and are named in the notes as such. The shunt and the portal blood flow describe the same portal blood which does not reach the sinusoids; applied together they would count it twice. The library takes the shunt: the shunt fractions are the degrees of cirrhosis of the Child-Pugh classes of `pkpdsim.impairment.CIRRHOSIS` (the ICG models of the König lab, a choice of the library), the splanchnic flow of the portal organs is not reduced, and the fraction `f_shunt` of the liver inflow bypasses the liver, so the portal blood which perfuses the liver is 0.60, 0.30 and 0.19 of healthy (Edginton 2008: 0.40, 0.36, 0.04). The shunt acts on the hepatic arterial inflow as well.
 
-The enzymes and transporters are the median abundances of El-Khateeb 2021 (the only source with all three classes); a class the figures do not annotate is the linear interpolation between healthy and the next annotated class, a choice of the library. Johnson 2010 (the abundance factors of the Simcyp cirrhosis populations) was not accessible and is not used; Prasad 2018 agrees with El-Khateeb 2021 for class C within the variability, but for CYP2D6, CYP2C8 and CYP2C9.
+The enzymes and transporters of the liver are the consensus of the studies of the [parameter database](../database.md): the ratio of the abundance per amount of liver tissue of each Child-Pugh class to the controls of each study on the log scale, pooled over the studies by a random-effects meta-analysis (El-Khateeb 2021, Drozdzik 2021 and Prasad 2018, whose end-stage livers are assumed to be class C), the mRNA expression only for a protein without an abundance. The notes of every factor give the consensus of each class with its 95 % confidence interval and the ratio of every study. A class without a study is the interpolation between its neighbours (healthy 1) or the last class with a study, a choice of the library. Johnson 2010 (the abundance factors of the Simcyp cirrhosis populations) was not accessible and is not used.
 
 <!-- generated: impairment-child-pugh-proteins (scripts/pbpk_tables.py), do not edit -->
-*Generated from `data/impairment.toml` by `scripts/pbpk_tables.py`; the notes of every number are in the data file.*
+*Generated from the studies of `pkpdsim/database` by `scripts/pbpk_tables.py`; the notes of every number are in the database.*
 
-| protein | A | B | C | source |
+| protein | A | B | C | studies |
 | --- | ---: | ---: | ---: | --- |
-| `CYP1A2` | 0.69* | 0.38 | 0.13 | `ElKhateeb2021` |
-| `CYP2A6` | 0.725* | 0.45 | 0.28 | `ElKhateeb2021` |
-| `CYP2B6` | 1 | 1 | 1 | `ElKhateeb2021` |
-| `CYP2C8` | 0.685* | 0.37 | 0.25 | `ElKhateeb2021` |
-| `CYP2C9` | 0.73* | 0.46 | 0.23 | `ElKhateeb2021` |
-| `CYP2C18` | 0.8* | 0.6* | 0.4 | `ElKhateeb2021` |
-| `CYP2C19` | 0.51* | 0.02 | 0.05 | `ElKhateeb2021` |
-| `CYP2D6` | 0.7* | 0.4 | 0.3 | `ElKhateeb2021` |
-| `CYP2E1` | 0.695* | 0.39 | 0.14 | `ElKhateeb2021` |
-| `CYP3A4` | 0.615* | 0.23 | 0.2 | `ElKhateeb2021` |
-| `UGT1A1` | 1 | 1 | 1 | `ElKhateeb2021` |
-| `UGT1A9` | 0.74* | 0.48 | 0.28 | `ElKhateeb2021` |
-| `UGT2B7` | 0.65* | 0.3 | 0.13 | `ElKhateeb2021` |
-| `SLCO1B1` | 0.46 | 0.42 | 0.3 | `ElKhateeb2021` |
-| `SLCO1B3` | 1 | 1 | 1 | `ElKhateeb2021` |
-| `ABCC2` | 0.46 | 0.34 | 0.18 | `ElKhateeb2021` |
+| `ABCB1` | 1.317 | 0.6098 | 0.5488 | `ElKhateeb2021` |
+| `ABCC2` | 0.4558 | 0.3401 | 0.1837 | `ElKhateeb2021` |
+| `ABCC3` | 0.8111 | 0.5556 | 0.5556 | `ElKhateeb2021` |
+| `ABCC4` | 0.3636 | 0.6364 | 0.2727 | `ElKhateeb2021` |
+| `ABCG2` | 0.75 | 1.25 | 1 | `ElKhateeb2021` |
+| `CYP1A2` | 0.481 | 0.536 | 0.1869 | `Drozdzik2021`, `ElKhateeb2021`, `Prasad2018` |
+| `CYP2C19` | 0.793 | 0.1162 | 0.2467 | `Drozdzik2021`, `ElKhateeb2021` |
+| `CYP2C8` | 0.6561 | 0.3706 | 0.3428 | `Drozdzik2021`, `ElKhateeb2021`, `Prasad2018` |
+| `CYP2C9` | 0.9053 | 0.7152 | 0.415 | `Drozdzik2021`, `ElKhateeb2021`, `Prasad2018` |
+| `CYP2D6` | 0.824 | 0.7194 | 0.5954 | `Drozdzik2021`, `ElKhateeb2021`, `Prasad2018` |
+| `CYP3A4` | 0.5981 | 0.3449 | 0.1816 | `Drozdzik2021`, `ElKhateeb2021`, `Prasad2018` |
+| `SLC22A1` | 0.4498 | 0.2307 | 0.1845 | `ElKhateeb2021` |
+| `SLCO1B1` | 0.4545 | 0.4182 | 0.297 | `ElKhateeb2021` |
+| `SLCO1B3` | 0.6037* | 0.2074 | 0.08889 | `ElKhateeb2021` |
+| `UGT1A1` | 1.49 | 1.204 | 0.9976 | `Drozdzik2021`, `ElKhateeb2021` |
+| `UGT1A9` | 1.356 | 0.4759 | 0.2799 | `ElKhateeb2021` |
+| `UGT2B7` | 0.7633 | 0.4251 | 0.2091 | `Drozdzik2021`, `ElKhateeb2021`, `Prasad2018` |
 
-A value marked `*` is a choice of the library, not a value of the source.
+The consensus of the studies of the database on the abundance per amount of liver tissue over the controls, see [the database](../database.md); a value marked `*` is the interpolation of a class without a study, a choice of the library.
 
 ??? note "Sources"
 
+    - `Drozdzik2021`: Drozdzik M, Lapczuk-Romanska J, Wenzel C, Szelag-Pieniek S, Post M, Skalski Ł, Kurzawski M, Oswald S. Gene expression and protein abundance of hepatic drug metabolizing enzymes in liver pathology. Pharmaceutics 13(9):1334, 2021. [doi:10.3390/pharmaceutics13091334](https://doi.org/10.3390/pharmaceutics13091334)
     - `ElKhateeb2021`: El-Khateeb E, Achour B, Al-Majdoub ZM, Barber J, Rostami-Hodjegan A. Non-uniformity of changes in drug-metabolizing enzymes and transporters in liver cirrhosis: implications for drug dosage adjustment. Mol Pharm 18(9):3563-3577, 2021. [doi:10.1021/acs.molpharmaceut.1c00462](https://doi.org/10.1021/acs.molpharmaceut.1c00462)
+    - `Prasad2018`: Prasad B, Bhatt DK, Johnson K, Chapa R, Chu X, Salphati L, Xiao G, Lee C, Hop CE, Mathias A, Lai Y, Liao M, Humphreys WG, Kumer SC, Unadkat JD. Abundance of phase 1 and 2 drug-metabolizing enzymes in alcoholic and hepatitis C cirrhotic livers: a quantitative targeted proteomics study. Drug Metab Dispos 46(7):943-952, 2018. [doi:10.1124/dmd.118.080523](https://doi.org/10.1124/dmd.118.080523)
 <!-- end generated -->
 
 ## Chronic kidney disease
@@ -107,7 +110,7 @@ fckd_plasma_protein = piecewise(1, eGFR >= 0.09, 1, eGFR >= 0.075, 1 + 0.45 * (0
 ```
 
 <!-- generated: impairment-ckd (scripts/pbpk_tables.py), do not edit -->
-*Generated from `data/impairment.toml` by `scripts/pbpk_tables.py`; the notes of every number are in the data file.*
+*Generated from `database/tables/impairment.toml` by `scripts/pbpk_tables.py`; the notes of every number are in the database.*
 
 Stage limits of the GFR per 1.73 m2 (ml/min/1.73 m2): 90, 60, 30, 15 (`Yoshida2016`).
 
@@ -138,7 +141,7 @@ The factor `plasma_protein` of the binding capacity acts on the binding to an un
 The hepatic proteins (switch `CKD_hepatic`, off by default) are the mean ratios of the unbound clearance of model drugs (Yoshida 2016, Tan 2018), taken as the activity of the pathway:
 
 <!-- generated: impairment-ckd-proteins (scripts/pbpk_tables.py), do not edit -->
-*Generated from `data/impairment.toml` by `scripts/pbpk_tables.py`; the notes of every number are in the data file.*
+*Generated from `database/tables/impairment.toml` by `scripts/pbpk_tables.py`; the notes of every number are in the database.*
 
 | protein | mild | moderate | severe | end stage | source |
 | --- | ---: | ---: | ---: | ---: | --- |
@@ -166,7 +169,7 @@ The binding to albumin and to alpha-1-acid glycoprotein has a CKD profile per pr
 The end stage values mix the populations: the albumin concentration is of non-dialysis CKD 5 (Huang 2017), the albumin binding function (Klammt 2012, stage 5) and AGP (Schmulenson 2018, ESRD) include dialysis patients, whose binding differs between and on the days of dialysis. The library's end stage is CKD off dialysis. Mild CKD is measured by none of the sources: its value lies on the line from 1 at the eGFR 90 to the moderate value at 45 (albumin concentration, AGP), and the binding function of the stages 1/2 is 1, choices of the library. At the end stage the profile raises fu of a strongly bound albumin substance by 1/(0.905*0.669) = 1.65 (the binding capacity 2.5) and lowers fu of a strongly bound AGP substance to 0.485 of healthy (2.5 before). The measured rise of fu of highly bound acidic drugs in severe CKD reaches 2.71 (bumetanide, Tan 2022, doi:10.1002/cpt.2642, full text), while the concentration of albumin alone predicts at most 1.20 (Tan 2022); Vanholder 1988 (doi:10.1038/ki.1988.99, abstract) measured a falling binding of phenytoin, theophylline and methotrexate and a rising binding of the basic drugs propranolol, cimetidine and clonidine in dialysed patients.
 
 <!-- generated: impairment-ckd-binding (scripts/pbpk_tables.py), do not edit -->
-*Generated from `data/impairment.toml` by `scripts/pbpk_tables.py`; the notes of every number are in the data file.*
+*Generated from `database/tables/impairment.toml` by `scripts/pbpk_tables.py`; the notes of every number are in the database.*
 
 | factor | mild | moderate | severe | end stage | source |
 | --- | ---: | ---: | ---: | ---: | --- |
@@ -190,7 +193,7 @@ The rows: `albumin` the plasma albumin concentration (protein `albumin`); `album
 The flows of the organs are multiplied by the factors of the NYHA class and the cardiac output is their sum (Gu 2025, Table 1). The renal blood flow is not monotonic in the class (NYHA IV above NYHA III, as measured by Leithe 1984), and the GFR follows it.
 
 <!-- generated: impairment-heart-failure (scripts/pbpk_tables.py), do not edit -->
-*Generated from `data/impairment.toml` by `scripts/pbpk_tables.py`; the notes of every number are in the data file.*
+*Generated from `database/tables/impairment.toml` by `scripts/pbpk_tables.py`; the notes of every number are in the database.*
 
 | factor | I | II | III | IV | source |
 | --- | ---: | ---: | ---: | ---: | --- |
