@@ -6,6 +6,7 @@ toy model (`tests/pkpdsim_toy`) has the male build only. A task which runs the
 wrong build starts at the wrong concentration.
 """
 
+import json
 from collections.abc import Mapping
 from pathlib import Path
 from typing import ClassVar, cast
@@ -14,13 +15,17 @@ import numpy as np
 import pytest
 from sbmlsim.experiment import ExperimentRunner
 from sbmlsim.model import AbstractModel
+from sbmlsim.project_checks import (
+    check_model,
+    initialize_experiments,
+    run_all_experiments,
+)
 from sbmlsim.simulator import Simulator
 
 from pkpdsim.cli import fit_command, run_command
 from pkpdsim.experiment import PKPDSimulationExperiment
 from pkpdsim.model import PKPDModel
 from pkpdsim.sex import Sex
-from pkpdsim.testing import check_model, initialize_experiments, run_all_experiments
 from pkpdsim_sexes import FEMALE_A0, FEMALE_MODEL_PATH, MODEL, MODEL_PATH
 from pkpdsim_sexes.experiments.decay import SexesGroups, SexesMen, SexesWomen
 from pkpdsim_toy import MODEL as TOY
@@ -214,7 +219,7 @@ def test_the_check_of_the_model_sees_both_builds(tmp_path: Path) -> None:
     outside = MODEL.replace(
         variants={"male": MODEL_PATH, "female": tmp_path / "female.xml"}
     )
-    with pytest.raises(AssertionError, match="female_model_path"):
+    with pytest.raises(AssertionError, match="female"):
         check_model(outside)
 
 
@@ -232,7 +237,10 @@ def test_the_tests_of_a_model_initialize_and_run_both_builds(tmp_path: Path) -> 
 
 
 def test_run_simulation_runs_the_experiments_of_both_builds(tmp_path: Path) -> None:
-    run_command(MODEL, ["-a", "simulate", "-e", "all", "--results-dir", str(tmp_path)])
+    run_command(
+        MODEL,
+        ["-a", "simulate", "-e", "all", "-w", "1", "--results-dir", str(tmp_path)],
+    )
     figures = tmp_path / "simulation" / "all" / "_figures"
     for name in ("SexesMen", "SexesWomen", "SexesGroups"):
         assert list(figures.glob(f"{name}_*.svg")), name
@@ -244,6 +252,7 @@ def test_a_fit_applies_one_parameter_set_to_both_builds(tmp_path: Path) -> None:
         MODEL,
         ["--runs", "1", "--no-mapping-figures", "--output_dir", str(tmp_path)],
     )
-    (run,) = runs.values()
-    (k,) = run.result.xopt
+    (records,) = runs.values()
+    best = json.loads((records / "parameters.json").read_text(encoding="utf-8"))
+    k = best["sets"][0]["values"]["k"]
     assert k == pytest.approx(0.2, rel=1e-2)

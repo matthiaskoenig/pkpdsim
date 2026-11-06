@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -16,7 +17,54 @@ from pkpdsim.cli import (
     report_command,
     with_output_dir,
 )
+from pkpdsim.model import PKPDModel
 from pkpdsim_toy import MODEL
+
+type AsModel = Callable[[PKPDModel], PKPDModel]
+
+#: the files of the records and the report of a fit, which the old command wrote
+FIT_FILES = {
+    "datapoints.tsv",
+    "fisher.json",
+    "fisher.tsv",
+    "identifiability.json",
+    "identifiability.tsv",
+    "index.html",
+    "metrics.tsv",
+    "metrics_mappings.tsv",
+    "metrics_observables.tsv",
+    "optimization_result.json",
+    "optimization_result.tsv",
+    "parameters.json",
+    "plots/bland_altman.png",
+    "plots/bland_altman.svg",
+    "plots/cost_bar.svg",
+    "plots/goodness_of_fit.png",
+    "plots/goodness_of_fit.svg",
+    "plots/profile_k.svg",
+    "plots/profiles.png",
+    "plots/profiles.svg",
+    "plots/residual_boxplot.svg",
+    "plots/traces.png",
+    "plots/traces.svg",
+    "references.bib",
+    "references.csl",
+    "report.pdf",
+    "report.tex",
+    "report.txt",
+    "report.typ",
+    "report_standalone.tex",
+}
+
+#: the records of a run of a kind of the run layer
+RUN_FILES = {"run.json", "spec.json", "summary.json", "progress.jsonl"}
+
+
+def _files(directory: Path) -> set[str]:
+    """Get the files below a directory, relative to it."""
+    return {
+        p.relative_to(directory).as_posix() for p in directory.rglob("*") if p.is_file()
+    }
 
 
 def test_with_output_dir() -> None:
@@ -83,8 +131,10 @@ def test_fit_and_report(tmp_path: Path) -> None:
         MODEL,
         ["--runs", "1", "--output_dir", str(tmp_path / "fit"), "--no-mapping-figures"],
     )
-    assert runs
+    ((opid, records),) = runs.items()
+    assert records == tmp_path / "fit" / opid
     (parameters,) = (tmp_path / "fit").glob("**/parameters.json")
+    assert parameters == records / "parameters.json"
     report = report_command(
         MODEL,
         [
@@ -96,7 +146,64 @@ def test_fit_and_report(tmp_path: Path) -> None:
             str(parameters),
         ],
     )
-    assert report.is_relative_to(tmp_path / "report")
+    assert report == tmp_path / "report" / "report"
+    assert (report / "index.html").is_file()
+    assert _files(report) >= RUN_FILES
+
+
+def test_the_fit_writes_the_files_of_the_old_command(tmp_path: Path) -> None:
+    """The end-to-end run of `run_fit`: the records and the report of the fit.
+
+    The kind `fit` writes them into the folder of the fit id of its output,
+    which the command moves up into the output, `<output_dir>/<fit id>`.
+    """
+    runs = fit_command(
+        MODEL,
+        [
+            "--runs",
+            "1",
+            "--identifiability",
+            "--max-points",
+            "3",
+            "--no-mapping-figures",
+            "--output_dir",
+            str(tmp_path),
+        ],
+    )
+    ((opid, records),) = runs.items()
+    assert records == tmp_path / opid
+    files = _files(records)
+    assert files == FIT_FILES | RUN_FILES | {"fits.tsv", f"runs/{opid}_run_0.json"}
+    spec = json.loads((records / "spec.json").read_text(encoding="utf-8"))
+    assert spec["project"] == "pkpdsim_toy:MODEL"
+    assert spec["opid"] == opid
+    assert (spec["repeats"], spec["seed"], spec["algorithm"]) == (1, 1234, "LSQ")
+    assert spec["record_adopted"] and spec["report"] and spec["identifiability"]
+
+
+def test_the_identifiability_writes_the_report_of_the_old_command(
+    tmp_path: Path,
+) -> None:
+    """The end-to-end run of `run_identifiability`: the report of the analysis."""
+    parameters = fitted_parameters(tmp_path / "fit")
+    report = identifiability_command(
+        MODEL,
+        [
+            "--max-points",
+            "3",
+            "--no-mapping-figures",
+            "--output_dir",
+            str(tmp_path / "identifiability"),
+            str(parameters),
+        ],
+    )
+    assert report == tmp_path / "identifiability" / "identifiability"
+    files = _files(report)
+    assert files >= FIT_FILES
+    # the runs of the kinds `identifiability` and `report`
+    assert {f"report/{name}" for name in RUN_FILES} <= files
+    assert {f"analysis/{name}" for name in RUN_FILES} <= files
+    assert "analysis/identifiability.json" in files
 
 
 def fitted_parameters(directory: Path, *extra: str) -> Path:
@@ -151,15 +258,16 @@ def test_the_identifiability_of_stored_parameters(tmp_path: Path) -> None:
         ],
     )
     assert report.is_relative_to(tmp_path / "identifiability")
-    (result,) = (tmp_path / "identifiability").glob("**/identifiability.json")
-    content = json.loads(result.read_text(encoding="utf-8"))
-    assert content["opid"] == "DECAY"
+    content = json.loads((report / "identifiability.json").read_text(encoding="utf-8"))
+    assert content["opid"] == parameters.parent.name
     assert content["parameter_set"]["values"].keys() == {"k"}
 
 
-def test_the_reports_write_into_the_results_of_the_model(tmp_path: Path) -> None:
-    model = MODEL.replace(results_path=tmp_path)
+def test_the_reports_write_into_the_results_of_the_model(
+    tmp_path: Path, as_model: AsModel
+) -> None:
     parameters = fitted_parameters(tmp_path / "fit")
+    model = as_model(MODEL.replace(results_path=tmp_path))
     report_command(
         model, ["--subset", "DECAY", "--no-mapping-figures", str(parameters)]
     )
@@ -168,7 +276,7 @@ def test_the_reports_write_into_the_results_of_the_model(tmp_path: Path) -> None
         model,
         ["--subset", "DECAY", "--max-points", "3", "--no-fisher", str(parameters)],
     )
-    assert list((tmp_path / "identifiability").glob("**/identifiability.json"))
+    assert (tmp_path / "identifiability" / "identifiability" / "index.html").is_file()
 
 
 def test_a_model_with_an_empty_mapping_of_fit_definitions_fails() -> None:
@@ -176,8 +284,10 @@ def test_a_model_with_an_empty_mapping_of_fit_definitions_fails() -> None:
         fit_parser(MODEL, {})
 
 
-def test_the_fit_writes_into_the_results_of_the_model(tmp_path: Path) -> None:
-    model = MODEL.replace(results_path=tmp_path)
+def test_the_fit_writes_into_the_results_of_the_model(
+    tmp_path: Path, as_model: AsModel
+) -> None:
+    model = as_model(MODEL.replace(results_path=tmp_path))
     fit_command(model, ["--runs", "1", "--no-mapping-figures"])
     assert list((tmp_path / "fit").glob("**/parameters.json"))
 
@@ -212,11 +322,12 @@ def test_the_fit_report_has_the_model_context(tmp_path: Path) -> None:
     assert (report / "report.pdf").exists()
     (result,) = tmp_path.glob("**/optimization_result.json")
     arguments = json.loads(result.read_text(encoding="utf-8"))["provenance"]
-    assert arguments["arguments"]["subset"] == "DECAY"
-    assert arguments["arguments"]["command"] == f"run_fit {MODEL.package}"
     assert arguments["fixed_values"] == {}
     assert arguments["arguments"]["fixed_fits"] == []
     assert opid.startswith("DECAY_")
+    # the command is the spec of the run of the kind `fit`
+    spec = json.loads((report / "spec.json").read_text(encoding="utf-8"))
+    assert spec["subset"] == "DECAY"
 
 
 def _adopted_other(tmp_path: Path) -> Path:
@@ -247,9 +358,11 @@ def _adopted_other(tmp_path: Path) -> Path:
     return other
 
 
-def test_the_fit_names_the_fixed_adopted_fits(tmp_path: Path) -> None:
+def test_the_fit_names_the_fixed_adopted_fits(
+    tmp_path: Path, as_model: AsModel
+) -> None:
     other = _adopted_other(tmp_path)
-    model = MODEL.replace(adopted_ids=[other.name], fits_dir=other.parent)
+    model = as_model(MODEL.replace(adopted_ids=[other.name], fits_dir=other.parent))
     output = tmp_path / "second"
     fit_command(
         model, ["--runs", "1", "--no-mapping-figures", "--output_dir", str(output)]
@@ -282,7 +395,7 @@ def _rename(value: object, old: str, new: str) -> object:
 
 
 def test_the_fixed_values_leave_out_the_parameters_of_the_fit(
-    tmp_path: Path,
+    tmp_path: Path, as_model: AsModel
 ) -> None:
     other = _adopted_other(tmp_path)
     # the adopted fit of the other subset fitted a parameter `k_other`
@@ -290,7 +403,7 @@ def test_the_fixed_values_leave_out_the_parameters_of_the_fit(
         path = other / name
         data = json.loads(path.read_text(encoding="utf-8"))
         path.write_text(json.dumps(_rename(data, "k", "k_other")), encoding="utf-8")
-    model = MODEL.replace(adopted_ids=[other.name], fits_dir=other.parent)
+    model = as_model(MODEL.replace(adopted_ids=[other.name], fits_dir=other.parent))
     value = model.fit_records().records[other.name].parameters["k_other"].value
 
     output = tmp_path / "second"
@@ -303,17 +416,17 @@ def test_the_fixed_values_leave_out_the_parameters_of_the_fit(
 
 
 def test_the_report_of_stored_parameters_has_the_context_of_its_record(
-    tmp_path: Path,
+    tmp_path: Path, as_model: AsModel
 ) -> None:
     other = _adopted_other(tmp_path)
-    model = MODEL.replace(adopted_ids=[other.name], fits_dir=other.parent)
+    model = as_model(MODEL.replace(adopted_ids=[other.name], fits_dir=other.parent))
     output = tmp_path / "second"
     fit_command(
         model, ["--runs", "1", "--no-mapping-figures", "--output_dir", str(output)]
     )
     parameters = _report_dir(output) / "parameters.json"
     # the adopted fits of the model changed since the fit ran
-    later = MODEL.replace(adopted_ids=[], results_path=tmp_path / "results")
+    later = as_model(MODEL.replace(adopted_ids=[], results_path=tmp_path / "results"))
     report = report_command(
         later, ["--subset", "DECAY", "--no-mapping-figures", str(parameters)]
     )
@@ -366,10 +479,12 @@ def test_a_fit_starts_from_another_fit(toy_fit: Path) -> None:
     assert result["provenance"]["start_values"] == {"k": pytest.approx(k, rel=1e-12)}
 
 
-def test_a_fit_starts_from_an_adopted_fit(fits_dir: Path, tmp_path: Path) -> None:
+def test_a_fit_starts_from_an_adopted_fit(
+    fits_dir: Path, tmp_path: Path, as_model: AsModel
+) -> None:
     """An adopted fit of the model is found by its id."""
     (record,) = fits_dir.iterdir()
-    model = MODEL.replace(fits_dir=fits_dir)
+    model = as_model(MODEL.replace(fits_dir=fits_dir))
     output = tmp_path / "fit"
     fit_command(
         model,
@@ -422,15 +537,19 @@ def _level(definition: object) -> str:
     return str(definition.problem(opid="level").jit_optimization)
 
 
+class _Stop(Exception):
+    """Stops a fit once its problem is known."""
+
+
 def test_the_fits_compile_at_the_level_of_the_model(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, as_model: AsModel
 ) -> None:
     """The problem of a fit has `jit_optimization` of the model, not the environment.
 
     The problem carries its level into the workers of a pool
     (`tests/test_fit.py::test_a_worker_loads_the_models_at_the_level_of_the_model`).
     """
-    import pkpdsim.cli
+    import sbmlsim.fit.cli
 
     variable = "SBMLSIM_JIT_OPTIMIZATION"
     monkeypatch.setenv(variable, "O3")
@@ -439,17 +558,20 @@ def test_the_fits_compile_at_the_level_of_the_model(
     def recording_run_fit(definition: object, **kwargs: object) -> dict:
         seen.append(_level(definition))
         assert os.environ[variable] == "O3"
-        return {}
+        raise _Stop
 
-    monkeypatch.setattr(pkpdsim.cli, "run_fit", recording_run_fit)
+    monkeypatch.setattr(sbmlsim.fit.cli, "run_fit", recording_run_fit)
     simulator = SimulatorSettings(
         absolute_tolerance=1e-10, relative_tolerance=1e-10, jit_optimization="O0"
     )
-    model = MODEL.replace(simulator=simulator)
-    fit_command(model, ["--runs", "1", "--output_dir", str(tmp_path)])
+    model = as_model(MODEL.replace(simulator=simulator))
+    with pytest.raises(_Stop):
+        fit_command(model, ["--runs", "1", "--output_dir", str(tmp_path / "a")])
     assert seen == ["O0"]
     # a model without a level takes the level of sbmlsim
-    fit_command(MODEL, ["--runs", "1", "--output_dir", str(tmp_path)])
+    as_model(MODEL)
+    with pytest.raises(_Stop):
+        fit_command(MODEL, ["--runs", "1", "--output_dir", str(tmp_path / "b")])
     assert seen == ["O0", "O3"]
 
 

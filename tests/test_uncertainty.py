@@ -8,6 +8,7 @@ the command `run_simulation --uncertainty`.
 """
 
 import dataclasses
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +31,7 @@ from sbmlutils.factory import Parameter, create_model
 
 from pkpdsim.cli import fit_command, run_command
 from pkpdsim.experiment import PKPDSimulationExperiment
+from pkpdsim.model import PKPDModel
 from pkpdsim_toy import MODEL, TOY_PATH
 from pkpdsim_toy.experiments.decay import ToyDecay
 from pkpdsim_toy.factory import U, toy_model
@@ -50,13 +52,17 @@ def toy_with_uncertainty(
     return path
 
 
-def test_fit_adopt_command(toy_fit: Path, tmp_path: Path) -> None:
-    model = MODEL.replace(fits_dir=tmp_path / "fits")
+def test_fit_adopt_command(
+    toy_fit: Path, tmp_path: Path, as_model: Callable[[PKPDModel], PKPDModel]
+) -> None:
+    model = as_model(MODEL.replace(fits_dir=tmp_path / "fits"))
     runs = fit_command(
         model, ["--adopt", toy_fit.name, "--output_dir", str(toy_fit.parent)]
     )
     assert runs == {}
     assert (tmp_path / "fits" / toy_fit.name / "parameters.json").exists()
+    # the run of the kind `adopt` in the folder of the fit
+    assert (toy_fit / "adopt" / "fits" / toy_fit.name / "parameters.json").exists()
     with pytest.raises(SystemExit):
         fit_command(
             model, ["--adopt", toy_fit.name, "--output_dir", str(toy_fit.parent)]
@@ -235,10 +241,14 @@ def test_an_experiment_runs_over_the_draws(toy_with_uncertainty: Path) -> None:
 
 
 def test_the_run_writes_into_the_results_of_the_draws(
-    toy_with_uncertainty: Path, tmp_path: Path
+    toy_with_uncertainty: Path,
+    tmp_path: Path,
+    as_model: Callable[[PKPDModel], PKPDModel],
 ) -> None:
-    model = MODEL.replace(
-        variants={"male": toy_with_uncertainty}, factory_dir=MODEL.factory_dir
+    model = as_model(
+        MODEL.replace(
+            variants={"male": toy_with_uncertainty}, factory_dir=MODEL.factory_dir
+        )
     )
     run_command(
         model,
@@ -250,6 +260,8 @@ def test_the_run_writes_into_the_results_of_the_draws(
             "--uncertainty",
             "--draws",
             "3",
+            "-w",
+            "1",
             "--results-dir",
             str(tmp_path),
             "--formats",

@@ -221,8 +221,10 @@ def test_a_model_without_experiments_and_fits() -> None:
 
 
 def test_create_models(tmp_path: Path) -> None:
-    assert MODEL.create_models(tmp_path) == tmp_path
-    assert (tmp_path / "toy.xml").exists()
+    """A rebuild into a directory has the layout of the package (sbmlsim)."""
+    factory_dir = tmp_path / MODEL.factory_dir.relative_to(MODEL.root)
+    assert MODEL.create_models(tmp_path) == factory_dir
+    assert (factory_dir / "toy.xml").exists()
 
 
 def test_an_extra_action_must_not_repeat_an_action() -> None:

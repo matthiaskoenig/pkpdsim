@@ -37,6 +37,7 @@ the CI each (see `sharding`).
 """
 
 import hashlib
+import importlib
 import os
 import re
 import shutil
@@ -194,6 +195,22 @@ def uncached_build(
 
 
 @pytest.fixture
+def as_model(monkeypatch: pytest.MonkeyPatch) -> "Callable[[PKPDModel], PKPDModel]":
+    """Make a model the model object `MODEL` of its package for a test.
+
+    The commands run the model object of a package, which the run layer of
+    sbmlsim loads by its reference (`pkpdsim.cli.project_reference`), so a
+    copy of a model with other fields is the model object while the test runs.
+    """
+
+    def use(model: PKPDModel) -> PKPDModel:
+        monkeypatch.setattr(importlib.import_module(model.package), "MODEL", model)
+        return model
+
+    return use
+
+
+@pytest.fixture
 def no_pyplot(monkeypatch: pytest.MonkeyPatch) -> None:
     """Make `matplotlib.pyplot.figure` raise, so a figure on pyplot fails the test.
 
@@ -229,8 +246,8 @@ def toy_fit(tmp_path_factory: pytest.TempPathFactory) -> Path:
             str(output),
         ],
     )
-    (opid,) = runs
-    return output / opid
+    (records,) = runs.values()
+    return records
 
 
 @pytest.fixture(scope="module")
@@ -262,8 +279,8 @@ def credibility_model(tmp_path_factory: pytest.TempPathFactory) -> PKPDModel:
             str(base / "fit"),
         ],
     )
-    (opid,) = runs
-    adopt_fit(base / "fit" / opid, base / "fits")
+    ((opid, records),) = runs.items()
+    adopt_fit(records, base / "fits")
     return CREDIBILITY_MODEL.replace(
         adopted_ids=[opid],
         fits_dir=base / "fits",

@@ -62,8 +62,13 @@ def test_a_run_takes_other_simulator_settings(
 
     monkeypatch.setattr(SimulatorSettings, "simulator", create)
     other = SimulatorSettings(relative_tolerance=1e-9)
-    MODEL.run_experiments(ToyDecay, output_dir=tmp_path, simulator=other, n_workers=2)
+    MODEL.run_experiments(
+        ToyDecay, output_dir=tmp_path, simulator=other, n_workers=2, scan_workers=None
+    )
     assert seen == [(other, 2)]
+    # the scans serially by default, the experiments in a pool
+    MODEL.run_experiments(ToyDecay, output_dir=tmp_path / "pool", n_workers=2)
+    assert seen[-1] == (MODEL.simulator, 1)
     MODEL.run_experiments(ToyDecay, output_dir=tmp_path / "model")
     assert seen[-1] == (MODEL.simulator, 1)
 

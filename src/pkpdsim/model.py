@@ -43,6 +43,7 @@ therefore imports sbmlsim's plotting.
 
 from __future__ import annotations
 
+import argparse
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -53,9 +54,11 @@ from sbmlsim.plot import FigureSettings as SbmlsimFigureSettings
 from sbmlsim.project import (
     FigureOutputs,
     Project,
+    ProjectAction,
     SimulatorSettings,
     check_reference,
     normalize_formats,
+    resolve,
 )
 
 from pkpdsim.sex import Sex
@@ -70,8 +73,9 @@ if TYPE_CHECKING:
 #: the actions of the `run` command of a model, see `pkpdsim.cli`
 RUN_ACTIONS: tuple[str, ...] = ("simulate", "list_experiments", "factory", "all")
 
-#: the processes of a run of the experiments of a model by default: serially,
-#: so that a script which runs a model needs no guard `if __name__ == "__main__":`
+#: the processes of the scans of a run of the experiments of a model by
+#: default: serially, the experiments in a pool (a worker per four experiments,
+#: at most one per CPU, see `PKPDModel.run_experiments`)
 RUN_WORKERS = 1
 
 #: the settings of the simulator of a model which does not give its own
@@ -166,6 +170,81 @@ class ExtraAction:
     help: str
     function: str
     in_all: bool = False
+
+
+@dataclass(frozen=True)
+class ExtraActionFunction:
+    """An extra action of a model as the function of an action of its project.
+
+    The `Project.actions` of a model are its extra actions, so the kind
+    `action` of `python -m sbmlsim.run` runs them as well (see
+    `sbmlsim.project.ActionFunction`): the arguments of the spec are the
+    options of the action, over the defaults of the options of the model
+    (`PKPDModel.extra_arguments`), and the action gets the settings of the
+    simulator of the model as `options.simulator`, the processes of the run as
+    `options.n_workers`, no draws (`options.uncertainty` is `None`) and the
+    output of the run as its directory of the results.
+
+    Attributes:
+        reference: the reference to the function of the action,
+            `ExtraAction.function`.
+    """
+
+    reference: str
+
+    def __call__(
+        self,
+        project: Project,
+        out: Path,
+        /,
+        *,
+        workers: int,
+        **arguments: Any,  # noqa: ANN401
+    ) -> None:
+        """Run the extra action into the output of a run.
+
+        Args:
+            project: the model.
+            out: the output of the run, the directory of the results.
+            workers: the processes of the run.
+            **arguments: the options of the action.
+        """
+        defaults = argparse.ArgumentParser()
+        extra_arguments = getattr(project, "extra_arguments", None)
+        if extra_arguments is not None:
+            resolve(extra_arguments, project.package)(defaults)
+        options = defaults.parse_args([])
+        for name, value in arguments.items():
+            setattr(options, name, value)
+        options.simulator = project.simulator
+        options.n_workers = workers
+        options.uncertainty = None
+        resolve(self.reference, project.package)(project, options, out)
+
+
+def _actions(data: dict[str, Any]) -> None:
+    """Map the extra actions of a model onto the actions of its project.
+
+    Args:
+        data: the keywords of the model, changed in place.
+
+    Raises:
+        ValueError: if actions other than the extra actions are given.
+    """
+    extras = data.get("extra_actions") or ()
+    derived = {
+        extra.name: ProjectAction(
+            function=ExtraActionFunction(extra.function), description=extra.help
+        )
+        for extra in extras
+        if isinstance(extra, ExtraAction)
+    }
+    given = data.get("actions")
+    if given and dict(given) != derived:
+        raise ValueError(
+            "The actions of a model are its extra actions, give them as extra_actions."
+        )
+    data["actions"] = derived
 
 
 def _figures(data: dict[str, Any]) -> None:
@@ -314,7 +393,9 @@ class PKPDModel(Project):
         save_results: store the results of the simulations by default.
         fit_identifiability: the fit command analyses the identifiability of the
             fitted parameters by default.
-        extra_actions: actions the model adds to its `run` command.
+        extra_actions: actions the model adds to its `run` command, also the
+            `actions` of its project (`ExtraActionFunction`), which the kind
+            `action` of `python -m sbmlsim.run` runs.
         extra_arguments: reference to a function which adds the options of the
             extra actions to the parser of the `run` command.
         adopted_ids: the ids of the adopted fits, whose records in `fits_dir`
@@ -400,6 +481,7 @@ class PKPDModel(Project):
         _fits(data)
         _figures(data)
         _directories(data)
+        _actions(data)
         return data
 
     @model_validator(mode="after")
@@ -634,7 +716,8 @@ class PKPDModel(Project):
         show_report: bool = False,
         figure_formats: Sequence[str] | None = None,
         simulator: SimulatorSettings | None = None,
-        n_workers: int | None = RUN_WORKERS,
+        n_workers: int | None = None,
+        scan_workers: int | None = RUN_WORKERS,
         uncertainty: UncertaintySettings | None = None,
     ) -> Path:
         """Run simulation experiments and create their report.
@@ -657,9 +740,15 @@ class PKPDModel(Project):
                 default or when empty.
             simulator: the settings of the simulator, those of the model by
                 default.
-            n_workers: the processes of the run, of the experiments and of their
-                scans, serially by default (`RUN_WORKERS`), see
-                `Project.run_experiments`.
+            n_workers: the processes of the pool of the experiments, every
+                experiment with its scans in its worker; by default a worker
+                per four experiments, at most one per CPU, and serially below
+                (`None`), `1` runs every experiment in this process, see
+                `Project.run_experiments`. A pool needs the guard
+                `if __name__ == "__main__":` in the script of the run.
+            scan_workers: the processes of the scans of an experiment,
+                serially by default (`RUN_WORKERS`); `None` takes `n_workers`,
+                the processes of the whole run as sbmlsim counts them.
             uncertainty: run the experiments over the draws of the fitted
                 parameters of the model (`sbmlsim.experiment.draws`), `None`
                 runs them once.
@@ -681,6 +770,7 @@ class PKPDModel(Project):
             figure_formats=figure_formats,
             simulator=simulator,
             n_workers=n_workers,
+            scan_workers=scan_workers,
             uncertainty=uncertainty,
             collect_figures=False,
         )
@@ -694,7 +784,8 @@ class PKPDModel(Project):
         show_report: bool = False,
         figure_formats: Sequence[str] | None = None,
         simulator: SimulatorSettings | None = None,
-        n_workers: int | None = RUN_WORKERS,
+        n_workers: int | None = None,
+        scan_workers: int | None = RUN_WORKERS,
         uncertainty: UncertaintySettings | None = None,
     ) -> Path:
         """Run simulation experiments and collect their figures.
@@ -711,7 +802,8 @@ class PKPDModel(Project):
                 default.
             simulator: the settings of the simulator, those of the model by
                 default.
-            n_workers: the processes of the run, see `run_experiments`.
+            n_workers: the processes of the experiments, see `run_experiments`.
+            scan_workers: the processes of the scans, see `run_experiments`.
             uncertainty: run the experiments over the draws of the fitted
                 parameters, see `run_experiments`.
 
@@ -733,6 +825,7 @@ class PKPDModel(Project):
             figure_formats=figure_formats,
             simulator=simulator,
             n_workers=n_workers,
+            scan_workers=scan_workers,
             uncertainty=uncertainty,
             collect_figures=True,
         )
@@ -756,6 +849,7 @@ class PKPDModel(Project):
         figure_formats: Sequence[str] | None,
         simulator: SimulatorSettings | None,
         n_workers: int | None,
+        scan_workers: int | None,
         uncertainty: UncertaintySettings | None,
         collect_figures: bool,
     ) -> None:
@@ -769,6 +863,7 @@ class PKPDModel(Project):
             experiment_classes,
             output_path,
             n_workers=n_workers,
+            scan_workers=scan_workers,
             simulator=simulator,
             figure_formats=figure_formats,
             save_results=save_results,

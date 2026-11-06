@@ -338,7 +338,9 @@ def test_capture_settings_of_a_model() -> None:
     assert settings["rc"]["savefig.dpi"] == 30
     assert settings["calls"] == {"simulator": 1, "runner": 1, "run": 1}
     assert "<root>" in settings["runner"]["base_path"]
+    # the scans serially, the experiments in a pool of sbmlsim's choice
     assert settings["simulator"]["n_workers"] == 1
+    assert settings["run"]["n_workers"] is None
     assert "figure" not in settings
 
 
