@@ -12,9 +12,13 @@ from pkpdsim.pbpk.organs import Organ, Part, Pool
 
 __all__ = [
     "AGE",
+    "BFF",
     "BMI",
     "BSA",
     "BW",
+    "BW_BASE",
+    "BW_EFFECT",
+    "BW_SET",
     "BW_TOTAL",
     "CKD_HEPATIC",
     "CLOCK",
@@ -25,6 +29,8 @@ __all__ = [
     "EGFR",
     "FED",
     "FFM",
+    "FM",
+    "FMI",
     "F_CARDIAC_FUNCTION",
     "F_FUNCTIONAL",
     "F_MUCOSA_FLOW",
@@ -32,6 +38,7 @@ __all__ = [
     "F_RENAL_FUNCTION",
     "F_SHUNT",
     "F_TUBULAR",
+    "F_VISCERAL",
     "F_ZONE",
     "GA",
     "GFR",
@@ -48,6 +55,8 @@ __all__ = [
     "HEIGHT",
     "HF_SEVERITY",
     "K_BILE",
+    "K_BW",
+    "LBW",
     "MLEAN",
     "MUCOSA_FLOW_TOTAL",
     "MUCOSA_VOLUME_TOTAL",
@@ -56,12 +65,14 @@ __all__ = [
     "QHA",
     "QPO",
     "Q_PLACENTA",
+    "SAT",
     "SV_TIS",
     "TIME_OF_DAY",
     "TUBULE_SEGMENTS",
     "T_LUMEN",
     "T_STOMACH",
     "T_STOMACH_FED",
+    "VAT",
     "VBILE",
     "VBLOOD",
     "VFECES",
@@ -251,6 +262,31 @@ TIME_OF_DAY = "TOD"
 rhythms, `CLOCK` plus the time of the simulation."""
 BMI = "BMI"
 """The body mass index."""
+BW_BASE = "BW0"
+"""The body weight (kg) at the start of a simulation of a model whose body
+weight changes (`pkpdsim.pbpk.adipose`)."""
+BW_SET = "BW_set"
+"""The body weight (kg) the individual approaches, the weight at the start and
+the effect of the model, `BW0*(1 + f_bw)`."""
+BW_EFFECT = "f_bw"
+"""The fractional change of the body weight at the set point, the effect of a
+model (negative for a loss)."""
+K_BW = "k_bw"
+"""The rate (1/min) at which the body weight approaches its set point."""
+LBW = "LBW"
+"""The lean body weight (kg), the body weight without the adipose tissue."""
+FM = "FM"
+"""The body fat mass (kg), the body weight without the fat-free mass."""
+FMI = "FMI"
+"""The fat mass index (kg/m2), the body fat mass over the squared height."""
+BFF = "BFF"
+"""The body fat fraction, the body fat mass over the body weight."""
+VAT = "VAT"
+"""The visceral adipose tissue mass (kg)."""
+SAT = "SAT"
+"""The subcutaneous adipose tissue mass (kg), the rest of the adipose tissue."""
+F_VISCERAL = "f_vat"
+"""The visceral share of the adipose tissue."""
 BSA = "BSA"
 """The body surface area."""
 FFM = "FFM"

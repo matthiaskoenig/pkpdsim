@@ -21,9 +21,10 @@ The clinical classes of the conditions are `Classification`s with their
 definitions, colors and the value of the library parameter of every class:
 `CHILD_PUGH_CLASSES` (Child-Pugh, `CP_severity`), `KDIGO_GFR_CLASSES` (the GFR
 categories of KDIGO 2012, the eGFR of the library), `NYHA_CLASSES` (the NYHA
-functional classes, `HF_severity`) and `AGE_CLASSES` (the paediatric and
-geriatric age classes of ICH E11 and ICH E7, `AGE`), together `CLASSIFICATIONS`; a model scans
-and draws them with `class_simulations` and `add_classes` of
+functional classes, `HF_severity`), `AGE_CLASSES` (the paediatric and
+geriatric age classes of ICH E11 and ICH E7, `AGE`) and `BMI_CLASSES` (the
+body mass index classes of the WHO, `BMI`), together `CLASSIFICATIONS`; a
+model scans and draws them with `class_simulations` and `add_classes` of
 `pkpdsim.pbpk.PBPKSimulationExperiment` (docs page `pbpk/classes.md`).
 """
 
@@ -506,7 +507,92 @@ AGE_CLASSES = Classification(
 populations (`AGE` in years); the value of a class is a representative age,
 the physiology is continuous in age."""
 
+BMI_CLASSES = Classification(
+    key="bmi",
+    name="Body mass index classes (WHO)",
+    condition="overweight and obesity",
+    parameter="BMI",
+    quantity="body mass index (kg/m2)",
+    reference="WHO2000",
+    classes=(
+        ImpairmentClass(
+            "normal",
+            "Normal weight",
+            "black",
+            "a body mass index of 18.5 to 24.9 kg/m2 (WHO Technical Report "
+            "Series 894); the class has no value of its own, it is the "
+            "reference individual of the build (a body mass index of 23.6 "
+            "kg/m2 for the man and 22.6 for the woman of ICRP 89)",
+            None,
+            (18.5, 25.0),
+        ),
+        ImpairmentClass(
+            "underweight",
+            "Underweight",
+            "#6baed6",
+            "a body mass index below 18.5 kg/m2 (WHO: severe below 16, "
+            "moderate 16 to 16.9, mild 17 to 18.4); the value of the class is "
+            "the middle of the mild and moderate range",
+            17.0,
+            (None, 18.5),
+        ),
+        ImpairmentClass(
+            "overweight",
+            "Overweight",
+            "#fdd0a2",
+            "a body mass index of 25.0 to 29.9 kg/m2, pre-obese in WHO "
+            "Technical Report Series 894; the value of the class is its middle",
+            27.5,
+            (25.0, 30.0),
+        ),
+        ImpairmentClass(
+            "obesity_1",
+            "Obesity class I",
+            "#fdae6b",
+            "a body mass index of 30.0 to 34.9 kg/m2; the value of the class "
+            "is its middle",
+            32.5,
+            (30.0, 35.0),
+        ),
+        ImpairmentClass(
+            "obesity_2",
+            "Obesity class II",
+            "#e6550d",
+            "a body mass index of 35.0 to 39.9 kg/m2; the value of the class "
+            "is its middle",
+            37.5,
+            (35.0, 40.0),
+        ),
+        ImpairmentClass(
+            "obesity_3",
+            "Obesity class III",
+            "#7f2704",
+            "a body mass index of 40.0 kg/m2 and above, severe or morbid "
+            "obesity; the value of the class is 45 kg/m2, and the adipose "
+            "model of the library is valid to about 40 (the equations of the "
+            "fat-free mass and of the obese repository both saturate above it)",
+            45.0,
+            (40.0, None),
+        ),
+    ),
+)
+"""The classes of the body mass index of the WHO classification (`BMI`, the
+body weight of the class at the height of the reference individual). The WHO
+Expert Consultation 2004 retained these cut-offs as the international
+classification and added the public health action points 23.0, 27.5, 32.5 and
+37.5 kg/m2 for Asian populations, which the percent body fat of Gallagher 2000
+reproduces (a body mass index of 22.7 in Asian men has the body fat of 25.0 in
+white men); the library carries the action points in `docs/pbpk/adipose.md`
+and not as a classification of its own."""
+
 CLASSIFICATIONS: Mapping[str, Classification] = {
-    c.key: c for c in (CHILD_PUGH_CLASSES, KDIGO_GFR_CLASSES, NYHA_CLASSES, AGE_CLASSES)
+    c.key: c
+    for c in (
+        CHILD_PUGH_CLASSES,
+        KDIGO_GFR_CLASSES,
+        NYHA_CLASSES,
+        AGE_CLASSES,
+        BMI_CLASSES,
+    )
 }
 """The classifications by key."""

@@ -911,16 +911,23 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
         build of the subjects (`normal_gfr`, the GFR per 1.73 m2 of its
         reference individual), so the CKD factors of the library take the
         values of the class; the category of the normal function (G1) is the
-        renal function 1.
+        renal function 1. An age class and a class of the body mass index set
+        the covariates instead: the age class its age and the body weight and
+        height of the reference individual of that age, the class of the body
+        mass index the height of the reference individual and the body weight
+        at the body mass index of the class (the class of normal weight, which
+        has no value of its own, the reference individual).
 
         Args:
             classification: the classification, e.g.
                 `pkpdsim.impairment.NYHA_CLASSES`.
             key: the key of the class, e.g. `III`.
-            sex: the sex of the subjects of a GFR category (`subjects_sex`).
+            sex: the sex of the subjects of a GFR category or of a class of
+                the body mass index (`subjects_sex`).
             simulation: the key of the simulation of the subjects.
-            age: the age of the subjects of a GFR category (years), `None` for
-                the adult of ICRP 89 (35 years).
+            age: the age of the subjects of a GFR category or of a class of
+                the body mass index (years), `None` for the adult of ICRP 89
+                (35 years).
 
         Returns:
             The changes, `{parameter: value}`, for `preinit_changes`.
@@ -936,6 +943,10 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
                 ids.BW: Q(ref.bw, "kg"),
                 ids.HEIGHT: Q(ref.height, "cm"),
             }
+        if classification.parameter == ids.BMI:
+            ref = reference_individual(cls.subjects_sex(sex, simulation), _age(age))
+            bw = ref.bw if c.value is None else c.value * (ref.height / 100.0) ** 2
+            return {ids.BW: Q(bw, "kg"), ids.HEIGHT: Q(ref.height, "cm")}
         if classification.parameter != "eGFR":
             return {classification.parameter: Q(c.value, "dimensionless")}
         if c.value is None:

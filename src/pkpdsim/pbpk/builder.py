@@ -81,6 +81,7 @@ from sbmlutils.metadata import SBO
 from sbmlutils.validation import ValidationOptions, validate_doc
 
 from pkpdsim.pbpk import distribution, ids, variants
+from pkpdsim.pbpk.adipose import StartValue, adipose_dynamic, adipose_objects
 from pkpdsim.pbpk.annotation import annotate, initial_assignment, model_annotations
 from pkpdsim.pbpk.chemistry import Membrane, Metabolism, Transport
 from pkpdsim.pbpk.circadian import circadian_ids, circadian_objects
@@ -709,6 +710,7 @@ def _body(
             *definition.dynamic,
             *(o for o in outputs if o not in definition.dynamic),
             *(f for f in rhythms if f not in definition.dynamic),
+            *(b for b in adipose_dynamic(definition) if b not in definition.dynamic),
         ),
         top.objects,
         model_definitions,
@@ -1231,8 +1233,9 @@ def _to_rules(
     of a species of an endogenous substance (`SpeciesStart`,
     `Substance.baseline`) stays an initial assignment: the species starts at
     the value of the dynamic quantities at the start, its reactions change it
-    afterwards. Every other initial assignment, also of a species of a PD
-    component, is converted as before.
+    afterwards; so does a recorded value at the start (`StartValue`, the body
+    weight `BW0` of a model whose weight changes). Every other initial
+    assignment, also of a species of a PD component, is converted as before.
 
     Args:
         assignments: the initial assignments.
@@ -1249,7 +1252,7 @@ def _to_rules(
         for ia in list(assignments):
             if (
                 ia.symbol in dynamic
-                or isinstance(ia, SpeciesStart)
+                or isinstance(ia, SpeciesStart | StartValue)
                 or not _symbols(ia.value) & dynamic
             ):
                 continue
@@ -1487,6 +1490,7 @@ class _Top:
             *impairment_objects(definition),
             *circadian_objects(definition),
             *pregnancy_objects(definition),
+            *adipose_objects(definition),
         ]
         self.known: set[str] = {
             str(o.sid) for o in self.objects if isinstance(o, Parameter)

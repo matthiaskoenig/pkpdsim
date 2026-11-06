@@ -1,0 +1,154 @@
+# The adipose tissue and the body composition of the human builds
+# (`pkpdsim.pbpk.adipose`, `PBPKDefinition.adipose`): the split of the adipose
+# tissue into the visceral and the subcutaneous depot, the factors of
+# overweight and obesity on the physiology, and the rate at which the body
+# weight of a model follows its set point.
+#
+# The adipose tissue of the library is the remainder of the body weight after
+# the lean organs and the blood (`pkpdsim.pbpk.physiology`, Huisinga 2012 on
+# the fat-free mass of Janmahasatian 2005), so the body composition of an
+# individual needs no equation of its own; this table holds what the remainder
+# does not give.
+#
+# The searches, the sources read, the quantities which need no factor and the
+# limits of the construction are documented in docs/pbpk/adipose.md.
+
+# The share of the adipose tissue which is visceral (`f_vat`), a function of
+# the age of the sex; the subcutaneous depot is the rest. The share and its
+# shape over age are the whole-body MRI regression of Shen 2009, the only
+# cohort which measures the total and the visceral adipose tissue of the same
+# subjects, which is what the remainder of the library is.
+[visceral_share.male]
+age = [18.0, 20.0, 25.0, 30.0, 35.0, 40.0, 45.0, 50.0, 55.0, 60.0, 65.0, 70.0]
+value = [0.04026, 0.04568, 0.06142, 0.07967, 0.09959, 0.1204, 0.1412, 0.1612, 0.1795, 0.1954, 0.2081, 0.2166]
+source = "Shen2009"
+sources = ["Linge2018", "Demerath2007"]
+notes = "Shen 2009 (whole body MRI, 10 mm slices at 40 mm intervals, the visceral depot over the abdominopelvic region; n = 164 men of 37.8 +- 14.8 years, BMI 25.6 +- 3.7) measure a total adipose tissue of 18.8 +- 8.1 l and a visceral adipose tissue of 2.1 +- 1.8 l, i.e. a visceral share of 0.112 of the men at 38 years; the shape over age is their Table 2 regression of the visceral volume (adjusted R2 0.428, n = 499, 5-88 years), `VAT = 0.473 - 2.22e-2*age + 2.59e-3*age^2 - 2.15e-5*age^3` for the men, relative to its value at 38 years. The share rises threefold between 20 and 60 years, which is the dominant covariate after the sex and which Demerath 2007 (n = 820) and the gap between Shen 2009 (38 years, 2.1 l) and Linge 2018 (UK Biobank, 64 years, 4.62 l at the same BMI) both show. The values below 18 and above 70 years are those of 18 and 70 years: the cubic is not monotone in the children, whose visceral fat the regression does not resolve, and it turns over above about 70 years. Checked against the UK Biobank: at the age and BMI of Linge 2018 the library predicts 5.09 l against the measured median of 4.62 l (men) and 3.14 against 2.33 l (women). The visceral depot is a mass of the body composition and not an organ of its own: the adipose tissue of the library is one well-stirred organ which drains into the venous blood, while the visceral depot drains through the portal vein (about 3 to 10 % of the portal inflow at the perfusion of ICRP 89; the only human measurement of the splanchnic contribution is a free fatty acid flux, Nielsen 2004, less than 10 to almost 50 % of the hepatic delivery)."
+
+[visceral_share.female]
+age = [18.0, 20.0, 25.0, 30.0, 35.0, 40.0, 45.0, 50.0, 55.0, 60.0, 65.0, 70.0]
+value = [0.02313, 0.02402, 0.02913, 0.03763, 0.04861, 0.06114, 0.07432, 0.08722, 0.09894, 0.1086, 0.1152, 0.1178]
+source = "Shen2009"
+sources = ["Linge2018", "Demerath2007"]
+notes = "Shen 2009 (the same cohort, n = 188 women of 44.0 +- 17.4 years, BMI 25.5 +- 5.4): a total adipose tissue of 25.2 +- 11.9 l and a visceral adipose tissue of 1.4 +- 1.2 l, i.e. a visceral share of 0.056 of the women at 38 years, half that of the men; the shape over age is their Table 2 regression with the sex term, `+ 0.697 - 6.77e-2*age + 7.52e-4*age^2 - 4.10e-6*age^3`, relative to its value at 38 years, and the values below 18 and above 70 years are held as for the men."
+
+# The rate at which the body weight of a model with an effect on its adipose
+# tissue approaches its set point (`Adipose(effect=...)`, `k_bw`).
+[weight_change]
+k_bw = { value = 1.965e-6, unit = "1/min", source = "ModelChoice", sources = [
+  "Wilding2022",
+  "Aronne2024",
+  "Hall2011",
+], notes = "A half time of 35 weeks, the measured time scale of a change of the body weight: two thirds of the loss of semaglutide returns within 52 weeks of stopping it (STEP 1 extension, 11.6 of 17.3 percentage points, Wilding 2022) and tirzepatide regains 14.0 of 20.9 % in 52 weeks (SURMOUNT-4, Aronne 2024), both a half time of roughly 30 to 40 weeks, and the half time of the body weight after a step change of the energy intake is about one year (Hall 2011, longer in a person with more fat). A model fits the rate; the number is the choice of the middle of that range and sets the scale, not the trajectory of a drug whose dose is escalated over 16 to 20 weeks." }
+
+# The factors of overweight and obesity on the physiology, `fobes_<key>`, a
+# function of the body mass index; `value` for a factor which is the same in
+# both sexes, `male` and `female` where they differ. Every factor is 1 up to a
+# body mass index of 25 kg/m2 and is the residual of the repository of Berton
+# 2022 over what the scaling of the library already does,
+#
+#   fobes(q, BMI) = [Berton(q, BMI)/library(q, BMI)]/[Berton(q, 25)/library(q, 25)],
+#
+# evaluated at the reference height of the sex and at 35 years, so a factor of
+# 1 means that the fat-free mass of Janmahasatian 2005 and the scaling of
+# Huisinga 2012 reproduce the measured obese value. A factor on a flow
+# fraction is the percentage of the cardiac output of Berton 2022 over its
+# value at a body mass index of 25, which is a residual by construction: the
+# fractions of the library are constant. Berton 2022 declare their equations
+# robust to a body mass index of 40 and usable with caution to 60, which is
+# the range of the factors; the values above 40 are an extrapolation of both
+# the repository and the fat-free mass of Janmahasatian 2005, which saturates.
+#
+# The quantities without a factor, and why, are in docs/pbpk/adipose.md: the
+# GFR (the library's `GFR_ref*BSA/BSA_ref` reproduces the measured obese GFR
+# to within 1 % at every body mass index), the hematocrit, the kidney flow
+# fraction, the kidney, heart and skin masses, the liver mass (the mass of the
+# library is already a lean liver volume, 1.12 to 1.13 times the lean liver
+# volume of Sinha 2020 at every body mass index, which is what the clearance
+# must scale with), the muscle mass and the blood volume (within 7 % to a body
+# mass index of 40), the gastric pH, the gastric emptying and the transit
+# times, the composition of the adipose tissue and the hepatic artery.
+
+[factor.cardiac_output]
+bmi = [25.0, 27.5, 30.0, 32.5, 35.0, 37.5, 40.0, 45.0, 50.0, 60.0]
+male = [1.0, 0.969, 0.9475, 0.933, 0.9235, 0.9179, 0.9152, 0.9161, 0.9227, 0.9451]
+female = [1.0, 0.9659, 0.9417, 0.9247, 0.913, 0.9053, 0.9006, 0.8978, 0.901, 0.9171]
+source = "Berton2022"
+sources = ["Collis2001", "deDivitiis1981"]
+notes = "The cardiac output of Berton 2022 (`CO = HR*EDV*EF/1000` with a heart rate of 80/min, an end-diastolic volume of `43.13 + 12.96*Vblood` ml and an ejection fraction of `0.65 - 0.0018*BMI`, 11 studies) rises from 5.1 to 7.5 l/min between a body mass index of 20 and 60, less steeply than the scaling of the library with the lean tissue: the library overshoots by 8 % at a body mass index of 30 and 9 % at 40. The mechanism of the library is right (Collis 2001, Strong Heart Study, n = 2744: the stroke volume and the cardiac output track the fat-free mass, not the fat) and only too steep, because the blood volume per kg and the ejection fraction both fall with obesity (de Divitiis 1981). The factor carries every organ flow, so the cardiac output of the model stays the sum of its flows exactly, and the flows whose own factor falls (the muscle, the brain, the gut, the skin, the pancreas) lower it further: the cardiac output of the man of 176 cm at a body mass index of 40 falls from 8.55 to 7.37 l/min, against 6.63 in Berton 2022, whose reference individual has a cardiac output of 5.5 and not the 6.5 l/min of ICRP 89. The factors fix the shape of the response, not the reference individual."
+
+[factor.adipose_flow]
+bmi = [25.0, 27.5, 30.0, 32.5, 35.0, 37.5, 40.0, 45.0, 50.0, 60.0]
+male = [1.0, 1.038, 1.077, 1.118, 1.161, 1.205, 1.25, 1.347, 1.451, 1.684]
+female = [1.0, 1.031, 1.062, 1.095, 1.128, 1.163, 1.198, 1.273, 1.352, 1.525]
+source = "Berton2022"
+sources = ["Levitt2007", "Blaak1995", "Summers1996", "Virtanen2002", "Lesser1967"]
+notes = "The adipose share of the cardiac output of Berton 2022, `exp(2.50 - 0.043*BMI + 0.033*Mad)` percent (14 studies, 312 subjects), rises with the fat mass although the perfusion per kg of fat falls. The factor is upward because the perfusion of the library falls too fast, not too slowly: at a constant fraction of 5 % the perfusion of the man falls from 1.87 to 1.00 ml/min/100 g between a body mass index of 25 and 40, against 2.9 to 1.4 in Berton 2022 (and 2.2 to 4.4 ml/min/100 g at normal weight by three independent methods, Levitt 2007; 133Xe and 85Kr washout, Lesser 1967). With the factor of the cardiac output the absolute adipose flow of the man of 176 cm at a body mass index of 40 rises from 0.462 to 0.529 l/min and the perfusion of the compartment from 0.87 to 0.99 ml/min/100 g (the compartment holds 2 to 4 kg more than the fat mass, so its perfusion is lower than the perfusion per kg of fat). Blaak 1995, Summers 1996 and Virtanen 2002 (microdialysis, 133Xe and PET) give the direction only, their numbers being in abstracts."
+
+[factor.muscle_flow]
+bmi = [25.0, 27.5, 30.0, 32.5, 35.0, 37.5, 40.0, 45.0, 50.0, 60.0]
+value = [1.0, 0.9704, 0.9418, 0.9139, 0.8869, 0.8607, 0.8353, 0.7866, 0.7408, 0.657]
+source = "Berton2022"
+notes = "The muscle share of the cardiac output of Berton 2022, `exp(3.01 - 0.22*sex - 0.012*BMI)` percent (11 studies, 361 points), falls from 15.7 (men) and 12.6 % (women) at a body mass index of 20 to 11.9 and 9.5 % at 60; the factor keeps the absolute muscle flow nearly constant while the cardiac output rises. The sexes agree to within 0.001 after the normalisation, so one factor serves both."
+
+[factor.brain_flow]
+bmi = [25.0, 27.5, 30.0, 32.5, 35.0, 37.5, 40.0, 45.0, 50.0, 60.0]
+value = [1.0, 0.9729, 0.9458, 0.9188, 0.8917, 0.8646, 0.8375, 0.7833, 0.7292, 0.6208]
+source = "Berton2022"
+notes = "The brain share of the cardiac output of Berton 2022, 12 % up to a body mass index of 25 and `12 - 0.13*(BMI - 25)` above it, so that the absolute cerebral blood flow stays at its healthy value while the cardiac output rises. Without the factor the constant 12 % of the library raises the brain flow of the man of 176 cm from 0.843 to 1.109 l/min at a body mass index of 40, which no measurement supports; with it, and with the factor of the cardiac output, the brain keeps 0.850 l/min. The slope rests on one study (Berton 2022 and the references of their Table 1), which is why the library follows their choice rather than fitting one of its own."
+
+[factor.skin_flow]
+bmi = [25.0, 27.5, 30.0, 32.5, 35.0, 37.5, 40.0, 45.0, 50.0, 60.0]
+value = [1.0, 0.9824, 0.9648, 0.9472, 0.9296, 0.912, 0.8944, 0.8592, 0.824, 0.7536]
+source = "Berton2022"
+notes = "The skin share of the cardiac output of Berton 2022, `5.68 - 0.034*BMI` percent. The slope comes from one cohort and is the weakest of their flow regressions; it keeps the absolute skin flow nearly constant, which is the same statement as for the muscle, and the skin mass of the library already follows the body surface area."
+
+[factor.heart_flow]
+bmi = [25.0, 27.5, 30.0, 32.5, 35.0, 37.5, 40.0, 45.0, 50.0, 60.0]
+male = [1.0, 1.045, 1.089, 1.134, 1.179, 1.223, 1.268, 1.357, 1.446, 1.625]
+female = [1.0, 1.043, 1.085, 1.128, 1.171, 1.213, 1.256, 1.341, 1.426, 1.597]
+source = "Berton2022"
+notes = "The heart share of the cardiac output of Berton 2022, `3.41 + 0.29*sex + 0.11*BMI` percent (11 studies, 499 subjects): the coronary flow rises with the work of the hypertrophied heart faster than the cardiac output."
+
+[factor.gut_flow]
+bmi = [25.0, 27.5, 30.0, 32.5, 35.0, 37.5, 40.0, 45.0, 50.0, 60.0]
+male = [1.0, 0.9729, 0.9466, 0.921, 0.8963, 0.8724, 0.8493, 0.8054, 0.7648, 0.6931]
+female = [1.0, 0.9698, 0.9406, 0.9125, 0.8853, 0.8592, 0.8341, 0.7871, 0.7441, 0.6703]
+source = "Berton2022"
+sources = ["Ghobadi2011"]
+notes = "The gastrointestinal share of the cardiac output of Berton 2022, `(18.52 + 3.04*sex) - (0.20 + 0.06*sex)*BMI + (0.0009 + 0.0004*sex)*BMI^2` percent, on the stomach, the small and the large intestine; the absolute gastrointestinal flow is then nearly unchanged, which is what both platforms assume (Ghobadi 2011 keep it constant for Simcyp's obese populations). This is the best supported of the flow factors: the two independent parameterisations agree. It is also what makes the total hepatic blood flow of the library rise by 9 % at a body mass index of 40 (1.95 against 1.79 l/min of the reference man, 26.5 instead of 27.6 % of the cardiac output) while the hepatic artery keeps its fraction, between Simcyp (the absolute hepatic flow unchanged, Alexander 1962) and Berton 2022 (the percentage of the cardiac output constant, so the absolute flow rises 22 %); the two disagree and the hepatic artery share is a derived quantity, not a measurement, so the library adds no factor of its own."
+
+[factor.pancreas_flow]
+bmi = [25.0, 27.5, 30.0, 32.5, 35.0, 37.5, 40.0, 45.0, 50.0, 60.0]
+male = [1.0, 0.9755, 0.9521, 0.9297, 0.9082, 0.8875, 0.8675, 0.8294, 0.7935, 0.727]
+female = [1.0, 0.9778, 0.9566, 0.9363, 0.9168, 0.898, 0.8797, 0.845, 0.8122, 0.7511]
+source = "Berton2022"
+notes = "The pancreatic share of the cardiac output of Berton 2022, `5.18 - 0.95*BSA` percent, which falls with the body surface area and therefore with the body mass index at a fixed height; it rests on two PET studies and keeps the absolute pancreatic flow nearly constant."
+
+[factor.albumin]
+bmi = [25.0, 27.5, 30.0, 32.5, 35.0, 37.5, 40.0, 45.0, 50.0, 60.0]
+value = [1.0, 0.9908, 0.9816, 0.9725, 0.9633, 0.9541, 0.9449, 0.9266, 0.9082, 0.8715]
+source = "Berton2022"
+sources = ["Benedek1983", "Benedek1984", "Ghobadi2011"]
+notes = "The plasma albumin of Berton 2022, `47.58 - 0.16*BMI` g/l (10 studies), falls by 5.5 % at a body mass index of 40. Simcyp and the two small studies behind it keep the albumin of the obese unchanged (Ghobadi 2011; Benedek 1983 and 1984), so the direction is settled by the larger set and the size is small either way."
+
+[factor.agp]
+bmi = [25.0, 27.5, 30.0, 32.5, 35.0, 37.5, 40.0, 45.0, 50.0, 60.0]
+value = [1.0, 1.038, 1.077, 1.115, 1.154, 1.192, 1.231, 1.308, 1.385, 1.538]
+source = "Berton2022"
+sources = ["Benedek1983", "Benedek1984", "Ghobadi2011"]
+notes = "The plasma alpha-1-acid glycoprotein of Berton 2022, `0.48 + 0.012*BMI` g/l (12 studies, 455 subjects), rises by 23 % at a body mass index of 40. Simcyp raises it by a factor of 2.03 at a body mass index of 30 to 40 and 2.25 above 40 (Ghobadi 2011), from Benedek 1983 (n = 18) and Benedek 1984 (n = 11); the two parameterisations differ by a factor of about 1.7 and the library follows the regression of the larger set. A model whose drug binds mainly to the acid glycoprotein should scan the alternative."
+
+[protein.li.CYP3A4]
+bmi = [25.0, 27.5, 30.0, 32.5, 35.0, 37.5, 40.0, 45.0, 50.0, 60.0]
+value = [1.0, 0.95, 0.9065, 0.8683, 0.8344, 0.804, 0.7765, 0.7288, 0.6886, 0.6243]
+source = "Krogstad2021"
+sources = ["Jamwal2018", "Ulvestad2013", "Ghobadi2011", "Izat2026"]
+notes = "The hepatic CYP3A4 activity per mg of microsomal protein falls by 5 % per 10 % of body weight (Krogstad 2021, 36 livers of a body mass index of 18 to 63, unbound intrinsic clearance of midazolam), i.e. `0.95^(ln(BMI/25)/ln(1.1))` at a fixed height, 0.78 at a body mass index of 40. Three independent lines agree on the direction and roughly on the size: the protein expression and the activity are 2.7-fold (fatty liver) and 4.1-fold (steatohepatitis) lower than in the healthy liver (Jamwal 2018), Simcyp's step function gives 0.62 at a body mass index of 30 to 40 and 0.47 above (Ghobadi 2011), Ulvestad 2013 regressed the abundance on the body mass index (in a figure which could not be read) and the endogenous biomarker of the virtual twins of Izat 2026 shows the same. The factor is applied per amount of liver tissue, as the factors of cirrhosis are, so it multiplies every process of CYP3A4 in the liver; the intestinal CYP3A4 also falls (Ulvestad 2013, Krogstad 2020) by an amount nobody has quantified and keeps its healthy value."
+
+[protein.li.CYP2E1]
+bmi = [25.0, 35.0, 45.0]
+value = [1.0, 1.63, 1.8]
+source = "Ghobadi2011"
+sources = ["Emery2003", "OShea1994"]
+notes = "The hepatic CYP2E1 abundance rises with obesity: Simcyp multiplies it by 1.63 at a body mass index of 30 to 40 and by 1.80 above 40 (back-calculated by Ghobadi 2011 from the chlorzoxazone data), which the library reads as a continuous rise through the midpoints of the two bands, 1.63 at 35 and 1.80 at 45, rather than as a step. The direction is well established and the size is not: the unbound clearance of chlorzoxazone falls about threefold after a weight loss in morbid obesity with fatty liver (Emery 2003, n = 14, paired before and after) and is raised in the obese (O'Shea 1994), while Berton 2022 declined to assign a value."

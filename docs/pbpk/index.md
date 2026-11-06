@@ -209,6 +209,17 @@ Every other id of the scheme, the ids a model rarely reads: the physiology, the 
 | `BMI` | the body mass index | `ids.BMI` |
 | `BSA` | the body surface area (m2) | `ids.BSA` |
 | `FFM` | the fat-free mass (kg) | `ids.FFM` |
+| `FM` | the body fat mass (kg), `BW - FFM` (a model with `adipose`) | `ids.FM` |
+| `FMI` | the fat mass index (kg/m2), the fat mass over the squared height | `ids.FMI` |
+| `BFF` | the body fat fraction, the fat mass over the body weight | `ids.BFF` |
+| `LBW` | the lean body weight (kg), the body weight without the adipose tissue | `ids.LBW` |
+| `f_vat` | the share of the adipose tissue which is visceral | `ids.F_VISCERAL` |
+| `VAT` | the visceral adipose tissue (kg) | `ids.VAT` |
+| `SAT` | the subcutaneous adipose tissue (kg) | `ids.SAT` |
+| `BW0` | the body weight (kg) at the start of a simulation of a model whose weight changes | `ids.BW_BASE` |
+| `f_bw` | the fractional change of the body weight at the set point, the effect of the model | `ids.BW_EFFECT` |
+| `BW_set` | the body weight (kg) the individual approaches, `BW0*(1 + f_bw)` | `ids.BW_SET` |
+| `k_bw` | the rate (1/min) at which the body weight approaches its set point | `ids.K_BW` |
 | `Mlean` | the mass of the lean organ tissues without their blood (kg) | `ids.MLEAN` |
 | `SV_tis` | the scaling factor of the lean tissues, the blood and the cardiac output | `ids.SV_TIS` |
 | `Vblood` | the total blood volume (l) | `ids.VBLOOD` |

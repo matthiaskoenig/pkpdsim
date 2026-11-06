@@ -36,12 +36,23 @@ from pkpdsim.database import integration
 from pkpdsim.database.studies import KINDS, QUANTITIES, studies
 from pkpdsim.impairment import (
     AGE_CLASSES,
+    BMI_CLASSES,
     CHILD_PUGH_CLASSES,
     KDIGO_GFR_CLASSES,
     NYHA_CLASSES,
     ImpairmentClass,
 )
 from pkpdsim.pbpk import ids
+from pkpdsim.pbpk.adipose import (
+    BINDING_FACTORS,
+    CARDIAC_OUTPUT,
+    FLOW_FACTORS,
+    ObesityFactor,
+    obesity_factor,
+    obesity_factors,
+    obesity_protein_factors,
+    visceral_share,
+)
 from pkpdsim.pbpk.age import (
     AGE_REFERENCE,
     factor_curves,
@@ -64,6 +75,7 @@ from pkpdsim.pbpk.organs import Organ
 from pkpdsim.pbpk.physiology import (
     Sex,
     _references,
+    body_composition,
     physiology_table,
     reference_hematocrit,
     reference_individual,
@@ -506,6 +518,162 @@ def pregnancy() -> str:
     ]
     return _generated(
         "`database/tables/pregnancy_human.toml`", _table(header, rows), cited
+    )
+
+
+ADIPOSE_BMI: tuple[float, ...] = (25.0, 30.0, 35.0, 40.0, 50.0)
+"""The body mass indices (kg/m2) of the table of the factors of obesity."""
+
+ADIPOSE_AGES: tuple[float, ...] = (20.0, 30.0, 40.0, 50.0, 60.0, 70.0)
+"""The ages (years) of the table of the visceral share of the adipose tissue."""
+
+
+def adipose_factors() -> str:
+    """The factors of overweight and obesity over the body mass index."""
+    rows: list[list[str]] = []
+    cited: list[str] = []
+    male, female = obesity_factors(Sex.MALE), obesity_factors(Sex.FEMALE)
+    entries: list[tuple[str, str, str, ObesityFactor, ObesityFactor]] = [
+        (
+            CARDIAC_OUTPUT.replace("_", " "),
+            f"`{obesity_factor(ids.CO)}`",
+            "every organ flow",
+            male[CARDIAC_OUTPUT],
+            female[CARDIAC_OUTPUT],
+        )
+    ]
+    for key, organs in FLOW_FACTORS.items():
+        entries.append(
+            (
+                key.replace("_", " "),
+                ", ".join(f"`{obesity_factor(ids.organ_flow(o))}`" for o in organs),
+                ", ".join(f"`{ids.organ_flow(o)}`" for o in organs),
+                male[key],
+                female[key],
+            )
+        )
+    for key in BINDING_FACTORS:
+        entries.append(
+            (
+                key,
+                f"`{obesity_factor(key)}`",
+                f"`{ids.impairment_factor(key)}`",
+                male[key],
+                female[key],
+            )
+        )
+    for (organ, protein), f in sorted(
+        obesity_protein_factors(Sex.MALE).items(),
+        key=lambda x: (x[0][0].value, x[0][1]),
+    ):
+        entries.append(
+            (
+                f"{protein} {_ORGAN_NAMES[organ]}",
+                f"`{obesity_factor(f'{organ.value}_{protein.lower()}')}`",
+                f"`{ids.impairment_activity(protein, organ)}`",
+                f,
+                obesity_protein_factors(Sex.FEMALE)[organ, protein],
+            )
+        )
+    for name, factor, target, m, f in entries:
+        cited += list(m.sources)
+        same = all(abs(m.value(b) - f.value(b)) < 5e-4 for b in (*ADIPOSE_BMI, 60.0))
+        values = [
+            _number(m.value(b))
+            if same
+            else f"{_number(m.value(b))} / {_number(f.value(b))}"
+            for b in ADIPOSE_BMI
+        ]
+        rows.append(
+            [name, factor, target, *values, ", ".join(f"`{k}`" for k in m.sources)]
+        )
+    header = [
+        "quantity",
+        "factor",
+        "on",
+        *[f"BMI {b:g}" for b in ADIPOSE_BMI],
+        "sources",
+    ]
+    return _generated(
+        "`database/tables/adipose_human.toml`", _table(header, rows), cited
+    )
+
+
+def adipose_visceral() -> str:
+    """The visceral share of the adipose tissue over age."""
+    rows: list[list[str]] = []
+    cited: list[str] = []
+    for sex in Sex:
+        share = visceral_share(sex)
+        cited += list(share.sources)
+        rows.append(
+            [
+                sex.value,
+                *[_number(share.curve.value(a)) for a in ADIPOSE_AGES],
+                ", ".join(f"`{k}`" for k in share.sources),
+            ]
+        )
+    header = ["sex", *[f"{a:g} y" for a in ADIPOSE_AGES], "sources"]
+    return _generated(
+        "`database/tables/adipose_human.toml`", _table(header, rows), cited
+    )
+
+
+def adipose_classes() -> str:
+    """The body composition of the classes of the body mass index."""
+    rows: list[list[str]] = []
+    order = (
+        "underweight",
+        "normal",
+        "overweight",
+        "obesity_1",
+        "obesity_2",
+        "obesity_3",
+    )
+    for sex in Sex:
+        reference = reference_individual(sex)
+        for key in order:
+            c = BMI_CLASSES[key]
+            bw = (
+                reference.bw
+                if c.value is None
+                else c.value * (reference.height / 100.0) ** 2
+            )
+            comp = body_composition(sex, bw, reference.height)
+            f_vat = visceral_share(sex).curve.value(AGE_REFERENCE)
+            rows.append(
+                [
+                    c.label,
+                    sex.value,
+                    _number(comp.bmi),
+                    _number(comp.bw),
+                    _number(comp.ffm),
+                    _number(comp.fm),
+                    _number(100.0 * comp.fm / comp.bw),
+                    _number(comp.fm / (comp.height / 100.0) ** 2),
+                    _number(comp.adipose),
+                    _number(f_vat * comp.adipose),
+                    _number((1.0 - f_vat) * comp.adipose),
+                ]
+            )
+    header = [
+        "class",
+        "sex",
+        "BMI",
+        "BW [kg]",
+        "FFM [kg]",
+        "FM [kg]",
+        "%fat",
+        "FMI",
+        "Mad [kg]",
+        "VAT [kg]",
+        "SAT [kg]",
+    ]
+    return _generated(
+        "`pkpdsim.pbpk.physiology.body_composition` at the height of the "
+        "reference individual of the sex (ICRP 89, 35 years)",
+        _table(header, rows),
+        (),
     )
 
 
@@ -1323,6 +1491,41 @@ def classes_age() -> str:
     )
 
 
+def classes_bmi() -> str:
+    """The WHO classes of the body mass index with the body weight of the scans."""
+    rows = []
+    for c in BMI_CLASSES:
+        weights = ", ".join(
+            f"{sex.value} "
+            + _number(
+                reference_individual(sex).bw
+                if c.value is None
+                else c.value * (reference_individual(sex).height / 100.0) ** 2
+            )
+            for sex in Sex
+        )
+        rows.append(
+            [
+                _class_cell(c),
+                c.definition,
+                _limits(c, closed=False),
+                _number(c.value) if c.value is not None else "reference",
+                weights,
+            ]
+        )
+    return "\n".join(
+        [
+            "*Generated from `pkpdsim.impairment.BMI_CLASSES` by "
+            "`scripts/pbpk_tables.py`.*",
+            "",
+            *_table(
+                ["class", "definition", "BMI [kg/m2]", "BMI", "BW [kg]"],
+                rows,
+            ),
+        ]
+    )
+
+
 def classes_kdigo() -> str:
     """The GFR categories of KDIGO with the eGFR and renal function of the scans."""
     stages = {
@@ -1866,6 +2069,9 @@ TABLES: dict[str, Callable[[], str]] = {
     "physiology-organs-male": physiology_organs_male,
     "species-overview": species_overview,
     "circadian-rhythms": circadian_rhythms,
+    "adipose-factors": adipose_factors,
+    "adipose-visceral": adipose_visceral,
+    "adipose-classes": adipose_classes,
     "pregnancy-factors": pregnancy,
     "species-intestine": species_intestine,
     "species-organs-rat": species_organs_rat,
@@ -1880,6 +2086,7 @@ TABLES: dict[str, Callable[[], str]] = {
     "ontogeny": ontogeny,
     "sex-factors": sex_factors,
     "classes-age": classes_age,
+    "classes-bmi": classes_bmi,
     "impairment-child-pugh": impairment_child_pugh,
     "impairment-child-pugh-proteins": impairment_child_pugh_proteins,
     "impairment-meld": impairment_meld,

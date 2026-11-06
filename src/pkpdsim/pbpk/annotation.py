@@ -489,6 +489,18 @@ KINDS: dict[str, Kind] = {
     "sex_factor": Kind(
         _P, _PHYS, requested="factor of the sex on a physiological quantity"
     ),
+    # the body composition and the adipose tissue
+    "body_composition": Kind(_P, _PHYS, requested="body composition of an individual"),
+    "fat_mass": Kind(_P, _PHYS, requested="body fat mass"),
+    "adipose_depot": Kind(_P, _PHYS, requested="mass of an adipose tissue depot"),
+    "obesity_factor": Kind(
+        _P, _PHYS, requested="factor of obesity on a physiological quantity"
+    ),
+    "weight_change": Kind(
+        SBO.KINETIC_CONSTANT,
+        _PHYS,
+        requested="rate of the change of the body weight",
+    ),
     # the pregnancy
     "gestational_age": Kind(_P, _PHYS, requested="gestational age of a pregnancy"),
     "pregnancy": Kind(
