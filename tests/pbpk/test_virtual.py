@@ -16,7 +16,7 @@ from pkpdsim.pbpk import (
 )
 from pkpdsim.pbpk.populations import population
 
-from .conftest import definition, individuals
+from .conftest import definition, individuals, over_age
 
 
 def test_the_draws_are_reproducible() -> None:
@@ -103,6 +103,7 @@ def test_the_children_of_a_population_grow() -> None:
     assert mean(infants) < 90.0 < mean(children) < 150.0
 
 
+@over_age
 def test_the_dimension_of_a_sex(tmp_path: Path) -> None:
     """The dimension of a scan has the covariates of the individuals of the sex in the units of the model."""
     vp = virtual_population("white_american_nhanes", 20, ages="child", seed=3)
@@ -112,7 +113,7 @@ def test_the_dimension_of_a_sex(tmp_path: Path) -> None:
     assert values[ids.AGE].m_as("yr").tolist() == [i.age for i in men]
     assert values[ids.BW].m_as("kg").tolist() == [i.bw for i in men]
     # every child of the draw is a valid individual of the male build
-    at = individuals(build(definition(), tmp_path).flat_path)
+    at = individuals(build(definition(age=True), tmp_path).flat_path)
     for i in men:
         r = at(**i.changes())
         assert r[ids.organ_mass(Organ.ADIPOSE)] > 0

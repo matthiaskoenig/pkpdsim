@@ -519,12 +519,15 @@ def test_the_baseline_is_annotated(tmp_path: Path) -> None:
 # `fimp_albumin_ckd`) to both. The transit time of the stomach of the
 # segmented intestine added `T_st_eff`: a parameter of the top model of
 # the comp model, a parameter with its initial assignment of the flat model.
-# The physiology over age added 12 parameters (`BW_ref`, `HEIGHT_ref`, the
-# factors `fage_*`, `fsex_*` of its proteins) and made 45 reference values
-# and fractions initial assignments of `AGE`.
+# The physiology over age added 9 parameters (`BW_ref`, `HEIGHT_ref`, the
+# factors `fage_*` and the `fsex_*` of its proteins). The build of these
+# counts has no physiology over age (`PBPKDefinition.age`, the default), so
+# the reference values and the factors are constants and the model has no
+# `AGE`, `fage_albumin` and `fage_agp`; a build over age has three parameters
+# more and 26 of its parameters are initial assignments of `AGE` instead.
 _PINNED = {
-    "comp": (9, 252, 193, 12, 3, 9),
-    "flat": (65, 420, 310, 68, 108, 77),
+    "comp": (9, 249, 167, 12, 3, 9),
+    "flat": (65, 417, 284, 68, 108, 77),
 }
 
 

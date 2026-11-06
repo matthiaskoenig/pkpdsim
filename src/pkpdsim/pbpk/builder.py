@@ -1482,6 +1482,7 @@ class _Top:
                 physiology_factors() | pregnancy_physiology_factors(definition),
                 definition.population,
                 definition.species,
+                definition.age,
             ),
             *impairment_objects(definition),
             *circadian_objects(definition),

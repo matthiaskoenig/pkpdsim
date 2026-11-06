@@ -67,9 +67,12 @@ def test_european_reproduces_defaults() -> None:
             str(o.sid): o for o in physiology_objects(sex, population="european_icrp")
         }
         assert default.keys() == explicit.keys()
-        for pid in (ids.BW, ids.HEIGHT, ids.AGE):
+        for pid in (ids.BW, ids.HEIGHT):
             assert default[pid].value == explicit[pid].value  # ty: ignore[unresolved-attribute]
-    age = {str(o.sid): o for o in physiology_objects(Sex.MALE)}[ids.AGE]
+    # the age is a covariate of a build over age only (`PBPKDefinition.age`)
+    assert ids.AGE not in default
+    over = {str(o.sid): o for o in physiology_objects(Sex.MALE, over_age=True)}
+    age = over[ids.AGE]
     assert age.value == 35.0  # ty: ignore[unresolved-attribute]
     assert "the reference individual of the sex" in str(age.notes)
 
@@ -85,7 +88,7 @@ def test_population_reference_sums(tmp_path: Path, key: str, sex: Sex) -> None:
     path = _physiology(tmp_path / "physiology.xml", sex, key)
     r = individual(path)
     reference = population(key).reference[sex]
-    for pid in (ids.BW, ids.HEIGHT, ids.AGE):
+    for pid in (ids.BW, ids.HEIGHT):
         assert r[pid] == reference[pid].value, pid
     assert r[ids.organ_mass(Organ.ADIPOSE)] > 0
     _assert_balance(r, sex)

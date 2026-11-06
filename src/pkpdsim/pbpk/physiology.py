@@ -65,6 +65,7 @@ from pkpdsim.pbpk.age import (
     ADULT_AGE,
     AGE_REFERENCE,
     LIVER_GROUP,
+    AgeCurve,
     age_factor,
     factor_curves,
     flow_factors,
@@ -427,10 +428,12 @@ class _Physiology:
         factors: Mapping[str, str],
         population: "Population",
         default: bool,
+        over_age: bool = False,
     ) -> None:
         self.sex = sex
         self.species = Species.HUMAN
         self.anatomy = "ICRP89"
+        self.over_age = over_age
         self.refs = _references(sex, load("physiology_human"))
         self.curves = reference_curves(sex)
         self.factors_of_age = factor_curves(sex)
@@ -545,7 +548,11 @@ class _Physiology:
         return [
             covariate(ids.BW, U.kg, "body weight [kg]", kind="body_weight"),
             covariate(ids.HEIGHT, U.cm, "height [cm]", kind="height"),
-            covariate(ids.AGE, U.yr, "age [yr]", kind="age"),
+            *(
+                [covariate(ids.AGE, U.yr, "age [yr]", kind="age")]
+                if self.over_age
+                else []
+            ),
             *self.organ_functions(),
         ]
 
@@ -615,8 +622,27 @@ class _Physiology:
         kind: str,
         organ: Organ | None = None,
     ) -> list[Sbase]:
-        """A reference value of the sex over age, the initial assignment of its curve."""
+        """A reference value of the sex: the curve over age, or the constant of the adult.
+
+        A build without the physiology over age (`PBPKDefinition.age`) has the
+        value of the reference individual of `AGE_REFERENCE`, a constant.
+        """
         c = self.curves[pid]
+        if not self.over_age:
+            return [
+                _parameter(
+                    pid,
+                    unit,
+                    name,
+                    f"{text} Of the reference individual of "
+                    f"{AGE_REFERENCE:g} years (the build has no physiology over "
+                    f"age, `PBPKDefinition.age`): {c.notes}",
+                    c.sources,
+                    value=c.curve.value(AGE_REFERENCE),
+                    kind=kind,
+                    organ=organ,
+                )
+            ]
         return _initial(
             pid,
             c.curve.formula(ids.AGE, str(unit.sid)),
@@ -636,8 +662,15 @@ class _Physiology:
         kind: str,
         organ: Organ | None = None,
     ) -> list[Sbase]:
-        """The factor of the age on a quantity, `fage_<key>`, 1 at 35 years."""
+        """The factor of the age on a quantity, `fage_<key>`, 1 at 35 years.
+
+        A build without the physiology over age has the constant 1.
+        """
         c = self.factors_of_age[key]
+        if not self.over_age:
+            return [
+                self.constant_factor(age_factor(key), f"age factor {name}", c, organ)
+            ]
         return _initial(
             age_factor(key),
             c.curve.formula(ids.AGE),
@@ -647,6 +680,31 @@ class _Physiology:
             f"individual at a fixed body size, 1 at {AGE_REFERENCE:g} years "
             f"(`pkpdsim.pbpk.age`): {c.notes}",
             c.sources,
+            kind="age_factor",
+            organ=organ,
+        )
+
+    def constant_factor(
+        self,
+        pid: str,
+        name: str,
+        curve: AgeCurve,
+        organ: Organ | None = None,
+    ) -> Parameter:
+        """The factor of the age of a build without the physiology over age: 1.
+
+        The individual of such a build is of `AGE_REFERENCE`, where every
+        factor of the age is 1 (`PBPKDefinition.age` gives the curve).
+        """
+        return _parameter(
+            pid,
+            U.dimensionless,
+            name,
+            f"1 at {AGE_REFERENCE:g} years, the age of the individual of a build "
+            "without the physiology over age (`PBPKDefinition.age`, which gives "
+            f"the curve of `pkpdsim.pbpk.age`): {curve.notes}",
+            curve.sources,
+            value=curve.curve.value(AGE_REFERENCE),
             kind="age_factor",
             organ=organ,
         )
@@ -676,6 +734,22 @@ class _Physiology:
         for key, name in names.items():
             c = self.factors_of_sex.get(key)
             if c is None:
+                continue
+            if not self.over_age:
+                objects.append(
+                    _parameter(
+                        sex_factor(key),
+                        U.dimensionless,
+                        f"sex factor {name}",
+                        f"The factor of the sex on the {name} of the "
+                        f"{self.sex.value} individual of {AGE_REFERENCE:g} years "
+                        "relative to a man of the same body weight and height "
+                        f"(`pkpdsim.pbpk.sex_differences`): {c.notes}",
+                        c.sources,
+                        value=c.curve.value(AGE_REFERENCE),
+                        kind="sex_factor",
+                    )
+                )
                 continue
             objects += _initial(
                 sex_factor(key),
@@ -716,6 +790,13 @@ class _Physiology:
             (qli, f.liver, "liver flow"),
             (qki, f.kidney, "kidney flow"),
         ):
+            if not self.over_age:
+                objects.append(
+                    self.constant_factor(
+                        pid, f"age factor {name}", AgeCurve(curve, f.sources, f.notes)
+                    )
+                )
+                continue
             objects += _initial(
                 pid,
                 curve.formula(ids.AGE),
@@ -1242,6 +1323,7 @@ class _AnimalPhysiology(_Physiology):
         self.factors_of_sex = {}
         self.factors = factors
         self.applied = set()
+        self.over_age = False
 
     @property
     def animal(self) -> str:
@@ -1433,6 +1515,7 @@ def physiology_objects(
     factors: Mapping[str, str] | None = None,
     population: str = DEFAULT_POPULATION,
     species: Species = Species.HUMAN,
+    over_age: bool = False,
 ) -> list[Sbase]:
     """The parameters and initial assignments of the standard physiology.
 
@@ -1452,6 +1535,11 @@ def physiology_objects(
             (`_AnimalPhysiology`, the reference animal of
             `database/tables/physiology_<species>.toml` scaled with the body
             weight; the default population only).
+        over_age: the physiology is a function of the age `AGE`
+            (`PBPKDefinition.age`): the reference values and the factors are
+            the curves of `pkpdsim.pbpk.age`. Without it (the default) they
+            are the constants of the reference individual of
+            `AGE_REFERENCE` and the model has no `AGE`.
 
     Returns:
         The constant parameters and their initial assignments of the top model.
@@ -1472,12 +1560,18 @@ def physiology_objects(
             factors or {},
             get_population(population),
             population == DEFAULT_POPULATION,
+            over_age,
         )
     else:
         if population != DEFAULT_POPULATION:
             raise ValueError(
                 f"The population '{population}' is human: the {species.value} "
                 "has its reference animal."
+            )
+        if over_age:
+            raise ValueError(
+                f"The {species.value} has no physiology over age: the curves of "
+                "the library are the human ones."
             )
         physiology = _AnimalPhysiology(species, sex, factors or {})
     objects = [

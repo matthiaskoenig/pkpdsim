@@ -35,7 +35,7 @@ from pkpdsim.pbpk.data import load
 from pkpdsim.pbpk.physiology import _references, normal_gfr
 from pkpdsim.pbpk.sex_differences import protein_sex_factor, sex_factor
 
-from .conftest import definition, individuals
+from .conftest import definition, individuals, over_age
 from .test_physiology import _assert_balance, _assert_flows
 
 AGES = (0.0, 0.01, 0.1, 0.5, 1.0, 2.5, 5.0, 10.0, 15.0, 18.0, 20.0, 27.5, 35.0, 42.0)
@@ -47,7 +47,9 @@ AGES += (50.0, 57.0, 65.0, 72.0, 80.0, 85.0, 90.0, 100.0)
 def builds(tmp_path_factory: pytest.TempPathFactory) -> dict[Sex, Path]:
     """The simple definition built for each sex."""
     return {
-        sex: build(definition(sex=sex), tmp_path_factory.mktemp(sex.value)).flat_path
+        sex: build(
+            definition(sex=sex, age=True), tmp_path_factory.mktemp(sex.value)
+        ).flat_path
         for sex in Sex
     }
 
@@ -186,6 +188,7 @@ def test_the_proteins_of_the_age_and_the_sex() -> None:
 
 
 @pytest.mark.parametrize("sex", list(Sex))
+@over_age
 def test_the_model_computes_the_curves(builds: dict[Sex, Path], sex: Sex) -> None:
     """Every curve of the model is its curve of python at every age, to 1e-12."""
     at = individuals(builds[sex])
@@ -215,6 +218,7 @@ def test_the_model_computes_the_curves(builds: dict[Sex, Path], sex: Sex) -> Non
 
 
 @pytest.mark.parametrize("sex", list(Sex))
+@over_age
 def test_the_reference_individual_of_every_age_balances(
     builds: dict[Sex, Path], sex: Sex
 ) -> None:
@@ -233,6 +237,7 @@ def test_the_reference_individual_of_every_age_balances(
         assert r[ids.HCT] < 1 - r[ids.GFR] / r[ids.organ_flow(Organ.KIDNEY)]
 
 
+@over_age
 def test_the_sex_factor_is_in_the_female_build_only(builds: dict[Sex, Path]) -> None:
     """The female build has the sex factor of CYP3A4, the male build none."""
     key = "li_cyp3a4"
@@ -243,6 +248,7 @@ def test_the_sex_factor_is_in_the_female_build_only(builds: dict[Sex, Path]) -> 
         male[sex_factor(key)]
 
 
+@over_age
 def test_the_growth_meets_the_adult(builds: dict[Sex, Path]) -> None:
     """The children reach the adult with its aging at 20 years."""
     refs = reference_curves(Sex.MALE)

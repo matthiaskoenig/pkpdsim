@@ -94,6 +94,7 @@ from pkpdsim.database import integration, studies
 from pkpdsim.pbpk import ids
 from pkpdsim.pbpk.age import (
     AGE_REFERENCE,
+    AgeCurve,
     age_factor,
     factor_curves,
     protein_factor,
@@ -1007,8 +1008,59 @@ class _Impairment:
             key=lambda x: (x[0].value, x[1]),
         )
 
+    def _sex_formula(self, factor: AgeCurve) -> str:
+        """The factor of the sex: its curve of the age, or its value at 35 years.
+
+        A build without the physiology over age (`PBPKDefinition.age`) has no
+        `AGE`, so the factor is the constant of the adult.
+        """
+        if self.definition.age:
+            return factor.curve.formula(ids.AGE)
+        return _number(factor.curve.value(AGE_REFERENCE))
+
+    def sex(self) -> None:
+        """The factors of the sex on the albumin and on the proteins of the organs.
+
+        A build over age has them as curves of `AGE`, a build without as the
+        constants of the adult (`_sex_formula`).
+        """
+        sex = self.definition.sex
+        albumin = sex_curves(sex).get(ALBUMIN)
+        if albumin is not None:
+            self.add(
+                _initial(
+                    sex_factor(ALBUMIN),
+                    self._sex_formula(albumin),
+                    "sex factor albumin",
+                    f"The plasma albumin of the {sex.value} build relative to the "
+                    "men of the same age (`pkpdsim.pbpk.sex_differences`): "
+                    f"{albumin.notes}",
+                    albumin.sources,
+                    kind="sex_factor",
+                )
+            )
+        for organ, protein in self.individual_proteins():
+            factor = protein_sex_factor(sex, organ, protein)
+            if factor is None:
+                continue
+            where = f"{protein} in the {organ.name.lower().replace('_', ' ')}"
+            self.add(
+                _initial(
+                    sex_factor(f"{organ.value}_{protein.lower()}"),
+                    self._sex_formula(factor),
+                    f"sex factor {protein} {organ.name.lower()}",
+                    f"The activity of {where} of the {sex.value} build relative "
+                    "to the men of the same age, per amount of tissue "
+                    f"(`pkpdsim.pbpk.sex_differences`): {factor.notes}",
+                    factor.sources,
+                    kind="sex_factor",
+                    organ=organ,
+                    protein=protein,
+                )
+            )
+
     def age(self) -> None:
-        """The factors of the age on the binding proteins and of the age and sex on the proteins."""
+        """The factors of the age on the binding proteins and on the proteins."""
         sex = self.definition.sex
         curves = factor_curves(sex)
         for key, name in (("albumin", "albumin"), ("agp", "alpha-1-acid glycoprotein")):
@@ -1023,20 +1075,6 @@ class _Impairment:
                     f"(`pkpdsim.pbpk.age`): {c.notes}",
                     c.sources,
                     kind="age_factor",
-                )
-            )
-        albumin = sex_curves(sex).get(ALBUMIN)
-        if albumin is not None:
-            self.add(
-                _initial(
-                    sex_factor(ALBUMIN),
-                    albumin.curve.formula(ids.AGE),
-                    "sex factor albumin",
-                    f"The plasma albumin of the {sex.value} build relative to the "
-                    "men of the same age (`pkpdsim.pbpk.sex_differences`): "
-                    f"{albumin.notes}",
-                    albumin.sources,
-                    kind="sex_factor",
                 )
             )
         for organ, protein in self.individual_proteins():
@@ -1054,22 +1092,6 @@ class _Impairment:
                         f"{ontogeny.notes}",
                         ontogeny.sources,
                         kind="age_factor",
-                        organ=organ,
-                        protein=protein,
-                    )
-                )
-            factor = protein_sex_factor(sex, organ, protein)
-            if factor is not None:
-                self.add(
-                    _initial(
-                        sex_factor(key),
-                        factor.curve.formula(ids.AGE),
-                        f"sex factor {protein} {organ.name.lower()}",
-                        f"The activity of {where} of the {sex.value} build "
-                        "relative to the men of the same age, per amount of tissue "
-                        f"(`pkpdsim.pbpk.sex_differences`): {factor.notes}",
-                        factor.sources,
-                        kind="sex_factor",
                         organ=organ,
                         protein=protein,
                     )
@@ -1237,7 +1259,7 @@ class _Impairment:
             return " * ".join(present) if present else _ONE
 
         female_albumin = ALBUMIN in sex_curves(self.definition.sex)
-        human = self.definition.species is Species.HUMAN
+        human = self.definition.age and self.definition.species is Species.HUMAN
         rhythms = circadian_keys(self.definition)
         pregnant = self.definition.pregnancy is not None
 
@@ -1468,6 +1490,8 @@ def impairment_objects(definition: "PBPKDefinition") -> list[Sbase]:
     impairment.ckd()
     impairment.heart_failure()
     if definition.species is Species.HUMAN:
+        impairment.sex()
+    if definition.age and definition.species is Species.HUMAN:
         impairment.age()
     impairment.combined()
     return impairment.objects

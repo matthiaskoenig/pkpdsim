@@ -368,7 +368,10 @@ def contexts(tmp_path_factory: pytest.TempPathFactory) -> list[Context]:
     """The models of the built toys: the top models and the organ components."""
     directory = tmp_path_factory.mktemp("pbpk_equations")
     result: list[Context] = []
-    female = dataclasses.replace(standard(), sid="toy_standard_female", sex=Sex.FEMALE)
+    aged = dataclasses.replace(standard(), sid="toy_standard_age", age=True)
+    female = dataclasses.replace(
+        standard(), sid="toy_standard_female", sex=Sex.FEMALE, age=True
+    )
     pregnant = dataclasses.replace(
         female,
         sid="toy_standard_pregnant",
@@ -380,7 +383,7 @@ def contexts(tmp_path_factory: pytest.TempPathFactory) -> list[Context]:
             for s in female.substances
         ],
     )
-    for definition in (standard(), female, pregnant, variants(), absorption()):
+    for definition in (standard(), aged, female, pregnant, variants(), absorption()):
         paths = build(definition, directory)
         doc = libsbml.readSBMLFromFile(str(paths.comp_path))
         substances = tuple(s.sid for s in definition.substances)

@@ -65,6 +65,39 @@ if TYPE_CHECKING:
     import roadrunner
 
 
+IA_CACHE = (2, 11, 1)
+"""The first version of roadrunner with the cache of the initial value resolvers.
+
+Without it (sys-bio/roadrunner#1435) every initial assignment is inlined into
+each of its readers, so a model with the physiology over age
+(`PBPKDefinition.age`, hundreds of piecewise curves of `AGE`) takes over a
+minute to compile instead of five seconds. The tests which build such a model
+are skipped on an older roadrunner (`over_age`).
+"""
+
+
+def _roadrunner_version() -> tuple[int, ...]:
+    """The version of roadrunner as a tuple of its numbers."""
+    import roadrunner
+
+    parts = []
+    for piece in str(roadrunner.__version__).split("."):
+        digits = "".join(c for c in piece if c.isdigit())
+        parts.append(int(digits) if digits else 0)
+    return tuple(parts)
+
+
+over_age = pytest.mark.skipif(
+    _roadrunner_version() < IA_CACHE,
+    reason=(
+        "a model with the physiology over age needs the cache of the initial "
+        f"value resolvers of roadrunner {'.'.join(str(i) for i in IA_CACHE)} "
+        "(sys-bio/roadrunner#1435)"
+    ),
+)
+"""Skip a test which builds a model with the physiology over age."""
+
+
 def simple_drug() -> Substance:
     """Get the simple drug: Mr 300, fu 0.1 (albumin), Kp 2, merged tissue, urine."""
     return Substance(
@@ -591,7 +624,7 @@ def assert_reference_sbml(result: BuildResult) -> None:
     the consensus of the database (the factors, their notes and sources only),
     and with the heart failure factors of the consensus (Leithe 1984), the
     kidney volume and transit of CKD of Malik 2020 and the cirrhosis factors
-    cited from Edginton 2008 (factors, notes and sources only), and all rebuilt with the physiology over age and sex (the reference values, the hematocrit, the GFR, the fat-free mass, the flow fractions and the binding proteins as curves of `AGE`, the ontogeny and the sex factors of the proteins, the default age 35 of ICRP 89; the values of the default individual unchanged); a change of the library which changes the
+    cited from Edginton 2008 (factors, notes and sources only), and all rebuilt with the factors of the sex of the female build and the constant factors of the age of a build without the physiology over age (`PBPKDefinition.age`, which is not the default: the reference values and the factors are those of the individual of 35 years, as before, and the parameters `fage_*` are their constant 1; the values of the default individual unchanged); a change of the library which changes the
     SBML of every model on purpose rebuilds them and says so.
     """
     for path in (result.comp_path, result.flat_path):

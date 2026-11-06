@@ -1,5 +1,7 @@
 # Virtual populations
 
+A virtual population varies the age, so its model is a build over age (`PBPKDefinition(age=True)`, see [Physiology over age](physiology.md#physiology-over-age)); a build without it has no `AGE` and refuses the changes of an individual.
+
 A virtual individual is a combination of factors, each of which the library knows: the population (the distribution of the body weight and the height over age, [Populations](physiology.md#populations)), the sex (the build of the model, [Sex](physiology.md#sex)), the age (the [physiology over age](physiology.md#physiology-over-age)) and the impaired organ function (the severities of the [impairment](impairment.md)). `virtual_population` draws them:
 
 - the sex by its share (`female`, 0 for men only, 1 for women only);

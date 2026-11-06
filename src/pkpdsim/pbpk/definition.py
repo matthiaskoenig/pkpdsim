@@ -117,6 +117,15 @@ class PBPKDefinition:
             values and default individual; a study of both sexes uses one
             model per sex, the builds of `create_archive(..., sexes=...)`. A
             `Sex` member or its value (`"female"`), normalised to the member.
+        age: the physiology is a function of the age (`AGE`, a covariate):
+            the reference values, the factors and the ontogeny of the
+            proteins are the curves of `pkpdsim.pbpk.age` over the age, from
+            the newborn to 100 years. Without it (the default) the model is
+            that of the reference individual of 35 years (`AGE_REFERENCE`),
+            it has no `AGE`, and its curves are constants: a model of adults
+            pays nothing for the age. A build over age needs the roadrunner
+            with the cache of the initial value resolvers (see
+            `docs/pbpk/physiology.md`).
         species: the species of the model, chosen when it is built: the
             human (ICRP 89, the default) or a laboratory animal (`Species.RAT`,
             `MOUSE`, `PIG`) with the reference animal of
@@ -198,6 +207,7 @@ class PBPKDefinition:
     routes: Sequence[Route] = ()
     pd: Sequence[PDComponent] = ()
     sex: Sex = Sex.MALE
+    age: bool = False
     species: Species = Species.HUMAN
     population: str = DEFAULT_POPULATION
     arm_vein: str = "pksim_default"
@@ -263,6 +273,7 @@ class PBPKDefinition:
         if not definitions:
             raise ValueError(f"Combine '{sid}': no definitions given.")
         for attribute in (
+            "age",
             "sex",
             "species",
             "population",
@@ -309,6 +320,7 @@ class PBPKDefinition:
                 lambda x: str(x.model.sid),
                 "has different inputs or outputs in two definitions",
             ),
+            age=first.age,
             sex=first.sex,
             species=first.species,
             population=first.population,
