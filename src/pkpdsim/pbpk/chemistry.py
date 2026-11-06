@@ -22,9 +22,9 @@ from enum import Enum, StrEnum
 from typing import Literal
 
 import libsbml
+from sbmlsim import distrib
 from sbmlutils.factory import Parameter, Species
 
-from pkpdsim import distrib
 from pkpdsim.pbpk.organs import Organ, Part, as_member
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import (
@@ -495,7 +495,7 @@ def fraction_range(f: float | Value) -> tuple[float, float]:
 
     The distribution of the draws of a fitted value (the uncertainty of
     `fitted`, truncated to the bounds of the fit) is the range a fit or an
-    uncertainty run gives the fraction (`pkpdsim.distrib.support`).
+    uncertainty run gives the fraction (`sbmlsim.distrib.support`).
     """
     if not isinstance(f, Value):
         return float(f), float(f)

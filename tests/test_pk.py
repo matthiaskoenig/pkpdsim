@@ -6,11 +6,11 @@ from pkpdutils import Dose, NCAOptions, Route, Timecourse, nca_single
 from sbmlsim import Q
 from sbmlsim.model import AbstractModel
 from sbmlsim.result import ScanResult
+from sbmlsim.result.scan import point_timecourse
 from sbmlsim.simulation import Change, Dimension, Scan, Simulation
 from sbmlsim.simulator import Simulator
 
 from pkpdsim.pk import nca_frame, scan_nca
-from pkpdsim.scan import point_timecourse
 from pkpdsim_toy import MODEL_PATH
 
 TOY = AbstractModel(

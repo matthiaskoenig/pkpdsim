@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, cast
 
 import pytest
 from sbmlsim import Q
+from sbmlsim.result.scan import start_values
 from sbmlsim.simulation import Simulation
 from sbmlsim.simulator import Simulator
 
@@ -24,7 +25,6 @@ from pkpdsim.pbpk.experiment import (
     ScaledRenalMap,
     healthy_gfr,
 )
-from pkpdsim.scan import start_values
 
 from .conftest import definition, individual, individuals
 
@@ -251,11 +251,17 @@ def test_the_renal_map_is_lazy(
 
 
 def test_importing_the_library_imports_no_simulator() -> None:
-    """`import pkpdsim.pbpk` stays light, the base experiment is exported lazily."""
+    """`import pkpdsim.pbpk` stays light, the base experiment is exported lazily.
+
+    Of sbmlsim it imports only the modules without a simulator (`sbmlsim.distrib`
+    and the units of the package), never roadrunner, COPASI or AMICI.
+    """
     code = (
         "import sys, pkpdsim.pbpk; "
         "print(sorted(m for m in sys.modules "
-        "if m.split('.')[0] in {'sbmlsim', 'roadrunner'} "
+        "if m.split('.')[0] in {'roadrunner', 'COPASI', 'amici'} "
+        "or (m.startswith('sbmlsim') "
+        "and m not in {'sbmlsim', 'sbmlsim.distrib', 'sbmlsim.units'}) "
         "or m in {'pkpdsim.experiment', 'pkpdsim.pbpk.experiment'})); "
         "from pkpdsim.pbpk import REFERENCE_GFR, PBPKSimulationExperiment, "
         "ScaledRenalMap, healthy_gfr; "

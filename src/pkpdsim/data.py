@@ -637,7 +637,7 @@ def _check_labels(name: str, labels: Iterable[str | None]) -> None:
 
     The datasets of an experiment are keyed by the labels; a label with a
     character which an SId does not allow (`-`, `+`, a leading digit) has to
-    be converted (`to_sid` of the experiments). The labels stay as they are.
+    be converted (`sbmlsim.experiment.to_sid`). The labels stay as they are.
     """
     invalid = sorted({label for label in labels if label and not SID.fullmatch(label)})
     if invalid:

@@ -13,34 +13,26 @@ The models of [pkdb_models](https://github.com/matthiaskoenig/pkdb_models) descr
 - **[Study data](data.md)** - the study folders of PK-DB in a checkout of pkdb_data, found through the environment variable `PKDB_DATA`, and the data of a model collected from them into its own folder.
 - **[Initial values](initial_values.md)** - the same initial concentration or amount of a substance in every tissue of a model, which removes the distribution kinetics.
 - **[Timecourses in parts](timecourse.md)** - the one runner of a roadrunner model which is simulated in parts, the parts one after the other in one timecourse.
-- **[Licenses](licenses.md)** - the texts of CC BY-SA 4.0 and MIT for the COMBINE archive of a model, written byte for byte the same on every platform.
+- **[Licenses](licenses.md)** - the texts of CC BY-SA 4.0 and MIT for the COMBINE archive of a model, written byte for byte the same on every platform by `sbmlsim.licenses`.
 - **[Models and their commands](models.md)** - the model object and the commands of a model (`run`, `fit`, `report`, `identifiability`), the tests of a model as functions and the verification of a change, also across versions of sbmlsim (`pkpdsim-verify`).
 - **[Experiments and their metadata](experiments.md)** - the base class of the simulation experiments of a model (the SIds of its keys, the units of its data), the presets of the impaired organ function, the shared vocabulary of the metadata of a fit mapping and the filters which select the mappings of a fit by it.
-- **[Scans and sensitivity analyses](scans.md)** - the timecourse of a point of a scan as sbmlsim 0.8 gave it and the table of the parameters, the distributions and the runner of the sensitivity analyses of a script.
+- **[Scans and sensitivity analyses](scans.md)** - the table of the parameters, the distributions and the runner of the sensitivity analyses of a script.
 - **[Uncertainty of the fitted parameters](uncertainty.md)** - adopted fits whose values the factory takes, their confidence intervals as distrib uncertainties of the SBML parameters, and the run of the experiments over draws of the fitted parameters with bands (`run_simulation <package> --uncertainty`).
 - **[PBPK library](pbpk/index.md)** - the PBPK model library `pkpdsim.pbpk`, from which the PBPK models of pkdb_models will be built: substances, chemistry and choices of a model package on a standard human physiology (ICRP 89), with the standard organ, organ variants, routes, impairment, observers and annotation, built into the comp and the flat SBML model.
 
 ## Quickstart
 
 ```python
-from pathlib import Path
-
 from pkpdsim.annotations import compartments
-from pkpdsim.licenses import License, write_license
 from pkpdsim.templates import creators
 
 print(creators[0].givenName, creators[0].familyName)
 print([resource for _, resource in compartments["li"]])
-
-results = Path("results")
-results.mkdir()
-print(write_license(results, License.MIT, copyright="2026 Matthias König").name)
 ```
 
 ```text
 Matthias König
 ['fma/FMA:7197', 'bto/BTO:0000759', 'ncit/C12392']
-mit.txt
 ```
 
 Continue with [Installation](installation.md) and the [Templates and annotations](templates.md) of a model.

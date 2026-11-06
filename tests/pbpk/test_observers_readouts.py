@@ -15,6 +15,7 @@ from pathlib import Path
 import libsbml
 import numpy as np
 import pytest
+from sbmlsim.result.scan import end_values, start_values
 from sbmlsim.simulation import Simulation
 from sbmlsim.simulator import Simulator
 from sbmlutils.factory import ModelDefinition, Parameter, Reaction, Species
@@ -51,7 +52,6 @@ from pkpdsim.pbpk.units import (
     unit_label,
 )
 from pkpdsim.pbpk.variants.segments import segments
-from pkpdsim.scan import end_values, start_values
 
 from .conftest import (
     assert_reference_sbml,

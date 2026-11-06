@@ -6,8 +6,8 @@ from typing import Any
 
 import pytest
 from pymetadata.omex import EntryFormat
+from sbmlsim.licenses import License, license_text
 
-from pkpdsim.licenses import License, license_text
 from pkpdsim.pbpk import create_archive
 
 from .conftest import definition

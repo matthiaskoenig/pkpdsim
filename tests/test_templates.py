@@ -5,6 +5,7 @@ from datetime import datetime
 
 import libsbml
 import pytest
+from sbmlsim.licenses import License, license_text
 from sbmlutils.factory import (
     Compartment,
     Model,
@@ -16,7 +17,6 @@ from sbmlutils.factory import (
 from sbmlutils.validation import ValidationOptions, validate_doc
 
 from pkpdsim.annotations import compartments
-from pkpdsim.licenses import License, license_text
 from pkpdsim.templates import creators, terms_of_use
 
 

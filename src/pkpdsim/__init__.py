@@ -10,10 +10,10 @@ nothing but itself and released packages.
 Every topic is a module of its own, which a model imports directly:
 `pkpdsim.templates` (the creators and the terms of use of a model),
 `pkpdsim.annotations` (the annotations of the recurring compartments),
-`pkpdsim.data` (the study data of a model from the study folders of PK-DB),
-`pkpdsim.initial_values` (the initial values of a substance in every tissue)
-and `pkpdsim.licenses` (the license texts of the COMBINE archive of a model).
-`import pkpdsim` imports none of them.
+`pkpdsim.data` (the study data of a model from the study folders of PK-DB)
+and `pkpdsim.initial_values` (the initial values of a substance in every
+tissue). `import pkpdsim` imports none of them. The license texts of the
+COMBINE archive of a model are `sbmlsim.licenses`.
 """
 
 __version__ = "0.19.0"

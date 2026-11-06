@@ -249,7 +249,7 @@ The ids of sbmlsim 0.9 are SIds (see [Keys](experiments.md#keys)). The migration
 | part | content |
 | --- | --- |
 | `ids` | an old id to its new id: the task of a result, the dataset, the figure and mapping keys and the references to them in a figure |
-| `sids` | `true`: every id of the old dump becomes `pkpdsim.experiment.to_sid(id)` (after `ids`) |
+| `sids` | `true`: every id of the old dump becomes `sbmlsim.experiment.to_sid(id)` (after `ids`) |
 | `figure_fields` | the keys of the specification of a figure which are left out of both dumps, at the level of the figure only (not in its plots, curves or axes), in the form in which the figures are compared: a field of a figure which `compare` cannot map. The specification is the attributes of sbmlsim's `Figure` and its objects as json (`pkpdsim.verify.serialize`, `figure_spec`), so the fields are those of the version of sbmlsim which made the dump. The port from sbmlsim 0.8 to 0.9 needs none |
 | `expected` | a part (`results`, `datasets`, `mappings`, `figures`, `ranges`) to the patterns of the keys of the differences which are expected |
 | `metadata`, `strings` | as in [Experiments and their metadata](experiments.md#renames-in-a-verification) |

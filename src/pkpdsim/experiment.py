@@ -19,17 +19,17 @@ The base simulates the model of the model object (`models`), the build of the
 sex of the study (`sex`, the male build by default, the female build of a study
 of women; `simulation_sexes` for a study with a group of each sex), creates a
 task per simulation on the build of its sex (`tasks`), adds the selections to
-every task (`data`), loads the digitized data of the study (`load_dataframe`, with the unit of the geometric
-means, `add_gmean_unit`) and has the classes of impaired
+every task (`data`), loads the digitized data of the study (`load_dataframe`) and has the classes of impaired
 organ function (`pkpdsim.impairment`) and the labels of the pharmacokinetic
 parameters (`pkpdsim.pk`) as defaults. A model overrides what it does
 differently.
 
-The keys of an experiment are SIds (sbmlsim checks them): `to_sid` gives the SId
-of a text, e.g. of a label of the data, and the method `to_sid` of the base
+The keys of an experiment are SIds (sbmlsim checks them): `sbmlsim.experiment.to_sid`
+gives the SId of a text, e.g. of a label of the data, and the method `to_sid` of the base
 checks that no two texts of an experiment give the same SId. A unit which the
 data use and sbmlsim does not define (an international unit is specific to a
-substance) is defined under a name of the model and the substance, `data_units`.
+substance) is defined under a name of the model and the substance, `data_units`
+(`sbmlsim.units.define_unit`).
 
 A run over the draws of the fitted parameters (`run_simulation <package> --uncertainty`)
 gives every experiment the setting `uncertainty`, a
@@ -38,7 +38,7 @@ draws and turns the curves of the simulations into bands
 (`pkpdsim.uncertainty.apply_uncertainty`), so an experiment needs no code of its
 own for it. A figure which an experiment draws itself (`figures_mpl`) reads
 `uncertainty` and draws the bands of the draws, e.g. with
-`pkpdsim.scan.point_band`.
+`sbmlsim.result.scan.point_band`.
 
 A dose after the first one adds to its dose state (`add_doses`): the rest of the
 earlier doses which is not yet dissolved, absorbed or infused stays, which a
@@ -47,20 +47,18 @@ change of the dose state to the dose would discard (pkdb_models#105).
 
 from __future__ import annotations
 
-import math
-import re
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
-from tokenize import TokenError
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from sbmlsim.data import Data, load_pkdb_dataframe
-from sbmlsim.experiment import SimulationExperiment
+from sbmlsim.data import Data, load_pkdb_dataframe, rename_units
+from sbmlsim.experiment import SimulationExperiment, to_sid
 from sbmlsim.model import AbstractModel
 from sbmlsim.plot import Curve
 from sbmlsim.simulation import Change
 from sbmlsim.task import Task
+from sbmlsim.units import define_unit
 
 from pkpdsim import impairment, pk
 from pkpdsim.sex import Sex
@@ -72,157 +70,6 @@ if TYPE_CHECKING:
     from sbmlsim.units import Quantity, UnitRegistry
 
     from pkpdsim.model import PKPDModel
-
-#: a decimal point between two digits, which `to_sid` writes as `p`
-_DECIMAL_POINT = re.compile(r"(?<=[0-9])\.(?=[0-9])")
-#: a character which an SId does not allow
-_NOT_IN_SID = re.compile(r"[^A-Za-z0-9_]")
-#: the metric prefixes a unit of the data can have, the longest first
-_PREFIXES: tuple[str, ...] = (
-    "da", "Y", "Z", "E", "P", "T", "G", "M", "k", "h", "d", "c", "m",
-    "µ", "μ", "u", "n", "p", "f", "a", "z", "y",
-)  # fmt: skip
-
-
-def to_sid(text: str) -> str:
-    """Get the SId of a text, e.g. of a label of the data, as a key of an experiment.
-
-    A decimal point between two digits becomes `p` (`0.5mg` is `0p5mg`) and
-    every other character which an SId does not allow becomes `_`
-    (`po 2.5 mg` is `po_2p5_mg`, `µg/ml` is `_g_ml`). One character becomes
-    one character, and an SId stays as it is. The function maps characters, so
-    a part of a key gives the same part of the SId of the key
-    (`f"task_po_{to_sid(dose)}"`). Whether a whole key is a valid SId, i.e. not
-    empty and not starting with a digit, is not checked here (the text of a part
-    of a key may start with a digit): sbmlsim checks every key when the
-    experiment initializes and names all invalid ones.
-
-    Args:
-        text: the text.
-
-    Returns:
-        The SId.
-    """
-    return _NOT_IN_SID.sub("_", _DECIMAL_POINT.sub("p", text))
-
-
-def define_unit(ureg: UnitRegistry, definition: str) -> str:
-    """Define a unit in a registry once, e.g. the international unit of a substance.
-
-    The registry of sbmlsim, one per process, ignores a redefinition, so a
-    second model which defined a name with another value would silently get
-    the first one. A name which is defined already must therefore have the same
-    value (compared in base units); a name of the model and the substance, e.g.
-    `IU_ramipril_renin`, keeps the models apart.
-
-    Args:
-        ureg: the unit registry, the one of the experiments.
-        definition: `"<name> = <expression>"` in the syntax of pint, e.g.
-            `"IU_ramipril_renin = 0.6 * microgram"` or `"IU_apixaban_antixa = count"`.
-
-    Returns:
-        The name of the unit.
-
-    Raises:
-        ValueError: if the definition is not `<name> = <expression>` with an
-            identifier as the name, pint cannot evaluate the expression (e.g. an
-            unknown unit in it, pint's `UndefinedUnitError`) or the name is
-            defined with another value.
-    """
-    name, separator, expression = (part.strip() for part in definition.partition("="))
-    if not separator or not name.isidentifier() or not expression:
-        raise ValueError(
-            f"A unit is defined as '<name> = <expression>', not '{definition}'."
-        )
-    try:
-        value = ureg.Quantity(expression).to_base_units()
-    # the errors of pint derive from these (`UndefinedUnitError` from
-    # `AttributeError`), the others come from its parser
-    except (ArithmeticError, AttributeError, TokenError, TypeError, ValueError) as err:
-        raise ValueError(
-            f"The unit '{name}' cannot be defined as '{expression}': "
-            f"{type(err).__name__}: {err}"
-        ) from err
-    if name in ureg:
-        defined = ureg.Quantity(1, name).to_base_units()
-        if defined.units != value.units or not math.isclose(
-            defined.magnitude, value.magnitude, rel_tol=1e-12
-        ):
-            raise ValueError(
-                f"The unit '{name}' is defined as {defined} already, not as "
-                f"{value} ({expression}); give the unit of another substance or "
-                "model another name."
-            )
-        return name
-    ureg.define(f"{name} = {expression}")
-    return name
-
-
-def rename_units(df: pd.DataFrame, names: Mapping[str, str]) -> pd.DataFrame:
-    """Rename units in the unit columns of a table of the data.
-
-    A name is replaced where it is a unit of a unit expression, alone or after a
-    metric prefix: with `{"IU": "IU_x"}`, `IU/ml` is `IU_x/ml` and `µIU/ml` is
-    `µIU_x/ml`; `IU_per_ml` and `2IU` stay. The unit columns are `unit` and
-    every column whose name ends with `_unit`; a missing value stays missing.
-
-    Args:
-        df: the table, changed in place.
-        names: the name in the data -> the new name.
-
-    Returns:
-        The table.
-    """
-    if not names:
-        return df
-    prefixes = "|".join(re.escape(prefix) for prefix in _PREFIXES)
-    patterns = [
-        (
-            re.compile(rf"(?<!\w)({prefixes})?{re.escape(old)}(?!\w)"),
-            r"\g<1>" + new.replace("\\", "\\\\"),
-        )
-        for old, new in names.items()
-    ]
-
-    def rename(value: object) -> object:
-        if not isinstance(value, str):
-            return value
-        for pattern, replacement in patterns:
-            value = pattern.sub(replacement, value)
-        return value
-
-    for column in df.columns:
-        if column == "unit" or str(column).endswith("_unit"):
-            df[column] = df[column].map(rename)
-    return df
-
-
-def add_gmean_unit(df: pd.DataFrame) -> pd.DataFrame:
-    """Give the geometric means of a table of the data their unit, `gmean_unit`.
-
-    The `unit` of a row of the tables of PK-DB is the unit of all its
-    statistics, but sbmlsim (`DataSet.from_df`) reads it as the unit of
-    `mean`, `value` and `median` only, so that a curve of the geometric means
-    (`yid="gmean"`) has no unit. The column `gmean_unit` is the `unit` of the
-    rows with a geometric mean, which sbmlsim reads as the unit of `gmean`
-    (and converts the rows of other units into the first). The geometric SD
-    `gsd` and the `gcv` are ratios without a unit. A table without geometric
-    means or with a `gmean_unit` stays as it is.
-
-    Args:
-        df: the table, changed in place.
-
-    Returns:
-        The table.
-    """
-    if (
-        "gmean" in df.columns
-        and "unit" in df.columns
-        and "gmean_unit" not in df.columns
-        and df["gmean"].notna().any()
-    ):
-        df["gmean_unit"] = df["unit"].where(df["gmean"].notna())
-    return df
 
 
 class PKPDSimulationExperiment(SimulationExperiment):
@@ -368,7 +215,7 @@ class PKPDSimulationExperiment(SimulationExperiment):
         The dimension over which a run over the draws (`uncertainty`) varies
         the fitted parameters, which a figure or an analysis of a scan of the
         experiment leaves out of its own dimensions or makes a band of, e.g.
-        `pkpdsim.scan.point_band(result, ..., across=self.across())`.
+        `sbmlsim.result.scan.point_band(result, ..., across=self.across())`.
         """
         run = self.uncertainty
         return None if run is None else run.id
@@ -422,7 +269,7 @@ class PKPDSimulationExperiment(SimulationExperiment):
 
         The loaders rename the units of the data with these names; a table
         which a model reads itself, e.g. the data of a figure of a scan, is
-        renamed with them by `rename_units`. `initialize` calls it first; a call
+        renamed with them by `sbmlsim.data.rename_units`. `initialize` calls it first; a call
         without `initialize` defines the units on its first call.
 
         Returns:
@@ -435,14 +282,14 @@ class PKPDSimulationExperiment(SimulationExperiment):
         if self._unit_names is None:
             self._unit_names = MappingProxyType(
                 {
-                    name: define_unit(self.ureg, definition)
+                    name: define_unit(definition, self.ureg)
                     for name, definition in self.data_units.items()
                 }
             )
         return self._unit_names
 
     def to_sid(self, text: str) -> str:
-        """Get the SId of a text as a key of the experiment, see `to_sid`.
+        """Get the SId of a text as a key of the experiment, see `sbmlsim.experiment.to_sid`.
 
         The keys of an experiment are unique across its datasets, simulations,
         tasks, figures and fit mappings, so two texts which give one SId in an
@@ -632,8 +479,9 @@ class PKPDSimulationExperiment(SimulationExperiment):
     ) -> pd.DataFrame:
         """Load the digitized data of a figure or table of a study.
 
-        The geometric means get their unit (`add_gmean_unit`), the units of the
-        data are renamed (`data_units`, `rename_units`).
+        The units of the data are renamed (`data_units`, `rename_units`); the
+        geometric means get the unit of their row when the table is read as a
+        `DataSet` (`DataSet.from_df`).
 
         Args:
             fig_id: the id of the figure or table in the study, e.g. `Fig1`.
@@ -651,15 +499,14 @@ class PKPDSimulationExperiment(SimulationExperiment):
             data_path=self._data_paths(),
             na_values=na_values,
         )
-        return rename_units(add_gmean_unit(df), names)
+        return rename_units(df, names)
 
     def load_dataframes_by_substance(
         self, fig_id: str, study: str | None = None
     ) -> dict[str, pd.DataFrame]:
         """Load the digitized data of a figure or table by substance.
 
-        The geometric means get their unit (`add_gmean_unit`), the units of the
-        data are renamed (`data_units`, `rename_units`). The rows without a
+        The units of the data are renamed (`data_units`, `rename_units`). The rows without a
         substance (a bile flow, a blood pressure) are in no frame, they are in
         the table of `load_dataframe`.
 
@@ -678,7 +525,7 @@ class PKPDSimulationExperiment(SimulationExperiment):
             na_values=["na"],
         )
         return {
-            str(substance): rename_units(add_gmean_unit(frame.copy()), names)
+            str(substance): rename_units(frame.copy(), names)
             for substance, frame in df.groupby("substance", sort=False)
         }
 

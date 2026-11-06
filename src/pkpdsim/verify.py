@@ -1415,7 +1415,7 @@ class Renames(TypedDict, total=False):
     strings: dict[str, str]
     #: old id -> new id, of a task, a dataset, a figure or a fit mapping
     ids: dict[str, str]
-    #: every id of the old dump becomes its SId (`pkpdsim.experiment.to_sid`)
+    #: every id of the old dump becomes its SId (`sbmlsim.experiment.to_sid`)
     sids: bool
     #: the keys of the specification of a figure which are left out of both
     #: dumps, at the level of the figure, after `align_figures`: a field of a
@@ -1878,7 +1878,7 @@ def align_figures(old: Dump, new: Dump) -> AlignedFigures:
 
 def _renamer(renames: Renames) -> Callable[[str], str]:
     """Get the rename of an id: `ids`, then its SId with `sids`."""
-    from pkpdsim.experiment import to_sid
+    from sbmlsim.experiment import to_sid
 
     ids = renames.get("ids", {})
     sids = renames.get("sids", False)
@@ -2588,7 +2588,7 @@ def png(args: argparse.Namespace) -> int:
 
     The directories are searched recursively and the figures are paired by the
     path relative to the directory; with `--sids` an old figure is paired with
-    the new figure of the SId of its file name (`pkpdsim.experiment.to_sid`).
+    the new figure of the SId of its file name (`sbmlsim.experiment.to_sid`).
 
     Returns:
         0 if all figures are identical, 1 if some differ or exist on one side
@@ -2608,7 +2608,7 @@ def png(args: argparse.Namespace) -> int:
     old_files = {k: v for k, v in _files(old, "*.png").items() if selected(v)}
     new_files = {k: v for k, v in _files(new, "*.png").items() if selected(v)}
     if args.sids:
-        from pkpdsim.experiment import to_sid
+        from sbmlsim.experiment import to_sid
 
         by_sid: dict[Path, Path] = {}
         for key, path in old_files.items():
@@ -2931,7 +2931,7 @@ def parser() -> argparse.ArgumentParser:
         action="store_true",
         help=(
             "pair an old figure with the new figure of the SId of its file name "
-            "(pkpdsim.experiment.to_sid), for a port which renamed the keys"
+            "(sbmlsim.experiment.to_sid), for a port which renamed the keys"
         ),
     )
     s.add_argument("names", nargs="*", help="only files containing one of these")
