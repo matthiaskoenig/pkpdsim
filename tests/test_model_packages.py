@@ -106,7 +106,7 @@ def test_glimepiride(package: Path) -> None:
     )
     assert model.root == model.path == package
     assert model.model_paths == {Sex.MALE: model_path, Sex.FEMALE: female_model_path}
-    assert model.model_path() == model_path
+    assert model.model_path == model_path
     assert model.model_path_of(Sex.FEMALE) == female_model_path
     assert model.data_paths == tuple(data_paths)
     assert model.fits == ".fitting.fitting:FIT_DEFINITIONS"

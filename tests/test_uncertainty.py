@@ -357,7 +357,7 @@ def test_the_draws_of_the_model(toy_with_uncertainty: Path) -> None:
 
 def test_a_model_without_distributions_cannot_be_drawn() -> None:
     with pytest.raises(ValueError, match="No parameter"):
-        uncertainty_dimension(MODEL.model_path(), 3, seed=1)
+        uncertainty_dimension(MODEL.model_path, 3, seed=1)
 
 
 def test_the_check_of_the_fit_parameters(
@@ -368,6 +368,7 @@ def test_the_check_of_the_fit_parameters(
         adopted_ids=(toy_fit.name,),
         fits_dir=fits_dir,
         variants={"male": toy_with_uncertainty},
+        factory_dir=MODEL.factory_dir,
     )
     assert check_fit_parameters(model) == []
     # the model of the factory has neither the value nor the distribution
@@ -416,6 +417,7 @@ def test_the_check_of_the_fit_parameters_sees_every_build(
             "male": toy_with_uncertainty,
             "female": _female_build(tmp_path / "female.xml", records),
         },
+        factory_dir=MODEL.factory_dir,
     )
     assert check_fit_parameters(model) == []
     stale = model.replace(
@@ -582,7 +584,9 @@ def test_a_scan_gets_the_draws_appended(toy_with_uncertainty: Path) -> None:
 def test_the_run_writes_into_the_results_of_the_draws(
     toy_with_uncertainty: Path, tmp_path: Path
 ) -> None:
-    model = MODEL.replace(variants={"male": toy_with_uncertainty})
+    model = MODEL.replace(
+        variants={"male": toy_with_uncertainty}, factory_dir=MODEL.factory_dir
+    )
     run_command(
         model,
         [

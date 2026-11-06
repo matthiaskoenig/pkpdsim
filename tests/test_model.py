@@ -46,7 +46,7 @@ def test_a_model_is_a_project() -> None:
     assert MODEL.root == MODEL.path == TOY_PATH
     assert MODEL.package == "pkpdsim_toy"
     assert MODEL.variants == {"male": MODEL_PATH}
-    assert MODEL.model_path() == MODEL_PATH
+    assert MODEL.model_path == MODEL_PATH
     assert MODEL.fits == ".fitting:FIT_DEFINITIONS"
     assert MODEL.data_path == [TOY_PATH]
     assert MODEL.data_paths == (TOY_PATH,)
@@ -82,7 +82,7 @@ def test_relative_paths_are_relative_to_the_package() -> None:
     model = PKPDModel(
         **keywords(model_path=Path("models/toy.xml"), data_paths=(Path("data"),))
     )
-    assert model.model_path() == MODEL_PATH
+    assert model.model_path == MODEL_PATH
     assert model.factory_dir == MODEL_BASE_PATH
     assert model.fits_dir == TOY_PATH / "fits"
     assert model.data_paths == (TOY_PATH / "data",)
@@ -109,13 +109,27 @@ def test_given_paths_win(tmp_path: Path) -> None:
     assert model.fits_dir == tmp_path / "fits"
 
 
-def test_the_directories_derive_again_when_cleared(tmp_path: Path) -> None:
+def test_the_directories_derive_again_with_other_builds(tmp_path: Path) -> None:
     build = tmp_path / "models" / "toy.xml"
-    model = MODEL.replace(
-        root=tmp_path, variants={"male": build}, factory_dir=None, fits_dir=None
-    )
+    model = MODEL.replace(root=tmp_path, variants={"male": build})
     assert model.factory_dir == tmp_path / "models"
     assert model.fits_dir == tmp_path / "fits"
+    moved = MODEL.replace(root=TOY_PATH.parent)
+    assert moved.factory_dir == MODEL.factory_dir
+    assert moved.fits_dir == MODEL.fits_dir
+
+
+def test_given_directories_stay_with_other_builds(tmp_path: Path) -> None:
+    build = tmp_path / "models" / "toy.xml"
+    given = MODEL.replace(root=tmp_path, factory_dir=tmp_path, fits_dir=TOY_PATH)
+    model = given.replace(variants={"male": build})
+    assert model.factory_dir == tmp_path
+    assert model.fits_dir == TOY_PATH
+    derived = MODEL.replace(
+        root=tmp_path, variants={"male": build}, fits_dir=tmp_path / "records"
+    )
+    assert derived.factory_dir == tmp_path / "models"
+    assert derived.fits_dir == tmp_path / "records"
 
 
 @pytest.mark.parametrize(
@@ -326,7 +340,7 @@ def test_a_test_loads_the_model_at_its_level(monkeypatch: pytest.MonkeyPatch) ->
         absolute_tolerance=1e-10, relative_tolerance=1e-10, jit_optimization="O0"
     )
     r = MODEL.replace(simulator=simulator).load_roadrunner()
-    assert calls == [(MODEL.model_path(), "O0")]
+    assert calls == [(MODEL.model_path, "O0")]
     assert "k" in r.model.getGlobalParameterIds()
     with pytest.raises(ValueError, match="no female build"):
         MODEL.load_roadrunner(Sex.FEMALE)

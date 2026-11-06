@@ -139,7 +139,13 @@ def test_a_package_which_does_not_import_fails() -> None:
     ("changes", "message"),
     [
         ({"name": "other"}, "is not the name of the package"),
-        ({"variants": {"male": Path("/elsewhere/model.xml")}}, "model_path"),
+        (
+            {
+                "variants": {"male": Path("/elsewhere/model.xml")},
+                "factory_dir": MODEL.factory_dir,
+            },
+            "model_path",
+        ),
         ({"archive_path": Path("/elsewhere/model.omex")}, "archive_path"),
         ({"data_path": (Path("/does/not/exist"),)}, "does not exist"),
     ],

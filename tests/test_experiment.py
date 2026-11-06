@@ -38,7 +38,7 @@ def initialized(
 def test_the_base_simulates_the_model_of_the_model_object() -> None:
     model = initialized(ToyDecay).models()["model"]
     assert isinstance(model, AbstractModel)
-    assert Path(model.source.source) == MODEL.model_path()
+    assert Path(model.source.source) == MODEL.model_path
     assert model.language_type == AbstractModel.LanguageType.SBML
     assert model.changes == {}
 
