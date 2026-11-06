@@ -63,9 +63,9 @@ from pkpdsim.sex import Sex
 if TYPE_CHECKING:
     import roadrunner
     from sbmlsim.experiment import SimulationExperiment
+    from sbmlsim.experiment.draws import UncertaintySettings
 
     from pkpdsim.credibility import Credibility
-    from pkpdsim.uncertainty import UncertaintySettings
 
 #: the actions of the `run` command of a model, see `pkpdsim.cli`
 RUN_ACTIONS: tuple[str, ...] = ("simulate", "list_experiments", "factory", "all")
@@ -158,7 +158,7 @@ class ExtraAction:
             action that simulates passes on, e.g.
             `model.run_experiments(..., simulator=options.simulator,
             n_workers=options.n_workers)` or
-            `pkpdsim.run.create_simulator(options.simulator, options.n_workers)`.
+            `options.simulator.simulator(options.n_workers)`.
         in_all: run the action with `--action all`, after the simulations.
     """
 
@@ -639,26 +639,52 @@ class PKPDModel(Project):
     ) -> Path:
         """Run simulation experiments and create their report.
 
-        The run of the model packages, which returns the directory of the
-        results and resolves a relative directory below the results of the
-        model (`simulation_dir`), see `pkpdsim.run.run_experiments`; a run with
-        a failed experiment or figure raises
+        The run of the model packages: `Project.run_experiments` with the
+        settings of the model, which returns the directory of the results and
+        resolves a relative directory below the results of the model. A run
+        with a failed experiment or figure raises
         `sbmlsim.experiment.ExperimentRunError` after its report is written.
-        It runs serially by default (`RUN_WORKERS`).
-        """
-        from pkpdsim.run import run_experiments
+        The messages of the run are shown on the rich console.
 
-        return run_experiments(
-            self,
+        Args:
+            experiment_classes: the experiment class or classes to run.
+            output_dir: the directory of the results; a relative directory is
+                below `simulation_dir`, or `uncertainty_dir` with `uncertainty`.
+            save_results: store the results of the simulations, `save_results`
+                of the model by default.
+            show_report: open the report in a web browser.
+            figure_formats: the formats of the figures, those of the model by
+                default or when empty.
+            simulator: the settings of the simulator, those of the model by
+                default.
+            n_workers: the processes of the run, of the experiments and of their
+                scans, serially by default (`RUN_WORKERS`), see
+                `Project.run_experiments`.
+            uncertainty: run the experiments over the draws of the fitted
+                parameters of the model (`sbmlsim.experiment.draws`), `None`
+                runs them once.
+
+        Returns:
+            The directory of the results.
+
+        Raises:
+            TypeError: if `figure_formats` is a single string.
+            ExperimentRunError: after the report is written, if an experiment or
+                a figure failed.
+        """
+        output_path = self._output_path(output_dir, uncertainty)
+        self._run(
             experiment_classes,
-            output_dir,
-            save_results=save_results,
+            output_path,
+            save_results=self.save_results if save_results is None else save_results,
             show_report=show_report,
             figure_formats=figure_formats,
             simulator=simulator,
             n_workers=n_workers,
             uncertainty=uncertainty,
+            collect_figures=False,
         )
+        return output_path
 
     def run_simulation_experiments(
         self,
@@ -673,17 +699,81 @@ class PKPDModel(Project):
     ) -> Path:
         """Run simulation experiments and collect their figures.
 
-        See `pkpdsim.run.run_simulation_experiments`.
-        """
-        from pkpdsim.run import run_simulation_experiments
+        `run_experiments` which copies the static figures of every experiment
+        into `sbmlsim.project.FIGURES_DIR` of the output directory, also those
+        of a run with failures, before it raises.
 
-        return run_simulation_experiments(
-            self,
-            experiment_classes,
-            output_dir,
+        Args:
+            experiment_classes: the experiments to run.
+            output_dir: the directory of the results, see `run_experiments`.
+            show_report: open the report in a web browser.
+            figure_formats: the formats of the figures, those of the model by
+                default.
+            simulator: the settings of the simulator, those of the model by
+                default.
+            n_workers: the processes of the run, see `run_experiments`.
+            uncertainty: run the experiments over the draws of the fitted
+                parameters, see `run_experiments`.
+
+        Returns:
+            The directory of the collected figures.
+
+        Raises:
+            ExperimentRunError: after the figures are collected, if an
+                experiment or a figure failed.
+        """
+        from sbmlsim.project import FIGURES_DIR
+
+        output_path = self._output_path(output_dir, uncertainty)
+        self._run(
+            list(experiment_classes),
+            output_path,
+            save_results=self.save_results,
             show_report=show_report,
             figure_formats=figure_formats,
             simulator=simulator,
             n_workers=n_workers,
             uncertainty=uncertainty,
+            collect_figures=True,
+        )
+        return output_path / FIGURES_DIR
+
+    def _output_path(
+        self, output_dir: str | Path, uncertainty: UncertaintySettings | None
+    ) -> Path:
+        """Get the directory of a run, a relative one below the results of the model."""
+        parent = self.simulation_dir if uncertainty is None else self.uncertainty_dir
+        return parent / output_dir
+
+    def _run(
+        self,
+        experiment_classes: type[SimulationExperiment]
+        | Sequence[type[SimulationExperiment]],
+        output_path: Path,
+        *,
+        save_results: bool,
+        show_report: bool,
+        figure_formats: Sequence[str] | None,
+        simulator: SimulatorSettings | None,
+        n_workers: int | None,
+        uncertainty: UncertaintySettings | None,
+        collect_figures: bool,
+    ) -> None:
+        """Run experiments with the settings of the model, see `run_experiments`."""
+        from sbmlsim import log
+
+        # sbmlsim does not configure logging, a run of a model shows its messages
+        log.enable_rich_logging()
+        Project.run_experiments(
+            self,
+            experiment_classes,
+            output_path,
+            n_workers=n_workers,
+            simulator=simulator,
+            figure_formats=figure_formats,
+            save_results=save_results,
+            reduced_selections=self.reduced_selections,
+            show_report=show_report,
+            uncertainty=uncertainty,
+            collect_figures=collect_figures,
         )

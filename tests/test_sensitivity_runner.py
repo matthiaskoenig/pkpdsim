@@ -28,7 +28,6 @@ from sbmlsim.sensitivity.classification import (
 )
 from sbmlsim.simulation import PK, Formula, Scan, Simulation, sampling
 
-from pkpdsim.run import create_simulator
 from pkpdsim.sensitivity import (
     FastAnalysis,
     LocalAnalysis,
@@ -210,12 +209,13 @@ def test_the_simulator_of_the_model_with_a_pool(
 ) -> None:
     """A run uses the tolerances of the model and lets sbmlsim choose the processes."""
     settings: list[tuple[SimulatorSettings, int | None]] = []
+    original = SimulatorSettings.simulator
 
     def serial(s: SimulatorSettings, n_workers: int | None) -> object:
         settings.append((s, n_workers))
-        return create_simulator(s, 1)
+        return original(s, 1)
 
-    monkeypatch.setattr("pkpdsim.sensitivity.create_simulator", serial)
+    monkeypatch.setattr(SimulatorSettings, "simulator", serial)
     analyses = {"local": LocalAnalysis(groups=[CONTROL])}
     runner(tmp_path, analyses=analyses).run()
     assert settings == [(MODEL.simulator, None)]
@@ -541,7 +541,7 @@ def test_local_writes_the_table_and_heatmap_of_sbmlsim_085(tmp_path: Path) -> No
             ["k"], delta=delta, model=MODEL_PATH, simulation=CONTROL.simulation
         )
         result = sensitivity.local(
-            create_simulator(SERIAL.settings, SERIAL.n_workers).run(
+            SERIAL.settings.simulator(SERIAL.n_workers).run(
                 MODEL_PATH,
                 Scan(CONTROL.simulation, [design]),
                 OBSERVABLES,
@@ -940,12 +940,13 @@ def test_the_simulator_of_a_run_gets_the_workers(
     n_workers: int | None,
 ) -> None:
     workers: list[int | None] = []
+    original = SimulatorSettings.simulator
 
     def serial(s: SimulatorSettings, n: int | None) -> object:
         workers.append(n)
-        return create_simulator(s, 1)
+        return original(s, 1)
 
-    monkeypatch.setattr("pkpdsim.sensitivity.create_simulator", serial)
+    monkeypatch.setattr(SimulatorSettings, "simulator", serial)
     analyses = {"local": LocalAnalysis(groups=[CONTROL])}
     runner(tmp_path, analyses=analyses).main(["local", *argv])
     assert workers == [n_workers]

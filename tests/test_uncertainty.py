@@ -1,7 +1,10 @@
-"""Tests of the uncertainty of the fitted parameters: the check of a model, the draws, the bands.
+"""Tests of the uncertainty of the fitted parameters of a model of pkpdsim.
 
-The records of the adopted fits and their distributions are those of sbmlsim
-(`sbmlsim.fit.records`, `sbmlsim.simulation.sampling`), tested in sbmlsim.
+The records of the adopted fits, their distributions and the run of the
+experiments over the draws are sbmlsim's (`sbmlsim.fit.records`,
+`sbmlsim.simulation.sampling`, `sbmlsim.experiment.draws`), tested in sbmlsim;
+these tests check them on the builds of the sexes, the experiments of pkpdsim and
+the command `run_simulation --uncertainty`.
 """
 
 import dataclasses
@@ -10,28 +13,25 @@ from typing import Any
 
 import numpy as np
 import pytest
-from sbmlsim import Q
-from sbmlsim.data import Data
 from sbmlsim.distrib import UNCERTAINTY_DIMENSION
 from sbmlsim.experiment import ExperimentRunner
+from sbmlsim.experiment.draws import (
+    UncertaintyRun,
+    UncertaintySettings,
+    check_fit_parameters,
+)
 from sbmlsim.fit.records import AdoptedRecords
-from sbmlsim.plot import Curve, Figure
 from sbmlsim.plot.plotting import Band
 from sbmlsim.result.scan import point_timecourse
-from sbmlsim.simulation import Dimension, Scan, Simulation
+from sbmlsim.simulation import Scan
 from sbmlsim.simulation.sampling import uncertainty_dimension
 from sbmlsim.simulator import Simulator
 from sbmlutils.factory import Parameter, create_model
 
 from pkpdsim.cli import fit_command, run_command
 from pkpdsim.experiment import PKPDSimulationExperiment
-from pkpdsim.uncertainty import (
-    UncertaintyRun,
-    UncertaintySettings,
-    check_fit_parameters,
-)
 from pkpdsim_toy import MODEL, TOY_PATH
-from pkpdsim_toy.experiments.decay import ToyDecay, ToyDecaySlow
+from pkpdsim_toy.experiments.decay import ToyDecay
 from pkpdsim_toy.factory import U, toy_model
 
 
@@ -115,7 +115,7 @@ def _female_build(
 def test_the_check_of_the_fit_parameters_sees_every_build(
     fits_dir: Path, toy_fit: Path, toy_with_uncertainty: Path, tmp_path: Path
 ) -> None:
-    """The female build has the fitted values and the distributions of the male one."""
+    """The female build, a variant, has the fitted values and distributions of the male one."""
     records = AdoptedRecords(fits_dir, [toy_fit.name])
     model = MODEL.replace(
         adopted_ids=(toy_fit.name,),
@@ -135,7 +135,7 @@ def test_the_check_of_the_fit_parameters_sees_every_build(
     )
     problems = check_fit_parameters(stale)
     assert problems
-    assert all("female build stale.xml" in p for p in problems)
+    assert all("(the variant 'female', stale.xml)" in p for p in problems)
     assert any("has no distribution" in p for p in problems)
     assert any("take it from the record" in p for p in problems)
     other = model.replace(
@@ -146,12 +146,12 @@ def test_the_check_of_the_fit_parameters_sees_every_build(
     )
     (problem,) = check_fit_parameters(other)
     assert "distribution" in problem
-    assert "differs from the male build" in problem
+    assert "differs from the default variant" in problem
     missing = model.replace(
         variants={**model.variants, "female": tmp_path / "missing.xml"}
     )
     assert check_fit_parameters(missing) == [
-        f"the female build {tmp_path / 'missing.xml'} does not exist"
+        f"the variant 'female' {tmp_path / 'missing.xml'} does not exist"
     ]
 
 
@@ -190,14 +190,6 @@ def test_the_draws_reach_a_female_experiment(toy_with_uncertainty: Path) -> None
             rtol=1e-6,
             atol=1e-8,
         )
-
-
-def test_the_settings_of_a_run() -> None:
-    assert UncertaintySettings().quantiles == (0.05, 0.95)
-    with pytest.raises(ValueError, match="two draws"):
-        UncertaintySettings(draws=1)
-    with pytest.raises(ValueError, match="quantiles"):
-        UncertaintySettings(quantiles=(0.9, 0.1))
 
 
 # ----------------------------------------------------------------------------
@@ -240,52 +232,6 @@ def test_an_experiment_runs_over_the_draws(toy_with_uncertainty: Path) -> None:
     assert isinstance(band, Band)
     assert band.across == UNCERTAINTY_DIMENSION
     assert band.name == "A"
-
-
-def test_a_parameter_which_a_simulation_sets_is_not_drawn(
-    toy_with_uncertainty: Path,
-) -> None:
-    exp = initialized(ToyDecaySlow, draws_run(toy_with_uncertainty))
-    # the slow decay sets the rate itself, nothing is left to draw: it runs
-    # once and keeps its curve
-    assert isinstance(exp._simulations["decay"], Simulation)
-    (plot,) = exp._figures["fig_decay"].get_plots()
-    assert len(plot.curves) == 1
-    assert not plot.bands
-
-
-def test_without_draws_the_experiment_is_unchanged() -> None:
-    exp = initialized(ToyDecay, None)
-    assert exp.uncertainty is None
-    assert isinstance(exp._simulations["decay"], Simulation)
-
-
-def test_a_wrong_setting_raises() -> None:
-    with pytest.raises(TypeError, match="no UncertaintyRun"):
-        ExperimentRunner(
-            experiment_classes=[ToyDecay],
-            base_path=TOY_PATH,
-            data_path=list(MODEL.data_paths),
-            simulator=None,
-            on_error="raise",
-            uncertainty=3,
-        )
-
-
-def test_a_scan_gets_the_draws_appended(toy_with_uncertainty: Path) -> None:
-    from pkpdsim.uncertainty import _over_draws
-
-    run = draws_run(toy_with_uncertainty)
-    scan = Scan(
-        Simulation(end=10, steps=10),
-        [Dimension("dim_volume", values={"Vc": np.array([1.0, 2.0])})],
-    )
-    over = _over_draws(scan, run.dimension, "scan", "exp")
-    assert isinstance(over, Scan)
-    assert [d.id for d in over.dimensions] == ["dim_volume", UNCERTAINTY_DIMENSION]
-    clash = Scan(Simulation(end=10, steps=10), [run.dimension])
-    with pytest.raises(ValueError, match="id of the draws"):
-        _over_draws(clash, run.dimension, "scan", "exp")
 
 
 def test_the_run_writes_into_the_results_of_the_draws(
@@ -332,102 +278,3 @@ def test_the_options_of_the_draws(tmp_path: Path) -> None:
             ],
         )
     assert error.value.code == 2
-
-
-class ToyPhase(ToyDecay):
-    """The decay with a curve of A over A, whose x is not the time."""
-
-    def figures(self) -> dict[str, Figure]:
-        """Get the figure of the decay and a curve over the concentration."""
-        figures = super().figures()
-        (plot,) = figures["fig_decay"].get_plots()
-        plot.curves.append(
-            Curve(
-                x=Data(index="[A]", task="task_decay"),
-                y=Data(index="[A]", task="task_decay"),
-                name="A over A",
-            )
-        )
-        return figures
-
-
-def test_a_curve_over_another_variable_draws_the_fitted_values(
-    toy_with_uncertainty: Path,
-) -> None:
-    exp = initialized(ToyPhase, draws_run(toy_with_uncertainty))
-    (plot,) = exp._figures["fig_decay"].get_plots()
-    (band,) = plot.bands
-    assert band.y.task_id == "task_decay"
-    (curve,) = [c for c in plot.curves if c.y.task_id == "task_decay_fitted"]
-    assert curve.x.task_id == "task_decay_fitted"
-    assert curve.name == "A over A (fit)"
-    # below it a line of every draw, without a legend entry
-    lines = [c for c in plot.curves if c.y.task_id == "task_decay"]
-    assert plot.curves[: len(lines)] == lines
-    assert [line.y.sel for line in lines] == [
-        {UNCERTAINTY_DIMENSION: k} for k in range(3)
-    ]
-    assert len({line.y.sid for line in lines}) == 3
-    assert all(line.name is None for line in lines)
-    assert all(line.kwargs["alpha"] == 0.3 for line in lines)
-    assert isinstance(exp._simulations["decay_fitted"], Simulation)
-    assert exp._tasks["task_decay_fitted"].simulation_id == "decay_fitted"
-
-
-class ToyInitialScan(ToyDecay):
-    """The decay at three initial concentrations, A at its end over them."""
-
-    def simulations(self) -> dict[str, Simulation | Scan]:  # ty: ignore[invalid-method-override]
-        """Get the decay and the scan of the initial concentration."""
-        return {
-            **super().simulations(),
-            "scan_initial": Scan(
-                Simulation(end=10, steps=50),
-                [Dimension("dim_initial", values={"[A]": Q([0.5, 1, 2], "mM")})],
-            ),
-        }
-
-    def figures(self) -> dict[str, Figure]:
-        """Get the figure of the decay and A over the initial concentration."""
-        figures = super().figures()
-        (plot,) = figures["fig_decay"].get_plots()
-        plot.curves.append(
-            Curve(
-                x=Data(index="dim_initial.[A]", task="task_scan_initial"),
-                y=Data(index="[A]", task="task_scan_initial"),
-                name="A over the initial A",
-            )
-        )
-        return figures
-
-
-def test_a_curve_over_a_dimension_of_its_scan_draws_a_band(
-    toy_with_uncertainty: Path,
-) -> None:
-    """The values of a dimension are the same in every draw, the curve has a band."""
-    exp = initialized(ToyInitialScan, draws_run(toy_with_uncertainty))
-    (plot,) = exp._figures["fig_decay"].get_plots()
-    assert not [c for c in plot.curves if c.y.task_id is not None]
-    band = next(b for b in plot.bands if b.y.task_id == "task_scan_initial")
-    assert band.x.index == "dim_initial.[A]"
-    assert band.name == "A over the initial A"
-    assert "scan_initial_fitted" not in exp._simulations
-
-
-def test_a_parameter_which_the_model_has_not_is_not_drawn(
-    toy_with_uncertainty: Path,
-) -> None:
-    from pkpdsim.uncertainty import _over_draws
-
-    run = draws_run(toy_with_uncertainty)
-    values = dict(run.dimension.values)
-    dimension = Dimension(
-        UNCERTAINTY_DIMENSION,
-        values={**values, "missing": np.ones(3)},
-    )
-    over = _over_draws(Simulation(end=1, steps=1), dimension, "s", "e", {"k"})
-    assert isinstance(over, Scan)
-    assert set(over.dimensions[0].values) == {"k"}
-    # a model with none of the drawn parameters runs the simulation once
-    simulation = Simulation(end=1, steps=1)
-    assert _over_draws(simulation, dimension, "s", "e", {"x"}) is simulation

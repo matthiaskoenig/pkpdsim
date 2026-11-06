@@ -33,12 +33,13 @@ substance) is defined under a name of the model and the substance, `data_units`
 
 A run over the draws of the fitted parameters (`run_simulation <package> --uncertainty`)
 gives every experiment the setting `uncertainty`, a
-`pkpdsim.uncertainty.UncertaintyRun`: `initialize` runs every simulation over the
-draws and turns the curves of the simulations into bands
-(`pkpdsim.uncertainty.apply_uncertainty`), so an experiment needs no code of its
-own for it. A figure which an experiment draws itself (`figures_mpl`) reads
-`uncertainty` and draws the bands of the draws, e.g. with
-`sbmlsim.result.scan.point_band`.
+`sbmlsim.experiment.draws.UncertaintyRun`: the `initialize` of sbmlsim's
+`SimulationExperiment` runs every simulation over the draws and turns the curves
+of the simulations into bands (`sbmlsim.experiment.draws.apply_uncertainty`), so
+an experiment needs no code of its own for it. A figure which an experiment draws
+itself (`figures_mpl`) reads `uncertainty` and draws the bands of the draws, e.g.
+with `sbmlsim.result.scan.point_band(result, ..., across=self.across())`; a
+function of the results (`add_function`) is a band of the draws as well.
 
 A dose after the first one adds to its dose state (`add_doses`): the rest of the
 earlier doses which is not yet dissolved, absorbed or infused stays, which a
@@ -62,7 +63,6 @@ from sbmlsim.units import define_unit
 
 from pkpdsim import impairment, pk
 from pkpdsim.sex import Sex
-from pkpdsim.uncertainty import UncertaintyRun, apply_uncertainty
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -166,11 +166,8 @@ class PKPDSimulationExperiment(SimulationExperiment):
         """Define the units of the data and initialize the experiment.
 
         The units of `data_units` are defined before the data are read, see
-        `SimulationExperiment.initialize`.
-
-        With the setting `uncertainty` every simulation runs over the draws of
-        the fitted parameters and the curves of the simulations become bands,
-        see `pkpdsim.uncertainty.apply_uncertainty`.
+        `SimulationExperiment.initialize`, which also runs the experiment over
+        the draws of its setting `uncertainty`.
 
         Raises:
             ValueError: for a definition of `data_units` which `define_unit`
@@ -182,43 +179,6 @@ class PKPDSimulationExperiment(SimulationExperiment):
             err.add_note(f"The experiment '{self.sid}' cannot be initialized.")
             raise
         super().initialize()
-        run = self.uncertainty
-        if run is not None:
-            try:
-                apply_uncertainty(self, run)
-                self._check_figures()
-            except Exception as err:
-                err.add_note(
-                    f"The experiment '{self.sid}' cannot run over the draws of the "
-                    f"fitted parameters."
-                )
-                raise
-
-    @property
-    def uncertainty(self) -> UncertaintyRun | None:
-        """The draws of the fitted parameters of a run over them, `None` otherwise.
-
-        Raises:
-            TypeError: if the setting `uncertainty` is no `UncertaintyRun`.
-        """
-        run = self.settings.get("uncertainty")
-        if run is not None and not isinstance(run, UncertaintyRun):
-            raise TypeError(
-                f"The setting 'uncertainty' of '{self.sid}' is no UncertaintyRun: "
-                f"{run!r}."
-            )
-        return run
-
-    def across(self) -> str | None:
-        """Get the dimension of the draws of the fitted parameters, `None` without.
-
-        The dimension over which a run over the draws (`uncertainty`) varies
-        the fitted parameters, which a figure or an analysis of a scan of the
-        experiment leaves out of its own dimensions or makes a band of, e.g.
-        `sbmlsim.result.scan.point_band(result, ..., across=self.across())`.
-        """
-        run = self.uncertainty
-        return None if run is None else run.id
 
     def add_function(
         self,

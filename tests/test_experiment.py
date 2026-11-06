@@ -376,9 +376,8 @@ def test_a_function_of_a_task_is_a_band_over_the_draws() -> None:
     """In a run over the draws of the fitted parameters the function is a band."""
     from sbmlsim import Q
     from sbmlsim.data import Data
+    from sbmlsim.experiment.draws import UncertaintyRun, UncertaintySettings
     from sbmlsim.simulation import Dimension
-
-    from pkpdsim.uncertainty import UncertaintyRun, UncertaintySettings
 
     experiment = initialized(ToyDecay)
     draws = Dimension("dim_draws", values={"k": Q([0.1, 0.2], "1/min")})

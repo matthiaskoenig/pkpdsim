@@ -264,16 +264,14 @@ def test_a_bad_number_of_workers_is_a_usage_error(tmp_path: Path) -> None:
 def test_the_workers_reach_the_run(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import pkpdsim.run
-
     seen: list[tuple[SimulatorSettings, int | None]] = []
-    original = pkpdsim.run.create_simulator
+    original = SimulatorSettings.simulator
 
     def create(settings: SimulatorSettings, n_workers: int | None) -> object:
         seen.append((settings, n_workers))
         return original(settings, n_workers)
 
-    monkeypatch.setattr(pkpdsim.run, "create_simulator", create)
+    monkeypatch.setattr(SimulatorSettings, "simulator", create)
     run_command(
         MODEL, ["-a", "simulate", "-e", "ToyDecay", "-w", "2", "-r", str(tmp_path)]
     )

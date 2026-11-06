@@ -1,6 +1,6 @@
 # Uncertainty of the fitted parameters
 
-The fitted parameters of a model are known only within their confidence intervals, and so are its predictions. `pkpdsim.uncertainty` makes the uncertainty of the fitted parameters part of the model and draws the predictions of the simulation experiments as bands. A fit becomes part of a model in three steps: it is adopted, the factory takes its values with their uncertainty, and a run draws them.
+The fitted parameters of a model are known only within their confidence intervals, and so are its predictions. The records of the adopted fits, their distributions and the run of the experiments over their draws are part of sbmlsim ([`sbmlsim.fit.records`](https://matthiaskoenig.github.io/sbmlsim/api/fit.records/), [`sbmlsim.experiment.draws`](https://matthiaskoenig.github.io/sbmlsim/api/experiment.draws/)); a model of pkpdsim uses them to make the uncertainty of the fitted parameters part of the model and to draw the predictions of the simulation experiments as bands. A fit becomes part of a model in three steps: it is adopted, the factory takes its values with their uncertainty, and a run draws them.
 
 ## Adopting a fit
 
@@ -39,7 +39,7 @@ Parameter(
 )
 ```
 
-A parameter which no adopted fit has, and a parameter which two adopted fits have, raise. `pkpdsim.testing.check_model` checks with `check_fit_parameters` that every parameter of an adopted fit is a parameter of the flat model with the value of the fit and a distribution.
+A parameter which no adopted fit has, and a parameter which two adopted fits have, raise. `pkpdsim.testing.check_model` checks with `sbmlsim.experiment.draws.check_fit_parameters` that every parameter of an adopted fit is a parameter of every build of the model (its variants, the male and the female build) with the value of the fit and a distribution, and that the female build has the distribution of the male build: the draws are those of the male build, the default variant, and run on every build.
 
 ## The uncertainty in the SBML
 
@@ -73,7 +73,7 @@ run_simulation pkdb_models.models.hctz --action simulate --experiments all --unc
 run_simulation pkdb_models.models.hctz --action simulate --experiments all -u --draws 200 --seed 1 --quantiles 0.025 0.975
 ```
 
-The run reads the distribution of every parameter of `model_path` (`sbmlsim.simulation.sampling.parameter_distributions`) and draws them once in a Latin hypercube into the dimension `uncertainty` (`sbmlsim.simulation.sampling.uncertainty_dimension`, `UncertaintySettings`: 100 draws, seed 1234, the quantiles 0.05 and 0.95). Every experiment gets the draws as its setting `uncertainty` (`UncertaintyRun`), and `PKPDSimulationExperiment.initialize` applies them (`apply_uncertainty`):
+The run reads the distribution of every parameter of `model_path`, the default variant, (`sbmlsim.simulation.sampling.parameter_distributions`) and draws them once in a Latin hypercube into the dimension `uncertainty` (`sbmlsim.simulation.sampling.uncertainty_dimension`, `sbmlsim.experiment.draws.UncertaintySettings`: 100 draws, seed 1234, the quantiles 0.05 and 0.95). Every experiment gets the draws as its setting `uncertainty` (`UncertaintyRun`), and the `initialize` of sbmlsim's `SimulationExperiment`, which `PKPDSimulationExperiment` derives from, applies them (`apply_uncertainty`):
 
 - every simulation becomes a scan over the draws, a scan gets the dimension of the draws appended; a fitted parameter which a simulation, or a dimension of its scan, sets itself keeps its value and is left out of the draws of that simulation, and a simulation which sets all of them runs once;
 - every curve of a figure which reads a task over the draws, over the time or over the values of a dimension of its scan (e.g. an amount at a time over the scanned renal function), becomes the band of the quantiles of the draws with the median, in the colour and with the name of the curve; a curve over another variable of the task, which differs between the draws (e.g. a blood pressure over a concentration), has no common x for quantiles: it draws the simulation with the fitted values (`<simulation>_fitted`, its name gets "(fit)") over a thin translucent line of every draw in its colour, the area of the draws (no legend entry; not for a curve with a line per point of a dimension); the curves of the data stay.
@@ -96,4 +96,4 @@ else:
     ax.plot(time, median, color=color)
 ```
 
-An extra action of `run_simulation` gets the settings of `--uncertainty` as `options.uncertainty`, and `PKPDModel.run_experiments(..., uncertainty=UncertaintySettings())` runs experiments over the draws from a script.
+An extra action of `run_simulation` gets the settings of `--uncertainty` as `options.uncertainty`, and `PKPDModel.run_experiments(..., uncertainty=UncertaintySettings())` (`from sbmlsim.experiment.draws import UncertaintySettings`) runs experiments over the draws from a script, `sbmlsim.project.Project.run_experiments` with the settings and the result directories of the model.

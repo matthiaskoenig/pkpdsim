@@ -30,7 +30,7 @@ its presimulation as well) and the values of the dimensions of a scan without
 a time. It does not check a change during a simulation (`Simulation.changes`,
 also at its start, of an id the definition names `dynamic`), a dimension with
 a time (`at`), a scan over models and the draws of the fitted parameters of a
-run over them (`pkpdsim.uncertainty`).
+run over them (`sbmlsim.experiment.draws`).
 
 The module imports sbmlsim; `pkpdsim.pbpk` exports its names
 lazily, so `import pkpdsim.pbpk` (a factory) imports no simulator.
@@ -259,7 +259,7 @@ def simulated_individuals(
     its presimulation and of itself, of every simulation of a dimension of
     simulations and of every point of the dimensions of values without a time
     (`Simulation.with_values`). A dimension with a time, the draws of the
-    fitted parameters (`pkpdsim.uncertainty`) and the changes during a
+    fitted parameters (`sbmlsim.experiment.draws`) and the changes during a
     simulation are not read, and a scan over models has no individual of this
     model.
 
