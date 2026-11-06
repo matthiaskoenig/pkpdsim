@@ -194,6 +194,8 @@ Every other id of the scheme, the ids a model rarely reads: the physiology, the 
 | id | what | made by |
 |---|---|---|
 | `AGE` | the age (yr), a covariate | `ids.AGE` |
+| `CLOCK` | the clock time (hr) at the start of a simulation of a model with circadian rhythms, an initial value | `ids.CLOCK` |
+| `TOD` | the clock time (hr, 0 to 24) during a simulation of a model with circadian rhythms | `ids.TIME_OF_DAY` |
 | `BMI` | the body mass index | `ids.BMI` |
 | `BSA` | the body surface area (m2) | `ids.BSA` |
 | `FFM` | the fat-free mass (kg) | `ids.FFM` |

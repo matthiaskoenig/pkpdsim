@@ -101,6 +101,7 @@ from pkpdsim.pbpk.age import (
 )
 from pkpdsim.pbpk.annotation import annotate, initial_assignment
 from pkpdsim.pbpk.chemistry import Metabolism, Transport
+from pkpdsim.pbpk.circadian import circadian_factor, circadian_keys, protein_rhythms
 from pkpdsim.pbpk.data import cite, load
 from pkpdsim.pbpk.organs import PORTAL_ORGANS, Organ
 from pkpdsim.pbpk.physiology import normal_gfr
@@ -216,7 +217,7 @@ def organ_activity(organ: Organ, protein: str) -> str | None:
     if (organ is Organ.LIVER and protein in _proteins()) or (
         organ,
         protein,
-    ) in protein_factors() | protein_sex_factors():
+    ) in protein_factors() | protein_sex_factors() | set(protein_rhythms()):
         return ids.impairment_activity(protein)
     return None
 
@@ -1219,6 +1220,12 @@ class _Impairment:
 
         female_albumin = ALBUMIN in sex_curves(self.definition.sex)
         human = self.definition.species is Species.HUMAN
+        rhythms = circadian_keys(self.definition)
+
+        def circ(key: str) -> str | None:
+            """The circadian factor of a quantity, if the model has the rhythm."""
+            return circadian_factor(key) if key in rhythms else None
+
         text = "The factor of all impairments (cirrhosis, CKD, heart failure) on"
         rest = ids.condition_factor("cp", "rest_flow")
         flows: list[str] = []
@@ -1286,6 +1293,7 @@ class _Impairment:
                 product(
                     ids.condition_factor("cp", "gfr"),
                     ids.condition_factor("hf", "kidney_flow"),
+                    circ(ids.GFR),
                 ),
                 "the GFR (heart failure: the GFR follows the renal blood flow; "
                 f"chronic kidney disease is `{ids.F_RENAL_FUNCTION}`)",
@@ -1308,6 +1316,7 @@ class _Impairment:
                     ids.condition_factor("cp", "albumin"),
                     age_factor("albumin") if human else None,
                     sex_factor(ALBUMIN) if female_albumin else None,
+                    circ("albumin"),
                 ),
                 "the plasma albumin"
                 + (
@@ -1388,6 +1397,7 @@ class _Impairment:
                         if protein_sex_factor(self.definition.sex, organ, protein)
                         is not None
                         else None,
+                        circ(key),
                     ),
                     f"individual factor activity {protein} {organ.name.lower()}",
                     f"The factor of the individual (the impairments, the age and "

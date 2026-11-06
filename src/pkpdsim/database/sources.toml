@@ -847,3 +847,51 @@ doi = "10.2527/2002.8051294x"
 
 [Ellegaard2009]
 citation = "Ellegaard Göttingen Minipigs. Organ weight 2009: absolute (g) and relative (% of body weight) organ weight, group mean values, 8 weeks and 6 months. https://minipigs.dk/sites/default/files/2024-05/Organ%20Weights.pdf (accessed 2026-11-06)."
+
+# The circadian rhythms (circadian_human.toml, #131), searched and read 2026-11-06.
+
+[Koopmans1991]
+citation = "Koopmans R, Dingemanse J, Danhof M, Horsten GP, van Boxtel CJ. The influence of dosage time of midazolam on its pharmacokinetics and effects in humans. Clin Pharmacol Ther 50(1):16-24, 1991."
+doi = "10.1038/clpt.1991.99"
+
+[TomalikScharte2014]
+citation = "Tomalik-Scharte D, Suleiman AA, Frechen S, Kraus D, Kerkweg U, Rokitta D, Di Gion P, Queckenberg C, Fuhr U. Population pharmacokinetic analysis of circadian rhythms in hepatic CYP3A activity using midazolam. J Clin Pharmacol 54(10):1162-1169, 2014."
+doi = "10.1002/jcph.318"
+
+[VanRongen2015]
+citation = "van Rongen A, Kervezee L, Brill M, van Meir H, den Hartigh J, Guchelaar HJ, Meijer JH, Burggraaf J, van Oosterhout F. Population pharmacokinetic model characterizing 24-hour variation in the pharmacokinetics of oral and intravenous midazolam in healthy volunteers. CPT Pharmacometrics Syst Pharmacol 4(8):454-464, 2015."
+doi = "10.1002/psp4.12007"
+
+[Koopman1989]
+citation = "Koopman MG, Koomen GC, Krediet RT, de Moor EA, Hoek FJ, Arisz L. Circadian rhythm of glomerular filtration rate in normal individuals. Clin Sci (Lond) 77(1):105-111, 1989."
+doi = "10.1042/cs0770105"
+
+[Koopman1996]
+citation = "Koopman MG, Koomen GC, van Acker BA, Arisz L. Circadian rhythm in glomerular transport of macromolecules through large pores and shunt pathway. Kidney Int 49(5):1242-1249, 1996."
+doi = "10.1038/ki.1996.178"
+
+[VanAcker1992]
+citation = "van Acker BA, Koomen GC, Koopman MG, Krediet RT, Arisz L. Discrepancy between circadian rhythms of inulin and creatinine clearance. J Lab Clin Med 120(3):400-410, 1992."
+
+[Buijsen1994]
+citation = "Buijsen JG, van Acker BA, Koomen GC, Koopman MG, Arisz L. Circadian rhythm of glomerular filtration rate in patients after kidney transplantation. Nephrol Dial Transplant 9(9):1330-1333, 1994."
+
+[Goo1987]
+citation = "Goo RH, Moore JG, Greenberg E, Alazraki NP. Circadian variation in gastric emptying of meals in humans. Gastroenterology 93(3):515-518, 1987."
+doi = "10.1016/0016-5085(87)90913-9"
+
+[McIver2019]
+citation = "McIver VJ, Mattin LR, Evans GH, Yau AMW. Diurnal influences of fasted and non-fasted brisk walking on gastric emptying rate, metabolic responses, and appetite in healthy males. Appetite 143:104411, 2019."
+doi = "10.1016/j.appet.2019.104411"
+
+[Kambayashi2020]
+citation = "Kambayashi A, Sako K, Kondo H. Effects of diurnal variation and food on gastrointestinal transit of 111In-labeled hydrogel matrix extended-release tablets and 99mTc-labeled pellets in humans. J Pharm Sci 109(2):1020-1025, 2020."
+doi = "10.1016/j.xphs.2019.09.025"
+
+[Jubiz1972]
+citation = "Jubiz W, Canterbury JM, Reiss E, Tyler FH. Circadian rhythm in serum parathyroid hormone concentration in human subjects: correlation with serum calcium, phosphate, albumin, and growth hormone levels. J Clin Invest 51(8):2040-2046, 1972."
+doi = "10.1172/JCI107010"
+
+[Hagan1978]
+citation = "Hagan RD, Diaz FJ, Horvath SM. Plasma volume changes with movement to supine and standing positions. J Appl Physiol 45(3):414-417, 1978."
+doi = "10.1152/jappl.1978.45.3.414"

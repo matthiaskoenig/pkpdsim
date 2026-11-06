@@ -30,6 +30,7 @@ from pkpdsim.pbpk.chemistry import (
     Saturable,
     Transport,
 )
+from pkpdsim.pbpk.circadian import Circadian
 from pkpdsim.pbpk.data import Source, cite, load, sources
 from pkpdsim.pbpk.definition import PBPKDefinition, Variants
 from pkpdsim.pbpk.distribution import KCellFloorWarning, interstitial_share
@@ -141,6 +142,7 @@ __all__ = [
     "Binding",
     "Boundary",
     "BuildResult",
+    "Circadian",
     "CustomReaction",
     "Direction",
     "DoseDependentDissolution",

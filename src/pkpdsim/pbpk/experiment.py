@@ -1173,6 +1173,27 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
         }
         return Dimension(dimension, values=values)
 
+    @staticmethod
+    def clock_changes(hour: float) -> dict[str, Quantity]:
+        """Get the change which starts a simulation at a clock time.
+
+        For a model with circadian rhythms (`PBPKDefinition.circadian`): the
+        clock time `CLOCK` at time 0 of the simulation, set before the
+        initialization (`preinit_changes`), e.g. a dose at 8:00 or at 20:00.
+
+        Args:
+            hour: the clock time (hours, 0 to 24).
+
+        Returns:
+            The change of `CLOCK` in hours.
+
+        Raises:
+            ValueError: for a clock time not in [0, 24).
+        """
+        if not 0.0 <= hour < 24.0:
+            raise ValueError(f"The clock time {hour} is not in [0, 24) hours.")
+        return {ids.CLOCK: Q(hour, "hr")}
+
     def class_simulations(
         self,
         simulation: Simulation,

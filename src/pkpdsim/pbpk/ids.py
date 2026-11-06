@@ -16,6 +16,7 @@ __all__ = [
     "BSA",
     "BW",
     "CKD_HEPATIC",
+    "CLOCK",
     "CO",
     "CO_BASE",
     "CO_EXPONENT",
@@ -53,6 +54,7 @@ __all__ = [
     "QHA",
     "QPO",
     "SV_TIS",
+    "TIME_OF_DAY",
     "TUBULE_SEGMENTS",
     "T_LUMEN",
     "T_STOMACH",
@@ -219,6 +221,12 @@ HEIGHT = "HEIGHT"
 """The height (covariate)."""
 AGE = "AGE"
 """The age (covariate)."""
+CLOCK = "CLOCK"
+"""The clock time (hr) at the start of a simulation, time 0, of a model with
+circadian rhythms (`pkpdsim.pbpk.circadian`); an initial value."""
+TIME_OF_DAY = "TOD"
+"""The clock time (hr, 0 to 24) during a simulation of a model with circadian
+rhythms, `CLOCK` plus the time of the simulation."""
 BMI = "BMI"
 """The body mass index."""
 BSA = "BSA"

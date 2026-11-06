@@ -1,0 +1,38 @@
+# The circadian rhythms of the human physiology: the changes over the day and
+# the night of healthy adults (`pkpdsim.pbpk.circadian`).
+#
+# Every rhythm is a cosinor of the clock time relative to its mean over 24
+# hours, `1 + amplitude*cos(2*pi*(clock - acrophase)/24 h)`: `amplitude` the
+# amplitude over the mesor (a "relative amplitude" printed as (max - min)/mean
+# is halved), `acrophase` the clock time of the maximum (hours). A rhythm with
+# `default = false` is not a rhythm of `Circadian()` and is chosen by its key.
+#
+# `[gfr]` multiplies the GFR, `[gastric_emptying_fed]` the transit time of the
+# stomach in the fed state, `[albumin]` the albumin of the binding;
+# `[protein.<organ>.<protein>]` the activity of a protein in an organ.
+#
+# No rhythm (documented in docs/pbpk/circadian.md): the small intestinal
+# transit, the fasted gastric emptying of liquids, the colonic transit, the
+# renal plasma flow and the renal clearance of drugs, CYP1A2 (caffeine), the
+# other enzymes and transporters (no data of humans in vivo); not usable
+# (amplitude unknown or not a quantity of the library): the liver blood flow
+# (Lemmer and Nold 1991, maximum at 08:00), the cardiac output (activity and
+# sleep, night 29 % below the day, Veerman 1995), the gastric acid and pH,
+# AGP, the hematocrit (posture).
+
+[gfr]
+amplitude = { value = 0.15, unit = "dimensionless", source = "Koopman1996", notes = "inulin clearance over 24 h of healthy subjects under bed rest with equal meals: Koopman 1996 (Tables 2, 4, 5, relative amplitude (max - min)/mean 40.3 %, i.e. 0.20), van Acker 1992 (21 %, i.e. 0.105), Koopman 1989; 0.15 the middle of the range 0.10-0.20; the rhythm persists under bed rest and in denervated kidney grafts (Buijsen 1994), i.e. endogenous; the renal clearance of gentamicin (08:00 against 20:00, Dickson 1986) and levofloxacin (Kervezee 2016) shows no rhythm, the effect on a drug is small" }
+acrophase = { value = 16.5, unit = "hr", source = "Koopman1996", notes = "orthophase of the inulin clearance 16.50 h (Koopman 1996, methods p. 1244; range of the studies 14:30-17:00)" }
+
+[gastric_emptying_fed]
+amplitude = { value = 0.21, unit = "dimensionless", source = "Goo1987", notes = "derived: the half-emptying time of the solid part of a meal 53.6 % longer in the evening (20:00) than in the morning (08:00), the liquid part unchanged (Goo 1987, abstract), (1.536 - 1)/(1.536 + 1) for a morning minimum and an evening maximum; the direction confirmed by McIver 2019 and a trend in Kambayashi 2020 (scintigraphy of tablets, n.s.); amplitude and phase of low confidence; the fasted emptying of liquids has no factor" }
+acrophase = { value = 20.0, unit = "hr", source = "Goo1987", notes = "the longest emptying in the evening, 20:00 (Goo 1987), the shortest in the morning, 08:00; between 20:00 and 23:00 in the studies" }
+
+[albumin]
+default = false
+amplitude = { value = 0.05, unit = "dimensionless", source = "Koopman1996", notes = "plasma albumin over 24 h under bed rest, relative amplitude (max - min)/mean 10.3 % (Koopman 1996), i.e. 0.05; mostly posture and plasma volume (Hagan 1978: standing concentrates the plasma proteins), free-living minimum at 02:00-04:00 (Jubiz 1972); an optional rhythm, its effect on fu about 5 %" }
+acrophase = { value = 16.5, unit = "hr", source = "Koopman1996", notes = "orthophase 16.50 h under bed rest (Koopman 1996)" }
+
+[protein.li.CYP3A4]
+amplitude = { value = 0.071, unit = "dimensionless", source = "VanRongen2015", notes = "population pharmacokinetics of intravenous and oral midazolam over 24 h (van Rongen 2015, full text: cosinor of the clearance, amplitude 0.071 of the mean), Tomalik-Scharte 2014 (hepatic CYP3A activity +-10 %, abstract); the range of the studies 0.07-0.10; the midazolam clearance as the activity of the hepatic CYP3A4" }
+acrophase = { value = 18.83, unit = "hr", source = "VanRongen2015", notes = "peak of the clearance at 18:50 (van Rongen 2015); Tomalik-Scharte 2014: 15:00; Koopmans 1991 and Klotz 1982 no consistent difference of the dosing time" }

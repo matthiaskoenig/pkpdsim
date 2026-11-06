@@ -489,6 +489,11 @@ KINDS: dict[str, Kind] = {
     "sex_factor": Kind(
         _P, _PHYS, requested="factor of the sex on a physiological quantity"
     ),
+    # circadian rhythms
+    "clock_time": Kind(_P, _PHYS, requested="clock time of a simulation"),
+    "circadian": Kind(
+        _P, _PHYS, requested="circadian rhythm of a physiological quantity"
+    ),
     # substances
     "molecular_weight": Kind(SBO.MOLECULAR_MASS, "MOLECULAR_WEIGHT"),
     "fu": Kind(_P, "FRACTION_UNBOUND_PLASMA"),

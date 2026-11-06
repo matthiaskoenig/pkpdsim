@@ -20,6 +20,7 @@ from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk import ids
 from pkpdsim.pbpk.annotation import initial_assignment
+from pkpdsim.pbpk.circadian import circadian_factor
 from pkpdsim.pbpk.data import cite, load, value
 from pkpdsim.pbpk.impairment import GASTRIC_EMPTYING, SI_TRANSIT
 from pkpdsim.pbpk.organ import StandardBuilder
@@ -203,6 +204,12 @@ class LumenBuilder(StandardBuilder):
         sex = self._sex_input(GASTRIC_EMPTYING_FED, "gastric emptying time fed")
         if sex is not None:
             t_fed = f"{t_fed} * {sex}"
+        circadian = circadian_factor("t_stomach_fed")
+        if circadian in self.ctx.top:
+            factor_of_day = self._input(
+                circadian, U.dimensionless, "circadian factor gastric emptying time fed"
+            )
+            t_fed = f"{t_fed} * {factor_of_day}"
         return f"({t} + {fed} * ({t_fed} - {t})) * {factor}"
 
     def _stomach_transit(self) -> None:

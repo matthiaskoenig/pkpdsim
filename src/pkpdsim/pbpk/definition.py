@@ -17,6 +17,7 @@ from pkpdsim.pbpk.chemistry import (
     check_rate_of,
     check_stationary,
 )
+from pkpdsim.pbpk.circadian import Circadian
 from pkpdsim.pbpk.data import load
 from pkpdsim.pbpk.kp import check_kp_method
 from pkpdsim.pbpk.observers import Observer, formula_functions, readout_ids
@@ -178,6 +179,10 @@ class PBPKDefinition:
             (the default) or `kslow_<s>*Vti*(Kpslow_<s>*Cpl_<s> - Cslow_<s>)`
             with the plasma of the organ (`SlowPool.source`); a model without
             them has none of their elements.
+        circadian: the circadian rhythms of the physiology (`Circadian`,
+            `pkpdsim.pbpk.circadian`): the clock time `CLOCK` at the start of
+            a simulation and the factors `fcirc_<key>` of the rhythms over the
+            day and the night; `None` (the default) for a model without them.
     """
 
     sid: str
@@ -200,6 +205,7 @@ class PBPKDefinition:
     deltas: tuple[str, ...] = ()
     readouts: tuple[str, ...] = ()
     slow_pools: Sequence[SlowPool] = ()
+    circadian: Circadian | None = None
 
     def __post_init__(self) -> None:
         """Normalise the sex and the species to their members and freeze the starts."""
@@ -249,7 +255,7 @@ class PBPKDefinition:
         """
         if not definitions:
             raise ValueError(f"Combine '{sid}': no definitions given.")
-        for attribute in ("sex", "species", "population", "arm_vein"):
+        for attribute in ("sex", "species", "population", "arm_vein", "circadian"):
             values = {getattr(d, attribute) for d in definitions}
             if len(values) > 1:
                 raise ValueError(
@@ -292,6 +298,7 @@ class PBPKDefinition:
             sex=first.sex,
             species=first.species,
             population=first.population,
+            circadian=first.circadian,
             arm_vein=first.arm_vein,
             dynamic=tuple(dict.fromkeys(p for d in definitions for p in d.dynamic)),
             notes=f"The coupled physiology of the definitions {sids}.",

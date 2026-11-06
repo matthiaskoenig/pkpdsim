@@ -83,6 +83,7 @@ from sbmlutils.validation import ValidationOptions, validate_doc
 from pkpdsim.pbpk import distribution, ids, variants
 from pkpdsim.pbpk.annotation import annotate, initial_assignment, model_annotations
 from pkpdsim.pbpk.chemistry import Membrane, Metabolism, Transport
+from pkpdsim.pbpk.circadian import circadian_ids, circadian_objects
 from pkpdsim.pbpk.data import cite
 from pkpdsim.pbpk.definition import PBPKDefinition
 from pkpdsim.pbpk.impairment import (
@@ -700,9 +701,14 @@ def _body(
         )
     top.formulas()
     _annotate_inputs(top.objects, model_definitions, submodels, replaced)
+    rhythms = circadian_ids(definition)
     _dynamic(
         definition,
-        (*definition.dynamic, *(o for o in outputs if o not in definition.dynamic)),
+        (
+            *definition.dynamic,
+            *(o for o in outputs if o not in definition.dynamic),
+            *(f for f in rhythms if f not in definition.dynamic),
+        ),
         top.objects,
         model_definitions,
         submodels,
@@ -1477,6 +1483,7 @@ class _Top:
                 definition.species,
             ),
             *impairment_objects(definition),
+            *circadian_objects(definition),
         ]
         self.known: set[str] = {
             str(o.sid) for o in self.objects if isinstance(o, Parameter)

@@ -51,6 +51,7 @@ from pkpdsim.pbpk.age import (
     protein_factors,
     reference_curves,
 )
+from pkpdsim.pbpk.circadian import circadian_factor, protein_rhythms, rhythms
 from pkpdsim.pbpk.data import load, sources
 from pkpdsim.pbpk.experiment import PBPKSimulationExperiment
 from pkpdsim.pbpk.impairment import (
@@ -423,6 +424,48 @@ def species_organs_mouse() -> str:
 def species_organs_pig() -> str:
     """The organs of the reference pig (male)."""
     return _organs(Sex.MALE, physiology_table(Species.PIG))
+
+
+def circadian_rhythms() -> str:
+    """The circadian rhythms of the physiology and the proteins."""
+    rows: list[list[str]] = []
+    cited: list[str] = []
+    entries = [(r, "") for r in rhythms().values()]
+    entries += [
+        (r, f"{protein} {_ORGAN_NAMES[organ]}")
+        for (organ, protein), r in sorted(
+            protein_rhythms().items(), key=lambda x: (x[0][0].value, x[0][1])
+        )
+    ]
+    for r, protein in entries:
+        cited += list(r.sources)
+        hours = int(r.acrophase)
+        minutes = round(60 * (r.acrophase - hours))
+        rows.append(
+            [
+                protein or r.key,
+                f"`{circadian_factor(r.key)}`",
+                _number(r.amplitude),
+                f"{hours:02d}:{minutes:02d}",
+                _number(r.value(8.0)),
+                _number(r.value(20.0)),
+                "yes" if r.default else "no",
+                ", ".join(f"`{k}`" for k in r.sources),
+            ]
+        )
+    header = [
+        "rhythm",
+        "factor",
+        "amplitude",
+        "acrophase",
+        "08:00",
+        "20:00",
+        "default",
+        "sources",
+    ]
+    return _generated(
+        "`database/tables/circadian_human.toml`", _table(header, rows), cited
+    )
 
 
 def populations() -> str:
@@ -1781,6 +1824,7 @@ TABLES: dict[str, Callable[[], str]] = {
     "physiology-general": physiology_general,
     "physiology-organs-male": physiology_organs_male,
     "species-overview": species_overview,
+    "circadian-rhythms": circadian_rhythms,
     "species-intestine": species_intestine,
     "species-organs-rat": species_organs_rat,
     "species-organs-mouse": species_organs_mouse,
