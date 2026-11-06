@@ -9,6 +9,7 @@ import pytest
 from credibility_tables import KINDS, fit_table
 from pkpdsim_credibility.credibility import CREDIBILITY
 from pkpdsim_credibility.fitting import DOSE
+from sbmlsim.fit.filters import named_filter
 
 from pkpdsim.credibility import (
     UNCLAIMED,
@@ -33,7 +34,7 @@ from pkpdsim.credibility import (
     recorded_kinds,
     select,
 )
-from pkpdsim.fit import metadata_filter, named_filter
+from pkpdsim.fit import metadata_filter
 from pkpdsim.metadata import Health, Route
 from pkpdsim.model import PKPDModel
 

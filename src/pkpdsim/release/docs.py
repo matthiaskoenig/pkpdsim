@@ -16,13 +16,14 @@ from pathlib import Path
 from typing import Any, cast
 from urllib.parse import quote
 
+from sbmlsim.fit.records import AdoptedRecord
+
 from pkpdsim.credibility import Check, CredibilityAssessment
 from pkpdsim.credibility.verification import BATTERY_CHECKS
 from pkpdsim.release.build import BuildPaths
 from pkpdsim.release.notes import NOTES_DIR, fits_prefix
 from pkpdsim.release.project import ProjectContext, render
 from pkpdsim.release.source import ReleaseError
-from pkpdsim.uncertainty import FitRecord
 
 PAGES = ("index", "running", "models", "simulations", "fit", "release-notes")
 """The pages of the site, the entries of its navigation.
@@ -187,7 +188,7 @@ def _fit_entries(context: ProjectContext, release_path: Path) -> list[FitEntry]:
     entries = []
     for fit_id in context.model.adopted_ids:
         try:
-            record = FitRecord.load(directory / fit_id)
+            record = AdoptedRecord.load(directory / fit_id)
         except (FileNotFoundError, ValueError) as err:
             raise ReleaseError(
                 f"The adopted fit '{fit_id}' has no readable record: {err}"

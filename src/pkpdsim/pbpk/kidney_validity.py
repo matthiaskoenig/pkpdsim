@@ -45,6 +45,7 @@ from functools import cache
 from pathlib import Path
 
 from sbmlsim import Q
+from sbmlsim.distrib import UNCERTAINTY_DIMENSION
 from sbmlsim.result.scan import start_values
 from sbmlsim.simulation import Scan, Simulation
 from sbmlsim.simulation.definition import Value as Change
@@ -55,7 +56,6 @@ from sbmlsim.units import Quantity
 from pkpdsim.pbpk import ids
 from pkpdsim.pbpk.flat_model import flat_model, loaded_model
 from pkpdsim.pbpk.organs import Organ
-from pkpdsim.uncertainty import UNCERTAINTY_DIMENSION
 
 __all__ = [
     "IndividualValues",

@@ -9,7 +9,7 @@ fitted, the closest the existing models get to a prospective validation.
 The day of the collection is the record of the study in the data of the model
 (`pkpdsim.data.StudyRecord`, `.<study>_study.json`), which
 `pkpdsim.data.write_study_tables` writes on the first collection and keeps
-afterwards; the day of a fit is the date of its id (`pkpdsim.fit.fit_date`).
+afterwards; the day of a fit is the date of its id (`sbmlsim.fit.result.fit_date`).
 The release of a study in PK-DB is no such day, since a model can collect a
 study from a checkout of pkdb_data before it is released. `chronology` reads
 both for a model, and the assessment splits the decisive points of every
@@ -23,11 +23,10 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, TypedDict
 
 import pandas as pd
-from sbmlsim.fit.result import fit_subset
+from sbmlsim.fit.result import fit_date, fit_subset
 
 from pkpdsim.credibility.studies import study_folders
 from pkpdsim.data import StudyRecord, read_study_record
-from pkpdsim.fit import fit_date
 
 if TYPE_CHECKING:
     from datetime import date

@@ -1,31 +1,25 @@
-"""The fit settings, the metadata filters and the selection of the mappings.
+"""The fit settings, the metadata check and the sampling sites of the models.
 
 The models of pkdb_models share their fit settings apart from the integrator
 tolerances (`default_fit_settings`). Every `mapping_collections.py` checks the
-type of the metadata of a mapping (`mapping_metadata`), reads the observable of
-a mapping (`observable_id`) and selects the training data by the values of the
-metadata (`metadata_filter`) or the observable (`observable_filter`).
-`select_mappings` selects the data of a fit with the paths of the model object,
-see `sbmlsim.fit.helpers.FitMappings.select` for the filters, outliers and
-validation data.
+type of the metadata of a mapping (`mapping_metadata`) and selects the training
+data by the values of the metadata (`metadata_filter`, the filter of
+`sbmlsim.fit.filters` for `PKPDMappingMetaData`). The other filters, the
+selection of the mappings, the start of a fit, the fixed adopted fits and the
+records of the adopted fits are those of `sbmlsim.fit` (`sbmlsim.fit.filters`,
+`sbmlsim.fit.helpers.select_mappings`, `sbmlsim.fit.project_fits`,
+`sbmlsim.fit.records`).
 """
 
 from __future__ import annotations
 
-import copy
-import dataclasses
-from collections.abc import Callable, Collection, Hashable, Iterable, Mapping, Sequence
-from dataclasses import dataclass
-from datetime import date, datetime
-from enum import Enum
-from pathlib import Path
+from collections.abc import Collection, Hashable, Iterable, Mapping
 from typing import TYPE_CHECKING, overload
 
-from sbmlsim.fit import FitMapping, FitMappingCollection, FitSettings
-from sbmlsim.fit.cli import FitDefinition
-from sbmlsim.fit.helpers import FitMappings, MappingFilter
-from sbmlsim.fit.methods import ReportContext
-from sbmlsim.fit.objects import FitParameter, MappingMetaData
+from sbmlsim.fit import FitMapping, FitSettings, filters
+from sbmlsim.fit.filters import MetadataFilter, observable_id
+from sbmlsim.fit.helpers import FitMappings
+from sbmlsim.fit.objects import MappingMetaData
 from sbmlsim.fit.options import (
     DataAtChangeType,
     LossFunctionType,
@@ -33,16 +27,11 @@ from sbmlsim.fit.options import (
     WeightingCurvesType,
     WeightingPointsType,
 )
-from sbmlsim.fit.result import FIT_ID, fit_subset
 
 from pkpdsim.metadata import PKPDMappingMetaData, SamplingSite
 
 if TYPE_CHECKING:
-    from sbmlsim.experiment import SimulationExperiment
-    from sbmlsim.fit.cli import FitRecords
     from sbmlsim.model.tolerances import AbsoluteTolerance
-
-    from pkpdsim.model import PKPDModel
 
 
 def default_fit_settings(
@@ -114,22 +103,46 @@ def mapping_metadata(
     return metadata
 
 
-def observable_id(fit_mapping: FitMapping) -> str:
-    """Get the observable of a fit mapping, the index of its data.
+def metadata_filter(
+    metadata_type: type[PKPDMappingMetaData] = PKPDMappingMetaData,
+    /,
+    *,
+    excluded: Mapping[str, Collection[Hashable]] | None = None,
+    **allowed: Collection[Hashable],
+) -> MetadataFilter:
+    """Build a filter of fit mappings by the values of their PK metadata.
 
-    The index of the y data of the observable (`sbmlsim.data.Data.index`): the
-    selection without the brackets of a concentration, `Cve_hctz` for
-    `[Cve_hctz]`, `Aurine_hctz` for `Aurine_hctz`. sbmlsim 0.9 writes the
-    concentration into the id of the data (`<task>__conc__Cve_hctz`), so the
-    id is no longer read.
+    The filter of `sbmlsim.fit.filters.metadata_filter` with the metadata of
+    the models, `PKPDMappingMetaData`; the sampling site it compares is the
+    resolved one (`PKPDMappingMetaData.filter_value`).
+
+    ```python
+    # not executed
+    filter_control = metadata_filter(
+        route={Route.PO, Route.IV},
+        coadministration={Coadministration.NONE},
+        excluded={"dosing": {Dosing.MULTIPLE}},
+    )
+    ```
 
     Args:
-        fit_mapping: the fit mapping.
+        metadata_type: the metadata class, `PKPDMappingMetaData` unless a model
+            extends it; positional only.
+        excluded: the fields with the values a mapping must not have.
+        **allowed: the fields with the values a mapping must have.
 
     Returns:
-        The id of the observable, e.g. `Cve_hctz`.
+        The filter, called by the selection of the mappings of a fit.
+
+    Raises:
+        TypeError: if the metadata class is no dataclass (or an instance of
+            one), has no field of a given name, or the values of a field are not
+            a collection (a single value, also a string or `None`).
+        ValueError: for a filter without clauses, with an empty set of allowed
+            values, which would select nothing, or with an empty set of excluded
+            values, which would exclude nothing.
     """
-    return fit_mapping.observable.y.index
+    return filters.metadata_filter(metadata_type, excluded=excluded, **allowed)
 
 
 def check_sampling_sites(
@@ -171,603 +184,3 @@ def check_sampling_sites(
                 f"differs from {sites[observable].name}"
             )
     return problems
-
-
-def _value(metadata: MappingMetaData, name: str) -> Hashable:
-    """Get the value of a field of the metadata the filters compare.
-
-    The sampling site is the resolved one, which follows the tissue if it is not
-    stated.
-    """
-    if name == "sampling_site" and isinstance(metadata, PKPDMappingMetaData):
-        return metadata.resolved_sampling_site()
-    return getattr(metadata, name)
-
-
-def _show(values: frozenset[Hashable]) -> str:
-    """Show values sorted, enum members by their name."""
-    names = sorted(v.name if isinstance(v, Enum) else repr(v) for v in values)
-    return f"[{', '.join(names)}]"
-
-
-def _values(name: str, values: object) -> frozenset[Hashable]:
-    """Check that the values of a clause are a collection and make a set of them.
-
-    A single value would silently become a set of its characters when it is a
-    string (every `StrEnum` member is one).
-
-    Raises:
-        TypeError: if the values are a string or not a collection.
-    """
-    if isinstance(values, str | bytes) or not isinstance(values, Collection):
-        raise TypeError(
-            f"{name} needs a collection of values, e.g. a set, not {values!r}"
-        )
-    return frozenset(values)
-
-
-@dataclass(frozen=True)
-class MetadataFilter:
-    """A filter of fit mappings by the values of their metadata.
-
-    A mapping passes when every allowed field has one of its values and no
-    excluded field has one of its values. Build it with `metadata_filter`.
-
-    Attributes:
-        metadata_type: the metadata class, `PKPDMappingMetaData` unless a model
-            extends it.
-        allowed: the fields with the values a mapping must have.
-        excluded: the fields with the values a mapping must not have.
-    """
-
-    metadata_type: type[MappingMetaData]
-    allowed: tuple[tuple[str, frozenset[Hashable]], ...]
-    excluded: tuple[tuple[str, frozenset[Hashable]], ...]
-
-    def __call__(self, fit_mapping_key: str, fit_mapping: FitMapping) -> bool:
-        """Check a fit mapping, see `sbmlsim.fit.helpers.MappingFilter`."""
-        metadata = mapping_metadata(fit_mapping, self.metadata_type)
-        return all(
-            _value(metadata, name) in values for name, values in self.allowed
-        ) and not any(
-            _value(metadata, name) in values for name, values in self.excluded
-        )
-
-    def __repr__(self) -> str:
-        """Say what the filter selects."""
-        clauses = [f"{name} in {_show(values)}" for name, values in self.allowed]
-        clauses += [f"{name} not in {_show(values)}" for name, values in self.excluded]
-        return f"MetadataFilter({self.metadata_type.__name__}: {' and '.join(clauses)})"
-
-
-def metadata_filter(
-    metadata_type: type[MappingMetaData] = PKPDMappingMetaData,
-    /,
-    *,
-    excluded: Mapping[str, Collection[Hashable]] | None = None,
-    **allowed: Collection[Hashable],
-) -> MetadataFilter:
-    """Build a filter of fit mappings by the values of their metadata.
-
-    ```python
-    # not executed
-    filter_control = metadata_filter(
-        route={Route.PO, Route.IV},
-        coadministration={Coadministration.NONE},
-        excluded={"dosing": {Dosing.MULTIPLE}},
-    )
-    ```
-
-    Args:
-        metadata_type: the metadata class, `PKPDMappingMetaData` unless a model
-            extends it; a dataclass.
-        excluded: the fields with the values a mapping must not have.
-        **allowed: the fields with the values a mapping must have.
-
-    Returns:
-        The filter, called by the selection of the mappings of a fit.
-
-    Raises:
-        TypeError: if the metadata class is no dataclass (or an instance of
-            one), has no field of a given name, or the values of a field are not
-            a collection (a single value, also a string or `None`), i.e. when
-            the module of the filters is imported.
-        ValueError: for a filter without clauses, with an empty set of allowed
-            values, which would select nothing, or with an empty set of excluded
-            values, which would exclude nothing.
-    """
-    if not isinstance(metadata_type, type):
-        raise TypeError(
-            f"metadata_type must be the class, not an instance: {metadata_type!r}"
-        )
-    if not dataclasses.is_dataclass(metadata_type):
-        raise TypeError(f"{metadata_type.__name__} is not a dataclass")
-    excluded = excluded or {}
-    names = {field.name for field in dataclasses.fields(metadata_type)}
-    unknown = sorted((set(allowed) | set(excluded)) - names)
-    if unknown:
-        raise TypeError(f"{metadata_type.__name__} has no fields {unknown}")
-    if not allowed and not excluded:
-        raise ValueError("a metadata filter needs at least one clause")
-    allowed_sets = {name: _values(name, values) for name, values in allowed.items()}
-    excluded_sets = {name: _values(name, values) for name, values in excluded.items()}
-    empty = sorted(name for name, values in allowed_sets.items() if not values)
-    if empty:
-        raise ValueError(f"an empty set of allowed values selects nothing: {empty}")
-    empty = sorted(name for name, values in excluded_sets.items() if not values)
-    if empty:
-        raise ValueError(f"an empty set of excluded values excludes nothing: {empty}")
-    return MetadataFilter(
-        metadata_type=metadata_type,
-        allowed=tuple(allowed_sets.items()),
-        excluded=tuple(excluded_sets.items()),
-    )
-
-
-@dataclass(frozen=True)
-class ObservableFilter:
-    """A filter of fit mappings by their observable, see `observable_id`.
-
-    Attributes:
-        observables: the ids of the observables a mapping may have, the index
-            of the data (`Data.index`).
-    """
-
-    observables: frozenset[str]
-
-    def __call__(self, fit_mapping_key: str, fit_mapping: FitMapping) -> bool:
-        """Check a fit mapping, see `sbmlsim.fit.helpers.MappingFilter`."""
-        return observable_id(fit_mapping) in self.observables
-
-    def __repr__(self) -> str:
-        """Say what the filter selects."""
-        return f"ObservableFilter({', '.join(sorted(self.observables))})"
-
-
-def observable_filter(observables: Collection[str]) -> ObservableFilter:
-    """Build a filter of fit mappings by their observable, e.g. the PK data.
-
-    Args:
-        observables: the ids of the observables, the index of the data
-            (`Data.index`), e.g. `Cve_hctz`.
-
-    Returns:
-        The filter.
-
-    Raises:
-        TypeError: if the observables are a single id or not a collection.
-        ValueError: for no observables, which would select nothing.
-    """
-    ids = _values("observables", observables)
-    if not ids:
-        raise ValueError("an empty set of observables selects nothing")
-    return ObservableFilter(frozenset(str(i) for i in ids))
-
-
-#: the keys of fit mappings by study: the keys of the mappings are SIds of their
-#: experiment, which two studies can share, so a named mapping is named with its
-#: study
-type NamedMappings = dict[str, set[str]]
-
-
-def study(fit_mapping: FitMapping) -> str:
-    """Get the study of a fit mapping, the id of its experiment."""
-    return fit_mapping.reference.experiment.sid
-
-
-def named(
-    mappings: NamedMappings, fit_mapping_key: str, fit_mapping: FitMapping
-) -> bool:
-    """Check whether a fit mapping is one of the named mappings of its study.
-
-    The key alone is not enough: two studies can share a key, so it counts only
-    for the study it is named with.
-    """
-    return fit_mapping_key in mappings.get(study(fit_mapping), set())
-
-
-@dataclass(frozen=True)
-class NamedFilter:
-    """A filter of fit mappings by their key and study, see `named`.
-
-    Attributes:
-        mappings: the study ids with their mapping keys, sorted, so that the
-            filter compares, pickles and describes the same for equal mappings.
-    """
-
-    mappings: tuple[tuple[str, frozenset[str]], ...]
-
-    def __call__(self, fit_mapping_key: str, fit_mapping: FitMapping) -> bool:
-        """Check a fit mapping, see `sbmlsim.fit.helpers.MappingFilter`."""
-        return named(
-            {sid: set(keys) for sid, keys in self.mappings},
-            fit_mapping_key,
-            fit_mapping,
-        )
-
-
-def named_filter(mappings: NamedMappings) -> NamedFilter:
-    """Build a filter of the fit mappings named with their study.
-
-    Args:
-        mappings: the mapping keys by study id.
-
-    Returns:
-        The filter.
-    """
-    return NamedFilter(
-        tuple((sid, frozenset(keys)) for sid, keys in sorted(mappings.items()))
-    )
-
-
-def select_mappings(
-    model: PKPDModel,
-    experiment_classes: Iterable[type[SimulationExperiment]],
-    filters: MappingFilter | Iterable[MappingFilter] = (),
-    outliers: Iterable[str] = (),
-    validation: Iterable[str] | MappingFilter = (),
-) -> dict[str, list[FitMappingCollection]]:
-    """Select the data of a fit of a model, see `sbmlsim.fit.helpers.FitMappings`.
-
-    The experiments are created with the paths of the model object; the counts of
-    the selected mappings per experiment and kind are printed.
-
-    Args:
-        model: the model object.
-        experiment_classes: the experiments with the fit mappings.
-        filters: the filters of the training data.
-        outliers: the keys of the training data which is not usable.
-        validation: the keys or a filter of the validation data.
-
-    Returns:
-        The fit mapping collections of all kinds by experiment id.
-    """
-    fit_mappings = FitMappings(
-        experiment_classes=experiment_classes,
-        base_path=model.base_path or model.path,
-        data_path=list(model.data_paths),
-    )
-    selection = fit_mappings.select(
-        filters=filters, outliers=outliers, validation=validation, print_info=False
-    )
-    selection.print(detail=False)
-    return selection.collections
-
-
-def fit_date(fit_id: str) -> date:
-    """Get the day a fit ran from its id.
-
-    Args:
-        fit_id: the id of a fit, e.g. `PK_20261016_185018__3efe3`.
-
-    Returns:
-        The date of the id, e.g. 2026-10-16.
-
-    Raises:
-        ValueError: if the id does not have the form of the id of a fit, see
-            `sbmlsim.fit.result.fit_subset`, or its date is no date.
-    """
-    fit_subset(fit_id)
-    match = FIT_ID.match(fit_id)
-    text = "" if match is None else match["date"]
-    try:
-        return datetime.strptime(text, "%Y%m%d").date()
-    except ValueError as err:
-        raise ValueError(f"The date of the fit '{fit_id}' is no date.") from err
-
-
-def remainder_problems(
-    sbml_path: Path,
-    parameters: Iterable[FitParameter],
-    fixed_values: Mapping[str, float] | None = None,
-) -> list[str]:
-    """Check that the fitted fractions of a remainder cannot sum above 1.
-
-    A remainder is the initial assignment `1 - a - b - ...` of a constant of
-    the model (the remainder `REST` of the product fractions of a metabolism
-    of `pkpdsim.pbpk`, `f_<p>_<s>`): it keeps the sum of the fractions at 1,
-    and is negative, a product formed at a negative rate, when the other
-    fractions sum above 1. `run_fit` refuses a fit whose bounds allow it
-    before it starts: the upper bounds of the fitted fractions of a remainder
-    and the values of the others (the fixed values of the adopted fits, else
-    those of the model) sum to at most 1.
-
-    Args:
-        sbml_path: the model the fit simulates.
-        parameters: the parameters of the fit.
-        fixed_values: the values of parameters the fit keeps fixed, by id.
-
-    Returns:
-        The problems, naming the remainder, the fitted parameters and their
-        upper bounds.
-    """
-    import libsbml
-
-    fixed_values = fixed_values or {}
-    upper = {p.pid: p.upper_bound for p in parameters}
-    doc = libsbml.readSBMLFromFile(str(sbml_path))
-    model = doc.getModel()
-    if model is None:
-        return []
-    problems: list[str] = []
-    for assignment in model.getListOfInitialAssignments():
-        terms = _remainder_terms(assignment.getMath())
-        if terms is None or not upper.keys() & set(terms):
-            continue
-        total = 0.0
-        for term in terms:
-            if term in upper:
-                total += upper[term]
-            elif term in fixed_values:
-                total += fixed_values[term]
-            elif (parameter := model.getParameter(term)) is not None:
-                total += parameter.getValue()
-        if not total <= 1.0 + 1e-9:
-            fitted = ", ".join(f"{t} <= {upper[t]:g}" for t in terms if t in upper)
-            problems.append(
-                f"the remainder '{assignment.getSymbol()}' = 1 - "
-                f"{' - '.join(terms)} can be negative: the fractions sum to "
-                f"{total:g} > 1 at the upper bounds of the fit ({fitted}); "
-                "lower the upper bounds so that they sum to at most 1"
-            )
-    return problems
-
-
-def _remainder_terms(ast: object) -> list[str] | None:
-    """The ids of a formula `1 - a - b - ...`, `None` for another formula."""
-    import libsbml
-
-    assert isinstance(ast, libsbml.ASTNode)
-    terms: list[str] = []
-    node = ast
-    while node.getType() == libsbml.AST_MINUS and node.getNumChildren() == 2:
-        right = node.getChild(1)
-        if right.getType() != libsbml.AST_NAME:
-            return None
-        terms.insert(0, right.getName())
-        node = node.getChild(0)
-    if not terms or not node.isNumber() or node.getValue() != 1.0:
-        return None
-    return terms
-
-
-#: the argument of the provenance of a fit which names the fixed adopted fits
-FIXED_FITS = "fixed_fits"
-
-
-def start_point(
-    model: PKPDModel, definition: FitDefinition, start: str, output_dir: Path
-) -> dict[str, float]:
-    """Get the parameters a fit starts from (`run_fit --start`).
-
-    The start is a json file of the values by parameter id, in the units of
-    the fit parameters (`FitParameter.unit`), or the id of a fit: an adopted
-    fit of the model (`PKPDModel.fits_dir`) or else a finished fit in the
-    output directory of the fits, whose best parameters (`parameters.json`, in
-    the units of the model) are converted into the units of the fit
-    parameters. A fit of another problem gives the parameters which the
-    definition fits. A parameter which the start does not give keeps its own
-    start value.
-
-    Args:
-        model: the model.
-        definition: the fit problem.
-        start: the json file or the fit id.
-        output_dir: the directory of the finished fits.
-
-    Returns:
-        The start value of every parameter the start gives which the
-        definition fits.
-
-    Raises:
-        ValueError: if the start is neither a file nor a fit, a value is not a
-            number, a parameter of the file is not fitted, a value of a fit has
-            no unit for a fit parameter with one, or a value is outside of the
-            bounds of its parameter.
-    """
-    import json
-
-    from pkpdsim.uncertainty import convert_value
-
-    parameters = {p.pid: p for p in definition.parameters}
-    path = Path(start)
-    values: dict[str, object]
-    if path.is_file():
-        values = dict(json.loads(path.read_text(encoding="utf-8")))
-        unknown = sorted(set(values) - set(parameters))
-        if unknown:
-            raise ValueError(
-                f"The start '{start}' gives parameters which are not fitted: "
-                f"{unknown}; the fitted parameters are {sorted(parameters)}."
-            )
-    else:
-        directory = next(
-            (
-                d / start
-                for d in (model.fits_dir, output_dir)
-                if (d / start / "parameters.json").is_file()
-            ),
-            None,
-        )
-        if directory is None:
-            raise ValueError(
-                f"The start '{start}' is neither a json file nor a fit of the "
-                f"model (adopted in {model.fits_dir} or finished in {output_dir})."
-            )
-        best = json.loads((directory / "parameters.json").read_text("utf-8"))
-        best = best["sets"][0]
-        units = dict(best.get("units") or {})
-        values = {}
-        for pid, value in best["values"].items():
-            if pid not in parameters:
-                continue
-            unit, target = units.get(pid), parameters[pid].unit
-            if unit is None and target is not None:
-                raise ValueError(
-                    f"The fit '{start}' has no unit of '{pid}': its value cannot be "
-                    f"converted into the unit of the fit parameter, {target}."
-                )
-            values[pid] = convert_value(float(value), unit, target)
-    point: dict[str, float] = {}
-    for pid, value in values.items():
-        if isinstance(value, bool) or not isinstance(value, int | float):
-            raise ValueError(f"The start value of '{pid}' is not a number: {value!r}.")
-        parameter = parameters[pid]
-        if not parameter.lower_bound <= value <= parameter.upper_bound:
-            raise ValueError(
-                f"The start value {value} of '{pid}' is outside of its bounds "
-                f"[{parameter.lower_bound}, {parameter.upper_bound}]."
-            )
-        point[pid] = float(value)
-    return point
-
-
-def with_start(definition: FitDefinition, point: Mapping[str, float]) -> FitDefinition:
-    """Get a fit problem whose parameters start from a point.
-
-    The parameters are copies, so the definition of the model keeps its start
-    values (the definitions are objects of the module of the model).
-
-    Args:
-        definition: the fit problem.
-        point: the start value by parameter id.
-
-    Returns:
-        The fit problem with the start values of the point.
-    """
-    parameters = []
-    for parameter in definition.parameters:
-        if parameter.pid in point:
-            parameter = copy.copy(parameter)
-            parameter.start_value = point[parameter.pid]
-        parameters.append(parameter)
-    return dataclasses.replace(definition, parameters=parameters)
-
-
-def fixed_values(
-    model: PKPDModel, subset: str, definition: FitDefinition
-) -> tuple[list[str], dict[str, float]]:
-    """Get what a fit of a subset keeps fixed: the adopted fits of the other problems.
-
-    Args:
-        model: the model.
-        subset: the fit problem, e.g. `PK`.
-        definition: its definition, whose parameters are fitted and not fixed.
-
-    Returns:
-        The adopted fits of the other subsets (`current_fixed_fits`) and the
-        values of their parameters in the units of the model, without the
-        parameters the definition fits.
-    """
-    fixed_fits = current_fixed_fits(model, subset)
-    records = model.fit_records().records
-    fitted = {p.pid for p in definition.parameters}
-    values = {
-        pid: parameter.value
-        for fit_id_ in fixed_fits
-        for pid, parameter in records[fit_id_].parameters.items()
-        if pid not in fitted
-    }
-    return fixed_fits, values
-
-
-def current_fixed_fits(model: PKPDModel, subset: str) -> list[str]:
-    """Get the adopted fits whose parameters a fit of a subset keeps fixed.
-
-    Args:
-        model: the model.
-        subset: the fit problem, e.g. `PK`.
-
-    Returns:
-        The adopted fits of the model of the other subsets, in the order of
-        `model.adopted_ids`.
-    """
-    return [f for f in model.adopted_ids if fit_subset(f) != subset]
-
-
-def recorded_fixed_fits(records: FitRecords) -> tuple[str, ...]:
-    """Get the fixed adopted fits which the provenance of a fit records.
-
-    `run_fit` records them in the arguments of the provenance (`FIXED_FITS`).
-
-    Args:
-        records: the records of the fit (`sbmlsim.fit.cli.load_fit_records`).
-
-    Returns:
-        The ids of the fixed fits, none for a fit without a result, without a
-        provenance or of an older pkpdsim, which did not record them.
-    """
-    opt_result = records.opt_result
-    if opt_result is None or opt_result.provenance is None:
-        return ()
-    return tuple(opt_result.provenance.arguments.get(FIXED_FITS, ()))
-
-
-def report_context(
-    model: PKPDModel,
-    subset: str,
-    definition: FitDefinition,
-    *,
-    fixed_fits: Sequence[str],
-) -> ReportContext:
-    """Get what the report of a fit says about the model beyond the fit itself.
-
-    Args:
-        model: the model.
-        subset: the fit problem, e.g. `PK`.
-        definition: the definition of the fit problem.
-        fixed_fits: the adopted fits whose parameters the fit kept fixed, the
-            current ones for a fit which runs (`current_fixed_fits`), the
-            recorded ones for a report from a record (`recorded_fixed_fits`).
-
-    Returns:
-        The title of the model and the fit, the description of the fit and of
-        its parameters, and a note on the fixed adopted fits, none without
-        them.
-    """
-    noun = "fit" if len(fixed_fits) == 1 else "fits"
-    notes = (
-        (
-            f"The parameters of the adopted {noun} {', '.join(fixed_fits)} were "
-            f"fixed at their fitted values.",
-        )
-        if fixed_fits
-        else ()
-    )
-    return ReportContext(
-        title=f"{model.title}: fit {subset}",
-        description=definition.description,
-        parameter_descriptions={
-            p.pid: p.description for p in definition.parameters if p.description
-        },
-        notes=notes,
-    )
-
-
-def records_context(
-    model: PKPDModel,
-) -> Callable[[str, FitDefinition, FitRecords], ReportContext]:
-    """Get the context of the report of a fit from its records.
-
-    It is the context of `sbmlsim.fit.cli.report_cli` and of
-    `sbmlsim.fit.cli.report_from_records` for a model: the fixed adopted fits
-    are those the provenance of the record names (`recorded_fixed_fits`), not
-    the adopted fits of the model now.
-
-    Args:
-        model: the model.
-
-    Returns:
-        A function of the subset, its definition and the records of the fit
-        which returns the context of its report (`report_context`).
-    """
-
-    def context(
-        subset: str, definition: FitDefinition, records: FitRecords
-    ) -> ReportContext:
-        """Get the context of the report of a record."""
-        return report_context(
-            model, subset, definition, fixed_fits=recorded_fixed_fits(records)
-        )
-
-    return context

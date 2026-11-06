@@ -11,7 +11,7 @@ run_fit pkdb_models.models.hctz --subset PK --runs 40 --cores 10 --identifiabili
 run_fit pkdb_models.models.hctz --adopt PK_20261015_235422__7a62a
 ```
 
-The record is the part of the results which the model needs (`RECORD_FILES`): the best parameter sets (`parameters.json`), the problem with its settings and bounds (`optimization_result.json`), the profile likelihood (`identifiability.json`, `identifiability.tsv`), the Fisher information (`fisher.json`, `fisher.tsv`), the metrics, the text report and the methods report: `report.pdf`, its Typst source `report.typ` with `references.bib` and `references.csl` and the SVG figures it shows (`plots/`), so that `report.typ` compiles in the record. The LaTeX sources of the report (`report.tex`, `report_standalone.tex`) with the PNG copies of their figures, the HTML report and the runs stay in the results of the fit. The record of the PK fit of HCTZ is 1.6 MB: the five SVG figures 0.83 MB, `report.pdf` 0.41 MB, `optimization_result.json` 0.14 MB, `report.txt` 0.12 MB and the other files 0.10 MB. A fit without a profile likelihood and without a Fisher information cannot be adopted (run it with `--identifiability`); an adopted fit is only replaced with `--force`. The model object lists its adopted fits:
+The record is the part of the results which the model needs (`sbmlsim.fit.records.RECORD_FILES`, `adopt_fit`): the best parameter sets (`parameters.json`), the problem with its settings and bounds (`optimization_result.json`), the profile likelihood (`identifiability.json`, `identifiability.tsv`), the Fisher information (`fisher.json`, `fisher.tsv`), the metrics, the text report and the methods report: `report.pdf`, its Typst source `report.typ` with `references.bib` and `references.csl` and the SVG figures it shows (`plots/`), so that `report.typ` compiles in the record. The LaTeX sources of the report (`report.tex`, `report_standalone.tex`) with the PNG copies of their figures, the HTML report and the runs stay in the results of the fit. The record of the PK fit of HCTZ is 1.6 MB: the five SVG figures 0.83 MB, `report.pdf` 0.41 MB, `optimization_result.json` 0.14 MB, `report.txt` 0.12 MB and the other files 0.10 MB. A fit without a profile likelihood and without a Fisher information cannot be adopted (run it with `--identifiability`); an adopted fit is only replaced with `--force`. The model object lists its adopted fits:
 
 ```python
 # not executed
@@ -26,7 +26,7 @@ MODEL = PKPDModel(
 
 ## The fitted values in the factory
 
-A model file takes the value of a fitted parameter from the record of its fit, so the value, its uncertainty and its provenance come from one place and cannot drift apart. `PKPDModel.fit_records()` reads the records (`FitRecords`), and `FitRecords.parameter(pid, unit=...)` gives the keyword arguments of an `sbmlutils.factory.Parameter`: its `value`, its `uncertainties` and its `unit`. The pid is the id of the parameter in the flat model, as the fit names it:
+A model file takes the value of a fitted parameter from the record of its fit, so the value, its uncertainty and its provenance come from one place and cannot drift apart. `PKPDModel.fit_records()` reads the records (`sbmlsim.fit.records.AdoptedRecords`), and `AdoptedRecords.parameter(pid, unit=...)` gives the keyword arguments of an `sbmlutils.factory.Parameter`: its `value`, its `uncertainties` and its `unit`. The pid is the id of the parameter in the flat model, as the fit names it:
 
 ```python
 # not executed
@@ -43,7 +43,7 @@ A parameter which no adopted fit has, and a parameter which two adopted fits hav
 
 ## The uncertainty in the SBML
 
-The uncertainty is a `distrib:uncertainty` of the SBML parameter (the distrib package of SBML), which comp flattening keeps. It has three children and the provenance in its notes (`ParameterUncertainty`):
+The uncertainty is a `distrib:uncertainty` of the SBML parameter (the distrib package of SBML), which comp flattening keeps. It has three children and the provenance in its notes (`sbmlsim.fit.records.ParameterUncertainty`):
 
 | child | value |
 | --- | --- |
@@ -73,7 +73,7 @@ run_simulation pkdb_models.models.hctz --action simulate --experiments all --unc
 run_simulation pkdb_models.models.hctz --action simulate --experiments all -u --draws 200 --seed 1 --quantiles 0.025 0.975
 ```
 
-The run reads the distribution of every parameter of `model_path` (`parameter_distributions`) and draws them once in a Latin hypercube into the dimension `uncertainty` (`uncertainty_dimension`, `UncertaintySettings`: 100 draws, seed 1234, the quantiles 0.05 and 0.95). Every experiment gets the draws as its setting `uncertainty` (`UncertaintyRun`), and `PKPDSimulationExperiment.initialize` applies them (`apply_uncertainty`):
+The run reads the distribution of every parameter of `model_path` (`sbmlsim.simulation.sampling.parameter_distributions`) and draws them once in a Latin hypercube into the dimension `uncertainty` (`sbmlsim.simulation.sampling.uncertainty_dimension`, `UncertaintySettings`: 100 draws, seed 1234, the quantiles 0.05 and 0.95). Every experiment gets the draws as its setting `uncertainty` (`UncertaintyRun`), and `PKPDSimulationExperiment.initialize` applies them (`apply_uncertainty`):
 
 - every simulation becomes a scan over the draws, a scan gets the dimension of the draws appended; a fitted parameter which a simulation, or a dimension of its scan, sets itself keeps its value and is left out of the draws of that simulation, and a simulation which sets all of them runs once;
 - every curve of a figure which reads a task over the draws, over the time or over the values of a dimension of its scan (e.g. an amount at a time over the scanned renal function), becomes the band of the quantiles of the draws with the median, in the colour and with the name of the curve; a curve over another variable of the task, which differs between the draws (e.g. a blood pressure over a concentration), has no common x for quantiles: it draws the simulation with the fitted values (`<simulation>_fitted`, its name gets "(fit)") over a thin translucent line of every draw in its colour, the area of the draws (no legend entry; not for a curve with a line per point of a dimension); the curves of the data stay.

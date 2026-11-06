@@ -2,8 +2,9 @@
 
 from sbmlsim.fit import FitMappingCollection, FitParameter
 from sbmlsim.fit.cli import FitDefinition
+from sbmlsim.fit.helpers import select_mappings
 
-from pkpdsim.fit import default_fit_settings, select_mappings
+from pkpdsim.fit import default_fit_settings
 from pkpdsim_sexes import MODEL, SEXES_PATH
 from pkpdsim_sexes.experiments.decay import SexesMen, SexesWomen
 

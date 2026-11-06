@@ -4,9 +4,9 @@ Every fit mapping of an experiment carries metadata which says what its curve
 is: the tissue, the route, the application form, the dosing, the fasting, the
 health of the subjects, what was coadministered, the genotype and the phenotype
 of the subjects, the site of the administration, the kind of the data and the
-site of the blood sample. The
-fits select their data by these values (see `pkpdsim.fit.metadata_filter`), so
-all models describe their studies with the same words: there is one vocabulary
+site of the blood sample. The fits select their data by these values (see
+`pkpdsim.fit.metadata_filter` and `PKPDMappingMetaData.filter_value`), so all
+models describe their studies with the same words: there is one vocabulary
 for all models, and every closed vocabulary is an enum of this module.
 Their conventional members are `HEALTHY`, `NONE` (nothing coadministered) and
 `NR` (not reported), and a member has one name and one value everywhere. A new
@@ -35,7 +35,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, fields
 from enum import Enum, StrEnum, unique
 from types import MappingProxyType
-from typing import Final, override
+from typing import Any, Final, override
 
 from sbmlsim.fit.objects import MappingMetaData
 
@@ -581,6 +581,23 @@ class PKPDMappingMetaData(MappingMetaData):
         if self.sampling_site is not None:
             return self.sampling_site
         return _DEFAULT_SITES[self.tissue]
+
+    @override
+    def filter_value(self, name: str) -> Any:
+        """Get the value of a field which a filter of the mappings compares.
+
+        The sampling site is the resolved one (`resolved_sampling_site`), which
+        follows the tissue if it is not stated; every other field is its value.
+
+        Args:
+            name: the name of the field.
+
+        Returns:
+            The value the filter compares with its values.
+        """
+        if name == "sampling_site":
+            return self.resolved_sampling_site()
+        return super().filter_value(name)
 
     @override
     def to_dict(self) -> dict[str, str]:

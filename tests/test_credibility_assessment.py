@@ -12,6 +12,7 @@ from pkpdsim_credibility import MODEL
 from pkpdsim_credibility.credibility import CREDIBILITY
 from pkpdsim_credibility.fitting import DOSE, ZERO
 from release_git import git, init_repo
+from sbmlsim.fit.filters import NamedMappings, named_filter
 
 from pkpdsim.credibility import (
     UNCLAIMED,
@@ -39,7 +40,7 @@ from pkpdsim.credibility import (
 )
 from pkpdsim.credibility.assessment import provenance, verdict
 from pkpdsim.credibility.factors import FACTORS
-from pkpdsim.fit import NamedMappings, metadata_filter, named_filter
+from pkpdsim.fit import metadata_filter
 from pkpdsim.metadata import Health, Route
 from pkpdsim.model import PKPDModel
 

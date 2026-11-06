@@ -147,7 +147,7 @@ def test_combine_shared_object_accepted() -> None:
 def _fit(value: float, sd: float) -> dict[str, object]:
     """The keyword arguments of a fit record of a value, new objects at every call.
 
-    `FitRecords.parameter` creates its uncertainty anew for every call, so
+    `AdoptedRecords.parameter` creates its uncertainty anew for every call, so
     two packages which take the same fitted value hold equal, not the same,
     uncertainties.
     """

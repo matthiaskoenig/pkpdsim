@@ -65,7 +65,7 @@ if TYPE_CHECKING:
     from sbmlsim.experiment import SimulationExperiment
 
     from pkpdsim.credibility import Credibility
-    from pkpdsim.uncertainty import FitRecords, UncertaintySettings
+    from pkpdsim.uncertainty import UncertaintySettings
 
 #: the actions of the `run` command of a model, see `pkpdsim.cli`
 RUN_ACTIONS: tuple[str, ...] = ("simulate", "list_experiments", "factory", "all")
@@ -277,9 +277,9 @@ def _directories(data: dict[str, Any]) -> None:
 class PKPDModel(Project):
     """A PBPK/PD model: what the commands, the verification and the tests need.
 
-    A `sbmlsim.project.Project` with what pkpdsim adds: the title, the
-    COMBINE archive, the builds per sex, the adopted fits, the directories of
-    the results below the package and the actions of the `run` command. The
+    A `sbmlsim.project.Project` with what pkpdsim adds: the COMBINE archive,
+    the builds per sex, the adopted fits, the directories of the results below
+    the package and the actions of the `run` command. The
     keywords of the model packages are mapped onto the fields of the project
     when a model is created from keywords:
 
@@ -306,7 +306,6 @@ class PKPDModel(Project):
     fields.
 
     Attributes:
-        title: the title of the model in the output of the commands.
         archive_path: the COMBINE archive the factory creates, linked by the
             `factory` action.
         results_path: the directory of the results, `<root>/results` by
@@ -320,14 +319,13 @@ class PKPDModel(Project):
             extra actions to the parser of the `run` command.
         adopted_ids: the ids of the adopted fits, whose records in `fits_dir`
             give the fitted values and their uncertainty, see
-            `pkpdsim.uncertainty`; one fit per fit subset.
+            `sbmlsim.fit.records`; one fit per fit subset.
     """
 
     # the fields of the project a model always has, narrowed: a model is frozen
     package: str  # ty: ignore[invalid-mutable-override]
     factory_dir: Path  # ty: ignore[invalid-mutable-override]
     fits_dir: Path  # ty: ignore[invalid-mutable-override]
-    title: str
     archive_path: Path | None = None
     results_path: Path | None = None
     reduced_selections: bool = True
@@ -600,12 +598,6 @@ class PKPDModel(Project):
                 )
             fits[subset] = fit_id
         return fits
-
-    def fit_records(self) -> FitRecords:
-        """Get the records of the adopted fits, see `pkpdsim.uncertainty.FitRecords`."""
-        from pkpdsim.uncertainty import FitRecords
-
-        return FitRecords(self.fits_dir, self.adopted_ids)
 
     # ------------------------------------------------------------------------
     # credibility and experiments

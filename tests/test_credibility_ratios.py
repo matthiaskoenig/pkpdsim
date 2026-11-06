@@ -13,6 +13,7 @@ import pandas as pd
 import pytest
 from credibility_tables import fit_table, verification_of
 from pkpdsim_credibility.credibility import CREDIBILITY
+from sbmlsim.fit.filters import named_filter
 
 from pkpdsim.credibility import (
     ContextOfUse,
@@ -35,7 +36,7 @@ from pkpdsim.credibility.ratios import guest_limit, ratio_pairs, summarize
 from pkpdsim.credibility.report import ratios_table, write_outputs
 from pkpdsim.credibility.risk import DEFAULT_RATIO_ACCEPTANCE
 from pkpdsim.credibility.selection import SelectionError
-from pkpdsim.fit import metadata_filter, named_filter
+from pkpdsim.fit import metadata_filter
 from pkpdsim.metadata import Health
 
 RENAL = Ratio(

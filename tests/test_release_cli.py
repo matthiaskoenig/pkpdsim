@@ -15,17 +15,17 @@ from pathlib import Path
 
 import pytest
 from release_git import git
+from sbmlsim.fit.records import adopt_fit
+from sbmlsim.fit.result import fit_subset
 from sbmlsim.release.settings import ReleaseSettings
 from sbmlutils.console import console
 
-from pkpdsim.fit import fit_subset
 from pkpdsim.model import PKPDModel
 from pkpdsim.release import cli as cli_module
 from pkpdsim.release import source as source_module
 from pkpdsim.release.cli import main, release
 from pkpdsim.release.manifest import BUILD_MARKER, MANIFEST_FILE
 from pkpdsim.release.source import ReleaseError, Runner, run
-from pkpdsim.uncertainty import adopt_fit
 from pkpdsim_toy import MODEL, TOY_PATH
 
 pytestmark = pytest.mark.usefixtures("git_env")
