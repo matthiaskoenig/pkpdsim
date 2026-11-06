@@ -15,7 +15,8 @@ import pytest
 from credibility_tables import fit_table, verification_of
 from pkpdsim_credibility import MODEL as CREDIBILITY_MODEL
 from pkpdsim_credibility.credibility import CREDIBILITY
-from sbmlsim.project import CheckSettings
+from sbmlsim.project import CheckSettings, Project
+from sbmlsim.project_checks import check_battery
 
 from pkpdsim.credibility import (
     CredibilityAssessment,
@@ -36,7 +37,6 @@ from pkpdsim.credibility.battery import (
 from pkpdsim.credibility.report import battery_table, fates_table, write_outputs
 from pkpdsim.credibility.verification import BATTERY_CHECKS, Check
 from pkpdsim.model import PKPDModel
-from pkpdsim.testing import check_battery
 from pkpdsim_toy import MODEL as TOY
 
 #: a drug model of the conventions: the doses enter the venous blood, the drug
@@ -422,23 +422,29 @@ def test_the_outputs_of_the_battery(tmp_path: Path) -> None:
     assert "battery of the builds</a>, 6 checks" in html
 
 
+def _pk_battery(project: Project) -> Battery:
+    """Run the PK battery of a model, the hook of `check_battery` of sbmlsim."""
+    assert isinstance(project, PKPDModel)
+    return run_battery(project, rebuild=False, cross_simulator=False)
+
+
 def test_check_battery(tmp_path: Path) -> None:
     model = _model(tmp_path, "PROD: => Cve_d; 1e-6;")
     with pytest.raises(AssertionError, match="the check 'zero_dose' failed"):
-        check_battery(model, rebuild=False, cross_simulator=False)
+        check_battery(model, _pk_battery)
     known = model.replace(
         checks=CheckSettings(
             battery={"zero_dose": "a production", "steady_state": "a production"}
         ),
     )
-    check_battery(known, rebuild=False, cross_simulator=False)
+    check_battery(known, _pk_battery)
     stale = _model(tmp_path).replace(
         checks=CheckSettings(battery={"zero_dose": "fixed since"})
     )
     with pytest.raises(
         AssertionError, match="'zero_dose' no longer applies, it passed"
     ):
-        check_battery(stale, rebuild=False, cross_simulator=False)
+        check_battery(stale, _pk_battery)
 
 
 def test_the_known_failures_of_the_battery_are_checked(tmp_path: Path) -> None:

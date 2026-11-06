@@ -20,6 +20,30 @@ pkpd_release pkdb_models.models.hctz --version 0.8.0 --no-publish
 
 A model package registers no commands of its own: the commands are defined once, in pkpdsim, and everything which differs between two models comes from the model object `MODEL` of the package (its actions, fit problems, settings and folders) or from the options of the command line.
 
+## The run layer of sbmlsim
+
+`run_simulation`, `run_fit`, `run_report` and `run_identifiability` are wrappers of the run layer of sbmlsim, `python -m sbmlsim.run` (see the documentation of sbmlsim, `sbmlsim.run`): they keep their options and defaults, translate them into the spec of a kind and run it with `sbmlsim.run.execute` on the model object of the package, the project `<package>:MODEL` (`pkpdsim.cli.project_reference`). A kind runs into an empty output directory and writes the records of the run next to its results: `run.json` (the kind, the versions, the host, the status), `spec.json` (the planned spec), `summary.json` and `progress.jsonl`. A command therefore runs the kind into the folder of its result below the folder it always wrote into, and replaces an earlier result in that folder, as the commands wrote over it before:
+
+| command | kind | output of the run | the spec |
+|---------|------|-------------------|----------|
+| `run_simulation -a simulate -e misc` | `simulate` | `results/simulation/misc` | `{project, experiments: [misc], figure_formats, uncertainty}` |
+| `run_simulation -a factory --rebuild` | `factory` | `results/factory` | `{project}` |
+| `run_fit --subset PK` | `fit` | `results/fit/<fit id>` | `{project, subset, opid, repeats, algorithm, seed, studies, timeout, start, record_adopted: true, identifiability, profile, fisher, report: true, mapping_figures}` |
+| `run_fit --adopt <fit id>` | `adopt` | `results/fit/<fit id>/adopt` | `{project, force}`, the input `fit` the folder of the fit |
+| `run_report <parameters.json>` | `report` | `results/report/<name>` | `{project, subset, mapping_figures, group_by}`, the input `fit` the folder of the file |
+| `run_report --adopted` | `report` | `results/report/<fit id>` | `{project, subset, adopted: true, mapping_figures}` |
+| `run_identifiability <parameters.json>` | `identifiability`, `report` | `results/identifiability/<name>/analysis`, `.../report` | the profile settings, `pids`, `fisher`; the report of the analysis |
+
+The same run from the command line of sbmlsim, e.g. for a fit:
+
+```bash
+python -m sbmlsim.run fit spec.yaml --out results/fit/run --workers 10
+```
+
+with `spec.yaml` the spec of the table, `project: pkdb_models.models.hctz:MODEL`, `subset: PK`, `repeats: 10`. The kind `fit` writes the records of the fit into the folder `<fit id>` of its output; `run_fit` moves them up into `results/fit/<fit id>`, so the records, the report and `parameters.json` are where they always were, next to the records of the run. The report of the kind `report` (its folder `report`) and of an adopted fit (`<fit id>`) are moved up the same way; `run_identifiability` writes the report of the analysis into `results/identifiability/<name>` itself, the run of the analysis into `analysis/` and the records of the run of the report into `report/` of it.
+
+Three parts use the library of sbmlsim directly instead: `--action factory` builds the models of the package in place (`create_models`), the extra actions write into the results of the model, which are no empty output (they are the `actions` of the project as well, so `python -m sbmlsim.run action` runs them, see [Extra actions](#extra-actions)), and `run_fit --strategy single`, `run_report` of several parameter files and a parameter file without the records of its fit next to it run with `sbmlsim.fit.cli` (`run_fit`, `report_cli`, `identifiability_cli`), which no kind expresses.
+
 ## The model argument
 
 The model is given as the dotted name of its package, e.g. `pkdb_models.models.hctz`. The command imports the package and takes its model object `MODEL`, the `PKPDModel` of its `__init__.py` (see [Models and their commands](models.md)). The package has to be importable in the environment the command runs in, i.e. installed, e.g. the checkout of a repository of models with `uv sync` or `pip install -e .`; a console script does not import from the working directory.
@@ -54,7 +78,7 @@ Any other error of the import of the package, e.g. a module which the model impo
 
 `run_simulation` performs one `--action` (`-a`):
 
-- `factory` creates the models with the factory of the model: the SBML, the ODEs and the COMBINE archive.
+- `factory` creates the models with the factory of the model: the SBML, the ODEs and the COMBINE archive, in the package. With `--rebuild` the kind `factory` builds them into `factory` of the results instead and reports the outputs of the factory which differ from the ones of the package; the command then exits with 1.
 - `list_experiments` lists the groups and experiments of the registry of the model.
 - `simulate` runs the experiments of `--experiments` (required).
 - `all` runs the factory, all experiments and every extra action with `in_all`.
@@ -71,11 +95,12 @@ run_simulation pkdb_models.models.hctz --action simulate --experiments all --unc
 
 The options:
 
-- `--experiments` (`-e`): comma separated groups and experiments of the registry, e.g. `all`, `misc,Anderson1961`. A single group is written into the folder of the group, any other selection into `custom_selection`, both in the `simulation` folder of the results.
+- `--experiments` (`-e`): comma separated groups and experiments of the registry, e.g. `all`, `misc,Anderson1961`. A single group is written into the folder of the group, any other selection into `custom_selection`, both in the `simulation` folder of the results; an earlier result in the folder is replaced. A name which is neither a group nor an experiment is reported and left out, a selection without any experiment exits with 1.
 - `--results-dir` (`-r`): the folder of the results, `MODEL.results_dir` by default.
 - `--formats` (`-f`): comma separated formats of the figures, the static images of matplotlib (`svg`, `png`, ...) and the interactive pages of plotly (`html`); the formats of the `FigureSettings` of the model by default. The report shows the SVG and links the interactive page; without `svg` the interactive page is embedded in the report.
 - `--open` (`-o`): opens the report of the simulations in the web browser.
-- `--workers` (`-w`): the processes of this run, of its experiments and of their scans: a number (the experiments in a pool of that many processes, a single experiment with its scans in a pool), `auto` (sbmlsim's choice: a worker per four experiments, at most one per CPU, or the scans in a pool of every CPU when one has 256 points or more) or `model` (the default of a model, serial, `pkpdsim.model.RUN_WORKERS`), see [Models and their commands](models.md).
+- `--workers` (`-w`): the processes of the run of the kind `simulate`: a number (the experiments in a pool of that many processes, at most one per experiment, every experiment serially in its worker, a single experiment with its scans in the pool), or `model` and `auto` (the default `model`), every CPU of the quota of the process; an extra action gets the number, 1 for `model` (`pkpdsim.model.RUN_WORKERS`) and `None`, sbmlsim's choice, for `auto`, see [Models and their commands](models.md).
+- `--rebuild`: the factory of `factory` and `all` builds into the results and compares, see above.
 - `--uncertainty` (`-u`) with `--draws` (100), `--seed` (1234) and `--quantiles` (0.05 0.95): runs the experiments over draws of the fitted parameters of the model and draws the curves of the simulations as bands, into the folder `simulation_uncertainty` of the results, see [Uncertainty of the fitted parameters](uncertainty.md).
 
 A run which fails is not the end of the command. An experiment which cannot be initialized or whose figure fails is reported, the other experiments run, the report and the figures are written, and the command then runs its remaining actions, prints every failure and exits with 1.
@@ -90,6 +115,8 @@ A model adds actions of its own with `ExtraAction` and their options with `extra
 run_simulation pkdb_models.models.glimepiride --action analyze_cyp2c9
 ```
 
+`run_simulation` calls an extra action as before, with the folder of the results. The extra actions are also the `actions` of the project of the model (`pkpdsim.model.ExtraActionFunction`), which the kind `action` of sbmlsim runs into its output, `python -m sbmlsim.run action spec.yaml --out DIR` with the spec `{project: <package>:MODEL, name: analyze_cyp2c9, arguments: {analyses: pk}}`: the arguments are the options of the action over their defaults, `options.n_workers` the processes of the run and `options.uncertainty` `None`.
+
 An extra action gets the options of the command line, the settings of the simulator of the run as `options.simulator` (the `SimulatorSettings` of the model), the processes of `--workers` as `options.n_workers` and the settings of `--uncertainty` as `options.uncertainty` (`None` without). An action which simulates passes them on, `model.run_experiments(..., simulator=options.simulator, n_workers=options.n_workers)` or `options.simulator.simulator(options.n_workers)` (`sbmlsim.project.SimulatorSettings.simulator`) for a runner of its own, otherwise `--workers` does not reach it. An option of the model named `--simulator` or `--n-workers`, or `--uncertainty` for a model without experiments, is refused with a `ValueError` before the action runs, because it would be replaced.
 
 ## run_fit
@@ -103,26 +130,26 @@ run_fit pkdb_models.models.hctz --adopt PK_<fit id>
 run_fit pkdb_models.models.inulin --subset PK --runs 1 --start profile_point.json
 ```
 
-The options of the fit are those of sbmlsim (`sbmlsim.fit.cli.fit_cli`): `--subset` (`-x`), `--name` (`-n`), `--runs` (`-r`), `--cores` (`-c`), `--seed` (`-s`), `--method` (`-m`, `LSQ` least squares with latin hypercube starts or `DE` differential evolution), `--strategy` (`-t`, `ALL` the experiments together or `SINGLE` every experiment on its own), `--experiments` (`-e`), `--timeout`, `--start`, `--no-mapping-figures` and `--output_dir` (`-o`, the `fit` folder of the results by default). The options of the identifiability are `--parameter` (`-p`, repeatable), `--alpha` (`-a`), `--df`, `--max-points`, `--no-reoptimize` and `--no-fisher`.
+The options of the fit are those of sbmlsim (`sbmlsim.fit.cli.fit_cli`): `--subset` (`-x`), `--name` (`-n`, the name of the reports of `--strategy SINGLE`; ignored with a warning otherwise, the report of a fit is in the folder of its id), `--runs` (`-r`), `--cores` (`-c`), `--seed` (`-s`), `--method` (`-m`, `LSQ` least squares with latin hypercube starts or `DE` differential evolution), `--strategy` (`-t`, `ALL` the experiments together or `SINGLE` every experiment on its own), `--experiments` (`-e`), `--timeout`, `--start`, `--no-mapping-figures` and `--output_dir` (`-o`, the `fit` folder of the results by default). The options of the identifiability are `--parameter` (`-p`, repeatable), `--alpha` (`-a`), `--df`, `--max-points`, `--no-reoptimize` and `--no-fisher`.
 
 Least squares starts every run from a sample of the bounds of the parameters (log-uniform latin hypercube sampling, `sbmlsim.fit.sampling`); the start value of a parameter (`FitParameter.start_value`) is neither the first start nor the center of the samples, it is used only for a parameter with an infinite bound, which is not sampled. `--start` starts least squares from a given point instead, e.g. a point of a profile likelihood below the cost of the fit: a json file of the values by parameter id in the units of the fit parameters (`{"kslow_inu": 0.002}`), or the id of a fit, an adopted fit of the model (`MODEL.fits_dir`) or else a finished fit in the output folder, whose best parameters are converted into the units of the fit parameters. The point replaces the start values of the parameters it gives (`sbmlsim.fit.project_fits.start_point`, `with_start`, on copies of the parameters), and every run starts from the start values (the sampling `START` of sbmlsim), so a fit with `--start` has one run (`--runs 1`); a parameter which the start does not give starts from its start value, a parameter of the file which is not fitted, a value which is no number or outside of the bounds, `--runs` other than 1 and differential evolution, which draws its population from the bounds, are usage errors.
 
 The problem of the fit, of its identifiability analysis and of its report loads the model at the optimization level of the model (`SimulatorSettings.jit_optimization`), as `run_report` and `run_identifiability` do: sbmlsim builds a fit problem without a level, so the commands hand sbmlsim the fit definitions at the level (`PKPDModel.load_fit_definitions`, `FitDefinition.jit_optimization` of sbmlsim), whose problems carry it into every worker of a parallel fit; the environment of the process and of a forkserver which starts the workers does not matter, and nothing is set in it. The selection of the mappings (`select_mappings`, which instantiates the experiments once in the process) is no problem of the fit and keeps the level of sbmlsim.
 
-The report of the fit carries the title of the model (`PKPDModel.title`), the description of the fit (`FitDefinition.description`) and of its parameters (`FitParameter.description`), and a note on the adopted fits of the other subsets of the model, whose parameters were fixed at their fitted values. The provenance of the fit records the arguments of the command (`subset`, `runs`, `cores`, `method`, `command`, `start` and `fixed_fits`, the ids of the fixed adopted fits), the start values of the parameters and the fixed values, i.e. the values of the parameters of the fixed adopted fits which the fit does not optimize itself.
+The fit runs the kind `fit` (`--strategy ALL`, the default) into `results/fit/<fit id>`: the repeats in `runs/`, `optimization_result.json`, `parameters.json`, `fits.tsv`, with `--identifiability` `identifiability.json` and `fisher.json`, the report and the records of the run. The plan of the kind refuses a fit whose bounds let a remainder of a model become negative, an invalid start and an unknown study before anything runs, a usage error with the exit code 2. The report of the fit carries the title of the model (`PKPDModel.title`), the description of the fit (`FitDefinition.description`) and of its parameters (`FitParameter.description`), and a note on the adopted fits of the other subsets of the model, whose parameters were fixed at their fitted values. The provenance of the fit records `start` and `fixed_fits` (the ids of the fixed adopted fits), the start values of the parameters and the fixed values, i.e. the values of the parameters of the fixed adopted fits which the fit does not optimize itself; the options of the command are the spec of the run, `spec.json`. A fit of `--strategy SINGLE` records the arguments of the command (`subset`, `runs`, `cores`, `method`, `command`, `start` and `fixed_fits`) as before.
 
-`--cross-validation <fit id>` cross-validates an adopted fit instead of fitting: a refit per training study without it, stored in the record of the fit, see [Cross-validation](credibility.md#cross-validation). `--adopt <fit id>` copies the record of the finished fit `<fit id>` from the output folder into the adopted fits of the model (`MODEL.fits_dir`) instead of fitting, `--force` replaces an adopted record of the same id; the id then goes into `fits` of the model object, see [Uncertainty of the fitted parameters](uncertainty.md).
+`--cross-validation <fit id>` cross-validates an adopted fit instead of fitting: a refit per training study without it, stored in the record of the fit, see [Cross-validation](credibility.md#cross-validation). `--adopt <fit id>` runs the kind `adopt` on the finished fit `<fit id>` of the output folder, which checks the fit and writes its record into `adopt/` of the fit, and copies the record into the adopted fits of the model (`MODEL.fits_dir`) instead of fitting, `--force` replaces an adopted record of the same id; the id then goes into `fits` of the model object, see [Uncertainty of the fitted parameters](uncertainty.md).
 
 ## run_report and run_identifiability
 
-Both work on the `parameters.json` of an earlier fit (`sbmlsim.fit.cli.report_cli`, `identifiability_cli`):
+Both work on the `parameters.json` of an earlier fit, the kinds `report` and `identifiability` with the records of the fit next to it as the input `fit` (several parameter files of `run_report`, or a file of another name, with `sbmlsim.fit.cli.report_cli` and `identifiability_cli`):
 
 ```bash
 run_report pkdb_models.models.hctz --subset PK results/fit/PK_<fit id>/parameters.json
 run_identifiability pkdb_models.models.hctz --subset PK --max-points 30 results/fit/PK_<fit id>/parameters.json
 ```
 
-`run_report` writes the report of the fit problem for one or more files of parameter sets, `run_identifiability` the profile likelihood and the Fisher information of the first parameter set of a file. `--subset` is the fit problem, `--output_dir` the folder of the report.
+`run_report` writes the report of the fit problem for one or more files of parameter sets, `run_identifiability` the profile likelihood and the Fisher information of the first parameter set of a file. `--subset` is the fit problem, `--output_dir` the folder of the reports and `--name` the folder of the report in it, `report` and `identifiability` by default.
 
 The report of `run_report` has the context of the model as the report of `run_fit` has it: the title of the model, the description of the fit and of its parameters and the note on the fixed adopted fits, which are the fits the provenance of the record next to the first file names, not the adopted fits of the model now (a record without provenance names none).
 
@@ -170,17 +197,17 @@ run_simulation pkdb_models.models.hctz --profile --action simulate --experiments
 run_fit pkdb_models.models.hctz --profile --subset PK
 ```
 
-The profile is written into `profiling/<command>_<time>/` of the results of the model: `flamegraph.html` (the interactive flame graph), `heatmap/` (the sampled lines of the source code), `profile.pstats` (the statistics of the functions, for `pstats` and its viewers), `summary.txt` (the functions with the most time) and `profile.bin` (the samples; `python -m profiling.sampling replay --diff-flamegraph old/profile.bin new/profile.bin` compares two profiles). The command keeps its exit code. With an older python `--profile` is a usage error and the command does not run. The profiler runs the command as `python -m pkpdsim.cli <command> <package> ...`, which works without the profiler as well. A command which runs its simulations in a pool of processes (`--workers`) is profiled in its main process only.
+The profiler is the one of sbmlsim (`sbmlsim.run.profiling.run_profiled`, `--profile` of `python -m sbmlsim.run`), which runs `python -m pkpdsim.cli`. The profile is written into `profiling/<command>_<time>/` of the results of the model: `flamegraph.html` (the interactive flame graph), `heatmap/` (the sampled lines of the source code), `profile.pstats` (the statistics of the functions, for `pstats` and its viewers), `summary.txt` (the functions with the most time) and `profile.bin` (the samples; `python -m profiling.sampling replay --diff-flamegraph old/profile.bin new/profile.bin` compares two profiles). The command keeps its exit code. With an older python `--profile` is a usage error and the command does not run. The profiler runs the command as `python -m pkpdsim.cli <command> <package> ...`, which works without the profiler as well. A command which runs its simulations in a pool of processes (`--workers`) is profiled in its main process only.
 
 ## The folders of the results
 
 Every command writes into the folders of the model object unless an option names another one; the results are not tracked, the adopted fits are:
 
-- `run_simulation`: `MODEL.simulation_dir` (`results/simulation`), with `--uncertainty` `MODEL.uncertainty_dir` (`results/simulation_uncertainty`); `--results-dir` replaces `results`.
+- `run_simulation`: `MODEL.simulation_dir` (`results/simulation`), with `--uncertainty` `MODEL.uncertainty_dir` (`results/simulation_uncertainty`), `--rebuild` `results/factory`; `--results-dir` replaces `results`.
 - `run_fit`: `MODEL.fit_dir` (`results/fit/<fit id>`), `--output_dir` replaces it.
 - `run_fit --adopt`: `MODEL.fits_dir` (`fits` next to the output of the factory).
-- `run_report`: `MODEL.report_dir` (`results/report`), `--output_dir` replaces it; with `--adopted` one folder per adopted fit below it.
-- `run_identifiability`: `MODEL.identifiability_dir` (`results/identifiability`), `--output_dir` replaces it.
+- `run_report`: `MODEL.report_dir` (`results/report/report`, `--name` names the last folder), `--output_dir` replaces it; with `--adopted` one folder per adopted fit below it.
+- `run_identifiability`: `MODEL.identifiability_dir` (`results/identifiability/identifiability`, `--name` names the last folder), `--output_dir` replaces it.
 - `run_credibility`: `MODEL.credibility_dir` (`results/credibility`), `--output_dir` replaces it.
 
 `results` is `MODEL.results_dir`, the folder `results` of the model package unless the model object sets `results_path`; so every result stays in the folder of its model.
@@ -197,7 +224,7 @@ run_fit hctz_model --subset PK
 
 ## From python
 
-The commands are functions of a model object as well, which take the arguments after the model: `run_command(model, args)`, `fit_command`, `report_command` and `identifiability_command` of `pkpdsim.cli`. The console scripts are `run_simulation_main(argv)`, `run_fit_main`, `run_report_main` and `run_identifiability_main`, which take the model package first. In a script or the `__main__` block of an experiment `MODEL.run_experiments` runs experiments directly:
+The commands are functions of a model object as well, which take the arguments after the model: `run_command(model, args)`, `fit_command` (which returns the folder of every fit by its id), `report_command` and `identifiability_command` of `pkpdsim.cli`. The model is the model object `MODEL` of its package, which the run layer loads by its reference; a copy of it with other fields is a `ValueError`. The console scripts are `run_simulation_main(argv)`, `run_fit_main`, `run_report_main` and `run_identifiability_main`, which take the model package first. In a script or the `__main__` block of an experiment `MODEL.run_experiments` runs experiments directly:
 
 ```python
 # not executed

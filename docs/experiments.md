@@ -218,7 +218,7 @@ class RamiprilSimulationExperiment(PKPDSimulationExperiment):
     data_units = MappingProxyType({"IU": "IU_ramipril_renin = 0.6 * microgram"})
 ```
 
-`initialize` defines the units before it reads the data, and a loader which is called outside of `initialize` defines them on its first call. `data_unit_names()` gives the names of the definitions (`{"IU": "IU_ramipril_renin"}`, read-only) and defines the units as well, for a table which the model reads itself, e.g. the data of the figure of a scan: `rename_units(df, self.data_unit_names())`. A definition which pint cannot evaluate (an unknown unit in the expression, a syntax error) or which `define_unit` refuses is a `ValueError` naming the unit, which fails the initialization of that experiment only: a run reports it with its traceback, runs the other experiments and raises at the end, and `pkpdsim.testing.initialize_experiments` names it with every other failure.
+`initialize` defines the units before it reads the data, and a loader which is called outside of `initialize` defines them on its first call. `data_unit_names()` gives the names of the definitions (`{"IU": "IU_ramipril_renin"}`, read-only) and defines the units as well, for a table which the model reads itself, e.g. the data of the figure of a scan: `rename_units(df, self.data_unit_names())`. A definition which pint cannot evaluate (an unknown unit in the expression, a syntax error) or which `define_unit` refuses is a `ValueError` naming the unit, which fails the initialization of that experiment only: a run reports it with its traceback, runs the other experiments and raises at the end, and `sbmlsim.project_checks.initialize_experiments` names it with every other failure.
 
 ## Impairment presets
 
@@ -385,7 +385,7 @@ collections = select_mappings(
 
 ## Exceptions of the tests
 
-The tests of `pkpdsim.testing` read the known exceptions of a model from
+The tests of `sbmlsim.project_checks` read the known exceptions of a model from
 `PKPDModel.checks`, a `CheckSettings` of `sbmlsim.project`. Every exception carries its reason, and an
 exception which no longer applies (a class which is registered now, a module
 which is gone) fails the test, so the list cannot go stale:

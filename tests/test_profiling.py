@@ -1,29 +1,22 @@
-"""The profile of a command with the sampling profiler of python 3.15."""
+"""The profile of a command with the sampling profiler of python 3.15.
 
-import sys
+The profiler is `sbmlsim.run.profiling`, tested in sbmlsim; the commands run
+it on `python -m pkpdsim.cli` and write the profile into the results of the
+model.
+"""
+
 from pathlib import Path
 
 import pytest
+from sbmlsim.run.profiling import profiler_available
 
-from pkpdsim import profiling
-from pkpdsim.cli import COMMANDS, command_parser, run_simulation_main
-from pkpdsim.profiling import profile_dir, profiler_available, run_profiled
+from pkpdsim.cli import COMMANDS, command_parser, profile_dir, run_simulation_main
 from pkpdsim_toy import MODEL
 
 TESTS = Path(__file__).parent
 
 needs_profiler = pytest.mark.skipif(
     not profiler_available(), reason="the sampling profiler of python 3.15"
-)
-
-#: the sampling profiler of python 3.15.1 and 3.15.2 crashes now and then while
-#: it writes a sample of the binary profile (`UnicodeEncodeError: ... surrogates
-#: not allowed` in `binary_collector.write_sample`, more often under load), and
-#: the replay refuses the truncated profile; 3.15.0 does not
-profiler_of_3151 = pytest.mark.xfail(
-    sys.version_info[:3] >= (3, 15, 1),
-    reason="the sampling profiler of python 3.15.1 and later crashes writing a sample",
-    strict=False,
 )
 
 
@@ -48,14 +41,7 @@ def test_without_the_profiler_the_option_is_an_error(
     assert "python 3.15" in capsys.readouterr().err
 
 
-def test_run_profiled_needs_the_profiler(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(profiling, "PROFILER_PYTHON", (sys.version_info[0] + 1, 0))
-    with pytest.raises(RuntimeError, match="sampling profiler"):
-        run_profiled(MODEL, "run_simulation", ["-a", "list_experiments"])
-
-
 @needs_profiler
-@profiler_of_3151
 def test_a_profiled_command_writes_its_profile(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -64,31 +50,27 @@ def test_a_profiled_command_writes_its_profile(
     # toy model of the tests
     monkeypatch.setenv("PYTHONPATH", str(TESTS))
     folder = tmp_path / "profile"
-    code = run_profiled(
-        MODEL,
-        "run_simulation",
-        ["-a", "simulate", "-e", "all", "--results-dir", str(tmp_path / "results")],
-        output=folder,
+    monkeypatch.setattr("pkpdsim.cli.profile_dir", lambda model, command: folder)
+    results = tmp_path / "results"
+    run_simulation_main(
+        [
+            *("pkpdsim_toy", "--profile", "-a", "simulate", "-e", "all", "-w", "1"),
+            *("--results-dir", str(results)),
+        ]
     )
-    assert code == 0
-    assert (tmp_path / "results").is_dir()
+    assert (results / "simulation" / "all" / "run.json").is_file()
     for name in ["flamegraph.html", "profile.pstats", "profile.bin", "summary.txt"]:
         assert (folder / name).is_file(), name
-    assert any((folder / "heatmap").iterdir())
-    assert (
-        (folder / "summary.txt")
-        .read_text(encoding="utf-8")
-        .startswith("Profile Stats:")
-    )
 
 
 @needs_profiler
-@profiler_of_3151
 def test_the_exit_code_of_a_failing_command_is_kept(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("PYTHONPATH", str(TESTS))
-    code = run_profiled(
-        MODEL, "run_simulation", ["-a", "simulate"], output=tmp_path / "profile"
+    monkeypatch.setattr(
+        "pkpdsim.cli.profile_dir", lambda model, command: tmp_path / "profile"
     )
-    assert code != 0
+    with pytest.raises(SystemExit) as error:
+        run_simulation_main(["pkpdsim_toy", "--profile", "-a", "simulate"])
+    assert error.value.code == 2

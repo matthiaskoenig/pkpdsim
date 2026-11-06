@@ -39,7 +39,7 @@ Parameter(
 )
 ```
 
-A parameter which no adopted fit has, and a parameter which two adopted fits have, raise. `pkpdsim.testing.check_model` checks with `sbmlsim.experiment.draws.check_fit_parameters` that every parameter of an adopted fit is a parameter of every build of the model (its variants, the male and the female build) with the value of the fit and a distribution, and that the female build has the distribution of the male build: the draws are those of the male build, the default variant, and run on every build.
+A parameter which no adopted fit has, and a parameter which two adopted fits have, raise. `sbmlsim.project_checks.check_model` checks with `sbmlsim.experiment.draws.check_fit_parameters` that every parameter of an adopted fit is a parameter of every build of the model (its variants, the male and the female build) with the value of the fit and a distribution, and that the female build has the distribution of the male build: the draws are those of the male build, the default variant, and run on every build.
 
 ## The uncertainty in the SBML
 
