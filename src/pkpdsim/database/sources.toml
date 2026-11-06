@@ -770,3 +770,80 @@ doi = "10.1124/jpet.104.067660"
 [Benowitz2006]
 citation = "Benowitz NL, Lessov-Schlaggar CN, Swan GE, Jacob P 3rd. Female sex and oral contraceptive use accelerate nicotine metabolism. Clin Pharmacol Ther 79(5):480-488, 2006."
 doi = "10.1016/j.clpt.2006.01.008"
+
+# The physiologies of the laboratory animals (physiology_<species>.toml, intestine_<species>.toml, #138), searched and read 2026-11-06.
+
+[Ruark2014]
+citation = "Ruark CD, Hack CE, Robinson PJ, Mahle DA, Gearhart JM. Predicting passive and active tissue:plasma partition coefficients: interindividual and interspecies variability. J Pharm Sci 103(7):2189-2198, 2014."
+doi = "10.1002/jps.24011"
+[Davies1993]
+citation = "Davies B, Morris T. Physiological parameters in laboratory animals and humans. Pharm Res 10(7):1093-1095, 1993."
+doi = "10.1023/a:1018943613122"
+[Kawai1994]
+citation = "Kawai R, Lemaire M, Steimer JL, Bruelisauer A, Niederberger W, Rowland M. Physiologically based pharmacokinetic study on a cyclosporin derivative, SDZ IMM 125. J Pharmacokinet Biopharm 22(5):327-365, 1994."
+doi = "10.1007/BF02353860"
+[Lee1985]
+citation = "Lee HB, Blaufox MD. Blood volume in the rat. J Nucl Med 26(1):72-76, 1985. PMID 3965655."
+[Riches1973]
+citation = "Riches AC, Sharp JG, Thomas DB, Smith SV. Blood volume determination in the mouse. J Physiol 228(2):279-284, 1973."
+doi = "10.1113/jphysiol.1973.sp010086"
+[He2017]
+citation = "He Q, Su G, Liu K, Zhang F, Jiang Y, Gao J, Liu L, Jiang Z, Jin M, Xie H. Sex-specific reference intervals of hematologic and biochemical analytes in Sprague-Dawley rats using the nonparametric rank percentile method. PLoS One 12(12):e0189837, 2017."
+doi = "10.1371/journal.pone.0189837"
+[Carrara2016]
+citation = "Carrara F, Azzollini N, Nattino G, Corna D, Villa S, Cerullo D, Zoja C, Abrante B, Luis-Lima S, Porrini E, Cannata A, Ferrari S, Fois M, Stucchi N, Gaspari F. Simplified method to measure glomerular filtration rate by iohexol plasma clearance in conscious rats. Nephron 133(1):62-70, 2016."
+doi = "10.1159/000445843"
+[Qi2004]
+citation = "Qi Z, Whitt I, Mehta A, Jin J, Zhao M, Harris RC, Fogo AB, Breyer MD. Serial determination of glomerular filtration rate in conscious mice using FITC-inulin clearance. Am J Physiol Renal Physiol 286(3):F590-F596, 2004."
+doi = "10.1152/ajprenal.00324.2003"
+[Gouma2012]
+citation = "Gouma E, Simos Y, Verginadis I, Lykoudis E, Evangelou A, Karkabounas S. A simple procedure for estimation of total body surface area and determination of a new value of Meeh's constant in rats. Lab Anim 46(1):40-45, 2012."
+doi = "10.1258/la.2011.011021"
+[Cheung2009]
+citation = "Cheung MC, Spalding PB, Gutierrez JC, Balkan W, Namias N, Koniaris LG, Zimmers TA. Body surface area prediction in normal, hypermuscular, and obese mice. J Surg Res 153(2):326-331, 2009."
+doi = "10.1016/j.jss.2008.05.002"
+[McConnell2008]
+citation = "McConnell EL, Basit AW, Murdan S. Measurements of rat and mouse gastrointestinal pH, fluid and lymphoid tissue, and implications for in-vivo experiments. J Pharm Pharmacol 60(1):63-70, 2008."
+doi = "10.1211/jpp.60.1.0008"
+[Grandoni2019]
+citation = "Grandoni S, Cesari N, Brogin G, Puccini P, Magni P. Building in-house PBPK modelling tools for oral drug administration from literature information. ADMET DMPK 7(1):4-21, 2019."
+doi = "10.5599/admet.638"
+[Padmanabhan2013]
+citation = "Padmanabhan P, Grosse J, Asad ABMA, Radda GK, Golay X. Gastrointestinal transit measurements in mice with 99mTc-DTPA-labeled activated charcoal using NanoSPECT-CT. EJNMMI Res 3(1):60, 2013."
+doi = "10.1186/2191-219X-3-60"
+[Thiel2015]
+citation = "Thiel C, Schneckener S, Krauss M, Ghallab A, Hofmann U, Kanacher T, Zellmer S, Gebhardt R, Hengstler JG, Kuepfer L. A systematic evaluation of the use of physiologically based pharmacokinetic modeling for cross-species extrapolation. J Pharm Sci 104(1):191-206, 2015."
+doi = "10.1002/jps.24214"
+[PKSimDB]
+citation = "Open Systems Pharmacology. PK-Sim database src/Db/PKSimDB.sqlite, github.com/Open-Systems-Pharmacology/PK-Sim, branch develop, commit aaebb648cbc3e4bf71fb9768916932f881dde19d (downloaded 2026-11-06), GPL-2.0; the rat and mouse species of Thiel 2015."
+
+[Lin2020]
+citation = "Lin Z, Li M, Wang YS, Tell LA, Baynes RE, Davis JL, Vickroy TW, Riviere JE. Physiological parameter values for physiologically based pharmacokinetic models in food-producing animals. Part I: Cattle and swine. J Vet Pharmacol Ther 43(5):385-420, 2020."
+doi = "10.1111/jvp.12861"
+
+[Hannon1985]
+citation = "Hannon JP, Bossone CA, Rodkey WG. Splenic red cell sequestration and blood volume measurements in conscious pigs. Am J Physiol 248(3):R293-R301, 1985."
+doi = "10.1152/ajpregu.1985.248.3.r293"
+
+[Gasthuys2017]
+citation = "Gasthuys E, Devreese M, Millecam J, Sys S, Vanderperren K, Delanghe J, Vande Walle J, Heyndrickx M, Croubels S. Postnatal maturation of the glomerular filtration rate in conventional growing piglets as potential juvenile animal model for preclinical pharmaceutical research. Front Pharmacol 8:431, 2017."
+doi = "10.3389/fphar.2017.00431"
+
+[Merchant2011]
+citation = "Merchant HA, McConnell EL, Liu F, Ramaswamy C, Kulkarni RP, Basit AW, Murdan S. Assessment of gastrointestinal pH, fluid and lymphoid tissue in the guinea pig, rabbit and pig, and implications for their use in drug development. Eur J Pharm Sci 42(1-2):3-10, 2011."
+doi = "10.1016/j.ejps.2010.09.019"
+
+[Henze2019]
+citation = "Henze LJ, Koehl NJ, O'Shea JP, Kostewicz ES, Holm R, Griffin BT. The pig as a preclinical model for predicting oral bioavailability and in vivo performance of pharmaceutical oral dosage forms: a PEARRL review. J Pharm Pharmacol 71(4):581-602, 2019."
+doi = "10.1111/jphp.12912"
+
+[Davis2001]
+citation = "Davis SS, Illum L, Hinchcliffe M. Gastrointestinal transit of dosage forms in the pig. J Pharm Pharmacol 53(1):33-39, 2001."
+doi = "10.1211/0022357011775163"
+
+[Moher2002]
+citation = "Moher HE, Carey GB. Technical note: adipose tissue blood flow in miniature swine (Sus scrofa) using the 133xenon washout technique. J Anim Sci 80(5):1294-1298, 2002."
+doi = "10.2527/2002.8051294x"
+
+[Ellegaard2009]
+citation = "Ellegaard Göttingen Minipigs. Organ weight 2009: absolute (g) and relative (% of body weight) organ weight, group mean values, 8 weeks and 6 months. https://minipigs.dk/sites/default/files/2024-05/Organ%20Weights.pdf (accessed 2026-11-06)."

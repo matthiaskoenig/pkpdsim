@@ -18,6 +18,7 @@ __all__ = [
     "CKD_HEPATIC",
     "CO",
     "CO_BASE",
+    "CO_EXPONENT",
     "CP_SEVERITY",
     "EGFR",
     "FED",
@@ -32,6 +33,7 @@ __all__ = [
     "F_ZONE",
     "GFR",
     "GFR_BASE",
+    "GFR_EXPONENT",
     "GUT",
     "GUT_FLOW",
     "GUT_INTERSTITIAL_FRACTION",
@@ -237,6 +239,12 @@ VBLOOD = "Vblood"
 """The total blood volume."""
 MLEAN = "Mlean"
 """The mass of the lean organ tissues without their blood."""
+CO_EXPONENT = "b_CO"
+"""The allometric exponent of the cardiac output on the body weight within a
+species (the builds of the laboratory animals, `CO = CO_ref*(BW/BW_ref)^b_CO`)."""
+GFR_EXPONENT = "b_GFR"
+"""The allometric exponent of the GFR on the body weight within a species (the
+builds of the laboratory animals)."""
 SV_TIS = "SV_tis"
 """The scaling factor of the lean tissues, the blood and the cardiac output."""
 QHA = "Qha"

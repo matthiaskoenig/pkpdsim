@@ -63,8 +63,10 @@ from pkpdsim.pbpk.organs import Organ
 from pkpdsim.pbpk.physiology import (
     Sex,
     _references,
+    physiology_table,
     reference_hematocrit,
     reference_individual,
+    reference_tissue_volumes,
 )
 from pkpdsim.pbpk.populations import POPULATIONS
 from pkpdsim.pbpk.proteins import PROTEINS
@@ -74,6 +76,8 @@ from pkpdsim.pbpk.sex_differences import (
     sex_curves,
     sex_factor,
 )
+from pkpdsim.pbpk.variants.segments import intestine_table
+from pkpdsim.species import Species
 
 REPO_DIR: Path = Path(__file__).parent.parent
 PBPK_DIR: Path = REPO_DIR / "docs" / "pbpk"
@@ -252,9 +256,9 @@ def physiology_general() -> str:
     return _generated("`database/tables/physiology_human.toml`", lines, cited)
 
 
-def _organs(sex: Sex) -> str:
-    """The organs of the reference individual of a sex."""
-    organs = load("physiology_human")[sex.value]["organs"]
+def _organs(sex: Sex, table: str = "physiology_human") -> str:
+    """The organs of the reference individual of a sex of a physiology table."""
+    organs = load(table)[sex.value]["organs"]
     rows = [
         [
             f"`{organ.value}` {_ORGAN_NAMES[organ]}",
@@ -273,7 +277,7 @@ def _organs(sex: Sex) -> str:
     columns = {k: k for k in ("mass", "density", "blood", "f_vas", "f_int", "flow")}
     line, cited = _column_sources(organs.values(), columns)
     lines = [*_table(header, rows), "", line]
-    return _generated("`database/tables/physiology_human.toml`", lines, cited)
+    return _generated(f"`database/tables/{table}.toml`", lines, cited)
 
 
 def physiology_organs_male() -> str:
@@ -284,6 +288,141 @@ def physiology_organs_male() -> str:
 def physiology_organs_female() -> str:
     """The organs of the female reference individual."""
     return _organs(Sex.FEMALE)
+
+
+ANIMALS: tuple[Species, ...] = (Species.RAT, Species.MOUSE, Species.PIG)
+"""The laboratory animals of the library."""
+
+
+def species_overview() -> str:
+    """The reference animals of the laboratory species against the human."""
+    rows: list[list[str]] = []
+    cited: list[str] = []
+    for species in (Species.HUMAN, *ANIMALS):
+        data = load(physiology_table(species))
+        for sex in Sex:
+            if sex.value not in data:
+                continue
+            p = data[sex.value]
+            refs = _references(sex, data, species)
+            adipose = reference_tissue_volumes(sex, species=species)[Organ.ADIPOSE]
+            ad = p["organs"]["ad"]
+            rho = float(ad.get("density", {"value": 1.0})["value"])
+            exponents = (
+                ("BSA", "BSA")
+                if species is Species.HUMAN
+                else (
+                    _number(refs[ids.CO_EXPONENT].value),
+                    _number(refs[ids.GFR_EXPONENT].value),
+                )
+            )
+            for key in ("bodyweight", "cardiac_output", "gfr", "hematocrit"):
+                cited.append(p[key]["source"])
+            cited.append(p["blood"]["volume"]["source"])
+            rows.append(
+                [
+                    species.value,
+                    sex.value,
+                    _number(refs[ids.BW].value),
+                    _number(refs[ids.ref(ids.CO)].value * 1000),
+                    exponents[0],
+                    _number(refs[ids.ref(ids.GFR)].value * 1000),
+                    exponents[1],
+                    _number(
+                        refs[ids.ref(ids.VBLOOD)].value * 1000 / refs[ids.BW].value
+                    ),
+                    _number(refs[ids.HCT].value),
+                    f"{_number(100 * adipose * rho / refs[ids.BW].value)} "
+                    f"({_number(100 * float(ad['mass']['value']) / refs[ids.BW].value)})",
+                ]
+            )
+    header = [
+        "species",
+        "sex",
+        "BW [kg]",
+        "CO [ml/min]",
+        "CO scales with",
+        "GFR [ml/min]",
+        "GFR scales with",
+        "blood [ml/kg]",
+        "HCT",
+        "adipose [% BW] (reference)",
+    ]
+    return _generated(
+        "`database/tables/physiology_<species>.toml`", _table(header, rows), cited
+    )
+
+
+def species_intestine() -> str:
+    """The transit times and fluid volumes of the lumen of the species."""
+    rows: list[list[str]] = []
+    cited: list[str] = []
+    for species in (Species.HUMAN, *ANIMALS):
+        data = load(intestine_table(species))
+        small = [
+            data[k]
+            for k in (
+                "duodenum",
+                "upper_jejunum",
+                "lower_jejunum",
+                "upper_ileum",
+                "lower_ileum",
+            )
+        ]
+        large = [
+            data[k]
+            for k in (
+                "caecum",
+                "colon_ascendens",
+                "colon_transversum",
+                "colon_descendens",
+                "colon_sigmoid",
+                "rectum",
+            )
+        ]
+        for e in (data["stomach"], *small, *large):
+            cited += [e["transit_time"]["source"], e["volume"]["source"]]
+        fed = data["stomach"].get("transit_time_fed")
+        rows.append(
+            [
+                species.value,
+                _number(data["stomach"]["transit_time"]["value"]),
+                _number(fed["value"]) if fed else "",
+                _number(sum(e["transit_time"]["value"] for e in small)),
+                _number(sum(e["transit_time"]["value"] for e in large) / 60),
+                _number(1000 * data["stomach"]["volume"]["value"]),
+                _number(1000 * sum(e["volume"]["value"] for e in small)),
+                _number(1000 * sum(e["volume"]["value"] for e in large)),
+            ]
+        )
+    header = [
+        "species",
+        "stomach fasted [min]",
+        "stomach fed [min]",
+        "small intestine [min]",
+        "large intestine [h]",
+        "stomach [ml]",
+        "small intestine [ml]",
+        "large intestine [ml]",
+    ]
+    return _generated(
+        "`database/tables/intestine_<species>.toml`", _table(header, rows), cited
+    )
+
+
+def species_organs_rat() -> str:
+    """The organs of the reference rat."""
+    return _organs(Sex.MALE, physiology_table(Species.RAT))
+
+
+def species_organs_mouse() -> str:
+    """The organs of the reference mouse."""
+    return _organs(Sex.MALE, physiology_table(Species.MOUSE))
+
+
+def species_organs_pig() -> str:
+    """The organs of the reference pig (male)."""
+    return _organs(Sex.MALE, physiology_table(Species.PIG))
 
 
 def populations() -> str:
@@ -1641,6 +1780,11 @@ def _hf_factor(key: str) -> Callable[[float], float]:
 TABLES: dict[str, Callable[[], str]] = {
     "physiology-general": physiology_general,
     "physiology-organs-male": physiology_organs_male,
+    "species-overview": species_overview,
+    "species-intestine": species_intestine,
+    "species-organs-rat": species_organs_rat,
+    "species-organs-mouse": species_organs_mouse,
+    "species-organs-pig": species_organs_pig,
     "physiology-organs-female": physiology_organs_female,
     "populations": populations,
     "physiology-age-male": physiology_age_male,

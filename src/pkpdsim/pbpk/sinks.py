@@ -23,6 +23,7 @@ from pkpdsim.pbpk.definition import PBPKDefinition
 from pkpdsim.pbpk.placement import value_parameter
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import Value
+from pkpdsim.pbpk.variants.segments import intestine_table
 
 __all__ = ["sink_objects"]
 
@@ -48,7 +49,7 @@ def sink_objects(definition: PBPKDefinition, lumen: bool = True) -> list[Sbase]:
         annotate(
             _value_compartment(
                 ids.VBILE,
-                value("intestine_human", "bile", "volume"),
+                value(intestine_table(definition.species), "bile", "volume"),
                 "bile",
                 "Bile, which drains into the duodenum.",
             ),
@@ -57,7 +58,7 @@ def sink_objects(definition: PBPKDefinition, lumen: bool = True) -> list[Sbase]:
         annotate(
             value_parameter(
                 ids.K_BILE,
-                value("intestine_human", "bile", "k_bile"),
+                value(intestine_table(definition.species), "bile", "k_bile"),
                 U.per_min,
                 "transit bile to intestinal lumen [1/min]",
                 _SBO_PARAMETER,

@@ -1,0 +1,99 @@
+# The intestine of the reference domestic pig (30 kg): the lumen
+# segments of the segmented intestine, the mucosa, the single lumen and the bile.
+#
+# The segments are those of intestine_human.toml (Thelen 2011). The pig has a
+# spiral colon without a sigmoid; its colon is split onto the five colonic
+# segments in equal parts (a choice). The data of the pig are few and partly
+# fed: pigs retain food in the stomach for many hours, a truly fasted pig is
+# rare (Henze 2019). Fluid volumes are the water in the gut contents of fed
+# pigs of 95-110 kg (Merchant 2011, Figure 4C) scaled to 30 kg by body weight,
+# not free fluid as in the human table. No abundance of CYP3A (CYP3A29/46 in
+# the pig) along the intestine was compiled: the key `cyp3a4` is left out.
+
+[stomach]
+volume = { value = 0.08107, unit = "l", source = "Merchant2011", notes = "derived: water of the stomach contents about 277 g (read from Figure 4C; fed ad libitum, 6 male pigs of 95-110 kg, 25 weeks) times 30/102.5 kg" }
+transit_time = { value = 121.2, unit = "min", source = "Davis2001", notes = "derived: time to empty 50 % of a liquid 1.4 h (gamma scintigraphy, Landrace pigs after a light meal; Davis 2001 as cited by Henze 2019, not read) as mean residence time of a first order emptying, 1.4 h / ln 2; truly fasted pigs are rare" }
+transit_time_fed = { value = 121.2, unit = "min", source = "ModelChoice", notes = "the value of transit_time (measured after a light meal); the gastric emptying of pigs after a meal is 1.5-6 h (Davis 2001, via Henze 2019), of Goettingen minipigs fasted or fed 4-6 h (Christiansen 2015, via Henze 2019)" }
+ph = { value = 2.6, unit = "dimensionless", source = "ModelChoice", notes = "the middle of the fasted range 1.2-4.0 (Hossain 1990 as cited by Henze 2019 Table 1, not read); fed: fundus 4.6, antrum 4.4 (Merchant 2011 Figure 3C, mean of 6 pigs)" }
+area_factor = { value = 0.0, unit = "dimensionless", source = "ModelChoice", notes = "no absorption in the stomach, as the human table" }
+
+[duodenum]
+volume = { value = 0.01017, unit = "l", source = "Merchant2011", notes = "derived: water of the small intestinal contents about 477 g (Figure 4C, fed) times 30/102.5 kg, by the length share 0.07285 of the segment" }
+transit_time = { value = 15.3, unit = "min", source = "Davis2001", notes = "derived: small intestinal transit 3-4 h for solution, pellets and tablet (Davis 2001 via Henze 2019), its middle 210 min, by the length share 0.07285 (duodenum 2.2, jejunum 25.48, ileum 2.52 dm of the minipig of PK-Sim, OSP PK-Sim database; no segment lengths of the domestic pig read)" }
+ph = { value = 6.7, unit = "dimensionless", source = "Henze2019", notes = "Table 1, fasted Landrace pig 6.7 (in-house data of 12 pigs); fed 6.1-6.5 (Merchant 2011)" }
+area_factor = { value = 1.0, unit = "dimensionless", source = "Yu1999", notes = "uniform absorption along the small intestine, as the human table" }
+
+[upper_jejunum]
+volume = { value = 0.05889, unit = "l", source = "Merchant2011", notes = "derived: water of the small intestinal contents about 477 g (Figure 4C, fed) times 30/102.5 kg, by the length share 0.4219 of the segment" }
+transit_time = { value = 88.59, unit = "min", source = "Davis2001", notes = "derived: small intestinal transit 3-4 h for solution, pellets and tablet (Davis 2001 via Henze 2019), its middle 210 min, by the length share 0.4219 (duodenum 2.2, jejunum 25.48, ileum 2.52 dm of the minipig of PK-Sim, OSP PK-Sim database; no segment lengths of the domestic pig read)" }
+ph = { value = 6.8, unit = "dimensionless", source = "Henze2019", notes = "Table 1, fasted jejunum 6.8 (in-house data of 12 pigs); fed 6.3-6.6" }
+area_factor = { value = 1.0, unit = "dimensionless", source = "Yu1999", notes = "uniform absorption along the small intestine, as the human table" }
+
+[lower_jejunum]
+volume = { value = 0.05889, unit = "l", source = "Merchant2011", notes = "derived: water of the small intestinal contents about 477 g (Figure 4C, fed) times 30/102.5 kg, by the length share 0.4219 of the segment" }
+transit_time = { value = 88.59, unit = "min", source = "Davis2001", notes = "derived: small intestinal transit 3-4 h for solution, pellets and tablet (Davis 2001 via Henze 2019), its middle 210 min, by the length share 0.4219 (duodenum 2.2, jejunum 25.48, ileum 2.52 dm of the minipig of PK-Sim, OSP PK-Sim database; no segment lengths of the domestic pig read)" }
+ph = { value = 6.8, unit = "dimensionless", source = "Henze2019", notes = "Table 1, fasted jejunum 6.8 (in-house data of 12 pigs); fed 6.3-6.6" }
+area_factor = { value = 1.0, unit = "dimensionless", source = "Yu1999", notes = "uniform absorption along the small intestine, as the human table" }
+
+[upper_ileum]
+volume = { value = 0.005825, unit = "l", source = "Merchant2011", notes = "derived: water of the small intestinal contents about 477 g (Figure 4C, fed) times 30/102.5 kg, by the length share 0.04172 of the segment" }
+transit_time = { value = 8.762, unit = "min", source = "Davis2001", notes = "derived: small intestinal transit 3-4 h for solution, pellets and tablet (Davis 2001 via Henze 2019), its middle 210 min, by the length share 0.04172 (duodenum 2.2, jejunum 25.48, ileum 2.52 dm of the minipig of PK-Sim, OSP PK-Sim database; no segment lengths of the domestic pig read)" }
+ph = { value = 6.9, unit = "dimensionless", source = "Henze2019", notes = "Table 1, fasted ileum 6.9 (in-house data of 12 pigs); fed 6.5-6.7" }
+area_factor = { value = 1.0, unit = "dimensionless", source = "Yu1999", notes = "uniform absorption along the small intestine, as the human table" }
+
+[lower_ileum]
+volume = { value = 0.005825, unit = "l", source = "Merchant2011", notes = "derived: water of the small intestinal contents about 477 g (Figure 4C, fed) times 30/102.5 kg, by the length share 0.04172 of the segment" }
+transit_time = { value = 8.762, unit = "min", source = "Davis2001", notes = "derived: small intestinal transit 3-4 h for solution, pellets and tablet (Davis 2001 via Henze 2019), its middle 210 min, by the length share 0.04172 (duodenum 2.2, jejunum 25.48, ileum 2.52 dm of the minipig of PK-Sim, OSP PK-Sim database; no segment lengths of the domestic pig read)" }
+ph = { value = 6.9, unit = "dimensionless", source = "Henze2019", notes = "Table 1, fasted ileum 6.9 (in-house data of 12 pigs); fed 6.5-6.7" }
+area_factor = { value = 1.0, unit = "dimensionless", source = "Yu1999", notes = "uniform absorption along the small intestine, as the human table" }
+
+[caecum]
+volume = { value = 0.05854, unit = "l", source = "Merchant2011", notes = "derived: water of the caecal contents about 200 g (Figure 4C, fed) times 30/102.5 kg" }
+transit_time = { value = 96.47, unit = "min", source = "ModelChoice", notes = "derived: the total transit 24-48 h of 3 of 4 pigs (Davis 2001 via Henze 2019), its middle 36 h, less stomach and small intestine (1829 min for caecum and colon), by the length share of the caecum 23/436 cm (Merchant 2011 Table 1)" }
+ph = { value = 6.1, unit = "dimensionless", source = "Merchant2011", notes = "Figure 3C, caecum, fed ad libitum (mean of 6 pigs)" }
+area_factor = { value = 0.0362, unit = "dimensionless", source = "ModelChoice", notes = "the human value (Helander 2014 geometry); no mucosal surface of the pig colon per lumen volume derived" }
+
+[colon_ascendens]
+volume = { value = 0.03424, unit = "l", source = "Merchant2011", notes = "derived: water of the colonic contents about 585 g (Figure 4C, fed) times 30/102.5 kg, a fifth per colonic segment" }
+transit_time = { value = 346.5, unit = "min", source = "ModelChoice", notes = "derived: caecum and colon 1829 min (see caecum), the colon share 413/436 cm (Merchant 2011 Table 1), a fifth per colonic segment" }
+ph = { value = 6.23, unit = "dimensionless", source = "Merchant2011", notes = "derived: Figure 3C, mean of the four sites of the proximal colon 6.1, 6.1, 6.4, 6.3 (fed)" }
+area_factor = { value = 0.0362, unit = "dimensionless", source = "ModelChoice", notes = "the human value (Helander 2014 geometry); no mucosal surface of the pig colon per lumen volume derived" }
+
+[colon_transversum]
+volume = { value = 0.03424, unit = "l", source = "Merchant2011", notes = "derived: water of the colonic contents about 585 g (Figure 4C, fed) times 30/102.5 kg, a fifth per colonic segment" }
+transit_time = { value = 346.5, unit = "min", source = "ModelChoice", notes = "derived: caecum and colon 1829 min (see caecum), the colon share 413/436 cm (Merchant 2011 Table 1), a fifth per colonic segment" }
+ph = { value = 6.45, unit = "dimensionless", source = "Merchant2011", notes = "derived: Figure 3C, mean of the four sites of the mid colon 6.5, 6.3, 6.5, 6.5 (fed)" }
+area_factor = { value = 0.0362, unit = "dimensionless", source = "ModelChoice", notes = "the human value (Helander 2014 geometry); no mucosal surface of the pig colon per lumen volume derived" }
+
+[colon_descendens]
+volume = { value = 0.03424, unit = "l", source = "Merchant2011", notes = "derived: water of the colonic contents about 585 g (Figure 4C, fed) times 30/102.5 kg, a fifth per colonic segment" }
+transit_time = { value = 346.5, unit = "min", source = "ModelChoice", notes = "derived: caecum and colon 1829 min (see caecum), the colon share 413/436 cm (Merchant 2011 Table 1), a fifth per colonic segment" }
+ph = { value = 6.57, unit = "dimensionless", source = "Merchant2011", notes = "derived: Figure 3C, mean of the four sites of the distal colon 6.6, 6.5, 6.6, 6.6 (fed)" }
+area_factor = { value = 0.0362, unit = "dimensionless", source = "ModelChoice", notes = "the human value (Helander 2014 geometry); no mucosal surface of the pig colon per lumen volume derived" }
+
+[colon_sigmoid]
+volume = { value = 0.03424, unit = "l", source = "Merchant2011", notes = "derived: water of the colonic contents about 585 g (Figure 4C, fed) times 30/102.5 kg, a fifth per colonic segment" }
+transit_time = { value = 346.5, unit = "min", source = "ModelChoice", notes = "derived: caecum and colon 1829 min (see caecum), the colon share 413/436 cm (Merchant 2011 Table 1), a fifth per colonic segment" }
+ph = { value = 6.57, unit = "dimensionless", source = "Merchant2011", notes = "derived: Figure 3C, the distal colon (fed)" }
+area_factor = { value = 0.0362, unit = "dimensionless", source = "ModelChoice", notes = "the human value (Helander 2014 geometry); no mucosal surface of the pig colon per lumen volume derived" }
+
+[rectum]
+volume = { value = 0.03424, unit = "l", source = "Merchant2011", notes = "derived: water of the colonic contents about 585 g (Figure 4C, fed) times 30/102.5 kg, a fifth per colonic segment" }
+transit_time = { value = 346.5, unit = "min", source = "ModelChoice", notes = "derived: caecum and colon 1829 min (see caecum), the colon share 413/436 cm (Merchant 2011 Table 1), a fifth per colonic segment" }
+ph = { value = 6.57, unit = "dimensionless", source = "Merchant2011", notes = "derived: Figure 3C, the distal colon (fed)" }
+area_factor = { value = 0.0362, unit = "dimensionless", source = "ModelChoice", notes = "the human value (Helander 2014 geometry); no mucosal surface of the pig colon per lumen volume derived" }
+
+[mucosa]
+volume_fraction = { value = 0.1, unit = "dimensionless", source = "ModelChoice", notes = "the human choice" }
+flow_fraction = { value = 0.7, unit = "dimensionless", source = "ModelChoice", notes = "the human choice (Granger 1980, not transcribed)" }
+
+[absorption]
+ka = { value = 1.0, unit = "1/hr", source = "ModelChoice", notes = "the human default" }
+
+[single_lumen]
+volume = { value = 0.1396, unit = "l", source = "Merchant2011", notes = "derived: water of the small intestinal contents about 477 g (Figure 4C, fed) times 30/102.5 kg" }
+transit_time = { value = 210.0, unit = "min", source = "Davis2001", notes = "small intestinal transit 3-4 h (Davis 2001 via Henze 2019), its middle" }
+
+[bile]
+volume = { value = 0.02384, unit = "l", source = "ModelChoice", notes = "no gallbladder volume of the pig found; the human 58 ml (ICRP 89) times 30/73 kg" }
+k_bile = { value = 0.01, unit = "1/min", source = "ModelChoice", notes = "the human choice; the pig secretes bile with the meals like the human (Henze 2019)" }

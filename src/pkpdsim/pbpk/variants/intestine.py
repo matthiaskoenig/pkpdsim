@@ -97,7 +97,11 @@ from pkpdsim.pbpk.variants.lumen_options import (
     conversion_objects,
     segment_factor_objects,
 )
-from pkpdsim.pbpk.variants.segments import DATA, segments, single_lumen
+from pkpdsim.pbpk.variants.segments import (
+    intestine_table,
+    segments,
+    single_lumen,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -242,9 +246,14 @@ def _colon_objects(
     ]
 
 
-def _ka_value(ka: "PerSubstance | None", sid: str, oral: frozenset[str]) -> Q:
-    """The `ka` of a substance: its entry or the scalar, else the default (0 without oral route)."""
-    default = value(DATA, "absorption", "ka")
+def _ka_value(
+    ka: "PerSubstance | None", sid: str, oral: frozenset[str], table: str
+) -> Q:
+    """The `ka` of a substance: its entry or the scalar, else the default (0 without oral route).
+
+    The default is the one of the data file of the intestine of the species.
+    """
+    default = value(table, "absorption", "ka")
     if isinstance(ka, Mapping) and sid in ka:
         return ka[sid]
     if sid not in oral:
@@ -287,7 +296,7 @@ def _ka_objects(definition: "PBPKDefinition", ka: "PerSubstance | None") -> list
         annotate(
             value_parameter(
                 ids.absorption(s.sid),
-                _ka_value(ka, s.sid, oral),
+                _ka_value(ka, s.sid, oral, intestine_table(definition.species)),
                 U.per_hr,
                 f"absorption {s.sid} [1/hr]",
                 _SBO_PARAMETER,
@@ -513,7 +522,7 @@ class SegmentedIntestine:
         return GutBuilder(
             ctx,
             self.name,
-            segments(),
+            segments(intestine_table(ctx.species)),
             single=False,
             fabs=a.fabs,
             colon=frozenset(a.colon),
@@ -641,7 +650,7 @@ class SingleLumen:
         return GutBuilder(
             ctx,
             self.name,
-            single_lumen(),
+            single_lumen(intestine_table(ctx.species)),
             single=True,
             fabs=frozenset(s.sid for s in ctx.substances),
         ).build()

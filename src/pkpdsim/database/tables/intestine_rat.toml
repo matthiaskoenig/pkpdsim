@@ -1,0 +1,108 @@
+# The intestine of the adult male rat, in the segments
+# of intestine_human.toml. Segment geometry (radii, lengths), fill levels,
+# surface enhancement factors and the fasted pH are those of the PK-Sim
+# database (develop aaebb648; no value origin is stored for them, the rat
+# lengths cite Willmann 2003). The lumen volume of a segment is its frustum
+# times the fractional steady state fill level of the database; the transit
+# time of a region (literature) is split onto its segments by their volume
+# shares (a uniform flow of the fluid). No values found: the fed gastric
+# emptying, the intestinal Cyp3a of the rat; see rodents.md.
+
+[stomach]
+volume = { value = 0.001, unit = "l", source = "PKSimDB", notes = "derived: PK-Sim database stomach (radius 0.06 dm, length 0.27 dm, fractional steady state fill level 0.32748), pi*r^2*L*fill; McConnell 2008 (abstract): water content of the whole gastrointestinal tract of the fasted rat 3.2 +- 1.8 ml, the stomach capacity about 3.4 ml" }
+transit_time = { value = 30.0, unit = "min", source = "PKSimDB", notes = "gastric emptying time 30 min of the PK-Sim database rat, fasted (no value origin); Grandoni 2019 Table 1: gastric MRT of the rat 2.7 to 60 min in the literature" }
+# transit_time_fed: not found for the rat (no fed gastric emptying time read)
+ph = { value = 3.9, unit = "dimensionless", source = "McConnell2008", notes = "abstract: rat stomach pH 3.9 fasted (3.2 fed); the PK-Sim database fasted basal pH 3.9" }
+area_factor = { value = 0.0, unit = "dimensionless", source = "ModelChoice", notes = "no absorption in the stomach, as the human table" }
+
+[duodenum]
+volume = { value = 1.453e-05, unit = "l", source = "PKSimDB", notes = "derived: PK-Sim database lumen of the segment as a frustum (radii 0.0075 and 0.01 dm, length 1.0 dm) times its fractional steady state fill level 0.06" }
+transit_time = { value = 1.066, unit = "min", source = "Davies1993", notes = "derived: small intestinal mean residence time 88 min (Davies and Morris 1993 as cited in Grandoni 2019 Table 1 and httk 2.7.4 physiology.data; not read; the PK-Sim database rat: 268 min) by the volume share 0.01211 of the segment in the small intestine (a uniform flow of the fluid through the region, residence time proportional to volume)" }
+ph = { value = 6.01, unit = "dimensionless", source = "PKSimDB", notes = "PK-Sim database, fasted pH of the segment (no value origin; consistent with McConnell 2008, abstract: mean intestinal pH below 6.6 in the rat)" }
+area_factor = { value = 1.0, unit = "dimensionless", source = "Yu1999", notes = "uniform absorption along the small intestine, as the human table" }
+# cyp3a4: not set; the rodent Cyp3a isoforms along the intestine were not researched
+
+[upper_jejunum]
+volume = { value = 0.000581, unit = "l", source = "PKSimDB", notes = "derived: PK-Sim database lumen of the segment as a frustum (radii 0.01 and 0.01 dm, length 4.35 dm) times its fractional steady state fill level 0.42518" }
+transit_time = { value = 42.61, unit = "min", source = "Davies1993", notes = "derived: small intestinal mean residence time 88 min (Davies and Morris 1993 as cited in Grandoni 2019 Table 1 and httk 2.7.4 physiology.data; not read; the PK-Sim database rat: 268 min) by the volume share 0.4842 of the segment in the small intestine (a uniform flow of the fluid through the region, residence time proportional to volume)" }
+ph = { value = 6.13, unit = "dimensionless", source = "PKSimDB", notes = "PK-Sim database, fasted pH of the segment (no value origin; consistent with McConnell 2008, abstract: mean intestinal pH below 6.6 in the rat)" }
+area_factor = { value = 1.0, unit = "dimensionless", source = "Yu1999", notes = "uniform absorption along the small intestine, as the human table" }
+# cyp3a4: not set; the rodent Cyp3a isoforms along the intestine were not researched
+
+[lower_jejunum]
+volume = { value = 0.000581, unit = "l", source = "PKSimDB", notes = "derived: PK-Sim database lumen of the segment as a frustum (radii 0.01 and 0.01 dm, length 4.35 dm) times its fractional steady state fill level 0.42518" }
+transit_time = { value = 42.61, unit = "min", source = "Davies1993", notes = "derived: small intestinal mean residence time 88 min (Davies and Morris 1993 as cited in Grandoni 2019 Table 1 and httk 2.7.4 physiology.data; not read; the PK-Sim database rat: 268 min) by the volume share 0.4842 of the segment in the small intestine (a uniform flow of the fluid through the region, residence time proportional to volume)" }
+ph = { value = 6.03, unit = "dimensionless", source = "PKSimDB", notes = "PK-Sim database, fasted pH of the segment (no value origin; consistent with McConnell 2008, abstract: mean intestinal pH below 6.6 in the rat)" }
+area_factor = { value = 1.0, unit = "dimensionless", source = "Yu1999", notes = "uniform absorption along the small intestine, as the human table" }
+# cyp3a4: not set; the rodent Cyp3a isoforms along the intestine were not researched
+
+[upper_ileum]
+volume = { value = 1.544e-05, unit = "l", source = "PKSimDB", notes = "derived: PK-Sim database lumen of the segment as a frustum (radii 0.01 and 0.0075 dm, length 0.15 dm) times its fractional steady state fill level 0.42518" }
+transit_time = { value = 1.133, unit = "min", source = "Davies1993", notes = "derived: small intestinal mean residence time 88 min (Davies and Morris 1993 as cited in Grandoni 2019 Table 1 and httk 2.7.4 physiology.data; not read; the PK-Sim database rat: 268 min) by the volume share 0.01287 of the segment in the small intestine (a uniform flow of the fluid through the region, residence time proportional to volume)" }
+ph = { value = 5.93, unit = "dimensionless", source = "PKSimDB", notes = "PK-Sim database, fasted pH of the segment (no value origin; consistent with McConnell 2008, abstract: mean intestinal pH below 6.6 in the rat)" }
+area_factor = { value = 1.0, unit = "dimensionless", source = "Yu1999", notes = "uniform absorption along the small intestine, as the human table" }
+# cyp3a4: not set; the rodent Cyp3a isoforms along the intestine were not researched
+
+[lower_ileum]
+volume = { value = 7.931e-06, unit = "l", source = "PKSimDB", notes = "derived: PK-Sim database lumen of the segment as a frustum (radii 0.0075 and 0.005 dm, length 0.15 dm) times its fractional steady state fill level 0.42518" }
+transit_time = { value = 0.5816, unit = "min", source = "Davies1993", notes = "derived: small intestinal mean residence time 88 min (Davies and Morris 1993 as cited in Grandoni 2019 Table 1 and httk 2.7.4 physiology.data; not read; the PK-Sim database rat: 268 min) by the volume share 0.006609 of the segment in the small intestine (a uniform flow of the fluid through the region, residence time proportional to volume)" }
+ph = { value = 6.255, unit = "dimensionless", source = "PKSimDB", notes = "PK-Sim database, fasted pH of the segment (no value origin; consistent with McConnell 2008, abstract: mean intestinal pH below 6.6 in the rat)" }
+area_factor = { value = 1.0, unit = "dimensionless", source = "Yu1999", notes = "uniform absorption along the small intestine, as the human table" }
+# cyp3a4: not set; the rodent Cyp3a isoforms along the intestine were not researched
+
+[caecum]
+volume = { value = 0.0001096, unit = "l", source = "PKSimDB", notes = "derived: PK-Sim database lumen of the segment as a frustum (radii 0.026 and 0.026 dm, length 0.1 dm) times its fractional steady state fill level 0.51629" }
+transit_time = { value = 88.81, unit = "min", source = "PKSimDB", notes = "derived: large intestinal transit time 810 min of the PK-Sim database rat (no value origin; Grandoni 2019 Table 1: colon 228 min after Peters 2012) by the volume share 0.1096 of the segment in the large intestine (a uniform flow of the fluid through the region, residence time proportional to volume)" }
+ph = { value = 6.405, unit = "dimensionless", source = "PKSimDB", notes = "PK-Sim database, fasted pH of the segment (no value origin; consistent with McConnell 2008, abstract: mean intestinal pH below 6.6 in the rat)" }
+area_factor = { value = 0.05871, unit = "dimensionless", source = "PKSimDB", notes = "derived: absorbing surface per lumen volume relative to the small intestine, E*2/r of the segment (effective surface area enhancement factor E = 1.469, mean radius 0.026 dm of the PK-Sim database) over the volume weighted mean of the small intestine segments (1925.0 1/dm); permeability differences not included" }
+# cyp3a4: not set; the rodent Cyp3a isoforms along the intestine were not researched
+
+[colon_ascendens]
+volume = { value = 0.0003725, unit = "l", source = "PKSimDB", notes = "derived: PK-Sim database lumen of the segment as a frustum (radii 0.026 and 0.019 dm, length 0.45 dm) times its fractional steady state fill level 0.51629" }
+transit_time = { value = 301.7, unit = "min", source = "PKSimDB", notes = "derived: large intestinal transit time 810 min of the PK-Sim database rat (no value origin; Grandoni 2019 Table 1: colon 228 min after Peters 2012) by the volume share 0.3725 of the segment in the large intestine (a uniform flow of the fluid through the region, residence time proportional to volume)" }
+ph = { value = 6.23, unit = "dimensionless", source = "PKSimDB", notes = "PK-Sim database, fasted pH of the segment (no value origin; consistent with McConnell 2008, abstract: mean intestinal pH below 6.6 in the rat)" }
+area_factor = { value = 0.07839, unit = "dimensionless", source = "PKSimDB", notes = "derived: absorbing surface per lumen volume relative to the small intestine, E*2/r of the segment (effective surface area enhancement factor E = 1.698, mean radius 0.0225 dm of the PK-Sim database) over the volume weighted mean of the small intestine segments (1925.0 1/dm); permeability differences not included" }
+# cyp3a4: not set; the rodent Cyp3a isoforms along the intestine were not researched
+
+[colon_transversum]
+volume = { value = 0.0001581, unit = "l", source = "PKSimDB", notes = "derived: PK-Sim database lumen of the segment as a frustum (radii 0.019 and 0.019 dm, length 0.27 dm) times its fractional steady state fill level 0.51629" }
+transit_time = { value = 128.1, unit = "min", source = "PKSimDB", notes = "derived: large intestinal transit time 810 min of the PK-Sim database rat (no value origin; Grandoni 2019 Table 1: colon 228 min after Peters 2012) by the volume share 0.1581 of the segment in the large intestine (a uniform flow of the fluid through the region, residence time proportional to volume)" }
+ph = { value = 6.055, unit = "dimensionless", source = "PKSimDB", notes = "PK-Sim database, fasted pH of the segment (no value origin; consistent with McConnell 2008, abstract: mean intestinal pH below 6.6 in the rat)" }
+area_factor = { value = 0.1052, unit = "dimensionless", source = "PKSimDB", notes = "derived: absorbing surface per lumen volume relative to the small intestine, E*2/r of the segment (effective surface area enhancement factor E = 1.923, mean radius 0.019 dm of the PK-Sim database) over the volume weighted mean of the small intestine segments (1925.0 1/dm); permeability differences not included" }
+# cyp3a4: not set; the rodent Cyp3a isoforms along the intestine were not researched
+
+[colon_descendens]
+volume = { value = 0.0001083, unit = "l", source = "PKSimDB", notes = "derived: PK-Sim database lumen of the segment as a frustum (radii 0.019 and 0.018 dm, length 0.195 dm) times its fractional steady state fill level 0.51629" }
+transit_time = { value = 87.7, unit = "min", source = "PKSimDB", notes = "derived: large intestinal transit time 810 min of the PK-Sim database rat (no value origin; Grandoni 2019 Table 1: colon 228 min after Peters 2012) by the volume share 0.1083 of the segment in the large intestine (a uniform flow of the fluid through the region, residence time proportional to volume)" }
+ph = { value = 5.88, unit = "dimensionless", source = "PKSimDB", notes = "PK-Sim database, fasted pH of the segment (no value origin; consistent with McConnell 2008, abstract: mean intestinal pH below 6.6 in the rat)" }
+area_factor = { value = 0.1095, unit = "dimensionless", source = "PKSimDB", notes = "derived: absorbing surface per lumen volume relative to the small intestine, E*2/r of the segment (effective surface area enhancement factor E = 1.95, mean radius 0.0185 dm of the PK-Sim database) over the volume weighted mean of the small intestine segments (1925.0 1/dm); permeability differences not included" }
+# cyp3a4: not set; the rodent Cyp3a isoforms along the intestine were not researched
+
+[colon_sigmoid]
+volume = { value = 9.689e-05, unit = "l", source = "PKSimDB", notes = "derived: PK-Sim database lumen of the segment as a frustum (radii 0.018 and 0.017 dm, length 0.195 dm) times its fractional steady state fill level 0.51629" }
+transit_time = { value = 78.48, unit = "min", source = "PKSimDB", notes = "derived: large intestinal transit time 810 min of the PK-Sim database rat (no value origin; Grandoni 2019 Table 1: colon 228 min after Peters 2012) by the volume share 0.09689 of the segment in the large intestine (a uniform flow of the fluid through the region, residence time proportional to volume)" }
+ph = { value = 5.88, unit = "dimensionless", source = "PKSimDB", notes = "PK-Sim database, fasted pH of the segment (no value origin; consistent with McConnell 2008, abstract: mean intestinal pH below 6.6 in the rat)" }
+area_factor = { value = 0.1158, unit = "dimensionless", source = "PKSimDB", notes = "derived: absorbing surface per lumen volume relative to the small intestine, E*2/r of the segment (effective surface area enhancement factor E = 1.95, mean radius 0.0175 dm of the PK-Sim database) over the volume weighted mean of the small intestine segments (1925.0 1/dm); permeability differences not included" }
+# cyp3a4: not set; the rodent Cyp3a isoforms along the intestine were not researched
+
+[rectum]
+volume = { value = 0.0001546, unit = "l", source = "PKSimDB", notes = "derived: PK-Sim database lumen of the segment as a frustum (radii 0.017 and 0.016 dm, length 0.35 dm) times its fractional steady state fill level 0.51629" }
+transit_time = { value = 125.2, unit = "min", source = "PKSimDB", notes = "derived: large intestinal transit time 810 min of the PK-Sim database rat (no value origin; Grandoni 2019 Table 1: colon 228 min after Peters 2012) by the volume share 0.1546 of the segment in the large intestine (a uniform flow of the fluid through the region, residence time proportional to volume)" }
+ph = { value = 5.88, unit = "dimensionless", source = "PKSimDB", notes = "PK-Sim database, fasted pH of the segment (no value origin; consistent with McConnell 2008, abstract: mean intestinal pH below 6.6 in the rat)" }
+area_factor = { value = 0.1336, unit = "dimensionless", source = "PKSimDB", notes = "derived: absorbing surface per lumen volume relative to the small intestine, E*2/r of the segment (effective surface area enhancement factor E = 2.122, mean radius 0.0165 dm of the PK-Sim database) over the volume weighted mean of the small intestine segments (1925.0 1/dm); permeability differences not included" }
+# cyp3a4: not set; the rodent Cyp3a isoforms along the intestine were not researched
+
+[mucosa]
+volume_fraction = { value = 0.1, unit = "dimensionless", source = "ModelChoice", notes = "the human model choice carried over (a tenth of the intestinal tissue volume); not researched for the rat" }
+flow_fraction = { value = 0.7, unit = "dimensionless", source = "ModelChoice", notes = "the human model choice carried over; the PK-Sim database uses a mucosa blood flow fraction of 0.75 for the small and large intestine of the rat" }
+
+[absorption]
+ka = { value = 1.0, unit = "1/hr", source = "ModelChoice", notes = "the human default carried over, for a model which does not fit it" }
+
+[single_lumen]
+volume = { value = 0.0012, unit = "l", source = "PKSimDB", notes = "derived: the sum of the small intestinal segment volumes above (PK-Sim database geometry and fill levels)" }
+transit_time = { value = 88.0, unit = "min", source = "Davies1993", notes = "small intestinal mean residence time 88 min (Davies and Morris 1993 as cited in Grandoni 2019 Table 1 and httk 2.7.4 physiology.data; not read; the PK-Sim database rat: 268 min)" }
+
+[bile]
+volume = { value = 0.0001562, unit = "l", source = "ModelChoice", notes = "the rat has no gallbladder: the bile reaches the duodenum continuously; the volume is the bile flow of 10 min, 0.01562 ml/min (httk 2.7.4 physiology.data, 0.04419 ml/min/kg^0.75 of Davies and Morris 1993, not read, at 250 g) times 1/k_bile" }
+k_bile = { value = 0.1, unit = "1/min", source = "ModelChoice", notes = "transit of the bile into the duodenum within about 10 min (half-life 6.9 min), a choice for an animal without gallbladder; a model with enterohepatic circulation fits it" }

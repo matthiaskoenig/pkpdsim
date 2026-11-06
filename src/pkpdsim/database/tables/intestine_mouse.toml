@@ -1,0 +1,108 @@
+# The intestine of the adult male mouse, in the segments
+# of intestine_human.toml. Segment geometry (radii, lengths), fill levels,
+# surface enhancement factors and the fasted pH are those of the PK-Sim
+# database (develop aaebb648; no value origin is stored for them, the rat
+# lengths cite Willmann 2003). The lumen volume of a segment is its frustum
+# times the fractional steady state fill level of the database; the transit
+# time of a region (literature) is split onto its segments by their volume
+# shares (a uniform flow of the fluid). No values found: the fed gastric
+# emptying, the intestinal Cyp3a of the mouse; see rodents.md.
+
+[stomach]
+volume = { value = 0.0002, unit = "l", source = "PKSimDB", notes = "derived: PK-Sim database stomach (radius 0.04 dm, length 0.06 dm, fractional steady state fill level 0.66314), pi*r^2*L*fill; McConnell 2008 (abstract): water content of the whole gastrointestinal tract of the fasted mouse 0.81 +- 1.3 ml, the stomach capacity about 0.4 ml" }
+transit_time = { value = 20.0, unit = "min", source = "PKSimDB", notes = "gastric emptying time 20 min of the PK-Sim database mouse, fasted (no value origin)" }
+# transit_time_fed: not found for the mouse (no fed gastric emptying time read)
+ph = { value = 4.0, unit = "dimensionless", source = "McConnell2008", notes = "abstract: mouse stomach pH 4.0 fasted (3.0 fed); the PK-Sim database fasted basal pH 4.04" }
+area_factor = { value = 0.0, unit = "dimensionless", source = "ModelChoice", notes = "no absorption in the stomach, as the human table" }
+
+[duodenum]
+volume = { value = 2.871e-05, unit = "l", source = "PKSimDB", notes = "derived: PK-Sim database lumen of the segment as a frustum (radii 0.0145 and 0.015 dm, length 0.7 dm) times its fractional steady state fill level 0.06" }
+transit_time = { value = 3.914, unit = "min", source = "PKSimDB", notes = "derived: small intestinal transit time 40.9 min of the PK-Sim database mouse (no value origin) by the volume share 0.0957 of the segment in the small intestine (a uniform flow of the fluid through the region, residence time proportional to volume)" }
+ph = { value = 4.875, unit = "dimensionless", source = "PKSimDB", notes = "PK-Sim database, fasted pH of the segment (no value origin; consistent with McConnell 2008, abstract: mean intestinal pH below 5.2 in the mouse)" }
+area_factor = { value = 1.0, unit = "dimensionless", source = "Yu1999", notes = "uniform absorption along the small intestine, as the human table" }
+# cyp3a4: not set; the rodent Cyp3a isoforms along the intestine were not researched
+
+[upper_jejunum]
+volume = { value = 0.0001319, unit = "l", source = "PKSimDB", notes = "derived: PK-Sim database lumen of the segment as a frustum (radii 0.015 and 0.0139 dm, length 1.625 dm) times its fractional steady state fill level 0.12371" }
+transit_time = { value = 17.99, unit = "min", source = "PKSimDB", notes = "derived: small intestinal transit time 40.9 min of the PK-Sim database mouse (no value origin) by the volume share 0.4398 of the segment in the small intestine (a uniform flow of the fluid through the region, residence time proportional to volume)" }
+ph = { value = 5.025, unit = "dimensionless", source = "PKSimDB", notes = "PK-Sim database, fasted pH of the segment (no value origin; consistent with McConnell 2008, abstract: mean intestinal pH below 5.2 in the mouse)" }
+area_factor = { value = 1.0, unit = "dimensionless", source = "Yu1999", notes = "uniform absorption along the small intestine, as the human table" }
+# cyp3a4: not set; the rodent Cyp3a isoforms along the intestine were not researched
+
+[lower_jejunum]
+volume = { value = 0.0001126, unit = "l", source = "PKSimDB", notes = "derived: PK-Sim database lumen of the segment as a frustum (radii 0.0139 and 0.0128 dm, length 1.625 dm) times its fractional steady state fill level 0.12371" }
+transit_time = { value = 15.35, unit = "min", source = "PKSimDB", notes = "derived: small intestinal transit time 40.9 min of the PK-Sim database mouse (no value origin) by the volume share 0.3754 of the segment in the small intestine (a uniform flow of the fluid through the region, residence time proportional to volume)" }
+ph = { value = 5.125, unit = "dimensionless", source = "PKSimDB", notes = "PK-Sim database, fasted pH of the segment (no value origin; consistent with McConnell 2008, abstract: mean intestinal pH below 5.2 in the mouse)" }
+area_factor = { value = 1.0, unit = "dimensionless", source = "Yu1999", notes = "uniform absorption along the small intestine, as the human table" }
+# cyp3a4: not set; the rodent Cyp3a isoforms along the intestine were not researched
+
+[upper_ileum]
+volume = { value = 1.353e-05, unit = "l", source = "PKSimDB", notes = "derived: PK-Sim database lumen of the segment as a frustum (radii 0.0128 and 0.01265 dm, length 0.215 dm) times its fractional steady state fill level 0.12371" }
+transit_time = { value = 1.845, unit = "min", source = "PKSimDB", notes = "derived: small intestinal transit time 40.9 min of the PK-Sim database mouse (no value origin) by the volume share 0.0451 of the segment in the small intestine (a uniform flow of the fluid through the region, residence time proportional to volume)" }
+ph = { value = 5.24, unit = "dimensionless", source = "PKSimDB", notes = "PK-Sim database, fasted pH of the segment (no value origin; consistent with McConnell 2008, abstract: mean intestinal pH below 5.2 in the mouse)" }
+area_factor = { value = 1.0, unit = "dimensionless", source = "Yu1999", notes = "uniform absorption along the small intestine, as the human table" }
+# cyp3a4: not set; the rodent Cyp3a isoforms along the intestine were not researched
+
+[lower_ileum]
+volume = { value = 1.321e-05, unit = "l", source = "PKSimDB", notes = "derived: PK-Sim database lumen of the segment as a frustum (radii 0.01265 and 0.0125 dm, length 0.215 dm) times its fractional steady state fill level 0.12371" }
+transit_time = { value = 1.801, unit = "min", source = "PKSimDB", notes = "derived: small intestinal transit time 40.9 min of the PK-Sim database mouse (no value origin) by the volume share 0.04404 of the segment in the small intestine (a uniform flow of the fluid through the region, residence time proportional to volume)" }
+ph = { value = 4.935, unit = "dimensionless", source = "PKSimDB", notes = "PK-Sim database, fasted pH of the segment (no value origin; consistent with McConnell 2008, abstract: mean intestinal pH below 5.2 in the mouse)" }
+area_factor = { value = 1.0, unit = "dimensionless", source = "Yu1999", notes = "uniform absorption along the small intestine, as the human table" }
+# cyp3a4: not set; the rodent Cyp3a isoforms along the intestine were not researched
+
+[caecum]
+volume = { value = 7.107e-05, unit = "l", source = "PKSimDB", notes = "derived: PK-Sim database lumen of the segment as a frustum (radii 0.027 and 0.0145 dm, length 0.35 dm) times its fractional steady state fill level 0.14572" }
+transit_time = { value = 133.6, unit = "min", source = "PKSimDB", notes = "derived: large intestinal transit time 282 min of the PK-Sim database mouse (no value origin); Padmanabhan 2013: peak activity in the rectum 6-7 h after gavage in male 129SvEv mice of 25-30 g, which the 20 + 40.9 + 282 min of the database agree with by the volume share 0.4738 of the segment in the large intestine (a uniform flow of the fluid through the region, residence time proportional to volume)" }
+ph = { value = 4.825, unit = "dimensionless", source = "PKSimDB", notes = "PK-Sim database, fasted pH of the segment (no value origin; consistent with McConnell 2008, abstract: mean intestinal pH below 5.2 in the mouse)" }
+area_factor = { value = 0.4008, unit = "dimensionless", source = "PKSimDB", notes = "derived: absorbing surface per lumen volume relative to the small intestine, E*2/r of the segment (effective surface area enhancement factor E = 5.369, mean radius 0.02075 dm of the PK-Sim database) over the volume weighted mean of the small intestine segments (1291.0 1/dm); permeability differences not included" }
+# cyp3a4: not set; the rodent Cyp3a isoforms along the intestine were not researched
+
+[colon_ascendens]
+volume = { value = 1.973e-05, unit = "l", source = "PKSimDB", notes = "derived: PK-Sim database lumen of the segment as a frustum (radii 0.0145 and 0.0145 dm, length 0.205 dm) times its fractional steady state fill level 0.14572" }
+transit_time = { value = 37.09, unit = "min", source = "PKSimDB", notes = "derived: large intestinal transit time 282 min of the PK-Sim database mouse (no value origin); Padmanabhan 2013: peak activity in the rectum 6-7 h after gavage in male 129SvEv mice of 25-30 g, which the 20 + 40.9 + 282 min of the database agree with by the volume share 0.1315 of the segment in the large intestine (a uniform flow of the fluid through the region, residence time proportional to volume)" }
+ph = { value = 4.87, unit = "dimensionless", source = "PKSimDB", notes = "PK-Sim database, fasted pH of the segment (no value origin; consistent with McConnell 2008, abstract: mean intestinal pH below 5.2 in the mouse)" }
+area_factor = { value = 0.3431, unit = "dimensionless", source = "PKSimDB", notes = "derived: absorbing surface per lumen volume relative to the small intestine, E*2/r of the segment (effective surface area enhancement factor E = 3.213, mean radius 0.0145 dm of the PK-Sim database) over the volume weighted mean of the small intestine segments (1291.0 1/dm); permeability differences not included" }
+# cyp3a4: not set; the rodent Cyp3a isoforms along the intestine were not researched
+
+[colon_transversum]
+volume = { value = 1.973e-05, unit = "l", source = "PKSimDB", notes = "derived: PK-Sim database lumen of the segment as a frustum (radii 0.0145 and 0.0145 dm, length 0.205 dm) times its fractional steady state fill level 0.14572" }
+transit_time = { value = 37.09, unit = "min", source = "PKSimDB", notes = "derived: large intestinal transit time 282 min of the PK-Sim database mouse (no value origin); Padmanabhan 2013: peak activity in the rectum 6-7 h after gavage in male 129SvEv mice of 25-30 g, which the 20 + 40.9 + 282 min of the database agree with by the volume share 0.1315 of the segment in the large intestine (a uniform flow of the fluid through the region, residence time proportional to volume)" }
+ph = { value = 4.72, unit = "dimensionless", source = "PKSimDB", notes = "PK-Sim database, fasted pH of the segment (no value origin; consistent with McConnell 2008, abstract: mean intestinal pH below 5.2 in the mouse)" }
+area_factor = { value = 0.3431, unit = "dimensionless", source = "PKSimDB", notes = "derived: absorbing surface per lumen volume relative to the small intestine, E*2/r of the segment (effective surface area enhancement factor E = 3.213, mean radius 0.0145 dm of the PK-Sim database) over the volume weighted mean of the small intestine segments (1291.0 1/dm); permeability differences not included" }
+# cyp3a4: not set; the rodent Cyp3a isoforms along the intestine were not researched
+
+[colon_descendens]
+volume = { value = 1.315e-05, unit = "l", source = "PKSimDB", notes = "derived: PK-Sim database lumen of the segment as a frustum (radii 0.0145 and 0.0145 dm, length 0.13667 dm) times its fractional steady state fill level 0.14572" }
+transit_time = { value = 24.73, unit = "min", source = "PKSimDB", notes = "derived: large intestinal transit time 282 min of the PK-Sim database mouse (no value origin); Padmanabhan 2013: peak activity in the rectum 6-7 h after gavage in male 129SvEv mice of 25-30 g, which the 20 + 40.9 + 282 min of the database agree with by the volume share 0.0877 of the segment in the large intestine (a uniform flow of the fluid through the region, residence time proportional to volume)" }
+ph = { value = 4.44, unit = "dimensionless", source = "PKSimDB", notes = "PK-Sim database, fasted pH of the segment (no value origin; consistent with McConnell 2008, abstract: mean intestinal pH below 5.2 in the mouse)" }
+area_factor = { value = 0.3431, unit = "dimensionless", source = "PKSimDB", notes = "derived: absorbing surface per lumen volume relative to the small intestine, E*2/r of the segment (effective surface area enhancement factor E = 3.213, mean radius 0.0145 dm of the PK-Sim database) over the volume weighted mean of the small intestine segments (1291.0 1/dm); permeability differences not included" }
+# cyp3a4: not set; the rodent Cyp3a isoforms along the intestine were not researched
+
+[colon_sigmoid]
+volume = { value = 1.315e-05, unit = "l", source = "PKSimDB", notes = "derived: PK-Sim database lumen of the segment as a frustum (radii 0.0145 and 0.0145 dm, length 0.13667 dm) times its fractional steady state fill level 0.14572" }
+transit_time = { value = 24.73, unit = "min", source = "PKSimDB", notes = "derived: large intestinal transit time 282 min of the PK-Sim database mouse (no value origin); Padmanabhan 2013: peak activity in the rectum 6-7 h after gavage in male 129SvEv mice of 25-30 g, which the 20 + 40.9 + 282 min of the database agree with by the volume share 0.0877 of the segment in the large intestine (a uniform flow of the fluid through the region, residence time proportional to volume)" }
+ph = { value = 4.44, unit = "dimensionless", source = "PKSimDB", notes = "PK-Sim database, fasted pH of the segment (no value origin; consistent with McConnell 2008, abstract: mean intestinal pH below 5.2 in the mouse)" }
+area_factor = { value = 0.3431, unit = "dimensionless", source = "PKSimDB", notes = "derived: absorbing surface per lumen volume relative to the small intestine, E*2/r of the segment (effective surface area enhancement factor E = 3.213, mean radius 0.0145 dm of the PK-Sim database) over the volume weighted mean of the small intestine segments (1291.0 1/dm); permeability differences not included" }
+# cyp3a4: not set; the rodent Cyp3a isoforms along the intestine were not researched
+
+[rectum]
+volume = { value = 1.315e-05, unit = "l", source = "PKSimDB", notes = "derived: PK-Sim database lumen of the segment as a frustum (radii 0.0145 and 0.0145 dm, length 0.13667 dm) times its fractional steady state fill level 0.14572" }
+transit_time = { value = 24.73, unit = "min", source = "PKSimDB", notes = "derived: large intestinal transit time 282 min of the PK-Sim database mouse (no value origin); Padmanabhan 2013: peak activity in the rectum 6-7 h after gavage in male 129SvEv mice of 25-30 g, which the 20 + 40.9 + 282 min of the database agree with by the volume share 0.0877 of the segment in the large intestine (a uniform flow of the fluid through the region, residence time proportional to volume)" }
+ph = { value = 4.44, unit = "dimensionless", source = "PKSimDB", notes = "PK-Sim database, fasted pH of the segment (no value origin; consistent with McConnell 2008, abstract: mean intestinal pH below 5.2 in the mouse)" }
+area_factor = { value = 0.3431, unit = "dimensionless", source = "PKSimDB", notes = "derived: absorbing surface per lumen volume relative to the small intestine, E*2/r of the segment (effective surface area enhancement factor E = 3.213, mean radius 0.0145 dm of the PK-Sim database) over the volume weighted mean of the small intestine segments (1291.0 1/dm); permeability differences not included" }
+# cyp3a4: not set; the rodent Cyp3a isoforms along the intestine were not researched
+
+[mucosa]
+volume_fraction = { value = 0.1, unit = "dimensionless", source = "ModelChoice", notes = "the human model choice carried over (a tenth of the intestinal tissue volume); not researched for the mouse" }
+flow_fraction = { value = 0.7, unit = "dimensionless", source = "ModelChoice", notes = "the human model choice carried over; the PK-Sim database uses a mucosa blood flow fraction of 0.75 for the small and large intestine of the mouse" }
+
+[absorption]
+ka = { value = 1.0, unit = "1/hr", source = "ModelChoice", notes = "the human default carried over, for a model which does not fit it" }
+
+[single_lumen]
+volume = { value = 0.0003, unit = "l", source = "PKSimDB", notes = "derived: the sum of the small intestinal segment volumes above (PK-Sim database geometry and fill levels)" }
+transit_time = { value = 40.9, unit = "min", source = "PKSimDB", notes = "small intestinal transit time 40.9 min of the PK-Sim database mouse (no value origin)" }
+
+[bile]
+volume = { value = 0.0001642, unit = "l", source = "ModelChoice", notes = "the gallbladder volume of the mouse was not found; the human model choice of the transit (1/k_bile = 100 min) times the bile flow 0.001642 ml/min (httk 2.7.4 physiology.data, 0.02612 ml/min/kg^0.75 of Davies and Morris 1993, not read, at 25 g)" }
+k_bile = { value = 0.01, unit = "1/min", source = "ModelChoice", notes = "the human model choice carried over (the mouse has a gallbladder, which empties with the meals)" }

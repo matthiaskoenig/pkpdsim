@@ -201,6 +201,8 @@ Every other id of the scheme, the ids a model rarely reads: the physiology, the 
 | `SV_tis` | the scaling factor of the lean tissues, the blood and the cardiac output | `ids.SV_TIS` |
 | `Vblood` | the total blood volume (l) | `ids.VBLOOD` |
 | `CO_base` | the cardiac output without impairment, of which the organ flows are fractions | `ids.CO_BASE` |
+| `b_CO` | the allometric exponent of the cardiac output on the body weight within a species (laboratory animals) | `ids.CO_EXPONENT` |
+| `b_GFR` | the allometric exponent of the GFR on the body weight within a species (laboratory animals) | `ids.GFR_EXPONENT` |
 | `Qh` | the total liver blood flow | `ids.QH` |
 | `Qha` | the blood flow of the hepatic artery | `ids.QHA` |
 | `Qpo` | the blood flow of the portal vein | `ids.QPO` |

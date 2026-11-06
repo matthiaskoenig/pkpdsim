@@ -115,6 +115,7 @@ from pkpdsim.pbpk.sex_differences import (
 from pkpdsim.pbpk.substance import Substance
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import number
+from pkpdsim.species import Species
 
 if TYPE_CHECKING:
     from pkpdsim.pbpk.definition import PBPKDefinition
@@ -1217,6 +1218,7 @@ class _Impairment:
             return " * ".join(present) if present else _ONE
 
         female_albumin = ALBUMIN in sex_curves(self.definition.sex)
+        human = self.definition.species is Species.HUMAN
         text = "The factor of all impairments (cirrhosis, CKD, heart failure) on"
         rest = ids.condition_factor("cp", "rest_flow")
         flows: list[str] = []
@@ -1304,15 +1306,23 @@ class _Impairment:
             "albumin": (
                 product(
                     ids.condition_factor("cp", "albumin"),
-                    age_factor("albumin"),
+                    age_factor("albumin") if human else None,
                     sex_factor(ALBUMIN) if female_albumin else None,
                 ),
-                "the plasma albumin (and the age"
-                + (" and the sex)" if female_albumin else ")"),
+                "the plasma albumin"
+                + (
+                    " (and the age" + (" and the sex)" if female_albumin else ")")
+                    if human
+                    else ""
+                ),
             ),
             "agp": (
-                product(ids.condition_factor("cp", "agp"), age_factor("agp")),
-                "the plasma alpha-1-acid glycoprotein (and the age)",
+                product(
+                    ids.condition_factor("cp", "agp"),
+                    age_factor("agp") if human else None,
+                ),
+                "the plasma alpha-1-acid glycoprotein"
+                + (" (and the age)" if human else ""),
             ),
             "plasma_protein": (
                 ids.condition_factor("ckd", "plasma_protein"),
@@ -1372,7 +1382,7 @@ class _Impairment:
                         else None,
                         hepatic,
                         age_factor(key)
-                        if protein_factor(organ, protein) is not None
+                        if human and protein_factor(organ, protein) is not None
                         else None,
                         sex_factor(key)
                         if protein_sex_factor(self.definition.sex, organ, protein)
@@ -1409,6 +1419,7 @@ def impairment_objects(definition: "PBPKDefinition") -> list[Sbase]:
     impairment.child_pugh()
     impairment.ckd()
     impairment.heart_failure()
-    impairment.age()
+    if definition.species is Species.HUMAN:
+        impairment.age()
     impairment.combined()
     return impairment.objects

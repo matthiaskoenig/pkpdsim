@@ -85,6 +85,7 @@ from pkpdsim.pbpk.virtual import (
     VirtualPopulation,
     virtual_population,
 )
+from pkpdsim.species import Species
 
 if TYPE_CHECKING:
     from pkpdsim.pbpk.equilibration import Equilibration, equilibrated_simulation
@@ -187,6 +188,7 @@ __all__ = [
     "SingleLumen",
     "SlowPool",
     "Source",
+    "Species",
     "StandardOrgan",
     "Substance",
     "ThresholdReabsorption",

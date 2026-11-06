@@ -42,6 +42,7 @@ from pkpdsim.pbpk.placement import value_parameter
 from pkpdsim.pbpk.substance import Kp, Substance
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import Formula, Q, Value
+from pkpdsim.species import Species
 
 __all__ = [
     "INTERSTITIAL",
@@ -161,7 +162,9 @@ def k_int_pls_value(fu: float) -> float:
     return _evaluate(_K_INT.format(fu=repr(fu), one="1", **values))
 
 
-def interstitial_share(organ: Organ, fu: float, sex: Sex) -> float:
+def interstitial_share(
+    organ: Organ, fu: float, sex: Sex, species: Species = Species.HUMAN
+) -> float:
     """The interstitial share of the whole tissue of an organ.
 
     `f_int*K_int_pls(fu)/(1 - f_vas)`, the Kp of a substance which reaches the
@@ -182,21 +185,25 @@ def interstitial_share(organ: Organ, fu: float, sex: Sex) -> float:
         fu: the fraction unbound in plasma.
         sex: the sex of the build, no default: a female build reads the
             female share.
+        species: the species of the build.
 
     Returns:
         The interstitial share (dimensionless).
     """
-    f_vas, f_int = reference_fractions(organ)[sex]
+    f_vas, f_int = reference_fractions(organ, species)[sex]
     return f_int * k_int_pls_value(fu) / (1.0 - f_vas)
 
 
-def kp_of_organ(substance: Substance, organ: Organ, sex: Sex) -> Q | None:
+def kp_of_organ(
+    substance: Substance, organ: Organ, sex: Sex, species: Species = Species.HUMAN
+) -> Q | None:
     """The whole-tissue Kp which a `Kp` gives an organ, before the simulation.
 
     Args:
         substance: the substance, with a `Kp` as distribution.
         organ: the organ.
         sex: the sex of the build, whose interstitial share a scale multiplies.
+        species: the species of the build.
 
     Returns:
         The override of the organ, else the scale times the interstitial share
@@ -216,7 +223,9 @@ def kp_of_organ(substance: Substance, organ: Organ, sex: Sex) -> Q | None:
     fu = substance.binding.fu if substance.binding is not None else 1.0
     if isinstance(fu, Formula) or isinstance(dist.interstitial, Formula):
         return None
-    return number(dist.interstitial) * interstitial_share(organ, number(fu), sex)
+    return number(dist.interstitial) * interstitial_share(
+        organ, number(fu), sex, species
+    )
 
 
 def k_cell_pls(kp: str, k_int: str, f_vas: str, f_int: str) -> str:
@@ -267,21 +276,27 @@ def k_organ(f_vas: str, vascular: str, kp: str) -> str:
     return f"{f_vas} * {vascular} + ({_ONE} - {f_vas}) * {kp}"
 
 
-def _full_form_kp(substance: Substance, organ: Organ, sex: Sex) -> float | None:
+def _full_form_kp(
+    substance: Substance, organ: Organ, sex: Sex, species: Species = Species.HUMAN
+) -> float | None:
     """The number of the Kp of the full form of an organ, `None` for a formula or none."""
     dist = substance.distribution
     if dist is None:
         return None
-    kp_q = kp_of_organ(substance, organ, sex) if isinstance(dist, Kp) else dist.factor
+    kp_q = (
+        kp_of_organ(substance, organ, sex, species)
+        if isinstance(dist, Kp)
+        else dist.factor
+    )
     if kp_q is None or isinstance(kp_q, Formula):
         return None
     if isinstance(dist, Kp):
         return number(kp_q)
-    return kp_values(substance, sex)[organ].value * number(dist.factor)
+    return kp_values(substance, sex, species)[organ].value * number(dist.factor)
 
 
 def kp_floor_stages(
-    substance: Substance, organ: Organ, sex: Sex
+    substance: Substance, organ: Organ, sex: Sex, species: Species = Species.HUMAN
 ) -> list[tuple[str, float, float]]:
     """Get the CKD stages at whose fu the interstitial share exceeds the Kp of the full form.
 
@@ -298,15 +313,16 @@ def kp_floor_stages(
         substance: the substance.
         organ: the organ of the full form.
         sex: the sex of the build.
+        species: the species of the build.
 
     Returns:
         (stage, fu, share) of every such stage, in the order of the stages;
         empty without a numeric Kp or a change of fu in CKD.
     """
-    kp = _full_form_kp(substance, organ, sex)
+    kp = _full_form_kp(substance, organ, sex, species)
     if kp is None:
         return []
-    f_vas, f_int = reference_fractions(organ)[sex]
+    f_vas, f_int = reference_fractions(organ, species)[sex]
     return [
         (stage, fu, f_int * k_int_pls_value(fu) / (1.0 - f_vas))
         for stage, fu in ckd_unbound_fractions(substance).items()
@@ -314,7 +330,9 @@ def kp_floor_stages(
     ]
 
 
-def warn_kp_floor(substance: Substance, organ: Organ, sex: Sex) -> None:
+def warn_kp_floor(
+    substance: Substance, organ: Organ, sex: Sex, species: Species = Species.HUMAN
+) -> None:
     """Warn when the cell partition of the full form is floored in chronic kidney disease.
 
     The build calls it for every organ of the full form with a Kp
@@ -326,6 +344,7 @@ def warn_kp_floor(substance: Substance, organ: Organ, sex: Sex) -> None:
         substance: the substance.
         organ: the organ.
         sex: the sex of the build.
+        species: the species of the build.
 
     Warns:
         KCellFloorWarning: naming the substance, the organ, the stages with
@@ -334,10 +353,10 @@ def warn_kp_floor(substance: Substance, organ: Organ, sex: Sex) -> None:
     dist = substance.distribution
     if dist is not None and organ in dist.ckd_floor:
         return
-    stages = kp_floor_stages(substance, organ, sex)
+    stages = kp_floor_stages(substance, organ, sex, species)
     if not stages:
         return
-    kp = _full_form_kp(substance, organ, sex)
+    kp = _full_form_kp(substance, organ, sex, species)
     listed = ", ".join(
         f"{stage} (fu {fu:.4g}, share {share:.4g})" for stage, fu, share in stages
     )
@@ -355,13 +374,16 @@ def warn_kp_floor(substance: Substance, organ: Organ, sex: Sex) -> None:
     )
 
 
-def kp_floor_notes(substance: Substance, organ: Organ, sex: Sex) -> str:
+def kp_floor_notes(
+    substance: Substance, organ: Organ, sex: Sex, species: Species = Species.HUMAN
+) -> str:
     """Get the notes of an accepted floor of the cell partition in an organ.
 
     Args:
         substance: the substance.
         organ: the organ of the full form.
         sex: the sex of the build.
+        species: the species of the build.
 
     Returns:
         The reason of `ckd_floor` with the stages at which the floor holds in
@@ -370,7 +392,7 @@ def kp_floor_notes(substance: Substance, organ: Organ, sex: Sex) -> str:
     dist = substance.distribution
     if dist is None or organ not in dist.ckd_floor:
         return ""
-    stages = kp_floor_stages(substance, organ, sex)
+    stages = kp_floor_stages(substance, organ, sex, species)
     where = (
         ", ".join(
             f"{stage} (fu {fu:.4g}, share {share:.4g})" for stage, fu, share in stages
@@ -384,7 +406,9 @@ def kp_floor_notes(substance: Substance, organ: Organ, sex: Sex) -> str:
     )
 
 
-def check_kp(substance: Substance, organ: Organ, sex: Sex) -> None:
+def check_kp(
+    substance: Substance, organ: Organ, sex: Sex, species: Species = Species.HUMAN
+) -> None:
     """Check that the Kp of a substance leaves a positive `K_cell_pls` in an organ.
 
     The check uses the fractions of the reference individual of the sex of
@@ -396,19 +420,20 @@ def check_kp(substance: Substance, organ: Organ, sex: Sex) -> None:
         substance: the substance.
         organ: the organ.
         sex: the sex of the build.
+        species: the species of the build.
 
     Raises:
         ValueError: if the Kp is not above the interstitial share of the
             whole tissue, `f_int*K_int_pls/(f_int + f_cell)`.
     """
     fu_q = substance.binding.fu if substance.binding is not None else 1.0
-    kp = _full_form_kp(substance, organ, sex)
+    kp = _full_form_kp(substance, organ, sex, species)
     if isinstance(fu_q, Formula) or kp is None:
         # a formula has no number before the simulation; `K_cell_pls` has the
         # lower bound 1e-6 in the model
         return
     fu = number(fu_q)
-    f_vas, f_int = reference_fractions(organ)[sex]
+    f_vas, f_int = reference_fractions(organ, species)[sex]
     if k_cell_pls_value(kp, fu, f_vas, f_int) <= 0:
         share = f_int * k_int_pls_value(fu) / (1.0 - f_vas)
         raise ValueError(

@@ -20,7 +20,7 @@ from pkpdsim.pbpk.chemistry import (
     Metabolism,
     Transport,
 )
-from pkpdsim.pbpk.data import cite, value
+from pkpdsim.pbpk.data import cite, load, value
 from pkpdsim.pbpk.organ import Boundary, OrganContext
 from pkpdsim.pbpk.organ_builder import ONE
 from pkpdsim.pbpk.organs import Organ, Part, Pool
@@ -42,7 +42,7 @@ from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import Value
 from pkpdsim.pbpk.variants.gut_lumen import LumenBuilder
 from pkpdsim.pbpk.variants.lumen_options import LumenConversion, converted
-from pkpdsim.pbpk.variants.segments import DATA, Segment
+from pkpdsim.pbpk.variants.segments import Segment
 
 __all__ = [
     "GUT_ORGANS",
@@ -275,6 +275,7 @@ class GutBuilder(LumenBuilder):
         super().__init__(wall, name)
         self.processes = processes
         self.segments = segments
+        self.table = segments[0].table
         self.single = single
         self.fabs = fabs
         self.colon = colon
@@ -512,14 +513,14 @@ class GutBuilder(LumenBuilder):
         """The volumes and blood flows of the mucosa segments and the flow of the wall."""
         f_vol = self._constant(
             ids.F_MUCOSA_VOLUME,
-            value(DATA, "mucosa", "volume_fraction"),
+            value(self.table, "mucosa", "volume_fraction"),
             U.dimensionless,
             "mucosa fraction of the intestinal tissue",
             kind="intestine_geometry",
         )
         f_flow = self._constant(
             ids.F_MUCOSA_FLOW,
-            value(DATA, "mucosa", "flow_fraction"),
+            value(self.table, "mucosa", "flow_fraction"),
             U.dimensionless,
             "mucosa fraction of the intestinal blood flow",
             kind="intestine_geometry",
@@ -700,11 +701,14 @@ class GutBuilder(LumenBuilder):
         organ of the process; `None` where the protein is not placed.
         """
         key = _UNIFORM if self.single else _PROFILED.get(protein or "", _UNIFORM)
+        if key != _UNIFORM and key not in load(self.table)[self.segments[1].key]:
+            # the species has no expression data of the protein
+            key = _UNIFORM
 
         def expression(other: Segment) -> Value | None:
             if key == _UNIFORM:
                 return None
-            return value(DATA, other.key, key)
+            return value(other.table, other.key, key)
 
         def placed(other: Segment) -> bool:
             if key == _UNIFORM:

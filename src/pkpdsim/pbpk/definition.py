@@ -41,6 +41,7 @@ from pkpdsim.pbpk.values import (
     equal_by_value,
     number,
 )
+from pkpdsim.species import Species
 
 __all__ = ["PBPKDefinition", "Variants"]
 
@@ -114,6 +115,13 @@ class PBPKDefinition:
             values and default individual; a study of both sexes uses one
             model per sex, the builds of `create_archive(..., sexes=...)`. A
             `Sex` member or its value (`"female"`), normalised to the member.
+        species: the species of the model, chosen when it is built: the
+            human (ICRP 89, the default) or a laboratory animal (`Species.RAT`,
+            `MOUSE`, `PIG`) with the reference animal of
+            `database/tables/physiology_<species>.toml` and its intestine; a
+            `Species` member or its value (`"rat"`), normalised to the member.
+            A laboratory animal has no age, no factors of the sex and the
+            default population only.
         population: the population (`pkpdsim.pbpk.populations`), chosen when
             the model is built: its reference individual of the sex is the
             default individual (`BW`, `HEIGHT`, `AGE`); the reference anatomy
@@ -179,6 +187,7 @@ class PBPKDefinition:
     routes: Sequence[Route] = ()
     pd: Sequence[PDComponent] = ()
     sex: Sex = Sex.MALE
+    species: Species = Species.HUMAN
     population: str = DEFAULT_POPULATION
     arm_vein: str = "pksim_default"
     dynamic: tuple[str, ...] = ()
@@ -193,8 +202,11 @@ class PBPKDefinition:
     slow_pools: Sequence[SlowPool] = ()
 
     def __post_init__(self) -> None:
-        """Normalise the sex to a `Sex` member and freeze the starts."""
+        """Normalise the sex and the species to their members and freeze the starts."""
         object.__setattr__(self, "sex", as_member(Sex, self.sex, "PBPKDefinition.sex"))
+        object.__setattr__(
+            self, "species", as_member(Species, self.species, "PBPKDefinition.species")
+        )
         object.__setattr__(self, "starts", FrozenMap(self.starts))
 
     @classmethod
@@ -237,7 +249,7 @@ class PBPKDefinition:
         """
         if not definitions:
             raise ValueError(f"Combine '{sid}': no definitions given.")
-        for attribute in ("sex", "population", "arm_vein"):
+        for attribute in ("sex", "species", "population", "arm_vein"):
             values = {getattr(d, attribute) for d in definitions}
             if len(values) > 1:
                 raise ValueError(
@@ -278,6 +290,7 @@ class PBPKDefinition:
                 "has different inputs or outputs in two definitions",
             ),
             sex=first.sex,
+            species=first.species,
             population=first.population,
             arm_vein=first.arm_vein,
             dynamic=tuple(dict.fromkeys(p for d in definitions for p in d.dynamic)),

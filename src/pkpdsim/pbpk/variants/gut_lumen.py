@@ -6,6 +6,8 @@ sets the attributes (the segments, the substances which reach the lumen,
 the mucosa) before it builds.
 """
 
+from dataclasses import replace
+
 from sbmlutils.factory import (
     Compartment,
     Parameter,
@@ -18,7 +20,7 @@ from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk import ids
 from pkpdsim.pbpk.annotation import initial_assignment
-from pkpdsim.pbpk.data import cite, value
+from pkpdsim.pbpk.data import cite, load, value
 from pkpdsim.pbpk.impairment import GASTRIC_EMPTYING, SI_TRANSIT
 from pkpdsim.pbpk.organ import StandardBuilder
 from pkpdsim.pbpk.organ_builder import ONE
@@ -41,9 +43,26 @@ from pkpdsim.pbpk.substance import Substance
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import Value
 from pkpdsim.pbpk.variants.lumen_options import LumenConversion
-from pkpdsim.pbpk.variants.segments import DATA, SMALL, Segment
+from pkpdsim.pbpk.variants.segments import SMALL, Segment
 
 __all__ = ["LumenBuilder"]
+
+
+def _fed_transit(table: str) -> Value:
+    """The transit time of the stomach in the fed state of the data of a species.
+
+    A species without a fed transit time in its data has the fasted one, with
+    a note.
+    """
+    if "transit_time_fed" in load(table)["stomach"]:
+        return value(table, "stomach", "transit_time_fed")
+    fasted = value(table, "stomach", "transit_time")
+    return replace(
+        fasted,
+        notes=f"no transit time of the fed state in {table}.toml: the fasted one "
+        f"({fasted.notes})",
+    )
+
 
 _SBO_PARAMETER = SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER
 
@@ -83,7 +102,7 @@ class LumenBuilder(StandardBuilder):
     def _lumen_segments(self) -> None:
         """The compartments, transit times and area factors of the lumen segments."""
         for seg in self.segments:
-            v = value(DATA, seg.key, "volume")
+            v = value(seg.table, seg.key, "volume")
             cid = ids.lumen_volume(seg.token)
             self.compartments[cid] = self._annotate(
                 Compartment(
@@ -101,7 +120,7 @@ class LumenBuilder(StandardBuilder):
             )
             self._constant(
                 ids.transit_time(seg.token),
-                value(DATA, seg.key, "transit_time"),
+                value(seg.table, seg.key, "transit_time"),
                 U.min,
                 f"transit time {seg.label} [min]",
                 "Mean transit time of the lumen segment (fasted), the transit "
@@ -112,7 +131,7 @@ class LumenBuilder(StandardBuilder):
             if seg.absorbs:
                 self._constant(
                     ids.area_factor(str(seg.token)),
-                    value(DATA, seg.key, "area_factor"),
+                    value(seg.table, seg.key, "area_factor"),
                     U.dimensionless,
                     f"absorption area factor {seg.label}",
                     "Mucosal surface per lumen volume relative to the small "
@@ -123,7 +142,7 @@ class LumenBuilder(StandardBuilder):
         if not self.single:
             self._constant(
                 ids.T_STOMACH_FED,
-                value(DATA, "stomach", "transit_time_fed"),
+                _fed_transit(self.segments[0].table),
                 U.min,
                 "transit time stomach fed [min]",
                 "Mean transit time of the stomach in the fed state (`FED = 1`).",

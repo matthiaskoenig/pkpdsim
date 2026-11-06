@@ -277,6 +277,7 @@ def organ_context(
         inhibitions=tuple((s.sid, i) for s in substances for i in s.inhibits),
         inductions=tuple((s.sid, i) for s in substances for i in s.induces),
         sex=definition.sex,
+        species=definition.species,
         routes=tuple(definition.routes),
         top=dict(top or {}),
         slow_pools=tuple(definition.slow_pools),
@@ -324,7 +325,7 @@ def compose(definition: PBPKDefinition) -> Model:
     return Model(
         sid=definition.sid,
         name=definition.name or definition.sid,
-        annotations=model_annotations(definition.substances),
+        annotations=model_annotations(definition.substances, definition.species),
         notes=definition.notes,
         creators=list(definition.creators),
         units=_units(top.objects),
@@ -1470,7 +1471,10 @@ class _Top:
         self.definition = definition
         self.objects: list[Sbase] = [
             *physiology_objects(
-                definition.sex, physiology_factors(), definition.population
+                definition.sex,
+                physiology_factors(),
+                definition.population,
+                definition.species,
             ),
             *impairment_objects(definition),
         ]
@@ -2102,7 +2106,9 @@ class _Top:
             )
         shared = self._ftissue_organs(s)
         if shared:
-            volumes = reference_tissue_volumes(self.definition.sex)
+            volumes = reference_tissue_volumes(
+                self.definition.sex, species=self.definition.species
+            )
             total = sum(volumes[o] for o in shared)
             objects.append(
                 annotate(
@@ -2198,7 +2204,9 @@ class _Top:
         ]
         for organ in organs:
             pid = ids.kp_organ(organ, sid)
-            share = distribution.interstitial_share(organ, fu, self.definition.sex)
+            share = distribution.interstitial_share(
+                organ, fu, self.definition.sex, self.definition.species
+            )
             formula = f"{fkp} * {share!r} dimensionless"
             objects += [
                 annotate(
@@ -2251,7 +2259,9 @@ class _Top:
                 "kp_factor",
             )
         ]
-        for organ, v in kp_values(s, self.definition.sex).items():
+        for organ, v in kp_values(
+            s, self.definition.sex, self.definition.species
+        ).items():
             pid = ids.kp_organ(organ, sid)
             formula = f"{fkp} * {v.value!r} dimensionless"
             citations = "\n".join(f"- {cite(key)}" for key in kp_sources(organ))

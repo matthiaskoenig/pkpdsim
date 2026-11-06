@@ -1,0 +1,184 @@
+# The reference physiology of the adult male mouse.
+#
+# The reference animal is the male mouse of 25 g (the reference body weight
+# of Arms and Travis 1988 discussed by Brown 1997: a male B6C3F1 mouse of about
+# 9 weeks; adult mice reach 35-40 g). Organ weights, blood flows and the
+# residual blood of the organs are those of the compilation of Brown 1997
+# (Tables 4, 21, 22, 24, 30, read from the scanned tables); what Brown 1997
+# lacks is taken from the PK-Sim database (PKSimDB, Open Systems Pharmacology,
+# develop aaebb648; the mouse of Thiel 2015), httk 2.7.4 (Davies and Morris
+# 1993) and the rat (tissue composition and densities).
+# Only the male: the organ weights, flows and residual blood of Brown 1997 are
+# not given per sex; female data found are listed in the report (rodents.md).
+#
+# Conventions, as physiology_human.toml, with these differences:
+# - Brown 1997 gives the weight of the excised organ with its residual blood
+#   and the volume fraction of that blood (Table 30, organ volume basis). The
+#   `mass` here is the tissue without blood, weight*(1 - phi); `blood` is
+#   phi*weight/density over the total blood volume, so that `f_vas` equals phi.
+# - `f_int` is Fint*(1 - f_vas) with Fint of the rat (httk has no mouse) of httk 2.7.4 tissue.data
+#   (reference Ruark 2014).
+# - `flow` is the fraction of the cardiac output (Brown 1997 Table 24, which lacks adipose, bone
+#   and the adrenals; the remainder of the flows, 'other_tissues', is large); the
+#   portal organs split the portal vein flow by the shares of the PK-Sim
+#   database (Brown 1997 has no single portal organ).
+# - The arterial and venous pools hold the blood outside the organs, divided
+#   25:75 (Brown 1997 p. 460); the portal vein is a model choice.
+# - Proposed new keys (no human counterpart): `cardiac_output_exponent`,
+#   `gfr_exponent` (the allometric exponent within the species) and
+#   `urine_flow`. There is no `height` for the mouse.
+# - Adipose is the remainder of the body weight; its value is the reference.
+
+[male]
+bodyweight = { value = 0.025, unit = "kg", source = "Brown1997", notes = "reference adult male mouse of 25 g (Arms and Travis 1988, discussed by Brown 1997 p. 413: a male B6C3F1 mouse of 25 g is about 9 weeks old; adult B6C3F1 mice reach 35-40 g); PK-Sim database mouse: 0.0210 kg" }
+body_surface_area = { value = 0.008396, unit = "m2", source = "Cheung2009", notes = "derived: Meeh formula BSA (cm2) = k*BW(g)^(2/3) with k = 9.82 of C57BL/6J mice (Cheung 2009, abstract: pelts scanned, not different from other inbred and outbred strains of normal body composition), at 25 g" }
+cardiac_output = { value = 0.01398, unit = "l/min", source = "Brown1997", notes = "Table 22, 13.98 +- 2.85 ml/min (12-16) in unanesthetized male C3H mice (Barbee 1992, Wang 1993b, microspheres, 16 animals; body weight not stated in Brown 1997); the flows of Table 24 are fractions of the same studies; Arms and Travis 1988: 0.275*BW^0.75 = 17.3 ml/min at 25 g; httk/Davies 1993: 150.4 ml/min/kg^0.75 = 9.46 ml/min" }
+cardiac_output_exponent = { value = 0.75, unit = "dimensionless", source = "Brown1997", notes = "allometric exponent of the cardiac output with body weight within the species assumed by Arms and Travis 1988 (Brown 1997 p. 440); no intraspecies fit of the mouse read" }
+hematocrit = { value = 0.45, unit = "dimensionless", source = "Davies1993", notes = "httk 2.7.4 physiology.data, mouse hematocrit 0.45 (Davies and Morris 1993, not read); the PK-Sim database mouse 0.45 (value origin Davies 1993); Riches 1973 (abstract): the venous hematocrit of the mouse differs markedly from the whole-body hematocrit" }
+gfr = { value = 0.2367, unit = "ml/min", source = "Qi2004", notes = "FITC-inulin plasma clearance after a bolus, two-compartment model, 236.69 +- 16.55 ul/min in conscious male C57BL/6J mice (abstract; female 140.20 +- 22.27; urinary clearance 211.11 and 157.36 ul/min); body weight not in the abstract; httk/Davies 1993: 5.265 ml/min/kg^0.75 = 0.331 ml/min; PK-Sim database 0.824 ml/min per ml kidney" }
+gfr_exponent = { value = 0.75, unit = "dimensionless", source = "Davies1993", notes = "assumption: the allometric scaling of httk (Davies and Morris 1993, ml/min/kg^0.75); no intraspecies fit of the mouse read" }
+hepatic_artery_fraction = { value = 0.1242, unit = "dimensionless", source = "Brown1997", notes = "derived: Table 24, hepatic artery 2.0 % of hepatic artery plus portal vein 2.0 + 14.1 % (Table 24 states a liver total of 16.2 %)" }
+urine_flow = { value = 0.0008211, unit = "ml/min", source = "Davies1993", notes = "derived: httk 2.7.4 physiology.data, urine 0.01306 ml/min/kg^0.75 (Davies and Morris 1993, not read) at 25 g, 1.2 ml/day" }
+
+[male.blood]
+volume = { value = 0.002118, unit = "l", source = "Riches1973", notes = "Riches 1973 (abstract): 84.7 +- 1.2 ml/kg of male CBA mice (59Fe red cells plus 131I albumin plasma volume; female CBA 96.3 +- 2.7, female CSI 95.0 +- 1.5 ml/kg) times 25 g; Brown 1997 Table 21: blood 4.9 % BW" }
+density = { value = 1.06, unit = "kg/l", source = "ICRP89", notes = "assumption: the specific gravity of human whole blood (ICRP 89 Section 7.2.1); no rodent value read" }
+arterial = { value = 0.08019, unit = "dimensionless", source = "Brown1997", notes = "derived: a quarter of the blood outside the organs and the portal vein, 0.25*(1 - 0.6784 - portal); the 25:75 division of the blood between arterial and venous circulation of Leggett and Williams 1991 and Mapleson 1963 (Brown 1997 p. 460); no rodent measurement of the pools read" }
+venous = { value = 0.2406, unit = "dimensionless", source = "Brown1997", notes = "derived: three quarters of the blood outside the organs and the portal vein, 25:75 division (Brown 1997 p. 460)" }
+portal = { value = 0.000828, unit = "dimensionless", source = "ModelChoice", notes = "the fraction of the human male (Chau 2023 portal vein cylinder over ICRP 89 blood volume) carried over, the portal vein assumed to scale with the blood volume; no rodent portal vein volume read; the PK-Sim database has a portal vein of 0.15 ml (of 0.90 ml of the arterial, venous and portal blood of a 21.0 g mouse), a compartment of the model rather than the vein" }
+
+[male.organs.lu]
+mass = { value = 9.125e-05, unit = "kg", source = "Brown1997", notes = "derived: excised organ weight 0.73 % BW times (1 - 0.5), the volume fraction of its residual blood (see blood); Table 4, 0.73 +- 0.08 % BW (5 studies, 35 animals)" }
+density = { value = 1.05, unit = "kg/l", source = "httk", notes = "httk 2.7.4 tissue.data, Rat, density of lung, reference EPA Physiological Parameters Database for PBPK Modeling (not read); the rat value, httk has no mouse densities" }
+flow = { value = 1.0, unit = "dimensionless", source = "Brown1997", notes = "in series, the lung receives the cardiac output; the bronchial flow of Table 24 (0.5 % CO) is in [unmapped]" }
+blood = { value = 0.04104, unit = "dimensionless", source = "Brown1997", notes = "derived: volume fraction of blood 0.5 times the organ volume 0.1738 ml over the blood volume; Table 30, mouse lung 0.50 (0.40-0.62, 3 studies)" }
+f_vas = { value = 0.5, unit = "dimensionless", source = "Brown1997", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), equal to the volume fraction of blood in the excised organ" }
+f_int = { value = 0.1625, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.325 (httk 2.7.4 tissue.data, Rat, reference Ruark 2014, Fint of lung); read in httk (MIT), Ruark 2014 itself not read; assumption: httk has no mouse composition (it uses the human for the mouse), the rat value is used" }
+
+[male.organs.he]
+mass = { value = 9.225e-05, unit = "kg", source = "Brown1997", notes = "derived: excised organ weight 0.5 % BW times (1 - 0.262), the volume fraction of its residual blood (see blood); Table 4, 0.50 +- 0.07 % BW (4 studies, 46 animals)" }
+density = { value = 1.03, unit = "kg/l", source = "httk", notes = "httk 2.7.4 tissue.data, Rat, density of heart, reference EPA Physiological Parameters Database for PBPK Modeling (not read); the rat value, httk has no mouse densities" }
+flow = { value = 0.066, unit = "dimensionless", source = "Brown1997", notes = "Table 24, heart 6.6 +- 0.9 % CO (2 studies, Barbee 1992, Wang 1993b)" }
+blood = { value = 0.01502, unit = "dimensionless", source = "Kawai1994", notes = "derived: volume fraction of blood 0.262 times the organ volume 0.1214 ml over the blood volume; Brown 1997 Table 30 has no mouse heart (rat 0.26); fraction vascular 0.262 of the PK-Sim database mouse (the rat value, origin Kawai 1994, not read)" }
+f_vas = { value = 0.262, unit = "dimensionless", source = "Kawai1994", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), equal to the volume fraction of blood in the excised organ" }
+f_int = { value = 0.1033, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.14 (httk 2.7.4 tissue.data, Rat, reference Ruark 2014, Fint of heart); read in httk (MIT), Ruark 2014 itself not read; assumption: httk has no mouse composition (it uses the human for the mouse), the rat value is used" }
+
+[male.organs.br]
+mass = { value = 0.0004001, unit = "kg", source = "Brown1997", notes = "derived: excised organ weight 1.65 % BW times (1 - 0.03), the volume fraction of its residual blood (see blood); Table 4, 1.65 +- 0.26 % BW (4 studies, 419 animals)" }
+density = { value = 1.035, unit = "kg/l", source = "httk", notes = "httk 2.7.4 tissue.data, Rat, density of brain, reference EPA Physiological Parameters Database for PBPK Modeling (not read); the rat value, httk has no mouse densities" }
+flow = { value = 0.033, unit = "dimensionless", source = "Brown1997", notes = "Table 24, brain 3.3 +- 0.3 % CO (2 studies)" }
+blood = { value = 0.005647, unit = "dimensionless", source = "Brown1997", notes = "derived: volume fraction of blood 0.03 times the organ volume 0.3986 ml over the blood volume; Table 30, mouse brain 0.03 (1 study)" }
+f_vas = { value = 0.03, unit = "dimensionless", source = "Brown1997", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), equal to the volume fraction of blood in the excised organ" }
+f_int = { value = 0.1571, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.162 (httk 2.7.4 tissue.data, Rat, reference Ruark 2014, Fint of brain); read in httk (MIT), Ruark 2014 itself not read; assumption: httk has no mouse composition (it uses the human for the mouse), the rat value is used" }
+
+[male.organs.li]
+mass = { value = 0.000947, unit = "kg", source = "Brown1997", notes = "derived: excised organ weight 5.49 % BW times (1 - 0.31), the volume fraction of its residual blood (see blood); Table 4, 5.49 +- 1.32 % BW (7 studies, 84 animals)" }
+density = { value = 1.05, unit = "kg/l", source = "httk", notes = "httk 2.7.4 tissue.data, Rat, density of liver, reference EPA Physiological Parameters Database for PBPK Modeling (not read); the rat value, httk has no mouse densities" }
+flow = { value = 0.02, unit = "dimensionless", source = "Brown1997", notes = "Table 24, hepatic artery 2.0 % CO (1 study, Wang 1993b); the portal organs (portal vein 14.1 %) feed the liver in addition; Table 24 liver total 16.2 %" }
+blood = { value = 0.1914, unit = "dimensionless", source = "Brown1997", notes = "derived: volume fraction of blood 0.31 times the organ volume 1.307 ml over the blood volume; Table 30, mouse liver 0.31 (0.23-0.36, 3 studies)" }
+f_vas = { value = 0.31, unit = "dimensionless", source = "Brown1997", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), equal to the volume fraction of blood in the excised organ" }
+f_int = { value = 0.08763, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.127 (httk 2.7.4 tissue.data, Rat, reference Ruark 2014, Fint of liver); read in httk (MIT), Ruark 2014 itself not read; assumption: httk has no mouse composition (it uses the human for the mouse), the rat value is used" }
+
+[male.organs.ki]
+mass = { value = 0.0003173, unit = "kg", source = "Brown1997", notes = "derived: excised organ weight 1.67 % BW times (1 - 0.24), the volume fraction of its residual blood (see blood); Table 4, 1.67 +- 0.17 % BW (7 studies, 84 animals)" }
+density = { value = 1.05, unit = "kg/l", source = "httk", notes = "httk 2.7.4 tissue.data, Rat, density of kidney, reference EPA Physiological Parameters Database for PBPK Modeling (not read); the rat value, httk has no mouse densities" }
+flow = { value = 0.091, unit = "dimensionless", source = "Brown1997", notes = "Table 24, kidneys 9.1 +- 2.9 % CO (2 studies)" }
+blood = { value = 0.04507, unit = "dimensionless", source = "Brown1997", notes = "derived: volume fraction of blood 0.24 times the organ volume 0.3976 ml over the blood volume; Table 30, mouse kidney 0.24 (0.12-0.34, 3 studies)" }
+f_vas = { value = 0.24, unit = "dimensionless", source = "Brown1997", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), equal to the volume fraction of blood in the excised organ" }
+f_int = { value = 0.111, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.146 (httk 2.7.4 tissue.data, Rat, reference Ruark 2014, Fint of kidney); read in httk (MIT), Ruark 2014 itself not read; assumption: httk has no mouse composition (it uses the human for the mouse), the rat value is used" }
+
+[male.organs.st]
+mass = { value = 0.0001452, unit = "kg", source = "Brown1997", notes = "derived: excised organ weight 0.6 % BW times (1 - 0.032), the volume fraction of its residual blood (see blood); Table 4, stomach 0.60 % BW (1 study, 5 animals; Table 18: Stott 1983)" }
+density = { value = 1.044, unit = "kg/l", source = "httk", notes = "httk 2.7.4 tissue.data, Rat, density of gut (httk has no stomach, pancreas or intestine segments: the gut), reference EPA Physiological Parameters Database for PBPK Modeling (not read); the rat value, httk has no mouse densities" }
+flow = { value = 0.008855, unit = "dimensionless", source = "PKSimDB", notes = "derived: the portal vein flow of Brown 1997 Table 24 (14.1 % CO) times the share 0.0628 of stomach in the portal organs of the PK-Sim database (0.11 of 1.752 ml/min, specific flow times volume, no value origin); Brown 1997 has no flows of the single portal organs" }
+blood = { value = 0.002171, unit = "dimensionless", source = "Kawai1994", notes = "derived: volume fraction of blood 0.032 times the organ volume 0.1437 ml over the blood volume; Brown 1997 Table 30 has no stomach; fraction vascular 0.032 of the PK-Sim database mouse (the rat value, origin Kawai 1994, not read)" }
+f_vas = { value = 0.032, unit = "dimensionless", source = "Kawai1994", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), equal to the volume fraction of blood in the excised organ" }
+f_int = { value = 0.09293, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (httk 2.7.4 tissue.data, Rat, reference Ruark 2014, Fint of gut) (httk has no stomach); read in httk (MIT), Ruark 2014 itself not read; assumption: httk has no mouse composition (it uses the human for the mouse), the rat value is used" }
+
+[male.organs.si]
+mass = { value = 0.0006173, unit = "kg", source = "Brown1997", notes = "derived: excised organ weight 2.53 % BW times (1 - 0.024), the volume fraction of its residual blood (see blood); Table 4, small intestine 2.53 % BW (1 study, 5 animals)" }
+density = { value = 1.044, unit = "kg/l", source = "httk", notes = "httk 2.7.4 tissue.data, Rat, density of gut (httk has no stomach, pancreas or intestine segments: the gut), reference EPA Physiological Parameters Database for PBPK Modeling (not read); the rat value, httk has no mouse densities" }
+flow = { value = 0.08048, unit = "dimensionless", source = "PKSimDB", notes = "derived: the portal vein flow of Brown 1997 Table 24 (14.1 % CO) times the share 0.5708 of small intestine in the portal organs of the PK-Sim database (1.0 of 1.752 ml/min, specific flow times volume, no value origin); Brown 1997 has no flows of the single portal organs" }
+blood = { value = 0.006867, unit = "dimensionless", source = "Kawai1994", notes = "derived: volume fraction of blood 0.024 times the organ volume 0.6058 ml over the blood volume; Brown 1997 Table 30 has no small intestine; fraction vascular 0.024 of the PK-Sim database mouse (the rat value, origin Kawai 1994, not read)" }
+f_vas = { value = 0.024, unit = "dimensionless", source = "Kawai1994", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), equal to the volume fraction of blood in the excised organ" }
+f_int = { value = 0.0937, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (httk 2.7.4 tissue.data, Rat, reference Ruark 2014, Fint of gut); read in httk (MIT), Ruark 2014 itself not read; assumption: httk has no mouse composition (it uses the human for the mouse), the rat value is used" }
+
+[male.organs.la]
+mass = { value = 0.000266, unit = "kg", source = "Brown1997", notes = "derived: excised organ weight 1.09 % BW times (1 - 0.024), the volume fraction of its residual blood (see blood); Table 4, large intestine 1.09 % BW (1 study, 3 animals)" }
+density = { value = 1.044, unit = "kg/l", source = "httk", notes = "httk 2.7.4 tissue.data, Rat, density of gut (httk has no stomach, pancreas or intestine segments: the gut), reference EPA Physiological Parameters Database for PBPK Modeling (not read); the rat value, httk has no mouse densities" }
+flow = { value = 0.04024, unit = "dimensionless", source = "PKSimDB", notes = "derived: the portal vein flow of Brown 1997 Table 24 (14.1 % CO) times the share 0.2854 of large intestine in the portal organs of the PK-Sim database (0.5 of 1.752 ml/min, specific flow times volume, no value origin); Brown 1997 has no flows of the single portal organs" }
+blood = { value = 0.002958, unit = "dimensionless", source = "Kawai1994", notes = "derived: volume fraction of blood 0.024 times the organ volume 0.261 ml over the blood volume; Brown 1997 Table 30 has no large intestine; fraction vascular 0.024 of the PK-Sim database mouse (the rat value, origin Kawai 1994, not read)" }
+f_vas = { value = 0.024, unit = "dimensionless", source = "Kawai1994", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), equal to the volume fraction of blood in the excised organ" }
+f_int = { value = 0.0937, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (httk 2.7.4 tissue.data, Rat, reference Ruark 2014, Fint of gut); read in httk (MIT), Ruark 2014 itself not read; assumption: httk has no mouse composition (it uses the human for the mouse), the rat value is used" }
+
+[male.organs.sp]
+mass = { value = 7.262e-05, unit = "kg", source = "Brown1997", notes = "derived: excised organ weight 0.35 % BW times (1 - 0.17), the volume fraction of its residual blood (see blood); Table 4, 0.35 +- 0.16 % BW (5 studies, 60 animals)" }
+density = { value = 1.054, unit = "kg/l", source = "httk", notes = "httk 2.7.4 tissue.data, Rat, density of spleen, reference EPA Physiological Parameters Database for PBPK Modeling (not read); the rat value, httk has no mouse densities" }
+flow = { value = 0.007247, unit = "dimensionless", source = "PKSimDB", notes = "derived: the portal vein flow of Brown 1997 Table 24 (14.1 % CO) times the share 0.0514 of spleen in the portal organs of the PK-Sim database (0.09 of 1.752 ml/min, specific flow times volume, no value origin); Brown 1997 has no flows of the single portal organs" }
+blood = { value = 0.006665, unit = "dimensionless", source = "Brown1997", notes = "derived: volume fraction of blood 0.17 times the organ volume 0.08302 ml over the blood volume; Table 30, mouse spleen 0.17 (0.17-0.19, 3 studies)" }
+f_vas = { value = 0.17, unit = "dimensionless", source = "Brown1997", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), equal to the volume fraction of blood in the excised organ" }
+f_int = { value = 0.2117, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.255 (httk 2.7.4 tissue.data, Rat, reference Ruark 2014, Fint of spleen); read in httk (MIT), Ruark 2014 itself not read; assumption: httk has no mouse composition (it uses the human for the mouse), the rat value is used" }
+
+[male.organs.pa]
+mass = { value = 0.0001268, unit = "kg", source = "PKSimDB", notes = "derived: excised organ weight 0.6187 % BW times (1 - 0.18), the volume fraction of its residual blood (see blood); derived: PK-Sim database mouse pancreas volume 0.13 ml of the database mouse of 21.01 g (MeanBW) as % BW, 0.619 %; Brown 1997 Table 4: see text, few data (p. 427: 0.5-0.7 % in two strains of obese New Zealand mice, Crispens 1975)" }
+density = { value = 1.044, unit = "kg/l", source = "httk", notes = "httk 2.7.4 tissue.data, Rat, density of gut (httk has no stomach, pancreas or intestine segments: the gut), reference EPA Physiological Parameters Database for PBPK Modeling (not read); the rat value, httk has no mouse densities" }
+flow = { value = 0.004188, unit = "dimensionless", source = "PKSimDB", notes = "derived: the portal vein flow of Brown 1997 Table 24 (14.1 % CO) times the share 0.0297 of pancreas in the portal organs of the PK-Sim database (0.052 of 1.752 ml/min, specific flow times volume, no value origin); Brown 1997 has no flows of the single portal organs" }
+blood = { value = 0.01259, unit = "dimensionless", source = "Kawai1994", notes = "derived: volume fraction of blood 0.18 times the organ volume 0.1482 ml over the blood volume; fraction vascular 0.18 of the PK-Sim database mouse (the rat value, origin Kawai 1994, not read)" }
+f_vas = { value = 0.18, unit = "dimensionless", source = "Kawai1994", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), equal to the volume fraction of blood in the excised organ" }
+f_int = { value = 0.07872, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (httk 2.7.4 tissue.data, Rat, reference Ruark 2014, Fint of gut) (assumption: httk has no pancreas, the value of the gut is used); read in httk (MIT), Ruark 2014 itself not read; assumption: httk has no mouse composition (it uses the human for the mouse), the rat value is used" }
+
+[male.organs.mu]
+mass = { value = 0.009216, unit = "kg", source = "Brown1997", notes = "derived: excised organ weight 38.4 % BW times (1 - 0.04), the volume fraction of its residual blood (see blood); Table 4, 38.40 +- 1.81 % BW (4 studies, 40 animals)" }
+density = { value = 1.041, unit = "kg/l", source = "httk", notes = "httk 2.7.4 tissue.data, Rat, density of muscle, reference EPA Physiological Parameters Database for PBPK Modeling (not read); the rat value, httk has no mouse densities" }
+flow = { value = 0.159, unit = "dimensionless", source = "Brown1997", notes = "Table 24, muscle 15.9 +- 5.2 % CO (2 studies)" }
+blood = { value = 0.1742, unit = "dimensionless", source = "Brown1997", notes = "derived: volume fraction of blood 0.04 times the organ volume 9.222 ml over the blood volume; Table 30, mouse muscle 0.04 (0.03-0.05, 2 studies)" }
+f_vas = { value = 0.04, unit = "dimensionless", source = "Brown1997", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), equal to the volume fraction of blood in the excised organ" }
+f_int = { value = 0.119, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.124 (httk 2.7.4 tissue.data, Rat, reference Ruark 2014, Fint of muscle); read in httk (MIT), Ruark 2014 itself not read; assumption: httk has no mouse composition (it uses the human for the mouse), the rat value is used" }
+
+[male.organs.sk]
+mass = { value = 0.004009, unit = "kg", source = "Brown1997", notes = "derived: excised organ weight 16.53 % BW times (1 - 0.03), the volume fraction of its residual blood (see blood); Table 4, 16.53 +- 3.39 % BW (5 studies, 45 animals)" }
+density = { value = 1.117, unit = "kg/l", source = "httk", notes = "httk 2.7.4 tissue.data, Rat, density of skin, reference EPA Physiological Parameters Database for PBPK Modeling (not read); the rat value, httk has no mouse densities" }
+flow = { value = 0.058, unit = "dimensionless", source = "Brown1997", notes = "Table 24, skin 5.8 +- 3.5 % CO (2 studies)" }
+blood = { value = 0.05242, unit = "dimensionless", source = "Brown1997", notes = "derived: volume fraction of blood 0.03 times the organ volume 3.7 ml over the blood volume; Table 30, mouse skin 0.03 (1 study)" }
+f_vas = { value = 0.03, unit = "dimensionless", source = "Brown1997", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), equal to the volume fraction of blood in the excised organ" }
+f_int = { value = 0.3094, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.319 (httk 2.7.4 tissue.data, Rat, reference Ruark 2014, Fint of skin); read in httk (MIT), Ruark 2014 itself not read; assumption: httk has no mouse composition (it uses the human for the mouse), the rat value is used" }
+
+[male.organs.ad]
+mass = { value = 0.001733, unit = "kg", source = "Brown1997", notes = "derived: excised organ weight 7.0 % BW times (1 - 0.01), the volume fraction of its residual blood (see blood); Table 21, adipose about 7.0 % BW of the mouse (Table 10: dissectible fat 5-14 %, strain and age dependent); reference only: adipose is the remainder of the body weight" }
+density = { value = 0.916, unit = "kg/l", source = "httk", notes = "httk 2.7.4 tissue.data, Rat, density of adipose, reference EPA Physiological Parameters Database for PBPK Modeling (not read); the rat value, httk has no mouse densities" }
+flow = { value = 0.027, unit = "dimensionless", source = "Davies1993", notes = "derived: httk 2.7.4 physiology.data and tissue.data (Davies and Morris 1993): adipose 4.061 of the cardiac output 150.4 ml/min/kg^0.75; Brown 1997 Table 24 has no mouse adipose; Davies and Morris 1993 not read" }
+blood = { value = 0.009022, unit = "dimensionless", source = "Kawai1994", notes = "derived: volume fraction of blood 0.01 times the organ volume 1.91 ml over the blood volume; Brown 1997 Table 30 lists one mouse study of adipose without a value; fraction vascular 0.01 of the PK-Sim database mouse (the rat value, origin Kawai 1994, not read)" }
+f_vas = { value = 0.01, unit = "dimensionless", source = "Kawai1994", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), equal to the volume fraction of blood in the excised organ" }
+f_int = { value = 0.1386, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.14 (httk 2.7.4 tissue.data, Rat, reference Ruark 2014, Fint of adipose); read in httk (MIT), Ruark 2014 itself not read; assumption: httk has no mouse composition (it uses the human for the mouse), the rat value is used" }
+
+[male.organs.bo]
+mass = { value = 0.002387, unit = "kg", source = "Brown1997", notes = "derived: excised organ weight 10.73 % BW times (1 - 0.11), the volume fraction of its residual blood (see blood); Table 4, 10.73 +- 0.53 % BW (3 studies, 30 animals), skeleton" }
+density = { value = 1.49, unit = "kg/l", source = "Brown1997", notes = "derived: p. 425, skeleton (without cartilage) of the mature small animal 7.3 g and 4.9 ml per 100 g BW (O'Flaherty 1991a), 7.3/4.9; the rat value, no mouse value read" }
+flow = { value = 0.05828, unit = "dimensionless", source = "Davies1993", notes = "derived: httk 2.7.4 physiology.data and tissue.data (Davies and Morris 1993): bone 8.766 of the cardiac output 150.4 ml/min/kg^0.75; Brown 1997 Table 24 has no mouse bone; Davies and Morris 1993 not read" }
+blood = { value = 0.09354, unit = "dimensionless", source = "Brown1997", notes = "derived: volume fraction of blood 0.11 times the organ volume 1.801 ml over the blood volume; Table 30, mouse bone 0.11 (1 study)" }
+f_vas = { value = 0.11, unit = "dimensionless", source = "Brown1997", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), equal to the volume fraction of blood in the excised organ" }
+f_int = { value = 0.089, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.1 (httk 2.7.4 tissue.data, Rat, reference Ruark 2014, Fint of bone); read in httk (MIT), Ruark 2014 itself not read; assumption: httk has no mouse composition (it uses the human for the mouse), the rat value is used" }
+
+[male.organs.go]
+mass = { value = 0.0002558, unit = "kg", source = "PKSimDB", notes = "derived: excised organ weight 1.19 % BW times (1 - 0.14), the volume fraction of its residual blood (see blood); derived: PK-Sim database mouse gonads volume 0.25 ml of the database mouse of 21.01 g (MeanBW) as % BW, 1.190 %; no value origin in the database; Brown 1997 has no gonads" }
+flow = { value = 0.004085, unit = "dimensionless", source = "PKSimDB", notes = "derived: specific blood flow 0.192 ml/min/ml of the PK-Sim database gonads (no value origin) times the gonad volume 0.2975 ml over the cardiac output" }
+blood = { value = 0.01967, unit = "dimensionless", source = "PKSimDB", notes = "derived: volume fraction of blood 0.14 times the organ volume 0.2975 ml over the blood volume; fraction vascular 0.14 of the PK-Sim database gonads, no value origin" }
+f_vas = { value = 0.14, unit = "dimensionless", source = "PKSimDB", notes = "derived: blood*V_blood / (mass/density + blood*V_blood), equal to the volume fraction of blood in the excised organ" }
+f_int = { value = 0.08256, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (httk 2.7.4 tissue.data, Rat, reference Ruark 2014, Fint of gut) (assumption: httk has no gonads, the value of the gut is used); read in httk (MIT), Ruark 2014 itself not read; assumption: httk has no mouse composition (it uses the human for the mouse), the rat value is used" }
+
+[male.unmapped.adrenals]
+mass = { value = 1.164e-05, unit = "kg", source = "Brown1997", notes = "derived: Table 4, adrenals 0.048 % BW (Dowell 1992, 5 animals) times (1 - 0.03), its residual blood" }
+# flow: Brown 1997 Table 24 has no adrenal flow of the mouse; counted in other_tissues
+blood = { value = 0.00017, unit = "dimensionless", source = "Brown1997", notes = "derived: volume fraction of blood 0.03 times the organ weight (density 1 kg/l) over the blood volume; Table 30, mouse adrenal 0.03 (1 study)" }
+
+[male.unmapped.bronchial]
+flow = { value = 0.005, unit = "dimensionless", source = "Brown1997", notes = "Table 24, lung (bronchial flow) 0.5 % CO (1 study); the lung tissue is the organ lu, which receives the cardiac output; its blood is counted in lu" }
+
+[male.unmapped.gi_contents]
+mass = { value = 0.001425, unit = "kg", source = "Brown1997", notes = "Table 21, gastrointestinal tract contents 5.7 % BW of the mouse" }
+
+[male.unmapped.unlisted]
+mass = { value = 0.000625, unit = "kg", source = "Brown1997", notes = "Table 21, rest of body 2.5 % BW of the mouse (the term which closes the mass balance of Table 21 to 100 %)" }
+
+[male.unmapped.other_tissues]
+flow = { value = 0.3376, unit = "dimensionless", source = "ModelChoice", notes = "derived: 1 less the flows of the organs (lung excluded) and of the unmapped tissues above, the tissues of the cardiac output which no table names (thyroid, gonads beyond the database value, connective tissue, carcass)" }
