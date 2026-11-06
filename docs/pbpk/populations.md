@@ -25,7 +25,10 @@ vp = virtual_population(
 women = vp.of_sex(Sex.FEMALE)
 print(len(vp), len(women))
 print(round(float(np.mean([i.age for i in vp.individuals])), 1))
-print(round(float(np.median([i.bw for i in women])), 1), round(float(np.mean([i.height for i in women])), 1))
+print(
+    round(float(np.median([i.bw for i in women])), 1),
+    round(float(np.mean([i.height for i in women])), 1),
+)
 print(sorted(vp.values(Sex.FEMALE)))
 ```
 
@@ -57,8 +60,13 @@ class ElderlyPopulation(HctzSimulationExperiment):
     def simulations(self) -> dict[str, Scan]:
         dose = Simulation(end=48 * 60, preinit_changes={"PODOSE_hctz": Q(25, "mg")})
         return {
-            "po_men": Scan(dose, dimensions=[self.population_dimension(self.population, Sex.MALE)]),
-            "po_women": Scan(dose, dimensions=[self.population_dimension(self.population, Sex.FEMALE)]),
+            "po_men": Scan(
+                dose, dimensions=[self.population_dimension(self.population, Sex.MALE)]
+            ),
+            "po_women": Scan(
+                dose,
+                dimensions=[self.population_dimension(self.population, Sex.FEMALE)],
+            ),
         }
 ```
 
