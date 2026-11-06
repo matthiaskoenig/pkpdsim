@@ -141,7 +141,7 @@ def fitted(
     """Get the value of a fitted parameter.
 
     Args:
-        kwargs: the keyword arguments of `FitRecords.parameter(pid, unit=...)`:
+        kwargs: the keyword arguments of `AdoptedRecords.parameter(pid, unit=...)`:
             `value`, `uncertainties` and `unit`.
         source: the provenance of the value.
         notes: a remark on the value, e.g. the literature of the process; the

@@ -2,8 +2,9 @@
 
 from sbmlsim.fit import FitMappingCollection, FitParameter
 from sbmlsim.fit.cli import FitDefinition
+from sbmlsim.fit.helpers import select_mappings
 
-from pkpdsim.fit import default_fit_settings, metadata_filter, select_mappings
+from pkpdsim.fit import default_fit_settings, metadata_filter
 from pkpdsim.metadata import Route
 from pkpdsim_toy import DATA_PATHS, MODEL, TOY_PATH
 from pkpdsim_toy.experiments.decay import ToyDecay

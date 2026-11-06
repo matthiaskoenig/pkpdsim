@@ -38,12 +38,12 @@ of every fitted parameter and the Fisher information around the best parameter
 set, which end up in the identifiability section of the report of the fit.
 `run_fit <package> --adopt <fit id>` copies the record of a finished fit into
 the adopted fits of the model, whose values and uncertainty the factory takes
-(`pkpdsim.uncertainty.adopt_fit`).
+(`sbmlsim.fit.records.adopt_fit`).
 `run_report` and `run_identifiability` (`report_command`,
 `identifiability_command`) work on the `parameters.json` of an earlier fit
 (`sbmlsim.fit.cli.report_cli`, `identifiability_cli`);
 `run_report <package> --adopted` writes the report of every adopted fit of the
-model from its record (`pkpdsim.reports.adopted_reports`).
+model from its record (`sbmlsim.fit.cli.report_from_records`).
 `run_credibility` (`credibility_command`) assesses the contexts of use of the
 model against its adopted fits (`pkpdsim.credibility.assess`) and writes the
 record, the tables and the report (`pkpdsim.credibility.report`); with
@@ -77,13 +77,25 @@ from sbmlsim.fit.cli import (
     FitDefinition,
     FitRun,
     identifiability_cli,
+    load_fit_records,
+    records_context,
     report_cli,
+    report_context,
+    report_from_records,
     run_fit,
 )
 from sbmlsim.fit.fisher import FisherInformation
 from sbmlsim.fit.identifiability import IdentifiabilityResult, ProfileSettings
 from sbmlsim.fit.options import OptimizationAlgorithmType, OptimizationStrategy
-from sbmlsim.fit.result import fit_id
+from sbmlsim.fit.project_fits import (
+    FIXED_FITS,
+    fixed_values,
+    remainder_problems,
+    start_point,
+    with_start,
+)
+from sbmlsim.fit.records import adopt_fit
+from sbmlsim.fit.result import fit_id, fit_subset
 from sbmlsim.fit.sampling import SamplingType
 from sbmlsim.project import resolve
 from sbmlsim.utils import paths_text
@@ -97,15 +109,6 @@ from pkpdsim.credibility import (
     assess,
 )
 from pkpdsim.credibility.report import print_summary, write_outputs
-from pkpdsim.fit import (
-    FIXED_FITS,
-    fixed_values,
-    records_context,
-    remainder_problems,
-    report_context,
-    start_point,
-    with_start,
-)
 from pkpdsim.model import RUN_WORKERS, PKPDModel
 from pkpdsim.profiling import (
     PROFILE_OPTION,
@@ -113,8 +116,7 @@ from pkpdsim.profiling import (
     record_exit_code,
     run_profiled,
 )
-from pkpdsim.reports import adopted_reports
-from pkpdsim.uncertainty import UncertaintySettings, adopt_fit
+from pkpdsim.uncertainty import UncertaintySettings
 
 if TYPE_CHECKING:
     from sbmlsim.experiment import SimulationExperiment
@@ -751,7 +753,7 @@ def _adopt(model: PKPDModel, fit_dir: Path, *, force: bool) -> Path:
         console.print(
             f"Add '{fit_dir.name}' to `fits` of the model object, the factory takes "
             f"the fitted values and their uncertainty from the record "
-            f"(`FitRecords.parameter`).",
+            f"(`AdoptedRecords.parameter`).",
             style="warning",
         )
     return record
@@ -924,14 +926,62 @@ def _cross_validate(model: PKPDModel, options: argparse.Namespace) -> None:
     display.key_values({"cross-validation": path})
 
 
+def _adopted_reports(
+    model: PKPDModel, output_dir: Path, *, mapping_figures: bool = True
+) -> list[Path]:
+    """Write the report of every adopted fit of a model, each from its record.
+
+    No fit is run. The report of a record is the report which `run_report
+    <package> --subset <subset> --name <fit id> <record>/parameters.json`
+    writes for it: the problem of its subset, the settings the fit ran with,
+    the records of the fit (`sbmlsim.fit.cli.report_from_records`) and the
+    context of the model (`sbmlsim.fit.cli.records_context`).
+
+    Args:
+        model: the model, its `adopted_ids` are the fits to report.
+        output_dir: the directory of the reports, every report is written into
+            the folder named by its fit id.
+        mapping_figures: create the figures of the fit mappings.
+
+    Returns:
+        The directories of the reports, in the order of `model.adopted_ids`.
+
+    Raises:
+        ValueError: if the model has no adopted fits, or the subset of an
+            adopted fit has no fit definition.
+        FileNotFoundError: if the record of an adopted fit has no
+            `parameters.json`.
+    """
+    if not model.adopted_ids:
+        raise ValueError(f"The model '{model.name}' has no adopted fits.")
+    definitions = model.load_fit_definitions()
+    context = records_context(model)
+    directories: list[Path] = []
+    for adopted_id in model.adopted_ids:
+        record = model.adopted_record(adopted_id)
+        subset = fit_subset(adopted_id)
+        definition = definitions[subset]
+        records = load_fit_records(record)
+        report = report_from_records(
+            definition,
+            record,
+            opid=subset,
+            records=records,
+            context=context(subset, definition, records),
+            mapping_figures=mapping_figures,
+        )
+        directories.append(report.create(output_dir=output_dir, name=adopted_id))
+    return directories
+
+
 def report_command(model: PKPDModel, args: Sequence[str] | None = None) -> Path:
     """Report stored parameter sets of a model (`sbmlsim.fit.cli.report_cli`).
 
     The report has the context of the model, with the fixed adopted fits which
     the record of the fit next to the parameters names
-    (`pkpdsim.fit.records_context`). With `--adopted` the report of every
+    (`sbmlsim.fit.cli.records_context`). With `--adopted` the report of every
     adopted fit of the model is written from its record, see
-    `pkpdsim.reports.adopted_reports`.
+    `_adopted_reports`.
 
     Args:
         model: the model.
@@ -958,7 +1008,7 @@ def report_command(model: PKPDModel, args: Sequence[str] | None = None) -> Path:
         p.add_argument("--no-mapping-figures", action="store_true")
         options = p.parse_args(arguments)
         try:
-            directories = adopted_reports(
+            directories = _adopted_reports(
                 model,
                 options.output_dir,
                 mapping_figures=not options.no_mapping_figures,

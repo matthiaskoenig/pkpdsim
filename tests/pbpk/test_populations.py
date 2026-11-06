@@ -5,6 +5,7 @@ from pathlib import Path
 
 import libsbml
 import pytest
+from sbmlsim.simulation.sampling import parameter_distributions
 from sbmlutils.factory import Model, Uncertainty, UncertParameter, create_model
 
 from pkpdsim.pbpk import MODEL_UNITS, KpMethod, U, Value, build, ids, sources
@@ -16,7 +17,6 @@ from pkpdsim.pbpk.populations import (
     Anthropometry,
     population,
 )
-from pkpdsim.uncertainty import parameter_distributions
 
 from .conftest import definition, individual, simple_drug
 from .test_physiology import _assert_balance, _assert_flows

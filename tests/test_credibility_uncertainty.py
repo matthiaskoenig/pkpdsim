@@ -16,6 +16,7 @@ from credibility_tables import fit_table
 from pkpdsim_credibility.credibility import CREDIBILITY
 from sbmlsim.fit.fisher import FisherInformation
 from sbmlsim.fit.objects import ParameterScaleType
+from sbmlsim.fit.records import ParameterUncertainty, UncertaintyMethod
 
 from pkpdsim.cli import credibility_command
 from pkpdsim.credibility import (
@@ -36,7 +37,6 @@ from pkpdsim.credibility.uncertainty import (
     sensitivity_indices,
 )
 from pkpdsim.model import PKPDModel
-from pkpdsim.uncertainty import ParameterUncertainty, UncertaintyMethod
 
 PROVENANCE = Provenance(
     model="credibility",

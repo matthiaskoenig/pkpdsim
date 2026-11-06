@@ -2,16 +2,13 @@
 
 import copy
 import dataclasses
-import json
 import multiprocessing
 import os
-import pickle
 from concurrent.futures import ProcessPoolExecutor
-from pathlib import Path
 
 import pytest
 from sbmlsim.experiment import ExperimentRunner
-from sbmlsim.fit import FitMapping, FitMappingCollection, FitSettings, MappingKind
+from sbmlsim.fit import FitMapping, FitSettings
 from sbmlsim.fit.objects import MappingMetaData
 from sbmlsim.fit.optimization import OptimizationProblem
 from sbmlsim.fit.options import (
@@ -29,17 +26,10 @@ from pkpdsim.fit import (
     default_fit_settings,
     mapping_metadata,
     metadata_filter,
-    named_filter,
-    observable_filter,
-    observable_id,
-    select_mappings,
-    start_point,
 )
 from pkpdsim.metadata import (
     Coadministration,
     Dosing,
-    Fasting,
-    Health,
     PKPDMappingMetaData,
     Route,
     SamplingSite,
@@ -95,162 +85,12 @@ def test_other_metadata_is_an_error(fit_mapping: FitMapping) -> None:
         mapping_metadata(fit_mapping, OtherMetaData)
 
 
-def test_the_observable_of_a_mapping(fit_mapping: FitMapping) -> None:
-    assert observable_id(fit_mapping) == "A"
-
-
 def with_metadata(fit_mapping: FitMapping, **changes: object) -> FitMapping:
     """A copy of the mapping whose metadata differs in some fields."""
     metadata = mapping_metadata(fit_mapping, PKPDMappingMetaData)
     other = copy.copy(fit_mapping)
     other.metadata = dataclasses.replace(metadata, **changes)
     return other
-
-
-def test_a_mapping_with_an_allowed_value_passes(fit_mapping: FitMapping) -> None:
-    control = metadata_filter(PKPDMappingMetaData, route={Route.IV, Route.PO})
-    assert control("fm_decay_A", fit_mapping)
-    assert not control("fm_decay_A", with_metadata(fit_mapping, route=Route.SC))
-
-
-def test_every_clause_must_hold(fit_mapping: FitMapping) -> None:
-    control = metadata_filter(
-        PKPDMappingMetaData, route={Route.IV}, health={Health.HEALTHY}
-    )
-    assert control("fm_decay_A", fit_mapping)
-    assert not control("fm_decay_A", with_metadata(fit_mapping, route=Route.PO))
-
-
-def test_an_excluded_value_fails(fit_mapping: FitMapping) -> None:
-    single = metadata_filter(
-        PKPDMappingMetaData, excluded={"dosing": {Dosing.MULTIPLE}}
-    )
-    assert single("fm_decay_A", fit_mapping)
-    assert not single("fm_decay_A", with_metadata(fit_mapping, dosing=Dosing.MULTIPLE))
-
-
-def test_a_constant_set_is_a_clause(fit_mapping: FitMapping) -> None:
-    control_fasting = {Fasting.FASTED, Fasting.NR}
-    fasted = metadata_filter(PKPDMappingMetaData, fasting=control_fasting)
-    assert fasted("fm_decay_A", fit_mapping)
-    assert not fasted("fm_decay_A", with_metadata(fit_mapping, fasting=Fasting.FED))
-
-
-def test_an_unknown_field_fails_when_the_filter_is_built() -> None:
-    with pytest.raises(TypeError, match=r"PKPDMappingMetaData has no field.*diplotype"):
-        metadata_filter(PKPDMappingMetaData, diplotype={"*1/*1"})
-    with pytest.raises(TypeError, match=r"has no field.*tisue"):
-        metadata_filter(PKPDMappingMetaData, excluded={"tisue": {Tissue.URINE}})
-
-
-def test_a_filter_needs_a_clause_and_values() -> None:
-    with pytest.raises(ValueError, match="at least one clause"):
-        metadata_filter(PKPDMappingMetaData)
-    with pytest.raises(ValueError, match=r"selects nothing.*route"):
-        metadata_filter(PKPDMappingMetaData, route=set())
-
-
-def test_a_single_value_is_not_a_collection() -> None:
-    with pytest.raises(TypeError, match=r"route.*collection"):
-        metadata_filter(PKPDMappingMetaData, route=Route.IV)
-    with pytest.raises(TypeError, match=r"dosing.*collection"):
-        metadata_filter(PKPDMappingMetaData, excluded={"dosing": Dosing.SINGLE})
-    with pytest.raises(TypeError, match=r"route.*collection"):
-        metadata_filter(PKPDMappingMetaData, route=None)  # ty: ignore[invalid-argument-type]
-    with pytest.raises(TypeError, match=r"observables.*collection"):
-        observable_filter("Cve_hctz")
-
-
-def test_an_empty_exclusion_or_observable_set_is_an_error() -> None:
-    with pytest.raises(ValueError, match=r"excludes nothing.*dosing"):
-        metadata_filter(PKPDMappingMetaData, excluded={"dosing": set()})
-    with pytest.raises(ValueError, match=r"observables.*selects nothing"):
-        observable_filter([])
-
-
-def test_the_metadata_class_is_not_an_instance() -> None:
-    metadata = PKPDMappingMetaData(
-        tissue=Tissue.PLASMA,
-        route=Route.IV,
-        dosing=Dosing.SINGLE,
-        health=Health.HEALTHY,
-    )
-    with pytest.raises(TypeError, match="class, not an instance"):
-        metadata_filter(metadata, route={Route.IV})  # ty: ignore[invalid-argument-type]
-
-
-def test_the_metadata_class_must_be_a_dataclass() -> None:
-    class OtherMetaData:
-        route: Route
-
-    with pytest.raises(TypeError, match="OtherMetaData is not a dataclass"):
-        metadata_filter(OtherMetaData, route={Route.IV})  # ty: ignore[invalid-argument-type]
-
-
-def test_the_filter_checks_the_type_of_the_metadata(fit_mapping: FitMapping) -> None:
-    other = dataclasses.make_dataclass(
-        "Other", [("route", Route)], bases=(MappingMetaData,), kw_only=True
-    )
-    with pytest.raises(TypeError, match="Other required on"):
-        metadata_filter(other, route={Route.IV})("fm_decay_A", fit_mapping)  # ty: ignore[invalid-argument-type]
-
-
-def test_the_filter_says_what_it_selects() -> None:
-    control = metadata_filter(
-        PKPDMappingMetaData,
-        route={Route.PO, Route.IV},
-        excluded={"dosing": {Dosing.MULTIPLE}},
-    )
-    assert repr(control) == (
-        "MetadataFilter(PKPDMappingMetaData: route in [IV, PO] "
-        "and dosing not in [MULTIPLE])"
-    )
-
-
-def test_the_observable_filter(fit_mapping: FitMapping) -> None:
-    pk_filter = observable_filter({"A", "B"})
-    assert pk_filter("fm_decay_A", fit_mapping)
-    assert not observable_filter({"B"})("fm_decay_A", fit_mapping)
-    assert repr(pk_filter) == "ObservableFilter(A, B)"
-
-
-def test_named_filter_selects_the_keys_of_their_study(fit_mapping: FitMapping) -> None:
-    assert named_filter({"ToyDecay": {"fm_decay_A"}})("fm_decay_A", fit_mapping) is True
-    assert named_filter({"Other": {"fm_decay_A"}})("fm_decay_A", fit_mapping) is False
-
-
-def test_named_filter_pickles() -> None:
-    f = named_filter({"ToyDecay": {"fm_decay_A"}})
-    assert pickle.loads(pickle.dumps(f)) == f
-
-
-def test_named_filter_is_sorted() -> None:
-    f = named_filter({"B": {"y", "x"}, "A": {"z"}})
-    assert f.mappings == (("A", frozenset({"z"})), ("B", frozenset({"x", "y"})))
-
-
-def training(collections: dict[str, list[FitMappingCollection]]) -> list[list[str]]:
-    return [
-        c.mappings for c in collections["ToyDecay"] if c.kind is MappingKind.TRAINING
-    ]
-
-
-def test_the_mappings_are_selected_by_the_filters() -> None:
-    selected = select_mappings(
-        MODEL, [ToyDecay], [metadata_filter(PKPDMappingMetaData, route={Route.IV})]
-    )
-    assert training(selected) == [["fm_decay_A"]]
-    excluded = select_mappings(
-        MODEL, [ToyDecay], [metadata_filter(PKPDMappingMetaData, route={Route.PO})]
-    )
-    assert training(excluded) == []
-
-
-def test_outliers_and_validation_are_passed_on() -> None:
-    outlier = select_mappings(MODEL, [ToyDecay], outliers={"fm_decay_A"})
-    assert training(outlier) == []
-    with pytest.raises(ValueError, match="no_mapping"):
-        select_mappings(MODEL, [ToyDecay], validation={"no_mapping"})
 
 
 def test_metadata_filter_defaults_to_the_shared_metadata() -> None:
@@ -310,6 +150,15 @@ def test_a_filter_on_the_sampling_site_compares_the_resolved_site(
     assert not arm("k", urine)
 
 
+def test_the_filter_value_of_the_sampling_site_is_the_resolved_site(
+    fit_mapping: FitMapping,
+) -> None:
+    metadata = mapping_metadata(fit_mapping)
+    assert metadata.sampling_site is None
+    assert metadata.filter_value("sampling_site") is SamplingSite.ARM_VEIN
+    assert metadata.filter_value("route") is Route.IV
+
+
 #: the environment variable of sbmlsim of the level of a model loaded without one
 JIT_VARIABLE = "SBMLSIM_JIT_OPTIMIZATION"
 
@@ -365,19 +214,3 @@ def test_a_worker_loads_the_models_at_the_level_of_the_model(
     plain = MODEL.load_fit_definitions()["DECAY"]
     assert plain.jit_optimization is None
     assert plain.problem(opid="default").jit_optimization == "O2"
-
-
-def test_a_start_without_the_unit_of_a_parameter_is_refused(tmp_path: Path) -> None:
-    """A value of a fit without its unit cannot be converted into the unit of the fit."""
-    definition = MODEL.load_fit_definitions()["DECAY"]
-    fit = tmp_path / "DECAY_20261030_120000__abcde"
-    fit.mkdir()
-    best: dict[str, object] = {"values": {"k": 12.0}}
-    (fit / "parameters.json").write_text(json.dumps({"sets": [best]}), "utf-8")
-    with pytest.raises(ValueError, match=r"has no unit of 'k'.*1/min"):
-        start_point(MODEL, definition, fit.name, tmp_path)
-    best["units"] = {"k": "1/hr"}
-    (fit / "parameters.json").write_text(json.dumps({"sets": [best]}), "utf-8")
-    assert start_point(MODEL, definition, fit.name, tmp_path) == {
-        "k": pytest.approx(0.2)
-    }

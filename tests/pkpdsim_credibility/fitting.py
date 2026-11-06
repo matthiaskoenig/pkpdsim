@@ -2,13 +2,10 @@
 
 from sbmlsim.fit import FitMappingCollection, FitParameter
 from sbmlsim.fit.cli import FitDefinition
+from sbmlsim.fit.filters import NamedMappings, named_filter
+from sbmlsim.fit.helpers import select_mappings
 
-from pkpdsim.fit import (
-    NamedMappings,
-    default_fit_settings,
-    named_filter,
-    select_mappings,
-)
+from pkpdsim.fit import default_fit_settings
 from pkpdsim_credibility import MODEL
 from pkpdsim_credibility.experiments import CredA, CredB
 from pkpdsim_toy import DATA_PATHS, TOY_PATH

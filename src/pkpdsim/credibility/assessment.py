@@ -56,6 +56,7 @@ from typing import TYPE_CHECKING, Any, Final, Self, TypedDict
 import numpy as np
 import pandas as pd
 from sbmlsim.fit.evaluation import Fold, criteria_metrics
+from sbmlsim.fit.filters import MetadataFilter, NamedFilter
 
 from pkpdsim.credibility.cross_validation import CrossValidation
 from pkpdsim.credibility.declaration import (
@@ -123,7 +124,6 @@ from pkpdsim.credibility.verification import (
     relative_differences,
     verify,
 )
-from pkpdsim.fit import MetadataFilter, NamedFilter
 
 if TYPE_CHECKING:
     from pathlib import Path

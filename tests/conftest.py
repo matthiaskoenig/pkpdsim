@@ -51,13 +51,13 @@ from pkpdsim_credibility import MODEL_BASE_PATH as CREDIBILITY_BASE_PATH
 from pymetadata.webservices.registry import get_registry
 from pymetadata.webservices.webservice import WebserviceError
 from release_git import GIT_ENV, git, init_repo
+from sbmlsim.fit.records import adopt_fit
 from sbmlsim.release.settings import ReleaseSettings
 from sharding import in_shard, parse_shard
 
 from pkpdsim.cli import fit_command
 from pkpdsim.model import PKPDModel
 from pkpdsim.release import source as source_module
-from pkpdsim.uncertainty import adopt_fit
 from pkpdsim_sexes import MODEL_BASE_PATH as SEXES_BASE_PATH
 from pkpdsim_sexes.factory import create_sexes_models
 from pkpdsim_toy import MODEL, MODEL_BASE_PATH

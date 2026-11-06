@@ -20,6 +20,7 @@ import libsbml
 import numpy as np
 import pytest
 from sbmlsim import Q
+from sbmlsim.distrib import UNCERTAINTY_DIMENSION
 from sbmlsim.model import AbstractModel
 from sbmlsim.model.model_roadrunner import RoadrunnerSBMLModel
 from sbmlsim.simulation import Change as TimedChange
@@ -49,7 +50,6 @@ from pkpdsim.pbpk.kidney_validity import (
     kidney_outflow,
     simulated_individuals,
 )
-from pkpdsim.uncertainty import UNCERTAINTY_DIMENSION
 
 from .conftest import individual
 

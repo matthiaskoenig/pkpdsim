@@ -12,6 +12,7 @@ import pytest
 from credibility_tables import fit_table
 from pkpdsim_credibility import MODEL
 from pkpdsim_credibility.credibility import CREDIBILITY
+from sbmlsim.fit.filters import named_filter
 
 from pkpdsim.cli import credibility_command
 from pkpdsim.credibility import (
@@ -33,7 +34,6 @@ from pkpdsim.credibility.lock import (
     selection_lock,
     write_lock,
 )
-from pkpdsim.fit import named_filter
 from pkpdsim.model import PKPDModel
 
 

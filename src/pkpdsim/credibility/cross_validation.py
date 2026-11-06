@@ -286,12 +286,11 @@ def cross_validate(
     """
     from sbmlsim.fit.cli import report_from_records, run_fit
     from sbmlsim.fit.options import OptimizationAlgorithmType
+    from sbmlsim.fit.project_fits import fixed_values, start_point
+    from sbmlsim.fit.project_fits import with_start as start_from
     from sbmlsim.fit.report import FitReport
     from sbmlsim.fit.result import fit_subset
     from sbmlsim.fit.sampling import SamplingType
-
-    from pkpdsim.fit import fixed_values, start_point
-    from pkpdsim.fit import with_start as start_from
 
     if fit_id not in model.adopted_ids:
         raise ValueError(

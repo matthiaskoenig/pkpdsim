@@ -329,21 +329,7 @@ value is not changed lightly either.
 
 ## Filters
 
-A `fitting/mapping_collections.py` selects the mappings of a fit by what a study
-is, not by listing names. `metadata_filter(metadata_type=PKPDMappingMetaData, /, *,
-excluded=None, **allowed)` builds a filter on the fields of the metadata (the class only for a
-local extension): a mapping passes when
-every allowed field has one of its values and no excluded field has one of its
-values. `observable_filter(observables)` selects by the index of the data of the
-observable (`observable_id`, i.e. `Data.index` of the `y` of the mapping: the
-selection of the model without its brackets and without the task, `Cve_hctz` for
-the selection `[Cve_hctz]`; a filter of `[Cve_hctz]` selects nothing). Both are callables of sbmlsim's
-`MappingFilter` and have a readable `repr`. `check_sampling_sites(fit_mappings, sites)` checks the `sampling_site` of every mapping against a table of the site of each observable id and returns one problem per mismatch or unknown observable. An unknown field, a class which is no
-dataclass or is an instance, a filter without clauses, an empty set of allowed
-values (it selects nothing) or of excluded values (it excludes nothing) and values
-which are no collection raise when the module of the filters is imported. A single
-value is an error, not a set of its characters: write `route={Route.IV}`, not
-`route=Route.IV`:
+A `fitting/mapping_collections.py` selects the mappings of a fit by what a study is, not by listing names. `metadata_filter(metadata_type=PKPDMappingMetaData, /, *, excluded=None, **allowed)` of `pkpdsim.fit` builds a filter on the fields of the metadata (the class only for a local extension), the filter `sbmlsim.fit.filters.metadata_filter` of sbmlsim for `PKPDMappingMetaData`: a mapping passes when every allowed field has one of its values and no excluded field has one of its values; the sampling site it compares is the resolved one (`PKPDMappingMetaData.filter_value`). `observable_filter(observables)` of `sbmlsim.fit.filters` selects by the index of the data of the observable (`observable_id`, i.e. `Data.index` of the `y` of the mapping: the selection of the model without its brackets and without the task, `Cve_hctz` for the selection `[Cve_hctz]`; a filter of `[Cve_hctz]` selects nothing). Both are callables of sbmlsim's `MappingFilter` and have a readable `repr`. `check_sampling_sites(fit_mappings, sites)` of `pkpdsim.fit` checks the `sampling_site` of every mapping against a table of the site of each observable id and returns one problem per mismatch or unknown observable. An unknown field, a class which is no dataclass or is an instance, a filter without clauses, an empty set of allowed values (it selects nothing) or of excluded values (it excludes nothing) and values which are no collection raise when the module of the filters is imported. A single value is an error, not a set of its characters: write `route={Route.IV}`, not `route=Route.IV`:
 
 ```python
 from types import SimpleNamespace
@@ -371,16 +357,14 @@ except TypeError as err:
     print(err)
 ```
 
-`select_mappings(model, experiment_classes, filters=(), outliers=(),
-validation=())` selects the data of a fit with the paths of the model object
-(`path` and `data_paths`) and returns the fit mapping collections by experiment
-id; it prints the counts of the mappings per experiment and kind. The filters
-select the training data, `outliers` are the keys of mappings which are not
-usable and `validation` are keys or a filter of the validation data:
+`select_mappings(project, experiment_classes, filters=(), outliers=(), validation=())` of `sbmlsim.fit.helpers` selects the data of a fit with the paths of the model object (its `root` and `data_path`) and returns the fit mapping collections by experiment id; it prints the counts of the mappings per experiment and kind. The filters select the training data, `outliers` are the keys of mappings which are not usable and `validation` are keys or a filter of the validation data:
 
 ```python
 # not executed
-from pkpdsim.fit import metadata_filter, observable_filter, select_mappings
+from sbmlsim.fit.filters import observable_filter
+from sbmlsim.fit.helpers import select_mappings
+
+from pkpdsim.fit import metadata_filter
 
 from pkdb_models.models.hctz import MODEL
 from pkdb_models.models.hctz.experiments.studies import Anderson1961, Barbhaiya1982

@@ -12,6 +12,7 @@ from urllib.parse import quote
 import pytest
 from credibility_tables import battery_of, fit_table, verification_of
 from pkpdsim_credibility.credibility import CREDIBILITY
+from sbmlsim.fit.records import AdoptedRecord, adopt_fit
 
 from pkpdsim.credibility import (
     Battery,
@@ -24,7 +25,6 @@ from pkpdsim.release.build import BuildPaths
 from pkpdsim.release.docs import PAGES, pages, write_docs
 from pkpdsim.release.notes import fits_prefix
 from pkpdsim.release.project import ProjectContext, write_project_files
-from pkpdsim.uncertainty import FitRecord, adopt_fit
 from pkpdsim_toy import MODEL, TOY_PATH
 
 assert MODEL.release is not None
@@ -214,7 +214,7 @@ def test_fit_table(release: tuple[ProjectContext, Path]) -> None:
     context, path = release
     write_docs(context, path)
     fit_id = context.model.adopted_ids[0]
-    record = FitRecord.load(path / fits_prefix(context.model) / fit_id)
+    record = AdoptedRecord.load(path / fits_prefix(context.model) / fit_id)
     page = (path / "docs" / "fit.md").read_text(encoding="utf-8")
     assert f"{SETTINGS.site_url}fit/{fit_id}/index.html" in page
     # the build wrote no methods report
@@ -244,7 +244,7 @@ def test_fit_table_open_interval(release: tuple[ProjectContext, Path]) -> None:
     context, path = release
     fit_id = context.model.adopted_ids[0]
     directory = path / fits_prefix(context.model) / fit_id
-    record = FitRecord.load(directory)
+    record = AdoptedRecord.load(directory)
     pid = next(iter(record.parameters))
     profiles = directory / "identifiability.json"
     text = profiles.read_text(encoding="utf-8")
@@ -255,7 +255,7 @@ def test_fit_table_open_interval(release: tuple[ProjectContext, Path]) -> None:
     for key in ("ci_lower", "ci_upper"):
         entry[key] = None
     profiles.write_text(json.dumps(data))
-    reloaded = FitRecord.load(directory).parameters[pid]
+    reloaded = AdoptedRecord.load(directory).parameters[pid]
     if reloaded.ci_lower is not None:
         pytest.skip("the record format keeps the interval of the profile")
     write_docs(context, path)

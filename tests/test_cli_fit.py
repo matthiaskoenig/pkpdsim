@@ -1,12 +1,11 @@
 import argparse
-import copy
-import dataclasses
 import json
 import os
 from pathlib import Path
 
 import pytest
-from sbmlsim.fit.cli import FitDefinition, load_fit_records
+from sbmlsim.fit.cli import FitDefinition
+from sbmlsim.fit.records import adopt_fit
 from sbmlsim.project import SimulatorSettings
 from sbmlsim.report.render import escape_typst
 
@@ -17,8 +16,6 @@ from pkpdsim.cli import (
     report_command,
     with_output_dir,
 )
-from pkpdsim.fit import records_context, report_context
-from pkpdsim.uncertainty import adopt_fit
 from pkpdsim_toy import MODEL
 
 
@@ -250,26 +247,9 @@ def _adopted_other(tmp_path: Path) -> Path:
     return other
 
 
-def test_the_report_context_names_the_fixed_adopted_fits(tmp_path: Path) -> None:
+def test_the_fit_names_the_fixed_adopted_fits(tmp_path: Path) -> None:
     other = _adopted_other(tmp_path)
     model = MODEL.replace(adopted_ids=[other.name], fits_dir=other.parent)
-    definition = model.load_fit_definitions()["DECAY"]
-
-    context = report_context(model, "DECAY", definition, fixed_fits=[other.name])
-    assert context.title == f"{model.title}: fit DECAY"
-    assert context.notes == (
-        f"The parameters of the adopted fit {other.name} were fixed at their "
-        f"fitted values.",
-    )
-    assert report_context(
-        model, "DECAY", definition, fixed_fits=["A_1", "B_2"]
-    ).notes == (
-        "The parameters of the adopted fits A_1, B_2 were fixed at their fitted "
-        "values.",
-    )
-    # the fixed fits are those given, not the adopted fits of the model
-    assert report_context(model, "DECAY", definition, fixed_fits=()).notes == ()
-
     output = tmp_path / "second"
     fit_command(
         model, ["--runs", "1", "--no-mapping-figures", "--output_dir", str(output)]
@@ -340,21 +320,6 @@ def test_the_report_of_stored_parameters_has_the_context_of_its_record(
     typst = (report / "report.typ").read_text(encoding="utf-8")
     assert f"{MODEL.title}: fit DECAY" in typst
     assert escape_typst(f"adopted fit {other.name} were fixed") in typst
-
-
-def test_a_record_without_provenance_has_no_fixed_fits(tmp_path: Path) -> None:
-    other = _adopted_other(tmp_path)
-    model = MODEL.replace(adopted_ids=[other.name], fits_dir=other.parent)
-    definition = model.load_fit_definitions()["DECAY"]
-    records = load_fit_records(other)
-    assert records.opt_result is not None
-    opt_result = copy.copy(records.opt_result)
-    opt_result.provenance = None
-    no_provenance = dataclasses.replace(records, opt_result=opt_result)
-    # the adopted fit of the other subset is not named, the record does not
-    # state what was fixed
-    assert records_context(model)("DECAY", definition, no_provenance).notes == ()
-    assert records_context(model)("DECAY", definition, records).notes == ()
 
 
 #: a fit of one run without the figures of the mappings

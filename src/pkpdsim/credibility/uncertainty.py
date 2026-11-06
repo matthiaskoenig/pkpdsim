@@ -2,7 +2,7 @@
 
 The adopted fits estimate their parameters with an uncertainty, the profile
 likelihood interval or the standard error of the Fisher information of their
-record (`pkpdsim.uncertainty.FitRecord`). A context of use whose acceptance is
+record (`sbmlsim.fit.records.AdoptedRecord`). A context of use whose acceptance is
 met at the adopted parameters only may fail for parameters which the data fit
 equally well; the propagation of the parameter uncertainty to the decisive
 predictions shows how robust the acceptance is and how precise the
@@ -44,11 +44,11 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from sbmlsim.fit.fisher import FisherInformation
+    from sbmlsim.fit.records import ParameterUncertainty
     from sbmlsim.fit.report import FitReport
 
     from pkpdsim.credibility.records import FitTable
     from pkpdsim.model import PKPDModel
-    from pkpdsim.uncertainty import ParameterUncertainty
 
 logger = logging.getLogger(__name__)
 
@@ -164,11 +164,10 @@ def parameter_draws(
     Returns:
         The draws.
     """
+    from sbmlsim.simulation.sampling import distribution_from_formula
     from sbmlsim.uncertainty import Covariance
     from sbmlsim.uncertainty.draws import draw
     from sbmlsim.uncertainty.sources import Variable
-
-    from pkpdsim.uncertainty import distribution_from_formula
 
     pids = tuple(p.pid for p in parameters)
     variables = [
@@ -315,7 +314,7 @@ def propagate(
     Raises:
         ValueError: if the points of a draw are not the reference points.
     """
-    from pkpdsim.uncertainty import FitRecord
+    from sbmlsim.fit.records import AdoptedRecord
 
     table = fits.table
     columns = list(range(settings.draws))
@@ -327,7 +326,7 @@ def propagate(
         report = fits.reports.get(subset)
         if report is None:
             continue
-        record = FitRecord.load(model.fits_dir / fit_id)
+        record = AdoptedRecord.load(model.fits_dir / fit_id)
         draws = parameter_draws(
             fit_id,
             list(record.parameters.values()),

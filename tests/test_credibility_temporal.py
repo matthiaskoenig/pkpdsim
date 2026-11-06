@@ -12,6 +12,7 @@ import pytest
 from credibility_tables import fit_table
 from pkpdsim_credibility import MODEL
 from pkpdsim_credibility.credibility import CREDIBILITY
+from sbmlsim.fit.result import fit_date, fit_subset
 
 from pkpdsim.credibility import (
     ContextResult,
@@ -24,7 +25,6 @@ from pkpdsim.credibility.report import temporal_table, write_outputs
 from pkpdsim.credibility.scorecard import compare, scorecard
 from pkpdsim.credibility.temporal import Chronology, chronology
 from pkpdsim.data import StudyRecord, study_record_path
-from pkpdsim.fit import fit_date, fit_subset
 from pkpdsim.model import PKPDModel
 
 PROVENANCE = Provenance(

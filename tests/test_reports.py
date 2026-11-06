@@ -1,19 +1,17 @@
-"""The reports of the adopted fits of a model."""
+"""The command which reports the adopted fits of a model, `run_report --adopted`.
 
-import json
-import shutil
+The reports themselves are those of the `report` kind of sbmlsim with `adopted`
+(`sbmlsim.fit.cli.report_from_records`), tested in sbmlsim.
+"""
+
 from pathlib import Path
 
 import pytest
-from sbmlsim.report.render import escape_typst
+from sbmlsim.fit.records import adopt_fit
 
 from pkpdsim.cli import fit_command, main, report_command
 from pkpdsim.model import PKPDModel
-from pkpdsim.reports import adopted_reports
-from pkpdsim.uncertainty import adopt_fit
 from pkpdsim_toy import MODEL
-
-FILES = ("index.html", "report.pdf", "report.typ", "references.bib", "references.csl")
 
 
 @pytest.fixture(scope="module")
@@ -44,29 +42,15 @@ def adopted(tmp_path_factory: pytest.TempPathFactory) -> PKPDModel:
     return MODEL.replace(adopted_ids=ids, fits_dir=fits, results_path=base / "results")
 
 
-def test_one_report_per_adopted_fit(adopted: PKPDModel) -> None:
-    dirs = adopted_reports(adopted)
-    assert [d.name for d in dirs] == list(adopted.adopted_ids)
-    for directory in dirs:
-        assert directory.parent == adopted.report_dir
-        for name in FILES:
-            assert (directory / name).exists(), name
-        assert (directory / "report.pdf").read_bytes().startswith(b"%PDF")
-        assert (directory / "plots").is_dir()
-        typst = (directory / "report.typ").read_text(encoding="utf-8")
-        assert adopted.title in typst
-        assert "fit DECAY" in typst
-
-
-def test_the_output_dir(adopted: PKPDModel, tmp_path: Path) -> None:
-    dirs = adopted_reports(adopted, tmp_path)
-    assert [d.parent for d in dirs] == [tmp_path, tmp_path]
-
-
 def test_the_command_writes_the_reports(adopted: PKPDModel) -> None:
     assert report_command(adopted, ["--adopted"]) == adopted.report_dir
     for fit in adopted.adopted_ids:
-        assert (adopted.report_dir / fit / "index.html").exists()
+        directory = adopted.report_dir / fit
+        assert (directory / "index.html").exists()
+        assert (directory / "report.pdf").read_bytes().startswith(b"%PDF")
+        typst = (directory / "report.typ").read_text(encoding="utf-8")
+        assert adopted.title in typst
+        assert "fit DECAY" in typst
 
 
 def test_the_console_script(
@@ -78,107 +62,9 @@ def test_the_console_script(
         assert (tmp_path / fit / "index.html").exists()
 
 
-def test_a_record_without_provenance(adopted: PKPDModel, tmp_path: Path) -> None:
-    fits = tmp_path / "fits"
-    fits.mkdir()
-    (fit,) = adopted.adopted_ids[:1]
-    record = fits / fit
-    record.mkdir()
-    for source in (adopted.fits_dir / fit).iterdir():
-        if source.is_dir():
-            continue
-        (record / source.name).write_bytes(source.read_bytes())
-    path = record / "optimization_result.json"
-    data = json.loads(path.read_text(encoding="utf-8"))
-    assert data.pop("provenance") is not None
-    path.write_text(json.dumps(data), encoding="utf-8")
-    model = adopted.replace(adopted_ids=[fit], fits_dir=fits)
-    (directory,) = adopted_reports(model, tmp_path / "out")
-    typst = (directory / "report.typ").read_text(encoding="utf-8")
-    assert "not recorded" in typst
-    assert "were fixed" not in typst
-
-
-def test_the_report_names_the_fixed_fits_of_its_record(
-    adopted: PKPDModel, tmp_path: Path
+def test_a_model_without_adopted_fits(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """The fixed fits are those the provenance of the record names.
-
-    The fit ran while a fit of another subset was adopted, which the model no
-    longer adopts.
-    """
-    fits = tmp_path / "fits"
-    other = "OTHER_20260101_000000__abcde"
-    shutil.copytree(adopted.fits_dir / adopted.adopted_ids[0], fits / other)
-    out = tmp_path / "fit"
-    (opid,) = fit_command(
-        adopted.replace(adopted_ids=[other], fits_dir=fits),
-        [
-            "--runs",
-            "1",
-            "--identifiability",
-            "--max-points",
-            "5",
-            "--no-fisher",
-            "--no-mapping-figures",
-            "--output_dir",
-            str(out),
-        ],
-    )
-    adopt_fit(out / opid, fits)
-    model = adopted.replace(adopted_ids=[opid], fits_dir=fits)
-    (directory,) = adopted_reports(model, tmp_path / "out")
-    typst = (directory / "report.typ").read_text(encoding="utf-8")
-    # the Typst source escapes the underscores of the id
-    assert (
-        escape_typst(
-            f"The parameters of the adopted fit {other} were fixed at their "
-            f"fitted values."
-        )
-        in typst
-    )
-    assert typst.count("were fixed at their fitted values") == 1
-
-
-def test_the_report_of_an_adopted_fit_is_the_report_of_its_record(
-    adopted: PKPDModel, tmp_path: Path
-) -> None:
-    """`run_report --adopted` writes what `run_report` writes for the record."""
-    fit = adopted.adopted_ids[0]
-    (directory,) = adopted_reports(
-        adopted.replace(adopted_ids=[fit]),
-        tmp_path / "adopted",
-        mapping_figures=False,
-    )
-    single = report_command(
-        adopted,
-        [
-            "--subset",
-            "DECAY",
-            "--name",
-            fit,
-            "--no-mapping-figures",
-            "--output_dir",
-            str(tmp_path / "single"),
-            str(adopted.fits_dir / fit / "parameters.json"),
-        ],
-    )
-    assert single == tmp_path / "single" / fit
-    assert (directory / "report.typ").read_text(encoding="utf-8") == (
-        single / "report.typ"
-    ).read_text(encoding="utf-8")
-
-
-def test_a_fit_of_an_unknown_subset(adopted: PKPDModel, tmp_path: Path) -> None:
-    fits = tmp_path / "fits"
-    fits.mkdir()
-    fit = "OTHER_20260101_000000__abcde"
-    (fits / fit).mkdir()
-    model = adopted.replace(adopted_ids=[fit], fits_dir=fits)
-    with pytest.raises(ValueError, match=r"OTHER_20260101_000000__abcde.*DECAY"):
-        adopted_reports(model, tmp_path / "out")
-
-
-def test_a_model_without_adopted_fits(tmp_path: Path) -> None:
-    with pytest.raises(ValueError, match="no adopted fits"):
-        adopted_reports(MODEL, tmp_path)
+    with pytest.raises(SystemExit):
+        report_command(MODEL, ["--adopted", "--output_dir", str(tmp_path)])
+    assert "no adopted fits" in capsys.readouterr().out

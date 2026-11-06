@@ -264,7 +264,7 @@ def test_a_fitted_custom_parameter_carries_its_distribution_and_provenance(
 
 def test_the_distribution_of_a_custom_parameter_is_drawn(tmp_path: Path) -> None:
     """The draws of the uncertainty runs find the distribution of a custom parameter."""
-    from pkpdsim.uncertainty import parameter_distributions
+    from sbmlsim.simulation.sampling import parameter_distributions
 
     k_deep = ModelParameter(
         "k_deep",
@@ -934,8 +934,7 @@ def test_a_fit_whose_fractions_can_exceed_one_is_refused_before_it_starts(
     or the fixed values of the adopted fits.
     """
     from sbmlsim.fit.objects import FitParameter
-
-    from pkpdsim.fit import remainder_problems
+    from sbmlsim.fit.project_fits import remainder_problems
 
     d = _definition(
         [
