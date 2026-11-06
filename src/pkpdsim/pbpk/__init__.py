@@ -52,6 +52,7 @@ from pkpdsim.pbpk.physiology import (
     physiology_objects,
     reference_individual,
 )
+from pkpdsim.pbpk.pregnancy import Pregnancy
 from pkpdsim.pbpk.proteins import PROTEINS, Induction, Inhibition, Protein
 from pkpdsim.pbpk.regional import (
     derive_regional_absorption,
@@ -176,6 +177,7 @@ __all__ = [
     "Part",
     "Parts",
     "Pool",
+    "Pregnancy",
     "Protein",
     "Q",
     "RateOf",

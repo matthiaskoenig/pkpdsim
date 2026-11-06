@@ -105,6 +105,11 @@ from pkpdsim.pbpk.circadian import circadian_factor, circadian_keys, protein_rhy
 from pkpdsim.pbpk.data import cite, load
 from pkpdsim.pbpk.organs import PORTAL_ORGANS, Organ
 from pkpdsim.pbpk.physiology import normal_gfr
+from pkpdsim.pbpk.pregnancy import (
+    ORGAN_FLOW,
+    PLACENTA_SHARE,
+    pregnancy_factor,
+)
 from pkpdsim.pbpk.proteins import PROTEINS
 from pkpdsim.pbpk.sex_differences import (
     ALBUMIN,
@@ -201,6 +206,14 @@ def _ckd_binding(protein: str) -> str:
     return ids.impairment_factor(f"{protein}_ckd")
 
 
+@cache
+def _pregnancy_proteins() -> frozenset[tuple[Organ, str]]:
+    """The organs and proteins with a factor of the pregnancy."""
+    from pkpdsim.pbpk.pregnancy import protein_factors
+
+    return frozenset(protein_factors())
+
+
 def organ_activity(organ: Organ, protein: str) -> str | None:
     """Get the local input of the individual on a protein in an organ.
 
@@ -217,7 +230,12 @@ def organ_activity(organ: Organ, protein: str) -> str | None:
     if (organ is Organ.LIVER and protein in _proteins()) or (
         organ,
         protein,
-    ) in protein_factors() | protein_sex_factors() | set(protein_rhythms()):
+    ) in (
+        protein_factors()
+        | protein_sex_factors()
+        | set(protein_rhythms())
+        | _pregnancy_proteins()
+    ):
         return ids.impairment_activity(protein)
     return None
 
@@ -1221,6 +1239,11 @@ class _Impairment:
         female_albumin = ALBUMIN in sex_curves(self.definition.sex)
         human = self.definition.species is Species.HUMAN
         rhythms = circadian_keys(self.definition)
+        pregnant = self.definition.pregnancy is not None
+
+        def preg(key: str) -> str | None:
+            """The factor of the pregnancy on a quantity, if the model is pregnant."""
+            return pregnancy_factor(key) if pregnant else None
 
         def circ(key: str) -> str | None:
             """The circadian factor of a quantity, if the model has the rhythm."""
@@ -1249,7 +1272,13 @@ class _Impairment:
             self.add(
                 _initial(
                     ids.impairment_factor(q),
-                    product(cp_flow or rest, ckd_flow, hf_flow),
+                    product(
+                        cp_flow or rest,
+                        ckd_flow,
+                        hf_flow,
+                        preg(ORGAN_FLOW),
+                        preg(q) if o is Organ.KIDNEY else None,
+                    ),
                     f"impairment factor {q}",
                     f"{text} the blood flow `{q}`; the cardiac output is the "
                     f"sum of the flows (`{ids.impairment_factor(ids.CO)}`).",
@@ -1258,9 +1287,9 @@ class _Impairment:
                 )
             )
             if cp_flow is None:
-                closing.setdefault(product(ckd_flow, hf_flow), []).append(
-                    ids.flow_fraction(o)
-                )
+                closing.setdefault(
+                    product(ckd_flow, hf_flow, preg(ORGAN_FLOW)), []
+                ).append(ids.flow_fraction(o))
             else:
                 flows.append(
                     f"{ids.flow_fraction(o)} * ({ids.impairment_factor(q)} - {_ONE})"
@@ -1275,6 +1304,8 @@ class _Impairment:
             else f"({' + '.join(fractions)}) * ({rest} - {_ONE})"
             for factor, fractions in closing.items()
         ]
+        if pregnant:
+            flows.append(pregnancy_factor(PLACENTA_SHARE))
         self.add(
             _initial(
                 ids.impairment_factor(ids.CO),
@@ -1294,6 +1325,7 @@ class _Impairment:
                     ids.condition_factor("cp", "gfr"),
                     ids.condition_factor("hf", "kidney_flow"),
                     circ(ids.GFR),
+                    preg(ids.GFR),
                 ),
                 "the GFR (heart failure: the GFR follows the renal blood flow; "
                 f"chronic kidney disease is `{ids.F_RENAL_FUNCTION}`)",
@@ -1302,6 +1334,7 @@ class _Impairment:
                 product(
                     ids.condition_factor("cp", "hematocrit"),
                     ids.condition_factor("ckd", "hematocrit"),
+                    preg(ids.HCT),
                 ),
                 "the hematocrit of the sex of the build; the anaemia of "
                 "cirrhosis and of chronic kidney disease combine "
@@ -1317,6 +1350,7 @@ class _Impairment:
                     age_factor("albumin") if human else None,
                     sex_factor(ALBUMIN) if female_albumin else None,
                     circ("albumin"),
+                    preg("albumin"),
                 ),
                 "the plasma albumin"
                 + (
@@ -1329,6 +1363,7 @@ class _Impairment:
                 product(
                     ids.condition_factor("cp", "agp"),
                     age_factor("agp") if human else None,
+                    preg("agp"),
                 ),
                 "the plasma alpha-1-acid glycoprotein"
                 + (" (and the age)" if human else ""),
@@ -1343,7 +1378,7 @@ class _Impairment:
                 "the gastric emptying time",
             ),
             "t_si": (
-                ids.condition_factor("ckd", "si_transit_time"),
+                product(ids.condition_factor("ckd", "si_transit_time"), preg("t_si")),
                 "the transit times of the small intestine",
             ),
         }
@@ -1398,6 +1433,9 @@ class _Impairment:
                         is not None
                         else None,
                         circ(key),
+                        preg(key)
+                        if (organ, protein) in _pregnancy_proteins()
+                        else None,
                     ),
                     f"individual factor activity {protein} {organ.name.lower()}",
                     f"The factor of the individual (the impairments, the age and "

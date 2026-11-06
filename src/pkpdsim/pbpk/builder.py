@@ -120,6 +120,7 @@ from pkpdsim.pbpk.placement import (
     start_formula,
     value_parameter,
 )
+from pkpdsim.pbpk.pregnancy import pregnancy_objects, pregnancy_physiology_factors
 from pkpdsim.pbpk.routes import ORAL, route_objects
 from pkpdsim.pbpk.sinks import sink_objects
 from pkpdsim.pbpk.stationary import (
@@ -1478,12 +1479,13 @@ class _Top:
         self.objects: list[Sbase] = [
             *physiology_objects(
                 definition.sex,
-                physiology_factors(),
+                physiology_factors() | pregnancy_physiology_factors(definition),
                 definition.population,
                 definition.species,
             ),
             *impairment_objects(definition),
             *circadian_objects(definition),
+            *pregnancy_objects(definition),
         ]
         self.known: set[str] = {
             str(o.sid) for o in self.objects if isinstance(o, Parameter)

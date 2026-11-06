@@ -26,6 +26,7 @@ from pkpdsim.pbpk.organs import Organ, Part, Pool, as_member, as_organ_keys
 from pkpdsim.pbpk.pd import PDComponent
 from pkpdsim.pbpk.physiology import DEFAULT_POPULATION, Sex
 from pkpdsim.pbpk.populations import POPULATIONS
+from pkpdsim.pbpk.pregnancy import Pregnancy
 from pkpdsim.pbpk.proteins import PROTEINS
 from pkpdsim.pbpk.routes import Route
 from pkpdsim.pbpk.slow_pool import SlowPool, check_slow_pools
@@ -183,6 +184,11 @@ class PBPKDefinition:
             `pkpdsim.pbpk.circadian`): the clock time `CLOCK` at the start of
             a simulation and the factors `fcirc_<key>` of the rhythms over the
             day and the night; `None` (the default) for a model without them.
+        pregnancy: the pregnancy of the female build (`Pregnancy`,
+            `pkpdsim.pbpk.pregnancy`): the gestational age `GA`, the factors
+            `fpreg_<key>` of the maternal physiology and the fetoplacental
+            unit (the placenta and the fetus as compartments); `None` (the
+            default) for a model without it.
     """
 
     sid: str
@@ -206,6 +212,7 @@ class PBPKDefinition:
     readouts: tuple[str, ...] = ()
     slow_pools: Sequence[SlowPool] = ()
     circadian: Circadian | None = None
+    pregnancy: Pregnancy | None = None
 
     def __post_init__(self) -> None:
         """Normalise the sex and the species to their members and freeze the starts."""
@@ -255,7 +262,14 @@ class PBPKDefinition:
         """
         if not definitions:
             raise ValueError(f"Combine '{sid}': no definitions given.")
-        for attribute in ("sex", "species", "population", "arm_vein", "circadian"):
+        for attribute in (
+            "sex",
+            "species",
+            "population",
+            "arm_vein",
+            "circadian",
+            "pregnancy",
+        ):
             values = {getattr(d, attribute) for d in definitions}
             if len(values) > 1:
                 raise ValueError(
@@ -299,6 +313,7 @@ class PBPKDefinition:
             species=first.species,
             population=first.population,
             circadian=first.circadian,
+            pregnancy=first.pregnancy,
             arm_vein=first.arm_vein,
             dynamic=tuple(dict.fromkeys(p for d in definitions for p in d.dynamic)),
             notes=f"The coupled physiology of the definitions {sids}.",

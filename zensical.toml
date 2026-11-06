@@ -45,6 +45,7 @@ nav = [
     { "Virtual populations" = "pbpk/populations.md" },
     { "Species" = "pbpk/species.md" },
     { "Circadian rhythms" = "pbpk/circadian.md" },
+    { "Pregnancy" = "pbpk/pregnancy.md" },
     { "Observers" = "pbpk/observers.md" },
     { "Annotation" = "pbpk/annotation.md" },
     { "Migration" = "pbpk/migration.md" },

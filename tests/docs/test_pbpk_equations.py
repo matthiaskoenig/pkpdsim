@@ -53,6 +53,7 @@ from pkpdsim.pbpk import (
     Part,
     PBPKDefinition,
     PDComponent,
+    Pregnancy,
     RateOf,
     RegionalAbsorption,
     Route,
@@ -368,7 +369,18 @@ def contexts(tmp_path_factory: pytest.TempPathFactory) -> list[Context]:
     directory = tmp_path_factory.mktemp("pbpk_equations")
     result: list[Context] = []
     female = dataclasses.replace(standard(), sid="toy_standard_female", sex=Sex.FEMALE)
-    for definition in (standard(), female, variants(), absorption()):
+    pregnant = dataclasses.replace(
+        female,
+        sid="toy_standard_pregnant",
+        pregnancy=Pregnancy(),
+        substances=[
+            dataclasses.replace(s, erythrocytes=None)
+            if s.erythrocytes is not None and s.erythrocytes.mode == "kinetic"
+            else s
+            for s in female.substances
+        ],
+    )
+    for definition in (standard(), female, pregnant, variants(), absorption()):
         paths = build(definition, directory)
         doc = libsbml.readSBMLFromFile(str(paths.comp_path))
         substances = tuple(s.sid for s in definition.substances)

@@ -489,6 +489,13 @@ KINDS: dict[str, Kind] = {
     "sex_factor": Kind(
         _P, _PHYS, requested="factor of the sex on a physiological quantity"
     ),
+    # the pregnancy
+    "gestational_age": Kind(_P, _PHYS, requested="gestational age of a pregnancy"),
+    "pregnancy": Kind(
+        _P, _PHYS, requested="factor of the pregnancy on a physiological quantity"
+    ),
+    "placenta": Kind(_C, "COMPARTMENT", requested="placenta compartment"),
+    "fetus": Kind(_C, "COMPARTMENT", requested="fetus compartment"),
     # circadian rhythms
     "clock_time": Kind(_P, _PHYS, requested="clock time of a simulation"),
     "circadian": Kind(

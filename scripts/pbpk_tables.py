@@ -70,6 +70,9 @@ from pkpdsim.pbpk.physiology import (
     reference_tissue_volumes,
 )
 from pkpdsim.pbpk.populations import POPULATIONS
+from pkpdsim.pbpk.pregnancy import factors as pregnancy_factors
+from pkpdsim.pbpk.pregnancy import pregnancy_factor
+from pkpdsim.pbpk.pregnancy import protein_factors as pregnancy_proteins
 from pkpdsim.pbpk.proteins import PROTEINS
 from pkpdsim.pbpk.sex_differences import (
     protein_sex_factor,
@@ -465,6 +468,44 @@ def circadian_rhythms() -> str:
     ]
     return _generated(
         "`database/tables/circadian_human.toml`", _table(header, rows), cited
+    )
+
+
+PREGNANCY_AGES: tuple[float, ...] = (0.0, 8.0, 13.0, 20.0, 26.0, 33.0, 40.0)
+"""The gestational ages (weeks) of the table of the pregnancy."""
+
+
+def pregnancy() -> str:
+    """The factors of the pregnancy over the gestational age."""
+    rows: list[list[str]] = []
+    cited: list[str] = []
+    entries = [(f.key, f) for f in pregnancy_factors().values()]
+    entries += [
+        (f"{protein} {_ORGAN_NAMES[organ]}", f)
+        for (organ, protein), f in sorted(
+            pregnancy_proteins().items(), key=lambda x: (x[0][0].value, x[0][1])
+        )
+    ]
+    for name, f in entries:
+        cited += list(f.sources)
+        rows.append(
+            [
+                name.replace("mass_", "mass "),
+                f"`{pregnancy_factor(f.key)}`",
+                "kg" if f.unit == "kg" else "-",
+                *[_number(f.value(ga)) for ga in PREGNANCY_AGES],
+                ", ".join(f"`{k}`" for k in f.sources),
+            ]
+        )
+    header = [
+        "quantity",
+        "factor",
+        "unit",
+        *[f"{a:g} wk" for a in PREGNANCY_AGES],
+        "sources",
+    ]
+    return _generated(
+        "`database/tables/pregnancy_human.toml`", _table(header, rows), cited
     )
 
 
@@ -1825,6 +1866,7 @@ TABLES: dict[str, Callable[[], str]] = {
     "physiology-organs-male": physiology_organs_male,
     "species-overview": species_overview,
     "circadian-rhythms": circadian_rhythms,
+    "pregnancy-factors": pregnancy,
     "species-intestine": species_intestine,
     "species-organs-rat": species_organs_rat,
     "species-organs-mouse": species_organs_mouse,

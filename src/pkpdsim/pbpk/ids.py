@@ -15,6 +15,7 @@ __all__ = [
     "BMI",
     "BSA",
     "BW",
+    "BW_TOTAL",
     "CKD_HEPATIC",
     "CLOCK",
     "CO",
@@ -32,6 +33,7 @@ __all__ = [
     "F_SHUNT",
     "F_TUBULAR",
     "F_ZONE",
+    "GA",
     "GFR",
     "GFR_BASE",
     "GFR_EXPONENT",
@@ -53,6 +55,7 @@ __all__ = [
     "QH",
     "QHA",
     "QPO",
+    "Q_PLACENTA",
     "SV_TIS",
     "TIME_OF_DAY",
     "TUBULE_SEGMENTS",
@@ -64,6 +67,8 @@ __all__ = [
     "VFECES",
     "VLUMEN",
     "VURINE",
+    "V_FETUS",
+    "V_PLACENTA",
     "WALL_FRACTION",
     "absorbed_amount",
     "absorbed_fraction",
@@ -106,6 +111,7 @@ __all__ = [
     "feces",
     "feces_rate",
     "feces_reaction",
+    "fetus_species",
     "filtration_reaction",
     "fkp",
     "flat",
@@ -137,7 +143,9 @@ __all__ = [
     "kinact",
     "kiu",
     "kp",
+    "kp_fetus",
     "kp_organ",
+    "kp_placenta",
     "kp_slow",
     "kps",
     "kslow",
@@ -165,6 +173,7 @@ __all__ = [
     "outflow_reaction",
     "placement_profile",
     "placement_weight",
+    "placenta_species",
     "plasma_capacity",
     "po_dose",
     "pool_capacity",
@@ -176,6 +185,7 @@ __all__ = [
     "product_fraction",
     "product_reaction",
     "ps",
+    "ps_placenta",
     "ps_ref",
     "rate_ratio",
     "reabsorption_n",
@@ -221,6 +231,18 @@ HEIGHT = "HEIGHT"
 """The height (covariate)."""
 AGE = "AGE"
 """The age (covariate)."""
+GA = "GA"
+"""The gestational age (weeks) of a pregnancy (`pkpdsim.pbpk.pregnancy`); 0 not
+pregnant, 40 term. An initial value, as the covariates."""
+BW_TOTAL = "BW_total"
+"""The total body weight of a pregnant woman (kg): the body weight of the
+covariates and the masses of the pregnancy."""
+Q_PLACENTA = "Qpla"
+"""The blood flow of the placenta (l/min)."""
+V_PLACENTA = "Vpla"
+"""The volume of the placenta (l)."""
+V_FETUS = "Vfet"
+"""The volume of the fetus (l)."""
 CLOCK = "CLOCK"
 """The clock time (hr) at the start of a simulation, time 0, of a model with
 circadian rhythms (`pkpdsim.pbpk.circadian`); an initial value."""
@@ -703,6 +725,31 @@ def fkp(s: str) -> str:
 def ftissue(s: str) -> str:
     """The id of the whole-body exchange factor, `ftissue_<s>`."""
     return f"ftissue_{s}"
+
+
+def placenta_species(s: str) -> str:
+    """The id of the substance in the placenta, `Cpla_<s>`."""
+    return f"Cpla_{s}"
+
+
+def fetus_species(s: str) -> str:
+    """The id of the substance in the fetus, `Cfet_<s>`."""
+    return f"Cfet_{s}"
+
+
+def kp_placenta(s: str) -> str:
+    """The id of the placenta to plasma coefficient, `Kp_pla_<s>`."""
+    return f"Kp_pla_{s}"
+
+
+def kp_fetus(s: str) -> str:
+    """The id of the fetus to fetal plasma coefficient, `Kp_fet_<s>`."""
+    return f"Kp_fet_{s}"
+
+
+def ps_placenta(s: str) -> str:
+    """The id of the transfer clearance of the placenta, `PS_pla_<s>`."""
+    return f"PS_pla_{s}"
 
 
 def bp(s: str) -> str:
@@ -1323,7 +1370,7 @@ def species_of(s: str, ids: Iterable[str]) -> list[str]:
     """
     pattern = re.compile(
         rf"(?:C(?:(?:{_PARTS})(?:_z\d+)?|(?:{_POOLS})(?:_{Part.BLOOD_CELLS.value})?"
-        r"|slow)"
+        r"|slow|pla|fet)"
         rf"|(?:Clumen|Cmu|Asolid)(?:_(?:{_SEGMENTS}))?"
         rf"|Ctub_(?:{_TUBULE}))_{re.escape(s)}"
     )

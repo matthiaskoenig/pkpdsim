@@ -895,3 +895,64 @@ doi = "10.1172/JCI107010"
 [Hagan1978]
 citation = "Hagan RD, Diaz FJ, Horvath SM. Plasma volume changes with movement to supine and standing positions. J Appl Physiol 45(3):414-417, 1978."
 doi = "10.1152/jappl.1978.45.3.414"
+
+# The pregnancy (pregnancy_human.toml, #134), searched and read 2026-11-06.
+
+[Dallmann2017]
+citation = "Dallmann A, Ince I, Meyer M, Willmann S, Eissing T, Hempel G. Gestation-specific changes in the anatomy and physiology of healthy pregnant women: an extended repository of model parameters for physiologically based pharmacokinetic modeling in pregnancy. Clin Pharmacokinet 56(11):1303-1330, 2017."
+doi = "10.1007/s40262-017-0539-z"
+
+[Dallmann2018]
+citation = "Dallmann A, Ince I, Coboeken K, Eissing T, Hempel G. A physiologically based pharmacokinetic model for pregnant women to predict the pharmacokinetics of drugs metabolized via several enzymatic pathways. Clin Pharmacokinet 57(6):749-768, 2018."
+doi = "10.1007/s40262-017-0594-5"
+
+[Abduljalil2012]
+citation = "Abduljalil K, Furness P, Johnson TN, Rostami-Hodjegan A, Soltani H. Anatomical, physiological and metabolic changes with gestational age during normal pregnancy: a database for parameters required in physiologically based pharmacokinetic modelling. Clin Pharmacokinet 51(6):365-396, 2012."
+doi = "10.2165/11597440-000000000-00000"
+
+[Tracy2005]
+citation = "Tracy TS, Venkataramanan R, Glover DD, Caritis SN. Temporal changes in drug metabolism (CYP1A2, CYP2D6 and CYP3A activity) during pregnancy. Am J Obstet Gynecol 192(2):633-639, 2005."
+doi = "10.1016/j.ajog.2004.08.030"
+
+[Ke2014]
+citation = "Ke AB, Nallani SC, Zhao P, Rostami-Hodjegan A, Unadkat JD. Expansion of a PBPK model to predict disposition in pregnant women of drugs cleared via multiple CYP enzymes, including CYP2B6, CYP2C9 and CYP2C19. Br J Clin Pharmacol 77(3):554-570, 2014."
+doi = "10.1111/bcp.12207"
+
+[Hebert2008]
+citation = "Hebert MF, Easterling TR, Kirby B, Carr DB, Buchanan ML, Rutherford T, Thummel KE, Fishbein DP, Unadkat JD. Effects of pregnancy on CYP3A and P-glycoprotein activities as measured by disposition of midazolam and digoxin: a University of Washington Specialized Center of Research study. Clin Pharmacol Ther 84(2):248-253, 2008."
+doi = "10.1038/clpt.2008.1"
+
+[Eyal2010]
+citation = "Eyal S, Easterling TR, Carr D, Umans JG, Miodovnik M, Hankins GD, Clark SM, Risler L, Wang J, Kelly EJ, Shen DD, Hebert MF. Pharmacokinetics of metformin during pregnancy. Drug Metab Dispos 38(5):833-840, 2010."
+doi = "10.1124/dmd.109.031245"
+
+[Thakur2026]
+citation = "Thakur A, Unadkat JD, Fay EE, Isoherranen N, Hebert MF. Effect of late second to early third trimester of pregnancy on the activity of renal organic anion transporters (OAT1 and OAT3): a biomarker study. Clin Pharmacol Ther 120(2):465-474, 2026."
+doi = "10.1002/cpt.70321"
+
+[Karanam2025]
+citation = "Karanam A, Pennell PB, Meador KJ, Long Y, Birnbaum AK. Characterization of lamotrigine disposition changes during and after pregnancy in women with epilepsy. Pharmacotherapy 45(1):33-42, 2025."
+doi = "10.1002/phar.4640"
+
+[Fischer2014]
+citation = "Fischer JH, Sarto GE, Hardman J, Endres L, Jenkins TM, Kilpatrick SJ, Jeong H, Geller S, Deyo K, Fischer PA, Rodvold KA. Influence of gestational age and body weight on the pharmacokinetics of labetalol in pregnancy. Clin Pharmacokinet 53(4):373-383, 2014."
+doi = "10.1007/s40262-013-0123-0"
+
+[Dempsey2002]
+citation = "Dempsey D, Jacob P 3rd, Benowitz NL. Accelerated metabolism of nicotine and cotinine in pregnant smokers. J Pharmacol Exp Ther 301(2):594-598, 2002."
+doi = "10.1124/jpet.301.2.594"
+
+[Bartlett2021]
+citation = "Bartlett AQ, Vesco KK, Purnell JQ, Francisco M, Goddard E, Guan X, DeBarber A, Leo MC, et al. Pregnancy and weaning regulate human maternal liver size and function. Proc Natl Acad Sci U S A 118(48):e2107269118, 2021."
+doi = "10.1073/pnas.2107269118"
+
+[Chiloiro2001]
+citation = "Chiloiro M, Darconza G, Piccioli E, De Carne M, Clemente C, Riezzo G. Gastric emptying and orocecal transit time in pregnancy. J Gastroenterol 36(8):538-543, 2001."
+doi = "10.1007/s005350170056"
+
+[Lawson1985]
+citation = "Lawson M, Kern F Jr, Everson GT. Gastrointestinal transit time in human pregnancy: prolongation in the second and third trimesters followed by postpartum normalization. Gastroenterology 89(5):996-999, 1985."
+doi = "10.1016/0016-5085(85)90199-4"
+
+[Szilagyi1996]
+citation = "Szilagyi A, Salomon R, Smith BE, Martin M, Seidman E. Determinants of prolonged oral cecal transit time during late phase pregnancy. Clin Invest Med 19(1):20-27, 1996."
