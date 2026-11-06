@@ -5,7 +5,6 @@ hand-built table of the test package with predictions per draw, and the
 propagation on the adopted fit of the session fixture `credibility_model`.
 """
 
-import dataclasses
 import json
 import math
 from pathlib import Path
@@ -311,7 +310,7 @@ def test_the_propagation_of_the_adopted_fit(credibility_model: PKPDModel) -> Non
 def test_the_options_of_the_command(
     credibility_model: PKPDModel, tmp_path: Path
 ) -> None:
-    model = dataclasses.replace(credibility_model, results_path=tmp_path)
+    model = credibility_model.replace(results_path=tmp_path)
     for args in (["--draws", "8"], ["--uncertainty", "--draws", "1"]):
         with pytest.raises(SystemExit) as exc:
             credibility_command(model, args)

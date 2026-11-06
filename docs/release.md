@@ -13,10 +13,10 @@ The release repository holds only what the command generates. The models, the si
 
 ## The release metadata of a model
 
-What the monorepo does not know about a release is the `release` of the model object, a `ReleaseSettings` (`pkpdsim.release.settings`):
+What the monorepo does not know about a release is the `release` of the model object, a `ReleaseSettings` (`sbmlsim.release.settings`):
 
 ```python
-from pkpdsim.release.settings import Author, ReleaseSettings
+from sbmlsim.release.settings import Author, ReleaseSettings
 
 release = ReleaseSettings(
     title="Physiologically based pharmacokinetic model of hydrochlorothiazide",

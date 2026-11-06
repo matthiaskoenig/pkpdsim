@@ -1,6 +1,5 @@
 """Tests of the release notes, from the previous release and the new build."""
 
-import dataclasses
 import json
 import shutil
 from collections.abc import Sequence
@@ -86,7 +85,7 @@ def commit_release(path: Path, tag: str) -> ReleaseRepo:
 
 @pytest.fixture
 def model() -> PKPDModel:
-    return dataclasses.replace(MODEL, fits=[NEW_FIT])
+    return MODEL.replace(adopted_ids=[NEW_FIT])
 
 
 @pytest.fixture

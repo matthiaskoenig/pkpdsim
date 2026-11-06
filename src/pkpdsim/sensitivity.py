@@ -65,6 +65,7 @@ from matplotlib.figure import Figure
 from pkpdutils import NCAOptions
 from sbmlsim import display, sensitivity
 from sbmlsim.model.model_roadrunner import JitOptimization, load_roadrunner
+from sbmlsim.project import SimulatorSettings
 from sbmlsim.result import ScanResult
 from sbmlsim.sensitivity import SensitivityResult
 from sbmlsim.sensitivity.classification import (
@@ -88,7 +89,7 @@ from sbmlsim.simulator import Simulator
 from sbmlutils.console import console
 from sbmlutils.report.units import udef_to_string
 
-from pkpdsim.model import PKPDModel, SimulatorSettings
+from pkpdsim.model import PKPDModel
 from pkpdsim.run import create_simulator
 from pkpdsim.sex import Sex
 
@@ -1791,6 +1792,19 @@ class SobolAnalysis(_GlobalAnalysis):
         return sensitivity.sobol(result)
 
 
+@dataclass(frozen=True)
+class SimulatorRun:
+    """The simulator of a run of analyses: the settings of the model and the processes.
+
+    Attributes:
+        settings: the settings of the simulator, those of the model.
+        n_workers: the processes of the pool, `None` lets sbmlsim choose.
+    """
+
+    settings: SimulatorSettings
+    n_workers: int | None = None
+
+
 class CommandLine(NamedTuple):
     """The words of the command line of a sensitivity script.
 
@@ -2031,8 +2045,8 @@ class SensitivityRunner:
                     )
                     raise
 
-    def simulator_settings(self, workers: int | None) -> SimulatorSettings | None:
-        """Get the settings of the simulator of a run which caps the processes.
+    def simulator_settings(self, workers: int | None) -> SimulatorRun | None:
+        """Get the simulator of a run which caps the processes.
 
         Args:
             workers: the processes of `--workers` (`CommandLine.workers`).
@@ -2043,16 +2057,12 @@ class SensitivityRunner:
         """
         if workers is None:
             return None
-        return dataclasses.replace(self.model.simulator, n_workers=workers)
+        return SimulatorRun(self.model.simulator, workers)
 
-    def _simulator(self, simulator: SimulatorSettings | None) -> Simulator:
+    def _simulator(self, simulator: SimulatorRun | None) -> Simulator:
         """Get the simulator of a run, of the model with `n_workers=None` by default."""
-        settings = (
-            dataclasses.replace(self.model.simulator, n_workers=None)
-            if simulator is None
-            else simulator
-        )
-        return create_simulator(settings)
+        run = SimulatorRun(self.model.simulator) if simulator is None else simulator
+        return create_simulator(run.settings, run.n_workers)
 
     def _execute(
         self,
@@ -2073,7 +2083,7 @@ class SensitivityRunner:
         *,
         path: Path | None = None,
         subfolder: str | None = None,
-        simulator: SimulatorSettings | None = None,
+        simulator: SimulatorRun | None = None,
     ) -> Path:
         """Run analyses and write the table of the parameters.
 
@@ -2091,9 +2101,9 @@ class SensitivityRunner:
             subfolder: the folder of the analyses below `path`; the table of
                 the parameters stays in `path`. Several simulations of a model
                 run with `run_subfolders`, which writes the table once.
-            simulator: the settings of the simulator, the settings of the model
-                with `n_workers=None` (sbmlsim chooses the processes of the
-                pool, the script has the guard `if __name__ == "__main__":`) if
+            simulator: the simulator, the settings of the model with
+                `n_workers=None` (sbmlsim chooses the processes of the pool,
+                the script has the guard `if __name__ == "__main__":`) if
                 `None`.
 
         Returns:
@@ -2225,7 +2235,7 @@ def run_subfolders(
     *,
     subfolders: Sequence[str] | None = None,
     path: Path | None = None,
-    simulator: SimulatorSettings | None = None,
+    simulator: SimulatorRun | None = None,
 ) -> Path:
     """Run the analyses of several simulations of a model, each into a subfolder.
 
@@ -2244,7 +2254,7 @@ def run_subfolders(
         subfolders: the subfolders which run, every one if `None`.
         path: the folder of the results, `model.results_dir / "sensitivity"` if
             `None`.
-        simulator: the settings of the simulator, see `SensitivityRunner.run`.
+        simulator: the simulator, see `SensitivityRunner.run`.
 
     Returns:
         The folder of the results, `path`.

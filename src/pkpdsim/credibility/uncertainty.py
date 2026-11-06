@@ -37,8 +37,7 @@ from typing import TYPE_CHECKING, TypedDict
 
 import numpy as np
 import pandas as pd
-
-from pkpdsim.fit import fit_subset
+from sbmlsim.fit.result import fit_subset
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -323,7 +322,7 @@ def propagate(
     predictions = pd.DataFrame(np.nan, index=table.index, columns=columns)
     found: dict[str, FitDraws] = {}
     failed: dict[str, int] = {}
-    for fit_id in model.fits:
+    for fit_id in model.adopted_ids:
         subset = fit_subset(fit_id)
         report = fits.reports.get(subset)
         if report is None:

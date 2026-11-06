@@ -463,7 +463,7 @@ def test_kind_differences(fits: FitTable) -> None:
 
 
 def test_recorded_kinds(credibility_model: PKPDModel, tmp_path: Path) -> None:
-    (fit_id,) = credibility_model.fits
+    (fit_id,) = credibility_model.adopted_ids
     record = credibility_model.fits_dir / fit_id
     assert recorded_kinds(record, "DECAY") == {
         ("DECAY", e, m): k for (e, m), k in KINDS.items()
@@ -482,13 +482,13 @@ def test_recorded_kinds(credibility_model: PKPDModel, tmp_path: Path) -> None:
 def _edited_model(model: PKPDModel, fits_dir: Path) -> PKPDModel:
     """Get the model with a copy of its fits whose record has another kind."""
     shutil.copytree(model.fits_dir, fits_dir)
-    (fit_id,) = model.fits
+    (fit_id,) = model.adopted_ids
     path = fits_dir / fit_id / "metrics_mappings.tsv"
     table = pd.read_csv(path, sep="\t")
     edited = (table.experiment == "CredA") & (table.mapping == "fm_dose")
     table.loc[edited, "kind"] = "training"
     table.to_csv(path, sep="\t", index=False)
-    return dataclasses.replace(model, fits_path=fits_dir)
+    return model.replace(fits_dir=fits_dir)
 
 
 def test_evaluate_fits(credibility_model: PKPDModel, tmp_path: Path) -> None:
@@ -523,7 +523,7 @@ def test_check_declaration_of_the_test_package(
 ) -> None:
     assert check_declaration(credibility_model) == []
 
-    broken = dataclasses.replace(credibility_model, credibility=".credibility:BROKEN")
+    broken = credibility_model.replace(credibility=".credibility:BROKEN")
     messages = check_declaration(broken)
     assert len(messages) == 1
     assert "CredB" in messages[0]
@@ -534,16 +534,14 @@ def test_check_declaration_of_the_test_package(
     assert any("CredB.fm_dose" in m for m in messages)
     assert len([m for m in messages if "adopt the fit again" in m]) == 1
 
-    (message,) = check_declaration(dataclasses.replace(credibility_model, fits=[]))
+    (message,) = check_declaration(credibility_model.replace(adopted_ids=[]))
     assert "no adopted fits" in message
 
     missing = tmp_path / "missing"
     shutil.copytree(credibility_model.fits_dir, missing)
-    (fit_id,) = credibility_model.fits
+    (fit_id,) = credibility_model.adopted_ids
     (missing / fit_id / "metrics_mappings.tsv").unlink()
-    (message,) = check_declaration(
-        dataclasses.replace(credibility_model, fits_path=missing)
-    )
+    (message,) = check_declaration(credibility_model.replace(fits_dir=missing))
     assert "adopt the fit again" in message
 
     twice = tmp_path / "twice"
@@ -553,7 +551,5 @@ def test_check_declaration_of_the_test_package(
     pd.concat([table, table.assign(kind="training")]).to_csv(
         path, sep="\t", index=False
     )
-    (message,) = check_declaration(
-        dataclasses.replace(credibility_model, fits_path=twice)
-    )
+    (message,) = check_declaration(credibility_model.replace(fits_dir=twice))
     assert "a mapping has one kind" in message

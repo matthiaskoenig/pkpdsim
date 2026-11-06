@@ -25,9 +25,7 @@ import pandas as pd
 from sbmlsim.fit.helpers import FitMappings
 from sbmlsim.fit.metrics import metadata_dict
 from sbmlsim.fit.objects import EVALUATED_KINDS, FitMapping
-
-from pkpdsim.fit import fit_subset, leveled_definitions
-from pkpdsim.reports import adopted_record
+from sbmlsim.fit.result import fit_subset
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -225,18 +223,18 @@ def _adopted_fits(model: PKPDModel) -> Iterator[tuple[str, Path, FitDefinition]]
             subset or a subset has no fit definition.
         FileNotFoundError: if the record of a fit has no parameters.
     """
-    if not model.fits:
+    if not model.adopted_ids:
         raise ValueError(f"The model '{model.name}' has no adopted fits.")
-    subsets = [fit_subset(fit_id) for fit_id in model.fits]
+    subsets = [fit_subset(fit_id) for fit_id in model.adopted_ids]
     repeated = sorted({s for s in subsets if subsets.count(s) > 1})
     if repeated:
         raise ValueError(
             f"The adopted fits of '{model.name}' have the subsets {repeated} "
             f"twice, a subset has one adopted fit."
         )
-    definitions = leveled_definitions(model)
-    for fit_id, subset in zip(model.fits, subsets, strict=True):
-        record = adopted_record(model, fit_id)
+    definitions = model.load_fit_definitions()
+    for fit_id, subset in zip(model.adopted_ids, subsets, strict=True):
+        record = model.adopted_record(fit_id)
         yield subset, record, definitions[subset]
 
 
@@ -334,7 +332,7 @@ def mapping_table(model: PKPDModel) -> FitTable:
             )
     fit_mappings = FitMappings(
         experiment_classes=classes.values(),
-        base_path=model.path,
+        base_path=model.base_path or model.path,
         data_path=list(model.data_paths),
     )
     lookup = _Lookup(fit_mappings.experiments)

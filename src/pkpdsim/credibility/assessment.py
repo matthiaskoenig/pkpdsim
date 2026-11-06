@@ -1995,7 +1995,7 @@ def provenance(
     return Provenance(
         model=model.name,
         title=model.title,
-        fits=list(model.fits),
+        fits=list(model.adopted_ids),
         versions={
             package: importlib.metadata.version(package)
             for package in VERSIONED_PACKAGES

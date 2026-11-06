@@ -32,36 +32,38 @@ from sbmlsim.experiment import (
     ExperimentRunner,
     SimulationExperiment,
 )
+from sbmlsim.project import normalize_formats
 from sbmlsim.report.experiment_report import ExperimentReport, ReportResults
 from sbmlsim.simulator import Simulator
 
-from pkpdsim.model import normalize_formats
+from pkpdsim.model import RUN_WORKERS
 from pkpdsim.uncertainty import UncertaintyRun
 
 if TYPE_CHECKING:
     from sbmlsim.experiment import ExperimentResult
+    from sbmlsim.project import SimulatorSettings
 
-    from pkpdsim.model import PKPDModel, SimulatorSettings
+    from pkpdsim.model import PKPDModel
     from pkpdsim.uncertainty import UncertaintySettings
 
 #: the formats of the figures which are copied into `_figures`
 COLLECTED_FORMATS: tuple[str, ...] = ("png", "svg")
 
 
-def create_simulator(settings: SimulatorSettings) -> Simulator:
+def create_simulator(
+    settings: SimulatorSettings, n_workers: int | None = RUN_WORKERS
+) -> Simulator:
     """Get the simulator of sbmlsim with the settings of a model.
 
     Args:
-        settings: the tolerances and the processes of the simulations.
+        settings: the settings of the simulator of the model.
+        n_workers: the processes of the scans, serially by default, see
+            `sbmlsim.simulator.Simulator`.
 
     Returns:
         The simulator.
     """
-    return Simulator(
-        n_workers=settings.n_workers,
-        absolute_tolerance=settings.absolute_tolerance,
-        relative_tolerance=settings.relative_tolerance,
-    )
+    return settings.simulator(n_workers)
 
 
 def _run(
@@ -74,6 +76,7 @@ def _run(
     show_report: bool,
     figure_formats: Sequence[str] | None,
     simulator: SimulatorSettings | None,
+    n_workers: int | None,
     uncertainty: UncertaintySettings | None,
 ) -> tuple[Path, list[ExperimentResult]]:
     """Run experiments and write their report, see `run_experiments`.
@@ -106,8 +109,8 @@ def _run(
     runner = ExperimentRunner(
         experiment_classes=classes,
         data_path=list(model.data_paths) or None,
-        base_path=model.path,
-        simulator=create_simulator(simulator_settings),
+        base_path=model.base_path or model.path,
+        simulator=create_simulator(simulator_settings, n_workers),
         jit_optimization=simulator_settings.jit_optimization,
         # an experiment which cannot be initialized is logged and reported
         on_error="log",
@@ -123,7 +126,7 @@ def _run(
             save_results=model.save_results if save_results is None else save_results,
             figure_formats=list(formats or model.figures.formats),
             reduced_selections=model.reduced_selections,
-            figure_settings=model.figures.sbmlsim_settings(),
+            figure_settings=model.figure_settings,
         )
 
     report_results = ReportResults()
@@ -159,6 +162,7 @@ def run_experiments(
     show_report: bool = False,
     figure_formats: Sequence[str] | None = None,
     simulator: SimulatorSettings | None = None,
+    n_workers: int | None = RUN_WORKERS,
     uncertainty: UncertaintySettings | None = None,
 ) -> Path:
     """Run simulation experiments of a model and create their report.
@@ -178,7 +182,9 @@ def run_experiments(
             default; an empty sequence falls back to the formats of the model
             as well.
         simulator: the settings of the simulator, those of the model by
-            default, e.g. with more processes.
+            default.
+        n_workers: the processes of the scans of the experiments, serially by
+            default (`pkpdsim.model.RUN_WORKERS`), see `sbmlsim.simulator.Simulator`.
         uncertainty: run the experiments over draws of the fitted parameters
             of the model, see the module; `None` runs them once.
 
@@ -199,6 +205,7 @@ def run_experiments(
         show_report=show_report,
         figure_formats=figure_formats,
         simulator=simulator,
+        n_workers=n_workers,
         uncertainty=uncertainty,
     )
     _raise_failures(results)
@@ -213,6 +220,7 @@ def run_simulation_experiments(
     show_report: bool = False,
     figure_formats: Sequence[str] | None = None,
     simulator: SimulatorSettings | None = None,
+    n_workers: int | None = RUN_WORKERS,
     uncertainty: UncertaintySettings | None = None,
 ) -> Path:
     """Run simulation experiments and collect their figures.
@@ -228,6 +236,7 @@ def run_simulation_experiments(
         figure_formats: the formats of the figures, those of the model by
             default.
         simulator: the settings of the simulator, those of the model by default.
+        n_workers: the processes of the scans, see `run_experiments`.
         uncertainty: run the experiments over draws of the fitted parameters,
             see `run_experiments`.
 
@@ -246,6 +255,7 @@ def run_simulation_experiments(
         show_report=show_report,
         figure_formats=figure_formats,
         simulator=simulator,
+        n_workers=n_workers,
         uncertainty=uncertainty,
     )
     figures_dir = output_path / "_figures"

@@ -6,13 +6,13 @@ from pathlib import Path
 from typing import cast
 
 import pytest
+from sbmlsim.release.settings import ReleaseSettings
 
 from pkpdsim.release.publish import (
     check_lock,
     check_tools,
     publish,
 )
-from pkpdsim.release.settings import ReleaseSettings
 from pkpdsim.release.source import ReleaseError
 from pkpdsim_toy import MODEL
 

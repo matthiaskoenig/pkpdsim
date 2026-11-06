@@ -12,10 +12,10 @@ import json
 import tomllib
 from pathlib import Path
 
+from sbmlsim.release.settings import ReleaseSettings
 from sbmlutils.console import console
 
 from pkpdsim.release.manifest import MANIFEST_FILE
-from pkpdsim.release.settings import ReleaseSettings
 from pkpdsim.release.source import ReleaseError, Runner, run, stage
 
 _PYPI = "https://pypi.org/simple"

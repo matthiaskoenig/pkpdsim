@@ -10,9 +10,10 @@ Windows a replace of a file which another process reads fails
 controller of the session, before the workers start, and the workers only read
 the cache.
 
-The SBML models of the toy model packages (`tests/pkpdsim_toy` and the toy
-model per sex `tests/pkpdsim_sexes`) are created in the controller of the
-session as well, before the workers start; the tests only read them.
+The SBML models of the toy model packages (`tests/pkpdsim_toy`, its copy in
+`tests/pkpdsim_credibility` and the toy model per sex `tests/pkpdsim_sexes`) are
+created in the controller of the session as well, before the workers start; the
+tests only read them.
 
 A short fit of the toy model with its identifiability, adopted into a folder of
 fits, is shared by the tests of the records (`toy_fit`, `fits_dir`); it is made
@@ -35,7 +36,6 @@ The tests of the release share git repositories (`git_env`, `source_repo_model`,
 the CI each (see `sharding`).
 """
 
-import dataclasses
 import hashlib
 import os
 import re
@@ -47,15 +47,16 @@ from typing import TYPE_CHECKING
 
 import pytest
 from pkpdsim_credibility import MODEL as CREDIBILITY_MODEL
+from pkpdsim_credibility import MODEL_BASE_PATH as CREDIBILITY_BASE_PATH
 from pymetadata.webservices.registry import get_registry
 from pymetadata.webservices.webservice import WebserviceError
 from release_git import GIT_ENV, git, init_repo
+from sbmlsim.release.settings import ReleaseSettings
 from sharding import in_shard, parse_shard
 
 from pkpdsim.cli import fit_command
 from pkpdsim.model import PKPDModel
 from pkpdsim.release import source as source_module
-from pkpdsim.release.settings import ReleaseSettings
 from pkpdsim.uncertainty import adopt_fit
 from pkpdsim_sexes import MODEL_BASE_PATH as SEXES_BASE_PATH
 from pkpdsim_sexes.factory import create_sexes_models
@@ -108,6 +109,7 @@ def pytest_configure(config: pytest.Config) -> None:
     with suppress(WebserviceError):
         get_registry()
     create_toy_models(MODEL_BASE_PATH)
+    create_toy_models(CREDIBILITY_BASE_PATH)
     create_sexes_models(SEXES_BASE_PATH)
 
 
@@ -262,10 +264,9 @@ def credibility_model(tmp_path_factory: pytest.TempPathFactory) -> PKPDModel:
     )
     (opid,) = runs
     adopt_fit(base / "fit" / opid, base / "fits")
-    return dataclasses.replace(
-        CREDIBILITY_MODEL,
-        fits=[opid],
-        fits_path=base / "fits",
+    return CREDIBILITY_MODEL.replace(
+        adopted_ids=[opid],
+        fits_dir=base / "fits",
         results_path=base / "results",
     )
 
@@ -297,8 +298,11 @@ def source_repo_model(tmp_path: Path, git_env: None) -> PKPDModel:
     (package / "literature" / "x.txt").write_text("x\n")
     git(root, "add", "-A")
     git(root, "commit", "-m", "init")
-    return dataclasses.replace(
-        MODEL, path=package, model_path=package / "models" / "toy.xml"
+    return MODEL.replace(
+        root=package,
+        variants={"male": package / "models" / "toy.xml"},
+        factory_dir=None,
+        fits_dir=None,
     )
 
 

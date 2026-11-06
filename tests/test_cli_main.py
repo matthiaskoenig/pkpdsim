@@ -40,9 +40,8 @@ def packages(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         "brokenmodel/__init__.py": "import missing_dependency_of_the_model\n",
         "aliasmodel/__init__.py": "from pkpdsim_toy import MODEL\n",
         "nofits/__init__.py": (
-            "import dataclasses\n"
             "from pkpdsim_toy import MODEL as TOY\n"
-            "MODEL = dataclasses.replace(TOY, package=__name__, fit_definitions=None)\n"
+            "MODEL = TOY.replace(package=__name__, fits={})\n"
         ),
     }
     for name, text in files.items():

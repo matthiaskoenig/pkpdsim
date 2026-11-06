@@ -5,7 +5,6 @@ table of the test package with hand-built bands; `predictive_checks` and
 `assess` run on its adopted fit with a variability of the fitted rate.
 """
 
-import dataclasses
 import json
 from pathlib import Path
 
@@ -195,8 +194,7 @@ def test_the_assessment_with_the_variability(
     settings = VariabilitySettings(subjects=8, groups=50, seed=2)
     with pytest.raises(ValueError, match="declares no variability"):
         assess(credibility_model, verification=False, variability=settings)
-    model = dataclasses.replace(
-        credibility_model,
+    model = credibility_model.replace(
         credibility="pkpdsim_credibility.credibility:CREDIBILITY_VARIABILITY",
     )
     assessment = assess(model, verification=False, variability=settings)
@@ -212,7 +210,7 @@ def test_the_assessment_with_the_variability(
         ["--variability", "--from-json", str(tmp_path / "credibility.json")],
     ):
         with pytest.raises(SystemExit) as exc:
-            credibility_command(dataclasses.replace(model, results_path=tmp_path), args)
+            credibility_command(model.replace(results_path=tmp_path), args)
         assert exc.value.code == 2
 
 

@@ -21,9 +21,9 @@ from typing import Any
 from urllib.parse import quote
 
 from jinja2 import Environment, StrictUndefined, Template
+from sbmlsim.release.settings import ReleaseSettings
 
 from pkpdsim.model import PKPDModel
-from pkpdsim.release.settings import ReleaseSettings
 from pkpdsim.release.source import ReleaseError, SourceRepo
 
 UV_VERSION = "0.13.6"

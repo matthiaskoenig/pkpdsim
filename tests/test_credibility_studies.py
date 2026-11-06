@@ -4,7 +4,6 @@ The hand-built table of the test package has points of the studies `CredA` and
 `CredB`; the tests write a data folder with a record of `CredA` only.
 """
 
-import dataclasses
 import json
 from datetime import date
 from pathlib import Path
@@ -51,7 +50,7 @@ def _model(data: Path) -> PKPDModel:
     )
     study_record_path(folder).write_text(json.dumps(record.to_dict()))
     # a data path which is no folder is skipped
-    return dataclasses.replace(MODEL, data_paths=(data, data / "missing"))
+    return MODEL.replace(data_path=(data, data / "missing"))
 
 
 def test_the_study_data(tmp_path: Path) -> None:

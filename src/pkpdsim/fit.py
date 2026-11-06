@@ -14,20 +14,18 @@ from __future__ import annotations
 
 import copy
 import dataclasses
-import re
 from collections.abc import Callable, Collection, Hashable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, overload, override
+from typing import TYPE_CHECKING, overload
 
 from sbmlsim.fit import FitMapping, FitMappingCollection, FitSettings
 from sbmlsim.fit.cli import FitDefinition
 from sbmlsim.fit.helpers import FitMappings, MappingFilter
 from sbmlsim.fit.methods import ReportContext
 from sbmlsim.fit.objects import FitParameter, MappingMetaData
-from sbmlsim.fit.optimization import OptimizationProblem
 from sbmlsim.fit.options import (
     DataAtChangeType,
     LossFunctionType,
@@ -35,7 +33,7 @@ from sbmlsim.fit.options import (
     WeightingCurvesType,
     WeightingPointsType,
 )
-from sbmlsim.model.model_roadrunner import resolve_jit_optimization
+from sbmlsim.fit.result import FIT_ID, fit_subset
 
 from pkpdsim.metadata import PKPDMappingMetaData, SamplingSite
 
@@ -426,7 +424,7 @@ def select_mappings(
     """
     fit_mappings = FitMappings(
         experiment_classes=experiment_classes,
-        base_path=model.path,
+        base_path=model.base_path or model.path,
         data_path=list(model.data_paths),
     )
     selection = fit_mappings.select(
@@ -434,34 +432,6 @@ def select_mappings(
     )
     selection.print(detail=False)
     return selection.collections
-
-
-FIT_ID = re.compile(r"^(?P<subset>.+)_(?P<date>\d{8})_\d{6}__[0-9a-f]{5}$")
-"""The form of the id of a fit, `<subset>_<date>_<time>__<hash>`."""
-
-
-def fit_subset(fit_id: str) -> str:
-    """Get the fit problem a fit belongs to from its id.
-
-    Args:
-        fit_id: the id of a fit, e.g. `PK_20261016_185018__3efe3`
-            (`sbmlsim.fit.result.fit_id`).
-
-    Returns:
-        The subset, e.g. `PK`. It may contain underscores, `PK_X_...` is `PK_X`.
-
-    Raises:
-        ValueError: if the id does not have the form of the id of a fit, also if
-            it holds a path separator or `..`, so that the id is safe as the name
-            of a directory.
-    """
-    match = FIT_ID.match(fit_id)
-    if match is None or any(part in fit_id for part in ("/", "\\", "..")):
-        raise ValueError(
-            f"'{fit_id}' is not the id of a fit, which has the form "
-            f"'<subset>_<date>_<time>__<hash>', e.g. 'PK_20261016_185018__3efe3'."
-        )
-    return match["subset"]
 
 
 def fit_date(fit_id: str) -> date:
@@ -475,7 +445,7 @@ def fit_date(fit_id: str) -> date:
 
     Raises:
         ValueError: if the id does not have the form of the id of a fit, see
-            `fit_subset`, or its date is no date.
+            `sbmlsim.fit.result.fit_subset`, or its date is no date.
     """
     fit_subset(fit_id)
     match = FIT_ID.match(fit_id)
@@ -563,72 +533,6 @@ def _remainder_terms(ast: object) -> list[str] | None:
 
 #: the argument of the provenance of a fit which names the fixed adopted fits
 FIXED_FITS = "fixed_fits"
-
-
-@dataclass
-class LeveledFitDefinition(FitDefinition):
-    """A fit definition whose problems load their models at an optimization level.
-
-    sbmlsim builds the problem of a definition without a level, so it takes the
-    level of the environment variable `SBMLSIM_JIT_OPTIMIZATION` of the process
-    which builds it. The problem resolves its level once and carries it into
-    every worker of a pool (`OptimizationProblem.__getstate__`), which loads the
-    models with it: the problems of this definition get the level of the model,
-    in the process and in every worker, whatever the environment of the
-    process and of a forkserver which started the workers.
-
-    Attributes:
-        jit_optimization: the level of LLJIT (`"O0"` to `"O3"`).
-    """
-
-    jit_optimization: str | None = None
-
-    @override
-    def problem(
-        self, opid: str, mapping_collections: list[FitMappingCollection] | None = None
-    ) -> OptimizationProblem:
-        problem = super().problem(opid, mapping_collections)
-        if self.jit_optimization is not None:
-            problem.jit_optimization = resolve_jit_optimization(self.jit_optimization)
-        return problem
-
-
-def at_level(definition: FitDefinition, level: str | None) -> FitDefinition:
-    """Get a fit definition whose problems load their models at a level.
-
-    Args:
-        definition: the fit definition of the model.
-        level: the optimization level of the model
-            (`SimulatorSettings.jit_optimization`), `None` for the level of
-            sbmlsim.
-
-    Returns:
-        The definition itself without a level, else a `LeveledFitDefinition`
-        with its fields.
-    """
-    if level is None:
-        return definition
-    fields = {
-        f.name: getattr(definition, f.name) for f in dataclasses.fields(definition)
-    }
-    fields["jit_optimization"] = level
-    return LeveledFitDefinition(**fields)
-
-
-def leveled_definitions(model: PKPDModel) -> dict[str, FitDefinition]:
-    """Get the fit definitions of a model at its optimization level, see `at_level`.
-
-    Args:
-        model: the model.
-
-    Returns:
-        The fit definitions by name.
-    """
-    level = model.simulator.jit_optimization
-    return {
-        name: at_level(definition, level)
-        for name, definition in model.load_fit_definitions().items()
-    }
 
 
 def start_point(
@@ -776,9 +680,9 @@ def current_fixed_fits(model: PKPDModel, subset: str) -> list[str]:
 
     Returns:
         The adopted fits of the model of the other subsets, in the order of
-        `model.fits`.
+        `model.adopted_ids`.
     """
-    return [f for f in model.fits if fit_subset(f) != subset]
+    return [f for f in model.adopted_ids if fit_subset(f) != subset]
 
 
 def recorded_fixed_fits(records: FitRecords) -> tuple[str, ...]:

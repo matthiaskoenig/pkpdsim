@@ -615,7 +615,7 @@ def test_describe_selection() -> None:
 def test_assess_the_test_package(credibility_model: PKPDModel) -> None:
     assessment = assess(credibility_model)
     assert [c.id for c in assessment.contexts] == ["describe", "dose", "renal"]
-    assert assessment.provenance.fits == list(credibility_model.fits)
+    assert assessment.provenance.fits == list(credibility_model.adopted_ids)
     assert assessment.provenance.model == credibility_model.name
     assert set(assessment.provenance.versions) == {
         "pkpdsim",
@@ -658,11 +658,11 @@ def test_the_provenance_is_of_the_folder_of_the_model(tmp_path: Path) -> None:
     (package / "credibility.py").write_text("CREDIBILITY = None\n")
     git(root, "add", "-A")
     git(root, "commit", "-m", "init")
-    model = dataclasses.replace(MODEL, path=package)
+    model = MODEL.replace(root=package, factory_dir=package)
     (root / "other.txt").write_text("a change outside the model\n")
     result = provenance(model)
     assert result.commit == git(root, "rev-parse", "HEAD").strip()
     assert result.dirty is False
     (package / "notes.txt").write_text("a change of the model\n")
     assert provenance(model).dirty is True
-    assert provenance(dataclasses.replace(model, path=tmp_path)).commit is None
+    assert provenance(model.replace(root=tmp_path, factory_dir=tmp_path)).commit is None

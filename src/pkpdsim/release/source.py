@@ -19,10 +19,10 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Protocol
 
+from sbmlsim.release.settings import ReleaseSettings
 from sbmlutils.console import console
 
 from pkpdsim.model import PKPDModel
-from pkpdsim.release.settings import ReleaseSettings
 
 _VERSION = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
 _GITHUB_URL = re.compile(

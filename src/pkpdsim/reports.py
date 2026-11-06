@@ -1,7 +1,7 @@
 """The reports of the adopted fits of a model.
 
 A fit is adopted with `run_fit <package> --adopt <fit id>`, its record
-(`PKPDModel.fits_dir`) holds everything its report is built from. The report of
+(`fits_dir` of the model) holds everything its report is built from. The report of
 every adopted fit is written separately, there is no report which merges the
 fits of a model: the fits have different problems, data and parameters.
 """
@@ -11,44 +11,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from sbmlsim.fit.cli import load_fit_records, report_from_records
+from sbmlsim.fit.result import fit_subset
 
-from pkpdsim.fit import fit_subset, leveled_definitions, records_context
+from pkpdsim.fit import records_context
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     from pkpdsim.model import PKPDModel
-
-
-def adopted_record(model: PKPDModel, fit_id: str) -> Path:
-    """Get the record of an adopted fit of a model, which its report is built from.
-
-    Args:
-        model: the model.
-        fit_id: the id of the adopted fit, e.g. `PK_20261016_185018__3efe3`.
-
-    Returns:
-        The directory of the record in `model.fits_dir`.
-
-    Raises:
-        ValueError: if the id is not the id of a fit (`pkpdsim.fit.fit_subset`)
-            or its subset has no fit definition.
-        FileNotFoundError: if the record of the fit has no `parameters.json`.
-    """
-    subset = fit_subset(fit_id)
-    definitions = leveled_definitions(model)
-    if subset not in definitions:
-        raise ValueError(
-            f"The subset '{subset}' of the adopted fit '{fit_id}' has no fit "
-            f"definition, the subsets are {', '.join(definitions)}."
-        )
-    record = model.fits_dir / fit_id
-    parameters = record / "parameters.json"
-    if not parameters.exists():
-        raise FileNotFoundError(
-            f"The record of the adopted fit '{fit_id}' has no {parameters}."
-        )
-    return record
 
 
 def adopted_reports(
@@ -68,13 +38,13 @@ def adopted_reports(
     recorded and names no fixed fits.
 
     Args:
-        model: the model, its `fits` are the fits to report.
+        model: the model, its `adopted_ids` are the fits to report.
         output_dir: the directory of the reports, `model.report_dir` by default;
             every report is written into the folder named by its fit id.
         mapping_figures: create the figures of the fit mappings.
 
     Returns:
-        The directories of the reports, in the order of `model.fits`.
+        The directories of the reports, in the order of `model.adopted_ids`.
 
     Raises:
         ValueError: if the model has no adopted fits, or the subset of an
@@ -82,13 +52,13 @@ def adopted_reports(
         FileNotFoundError: if the record of an adopted fit has no
             `parameters.json`.
     """
-    if not model.fits:
+    if not model.adopted_ids:
         raise ValueError(f"The model '{model.name}' has no adopted fits.")
-    definitions = leveled_definitions(model)
+    definitions = model.load_fit_definitions()
     context = records_context(model)
     directories: list[Path] = []
-    for fit_id in model.fits:
-        record = adopted_record(model, fit_id)
+    for fit_id in model.adopted_ids:
+        record = model.adopted_record(fit_id)
         subset = fit_subset(fit_id)
         definition = definitions[subset]
         records = load_fit_records(record)

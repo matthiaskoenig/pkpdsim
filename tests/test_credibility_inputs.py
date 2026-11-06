@@ -6,7 +6,6 @@ package with the volume `Vc` as the covariate, reported by the group of the
 study tables which the tests write.
 """
 
-import dataclasses
 import json
 import math
 from pathlib import Path
@@ -286,9 +285,7 @@ def _data(data: Path) -> Path:
 def test_the_checks_of_the_adopted_fit(
     credibility_model: PKPDModel, tmp_path: Path
 ) -> None:
-    model = dataclasses.replace(
-        credibility_model, data_paths=(_data(tmp_path / "data"),)
-    )
+    model = credibility_model.replace(data_path=(_data(tmp_path / "data"),))
     fits = evaluate_fits(model)
     # the toy has no body weight and no doses
     assert input_checks(model, fits, DEFAULT_COVARIATES) == []

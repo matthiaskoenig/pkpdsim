@@ -19,6 +19,7 @@ import pytest
 from sbmlsim import Q
 from sbmlsim.experiment import ExperimentRunner
 from sbmlsim.model import AbstractModel
+from sbmlsim.project import SimulatorSettings
 from sbmlsim.result import TimecourseResult
 from sbmlsim.simulation import (
     Change,
@@ -33,7 +34,7 @@ from sbmlsim.simulator.simulator import ScanError
 from sbmlutils.factory import Model, Parameter, Port, PortType, RateRule, Sbase
 from sbmlutils.metadata import SBO
 
-from pkpdsim.model import PKPDModel, SimulatorSettings
+from pkpdsim.model import PKPDModel
 from pkpdsim.pbpk import (
     MODEL_UNITS,
     CustomReaction,
@@ -816,6 +817,7 @@ def test_a_sensitivity_group_runs_from_the_equilibrated_state(
         SensitivityOutput,
         SensitivityParameter,
         SensitivityRunner,
+        SimulatorRun,
     )
 
     placebo = Simulation(end=60, preinit_changes=CONDITION)
@@ -829,7 +831,7 @@ def test_a_sensitivity_group_runs_from_the_equilibrated_state(
         ),
     ]
     runner = SensitivityRunner(
-        model=dataclasses.replace(_model(builds["sink"]), results_path=tmp_path),
+        model=_model(builds["sink"]).replace(results_path=tmp_path),
         parameters=lambda: [
             SensitivityParameter(
                 uid="HOMEO__EC50",
@@ -848,8 +850,8 @@ def test_a_sensitivity_group_runs_from_the_equilibrated_state(
     )
     path = runner.run(
         ["sampling"],
-        simulator=SimulatorSettings(
-            absolute_tolerance=1e-10, relative_tolerance=1e-10, n_workers=1
+        simulator=SimulatorRun(
+            SimulatorSettings(absolute_tolerance=1e-10, relative_tolerance=1e-10), 1
         ),
     )
     starts = {

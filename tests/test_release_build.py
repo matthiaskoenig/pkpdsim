@@ -1,6 +1,5 @@
 """Tests of the build of a release repository."""
 
-import dataclasses
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -15,7 +14,7 @@ OTHER_FIT_ID = "OTHER_20260102_000000__bcdef"
 FIT_IDS = [FIT_ID, OTHER_FIT_ID]
 ARCHIVE = MODEL.path / "toy.omex"
 CREDIBILITY_REFERENCE = "pkpdsim_toy.credibility:CREDIBILITY"
-MODEL_WITH_FIT = dataclasses.replace(MODEL, fits=FIT_IDS, archive_path=ARCHIVE)
+MODEL_WITH_FIT = MODEL.replace(adopted_ids=FIT_IDS, archive_path=ARCHIVE)
 
 
 class FakeRunner:
@@ -176,7 +175,7 @@ def test_build_without_fits_writes_no_reports(tmp_path: Path) -> None:
     stale.mkdir()
     (stale / "index.html").write_text("stale")
     runner = FakeRunner()
-    written = build(dataclasses.replace(MODEL_WITH_FIT, fits=[]), tmp_path, runner)
+    written = build(MODEL_WITH_FIT.replace(adopted_ids=[]), tmp_path, runner)
     assert not any("run_report" in command for command in runner.commands)
     assert not any("--uncertainty" in command for command in runner.commands)
     assert not stale.exists()
@@ -193,7 +192,7 @@ def test_build_requires_the_report_of_every_fit(tmp_path: Path) -> None:
 
 def test_build_runs_run_credibility_for_a_declared_model(tmp_path: Path) -> None:
     runner = FakeRunner()
-    model = dataclasses.replace(MODEL_WITH_FIT, credibility=CREDIBILITY_REFERENCE)
+    model = MODEL_WITH_FIT.replace(credibility=CREDIBILITY_REFERENCE)
     written = build(model, tmp_path, runner=runner)
     credibility = ["uv", "run", "run_credibility", "pkpdsim_toy"]
     assert runner.commands[-1] == [*credibility, "-o", "results/credibility"]
@@ -204,7 +203,7 @@ def test_build_runs_run_credibility_for_a_declared_model(tmp_path: Path) -> None
 def test_build_passes_the_source_commit_to_run_credibility(tmp_path: Path) -> None:
     """The assessment runs in the release repository, its provenance is the source."""
     runner = FakeRunner()
-    model = dataclasses.replace(MODEL_WITH_FIT, credibility=CREDIBILITY_REFERENCE)
+    model = MODEL_WITH_FIT.replace(credibility=CREDIBILITY_REFERENCE)
     build(model, tmp_path, runner=runner, source_commit="0123abc")
     (command,) = (c for c in runner.commands if "run_credibility" in c)
     assert command[-2:] == ["--source-commit", "0123abc"]
@@ -222,6 +221,6 @@ def test_build_without_a_declaration_removes_credibility(tmp_path: Path) -> None
 
 
 def test_build_requires_the_credibility_folder(tmp_path: Path) -> None:
-    model = dataclasses.replace(MODEL_WITH_FIT, credibility=CREDIBILITY_REFERENCE)
+    model = MODEL_WITH_FIT.replace(credibility=CREDIBILITY_REFERENCE)
     with pytest.raises(ReleaseError, match="run_credibility"):
         build(model, tmp_path, runner=FakeRunner(no_credibility=True))

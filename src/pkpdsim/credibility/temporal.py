@@ -23,10 +23,11 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, TypedDict
 
 import pandas as pd
+from sbmlsim.fit.result import fit_subset
 
 from pkpdsim.credibility.studies import study_folders
 from pkpdsim.data import StudyRecord, read_study_record
-from pkpdsim.fit import fit_date, fit_subset
+from pkpdsim.fit import fit_date
 
 if TYPE_CHECKING:
     from datetime import date
@@ -154,7 +155,7 @@ def chronology(model: PKPDModel) -> Chronology:
         model: the model.
 
     Returns:
-        The days of the adopted fits of `model.fits` and the records of the
+        The days of the adopted fits of `model.adopted_ids` and the records of the
         study folders of every data path of the model.
 
     Raises:
@@ -170,6 +171,6 @@ def chronology(model: PKPDModel) -> Chronology:
             earlier = studies.get(name)
             studies[name] = record if earlier is None else _merged(earlier, record)
     return Chronology(
-        fits={fit_subset(fit_id): fit_date(fit_id) for fit_id in model.fits},
+        fits={fit_subset(fit_id): fit_date(fit_id) for fit_id in model.adopted_ids},
         studies=studies,
     )

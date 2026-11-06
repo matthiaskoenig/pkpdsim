@@ -23,7 +23,7 @@ def workers(model: PKPDModel, options: argparse.Namespace, results_dir: Path) ->
     """Write the processes of the simulator of the run into the results."""
     results_dir.mkdir(parents=True, exist_ok=True)
     (results_dir / "workers.txt").write_text(
-        f"{model.name} {options.simulator.n_workers}", encoding="utf-8"
+        f"{model.name} {options.n_workers}", encoding="utf-8"
     )
 
 
