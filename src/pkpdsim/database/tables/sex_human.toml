@@ -1,0 +1,116 @@
+# The physiology of the women relative to the men of the same age, body weight
+# and height, beyond what the reference anatomy of each sex gives: the organ
+# masses, the blood volume, the flow fractions and the hematocrit of ICRP 89
+# per sex (physiology_human.toml, children_human.toml), the fat-free mass per
+# sex (Janmahasatian 2005) and the curves of the women over age where they
+# differ (age_human.toml: the GFR of the elderly, the hematocrit and the
+# albumin of NHANES relative to the women of 35 years).
+#
+# Every entry is the factor `fsex_<key>` of the female build on a quantity of
+# the female physiology, a function of the age of the forms of age_human.toml
+# (`points`: values at ages in years, linear between them and constant beyond
+# the first and the last); the male build has none, its physiology is the
+# reference of the parameters of a substance (fu, a clearance, measured in men
+# or in groups of both sexes). The form `ratio` is the constant ratio of the
+# women to the men of a table of the database at 35 years. `source` is the
+# primary source of the values, `sources` the further sources of the notes.
+#
+# The sex differences arise at puberty and some end at the menopause: a factor
+# is 1 in the children before 10 to 12 years and follows the evidence of the
+# adults; where the shape over age has no data of its own (the rise over
+# puberty, the fall over the menopause) the linear interpolation is a choice.
+# The searches, the sources read and the quantities without a difference are
+# documented in docs/pbpk/physiology.md (Sex).
+
+[cardiac_output]
+form = "points"
+age = [10.0, 12.0, 13.0, 14.0, 15.0, 16.0, 18.0, 20.0]
+value = [1.0, 0.968, 0.957, 0.946, 0.937, 0.93, 0.92, 0.914]
+source = "Williams1994"
+sources = ["Carlsson2012", "Patel2021", "Middlemiss2019", "deSimone1997"]
+notes = "The cardiac index (cardiac output per body surface area) of women and men of the same size is the same: Williams 1994 (the source of the cardiac output of ICRP 89; Table 5, the same reference cardiac index of both sexes at every age, 3.7 l/min/m2 at 24 and 3.6 at 34 years, the 6.5 and 5.9 l/min of the adults the different body sizes), Carlsson 2012 (CMR, n = 144, 3.1 +- 0.4 women and 3.2 +- 0.5 l/min/m2 men, p = 0.64), Patel 2021 (WASE, n = 605, 18-40 years, equal), de Simone 1997 (no sex effect at the same body surface area or weight, children and adults) and Middlemiss 2019 (inert gas rebreathing, n = 600, 20-49 years, women 0.94-0.96 at the same size). The scaling of the cardiac output with the lean tissue of the sex (Huisinga 2012) gives a woman about 9 % more cardiac output than a man of the same body weight and height (women have more cardiac output per fat-free mass, 20-25 % in Middlemiss 2019 and Yeon 2015, and less fat-free mass at the same size); the factor removes it: 1/(the female over the male cardiac output of the library at the same body weight, height and age), 0.914 of the adults (a direct fit of the library to the 12 groups of Middlemiss 2019 gives 0.911, the range of the evidence 0.88-0.96); 1 until 10 years, where the references of ICRP 89 of both sexes have the same cardiac output (Williams 1994 p. 14: independent of sex until near 10 years), and the drift of the references over puberty removed at its ages; constant in the elderly (no consistent sex difference of the decline: Carlsson 2012, Middlemiss 2019, Williams 1994)."
+
+[brain_flow]
+form = "points"
+age = [12.0, 18.0, 45.0, 65.0]
+value = [1.0, 1.257, 1.257, 1.096]
+source = "Aanerud2017"
+sources = ["Alisch2021", "Rodriguez1988", "Xing2017", "Satterthwaite2014", "Smith2019"]
+notes = "The cerebral blood flow per mass of young women is higher than of men: PET 15O-water +17 % at 20 years and +2 % at 65 years (Aanerud 2017, n = 58, cortical grey matter, Table 1), pCASL +16.5 % (Alisch 2021, n = 80), Xe-133 +11 % at all ages (Rodriguez 1988), and the total cerebral blood flow by phase-contrast MRI is higher despite a smaller brain (Xing 2017, 21-45 years, 724 +- 112 women and 551 +- 111 ml/min men, 21.3 and 14.8 % of the cardiac output); ICRP 89 gives both sexes 12 % of the cardiac output and the same perfusion per mass. The factor on the brain fraction of the cardiac output of the women (the other fractions share the rest in their proportions) gives the perfusion per mass of the female reference individual 1.17 times the male at 18-45 years and 1.02 from 65 years (Aanerud 2017 at 65 years, Smith 2019 -4 % with the hematocrit of each subject, Alisch 2021 70-79 years +3 %), with the factor of the cardiac output: 1.17/0.931 = 1.257 and 1.02/0.931 = 1.096 (0.931 the perfusion ratio of the references with the cardiac output factor alone); 1 until 12 years (no difference before puberty, Satterthwaite 2014, n = 922, 8-22 years, the divergence at mid-puberty, and Wu 2016), the rise over puberty and the fall from 45 to 65 years (the faster decline of the women, Aanerud 2017 -3.8 against -1.0 % per decade) linear, a choice."
+
+[albumin]
+form = "ratio"
+table = "blood_nhanes"
+quantity = "albumin"
+source = "NHANES2013_2018"
+sources = ["Weaving2016"]
+notes = "The plasma albumin of the women is lower than of the men from puberty to about 55 years: NHANES 2013-2018, survey-weighted means, 0.93-0.95 at 18-49 years, 0.98-0.99 from 55 years, 0.997 at 12 years (blood_nhanes.toml), Weaving 2016 (n = 1,079,193, the values of the women close to the men at 60 years); not an effect of the oral contraceptives (NHANES women of 20-49 years without estrogen 0.943). The curve of the women over age is relative to the women of 35 years (age_human.toml); the constant ratio of the women to the men at 35 years, 41.65/44.32 = 0.9398, times it gives the ratio of NHANES at every age from 12 years and 0.997 below, so puberty and the menopause need no switch."
+
+[gastric_emptying_fed]
+form = "points"
+age = [10.0, 15.0, 45.0, 55.0]
+value = [1.0, 1.2, 1.2, 1.0]
+source = "Camilleri2012"
+sources = ["Vasavid2014", "ICRP89", "Degen1996", "Hutson1989", "Gryback2000", "Karrento2025", "Hauser2016"]
+notes = "The emptying of a meal (caloric liquids and solids) of premenopausal women is slower than of men: scintigraphy of solids, Camilleri 2012 (n = 319, 127.7 +- 28.7 women and 109.9 +- 28.6 min men, Table 2A, 1.16 of the means and 1.19 of the medians, sex significant after age and BMI) and Vasavid 2014 (n = 189, 1.17); the smaller studies of premenopausal women 1.42-1.78 (Datz 1987, Hutson 1989), rounded to 1.33 (caloric liquids) and 1.40 (solids) by ICRP 89 (para 275); 1.2 of the large cohorts on the fed transit time of the stomach (`T_st_fed`). The fasted emptying of water does not differ (ICRP 89, 30 min both sexes; no sex difference of the fasting motility). Children before puberty 1 (ICRP 89 children with the values of the men, Hauser 2016 no sex effect at 1-17 years), the difference from puberty (Karrento 2025, n = 216, half time 86.6 girls and 73.6 min boys, 1.18), linear from 10 to 15 years; postmenopausal women without hormone replacement empty solids like men (Hutson 1989, Gryback 2000, Vasavid 2014), linear from 45 to 55 years, a choice."
+
+[colon_transit]
+form = "points"
+age = [15.0, 20.0]
+value = [1.0, 1.333]
+source = "ICRP89"
+sources = ["Metcalf1987", "Meier1995", "Degen1996", "Velde2013"]
+notes = "The colonic transit of women is slower than of men: ICRP 89 para 277, the colonic transit time of the adult females one third greater than of the males (48 and 36 h, 16 and 12 h for each of the right colon, the left colon and the rectosigmoid); radio-opaque markers, Metcalf 1987 (the segmental transits of the library, 35 h of a group of both sexes; the men significantly faster over the whole colon), Meier 1995 (n = 164, 1.40), Degen 1996 (colonic transit faster in men). The factor on the transit times of every segment of the large intestine (caecum to rectum); the small intestine does not differ (ICRP 89 para 276, Degen 1996). Children and adolescents 1 (Velde 2013, no sex difference at 3-18 years), linear to the adults from 15 to 20 years (a choice), constant after the menopause (no consistent change)."
+
+# `[protein.<organ>.<protein>]`, the organ by its token (`li` liver): the
+# activity of a protein per amount of tissue of the women relative to the men,
+# the factor `fsex_<organ>_<protein>` of the female build; it multiplies the
+# activity of every process of the protein in the organ (and its ontogeny,
+# ontogeny.toml). A protein of an organ without an entry is alike in both
+# sexes: in the liver CYP2B6, CYP2C8, CYP2C9, CYP2C19, CYP2D6, CYP2E1, CYP3A5,
+# UGT1A1, UGT1A4, UGT1A6, UGT1A9, UGT2B7, SULT1A1 and the transporters (OATP1B1,
+# OATP1B3, OATP2B1, OCT1, MATE1, P-gp, BCRP, MRP2, MRP3, BSEP), every protein of
+# the kidney and of the intestine (CYP3A4 of the intestine included). The
+# difference arises at puberty (no difference in the children: Bhatt 2019,
+# Prasad 2016, Cheung 2019, Bhatt 2018), linear from 10 to 16 years, a choice
+# (no study measured its onset but UGT2B17).
+
+[protein.li.CYP3A4]
+form = "points"
+age = [10.0, 16.0]
+value = [1.0, 1.2]
+source = "HuZhao2010"
+sources = ["Wolbold2003", "Gaither2025"]
+notes = "Every kind of evidence finds the women higher: the protein of the liver 2.0-2.3-fold by immunoblot (Wolbold 2003, 94 livers; verapamil N-dealkylation +50 %) and 1.18 by LC-MS/MS (Gaither 2025, n = 94, n.s.), the mRNA of GTEx 1.33-1.76, the activity of liver microsomes 1.24-1.55, the P-gp-independent marker 4beta-hydroxycholesterol +21 % (n = 1440, adjusted); midazolam (meta-analysis of Hu and Zhao 2010) oral clearance per kg +16 %, systemic +20 %. With the liver mass and the flows of the female build 1.2 gives +14 % (oral) and +15 % (systemic) per kg, without a factor -5 % and 0 to +4 %; the intestine alike (Paine 2005), the P-gp of liver and intestine alike, so not a P-gp effect (Cummins 2002). No change at the menopause (protein, Wolbold 2003; midazolam, Gorski 2000; erythromycin breath test, Harris 1996; no effect of hormone replacement) and no difference in the children (Parvez 2024)."
+
+[protein.li.CYP1A2]
+form = "points"
+age = [10.0, 16.0]
+value = [1.0, 0.9]
+source = "TantchevaPoor1999"
+sources = ["Gaither2025"]
+notes = "The caffeine test of 863 healthy Caucasians, the activity of the women about 0.9 of the men without oral contraceptives (Tantcheva-Poor 1999; oral contraceptives 0.72, a co-medication and not a part of the factor); per amount of tissue lower still (protein 0.74, Gaither 2025; mRNA of GTEx 0.58; microsomes of men higher, Parkinson 2004), the clearance per kg after the smaller liver of the women about 0.95 per tissue; 0.85-0.95 defensible. No difference in adolescents (Gade 2026), alike after the menopause."
+
+[protein.li.UGT2B17]
+form = "points"
+age = [9.0, 15.0]
+value = [1.0, 0.4]
+source = "Bhatt2018"
+sources = ["Gaither2025"]
+notes = "The protein of the liver of the men 2.6-fold of the women (Bhatt 2018, 455 livers, LC-MS/MS, adults 1.2 and 0.47 pmol/mg), sparse before 9 years (0.12 pmol/mg) and rising about 10-fold over puberty; Gaither 2025 0.27 (1.8 and 6.6 pmol/mg, P = 2.8e-7), the mRNA of GTEx 0.25; the copy-number deletion of the gene dominates the variability. The onset of the difference with the expression at puberty, 9 to 15 years."
+
+[protein.li.UGT2B15]
+form = "points"
+age = [10.0, 16.0]
+value = [1.0, 0.75]
+source = "Court2004"
+sources = ["Gaither2025"]
+notes = "The S-oxazepam glucuronidation of liver microsomes of women 0.60 of men (Court 2004, 54 livers, median 39 and 65 pmol/min/mg, p = 0.042), the protein 0.72 (Gaither 2025, P = 5.7e-7), the mRNA of GTEx 0.84; the glucuronidation of paracetamol lower in women (Miners 1983)."
+
+[protein.li.CYP2A6]
+form = "points"
+age = [10.0, 16.0, 45.0, 55.0]
+value = [1.0, 1.2, 1.2, 1.0]
+source = "Benowitz2006"
+sources = ["Gaither2025"]
+notes = "The nicotine clearance of women 18.8 +- 6.6 and of men 15.6 +- 4.3 ml/min/kg (Benowitz 2006, 278 twins and 16 siblings, intravenous deuterated nicotine and cotinine, 1.21, P < 0.001; the flow-independent ratio of trans-3'-hydroxycotinine to cotinine higher as well), the women after the menopause like the men (estrogen-driven; oral contraceptives faster still, a co-medication); the protein 1.24 (Gaither 2025, P = 0.03). The fall over the menopause linear from 45 to 55 years, a choice."

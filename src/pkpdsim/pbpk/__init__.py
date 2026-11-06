@@ -80,6 +80,11 @@ from pkpdsim.pbpk.variants.intestine import SegmentedIntestine, SingleLumen
 from pkpdsim.pbpk.variants.kidney_nephron import NephronKidney
 from pkpdsim.pbpk.variants.liver_zonated import ZonatedLiver
 from pkpdsim.pbpk.variants.lumen_options import LumenConversion, RegionalAbsorption
+from pkpdsim.pbpk.virtual import (
+    VirtualIndividual,
+    VirtualPopulation,
+    virtual_population,
+)
 
 if TYPE_CHECKING:
     from pkpdsim.pbpk.equilibration import Equilibration, equilibrated_simulation
@@ -189,6 +194,8 @@ __all__ = [
     "U",
     "Value",
     "Variants",
+    "VirtualIndividual",
+    "VirtualPopulation",
     "WeibullDissolution",
     "ZonatedLiver",
     "as_value",
@@ -214,4 +221,5 @@ __all__ = [
     "sex_definition",
     "sources",
     "unit_label",
+    "virtual_population",
 ]

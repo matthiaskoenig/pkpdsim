@@ -31,6 +31,12 @@ from pkpdsim.pbpk.routes import (
     dissolution_reads_fed,
     is_weibull,
 )
+from pkpdsim.pbpk.sex_differences import (
+    COLON_TRANSIT,
+    GASTRIC_EMPTYING_FED,
+    sex_curves,
+    sex_factor,
+)
 from pkpdsim.pbpk.substance import Substance
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import Value
@@ -125,13 +131,21 @@ class LumenBuilder(StandardBuilder):
                 segment="st",
             )
 
+    def _sex_input(self, key: str, name: str) -> str | None:
+        """The factor of the sex on a transit time, an input of the body, if the build has one."""
+        if key not in sex_curves(self.ctx.sex):
+            return None
+        return self._input(sex_factor(key), U.dimensionless, f"sex factor {name}")
+
     def _transit(self, seg: Segment) -> str:
         """The transit time of a segment, of the stomach by the prandial state.
 
         The impairment (chronic kidney disease) multiplies the transit time of
         the stomach and of the small intestine (its segments, the single
-        lumen) by its factors, inputs of the body. The time is returned in
-        parentheses, so that a caller divides by the whole product.
+        lumen) by its factors, the female build the transit times of the large
+        intestine by the factor of the sex (`fsex_t_colon`), inputs of the
+        body. The time is returned in parentheses, so that a caller divides
+        by the whole product.
         """
         t = ids.transit_time(seg.token)
         if seg.token == "st":
@@ -143,6 +157,10 @@ class LumenBuilder(StandardBuilder):
                 "impairment factor small intestinal transit time",
             )
             return f"({t} * {factor})"
+        if (
+            colon := self._sex_input(COLON_TRANSIT, "colonic transit time")
+        ) is not None:
+            return f"({t} * {colon})"
         return t
 
     def _stomach_time(self) -> str:
@@ -150,8 +168,10 @@ class LumenBuilder(StandardBuilder):
 
         `(T_st + FED*(T_st_fed - T_st))*fimp_t_stomach`: the prandial state
         and the factor of the gastric emptying of chronic kidney disease
-        (inputs of the body); the one formula which the transit of the stomach
-        (`_transit`) and its output `T_st_eff` (`_stomach_transit`) read.
+        (inputs of the body), in the female build `T_st_fed*fsex_t_stomach_fed`
+        (the slower emptying of a meal, the fasted emptying alike); the one
+        formula which the transit of the stomach (`_transit`) and its output
+        `T_st_eff` (`_stomach_transit`) read.
         """
         t = ids.transit_time("st")
         fed = self._input(ids.FED, U.dimensionless, "fed state (0 fasted, 1 fed)")
@@ -160,7 +180,11 @@ class LumenBuilder(StandardBuilder):
             U.dimensionless,
             "impairment factor gastric emptying time",
         )
-        return f"({t} + {fed} * ({ids.T_STOMACH_FED} - {t})) * {factor}"
+        t_fed = ids.T_STOMACH_FED
+        sex = self._sex_input(GASTRIC_EMPTYING_FED, "gastric emptying time fed")
+        if sex is not None:
+            t_fed = f"{t_fed} * {sex}"
+        return f"({t} + {fed} * ({t_fed} - {t})) * {factor}"
 
     def _stomach_transit(self) -> None:
         """The transit time of the stomach as a constant and an output, `T_st_eff`.
@@ -187,9 +211,15 @@ class LumenBuilder(StandardBuilder):
                 sboTerm=_SBO_PARAMETER,
                 notes="The transit time of the stomach of the prandial state and "
                 "the impairment, which its transit reads: `T_st` fasted, `T_st_fed` "
-                "fed (`FED = 1`), times the factor of the gastric emptying of "
-                "chronic kidney disease; an output of the intestine, an id of the "
-                f"top model.\n\n`{sid} = {formula}`",
+                "fed (`FED = 1`"
+                + (
+                    "; times the factor of the sex"
+                    if GASTRIC_EMPTYING_FED in sex_curves(self.ctx.sex)
+                    else ""
+                )
+                + "), times the factor of the gastric emptying of chronic kidney "
+                "disease; an output of the intestine, an id of the top model."
+                f"\n\n`{sid} = {formula}`",
                 port=_Port(f"{sid}_port", portType=PortType.OUTPUT_PORT),
             ),
             "gastric_transit_time",

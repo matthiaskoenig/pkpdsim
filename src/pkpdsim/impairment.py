@@ -20,8 +20,9 @@ keep their values and meaning.
 The clinical classes of the conditions are `Classification`s with their
 definitions, colors and the value of the library parameter of every class:
 `CHILD_PUGH_CLASSES` (Child-Pugh, `CP_severity`), `KDIGO_GFR_CLASSES` (the GFR
-categories of KDIGO 2012, the eGFR of the library) and `NYHA_CLASSES` (the NYHA
-functional classes, `HF_severity`), together `CLASSIFICATIONS`; a model scans
+categories of KDIGO 2012, the eGFR of the library), `NYHA_CLASSES` (the NYHA
+functional classes, `HF_severity`) and `AGE_CLASSES` (the paediatric and
+geriatric age classes of ICH E11 and ICH E7, `AGE`), together `CLASSIFICATIONS`; a model scans
 and draws them with `class_simulations` and `add_classes` of
 `pkpdsim.pbpk.PBPKSimulationExperiment` (docs page `pbpk/classes.md`).
 """
@@ -419,7 +420,93 @@ NYHA_CLASSES = Classification(
 )
 """The NYHA functional classes of chronic heart failure (`HF_severity` 0 to 4)."""
 
+_DAY = 1.0 / 365.25
+"""A day in years."""
+
+AGE_CLASSES = Classification(
+    key="age",
+    name="Age classes (ICH E11, ICH E7)",
+    condition="age",
+    parameter="AGE",
+    quantity="age (years)",
+    reference="ICHE11",
+    classes=(
+        ImpairmentClass(
+            "newborn",
+            "Term newborn",
+            "#c6dbef",
+            "term newborn infants, 0 to 27 days (ICH E11); preterm newborn "
+            "infants need the gestational age, which the library does not model",
+            13.5 * _DAY,
+            (0.0, 28 * _DAY),
+        ),
+        ImpairmentClass(
+            "infant",
+            "Infant and toddler",
+            "#6baed6",
+            "infants and toddlers, 28 days to 23 months (ICH E11)",
+            1.0,
+            (28 * _DAY, 2.0),
+        ),
+        ImpairmentClass(
+            "child",
+            "Child",
+            "#2171b5",
+            "children, 2 to 11 years (ICH E11)",
+            6.5,
+            (2.0, 12.0),
+        ),
+        ImpairmentClass(
+            "adolescent",
+            "Adolescent",
+            "#08306b",
+            "adolescents, 12 to 17 years (ICH E11: 12 to 16-18 years by "
+            "region; the EMA guideline on paediatric pharmacokinetics 12 to 17)",
+            15.0,
+            (12.0, 18.0),
+        ),
+        ImpairmentClass(
+            "adult",
+            "Adult",
+            "black",
+            "adults, 18 to 64 years; the value of the class is the adult of "
+            "ICRP 89 (35 years)",
+            35.0,
+            (18.0, 65.0),
+        ),
+        ImpairmentClass(
+            "young_old",
+            "65-74 years",
+            "#fdae6b",
+            "geriatric patients of 65 to 74 years (ICH E7 Questions and "
+            "Answers 2010; ICH E7: the geriatric population is 65 years or older)",
+            70.0,
+            (65.0, 75.0),
+        ),
+        ImpairmentClass(
+            "old_old",
+            "75-84 years",
+            "#e6550d",
+            "geriatric patients of 75 to 84 years (ICH E7 Questions and Answers 2010)",
+            80.0,
+            (75.0, 85.0),
+        ),
+        ImpairmentClass(
+            "oldest_old",
+            "85 years and older",
+            "#7f2704",
+            "geriatric patients of 85 years and older (ICH E7 Questions and "
+            "Answers 2010); the physiology beyond 85 years is extrapolated",
+            90.0,
+            (85.0, None),
+        ),
+    ),
+)
+"""The age classes of the paediatric (ICH E11) and geriatric (ICH E7)
+populations (`AGE` in years); the value of a class is a representative age,
+the physiology is continuous in age."""
+
 CLASSIFICATIONS: Mapping[str, Classification] = {
-    c.key: c for c in (CHILD_PUGH_CLASSES, KDIGO_GFR_CLASSES, NYHA_CLASSES)
+    c.key: c for c in (CHILD_PUGH_CLASSES, KDIGO_GFR_CLASSES, NYHA_CLASSES, AGE_CLASSES)
 }
 """The classifications by key."""

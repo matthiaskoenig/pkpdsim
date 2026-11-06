@@ -42,6 +42,7 @@ nav = [
     { "Intestine and routes" = "pbpk/intestine.md" },
     { "Impairment" = "pbpk/impairment.md" },
     { "Impairment classes" = "pbpk/classes.md" },
+    { "Virtual populations" = "pbpk/populations.md" },
     { "Observers" = "pbpk/observers.md" },
     { "Annotation" = "pbpk/annotation.md" },
     { "Migration" = "pbpk/migration.md" },

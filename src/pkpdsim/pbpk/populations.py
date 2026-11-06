@@ -1,15 +1,17 @@
-"""The populations: the reference individual and the distributions of the covariates.
+"""The populations: the reference individual and the covariates over age.
 
 A population is a set of data of the library (`database/tables/populations/<key>.toml`):
 the reference covariates of each sex (body weight, height and, where the data
 give it, the age), which become the default individual of a model, and the
-distributions of the covariates for a later sampler of virtual individuals.
-The reference anatomy stays ICRP 89 (`database/tables/physiology_human.toml`): the organ
-volumes and flows of a population's reference individual follow from the
-covariate scaling of `pkpdsim.pbpk.physiology` (Huisinga 2012) at its body
-weight and height. The population is chosen when the model is built
-(`PBPKDefinition.population`), the European reference individuals of ICRP 89
-are the default.
+distribution of the body weight and the height of each sex over age
+(`Anthropometry`), from which `pkpdsim.pbpk.virtual` draws virtual
+individuals. The reference anatomy stays ICRP 89 (`database/tables/physiology_human.toml`,
+with its children and the changes of the adults over age of
+`pkpdsim.pbpk.age`): the organ volumes and flows of an individual follow
+from the covariate scaling of `pkpdsim.pbpk.physiology` (Huisinga 2012) at
+its body weight, height and age. The population is chosen when the model is
+built (`PBPKDefinition.population`), the European reference individuals of
+ICRP 89 are the default.
 
 The distributions are data of the library and never SBML `distrib`
 uncertainties: `run_simulation --uncertainty` draws every parameter with a
@@ -20,12 +22,12 @@ The populations:
 - `european_icrp`: the ICRP 89 reference individuals (the default); ICRP 89
   gives reference values, not distributions, so the population has none;
 - `white_american_nhanes`, `black_american_nhanes`, `mexican_american_nhanes`:
-  adults of 20 to 49 years of the NHANES examinations 2013-2018 as
-  preprocessed by httk (HTTK-Pop, Ring 2017), survey-weighted means and
-  standard deviations;
-- `east_asian_tanaka`: the Asian Reference Man of Tanaka 1996 (Tables 9 and
-  10, 20 to 49 years) with the distributions of the Japanese of the same
-  tables.
+  the NHANES examinations 2013-2018 (`scripts/database/nhanes_populations.py`
+  from the public files of the survey): the reference individual the
+  survey-weighted mean of the adults of 20 to 49 years, the distributions of
+  every age from birth to 80 years and over, survey-weighted kernel moments;
+- `east_asian_tanaka`: the Asian Reference Man of Tanaka 1996 with the
+  distributions of the Japanese of the same tables.
 
 PK-Sim also offers a Japanese population (based on Japanese national
 statistics of 2015). Its primary data were not read, so the library has no
@@ -36,14 +38,15 @@ the distributions of `east_asian_tanaka`.
 from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import cache
-from typing import Any, Literal
+from typing import Any
 
+import numpy as np
 from sbmlutils.factory import UnitDefinition
 
 from pkpdsim.database.tables import load_folder
 from pkpdsim.pbpk import ids
 from pkpdsim.pbpk.data import load
-from pkpdsim.pbpk.physiology import AGE_DEFAULT, DEFAULT_POPULATION, MODEL_DEFAULT, Sex
+from pkpdsim.pbpk.physiology import AGE_REFERENCE, DEFAULT_POPULATION, Sex
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import Value
 
@@ -51,7 +54,8 @@ __all__ = [
     "COVARIATES",
     "DEFAULT_POPULATION",
     "POPULATIONS",
-    "Distribution",
+    "Anthropometry",
+    "CovariateDistribution",
     "Population",
     "population",
 ]
@@ -70,30 +74,172 @@ _COVARIATE_UNITS: dict[str, UnitDefinition] = {
 
 
 @dataclass(frozen=True)
-class Distribution:
-    """The distribution of a covariate in a population.
+class CovariateDistribution:
+    """The distribution of height and body weight of the individuals of one age and sex.
+
+    The height (cm) and the logarithm of the body weight (kg) are bivariate
+    normal: the body weight is lognormal and correlated with the height.
 
     Attributes:
-        kind: `normal` or `lognormal`; the mean and the standard deviation are
-            those of the covariate itself (not of its logarithm) for both.
-        mean: the mean.
-        sd: the standard deviation.
-        unit: the unit of mean and standard deviation.
+        height_mean: the mean height (cm).
+        height_sd: the standard deviation of the height (cm).
+        ln_bw_mean: the mean of the logarithm of the body weight (ln kg).
+        ln_bw_sd: the standard deviation of the logarithm of the body weight.
+        rho: the correlation of height and logarithm of the body weight;
+            `None` where the data give none, the two are drawn independently.
+    """
+
+    height_mean: float
+    height_sd: float
+    ln_bw_mean: float
+    ln_bw_sd: float
+    rho: float | None
+
+    @property
+    def bw_median(self) -> float:
+        """The median body weight (kg), `exp(ln_bw_mean)`."""
+        return float(np.exp(self.ln_bw_mean))
+
+    @property
+    def bw_mean(self) -> float:
+        """The mean body weight (kg) of the lognormal distribution."""
+        return float(np.exp(self.ln_bw_mean + self.ln_bw_sd**2 / 2))
+
+
+@dataclass(frozen=True)
+class Anthropometry:
+    """The distribution of height and body weight of one sex of a population over age.
+
+    The rows are the distributions at ages (`CovariateDistribution`); between
+    two ages every moment is interpolated linearly, below the first and above
+    the last age of the rows the nearest row holds, within `age_range`, the
+    ages the data describe.
+
+    Attributes:
+        ages: the ages of the rows (years), increasing.
+        height_mean: the mean height of each row (cm).
+        height_sd: the standard deviation of the height of each row (cm).
+        ln_bw_mean: the mean logarithm of the body weight of each row (ln kg).
+        ln_bw_sd: the standard deviation of the logarithm of the body weight.
+        rho: the correlation of height and log body weight of each row, or
+            `None`: the data give no correlation, the two are independent.
+        age_range: the ages (years) the distributions describe.
         source: the key of the source in `database/sources.toml`.
         notes: where the numbers come from.
     """
 
-    kind: Literal["normal", "lognormal"]
-    mean: float
-    sd: float
-    unit: UnitDefinition
+    ages: tuple[float, ...]
+    height_mean: tuple[float, ...]
+    height_sd: tuple[float, ...]
+    ln_bw_mean: tuple[float, ...]
+    ln_bw_sd: tuple[float, ...]
+    rho: tuple[float, ...] | None
+    age_range: tuple[float, float]
     source: str
     notes: str | None = None
+
+    def __post_init__(self) -> None:
+        """Check the rows.
+
+        Raises:
+            ValueError: for rows of different lengths, ages which do not
+                increase or lie outside the age range, a standard deviation
+                which is not positive or a correlation outside of (-1, 1).
+        """
+        columns = [self.height_mean, self.height_sd, self.ln_bw_mean, self.ln_bw_sd]
+        if self.rho is not None:
+            columns.append(self.rho)
+        if not self.ages or any(len(c) != len(self.ages) for c in columns):
+            raise ValueError("Anthropometry: the columns differ in length.")
+        if any(b <= a for a, b in zip(self.ages, self.ages[1:], strict=False)):
+            raise ValueError(f"Anthropometry: the ages {self.ages} do not increase.")
+        lo, hi = self.age_range
+        if not lo <= self.ages[0] or not self.ages[-1] <= hi:
+            raise ValueError(
+                f"Anthropometry: the ages {self.ages} lie outside of the age "
+                f"range {self.age_range}."
+            )
+        if min(self.height_sd) <= 0 or min(self.ln_bw_sd) <= 0:
+            raise ValueError("Anthropometry: a standard deviation is not positive.")
+        if self.rho is not None and any(not -1 < r < 1 for r in self.rho):
+            raise ValueError("Anthropometry: a correlation is outside of (-1, 1).")
+
+    def at(self, age: float) -> CovariateDistribution:
+        """The distribution of an age.
+
+        Args:
+            age: the age (years).
+
+        Returns:
+            The moments interpolated linearly in age.
+
+        Raises:
+            ValueError: for an age outside of `age_range`.
+        """
+        lo, hi = self.age_range
+        if not lo <= age <= hi:
+            raise ValueError(
+                f"The age {age} is outside of the ages {lo} to {hi} of the data."
+            )
+
+        def interp(column: tuple[float, ...]) -> float:
+            return float(np.interp(age, self.ages, column))
+
+        return CovariateDistribution(
+            height_mean=interp(self.height_mean),
+            height_sd=interp(self.height_sd),
+            ln_bw_mean=interp(self.ln_bw_mean),
+            ln_bw_sd=interp(self.ln_bw_sd),
+            rho=None if self.rho is None else interp(self.rho),
+        )
+
+    def sample(
+        self, ages: np.ndarray, rng: np.random.Generator, truncation: float = 3.0
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Draw the height and body weight of individuals of given ages.
+
+        Every individual is drawn from the bivariate normal distribution of
+        height and log body weight of its age, truncated at `truncation`
+        standard deviations of each (the draws beyond are drawn again).
+
+        Args:
+            ages: the ages of the individuals (years).
+            rng: the random generator.
+            truncation: the truncation of both marginals in standard
+                deviations.
+
+        Returns:
+            The heights (cm) and the body weights (kg).
+
+        Raises:
+            ValueError: for an age outside of `age_range` or a truncation
+                which is not positive.
+        """
+        if not truncation > 0:
+            raise ValueError(f"The truncation {truncation} is not positive.")
+        rows = [self.at(float(a)) for a in ages]
+        n = len(rows)
+        z = np.empty((n, 2))
+        todo = np.arange(n)
+        while todo.size:
+            draw = rng.standard_normal((todo.size, 2))
+            ok = np.all(np.abs(draw) <= truncation, axis=1)
+            z[todo[ok]] = draw[ok]
+            todo = todo[~ok]
+        heights = np.empty(n)
+        bws = np.empty(n)
+        for i, row in enumerate(rows):
+            rho = 0.0 if row.rho is None else row.rho
+            z1 = z[i, 0]
+            z2 = rho * z1 + np.sqrt(1.0 - rho**2) * z[i, 1]
+            heights[i] = row.height_mean + row.height_sd * z1
+            bws[i] = np.exp(row.ln_bw_mean + row.ln_bw_sd * z2)
+        return heights, bws
 
 
 @dataclass(frozen=True)
 class Population:
-    """A population: the reference individual and the covariate distributions per sex.
+    """A population: the reference individual and the covariates over age per sex.
 
     Attributes:
         key: the key of the population, `PBPKDefinition.population`.
@@ -101,14 +247,15 @@ class Population:
         source: the key of the source of the population in `database/sources.toml`.
         reference: the reference covariates (`BW`, `HEIGHT`, `AGE`) of each
             sex, the default individual of a model.
-        covariates: the distributions of the covariates of each sex.
+        anthropometry: the distribution of height and body weight over age
+            of each sex; a sex without data has none.
     """
 
     key: str
     name: str
     source: str
     reference: Mapping[Sex, Mapping[str, Value]]
-    covariates: Mapping[Sex, Mapping[str, Distribution]]
+    anthropometry: Mapping[Sex, Anthropometry]
 
 
 def _unit(key: str, entry: Mapping[str, Any], covariate: str) -> UnitDefinition:
@@ -148,15 +295,62 @@ def _icrp_reference(sex: Sex) -> dict[str, Value]:
             p["height"].get("notes"),
         ),
         ids.AGE: Value(
-            AGE_DEFAULT, U.yr, None, f"{MODEL_DEFAULT} No rule uses AGE yet."
+            AGE_REFERENCE,
+            U.yr,
+            "ICRP89",
+            "Section 1.4.2 para 14: adults are 20-50 years, the adult reference "
+            "values are tabulated at the average age of 35 years",
         ),
     }
+
+
+def _floats(table: Mapping[str, Any], key: str) -> tuple[float, ...]:
+    """A column of the rows of an anthropometry."""
+    return tuple(float(v) for v in table[key])
+
+
+def _anthropometry(key: str, table: Mapping[str, Any]) -> Anthropometry:
+    """The anthropometry of a sex of a population file.
+
+    The log body weight is given by its moments (`ln_bw_mean`, `ln_bw_sd`) or
+    by the mean and standard deviation of the lognormal body weight
+    (`bw_mean`, `bw_sd`).
+
+    Raises:
+        ValueError: for a table with neither form of the body weight.
+    """
+    if "ln_bw_mean" in table:
+        ln_mean, ln_sd = _floats(table, "ln_bw_mean"), _floats(table, "ln_bw_sd")
+    elif "bw_mean" in table:
+        mean, sd = (
+            np.array(_floats(table, "bw_mean")),
+            np.array(_floats(table, "bw_sd")),
+        )
+        var = np.log1p((sd / mean) ** 2)
+        ln_mean = tuple(float(v) for v in np.log(mean) - var / 2)
+        ln_sd = tuple(float(v) for v in np.sqrt(var))
+    else:
+        raise ValueError(
+            f"population '{key}': `by_age` gives neither `ln_bw_mean` nor `bw_mean`."
+        )
+    lo, hi = table["age_range"]
+    return Anthropometry(
+        ages=_floats(table, "age"),
+        height_mean=_floats(table, "height_mean"),
+        height_sd=_floats(table, "height_sd"),
+        ln_bw_mean=ln_mean,
+        ln_bw_sd=ln_sd,
+        rho=_floats(table, "rho") if "rho" in table else None,
+        age_range=(float(lo), float(hi)),
+        source=table["source"],
+        notes=table.get("notes"),
+    )
 
 
 def _population(key: str, data: Mapping[str, Any]) -> Population:
     """A population of its data file."""
     reference: dict[Sex, Mapping[str, Value]] = {}
-    covariates: dict[Sex, Mapping[str, Distribution]] = {}
+    anthropometry: dict[Sex, Anthropometry] = {}
     for sex in Sex:
         table = data.get(sex.value, {})
         values = _icrp_reference(sex)
@@ -168,28 +362,14 @@ def _population(key: str, data: Mapping[str, Any]) -> Population:
                 entry.get("notes"),
             )
         reference[sex] = values
-        distributions: dict[str, Distribution] = {}
-        for covariate, entry in table.get("covariates", {}).items():
-            if entry["kind"] not in ("normal", "lognormal"):
-                raise ValueError(
-                    f"population '{key}': {covariate} has the unknown kind "
-                    f"'{entry['kind']}', not normal or lognormal."
-                )
-            distributions[covariate] = Distribution(
-                kind=entry["kind"],
-                mean=float(entry["mean"]),
-                sd=float(entry["sd"]),
-                unit=_unit(key, entry, covariate),
-                source=entry["source"],
-                notes=entry.get("notes"),
-            )
-        covariates[sex] = distributions
+        if "by_age" in table:
+            anthropometry[sex] = _anthropometry(key, table["by_age"])
     return Population(
         key=key,
         name=data["name"],
         source=data["source"],
         reference=reference,
-        covariates=covariates,
+        anthropometry=anthropometry,
     )
 
 

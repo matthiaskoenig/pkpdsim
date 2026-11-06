@@ -35,10 +35,21 @@ from sbmlutils.factory import UnitDefinition
 from pkpdsim.database import integration
 from pkpdsim.database.studies import KINDS, QUANTITIES, studies
 from pkpdsim.impairment import (
+    AGE_CLASSES,
     CHILD_PUGH_CLASSES,
     KDIGO_GFR_CLASSES,
     NYHA_CLASSES,
     ImpairmentClass,
+)
+from pkpdsim.pbpk import ids
+from pkpdsim.pbpk.age import (
+    AGE_REFERENCE,
+    factor_curves,
+    flow_factors,
+    flow_fraction_curves,
+    protein_factor,
+    protein_factors,
+    reference_curves,
 )
 from pkpdsim.pbpk.data import load, sources
 from pkpdsim.pbpk.experiment import PBPKSimulationExperiment
@@ -49,9 +60,20 @@ from pkpdsim.pbpk.impairment import (
     meld_anchors,
 )
 from pkpdsim.pbpk.organs import Organ
-from pkpdsim.pbpk.physiology import Sex
+from pkpdsim.pbpk.physiology import (
+    Sex,
+    _references,
+    reference_hematocrit,
+    reference_individual,
+)
 from pkpdsim.pbpk.populations import POPULATIONS
 from pkpdsim.pbpk.proteins import PROTEINS
+from pkpdsim.pbpk.sex_differences import (
+    protein_sex_factor,
+    protein_sex_factors,
+    sex_curves,
+    sex_factor,
+)
 
 REPO_DIR: Path = Path(__file__).parent.parent
 PBPK_DIR: Path = REPO_DIR / "docs" / "pbpk"
@@ -274,14 +296,25 @@ def populations() -> str:
         population = POPULATIONS[key]
         for sex in Sex:
             reference = population.reference[sex]
-            covariates = population.covariates[sex]
-            spread = [
-                f"{name} {d.kind} {_number(d.mean)} &plusmn; {_number(d.sd)}"
-                for name, d in covariates.items()
-            ]
             cited.append(population.source)
             cited += [v.source for v in reference.values() if v.source]
-            cited += [d.source for d in covariates.values()]
+            a = population.anthropometry.get(sex)
+            if a is None:
+                spread = "none"
+            else:
+                cited.append(a.source)
+                lo, hi = a.age_range
+                adult = a.at(min(max(AGE_REFERENCE, lo), hi))
+                corr = (
+                    "independent"
+                    if adult.rho is None
+                    else f"correlation {adult.rho:.2f} at 35 y"
+                )
+                spread = (
+                    f"{_number(lo)}-{_number(hi)} y, {len(a.ages)} ages; "
+                    f"HEIGHT &plusmn; {_number(adult.height_sd)} cm, "
+                    f"ln BW &plusmn; {_number(adult.ln_bw_sd)}, {corr}"
+                )
             rows.append(
                 [
                     f"{population.name} `{key}`",
@@ -289,7 +322,7 @@ def populations() -> str:
                     _number(reference["BW"].value),
                     _number(reference["HEIGHT"].value),
                     _number(reference["AGE"].value),
-                    "<br>".join(spread) if spread else "none",
+                    spread,
                 ]
             )
     reference = POPULATIONS[default].reference[Sex.MALE]
@@ -297,10 +330,217 @@ def populations() -> str:
         "population",
         "sex",
         *(f"{c} [{_unit_id(reference[c].unit)}]" for c in ("BW", "HEIGHT", "AGE")),
-        "covariates",
+        "distribution over age",
     ]
     lines = _table(header, rows)
     return _generated("`database/tables/populations/*.toml`", lines, cited)
+
+
+AGES: tuple[float, ...] = (
+    0.0,
+    1.0,
+    5.0,
+    10.0,
+    15.0,
+    20.0,
+    35.0,
+    50.0,
+    65.0,
+    80.0,
+    100.0,
+)
+"""The ages (years) of the tables of the physiology over age."""
+
+
+def _age(a: float) -> str:
+    """An age in a table, the newborn at 0."""
+    return "newborn" if a == 0 else _number(a)
+
+
+def _physiology_age(sex: Sex) -> str:
+    """The reference individual of a sex over age."""
+    curves = reference_curves(sex)
+    cited = ["ICRP89", *(s for c in curves.values() for s in c.sources)]
+    cited += list(factor_curves(sex)[ids.HCT].sources)
+    cited += list(factor_curves(sex)[ids.GFR].sources)
+    rows = []
+    organs = (Organ.BRAIN, Organ.LIVER, Organ.KIDNEY, Organ.MUSCLE)
+    for a in AGES:
+        ref = reference_individual(sex, a)
+        bsa = 0.007184 * ref.bw**0.425 * ref.height**0.725
+        masses = [curves[ids.ref(ids.organ_mass(o))].curve.value(a) for o in organs]
+        rows.append(
+            [
+                _age(a),
+                _number(ref.bw),
+                _number(ref.height),
+                _number(bsa),
+                *(_number(m) for m in masses),
+                _number(curves[ids.ref(ids.VBLOOD)].curve.value(a)),
+                _number(curves[ids.ref(ids.CO)].curve.value(a)),
+                _number(ref.gfr * 1e3),
+                _number(ref.gfr * 1e3 * 1.73 / bsa),
+                _number(reference_hematocrit(sex, a)),
+            ]
+        )
+    header = [
+        "age [yr]",
+        "BW [kg]",
+        "HEIGHT [cm]",
+        "BSA [m2]",
+        *(f"M{o.value} [kg]" for o in organs),
+        "Vblood [l]",
+        "CO [l/min]",
+        "GFR [ml/min]",
+        "GFR [ml/min/1.73 m2]",
+        "HCT [-]",
+    ]
+    return _generated(
+        "`database/tables/children_human.toml`, `physiology_human.toml` and "
+        "`age_human.toml`",
+        _table(header, rows),
+        cited,
+    )
+
+
+def physiology_age_male() -> str:
+    """The male reference individual over age."""
+    return _physiology_age(Sex.MALE)
+
+
+def physiology_age_female() -> str:
+    """The female reference individual over age."""
+    return _physiology_age(Sex.FEMALE)
+
+
+def _age_factors(sex: Sex) -> str:
+    """The factors of the age of a sex."""
+    factors = factor_curves(sex)
+    refs = _references(sex, load("physiology_human"))
+    fractions = {
+        o: refs[ids.flow_fraction(o)].value for o in Organ if o is not Organ.LUNG
+    }
+    flows = flow_fraction_curves(sex, fractions)
+    keys = (ids.GFR, ids.HCT, ids.FFM, "albumin", "agp")
+    cited = [s for k in keys for s in factors[k].sources]
+    cited += list(flow_factors(sex).sources)
+    rows = []
+    for a in AGES:
+        rows.append(
+            [
+                _age(a),
+                *(_number(factors[k].curve.value(a)) for k in keys),
+                _number(flows[Organ.BRAIN].value(a)),
+                _number(flows[Organ.LIVER].value(a) / fractions[Organ.LIVER]),
+                _number(flows[Organ.KIDNEY].value(a) / fractions[Organ.KIDNEY]),
+                _number(flows[Organ.MUSCLE].value(a) / fractions[Organ.MUSCLE]),
+            ]
+        )
+    header = [
+        "age [yr]",
+        "fage_GFR",
+        "fage_HCT",
+        "fage_FFM",
+        "fage_albumin",
+        "fage_agp",
+        "brain share of CO",
+        "liver group",
+        "kidney",
+        "other organs",
+    ]
+    return _generated("`database/tables/age_human.toml`", _table(header, rows), cited)
+
+
+def age_factors_male() -> str:
+    """The factors of the age of men."""
+    return _age_factors(Sex.MALE)
+
+
+def age_factors_female() -> str:
+    """The factors of the age of women."""
+    return _age_factors(Sex.FEMALE)
+
+
+ONTOGENY_AGES: tuple[float, ...] = (0.0, 1 / 12, 0.5, 1.0, 2.0, 5.0, 18.0)
+"""The ages (years) of the table of the ontogeny."""
+
+
+def ontogeny() -> str:
+    """The ontogeny of the proteins."""
+    rows = []
+    cited: list[str] = []
+    for organ, protein in sorted(protein_factors(), key=lambda x: (x[0].value, x[1])):
+        curve = protein_factor(organ, protein)
+        assert curve is not None
+        cited += list(curve.sources)
+        rows.append(
+            [
+                f"`{organ.value}` {_ORGAN_NAMES[organ]}",
+                protein,
+                *[_number(curve.curve.value(a)) for a in ONTOGENY_AGES],
+                ", ".join(f"`{k}`" for k in curve.sources),
+            ]
+        )
+    header = [
+        "organ",
+        "protein",
+        "newborn",
+        "1 month",
+        "6 months",
+        "1 y",
+        "2 y",
+        "5 y",
+        "18 y",
+        "sources",
+    ]
+    return _generated("`database/tables/ontogeny.toml`", _table(header, rows), cited)
+
+
+SEX_AGES: tuple[float, ...] = (5.0, 12.0, 15.0, 18.0, 35.0, 50.0, 60.0, 80.0)
+"""The ages (years) of the table of the factors of the sex."""
+
+_SEX_NAMES: dict[str, str] = {
+    "CO": "cardiac output",
+    "Qbr": "brain fraction of the cardiac output",
+    "albumin": "plasma albumin",
+    "t_stomach_fed": "transit time of the stomach, fed",
+    "t_colon": "transit times of the large intestine",
+}
+"""The quantities of the factors of the sex in the table."""
+
+
+def sex_factors() -> str:
+    """The factors of the female build relative to the male, over age."""
+    rows = []
+    cited: list[str] = []
+    entries = [
+        (_SEX_NAMES[key], sex_factor(key), c)
+        for key, c in sex_curves(Sex.FEMALE).items()
+    ]
+    for organ, protein in sorted(
+        protein_sex_factors(), key=lambda x: (x[0].value, x[1])
+    ):
+        c = protein_sex_factor(Sex.FEMALE, organ, protein)
+        assert c is not None
+        entries.append(
+            (
+                f"{protein} {_ORGAN_NAMES[organ]}",
+                sex_factor(f"{organ.value}_{protein.lower()}"),
+                c,
+            )
+        )
+    for name, pid, c in entries:
+        cited += list(c.sources)
+        rows.append(
+            [
+                name,
+                f"`{pid}`",
+                *[_number(c.curve.value(a)) for a in SEX_AGES],
+                ", ".join(f"`{k}`" for k in c.sources),
+            ]
+        )
+    header = ["quantity", "factor", *[f"{a:g} y" for a in SEX_AGES], "sources"]
+    return _generated("`database/tables/sex_human.toml`", _table(header, rows), cited)
 
 
 def _class_table(
@@ -835,6 +1075,27 @@ def classes_child_pugh() -> str:
             *score,
             "",
             *classes,
+        ]
+    )
+
+
+def classes_age() -> str:
+    """The age classes of ICH E11 and ICH E7 with the age of the scans."""
+    rows = [
+        [
+            _class_cell(c),
+            c.definition,
+            _limits(c, closed=False) if c.key != "newborn" else "0-27 days",
+            _number(c.value) if c.value is not None else "",
+        ]
+        for c in AGE_CLASSES
+    ]
+    return "\n".join(
+        [
+            "*Generated from `pkpdsim.impairment.AGE_CLASSES` by "
+            "`scripts/pbpk_tables.py`.*",
+            "",
+            *_table(["class", "definition", "age [yr]", "AGE"], rows),
         ]
     )
 
@@ -1382,6 +1643,13 @@ TABLES: dict[str, Callable[[], str]] = {
     "physiology-organs-male": physiology_organs_male,
     "physiology-organs-female": physiology_organs_female,
     "populations": populations,
+    "physiology-age-male": physiology_age_male,
+    "physiology-age-female": physiology_age_female,
+    "age-factors-male": age_factors_male,
+    "age-factors-female": age_factors_female,
+    "ontogeny": ontogeny,
+    "sex-factors": sex_factors,
+    "classes-age": classes_age,
     "impairment-child-pugh": impairment_child_pugh,
     "impairment-child-pugh-proteins": impairment_child_pugh_proteins,
     "impairment-meld": impairment_meld,

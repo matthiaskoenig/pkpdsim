@@ -2,9 +2,10 @@
 #
 # The reference individuals of each sex are those of physiology_human.toml
 # (ICRP 89 Table 2.9), so this file states no numbers of its own; the age is
-# the model default of `pkpdsim.pbpk.physiology.AGE_DEFAULT`. ICRP 89 gives
-# reference values, not distributions of the covariates: the population has
-# no covariate distributions until a European survey has been read.
+# 35 years, the age of the adults of ICRP 89 (`pkpdsim.pbpk.age.AGE_REFERENCE`).
+# ICRP 89 gives reference values (of the children as well,
+# children_human.toml), not distributions of the covariates: the population
+# has no covariate distributions until a European survey has been read.
 
 name = "European (ICRP 89)"
 source = "ICRP89"

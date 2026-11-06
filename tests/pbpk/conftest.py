@@ -591,7 +591,7 @@ def assert_reference_sbml(result: BuildResult) -> None:
     the consensus of the database (the factors, their notes and sources only),
     and with the heart failure factors of the consensus (Leithe 1984), the
     kidney volume and transit of CKD of Malik 2020 and the cirrhosis factors
-    cited from Edginton 2008 (factors, notes and sources only); a change of the library which changes the
+    cited from Edginton 2008 (factors, notes and sources only), and all rebuilt with the physiology over age and sex (the reference values, the hematocrit, the GFR, the fat-free mass, the flow fractions and the binding proteins as curves of `AGE`, the ontogeny and the sex factors of the proteins, the default age 35 of ICRP 89; the values of the default individual unchanged); a change of the library which changes the
     SBML of every model on purpose rebuilds them and says so.
     """
     for path in (result.comp_path, result.flat_path):

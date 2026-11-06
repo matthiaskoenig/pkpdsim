@@ -480,6 +480,13 @@ KINDS: dict[str, Kind] = {
         _P, _PHYS, terms=(_DISEASES["heart_failure"],), requested="impairment factor"
     ),
     "impairment_factor": Kind(_P, _PHYS, requested="impairment factor"),
+    # age and sex
+    "age_factor": Kind(
+        _P, _PHYS, requested="factor of the age on a physiological quantity"
+    ),
+    "sex_factor": Kind(
+        _P, _PHYS, requested="factor of the sex on a physiological quantity"
+    ),
     # substances
     "molecular_weight": Kind(SBO.MOLECULAR_MASS, "MOLECULAR_WEIGHT"),
     "fu": Kind(_P, "FRACTION_UNBOUND_PLASMA"),

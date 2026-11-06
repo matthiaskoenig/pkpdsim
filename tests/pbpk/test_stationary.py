@@ -50,9 +50,7 @@ from pkpdsim.pbpk import (
     steady_state,
 )
 from pkpdsim.pbpk.stationary import (
-    BASELINE_SIZE_LIMIT,
     SteadyStateWarning,
-    expanded_size,
     linear_clearance,
     steady_plan,
 )
@@ -628,21 +626,18 @@ def test_the_single_lumen_starts_at_the_arterial_plasma(tmp_path: Path) -> None:
 # --- the checks of the build --------------------------------------------------------
 
 
-def test_a_large_solved_baseline_warns(tmp_path: Path) -> None:
-    """A solved saturable process of a body which also eliminates elsewhere: the build warns.
+def test_a_large_solved_baseline_loads(tmp_path: Path) -> None:
+    """A solved saturable process of a body which also eliminates elsewhere: no warning.
 
-    The root repeats the clearance and the source of the rest of the body;
-    above `BASELINE_SIZE_LIMIT` nodes every start compiles a slow copy.
-    Without the saturable secretion the baseline is small and the build is
+    The root repeats the clearance and the source of the rest of the body,
+    which every start reads; roadrunner generates the code of an initial
+    assignment once per symbol (the cache of its initial value resolvers),
+    so the size of the baseline costs its own nodes once and the build is
     quiet.
     """
-    with pytest.warns(SteadyStateWarning, match="expands to"):
-        build(_definition([*CHEMISTRY, SEC]), tmp_path / "large")
     with warnings.catch_warnings():
         warnings.simplefilter("error", SteadyStateWarning)
-        result = build(_definition(), tmp_path / "small")
-    model = libsbml.readSBMLFromFile(str(result.flat_path)).getModel()
-    assert expanded_size(model, ids.baseline(S)) < BASELINE_SIZE_LIMIT
+        build(_definition([*CHEMISTRY, SEC]), tmp_path / "large")
 
 
 def test_a_pinned_imbalance_warns(tmp_path: Path) -> None:

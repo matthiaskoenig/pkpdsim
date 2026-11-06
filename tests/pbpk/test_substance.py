@@ -519,9 +519,12 @@ def test_the_baseline_is_annotated(tmp_path: Path) -> None:
 # `fimp_albumin_ckd`) to both. The transit time of the stomach of the
 # segmented intestine added `T_st_eff`: a parameter of the top model of
 # the comp model, a parameter with its initial assignment of the flat model.
+# The physiology over age added 12 parameters (`BW_ref`, `HEIGHT_ref`, the
+# factors `fage_*`, `fsex_*` of its proteins) and made 45 reference values
+# and fractions initial assignments of `AGE`.
 _PINNED = {
-    "comp": (9, 240, 148, 12, 3, 9),
-    "flat": (65, 408, 265, 68, 108, 77),
+    "comp": (9, 252, 193, 12, 3, 9),
+    "flat": (65, 420, 310, 68, 108, 77),
 }
 
 

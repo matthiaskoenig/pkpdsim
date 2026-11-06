@@ -9,8 +9,10 @@ changes of an experiment (a value which no rule recomputes during the
 integration keeps the compiled model small and fast to load):
 
 - the reference values of the sex of the build (ICRP 89,
-  `database/tables/physiology_human.toml`); the sex is chosen when the model is built,
-  a study of both sexes uses one model per sex;
+  `database/tables/physiology_human.toml`) and of the age: the reference
+  values are curves of `AGE` (`pkpdsim.pbpk.age`, the reference children of
+  ICRP 89 and the aging of the adults, 1 at 35 years); the sex is chosen when
+  the model is built, a study of both sexes uses one model per sex;
 - the default individual (`BW`, `HEIGHT`, `AGE`) is the reference individual
   of the sex of the population of the build (`pkpdsim.pbpk.populations`,
   ICRP 89 by default); the reference anatomy stays ICRP 89 for every
@@ -25,7 +27,9 @@ integration keeps the compiled model small and fast to load):
 - the cardiac output scales as the tissues, `SV_tis` (Huisinga 2012 eq. 13),
   and the organ flows are fractions of it, renormalised over the organs so
   that they sum to the cardiac output;
-- the GFR scales with the body surface area.
+- the GFR scales with the body surface area and matures and declines with
+  the age (`fage_GFR`); the hematocrit, the fat-free mass and the flow
+  fractions carry their factors of the age (`fage_<id>`).
 
 An organ volume is the volume of its tissue and its blood,
 `M<o>/density + blood*Vblood`; the body weight is the mass of the tissues
@@ -57,9 +61,27 @@ from sbmlutils.factory import Parameter, Sbase, UnitDefinition
 from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk import ids
+from pkpdsim.pbpk.age import (
+    ADULT_AGE,
+    AGE_REFERENCE,
+    LIVER_GROUP,
+    age_factor,
+    factor_curves,
+    flow_factors,
+    reference_curves,
+    rest_denominator,
+)
 from pkpdsim.pbpk.annotation import annotate, initial_assignment
 from pkpdsim.pbpk.data import cite, load
 from pkpdsim.pbpk.organs import PORTAL_ORGANS, Organ, Pool
+from pkpdsim.pbpk.sex_differences import (
+    BRAIN_FLOW,
+    CARDIAC_OUTPUT,
+    COLON_TRANSIT,
+    GASTRIC_EMPTYING_FED,
+    sex_curves,
+    sex_factor,
+)
 from pkpdsim.pbpk.units import U
 from pkpdsim.sex import Sex
 
@@ -67,6 +89,8 @@ if TYPE_CHECKING:
     from pkpdsim.pbpk.populations import Population
 
 __all__ = [
+    "ADULT_AGE",
+    "AGE_REFERENCE",
     "DEFAULT_POPULATION",
     "ReferenceIndividual",
     "Sex",
@@ -84,9 +108,6 @@ LEAN_ORGANS: tuple[Organ, ...] = tuple(o for o in Organ if o is not Organ.ADIPOS
 
 DEFAULT_POPULATION = "european_icrp"
 """The population of a model which does not choose one (`pkpdsim.pbpk.populations`)."""
-
-AGE_DEFAULT = 40.0
-"""The age of an individual if an experiment does not set it (yr)."""
 
 MODEL_DEFAULT = "Model default without a source."
 """The notes of a parameter whose value is a choice of the model, not data."""
@@ -163,6 +184,31 @@ def _janmahasatian(bw: float, height: float, sex: Sex) -> float:
     if sex is Sex.MALE:
         return 9270 * bw / (6680 + 216 * bmi)
     return 9270 * bw / (8780 + 244 * bmi)
+
+
+def _dubois_formula(bw: str, height: str) -> str:
+    """The Du Bois body surface area of the ids of body weight (kg) and height (cm)."""
+    return f"0.007184 m2 * ({bw} / 1 kg)^0.425 * ({height} / 1 cm)^0.725"
+
+
+def _ffm_formula(bw: str, height: str, sex: Sex, bmi: str | None = None) -> str:
+    """The fat-free mass of Janmahasatian 2005, `BW * 9270 / (k + a*BMI)`.
+
+    Args:
+        bw: the id of the body weight (kg).
+        height: the id of the height (cm).
+        sex: the sex of the coefficients.
+        bmi: the id of the body mass index (kg/m2), else computed of both.
+    """
+    k, a = (6680, 216) if sex is Sex.MALE else (8780, 244)
+    index = (
+        f"{bmi} / 1 kg_per_m2"
+        if bmi is not None
+        else f"({bw} / 1 kg) / ({height} / 100 cm)^2"
+    )
+    return (
+        f"{bw} * 9270 dimensionless / ({k} dimensionless + {a} dimensionless * {index})"
+    )
 
 
 def _references(sex: Sex, data: dict[str, Any]) -> dict[str, _Ref]:
@@ -343,6 +389,9 @@ class _Physiology:
     ) -> None:
         self.sex = sex
         self.refs = _references(sex, load("physiology_human"))
+        self.curves = reference_curves(sex)
+        self.factors_of_age = factor_curves(sex)
+        self.factors_of_sex = sex_curves(sex)
         self.population = population
         self.default = default
         self.factors = factors
@@ -507,94 +556,279 @@ class _Physiology:
             ),
         ]
 
+    def curve(
+        self,
+        pid: str,
+        unit: UnitDefinition,
+        name: str,
+        text: str,
+        *,
+        kind: str,
+        organ: Organ | None = None,
+    ) -> list[Sbase]:
+        """A reference value of the sex over age, the initial assignment of its curve."""
+        c = self.curves[pid]
+        return _initial(
+            pid,
+            c.curve.formula(ids.AGE, str(unit.sid)),
+            unit,
+            name,
+            f"{text} A function of the age (`pkpdsim.pbpk.age`): {c.notes}",
+            c.sources,
+            kind=kind,
+            organ=organ,
+        )
+
+    def factor(
+        self,
+        key: str,
+        name: str,
+        *,
+        kind: str,
+        organ: Organ | None = None,
+    ) -> list[Sbase]:
+        """The factor of the age on a quantity, `fage_<key>`, 1 at 35 years."""
+        c = self.factors_of_age[key]
+        return _initial(
+            age_factor(key),
+            c.curve.formula(ids.AGE),
+            U.dimensionless,
+            f"age factor {name}",
+            f"The factor of the age on the {name} of the {self.sex.value} "
+            f"individual at a fixed body size, 1 at {AGE_REFERENCE:g} years "
+            f"(`pkpdsim.pbpk.age`): {c.notes}",
+            c.sources,
+            kind="age_factor",
+            organ=organ,
+        )
+
+    def with_sex(self, key: str, formula: str) -> str:
+        """A formula times the factor of the sex on a quantity, if the build has one."""
+        if key in self.factors_of_sex:
+            return f"{formula} * {sex_factor(key)}"
+        return formula
+
+    def sex_factors(self) -> list[Sbase]:
+        """The factors of the sex of the female build, `fsex_<key>`, curves of the age.
+
+        The cardiac output, the brain fraction of the cardiac output and the
+        transit times of the stomach in the fed state and of the large
+        intestine (inputs of the intestine); the factors of the albumin and of
+        the proteins are those of the impairment
+        (`pkpdsim.pbpk.sex_differences`). None in the male build.
+        """
+        names = {
+            CARDIAC_OUTPUT: "cardiac output",
+            BRAIN_FLOW: "brain fraction of the cardiac output",
+            GASTRIC_EMPTYING_FED: "transit time of the stomach in the fed state",
+            COLON_TRANSIT: "transit times of the large intestine",
+        }
+        objects: list[Sbase] = []
+        for key, name in names.items():
+            c = self.factors_of_sex.get(key)
+            if c is None:
+                continue
+            objects += _initial(
+                sex_factor(key),
+                c.curve.formula(ids.AGE),
+                U.dimensionless,
+                f"sex factor {name}",
+                f"The factor of the sex on the {name} of the {self.sex.value} "
+                "individual relative to a man of the same age, body weight and "
+                f"height (`pkpdsim.pbpk.sex_differences`): {c.notes}",
+                c.sources,
+                kind="sex_factor",
+            )
+        return objects
+
+    def flow_fractions(self) -> list[Sbase]:
+        """The flow fractions over age: the adults of ICRP 89 times the factors of the age.
+
+        The brain by `fage_Qbr` (and in the female build by its factor of the
+        sex `fsex_Qbr`), the other organs share the rest in the proportions of
+        the adults (`fage_Qrest`), the liver group and the kidney with their
+        factors `fage_Qli` and `fage_Qki`, the remaining organs close the sum
+        (`fage_Qother`); `pkpdsim.pbpk.age.FlowFactors`.
+        """
+        f = flow_factors(self.sex)
+        text = (
+            f"of the {self.sex.value} individual at a fixed body size, 1 at {AGE_REFERENCE:g} years "
+            f"(`pkpdsim.pbpk.age.FlowFactors`): {f.notes}"
+        )
+        brain, _kidney = ids.flow_fraction(Organ.BRAIN), ids.flow_fraction(Organ.KIDNEY)
+        qbr, qli, qki = (
+            age_factor(ids.organ_flow(o))
+            for o in (Organ.BRAIN, Organ.LIVER, Organ.KIDNEY)
+        )
+        rest, other = age_factor("Qrest"), age_factor("Qother")
+        objects: list[Sbase] = []
+        for pid, curve, name in (
+            (qbr, f.brain, "brain flow"),
+            (qli, f.liver, "liver flow"),
+            (qki, f.kidney, "kidney flow"),
+        ):
+            objects += _initial(
+                pid,
+                curve.formula(ids.AGE),
+                U.dimensionless,
+                f"age factor {name}",
+                f"The factor of the age on the {name} fraction {text}",
+                f.sources,
+                kind="age_factor",
+            )
+        fbr = self.refs[brain].value
+        qbr = self.with_sex(BRAIN_FLOW, qbr)
+        special = dict.fromkeys(LIVER_GROUP, qli) | {Organ.KIDNEY: qki}
+        denominator = rest_denominator(
+            fbr, [self.refs[ids.flow_fraction(o)].value for o in special]
+        )
+        objects += _initial(
+            rest,
+            f"(1 dimensionless - {fbr!r} dimensionless * {qbr}) / "
+            f"{1.0 - fbr!r} dimensionless",
+            U.dimensionless,
+            "age factor of the organs besides the brain",
+            "The share of the cardiac output of the organs besides the brain "
+            f"relative to the adults, `(1 - fQbr*{qbr})/(1 - fQbr)`.",
+            f.sources,
+            kind="age_factor",
+        )
+        terms = " - ".join(
+            f"{self.refs[ids.flow_fraction(o)].value!r} dimensionless * {h}"
+            for o, h in special.items()
+        )
+        objects += _initial(
+            other,
+            f"(1 dimensionless - {fbr!r} dimensionless - {terms}) / "
+            f"{denominator!r} dimensionless",
+            U.dimensionless,
+            "age factor of the organs without a factor of their own",
+            "The factor which closes the sum of the fractions: the share of "
+            "the organs besides the brain, the liver group and the kidney, "
+            "relative to the adults.",
+            f.sources,
+            kind="age_factor",
+        )
+        for o in Organ:
+            if o is Organ.LUNG:
+                continue
+            pid = ids.flow_fraction(o)
+            if o is Organ.BRAIN:
+                factor = qbr
+            elif o in special:
+                factor = f"{rest} * {special[o]}"
+            else:
+                factor = f"{rest} * {other}"
+            notes, sources = self.provenance(pid)
+            objects += _initial(
+                pid,
+                f"{self.number(pid, U.dimensionless)} * {factor}",
+                U.dimensionless,
+                f"blood flow fraction {_label(o)}",
+                "Blood flow as fraction of cardiac output"
+                + (" (hepatic artery)" if o is Organ.LIVER else "")
+                + f": the fraction of the adults times `{factor}`.\n\n{notes}",
+                sources,
+                kind="flow_fraction",
+                organ=o,
+            )
+        return objects
+
     def references(self) -> list[Sbase]:
-        """The reference values of the sex."""
-        objects = self.reference(
+        """The reference values of the sex, those of the size over age."""
+        objects = self.curve(
+            ids.ref(ids.BW),
+            U.kg,
+            "reference body weight [kg]",
+            "Body weight of the reference individual of the age.",
+            kind="body_weight",
+        )
+        objects += self.curve(
+            ids.ref(ids.HEIGHT),
+            U.cm,
+            "reference height [cm]",
+            "Height of the reference individual of the age.",
+            kind="height",
+        )
+        bw, height = ids.ref(ids.BW), ids.ref(ids.HEIGHT)
+        objects += _initial(
             ids.ref(ids.BSA),
+            _dubois_formula(bw, height),
             U.m2,
             "reference body surface area [m2]",
-            "Body surface area of the reference individual, the reference of "
-            "skin and GFR.",
+            "Body surface area of the reference individual of the age, Du Bois "
+            "formula; the reference of the skin.",
+            ("DuBois1916",),
             kind="bsa",
         )
-        objects += self.reference(
+        objects += self.factor(ids.FFM, "fat-free mass", kind="lean_mass")
+        objects += _initial(
             ids.ref(ids.FFM),
+            f"{_ffm_formula(bw, height, self.sex)} * {age_factor(ids.FFM)}",
             U.kg,
             "reference fat-free mass [kg]",
-            "Fat-free mass of the reference individual.",
+            f"Fat-free mass of the reference individual of the age, the "
+            f"{self.sex.value} formula of Janmahasatian 2005 times the factor of "
+            "the children (Al-Sallami 2015).",
+            ("Janmahasatian2005", "AlSallami2015"),
             kind="lean_mass",
         )
-        objects += self.reference(
+        objects += self.curve(
             ids.ref(ids.CO),
             U.l_per_min,
             "reference cardiac output [l/min]",
-            "Cardiac output of the reference individual.",
+            "Cardiac output of the reference individual of the age.",
             kind="cardiac_output",
         )
         objects += self.reference(
             ids.ref(ids.GFR),
             U.l_per_min,
             "reference glomerular filtration rate [l/min]",
-            "GFR of the reference individual.",
+            "GFR of the adult reference individual.",
             kind="gfr",
             organ=Organ.KIDNEY,
         )
-        objects += self.reference(
+        objects += self.curve(
             ids.ref(ids.VBLOOD),
             U.litre,
             "reference blood volume [l]",
-            "Total blood volume of the reference individual.",
+            "Total blood volume of the reference individual of the age.",
             kind="blood_volume",
         )
-        if ids.HCT in self.factors:
-            objects += self.reference(
-                ids.ref(ids.HCT),
-                U.dimensionless,
-                "reference hematocrit",
-                "The volume fraction of the blood cells in blood of the healthy "
-                "individual.",
-                key=ids.HCT,
-                kind="hematocrit",
-            )
-            objects += self.initial(
-                ids.HCT,
-                ids.ref(ids.HCT),
-                U.dimensionless,
-                "hematocrit",
-                "The volume fraction of the blood cells in blood.",
-                (),
-                kind="hematocrit",
-            )
-        else:
-            objects += self.reference(
-                ids.HCT,
-                U.dimensionless,
-                "hematocrit",
-                "The volume fraction of the blood cells in blood.",
-                kind="hematocrit",
-            )
+        objects += self.factor(ids.HCT, "hematocrit", kind="hematocrit")
+        notes, sources = self.provenance(ids.HCT)
+        objects += _initial(
+            ids.ref(ids.HCT),
+            f"{self.number(ids.HCT, U.dimensionless)} * {age_factor(ids.HCT)}",
+            U.dimensionless,
+            "reference hematocrit",
+            "The volume fraction of the blood cells in blood of the healthy "
+            f"individual of the age: the adult value times `{age_factor(ids.HCT)}`."
+            f"\n\n{notes}",
+            sources,
+            kind="hematocrit",
+        )
+        objects += self.initial(
+            ids.HCT,
+            ids.ref(ids.HCT),
+            U.dimensionless,
+            "hematocrit",
+            "The volume fraction of the blood cells in blood, the reference of "
+            "the age.",
+            sources,
+            kind="hematocrit",
+        )
         for o in LEAN_ORGANS:
-            objects += self.reference(
+            objects += self.curve(
                 ids.ref(ids.organ_mass(o)),
                 U.kg,
                 f"reference tissue mass {_label(o)} [kg]",
                 "Mass of the organ tissue without its blood of the reference "
-                "individual.",
+                "individual of the age.",
                 kind="organ_mass",
                 organ=o,
             )
-        for o in Organ:
-            if o is Organ.LUNG:
-                continue
-            objects += self.reference(
-                ids.flow_fraction(o),
-                U.dimensionless,
-                f"blood flow fraction {_label(o)}",
-                "Blood flow as fraction of cardiac output"
-                + (" (hepatic artery)." if o is Organ.LIVER else "."),
-                kind="flow_fraction",
-                organ=o,
-            )
+        objects += self.flow_fractions()
         for pool in Pool:
             objects += self.reference(
                 ids.pool_fraction(pool),
@@ -619,7 +853,7 @@ class _Physiology:
         )
         objects += self.initial(
             ids.BSA,
-            f"0.007184 m2 * ({ids.BW} / 1 kg)^0.425 * ({ids.HEIGHT} / 1 cm)^0.725",
+            _dubois_formula(ids.BW, ids.HEIGHT),
             U.m2,
             "body surface area [m2]",
             "Body surface area of the individual, Du Bois formula.",
@@ -627,23 +861,17 @@ class _Physiology:
             kind="bsa",
         )
 
-        def ffm(k: int, a: int) -> str:
-            """The FFM per body weight of Janmahasatian, `9270 / (k + a*BMI)`."""
-            return (
-                f"9270 dimensionless / ({k} dimensionless + {a} dimensionless * "
-                f"{ids.BMI} / 1 kg_per_m2)"
-            )
-
-        k, a = (6680, 216) if self.sex is Sex.MALE else (8780, 244)
         objects += self.initial(
             ids.FFM,
-            f"{ids.BW} * {ffm(k, a)}",
+            f"{_ffm_formula(ids.BW, ids.HEIGHT, self.sex, bmi=ids.BMI)} * "
+            f"{age_factor(ids.FFM)}",
             U.kg,
             "fat-free mass [kg]",
             f"Fat-free mass of the individual, the {self.sex.value} formula of "
-            "Janmahasatian 2005; Huisinga 2012 (eq. 6) use it for the lean body "
-            "weight.",
-            ("Janmahasatian2005", "Huisinga2012"),
+            "Janmahasatian 2005 times the factor of the children (Al-Sallami "
+            "2015, 1 from 20 years); Huisinga 2012 (eq. 6) use it for the lean "
+            "body weight.",
+            ("Janmahasatian2005", "AlSallami2015", "Huisinga2012"),
             kind="lean_mass",
         )
         br, sk = ids.organ_mass(Organ.BRAIN), ids.organ_mass(Organ.SKIN)
@@ -798,13 +1026,22 @@ class _Physiology:
         """
         objects = _initial(
             ids.CO_BASE,
-            f"{ids.ref(ids.CO)} * {ids.SV_TIS} * {ids.F_CARDIAC_FUNCTION}",
+            self.with_sex(
+                CARDIAC_OUTPUT,
+                f"{ids.ref(ids.CO)} * {ids.SV_TIS} * {ids.F_CARDIAC_FUNCTION}",
+            ),
             U.l_per_min,
             "cardiac output without impairment [l/min]",
             "Cardiac output of the individual without the impaired organ "
             "function; it scales as the lean tissues (Huisinga 2012 eq. 13, "
-            "SQ_co = SV_tis) and with the cardiac function. The organ flows are "
-            "fractions of it.",
+            "SQ_co = SV_tis) and with the cardiac function"
+            + (
+                ", and with the factor of the sex (the same cardiac index of "
+                "women and men of the same size)"
+                if CARDIAC_OUTPUT in self.factors_of_sex
+                else ""
+            )
+            + ". The organ flows are fractions of it.",
             ("Huisinga2012",),
             kind="cardiac_output",
         )
@@ -875,14 +1112,18 @@ class _Physiology:
             kind="hepatic_flow",
             organ=Organ.LIVER,
         )
+        objects += self.factor(ids.GFR, "GFR", kind="age_factor", organ=Organ.KIDNEY)
         objects += self.initial(
             ids.GFR_BASE,
-            f"{ids.ref(ids.GFR)} * {ids.BSA} / {ids.ref(ids.BSA)}",
+            f"{ids.ref(ids.GFR)} * {ids.BSA} / {self.number(ids.ref(ids.BSA), U.m2)} * "
+            f"{age_factor(ids.GFR)}",
             U.l_per_min,
             "glomerular filtration rate at renal function 1 [l/min]",
             "GFR of the individual at renal function 1: the reference GFR, which "
             "is roughly proportional to body size (ICRP 89 Section 8.3.1), scaled "
-            "with the body surface area, i.e. the same GFR per 1.73 m2. A model "
+            "with the body surface area, i.e. the same GFR per 1.73 m2, times the "
+            f"factor of the age `{age_factor(ids.GFR)}` (the maturation of the "
+            "children and the decline of the adults). A model "
             "which needs the GFR of the kidney without chronic kidney disease "
             "reads it (defined at renal function 0, where the GFR is 0).",
             ("ICRP89",),
@@ -949,6 +1190,7 @@ def physiology_objects(
     objects = [
         *physiology.covariates(),
         *physiology.references(),
+        *physiology.sex_factors(),
         *physiology.body(),
         *physiology.volumes(),
         *physiology.fractions(),
@@ -982,21 +1224,32 @@ def reference_fractions(organ: Organ) -> dict[Sex, tuple[float, float]]:
     }
 
 
-def normal_gfr(sex: Sex) -> float:
-    """The GFR per 1.73 m2 body surface area of a reference individual.
+def normal_gfr(sex: Sex, age: float = AGE_REFERENCE) -> float:
+    """The GFR per 1.73 m2 body surface area of a healthy individual.
 
     Args:
-        sex: the sex of the reference individual.
+        sex: the sex of the individual.
+        age: the age (years); the GFR per 1.73 m2 matures in the children and
+            declines in the adults (`fage_GFR`), 35 years the adult of ICRP 89.
 
     Returns:
         The reference GFR scaled to 1.73 m2 with the reference body surface
-        area (l/min), the GFR of the normal renal function.
+        area (l/min) times the factor of the age, the GFR of the normal renal
+        function of the age.
     """
     refs = _references(sex, load("physiology_human"))
-    return refs[ids.ref(ids.GFR)].value * 1.73 / refs[ids.ref(ids.BSA)].value
+    factor = factor_curves(sex)[ids.GFR].curve.value(age)
+    return refs[ids.ref(ids.GFR)].value * 1.73 / refs[ids.ref(ids.BSA)].value * factor
 
 
-def reference_tissue_volumes(sex: Sex) -> dict[Organ, float]:
+def _at_age(sex: Sex, age: float) -> dict[str, float]:
+    """The reference values of a sex at an age, by the id of their parameter."""
+    return {pid: c.curve.value(age) for pid, c in reference_curves(sex).items()}
+
+
+def reference_tissue_volumes(
+    sex: Sex, age: float = AGE_REFERENCE
+) -> dict[Organ, float]:
     """The tissue volumes of the organs of a reference individual.
 
     The tissue volume of an organ is its volume without its blood,
@@ -1005,30 +1258,34 @@ def reference_tissue_volumes(sex: Sex) -> dict[Organ, float]:
 
     Args:
         sex: the sex of the reference individual.
+        age: the age of the reference individual (years).
 
     Returns:
         The tissue volume (l) by organ.
     """
     refs = _references(sex, load("physiology_human"))
-    masses = {o: refs[ids.ref(ids.organ_mass(o))].value for o in LEAN_ORGANS}
+    at = _at_age(sex, age)
+    masses = {o: at[ids.ref(ids.organ_mass(o))] for o in LEAN_ORGANS}
     masses[Organ.ADIPOSE] = (
-        refs[ids.BW].value
+        at[ids.ref(ids.BW)]
         - sum(masses.values())
-        - refs[ids.ref(ids.VBLOOD)].value * refs["rho_blood"].value
+        - at[ids.ref(ids.VBLOOD)] * refs["rho_blood"].value
     )
     return {o: masses[o] / refs[f"rho_{o}"].value for o in Organ}
 
 
-def reference_hematocrit(sex: Sex) -> float:
+def reference_hematocrit(sex: Sex, age: float = AGE_REFERENCE) -> float:
     """The hematocrit of a reference individual.
 
     Args:
         sex: the sex of the reference individual.
+        age: the age of the reference individual (years).
 
     Returns:
-        The hematocrit of physiology_human.toml.
+        The hematocrit of physiology_human.toml times the factor of the age.
     """
-    return _references(sex, load("physiology_human"))[ids.HCT].value
+    factor = factor_curves(sex)[ids.HCT].curve.value(age)
+    return _references(sex, load("physiology_human"))[ids.HCT].value * factor
 
 
 @dataclass(frozen=True)
@@ -1076,11 +1333,14 @@ class ReferenceIndividual:
 
 
 @cache
-def reference_individual(sex: Sex) -> ReferenceIndividual:
-    """The reference individual of a sex.
+def reference_individual(sex: Sex, age: float = AGE_REFERENCE) -> ReferenceIndividual:
+    """The reference individual of a sex and an age.
 
     Args:
         sex: the sex of the reference individual.
+        age: the age (years), the adult of ICRP 89 by default; a child is the
+            interpolation of the reference children of ICRP 89, an older
+            adult the adult with the factors of the age (`pkpdsim.pbpk.age`).
 
     Returns:
         Its body weight, height, healthy GFR, organ, cell and lumen volumes.
@@ -1089,15 +1349,23 @@ def reference_individual(sex: Sex) -> ReferenceIndividual:
     from pkpdsim.pbpk.variants.segments import DATA, SEGMENTS
 
     refs = _references(sex, load("physiology_human"))
-    tissue = reference_tissue_volumes(sex)
-    vblood = refs[ids.ref(ids.VBLOOD)].value
+    at = _at_age(sex, age)
+    tissue = reference_tissue_volumes(sex, age)
+    vblood = at[ids.ref(ids.VBLOOD)]
     volumes = {o: tissue[o] + refs[f"blood_{o}"].value * vblood for o in Organ}
+    bw, height = at[ids.ref(ids.BW)], at[ids.ref(ids.HEIGHT)]
+    # GFR_base = GFR_ref*BSA/BSA_ref(adult)*fage_GFR, at the body surface area of the age
+    gfr = (
+        refs[ids.ref(ids.GFR)].value
+        * _dubois(bw, height)
+        / refs[ids.ref(ids.BSA)].value
+        * factor_curves(sex)[ids.GFR].curve.value(age)
+    )
     return ReferenceIndividual(
         sex=sex,
-        bw=refs[ids.BW].value,
-        height=refs[ids.HEIGHT].value,
-        # GFR_base = GFR_ref*BSA/BSA_ref, at the reference body surface area
-        gfr=refs[ids.ref(ids.GFR)].value,
+        bw=bw,
+        height=height,
+        gfr=gfr,
         volumes=MappingProxyType(volumes),
         tissue_volumes=MappingProxyType(tissue),
         intracellular_volumes=MappingProxyType(

@@ -191,7 +191,7 @@ citation = "Ring CL, Pearce RG, Setzer RW, Wetmore BA, Wambaugh JF. Identifying 
 doi = "10.1016/j.envint.2017.06.004"
 
 [NHANES2013_2018]
-citation = "Centers for Disease Control and Prevention, National Center for Health Statistics. National Health and Nutrition Examination Survey (NHANES) 2013-2014, 2015-2016 and 2017-2018, demographics, body measures and laboratory data (public domain). https://wwwn.cdc.gov/nchs/nhanes/ (accessed 2026-10-25). Read as the data set `mecdt` of the R package httk 2.7.4, see `httk`."
+citation = "Centers for Disease Control and Prevention, National Center for Health Statistics. National Health and Nutrition Examination Survey (NHANES) 2013-2014, 2015-2016 and 2017-2018, demographics (DEMO), body measures (BMX), complete blood count (CBC) and standard biochemistry profile (BIOPRO) of the cycles H, I and J (public domain). https://wwwn.cdc.gov/nchs/nhanes/ (accessed 2026-11-06). Read from the public files by scripts/database/nhanes_populations.py and scripts/database/nhanes_blood.py."
 
 [httk]
 citation = "Pearce RG, Setzer RW, Strope CL, Wambaugh JF, Sipes NS. httk: R package for high-throughput toxicokinetics. J Stat Softw 79(4):1-26, 2017. R package httk version 2.7.4 (CRAN, 2025-12-08), MIT license, copyright 2025 John Wambaugh; the data set mecdt of HTTK-Pop (Ring 2017) holds the preprocessed NHANES 2013-2018 respondents."
@@ -578,3 +578,195 @@ doi = "10.1002/jcph.1713"
 [Docci1985]
 citation = "Docci D, Bilancioni R, Pistocchi E, Mosconi G, Turci F, Salvi G, Baldrati L, Orsi C. Serum alpha-1-acid glycoprotein in chronic renal failure. Nephron 39(3):160-163, 1985."
 doi = "10.1159/000183364"
+
+[ICHE11]
+citation = "ICH Topic E11. Clinical investigation of medicinal products in the paediatric population, Section 2.5 Age classification of paediatric patients. CPMP/ICH/2711/99, European Medicines Agency, Step 5, January 2001 (ICH Step 4, July 2000)."
+
+[ICHE7]
+citation = "ICH Harmonised Tripartite Guideline E7. Studies in support of special populations: geriatrics, Section IV. Step 4, 24 June 1993; and ICH E7 Questions and Answers, Q2, 2010 (the subgroups 65-74, 75-84 and 85 years and older)."
+
+[Rhodin2009]
+citation = "Rhodin MM, Anderson BJ, Peters AM, Coulthard MG, Wilkins B, Cole M, Chatelut E, Grubb A, Veal GJ, Keir MJ, Holford NHG. Human renal function maturation: a quantitative description using weight and postmenstrual age. Pediatr Nephrol 24(1):67-76, 2009."
+doi = "10.1007/s00467-008-0997-5"
+
+[AlSallami2015]
+citation = "Al-Sallami HS, Goulding A, Grant A, Taylor R, Holford N, Duffull SB. Prediction of fat-free mass in children. Clin Pharmacokinet 54(11):1169-1178, 2015."
+doi = "10.1007/s40262-015-0277-z"
+
+[Johnson2006]
+citation = "Johnson TN, Rostami-Hodjegan A, Tucker GT. Prediction of the clearance of eleven drugs and associated variability in neonates, infants and children. Clin Pharmacokinet 45(9):931-956, 2006."
+doi = "10.2165/00003088-200645090-00005"
+
+[Maharaj2018]
+citation = "Maharaj AR, Gonzalez D, Cohen-Wolkowiez M, Hornik CP, Edginton AN. Improving pediatric protein binding estimates: an evaluation of alpha1-acid glycoprotein maturation in healthy and infected subjects. Clin Pharmacokinet 57(5):577-589, 2018."
+doi = "10.1007/s40262-017-0576-7"
+
+[Chiron1992]
+citation = "Chiron C, Raynaud C, Maziere B, Zilbovicius M, Laflamme L, Masure MC, Dulac O, Bourguignon M, Syrota A. Changes in regional cerebral blood flow during brain maturation in children and adolescents. J Nucl Med 33(5):696-703, 1992. PMID 1569478."
+
+[Wu2016]
+citation = "Wu C, Honarmand AR, Schnell S, Kuhn R, Schoeneman SE, Ansari SA, Carr J, Markl M, Shaibani A. Age-related changes of normal cerebral and cardiac blood flow in children and adults aged 7 months to 61 years. J Am Heart Assoc 5(1):e002657, 2016."
+doi = "10.1161/JAHA.115.002657"
+
+[Scholkmann2019]
+citation = "Scholkmann F, Ostojic D, Isler H, Bassler D, Wolf M, Karen T. Reference ranges for hemoglobin and hematocrit levels in neonates as a function of gestational age (22-42 weeks) and postnatal age (0-29 days): mathematical modeling. Children 6(3):38, 2019."
+doi = "10.3390/children6030038"
+
+[PKSimOntogeny]
+citation = "Open Systems Pharmacology. PK-Sim Ontogeny Database. OSPSuite.Documentation, https://github.com/Open-Systems-Pharmacology/OSPSuite.Documentation, file PK-Sim Ontogeny Database.pdf (PDF of 2026-02-05, accessed 2026-11-06), GPLv2."
+
+[Hunt2024]
+citation = "Hunt JP, Dubinsky S, McKnite AM, Cheung KWK, van Groen BD, Giacomini KM, de Wildt SN, Edginton AN, Watt KM. Maximum likelihood estimation of renal transporter ontogeny profiles for pediatric PBPK modeling. CPT Pharmacometrics Syst Pharmacol 13(4):576-588, 2024."
+doi = "10.1002/psp4.13102"
+
+[Cheung2019]
+citation = "Cheung KWK, van Groen BD, Spaans E, van Borselen MD, de Bruijn ACJM, Simons-Oosterhuis Y, Tibboel D, Samsom JN, Verdijk RM, Smeets B, Zhang L, Huang S, Giacomini KM, de Wildt SN. A comprehensive analysis of ontogeny of renal drug transporters: mRNA analyses, quantitative proteomics, and localization. Clin Pharmacol Ther 106(5):1083-1092, 2019."
+doi = "10.1002/cpt.1516"
+
+[Prasad2016]
+citation = "Prasad B, Gaedigk A, Vrana M, Gaedigk R, Leeder JS, Salphati L, Chu X, Xiao G, Hop C, Evers R, Gan L, Unadkat JD. Ontogeny of hepatic drug transporters as quantified by LC-MS/MS proteomics. Clin Pharmacol Ther 100(4):362-370, 2016."
+doi = "10.1002/cpt.409"
+
+[Wolbold2003]
+citation = "Wolbold R, Klein K, Burk O, Nüssler AK, Neuhaus P, Eichelbaum M, Schwab M, Zanger UM. Sex is a major determinant of CYP3A4 expression in human liver. Hepatology 38(4):978-988, 2003."
+doi = "10.1053/jhep.2003.50393"
+
+[HuZhao2010]
+citation = "Hu ZY, Zhao YS. Sex-dependent differences in cytochrome P450 3A activity as assessed by midazolam disposition in humans: a meta-analysis. Drug Metab Dispos 38(5):817-823, 2010."
+doi = "10.1124/dmd.109.031328"
+
+[TantchevaPoor1999]
+citation = "Tantcheva-Poór I, Zaigler M, Rietbrock S, Fuhr U. Estimation of cytochrome P-450 CYP1A2 activity in 863 healthy Caucasians using a saliva-based caffeine test. Pharmacogenetics 9(2):131-144, 1999. PMID 10376760."
+
+[Delanaye2022]
+citation = "Delanaye P, Gaillard F, van der Weijden J, Mjøen G, Ferhman-Ekholm I, Dubourg L, Ebert N, Schaeffner E, Åkerfeldt T, Goffin K, et al. Age-adapted percentiles of measured glomerular filtration in healthy individuals: extrapolation to living kidney donors over 65 years. Clin Chem Lab Med 60(3):401-407, 2022."
+doi = "10.1515/cclm-2021-1011"
+
+[Eriksen2020]
+citation = "Eriksen BO, Palsson R, Ebert N, Melsom T, van der Giet M, Gudnason V, Indridason OS, Inker LA, Jenssen TG, Levey AS, Solbu MD, Tighiouart H, Schaeffner E. GFR in healthy aging: an individual participant data meta-analysis of iohexol clearance in European population-based cohorts. J Am Soc Nephrol 31(7):1602-1615, 2020."
+doi = "10.1681/ASN.2020020151"
+
+[Pottel2017]
+citation = "Pottel H, Hoste L, Yayo E, Delanaye P. Glomerular filtration rate in healthy living potential kidney donors: a meta-analysis supporting the construction of the full age spectrum equation. Nephron 135(2):105-119, 2017."
+doi = "10.1159/000450893"
+
+[DaviesShock1950]
+citation = "Davies DF, Shock NW. Age changes in glomerular filtration rate, effective renal plasma flow, and tubular excretory capacity in adult males. J Clin Invest 29(5):496-507, 1950."
+doi = "10.1172/JCI102286"
+
+[Fliser1993]
+citation = "Fliser D, Zeier M, Nowack R, Ritz E. Renal functional reserve in healthy elderly subjects. J Am Soc Nephrol 3(7):1371-1377, 1993."
+doi = "10.1681/ASN.V371371"
+
+[WangX2014]
+citation = "Wang X, Vrtiska TJ, Avula RT, Walters LR, Chakkera HA, Kremers WK, Lerman LO, Rule AD. Age, kidney function, and risk factors associate differently with cortical and medullary volumes of the kidney. Kidney Int 85(3):677-685, 2014."
+doi = "10.1038/ki.2013.359"
+
+[Imamura2026]
+citation = "Imamura H, Ito R, Ichida H, Yoshioka R, Mise Y, Nojiri S, Sano K, Yamataka A, Saiura A. Age-range-matched external validation of standard liver volume equations: methodological re-evaluation of 13 regression models. PLOS One 21:e0351983, 2026."
+doi = "10.1371/journal.pone.0351983"
+
+[Zoli1999]
+citation = "Zoli M, Magalotti D, Bianchi G, Gueli C, Orlandini C, Grimaldi M, Marchesini G. Total and functional hepatic blood flow decrease in parallel with ageing. Age Ageing 28(1):29-33, 1999."
+doi = "10.1093/ageing/28.1.29"
+
+[Patel2021]
+citation = "Patel HN, Miyoshi T, Addetia K, Henry MP, Citro R, Daimon M, Gutierrez Fajardo P, Kasliwal RR, Kirkpatrick JN, Monaghan MJ, et al. Normal values of cardiac output and stroke volume according to measurement technique, age, sex, and ethnicity: results of the World Alliance of Societies of Echocardiography study. J Am Soc Echocardiogr 34(10):1077-1085.e1, 2021."
+doi = "10.1016/j.echo.2021.05.012"
+
+[Stader2019]
+citation = "Stader F, Siccardi M, Battegay M, Kinvig H, Penny MA, Marzolini C. Repository describing an aging population to inform physiologically based pharmacokinetic models considering anatomical, physiological, and biological age-dependent changes. Clin Pharmacokinet 58(4):483-501, 2019."
+doi = "10.1007/s40262-018-0709-7"
+
+# The differences of the sexes (sex_human.toml), searched and read 2026-11-06.
+
+[Williams1994]
+citation = "Williams LR. Reference values for total blood volume and cardiac output in humans. Report ORNL/TM-12814, Oak Ridge National Laboratory, Oak Ridge, TN, 1994. OSTI ID 10186900, https://www.osti.gov/biblio/10186900 (US government report, public)."
+
+[Middlemiss2019]
+citation = "Middlemiss JE, Cocks A, Paapstel K, Maki-Petaja KM, Sunita, Wilkinson IB, McEniery CM; ACCT Study Investigators. Evaluation of inert gas rebreathing for determination of cardiac output: influence of age, gender and body size. Hypertens Res 42(6):834-844, 2019."
+doi = "10.1038/s41440-018-0179-1"
+
+[deSimone1997]
+citation = "de Simone G, Devereux RB, Daniels SR, Mureddu G, Roman MJ, Kimball TR, Greco R, Witt S, Contaldo F. Stroke volume and cardiac output in normotensive children and adults: assessment of relations with body size and impact of overweight. Circulation 95(7):1837-1843, 1997."
+doi = "10.1161/01.CIR.95.7.1837"
+
+[Aanerud2017]
+citation = "Aanerud J, Borghammer P, Rodell A, Jónsdottir KY, Gjedde A. Sex differences of human cortical blood flow and energy metabolism. J Cereb Blood Flow Metab 37(7):2433-2440, 2017."
+doi = "10.1177/0271678X16668536"
+
+[Alisch2021]
+citation = "Alisch JSR, Khattar N, Kim RW, Cortina LE, Rejimon AC, Qian W, Ferrucci L, Resnick SM, Spencer RG, Bouhrara M. Sex and age-related differences in cerebral blood flow investigated using pseudo-continuous arterial spin labeling magnetic resonance imaging. Aging (Albany NY) 13(4):4911-4925, 2021."
+doi = "10.18632/aging.202673"
+
+[Rodriguez1988]
+citation = "Rodriguez G, Warkentin S, Risberg J, Rosadini G. Sex differences in regional cerebral blood flow. J Cereb Blood Flow Metab 8(6):783-789, 1988."
+doi = "10.1038/jcbfm.1988.133"
+
+[Xing2017]
+citation = "Xing CY, Tarumi T, Liu J, Zhang Y, Turner M, Riley J, Tinajero CD, Yuan LJ, Zhang R. Distribution of cardiac output to the brain across the adult lifespan. J Cereb Blood Flow Metab 37(8):2848-2856, 2017."
+doi = "10.1177/0271678X16676826"
+
+[Satterthwaite2014]
+citation = "Satterthwaite TD, Shinohara RT, Wolf DH, Hopson RD, Elliott MA, Vandekar SN, Ruparel K, Calkins ME, Roalf DR, Gennatas ED, Jackson C, Erus G, Prabhakaran K, Davatzikos C, Detre JA, Hakonarson H, Gur RC, Gur RE. Impact of puberty on the evolution of cerebral perfusion during adolescence. Proc Natl Acad Sci U S A 111(23):8643-8648, 2014."
+doi = "10.1073/pnas.1400178111"
+
+[Smith2019]
+citation = "Smith LA, Melbourne A, Owen D, Cardoso MJ, Sudre CH, Tillin T, Sokolska M, Atkinson D, Chaturvedi N, Ourselin S, Hughes AD, Barkhof F, Jäger HR. Cortical cerebral blood flow in ageing: effects of haematocrit, sex, ethnicity and diabetes. Eur Radiol 29(10):5549-5558, 2019."
+doi = "10.1007/s00330-019-06096-w"
+
+[Weaving2016]
+citation = "Weaving G, Batstone GF, Jones RG. Age and sex variation in serum albumin concentration: an observational study. Ann Clin Biochem 53(1):106-111, 2016."
+doi = "10.1177/0004563215593561"
+
+[Camilleri2012]
+citation = "Camilleri M, Iturrino J, Bharucha AE, Burton D, Shin A, Jeong ID, Zinsmeister AR. Performance characteristics of scintigraphic measurement of gastric emptying of solids in healthy participants. Neurogastroenterol Motil 24(12):1076-e562, 2012."
+doi = "10.1111/j.1365-2982.2012.01972.x"
+
+[Vasavid2014]
+citation = "Vasavid P, Chaiwatanarat T, Pusuwan P, Sritara C, Roysri K, Namwongprom S, Kuanrakcharoen P, Premprabha T, Chunlertrith K, Thongsawat S, Sirinthornpunya S, Ovartlarnporn B, Kachintorn U, Leelakusolvong S, Kositchaiwat C, Chakkaphak S, Gonlachanvit S. Normal solid gastric emptying values measured by scintigraphy using Asian-style meal: a multicenter study in healthy volunteers. J Neurogastroenterol Motil 20(3):371-378, 2014."
+doi = "10.5056/jnm13114"
+
+[Degen1996]
+citation = "Degen LP, Phillips SF. Variability of gastrointestinal transit in healthy women and men. Gut 39(2):299-305, 1996."
+doi = "10.1136/gut.39.2.299"
+
+[Hutson1989]
+citation = "Hutson WR, Roehrkasse RL, Wald A. Influence of gender and menopause on gastric emptying and motility. Gastroenterology 96(1):11-17, 1989."
+doi = "10.1016/0016-5085(89)90758-0"
+
+[Gryback2000]
+citation = "Grybäck P, Hermansson G, Lyrenäs E, Beckman KW, Jacobsson H, Hellström PM. Nationwide standardisation and evaluation of scintigraphic gastric emptying: reference values and comparisons between subgroups in a multicentre trial. Eur J Nucl Med 27(6):647-655, 2000."
+doi = "10.1007/s002590050558"
+
+[Karrento2025]
+citation = "Karrento K, Chumpitazi BP, Zhang L, Simpson P, Shulman RJ. 13C-Spirulina gastric emptying breath test normative values in healthy children: a multicenter study with comparison to symptomatic children. Am J Gastroenterol 121(2):491-500, 2026 (epub 2025)."
+doi = "10.14309/ajg.0000000000003545"
+
+[Hauser2016]
+citation = "Hauser B, Roelants M, De Schepper J, Veereman G, Caveliers V, Devreker T, De Greef E, Vandenplas Y. Gastric emptying of solids in children: reference values for the 13C-octanoic acid breath test. Neurogastroenterol Motil 28(10):1480-1487, 2016."
+doi = "10.1111/nmo.12845"
+
+[Meier1995]
+citation = "Meier R, Beglinger C, Dederding JP, Meyer-Wyss B, Fumagalli M, Rowedder A, Turberg Y, Brignoli R. Influence of age, gender, hormonal status and smoking habits on colonic transit time. Neurogastroenterol Motil 7(4):235-238, 1995."
+doi = "10.1111/j.1365-2982.1995.tb00231.x"
+
+[Velde2013]
+citation = "Van de Velde S, Notebaert A, Meersschaut V, Herregods N, Van Winckel M, Van Biervliet S. Colon transit time in healthy children and adolescents. Int J Colorectal Dis 28(12):1721-1724, 2013."
+doi = "10.1007/s00384-013-1750-5"
+
+[Gaither2025]
+citation = "Gaither KA, Yue G, Singh DK, Trudeau J, Ponraj K, Davydova NY, Lazarus P, Davydov DR, Prasad B. Effects of chronic alcohol intake on the composition of the ensemble of drug-metabolizing enzymes and transporters in the human liver. J Xenobiot 15(1):20, 2025."
+doi = "10.3390/jox15010020"
+
+[Bhatt2018]
+citation = "Bhatt DK, Basit A, Zhang H, Gaedigk A, Lee SB, Claw KG, Mehrotra A, Chaudhry AS, Pearce RE, Gaedigk R, Broeckel U, Thornton TA, Nickerson DA, Schuetz EG, Amory JK, Leeder JS, Prasad B. Hepatic abundance and activity of androgen- and drug-metabolizing enzyme UGT2B17 are associated with genotype, age, and sex. Drug Metab Dispos 46(6):888-896, 2018."
+doi = "10.1124/dmd.118.080952"
+
+[Court2004]
+citation = "Court MH, Hao Q, Krishnaswamy S, Bekaii-Saab T, Al-Rohaimi A, von Moltke LL, Greenblatt DJ. UDP-glucuronosyltransferase (UGT) 2B15 pharmacogenetics: UGT2B15 D85Y genotype and gender are major determinants of oxazepam glucuronidation by human liver. J Pharmacol Exp Ther 310(2):656-665, 2004."
+doi = "10.1124/jpet.104.067660"
+
+[Benowitz2006]
+citation = "Benowitz NL, Lessov-Schlaggar CN, Swan GE, Jacob P 3rd. Female sex and oral contraceptive use accelerate nicotine metabolism. Clin Pharmacol Ther 79(5):480-488, 2006."
+doi = "10.1016/j.clpt.2006.01.008"

@@ -12,6 +12,7 @@ from sbmlutils.factory import Model, Parameter, create_model
 from pkpdsim.pbpk import MODEL_UNITS, U, cite, ids, load, physiology, sources
 from pkpdsim.pbpk.organs import PORTAL_ORGANS, Organ, Pool
 from pkpdsim.pbpk.physiology import Sex, physiology_objects
+from pkpdsim.pbpk.sex_differences import BRAIN_FLOW, CARDIAC_OUTPUT, sex_curves
 
 from .conftest import individual
 
@@ -125,7 +126,9 @@ def test_reference_individual_reproduces_reference(
         assert r[ids.pool_volume(pool)] == pytest.approx(
             _v(p["blood"], key) * vblood, rel=1e-9
         )
-    assert r[ids.CO] == pytest.approx(_v(p, "cardiac_output"), rel=1e-9)
+    # the female build: the same cardiac index as a man of the same size
+    factor = _sex_factor(sex, CARDIAC_OUTPUT)
+    assert r[ids.CO] == pytest.approx(_v(p, "cardiac_output") * factor, rel=1e-9)
     assert r[ids.HCT] == _v(p, "hematocrit")
     assert r[ids.GFR] == pytest.approx(_v(p, "gfr") / 1000, rel=1e-9)
     assert r[ids.FFM] == pytest.approx(r[ids.ref(ids.FFM)], rel=1e-12)
@@ -137,9 +140,18 @@ def test_volumes_sum_to_bodyweight(paths: dict[Sex, Path], sex: Sex) -> None:
     _assert_balance(_rr(paths, sex), sex)
 
 
+def _sex_factor(sex: Sex, key: str, age: float = 35.0) -> float:
+    """The factor of the sex of a build on a quantity, 1 for the male build."""
+    c = sex_curves(sex).get(key)
+    return 1.0 if c is None else c.curve.value(age)
+
+
 @pytest.mark.parametrize("sex", list(Sex))
 def test_flows_sum_to_cardiac_output(paths: dict[Sex, Path], sex: Sex) -> None:
-    """The flows are the ICRP 89 fractions renormalised to cardiac output."""
+    """The flows are the ICRP 89 fractions renormalised to cardiac output.
+
+    The brain of the female build with its factor of the sex.
+    """
     r = _rr(paths, sex)
     _assert_flows(r)
     organs = _data(sex)["organs"]
@@ -148,6 +160,11 @@ def test_flows_sum_to_cardiac_output(paths: dict[Sex, Path], sex: Sex) -> None:
             continue
         ratio = r[ids.organ_flow(o)] / r[ids.organ_flow(Organ.MUSCLE)]
         expected = _v(organs[o], "flow") / _v(organs[Organ.MUSCLE], "flow")
+        if o is Organ.BRAIN:
+            # the brain fraction times the factor, the others share the rest
+            f = _sex_factor(sex, BRAIN_FLOW)
+            fbr = r[ids.flow_fraction(Organ.BRAIN)] / f
+            expected *= f * (1 - fbr) / (1 - fbr * f)
         assert ratio == pytest.approx(expected, rel=1e-9), o
 
 
@@ -201,14 +218,15 @@ def test_sex_is_chosen_at_build(paths: dict[Sex, Path]) -> None:
     """Each build has the references of its sex, no switch and no rule.
 
     The male model with the body weight and height of the female reference
-    keeps the male references: the sex is not a covariate.
+    keeps the male references: the sex is not a covariate (the age is, its
+    curves are the piecewise functions of the physiology).
     """
     for sex in Sex:
         doc = libsbml.readSBMLFromFile(str(paths[sex]))
         model = doc.getModel()
         assert model.getNumRules() == 0
         assert model.getParameter("SEX") is None
-        assert "piecewise" not in libsbml.writeSBMLToString(doc)
+        assert "SEX" not in libsbml.writeSBMLToString(doc)
         r = _rr(paths, sex)
         p = _data(sex)
         assert r[ids.HCT] == _v(p, "hematocrit")
@@ -296,7 +314,6 @@ def test_parameters_annotated(sex: Sex) -> None:
     parameters = [o for o in physiology_objects(sex) if isinstance(o, Parameter)]
     defaults = {p.sid for p in parameters if physiology.MODEL_DEFAULT in str(p.notes)}
     assert defaults == {
-        ids.AGE,
         ids.F_RENAL_FUNCTION,
         ids.F_CARDIAC_FUNCTION,
         ids.F_SHUNT,

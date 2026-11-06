@@ -13,7 +13,7 @@ from pkpdsim.pbpk.physiology import Sex, physiology_objects
 from pkpdsim.pbpk.populations import (
     DEFAULT_POPULATION,
     POPULATIONS,
-    Distribution,
+    Anthropometry,
     population,
 )
 from pkpdsim.uncertainty import parameter_distributions
@@ -60,7 +60,7 @@ def test_european_reproduces_defaults() -> None:
     assert p.reference[Sex.MALE][ids.HEIGHT].value == 176.0
     assert p.reference[Sex.FEMALE][ids.BW].value == 60.0
     assert p.reference[Sex.FEMALE][ids.HEIGHT].value == 163.0
-    assert p.covariates == {Sex.MALE: {}, Sex.FEMALE: {}}
+    assert p.anthropometry == {}
     for sex in Sex:
         default = {str(o.sid): o for o in physiology_objects(sex)}
         explicit = {
@@ -70,9 +70,8 @@ def test_european_reproduces_defaults() -> None:
         for pid in (ids.BW, ids.HEIGHT, ids.AGE):
             assert default[pid].value == explicit[pid].value  # ty: ignore[unresolved-attribute]
     age = {str(o.sid): o for o in physiology_objects(Sex.MALE)}[ids.AGE]
-    notes = str(age.notes)
-    assert "the population gives no value" in notes
-    assert "reference individual" not in notes
+    assert age.value == 35.0  # ty: ignore[unresolved-attribute]
+    assert "the reference individual of the sex" in str(age.notes)
 
 
 @pytest.mark.parametrize("key", sorted(POPULATIONS))
@@ -94,24 +93,30 @@ def test_population_reference_sums(tmp_path: Path, key: str, sex: Sex) -> None:
 
 
 def test_population_distributions() -> None:
-    """Body weight is lognormal, height normal, around the reference of NHANES."""
+    """The NHANES populations describe every age, the East Asian the adults of 20-49 years."""
     for key, p in POPULATIONS.items():
         if key == "european_icrp":
             continue
         for sex in Sex:
-            covariates = p.covariates[sex]
-            assert set(covariates) == {ids.BW, ids.HEIGHT}, key
-            bw, height = covariates[ids.BW], covariates[ids.HEIGHT]
-            assert isinstance(bw, Distribution)
-            assert (bw.kind, bw.unit) == ("lognormal", U.kg)
-            assert (height.kind, height.unit) == ("normal", U.cm)
-            assert 0 < bw.sd < bw.mean
-            assert 0 < height.sd < 0.1 * height.mean
-            assert height.mean == pytest.approx(
-                p.reference[sex][ids.HEIGHT].value, rel=1e-12
-            )
+            a = p.anthropometry[sex]
+            assert isinstance(a, Anthropometry)
             if key.endswith("_nhanes"):
-                assert bw.mean == p.reference[sex][ids.BW].value
+                assert a.age_range == (0.0, 100.0)
+                assert a.rho is not None
+                adult = a.at(35.0)
+                reference = p.reference[sex]
+                # the kernel moments of 35 years are close to the mean of 20-49 years
+                assert adult.height_mean == pytest.approx(
+                    reference[ids.HEIGHT].value, rel=0.01
+                )
+                assert adult.bw_mean == pytest.approx(reference[ids.BW].value, rel=0.08)
+                # the children grow
+                assert (
+                    a.at(1.0).height_mean < a.at(10.0).height_mean < adult.height_mean
+                )
+            else:
+                assert a.age_range == (20.0, 49.0)
+                assert a.rho is None
 
 
 def test_tanaka_reference_values() -> None:
@@ -120,7 +125,15 @@ def test_tanaka_reference_values() -> None:
     male, female = p.reference[Sex.MALE], p.reference[Sex.FEMALE]
     assert (male[ids.BW].value, male[ids.HEIGHT].value) == (60.0, 169.97)
     assert (female[ids.BW].value, female[ids.HEIGHT].value) == (51.28, 155.04)
-    assert p.covariates[Sex.MALE][ids.BW].sd == 8.84
+    bw = p.anthropometry[Sex.MALE].at(35.0)
+    assert bw.bw_mean == pytest.approx(63.63, rel=1e-12)
+    assert bw.height_sd == 5.68
+
+
+def test_an_age_outside_of_the_data_is_refused() -> None:
+    """The East Asian distribution describes the adults of 20 to 49 years only."""
+    with pytest.raises(ValueError, match=r"outside of the ages 20\.0 to 49\.0"):
+        population("east_asian_tanaka").anthropometry[Sex.MALE].at(5.0)
 
 
 def test_population_chosen_at_build(tmp_path: Path) -> None:

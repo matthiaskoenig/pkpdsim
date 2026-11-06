@@ -92,12 +92,26 @@ from sbmlutils.metadata import SBO
 
 from pkpdsim.database import integration, studies
 from pkpdsim.pbpk import ids
+from pkpdsim.pbpk.age import (
+    AGE_REFERENCE,
+    age_factor,
+    factor_curves,
+    protein_factor,
+    protein_factors,
+)
 from pkpdsim.pbpk.annotation import annotate, initial_assignment
 from pkpdsim.pbpk.chemistry import Metabolism, Transport
 from pkpdsim.pbpk.data import cite, load
 from pkpdsim.pbpk.organs import PORTAL_ORGANS, Organ
 from pkpdsim.pbpk.physiology import normal_gfr
 from pkpdsim.pbpk.proteins import PROTEINS
+from pkpdsim.pbpk.sex_differences import (
+    ALBUMIN,
+    protein_sex_factor,
+    protein_sex_factors,
+    sex_curves,
+    sex_factor,
+)
 from pkpdsim.pbpk.substance import Substance
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import number
@@ -186,17 +200,22 @@ def _ckd_binding(protein: str) -> str:
 
 
 def organ_activity(organ: Organ, protein: str) -> str | None:
-    """Get the local input of the impairment on a protein in an organ.
+    """Get the local input of the individual on a protein in an organ.
 
     Args:
         organ: the organ.
         protein: the protein of a process of the organ.
 
     Returns:
-        `fimp_<protein>` in the liver for a protein with data of impairment,
-        replaced by `fimp_li_<protein>` of the body; `None` elsewhere.
+        `fimp_<protein>`, replaced by `fimp_<organ>_<protein>` of the body,
+        for a protein with data of impairment in the liver or with a factor
+        of the age or the sex in the organ (`pkpdsim.pbpk.age`,
+        `pkpdsim.pbpk.sex_differences`); `None` otherwise.
     """
-    if organ is Organ.LIVER and protein in _proteins():
+    if (organ is Organ.LIVER and protein in _proteins()) or (
+        organ,
+        protein,
+    ) in protein_factors() | protein_sex_factors():
         return ids.impairment_activity(protein)
     return None
 
@@ -956,6 +975,86 @@ class _Impairment:
         }
         return sorted(p for p in section if p in used)
 
+    def individual_proteins(self) -> list[tuple[Organ, str]]:
+        """The organs and proteins of the processes with a factor of the individual."""
+        used = {
+            (p.organ, p.protein)
+            for p in self.definition.chemistry
+            if isinstance(p, Metabolism | Transport) and p.protein is not None
+        }
+        return sorted(
+            ((o, p) for o, p in used if organ_activity(o, p) is not None),
+            key=lambda x: (x[0].value, x[1]),
+        )
+
+    def age(self) -> None:
+        """The factors of the age on the binding proteins and of the age and sex on the proteins."""
+        sex = self.definition.sex
+        curves = factor_curves(sex)
+        for key, name in (("albumin", "albumin"), ("agp", "alpha-1-acid glycoprotein")):
+            c = curves[key]
+            self.add(
+                _initial(
+                    age_factor(key),
+                    c.curve.formula(ids.AGE),
+                    f"age factor {name}",
+                    f"The factor of the age on the plasma {name} of the "
+                    f"{sex.value} individual, 1 at {AGE_REFERENCE:g} years "
+                    f"(`pkpdsim.pbpk.age`): {c.notes}",
+                    c.sources,
+                    kind="age_factor",
+                )
+            )
+        albumin = sex_curves(sex).get(ALBUMIN)
+        if albumin is not None:
+            self.add(
+                _initial(
+                    sex_factor(ALBUMIN),
+                    albumin.curve.formula(ids.AGE),
+                    "sex factor albumin",
+                    f"The plasma albumin of the {sex.value} build relative to the "
+                    "men of the same age (`pkpdsim.pbpk.sex_differences`): "
+                    f"{albumin.notes}",
+                    albumin.sources,
+                    kind="sex_factor",
+                )
+            )
+        for organ, protein in self.individual_proteins():
+            key = f"{organ.value}_{protein.lower()}"
+            where = f"{protein} in the {organ.name.lower().replace('_', ' ')}"
+            ontogeny = protein_factor(organ, protein)
+            if ontogeny is not None:
+                self.add(
+                    _initial(
+                        age_factor(key),
+                        ontogeny.curve.formula(ids.AGE),
+                        f"age factor {protein} {organ.name.lower()}",
+                        f"The ontogeny of {where} per amount of tissue, 1 at "
+                        f"{AGE_REFERENCE:g} years (`pkpdsim.pbpk.age`): "
+                        f"{ontogeny.notes}",
+                        ontogeny.sources,
+                        kind="age_factor",
+                        organ=organ,
+                        protein=protein,
+                    )
+                )
+            factor = protein_sex_factor(sex, organ, protein)
+            if factor is not None:
+                self.add(
+                    _initial(
+                        sex_factor(key),
+                        factor.curve.formula(ids.AGE),
+                        f"sex factor {protein} {organ.name.lower()}",
+                        f"The activity of {where} of the {sex.value} build "
+                        "relative to the men of the same age, per amount of tissue "
+                        f"(`pkpdsim.pbpk.sex_differences`): {factor.notes}",
+                        factor.sources,
+                        kind="sex_factor",
+                        organ=organ,
+                        protein=protein,
+                    )
+                )
+
     def binding_proteins(self) -> list[str]:
         """The proteins with a CKD profile which a substance binds to with the CKD factor."""
         return sorted(
@@ -1117,6 +1216,7 @@ class _Impairment:
             present = [f for f in factors if f is not None and f != _ONE]
             return " * ".join(present) if present else _ONE
 
+        female_albumin = ALBUMIN in sex_curves(self.definition.sex)
         text = "The factor of all impairments (cirrhosis, CKD, heart failure) on"
         rest = ids.condition_factor("cp", "rest_flow")
         flows: list[str] = []
@@ -1201,10 +1301,18 @@ class _Impairment:
                 ids.condition_factor("ckd", "kidney_volume"),
                 "the kidney mass (adipose, the remainder, takes the difference)",
             ),
-            "albumin": (ids.condition_factor("cp", "albumin"), "the plasma albumin"),
+            "albumin": (
+                product(
+                    ids.condition_factor("cp", "albumin"),
+                    age_factor("albumin"),
+                    sex_factor(ALBUMIN) if female_albumin else None,
+                ),
+                "the plasma albumin (and the age"
+                + (" and the sex)" if female_albumin else ")"),
+            ),
             "agp": (
-                ids.condition_factor("cp", "agp"),
-                "the plasma alpha-1-acid glycoprotein",
+                product(ids.condition_factor("cp", "agp"), age_factor("agp")),
+                "the plasma alpha-1-acid glycoprotein (and the age)",
             ),
             "plasma_protein": (
                 ids.condition_factor("ckd", "plasma_protein"),
@@ -1247,27 +1355,38 @@ class _Impairment:
             )
         cp_proteins = set(self.liver_proteins(child_pugh_proteins()))
         ckd_proteins = set(self.liver_proteins(self.data["ckd"]["proteins"]))
-        for protein in sorted(cp_proteins | ckd_proteins):
+        for organ, protein in self.individual_proteins():
+            liver = organ is Organ.LIVER
             hepatic = (
                 f"({_ONE} + {ids.CKD_HEPATIC} * ({ids.condition_factor('ckd', protein)} - {_ONE}))"
-                if protein in ckd_proteins
+                if liver and protein in ckd_proteins
                 else None
             )
+            key = f"{organ.value}_{protein.lower()}"
             self.add(
                 _initial(
-                    ids.impairment_activity(protein, Organ.LIVER),
+                    ids.impairment_activity(protein, organ),
                     product(
                         ids.condition_factor("cp", protein)
-                        if protein in cp_proteins
+                        if liver and protein in cp_proteins
                         else None,
                         hepatic,
+                        age_factor(key)
+                        if protein_factor(organ, protein) is not None
+                        else None,
+                        sex_factor(key)
+                        if protein_sex_factor(self.definition.sex, organ, protein)
+                        is not None
+                        else None,
                     ),
-                    f"impairment factor activity {protein} liver",
-                    f"{text} the activity of {protein} in the liver, the input "
-                    f"`{ids.impairment_activity(protein)}` of the liver; its rates "
+                    f"individual factor activity {protein} {organ.name.lower()}",
+                    f"The factor of the individual (the impairments, the age and "
+                    f"the sex) on the activity of {protein} in the "
+                    f"{organ.name.lower().replace('_', ' ')}, the input "
+                    f"`{ids.impairment_activity(protein)}` of the organ; its rates "
                     f"run with `{ids.activity(protein)}` times it.",
                     kind="impairment_factor",
-                    organ=Organ.LIVER,
+                    organ=organ,
                     protein=protein,
                 )
             )
@@ -1290,5 +1409,6 @@ def impairment_objects(definition: "PBPKDefinition") -> list[Sbase]:
     impairment.child_pugh()
     impairment.ckd()
     impairment.heart_failure()
+    impairment.age()
     impairment.combined()
     return impairment.objects
