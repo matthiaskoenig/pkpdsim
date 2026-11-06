@@ -13,6 +13,7 @@ exported lazily: they import sbmlsim, which a factory does not need, so
 import importlib
 from typing import TYPE_CHECKING
 
+from pkpdsim.pbpk.adipose import Adipose
 from pkpdsim.pbpk.archive import create_archive, sex_definition
 from pkpdsim.pbpk.builder import BuildResult, build, compose
 from pkpdsim.pbpk.chemistry import (
@@ -47,8 +48,10 @@ from pkpdsim.pbpk.organs import Organ, Part, Pool
 from pkpdsim.pbpk.parts import Parts, parts_for
 from pkpdsim.pbpk.pd import PDComponent
 from pkpdsim.pbpk.physiology import (
+    BodyComposition,
     ReferenceIndividual,
     Sex,
+    body_composition,
     physiology_objects,
     reference_individual,
 )
@@ -140,7 +143,9 @@ __all__ = [
     "REFERENCE_GFR",
     "REST",
     "UNIT_LABELS",
+    "Adipose",
     "Binding",
+    "BodyComposition",
     "Boundary",
     "BuildResult",
     "Circadian",
@@ -206,6 +211,7 @@ __all__ = [
     "ZonatedLiver",
     "as_value",
     "axis",
+    "body_composition",
     "build",
     "cite",
     "compose",

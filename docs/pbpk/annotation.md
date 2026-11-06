@@ -63,6 +63,11 @@ PBPKO has no term for some of the quantities, compartments and processes of the 
 | factor of the pregnancy on a physiological quantity | `PHYSIOLOGICAL_PARAMETER` |
 | placenta compartment | `COMPARTMENT` |
 | fetus compartment | `COMPARTMENT` |
+| body composition of an individual | `PHYSIOLOGICAL_PARAMETER` |
+| body fat mass | `PHYSIOLOGICAL_PARAMETER` |
+| mass of an adipose tissue depot | `PHYSIOLOGICAL_PARAMETER` |
+| factor of obesity on a physiological quantity | `PHYSIOLOGICAL_PARAMETER` |
+| rate of the change of the body weight | `PHYSIOLOGICAL_PARAMETER` |
 | endogenous baseline plasma concentration | `CONCENTRATION_IN_PLASMA` |
 | net production rate at the steady state | `BIOCHEMICAL_PARAMETER` |
 | factor of the partition coefficients | `BIOCHEMICAL_PARAMETER` |

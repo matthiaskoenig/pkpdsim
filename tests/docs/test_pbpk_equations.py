@@ -35,12 +35,14 @@ from pkpdsim.pbpk import (
     MM,
     MODEL_UNITS,
     REST,
+    Adipose,
     Binding,
     Direction,
     Erythrocytes,
     Excretion,
     FirstOrder,
     FirstOrderDissolution,
+    Formula,
     Hill,
     Induction,
     Inhibition,
@@ -383,7 +385,24 @@ def contexts(tmp_path_factory: pytest.TempPathFactory) -> list[Context]:
             for s in female.substances
         ],
     )
-    for definition in (standard(), aged, female, pregnant, variants(), absorption()):
+    losing = dataclasses.replace(
+        standard(),
+        sid="toy_standard_adipose",
+        adipose=Adipose(
+            effect=Formula(
+                "-0.2 dimensionless * Cve_drg / (Cve_drg + 0.0002 mM)", U.dimensionless
+            )
+        ),
+    )
+    for definition in (
+        standard(),
+        aged,
+        female,
+        pregnant,
+        losing,
+        variants(),
+        absorption(),
+    ):
         paths = build(definition, directory)
         doc = libsbml.readSBMLFromFile(str(paths.comp_path))
         substances = tuple(s.sid for s in definition.substances)

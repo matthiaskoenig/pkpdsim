@@ -94,8 +94,10 @@ __all__ = [
     "ADULT_AGE",
     "AGE_REFERENCE",
     "DEFAULT_POPULATION",
+    "BodyComposition",
     "ReferenceIndividual",
     "Sex",
+    "body_composition",
     "normal_gfr",
     "physiology_objects",
     "physiology_table",
@@ -1810,4 +1812,95 @@ def reference_individual(sex: Sex, age: float = AGE_REFERENCE) -> ReferenceIndiv
         lumen_volumes=MappingProxyType(
             {t: value(DATA, key, "volume").value for t, key in SEGMENTS.items()}
         ),
+    )
+
+
+@dataclass(frozen=True)
+class BodyComposition:
+    """The body composition of an individual of the scaling of the library.
+
+    The quantities the build computes from the covariates (Huisinga 2012 with
+    the fat-free mass of Janmahasatian 2005), as numbers: a table of the
+    documentation, a test and an experiment read them instead of restating the
+    equations.
+
+    Attributes:
+        sex: the sex of the build.
+        bw: the body weight [kg].
+        height: the height [cm].
+        age: the age [years].
+        bmi: the body mass index [kg/m2].
+        bsa: the body surface area [m2], Du Bois.
+        ffm: the fat-free mass [kg], `FFM`.
+        fm: the body fat mass [kg], `FM = BW - FFM`.
+        sv_tis: the scaling factor of the lean tissues, `SV_tis`.
+        lean: the mass of the lean organ tissues [kg], `Mlean`.
+        blood: the blood volume [l], `Vblood`.
+        adipose: the mass of the adipose tissue compartment [kg], `Mad`, the
+            remainder of the body weight.
+    """
+
+    sex: Sex
+    bw: float
+    height: float
+    age: float
+    bmi: float
+    bsa: float
+    ffm: float
+    fm: float
+    sv_tis: float
+    lean: float
+    blood: float
+    adipose: float
+
+
+def body_composition(
+    sex: Sex, bw: float, height: float, age: float = AGE_REFERENCE
+) -> BodyComposition:
+    """The body composition of a human individual of the scaling of the library.
+
+    Args:
+        sex: the sex of the build.
+        bw: the body weight (kg).
+        height: the height (cm).
+        age: the age (years).
+
+    Returns:
+        The composition, the quantities the build computes from `BW` and
+        `HEIGHT` (`pkpdsim.pbpk.adipose` exposes them in the model as `FM`,
+        `BFF`, `FMI`, `LBW`, `VAT` and `SAT`).
+    """
+    refs = _references(sex, load("physiology_human"))
+    at = _at_age(sex, age)
+    ffm_factor = factor_curves(sex)[ids.FFM].curve.value(age)
+    bw_ref, height_ref = at[ids.ref(ids.BW)], at[ids.ref(ids.HEIGHT)]
+    brain = at[ids.ref(ids.organ_mass(Organ.BRAIN))]
+    skin = at[ids.ref(ids.organ_mass(Organ.SKIN))]
+    bsa, bsa_ref = _dubois(bw, height), _dubois(bw_ref, height_ref)
+    ffm = _janmahasatian(bw, height, sex) * ffm_factor
+    ffm_ref = _janmahasatian(bw_ref, height_ref, sex) * ffm_factor
+    msk = skin * bsa / bsa_ref
+    sv_tis = (ffm - brain - msk) / (ffm_ref - brain - skin)
+    lean = sum(
+        brain
+        if o is Organ.BRAIN
+        else msk
+        if o is Organ.SKIN
+        else at[ids.ref(ids.organ_mass(o))] * sv_tis
+        for o in LEAN_ORGANS
+    )
+    blood = at[ids.ref(ids.VBLOOD)] * sv_tis
+    return BodyComposition(
+        sex=sex,
+        bw=bw,
+        height=height,
+        age=age,
+        bmi=bw / (height / 100.0) ** 2,
+        bsa=bsa,
+        ffm=ffm,
+        fm=bw - ffm,
+        sv_tis=sv_tis,
+        lean=lean,
+        blood=blood,
+        adipose=bw - lean - blood * refs["rho_blood"].value,
     )

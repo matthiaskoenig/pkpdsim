@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from sbmlutils.factory import Creator
 
 from pkpdsim.pbpk import ids
+from pkpdsim.pbpk.adipose import Adipose
 from pkpdsim.pbpk.chemistry import (
     CustomReaction,
     Metabolism,
@@ -198,6 +199,14 @@ class PBPKDefinition:
             `fpreg_<key>` of the maternal physiology and the fetoplacental
             unit (the placenta and the fetus as compartments); `None` (the
             default) for a model without it.
+        adipose: the adipose tissue, the body composition and the physiology
+            of obesity (`Adipose`, `pkpdsim.pbpk.adipose`): the lean body
+            weight, the body fat mass with its fraction and index and the
+            visceral and subcutaneous adipose tissue, the factors
+            `fobes_<key>` of overweight and obesity on the cardiac output, the
+            flow fractions, the plasma proteins and the hepatic enzymes, and
+            with an effect the body weight as a state which the physiology
+            follows; `None` (the default) for a model without it.
     """
 
     sid: str
@@ -223,6 +232,7 @@ class PBPKDefinition:
     slow_pools: Sequence[SlowPool] = ()
     circadian: Circadian | None = None
     pregnancy: Pregnancy | None = None
+    adipose: Adipose | None = None
 
     def __post_init__(self) -> None:
         """Normalise the sex and the species to their members and freeze the starts."""
@@ -280,6 +290,7 @@ class PBPKDefinition:
             "arm_vein",
             "circadian",
             "pregnancy",
+            "adipose",
         ):
             values = {getattr(d, attribute) for d in definitions}
             if len(values) > 1:
@@ -326,6 +337,7 @@ class PBPKDefinition:
             population=first.population,
             circadian=first.circadian,
             pregnancy=first.pregnancy,
+            adipose=first.adipose,
             arm_vein=first.arm_vein,
             dynamic=tuple(dict.fromkeys(p for d in definitions for p in d.dynamic)),
             notes=f"The coupled physiology of the definitions {sids}.",

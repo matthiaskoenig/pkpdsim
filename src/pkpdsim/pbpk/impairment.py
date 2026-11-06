@@ -92,6 +92,15 @@ from sbmlutils.metadata import SBO
 
 from pkpdsim.database import integration, studies
 from pkpdsim.pbpk import ids
+from pkpdsim.pbpk.adipose import (
+    BINDING_FACTORS,
+    CARDIAC_OUTPUT,
+    FLOW_FACTORS,
+    ObesityFactor,
+    obesity_factor,
+    obesity_factors,
+    obesity_protein_factors,
+)
 from pkpdsim.pbpk.age import (
     AGE_REFERENCE,
     AgeCurve,
@@ -122,6 +131,7 @@ from pkpdsim.pbpk.sex_differences import (
 from pkpdsim.pbpk.substance import Substance
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import number
+from pkpdsim.sex import Sex
 from pkpdsim.species import Species
 
 if TYPE_CHECKING:
@@ -215,6 +225,12 @@ def _pregnancy_proteins() -> frozenset[tuple[Organ, str]]:
     return frozenset(protein_factors())
 
 
+@cache
+def _obesity_proteins() -> frozenset[tuple[Organ, str]]:
+    """The organs and proteins with a factor of obesity (alike in both sexes)."""
+    return frozenset(obesity_protein_factors(Sex.MALE))
+
+
 def organ_activity(organ: Organ, protein: str) -> str | None:
     """Get the local input of the individual on a protein in an organ.
 
@@ -236,6 +252,7 @@ def organ_activity(organ: Organ, protein: str) -> str | None:
         | protein_sex_factors()
         | set(protein_rhythms())
         | _pregnancy_proteins()
+        | _obesity_proteins()
     ):
         return ids.impairment_activity(protein)
     return None
@@ -1059,6 +1076,67 @@ class _Impairment:
                 )
             )
 
+    def obesity(self) -> None:
+        """The factors `fobes_<key>` of overweight and obesity over the body mass index.
+
+        Each is 1 up to a body mass index of 25 kg/m2 and is the residual of
+        the obese repository of Berton 2022 over what the scaling of the
+        library already does (`pkpdsim.pbpk.adipose`); the factor of the
+        cardiac output carries every organ flow, so the cardiac output of the
+        model stays the sum of its flows.
+        """
+        sex = self.definition.sex
+        factors = obesity_factors(sex)
+
+        def add(
+            pid: str,
+            factor: ObesityFactor,
+            what: str,
+            organ: Organ | None = None,
+            protein: str | None = None,
+        ) -> None:
+            self.add(
+                _initial(
+                    obesity_factor(pid),
+                    factor.formula(),
+                    f"obesity factor {pid}",
+                    f"The factor of overweight and obesity on {what}, a function "
+                    f"of the body mass index of the {sex.value} individual which "
+                    f"is 1 up to 25 kg/m2 (`pkpdsim.pbpk.adipose`): "
+                    f"{factor.notes}",
+                    factor.sources,
+                    kind="obesity_factor",
+                    organ=organ,
+                    protein=protein,
+                )
+            )
+
+        add(ids.CO, factors[CARDIAC_OUTPUT], "the cardiac output")
+        for key, organs in FLOW_FACTORS.items():
+            factor = factors[key]
+            for organ in organs:
+                add(
+                    ids.organ_flow(organ),
+                    factor,
+                    f"the blood flow fraction of the "
+                    f"{organ.name.lower().replace('_', ' ')}",
+                    organ=organ,
+                )
+        for key in BINDING_FACTORS:
+            add(key, factors[key], f"the plasma {key}")
+        for organ, protein in self.individual_proteins():
+            factor = obesity_protein_factors(sex).get((organ, protein))
+            if factor is None:
+                continue
+            add(
+                f"{organ.value}_{protein.lower()}",
+                factor,
+                f"the activity of {protein} in the "
+                f"{organ.name.lower().replace('_', ' ')} per amount of tissue",
+                organ=organ,
+                protein=protein,
+            )
+
     def age(self) -> None:
         """The factors of the age on the binding proteins and on the proteins."""
         sex = self.definition.sex
@@ -1271,6 +1349,23 @@ class _Impairment:
             """The circadian factor of a quantity, if the model has the rhythm."""
             return circadian_factor(key) if key in rhythms else None
 
+        adipose = self.definition.adipose
+        obese = adipose is not None and adipose.obesity
+        obesity_keys = (
+            {
+                ids.CO,
+                *(ids.organ_flow(o) for os in FLOW_FACTORS.values() for o in os),
+                *BINDING_FACTORS,
+                *(f"{o.value}_{p.lower()}" for o, p in _obesity_proteins()),
+            }
+            if obese
+            else set()
+        )
+
+        def obes(key: str) -> str | None:
+            """The factor of obesity on a quantity, if the build has the factors."""
+            return obesity_factor(key) if key in obesity_keys else None
+
         text = "The factor of all impairments (cirrhosis, CKD, heart failure) on"
         rest = ids.condition_factor("cp", "rest_flow")
         flows: list[str] = []
@@ -1300,6 +1395,8 @@ class _Impairment:
                         hf_flow,
                         preg(ORGAN_FLOW),
                         preg(q) if o is Organ.KIDNEY else None,
+                        obes(ids.CO),
+                        obes(q),
                     ),
                     f"impairment factor {q}",
                     f"{text} the blood flow `{q}`; the cardiac output is the "
@@ -1310,7 +1407,8 @@ class _Impairment:
             )
             if cp_flow is None:
                 closing.setdefault(
-                    product(ckd_flow, hf_flow, preg(ORGAN_FLOW)), []
+                    product(ckd_flow, hf_flow, preg(ORGAN_FLOW), obes(ids.CO), obes(q)),
+                    [],
                 ).append(ids.flow_fraction(o))
             else:
                 flows.append(
@@ -1373,6 +1471,7 @@ class _Impairment:
                     sex_factor(ALBUMIN) if female_albumin else None,
                     circ("albumin"),
                     preg("albumin"),
+                    obes("albumin"),
                 ),
                 "the plasma albumin"
                 + (
@@ -1386,6 +1485,7 @@ class _Impairment:
                     ids.condition_factor("cp", "agp"),
                     age_factor("agp") if human else None,
                     preg("agp"),
+                    obes("agp"),
                 ),
                 "the plasma alpha-1-acid glycoprotein"
                 + (" (and the age)" if human else ""),
@@ -1458,6 +1558,7 @@ class _Impairment:
                         preg(key)
                         if (organ, protein) in _pregnancy_proteins()
                         else None,
+                        obes(key),
                     ),
                     f"individual factor activity {protein} {organ.name.lower()}",
                     f"The factor of the individual (the impairments, the age and "
@@ -1493,5 +1594,7 @@ def impairment_objects(definition: "PBPKDefinition") -> list[Sbase]:
         impairment.sex()
     if definition.age and definition.species is Species.HUMAN:
         impairment.age()
+    if definition.adipose is not None and definition.adipose.obesity:
+        impairment.obesity()
     impairment.combined()
     return impairment.objects

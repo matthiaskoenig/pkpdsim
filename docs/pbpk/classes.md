@@ -208,6 +208,29 @@ The value of a class is a representative age, the adult the adult of ICRP 89 (35
 | <span class="pbpk-swatch" style="background:#7f2704" title="#7f2704"></span> `oldest_old` 85 years and older | geriatric patients of 85 years and older (ICH E7 Questions and Answers 2010); the physiology beyond 85 years is extrapolated | >= 85 | 90 |
 <!-- end generated -->
 
+## Body mass index
+
+### Background
+
+Overweight and obesity are graded by the body mass index, `BW/height^2`. WHO Technical Report Series 894 gives the international classification ([WHO 2000](#ref-WHO2000)): underweight below 18.5 (severe below 16, moderate 16 to 16.9, mild 17 to 18.4), normal weight 18.5 to 24.9, pre-obese (overweight) 25.0 to 29.9, obesity class I 30.0 to 34.9, class II 35.0 to 39.9 and class III (severe or morbid obesity) 40.0 and above. The WHO Expert Consultation of 2004 retained those cut-offs and added the public health action points 23.0, 27.5, 32.5 and 37.5 kg/m2 for Asian populations, whose point of observed risk lies between a body mass index of 22 and 25 ([WHO Asian 2004](#ref-WHOAsian2004)). What the physiology of an obese individual does beyond the larger adipose mass, and what the library changes with it, is on the page [Adipose tissue and obesity](adipose.md).
+
+### Classes of the body mass index
+
+The value of a class is the middle of its range (45 kg/m2 for class III, which is open); the class of normal weight has no value of its own and is the reference individual of the build. `class_changes` sets the height of the reference individual of the sex and the age and the body weight at the body mass index of the class, so a scan over the classes is a scan over body weights at a fixed height.
+
+<!-- generated: classes-bmi (scripts/pbpk_tables.py), do not edit -->
+*Generated from `pkpdsim.impairment.BMI_CLASSES` by `scripts/pbpk_tables.py`.*
+
+| class | definition | BMI [kg/m2] | BMI | BW [kg] |
+| --- | --- | --- | --- | --- |
+| <span class="pbpk-swatch" style="background:black" title="black"></span> `normal` Normal weight | a body mass index of 18.5 to 24.9 kg/m2 (WHO Technical Report Series 894); the class has no value of its own, it is the reference individual of the build (a body mass index of 23.6 kg/m2 for the man and 22.6 for the woman of ICRP 89) | 18.5-24 | reference | male 73, female 60 |
+| <span class="pbpk-swatch" style="background:#6baed6" title="#6baed6"></span> `underweight` Underweight | a body mass index below 18.5 kg/m2 (WHO: severe below 16, moderate 16 to 16.9, mild 17 to 18.4); the value of the class is the middle of the mild and moderate range | < 18.5 | 17 | male 52.66, female 45.17 |
+| <span class="pbpk-swatch" style="background:#fdd0a2" title="#fdd0a2"></span> `overweight` Overweight | a body mass index of 25.0 to 29.9 kg/m2, pre-obese in WHO Technical Report Series 894; the value of the class is its middle | 25-29 | 27.5 | male 85.18, female 73.06 |
+| <span class="pbpk-swatch" style="background:#fdae6b" title="#fdae6b"></span> `obesity_1` Obesity class I | a body mass index of 30.0 to 34.9 kg/m2; the value of the class is its middle | 30-34 | 32.5 | male 100.7, female 86.35 |
+| <span class="pbpk-swatch" style="background:#e6550d" title="#e6550d"></span> `obesity_2` Obesity class II | a body mass index of 35.0 to 39.9 kg/m2; the value of the class is its middle | 35-39 | 37.5 | male 116.2, female 99.63 |
+| <span class="pbpk-swatch" style="background:#7f2704" title="#7f2704"></span> `obesity_3` Obesity class III | a body mass index of 40.0 kg/m2 and above, severe or morbid obesity; the value of the class is 45 kg/m2, and the adipose model of the library is valid to about 40 (the equations of the fat-free mass and of the obese repository both saturate above it) | >= 40 | 45 | male 139.4, female 119.6 |
+<!-- end generated -->
+
 ## The factors over the classes
 
 The physiological factors of each condition over its severity, a panel per factor: the line is the factor of the model, the points are the classes, the strip under a panel the classes of the axis in their colors (hover a point for its value). The factors of the enzymes and transporters of the liver are the tables of [Impairment](impairment.md).
@@ -2507,6 +2530,8 @@ A condition with a homeostasis of a PD component starts each class from its drug
 - <span id="ref-Tan2018"></span>Tan ML, Yoshida K, Zhao P, Zhang L, Nolin TD, Piquette-Miller M, Galetin A, Huang SM. Effect of chronic kidney disease on nonrenal elimination pathways: a systematic assessment of CYP1A2, CYP2C8, CYP2C9, CYP2C19, and OATP. Clin Pharmacol Ther 103(5):854-867, 2018. [doi:10.1002/cpt.807](https://doi.org/10.1002/cpt.807)
 - <span id="ref-Verbeeck2008"></span>Verbeeck RK. Pharmacokinetics and dosage adjustment in patients with hepatic dysfunction. Eur J Clin Pharmacol 64(12):1147-1161, 2008. [doi:10.1007/s00228-008-0553-z](https://doi.org/10.1007/s00228-008-0553-z)
 - <span id="ref-Verbeeck2009"></span>Verbeeck RK, Musuamba FT. Pharmacokinetics and dosage adjustment in patients with renal dysfunction. Eur J Clin Pharmacol 65(8):757-773, 2009. [doi:10.1007/s00228-009-0678-8](https://doi.org/10.1007/s00228-009-0678-8)
+- <span id="ref-WHO2000"></span>World Health Organization. Obesity: preventing and managing the global epidemic. Report of a WHO Consultation. WHO Technical Report Series 894, Geneva, 2000.
+- <span id="ref-WHOAsian2004"></span>WHO Expert Consultation. Appropriate body-mass index for Asian populations and its implications for policy and intervention strategies. Lancet 363(9403):157-163, 2004. [doi:10.1016/S0140-6736(03)15268-3](https://doi.org/10.1016/S0140-6736(03)15268-3)
 - <span id="ref-Wiesner2003"></span>Wiesner R, Edwards E, Freeman R, Harper A, Kim R, Kamath P, Kremers W, Lake J, Howard T, Merion RM, Wolfe RA, Krom R. Model for end-stage liver disease (MELD) and allocation of donor livers. Gastroenterology 124(1):91-96, 2003. [doi:10.1053/gast.2003.50016](https://doi.org/10.1053/gast.2003.50016)
 - <span id="ref-Wilkinson1975"></span>Wilkinson GR, Shand DG. A physiological approach to hepatic drug clearance. Clin Pharmacol Ther 18(4):377-390, 1975. [doi:10.1002/cpt1975184377](https://doi.org/10.1002/cpt1975184377)
 - <span id="ref-Yoshida2016"></span>Yoshida K, Sun B, Zhang L, Zhao P, Abernethy DR, Nolin TD, Rostami-Hodjegan A, Zineh I, Huang SM. Systematic and quantitative assessment of the effect of chronic kidney disease on CYP2D6 and CYP3A4/5. Clin Pharmacol Ther 100(1):75-87, 2016. [doi:10.1002/cpt.337](https://doi.org/10.1002/cpt.337)

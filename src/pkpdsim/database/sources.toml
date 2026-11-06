@@ -956,3 +956,177 @@ doi = "10.1016/0016-5085(85)90199-4"
 
 [Szilagyi1996]
 citation = "Szilagyi A, Salomon R, Smith BE, Martin M, Seidman E. Determinants of prolonged oral cecal transit time during late phase pregnancy. Clin Invest Med 19(1):20-27, 1996."
+
+# The adipose tissue, the body composition and the physiology of obesity
+# (tables/adipose_human.toml, docs/pbpk/adipose.md). The DOIs were checked
+# against Crossref (2026-11-06).
+
+[Berton2022]
+citation = "Berton M, Bettonte S, Stader F, Battegay M, Marzolini C. Repository describing the anatomical, physiological, and biological changes in an obese population to inform physiologically based pharmacokinetic models. Clin Pharmacokinet 61(9):1251-1270, 2022."
+doi = "10.1007/s40262-022-01132-3"
+
+[Ghobadi2011]
+citation = "Ghobadi C, Johnson TN, Aarabi M, Almond LM, Allabi AC, Rowland-Yeo K, Jamei M, Rostami-Hodjegan A. Application of a systems approach to the bottom-up assessment of pharmacokinetics in obese patients: expected variations in clearance. Clin Pharmacokinet 50(12):809-822, 2011."
+doi = "10.2165/11594420-000000000-00000"
+
+[Izat2026]
+citation = "Izat N, Kangne H, Jansson-Lofmark R, Hertel JK, Rostami-Hodjegan A, Robertsen I, Galetin A. Application of virtual twin PBPK models in individuals with obesity via CYP3A4 phenotyping using endogenous biomarker data. Clin Pharmacol Ther 120(3):762-773, 2026."
+doi = "10.1002/cpt.70369"
+
+[Knibbe2015]
+citation = "Knibbe CA, Brill MJ, van Rongen A, Diepstraten J, van der Graaf PH, Danhof M. Drug disposition in obesity: toward evidence-based dosing. Annu Rev Pharmacol Toxicol 55:149-167, 2015."
+doi = "10.1146/annurev-pharmtox-010814-124354"
+
+[Brill2012]
+citation = "Brill MJ, Diepstraten J, van Rongen A, van Kralingen S, van den Anker JN, Knibbe CA. Impact of obesity on drug metabolism and elimination in adults and children. Clin Pharmacokinet 51(5):277-304, 2012."
+doi = "10.2165/11599410-000000000-00000"
+
+[Collis2001]
+citation = "Collis T, Devereux RB, Roman MJ, de Simone G, Yeh J, Howard BV, Fabsitz RR, Welty TK. Relations of stroke volume and cardiac output to body composition: the Strong Heart Study. Circulation 103(6):820-825, 2001."
+doi = "10.1161/01.CIR.103.6.820"
+
+[deDivitiis1981]
+citation = "de Divitiis O, Fazio S, Petitto M, Maddalena G, Contaldo F, Mancini M. Obesity and cardiac function. Circulation 64(3):477-482, 1981."
+doi = "10.1161/01.CIR.64.3.477"
+
+[Blaak1995]
+citation = "Blaak EE, van Baak MA, Kemerink GJ, Pakbiers MT, Heidendal GA, Saris WH. Beta-adrenergic stimulation and abdominal subcutaneous fat blood flow in lean, obese, and reduced-obese subjects. Metabolism 44(2):183-187, 1995."
+doi = "10.1016/0026-0495(95)90262-7"
+
+[Summers1996]
+citation = "Summers LK, Samra JS, Humphreys SM, Morris RJ, Frayn KN. Subcutaneous abdominal adipose tissue blood flow: variation within and between subjects and relationship to obesity. Clin Sci (Lond) 91(6):679-683, 1996."
+doi = "10.1042/cs0910679"
+
+[Virtanen2002]
+citation = "Virtanen KA, Lonnroth P, Parkkola R, Peltoniemi P, Asola M, Viljanen T, Tolvanen T, Knuuti J, Ronnemaa T, Huupponen R, Nuutila P. Glucose uptake and perfusion in subcutaneous and visceral adipose tissue during insulin stimulation in nonobese and obese humans. J Clin Endocrinol Metab 87(8):3902-3910, 2002."
+doi = "10.1210/jcem.87.8.8761"
+
+[Lesser1967]
+citation = "Lesser GT, Deutsch S. Measurement of adipose tissue blood flow and perfusion in man by uptake of 85Kr. J Appl Physiol 23(5):621-630, 1967."
+doi = "10.1152/jappl.1967.23.5.621"
+
+[Levitt2007]
+citation = "Levitt DG. Heterogeneity of human adipose blood flow. BMC Clin Pharmacol 7:1, 2007."
+doi = "10.1186/1472-6904-7-1"
+
+[Levitt2010]
+citation = "Levitt DG. Quantitative relationship between the octanol/water partition coefficient and the diffusion limitation of the exchange between adipose and blood. BMC Clin Pharmacol 10:1, 2010."
+doi = "10.1186/1472-6904-10-1"
+
+[Chagnac2003]
+citation = "Chagnac A, Weinstein T, Herman M, Hirsh J, Gafter U, Ori Y. The effects of weight loss on renal function in patients with severe obesity. J Am Soc Nephrol 14(6):1480-1486, 2003."
+doi = "10.1097/01.ASN.0000068462.38661.89"
+
+[ChewHarris2014]
+citation = "Chew-Harris JS, Florkowski CM, Elmslie JL, Livesey J, Endre ZH, George PM. Lean mass modulates glomerular filtration rate in males of normal and extreme body composition. Intern Med J 44(8):749-756, 2014."
+doi = "10.1111/imj.12479"
+
+[Benedek1983]
+citation = "Benedek IH, Fiske WD 3rd, Griffen WO, Bell RM, Blouin RA, McNamara PJ. Serum alpha 1-acid glycoprotein and the binding of drugs in obesity. Br J Clin Pharmacol 16(6):751-754, 1983."
+doi = "10.1111/j.1365-2125.1983.tb02258.x"
+
+[Benedek1984]
+citation = "Benedek IH, Blouin RA, McNamara PJ. Serum protein binding and the role of increased alpha 1-acid glycoprotein in moderately obese male subjects. Br J Clin Pharmacol 18(6):941-946, 1984."
+doi = "10.1111/j.1365-2125.1984.tb02567.x"
+
+[Krogstad2021]
+citation = "Krogstad V, Peric A, Robertsen I, Kringen MK, Vistnes M, Hjelmesaeth J, Sandbu R, Johnson LK, Angeles PC, Jansson-Lofmark R, Karlsson C, Andersson S, Asberg A, Andersson TB, Christensen H. Correlation of body weight and composition with hepatic activities of cytochrome P450 enzymes. J Pharm Sci 110(1):432-437, 2021."
+doi = "10.1016/j.xphs.2020.10.027"
+
+[Krogstad2020]
+citation = "Krogstad V, Peric A, Robertsen I, Kringen MK, Wegler C, Angeles PC, Hjelmesaeth J, Karlsson C, Andersson S, Artursson P, Christensen H, Asberg A. A comparative analysis of cytochrome P450 activities in paired liver and small intestinal samples from patients with obesity. Drug Metab Dispos 48(1):8-17, 2020."
+doi = "10.1124/dmd.119.087940"
+
+[Ulvestad2013]
+citation = "Ulvestad M, Skottheim IB, Jakobsen GS, Bremer S, Molden E, Asberg A, Hjelmesaeth J, Andersson TB, Sandbu R, Christensen H. Impact of OATP1B1, MDR1, and CYP3A4 expression in liver and intestine on interpatient pharmacokinetic variability of atorvastatin in obese subjects. Clin Pharmacol Ther 93(3):275-282, 2013."
+doi = "10.1038/clpt.2012.261"
+
+[Jamwal2018]
+citation = "Jamwal R, de la Monte SM, Ogasawara K, Adusumalli S, Barlock BB, Akhlaghi F. Nonalcoholic fatty liver disease and diabetes are associated with decreased CYP3A4 protein expression and activity in human liver. Mol Pharm 15(7):2621-2632, 2018."
+doi = "10.1021/acs.molpharmaceut.8b00159"
+
+[Emery2003]
+citation = "Emery MG, Fisher JM, Chien JY, Kharasch ED, Dellinger EP, Kowdley KV, Thummel KE. CYP2E1 activity before and after weight loss in morbidly obese subjects with nonalcoholic fatty liver disease. Hepatology 38(2):428-435, 2003."
+doi = "10.1053/jhep.2003.50342"
+
+[OShea1994]
+citation = "O'Shea D, Davis SN, Kim RB, Wilkinson GR. Effect of fasting and obesity in humans on the 6-hydroxylation of chlorzoxazone: a putative probe of CYP2E1 activity. Clin Pharmacol Ther 56(4):359-367, 1994."
+doi = "10.1038/clpt.1994.150"
+
+[Sinha2020]
+citation = "Sinha J, Duffull SB, Green B, Al-Sallami HS. Evaluating the relationship between lean liver volume and fat-free mass. Clin Pharmacokinet 59(4):475-483, 2020."
+doi = "10.1007/s40262-019-00824-7"
+
+[Martin1994]
+citation = "Martin AD, Daniel MZ, Drinkwater DT, Clarys JP. Adipose tissue density, estimated adipose lipid fraction and whole body adiposity in male cadavers. Int J Obes Relat Metab Disord 18(2):79-83, 1994. PMID 8148928; no DOI deposited in Crossref."
+
+[Shen2009]
+citation = "Shen W, Punyanitya M, Silva AM, Chen J, Gallagher D, Sardinha LB, Allison DB, Heymsfield SB. Sexual dimorphism of adipose tissue distribution across the lifespan: a cross-sectional whole-body magnetic resonance imaging study. Nutr Metab (Lond) 6:17, 2009."
+doi = "10.1186/1743-7075-6-17"
+
+[Linge2018]
+citation = "Linge J, Borga M, West J, Tuthill T, Miller MR, Dumitriu A, Thomas EL, Romu T, Tunon P, Bell JD, Dahlqvist Leinhard O. Body composition profiling in the UK Biobank imaging study. Obesity (Silver Spring) 26(11):1785-1795, 2018."
+doi = "10.1002/oby.22210"
+
+[Demerath2007]
+citation = "Demerath EW, Shen W, Lee M, Choh AC, Czerwinski SA, Siervogel RM, Towne B. Approximation of total visceral adipose tissue with a single magnetic resonance image. Am J Clin Nutr 85(2):362-368, 2007."
+doi = "10.1093/ajcn/85.2.362"
+
+[Nielsen2004]
+citation = "Nielsen S, Guo Z, Johnson CM, Hensrud DD, Jensen MD. Splanchnic lipolysis in human obesity. J Clin Invest 113(11):1582-1588, 2004."
+doi = "10.1172/JCI21047"
+
+[Kelly2009]
+citation = "Kelly TL, Wilson KE, Heymsfield SB. Dual energy X-ray absorptiometry body composition reference values from NHANES. PLoS One 4(9):e7038, 2009."
+doi = "10.1371/journal.pone.0007038"
+
+[Gallagher2000]
+citation = "Gallagher D, Heymsfield SB, Heo M, Jebb SA, Murgatroyd PR, Sakamoto Y. Healthy percentage body fat ranges: an approach for developing guidelines based on body mass index. Am J Clin Nutr 72(3):694-701, 2000."
+doi = "10.1093/ajcn/72.3.694"
+
+[WHO2000]
+citation = "World Health Organization. Obesity: preventing and managing the global epidemic. Report of a WHO Consultation. WHO Technical Report Series 894, Geneva, 2000."
+
+[WHOAsian2004]
+citation = "WHO Expert Consultation. Appropriate body-mass index for Asian populations and its implications for policy and intervention strategies. Lancet 363(9403):157-163, 2004."
+doi = "10.1016/S0140-6736(03)15268-3"
+
+[Forbes1987]
+citation = "Forbes GB. Lean body mass-body fat interrelationships in humans. Nutr Rev 45(8):225-231, 1987."
+doi = "10.1111/j.1753-4887.1987.tb02684.x"
+
+[ChowHall2008]
+citation = "Chow CC, Hall KD. The dynamics of human body weight change. PLoS Comput Biol 4(3):e1000045, 2008."
+doi = "10.1371/journal.pcbi.1000045"
+
+[Hall2011]
+citation = "Hall KD, Sacks G, Chandramohan D, Chow CC, Wang YC, Gortmaker SL, Swinburn BA. Quantification of the effect of energy imbalance on bodyweight. Lancet 378(9793):826-837, 2011."
+doi = "10.1016/S0140-6736(11)60812-X"
+
+[Wilding2022]
+citation = "Wilding JPH, Batterham RL, Davies M, Van Gaal LF, Kandler K, Konakli K, Lingvay I, McGowan BM, Oral TK, Rosenstock J, Wadden TA, Wharton S, Yokote K, Kushner RF, STEP 1 Study Group. Weight regain and cardiometabolic effects after withdrawal of semaglutide: the STEP 1 trial extension. Diabetes Obes Metab 24(8):1553-1564, 2022."
+doi = "10.1111/dom.14725"
+
+[Jastreboff2022]
+citation = "Jastreboff AM, Aronne LJ, Ahmad NN, Wharton S, Connery L, Alves B, Kiyosue A, Zhang S, Liu B, Bunck MC, Stefanski A, SURMOUNT-1 Investigators. Tirzepatide once weekly for the treatment of obesity. N Engl J Med 387(3):205-216, 2022."
+doi = "10.1056/NEJMoa2206038"
+
+[Aronne2024]
+citation = "Aronne LJ, Sattar N, Horn DB, Bays HE, Wharton S, Lin WY, Ahmad NN, Zhang S, Liao R, Bunck MC, Jouravskaya I, Murphy MA, SURMOUNT-4 Investigators. Continued treatment with tirzepatide for maintenance of weight reduction in adults with obesity: the SURMOUNT-4 randomized clinical trial. JAMA 331(1):38-48, 2024."
+doi = "10.1001/jama.2023.24945"
+
+[Look2025]
+citation = "Look M, Dunn JP, Kushner RF, Cao D, Harris C, Gibble TH, Stefanski A, Bunck MC. Body composition changes during weight reduction with tirzepatide in the SURMOUNT-1 study of adults with obesity or overweight. Diabetes Obes Metab 27(5):2720-2729, 2025."
+doi = "10.1111/dom.16275"
+
+[Dubin2026]
+citation = "Dubin RL, Sanders TN, Schwab HM, Heymsfield SB, Greenway FL. Glucagon-like peptide-1 receptor agonist-based agents and body composition: filling more gaps. Obesity (Silver Spring) 34(Suppl 2):51-63, 2026."
+doi = "10.1002/oby.70212"
+
+[Falkenhain2025]
+citation = "Falkenhain K, Redman LM, Chen W, Martin CK, Ravussin E, Shen W, Heymsfield SB. Effect of caloric restriction on organ size and its contribution to metabolic adaptation: an ancillary analysis of CALERIE. Sci Rep 15(1):30374, 2025."
+doi = "10.1038/s41598-024-83762-0"
+
+[Nilsen2025]
+citation = "Nilsen I, Andersson A, Laurenius A, Osterberg J. Low-energy diets before metabolic bariatric surgery: a systematic review of the effect on total body weight, liver volume, glucose and insulin. Obes Rev 26(4):e13876, 2025."
+doi = "10.1111/obr.13876"
