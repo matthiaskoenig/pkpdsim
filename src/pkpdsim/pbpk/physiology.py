@@ -100,6 +100,7 @@ __all__ = [
     "reference_hematocrit",
     "reference_individual",
     "reference_tissue_volumes",
+    "scaled_cardiac_output",
 ]
 
 
@@ -1272,6 +1273,37 @@ def reference_tissue_volumes(
         - at[ids.ref(ids.VBLOOD)] * refs["rho_blood"].value
     )
     return {o: masses[o] / refs[f"rho_{o}"].value for o in Organ}
+
+
+def scaled_cardiac_output(
+    sex: Sex, bw: float, height: float, age: float = AGE_REFERENCE
+) -> float:
+    """The cardiac output of the scaling of a build before the factor of the sex.
+
+    `CO_ref*SV_tis` (Huisinga 2012 eq. 13) of an individual without
+    impairment: the reference cardiac output of the sex and the age times the
+    fat-free mass less brain and skin relative to the reference individual of
+    the age, as the model computes `CO_base` without `fsex_CO`.
+
+    Args:
+        sex: the sex of the build.
+        bw: the body weight (kg).
+        height: the height (cm).
+        age: the age (years).
+
+    Returns:
+        The cardiac output (l/min).
+    """
+    at = _at_age(sex, age)
+    ffm_factor = factor_curves(sex)[ids.FFM].curve.value(age)
+    bw_ref, height_ref = at[ids.ref(ids.BW)], at[ids.ref(ids.HEIGHT)]
+    brain = at[ids.ref(ids.organ_mass(Organ.BRAIN))]
+    skin = at[ids.ref(ids.organ_mass(Organ.SKIN))]
+    ffm = _janmahasatian(bw, height, sex) * ffm_factor
+    ffm_ref = _janmahasatian(bw_ref, height_ref, sex) * ffm_factor
+    msk = skin * _dubois(bw, height) / _dubois(bw_ref, height_ref)
+    sv = (ffm - brain - msk) / (ffm_ref - brain - skin)
+    return at[ids.ref(ids.CO)] * sv
 
 
 def reference_hematocrit(sex: Sex, age: float = AGE_REFERENCE) -> float:

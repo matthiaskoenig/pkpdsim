@@ -45,6 +45,7 @@ __all__ = [
     "SEX",
     "protein_sex_factor",
     "protein_sex_factors",
+    "same_cardiac_index",
     "sex_curves",
     "sex_factor",
 ]
@@ -98,10 +99,42 @@ def _ratio(entry: Mapping[str, Any]) -> float:
     return at(Sex.FEMALE) / at(Sex.MALE)
 
 
+def same_cardiac_index(age: float) -> float:
+    """The factor on the female cardiac output which makes it that of a man of the same size.
+
+    The ratio of the cardiac output of the scaling of the male build to that
+    of the female build (`pkpdsim.pbpk.physiology.scaled_cardiac_output`) at
+    the body weight and height between the reference individuals of the
+    sexes at the age.
+
+    Args:
+        age: the age (years).
+
+    Returns:
+        The factor (dimensionless).
+    """
+    # physiology imports this module (the factors of the sex)
+    from pkpdsim.pbpk.physiology import reference_individual, scaled_cardiac_output
+
+    refs = [reference_individual(sex, age) for sex in Sex]
+    bw = sum(r.bw for r in refs) / len(refs)
+    height = sum(r.height for r in refs) / len(refs)
+    return scaled_cardiac_output(Sex.MALE, bw, height, age) / scaled_cardiac_output(
+        Sex.FEMALE, bw, height, age
+    )
+
+
 def _factor(entry: Mapping[str, Any]) -> AgeCurve:
     """The curve of an entry of the table with its provenance."""
     sources, notes = provenance(entry)
-    curve = Constant(_ratio(entry)) if entry["form"] == "ratio" else entry_curve(entry)
+    form = entry["form"]
+    if form == "ratio":
+        curve = Constant(_ratio(entry))
+    elif form == "same_cardiac_index":
+        ages = tuple(float(a) for a in entry["age"])
+        curve = Interpolation(ages, tuple(same_cardiac_index(a) for a in ages))
+    else:
+        curve = entry_curve(entry)
     return AgeCurve(curve, sources, notes)
 
 
