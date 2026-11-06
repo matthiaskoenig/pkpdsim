@@ -191,7 +191,7 @@ def check_model(model: PKPDModel) -> None:
             f"the name '{model.name}' is not the name of the package '{component}'"
         )
     for label, path in [
-        ("model_path", model.model_path()),
+        ("model_path", model.model_path),
         ("female_model_path", model.female_model_path),
         ("the factory directory", model.factory_dir),
         ("archive_path", model.archive_path),

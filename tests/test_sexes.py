@@ -67,7 +67,7 @@ def start(experiment: PKPDSimulationExperiment, task: str) -> float:
 def test_a_model_has_a_build_per_sex() -> None:
     assert MODEL.model_paths == {Sex.MALE: MODEL_PATH, Sex.FEMALE: FEMALE_MODEL_PATH}
     assert list(MODEL.model_paths) == [Sex.MALE, Sex.FEMALE]
-    assert MODEL.model_path() == MODEL_PATH
+    assert MODEL.model_path == MODEL_PATH
     assert MODEL.female_model_path == FEMALE_MODEL_PATH
     assert MODEL.variants == {"male": MODEL_PATH, "female": FEMALE_MODEL_PATH}
     assert MODEL.model_path_of(Sex.MALE) == MODEL_PATH
@@ -76,14 +76,18 @@ def test_a_model_has_a_build_per_sex() -> None:
 
 def test_a_model_without_a_female_build_has_the_male_one() -> None:
     assert TOY.female_model_path is None
-    assert TOY.model_paths == {Sex.MALE: TOY.model_path()}
+    assert TOY.model_paths == {Sex.MALE: TOY.model_path}
     with pytest.raises(ValueError, match="'toy' has no female build") as error:
         TOY.model_path_of(Sex.FEMALE)
     assert "female_model_path" in str(error.value)
 
 
 def test_a_replaced_male_build_keeps_the_female_one(tmp_path: Path) -> None:
-    model = MODEL.replace(variants={**MODEL.variants, "male": tmp_path / "male.xml"})
+    # the factory keeps its directory in the package, the new build lies outside
+    model = MODEL.replace(
+        variants={**MODEL.variants, "male": tmp_path / "male.xml"},
+        factory_dir=MODEL.factory_dir,
+    )
     assert model.model_paths == {
         Sex.MALE: tmp_path / "male.xml",
         Sex.FEMALE: FEMALE_MODEL_PATH,
@@ -162,13 +166,13 @@ def test_a_study_of_women_with_a_group_of_men() -> None:
 
 def test_a_model_without_a_female_build_runs_as_before() -> None:
     toy = initialized(ToyDecay)
-    assert loaded_paths(toy) == {"model": TOY.model_path()}
+    assert loaded_paths(toy) == {"model": TOY.model_path}
     assert task_models(toy) == {"task_decay": "model"}
     # the models of an experiment of a model with one build, as before the builds
     # per sex
     models = cast("dict[str, AbstractModel]", toy.models())
     assert list(models) == ["model"]
-    assert models["model"].source.path == TOY.model_path()
+    assert models["model"].source.path == TOY.model_path
     assert models["model"].changes == {}
 
 

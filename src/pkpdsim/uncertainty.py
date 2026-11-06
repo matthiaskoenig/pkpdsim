@@ -817,7 +817,7 @@ class UncertaintyRun:
         build.
 
         Args:
-            model: the model, whose male build (`model_path()`) has the
+            model: the model, whose male build (`model_path`) has the
                 distributions.
             settings: the settings of the run.
 
@@ -827,7 +827,7 @@ class UncertaintyRun:
         return cls(
             settings=settings,
             dimension=uncertainty_dimension(
-                model.model_path(), settings.draws, settings.seed
+                model.model_path, settings.draws, settings.seed
             ),
         )
 

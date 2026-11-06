@@ -264,7 +264,7 @@ def describe(package: str) -> ModelInfo:
     return ModelInfo(
         package=package,
         base_path=model.base_path or model.path,
-        model_path=model.model_path(),
+        model_path=model.model_path,
         data_path=list(model.data_paths) or None,
         experiments=model.load_experiments() if model.experiments else None,
         absolute_tolerance=model.simulator.absolute_tolerance,

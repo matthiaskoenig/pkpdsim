@@ -38,7 +38,7 @@ MODEL = PKPDModel(
 )
 ```
 
-`PKPDModel`, `FigureSettings`, `SimulatorSettings` and `ExtraAction` take keyword arguments only, so the order of their fields is not API. The keywords of a model package are the fields of the project by other names: `path` is `root` (the property `path`), `model_path` and `female_model_path` are the `variants` `male` and `female`, `data_paths` is `data_path` (the property `data_paths`), `fit_definitions` is `fits`, `fits` as a sequence of fit ids is `adopted_ids`, `fits_path` is `fits_dir`, `factory_path` is `factory_dir`, and a `FigureSettings` as `figures` is split into the `figure_settings` (sbmlsim's) and the `figures` (a `FigureOutputs`, the formats and the resolution) of the project. A keyword and its field are not given together. A model is a frozen pydantic model: `model.replace(**fields)` gives a changed copy by the names of the fields, e.g. `model.replace(adopted_ids=[...])`; the directory of the factory and the folder of the adopted fits, which a model derives from its male build, stay unless they are given as `None` too. `SimulatorSettings` and `CheckSettings` are those of `sbmlsim.project`, the release settings are `sbmlsim.release.settings`.
+`PKPDModel`, `FigureSettings`, `SimulatorSettings` and `ExtraAction` take keyword arguments only, so the order of their fields is not API. The keywords of a model package are the fields of the project by other names: `path` is `root` (the property `path`), `model_path` and `female_model_path` are the `variants` `male` and `female`, `data_paths` is `data_path` (the property `data_paths`), `fit_definitions` is `fits`, `fits` as a sequence of fit ids is `adopted_ids`, `fits_path` is `fits_dir`, `factory_path` is `factory_dir`, and a `FigureSettings` as `figures` is split into the `figure_settings` (sbmlsim's) and the `figures` (a `FigureOutputs`, the formats and the resolution) of the project. A keyword and its field are not given together. A model is a frozen pydantic model: `model.replace(**fields)` gives a changed copy by the names of the fields, e.g. `model.replace(adopted_ids=[...])`; the directory of the factory and the folder of the adopted fits, which a model derives from its male build, are derived again for other builds or another root, unless they are given or were given when the model was created. `SimulatorSettings` and `CheckSettings` are those of `sbmlsim.project`, the release settings are `sbmlsim.release.settings`.
 
 ## Builds per sex
 
@@ -63,7 +63,7 @@ MODEL = PKPDModel(
 ```
 
 `model_path` is the male build, the model of every experiment and every caller
-which does not ask for a sex (`model_path()` of the project); `model_paths` maps every sex to its build (the
+which does not ask for a sex (`model_path` of the project, `variant_path(variant)` gives any build); `model_paths` maps every sex to its build (the
 male one only for a model without a female build) and `model_path_of(sex)`
 gives the build of a sex, with a `ValueError` naming the model for a sex it has
 no build of. The builds have the same ids, so the changes of an experiment and

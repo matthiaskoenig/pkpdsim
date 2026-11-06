@@ -354,7 +354,11 @@ class PKPDModel(Project):
         """Get a copy of the model with other fields, validated again.
 
         See `sbmlsim.project.Project.replace`. A `FigureSettings` as `figures`
-        replaces the settings of the figures as well, `figure_settings`.
+        replaces the settings of the figures as well, `figure_settings`. A
+        copy with other builds (`variants`) or another `root` derives the
+        directory of the factory and the folder of the adopted fits again,
+        unless they are given or were not the derived ones: the directory of
+        the male build and `fits` next to the directory of the factory.
 
         Raises:
             pydantic.ValidationError: for invalid fields.
@@ -362,6 +366,13 @@ class PKPDModel(Project):
         figures = changes.get("figures")
         if isinstance(figures, SbmlsimFigureSettings):
             changes.setdefault("figure_settings", None)
+        if "variants" in changes or "root" in changes:
+            derived_factory = self.factory_dir == self.model_path.parent
+            if "factory_dir" not in changes and derived_factory:
+                changes["factory_dir"] = None
+            derived_fits = self.fits_dir == self.factory_dir.parent / "fits"
+            if "fits_dir" not in changes and derived_fits:
+                changes["fits_dir"] = None
         return super().replace(**changes)
 
     @model_validator(mode="before")
@@ -617,6 +628,9 @@ class PKPDModel(Project):
             )
         return declaration
 
+    # the override keeps the signature of the model packages of pkdb_models
+    # (`experiment_classes`, `output_dir`, the result a `Path`); the run layer
+    # of sbmlsim calls `Project.run_experiments` unbound, so it is not affected
     @override
     def run_experiments(  # ty: ignore[invalid-method-override]
         self,

@@ -301,8 +301,6 @@ def source_repo_model(tmp_path: Path, git_env: None) -> PKPDModel:
     return MODEL.replace(
         root=package,
         variants={"male": package / "models" / "toy.xml"},
-        factory_dir=None,
-        fits_dir=None,
     )
 
 

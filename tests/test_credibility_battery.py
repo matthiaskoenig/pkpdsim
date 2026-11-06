@@ -276,20 +276,18 @@ def test_the_rebuild(tmp_path: Path) -> None:
     passed = run_battery(CREDIBILITY_MODEL, cross_simulator=False).result(Check.REBUILD)
     assert passed.status is BatteryStatus.PASSED
     assert passed.cases == 1
-    copy = tmp_path / "models" / CREDIBILITY_MODEL.model_path().name
+    copy = tmp_path / "models" / CREDIBILITY_MODEL.model_path.name
     copy.parent.mkdir()
     copy.write_text(
-        CREDIBILITY_MODEL.model_path()
-        .read_text(encoding="utf-8")
-        .replace('name="rate of the decay"', 'name="the rate of the decay"'),
+        CREDIBILITY_MODEL.model_path.read_text(encoding="utf-8").replace(
+            'name="rate of the decay"', 'name="the rate of the decay"'
+        ),
         encoding="utf-8",
     )
     model = CREDIBILITY_MODEL.replace(
         root=tmp_path,
         base_path=CREDIBILITY_MODEL.root,
         variants={"male": copy},
-        factory_dir=None,
-        fits_dir=None,
     )
     failed = run_battery(model, cross_simulator=False).result(Check.REBUILD)
     assert failed.status is BatteryStatus.FAILED
@@ -321,7 +319,7 @@ def test_a_dose_through_the_stomach(tmp_path: Path) -> None:
             "po_d: => Cve_d; kst*STOMACH_d/Mr_d",
         ),
     )
-    build = FlatBuild.read("male", model.model_path())
+    build = FlatBuild.read("male", model.model_path)
     assert dict(build.dose_states) == {
         "IVDOSE_d": "d",
         "PODOSE_d": "d",
@@ -336,7 +334,7 @@ def test_a_species_by_its_prefix(tmp_path: Path) -> None:
         tmp_path,
         "species d_lumen in Vve = 0; ABS: d_lumen => Cve_d; 0.01*d_lumen*Vve;",
     )
-    build = FlatBuild.read("male", model.model_path())
+    build = FlatBuild.read("male", model.model_path)
     assert build.tracked["d_lumen"] == "d"
     assert build.tracked["Cve_d"] == "d"
 
@@ -496,7 +494,7 @@ def test_a_compilation_which_takes_too_long(
 
     monkeypatch.setattr(battery.tempfile, "gettempdir", lambda: str(tmp_path / "tmp"))
     monkeypatch.setattr(battery, "AMICI_TIMEOUT", 0.1)
-    build = FlatBuild.read("male", _model(tmp_path).model_path())
+    build = FlatBuild.read("male", _model(tmp_path).model_path)
     with pytest.raises(battery._CompileTimeout):
         battery._amici_model(build)
     model = _model(tmp_path)
