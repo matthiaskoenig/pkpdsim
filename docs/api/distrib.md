@@ -1,3 +1,0 @@
-# distrib
-
-::: pkpdsim.distrib

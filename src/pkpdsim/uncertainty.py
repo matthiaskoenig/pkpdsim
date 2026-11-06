@@ -47,6 +47,7 @@ from typing import TYPE_CHECKING, Any
 
 import libsbml
 import numpy as np
+from sbmlsim import distrib
 from sbmlsim.data import Data
 from sbmlsim.fit.fisher import FisherInformation
 from sbmlsim.fit.options import ParameterScaleType
@@ -63,7 +64,6 @@ from sbmlsim.task import Task
 from sbmlsim.units import ureg
 from scipy import stats
 
-from pkpdsim import distrib
 from pkpdsim.sex import Sex
 
 if TYPE_CHECKING:
@@ -662,7 +662,7 @@ def distribution_from_formula(formula: str) -> Distribution:
         formula: `lognormal(mu, sigma[, lower, upper])` (mu and sigma of the
             natural logarithm), `normal(mean, sd[, lower, upper])` or
             `uniform(lower, upper)`, with numbers as arguments (the grammar of
-            `pkpdsim.distrib`).
+            `sbmlsim.distrib`).
 
     Returns:
         The distribution, truncated if the formula has bounds.

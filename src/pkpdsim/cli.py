@@ -66,7 +66,7 @@ import sys
 from collections.abc import Callable, Mapping, Sequence
 from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sbmlsim import display, log
 from sbmlsim.experiment import ExperimentRunError
@@ -771,7 +771,8 @@ def fit_command(
     algorithm = ALGORITHMS[options.method]
     # the start of least squares: every run starts from the point (the sampling
     # START of sbmlsim), the global optimizer draws its population itself
-    sampling: dict[str, SamplingType] = {}
+    # keyword arguments of `run_fit`, whose other keywords have other types
+    sampling: dict[str, Any] = {}
     if options.start is not None:
         if algorithm != OptimizationAlgorithmType.LEAST_SQUARE:
             parser.error(

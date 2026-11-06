@@ -361,7 +361,7 @@ def test_a_scan_is_equilibrated_at_every_point(
         return {"scan": experiment.equilibrated(scan)}
 
     experiment = _run(_model(builds["homeostasis"]), simulations)
-    from pkpdsim.scan import start_values
+    from sbmlsim.result.scan import start_values
 
     x = np.asarray(start_values(experiment.results["task_scan"], "HOMEO__X"))
     assert np.allclose(x, [[50.0, 50.0], [200.0, 200.0]], rtol=1e-6)
@@ -789,7 +789,7 @@ def test_a_simulation_of_a_model_file_is_equilibrated(
     result = Simulator(
         n_workers=1, absolute_tolerance=1e-10, relative_tolerance=1e-10
     ).run(path, outside)
-    from pkpdsim.scan import start_values
+    from sbmlsim.result.scan import start_values
 
     assert float(start_values(result, "HOMEO__X").item()) == pytest.approx(
         STEADY_X, rel=1e-6

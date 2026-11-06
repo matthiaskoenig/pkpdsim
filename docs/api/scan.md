@@ -1,3 +1,0 @@
-# scan
-
-::: pkpdsim.scan

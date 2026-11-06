@@ -9,7 +9,7 @@ the [llms.txt convention](https://llmstxt.org/) into the built site:
 - a markdown copy of every page next to its html, so that the links resolve.
 
 The pages of the API reference only contain a mkdocstrings directive
-(`::: pkpdsim.licenses`), their markdown is generated from the docstrings of the
+(`::: pkpdsim.templates`), their markdown is generated from the docstrings of the
 module with `inspect`, i.e., the same source the html is rendered from.
 
 Run it after `zensical build`:
@@ -144,7 +144,7 @@ def api_markdown(module_name: str) -> str:
     """Render the API of a module as markdown.
 
     Args:
-        module_name: name of the module, e.g., `pkpdsim.licenses`.
+        module_name: name of the module, e.g., `pkpdsim.templates`.
 
     Returns:
         The module docstring followed by the public classes and functions with
