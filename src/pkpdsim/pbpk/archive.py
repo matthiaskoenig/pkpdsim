@@ -136,9 +136,8 @@ def create_archive(
     """
     from pymetadata.omex import EntryFormat, ManifestEntry, Omex
     from sbmlode import OdeSystem
+    from sbmlsim.licenses import License, write_license
     from sbmlutils.io import sbml_to_antimony
-
-    from pkpdsim.licenses import License, write_license
 
     def entry(
         location: str, fmt: EntryFormat, *, master: bool = False

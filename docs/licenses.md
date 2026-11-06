@@ -1,6 +1,6 @@
 # Licenses
 
-A model is published under two licenses: the model and its documentation under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/), the source code which creates and simulates it under [MIT](https://opensource.org/license/MIT). The texts of both licenses travel with the model in its [COMBINE archive](https://combinearchive.org), the `.omex` file which packs the SBML, the documentation and the figures of a model into one file. `pkpdsim.licenses` holds the texts as resources of the package and writes them into a directory.
+A model is published under two licenses: the model and its documentation under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/), the source code which creates and simulates it under [MIT](https://opensource.org/license/MIT). The texts of both licenses travel with the model in its [COMBINE archive](https://combinearchive.org), the `.omex` file which packs the SBML, the documentation and the figures of a model into one file. [`sbmlsim.licenses`](https://matthiaskoenig.github.io/sbmlsim/api/licenses/) holds the texts as resources of sbmlsim and writes them into a directory.
 
 The text of CC BY-SA 4.0 is the same for every model. The text of MIT starts with the copyright, which names the years and the authors of the model, e.g. `Copyright (c) 2024-2025 Matthias König`; it is the only part in which the MIT texts of two models differ, so it is the argument `copyright` of the functions, without the words `Copyright (c)`, which the text adds.
 
@@ -9,7 +9,7 @@ The text of CC BY-SA 4.0 is the same for every model. The text of MIT starts wit
 ```python
 from pathlib import Path
 
-from pkpdsim.licenses import License, license_text, write_license
+from sbmlsim.licenses import License, license_text, write_license
 
 results = Path("results")
 results.mkdir()
@@ -35,8 +35,7 @@ A model of the PBPK library writes the texts and the archive with one call, `pkp
 ```python
 # not executed: a fragment of the factory of a model
 from pymetadata.omex import EntryFormat, ManifestEntry
-
-from pkpdsim.licenses import License, write_license
+from sbmlsim.licenses import License, write_license
 
 entries = {
     license.value: {

@@ -55,5 +55,5 @@ terms_of_use = _TERMS_OF_USE.format(
 """The terms of use of a model in markdown, with the copyright of the current year.
 
 The model is licensed under CC BY-SA 4.0, whose text the COMBINE archive of
-the model carries, see `pkpdsim.licenses.License.CC_BY_SA_4_0`.
+the model carries, see `sbmlsim.licenses.License.CC_BY_SA_4_0`.
 """

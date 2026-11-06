@@ -1,43 +1,27 @@
 # Scans and sensitivity analyses
 
-Two modules hold what the scripts of the models around scans and sensitivity analyses share, up to the runner of the sensitivity analyses of a script. Both build on the API of sbmlsim 0.9, where a design of `sbmlsim.simulation.sampling` is a dimension of a `Scan` and its result is a `ScanResult`.
+`pkpdsim.sensitivity` holds what the scripts of the models share around sensitivity analyses, up to the runner of the sensitivity analyses of a script. It builds on the API of sbmlsim 0.9, where a design of `sbmlsim.simulation.sampling` is a dimension of a `Scan` and its result is a `ScanResult`.
 
-## The timecourse of a point of a scan
+## The points of a scan
 
-sbmlsim 0.9 returns a scan as a `ScanResult` with the layout `(*dims, time)`, and at the time of a change after the start (a second dose) it keeps the state before and after the change. The pharmacokinetic parameters of a scan (`<model>_pk.py`) and the figures of a model read the timecourse of one point as sbmlsim 0.8 gave it, with the state after the change only, so that their numbers and figures stay the same. `pkpdsim.scan.single_dimension(res)` gives the id of the dimension of a scan of one dimension and `point_timecourse(res, key, /, **point)` the time points and the values of a variable at the point `point` (the position along every dimension, e.g. `dim_dose=2`; `res` and `key` are positional only, so a dimension may have any name); a result without dimension needs none:
+What the figures and the pharmacokinetic parameters of a model read from the points of a scan are functions of [`sbmlsim.result.scan`](https://matthiaskoenig.github.io/sbmlsim/api/result.scan/), see the page [Scans](https://matthiaskoenig.github.io/sbmlsim/scans/) of sbmlsim: the timecourse of a point with the state after a change only (`point_timecourse`, `single_dimension`), the state after a change of the whole result (`state_after_changes`), the first and the last value of a variable at every point, on a grid and in the ragged layout alike (`start_values`, `end_values`), and the dimensions and the band of a point over draws (`scan_dimensions`, `point_band`):
 
 ```python
 # not executed
-from pkpdsim.scan import point_timecourse, single_dimension
+from sbmlsim.result.scan import (
+    end_values,
+    point_timecourse,
+    single_dimension,
+    start_values,
+    state_after_changes,
+)
 
 dim = single_dimension(res)
 for k in range(res.ds.sizes[dim]):
     time, values = point_timecourse(res, "[Cve_hctz]", **{dim: k})
-```
-
-A scan with several dimensions, a point which misses a dimension or names an unknown one, and a variable which is no timecourse raise a `ValueError`. The padding of a result whose simulations have different times is removed.
-
-### The state after a change of the whole result
-
-A figure which reads the arrays of a result (a band over the points of a scan, the result of a task of an experiment) needs the state after a change for all points at once. `state_after_changes(res)` gives the result on its time points without the repeated ones, with the state after a change at its time (`res.interpolate(np.unique(res.time_points()))`), as a `ScanResult` whose arrays keep their dimensions; for one point it has the time points and values of `point_timecourse`. A result without a change is unchanged. A ragged result of several simulations (the steps of the integrator) is interpolated onto the time points of a figure instead (`sbmlsim.result.timecourse.plot_times`: a few hundred, dense where the simulations stepped densely, with the times of the changes), since the union of the steps of all simulations grows with the square of their number.
-
-```python
-# not executed
-from pkpdsim.scan import state_after_changes
-
-res = state_after_changes(self.results[self.to_sid("task_sim")])
-```
-
-### The start and the end of every point
-
-A simulation without `steps` or `times` outputs the steps of the integrator; a scan of such simulations is ragged, every point keeps its own time points (`(*dims, _point)`, padded with `NaN`), and `res["[X]"].isel(time=0)` has no `time` to select. `start_values(res, key)` and `end_values(res, key)` give the first and the last value of a variable at every point, over the dimensions of the scan, on a grid and in the ragged layout alike; a point whose simulation failed ends with `NaN`:
-
-```python
-# not executed
-from pkpdsim.scan import end_values, start_values
-
 doses = start_values(res, "PODOSE_hctz")  # the dose of every point
 urine = end_values(res, "Aurine_hctz")  # the amount in the urine at the end
+res = state_after_changes(self.results[self.to_sid("task_sim")])
 ```
 
 ## The parameters of a sensitivity analysis

@@ -7,20 +7,15 @@ from typing import ClassVar, NamedTuple
 
 import pandas as pd
 import pytest
+from sbmlsim.data import DataSet, rename_units
 from sbmlsim.experiment import ExperimentRunner
 from sbmlsim.model import AbstractModel
 from sbmlsim.plot import Figure, Plot
 from sbmlsim.simulation import Simulation
-from sbmlsim.units import Quantity, ureg
+from sbmlsim.units import Quantity, define_unit, ureg
 
 from pkpdsim import impairment, pk
-from pkpdsim.experiment import (
-    PKPDSimulationExperiment,
-    add_gmean_unit,
-    define_unit,
-    rename_units,
-    to_sid,
-)
+from pkpdsim.experiment import PKPDSimulationExperiment
 from pkpdsim_toy import DATA_PATHS, MODEL, TOY_PATH
 from pkpdsim_toy.experiments.decay import ToyDecay, ToyExperiment
 
@@ -124,40 +119,25 @@ GMEAN_TABLE = (
 
 
 def test_the_geometric_means_get_their_unit(tmp_path: Path) -> None:
-    """sbmlsim reads the unit of the rows as the unit of `gmean` and converts them."""
-    from sbmlsim.data import DataSet
-
+    """The table is read as it is; its `DataSet` gives `gmean` the unit of its rows."""
     write_study(tmp_path, "ToyStudy_Fig3", GMEAN_TABLE)
     experiment = initialized(ToyStudy, tmp_path)
     df = experiment.load_dataframe("Fig3")
-    assert df["gmean_unit"].tolist()[:2] == ["ng/ml", "µg/ml"]
-    assert pd.isna(df["gmean_unit"].tolist()[2])
+    assert "gmean_unit" not in df.columns
     dset = DataSet.from_df(df[df["label"] == "a"], experiment.ureg)
     assert dset.uinfo["gmean"] == "ng/ml"
     assert dset["gmean"].tolist() == pytest.approx([2.0, 3000.0])
     # the geometric SD is a ratio
+    assert dset.uinfo["gsd"] == "dimensionless"
     assert dset["gsd"].tolist() == pytest.approx([1.5, 1.4])
 
 
 def test_the_geometric_means_by_substance_get_their_unit(tmp_path: Path) -> None:
     write_study(tmp_path, "ToyStudy_Fig4", "substance\tgmean\tunit\nx\t1.0\tng/ml\n")
-    frames = initialized(ToyStudy, tmp_path).load_dataframes_by_substance("Fig4")
-    assert frames["x"]["gmean_unit"].tolist() == ["ng/ml"]
-
-
-@pytest.mark.parametrize(
-    "columns",
-    [
-        {"mean": [1.0], "unit": ["ng/ml"]},
-        {"gmean": [None], "unit": ["ng/ml"]},
-        {"gmean": [1.0], "unit": ["ng/ml"], "gmean_unit": ["mg/l"]},
-    ],
-)
-def test_a_table_without_geometric_means_stays(columns: dict[str, list]) -> None:
-    """No geometric means, or a unit of their own: the table is left as it is."""
-    df = pd.DataFrame(columns)
-    assert add_gmean_unit(df) is df
-    assert list(df.columns) == list(columns)
+    experiment = initialized(ToyStudy, tmp_path)
+    frames = experiment.load_dataframes_by_substance("Fig4")
+    dset = DataSet.from_df(frames["x"], experiment.ureg)
+    assert dset.uinfo["gmean"] == "ng/ml"
 
 
 def test_an_experiment_without_data_paths_cannot_load() -> None:
@@ -205,34 +185,6 @@ def test_a_model_types_its_conventions_itself() -> None:
     assert Narrowed.labels == {"time": "time"}
 
 
-@pytest.mark.parametrize(
-    ("text", "sid"),
-    [
-        ("task_po", "task_po"),
-        ("po 2.5 mg", "po_2p5_mg"),
-        ("dset_torasemide-M5_po_2.5", "dset_torasemide_M5_po_2p5"),
-        ("tor_iv_chronic renal disease", "tor_iv_chronic_renal_disease"),
-        ("Fig1_CIM400, ENA10_B1", "Fig1_CIM400__ENA10_B1"),
-        ("µg/ml", "_g_ml"),
-        ("1.5.2", "1p5p2"),
-        ("a.b", "a_b"),
-        ("2.", "2_"),
-        (".5", "_5"),
-        ("a b", "a_b"),
-        ("a‐b", "a_b"),
-        ("(a+b)*c&d", "_a_b__c_d"),
-        ("", ""),
-    ],
-)
-def test_a_text_becomes_an_sid(text: str, sid: str) -> None:
-    assert to_sid(text) == sid
-    assert len(to_sid(text)) == len(text)
-
-
-def test_a_part_of_a_key_becomes_the_same_part_of_its_sid() -> None:
-    assert f"task_po_{to_sid('2.5')}" == to_sid("task_po_2.5")
-
-
 def test_the_experiment_gives_the_sid_of_a_text() -> None:
     experiment = initialized(ToyStudy)
     assert experiment.to_sid("po 2.5") == "po_2p5"
@@ -250,84 +202,6 @@ def test_two_texts_with_one_sid_are_an_error() -> None:
 def test_every_experiment_has_its_own_sids() -> None:
     initialized(ToyStudy).to_sid("a b")
     assert initialized(ToyStudy).to_sid("a-b") == "a_b"
-
-
-def test_a_unit_is_defined_once() -> None:
-    assert (
-        define_unit(ureg, "IU_pkpdsim_test_once = 0.5 * mg") == "IU_pkpdsim_test_once"
-    )
-    assert define_unit(ureg, "IU_pkpdsim_test_once = 0.5*mg") == "IU_pkpdsim_test_once"
-    assert ureg.Quantity(2, "µIU_pkpdsim_test_once").to(
-        "ng"
-    ).magnitude == pytest.approx(1.0)
-
-
-def test_a_unit_with_another_value_is_an_error() -> None:
-    define_unit(ureg, "IU_pkpdsim_test_other = 0.5 * mg")
-    with pytest.raises(ValueError, match="IU_pkpdsim_test_other"):
-        define_unit(ureg, "IU_pkpdsim_test_other = 0.6 * mg")
-
-
-def test_a_count_is_a_unit() -> None:
-    define_unit(ureg, "IU_pkpdsim_test_count = count")
-    assert ureg.Quantity(3, "IU_pkpdsim_test_count/ml").to(
-        "1/ml"
-    ).magnitude == pytest.approx(3.0)
-
-
-@pytest.mark.parametrize(
-    ("expression", "error"),
-    [
-        ("0.6 * microgramm", "'microgramm' is not defined"),
-        ("0.6 * * mg", "missing unary operator"),
-        ("(0.6 * mg", "unexpected EOF"),
-        ("mg ** mg", "Cannot convert"),
-        ("0.6 * mg / 0", "division by zero"),
-    ],
-)
-def test_an_expression_which_pint_refuses_is_an_error(
-    expression: str, error: str
-) -> None:
-    with pytest.raises(ValueError, match=rf"'IU_pkpdsim_test_refused'.*{error}"):
-        define_unit(ureg, f"IU_pkpdsim_test_refused = {expression}")
-    assert "IU_pkpdsim_test_refused" not in ureg
-
-
-@pytest.mark.parametrize("definition", ["IU_x", "IU_x =", "= 0.5 * mg", "1IU = mg"])
-def test_a_definition_needs_a_name_and_an_expression(definition: str) -> None:
-    with pytest.raises(ValueError, match="<name> = <expression>"):
-        define_unit(ureg, definition)
-
-
-@pytest.mark.parametrize(
-    ("unit", "renamed"),
-    [
-        ("IU/ml", "IU_x/ml"),
-        ("IU/mL", "IU_x/mL"),
-        ("µIU/ml", "µIU_x/ml"),
-        ("μIU/ml", "μIU_x/ml"),
-        ("mIU/l", "mIU_x/l"),
-        ("IU", "IU_x"),
-        ("IU/(ml*hr)", "IU_x/(ml*hr)"),
-        ("IU_per_ml", "IU_per_ml"),
-        ("2IU", "2IU"),
-        ("mg/IUx", "mg/IUx"),
-        ("ng/ml", "ng/ml"),
-    ],
-)
-def test_units_are_renamed_where_they_are_units(unit: str, renamed: str) -> None:
-    df = pd.DataFrame({"unit": [unit], "mean_unit": [unit], "label": ["IU"]})
-    assert rename_units(df, {"IU": "IU_x"}) is df
-    assert df["unit"].tolist() == [renamed]
-    assert df["mean_unit"].tolist() == [renamed]
-    assert df["label"].tolist() == ["IU"]
-
-
-def test_a_missing_unit_stays_missing() -> None:
-    df = pd.DataFrame({"unit": ["IU/ml", None]})
-    rename_units(df, {"IU": "IU_x"})
-    assert df["unit"].tolist()[0] == "IU_x/ml"
-    assert pd.isna(df["unit"].tolist()[1])
 
 
 class ToyIUStudy(ToyStudy):
@@ -402,7 +276,7 @@ class ToyRefusedStudy(ToyStudy):
 
 
 def test_a_refused_unit_of_the_data_fails_the_initialization(tmp_path: Path) -> None:
-    define_unit(ureg, "IU_pkpdsim_test_toy = 0.5 * mg")
+    define_unit("IU_pkpdsim_test_toy = 0.5 * mg", ureg)
     # the experiment is created, which a run does before its error handling
     experiment = ToyRefusedStudy(base_path=TOY_PATH, data_path=tmp_path)
     with pytest.raises(ValueError, match="IU_pkpdsim_test_toy") as info:

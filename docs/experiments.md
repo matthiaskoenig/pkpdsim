@@ -62,9 +62,9 @@ set by a simulation), `data` (the selections for every task),
 `load_dataframe(fig_id, study=None, *, na_values=None)` and
 `load_dataframes_by_substance(fig_id, study=None)` (the digitized data of the
 figure or table `Fig1` of the study, by default that of the experiment, read
-from the `data_path` of the experiment, a path or paths, with the unit of the
-geometric means in `gmean_unit`, `add_gmean_unit`; by substance without the
-rows which have none), `figures_by_sid(*figures)`, `across()` (the dimension
+from the `data_path` of the experiment, a path or paths; by substance without
+the rows which have none; `DataSet.from_df` of sbmlsim gives the geometric
+means the unit of their row), `figures_by_sid(*figures)`, `across()` (the dimension
 of the draws of the fitted parameters of a run over them, `None` without,
 which a figure of a scan leaves out of its dimensions) and
 `add_function(plot, task_id, y, label, color, linestyle="-")` (a function of
@@ -137,10 +137,10 @@ The attribute `renal_map` stays the map of `sex` of the experiment.
 
 ## Keys
 
-The keys of an experiment (its datasets, simulations, tasks, figures and fit mappings) are SIds, which sbmlsim checks when the experiment initializes: letters, digits and `_`, not starting with a digit, and unique across the kinds. Keys are often built from the texts of the data (a dose, a label of a legend), so `pkpdsim.experiment.to_sid(text)` maps a text to an SId. A decimal point between two digits becomes `p`, every other character an SId does not allow becomes `_`, and one character becomes one character. The function maps characters, so a part of a key gives the same part of the SId of the key (`f"task_po_{to_sid(dose)}"`). Whether a whole key is valid (not empty, not starting with a digit) is not checked by `to_sid`, because the text of a part of a key may start with a digit; sbmlsim checks every key at initialize and names all invalid ones:
+The keys of an experiment (its datasets, simulations, tasks, figures and fit mappings) are SIds, which sbmlsim checks when the experiment initializes: letters, digits and `_`, not starting with a digit, and unique across the kinds. Keys are often built from the texts of the data (a dose, a label of a legend), so `sbmlsim.experiment.to_sid(text)` maps a text to an SId. A decimal point between two digits becomes `p`, every other character an SId does not allow becomes `_`, and one character becomes one character. The function maps characters, so a part of a key gives the same part of the SId of the key (`f"task_po_{to_sid(dose)}"`). Whether a whole key is valid (not empty, not starting with a digit) is not checked by `to_sid`, because the text of a part of a key may start with a digit; sbmlsim checks every key at initialize and names all invalid ones:
 
 ```python
-from pkpdsim.experiment import to_sid
+from sbmlsim.experiment import to_sid
 
 assert to_sid("po 2.5 mg") == "po_2p5_mg"
 assert to_sid("0.5mg") == "0p5mg"
@@ -182,20 +182,20 @@ The change is `Change(times, {"PODOSE_hctz": "PODOSE_hctz + 12.5"})` for a model
 
 ## Units of the data
 
-The data of a study can use units which sbmlsim does not define. An international unit (IU) is specific to a substance (the activity of an enzyme, the effect of a coagulation factor), so it has no value without it. `data_units` of an experiment maps the unit as the data write it to the definition of a unit of its own, which the base defines in the registry of the experiment before the data are read and which `load_dataframe` and `load_dataframes_by_substance` rename in the unit columns of the data (`unit` and every column ending in `_unit`). The name carries the model and the substance (`IU_ramipril_renin`, not `IU`): the registry of sbmlsim exists once per process (pytest runs all models in one) and ignores a redefinition, so two models which defined `IU` with different values would silently get the first one. `define_unit` therefore raises for a name which is defined with another value:
+The data of a study can use units which sbmlsim does not define. An international unit (IU) is specific to a substance (the activity of an enzyme, the effect of a coagulation factor), so it has no value without it. `data_units` of an experiment maps the unit as the data write it to the definition of a unit of its own, which the base defines in the registry of the experiment before the data are read and which `load_dataframe` and `load_dataframes_by_substance` rename in the unit columns of the data (`unit` and every column ending in `_unit`). The name carries the model and the substance (`IU_ramipril_renin`, not `IU`): the registry of sbmlsim exists once per process (pytest runs all models in one) and ignores a redefinition, so two models which defined `IU` with different values would silently get the first one. `define_unit` of `sbmlsim.units` therefore raises for a name which is defined with another value:
 
 ```python
-from pkpdsim.experiment import define_unit, rename_units
-from sbmlsim.units import UnitRegistry
 import pandas as pd
+from sbmlsim.data import rename_units
+from sbmlsim.units import UnitRegistry, define_unit
 
 ureg = UnitRegistry()
-name = define_unit(ureg, "IU_ramipril_renin = 0.6 * microgram")
+name = define_unit("IU_ramipril_renin = 0.6 * microgram", ureg)
 assert name == "IU_ramipril_renin"
-assert define_unit(ureg, "IU_ramipril_renin = 0.6 * microgram") == name
+assert define_unit("IU_ramipril_renin = 0.6 * microgram", ureg) == name
 
 try:
-    define_unit(ureg, "IU_ramipril_renin = 1.0 * microgram")
+    define_unit("IU_ramipril_renin = 1.0 * microgram", ureg)
 except ValueError as err:
     print(err)
 
@@ -205,7 +205,7 @@ df = pd.DataFrame(
 print(rename_units(df, {"IU": name}))
 ```
 
-`rename_units` replaces a name where it is a unit, alone or after a metric prefix (`IU/ml` and `µIU/ml`), and leaves it where it is part of another name (`IU_per_ml`, `2IU`). In the experiment:
+`rename_units` of `sbmlsim.data` replaces a name where it is a unit, alone or after a metric prefix (`IU/ml` and `µIU/ml`), and leaves it where it is part of another name (`IU_per_ml`, `2IU`). In the experiment:
 
 ```python
 # not executed

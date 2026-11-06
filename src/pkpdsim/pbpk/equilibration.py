@@ -26,6 +26,7 @@ from types import MappingProxyType
 from typing import overload
 
 import libsbml
+from sbmlsim.result.scan import start_values
 from sbmlsim.simulation import Change, Scan, Simulation, SteadyState
 from sbmlsim.simulation.definition import Value
 from sbmlsim.simulation.scan import DimensionKind
@@ -36,7 +37,6 @@ from sbmlsim.units import Quantity
 from pkpdsim.pbpk import ids
 from pkpdsim.pbpk.flat_model import accumulating, flat_model, loaded_model
 from pkpdsim.pbpk.organs import Organ
-from pkpdsim.scan import start_values
 
 __all__ = [
     "DOSE_PREFIXES",
