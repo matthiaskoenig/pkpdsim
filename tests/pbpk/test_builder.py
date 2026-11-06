@@ -234,14 +234,19 @@ def test_load_time(simple: BuildResult) -> None:
     run without pytest-xdist (`pytest -n 0`, the second command of tox and so
     of continuous integration); the structural guard
     `test_rules_read_a_state` runs in every run. The model is compiled at the
-    level of production, `O2`, not at the level of the tests. The serial
-    compile took 10.6 s of CPU time on a windows runner of continuous
-    integration, so the limit is 15 s, still half of the 28.8 s it guards
-    against.
+    level of production, `O2`, not at the level of the tests. The compile of
+    the same model takes what the machine takes: 10.6 s of CPU on a windows
+    runner of continuous integration when the test was written, 15.1 to
+    15.7 s on the windows and macos runners of 2026-11 and 20 s on a
+    developer machine (measured on this model and on the same model built
+    from `develop`, which differ in no byte). The limit is 30 s, twice the
+    slowest of these, because the regression it guards is not a few per cent
+    but a factor: the physiology as assignment rules took 28.8 s where the
+    initial assignments took 2 s, i.e. 14 times the compile of its machine.
     """
     start = time.process_time()
     load(simple, "O2")
-    assert time.process_time() - start < 15.0
+    assert time.process_time() - start < 30.0
 
 
 def rules_without_state(doc: libsbml.SBMLDocument) -> list[str]:
