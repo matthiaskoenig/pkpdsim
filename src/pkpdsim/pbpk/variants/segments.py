@@ -12,11 +12,26 @@ from dataclasses import dataclass
 from pkpdsim.pbpk import ids
 from pkpdsim.pbpk.data import value
 from pkpdsim.pbpk.organs import Organ
+from pkpdsim.species import Species
 
-__all__ = ["DATA", "SEGMENTS", "SMALL", "Segment", "segments", "single_lumen"]
+__all__ = [
+    "DATA",
+    "SEGMENTS",
+    "SMALL",
+    "Segment",
+    "intestine_table",
+    "segments",
+    "single_lumen",
+]
 
 DATA = "intestine_human"
-"""The data file of the intestine."""
+"""The data file of the intestine of the human."""
+
+
+def intestine_table(species: Species) -> str:
+    """The data file of the intestine of a species, `intestine_rat`."""
+    return f"intestine_{species.value}"
+
 
 SEGMENTS: dict[str, str] = dict(
     zip(
@@ -55,6 +70,7 @@ class Segment:
             `None` without mucosa (the stomach).
         share: the share of the segment in its region (the transit share).
         absorbs: the segment absorbs (with the area factor of the data).
+        table: the data file of the intestine of the species.
     """
 
     token: str | None
@@ -62,6 +78,7 @@ class Segment:
     region: Organ | None
     share: float
     absorbs: bool
+    table: str = DATA
 
     @property
     def label(self) -> str:
@@ -69,33 +86,45 @@ class Segment:
         return self.key.replace("_", " ")
 
 
-def segments() -> tuple[Segment, ...]:
+def segments(table: str = DATA) -> tuple[Segment, ...]:
     """Get the lumen segments of the segmented intestine.
 
     The share of a segment in its region is its share of the transit time of
     the region (small intestine, large intestine).
 
+    Args:
+        table: the data file of the intestine of the species
+            (`intestine_table`), the human by default.
+
     Returns:
         The segments in the order of the transit.
     """
-    transit = {t: value(DATA, key, "transit_time").value for t, key in SEGMENTS.items()}
+    transit = {
+        t: value(table, key, "transit_time").value for t, key in SEGMENTS.items()
+    }
     small = sum(transit[t] for t in SMALL)
     large = sum(transit[t] for t in SEGMENTS if t not in SMALL and t != "st")
     result = []
     for token, key in SEGMENTS.items():
         if token == "st":
-            result.append(Segment(token, key, None, 0.0, absorbs=False))
+            result.append(Segment(token, key, None, 0.0, absorbs=False, table=table))
         elif token in SMALL:
+            share = transit[token] / small
             result.append(
-                Segment(token, key, Organ.SMALL_INTESTINE, transit[token] / small, True)
+                Segment(token, key, Organ.SMALL_INTESTINE, share, True, table)
             )
         else:
+            share = transit[token] / large
             result.append(
-                Segment(token, key, Organ.LARGE_INTESTINE, transit[token] / large, True)
+                Segment(token, key, Organ.LARGE_INTESTINE, share, True, table)
             )
     return tuple(result)
 
 
-def single_lumen() -> tuple[Segment, ...]:
-    """The one segment of the single lumen."""
-    return (Segment(None, "single_lumen", Organ.SMALL_INTESTINE, 1.0, absorbs=False),)
+def single_lumen(table: str = DATA) -> tuple[Segment, ...]:
+    """The one segment of the single lumen, of the data file of the species."""
+    return (
+        Segment(
+            None, "single_lumen", Organ.SMALL_INTESTINE, 1.0, absorbs=False, table=table
+        ),
+    )

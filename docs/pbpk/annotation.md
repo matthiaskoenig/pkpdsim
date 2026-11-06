@@ -55,6 +55,14 @@ PBPKO has no term for some of the quantities, compartments and processes of the 
 | severity of heart failure | `PHYSIOLOGICAL_PARAMETER` |
 | stage of chronic kidney disease | `PHYSIOLOGICAL_PARAMETER` |
 | impairment factor | `PHYSIOLOGICAL_PARAMETER` |
+| factor of the age on a physiological quantity | `PHYSIOLOGICAL_PARAMETER` |
+| factor of the sex on a physiological quantity | `PHYSIOLOGICAL_PARAMETER` |
+| clock time of a simulation | `PHYSIOLOGICAL_PARAMETER` |
+| circadian rhythm of a physiological quantity | `PHYSIOLOGICAL_PARAMETER` |
+| gestational age of a pregnancy | `PHYSIOLOGICAL_PARAMETER` |
+| factor of the pregnancy on a physiological quantity | `PHYSIOLOGICAL_PARAMETER` |
+| placenta compartment | `COMPARTMENT` |
+| fetus compartment | `COMPARTMENT` |
 | endogenous baseline plasma concentration | `CONCENTRATION_IN_PLASMA` |
 | net production rate at the steady state | `BIOCHEMICAL_PARAMETER` |
 | factor of the partition coefficients | `BIOCHEMICAL_PARAMETER` |

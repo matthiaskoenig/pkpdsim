@@ -63,7 +63,6 @@ processes or no elimination.
 import warnings
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -93,7 +92,6 @@ if TYPE_CHECKING:
     from pkpdsim.pbpk.definition import PBPKDefinition
 
 __all__ = [
-    "BASELINE_SIZE_LIMIT",
     "IMBALANCE_LIMIT",
     "OrganSteady",
     "SteadyPlan",
@@ -101,7 +99,6 @@ __all__ = [
     "SteadyValue",
     "carrier",
     "check_built",
-    "expanded_size",
     "linear_clearance",
     "organ_exports",
     "plasma_start",
@@ -1101,17 +1098,6 @@ def pool_start(
 
 # --- the checks of the built model ---------------------------------------------
 
-BASELINE_SIZE_LIMIT = 20_000
-"""The expanded size (nodes) of a solved baseline above which the build warns.
-
-roadrunner inlines every initial assignment a start reads, without
-memoizing it: every species of the substance compiles a copy of the
-expanded baseline (a parameter in between is inlined as well, it is no
-cheaper). The baseline of creatinine expands to about 3,800 nodes (the model
-about 220,000, 4 s at LLJIT O0); a solved saturable process of a body which
-also eliminates in the liver and a portal organ reached 31,000 nodes and
-1.2 million in the model (37 s at O0)."""
-
 IMBALANCE_LIMIT = 1e-9
 """The relative rate (1/min) of the venous pool of a pinned substance at the
 start above which the build warns that its declared rates do not balance at
@@ -1119,51 +1105,13 @@ its baseline; a balanced start is stationary to the rounding (about 1e-16)."""
 
 
 class SteadyStateWarning(UserWarning):
-    """A generated steady state which loads slowly or does not balance."""
-
-
-def expanded_size(model: libsbml.Model, sid: str) -> int:
-    """Get the size of the expanded initial value of an id (nodes of its math tree).
-
-    Every id the math reads which has an initial assignment or an assignment
-    rule is replaced by its own expanded math, as roadrunner compiles it;
-    every other id and number counts one.
-
-    Args:
-        model: the flat model.
-        sid: the id.
-
-    Returns:
-        The number of nodes.
-    """
-    maths = {a.getSymbol(): a.getMath() for a in model.getListOfInitialAssignments()}
-    maths |= {
-        r.getVariable(): r.getMath()
-        for r in model.getListOfRules()
-        if r.isAssignment() and r.getVariable() not in maths
-    }
-
-    @cache
-    def size(x: str) -> int:
-        ast = maths.get(x)
-        if ast is None:
-            return 1
-        total, stack = 0, [ast]
-        while stack:
-            node = stack.pop()
-            total += size(node.getName()) if node.getType() == libsbml.AST_NAME else 1
-            stack.extend(node.getChild(k) for k in range(node.getNumChildren()))
-        return total
-
-    return size(sid)
+    """A generated steady state which does not balance."""
 
 
 def check_built(plan: SteadyPlan, flat_path: Path) -> None:
-    """Warn about a generated steady state of a built model which loads slowly or does not balance.
+    """Warn about a generated steady state of a built model which does not balance.
 
-    A solved baseline whose expansion exceeds `BASELINE_SIZE_LIMIT`: every
-    start reads it, give the substance a baseline (pinned) or fewer declared
-    organs. A pinned substance whose venous pool moves at the start of the
+    A pinned substance whose venous pool moves at the start of the
     reference individual (`IMBALANCE_LIMIT`): its declared rates do not
     balance at its baseline by the net rate of the venous pool (mmole/min),
     the model derives the rate which closes the balance (e.g. a supply) from
@@ -1174,22 +1122,8 @@ def check_built(plan: SteadyPlan, flat_path: Path) -> None:
         flat_path: the flat model.
 
     Warns:
-        SteadyStateWarning: naming the substance and the size or the imbalance.
+        SteadyStateWarning: naming the substance and the imbalance.
     """
-    if not plan.substances:
-        return
-    model = libsbml.readSBMLFromFile(str(flat_path)).getModel()
-    for sid in sorted(plan.solved):
-        n = expanded_size(model, ids.baseline(sid))
-        if n > BASELINE_SIZE_LIMIT:
-            warnings.warn(
-                f"{sid}: the solved baseline expands to {n} nodes (above "
-                f"{BASELINE_SIZE_LIMIT}); roadrunner compiles a copy into every "
-                "start of the substance, the model loads slowly. Give the "
-                "substance a baseline (pinned) or declare fewer organs.",
-                SteadyStateWarning,
-                stacklevel=3,
-            )
     if not plan.pinned:
         return
     # a factory without pinned substances loads no simulator

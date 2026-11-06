@@ -183,6 +183,31 @@ The NYHA functional classes ([Criteria Committee of the New York Heart Associati
 | <span class="pbpk-swatch" style="background:#67001F" title="#67001F"></span> `IV` NYHA IV | unable to carry on any physical activity without discomfort; symptoms at rest | 4 |
 <!-- end generated -->
 
+## Age
+
+### Background
+
+The physiology is a continuous function of the age ([Physiology over age](physiology.md#physiology-over-age)); the classes of the age are those of the guidelines for the studies of special populations. ICH E11 classifies the paediatric patients by their development ([ICH E11](#ref-ICHE11)): preterm newborn infants, term newborn infants (0 to 27 days), infants and toddlers (28 days to 23 months), children (2 to 11 years) and adolescents (12 to 16-18 years, depending on the region; 12 to 17 years in the EMA guideline on paediatric pharmacokinetics), and notes that the age may be examined as a continuous covariate instead. ICH E7 defines the geriatric population as 65 years and older and asks for patients of 75 years and above; its questions and answers of 2010 name the subgroups 65-74, 75-84 and 85 years and older ([ICH E7](#ref-ICHE7)). The preterm newborn needs the gestational age, which the library does not model.
+
+### Age classes
+
+The value of a class is a representative age, the adult the adult of ICRP 89 (35 years); `class_changes` sets `AGE` and the body weight and height of the reference individual of the age and the sex (`reference_individual`), and a [virtual population](populations.md) draws the ages of a class uniformly with the body size of its population.
+
+<!-- generated: classes-age (scripts/pbpk_tables.py), do not edit -->
+*Generated from `pkpdsim.impairment.AGE_CLASSES` by `scripts/pbpk_tables.py`.*
+
+| class | definition | age [yr] | AGE |
+| --- | --- | --- | ---: |
+| <span class="pbpk-swatch" style="background:#c6dbef" title="#c6dbef"></span> `newborn` Term newborn | term newborn infants, 0 to 27 days (ICH E11); preterm newborn infants need the gestational age, which the library does not model | 0-27 days | 0.03696 |
+| <span class="pbpk-swatch" style="background:#6baed6" title="#6baed6"></span> `infant` Infant and toddler | infants and toddlers, 28 days to 23 months (ICH E11) | 0.07666-1 | 1 |
+| <span class="pbpk-swatch" style="background:#2171b5" title="#2171b5"></span> `child` Child | children, 2 to 11 years (ICH E11) | 2-11 | 6.5 |
+| <span class="pbpk-swatch" style="background:#08306b" title="#08306b"></span> `adolescent` Adolescent | adolescents, 12 to 17 years (ICH E11: 12 to 16-18 years by region; the EMA guideline on paediatric pharmacokinetics 12 to 17) | 12-17 | 15 |
+| <span class="pbpk-swatch" style="background:black" title="black"></span> `adult` Adult | adults, 18 to 64 years; the value of the class is the adult of ICRP 89 (35 years) | 18-64 | 35 |
+| <span class="pbpk-swatch" style="background:#fdae6b" title="#fdae6b"></span> `young_old` 65-74 years | geriatric patients of 65 to 74 years (ICH E7 Questions and Answers 2010; ICH E7: the geriatric population is 65 years or older) | 65-74 | 70 |
+| <span class="pbpk-swatch" style="background:#e6550d" title="#e6550d"></span> `old_old` 75-84 years | geriatric patients of 75 to 84 years (ICH E7 Questions and Answers 2010) | 75-84 | 80 |
+| <span class="pbpk-swatch" style="background:#7f2704" title="#7f2704"></span> `oldest_old` 85 years and older | geriatric patients of 85 years and older (ICH E7 Questions and Answers 2010); the physiology beyond 85 years is extrapolated | >= 85 | 90 |
+<!-- end generated -->
+
 ## The factors over the classes
 
 The physiological factors of each condition over its severity, a panel per factor: the line is the factor of the model, the points are the classes, the strip under a panel the classes of the axis in their colors (hover a point for its value). The factors of the enzymes and transporters of the liver are the tables of [Impairment](impairment.md).
@@ -2464,6 +2489,8 @@ A condition with a homeostasis of a PD component starts each class from its drug
 - <span id="ref-FDA2024Renal"></span>U.S. Food and Drug Administration. Pharmacokinetics in Patients with Impaired Renal Function - Study Design, Data Analysis, and Impact on Dosing. Guidance for Industry, 2024. https://www.fda.gov/media/78573/download
 - <span id="ref-Gines2018"></span>Ginès P, Solà E, Angeli P, Wong F, Nadim MK, Kamath PS. Hepatorenal syndrome. Nat Rev Dis Primers 4(1):23, 2018. [doi:10.1038/s41572-018-0022-7](https://doi.org/10.1038/s41572-018-0022-7)
 - <span id="ref-Heidenreich2022"></span>Heidenreich PA, Bozkurt B, Aguilar D, Allen LA, Byun JJ, Colvin MM, Deswal A, Drazner MH, et al. 2022 AHA/ACC/HFSA Guideline for the Management of Heart Failure. Circulation 145(18):e895-e1032, 2022. [doi:10.1161/CIR.0000000000001063](https://doi.org/10.1161/CIR.0000000000001063)
+- <span id="ref-ICHE11"></span>ICH Topic E11. Clinical investigation of medicinal products in the paediatric population, Section 2.5 Age classification of paediatric patients. CPMP/ICH/2711/99, European Medicines Agency, Step 5, January 2001 (ICH Step 4, July 2000).
+- <span id="ref-ICHE7"></span>ICH Harmonised Tripartite Guideline E7. Studies in support of special populations: geriatrics, Section IV. Step 4, 24 June 1993; and ICH E7 Questions and Answers, Q2, 2010 (the subgroups 65-74, 75-84 and 85 years and older).
 - <span id="ref-Iwakiri2014"></span>Iwakiri Y. Pathophysiology of portal hypertension. Clin Liver Dis 18(2):281-291, 2014. [doi:10.1016/j.cld.2013.12.001](https://doi.org/10.1016/j.cld.2013.12.001)
 - <span id="ref-Johnson2010"></span>Johnson TN, Boussery K, Rowland-Yeo K, Tucker GT, Rostami-Hodjegan A. A semi-mechanistic model to predict the effects of liver cirrhosis on drug clearance. Clin Pharmacokinet 49(3):189-206, 2010. [doi:10.2165/11318160-000000000-00000](https://doi.org/10.2165/11318160-000000000-00000)
 - <span id="ref-Kamath2001"></span>Kamath PS, Wiesner RH, Malinchoc M, Kremers W, Therneau TM, Kosberg CL, D'Amico G, Dickson ER, Kim WR. A model to predict survival in patients with end-stage liver disease. Hepatology 33(2):464-470, 2001. [doi:10.1053/jhep.2001.22172](https://doi.org/10.1053/jhep.2001.22172)

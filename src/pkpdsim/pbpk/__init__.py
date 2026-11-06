@@ -30,6 +30,7 @@ from pkpdsim.pbpk.chemistry import (
     Saturable,
     Transport,
 )
+from pkpdsim.pbpk.circadian import Circadian
 from pkpdsim.pbpk.data import Source, cite, load, sources
 from pkpdsim.pbpk.definition import PBPKDefinition, Variants
 from pkpdsim.pbpk.distribution import KCellFloorWarning, interstitial_share
@@ -51,6 +52,7 @@ from pkpdsim.pbpk.physiology import (
     physiology_objects,
     reference_individual,
 )
+from pkpdsim.pbpk.pregnancy import Pregnancy
 from pkpdsim.pbpk.proteins import PROTEINS, Induction, Inhibition, Protein
 from pkpdsim.pbpk.regional import (
     derive_regional_absorption,
@@ -80,6 +82,12 @@ from pkpdsim.pbpk.variants.intestine import SegmentedIntestine, SingleLumen
 from pkpdsim.pbpk.variants.kidney_nephron import NephronKidney
 from pkpdsim.pbpk.variants.liver_zonated import ZonatedLiver
 from pkpdsim.pbpk.variants.lumen_options import LumenConversion, RegionalAbsorption
+from pkpdsim.pbpk.virtual import (
+    VirtualIndividual,
+    VirtualPopulation,
+    virtual_population,
+)
+from pkpdsim.species import Species
 
 if TYPE_CHECKING:
     from pkpdsim.pbpk.equilibration import Equilibration, equilibrated_simulation
@@ -135,6 +143,7 @@ __all__ = [
     "Binding",
     "Boundary",
     "BuildResult",
+    "Circadian",
     "CustomReaction",
     "Direction",
     "DoseDependentDissolution",
@@ -168,6 +177,7 @@ __all__ = [
     "Part",
     "Parts",
     "Pool",
+    "Pregnancy",
     "Protein",
     "Q",
     "RateOf",
@@ -182,6 +192,7 @@ __all__ = [
     "SingleLumen",
     "SlowPool",
     "Source",
+    "Species",
     "StandardOrgan",
     "Substance",
     "ThresholdReabsorption",
@@ -189,6 +200,8 @@ __all__ = [
     "U",
     "Value",
     "Variants",
+    "VirtualIndividual",
+    "VirtualPopulation",
     "WeibullDissolution",
     "ZonatedLiver",
     "as_value",
@@ -214,4 +227,5 @@ __all__ = [
     "sex_definition",
     "sources",
     "unit_label",
+    "virtual_population",
 ]

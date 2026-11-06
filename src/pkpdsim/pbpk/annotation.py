@@ -45,9 +45,11 @@ from pkpdsim.annotations import compartments as _compartments
 from pkpdsim.pbpk.organs import Organ, Pool
 from pkpdsim.pbpk.proteins import PROTEINS
 from pkpdsim.pbpk.substance import Mode, Substance
+from pkpdsim.species import Species as BuildSpecies
 
 __all__ = [
     "KINDS",
+    "TAXA",
     "Kind",
     "Term",
     "annotate",
@@ -480,6 +482,25 @@ KINDS: dict[str, Kind] = {
         _P, _PHYS, terms=(_DISEASES["heart_failure"],), requested="impairment factor"
     ),
     "impairment_factor": Kind(_P, _PHYS, requested="impairment factor"),
+    # age and sex
+    "age_factor": Kind(
+        _P, _PHYS, requested="factor of the age on a physiological quantity"
+    ),
+    "sex_factor": Kind(
+        _P, _PHYS, requested="factor of the sex on a physiological quantity"
+    ),
+    # the pregnancy
+    "gestational_age": Kind(_P, _PHYS, requested="gestational age of a pregnancy"),
+    "pregnancy": Kind(
+        _P, _PHYS, requested="factor of the pregnancy on a physiological quantity"
+    ),
+    "placenta": Kind(_C, "COMPARTMENT", requested="placenta compartment"),
+    "fetus": Kind(_C, "COMPARTMENT", requested="fetus compartment"),
+    # circadian rhythms
+    "clock_time": Kind(_P, _PHYS, requested="clock time of a simulation"),
+    "circadian": Kind(
+        _P, _PHYS, requested="circadian rhythm of a physiological quantity"
+    ),
     # substances
     "molecular_weight": Kind(SBO.MOLECULAR_MASS, "MOLECULAR_WEIGHT"),
     "fu": Kind(_P, "FRACTION_UNBOUND_PLASMA"),
@@ -974,7 +995,18 @@ def annotate[S: Sbase](
     return element
 
 
-def model_annotations(substances: Iterable[Substance]) -> list[Term]:
+TAXA: dict[BuildSpecies, str] = {
+    BuildSpecies.HUMAN: "taxonomy/9606",  # Homo sapiens
+    BuildSpecies.RAT: "taxonomy/10116",  # Rattus norvegicus
+    BuildSpecies.MOUSE: "taxonomy/10090",  # Mus musculus
+    BuildSpecies.PIG: "taxonomy/9823",  # Sus scrofa
+}
+"""The NCBI taxon of every species of a build."""
+
+
+def model_annotations(
+    substances: Iterable[Substance], species: BuildSpecies = BuildSpecies.HUMAN
+) -> list[Term]:
     """Get the annotations of a PBPK model: its type, the taxon and the approach.
 
     A model is perfusion-limited when every substance which enters tissue
@@ -983,6 +1015,7 @@ def model_annotations(substances: Iterable[Substance]) -> list[Term]:
 
     Args:
         substances: the substances of the model.
+        species: the species of the build, its taxon.
 
     Returns:
         The terms of the model.
@@ -991,7 +1024,7 @@ def model_annotations(substances: Iterable[Substance]) -> list[Term]:
     terms: list[Term] = [
         (BQB.IS, pbpko("PHYSIOLOGICALLY_BASED_PHARMACOKINETIC_MODEL")),
         (BQB.IS, pbpko("WHOLE_BODY_PBPK")),
-        (BQB.HAS_TAXON, "taxonomy/9606"),  # human
+        (BQB.HAS_TAXON, TAXA[species]),
         (BQB.HAS_PROPERTY, "mamo/MAMO_0000046"),  # ordinary differential equation model
         (BQB.HAS_PROPERTY, "ncit/C15299"),  # pharmacokinetics
     ]

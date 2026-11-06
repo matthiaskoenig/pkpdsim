@@ -1,0 +1,138 @@
+# The physiology over age beyond the reference anatomy of children_human.toml:
+# the maturation of the functions in the children and the aging of the adults.
+#
+# Every factor is relative: the physiology (`pkpdsim.pbpk.age`) divides a curve
+# by its value at 35 years, the adult of ICRP 89, so the reference individual
+# of ICRP 89 keeps its values. A factor acts at a fixed body weight and height,
+# on top of the scaling of the physiology (Huisinga 2012).
+#
+# Forms (`form`):
+# - `hill`: `base + (top - base) * x^n / (x50^n + x^n)`, `x` the postnatal age
+#   in years (`variable = "age"`) or the postmenstrual age in weeks of a birth
+#   at term (`variable = "pma"`, 40 weeks at birth), at least `x_min`;
+# - `points`: values at ages (years), linear between them and constant beyond
+#   the first and the last;
+# - `log`: `a + b * ln(days)` of the postnatal age in days (at least one day).
+# A table of values of another file (`table`) gives the factor of the ratio of
+# its values to the value at 35 years.
+
+[gfr.maturation]
+form = "hill"
+variable = "pma"
+x50 = 47.7
+n = 3.40
+source = "Rhodin2009"
+notes = "abstract (theory-based model): half of the adult GFR at 47.7 weeks of postmenstrual age, Hill coefficient 3.40; Rhodin 2009 scale the size by (WT/70)^0.75, the library by the body surface area (GFR per 1.73 m2 reaches the adult value at 1-2 years, Rubin 1949, so the two size terms differ little after infancy)"
+
+[gfr.aging.male]
+form = "points"
+age = [40.0, 50.0, 100.0]
+value = [1.0, 0.9169, 0.578]
+source = "Delanaye2022"
+notes = "1 to 40 years; -0.88235 ml/min/1.73 m2 per year on 106.2353 from 40 years (Delanaye 2022, the P50 of 1983 living donors, validated over 65 years), i.e. 0.9169 at 50; from 50 years the slope of the healthy men of Eriksen 2020 (Table 3), -0.00678 per year; no sex difference below 50 years (Pottel 2017); linear, extrapolated beyond 95 years"
+
+[gfr.aging.female]
+form = "points"
+age = [40.0, 50.0, 100.0]
+value = [1.0, 0.9169, 0.484]
+source = "Delanaye2022"
+notes = "as men to 50 years (Delanaye 2022, Pottel 2017); from 50 years the slope of the healthy women of Eriksen 2020 (Table 3), -0.00866 per year; linear, extrapolated beyond 95 years"
+
+[kidney_flow.aging]
+form = "points"
+age = [40.0, 85.0, 100.0]
+value = [1.0, 0.46, 0.391]
+source = "DaviesShock1950"
+notes = "renal plasma flow: 1 to 40 years, -0.012 per year to 85 years (fitted to the effective renal plasma flow of Davies and Shock 1950, men; Fliser 1993 0.52 at 70 against 26 years); beyond 85 years the filtration fraction is held, the flow follows the GFR of men (0.46 * 0.578/0.6796 at 100 years), a model choice: the line would give a filtration fraction of 0.36; no reliable sex difference (Berg 2006, abstract), both sexes alike, held at the filtration fraction of men beyond 85 years"
+
+[kidney_mass.aging]
+form = "points"
+age = [50.0, 100.0]
+value = [1.0, 0.675]
+source = "WangX2014"
+notes = "kidney volume per body surface area: 1 to 50 years, -0.0065 per year from 50 years (Wang 2014, CT of 1852 living donors, -9.8 and -10.3 ml/m2 per decade of about 154 ml/m2); both sexes alike; extrapolated beyond 81 years"
+
+[liver_mass.aging]
+form = "points"
+age = [50.0, 100.0]
+value = [1.0, 0.725]
+source = "Imamura2026"
+notes = "total liver volume over the standard liver volume of the body size: 1 to 50 years, -0.0055 per year from 50 years (Imamura 2026, CT of 1044 normal livers, minimal sex effect); extrapolated beyond 92 years"
+
+[cardiac_output.aging]
+form = "points"
+age = [20.0, 100.0]
+value = [1.045, 0.805]
+source = "Carlsson2012"
+notes = "cardiac index at a fixed body surface area: 1 - 0.0030 * (age - 35) (cardiovascular magnetic resonance of Carlsson 2012, -0.21 to -0.29 % per year; the three-dimensional echocardiography of Patel 2021 about -0.25 % per year); both sexes alike; the decline is debated, 1.0 to 0.64 at 80 years in the literature"
+
+[liver_flow.aging]
+form = "points"
+age = [50.0, 100.0]
+value = [1.0, 0.725]
+source = "Zoli1999"
+notes = "the fraction of the cardiac output to the liver (hepatic artery and portal organs) follows the liver volume (liver_mass), so the hepatic blood flow is the cardiac output times the liver volume factor, 0.72 at 80 years; Zoli 1999 measured 0.71 above 75 against below 45 years; a model choice of the form after Imamura 2026"
+
+[hematocrit.newborn]
+form = "points"
+age = [0.0, 0.019165, 0.038330, 0.076660, 0.16667]
+value = [0.522, 0.460, 0.416, 0.385, 0.35]
+source = "Scholkmann2019"
+notes = "the hematocrit (fraction) of a newborn at term: days 0, 7, 14 and 28 of Scholkmann 2019, Equation 2 evaluated as printed at a gestational age of 40 weeks (the fit of about 100 000 neonates of Henry and Christensen 2015); the nadir 0.35 at 2 months of the PK-Sim database (secondary, the source of the value not read); the sexes alike (Jopling 2009); from 1 year the table of NHANES"
+
+[hematocrit.adult]
+table = "blood_nhanes"
+quantity = "hematocrit"
+top_coded_age = 85.0
+source = "NHANES2013_2018"
+notes = "the ratio of the hematocrit of the sex to its value at 35 years (blood_nhanes.toml, 1 to 80 years); the respondents of 80 years and over are placed at 85 years, a model choice (their mean age is not published); constant beyond"
+
+[albumin.children]
+form = "log"
+a = 33.746
+b = 1.1287
+source = "Johnson2006"
+notes = "Equation 5, albumin (g/l) of the postnatal age in days, 625 subjects from birth to adulthood; used below 12 years, scaled to meet the albumin of NHANES at 12 years"
+
+[albumin.adult]
+table = "blood_nhanes"
+quantity = "albumin"
+top_coded_age = 85.0
+source = "NHANES2013_2018"
+notes = "the ratio of the albumin (bromocresol purple) of the sex to its value at 35 years (blood_nhanes.toml, 12 to 80 years); the respondents of 80 years and over at 85 years, a model choice; constant beyond"
+
+[agp.maturation]
+form = "hill"
+variable = "age"
+x50 = 0.021246
+n = 0.498
+x_min = 0.0027379
+source = "Maharaj2018"
+notes = "Table 3, sigmoid Emax of 26 publications of healthy subjects: AAGmax 93.17 mg/dl, TM50 7.76 days of postnatal age (0.021246 years), Hill coefficient 0.498, from the first day (0.0027379 years, 24.67 mg/dl, 3.8-fold below the adults); no change of the adults (Stader 2019)"
+
+[fat_free_mass.male]
+form = "hill"
+variable = "age"
+x50 = 13.4
+n = 12.7
+base = 0.88
+top = 1.0
+source = "AlSallami2015"
+notes = "the multiplier of the Janmahasatian 2005 fat-free mass of boys, 0.88 + (1 - 0.88)/(1 + (AGE/13.4)^-12.7) (model M2, 515 males of 3 to 29 years; the equation as printed in two open access papers citing it); relative to 20 years, 1 from 20 years; extrapolated below 3 years"
+
+[fat_free_mass.female]
+form = "hill"
+variable = "age"
+x50 = 7.1
+n = 1.1
+base = 1.11
+top = 1.0
+source = "AlSallami2015"
+notes = "the multiplier of the Janmahasatian 2005 fat-free mass of girls, 1.11 + (1 - 1.11)/(1 + (AGE/7.1)^-1.1) (model M2, 496 females of 3 to 29 years); relative to 20 years, 1 from 20 years; extrapolated below 3 years"
+
+[brain_perfusion.children]
+form = "points"
+age = [0.0, 0.375, 1.0, 1.58, 3.0, 5.0, 12.5, 19.0]
+value = [0.980, 1.078, 1.176, 1.216, 1.275, 1.392, 1.216, 1.0]
+source = "Chiron1992"
+notes = "the global cerebral blood flow per mass relative to the adults (51 ml/min/100 g of 32 adults of 18-29 years), Xe-133 SPECT of 42 neurologically normal children (Table 1: 2-45 days 50, 2-7 months 55, 9-15 months 60, 16-22 months 62, 2-4 years 65, 6-19 years 62 ml/min/100 g, at the middle of each group; the maximum 71 at 5 years and the adult value after 19 years of the text); the brain takes 47 % of the cardiac output at 1 year (Wu 2016: 45.5 % below 4 years by 4D flow MRI, 14.5 % in adults)"

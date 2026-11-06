@@ -35,11 +35,23 @@ from sbmlutils.factory import UnitDefinition
 from pkpdsim.database import integration
 from pkpdsim.database.studies import KINDS, QUANTITIES, studies
 from pkpdsim.impairment import (
+    AGE_CLASSES,
     CHILD_PUGH_CLASSES,
     KDIGO_GFR_CLASSES,
     NYHA_CLASSES,
     ImpairmentClass,
 )
+from pkpdsim.pbpk import ids
+from pkpdsim.pbpk.age import (
+    AGE_REFERENCE,
+    factor_curves,
+    flow_factors,
+    flow_fraction_curves,
+    protein_factor,
+    protein_factors,
+    reference_curves,
+)
+from pkpdsim.pbpk.circadian import circadian_factor, protein_rhythms, rhythms
 from pkpdsim.pbpk.data import load, sources
 from pkpdsim.pbpk.experiment import PBPKSimulationExperiment
 from pkpdsim.pbpk.impairment import (
@@ -49,9 +61,27 @@ from pkpdsim.pbpk.impairment import (
     meld_anchors,
 )
 from pkpdsim.pbpk.organs import Organ
-from pkpdsim.pbpk.physiology import Sex
+from pkpdsim.pbpk.physiology import (
+    Sex,
+    _references,
+    physiology_table,
+    reference_hematocrit,
+    reference_individual,
+    reference_tissue_volumes,
+)
 from pkpdsim.pbpk.populations import POPULATIONS
+from pkpdsim.pbpk.pregnancy import factors as pregnancy_factors
+from pkpdsim.pbpk.pregnancy import pregnancy_factor
+from pkpdsim.pbpk.pregnancy import protein_factors as pregnancy_proteins
 from pkpdsim.pbpk.proteins import PROTEINS
+from pkpdsim.pbpk.sex_differences import (
+    protein_sex_factor,
+    protein_sex_factors,
+    sex_curves,
+    sex_factor,
+)
+from pkpdsim.pbpk.variants.segments import intestine_table
+from pkpdsim.species import Species
 
 REPO_DIR: Path = Path(__file__).parent.parent
 PBPK_DIR: Path = REPO_DIR / "docs" / "pbpk"
@@ -230,9 +260,9 @@ def physiology_general() -> str:
     return _generated("`database/tables/physiology_human.toml`", lines, cited)
 
 
-def _organs(sex: Sex) -> str:
-    """The organs of the reference individual of a sex."""
-    organs = load("physiology_human")[sex.value]["organs"]
+def _organs(sex: Sex, table: str = "physiology_human") -> str:
+    """The organs of the reference individual of a sex of a physiology table."""
+    organs = load(table)[sex.value]["organs"]
     rows = [
         [
             f"`{organ.value}` {_ORGAN_NAMES[organ]}",
@@ -251,7 +281,7 @@ def _organs(sex: Sex) -> str:
     columns = {k: k for k in ("mass", "density", "blood", "f_vas", "f_int", "flow")}
     line, cited = _column_sources(organs.values(), columns)
     lines = [*_table(header, rows), "", line]
-    return _generated("`database/tables/physiology_human.toml`", lines, cited)
+    return _generated(f"`database/tables/{table}.toml`", lines, cited)
 
 
 def physiology_organs_male() -> str:
@@ -264,6 +294,221 @@ def physiology_organs_female() -> str:
     return _organs(Sex.FEMALE)
 
 
+ANIMALS: tuple[Species, ...] = (Species.RAT, Species.MOUSE, Species.PIG)
+"""The laboratory animals of the library."""
+
+
+def species_overview() -> str:
+    """The reference animals of the laboratory species against the human."""
+    rows: list[list[str]] = []
+    cited: list[str] = []
+    for species in (Species.HUMAN, *ANIMALS):
+        data = load(physiology_table(species))
+        for sex in Sex:
+            if sex.value not in data:
+                continue
+            p = data[sex.value]
+            refs = _references(sex, data, species)
+            adipose = reference_tissue_volumes(sex, species=species)[Organ.ADIPOSE]
+            ad = p["organs"]["ad"]
+            rho = float(ad.get("density", {"value": 1.0})["value"])
+            exponents = (
+                ("BSA", "BSA")
+                if species is Species.HUMAN
+                else (
+                    _number(refs[ids.CO_EXPONENT].value),
+                    _number(refs[ids.GFR_EXPONENT].value),
+                )
+            )
+            for key in ("bodyweight", "cardiac_output", "gfr", "hematocrit"):
+                cited.append(p[key]["source"])
+            cited.append(p["blood"]["volume"]["source"])
+            rows.append(
+                [
+                    species.value,
+                    sex.value,
+                    _number(refs[ids.BW].value),
+                    _number(refs[ids.ref(ids.CO)].value * 1000),
+                    exponents[0],
+                    _number(refs[ids.ref(ids.GFR)].value * 1000),
+                    exponents[1],
+                    _number(
+                        refs[ids.ref(ids.VBLOOD)].value * 1000 / refs[ids.BW].value
+                    ),
+                    _number(refs[ids.HCT].value),
+                    f"{_number(100 * adipose * rho / refs[ids.BW].value)} "
+                    f"({_number(100 * float(ad['mass']['value']) / refs[ids.BW].value)})",
+                ]
+            )
+    header = [
+        "species",
+        "sex",
+        "BW [kg]",
+        "CO [ml/min]",
+        "CO scales with",
+        "GFR [ml/min]",
+        "GFR scales with",
+        "blood [ml/kg]",
+        "HCT",
+        "adipose [% BW] (reference)",
+    ]
+    return _generated(
+        "`database/tables/physiology_<species>.toml`", _table(header, rows), cited
+    )
+
+
+def species_intestine() -> str:
+    """The transit times and fluid volumes of the lumen of the species."""
+    rows: list[list[str]] = []
+    cited: list[str] = []
+    for species in (Species.HUMAN, *ANIMALS):
+        data = load(intestine_table(species))
+        small = [
+            data[k]
+            for k in (
+                "duodenum",
+                "upper_jejunum",
+                "lower_jejunum",
+                "upper_ileum",
+                "lower_ileum",
+            )
+        ]
+        large = [
+            data[k]
+            for k in (
+                "caecum",
+                "colon_ascendens",
+                "colon_transversum",
+                "colon_descendens",
+                "colon_sigmoid",
+                "rectum",
+            )
+        ]
+        for e in (data["stomach"], *small, *large):
+            cited += [e["transit_time"]["source"], e["volume"]["source"]]
+        fed = data["stomach"].get("transit_time_fed")
+        rows.append(
+            [
+                species.value,
+                _number(data["stomach"]["transit_time"]["value"]),
+                _number(fed["value"]) if fed else "",
+                _number(sum(e["transit_time"]["value"] for e in small)),
+                _number(sum(e["transit_time"]["value"] for e in large) / 60),
+                _number(1000 * data["stomach"]["volume"]["value"]),
+                _number(1000 * sum(e["volume"]["value"] for e in small)),
+                _number(1000 * sum(e["volume"]["value"] for e in large)),
+            ]
+        )
+    header = [
+        "species",
+        "stomach fasted [min]",
+        "stomach fed [min]",
+        "small intestine [min]",
+        "large intestine [h]",
+        "stomach [ml]",
+        "small intestine [ml]",
+        "large intestine [ml]",
+    ]
+    return _generated(
+        "`database/tables/intestine_<species>.toml`", _table(header, rows), cited
+    )
+
+
+def species_organs_rat() -> str:
+    """The organs of the reference rat."""
+    return _organs(Sex.MALE, physiology_table(Species.RAT))
+
+
+def species_organs_mouse() -> str:
+    """The organs of the reference mouse."""
+    return _organs(Sex.MALE, physiology_table(Species.MOUSE))
+
+
+def species_organs_pig() -> str:
+    """The organs of the reference pig (male)."""
+    return _organs(Sex.MALE, physiology_table(Species.PIG))
+
+
+def circadian_rhythms() -> str:
+    """The circadian rhythms of the physiology and the proteins."""
+    rows: list[list[str]] = []
+    cited: list[str] = []
+    entries = [(r, "") for r in rhythms().values()]
+    entries += [
+        (r, f"{protein} {_ORGAN_NAMES[organ]}")
+        for (organ, protein), r in sorted(
+            protein_rhythms().items(), key=lambda x: (x[0][0].value, x[0][1])
+        )
+    ]
+    for r, protein in entries:
+        cited += list(r.sources)
+        hours = int(r.acrophase)
+        minutes = round(60 * (r.acrophase - hours))
+        rows.append(
+            [
+                protein or r.key,
+                f"`{circadian_factor(r.key)}`",
+                _number(r.amplitude),
+                f"{hours:02d}:{minutes:02d}",
+                _number(r.value(8.0)),
+                _number(r.value(20.0)),
+                "yes" if r.default else "no",
+                ", ".join(f"`{k}`" for k in r.sources),
+            ]
+        )
+    header = [
+        "rhythm",
+        "factor",
+        "amplitude",
+        "acrophase",
+        "08:00",
+        "20:00",
+        "default",
+        "sources",
+    ]
+    return _generated(
+        "`database/tables/circadian_human.toml`", _table(header, rows), cited
+    )
+
+
+PREGNANCY_AGES: tuple[float, ...] = (0.0, 8.0, 13.0, 20.0, 26.0, 33.0, 40.0)
+"""The gestational ages (weeks) of the table of the pregnancy."""
+
+
+def pregnancy() -> str:
+    """The factors of the pregnancy over the gestational age."""
+    rows: list[list[str]] = []
+    cited: list[str] = []
+    entries = [(f.key, f) for f in pregnancy_factors().values()]
+    entries += [
+        (f"{protein} {_ORGAN_NAMES[organ]}", f)
+        for (organ, protein), f in sorted(
+            pregnancy_proteins().items(), key=lambda x: (x[0][0].value, x[0][1])
+        )
+    ]
+    for name, f in entries:
+        cited += list(f.sources)
+        rows.append(
+            [
+                name.replace("mass_", "mass "),
+                f"`{pregnancy_factor(f.key)}`",
+                "kg" if f.unit == "kg" else "-",
+                *[_number(f.value(ga)) for ga in PREGNANCY_AGES],
+                ", ".join(f"`{k}`" for k in f.sources),
+            ]
+        )
+    header = [
+        "quantity",
+        "factor",
+        "unit",
+        *[f"{a:g} wk" for a in PREGNANCY_AGES],
+        "sources",
+    ]
+    return _generated(
+        "`database/tables/pregnancy_human.toml`", _table(header, rows), cited
+    )
+
+
 def populations() -> str:
     """The reference individuals and the covariate distributions of the populations."""
     rows: list[list[str]] = []
@@ -274,14 +519,25 @@ def populations() -> str:
         population = POPULATIONS[key]
         for sex in Sex:
             reference = population.reference[sex]
-            covariates = population.covariates[sex]
-            spread = [
-                f"{name} {d.kind} {_number(d.mean)} &plusmn; {_number(d.sd)}"
-                for name, d in covariates.items()
-            ]
             cited.append(population.source)
             cited += [v.source for v in reference.values() if v.source]
-            cited += [d.source for d in covariates.values()]
+            a = population.anthropometry.get(sex)
+            if a is None:
+                spread = "none"
+            else:
+                cited.append(a.source)
+                lo, hi = a.age_range
+                adult = a.at(min(max(AGE_REFERENCE, lo), hi))
+                corr = (
+                    "independent"
+                    if adult.rho is None
+                    else f"correlation {adult.rho:.2f} at 35 y"
+                )
+                spread = (
+                    f"{_number(lo)}-{_number(hi)} y, {len(a.ages)} ages; "
+                    f"HEIGHT &plusmn; {_number(adult.height_sd)} cm, "
+                    f"ln BW &plusmn; {_number(adult.ln_bw_sd)}, {corr}"
+                )
             rows.append(
                 [
                     f"{population.name} `{key}`",
@@ -289,7 +545,7 @@ def populations() -> str:
                     _number(reference["BW"].value),
                     _number(reference["HEIGHT"].value),
                     _number(reference["AGE"].value),
-                    "<br>".join(spread) if spread else "none",
+                    spread,
                 ]
             )
     reference = POPULATIONS[default].reference[Sex.MALE]
@@ -297,10 +553,217 @@ def populations() -> str:
         "population",
         "sex",
         *(f"{c} [{_unit_id(reference[c].unit)}]" for c in ("BW", "HEIGHT", "AGE")),
-        "covariates",
+        "distribution over age",
     ]
     lines = _table(header, rows)
     return _generated("`database/tables/populations/*.toml`", lines, cited)
+
+
+AGES: tuple[float, ...] = (
+    0.0,
+    1.0,
+    5.0,
+    10.0,
+    15.0,
+    20.0,
+    35.0,
+    50.0,
+    65.0,
+    80.0,
+    100.0,
+)
+"""The ages (years) of the tables of the physiology over age."""
+
+
+def _age(a: float) -> str:
+    """An age in a table, the newborn at 0."""
+    return "newborn" if a == 0 else _number(a)
+
+
+def _physiology_age(sex: Sex) -> str:
+    """The reference individual of a sex over age."""
+    curves = reference_curves(sex)
+    cited = ["ICRP89", *(s for c in curves.values() for s in c.sources)]
+    cited += list(factor_curves(sex)[ids.HCT].sources)
+    cited += list(factor_curves(sex)[ids.GFR].sources)
+    rows = []
+    organs = (Organ.BRAIN, Organ.LIVER, Organ.KIDNEY, Organ.MUSCLE)
+    for a in AGES:
+        ref = reference_individual(sex, a)
+        bsa = 0.007184 * ref.bw**0.425 * ref.height**0.725
+        masses = [curves[ids.ref(ids.organ_mass(o))].curve.value(a) for o in organs]
+        rows.append(
+            [
+                _age(a),
+                _number(ref.bw),
+                _number(ref.height),
+                _number(bsa),
+                *(_number(m) for m in masses),
+                _number(curves[ids.ref(ids.VBLOOD)].curve.value(a)),
+                _number(curves[ids.ref(ids.CO)].curve.value(a)),
+                _number(ref.gfr * 1e3),
+                _number(ref.gfr * 1e3 * 1.73 / bsa),
+                _number(reference_hematocrit(sex, a)),
+            ]
+        )
+    header = [
+        "age [yr]",
+        "BW [kg]",
+        "HEIGHT [cm]",
+        "BSA [m2]",
+        *(f"M{o.value} [kg]" for o in organs),
+        "Vblood [l]",
+        "CO [l/min]",
+        "GFR [ml/min]",
+        "GFR [ml/min/1.73 m2]",
+        "HCT [-]",
+    ]
+    return _generated(
+        "`database/tables/children_human.toml`, `physiology_human.toml` and "
+        "`age_human.toml`",
+        _table(header, rows),
+        cited,
+    )
+
+
+def physiology_age_male() -> str:
+    """The male reference individual over age."""
+    return _physiology_age(Sex.MALE)
+
+
+def physiology_age_female() -> str:
+    """The female reference individual over age."""
+    return _physiology_age(Sex.FEMALE)
+
+
+def _age_factors(sex: Sex) -> str:
+    """The factors of the age of a sex."""
+    factors = factor_curves(sex)
+    refs = _references(sex, load("physiology_human"))
+    fractions = {
+        o: refs[ids.flow_fraction(o)].value for o in Organ if o is not Organ.LUNG
+    }
+    flows = flow_fraction_curves(sex, fractions)
+    keys = (ids.GFR, ids.HCT, ids.FFM, "albumin", "agp")
+    cited = [s for k in keys for s in factors[k].sources]
+    cited += list(flow_factors(sex).sources)
+    rows = []
+    for a in AGES:
+        rows.append(
+            [
+                _age(a),
+                *(_number(factors[k].curve.value(a)) for k in keys),
+                _number(flows[Organ.BRAIN].value(a)),
+                _number(flows[Organ.LIVER].value(a) / fractions[Organ.LIVER]),
+                _number(flows[Organ.KIDNEY].value(a) / fractions[Organ.KIDNEY]),
+                _number(flows[Organ.MUSCLE].value(a) / fractions[Organ.MUSCLE]),
+            ]
+        )
+    header = [
+        "age [yr]",
+        "fage_GFR",
+        "fage_HCT",
+        "fage_FFM",
+        "fage_albumin",
+        "fage_agp",
+        "brain share of CO",
+        "liver group",
+        "kidney",
+        "other organs",
+    ]
+    return _generated("`database/tables/age_human.toml`", _table(header, rows), cited)
+
+
+def age_factors_male() -> str:
+    """The factors of the age of men."""
+    return _age_factors(Sex.MALE)
+
+
+def age_factors_female() -> str:
+    """The factors of the age of women."""
+    return _age_factors(Sex.FEMALE)
+
+
+ONTOGENY_AGES: tuple[float, ...] = (0.0, 1 / 12, 0.5, 1.0, 2.0, 5.0, 18.0)
+"""The ages (years) of the table of the ontogeny."""
+
+
+def ontogeny() -> str:
+    """The ontogeny of the proteins."""
+    rows = []
+    cited: list[str] = []
+    for organ, protein in sorted(protein_factors(), key=lambda x: (x[0].value, x[1])):
+        curve = protein_factor(organ, protein)
+        assert curve is not None
+        cited += list(curve.sources)
+        rows.append(
+            [
+                f"`{organ.value}` {_ORGAN_NAMES[organ]}",
+                protein,
+                *[_number(curve.curve.value(a)) for a in ONTOGENY_AGES],
+                ", ".join(f"`{k}`" for k in curve.sources),
+            ]
+        )
+    header = [
+        "organ",
+        "protein",
+        "newborn",
+        "1 month",
+        "6 months",
+        "1 y",
+        "2 y",
+        "5 y",
+        "18 y",
+        "sources",
+    ]
+    return _generated("`database/tables/ontogeny.toml`", _table(header, rows), cited)
+
+
+SEX_AGES: tuple[float, ...] = (5.0, 12.0, 15.0, 18.0, 35.0, 50.0, 60.0, 80.0)
+"""The ages (years) of the table of the factors of the sex."""
+
+_SEX_NAMES: dict[str, str] = {
+    "CO": "cardiac output",
+    "Qbr": "brain fraction of the cardiac output",
+    "albumin": "plasma albumin",
+    "t_stomach_fed": "transit time of the stomach, fed",
+    "t_colon": "transit times of the large intestine",
+}
+"""The quantities of the factors of the sex in the table."""
+
+
+def sex_factors() -> str:
+    """The factors of the female build relative to the male, over age."""
+    rows = []
+    cited: list[str] = []
+    entries = [
+        (_SEX_NAMES[key], sex_factor(key), c)
+        for key, c in sex_curves(Sex.FEMALE).items()
+    ]
+    for organ, protein in sorted(
+        protein_sex_factors(), key=lambda x: (x[0].value, x[1])
+    ):
+        c = protein_sex_factor(Sex.FEMALE, organ, protein)
+        assert c is not None
+        entries.append(
+            (
+                f"{protein} {_ORGAN_NAMES[organ]}",
+                sex_factor(f"{organ.value}_{protein.lower()}"),
+                c,
+            )
+        )
+    for name, pid, c in entries:
+        cited += list(c.sources)
+        rows.append(
+            [
+                name,
+                f"`{pid}`",
+                *[_number(c.curve.value(a)) for a in SEX_AGES],
+                ", ".join(f"`{k}`" for k in c.sources),
+            ]
+        )
+    header = ["quantity", "factor", *[f"{a:g} y" for a in SEX_AGES], "sources"]
+    return _generated("`database/tables/sex_human.toml`", _table(header, rows), cited)
 
 
 def _class_table(
@@ -835,6 +1298,27 @@ def classes_child_pugh() -> str:
             *score,
             "",
             *classes,
+        ]
+    )
+
+
+def classes_age() -> str:
+    """The age classes of ICH E11 and ICH E7 with the age of the scans."""
+    rows = [
+        [
+            _class_cell(c),
+            c.definition,
+            _limits(c, closed=False) if c.key != "newborn" else "0-27 days",
+            _number(c.value) if c.value is not None else "",
+        ]
+        for c in AGE_CLASSES
+    ]
+    return "\n".join(
+        [
+            "*Generated from `pkpdsim.impairment.AGE_CLASSES` by "
+            "`scripts/pbpk_tables.py`.*",
+            "",
+            *_table(["class", "definition", "age [yr]", "AGE"], rows),
         ]
     )
 
@@ -1380,8 +1864,22 @@ def _hf_factor(key: str) -> Callable[[float], float]:
 TABLES: dict[str, Callable[[], str]] = {
     "physiology-general": physiology_general,
     "physiology-organs-male": physiology_organs_male,
+    "species-overview": species_overview,
+    "circadian-rhythms": circadian_rhythms,
+    "pregnancy-factors": pregnancy,
+    "species-intestine": species_intestine,
+    "species-organs-rat": species_organs_rat,
+    "species-organs-mouse": species_organs_mouse,
+    "species-organs-pig": species_organs_pig,
     "physiology-organs-female": physiology_organs_female,
     "populations": populations,
+    "physiology-age-male": physiology_age_male,
+    "physiology-age-female": physiology_age_female,
+    "age-factors-male": age_factors_male,
+    "age-factors-female": age_factors_female,
+    "ontogeny": ontogeny,
+    "sex-factors": sex_factors,
+    "classes-age": classes_age,
     "impairment-child-pugh": impairment_child_pugh,
     "impairment-child-pugh-proteins": impairment_child_pugh_proteins,
     "impairment-meld": impairment_meld,

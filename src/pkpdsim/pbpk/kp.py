@@ -65,6 +65,7 @@ from pkpdsim.pbpk.physiology import Sex, reference_hematocrit
 from pkpdsim.pbpk.substance import KpMethod, Substance
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import Formula, Q, Value
+from pkpdsim.species import Species
 
 __all__ = [
     "AP_PKA",
@@ -330,13 +331,16 @@ def blood_to_plasma(substance: Substance, hct: float) -> float | None:
     return None
 
 
-def kp_values(substance: Substance, sex: Sex) -> dict[Organ, Value]:
+def kp_values(
+    substance: Substance, sex: Sex, species: Species = Species.HUMAN
+) -> dict[Organ, Value]:
     """Get the coefficients of the Kp method of a substance for the organs it enters.
 
     Args:
         substance: the substance, with a `KpMethod` as distribution.
         sex: the sex of the model, whose reference hematocrit enters the
             affinity of a base to the acidic phospholipids.
+        species: the species of the model (its reference hematocrit).
 
     Returns:
         The whole-tissue to plasma coefficient of every organ the substance
@@ -349,7 +353,7 @@ def kp_values(substance: Substance, sex: Sex) -> dict[Organ, Value]:
     if not isinstance(method, KpMethod):
         raise ValueError(f"{substance.sid}: the distribution is no Kp method.")
     fu = _number_of(substance.binding.fu) if substance.binding is not None else 1.0
-    hct = reference_hematocrit(sex)
+    hct = reference_hematocrit(sex, species=species)
     bp = blood_to_plasma(substance, hct)
     organs = [o for o in Organ if method.organs is None or o in method.organs]
     binding = (

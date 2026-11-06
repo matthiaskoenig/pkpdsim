@@ -711,6 +711,16 @@ def test_the_equilibration_sets_back_the_absorbed_amount_of_an_endogenous_substa
     grows during the equilibration without a steady state. The equilibration
     sets it and the oral dose applied back at the start, as the sinks, so the
     simulation starts at 0 and needs no reset.
+
+    After the equilibration the lumen is at its steady state with the wall,
+    so the amount which is absorbed again over the simulation is the
+    difference of two nearly equal fluxes: 4.6e-18 mmole over 60 min and
+    3.7e-16 over 6000 min, the noise of the integrator, whose sign is that of
+    the platform (-1.4e-17 on a macos runner). The test therefore asserts
+    that the readout starts at exactly 0 and stays at 0 within that noise,
+    which is what the setting back has to achieve; that it grows at all is
+    the assertion `before > 1e-6` of the simulation without the
+    equilibration, over 1e5 min.
     """
     drug = dataclasses.replace(simple_drug(), excretion=Excretion(), baseline=0.001)
     d = _oral(
@@ -741,7 +751,7 @@ def test_the_equilibration_sets_back_the_absorbed_amount_of_an_endogenous_substa
     ).run(path, simulation)
     assert float(start_values(result, amount).item()) == 0.0
     assert float(start_values(result, applied).item()) == 0.0
-    assert float(end_values(result, amount).item()) > 0.0
+    assert abs(float(end_values(result, amount).item())) < 1e-12
 
 
 def test_the_absorbed_fraction_needs_an_oral_dose() -> None:

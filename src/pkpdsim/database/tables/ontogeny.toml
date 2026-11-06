@@ -1,0 +1,160 @@
+# The ontogeny of the enzymes and transporters: factors on the
+# activity of a protein in an organ (`pkpdsim.pbpk.age`).
+#
+# `[ontogeny.<organ>.<protein>]`, the organ by its token (`li` liver, `ki`
+# kidney, `si` small intestine): the abundance or activity per amount of
+# tissue relative to the adult over age, in the forms of age_human.toml
+# (`hill` of the postnatal age in years or the postmenstrual age in weeks);
+# the physiology divides it by its value at 35 years. A protein of an organ
+# without an entry has no ontogeny (1 at every age): no function was fitted
+# (SULT1A1, ABCC3, SLC6A8), the protein is stable (SLCO1B1, ABCG2, ABCC2,
+# ABCC4, MATE1 of the kidney: Prasad 2016, Cheung 2019), or no data were found.
+# The abundance per mg of protein shows no consistent change of the adults
+# (Parkinson 2004, Wolbold 2003, Prasad 2014): the elderly have no factor, the
+# smaller liver of age_human.toml is their change; the microsomal protein per
+# gram of liver (Barter 2008) is not applied, a model choice (PK-Sim applies
+# the fractions to the tissue alike).
+#
+# The differences of the sexes are in sex_human.toml.
+
+[ontogeny.li.CYP1A2]
+form = "hill"
+variable = "pma"
+x50 = 65.639
+n = 10.015
+source = "PKSimOntogeny"
+notes = "Section A.1: Hill of the postmenstrual age, A0.5 65.639 weeks, n 10.015 (caffeine N3- and N7-demethylation of Cazeneuve 1994, Sonnier and Cresteil 1998, protein of Ratanasavanh 1991)"
+
+[ontogeny.li.CYP2C8]
+form = "hill"
+variable = "pma"
+x50 = 43.084
+n = 7.758
+source = "PKSimOntogeny"
+notes = "Section A.4: A0.5 43.084 weeks, n 7.758 (mRNA of Treluyer 1997, mRNA, protein and verapamil D-703 formation of Lapple 2003)"
+
+[ontogeny.li.CYP2C9]
+form = "hill"
+variable = "pma"
+x50 = 36.773
+n = 8.135
+source = "PKSimOntogeny"
+notes = "Section A.5: A0.5 36.773 weeks, n 8.135 (protein and diclofenac 4-hydroxylation of Koukouritaki 2004, Treluyer 1997, Lapple 2003)"
+
+[ontogeny.li.CYP2C19]
+form = "hill"
+variable = "pma"
+x50 = 35.447
+n = 9.390
+source = "PKSimOntogeny"
+notes = "Section A.3: A0.5 35.447 weeks, n 9.390 (protein and S-mephenytoin 4-hydroxylation of Koukouritaki 2004, Lapple 2003); Johnson 2006 mature much later (half at about 1 year)"
+
+[ontogeny.li.CYP2D6]
+form = "hill"
+variable = "pma"
+x50 = 37.706
+n = 5.391
+source = "PKSimOntogeny"
+notes = "Section A.6: A0.5 37.706 weeks, n 5.391 (dextromethorphan O-demethylation of Stevens 2008, protein of Treluyer 1991)"
+
+[ontogeny.li.CYP3A4]
+form = "hill"
+variable = "pma"
+x50 = 73.019
+n = 3.331
+source = "PKSimOntogeny"
+notes = "Section A.8: A0.5 73.019 weeks, n 3.331 (mRNA and testosterone 6beta-hydroxylation of Lacroix 1997, amprenavir of Treluyer 2003, protein of Stevens 2003); the least certain ontogeny: the in vivo functions mature faster (Salem 2014, adult at 1.3 years of postmenstrual age; Upreti 2016)"
+
+[ontogeny.si.CYP3A4]
+form = "hill"
+variable = "pma"
+x50 = 74.055
+n = 1.237
+source = "PKSimOntogeny"
+notes = "Section 4.5, duodenum: A0.5 74.055 weeks, n 1.237 (protein and testosterone 6beta-hydroxylation of Johnson 2001)"
+
+[ontogeny.li.UGT1A1]
+form = "hill"
+variable = "pma"
+x50 = 50.754
+n = 20.670
+source = "PKSimOntogeny"
+notes = "Section A.1 (UGT): A0.5 50.754 weeks, n 20.670 (bilirubin glucuronidation of Burchell 1989 and Onishi 1979); the protein matures over years (Bhatt 2019)"
+
+[ontogeny.li.UGT1A9]
+form = "hill"
+variable = "pma"
+x50 = 84.220
+n = 2.362
+source = "PKSimOntogeny"
+notes = "Section A.4 (UGT): A0.5 84.220 weeks, n 2.362 (mRNA of Strassburg 2002 only)"
+
+[ontogeny.li.UGT2B7]
+form = "hill"
+variable = "pma"
+x50 = 72.533
+n = 6.543
+source = "PKSimOntogeny"
+notes = "Section A.6 (UGT): A0.5 72.533 weeks, n 6.543 (epirubicin of Zaya 2006, morphine glucuronidation of Pacifici 1982, clearance of morphine and lorazepam in vivo)"
+
+[ontogeny.li.SLCO1B3]
+form = "hill"
+variable = "age"
+x50 = 0.58
+n = 4.87
+base = 0.30488
+top = 1.0
+source = "Prasad2016"
+notes = "Table 1, Emax of the postnatal age: E0 0.50, Emax 1.14 fmol/ug membrane protein, Age50 0.58 years, Hill 4.87, as the fraction of the plateau E0 + Emax (base E0/(E0 + Emax) = 0.30488); 69 paediatric and 41 adult livers, LC-MS/MS"
+
+[ontogeny.li.SLC22A1]
+form = "hill"
+variable = "age"
+x50 = 0.47
+n = 0.92
+base = 0.12719
+top = 1.0
+source = "Prasad2016"
+notes = "Table 1, OCT1: E0 0.58, Emax 3.98 fmol/ug membrane protein, Age50 0.47 years, Hill 0.92 (base E0/(E0 + Emax) = 0.12719)"
+
+[ontogeny.li.ABCB1]
+form = "hill"
+variable = "age"
+x50 = 2.94
+n = 0.78
+base = 0.26786
+top = 1.0
+source = "Prasad2016"
+notes = "Table 1, P-gp of the liver: E0 0.15, Emax 0.41 fmol/ug membrane protein, Age50 2.94 years, Hill 0.78 (base E0/(E0 + Emax) = 0.26786); wide confidence intervals"
+
+[ontogeny.ki.SLC22A2]
+form = "hill"
+variable = "pma"
+x50 = 47.066
+n = 8.670
+source = "Hunt2024"
+notes = "OCT2: f = PMA^b/(PMA^b + a^b), a 0.902 years of postmenstrual age (47.066 weeks), b 8.670 (protein of the renal cortex of Cheung 2019 and preterm mRNA, maximum likelihood; the form verified against the supplementary tables)"
+
+[ontogeny.ki.SLC22A6]
+form = "hill"
+variable = "pma"
+x50 = 52.179
+n = 7.602
+source = "Hunt2024"
+notes = "OAT1: a 1.000 years of postmenstrual age (52.179 weeks), b 7.602"
+
+[ontogeny.ki.SLC22A8]
+form = "hill"
+variable = "pma"
+x50 = 56.405
+n = 5.948
+source = "Hunt2024"
+notes = "OAT3: a 1.081 years of postmenstrual age (56.405 weeks), b 5.948"
+
+[ontogeny.ki.ABCB1]
+form = "hill"
+variable = "pma"
+x50 = 52.231
+n = 4.565
+source = "Hunt2024"
+notes = "P-gp of the kidney: a 1.001 years of postmenstrual age (52.231 weeks), b 4.565"

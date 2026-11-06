@@ -1,0 +1,324 @@
+# The reference physiology of the domestic pig (growing, 30 kg), male and female.
+#
+# The reference animal is the domestic pig of the pharmacokinetic and
+# hemodynamic studies (Landrace x Yorkshire or Large White crosses, growing,
+# 30 kg, about 10 weeks). Its organ weights are the meta-analysis of Lin 2020
+# (Tables 9 to 11, relative organ weights of swine of all ages, open access,
+# with the extracted data of its Appendices S13 and S16), its flows the
+# microsphere studies in unanesthetized pigs of 20 to 59 kg compiled there
+# (Tables 17, 27, 28). The Goettingen minipig is not tabulated: its open data
+# cover the organ weights of a few organs only (see pig.md).
+#
+# Conventions as physiology_human.toml, with these differences:
+# - `mass` is the dissected organ weight of Lin 2020, which holds the residual
+#   blood of the organ (a few percent, Lin 2020 Tables 31, 32), times the body
+#   weight of the reference animal.
+# - the densities and the vascular fractions `f_vas` of the organs are those
+#   of the human (ICRP 89, physiology_human.toml; no in vivo data of the pig
+#   found); `blood` follows from them with the masses and the blood volume of
+#   the pig, the vascular pools are the remaining blood split as in the human.
+# - Fint is the human Fint of Schmitt 2008 (httk has no pig).
+# - the flows are percent of cardiac output of Lin 2020 Table 28 where measured,
+#   muscle and adipose are perfusion times mass over cardiac output, bone and
+#   gonads human perfusion times the mass of the pig (a choice).
+# - no height: the pig has no height of the Huisinga scaling.
+# Adipose is the remainder of the body weight in the physiology; its mass of
+# Lin 2020 is a reference value.
+
+[male]
+bodyweight = { value = 30.0, unit = "kg", source = "ModelChoice", notes = "reference domestic pig (Landrace x Yorkshire or Large White crosses), growing, about 69 days (Lin 2020 Eq. 7, BW = 3.37 + 0.387 age in days, inverted); the conscious hemodynamic studies of Lin 2020 Table 17 and 28 had 20 to 58.7 kg, their mean weighted by animals about 30 kg (Lin 2020 Appendix S16); Upton 2008 uses 25 kg as the standard pig of biomedical research (as cited by Lin 2020)" }
+body_surface_area = { value = 0.9781, unit = "m2", source = "Gasthuys2017", notes = "derived: Meeh formula k*BW^(2/3) with k = 0.1013 m2/kg^(2/3), the mean of k = BSA/BW^(2/3) of the four groups of Table 1 (BSA by CT for 2.01, 10.0, 13.9 kg; 2.42 m2 at 112.88 kg; Belgian Landrace x Large White, male)" }
+cardiac_output = { value = 4.35, unit = "l/min", source = "Lin2020", notes = "derived: Table 17, 8.70 +- 1.62 l/h/kg (83 unanesthetized animals, 7 studies, 20-58.7 kg) times 30 kg; Hannon 1989 (immature Yorkshire x Duroc, 21.3 kg): 147 ml/min/kg (Lin 2020 Appendix S16, Table 9 of the report); no allometric exponent within the pig found, linear in body weight (a choice)" }
+hematocrit = { value = 0.401, unit = "dimensionless", source = "Lin2020", notes = "Table 37, growing swine 40.1 +- 6.4 % (65.6 kg, 113 animals, 2 studies); young swine 39.9 +- 5.4 % (17.6 kg), all ages 41.2 +- 5.0 % (Table 36, 56.3 kg, 684 animals, 10 studies)" }
+gfr = { value = 129.3, unit = "ml/min", source = "Gasthuys2017", notes = "derived: Table 2, exo-iohexol plasma clearance 4.31 +- 0.70 ml/min/kg at 7 weeks (13.9 kg, 16 male Belgian Landrace x Large White piglets) times 30 kg; within the growing pig the GFR scales with BW^1.092 at a given plasma creatinine (Table 3, model I, eGFR = 1.879 BW^1.092 / Pcr^0.600)" }
+hepatic_artery_fraction = { value = 0.1401, unit = "dimensionless", source = "Lin2020", notes = "derived: Table 28, hepatic artery 4.4 % of the liver total 31.4 % (hepatic artery + stomach, small and large intestine, spleen and pancreas); with the measured portal vein flow (19.9 %) 4.4/(4.4 + 19.9) = 0.181" }
+
+[male.blood]
+volume = { value = 2.016, unit = "l", source = "Hannon1985", notes = "derived: 67.2 +- 4.12 ml/kg (abstract; 51Cr red cells, body-to-large vessel hematocrit 0.9 assumed; 20 sham-operated immature conscious pigs) times 30 kg; splenectomized 67.3 +- 3.67 ml/kg; Lin 2020 Table 9 blood 4.12 % of body weight is the blood collected at slaughter, not the circulating volume" }
+density = { value = 1.06, unit = "kg/l", source = "ModelChoice", notes = "no density of pig blood found; the human value of ICRP 89 Section 7.2.1" }
+arterial = { value = 0.0707, unit = "dimensionless", source = "ModelChoice", notes = "derived: no distribution of the pig blood over the vascular pools found; the blood outside the organs (0.2222 = 1 - organ blood - unmapped blood) split as the human pools of physiology_human.toml (arterial 0.105, venous 0.2242, portal 0.000828)" }
+venous = { value = 0.151, unit = "dimensionless", source = "ModelChoice", notes = "derived: no distribution of the pig blood over the vascular pools found; the blood outside the organs (0.2222 = 1 - organ blood - unmapped blood) split as the human pools of physiology_human.toml (arterial 0.105, venous 0.2242, portal 0.000828)" }
+portal = { value = 0.0005575, unit = "dimensionless", source = "ModelChoice", notes = "derived: no distribution of the pig blood over the vascular pools found; the blood outside the organs (0.2222 = 1 - organ blood - unmapped blood) split as the human pools of physiology_human.toml (arterial 0.105, venous 0.2242, portal 0.000828)" }
+
+[male.organs.lu]
+mass = { value = 0.24, unit = "kg", source = "Lin2020", notes = "derived: Lin 2020 Table 10 (male swine), Lungs 0.8 % of body weight (200 animals, 6 studies), times the body weight 30 kg; organ weight as dissected (with its residual blood)" }
+density = { value = 1.0, unit = "kg/l", source = "ModelChoice", notes = "no density of the pig organ found; the human value of ICRP 89 Section 5.3.6 para 166" }
+flow = { value = 1.0, unit = "dimensionless", source = "Lin2020", notes = "in series, the lung receives the cardiac output; the bronchial flow is in [unmapped.other_tissues]" }
+blood = { value = 0.1577, unit = "dimensionless", source = "ModelChoice", notes = "derived: f_vas/(1 - f_vas) * mass/density / V_blood, the blood of the organ at the human vascular fraction, as fraction of the blood volume of the pig" }
+f_vas = { value = 0.5699, unit = "dimensionless", source = "ModelChoice", notes = "no blood content of the pig organs in vivo found; the vascular fraction of the human organ (physiology_human.toml, male, ICRP 89); residual blood after exsanguination (Hansard 1956 via Lin 2020 Table 31, growing swine, % of organ weight, a lower bound): 24.8" }
+f_int = { value = 0.08602, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.2 (httk 2.7.4 tissue.data, Human, Schmitt 2008, Fint of lung); httk has Fint of human and rat only, the human value is used for the pig (a choice)" }
+
+[male.organs.he]
+mass = { value = 0.102, unit = "kg", source = "Lin2020", notes = "derived: Lin 2020 Table 10 (male swine), Heart 0.34 % of body weight (377 animals, 14 studies), times the body weight 30 kg; organ weight as dissected (with its residual blood)" }
+flow = { value = 0.03, unit = "dimensionless", source = "Lin2020", notes = "Lin 2020 Table 28, 3.0 % of cardiac output (9 animals, 1 studies, unanesthetized, microspheres; sexes pooled); sum of septum, left and right ventricle of Tranquilli 1982" }
+blood = { value = 0.008127, unit = "dimensionless", source = "ModelChoice", notes = "derived: f_vas/(1 - f_vas) * mass / V_blood, the blood of the organ at the human vascular fraction, as fraction of the blood volume of the pig" }
+f_vas = { value = 0.1384, unit = "dimensionless", source = "ModelChoice", notes = "no blood content of the pig organs in vivo found; the vascular fraction of the human organ (physiology_human.toml, male, ICRP 89); residual blood after exsanguination (Hansard 1956 via Lin 2020 Table 31, growing swine, % of organ weight, a lower bound): 3.1" }
+f_int = { value = 0.2154, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.25 (httk 2.7.4 tissue.data, Human, Schmitt 2008, Fint of heart); httk has Fint of human and rat only, the human value is used for the pig (a choice)" }
+
+[male.organs.br]
+mass = { value = 0.066, unit = "kg", source = "Lin2020", notes = "derived: Lin 2020 Table 9 (swine, both sexes, all ages), Brain 0.22 % of body weight (37 animals, 1 studies); not in Table 10 (male swine), times the body weight 30 kg; organ weight as dissected (with its residual blood)" }
+density = { value = 1.04, unit = "kg/l", source = "ModelChoice", notes = "no density of the pig organ found; the human value of ICRP 89 Section 11.3.2 para 554" }
+flow = { value = 0.015, unit = "dimensionless", source = "Lin2020", notes = "Lin 2020 Table 28, 1.5 % of cardiac output (35 animals, 3 studies, unanesthetized, microspheres; sexes pooled)" }
+blood = { value = 0.001436, unit = "dimensionless", source = "ModelChoice", notes = "derived: f_vas/(1 - f_vas) * mass/density / V_blood, the blood of the organ at the human vascular fraction, as fraction of the blood volume of the pig" }
+f_vas = { value = 0.04363, unit = "dimensionless", source = "ModelChoice", notes = "no blood content of the pig organs in vivo found; the vascular fraction of the human organ (physiology_human.toml, male, ICRP 89); residual blood after exsanguination (Hansard 1956 via Lin 2020 Table 31, growing swine, % of organ weight, a lower bound): not measured" }
+f_int = { value = 0.004782, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.005 (httk 2.7.4 tissue.data, Human, Schmitt 2008, Fint of brain); httk has Fint of human and rat only, the human value is used for the pig (a choice)" }
+
+[male.organs.li]
+mass = { value = 0.528, unit = "kg", source = "Lin2020", notes = "derived: Lin 2020 Table 10 (male swine), Liver 1.76 % of body weight (246 animals, 19 studies), times the body weight 30 kg; organ weight as dissected (with its residual blood)" }
+flow = { value = 0.044, unit = "dimensionless", source = "Lin2020", notes = "Lin 2020 Table 28, 4.4 % of cardiac output (55 animals, 5 studies, unanesthetized, microspheres; sexes pooled); hepatic artery (portal vein 19.9 % of cardiac output, 32 animals, 3 studies); the portal organs feed the liver in addition" }
+blood = { value = 0.07713, unit = "dimensionless", source = "ModelChoice", notes = "derived: f_vas/(1 - f_vas) * mass / V_blood, the blood of the organ at the human vascular fraction, as fraction of the blood volume of the pig" }
+f_vas = { value = 0.2275, unit = "dimensionless", source = "ModelChoice", notes = "no blood content of the pig organs in vivo found; the vascular fraction of the human organ (physiology_human.toml, male, ICRP 89); residual blood after exsanguination (Hansard 1956 via Lin 2020 Table 31, growing swine, % of organ weight, a lower bound): 5.7" }
+f_int = { value = 0.1777, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.23 (httk 2.7.4 tissue.data, Human, Schmitt 2008, Fint of liver); httk has Fint of human and rat only, the human value is used for the pig (a choice)" }
+
+[male.organs.ki]
+mass = { value = 0.114, unit = "kg", source = "Lin2020", notes = "derived: Lin 2020 Table 10 (male swine), Kidneys 0.38 % of body weight (1566 animals, 16 studies), times the body weight 30 kg; organ weight as dissected (with its residual blood)" }
+density = { value = 1.05, unit = "kg/l", source = "ModelChoice", notes = "no density of the pig organ found; the human value of ICRP 89 Section 8.2.1 para 337" }
+flow = { value = 0.114, unit = "dimensionless", source = "Lin2020", notes = "Lin 2020 Table 28, 11.4 % of cardiac output (56 animals, 5 studies, unanesthetized, microspheres; sexes pooled); includes the renal blood flow of Hannon 1989 (11.4 % of cardiac output)" }
+blood = { value = 0.01934, unit = "dimensionless", source = "ModelChoice", notes = "derived: f_vas/(1 - f_vas) * mass/density / V_blood, the blood of the organ at the human vascular fraction, as fraction of the blood volume of the pig" }
+f_vas = { value = 0.2642, unit = "dimensionless", source = "ModelChoice", notes = "no blood content of the pig organs in vivo found; the vascular fraction of the human organ (physiology_human.toml, male, ICRP 89); residual blood after exsanguination (Hansard 1956 via Lin 2020 Table 31, growing swine, % of organ weight, a lower bound): 7.2" }
+f_int = { value = 0.1214, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.165 (httk 2.7.4 tissue.data, Human, Schmitt 2008, Fint of kidney); httk has Fint of human and rat only, the human value is used for the pig (a choice)" }
+
+[male.organs.st]
+mass = { value = 0.198, unit = "kg", source = "Lin2020", notes = "derived: Lin 2020 Table 10 (male swine), Stomach 0.66 % of body weight (324 animals, 10 studies), times the body weight 30 kg; organ weight as dissected (with its residual blood)" }
+density = { value = 1.045, unit = "kg/l", source = "ModelChoice", notes = "no density of the pig organ found; the human value of ICRP 89 Section 6.3 para 191" }
+flow = { value = 0.021, unit = "dimensionless", source = "Lin2020", notes = "Lin 2020 Table 28, 2.1 % of cardiac output (34 animals, 4 studies, unanesthetized, microspheres; sexes pooled)" }
+blood = { value = 0.03471, unit = "dimensionless", source = "ModelChoice", notes = "derived: f_vas/(1 - f_vas) * mass/density / V_blood, the blood of the organ at the human vascular fraction, as fraction of the blood volume of the pig" }
+f_vas = { value = 0.2697, unit = "dimensionless", source = "ModelChoice", notes = "no blood content of the pig organs in vivo found; the vascular fraction of the human organ (physiology_human.toml, male, ICRP 89); residual blood after exsanguination (Hansard 1956 via Lin 2020 Table 31, growing swine, % of organ weight, a lower bound): not measured" }
+f_int = { value = 0.07011, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (httk 2.7.4 tissue.data, Human, Schmitt 2008, Fint of gut); httk has Fint of human and rat only, the human value is used for the pig (a choice)" }
+
+[male.organs.si]
+mass = { value = 0.657, unit = "kg", source = "Lin2020", notes = "derived: Lin 2020 Table 9 (swine, both sexes, all ages), Small intestine 2.19 % of body weight (626 animals, 18 studies); the sex tables give small and large intestine from fewer studies whose sum differs from their own intestines total, times the body weight 30 kg; organ weight as dissected (with its residual blood)" }
+density = { value = 1.045, unit = "kg/l", source = "ModelChoice", notes = "no density of the pig organ found; the human value of ICRP 89 Section 6.3 para 191" }
+flow = { value = 0.153, unit = "dimensionless", source = "Lin2020", notes = "Lin 2020 Table 28, 15.3 % of cardiac output (52 animals, 5 studies, unanesthetized, microspheres; sexes pooled)" }
+blood = { value = 0.101, unit = "dimensionless", source = "ModelChoice", notes = "derived: f_vas/(1 - f_vas) * mass/density / V_blood, the blood of the organ at the human vascular fraction, as fraction of the blood volume of the pig" }
+f_vas = { value = 0.2446, unit = "dimensionless", source = "ModelChoice", notes = "no blood content of the pig organs in vivo found; the vascular fraction of the human organ (physiology_human.toml, male, ICRP 89); residual blood after exsanguination (Hansard 1956 via Lin 2020 Table 31, growing swine, % of organ weight, a lower bound): not measured" }
+f_int = { value = 0.07252, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (httk 2.7.4 tissue.data, Human, Schmitt 2008, Fint of gut); httk has Fint of human and rat only, the human value is used for the pig (a choice)" }
+
+[male.organs.la]
+mass = { value = 0.441, unit = "kg", source = "Lin2020", notes = "derived: Lin 2020 Table 9 (swine, both sexes, all ages), Large intestine 1.47 % of body weight (282 animals, 11 studies); the sex tables give small and large intestine from fewer studies whose sum differs from their own intestines total, times the body weight 30 kg; organ weight as dissected (with its residual blood)" }
+density = { value = 1.045, unit = "kg/l", source = "ModelChoice", notes = "no density of the pig organ found; the human value of ICRP 89 Section 6.3 para 191" }
+flow = { value = 0.051, unit = "dimensionless", source = "Lin2020", notes = "Lin 2020 Table 28, 5.1 % of cardiac output (18 animals, 2 studies, unanesthetized, microspheres; sexes pooled)" }
+blood = { value = 0.06892, unit = "dimensionless", source = "ModelChoice", notes = "derived: f_vas/(1 - f_vas) * mass/density / V_blood, the blood of the organ at the human vascular fraction, as fraction of the blood volume of the pig" }
+f_vas = { value = 0.2477, unit = "dimensionless", source = "ModelChoice", notes = "no blood content of the pig organs in vivo found; the vascular fraction of the human organ (physiology_human.toml, male, ICRP 89); residual blood after exsanguination (Hansard 1956 via Lin 2020 Table 31, growing swine, % of organ weight, a lower bound): not measured" }
+f_int = { value = 0.07222, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (httk 2.7.4 tissue.data, Human, Schmitt 2008, Fint of gut); httk has Fint of human and rat only, the human value is used for the pig (a choice)" }
+
+[male.organs.sp]
+mass = { value = 0.06, unit = "kg", source = "Lin2020", notes = "derived: Lin 2020 Table 10 (male swine), Spleen 0.2 % of body weight (765 animals, 11 studies), times the body weight 30 kg; organ weight as dissected (with its residual blood)" }
+density = { value = 1.06, unit = "kg/l", source = "ModelChoice", notes = "no density of the pig organ found; the human value of ICRP 89 Section 11.10.2 para 600" }
+flow = { value = 0.031, unit = "dimensionless", source = "Lin2020", notes = "Lin 2020 Table 28, 3.1 % of cardiac output (52 animals, 5 studies, unanesthetized, microspheres; sexes pooled)" }
+blood = { value = 0.01472, unit = "dimensionless", source = "ModelChoice", notes = "derived: f_vas/(1 - f_vas) * mass/density / V_blood, the blood of the organ at the human vascular fraction, as fraction of the blood volume of the pig" }
+f_vas = { value = 0.344, unit = "dimensionless", source = "ModelChoice", notes = "no blood content of the pig organs in vivo found; the vascular fraction of the human organ (physiology_human.toml, male, ICRP 89); residual blood after exsanguination (Hansard 1956 via Lin 2020 Table 31, growing swine, % of organ weight, a lower bound): 14.6" }
+f_int = { value = 0.1673, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.255 (httk 2.7.4 tissue.data, Human, Schmitt 2008, Fint of spleen); httk has Fint of human and rat only, the human value is used for the pig (a choice)" }
+
+[male.organs.pa]
+mass = { value = 0.045, unit = "kg", source = "Lin2020", notes = "derived: Lin 2020 Table 10 (male swine), Pancreas 0.15 % of body weight (297 animals, 7 studies), times the body weight 30 kg; organ weight as dissected (with its residual blood)" }
+flow = { value = 0.014, unit = "dimensionless", source = "Lin2020", notes = "Lin 2020 Table 28, 1.4 % of cardiac output (9 animals, 1 studies, unanesthetized, microspheres; sexes pooled)" }
+blood = { value = 0.00507, unit = "dimensionless", source = "ModelChoice", notes = "derived: f_vas/(1 - f_vas) * mass / V_blood, the blood of the organ at the human vascular fraction, as fraction of the blood volume of the pig" }
+f_vas = { value = 0.1851, unit = "dimensionless", source = "ModelChoice", notes = "no blood content of the pig organs in vivo found; the vascular fraction of the human organ (physiology_human.toml, male, ICRP 89); residual blood after exsanguination (Hansard 1956 via Lin 2020 Table 31, growing swine, % of organ weight, a lower bound): 2.2" }
+f_int = { value = 0.07823, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (httk 2.7.4 tissue.data, Human, Schmitt 2008, Fint of gut); httk has Fint of human and rat only, the human value is used for the pig (a choice)" }
+
+[male.organs.mu]
+mass = { value = 16.23, unit = "kg", source = "ModelChoice", notes = "derived: Lin 2020 Table 10 (male swine), Muscle 38.46 % of body weight (79 animals, 3 studies), times the body weight 30 kg; organ weight as dissected (with its residual blood); plus its share 0.7464 of the rest of body of Lin 2020 (6.279 kg: head, feet, tail, gut contents, connective tissue), in proportion to the masses of muscle, skin and bone, a choice of the library (adipose, the remainder of the body weight, would otherwise take it): 11.54 + 4.687 kg" }
+flow = { value = 0.2679, unit = "dimensionless", source = "Lin2020", notes = "derived: perfusion 10.10 ml/min/100 g (Lin 2020 Table 27, 45 animals, 4 studies) times the muscle mass 38.46 % of body weight over the cardiac output 145 ml/min/kg (Table 17); Table 28 gives 34.2 +- 30.6 %, dominated by one study (Lundeen 1983), not used" }
+blood = { value = 0.206, unit = "dimensionless", source = "ModelChoice", notes = "derived: f_vas/(1 - f_vas) * mass / V_blood, the blood of the organ at the human vascular fraction, as fraction of the blood volume of the pig; with the mass which includes the share of the rest of body" }
+f_vas = { value = 0.02495, unit = "dimensionless", source = "ModelChoice", notes = "no blood content of the pig organs in vivo found; the vascular fraction of the human organ (physiology_human.toml, male, ICRP 89); residual blood after exsanguination (Hansard 1956 via Lin 2020 Table 31, growing swine, % of organ weight, a lower bound): 1.5 loin, 0.80 gastrocnemius" }
+f_int = { value = 0.1463, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.15 (httk 2.7.4 tissue.data, Human, Schmitt 2008, Fint of muscle); httk has Fint of human and rat only, the human value is used for the pig (a choice)" }
+
+[male.organs.sk]
+mass = { value = 1.886, unit = "kg", source = "ModelChoice", notes = "derived: Lin 2020 Table 10 (male swine), Skin 4.47 % of body weight (86 animals, 2 studies), times the body weight 30 kg; organ weight as dissected (with its residual blood); plus its share 0.0867 of the rest of body of Lin 2020 (6.279 kg: head, feet, tail, gut contents, connective tissue), in proportion to the masses of muscle, skin and bone, a choice of the library (adipose, the remainder of the body weight, would otherwise take it): 1.341 + 0.5446 kg" }
+density = { value = 1.1, unit = "kg/l", source = "ModelChoice", notes = "no density of the pig organ found; the human value of ICRP 89 Section 10.6 para 529" }
+flow = { value = 0.035, unit = "dimensionless", source = "Lin2020", notes = "Lin 2020 Table 28, 3.5 % of cardiac output (34 animals, 3 studies, unanesthetized, microspheres; sexes pooled); perfusion times the relative skin weight of Lin 2020 Table 9 per study" }
+blood = { value = 0.04506, unit = "dimensionless", source = "ModelChoice", notes = "derived: f_vas/(1 - f_vas) * mass/density / V_blood, the blood of the organ at the human vascular fraction, as fraction of the blood volume of the pig; with the mass which includes the share of the rest of body" }
+f_vas = { value = 0.05033, unit = "dimensionless", source = "ModelChoice", notes = "no blood content of the pig organs in vivo found; the vascular fraction of the human organ (physiology_human.toml, male, ICRP 89); residual blood after exsanguination (Hansard 1956 via Lin 2020 Table 31, growing swine, % of organ weight, a lower bound): not measured" }
+f_int = { value = 0.5698, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.6 (httk 2.7.4 tissue.data, Human, Schmitt 2008, Fint of skin); httk has Fint of human and rat only, the human value is used for the pig (a choice)" }
+
+[male.organs.ad]
+mass = { value = 4.479, unit = "kg", source = "Lin2020", notes = "derived: Lin 2020 Table 10 (male swine), Adipose tissue 14.93 % of body weight (122 animals, 4 studies), times the body weight 30 kg; organ weight as dissected (with its residual blood)" }
+flow = { value = 0.04098, unit = "dimensionless", source = "Moher2002", notes = "derived: resting subcutaneous adipose perfusion 3.98 +- 2.72 ml/min/100 g (Moher 2002, abstract, 133Xe washout, 19 female Yucatan minipigs) times the adipose mass 14.93 % of body weight (Lin 2020) over the cardiac output 145 ml/min/kg (Lin 2020 Table 17)" }
+blood = { value = 0.04061, unit = "dimensionless", source = "ModelChoice", notes = "derived: f_vas/(1 - f_vas) * mass / V_blood, the blood of the organ at the human vascular fraction, as fraction of the blood volume of the pig" }
+f_vas = { value = 0.01795, unit = "dimensionless", source = "ModelChoice", notes = "no blood content of the pig organs in vivo found; the vascular fraction of the human organ (physiology_human.toml, male, ICRP 89); residual blood after exsanguination (Hansard 1956 via Lin 2020 Table 31, growing swine, % of organ weight, a lower bound): not measured" }
+f_int = { value = 0.1375, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.14 (httk 2.7.4 tissue.data, Human, Schmitt 2008, Fint of adipose); httk has Fint of human and rat only, the human value is used for the pig (a choice)" }
+
+[male.organs.bo]
+mass = { value = 3.628, unit = "kg", source = "ModelChoice", notes = "derived: Lin 2020 Table 10 (male swine), Bone 8.6 % of body weight (86 animals, 2 studies), times the body weight 30 kg; organ weight as dissected (with its residual blood); plus its share 0.1669 of the rest of body of Lin 2020 (6.279 kg: head, feet, tail, gut contents, connective tissue), in proportion to the masses of muscle, skin and bone, a choice of the library (adipose, the remainder of the body weight, would otherwise take it): 2.58 + 1.048 kg" }
+density = { value = 1.3, unit = "kg/l", source = "ModelChoice", notes = "no density of the pig organ found; the human value of ICRP 89 Table 2.20" }
+flow = { value = 0.01836, unit = "dimensionless", source = "ModelChoice", notes = "derived: no bone blood flow of the pig found; the human perfusion of the skeleton (3.095 ml/min/100 g = 5 % of 6.5 l/min over 10.5 kg, ICRP 89 Tables 2.8, 2.39, 2.40) times the bone mass 8.6 % of body weight over the cardiac output 145 ml/min/kg (a choice)" }
+blood = { value = 0.06359, unit = "dimensionless", source = "ModelChoice", notes = "derived: f_vas/(1 - f_vas) * mass/density / V_blood, the blood of the organ at the human vascular fraction, as fraction of the blood volume of the pig; with the mass which includes the share of the rest of body" }
+f_vas = { value = 0.04392, unit = "dimensionless", source = "ModelChoice", notes = "no blood content of the pig organs in vivo found; the vascular fraction of the human organ (physiology_human.toml, male, ICRP 89); residual blood after exsanguination (Hansard 1956 via Lin 2020 Table 31, growing swine, % of organ weight, a lower bound): not measured" }
+f_int = { value = 0.09561, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.1 (httk 2.7.4 tissue.data, Human, Schmitt 2008, Fint of bone); httk has Fint of human and rat only, the human value is used for the pig (a choice)" }
+
+[male.organs.go]
+mass = { value = 0.08884, unit = "kg", source = "Ellegaard2009", notes = "derived: 0.2961 % of body weight, Ellegaard 2009 Goettingen minipig, testes 42.05 g of a body weight of 14.2 kg (6 months, n = 20); no gonad weight of the domestic pig found (Lin 2020 has none), the relative weight of the minipig of 6 months is used for the domestic pig (a choice)" }
+density = { value = 1.04, unit = "kg/l", source = "ModelChoice", notes = "no density of the pig organ found; the human value of ICRP 89 Section 8.2.5 para 354" }
+flow = { value = 0.001896, unit = "dimensionless", source = "ModelChoice", notes = "derived: no gonad blood flow of the pig found; the human perfusion of the testes (9.286 ml/min/100 g = 0.05 % of 6.5 l/min over 35 g, ICRP 89) times the gonad mass over the cardiac output 145 ml/min/kg (a choice)" }
+blood = { value = 0.002669, unit = "dimensionless", source = "ModelChoice", notes = "derived: f_vas/(1 - f_vas) * mass/density / V_blood, the blood of the organ at the human vascular fraction, as fraction of the blood volume of the pig" }
+f_vas = { value = 0.05926, unit = "dimensionless", source = "ModelChoice", notes = "no blood content of the pig organs in vivo found; the vascular fraction of the human organ (physiology_human.toml, male, ICRP 89); residual blood after exsanguination (Hansard 1956 via Lin 2020 Table 31, growing swine, % of organ weight, a lower bound): not measured" }
+f_int = { value = 0.09031, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (httk 2.7.4 tissue.data, Human, Schmitt 2008, Fint of gut); httk has Fint of human and rat only, the human value is used for the pig (a choice)" }
+
+[male.unmapped.adrenals]
+mass = { value = 0.0015, unit = "kg", source = "Lin2020", notes = "derived: Lin 2020 Table 10, Adrenal glands 0.005 % of body weight, times 30 kg" }
+flow = { value = 0.0006, unit = "dimensionless", source = "Lin2020", notes = "Table 28, Adrenal glands 0.06 % of cardiac output (43 animals, 4 studies)" }
+
+[male.unmapped.thyroid]
+mass = { value = 0.0024, unit = "kg", source = "Lin2020", notes = "derived: Lin 2020 Table 10, Thyroid 0.008 % of body weight, times 30 kg" }
+flow = { value = 0.0013, unit = "dimensionless", source = "Lin2020", notes = "Table 28, Thyroid 0.13 % of cardiac output (9 animals, 1 studies)" }
+
+[male.unmapped.thymus]
+mass = { value = 0.084, unit = "kg", source = "Lin2020", notes = "derived: Lin 2020 Table 10, Thymus 0.28 % of body weight, times 30 kg" }
+
+[male.unmapped.other_tissues]
+mass = { value = 0, unit = "kg", source = "ModelChoice", notes = "derived: body weight less all masses above, the gonads and the blood collected at slaughter (3.85 % of body weight, Lin 2020 Table 10); the rest of body of Lin 2020 (head, feet, tail, gut contents, connective tissue; 21.38 % in Table 10, 19.29 % in Table 9); assigned to muscle, skin and bone in proportion to their masses (6.279 kg), a choice of the library" }
+flow = { value = 0.161, unit = "dimensionless", source = "ModelChoice", notes = "derived: the remainder of the flows to one (bronchial flow, rest of body; not measured)" }
+blood = { value = 0.0226, unit = "dimensionless", source = "ModelChoice", notes = "the human unmapped blood of ICRP 89 Table 2.14 (adrenals, thyroid, urinary bladder, lymph nodes, all other tissues: 0.0006 + 0.0006 + 0.0002 + 0.002 + 0.0192)" }
+
+[female]
+bodyweight = { value = 30.0, unit = "kg", source = "ModelChoice", notes = "reference domestic pig (Landrace x Yorkshire or Large White crosses), growing, about 69 days (Lin 2020 Eq. 7, BW = 3.37 + 0.387 age in days, inverted); the conscious hemodynamic studies of Lin 2020 Table 17 and 28 had 20 to 58.7 kg, their mean weighted by animals about 30 kg (Lin 2020 Appendix S16); Upton 2008 uses 25 kg as the standard pig of biomedical research (as cited by Lin 2020)" }
+body_surface_area = { value = 0.9781, unit = "m2", source = "Gasthuys2017", notes = "derived: Meeh formula k*BW^(2/3) with k = 0.1013 m2/kg^(2/3), the mean of k = BSA/BW^(2/3) of the four groups of Table 1 (BSA by CT for 2.01, 10.0, 13.9 kg; 2.42 m2 at 112.88 kg; Belgian Landrace x Large White, male)" }
+cardiac_output = { value = 4.35, unit = "l/min", source = "Lin2020", notes = "derived: Table 17, 8.70 +- 1.62 l/h/kg (83 unanesthetized animals, 7 studies, 20-58.7 kg) times 30 kg; Hannon 1989 (immature Yorkshire x Duroc, 21.3 kg): 147 ml/min/kg (Lin 2020 Appendix S16, Table 9 of the report); no allometric exponent within the pig found, linear in body weight (a choice)" }
+hematocrit = { value = 0.401, unit = "dimensionless", source = "Lin2020", notes = "Table 37, growing swine 40.1 +- 6.4 % (65.6 kg, 113 animals, 2 studies); young swine 39.9 +- 5.4 % (17.6 kg), all ages 41.2 +- 5.0 % (Table 36, 56.3 kg, 684 animals, 10 studies)" }
+gfr = { value = 129.3, unit = "ml/min", source = "Gasthuys2017", notes = "derived: Table 2, exo-iohexol plasma clearance 4.31 +- 0.70 ml/min/kg at 7 weeks (13.9 kg, 16 male Belgian Landrace x Large White piglets) times 30 kg; within the growing pig the GFR scales with BW^1.092 at a given plasma creatinine (Table 3, model I, eGFR = 1.879 BW^1.092 / Pcr^0.600)" }
+hepatic_artery_fraction = { value = 0.1401, unit = "dimensionless", source = "Lin2020", notes = "derived: Table 28, hepatic artery 4.4 % of the liver total 31.4 % (hepatic artery + stomach, small and large intestine, spleen and pancreas); with the measured portal vein flow (19.9 %) 4.4/(4.4 + 19.9) = 0.181" }
+
+[female.blood]
+volume = { value = 2.016, unit = "l", source = "Hannon1985", notes = "derived: 67.2 +- 4.12 ml/kg (abstract; 51Cr red cells, body-to-large vessel hematocrit 0.9 assumed; 20 sham-operated immature conscious pigs) times 30 kg; splenectomized 67.3 +- 3.67 ml/kg; Lin 2020 Table 9 blood 4.12 % of body weight is the blood collected at slaughter, not the circulating volume" }
+density = { value = 1.06, unit = "kg/l", source = "ModelChoice", notes = "no density of pig blood found; the human value of ICRP 89 Section 7.2.1" }
+arterial = { value = 0.09469, unit = "dimensionless", source = "ModelChoice", notes = "derived: no distribution of the pig blood over the vascular pools found; the blood outside the organs (0.2976 = 1 - organ blood - unmapped blood) split as the human pools of physiology_human.toml (arterial 0.105, venous 0.2239, portal 0.00113)" }
+venous = { value = 0.2019, unit = "dimensionless", source = "ModelChoice", notes = "derived: no distribution of the pig blood over the vascular pools found; the blood outside the organs (0.2976 = 1 - organ blood - unmapped blood) split as the human pools of physiology_human.toml (arterial 0.105, venous 0.2239, portal 0.00113)" }
+portal = { value = 0.001019, unit = "dimensionless", source = "ModelChoice", notes = "derived: no distribution of the pig blood over the vascular pools found; the blood outside the organs (0.2976 = 1 - organ blood - unmapped blood) split as the human pools of physiology_human.toml (arterial 0.105, venous 0.2239, portal 0.00113)" }
+
+[female.organs.lu]
+mass = { value = 0.27, unit = "kg", source = "Lin2020", notes = "derived: Lin 2020 Table 11 (female swine), Lungs 0.9 % of body weight (119 animals, 2 studies), times the body weight 30 kg; organ weight as dissected (with its residual blood)" }
+density = { value = 1.0, unit = "kg/l", source = "ModelChoice", notes = "no density of the pig organ found; the human value of ICRP 89 Section 5.3.6 para 166" }
+flow = { value = 1.0, unit = "dimensionless", source = "Lin2020", notes = "in series, the lung receives the cardiac output; the bronchial flow is in [unmapped.other_tissues]" }
+blood = { value = 0.1555, unit = "dimensionless", source = "ModelChoice", notes = "derived: f_vas/(1 - f_vas) * mass/density / V_blood, the blood of the organ at the human vascular fraction, as fraction of the blood volume of the pig" }
+f_vas = { value = 0.5372, unit = "dimensionless", source = "ModelChoice", notes = "no blood content of the pig organs in vivo found; the vascular fraction of the human organ (physiology_human.toml, female, ICRP 89); residual blood after exsanguination (Hansard 1956 via Lin 2020 Table 31, growing swine, % of organ weight, a lower bound): 24.8" }
+f_int = { value = 0.09256, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.2 (httk 2.7.4 tissue.data, Human, Schmitt 2008, Fint of lung); httk has Fint of human and rat only, the human value is used for the pig (a choice)" }
+
+[female.organs.he]
+mass = { value = 0.108, unit = "kg", source = "Lin2020", notes = "derived: Lin 2020 Table 11 (female swine), Heart 0.36 % of body weight (196 animals, 6 studies), times the body weight 30 kg; organ weight as dissected (with its residual blood)" }
+flow = { value = 0.03, unit = "dimensionless", source = "Lin2020", notes = "Lin 2020 Table 28, 3.0 % of cardiac output (9 animals, 1 studies, unanesthetized, microspheres; sexes pooled); sum of septum, left and right ventricle of Tranquilli 1982" }
+blood = { value = 0.008354, unit = "dimensionless", source = "ModelChoice", notes = "derived: f_vas/(1 - f_vas) * mass / V_blood, the blood of the organ at the human vascular fraction, as fraction of the blood volume of the pig" }
+f_vas = { value = 0.1349, unit = "dimensionless", source = "ModelChoice", notes = "no blood content of the pig organs in vivo found; the vascular fraction of the human organ (physiology_human.toml, female, ICRP 89); residual blood after exsanguination (Hansard 1956 via Lin 2020 Table 31, growing swine, % of organ weight, a lower bound): 3.1" }
+f_int = { value = 0.2163, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.25 (httk 2.7.4 tissue.data, Human, Schmitt 2008, Fint of heart); httk has Fint of human and rat only, the human value is used for the pig (a choice)" }
+
+[female.organs.br]
+mass = { value = 0.066, unit = "kg", source = "Lin2020", notes = "derived: Lin 2020 Table 9 (swine, both sexes, all ages), Brain 0.22 % of body weight (37 animals, 1 studies); not in Table 11 (female swine), times the body weight 30 kg; organ weight as dissected (with its residual blood)" }
+density = { value = 1.04, unit = "kg/l", source = "ModelChoice", notes = "no density of the pig organ found; the human value of ICRP 89 Section 11.3.2 para 554" }
+flow = { value = 0.015, unit = "dimensionless", source = "Lin2020", notes = "Lin 2020 Table 28, 1.5 % of cardiac output (35 animals, 3 studies, unanesthetized, microspheres; sexes pooled)" }
+blood = { value = 0.001179, unit = "dimensionless", source = "ModelChoice", notes = "derived: f_vas/(1 - f_vas) * mass/density / V_blood, the blood of the organ at the human vascular fraction, as fraction of the blood volume of the pig" }
+f_vas = { value = 0.03609, unit = "dimensionless", source = "ModelChoice", notes = "no blood content of the pig organs in vivo found; the vascular fraction of the human organ (physiology_human.toml, female, ICRP 89); residual blood after exsanguination (Hansard 1956 via Lin 2020 Table 31, growing swine, % of organ weight, a lower bound): not measured" }
+f_int = { value = 0.00482, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.005 (httk 2.7.4 tissue.data, Human, Schmitt 2008, Fint of brain); httk has Fint of human and rat only, the human value is used for the pig (a choice)" }
+
+[female.organs.li]
+mass = { value = 0.567, unit = "kg", source = "Lin2020", notes = "derived: Lin 2020 Table 11 (female swine), Liver 1.89 % of body weight (1002 animals, 8 studies), times the body weight 30 kg; organ weight as dissected (with its residual blood)" }
+flow = { value = 0.044, unit = "dimensionless", source = "Lin2020", notes = "Lin 2020 Table 28, 4.4 % of cardiac output (55 animals, 5 studies, unanesthetized, microspheres; sexes pooled); hepatic artery (portal vein 19.9 % of cardiac output, 32 animals, 3 studies); the portal organs feed the liver in addition" }
+blood = { value = 0.07836, unit = "dimensionless", source = "ModelChoice", notes = "derived: f_vas/(1 - f_vas) * mass / V_blood, the blood of the organ at the human vascular fraction, as fraction of the blood volume of the pig" }
+f_vas = { value = 0.2179, unit = "dimensionless", source = "ModelChoice", notes = "no blood content of the pig organs in vivo found; the vascular fraction of the human organ (physiology_human.toml, female, ICRP 89); residual blood after exsanguination (Hansard 1956 via Lin 2020 Table 31, growing swine, % of organ weight, a lower bound): 5.7" }
+f_int = { value = 0.1799, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.23 (httk 2.7.4 tissue.data, Human, Schmitt 2008, Fint of liver); httk has Fint of human and rat only, the human value is used for the pig (a choice)" }
+
+[female.organs.ki]
+mass = { value = 0.105, unit = "kg", source = "Lin2020", notes = "derived: Lin 2020 Table 11 (female swine), Kidneys 0.35 % of body weight (1318 animals, 8 studies), times the body weight 30 kg; organ weight as dissected (with its residual blood)" }
+density = { value = 1.05, unit = "kg/l", source = "ModelChoice", notes = "no density of the pig organ found; the human value of ICRP 89 Section 8.2.1 para 337" }
+flow = { value = 0.114, unit = "dimensionless", source = "Lin2020", notes = "Lin 2020 Table 28, 11.4 % of cardiac output (56 animals, 5 studies, unanesthetized, microspheres; sexes pooled); includes the renal blood flow of Hannon 1989 (11.4 % of cardiac output)" }
+blood = { value = 0.01477, unit = "dimensionless", source = "ModelChoice", notes = "derived: f_vas/(1 - f_vas) * mass/density / V_blood, the blood of the organ at the human vascular fraction, as fraction of the blood volume of the pig" }
+f_vas = { value = 0.2295, unit = "dimensionless", source = "ModelChoice", notes = "no blood content of the pig organs in vivo found; the vascular fraction of the human organ (physiology_human.toml, female, ICRP 89); residual blood after exsanguination (Hansard 1956 via Lin 2020 Table 31, growing swine, % of organ weight, a lower bound): 7.2" }
+f_int = { value = 0.1271, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.165 (httk 2.7.4 tissue.data, Human, Schmitt 2008, Fint of kidney); httk has Fint of human and rat only, the human value is used for the pig (a choice)" }
+
+[female.organs.st]
+mass = { value = 0.189, unit = "kg", source = "Lin2020", notes = "derived: Lin 2020 Table 11 (female swine), Stomach 0.63 % of body weight (131 animals, 3 studies), times the body weight 30 kg; organ weight as dissected (with its residual blood)" }
+density = { value = 1.045, unit = "kg/l", source = "ModelChoice", notes = "no density of the pig organ found; the human value of ICRP 89 Section 6.3 para 191" }
+flow = { value = 0.021, unit = "dimensionless", source = "Lin2020", notes = "Lin 2020 Table 28, 2.1 % of cardiac output (34 animals, 4 studies, unanesthetized, microspheres; sexes pooled)" }
+blood = { value = 0.02612, unit = "dimensionless", source = "ModelChoice", notes = "derived: f_vas/(1 - f_vas) * mass/density / V_blood, the blood of the organ at the human vascular fraction, as fraction of the blood volume of the pig" }
+f_vas = { value = 0.2255, unit = "dimensionless", source = "ModelChoice", notes = "no blood content of the pig organs in vivo found; the vascular fraction of the human organ (physiology_human.toml, female, ICRP 89); residual blood after exsanguination (Hansard 1956 via Lin 2020 Table 31, growing swine, % of organ weight, a lower bound): not measured" }
+f_int = { value = 0.07435, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (httk 2.7.4 tissue.data, Human, Schmitt 2008, Fint of gut); httk has Fint of human and rat only, the human value is used for the pig (a choice)" }
+
+[female.organs.si]
+mass = { value = 0.657, unit = "kg", source = "Lin2020", notes = "derived: Lin 2020 Table 9 (swine, both sexes, all ages), Small intestine 2.19 % of body weight (626 animals, 18 studies); the sex tables give small and large intestine from fewer studies whose sum differs from their own intestines total, times the body weight 30 kg; organ weight as dissected (with its residual blood)" }
+density = { value = 1.045, unit = "kg/l", source = "ModelChoice", notes = "no density of the pig organ found; the human value of ICRP 89 Section 6.3 para 191" }
+flow = { value = 0.153, unit = "dimensionless", source = "Lin2020", notes = "Lin 2020 Table 28, 15.3 % of cardiac output (52 animals, 5 studies, unanesthetized, microspheres; sexes pooled)" }
+blood = { value = 0.08052, unit = "dimensionless", source = "ModelChoice", notes = "derived: f_vas/(1 - f_vas) * mass/density / V_blood, the blood of the organ at the human vascular fraction, as fraction of the blood volume of the pig" }
+f_vas = { value = 0.2052, unit = "dimensionless", source = "ModelChoice", notes = "no blood content of the pig organs in vivo found; the vascular fraction of the human organ (physiology_human.toml, female, ICRP 89); residual blood after exsanguination (Hansard 1956 via Lin 2020 Table 31, growing swine, % of organ weight, a lower bound): not measured" }
+f_int = { value = 0.0763, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (httk 2.7.4 tissue.data, Human, Schmitt 2008, Fint of gut); httk has Fint of human and rat only, the human value is used for the pig (a choice)" }
+
+[female.organs.la]
+mass = { value = 0.441, unit = "kg", source = "Lin2020", notes = "derived: Lin 2020 Table 9 (swine, both sexes, all ages), Large intestine 1.47 % of body weight (282 animals, 11 studies); the sex tables give small and large intestine from fewer studies whose sum differs from their own intestines total, times the body weight 30 kg; organ weight as dissected (with its residual blood)" }
+density = { value = 1.045, unit = "kg/l", source = "ModelChoice", notes = "no density of the pig organ found; the human value of ICRP 89 Section 6.3 para 191" }
+flow = { value = 0.051, unit = "dimensionless", source = "Lin2020", notes = "Lin 2020 Table 28, 5.1 % of cardiac output (18 animals, 2 studies, unanesthetized, microspheres; sexes pooled)" }
+blood = { value = 0.05214, unit = "dimensionless", source = "ModelChoice", notes = "derived: f_vas/(1 - f_vas) * mass/density / V_blood, the blood of the organ at the human vascular fraction, as fraction of the blood volume of the pig" }
+f_vas = { value = 0.1994, unit = "dimensionless", source = "ModelChoice", notes = "no blood content of the pig organs in vivo found; the vascular fraction of the human organ (physiology_human.toml, female, ICRP 89); residual blood after exsanguination (Hansard 1956 via Lin 2020 Table 31, growing swine, % of organ weight, a lower bound): not measured" }
+f_int = { value = 0.07686, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (httk 2.7.4 tissue.data, Human, Schmitt 2008, Fint of gut); httk has Fint of human and rat only, the human value is used for the pig (a choice)" }
+
+[female.organs.sp]
+mass = { value = 0.063, unit = "kg", source = "Lin2020", notes = "derived: Lin 2020 Table 11 (female swine), Spleen 0.21 % of body weight (492 animals, 4 studies), times the body weight 30 kg; organ weight as dissected (with its residual blood)" }
+density = { value = 1.06, unit = "kg/l", source = "ModelChoice", notes = "no density of the pig organ found; the human value of ICRP 89 Section 11.10.2 para 600" }
+flow = { value = 0.031, unit = "dimensionless", source = "Lin2020", notes = "Lin 2020 Table 28, 3.1 % of cardiac output (52 animals, 5 studies, unanesthetized, microspheres; sexes pooled)" }
+blood = { value = 0.01313, unit = "dimensionless", source = "ModelChoice", notes = "derived: f_vas/(1 - f_vas) * mass/density / V_blood, the blood of the organ at the human vascular fraction, as fraction of the blood volume of the pig" }
+f_vas = { value = 0.3081, unit = "dimensionless", source = "ModelChoice", notes = "no blood content of the pig organs in vivo found; the vascular fraction of the human organ (physiology_human.toml, female, ICRP 89); residual blood after exsanguination (Hansard 1956 via Lin 2020 Table 31, growing swine, % of organ weight, a lower bound): 14.6" }
+f_int = { value = 0.1764, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.255 (httk 2.7.4 tissue.data, Human, Schmitt 2008, Fint of spleen); httk has Fint of human and rat only, the human value is used for the pig (a choice)" }
+
+[female.organs.pa]
+mass = { value = 0.03, unit = "kg", source = "Lin2020", notes = "derived: Lin 2020 Table 11 (female swine), Pancreas 0.1 % of body weight (12 animals, 1 studies), times the body weight 30 kg; organ weight as dissected (with its residual blood)" }
+flow = { value = 0.014, unit = "dimensionless", source = "Lin2020", notes = "Lin 2020 Table 28, 1.4 % of cardiac output (9 animals, 1 studies, unanesthetized, microspheres; sexes pooled)" }
+blood = { value = 0.002902, unit = "dimensionless", source = "ModelChoice", notes = "derived: f_vas/(1 - f_vas) * mass / V_blood, the blood of the organ at the human vascular fraction, as fraction of the blood volume of the pig" }
+f_vas = { value = 0.1632, unit = "dimensionless", source = "ModelChoice", notes = "no blood content of the pig organs in vivo found; the vascular fraction of the human organ (physiology_human.toml, female, ICRP 89); residual blood after exsanguination (Hansard 1956 via Lin 2020 Table 31, growing swine, % of organ weight, a lower bound): 2.2" }
+f_int = { value = 0.08033, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (httk 2.7.4 tissue.data, Human, Schmitt 2008, Fint of gut); httk has Fint of human and rat only, the human value is used for the pig (a choice)" }
+
+[female.organs.mu]
+mass = { value = 14.62, unit = "kg", source = "ModelChoice", notes = "derived: Lin 2020 Table 11 (female swine), Muscle 34.09 % of body weight (19 animals, 1 studies), times the body weight 30 kg; organ weight as dissected (with its residual blood); plus its share 0.6834 of the rest of body of Lin 2020 (6.43 kg: head, feet, tail, gut contents, connective tissue), in proportion to the masses of muscle, skin and bone, a choice of the library (adipose, the remainder of the body weight, would otherwise take it): 10.23 + 4.394 kg" }
+flow = { value = 0.2375, unit = "dimensionless", source = "Lin2020", notes = "derived: perfusion 10.10 ml/min/100 g (Lin 2020 Table 27, 45 animals, 4 studies) times the muscle mass 34.09 % of body weight over the cardiac output 145 ml/min/kg (Table 17); Table 28 gives 34.2 +- 30.6 %, dominated by one study (Lundeen 1983), not used" }
+blood = { value = 0.1697, unit = "dimensionless", source = "ModelChoice", notes = "derived: f_vas/(1 - f_vas) * mass / V_blood, the blood of the organ at the human vascular fraction, as fraction of the blood volume of the pig; with the mass which includes the share of the rest of body" }
+f_vas = { value = 0.02286, unit = "dimensionless", source = "ModelChoice", notes = "no blood content of the pig organs in vivo found; the vascular fraction of the human organ (physiology_human.toml, female, ICRP 89); residual blood after exsanguination (Hansard 1956 via Lin 2020 Table 31, growing swine, % of organ weight, a lower bound): 1.5 loin, 0.80 gastrocnemius" }
+f_int = { value = 0.1466, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.15 (httk 2.7.4 tissue.data, Human, Schmitt 2008, Fint of muscle); httk has Fint of human and rat only, the human value is used for the pig (a choice)" }
+
+[female.organs.sk]
+mass = { value = 2.174, unit = "kg", source = "ModelChoice", notes = "derived: Lin 2020 Table 11 (female swine), Skin 5.07 % of body weight (40 animals, 2 studies), times the body weight 30 kg; organ weight as dissected (with its residual blood); plus its share 0.1016 of the rest of body of Lin 2020 (6.43 kg: head, feet, tail, gut contents, connective tissue), in proportion to the masses of muscle, skin and bone, a choice of the library (adipose, the remainder of the body weight, would otherwise take it): 1.521 + 0.6533 kg" }
+density = { value = 1.1, unit = "kg/l", source = "ModelChoice", notes = "no density of the pig organ found; the human value of ICRP 89 Section 10.6 para 529" }
+flow = { value = 0.035, unit = "dimensionless", source = "Lin2020", notes = "Lin 2020 Table 28, 3.5 % of cardiac output (34 animals, 3 studies, unanesthetized, microspheres; sexes pooled); perfusion times the relative skin weight of Lin 2020 Table 9 per study" }
+blood = { value = 0.05486, unit = "dimensionless", source = "ModelChoice", notes = "derived: f_vas/(1 - f_vas) * mass/density / V_blood, the blood of the organ at the human vascular fraction, as fraction of the blood volume of the pig; with the mass which includes the share of the rest of body" }
+f_vas = { value = 0.05299, unit = "dimensionless", source = "ModelChoice", notes = "no blood content of the pig organs in vivo found; the vascular fraction of the human organ (physiology_human.toml, female, ICRP 89); residual blood after exsanguination (Hansard 1956 via Lin 2020 Table 31, growing swine, % of organ weight, a lower bound): not measured" }
+f_int = { value = 0.5682, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.6 (httk 2.7.4 tissue.data, Human, Schmitt 2008, Fint of skin); httk has Fint of human and rat only, the human value is used for the pig (a choice)" }
+
+[female.organs.ad]
+mass = { value = 3.9, unit = "kg", source = "Lin2020", notes = "derived: Lin 2020 Table 11 (female swine), Adipose tissue 13.0 % of body weight (40 animals, 2 studies), times the body weight 30 kg; organ weight as dissected (with its residual blood)" }
+flow = { value = 0.03568, unit = "dimensionless", source = "Moher2002", notes = "derived: resting subcutaneous adipose perfusion 3.98 +- 2.72 ml/min/100 g (Moher 2002, abstract, 133Xe washout, 19 female Yucatan minipigs) times the adipose mass 13 % of body weight (Lin 2020) over the cardiac output 145 ml/min/kg (Lin 2020 Table 17)" }
+blood = { value = 0.03376, unit = "dimensionless", source = "ModelChoice", notes = "derived: f_vas/(1 - f_vas) * mass / V_blood, the blood of the organ at the human vascular fraction, as fraction of the blood volume of the pig" }
+f_vas = { value = 0.01715, unit = "dimensionless", source = "ModelChoice", notes = "no blood content of the pig organs in vivo found; the vascular fraction of the human organ (physiology_human.toml, female, ICRP 89); residual blood after exsanguination (Hansard 1956 via Lin 2020 Table 31, growing swine, % of organ weight, a lower bound): not measured" }
+f_int = { value = 0.1376, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.14 (httk 2.7.4 tissue.data, Human, Schmitt 2008, Fint of adipose); httk has Fint of human and rat only, the human value is used for the pig (a choice)" }
+
+[female.organs.bo]
+mass = { value = 4.602, unit = "kg", source = "ModelChoice", notes = "derived: Lin 2020 Table 11 (female swine), Bone 10.73 % of body weight (40 animals, 2 studies), times the body weight 30 kg; organ weight as dissected (with its residual blood); plus its share 0.2150 of the rest of body of Lin 2020 (6.43 kg: head, feet, tail, gut contents, connective tissue), in proportion to the masses of muscle, skin and bone, a choice of the library (adipose, the remainder of the body weight, would otherwise take it): 3.219 + 1.383 kg" }
+density = { value = 1.3, unit = "kg/l", source = "ModelChoice", notes = "no density of the pig organ found; the human value of ICRP 89 Table 2.20" }
+flow = { value = 0.0229, unit = "dimensionless", source = "ModelChoice", notes = "derived: no bone blood flow of the pig found; the human perfusion of the skeleton (3.095 ml/min/100 g = 5 % of 6.5 l/min over 10.5 kg, ICRP 89 Tables 2.8, 2.39, 2.40) times the bone mass 10.73 % of body weight over the cardiac output 145 ml/min/kg (a choice)" }
+blood = { value = 0.07989, unit = "dimensionless", source = "ModelChoice", notes = "derived: f_vas/(1 - f_vas) * mass/density / V_blood, the blood of the organ at the human vascular fraction, as fraction of the blood volume of the pig; with the mass which includes the share of the rest of body" }
+f_vas = { value = 0.04352, unit = "dimensionless", source = "ModelChoice", notes = "no blood content of the pig organs in vivo found; the vascular fraction of the human organ (physiology_human.toml, female, ICRP 89); residual blood after exsanguination (Hansard 1956 via Lin 2020 Table 31, growing swine, % of organ weight, a lower bound): not measured" }
+f_int = { value = 0.09565, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.1 (httk 2.7.4 tissue.data, Human, Schmitt 2008, Fint of bone); httk has Fint of human and rat only, the human value is used for the pig (a choice)" }
+
+[female.organs.go]
+mass = { value = 0.004274, unit = "kg", source = "Ellegaard2009", notes = "derived: 0.01425 % of body weight, Ellegaard 2009 Goettingen minipig, ovaries 2.08 g of a body weight of 14.6 kg (6 months, n = 20); no gonad weight of the domestic pig found (Lin 2020 has none), the relative weight of the minipig of 6 months is used for the domestic pig (a choice)" }
+density = { value = 1.04, unit = "kg/l", source = "ModelChoice", notes = "no density of the pig organ found; the human value of ICRP 89 Section 8.2.5 para 354" }
+flow = { value = 0.00009123, unit = "dimensionless", source = "ModelChoice", notes = "derived: no gonad blood flow of the pig found; the human perfusion of the testes (9.286 ml/min/100 g = 0.05 % of 6.5 l/min over 35 g, ICRP 89) times the gonad mass over the cardiac output 145 ml/min/kg (a choice)" }
+blood = { value = 0.0001518, unit = "dimensionless", source = "ModelChoice", notes = "derived: f_vas/(1 - f_vas) * mass/density / V_blood, the blood of the organ at the human vascular fraction, as fraction of the blood volume of the pig" }
+f_vas = { value = 0.0693, unit = "dimensionless", source = "ModelChoice", notes = "no blood content of the pig organs in vivo found; the vascular fraction of the human organ (physiology_human.toml, female, ICRP 89); residual blood after exsanguination (Hansard 1956 via Lin 2020 Table 31, growing swine, % of organ weight, a lower bound): not measured" }
+f_int = { value = 0.08935, unit = "dimensionless", source = "httk", notes = "derived: Fint*(1 - f_vas), Fint = 0.096 (httk 2.7.4 tissue.data, Human, Schmitt 2008, Fint of gut); httk has Fint of human and rat only, the human value is used for the pig (a choice)" }
+
+[female.unmapped.adrenals]
+mass = { value = 0.0015, unit = "kg", source = "Lin2020", notes = "derived: Lin 2020 Table 11, Adrenal glands 0.005 % of body weight, times 30 kg" }
+flow = { value = 0.0006, unit = "dimensionless", source = "Lin2020", notes = "Table 28, Adrenal glands 0.06 % of cardiac output (43 animals, 4 studies)" }
+
+[female.unmapped.thyroid]
+mass = { value = 0.0033, unit = "kg", source = "Lin2020", notes = "derived: Lin 2020 Table 9 (both sexes), Thyroid 0.011 % of body weight, times 30 kg" }
+flow = { value = 0.0013, unit = "dimensionless", source = "Lin2020", notes = "Table 28, Thyroid 0.13 % of cardiac output (9 animals, 1 studies)" }
+
+[female.unmapped.thymus]
+mass = { value = 0.084, unit = "kg", source = "Lin2020", notes = "derived: Lin 2020 Table 9 (both sexes), Thymus 0.28 % of body weight, times 30 kg" }
+
+[female.unmapped.uterus]
+mass = { value = 0.984, unit = "kg", source = "Lin2020", notes = "derived: Lin 2020 Table 11, Uterus 3.28 % of body weight, times 30 kg" }
+
+[female.unmapped.corpora_lutea]
+mass = { value = 0.0015, unit = "kg", source = "Lin2020", notes = "derived: Lin 2020 Table 11, Corpora Lutea 0.005 % of body weight, times 30 kg" }
+
+[female.unmapped.other_tissues]
+mass = { value = 0, unit = "kg", source = "ModelChoice", notes = "derived: body weight less all masses above, the gonads and the blood collected at slaughter (3.76 % of body weight, Lin 2020 Table 11); the rest of body of Lin 2020 (head, feet, tail, gut contents, connective tissue; 22.14 % in Table 11, 19.29 % in Table 9); assigned to muscle, skin and bone in proportion to their masses (6.43 kg), a choice of the library" }
+flow = { value = 0.194, unit = "dimensionless", source = "ModelChoice", notes = "derived: the remainder of the flows to one (bronchial flow, rest of body; not measured)" }
+blood = { value = 0.0226, unit = "dimensionless", source = "ModelChoice", notes = "the human unmapped blood of ICRP 89 Table 2.14 (adrenals, thyroid, urinary bladder, lymph nodes, all other tissues: 0.0006 + 0.0006 + 0.0002 + 0.002 + 0.0192)" }

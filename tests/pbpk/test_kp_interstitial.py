@@ -20,6 +20,7 @@ from pkpdsim.pbpk import (
     Organ,
     PBPKDefinition,
     Sex,
+    Species,
     Substance,
     U,
     Value,
@@ -76,8 +77,10 @@ def distinct_shares(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     original = distribution.reference_fractions
 
-    def fractions(organ: Organ) -> dict[Sex, tuple[float, float]]:
-        f_vas, f_int = original(organ)[Sex.MALE]
+    def fractions(
+        organ: Organ, species: Species = Species.HUMAN
+    ) -> dict[Sex, tuple[float, float]]:
+        f_vas, f_int = original(organ, species)[Sex.MALE]
         return {
             Sex.MALE: (f_vas, f_int),
             Sex.FEMALE: (f_vas, FEMALE_INTERSTITIUM * f_int),

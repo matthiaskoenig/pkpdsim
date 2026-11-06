@@ -194,6 +194,18 @@ Every other id of the scheme, the ids a model rarely reads: the physiology, the 
 | id | what | made by |
 |---|---|---|
 | `AGE` | the age (yr), a covariate | `ids.AGE` |
+| `CLOCK` | the clock time (hr) at the start of a simulation of a model with circadian rhythms, an initial value | `ids.CLOCK` |
+| `GA` | the gestational age (weeks) of a pregnancy, an initial value | `ids.GA` |
+| `BW_total` | the total body weight (kg) of a pregnant woman, with the masses of the pregnancy | `ids.BW_TOTAL` |
+| `Qpla` | the blood flow of the placenta (l/min) | `ids.Q_PLACENTA` |
+| `Vpla` | the volume of the placenta (l) | `ids.V_PLACENTA` |
+| `Vfet` | the volume of the fetus (l) | `ids.V_FETUS` |
+| `Cpla_<s>` | the concentration of a substance in the placenta (mM) | `ids.placenta_species(s)` |
+| `Cfet_<s>` | the concentration of a substance in the fetus (mM) | `ids.fetus_species(s)` |
+| `Kp_pla_<s>` | the placenta to plasma coefficient of a substance | `ids.kp_placenta(s)` |
+| `Kp_fet_<s>` | the fetus to fetal plasma coefficient of a substance | `ids.kp_fetus(s)` |
+| `PS_pla_<s>` | the transfer clearance of the placenta (l/min) | `ids.ps_placenta(s)` |
+| `TOD` | the clock time (hr, 0 to 24) during a simulation of a model with circadian rhythms | `ids.TIME_OF_DAY` |
 | `BMI` | the body mass index | `ids.BMI` |
 | `BSA` | the body surface area (m2) | `ids.BSA` |
 | `FFM` | the fat-free mass (kg) | `ids.FFM` |
@@ -201,6 +213,8 @@ Every other id of the scheme, the ids a model rarely reads: the physiology, the 
 | `SV_tis` | the scaling factor of the lean tissues, the blood and the cardiac output | `ids.SV_TIS` |
 | `Vblood` | the total blood volume (l) | `ids.VBLOOD` |
 | `CO_base` | the cardiac output without impairment, of which the organ flows are fractions | `ids.CO_BASE` |
+| `b_CO` | the allometric exponent of the cardiac output on the body weight within a species (laboratory animals) | `ids.CO_EXPONENT` |
+| `b_GFR` | the allometric exponent of the GFR on the body weight within a species (laboratory animals) | `ids.GFR_EXPONENT` |
 | `Qh` | the total liver blood flow | `ids.QH` |
 | `Qha` | the blood flow of the hepatic artery | `ids.QHA` |
 | `Qpo` | the blood flow of the portal vein | `ids.QPO` |

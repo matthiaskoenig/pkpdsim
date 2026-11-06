@@ -111,6 +111,7 @@ from pkpdsim.pbpk.stationary import (
 )
 from pkpdsim.pbpk.substance import Substance
 from pkpdsim.pbpk.units import U
+from pkpdsim.species import Species as BuildSpecies
 
 if TYPE_CHECKING:
     from pkpdsim.pbpk.definition import PBPKDefinition
@@ -138,6 +139,8 @@ class OrganContext:
         inductions: the inductions as (inducer id, induction).
         sex: the sex of the build, whose reference individual the checks of
             the organ use (`distribution.check_kp`).
+        species: the species of the build (its reference individual, its
+            intestine).
         routes: the routes of administration (the intestine applies the
             oral doses).
         top: the parameters and compartments of the top model which exist
@@ -158,6 +161,7 @@ class OrganContext:
     inhibitions: tuple[tuple[str, Inhibition], ...]
     inductions: tuple[tuple[str, Induction], ...]
     sex: Sex
+    species: BuildSpecies = BuildSpecies.HUMAN
     routes: tuple[Route, ...] = ()
     top: Mapping[str, tuple[str, UnitType]] = field(default_factory=dict)
     slow_pools: tuple[SlowPool, ...] = ()
@@ -1014,8 +1018,8 @@ class StandardBuilder(OrganBuilder):
                 kind="partition",
             )
         else:
-            distribution.check_kp(s, self.organ, self.ctx.sex)
-            distribution.warn_kp_floor(s, self.organ, self.ctx.sex)
+            distribution.check_kp(s, self.organ, self.ctx.sex, self.ctx.species)
+            distribution.warn_kp_floor(s, self.organ, self.ctx.sex, self.ctx.species)
             k_cell = self._initial(
                 ids.k_cell_pls(s.sid),
                 distribution.k_cell_pls(kp, k_int, self.f_vas, self.f_int),
@@ -1028,7 +1032,9 @@ class StandardBuilder(OrganBuilder):
                 "`f_int*K_int_pls/(f_int + f_cell)` (the lower bound of a fitted "
                 f"Kp); below it the coefficient is floored at "
                 f"{distribution.K_CELL_FLOOR}."
-                + distribution.kp_floor_notes(s, self.organ, self.ctx.sex),
+                + distribution.kp_floor_notes(
+                    s, self.organ, self.ctx.sex, self.ctx.species
+                ),
                 kind="partition",
             )
         return k_int, k_cell

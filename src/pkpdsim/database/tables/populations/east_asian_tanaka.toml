@@ -7,7 +7,7 @@
 # The distributions are the means and standard deviations of the Japanese of
 # the same tables and row (national statistics of 1976 to 1988, Section
 # 3.1.3); Tanaka found no appreciable difference between Japanese and Chinese.
-# The report gives no mean age, the age is the model default.
+# The report gives no mean age, the age is the adult of ICRP 89 (35 years).
 
 name = "East Asian (Tanaka 1996)"
 source = "Tanaka1996"
@@ -16,14 +16,26 @@ source = "Tanaka1996"
 BW = { value = 60.0, unit = "kg", source = "Tanaka1996", notes = "Table 10, Asian Reference Man (ARM) value, male, 20-49 years" }
 HEIGHT = { value = 169.97, unit = "cm", source = "Tanaka1996", notes = "Table 9, Asian Reference Man (RAM) value, male, 20-49 years" }
 
-[male.covariates]
-BW = { kind = "lognormal", mean = 63.63, sd = 8.84, unit = "kg", source = "Tanaka1996", notes = "Table 10, Japanese male, 20-49 years, mean and S.D.; lognormal, the mean exceeds the 50th percentile (the ARM value 60.0 kg)" }
-HEIGHT = { kind = "normal", mean = 169.97, sd = 5.68, unit = "cm", source = "Tanaka1996", notes = "Table 9, Japanese male, 20-49 years, mean and S.D." }
+[male.by_age]
+source = "Tanaka1996"
+notes = "Tables 9 and 10, Japanese male, 20-49 years, mean and S.D. of height and body weight; the body weight lognormal (its mean exceeds the 50th percentile, the ARM value 60.0 kg); the report gives no correlation of height and body weight, they are drawn independently; one age group, so the distribution holds for 20 to 49 years only"
+age_range = [20.0, 49.0]
+age = [34.5]
+height_mean = [169.97]
+height_sd = [5.68]
+bw_mean = [63.63]
+bw_sd = [8.84]
 
 [female.reference]
 BW = { value = 51.28, unit = "kg", source = "Tanaka1996", notes = "Table 10, Asian Reference Man (ARM) value, female, 20-49 years" }
 HEIGHT = { value = 155.04, unit = "cm", source = "Tanaka1996", notes = "Table 9, Asian Reference Man (RAM) value, female, 20-49 years" }
 
-[female.covariates]
-BW = { kind = "lognormal", mean = 52.34, sd = 7.41, unit = "kg", source = "Tanaka1996", notes = "Table 10, Japanese female, 20-49 years, mean and S.D.; lognormal, the mean exceeds the 50th percentile (the ARM value 51.28 kg)" }
-HEIGHT = { kind = "normal", mean = 155.04, sd = 5.22, unit = "cm", source = "Tanaka1996", notes = "Table 9, Japanese female, 20-49 years, mean and S.D." }
+[female.by_age]
+source = "Tanaka1996"
+notes = "Tables 9 and 10, Japanese female, 20-49 years, mean and S.D. of height and body weight; the body weight lognormal (its mean exceeds the 50th percentile, the ARM value 51.28 kg); no correlation given, drawn independently; 20 to 49 years only"
+age_range = [20.0, 49.0]
+age = [34.5]
+height_mean = [155.04]
+height_sd = [5.22]
+bw_mean = [52.34]
+bw_sd = [7.41]

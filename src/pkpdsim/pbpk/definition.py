@@ -17,6 +17,7 @@ from pkpdsim.pbpk.chemistry import (
     check_rate_of,
     check_stationary,
 )
+from pkpdsim.pbpk.circadian import Circadian
 from pkpdsim.pbpk.data import load
 from pkpdsim.pbpk.kp import check_kp_method
 from pkpdsim.pbpk.observers import Observer, formula_functions, readout_ids
@@ -25,6 +26,7 @@ from pkpdsim.pbpk.organs import Organ, Part, Pool, as_member, as_organ_keys
 from pkpdsim.pbpk.pd import PDComponent
 from pkpdsim.pbpk.physiology import DEFAULT_POPULATION, Sex
 from pkpdsim.pbpk.populations import POPULATIONS
+from pkpdsim.pbpk.pregnancy import Pregnancy
 from pkpdsim.pbpk.proteins import PROTEINS
 from pkpdsim.pbpk.routes import Route
 from pkpdsim.pbpk.slow_pool import SlowPool, check_slow_pools
@@ -41,6 +43,7 @@ from pkpdsim.pbpk.values import (
     equal_by_value,
     number,
 )
+from pkpdsim.species import Species
 
 __all__ = ["PBPKDefinition", "Variants"]
 
@@ -114,6 +117,22 @@ class PBPKDefinition:
             values and default individual; a study of both sexes uses one
             model per sex, the builds of `create_archive(..., sexes=...)`. A
             `Sex` member or its value (`"female"`), normalised to the member.
+        age: the physiology is a function of the age (`AGE`, a covariate):
+            the reference values, the factors and the ontogeny of the
+            proteins are the curves of `pkpdsim.pbpk.age` over the age, from
+            the newborn to 100 years. Without it (the default) the model is
+            that of the reference individual of 35 years (`AGE_REFERENCE`),
+            it has no `AGE`, and its curves are constants: a model of adults
+            pays nothing for the age. A build over age needs the roadrunner
+            with the cache of the initial value resolvers (see
+            `docs/pbpk/physiology.md`).
+        species: the species of the model, chosen when it is built: the
+            human (ICRP 89, the default) or a laboratory animal (`Species.RAT`,
+            `MOUSE`, `PIG`) with the reference animal of
+            `database/tables/physiology_<species>.toml` and its intestine; a
+            `Species` member or its value (`"rat"`), normalised to the member.
+            A laboratory animal has no age, no factors of the sex and the
+            default population only.
         population: the population (`pkpdsim.pbpk.populations`), chosen when
             the model is built: its reference individual of the sex is the
             default individual (`BW`, `HEIGHT`, `AGE`); the reference anatomy
@@ -170,6 +189,15 @@ class PBPKDefinition:
             (the default) or `kslow_<s>*Vti*(Kpslow_<s>*Cpl_<s> - Cslow_<s>)`
             with the plasma of the organ (`SlowPool.source`); a model without
             them has none of their elements.
+        circadian: the circadian rhythms of the physiology (`Circadian`,
+            `pkpdsim.pbpk.circadian`): the clock time `CLOCK` at the start of
+            a simulation and the factors `fcirc_<key>` of the rhythms over the
+            day and the night; `None` (the default) for a model without them.
+        pregnancy: the pregnancy of the female build (`Pregnancy`,
+            `pkpdsim.pbpk.pregnancy`): the gestational age `GA`, the factors
+            `fpreg_<key>` of the maternal physiology and the fetoplacental
+            unit (the placenta and the fetus as compartments); `None` (the
+            default) for a model without it.
     """
 
     sid: str
@@ -179,6 +207,8 @@ class PBPKDefinition:
     routes: Sequence[Route] = ()
     pd: Sequence[PDComponent] = ()
     sex: Sex = Sex.MALE
+    age: bool = False
+    species: Species = Species.HUMAN
     population: str = DEFAULT_POPULATION
     arm_vein: str = "pksim_default"
     dynamic: tuple[str, ...] = ()
@@ -191,10 +221,15 @@ class PBPKDefinition:
     deltas: tuple[str, ...] = ()
     readouts: tuple[str, ...] = ()
     slow_pools: Sequence[SlowPool] = ()
+    circadian: Circadian | None = None
+    pregnancy: Pregnancy | None = None
 
     def __post_init__(self) -> None:
-        """Normalise the sex to a `Sex` member and freeze the starts."""
+        """Normalise the sex and the species to their members and freeze the starts."""
         object.__setattr__(self, "sex", as_member(Sex, self.sex, "PBPKDefinition.sex"))
+        object.__setattr__(
+            self, "species", as_member(Species, self.species, "PBPKDefinition.species")
+        )
         object.__setattr__(self, "starts", FrozenMap(self.starts))
 
     @classmethod
@@ -237,7 +272,15 @@ class PBPKDefinition:
         """
         if not definitions:
             raise ValueError(f"Combine '{sid}': no definitions given.")
-        for attribute in ("sex", "population", "arm_vein"):
+        for attribute in (
+            "age",
+            "sex",
+            "species",
+            "population",
+            "arm_vein",
+            "circadian",
+            "pregnancy",
+        ):
             values = {getattr(d, attribute) for d in definitions}
             if len(values) > 1:
                 raise ValueError(
@@ -277,8 +320,12 @@ class PBPKDefinition:
                 lambda x: str(x.model.sid),
                 "has different inputs or outputs in two definitions",
             ),
+            age=first.age,
             sex=first.sex,
+            species=first.species,
             population=first.population,
+            circadian=first.circadian,
+            pregnancy=first.pregnancy,
             arm_vein=first.arm_vein,
             dynamic=tuple(dict.fromkeys(p for d in definitions for p in d.dynamic)),
             notes=f"The coupled physiology of the definitions {sids}.",

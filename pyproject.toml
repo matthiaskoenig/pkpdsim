@@ -41,7 +41,11 @@ dependencies = [
     # and the COMBINE archive
     "sbmlode>=0.3.0",
     "pymetadata>=0.8.0",
-    # the simulator, the initial values are selections of a roadrunner model
+    # the simulator, the initial values are selections of a roadrunner model; a
+    # build with the physiology over age (`PBPKDefinition.age`) needs the cache
+    # of the initial value resolvers (sys-bio/roadrunner#1435), which 2.11.0
+    # lacks: raise the floor when a release carries it and the tests marked
+    # `over_age` stop skipping (tests/pbpk/conftest.py)
     "libroadrunner>=2.11.0",
     # the simulation experiments, their figures and reports, and the fits
     # 0.17 and 0.18 take over the generic modules of pkpdsim (the consolidation),

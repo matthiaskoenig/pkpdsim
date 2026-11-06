@@ -83,6 +83,7 @@ from sbmlutils.validation import ValidationOptions, validate_doc
 from pkpdsim.pbpk import distribution, ids, variants
 from pkpdsim.pbpk.annotation import annotate, initial_assignment, model_annotations
 from pkpdsim.pbpk.chemistry import Membrane, Metabolism, Transport
+from pkpdsim.pbpk.circadian import circadian_ids, circadian_objects
 from pkpdsim.pbpk.data import cite
 from pkpdsim.pbpk.definition import PBPKDefinition
 from pkpdsim.pbpk.impairment import (
@@ -119,6 +120,7 @@ from pkpdsim.pbpk.placement import (
     start_formula,
     value_parameter,
 )
+from pkpdsim.pbpk.pregnancy import pregnancy_objects, pregnancy_physiology_factors
 from pkpdsim.pbpk.routes import ORAL, route_objects
 from pkpdsim.pbpk.sinks import sink_objects
 from pkpdsim.pbpk.stationary import (
@@ -277,6 +279,7 @@ def organ_context(
         inhibitions=tuple((s.sid, i) for s in substances for i in s.inhibits),
         inductions=tuple((s.sid, i) for s in substances for i in s.induces),
         sex=definition.sex,
+        species=definition.species,
         routes=tuple(definition.routes),
         top=dict(top or {}),
         slow_pools=tuple(definition.slow_pools),
@@ -324,7 +327,7 @@ def compose(definition: PBPKDefinition) -> Model:
     return Model(
         sid=definition.sid,
         name=definition.name or definition.sid,
-        annotations=model_annotations(definition.substances),
+        annotations=model_annotations(definition.substances, definition.species),
         notes=definition.notes,
         creators=list(definition.creators),
         units=_units(top.objects),
@@ -699,9 +702,14 @@ def _body(
         )
     top.formulas()
     _annotate_inputs(top.objects, model_definitions, submodels, replaced)
+    rhythms = circadian_ids(definition)
     _dynamic(
         definition,
-        (*definition.dynamic, *(o for o in outputs if o not in definition.dynamic)),
+        (
+            *definition.dynamic,
+            *(o for o in outputs if o not in definition.dynamic),
+            *(f for f in rhythms if f not in definition.dynamic),
+        ),
         top.objects,
         model_definitions,
         submodels,
@@ -1470,9 +1478,15 @@ class _Top:
         self.definition = definition
         self.objects: list[Sbase] = [
             *physiology_objects(
-                definition.sex, physiology_factors(), definition.population
+                definition.sex,
+                physiology_factors() | pregnancy_physiology_factors(definition),
+                definition.population,
+                definition.species,
+                definition.age,
             ),
             *impairment_objects(definition),
+            *circadian_objects(definition),
+            *pregnancy_objects(definition),
         ]
         self.known: set[str] = {
             str(o.sid) for o in self.objects if isinstance(o, Parameter)
@@ -2102,7 +2116,9 @@ class _Top:
             )
         shared = self._ftissue_organs(s)
         if shared:
-            volumes = reference_tissue_volumes(self.definition.sex)
+            volumes = reference_tissue_volumes(
+                self.definition.sex, species=self.definition.species
+            )
             total = sum(volumes[o] for o in shared)
             objects.append(
                 annotate(
@@ -2198,7 +2214,9 @@ class _Top:
         ]
         for organ in organs:
             pid = ids.kp_organ(organ, sid)
-            share = distribution.interstitial_share(organ, fu, self.definition.sex)
+            share = distribution.interstitial_share(
+                organ, fu, self.definition.sex, self.definition.species
+            )
             formula = f"{fkp} * {share!r} dimensionless"
             objects += [
                 annotate(
@@ -2251,7 +2269,9 @@ class _Top:
                 "kp_factor",
             )
         ]
-        for organ, v in kp_values(s, self.definition.sex).items():
+        for organ, v in kp_values(
+            s, self.definition.sex, self.definition.species
+        ).items():
             pid = ids.kp_organ(organ, sid)
             formula = f"{fkp} * {v.value!r} dimensionless"
             citations = "\n".join(f"- {cite(key)}" for key in kp_sources(organ))

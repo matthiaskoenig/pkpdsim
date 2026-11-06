@@ -65,9 +65,10 @@ from pkpdsim.pbpk.kidney_validity import (
     kidney_outflow,
     simulated_individuals,
 )
-from pkpdsim.pbpk.physiology import normal_gfr
+from pkpdsim.pbpk.physiology import AGE_REFERENCE, normal_gfr, reference_individual
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import number, unit_text
+from pkpdsim.pbpk.virtual import VirtualPopulation
 from pkpdsim.sex import Sex
 
 if TYPE_CHECKING:
@@ -88,6 +89,7 @@ def healthy_gfr(
     height: float | None = None,
     hf_severity: float = 0.0,
     cp_severity: float = 0.0,
+    age: float | None = None,
 ) -> Quantity:
     """Get the healthy glomerular filtration rate of an individual (ml/min).
 
@@ -113,14 +115,21 @@ def healthy_gfr(
             model.
         hf_severity: the severity of heart failure `HF_severity` (0 to 4).
         cp_severity: the severity of cirrhosis `CP_severity` (0 to 3).
+        age: the age of the individual [yr], `None` for that of the model;
+            the GFR matures in the children and declines in the adults.
 
     Returns:
         The GFR at renal function 1 in ml/min, a quantity as the renal
         function of `PBPKSimulationExperiment.renal_function`.
     """
-    changes = covariate_changes(bw, height, hf_severity, cp_severity)
+    changes = covariate_changes(bw, height, hf_severity, cp_severity, age=age)
     gfr = individual_values(Path(model_path), changes).ml_per_min(ids.GFR_BASE)
     return Q(gfr, "ml/min")
+
+
+def _age(age: float | None) -> float:
+    """The age of an individual, the adult of ICRP 89 (35 years) if not given."""
+    return AGE_REFERENCE if age is None else float(age)
 
 
 def molecular_weights(definition: PBPKDefinition) -> Mapping[str, Quantity]:
@@ -675,6 +684,7 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
         height: float | None = None,
         hf_severity: float = 0.0,
         cp_severity: float = 0.0,
+        age: float | None = None,
         sex: Sex | None = None,
         simulation: str | None = None,
     ) -> Quantity:
@@ -690,6 +700,7 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
                 model.
             hf_severity: the severity of heart failure `HF_severity` (0 to 4).
             cp_severity: the severity of cirrhosis `CP_severity` (0 to 3).
+            age: the age of the individual [yr], `None` for that of the model.
             sex: the sex of the individual, `None` for the sex of `simulation`.
             simulation: the key of the simulation of the individual, `None`
                 for the sex of the experiment (`sex`).
@@ -708,6 +719,7 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
             height=height,
             hf_severity=hf_severity,
             cp_severity=cp_severity,
+            age=age,
         )
 
     @classmethod
@@ -719,6 +731,7 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
         height: float | None = None,
         hf_severity: float = 0.0,
         cp_severity: float = 0.0,
+        age: float | None = None,
         sex: Sex | None = None,
         simulation: str | None = None,
     ) -> Quantity:
@@ -742,6 +755,7 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
                 model.
             hf_severity: the severity of heart failure of the simulation.
             cp_severity: the severity of cirrhosis of the simulation.
+            age: the age of the simulation [yr], `None` for that of the model.
             sex: the sex of the subjects, `None` for the sex of `simulation`;
                 the GFR of a woman is the GFR of the female build.
             simulation: the key of the simulation of the subjects, whose sex
@@ -764,10 +778,13 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
             height=height,
             hf_severity=hf_severity,
             cp_severity=cp_severity,
+            age=age,
             sex=sex,
         )
         value = clearance / float(healthy.m_as("ml/min"))
-        changes = covariate_changes(bw, height, hf_severity, cp_severity, value)
+        changes = covariate_changes(
+            bw, height, hf_severity, cp_severity, value, age=age
+        )
         for outflow in kidney_outflow(cls._build(sex), changes):
             if not outflow.valid:
                 raise ValueError(
@@ -793,6 +810,7 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
         height: float | None = None,
         hf_severity: float = 0.0,
         cp_severity: float = 0.0,
+        age: float | None = None,
         sex: Sex | None = None,
         simulation: str | None = None,
     ) -> tuple[float, float]:
@@ -817,6 +835,7 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
                 model.
             hf_severity: the severity of heart failure of the individual.
             cp_severity: the severity of cirrhosis of the individual.
+            age: the age of the individual [yr], `None` for that of the model.
             sex: the sex of the individual, `None` for the sex of `simulation`.
             simulation: the key of the simulation of the individual, `None`
                 for the sex of the experiment (`sex`).
@@ -829,7 +848,7 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
             ValueError: if the model object has no build of the sex, or the sex
                 is not given in an experiment of both sexes (`subjects_sex`).
         """
-        changes = covariate_changes(bw, height, hf_severity, cp_severity, 1.0)
+        changes = covariate_changes(bw, height, hf_severity, cp_severity, 1.0, age=age)
         outflows = kidney_outflow(cls._build(sex, simulation), changes)
         high = min(
             (o.plasma_flow / o.filtered for o in outflows if o.filtered > 0),
@@ -881,6 +900,7 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
         *,
         sex: Sex | None = None,
         simulation: str | None = None,
+        age: float | None = None,
     ) -> dict[str, Quantity]:
         """Get the changes of a clinical class of a condition.
 
@@ -899,6 +919,8 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
             key: the key of the class, e.g. `III`.
             sex: the sex of the subjects of a GFR category (`subjects_sex`).
             simulation: the key of the simulation of the subjects.
+            age: the age of the subjects of a GFR category (years), `None` for
+                the adult of ICRP 89 (35 years).
 
         Returns:
             The changes, `{parameter: value}`, for `preinit_changes`.
@@ -907,11 +929,18 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
             KeyError: for a key which is no class of the classification.
         """
         c = classification[key]
+        if classification.parameter == ids.AGE:
+            ref = reference_individual(cls.subjects_sex(sex, simulation), c.value)
+            return {
+                ids.AGE: Q(c.value, "yr"),
+                ids.BW: Q(ref.bw, "kg"),
+                ids.HEIGHT: Q(ref.height, "cm"),
+            }
         if classification.parameter != "eGFR":
             return {classification.parameter: Q(c.value, "dimensionless")}
         if c.value is None:
             return {ids.F_RENAL_FUNCTION: Q(1.0, "dimensionless")}
-        normal = normal_gfr(cls.subjects_sex(sex, simulation)) * 1e3
+        normal = normal_gfr(cls.subjects_sex(sex, simulation), _age(age)) * 1e3
         return {ids.F_RENAL_FUNCTION: Q(c.value / normal, "dimensionless")}
 
     @classmethod
@@ -925,6 +954,7 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
         hf_severity: Sequence[float] | float | None = None,
         sex: Sex | None = None,
         simulation: str | None = None,
+        age: float | None = None,
     ) -> dict[str, np.ndarray]:
         """Get the values of the severities of a continuous course of the impairments.
 
@@ -948,6 +978,8 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
             hf_severity: the severity of heart failure, 0 to 4.
             sex: the sex of the subjects of an eGFR (`subjects_sex`).
             simulation: the key of the simulation of the subjects.
+            age: the age of the subjects of an eGFR (years), whose normal eGFR
+                the renal function is relative to; `None` for 35 years.
 
         Returns:
             The values by parameter (`CP_severity`, `f_renal_function`,
@@ -1007,7 +1039,7 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
         elif "cp_severity" in arrays:
             out[ids.CP_SEVERITY] = arrays["cp_severity"]
         if "egfr" in arrays:
-            normal = normal_gfr(cls.subjects_sex(sex, simulation)) * 1e3
+            normal = normal_gfr(cls.subjects_sex(sex, simulation), _age(age)) * 1e3
             out[ids.F_RENAL_FUNCTION] = arrays["egfr"] / normal
         elif "renal_function" in arrays:
             out[ids.F_RENAL_FUNCTION] = arrays["renal_function"]
@@ -1026,6 +1058,7 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
         hf_severity: float | None = None,
         sex: Sex | None = None,
         simulation: str | None = None,
+        age: float | None = None,
     ) -> dict[str, Quantity]:
         """Get the changes of one point of the continuous severities of the impairments.
 
@@ -1040,6 +1073,7 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
             hf_severity: the severity of heart failure, 0 to 4.
             sex: the sex of the subjects of an eGFR (`subjects_sex`).
             simulation: the key of the simulation of the subjects.
+            age: the age of the subjects of an eGFR (years), `None` for 35 years.
 
         Returns:
             The changes, `{parameter: value}`.
@@ -1052,6 +1086,7 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
             hf_severity=hf_severity,
             sex=sex,
             simulation=simulation,
+            age=age,
         )
         return {k: Q(float(v[0]), "dimensionless") for k, v in values.items()}
 
@@ -1067,6 +1102,7 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
         hf_severity: Sequence[float] | None = None,
         sex: Sex | None = None,
         simulation: str | None = None,
+        age: float | None = None,
     ) -> Dimension:
         """Get the dimension of a scan over a continuous course of the impairments.
 
@@ -1087,6 +1123,7 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
             hf_severity: the severity of heart failure, 0 to 4.
             sex: the sex of the subjects of an eGFR (`subjects_sex`).
             simulation: the key of the simulation of the subjects.
+            age: the age of the subjects of an eGFR (years), `None` for 35 years.
 
         Returns:
             The dimension of values.
@@ -1098,11 +1135,64 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
             "renal_function": renal_function,
             "hf_severity": hf_severity,
         }
-        values = cls.severity_values(**given, sex=sex, simulation=simulation)
+        values = cls.severity_values(**given, sex=sex, simulation=simulation, age=age)
         coordinates = {
             k: np.asarray(v, dtype=float) for k, v in given.items() if v is not None
         }
         return Dimension(dimension, values=values, coordinates=coordinates)
+
+    @staticmethod
+    def population_dimension(
+        population: VirtualPopulation,
+        sex: Sex,
+        dimension: str = "dim_individual",
+    ) -> Dimension:
+        """Get the dimension of a scan over the individuals of a virtual population of a sex.
+
+        Every point is an individual of the sex (`VirtualPopulation.of_sex`):
+        its age, body weight, height and severities set before the
+        initialization, so the physiology of the build of the sex follows.
+        A study of both sexes scans each sex on its build, the simulation of
+        the other sex declared in `simulation_sexes`.
+
+        Args:
+            population: the virtual population (`pkpdsim.pbpk.virtual`).
+            sex: the sex of the build of the simulation.
+            dimension: the id of the dimension.
+
+        Returns:
+            The dimension of values.
+
+        Raises:
+            ValueError: if the population has no individual of the sex.
+        """
+        units = {ids.AGE: "yr", ids.BW: "kg", ids.HEIGHT: "cm"}
+        values = {
+            k: Q(v, units.get(k, "dimensionless"))
+            for k, v in population.values(sex).items()
+        }
+        return Dimension(dimension, values=values)
+
+    @staticmethod
+    def clock_changes(hour: float) -> dict[str, Quantity]:
+        """Get the change which starts a simulation at a clock time.
+
+        For a model with circadian rhythms (`PBPKDefinition.circadian`): the
+        clock time `CLOCK` at time 0 of the simulation, set before the
+        initialization (`preinit_changes`), e.g. a dose at 8:00 or at 20:00.
+
+        Args:
+            hour: the clock time (hours, 0 to 24).
+
+        Returns:
+            The change of `CLOCK` in hours.
+
+        Raises:
+            ValueError: for a clock time not in [0, 24).
+        """
+        if not 0.0 <= hour < 24.0:
+            raise ValueError(f"The clock time {hour} is not in [0, 24) hours.")
+        return {ids.CLOCK: Q(hour, "hr")}
 
     def class_simulations(
         self,

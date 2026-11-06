@@ -1,0 +1,65 @@
+# The reference children of ICRP 89: newborn, 1, 5, 10 and 15 years, male and female.
+#
+# The values are those of ICRP Publication 89 (Valentin 2002) at the ages of
+# `ages` (years, the newborn at 0), taken directly from its tables; the adult
+# values are those of physiology_human.toml. The physiology interpolates them
+# linearly in age up to the adult (`pkpdsim.pbpk.age`).
+#
+# Conventions: as physiology_human.toml, `organs.<o>` is the mass of the organ
+# tissue without its blood (kg), the organs of the model by their token; the
+# large intestine is the sum of the walls of right colon, left colon and
+# rectosigmoid, the bone the total skeleton, the gonads the testes (male) or
+# the ovaries (female). ICRP 89 tabulates the children of both sexes alike up
+# to 10 years but the brain (5 and 10 years) and the gonads; the adipose mass
+# is a reference value only (adipose is the remainder of the body weight in
+# the model), as for the adults.
+
+ages = [0.0, 1.0, 5.0, 10.0, 15.0]
+
+[male]
+bodyweight = { value = [3.5, 10.0, 19.0, 32.0, 56.0], unit = "kg", source = "ICRP89", notes = "Table 2.9, mass, male" }
+height = { value = [51.0, 76.0, 109.0, 138.0, 167.0], unit = "cm", source = "ICRP89", notes = "Table 2.9, height, male" }
+body_surface_area = { value = [0.24, 0.48, 0.78, 1.12, 1.62], unit = "m2", source = "ICRP89", notes = "Table 2.9 (and Table 2.26), surface area, male" }
+blood_volume = { value = [0.27, 0.5, 1.4, 2.4, 4.5], unit = "l", source = "ICRP89", notes = "Section 7.4, total blood volume, males" }
+cardiac_output = { value = [0.6, 1.2, 3.4, 5.0, 6.1], unit = "l/min", source = "ICRP89", notes = "Table 2.39 (Section 7.5), cardiac output, male" }
+
+[male.organs]
+lu = { value = [0.03, 0.08, 0.125, 0.21, 0.33], unit = "kg", source = "ICRP89", notes = "Table 2.8, lung - tissue only" }
+he = { value = [0.02, 0.05, 0.085, 0.14, 0.23], unit = "kg", source = "ICRP89", notes = "Table 2.8, heart - tissue only" }
+br = { value = [0.38, 0.95, 1.31, 1.4, 1.42], unit = "kg", source = "ICRP89", notes = "Table 2.8, brain (male values at 5 and 10 years)" }
+li = { value = [0.13, 0.33, 0.57, 0.83, 1.3], unit = "kg", source = "ICRP89", notes = "Table 2.8, liver" }
+ki = { value = [0.025, 0.07, 0.11, 0.18, 0.25], unit = "kg", source = "ICRP89", notes = "Table 2.8, kidneys (2)" }
+st = { value = [0.007, 0.02, 0.05, 0.085, 0.12], unit = "kg", source = "ICRP89", notes = "Table 2.8, stomach wall" }
+si = { value = [0.03, 0.085, 0.22, 0.37, 0.52], unit = "kg", source = "ICRP89", notes = "Table 2.8, small intestine wall" }
+la = { value = [0.017, 0.05, 0.12, 0.21, 0.3], unit = "kg", source = "ICRP89", notes = "Table 2.8, walls of right colon, left colon and rectosigmoid (7 + 7 + 3, 20 + 20 + 10, 49 + 49 + 22, 85 + 85 + 40, 122 + 122 + 56 g)" }
+sp = { value = [0.0095, 0.029, 0.05, 0.08, 0.13], unit = "kg", source = "ICRP89", notes = "Table 2.8, spleen" }
+pa = { value = [0.006, 0.02, 0.035, 0.06, 0.11], unit = "kg", source = "ICRP89", notes = "Table 2.8, pancreas" }
+mu = { value = [0.8, 1.9, 5.6, 11.0, 24.0], unit = "kg", source = "ICRP89", notes = "Table 2.8, muscle, skeletal" }
+sk = { value = [0.175, 0.35, 0.57, 0.82, 2.0], unit = "kg", source = "ICRP89", notes = "Table 2.8, skin (Table 2.27, total skin, males)" }
+ad = { value = [0.89, 3.6, 5.0, 7.5, 9.5], unit = "kg", source = "ICRP89", notes = "Table 2.8, separable adipose tissue, excluding yellow marrow; reference only" }
+bo = { value = [0.37, 1.17, 2.43, 4.5, 7.95], unit = "kg", source = "ICRP89", notes = "Table 2.8, total skeleton" }
+go = { value = [0.00085, 0.0015, 0.0017, 0.002, 0.016], unit = "kg", source = "ICRP89", notes = "Table 2.8, testes (2)" }
+
+[female]
+bodyweight = { value = [3.5, 10.0, 19.0, 32.0, 53.0], unit = "kg", source = "ICRP89", notes = "Table 2.9, mass, female" }
+height = { value = [51.0, 76.0, 109.0, 138.0, 161.0], unit = "cm", source = "ICRP89", notes = "Table 2.9, height, female" }
+body_surface_area = { value = [0.24, 0.48, 0.78, 1.12, 1.55], unit = "m2", source = "ICRP89", notes = "Table 2.9 (and Table 2.26), surface area, female" }
+blood_volume = { value = [0.27, 0.5, 1.4, 2.4, 3.3], unit = "l", source = "ICRP89", notes = "Section 7.4, total blood volume, females" }
+cardiac_output = { value = [0.6, 1.2, 3.4, 5.0, 6.1], unit = "l/min", source = "ICRP89", notes = "Table 2.39 (Section 7.5), cardiac output, female" }
+
+[female.organs]
+lu = { value = [0.03, 0.08, 0.125, 0.21, 0.29], unit = "kg", source = "ICRP89", notes = "Table 2.8, lung - tissue only" }
+he = { value = [0.02, 0.05, 0.085, 0.14, 0.22], unit = "kg", source = "ICRP89", notes = "Table 2.8, heart - tissue only" }
+br = { value = [0.38, 0.95, 1.18, 1.22, 1.3], unit = "kg", source = "ICRP89", notes = "Table 2.8, brain (female values at 5 and 10 years)" }
+li = { value = [0.13, 0.33, 0.57, 0.83, 1.3], unit = "kg", source = "ICRP89", notes = "Table 2.8, liver" }
+ki = { value = [0.025, 0.07, 0.11, 0.18, 0.24], unit = "kg", source = "ICRP89", notes = "Table 2.8, kidneys (2)" }
+st = { value = [0.007, 0.02, 0.05, 0.085, 0.12], unit = "kg", source = "ICRP89", notes = "Table 2.8, stomach wall" }
+si = { value = [0.03, 0.085, 0.22, 0.37, 0.52], unit = "kg", source = "ICRP89", notes = "Table 2.8, small intestine wall" }
+la = { value = [0.017, 0.05, 0.12, 0.21, 0.3], unit = "kg", source = "ICRP89", notes = "Table 2.8, walls of right colon, left colon and rectosigmoid (7 + 7 + 3, 20 + 20 + 10, 49 + 49 + 22, 85 + 85 + 40, 122 + 122 + 56 g)" }
+sp = { value = [0.0095, 0.029, 0.05, 0.08, 0.13], unit = "kg", source = "ICRP89", notes = "Table 2.8, spleen" }
+pa = { value = [0.006, 0.02, 0.035, 0.06, 0.1], unit = "kg", source = "ICRP89", notes = "Table 2.8, pancreas" }
+mu = { value = [0.8, 1.9, 5.6, 11.0, 17.0], unit = "kg", source = "ICRP89", notes = "Table 2.8, muscle, skeletal" }
+sk = { value = [0.175, 0.35, 0.57, 0.82, 1.7], unit = "kg", source = "ICRP89", notes = "Table 2.8, skin (Table 2.27, total skin, females)" }
+ad = { value = [0.89, 3.6, 5.0, 7.5, 16.0], unit = "kg", source = "ICRP89", notes = "Table 2.8, separable adipose tissue, excluding yellow marrow; reference only" }
+bo = { value = [0.37, 1.17, 2.43, 4.5, 7.18], unit = "kg", source = "ICRP89", notes = "Table 2.8, total skeleton" }
+go = { value = [0.0003, 0.0008, 0.002, 0.0035, 0.006], unit = "kg", source = "ICRP89", notes = "Table 2.8, ovaries (2)" }

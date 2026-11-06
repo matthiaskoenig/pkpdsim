@@ -6,6 +6,8 @@ sets the attributes (the segments, the substances which reach the lumen,
 the mucosa) before it builds.
 """
 
+from dataclasses import replace
+
 from sbmlutils.factory import (
     Compartment,
     Parameter,
@@ -18,7 +20,8 @@ from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk import ids
 from pkpdsim.pbpk.annotation import initial_assignment
-from pkpdsim.pbpk.data import cite, value
+from pkpdsim.pbpk.circadian import circadian_factor
+from pkpdsim.pbpk.data import cite, load, value
 from pkpdsim.pbpk.impairment import GASTRIC_EMPTYING, SI_TRANSIT
 from pkpdsim.pbpk.organ import StandardBuilder
 from pkpdsim.pbpk.organ_builder import ONE
@@ -31,13 +34,36 @@ from pkpdsim.pbpk.routes import (
     dissolution_reads_fed,
     is_weibull,
 )
+from pkpdsim.pbpk.sex_differences import (
+    COLON_TRANSIT,
+    GASTRIC_EMPTYING_FED,
+    sex_curves,
+    sex_factor,
+)
 from pkpdsim.pbpk.substance import Substance
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import Value
 from pkpdsim.pbpk.variants.lumen_options import LumenConversion
-from pkpdsim.pbpk.variants.segments import DATA, SMALL, Segment
+from pkpdsim.pbpk.variants.segments import SMALL, Segment
 
 __all__ = ["LumenBuilder"]
+
+
+def _fed_transit(table: str) -> Value:
+    """The transit time of the stomach in the fed state of the data of a species.
+
+    A species without a fed transit time in its data has the fasted one, with
+    a note.
+    """
+    if "transit_time_fed" in load(table)["stomach"]:
+        return value(table, "stomach", "transit_time_fed")
+    fasted = value(table, "stomach", "transit_time")
+    return replace(
+        fasted,
+        notes=f"no transit time of the fed state in {table}.toml: the fasted one "
+        f"({fasted.notes})",
+    )
+
 
 _SBO_PARAMETER = SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER
 
@@ -77,7 +103,7 @@ class LumenBuilder(StandardBuilder):
     def _lumen_segments(self) -> None:
         """The compartments, transit times and area factors of the lumen segments."""
         for seg in self.segments:
-            v = value(DATA, seg.key, "volume")
+            v = value(seg.table, seg.key, "volume")
             cid = ids.lumen_volume(seg.token)
             self.compartments[cid] = self._annotate(
                 Compartment(
@@ -95,7 +121,7 @@ class LumenBuilder(StandardBuilder):
             )
             self._constant(
                 ids.transit_time(seg.token),
-                value(DATA, seg.key, "transit_time"),
+                value(seg.table, seg.key, "transit_time"),
                 U.min,
                 f"transit time {seg.label} [min]",
                 "Mean transit time of the lumen segment (fasted), the transit "
@@ -106,7 +132,7 @@ class LumenBuilder(StandardBuilder):
             if seg.absorbs:
                 self._constant(
                     ids.area_factor(str(seg.token)),
-                    value(DATA, seg.key, "area_factor"),
+                    value(seg.table, seg.key, "area_factor"),
                     U.dimensionless,
                     f"absorption area factor {seg.label}",
                     "Mucosal surface per lumen volume relative to the small "
@@ -117,7 +143,7 @@ class LumenBuilder(StandardBuilder):
         if not self.single:
             self._constant(
                 ids.T_STOMACH_FED,
-                value(DATA, "stomach", "transit_time_fed"),
+                _fed_transit(self.segments[0].table),
                 U.min,
                 "transit time stomach fed [min]",
                 "Mean transit time of the stomach in the fed state (`FED = 1`).",
@@ -125,13 +151,21 @@ class LumenBuilder(StandardBuilder):
                 segment="st",
             )
 
+    def _sex_input(self, key: str, name: str) -> str | None:
+        """The factor of the sex on a transit time, an input of the body, if the build has one."""
+        if key not in sex_curves(self.ctx.sex):
+            return None
+        return self._input(sex_factor(key), U.dimensionless, f"sex factor {name}")
+
     def _transit(self, seg: Segment) -> str:
         """The transit time of a segment, of the stomach by the prandial state.
 
         The impairment (chronic kidney disease) multiplies the transit time of
         the stomach and of the small intestine (its segments, the single
-        lumen) by its factors, inputs of the body. The time is returned in
-        parentheses, so that a caller divides by the whole product.
+        lumen) by its factors, the female build the transit times of the large
+        intestine by the factor of the sex (`fsex_t_colon`), inputs of the
+        body. The time is returned in parentheses, so that a caller divides
+        by the whole product.
         """
         t = ids.transit_time(seg.token)
         if seg.token == "st":
@@ -143,6 +177,10 @@ class LumenBuilder(StandardBuilder):
                 "impairment factor small intestinal transit time",
             )
             return f"({t} * {factor})"
+        if (
+            colon := self._sex_input(COLON_TRANSIT, "colonic transit time")
+        ) is not None:
+            return f"({t} * {colon})"
         return t
 
     def _stomach_time(self) -> str:
@@ -150,8 +188,10 @@ class LumenBuilder(StandardBuilder):
 
         `(T_st + FED*(T_st_fed - T_st))*fimp_t_stomach`: the prandial state
         and the factor of the gastric emptying of chronic kidney disease
-        (inputs of the body); the one formula which the transit of the stomach
-        (`_transit`) and its output `T_st_eff` (`_stomach_transit`) read.
+        (inputs of the body), in the female build `T_st_fed*fsex_t_stomach_fed`
+        (the slower emptying of a meal, the fasted emptying alike); the one
+        formula which the transit of the stomach (`_transit`) and its output
+        `T_st_eff` (`_stomach_transit`) read.
         """
         t = ids.transit_time("st")
         fed = self._input(ids.FED, U.dimensionless, "fed state (0 fasted, 1 fed)")
@@ -160,7 +200,17 @@ class LumenBuilder(StandardBuilder):
             U.dimensionless,
             "impairment factor gastric emptying time",
         )
-        return f"({t} + {fed} * ({ids.T_STOMACH_FED} - {t})) * {factor}"
+        t_fed = ids.T_STOMACH_FED
+        sex = self._sex_input(GASTRIC_EMPTYING_FED, "gastric emptying time fed")
+        if sex is not None:
+            t_fed = f"{t_fed} * {sex}"
+        circadian = circadian_factor("t_stomach_fed")
+        if circadian in self.ctx.top:
+            factor_of_day = self._input(
+                circadian, U.dimensionless, "circadian factor gastric emptying time fed"
+            )
+            t_fed = f"{t_fed} * {factor_of_day}"
+        return f"({t} + {fed} * ({t_fed} - {t})) * {factor}"
 
     def _stomach_transit(self) -> None:
         """The transit time of the stomach as a constant and an output, `T_st_eff`.
@@ -187,9 +237,15 @@ class LumenBuilder(StandardBuilder):
                 sboTerm=_SBO_PARAMETER,
                 notes="The transit time of the stomach of the prandial state and "
                 "the impairment, which its transit reads: `T_st` fasted, `T_st_fed` "
-                "fed (`FED = 1`), times the factor of the gastric emptying of "
-                "chronic kidney disease; an output of the intestine, an id of the "
-                f"top model.\n\n`{sid} = {formula}`",
+                "fed (`FED = 1`"
+                + (
+                    "; times the factor of the sex"
+                    if GASTRIC_EMPTYING_FED in sex_curves(self.ctx.sex)
+                    else ""
+                )
+                + "), times the factor of the gastric emptying of chronic kidney "
+                "disease; an output of the intestine, an id of the top model."
+                f"\n\n`{sid} = {formula}`",
                 port=_Port(f"{sid}_port", portType=PortType.OUTPUT_PORT),
             ),
             "gastric_transit_time",

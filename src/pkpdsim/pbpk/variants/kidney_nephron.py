@@ -139,9 +139,15 @@ class NephronKidney:
 
         Raises:
             ValueError: if the organ is not the kidney, a process cannot be
-                placed (a custom reaction), or the standard kidney refuses a
-                substance.
+                placed (a custom reaction), the standard kidney refuses a
+                substance, or the build is of a laboratory animal (the nephron
+                is the human one of kidney_human.toml).
         """
+        if ctx.species.value != "human":
+            raise ValueError(
+                f"The nephron kidney has the human nephron ({_DATA}.toml); the "
+                f"{ctx.species.value} has none, use the standard kidney."
+            )
         return NephronBuilder(ctx, self.name).build()
 
 

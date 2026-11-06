@@ -74,6 +74,7 @@ def covariate_changes(
     hf_severity: float,
     cp_severity: float,
     renal_function: float | None = None,
+    age: float | None = None,
 ) -> dict[str, Change]:
     """Get the changes before the initialization of an individual by its covariates.
 
@@ -84,6 +85,7 @@ def covariate_changes(
         cp_severity: the severity of cirrhosis `CP_severity` (0 to 3).
         renal_function: the renal function `f_renal_function`, `None` for
             that of the model.
+        age: the age [yr], `None` for that of the model.
 
     Returns:
         The changes, quantities.
@@ -96,6 +98,8 @@ def covariate_changes(
         changes[ids.BW] = Q(bw, "kg")
     if height is not None:
         changes[ids.HEIGHT] = Q(height, "cm")
+    if age is not None:
+        changes[ids.AGE] = Q(age, "yr")
     if renal_function is not None:
         changes[ids.F_RENAL_FUNCTION] = Q(float(renal_function), "dimensionless")
     return changes

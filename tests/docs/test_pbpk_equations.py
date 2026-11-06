@@ -21,6 +21,7 @@ the toy. The formulas are compared as math: both are parsed, the units of
 their numbers are dropped, and the printed formulas must be equal.
 """
 
+import dataclasses
 import itertools
 import re
 from dataclasses import dataclass
@@ -52,10 +53,12 @@ from pkpdsim.pbpk import (
     Part,
     PBPKDefinition,
     PDComponent,
+    Pregnancy,
     RateOf,
     RegionalAbsorption,
     Route,
     SegmentedIntestine,
+    Sex,
     SlowPool,
     Substance,
     ThresholdReabsorption,
@@ -365,7 +368,22 @@ def contexts(tmp_path_factory: pytest.TempPathFactory) -> list[Context]:
     """The models of the built toys: the top models and the organ components."""
     directory = tmp_path_factory.mktemp("pbpk_equations")
     result: list[Context] = []
-    for definition in (standard(), variants(), absorption()):
+    aged = dataclasses.replace(standard(), sid="toy_standard_age", age=True)
+    female = dataclasses.replace(
+        standard(), sid="toy_standard_female", sex=Sex.FEMALE, age=True
+    )
+    pregnant = dataclasses.replace(
+        female,
+        sid="toy_standard_pregnant",
+        pregnancy=Pregnancy(),
+        substances=[
+            dataclasses.replace(s, erythrocytes=None)
+            if s.erythrocytes is not None and s.erythrocytes.mode == "kinetic"
+            else s
+            for s in female.substances
+        ],
+    )
+    for definition in (standard(), aged, female, pregnant, variants(), absorption()):
         paths = build(definition, directory)
         doc = libsbml.readSBMLFromFile(str(paths.comp_path))
         substances = tuple(s.sid for s in definition.substances)

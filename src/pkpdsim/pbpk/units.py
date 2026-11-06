@@ -17,9 +17,11 @@ if TYPE_CHECKING:
 
 __all__ = [
     "EXTRA_UNITS",
+    "HOUR",
     "ML_PER_MIN_1P73M2",
     "MODEL_UNITS",
     "UNIT_LABELS",
+    "WEEK",
     "U",
     "axis",
     "unit_label",
@@ -76,12 +78,20 @@ model defines it wherever it uses it (an observer, a parameter of the
 definition, a custom reaction, a number of a formula).
 """
 
-EXTRA_UNITS: tuple[UnitDefinition, ...] = (ML_PER_MIN_1P73M2,)
+HOUR = UnitDefinition("hr", "hr", name="hour")
+"""The hour, the unit of the clock time of the circadian rhythms (`CLOCK`, the
+acrophases); a model defines it only when it has the rhythms."""
+
+WEEK = UnitDefinition("week", "week", name="week")
+"""The week, the unit of the gestational age `GA` of a pregnancy
+(`pkpdsim.pbpk.pregnancy`); a model defines it only when it is pregnant."""
+
+EXTRA_UNITS: tuple[UnitDefinition, ...] = (ML_PER_MIN_1P73M2, HOUR, WEEK)
 """The units of the library outside `U`: a model defines one when it uses it, as
 the unit of an element or by its id in a formula."""
 
 UNIT_LABELS: Mapping[str, str] = MappingProxyType(
-    {"ml_per_min_1p73m2": "ml/min/1.73\u00a0m²"}
+    {"ml_per_min_1p73m2": "ml/min/1.73\u00a0m²", "hr": "h", "week": "week"}
 )
 """The text of a unit of `EXTRA_UNITS` on a figure, by the unit id.
 
