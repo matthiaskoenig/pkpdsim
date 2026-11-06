@@ -287,20 +287,20 @@ def cross_validate(
     from sbmlsim.fit.cli import report_from_records, run_fit
     from sbmlsim.fit.options import OptimizationAlgorithmType
     from sbmlsim.fit.report import FitReport
+    from sbmlsim.fit.result import fit_subset
     from sbmlsim.fit.sampling import SamplingType
 
-    from pkpdsim.fit import fit_subset, fixed_values, leveled_definitions, start_point
+    from pkpdsim.fit import fixed_values, start_point
     from pkpdsim.fit import with_start as start_from
-    from pkpdsim.reports import adopted_record
 
-    if fit_id not in model.fits:
+    if fit_id not in model.adopted_ids:
         raise ValueError(
             f"The fit '{fit_id}' is not adopted by '{model.name}', the adopted "
-            f"fits are {list(model.fits)}."
+            f"fits are {list(model.adopted_ids)}."
         )
     subset = fit_subset(fit_id)
-    definition = leveled_definitions(model)[subset]
-    record = adopted_record(model, fit_id)
+    definition = model.load_fit_definitions()[subset]
+    record = model.adopted_record(fit_id)
     trained = training_studies(definition)
     chosen = list(studies) if studies else trained
     unknown = [s for s in chosen if s not in trained]
@@ -398,7 +398,7 @@ def read_cross_validations(model: PKPDModel) -> dict[str, CrossValidation]:
         The cross-validation of every adopted fit which has one.
     """
     found: dict[str, CrossValidation] = {}
-    for fit_id in model.fits:
+    for fit_id in model.adopted_ids:
         path = model.fits_dir / fit_id / CROSS_VALIDATION_FILE
         if path.is_file():
             result = CrossValidation.from_dict(json.loads(path.read_text("utf-8")))

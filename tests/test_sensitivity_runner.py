@@ -18,6 +18,7 @@ import pandas as pd
 import pytest
 from matplotlib.figure import Figure
 from sbmlsim import sensitivity
+from sbmlsim.project import SimulatorSettings
 from sbmlsim.sensitivity import SensitivityResult
 from sbmlsim.sensitivity.classification import (
     sensitivity_classification,
@@ -27,7 +28,6 @@ from sbmlsim.sensitivity.classification import (
 )
 from sbmlsim.simulation import PK, Formula, Scan, Simulation, sampling
 
-from pkpdsim.model import SimulatorSettings
 from pkpdsim.run import create_simulator
 from pkpdsim.sensitivity import (
     FastAnalysis,
@@ -37,6 +37,7 @@ from pkpdsim.sensitivity import (
     SensitivityOutput,
     SensitivityParameter,
     SensitivityRunner,
+    SimulatorRun,
     SobolAnalysis,
     parameters_from_sbml,
     run_subfolders,
@@ -46,8 +47,8 @@ from pkpdsim.sex import Sex
 from pkpdsim_toy import MODEL, MODEL_PATH
 
 #: the simulations of the tests run in the process of the test
-SERIAL = SimulatorSettings(
-    absolute_tolerance=1e-10, relative_tolerance=1e-10, n_workers=1
+SERIAL = SimulatorRun(
+    SimulatorSettings(absolute_tolerance=1e-10, relative_tolerance=1e-10), 1
 )
 
 OBSERVABLES = [
@@ -81,7 +82,7 @@ def toy_parameters() -> list[SensitivityParameter]:
 
 def runner(tmp_path: Path, **kwargs: object) -> SensitivityRunner:
     options: dict[str, Any] = {
-        "model": dataclasses.replace(MODEL, results_path=tmp_path),
+        "model": MODEL.replace(results_path=tmp_path),
         "parameters": toy_parameters,
         "outputs": OUTPUTS,
         "observables": OBSERVABLES,
@@ -208,16 +209,16 @@ def test_the_simulator_of_the_model_with_a_pool(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A run uses the tolerances of the model and lets sbmlsim choose the processes."""
-    settings: list[SimulatorSettings] = []
+    settings: list[tuple[SimulatorSettings, int | None]] = []
 
-    def serial(s: SimulatorSettings) -> object:
-        settings.append(s)
-        return create_simulator(dataclasses.replace(s, n_workers=1))
+    def serial(s: SimulatorSettings, n_workers: int | None) -> object:
+        settings.append((s, n_workers))
+        return create_simulator(s, 1)
 
     monkeypatch.setattr("pkpdsim.sensitivity.create_simulator", serial)
     analyses = {"local": LocalAnalysis(groups=[CONTROL])}
     runner(tmp_path, analyses=analyses).run()
-    assert settings == [dataclasses.replace(MODEL.simulator, n_workers=None)]
+    assert settings == [(MODEL.simulator, None)]
 
 
 def test_main_runs_the_analyses_of_the_command_line(
@@ -229,7 +230,7 @@ def test_main_runs_the_analyses_of_the_command_line(
         self: SensitivityRunner,
         names: tuple[str, ...],
         *,
-        simulator: SimulatorSettings | None = None,
+        simulator: SimulatorRun | None = None,
     ) -> Path:
         assert simulator is None
         calls.append(tuple(names))
@@ -540,7 +541,7 @@ def test_local_writes_the_table_and_heatmap_of_sbmlsim_085(tmp_path: Path) -> No
             ["k"], delta=delta, model=MODEL_PATH, simulation=CONTROL.simulation
         )
         result = sensitivity.local(
-            create_simulator(SERIAL).run(
+            create_simulator(SERIAL.settings, SERIAL.n_workers).run(
                 MODEL_PATH,
                 Scan(CONTROL.simulation, [design]),
                 OBSERVABLES,
@@ -805,7 +806,7 @@ def test_several_subfolders_share_the_model_and_the_parameters(tmp_path: Path) -
     with pytest.raises(ValueError, match="parameters"):
         run_subfolders(runners, ["local"], simulator=SERIAL)
     runners["multi"] = dataclasses.replace(
-        runners["single"], model=dataclasses.replace(MODEL, title="other")
+        runners["single"], model=MODEL.replace(title="other")
     )
     with pytest.raises(ValueError, match="model"):
         run_subfolders(runners, ["local"], simulator=SERIAL)
@@ -902,21 +903,19 @@ def test_the_help_names_the_workers(
 def test_the_workers_set_the_processes_of_the_simulator(tmp_path: Path) -> None:
     toy = runner(tmp_path)
     assert toy.simulator_settings(None) is None
-    assert toy.simulator_settings(4) == dataclasses.replace(
-        MODEL.simulator, n_workers=4
-    )
+    assert toy.simulator_settings(4) == SimulatorRun(MODEL.simulator, 4)
 
 
 def test_main_passes_the_workers_to_the_run(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    calls: list[tuple[tuple[str, ...], SimulatorSettings | None]] = []
+    calls: list[tuple[tuple[str, ...], SimulatorRun | None]] = []
 
     def run(
         self: SensitivityRunner,
         names: tuple[str, ...],
         *,
-        simulator: SimulatorSettings | None = None,
+        simulator: SimulatorRun | None = None,
     ) -> Path:
         calls.append((tuple(names), simulator))
         return tmp_path
@@ -927,7 +926,7 @@ def test_main_passes_the_workers_to_the_run(
     toy.main(["local", "--workers", "0"])
     toy.main(["local"])
     assert calls == [
-        (("local",), dataclasses.replace(MODEL.simulator, n_workers=2)),
+        (("local",), SimulatorRun(MODEL.simulator, 2)),
         (("local",), None),
         (("local",), None),
     ]
@@ -940,16 +939,16 @@ def test_the_simulator_of_a_run_gets_the_workers(
     argv: list[str],
     n_workers: int | None,
 ) -> None:
-    settings: list[SimulatorSettings] = []
+    workers: list[int | None] = []
 
-    def serial(s: SimulatorSettings) -> object:
-        settings.append(s)
-        return create_simulator(dataclasses.replace(s, n_workers=1))
+    def serial(s: SimulatorSettings, n: int | None) -> object:
+        workers.append(n)
+        return create_simulator(s, 1)
 
     monkeypatch.setattr("pkpdsim.sensitivity.create_simulator", serial)
     analyses = {"local": LocalAnalysis(groups=[CONTROL])}
     runner(tmp_path, analyses=analyses).main(["local", *argv])
-    assert [s.n_workers for s in settings] == [n_workers]
+    assert workers == [n_workers]
 
 
 @pytest.mark.usefixtures("no_pyplot")
@@ -1002,7 +1001,7 @@ def sexes_runner(tmp_path: Path, **kwargs: object) -> SensitivityRunner:
     from pkpdsim_sexes import MODEL as SEXES
 
     options: dict[str, Any] = {
-        "model": dataclasses.replace(SEXES, results_path=tmp_path),
+        "model": SEXES.replace(results_path=tmp_path),
         "parameters": sexes_parameters,
     }
     options.update(kwargs)

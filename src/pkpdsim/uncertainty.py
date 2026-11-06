@@ -7,7 +7,7 @@ A fit of a model becomes part of the model in three steps:
    information) from the results of the fits into the tracked folder of the
    fits next to the model (`PKPDModel.fits_dir`), see `adopt_fit`.
 2. **Use** it in the factory: the model lists its adopted fits
-   (`PKPDModel.fits`), and a model file takes the value of a fitted parameter
+   (`PKPDModel.adopted_ids`), and a model file takes the value of a fitted parameter
    from the record, together with its uncertainty, see `FitRecords.parameter`:
 
    ```python
@@ -817,7 +817,8 @@ class UncertaintyRun:
         build.
 
         Args:
-            model: the model, whose `model_path` has the distributions.
+            model: the model, whose male build (`model_path()`) has the
+                distributions.
             settings: the settings of the run.
 
         Returns:
@@ -826,7 +827,7 @@ class UncertaintyRun:
         return cls(
             settings=settings,
             dimension=uncertainty_dimension(
-                model.model_path, settings.draws, settings.seed
+                model.model_path(), settings.draws, settings.seed
             ),
         )
 
@@ -1141,7 +1142,7 @@ def check_fit_parameters(model: PKPDModel) -> list[str]:
     Returns:
         The problems, one line each; empty for a model without adopted fits.
     """
-    if not model.fits:
+    if not model.adopted_ids:
         return []
     try:
         records = model.fit_records()

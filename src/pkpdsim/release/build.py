@@ -185,7 +185,7 @@ def build(
     if uncertainty_dir.exists():
         shutil.rmtree(uncertainty_dir)
     _clear(release_path / results / "simulation_uncertainty" / "all")
-    if model.fits:
+    if model.adopted_ids:
         # the confidence interval comes from the distributions of the fitted
         # parameters, a model without adopted fits has none
         stage("Simulations with the confidence interval")
@@ -205,7 +205,7 @@ def build(
     fits_dir.mkdir()
     reports = Path(results) / "fit_reports"
     _clear(release_path / reports)
-    if model.fits:
+    if model.adopted_ids:
         # one folder per adopted fit, named by its id, with the HTML report, the
         # methods report (PDF and Typst source) and the figures
         stage("Fit reports")
@@ -215,7 +215,7 @@ def build(
             ["uv", "run", "run_report", package, "--adopted", "-o", reports.as_posix()],
             release_path,
         )
-    for fit_id in model.fits:
+    for fit_id in model.adopted_ids:
         _replace(
             _require(release_path / reports / fit_id, f"run_report --adopted {fit_id}"),
             fits_dir / fit_id,

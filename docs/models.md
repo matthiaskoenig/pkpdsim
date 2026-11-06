@@ -1,6 +1,6 @@
 # Models and their commands
 
-A model package describes itself once, in its `__init__.py`, as a `PKPDModel`.
+A model package describes itself once, in its `__init__.py`, as a `PKPDModel`, a project of sbmlsim (`sbmlsim.project.Project`) with what a PBPK/PD model adds.
 The commands, the verification and the tests of pkpdsim work with this object;
 what stays in the package is what is the model's own: its factory, the registry
 of its experiments, its fit definitions and parameters, the filters of its
@@ -12,7 +12,9 @@ vocabulary of their metadata and the filters of the fits are described in
 # not executed
 from pathlib import Path
 
-from pkpdsim.model import FigureSettings, PKPDModel, SimulatorSettings
+from sbmlsim.project import SimulatorSettings
+
+from pkpdsim.model import FigureSettings, PKPDModel
 
 HCTZ_PATH = Path(__file__).parent
 MODEL_BASE_PATH = HCTZ_PATH / "models" / "results" / "models"
@@ -36,10 +38,7 @@ MODEL = PKPDModel(
 )
 ```
 
-`PKPDModel`, `FigureSettings`, `SimulatorSettings` and `ExtraAction` take
-keyword arguments only, so the order of their fields is not API. A list of
-`data_paths` is stored as a tuple; a model is hashable unless its absolute
-tolerance is an `AbsoluteTolerance` of sbmlsim.
+`PKPDModel`, `FigureSettings`, `SimulatorSettings` and `ExtraAction` take keyword arguments only, so the order of their fields is not API. The keywords of a model package are the fields of the project by other names: `path` is `root` (the property `path`), `model_path` and `female_model_path` are the `variants` `male` and `female`, `data_paths` is `data_path` (the property `data_paths`), `fit_definitions` is `fits`, `fits` as a sequence of fit ids is `adopted_ids`, `fits_path` is `fits_dir`, `factory_path` is `factory_dir`, and a `FigureSettings` as `figures` is split into the `figure_settings` (sbmlsim's) and the `figures` (a `FigureOutputs`, the formats and the resolution) of the project. A keyword and its field are not given together. A model is a frozen pydantic model: `model.replace(**fields)` gives a changed copy by the names of the fields, e.g. `model.replace(adopted_ids=[...])`; the directory of the factory and the folder of the adopted fits, which a model derives from its male build, stay unless they are given as `None` too. `SimulatorSettings` and `CheckSettings` are those of `sbmlsim.project`, the release settings are `sbmlsim.release.settings`.
 
 ## Builds per sex
 
@@ -64,7 +63,7 @@ MODEL = PKPDModel(
 ```
 
 `model_path` is the male build, the model of every experiment and every caller
-which does not ask for a sex; `model_paths` maps every sex to its build (the
+which does not ask for a sex (`model_path()` of the project); `model_paths` maps every sex to its build (the
 male one only for a model without a female build) and `model_path_of(sex)`
 gives the build of a sex, with a `ValueError` naming the model for a sex it has
 no build of. The builds have the same ids, so the changes of an experiment and
@@ -97,31 +96,28 @@ them; a module which starts with a dot is relative to `package`.
 
 ## Settings
 
-- `SimulatorSettings`: the absolute tolerance (one value, or an `AbsoluteTolerance` of sbmlsim per kind and state), the relative tolerance, the processes of a scan, `n_workers`, and the optimization level of the compilation, `jit_optimization` (`None` for the level of sbmlsim, `O2` or the environment variable `SBMLSIM_JIT_OPTIMIZATION`; `"O0"` to `"O3"`). A run creates an sbmlsim `Simulator` from them and compiles the model at the level, as the tests of `pkpdsim.testing` do; the problems of the fits, their reports and the identifiability analysis and `pkpdsim-verify` load their models at the level too, in the process and in every worker (`pkpdsim.fit.at_level`: the fit definition carries the level into its problems, which carry it into their workers), and a test of a model loads the model at the level with `MODEL.load_roadrunner(sex)` instead of a plain `roadrunner.RoadRunner`. sbmlsim compiles every model with LLJIT: `O0` compiles a model with large initial assignments several times faster and simulates a little slower (the creatinine model of pkdb_models loads in 4.5 s at `O0`, 24 s at `O2` and 53 s with the MCJIT of a plain `roadrunner.RoadRunner`), so a model whose runs compile more than they simulate sets `SimulatorSettings(jit_optimization="O0")`.
-- `FigureSettings`: sbmlsim's `FigureSettings` (the resolution, the sizes of the panels, the fonts and the legends, with the defaults of sbmlsim) and the two fields of a model, the `formats` of the figures (`svg`, `png`, `html`; SVG only by default) and the resolution of the static images (`savefig_dpi`). A run hands the settings of sbmlsim to every figure; an experiment (`figure_settings`) and a figure (`Figure(settings=...)`) override them. Nothing is applied to the process, so nothing has to be restored after a run.
+- `SimulatorSettings` (of `sbmlsim.project`): the engine, the absolute tolerance (one value, or an `AbsoluteTolerance` of sbmlsim per kind and state), the relative tolerance, the optimization level of the compilation, `jit_optimization` (`None` for the level of sbmlsim, `O2` or the environment variable `SBMLSIM_JIT_OPTIMIZATION`; `"O0"` to `"O3"`), and other settings of the integrator; a model without them has `SimulatorSettings(absolute_tolerance=1e-10, relative_tolerance=1e-10)`. The processes are no setting of the model, they belong to a run (`n_workers`). A run creates an sbmlsim `Simulator` from them and compiles the model at the level, as the tests of `pkpdsim.testing` do; the problems of the fits, their reports and the identifiability analysis and `pkpdsim-verify` load their models at the level too, in the process and in every worker (`load_fit_definitions()` gives the fit definitions with the level, `FitDefinition.jit_optimization` of sbmlsim, which carry it into their problems and their workers), and a test of a model loads the model at the level with `MODEL.load_roadrunner(sex)` instead of a plain `roadrunner.RoadRunner`. sbmlsim compiles every model with LLJIT: `O0` compiles a model with large initial assignments several times faster and simulates a little slower (the creatinine model of pkdb_models loads in 4.5 s at `O0`, 24 s at `O2` and 53 s with the MCJIT of a plain `roadrunner.RoadRunner`), so a model whose runs compile more than they simulate sets `SimulatorSettings(jit_optimization="O0")`.
+- `FigureSettings`: sbmlsim's `FigureSettings` (the resolution, the sizes of the panels, the fonts and the legends, with the defaults of sbmlsim) and the two fields of a model, the `formats` of the figures (`svg`, `png`, `html`; SVG only by default) and the resolution of the static images (`savefig_dpi`); the model keeps them as its `figure_settings` (`sbmlsim_settings()`) and its `figures` (`outputs()`). A run hands the settings of sbmlsim to every figure; an experiment (`figure_settings`) and a figure (`Figure(settings=...)`) override them. Nothing is applied to the process, so nothing has to be restored after a run.
 - `reduced_selections`, `save_results`, `fit_identifiability`: what a run simulates, whether it stores its results, whether a fit analyses the identifiability of its parameters by default.
-- `fits`, `fits_path`: the ids of the adopted fits, whose records in `fits_dir` (`fits` next to the output directory of the factory by default) give the fitted values and their uncertainty to the factory (`fit_records()`), see [Uncertainty of the fitted parameters](uncertainty.md).
+- `fits` (the field `adopted_ids`), `fits_path` (`fits_dir`): the ids of the adopted fits, one per fit problem, whose records in `fits_dir` (`fits` next to the output directory of the factory by default) give the fitted values and their uncertainty to the factory (`fit_records()`), see [Uncertainty of the fitted parameters](uncertainty.md).
 - `credibility` (see above) is loaded by `load_credibility()` and assessed by `run_credibility`, which writes into `credibility_dir` (`results/credibility`); see [Context of use and credibility](credibility.md).
 - `release`: the release metadata of the model (`ReleaseSettings`: the repository, the Docker image, the authors, ...), which `pkpd_release` needs to make the release of its model repository, see [Release of a model repository](release.md); `None` (the default) for a model without a release repository.
 
-The scans run serially by default (`n_workers=1`), and then sbmlsim runs the experiments of a run in a pool: a worker per four experiments, at most one per CPU, a few experiments serially, every experiment with its scans in its worker (sbmlsim 0.13; the 28 experiments of HCTZ take 12 s instead of 21 s). A pool needs the guard `if __name__ == "__main__":` in the script which runs the model (the processes of the pool import it again; the commands of pkpdsim have it), and the memory of a run grows with every process, about 330 MB for a PBPK model. `n_workers=4` runs a pool of four processes for a scan, `n_workers=None` leaves the choice to sbmlsim (a pool of every CPU for a scan of 256 points or more, serially below); a run whose scans have a pool runs its experiments serially, so the scans keep it:
+The scans of a run run serially by default (`n_workers=1`, `RUN_WORKERS`, of `run_experiments` and of the commands), and then sbmlsim runs the experiments of a run in a pool: a worker per four experiments, at most one per CPU, a few experiments serially, every experiment with its scans in its worker (sbmlsim 0.13; the 28 experiments of HCTZ take 12 s instead of 21 s). A pool needs the guard `if __name__ == "__main__":` in the script which runs the model (the processes of the pool import it again; the commands of pkpdsim have it), and the memory of a run grows with every process, about 330 MB for a PBPK model. `model.run_experiments(..., n_workers=4)` runs a pool of four processes for a scan, `n_workers=None` leaves the choice to sbmlsim (a pool of every CPU for a scan of 256 points or more, serially below); a run whose scans have a pool runs its experiments serially, so the scans keep it:
 
 ```python
-from pkpdsim.model import FigureSettings, SimulatorSettings
+from sbmlsim.project import SimulatorSettings
+
+from pkpdsim.model import RUN_WORKERS, FigureSettings
 
 serial = SimulatorSettings(absolute_tolerance=1e-10, relative_tolerance=1e-10)
-assert serial.n_workers == 1
-pool = SimulatorSettings(n_workers=4)
-sbmlsim_chooses = SimulatorSettings(n_workers=None)
-
-try:
-    SimulatorSettings(n_workers=0)
-except ValueError as err:
-    print(err)
+assert RUN_WORKERS == 1
+print(serial.simulator(4).n_workers)
 
 figures = FigureSettings(savefig_dpi=300, legend_fontsize=10)
 assert figures.formats == ("svg",)
 print(figures.sbmlsim_settings().legend_fontsize)
+print(figures.outputs())
 ```
 
 ## Commands

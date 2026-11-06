@@ -5,13 +5,13 @@ mappings of the studies `CredA` and `CredB`; the tests write into a copy of
 its folder of fits, never into the one of the session.
 """
 
-import dataclasses
 import math
 import shutil
 from pathlib import Path
 
 import pytest
 from sbmlsim.fit.objects import MappingKind
+from sbmlsim.fit.result import fit_subset
 
 from pkpdsim.cli import fit_command
 from pkpdsim.credibility import CredibilityAssessment, FactorStatus, assess
@@ -26,7 +26,6 @@ from pkpdsim.credibility.cross_validation import (
     write_cross_validation,
 )
 from pkpdsim.credibility.report import write_outputs
-from pkpdsim.fit import fit_subset, leveled_definitions
 from pkpdsim.model import PKPDModel
 
 
@@ -35,11 +34,11 @@ def model(credibility_model: PKPDModel, tmp_path: Path) -> PKPDModel:
     """Get the credibility model with a copy of its folder of adopted fits."""
     fits = tmp_path / "fits"
     shutil.copytree(credibility_model.fits_dir, fits)
-    return dataclasses.replace(credibility_model, fits_path=fits)
+    return credibility_model.replace(fits_dir=fits)
 
 
 def _definition(model: PKPDModel):  # noqa: ANN202
-    return leveled_definitions(model)[fit_subset(model.fits[0])]
+    return model.load_fit_definitions()[fit_subset(model.adopted_ids[0])]
 
 
 def test_the_training_studies(model: PKPDModel) -> None:
@@ -59,7 +58,7 @@ def test_held_out(model: PKPDModel) -> None:
 
 
 def test_cross_validate(model: PKPDModel, tmp_path: Path) -> None:
-    fit_id = model.fits[0]
+    fit_id = model.adopted_ids[0]
     result = cross_validate(model, fit_id, output_dir=tmp_path / "cv")
     assert result.fit == fit_id
     assert [s.study for s in result.studies] == ["CredA", "CredB"]
@@ -97,13 +96,13 @@ def test_cross_validate(model: PKPDModel, tmp_path: Path) -> None:
 
 def test_the_studies_must_be_training_studies(model: PKPDModel, tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="no training studies"):
-        cross_validate(model, model.fits[0], ["CredC"], output_dir=tmp_path)
+        cross_validate(model, model.adopted_ids[0], ["CredC"], output_dir=tmp_path)
     with pytest.raises(ValueError, match="is not adopted"):
         cross_validate(model, "DECAY_20260101_000000__00000", output_dir=tmp_path)
 
 
 def test_the_command(model: PKPDModel, tmp_path: Path) -> None:
-    fit_id = model.fits[0]
+    fit_id = model.adopted_ids[0]
     assert (
         fit_command(
             model,

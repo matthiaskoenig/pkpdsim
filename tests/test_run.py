@@ -1,6 +1,5 @@
 """The run of the simulation experiments of a model."""
 
-import dataclasses
 from pathlib import Path
 from typing import Any
 
@@ -9,9 +8,10 @@ import matplotlib.image
 import pytest
 from sbmlsim.experiment import ExperimentRunError, ExperimentRunner
 from sbmlsim.plot import FigureSettings as SbmlsimFigureSettings
+from sbmlsim.project import SimulatorSettings
 
 import pkpdsim.run
-from pkpdsim.model import FigureSettings, SimulatorSettings
+from pkpdsim.model import FigureSettings
 from pkpdsim.run import create_simulator
 from pkpdsim_toy import MODEL
 from pkpdsim_toy.broken import ToyCannotInitialize, ToyFigureFails, ToyRefusedUnit
@@ -37,7 +37,7 @@ def test_the_formats_of_a_run(tmp_path: Path) -> None:
 def test_a_relative_output_dir_is_below_the_simulation_results(
     tmp_path: Path,
 ) -> None:
-    model = dataclasses.replace(MODEL, results_path=tmp_path)
+    model = MODEL.replace(results_path=tmp_path)
     output = model.run_experiments(ToyDecay, output_dir="relative")
     assert output == tmp_path / "simulation" / "relative"
     assert list(output.glob("**/*.html"))
@@ -47,9 +47,7 @@ def test_the_static_resolution_is_applied(tmp_path: Path) -> None:
     """`savefig_dpi` sets the size of the images in pixels."""
     widths = []
     for dpi in [20, 40]:
-        model = dataclasses.replace(
-            MODEL, figures=FigureSettings(formats=("png",), savefig_dpi=dpi)
-        )
+        model = MODEL.replace(figures=FigureSettings(formats=("png",), savefig_dpi=dpi))
         output = model.run_experiments(ToyDecay, output_dir=tmp_path / str(dpi))
         (png,) = output.glob("**/*fig_decay*.png")
         widths.append(matplotlib.image.imread(png).shape[1])
@@ -68,7 +66,7 @@ def test_the_figures_are_collected(tmp_path: Path) -> None:
 
 
 def test_the_figures_of_a_relative_output_dir_are_collected(tmp_path: Path) -> None:
-    model = dataclasses.replace(MODEL, results_path=tmp_path)
+    model = MODEL.replace(results_path=tmp_path)
     figures = model.run_simulation_experiments([ToyDecay], output_dir="relative")
     assert figures == tmp_path / "simulation" / "relative" / "_figures"
     assert list(figures.glob("*.svg"))
@@ -113,15 +111,16 @@ def test_the_figure_settings_of_the_model_reach_sbmlsim(
     MODEL.run_experiments(ToyDecay, output_dir=tmp_path)
     settings = captured["figure_settings"]
     assert isinstance(settings, SbmlsimFigureSettings)
-    assert settings == MODEL.figures.sbmlsim_settings()
+    assert settings == MODEL.figure_settings
     assert settings.legend_fontsize == 7
 
 
 def test_the_simulator_has_the_settings_of_the_model() -> None:
     simulator = create_simulator(
-        SimulatorSettings(absolute_tolerance=1e-9, relative_tolerance=1e-8, n_workers=3)
+        SimulatorSettings(absolute_tolerance=1e-9, relative_tolerance=1e-8), 3
     )
     assert simulator.n_workers == 3
+    assert create_simulator(MODEL.simulator).n_workers == 1
     assert simulator.integrator_settings["absolute_tolerance"] == 1e-9
     assert simulator.integrator_settings["relative_tolerance"] == 1e-8
 
@@ -129,20 +128,19 @@ def test_the_simulator_has_the_settings_of_the_model() -> None:
 def test_a_run_takes_other_simulator_settings(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    seen: list[SimulatorSettings] = []
+    seen: list[tuple[SimulatorSettings, int | None]] = []
     original = pkpdsim.run.create_simulator
 
-    def create(settings: SimulatorSettings) -> object:
-        seen.append(settings)
-        return original(settings)
+    def create(settings: SimulatorSettings, n_workers: int | None) -> object:
+        seen.append((settings, n_workers))
+        return original(settings, n_workers)
 
     monkeypatch.setattr(pkpdsim.run, "create_simulator", create)
-    MODEL.run_experiments(
-        ToyDecay, output_dir=tmp_path, simulator=SimulatorSettings(n_workers=2)
-    )
-    assert [s.n_workers for s in seen] == [2]
+    other = SimulatorSettings(relative_tolerance=1e-9)
+    MODEL.run_experiments(ToyDecay, output_dir=tmp_path, simulator=other, n_workers=2)
+    assert seen == [(other, 2)]
     MODEL.run_experiments(ToyDecay, output_dir=tmp_path / "model")
-    assert seen[-1] == MODEL.simulator
+    assert seen[-1] == (MODEL.simulator, 1)
 
 
 def test_a_run_compiles_with_the_level_of_the_settings(

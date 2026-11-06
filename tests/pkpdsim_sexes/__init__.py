@@ -12,7 +12,9 @@ are not tracked.
 
 from pathlib import Path
 
-from pkpdsim.model import FigureSettings, PKPDModel, SimulatorSettings
+from sbmlsim.project import SimulatorSettings
+
+from pkpdsim.model import FigureSettings, PKPDModel
 
 SEXES_PATH = Path(__file__).parent
 MODEL_BASE_PATH = SEXES_PATH / "models"

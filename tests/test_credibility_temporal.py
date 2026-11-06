@@ -4,7 +4,6 @@ The hand-built table of the test package has one fit, `DECAY`; the
 chronologies date the studies `CredA` and `CredB` around the day of the fit.
 """
 
-import dataclasses
 import json
 from datetime import date, timedelta
 from pathlib import Path
@@ -237,10 +236,9 @@ def test_the_chronology_of_a_model(tmp_path: Path) -> None:
     _write_record(first, _record("CredB", date(2026, 10, 5)))
     _write_record(second, _record("CredB", None))
     (first / "Other").mkdir()
-    model = dataclasses.replace(
-        MODEL,
-        fits=["DECAY_20261001_120000__abcde"],
-        data_paths=(first, second, tmp_path / "missing"),
+    model = MODEL.replace(
+        adopted_ids=["DECAY_20261001_120000__abcde"],
+        data_path=(first, second, tmp_path / "missing"),
     )
     found = chronology(model)
     assert found.fits == {"DECAY": FIT_DAY}
@@ -253,10 +251,10 @@ def test_the_chronology_of_a_model(tmp_path: Path) -> None:
 def test_the_assessment_reads_the_chronology(
     credibility_model: PKPDModel, tmp_path: Path
 ) -> None:
-    (fit_id,) = credibility_model.fits
+    (fit_id,) = credibility_model.adopted_ids
     later = fit_date(fit_id) + timedelta(days=1)
     _write_record(tmp_path, _record("CredA", later))
-    model = dataclasses.replace(credibility_model, data_paths=(tmp_path,))
+    model = credibility_model.replace(data_path=(tmp_path,))
     assessment = assess(model, verification=False)
     dose = _context(assessment, "dose")
     assert dose.temporal is not None

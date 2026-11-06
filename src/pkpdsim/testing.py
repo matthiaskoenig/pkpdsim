@@ -38,9 +38,8 @@ from sbmlsim.experiment import (
     SimulationExperiment,
 )
 from sbmlsim.fit.cli import FitRun, run_fit
+from sbmlsim.project import resolve
 
-from pkpdsim.fit import leveled_definitions
-from pkpdsim.model import resolve
 from pkpdsim.uncertainty import check_fit_parameters
 
 if TYPE_CHECKING:
@@ -192,7 +191,7 @@ def check_model(model: PKPDModel) -> None:
             f"the name '{model.name}' is not the name of the package '{component}'"
         )
     for label, path in [
-        ("model_path", model.model_path),
+        ("model_path", model.model_path()),
         ("female_model_path", model.female_model_path),
         ("the factory directory", model.factory_dir),
         ("archive_path", model.archive_path),
@@ -208,7 +207,7 @@ def check_model(model: PKPDModel) -> None:
     references = {
         "factory": model.factory,
         "experiments": model.experiments,
-        "fit_definitions": model.fit_definitions,
+        "fit_definitions": model.fits or None,
         "extra_arguments": model.extra_arguments,
         **{f"extra action '{a.name}'": a.function for a in model.extra_actions},
     }
@@ -217,7 +216,11 @@ def check_model(model: PKPDModel) -> None:
         if reference is None:
             continue
         try:
-            resolved[name] = resolve(reference, model.package)
+            resolved[name] = (
+                resolve(reference, model.package)
+                if isinstance(reference, str)
+                else reference
+            )
         except Exception as err:  # reported, whatever the reference does
             problems.append(f"{name} '{reference}' does not resolve: {err!r}")
     if "experiments" in resolved:
@@ -238,7 +241,7 @@ def _runner(model: PKPDModel) -> ExperimentRunner:
     """Initialize the registered experiments of a model, as its runs do."""
     return ExperimentRunner(
         experiment_classes=registered_experiments(model),
-        base_path=model.path,
+        base_path=model.base_path or model.path,
         data_path=list(model.data_paths) or None,
         simulator=None,
         on_error="log",
@@ -367,7 +370,7 @@ def start_fits(
     """
     runs: dict[str, dict[str, FitRun]] = {}
     # the problems load their models at the level of the model
-    for key, definition in leveled_definitions(model).items():
+    for key, definition in model.load_fit_definitions().items():
         runs[key] = run_fit(
             definition,
             opid=f"test_{key}",

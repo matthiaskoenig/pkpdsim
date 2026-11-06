@@ -7,8 +7,10 @@ before the tests start (`tests/conftest.py`) and is not tracked.
 
 from pathlib import Path
 
-from pkpdsim.model import FigureSettings, PKPDModel, SimulatorSettings
-from pkpdsim.release.settings import Author, ReleaseSettings
+from sbmlsim.project import SimulatorSettings
+from sbmlsim.release.settings import Author, ReleaseSettings
+
+from pkpdsim.model import FigureSettings, PKPDModel
 
 TOY_PATH = Path(__file__).parent
 MODEL_BASE_PATH = TOY_PATH / "models"

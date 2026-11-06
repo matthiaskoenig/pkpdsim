@@ -33,10 +33,10 @@ from typing import TYPE_CHECKING, TypedDict
 
 import numpy as np
 import pandas as pd
+from sbmlsim.fit.result import fit_subset
 from scipy import stats
 
 from pkpdsim.credibility.selection import normalize_observable
-from pkpdsim.fit import fit_subset
 
 if TYPE_CHECKING:
     from sbmlsim.fit.report import FitReport
@@ -325,7 +325,7 @@ def predictive_checks(
     vectors: dict[str, int] = {}
     studies: dict[str, int] = {}
     failed: dict[str, int] = {}
-    for fit_id in model.fits:
+    for fit_id in model.adopted_ids:
         subset = fit_subset(fit_id)
         report = fits.reports.get(subset)
         if report is None:

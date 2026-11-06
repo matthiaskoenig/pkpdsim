@@ -185,7 +185,7 @@ def _fit_entries(context: ProjectContext, release_path: Path) -> list[FitEntry]:
     """Read the records of the adopted fits from the exported package."""
     directory = release_path / fits_prefix(context.model)
     entries = []
-    for fit_id in context.model.fits:
+    for fit_id in context.model.adopted_ids:
         try:
             record = FitRecord.load(directory / fit_id)
         except (FileNotFoundError, ValueError) as err:
@@ -367,7 +367,7 @@ def write_docs(context: ProjectContext, release_path: Path) -> list[Path]:
         "omex": archive.name if archive is not None else None,
         "experiments": _experiments(release_path),
         "fits": _fit_entries(context, release_path),
-        "fit_ids": list(context.model.fits),
+        "fit_ids": list(context.model.adopted_ids),
         "notes": _release_notes(release_path),
         "credibility": _credibility(release_path),
     }

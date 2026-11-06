@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 from sbmlsim.fit.cli import FitDefinition, load_fit_records
+from sbmlsim.project import SimulatorSettings
 from sbmlsim.report.render import escape_typst
 
 from pkpdsim.cli import (
@@ -70,12 +71,12 @@ def test_the_options_of_the_fit_command() -> None:
 def test_the_identifiability_default_comes_from_the_model() -> None:
     definitions = MODEL.load_fit_definitions()
     assert not fit_parser(MODEL, definitions).parse_args([]).identifiability
-    model = dataclasses.replace(MODEL, fit_identifiability=True)
+    model = MODEL.replace(fit_identifiability=True)
     assert fit_parser(model, definitions).parse_args([]).identifiability
 
 
 def test_a_model_without_fits_has_no_fit_command() -> None:
-    model = dataclasses.replace(MODEL, fit_definitions=None)
+    model = MODEL.replace(fits={})
     with pytest.raises(ValueError, match="no fit definitions"):
         fit_command(model, [])
 
@@ -160,7 +161,7 @@ def test_the_identifiability_of_stored_parameters(tmp_path: Path) -> None:
 
 
 def test_the_reports_write_into_the_results_of_the_model(tmp_path: Path) -> None:
-    model = dataclasses.replace(MODEL, results_path=tmp_path)
+    model = MODEL.replace(results_path=tmp_path)
     parameters = fitted_parameters(tmp_path / "fit")
     report_command(
         model, ["--subset", "DECAY", "--no-mapping-figures", str(parameters)]
@@ -179,7 +180,7 @@ def test_a_model_with_an_empty_mapping_of_fit_definitions_fails() -> None:
 
 
 def test_the_fit_writes_into_the_results_of_the_model(tmp_path: Path) -> None:
-    model = dataclasses.replace(MODEL, results_path=tmp_path)
+    model = MODEL.replace(results_path=tmp_path)
     fit_command(model, ["--runs", "1", "--no-mapping-figures"])
     assert list((tmp_path / "fit").glob("**/parameters.json"))
 
@@ -190,7 +191,7 @@ def test_the_help_states_the_default_of_the_identifiability() -> None:
     off = " ".join(off.split())
     assert "default: False" in off
     assert "--identifiability analyses the identifiability" in off
-    model = dataclasses.replace(MODEL, fit_identifiability=True)
+    model = MODEL.replace(fit_identifiability=True)
     on = fit_parser(model, definitions).format_help()
     on = " ".join(on.split())
     assert "default: True" in on
@@ -251,7 +252,7 @@ def _adopted_other(tmp_path: Path) -> Path:
 
 def test_the_report_context_names_the_fixed_adopted_fits(tmp_path: Path) -> None:
     other = _adopted_other(tmp_path)
-    model = dataclasses.replace(MODEL, fits=[other.name], fits_path=other.parent)
+    model = MODEL.replace(adopted_ids=[other.name], fits_dir=other.parent)
     definition = model.load_fit_definitions()["DECAY"]
 
     context = report_context(model, "DECAY", definition, fixed_fits=[other.name])
@@ -309,7 +310,7 @@ def test_the_fixed_values_leave_out_the_parameters_of_the_fit(
         path = other / name
         data = json.loads(path.read_text(encoding="utf-8"))
         path.write_text(json.dumps(_rename(data, "k", "k_other")), encoding="utf-8")
-    model = dataclasses.replace(MODEL, fits=[other.name], fits_path=other.parent)
+    model = MODEL.replace(adopted_ids=[other.name], fits_dir=other.parent)
     value = model.fit_records().records[other.name].parameters["k_other"].value
 
     output = tmp_path / "second"
@@ -325,14 +326,14 @@ def test_the_report_of_stored_parameters_has_the_context_of_its_record(
     tmp_path: Path,
 ) -> None:
     other = _adopted_other(tmp_path)
-    model = dataclasses.replace(MODEL, fits=[other.name], fits_path=other.parent)
+    model = MODEL.replace(adopted_ids=[other.name], fits_dir=other.parent)
     output = tmp_path / "second"
     fit_command(
         model, ["--runs", "1", "--no-mapping-figures", "--output_dir", str(output)]
     )
     parameters = _report_dir(output) / "parameters.json"
     # the adopted fits of the model changed since the fit ran
-    later = dataclasses.replace(MODEL, fits=[], results_path=tmp_path / "results")
+    later = MODEL.replace(adopted_ids=[], results_path=tmp_path / "results")
     report = report_command(
         later, ["--subset", "DECAY", "--no-mapping-figures", str(parameters)]
     )
@@ -343,7 +344,7 @@ def test_the_report_of_stored_parameters_has_the_context_of_its_record(
 
 def test_a_record_without_provenance_has_no_fixed_fits(tmp_path: Path) -> None:
     other = _adopted_other(tmp_path)
-    model = dataclasses.replace(MODEL, fits=[other.name], fits_path=other.parent)
+    model = MODEL.replace(adopted_ids=[other.name], fits_dir=other.parent)
     definition = model.load_fit_definitions()["DECAY"]
     records = load_fit_records(other)
     assert records.opt_result is not None
@@ -403,7 +404,7 @@ def test_a_fit_starts_from_another_fit(toy_fit: Path) -> None:
 def test_a_fit_starts_from_an_adopted_fit(fits_dir: Path, tmp_path: Path) -> None:
     """An adopted fit of the model is found by its id."""
     (record,) = fits_dir.iterdir()
-    model = dataclasses.replace(MODEL, fits_path=fits_dir)
+    model = MODEL.replace(fits_dir=fits_dir)
     output = tmp_path / "fit"
     fit_command(
         model,
@@ -476,8 +477,10 @@ def test_the_fits_compile_at_the_level_of_the_model(
         return {}
 
     monkeypatch.setattr(pkpdsim.cli, "run_fit", recording_run_fit)
-    simulator = dataclasses.replace(MODEL.simulator, jit_optimization="O0")
-    model = dataclasses.replace(MODEL, simulator=simulator)
+    simulator = SimulatorSettings(
+        absolute_tolerance=1e-10, relative_tolerance=1e-10, jit_optimization="O0"
+    )
+    model = MODEL.replace(simulator=simulator)
     fit_command(model, ["--runs", "1", "--output_dir", str(tmp_path)])
     assert seen == ["O0"]
     # a model without a level takes the level of sbmlsim
@@ -499,8 +502,10 @@ def test_the_reports_compile_at_the_level_of_the_model(
 
     monkeypatch.setattr(pkpdsim.cli, "report_cli", recording)
     monkeypatch.setattr(pkpdsim.cli, "identifiability_cli", recording)
-    simulator = dataclasses.replace(MODEL.simulator, jit_optimization="O1")
-    model = dataclasses.replace(MODEL, simulator=simulator)
+    simulator = SimulatorSettings(
+        absolute_tolerance=1e-10, relative_tolerance=1e-10, jit_optimization="O1"
+    )
+    model = MODEL.replace(simulator=simulator)
     report_command(model, ["parameters.json"])
     identifiability_command(model, ["parameters.json"])
     assert seen == ["O1", "O1"]

@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 from release_git import git
+from sbmlsim.release.settings import ReleaseSettings
 from sbmlutils.console import console
 
 from pkpdsim.fit import fit_subset
@@ -23,7 +24,6 @@ from pkpdsim.release import cli as cli_module
 from pkpdsim.release import source as source_module
 from pkpdsim.release.cli import main, release
 from pkpdsim.release.manifest import BUILD_MARKER, MANIFEST_FILE
-from pkpdsim.release.settings import ReleaseSettings
 from pkpdsim.release.source import ReleaseError, Runner, run
 from pkpdsim.uncertainty import adopt_fit
 from pkpdsim_toy import MODEL, TOY_PATH
@@ -123,9 +123,8 @@ def model(
     source_repo_model: PKPDModel, toy_fit: Path, release_settings: ReleaseSettings
 ) -> PKPDModel:
     """The toy model with an adopted fit and an archive, committed in the monorepo."""
-    model = dataclasses.replace(
-        source_repo_model,
-        fits=[toy_fit.name],
+    model = source_repo_model.replace(
+        adopted_ids=[toy_fit.name],
         archive_path=source_repo_model.path / "toy.omex",
         release=release_settings,
     )
@@ -170,12 +169,12 @@ def do_release(
 def test_missing_release_settings(model: PKPDModel, clone: Path) -> None:
     runner = FakeRunner()
     with pytest.raises(ReleaseError, match=r"MODEL\.release is not set"):
-        do_release(dataclasses.replace(model, release=None), clone, publish=False)
+        do_release(model.replace(release=None), clone, publish=False)
     assert model.release is not None
     incomplete = dataclasses.replace(model.release, doi="", funding="")
     with pytest.raises(ReleaseError, match="doi, funding"):
         do_release(
-            dataclasses.replace(model, release=incomplete),
+            model.replace(release=incomplete),
             clone,
             publish=False,
             runner=runner,
@@ -218,8 +217,8 @@ def test_no_publish_stops_before_commit(model: PKPDModel, clone: Path) -> None:
     assert (clone / "uv.lock").is_file()
     assert (clone / "docs" / "images" / "toy_model.png").is_file()
     assert (clone / "release-notes" / f"{VERSION}.md").is_file()
-    assert (clone / "fit" / model.fits[0] / "index.html").is_file()
-    assert (clone / "fit" / model.fits[0] / "report.pdf").is_file()
+    assert (clone / "fit" / model.adopted_ids[0] / "index.html").is_file()
+    assert (clone / "fit" / model.adopted_ids[0] / "report.pdf").is_file()
     assert not (clone / "run_toy.py").exists()
 
 
@@ -339,11 +338,11 @@ def test_local_lock_after_review_rebuilds(model: PKPDModel, clone: Path) -> None
 
 
 def test_fit_without_record_refused(model: PKPDModel, clone: Path) -> None:
-    fit_id = f"{fit_subset(model.fits[0])}_19990101_000000__00000"
+    fit_id = f"{fit_subset(model.adopted_ids[0])}_19990101_000000__00000"
     runner = FakeRunner()
     with pytest.raises(ReleaseError, match=fit_id):
         do_release(
-            dataclasses.replace(model, fits=[fit_id]),
+            model.replace(adopted_ids=[fit_id]),
             clone,
             publish=False,
             runner=runner,
@@ -353,7 +352,7 @@ def test_fit_without_record_refused(model: PKPDModel, clone: Path) -> None:
 
 def test_publish_needs_archive(model: PKPDModel, clone: Path) -> None:
     with pytest.raises(ReleaseError, match="archive"):
-        do_release(dataclasses.replace(model, archive_path=None), clone, publish=True)
+        do_release(model.replace(archive_path=None), clone, publish=True)
 
 
 def test_main_reports_refusal(

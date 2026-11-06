@@ -18,41 +18,51 @@ MODEL = PKPDModel(
 )
 ```
 
-The factory, the registry of the experiments and the fit definitions are
-references `"module:attribute"`, resolved when they are used: the experiments
-import the `__init__.py` of their model, so the model object cannot import them,
-and importing a model package does not import its experiments. A module which
-starts with a dot is relative to `package`.
+A `PKPDModel` is a `sbmlsim.project.Project`: the factory, the experiments, the
+fit definitions and the credibility declaration are references
+`"module:attribute"`, resolved when they are used, the settings of the
+simulator are the `sbmlsim.project.SimulatorSettings`, the known exceptions of
+the tests the `sbmlsim.project.CheckSettings` and the release metadata the
+`sbmlsim.release.settings.ReleaseSettings` of sbmlsim. The keywords of the
+model packages (`path`, `model_path`, `female_model_path`, `data_paths`,
+`fit_definitions`, `fits`, `fits_path`, `factory_path`, `figures`) are mapped
+onto the fields of the project when a model is created, see `PKPDModel`.
 
 A model whose studies include women has a female build next to the male one
 (`female_model_path`, the factory builds both from one definition, see
-`pkpdsim.pbpk.create_archive`): `model_path` stays the male build, the model of
-every caller which does not ask for a sex, and an experiment chooses the build
-of the sex of its subjects (`pkpdsim.experiment.PKPDSimulationExperiment.sex`).
+`pkpdsim.pbpk.create_archive`): the builds are the variants of the project by
+the value of their `pkpdsim.sex.Sex`, the male build first, the model of every
+caller which does not ask for a sex, and an experiment chooses the build of the
+sex of its subjects (`pkpdsim.experiment.PKPDSimulationExperiment.sex`).
 
 `FigureSettings` is the `sbmlsim.plot.FigureSettings` of sbmlsim with the
-formats of the figures and the resolution of the static images; the module
+formats of the figures and the resolution of the static images, which a model
+splits into the `figure_settings` and the `figures` of its project; the module
 therefore imports sbmlsim's plotting.
 """
 
 from __future__ import annotations
 
-import importlib
-from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Self, override
 
+from pydantic import model_validator
 from sbmlsim.plot import FigureSettings as SbmlsimFigureSettings
+from sbmlsim.project import (
+    FigureOutputs,
+    Project,
+    SimulatorSettings,
+    check_reference,
+    normalize_formats,
+)
 
-from pkpdsim.release.settings import ReleaseSettings
 from pkpdsim.sex import Sex
 
 if TYPE_CHECKING:
     import roadrunner
     from sbmlsim.experiment import SimulationExperiment
-    from sbmlsim.fit.cli import FitDefinition
-    from sbmlsim.model.tolerances import AbsoluteTolerance
 
     from pkpdsim.credibility import Credibility
     from pkpdsim.uncertainty import FitRecords, UncertaintySettings
@@ -60,124 +70,22 @@ if TYPE_CHECKING:
 #: the actions of the `run` command of a model, see `pkpdsim.cli`
 RUN_ACTIONS: tuple[str, ...] = ("simulate", "list_experiments", "factory", "all")
 
+#: the processes of a run of the experiments of a model by default: serially,
+#: so that a script which runs a model needs no guard `if __name__ == "__main__":`
+RUN_WORKERS = 1
 
-def check_reference(reference: str) -> None:
-    """Check that a reference has the form `"module:attribute"`.
+#: the settings of the simulator of a model which does not give its own
+DEFAULT_SIMULATOR = SimulatorSettings(
+    absolute_tolerance=1e-10, relative_tolerance=1e-10
+)
 
-    The module may start with dots (relative to a package), the attribute may be
-    dotted (an attribute of an attribute).
-
-    Args:
-        reference: the reference to check.
-
-    Raises:
-        ValueError: if the reference does not have the form.
-    """
-    module, separator, attribute = reference.partition(":")
-    names = [*module.lstrip(".").split("."), *attribute.split(".")]
-    if not separator or not all(name.isidentifier() for name in names):
-        raise ValueError(f"A reference is 'module:attribute', not '{reference}'.")
-
-
-def resolve(reference: str, package: str | None = None) -> Any:  # noqa: ANN401
-    """Resolve a reference `"module:attribute"` to the object it names.
-
-    Args:
-        reference: the reference; a module which starts with a dot is relative to
-            `package`.
-        package: the package of relative references.
-
-    Returns:
-        The object.
-
-    Raises:
-        ValueError: if the reference is malformed or relative without a package.
-        AttributeError: if the module has no such attribute; the message names
-            the reference.
-    """
-    check_reference(reference)
-    module_name, _, attribute = reference.partition(":")
-    if module_name.startswith(".") and package is None:
-        raise ValueError(f"The relative reference '{reference}' needs a package.")
-    obj: Any = importlib.import_module(module_name, package)
-    for name in attribute.split("."):
-        try:
-            obj = getattr(obj, name)
-        except AttributeError as err:
-            raise AttributeError(f"'{reference}' cannot be resolved: {err}") from err
-    return obj
-
-
-def normalize_formats(formats: Sequence[str]) -> tuple[str, ...]:
-    """Get figure formats as a lower-case tuple.
-
-    Raises:
-        TypeError: if the formats are a single string, e.g. `"svg"` instead of
-            `("svg",)`; a string is a sequence of characters.
-    """
-    if isinstance(formats, str):
-        raise TypeError(
-            f"The figure formats must be a sequence of strings, not {formats!r}; "
-            f"use ({formats!r},)."
-        )
-    return tuple(f.lower() for f in formats)
-
-
-@dataclass(frozen=True, kw_only=True)
-class SimulatorSettings:
-    """The integrator settings of the simulation experiments of a model.
-
-    All fields are keyword-only.
-
-    Attributes:
-        absolute_tolerance: the absolute tolerance, one value for every state or
-            an `AbsoluteTolerance` of sbmlsim with tolerances per kind and state.
-        relative_tolerance: the relative tolerance.
-        n_workers: the processes of a scan: `1` runs serially, a number runs a
-            pool of that many processes, `None` lets sbmlsim choose (a pool of
-            every CPU for a scan of `sbmlsim.parallel.POOL_THRESHOLD` points or
-            more, serially otherwise). A pool needs the guard
-            `if __name__ == "__main__":` in a script which runs the model.
-        jit_optimization: the optimization level with which LLJIT compiles
-            the model for the runs of its experiments and the tests of
-            `pkpdsim.testing` (`sbmlsim.model.model_roadrunner.JitOptimization`,
-            `"O0"` to `"O3"`), `None` for the level of sbmlsim (`O2`, or the
-            environment variable `SBMLSIM_JIT_OPTIMIZATION`). `"O0"` compiles a
-            model with large initial assignments several times faster (the
-            creatinine model in 4.5 s instead of 24 s) and simulates a little
-            slower. The problems of the fits, their reports and the
-            identifiability analysis (`run_fit`, `run_report`,
-            `run_identifiability`, `pkpdsim.testing.start_fits`,
-            `pkpdsim-verify fits`) load their models at the level, in the
-            process and in every worker of a pool: their fit definitions
-            carry it (`pkpdsim.fit.at_level`), and a problem carries its level
-            into its workers, so neither the environment of the process nor
-            that of a forkserver matters; `pkpdsim-verify dump` runs at it,
-            and a test of a model loads its model at it with
-            `PKPDModel.load_roadrunner`.
-    """
-
-    absolute_tolerance: float | AbsoluteTolerance = 1e-10
-    relative_tolerance: float = 1e-10
-    n_workers: int | None = 1
-    jit_optimization: str | None = None
-
-    def __post_init__(self) -> None:
-        """Check the number of processes and the optimization level.
-
-        Raises:
-            ValueError: if `n_workers` is neither a positive int nor `None`, or
-                `jit_optimization` is no level of sbmlsim.
-        """
-        if self.jit_optimization is not None:
-            from sbmlsim.model.model_roadrunner import resolve_jit_optimization
-
-            resolve_jit_optimization(self.jit_optimization)
-        n = self.n_workers
-        if n is not None and (isinstance(n, bool) or not isinstance(n, int) or n < 1):
-            raise ValueError(
-                f"n_workers is a positive number of processes or None, not {n!r}."
-            )
+#: the keywords of a model package which are fields of the project by another name
+_RENAMED: dict[str, str] = {
+    "path": "root",
+    "data_paths": "data_path",
+    "fits_path": "fits_dir",
+    "factory_path": "factory_dir",
+}
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -187,11 +95,9 @@ class FigureSettings(SbmlsimFigureSettings):
     The settings of sbmlsim's figures (`sbmlsim.plot.FigureSettings`: the
     resolution, the sizes of the panels, the fonts and the legends, with the
     defaults of sbmlsim) and what a model adds: the formats of the figures and
-    the resolution of the static images. A run hands the settings of sbmlsim to
-    every figure (`sbmlsim_settings`); an experiment (`figure_settings`) and a
-    figure (`Figure(settings=...)`) override them. `savefig_dpi` is the
-    `savefig.dpi` of matplotlib while the figures of a run are drawn
-    (`rc_params`).
+    the resolution of the static images. A model splits them into the settings
+    of its figures (`sbmlsim_settings`, the `figure_settings` of the project)
+    and the files of its figures (`outputs`, the `figures` of the project).
 
     The fields of sbmlsim can be given by position, as in sbmlsim; `formats`
     and `savefig_dpi` only by keyword.
@@ -230,9 +136,9 @@ class FigureSettings(SbmlsimFigureSettings):
             **{name: getattr(self, name) for name in SbmlsimFigureSettings.names()}
         )
 
-    def rc_params(self) -> dict[str, float]:
-        """Get the settings of matplotlib for a run, the resolution of the images."""
-        return {} if self.savefig_dpi is None else {"savefig.dpi": self.savefig_dpi}
+    def outputs(self) -> FigureOutputs:
+        """Get the files of the figures: the formats and the resolution."""
+        return FigureOutputs(formats=tuple(self.formats), savefig_dpi=self.savefig_dpi)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -247,10 +153,12 @@ class ExtraAction:
         function: reference to the function which runs the action; it is called
             with the model, the parsed arguments and the directory of the results.
             The arguments have the settings of the simulator of the run as
-            `simulator` (`SimulatorSettings`, those of the model with the
-            processes of `--workers`), which an action that simulates passes on,
-            e.g. `model.run_experiments(..., simulator=options.simulator)` or
-            `pkpdsim.run.create_simulator(options.simulator)`.
+            `simulator` (`sbmlsim.project.SimulatorSettings`, those of the
+            model) and the processes of `--workers` as `n_workers`, which an
+            action that simulates passes on, e.g.
+            `model.run_experiments(..., simulator=options.simulator,
+            n_workers=options.n_workers)` or
+            `pkpdsim.run.create_simulator(options.simulator, options.n_workers)`.
         in_all: run the action with `--action all`, after the simulations.
     """
 
@@ -260,116 +168,149 @@ class ExtraAction:
     in_all: bool = False
 
 
-@dataclass(frozen=True, kw_only=True)
-class CheckSettings:
-    """The known exceptions of the tests of a model, each with its reason.
+def _figures(data: dict[str, Any]) -> None:
+    """Split the figure settings of a model into those of its project.
 
-    All fields are keyword-only. The mappings are copied, so the settings do not
-    change with the dictionaries they were created from, and the settings are
-    hashable.
+    Args:
+        data: the keywords of the model, changed in place.
 
-    Attributes:
-        not_registered: experiment classes which are defined but not in the
-            group `all` of the registry on purpose, by class name.
-        not_importable: modules below the package which do not import in the
-            test environment (an optional dependency), by their name relative to
-            the package, e.g. `experiments.zonation.plot_pyvista`.
-        one_at_a_time: why the tests run the registered experiments one at a
-            time (the memory a run of all of them needs), `None` to run them
-            together.
-        battery: the checks of the battery of the builds which fail, by the
-            id of the check (`pkpdsim.credibility.battery.BATTERY_CHECKS`,
-            e.g. `steady_state`), see `pkpdsim.testing.check_battery`; a
-            credibility assessment shows a known failure with its reason and
-            still fails it.
+    Raises:
+        ValueError: if the settings of sbmlsim are given twice.
     """
-
-    not_registered: Mapping[str, str] = field(default_factory=dict)
-    not_importable: Mapping[str, str] = field(default_factory=dict)
-    one_at_a_time: str | None = None
-    battery: Mapping[str, str] = field(default_factory=dict)
-
-    def __post_init__(self) -> None:
-        """Copy the mappings and check the reasons.
-
-        Raises:
-            ValueError: if one_at_a_time is an empty reason, or a failure of
-                the battery is no check of the battery or has no reason.
-        """
-        from pkpdsim.credibility.verification import BATTERY_CHECKS
-
-        object.__setattr__(self, "not_registered", dict(self.not_registered))
-        object.__setattr__(self, "not_importable", dict(self.not_importable))
-        object.__setattr__(self, "battery", dict(self.battery))
-        if self.one_at_a_time is not None and not self.one_at_a_time.strip():
-            raise ValueError(
-                "one_at_a_time needs a reason, e.g. the memory a run of all "
-                "experiments needs; None runs them together."
-            )
-        for check, reason in self.battery.items():
-            if check not in {c.value for c in BATTERY_CHECKS}:
-                raise ValueError(
-                    f"The failure of the battery '{check}' is no check of the "
-                    f"battery, one of {', '.join(c.value for c in BATTERY_CHECKS)}."
-                )
-            if not reason.strip():
-                raise ValueError(
-                    f"The failure of the battery '{check}' needs a reason."
-                )
-
-    def __hash__(self) -> int:
-        """Hash the settings by their content."""
-        return hash(
-            (
-                tuple(sorted(self.not_registered.items())),
-                tuple(sorted(self.not_importable.items())),
-                self.one_at_a_time,
-                tuple(sorted(self.battery.items())),
-            )
+    figures = data.get("figures")
+    if not isinstance(figures, SbmlsimFigureSettings):
+        return
+    if data.get("figure_settings") is not None:
+        raise ValueError(
+            "The settings of the figures are given twice, as figures and as "
+            "figure_settings."
         )
+    if isinstance(figures, FigureSettings):
+        data["figure_settings"] = figures.sbmlsim_settings()
+        data["figures"] = figures.outputs()
+    else:
+        data["figure_settings"] = figures
+        del data["figures"]
 
 
-@dataclass(frozen=True, kw_only=True)
-class PKPDModel:
+def _builds(data: dict[str, Any]) -> None:
+    """Map the builds of a model onto the variants of its project.
+
+    Args:
+        data: the keywords of the model, changed in place.
+
+    Raises:
+        ValueError: if the model has no build, the variants are given as well,
+            or the female build is the file of the male build.
+    """
+    if "model_path" not in data and "female_model_path" not in data:
+        if not data.get("variants"):
+            raise ValueError("A model needs its build, model_path.")
+        return
+    if "variants" in data:
+        raise ValueError(
+            "The builds of a model are given twice, as model_path or "
+            "female_model_path and as variants."
+        )
+    male = data.pop("model_path", None)
+    female = data.pop("female_model_path", None)
+    if male is None:
+        raise ValueError("A model needs its build, model_path.")
+    if female is not None and Path(female) == Path(male):
+        raise ValueError(
+            f"The female build of '{data.get('name')}' is the file of the male "
+            f"build {male}: a build per sex is a file per sex."
+        )
+    variants = {Sex.MALE.value: male}
+    if female is not None:
+        variants[Sex.FEMALE.value] = female
+    data["variants"] = variants
+
+
+def _fits(data: dict[str, Any]) -> None:
+    """Map the fit definitions and the adopted fits of a model onto its project.
+
+    `fit_definitions` are the `fits` of the project; `fits` given as a
+    sequence of fit ids are the adopted fits, `adopted_ids`.
+
+    Args:
+        data: the keywords of the model, changed in place.
+
+    Raises:
+        ValueError: if the adopted fits or the fit definitions are given twice.
+    """
+    fits = data.get("fits")
+    if isinstance(fits, Sequence) and not isinstance(fits, str):
+        if "adopted_ids" in data:
+            raise ValueError(
+                "The adopted fits are given twice, as fits and as adopted_ids."
+            )
+        data["adopted_ids"] = data.pop("fits")
+    if "fit_definitions" in data:
+        if "fits" in data:
+            raise ValueError(
+                "The fit definitions are given twice, as fit_definitions and as fits."
+            )
+        definitions = data.pop("fit_definitions")
+        if definitions is not None:
+            data["fits"] = definitions
+
+
+def _directories(data: dict[str, Any]) -> None:
+    """Set the directories of the factory and of the adopted fits of a model.
+
+    The directory of the factory is the one of the male build, the folder of
+    the adopted fits `fits` next to it, unless they are given; relative paths
+    are relative to the root of the project, as the fields resolve them.
+
+    Args:
+        data: the keywords of the model, changed in place.
+    """
+    variants = data.get("variants")
+    if data.get("factory_dir") is None and isinstance(variants, Mapping) and variants:
+        data["factory_dir"] = Path(next(iter(variants.values()))).parent
+    factory_dir = data.get("factory_dir")
+    if data.get("fits_dir") is None and factory_dir is not None:
+        data["fits_dir"] = Path(factory_dir).parent / "fits"
+
+
+class PKPDModel(Project):
     """A PBPK/PD model: what the commands, the verification and the tests need.
 
-    All fields are keyword-only, so their order is not API. The sequences
-    (`data_paths`, `extra_actions` and the formats of the figures) are stored as
-    tuples, so a list can be passed and the model is hashable, unless the
-    absolute tolerance of the simulator is an `AbsoluteTolerance`, which is not
-    hashable.
+    A `sbmlsim.project.Project` with what pkpdsim adds: the title, the
+    COMBINE archive, the builds per sex, the adopted fits, the directories of
+    the results below the package and the actions of the `run` command. The
+    keywords of the model packages are mapped onto the fields of the project
+    when a model is created from keywords:
+
+    - `path`: `root`, the directory of the model package, the base path of
+      its experiments (the property `path`).
+    - `model_path`, `female_model_path`: the `variants` `male` and `female`,
+      the male build first: the model of every experiment and every caller
+      which does not ask for a sex. The builds have the same ids, so a fit
+      applies one parameter set to both, see `model_paths`.
+    - `data_paths`: `data_path`, the directories of the study data (the
+      property `data_paths`).
+    - `fit_definitions`: `fits`, the reference to the fit problems by name
+      (`sbmlsim.fit.cli.FitDefinition`).
+    - `fits` as a sequence of fit ids: `adopted_ids`.
+    - `fits_path`: `fits_dir`, `fits` next to the directory of the factory
+      by default.
+    - `factory_path`: `factory_dir`, the directory of the male build by
+      default.
+    - `figures` as a `FigureSettings`: `figure_settings` and `figures`
+      (`FigureSettings.sbmlsim_settings`, `FigureSettings.outputs`).
+
+    A keyword and its field are not given together. A model is a frozen
+    pydantic model: `replace` gives a changed copy, by the names of the
+    fields.
 
     Attributes:
-        name: the short name of the model.
-        package: the dotted name of the model package, `__name__` in its
-            `__init__.py`; relative references are relative to it.
         title: the title of the model in the output of the commands.
-        path: the directory of the model package, the base path of its
-            experiments.
-        model_path: the SBML model the experiments simulate, the male build:
-            the model of every experiment and every caller which does not ask
-            for a sex.
-        female_model_path: the female build of the model, `None` for a model
-            without one; an experiment of women (`sex` of
-            `pkpdsim.experiment.PKPDSimulationExperiment`) simulates it. The
-            builds have the same ids, so a fit applies one parameter set to
-            both, see `model_paths`.
-        factory: reference to the function which creates the models; it is
-            called with the output directory.
-        experiments: reference to the registry of the experiments, groups of
-            experiment classes by name with the group `all`.
-        fit_definitions: reference to the fit problems by name
-            (`sbmlsim.fit.cli.FitDefinition`).
-        credibility: reference to the declaration of the contexts of use
-            (`pkpdsim.credibility.Credibility`), `None` for a model without one.
-        data_paths: the directories of the study data.
-        results_path: the directory of the results, `<path>/results` by default.
-        factory_path: the output directory of the factory, the directory of
-            `model_path` by default.
         archive_path: the COMBINE archive the factory creates, linked by the
             `factory` action.
-        simulator: the integrator settings of the experiments.
-        figures: the formats and settings of the figures.
+        results_path: the directory of the results, `<root>/results` by
+            default.
         reduced_selections: simulate only the selections the experiments need.
         save_results: store the results of the simulations by default.
         fit_identifiability: the fit command analyses the identifiability of the
@@ -377,74 +318,152 @@ class PKPDModel:
         extra_actions: actions the model adds to its `run` command.
         extra_arguments: reference to a function which adds the options of the
             extra actions to the parser of the `run` command.
-        checks: the known exceptions of the tests of the model, see
-            `pkpdsim.testing`.
-        fits: the ids of the adopted fits, whose records in `fits_dir` give the
-            fitted values and their uncertainty, see `pkpdsim.uncertainty`.
-        fits_path: the folder of the adopted fits, `fits` next to the output
-            directory of the factory by default.
-        release: the release metadata, see `pkpdsim.release.settings`; a model
-            without it cannot be released.
+        adopted_ids: the ids of the adopted fits, whose records in `fits_dir`
+            give the fitted values and their uncertainty, see
+            `pkpdsim.uncertainty`; one fit per fit subset.
     """
 
-    name: str
-    package: str
+    # the fields of the project a model always has, narrowed: a model is frozen
+    package: str  # ty: ignore[invalid-mutable-override]
+    factory_dir: Path  # ty: ignore[invalid-mutable-override]
+    fits_dir: Path  # ty: ignore[invalid-mutable-override]
     title: str
-    path: Path
-    model_path: Path
-    female_model_path: Path | None = None
-    factory: str
-    experiments: str | None = None
-    fit_definitions: str | None = None
-    credibility: str | None = None
-    data_paths: Sequence[Path] = ()
-    results_path: Path | None = None
-    factory_path: Path | None = None
     archive_path: Path | None = None
-    simulator: SimulatorSettings = field(default_factory=SimulatorSettings)
-    figures: FigureSettings = field(default_factory=FigureSettings)
+    results_path: Path | None = None
     reduced_selections: bool = True
     save_results: bool = False
     fit_identifiability: bool = False
-    extra_actions: Sequence[ExtraAction] = ()
+    extra_actions: tuple[ExtraAction, ...] = ()
     extra_arguments: str | None = None
-    checks: CheckSettings = field(default_factory=CheckSettings)
-    fits: Sequence[str] = ()
-    fits_path: Path | None = None
-    release: ReleaseSettings | None = None
+    adopted_ids: tuple[str, ...] = ()
+    simulator: SimulatorSettings = DEFAULT_SIMULATOR
 
-    def __post_init__(self) -> None:
-        """Normalize the sequences, check the references and the extra actions."""
-        object.__setattr__(self, "data_paths", tuple(self.data_paths))
-        object.__setattr__(self, "fits", tuple(self.fits))
-        repeated_fits = sorted({f for f in self.fits if self.fits.count(f) > 1})
+    def __init__(self, **data: Any) -> None:  # noqa: ANN401
+        """Create a model from the keywords of a model package or the fields.
+
+        The keywords of the model packages are mapped onto the fields of the
+        project, see the class.
+
+        Raises:
+            pydantic.ValidationError: for invalid keywords or fields.
+        """
+        super().__init__(**data)
+
+    @override
+    def replace(self, **changes: Any) -> Self:
+        """Get a copy of the model with other fields, validated again.
+
+        See `sbmlsim.project.Project.replace`. A `FigureSettings` as `figures`
+        replaces the settings of the figures as well, `figure_settings`.
+
+        Raises:
+            pydantic.ValidationError: for invalid fields.
+        """
+        figures = changes.get("figures")
+        if isinstance(figures, SbmlsimFigureSettings):
+            changes.setdefault("figure_settings", None)
+        return super().replace(**changes)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _keywords_of_a_package(cls, data: Any) -> Any:  # noqa: ANN401
+        """Map the keywords of a model package onto the fields of the project.
+
+        Only keywords are mapped, a model given as an object is itself.
+
+        Raises:
+            ValueError: if a keyword and its field are given together, see the
+                class.
+        """
+        if not isinstance(data, Mapping):
+            return data
+        data = dict(data)
+        for keyword, name in _RENAMED.items():
+            if keyword not in data:
+                continue
+            if name in data:
+                raise ValueError(
+                    f"'{keyword}' is the field '{name}' of the project, give one "
+                    "of them."
+                )
+            data[name] = data.pop(keyword)
+        _builds(data)
+        _fits(data)
+        _figures(data)
+        _directories(data)
+        return data
+
+    @model_validator(mode="after")
+    def _check_model(self) -> Self:
+        """Check the builds, the adopted fits, the actions and the known failures.
+
+        Raises:
+            ValueError: for a model without its build or its factory, a variant
+                which is no sex or a female build first, a repeated adopted
+                fit, an extra action which repeats an action, a malformed
+                reference, or a known failure of the battery which is no check
+                of the battery.
+        """
+        if not self.variants:
+            raise ValueError(f"The model '{self.name}' needs its build, model_path.")
+        names = list(self.variants)
+        if names[0] != Sex.MALE.value or not set(names) <= {s.value for s in Sex}:
+            raise ValueError(
+                f"The builds of the model '{self.name}' are the variants {names}: "
+                "the variants of a model are its builds per sex, the male build "
+                "first."
+            )
+        if self.factory is None:
+            raise ValueError(f"The model '{self.name}' needs its factory.")
+        repeated_fits = sorted(
+            {f for f in self.adopted_ids if self.adopted_ids.count(f) > 1}
+        )
         if repeated_fits:
             raise ValueError(
                 f"The adopted fits of '{self.name}' repeat a fit: {repeated_fits}."
             )
-        object.__setattr__(self, "extra_actions", tuple(self.extra_actions))
-        references = [
-            self.factory,
-            self.experiments,
-            self.fit_definitions,
-            self.credibility,
+        for reference in [
             self.extra_arguments,
             *(action.function for action in self.extra_actions),
-        ]
-        for reference in references:
+        ]:
             if reference is not None:
                 check_reference(reference)
-        names = [action.name for action in self.extra_actions]
-        repeated = sorted({n for n in names if n in RUN_ACTIONS or names.count(n) > 1})
+        actions = [action.name for action in self.extra_actions]
+        repeated = sorted(
+            {n for n in actions if n in RUN_ACTIONS or actions.count(n) > 1}
+        )
         if repeated:
             raise ValueError(
                 f"The extra actions of '{self.name}' repeat an action: {repeated}."
             )
-        if self.female_model_path == self.model_path:
-            raise ValueError(
-                f"The female build of '{self.name}' is the file of the male build "
-                f"{self.model_path}: a build per sex is a file per sex."
-            )
+        if self.checks.battery:
+            from pkpdsim.credibility.verification import BATTERY_CHECKS
+
+            checks = [c.value for c in BATTERY_CHECKS]
+            unknown = sorted(set(self.checks.battery) - set(checks))
+            if unknown:
+                raise ValueError(
+                    f"The failures of the battery {unknown} are no checks of the "
+                    f"battery, one of {', '.join(checks)}."
+                )
+        return self
+
+    # ------------------------------------------------------------------------
+    # paths
+    # ------------------------------------------------------------------------
+    @property
+    def path(self) -> Path:
+        """The directory of the model package, `root`."""
+        return self.root
+
+    @property
+    def data_paths(self) -> tuple[Path, ...]:
+        """The directories of the study data, `data_path` as a tuple."""
+        if self.data_path is None:
+            return ()
+        if isinstance(self.data_path, Path):
+            return (self.data_path,)
+        return tuple(self.data_path)
 
     @property
     def model_paths(self) -> dict[Sex, Path]:
@@ -456,12 +475,14 @@ class PKPDModel:
         builds have the same ids, so the changes of an experiment and the
         parameters of a fit apply to both.
         """
-        paths = {Sex.MALE: self.model_path}
-        if self.female_model_path is not None:
-            paths[Sex.FEMALE] = self.female_model_path
-        return paths
+        return {Sex(name): path for name, path in self.variants.items()}
 
-    def model_path_of(self, sex: Sex) -> Path:
+    @property
+    def female_model_path(self) -> Path | None:
+        """The female build, `None` for a model without one."""
+        return self.variants.get(Sex.FEMALE.value)
+
+    def model_path_of(self, sex: Sex | str) -> Path:
         """Get the build of a sex.
 
         Args:
@@ -482,17 +503,16 @@ class PKPDModel:
             )
         return path
 
-    def load_roadrunner(self, sex: Sex = Sex.MALE) -> roadrunner.RoadRunner:
+    @override
+    def load_roadrunner(self, variant: str | None = None) -> roadrunner.RoadRunner:
         """Load the build of a sex in roadrunner at the level of the model.
 
-        The model is compiled with LLJIT at `SimulatorSettings.jit_optimization`
-        (`sbmlsim.model.model_roadrunner.load_roadrunner`), as its experiments
-        load it, and not with roadrunner's default MCJIT, which compiles a
-        model with large initial assignments much slower (48 s for
-        creatinine): the loader of the tests of a model.
+        See `sbmlsim.project.Project.load_roadrunner`: the loader of the tests
+        of a model.
 
         Args:
-            sex: the sex of the build.
+            variant: the sex of the build (`pkpdsim.sex.Sex`), the male build
+                without.
 
         Returns:
             The roadrunner instance.
@@ -500,14 +520,15 @@ class PKPDModel:
         Raises:
             ValueError: if the model has no build of the sex.
         """
-        from sbmlsim.model.model_roadrunner import load_roadrunner
+        from sbmlsim.model import model_roadrunner
 
-        return load_roadrunner(self.model_path_of(sex), self.simulator.jit_optimization)
+        path = self.model_path_of(Sex.MALE if variant is None else variant)
+        return model_roadrunner.load_roadrunner(path, self.simulator.jit_optimization)
 
     @property
     def results_dir(self) -> Path:
         """The directory of the results."""
-        return self.results_path or self.path / "results"
+        return self.results_path or self.root / "results"
 
     @property
     def simulation_dir(self) -> Path:
@@ -539,40 +560,46 @@ class PKPDModel:
         """The directory of the credibility assessments."""
         return self.results_dir / "credibility"
 
-    @property
-    def factory_dir(self) -> Path:
-        """The output directory of the factory."""
-        return self.factory_path or self.model_path.parent
+    # ------------------------------------------------------------------------
+    # fits
+    # ------------------------------------------------------------------------
+    @override
+    def adopted_fits(self) -> dict[str, str]:
+        """Get the adopted fits by their subset, those of `adopted_ids`.
 
-    @property
-    def fits_dir(self) -> Path:
-        """The folder of the adopted fits, next to the output of the factory."""
-        return self.fits_path or self.factory_dir.parent / "fits"
+        Returns:
+            The fit id by subset; the adopted fits of the file of the project
+            for a model without `adopted_ids`.
+
+        Raises:
+            ValueError: if an adopted fit has no id of a fit, or two adopted
+                fits are fits of one subset.
+        """
+        if not self.adopted_ids:
+            return super().adopted_fits()
+        from sbmlsim.fit.result import fit_subset
+
+        fits: dict[str, str] = {}
+        for fit_id in self.adopted_ids:
+            subset = fit_subset(fit_id)
+            if subset in fits:
+                raise ValueError(
+                    f"The adopted fits '{fits[subset]}' and '{fit_id}' of "
+                    f"'{self.name}' are fits of one subset '{subset}'."
+                )
+            fits[subset] = fit_id
+        return fits
 
     def fit_records(self) -> FitRecords:
         """Get the records of the adopted fits, see `pkpdsim.uncertainty.FitRecords`."""
         from pkpdsim.uncertainty import FitRecords
 
-        return FitRecords(self.fits_dir, self.fits)
+        return FitRecords(self.fits_dir, self.adopted_ids)
 
-    def load_factory(self) -> Callable[[Path], object]:
-        """Get the function which creates the models."""
-        return resolve(self.factory, self.package)
-
-    def load_experiments(
-        self,
-    ) -> Mapping[str, list[type[SimulationExperiment]]]:
-        """Get the registry of the experiments."""
-        if self.experiments is None:
-            raise ValueError(f"The model '{self.name}' has no registry of experiments.")
-        return resolve(self.experiments, self.package)
-
-    def load_fit_definitions(self) -> Mapping[str, FitDefinition]:
-        """Get the fit problems by name."""
-        if self.fit_definitions is None:
-            raise ValueError(f"The model '{self.name}' has no fit definitions.")
-        return resolve(self.fit_definitions, self.package)
-
+    # ------------------------------------------------------------------------
+    # credibility and experiments
+    # ------------------------------------------------------------------------
+    @override
     def load_credibility(self) -> Credibility:
         """Get the declaration of the contexts of use.
 
@@ -582,9 +609,7 @@ class PKPDModel:
         """
         from pkpdsim.credibility import Credibility
 
-        if self.credibility is None:
-            raise ValueError(f"The model '{self.name}' has no credibility declaration.")
-        declaration = resolve(self.credibility, self.package)
+        declaration = super().load_credibility()
         if not isinstance(declaration, Credibility):
             raise TypeError(
                 f"The credibility of '{self.name}' ({self.credibility}) is a "
@@ -592,20 +617,8 @@ class PKPDModel:
             )
         return declaration
 
-    def create_models(self, output_dir: Path | None = None) -> Path:
-        """Create the models with the factory.
-
-        Args:
-            output_dir: the output directory, `factory_dir` by default.
-
-        Returns:
-            The output directory.
-        """
-        directory = output_dir or self.factory_dir
-        self.load_factory()(directory)
-        return directory
-
-    def run_experiments(
+    @override
+    def run_experiments(  # ty: ignore[invalid-method-override]
         self,
         experiment_classes: type[SimulationExperiment]
         | Sequence[type[SimulationExperiment]],
@@ -615,13 +628,17 @@ class PKPDModel:
         show_report: bool = False,
         figure_formats: Sequence[str] | None = None,
         simulator: SimulatorSettings | None = None,
+        n_workers: int | None = RUN_WORKERS,
         uncertainty: UncertaintySettings | None = None,
     ) -> Path:
         """Run simulation experiments and create their report.
 
-        See `pkpdsim.run.run_experiments`; a run with a failed experiment or
-        figure raises `sbmlsim.experiment.ExperimentRunError` after its report
-        is written.
+        The run of the model packages, which returns the directory of the
+        results and resolves a relative directory below the results of the
+        model (`simulation_dir`), see `pkpdsim.run.run_experiments`; a run with
+        a failed experiment or figure raises
+        `sbmlsim.experiment.ExperimentRunError` after its report is written.
+        It runs serially by default (`RUN_WORKERS`).
         """
         from pkpdsim.run import run_experiments
 
@@ -633,6 +650,7 @@ class PKPDModel:
             show_report=show_report,
             figure_formats=figure_formats,
             simulator=simulator,
+            n_workers=n_workers,
             uncertainty=uncertainty,
         )
 
@@ -644,6 +662,7 @@ class PKPDModel:
         show_report: bool = False,
         figure_formats: Sequence[str] | None = None,
         simulator: SimulatorSettings | None = None,
+        n_workers: int | None = RUN_WORKERS,
         uncertainty: UncertaintySettings | None = None,
     ) -> Path:
         """Run simulation experiments and collect their figures.
@@ -659,5 +678,6 @@ class PKPDModel:
             show_report=show_report,
             figure_formats=figure_formats,
             simulator=simulator,
+            n_workers=n_workers,
             uncertainty=uncertainty,
         )

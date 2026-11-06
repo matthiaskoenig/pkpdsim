@@ -1,84 +1,209 @@
-"""The model object: its references, settings, paths and validation."""
+"""The model object: a project of sbmlsim with the keywords of the model packages."""
 
 import dataclasses
+import pickle
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 from sbmlsim.plot import FigureSettings as SbmlsimFigureSettings
+from sbmlsim.project import (
+    CheckSettings,
+    FigureOutputs,
+    Project,
+    SimulatorSettings,
+)
 
 from pkpdsim.model import (
-    CheckSettings,
+    DEFAULT_SIMULATOR,
+    RUN_WORKERS,
     ExtraAction,
     FigureSettings,
     PKPDModel,
-    SimulatorSettings,
-    check_reference,
-    resolve,
 )
 from pkpdsim.sex import Sex
-from pkpdsim_toy import MODEL, MODEL_BASE_PATH, TOY_PATH
+from pkpdsim_toy import DATA_PATHS, MODEL, MODEL_BASE_PATH, MODEL_PATH, TOY_PATH
 
 
-def test_resolve_an_absolute_reference() -> None:
-    assert resolve("pkpdsim_toy:TOY_PATH") == TOY_PATH
+def keywords(**changes: object) -> dict[str, object]:
+    """Get the keywords of the toy model package, with changes."""
+    return {
+        "name": "toy",
+        "package": "pkpdsim_toy",
+        "title": "Toy PK model",
+        "path": TOY_PATH,
+        "model_path": MODEL_PATH,
+        "factory": ".factory:create_toy_models",
+        "experiments": ".simulations:EXPERIMENTS",
+        "fit_definitions": ".fitting:FIT_DEFINITIONS",
+        "data_paths": tuple(DATA_PATHS),
+        **changes,
+    }
 
 
-def test_resolve_a_relative_reference() -> None:
-    registry = resolve(".simulations:EXPERIMENTS", "pkpdsim_toy")
-    assert set(registry) == {"studies", "misc", "all"}
+def test_a_model_is_a_project() -> None:
+    assert isinstance(MODEL, Project)
+    assert MODEL.root == MODEL.path == TOY_PATH
+    assert MODEL.package == "pkpdsim_toy"
+    assert MODEL.variants == {"male": MODEL_PATH}
+    assert MODEL.model_path() == MODEL_PATH
+    assert MODEL.fits == ".fitting:FIT_DEFINITIONS"
+    assert MODEL.data_path == [TOY_PATH]
+    assert MODEL.data_paths == (TOY_PATH,)
 
 
-def test_resolve_a_dotted_attribute() -> None:
-    assert resolve("pkpdsim_toy:MODEL.name") == "toy"
+def test_the_keywords_of_a_package_are_the_fields_of_the_project(
+    tmp_path: Path,
+) -> None:
+    model = PKPDModel(
+        **keywords(
+            female_model_path=MODEL_BASE_PATH / "toy_female.xml",
+            fits=("PK_20260101_000000__abcde",),
+            fits_path=tmp_path / "fits",
+            factory_path=MODEL_BASE_PATH,
+            figures=FigureSettings(formats=("svg", "png"), savefig_dpi=30, fig_dpi=300),
+        )
+    )
+    assert model.variants == {
+        "male": MODEL_PATH,
+        "female": MODEL_BASE_PATH / "toy_female.xml",
+    }
+    assert model.female_model_path == MODEL_BASE_PATH / "toy_female.xml"
+    assert model.adopted_ids == ("PK_20260101_000000__abcde",)
+    assert model.adopted_fits() == {"PK": "PK_20260101_000000__abcde"}
+    assert model.fits == ".fitting:FIT_DEFINITIONS"
+    assert model.fits_dir == tmp_path / "fits"
+    assert model.factory_dir == MODEL_BASE_PATH
+    assert model.figures == FigureOutputs(formats=("svg", "png"), savefig_dpi=30)
+    assert model.figure_settings == SbmlsimFigureSettings(fig_dpi=300)
 
 
-@pytest.mark.parametrize(
-    "reference",
-    ["simulations.EXPERIMENTS", ":EXPERIMENTS", ".simulations:", "a:b-c", "a b:c"],
-)
-def test_a_malformed_reference_is_rejected(reference: str) -> None:
-    with pytest.raises(ValueError, match="module:attribute"):
-        check_reference(reference)
+def test_relative_paths_are_relative_to_the_package() -> None:
+    model = PKPDModel(
+        **keywords(model_path=Path("models/toy.xml"), data_paths=(Path("data"),))
+    )
+    assert model.model_path() == MODEL_PATH
+    assert model.factory_dir == MODEL_BASE_PATH
+    assert model.fits_dir == TOY_PATH / "fits"
+    assert model.data_paths == (TOY_PATH / "data",)
 
 
-def test_a_malformed_reference_fails_at_creation() -> None:
-    with pytest.raises(ValueError, match=r"simulations\.EXPERIMENTS"):
-        dataclasses.replace(MODEL, experiments="simulations.EXPERIMENTS")
-
-
-def test_a_missing_attribute_names_the_reference() -> None:
-    with pytest.raises(AttributeError, match=r"\.simulations:MISSING"):
-        resolve(".simulations:MISSING", "pkpdsim_toy")
-
-
-def test_the_paths_derive_from_the_path_of_the_model() -> None:
+def test_the_directories_derive_from_the_male_build() -> None:
+    assert MODEL.factory_dir == MODEL_BASE_PATH
+    assert MODEL.fits_dir == TOY_PATH / "fits"
     assert MODEL.results_dir == TOY_PATH / "results"
     assert MODEL.simulation_dir == TOY_PATH / "results" / "simulation"
+    assert MODEL.uncertainty_dir == TOY_PATH / "results" / "simulation_uncertainty"
     assert MODEL.fit_dir == TOY_PATH / "results" / "fit"
     assert MODEL.report_dir == TOY_PATH / "results" / "report"
     assert MODEL.identifiability_dir == TOY_PATH / "results" / "identifiability"
-    assert MODEL.factory_dir == MODEL_BASE_PATH
+    assert MODEL.credibility_dir == TOY_PATH / "results" / "credibility"
 
 
 def test_given_paths_win(tmp_path: Path) -> None:
-    model = dataclasses.replace(MODEL, results_path=tmp_path, factory_path=tmp_path)
+    model = MODEL.replace(
+        results_path=tmp_path, factory_dir=TOY_PATH, fits_dir=tmp_path / "fits"
+    )
     assert model.simulation_dir == tmp_path / "simulation"
-    assert model.factory_dir == tmp_path
+    assert model.factory_dir == TOY_PATH
+    assert model.fits_dir == tmp_path / "fits"
+
+
+def test_the_directories_derive_again_when_cleared(tmp_path: Path) -> None:
+    build = tmp_path / "models" / "toy.xml"
+    model = MODEL.replace(
+        root=tmp_path, variants={"male": build}, factory_dir=None, fits_dir=None
+    )
+    assert model.factory_dir == tmp_path / "models"
+    assert model.fits_dir == tmp_path / "fits"
+
+
+@pytest.mark.parametrize(
+    ("keyword", "field"),
+    [
+        ("path", "root"),
+        ("data_paths", "data_path"),
+        ("fits_path", "fits_dir"),
+        ("factory_path", "factory_dir"),
+    ],
+)
+def test_a_keyword_and_its_field_are_given_once(keyword: str, field: str) -> None:
+    data = keywords(**{keyword: TOY_PATH})
+    data[field] = TOY_PATH
+    with pytest.raises(ValidationError, match=f"'{keyword}' is the field '{field}'"):
+        PKPDModel(**data)
+
+
+def test_the_builds_and_the_variants_are_given_once() -> None:
+    with pytest.raises(ValidationError, match="given twice"):
+        PKPDModel(**keywords(variants={"male": MODEL_PATH}))
+    with pytest.raises(ValidationError, match="needs its build"):
+        PKPDModel(**{k: v for k, v in keywords().items() if k != "model_path"})
+
+
+def test_the_fits_are_given_once() -> None:
+    with pytest.raises(ValidationError, match="adopted fits are given twice"):
+        PKPDModel(**keywords(fits=("A_20260101_000000__abcde",), adopted_ids=()))
+    with pytest.raises(ValidationError, match="fit definitions are given twice"):
+        PKPDModel(**keywords(fits=".fitting:FIT_DEFINITIONS"))
+
+
+def test_the_figure_settings_are_given_once() -> None:
+    with pytest.raises(ValidationError, match="given twice"):
+        PKPDModel(
+            **keywords(
+                figures=FigureSettings(), figure_settings=SbmlsimFigureSettings()
+            )
+        )
+    plain = PKPDModel(**keywords(figures=SbmlsimFigureSettings(legend_fontsize=3)))
+    assert plain.figure_settings == SbmlsimFigureSettings(legend_fontsize=3)
+    assert plain.figures == FigureOutputs()
+
+
+def test_a_model_without_figures_has_those_of_sbmlsim() -> None:
+    model = PKPDModel(**keywords())
+    assert model.figure_settings is None
+    assert model.figures == FigureOutputs()
+
+
+def test_the_defaults_of_a_model() -> None:
+    model = PKPDModel(**keywords())
+    assert model.simulator == DEFAULT_SIMULATOR
+    assert model.simulator == SimulatorSettings(
+        absolute_tolerance=1e-10, relative_tolerance=1e-10
+    )
+    assert RUN_WORKERS == 1
+    assert model.reduced_selections is True
+    assert model.save_results is False
+    assert model.fit_identifiability is False
+    assert model.adopted_ids == ()
+    assert model.checks == CheckSettings()
+
+
+def test_a_model_needs_its_factory() -> None:
+    with pytest.raises(ValidationError, match="needs its factory"):
+        PKPDModel(**keywords(factory=None))
+
+
+def test_a_malformed_reference_fails_at_creation() -> None:
+    with pytest.raises(ValidationError, match=r"simulations\.EXPERIMENTS"):
+        MODEL.replace(experiments="simulations.EXPERIMENTS")
+    with pytest.raises(ValidationError, match="module:attribute"):
+        MODEL.replace(extra_arguments="extras.add_arguments")
 
 
 def test_the_references_load() -> None:
-    assert set(MODEL.load_experiments()["all"]) == set(
-        MODEL.load_experiments()["studies"] + MODEL.load_experiments()["misc"]
-    )
+    groups = MODEL.load_experiments()
+    assert set(groups["all"]) == set(groups["studies"] + groups["misc"])
     assert callable(MODEL.load_factory())
+    assert set(MODEL.load_fit_definitions()) == {"DECAY"}
 
 
-def test_a_model_without_experiments_says_so() -> None:
-    model = dataclasses.replace(MODEL, experiments=None, fit_definitions=None)
-    with pytest.raises(ValueError, match="'toy' has no registry of experiments"):
+def test_a_model_without_experiments_and_fits() -> None:
+    model = MODEL.replace(experiments=None, fits={})
+    with pytest.raises(ValueError, match="'toy' has no simulation experiments"):
         model.load_experiments()
-    with pytest.raises(ValueError, match="'toy' has no fit definitions"):
-        model.load_fit_definitions()
+    assert model.load_fit_definitions() == {}
 
 
 def test_create_models(tmp_path: Path) -> None:
@@ -88,16 +213,46 @@ def test_create_models(tmp_path: Path) -> None:
 
 def test_an_extra_action_must_not_repeat_an_action() -> None:
     for name in ["all", "simulate"]:
-        with pytest.raises(ValueError, match="repeat an action"):
-            dataclasses.replace(
-                MODEL,
+        with pytest.raises(ValidationError, match="repeat an action"):
+            MODEL.replace(
                 extra_actions=(
                     ExtraAction(name=name, help="help", function=".extras:greet"),
                 ),
             )
     twice = (ExtraAction(name="greet", help="h", function=".extras:greet"),) * 2
-    with pytest.raises(ValueError, match="repeat an action"):
-        dataclasses.replace(MODEL, extra_actions=twice)
+    with pytest.raises(ValidationError, match="repeat an action"):
+        MODEL.replace(extra_actions=twice)
+
+
+def test_an_adopted_fit_is_given_once() -> None:
+    fit = "DECAY_20260101_000000__abcde"
+    with pytest.raises(ValidationError, match="repeat a fit"):
+        MODEL.replace(adopted_ids=(fit, fit))
+
+
+def test_the_adopted_fits_are_one_per_subset() -> None:
+    model = MODEL.replace(
+        adopted_ids=("DECAY_20260101_000000__abcde", "DECAY_20260102_000000__abcde")
+    )
+    with pytest.raises(ValueError, match="fits of one subset 'DECAY'"):
+        model.adopted_fits()
+
+
+def test_the_sequences_are_tuples() -> None:
+    model = MODEL.replace(
+        adopted_ids=["DECAY_20260101_000000__abcde"], extra_actions=[]
+    )
+    assert model.adopted_ids == ("DECAY_20260101_000000__abcde",)
+    assert model.extra_actions == ()
+
+
+def test_the_model_is_frozen() -> None:
+    with pytest.raises(ValidationError, match="frozen"):
+        MODEL.name = "other"
+
+
+def test_a_model_pickles() -> None:
+    assert pickle.loads(pickle.dumps(MODEL)) == MODEL
 
 
 def test_a_bare_string_is_not_a_list_of_formats() -> None:
@@ -113,53 +268,18 @@ def test_the_formats_are_a_lower_case_tuple() -> None:
     assert FigureSettings(formats=["SVG", "Png"]).formats == ("svg", "png")
 
 
+def test_a_model_needs_a_figure_format() -> None:
+    with pytest.raises(ValueError, match="figure format"):
+        FigureSettings(formats=())
+
+
 def test_the_dataclasses_are_keyword_only() -> None:
     assert [f.name for f in dataclasses.fields(FigureSettings) if f.kw_only] == [
         "formats",
         "savefig_dpi",
     ]
     with pytest.raises(TypeError):
-        SimulatorSettings(1e-10)  # ty: ignore[too-many-positional-arguments]
-    with pytest.raises(TypeError):
         ExtraAction("a", "b", "c")  # ty: ignore[missing-argument, too-many-positional-arguments]
-
-
-def test_the_sequences_are_tuples_and_the_model_is_hashable() -> None:
-    model = dataclasses.replace(
-        MODEL,
-        data_paths=[TOY_PATH],
-        extra_actions=[],
-    )
-    assert model.data_paths == (TOY_PATH,)
-    assert model.extra_actions == ()
-    assert isinstance(hash(model), int)
-    assert hash(model) == hash(dataclasses.replace(model))
-
-
-def test_the_checks_are_hashable_and_copied() -> None:
-    reasons = {"ToyDecaySlow": "a test"}
-    checks = CheckSettings(not_registered=reasons)
-    reasons["other"] = "changed"
-    assert dict(checks.not_registered) == {"ToyDecaySlow": "a test"}
-    model = dataclasses.replace(MODEL, checks=checks)
-    assert hash(model) == hash(dataclasses.replace(model))
-    assert MODEL.checks == CheckSettings()
-
-
-def test_resolve_a_relative_reference_needs_a_package() -> None:
-    with pytest.raises(ValueError, match="needs a package"):
-        resolve(".simulations:EXPERIMENTS")
-
-
-def test_a_model_needs_a_figure_format() -> None:
-    with pytest.raises(ValueError, match="figure format"):
-        FigureSettings(formats=())
-
-
-def test_the_settings_are_frozen() -> None:
-    with pytest.raises(dataclasses.FrozenInstanceError):
-        MODEL.name = "other"  # ty: ignore[invalid-assignment]
-    assert SimulatorSettings().absolute_tolerance == 1e-10
 
 
 def test_the_figure_settings_are_those_of_sbmlsim() -> None:
@@ -177,40 +297,17 @@ def test_sbmlsim_gets_its_settings_without_the_formats() -> None:
     assert FigureSettings().sbmlsim_settings() == SbmlsimFigureSettings()
 
 
-def test_the_resolution_of_the_images_is_a_matplotlib_setting() -> None:
-    assert FigureSettings(savefig_dpi=17).rc_params() == {"savefig.dpi": 17}
-    assert FigureSettings().rc_params() == {}
-
-
-def test_the_simulations_run_serially_by_default() -> None:
-    assert SimulatorSettings().n_workers == 1
-    assert SimulatorSettings(n_workers=None).n_workers is None
-    assert SimulatorSettings(n_workers=4).n_workers == 4
-
-
-@pytest.mark.parametrize("n_workers", [0, -1, 1.5, True, "2"])
-def test_the_number_of_workers_is_a_positive_number(n_workers: object) -> None:
-    with pytest.raises(ValueError, match="n_workers"):
-        SimulatorSettings(n_workers=n_workers)  # ty: ignore[invalid-argument-type]
-
-
-@pytest.mark.parametrize("reason", ["", "  "])
-def test_one_at_a_time_needs_a_reason(reason: str) -> None:
-    with pytest.raises(ValueError, match="reason"):
-        CheckSettings(one_at_a_time=reason)
+def test_the_outputs_are_the_formats_and_the_resolution() -> None:
+    outputs = FigureSettings(formats=("png",), savefig_dpi=17).outputs()
+    assert outputs == FigureOutputs(formats=("png",), savefig_dpi=17)
+    assert outputs.rc_params() == {"savefig.dpi": 17}
+    assert FigureSettings().outputs().rc_params() == {}
 
 
 def test_the_model_of_the_toy_package() -> None:
     assert isinstance(MODEL, PKPDModel)
     assert MODEL.package == "pkpdsim_toy"
     assert MODEL.figures.formats == ("svg", "png")
-
-
-def test_the_jit_optimization_is_that_of_sbmlsim_by_default() -> None:
-    assert SimulatorSettings().jit_optimization is None
-    assert SimulatorSettings(jit_optimization="O0").jit_optimization == "O0"
-    with pytest.raises(ValueError, match="optimization level"):
-        SimulatorSettings(jit_optimization="O9")
 
 
 def test_a_test_loads_the_model_at_its_level(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -225,12 +322,22 @@ def test_a_test_loads_the_model_at_its_level(monkeypatch: pytest.MonkeyPatch) ->
         return load(source, optimization)  # ty: ignore[invalid-argument-type]
 
     monkeypatch.setattr(model_roadrunner, "load_roadrunner", recording)
-    simulator = dataclasses.replace(MODEL.simulator, jit_optimization="O0")
-    r = dataclasses.replace(MODEL, simulator=simulator).load_roadrunner()
-    assert calls == [(MODEL.model_path, "O0")]
+    simulator = SimulatorSettings(
+        absolute_tolerance=1e-10, relative_tolerance=1e-10, jit_optimization="O0"
+    )
+    r = MODEL.replace(simulator=simulator).load_roadrunner()
+    assert calls == [(MODEL.model_path(), "O0")]
     assert "k" in r.model.getGlobalParameterIds()
     with pytest.raises(ValueError, match="no female build"):
         MODEL.load_roadrunner(Sex.FEMALE)
+
+
+def test_the_fit_definitions_carry_the_level_of_the_model() -> None:
+    simulator = SimulatorSettings(jit_optimization="O0")
+    definitions = MODEL.replace(simulator=simulator).load_fit_definitions()
+    assert {d.jit_optimization for d in definitions.values()} == {"O0"}
+    levels = {d.jit_optimization for d in MODEL.load_fit_definitions().values()}
+    assert levels == {None}
 
 
 def test_a_model_without_credibility() -> None:
@@ -238,11 +345,7 @@ def test_a_model_without_credibility() -> None:
         MODEL.load_credibility()
 
 
-def test_the_credibility_dir() -> None:
-    assert MODEL.credibility_dir == MODEL.results_dir / "credibility"
-
-
 def test_a_credibility_which_is_no_declaration() -> None:
-    model = dataclasses.replace(MODEL, credibility="pkpdsim_toy:MODEL")
+    model = MODEL.replace(credibility="pkpdsim_toy:MODEL")
     with pytest.raises(TypeError, match="not a Credibility"):
         model.load_credibility()

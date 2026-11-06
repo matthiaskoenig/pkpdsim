@@ -24,6 +24,7 @@ import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
+from sbmlsim.release.settings import ReleaseSettings
 from sbmlutils.console import console
 
 from pkpdsim.cli import ModelNotFoundError, resolve_model
@@ -50,7 +51,6 @@ from pkpdsim.release.publish import (
     tag_commit,
 )
 from pkpdsim.release.publish import publish as publish_release
-from pkpdsim.release.settings import ReleaseSettings
 from pkpdsim.release.source import (
     ReleaseError,
     ReleaseRepo,
@@ -65,7 +65,6 @@ from pkpdsim.release.source import (
     source_repo,
     stage,
 )
-from pkpdsim.reports import adopted_record
 
 Publisher = Callable[[ReleaseSettings, Path, str, Path, Runner], list[str]]
 """Publishes a built release, see `pkpdsim.release.publish.publish`."""
@@ -96,11 +95,11 @@ def _archive_name(model: PKPDModel) -> str:
 
 def _check_fits(model: PKPDModel) -> None:
     """Check that every adopted fit has its record in the model package."""
-    if model.fits:
+    if model.adopted_ids:
         fits_prefix(model)
-    for fit_id in model.fits:
+    for fit_id in model.adopted_ids:
         try:
-            adopted_record(model, fit_id)
+            model.adopted_record(fit_id)
         except (ValueError, FileNotFoundError) as err:
             raise ReleaseError(str(err)) from err
 

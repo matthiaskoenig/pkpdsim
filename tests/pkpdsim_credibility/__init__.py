@@ -1,17 +1,21 @@
 """A test model package with every kind of evidence of the credibility declaration.
 
-It reuses the SBML model of the toy (`pkpdsim_toy`, built by `tests/conftest.py`)
-and has two experiments with mappings which are calibration, dose, population and
+It has the SBML model of the toy (`pkpdsim_toy`), built by its factory into the
+folder `models` of this package by `tests/conftest.py`, and has two experiments with mappings which are calibration, dose, population and
 limitation evidence, unclaimed validation data and an outlier. The renal
 impairment is a label of the metadata only, the model does not change.
 """
 
 from pathlib import Path
 
-from pkpdsim.model import FigureSettings, PKPDModel, SimulatorSettings
-from pkpdsim_toy import DATA_PATHS, MODEL_PATH
+from sbmlsim.project import SimulatorSettings
+
+from pkpdsim.model import FigureSettings, PKPDModel
+from pkpdsim_toy import DATA_PATHS
 
 CREDIBILITY_PATH = Path(__file__).parent
+MODEL_BASE_PATH = CREDIBILITY_PATH / "models"
+MODEL_PATH = MODEL_BASE_PATH / "toy.xml"
 
 MODEL = PKPDModel(
     name="credibility",

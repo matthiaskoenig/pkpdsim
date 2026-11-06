@@ -1,15 +1,14 @@
 """Tests of the source repository, the release repository and the export."""
 
-import dataclasses
 import sys
 from pathlib import Path
 
 import pytest
 from release_git import git
+from sbmlsim.release.settings import ReleaseSettings
 
 from pkpdsim.model import PKPDModel
 from pkpdsim.release import source as source_module
-from pkpdsim.release.settings import ReleaseSettings
 from pkpdsim.release.source import (
     ReleaseError,
     check_version,
@@ -163,7 +162,7 @@ def test_export_excludes(tmp_path: Path, source_repo_model: PKPDModel) -> None:
 
 
 def test_export_namespace(tmp_path: Path, source_repo_model: PKPDModel) -> None:
-    model = dataclasses.replace(source_repo_model, package="pkg.pkpdsim_toy")
+    model = source_repo_model.replace(package="pkg.pkpdsim_toy")
     release = tmp_path / "release"
     (release / "src" / "pkg").mkdir(parents=True)
     (release / "src" / "pkg" / "__init__.py").write_text("")

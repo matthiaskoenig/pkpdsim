@@ -402,7 +402,7 @@ collections = select_mappings(
 ## Exceptions of the tests
 
 The tests of `pkpdsim.testing` read the known exceptions of a model from
-`PKPDModel.checks`, a `CheckSettings`. Every exception carries its reason, and an
+`PKPDModel.checks`, a `CheckSettings` of `sbmlsim.project`. Every exception carries its reason, and an
 exception which no longer applies (a class which is registered now, a module
 which is gone) fails the test, so the list cannot go stale:
 
@@ -411,10 +411,10 @@ which is gone) fails the test, so the list cannot go stale:
 | `not_registered` | experiment classes which are not in the group `all` of the registry on purpose, class name to reason |
 | `not_importable` | modules below the package which do not import in the test environment (an optional dependency), name relative to the package to reason |
 | `one_at_a_time` | the reason why the registered experiments run one at a time (the memory a run of all of them needs), `None` to run them together; an empty reason is an error |
-| `battery` | the checks of the battery of the builds which fail, the id of the check (`steady_state`) to reason, see [Battery of the builds](credibility.md#battery-of-the-builds); an id which is no check of the battery and an empty reason are errors |
+| `battery` | the checks of the battery of the builds which fail, the id of the check (`steady_state`) to reason, see [Battery of the builds](credibility.md#battery-of-the-builds); an id which is no check of the battery is an error of the model, an empty reason one of the settings |
 
 ```python
-from pkpdsim.model import CheckSettings
+from sbmlsim.project import CheckSettings
 
 checks = CheckSettings(
     not_registered={"Anderson1961Scan": "a scan which takes hours"},

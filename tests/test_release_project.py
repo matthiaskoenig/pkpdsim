@@ -12,6 +12,7 @@ from pathlib import Path, PureWindowsPath
 import pytest
 import yaml
 from jinja2 import UndefinedError
+from sbmlsim.release.settings import Author
 
 from pkpdsim.release import project as project_module
 from pkpdsim.release.project import (
@@ -22,7 +23,6 @@ from pkpdsim.release.project import (
     write_project_files,
     zenodo_json,
 )
-from pkpdsim.release.settings import Author
 from pkpdsim.release.source import ReleaseError, SourceRepo
 from pkpdsim_toy import MODEL
 

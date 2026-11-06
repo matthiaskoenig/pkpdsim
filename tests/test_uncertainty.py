@@ -165,7 +165,7 @@ def test_adopt_refuses_a_fit_without_uncertainty(toy_fit: Path, tmp_path: Path) 
 
 
 def test_fit_adopt_command(toy_fit: Path, tmp_path: Path) -> None:
-    model = dataclasses.replace(MODEL, fits_path=tmp_path / "fits")
+    model = MODEL.replace(fits_dir=tmp_path / "fits")
     runs = fit_command(
         model, ["--adopt", toy_fit.name, "--output_dir", str(toy_fit.parent)]
     )
@@ -357,27 +357,24 @@ def test_the_draws_of_the_model(toy_with_uncertainty: Path) -> None:
 
 def test_a_model_without_distributions_cannot_be_drawn() -> None:
     with pytest.raises(ValueError, match="No parameter"):
-        uncertainty_dimension(MODEL.model_path, 3, seed=1)
+        uncertainty_dimension(MODEL.model_path(), 3, seed=1)
 
 
 def test_the_check_of_the_fit_parameters(
     fits_dir: Path, toy_fit: Path, toy_with_uncertainty: Path
 ) -> None:
     assert check_fit_parameters(MODEL) == []
-    model = dataclasses.replace(
-        MODEL,
-        fits=(toy_fit.name,),
-        fits_path=fits_dir,
-        model_path=toy_with_uncertainty,
+    model = MODEL.replace(
+        adopted_ids=(toy_fit.name,),
+        fits_dir=fits_dir,
+        variants={"male": toy_with_uncertainty},
     )
     assert check_fit_parameters(model) == []
     # the model of the factory has neither the value nor the distribution
-    problems = check_fit_parameters(
-        dataclasses.replace(model, model_path=MODEL.model_path)
-    )
+    problems = check_fit_parameters(model.replace(variants=MODEL.variants))
     assert any("has no distribution" in p for p in problems)
     assert any("take it from the record" in p for p in problems)
-    missing = dataclasses.replace(model, fits=("FIT_X",))
+    missing = model.replace(adopted_ids=("FIT_X",))
     assert any("not adopted" in p for p in check_fit_parameters(missing))
 
 
@@ -412,31 +409,38 @@ def test_the_check_of_the_fit_parameters_sees_every_build(
 ) -> None:
     """The female build has the fitted values and the distributions of the male one."""
     records = FitRecords(fits_dir, [toy_fit.name])
-    model = dataclasses.replace(
-        MODEL,
-        fits=(toy_fit.name,),
-        fits_path=fits_dir,
-        model_path=toy_with_uncertainty,
-        female_model_path=_female_build(tmp_path / "female.xml", records),
+    model = MODEL.replace(
+        adopted_ids=(toy_fit.name,),
+        fits_dir=fits_dir,
+        variants={
+            "male": toy_with_uncertainty,
+            "female": _female_build(tmp_path / "female.xml", records),
+        },
     )
     assert check_fit_parameters(model) == []
-    stale = dataclasses.replace(
-        model,
-        female_model_path=_female_build(tmp_path / "stale.xml", records, fitted=False),
+    stale = model.replace(
+        variants={
+            **model.variants,
+            "female": _female_build(tmp_path / "stale.xml", records, fitted=False),
+        },
     )
     problems = check_fit_parameters(stale)
     assert problems
     assert all("female build stale.xml" in p for p in problems)
     assert any("has no distribution" in p for p in problems)
     assert any("take it from the record" in p for p in problems)
-    other = dataclasses.replace(
-        model,
-        female_model_path=_female_build(tmp_path / "other.xml", records, upper=5.0),
+    other = model.replace(
+        variants={
+            **model.variants,
+            "female": _female_build(tmp_path / "other.xml", records, upper=5.0),
+        },
     )
     (problem,) = check_fit_parameters(other)
     assert "distribution" in problem
     assert "differs from the male build" in problem
-    missing = dataclasses.replace(model, female_model_path=tmp_path / "missing.xml")
+    missing = model.replace(
+        variants={**model.variants, "female": tmp_path / "missing.xml"}
+    )
     assert check_fit_parameters(missing) == [
         f"the female build {tmp_path / 'missing.xml'} does not exist"
     ]
@@ -578,7 +582,7 @@ def test_a_scan_gets_the_draws_appended(toy_with_uncertainty: Path) -> None:
 def test_the_run_writes_into_the_results_of_the_draws(
     toy_with_uncertainty: Path, tmp_path: Path
 ) -> None:
-    model = dataclasses.replace(MODEL, model_path=toy_with_uncertainty)
+    model = MODEL.replace(variants={"male": toy_with_uncertainty})
     run_command(
         model,
         [

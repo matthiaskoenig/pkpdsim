@@ -1038,7 +1038,7 @@ def _plausibility(
                 collector.problems.append(
                     f"{name}: the species '{sid}' starts at {value:g}"
                 )
-    if not model.fits:
+    if not model.adopted_ids:
         return
     try:
         records = model.fit_records()

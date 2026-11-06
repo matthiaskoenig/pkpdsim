@@ -15,6 +15,7 @@ import pytest
 from credibility_tables import fit_table, verification_of
 from pkpdsim_credibility import MODEL as CREDIBILITY_MODEL
 from pkpdsim_credibility.credibility import CREDIBILITY
+from sbmlsim.project import CheckSettings
 
 from pkpdsim.credibility import (
     CredibilityAssessment,
@@ -34,7 +35,7 @@ from pkpdsim.credibility.battery import (
 )
 from pkpdsim.credibility.report import battery_table, fates_table, write_outputs
 from pkpdsim.credibility.verification import BATTERY_CHECKS, Check
-from pkpdsim.model import CheckSettings, PKPDModel
+from pkpdsim.model import PKPDModel
 from pkpdsim.testing import check_battery
 from pkpdsim_toy import MODEL as TOY
 
@@ -255,7 +256,7 @@ def test_a_fitted_value_at_its_bound_is_implausible(
     records.parameters[pid] = at_bound
 
     class Model:
-        fits = credibility_model.fits
+        adopted_ids = credibility_model.adopted_ids
 
         @staticmethod
         def fit_records() -> object:
@@ -275,15 +276,21 @@ def test_the_rebuild(tmp_path: Path) -> None:
     passed = run_battery(CREDIBILITY_MODEL, cross_simulator=False).result(Check.REBUILD)
     assert passed.status is BatteryStatus.PASSED
     assert passed.cases == 1
-    copy = tmp_path / "models" / CREDIBILITY_MODEL.model_path.name
+    copy = tmp_path / "models" / CREDIBILITY_MODEL.model_path().name
     copy.parent.mkdir()
     copy.write_text(
-        CREDIBILITY_MODEL.model_path.read_text(encoding="utf-8").replace(
-            'name="rate of the decay"', 'name="the rate of the decay"'
-        ),
+        CREDIBILITY_MODEL.model_path()
+        .read_text(encoding="utf-8")
+        .replace('name="rate of the decay"', 'name="the rate of the decay"'),
         encoding="utf-8",
     )
-    model = dataclasses.replace(CREDIBILITY_MODEL, model_path=copy)
+    model = CREDIBILITY_MODEL.replace(
+        root=tmp_path,
+        base_path=CREDIBILITY_MODEL.root,
+        variants={"male": copy},
+        factory_dir=None,
+        fits_dir=None,
+    )
     failed = run_battery(model, cross_simulator=False).result(Check.REBUILD)
     assert failed.status is BatteryStatus.FAILED
     assert failed.problems == ("'toy.xml' differs from its rebuild",)
@@ -314,7 +321,7 @@ def test_a_dose_through_the_stomach(tmp_path: Path) -> None:
             "po_d: => Cve_d; kst*STOMACH_d/Mr_d",
         ),
     )
-    build = FlatBuild.read("male", model.model_path)
+    build = FlatBuild.read("male", model.model_path())
     assert dict(build.dose_states) == {
         "IVDOSE_d": "d",
         "PODOSE_d": "d",
@@ -329,7 +336,7 @@ def test_a_species_by_its_prefix(tmp_path: Path) -> None:
         tmp_path,
         "species d_lumen in Vve = 0; ABS: d_lumen => Cve_d; 0.01*d_lumen*Vve;",
     )
-    build = FlatBuild.read("male", model.model_path)
+    build = FlatBuild.read("male", model.model_path())
     assert build.tracked["d_lumen"] == "d"
     assert build.tracked["Cve_d"] == "d"
 
@@ -421,15 +428,14 @@ def test_check_battery(tmp_path: Path) -> None:
     model = _model(tmp_path, "PROD: => Cve_d; 1e-6;")
     with pytest.raises(AssertionError, match="the check 'zero_dose' failed"):
         check_battery(model, rebuild=False, cross_simulator=False)
-    known = dataclasses.replace(
-        model,
+    known = model.replace(
         checks=CheckSettings(
             battery={"zero_dose": "a production", "steady_state": "a production"}
         ),
     )
     check_battery(known, rebuild=False, cross_simulator=False)
-    stale = dataclasses.replace(
-        _model(tmp_path), checks=CheckSettings(battery={"zero_dose": "fixed since"})
+    stale = _model(tmp_path).replace(
+        checks=CheckSettings(battery={"zero_dose": "fixed since"})
     )
     with pytest.raises(
         AssertionError, match="'zero_dose' no longer applies, it passed"
@@ -437,14 +443,12 @@ def test_check_battery(tmp_path: Path) -> None:
         check_battery(stale, rebuild=False, cross_simulator=False)
 
 
-def test_the_known_failures_of_the_battery_are_checked() -> None:
-    with pytest.raises(ValueError, match="'unknown' is no check of the battery"):
-        CheckSettings(battery={"unknown": "reason"})
-    with pytest.raises(ValueError, match="'zero_dose' needs a reason"):
+def test_the_known_failures_of_the_battery_are_checked(tmp_path: Path) -> None:
+    model = _model(tmp_path)
+    with pytest.raises(ValueError, match=r"\['unknown'\] are no checks of the battery"):
+        model.replace(checks=CheckSettings(battery={"unknown": "reason"}))
+    with pytest.raises(ValueError, match="'zero_dose' needs a name and a reason"):
         CheckSettings(battery={"zero_dose": " "})
-    assert hash(CheckSettings(battery={"zero_dose": "x"})) == hash(
-        CheckSettings(battery={"zero_dose": "x"})
-    )
 
 
 def test_without_amici_the_second_simulator_is_not_applicable(
@@ -492,7 +496,7 @@ def test_a_compilation_which_takes_too_long(
 
     monkeypatch.setattr(battery.tempfile, "gettempdir", lambda: str(tmp_path / "tmp"))
     monkeypatch.setattr(battery, "AMICI_TIMEOUT", 0.1)
-    build = FlatBuild.read("male", _model(tmp_path).model_path)
+    build = FlatBuild.read("male", _model(tmp_path).model_path())
     with pytest.raises(battery._CompileTimeout):
         battery._amici_model(build)
     model = _model(tmp_path)

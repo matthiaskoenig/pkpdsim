@@ -219,7 +219,7 @@ def test_a_female_experiment_runs_the_female_model(
 
     checked.clear()
     men = _run(_subclass(base, "Men"))
-    assert checked == [model.model_path]
+    assert checked == [model.model_path()]
     assert _value(men, "task_iv", "BW") == pytest.approx(73.0)
 
 
@@ -256,7 +256,7 @@ def test_the_renal_function_of_a_woman_uses_the_female_gfr(model: PKPDModel) -> 
     women = _subclass(base, "Women", sex=Sex.FEMALE)
     female_path = model.model_path_of(Sex.FEMALE)
     female = _ml(healthy_gfr(female_path))
-    male = _ml(healthy_gfr(model.model_path))
+    male = _ml(healthy_gfr(model.model_path()))
     assert female < male
     assert _ml(women.healthy_gfr()) == female
     assert _ml(base.healthy_gfr()) == male
@@ -344,7 +344,7 @@ def test_the_renal_functions_of_a_mixed_study_follow_the_sex_of_the_simulation(
     neither the key nor the sex would be of no one sex and is refused.
     """
     groups = _subclass(_base(model), "Groups", simulation_sexes={"women": Sex.FEMALE})
-    male = _ml(healthy_gfr(model.model_path))
+    male = _ml(healthy_gfr(model.model_path()))
     female = _ml(healthy_gfr(model.model_path_of(Sex.FEMALE)))
     women = float(groups.renal_function(60.0, simulation="women").m_as("dimensionless"))
     men = float(groups.renal_function(60.0, simulation="men").m_as("dimensionless"))

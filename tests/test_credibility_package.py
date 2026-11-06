@@ -11,7 +11,7 @@ def test_load_credibility(credibility_model: PKPDModel) -> None:
 
 
 def test_the_fit_has_every_kind(credibility_model: PKPDModel) -> None:
-    (fit,) = credibility_model.fits
+    (fit,) = credibility_model.adopted_ids
     table = pd.read_csv(
         credibility_model.fits_dir / fit / "metrics_mappings.tsv", sep="\t"
     )

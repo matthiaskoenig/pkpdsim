@@ -20,6 +20,7 @@ from PIL import Image
 from sbmlsim.experiment import SimulationExperiment
 from sbmlsim.fit.cli import FitDefinition
 from sbmlsim.plot import Figure
+from sbmlsim.project import SimulatorSettings
 from sbmlsim.simulation import Scan, Simulation
 from sbmlsim.simulation.sampling import local
 
@@ -344,9 +345,7 @@ def test_capture_settings_of_a_model() -> None:
 def test_capture_settings_sees_a_difference() -> None:
     from pkpdsim.verify import capture_settings
 
-    other = dataclasses.replace(
-        MODEL, figures=FigureSettings(formats=("png",), legend_fontsize=9)
-    )
+    other = MODEL.replace(figures=FigureSettings(formats=("png",), legend_fontsize=9))
     a = capture_settings(MODEL.run_experiments, ToyDecay, TESTS_DIR)
     b = capture_settings(other.run_experiments, ToyDecay, TESTS_DIR)
     assert a["run"]["figure_settings"] != b["run"]["figure_settings"]
@@ -381,7 +380,7 @@ def test_a_dump_records_an_experiment_which_cannot_be_initialized(
     import pkpdsim_toy
 
     monkeypatch.setattr(
-        pkpdsim_toy, "MODEL", dataclasses.replace(MODEL, experiments=".broken:BROKEN")
+        pkpdsim_toy, "MODEL", MODEL.replace(experiments=".broken:BROKEN")
     )
     # the experiment which cannot be initialized runs first
     order = tmp_path / "order.pkl"
@@ -555,7 +554,7 @@ def test_capture_settings_records_the_matplotlib_settings() -> None:
 
     from pkpdsim.verify import capture_settings
 
-    other = dataclasses.replace(MODEL, figures=FigureSettings(savefig_dpi=55))
+    other = MODEL.replace(figures=FigureSettings(savefig_dpi=55))
     assert (
         capture_settings(other.run_experiments, ToyDecay, TESTS_DIR)["rc"][
             "savefig.dpi"
@@ -1783,8 +1782,10 @@ def test_a_dump_and_the_fits_load_at_the_level_of_the_model(
 
     import pkpdsim_toy
 
-    simulator = dataclasses.replace(MODEL.simulator, jit_optimization="O0")
-    model = dataclasses.replace(MODEL, simulator=simulator)
+    simulator = SimulatorSettings(
+        absolute_tolerance=1e-10, relative_tolerance=1e-10, jit_optimization="O0"
+    )
+    model = MODEL.replace(simulator=simulator)
     monkeypatch.setattr(pkpdsim_toy, "MODEL", model)
     assert describe("pkpdsim_toy").jit_optimization == "O0"
 

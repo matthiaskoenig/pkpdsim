@@ -150,7 +150,7 @@ def _study(
     )
     experiment = cls(base_path=base.pkpd_model.path)
     # the runner resolves the models before the initialization
-    experiment._models = {"model": _model(base.pkpd_model.model_path)}
+    experiment._models = {"model": _model(base.pkpd_model.model_path())}
     return experiment
 
 

@@ -37,3 +37,4 @@ tests/pkpdsim_toy/models/
 tests/pkpdsim_toy/results/
 tests/pkpdsim_sexes/models/
 tests/pkpdsim_sexes/results/
+tests/pkpdsim_credibility/models/

@@ -85,6 +85,7 @@ from sbmlsim.fit.identifiability import IdentifiabilityResult, ProfileSettings
 from sbmlsim.fit.options import OptimizationAlgorithmType, OptimizationStrategy
 from sbmlsim.fit.result import fit_id
 from sbmlsim.fit.sampling import SamplingType
+from sbmlsim.project import resolve
 from sbmlsim.utils import paths_text
 from sbmlutils.console import console
 
@@ -98,16 +99,14 @@ from pkpdsim.credibility import (
 from pkpdsim.credibility.report import print_summary, write_outputs
 from pkpdsim.fit import (
     FIXED_FITS,
-    at_level,
     fixed_values,
-    leveled_definitions,
     records_context,
     remainder_problems,
     report_context,
     start_point,
     with_start,
 )
-from pkpdsim.model import PKPDModel, resolve
+from pkpdsim.model import RUN_WORKERS, PKPDModel
 from pkpdsim.profiling import (
     PROFILE_OPTION,
     profiler_available,
@@ -119,8 +118,7 @@ from pkpdsim.uncertainty import UncertaintySettings, adopt_fit
 
 if TYPE_CHECKING:
     from sbmlsim.experiment import SimulationExperiment
-
-    from pkpdsim.model import SimulatorSettings
+    from sbmlsim.project import SimulatorSettings
 
 
 class Action(StrEnum):
@@ -144,14 +142,13 @@ def parse_formats(text: str) -> list[str]:
     return [part.strip().lower() for part in text.split(",") if part.strip()]
 
 
-def parse_workers(text: str, model: PKPDModel) -> int | None:
+def parse_workers(text: str) -> int | None:
     """Get the processes of a run from the option `--workers`.
 
     Args:
-        text: `model` for the setting of the model, `auto` for the choice of
-            sbmlsim (`None`: a pool of every CPU for a scan of 256 points or
-            more), or a positive number.
-        model: the model.
+        text: `model` for the default of a model (`pkpdsim.model.RUN_WORKERS`,
+            serially), `auto` for the choice of sbmlsim (`None`: a pool of
+            every CPU for a scan of 256 points or more), or a positive number.
 
     Returns:
         The number of processes, `None` for the choice of sbmlsim.
@@ -160,7 +157,7 @@ def parse_workers(text: str, model: PKPDModel) -> int | None:
         ValueError: for any other text.
     """
     if text == "model":
-        return model.simulator.n_workers
+        return RUN_WORKERS
     if text == "auto":
         return None
     try:
@@ -291,10 +288,10 @@ def run_parser(model: PKPDModel) -> argparse.ArgumentParser:
             default="model",
             help="the processes of the scans: a number, 'auto' for a pool of "
             "every CPU for a scan of 256 points or more, or 'model' for the "
-            "setting of the model (default: %(default)s); with serial scans "
-            "the experiments run in a pool, a worker per four experiments; an "
-            "extra action gets the settings of the simulator as "
-            "`options.simulator`",
+            "default of a model, serially (default: %(default)s); with serial "
+            "scans the experiments run in a pool, a worker per four "
+            "experiments; an extra action gets the settings of the simulator "
+            "as `options.simulator` and the processes as `options.n_workers`",
         )
     if model.extra_arguments is not None:
         resolve(model.extra_arguments, model.package)(p)
@@ -333,6 +330,7 @@ def _simulate(
     show_report: bool,
     figure_formats: Sequence[str],
     simulator: SimulatorSettings,
+    n_workers: int | None,
     uncertainty: UncertaintySettings | None = None,
 ) -> list[str]:
     """Simulate the given groups and experiments.
@@ -344,6 +342,7 @@ def _simulate(
         show_report: open the report in a web browser.
         figure_formats: the formats of the figures.
         simulator: the settings of the simulator.
+        n_workers: the processes of the scans.
         uncertainty: run over draws of the fitted parameters, `None` for once.
 
     Returns:
@@ -369,6 +368,7 @@ def _simulate(
             show_report=show_report,
             figure_formats=figure_formats,
             simulator=simulator,
+            n_workers=n_workers,
             uncertainty=uncertainty,
         )
     except ExperimentRunError as err:
@@ -386,8 +386,8 @@ def run_command(model: PKPDModel, args: Sequence[str] | None = None) -> None:
     A failure of the simulations does not stop the command: the remaining
     actions run, then the failures are printed and the command exits with 1.
     An extra action gets the settings of the simulator of the run as
-    `options.simulator`: those of the model with the processes of `--workers`,
-    and the settings of `--uncertainty` as `options.uncertainty` (`None`
+    `options.simulator`, those of the model, the processes of `--workers` as
+    `options.n_workers`, and the settings of `--uncertainty` as `options.uncertainty` (`None`
     without).
     """
     p = run_parser(model)
@@ -395,6 +395,7 @@ def run_command(model: PKPDModel, args: Sequence[str] | None = None) -> None:
     formats: list[str] = []
     names: list[str] = []
     simulator = model.simulator
+    n_workers: int | None = RUN_WORKERS
     uncertainty: UncertaintySettings | None = None
     if model.experiments is not None:
         if options.uncertainty:
@@ -410,10 +411,9 @@ def run_command(model: PKPDModel, args: Sequence[str] | None = None) -> None:
         if not formats:
             p.error("'--formats' requires at least one format")
         try:
-            n_workers = parse_workers(options.workers, model)
+            n_workers = parse_workers(options.workers)
         except ValueError as err:
             p.error(str(err))
-        simulator = dataclasses.replace(model.simulator, n_workers=n_workers)
         names = [
             name.strip()
             for name in (options.experiments or "").split(",")
@@ -422,12 +422,18 @@ def run_command(model: PKPDModel, args: Sequence[str] | None = None) -> None:
         if options.action == Action.SIMULATE and not names:
             p.error("'--action simulate' requires '--experiments'")
 
-    # an extra action runs its simulations with the settings of the run, which
-    # `--workers` changed; an extra option of that name would be replaced
+    # an extra action runs its simulations with the settings of the run and the
+    # processes of `--workers`; an extra option of these names would be replaced
     if hasattr(options, "simulator"):
         msg = (
             f"the extra option '--simulator' of {model.name} clashes with "
             "`options.simulator`, the settings of the simulator of the run"
+        )
+        raise ValueError(msg)
+    if hasattr(options, "n_workers"):
+        msg = (
+            f"the extra option '--n-workers' of {model.name} clashes with "
+            "`options.n_workers`, the processes of the run"
         )
         raise ValueError(msg)
     if model.experiments is None and hasattr(options, "uncertainty"):
@@ -437,6 +443,7 @@ def run_command(model: PKPDModel, args: Sequence[str] | None = None) -> None:
         )
         raise ValueError(msg)
     options.simulator = simulator
+    options.n_workers = n_workers
     options.uncertainty = uncertainty
     display.section(model.title, icon=":pill:")
     display.key_values({"action": options.action})
@@ -454,7 +461,14 @@ def run_command(model: PKPDModel, args: Sequence[str] | None = None) -> None:
         _list_experiments(model)
     elif options.action == Action.SIMULATE:
         failures = _simulate(
-            model, names, simulation_dir, options.open, formats, simulator, uncertainty
+            model,
+            names,
+            simulation_dir,
+            options.open,
+            formats,
+            simulator,
+            n_workers,
+            uncertainty,
         )
     elif options.action == Action.ALL:
         _run_factory(model)
@@ -466,6 +480,7 @@ def run_command(model: PKPDModel, args: Sequence[str] | None = None) -> None:
                 options.open,
                 formats,
                 simulator,
+                n_workers,
                 uncertainty,
             )
         for extra in model.extra_actions:
@@ -732,7 +747,7 @@ def _adopt(model: PKPDModel, fit_dir: Path, *, force: bool) -> Path:
         console.print(str(err), style="error")
         sys.exit(1)
     fit_display.key_values({"fit": fit_dir.name, "record": record})
-    if fit_dir.name not in model.fits:
+    if fit_dir.name not in model.adopted_ids:
         console.print(
             f"Add '{fit_dir.name}' to `fits` of the model object, the factory takes "
             f"the fitted values and their uncertainty from the record "
@@ -766,8 +781,8 @@ def fit_command(
         return {}
 
     # the problems of the fit load the models at the level of the model, in the
-    # process and in every worker of a pool
-    definition = at_level(definitions[options.subset], model.simulator.jit_optimization)
+    # process and in every worker of a pool (`PKPDModel.load_fit_definitions`)
+    definition = definitions[options.subset]
     algorithm = ALGORITHMS[options.method]
     # the start of least squares: every run starts from the point (the sampling
     # START of sbmlsim), the global optimizer draws its population itself
@@ -954,7 +969,7 @@ def report_command(model: PKPDModel, args: Sequence[str] | None = None) -> Path:
         fit_display.key_values({d.name: d for d in directories})
         return options.output_dir
     return report_cli(
-        leveled_definitions(model),
+        model.load_fit_definitions(),
         args=with_output_dir(arguments, model.report_dir),
         prog=f"run_report {model.package}",
         description=(
@@ -981,7 +996,7 @@ def identifiability_command(
         The directory of the report.
     """
     return identifiability_cli(
-        leveled_definitions(model),
+        model.load_fit_definitions(),
         args=with_output_dir(
             sys.argv[1:] if args is None else args, model.identifiability_dir
         ),
@@ -1364,7 +1379,7 @@ def main(name: str, argv: Sequence[str] | None = None) -> None:
         model = resolve_model(package)
     except ModelNotFoundError as err:
         p.error(str(err))
-    if command.fits and model.fit_definitions is None:
+    if command.fits and not model.fits:
         p.error(f"the model '{model.name}' ({package}) has no fit definitions")
     if PROFILE_OPTION in rest:
         rest = [arg for arg in rest if arg != PROFILE_OPTION]

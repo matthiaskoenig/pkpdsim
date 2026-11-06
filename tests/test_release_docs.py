@@ -42,8 +42,8 @@ def write(path: Path, text: str | bytes) -> None:
 @pytest.fixture
 def release(toy_fit: Path, tmp_path: Path) -> tuple[ProjectContext, Path]:
     """A built release repository of the toy model with an adopted fit."""
-    model = dataclasses.replace(
-        MODEL, fits=[toy_fit.name], archive_path=MODEL.path / "toy_model.omex"
+    model = MODEL.replace(
+        adopted_ids=[toy_fit.name], archive_path=MODEL.path / "toy_model.omex"
     )
     path = tmp_path / "toy-model"
     adopt_fit(toy_fit, path / fits_prefix(model))
@@ -145,7 +145,7 @@ def test_models_link_the_archive_of_the_model(
     models = (path / "docs" / "models.md").read_text(encoding="utf-8")
     assert "toy_model.omex" in models
     assert "a_stale.omex" not in models
-    model = dataclasses.replace(context.model, archive_path=None)
+    model = context.model.replace(archive_path=None)
     write_docs(dataclasses.replace(context, model=model), path)
     assert ".omex" not in (path / "docs" / "models.md").read_text(encoding="utf-8")
 
@@ -168,7 +168,7 @@ def test_simulations_links(release: tuple[ProjectContext, Path]) -> None:
 
 def test_fit_links_the_methods_report(release: tuple[ProjectContext, Path]) -> None:
     context, path = release
-    fit_id = context.model.fits[0]
+    fit_id = context.model.adopted_ids[0]
     write(path / BuildPaths.FITS / fit_id / "report.pdf", b"%PDF")
     write_docs(context, path)
     page = (path / "docs" / "fit.md").read_text(encoding="utf-8")
@@ -185,7 +185,7 @@ def test_running_recreates_the_fit_reports(
     package = context.model.package
     assert f"uv run run_report {package} --adopted -o results/fit_reports" in page
     write_docs(
-        dataclasses.replace(context, model=dataclasses.replace(context.model, fits=[])),
+        dataclasses.replace(context, model=context.model.replace(adopted_ids=[])),
         path,
     )
     assert "run_report" not in (path / "docs" / "running.md").read_text(
@@ -200,7 +200,7 @@ def test_without_fits_no_confidence_interval(
     context, path = release
     write_docs(context, path)
     assert "--uncertainty" in (path / "docs" / "running.md").read_text(encoding="utf-8")
-    model = dataclasses.replace(context.model, fits=[])
+    model = context.model.replace(adopted_ids=[])
     write_docs(dataclasses.replace(context, model=model), path)
     assert "--uncertainty" not in (path / "docs" / "running.md").read_text(
         encoding="utf-8"
@@ -213,7 +213,7 @@ def test_without_fits_no_confidence_interval(
 def test_fit_table(release: tuple[ProjectContext, Path]) -> None:
     context, path = release
     write_docs(context, path)
-    fit_id = context.model.fits[0]
+    fit_id = context.model.adopted_ids[0]
     record = FitRecord.load(path / fits_prefix(context.model) / fit_id)
     page = (path / "docs" / "fit.md").read_text(encoding="utf-8")
     assert f"{SETTINGS.site_url}fit/{fit_id}/index.html" in page
@@ -233,7 +233,7 @@ def test_fit_table_is_a_block(release: tuple[ProjectContext, Path]) -> None:
     write_docs(context, path)
     page = (path / "docs" / "fit.md").read_text(encoding="utf-8")
     assert "/index.html)\n\n| Parameter |" in page
-    fit_id = context.model.fits[0]
+    fit_id = context.model.adopted_ids[0]
     write(path / BuildPaths.FITS / fit_id / "report.pdf", b"%PDF")
     write_docs(context, path)
     page = (path / "docs" / "fit.md").read_text(encoding="utf-8")
@@ -242,7 +242,7 @@ def test_fit_table_is_a_block(release: tuple[ProjectContext, Path]) -> None:
 
 def test_fit_table_open_interval(release: tuple[ProjectContext, Path]) -> None:
     context, path = release
-    fit_id = context.model.fits[0]
+    fit_id = context.model.adopted_ids[0]
     directory = path / fits_prefix(context.model) / fit_id
     record = FitRecord.load(directory)
     pid = next(iter(record.parameters))
@@ -395,9 +395,7 @@ def test_the_credibility_page(release: tuple[ProjectContext, Path]) -> None:
     context, path = release
     context = dataclasses.replace(
         context,
-        model=dataclasses.replace(
-            context.model, credibility="pkpdsim_toy.credibility:CREDIBILITY"
-        ),
+        model=context.model.replace(credibility="pkpdsim_toy.credibility:CREDIBILITY"),
     )
     assessment = _write_credibility(path)
     write_project_files(context, path)
@@ -431,9 +429,7 @@ def test_the_credibility_page_shows_the_domain(
     context, path = release
     context = dataclasses.replace(
         context,
-        model=dataclasses.replace(
-            context.model, credibility="pkpdsim_toy.credibility:CREDIBILITY"
-        ),
+        model=context.model.replace(credibility="pkpdsim_toy.credibility:CREDIBILITY"),
     )
     assessment = _write_credibility(path)
     write_project_files(context, path)
@@ -471,9 +467,7 @@ def test_the_credibility_page_shows_the_verification(
     context, path = release
     context = dataclasses.replace(
         context,
-        model=dataclasses.replace(
-            context.model, credibility="pkpdsim_toy.credibility:CREDIBILITY"
-        ),
+        model=context.model.replace(credibility="pkpdsim_toy.credibility:CREDIBILITY"),
     )
     _write_credibility(path, verified=True)
     write_project_files(context, path)
@@ -501,9 +495,7 @@ def test_the_credibility_page_shows_the_battery(
     context, path = release
     context = dataclasses.replace(
         context,
-        model=dataclasses.replace(
-            context.model, credibility="pkpdsim_toy.credibility:CREDIBILITY"
-        ),
+        model=context.model.replace(credibility="pkpdsim_toy.credibility:CREDIBILITY"),
     )
     _write_credibility(path, verified=True, battery=battery_of(Check.STEADY_STATE))
     write_project_files(context, path)
@@ -534,9 +526,7 @@ def test_the_credibility_page_shows_the_ratio_pairs(
     context, path = release
     context = dataclasses.replace(
         context,
-        model=dataclasses.replace(
-            context.model, credibility="pkpdsim_toy.credibility:CREDIBILITY"
-        ),
+        model=context.model.replace(credibility="pkpdsim_toy.credibility:CREDIBILITY"),
     )
     fits = fit_table(factors={("CredA", "fm_renal"): 1.1}, times=True)
     assessment = assess_table(_renal(), fits, PROVENANCE)
@@ -562,9 +552,7 @@ def test_the_credibility_page_shows_the_temporal_validation(
     context, path = release
     context = dataclasses.replace(
         context,
-        model=dataclasses.replace(
-            context.model, credibility="pkpdsim_toy.credibility:CREDIBILITY"
-        ),
+        model=context.model.replace(credibility="pkpdsim_toy.credibility:CREDIBILITY"),
     )
     assessment = assess_table(
         CREDIBILITY,
@@ -595,9 +583,7 @@ def test_the_credibility_page_shows_the_study_data(
     context, path = release
     context = dataclasses.replace(
         context,
-        model=dataclasses.replace(
-            context.model, credibility="pkpdsim_toy.credibility:CREDIBILITY"
-        ),
+        model=context.model.replace(credibility="pkpdsim_toy.credibility:CREDIBILITY"),
     )
     assessment = assess_table(
         CREDIBILITY,
@@ -626,9 +612,7 @@ def test_the_credibility_page_shows_the_parameter_uncertainty(
     context, path = release
     context = dataclasses.replace(
         context,
-        model=dataclasses.replace(
-            context.model, credibility="pkpdsim_toy.credibility:CREDIBILITY"
-        ),
+        model=context.model.replace(credibility="pkpdsim_toy.credibility:CREDIBILITY"),
     )
     assessment = assess_table(
         CREDIBILITY, fit_table(), PROVENANCE, propagation=_propagation(0.01)
@@ -652,9 +636,7 @@ def test_the_credibility_page_shows_the_inputs(
     context, path = release
     context = dataclasses.replace(
         context,
-        model=dataclasses.replace(
-            context.model, credibility="pkpdsim_toy.credibility:CREDIBILITY"
-        ),
+        model=context.model.replace(credibility="pkpdsim_toy.credibility:CREDIBILITY"),
     )
     checks = [
         _check("fm_dose", "BW", 72.0, "equivalent"),
@@ -681,9 +663,7 @@ def test_the_credibility_page_escapes_a_table_cell(
     context, path = release
     context = dataclasses.replace(
         context,
-        model=dataclasses.replace(
-            context.model, credibility="pkpdsim_toy.credibility:CREDIBILITY"
-        ),
+        model=context.model.replace(credibility="pkpdsim_toy.credibility:CREDIBILITY"),
     )
     assessment = _write_credibility(path)
     piped = dataclasses.replace(
@@ -722,9 +702,7 @@ def test_the_credibility_page_shows_the_variability(
     context, path = release
     context = dataclasses.replace(
         context,
-        model=dataclasses.replace(
-            context.model, credibility="pkpdsim_toy.credibility:CREDIBILITY"
-        ),
+        model=context.model.replace(credibility="pkpdsim_toy.credibility:CREDIBILITY"),
     )
     assessment = assess_table(
         CREDIBILITY, fit_table(), PROVENANCE, variability=_checks(0.5)

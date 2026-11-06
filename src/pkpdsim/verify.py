@@ -263,16 +263,14 @@ def describe(package: str) -> ModelInfo:
         )
     return ModelInfo(
         package=package,
-        base_path=model.path,
-        model_path=model.model_path,
+        base_path=model.base_path or model.path,
+        model_path=model.model_path(),
         data_path=list(model.data_paths) or None,
         experiments=model.load_experiments() if model.experiments else None,
         absolute_tolerance=model.simulator.absolute_tolerance,
         relative_tolerance=model.simulator.relative_tolerance,
         run_experiments=model.run_experiments,
-        fit_definitions=(
-            dict(model.load_fit_definitions()) if model.fit_definitions else None
-        ),
+        fit_definitions=(dict(model.load_fit_definitions()) if model.fits else None),
         jit_optimization=model.simulator.jit_optimization,
     )
 
@@ -2320,8 +2318,6 @@ def fits(args: argparse.Namespace) -> int:
     sys.path.insert(0, str(root))
     from sbmlsim.fit.cli import run_fit
 
-    from pkpdsim.fit import at_level
-
     if message := _outside_root(args.model, root):
         print(message, file=sys.stderr)
         return 2
@@ -2335,9 +2331,10 @@ def fits(args: argparse.Namespace) -> int:
     status: dict[str, str] = {}
     for key in args.subsets or list(definitions):
         try:
-            # the problems load their models at the level of the model
+            # the problems load their models at the level of the model, their
+            # definitions carry it (`PKPDModel.load_fit_definitions`)
             run_fit(
-                at_level(definitions[key], info.jit_optimization),
+                definitions[key],
                 opid=f"smoke_{key}",
                 size=1,
                 seed=1234,

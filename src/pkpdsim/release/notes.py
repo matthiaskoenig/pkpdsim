@@ -25,8 +25,8 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Literal
 
 import libsbml
+from sbmlsim.fit.result import fit_subset
 
-from pkpdsim.fit import fit_subset
 from pkpdsim.model import PKPDModel
 from pkpdsim.release.build import BuildPaths
 from pkpdsim.release.project import ProjectContext, render
@@ -609,7 +609,7 @@ def fit_changes(
             old[fit_subset(relative.parent.name)] = relative.parent.name
         except ValueError:
             continue
-    new = {fit_subset(fit_id): fit_id for fit_id in model.fits}
+    new = {fit_subset(fit_id): fit_id for fit_id in model.adopted_ids}
 
     changes = []
     for subset in sorted(old.keys() | new.keys()):

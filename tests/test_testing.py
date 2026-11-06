@@ -1,22 +1,20 @@
 """The tests of a model as functions, run on the toy model."""
 
-import dataclasses
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 from sbmlsim.fit.cli import FitDefinition
+from sbmlsim.project import CheckSettings, SimulatorSettings
 
 from pkpdsim import testing
-from pkpdsim.model import CheckSettings
 from pkpdsim_toy import MODEL
 from pkpdsim_toy.broken import ToyCannotInitialize, ToyFigureFails, ToyRefusedUnit
 from pkpdsim_toy.experiments.decay import ToyDecay, ToyDecaySlow
 
-PARTIAL = dataclasses.replace(MODEL, experiments=".simulations:PARTIAL")
-BROKEN = dataclasses.replace(MODEL, experiments=".broken:BROKEN")
-KNOWN = dataclasses.replace(
-    PARTIAL, checks=CheckSettings(not_registered={"ToyDecaySlow": "a test"})
-)
+PARTIAL = MODEL.replace(experiments=".simulations:PARTIAL")
+BROKEN = MODEL.replace(experiments=".broken:BROKEN")
+KNOWN = PARTIAL.replace(checks=CheckSettings(not_registered={"ToyDecaySlow": "a test"}))
 
 
 def test_the_modules_of_the_experiments() -> None:
@@ -47,32 +45,28 @@ def test_a_known_exception_passes() -> None:
 
 
 def test_a_stale_exception_fails() -> None:
-    stale = dataclasses.replace(
-        MODEL, checks=CheckSettings(not_registered={"ToyDecay": "a test"})
-    )
+    stale = MODEL.replace(checks=CheckSettings(not_registered={"ToyDecay": "a test"}))
     with pytest.raises(AssertionError, match="listed as not registered"):
         testing.check_registry(stale)
 
 
 def test_a_listed_class_which_is_not_defined_fails() -> None:
-    gone = dataclasses.replace(
-        MODEL, checks=CheckSettings(not_registered={"ToyGone": "a test"})
-    )
+    gone = MODEL.replace(checks=CheckSettings(not_registered={"ToyGone": "a test"}))
     with pytest.raises(AssertionError, match=r"not defined.*ToyGone"):
         testing.check_registry(gone)
 
 
 def test_a_module_which_is_not_importable_is_skipped() -> None:
-    skipping = dataclasses.replace(
-        MODEL, checks=CheckSettings(not_importable={"experiments.decay": "a test"})
+    skipping = MODEL.replace(
+        checks=CheckSettings(not_importable={"experiments.decay": "a test"})
     )
     modules, _ = testing.experiment_modules(skipping)
     assert [module.__name__ for module in modules] == ["pkpdsim_toy.experiments"]
 
 
 def test_a_listed_module_which_does_not_exist_fails() -> None:
-    gone = dataclasses.replace(
-        MODEL, checks=CheckSettings(not_importable={"experiments.gone": "a test"})
+    gone = MODEL.replace(
+        checks=CheckSettings(not_importable={"experiments.gone": "a test"})
     )
     with pytest.raises(AssertionError, match=r"no module.*experiments\.gone"):
         testing.check_registry(gone)
@@ -84,9 +78,7 @@ def test_the_experiments_initialize() -> None:
 
 @pytest.mark.parametrize("one_at_a_time", [None, "a test"])
 def test_all_experiments_run(tmp_path: Path, one_at_a_time: str | None) -> None:
-    model = dataclasses.replace(
-        MODEL, checks=CheckSettings(one_at_a_time=one_at_a_time)
-    )
+    model = MODEL.replace(checks=CheckSettings(one_at_a_time=one_at_a_time))
     testing.run_all_experiments(model, tmp_path)
     if one_at_a_time:
         assert (tmp_path / "ToyDecay").is_dir()
@@ -105,12 +97,11 @@ def test_a_model_of_its_package_passes_the_check() -> None:
 
 
 def test_a_broken_model_names_every_problem() -> None:
-    broken = dataclasses.replace(
-        MODEL,
-        path=MODEL.path.parent,
+    broken = MODEL.replace(
+        root=MODEL.path.parent,
         factory=".factory:missing",
         experiments=".simulations:not_a_registry",
-        fit_definitions=".fitting:EMPTY",
+        fits=".fitting:EMPTY",
         extra_arguments=".extras:missing",
     )
     with pytest.raises(AssertionError) as info:
@@ -128,10 +119,9 @@ def test_a_broken_model_names_every_problem() -> None:
 
 
 def test_a_registry_without_all_and_empty_fits_fail() -> None:
-    model = dataclasses.replace(
-        MODEL,
+    model = MODEL.replace(
         experiments=".simulations:WITHOUT_ALL",
-        fit_definitions=".simulations:NO_FITS",
+        fits=".simulations:NO_FITS",
     )
     with pytest.raises(AssertionError) as info:
         testing.check_model(model)
@@ -140,7 +130,7 @@ def test_a_registry_without_all_and_empty_fits_fail() -> None:
 
 
 def test_a_package_which_does_not_import_fails() -> None:
-    model = dataclasses.replace(MODEL, package="pkpdsim_missing")
+    model = MODEL.replace(package="pkpdsim_missing")
     with pytest.raises(AssertionError, match="does not import"):
         testing.check_model(model)
 
@@ -149,15 +139,19 @@ def test_a_package_which_does_not_import_fails() -> None:
     ("changes", "message"),
     [
         ({"name": "other"}, "is not the name of the package"),
-        ({"model_path": Path("/elsewhere/model.xml")}, "model_path"),
-        ({"factory_path": Path("/elsewhere")}, "factory"),
+        ({"variants": {"male": Path("/elsewhere/model.xml")}}, "model_path"),
         ({"archive_path": Path("/elsewhere/model.omex")}, "archive_path"),
-        ({"data_paths": (Path("/does/not/exist"),)}, "does not exist"),
+        ({"data_path": (Path("/does/not/exist"),)}, "does not exist"),
     ],
 )
 def test_check_model_finds_a_slip(changes: dict[str, object], message: str) -> None:
     with pytest.raises(AssertionError, match=message):
-        testing.check_model(dataclasses.replace(MODEL, **changes))
+        testing.check_model(MODEL.replace(**changes))
+
+
+def test_the_factory_writes_below_the_model() -> None:
+    with pytest.raises(ValidationError, match="outside of the root"):
+        MODEL.replace(factory_dir=Path("/elsewhere"))
 
 
 def test_every_failure_of_the_initialization_is_named() -> None:
@@ -183,8 +177,8 @@ def test_every_failure_of_a_run_is_named(tmp_path: Path) -> None:
 
 
 def test_every_failure_of_a_run_one_at_a_time_is_named(tmp_path: Path) -> None:
-    one_by_one = dataclasses.replace(
-        BROKEN, checks=CheckSettings(one_at_a_time="a test of the failures")
+    one_by_one = BROKEN.replace(
+        checks=CheckSettings(one_at_a_time="a test of the failures")
     )
     with pytest.raises(AssertionError) as info:
         testing.run_all_experiments(one_by_one, tmp_path)
@@ -197,8 +191,10 @@ def test_every_failure_of_a_run_one_at_a_time_is_named(tmp_path: Path) -> None:
 
 
 def test_the_initialization_compiles_with_the_level_of_the_model() -> None:
-    model = dataclasses.replace(
-        MODEL, simulator=dataclasses.replace(MODEL.simulator, jit_optimization="O0")
+    model = MODEL.replace(
+        simulator=SimulatorSettings(
+            absolute_tolerance=1e-10, relative_tolerance=1e-10, jit_optimization="O0"
+        )
     )
     assert str(testing._runner(model).jit_optimization) == "O0"
 
@@ -214,6 +210,8 @@ def test_the_fits_start_at_the_level_of_the_model(
         return {"run": object()}
 
     monkeypatch.setattr(testing, "run_fit", recording_run_fit)
-    simulator = dataclasses.replace(MODEL.simulator, jit_optimization="O0")
-    testing.start_fits(dataclasses.replace(MODEL, simulator=simulator), tmp_path)
+    simulator = SimulatorSettings(
+        absolute_tolerance=1e-10, relative_tolerance=1e-10, jit_optimization="O0"
+    )
+    testing.start_fits(MODEL.replace(simulator=simulator), tmp_path)
     assert seen == ["O0"]

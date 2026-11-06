@@ -350,7 +350,7 @@ def test_the_command_writes_into_the_credibility_dir(
 ) -> None:
     record = tmp_path / "credibility.json"
     write_outputs(assess_table(CREDIBILITY, fit_table(), PROVENANCE), tmp_path)
-    model = dataclasses.replace(credibility_model, results_path=tmp_path / "results")
+    model = credibility_model.replace(results_path=tmp_path / "results")
     assert credibility_command(model, ["--from-json", str(record)]) == (
         model.credibility_dir
     )
@@ -360,7 +360,7 @@ def test_the_command_writes_into_the_credibility_dir(
 def test_the_command_reports_a_broken_declaration(
     credibility_model: PKPDModel, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    broken = dataclasses.replace(credibility_model, credibility=".credibility:BROKEN")
+    broken = credibility_model.replace(credibility=".credibility:BROKEN")
     with pytest.raises(SystemExit) as exit_info:
         credibility_command(broken, ["-o", str(tmp_path / "broken")])
     assert exit_info.value.code == 1
@@ -417,7 +417,7 @@ def test_the_command_reports_a_malformed_record(
 def test_the_command_reports_a_declaration_of_another_type(
     credibility_model: PKPDModel, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    other = dataclasses.replace(credibility_model, credibility=".fitting:DOSE")
+    other = credibility_model.replace(credibility=".fitting:DOSE")
     with pytest.raises(SystemExit) as exit_info:
         credibility_command(other, ["-o", str(tmp_path / "other")])
     assert exit_info.value.code == 1
@@ -429,10 +429,10 @@ def test_the_command_reports_a_malformed_record_of_a_fit(
 ) -> None:
     fits = tmp_path / "fits"
     shutil.copytree(credibility_model.fits_dir, fits)
-    (fit_id,) = credibility_model.fits
+    (fit_id,) = credibility_model.adopted_ids
     path = fits / fit_id / "metrics_mappings.tsv"
     pd.read_csv(path, sep="\t").drop(columns="kind").to_csv(path, sep="\t", index=False)
-    model = dataclasses.replace(credibility_model, fits_path=fits)
+    model = credibility_model.replace(fits_dir=fits)
     with pytest.raises(SystemExit) as exit_info:
         credibility_command(model, ["-o", str(tmp_path / "out")])
     assert exit_info.value.code == 1

@@ -6,7 +6,6 @@ toy model (`tests/pkpdsim_toy`) has the male build only. A task which runs the
 wrong build starts at the wrong concentration.
 """
 
-import dataclasses
 from collections.abc import Mapping
 from pathlib import Path
 from typing import ClassVar, cast
@@ -19,6 +18,7 @@ from sbmlsim.simulator import Simulator
 
 from pkpdsim.cli import fit_command, run_command
 from pkpdsim.experiment import PKPDSimulationExperiment
+from pkpdsim.model import PKPDModel
 from pkpdsim.sex import Sex
 from pkpdsim.testing import check_model, initialize_experiments, run_all_experiments
 from pkpdsim_sexes import FEMALE_A0, FEMALE_MODEL_PATH, MODEL, MODEL_PATH
@@ -67,22 +67,23 @@ def start(experiment: PKPDSimulationExperiment, task: str) -> float:
 def test_a_model_has_a_build_per_sex() -> None:
     assert MODEL.model_paths == {Sex.MALE: MODEL_PATH, Sex.FEMALE: FEMALE_MODEL_PATH}
     assert list(MODEL.model_paths) == [Sex.MALE, Sex.FEMALE]
-    assert MODEL.model_path == MODEL_PATH
+    assert MODEL.model_path() == MODEL_PATH
+    assert MODEL.female_model_path == FEMALE_MODEL_PATH
+    assert MODEL.variants == {"male": MODEL_PATH, "female": FEMALE_MODEL_PATH}
     assert MODEL.model_path_of(Sex.MALE) == MODEL_PATH
     assert MODEL.model_path_of(Sex.FEMALE) == FEMALE_MODEL_PATH
-    assert hash(MODEL) == hash(dataclasses.replace(MODEL))
 
 
 def test_a_model_without_a_female_build_has_the_male_one() -> None:
     assert TOY.female_model_path is None
-    assert TOY.model_paths == {Sex.MALE: TOY.model_path}
+    assert TOY.model_paths == {Sex.MALE: TOY.model_path()}
     with pytest.raises(ValueError, match="'toy' has no female build") as error:
         TOY.model_path_of(Sex.FEMALE)
     assert "female_model_path" in str(error.value)
 
 
 def test_a_replaced_male_build_keeps_the_female_one(tmp_path: Path) -> None:
-    model = dataclasses.replace(MODEL, model_path=tmp_path / "male.xml")
+    model = MODEL.replace(variants={**MODEL.variants, "male": tmp_path / "male.xml"})
     assert model.model_paths == {
         Sex.MALE: tmp_path / "male.xml",
         Sex.FEMALE: FEMALE_MODEL_PATH,
@@ -91,7 +92,24 @@ def test_a_replaced_male_build_keeps_the_female_one(tmp_path: Path) -> None:
 
 def test_the_female_build_is_another_file() -> None:
     with pytest.raises(ValueError, match="the file of the male build"):
-        dataclasses.replace(MODEL, female_model_path=MODEL_PATH)
+        PKPDModel(
+            name="sexes",
+            package="pkpdsim_sexes",
+            title="Toy PK model per sex",
+            path=MODEL.root,
+            model_path=MODEL_PATH,
+            female_model_path=MODEL_PATH,
+            factory=".factory:create_sexes_models",
+        )
+    with pytest.raises(ValueError, match="every variant is a file of its own"):
+        MODEL.replace(variants={"male": MODEL_PATH, "female": MODEL_PATH})
+
+
+def test_the_builds_are_variants_of_the_sexes(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="the male build first"):
+        MODEL.replace(variants={"female": FEMALE_MODEL_PATH, "male": MODEL_PATH})
+    with pytest.raises(ValueError, match="the male build first"):
+        MODEL.replace(variants={"male": MODEL_PATH, "child": tmp_path / "c.xml"})
 
 
 # ----------------------------------------------------------------------------
@@ -144,13 +162,13 @@ def test_a_study_of_women_with_a_group_of_men() -> None:
 
 def test_a_model_without_a_female_build_runs_as_before() -> None:
     toy = initialized(ToyDecay)
-    assert loaded_paths(toy) == {"model": TOY.model_path}
+    assert loaded_paths(toy) == {"model": TOY.model_path()}
     assert task_models(toy) == {"task_decay": "model"}
     # the models of an experiment of a model with one build, as before the builds
     # per sex
     models = cast("dict[str, AbstractModel]", toy.models())
     assert list(models) == ["model"]
-    assert models["model"].source.path == TOY.model_path
+    assert models["model"].source.path == TOY.model_path()
     assert models["model"].changes == {}
 
 
@@ -189,7 +207,9 @@ def test_the_sex_of_an_experiment_is_a_sex() -> None:
 # ----------------------------------------------------------------------------
 def test_the_check_of_the_model_sees_both_builds(tmp_path: Path) -> None:
     check_model(MODEL)
-    outside = dataclasses.replace(MODEL, female_model_path=tmp_path / "female.xml")
+    outside = MODEL.replace(
+        variants={"male": MODEL_PATH, "female": tmp_path / "female.xml"}
+    )
     with pytest.raises(AssertionError, match="female_model_path"):
         check_model(outside)
 

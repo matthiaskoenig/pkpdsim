@@ -22,12 +22,11 @@ from sbmlsim.fit.options import (
     WeightingPointsType,
 )
 from sbmlsim.model.tolerances import AbsoluteTolerance
+from sbmlsim.project import SimulatorSettings
 
 from pkpdsim.fit import (
-    at_level,
     check_sampling_sites,
     default_fit_settings,
-    fit_subset,
     mapping_metadata,
     metadata_filter,
     named_filter,
@@ -284,39 +283,6 @@ def test_mapping_metadata_defaults_to_the_shared_metadata(
     assert mapping_metadata(fit_mapping).route == "iv"
 
 
-@pytest.mark.parametrize(
-    ("fit_id", "subset"),
-    [
-        ("PK_20261016_185018__3efe3", "PK"),
-        ("PK_X_20261016_185018__3efe3", "PK_X"),
-        ("20261016_185018__3efe3", ""),
-    ],
-)
-def test_the_subset_of_a_fit_id(fit_id: str, subset: str) -> None:
-    if subset:
-        assert fit_subset(fit_id) == subset
-    else:
-        with pytest.raises(ValueError, match="not the id of a fit"):
-            fit_subset(fit_id)
-
-
-@pytest.mark.parametrize(
-    "fit_id",
-    [
-        "PK",
-        "PK_2026_1",
-        "PK_20261016_185018_3efe3",
-        "../PK_20261016_185018__3efe3",
-        "a/PK_20261016_185018__3efe3",
-        "a\\PK_20261016_185018__3efe3",
-        "..PK_20261016_185018__3efe3",
-    ],
-)
-def test_an_invalid_fit_id_has_no_subset(fit_id: str) -> None:
-    with pytest.raises(ValueError, match="not the id of a fit"):
-        fit_subset(fit_id)
-
-
 def test_check_sampling_sites_names_every_mismatch(fit_mapping: FitMapping) -> None:
     assert not check_sampling_sites([fit_mapping], {"A": SamplingSite.ARM_VEIN})
     wrong = check_sampling_sites([fit_mapping], {"A": SamplingSite.VENOUS})
@@ -386,22 +352,19 @@ def test_a_worker_loads_the_models_at_the_level_of_the_model(
     context = multiprocessing.get_context(start_method)
     with ProcessPoolExecutor(1, mp_context=context) as pool:
         assert pool.submit(environment_level).result() is None
-    definition = MODEL.load_fit_definitions()["DECAY"]
-    problem = at_level(definition, "O0").problem(opid="levels")
+    leveled = MODEL.replace(simulator=SimulatorSettings(jit_optimization="O0"))
+    definition = leveled.load_fit_definitions()["DECAY"]
+    problem = definition.problem(opid="levels")
     assert problem.jit_optimization == "O0"
     with ProcessPoolExecutor(1, mp_context=context) as pool:
         levels = pool.submit(levels_in_worker, problem, definition.settings).result()
     assert levels == ("O0", None, "O0")
     # nothing of the level is left in the process
     assert JIT_VARIABLE not in os.environ
-    # a definition without a level is the definition of the model
-    assert at_level(definition, None) is definition
-    assert (
-        dataclasses.replace(at_level(definition, "O1"), jit_optimization=None)
-        .problem(opid="default")
-        .jit_optimization
-        == "O2"
-    )
+    # a model without a level gives its definitions without one
+    plain = MODEL.load_fit_definitions()["DECAY"]
+    assert plain.jit_optimization is None
+    assert plain.problem(opid="default").jit_optimization == "O2"
 
 
 def test_a_start_without_the_unit_of_a_parameter_is_refused(tmp_path: Path) -> None:
