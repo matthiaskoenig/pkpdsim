@@ -74,7 +74,7 @@ def parameters(values: dict[str, float]) -> str:
 
 
 def toy_sbml() -> str:
-    return (MODEL.path / "models" / "toy.xml").read_text()
+    return (MODEL.path / "models" / "toy.xml").read_text(encoding="utf-8")
 
 
 def commit_release(path: Path, tag: str) -> ReleaseRepo:
@@ -411,7 +411,7 @@ def test_notes_no_changes(tmp_path: Path, model: PKPDModel) -> None:
     source = SourceRepo(root=release.path, commit=COMMIT)
     text = write_release_notes(
         context(model, "0.1.1"), release, model, source, fetch=fake_fetch
-    ).read_text()
+    ).read_text(encoding="utf-8")
     assert text.count("No changes.") == 6
 
 
@@ -427,7 +427,7 @@ def test_notes_direct_dependencies(tmp_path: Path, model: PKPDModel) -> None:
     dependencies = ("NumPy>=2.0", "pkpdsim[docs]>=0.7")
     text = write_release_notes(
         context(model, "0.1.1", dependencies), release, model, source, fetch=fake_fetch
-    ).read_text()
+    ).read_text(encoding="utf-8")
     libraries = text.split("## Libraries\n\n")[1].split("\n## Data")[0]
     assert libraries == (
         "| Package | Previous | New |\n"
@@ -477,7 +477,7 @@ def test_notes_old_layout(old_layout: ReleaseRepo, model: PKPDModel) -> None:
     source = SourceRepo(root=old_layout.path, commit=COMMIT)
     text = write_release_notes(
         context(model, "0.8.0"), old_layout, model, source, fetch=failing_fetch
-    ).read_text()
+    ).read_text(encoding="utf-8")
     assert "no lock file in the previous release" in text
     assert "no fit record in the previous release" in text
     assert f"`{NEW_FIT}`" in text
@@ -488,7 +488,7 @@ def test_notes_no_previous_release(release: ReleaseRepo, model: PKPDModel) -> No
     source = SourceRepo(root=release.path, commit=COMMIT)
     text = write_release_notes(
         context(model, "0.1.0"), first, model, source, fetch=fake_fetch
-    ).read_text()
+    ).read_text(encoding="utf-8")
     assert "First release." in text
     for item in ("drug/Same2000", "other/Added2003", "`A`", "`C`", "toy.xml", NEW_FIT):
         assert item in text

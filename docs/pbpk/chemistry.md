@@ -212,7 +212,7 @@ print([b.protein for b in branches])
 A protein is named once in the protein table of the library with its UniProt and NCIT annotation; a process names it by its key. In every organ where a process uses it, the protein has the activity factor `f_<protein>` (1, a constant of the organ, `LI__f_cyp3a4` in the flat model): genotype, interactions of an experiment and other factors act on it, as `f_cyp3a4` and `f_cyp2c9` of the hand-written models. In the liver the impairment multiplies it by `fimp_<protein>` (the input `fimp_li_<protein>` of the body, see [Impairment](impairment.md)).
 
 <!-- generated: proteins (scripts/pbpk_tables.py), do not edit -->
-*Generated from `data/proteins.toml` by `scripts/pbpk_tables.py`; the notes of every number are in the data file.*
+*Generated from `database/tables/proteins.toml` by `scripts/pbpk_tables.py`; the notes of every number are in the database.*
 
 | protein | name | UniProt | NCIT |
 | --- | --- | --- | --- |

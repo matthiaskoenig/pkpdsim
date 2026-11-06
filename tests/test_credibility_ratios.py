@@ -247,8 +247,12 @@ def test_the_outputs_of_the_ratios(tmp_path: Path) -> None:
     read = CredibilityAssessment.from_json(record)
     assert _context(read, "renal").ratios == _context(assessment, "renal").ratios
     output = write_outputs(assessment, tmp_path / "out")
-    assert (output / "ratios.tsv").read_text().startswith("context\tquantity\t")
-    html = (output / "index.html").read_text()
+    assert (
+        (output / "ratios.tsv")
+        .read_text(encoding="utf-8")
+        .startswith("context\tquantity\t")
+    )
+    html = (output / "index.html").read_text(encoding="utf-8")
     assert "Ratio pairs" in html
     assert "fm_renal / fm_dose" in html
 

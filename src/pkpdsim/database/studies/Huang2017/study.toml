@@ -1,0 +1,29 @@
+source = "Huang2017"
+tissue = "body"
+control = "controls"
+notes = "Healthy controls (eGFR 101.4 ml/min/1.73 m2) and patients with non-dialysis CKD 3 (eGFR 48.9), 4 (24.7) and 5 (10.9); the means of the serum albumin of Table 1 as the table of the impairment of the library gives them (`[ckd.binding]`), without their spread; transcribed from the full text by the literature search of the database (2026-11-05)."
+
+[measurements.physiology]
+file = "physiology.tsv"
+kind = "physiology"
+method = "serum albumin"
+location = "Table 1"
+
+[groups.controls]
+condition = "control"
+description = "healthy subjects"
+
+[groups.ckd_3]
+condition = "ckd"
+ckd_stage = "moderate"
+description = "non-dialysis CKD 3"
+
+[groups.ckd_4]
+condition = "ckd"
+ckd_stage = "severe"
+description = "non-dialysis CKD 4"
+
+[groups.ckd_5]
+condition = "ckd"
+ckd_stage = "end stage"
+description = "non-dialysis CKD 5"

@@ -1,0 +1,6 @@
+entity	group	n	mean	sd	se	median	q1	q3	notes
+hemoglobin	controls	206				146	140	152	the bracket taken as the interquartile range
+hemoglobin	ckd_1	88				136.5	128.3	147.8	the bracket taken as the interquartile range
+hemoglobin	ckd_2	141				127	111.5	140	the bracket taken as the interquartile range
+hemoglobin	ckd_3	73				114	105	128.5	the bracket taken as the interquartile range
+hemoglobin	ckd_4	54				115	98	123	the bracket taken as the interquartile range

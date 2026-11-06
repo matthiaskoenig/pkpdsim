@@ -2,6 +2,7 @@
 
 import dataclasses
 import itertools
+import math
 from pathlib import Path
 from typing import Any
 from xml.etree import ElementTree
@@ -12,6 +13,7 @@ import roadrunner
 from sbmlutils.factory import Model, create_model
 
 from pkpdsim import impairment as presets
+from pkpdsim.database import integration
 from pkpdsim.pbpk import (
     MODEL_UNITS,
     Binding,
@@ -29,7 +31,13 @@ from pkpdsim.pbpk import (
 from pkpdsim.pbpk.builder import BuildResult
 from pkpdsim.pbpk.chemistry import MM
 from pkpdsim.pbpk.impairment import (
+    MELD_HEALTHY,
+    child_pugh_protein,
+    class_factors,
+    cp_severity_of_meld,
     impairment_objects,
+    meld_anchors,
+    meld_of_cp_severity,
     physiology_factors,
     unbound_fraction,
     unbound_fraction_notes,
@@ -49,10 +57,32 @@ from .conftest import load as load_model
 
 PARALLEL = [o for o in Organ if o is not Organ.LUNG]
 DATA = load("impairment")
-CP = DATA["child_pugh"]
-CKD = DATA["ckd"]
+CP = {
+    key: {"value": list(class_factors("child_pugh", key).values)}
+    for key in DATA["child_pugh"]
+}
+"""The factors of the Child-Pugh classes, of the table or the consensus of the database."""
+
+
+def _resolved(section: str, table: dict[str, Any]) -> dict[str, Any]:
+    """A section of the impairment with the values of every factor, also of a consensus."""
+    out: dict[str, Any] = {}
+    for key, entry in table.items():
+        if isinstance(entry, dict) and "consensus" in entry:
+            values = list(class_factors(section, key).values)
+            out[key] = {**entry, "value": values}
+        elif isinstance(entry, dict) and "value" not in entry:
+            out[key] = _resolved(f"{section}.{key}", entry)
+        else:
+            out[key] = entry
+    return out
+
+
+CKD = _resolved("ckd", DATA["ckd"])
+"""The factors of the CKD stages, of the table or the consensus of the database."""
 BINDING = CKD["binding"]
-HF = DATA["heart_failure"]
+HF = _resolved("heart_failure", DATA["heart_failure"])
+"""The factors of the NYHA classes, of the table or the consensus of the database."""
 
 
 def _impaired_definition(**overrides: Any) -> PBPKDefinition:  # noqa: ANN401
@@ -103,10 +133,17 @@ def test_child_pugh_class_values(model: BuildResult) -> None:
             CP["functional_liver"]["value"][k - 1], rel=1e-12
         )
         for protein in ("CYP3A4", "CYP2D6"):
-            expected = CP["proteins"][protein]["value"][k - 1]
-            assert r[ids.condition_factor("cp", protein)] == pytest.approx(expected)
+            consensus = integration.factor(
+                protein, {"condition": "cirrhosis", "child_pugh": "ABC"[k - 1]}
+            )
+            assert consensus is not None
+            # the factors have four significant digits of the consensus
+            expected = consensus.value
+            assert r[ids.condition_factor("cp", protein)] == pytest.approx(
+                expected, rel=5e-4
+            )
             assert r[ids.impairment_activity(protein, Organ.LIVER)] == pytest.approx(
-                expected
+                expected, rel=5e-4
             )
 
 
@@ -337,21 +374,28 @@ def test_binding_free_of_ckd(tmp_path: Path) -> None:
 
 
 def test_ckd_binding_profile_data() -> None:
-    """The CKD profile of the binding per protein, every row with its source.
+    """The CKD profile of the binding per protein, every row with its sources.
 
-    Albumin falls in concentration (Huang 2017) and in the binding function of
-    its molecule (Klammt 2012), alpha-1-acid glycoprotein rises (Schmulenson
-    2018); the mild stage, which no source measures, is a model choice.
+    Albumin falls in concentration (the consensus of Huang 2017, Lin 2017 and
+    Zakiyanov 2013) and in the binding function of its molecule (Klammt
+    2012), alpha-1-acid glycoprotein rises (the consensus of Docci 1985 and
+    Zakiyanov 2013, the end stage only); a stage which no source measures is
+    a model choice.
     """
     assert {e["protein"] for e in BINDING.values()} == {"albumin", "agp"}
-    assert {k: e["source"] for k, e in BINDING.items()} == {
-        "albumin": "Huang2017",
-        "albumin_binding": "Klammt2012",
-        "agp": "Schmulenson2018",
+    sources = {k: set(class_factors("ckd.binding", k).sources) for k in BINDING}
+    assert sources == {
+        "albumin": {"Huang2017", "Lin2017", "Zakiyanov2013"},
+        "albumin_binding": {"Klammt2012"},
+        "agp": {"Docci1985", "Zakiyanov2013"},
+    }
+    choices = {k: class_factors("ckd.binding", k).choice for k in BINDING}
+    assert choices == {
+        "albumin": ("mild",),
+        "albumin_binding": ("mild",),
+        "agp": ("mild", "moderate", "severe"),
     }
     for key, entry in BINDING.items():
-        assert entry["choice"] == ["mild"], key
-        assert entry["unit"] == "dimensionless", key
         values = [1.0, *entry["value"]]
         pairs = list(itertools.pairwise(values))
         if entry["protein"] == "albumin":
@@ -359,10 +403,10 @@ def test_ckd_binding_profile_data() -> None:
         else:
             assert all(b >= a for a, b in pairs), key
     # the end stage factors which the albumin and the AAG of a strongly bound
-    # substance multiply its fu with: about 1.65 and 0.48, against the 2.5 of
+    # substance multiply its fu with: about 1.75 and 0.69, against the 2.5 of
     # the old factor of the binding capacity
-    assert 1.0 / _ckd_binding("albumin", 3) == pytest.approx(1.65, abs=0.01)
-    assert 1.0 / _ckd_binding("agp", 3) == pytest.approx(0.485, abs=0.01)
+    assert 1.0 / _ckd_binding("albumin", 3) == pytest.approx(1.75, abs=0.01)
+    assert 1.0 / _ckd_binding("agp", 3) == pytest.approx(0.688, abs=0.01)
 
 
 @pytest.mark.parametrize("fu_ref", [0.01, 0.3])
@@ -540,9 +584,12 @@ def test_ckd_factors_at_the_anchors(model: BuildResult) -> None:
             assert r[ids.condition_factor("ckd", key)] == pytest.approx(
                 expected, rel=1e-12
             ), (key, egfr)
-        assert r[ids.HCT] == healthy[ids.HCT]
+        # the anaemia of CKD, the consensus of the hemoglobin
+        anaemia = 1.0 if stage is None else CKD["hematocrit"]["value"][stage]
+        assert r[ids.HCT] == pytest.approx(healthy[ids.HCT] * anaemia, rel=1e-12)
         mki = ids.organ_mass(Organ.KIDNEY)
-        assert r[mki] == healthy[mki]
+        shrink = 1.0 if stage is None else CKD["kidney_volume"]["value"][stage]
+        assert r[mki] == pytest.approx(healthy[mki] * shrink, rel=1e-12)
         assert r[ids.GFR] == pytest.approx(healthy[ids.GFR] * f, rel=1e-12)
         _assert_flows_sum(r)
         cyp2d6 = 1.0 if stage is None else CKD["proteins"]["CYP2D6"]["value"][stage]
@@ -783,8 +830,12 @@ def test_enzyme_factor_multiplies_activity(model: BuildResult) -> None:
         r = person(CP_severity=3.0, LI__f_cyp3a4=f)
         r["[LI__Cti_drg]"] = 0.001
         rates[f] = r["LI__DRG2M"]
+        consensus = integration.factor(
+            "CYP3A4", {"condition": "cirrhosis", "child_pugh": "C"}
+        )
+        assert consensus is not None
         assert r[ids.impairment_activity("CYP3A4", Organ.LIVER)] == pytest.approx(
-            CP["proteins"]["CYP3A4"]["value"][2]
+            consensus.value, rel=5e-4
         )
     assert rates[0.5] == pytest.approx(0.5 * rates[1.0], rel=1e-12)
 
@@ -910,7 +961,13 @@ def test_dynamic_severity(tmp_path: Path, severity: str, value: float) -> None:
 
 
 def test_model_choices_are_cited_as_such(model: BuildResult) -> None:
-    """A vector with model-choice classes cites ModelChoice in the SBML notes."""
+    """A factor cites its studies, a model choice cites ModelChoice in the SBML notes.
+
+    The factor of a protein cites the studies of its consensus; a class
+    without a study is the interpolation between its neighbours, a model
+    choice (ADH1A of the classes A and B, whose only study is of class C).
+    A factor of the physiology with a consensus (albumin) cites its studies.
+    """
     import libsbml
 
     doc = libsbml.readSBMLFromFile(str(model.flat_path))
@@ -919,14 +976,179 @@ def test_model_choices_are_cited_as_such(model: BuildResult) -> None:
         .getParameter(ids.condition_factor("cp", "CYP3A4"))
         .getNotesString()
     )
-    assert "El-Khateeb" in notes
-    assert "A: a model choice" in notes
-    assert "Choice of the pkpdsim PBPK library" in notes
-    for key in ("albumin", "shunt"):
-        notes = (
-            doc.getModel()
-            .getParameter(ids.condition_factor("cp", key))
-            .getNotesString()
+    for author in ("El-Khateeb", "Drozdzik", "Prasad"):
+        assert author in notes
+    assert "random-effects meta-analysis" in notes
+    assert "a model choice" not in notes
+    entry = child_pugh_protein("ADH1A")
+    assert entry.choice == ("A", "B")
+    c = entry.values[2]
+    assert entry.values[:2] == pytest.approx(
+        (1.0 + (c - 1.0) / 3, 1.0 + 2 * (c - 1.0) / 3), rel=1e-3
+    )
+    provenance, sources = entry.provenance(("A", "B", "C"))
+    assert "A, B: a model choice" in provenance
+    assert "ModelChoice" in sources
+    shunt = (
+        doc.getModel()
+        .getParameter(ids.condition_factor("cp", "shunt"))
+        .getNotesString()
+    )
+    assert "not verified" in shunt
+    # the factors of Edginton & Willmann 2008, read, cite it
+    agp = (
+        doc.getModel().getParameter(ids.condition_factor("cp", "agp")).getNotesString()
+    )
+    assert "Table I" in agp
+    assert "Edginton AN" in agp
+    notes = (
+        doc.getModel()
+        .getParameter(ids.condition_factor("cp", "albumin"))
+        .getNotesString()
+    )
+    for author in ("Viani", "Chawla", "Mesropyan"):
+        assert author in notes
+    assert "random-effects meta-analysis" in notes
+
+
+def test_class_factors_of_the_table_and_of_the_consensus() -> None:
+    """A factor states its values or is the consensus of the studies on its quantity."""
+    kidney = class_factors("child_pugh", "kidney_flow")
+    assert kidney.values == tuple(DATA["child_pugh"]["kidney_flow"]["value"])
+    assert kidney.sources == ("Edginton2008",)
+    for key in ("albumin", "hematocrit", "cardiac_index"):
+        assert DATA["child_pugh"][key]["consensus"] == key
+        factors = class_factors("child_pugh", key)
+        consensus = integration.consensus(
+            key,
+            {"condition": "cirrhosis", "child_pugh": "C"},
+            kind="physiology",
+            tissue="body",
         )
-        assert "not verified" in notes
-        assert "Edginton AN" not in notes
+        assert consensus is not None
+        assert factors.values[2] == float(f"{consensus.value:.4g}")
+        assert set(factors.sources) >= set(consensus.sources)
+        assert factors.choice == ()
+    # cirrhosis lowers albumin and the hematocrit and raises the cardiac index
+    assert all(v < 1 for v in class_factors("child_pugh", "albumin").values)
+    assert all(v < 1 for v in class_factors("child_pugh", "hematocrit").values)
+    assert all(v > 1 for v in class_factors("child_pugh", "cardiac_index").values)
+    with pytest.raises(KeyError):
+        class_factors("child_pugh", "nope")
+
+
+def test_meld_anchors() -> None:
+    """Healthy is the smallest MELD of the formula, the classes the consensus of the cohorts."""
+    anchors = meld_anchors()
+    assert [a.severity for a in anchors] == [0.0, 1.0, 2.0, 3.0]
+    assert anchors[0].meld == MELD_HEALTHY == 6.43
+    assert anchors[0].level is None
+    melds = [a.meld for a in anchors]
+    assert melds == sorted(melds)
+    for anchor, cls in zip(anchors[1:], "ABC", strict=True):
+        level = integration.level("meld", {"condition": "cirrhosis", "child_pugh": cls})
+        assert level is not None
+        assert anchor.level == level
+        assert anchor.meld == float(f"{level.value:.4g}")
+        assert len(level.estimates) >= 4
+
+
+@pytest.mark.parametrize("severity", [0.0, 0.5, 1.0, 1.7, 2.0, 2.25, 3.0])
+def test_meld_and_severity_are_inverse(severity: float) -> None:
+    """The MELD of a severity maps back onto the severity."""
+    meld = meld_of_cp_severity(severity)
+    assert cp_severity_of_meld(meld) == pytest.approx(severity, abs=1e-12)
+
+
+def test_cp_severity_of_meld() -> None:
+    """The severity is linear between the anchors and bounded by healthy and class C."""
+    anchors = meld_anchors()
+    for a in anchors:
+        assert cp_severity_of_meld(a.meld) == pytest.approx(a.severity, abs=1e-12)
+    a, b = anchors[1], anchors[2]
+    assert cp_severity_of_meld((a.meld + b.meld) / 2) == pytest.approx(1.5)
+    assert cp_severity_of_meld(6.0) == 0.0
+    assert cp_severity_of_meld(40.0) == 3.0
+    for meld in (math.nan, math.inf):
+        with pytest.raises(ValueError, match="not finite"):
+            cp_severity_of_meld(meld)
+    for severity in (-0.1, 3.1):
+        with pytest.raises(ValueError, match="outside"):
+            meld_of_cp_severity(severity)
+
+
+@pytest.mark.parametrize(
+    ("section", "key", "quantity"),
+    [
+        ("ckd", "hematocrit", "hemoglobin"),
+        ("ckd", "kidney_flow", "renal_cortical_perfusion"),
+        ("ckd.binding", "albumin", "albumin"),
+    ],
+)
+def test_the_ckd_factors_of_the_consensus(
+    section: str, key: str, quantity: str
+) -> None:
+    """A CKD factor with a consensus is the ratio of each stage, falling with the stage."""
+    factors = class_factors(section, key)
+    stages = ("mild", "moderate", "severe", "end stage")
+    for stage, value in zip(stages, factors.values, strict=True):
+        found = integration.consensus(
+            quantity,
+            {"condition": "ckd", "ckd_stage": stage},
+            kind="physiology",
+            tissue="body",
+        )
+        if found is not None:
+            assert value == float(f"{found.value:.4g}")
+        else:
+            assert stage in factors.choice
+    assert list(factors.values) == sorted(factors.values, reverse=True)
+    assert all(v < 1 for v in factors.values)
+
+
+def test_the_conditions_combine_continuously(model: BuildResult) -> None:
+    """Between the classes every factor interpolates, the conditions multiply.
+
+    Cirrhosis at CP_severity 2.5, CKD at an eGFR between two anchors and
+    heart failure at HF_severity 1.5 together: the factor of a condition is
+    the midpoint of its neighbouring classes (the eGFR on its line between
+    the anchors), the factor of a quantity is their product, e.g. the GFR of
+    the hepatorenal and cardiorenal decline.
+    """
+    healthy = individual(model.flat_path)
+    egfr = (ANCHORS[1] + ANCHORS[2]) / 2
+    f = _stage_function(healthy, egfr)
+    r = individual(
+        model.flat_path, CP_severity=2.5, f_renal_function=f, HF_severity=1.5
+    )
+
+    def mid(values: list[float], k: int) -> float:
+        return (values[k] + values[k + 1]) / 2
+
+    cp = {k: mid(v["value"], 1) for k, v in CP.items()}
+    ckd = {k: mid(CKD[k]["value"], 1) for k in ("hematocrit", "kidney_flow")}
+    hf = {k: mid([1.0, *HF[k]["value"]], 1) for k in ("kidney_flow",)}
+    for key, value in cp.items():
+        assert r[ids.condition_factor("cp", key)] == pytest.approx(value, rel=1e-12)
+    for key, value in ckd.items():
+        assert r[ids.condition_factor("ckd", key)] == pytest.approx(value, rel=1e-12)
+    assert r[ids.condition_factor("hf", "kidney_flow")] == pytest.approx(
+        hf["kidney_flow"], rel=1e-12
+    )
+    # the products of the conditions
+    assert r[ids.impairment_factor(ids.HCT)] == pytest.approx(
+        cp["hematocrit"] * ckd["hematocrit"], rel=1e-12
+    )
+    assert r[ids.impairment_factor(ids.GFR)] == pytest.approx(
+        cp["gfr"] * hf["kidney_flow"], rel=1e-12
+    )
+    qki = ids.impairment_factor(ids.organ_flow(Organ.KIDNEY))
+    assert r[qki] == pytest.approx(
+        cp["kidney_flow"] * ckd["kidney_flow"] * hf["kidney_flow"], rel=1e-12
+    )
+    # the GFR: the intrinsic renal function times the functional decline
+    gfr_base = healthy[ids.GFR] / healthy[ids.impairment_factor(ids.GFR)]
+    assert r[ids.GFR] == pytest.approx(
+        gfr_base * r[ids.impairment_factor(ids.GFR)] * f, rel=1e-6
+    )
+    _assert_flows_sum(r)

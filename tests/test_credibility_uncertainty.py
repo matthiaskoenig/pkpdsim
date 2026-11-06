@@ -242,7 +242,7 @@ def test_the_record_and_the_outputs(tmp_path: Path) -> None:
     assessment.to_json(path)
     assert CredibilityAssessment.from_json(path).to_dict() == assessment.to_dict()
     # a record of pkpdsim 0.18 has no uncertainty
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding="utf-8"))
     for context in data["contexts"]:
         del context["uncertainty"]
     assert all(
@@ -261,7 +261,7 @@ def test_the_record_and_the_outputs(tmp_path: Path) -> None:
     ]
     sensitivity = pd.read_csv(output / "uncertainty_sensitivity.tsv", sep="\t")
     assert set(sensitivity["parameter"]) == {"k"}
-    html = (output / "index.html").read_text()
+    html = (output / "index.html").read_text(encoding="utf-8")
     assert "leading parameters" in html
     assert "Parameter uncertainty" in html
     assert "P(met)" in html

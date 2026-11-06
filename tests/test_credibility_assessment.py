@@ -574,7 +574,7 @@ def test_the_json_round_trip(tmp_path: Path) -> None:
     assert math.isnan(zeros.metrics["GMFE"])
     path = tmp_path / "credibility.json"
     assessment.to_json(path)
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding="utf-8"))
     (written,) = (e for e in data["evidence"] if e["name"] == "zeros")
     assert written["metrics"]["GMFE"] is None
     read = CredibilityAssessment.from_json(path)

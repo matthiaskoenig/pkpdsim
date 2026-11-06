@@ -1,0 +1,24 @@
+source = "VukmirovicPapuga2022"
+tissue = "body"
+control = "controls"
+notes = "Controls (GFR > 90, mGFR 101.4 +- 9.6) and patients with obstructive nephropathy by the GFR measured with 99mTc-DTPA: > 60 (79.5 +- 9.1) and <= 60 (39.7 +- 9.9); ERPF by 131I-hippuran clearance; Table 2 (open access, CC BY), mean and SD; transcribed from the full text by the literature search of the database (2026-11-05)."
+
+[measurements.physiology]
+file = "physiology.tsv"
+kind = "physiology"
+method = "131I-hippuran clearance"
+location = "Table 2"
+
+[groups.controls]
+condition = "control"
+description = "subjects with a GFR above 90"
+
+[groups.gfr_gt60]
+condition = "ckd"
+ckd_stage = "mild"
+description = "obstructive nephropathy, mGFR > 60"
+
+[groups.gfr_le60]
+condition = "ckd"
+ckd_stage = "moderate"
+description = "obstructive nephropathy, mGFR <= 60"

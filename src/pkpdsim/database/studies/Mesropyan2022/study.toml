@@ -1,0 +1,32 @@
+source = "Mesropyan2022"
+tissue = "body"
+control = "controls"
+notes = "Liver MRI with the extracellular volume fraction (ECV) of 22 controls and 68 patients with cirrhosis of mixed etiology by Child-Pugh class (A 27, B 32, C 9), mean and SD of Table 1 (open access, CC BY). The MELD of the controls, 6.3, is below 6.43, the smallest MELD of the formula with its lower bounds of 1 mg/dl bilirubin and creatinine and INR 1: the study did not bound the values."
+
+[measurements.physiology]
+file = "physiology.tsv"
+kind = "physiology"
+method = "laboratory values of the day of the MRI; hepatic ECV of T1 maps before and after contrast"
+location = "Table 1"
+
+[groups.controls]
+condition = "control"
+description = "subjects without liver disease"
+
+[groups.cirrhosis_A]
+condition = "cirrhosis"
+child_pugh = "A"
+etiology = "mixed"
+description = "Child-Pugh class A"
+
+[groups.cirrhosis_B]
+condition = "cirrhosis"
+child_pugh = "B"
+etiology = "mixed"
+description = "Child-Pugh class B"
+
+[groups.cirrhosis_C]
+condition = "cirrhosis"
+child_pugh = "C"
+etiology = "mixed"
+description = "Child-Pugh class C"

@@ -1,0 +1,38 @@
+source = "ZhangX2024"
+tissue = "body"
+control = "controls"
+notes = "Healthy volunteers (eGFR 107.6 +- 5.2) and CKD patients by the KDIGO stages, mostly chronic glomerulonephritis, dialysis and diabetes excluded: G1 (101.5), G2 (69.2), G3 (47.2, G3a and G3b together), G4 (22.0), G5 (11.2). 3D pCASL at 3 T; Table 2 (open access, CC BY-NC), mean and SD (small against the other ASL studies); transcribed from the full text by the literature search of the database (2026-11-05)."
+
+[measurements.physiology]
+file = "physiology.tsv"
+kind = "physiology"
+method = "arterial spin labelling MRI (3D pCASL, 3 T)"
+location = "Table 2"
+
+[groups.controls]
+condition = "control"
+description = "healthy volunteers"
+
+[groups.ckd_1]
+condition = "ckd"
+description = "CKD G1"
+
+[groups.ckd_2]
+condition = "ckd"
+ckd_stage = "mild"
+description = "CKD G2"
+
+[groups.ckd_3]
+condition = "ckd"
+ckd_stage = "moderate"
+description = "CKD G3"
+
+[groups.ckd_4]
+condition = "ckd"
+ckd_stage = "severe"
+description = "CKD G4"
+
+[groups.ckd_5]
+condition = "ckd"
+ckd_stage = "end stage"
+description = "CKD G5, not on dialysis"

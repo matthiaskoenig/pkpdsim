@@ -1,7 +1,7 @@
 """Values with provenance.
 
 A number of a PBPK model is a `Value`: the number, its unit and where it
-comes from (a key of `data/sources.toml`, see `pkpdsim.pbpk.data`). A fitted
+comes from (a key of `database/sources.toml`, see `pkpdsim.pbpk.data`). A fitted
 value is a `Value` as well, from the keyword arguments of a fit record. A
 value which is tied to other parameters (a metabolite with the Kp of its
 parent, a fixed ratio) is a `Formula` over ids of the top model, written as
@@ -48,7 +48,7 @@ class Value:
     Attributes:
         value: the number.
         unit: the unit of the number.
-        source: the key of the source in `data/sources.toml`, `fit` for a
+        source: the key of the source in `database/sources.toml`, `fit` for a
             fitted value.
         notes: a remark on the value.
         uncertainties: the uncertainty of a fitted value.

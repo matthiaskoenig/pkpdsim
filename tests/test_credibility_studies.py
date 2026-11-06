@@ -92,15 +92,19 @@ def test_the_record_and_the_outputs(tmp_path: Path) -> None:
     assert read.to_dict() == assessment.to_dict()
     assert [s["study"] for s in read.studies] == ["CredA", "CredB"]
     # a record of pkpdsim 0.18 has no study data
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding="utf-8"))
     del data["studies"]
     assert CredibilityAssessment.from_dict(data).studies == []
     table = studies_table(assessment)
     assert list(table["study"]) == ["CredA", "CredB"]
     assert table.loc[0, "fits"] == "DECAY"
     output = write_outputs(assessment, tmp_path / "out")
-    assert (output / "studies.tsv").read_text().startswith("study\tfolder\tfits")
-    html = (output / "index.html").read_text()
+    assert (
+        (output / "studies.tsv")
+        .read_text(encoding="utf-8")
+        .startswith("study\tfolder\tfits")
+    )
+    html = (output / "index.html").read_text(encoding="utf-8")
     assert 'id="studies"' in html
     assert "2 studies, 1 with a record of their collection" in html
     assert "no data folder of the study" in html

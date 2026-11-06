@@ -693,7 +693,7 @@ def test_the_absorbed_fraction_alone_keeps_its_amount_in_the_intestine(
     assert gu <= found
     assert ids.absorbed_fraction(S) in found
     assert ids.absorbed_amount(S) not in found
-    assert gu <= set(accumulating_states(result.flat_path.read_text()))
+    assert gu <= set(accumulating_states(result.flat_path.read_text(encoding="utf-8")))
 
 
 @pytest.mark.parametrize(

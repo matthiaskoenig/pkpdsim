@@ -1,0 +1,29 @@
+source = "Prasad2018"
+tissue = "liver"
+control = "controls"
+notes = "Liver tissue of 25 controls and of end-stage alcoholic (27) and HCV (30) cirrhosis of transplant recipients (the livers of Wang 2016); the mean and SD of Table 3 as printed (the statistic, mean ± SD, is named by the captions of the figures). The authors assume the end-stage livers to represent Child-Pugh class C, the class is no measurement. CYP3A5, UGT2B6 (as printed), UGT1A1 and UGT2B17 were below the limit of quantification in every group and have no record. Read from the HTML table of the article (PMC5987995)."
+
+[measurements.protein]
+file = "protein.tsv"
+kind = "protein"
+unit = "pmol/g tissue"
+method = "targeted quantitative proteomics (LC-MS/MS) of the S9 fraction of the liver tissue"
+location = "Table 3"
+
+[groups.controls]
+condition = "control"
+description = "non-cirrhotic livers"
+
+[groups.ald]
+condition = "cirrhosis"
+child_pugh = "C"
+etiology = "alcoholic liver disease"
+description = "end-stage alcoholic cirrhosis, liver transplantation"
+assumption = "Child-Pugh class C assumed for end-stage liver disease, as the authors assume for their PBPK modelling"
+
+[groups.hcv]
+condition = "cirrhosis"
+child_pugh = "C"
+etiology = "hepatitis C"
+description = "end-stage HCV cirrhosis, liver transplantation"
+assumption = "Child-Pugh class C assumed for end-stage liver disease, as the authors assume for their PBPK modelling"

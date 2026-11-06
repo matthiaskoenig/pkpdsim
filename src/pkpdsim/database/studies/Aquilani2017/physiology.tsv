@@ -1,0 +1,13 @@
+entity	group	n	mean	sd	se	median	notes
+cardiac_index	nyha_2	12	2.4	0.4			
+cardiac_index	nyha_3	19	2.2	0.5			
+cardiac_index	nyha_4	10	1.9	0.3			
+cardiac_output	nyha_2	12	4.7	1.4			
+cardiac_output	nyha_3	19	4	1			
+cardiac_output	nyha_4	10	3	1.6			
+hemoglobin	nyha_2	12	124	17			printed 12.4 +- 1.7 g/dL
+hemoglobin	nyha_3	19	127	16			printed 12.7 +- 1.6 g/dL
+hemoglobin	nyha_4	10	113	32			printed 11.3 +- 3.2 g/dL
+albumin	nyha_2	12	45	4			printed 4.5 +- 0.4 g/dL
+albumin	nyha_3	19	45	5			printed 4.5 +- 0.5 g/dL
+albumin	nyha_4	10	44	1			printed 4.4 +- 0.1 g/dL

@@ -1,0 +1,24 @@
+source = "Yamabe1992"
+tissue = "body"
+notes = "Stable chronic heart failure (myocardial infarction, dilated cardiomyopathy, valvular regurgitation) by NYHA class (LVEF 58, 43, 34 %), no control group; at rest supine, cardiac index by Fick, the flow of one leg by femoral vein thermodilution; Table I (free full text, read from the page images), mean and a spread the table does not name, taken as SD; transcribed from the full text by the literature search of the database (2026-11-05)."
+
+[measurements.physiology]
+file = "physiology.tsv"
+kind = "physiology"
+method = "right heart catheterization (Fick), femoral vein thermodilution"
+location = "Table I"
+
+[groups.nyha_1]
+condition = "heart_failure"
+nyha = "I"
+description = "NYHA I"
+
+[groups.nyha_2]
+condition = "heart_failure"
+nyha = "II"
+description = "NYHA II"
+
+[groups.nyha_3]
+condition = "heart_failure"
+nyha = "III"
+description = "NYHA III"

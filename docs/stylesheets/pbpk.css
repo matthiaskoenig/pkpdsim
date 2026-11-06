@@ -25,3 +25,19 @@
 .pbpk-ids td:nth-child(2) {
   min-width: 16em;
 }
+
+/* The generated figures of the classes and factors of the impairments are
+   wider than the diagrams. */
+.pbpk-figure.pbpk-wide {
+  max-width: 46rem;
+}
+
+/* The color of a class in a table: a small square before its hex code. */
+.pbpk-swatch {
+  display: inline-block;
+  width: 0.9em;
+  height: 0.9em;
+  border-radius: 2px;
+  vertical-align: -0.1em;
+  border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+}

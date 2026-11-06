@@ -14,7 +14,7 @@ Every organ owns its blood flows: it reads the plasma (and blood cell) species o
 
 ## Reference values
 
-The organ masses, densities, blood contents and blood flows are those of the ICRP 89 reference individuals (Valentin 2002), taken directly from its tables; the interstitial fractions are those of Schmitt 2008 as tabulated by httk 2.7.4 (`tissue.data`, MIT), where they were read. The data file `data/physiology_human.toml` compares the male values with Jones & Rowland-Yeo 2013 in the notes of every value. The conventions of the data:
+The organ masses, densities, blood contents and blood flows are those of the ICRP 89 reference individuals (Valentin 2002), taken directly from its tables; the interstitial fractions are those of Schmitt 2008 as tabulated by httk 2.7.4 (`tissue.data`, MIT), where they were read. The data file `database/tables/physiology_human.toml` compares the male values with Jones & Rowland-Yeo 2013 in the notes of every value. The conventions of the data:
 
 - `mass` is the mass of the organ without its blood (the blood is counted on its own); `density` is the specific gravity (1 kg/l where ICRP 89 states none); `blood` is the blood content of the organ as fraction of the blood volume.
 - The organ volume of the model is the volume of its tissue and its blood, `V<o> = M<o>/density + blood*Vblood`; the vascular fraction is its blood, `f_vas_<o> = blood*Vblood/V<o>`, so that the vascular spaces of the organs and the pools are the blood volume for every individual.
@@ -24,7 +24,7 @@ The organ masses, densities, blood contents and blood flows are those of the ICR
 - Adipose closes the body weight: its mass is the remainder, `Mad = BW - Mlean - Vblood*rho_blood`; the ICRP adipose mass in the data is a reference value only.
 
 <!-- generated: physiology-general (scripts/pbpk_tables.py), do not edit -->
-*Generated from `data/physiology_human.toml` by `scripts/pbpk_tables.py`; the notes of every number are in the data file.*
+*Generated from `database/tables/physiology_human.toml` by `scripts/pbpk_tables.py`; the notes of every number are in the database.*
 
 | quantity | unit | male | female |
 | --- | --- | ---: | ---: |
@@ -68,7 +68,7 @@ print(man.gfr, round(reference_individual(Sex.FEMALE).gfr, 4))
 ### Male reference individual
 
 <!-- generated: physiology-organs-male (scripts/pbpk_tables.py), do not edit -->
-*Generated from `data/physiology_human.toml` by `scripts/pbpk_tables.py`; the notes of every number are in the data file.*
+*Generated from `database/tables/physiology_human.toml` by `scripts/pbpk_tables.py`; the notes of every number are in the database.*
 
 | organ | mass [kg] | density [kg/l] | blood [-] | f_vas [-] | f_int [-] | flow [-] |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -99,7 +99,7 @@ Sources of the columns: mass, density, blood, f_vas, flow: `ICRP89`; f_int: `htt
 ### Female reference individual
 
 <!-- generated: physiology-organs-female (scripts/pbpk_tables.py), do not edit -->
-*Generated from `data/physiology_human.toml` by `scripts/pbpk_tables.py`; the notes of every number are in the data file.*
+*Generated from `database/tables/physiology_human.toml` by `scripts/pbpk_tables.py`; the notes of every number are in the database.*
 
 | organ | mass [kg] | density [kg/l] | blood [-] | f_vas [-] | f_int [-] | flow [-] |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -181,7 +181,7 @@ The factors `fimp_<id>` are those of the [impairment](impairment.md), 1 for the 
 A population is the reference individual of each sex, which becomes the default individual of the model (`BW`, `HEIGHT`, `AGE`), and the distributions of the covariates, data for a later sampler of virtual individuals. The reference anatomy stays ICRP 89 for every population: the organs of another population's reference individual follow from the scaling at its body weight and height. The population is chosen when the model is built, `PBPKDefinition(population="white_american_nhanes", sex=Sex.FEMALE, ...)`, the European reference individuals of ICRP 89 are the default.
 
 <!-- generated: populations (scripts/pbpk_tables.py), do not edit -->
-*Generated from `data/populations/*.toml` by `scripts/pbpk_tables.py`; the notes of every number are in the data file.*
+*Generated from `database/tables/populations/*.toml` by `scripts/pbpk_tables.py`; the notes of every number are in the database.*
 
 | population | sex | BW [kg] | HEIGHT [cm] | AGE [yr] | covariates |
 | --- | --- | ---: | ---: | ---: | --- |

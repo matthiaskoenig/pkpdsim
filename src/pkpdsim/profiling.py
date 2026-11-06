@@ -136,7 +136,11 @@ def run_profiled(
         env={**os.environ, EXIT_CODE_FILE: str(exit_code)},
     ).returncode
     # the code of the command, which the profiler does not pass on
-    code = int(exit_code.read_text()) if exit_code.is_file() else returned or 1
+    code = (
+        int(exit_code.read_text(encoding="utf-8"))
+        if exit_code.is_file()
+        else returned or 1
+    )
     exit_code.unlink(missing_ok=True)
     if not binary.is_file():
         console.print(f"The profiler wrote no profile into '{folder}'.", style="error")

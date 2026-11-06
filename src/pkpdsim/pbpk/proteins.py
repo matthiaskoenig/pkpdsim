@@ -44,7 +44,7 @@ class Protein:
 
 
 def load_proteins() -> dict[str, Protein]:
-    """Load the protein table `data/proteins.toml`.
+    """Load the protein table `database/tables/proteins.toml`.
 
     Returns:
         The proteins by their id.
@@ -120,7 +120,7 @@ class Induction:
 def turnover(organ: Organ) -> Value:
     """Get the degradation rate constant of the proteins in an organ.
 
-    The values of CYP3A4 (`data/proteins.toml`, `[turnover]`): the liver, the
+    The values of CYP3A4 (`database/tables/proteins.toml`, `[turnover]`): the liver, the
     small intestine, and the hepatic value for every other organ.
 
     Args:

@@ -1,0 +1,19 @@
+source = "SallesJunior2013"
+tissue = "body"
+notes = "Patients on haemodialysis with and without dyspepsia, no control group; the half time of gastric emptying by the 13C-octanoic acid breath test; Results and Table 1 (open access, CC BY), mean and SD; transcribed from the full text by the literature search of the database (2026-11-05)."
+
+[measurements.physiology]
+file = "physiology.tsv"
+kind = "physiology"
+method = "13C-octanoic acid breath test"
+location = "Results, Table 1"
+
+[groups.hd_dyspepsia]
+condition = "ckd"
+ckd_stage = "dialysis"
+description = "haemodialysis with dyspepsia"
+
+[groups.hd]
+condition = "ckd"
+ckd_stage = "dialysis"
+description = "haemodialysis without dyspepsia"

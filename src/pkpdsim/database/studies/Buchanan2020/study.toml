@@ -1,0 +1,18 @@
+source = "Buchanan2020"
+tissue = "body"
+control = "controls"
+notes = "Patients with CKD G3-4 and a recent biopsy (eGFR 39 +- 14, iohexol mGFR 34 +- 23, no diabetic kidney disease) and healthy volunteers matched by age and sex (eGFR 92 +- 12); the flow of both renal arteries by phase-contrast MRI, the cortical perfusion by ASL, the total kidney volume; Results text (open access, CC BY): healthy mean and SD, CKD median with the width of the interquartile range only (in the notes, the quartiles are not printed); transcribed from the full text by the literature search of the database (2026-11-05)."
+
+[measurements.physiology]
+file = "physiology.tsv"
+kind = "physiology"
+method = "multiparametric renal MRI"
+location = "Results"
+
+[groups.controls]
+condition = "control"
+description = "healthy volunteers matched by age and sex"
+
+[groups.ckd_3_4]
+condition = "ckd"
+description = "CKD G3-4 with a recent biopsy"

@@ -1,0 +1,327 @@
+{
+ "image": "fig-001.png",
+ "panels": [
+  {
+   "name": "SLC10A1",
+   "entity": "SLC10A1",
+   "kind": "mrna",
+   "x_axis": 60,
+   "x_end": 600,
+   "groups": [
+    "controls",
+    "cirrhosis_A",
+    "cirrhosis_B",
+    "cirrhosis_C"
+   ],
+   "segments": [
+    {
+     "y_top": 75,
+     "v_top": 4,
+     "y_bottom": 457,
+     "v_bottom": 0,
+     "y_min": 61,
+     "y_max": 458
+    }
+   ]
+  },
+  {
+   "name": "NTCP",
+   "entity": "SLC10A1",
+   "kind": "protein",
+   "x_axis": 660,
+   "x_end": 1200,
+   "groups": [
+    "controls",
+    "cirrhosis_A",
+    "cirrhosis_B",
+    "cirrhosis_C"
+   ],
+   "segments": [
+    {
+     "y_top": 75,
+     "v_top": 300,
+     "y_bottom": 457,
+     "v_bottom": 0,
+     "y_min": 61,
+     "y_max": 458
+    }
+   ]
+  },
+  {
+   "name": "SLC22A1",
+   "entity": "SLC22A1",
+   "kind": "mrna",
+   "x_axis": 60,
+   "x_end": 600,
+   "groups": [
+    "controls",
+    "cirrhosis_A",
+    "cirrhosis_B",
+    "cirrhosis_C"
+   ],
+   "segments": [
+    {
+     "y_top": 624,
+     "v_top": 2.5,
+     "y_bottom": 1006.5,
+     "v_bottom": 0,
+     "y_min": 610,
+     "y_max": 1007.5
+    }
+   ]
+  },
+  {
+   "name": "OCT1",
+   "entity": "SLC22A1",
+   "kind": "protein",
+   "x_axis": 660,
+   "x_end": 1200,
+   "groups": [
+    "controls",
+    "cirrhosis_A",
+    "cirrhosis_B",
+    "cirrhosis_C"
+   ],
+   "segments": [
+    {
+     "y_top": 624,
+     "v_top": 300,
+     "y_bottom": 1006.5,
+     "v_bottom": 0,
+     "y_min": 610,
+     "y_max": 1007.5
+    }
+   ]
+  },
+  {
+   "name": "SLC22A3",
+   "entity": "SLC22A3",
+   "kind": "mrna",
+   "x_axis": 60,
+   "x_end": 600,
+   "groups": [
+    "controls",
+    "cirrhosis_A",
+    "cirrhosis_B",
+    "cirrhosis_C"
+   ],
+   "segments": [
+    {
+     "y_top": 1172,
+     "v_top": 2.5,
+     "y_bottom": 1555,
+     "v_bottom": 0,
+     "y_min": 1158,
+     "y_max": 1556
+    }
+   ]
+  },
+  {
+   "name": "OCT3",
+   "entity": "SLC22A3",
+   "kind": "protein",
+   "x_axis": 660,
+   "x_end": 1200,
+   "groups": [
+    "controls",
+    "cirrhosis_A",
+    "cirrhosis_B",
+    "cirrhosis_C"
+   ],
+   "segments": [
+    {
+     "y_top": 1172,
+     "v_top": 35,
+     "y_bottom": 1555,
+     "v_bottom": 0,
+     "y_min": 1158,
+     "y_max": 1556
+    }
+   ]
+  },
+  {
+   "name": "SLC22A7",
+   "entity": "SLC22A7",
+   "kind": "mrna",
+   "x_axis": 60,
+   "x_end": 600,
+   "groups": [
+    "controls",
+    "cirrhosis_A",
+    "cirrhosis_B",
+    "cirrhosis_C"
+   ],
+   "segments": [
+    {
+     "y_top": 1721,
+     "v_top": 3.0,
+     "y_bottom": 2104,
+     "v_bottom": 0,
+     "y_min": 1707,
+     "y_max": 2105
+    }
+   ]
+  },
+  {
+   "name": "OAT2",
+   "entity": "SLC22A7",
+   "kind": "protein",
+   "x_axis": 660,
+   "x_end": 1200,
+   "groups": [
+    "controls",
+    "cirrhosis_A",
+    "cirrhosis_B",
+    "cirrhosis_C"
+   ],
+   "segments": [
+    {
+     "y_top": 1721,
+     "v_top": 100,
+     "y_bottom": 2104,
+     "v_bottom": 0,
+     "y_min": 1707,
+     "y_max": 2105
+    }
+   ]
+  },
+  {
+   "name": "SLCO1B1",
+   "entity": "SLCO1B1",
+   "kind": "mrna",
+   "x_axis": 60,
+   "x_end": 600,
+   "groups": [
+    "controls",
+    "cirrhosis_A",
+    "cirrhosis_B",
+    "cirrhosis_C"
+   ],
+   "segments": [
+    {
+     "y_top": 2270,
+     "v_top": 2.5,
+     "y_bottom": 2652,
+     "v_bottom": 0,
+     "y_min": 2256,
+     "y_max": 2653
+    }
+   ]
+  },
+  {
+   "name": "OATP1B1",
+   "entity": "SLCO1B1",
+   "kind": "protein",
+   "x_axis": 660,
+   "x_end": 1200,
+   "groups": [
+    "controls",
+    "cirrhosis_A",
+    "cirrhosis_B",
+    "cirrhosis_C"
+   ],
+   "segments": [
+    {
+     "y_top": 2270,
+     "v_top": 700,
+     "y_bottom": 2652,
+     "v_bottom": 0,
+     "y_min": 2256,
+     "y_max": 2653
+    }
+   ]
+  },
+  {
+   "name": "SLCO1B3",
+   "entity": "SLCO1B3",
+   "kind": "mrna",
+   "x_axis": 60,
+   "x_end": 600,
+   "groups": [
+    "controls",
+    "cirrhosis_A",
+    "cirrhosis_B",
+    "cirrhosis_C"
+   ],
+   "segments": [
+    {
+     "y_top": 2818,
+     "v_top": 3.5,
+     "y_bottom": 3200.5,
+     "v_bottom": 0,
+     "y_min": 2804,
+     "y_max": 3201.5
+    }
+   ]
+  },
+  {
+   "name": "OATP1B3",
+   "entity": "SLCO1B3",
+   "kind": "protein",
+   "x_axis": 660,
+   "x_end": 1200,
+   "groups": [
+    "controls",
+    "cirrhosis_A",
+    "cirrhosis_B",
+    "cirrhosis_C"
+   ],
+   "segments": [
+    {
+     "y_top": 2818,
+     "v_top": 300,
+     "y_bottom": 3200.5,
+     "v_bottom": 0,
+     "y_min": 2804,
+     "y_max": 3201.5
+    }
+   ]
+  },
+  {
+   "name": "SLCO2B1",
+   "entity": "SLCO2B1",
+   "kind": "mrna",
+   "x_axis": 60,
+   "x_end": 600,
+   "groups": [
+    "controls",
+    "cirrhosis_A",
+    "cirrhosis_B",
+    "cirrhosis_C"
+   ],
+   "segments": [
+    {
+     "y_top": 3366.5,
+     "v_top": 3.0,
+     "y_bottom": 3749,
+     "v_bottom": 0,
+     "y_min": 3352.5,
+     "y_max": 3750
+    }
+   ]
+  },
+  {
+   "name": "OATP2B1",
+   "entity": "SLCO2B1",
+   "kind": "protein",
+   "x_axis": 660,
+   "x_end": 1200,
+   "groups": [
+    "controls",
+    "cirrhosis_A",
+    "cirrhosis_B",
+    "cirrhosis_C"
+   ],
+   "segments": [
+    {
+     "y_top": 3366.5,
+     "v_top": 400,
+     "y_bottom": 3749,
+     "v_bottom": 0,
+     "y_min": 3352.5,
+     "y_max": 3750
+    }
+   ]
+  }
+ ]
+}

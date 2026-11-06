@@ -1,0 +1,5 @@
+entity	group	n	mean	sd	se	unit	notes
+liver_volume_per_height	controls	30	629.81	133.8		cm3/m	
+liver_volume_per_height	cirrhosis_A	2	645.6			cm3/m	two patients, no SD
+liver_volume_per_height	cirrhosis_B	13	533.1	50.1		cm3/m	
+liver_volume_per_height	cirrhosis_C	10	393.8	48.2		cm3/m	

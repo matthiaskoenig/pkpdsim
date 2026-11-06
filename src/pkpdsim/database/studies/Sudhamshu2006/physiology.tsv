@@ -1,0 +1,9 @@
+entity	group	n	mean	sd	se	unit	notes
+portal_vein_flow	controls	30	318	92		mL/min	the flow of the right portal vein
+portal_vein_flow	cirrhosis_A	46	357	182		mL/min	the flow of the right portal vein
+portal_vein_flow	cirrhosis_B	29	365	139		mL/min	the flow of the right portal vein
+portal_vein_flow	cirrhosis_C	25	415	169		mL/min	the flow of the right portal vein
+hepatic_artery_flow	controls	30	99.4	25.2		mL/min	calculated by Li 2015 from the diameter and velocity of the hepatic artery
+hepatic_artery_flow	cirrhosis_A	46	153	80.9		mL/min	calculated by Li 2015 from the diameter and velocity of the hepatic artery
+hepatic_artery_flow	cirrhosis_B	29	161	62.4		mL/min	calculated by Li 2015 from the diameter and velocity of the hepatic artery
+hepatic_artery_flow	cirrhosis_C	25	195	100		mL/min	calculated by Li 2015 from the diameter and velocity of the hepatic artery

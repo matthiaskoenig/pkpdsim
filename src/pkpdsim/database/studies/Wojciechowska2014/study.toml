@@ -1,0 +1,17 @@
+source = "Wojciechowska2014"
+tissue = "body"
+notes = "Dilated cardiomyopathy (LVEF 22.9 %) by NYHA I-II (3 of class I, 63 of class II) and III-IV (34 of class III, 9 of class IV); the healthy controls of the study have no haemodynamics; cardiac index by right heart catheterization; Tables 2 and 3 (open access, CC BY), mean and SD; transcribed from the full text by the literature search of the database (2026-11-05)."
+
+[measurements.physiology]
+file = "physiology.tsv"
+kind = "physiology"
+method = "right heart catheterization, laboratory values"
+location = "Tables 2 and 3"
+
+[groups.nyha_1_2]
+condition = "heart_failure"
+description = "NYHA I-II"
+
+[groups.nyha_3_4]
+condition = "heart_failure"
+description = "NYHA III-IV"

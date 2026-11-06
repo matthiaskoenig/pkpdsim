@@ -58,7 +58,7 @@ def _drug(method: KpMethod, **changes: object) -> Substance:
 # Coutinho 2024 (Pharm Res 41:1121, open access, CC BY 4.0), Supplementary
 # Tables S5 to S7: Kpu of the Rodgers & Rowland equation (their Eq. 3) for 13
 # tissues and every logP column, computed with the rat composition of their
-# Table III, which is the composition of data/tissue_composition.toml. Drug
+# Table III, which is the composition of database/tables/tissue_composition.toml. Drug
 # data of their Table II (weak bases, binding to albumin). The rows were
 # transcribed by a script from the supplementary file (11095_2024_3703_MOESM1).
 # Left out: adipose, whose two lipid fractions their Table III exchanges (the

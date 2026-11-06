@@ -1,0 +1,119 @@
+{
+ "image": "fig-001.png",
+ "dark": 128,
+ "min_run": 20,
+ "thick": 1000,
+ "panels": [
+  {
+   "name": "NTCP",
+   "entity": "SLC10A1",
+   "kind": "protein",
+   "x_axis": 508,
+   "x_end": 1650,
+   "groups": [
+    "controls",
+    "ald",
+    "hcv"
+   ],
+   "segments": [
+    {
+     "y_top": 2560.0,
+     "v_top": 200,
+     "y_bottom": 3098.0,
+     "v_bottom": 0,
+     "y_min": 2520.0,
+     "y_max": 3098.0
+    }
+   ]
+  },
+  {
+   "name": "OATP1B1",
+   "entity": "SLCO1B1",
+   "kind": "protein",
+   "x_axis": 1678,
+   "x_end": 2820,
+   "groups": [
+    "controls",
+    "ald",
+    "hcv"
+   ],
+   "segments": [
+    {
+     "y_top": 2570.0,
+     "v_top": 400,
+     "y_bottom": 3102.0,
+     "v_bottom": 0,
+     "y_min": 2530.0,
+     "y_max": 3102.0
+    }
+   ]
+  },
+  {
+   "name": "OATP1B3",
+   "entity": "SLCO1B3",
+   "kind": "protein",
+   "x_axis": 2849,
+   "x_end": 3991,
+   "groups": [
+    "controls",
+    "ald",
+    "hcv"
+   ],
+   "segments": [
+    {
+     "y_top": 2559.0,
+     "v_top": 150,
+     "y_bottom": 3097.0,
+     "v_bottom": 0,
+     "y_min": 2519.0,
+     "y_max": 3097.0
+    }
+   ]
+  },
+  {
+   "name": "OATP2B1",
+   "entity": "SLCO2B1",
+   "kind": "protein",
+   "x_axis": 4022,
+   "x_end": 5164,
+   "groups": [
+    "controls",
+    "ald",
+    "hcv"
+   ],
+   "segments": [
+    {
+     "y_top": 2554.0,
+     "v_top": 200,
+     "y_bottom": 3093.0,
+     "v_bottom": 0,
+     "y_min": 2514.0,
+     "y_max": 3093.0
+    }
+   ]
+  },
+  {
+   "name": "OCT1",
+   "entity": "SLC22A1",
+   "kind": "protein",
+   "x_axis": 5185,
+   "x_end": 6327,
+   "groups": [
+    "controls",
+    "ald",
+    "hcv"
+   ],
+   "segments": [
+    {
+     "y_top": 2555.0,
+     "v_top": 400,
+     "y_bottom": 3093.0,
+     "v_bottom": 0,
+     "y_min": 2515.0,
+     "y_max": 3093.0
+    }
+   ]
+  }
+ ],
+ "box_fraction": 0.7
+}

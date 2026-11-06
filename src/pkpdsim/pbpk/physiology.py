@@ -9,7 +9,7 @@ changes of an experiment (a value which no rule recomputes during the
 integration keeps the compiled model small and fast to load):
 
 - the reference values of the sex of the build (ICRP 89,
-  `data/physiology_human.toml`); the sex is chosen when the model is built,
+  `database/tables/physiology_human.toml`); the sex is chosen when the model is built,
   a study of both sexes uses one model per sex;
 - the default individual (`BW`, `HEIGHT`, `AGE`) is the reference individual
   of the sex of the population of the build (`pkpdsim.pbpk.populations`,
@@ -1033,7 +1033,7 @@ def reference_hematocrit(sex: Sex) -> float:
 
 @dataclass(frozen=True)
 class ReferenceIndividual:
-    """The reference individual of a sex (ICRP 89, `data/physiology_human.toml`).
+    """The reference individual of a sex (ICRP 89, `database/tables/physiology_human.toml`).
 
     The individual whose anatomy the physiology scales, the default
     individual of the populations of ICRP 89: a model which states a value of

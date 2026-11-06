@@ -1,0 +1,24 @@
+source = "Zakiyanov2013"
+tissue = "body"
+control = "controls"
+notes = "Age-matched healthy controls, patients with CKD 5 at the start of renal replacement therapy (blood before the first dialysis, MDRD eGFR 0.18 +- 0.09 mL/s/1.73 m2, about 11 mL/min) and patients on long-term haemodialysis (blood before a session); the group with acute kidney injury is not taken. Table 1 (open access, CC BY), mean and SD; transcribed from the full text by the literature search of the database (2026-11-05)."
+
+[measurements.physiology]
+file = "physiology.tsv"
+kind = "physiology"
+method = "laboratory values; orosomucoid by nephelometry"
+location = "Table 1"
+
+[groups.controls]
+condition = "control"
+description = "age-matched healthy subjects"
+
+[groups.ckd_5]
+condition = "ckd"
+ckd_stage = "end stage"
+description = "CKD 5 before the first dialysis"
+
+[groups.hd]
+condition = "ckd"
+ckd_stage = "dialysis"
+description = "long-term haemodialysis"

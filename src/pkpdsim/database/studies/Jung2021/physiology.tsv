@@ -1,0 +1,7 @@
+entity	group	n	mean	sd	se	median	notes
+gfr_measured	controls	31	83.6	13.4			
+gfr_measured	chf	54	68.1	10.1			
+effective_renal_plasma_flow	controls	31	627.1	161.8			
+effective_renal_plasma_flow	chf	54	565	143.3			
+renal_blood_flow_per_bsa	controls	31	1105.7	258.6			
+renal_blood_flow_per_bsa	chf	54	959.1	244.8			

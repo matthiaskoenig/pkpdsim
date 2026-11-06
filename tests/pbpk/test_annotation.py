@@ -411,7 +411,7 @@ def test_build_logs_no_annotation_errors(
 
 def test_requested_terms_documented() -> None:
     """Every PBPKO term the library lacks is listed in the documentation, requested upstream."""
-    text = DOCS.read_text()
+    text = DOCS.read_text(encoding="utf-8")
     assert "## Terms requested upstream" in text
     upstream = text.split("## Terms requested upstream", 1)[1]
     missing = [term for term in requested_terms() if term not in upstream]
@@ -422,7 +422,7 @@ def test_compartment_terms_resolved() -> None:
     """The compartment terms of `pkpdsim.annotations` have no open FIXME, every organ a UBERON term."""
     source = (
         Path(__file__).parents[2] / "src" / "pkpdsim" / "annotations.py"
-    ).read_text()
+    ).read_text(encoding="utf-8")
     assert "fixme" not in source.lower()
     for key in ("fluid volume", "re", "rev", "kiv", "fov"):
         assert compartments[key], key

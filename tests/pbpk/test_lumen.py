@@ -512,7 +512,10 @@ def test_the_group_colon_is_f_ka_colon(tmp_path: Path) -> None:
     ):
         result = build(_definition("colon_group", intestine), tmp_path / name)
         texts.append(
-            [dateless(p.read_text()) for p in (result.comp_path, result.flat_path)]
+            [
+                dateless(p.read_text(encoding="utf-8"))
+                for p in (result.comp_path, result.flat_path)
+            ]
         )
     assert texts[0] == texts[1]
     found = _sbml_ids(tmp_path / "group" / "colon_group_flat.xml")
@@ -607,7 +610,9 @@ def test_the_colon_absorption_of_the_docs(tmp_path: Path) -> None:
         r = load(result)
         r[f"[{_gu(ids.lumen(S, seg))}]"] = 1.0
         ratios[seg] = _absorbed_from(r, r[_gu(ids.lumen_volume(seg))]) / oral
-    page = (Path(__file__).parents[2] / "docs" / "pbpk" / "intestine.md").read_text()
+    page = (Path(__file__).parents[2] / "docs" / "pbpk" / "intestine.md").read_text(
+        encoding="utf-8"
+    )
     stated = re.search(
         r"released in the caecum is absorbed to (\d+) % \(in the colon ascendens "
         r"(\d+) %\)",

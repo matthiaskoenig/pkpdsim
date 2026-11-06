@@ -1,0 +1,9 @@
+entity	group	n	mean	sd	se	unit	notes
+portal_vein_flow	controls	18	1207.8	184.41		mL/min	
+portal_vein_flow	cirrhosis_A	11	1098.5	369.4		mL/min	
+portal_vein_flow	cirrhosis_B	13	698.6	8.5		mL/min	the SD as tabulated, 8.5, small against the other groups
+portal_vein_flow	cirrhosis_C	21	614.9	240.5		mL/min	
+splenic_vein_flow	controls	18	447.3	107.3		mL/min	
+splenic_vein_flow	cirrhosis_A	11	535.8	5.5		mL/min	the SD as tabulated, 5.5, small against the other groups
+splenic_vein_flow	cirrhosis_B	13	652	172.8		mL/min	
+splenic_vein_flow	cirrhosis_C	21	689	177.1		mL/min	

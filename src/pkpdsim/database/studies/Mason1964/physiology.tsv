@@ -1,0 +1,5 @@
+entity	group	n	mean	sd	se	median	notes
+forearm_blood_flow	controls	12	3.6		0.39		
+forearm_blood_flow	nyha_3_4	6	1.67		0.15		
+cardiac_index	controls	6	3.36		0.12		
+cardiac_index	nyha_3_4	4	1.68		0.2		

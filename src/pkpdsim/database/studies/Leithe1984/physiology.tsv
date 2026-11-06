@@ -1,0 +1,17 @@
+entity	group	n	mean	sd	notes
+cardiac_index	controls	16	3.5	0.48	Results text
+cardiac_index	mild	18	2.76	0.29	digitized from Figure 1A (1 pixel is 0.005 L/min/m2)
+cardiac_index	moderate	20	2.19	0.19	digitized from Figure 1A (1 pixel is 0.005 L/min/m2)
+cardiac_index	severe	26	1.75	0.17	digitized from Figure 1A (1 pixel is 0.005 L/min/m2)
+hepatic_blood_flow_per_bsa	controls	16	595	116	Results text
+hepatic_blood_flow_per_bsa	mild	18	455	138	digitized from Figure 1C (1 pixel is 1.0 ml/min/m2)
+hepatic_blood_flow_per_bsa	moderate	20	317	79	digitized from Figure 1C (1 pixel is 1.0 ml/min/m2)
+hepatic_blood_flow_per_bsa	severe	26	282	76	digitized from Figure 1C (1 pixel is 1.0 ml/min/m2)
+renal_blood_flow_per_bsa	controls	16	1050.1	297.6	Results text, printed 607 +- 172 ml/min/m2, times 1.73
+renal_blood_flow_per_bsa	mild	18	816.6	301	digitized from Figure 1E (1 pixel is 1.0 ml/min/m2); per 1.73 m2 from the printed per m2: 472 +- 174
+renal_blood_flow_per_bsa	moderate	20	579.5	174.7	digitized from Figure 1E (1 pixel is 1.0 ml/min/m2); per 1.73 m2 from the printed per m2: 335 +- 101
+renal_blood_flow_per_bsa	severe	26	659.1	178.2	digitized from Figure 1E (1 pixel is 1.0 ml/min/m2); per 1.73 m2 from the printed per m2: 381 +- 103
+forearm_blood_flow	controls	16	8.22	3.16	Results text, the limb (right upper extremity)
+forearm_blood_flow	mild	18	5.45	2.43	digitized from Figure 1G (1 pixel is 0.02 ml/100 ml/min)
+forearm_blood_flow	moderate	20	4.68	1.76	digitized from Figure 1G (1 pixel is 0.02 ml/100 ml/min)
+forearm_blood_flow	severe	26	3.67	0.87	digitized from Figure 1G (1 pixel is 0.02 ml/100 ml/min)

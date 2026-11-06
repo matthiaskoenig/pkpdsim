@@ -1,0 +1,18 @@
+source = "Mason1964"
+tissue = "body"
+control = "controls"
+notes = "Heart failure of NYHA III or IV without diuretics and normal subjects, the values before ouabain; forearm blood flow by strain gauge plethysmography, cardiac index by dye dilution; Tables II and III (free full text), mean and SE, per 100 g of tissue taken as per 100 mL; transcribed from the full text by the literature search of the database (2026-11-05)."
+
+[measurements.physiology]
+file = "physiology.tsv"
+kind = "physiology"
+method = "plethysmography, dye dilution"
+location = "Tables II and III"
+
+[groups.controls]
+condition = "control"
+description = "normal subjects"
+
+[groups.nyha_3_4]
+condition = "heart_failure"
+description = "NYHA III-IV"

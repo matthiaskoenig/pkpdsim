@@ -333,7 +333,7 @@ def test_the_record_and_the_outputs(tmp_path: Path) -> None:
     assert read.to_dict() == assessment.to_dict()
     assert read.inputs == checks
     # a record of pkpdsim 0.18 has no inputs
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding="utf-8"))
     del data["inputs"]
     for context in data["contexts"]:
         del context["inputs"]
@@ -352,8 +352,16 @@ def test_the_record_and_the_outputs(tmp_path: Path) -> None:
         == 1
     )
     output = write_outputs(assessment, tmp_path / "out")
-    assert (output / "inputs.tsv").read_text().startswith("fit\texperiment\tmapping")
-    assert (output / "input_ranges.tsv").read_text().startswith("context\ttarget")
-    html = (output / "index.html").read_text()
+    assert (
+        (output / "inputs.tsv")
+        .read_text(encoding="utf-8")
+        .startswith("fit\texperiment\tmapping")
+    )
+    assert (
+        (output / "input_ranges.tsv")
+        .read_text(encoding="utf-8")
+        .startswith("context\ttarget")
+    )
+    html = (output / "index.html").read_text(encoding="utf-8")
     assert "<h4>Inputs</h4>" in html
     assert "CredA/fm_dose" in html

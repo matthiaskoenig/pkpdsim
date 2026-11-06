@@ -1,0 +1,9 @@
+entity	group	n	mean	sd	se	median	q1	q3	notes
+renal_artery_flow	controls	22	856	160					
+renal_artery_flow	ckd_3_4	22				486			interquartile range 174 wide
+renal_cortical_perfusion	controls	22	200	56					
+renal_cortical_perfusion	ckd_3_4	22				71			interquartile range 49 wide
+kidney_volume	controls	22	396	99					
+kidney_volume	ckd_3_4	22	322	114					
+kidney_volume_per_bsa	controls	22	194	28					
+kidney_volume_per_bsa	ckd_3_4	22				165			interquartile range 39 wide

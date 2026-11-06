@@ -211,7 +211,7 @@ def test_no_publish_stops_before_commit(model: PKPDModel, clone: Path) -> None:
     assert publisher.calls == []
     assert not runner.ran("docker") and not runner.ran("gh")
     assert git(clone, "rev-parse", "HEAD") == head
-    manifest = json.loads((clone / MANIFEST_FILE).read_text())
+    manifest = json.loads((clone / MANIFEST_FILE).read_text(encoding="utf-8"))
     assert manifest["version"] == VERSION
     assert "uv.lock" in manifest["files"]
     assert "docs/images/toy_model.png" in manifest["files"]
@@ -281,7 +281,9 @@ def test_hand_edit_after_review_rebuilds(model: PKPDModel, clone: Path) -> None:
     runner, publisher = FakeRunner(), FakePublisher()
     do_release(model, clone, publish=True, runner=runner, publisher=publisher)
     assert runner.ran("run_simulation")
-    assert (clone / "docs" / "index.md").read_text() != "edited by hand\n"
+    assert (clone / "docs" / "index.md").read_text(
+        encoding="utf-8"
+    ) != "edited by hand\n"
     assert len(publisher.calls) == 1
 
 
@@ -324,8 +326,10 @@ def test_missing_tools_fail_before_build(model: PKPDModel, clone: Path) -> None:
 def test_local_lock_after_review_rebuilds(model: PKPDModel, clone: Path) -> None:
     do_release(model, clone, publish=False)
     lock = clone / "uv.lock"
-    lock.write_text(lock.read_text().replace(PYPI, '{ directory = "../pkpdsim" }'))
-    manifest = json.loads((clone / MANIFEST_FILE).read_text())
+    lock.write_text(
+        lock.read_text(encoding="utf-8").replace(PYPI, '{ directory = "../pkpdsim" }')
+    )
+    manifest = json.loads((clone / MANIFEST_FILE).read_text(encoding="utf-8"))
     manifest["files"]["uv.lock"] = hashlib.sha256(lock.read_bytes()).hexdigest()
     (clone / MANIFEST_FILE).write_text(json.dumps(manifest))
     runner, publisher = FakeRunner(), FakePublisher()
@@ -455,7 +459,7 @@ def test_interrupted_build_is_rebuilt(model: PKPDModel, clone: Path) -> None:
         do_release(
             model, clone, publish=False, runner=FakeRunner(interrupt_on="--uncertainty")
         )
-    marker = json.loads((clone / ".git" / BUILD_MARKER).read_text())
+    marker = json.loads((clone / ".git" / BUILD_MARKER).read_text(encoding="utf-8"))
     assert "src/pkpdsim_toy/__init__.py" in marker["changed"]
     do_release(model, clone, publish=False)
     assert not (clone / ".git" / BUILD_MARKER).exists()
@@ -544,7 +548,10 @@ def test_tracked_results_of_the_package_are_released(
     commit_package_file(model, "fitting/results/data.xlsx")
     do_release(model, clone, publish=False)
     released = "src/pkpdsim_toy/fitting/results/data.xlsx"
-    assert released in json.loads((clone / MANIFEST_FILE).read_text())["files"]
+    assert (
+        released
+        in json.loads((clone / MANIFEST_FILE).read_text(encoding="utf-8"))["files"]
+    )
     untracked = git(clone, "ls-files", "--others", "--exclude-standard")
     assert released in untracked.splitlines()
 
@@ -612,5 +619,5 @@ def test_first_release_into_an_empty_repository(
     do_release(model, path, publish=False)
     assert (path / MANIFEST_FILE).is_file()
     assert (path / "README.md").is_file()
-    notes = (path / "release-notes" / f"{VERSION}.md").read_text()
+    notes = (path / "release-notes" / f"{VERSION}.md").read_text(encoding="utf-8")
     assert "First release." in notes

@@ -119,7 +119,7 @@ class PBPKDefinition:
             default individual (`BW`, `HEIGHT`, `AGE`); the reference anatomy
             stays ICRP 89.
         arm_vein: the preset of the weights of the arm vein sampling site
-            (`data/arm_vein.toml`), the PK-Sim default skin and muscle mix.
+            (`database/tables/arm_vein.toml`), the PK-Sim default skin and muscle mix.
         dynamic: the parameters of the top model which change during a
             simulation (an impairment changed in the middle of a study, a PD
             output): every quantity which depends on them is an assignment
@@ -397,7 +397,7 @@ class PBPKDefinition:
         presets = sorted(load("arm_vein"))
         if self.arm_vein not in presets:
             problems.append(
-                f"arm_vein '{self.arm_vein}' is no preset of data/arm_vein.toml, "
+                f"arm_vein '{self.arm_vein}' is no preset of database/tables/arm_vein.toml, "
                 f"the presets are {presets}"
             )
         if not problems and symbols and self.observers:

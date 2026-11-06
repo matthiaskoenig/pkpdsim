@@ -1,0 +1,32 @@
+source = "Henriksen2001"
+via = "Li2015"
+tissue = "body"
+control = "controls"
+notes = "cardiac output per body surface area of healthy subjects and patients with alcoholic cirrhosis; Li 2015 calculated the blood cardiac index from the plasma and red cell cardiac index the study reports; the numbers as Li 2015 tabulate them for their meta-analysis (Supplementary Materials, Physiological and biological values used in meta-analysis, PMC4505828, CC BY-NC); the primary publication was not read."
+
+[measurements.physiology]
+file = "physiology.tsv"
+kind = "physiology"
+location = "Li 2015, Supplementary Materials, Physiological and biological values used in meta-analysis"
+
+[groups.controls]
+condition = "control"
+description = "healthy subjects"
+
+[groups.cirrhosis_A]
+condition = "cirrhosis"
+child_pugh = "A"
+etiology = "alcoholic liver disease"
+description = "Child-Pugh class A"
+
+[groups.cirrhosis_B]
+condition = "cirrhosis"
+child_pugh = "B"
+etiology = "alcoholic liver disease"
+description = "Child-Pugh class B"
+
+[groups.cirrhosis_C]
+condition = "cirrhosis"
+child_pugh = "C"
+etiology = "alcoholic liver disease"
+description = "Child-Pugh class C"

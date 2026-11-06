@@ -1,0 +1,7 @@
+entity	group	n	mean	sd	se	median	q1	q3	notes
+renal_cortical_perfusion	controls	12	480	136					24 kidneys
+renal_cortical_perfusion	ckd_1	3	446	161					6 kidneys
+renal_cortical_perfusion	ckd_2	5	392	123					10 kidneys
+renal_cortical_perfusion	ckd_3	14	302	95					28 kidneys
+renal_cortical_perfusion	ckd_4	4	229	7					5 kidneys
+renal_cortical_perfusion	ckd_5	2	152	32					4 kidneys

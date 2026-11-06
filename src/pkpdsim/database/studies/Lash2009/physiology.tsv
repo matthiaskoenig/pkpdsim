@@ -1,0 +1,6 @@
+entity	group	n	mean	sd	se	median	q1	q3	notes
+hemoglobin	lt30	667	118	17					printed 11.8 +- 1.7 g/dl
+hemoglobin	30_39	844	123	17					printed 12.3 +- 1.7 g/dl
+hemoglobin	40_49	968	128	17					printed 12.8 +- 1.7 g/dl
+hemoglobin	50_59	720	132	16					printed 13.2 +- 1.6 g/dl
+hemoglobin	ge60	397	134	16					printed 13.4 +- 1.6 g/dl

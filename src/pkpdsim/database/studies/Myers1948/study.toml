@@ -1,0 +1,18 @@
+source = "Myers1948"
+tissue = "body"
+control = "controls"
+notes = "Chronic heart failure of various degrees and etiologies (NYHA class not given) and controls without significant disease; hepatic blood flow by bromsulphalein infusion with hepatic vein catheterization (Bradley), cardiac index by direct Fick; Tables I and II (free full text), mean, SD and SE; transcribed from the full text by the literature search of the database (2026-11-05)."
+
+[measurements.physiology]
+file = "physiology.tsv"
+kind = "physiology"
+method = "bromsulphalein clearance and extraction, Fick"
+location = "Tables I and II"
+
+[groups.controls]
+condition = "control"
+description = "subjects without significant disease"
+
+[groups.chf]
+condition = "heart_failure"
+description = "chronic heart failure"

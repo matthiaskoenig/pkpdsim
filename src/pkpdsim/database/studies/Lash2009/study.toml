@@ -1,0 +1,33 @@
+source = "Lash2009"
+tissue = "body"
+notes = "The CRIC cohort (eGFR 20-70 by age, not on dialysis, 48 % diabetic) by the MDRD eGFR at baseline, no control group; Table 4 (free full text), mean and SD; transcribed from the full text by the literature search of the database (2026-11-05)."
+
+[measurements.physiology]
+file = "physiology.tsv"
+kind = "physiology"
+method = "laboratory values at baseline"
+location = "Table 4"
+
+[groups.lt30]
+condition = "ckd"
+description = "eGFR < 30 (G4, few G5)"
+
+[groups.30_39]
+condition = "ckd"
+ckd_stage = "moderate"
+description = "eGFR 30-39"
+
+[groups.40_49]
+condition = "ckd"
+ckd_stage = "moderate"
+description = "eGFR 40-49"
+
+[groups.50_59]
+condition = "ckd"
+ckd_stage = "moderate"
+description = "eGFR 50-59"
+
+[groups.ge60]
+condition = "ckd"
+ckd_stage = "mild"
+description = "eGFR >= 60 (mostly G2)"

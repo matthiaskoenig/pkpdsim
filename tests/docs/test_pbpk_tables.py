@@ -3,7 +3,7 @@
 `scripts/pbpk_tables.py` writes the tables (reference physiology,
 populations, impairment, arm vein presets, intestine, nephron) into the
 marked regions of the pages of `docs/pbpk/` from the TOML files of
-`pkpdsim/pbpk/data`. The test renders the pages again, so a change of a data
+`pkpdsim/database/tables`. The test renders the pages again, so a change of a data
 file or of the script fails until the pages are written again.
 """
 
@@ -30,7 +30,7 @@ def test_the_tables_are_current() -> None:
     script = _script()
     stale = [
         page.name
-        for page in sorted(script.PBPK_DIR.glob("*.md"))
+        for page in script.PAGES
         if script.render_page(page.read_text(encoding="utf-8"))
         != page.read_text(encoding="utf-8")
     ]
@@ -43,9 +43,7 @@ def test_the_tables_are_current() -> None:
 def test_every_table_is_on_a_page() -> None:
     """Every table of the script has a region on a page, and only one."""
     script = _script()
-    text = "".join(
-        p.read_text(encoding="utf-8") for p in sorted(script.PBPK_DIR.glob("*.md"))
-    )
+    text = "".join(p.read_text(encoding="utf-8") for p in script.PAGES)
     counts = {name: text.count(script.begin_marker(name)) for name in script.TABLES}
     assert counts == dict.fromkeys(script.TABLES, 1)
 
@@ -60,3 +58,28 @@ def test_an_unknown_table_is_refused() -> None:
         assert "nothing" in str(err)
     else:
         raise AssertionError("an unknown table was accepted")
+
+
+def test_every_citation_is_a_reference() -> None:
+    """A page which cites a source has the region of its references, listing it."""
+    script = _script()
+    for page in script.PAGES:
+        text = page.read_text(encoding="utf-8")
+        cited = set(script._CITATION.findall(text))
+        if not cited:
+            continue
+        assert script.begin_marker(script.REFERENCES) in text, page.name
+        for key in cited:
+            assert f'<span id="ref-{key}"></span>' in text, (page.name, key)
+
+
+def test_a_citation_of_an_unknown_source_is_refused() -> None:
+    """A page which cites a key that is no source fails to render."""
+    script = _script()
+    page = f"[x](#ref-Nobody1900)\n{script.begin_marker(script.REFERENCES)}\n{script.END}\n"
+    try:
+        script.render_page(page)
+    except KeyError as err:
+        assert "Nobody1900" in str(err)
+    else:
+        raise AssertionError("an unknown citation was accepted")

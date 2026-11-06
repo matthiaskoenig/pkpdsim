@@ -1,7 +1,7 @@
 """Cross-check the reference physiology with the one of PK-Sim.
 
 Prints the relative difference of the organ volumes and blood flows of the
-reference physiology (`pkpdsim/pbpk/data/physiology_human.toml`, ICRP 89) to
+reference physiology (`pkpdsim/database/tables/physiology_human.toml`, ICRP 89) to
 those of the PK-Sim database for the population `European_ICRP_2002` at age 30.
 
 PK-Sim (GPLv2) is a check only: no number of the database enters pkpdsim. The

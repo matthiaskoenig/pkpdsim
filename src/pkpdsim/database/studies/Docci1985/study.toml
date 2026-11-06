@@ -1,0 +1,52 @@
+source = "Docci1985"
+tissue = "body"
+control = "controls"
+notes = "Healthy subjects (serum creatinine below 1.3 mg/dl) and patients with primary nephropathy by the serum creatinine, without inflammation, liver dysfunction or proteinuria: group I with residual renal function in four strata of the creatinine (1.3-5.0, 5.1-7.5, 7.6-10.0, > 10.0 mg/dl, mean 3.38, 6.49, 8.93, 14.11) on an unrestricted diet, group II in the terminal phase on a low-protein diet or on maintenance haemodialysis (5 of them anephric). Serum alpha-1-acid glycoprotein by radial immunodiffusion; the mean and SD printed in Figures 2 and 3 (the PDF read, a scan). The stratum 1.3-5.0 mg/dl spans the stages moderate to end stage and has no stage."
+
+[measurements.physiology]
+file = "physiology.tsv"
+kind = "physiology"
+method = "radial immunodiffusion"
+location = "Figures 2 and 3 (the printed mean and SD)"
+
+[groups.controls]
+condition = "control"
+description = "healthy subjects with a serum creatinine below 1.3 mg/dl"
+
+[groups.creatinine_1_5]
+condition = "ckd"
+description = "residual renal function, serum creatinine 1.3-5.0 mg/dl (mean 3.38)"
+
+[groups.creatinine_5_7]
+condition = "ckd"
+ckd_stage = "end stage"
+description = "residual renal function, serum creatinine 5.1-7.5 mg/dl (mean 6.49)"
+assumption = "the stage from the serum creatinine of the group (the study gives no GFR): the MDRD eGFR of the mean creatinine at the mean age of 45 years is below 15 ml/min/1.73 m2 (about 9 for men)"
+
+[groups.creatinine_7_10]
+condition = "ckd"
+ckd_stage = "end stage"
+description = "residual renal function, serum creatinine 7.6-10.0 mg/dl (mean 8.93)"
+assumption = "the stage from the serum creatinine of the group (the study gives no GFR): the MDRD eGFR of the mean creatinine at the mean age of 45 years is below 15 ml/min/1.73 m2 (about 7 for men)"
+
+[groups.creatinine_gt10]
+condition = "ckd"
+ckd_stage = "end stage"
+description = "residual renal function, serum creatinine above 10.0 mg/dl (mean 14.11), unrestricted diet"
+assumption = "the stage from the serum creatinine of the group (the study gives no GFR): the MDRD eGFR of the mean creatinine at the mean age of 45 years is below 15 ml/min/1.73 m2 (about 4 for men)"
+
+[groups.lpd]
+condition = "ckd"
+ckd_stage = "end stage"
+description = "terminal phase of chronic renal failure on a low-protein diet, serum creatinine above 10 mg/dl"
+assumption = "not on dialysis: the conservative therapy of the terminal phase"
+
+[groups.hd]
+condition = "ckd"
+ckd_stage = "dialysis"
+description = "maintenance haemodialysis, the anephric patients apart"
+
+[groups.anephric]
+condition = "ckd"
+ckd_stage = "dialysis"
+description = "maintenance haemodialysis after bilateral nephrectomy"

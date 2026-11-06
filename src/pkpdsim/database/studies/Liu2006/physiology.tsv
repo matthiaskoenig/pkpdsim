@@ -1,0 +1,3 @@
+entity	group	n	mean	sd	se	unit	notes
+hematocrit	cirrhosis_A	24	36.62	5.44	1.11	%	
+hematocrit	cirrhosis_BC	62	32.86	5.97	0.76	%	

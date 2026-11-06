@@ -1,0 +1,92 @@
+{
+ "source": "Leithe 1984, Figure 1 (page 3 of the PDF, pdfimages -png -f 3 -l 3), bar charts of mean + SD; read by the script below, not by digitize_boxplot.py",
+ "image": "p3-000.png",
+ "panels": {
+  "A": {
+   "axis_x": 611,
+   "ticks": [
+    [
+     547.5,
+     4.0
+    ],
+    [
+     733.5,
+     3.0
+    ],
+    [
+     934.5,
+     2.0
+    ],
+    [
+     1127.5,
+     1.0
+    ]
+   ],
+   "bottom": 1228,
+   "top": 546
+  },
+  "C": {
+   "axis_x": 611,
+   "ticks": [
+    [
+     1425.5,
+     600
+    ],
+    [
+     1622.5,
+     400
+    ],
+    [
+     1821.5,
+     200
+    ]
+   ],
+   "bottom": 1825,
+   "top": 1290
+  },
+  "E": {
+   "axis_x": 611,
+   "ticks": [
+    [
+     2024.5,
+     700
+    ],
+    [
+     2223.0,
+     500
+    ],
+    [
+     2421.5,
+     300
+    ]
+   ],
+   "bottom": 2425,
+   "top": 1860
+  },
+  "G": {
+   "axis_x": 614,
+   "ticks": [
+    [
+     2518.5,
+     14
+    ],
+    [
+     2714.5,
+     10
+    ],
+    [
+     2917.0,
+     6
+    ]
+   ],
+   "bottom": 3123,
+   "top": 2500
+  }
+ },
+ "groups": [
+  "controls",
+  "mild",
+  "moderate",
+  "severe"
+ ]
+}

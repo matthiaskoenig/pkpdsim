@@ -378,7 +378,7 @@ class StandardBuilder(OrganBuilder):
 
         Every metabolism and transport of the kidney runs with the share
         `f_tubular` of its capacity which follows the renal function, the
-        intact nephron hypothesis (a model choice of `data/impairment.toml`,
+        intact nephron hypothesis (a model choice of `database/tables/impairment.toml`,
         `[ckd] tubular_capacity`): with the share 1 a tubular secretion falls
         with the GFR, as the secretion of a fraction of the GFR of the
         hand-written models did. The filtration `fu*GFR` follows the GFR

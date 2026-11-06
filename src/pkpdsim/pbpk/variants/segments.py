@@ -1,7 +1,7 @@
 """The lumen segments of the segmented intestine: their data and geometry.
 
 The segments of Thelen 2011 in the order of the transit, each with its table
-in `data/intestine_human.toml`; the share of an intestinal segment in its
+in `database/tables/intestine_human.toml`; the share of an intestinal segment in its
 region (small or large intestine) is its share of the transit time of the
 region, by which the mucosa gets its tissue volume and blood flow. The
 single lumen is one segment, the fluid of the small intestine.
@@ -50,7 +50,7 @@ class Segment:
 
     Attributes:
         token: the id token (`du`), `None` for the single lumen.
-        key: the table of its data in `data/intestine_human.toml`.
+        key: the table of its data in `database/tables/intestine_human.toml`.
         region: the organ whose tissue and blood flow its mucosa shares,
             `None` without mucosa (the stomach).
         share: the share of the segment in its region (the transit share).

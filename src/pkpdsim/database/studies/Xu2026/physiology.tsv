@@ -1,0 +1,10 @@
+entity	group	n	mean	sd	median	q1	q3	notes
+meld	cirrhosis_A	183			8	7	10	
+meld	cirrhosis_B	92			15	13	18	
+meld	cirrhosis_C	31			24	21	28	
+albumin	cirrhosis_A	183	38.52	4.21				
+albumin	cirrhosis_B	92	31.76	3.85				
+albumin	cirrhosis_C	31	26.43	4.02				
+creatinine	cirrhosis_A	183			0.8177	0.7363	0.9104	printed in umol/L: 72.3 (65.1-80.5)
+creatinine	cirrhosis_B	92			0.8923	0.7849	1.0416	printed in umol/L: 78.9 (69.4-92.1)
+creatinine	cirrhosis_C	31			1.1479	0.9805	1.4114	printed in umol/L: 101.5 (86.7-124.8)

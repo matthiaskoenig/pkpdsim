@@ -1,0 +1,7 @@
+entity	group	n	mean	sd	se	median	q1	q3	notes
+albumin	g1	265	43	4					printed 4.3 +- 0.4 g/dL
+albumin	g2	419	43	4					printed 4.3 +- 0.4 g/dL
+albumin	g3a	403	42	4					printed 4.2 +- 0.4 g/dL
+albumin	g3b	484	42	4					printed 4.2 +- 0.4 g/dL
+albumin	g4	522	40	5					printed 4.0 +- 0.5 g/dL
+albumin	g5	145	39	4					printed 3.9 +- 0.4 g/dL

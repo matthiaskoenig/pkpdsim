@@ -1,0 +1,26 @@
+source = "Luo2024"
+tissue = "body"
+control = "controls"
+notes = "Subjects with normal kidneys (eGFR 105) and patients with renal insufficiency by groups of CKD stages: 1 (eGFR 113), 2 and 3 (68), 4 and 5 (7.6, dialysis not stated); the parenchymal volume of contrast CT by nnU-Net segmentation, both kidneys by its magnitude; Table 3 (open access, CC BY-NC-ND), mean and a spread the table does not name, taken as SD; transcribed from the full text by the literature search of the database (2026-11-05)."
+
+[measurements.physiology]
+file = "physiology.tsv"
+kind = "physiology"
+method = "contrast CT, automated segmentation"
+location = "Table 3"
+
+[groups.controls]
+condition = "control"
+description = "subjects with normal kidneys"
+
+[groups.ckd_1]
+condition = "ckd"
+description = "CKD 1"
+
+[groups.ckd_2_3]
+condition = "ckd"
+description = "CKD 2 and 3"
+
+[groups.ckd_4_5]
+condition = "ckd"
+description = "CKD 4 and 5"

@@ -6,7 +6,7 @@ Every compartment, species, parameter and reaction which the PBPK library create
 - the blood pool: arterial or venous blood, the portal vein;
 - the lumen segment of the intestine or the segment of the renal tubule;
 - the sampling site of an observer (hepatic vein, arm vein);
-- the protein of a process or of its parameters: its UniProt and NCIT terms (the protein table `data/proteins.toml`);
+- the protein of a process or of its parameters: its UniProt and NCIT terms (the protein table `database/tables/proteins.toml`);
 - the substance of a species: the annotations of its specification (`Substance.annotations`, ChEBI, PubChem, NCIT).
 
 An input of an organ or of a PD component, which the element of the body replaces in the comp model, takes the annotation of that element, so the comp model and the flat model carry the same terms.

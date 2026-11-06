@@ -1,0 +1,19 @@
+source = "LiLP2017"
+tissue = "body"
+control = "controls"
+notes = "Healthy controls (CKD-EPI eGFR 100.7 +- 17.7, aged 42) and diabetic patients with CKD 3 (50.0 +- 13.9, aged 68). 2D FAIR True-FISP ASL; Table 3 (open access, CC BY-NC-ND), mean and SD of all subjects (Prasad 2019 of the same group is not taken, its subjects overlap); transcribed from the full text by the literature search of the database (2026-11-05)."
+
+[measurements.physiology]
+file = "physiology.tsv"
+kind = "physiology"
+method = "arterial spin labelling MRI (FAIR True-FISP)"
+location = "Table 3"
+
+[groups.controls]
+condition = "control"
+description = "healthy subjects"
+
+[groups.ckd_3]
+condition = "ckd"
+ckd_stage = "moderate"
+description = "diabetic CKD 3"

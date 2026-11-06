@@ -1,0 +1,42 @@
+source = "Taal2023"
+tissue = "body"
+notes = "Referred patients of the NURTuRE-CKD cohort (eGFR 15-59, or >= 60 with an albumin-to-creatinine ratio above 30 mg/mmol; transplant recipients excluded) by the eGFR at baseline, no control group; Table 3 (open access, CC BY-NC): hemoglobin mean and SD, albumin median and interquartile range. The group of eGFR >= 70 is 67.5 % A3 albuminuria; transcribed from the full text by the literature search of the database (2026-11-05)."
+
+[measurements.physiology]
+file = "physiology.tsv"
+kind = "physiology"
+method = "laboratory values at baseline"
+location = "Table 3"
+
+[groups.lt20]
+condition = "ckd"
+description = "eGFR < 20 (G4 and G5)"
+
+[groups.20_29]
+condition = "ckd"
+ckd_stage = "severe"
+description = "eGFR 20-29"
+
+[groups.30_39]
+condition = "ckd"
+ckd_stage = "moderate"
+description = "eGFR 30-39"
+
+[groups.40_49]
+condition = "ckd"
+ckd_stage = "moderate"
+description = "eGFR 40-49"
+
+[groups.50_59]
+condition = "ckd"
+ckd_stage = "moderate"
+description = "eGFR 50-59"
+
+[groups.60_69]
+condition = "ckd"
+ckd_stage = "mild"
+description = "eGFR 60-69, proteinuric"
+
+[groups.ge70]
+condition = "ckd"
+description = "eGFR >= 70 (G1 and G2), proteinuric"

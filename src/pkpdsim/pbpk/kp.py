@@ -10,7 +10,7 @@ Rodgers & Rowland (Rodgers, Leahy & Rowland 2005 for moderate-to-strong bases,
 Rodgers & Rowland 2006 for acids, very weak bases, neutrals and zwitterions)
 predict the tissue to unbound plasma coefficient `Kpu` (`Kp = Kpu * fu`) in the
 form stated by Yau 2020 (eqs. 1 to 5), from the composition of
-`data/tissue_composition.toml`:
+`database/tables/tissue_composition.toml`:
 
 - moderate-to-strong bases (a basic pKa >= 7), electrostatic binding to the
   acidic phospholipids `AP` of the tissue (eq. 1),
@@ -94,7 +94,7 @@ class Composition:
     """The composition of a tissue of the Rodgers & Rowland method.
 
     Attributes:
-        tissue: the tissue of `data/tissue_composition.toml`.
+        tissue: the tissue of `database/tables/tissue_composition.toml`.
         f_ew: the fractional volume of extracellular water.
         f_iw: the fractional volume of intracellular water.
         f_nl: the fractional volume of neutral lipids.
@@ -133,7 +133,7 @@ def _number(table: Mapping[str, Any], key: str) -> float:
 
 @cache
 def _data() -> dict[str, Any]:
-    """The content of `data/tissue_composition.toml`."""
+    """The content of `database/tables/tissue_composition.toml`."""
     return load("tissue_composition")
 
 

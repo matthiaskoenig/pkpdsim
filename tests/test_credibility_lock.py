@@ -73,7 +73,7 @@ def test_write_and_compare(lock_file: Path) -> None:
     selections = select(CREDIBILITY, fits)
     assert lock_differences(MODEL, selections, fits) is None
     assert write_lock(MODEL, selections, fits) == lock_file
-    data = json.loads(lock_file.read_text())
+    data = json.loads(lock_file.read_text(encoding="utf-8"))
     assert data["version"] == 1
     assert read_lock(MODEL) == data["evidence"]
     assert lock_differences(MODEL, selections, fits) == []
@@ -86,7 +86,7 @@ def test_write_and_compare(lock_file: Path) -> None:
 def test_a_gone_and_a_changed_evidence(lock_file: Path) -> None:
     fits = fit_table()
     write_lock(MODEL, select(CREDIBILITY, fits), fits)
-    data = json.loads(lock_file.read_text())
+    data = json.loads(lock_file.read_text(encoding="utf-8"))
     data["evidence"]["renal/renal impairment"] = ["DECAY/CredA/fm_other"]
     data["evidence"]["renal/old"] = ["DECAY/CredA/fm_renal"]
     lock_file.write_text(json.dumps(data))
@@ -113,7 +113,7 @@ def test_the_assessment_writes_and_matches_the_lock(
     matched = assess(credibility_model, verification=False)
     assert matched.provenance.lock == "matched"
     assert check_declaration(credibility_model) == []
-    data = json.loads(lock_file.read_text())
+    data = json.loads(lock_file.read_text(encoding="utf-8"))
     data["evidence"]["renal/renal impairment"] = []
     lock_file.write_text(json.dumps(data))
     with pytest.raises(LockMismatchError, match="renal/renal impairment"):
@@ -139,7 +139,9 @@ def test_the_command_writes_the_lock(
     )
     record = CredibilityAssessment.from_json(output / "credibility.json")
     assert record.provenance.lock == "written"
-    assert "the lock of the evidence was written" in (output / "index.html").read_text()
+    assert "the lock of the evidence was written" in (output / "index.html").read_text(
+        encoding="utf-8"
+    )
     with pytest.raises(SystemExit) as exc:
         credibility_command(
             credibility_model,

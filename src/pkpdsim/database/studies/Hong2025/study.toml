@@ -1,0 +1,27 @@
+source = "Hong2025"
+tissue = "body"
+notes = "Dual energy CT of 258 patients with cirrhosis by Child-Pugh class (A 207, B 38, C 13), median and interquartile range of Table 1 (open access, CC BY); no control group. Albumin printed in g/dL."
+
+[measurements.physiology]
+file = "physiology.tsv"
+kind = "physiology"
+method = "laboratory values at the CT"
+location = "Table 1"
+
+[groups.cirrhosis_A]
+condition = "cirrhosis"
+child_pugh = "A"
+etiology = "mixed"
+description = "Child-Pugh class A"
+
+[groups.cirrhosis_B]
+condition = "cirrhosis"
+child_pugh = "B"
+etiology = "mixed"
+description = "Child-Pugh class B"
+
+[groups.cirrhosis_C]
+condition = "cirrhosis"
+child_pugh = "C"
+etiology = "mixed"
+description = "Child-Pugh class C"

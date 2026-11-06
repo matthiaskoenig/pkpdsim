@@ -1,0 +1,13 @@
+entity	group	n	mean	sd	se	median	q1	q3	notes
+renal_artery_flow_one_kidney	controls_under40	33	427	117					
+renal_artery_flow_one_kidney	controls_over40	40	329	69					
+renal_artery_flow_one_kidney	ckd_3_4	11	314	148					
+renal_cortical_perfusion	controls_under40	42	279	75					
+renal_cortical_perfusion	controls_over40	43	232	57					
+renal_cortical_perfusion	ckd_3_4	11	83	68					
+kidney_volume	controls_under40	15	361	62					
+kidney_volume	controls_over40	7	382	51					
+kidney_volume	ckd_3_4	11	409	153					
+kidney_volume_per_bsa	controls_under40	15	184	29					
+kidney_volume_per_bsa	controls_over40	7	190	25					
+kidney_volume_per_bsa	ckd_3_4	11	202	86					

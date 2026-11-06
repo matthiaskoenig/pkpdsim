@@ -1,0 +1,160 @@
+source = "Drozdzik2021"
+tissue = "liver"
+control = "controls"
+notes = "Livers of 77 patients undergoing liver transplantation for HCV (21), ALD (20), AIH (20), PBC (10) and PSC (6), classified by Child-Pugh (A 18, B 31, C 28), and 20 controls; the statistics of the supplementary Tables S2 and S3 as printed (median with range, mean with SD and CV, for the protein the samples above the limit of quantification over all samples, a sample below it counted as 0). The CYP2C19 and CYP2D6 groups leave out samples by their genotype (the n of the records). Extracted from the PDF of the supplementary material (Europe PMC, PMC8471929) by the positions of the words, every cell checked by its CV, its range and its counts; the cells of CYP1A1 on the first page of Table S2 and three cells of Table S3 transcribed by hand."
+
+[measurements.protein]
+file = "protein.tsv"
+kind = "protein"
+unit = "fmol/mg tissue"
+method = "targeted proteomics, LC-MS/MS of the tissue homogenate"
+location = "Table S3"
+
+[measurements.mrna]
+file = "mrna.tsv"
+kind = "mrna"
+unit = "relative to the mean of the controls (2^-ddCt)"
+method = "qRT-PCR (TaqMan), normalized to the mean of five housekeeping genes"
+location = "Table S2"
+
+[groups.controls]
+condition = "control"
+description = "liver tissue of patients with colorectal cancer metastases, at least 5 cm from the tumour, without pathological signs in histology"
+
+[groups.cirrhosis_A]
+condition = "cirrhosis"
+child_pugh = "A"
+etiology = "mixed"
+description = "all diseases, Child-Pugh class A"
+
+[groups.cirrhosis_B]
+condition = "cirrhosis"
+child_pugh = "B"
+etiology = "mixed"
+description = "all diseases, Child-Pugh class B"
+
+[groups.cirrhosis_C]
+condition = "cirrhosis"
+child_pugh = "C"
+etiology = "mixed"
+description = "all diseases, Child-Pugh class C"
+
+[groups.cirrhosis_all]
+condition = "cirrhosis"
+etiology = "mixed"
+description = "all diseases, the classes A, B and C together"
+
+[groups.aih_A]
+condition = "cirrhosis"
+child_pugh = "A"
+etiology = "autoimmune hepatitis"
+description = "AIH, Child-Pugh class A"
+
+[groups.aih_B]
+condition = "cirrhosis"
+child_pugh = "B"
+etiology = "autoimmune hepatitis"
+description = "AIH, Child-Pugh class B"
+
+[groups.aih_C]
+condition = "cirrhosis"
+child_pugh = "C"
+etiology = "autoimmune hepatitis"
+description = "AIH, Child-Pugh class C"
+
+[groups.aih_all]
+condition = "cirrhosis"
+etiology = "autoimmune hepatitis"
+description = "AIH, the classes A, B and C together"
+
+[groups.ald_A]
+condition = "cirrhosis"
+child_pugh = "A"
+etiology = "alcoholic liver disease"
+description = "ALD, Child-Pugh class A"
+
+[groups.ald_B]
+condition = "cirrhosis"
+child_pugh = "B"
+etiology = "alcoholic liver disease"
+description = "ALD, Child-Pugh class B"
+
+[groups.ald_C]
+condition = "cirrhosis"
+child_pugh = "C"
+etiology = "alcoholic liver disease"
+description = "ALD, Child-Pugh class C"
+
+[groups.ald_all]
+condition = "cirrhosis"
+etiology = "alcoholic liver disease"
+description = "ALD, the classes A, B and C together"
+
+[groups.hcv_A]
+condition = "cirrhosis"
+child_pugh = "A"
+etiology = "hepatitis C"
+description = "HCV, Child-Pugh class A"
+
+[groups.hcv_B]
+condition = "cirrhosis"
+child_pugh = "B"
+etiology = "hepatitis C"
+description = "HCV, Child-Pugh class B"
+
+[groups.hcv_C]
+condition = "cirrhosis"
+child_pugh = "C"
+etiology = "hepatitis C"
+description = "HCV, Child-Pugh class C"
+
+[groups.hcv_all]
+condition = "cirrhosis"
+etiology = "hepatitis C"
+description = "HCV, the classes A, B and C together"
+
+[groups.pbc_A]
+condition = "cirrhosis"
+child_pugh = "A"
+etiology = "primary biliary cholangitis"
+description = "PBC, Child-Pugh class A"
+
+[groups.pbc_B]
+condition = "cirrhosis"
+child_pugh = "B"
+etiology = "primary biliary cholangitis"
+description = "PBC, Child-Pugh class B"
+
+[groups.pbc_C]
+condition = "cirrhosis"
+child_pugh = "C"
+etiology = "primary biliary cholangitis"
+description = "PBC, Child-Pugh class C"
+
+[groups.pbc_all]
+condition = "cirrhosis"
+etiology = "primary biliary cholangitis"
+description = "PBC, the classes A, B and C together"
+
+[groups.psc_A]
+condition = "cirrhosis"
+child_pugh = "A"
+etiology = "primary sclerosing cholangitis"
+description = "PSC, Child-Pugh class A"
+
+[groups.psc_B]
+condition = "cirrhosis"
+child_pugh = "B"
+etiology = "primary sclerosing cholangitis"
+description = "PSC, Child-Pugh class B"
+
+[groups.psc_C]
+condition = "cirrhosis"
+child_pugh = "C"
+etiology = "primary sclerosing cholangitis"
+description = "PSC, Child-Pugh class C"
+
+[groups.psc_all]
+condition = "cirrhosis"
+etiology = "primary sclerosing cholangitis"
+description = "PSC, the classes A, B and C together"

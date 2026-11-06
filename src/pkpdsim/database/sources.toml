@@ -1,0 +1,580 @@
+# The publications the numbers of the data files are taken from, and `ModelChoice`
+# for a number the library chooses where the literature gives none.
+# Every number of a data file has a `source` which is a key of this file.
+# The DOIs were checked against Crossref (2026-10-25).
+
+[ICRP89]
+citation = "Valentin J (ed). Basic anatomical and physiological data for use in radiological protection: reference values. ICRP Publication 89. Ann ICRP 32(3-4), 2002."
+doi = "10.1016/S0146-6453(03)00002-2"
+
+[Jones2013]
+citation = "Jones H, Rowland-Yeo K. Basic concepts in physiologically based pharmacokinetic modeling in drug discovery and development. CPT Pharmacometrics Syst Pharmacol 2:e63, 2013."
+doi = "10.1038/psp.2013.41"
+
+[Brown1997]
+citation = "Brown RP, Delp MD, Lindstedt SL, Rhomberg LR, Beliles RP. Physiological parameter values for physiologically based pharmacokinetic models. Toxicol Ind Health 13(4):407-484, 1997."
+doi = "10.1177/074823379701300401"
+
+[Schmitt2008]
+citation = "Schmitt W. General approach for the calculation of tissue to plasma partition coefficients. Toxicol In Vitro 22(2):457-467, 2008."
+doi = "10.1016/j.tiv.2007.09.010"
+
+[Chau2023]
+citation = "Chau P, Yoon JS, Moses D, Pather N. A systematic review and meta-analysis of portal vein morphometry in pediatric and adult populations: drawing the line between normal and abnormal findings. Eur J Radiol 168:111016, 2023."
+doi = "10.1016/j.ejrad.2023.111016"
+
+[DuBois1916]
+citation = "Du Bois D, Du Bois EF. Clinical calorimetry, tenth paper: a formula to estimate the approximate surface area if height and weight be known. Arch Intern Med 17(6_2):863-871, 1916."
+doi = "10.1001/archinte.1916.00080130010002"
+
+[Janmahasatian2005]
+citation = "Janmahasatian S, Duffull SB, Ash S, Ward LC, Byrne NM, Green B. Quantification of lean bodyweight. Clin Pharmacokinet 44(10):1051-1065, 2005."
+doi = "10.2165/00003088-200544100-00004"
+
+[Huisinga2012]
+citation = "Huisinga W, Solms A, Fronton L, Pilari S. Modeling interindividual variability in physiologically based pharmacokinetics and its link to mechanistic covariate modeling. CPT Pharmacometrics Syst Pharmacol 1(9):e4, 2012."
+doi = "10.1038/psp.2012.3"
+
+[UniProt]
+citation = "The UniProt Consortium. UniProt: the Universal Protein Knowledgebase in 2023. Nucleic Acids Res 51(D1):D523-D531, 2023."
+doi = "10.1093/nar/gkac1052"
+
+[ModelChoice]
+citation = "Choice of the pkpdsim PBPK library, not a value of the literature; the notes of the value give the reasoning."
+
+[Schiller2005]
+citation = "Schiller C, Fröhlich CP, Giessmann T, Siegmund W, Mönnikes H, Hosten N, Weitschies W. Intestinal fluid volumes and transit of dosage forms as assessed by magnetic resonance imaging. Aliment Pharmacol Ther 22(10):971-979, 2005."
+doi = "10.1111/j.1365-2036.2005.02683.x"
+
+[OSPDocumentation]
+citation = "Open Systems Pharmacology. PK-Sim documentation: Simulations, section on the venous blood outputs (Peripheral Venous Blood). https://docs.open-systems-pharmacology.org/working-with-pk-sim/pk-sim-documentation/pk-sim-simulations (accessed 2026-10-25)."
+
+[Levitt2004]
+citation = "Levitt DG. Physiologically based pharmacokinetic modeling of arterial - antecubital vein concentration difference. BMC Clin Pharmacol 4:2, 2004."
+doi = "10.1186/1472-6904-4-2"
+
+[Musther2015]
+citation = "Musther H, Gill KL, Chetty M, Rostami-Hodjegan A, Rowland M, Jamei M. Are physiologically based pharmacokinetic models reporting the right Cmax? Central venous versus peripheral sampling site. AAPS J 17(5):1268-1279, 2015."
+doi = "10.1208/s12248-015-9796-7"
+
+[Liu1992]
+citation = "Liu D, Moberg E, Kollind M, Lins PE, Adamson U, Macdonald IA. Arterial, arterialized venous, venous and capillary blood glucose measurements in normal man during hyperinsulinaemic euglycaemia and hypoglycaemia. Diabetologia 35(3):287-290, 1992."
+doi = "10.1007/BF00400932"
+
+[Segel1975]
+citation = "Segel IH. Enzyme Kinetics: Behavior and Analysis of Rapid Equilibrium and Steady-State Enzyme Systems. New York: Wiley-Interscience, 1975. Chapter 3 (simple inhibition systems: competitive, noncompetitive, uncompetitive, mixed)."
+
+[Mayhew2000]
+citation = "Mayhew BS, Jones DR, Hall SD. An in vitro model for predicting in vivo inhibition of cytochrome P450 3A4 by metabolic intermediate complex formation. Drug Metab Dispos 28(9):1031-1037, 2000."
+doi = "10.1016/S0090-9556(24)15182-3"
+
+[Almond2009]
+citation = "Almond LM, Yang J, Jamei M, Tucker GT, Rostami-Hodjegan A. Towards a quantitative framework for the prediction of DDIs arising from cytochrome P450 induction. Curr Drug Metab 10(4):420-432, 2009."
+doi = "10.2174/138920009788498978"
+
+[Fahmi2008]
+citation = "Fahmi OA, Maurer TS, Kish M, Cardenas E, Boldt S, Nettleton D. A combined model for predicting CYP3A4 clinical net drug-drug interaction based on CYP3A4 inhibition, inactivation, and induction determined in vitro. Drug Metab Dispos 36(8):1698-1708, 2008."
+doi = "10.1124/dmd.107.018663"
+
+[RowlandYeo2011]
+citation = "Rowland Yeo K, Walsky RL, Jamei M, Rostami-Hodjegan A, Tucker GT. Prediction of time-dependent CYP3A4 drug-drug interactions by physiologically based pharmacokinetic modelling: impact of inactivation parameters and enzyme turnover. Eur J Pharm Sci 43(3):160-173, 2011."
+doi = "10.1016/j.ejps.2011.04.008"
+
+[Greenblatt2003]
+citation = "Greenblatt DJ, von Moltke LL, Harmatz JS, Chen G, Weemhoff JL, Jen C, Kelley CJ, LeDuc BW, Zinny MA. Time course of recovery of cytochrome P450 3A function after single doses of grapefruit juice. Clin Pharmacol Ther 74(2):121-129, 2003."
+doi = "10.1016/S0009-9236(03)00118-8"
+
+[Thelen2011]
+citation = "Thelen K, Coboeken K, Willmann S, Burghaus R, Dressman JB, Lippert J. Evolution of a detailed physiological model to simulate the gastrointestinal transit and absorption process in humans, part 1: oral solutions. J Pharm Sci 100(12):5324-5345, 2011."
+doi = "10.1002/jps.22726"
+
+[Mudie2010]
+citation = "Mudie DM, Amidon GL, Amidon GE. Physiological parameters for oral delivery and in vitro testing. Mol Pharm 7(5):1388-1405, 2010."
+doi = "10.1021/mp100149j"
+
+[Evans1988]
+citation = "Evans DF, Pye G, Bramley R, Clark AG, Dyson TJ, Hardcastle JD. Measurement of gastrointestinal pH profiles in normal ambulant human subjects. Gut 29(8):1035-1041, 1988."
+doi = "10.1136/gut.29.8.1035"
+
+[Metcalf1987]
+citation = "Metcalf AM, Phillips SF, Zinsmeister AR, MacCarty RL, Beart RW, Wolff BG. Simplified assessment of segmental colonic transit. Gastroenterology 92(1):40-47, 1987."
+doi = "10.1016/0016-5085(87)90837-7"
+
+[Helander2014]
+citation = "Helander HF, Fändriks L. Surface area of the digestive tract - revisited. Scand J Gastroenterol 49(6):681-689, 2014."
+doi = "10.3109/00365521.2014.898326"
+
+# The regional absorption: no generic profile of the colonic absorption, which
+# depends on the permeability of the drug (`RegionalAbsorption`).
+[Tannergren2009]
+citation = "Tannergren C, Bergendal A, Lennernäs H, Abrahamsson B. Toward an increased understanding of the barriers to colonic drug absorption in humans: implications for early controlled release candidate assessment. Mol Pharm 6(1):60-73, 2009."
+doi = "10.1021/mp800261a"
+
+# The regional absorption of apixaban (Enterion capsules, 2.5 mg solution):
+# Cmax and AUC(0-t) about 60 % lower released in the distal small bowel, 90 %
+# and 84 % lower in the ascending colon than after the oral solution.
+[Byon2018]
+citation = "Byon W, Nepal S, Schuster AE, Shenker A, Frost CE. Regional gastrointestinal absorption of apixaban in healthy subjects. J Clin Pharmacol 58(7):965-971, 2018. Abstract read (Europe PMC, 2026-10-29); the full text is not open access."
+doi = "10.1002/jcph.1097"
+
+[Paine1997]
+citation = "Paine MF, Khalighi M, Fisher JM, Shen DD, Kunze KL, Marsh CL, Perkins JD, Thummel KE. Characterization of interintestinal and intraintestinal variations in human CYP3A-dependent metabolism. J Pharmacol Exp Ther 283(3):1552-1562, 1997."
+
+[Drozdzik2018]
+citation = "Drozdzik M, Busch D, Lapczuk J, Müller J, Ostrowski M, Kurzawski M, Oswald S. Protein abundance of clinically relevant drug-metabolizing enzymes in the human liver and intestine: a comparative analysis in paired tissue specimens. Clin Pharmacol Ther 104(3):515-524, 2018. Abstract read (Europe PMC, 2026-10-25); the full text is not open access."
+doi = "10.1002/cpt.967"
+
+[Yu1999]
+citation = "Yu LX, Amidon GL. A compartmental absorption and transit model for estimating oral drug absorption. Int J Pharm 186(2):119-125, 1999."
+doi = "10.1016/S0378-5173(99)00147-7"
+
+[Scotcher2016]
+citation = "Scotcher D, Jones C, Rostami-Hodjegan A, Galetin A. Novel minimal physiologically-based model for the prediction of passive tubular reabsorption and renal excretion clearance. Eur J Pharm Sci 94:59-71, 2016."
+doi = "10.1016/j.ejps.2016.03.018"
+
+[Huang2018]
+citation = "Huang W, Isoherranen N. Development of a dynamic physiologically based mechanistic kidney model to predict renal clearance. CPT Pharmacometrics Syst Pharmacol 7(9):593-602, 2018."
+doi = "10.1002/psp4.12321"
+
+
+[Drozdzik2020]
+citation = "Drozdzik M, Szelag-Pieniek S, Post M, Zeair S, Wrzesinski M, Kurzawski M, Prieto J, Oswald S. Protein abundance of hepatic drug transporters in patients with different forms of liver damage. Clin Pharmacol Ther 107(5):1138-1148, 2020."
+doi = "10.1002/cpt.1717"
+
+[Drozdzik2021]
+citation = "Drozdzik M, Lapczuk-Romanska J, Wenzel C, Szelag-Pieniek S, Post M, Skalski Ł, Kurzawski M, Oswald S. Gene expression and protein abundance of hepatic drug metabolizing enzymes in liver pathology. Pharmaceutics 13(9):1334, 2021."
+doi = "10.3390/pharmaceutics13091334"
+
+[ElKhateeb2021]
+citation = "El-Khateeb E, Achour B, Al-Majdoub ZM, Barber J, Rostami-Hodjegan A. Non-uniformity of changes in drug-metabolizing enzymes and transporters in liver cirrhosis: implications for drug dosage adjustment. Mol Pharm 18(9):3563-3577, 2021."
+doi = "10.1021/acs.molpharmaceut.1c00462"
+
+
+
+[Yoshida2016]
+citation = "Yoshida K, Sun B, Zhang L, Zhao P, Abernethy DR, Nolin TD, Rostami-Hodjegan A, Zineh I, Huang SM. Systematic and quantitative assessment of the effect of chronic kidney disease on CYP2D6 and CYP3A4/5. Clin Pharmacol Ther 100(1):75-87, 2016."
+doi = "10.1002/cpt.337"
+
+[Tan2018]
+citation = "Tan ML, Yoshida K, Zhao P, Zhang L, Nolin TD, Piquette-Miller M, Galetin A, Huang SM. Effect of chronic kidney disease on nonrenal elimination pathways: a systematic assessment of CYP1A2, CYP2C8, CYP2C9, CYP2C19, and OATP. Clin Pharmacol Ther 103(5):854-867, 2018."
+doi = "10.1002/cpt.807"
+
+[Rasool2015]
+citation = "Rasool MF, Khalil F, Läer S. A physiologically based pharmacokinetic drug-disease model to predict carvedilol exposure in adult and paediatric heart failure patients by incorporating pathophysiological changes in hepatic and renal blood flows. Clin Pharmacokinet 54(9):943-962, 2015."
+doi = "10.1007/s40262-015-0253-7"
+
+[Gu2025]
+citation = "Gu W, Shao Q, Jiang L. Predicting pharmacokinetics of drugs in patients with heart failure and optimizing their dosing strategies using a physiologically based pharmacokinetic model. Pharmaceutics 17(11):1394, 2025."
+doi = "10.3390/pharmaceutics17111394"
+
+[McNamara2002]
+citation = "McNamara PJ, Alcorn J. Protein binding predictions in infants. AAPS PharmSci 4(1):E4, 2002."
+doi = "10.1208/ps040104"
+
+[Alasmari2023]
+citation = "Alasmari F, Alasmari MS, Muwainea HM, Alomar HA, Alasmari AF, Alsanea S, Alshamsan A, Rasool MF, Alqahtani F. Physiologically-based pharmacokinetic modeling for single and multiple dosing regimens of ceftriaxone in healthy and chronic kidney disease populations: a tool for model-informed precision dosing. Front Pharmacol 14:1200828, 2023."
+doi = "10.3389/fphar.2023.1200828"
+
+[Huang2017]
+citation = "Huang MJ, Wei RB, Wang Y, Su TY, Di P, Li QP, Yang X, Li P, Chen XM. Blood coagulation system in patients with chronic kidney disease: a prospective observational study. BMJ Open 7(5):e014294, 2017."
+doi = "10.1136/bmjopen-2016-014294"
+
+[Klammt2012]
+citation = "Klammt S, Wojak HJ, Mitzner A, Koball S, Rychly J, Reisinger EC, Mitzner S. Albumin-binding capacity (ABiC) is reduced in patients with chronic kidney disease along with an accumulation of protein-bound uraemic toxins. Nephrol Dial Transplant 27(6):2377-2383, 2012 (the abstract read)."
+doi = "10.1093/ndt/gfr616"
+
+[Schmulenson2018]
+citation = "Schmulenson E, Schlender JF, Frechen S, Jaehde U. A physiologically-based pharmacokinetic modeling approach to assess the impact of chronic kidney disease. PAGE 27 (2018), Abstr 8630, poster IV-61, https://www.page-meeting.org/?abstract=8630 (the poster read: https://www.page-meeting.org/pdf_assets/1160-Schmulenson_PAGE2018.pdf)."
+
+[Ring2017]
+citation = "Ring CL, Pearce RG, Setzer RW, Wetmore BA, Wambaugh JF. Identifying populations sensitive to environmental chemicals by simulating toxicokinetic variability. Environ Int 106:105-118, 2017."
+doi = "10.1016/j.envint.2017.06.004"
+
+[NHANES2013_2018]
+citation = "Centers for Disease Control and Prevention, National Center for Health Statistics. National Health and Nutrition Examination Survey (NHANES) 2013-2014, 2015-2016 and 2017-2018, demographics, body measures and laboratory data (public domain). https://wwwn.cdc.gov/nchs/nhanes/ (accessed 2026-10-25). Read as the data set `mecdt` of the R package httk 2.7.4, see `httk`."
+
+[httk]
+citation = "Pearce RG, Setzer RW, Strope CL, Wambaugh JF, Sipes NS. httk: R package for high-throughput toxicokinetics. J Stat Softw 79(4):1-26, 2017. R package httk version 2.7.4 (CRAN, 2025-12-08), MIT license, copyright 2025 John Wambaugh; the data set mecdt of HTTK-Pop (Ring 2017) holds the preprocessed NHANES 2013-2018 respondents."
+doi = "10.18637/jss.v079.i04"
+
+[Tanaka1996]
+citation = "Tanaka G, Kawamura H. Anatomical and physiological characteristics for Asian reference man: male and female of different ages: Tanaka model. NIRS-M-115, National Institute of Radiological Sciences, Hitachinaka, Japan, 1996. https://repo.qst.go.jp/records/73628 (accessed 2026-10-25)."
+
+[Yau2020]
+citation = "Yau E, Olivares-Morales A, Gertz M, Parrott N, Darwich AS, Aarons L, Ogungbenro K. Global sensitivity analysis of the Rodgers and Rowland model for prediction of tissue:plasma partitioning coefficients: assessment of the key physiological and physicochemical factors that determine small-molecule tissue distribution. AAPS J 22(2):41, 2020 (accepted manuscript, KTH DiVA diva2:1391464, accessed 2026-10-25)."
+doi = "10.1208/s12248-020-0418-7"
+
+[Coutinho2024]
+citation = "Coutinho AL, Cristofoletti R, Wu F, Al Shoyaib A, Dressman J, Polli JE. Relative performance of volume of distribution prediction methods for lipophilic drugs with uncertainty in LogP value. Pharm Res 41(6):1121-1138, 2024 (open access, CC BY 4.0)."
+doi = "10.1007/s11095-024-03703-4"
+
+[Utsey2020]
+citation = "Utsey K, Gastonguay MS, Russell S, Freling R, Riggs MM, Elmokadem A. Quantification of the impact of partition coefficient prediction methods on physiologically based pharmacokinetic model output using a standardized tissue composition. Drug Metab Dispos 48(10):903-916, 2020 (open access, CC BY 4.0); the Rodgers & Rowland tissue composition is the file data/tissue_comp_R&R.csv of the repository of the article, https://github.com/metrumresearchgroup/PBPK_PC (commit 75a594462625fd9cae29761716c1d282b779e8b9, accessed 2026-11-02)."
+doi = "10.1124/dmd.120.090498"
+
+[Ye2016]
+citation = "Ye M, Nagar S, Korzekwa K. A physiologically based pharmacokinetic model to predict the pharmacokinetics of highly protein-bound drugs and the impact of errors in plasma protein binding. Biopharm Drug Dispos 37(3):123-141, 2016 (author manuscript PMC4844798)."
+doi = "10.1002/bdd.1996"
+
+[Prasad2018]
+citation = "Prasad B, Bhatt DK, Johnson K, Chapa R, Chu X, Salphati L, Xiao G, Lee C, Hop CE, Mathias A, Lai Y, Liao M, Humphreys WG, Kumer SC, Unadkat JD. Abundance of phase 1 and 2 drug-metabolizing enzymes in alcoholic and hepatitis C cirrhotic livers: a quantitative targeted proteomics study. Drug Metab Dispos 46(7):943-952, 2018."
+doi = "10.1124/dmd.118.080523"
+
+# The studies of the physiology of cirrhosis: the primary studies which Li 2015
+# tabulate (their supplement, read through `via = "Li2015"`) and the cohorts with
+# the MELD score by Child-Pugh class. The DOIs were checked against Crossref and the
+# PubMed ids of the sources without a DOI against PubMed (2026-11-05).
+
+[Li2015]
+citation = "Li R, Barton H, Maurer T. A Mechanistic Pharmacokinetic Model for Liver Transporter Substrates Under Liver Cirrhosis Conditions. CPT Pharmacometrics Syst Pharmacol 4(6):338-349, 2015."
+doi = "10.1002/psp4.39"
+
+[Alberino2001]
+citation = "Alberino F, Gatta A, Amodio P, Merkel C, Di Pascoli L, Boffo G, Caregaro L. Nutrition and survival in patients with liver cirrhosis. Nutrition 17(6):445-450, 2001."
+doi = "10.1016/s0899-9007(01)00521-4"
+
+[Annet2003]
+citation = "Annet L, Materne R, Danse E, Jamart J, Horsmans Y, Van Beers BE. Hepatic Flow Parameters Measured with MR Imaging and Doppler US: Correlations with Degree of Cirrhosis and Portal Hypertension. Radiology 229(2):409-414, 2003."
+doi = "10.1148/radiol.2292021128"
+
+[Boker2000]
+citation = "Böker KH, Franzen A, Wrobel M, Bahr MJ, Tietge U, Manns MP. Regulation of hepatic blood flow in patients with liver cirrhosis and after liver transplantation. Pathophysiology 6(4):251-260, 2000."
+doi = "10.1016/s0928-4680(99)00024-3"
+
+[Chawla1998]
+citation = "Chawla Y, Radha NS, Jang KD, Dilawari B. Portal Hemodynamics by Duplex Doppler Sonography in Different Grades of Cirrhosis. Dig Dis Sci 43(2):354-357, 1998."
+doi = "10.1023/a:1018814624307"
+
+[Dincer2005]
+citation = "Dincer D, Besisk F, Demirkol O, Demir K, Kaymakoglu S, Cakaloglu Y, Okten A. Relationships between hemodynamic alterations and Child-Pugh Score in patients with cirrhosis. Hepatogastroenterology 52(65):1521-1525, 2005. PMID 16201110."
+
+[Froomes1999]
+citation = "Froomes PR, Morgan DJ, Smallwood RA, Angus PW. Comparative effects of oxygen supplementation on theophylline and acetaminophen clearance in human cirrhosis. Gastroenterology 116(4):915-920, 1999."
+doi = "10.1016/s0016-5085(99)70075-2"
+
+[Henriksen2001]
+citation = "Henriksen JH, Bendtsen F, Møller S. Normal red cell cardiac output in the hyperkinetic syndrome of alcoholic cirrhosis. J Hepatol 34(5):782-783, 2001."
+doi = "10.1016/s0168-8278(01)00019-8"
+
+[Hong2025]
+citation = "Hong SJ, Kim JE, Cho JM, Choi HC, Park MJ, Choi HY, Shin HS, Won JH, Yang W, Kim HO. Dual Energy CT-Derived Liver Extracellular Volume Fraction for Assessing Liver Functional Reserve in Patients with Liver Cirrhosis. Medicina 61(9):1561, 2025."
+doi = "10.3390/medicina61091561"
+
+[Iwao1997]
+citation = "Iwao T, Oho K, Sakai T, Tayama C, Sato M, Nakano R, Yamawaki M, Toyonaga A, Tanikawa K. Splanchnic and extrasplanchnic arterial hemodynamics in patients with cirrhosis. J Hepatol 27(5):817-823, 1997."
+doi = "10.1016/s0168-8278(97)80318-2"
+
+[Kayacetin2004]
+citation = "Kayacetin E, Efe D, Doğan C. Portal and splenic hemodynamics in cirrhotic patients: relationship between esophageal variceal bleeding and the severity of hepatic failure. J Gastroenterol 39(7):661-667, 2004."
+doi = "10.1007/s00535-003-1362-x"
+
+[Kim2020]
+citation = "Kim TH, Yun SG, Choi J, Goh HG, Lee HA, Yim SY, Choi SJ, Lee YS, Yoon EL, Jung YK, Seo YS, Kim JH, Yim HJ, Yeon JE, Byun KS, Um SH. Differential Impact of Serum 25-Hydroxyvitamin D3 Levels on the Prognosis of Patients with Liver Cirrhosis According to MELD and Child-Pugh Scores. J Korean Med Sci 35(19):e129, 2020."
+doi = "10.3346/jkms.2020.35.e129"
+
+[Kwon2001]
+citation = "Kwon HA, Matsui Y, Ha-Kawa SK, Kamiyama Y. Functional Hepatic Volume Measured by Technetium-99M-Galactosyl-Human Serum Albumin Liver Scintigraphy: Comparison Between Hepatocyte Volume and Liver Volume by Computed Tomography. Am J Gastroenterol 96(2):541-546, 2001."
+doi = "10.1111/j.1572-0241.2001.03556.x"
+
+
+[Lin1998]
+citation = "Lin XZ, Sun YN, Liu YH, Sheu BS, Cheng BN, Chen CY, Tsai HM, Shen CL. Liver volume in patients with or without chronic liver diseases. Hepatogastroenterology 45(22):1069-1074, 1998. PMID 9756008."
+
+[Liu2006]
+citation = "Liu T, Wong W, Hou M, Lin H, Chang F, Lee S. Hemorheology in patients with liver cirrhosis: Special emphasis on its relation to severity of esophageal variceal bleeding. J Gastroenterol Hepatol 21(5):908-913, 2006."
+doi = "10.1111/j.1440-1746.2006.04266.x"
+
+[Matsui1996]
+citation = "Matsui Y, Tu W, Kitade H, Nakagawa A, Kamiya T, Kwon A, Uetsuji S, Kamiyama Y. Hepatocyte volume as an indicator of hepatic functional reserve in cirrhotic patients with liver tumours. J Gastroenterol Hepatol 11(6):540-545, 1996."
+doi = "10.1111/j.1440-1746.1996.tb01699.x"
+
+[Mesropyan2022]
+citation = "Mesropyan N, Kupczyk PA, Dold L, Praktiknjo M, Chang J, Isaak A, Endler C, Kravchenko D, Bischoff LM, Sprinkart AM, Pieper CC, Kuetting D, Jansen C, Attenberger UI, Luetkens JA. Assessment of liver cirrhosis severity with extracellular volume fraction MRI. Sci Rep 12(1):9422, 2022."
+doi = "10.1038/s41598-022-13340-9"
+
+[Sudhamshu2006]
+citation = "Sudhamshu KC, Matsutani S, Maruyama H, Akiike T, Saisho H. Doppler study of hepatic vein in cirrhotic patients: Correlation with liver dysfunction and hepatic hemodynamics. World J Gastroenterol 12(36):5853-5858, 2006."
+doi = "10.3748/wjg.v12.i36.5853"
+
+[VanBeers2001]
+citation = "Van Beers BE, Leconte I, Materne R, Smith AM, Jamart J, Horsmans Y. Hepatic Perfusion Parameters in Chronic Liver Disease. AJR Am J Roentgenol 176(3):667-673, 2001."
+doi = "10.2214/ajr.176.3.1760667"
+
+[Viani1992]
+citation = "Viani A, Rizzo G, Carrai M, Pacifici GM. Interindividual variability in the concentrations of albumin and alpha-1-acid glycoprotein in patients with renal or liver disease, newborns and healthy subjects: implications for binding of drugs. Int J Clin Pharmacol Ther Toxicol 30(4):128-133, 1992. PMID 1572757."
+
+[Woitas2000]
+citation = "Woitas RP, Stoffel-Wagner B, Flommersfeld S, Poege U, Schiedermaier P, Klehr HU, Spengler U, Bidlingmaier F, Sauerbruch T. Correlation of Serum Concentrations of Cystatin C and Creatinine to Inulin Clearance in Liver Cirrhosis. Clin Chem 46(5):712-715, 2000."
+doi = "10.1093/clinchem/46.5.712"
+
+[Wong2001]
+citation = "Wong F, Girgrah N, Graba J, Allidina Y, Liu P, Blendis L. The cardiac response to exercise in cirrhosis. Gut 49(2):268-275, 2001."
+doi = "10.1136/gut.49.2.268"
+
+[Xu2026]
+citation = "Xu L, Jiang B, Ma Y, Pan J, Liang M, Du Q, Wu H, Cheng Z, Lu D. Comparison of Child-Pugh and MELD scores in predicting survival of hepatocellular carcinoma patients with splenomegaly undergoing TACE: a real-world study. Front Med 13:1804646, 2026."
+doi = "10.3389/fmed.2026.1804646"
+
+[Yang2020]
+citation = "Yang M, Zhang Y, Zhao W, Cheng W, Wang H, Guo S. Evaluation of liver function using liver parenchyma, spleen and portal vein signal intensities during the hepatobiliary phase in Gd-EOB-D TPA-enhanced MRI. BMC Med Imaging 20(1):119, 2020."
+doi = "10.1186/s12880-020-00519-7"
+
+[Zhu1999]
+citation = "Zhu JY, Leng XS, Dong N, Qi GY, Du RY. Measurement of liver volume and its clinical significance in cirrhotic portal hypertensive patients. World J Gastroenterol 5(6):525-526, 1999."
+doi = "10.3748/wjg.v5.i6.525"
+
+[Wang2016]
+citation = "Wang L, Collins C, Kelly EJ, Chu X, Ray AS, Salphati L, Xiao G, Lee C, Lai Y, Liao M, Mathias A, Evers R, Humphreys W, Hop CE, Kumer SC, Unadkat JD. Transporter Expression in Liver Tissue from Subjects with Alcoholic or Hepatitis C Cirrhosis Quantified by Targeted Quantitative Proteomics. Drug Metab Dispos 44(11):1752-1758, 2016."
+doi = "10.1124/dmd.116.071050"
+
+# The studies of the physiology of chronic kidney disease by its stage, open
+# access; the DOIs as the full texts give them (2026-11-05).
+
+[Lin2017]
+citation = "Lin HY, Lee YL, Lin KD, Chiu YW, Shin SJ, Hwang SJ, Chen HC, Hung CC. Association of Renal Elasticity and Renal Function Progression in Patients with Chronic Kidney Disease Evaluated by Real-Time Ultrasound Elastography. Sci Rep 7:43303, 2017."
+doi = "10.1038/srep43303"
+
+[Panjeta2017]
+citation = "Panjeta M, Tahirović I, Sofić E, Ćorić J, Dervišević A. Interpretation of Erythropoietin and Haemoglobin Levels in Patients with Various Stages of Chronic Kidney Disease. J Med Biochem 36(2):145-152, 2017."
+doi = "10.1515/jomb-2017-0014"
+
+[Zakiyanov2013]
+citation = "Zakiyanov O, Kriha V, Vachek J, Zima T, Tesar V, Kalousova M. Placental growth factor, pregnancy-associated plasma protein-A, soluble receptor for advanced glycation end products, extracellular newly identified receptor for receptor for advanced glycation end products binding protein and high mobility group box 1 levels in patients with acute kidney injury: a cross sectional study. BMC Nephrol 14:245, 2013."
+doi = "10.1186/1471-2369-14-245"
+
+[Kang2017]
+citation = "Kang E, Han M, Kim H, Park SK, Lee J, Hyun YY, Kim YS, Chung W, Kim HJ, Oh YK, Ahn C, Oh KH. Baseline General Characteristics of the Korean Chronic Kidney Disease: Report from the KoreaN Cohort Study for Outcomes in Patients With Chronic Kidney Disease (KNOW-CKD). J Korean Med Sci 32(2):221-230, 2017."
+doi = "10.3346/jkms.2017.32.2.221"
+
+[Kim2017]
+citation = "Kim H, Yoo TH, Choi KH, Oh KH, Lee J, Kim SW, Kim TH, Sung S, Han SH; KNOW-CKD Group. Baseline Cardiovascular Characteristics of Adult Patients with Chronic Kidney Disease from the KoreaN Cohort Study for Outcomes in Patients With Chronic Kidney Disease (KNOW-CKD). J Korean Med Sci 32(2):231-239, 2017."
+doi = "10.3346/jkms.2017.32.2.231"
+
+[Taal2023]
+citation = "Taal MW, Lucas B, Roderick P, Cockwell P, Wheeler DC, Saleem MA, Fraser SDS, Banks RE, Johnson T, Hale LJ, Andag U, Skroblin P, Bayerlova M, Unwin R, Vuilleumier N, Dusaulcy R, Robertson F, Colby E, Pitcher D, Braddon F, Benavente M, Davies E, Nation M, Kalra PA. Associations with age and glomerular filtration rate in a referred population with chronic kidney disease: methods and baseline data from a UK multicentre cohort study (NURTuRE-CKD). Nephrol Dial Transplant 38(11):2617-2626, 2023."
+doi = "10.1093/ndt/gfad110"
+
+[Lash2009]
+citation = "Lash JP, Go AS, Appel LJ, He J, Ojo A, Rahman M, Townsend RR, Xie D, Cifelli D, Cohan J, Fink JC, Fischer MJ, Gadegbeku C, Hamm LL, Kusek JW, Landis JR, Narva A, Robinson N, Teal V, Feldman HI; CRIC Study Group. Chronic Renal Insufficiency Cohort (CRIC) Study: baseline characteristics and associations with kidney function. Clin J Am Soc Nephrol 4(8):1302-1311, 2009."
+doi = "10.2215/CJN.00070109"
+
+[ZhangX2024]
+citation = "Zhang X, Ye C, Lu F, Yang J, Xu Y, Wang C. Evaluation of renal oxygenation and perfusion in patients with chronic kidney disease: a preliminary prospective study based on functional magnetic resonance. Ren Fail 46(2):2428337, 2024."
+doi = "10.1080/0886022X.2024.2428337"
+
+[Brown2020]
+citation = "Brown RS, Sun MRM, Stillman IE, Russell TL, Rosas SE, Wei JL. The utility of magnetic resonance imaging for noninvasive evaluation of diabetic nephropathy. Nephrol Dial Transplant 35(6):970-978, 2020."
+doi = "10.1093/ndt/gfz066"
+
+[LiLP2017]
+citation = "Li LP, Tan H, Thacker JM, Li W, Zhou Y, Kohn O, Sprague SM, Prasad PV. Evaluation of Renal Blood Flow in Chronic Kidney Disease Using Arterial Spin Labeling Perfusion Magnetic Resonance Imaging. Kidney Int Rep 2(1):36-43, 2017."
+doi = "10.1016/j.ekir.2016.09.003"
+
+[Cox2017]
+citation = "Cox EF, Buchanan CE, Bradley CR, Prestwich B, Mahmoud H, Taal M, Selby NM, Francis ST. Multiparametric Renal Magnetic Resonance Imaging: Validation, Interventions, and Alterations in Chronic Kidney Disease. Front Physiol 8:696, 2017."
+doi = "10.3389/fphys.2017.00696"
+
+[Buchanan2020]
+citation = "Buchanan CE, Mahmoud H, Cox EF, McCulloch T, Prestwich BL, Taal MW, Selby NM, Francis ST. Quantitative assessment of renal structural and functional changes in chronic kidney disease using multi-parametric magnetic resonance imaging. Nephrol Dial Transplant 35(6):955-964, 2020."
+doi = "10.1093/ndt/gfz129"
+
+[VukmirovicPapuga2022]
+citation = "Vukmirović Papuga M, Bukumirić Z, Ilinčić B, Mijović R, Šašić Ostojić T, Žeravica R. Serum Uromodulin, a Potential Biomarker of Tubulointerstitial Damage, Correlates Well with Measured GFR and ERPF in Patients with Obstructive Nephropathy. Medicina (Kaunas) 58(12):1729, 2022."
+doi = "10.3390/medicina58121729"
+
+[Ilincic2025]
+citation = "Ilinčić B, Žeravica R, Mijović R, Isenović E, Burić D, Žuvić D, Čabarkapa V. Tubular functional capacity and maladaptive parathyroid hormone response in early-stage chronic kidney disease. Biomol Biomed 26(8):1357-1367, 2025."
+doi = "10.17305/bb.2025.13395"
+
+[Prasad2015]
+citation = "Prasad PV, Thacker J, Li LP, Haque M, Li W, Koenigs H, Zhou Y, Sprague SM. Multi-Parametric Evaluation of Chronic Kidney Disease by MRI: A Preliminary Cross-Sectional Study. PLoS One 10(10):e0139661, 2015."
+doi = "10.1371/journal.pone.0139661"
+
+[Luo2024]
+citation = "Luo H, Li J, Huang H, Jiao L, Zheng S, Ying Y, Li Q. AI-based segmentation of renal enhanced CT images for quantitative evaluate of chronic kidney disease. Sci Rep 14:16890, 2024."
+doi = "10.1038/s41598-024-67658-7"
+
+[Guo2026]
+citation = "Guo L, Ran L, Wu Q, Zhang Y, Gao Y, Zhou X, Li J, Li J. Shear wave elastography and ultrasonic multi-parameter score for the identification of moderate-to-severe chronic kidney disease. BMC Med Imaging 26:452, 2026."
+doi = "10.1186/s12880-026-02439-4"
+
+[ZhangDL2024]
+citation = "Zhang DL, Chen S, Xu JM, Na-Lin, Wu HY, Zhou JM, Chen ZP, Huang XR, Wei LX, Liu DX. The value of tissue quantitative diffusion analysis of ultrasound elastography in the diagnosis of early-stage chronic kidney disease. BMC Nephrol 25:328, 2024."
+doi = "10.1186/s12882-024-03762-0"
+
+[SallesJunior2013]
+citation = "Salles Junior LD, Santos PR, dos Santos AA, de Souza MHLP. Dyspepsia and gastric emptying in end-stage renal disease patients on hemodialysis. BMC Nephrol 14:275, 2013."
+doi = "10.1186/1471-2369-14-275"
+
+# The studies of the physiology of chronic heart failure, open access or free
+# full text; the DOIs as the full texts give them (2026-11-05).
+
+[Aquilani2017]
+citation = "Aquilani R, La Rovere MT, Corbellini D, Pasini E, Verri M, Barbieri A, Condino AM, Boschi F. Plasma Amino Acid Abnormalities in Chronic Heart Failure. Mechanisms, Potential Risks and Targets in Human Myocardium Metabolism. Nutrients 9(11):1251, 2017."
+doi = "10.3390/nu9111251"
+
+[Yamabe1992]
+citation = "Yamabe H, Itoh K, Yasaka Y, Kakimoto T, Yokoyama M. The distribution of the blood flow during exercise in chronic heart failure: compensatory mechanism to the decreased cardiac output. Jpn Circ J 56(5):494-499, 1992."
+doi = "10.1253/jcj.56.494"
+
+[Wojciechowska2014]
+citation = "Wojciechowska C, Romuk E, Tomasik A, Skrzep-Poloczek B, Nowalany-Kozielska E, Birkner E, Jacheć W. Oxidative stress markers and C-reactive protein are related to severity of heart failure in patients with dilated cardiomyopathy. Mediators Inflamm 2014:147040, 2014."
+doi = "10.1155/2014/147040"
+
+[Carlsson2012]
+citation = "Carlsson M, Andersson R, Bloch KM, Steding-Ehrenborg K, Mosén H, Stahlberg F, Ekmehag B, Arheden H. Cardiac output and cardiac index measured with cardiovascular magnetic resonance in healthy subjects, elite athletes and patients with congestive heart failure. J Cardiovasc Magn Reson 14(1):51, 2012."
+doi = "10.1186/1532-429X-14-51"
+
+[Myers1948]
+citation = "Myers JD, Hickam JB. An estimation of the hepatic blood flow and splanchnic oxygen consumption in heart failure. J Clin Invest 27(5):620-627, 1948."
+doi = "10.1172/JCI102008"
+
+[Muller1992]
+citation = "Muller AF, Batin P, Evans S, Hawkins M, Cowley AJ. Regional blood flow in chronic heart failure: the reason for the lack of correlation between patients' exercise tolerance and cardiac output? Br Heart J 67(6):478-481, 1992."
+doi = "10.1136/hrt.67.6.478"
+
+[Mokotoff1948]
+citation = "Mokotoff R, Ross G, Leiter L. Renal plasma flow and sodium reabsorption and excretion in congestive heart failure. J Clin Invest 27(1):1-9, 1948."
+doi = "10.1172/JCI101911"
+
+[Jung2021]
+citation = "Jung S, Bosch A, Kolwelter J, Striepe K, Kannenkeril D, Schuster T, Ott C, Achenbach S, Schmieder RE. Renal and intraglomerular haemodynamics in chronic heart failure with preserved and reduced ejection fraction. ESC Heart Fail 8(2):1562-1570, 2021."
+doi = "10.1002/ehf2.13257"
+
+[Zelis1968]
+citation = "Zelis R, Mason DT, Braunwald E. A comparison of the effects of vasodilator stimuli on peripheral resistance vessels in normal subjects and in patients with congestive heart failure. J Clin Invest 47(4):960-970, 1968."
+doi = "10.1172/JCI105788"
+
+[Mason1964]
+citation = "Mason DT, Braunwald E. Studies on digitalis. X. Effects of ouabain on forearm vascular resistance and venous tone in normal subjects and in patients in heart failure. J Clin Invest 43(3):532-543, 1964."
+doi = "10.1172/JCI104939"
+
+# The definitions of the classes, the background of the conditions and the
+# methods of the integration, cited by the documentation; the DOIs checked
+# against Crossref (2026-11-05). A guidance or a book has no DOI.
+
+[Pugh1973]
+citation = "Pugh RNH, Murray-Lyon IM, Dawson JL, Pietroni MC, Williams R. Transection of the oesophagus for bleeding oesophageal varices. Br J Surg 60(8):646-649, 1973."
+doi = "10.1002/bjs.1800600817"
+
+[ChildTurcotte1964]
+citation = "Child CG, Turcotte JG. Surgery and portal hypertension. In: Child CG (ed.), The Liver and Portal Hypertension. Major Probl Clin Surg 1:1-85, 1964."
+
+[Malinchoc2000]
+citation = "Malinchoc M, Kamath PS, Gordon FD, Peine CJ, Rank J, ter Borg PC. A model to predict poor survival in patients undergoing transjugular intrahepatic portosystemic shunts. Hepatology 31(4):864-871, 2000."
+doi = "10.1053/he.2000.5852"
+
+[Kamath2001]
+citation = "Kamath PS, Wiesner RH, Malinchoc M, Kremers W, Therneau TM, Kosberg CL, D'Amico G, Dickson ER, Kim WR. A model to predict survival in patients with end-stage liver disease. Hepatology 33(2):464-470, 2001."
+doi = "10.1053/jhep.2001.22172"
+
+[Wiesner2003]
+citation = "Wiesner R, Edwards E, Freeman R, Harper A, Kim R, Kamath P, Kremers W, Lake J, Howard T, Merion RM, Wolfe RA, Krom R. Model for end-stage liver disease (MELD) and allocation of donor livers. Gastroenterology 124(1):91-96, 2003."
+doi = "10.1053/gast.2003.50016"
+
+[Kim2008]
+citation = "Kim WR, Biggins SW, Kremers WK, Wiesner RH, Kamath PS, Benson JT, Edwards E, Therneau TM. Hyponatremia and mortality among patients on the liver-transplant waiting list. N Engl J Med 359(10):1018-1026, 2008."
+doi = "10.1056/NEJMoa0801209"
+
+[Iwakiri2014]
+citation = "Iwakiri Y. Pathophysiology of portal hypertension. Clin Liver Dis 18(2):281-291, 2014."
+doi = "10.1016/j.cld.2013.12.001"
+
+[Wilkinson1975]
+citation = "Wilkinson GR, Shand DG. A physiological approach to hepatic drug clearance. Clin Pharmacol Ther 18(4):377-390, 1975."
+doi = "10.1002/cpt1975184377"
+
+[Verbeeck2008]
+citation = "Verbeeck RK. Pharmacokinetics and dosage adjustment in patients with hepatic dysfunction. Eur J Clin Pharmacol 64(12):1147-1161, 2008."
+doi = "10.1007/s00228-008-0553-z"
+
+[Edginton2008]
+citation = "Edginton AN, Willmann S. Physiology-based simulations of a pathological condition: prediction of pharmacokinetics in patients with liver cirrhosis. Clin Pharmacokinet 47(11):743-752, 2008."
+doi = "10.2165/00003088-200847110-00005"
+
+[Johnson2010]
+citation = "Johnson TN, Boussery K, Rowland-Yeo K, Tucker GT, Rostami-Hodjegan A. A semi-mechanistic model to predict the effects of liver cirrhosis on drug clearance. Clin Pharmacokinet 49(3):189-206, 2010."
+doi = "10.2165/11318160-000000000-00000"
+
+[Gines2018]
+citation = "Ginès P, Solà E, Angeli P, Wong F, Nadim MK, Kamath PS. Hepatorenal syndrome. Nat Rev Dis Primers 4(1):23, 2018."
+doi = "10.1038/s41572-018-0022-7"
+
+[KDIGO2012]
+citation = "Kidney Disease: Improving Global Outcomes (KDIGO) CKD Work Group. KDIGO 2012 clinical practice guideline for the evaluation and management of chronic kidney disease. Chapter 1: Definition and classification of CKD. Kidney Int Suppl 3(1):19-62, 2013."
+doi = "10.1038/kisup.2012.64"
+
+[Levey2005]
+citation = "Levey AS, Eckardt KU, Tsukamoto Y, Levin A, Coresh J, Rossert J, de Zeeuw D, Hostetter TH, Lameire N, Eknoyan G. Definition and classification of chronic kidney disease: a position statement from Kidney Disease: Improving Global Outcomes (KDIGO). Kidney Int 67(6):2089-2100, 2005."
+doi = "10.1111/j.1523-1755.2005.00365.x"
+
+[Bricker1960]
+citation = "Bricker NS, Morrin PA, Kime SW Jr. The pathologic physiology of chronic Bright's disease. An exposition of the intact nephron hypothesis. Am J Med 28:77-98, 1960."
+doi = "10.1016/0002-9343(60)90225-4"
+
+[Verbeeck2009]
+citation = "Verbeeck RK, Musuamba FT. Pharmacokinetics and dosage adjustment in patients with renal dysfunction. Eur J Clin Pharmacol 65(8):757-773, 2009."
+doi = "10.1007/s00228-009-0678-8"
+
+[Nolin2008]
+citation = "Nolin TD, Naud J, Leblond FA, Pichette V. Emerging evidence of the impact of kidney disease on drug metabolism and transport. Clin Pharmacol Ther 83(6):898-903, 2008."
+doi = "10.1038/clpt.2008.59"
+
+[FDA2024Renal]
+citation = "U.S. Food and Drug Administration. Pharmacokinetics in Patients with Impaired Renal Function - Study Design, Data Analysis, and Impact on Dosing. Guidance for Industry, 2024. https://www.fda.gov/media/78573/download"
+
+[FDA2003Hepatic]
+citation = "U.S. Food and Drug Administration. Pharmacokinetics in Patients with Impaired Hepatic Function: Study Design, Data Analysis, and Impact on Dosing and Labeling. Guidance for Industry, 2003. https://www.fda.gov/media/71311/download"
+
+[EMA2015Renal]
+citation = "European Medicines Agency. Guideline on the evaluation of the pharmacokinetics of medicinal products in patients with decreased renal function. EMA/CHMP/83874/2014, 2015."
+
+[EMA2005Hepatic]
+citation = "European Medicines Agency. Guideline on the evaluation of the pharmacokinetics of medicinal products in patients with impaired hepatic function. CPMP/EWP/2339/02, 2005."
+
+[NYHA1994]
+citation = "The Criteria Committee of the New York Heart Association. Nomenclature and Criteria for Diagnosis of Diseases of the Heart and Great Vessels. 9th ed. Boston, Little, Brown & Co, 253-256, 1994."
+
+[Bozkurt2021]
+citation = "Bozkurt B, Coats AJS, Tsutsui H, Abdelhamid CM, Adamopoulos S, Albert N, Anker SD, Atherton J, et al. Universal definition and classification of heart failure: a report of the Heart Failure Society of America, Heart Failure Association of the European Society of Cardiology, Japanese Heart Failure Society and Writing Committee of the Universal Definition of Heart Failure. Eur J Heart Fail 23(3):352-380, 2021."
+doi = "10.1002/ejhf.2115"
+
+[Heidenreich2022]
+citation = "Heidenreich PA, Bozkurt B, Aguilar D, Allen LA, Byun JJ, Colvin MM, Deswal A, Drazner MH, et al. 2022 AHA/ACC/HFSA Guideline for the Management of Heart Failure. Circulation 145(18):e895-e1032, 2022."
+doi = "10.1161/CIR.0000000000001063"
+
+[Leithe1984]
+citation = "Leithe ME, Margorien RD, Hermiller JB, Unverferth DV, Leier CV. Relationship between central hemodynamics and regional blood flow in normal subjects and in patients with congestive heart failure. Circulation 69(1):57-64, 1984."
+doi = "10.1161/01.CIR.69.1.57"
+
+[Shammas1988]
+citation = "Shammas FV, Dickstein K. Clinical pharmacokinetics in heart failure. An updated review. Clin Pharmacokinet 15(2):94-113, 1988."
+doi = "10.2165/00003088-198815020-00002"
+
+[Ronco2008]
+citation = "Ronco C, Haapio M, House AA, Anavekar N, Bellomo R. Cardiorenal syndrome. J Am Coll Cardiol 52(19):1527-1539, 2008."
+doi = "10.1016/j.jacc.2008.07.051"
+
+[DerSimonian1986]
+citation = "DerSimonian R, Laird N. Meta-analysis in clinical trials. Control Clin Trials 7(3):177-188, 1986."
+doi = "10.1016/0197-2456(86)90046-2"
+
+[Higgins2002]
+citation = "Higgins JPT, Thompson SG. Quantifying heterogeneity in a meta-analysis. Stat Med 21(11):1539-1558, 2002."
+doi = "10.1002/sim.1186"
+
+[Higgins2008]
+citation = "Higgins JPT, White IR, Anzures-Cabrera J. Meta-analysis of skewed data: combining results reported on log-transformed or raw scales. Stat Med 27(29):6072-6092, 2008."
+doi = "10.1002/sim.3427"
+
+[Wan2014]
+citation = "Wan X, Wang W, Liu J, Tong T. Estimating the sample mean and standard deviation from the sample size, median, range and/or interquartile range. BMC Med Res Methodol 14:135, 2014."
+doi = "10.1186/1471-2288-14-135"
+
+[Malik2020]
+citation = "Malik PRV, Yeung CHT, Ismaeil S, Advani U, Djie S, Edginton AN. A physiological approach to pharmacokinetics in chronic kidney disease. J Clin Pharmacol 60(S1):S52-S62, 2020."
+doi = "10.1002/jcph.1713"
+
+[Docci1985]
+citation = "Docci D, Bilancioni R, Pistocchi E, Mosconi G, Turci F, Salvi G, Baldrati L, Orsi C. Serum alpha-1-acid glycoprotein in chronic renal failure. Nephron 39(3):160-163, 1985."
+doi = "10.1159/000183364"

@@ -31,7 +31,7 @@ from pkpdsim.pbpk import (
 )
 from pkpdsim.pbpk.builder import built_organs
 from pkpdsim.pbpk.data import load
-from pkpdsim.pbpk.impairment import ckd_unbound_fractions
+from pkpdsim.pbpk.impairment import ckd_unbound_fractions, class_factors
 from pkpdsim.pbpk.physiology import reference_fractions
 
 from .conftest import (
@@ -314,12 +314,14 @@ def test_the_fu_of_the_ckd_stages() -> None:
     """The albumin profile raises fu at every stage, `ckd=False` and no binding none."""
     fu = ckd_unbound_fractions(_floor_drug(1.0))
     assert list(fu) == ["mild", "moderate", "severe", "end stage"]
-    # end stage: the albumin 0.905 times its binding function 0.669
-    factor = 0.905 * 0.669
+    # end stage: the albumin (the consensus of the database) times its
+    # binding function 0.669
+    albumin = class_factors("ckd.binding", "albumin").values[3]
+    factor = albumin * 0.669
     assert fu["end stage"] == pytest.approx(
         1 / (1 + factor * (1 - FU_M1) / FU_M1), rel=1e-12
     )
-    assert fu["end stage"] == pytest.approx(0.212, abs=1e-3)
+    assert fu["end stage"] == pytest.approx(0.221, abs=1e-3)
     assert all(a <= b for a, b in itertools.pairwise(fu.values()))
     assert ckd_unbound_fractions(_floor_drug(1.0, ckd=False)) == {}
     assert ckd_unbound_fractions(dataclasses.replace(simple_drug(), binding=None)) == {}
@@ -381,7 +383,8 @@ def test_an_accepted_floor_is_silent_and_in_the_notes(tmp_path: Path) -> None:
     notes = parameters(result.flat_path)[f"SK__{ids.k_cell_pls('drg')}"][1]
     assert "The model accepts the floor" in notes
     assert REASON in notes
-    assert "end stage (fu 0.2119" in notes
+    end_stage = ckd_unbound_fractions(_floor_drug(1.0))["end stage"]
+    assert f"end stage (fu {end_stage:.4g}" in notes
     other = _floor_drug(1.01 * share, accept={Organ.MUSCLE: REASON})
     with warnings.catch_warnings(record=True) as record:
         warnings.simplefilter("always")

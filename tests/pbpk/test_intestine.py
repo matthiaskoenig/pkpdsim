@@ -1039,8 +1039,8 @@ def test_a_scalar_form_equals_a_mapping_of_every_oral_substance(
         fabs=dict.fromkeys(oral_ids, 0.7),
         f_ka_colon=dict.fromkeys(oral_ids, 0.4),
     )
-    a = build(scalar, tmp_path / "a").flat_path.read_text()
-    b = build(mapped, tmp_path / "b").flat_path.read_text()
+    a = build(scalar, tmp_path / "a").flat_path.read_text(encoding="utf-8")
+    b = build(mapped, tmp_path / "b").flat_path.read_text(encoding="utf-8")
     assert a == b
 
 

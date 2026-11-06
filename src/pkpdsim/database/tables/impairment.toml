@@ -1,0 +1,133 @@
+# The impaired organ function of the library (`pkpdsim.pbpk.impairment`): liver
+# cirrhosis by the Child-Pugh class, chronic kidney disease (CKD) by the stage
+# of the GFR and heart failure by the NYHA class. Every number is a factor on
+# a quantity of the healthy individual (dimensionless, 1 healthy) unless the
+# notes say otherwise. A vector gives the classes in order; `choice` names the
+# classes whose value is a choice of the library and not a value of `source`
+# (the notes give the choice), the SBML notes cite ModelChoice for them.
+#
+# [child_pugh]: the classes A, B, C (`CP_severity` 1, 2, 3; 0 is healthy); a
+# severity between the classes interpolates linearly. A factor which states
+# `consensus` (albumin, hematocrit, cardiac index, the liver volume) is the
+# consensus of the studies of the database on that quantity
+# (`pkpdsim/database/studies`, the kind `physiology`,
+# `pkpdsim.pbpk.impairment.class_factors`): the ratio of each class to the
+# controls of each study, pooled over the studies. The liver volume
+# (`functional_liver`) is the consensus of the volume per body weight, since
+# the protein factors are per amount of tissue (see its notes). The other
+# physiological factors are those of Edginton & Willmann 2008 (Table I, Clin
+# Pharmacokinet 47:743, doi:10.2165/00003088-200847110-00005, the publication
+# read), each from the primary study its footnote names. The enzymes and
+# transporters are no numbers of this table: they are the consensus of the
+# studies of the database on the abundance per amount of liver tissue of each
+# class over the controls (El-Khateeb 2021, Drozdzik 2020, Drozdzik 2021,
+# Prasad 2018 and Wang 2016, whose end-stage livers are assumed to
+# be class C). The MELD score of the classes, the anchors of
+# `pkpdsim.pbpk.impairment.cp_severity_of_meld`, is the consensus of the
+# cohorts of the database as well. The parameters of the Simcyp cirrhosis
+# populations (Johnson 2010, Table III) are in `comparisons.toml` for the
+# comparison, no factor is read from them.
+#
+# The shunt and the portal blood flow (reconciliation): the shunt fractions
+# are the degrees of cirrhosis of the Child-Pugh classes of
+# `pkpdsim.impairment.CIRRHOSIS`, which set the shunt of the portal venous
+# blood and the loss of parenchyma together in the hand-written ICG models.
+# Edginton 2008 (Table I, from Annet 2003) represent the portosystemic shunting by a
+# portal vein flow of 0.40, 0.36 and 0.04 of healthy. Both describe the same
+# portal blood which does not reach the sinusoids; applied together they
+# would count it twice. The library takes the shunt (`f_shunt`): the
+# splanchnic flow of the portal organs is not reduced and the fraction
+# `f_shunt` of the liver inflow bypasses the liver, so the portal blood which
+# perfuses the liver is 0.60, 0.30 and 0.19 of healthy (Edginton 2008: 0.40,
+# 0.36, 0.04). The library's shunt acts on the hepatic arterial inflow as well
+# (the ICG models shunt the portal blood only), so the perfused arterial flow
+# is (1 - f_shunt) times the increased hepatic arterial flow.
+#
+# The hematocrit: cirrhosis and CKD reduce it (anaemia), and the two factors
+# would combine multiplicatively on the hematocrit of the sex of the build
+# (`HCT = HCT_ref*fimp_HCT`). Both factors are the consensus of the studies
+# with a healthy control group: of the hematocrit in cirrhosis (Mesropyan
+# 2022, Wong 2001, Boker 2000), of the hemoglobin in CKD (Panjeta 2017, Lin
+# 2017, Zakiyanov 2013), the hematocrit taken proportional to it.
+#
+# [ckd]: the stages by the GFR per 1.73 m2 of the renal function
+# (`f_renal_function` times the healthy GFR per 1.73 m2 of the reference
+# individual): normal >= 90, mild 60-89, moderate (stage 3) 30-59, severe
+# (stage 4) 15-29, end stage (stage 5) < 15 ml/min/1.73 m2; a vector gives
+# mild, moderate, severe and end stage, normal is 1. The factors interpolate
+# piecewise linearly over the eGFR through anchor points at the stage
+# midpoints (`stage_anchor`: mild at 75, moderate at 45, severe at 22.5, end
+# stage at 7.5 and constant below; 1 from 90 and a linear change from 90 to
+# the mild value), so a scan or fit of `f_renal_function` sees no step at a
+# stage limit. The anchors are a model choice (`ModelChoice`: continuous
+# covariate for scans and fits; stage midpoints), the values of the stages
+# and their sources are unchanged. The hematocrit, the renal blood flow and
+# the albumin of the binding are the consensus of the studies of the database
+# by stage against healthy controls (`consensus`, see the notes). Malik 2020
+# (paywalled) was not read; the effects which PK-Sim takes from it and no open
+# publication read gives with its healthy reference (kidney volume, gastric
+# emptying and small intestinal transit) are 1 with a note. The plasma protein factor is read in Alasmari
+# 2023 (Front Pharmacol 14:1200828, Table 3, CC BY 4.0,
+# doi:10.3389/fphar.2023.1200828), which tabulates it for the stages 3 to 5
+# from Malik 2020; it acts on the binding to an unknown protein only. The
+# binding to albumin and alpha-1-acid glycoprotein has the CKD profile of its
+# protein (`[ckd.binding]`, a row per quantity with its source and the protein
+# it belongs to; the factor of a protein is the product of its rows): the
+# albumin concentration of non-dialysis CKD against healthy controls (Huang
+# 2017), the binding function of the albumin molecule (site II, Klammt 2012)
+# and the concentration of alpha-1-acid glycoprotein (the consensus of Docci
+# 1985 and Zakiyanov 2013 at the end stage, interpolated before it). The hepatic proteins (switch `CKD_hepatic`) are the mean
+# ratios of the unbound clearance of model drugs (Yoshida 2016, Tan 2018),
+# clearances of the drugs, taken as activity of the pathway. The tubular
+# capacity (`tubular_capacity`, a number, not a vector of the stages) is the
+# share of the capacity of the processes of the kidney which follows the renal
+# function continuously (the intact nephron hypothesis), a model choice.
+#
+# [heart_failure]: the NYHA classes I to IV (`HF_severity` 1 to 4, 0 healthy).
+# The flows of the organs are multiplied, the cardiac output is their sum
+# (Gu 2025, Table 1: the lung flow of each class is the sum of the organ flows).
+# The factors are the consensus of the database on the hepatic, renal and limb
+# blood flow (`consensus`); its only study with single classes against
+# controls is Leithe 1984 (Figure 1), whose subgroups are defined by the
+# cardiac index (mild > 2.5, moderate 2.0-2.5, severe < 2.0 L/min/m2) and taken
+# as NYHA II, III and IV, as Rasool 2015 and Gu 2025 take them. The renal blood
+# flow is not monotonic in the class (the severe subgroup above the moderate
+# one, as measured), and the GFR follows it.
+
+[child_pugh]
+functional_liver = { consensus = "liver_volume_per_bw", notes = "the liver tissue of the classes A, B, C relative to healthy, `f_functional`, which scales the tissue volume of the liver and the capacity of its processes: the liver volume, so that the loss of hepatocytes is counted once; the factors of the enzymes and transporters are abundances per amount of liver tissue, of cirrhotic tissue with fewer hepatocytes per gram, and the capacity of the liver is that abundance times the amount of tissue. The functional liver mass of Edginton & Willmann 2008 (Table I: 0.69, 0.55, 0.28, a hepatocyte radioligand, Virgolini et al.) counts the hepatocytes and would count their loss a second time with the abundances per tissue; Johnson 2010 (Table III) take the functional hepatocyte volume (0.81, 0.65, 0.53) with abundances per mg of microsomal protein of the functional liver; the hepatocyte volume of Kwon 2001 is 0.86 and 0.82 (A, B)" }
+shunt = { value = [0.3994897959183674, 0.6979591836734694, 0.8127551020408164], unit = "dimensionless", source = "ModelChoice", notes = "portosystemic shunt `f_shunt` of the classes A, B, C (healthy 0): the values of pkpdsim.impairment.CIRRHOSIS (bit-identical here; the MathML of the SBML writes 15 significant digits), the degrees of cirrhosis of the Child-Pugh classes of the hand-written ICG models; their publication is not verified; replaces the reduced portal vein flow of Edginton & Willmann 2008 (Table I: 0.40, 0.36, 0.04 of the controls, from the portal perfusion of Annet 2003), see the header" }
+hepatic_artery_flow = { value = [1.3, 2.3, 3.4], unit = "dimensionless", source = "Edginton2008", notes = "hepatic arterial blood flow relative to healthy (hepatic arterial buffer response): Edginton & Willmann 2008, Table I, from Annet 2003 with the control set at 160 mL/min, the ratios of the mean arterial perfusion per volume of liver of Annet 2003 (1.29, 2.35, 3.42); the consensus of the database on the arterial perfusion (Annet 2003, Van Beers 2001: 1.13, 2.07, 3.26) times that on the liver volume per body weight (0.90, 0.79, 0.67) gives 1.01, 1.63, 2.17, and the absolute flow of the hepatic artery of Sudhamshu 2006 gives 1.40, 1.56, 1.80 (`pkpdsim.database.integration.consensus`); kept until the flow of the hepatic artery is decided together with the shunt and the functional liver" }
+kidney_flow = { value = [0.88, 0.65, 0.48], unit = "dimensionless", source = "Edginton2008", notes = "renal blood flow relative to healthy: Edginton & Willmann 2008, Table I, from the inverse of the renal flow index of Dincer 2005" }
+cardiac_index = { consensus = "cardiac_index", notes = "cardiac index relative to healthy (hyperdynamic circulation); the flows of the organs without a factor of their own (heart, muscle, skin, adipose, bone, gonads) close the cardiac output to it; Edginton & Willmann 2008 (Table I) give 1.11, 1.27 and 1.36 (the cardiac index of Dincer 2005, observed 1.19, 1.29, 1.43 of the controls), and 1.75, 2.25 and 2.75 for the flow of the other organs" }
+gfr = { value = [1.0, 0.70, 0.36], unit = "dimensionless", source = "Edginton2008", notes = "glomerular filtration rate relative to healthy (hepatorenal reduction): Edginton & Willmann 2008, Table I, from inulin clearance: class A as the controls, class B a value of the range of the review of Proulx et al., class C from Woitas 2000; the GFR of classes B and C varies from 0.18 of the controls to none, Edginton & Willmann 2008" }
+albumin = { consensus = "albumin", notes = "plasma albumin relative to healthy, the binding protein factor of fu; Edginton & Willmann 2008 (Table I) give 0.81, 0.68 and 0.50 (from Chawla 1998, Froomes 1999 and Woitas 2000, which the consensus has with the further studies)" }
+agp = { value = [0.60, 0.56, 0.30], unit = "dimensionless", source = "Edginton2008", notes = "plasma alpha-1-acid glycoprotein relative to healthy, the binding protein factor of fu: Edginton & Willmann 2008, Table I, from Barry et al." }
+hematocrit = { consensus = "hematocrit", notes = "hematocrit relative to healthy (the anaemia of cirrhosis); Edginton & Willmann 2008 (Table I) give absolute hematocrits of 0.39, 0.37 and 0.35 with the controls at 0.43 (0.91, 0.86, 0.81 of the controls, from Wong 2001)" }
+
+[ckd]
+stage_gfr = { value = [90.0, 60.0, 30.0, 15.0], unit = "ml/min/1.73 m2", source = "Yoshida2016", notes = "lower limits of the GFR per 1.73 m2 of normal function and of mild, moderate and severe CKD (Methods: mild 60-89, moderate 30-59, severe 15-29, end stage < 15 ml/min/1.73 m2, the classes of the FDA guidance)" }
+stage_anchor = { value = [75.0, 45.0, 22.5, 7.5], unit = "ml/min/1.73 m2", source = "ModelChoice", notes = "the eGFR at which each CKD factor takes the value of mild, moderate, severe and end stage CKD: the midpoints of the stages (mild 60-89, moderate 30-59, severe 15-29) and 7.5 for the end stage (< 15); the factors are 1 from the eGFR of normal function (90) and interpolate linearly between the anchors, constant below the end stage anchor; a model choice: continuous covariate for scans and fits; stage midpoints" }
+plasma_protein = { value = [1.0, 1.45, 2.20, 2.50], choice = ["mild"], unit = "dimensionless", source = "Alasmari2023", notes = "Table 3: the correction factor for the effect of CKD on the content of plasma proteins of the stages 3, 4 and 5 (30-60, 15-30, < 15 ml/min/1.73 m2), from Malik 2020 (not read); mild CKD (stage 2) is not tabulated, 1 (model choice); the library takes the factor as the factor by which the binding capacity of the plasma proteins falls (the binding factor of fu is divided by it, so fu of a strongly bound drug rises by it), a model choice of the direction" }
+hematocrit = { consensus = "hemoglobin", notes = "hematocrit relative to healthy (the anaemia of CKD): the ratio of the hemoglobin, the hematocrit taken proportional to it (a constant mean corpuscular hemoglobin concentration, a model choice); Alasmari 2023 (Table 3) tabulate absolute hematocrits of 0.44, 0.40 and 0.34 for the stages 3, 4 and 5 (from Malik 2020, not read) without the healthy hematocrit of the population; Malik 2020 (Table 1, after the studies cited there) tabulate the hematocrit by the creatinine clearance without n or spread, men from 45.5 % (healthy) to 45.2, 44.8, 43.3, 42.6, 41.7 and 34.3 % (CrCl 60-70 to <= 20 ml/min/1.73 m2, 0.99 to 0.75 of healthy), women from 40 % to 33.5 %, milder than the consensus in the moderate and severe stages" }
+kidney_volume = { value = [1.0, 1.0, 1.0, 1.0], unit = "dimensionless", source = "ModelChoice", notes = "kidney volume relative to healthy: 1, so that the loss of nephrons is not counted twice; the kidneys shrink in CKD, the regression of the log kidney volume on the GFR of Malik 2020 (Figure 1, ln(KV) = -6.3e-5*GFR^2 + 0.0149*GFR + 4.13, the volumes of Vegar-Zubovic 2016, Jovanovic 2013 and Kim 2010) gives 0.935, 0.75, 0.59 and 0.486 at the stage anchors relative to an eGFR of 90, but the capacity of every process of the kidney falls with the renal function already (`tubular_capacity`, the intact nephron hypothesis) and the processes are per litre of kidney, so a smaller kidney would lower them a second time; the renal blood flow (`kidney_flow`) is the measured flow, not a perfusion times a volume. The volumes of the database (Luo 2024 CT: CKD 4-5 0.37 of normal, Buchanan 2020 MRI: CKD 3-4 0.81) group the stages" }
+kidney_flow = { consensus = "renal_cortical_perfusion", notes = "renal blood flow relative to healthy: the ratio of the perfusion of the renal cortex per tissue mass by arterial spin labelling MRI, the flow taken proportional to it at the kidney volume of the model (kidney_volume, 1; a model choice: the volume of the kidneys falls in CKD, the database has no volume per stage against controls, Luo 2024 (CT) and Prasad 2015 (MRI) group the stages); the measured renal plasma flow of the database (Vukmirovic Papuga 2022, ERPF: mild 0.88, moderate 0.55) agrees; Alasmari 2023 (Table 3) tabulate a renal perfusion of 176, 97 and 75.35 ml/min/100 g for the stages 3 to 5 (from Malik 2020, not read) without the healthy perfusion; the regression of the log cortical perfusion on the GFR of Malik 2020 (Figure 1, ln(RCP) = -3e-5*GFR^2 + 0.0170*GFR + 4.09; Buchanan 2019, Gillis 2016, Rossi 2012) gives 0.835, 0.558, 0.399 and 0.313 at the anchors relative to an eGFR of 90, the consensus agrees" }
+gastric_emptying_time = { value = [1.0, 1.0, 1.6, 1.6], unit = "dimensionless", source = "Malik2020", notes = "gastric emptying time relative to healthy: Table 2, 1.0 in stage 3 and 1.6 (CV 25 %) in stages 4 and 5 (1.6, CV 30 %, on dialysis), after Rowland Yeo 2011 and the human studies cited there; stage 2 is not tabulated, 1" }
+si_transit_time = { value = [1.0, 1.0, 1.4, 1.4], unit = "dimensionless", source = "Malik2020", notes = "small intestinal transit time relative to healthy: Table 2, 1.0 in stage 3 and 1.4 (CV 25 %) in stages 4 and 5 (1.8, CV 30 %, on dialysis; the colonic transit 1.8 on dialysis only); stage 2 is not tabulated, 1" }
+tubular_capacity = { value = 1.0, unit = "dimensionless", source = "ModelChoice", notes = "the share `f_tubular` of the capacity of the tubular processes (every metabolism and transport of the kidney) which follows the renal function, the capacity is `1 - f_tubular + f_tubular*f_renal_function` of healthy: 1, the capacity falls in proportion to the GFR, the intact nephron hypothesis (Bricker 1960), not verified: the nephrons which remain in a diseased kidney work normally, so the tubular secretion falls with the number of nephrons as the GFR does, as the hand-written models scaled it (a secretion of a fraction of the GFR); the filtration `fu*GFR` follows the GFR itself; not a stage factor, a continuous factor of `f_renal_function`" }
+
+[ckd.proteins]
+CYP2D6 = { value = [1.0, 0.53, 0.41, 0.50], choice = ["mild"], unit = "dimensionless", source = "Yoshida2016", notes = "mean ratio of the unbound clearance of CYP2D6 model drugs of moderate, severe and end stage CKD (off dialysis) to the control (Results); mild CKD 1.16, no reduction, is taken as 1 (model choice)" }
+CYP3A4 = { value = [1.0, 1.0, 1.0, 1.0], unit = "dimensionless", source = "Yoshida2016", notes = "no apparent relationship between the severity of CKD and the clearance of CYP3A4/5 model drugs (mean ratios of the unbound clearance 0.84, 1.05, 0.79, 0.99), taken as unchanged" }
+SLCO1B1 = { value = [0.68, 0.56, 0.54, 0.45], unit = "dimensionless", source = "Tan2018", notes = "Table 2, mean ratio of the unbound clearance of the OATP model drugs of mild, moderate, severe and end stage CKD (off dialysis) to the control" }
+SLCO1B3 = { value = [0.68, 0.56, 0.54, 0.45], unit = "dimensionless", source = "Tan2018", notes = "Table 2, the OATP model drugs (OATP1B1 and OATP1B3 are not separated), as SLCO1B1" }
+
+[ckd.binding]
+albumin = { consensus = "albumin", protein = "albumin", quantity = "plasma albumin concentration", notes = "the serum albumin of non-dialysis CKD relative to healthy controls (Huang 2017, Lin 2017, Zakiyanov 2013); the mild stage has no study and is interpolated" }
+albumin_binding = { value = [1.0, 0.941, 0.839, 0.669], choice = ["mild"], protein = "albumin", quantity = "binding function of an albumin molecule", unit = "dimensionless", source = "Klammt2012", notes = "Results (abstract): the albumin-binding capacity (ABiC, binding site II, dansylsarcosine, measured at a fixed albumin concentration of 150 umol/l as the method of the group describes it, Klinkmann 2022, doi:10.3390/medicina58121780) of 104 CKD patients, 118, 111, 99 and 79 % of a pooled plasma reference for the stages 1/2, 3, 4 and 5 (stage 5 with dialysis patients); the ratios 0.941, 0.839 and 0.669 to the stages 1/2, which are taken as the healthy binding function and as mild CKD, 1 (model choice: the reference of the study is pooled plasma, not healthy subjects); site II taken for every drug bound to albumin (model choice); the binding function multiplies the concentration, the capacity of the albumin of the plasma" }
+agp = { consensus = "agp", protein = "agp", quantity = "plasma alpha-1-acid glycoprotein concentration", notes = "plasma alpha-1-acid glycoprotein of non-dialysis CKD relative to healthy controls, the consensus of Docci 1985 (by the serum creatinine) and Zakiyanov 2013, which measure the end stage only; the mild, moderate and severe stages have no study and are interpolated between healthy and the end stage; the meta-analysis of Schmulenson 2018 (a PAGE poster, not peer reviewed, of the weighted mean fractional changes) gives 1.046, 1.137, 1.328 and 2.062 for the four stages" }
+
+[heart_failure]
+liver_flow = { consensus = "hepatic_blood_flow_per_bsa", notes = "hepatic blood flow of the liver and the portal organs relative to healthy: the indocyanine green clearance of Leithe 1984 (Figure 1C, the subgroups of the cardiac index taken as NYHA II to IV), the only study with the flow of single classes against controls; NYHA I has no study and is interpolated; heart failure of several classes against controls in the database: 0.61 (Myers 1948, bromsulphalein), the flow of the superior mesenteric artery in NYHA II-III 0.74 (Muller 1992)" }
+kidney_flow = { consensus = "renal_blood_flow_per_bsa", notes = "renal blood flow relative to healthy: the PAH clearance of Leithe 1984 (Figure 1E, the subgroups of the cardiac index taken as NYHA II to IV), not monotonic in the class (the severe subgroup above the moderate one, as measured); NYHA I has no study and is interpolated; heart failure of several classes against controls in the database: the renal plasma flow of advanced congestive failure 0.30 (Mokotoff 1948) and of stable heart failure of NYHA I-III 0.90 (Jung 2021), the flow of the right renal artery in NYHA II-III 0.70 (Muller 1992)" }
+peripheral_flow = { consensus = "forearm_blood_flow", notes = "blood flow of skin, adipose and muscle relative to healthy: the limb (forearm) flow of Leithe 1984 by plethysmography (Figure 1G, the subgroups of the cardiac index taken as NYHA II to IV); NYHA I has no study and is interpolated; Gu 2025 give 0.57, 0.44 and 0.28 for NYHA II to IV, which is not the limb flow of Leithe 1984 (0.66, 0.57, 0.45 of the normal mean of the text); heart failure of several classes against controls in the database: forearm in NYHA III-IV 0.46 and 0.51 (Mason 1964, Zelis 1968), calf 0.62 (Zelis 1968) and 0.70 in NYHA II-III (Muller 1992)" }

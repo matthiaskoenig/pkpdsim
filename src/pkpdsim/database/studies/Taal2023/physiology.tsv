@@ -1,0 +1,15 @@
+entity	group	n	mean	sd	se	median	q1	q3	notes
+hemoglobin	lt20	418	116	16					
+hemoglobin	20_29	783	122	16					
+hemoglobin	30_39	707	127	17					
+hemoglobin	40_49	490	132	18					
+hemoglobin	50_59	293	134	16					
+hemoglobin	60_69	174	139	16					
+hemoglobin	ge70	131	138	17					
+albumin	lt20	418				41	38	44	
+albumin	20_29	783				41	37	44	
+albumin	30_39	707				41	37	45	
+albumin	40_49	490				41	37	44	
+albumin	50_59	293				42	38	45	
+albumin	60_69	174				42	39	46	
+albumin	ge70	131				39	34	43	

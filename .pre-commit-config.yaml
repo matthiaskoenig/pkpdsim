@@ -27,7 +27,7 @@ repos:
     description: Check for symlinks which do not point to anything
   - id: trailing-whitespace
     description: Trim trailing whitespaces
-    exclude: '^(src/pkpdsim/resources|tests/data/pkdb_data)/'
+    exclude: '^(src/pkpdsim/resources|src/pkpdsim/database/studies|tests/data/pkdb_data)/'
   - id: end-of-file-fixer
     description: Fix empty lines at ends of files
     exclude: '^(src/pkpdsim/resources|tests/data/pkdb_data)/'

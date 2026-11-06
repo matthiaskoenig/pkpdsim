@@ -1,0 +1,7 @@
+entity	group	n	mean	sd	se	median	q1	q3	notes
+hemoglobin	g1	265	140	15					printed 14.0 +- 1.5 g/dL
+hemoglobin	g2	419	141	17					printed 14.1 +- 1.7 g/dL
+hemoglobin	g3a	403	135	19					printed 13.5 +- 1.9 g/dL
+hemoglobin	g3b	484	127	18					printed 12.7 +- 1.8 g/dL
+hemoglobin	g4	522	115	15					printed 11.5 +- 1.5 g/dL
+hemoglobin	g5	145	105	12					printed 10.5 +- 1.2 g/dL

@@ -179,7 +179,7 @@ def page_markdown(page: Page) -> str:
         The source markdown, or the generated API markdown for the pages of the
         API reference.
     """
-    markdown = (DOCS_DIR / page.path).read_text()
+    markdown = (DOCS_DIR / page.path).read_text(encoding="utf-8")
     match = DIRECTIVE.search(markdown) if page.path.startswith("api/") else None
     return api_markdown(match.group("module")) if match else markdown
 

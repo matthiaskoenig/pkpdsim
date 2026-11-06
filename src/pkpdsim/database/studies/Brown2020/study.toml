@@ -1,0 +1,38 @@
+source = "Brown2020"
+tissue = "body"
+control = "controls"
+notes = "Normal volunteers (normal creatinine, urine albumin-to-creatinine ratio < 25 mg/g; CKD-EPI eGFR 94 +- 20) and diabetic patients not on dialysis by the stages of the CKD-EPI eGFR: G1 (119), G2 (69), G3 (45), G4 (23), G5 (14); the group with diabetes without nephropathy (2 kidneys) is not taken. pCASL cortical perfusion; Table 2 (free full text) gives the mean and SD over the kidneys, the n of a record is the number of subjects (12, 3, 5, 14, 4, 2; 24, 6, 10, 28, 5, 4 kidneys), so that the standard error is not that of independent kidneys; transcribed from the full text by the literature search of the database (2026-11-05)."
+
+[measurements.physiology]
+file = "physiology.tsv"
+kind = "physiology"
+method = "arterial spin labelling MRI (pCASL)"
+location = "Table 2"
+
+[groups.controls]
+condition = "control"
+description = "normal volunteers"
+
+[groups.ckd_1]
+condition = "ckd"
+description = "diabetic CKD G1"
+
+[groups.ckd_2]
+condition = "ckd"
+ckd_stage = "mild"
+description = "diabetic CKD G2"
+
+[groups.ckd_3]
+condition = "ckd"
+ckd_stage = "moderate"
+description = "diabetic CKD G3"
+
+[groups.ckd_4]
+condition = "ckd"
+ckd_stage = "severe"
+description = "diabetic CKD G4"
+
+[groups.ckd_5]
+condition = "ckd"
+ckd_stage = "end stage"
+description = "diabetic CKD G5, not on dialysis"

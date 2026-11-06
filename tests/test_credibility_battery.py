@@ -406,8 +406,12 @@ def test_the_outputs_of_the_battery(tmp_path: Path) -> None:
     iv = fates[fates["dose"] == "IVDOSE_d"].set_index("part")
     assert iv.loc["ELIM", "share"] < 0
     output = write_outputs(assessment, tmp_path / "credibility")
-    assert (output / "battery.tsv").read_text().startswith("check\tfactor\tstatus")
-    html = (output / "index.html").read_text()
+    assert (
+        (output / "battery.tsv")
+        .read_text(encoding="utf-8")
+        .startswith("check\tfactor\tstatus")
+    )
+    html = (output / "index.html").read_text(encoding="utf-8")
     assert "Battery of the builds" in html
     assert "Fate of the doses" in html
     assert "battery of the builds</a>, 6 checks" in html
