@@ -37,10 +37,9 @@ from sbmlsim.experiment import (
     ExperimentRunner,
     SimulationExperiment,
 )
+from sbmlsim.experiment.draws import check_fit_parameters
 from sbmlsim.fit.cli import FitRun, run_fit
 from sbmlsim.project import resolve
-
-from pkpdsim.uncertainty import check_fit_parameters
 
 if TYPE_CHECKING:
     from pkpdsim.credibility.battery import Battery
@@ -168,7 +167,8 @@ def check_model(model: PKPDModel) -> None:
     the builds (`model_path`, `female_model_path`), the factory directory and
     `archive_path` lie below `path`,
     the data paths exist, and every parameter of an adopted fit has its value
-    and a distribution in the model (`pkpdsim.uncertainty.check_fit_parameters`).
+    and a distribution in every build of the model, its variants
+    (`sbmlsim.experiment.draws.check_fit_parameters`).
 
     Raises:
         AssertionError: naming every problem.

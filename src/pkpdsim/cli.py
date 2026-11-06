@@ -29,7 +29,7 @@ is written into the directory of the group, any other selection into
 ends with the links to the report and to the figures. `--uncertainty` runs the
 experiments over draws of the fitted parameters of the model and draws the
 curves of the simulations as bands of the quantiles of the draws, into the
-`simulation_uncertainty` folder of the results (see `pkpdsim.uncertainty`).
+`simulation_uncertainty` folder of the results (see `sbmlsim.experiment.draws`).
 
 `run_fit` (`fit_command`) fits the parameters of a fit problem and, with
 `--identifiability` (the default of a model with `fit_identifiability`),
@@ -70,6 +70,7 @@ from typing import TYPE_CHECKING, Any
 
 from sbmlsim import display, log
 from sbmlsim.experiment import ExperimentRunError
+from sbmlsim.experiment.draws import UncertaintySettings
 from sbmlsim.fit import display as fit_display
 from sbmlsim.fit.cli import (
     ALGORITHMS,
@@ -116,7 +117,6 @@ from pkpdsim.profiling import (
     record_exit_code,
     run_profiled,
 )
-from pkpdsim.uncertainty import UncertaintySettings
 
 if TYPE_CHECKING:
     from sbmlsim.experiment import SimulationExperiment
@@ -149,8 +149,8 @@ def parse_workers(text: str) -> int | None:
 
     Args:
         text: `model` for the default of a model (`pkpdsim.model.RUN_WORKERS`,
-            serially), `auto` for the choice of sbmlsim (`None`: a pool of
-            every CPU for a scan of 256 points or more), or a positive number.
+            serially), `auto` for the choice of sbmlsim (`None`, see
+            `sbmlsim.project.Project.run_experiments`), or a positive number.
 
     Returns:
         The number of processes, `None` for the choice of sbmlsim.
@@ -288,12 +288,13 @@ def run_parser(model: PKPDModel) -> argparse.ArgumentParser:
             "-w",
             "--workers",
             default="model",
-            help="the processes of the scans: a number, 'auto' for a pool of "
-            "every CPU for a scan of 256 points or more, or 'model' for the "
-            "default of a model, serially (default: %(default)s); with serial "
-            "scans the experiments run in a pool, a worker per four "
-            "experiments; an extra action gets the settings of the simulator "
-            "as `options.simulator` and the processes as `options.n_workers`",
+            help="the processes of the run: a number (a pool of the experiments, "
+            "the scans of a single experiment in a pool), 'auto' for the choice "
+            "of sbmlsim (a worker per four experiments, the scans in a pool of "
+            "every CPU when one has 256 points or more), or 'model' for the "
+            "default of a model, serially (default: %(default)s); an extra "
+            "action gets the settings of the simulator as `options.simulator` "
+            "and the processes as `options.n_workers`",
         )
     if model.extra_arguments is not None:
         resolve(model.extra_arguments, model.package)(p)
@@ -344,7 +345,7 @@ def _simulate(
         show_report: open the report in a web browser.
         figure_formats: the formats of the figures.
         simulator: the settings of the simulator.
-        n_workers: the processes of the scans.
+        n_workers: the processes of the run.
         uncertainty: run over draws of the fitted parameters, `None` for once.
 
     Returns:

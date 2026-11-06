@@ -90,7 +90,6 @@ from sbmlutils.console import console
 from sbmlutils.report.units import udef_to_string
 
 from pkpdsim.model import PKPDModel
-from pkpdsim.run import create_simulator
 from pkpdsim.sex import Sex
 
 logger = logging.getLogger(__name__)
@@ -2062,7 +2061,7 @@ class SensitivityRunner:
     def _simulator(self, simulator: SimulatorRun | None) -> Simulator:
         """Get the simulator of a run, of the model with `n_workers=None` by default."""
         run = SimulatorRun(self.model.simulator) if simulator is None else simulator
-        return create_simulator(run.settings, run.n_workers)
+        return run.settings.simulator(run.n_workers)
 
     def _execute(
         self,

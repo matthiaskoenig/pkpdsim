@@ -1,3 +1,0 @@
-# uncertainty
-
-::: pkpdsim.uncertainty

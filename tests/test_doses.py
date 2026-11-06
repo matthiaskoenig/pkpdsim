@@ -8,7 +8,6 @@ from sbmlsim.experiment import ExperimentRunner
 from sbmlsim.simulation import Change, Simulation
 
 from pkpdsim.experiment import PKPDSimulationExperiment
-from pkpdsim.run import create_simulator
 from pkpdsim_toy import DATA_PATHS, MODEL, TOY_PATH
 from pkpdsim_toy.experiments.decay import ToyExperiment
 
@@ -48,7 +47,7 @@ def test_a_dose_adds_in_the_unit_of_the_model() -> None:
 def test_the_doses_keep_the_rest_of_the_earlier_ones() -> None:
     """At a dose the amount jumps by the dose from what is left."""
     exp = experiment(ToyDoses)
-    exp._run_tasks(create_simulator(MODEL.simulator))
+    exp._run_tasks(MODEL.simulator.simulator(1))
     result = exp._results["task_decay"]
     times = result["time"].to_numpy().ravel()
     a = result["[A]"].to_numpy().ravel()  # Vc is 1 l: the amount in mmole

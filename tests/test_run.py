@@ -1,21 +1,19 @@
-"""The run of the simulation experiments of a model."""
+"""The run of the simulation experiments of a model.
+
+`PKPDModel.run_experiments` and `run_simulation_experiments` are
+`sbmlsim.project.Project.run_experiments` with the settings of the model and its
+result directories, tested in sbmlsim; these tests check what the model adds.
+"""
 
 from pathlib import Path
-from typing import Any
 
-import matplotlib
-import matplotlib.image
 import pytest
-from sbmlsim.experiment import ExperimentRunError, ExperimentRunner
-from sbmlsim.plot import FigureSettings as SbmlsimFigureSettings
+from sbmlsim.experiment import ExperimentRunError
 from sbmlsim.project import SimulatorSettings
 
-import pkpdsim.run
-from pkpdsim.model import FigureSettings
-from pkpdsim.run import create_simulator
 from pkpdsim_toy import MODEL
 from pkpdsim_toy.broken import ToyCannotInitialize, ToyFigureFails, ToyRefusedUnit
-from pkpdsim_toy.experiments.decay import ToyDecay, ToyDecaySlow
+from pkpdsim_toy.experiments.decay import ToyDecay
 
 
 def test_a_run_writes_the_report_and_the_figures(tmp_path: Path) -> None:
@@ -26,12 +24,14 @@ def test_a_run_writes_the_report_and_the_figures(tmp_path: Path) -> None:
     assert list(output.glob("**/*fig_decay*.png"))
 
 
-def test_the_formats_of_a_run(tmp_path: Path) -> None:
-    output = MODEL.run_experiments(
-        ToyDecay, output_dir=tmp_path, figure_formats=["png"]
-    )
-    assert list(output.glob("**/*.png"))
-    assert not list(output.glob("**/*.svg"))
+def test_the_results_are_saved_as_the_model_says(tmp_path: Path) -> None:
+    MODEL.run_experiments(ToyDecay, output_dir=tmp_path / "default")
+    assert not list((tmp_path / "default").glob("**/*.nc"))
+    model = MODEL.replace(save_results=True)
+    model.run_experiments(ToyDecay, output_dir=tmp_path / "saved")
+    assert list((tmp_path / "saved").glob("**/*.nc"))
+    MODEL.run_experiments(ToyDecay, output_dir=tmp_path / "given", save_results=True)
+    assert list((tmp_path / "given").glob("**/*.nc"))
 
 
 def test_a_relative_output_dir_is_below_the_simulation_results(
@@ -43,28 +43,6 @@ def test_a_relative_output_dir_is_below_the_simulation_results(
     assert list(output.glob("**/*.html"))
 
 
-def test_the_static_resolution_is_applied(tmp_path: Path) -> None:
-    """`savefig_dpi` sets the size of the images in pixels."""
-    widths = []
-    for dpi in [20, 40]:
-        model = MODEL.replace(figures=FigureSettings(formats=("png",), savefig_dpi=dpi))
-        output = model.run_experiments(ToyDecay, output_dir=tmp_path / str(dpi))
-        (png,) = output.glob("**/*fig_decay*.png")
-        widths.append(matplotlib.image.imread(png).shape[1])
-    assert abs(widths[1] - 2 * widths[0]) <= 2
-
-
-def test_the_figures_are_collected(tmp_path: Path) -> None:
-    figures = MODEL.run_simulation_experiments(
-        [ToyDecay, ToyDecaySlow], output_dir=tmp_path / "all"
-    )
-    assert figures == tmp_path / "all" / "_figures"
-    names = sorted(path.name for path in figures.iterdir())
-    assert any(name.startswith("ToyDecay_") for name in names)
-    assert any(name.startswith("ToyDecaySlow_") for name in names)
-    assert {Path(name).suffix for name in names} == {".png", ".svg"}
-
-
 def test_the_figures_of_a_relative_output_dir_are_collected(tmp_path: Path) -> None:
     model = MODEL.replace(results_path=tmp_path)
     figures = model.run_simulation_experiments([ToyDecay], output_dir="relative")
@@ -72,97 +50,22 @@ def test_the_figures_of_a_relative_output_dir_are_collected(tmp_path: Path) -> N
     assert list(figures.glob("*.svg"))
 
 
-def test_a_bare_string_is_not_a_list_of_formats(tmp_path: Path) -> None:
-    with pytest.raises(TypeError, match="not 'png'"):
-        MODEL.run_experiments(
-            ToyDecay,
-            output_dir=tmp_path,
-            figure_formats="png",
-        )
-
-
-def test_empty_formats_fall_back_to_the_formats_of_the_model(tmp_path: Path) -> None:
-    output = MODEL.run_experiments(ToyDecay, output_dir=tmp_path, figure_formats=[])
-    assert list(output.glob("**/*.png"))
-    assert list(output.glob("**/*.svg"))
-
-
-def test_a_run_restores_the_matplotlib_settings(tmp_path: Path) -> None:
-    dpi = matplotlib.rcParams["savefig.dpi"]
-    MODEL.run_experiments(ToyDecay, output_dir=tmp_path)
-    assert matplotlib.rcParams["savefig.dpi"] == dpi
-
-
-def test_the_figure_settings_of_the_model_reach_sbmlsim(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    captured: dict[str, object] = {}
-    original = ExperimentRunner.run_experiments
-
-    def run_experiments(
-        self: ExperimentRunner,
-        *args: Any,  # noqa: ANN401, the arguments of sbmlsim, passed on
-        **kwargs: Any,  # noqa: ANN401
-    ) -> object:
-        captured.update(kwargs)
-        return original(self, *args, **kwargs)
-
-    monkeypatch.setattr(ExperimentRunner, "run_experiments", run_experiments)
-    MODEL.run_experiments(ToyDecay, output_dir=tmp_path)
-    settings = captured["figure_settings"]
-    assert isinstance(settings, SbmlsimFigureSettings)
-    assert settings == MODEL.figure_settings
-    assert settings.legend_fontsize == 7
-
-
-def test_the_simulator_has_the_settings_of_the_model() -> None:
-    simulator = create_simulator(
-        SimulatorSettings(absolute_tolerance=1e-9, relative_tolerance=1e-8), 3
-    )
-    assert simulator.n_workers == 3
-    assert create_simulator(MODEL.simulator).n_workers == 1
-    assert simulator.integrator_settings["absolute_tolerance"] == 1e-9
-    assert simulator.integrator_settings["relative_tolerance"] == 1e-8
-
-
 def test_a_run_takes_other_simulator_settings(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     seen: list[tuple[SimulatorSettings, int | None]] = []
-    original = pkpdsim.run.create_simulator
+    original = SimulatorSettings.simulator
 
     def create(settings: SimulatorSettings, n_workers: int | None) -> object:
         seen.append((settings, n_workers))
         return original(settings, n_workers)
 
-    monkeypatch.setattr(pkpdsim.run, "create_simulator", create)
+    monkeypatch.setattr(SimulatorSettings, "simulator", create)
     other = SimulatorSettings(relative_tolerance=1e-9)
     MODEL.run_experiments(ToyDecay, output_dir=tmp_path, simulator=other, n_workers=2)
     assert seen == [(other, 2)]
     MODEL.run_experiments(ToyDecay, output_dir=tmp_path / "model")
     assert seen[-1] == (MODEL.simulator, 1)
-
-
-def test_a_run_compiles_with_the_level_of_the_settings(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The optimization level of the settings reaches the runner and its models."""
-    monkeypatch.delenv("SBMLSIM_JIT_OPTIMIZATION", raising=False)
-    levels: list[object] = []
-    original = ExperimentRunner.__init__
-
-    def init(self: ExperimentRunner, *args: Any, **kwargs: Any) -> None:  # noqa: ANN401
-        original(self, *args, **kwargs)
-        levels.append(self.jit_optimization)
-
-    monkeypatch.setattr(ExperimentRunner, "__init__", init)
-    MODEL.run_experiments(
-        ToyDecay,
-        output_dir=tmp_path,
-        simulator=SimulatorSettings(jit_optimization="O0"),
-    )
-    MODEL.run_experiments(ToyDecay, output_dir=tmp_path / "model")
-    assert [str(level) for level in levels] == ["O0", "O2"]
 
 
 def test_a_failing_experiment_is_reported_after_the_run(tmp_path: Path) -> None:
@@ -189,13 +92,3 @@ def test_a_refused_unit_of_the_data_fails_its_experiment_only(tmp_path: Path) ->
     # the report is written and the other experiment ran
     assert list(tmp_path.glob("*.html"))
     assert list(tmp_path.glob("ToyDecay/*fig_decay*.svg"))
-
-
-def test_the_figures_are_collected_before_the_failures_are_raised(
-    tmp_path: Path,
-) -> None:
-    with pytest.raises(ExperimentRunError):
-        MODEL.run_simulation_experiments(
-            [ToyDecay, ToyFigureFails], output_dir=tmp_path / "all"
-        )
-    assert list((tmp_path / "all" / "_figures").glob("ToyDecay_*.svg"))

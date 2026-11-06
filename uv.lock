@@ -1575,7 +1575,7 @@ requires-dist = [
     { name = "pyyaml", marker = "extra == 'dev'", specifier = ">=6.0.3" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.17.3" },
     { name = "sbmlode", specifier = ">=0.3.0" },
-    { name = "sbmlsim", git = "https://github.com/matthiaskoenig/sbmlsim.git?rev=2e22420b6624976ea7ed406b67dc78042b57967f" },
+    { name = "sbmlsim", git = "https://github.com/matthiaskoenig/sbmlsim.git?rev=27df49684d51bf03e9a72a6e94673fd1d56598c9" },
     { name = "sbmlutils", specifier = ">=0.17.1" },
     { name = "scipy", specifier = ">=1.18.1" },
     { name = "tox", marker = "extra == 'dev'", specifier = ">=4.65.0,!=4.67.5" },
@@ -2178,7 +2178,7 @@ wheels = [
 [[package]]
 name = "sbmlsim"
 version = "0.16.0"
-source = { git = "https://github.com/matthiaskoenig/sbmlsim.git?rev=2e22420b6624976ea7ed406b67dc78042b57967f#2e22420b6624976ea7ed406b67dc78042b57967f" }
+source = { git = "https://github.com/matthiaskoenig/sbmlsim.git?rev=27df49684d51bf03e9a72a6e94673fd1d56598c9#27df49684d51bf03e9a72a6e94673fd1d56598c9" }
 dependencies = [
     { name = "certifi" },
     { name = "h5netcdf" },
