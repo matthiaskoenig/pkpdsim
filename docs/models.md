@@ -164,7 +164,7 @@ path of the model, and that the data paths exist.
 
 ## Verification of a change
 
-`pkpdsim-verify` dumps the experiments of a model in two checkouts and compares
+`pkpdsim-verify` is a thin wrapper of `python -m sbmlsim.run verify` (`sbmlsim.verify`, which holds the subcommands, their options and the exit codes) for the model objects of pkpdsim: `--model PACKAGE` is `--project PACKAGE:MODEL`, a dump records the sex of the build of every task through `PKPDSimulationExperiment.variant_of`, and `scorecard` judges with the evidence extensions of pkpdsim and pools the ratio pairs by `--field` (`health` by default) in the wording of the limits of Guest et al. It dumps the experiments of a model in two checkouts and compares
 them, writes the fit definitions and the settings of a run as json, compares
 figures and SBML, and compares the credibility of many models with a baseline
 (`scorecard`, see [Across models](credibility.md#across-models-scorecard-and-qualification)):
@@ -232,13 +232,7 @@ prints them. A dump of pkpdsim 0.4 (sbmlsim 0.8) and one of pkpdsim 0.5 (sbmlsim
   (`times of <experiment>/<task>: <n> rows only in new, at <times>`) and which
   the pattern `experiment/task/time` of `expected` names.
 
-The specification of a figure (its attributes as json) changed as well. A figure which the old dump has from sbmlsim 0.8 and the new dump from sbmlsim 0.9 is compared in the form of sbmlsim 0.9, and `compare` prints how many (`figures across versions of sbmlsim: <n>`):
-
-- The settings. sbmlsim 0.8 kept a setting which a figure set (`fig.legend_position = "outside"`) as an attribute of the figure, sbmlsim 0.9 keeps it in `_settings` (`fig.settings = {"legend_position": "outside"}`). The attributes of the old figure which are fields of `FigureSettings` move into its `_settings`, which are compared with the settings the new figure is rendered with apart from the settings of the run: the `figure_settings` of its experiment overridden by its own `settings`. Another value, a setting which only one figure has and one which moved into the experiment are compared by value.
-- The size. sbmlsim 0.8 computed the size of a figure when it was created (`_width` and `_height`: the explicit size, or the number of panels times the panel size), sbmlsim 0.9 keeps only the explicit size (`width` and `height`, `None` for the size of the panels) and computes the size when it renders the figure. The old size is compared with the size the new figure is rendered with apart from the settings of the run, which a dump of pkpdsim 0.5 stores with the settings (`__resolved__` of the specification, `pkpdsim.verify.figure_spec`), so an explicit size and the size of the panels are compared by value. A plot which is added to a figure gets its share of the size of the figure, from sbmlsim 0.8 always and from sbmlsim 0.9 only for an explicit size; such a size of a plot is left out on both sides, a size of its own is compared. A figure whose size was set after its plots were added gave them its earlier size in sbmlsim 0.8, which then counts as a size of their own and differs. A size computed from a setting which sbmlsim 0.8 read from the class `Figure` (`Figure.panel_width`; a dump of pkpdsim 0.4.1 ran without the settings of the model and saw sbmlsim's default) and which sbmlsim 0.9 reads from the figure settings of the model differs whenever the model changes that setting; the figure is the same.
-- The fields which only sbmlsim 0.9 has, the selection of a `Data` (`sel`), the dimensions of the lines of a `Curve` (`over`) and the bands of a `Plot` (`_bands`), have no counterpart in sbmlsim 0.8: they are left out of the comparison, and every one which is not empty is listed for the review of the migration, `new fields: <experiment>/<figure>: <path> = <value>` (the path as in a difference, e.g. `subplots[0].plot._curves[1].y.sel`).
-
-Two figures of one version of sbmlsim are compared as they are, `sel`, `over` and `_bands` included. Neither dump has the settings of the run (the `FigureSettings` of the model, which a run hands to every figure); `settings` compares them.
+The figures of a dump of sbmlsim 0.8 are no longer aligned with those of sbmlsim 0.9 (the port of the models is done): two figures are compared as they are, and `settings` compares the settings of the run.
 
 The ids of sbmlsim 0.9 are SIds (see [Keys](experiments.md#keys)). The migration says so in the renames file instead of weakening the comparison, which then passes with exit code 0 or fails:
 
@@ -246,7 +240,7 @@ The ids of sbmlsim 0.9 are SIds (see [Keys](experiments.md#keys)). The migration
 | --- | --- |
 | `ids` | an old id to its new id: the task of a result, the dataset, the figure and mapping keys and the references to them in a figure |
 | `sids` | `true`: every id of the old dump becomes `sbmlsim.experiment.to_sid(id)` (after `ids`) |
-| `figure_fields` | the keys of the specification of a figure which are left out of both dumps, at the level of the figure only (not in its plots, curves or axes), in the form in which the figures are compared: a field of a figure which `compare` cannot map. The specification is the attributes of sbmlsim's `Figure` and its objects as json (`pkpdsim.verify.serialize`, `figure_spec`), so the fields are those of the version of sbmlsim which made the dump. The port from sbmlsim 0.8 to 0.9 needs none |
+| `figure_fields` | the keys of the specification of a figure which are left out of both dumps, at the level of the figure only (not in its plots, curves or axes), a field of a figure which `compare` cannot map. The specification is the attributes of sbmlsim's `Figure` and its objects as json (`sbmlsim.verify.dump.serialize`, `figure_spec`), so the fields are those of the version of sbmlsim which made the dump. |
 | `expected` | a part (`results`, `datasets`, `mappings`, `figures`, `ranges`) to the patterns of the keys of the differences which are expected |
 | `metadata`, `strings` | as in [Experiments and their metadata](experiments.md#renames-in-a-verification) |
 
