@@ -147,20 +147,49 @@ def test_the_comparison_of_statements() -> None:
     assert _same_statement("C1 within_2fold 10 of 10.", "C1 within_2fold 10 of 10.")
 
 
+#: the tolerance of a decimal number of a record: the metrics, the values of
+#: the rules and the inputs of the adopted fit of the toy, which the fit of
+#: the session gives again; another platform fits a slightly different rate
+#: (macOS differed in the last digit of the GMFE, about 1e-16 relative), and
+#: the least squares stops at its tolerance of about 1e-8 of the parameter, so
+#: a metric within 1e-6 relative (1e-12 absolute) is the same, far below any
+#: limit of a rule (1.3 of a GMFE, a percentage of points); an integer, a text
+#: and a bool are compared exactly
+FIT_RTOL = 1e-6
+
+
 def _same(a: object, b: object) -> bool:
-    """Compare two values of a record, numbers within the integration."""
-    if isinstance(a, float) and isinstance(b, float):
-        return (math.isnan(a) and math.isnan(b)) or math.isclose(
-            a, b, rel_tol=1e-6, abs_tol=1e-12
+    """Compare two values of a record, decimal numbers within the noise of the fit.
+
+    Mappings and sequences are compared element by element; `None` and `NaN`
+    are each only themselves.
+    """
+    if isinstance(a, dict) and isinstance(b, dict):
+        return a.keys() == b.keys() and all(_same(a[k], b[k]) for k in a)
+    if isinstance(a, list | tuple) and isinstance(b, list | tuple):
+        return len(a) == len(b) and all(_same(x, y) for x, y in zip(a, b, strict=True))
+    decimal = isinstance(a, float) or isinstance(b, float)
+    if decimal and isinstance(a, int | float) and isinstance(b, int | float):
+        if isinstance(a, bool) or isinstance(b, bool):
+            return a == b
+        x, y = float(a), float(b)
+        return (math.isnan(x) and math.isnan(y)) or math.isclose(
+            x, y, rel_tol=FIT_RTOL, abs_tol=1e-12
         )
     return a == b
 
 
 def _rows(a: list[Any], b: list[Any]) -> bool:
-    return len(a) == len(b) and all(
-        x.keys() == y.keys() and all(_same(x[k], y[k]) for k in x)
-        for x, y in zip(a, b, strict=True)
-    )
+    return _same(list(a), list(b))
+
+
+def test_the_comparison_of_records() -> None:
+    assert _same({"GMFE": 1.0022358937189946}, {"GMFE": 1.002235893718994})
+    assert not _same({"GMFE": 1.0022}, {"GMFE": 1.0023})
+    assert not _same({"n": 10}, {"n": 11})
+    assert _same([{"v": None, "w": math.nan}], [{"v": None, "w": math.nan}])
+    assert not _same({"v": None}, {"v": 0.0})
+    assert not _same({"met": True}, {"met": False})
 
 
 def _compare(
@@ -182,20 +211,18 @@ def _compare(
             before.minimum_points,
         )
         assert _rows(list(after.acceptance), list(before.acceptance))
-        assert after.quantities == before.quantities
+        assert _same(list(after.quantities), list(before.quantities))
         # the sections of the extensions, the fields of 0.19 read as sections;
         # a context without a ratio pairing has no section of the ratios, 0.19
         # wrote an empty list
-        assert section_pairs(after.section("ratios")) == section_pairs(
-            before.section("ratios")
+        assert _same(
+            section_pairs(after.section("ratios")),
+            section_pairs(before.section("ratios")),
         )
         for name in ("temporal", "inputs"):
-            assert dated(new, after.section(name)) == dated(
-                old, before.section(name)
-            ), (
-                after.id,
-                name,
-            )
+            assert _same(
+                dated(new, after.section(name)), dated(old, before.section(name))
+            ), (after.id, name)
         for a, b in zip(after.factors, before.factors, strict=True):
             assert a["id"] == b["id"]
             if a["id"] == CODE_VERIFICATION:
@@ -212,15 +239,20 @@ def _compare(
                 a["statement"],
                 b["statement"],
             )
-    assert [e.to_dict() for e in new.evidence] == [e.to_dict() for e in old.evidence]
-    assert [c.to_dict() for c in new.coverage] == [c.to_dict() for c in old.coverage]
+    assert _same(
+        [e.to_dict() for e in new.evidence], [e.to_dict() for e in old.evidence]
+    )
+    assert _same(
+        [c.to_dict() for c in new.coverage], [c.to_dict() for c in old.coverage]
+    )
     # the folder of a study is the one of the run
     old_studies = dated(old, old.extensions["studies"])["studies"]
     new_studies = dated(new, new.extensions["studies"])["studies"]
-    assert [{**s, "folder": None} for s in new_studies] == [
-        {**s, "folder": None} for s in old_studies
-    ]
-    assert new.extensions["inputs"] == old.extensions["inputs"]
+    assert _same(
+        [{**s, "folder": None} for s in new_studies],
+        [{**s, "folder": None} for s in old_studies],
+    )
+    assert _same(new.extensions["inputs"], old.extensions["inputs"])
 
 
 def test_the_assessment_gives_the_verdicts_of_pkpdsim_0_19(
@@ -369,6 +401,29 @@ def test_the_extensions_give_the_evidence_of_pkpdsim_0_19(
     assert temporal is not None and temporal["temporal"]["studies"]
 
 
+#: the largest deviation of a check of the battery which passed is rounding or
+#: noise of the integrator (the mass balance about 5e-15, the superposition
+#: about 7e-10 at rtol 1e-10), orders below the limits of the checks (1e-6,
+#: 0.01), which the status compares; another platform gives other bits of it,
+#: so a deviation within a factor of 10 is the same, and zero (nothing
+#: negative, a state which does not move) stays zero
+NOISE_FACTOR = 10.0
+
+#: the absolute tolerance of a part of the fate of a dose, relative to the dose:
+#: the parts after two days integrated at rtol 1e-10, far below the parts the
+#: fate records (above 1e-6 of the dose)
+PART_ATOL = 1e-8
+
+
+def _same_noise(a: float, b: float) -> bool:
+    """Compare two largest deviations of the battery within the noise, `NaN` with `NaN`."""
+    if math.isnan(a) or math.isnan(b):
+        return math.isnan(a) and math.isnan(b)
+    if a == 0.0 or b == 0.0:
+        return a == b
+    return 1 / NOISE_FACTOR <= a / b <= NOISE_FACTOR
+
+
 def test_the_battery_of_the_drug_model_of_pkpdsim_0_19(tmp_path: Path) -> None:
     old = Battery.from_dict(
         json.loads((DATA / "battery-drug-0.19.json").read_text(encoding="utf-8"))
@@ -377,9 +432,11 @@ def test_the_battery_of_the_drug_model_of_pkpdsim_0_19(tmp_path: Path) -> None:
     assert [r.check.id for r in new.results] == [r.check.id for r in old.results]
     for before, after in zip(old.results, new.results, strict=True):
         assert (after.status, after.cases) == (before.status, before.cases), after
-        assert _same(after.largest, before.largest) or math.isclose(
-            after.largest, before.largest, rel_tol=1e-3, abs_tol=1e-15
-        ), (after.check.id, after.largest, before.largest)
+        assert _same_noise(after.largest, before.largest), (
+            after.check.id,
+            after.largest,
+            before.largest,
+        )
     old_fates = old.sections["fates"]
     new_fates = new.sections["fates"]
     assert [(f["build"], f["dose"], f["substance"]) for f in new_fates] == [
@@ -389,4 +446,6 @@ def test_the_battery_of_the_drug_model_of_pkpdsim_0_19(tmp_path: Path) -> None:
         assert after["amount"] == pytest.approx(before["amount"])
         assert after["parts"].keys() == before["parts"].keys()
         for part, value in before["parts"].items():
-            assert after["parts"][part] == pytest.approx(value, rel=1e-6, abs=1e-15)
+            assert after["parts"][part] == pytest.approx(
+                value, rel=FIT_RTOL, abs=PART_ATOL * before["amount"]
+            )
