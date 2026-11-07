@@ -31,7 +31,8 @@ them only where it is meant to. The subcommands make this checkable:
 - `scorecard` reads the credibility records of many models (`credibility.json`
   of `run_credibility`) into one table, pools their ratio pairs by a value of
   the metadata (the qualification of a scaling across drugs) and compares the
-  table with a baseline, see `pkpdsim.credibility.scorecard`.
+  table with a baseline, see `sbmlsim.credibility.scorecard` with the evidence
+  extensions of `pkpdsim.credibility`.
 
 A model before and after a change, with tight tolerances so that the solver does
 not hide a difference:
@@ -2774,13 +2775,9 @@ def scorecard_command(options: argparse.Namespace) -> int:
         which cannot be read.
     """
     import pandas as pd
+    from sbmlsim.credibility.scorecard import compare, load_records, pool, scorecard
 
-    from pkpdsim.credibility.scorecard import (
-        compare,
-        load_records,
-        qualification,
-        scorecard,
-    )
+    from pkpdsim.credibility import EXTENSIONS, RATIOS
 
     try:
         records = load_records(Path(path) for path in options.records)
@@ -2792,8 +2789,9 @@ def scorecard_command(options: argparse.Namespace) -> int:
     except (FileNotFoundError, ValueError, KeyError) as err:
         print(f"error: {err}", file=sys.stderr)
         return 2
-    table = scorecard(records)
-    qualified = qualification(records, options.field)
+    table = scorecard(records, EXTENSIONS)
+    qualified = pool(records, RATIOS, {"field": options.field})
+    assert qualified is not None  # the ratio pairs pool
     if options.out:
         table.to_csv(options.out, sep="\t", index=False, lineterminator="\n")
     if options.qualification:
@@ -2815,7 +2813,7 @@ def scorecard_command(options: argparse.Namespace) -> int:
             )
     if baseline is None:
         return 0
-    regressions = compare(baseline, table, options.tolerance)
+    regressions = compare(baseline, table, options.tolerance, EXTENSIONS)
     print(f"{len(regressions)} regressions against {options.baseline}")
     for regression in regressions:
         print(f"  {regression}")

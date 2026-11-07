@@ -1531,9 +1531,7 @@ dependencies = [
 
 [package.optional-dependencies]
 amici = [
-    { name = "amici" },
-    { name = "cmake" },
-    { name = "ninja" },
+    { name = "sbmlsim", extra = ["amici"] },
 ]
 dev = [
     { name = "bump-my-version" },
@@ -1552,15 +1550,12 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "amici", marker = "extra == 'amici'", specifier = ">=1.2.0" },
     { name = "bump-my-version", marker = "extra == 'dev'", specifier = ">=1.5.1" },
     { name = "certifi", specifier = ">=2026.10.19" },
-    { name = "cmake", marker = "extra == 'amici'", specifier = ">=4.4.4" },
     { name = "jinja2", specifier = ">=3.1.6" },
     { name = "libroadrunner", specifier = ">=2.11.0" },
     { name = "matplotlib", specifier = ">=3.11.2" },
     { name = "mkdocstrings-python", marker = "extra == 'dev'", specifier = ">=2.0.9" },
-    { name = "ninja", marker = "extra == 'amici'", specifier = ">=1.13.2" },
     { name = "numpy", specifier = ">=2.5.3" },
     { name = "pandas", specifier = ">=3.0.6" },
     { name = "pillow", specifier = ">=13.0.0" },
@@ -1575,7 +1570,8 @@ requires-dist = [
     { name = "pyyaml", marker = "extra == 'dev'", specifier = ">=6.0.3" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.17.3" },
     { name = "sbmlode", specifier = ">=0.3.0" },
-    { name = "sbmlsim", git = "https://github.com/matthiaskoenig/sbmlsim.git?rev=64a22d6f5da86bb3c764796fc773ff3cae5e9c2d" },
+    { name = "sbmlsim", git = "https://github.com/matthiaskoenig/sbmlsim.git?rev=ab6ba313ca5aa0b152889871d19b6795b4a160a9" },
+    { name = "sbmlsim", extras = ["amici"], marker = "extra == 'amici'", git = "https://github.com/matthiaskoenig/sbmlsim.git?rev=ab6ba313ca5aa0b152889871d19b6795b4a160a9" },
     { name = "sbmlutils", specifier = ">=0.17.1" },
     { name = "scipy", specifier = ">=1.18.1" },
     { name = "tox", marker = "extra == 'dev'", specifier = ">=4.65.0,!=4.67.5" },
@@ -2178,7 +2174,7 @@ wheels = [
 [[package]]
 name = "sbmlsim"
 version = "0.16.0"
-source = { git = "https://github.com/matthiaskoenig/sbmlsim.git?rev=64a22d6f5da86bb3c764796fc773ff3cae5e9c2d#64a22d6f5da86bb3c764796fc773ff3cae5e9c2d" }
+source = { git = "https://github.com/matthiaskoenig/sbmlsim.git?rev=ab6ba313ca5aa0b152889871d19b6795b4a160a9#ab6ba313ca5aa0b152889871d19b6795b4a160a9" }
 dependencies = [
     { name = "certifi" },
     { name = "h5netcdf" },
@@ -2207,6 +2203,12 @@ dependencies = [
     { name = "sympy" },
     { name = "typst" },
     { name = "xarray" },
+]
+
+[package.optional-dependencies]
+amici = [
+    { name = "amici" },
+    { name = "ninja" },
 ]
 
 [[package]]

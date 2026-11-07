@@ -59,9 +59,8 @@ dependencies = [
     # imported directly, also the dependencies of the packages above
     "numpy>=2.5.3",
     "pandas>=3.0.6",
-    # the statistics of the variability (`pkpdsim.credibility.variability`), the
-    # interpolation of the steps of the integrator (`pkpdsim-verify compare`) and the
-    # root search of a regional absorption profile (`pkpdsim.pbpk.regional`)
+    # the interpolation of the steps of the integrator (`pkpdsim-verify compare`) and
+    # the root search of a regional absorption profile (`pkpdsim.pbpk.regional`)
     "scipy>=1.18.1",
     # the templates of the files of a release repository (`pkpdsim.release`) and the
     # LaTeX table of the parameters of a sensitivity analysis (`DataFrame.to_latex`)
@@ -77,12 +76,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# the second simulator of the battery of `pkpdsim.credibility`: AMICI is built
-# from source and compiles every model with cmake and ninja
+# the second simulator of the battery of the credibility, the engine AMICI of
+# sbmlsim (`sbmlsim.credibility.battery`), built from source
 amici = [
-    "amici>=1.2.0",
-    "cmake>=4.4.4",
-    "ninja>=1.13.2",
+    "sbmlsim[amici]",
 ]
 dev = [
     "bump-my-version>=1.5.1",
@@ -123,7 +120,7 @@ Download = "https://pypi.org/project/pkpdsim"
 [tool.uv.sources]
 # sbmlsim of its develop branch while the generic modules of pkpdsim move into
 # it; a release of pkpdsim needs sbmlsim from PyPI again
-sbmlsim = { git = "https://github.com/matthiaskoenig/sbmlsim.git", rev = "64a22d6f5da86bb3c764796fc773ff3cae5e9c2d" }
+sbmlsim = { git = "https://github.com/matthiaskoenig/sbmlsim.git", rev = "ab6ba313ca5aa0b152889871d19b6795b4a160a9" }
 
 [tool.hatch.version]
 path = "./src/pkpdsim/__init__.py"
@@ -149,12 +146,6 @@ root = ["./src", ".", "./tests"]
 
 [tool.ty.src]
 include = ["src", "tests", "scripts"]
-
-[tool.ty.analysis]
-# AMICI, the second simulator of the battery of `pkpdsim.credibility`, is the
-# optional extra `amici`, built from source, and not in the environment of the
-# check
-allowed-unresolved-imports = ["amici", "amici.**"]
 
 [tool.ty.terminal]
 # warnings are failures: keep the codebase free of any diagnostic

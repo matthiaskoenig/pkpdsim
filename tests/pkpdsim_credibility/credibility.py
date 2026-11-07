@@ -2,11 +2,7 @@
 
 import dataclasses
 
-from sbmlsim.fit.filters import named_filter
-from sbmlsim.fit.variability import Variability
-from sbmlsim.simulation.sampling import LogNormal
-
-from pkpdsim.credibility import (
+from sbmlsim.credibility import (
     ContextOfUse,
     CouLevel,
     Credibility,
@@ -17,6 +13,10 @@ from pkpdsim.credibility import (
     QuantityOfInterest,
     Unclaimed,
 )
+from sbmlsim.fit.filters import named_filter
+from sbmlsim.fit.variability import Variability
+from sbmlsim.simulation.sampling import LogNormal
+
 from pkpdsim.fit import metadata_filter
 from pkpdsim.metadata import Health, Route
 from pkpdsim_credibility.fitting import DOSE, LIMITATION, POPULATION

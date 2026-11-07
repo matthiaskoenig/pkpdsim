@@ -92,7 +92,8 @@ them; a module which starts with a dot is relative to `package`.
 | `factory` | a function which creates the models in a directory |
 | `experiments` | the registry: groups of experiment classes by name, with the group `all` |
 | `fit_definitions` | the fit problems by name (`sbmlsim.fit.cli.FitDefinition`) |
-| `credibility` | the declaration of the contexts of use (`pkpdsim.credibility.Credibility`), e.g. `".credibility:CREDIBILITY"`; `None` for a model without one |
+| `credibility` | the declaration of the contexts of use (`sbmlsim.credibility.Credibility`), e.g. `".credibility:CREDIBILITY"`; `None` for a model without one |
+| `credibility_settings` | the credibility settings of sbmlsim (`sbmlsim.project.CredibilitySettings`), `pkpdsim.model.CREDIBILITY_SETTINGS` by default: the metadata `PKPDMappingMetaData`, the fields of a domain (`DOMAIN_FIELDS`), the evidence extensions and the PK battery of `pkpdsim.credibility`; `battery_settings` sets the battery, e.g. `{"steady_state": False}` for a model which does not start at its steady state |
 
 ## Settings
 
@@ -150,7 +151,7 @@ references resolve (`check_model`), the experiments initialize
 fit starts (`start_fits`). A function which checks several things raises one
 `AssertionError` which names every failure, not only the first.
 
-`check_battery(model, run)` of sbmlsim runs a battery of the checks of the builds and fails for every failed check the model does not know, `checks.battery`; the PK battery of pkpdsim (mass balance, non-negativity, zero dose, steady state, superposition, a second simulator, plausibility and rebuild, see [Battery of the builds](credibility.md#battery-of-the-builds)) is its hook, `check_battery(MODEL, lambda model: run_battery(model, rebuild=True, cross_simulator=True))` with `pkpdsim.credibility.battery.run_battery`.
+`check_battery(model, run)` of sbmlsim runs a battery of the checks of the builds and fails for every failed check the model does not know, `checks.battery`; the PK battery of pkpdsim (mass balance, non-negativity, zero dose, steady state, superposition, a second simulator, plausibility and rebuild, see [Battery of the builds](credibility.md#battery-of-the-builds)) is the battery hook of every model, so `check_battery(MODEL, run_battery)` with the battery of sbmlsim, `sbmlsim.credibility.battery.run_battery`, runs it.
 
 The known exceptions of a model (experiments which are not registered, modules
 which do not import, experiments which run one at a time, checks of the battery

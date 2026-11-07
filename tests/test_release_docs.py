@@ -10,17 +10,25 @@ from pathlib import Path
 from urllib.parse import quote
 
 import pytest
-from credibility_tables import battery_of, fit_table, verification_of
+from credibility_tables import (
+    assess,
+    battery_of,
+    fit_table,
+    predictive_checks_of,
+    propagation_of,
+    verification_of,
+)
 from pkpdsim_credibility.credibility import CREDIBILITY
-from sbmlsim.fit.records import AdoptedRecord, adopt_fit
-
-from pkpdsim.credibility import (
+from sbmlsim.credibility import (
+    CHECKS,
     Battery,
-    Check,
     CredibilityAssessment,
     Provenance,
     assess_table,
 )
+from sbmlsim.fit.records import AdoptedRecord, adopt_fit
+
+from pkpdsim.credibility import EXTENSIONS
 from pkpdsim.release.build import BuildPaths
 from pkpdsim.release.docs import PAGES, pages, write_docs
 from pkpdsim.release.notes import fits_prefix
@@ -378,14 +386,16 @@ def _write_credibility(
     verification = (
         verification_of(
             fits,
-            factors={Check.INTEGRATOR: 1.02},
+            factors={CHECKS["integrator"]: 1.02},
             problems=("the male build 'toy.xml' | has 1 issue",),
             battery=battery,
         )
         if verified
         else None
     )
-    assessment = assess_table(CREDIBILITY, fits, provenance, verification)
+    assessment = assess_table(
+        CREDIBILITY, fits, provenance, verification, extensions=EXTENSIONS
+    )
     (path / BuildPaths.CREDIBILITY).mkdir(parents=True)
     assessment.to_json(path / BuildPaths.CREDIBILITY / "credibility.json")
     return assessment
@@ -497,7 +507,7 @@ def test_the_credibility_page_shows_the_battery(
         context,
         model=context.model.replace(credibility="pkpdsim_toy.credibility:CREDIBILITY"),
     )
-    _write_credibility(path, verified=True, battery=battery_of(Check.STEADY_STATE))
+    _write_credibility(path, verified=True, battery=battery_of(CHECKS["steady_state"]))
     write_project_files(context, path)
     write_docs(context, path)
     page = (path / "docs" / "credibility.md").read_text(encoding="utf-8")
@@ -509,7 +519,7 @@ def test_the_credibility_page_shows_the_battery(
         in battery
     )
     assert (
-        "| physiological steady state | `numerical_code_verification` | 4 | 1e-09 | "
+        "| steady state | `numerical_code_verification` | 4 | 1e-09 | "
         "failed: broken |" in battery
     )
     assert (
@@ -521,7 +531,7 @@ def test_the_credibility_page_shows_the_battery(
 def test_the_credibility_page_shows_the_ratio_pairs(
     release: tuple[ProjectContext, Path],
 ) -> None:
-    from test_credibility_ratios import PROVENANCE, _renal
+    from test_credibility_ratios import _renal
 
     context, path = release
     context = dataclasses.replace(
@@ -529,7 +539,7 @@ def test_the_credibility_page_shows_the_ratio_pairs(
         model=context.model.replace(credibility="pkpdsim_toy.credibility:CREDIBILITY"),
     )
     fits = fit_table(factors={("CredA", "fm_renal"): 1.1}, times=True)
-    assessment = assess_table(_renal(), fits, PROVENANCE)
+    assessment = assess(_renal(), fits)
     (path / BuildPaths.CREDIBILITY).mkdir(parents=True)
     assessment.to_json(path / BuildPaths.CREDIBILITY / "credibility.json")
     write_project_files(context, path)
@@ -547,18 +557,17 @@ def test_the_credibility_page_shows_the_ratio_pairs(
 def test_the_credibility_page_shows_the_temporal_validation(
     release: tuple[ProjectContext, Path],
 ) -> None:
-    from test_credibility_temporal import FIT_DAY, PROVENANCE, _chronology
+    from test_credibility_temporal import FIT_DAY, _chronology
 
     context, path = release
     context = dataclasses.replace(
         context,
         model=context.model.replace(credibility="pkpdsim_toy.credibility:CREDIBILITY"),
     )
-    assessment = assess_table(
+    assessment = assess(
         CREDIBILITY,
         fit_table(),
-        PROVENANCE,
-        chronology=_chronology(FIT_DAY + timedelta(days=1)),
+        prepared={"temporal": _chronology(FIT_DAY + timedelta(days=1))},
     )
     (path / BuildPaths.CREDIBILITY).mkdir(parents=True)
     assessment.to_json(path / BuildPaths.CREDIBILITY / "credibility.json")
@@ -576,7 +585,7 @@ def test_the_credibility_page_shows_the_temporal_validation(
 def test_the_credibility_page_shows_the_study_data(
     release: tuple[ProjectContext, Path], tmp_path: Path
 ) -> None:
-    from test_credibility_studies import PROVENANCE, _model
+    from test_credibility_studies import _model
 
     from pkpdsim.credibility.studies import study_data
 
@@ -585,11 +594,10 @@ def test_the_credibility_page_shows_the_study_data(
         context,
         model=context.model.replace(credibility="pkpdsim_toy.credibility:CREDIBILITY"),
     )
-    assessment = assess_table(
+    assessment = assess(
         CREDIBILITY,
         fit_table(),
-        PROVENANCE,
-        studies=study_data(_model(tmp_path / "data"), fit_table().table),
+        prepared={"studies": study_data(_model(tmp_path / "data"), fit_table().table)},
     )
     (path / BuildPaths.CREDIBILITY).mkdir(parents=True)
     assessment.to_json(path / BuildPaths.CREDIBILITY / "credibility.json")
@@ -607,16 +615,12 @@ def test_the_credibility_page_shows_the_study_data(
 def test_the_credibility_page_shows_the_parameter_uncertainty(
     release: tuple[ProjectContext, Path],
 ) -> None:
-    from test_credibility_uncertainty import PROVENANCE, _propagation
-
     context, path = release
     context = dataclasses.replace(
         context,
         model=context.model.replace(credibility="pkpdsim_toy.credibility:CREDIBILITY"),
     )
-    assessment = assess_table(
-        CREDIBILITY, fit_table(), PROVENANCE, propagation=_propagation(0.01)
-    )
+    assessment = assess(CREDIBILITY, fit_table(), propagation=propagation_of(0.01))
     (path / BuildPaths.CREDIBILITY).mkdir(parents=True)
     assessment.to_json(path / BuildPaths.CREDIBILITY / "credibility.json")
     write_project_files(context, path)
@@ -631,7 +635,7 @@ def test_the_credibility_page_shows_the_parameter_uncertainty(
 def test_the_credibility_page_shows_the_inputs(
     release: tuple[ProjectContext, Path],
 ) -> None:
-    from test_credibility_inputs import PROVENANCE, _check
+    from test_credibility_inputs import _check
 
     context, path = release
     context = dataclasses.replace(
@@ -642,7 +646,7 @@ def test_the_credibility_page_shows_the_inputs(
         _check("fm_dose", "BW", 72.0, "equivalent"),
         _check("fm_dose", "PODOSE_a", 25.0, "differs"),
     ]
-    assessment = assess_table(CREDIBILITY, fit_table(), PROVENANCE, inputs=checks)
+    assessment = assess(CREDIBILITY, fit_table(), prepared={"inputs": checks})
     (path / BuildPaths.CREDIBILITY).mkdir(parents=True)
     assessment.to_json(path / BuildPaths.CREDIBILITY / "credibility.json")
     write_project_files(context, path)
@@ -697,16 +701,12 @@ def test_no_credibility_page_without_a_record(
 def test_the_credibility_page_shows_the_variability(
     release: tuple[ProjectContext, Path],
 ) -> None:
-    from test_credibility_variability import PROVENANCE, _checks
-
     context, path = release
     context = dataclasses.replace(
         context,
         model=context.model.replace(credibility="pkpdsim_toy.credibility:CREDIBILITY"),
     )
-    assessment = assess_table(
-        CREDIBILITY, fit_table(), PROVENANCE, variability=_checks(0.5)
-    )
+    assessment = assess(CREDIBILITY, fit_table(), variability=predictive_checks_of(0.5))
     (path / BuildPaths.CREDIBILITY).mkdir(parents=True)
     assessment.to_json(path / BuildPaths.CREDIBILITY / "credibility.json")
     write_project_files(context, path)
