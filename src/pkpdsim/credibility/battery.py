@@ -58,7 +58,7 @@ from sbmlsim.credibility.battery import (
     BatteryResult,
     BatteryRun,
     BatterySettings,
-    not_applicable,
+    not_applicable_result,
 )
 from sbmlsim.credibility.verification import (
     LIMIT,
@@ -909,7 +909,7 @@ class PKBattery(BatteryHook):
         if not any(isinstance(b, FlatBuild) and b.substances for b in builds):
             return BatteryContribution(
                 results=tuple(
-                    not_applicable(check, _NO_SUBSTANCE) for check in PK_CHECKS
+                    not_applicable_result(check, _NO_SUBSTANCE) for check in PK_CHECKS
                 ),
                 sections={"fates": []},
             )
@@ -922,7 +922,7 @@ class PKBattery(BatteryHook):
                 "`IVDOSE_<s>`, `PODOSE_<s>`, `SOLDOSE_<s>` or `Ri_<s>`."
             )
             for check in (MASS_BALANCE, SUPERPOSITION):
-                results[check.id] = not_applicable(check, reason)
+                results[check.id] = not_applicable_result(check, reason)
         else:
             collector = BatteryCollector()
             _mass_balance(simulations, collector, fates)
@@ -939,7 +939,7 @@ class PKBattery(BatteryHook):
         results[ZERO_DOSE.id] = (
             collector.result(ZERO_DOSE, _statement(ZERO_DOSE))
             if collector.cases
-            else not_applicable(
+            else not_applicable_result(
                 ZERO_DOSE,
                 "Every substance of the model starts above zero, it is endogenous.",
             )
