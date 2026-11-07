@@ -263,7 +263,11 @@ def test_the_message_of_a_replacement_shows_the_path(
     run_command(MODEL, arguments)
     capsys.readouterr()
     run_command(MODEL, arguments)
-    assert "a[b]/simulation/studies" in "".join(capsys.readouterr().out.split())
+    # the console wraps a long path and writes the separators of the platform;
+    # with markup the `[b]` of the path would vanish as a style
+    out = "".join(capsys.readouterr().out.split()).replace("\\", "/")
+    assert "earlierresultsin" in out
+    assert "a[b]/simulation/studies'arereplaced" in out
 
 
 def test_the_stagings_of_a_killed_run_are_removed(
