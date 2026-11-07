@@ -133,7 +133,9 @@ def test_png_and_sbml_compare_files(tmp_path: Path) -> None:
     assert verify(["png", str(old), str(new)]) == 0
 
 
-def test_a_package_without_a_model_object_is_a_usage_error(tmp_path: Path) -> None:
+def test_a_package_without_a_model_object_is_a_configuration_error(
+    tmp_path: Path,
+) -> None:
     code = verify(
         [
             "dump",
@@ -145,7 +147,7 @@ def test_a_package_without_a_model_object_is_a_usage_error(tmp_path: Path) -> No
             str(tmp_path / "x.pkl"),
         ]
     )
-    assert code == 2
+    assert code == 4
 
 
 @pytest.mark.parametrize(
