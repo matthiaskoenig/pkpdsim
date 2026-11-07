@@ -1,6 +1,6 @@
 # Uncertainty of the fitted parameters
 
-The fitted parameters of a model are known only within their confidence intervals, and so are its predictions. The records of the adopted fits, their distributions and the run of the experiments over their draws are part of sbmlsim ([`sbmlsim.fit.records`](https://matthiaskoenig.github.io/sbmlsim/api/fit.records/), [`sbmlsim.experiment.draws`](https://matthiaskoenig.github.io/sbmlsim/api/experiment.draws/)); a model of pkpdsim uses them to make the uncertainty of the fitted parameters part of the model and to draw the predictions of the simulation experiments as bands. A fit becomes part of a model in three steps: it is adopted, the factory takes its values with their uncertainty, and a run draws them.
+The fitted parameters of a model are known only within their confidence intervals, and so are its predictions. The records of the adopted fits, the `distrib` uncertainty they give the parameters of the SBML and the run of the experiments over their draws are part of sbmlsim, see [The uncertainty of the fitted parameters](https://matthiaskoenig.github.io/sbmlsim/uncertainty/#the-uncertainty-of-the-fitted-parameters); a model of pkpdsim uses them to make the uncertainty of the fitted parameters part of the model and to draw the predictions of the simulation experiments as bands. This page keeps the commands and the model object of pkpdsim.
 
 ## Adopting a fit
 
@@ -11,7 +11,7 @@ run_fit pkdb_models.models.hctz --subset PK --runs 40 --cores 10 --identifiabili
 run_fit pkdb_models.models.hctz --adopt PK_20261015_235422__7a62a
 ```
 
-The record is the part of the results which the model needs (`sbmlsim.fit.records.RECORD_FILES`, `adopt_fit`): the best parameter sets (`parameters.json`), the problem with its settings and bounds (`optimization_result.json`), the profile likelihood (`identifiability.json`, `identifiability.tsv`), the Fisher information (`fisher.json`, `fisher.tsv`), the metrics, the text report and the methods report: `report.pdf`, its Typst source `report.typ` with `references.bib` and `references.csl` and the SVG figures it shows (`plots/`), so that `report.typ` compiles in the record. The LaTeX sources of the report (`report.tex`, `report_standalone.tex`) with the PNG copies of their figures, the HTML report and the runs stay in the results of the fit. The record of the PK fit of HCTZ is 1.6 MB: the five SVG figures 0.83 MB, `report.pdf` 0.41 MB, `optimization_result.json` 0.14 MB, `report.txt` 0.12 MB and the other files 0.10 MB. A fit without a profile likelihood and without a Fisher information cannot be adopted (run it with `--identifiability`); an adopted fit is only replaced with `--force`. The model object lists its adopted fits:
+The record is the part of the results which the model needs (`sbmlsim.fit.records.RECORD_FILES`, `adopt_fit`, see [Adopting a fit](https://matthiaskoenig.github.io/sbmlsim/uncertainty/#adopting-a-fit)). A fit without a profile likelihood and without a Fisher information cannot be adopted (run it with `--identifiability`); an adopted fit is only replaced with `--force`. The model object lists its adopted fits:
 
 ```python
 # not executed
@@ -43,25 +43,7 @@ A parameter which no adopted fit has, and a parameter which two adopted fits hav
 
 ## The uncertainty in the SBML
 
-The uncertainty is a `distrib:uncertainty` of the SBML parameter (the distrib package of SBML), which comp flattening keeps. It has three children and the provenance in its notes (`sbmlsim.fit.records.ParameterUncertainty`):
-
-| child | value |
-| --- | --- |
-| `uncertSpan` of the type `confidenceInterval` | the confidence interval of the profile likelihood at the level of the fit (0.95); a side which the profile does not close is the bound of the fit |
-| `uncertParameter` of the type `standardError` | the standard error of the Fisher information in the unit of the model (delta method), if the fit has one |
-| `uncertParameter` of the type `distribution` | the distribution the draws of the parameter come from |
-
-The distribution follows the confidence interval in the space the fit searched the parameter in, the `parameter_scale` of the fit:
-
-| the profile | the distribution |
-| --- | --- |
-| closed, logarithmic scale | `lognormal(ln(value), sigma, lb, ub)`: sigma is the mean of the closed half widths of the interval in the logarithm divided by `z = sqrt(chi2(alpha, df))`, truncated to the bounds of the fit |
-| open on one side | the closed side gives sigma, the bound cuts off the open side (a value at its bound gives a half lognormal) |
-| open on both sides (not identifiable) | `uniform(lb, ub)` |
-| linear scale | `normal(value, sigma, lb, ub)` with the same rule |
-| no profile (the Fisher fallback) | sigma is the standard error of the Fisher information in the space of the fit |
-
-The notes name the fit, the record, the cost and the number of data points, the bounds and the scale, the method, the class of the profile, the confidence intervals of the profile and of the Fisher information and the distribution. The draws are independent per parameter: distrib states one distribution per parameter, the correlations of the Fisher information stay in the record.
+The uncertainty is a `distrib:uncertainty` of the SBML parameter with the confidence interval, the standard error and the distribution the draws come from, see [The uncertainty in the SBML](https://matthiaskoenig.github.io/sbmlsim/uncertainty/#the-uncertainty-in-the-sbml) of sbmlsim for the children and the rule by which the distribution follows from the profile. The draws are independent per parameter; the correlations of the Fisher information stay in the record.
 
 ## Running over the draws
 
@@ -73,12 +55,7 @@ run_simulation pkdb_models.models.hctz --action simulate --experiments all --unc
 run_simulation pkdb_models.models.hctz --action simulate --experiments all -u --draws 200 --seed 1 --quantiles 0.025 0.975
 ```
 
-The run reads the distribution of every parameter of `model_path`, the default variant, (`sbmlsim.simulation.sampling.parameter_distributions`) and draws them once in a Latin hypercube into the dimension `uncertainty` (`sbmlsim.simulation.sampling.uncertainty_dimension`, `sbmlsim.experiment.draws.UncertaintySettings`: 100 draws, seed 1234, the quantiles 0.05 and 0.95). Every experiment gets the draws as its setting `uncertainty` (`UncertaintyRun`), and the `initialize` of sbmlsim's `SimulationExperiment`, which `PKPDSimulationExperiment` derives from, applies them (`apply_uncertainty`):
-
-- every simulation becomes a scan over the draws, a scan gets the dimension of the draws appended; a fitted parameter which a simulation, or a dimension of its scan, sets itself keeps its value and is left out of the draws of that simulation, and a simulation which sets all of them runs once;
-- every curve of a figure which reads a task over the draws, over the time or over the values of a dimension of its scan (e.g. an amount at a time over the scanned renal function), becomes the band of the quantiles of the draws with the median, in the colour and with the name of the curve; a curve over another variable of the task, which differs between the draws (e.g. a blood pressure over a concentration), has no common x for quantiles: it draws the simulation with the fitted values (`<simulation>_fitted`, its name gets "(fit)") over a thin translucent line of every draw in its colour, the area of the draws (no legend entry; not for a curve with a line per point of a dimension); the curves of the data stay.
-
-An experiment therefore needs no code of its own for the bands. A figure which an experiment draws itself with matplotlib (`figures_mpl`) reads `self.uncertainty` (`None` without draws) and draws the bands itself: `sbmlsim.result.scan.scan_dimensions(res, across)` gives the dimensions of a scan without the draws and `point_band(res, key, across, quantiles, **point)` the time points, the lower quantile, the median and the upper quantile of a variable at a point; draws with their own time points (the steps of the integrator) are interpolated onto the time points of a figure, a few hundred which follow the density of their steps (`plot_times` of sbmlsim):
+The run reads the distribution of every parameter of `model_path`, the default variant, and draws them once in a Latin hypercube (100 draws, seed 1234, the quantiles 0.05 and 0.95 by default, `sbmlsim.experiment.draws.UncertaintySettings`). Every experiment gets the draws as its setting `uncertainty` and the `initialize` of `SimulationExperiment`, which `PKPDSimulationExperiment` derives from, turns its simulations into scans over the draws and its curves into bands, see [Running over the draws](https://matthiaskoenig.github.io/sbmlsim/uncertainty/#running-over-the-draws) of sbmlsim; an experiment therefore needs no code of its own for the bands. A figure which an experiment draws itself with matplotlib (`figures_mpl`) reads `self.uncertainty` (`None` without draws) and draws the bands with `point_band`:
 
 ```python
 # not executed

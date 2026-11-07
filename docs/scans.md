@@ -4,25 +4,7 @@ The scans and the sensitivity analyses of a model are sbmlsim's: a design of `sb
 
 ## The points of a scan
 
-What the figures and the pharmacokinetic parameters of a model read from the points of a scan are functions of [`sbmlsim.result.scan`](https://matthiaskoenig.github.io/sbmlsim/api/result.scan/), see the page [Scans](https://matthiaskoenig.github.io/sbmlsim/scans/) of sbmlsim: the timecourse of a point with the state after a change only (`point_timecourse`, `single_dimension`), the state after a change of the whole result (`state_after_changes`), the first and the last value of a variable at every point, on a grid and in the ragged layout alike (`start_values`, `end_values`), and the dimensions and the band of a point over draws (`scan_dimensions`, `point_band`):
-
-```python
-# not executed
-from sbmlsim.result.scan import (
-    end_values,
-    point_timecourse,
-    single_dimension,
-    start_values,
-    state_after_changes,
-)
-
-dim = single_dimension(res)
-for k in range(res.ds.sizes[dim]):
-    time, values = point_timecourse(res, "[Cve_hctz]", **{dim: k})
-doses = start_values(res, "PODOSE_hctz")  # the dose of every point
-urine = end_values(res, "Aurine_hctz")  # the amount in the urine at the end
-res = state_after_changes(self.results[self.to_sid("task_sim")])
-```
+What the figures and the pharmacokinetic parameters of a model read from the points of a scan are the functions of [`sbmlsim.result.scan`](https://matthiaskoenig.github.io/sbmlsim/api/result.scan/) (`point_timecourse`, `single_dimension`, `state_after_changes`, `start_values`, `end_values`, `scan_dimensions`, `point_band`), described with examples in [Scans](https://matthiaskoenig.github.io/sbmlsim/scans/) of sbmlsim.
 
 ## The sensitivity analyses of a model
 

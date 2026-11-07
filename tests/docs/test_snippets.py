@@ -79,7 +79,7 @@ PAGES: list[str] = sorted(
 def test_pages_are_found() -> None:
     """The pages with snippets are discovered."""
     assert "index.md" in PAGES
-    assert "licenses.md" in PAGES
+    assert "models.md" in PAGES
     assert "pbpk/tutorial.md" in PAGES
 
 

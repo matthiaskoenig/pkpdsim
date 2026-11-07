@@ -4,246 +4,17 @@ The fit metrics of a model pool its validation data: one GMFE and one percentage
 
 The credibility is the one of sbmlsim (`sbmlsim.credibility`, the kind `credibility` of `python -m sbmlsim.run`): the declaration, the selection of the evidence, the assessment, the verification, the parameter uncertainty, the predictive check, the lock, the report and the scorecard. pkpdsim adds what is specific to the PBPK models of pkdb_models (`pkpdsim.credibility`), which every model registers by its credibility settings (`pkpdsim.model.CREDIBILITY_SETTINGS`): the metadata of its fit mappings (`PKPDMappingMetaData`) with the fields a domain claims (`DOMAIN_FIELDS`), the evidence extensions of the ratio pairs ([Ratios](#ratios)), the temporal validation ([Temporal validation](#temporal-validation)), the equivalency of the inputs ([Equivalency of the inputs](#equivalency-of-the-inputs)) and the study data ([Study data](#study-data)), and the PK battery as the battery hook ([Battery of the builds](#battery-of-the-builds)). The evidence of an extension is a section of the record of a context or of the assessment by the name of the extension (`ContextResult.section("ratios")`, `CredibilityAssessment.extensions`); the records of pkpdsim 0.17 to 0.19, which have it as fields of their own, are read as these sections.
 
-## The frame
+## The frame, the declaration, the evidence and the verdicts
 
-The frame is that of ASME V&V 40 (2018), which the FDA guidance on the credibility of computational modeling (2023) and ICH M15 on model-informed drug development (Step 4, 2026) took over, and which the EMA guideline on the reporting of PBPK modelling and simulation (2018) uses for the qualification of a platform. For PBPK models it is worked out by Kuemmel et al. (2020) and Musuamba et al. (2021), and Erdemir et al. (2020) give the rules of credible practice. The default acceptance uses fold criteria on the predictions of the validation data; for ratios between arms, e.g. impaired over healthy, a fixed fold is too lenient near 1, and Guest et al. (2011) define the limits which step 3 uses.
+The frame of ASME V&V 40, the ladder of the contexts of use `C1` to `C5`, the model risk with its default acceptance and minimum of points, how a model declares its contexts of use (`Credibility`, `ContextOfUse`, `QuantityOfInterest`, `Domain`, `Evidence`, `Unclaimed`), the checks of a declaration, the roles of the evidence, the kinds from the records, the verdicts and their order are described in [Credibility](https://matthiaskoenig.github.io/sbmlsim/credibility/) of sbmlsim, which also describes the verification of the predictions, the generic battery, the cross-validation, the propagation of the parameter uncertainty, the variability and the predictive check, the locked splits and the report. This page keeps what pkpdsim adds to them.
 
-- The **question of interest** is what a decision needs to know, e.g. "Does the model predict the plasma concentration of the drug in renal impairment?".
-- The **context of use** (COU) states the role of the model in answering the question: its quantities of interest and the domain it is claimed for.
-- The **model risk** follows from the influence of the model on the decision (is it one argument among others or the only one) and the consequence of a wrong decision.
-- The **evidence** is the data the model is compared with, each part with a role: calibration (the data the model was fitted to), validation (data held out of the fit) or limitation (data the model is known not to describe).
-- The **assessment** decides per COU whether the validation evidence meets the acceptance, which part of the claimed domain the evidence covers, and which credibility factors of V&V 40 are assessed.
+A model package gets a module `credibility.py` with the object `CREDIBILITY`, a `Credibility`, and references it in its model object like the experiments and the fit definitions, `credibility=".credibility:CREDIBILITY"` (see [Models and their commands](models.md)); it is resolved when a command uses it. The example of the declaration is the module of the test package `tests/pkpdsim_credibility`, a decay with an intravenous dose.
 
-Credibility is per context of use. There is no score of a model.
-
-## The ladder of contexts of use
-
-A COU has one level, `CouLevel`. A model typically has two to five COUs.
-
-| level | name | meaning | typical evidence |
-|---|---|---|---|
-| `C1` | describe | the model describes the data it integrates | calibration evidence |
-| `C2` | interpolate | doses, routes, regimens and formulations inside the range of the data | held-out doses, subjects, studies |
-| `C3` | extrapolate with data | special populations or conditions for which some data of the drug exists (renal or hepatic impairment, genotypes, food, interactions) | validation data of the population |
-| `C4` | extrapolate without data | populations or conditions without data of the drug | the qualification of the platform across drugs, uncertainty (later steps) |
-| `C5` | clinical endpoint | pharmacodynamics and clinical outcomes (blood pressure, glucose, coagulation) | PD validation data |
-
-`CouLevel.label` gives the name of a level (`describe`, `interpolate`, ...). C1 is the only level decided on calibration evidence, since its question is whether the model describes the data it was fitted to. Every other level is decided on validation evidence only.
-
-## Model risk, the default acceptance and the minimum of points
-
-`Influence` and `Consequence` of a COU are `Level.LOW`, `Level.MEDIUM` or `Level.HIGH`; `ContextOfUse.risk` is the lookup `RISK_TABLE`:
-
-| influence \ consequence | low | medium | high |
-|---|---|---|---|
-| low | low | low | medium |
-| medium | low | medium | high |
-| high | medium | high | high |
-
-Influence is low when the model is one argument among others (a paper which also shows the data), medium when the prediction of the model is the main argument, high when it stands alone (no data of the condition, C4). Consequence is low for an explanation, medium for a statement a clinician or another modeller may act on (a dose adjustment) and high only with a rationale.
-
-A COU which declares no `acceptance` takes the default of its risk (`DEFAULT_ACCEPTANCE`, `default_acceptance(risk)`), all rules of which must be met on the validation evidence:
-
-| risk | rules |
-|---|---|
-| low | `within_2fold` >= 70 % |
-| medium | `within_2fold` >= 80 % and GMFE <= 1.5 |
-| high | `within_2fold` >= 90 %, `within_1.5fold` >= 70 % and GMFE <= 1.3 |
-
-The thresholds are a starting point of this repository and not taken from a guideline, which leaves them to the COU. A COU overrides them with its own rules: `Acceptance(criterion, minimum)` (the percentage of the points a criterion of `sbmlsim.fit.evaluation`, e.g. `Fold(2.0)`, accepts is at least `minimum`), `MaxGmfe(maximum)` and `AfeRange(low, high)` (the bias).
-
-A percentage of a few points says little, so a verdict also needs a minimum of evaluable decisive points. A COU which declares no `min_points` takes the default of its risk (`DEFAULT_MIN_POINTS`, `ContextOfUse.minimum_points`):
-
-| risk | minimum of evaluable points |
-|---|---|
-| low | 5 |
-| medium | 10 |
-| high | 20 |
-
-A COU overrides it with `min_points` (at least 1), e.g. for a pharmacodynamic endpoint of which a study reports a few values only; the rationale of the COU says why.
-
-## Declaring the contexts of use
-
-A model package gets a module `credibility.py` with the object `CREDIBILITY`, a `Credibility`, and references it in its model object like the experiments and the fit definitions, `credibility=".credibility:CREDIBILITY"` (see [Models and their commands](models.md)); it is resolved when a command uses it. A declaration is plain python, a tree of frozen dataclasses. This is the declaration of the test model of pkpdsim, a decay with an intravenous dose, which has calibration data, held-out doses, a renal impairment study and data the model does not describe:
-
-```python
-# not executed (the example is the module of the test package tests/pkpdsim_credibility)
-from sbmlsim.credibility import (
-    ContextOfUse,
-    CouLevel,
-    Credibility,
-    Domain,
-    Evidence,
-    EvidenceRole,
-    Level,
-    QuantityOfInterest,
-    Unclaimed,
-)
-from sbmlsim.fit.filters import named_filter
-
-from pkpdsim.fit import metadata_filter
-from pkpdsim.metadata import Health, Route
-from pkpdsim_credibility.fitting import DOSE, LIMITATION, POPULATION
-
-_A = (QuantityOfInterest("[A]", "the concentration of A"),)
-
-CREDIBILITY = Credibility(
-    contexts=(
-        ContextOfUse(
-            id="describe",
-            title="Describe the decay",
-            question="Does the model describe the intravenous decay of A?",
-            level=CouLevel.C1,
-            influence=Level.LOW,
-            consequence=Level.LOW,
-            quantities=_A,
-            domain=Domain(),
-            evidence=(
-                Evidence(
-                    "intravenous data",
-                    EvidenceRole.CALIBRATION,
-                    metadata_filter(route={Route.IV}),
-                ),
-            ),
-        ),
-        ContextOfUse(
-            id="dose",
-            title="Decay after a dose",
-            question="Does the model predict the decay after a dose of the data?",
-            level=CouLevel.C2,
-            influence=Level.MEDIUM,
-            consequence=Level.MEDIUM,
-            quantities=_A,
-            domain=Domain(
-                metadata={"route": (Route.IV,), "health": (Health.HEALTHY,)},
-                statement="the single doses of the data",
-            ),
-            evidence=(
-                Evidence("doses", EvidenceRole.VALIDATION, named_filter(DOSE)),
-                Evidence(
-                    "other healthy data",
-                    EvidenceRole.VALIDATION,
-                    Unclaimed(
-                        within=metadata_filter(
-                            route={Route.IV}, health={Health.HEALTHY}
-                        )
-                    ),
-                ),
-            ),
-        ),
-        ContextOfUse(
-            id="renal",
-            title="Decay in renal impairment",
-            question="Does the model predict the decay in renal impairment?",
-            level=CouLevel.C3,
-            influence=Level.MEDIUM,
-            consequence=Level.HIGH,
-            quantities=(
-                *_A,
-                QuantityOfInterest(
-                    "A_ratio",
-                    "the concentration in renal impairment over the healthy one",
-                    ratio=True,
-                ),
-            ),
-            domain=Domain(
-                metadata={"health": (Health.HEALTHY, Health.RENAL_IMPAIRMENT)}
-            ),
-            evidence=(
-                Evidence(
-                    "renal impairment",
-                    EvidenceRole.VALIDATION,
-                    named_filter(POPULATION),
-                ),
-            ),
-        ),
-    ),
-    limitations=(
-        Evidence(
-            "scaled data",
-            EvidenceRole.LIMITATION,
-            named_filter(LIMITATION),
-            "data at three times the decay which the model does not describe",
-        ),
-    ),
-)
-```
-
-- `ContextOfUse`: `id` (a slug matching `^[a-z][a-z0-9_]*$`, unique in the model), `title`, `question` (one sentence ending with `?`), `level`, `influence`, `consequence`, `quantities`, `domain`, `evidence`, and optional `acceptance` (empty means the default of the risk), `limitations` (evidence of role `LIMITATION` of this COU, subtracted like the limitations of the model), `rationale` (why this level, influence and consequence), `extrapolation` (see the verdicts) and `min_points` (`None` means the default of the risk). `ContextOfUse.risk`, `ContextOfUse.minimum_points` and `ContextOfUse.decisive_role` (calibration for C1, else validation) are derived.
-- `QuantityOfInterest(id, description)`: an observable of the fit mappings (`Cve_hctz`) or the observable of a value per simulation (`pk.cmax`). The observable column of the data holds the selection, `[Cve_hctz]` for a concentration, so a quantity is matched after the brackets are removed (`[A]` and `A` are the same quantity); a quantity which matches no observable of the fits is an error. A quantity restricts the evidence of its COU to its observables. `ratio` marks a ratio between arms (impaired over healthy): `ratio=True` declares it without a pairing, it is matched against no observable, restricts no evidence and is shown as "ratio, no pairing declared"; a `Ratio` pairs its arms and is assessed, see [Ratios](#ratios). The absolute quantities decide the verdict, a ratio adds to it, so a COU has at least one quantity which is no ratio.
-- `Domain`: `metadata`, the claimed values by field of the metadata (`route`, `health`, `genotype`, `phenotype`, `coadministration`, `dosing`, `fasting`, `application_form`, `tissue`; members of the enums of `pkpdsim.metadata`), and `statement`, a sentence for what the metadata cannot say (dose range, duration). The dose is not a field of the metadata, so a dose range is a statement only. The coverage is assessed on the metadata; the statement is shown, marked "statement, not assessed". A COU above C1 claims at least one value of the metadata, without one its domain would be covered by any data.
-- `Evidence(name, role, selection, description, fit=None)`: the selection is a filter of fit mappings (`named_filter` of a `NamedMappings`, the mapping keys by study id, of `sbmlsim.fit.filters`, or `metadata_filter` of `pkpdsim.fit`) or `Unclaimed`; `fit` restricts the evidence to one subset of the adopted fits (`"PK"` or `"PD"`), and a subset the adopted fits do not have is an error naming the subsets they have.
-- `Credibility(contexts, limitations, notes)`: the limitations are evidence of the whole model. A limitation, of the model or of a COU, is data the model does not describe and is subtracted from the evidence of every COU.
-
-## The checks of a declaration
-
-A declaration is validated when it is built (`DeclarationError` lists every problem):
-
-- the ids match `^[a-z][a-z0-9_]*$` and are unique;
-- a question ends with `?`;
-- a COU has at least one quantity of interest which is no ratio;
-- a COU of level C2 to C5 claims at least one value of the metadata in its domain, a C1 COU may claim none;
-- the evidence of `limitations`, of the model and of a COU, has the role `LIMITATION`;
-- a C1 COU has calibration evidence, a C4 COU has an `extrapolation` text (it has no validation data of its condition by definition), every other COU has validation evidence or an `extrapolation` text;
-- `Unclaimed` is validation evidence and at most once per COU;
-- a declared `min_points` is at least 1;
-- the setting of an extension (`ContextOfUse.extensions`, e.g. the rule of the ratio pairs) checks itself.
+The `Domain` of a context of use claims values by the fields of the metadata of the fit mappings of pkpdsim (`route`, `health`, `genotype`, `phenotype`, `coadministration`, `dosing`, `fasting`, `application_form`, `tissue`; members of the enums of `pkpdsim.metadata`, the `DOMAIN_FIELDS` of the credibility settings). The dose is not a field of the metadata, so a dose range is a statement only.
 
 When the model loads it (`load_credibility`, `sbmlsim.project.Project.load_credibility`), the declaration is checked against the credibility settings of the model as well: the claimed metadata values are members of the enums of the fields of `DOMAIN_FIELDS`, a setting of `extensions` names an extension of the model and a pairing of a ratio quantity is claimed by one (a `Ratio` by the extension `ratios`).
 
- The assessment checks the declaration against the data on top of that, and any failure is an error and not an empty result:
-
-- A quantity which matches no observable.
-- An evidence which selects no point, named with its COU, evidence and the fits searched.
-- Validation evidence on a mapping which is training data in any adopted fit. Circular evidence is a hard error and never a warning: a mapping fitted in one fit counts as fitted in every fit. The same holds for a limitation on a fitted mapping.
-- Kinds of mappings which differ from the recorded ones (see below).
-
-`check_declaration(model)` (`sbmlsim.credibility.check_declaration`) returns every problem of a declaration and of the records as messages, from the fit definitions and the records, without a simulation; the tests of a model repository use it.
-
-## The evidence
-
-| role | what it selects | what the assessment does with it |
-|---|---|---|
-| `CALIBRATION` | the training points of the selection | decides a C1 COU; for every other level it is reported and never decides |
-| `VALIDATION` | held-out points | decides the acceptance of every level but C1; a training point is an error, an outlier is dropped and counted |
-| `LIMITATION` | data the model does not describe | subtracted from every other evidence of every COU, reported apart, never in an acceptance |
-
-A limitation stays a validation mapping for the fit (the kinds of sbmlsim are not changed); for the credibility it is a limitation. The points a limitation removes from an evidence are counted per evidence and shown in the report; a calibration keeps only training points, so it counts only the removed points it would have kept.
-
-`Unclaimed(within=...)` is for validation data which is computed instead of named, e.g. held-out subjects: it takes the validation points which no other evidence of the model selects (the selected points of the other evidence, of any COU) and no limitation, restricted to the mappings `within` accepts. It is allowed once per COU and only as validation evidence. Without `within` it would take every validation point nobody claims, so a model gives it the metadata of the data it means. Two `Unclaimed` of different COUs may share points. A mapping which is training data in any adopted fit counts as fitted in every fit, so `Unclaimed` and the unclaimed report exclude it.
-
-## The kinds come from the records
-
-The kind of a mapping (`training`, `validation`, `outlier`) is the one the record of an adopted fit stores (`metrics_mappings.tsv`), keyed by experiment and mapping, never by the mapping key alone (two studies can share a key). The assessment compares the recorded kinds with the kinds of the current selection of the fit definitions and fails on any difference, naming the mappings: a split changed after the adoption without a refit would let fitted data count as validation. The remedy is a refit and a new adoption, never an override. The data points are evaluated fresh on the current model and data, not read from the metric tables of the record.
-
-## The verdicts
-
-Per COU, on the union of its validation evidence (each point once; the calibration evidence for C1):
-
-| verdict | meaning |
-|---|---|
-| `supported` | the acceptance is met on at least the minimum of evaluable points, every claimed value of the domain is covered by validation data (for C1 by calibration data) and every quantity of interest which is no ratio is covered |
-| `supported_with_extrapolation` | the acceptance is met on at least the minimum of evaluable points, some claimed value or quantity is not covered, and the COU has an `extrapolation` text which says why the claim holds; a C4 COU, which extrapolates by definition, is never plainly `supported` but at best this |
-| `not_supported` | an acceptance rule is not met |
-| `insufficient_evidence` | no evidence that can be evaluated, fewer evaluable points than the minimum, or claimed values or quantities not covered and no `extrapolation` text |
-| `not_verified` | a check of the verification failed: the decisive predictions change with tighter tolerances or another integration method, or the setup has a problem, so the comparison with the data is not to be trusted |
-
-The verdict is decided in this order, the first step which applies decides:
-
-1. no decisive point: `insufficient_evidence`;
-2. a failed check of the verification: `not_verified` (see [Verification](#verification));
-3. an acceptance rule not met: `not_supported` (a failure on few points is still a failure);
-4. an acceptance rule not evaluable: `insufficient_evidence`;
-5. fewer evaluable points than `minimum_points`: `insufficient_evidence`;
-6. every claimed value and every quantity which is no ratio covered: `supported` (C4: `supported_with_extrapolation`);
-7. an `extrapolation` text: `supported_with_extrapolation`;
-8. else `insufficient_evidence`.
-
-Coverage counts only the points the criteria can evaluate: a fold error needs a finite `DV` and `IPRED`, both greater than 0. The numbers are reported as `n_decisive` (the points of the deciding evidence), `n_evaluable` and `minimum_points`; a rule without an evaluable point has the value `NaN` and `met` of `None`, is not evaluable, and gives `insufficient_evidence`, never `supported`. A `not_supported` verdict is a finding to keep and explain, not a reason to loosen the acceptance. A `supported` C1 COU rests on the data the model was fitted to, so the console, the report and the release page show next to every verdict what decided it (decided on: calibration or validation).
-
-Domain coverage is per claimed (field, value): `validated` when validation points with the value exist, `calibrated` when only calibration points exist (this counts as covered for a C1 COU), `uncovered` otherwise. The values of the points outside of the claimed domain are reported as well; evidence that does not fit the claim is a smell of the declaration.
-
-Quantity coverage is per quantity of interest which is no ratio: `covered` when an evaluable decisive point of its observable lies inside the claimed domain, i.e. for every claimed field of the metadata the value of the point is one of the claimed values, `uncovered` otherwise. A quantity validated only outside the claim, e.g. the PT ratio (an observable, no ratio between arms) validated only by a fed study for a fasted claim, is uncovered, although every claimed value may be validated by the points of other quantities. An assessed ratio quantity is covered by an evaluable pair whose numerator has a decisive point inside the claimed domain (its points are these pairs), a ratio without a pairing has no coverage. The coverage is computed for every level, C4 included, and the coverage of combinations of values is not assessed (each claimed value on its own).
+`run_credibility` runs the kind `credibility` of sbmlsim and the commands `check_declaration(model)` and the lock work as described there; `--lock` writes `credibility.lock.json` into the folder of the model, to be committed and reviewed with the declaration, and `--no-verification` skips the verification and the battery.
 
 ## Ratios
 
@@ -277,19 +48,10 @@ QuantityOfInterest(
 
 `ratios.tsv` has one row per COU and pair (`context`, `quantity`, `fit`, `experiment`, `numerator`, `denominator`, `observed`, `predicted`, `limit`, `within`), the report and the release page a table of the pairs per COU and the rule of the pairs (`Guest`) in the acceptance, which `contexts.tsv` has as the columns `Guest` and `Guest_limit`. The pairs are the section `ratios` of the record of a COU with an assessed ratio, a COU without one has none (pkpdsim 0.19 wrote an empty list); a record of 0.18 or earlier has no pairs.
 
+
 ## Verification
 
-A verdict compares the predictions of the adopted fits (`IPRED`) with the data. Whether these numbers are the solution of the model, and not of the settings of the integrator or of a broken setup, are three factors of V&V 40: the discretization error, the numerical solver error and the use error. `run_credibility` verifies the decisive predictions of every COU with one check per factor (`sbmlsim.credibility.verification`):
-
-| check | factor | what is compared |
-|---|---|---|
-| `tolerances` | discretization error | every adopted fit evaluated again at its reference parameters with the absolute and the relative tolerance of its settings divided by 100 (`TIGHTENING`; every kind and override of an `AbsoluteTolerance`) |
-| `integrator` | numerical solver error | the same at the tightened tolerances with the BDF of CVODE of at most order 2 (`SECOND_METHOD_ORDER`) instead of order 5, a second integration method: another formula with its own local error, which stays stable on a stiff model |
-| `setup` | use error | every build of the model is valid SBML with consistent units (the consistency checks of libsbml with the units, every issue of severity warning or above) and every decisive prediction is finite |
-
-The difference of a prediction is relative, `|alt - ref| / max(|ref|, |alt|, floor)`, with the floor `1e-6` (`SCALE_FLOOR`) of the largest reference prediction of its mapping: a difference below a millionth of the peak of the curve is none, and a point at zero compares with the curve. A numerical check of a COU passes when the largest difference of its decisive predictions is at most `0.01` (`LIMIT`, more than an order below the narrowest default criterion, 1.5-fold and a GMFE of 1.3) and no acceptance rule changes its result with the alternative predictions; a prediction which is finite in the reference and not in the alternative is an infinite difference, and an evaluation of a fit which fails is a failed check with its message. A failed check makes the verdict `not_verified`; the three factors are `assessed` with the result as their statement.
-
-The checks run with every assessment and evaluate every adopted fit twice more; `--no-verification` skips them and the battery below for a quick look, the three factors are then `not_assessed` and the verdicts are those of the comparison alone. The non-stiff method of CVODE (Adams-Moulton) is no second method for these models: on the stiff PBPK models it takes too many steps (hctz: `CV_TOO_MUCH_WORK` on its long simulations), while the BDF of order 2 is A-stable. What the verification of the predictions does not do: the experiments on a second simulator (they run on roadrunner through sbmlsim; the battery below compares the builds with AMICI, an engine of sbmlsim), the explicit Runge-Kutta integrator of roadrunner (sbmlsim sets the settings of CVODE only, and an explicit method is no method for a stiff model) and a check of the doses of the simulations against the interventions of the data (the link of a simulation to an intervention is not declared).
+The three checks of the verification of the predictions (`tolerances`, `integrator`, `setup`) are those of sbmlsim, see [Verification](https://matthiaskoenig.github.io/sbmlsim/credibility/#verification). The experiments of pkpdsim run on roadrunner through sbmlsim; the battery below compares the builds with AMICI, an engine of sbmlsim.
 
 ## Battery of the builds
 
@@ -314,9 +76,7 @@ A failed check of the battery makes every context of use `not_verified`. Its che
 
 ## Cross-validation
 
-A fit describes its training data; how well it predicts a study it has not seen is a question of the form of the model. `run_fit <package> --cross-validation <fit id>` refits the problem of an adopted fit once per training study without that study (its training mappings become validation mappings, `held_out`), by least squares from the adopted parameters with the adopted fits of the other problems fixed, and predicts the held-out study with the refitted parameters (`sbmlsim.credibility.cross_validation`, `cross_validate`). `--experiments` limits the held-out studies, `--cores` and `--seed` are those of the refits, which are written below `cross_validation/` of the output directory. The result is stored in the record of the adopted fit in the folder of the fits of the model, `cross_validation.json`, where the assessment reads it (`sbmlsim.credibility.read_cross_validations`; the file of `sbmlsim.credibility.write_cross_validation`, which the command writes into the record itself): per study its points, the GMFE and the share within 2-fold of the held-out predictions and of the predictions of the adopted fit for the same points, and the cost of the refit, and the GMFE of all held-out points together.
-
-`run_credibility` reads the cross-validations of the adopted fits (`read_cross_validations`): the factor model form of a COU is `assessed` when an adopted fit of its decisive evidence is cross-validated, with the statement of the cross-validation; the record has them (`CredibilityAssessment.cross_validations`), `cross_validation.tsv` one row per fit and study, the report and the release page a section Cross-validation. A held-out GMFE close to the fitted one is a model form which carries across studies, a much larger one a model whose parameters are fitted to every study. The cross-validation fits the problem once per training study, so it runs on demand and is stored with the fit; a record of 0.18 or earlier has none.
+`run_fit <package> --cross-validation <fit id>` refits the problem of an adopted fit once per training study without that study and stores the result with the fit; `run_credibility` reads the cross-validations of the adopted fits, see [Cross-validation](https://matthiaskoenig.github.io/sbmlsim/credibility/#cross-validation).
 
 ## Temporal validation
 
@@ -328,15 +88,7 @@ The day of the collection is recorded where the data are: `collect_tsv_files` wr
 
 ## Parameter uncertainty
 
-The verdict is the acceptance at the adopted parameters, the best estimate. Parameters which the data fit about as well may predict differently, so `run_credibility --uncertainty` propagates the uncertainty of the adopted fits to the decisive predictions (`sbmlsim.credibility.uncertainty`, step 4).
-
-Every adopted fit is drawn from its record (`parameter_draws`): the marginal of every fitted parameter is the distribution the releases draw (`ParameterUncertainty.distribution`: the profile likelihood interval, else the standard error of the Fisher information, truncated to the bounds; uniform in the bounds without a closed side of the profile), and the dependence is the correlation of the Fisher information of the fit (`fisher.json`) in the space of the fit, as the correlation of the normal scores of a Gaussian copula (`sbmlsim.uncertainty.draws.draw`, scrambled Sobol points, `--draws` 128 and `--seed` 1234): for a normal or log-normal marginal this is the multivariate normal of the Fisher covariance in the scale of the fit, with the widths of the profile. A fit without a Fisher information or with one which is not of full rank is drawn independently, and the record says why. The fits are drawn independently of each other; the parameters a fit fixes from another adopted fit (a PD fit on a fixed PK fit) stay at their adopted values, so the uncertainty a later fit inherits is not propagated. Every fit is evaluated at each of its draws with the report of the fresh evaluation (`propagate`, `Propagation`); a draw whose evaluation fails is counted.
-
-Per COU (`ContextResult.uncertainty`, `UncertaintyRecord`) the record has the draws of the fits of its decisive points (parameters, correlated or not and why, failed draws), the 90 % bands of the decisive predictions (the quantiles 0.05 and 0.95 over the draws), their coverage of the evaluable decisive observations, per quantity of interest which is no ratio the median fold width of the bands (`band_fold`, upper over lower, the precision of its predictions) with its coverage, and per acceptance rule (the ratio rule last) the probability that it is met over the draws with the anytime-valid confidence sequence and the decision of the statement `P(met) >= 0.9` of `sbmlsim.uncertainty.testing` at the level 0.95 for the rules of the COU together (Bonferroni): `accepted` (the acceptance is robust to the parameter uncertainty), `rejected` (more than a tenth of the plausible parameters fail it), `equivalent` (within the margin of 0.05 of the threshold), `undecided` with the draws it would need, or `not_evaluable`. A draw on which a decisive prediction is not finite while the reference is finite is a failed draw of every rule. A band of the parameter uncertainty holds the prediction of the mean, not the observations: the variability between the subjects and the error of the measurements lie outside of it, so its coverage is reported and decides nothing.
-
-The draws also give the sensitivity of the quantities of interest, without further simulations: per quantity the mean log ratio of its predictions to the adopted predictions on every draw, per rule its value on every draw, and per fitted parameter its first-order index, the share of the variance of the target over the draws which the parameter explains alone (`sensitivity_indices`, `SensitivityIndex`, estimated from the given draws by binning, `sbmlsim.uncertainty.statistics.first_order_given_data`, Plischke et al. 2013). Unlike the Sobol designs of `pkpdsim.sensitivity`, which vary the parameters in boxes of a relative width, the indices are those of the uncertainty of the fits, so they name the parameters whose uncertainty the predictions of a COU depend on. The index of a parameter includes the effect of the parameters it is correlated with, so the indices of correlated parameters do not add up; with few draws an index has a bias of up to about `sqrt(n)/2/n` (bins of equal probability). The report and the release page show the leading parameters of every target (up to three of at least 0.05), `uncertainty_sensitivity.tsv` every index (`context`, `target`, `kind`, `fit`, `parameter`, `index`).
-
-The verdict does not change. The factor model inputs is `assessed` with the draws, the largest band fold, the coverage, the parameter carrying most of the variance of every quantity and the decision of every rule; without `--uncertainty` it stays `not_assessed` (and the record has no uncertainty, as a record of 0.18 or earlier). The scorecard has the columns `uncertainty_robust` (every rule accepted: true, one rejected: false, else empty) and `band_fold` (the largest band fold), and `compare` reports the regression `uncertainty_robust` of a COU which was robust. `uncertainty.tsv` has one row per COU and rule (`context`, `rule`, `limit`, `estimate`, `low`, `high`, `threshold`, `decision`, `n`, `n_failed`, `n_needed`), `uncertainty_quantities.tsv` one per COU and quantity (`context`, `quantity`, `n_points`, `band_fold`, `coverage`); the report and the release page have a block per COU.
+`run_credibility --uncertainty` propagates the uncertainty of the adopted fits to the decisive predictions as described in [Parameter uncertainty](https://matthiaskoenig.github.io/sbmlsim/credibility/#parameter-uncertainty); the draws are those of the records of the fits (see [Uncertainty of the fitted parameters](uncertainty.md)).
 
 ## Equivalency of the inputs
 
@@ -350,23 +102,11 @@ The values are compared in the unit of the target in the model. A simulation of 
 
 ## Variability and the predictive check
 
-The adopted fits predict every curve with the typical subject of its study group, while the observations scatter between the subjects of a study and between studies. A model declares the variability of its subjects (`Credibility(variability=Variability({...}))`, a `sbmlsim.fit.variability.Variability`: a relative distribution per target, e.g. `LogNormal(cv=0.3)` of a clearance, a factor with the median 1, correlated by `Covariance`s, e.g. the omega matrix of the logarithms, with `between=Variability({...})` the variability between the studies, the factors which all subjects of a study share), and `run_credibility --variability [--subjects 64] [--studies 16]` checks the decisive points with it (`sbmlsim.credibility.variability`, `predictive_checks`, `VariabilitySettings`): every adopted fit is evaluated for the subjects, each subject a factor per target times the value its simulation gives the target (the value the experiment sets for the study group, of a fitted parameter or of the model), so the subjects of every study group vary around its inputs; with a variability between the studies the subjects are `--studies` studies of `--subjects` subjects each. With `--uncertainty` the subjects are nested in the draws of the parameters of the fit, without it they vary around the adopted parameters. A data point of a group of `N` subjects (its count) is compared with the means of virtual groups of `N` subjects drawn from the subjects of a study (the geometric mean for data with a geometric standard deviation), a point of an individual with the subjects; the 5 % and 95 % quantiles of the pooled distribution are its band, the band of a visual predictive check (`sbmlsim.fit.variability.predictive_check`).
-
-Per COU (`ContextResult.variability`, `VariabilityRecord`) the record has the subjects, the studies, the parameter vectors, the declared targets and distributions of the subjects and between the studies, the evaluable decisive points with a band and how many are means of groups, the coverage (the share inside their band) with its Wilson interval at the level 0.95, the expected coverage (90 %, the probability between the quantiles) and the agreement: `consistent` (the expected coverage lies in the interval), `narrow` (the bands hold fewer observations than expected: the declared variability with the parameter uncertainty does not explain the scatter, or the typical predictions are biased) or `wide`, and the coverage per quantity of interest. The verdict does not change; the factor equivalency of inputs states the predictive check after the checks of the inputs. The band of a mean of `N` subjects narrows with `sqrt(N)`, so the means of the studies test the typical predictions hard: their scatter between studies (other populations, assays and protocols) is no variability of the subjects, which the variability between the studies declares. For hctz a CV of 30 % of the uptake into the kidney, 40 % of the absorption and 15 % of the body weight of the subjects alone puts 33 % of the 676 evaluable decisive observations of the description (461 of them means of groups) inside their 90 % bands; with a CV of 30 % of both between the studies (8 studies of 16 subjects) 64 %, with 78 % of the plasma and 84 % of the urinary excretion of hctz, while the sodium, chloride and urine volume of the diuresis stay at 16 % or less: the description is `narrow`, the dose and the interaction contexts (86 % and 92 %) `consistent`. `variability.tsv` has one row per COU, `variability_quantities.tsv` one per COU and quantity and `vpc.tsv` one per data point of the adopted fits (`fit`, `experiment`, `mapping`, `x`, `DV`, `N`, `statistic`, `PRED`, `low`, `median`, `high`, `inside`, `CredibilityAssessment.vpc`); the report and the release page show the coverage per COU and per quantity, the scorecard has the columns `vpc_coverage` and `vpc_agreement`. Without `--variability` the record has no predictive check, as a record of 0.18 or earlier; `--variability` for a declaration without a variability is an error.
+A model declares the variability of its subjects with `Credibility(variability=Variability({...}))` and `run_credibility --variability [--subjects 64] [--studies 16]` runs the predictive check, see [Variability and the predictive check](https://matthiaskoenig.github.io/sbmlsim/credibility/#variability-and-the-predictive-check). For hctz a CV of 30 % of the uptake into the kidney, 40 % of the absorption and 15 % of the body weight of the subjects alone puts 33 % of the 676 evaluable decisive observations of the description (461 of them means of groups) inside their 90 % bands; with a CV of 30 % of both between the studies (8 studies of 16 subjects) 64 %, with 78 % of the plasma and 84 % of the urinary excretion of hctz, while the sodium, chloride and urine volume of the diuresis stay at 16 % or less: the description is `narrow`, the dose and the interaction contexts (86 % and 92 %) `consistent`.
 
 ## Study data
 
 An assessment names the data it was computed on (`pkpdsim.credibility.studies`, the evidence extension `studies`): for every study with points in the adopted fits, the first folder of the data paths which has it (the one the experiments read), the fits and the points of the study, and its record of the collection: the days of the first and of the latest collection, the dating of the first, the release in PK-DB (`released`, `pkdb_id`), the source digest of PK-DB (the version of the study in the database), the commit of the checkout of pkdb_data and whether its study folder had uncommitted changes, and the tables of the record with those which differ from it now (`changed`, a table changed by hand after the collection, `-` for a removed and `+` for an added one; `None` for a record without the digests of its tables). A study without a folder (an experiment which generates its data) or without a record is listed as such (the section `studies` of the record of the assessment, `StudyData`, `study_data`; none in a record of 0.18 or earlier). `studies.tsv` has one row per study, the report and the release page a table; the verdicts do not depend on it.
-
-## Locked splits
-
-A validation counts only if its data was set apart before the predictions were seen. The kinds of the mappings (training, validation) are fixed by the records of the adopted fits, a changed kind is refused (`KindMismatchError`); which validation data answers which question is fixed by the declaration, which can be changed after a verdict was seen. The lock fixes it as well (`sbmlsim.credibility.lock`): `run_credibility <package> --lock` writes `credibility.lock.json` into the folder of the model (the kind `credibility` writes it into its output, the command moves it into the folder of the model), the mappings (`fit/experiment/mapping`) of every evidence and every limitation by `context/name` (a limitation of the model `/name`), to be committed and reviewed with the declaration. Afterwards:
-
-- `run_credibility` compares the evidence with the lock before it evaluates anything and refuses a difference (`LockMismatchError`), naming every evidence which is new, gone or selects other mappings with the added (`+`) and removed (`-`) mappings; `check_declaration`, the test of a repository of models, reports the same.
-- A changed split is renewed explicitly with `--lock`, so the change is a reviewed diff of the lock in the history of the repository.
-- The record says whether the evidence matched the lock (`Provenance.lock`: `matched`, `written` when the lock was written with the assessment, `None` without a lock), the report shows it in the provenance.
-
-A model without a lock is assessed as before.
 
 ## Across models: scorecard and qualification
 
@@ -402,10 +142,6 @@ The command runs the kind `credibility` of sbmlsim (`python -m sbmlsim.run credi
 The factors of V&V 40 are listed per COU with a status: `assessed` (output comparison, test samples, test conditions and the relevance of the validation activities, from the metrics, the evidence and the coverage; the discretization error, the numerical solver error and the use error from the verification, the numerical code verification and the software quality assurance from the battery after their platform statement), `platform` (a statement which holds for the whole stack, e.g. the code verification by the SBML Test Suite and the PEtab suites of sbmlsim) or `not_assessed` with the step which will assess it, so a reader sees what is missing. Step 1 checks that every claimed quantity which is no ratio has decisive points in the claimed domain (the quantity coverage, under the relevance of the validation activities); whether the quantities answer the question, e.g. the ratios of a special population, is the relevance of the quantities of interest of step 3.
 
 The record `credibility.json` holds everything, and the tables `contexts.tsv`, `evidence.tsv`, `domain.tsv` and `quantities.tsv` are one row per COU, per COU and evidence, per COU, field and value and per COU and quantity, `ratios.tsv` one row per COU and ratio pair (see [Ratios](#ratios)), `temporal.tsv` one row per COU and study collected after its fit (`context`, `study`, `fit`, `fit_date`, `collected`, `released`, `pkdb_id`, `n_points`, `n_evaluable`, see [Temporal validation](#temporal-validation)), `studies.tsv` one row per study with points (`study`, `folder`, `fits` joined by `;`, `n_points`, `recorded`, `collected`, `dating`, `updated`, `released`, `pkdb_id`, `source_digest`, `pkdb_data_commit`, `pkdb_data_dirty`, `n_tables`, `changed` joined by `;`, see [Study data](#study-data)), `inputs.tsv` one row per mapping and input and `input_ranges.tsv` one row per COU and input (see [Equivalency of the inputs](#equivalency-of-the-inputs)), `variability.tsv`, `variability_quantities.tsv` and `vpc.tsv` (see [Variability and the predictive check](#variability-and-the-predictive-check)) and `verification.tsv` one row per COU and check (the applicable checks of the battery included, the same for every COU), `battery.tsv` one row per check of the battery (`check`, `factor`, `status`, `cases`, `largest`, `at`, `statement`, `problems`) and `fates.tsv` one row per build, dose and part of its fate (`build`, `dose`, `substance`, `amount`, `part`, `value` in mmole and its `share` of the dose). `contexts.tsv` has the decisive and the evaluable points, the minimum (`minimum_points`), the uncovered quantities (`uncovered_quantities`, the ids comma separated, empty without) and whether the COU is verified (`verified`, empty without verification); `quantities.tsv` has the columns `context`, `quantity`, `description`, `ratio`, `coverage` (empty for a ratio without a pairing) and `n_points`; `verification.tsv` the columns `context`, `check`, `factor`, `n`, `max_difference`, `at`, `acceptance_changed`, `passed` and `problems` (joined by `; `), no rows without verification. The record has the evidence of the extensions by their name in the field `extensions` of a COU and of the assessment. A record written by pkpdsim 0.17 to 0.19 is still read (`--from-json`): one of 0.17 has no minimum (read as 0), no quantity coverage and no verification; one of 0.18 has no verification and no ratio pairs; one of 0.19 has the evidence of the extensions as fields of its own, which are read as their sections. A release of a model repository carries the assessment, see [Release of a model repository](release.md).
-
-## What the later steps add
-
-Steps 1 to 3 (the frame, the verification and the validation) and the parameter uncertainty, the sensitivity, the equivalency of the inputs and the predictive check of step 4 are this page. The predictive check with the variability of the subjects and between the studies is this page as well.
 
 ## References
 
