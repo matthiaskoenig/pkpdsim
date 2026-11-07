@@ -74,10 +74,10 @@ def create_archive(
     the extra models and the extra files. With `sexes` every sex is built
     (`sex_definition`), each with its comp model, flat model, markdown and
     antimony in the archive; the flat model of the sex of the definition stays
-    the master entry, the first model of the archive. With `figure` the figure of the definition
-    (`model_figure`, an SVG schematic of the organs, routes, substances and
-    processes) is written into `model_output_dir` as `<sid>.svg` and is an
-    entry of the archive.
+    the master entry, the first model of the archive. With `figure` the figure
+    of the definition (`model_figure`, an SVG schematic of the organs, routes,
+    substances and processes) is written into `model_output_dir` as
+    `<sid>.svg` and is an entry of the archive.
 
     Args:
         definition: the definition of the model.
