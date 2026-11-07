@@ -207,14 +207,30 @@ class ExtraActionFunction:
             project: the model.
             out: the output of the run, the directory of the results.
             workers: the processes of the run.
-            **arguments: the options of the action.
+            **arguments: the options of the action by their names (`dest`); a
+                text is converted by the type of its option.
+
+        Raises:
+            ValueError: for an argument which is no option of the action.
         """
-        defaults = argparse.ArgumentParser()
+        parser = argparse.ArgumentParser()
         extra_arguments = getattr(project, "extra_arguments", None)
         if extra_arguments is not None:
-            resolve(extra_arguments, project.package)(defaults)
-        options = defaults.parse_args([])
+            resolve(extra_arguments, project.package)(parser)
+        options = parser.parse_args([])
+        known = {
+            action.dest: action for action in parser._actions if action.dest != "help"
+        }
+        unknown = sorted(set(arguments) - set(known))
+        if unknown:
+            raise ValueError(
+                f"The extra action '{self.reference}' has no options {unknown}, "
+                f"its options are {sorted(known)}."
+            )
         for name, value in arguments.items():
+            convert = known[name].type
+            if isinstance(value, str) and callable(convert):
+                value = convert(value)
             setattr(options, name, value)
         options.simulator = project.simulator
         options.n_workers = workers
