@@ -27,8 +27,8 @@ the tests the `sbmlsim.project.CheckSettings` and the release metadata the
 model packages (`path`, `model_path`, `female_model_path`, `data_paths`,
 `fit_definitions`, `fits`, `fits_path`, `factory_path`, `figures`) are mapped
 onto the fields of the project when a model is created, see `PKPDModel`; the
-release settings of a model are the ones of the framework pkpdsim, with its
-release hook (`pkpdsim.release.hook`), see `RELEASE_SETTINGS`.
+release settings of a model are a `PKPDReleaseSettings`, the ones of sbmlsim
+with the framework pkpdsim and its release hook (`pkpdsim.release.hook`).
 
 A model whose studies include women has a female build next to the male one
 (`female_model_path`, the factory builds both from one definition, see
@@ -118,18 +118,30 @@ CREDIBILITY_SETTINGS = CredibilitySettings(
     battery="pkpdsim.credibility.battery:PK_BATTERY",
 )
 
-#: the release settings of pkpdsim which a model sets where its own release
-#: settings keep the default of sbmlsim, see `sbmlsim.release.settings`: the
-#: framework of the release, the core libraries whose release notes the release
-#: notes summarize, the owner of their repositories and the release hook of
-#: pkpdsim (`pkpdsim.release.hook`, a reference, so the model package imports
-#: none of it)
-RELEASE_SETTINGS: dict[str, Any] = {
-    "framework": "pkpdsim",
-    "core_libraries": ("pkpdsim", "sbmlsim", "sbmlutils"),
-    "library_owner": "matthiaskoenig",
-    "hook": "pkpdsim.release.hook:HOOK",
-}
+
+@dataclass(frozen=True, kw_only=True)
+class PKPDReleaseSettings(ReleaseSettings):
+    """The release settings of a model, `ReleaseSettings` with the defaults of pkpdsim.
+
+    The fields of `sbmlsim.release.settings.ReleaseSettings`; the release is
+    built with pkpdsim unless the model package gives another framework, so a
+    field which the package gives keeps its value, e.g. `framework="sbmlsim"`.
+    The archive of the release is `PKPDModel.archive_path`.
+
+    Attributes:
+        framework: `pkpdsim`, whose version the release records.
+        core_libraries: `pkpdsim`, `sbmlsim` and `sbmlutils`, whose release
+            notes the release notes summarize.
+        library_owner: `matthiaskoenig`, the owner of their repositories.
+        hook: the release hook of pkpdsim, `pkpdsim.release.hook:HOOK`, a
+            reference, so the model package imports none of it.
+    """
+
+    framework: str = "pkpdsim"
+    core_libraries: Sequence[str] = ("pkpdsim", "sbmlsim", "sbmlutils")
+    library_owner: str = "matthiaskoenig"
+    hook: object = "pkpdsim.release.hook:HOOK"
+
 
 #: the keywords of a model package which are fields of the project by another name
 _RENAMED: dict[str, str] = {
@@ -418,45 +430,46 @@ def _directories(data: dict[str, Any]) -> None:
 
 
 def _release(data: dict[str, Any]) -> None:
-    """Set the release settings of pkpdsim and the archive of a model.
+    """Set the archive of the release settings of a model, `archive_path`.
 
-    The fields of `RELEASE_SETTINGS` are set where the release settings of the
-    model keep the default of sbmlsim; the archive of the release
-    (`ReleaseSettings.archive`) is `archive_path`, relative to the root of the
-    model, none without it.
+    The archive of the release (`ReleaseSettings.archive`) is `archive_path`,
+    relative to the root of the model, none without it.
 
     Args:
         data: the keywords of the model, changed in place.
 
     Raises:
-        ValueError: for an archive outside of the root of a model which is
-            released.
+        ValueError: for release settings which are no `PKPDReleaseSettings`,
+            whose defaults are the ones of pkpdsim, and for an archive outside
+            of the root of a model which is released.
     """
     release = data.get("release")
-    if not isinstance(release, ReleaseSettings):
+    if release is None:
         return
-    defaults = {field.name: field.default for field in dataclasses.fields(release)}
-    changes = {
-        name: value
-        for name, value in RELEASE_SETTINGS.items()
-        if getattr(release, name) == defaults[name]
-    }
+    if not isinstance(release, PKPDReleaseSettings):
+        raise ValueError(
+            "The release settings of a model are a PKPDReleaseSettings "
+            "(pkpdsim.model), the release settings of sbmlsim with the framework, "
+            f"the core libraries and the release hook of pkpdsim, not a "
+            f"{type(release).__name__}."
+        )
     archive, root = data.get("archive_path"), data.get("root")
     if archive is None:
-        changes["archive"] = None
-    elif root is not None:
+        relative = None
+    elif root is None:
+        return
+    else:
         root = Path(root)
         path = Path(archive) if Path(archive).is_absolute() else root / archive
         try:
-            relative = path.resolve().relative_to(root.resolve())
+            relative = path.resolve().relative_to(root.resolve()).as_posix()
         except ValueError:
             raise ValueError(
                 f"The archive '{archive}' lies outside of the root '{root}' of the "
                 "model, a release copies it from the model package."
             ) from None
-        changes["archive"] = relative.as_posix()
-    if changes:
-        data["release"] = dataclasses.replace(release, **changes)
+    if relative != release.archive:
+        data["release"] = dataclasses.replace(release, archive=relative)
 
 
 class PKPDModel(Project):
@@ -486,9 +499,9 @@ class PKPDModel(Project):
     - `figures` as a `FigureSettings`: `figure_settings` and `figures`
       (`FigureSettings.sbmlsim_settings`, `FigureSettings.outputs`).
 
-    The release settings (`release`) get the framework `pkpdsim`, its core
-    libraries and the release hook of pkpdsim where they keep the defaults of
-    sbmlsim (`RELEASE_SETTINGS`), and `archive_path` is their archive.
+    The release settings (`release`) are a `PKPDReleaseSettings`, the release
+    settings of sbmlsim with the framework, the core libraries and the release
+    hook of pkpdsim as defaults, and `archive_path` is their archive.
 
     A keyword and its field are not given together. A model is a frozen
     pydantic model: `replace` gives a changed copy, by the names of the

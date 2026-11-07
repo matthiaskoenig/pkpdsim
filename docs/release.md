@@ -15,12 +15,14 @@ The release repository holds only what the build generates. The models, the simu
 
 ## The release metadata of a model
 
-What the monorepo does not know about a release is the `release` of the model object, a `ReleaseSettings` (`sbmlsim.release.settings`):
+What the monorepo does not know about a release is the `release` of the model object, a `PKPDReleaseSettings` (`pkpdsim.model`), the `ReleaseSettings` of sbmlsim (`sbmlsim.release.settings`) with the defaults of pkpdsim:
 
 ```python
-from sbmlsim.release.settings import Author, ReleaseSettings
+from sbmlsim.release.settings import Author
 
-release = ReleaseSettings(
+from pkpdsim.model import PKPDReleaseSettings
+
+release = PKPDReleaseSettings(
     title="Physiologically based pharmacokinetic model of hydrochlorothiazide",
     repository="matthiaskoenig/hctz-model",
     doi="10.5281/zenodo.15427418",
@@ -52,12 +54,12 @@ print(release.missing())
 
 The model object sets it as `PKPDModel(..., release=release)`. A model without `release`, with an empty field or a `first_year` which is no positive year cannot be released; the command names the missing fields. An empty `exclude` releases the whole model folder. The adopted fits of `MODEL.fits` are released with their records, the archive of `MODEL.archive_path` is attached to the GitHub release; it lies inside the model package.
 
-The model object adds the settings of pkpdsim to the release settings of sbmlsim where they keep the defaults of sbmlsim (`pkpdsim.model.RELEASE_SETTINGS`), so a model package writes none of them:
+The defaults of pkpdsim, which a model package does not write; a field it gives keeps its value (e.g. `framework="sbmlsim"`), and the release settings of sbmlsim themselves are refused by the model object, whose release is built with pkpdsim:
 
 - `framework`: `pkpdsim`, the package the release is built with; the lock of the release must contain it, `release.json` records its version and the release notes say "with pkpdsim <version>".
 - `core_libraries`: `pkpdsim`, `sbmlsim` and `sbmlutils`, whose release notes the release notes summarize; `library_owner`: `matthiaskoenig`, the owner of their repositories.
 - `hook`: `pkpdsim.release.hook:HOOK`, the release hook of pkpdsim.
-- `archive`: `archive_path`, relative to the root of the model.
+- `archive`: set by the model object, `archive_path` relative to the root of the model.
 
 ## One-time setup
 
@@ -104,5 +106,5 @@ A run which failed while publishing is finished by running the same command agai
 
 The release hook of pkpdsim (`pkpdsim.release.hook.PKReleaseHook`) adds the content of the pharmacokinetic models to the release of sbmlsim:
 
-- The page `credibility` of the docs shows the evidence of the extensions of pkpdsim (see [Context of use and credibility](credibility.md)): after the acceptance table of a context of use, whose last row is the rule of the ratio pairs (`(ratio pairs)`), the table of the ratio pairs and the temporal validation; at the end of the section of a context the inputs of its decisive mappings; after the sections of the contexts the study data of the adopted fits with the records of their collection from pkdb_data.
+- The page `credibility` of the docs shows the evidence of the extensions of pkpdsim (see [Context of use and credibility](credibility.md)): after the acceptance table of a context of use, whose last row is the rule of the ratio pairs (`(ratio pairs)`), the table of the ratio pairs and the temporal validation; between the parameter uncertainty and the variability of a context the inputs of its decisive mappings; after the sections of the contexts the study data of the adopted fits with the records of their collection from pkdb_data.
 - The release notes name a study of the data `<substance>/<study>`, a folder `data/<substance>/<study>` of the model package, as the releases of pkpdsim 0.19 named them, so the first release after the release moved into sbmlsim renames no study.

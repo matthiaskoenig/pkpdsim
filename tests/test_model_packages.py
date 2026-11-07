@@ -15,9 +15,9 @@ import pytest
 from sbmlsim.model.tolerances import AbsoluteTolerance
 from sbmlsim.plot import FigureSettings as SbmlsimFigureSettings
 from sbmlsim.project import CheckSettings, FigureOutputs, SimulatorSettings
-from sbmlsim.release.settings import Author, ReleaseSettings
+from sbmlsim.release.settings import Author
 
-from pkpdsim.model import ExtraAction, FigureSettings, PKPDModel
+from pkpdsim.model import ExtraAction, FigureSettings, PKPDModel, PKPDReleaseSettings
 from pkpdsim.sex import Sex
 
 
@@ -86,7 +86,7 @@ def test_glimepiride(package: Path) -> None:
             },
         ),
         # the release of the model repository
-        release=ReleaseSettings(
+        release=PKPDReleaseSettings(
             title="Physiologically based pharmacokinetic (PBPK) model of glimepiride",
             repository="matthiaskoenig/glimepiride-model",
             doi="10.5281/zenodo.14628700",
@@ -160,7 +160,7 @@ def test_hctz(package: Path) -> None:
                 "Januszewicz1959": "left out of the experiments and the fits",
             },
         ),
-        release=ReleaseSettings(
+        release=PKPDReleaseSettings(
             title="PBPK/PD model of hydrochlorothiazide",
             repository="matthiaskoenig/hctz-model",
             doi="10.5281/zenodo.15427418",
