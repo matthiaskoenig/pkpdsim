@@ -18,12 +18,13 @@ from release_git import git, init_repo
 from sbmlsim.credibility import CredibilityAssessment
 from sbmlsim.release.build import BuildPaths
 from sbmlsim.release.docs import write_docs
+from sbmlsim.release.hooks import ReleaseHook
 from sbmlsim.release.notes import data_changes, data_dirs
 from sbmlsim.release.project import ProjectContext
 from sbmlsim.release.settings import ReleaseSettings
 from sbmlsim.release.source import ReleaseRepo
 
-from pkpdsim.model import RELEASE_SETTINGS, PKPDModel
+from pkpdsim.model import PKPDModel, PKPDReleaseSettings
 from pkpdsim.release.hook import HOOK, PKReleaseHook
 from pkpdsim_toy import MODEL
 
@@ -32,6 +33,7 @@ SETTINGS: ReleaseSettings = MODEL.release
 
 
 def test_a_model_is_released_with_pkpdsim() -> None:
+    assert isinstance(SETTINGS, PKPDReleaseSettings)
     assert SETTINGS.framework == "pkpdsim"
     assert SETTINGS.core_libraries == ("pkpdsim", "sbmlsim", "sbmlutils")
     assert SETTINGS.library_owner == "matthiaskoenig"
@@ -60,27 +62,40 @@ def test_the_archive_of_a_model_is_the_archive_of_its_release(tmp_path: Path) ->
     assert MODEL.replace(release=None, archive_path=tmp_path / "a.omex").release is None
 
 
-def test_the_settings_a_model_gives_are_kept() -> None:
-    own = dataclasses.replace(
-        SETTINGS,
+def test_the_settings_a_package_gives_are_kept() -> None:
+    """A field the package gives keeps its value, also the default of sbmlsim."""
+    required = ["title", "repository", "doi", "authors", "keywords"]
+    required += ["docker_image", "funding", "description", "first_year"]
+    fields = {name: getattr(SETTINGS, name) for name in required}
+    defaults = PKPDReleaseSettings(**fields)
+    assert (defaults.framework, defaults.hook) == (
+        "pkpdsim",
+        "pkpdsim.release.hook:HOOK",
+    )
+    own = PKPDReleaseSettings(
+        **fields,
         framework="sbmlsim",
         core_libraries=("sbmlsim", "sbmlutils"),
         hook=None,
     )
-    # the defaults of sbmlsim get the settings of pkpdsim, as a model package
-    # writes its release settings without them
     model = MODEL.replace(release=own)
     assert model.release is not None
-    for name, value in RELEASE_SETTINGS.items():
-        assert getattr(model.release, name) == value
-    other = dataclasses.replace(
-        SETTINGS, framework="other", core_libraries=("other",), hook="other:HOOK"
-    )
+    assert model.release.framework == "sbmlsim"
+    assert model.release.core_libraries == ("sbmlsim", "sbmlutils")
+    assert model.release.hook is None
+    assert type(model.release_hook()) is ReleaseHook
+    other = dataclasses.replace(SETTINGS, framework="other", hook="other:HOOK")
     model = MODEL.replace(release=other)
     assert model.release is not None
-    assert model.release.framework == "other"
-    assert model.release.core_libraries == ("other",)
-    assert model.release.hook == "other:HOOK"
+    assert (model.release.framework, model.release.hook) == ("other", "other:HOOK")
+    assert model.release.core_libraries == ("pkpdsim", "sbmlsim", "sbmlutils")
+
+
+def test_the_release_settings_of_sbmlsim_are_refused() -> None:
+    """A model is released with pkpdsim, the settings of sbmlsim would not say so."""
+    fields = {f.name: getattr(SETTINGS, f.name) for f in dataclasses.fields(SETTINGS)}
+    with pytest.raises(ValueError, match="are a PKPDReleaseSettings"):
+        MODEL.replace(release=ReleaseSettings(**fields))
 
 
 def test_the_model_imports_no_release() -> None:
@@ -91,7 +106,7 @@ def test_the_model_imports_no_release() -> None:
         "'sbmlsim.release.workflow', 'jinja2'))))\n"
     )
     result = subprocess.run(
-        [sys.executable, "-c", code], capture_output=True, text=True, check=True
+        [sys.executable, "-c", code], capture_output=True, encoding="utf-8", check=True
     )
     assert result.stdout.strip() == "[]"
 
@@ -299,6 +314,29 @@ def test_the_credibility_page_shows_the_inputs(
     assert "| `BW` | 1 | 72 kg | 1 | 0 | 0 | 0 |" in dose
     assert "| `PODOSE_a` (dose) | 1 | 25 mg | 0 | 0 | 1 | 0 |" in dose
     assert "| CredA/fm_dose | `PODOSE_a` | 25 mg | 70 mg | group all |" in dose
+    # between the parameter uncertainty and the variability, as in pkpdsim 0.19
+    assert dose.index("Inputs, ") > dose.index("| Acceptance criterion |")
+
+
+def test_the_inputs_come_after_the_uncertainty_before_the_variability(
+    release: tuple[ProjectContext, Path],
+) -> None:
+    from credibility_tables import predictive_checks_of, propagation_of
+    from test_credibility_inputs import _check
+
+    checks = [_check("fm_dose", "BW", 72.0, "equivalent")]
+    assessment = assess(
+        CREDIBILITY,
+        fit_table(),
+        prepared={"inputs": checks},
+        propagation=propagation_of(0.01),
+        variability=predictive_checks_of(0.5),
+    )
+    dose = _section(_page(release, assessment), "## dose", "## renal")
+    uncertainty = dose.index("Parameter uncertainty, ")
+    inputs = dose.index("Inputs, ")
+    variability = dose.index("Variability, ")
+    assert uncertainty < inputs < variability
 
 
 def test_the_credibility_page_without_the_evidence_of_pkpdsim(

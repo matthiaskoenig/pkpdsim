@@ -301,7 +301,7 @@ def source_repo_model(tmp_path: Path, git_env: None) -> PKPDModel:
     root = tmp_path / "monorepo"
     init_repo(root)
     (root / "pyproject.toml").write_text(
-        '[project]\nname = "toy"\nrequires-python = ">=3.14"\n'
+        '[project]\nname = "toy"\nrequires-python = ">=3.14"\n', encoding="utf-8"
     )
     shutil.copy(RELEASE_DATA / "uv.lock", root / "uv.lock")
     package = root / "pkg" / "pkpdsim_toy"
@@ -310,9 +310,9 @@ def source_repo_model(tmp_path: Path, git_env: None) -> PKPDModel:
         package,
         ignore=shutil.ignore_patterns("__pycache__", "models", "results"),
     )
-    (package / "TODO.md").write_text("todo\n")
+    (package / "TODO.md").write_text("todo\n", encoding="utf-8")
     (package / "literature").mkdir()
-    (package / "literature" / "x.txt").write_text("x\n")
+    (package / "literature" / "x.txt").write_text("x\n", encoding="utf-8")
     git(root, "add", "-A")
     git(root, "commit", "-m", "init")
     return MODEL.replace(
@@ -330,7 +330,7 @@ def remote_and_clone(tmp_path: Path, git_env: None) -> tuple[Path, Path]:
     clone = tmp_path / "toy-model"
     git(tmp_path, "clone", f"file://{remote}", str(clone))
     git(clone, "checkout", "-B", "main")
-    (clone / "README.md").write_text("readme\n")
+    (clone / "README.md").write_text("readme\n", encoding="utf-8")
     git(clone, "add", "-A")
     git(clone, "commit", "-m", "initial")
     git(clone, "tag", "0.1.0")

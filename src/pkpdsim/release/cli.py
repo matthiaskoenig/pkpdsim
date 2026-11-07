@@ -7,7 +7,7 @@ pkpd_release pkdb_models.models.hctz --repo ../hctz-model --version 0.8.0
 ```
 
 The release is sbmlsim's (`sbmlsim.release`) with the release settings and the
-release hook of pkpdsim (`pkpdsim.model.RELEASE_SETTINGS`,
+release hook of pkpdsim (`pkpdsim.model.PKPDReleaseSettings`,
 `pkpdsim.release.hook`); the command runs its two steps:
 
 1. The build, the kind `release` of the run layer of sbmlsim
@@ -39,30 +39,24 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
-from sbmlsim.release import source
-from sbmlsim.release.manifest import matches
-from sbmlsim.release.publish import (
-    check_lock,
-    check_tools,
-    head_is_release,
-    tag_commit,
-)
+from sbmlsim.release.publish import check_tools
 from sbmlsim.release.publish import publish as publish_steps
 from sbmlsim.release.source import (
     ReleaseError,
     Runner,
     SourceRepo,
     parse_version,
-    source_framework,
+    run,
     source_repo,
 )
 from sbmlsim.release.workflow import (
     REPOSITORY_DIR,
     Publisher,
+    execute_release,
     publish_release,
+    publishable,
     release_settings,
 )
-from sbmlsim.run import execute
 from sbmlsim.run.kinds import ConfigurationError
 from sbmlutils.console import console
 
@@ -99,40 +93,6 @@ def default_out(checkout: Path, version: str) -> Path:
     return checkout.parent / f"{checkout.name}{OUT_SUFFIX}{version}"
 
 
-def _built(
-    settings: ReleaseSettings,
-    version: str,
-    path: Path,
-    src: SourceRepo,
-    runner: Runner,
-) -> bool:
-    """Tell whether a publishing finds the build of this release in its output.
-
-    The build is there if the release repository of the output has the release
-    commit of the version with its tag missing or at `HEAD` (a publishing
-    which failed half way), or holds the unchanged build of this version of
-    the source commit with a publishable lock (a reviewed `--no-publish`
-    build).
-    """
-    if not (path / ".git").exists():
-        return False
-    if head_is_release(path, version, runner):
-        tagged = tag_commit(path, version, runner)
-        head = runner(["git", "rev-parse", "HEAD"], path).strip()
-        if tagged is None or tagged == head:
-            return True
-    framework_version = source_framework(src, settings.framework)
-    if not matches(
-        path, version, src.commit, settings.framework, framework_version, runner
-    ):
-        return False
-    try:
-        check_lock(path)
-    except ReleaseError:
-        return False
-    return True
-
-
 def _build(
     reference: str,
     version: str,
@@ -140,6 +100,7 @@ def _build(
     checkout: Path,
     pkpdsim_path: Path | None,
     workers: str,
+    runner: Runner,
 ) -> None:
     """Build the release into the output with the kind `release` of sbmlsim.
 
@@ -148,18 +109,16 @@ def _build(
     Raises:
         ReleaseError: if the release is refused or a stage of the build fails.
     """
-    spec: dict[str, object] = {"project": reference, "version": version}
-    if checkout.exists():
-        spec["repository"] = str(checkout.resolve())
-    if pkpdsim_path is not None:
-        spec["framework_path"] = str(pkpdsim_path.resolve())
     try:
-        execute(
-            "release",
-            spec,
+        execute_release(
+            reference,
+            version,
             out,
+            repository=checkout if checkout.exists() else None,
+            framework_path=pkpdsim_path,
             workers=None if workers == "auto" else int(workers),
             resume=True,
+            runner=runner,
         )
     except ConfigurationError as err:
         raise ReleaseError(str(err)) from err
@@ -197,6 +156,7 @@ def release(
     pkpdsim_path: Path | None,
     workers: str,
     out: Path | None = None,
+    runner: Runner = run,
     publisher: Publisher = publish_steps,
 ) -> Path:
     """Make the complete release of a model repository.
@@ -214,20 +174,17 @@ def release(
        release repository into `out/repository` (from the checkout `repo`
        when it exists, else from GitHub) and checks it, the version and the
        records of the adopted fits, see
-       `sbmlsim.release.workflow.prepare_release` and `build_release`. It is
-       skipped if a publishing run finds the build of this release in the
-       output (a reviewed `--no-publish` build, or the release commit of a
-       publishing which failed half way); an earlier build of the same spec
-       in the output is built again (a resume of the run layer).
+       `sbmlsim.release.workflow.execute_release`. It is skipped if a
+       publishing run finds a publishable build of this release in the output
+       (`sbmlsim.release.workflow.publishable`: a reviewed `--no-publish`
+       build, or the release commit of a publishing which failed half way);
+       an earlier build of the same spec in the output is built again (a
+       resume of the run layer).
     3. `--no-publish` stops here, before the commit.
     4. The publishing of the build of the output
        (`sbmlsim.release.workflow.publish_release`, `publisher`), then the
        checkout is fast-forwarded to the release when it is clean and on
        `main`.
-
-    The commands (git, uv, the analyses of the model, docker and gh) run
-    through the runner of `sbmlsim.release.source` at the time of the call,
-    `source.run`, which the tests replace.
 
     Args:
         model: the model which is released, with its release settings.
@@ -241,6 +198,7 @@ def release(
         workers: the number of workers of the simulations, `auto` (the CPUs of
             the quota) or a number.
         out: the output of the build, `default_out` of the checkout by default.
+        runner: runs git, uv, the analyses of the model, docker and gh.
         publisher: publishes the built release.
 
     Returns:
@@ -252,7 +210,6 @@ def release(
     parse_version(version)
     if publish and pkpdsim_path is not None:
         raise ReleaseError("a local pkpdsim (pkpdsim_path) is only for --no-publish")
-    runner = source.run
     settings = release_settings(model)
     if publish and settings.archive is None:
         raise ReleaseError(
@@ -269,8 +226,8 @@ def release(
     path = out / REPOSITORY_DIR
     if publish:
         check_tools(model.root, runner)
-    if not (publish and _built(settings, version, path, src, runner)):
-        _build(reference, version, out, checkout, pkpdsim_path, workers)
+    if not (publish and publishable(model, version, out, runner=runner) is None):
+        _build(reference, version, out, checkout, pkpdsim_path, workers, runner)
     if not publish:
         return path
     publish_release(model, version, out, runner=runner, publisher=publisher)

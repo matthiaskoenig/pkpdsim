@@ -6,7 +6,8 @@ skipped by a publishing after a review and the checkout fast-forwarded after
 publishing. The source and the release repository are real git repositories
 (`release_git`); uv, the analyses of the run layer, docker and `gh` are
 replaced by a fake runner which writes what they would write, the publishing
-steps by a fake publisher.
+steps by a fake publisher; `release` gets them as its `runner` and its
+`publisher`.
 """
 
 import json
@@ -17,7 +18,6 @@ from pathlib import Path
 import pytest
 from release_git import git
 from sbmlsim.fit.records import adopt_fit
-from sbmlsim.release import source as source_module
 from sbmlsim.release.manifest import MANIFEST_FILE
 from sbmlsim.release.settings import ReleaseSettings
 from sbmlsim.release.source import ReleaseError, Runner, run
@@ -125,11 +125,9 @@ class FakePublisher:
 
 
 @pytest.fixture
-def runner(monkeypatch: pytest.MonkeyPatch) -> FakeRunner:
-    """The fake runner of the commands of the release."""
-    fake = FakeRunner()
-    monkeypatch.setattr(source_module, "run", fake)
-    return fake
+def runner() -> FakeRunner:
+    """The fake runner of the commands of the release, which `release` gets."""
+    return FakeRunner()
 
 
 @pytest.fixture
@@ -171,6 +169,7 @@ def do_release(
     clone: Path | None,
     *,
     publish: bool,
+    runner: FakeRunner,
     publisher: FakePublisher | None = None,
     out: Path | None = None,
 ) -> Path:
@@ -182,6 +181,7 @@ def do_release(
         pkpdsim_path=None,
         workers="2",
         out=out,
+        runner=runner,
         publisher=publisher or FakePublisher(),
     )
 
@@ -191,7 +191,7 @@ def test_no_publish_builds_next_to_the_checkout(
 ) -> None:
     head = git(clone, "rev-parse", "HEAD")
     publisher = FakePublisher()
-    path = do_release(model, clone, publish=False, publisher=publisher)
+    path = do_release(model, clone, publish=False, runner=runner, publisher=publisher)
     out = clone.parent / f"{clone.name}-release-{VERSION}"
     assert default_out(clone, VERSION) == out
     assert path == out / "repository"
@@ -217,9 +217,9 @@ def test_no_publish_builds_next_to_the_checkout(
 def test_a_second_build_builds_again_into_the_output(
     model: PKPDModel, clone: Path, runner: FakeRunner
 ) -> None:
-    path = do_release(model, clone, publish=False)
+    path = do_release(model, clone, publish=False, runner=runner)
     (path / "docs" / "index.md").write_text("edited by hand\n", encoding="utf-8")
-    assert do_release(model, clone, publish=False) == path
+    assert do_release(model, clone, publish=False, runner=runner) == path
     assert (path / "docs" / "index.md").read_text(encoding="utf-8") != (
         "edited by hand\n"
     )
@@ -230,17 +230,23 @@ def test_the_output_is_given(
     model: PKPDModel, clone: Path, runner: FakeRunner, tmp_path: Path
 ) -> None:
     out = tmp_path / "build"
-    assert do_release(model, clone, publish=False, out=out) == out / "repository"
+    assert (
+        do_release(model, clone, publish=False, runner=runner, out=out)
+        == out / "repository"
+    )
     assert (out / "repository" / MANIFEST_FILE).is_file()
 
 
 def test_publish_after_review_skips_the_build(
     model: PKPDModel, clone: Path, runner: FakeRunner
 ) -> None:
-    path = do_release(model, clone, publish=False)
+    path = do_release(model, clone, publish=False, runner=runner)
     builds = sum("specs/simulate.json" in c for c in runner.commands)
     publisher = FakePublisher()
-    assert do_release(model, clone, publish=True, publisher=publisher) == path
+    assert (
+        do_release(model, clone, publish=True, runner=runner, publisher=publisher)
+        == path
+    )
     assert sum("specs/simulate.json" in c for c in runner.commands) == builds
     assert runner.ran("docker info") and runner.ran("gh auth status")
     assert model.release is not None
@@ -254,7 +260,7 @@ def test_publish_builds_and_publishes(
     model: PKPDModel, clone: Path, runner: FakeRunner
 ) -> None:
     publisher = FakePublisher()
-    path = do_release(model, clone, publish=True, publisher=publisher)
+    path = do_release(model, clone, publish=True, runner=runner, publisher=publisher)
     assert runner.ran("specs/simulate.json")
     assert len(publisher.calls) == 1
     assert git(clone, "rev-parse", "HEAD") == git(path, "rev-parse", "HEAD")
@@ -265,7 +271,7 @@ def test_a_changed_checkout_is_not_fast_forwarded(
 ) -> None:
     (clone / "notes.txt").write_text("a note\n", encoding="utf-8")
     head = git(clone, "rev-parse", "HEAD")
-    path = do_release(model, clone, publish=True)
+    path = do_release(model, clone, publish=True, runner=runner)
     assert git(clone, "rev-parse", "HEAD") == head
     assert git(path, "rev-parse", "HEAD") != head
 
@@ -274,10 +280,16 @@ def test_a_failed_publishing_resumes_without_a_build(
     model: PKPDModel, clone: Path, runner: FakeRunner
 ) -> None:
     with pytest.raises(ReleaseError, match="the push failed"):
-        do_release(model, clone, publish=True, publisher=FakePublisher(fail=True))
+        do_release(
+            model,
+            clone,
+            publish=True,
+            runner=runner,
+            publisher=FakePublisher(fail=True),
+        )
     builds = sum("specs/simulate.json" in c for c in runner.commands)
     publisher = FakePublisher()
-    path = do_release(model, clone, publish=True, publisher=publisher)
+    path = do_release(model, clone, publish=True, runner=runner, publisher=publisher)
     assert sum("specs/simulate.json" in c for c in runner.commands) == builds
     assert [call[1] for call in publisher.calls] == [path]
 
@@ -289,7 +301,7 @@ def test_without_a_checkout_the_repository_is_cloned_from_github(
     tmp_path: Path,
 ) -> None:
     missing = tmp_path / "missing" / "toy-model"
-    path = do_release(model, missing, publish=False)
+    path = do_release(model, missing, publish=False, runner=runner)
     assert path == tmp_path / "missing" / f"toy-model-release-{VERSION}" / "repository"
     assert not missing.exists()
     remote, _ = remote_and_clone
@@ -302,7 +314,7 @@ def test_the_default_checkout_is_the_sibling_of_the_source(
     """The source is `<tmp>/monorepo`, the release repository `<tmp>/toy-model`."""
     assert model.release is not None
     assert clone.name == model.release.repo_name
-    path = do_release(model, None, publish=False)
+    path = do_release(model, None, publish=False, runner=runner)
     assert path == clone.parent / f"toy-model-release-{VERSION}" / "repository"
     assert any(
         c[:3] == ["git", "clone", "--no-hardlinks"] and str(clone) in c
@@ -316,7 +328,7 @@ def test_a_refused_release_builds_nothing(
     git(clone, "tag", "0.3.0")
     git(clone, "push", "origin", "--tags")
     with pytest.raises(ReleaseError, match="The release is refused"):
-        do_release(model, clone, publish=False)
+        do_release(model, clone, publish=False, runner=runner)
     assert not runner.ran("uv lock")
 
 
@@ -327,7 +339,9 @@ def test_missing_release_settings(
     as_model: Callable[[PKPDModel], PKPDModel],
 ) -> None:
     with pytest.raises(ReleaseError, match="has no release settings"):
-        do_release(as_model(model.replace(release=None)), clone, publish=False)
+        do_release(
+            as_model(model.replace(release=None)), clone, publish=False, runner=runner
+        )
     assert runner.commands == []
 
 
@@ -338,17 +352,19 @@ def test_publish_needs_an_archive(
     as_model: Callable[[PKPDModel], PKPDModel],
 ) -> None:
     with pytest.raises(ReleaseError, match="archive"):
-        do_release(as_model(model.replace(archive_path=None)), clone, publish=True)
+        do_release(
+            as_model(model.replace(archive_path=None)),
+            clone,
+            publish=True,
+            runner=runner,
+        )
     assert runner.commands == []
 
 
-def test_missing_tools_fail_before_the_build(
-    model: PKPDModel, clone: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_missing_tools_fail_before_the_build(model: PKPDModel, clone: Path) -> None:
     runner = FakeRunner(fail_on="docker info")
-    monkeypatch.setattr(source_module, "run", runner)
     with pytest.raises(ReleaseError, match="docker"):
-        do_release(model, clone, publish=True)
+        do_release(model, clone, publish=True, runner=runner)
     assert not runner.ran("uv lock")
 
 
@@ -356,7 +372,7 @@ def test_a_copy_of_the_model_is_refused(
     model: PKPDModel, clone: Path, runner: FakeRunner
 ) -> None:
     with pytest.raises(ReleaseError, match="model object of the package"):
-        do_release(model.replace(title="Another"), clone, publish=False)
+        do_release(model.replace(title="Another"), clone, publish=False, runner=runner)
     assert runner.commands == []
 
 
@@ -376,6 +392,7 @@ def test_pkpdsim_path_needs_no_publish(
             publish=True,
             pkpdsim_path=tmp_path,
             workers="auto",
+            runner=FakeRunner(),
         )
 
 
@@ -388,6 +405,7 @@ def test_invalid_version_refused(model: PKPDModel, runner: FakeRunner) -> None:
             publish=False,
             pkpdsim_path=None,
             workers="auto",
+            runner=runner,
         )
     assert runner.commands == []
 

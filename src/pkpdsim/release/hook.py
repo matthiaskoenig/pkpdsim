@@ -2,14 +2,15 @@
 
 The release of a model package is sbmlsim's (`sbmlsim.release`, the kind
 `release` of `python -m sbmlsim.run` and `python -m sbmlsim.release
-publish`); `pkpd_release` runs both (`pkpdsim.release.cli`). A `PKPDModel`
-names `HOOK` in its release settings (`ReleaseSettings.hook`, see
-`pkpdsim.model`), which adds the content of the pharmacokinetic models:
+publish`); `pkpd_release` runs both (`pkpdsim.release.cli`). The release
+settings of a model name `HOOK` by default
+(`pkpdsim.model.PKPDReleaseSettings.hook`), which adds the content of the pharmacokinetic models:
 
 - the evidence of the extensions of pkpdsim on the page of the credibility
   (`pkpdsim.credibility`): the ratio pairs and the temporal validation of a
   context of use after its acceptance table, the inputs of its decisive
-  mappings at the end of its section and the study data of the adopted fits
+  mappings between its parameter uncertainty and its variability and the
+  study data of the adopted fits
   with the records of their collection from pkdb_data after the sections of
   sbmlsim, the templates of `pkpdsim/resources/release`; the rule of the ratio
   pairs is the row `(ratio pairs)` of the acceptance table and the rules of
@@ -19,8 +20,8 @@ names `HOOK` in its release settings (`ReleaseSettings.hook`, see
   folder `data/<substance>/<study>` of the package, so the release notes name
   the studies as pkpdsim 0.19 named them.
 
-The framework of the release, `pkpdsim`, and its core libraries are fields of
-the release settings, which `PKPDModel` sets. The module imports the release
+The framework of the release, `pkpdsim`, and its core libraries are the defaults
+of the release settings of a model, `pkpdsim.model.PKPDReleaseSettings`. The module imports the release
 of sbmlsim only for its types.
 """
 
@@ -63,7 +64,7 @@ class PKReleaseHook(ReleaseHook):
 
         Returns:
             `TEMPLATES`, with `docs/credibility-acceptance.md.j2`,
-            `docs/credibility-context.md.j2` and
+            `docs/credibility-uncertainty.md.j2` and
             `docs/credibility-sections.md.j2`.
         """
         return (TEMPLATES,)

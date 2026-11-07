@@ -8,9 +8,9 @@ before the tests start (`tests/conftest.py`) and is not tracked.
 from pathlib import Path
 
 from sbmlsim.project import SimulatorSettings
-from sbmlsim.release.settings import Author, ReleaseSettings
+from sbmlsim.release.settings import Author
 
-from pkpdsim.model import FigureSettings, PKPDModel
+from pkpdsim.model import FigureSettings, PKPDModel, PKPDReleaseSettings
 
 TOY_PATH = Path(__file__).parent
 MODEL_BASE_PATH = TOY_PATH / "models"
@@ -29,7 +29,7 @@ MODEL = PKPDModel(
     data_paths=tuple(DATA_PATHS),
     simulator=SimulatorSettings(absolute_tolerance=1e-10, relative_tolerance=1e-10),
     figures=FigureSettings(formats=("svg", "png"), savefig_dpi=30, legend_fontsize=7),
-    release=ReleaseSettings(
+    release=PKPDReleaseSettings(
         title="Toy model of the decay of a substance",
         repository="pkpdsim/toy-model",
         doi="10.5281/zenodo.0000000",
