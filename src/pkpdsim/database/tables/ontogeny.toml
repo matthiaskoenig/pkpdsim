@@ -18,12 +18,12 @@
 # The differences of the sexes are in sex_human.toml.
 
 [ontogeny.li.CYP1A2]
-form = "hill"
-variable = "pma"
-x50 = 65.639
-n = 10.015
-source = "PKSimOntogeny"
-notes = "Section A.1: Hill of the postmenstrual age, A0.5 65.639 weeks, n 10.015 (caffeine N3- and N7-demethylation of Cazeneuve 1994, Sonnier and Cresteil 1998, protein of Ratanasavanh 1991)"
+form = "points"
+age = [0.01, 0.02, 0.05, 0.1, 0.25, 0.5, 1.0, 1.5, 2.0, 3.0, 5.0, 8.0, 12.0, 16.0, 20.0]
+value = [0.048, 0.102, 0.242, 0.451, 0.837, 1.151, 1.394, 1.485, 1.516, 1.526, 1.467, 1.347, 1.204, 1.081, 1.0]
+source = "Upreti2016"
+sources = ["PKSimOntogeny"]
+notes = "The in vivo ontogeny of CYP1A2 of the liver, Figure 1 panel A of Upreti 2016 (caffeine in apnoea of prematurity, their references 57-69): half of the adult activity at about 0.3 years, a peak of 1.53 times the adult at about 2 to 3 years and a fall back to the adult value in adolescence. Replaces the in vitro Hill of the PK-Sim database (Section A.1, A0.5 65.639 weeks of postmenstrual age, n 10.015, from the caffeine N3- and N7-demethylation of Cazeneuve 1994 and Sonnier and Cresteil 1998 and the protein of Ratanasavanh 1991), which reaches half of the adult at 0.49 years of postnatal age with a much steeper rise and never exceeds it. The function is the in vivo curve of Upreti 2016 Figure 1 digitized with `scripts/database/digitize_curve.py` and the configuration `scripts/database/upreti2016/figure1.json` from the image of page 5 of the PDF, read at the ages above and closed to 1 at 20 years, where the adult data of the panel sit; below 0.01 and above 20 years the first and the last value are held, and the library's `AGE` is the postnatal age of a birth at term, so a preterm neonate is outside it (the Hill function of the postmenstrual age which this entry replaced was not). The curve and not the equations of their Table 1: the printed parameters cannot be implemented as they stand, because the two pieces of the CYP3A row do not meet at the break point (equation 1 gives 1.675 at 2.5 years, equation 2 gives 1.519), the CYP1A2 row has C2 = C3 = 0, so its equation 2 is the constant 1.5 and never returns to the adult value, and the printed Age_50 of both rows puts the rise earlier than the plotted curve (CYP3A would be at 0.88 of the adult at 0.1 years against the 0.45 of the panel). The digitization reproduces the printed Adult_Max of both rows to within 0.02 (1.53 against 1.5 and 1.71 against 1.7), which is the check that the trace follows the published fit. Upreti 2016 predicted paediatric clearances within twofold in 100 % of their intravenous and 98 % of their oral cases with the in vivo functions against 51 % and 67 % with the in vitro ones, which is why the library uses them."
 
 [ontogeny.li.CYP2C8]
 form = "hill"
@@ -58,12 +58,12 @@ source = "PKSimOntogeny"
 notes = "Section A.6: A0.5 37.706 weeks, n 5.391 (dextromethorphan O-demethylation of Stevens 2008, protein of Treluyer 1991)"
 
 [ontogeny.li.CYP3A4]
-form = "hill"
-variable = "pma"
-x50 = 73.019
-n = 3.331
-source = "PKSimOntogeny"
-notes = "Section A.8: A0.5 73.019 weeks, n 3.331 (mRNA and testosterone 6beta-hydroxylation of Lacroix 1997, amprenavir of Treluyer 2003, protein of Stevens 2003); the least certain ontogeny: the in vivo functions mature faster (Salem 2014, adult at 1.3 years of postmenstrual age; Upreti 2016)"
+form = "points"
+age = [0.01, 0.02, 0.05, 0.1, 0.25, 0.5, 1.0, 1.5, 2.0, 3.0, 5.0, 8.0, 12.0, 16.0, 20.0]
+value = [0.207, 0.378, 0.720, 1.043, 1.415, 1.593, 1.687, 1.686, 1.677, 1.636, 1.557, 1.401, 1.246, 1.135, 1.0]
+source = "Upreti2016"
+sources = ["PKSimOntogeny"]
+notes = "The in vivo ontogeny of CYP3A of the liver, Figure 1 panel I of Upreti 2016 (sufentanil in healthy volunteers and surgical analgesia, their references 106-112): the activity per amount of liver passes the adult value before 0.1 years, peaks at 1.69 times the adult at about 1 year and falls back to the adult value in adolescence. The probe does not separate CYP3A4 from CYP3A5, so the paper labels the in vivo row CYP3A while the library applies it to CYP3A4, which carries nearly all of the activity. Replaces the in vitro Hill of the PK-Sim database (Section A.8, A0.5 73.019 weeks of postmenstrual age, n 3.331, from the mRNA and testosterone 6beta-hydroxylation of Lacroix 1997, the amprenavir of Treluyer 2003 and the protein of Stevens 2003), which reaches half of the adult at 0.63 years of postnatal age and never exceeds it; the in vitro function of Upreti 2016 themselves is slower still (half-maximal at 6.30 years). The function is the in vivo curve of Upreti 2016 Figure 1 digitized with `scripts/database/digitize_curve.py` and the configuration `scripts/database/upreti2016/figure1.json` from the image of page 5 of the PDF, read at the ages above and closed to 1 at 20 years, where the adult data of the panel sit; below 0.01 and above 20 years the first and the last value are held, and the library's `AGE` is the postnatal age of a birth at term, so a preterm neonate is outside it (the Hill function of the postmenstrual age which this entry replaced was not). The curve and not the equations of their Table 1: the printed parameters cannot be implemented as they stand, because the two pieces of the CYP3A row do not meet at the break point (equation 1 gives 1.675 at 2.5 years, equation 2 gives 1.519), the CYP1A2 row has C2 = C3 = 0, so its equation 2 is the constant 1.5 and never returns to the adult value, and the printed Age_50 of both rows puts the rise earlier than the plotted curve (CYP3A would be at 0.88 of the adult at 0.1 years against the 0.45 of the panel). The digitization reproduces the printed Adult_Max of both rows to within 0.02 (1.53 against 1.5 and 1.71 against 1.7), which is the check that the trace follows the published fit. Upreti 2016 predicted paediatric clearances within twofold in 100 % of their intravenous and 98 % of their oral cases with the in vivo functions against 51 % and 67 % with the in vitro ones, which is why the library uses them."
 
 [ontogeny.si.CYP3A4]
 form = "hill"
