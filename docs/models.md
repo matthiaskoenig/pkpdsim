@@ -1,6 +1,6 @@
 # Models and their commands
 
-A model package describes itself once, in its `__init__.py`, as a `PKPDModel`, a project of sbmlsim (`sbmlsim.project.Project`) with what a PBPK/PD model adds.
+A model package describes itself once, in its `__init__.py`, as a `PKPDModel`, a project of sbmlsim (`sbmlsim.project.Project`, see [Projects](https://matthiaskoenig.github.io/sbmlsim/project/) of sbmlsim for its fields, references, variants, analyses and checks) with what a PBPK/PD model adds.
 The commands, the verification and the tests of pkpdsim work with this object;
 what stays in the package is what is the model's own: its factory, the registry
 of its experiments, its fit definitions and parameters, the filters of its
@@ -144,7 +144,7 @@ commands, their options and their errors.
 
 ## Tests
 
-`sbmlsim.project_checks` holds the tests of a model as functions over its project (the `pkpdsim.testing` of earlier releases moved there): the registry is
+`sbmlsim.project_checks` holds the tests of a model as functions over its project, see [Checks of a project](https://matthiaskoenig.github.io/sbmlsim/project/#checks-of-a-project): the registry is
 complete (`check_registry`), the model object belongs to its package and its
 references resolve (`check_model`), the experiments initialize
 (`initialize_experiments`), all experiments run (`run_all_experiments`) and every

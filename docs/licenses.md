@@ -1,32 +1,6 @@
 # Licenses
 
-A model is published under two licenses: the model and its documentation under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/), the source code which creates and simulates it under [MIT](https://opensource.org/license/MIT). The texts of both licenses travel with the model in its [COMBINE archive](https://combinearchive.org), the `.omex` file which packs the SBML, the documentation and the figures of a model into one file. [`sbmlsim.licenses`](https://matthiaskoenig.github.io/sbmlsim/api/licenses/) holds the texts as resources of sbmlsim and writes them into a directory.
-
-The text of CC BY-SA 4.0 is the same for every model. The text of MIT starts with the copyright, which names the years and the authors of the model, e.g. `Copyright (c) 2024-2025 Matthias König`; it is the only part in which the MIT texts of two models differ, so it is the argument `copyright` of the functions, without the words `Copyright (c)`, which the text adds.
-
-## Usage
-
-```python
-from pathlib import Path
-
-from sbmlsim.licenses import License, license_text, write_license
-
-results = Path("results")
-results.mkdir()
-cc_by_sa = write_license(results, License.CC_BY_SA_4_0)
-mit = write_license(results, License.MIT, copyright="2026 Matthias König")
-print(cc_by_sa.name, mit.name)
-print(mit.read_text(encoding="utf-8").splitlines()[0])
-print(license_text(License.CC_BY_SA_4_0).splitlines()[0])
-```
-
-```text
-cc-by-sa-4.0.txt mit.txt
-Copyright (c) 2026 Matthias König
-Attribution-ShareAlike 4.0 International
-```
-
-The files are named after the license, `cc-by-sa-4.0.txt` and `mit.txt`, and are written in UTF-8 with line feeds as line endings on every platform, so a model creates the same files byte for byte on Linux, macOS and Windows. A license is given as a `License` or as its value (`"mit"`); MIT without a copyright, CC BY-SA 4.0 with one, and a copyright which is empty, spans several lines or starts with `Copyright` are errors.
+A model is published under two licenses: the model and its documentation under CC BY-SA 4.0, the source code which creates and simulates it under MIT. The license texts, the copyright argument, the functions `write_license` and `license_text` and the files they write are described in [Licenses](https://matthiaskoenig.github.io/sbmlsim/licenses/) of sbmlsim ([`sbmlsim.licenses`](https://matthiaskoenig.github.io/sbmlsim/api/licenses/)), and the licenses travel with the model in its [COMBINE archive](https://combinearchive.org). This page keeps the archive of the models of the PBPK library.
 
 ## The COMBINE archive of a model
 
