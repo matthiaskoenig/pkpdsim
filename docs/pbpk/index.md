@@ -213,6 +213,10 @@ Every other id of the scheme, the ids a model rarely reads: the physiology, the 
 | `FMI` | the fat mass index (kg/m2), the fat mass over the squared height | `ids.FMI` |
 | `BFF` | the body fat fraction, the fat mass over the body weight | `ids.BFF` |
 | `LBW` | the lean body weight (kg), the body weight without the adipose tissue | `ids.LBW` |
+| `WAIST_base` | the waist circumference (cm) predicted from the covariates of the build | `ids.WAIST_BASE` |
+| `f_waist` | the waist circumference over the predicted waist, the covariate of the visceral depot | `ids.F_WAIST` |
+| `WAIST` | the waist circumference (cm) at the site of the WHO protocol | `ids.WAIST` |
+| `WHtR` | the waist-to-height ratio | `ids.WHTR` |
 | `f_vat` | the share of the adipose tissue which is visceral | `ids.F_VISCERAL` |
 | `VAT` | the visceral adipose tissue (kg) | `ids.VAT` |
 | `SAT` | the subcutaneous adipose tissue (kg) | `ids.SAT` |

@@ -13,7 +13,12 @@ exported lazily: they import sbmlsim, which a factory does not need, so
 import importlib
 from typing import TYPE_CHECKING
 
-from pkpdsim.pbpk.adipose import Adipose
+from pkpdsim.pbpk.adipose import (
+    Adipose,
+    VisceralComposition,
+    visceral_composition,
+    waist_factor,
+)
 from pkpdsim.pbpk.archive import create_archive, sex_definition
 from pkpdsim.pbpk.builder import BuildResult, build, compose
 from pkpdsim.pbpk.chemistry import (
@@ -207,6 +212,7 @@ __all__ = [
     "Variants",
     "VirtualIndividual",
     "VirtualPopulation",
+    "VisceralComposition",
     "WeibullDissolution",
     "ZonatedLiver",
     "as_value",
@@ -234,4 +240,6 @@ __all__ = [
     "sources",
     "unit_label",
     "virtual_population",
+    "visceral_composition",
+    "waist_factor",
 ]
