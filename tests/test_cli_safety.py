@@ -264,3 +264,73 @@ def test_the_message_of_a_replacement_shows_the_path(
     capsys.readouterr()
     run_command(MODEL, arguments)
     assert "a[b]/simulation/studies" in "".join(capsys.readouterr().out.split())
+
+
+def test_the_stagings_of_a_killed_run_are_removed(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    from pkpdsim.cli import _staged
+
+    target = tmp_path / "result"
+    stale = [tmp_path / f".result.{'a' * 32}", tmp_path / f".result.old.{'b' * 32}"]
+    kept = [tmp_path / f".other.{'c' * 32}", tmp_path / ".result.keep"]
+    for directory in [*stale, *kept]:
+        directory.mkdir()
+    _staged(target, lambda staging: staging.mkdir())
+    assert target.is_dir()
+    assert not any(directory.exists() for directory in stale)
+    assert all(directory.exists() for directory in kept)
+    assert sum("was killed" in record.message for record in caplog.records) == 2
+
+
+def test_an_earlier_result_which_is_not_restored_is_named(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from pkpdsim.cli import _staged
+
+    target = tmp_path / "result"
+    target.mkdir()
+    (target / "earlier.txt").write_text("earlier", encoding="utf-8")
+    original = Path.rename
+
+    def rename(self: Path, other: Path) -> Path:
+        if Path(other) == target:
+            raise OSError("no rename onto the result")
+        return original(self, other)
+
+    monkeypatch.setattr(Path, "rename", rename)
+    with pytest.raises(SystemExit) as info:
+        _staged(target, lambda staging: staging.mkdir())
+    assert info.value.code == 1
+    out = "".join(capsys.readouterr().out.split())
+    (earlier,) = tmp_path.glob(".result.old.*")
+    assert (earlier / "earlier.txt").is_file()
+    assert earlier.name in out
+
+
+def test_an_error_of_the_run_itself_keeps_its_traceback(tmp_path: Path) -> None:
+    from pkpdsim.cli import _staged
+
+    def run(staging: Path) -> None:
+        staging.mkdir()
+        raise FileNotFoundError("a file of the run")
+
+    with pytest.raises(FileNotFoundError, match="a file of the run"):
+        _staged(tmp_path / "result", run)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_the_report_of_an_identifiability_names_its_analysis(
+    fit: Path, tmp_path: Path
+) -> None:
+    report = identifiability_command(
+        MODEL,
+        [
+            "--no-mapping-figures",
+            "--no-fisher",
+            *("--max-points", "3", "-o", str(tmp_path)),
+            str(fit / "parameters.json"),
+        ],
+    )
+    spec = json.loads((report / "report" / "spec.json").read_text(encoding="utf-8"))
+    assert spec["fit"] == str((report / "analysis").resolve())
