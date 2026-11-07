@@ -625,7 +625,7 @@ def assert_reference_sbml(result: BuildResult) -> None:
     and with the heart failure factors of the consensus (Leithe 1984), the
     kidney volume and transit of CKD of Malik 2020 and the cirrhosis factors
     cited from Edginton 2008 (factors, notes and sources only), and all rebuilt with the factors of the sex of the female build and the constant factors of the age of a build without the physiology over age (`PBPKDefinition.age`, which is not the default: the reference values and the factors are those of the individual of 35 years, as before, and the parameters `fage_*` are their constant 1; the values of the default individual unchanged); a change of the library which changes the
-    SBML of every model on purpose rebuilds them and says so.
+    SBML of every model on purpose rebuilds them and says so, and all rebuilt with the notes of the age table read from the primary publications (`age_human.toml`; the notes of the age factors and the two sources Fomon 1982 and Jopling 2009 only, no value changed) and with the citation of NHANES which names the script of the waist regression (the one line of the sources of the hematocrit and the albumin; the waist itself belongs to the adipose option, which these references do not have).
     """
     for path in (result.comp_path, result.flat_path):
         reference = gzip.decompress((REFERENCE / f"{path.name}.gz").read_bytes())

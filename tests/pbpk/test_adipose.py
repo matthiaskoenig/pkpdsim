@@ -1,6 +1,7 @@
 """The adipose tissue, the body composition and the physiology of obesity."""
 
 import logging
+import math
 from itertools import pairwise
 from pathlib import Path
 
@@ -18,7 +19,10 @@ from pkpdsim.pbpk.adipose import (
     obesity_factor,
     obesity_factors,
     obesity_protein_factors,
+    visceral_composition,
     visceral_share,
+    waist_factor,
+    waist_model,
 )
 from pkpdsim.pbpk.age import AGE_REFERENCE
 from pkpdsim.pbpk.physiology import body_composition, reference_individual
@@ -77,7 +81,19 @@ def test_a_definition_without_adipose_has_none_of_the_elements(
     """The body composition and the factors are a choice of the build."""
     path = build(definition(sid="plain"), tmp_path).flat_path
     parameters = _parameters(path)
-    composition = {ids.LBW, ids.FM, ids.FMI, ids.BFF, ids.F_VISCERAL, ids.VAT, ids.SAT}
+    composition = {
+        ids.LBW,
+        ids.FM,
+        ids.FMI,
+        ids.BFF,
+        ids.F_VISCERAL,
+        ids.VAT,
+        ids.SAT,
+        ids.WAIST,
+        ids.WAIST_BASE,
+        ids.F_WAIST,
+        ids.WHTR,
+    }
     assert not parameters & composition
     assert not {p for p in parameters if p.startswith("fobes_")}
 
@@ -95,6 +111,101 @@ def test_the_composition_of_a_build(adipose: Path) -> None:
     assert r.getValue(ids.F_VISCERAL) == pytest.approx(share, rel=1e-12)
     assert r.getValue(ids.VAT) == pytest.approx(share * fat, rel=1e-12)
     assert r.getValue(ids.VAT) + r.getValue(ids.SAT) == pytest.approx(fat, rel=1e-12)
+
+
+def test_the_waist_of_a_build_is_the_prediction_of_the_covariates(
+    adipose: Path,
+) -> None:
+    """`WAIST_base`, `WAIST`, `WHtR` and the depots of an individual."""
+    make = individuals(adipose)
+    for bw, height in ((73.0, 176.0), (105.0, 182.0)):
+        r = make(BW=bw, HEIGHT=height)
+        expected = visceral_composition(Sex.MALE, bw, height)
+        fat = r.getValue(ids.organ_mass(Organ.ADIPOSE))
+        assert r.getValue(ids.F_WAIST) == 1.0
+        assert r.getValue(ids.WAIST_BASE) == pytest.approx(
+            expected.waist_base, rel=1e-12
+        )
+        assert r.getValue(ids.WAIST) == pytest.approx(expected.waist, rel=1e-12)
+        assert r.getValue(ids.WHTR) == pytest.approx(expected.whtr, rel=1e-12)
+        assert r.getValue(ids.F_VISCERAL) == pytest.approx(
+            expected.f_visceral, rel=1e-12
+        )
+        assert r.getValue(ids.VAT) == pytest.approx(expected.visceral, rel=1e-9)
+        assert r.getValue(ids.SAT) == pytest.approx(expected.subcutaneous, rel=1e-9)
+        assert r.getValue(ids.VAT) + r.getValue(ids.SAT) == pytest.approx(
+            fat, rel=1e-12
+        )
+
+
+def test_a_measured_waist_moves_the_adipose_tissue_between_the_depots(
+    adipose: Path,
+) -> None:
+    """The waist is the one covariate of the split; the total is unchanged."""
+    make = individuals(adipose)
+    bw, height = 95.0, 176.0
+    predicted = waist_model(Sex.MALE).value(bw, height)
+    reference = make(BW=bw, HEIGHT=height)
+    fat = reference.getValue(ids.organ_mass(Organ.ADIPOSE))
+    visceral = reference.getValue(ids.VAT)
+    for deviation in (-10.0, 10.0):
+        factor = waist_factor(Sex.MALE, predicted + deviation, bw, height)
+        r = make(BW=bw, HEIGHT=height, f_waist=factor)
+        assert r.getValue(ids.WAIST) == pytest.approx(predicted + deviation, rel=1e-12)
+        assert r.getValue(ids.organ_mass(Organ.ADIPOSE)) == pytest.approx(
+            fat, rel=1e-12
+        )
+        assert r.getValue(ids.VAT) + r.getValue(ids.SAT) == pytest.approx(
+            fat, rel=1e-12
+        )
+        if deviation > 0:
+            assert r.getValue(ids.VAT) > visceral
+            assert r.getValue(ids.SAT) < fat - visceral
+        else:
+            assert r.getValue(ids.VAT) < visceral
+            assert r.getValue(ids.SAT) > fat - visceral
+
+
+def test_the_waist_prediction_reproduces_the_cohort_of_its_anchor() -> None:
+    """The intercept is shifted onto the mean waist of Haueise 2023."""
+    cohorts = {
+        Sex.MALE: (52.1, 178.2, 86.9, 97.4),
+        Sex.FEMALE: (51.7, 164.9, 71.2, 86.1),
+    }
+    for sex, (age, height, bw, waist) in cohorts.items():
+        model = waist_model(sex)
+        assert model.value(bw, height, age) == pytest.approx(waist, abs=0.05)
+        assert "Haueise2023" in model.sources
+        assert "NHANES2013_2018" in model.sources
+    # the reference individual of ICRP 89 is below the action points of the WHO
+    for sex, limit in ((Sex.MALE, 94.0), (Sex.FEMALE, 80.0)):
+        reference = reference_individual(sex, AGE_REFERENCE)
+        composition = visceral_composition(
+            sex, reference.bw, reference.height, AGE_REFERENCE
+        )
+        assert composition.waist < limit
+        assert composition.whtr < 0.5
+
+
+def test_the_sensitivity_of_the_visceral_depot_is_that_of_the_cohort() -> None:
+    """Haueise 2023: 2.96 % (men) and 2.72 % (women) of the depot per cm."""
+    assert waist_model(Sex.MALE).sensitivity == pytest.approx(0.02958, rel=1e-12)
+    assert waist_model(Sex.FEMALE).sensitivity == pytest.approx(0.02715, rel=1e-12)
+    for sex, bw, height in ((Sex.MALE, 73.0, 176.0), (Sex.FEMALE, 60.0, 163.0)):
+        model = waist_model(sex)
+        reference = visceral_composition(sex, bw, height)
+        factor = waist_factor(sex, reference.waist + 1.0, bw, height)
+        one_cm = visceral_composition(sex, bw, height, f_waist=factor)
+        rise = one_cm.visceral / reference.visceral - 1.0
+        assert rise == pytest.approx(math.exp(model.sensitivity) - 1.0, rel=1e-9)
+        # the exponential of the library against the linear regression
+        assert rise == pytest.approx(model.sensitivity, rel=0.02)
+
+
+def test_a_waist_which_is_not_positive_is_refused() -> None:
+    """The waist circumference of an individual is a positive length."""
+    with pytest.raises(ValueError, match="not positive"):
+        waist_factor(Sex.MALE, 0.0, 73.0, 176.0)
 
 
 def test_the_visceral_share_rises_with_age_and_is_smaller_in_women() -> None:
@@ -264,6 +375,37 @@ def test_the_body_weight_of_a_model_with_an_effect_is_a_state(
     assert frame[obesity_factor(ids.CO)][-1] > frame[obesity_factor(ids.CO)][0]
 
 
+def test_the_waist_follows_a_change_of_the_body_weight(losing_weight: Path) -> None:
+    """`WAIST` falls with the weight at the ratio of the individual, `WAIST0` stays."""
+    r = individuals(losing_weight)(BW=105.0, HEIGHT=176.0, Ri_drg=5e-3)
+    r.timeCourseSelections = [
+        "time",
+        ids.BW,
+        ids.WAIST,
+        ids.WAIST_BASE,
+        ids.WHTR,
+        "WAIST0",
+        "WAIST_change",
+        ids.VAT,
+        ids.SAT,
+    ]
+    result = r.simulate(0.0, 52 * 7 * 24 * 60.0, 400)
+    frame = {name: result[:, i] for i, name in enumerate(result.colnames)}
+    start = waist_model(Sex.MALE).value(105.0, 176.0)
+    assert np.allclose(frame["WAIST0"], start)
+    assert np.all(np.diff(frame[ids.WAIST]) <= 0)
+    assert np.allclose(frame[ids.WAIST], frame[ids.WAIST_BASE])
+    assert np.allclose(frame[ids.WHTR], frame[ids.WAIST] / 176.0)
+    assert frame["WAIST_change"][-1] == pytest.approx(
+        frame[ids.WAIST][-1] - start, rel=1e-9
+    )
+    # the waist of the prediction falls by its coefficient per kg of the weight
+    per_kg = frame["WAIST_change"][-1] / (frame[ids.BW][-1] - 105.0)
+    assert per_kg == pytest.approx(waist_model(Sex.MALE).bw, rel=1e-9)
+    assert frame[ids.VAT][-1] < frame[ids.VAT][0]
+    assert frame[ids.SAT][-1] < frame[ids.SAT][0]
+
+
 def test_the_mass_balance_of_a_model_whose_weight_changes(losing_weight: Path) -> None:
     """The dose is conserved while the volumes of the individual change."""
     r = individuals(losing_weight)(BW=105.0, HEIGHT=176.0, IVDOSE_drg=10.0)
@@ -372,6 +514,23 @@ def test_the_visceral_share_of_a_build_over_age_is_a_curve_of_the_age(
         reference = reference_individual(Sex.MALE, age)
         r = make(AGE=age, BW=reference.bw, HEIGHT=reference.height)
         assert r.getValue(ids.F_VISCERAL) == pytest.approx(share.value(age), rel=1e-9)
+
+
+@over_age
+def test_the_waist_of_a_build_over_age_reads_the_age(tmp_path: Path) -> None:
+    """The prediction of the waist carries the age term of a build over age."""
+    path = build(
+        definition(sid="aged_waist", adipose=Adipose(), age=True), tmp_path
+    ).flat_path
+    make = individuals(path)
+    for age in (25.0, 45.0, 65.0):
+        reference = reference_individual(Sex.MALE, age)
+        r = make(AGE=age, BW=reference.bw, HEIGHT=reference.height)
+        expected = visceral_composition(Sex.MALE, reference.bw, reference.height, age)
+        assert r.getValue(ids.WAIST) == pytest.approx(expected.waist, rel=1e-9)
+        assert r.getValue(ids.F_VISCERAL) == pytest.approx(
+            expected.f_visceral, rel=1e-9
+        )
 
 
 def test_the_visceral_share_of_a_build_over_age_reads_the_age(tmp_path: Path) -> None:

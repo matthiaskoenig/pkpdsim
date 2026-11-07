@@ -172,15 +172,30 @@ def test_the_brain_takes_half_of_the_cardiac_output_of_an_infant() -> None:
 
 
 def test_the_proteins_of_the_age_and_the_sex() -> None:
-    """The ontogeny of CYP3A4 and its female factor; a stable protein has none."""
+    """The ontogeny of CYP3A4 and its female factor; a stable protein has none.
+
+    The hepatic CYP3A4 and CYP1A2 are the in vivo ontogeny of Upreti 2016
+    (digitized from their Figure 1), which is not monotone: the activity per
+    amount of liver is low in the neonate, passes the adult value in the
+    first year, peaks above it in the toddler and falls back to exactly 1 at
+    20 years. The in vitro ontogeny of the other proteins rises to 1.
+    """
     cyp3a4 = protein_factor(Organ.LIVER, "CYP3A4")
     assert cyp3a4 is not None
-    assert (
-        cyp3a4.curve.value(0.0)
-        < 0.3
-        < cyp3a4.curve.value(1.0)
-        < cyp3a4.curve.value(5.0)
-    )
+    curve = cyp3a4.curve
+    assert curve.value(0.0) < 0.3 < curve.value(0.1)
+    assert curve.value(1.0) == pytest.approx(1.687, abs=5e-3)
+    assert curve.value(5.0) < curve.value(1.0)
+    assert max(curve.value(a) for a in (0.5, 1.0, 2.0, 3.0)) > 1.6
+    for age in (20.0, 35.0, 70.0):
+        assert curve.value(age) == pytest.approx(1.0, rel=1e-12)
+    cyp1a2 = protein_factor(Organ.LIVER, "CYP1A2")
+    assert cyp1a2 is not None
+    assert cyp1a2.curve.value(2.0) == pytest.approx(1.516, abs=5e-3)
+    assert cyp1a2.curve.value(35.0) == pytest.approx(1.0, rel=1e-12)
+    small = protein_factor(Organ.SMALL_INTESTINE, "CYP3A4")
+    assert small is not None
+    assert small.curve.value(0.0) < small.curve.value(5.0) < small.curve.value(35.0)
     assert protein_factor(Organ.LIVER, "SLCO1B1") is None
     assert protein_sex_factor(Sex.FEMALE, Organ.LIVER, "CYP3A4") is not None
     assert protein_sex_factor(Sex.MALE, Organ.LIVER, "CYP3A4") is None
