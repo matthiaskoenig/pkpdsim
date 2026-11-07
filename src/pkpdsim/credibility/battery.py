@@ -125,6 +125,11 @@ _INFUSION: Final = "Ri"
 _SINKS: Final = {"urine": "Aurine_", "feces": "Afeces_"}
 #: the prefix of the parameters which integrate the flows of the reactions
 _FLOW: Final = "battery_flow_"
+#: why a check of the PK battery or the steady state does not apply to a model
+_NO_SUBSTANCE: Final = (
+    "The model has no substance with a molecular weight `Mr_<s>`, the "
+    "convention of the PBPK models the checks of the simulations read."
+)
 
 MASS_BALANCE: Final = register_check(
     Check("mass_balance", "mass balance", "numerical_code_verification")
@@ -882,16 +887,30 @@ class PKBattery(BatteryHook):
         return dose_cases(data) if isinstance(data, FlatBuild) else ()
 
     @override
+    def not_applicable(self, check: str, data: object) -> str | None:
+        """Leave a build without a substance out of the steady state.
+
+        The steady state holds for the physiology of a PBPK model by
+        construction, a build without a substance with a molecular weight is
+        no such model; the other generic checks apply to every build.
+        """
+        if (
+            check == "steady_state"
+            and isinstance(data, FlatBuild)
+            and not data.substances
+        ):
+            return _NO_SUBSTANCE
+        return None
+
+    @override
     def contribute(self, runs: Sequence[BatteryRun]) -> BatteryContribution:
         """Check the mass balance, the zero dose and the superposition of the builds."""
         builds = [run.build.data for run in runs]
         if not any(isinstance(b, FlatBuild) and b.substances for b in builds):
-            reason = (
-                "The model has no substance with a molecular weight `Mr_<s>`, the "
-                "convention of the PBPK models the checks of the simulations read."
-            )
             return BatteryContribution(
-                results=tuple(not_applicable(check, reason) for check in PK_CHECKS),
+                results=tuple(
+                    not_applicable(check, _NO_SUBSTANCE) for check in PK_CHECKS
+                ),
                 sections={"fates": []},
             )
         simulations = [_Simulations.of(run) for run in runs]
@@ -947,7 +966,10 @@ class PKBattery(BatteryHook):
 
     @override
     def report_tables(self, sections: Mapping[str, Any]) -> Mapping[str, pd.DataFrame]:
-        """Write `fates.tsv`: one row per build, dose and part of the fate of a dose."""
+        """Write `fates.tsv`: one row per build, dose and part of the fate of a dose.
+
+        Without a battery the sections are empty and the table has no rows.
+        """
         return {"fates": fates_table(list(sections.get("fates", ())))}
 
 
