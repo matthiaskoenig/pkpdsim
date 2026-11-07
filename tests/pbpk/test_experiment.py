@@ -253,15 +253,17 @@ def test_the_renal_map_is_lazy(
 def test_importing_the_library_imports_no_simulator() -> None:
     """`import pkpdsim.pbpk` stays light, the base experiment is exported lazily.
 
-    Of sbmlsim it imports only the modules without a simulator (`sbmlsim.distrib`
-    and the units of the package), never roadrunner, COPASI or AMICI.
+    Of sbmlsim it imports only the modules without a simulator (`sbmlsim.distrib`,
+    the units of the package and the writer of the archive,
+    `sbmlsim.release.archive`), never roadrunner, COPASI or AMICI.
     """
     code = (
         "import sys, pkpdsim.pbpk; "
         "print(sorted(m for m in sys.modules "
         "if m.split('.')[0] in {'roadrunner', 'COPASI', 'amici'} "
         "or (m.startswith('sbmlsim') "
-        "and m not in {'sbmlsim', 'sbmlsim.distrib', 'sbmlsim.units'}) "
+        "and m not in {'sbmlsim', 'sbmlsim.distrib', 'sbmlsim.units', "
+        "'sbmlsim.release', 'sbmlsim.release.archive'}) "
         "or m in {'pkpdsim.experiment', 'pkpdsim.pbpk.experiment'})); "
         "from pkpdsim.pbpk import REFERENCE_GFR, PBPKSimulationExperiment, "
         "ScaledRenalMap, healthy_gfr; "
