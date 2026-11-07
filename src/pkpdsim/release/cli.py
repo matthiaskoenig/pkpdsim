@@ -33,7 +33,6 @@ again. See `release` for the order of the steps.
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import sys
 from collections.abc import Sequence
@@ -58,9 +57,8 @@ from sbmlsim.release.workflow import (
     publishable,
     release_settings,
 )
-from sbmlsim.run.context import RUN_FILE, spec_hash
+from sbmlsim.run import OutInUse, check_out
 from sbmlsim.run.kinds import ConfigurationError
-from sbmlsim.run.release_kinds import RELEASE, ReleaseSpec
 from sbmlutils.console import console
 
 from pkpdsim.cli import ModelNotFoundError, project_reference, resolve_model
@@ -80,14 +78,6 @@ OUT_SUFFIX: Final = "-release-"
 #: the suffix of the default output of a build with a local pkpdsim, which is
 #: never published, `<repository>-release-<version>-local`
 LOCAL_SUFFIX: Final = "-local"
-
-#: the refusals of the clone in the out which a change of the checkout or a new
-#: out resolves, with what to do in the checkout
-_CHECKOUT_REFUSALS: Final = {
-    "behind origin/main": "pull in the checkout",
-    "not 'main'": "pull in the checkout",
-    "ahead of origin/main": "push or reset in the checkout",
-}
 
 
 def _checkout(settings: ReleaseSettings, repo: Path | None, src: SourceRepo) -> Path:
@@ -112,46 +102,33 @@ def default_out(checkout: Path, version: str, *, local: bool = False) -> Path:
     return checkout.parent / name
 
 
-def _hint(err: ReleaseError, checkout: Path, out: Path) -> ReleaseError:
-    """Add what to do to a refusal of the clone in the out.
-
-    The clone of the checkout in the out is refused when it is behind
-    `origin/main`, on another branch or ahead of it; the checkout is changed
-    and the out removed, so the next build clones it again.
-    """
-    message = str(err)
-    for refusal, action in _CHECKOUT_REFUSALS.items():
-        if refusal in message and "remove" not in message:
-            return ReleaseError(f"{message}; {action} {checkout}, or remove {out}")
-    return err
+#: what makes an output another build than the one of the release, by the
+#: reason of `sbmlsim.run.OutInUse`
+_OUT_IN_USE: Final = {
+    "not_a_directory": "is no directory",
+    "no_record": "holds files of no build",
+    "unreadable": "holds a build whose record is not read",
+    "other_run": "holds the build of another release (another version, --repo "
+    "or --pkpdsim-path)",
+}
 
 
 def _check_out(out: Path, spec: dict[str, object]) -> None:
     """Refuse an out which holds another build than the one of the spec.
 
-    An earlier build of the same spec is built again; the build of another
-    version, another checkout or a local pkpdsim is no run the build resumes.
+    An earlier build of the same spec is built again (a resume of the run
+    layer, `sbmlsim.run.check_out`); any other out is refused.
 
     Raises:
-        ReleaseError: for an out which is not empty and holds no build of the
-            spec, naming what to do.
+        ReleaseError: for an out the build may not run into, naming what to do.
     """
-    if not out.is_dir() or not any(out.iterdir()):
-        return
     try:
-        record = json.loads((out / RUN_FILE).read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        record = None
-    given = spec_hash(ReleaseSpec.model_validate(spec), RELEASE.inputs)
-    if not isinstance(record, dict) or (
-        record.get("kind"),
-        record.get("spec_hash"),
-    ) != (RELEASE.name, given):
-        raise ReleaseError(
-            f"{out} holds another build than the one of this release (another "
-            "version, --repo or --pkpdsim-path, or no build): remove "
-            f"{out} or pass --out"
-        )
+        check_out("release", spec, out, resume=True)
+    except OutInUse as err:
+        what = _OUT_IN_USE.get(err.reason, "is in use")
+        raise ReleaseError(f"{err.out} {what}: remove {err.out} or pass --out") from err
+    except ConfigurationError as err:
+        raise ReleaseError(str(err)) from err
 
 
 def _build(
@@ -196,9 +173,7 @@ def _build(
             runner=runner,
         )
     except ConfigurationError as err:
-        raise _hint(ReleaseError(str(err)), checkout, out) from err
-    except ReleaseError as err:
-        raise _hint(err, checkout, out) from err
+        raise ReleaseError(str(err)) from err
 
 
 def _fast_forward(checkout: Path, runner: Runner) -> None:
@@ -309,10 +284,7 @@ def release(
         _build(reference, version, out, checkout, pkpdsim_path, workers, runner)
     if not publish:
         return path
-    try:
-        publish_release(model, version, out, runner=runner, publisher=publisher)
-    except ReleaseError as err:
-        raise _hint(err, checkout, out) from err
+    publish_release(model, version, out, runner=runner, publisher=publisher)
     _fast_forward(checkout, runner)
     return path
 
