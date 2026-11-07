@@ -33,6 +33,7 @@ again. See `release` for the order of the steps.
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import sys
 from collections.abc import Sequence
@@ -57,7 +58,9 @@ from sbmlsim.release.workflow import (
     publishable,
     release_settings,
 )
+from sbmlsim.run.context import RUN_FILE, spec_hash
 from sbmlsim.run.kinds import ConfigurationError
+from sbmlsim.run.release_kinds import RELEASE, ReleaseSpec
 from sbmlutils.console import console
 
 from pkpdsim.cli import ModelNotFoundError, project_reference, resolve_model
@@ -67,12 +70,24 @@ if TYPE_CHECKING:
 
     from pkpdsim.model import PKPDModel
 
-__all__ = ["OUT_SUFFIX", "default_out", "main", "parser", "release"]
+__all__ = ["LOCAL_SUFFIX", "OUT_SUFFIX", "default_out", "main", "parser", "release"]
 
 logger = logging.getLogger(__name__)
 
 #: the suffix of the default output of a build, `<repository>-release-<version>`
 OUT_SUFFIX: Final = "-release-"
+
+#: the suffix of the default output of a build with a local pkpdsim, which is
+#: never published, `<repository>-release-<version>-local`
+LOCAL_SUFFIX: Final = "-local"
+
+#: the refusals of the clone in the out which a change of the checkout or a new
+#: out resolves, with what to do in the checkout
+_CHECKOUT_REFUSALS: Final = {
+    "behind origin/main": "pull in the checkout",
+    "not 'main'": "pull in the checkout",
+    "ahead of origin/main": "push or reset in the checkout",
+}
 
 
 def _checkout(settings: ReleaseSettings, repo: Path | None, src: SourceRepo) -> Path:
@@ -80,17 +95,63 @@ def _checkout(settings: ReleaseSettings, repo: Path | None, src: SourceRepo) -> 
     return repo if repo is not None else src.root.parent / settings.repo_name
 
 
-def default_out(checkout: Path, version: str) -> Path:
+def default_out(checkout: Path, version: str, *, local: bool = False) -> Path:
     """Get the default output of the build of a release.
 
     Args:
         checkout: the checkout of the release repository, which need not exist.
         version: the version of the release.
+        local: a build with a local pkpdsim (`--pkpdsim-path`), which is never
+            published and gets an output of its own.
 
     Returns:
-        `<checkout>-release-<version>` next to the checkout.
+        `<checkout>-release-<version>` next to the checkout, with `-local` for
+        a build with a local pkpdsim.
     """
-    return checkout.parent / f"{checkout.name}{OUT_SUFFIX}{version}"
+    name = f"{checkout.name}{OUT_SUFFIX}{version}{LOCAL_SUFFIX if local else ''}"
+    return checkout.parent / name
+
+
+def _hint(err: ReleaseError, checkout: Path, out: Path) -> ReleaseError:
+    """Add what to do to a refusal of the clone in the out.
+
+    The clone of the checkout in the out is refused when it is behind
+    `origin/main`, on another branch or ahead of it; the checkout is changed
+    and the out removed, so the next build clones it again.
+    """
+    message = str(err)
+    for refusal, action in _CHECKOUT_REFUSALS.items():
+        if refusal in message and "remove" not in message:
+            return ReleaseError(f"{message}; {action} {checkout}, or remove {out}")
+    return err
+
+
+def _check_out(out: Path, spec: dict[str, object]) -> None:
+    """Refuse an out which holds another build than the one of the spec.
+
+    An earlier build of the same spec is built again; the build of another
+    version, another checkout or a local pkpdsim is no run the build resumes.
+
+    Raises:
+        ReleaseError: for an out which is not empty and holds no build of the
+            spec, naming what to do.
+    """
+    if not out.is_dir() or not any(out.iterdir()):
+        return
+    try:
+        record = json.loads((out / RUN_FILE).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        record = None
+    given = spec_hash(ReleaseSpec.model_validate(spec), RELEASE.inputs)
+    if not isinstance(record, dict) or (
+        record.get("kind"),
+        record.get("spec_hash"),
+    ) != (RELEASE.name, given):
+        raise ReleaseError(
+            f"{out} holds another build than the one of this release (another "
+            "version, --repo or --pkpdsim-path, or no build): remove "
+            f"{out} or pass --out"
+        )
 
 
 def _build(
@@ -104,24 +165,40 @@ def _build(
 ) -> None:
     """Build the release into the output with the kind `release` of sbmlsim.
 
-    The build resumes in an output of an earlier build of the same spec.
+    The build resumes in an output of an earlier build of the same spec; an
+    output of another build is refused (`_check_out`).
 
     Raises:
         ReleaseError: if the release is refused or a stage of the build fails.
     """
+    repository = checkout.resolve() if checkout.exists() else None
+    if repository is None and not (out / REPOSITORY_DIR).exists():
+        logger.info(
+            "The checkout %s does not exist, the build clones the release "
+            "repository from GitHub.",
+            checkout,
+        )
+    spec: dict[str, object] = {"project": reference, "version": version}
+    if repository is not None:
+        spec["repository"] = str(repository)
+    if pkpdsim_path is not None:
+        spec["framework_path"] = str(pkpdsim_path.resolve())
+    _check_out(out, spec)
     try:
         execute_release(
             reference,
             version,
             out,
-            repository=checkout if checkout.exists() else None,
+            repository=repository,
             framework_path=pkpdsim_path,
             workers=None if workers == "auto" else int(workers),
             resume=True,
             runner=runner,
         )
     except ConfigurationError as err:
-        raise ReleaseError(str(err)) from err
+        raise _hint(ReleaseError(str(err)), checkout, out) from err
+    except ReleaseError as err:
+        raise _hint(err, checkout, out) from err
 
 
 def _fast_forward(checkout: Path, runner: Runner) -> None:
@@ -197,7 +274,8 @@ def release(
             pkpdsim, only without `publish`.
         workers: the number of workers of the simulations, `auto` (the CPUs of
             the quota) or a number.
-        out: the output of the build, `default_out` of the checkout by default.
+        out: the output of the build, `default_out` of the checkout by default
+            (an output of its own for a build with a local pkpdsim).
         runner: runs git, uv, the analyses of the model, docker and gh.
         publisher: publishes the built release.
 
@@ -222,7 +300,8 @@ def release(
         raise ReleaseError(str(err)) from err
     src = source_repo(model, runner)
     checkout = _checkout(settings, repo, src)
-    out = out if out is not None else default_out(checkout, version)
+    if out is None:
+        out = default_out(checkout, version, local=pkpdsim_path is not None)
     path = out / REPOSITORY_DIR
     if publish:
         check_tools(model.root, runner)
@@ -230,7 +309,10 @@ def release(
         _build(reference, version, out, checkout, pkpdsim_path, workers, runner)
     if not publish:
         return path
-    publish_release(model, version, out, runner=runner, publisher=publisher)
+    try:
+        publish_release(model, version, out, runner=runner, publisher=publisher)
+    except ReleaseError as err:
+        raise _hint(err, checkout, out) from err
     _fast_forward(checkout, runner)
     return path
 
@@ -273,7 +355,8 @@ def parser() -> argparse.ArgumentParser:
         metavar="DIR",
         default=None,
         help="the output of the build, which holds the release repository in "
-        "DIR/repository; default is <repo>-release-<version> next to the checkout",
+        "DIR/repository; default is <repo>-release-<version> next to the checkout, "
+        "<repo>-release-<version>-local with --pkpdsim-path",
     )
     p.add_argument(
         "--no-publish",

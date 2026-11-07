@@ -11,6 +11,7 @@ steps by a fake publisher; `release` gets them as its `runner` and its
 """
 
 import json
+import logging
 import shutil
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -299,9 +300,13 @@ def test_without_a_checkout_the_repository_is_cloned_from_github(
     remote_and_clone: tuple[Path, Path],
     runner: FakeRunner,
     tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     missing = tmp_path / "missing" / "toy-model"
-    path = do_release(model, missing, publish=False, runner=runner)
+    with caplog.at_level(logging.INFO, logger="pkpdsim.release.cli"):
+        path = do_release(model, missing, publish=False, runner=runner)
+    assert f"The checkout {missing} does not exist" in caplog.text
+    assert "clones the release repository from GitHub" in caplog.text
     assert path == tmp_path / "missing" / f"toy-model-release-{VERSION}" / "repository"
     assert not missing.exists()
     remote, _ = remote_and_clone
@@ -478,3 +483,60 @@ def test_main_prints_the_release_path_verbatim(
     monkeypatch.setattr("pkpdsim.release.cli.release", lambda *a, **k: path)
     main(["pkpdsim_toy", "--version", VERSION, *args])
     assert line.format(path=path) in capsys.readouterr().out.splitlines()
+
+
+def test_a_build_with_a_local_pkpdsim_has_an_output_of_its_own(
+    model: PKPDModel, clone: Path, runner: FakeRunner, tmp_path: Path
+) -> None:
+    """A review with a local pkpdsim, then a release, builds twice, no refusal."""
+    local = tmp_path / "pkpdsim"
+    local.mkdir()
+    path = release(
+        model,
+        version=VERSION,
+        repo=clone,
+        publish=False,
+        pkpdsim_path=local,
+        workers="2",
+        runner=runner,
+    )
+    assert path == default_out(clone, VERSION, local=True) / "repository"
+    assert path.parent.name == f"toy-model-release-{VERSION}-local"
+    publisher = FakePublisher()
+    released = do_release(
+        model, clone, publish=True, runner=runner, publisher=publisher
+    )
+    assert released == default_out(clone, VERSION) / "repository"
+    assert [call[1] for call in publisher.calls] == [released]
+    assert sum("specs/simulate.json" in c for c in runner.commands) == 2
+
+
+def test_an_output_of_another_build_is_refused(
+    model: PKPDModel, clone: Path, runner: FakeRunner, tmp_path: Path
+) -> None:
+    out = tmp_path / "build"
+    do_release(model, clone, publish=False, runner=runner, out=out)
+    builds = sum(c[:2] == ["uv", "lock"] for c in runner.commands)
+    other = tmp_path / "other" / "toy-model"
+    with pytest.raises(ReleaseError) as err:
+        do_release(model, other, publish=False, runner=runner, out=out)
+    assert f"remove {out} or pass --out" in str(err.value)
+    assert "spec file" not in str(err.value)
+    assert sum(c[:2] == ["uv", "lock"] for c in runner.commands) == builds
+    (tmp_path / "used").mkdir()
+    (tmp_path / "used" / "notes.txt").write_text("mine\n", encoding="utf-8")
+    with pytest.raises(ReleaseError, match="or pass --out"):
+        do_release(model, clone, publish=False, runner=runner, out=tmp_path / "used")
+
+
+def test_an_unpushed_commit_of_the_checkout_is_refused(
+    model: PKPDModel, clone: Path, runner: FakeRunner
+) -> None:
+    (clone / "local.txt").write_text("not pushed\n", encoding="utf-8")
+    git(clone, "add", "-A")
+    git(clone, "commit", "-m", "not pushed")
+    out = default_out(clone, VERSION)
+    with pytest.raises(ReleaseError, match="ahead of origin/main") as err:
+        do_release(model, clone, publish=False, runner=runner)
+    assert f"push or reset in the checkout {clone}, or remove {out}" in str(err.value)
+    assert not runner.ran("uv lock")
