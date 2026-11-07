@@ -2052,7 +2052,13 @@ def credibility_command(model: PKPDModel, args: Sequence[str] | None = None) -> 
 
         # the lock of the package, which the next assessment compares with
         lock = locks.lock_path(model)
-        shutil.move(out / locks.LOCK_FILE, lock)
+        try:
+            shutil.move(out / locks.LOCK_FILE, lock)
+        except OSError as err:
+            _failed(
+                f"The lock '{lock}' is not written ({err}); the assessment is in "
+                f"'{out}'."
+            )
         display.key_values({"lock": lock})
     display.key_values({"report": out / "index.html"})
     return out
