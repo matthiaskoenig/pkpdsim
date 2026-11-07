@@ -2037,12 +2037,12 @@ def credibility_command(model: PKPDModel, args: Sequence[str] | None = None) -> 
     }
     inputs = None if options.from_json is None else {"record": options.from_json}
 
-    def run(staging: Path) -> None:
-        _execute(p, "credibility", spec, staging, inputs=inputs)
-        _with_fates(staging / CREDIBILITY_DIR)
-
     try:
-        _staged(out, run, inner=CREDIBILITY_DIR)
+        _staged(
+            out,
+            lambda staging: _execute(p, "credibility", spec, staging, inputs=inputs),
+            inner=CREDIBILITY_DIR,
+        )
     except (LookupError, ValueError, TypeError, OSError) as err:
         # the errors of the declaration, the evidence, the records and the
         # lock, e.g. `DeclarationError`, `SelectionError`, `KindMismatchError`
@@ -2062,22 +2062,6 @@ def credibility_command(model: PKPDModel, args: Sequence[str] | None = None) -> 
         display.key_values({"lock": lock})
     display.key_values({"report": out / "index.html"})
     return out
-
-
-def _with_fates(directory: Path) -> None:
-    """Write the table of the fates of the doses without rows when the battery did not run.
-
-    The battery hook writes `fates.tsv` with the battery; the outputs of an
-    assessment have it in any case, as `run_credibility` always wrote it.
-    """
-    from pkpdsim.credibility.battery import fates_table
-
-    path = directory / "fates.tsv"
-    if not path.exists():
-        path.write_text(
-            fates_table([]).to_csv(sep="\t", index=False, lineterminator="\n"),
-            encoding="utf-8",
-        )
 
 
 def _check_credibility_out(out: Path) -> None:

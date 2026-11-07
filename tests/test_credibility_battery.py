@@ -227,7 +227,11 @@ def test_a_model_without_a_substance(tmp_path: Path) -> None:
         result = battery.result(check)
         assert result.status is BatteryStatus.NOT_APPLICABLE
         assert "Mr_<s>" in result.statement
-    # the generic checks of sbmlsim run on every model
+    # the steady state leaves a build without a substance out
+    steady = battery.result("steady_state")
+    assert steady.status is BatteryStatus.NOT_APPLICABLE
+    assert "Mr_<s>" in steady.statement
+    # the other generic checks of sbmlsim run on every model
     assert battery.result("non_negativity").status is BatteryStatus.PASSED
     assert battery.result("plausibility").status is BatteryStatus.PASSED
     assert battery.result("cross_simulator").statement == "Not run."
@@ -454,8 +458,19 @@ def test_the_battery_hook_of_a_model() -> None:
     assert (settings.horizon, settings.steps) == (HORIZON, STEPS) == (2880.0, 288)
     assert settings.steady_state
     assert settings.engines == ("amici",)
-    # the toy credibility model does not start at its steady state
-    assert not core.battery_settings_of(CREDIBILITY_MODEL, PK_BATTERY).steady_state
+    assert core.battery_settings_of(CREDIBILITY_MODEL, PK_BATTERY).steady_state
+    # without a battery the table of the fates has no rows
+    (fates,) = PK_BATTERY.report_tables({}).values()
+    assert fates.empty
+    assert list(fates.columns) == [
+        "build",
+        "dose",
+        "substance",
+        "amount",
+        "part",
+        "value",
+        "share",
+    ]
     for check in PK_CHECKS:
         assert CHECKS[check.id] == check
         assert check.factor == "numerical_code_verification"

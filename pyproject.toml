@@ -120,7 +120,7 @@ Download = "https://pypi.org/project/pkpdsim"
 [tool.uv.sources]
 # sbmlsim of its develop branch while the generic modules of pkpdsim move into
 # it; a release of pkpdsim needs sbmlsim from PyPI again
-sbmlsim = { git = "https://github.com/matthiaskoenig/sbmlsim.git", rev = "ab6ba313ca5aa0b152889871d19b6795b4a160a9" }
+sbmlsim = { git = "https://github.com/matthiaskoenig/sbmlsim.git", rev = "0d4e64615cf114d483241eb551aac02425ec2d8e" }
 
 [tool.hatch.version]
 path = "./src/pkpdsim/__init__.py"
