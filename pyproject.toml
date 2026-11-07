@@ -57,7 +57,6 @@ dependencies = [
     # imported directly, also the dependencies of the packages above
     "numpy>=2.5.3",
     "pandas>=3.0.6",
-    # the interpolation of the steps of the integrator (`pkpdsim-verify compare`) and
     # the root search of a regional absorption profile (`pkpdsim.pbpk.regional`)
     "scipy>=1.18.1",
     # the blocks of the credibility report (`pkpdsim.credibility.blocks`)
@@ -117,7 +116,7 @@ Download = "https://pypi.org/project/pkpdsim"
 [tool.uv.sources]
 # sbmlsim of its develop branch while the generic modules of pkpdsim move into
 # it; a release of pkpdsim needs sbmlsim from PyPI again
-sbmlsim = { git = "https://github.com/matthiaskoenig/sbmlsim.git", rev = "40299abbd1ec9f710e6f455a9bd5e9ffd1a079d5" }
+sbmlsim = { git = "https://github.com/matthiaskoenig/sbmlsim.git", rev = "116b6617912ae4120452540ee188f5c25412bede" }
 
 [tool.hatch.version]
 path = "./src/pkpdsim/__init__.py"
