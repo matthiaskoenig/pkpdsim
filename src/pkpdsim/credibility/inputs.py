@@ -29,45 +29,69 @@ decides nothing about a verdict: `inputs_record` summarizes the checks of the
 decisive mappings of a context of use, with the range of every input the
 evidence covers, and the factor equivalency of inputs states it. The
 simulations of a scan are checked with the inputs of their base simulation.
+
+The checks are the evidence extension `INPUTS` (`InputsExtension`, name
+`inputs`) of the credibility of sbmlsim: the checks of every mapping are the
+section `inputs` of the record of an assessment (`inputs.tsv`), the summary of
+the decisive mappings of a context is the section `inputs` of its record
+(`input_ranges.tsv`, the block Inputs of the report after the parameter
+uncertainty), its statement comes before the one of the variability in the
+factor equivalency of inputs, and the scorecard has the inputs of the decisive
+mappings which differ (`inputs_differ`). The covariates are the ones of the
+declaration (`Credibility.covariates`), `DEFAULT_COVARIATES` when it declares
+none.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import math
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any, TypedDict
+from types import MappingProxyType
+from typing import TYPE_CHECKING, Any, Final, TypedDict, override
 
 import pandas as pd
 import pint
 from pint.errors import DimensionalityError, UndefinedUnitError
+from sbmlsim.credibility.extensions import (
+    ContextBlock,
+    ContextContribution,
+    EvidenceExtension,
+    FactorStatement,
+)
 
+from pkpdsim.credibility.blocks import render_macro
 from pkpdsim.credibility.studies import study_folders
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     from pint import UnitRegistry
+    from sbmlsim.credibility.declaration import ContextOfUse, Credibility
+    from sbmlsim.credibility.records import FitTable
     from sbmlsim.fit import FitMapping
     from sbmlsim.fit.optimization import OptimizationProblem
+    from sbmlsim.project import Project
     from sbmlsim.units import Quantity
-
-    from pkpdsim.credibility.records import FitTable
-    from pkpdsim.model import PKPDModel
 
 __all__ = [
     "COVARIATE_TOLERANCE",
+    "DEFAULT_COVARIATES",
     "DOSE_PREFIXES",
     "DOSE_TOLERANCE",
+    "INPUTS",
     "INPUT_COLUMNS",
+    "INPUT_RANGE_COLUMNS",
     "NAMED_DIFFERENCES",
     "SPREAD",
     "InputCheck",
     "InputStatus",
     "InputSummary",
+    "InputsExtension",
     "InputsRecord",
     "Reported",
     "StudyTables",
@@ -82,6 +106,14 @@ __all__ = [
 ]
 
 logger = logging.getLogger(__name__)
+
+#: the covariates of the subjects whose simulated values are checked against
+#: the reported ones when the declaration declares none
+#: (`Credibility.covariates`): the target of the model and the measurement
+#: type of PK-DB
+DEFAULT_COVARIATES: Final[Mapping[str, str]] = MappingProxyType(
+    {"BW": "weight", "HEIGHT": "height"}
+)
 
 #: the prefixes of the targets of the doses
 DOSE_PREFIXES: tuple[str, ...] = ("PODOSE_", "IVDOSE_", "SOLDOSE_")
@@ -734,14 +766,14 @@ def _mapping_checks(
 
 
 def input_checks(
-    model: PKPDModel, fits: FitTable, covariates: Mapping[str, str]
+    model: Project, fits: FitTable, covariates: Mapping[str, str]
 ) -> list[InputCheck]:
     """Check the simulated inputs of every mapping of the adopted fits.
 
     Args:
         model: the model, the folders of its studies hold the reported values.
         fits: the evaluated adopted fits with their reports, see
-            `pkpdsim.credibility.records.evaluate_fits`.
+            `sbmlsim.credibility.records.evaluate_fits`.
         covariates: the target of every covariate and the measurement type of
             its reported value, see `Credibility.covariates`.
 
@@ -895,3 +927,161 @@ def inputs_statement(record: InputsRecord) -> str:
         more = len(differs) - NAMED_DIFFERENCES
         parts.append(f"Differ: {named}" + (f"; and {more} more." if more > 0 else "."))
     return " ".join(parts)
+
+
+#: the columns of `input_ranges.tsv`, see `InputSummary`
+INPUT_RANGE_COLUMNS: Final = (
+    "context",
+    "target",
+    "kind",
+    "unit",
+    "n_mappings",
+    "low",
+    "high",
+    "n_equivalent",
+    "n_in_range",
+    "n_differs",
+    "n_not_reported",
+)
+
+
+def _plain(value: object) -> Any:  # noqa: ANN401  # plain data of JSON
+    """Get a record as plain data of JSON, a copy."""
+    return json.loads(json.dumps(value))
+
+
+def section_record(section: Mapping[str, Any] | None) -> InputsRecord | None:
+    """Get the equivalency of the inputs of the section `inputs` of the record of a context.
+
+    Args:
+        section: the section, `{"inputs": {...}}`, also of a record of pkpdsim
+            0.19; `None` without.
+
+    Returns:
+        The record, `None` without.
+    """
+    data = None if section is None else section.get("inputs")
+    if data is None:
+        return None
+    return InputsRecord(
+        n_mappings=int(data["n_mappings"]),
+        n_checked=int(data["n_checked"]),
+        inputs=[InputSummary(**i) for i in data["inputs"]],
+        differs=[InputCheck(**c) for c in data["differs"]],
+    )
+
+
+def section_checks(section: Mapping[str, Any] | None) -> list[InputCheck]:
+    """Get the checks of the section `inputs` of the record of an assessment.
+
+    Args:
+        section: the section, `{"inputs": [...]}`, also of a record of pkpdsim
+            0.19; `None` without.
+
+    Returns:
+        The checks, empty without.
+    """
+    if section is None:
+        return []
+    return [InputCheck(**check) for check in section.get("inputs", ())]
+
+
+class InputsExtension(EvidenceExtension):
+    """The equivalency of the inputs of the contexts of use, see the module.
+
+    Prepared: the checks of the inputs of every mapping of the adopted fits.
+    """
+
+    name = "inputs"
+    scorecard_names = ("inputs_differ",)
+
+    @override
+    def prepare(
+        self, project: Project, credibility: Credibility, fits: FitTable
+    ) -> object:
+        """Check the inputs of the mappings with the covariates of the declaration."""
+        covariates = (
+            DEFAULT_COVARIATES
+            if credibility.covariates is None
+            else credibility.covariates
+        )
+        return input_checks(project, fits, covariates)
+
+    @override
+    def assess_context(
+        self,
+        cou: ContextOfUse,
+        decisive: pd.DataFrame,
+        fits: FitTable,
+        prepared: object,
+    ) -> ContextContribution | None:
+        """Summarize the checks of the decisive mappings, none without the checks."""
+        if not isinstance(prepared, list):
+            return None
+        record = inputs_record(prepared, decisive)
+        return ContextContribution(
+            section={"inputs": _plain(record)},
+            factors=(
+                {
+                    "equivalency_of_inputs": FactorStatement(
+                        inputs_statement(record), before_core=True
+                    )
+                }
+                if record["n_checked"]
+                else {}
+            ),
+        )
+
+    @override
+    def assessment_section(self, prepared: object) -> Mapping[str, Any] | None:
+        """Get the checks of every mapping as the section of the assessment."""
+        if not isinstance(prepared, list):
+            return None
+        return {"inputs": _plain(prepared)}
+
+    @override
+    def context_report_blocks(
+        self, context: Mapping[str, Any], section: Mapping[str, Any] | None
+    ) -> Sequence[ContextBlock]:
+        """Show the inputs of the decisive mappings after the parameter uncertainty."""
+        record = section_record(section)
+        if record is None or not record["n_checked"]:
+            return ()
+        return (ContextBlock(render_macro("inputs", record), after="uncertainty"),)
+
+    @override
+    def report_tables(self, record: Mapping[str, Any]) -> Mapping[str, pd.DataFrame]:
+        """Write `inputs.tsv` and `input_ranges.tsv`.
+
+        `inputs.tsv`: one row per mapping of the adopted fits and simulated
+        input, the reporting groups, individuals and interventions joined by
+        `;`; `input_ranges.tsv`: one row per context of use and input of its
+        decisive mappings.
+        """
+        checks = section_checks(record.get("extensions", {}).get(self.name))
+        rows = [
+            {**check, "reported_by": ";".join(check["reported_by"])} for check in checks
+        ]
+        ranges = [
+            {"context": c["id"], **summary}
+            for c in record["contexts"]
+            if (r := section_record(c.get("extensions", {}).get(self.name))) is not None
+            for summary in r["inputs"]
+        ]
+        return {
+            "inputs": pd.DataFrame(rows, columns=list(INPUT_COLUMNS)),
+            "input_ranges": pd.DataFrame(ranges, columns=list(INPUT_RANGE_COLUMNS)),
+        }
+
+    @override
+    def scorecard_columns(
+        self, context: Mapping[str, Any] | None
+    ) -> Mapping[str, object]:
+        """Get the inputs of the decisive mappings which differ, empty without the checks."""
+        record = section_record(context)
+        return {"inputs_differ": None if record is None else len(record["differs"])}
+
+
+#: the evidence extension of the equivalency of the inputs, registered by
+#: `pkpdsim.model.PKPDModel`
+INPUTS: Final = InputsExtension()

@@ -74,10 +74,15 @@ output; they are the `actions` of the project as well
 without the records of its fit next to it use `sbmlsim.fit.cli.report_cli` and
 `identifiability_cli`.
 
-`run_credibility` (`credibility_command`) assesses the contexts of use of the
-model against its adopted fits (`pkpdsim.credibility.assess`) and writes the
-record, the tables and the report (`pkpdsim.credibility.report`); with
-`--from-json` it writes them again from a written record. All write into the
+`run_credibility` (`credibility_command`) runs the kind `credibility`, which
+assesses the contexts of use of the model against its adopted fits
+(`sbmlsim.credibility.assess`, with the evidence extensions and the PK battery
+of `pkpdsim.credibility`) and writes the record, the tables and the report
+(`sbmlsim.credibility.report`) into `credibility/` of its output; the command
+moves them up into its `--output_dir`, `--from-json` is the input `record`
+(the outputs written again from a written record) and the lock of `--lock`,
+which the kind writes into its output, is moved into the folder of the model,
+where the assessment compares the evidence with it. All write into the
 results of the model unless `--output_dir` is given.
 
 `--profile` anywhere after the model package runs a command under the
@@ -152,14 +157,6 @@ from sbmlsim.run.profiling import (
 from sbmlsim.utils import paths_text
 from sbmlutils.console import console
 
-from pkpdsim.credibility import (
-    CredibilityAssessment,
-    DeclarationError,
-    KindMismatchError,
-    SelectionError,
-    assess,
-)
-from pkpdsim.credibility.report import print_summary, write_outputs
 from pkpdsim.model import RUN_WORKERS, PKPDModel
 
 if TYPE_CHECKING:
@@ -202,6 +199,13 @@ FITS_DIR = "fits"
 
 #: the file of the best parameters of a fit, which the records of a fit have
 PARAMETERS_FILE = "parameters.json"
+
+
+#: the folder of the outputs of the kind `credibility` in its output
+CREDIBILITY_DIR = "credibility"
+
+#: the record of an assessment, which marks a directory of its outputs
+CREDIBILITY_RECORD = "credibility.json"
 
 
 def parse_formats(text: str) -> list[str]:
@@ -1502,9 +1506,9 @@ def fit_command(model: PKPDModel, args: Sequence[str] | None = None) -> dict[str
 
 def _cross_validate(model: PKPDModel, options: argparse.Namespace) -> None:
     """Cross-validate an adopted fit and store the result in its record."""
-    from pkpdsim.credibility.cross_validation import (
+    from sbmlsim.credibility.cross_validation import (
+        CROSS_VALIDATION_FILE,
         cross_validate,
-        write_cross_validation,
     )
 
     try:
@@ -1519,7 +1523,10 @@ def _cross_validate(model: PKPDModel, options: argparse.Namespace) -> None:
     except (ValueError, KeyError, FileNotFoundError) as err:
         console.print(str(err), style="error")
         sys.exit(1)
-    path = write_cross_validation(model, result)
+    # stored in the record of its adopted fit, which the assessment reads
+    # (`sbmlsim.credibility.read_cross_validations`)
+    path = model.adopted_record(result.fit) / CROSS_VALIDATION_FILE
+    write_text_atomic(path, json.dumps(result.to_dict(), indent=2) + "\n")
     fit_display.section("Cross-validation", icon=fit_display.ICON_FIT)
     for study in result.studies:
         console.print(
@@ -1881,16 +1888,22 @@ def identifiability_command(
 def credibility_command(model: PKPDModel, args: Sequence[str] | None = None) -> Path:
     """Assess the contexts of use of a model against its adopted fits.
 
-    The adopted fits are evaluated on the current model and data
-    (`pkpdsim.credibility.assess`), `--from-json` instead reads a written
-    record without evaluating a fit. The decisive predictions are verified
-    (`pkpdsim.credibility.verification`) unless `--no-verification` is given.
-    `--source-commit` records the commit of
-    the source repository in the provenance, which a release passes, since it
-    assesses the model in its release repository. The outputs replace an
-    earlier assessment in the directory, see
-    `pkpdsim.credibility.report.write_outputs`; an error of the declaration,
-    the evidence, the records or the directory is printed and exits with 1.
+    Runs the kind `credibility` of `sbmlsim.run` (`sbmlsim.credibility.assess`
+    with the evidence extensions and the PK battery of the model, see
+    `pkpdsim.model.CREDIBILITY_SETTINGS`) into the output directory through a
+    staged swap: the outputs of the kind (`credibility/` of its output) are
+    moved up into the directory, next to the records of the run. The adopted
+    fits are evaluated on the current model and data, `--from-json` instead
+    reads a written record (the input `record`) without evaluating a fit. The
+    decisive predictions are verified (`sbmlsim.credibility.verification`)
+    unless `--no-verification` is given. `--lock` writes the lock of the
+    evidence, which the kind writes into its output, into the folder of the
+    model. `--source-commit` records the commit of the source repository in
+    the provenance, which a release passes, since it assesses the model in its
+    release repository. The outputs replace an earlier assessment in the
+    directory, a directory with other files is refused; an error of the
+    declaration, the evidence, the records or the directory is printed and
+    exits with 1.
 
     Args:
         model: the model.
@@ -2007,84 +2020,76 @@ def credibility_command(model: PKPDModel, args: Sequence[str] | None = None) -> 
         options.draws is not None or options.seed is not None
     ):
         p.error("--draws and --seed are options of --uncertainty")
-    uncertainty = None
-    if options.uncertainty:
-        from pkpdsim.credibility.uncertainty import UncertaintySettings
+    out = options.output_dir
+    _check_out(p, model, out)
+    _check_credibility_out(out)
+    spec: dict[str, Any] = {
+        "project": project_reference(model),
+        "verification": not options.no_verification,
+        "lock": options.lock,
+        "uncertainty": options.uncertainty,
+        "draws": options.draws,
+        "seed": options.seed,
+        "variability": options.variability,
+        "subjects": options.subjects,
+        "studies": options.studies,
+        "source_commit": options.source_commit,
+    }
+    inputs = None if options.from_json is None else {"record": options.from_json}
 
-        defaults = UncertaintySettings()
-        try:
-            uncertainty = UncertaintySettings(
-                draws=defaults.draws if options.draws is None else options.draws,
-                seed=defaults.seed if options.seed is None else options.seed,
-            )
-        except ValueError as err:
-            p.error(str(err))
-    variability = None
-    if options.variability:
-        from pkpdsim.credibility.variability import VariabilitySettings
+    def run(staging: Path) -> None:
+        _execute(p, "credibility", spec, staging, inputs=inputs)
+        _with_fates(staging / CREDIBILITY_DIR)
 
-        defaults = VariabilitySettings()
-        try:
-            variability = VariabilitySettings(
-                subjects=(
-                    defaults.subjects if options.subjects is None else options.subjects
-                ),
-                studies=defaults.studies
-                if options.studies is None
-                else options.studies,
-            )
-        except ValueError as err:
-            p.error(str(err))
     try:
-        assessment = (
-            assess(
-                model,
-                options.source_commit,
-                verification=not options.no_verification,
-                lock=options.lock,
-                uncertainty=uncertainty,
-                variability=variability,
-            )
-            if options.from_json is None
-            else _read_assessment(options.from_json)
+        _staged(out, run, inner=CREDIBILITY_DIR)
+    except (LookupError, ValueError, TypeError, OSError) as err:
+        # the errors of the declaration, the evidence, the records and the
+        # lock, e.g. `DeclarationError`, `SelectionError`, `KindMismatchError`
+        _failed(str(err))
+    if options.lock:
+        from sbmlsim.credibility import lock as locks
+
+        # the lock of the package, which the next assessment compares with
+        lock = locks.lock_path(model)
+        shutil.move(out / locks.LOCK_FILE, lock)
+        display.key_values({"lock": lock})
+    display.key_values({"report": out / "index.html"})
+    return out
+
+
+def _with_fates(directory: Path) -> None:
+    """Write the table of the fates of the doses without rows when the battery did not run.
+
+    The battery hook writes `fates.tsv` with the battery; the outputs of an
+    assessment have it in any case, as `run_credibility` always wrote it.
+    """
+    from pkpdsim.credibility.battery import fates_table
+
+    path = directory / "fates.tsv"
+    if not path.exists():
+        path.write_text(
+            fates_table([]).to_csv(sep="\t", index=False, lineterminator="\n"),
+            encoding="utf-8",
         )
-        output_dir = write_outputs(assessment, options.output_dir)
-    except (
-        DeclarationError,
-        SelectionError,
-        KindMismatchError,
-        FileNotFoundError,
-        FileExistsError,
-        ValueError,
-        TypeError,
-    ) as err:
-        console.print(str(err), style="error")
-        sys.exit(1)
-    print_summary(assessment)
-    display.key_values({"report": output_dir / "index.html"})
-    return output_dir
 
 
-def _read_assessment(path: Path) -> CredibilityAssessment:
-    """Read a written assessment, see `CredibilityAssessment.from_json`.
+def _check_credibility_out(out: Path) -> None:
+    """Refuse an output of an assessment which holds other files than an assessment.
 
-    Args:
-        path: the record, a `credibility.json`.
-
-    Returns:
-        The assessment.
+    The outputs replace an earlier assessment, a directory with
+    `credibility.json`, as `sbmlsim.credibility.report.write_outputs` does.
 
     Raises:
-        FileNotFoundError: if the file does not exist.
-        ValueError: if the file is no JSON or no assessment.
+        SystemExit: exit 1 for a file or a directory with other files.
     """
-    try:
-        return CredibilityAssessment.from_json(path)
-    except (KeyError, TypeError, AttributeError) as err:
-        raise ValueError(
-            f"The record '{path}' is no assessment of the contexts of use "
-            f"({err!r}); write it again with run_credibility."
-        ) from err
+    if out.exists() and not out.is_dir():
+        _failed(f"The output directory '{out}' is a file.")
+    if out.is_dir() and any(out.iterdir()) and not (out / CREDIBILITY_RECORD).is_file():
+        _failed(
+            f"The output directory '{out}' is not empty and holds no "
+            f"{CREDIBILITY_RECORD}; it is not replaced."
+        )
 
 
 DOTTED_PACKAGE = re.compile(r"^[A-Za-z_]\w*(\.[A-Za-z_]\w*)*$")

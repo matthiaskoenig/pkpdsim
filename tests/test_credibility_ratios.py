@@ -1,5 +1,8 @@
 """The ratio quantities and their limits of Guest et al. (`pkpdsim.credibility.ratios`).
 
+The ratio pairs are the evidence extension `ratios`, assessed by
+`sbmlsim.credibility.assess_table` with the extensions of pkpdsim.
+
 The hand-built table of the test package has a renal impairment arm (`fm_renal`)
 and a healthy arm (`fm_dose`) in the study `CredA`, five points each.
 """
@@ -11,31 +14,39 @@ from types import MappingProxyType
 
 import pandas as pd
 import pytest
-from credibility_tables import fit_table, verification_of
+from credibility_tables import assess, fit_table, verification_of
+from pkpdsim_credibility import MODEL
 from pkpdsim_credibility.credibility import CREDIBILITY
-from sbmlsim.fit.filters import named_filter
-
-from pkpdsim.credibility import (
+from sbmlsim.credibility import (
+    AcceptanceRecord,
     ContextOfUse,
+    ContextResult,
     Credibility,
     CredibilityAssessment,
     DeclarationError,
     Evidence,
     EvidenceRole,
     FactorStatus,
-    GuestAcceptance,
-    Provenance,
     QuantityOfInterest,
-    Ratio,
-    Summary,
+    SelectionError,
     Verdict,
-    assess_table,
     select,
 )
-from pkpdsim.credibility.ratios import guest_limit, ratio_pairs, summarize
-from pkpdsim.credibility.report import ratios_table, write_outputs
-from pkpdsim.credibility.risk import DEFAULT_RATIO_ACCEPTANCE
-from pkpdsim.credibility.selection import SelectionError
+from sbmlsim.credibility.report import write_outputs
+from sbmlsim.fit.filters import named_filter
+
+from pkpdsim.credibility import EXTENSIONS, PK_BATTERY, RATIOS
+from pkpdsim.credibility.ratios import (
+    DEFAULT_RATIO_ACCEPTANCE,
+    GuestAcceptance,
+    Ratio,
+    Summary,
+    guest_limit,
+    ratio_pairs,
+    ratio_rule,
+    section_pairs,
+    summarize,
+)
 from pkpdsim.fit import metadata_filter
 from pkpdsim.metadata import Health
 
@@ -43,16 +54,6 @@ RENAL = Ratio(
     observable="[A]",
     numerator=metadata_filter(health={Health.RENAL_IMPAIRMENT}),
     denominator=metadata_filter(health={Health.HEALTHY}),
-)
-
-PROVENANCE = Provenance(
-    model="credibility",
-    title="Toy model with every kind of evidence",
-    fits=["DECAY"],
-    versions={"pkpdsim": "0.0.0"},
-    commit=None,
-    dirty=None,
-    date="2026-11-04T12:00:00+01:00",
 )
 
 
@@ -82,15 +83,24 @@ def _renal(
                 cou,
                 quantities=quantities,
                 evidence=(*cou.evidence, healthy),
-                ratio_acceptance=acceptance,
+                extensions={} if acceptance is None else {"ratios": acceptance},
                 min_points=5,
             )
         contexts.append(cou)
     return dataclasses.replace(CREDIBILITY, contexts=tuple(contexts))
 
 
-def _context(assessment: CredibilityAssessment, cou: str):  # noqa: ANN202
+def _context(assessment: CredibilityAssessment, cou: str) -> ContextResult:
     return next(c for c in assessment.contexts if c.id == cou)
+
+
+def _rule(context: ContextResult) -> AcceptanceRecord | None:
+    """Get the row of the rule of the ratio pairs of a context, `None` without."""
+    return next((a for a in context.acceptance if a.get("extension") == "ratios"), None)
+
+
+def _pairs(context: ContextResult) -> list:
+    return section_pairs(context.section("ratios"))
 
 
 @pytest.mark.parametrize(
@@ -152,11 +162,11 @@ def test_two_denominators_are_a_problem() -> None:
 
 def test_a_ratio_within_the_limits_supports_the_context() -> None:
     fits = fit_table(factors={("CredA", "fm_renal"): 1.1}, times=True)
-    renal = _context(assess_table(_renal(), fits, PROVENANCE), "renal")
-    assert [p["within"] for p in renal.ratios] == [True]
-    assert renal.ratio_acceptance is not None
-    assert renal.ratio_acceptance["value"] == 100.0
-    assert renal.ratio_acceptance["met"] is True
+    renal = _context(assess(_renal(), fits), "renal")
+    assert [p["within"] for p in _pairs(renal)] == [True]
+    assert (rule := _rule(renal)) is not None
+    assert rule["value"] == 100.0
+    assert rule["met"] is True
     quantity = next(q for q in renal.quantities if q["ratio"])
     assert quantity["coverage"] == "covered"
     assert quantity["n_points"] == 1
@@ -171,9 +181,9 @@ def test_a_ratio_within_the_limits_supports_the_context() -> None:
 
 def test_a_ratio_outside_the_limits_does_not_support_the_context() -> None:
     fits = fit_table(factors={("CredA", "fm_renal"): 2.0}, times=True)
-    renal = _context(assess_table(_renal(), fits, PROVENANCE), "renal")
-    assert renal.ratio_acceptance is not None
-    assert renal.ratio_acceptance["met"] is False
+    renal = _context(assess(_renal(), fits), "renal")
+    assert (rule := _rule(renal)) is not None
+    assert rule["met"] is False
     assert renal.verdict is Verdict.NOT_SUPPORTED
 
 
@@ -182,10 +192,10 @@ def test_a_ratio_without_a_pair_is_insufficient_evidence() -> None:
     nobody = dataclasses.replace(
         RENAL, numerator=metadata_filter(health={Health.CIRRHOSIS})
     )
-    renal = _context(assess_table(_renal(nobody), fits, PROVENANCE), "renal")
-    assert renal.ratios == []
-    assert renal.ratio_acceptance is not None
-    assert renal.ratio_acceptance["met"] is None
+    renal = _context(assess(_renal(nobody), fits), "renal")
+    assert _pairs(renal) == []
+    assert (rule := _rule(renal)) is not None
+    assert rule["met"] is None
     assert renal.verdict is Verdict.INSUFFICIENT_EVIDENCE
     quantity = next(q for q in renal.quantities if q["ratio"])
     assert quantity["coverage"] == "uncovered"
@@ -193,20 +203,20 @@ def test_a_ratio_without_a_pair_is_insufficient_evidence() -> None:
 
 def test_a_declared_ratio_without_a_pairing_is_not_assessed() -> None:
     fits = fit_table(times=True)
-    renal = _context(assess_table(CREDIBILITY, fits, PROVENANCE), "renal")
-    assert renal.ratios == []
-    assert renal.ratio_acceptance is None
+    renal = _context(assess(CREDIBILITY, fits), "renal")
+    assert _pairs(renal) == []
+    assert _rule(renal) is None
     quantity = next(q for q in renal.quantities if q["ratio"])
     assert quantity["coverage"] is None
 
 
 def test_the_default_and_a_declared_acceptance() -> None:
     renal = next(c for c in _renal().contexts if c.id == "renal")
-    assert renal.ratio_rule == DEFAULT_RATIO_ACCEPTANCE[renal.risk]
+    assert ratio_rule(renal) == DEFAULT_RATIO_ACCEPTANCE[renal.risk]
     declared = next(
         c for c in _renal(acceptance=GuestAcceptance(50.0)).contexts if c.id == "renal"
     )
-    assert declared.ratio_rule == GuestAcceptance(50.0)
+    assert ratio_rule(declared) == GuestAcceptance(50.0)
     assert GuestAcceptance(50.0).limit == ">= 50"
 
 
@@ -228,26 +238,26 @@ def test_a_ratio_of_an_unknown_observable() -> None:
     with pytest.raises(
         SelectionError, match="the ratio 'A_ratio' matches no observable"
     ):
-        assess_table(unknown, fit_table(times=True), PROVENANCE)
+        assess(unknown, fit_table(times=True))
 
 
 def test_the_selection_refuses_two_denominators() -> None:
     two = _renal(reference=("fm_dose", "fm_subject"))
     with pytest.raises(SelectionError, match="more than one denominator in CredA"):
-        select(two, fit_table(times=True))
+        select(two, fit_table(times=True), EXTENSIONS)
 
 
 def test_the_outputs_of_the_ratios(tmp_path: Path) -> None:
     fits = fit_table(factors={("CredA", "fm_renal"): 1.1}, times=True)
-    assessment = assess_table(_renal(), fits, PROVENANCE)
-    table = ratios_table(assessment)
+    assessment = assess(_renal(), fits)
+    table = RATIOS.report_tables(assessment.to_dict())["ratios"]
     assert list(table["context"]) == ["renal"]
     assert table.loc[0, "within"]
     record = tmp_path / "credibility.json"
     assessment.to_json(record)
     read = CredibilityAssessment.from_json(record)
-    assert _context(read, "renal").ratios == _context(assessment, "renal").ratios
-    output = write_outputs(assessment, tmp_path / "out")
+    assert _pairs(_context(read, "renal")) == _pairs(_context(assessment, "renal"))
+    output = write_outputs(assessment, tmp_path / "out", EXTENSIONS, PK_BATTERY)
     assert (
         (output / "ratios.tsv")
         .read_text(encoding="utf-8")
@@ -270,7 +280,7 @@ def test_the_verification_compares_the_ratio() -> None:
     verification = dataclasses.replace(
         verification, predictions=MappingProxyType(predictions)
     )
-    renal = _context(assess_table(_renal(), fits, PROVENANCE, verification), "renal")
+    renal = _context(assess(_renal(), fits, verification), "renal")
     tolerances = next(r for r in renal.verification if r["check"] == "tolerances")
     # 1.2 is within 1.25 of 1, 1.32 with the alternative is not
     assert tolerances["acceptance_changed"] is True
@@ -283,3 +293,25 @@ def test_a_question_is_still_required() -> None:
     assert any(isinstance(q.ratio, Ratio) for q in renal.quantities)
     assert any(not q.ratio for q in renal.quantities)
     assert isinstance(QuantityOfInterest("x", "y").ratio, bool)
+
+
+def test_a_model_claims_the_ratio_pairings() -> None:
+    """The extension `ratios` of a `PKPDModel` claims a `Ratio` and its acceptance."""
+    declaration = _renal(acceptance=GuestAcceptance(50.0))
+    assert MODEL.replace(credibility=declaration).load_credibility() is declaration
+    assert RATIOS.claims(RENAL)
+    assert not RATIOS.claims(QuantityOfInterest("x", "y"))  # ty: ignore[invalid-argument-type]
+
+
+def test_the_ratio_pairs_pool_by_the_metadata() -> None:
+    fits = fit_table(factors={("CredA", "fm_renal"): 1.1}, times=True)
+    assessment = assess(_renal(), fits)
+    sections = [c.section("ratios") for c in assessment.contexts]
+    pooled = RATIOS.pool({"a": sections, "b": sections}, {})
+    assert pooled is not None
+    assert list(pooled["model"]) == ["all", "a", "b"]
+    assert set(pooled["value"]) == {"RENAL_IMPAIRMENT"}
+    assert list(pooled["n_pairs"]) == [2, 1, 1]
+    by_route = RATIOS.pool({"a": sections}, {"field": "route"})
+    assert by_route is not None
+    assert by_route["value"].tolist() == ["IV", "IV"]

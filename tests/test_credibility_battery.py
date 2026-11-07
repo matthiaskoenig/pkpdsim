@@ -1,8 +1,10 @@
-"""The battery of the checks of the builds of a model (`pkpdsim.credibility.battery`).
+"""The PK battery of the checks of the builds of a model (`pkpdsim.credibility.battery`).
 
-The builds are small drug models in antimony which follow the conventions of
-the PBPK models: a drug `d` with its doses and a metabolite `m` excreted into
-the urine; every test breaks one property and expects its check to fail.
+The PK battery is the battery hook of every `PKPDModel` in the battery of
+sbmlsim (`sbmlsim.credibility.battery.run_battery`). The builds are small drug
+models in antimony which follow the conventions of the PBPK models: a drug `d`
+with its doses and a metabolite `m` excreted into the urine; every test breaks
+one property and expects its check to fail.
 """
 
 import dataclasses
@@ -12,30 +14,33 @@ from pathlib import Path
 
 import antimony
 import pytest
-from credibility_tables import fit_table, verification_of
+from credibility_tables import assess, fit_table, verification_of
 from pkpdsim_credibility import MODEL as CREDIBILITY_MODEL
 from pkpdsim_credibility.credibility import CREDIBILITY
+from sbmlsim.credibility import (
+    CHECKS,
+    Battery,
+    BatteryStatus,
+    CredibilityAssessment,
+    FactorStatus,
+    Verdict,
+)
+from sbmlsim.credibility import battery as core
+from sbmlsim.credibility.battery import run_battery
+from sbmlsim.credibility.report import battery_table, write_outputs
 from sbmlsim.project import CheckSettings, Project
 from sbmlsim.project_checks import check_battery
 
-from pkpdsim.credibility import (
-    CredibilityAssessment,
-    FactorStatus,
-    Provenance,
-    Verdict,
-    assess_table,
-)
+from pkpdsim.credibility import EXTENSIONS, PK_BATTERY, PK_CHECKS
 from pkpdsim.credibility.battery import (
     DOSE,
-    Battery,
-    BatteryStatus,
+    HORIZON,
+    STEPS,
     Fate,
     FlatBuild,
-    run_battery,
-    same_sbml,
+    dose_cases,
+    fates_table,
 )
-from pkpdsim.credibility.report import battery_table, fates_table, write_outputs
-from pkpdsim.credibility.verification import BATTERY_CHECKS, Check
 from pkpdsim.model import PKPDModel
 from pkpdsim_toy import MODEL as TOY
 
@@ -60,16 +65,6 @@ model drug()
   {extra}
 end
 """
-
-PROVENANCE = Provenance(
-    model="credibility",
-    title="Toy model with every kind of evidence",
-    fits=["PK"],
-    versions={"pkpdsim": "0.0.0"},
-    commit=None,
-    dirty=None,
-    date="2026-11-03T12:00:00+01:00",
-)
 
 
 def _sbml(path: Path, text: str) -> Path:
@@ -107,28 +102,32 @@ def _battery(model: PKPDModel) -> Battery:
 
 def test_a_sound_model_passes(tmp_path: Path) -> None:
     battery = _battery(_model(tmp_path))
-    assert [r.check for r in battery.results] == list(BATTERY_CHECKS)
-    status = {r.check: r.status for r in battery.results}
+    assert [r.check.id for r in battery.results] == list(PK_BATTERY.order)
+    status = {r.check.id: r.status for r in battery.results}
     for check in (
-        Check.MASS_BALANCE,
-        Check.NON_NEGATIVITY,
-        Check.ZERO_DOSE,
-        Check.STEADY_STATE,
-        Check.SUPERPOSITION,
-        Check.PLAUSIBILITY,
+        "mass_balance",
+        "non_negativity",
+        "zero_dose",
+        "steady_state",
+        "superposition",
+        "plausibility",
     ):
         assert status[check] is BatteryStatus.PASSED, battery.result(check)
-    assert status[Check.CROSS_SIMULATOR] is BatteryStatus.NOT_APPLICABLE
-    assert status[Check.REBUILD] is BatteryStatus.NOT_APPLICABLE
-    mass = battery.result(Check.MASS_BALANCE)
+    assert status["cross_simulator"] is BatteryStatus.NOT_APPLICABLE
+    assert status["rebuild"] is BatteryStatus.NOT_APPLICABLE
+    mass = battery.result("mass_balance")
     # the run without a dose and one per dose
     assert mass.cases == 4
     assert mass.largest < 1e-10
 
 
+def _fates(battery: Battery) -> list[Fate]:
+    return [Fate.from_dict(f) for f in battery.sections["fates"]]
+
+
 def test_the_fate_of_a_dose(tmp_path: Path) -> None:
     battery = _battery(_model(tmp_path))
-    fates = {f.dose: f for f in battery.fates}
+    fates = {f.dose: f for f in _fates(battery)}
     assert set(fates) == {"IVDOSE_d", "Ri_d", "PODOSE_d"}
     fate = fates["IVDOSE_d"]
     assert fate.substance == "d"
@@ -152,7 +151,7 @@ def test_a_dose_with_the_wrong_molecular_weight_breaks_the_mass_balance(
             "iv_d: => Cve_d; ka*IVDOSE_d/(2*Mr_d)",
         ),
     )
-    result = _battery(model).result(Check.MASS_BALANCE)
+    result = _battery(model).result("mass_balance")
     assert result.status is BatteryStatus.FAILED
     assert any("male IVDOSE_d" in p for p in result.problems)
     assert any("male Ri_d" in p for p in result.problems)
@@ -161,7 +160,7 @@ def test_a_dose_with_the_wrong_molecular_weight_breaks_the_mass_balance(
 
 def test_a_rule_on_a_species_breaks_the_mass_balance(tmp_path: Path) -> None:
     model = _model(tmp_path, "species Cbo_d in Vve = 0; Cbo_d' = 0.001*Cve_d;")
-    result = _battery(model).result(Check.MASS_BALANCE)
+    result = _battery(model).result("mass_balance")
     assert result.status is BatteryStatus.FAILED
     assert (
         "male: the species 'Cbo_d' is changed by a rule or an event"
@@ -173,17 +172,17 @@ def test_a_production_of_the_drug_fails_the_zero_dose_and_the_steady_state(
     tmp_path: Path,
 ) -> None:
     battery = _battery(_model(tmp_path, "PROD: => Cve_d; 1e-6;"))
-    zero = battery.result(Check.ZERO_DOSE)
+    zero = battery.result("zero_dose")
     assert zero.status is BatteryStatus.FAILED
     assert any("'Cve_d' of the substance 'd'" in p for p in zero.problems)
-    assert battery.result(Check.STEADY_STATE).status is BatteryStatus.FAILED
+    assert battery.result("steady_state").status is BatteryStatus.FAILED
     # the production is a flow of the balance, which still closes
-    assert battery.result(Check.MASS_BALANCE).status is BatteryStatus.PASSED
+    assert battery.result("mass_balance").status is BatteryStatus.PASSED
 
 
 def test_a_negative_species_fails_the_non_negativity(tmp_path: Path) -> None:
     battery = _battery(_model(tmp_path, "LOSS: Cli_m => ; 1e-6;"))
-    result = battery.result(Check.NON_NEGATIVITY)
+    result = battery.result("non_negativity")
     assert result.status is BatteryStatus.FAILED
     assert any("'Cli_m' reaches" in p for p in result.problems)
 
@@ -197,7 +196,7 @@ def test_a_saturated_elimination_fails_the_superposition(tmp_path: Path) -> None
             "ELIM: Cve_d => ; Vmax*Cve_d/(Km + Cve_d)",
         ),
     )
-    result = _battery(model).result(Check.SUPERPOSITION)
+    result = _battery(model).result("superposition")
     assert result.status is BatteryStatus.FAILED
     assert "to twice the dose differs from the double" in result.problems[0]
 
@@ -214,66 +213,35 @@ def test_an_endogenous_substance_at_its_steady_state(
         " PRODE: => Cve_e; 0.01; ELIME: Cve_e => ; ke*Vve*Cve_e;"
     )
     battery = _battery(_model(tmp_path, extra))
-    steady = battery.result(Check.STEADY_STATE)
+    steady = battery.result("steady_state")
     assert steady.status is status
     if status is BatteryStatus.FAILED:
         assert "'Cve_e' changes by" in steady.problems[0]
     # the drug still starts at zero, the endogenous substance is no case
-    assert battery.result(Check.ZERO_DOSE).cases == 3
+    assert battery.result("zero_dose").cases == 3
 
 
 def test_a_model_without_a_substance(tmp_path: Path) -> None:
     battery = run_battery(TOY, rebuild=False, cross_simulator=False)
-    for check in (
-        Check.MASS_BALANCE,
-        Check.NON_NEGATIVITY,
-        Check.ZERO_DOSE,
-        Check.STEADY_STATE,
-        Check.SUPERPOSITION,
-        Check.CROSS_SIMULATOR,
-    ):
+    for check in ("mass_balance", "zero_dose", "superposition"):
         result = battery.result(check)
         assert result.status is BatteryStatus.NOT_APPLICABLE
         assert "Mr_<s>" in result.statement
-    assert battery.result(Check.PLAUSIBILITY).status is BatteryStatus.PASSED
-    assert battery.fates == ()
+    # the generic checks of sbmlsim run on every model
+    assert battery.result("non_negativity").status is BatteryStatus.PASSED
+    assert battery.result("plausibility").status is BatteryStatus.PASSED
+    assert battery.result("cross_simulator").statement == "Not run."
+    assert _fates(battery) == []
 
 
 def test_a_compartment_without_a_volume_is_implausible(tmp_path: Path) -> None:
-    result = _battery(_model(tmp_path, "compartment Vx = 0;")).result(
-        Check.PLAUSIBILITY
-    )
+    result = _battery(_model(tmp_path, "compartment Vx = 0;")).result("plausibility")
     assert result.status is BatteryStatus.FAILED
     assert result.problems == ("male: the compartment 'Vx' has the size 0",)
 
 
-def test_a_fitted_value_at_its_bound_is_implausible(
-    credibility_model: PKPDModel,
-) -> None:
-    records = credibility_model.fit_records()
-    pid, parameter = next(iter(records.parameters.items()))
-    at_bound = dataclasses.replace(parameter, value=parameter.upper_bound)
-    records.parameters[pid] = at_bound
-
-    class Model:
-        adopted_ids = credibility_model.adopted_ids
-
-        @staticmethod
-        def fit_records() -> object:
-            return records
-
-    from pkpdsim.credibility.battery import _Collector, _plausibility
-
-    collector = _Collector()
-    _plausibility(Model(), [], collector)  # ty: ignore[invalid-argument-type]
-    assert collector.problems == [
-        f"the value {parameter.upper_bound:g} of '{pid}' of the fit "
-        f"'{parameter.fit_id}' lies at its upper bound {parameter.upper_bound:g}"
-    ]
-
-
 def test_the_rebuild(tmp_path: Path) -> None:
-    passed = run_battery(CREDIBILITY_MODEL, cross_simulator=False).result(Check.REBUILD)
+    passed = run_battery(CREDIBILITY_MODEL, cross_simulator=False).result("rebuild")
     assert passed.status is BatteryStatus.PASSED
     assert passed.cases == 1
     copy = tmp_path / "models" / CREDIBILITY_MODEL.model_path.name
@@ -289,22 +257,15 @@ def test_the_rebuild(tmp_path: Path) -> None:
         base_path=CREDIBILITY_MODEL.root,
         variants={"male": copy},
     )
-    failed = run_battery(model, cross_simulator=False).result(Check.REBUILD)
+    failed = run_battery(model, cross_simulator=False).result("rebuild")
     assert failed.status is BatteryStatus.FAILED
-    assert failed.problems == ("'toy.xml' differs from its rebuild",)
+    assert failed.problems == ("'models/toy.xml' differs from its rebuild",)
 
 
 def test_a_factory_which_fails(tmp_path: Path) -> None:
-    result = run_battery(_model(tmp_path), cross_simulator=False).result(Check.REBUILD)
+    result = run_battery(_model(tmp_path), cross_simulator=False).result("rebuild")
     assert result.status is BatteryStatus.FAILED
     assert result.problems[0].startswith("the factory failed: ")
-
-
-def test_same_sbml_ignores_the_dates() -> None:
-    a = "<a>\n<dcterms:W3CDTF>2026-11-03T12:00:00Z</dcterms:W3CDTF>\n<b/>\n</a>"
-    b = "<a>\n<dcterms:W3CDTF>2026-11-04T12:00:00Z</dcterms:W3CDTF>\n<b/>\n</a>"
-    assert same_sbml(a, b)
-    assert not same_sbml(a, b.replace("<b/>", "<c/>"))
 
 
 def test_a_dose_through_the_stomach(tmp_path: Path) -> None:
@@ -326,7 +287,7 @@ def test_a_dose_through_the_stomach(tmp_path: Path) -> None:
         "STOMACH_d": "d",
     }
     assert build.inputs == {"iv_d", "po_d"}
-    assert _battery(model).result(Check.MASS_BALANCE).status is BatteryStatus.PASSED
+    assert _battery(model).result("mass_balance").status is BatteryStatus.PASSED
 
 
 def test_a_species_by_its_prefix(tmp_path: Path) -> None:
@@ -344,28 +305,23 @@ def test_the_battery_round_trip(tmp_path: Path) -> None:
     read = Battery.from_dict(battery.to_dict())
     # equal but for NaN, which is not equal to itself
     assert read.to_dict() == battery.to_dict()
-    assert read.fates == battery.fates
-    assert math.isnan(read.result(Check.REBUILD).largest)
+    assert read.sections == battery.sections
+    assert math.isnan(read.result("rebuild").largest)
 
 
 def _with_battery(battery: Battery) -> CredibilityAssessment:
     fits = fit_table()
     verification = verification_of(fits)
     summary = dataclasses.replace(verification.summary, battery=battery)
-    return assess_table(
-        CREDIBILITY,
-        fits,
-        PROVENANCE,
-        dataclasses.replace(verification, summary=summary),
-    )
+    return assess(CREDIBILITY, fits, dataclasses.replace(verification, summary=summary))
 
 
-def _failed(battery: Battery, check: Check) -> Battery:
+def _failed(battery: Battery, check: str) -> Battery:
     return dataclasses.replace(
         battery,
         results=tuple(
             dataclasses.replace(r, status=BatteryStatus.FAILED, problems=("broken",))
-            if r.check is check
+            if r.check.id == check
             else r
             for r in battery.results
         ),
@@ -375,7 +331,7 @@ def _failed(battery: Battery, check: Check) -> Battery:
 def test_the_battery_in_an_assessment(tmp_path: Path) -> None:
     battery = _battery(_model(tmp_path))
     assessment = _with_battery(battery)
-    applicable = [r.check.value for r in battery.results if r.passed is not None]
+    applicable = [r.check.id for r in battery.results if r.passed is not None]
     for context in assessment.contexts:
         checks = [r["check"] for r in context.verification]
         assert checks[3:] == applicable
@@ -388,7 +344,7 @@ def test_the_battery_in_an_assessment(tmp_path: Path) -> None:
         assert factors["software_quality_assurance"]["status"] == "platform"
     dose = next(c for c in assessment.contexts if c.id == "dose")
     assert dose.verdict is Verdict.SUPPORTED
-    broken = _with_battery(_failed(battery, Check.STEADY_STATE))
+    broken = _with_battery(_failed(battery, "steady_state"))
     for context in broken.contexts:
         if context.n_decisive:
             assert context.verdict is Verdict.NOT_VERIFIED, context.id
@@ -404,22 +360,25 @@ def test_the_outputs_of_the_battery(tmp_path: Path) -> None:
     battery = _battery(_model(tmp_path))
     assessment = _with_battery(battery)
     table = battery_table(assessment)
-    assert list(table["check"]) == [c.value for c in BATTERY_CHECKS]
+    assert list(table["check"]) == list(PK_BATTERY.order)
     assert set(table["status"]) == {"passed", "not_applicable"}
-    fates = fates_table(assessment)
+    assert assessment.verification is not None
+    assert assessment.verification.battery is not None
+    fates = fates_table(assessment.verification.battery.sections["fates"])
     assert set(fates["dose"]) == {"IVDOSE_d", "Ri_d", "PODOSE_d"}
     iv = fates[fates["dose"] == "IVDOSE_d"].set_index("part")
     assert iv.loc["ELIM", "share"] < 0
-    output = write_outputs(assessment, tmp_path / "credibility")
+    output = write_outputs(assessment, tmp_path / "credibility", EXTENSIONS, PK_BATTERY)
     assert (
         (output / "battery.tsv")
         .read_text(encoding="utf-8")
         .startswith("check\tfactor\tstatus")
     )
     html = (output / "index.html").read_text(encoding="utf-8")
-    assert "Battery of the builds" in html
+    assert "Battery of the variants" in html
     assert "Fate of the doses" in html
-    assert "battery of the builds</a>, 6 checks" in html
+    assert "battery of the variants</a>, 6 checks" in html
+    assert (output / "fates.tsv").read_text(encoding="utf-8").startswith("build\tdose")
 
 
 def _pk_battery(project: Project) -> Battery:
@@ -458,11 +417,9 @@ def test_the_known_failures_of_the_battery_are_checked(tmp_path: Path) -> None:
 def test_without_amici_the_second_simulator_is_not_applicable(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import sys
-
-    monkeypatch.setitem(sys.modules, "amici.sim.sundials", None)
+    monkeypatch.setattr(core, "_installed", lambda engine: False)
     battery = run_battery(_model(tmp_path), rebuild=False)
-    result = battery.result(Check.CROSS_SIMULATOR)
+    result = battery.result("cross_simulator")
     assert result.status is BatteryStatus.NOT_APPLICABLE
     assert "AMICI is not installed" in result.statement
 
@@ -471,7 +428,7 @@ def test_without_amici_the_second_simulator_is_not_applicable(
     importlib.util.find_spec("amici") is None, reason="AMICI is not installed"
 )
 def test_the_second_simulator(tmp_path: Path) -> None:
-    result = run_battery(_model(tmp_path), rebuild=False).result(Check.CROSS_SIMULATOR)
+    result = run_battery(_model(tmp_path), rebuild=False).result("cross_simulator")
     assert result.status is BatteryStatus.PASSED, result
     # without a dose and one per dose
     assert result.cases == 4
@@ -490,23 +447,40 @@ def test_a_fate_round_trip() -> None:
     assert Fate.from_dict(fate.to_dict()) == fate
 
 
-@pytest.mark.skipif(
-    importlib.util.find_spec("amici") is None, reason="AMICI is not installed"
-)
-def test_a_compilation_which_takes_too_long(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from pkpdsim.credibility import battery
-
-    monkeypatch.setattr(battery.tempfile, "gettempdir", lambda: str(tmp_path / "tmp"))
-    monkeypatch.setattr(battery, "AMICI_TIMEOUT", 0.1)
-    build = FlatBuild.read("male", _model(tmp_path).model_path)
-    with pytest.raises(battery._CompileTimeout):
-        battery._amici_model(build)
-    model = _model(tmp_path)
-    result = run_battery(model, rebuild=False).result(Check.CROSS_SIMULATOR)
-    assert result.status is BatteryStatus.NOT_APPLICABLE
-    assert (
-        result.statement
-        == "AMICI did not compile the male build within 0.00166667 min."
+def test_the_battery_hook_of_a_model() -> None:
+    """Every model has the PK battery: two days, a model at its steady state, AMICI."""
+    assert CREDIBILITY_MODEL.battery_hook() is PK_BATTERY
+    settings = core.battery_settings_of(TOY, PK_BATTERY)
+    assert (settings.horizon, settings.steps) == (HORIZON, STEPS) == (2880.0, 288)
+    assert settings.steady_state
+    assert settings.engines == ("amici",)
+    # the toy credibility model does not start at its steady state
+    assert not core.battery_settings_of(CREDIBILITY_MODEL, PK_BATTERY).steady_state
+    for check in PK_CHECKS:
+        assert CHECKS[check.id] == check
+        assert check.factor == "numerical_code_verification"
+    assert sorted(PK_BATTERY.order) == sorted(
+        [*(c.id for c in core.BATTERY_CHECKS), *(c.id for c in PK_CHECKS)]
     )
+
+
+def test_the_cases_of_the_doses(tmp_path: Path) -> None:
+    build = FlatBuild.read("male", _model(tmp_path).model_path)
+    cases = {case.name: case for case in dose_cases(build)}
+    assert list(cases)[:5] == [
+        "IVDOSE_d",
+        "IVDOSE_d small at 0",
+        "IVDOSE_d small twice at 0",
+        "IVDOSE_d small at 720 min",
+        "IVDOSE_d small at 0 and 720 min",
+    ]
+    # the second simulator repeats the doses, not the superposition
+    assert [n for n, c in cases.items() if c.cross_simulator] == [
+        "IVDOSE_d",
+        "Ri_d",
+        "PODOSE_d",
+    ]
+    assert cases["IVDOSE_d"].added == {"IVDOSE_d"}
+    # an infusion over an hour, stopped
+    assert cases["Ri_d"].changes == {0.0: {"Ri_d": DOSE / 60.0}, 60.0: {"Ri_d": 0.0}}
+    assert cases["Ri_d"].added == frozenset()

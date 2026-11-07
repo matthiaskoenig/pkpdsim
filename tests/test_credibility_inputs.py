@@ -1,4 +1,4 @@
-"""The equivalency of the inputs (`pkpdsim.credibility.inputs`).
+"""The equivalency of the inputs (`pkpdsim.credibility.inputs`), the extension `inputs`.
 
 The functions on the tables of a study and the record of a context run
 without a simulation; `input_checks` runs on the adopted fit of the test
@@ -12,25 +12,32 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
-from credibility_tables import fit_table
+from credibility_tables import assess, fit_table
 from pkpdsim_credibility.credibility import CREDIBILITY
 from sbmlsim import Q
+from sbmlsim.credibility import (
+    ContextResult,
+    Credibility,
+    CredibilityAssessment,
+    DeclarationError,
+    evaluate_fits,
+)
+from sbmlsim.credibility.report import write_outputs
+from sbmlsim.credibility.scorecard import scorecard
 from sbmlsim.uncertainty import Uncertain
 from sbmlsim.units import ureg
 
 from pkpdsim.credibility import (
     DEFAULT_COVARIATES,
-    Credibility,
-    CredibilityAssessment,
-    DeclarationError,
+    EXTENSIONS,
+    INPUTS,
+    PK_BATTERY,
     InputStatus,
-    Provenance,
-    assess_table,
-    evaluate_fits,
     input_checks,
 )
 from pkpdsim.credibility.inputs import (
     InputCheck,
+    InputsRecord,
     Reported,
     StudyTables,
     _magnitude,
@@ -41,24 +48,15 @@ from pkpdsim.credibility.inputs import (
     read_study_tables,
     reported_doses,
     reported_subjects,
+    section_checks,
+    section_record,
 )
-from pkpdsim.credibility.report import (
-    input_ranges_table,
-    inputs_table,
-    write_outputs,
-)
-from pkpdsim.credibility.scorecard import scorecard
 from pkpdsim.model import PKPDModel
 
-PROVENANCE = Provenance(
-    model="credibility",
-    title="Toy model with every kind of evidence",
-    fits=["DECAY_20261001_120000__abcde"],
-    versions={"pkpdsim": "0.0.0"},
-    commit=None,
-    dirty=None,
-    date="2026-11-04T12:00:00+01:00",
-)
+
+def _inputs(context: ContextResult) -> InputsRecord | None:
+    return section_record(context.section("inputs"))
+
 
 GROUPS = pd.DataFrame(
     [
@@ -264,9 +262,11 @@ def test_the_record_of_a_context() -> None:
 
 
 def test_the_covariates_of_a_declaration() -> None:
-    assert Credibility(contexts=()).covariates == DEFAULT_COVARIATES
+    # a declaration without covariates checks the ones of PK-DB
+    assert Credibility(contexts=()).covariates is None
+    assert dict(DEFAULT_COVARIATES) == {"BW": "weight", "HEIGHT": "height"}
     declared = Credibility(contexts=(), covariates={"BW_kg": "weight"})
-    assert dict(declared.covariates) == {"BW_kg": "weight"}
+    assert declared.covariates == {"BW_kg": "weight"}
     with pytest.raises(DeclarationError, match="covariate 'BW'"):
         Credibility(contexts=(), covariates={"BW": " "})
 
@@ -310,45 +310,50 @@ def test_the_record_and_the_outputs(tmp_path: Path) -> None:
         _check("fm_dose", "PODOSE_a", 25.0, "differs"),
         _check("fm_renal", "BW", 60.0, "in_range"),
     ]
-    assessment = assess_table(CREDIBILITY, fit_table(), PROVENANCE, inputs=checks)
+    assessment = assess(CREDIBILITY, fit_table(), prepared={"inputs": checks})
     contexts = {c.id: c for c in assessment.contexts}
-    dose = contexts["dose"]
-    assert dose.inputs is not None
-    assert dose.inputs["n_checked"] == 1
-    assert [s["target"] for s in dose.inputs["inputs"]] == ["BW", "PODOSE_a"]
-    factor = next(f for f in dose.factors if f["id"] == "equivalency_of_inputs")
+    dose = _inputs(contexts["dose"])
+    assert dose is not None
+    assert dose["n_checked"] == 1
+    assert [s["target"] for s in dose["inputs"]] == ["BW", "PODOSE_a"]
+    factor = next(
+        f for f in contexts["dose"].factors if f["id"] == "equivalency_of_inputs"
+    )
     assert factor["status"] == "assessed"
     assert "Differ: CredA/fm_dose PODOSE_a 25 mg against 70 mg" in factor["statement"]
     # a context without a checked decisive mapping keeps the factor not assessed
     describe = contexts["describe"]
-    assert describe.inputs is not None and describe.inputs["n_checked"] == 0
+    record = _inputs(describe)
+    assert record is not None and record["n_checked"] == 0
     factor = next(f for f in describe.factors if f["id"] == "equivalency_of_inputs")
     assert factor["status"] == "not_assessed"
     path = tmp_path / "credibility.json"
     assessment.to_json(path)
     read = CredibilityAssessment.from_json(path)
     assert read.to_dict() == assessment.to_dict()
-    assert read.inputs == checks
-    # a record of pkpdsim 0.18 has no inputs
+    assert section_checks(read.extensions["inputs"]) == checks
+    # a record of pkpdsim 0.18 has no inputs (nor the sections)
     data = json.loads(path.read_text(encoding="utf-8"))
-    del data["inputs"]
+    del data["extensions"]
     for context in data["contexts"]:
-        del context["inputs"]
+        del context["extensions"]
     old = CredibilityAssessment.from_dict(data)
-    assert old.inputs == [] and old.contexts[0].inputs is None
+    assert section_checks(old.extensions.get("inputs")) == []
+    assert _inputs(old.contexts[0]) is None
     # without the checks no context has a record
-    plain = assess_table(CREDIBILITY, fit_table(), PROVENANCE)
-    assert all(c.inputs is None for c in plain.contexts)
-    assert inputs_table(assessment).loc[1, "reported_by"] == "group all"
-    ranges = input_ranges_table(assessment)
+    plain = assess(CREDIBILITY, fit_table())
+    assert all(_inputs(c) is None for c in plain.contexts)
+    tables = INPUTS.report_tables(assessment.to_dict())
+    assert tables["inputs"].loc[1, "reported_by"] == "group all"
+    ranges = tables["input_ranges"]
     assert list(ranges.loc[ranges["context"] == "dose", "target"]) == ["BW", "PODOSE_a"]
     assert (
-        scorecard({"credibility": assessment})
+        scorecard({"credibility": assessment}, EXTENSIONS)
         .set_index("context")
         .loc["dose", "inputs_differ"]
         == 1
     )
-    output = write_outputs(assessment, tmp_path / "out")
+    output = write_outputs(assessment, tmp_path / "out", EXTENSIONS, PK_BATTERY)
     assert (
         (output / "inputs.tsv")
         .read_text(encoding="utf-8")
@@ -362,3 +367,24 @@ def test_the_record_and_the_outputs(tmp_path: Path) -> None:
     html = (output / "index.html").read_text(encoding="utf-8")
     assert "<h4>Inputs</h4>" in html
     assert "CredA/fm_dose" in html
+
+
+def test_the_extension_checks_the_covariates_of_the_declaration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A declaration without covariates gets the ones of PK-DB, an empty one none."""
+    from pkpdsim_credibility import MODEL
+
+    from pkpdsim.credibility import inputs
+
+    seen: list[dict[str, str]] = []
+
+    def checks(model: object, fits: object, covariates: dict[str, str]) -> list:
+        seen.append(dict(covariates))
+        return []
+
+    monkeypatch.setattr(inputs, "input_checks", checks)
+    for covariates in (None, {}, {"BW_kg": "weight"}):
+        declaration = Credibility(contexts=(), covariates=covariates)
+        assert INPUTS.prepare(MODEL, declaration, fit_table()) == []
+    assert seen == [dict(DEFAULT_COVARIATES), {}, {"BW_kg": "weight"}]

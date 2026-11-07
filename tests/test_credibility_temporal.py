@@ -1,4 +1,4 @@
-"""The temporal validation (`pkpdsim.credibility.temporal`).
+"""The temporal validation (`pkpdsim.credibility.temporal`), the extension `temporal`.
 
 The hand-built table of the test package has one fit, `DECAY`; the
 chronologies date the studies `CredA` and `CredB` around the day of the fit.
@@ -9,33 +9,25 @@ from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
-from credibility_tables import fit_table
+from credibility_tables import assess, fit_table
 from pkpdsim_credibility import MODEL
 from pkpdsim_credibility.credibility import CREDIBILITY
+from sbmlsim.credibility import ContextResult, CredibilityAssessment
+from sbmlsim.credibility import assess as assess_project
+from sbmlsim.credibility.report import write_outputs
+from sbmlsim.credibility.scorecard import compare, scorecard
 from sbmlsim.fit.result import fit_date, fit_subset
 
-from pkpdsim.credibility import (
-    ContextResult,
-    CredibilityAssessment,
-    Provenance,
-    assess,
-    assess_table,
+from pkpdsim.credibility import EXTENSIONS, PK_BATTERY, TEMPORAL
+from pkpdsim.credibility.temporal import (
+    Chronology,
+    TemporalRecord,
+    chronology,
+    section_record,
 )
-from pkpdsim.credibility.report import temporal_table, write_outputs
-from pkpdsim.credibility.scorecard import compare, scorecard
-from pkpdsim.credibility.temporal import Chronology, chronology
 from pkpdsim.data import StudyRecord, study_record_path
 from pkpdsim.model import PKPDModel
 
-PROVENANCE = Provenance(
-    model="credibility",
-    title="Toy model with every kind of evidence",
-    fits=["DECAY_20261001_120000__abcde"],
-    versions={"pkpdsim": "0.0.0"},
-    commit=None,
-    dirty=None,
-    date="2026-11-04T12:00:00+01:00",
-)
 FIT_DAY = date(2026, 10, 1)
 
 
@@ -62,6 +54,10 @@ def _context(assessment: CredibilityAssessment, id: str) -> ContextResult:
     return next(c for c in assessment.contexts if c.id == id)
 
 
+def _temporal(context: ContextResult) -> TemporalRecord | None:
+    return section_record(context.section("temporal"))
+
+
 def _statement(context: ContextResult) -> str:
     return next(
         f["statement"] for f in context.factors if f["id"] == "output_comparison"
@@ -86,16 +82,15 @@ def test_the_new_points() -> None:
 
 
 def test_the_temporal_record_of_a_context() -> None:
-    assessment = assess_table(
+    assessment = assess(
         CREDIBILITY,
         fit_table(),
-        PROVENANCE,
-        chronology=_chronology(FIT_DAY + timedelta(days=1)),
+        prepared={"temporal": _chronology(FIT_DAY + timedelta(days=1))},
     )
     # a description is decided on calibration data, which are never new
-    assert _context(assessment, "describe").temporal is None
+    assert _temporal(_context(assessment, "describe")) is None
     dose = _context(assessment, "dose")
-    temporal = dose.temporal
+    temporal = _temporal(dose)
     assert temporal is not None
     (study,) = temporal["studies"]
     assert study == {
@@ -117,62 +112,63 @@ def test_the_temporal_record_of_a_context() -> None:
     renal = _context(assessment, "renal")
     assert "fewer than the minimum of 20" in _statement(renal)
     # the verdict does not change
-    plain = assess_table(CREDIBILITY, fit_table(), PROVENANCE)
+    plain = assess(CREDIBILITY, fit_table())
     assert [c.verdict for c in assessment.contexts] == [
         c.verdict for c in plain.contexts
     ]
-    assert all(c.temporal is None for c in plain.contexts)
+    assert all(_temporal(c) is None for c in plain.contexts)
 
 
 def test_a_rule_which_fails_on_the_new_points() -> None:
     fits = fit_table(factors={("CredA", "fm_dose"): 4.0})
-    temporal = _context(
-        assess_table(
-            CREDIBILITY,
-            fits,
-            PROVENANCE,
-            chronology=_chronology(FIT_DAY + timedelta(days=1)),
-        ),
-        "dose",
-    ).temporal
+    temporal = _temporal(
+        _context(
+            assess(
+                CREDIBILITY,
+                fits,
+                prepared={"temporal": _chronology(FIT_DAY + timedelta(days=1))},
+            ),
+            "dose",
+        )
+    )
     assert temporal is not None
     assert any(a["met"] is False for a in temporal["acceptance"])
 
 
 def test_no_new_study() -> None:
-    assessment = assess_table(
-        CREDIBILITY, fit_table(), PROVENANCE, chronology=_chronology(None, FIT_DAY)
+    assessment = assess(
+        CREDIBILITY, fit_table(), prepared={"temporal": _chronology(None, FIT_DAY)}
     )
     dose = _context(assessment, "dose")
-    assert dose.temporal is not None
-    assert dose.temporal["studies"] == []
-    assert dose.temporal["undated"] == ["CredA"]
+    temporal = _temporal(dose)
+    assert temporal is not None
+    assert temporal["studies"] == []
+    assert temporal["undated"] == ["CredA"]
     assert "No decisive study was collected after its fit" in _statement(dose)
     assert "1 without a date" in _statement(dose)
 
 
 def test_the_record_and_the_outputs(tmp_path: Path) -> None:
-    assessment = assess_table(
+    assessment = assess(
         CREDIBILITY,
         fit_table(),
-        PROVENANCE,
-        chronology=_chronology(FIT_DAY + timedelta(days=1)),
+        prepared={"temporal": _chronology(FIT_DAY + timedelta(days=1))},
     )
     path = tmp_path / "credibility.json"
     assessment.to_json(path)
     read = CredibilityAssessment.from_json(path)
     assert read.to_dict() == assessment.to_dict()
-    # a record of pkpdsim 0.18 has no temporal record
+    # a record of pkpdsim 0.18 has no temporal record (nor the sections)
     data = json.loads(path.read_text(encoding="utf-8"))
     for context in data["contexts"]:
-        del context["temporal"]
+        del context["extensions"]
     assert all(
-        c.temporal is None for c in CredibilityAssessment.from_dict(data).contexts
+        _temporal(c) is None for c in CredibilityAssessment.from_dict(data).contexts
     )
-    table = temporal_table(assessment)
+    table = TEMPORAL.report_tables(assessment.to_dict())["temporal"]
     assert set(table["context"]) == {"dose", "renal"}
     assert set(table["study"]) == {"CredA"}
-    output = write_outputs(assessment, tmp_path / "out")
+    output = write_outputs(assessment, tmp_path / "out", EXTENSIONS, PK_BATTERY)
     assert (
         (output / "temporal.tsv")
         .read_text(encoding="utf-8")
@@ -184,35 +180,34 @@ def test_the_record_and_the_outputs(tmp_path: Path) -> None:
 
 
 def test_the_scorecard() -> None:
+    chronology = {"temporal": _chronology(FIT_DAY + timedelta(days=1))}
     before = scorecard(
-        {
-            "toy": assess_table(
-                CREDIBILITY,
-                fit_table(),
-                PROVENANCE,
-                chronology=_chronology(FIT_DAY + timedelta(days=1)),
-            )
-        }
+        {"toy": assess(CREDIBILITY, fit_table(), prepared=chronology)}, EXTENSIONS
     )
     row = before.set_index("context").loc["dose"]
     assert row["temporal_met"] == True  # noqa: E712
     assert row["temporal_points"] > 0
     assert before.set_index("context").loc["describe", "temporal_met"] is None
+    fits = fit_table(factors={("CredA", "fm_dose"): 4.0})
     after = scorecard(
-        {
-            "toy": assess_table(
-                CREDIBILITY,
-                fit_table(factors={("CredA", "fm_dose"): 4.0}),
-                PROVENANCE,
-                chronology=_chronology(FIT_DAY + timedelta(days=1)),
-            )
-        }
+        {"toy": assess(CREDIBILITY, fits, prepared=chronology)}, EXTENSIONS
     )
-    regressions = [r for r in compare(before, after) if r.what == "temporal_met"]
+    regressions = [
+        r
+        for r in compare(before, after, extensions=EXTENSIONS)
+        if r.what == "temporal_met"
+    ]
     assert [r.context for r in regressions] == ["dose"]
     # a baseline without the temporal columns compares
     old = before.drop(columns=["temporal_points", "temporal_met"])
-    assert not [r for r in compare(old, after) if r.what == "temporal_met"]
+    assert not [
+        r
+        for r in compare(old, after, extensions=EXTENSIONS)
+        if r.what == "temporal_met"
+    ]
+    # the columns of the extension follow the columns of sbmlsim
+    columns = list(after.columns)
+    assert columns.index("temporal_points") > columns.index("vpc_agreement")
 
 
 def _record(study: str, collected: date | None) -> StudyRecord:
@@ -255,14 +250,15 @@ def test_the_assessment_reads_the_chronology(
     later = fit_date(fit_id) + timedelta(days=1)
     _write_record(tmp_path, _record("CredA", later))
     model = credibility_model.replace(data_path=(tmp_path,))
-    assessment = assess(model, verification=False)
+    assessment = assess_project(model, verification=False)
     dose = _context(assessment, "dose")
-    assert dose.temporal is not None
-    assert [(s["study"], s["fit"]) for s in dose.temporal["studies"]] == [
+    temporal = _temporal(dose)
+    assert temporal is not None
+    assert [(s["study"], s["fit"]) for s in temporal["studies"]] == [
         ("CredA", fit_subset(fit_id))
     ]
     # the provenance of the study data names the record of CredA
-    studies = {s["study"]: s for s in assessment.studies}
+    studies = {s["study"]: s for s in assessment.extensions["studies"]["studies"]}
     assert set(studies) == {"CredA", "CredB"}
     assert studies["CredA"]["recorded"]
     assert studies["CredA"]["collected"] == later.isoformat()

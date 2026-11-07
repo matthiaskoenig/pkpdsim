@@ -1,0 +1,174 @@
+{#
+  The blocks of the evidence extensions of pkpdsim and of its battery hook in the
+  report of an assessment of sbmlsim (`sbmlsim.credibility.report`), see
+  `pkpdsim.credibility.blocks`: the ratio pairs and the temporal validation after
+  the acceptance of a context, the inputs after its uncertainty, the section of
+  the study data and the fates of the doses after the table of the battery.
+#}
+{% macro ratio_pairs(ratios) %}
+<h4>Ratio pairs</h4>
+<p class="note">The ratio of the summary of an arm over the one of its reference arm in the same study, of the data and of the predictions; a pair is within when the predicted ratio lies within the limit of Guest et al. (2011) of the observed ratio, 1.25 at a ratio of 1 and towards 2 for a large ratio.</p>
+{% if ratios %}
+<div class="scroll">
+  <table class="compact">
+    <thead><tr><th>quantity</th><th>fit</th><th>study</th><th>arms</th><th class="num">observed</th><th class="num">predicted</th><th class="num">limit</th><th>result</th></tr></thead>
+    <tbody>
+    {% for r in ratios %}
+    <tr>
+      <td class="mono">{{ r.quantity }}</td>
+      <td class="mono">{{ r.fit }}</td>
+      <td>{{ r.experiment }}</td>
+      <td class="mono wrap">{{ r.numerator }} / {{ r.denominator }}</td>
+      <td class="num">{{ r.observed | number }}</td>
+      <td class="num">{{ r.predicted | number }}</td>
+      <td class="num">{{ r.limit | number }}</td>
+      <td>{% if r.within is none %}<span class="state not_evaluable">not evaluable</span>{% elif r.within %}<span class="state met">within</span>{% else %}<span class="state not_met">outside</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="empty">No study has both arms of a ratio in the decisive points.</p>
+{% endif %}
+{% endmacro %}
+
+{% macro temporal(t, minimum_points) %}
+<h4>Temporal validation</h4>
+<p class="note">The decisive points of the studies the model collected after the day its fit ran, data which did not exist for the model when it was fitted; the day of the collection is the record of the study in the data of the model. The points are part of the acceptance above, the verdict does not change.</p>
+{% if t.studies %}
+<div class="scroll">
+  <table class="compact">
+    <thead><tr><th>rule</th><th class="num">value</th><th>limit</th><th>result</th></tr></thead>
+    <tbody>
+    {% for a in t.acceptance %}
+    <tr>
+      <td class="mono">{{ a.name }} <span class="soft">new studies</span></td>
+      <td class="num">{{ a.value | number }}</td>
+      <td class="mono nowrap">{{ a.limit }}</td>
+      <td>{% if a.met is none %}<span class="state not_evaluable">not evaluable</span>{% elif a.met %}<span class="state met">met</span>{% else %}<span class="state not_met">not met</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="note">{{ t.n_evaluable }} evaluable points of the new studies, the minimum of the verdict is {{ minimum_points }}; {{ t.n_known }} decisive {{ "study was" if t.n_known == 1 else "studies were" }} collected before {{ "its" if t.n_known == 1 else "their" }} fit.</p>
+<div class="scroll">
+  <table class="compact">
+    <thead><tr><th>study</th><th>fit</th><th>fit ran</th><th>collected</th><th>released</th><th class="num">points</th><th class="num">evaluable</th></tr></thead>
+    <tbody>
+    {% for s in t.studies %}
+    <tr>
+      <td>{{ s.study }}</td>
+      <td class="mono">{{ s.fit }}</td>
+      <td class="mono nowrap">{{ s.fit_date }}</td>
+      <td class="mono nowrap">{{ s.collected }}</td>
+      <td class="mono nowrap">{% if s.released %}{{ s.released }} <span class="soft">{{ s.pkdb_id }}</span>{% else %}<span class="soft">not released</span>{% endif %}</td>
+      <td class="num">{{ s.n_points }}</td>
+      <td class="num">{{ s.n_evaluable }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="empty">No decisive study was collected after its fit: {{ t.n_known }} collected before{% if t.undated %}, {{ t.undated | length }} without a date{% endif %}.</p>
+{% endif %}
+{% if t.undated %}
+<p class="note">Without a day of collection (collected before the records of the studies existed, or without a record): {{ t.undated | join(", ") }}.</p>
+{% endif %}
+{% endmacro %}
+
+{% macro inputs(inp) %}
+<h4>Inputs</h4>
+<p class="note">The simulated covariates of the subjects and the doses of {{ inp.n_checked }} of the {{ inp.n_mappings }} decisive mappings against the groups, individuals and interventions their studies report. A covariate is equivalent within 10&nbsp;% of the reported mean (the value of an individual) and in the range within the reported minimum and maximum (else two standard deviations around the mean), a dose is equivalent within 2&nbsp;% of a reported dose; the simulated range is what the evidence covers.</p>
+<div class="scroll">
+  <table class="compact">
+    <thead><tr><th>input</th><th class="num">mappings</th><th class="num">simulated</th><th class="num">equivalent</th><th class="num">in range</th><th class="num">differ</th><th class="num">not reported</th></tr></thead>
+    <tbody>
+    {% for s in inp.inputs %}
+    <tr>
+      <td class="mono">{{ s.target }}{% if s.kind == "dose" %} <span class="soft">dose</span>{% endif %}</td>
+      <td class="num">{{ s.n_mappings }}</td>
+      <td class="num nowrap">{% if s.low == s.high %}{{ s.low | number }}{% else %}{{ s.low | number }} to {{ s.high | number }}{% endif %} <span class="soft">{{ s.unit }}</span></td>
+      <td class="num">{{ s.n_equivalent }}</td>
+      <td class="num">{{ s.n_in_range }}</td>
+      <td class="num">{% if s.n_differs %}<span class="warn">{{ s.n_differs }}</span>{% else %}0{% endif %}</td>
+      <td class="num">{{ s.n_not_reported }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% if inp.differs %}
+<p class="note">The inputs which differ from the reported ones, the ratio is the simulated over the reported value{% if inp.differs | selectattr("source", "equalto", "model") | list %}; <span class="soft">model</span> marks the value of the model, which the simulation does not set{% endif %}:</p>
+<div class="scroll">
+  <table class="compact">
+    <thead><tr><th>mapping</th><th>input</th><th class="num">simulated</th><th class="num">reported</th><th>reported by</th><th class="num">ratio</th></tr></thead>
+    <tbody>
+    {% for d in inp.differs %}
+    <tr>
+      <td class="mono wrap">{{ d.experiment }}/{{ d.mapping }}</td>
+      <td class="mono">{{ d.target }}{% if d.source == "model" %} <span class="soft">model</span>{% endif %}</td>
+      <td class="num nowrap">{{ d.simulated | number }} <span class="soft">{{ d.unit }}</span></td>
+      <td class="num nowrap">{{ d.reported | number }} <span class="soft">{{ d.unit }}{% if d.low is not none %}, {{ d.low | number }} to {{ d.high | number }}{% endif %}</span></td>
+      <td>{{ d.reported_by | join(", ") }}</td>
+      <td class="num"><span class="state not_met">{{ d.ratio | number }}</span></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endmacro %}
+
+{% macro studies(studies) %}
+{% set unrecorded = studies | rejectattr("recorded") | list %}
+{% set changed = studies | selectattr("changed") | list %}
+<p class="note">The data of every study with points in the adopted fits, as the simulations read it from the data folders of the model, and the record of its collection from pkdb_data: the day of the first collection (from the collection itself or from the git history of the model), the day of the latest collection, the release in PK-DB and the commit of the checkout. A table which differs from the record was changed after the collection.</p>
+<p class="text">{{ studies | length }} studies, {{ studies | length - unrecorded | length }} with a record of their collection{% if changed %}, <span class="warn">{{ changed | length }} with tables changed after the collection</span>{% endif %}.</p>
+<div class="card scroll">
+  <table class="compact">
+    <thead><tr><th>study</th><th class="num">points</th><th>first collected</th><th>latest collection</th><th>released</th><th>pkdb_data</th><th>source digest</th><th>tables</th></tr></thead>
+    <tbody>
+    {% for s in studies %}
+    <tr>
+      <td>{{ s.study }}{% if s.folder %}<div class="soft mono">{{ s.folder }}</div>{% endif %}</td>
+      <td class="num">{{ s.n_points }}</td>
+      {% if s.recorded %}
+      <td class="nowrap">{{ s.collected or "unknown" }}{% if s.dating == "git" %} <span class="soft">(git)</span>{% endif %}</td>
+      <td class="nowrap">{{ s.updated or "unknown" }}</td>
+      <td class="nowrap">{% if s.released %}{{ s.released }} <span class="soft mono">{{ s.pkdb_id }}</span>{% else %}<span class="soft">not released</span>{% endif %}</td>
+      <td class="mono nowrap">{% if s.pkdb_data_commit %}{{ s.pkdb_data_commit[:12] }}{% if s.pkdb_data_dirty %} <span class="warn">with uncommitted changes</span>{% endif %}{% else %}<span class="soft">unknown</span>{% endif %}</td>
+      <td class="mono">{{ s.source_digest[:12] if s.source_digest else "" }}</td>
+      <td>{% if s.changed is none %}<span class="soft">no digests</span>{% elif s.changed %}<span class="warn">changed: {{ s.changed | join(", ") }}</span>{% else %}{{ s.n_tables }} as collected{% endif %}</td>
+      {% else %}
+      <td colspan="6"><span class="soft">{% if s.folder %}no record of the collection{% else %}no data folder of the study{% endif %}</span></td>
+      {% endif %}
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endmacro %}
+
+{% macro fates(fates) %}
+<h3>Fate of the doses</h3>
+<p class="note">Where a dose is at the end of the simulation, as a share of the dose, relative to the simulation without a dose: in the body, in the urine and the feces, not yet applied (dose) and moved by every reaction which reads no dose (negative an elimination, positive a production, e.g. of a metabolite).</p>
+<div class="card scroll">
+  <table class="compact">
+    <thead><tr><th>build</th><th>dose</th><th class="num">mmole</th><th>parts</th><th class="num">imbalance</th></tr></thead>
+    <tbody>
+    {% for f in fates %}
+    <tr>
+      <td>{{ f.build }}</td>
+      <td class="mono">{{ f.dose }}</td>
+      <td class="num">{{ f.amount | number }}</td>
+      <td class="mono wrap">{% for name, value in f.parts.items() %}{{ name }} {{ (value / f.amount) | number }}{% if not loop.last %}, {% endif %}{% endfor %}</td>
+      <td class="num">{{ f.imbalance | number }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endmacro %}

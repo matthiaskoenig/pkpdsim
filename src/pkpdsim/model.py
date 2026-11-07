@@ -52,6 +52,7 @@ from typing import TYPE_CHECKING, Any, Self, override
 from pydantic import model_validator
 from sbmlsim.plot import FigureSettings as SbmlsimFigureSettings
 from sbmlsim.project import (
+    CredibilitySettings,
     FigureOutputs,
     Project,
     ProjectAction,
@@ -65,10 +66,9 @@ from pkpdsim.sex import Sex
 
 if TYPE_CHECKING:
     import roadrunner
+    from sbmlsim.credibility import Credibility
     from sbmlsim.experiment import SimulationExperiment
     from sbmlsim.experiment.draws import UncertaintySettings
-
-    from pkpdsim.credibility import Credibility
 
 #: the actions of the `run` command of a model, see `pkpdsim.cli`
 RUN_ACTIONS: tuple[str, ...] = ("simulate", "list_experiments", "factory", "all")
@@ -81,6 +81,37 @@ RUN_WORKERS = 1
 #: the settings of the simulator of a model which does not give its own
 DEFAULT_SIMULATOR = SimulatorSettings(
     absolute_tolerance=1e-10, relative_tolerance=1e-10
+)
+
+#: the fields of the metadata of the fit mappings (`PKPDMappingMetaData`)
+#: which a domain of a context of use can claim
+DOMAIN_FIELDS: tuple[str, ...] = (
+    "tissue",
+    "route",
+    "application_form",
+    "dosing",
+    "fasting",
+    "health",
+    "coadministration",
+    "genotype",
+    "phenotype",
+)
+
+#: the credibility settings of every model, see `sbmlsim.credibility`: the
+#: metadata of pkpdsim, the fields of its domain, the evidence extensions of
+#: `pkpdsim.credibility` (the ratio pairs, the temporal validation, the
+#: equivalency of the inputs and the study data) and the PK battery as the
+#: battery hook; references, so the model package imports none of them
+CREDIBILITY_SETTINGS = CredibilitySettings(
+    metadata_type="pkpdsim.metadata:PKPDMappingMetaData",
+    domain_fields=DOMAIN_FIELDS,
+    extensions=(
+        "pkpdsim.credibility.ratios:RATIOS",
+        "pkpdsim.credibility.temporal:TEMPORAL",
+        "pkpdsim.credibility.inputs:INPUTS",
+        "pkpdsim.credibility.studies:STUDIES",
+    ),
+    battery="pkpdsim.credibility.battery:PK_BATTERY",
 )
 
 #: the keywords of a model package which are fields of the project by another name
@@ -417,6 +448,9 @@ class PKPDModel(Project):
         adopted_ids: the ids of the adopted fits, whose records in `fits_dir`
             give the fitted values and their uncertainty, see
             `sbmlsim.fit.records`; one fit per fit subset.
+        credibility_settings: the credibility settings of the project,
+            `CREDIBILITY_SETTINGS` (the metadata, the domain, the evidence
+            extensions and the battery hook of pkpdsim) by default.
     """
 
     # the fields of the project a model always has, narrowed: a model is frozen
@@ -432,6 +466,7 @@ class PKPDModel(Project):
     extra_arguments: str | None = None
     adopted_ids: tuple[str, ...] = ()
     simulator: SimulatorSettings = DEFAULT_SIMULATOR
+    credibility_settings: CredibilitySettings = CREDIBILITY_SETTINGS
 
     def __init__(self, **data: Any) -> None:  # noqa: ANN401
         """Create a model from the keywords of a model package or the fields.
@@ -544,9 +579,11 @@ class PKPDModel(Project):
                 f"The extra actions of '{self.name}' repeat an action: {repeated}."
             )
         if self.checks.battery:
-            from pkpdsim.credibility.verification import BATTERY_CHECKS
+            from sbmlsim.credibility.verification import BATTERY_CHECKS
 
-            checks = [c.value for c in BATTERY_CHECKS]
+            from pkpdsim.credibility.battery import PK_CHECKS
+
+            checks = [c.id for c in (*BATTERY_CHECKS, *PK_CHECKS)]
             unknown = sorted(set(self.checks.battery) - set(checks))
             if unknown:
                 raise ValueError(
@@ -708,7 +745,7 @@ class PKPDModel(Project):
             ValueError: if the model has no declaration.
             TypeError: if the reference is no `Credibility`.
         """
-        from pkpdsim.credibility import Credibility
+        from sbmlsim.credibility import Credibility
 
         declaration = super().load_credibility()
         if not isinstance(declaration, Credibility):

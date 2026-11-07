@@ -16,10 +16,12 @@ from pathlib import Path
 from typing import Any, cast
 from urllib.parse import quote
 
+from sbmlsim.credibility import BATTERY_CHECKS, CredibilityAssessment
+from sbmlsim.credibility.extensions import ACCEPTANCE_EXTENSION
+from sbmlsim.credibility.verification import check_of
 from sbmlsim.fit.records import AdoptedRecord
 
-from pkpdsim.credibility import Check, CredibilityAssessment
-from pkpdsim.credibility.verification import BATTERY_CHECKS
+from pkpdsim.credibility import PK_CHECKS
 from pkpdsim.release.build import BuildPaths
 from pkpdsim.release.notes import NOTES_DIR, fits_prefix
 from pkpdsim.release.project import ProjectContext, render
@@ -236,9 +238,12 @@ def _credibility(release_path: Path) -> dict[str, Any] | None:
         The assessment as plain data with, for every context, the verdict in words
         (`verdict_label`), the role of the evidence which decides it
         (`decided_on`), the coverage of its claimed values (`coverage`) and
-        its checks of the predictions with their names (`label`), and the
-        checks of the battery of the builds with their names (`battery`,
-        empty if it did not run); `None` for a release without one.
+        its checks of the predictions with their names (`label`), the
+        evidence of the extensions of pkpdsim (`ratios`, `ratio_acceptance`,
+        `temporal` and `inputs` of a context, `studies` of the assessment, the
+        rule of the ratio pairs not in `acceptance`), and the checks of the
+        battery of the builds with their names (`battery`, empty if it did not
+        run); `None` for a release without one.
 
     Raises:
         ReleaseError: if the record cannot be read.
@@ -251,8 +256,19 @@ def _credibility(release_path: Path) -> dict[str, Any] | None:
     except (ValueError, KeyError, TypeError) as err:
         raise ReleaseError(f"The assessment '{file}' is not readable: {err}") from err
     data = assessment.to_dict()
+    # the evidence of the extensions of pkpdsim by the fields the page reads
+    data["studies"] = (assessment.extensions.get("studies") or {}).get("studies", [])
+    battery_checks = {c.id for c in (*BATTERY_CHECKS, *PK_CHECKS)}
     contexts = cast("list[dict[str, Any]]", data["contexts"])
     for context, result in zip(contexts, assessment.contexts, strict=True):
+        rows = cast("list[dict[str, Any]]", context["acceptance"])
+        context["acceptance"] = [r for r in rows if ACCEPTANCE_EXTENSION not in r]
+        context["ratio_acceptance"] = next(
+            (r for r in rows if r.get(ACCEPTANCE_EXTENSION) == "ratios"), None
+        )
+        for name in ("ratios", "temporal", "inputs"):
+            section = result.section(name) or {}
+            context[name] = section.get(name, [] if name == "ratios" else None)
         context["verdict_label"] = result.verdict.label
         context["decided_on"] = result.decisive_role.value
         context["coverage"] = [
@@ -261,9 +277,9 @@ def _credibility(release_path: Path) -> dict[str, Any] | None:
             if entry.context == result.id and entry.claimed
         ]
         context["verification"] = [
-            {**record, "label": Check(record["check"]).label}
+            {**record, "label": check_of(record["check"], record["factor"]).label}
             for record in cast("list[dict[str, Any]]", context["verification"])
-            if Check(record["check"]) not in BATTERY_CHECKS
+            if record["check"] not in battery_checks
         ]
     battery = (
         None if assessment.verification is None else assessment.verification.battery

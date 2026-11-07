@@ -1,0 +1,1585 @@
+{
+  "provenance": {
+    "model": "credibility",
+    "title": "Toy model with every kind of evidence",
+    "fits": [
+      "DECAY_20261107_050828__39f89"
+    ],
+    "versions": {
+      "pkpdsim": "0.19.0",
+      "sbmlsim": "0.16.0",
+      "sbmlutils": "0.17.2",
+      "libroadrunner": "2.11.0"
+    },
+    "commit": "0123abc",
+    "dirty": null,
+    "date": "2026-11-07T05:08:32+01:00",
+    "lock": null
+  },
+  "contexts": [
+    {
+      "id": "describe",
+      "title": "Describe the decay",
+      "question": "Does the model describe the intravenous decay of A?",
+      "level": "C1",
+      "influence": "low",
+      "consequence": "low",
+      "risk": "low",
+      "rationale": "",
+      "extrapolation": "",
+      "domain_statement": "",
+      "quantities": [
+        {
+          "id": "[A]",
+          "description": "the concentration of A",
+          "ratio": false,
+          "coverage": "covered",
+          "n_points": 10
+        }
+      ],
+      "acceptance": [
+        {
+          "name": "within_2fold",
+          "value": 100.0,
+          "limit": ">= 70",
+          "met": true
+        }
+      ],
+      "verdict": "supported",
+      "factors": [
+        {
+          "id": "software_quality_assurance",
+          "name": "Software quality assurance",
+          "status": "platform",
+          "statement": "pkpdsim and sbmlsim are released packages with tests and continuous integration; the model is released reproducibly from its repository with the versions and the commit of the provenance.",
+          "step": null
+        },
+        {
+          "id": "numerical_code_verification",
+          "name": "Numerical code verification",
+          "status": "platform",
+          "statement": "sbmlsim runs the SBML Test Suite and the PEtab test suite.",
+          "step": null
+        },
+        {
+          "id": "discretization_error",
+          "name": "Discretization error",
+          "status": "not_assessed",
+          "statement": "The convergence of the results in the tolerances of the integrator.",
+          "step": 2
+        },
+        {
+          "id": "numerical_solver_error",
+          "name": "Numerical solver error",
+          "status": "not_assessed",
+          "statement": "The results with a second integration method of the integrator.",
+          "step": 2
+        },
+        {
+          "id": "use_error",
+          "name": "Use error",
+          "status": "not_assessed",
+          "statement": "The validity and the units of the builds and the finite predictions of the evidence.",
+          "step": 2
+        },
+        {
+          "id": "model_form",
+          "name": "Model form",
+          "status": "not_assessed",
+          "statement": "The structure of the model across studies and drugs: the ratios, the cross-validation and the qualification across models.",
+          "step": 3
+        },
+        {
+          "id": "model_inputs",
+          "name": "Model inputs",
+          "status": "assessed",
+          "statement": "The parameter uncertainty of 1 adopted fit (0 with the correlation of the Fisher information) propagated with 8 draws. The 90 % bands of the predictions have a median fold width of up to 27.6 over the quantities and hold 100 % of the 10 evaluable decisive observations. The variance of the quantities is carried most by [A]: DECAY.k (0.67). The acceptance with probability at least 0.9: within_2fold >= 70: P = 0.25, rejected.",
+          "step": null
+        },
+        {
+          "id": "test_samples",
+          "name": "Test samples",
+          "status": "assessed",
+          "statement": "10 points of 2 mappings of 2 studies of the calibration evidence decide, 10 of them evaluable (minimum 5).",
+          "step": null
+        },
+        {
+          "id": "test_conditions",
+          "name": "Test conditions",
+          "status": "assessed",
+          "statement": "0 claimed values of the metadata, 0 values of the evidence outside the claim.",
+          "step": null
+        },
+        {
+          "id": "equivalency_of_inputs",
+          "name": "Equivalency of input parameters",
+          "status": "assessed",
+          "statement": "The variability of the subjects (k LogNormal(cv=0.2)): 8 subjects nested in 8 draws of the parameters. The 90 % bands of the predictive check hold 100 % (72 to 100 %) of the 10 evaluable decisive observations (10 means of groups, compared with virtual groups of their size), consistent with the 90 % of a variability which is the one of the data.",
+          "step": null
+        },
+        {
+          "id": "output_comparison",
+          "name": "Output comparison",
+          "status": "assessed",
+          "statement": "1 of 1 acceptance rule met on the calibration evidence, 0 not evaluable.",
+          "step": null
+        },
+        {
+          "id": "relevance_of_quantities",
+          "name": "Relevance of the quantities of interest",
+          "status": "not_assessed",
+          "statement": "Whether the quantities of the evidence answer the question, e.g. the ratios of a special population. A context with a ratio quantity and its pairing assesses it by the pairs of its arms; else only that every claimed quantity which is no ratio has decisive points in the claimed domain is checked, see the relevance of the validation activities.",
+          "step": 3
+        },
+        {
+          "id": "relevance_of_validation",
+          "name": "Relevance of the validation activities to the COU",
+          "status": "assessed",
+          "statement": "0 of 0 claimed values and 1 of 1 quantity of interest covered.",
+          "step": null
+        }
+      ],
+      "n_decisive": 10,
+      "n_evaluable": 10,
+      "minimum_points": 5,
+      "verification": [],
+      "ratios": [],
+      "ratio_acceptance": null,
+      "temporal": null,
+      "uncertainty": {
+        "n_draws": 8,
+        "seed": 1234,
+        "quantiles": [
+          0.05,
+          0.95
+        ],
+        "threshold": 0.9,
+        "level": 0.95,
+        "fits": [
+          {
+            "fit": "DECAY",
+            "fit_id": "DECAY_20261107_050828__39f89",
+            "n_parameters": 1,
+            "correlated": false,
+            "note": "independent draws, the fit has no Fisher information",
+            "n_failed": 0
+          }
+        ],
+        "n_points": 10,
+        "coverage": 1.0,
+        "quantities": [
+          {
+            "quantity": "[A]",
+            "n_points": 10,
+            "band_fold": 27.602442680015667,
+            "coverage": 1.0
+          }
+        ],
+        "rules": [
+          {
+            "name": "within_2fold",
+            "limit": ">= 70",
+            "estimate": 0.25,
+            "low": 0.019219422321674395,
+            "high": 0.7454853143208591,
+            "n": 8,
+            "n_failed": 0,
+            "decision": "rejected",
+            "n_needed": null
+          }
+        ],
+        "sensitivity": [
+          {
+            "target": "[A]",
+            "kind": "quantity",
+            "fit": "DECAY",
+            "parameter": "k",
+            "index": 0.6734566099745474
+          },
+          {
+            "target": "within_2fold",
+            "kind": "rule",
+            "fit": "DECAY",
+            "parameter": "k",
+            "index": 0.5892857142857143
+          }
+        ]
+      },
+      "inputs": {
+        "n_mappings": 2,
+        "n_checked": 0,
+        "inputs": [],
+        "differs": []
+      },
+      "variability": {
+        "subjects": 8,
+        "studies": 1,
+        "vectors": 8,
+        "groups": 1000,
+        "seed": 1234,
+        "targets": {
+          "k": "LogNormal(cv=0.2)"
+        },
+        "between": {},
+        "quantiles": [
+          0.05,
+          0.95
+        ],
+        "expected": 0.8999999999999999,
+        "n_points": 10,
+        "n_groups": 10,
+        "coverage": 1.0,
+        "low": 0.7224672001371107,
+        "high": 0.9999999999999999,
+        "level": 0.95,
+        "agreement": "consistent",
+        "quantities": [
+          {
+            "quantity": "[A]",
+            "n_points": 10,
+            "coverage": 1.0
+          }
+        ],
+        "failed": 0
+      }
+    },
+    {
+      "id": "dose",
+      "title": "Decay after a dose",
+      "question": "Does the model predict the decay after a dose of the data?",
+      "level": "C2",
+      "influence": "medium",
+      "consequence": "medium",
+      "risk": "medium",
+      "rationale": "",
+      "extrapolation": "",
+      "domain_statement": "the single doses of the data",
+      "quantities": [
+        {
+          "id": "[A]",
+          "description": "the concentration of A",
+          "ratio": false,
+          "coverage": "covered",
+          "n_points": 10
+        }
+      ],
+      "acceptance": [
+        {
+          "name": "within_2fold",
+          "value": 100.0,
+          "limit": ">= 80",
+          "met": true
+        },
+        {
+          "name": "GMFE",
+          "value": 1.002235893718994,
+          "limit": "<= 1.5",
+          "met": true
+        }
+      ],
+      "verdict": "supported",
+      "factors": [
+        {
+          "id": "software_quality_assurance",
+          "name": "Software quality assurance",
+          "status": "platform",
+          "statement": "pkpdsim and sbmlsim are released packages with tests and continuous integration; the model is released reproducibly from its repository with the versions and the commit of the provenance.",
+          "step": null
+        },
+        {
+          "id": "numerical_code_verification",
+          "name": "Numerical code verification",
+          "status": "platform",
+          "statement": "sbmlsim runs the SBML Test Suite and the PEtab test suite.",
+          "step": null
+        },
+        {
+          "id": "discretization_error",
+          "name": "Discretization error",
+          "status": "not_assessed",
+          "statement": "The convergence of the results in the tolerances of the integrator.",
+          "step": 2
+        },
+        {
+          "id": "numerical_solver_error",
+          "name": "Numerical solver error",
+          "status": "not_assessed",
+          "statement": "The results with a second integration method of the integrator.",
+          "step": 2
+        },
+        {
+          "id": "use_error",
+          "name": "Use error",
+          "status": "not_assessed",
+          "statement": "The validity and the units of the builds and the finite predictions of the evidence.",
+          "step": 2
+        },
+        {
+          "id": "model_form",
+          "name": "Model form",
+          "status": "not_assessed",
+          "statement": "The structure of the model across studies and drugs: the ratios, the cross-validation and the qualification across models.",
+          "step": 3
+        },
+        {
+          "id": "model_inputs",
+          "name": "Model inputs",
+          "status": "assessed",
+          "statement": "The parameter uncertainty of 1 adopted fit (0 with the correlation of the Fisher information) propagated with 8 draws. The 90 % bands of the predictions have a median fold width of up to 27.6 over the quantities and hold 100 % of the 10 evaluable decisive observations. The variance of the quantities is carried most by [A]: DECAY.k (0.67). The acceptance with probability at least 0.9: within_2fold >= 80: P = 0.25, rejected, GMFE <= 1.5: P = 0.25, rejected.",
+          "step": null
+        },
+        {
+          "id": "test_samples",
+          "name": "Test samples",
+          "status": "assessed",
+          "statement": "10 points of 2 mappings of 1 study of the validation evidence decide, 10 of them evaluable (minimum 10).",
+          "step": null
+        },
+        {
+          "id": "test_conditions",
+          "name": "Test conditions",
+          "status": "assessed",
+          "statement": "2 claimed values of the metadata, 0 values of the evidence outside the claim.",
+          "step": null
+        },
+        {
+          "id": "equivalency_of_inputs",
+          "name": "Equivalency of input parameters",
+          "status": "assessed",
+          "statement": "The variability of the subjects (k LogNormal(cv=0.2)): 8 subjects nested in 8 draws of the parameters. The 90 % bands of the predictive check hold 100 % (72 to 100 %) of the 10 evaluable decisive observations (10 means of groups, compared with virtual groups of their size), consistent with the 90 % of a variability which is the one of the data.",
+          "step": null
+        },
+        {
+          "id": "output_comparison",
+          "name": "Output comparison",
+          "status": "assessed",
+          "statement": "2 of 2 acceptance rules met on the validation evidence, 0 not evaluable. No decisive study was collected after its fit (0 collected before, 1 without a date).",
+          "step": null
+        },
+        {
+          "id": "relevance_of_quantities",
+          "name": "Relevance of the quantities of interest",
+          "status": "not_assessed",
+          "statement": "Whether the quantities of the evidence answer the question, e.g. the ratios of a special population. A context with a ratio quantity and its pairing assesses it by the pairs of its arms; else only that every claimed quantity which is no ratio has decisive points in the claimed domain is checked, see the relevance of the validation activities.",
+          "step": 3
+        },
+        {
+          "id": "relevance_of_validation",
+          "name": "Relevance of the validation activities to the COU",
+          "status": "assessed",
+          "statement": "2 of 2 claimed values and 1 of 1 quantity of interest covered.",
+          "step": null
+        }
+      ],
+      "n_decisive": 10,
+      "n_evaluable": 10,
+      "minimum_points": 10,
+      "verification": [],
+      "ratios": [],
+      "ratio_acceptance": null,
+      "temporal": {
+        "studies": [],
+        "n_points": 0,
+        "n_evaluable": 0,
+        "acceptance": [
+          {
+            "name": "within_2fold",
+            "value": null,
+            "limit": ">= 80",
+            "met": null
+          },
+          {
+            "name": "GMFE",
+            "value": null,
+            "limit": "<= 1.5",
+            "met": null
+          }
+        ],
+        "n_known": 0,
+        "undated": [
+          "CredA"
+        ]
+      },
+      "uncertainty": {
+        "n_draws": 8,
+        "seed": 1234,
+        "quantiles": [
+          0.05,
+          0.95
+        ],
+        "threshold": 0.9,
+        "level": 0.95,
+        "fits": [
+          {
+            "fit": "DECAY",
+            "fit_id": "DECAY_20261107_050828__39f89",
+            "n_parameters": 1,
+            "correlated": false,
+            "note": "independent draws, the fit has no Fisher information",
+            "n_failed": 0
+          }
+        ],
+        "n_points": 10,
+        "coverage": 1.0,
+        "quantities": [
+          {
+            "quantity": "[A]",
+            "n_points": 10,
+            "band_fold": 27.602442680015667,
+            "coverage": 1.0
+          }
+        ],
+        "rules": [
+          {
+            "name": "within_2fold",
+            "limit": ">= 80",
+            "estimate": 0.25,
+            "low": 0.01343118334576432,
+            "high": 0.7762933337870428,
+            "n": 8,
+            "n_failed": 0,
+            "decision": "rejected",
+            "n_needed": null
+          },
+          {
+            "name": "GMFE",
+            "limit": "<= 1.5",
+            "estimate": 0.25,
+            "low": 0.01343118334576432,
+            "high": 0.7762933337870428,
+            "n": 8,
+            "n_failed": 0,
+            "decision": "rejected",
+            "n_needed": null
+          }
+        ],
+        "sensitivity": [
+          {
+            "target": "[A]",
+            "kind": "quantity",
+            "fit": "DECAY",
+            "parameter": "k",
+            "index": 0.6734566099745474
+          },
+          {
+            "target": "within_2fold",
+            "kind": "rule",
+            "fit": "DECAY",
+            "parameter": "k",
+            "index": 0.5892857142857143
+          },
+          {
+            "target": "GMFE",
+            "kind": "rule",
+            "fit": "DECAY",
+            "parameter": "k",
+            "index": 0.390528865696966
+          }
+        ]
+      },
+      "inputs": {
+        "n_mappings": 2,
+        "n_checked": 0,
+        "inputs": [],
+        "differs": []
+      },
+      "variability": {
+        "subjects": 8,
+        "studies": 1,
+        "vectors": 8,
+        "groups": 1000,
+        "seed": 1234,
+        "targets": {
+          "k": "LogNormal(cv=0.2)"
+        },
+        "between": {},
+        "quantiles": [
+          0.05,
+          0.95
+        ],
+        "expected": 0.8999999999999999,
+        "n_points": 10,
+        "n_groups": 10,
+        "coverage": 1.0,
+        "low": 0.7224672001371107,
+        "high": 0.9999999999999999,
+        "level": 0.95,
+        "agreement": "consistent",
+        "quantities": [
+          {
+            "quantity": "[A]",
+            "n_points": 10,
+            "coverage": 1.0
+          }
+        ],
+        "failed": 0
+      }
+    },
+    {
+      "id": "renal",
+      "title": "Decay in renal impairment",
+      "question": "Does the model predict the decay in renal impairment?",
+      "level": "C3",
+      "influence": "medium",
+      "consequence": "high",
+      "risk": "high",
+      "rationale": "",
+      "extrapolation": "",
+      "domain_statement": "",
+      "quantities": [
+        {
+          "id": "[A]",
+          "description": "the concentration of A",
+          "ratio": false,
+          "coverage": "covered",
+          "n_points": 5
+        },
+        {
+          "id": "A_ratio",
+          "description": "the concentration in renal impairment over the healthy one",
+          "ratio": true,
+          "coverage": null,
+          "n_points": 0
+        }
+      ],
+      "acceptance": [
+        {
+          "name": "within_2fold",
+          "value": 100.0,
+          "limit": ">= 90",
+          "met": true
+        },
+        {
+          "name": "within_1.5fold",
+          "value": 100.0,
+          "limit": ">= 70",
+          "met": true
+        },
+        {
+          "name": "GMFE",
+          "value": 1.002235893718994,
+          "limit": "<= 1.3",
+          "met": true
+        }
+      ],
+      "verdict": "insufficient_evidence",
+      "factors": [
+        {
+          "id": "software_quality_assurance",
+          "name": "Software quality assurance",
+          "status": "platform",
+          "statement": "pkpdsim and sbmlsim are released packages with tests and continuous integration; the model is released reproducibly from its repository with the versions and the commit of the provenance.",
+          "step": null
+        },
+        {
+          "id": "numerical_code_verification",
+          "name": "Numerical code verification",
+          "status": "platform",
+          "statement": "sbmlsim runs the SBML Test Suite and the PEtab test suite.",
+          "step": null
+        },
+        {
+          "id": "discretization_error",
+          "name": "Discretization error",
+          "status": "not_assessed",
+          "statement": "The convergence of the results in the tolerances of the integrator.",
+          "step": 2
+        },
+        {
+          "id": "numerical_solver_error",
+          "name": "Numerical solver error",
+          "status": "not_assessed",
+          "statement": "The results with a second integration method of the integrator.",
+          "step": 2
+        },
+        {
+          "id": "use_error",
+          "name": "Use error",
+          "status": "not_assessed",
+          "statement": "The validity and the units of the builds and the finite predictions of the evidence.",
+          "step": 2
+        },
+        {
+          "id": "model_form",
+          "name": "Model form",
+          "status": "not_assessed",
+          "statement": "The structure of the model across studies and drugs: the ratios, the cross-validation and the qualification across models.",
+          "step": 3
+        },
+        {
+          "id": "model_inputs",
+          "name": "Model inputs",
+          "status": "assessed",
+          "statement": "The parameter uncertainty of 1 adopted fit (0 with the correlation of the Fisher information) propagated with 8 draws. The 90 % bands of the predictions have a median fold width of up to 27.6 over the quantities and hold 100 % of the 5 evaluable decisive observations. The variance of the quantities is carried most by [A]: DECAY.k (0.67). The acceptance with probability at least 0.9: within_2fold >= 90: P = 0.125, rejected, within_1.5fold >= 70: P = 0.125, rejected, GMFE <= 1.3: P = 0.125, rejected.",
+          "step": null
+        },
+        {
+          "id": "test_samples",
+          "name": "Test samples",
+          "status": "assessed",
+          "statement": "5 points of 1 mapping of 1 study of the validation evidence decide, 5 of them evaluable (minimum 20).",
+          "step": null
+        },
+        {
+          "id": "test_conditions",
+          "name": "Test conditions",
+          "status": "assessed",
+          "statement": "2 claimed values of the metadata, 0 values of the evidence outside the claim.",
+          "step": null
+        },
+        {
+          "id": "equivalency_of_inputs",
+          "name": "Equivalency of input parameters",
+          "status": "assessed",
+          "statement": "The variability of the subjects (k LogNormal(cv=0.2)): 8 subjects nested in 8 draws of the parameters. The 90 % bands of the predictive check hold 100 % (57 to 100 %) of the 5 evaluable decisive observations (5 means of groups, compared with virtual groups of their size), consistent with the 90 % of a variability which is the one of the data.",
+          "step": null
+        },
+        {
+          "id": "output_comparison",
+          "name": "Output comparison",
+          "status": "assessed",
+          "statement": "3 of 3 acceptance rules met on the validation evidence, 0 not evaluable. No decisive study was collected after its fit (0 collected before, 1 without a date).",
+          "step": null
+        },
+        {
+          "id": "relevance_of_quantities",
+          "name": "Relevance of the quantities of interest",
+          "status": "not_assessed",
+          "statement": "Whether the quantities of the evidence answer the question, e.g. the ratios of a special population. A context with a ratio quantity and its pairing assesses it by the pairs of its arms; else only that every claimed quantity which is no ratio has decisive points in the claimed domain is checked, see the relevance of the validation activities.",
+          "step": 3
+        },
+        {
+          "id": "relevance_of_validation",
+          "name": "Relevance of the validation activities to the COU",
+          "status": "assessed",
+          "statement": "1 of 2 claimed values and 1 of 1 quantity of interest covered.",
+          "step": null
+        }
+      ],
+      "n_decisive": 5,
+      "n_evaluable": 5,
+      "minimum_points": 20,
+      "verification": [],
+      "ratios": [],
+      "ratio_acceptance": null,
+      "temporal": {
+        "studies": [],
+        "n_points": 0,
+        "n_evaluable": 0,
+        "acceptance": [
+          {
+            "name": "within_2fold",
+            "value": null,
+            "limit": ">= 90",
+            "met": null
+          },
+          {
+            "name": "within_1.5fold",
+            "value": null,
+            "limit": ">= 70",
+            "met": null
+          },
+          {
+            "name": "GMFE",
+            "value": null,
+            "limit": "<= 1.3",
+            "met": null
+          }
+        ],
+        "n_known": 0,
+        "undated": [
+          "CredA"
+        ]
+      },
+      "uncertainty": {
+        "n_draws": 8,
+        "seed": 1234,
+        "quantiles": [
+          0.05,
+          0.95
+        ],
+        "threshold": 0.9,
+        "level": 0.95,
+        "fits": [
+          {
+            "fit": "DECAY",
+            "fit_id": "DECAY_20261107_050828__39f89",
+            "n_parameters": 1,
+            "correlated": false,
+            "note": "independent draws, the fit has no Fisher information",
+            "n_failed": 0
+          }
+        ],
+        "n_points": 5,
+        "coverage": 1.0,
+        "quantities": [
+          {
+            "quantity": "[A]",
+            "n_points": 5,
+            "band_fold": 27.602442680015667,
+            "coverage": 1.0
+          }
+        ],
+        "rules": [
+          {
+            "name": "within_2fold",
+            "limit": ">= 90",
+            "estimate": 0.125,
+            "low": 0.0020876917903447367,
+            "high": 0.6833325472973173,
+            "n": 8,
+            "n_failed": 0,
+            "decision": "rejected",
+            "n_needed": null
+          },
+          {
+            "name": "within_1.5fold",
+            "limit": ">= 70",
+            "estimate": 0.125,
+            "low": 0.0020876917903447367,
+            "high": 0.6833325472973173,
+            "n": 8,
+            "n_failed": 0,
+            "decision": "rejected",
+            "n_needed": null
+          },
+          {
+            "name": "GMFE",
+            "limit": "<= 1.3",
+            "estimate": 0.125,
+            "low": 0.0020876917903447367,
+            "high": 0.6833325472973173,
+            "n": 8,
+            "n_failed": 0,
+            "decision": "rejected",
+            "n_needed": null
+          }
+        ],
+        "sensitivity": [
+          {
+            "target": "[A]",
+            "kind": "quantity",
+            "fit": "DECAY",
+            "parameter": "k",
+            "index": 0.6734566099745474
+          },
+          {
+            "target": "within_2fold",
+            "kind": "rule",
+            "fit": "DECAY",
+            "parameter": "k",
+            "index": 0.5892857142857143
+          },
+          {
+            "target": "within_1.5fold",
+            "kind": "rule",
+            "fit": "DECAY",
+            "parameter": "k",
+            "index": 0.5651408450704225
+          },
+          {
+            "target": "GMFE",
+            "kind": "rule",
+            "fit": "DECAY",
+            "parameter": "k",
+            "index": 0.3905288656969659
+          }
+        ]
+      },
+      "inputs": {
+        "n_mappings": 1,
+        "n_checked": 0,
+        "inputs": [],
+        "differs": []
+      },
+      "variability": {
+        "subjects": 8,
+        "studies": 1,
+        "vectors": 8,
+        "groups": 1000,
+        "seed": 1234,
+        "targets": {
+          "k": "LogNormal(cv=0.2)"
+        },
+        "between": {},
+        "quantiles": [
+          0.05,
+          0.95
+        ],
+        "expected": 0.8999999999999999,
+        "n_points": 5,
+        "n_groups": 5,
+        "coverage": 1.0,
+        "low": 0.5655175352168251,
+        "high": 1.0,
+        "level": 0.95,
+        "agreement": "consistent",
+        "quantities": [
+          {
+            "quantity": "[A]",
+            "n_points": 5,
+            "coverage": 1.0
+          }
+        ],
+        "failed": 0
+      }
+    }
+  ],
+  "evidence": [
+    {
+      "context": "describe",
+      "name": "intravenous data",
+      "role": "calibration",
+      "description": "",
+      "selection": "route in [IV]",
+      "n_points": 10,
+      "n_mappings": 2,
+      "n_studies": 2,
+      "outliers_dropped": 0,
+      "limitation_subtracted": 0,
+      "metrics": {
+        "GMFE": 1.002235893718994,
+        "AFE": 1.000848541045419,
+        "within_1.25fold": 100.0,
+        "within_1.5fold": 100.0,
+        "within_2fold": 100.0,
+        "within_1sd": null,
+        "within_2sd": null
+      }
+    },
+    {
+      "context": "dose",
+      "name": "doses",
+      "role": "validation",
+      "description": "",
+      "selection": "CredA: fm_dose",
+      "n_points": 5,
+      "n_mappings": 1,
+      "n_studies": 1,
+      "outliers_dropped": 0,
+      "limitation_subtracted": 0,
+      "metrics": {
+        "GMFE": 1.002235893718994,
+        "AFE": 1.000848541045419,
+        "within_1.25fold": 100.0,
+        "within_1.5fold": 100.0,
+        "within_2fold": 100.0,
+        "within_1sd": null,
+        "within_2sd": null
+      }
+    },
+    {
+      "context": "dose",
+      "name": "other healthy data",
+      "role": "validation",
+      "description": "",
+      "selection": "unclaimed validation data within route in [IV] and health in [HEALTHY]",
+      "n_points": 5,
+      "n_mappings": 1,
+      "n_studies": 1,
+      "outliers_dropped": 0,
+      "limitation_subtracted": 5,
+      "metrics": {
+        "GMFE": 1.002235893718994,
+        "AFE": 1.000848541045419,
+        "within_1.25fold": 100.0,
+        "within_1.5fold": 100.0,
+        "within_2fold": 100.0,
+        "within_1sd": null,
+        "within_2sd": null
+      }
+    },
+    {
+      "context": "renal",
+      "name": "renal impairment",
+      "role": "validation",
+      "description": "",
+      "selection": "CredA: fm_renal",
+      "n_points": 5,
+      "n_mappings": 1,
+      "n_studies": 1,
+      "outliers_dropped": 0,
+      "limitation_subtracted": 0,
+      "metrics": {
+        "GMFE": 1.002235893718994,
+        "AFE": 1.000848541045419,
+        "within_1.25fold": 100.0,
+        "within_1.5fold": 100.0,
+        "within_2fold": 100.0,
+        "within_1sd": null,
+        "within_2sd": null
+      }
+    }
+  ],
+  "coverage": [
+    {
+      "context": "dose",
+      "field": "route",
+      "value": "IV",
+      "coverage": "validated",
+      "claimed": true,
+      "n_points": 10
+    },
+    {
+      "context": "dose",
+      "field": "health",
+      "value": "HEALTHY",
+      "coverage": "validated",
+      "claimed": true,
+      "n_points": 10
+    },
+    {
+      "context": "renal",
+      "field": "health",
+      "value": "HEALTHY",
+      "coverage": "uncovered",
+      "claimed": true,
+      "n_points": 0
+    },
+    {
+      "context": "renal",
+      "field": "health",
+      "value": "RENAL_IMPAIRMENT",
+      "coverage": "validated",
+      "claimed": true,
+      "n_points": 5
+    }
+  ],
+  "limitations": [
+    {
+      "context": "",
+      "name": "scaled data",
+      "role": "limitation",
+      "description": "data at three times the decay which the model does not describe",
+      "selection": "CredA: fm_limit",
+      "n_points": 5,
+      "n_mappings": 1,
+      "n_studies": 1,
+      "outliers_dropped": 0,
+      "limitation_subtracted": 0,
+      "metrics": {
+        "GMFE": 2.997456535098109,
+        "AFE": 0.33361618034847307,
+        "within_1.25fold": 0.0,
+        "within_1.5fold": 0.0,
+        "within_2fold": 0.0,
+        "within_1sd": null,
+        "within_2sd": null
+      }
+    }
+  ],
+  "unclaimed": [
+    {
+      "fit": "DECAY",
+      "experiment": "CredB",
+      "mapping": "fm_zero",
+      "n": 5
+    }
+  ],
+  "notes": "",
+  "verification": null,
+  "cross_validations": [],
+  "studies": [
+    {
+      "study": "CredA",
+      "folder": null,
+      "fits": [
+        "DECAY"
+      ],
+      "n_points": 30,
+      "recorded": false,
+      "collected": null,
+      "dating": null,
+      "updated": null,
+      "released": null,
+      "pkdb_id": null,
+      "source_digest": null,
+      "pkdb_data_commit": null,
+      "pkdb_data_dirty": null,
+      "n_tables": 0,
+      "changed": null
+    },
+    {
+      "study": "CredB",
+      "folder": null,
+      "fits": [
+        "DECAY"
+      ],
+      "n_points": 10,
+      "recorded": false,
+      "collected": null,
+      "dating": null,
+      "updated": null,
+      "released": null,
+      "pkdb_id": null,
+      "source_digest": null,
+      "pkdb_data_commit": null,
+      "pkdb_data_dirty": null,
+      "n_tables": 0,
+      "changed": null
+    }
+  ],
+  "inputs": [],
+  "vpc": [
+    {
+      "fit": "DECAY",
+      "experiment": "CredA",
+      "mapping": "fm_train",
+      "x": 0.0,
+      "DV": 1.0,
+      "N": 4,
+      "statistic": "mean",
+      "PRED": 1.0,
+      "low": 1.0,
+      "median": 1.0,
+      "high": 1.0,
+      "inside": true
+    },
+    {
+      "fit": "DECAY",
+      "experiment": "CredA",
+      "mapping": "fm_train",
+      "x": 2.0,
+      "DV": 0.67,
+      "N": 4,
+      "statistic": "mean",
+      "PRED": 0.13705887290427876,
+      "low": 0.12879026041235064,
+      "median": 0.3978600569790738,
+      "high": 0.8761755511268127,
+      "inside": true
+    },
+    {
+      "fit": "DECAY",
+      "experiment": "CredA",
+      "mapping": "fm_train",
+      "x": 4.0,
+      "DV": 0.45,
+      "N": 4,
+      "statistic": "mean",
+      "PRED": 0.018785546983006808,
+      "low": 0.018993336481827317,
+      "median": 0.1602674350741888,
+      "high": 0.7679260273281845,
+      "inside": true
+    },
+    {
+      "fit": "DECAY",
+      "experiment": "CredA",
+      "mapping": "fm_train",
+      "x": 6.0,
+      "DV": 0.3,
+      "N": 4,
+      "statistic": "mean",
+      "PRED": 0.0025747823680408975,
+      "low": 0.0030973429822308976,
+      "median": 0.06563429670123697,
+      "high": 0.6732617623495404,
+      "inside": true
+    },
+    {
+      "fit": "DECAY",
+      "experiment": "CredA",
+      "mapping": "fm_train",
+      "x": 8.0,
+      "DV": 0.2,
+      "N": 4,
+      "statistic": "mean",
+      "PRED": 0.0003529045990170874,
+      "low": 0.0005058836083376786,
+      "median": 0.027439980904250802,
+      "high": 0.5907320213939624,
+      "inside": true
+    },
+    {
+      "fit": "DECAY",
+      "experiment": "CredA",
+      "mapping": "fm_dose",
+      "x": 0.0,
+      "DV": 1.0,
+      "N": 4,
+      "statistic": "mean",
+      "PRED": 1.0,
+      "low": 1.0,
+      "median": 1.0,
+      "high": 1.0,
+      "inside": true
+    },
+    {
+      "fit": "DECAY",
+      "experiment": "CredA",
+      "mapping": "fm_dose",
+      "x": 2.0,
+      "DV": 0.67,
+      "N": 4,
+      "statistic": "mean",
+      "PRED": 0.13705887290427876,
+      "low": 0.1309437850011145,
+      "median": 0.3978600569790738,
+      "high": 0.8769058496984073,
+      "inside": true
+    },
+    {
+      "fit": "DECAY",
+      "experiment": "CredA",
+      "mapping": "fm_dose",
+      "x": 4.0,
+      "DV": 0.45,
+      "N": 4,
+      "statistic": "mean",
+      "PRED": 0.018785546983006808,
+      "low": 0.020053603805841213,
+      "median": 0.1602606614541875,
+      "high": 0.7691675257834628,
+      "inside": true
+    },
+    {
+      "fit": "DECAY",
+      "experiment": "CredA",
+      "mapping": "fm_dose",
+      "x": 6.0,
+      "DV": 0.3,
+      "N": 4,
+      "statistic": "mean",
+      "PRED": 0.0025747823680408975,
+      "low": 0.0033802203135649593,
+      "median": 0.06478052559031157,
+      "high": 0.674655934879117,
+      "inside": true
+    },
+    {
+      "fit": "DECAY",
+      "experiment": "CredA",
+      "mapping": "fm_dose",
+      "x": 8.0,
+      "DV": 0.2,
+      "N": 4,
+      "statistic": "mean",
+      "PRED": 0.0003529045990170874,
+      "low": 0.000571510850879297,
+      "median": 0.026725811760341726,
+      "high": 0.5918012480349808,
+      "inside": true
+    },
+    {
+      "fit": "DECAY",
+      "experiment": "CredA",
+      "mapping": "fm_renal",
+      "x": 0.0,
+      "DV": 1.0,
+      "N": 4,
+      "statistic": "mean",
+      "PRED": 1.0,
+      "low": 1.0,
+      "median": 1.0,
+      "high": 1.0,
+      "inside": true
+    },
+    {
+      "fit": "DECAY",
+      "experiment": "CredA",
+      "mapping": "fm_renal",
+      "x": 2.0,
+      "DV": 0.67,
+      "N": 4,
+      "statistic": "mean",
+      "PRED": 0.13705887290427876,
+      "low": 0.12957133403654172,
+      "median": 0.3936005265824754,
+      "high": 0.8770862850458837,
+      "inside": true
+    },
+    {
+      "fit": "DECAY",
+      "experiment": "CredA",
+      "mapping": "fm_renal",
+      "x": 4.0,
+      "DV": 0.45,
+      "N": 4,
+      "statistic": "mean",
+      "PRED": 0.018785546983006808,
+      "low": 0.01966518470633607,
+      "median": 0.1573746562245676,
+      "high": 0.7699568838768508,
+      "inside": true
+    },
+    {
+      "fit": "DECAY",
+      "experiment": "CredA",
+      "mapping": "fm_renal",
+      "x": 6.0,
+      "DV": 0.3,
+      "N": 4,
+      "statistic": "mean",
+      "PRED": 0.0025747823680408975,
+      "low": 0.0032669006540953795,
+      "median": 0.0640410429484485,
+      "high": 0.6759614227732518,
+      "inside": true
+    },
+    {
+      "fit": "DECAY",
+      "experiment": "CredA",
+      "mapping": "fm_renal",
+      "x": 8.0,
+      "DV": 0.2,
+      "N": 4,
+      "statistic": "mean",
+      "PRED": 0.0003529045990170874,
+      "low": 0.0005589130907884904,
+      "median": 0.026723967028488373,
+      "high": 0.5932598961758982,
+      "inside": true
+    },
+    {
+      "fit": "DECAY",
+      "experiment": "CredA",
+      "mapping": "fm_limit",
+      "x": 0.0,
+      "DV": 3.0,
+      "N": 4,
+      "statistic": "mean",
+      "PRED": 1.0,
+      "low": 1.0,
+      "median": 1.0,
+      "high": 1.0,
+      "inside": false
+    },
+    {
+      "fit": "DECAY",
+      "experiment": "CredA",
+      "mapping": "fm_limit",
+      "x": 2.0,
+      "DV": 2.0100000000000002,
+      "N": 4,
+      "statistic": "mean",
+      "PRED": 0.13705887290427876,
+      "low": 0.1298332439593115,
+      "median": 0.3934788872653976,
+      "high": 0.8770179327112553,
+      "inside": false
+    },
+    {
+      "fit": "DECAY",
+      "experiment": "CredA",
+      "mapping": "fm_limit",
+      "x": 4.0,
+      "DV": 1.35,
+      "N": 4,
+      "statistic": "mean",
+      "PRED": 0.018785546983006808,
+      "low": 0.019107878137170596,
+      "median": 0.15806741688705545,
+      "high": 0.7693380081356083,
+      "inside": false
+    },
+    {
+      "fit": "DECAY",
+      "experiment": "CredA",
+      "mapping": "fm_limit",
+      "x": 6.0,
+      "DV": 0.8999999999999999,
+      "N": 4,
+      "statistic": "mean",
+      "PRED": 0.0025747823680408975,
+      "low": 0.0032119279330539547,
+      "median": 0.06436383444557076,
+      "high": 0.6750279349346198,
+      "inside": false
+    },
+    {
+      "fit": "DECAY",
+      "experiment": "CredA",
+      "mapping": "fm_limit",
+      "x": 8.0,
+      "DV": 0.6000000000000001,
+      "N": 4,
+      "statistic": "mean",
+      "PRED": 0.0003529045990170874,
+      "low": 0.0005391400575331132,
+      "median": 0.026732101206596814,
+      "high": 0.5924026183659048,
+      "inside": false
+    },
+    {
+      "fit": "DECAY",
+      "experiment": "CredA",
+      "mapping": "fm_subject",
+      "x": 0.0,
+      "DV": 1.0,
+      "N": 4,
+      "statistic": "mean",
+      "PRED": 1.0,
+      "low": 1.0,
+      "median": 1.0,
+      "high": 1.0,
+      "inside": true
+    },
+    {
+      "fit": "DECAY",
+      "experiment": "CredA",
+      "mapping": "fm_subject",
+      "x": 2.0,
+      "DV": 0.67,
+      "N": 4,
+      "statistic": "mean",
+      "PRED": 0.13705887290427876,
+      "low": 0.13056774434987373,
+      "median": 0.39473286932498075,
+      "high": 0.8765530190154718,
+      "inside": true
+    },
+    {
+      "fit": "DECAY",
+      "experiment": "CredA",
+      "mapping": "fm_subject",
+      "x": 4.0,
+      "DV": 0.45,
+      "N": 4,
+      "statistic": "mean",
+      "PRED": 0.018785546983006808,
+      "low": 0.01976290882371911,
+      "median": 0.1581431657215296,
+      "high": 0.7686121987763698,
+      "inside": true
+    },
+    {
+      "fit": "DECAY",
+      "experiment": "CredA",
+      "mapping": "fm_subject",
+      "x": 6.0,
+      "DV": 0.3,
+      "N": 4,
+      "statistic": "mean",
+      "PRED": 0.0025747823680408975,
+      "low": 0.0032535404273988104,
+      "median": 0.06475586294825032,
+      "high": 0.673988918047015,
+      "inside": true
+    },
+    {
+      "fit": "DECAY",
+      "experiment": "CredA",
+      "mapping": "fm_subject",
+      "x": 8.0,
+      "DV": 0.2,
+      "N": 4,
+      "statistic": "mean",
+      "PRED": 0.0003529045990170874,
+      "low": 0.000541938327859446,
+      "median": 0.027090872676169876,
+      "high": 0.591480908025487,
+      "inside": true
+    },
+    {
+      "fit": "DECAY",
+      "experiment": "CredA",
+      "mapping": "fm_outlier",
+      "x": 0.0,
+      "DV": 1.0,
+      "N": 4,
+      "statistic": "mean",
+      "PRED": 1.0,
+      "low": 1.0,
+      "median": 1.0,
+      "high": 1.0,
+      "inside": true
+    },
+    {
+      "fit": "DECAY",
+      "experiment": "CredA",
+      "mapping": "fm_outlier",
+      "x": 2.0,
+      "DV": 0.67,
+      "N": 4,
+      "statistic": "mean",
+      "PRED": 0.13705887290427876,
+      "low": 0.12879026041235064,
+      "median": 0.39796782893371196,
+      "high": 0.8770379941084088,
+      "inside": true
+    },
+    {
+      "fit": "DECAY",
+      "experiment": "CredA",
+      "mapping": "fm_outlier",
+      "x": 4.0,
+      "DV": 0.45,
+      "N": 4,
+      "statistic": "mean",
+      "PRED": 0.018785546983006808,
+      "low": 0.019042476319479605,
+      "median": 0.1593651934974979,
+      "high": 0.7696357110952096,
+      "inside": true
+    },
+    {
+      "fit": "DECAY",
+      "experiment": "CredA",
+      "mapping": "fm_outlier",
+      "x": 6.0,
+      "DV": 0.3,
+      "N": 4,
+      "statistic": "mean",
+      "PRED": 0.0025747823680408975,
+      "low": 0.0031120741781355374,
+      "median": 0.06475586294825032,
+      "high": 0.6752527962567462,
+      "inside": true
+    },
+    {
+      "fit": "DECAY",
+      "experiment": "CredA",
+      "mapping": "fm_outlier",
+      "x": 8.0,
+      "DV": 0.2,
+      "N": 4,
+      "statistic": "mean",
+      "PRED": 0.0003529045990170874,
+      "low": 0.0005265894899973748,
+      "median": 0.027090872676169872,
+      "high": 0.5927823972787726,
+      "inside": true
+    },
+    {
+      "fit": "DECAY",
+      "experiment": "CredB",
+      "mapping": "fm_dose",
+      "x": 0.0,
+      "DV": 1.0,
+      "N": 4,
+      "statistic": "mean",
+      "PRED": 1.0,
+      "low": 1.0,
+      "median": 1.0,
+      "high": 1.0,
+      "inside": true
+    },
+    {
+      "fit": "DECAY",
+      "experiment": "CredB",
+      "mapping": "fm_dose",
+      "x": 2.0,
+      "DV": 0.67,
+      "N": 4,
+      "statistic": "mean",
+      "PRED": 0.13705887290427876,
+      "low": 0.13008781543684383,
+      "median": 0.39367735310349566,
+      "high": 0.876703979265321,
+      "inside": true
+    },
+    {
+      "fit": "DECAY",
+      "experiment": "CredB",
+      "mapping": "fm_dose",
+      "x": 4.0,
+      "DV": 0.45,
+      "N": 4,
+      "statistic": "mean",
+      "PRED": 0.018785546983006808,
+      "low": 0.019812048661371394,
+      "median": 0.1579916680525813,
+      "high": 0.7687799877341939,
+      "inside": true
+    },
+    {
+      "fit": "DECAY",
+      "experiment": "CredB",
+      "mapping": "fm_dose",
+      "x": 6.0,
+      "DV": 0.3,
+      "N": 4,
+      "statistic": "mean",
+      "PRED": 0.0025747823680408975,
+      "low": 0.0032121604261998262,
+      "median": 0.06355691390495177,
+      "high": 0.6743284171741599,
+      "inside": true
+    },
+    {
+      "fit": "DECAY",
+      "experiment": "CredB",
+      "mapping": "fm_dose",
+      "x": 8.0,
+      "DV": 0.2,
+      "N": 4,
+      "statistic": "mean",
+      "PRED": 0.0003529045990170874,
+      "low": 0.0005354139298830836,
+      "median": 0.026378027574607332,
+      "high": 0.5917829392363569,
+      "inside": true
+    },
+    {
+      "fit": "DECAY",
+      "experiment": "CredB",
+      "mapping": "fm_zero",
+      "x": 0.0,
+      "DV": 0.0,
+      "N": 4,
+      "statistic": "mean",
+      "PRED": 1.0,
+      "low": 1.0,
+      "median": 1.0,
+      "high": 1.0,
+      "inside": false
+    },
+    {
+      "fit": "DECAY",
+      "experiment": "CredB",
+      "mapping": "fm_zero",
+      "x": 2.0,
+      "DV": 0.0,
+      "N": 4,
+      "statistic": "mean",
+      "PRED": 0.13705887290427876,
+      "low": 0.13037224167879552,
+      "median": 0.39666797459972153,
+      "high": 0.8769872354906869,
+      "inside": false
+    },
+    {
+      "fit": "DECAY",
+      "experiment": "CredB",
+      "mapping": "fm_zero",
+      "x": 4.0,
+      "DV": 0.0,
+      "N": 4,
+      "statistic": "mean",
+      "PRED": 0.018785546983006808,
+      "low": 0.01981204866137139,
+      "median": 0.16016526364322536,
+      "high": 0.7692390171752522,
+      "inside": false
+    },
+    {
+      "fit": "DECAY",
+      "experiment": "CredB",
+      "mapping": "fm_zero",
+      "x": 6.0,
+      "DV": 0.0,
+      "N": 4,
+      "statistic": "mean",
+      "PRED": 0.0025747823680408975,
+      "low": 0.003207510563282403,
+      "median": 0.06563429670123695,
+      "high": 0.67501575941504,
+      "inside": false
+    },
+    {
+      "fit": "DECAY",
+      "experiment": "CredB",
+      "mapping": "fm_zero",
+      "x": 8.0,
+      "DV": 0.0,
+      "N": 4,
+      "statistic": "mean",
+      "PRED": 0.0003529045990170874,
+      "low": 0.0005391400575331132,
+      "median": 0.02717456470091455,
+      "high": 0.5923953829975818,
+      "inside": false
+    }
+  ]
+}

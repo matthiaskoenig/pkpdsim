@@ -1,233 +1,104 @@
-"""The credibility of a model for its contexts of use.
+"""The evidence and the battery of the credibility of a PBPK model.
 
-A model declares what it is used for (`ContextOfUse`), how risky a wrong answer
-is, which evidence supports it and when it is accepted (`Credibility`). The
-evidence is selected from the data points of the adopted fits (`evaluate_fits`,
-`mapping_table`) with the kinds their records store (`select`,
-`check_declaration`). The assessment (`assess`, `CredibilityAssessment`) gives
-every context of use its metrics, acceptance, domain coverage, verdict and the
-factors of V&V 40 (`FACTORS`) as plain data, written as JSON. The verification
-(`verify`) evaluates the fits again with tightened tolerances and a second
-integration method and checks the builds, for the factors of the verification,
-and runs the battery of the checks of the builds (`run_battery`): mass
-balance, non-negativity, zero dose, steady state, superposition, a second
-simulator, plausibility and rebuild. The temporal validation (`chronology`)
-splits the decisive points by whether the model collected their study after
-the fit, and the provenance of the study data (`study_data`) names the
-collection every study with points was written by. The parameter
-uncertainty of the adopted fits is propagated to the decisive predictions
-(`propagate`, `UncertaintySettings`), the probability that the acceptance is
-met over the draws of the parameters. The simulated inputs of the mappings,
-the covariates of the subjects and the doses, are checked against the reported
-ones of their studies (`input_checks`), the equivalency of the inputs, and
-the decisive points with the declared variability of the subjects
-(`predictive_checks`, `VariabilitySettings`), the visual predictive check.
+The credibility of a model for its contexts of use is `sbmlsim.credibility`:
+the declaration, the selection of the evidence, the assessment, the
+verification, the report and the scorecard. pkpdsim adds what is specific to
+the models of pkdb_models, registered by every `pkpdsim.model.PKPDModel`
+(`pkpdsim.model.CREDIBILITY_SETTINGS`: the metadata `PKPDMappingMetaData`, the
+fields of the domain `DOMAIN_FIELDS`, the extensions and the battery hook):
+
+- the evidence extensions (`EXTENSIONS`, `sbmlsim.credibility.extensions`):
+  the ratio pairs of the ratio quantities with the limits of Guest et al.
+  (`ratios`, `Ratio`, `GuestAcceptance`), the temporal validation on the
+  studies collected after their fit (`temporal`), the equivalency of the
+  simulated and the reported inputs of the subjects (`inputs`) and the
+  provenance of the study data (`studies`);
+- the battery hook of the PK checks (`PK_BATTERY`, `pkpdsim.credibility.battery`):
+  mass balance, zero dose and superposition on the doses of every route of
+  every substance, with the fates of the doses.
 """
 
-from pkpdsim.credibility.assessment import (
-    AcceptanceRecord,
-    ContextResult,
-    Coverage,
-    CoverageEntry,
-    CredibilityAssessment,
-    EvidenceResult,
-    Provenance,
-    QuantityRecord,
-    UnclaimedRecord,
-    Verdict,
-    assess,
-    assess_table,
-    describe_selection,
-)
+from typing import Final
+
 from pkpdsim.credibility.battery import (
-    Battery,
-    BatteryResult,
-    BatteryStatus,
+    MASS_BALANCE,
+    PK_BATTERY,
+    PK_CHECKS,
+    SUPERPOSITION,
+    ZERO_DOSE,
     Fate,
-    run_battery,
+    FlatBuild,
+    PKBattery,
 )
-from pkpdsim.credibility.check import check_declaration
-from pkpdsim.credibility.declaration import (
-    DEFAULT_COVARIATES,
-    UNCLAIMED,
-    Acceptance,
-    AcceptanceResult,
-    AcceptanceRule,
-    AfeRange,
-    Consequence,
-    ContextOfUse,
-    CouLevel,
-    Credibility,
-    DeclarationError,
-    Domain,
-    Evidence,
-    EvidenceRole,
-    GuestAcceptance,
-    Influence,
-    Level,
-    MaxGmfe,
-    QuantityOfInterest,
-    Ratio,
-    Risk,
-    Selection,
-    Summary,
-    Unclaimed,
-)
-from pkpdsim.credibility.factors import FACTORS, Factor, FactorRecord, FactorStatus
 from pkpdsim.credibility.inputs import (
+    DEFAULT_COVARIATES,
+    INPUTS,
     InputCheck,
+    InputsExtension,
     InputsRecord,
     InputStatus,
+    InputSummary,
     input_checks,
 )
-from pkpdsim.credibility.lock import LockMismatchError, lock_differences, write_lock
-from pkpdsim.credibility.ratios import RatioRecord, guest_limit, ratio_pairs
-from pkpdsim.credibility.records import (
-    FitTable,
-    KindMismatchError,
-    MappingLookup,
-    evaluate_fits,
-    kind_differences,
-    mapping_table,
-    recorded_kinds,
-)
-from pkpdsim.credibility.risk import (
-    DEFAULT_ACCEPTANCE,
-    DEFAULT_MIN_POINTS,
+from pkpdsim.credibility.ratios import (
     DEFAULT_RATIO_ACCEPTANCE,
-    RISK_TABLE,
-    default_acceptance,
-    model_risk,
+    GUEST_DELTA,
+    RATIOS,
+    GuestAcceptance,
+    Ratio,
+    RatioRecord,
+    RatiosExtension,
+    Summary,
+    guest_limit,
 )
-from pkpdsim.credibility.selection import (
-    EvidenceSelection,
-    SelectionError,
-    Selections,
-    normalize_observable,
-    select,
-)
-from pkpdsim.credibility.studies import StudyData, study_data
+from pkpdsim.credibility.studies import STUDIES, StudiesExtension, StudyData, study_data
 from pkpdsim.credibility.temporal import (
+    TEMPORAL,
     Chronology,
+    TemporalExtension,
     TemporalRecord,
     TemporalStudy,
     chronology,
 )
-from pkpdsim.credibility.uncertainty import (
-    Propagation,
-    UncertaintyRecord,
-    UncertaintySettings,
-    propagate,
-)
-from pkpdsim.credibility.variability import (
-    PredictiveChecks,
-    VariabilityRecord,
-    VariabilitySettings,
-    predictive_checks,
-)
-from pkpdsim.credibility.verification import (
-    BATTERY_CHECKS,
-    Check,
-    CheckRecord,
-    Verification,
-    VerificationSummary,
-    verify,
-)
+
+#: the evidence extensions of pkpdsim, in the order a `PKPDModel` registers them
+EXTENSIONS: Final = (RATIOS, TEMPORAL, INPUTS, STUDIES)
 
 __all__ = [
-    "BATTERY_CHECKS",
-    "DEFAULT_ACCEPTANCE",
     "DEFAULT_COVARIATES",
-    "DEFAULT_MIN_POINTS",
     "DEFAULT_RATIO_ACCEPTANCE",
-    "FACTORS",
-    "RISK_TABLE",
-    "UNCLAIMED",
-    "Acceptance",
-    "AcceptanceRecord",
-    "AcceptanceResult",
-    "AcceptanceRule",
-    "AfeRange",
-    "Battery",
-    "BatteryResult",
-    "BatteryStatus",
-    "Check",
-    "CheckRecord",
+    "EXTENSIONS",
+    "GUEST_DELTA",
+    "INPUTS",
+    "MASS_BALANCE",
+    "PK_BATTERY",
+    "PK_CHECKS",
+    "RATIOS",
+    "STUDIES",
+    "SUPERPOSITION",
+    "TEMPORAL",
+    "ZERO_DOSE",
     "Chronology",
-    "Consequence",
-    "ContextOfUse",
-    "ContextResult",
-    "CouLevel",
-    "Coverage",
-    "CoverageEntry",
-    "Credibility",
-    "CredibilityAssessment",
-    "DeclarationError",
-    "Domain",
-    "Evidence",
-    "EvidenceResult",
-    "EvidenceRole",
-    "EvidenceSelection",
-    "Factor",
-    "FactorRecord",
-    "FactorStatus",
     "Fate",
-    "FitTable",
+    "FlatBuild",
     "GuestAcceptance",
-    "Influence",
     "InputCheck",
     "InputStatus",
+    "InputSummary",
+    "InputsExtension",
     "InputsRecord",
-    "KindMismatchError",
-    "Level",
-    "LockMismatchError",
-    "MappingLookup",
-    "MaxGmfe",
-    "PredictiveChecks",
-    "Propagation",
-    "Provenance",
-    "QuantityOfInterest",
-    "QuantityRecord",
+    "PKBattery",
     "Ratio",
     "RatioRecord",
-    "Risk",
-    "Selection",
-    "SelectionError",
-    "Selections",
+    "RatiosExtension",
+    "StudiesExtension",
     "StudyData",
     "Summary",
+    "TemporalExtension",
     "TemporalRecord",
     "TemporalStudy",
-    "UncertaintyRecord",
-    "UncertaintySettings",
-    "Unclaimed",
-    "UnclaimedRecord",
-    "VariabilityRecord",
-    "VariabilitySettings",
-    "Verdict",
-    "Verification",
-    "VerificationSummary",
-    "assess",
-    "assess_table",
-    "check_declaration",
     "chronology",
-    "default_acceptance",
-    "describe_selection",
-    "evaluate_fits",
     "guest_limit",
     "input_checks",
-    "kind_differences",
-    "lock_differences",
-    "mapping_table",
-    "model_risk",
-    "normalize_observable",
-    "predictive_checks",
-    "propagate",
-    "ratio_pairs",
-    "recorded_kinds",
-    "run_battery",
-    "select",
     "study_data",
-    "verify",
-    "write_lock",
 ]

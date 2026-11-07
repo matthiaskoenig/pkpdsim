@@ -1,27 +1,60 @@
-"""Hand-built tables of the data points of the credibility test package."""
+"""Hand-built tables of the data points of the credibility test package.
+
+The tables are assessed by `sbmlsim.credibility.assess_table` with the evidence
+extensions of pkpdsim (`assess`), as a `PKPDModel` registers them.
+"""
 
 from collections.abc import Mapping
 from types import MappingProxyType
 
+import numpy as np
 import pandas as pd
 from pkpdsim_credibility import MODEL
 from pkpdsim_credibility.experiments import CredA, CredB
-from sbmlsim.fit import FitMapping
-from sbmlsim.fit.helpers import FitMappings
-from sbmlsim.fit.metrics import metadata_dict
-
-from pkpdsim.credibility import (
-    BATTERY_CHECKS,
+from sbmlsim.credibility import (
+    CHECKS,
     Battery,
     BatteryResult,
     BatteryStatus,
     Check,
-    Fate,
+    Credibility,
+    CredibilityAssessment,
+    FitPropagation,
     FitTable,
+    PredictiveChecks,
+    PropagationSettings,
+    Provenance,
+    VariabilitySettings,
     Verification,
     VerificationSummary,
+    assess_table,
 )
-from pkpdsim.credibility.verification import LIMIT, SCALE_FLOOR, TIGHTENING
+from sbmlsim.credibility.uncertainty import FitDraws
+from sbmlsim.credibility.verification import (
+    INTEGRATOR,
+    LIMIT,
+    SCALE_FLOOR,
+    TIGHTENING,
+    TOLERANCES,
+)
+from sbmlsim.fit import FitMapping
+from sbmlsim.fit.helpers import FitMappings
+from sbmlsim.fit.metrics import metadata_dict
+from sbmlsim.fit.variability import Variability
+from sbmlsim.simulation.sampling import LogNormal
+
+from pkpdsim.credibility import EXTENSIONS, PK_BATTERY, Fate
+
+#: the provenance of the assessments of the hand-built tables
+PROVENANCE = Provenance(
+    model="credibility",
+    title="Toy model with every kind of evidence",
+    fits=["DECAY_20261001_120000__abcde"],
+    versions={"pkpdsim": "0.0.0"},
+    commit=None,
+    dirty=None,
+    date="2026-11-04T12:00:00+01:00",
+)
 
 #: the kinds of the adopted fit of the test package, see `test_credibility_package`
 KINDS = {
@@ -109,13 +142,13 @@ def verification_of(
         predictions=MappingProxyType(
             {
                 check: ipred * factors.get(check, factor)
-                for check in (Check.TOLERANCES, Check.INTEGRATOR)
+                for check in (TOLERANCES, INTEGRATOR)
             }
         ),
         failures=MappingProxyType(
             {
                 check: MappingProxyType(failures.get(check, {}))
-                for check in (Check.TOLERANCES, Check.INTEGRATOR)
+                for check in (TOLERANCES, INTEGRATOR)
             }
         ),
         summary=VerificationSummary(
@@ -137,17 +170,19 @@ def verification_of(
 
 
 def battery_of(failed: Check | None = None) -> Battery:
-    """Get a battery without a simulation: the second simulator is not applicable.
+    """Get a battery of the PK hook without a simulation.
+
+    The second simulator is not applicable, the fates are one dose.
 
     Args:
         failed: a check which fails with the problem `broken`, every other
             check passes.
     """
     results = []
-    for check in BATTERY_CHECKS:
-        if check is Check.CROSS_SIMULATOR:
+    for check in (CHECKS[c] for c in PK_BATTERY.order):
+        if check.id == "cross_simulator":
             status = BatteryStatus.NOT_APPLICABLE
-        elif check is failed:
+        elif check == failed:
             status = BatteryStatus.FAILED
         else:
             status = BatteryStatus.PASSED
@@ -161,20 +196,111 @@ def battery_of(failed: Check | None = None) -> Battery:
                 else 1e-9,
                 at="" if status is BatteryStatus.NOT_APPLICABLE else "male IVDOSE_d",
                 problems=("broken",) if status is BatteryStatus.FAILED else (),
-                statement=f"The check {check.value}.",
+                statement=f"The check {check.id}.",
             )
         )
+    fate = Fate(
+        build="male",
+        dose="IVDOSE_d",
+        substance="d",
+        amount=0.1,
+        parts={"body": 0.01, "urine": 0.04, "ELIM": -0.05},
+        imbalance=1e-15,
+    )
     return Battery(
         results=tuple(results),
-        fates=(
-            Fate(
-                build="male",
-                dose="IVDOSE_d",
-                substance="d",
-                amount=0.1,
-                parts={"body": 0.01, "urine": 0.04, "ELIM": -0.05},
-                imbalance=1e-15,
-            ),
-        ),
+        sections={"fates": [fate.to_dict()]},
         settings="roadrunner CVODE BDF.",
+    )
+
+
+def propagation_of(spread: float, failed: int = 0) -> FitPropagation:
+    """Get predictions per draw of the table, the reference times a factor of the spread."""
+    settings = PropagationSettings(draws=256, seed=1)
+    table = fit_table().table
+    rng = np.random.default_rng(1)
+    factors = np.exp(rng.normal(0.0, spread, settings.draws))
+    values = np.outer(table["IPRED"].to_numpy(dtype=float), factors)
+    values[:, :failed] = np.nan
+    draws = FitDraws(
+        fit_id="DECAY_20261001_120000__abcde",
+        pids=("k",),
+        values=factors[:, None],
+        units={"k": "1/min"},
+        correlated=False,
+        note="nothing to correlate",
+    )
+    return FitPropagation(
+        settings=settings,
+        draws={"DECAY": draws},
+        predictions=pd.DataFrame(values, index=table.index),
+        failed={"DECAY": failed},
+    )
+
+
+def predictive_checks_of(width: float) -> PredictiveChecks:
+    """Get bands of the points of the table, `width` around the observations.
+
+    A width below 1 puts every observation outside its band.
+    """
+    table = fit_table().table
+    dv = table["DV"].to_numpy(dtype=float)
+    low, high = dv / (1 + width), dv * (1 + width)
+    if width < 1:
+        low, high = dv * 2.0, dv * 3.0
+    points = pd.DataFrame(
+        {
+            "N": 4,
+            "statistic": "mean",
+            "PRED": table["IPRED"].to_numpy(dtype=float),
+            "low": low,
+            "median": dv,
+            "high": high,
+            "inside": [
+                bool(lo <= v <= hi) for v, lo, hi in zip(dv, low, high, strict=True)
+            ],
+        },
+        index=table.index,
+    )
+    return PredictiveChecks(
+        settings=VariabilitySettings(subjects=16, groups=10),
+        variability=Variability({"k": LogNormal(cv=0.2)}),
+        points=points,
+        vectors={"DECAY": 1},
+        studies={"DECAY": 1},
+        failed={"DECAY": 0},
+    )
+
+
+def assess(
+    credibility: Credibility,
+    fits: FitTable,
+    verification: Verification | None = None,
+    *,
+    propagation: FitPropagation | None = None,
+    variability: PredictiveChecks | None = None,
+    prepared: Mapping[str, object] | None = None,
+) -> CredibilityAssessment:
+    """Assess a declaration on a table with the evidence extensions of pkpdsim.
+
+    Args:
+        credibility: the declaration.
+        fits: the table.
+        verification: the verification, none without.
+        propagation: the predictions of the draws of the parameters, none
+            without.
+        variability: the predictive checks, none without.
+        prepared: what an extension prepared by its name, e.g. the chronology
+            `{"temporal": ...}`; an extension without assesses nothing but the
+            ratio pairs, which need nothing prepared.
+    """
+    return assess_table(
+        credibility,
+        fits,
+        PROVENANCE,
+        verification,
+        propagation=propagation,
+        variability=variability,
+        extensions=EXTENSIONS,
+        prepared=prepared,
     )
