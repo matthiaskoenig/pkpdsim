@@ -80,12 +80,16 @@ def test_the_archive_has_the_flat_model_as_master(tmp_path: Path) -> None:
 
 
 def test_the_archive_carries_the_extra_models(tmp_path: Path) -> None:
-    """An extra SBML file is an entry by its stem, after the others."""
+    """An extra SBML file is an entry by its stem, after the models.
+
+    The figure and the extra files come after the extra models, the order of
+    `sbmlsim.release.archive.write_archive`.
+    """
     (tmp_path / "models").mkdir()
     extra = tmp_path / "models" / "simple_fluid.xml"
     extra.write_text(MINIMAL_SBML, encoding="utf-8")
     results = _create(tmp_path, extra=(extra,))
-    assert list(results)[-1] == "simple_fluid"
+    assert list(results)[-2:] == ["simple_fluid", "simple_svg"]
     entry = results["simple_fluid"]["entry"]
     assert entry.location == "./models/simple_fluid.xml"
     assert entry.format == EntryFormat.SBML_L3V2
@@ -140,7 +144,12 @@ def test_the_archive_carries_extra_files(tmp_path: Path) -> None:
     png = tmp_path / "figures" / "simple.png"
     png.write_bytes(b"\x89PNG")
     results = _create(tmp_path, extra=(extra,), files=(md, png))
-    assert list(results)[-3:] == ["simple_fluid", "simple_fluid_md", "simple_png"]
+    assert list(results)[-4:] == [
+        "simple_fluid",
+        "simple_svg",
+        "simple_fluid_md",
+        "simple_png",
+    ]
     assert results["simple_fluid_md"]["entry"].location == "./models/simple_fluid.md"
     assert results["simple_fluid_md"]["entry"].format == EntryFormat.MARKDOWN
     assert results["simple_png"]["entry"].location == "./figures/simple.png"

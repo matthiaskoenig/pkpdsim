@@ -26,7 +26,9 @@ the tests the `sbmlsim.project.CheckSettings` and the release metadata the
 `sbmlsim.release.settings.ReleaseSettings` of sbmlsim. The keywords of the
 model packages (`path`, `model_path`, `female_model_path`, `data_paths`,
 `fit_definitions`, `fits`, `fits_path`, `factory_path`, `figures`) are mapped
-onto the fields of the project when a model is created, see `PKPDModel`.
+onto the fields of the project when a model is created, see `PKPDModel`; the
+release settings of a model are the ones of the framework pkpdsim, with its
+release hook (`pkpdsim.release.hook`), see `RELEASE_SETTINGS`.
 
 A model whose studies include women has a female build next to the male one
 (`female_model_path`, the factory builds both from one definition, see
@@ -44,6 +46,7 @@ therefore imports sbmlsim's plotting.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -61,6 +64,7 @@ from sbmlsim.project import (
     normalize_formats,
     resolve,
 )
+from sbmlsim.release.settings import ReleaseSettings
 
 from pkpdsim.sex import Sex
 
@@ -113,6 +117,19 @@ CREDIBILITY_SETTINGS = CredibilitySettings(
     ),
     battery="pkpdsim.credibility.battery:PK_BATTERY",
 )
+
+#: the release settings of pkpdsim which a model sets where its own release
+#: settings keep the default of sbmlsim, see `sbmlsim.release.settings`: the
+#: framework of the release, the core libraries whose release notes the release
+#: notes summarize, the owner of their repositories and the release hook of
+#: pkpdsim (`pkpdsim.release.hook`, a reference, so the model package imports
+#: none of it)
+RELEASE_SETTINGS: dict[str, Any] = {
+    "framework": "pkpdsim",
+    "core_libraries": ("pkpdsim", "sbmlsim", "sbmlutils"),
+    "library_owner": "matthiaskoenig",
+    "hook": "pkpdsim.release.hook:HOOK",
+}
 
 #: the keywords of a model package which are fields of the project by another name
 _RENAMED: dict[str, str] = {
@@ -400,6 +417,48 @@ def _directories(data: dict[str, Any]) -> None:
         data["fits_dir"] = Path(factory_dir).parent / "fits"
 
 
+def _release(data: dict[str, Any]) -> None:
+    """Set the release settings of pkpdsim and the archive of a model.
+
+    The fields of `RELEASE_SETTINGS` are set where the release settings of the
+    model keep the default of sbmlsim; the archive of the release
+    (`ReleaseSettings.archive`) is `archive_path`, relative to the root of the
+    model, none without it.
+
+    Args:
+        data: the keywords of the model, changed in place.
+
+    Raises:
+        ValueError: for an archive outside of the root of a model which is
+            released.
+    """
+    release = data.get("release")
+    if not isinstance(release, ReleaseSettings):
+        return
+    defaults = {field.name: field.default for field in dataclasses.fields(release)}
+    changes = {
+        name: value
+        for name, value in RELEASE_SETTINGS.items()
+        if getattr(release, name) == defaults[name]
+    }
+    archive, root = data.get("archive_path"), data.get("root")
+    if archive is None:
+        changes["archive"] = None
+    elif root is not None:
+        root = Path(root)
+        path = Path(archive) if Path(archive).is_absolute() else root / archive
+        try:
+            relative = path.resolve().relative_to(root.resolve())
+        except ValueError:
+            raise ValueError(
+                f"The archive '{archive}' lies outside of the root '{root}' of the "
+                "model, a release copies it from the model package."
+            ) from None
+        changes["archive"] = relative.as_posix()
+    if changes:
+        data["release"] = dataclasses.replace(release, **changes)
+
+
 class PKPDModel(Project):
     """A PBPK/PD model: what the commands, the verification and the tests need.
 
@@ -427,13 +486,19 @@ class PKPDModel(Project):
     - `figures` as a `FigureSettings`: `figure_settings` and `figures`
       (`FigureSettings.sbmlsim_settings`, `FigureSettings.outputs`).
 
+    The release settings (`release`) get the framework `pkpdsim`, its core
+    libraries and the release hook of pkpdsim where they keep the defaults of
+    sbmlsim (`RELEASE_SETTINGS`), and `archive_path` is their archive.
+
     A keyword and its field are not given together. A model is a frozen
     pydantic model: `replace` gives a changed copy, by the names of the
     fields.
 
     Attributes:
         archive_path: the COMBINE archive the factory creates, linked by the
-            `factory` action.
+            `factory` action; the archive of the release
+            (`ReleaseSettings.archive`), inside of the root of a released
+            model.
         results_path: the directory of the results, `<root>/results` by
             default.
         reduced_selections: simulate only the selections the experiments need.
@@ -533,6 +598,7 @@ class PKPDModel(Project):
         _figures(data)
         _directories(data)
         _actions(data)
+        _release(data)
         return data
 
     @model_validator(mode="after")

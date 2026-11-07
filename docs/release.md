@@ -7,9 +7,11 @@ pkpd_release pkdb_models.models.hctz --version 0.8.0 --no-publish
 pkpd_release pkdb_models.models.hctz --version 0.8.0
 ```
 
-The first command builds the release in the release repository and stops before the commit, so the build can be looked at; the second one publishes it. Once a model has its release metadata and the one-time setup is done, a release needs no manual step before, during or after the command.
+The first command builds the release into a clone of the release repository and stops before the commit, so the build can be looked at; the second one publishes it. Once a model has its release metadata and the one-time setup is done, a release needs no manual step before, during or after the command.
 
-The release repository holds only what the command generates. The models, the simulations and the fit reports are created in the release repository from the exported package and its released dependencies, so a release proves that the model runs on its own. Nothing in a release repository is edited by hand: a change is made in the model package and released again.
+The release is the one of sbmlsim (`sbmlsim.release`): the build is the kind `release` of its run layer and the publishing the step `python -m sbmlsim.release publish`, see the page of the run layer of sbmlsim. `pkpd_release` runs both with the release settings and the release hook of pkpdsim, which add what is pharmacokinetic (see [What pkpdsim adds](#what-pkpdsim-adds)).
+
+The release repository holds only what the build generates. The models, the simulations and the fit reports are created in the release repository from the exported package and its released dependencies, so a release proves that the model runs on its own. Nothing in a release repository is edited by hand: a change is made in the model package and released again.
 
 ## The release metadata of a model
 
@@ -48,7 +50,14 @@ print(release.missing())
 - `exclude`: paths of the model folder which are not released, by default `TODO.md`, `literature/` and `thesis/`.
 - `first_year`: the year of the first release, the start of the copyright.
 
-The model object sets it as `PKPDModel(..., release=release)`. A model without `release`, with an empty field or a `first_year` which is no positive year cannot be released; the command names the missing fields. An empty `exclude` releases the whole model folder. The adopted fits of `MODEL.fits` are released with their records, the archive of `MODEL.archive_path` is attached to the GitHub release.
+The model object sets it as `PKPDModel(..., release=release)`. A model without `release`, with an empty field or a `first_year` which is no positive year cannot be released; the command names the missing fields. An empty `exclude` releases the whole model folder. The adopted fits of `MODEL.fits` are released with their records, the archive of `MODEL.archive_path` is attached to the GitHub release; it lies inside the model package.
+
+The model object adds the settings of pkpdsim to the release settings of sbmlsim where they keep the defaults of sbmlsim (`pkpdsim.model.RELEASE_SETTINGS`), so a model package writes none of them:
+
+- `framework`: `pkpdsim`, the package the release is built with; the lock of the release must contain it, `release.json` records its version and the release notes say "with pkpdsim <version>".
+- `core_libraries`: `pkpdsim`, `sbmlsim` and `sbmlutils`, whose release notes the release notes summarize; `library_owner`: `matthiaskoenig`, the owner of their repositories.
+- `hook`: `pkpdsim.release.hook:HOOK`, the release hook of pkpdsim.
+- `archive`: `archive_path`, relative to the root of the model.
 
 ## One-time setup
 
@@ -67,35 +76,33 @@ A release depends on released packages only: the version of pkpdsim which the mo
 ## The command
 
 ```bash
-pkpd_release PACKAGE --version VERSION [--repo PATH] [--no-publish] [--pkpdsim-path PATH] [--workers N]
+pkpd_release PACKAGE --version VERSION [--repo PATH] [--out DIR] [--no-publish] [--pkpdsim-path PATH] [--workers N]
 ```
 
 - `PACKAGE`: the dotted name of the model package, e.g. `pkdb_models.models.hctz`.
 - `--version`: the version of the release, `X.Y.Z`, greater than the last tag.
-- `--repo`: the checkout of the release repository; by default a sibling of the monorepo named like the repository (`../hctz-model`), cloned when missing.
+- `--repo`: the checkout of the release repository; by default a sibling of the monorepo named like the repository (`../hctz-model`). The build clones it and reads it only, a missing checkout is not created and the build clones the repository on GitHub instead; after publishing a clean checkout on `main` is fast-forwarded to the release.
+- `--out`: the output of the build, which holds the release repository in `DIR/repository` and the records of the run of the kind (`run.json`, `spec.json`, `summary.json`, `progress.jsonl`); by default `<repo>-release-<version>` next to the checkout (`../hctz-model-release-0.8.0`).
 - `--no-publish`: build the release and stop before the commit.
 - `--pkpdsim-path`: a local checkout of pkpdsim instead of the released one, for a test of a pkpdsim which is not released yet; only with `--no-publish`.
-- `--workers`: the number of workers of the simulations, `auto` by default.
+- `--workers`: the number of workers of the simulations, `auto` (the CPUs of the quota) by default.
 
-The steps, in order; the first failure stops the release. Every stage prints a line, and the long steps (`uv`, the simulations, the fit reports, `git push`, `docker build` and `docker push`) show their output as they run:
+The steps, in order; the first failure stops the release and ends the command with exit code 1 and the reason:
 
-1. **Checks**, before anything is changed: the release metadata is complete, the monorepo is clean and committed (its commit is recorded in the release), the release repository is a checkout of the repository on `main`, up to date with the remote, without local commits (besides the release commit of a release which failed while publishing) and without changes which no release made, the version is greater than the last tag and every adopted fit has its record. A run which publishes also checks that the model has its archive, docker runs with its buildx plugin and `gh` is logged in.
-2. **Export** of the files git tracks in the model folder into `src/<package as folders>/`, without the excluded paths.
-3. **Project files** from the templates of pkpdsim: `pyproject.toml`, `Dockerfile`, the workflows, `zensical.toml`, `.zenodo.json`, `.gitignore`, `.python-version`. The Docker image and the workflows install the same uv (0.13.6, `pkpdsim.release.project.UV_VERSION`). The release supports the Python versions of the classifiers of the monorepo (`Programming Language :: Python :: 3.14`, `3.15`): its `pyproject.toml` names them and its tests run on every one; the Docker image and the docs use the Python of the monorepo (`.python-version`).
-4. **Build** in the environment of the release repository (`uv lock`, locked to the library versions of the monorepo, and `uv sync --locked`): the models (`run_simulation --action factory`), the simulations, with a model which has adopted fits the simulations with the confidence interval and the reports of the adopted fits from their records (`run_report --adopted -o results/fit_reports`, one folder per fit with the HTML report and the methods report `report.pdf`, copied to `fit/<fit id>`).
-5. **Credibility**, for a model with a declaration of its contexts of use (`PKPDModel.credibility`): `run_credibility` assesses it against the adopted fits and writes the record, the tables and the report into `results/credibility`, which become `credibility/` of the release repository (replaced at every build, hashed in `release.json` like the fit reports). The assessment runs in the release repository, so the build passes the commit of the source repository (`--source-commit`), which the provenance records. The docs get a page `credibility` before the release notes, rendered from `credibility.json`: the table of the contexts of use with level, risk, verdict and the role of the evidence which decided it, per context the question, the quantities of interest (a ratio marked as assessed in step 3), the claimed values of the metadata with their coverage and points, the statement of the domain (marked as not assessed), the acceptance criteria and the extrapolation text, and a link to the report. The README links the page. A model without a declaration gets neither. See [Context of use and credibility](credibility.md).
-6. **Release notes** `release-notes/<version>.md`, generated from the changes since the last release.
-7. **Docs and README** of the release repository. Both start with the same badges: the DOI, the latest GitHub release, the documentation (the status of the docs workflow, linked to the site), the tests, the Docker image (an image of Docker Hub only), the Python versions and the licenses of the code and of the models.
-8. **Prune and manifest**: a written file above 100 MB is refused, since GitHub rejects the push of it (e.g. the netCDF results of a model with `save_results`); a written file which git ignores is refused, since the commit would lack it (the release repository ignores `results/`, `build/`, `dist/` and `site/` only at its top, a model package may track such folders); every file which the steps did not write is removed (besides `.git`, ignored files and the release notes of earlier versions), then `release.json` records the version, the commit of the monorepo, the versions of the core libraries and a hash of every generated file.
-9. `--no-publish` stops here.
-10. **Publish**: the lock must hold packages of PyPI only; then the build of the Docker image (for `linux/amd64`, before anything is published, so an image which does not build stops the release before the tag, which cannot be moved), the commit, the tag (the plain version), GitHub Pages (set up to deploy from the docs workflow, before the push which starts it), the push, the push of the Docker image (`:<version>` and `:latest`) and the GitHub release with the release notes and the COMBINE archive. Zenodo archives the release, the docs workflow deploys the site.
+1. **Checks** of `pkpd_release`, before anything is built: the version, the release metadata, the monorepo is clean, and for a run which publishes the archive of the model, docker with its buildx plugin and `gh`.
+2. **Build**, the kind `release` of sbmlsim into the output: the release repository is cloned into `DIR/repository` and checked (on `main`, up to date, without local commits and without changes which no release made, the version greater than the last tag, every adopted fit with its record), then the export of the model package, the project files, the analyses of the run layer in the release repository (the factory, the simulations, with distributions of the fitted parameters the simulations with the confidence interval, the reports of the adopted fits, the assessment of the credibility of a model which declares its contexts of use), the release notes, the docs and the README, the prune and the manifest `release.json`. A build of the same spec in the output is built again, so a failed or interrupted build is finished by the next run.
+3. `--no-publish` stops here.
+4. **Publish** the build of the output, the step `python -m sbmlsim.release publish`: the lock must hold packages of PyPI only; then the Docker image, the commit, the tag, GitHub Pages, the push, the push of the Docker image and the GitHub release with the release notes and the COMBINE archive. Then the checkout of `--repo` is fast-forwarded to the release, a checkout with changes or on another branch is left as it is with a warning to pull it.
 
 ## Review, then publish
 
-A run without `--no-publish` which finds the reviewed build of the same release (same version, same commit of the monorepo, the same pkpdsim locked by the monorepo, every file as it was built) commits it as it is, without running the simulations again. A file changed during the review makes the run build again, so the published release is always the output of the command.
+A run without `--no-publish` which finds the reviewed build of the same release in the output (same version, same commit of the monorepo, the same pkpdsim locked by the monorepo, every file as it was built) publishes it as it is, without running the build again. A file changed during the review makes the run build again, so the published release is always the output of the build.
 
-A build which failed or was interrupted (a failing simulation, a stopped command) is built again by the next run; nothing has to be cleaned up by hand. The build records the files it changed before it stopped, so a file added by hand afterwards is still refused.
+A run which failed while publishing is finished by running the same command again: every publishing step checks whether it is done already (the commit, the tag, the push, the image, the GitHub release) and is skipped then. If the last commit of the release repository of the output is the release of the version (the tag is missing or at that commit), the build is skipped and the publishing steps resume, even if the monorepo moved on since.
 
-A run which failed while publishing is finished by running the same command again: every publishing step checks whether it is done already (the commit, the tag, the push, the image, the GitHub release) and is skipped then. If the last commit of the release repository is the release of the version (the tag is missing or at that commit), the build is skipped and the publishing steps resume, even if the monorepo moved on since.
+## What pkpdsim adds
 
-The results of the build (`results/`), the environment (`.venv/`) and the settings of an editor (`.idea/`) are ignored by git and stay. A file added to the release repository by hand is refused; the release repository holds only what the command generates.
+The release hook of pkpdsim (`pkpdsim.release.hook.PKReleaseHook`) adds the content of the pharmacokinetic models to the release of sbmlsim:
+
+- The page `credibility` of the docs shows the evidence of the extensions of pkpdsim (see [Context of use and credibility](credibility.md)): after the acceptance table of a context of use, whose last row is the rule of the ratio pairs (`(ratio pairs)`), the table of the ratio pairs and the temporal validation; at the end of the section of a context the inputs of its decisive mappings; after the sections of the contexts the study data of the adopted fits with the records of their collection from pkdb_data.
+- The release notes name a study of the data `<substance>/<study>`, a folder `data/<substance>/<study>` of the model package, as the releases of pkpdsim 0.19 named them, so the first release after the release moved into sbmlsim renames no study.

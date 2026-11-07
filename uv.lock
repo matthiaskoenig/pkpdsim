@@ -1523,7 +1523,6 @@ dependencies = [
     { name = "pkpdutils" },
     { name = "pymetadata" },
     { name = "python-libsbml" },
-    { name = "sbmlode" },
     { name = "sbmlsim" },
     { name = "sbmlutils" },
     { name = "scipy" },
@@ -1569,9 +1568,8 @@ requires-dist = [
     { name = "python-libsbml", specifier = ">=5.21.2" },
     { name = "pyyaml", marker = "extra == 'dev'", specifier = ">=6.0.3" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.17.3" },
-    { name = "sbmlode", specifier = ">=0.3.0" },
-    { name = "sbmlsim", git = "https://github.com/matthiaskoenig/sbmlsim.git?rev=0d4e64615cf114d483241eb551aac02425ec2d8e" },
-    { name = "sbmlsim", extras = ["amici"], marker = "extra == 'amici'", git = "https://github.com/matthiaskoenig/sbmlsim.git?rev=0d4e64615cf114d483241eb551aac02425ec2d8e" },
+    { name = "sbmlsim", git = "https://github.com/matthiaskoenig/sbmlsim.git?rev=ae120871b84995f21e7db0ba00e4596b4e83b172" },
+    { name = "sbmlsim", extras = ["amici"], marker = "extra == 'amici'", git = "https://github.com/matthiaskoenig/sbmlsim.git?rev=ae120871b84995f21e7db0ba00e4596b4e83b172" },
     { name = "sbmlutils", specifier = ">=0.17.1" },
     { name = "scipy", specifier = ">=1.18.1" },
     { name = "tox", marker = "extra == 'dev'", specifier = ">=4.65.0,!=4.67.5" },
@@ -2174,7 +2172,7 @@ wheels = [
 [[package]]
 name = "sbmlsim"
 version = "0.16.0"
-source = { git = "https://github.com/matthiaskoenig/sbmlsim.git?rev=0d4e64615cf114d483241eb551aac02425ec2d8e#0d4e64615cf114d483241eb551aac02425ec2d8e" }
+source = { git = "https://github.com/matthiaskoenig/sbmlsim.git?rev=ae120871b84995f21e7db0ba00e4596b4e83b172#ae120871b84995f21e7db0ba00e4596b4e83b172" }
 dependencies = [
     { name = "certifi" },
     { name = "h5netcdf" },
@@ -2197,6 +2195,7 @@ dependencies = [
     { name = "rich" },
     { name = "salib" },
     { name = "sbmlmath" },
+    { name = "sbmlode" },
     { name = "sbmlutils" },
     { name = "scipy" },
     { name = "seaborn" },
