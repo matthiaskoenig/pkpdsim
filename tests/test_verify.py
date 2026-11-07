@@ -50,6 +50,11 @@ def test_a_command_of_a_model_needs_the_root_and_the_model(command: str) -> None
     assert verify([command, "--model", "pkg"]) == 2
 
 
+def test_an_abbreviated_option_is_refused() -> None:
+    """An abbreviation would pass the parser but not the translation."""
+    assert verify(["dump", "--root", "r", "--mod", "pkg", "--out", "o"]) == 2
+
+
 def test_the_scorecard_pools_the_ratios_by_health_by_default() -> None:
     assert translate(["scorecard", "records"]) == [
         "scorecard",
