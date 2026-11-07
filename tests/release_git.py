@@ -8,7 +8,7 @@ by the tests.
 
 from pathlib import Path
 
-from pkpdsim.release.source import run
+from sbmlsim.release.source import run
 
 #: a git without the configuration of the user, with a fixed author
 GIT_ENV = {

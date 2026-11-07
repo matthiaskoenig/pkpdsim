@@ -179,7 +179,7 @@ It writes `credibility.json` (the assessment), `contexts.tsv`, `evidence.tsv`, `
 
 ## pkpd_release
 
-`pkpd_release` makes the complete release of the repository of a model (`hctz-model`) from its package: export, build of the models, simulations and fit reports, release notes, docs, commit, tag, push, Docker image and GitHub release. `--no-publish` stops before the commit, so the build can be reviewed; a later run without the flag publishes the reviewed build:
+`pkpd_release` makes the complete release of the repository of a model (`hctz-model`) from its package with the release of sbmlsim: the build (the kind `release` of the run layer of sbmlsim: export, models, simulations, fit reports, credibility, release notes, docs) into a clone of the release repository in an output, then the publishing (commit, tag, push, Docker image and GitHub release). `--no-publish` stops before the commit, so the build can be reviewed; a later run without the flag publishes the reviewed build:
 
 ```bash
 pkpd_release pkdb_models.models.hctz --version 0.8.0 --no-publish
@@ -187,7 +187,7 @@ pkpd_release pkdb_models.models.hctz --version 0.8.0
 pkpd_release pkdb_models.models.hctz --version 0.8.0 --repo ../hctz-model
 ```
 
-`--repo` is the checkout of the release repository (by default a sibling of the monorepo named like the repository, cloned when missing), `--pkpdsim-path` a local pkpdsim for a run with `--no-publish`, `--workers` the workers of the simulations. A refused check or a failed step ends the command with exit code 1 and the reason. The release metadata of a model, the one-time setup and the steps are in [Release of a model repository](release.md).
+`--repo` is the checkout of the release repository (by default a sibling of the monorepo named like the repository), which the build clones and only reads (the repository on GitHub is cloned when the checkout is missing) and which publishing fast-forwards to the release, `--out` the output of the build (by default `<repo>-release-<version>` next to the checkout, the release repository in its folder `repository`), `--pkpdsim-path` a local pkpdsim for a run with `--no-publish`, `--workers` the workers of the simulations. A refused check or a failed step ends the command with exit code 1 and the reason. The release metadata of a model, the one-time setup and the steps are in [Release of a model repository](release.md).
 
 ## Profiling a command
 

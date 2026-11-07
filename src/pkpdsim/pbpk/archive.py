@@ -3,7 +3,10 @@
 A model package builds its `PBPKDefinition` with `pkpdsim.pbpk.build` and
 writes next to the SBML the differential equations as markdown, the antimony
 of the flat model, the two license texts and the COMBINE archive.
-`create_archive` does all of it, so the factory of a model is one call.
+`create_archive` does all of it, so the factory of a model is one call: it
+builds the definition and writes the rest with the archive writer of sbmlsim,
+`sbmlsim.release.archive.write_archive`, which imports `sbmlode` and
+`pymetadata` when it writes.
 
 A model with a build per sex builds the one definition for every sex
 (`sexes`): the build of the sex of the definition keeps its id (`<sid>.xml`,
@@ -19,6 +22,8 @@ import dataclasses
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
+
+from sbmlsim.release.archive import ArchiveModel, write_archive
 
 from pkpdsim.pbpk.builder import build
 from pkpdsim.pbpk.definition import PBPKDefinition
@@ -47,20 +52,6 @@ def sex_definition(definition: PBPKDefinition, sex: Sex) -> PBPKDefinition:
     )
 
 
-#: the formats of the extra files of an archive by their suffix, the names of
-#: the members of `pymetadata.omex.EntryFormat`
-EXTRA_FORMATS: dict[str, str] = {
-    ".md": "MARKDOWN",
-    ".ant": "ANTIMONY",
-    ".txt": "PLAIN",
-    ".png": "PNG",
-    ".svg": "SVG",
-    ".csv": "CSV",
-    ".tsv": "TSV",
-    ".pdf": "PDF",
-}
-
-
 def create_archive(
     definition: PBPKDefinition,
     model_output_dir: Path,
@@ -83,7 +74,7 @@ def create_archive(
     the extra models and the extra files. With `sexes` every sex is built
     (`sex_definition`), each with its comp model, flat model, markdown and
     antimony in the archive; the flat model of the sex of the definition stays
-    the master entry. With `figure` the figure of the definition
+    the master entry, the first model of the archive. With `figure` the figure of the definition
     (`model_figure`, an SVG schematic of the organs, routes, substances and
     processes) is written into `model_output_dir` as `<sid>.svg` and is an
     entry of the archive.
@@ -100,14 +91,16 @@ def create_archive(
             archive, e.g. a submodel which is simulated on its own.
         extra_files: further files of other formats which are entries of the
             archive, e.g. the ODEs of an extra model (`.md`) or a figure
-            (`.png`), with the format of their suffix (`EXTRA_FORMATS`, the
-            antimony of `.ant` as the antimony of the flat model).
+            (`.png`), with the format of their suffix
+            (`sbmlsim.release.archive.EXTRA_FORMATS`, the antimony of `.ant`
+            as the antimony of the flat model).
         sexes: the sexes to build, the sex of the definition among them and
             each once, e.g. `(Sex.MALE, Sex.FEMALE)`; `None` builds the sex of
             the definition only.
         figure: write the figure of the definition, `<sid>.svg` (the key
-            `<sid>_svg`); one figure for all sexes, which have the same organs,
-            substances and processes, its title names the builds.
+            `<sid>_svg`, the first extra file of the archive); one figure for
+            all sexes, which have the same organs, substances and processes,
+            its title names the builds.
 
     Every file of the archive has one location rule: it is below the parent
     of `model_output_dir`, and its location in the archive is its path
@@ -119,31 +112,21 @@ def create_archive(
     the file lies.
 
     Raises:
-        ValueError: if the stem of an extra model or the key of an extra file
-            is the key of another entry, if an extra model or file is not below
-            the parent of `model_output_dir` or the suffix of an extra file has
-            no format, or if `sexes` leaves out the sex of the definition or
-            names a sex twice (before anything is written).
+        ValueError: if `sexes` leaves out the sex of the definition or names
+            a sex twice (before anything is written), or, after the builds and
+            before the archive is written, if the stem of an extra model or the
+            key of an extra file is the key of another entry, if an extra model
+            or file is not below the parent of `model_output_dir` or the suffix
+            of an extra file has no format.
 
     Returns:
         The files with their entries in the COMBINE archive, by the keys of a
         factory: `README`, `cc-by`, `mit`, the sid of the definition, `<sid>_flat`,
         `<sid>_flat_md`, `<sid>_flat_ant` (and the same keys of the id of the
-        build of every other sex, `<sid>_female_flat`), `<sid>_svg` of the
-        figure, the stem of every
-        extra model and `<stem>_<suffix>` of every extra file (`fluid_md`),
-        each `{"path": Path, "entry": ManifestEntry}`.
+        build of every other sex, `<sid>_female_flat`), the stem of every extra
+        model, `<sid>_svg` of the figure and `<stem>_<suffix>` of every extra
+        file (`fluid_md`), each `{"path": Path, "entry": ManifestEntry}`.
     """
-    from pymetadata.omex import EntryFormat, ManifestEntry, Omex
-    from sbmlode import OdeSystem
-    from sbmlsim.licenses import License, write_license
-    from sbmlutils.io import sbml_to_antimony
-
-    def entry(
-        location: str, fmt: EntryFormat, *, master: bool = False
-    ) -> ManifestEntry:
-        return ManifestEntry(location=location, format=fmt, master=master)
-
     sexes = (definition.sex,) if sexes is None else tuple(Sex(s) for s in sexes)
     if definition.sex not in sexes:
         raise ValueError(
@@ -157,110 +140,21 @@ def create_archive(
             f"The archive of '{definition.sid}' builds the sexes {repeated} twice."
         )
     model_output_dir.mkdir(parents=True, exist_ok=True)
-    builds = []
-    for sex in sexes:
-        sexed = sex_definition(definition, sex)
-        built = build(sexed, model_output_dir)
-        flat = built.flat_path
-        # differential equations and antimony of the flat model
-        md_path = flat.with_suffix(".md")
-        OdeSystem.from_sbml(flat).write(md_path)
-        ant_path = flat.with_suffix(".ant")
-        ant_path.write_text(sbml_to_antimony(flat), encoding="utf-8")
-        builds.append((sexed.sid, built, md_path, ant_path))
-
-    parent = model_output_dir.parent
+    # the build of the sex of the definition first, the master entry
+    models = []
+    for sex in (definition.sex, *(s for s in sexes if s is not definition.sex)):
+        built = build(sex_definition(definition, sex), model_output_dir)
+        models.append(ArchiveModel(built.comp_path, flat=built.flat_path))
+    figures = []
     if figure:
-        figure_path = model_figure(
-            definition, model_output_dir / f"{definition.sid}.svg", sexes
-        )
-    else:
-        figure_path = None
-
-    def location(path: Path, what: str) -> str:
-        """The location of a file in the archive, its path below `parent`."""
-        try:
-            relative = path.resolve().relative_to(parent.resolve())
-        except ValueError:
-            raise ValueError(
-                f"The {what} {str(path)!r} is not below {str(parent)!r}, "
-                "the directory of the archive."
-            ) from None
-        return f"./{relative.as_posix()}"
-
-    results: dict[str, dict[str, Any]] = {}
-    if readme is not None:
-        results["README"] = {
-            "path": readme,
-            "entry": entry("./README.md", EntryFormat.MARKDOWN),
-        }
-    cc_by = write_license(parent, License.CC_BY_SA_4_0)
-    mit = write_license(parent, License.MIT, copyright=copyright)
-    results["cc-by"] = {
-        "path": cc_by,
-        "entry": entry(location(cc_by, "license"), EntryFormat.TXT),
-    }
-    results["mit"] = {
-        "path": mit,
-        "entry": entry(location(mit, "license"), EntryFormat.TXT),
-    }
-    for sid, built, md_path, ant_path in builds:
-        flat = built.flat_path
-        master = sid == definition.sid
-        results[sid] = {
-            "path": built.comp_path,
-            "entry": entry(location(built.comp_path, "model"), EntryFormat.SBML_L3V2),
-        }
-        results[f"{sid}_flat"] = {
-            "path": flat,
-            "entry": entry(
-                location(flat, "model"), EntryFormat.SBML_L3V2, master=master
-            ),
-        }
-        results[f"{sid}_flat_md"] = {
-            "path": md_path,
-            "entry": entry(location(md_path, "markdown"), EntryFormat.MARKDOWN),
-        }
-        results[f"{sid}_flat_ant"] = {
-            "path": ant_path,
-            "entry": entry(location(ant_path, "antimony"), EntryFormat.ANTIMONY),
-        }
-    if figure_path is not None:
-        results[f"{definition.sid}_svg"] = {
-            "path": figure_path,
-            "entry": entry(location(figure_path, "figure"), EntryFormat.SVG),
-        }
-
-    for extra in extra_models:
-        if extra.stem in results:
-            raise ValueError(
-                f"The extra model {extra.name!r} has the key {extra.stem!r} of an "
-                "entry of the archive."
-            )
-        results[extra.stem] = {
-            "path": extra,
-            "entry": entry(location(extra, "extra model"), EntryFormat.SBML_L3V2),
-        }
-    for extra in extra_files:
-        key = f"{extra.stem}_{extra.suffix.removeprefix('.')}"
-        if key in results:
-            raise ValueError(
-                f"The extra file {extra.name!r} has the key {key!r} of an entry of "
-                "the archive."
-            )
-        fmt = EXTRA_FORMATS.get(extra.suffix.lower())
-        if fmt is None:
-            raise ValueError(
-                f"The extra file {extra.name!r} has the suffix {extra.suffix!r} of "
-                f"no format of the archive, one of {sorted(EXTRA_FORMATS)}."
-            )
-        results[key] = {
-            "path": extra,
-            "entry": entry(location(extra, "extra file"), getattr(EntryFormat, fmt)),
-        }
-
-    omex = Omex()
-    for info in results.values():
-        omex.add_entry(entry_path=info["path"], entry=info["entry"])
-    omex.to_omex(omex_path=parent / f"{model}_model.omex")
-    return results
+        path = model_output_dir / f"{definition.sid}.svg"
+        figures.append(model_figure(definition, path, sexes))
+    return write_archive(
+        models,
+        model_output_dir.parent,
+        name=f"{model}_model",
+        copyright=copyright,
+        readme=readme,
+        extra_models=extra_models,
+        extra_files=[*figures, *extra_files],
+    )
