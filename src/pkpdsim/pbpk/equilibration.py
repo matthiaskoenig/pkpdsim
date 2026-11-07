@@ -248,9 +248,9 @@ def equilibrated_simulation(
     The equilibration of `PBPKSimulationExperiment.equilibrated`, which calls
     it with the file of its loaded model, and of a simulation outside an
     experiment, e.g. the groups of a sensitivity analysis
-    (`pkpdsim.sensitivity.SensitivityGroup(prepare=Equilibration(...))`): the ids of
-    the doses, the sinks, the readouts of the intestine and the deltas are
-    read from the model file (the doses move to the start, the sinks, the
+    (`sbmlsim.sensitivity.runner.SensitivityGroup(prepare=Equilibration(...))`):
+    the ids of the doses, the sinks, the readouts of the intestine and the
+    deltas are read from the model file (the doses move to the start, the sinks, the
     readouts which nothing drains and `resets` are set back, the species of
     the drugs are exactly 0, a growing state without a reset is refused,
     every point of a scan equilibrates in its own condition), see
@@ -392,8 +392,8 @@ def _intestine_readouts(parameters: Collection[str]) -> set[str]:
 class Equilibration:
     """The drug-free equilibration of the scans of a group of a sensitivity analysis.
 
-    The function of a `pkpdsim.sensitivity.SensitivityGroup` which prepares
-    its scans (`prepare`): every point of a design starts from the drug-free
+    The function of a `sbmlsim.sensitivity.runner.SensitivityGroup` which
+    prepares its scans (`prepare`): every point of a design starts from the drug-free
     steady state of its condition on the build of the group
     (`equilibrated_simulation`), which replaces a long pre-run from a
     negative start:

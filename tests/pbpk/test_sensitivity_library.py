@@ -8,14 +8,14 @@ model is the definition of `tests/pbpk/conftest.py`.
 from pathlib import Path
 
 import pytest
+from sbmlsim.sensitivity.parameters import ParameterType
+from sbmlsim.sensitivity.runner import SensitivityGroup
 from sbmlsim.simulation import Simulation
 
 from pkpdsim.pbpk.builder import build
 from pkpdsim.sensitivity import (
     SEVERITIES,
     NonzeroLocalAnalysis,
-    ParameterType,
-    SensitivityGroup,
     library_parameters,
     notes_sources,
 )

@@ -77,7 +77,7 @@ commands handle both builds:
 | `run_simulation`, `run_report`, `sbmlsim.project_checks` | every task runs the build of the sex of its simulation |
 | `run_fit` | one parameter set for both builds; the remainders of the fitted fractions are checked in every build |
 | `--uncertainty` | the draws of the fitted parameters are those of the male build, the default variant, and run on every build; `check_fit_parameters` of `sbmlsim.experiment.draws` checks the fitted values and the distributions in every build, a variant |
-| sensitivity | a group runs the build of its sex (`SensitivityGroup(sex=...)`): a local analysis varies the values of that build, a global design (sampling, Sobol, FAST) is the same relative design around the values of that build (the values of the table, read from the male build, times the ratio of the value in the build, `design_factors`; a value of the table which is zero or of another sign is refused before anything runs), and the table of the parameters has the column `value_female` |
+| sensitivity | a group runs the build of its sex, a variant of the project (`SensitivityGroup(variant=Sex.FEMALE)` of `sbmlsim.sensitivity.runner`): a local analysis varies the values of that build, a global design (sampling, Sobol, FAST) is the same relative design around the values of that build (the values of the table, read from the male build, times the ratio of the value in the build, `design_factors`; a value of the table which is zero or of another sign is refused before anything runs), and the table of the parameters has the column `value_female` |
 | `pkpdsim-verify` | a dump records the sex of the build of every task (`builds`), `compare` reports a task which moved to the build of another sex |
 
 ## References

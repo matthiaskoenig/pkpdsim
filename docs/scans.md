@@ -1,6 +1,6 @@
 # Scans and sensitivity analyses
 
-`pkpdsim.sensitivity` holds what the scripts of the models share around sensitivity analyses, up to the runner of the sensitivity analyses of a script. It builds on the API of sbmlsim 0.9, where a design of `sbmlsim.simulation.sampling` is a dimension of a `Scan` and its result is a `ScanResult`.
+The scans and the sensitivity analyses of a model are sbmlsim's: a design of `sbmlsim.simulation.sampling` is a dimension of a `Scan`, its result a `ScanResult`, and the runner of the sensitivity analyses of a model with the table of their parameters is `sbmlsim.sensitivity.runner` and `sbmlsim.sensitivity.parameters`. `pkpdsim.sensitivity` holds what is pharmacokinetic or of the PBPK library: the observables of the non-compartmental analysis of a substance, the parameters of an analysis of a model of the library and its local analysis of the nonzero parameters.
 
 ## The points of a scan
 
@@ -24,152 +24,75 @@ urine = end_values(res, "Aurine_hctz")  # the amount in the urine at the end
 res = state_after_changes(self.results[self.to_sid("task_sim")])
 ```
 
-## The parameters of a sensitivity analysis
+## The sensitivity analyses of a model
 
-sbmlsim 0.9 analyses the sensitivity of a model on the result of a scan, with a design (`local`, `sobol`, `fast`, `lhs`) as a dimension of the scan; it has no table of the parameters of an analysis any more, which the sensitivity scripts of the models write next to their results. `pkpdsim.sensitivity` is that table with the behavior of sbmlsim 0.8, so the tables of the scripts stay the same, and the distributions the global designs need:
+The sensitivity script of a model (`<model>/sensitivity/sensitivity_analysis.py`) runs its analyses with the runner of sbmlsim, see [Sensitivity analyses of a project](https://matthiaskoenig.github.io/sbmlsim/sensitivity/#sensitivity-analyses-of-a-project) and the API of [`sbmlsim.sensitivity.runner`](https://matthiaskoenig.github.io/sbmlsim/api/sensitivity.runner/) and [`sbmlsim.sensitivity.parameters`](https://matthiaskoenig.github.io/sbmlsim/api/sensitivity.parameters/): `SensitivityRunner`, `SensitivityGroup`, `SensitivityOutput`, the analyses `LocalAnalysis`, `SamplingAnalysis`, `FastAnalysis` and `SobolAnalysis`, `run_subfolders`, `sample_size` and the table of the parameters, `parameters_from_sbml`, `set_bounds`, `set_relative_bounds`, `write_parameters`, `distributions` and `free_parameters`. The runner writes the tables and figures of sbmlsim 0.8.5, which the manuscripts read. A `PKPDModel` is the project of a runner:
+
+- **The project.** `SensitivityRunner(project=MODEL, ..., out=MODEL.results_dir / "sensitivity")`: the runner simulates with the tolerances of the model (`MODEL.simulator`) and writes into `out`, the folder of the sensitivity analyses of the model package, unless the command line gives `--out`. A model may list its runners in `sensitivities` of its `PKPDModel` (a field of the project, a runner, a mapping of runners by subfolder or a reference `"module:attribute"`), which runs them with the kind `sensitivity` of [`python -m sbmlsim.run`](https://matthiaskoenig.github.io/sbmlsim/run/).
+- **The builds per sex** are the variants of the project (`male`, the default, and `female`, see [Builds per sex](models.md#builds-per-sex)): a group of women runs the female build with `SensitivityGroup(..., variant=Sex.FEMALE)`. A global design is drawn once and carried to the female build relative to the values of the table, which are those of the male build; the table gets the column `value_female`.
+- **The equilibration.** A group of a model of the PBPK library whose condition moves a slow state (the fluid and the blood pressure of a PD component in renal impairment) runs from the drug-free steady state of its condition: `SensitivityGroup(..., prepare=Equilibration(resets={"FLUID__Vurine": 0.0}))` with `pkpdsim.pbpk.Equilibration`, the equilibration of the experiments (see [Equilibration of a condition](pbpk/impairment.md#equilibration-of-a-condition)). The simulation of the group starts at the dose (time 0), so an output which compares with the start (a change of the blood pressure against its value at the dose) reads time 0.
+- **The command line.** `SENSITIVITY.main()` reads the analyses, `--workers N` (a pool of a PBPK model needs about 300 to 340 MB per process) and `--out DIR`; `SBMLSIM_SENSITIVITY_N` replaces the numbers of samples for a smoke run.
 
 ```python
 # not executed
-from pkpdsim.sensitivity import (
-    ParameterType,
-    distributions,
-    free_parameters,
-    parameters_from_sbml,
-    sample_size,
-    set_bounds,
-    set_relative_bounds,
-    write_parameters,
-)
-from sbmlsim.simulation.sampling import sobol
-
-parameters = parameters_from_sbml(MODEL_PATH, exclude_ids={"Mr_hctz"})
-set_bounds(parameters, [("f_renal_function", 0.85, 1.15, ParameterType.SCALING)])
-set_relative_bounds(parameters, 0.15)
-write_parameters(parameters, MODEL.results_dir / "sensitivity")
-# a design must not vary what the simulation of a group sets
-free = free_parameters(parameters, [simulation])
-design = sobol(distributions(free), n=sample_size(4096), seed=1234, model=MODEL_PATH)
-```
-
-- `parameters_from_sbml` takes the constant parameters, compartments and species of a model in its order, with their values after the initialization, and leaves out those without a value, those close to zero and `exclude_ids`, and with `exclude_derived=True` every one with an initial assignment (the organ volumes and clearances a model of the PBPK library derives from its covariates).
-- `library_parameters(model_path, ids, fit_ids=..., scaling_ids=..., references={}, relative=0.15)` is the table of a model of the PBPK library, whose hundreds of constants are mostly derived: the analysis names its `ids`. The fitted parameters vary by `value * (1 +- relative)`, the scaling factors (1 in the healthy individual) by `1 +- relative`, the severities `SEVERITIES` (`CP_severity` 0 to 3, `HF_severity` 0 to 4) from 0 to `relative` of their top, and any other parameter by `value * (1 +- relative)`. The reference of a parameter is the `Sources:` list of its notes (`notes_sources`), replaced by the text of `references`. An id which is no parameter of the model is a `ValueError` naming it. `NonzeroLocalAnalysis` is the `LocalAnalysis` which leaves out the parameters whose value is 0 (a severity of the healthy individual), whose local sensitivity is 0/0.
-- `set_bounds` sets the bounds and the type of parameters by id (an unknown id is logged and skipped), `set_relative_bounds` lets every parameter without bounds vary by `value * (1 +- fraction)`. For a negative value these bounds are reversed (the lower bound `value * (1 - fraction)` is above the upper one), as in the table of sbmlsim 0.8, which stays the same; such a parameter gets its bounds with `set_bounds` before a global analysis.
-- `write_parameters` writes `parameters.tsv` and the LaTeX table `parameters.tex` (`jinja2` is needed for the table), `parameters_to_df` gives the table as a `DataFrame` with the columns `uid`, `name`, `value`, `lower_bound`, `upper_bound`, `unit`, `type` and `reference`, sorted by type and id; with the values of other builds of the model (`builds`, by sex) a column `value_<sex>` after `value`.
-- `distributions` gives the uniform distribution of every parameter in its bounds, the input of a global design; a parameter without bounds or with a lower bound above the upper one raises a `ValueError` naming it.
-- `free_parameters(parameters, simulations)` gives the parameters which none of the simulations sets, in their order, in its `preinit_changes`, in the `preinit_changes` of its presimulation or in a `Change`. A design replaces its targets wherever a simulation sets them, so a parameter of a group (e.g. `f_renal_function` of the degree of renal impairment) would take the values of the design in every group and the groups would be one analysis; sbmlsim 0.8.5 left such a parameter out ("Removing fixed parameter"), sbmlsim 0.9's designs do not. The ids are compared as written, plain ids as in sbmlsim 0.8.5: a target given as a selection (`[S]`) does not match the parameter `S`. Every parameter left out is logged at level info.
-- `sample_size(n)` is `n`, or the value of the environment variable `PKPDSIM_SENSITIVITY_N` for a quick run of the scripts in a verification.
-
-The distributions do not need a model:
-
-```python
-from pkpdsim.sensitivity import (
-    ParameterType,
-    SensitivityParameter,
-    distributions,
-    parameters_to_df,
-    set_bounds,
-    set_relative_bounds,
-)
-
-parameters = [
-    SensitivityParameter(uid="Ka", name="absorption", value=2.0, unit="1/hr"),
-    SensitivityParameter(uid="f_renal_function", name="renal function", value=1.0),
-]
-set_bounds(parameters, [("f_renal_function", 0.85, 1.15, ParameterType.SCALING)])
-set_relative_bounds(parameters, 0.5)
-print(parameters_to_df(parameters)[["uid", "lower_bound", "upper_bound", "type"]])
-print(distributions(parameters))
-```
-
-A parameter which a simulation sets is left out of the design:
-
-```python
+from pkpdsim.sensitivity import pk_observables
 from sbmlsim import Q
-from sbmlsim.simulation import Simulation
-
-from pkpdsim.sensitivity import SensitivityParameter, free_parameters
-
-parameters = [
-    SensitivityParameter(uid="Ka", name="absorption", value=2.0),
-    SensitivityParameter(uid="f_renal_function", name="renal function", value=1.0),
-]
-group = Simulation(
-    end=24,
-    steps=100,
-    preinit_changes={"f_renal_function": 0.5, "PODOSE": Q(10, "mg")},
-)
-print([p.uid for p in free_parameters(parameters, [group])])
-```
-
-## The sensitivity analyses of a script
-
-The sensitivity script of a model (`<model>/sensitivity/sensitivity_analysis.py`) runs the analyses of sbmlsim 0.9 over the simulations of its groups and writes the tables and figures of its outputs. What every script does is `SensitivityRunner` of `pkpdsim.sensitivity`; a script gives only what is the model's own: the parameters with their bounds, the outputs with their observables and the groups of its analyses.
-
-```python
-# not executed
-from pkpdsim.sensitivity import (
-    FastAnalysis,
+from sbmlsim.sensitivity.runner import (
     LocalAnalysis,
     SamplingAnalysis,
     SensitivityGroup,
     SensitivityOutput,
     SensitivityRunner,
-    SobolAnalysis,
 )
-from sbmlsim import Q
-from sbmlsim.simulation import PK, Formula, Simulation
+from sbmlsim.simulation import Simulation
 
 from pkdb_models.models.hctz import MODEL
-from pkdb_models.models.hctz.experiments.base_experiment import (
-    HCTZSimulationExperiment,
-)
 
 OUTPUTS = [
-    SensitivityOutput("cmax", "HCTZ Cmax"),
-    SensitivityOutput("max_diuresis", "max diuresis"),
+    SensitivityOutput("cmax", "HCTZ Cmax", observable="pk_hctz.cmax"),
+    SensitivityOutput("hctz_cl_f", "HCTZ CL/F"),
 ]
-OBSERVABLES = [
-    PK("pk_hctz", "[Cve_hctz]", dose="PODOSE_hctz", route="oral", parameters=["cmax"]),
-    Formula("cmax", "pk_hctz.cmax", unit="mM"),
-    Formula("max_diuresis", "max(diuresis)", unit="l/min"),
-]
+
+
+def observables() -> list:
+    return pk_observables(
+        "hctz",
+        "[Cve_hctz]",
+        {"cmax": "mM", "cl_f": "ml/min"},
+        dose="PODOSE_hctz",
+        route="oral",
+        per_dose_mass={"cl_f"},
+        mr="Mr_hctz",
+    )
 
 
 def sensitivity_simulation(changes: dict[str, float]) -> Simulation:
     return Simulation(
         end=5 * 24 * 60,
-        steps=10000,
         time_unit="min",
         preinit_changes={"PODOSE_hctz": Q(25, "mg"), **changes},
     )
 
 
-renal_map = HCTZSimulationExperiment.renal_map
 GROUPS = [
     SensitivityGroup("control", "Control", sensitivity_simulation({})),
-    *(
-        SensitivityGroup(
-            uid, name, sensitivity_simulation({"f_renal_function": renal_map[name]})
-        )
-        for uid, name in [
-            ("mildRI", "Mild renal impairment"),
-            ("modRI", "Moderate renal impairment"),
-            ("sevRI", "Severe renal impairment"),
-        ]
+    SensitivityGroup(
+        "sevRI",
+        "Severe renal impairment",
+        sensitivity_simulation({"f_renal_function": 0.1}),
     ),
 ]
 
 SENSITIVITY = SensitivityRunner(
-    model=MODEL,
-    parameters=sensitivity_parameters,  # the table of the section above
+    project=MODEL,
+    parameters=sensitivity_parameters,  # the table, see below
     outputs=OUTPUTS,
-    observables=OBSERVABLES,
+    observables=observables,
     analyses={
         "local": LocalAnalysis(groups=GROUPS[:1]),
         "sampling": SamplingAnalysis(groups=GROUPS),
-        "fast": FastAnalysis(groups=GROUPS[:1]),
-        "sobol": SobolAnalysis(groups=GROUPS[:1]),
     },
+    out=MODEL.results_dir / "sensitivity",
 )
 
 if __name__ == "__main__":
@@ -178,70 +101,58 @@ if __name__ == "__main__":
 
 ```bash
 python -m pkdb_models.models.hctz.sensitivity.sensitivity_analysis             # the default analyses, local
-python -m pkdb_models.models.hctz.sensitivity.sensitivity_analysis local sobol
-PKPDSIM_SENSITIVITY_N=65 python -m pkdb_models.models.hctz.sensitivity.sensitivity_analysis fast
+python -m pkdb_models.models.hctz.sensitivity.sensitivity_analysis local sampling --workers 8
+SBMLSIM_SENSITIVITY_N=65 python -m pkdb_models.models.hctz.sensitivity.sensitivity_analysis fast
 ```
 
-- **The run.** `main(argv)` reads the names of the analyses from the command line (`default`, `("local",)` unless the script gives others, without one; an unknown or repeated name exits with 2) and calls `run(names)`. `run` writes the table of the parameters (`parameters.tsv`, `parameters.tex` of `write_parameters`) into `model.results_dir / "sensitivity"` and runs the analyses in their order, every one into `<analysis>` below it (see the table); `path` replaces the folder, `subfolder` puts the analyses into a folder below it while the table stays in `path` (see below), `simulator` replaces the settings of the simulator. The simulator has the tolerances of the model and `n_workers=None`: sbmlsim chooses the processes of the pool, so the script needs the guard `if __name__ == "__main__":`.
-- **The workers.** A pool needs about 300 to 340 MB per process for a PBPK model, so every CPU of a 20-CPU machine exceeds a memory budget of 8 GB. `--workers N` (an int of at least 1; `0` or absent means `n_workers=None`, sbmlsim chooses; the model's own `n_workers` is not used) caps the processes: `python -m ...sensitivity_analysis sobol --workers 8`. `main` passes it as the settings of the model with `N` processes (a `SimulatorRun`); a script with its own `main` reads `parse_command_line(...).workers` and passes `simulator=runner.simulator_settings(words.workers)` to `run` or `run_subfolders`.
-- **The parameters** are a function, `parameters`, which a run calls (it reads the model). An analysis varies the parameters which no simulation of its groups sets, `free_parameters`: `sampling` over the four groups of hctz leaves out `f_renal_function`, which the groups of renal impairment set.
-- **The outputs.** A `SensitivityOutput` is an observable of the simulation of a group: `uid` names it in the tables and the names of the files, `name` in the titles and the heatmaps of the figures and in the column `name` of the tables, and `observable` is the id of the observable in the result, the uid when not given. An id which is no identifier (`[Cve_api]_cmax`, the id of the tables of sbmlsim 0.8) names an observable `Cve_api_cmax`. The ids, the names and the observables of the outputs are unique, and every observable of an output is one of `observables`. The unit of an output in the tables of sbmlsim 0.8.5 is the one its observable was given (`Formula(..., unit="mM*min")`), else the one of the result.
-- **The groups.** A `SensitivityGroup` is a simulation with the changes of the group in its `preinit_changes`; `uid` is its name in the files and folders, `name` in the titles of the figures, `color` the color of the group in the figures of the sampling which compare the groups (the property cycle of matplotlib when not given), `sex` the build of the model the group runs (`Sex.MALE` by default, see [Builds per sex](models.md#builds-per-sex)). The values of the table of the parameters are those of the male build (`model_path`); a local analysis of a group of women varies the values of the female build, a global design (sampling, Sobol, FAST) is drawn once and carried to the female build relative to the values of the table (every value times the ratio of the value of the parameter in the female build to the value in the table, `design_factors`, `relative_design`), so men and women share the relative design and each samples around its own physiology. A parameter whose value differs between the builds and whose value in the table is zero or of another sign has no relative design and is refused before anything is written. The table of a run with a group of women has the values of the female build, the column `value_female`. Every analysis has its own groups, at least one (the local and global analyses of most models run for the control only, `GROUPS[:1]`, the sampling for every group).
-- **Prepared groups, the equilibration.** A group may prepare its scans: `SensitivityGroup(..., prepare=function)`, a function of the scan of the group over a design and the build of the group which gives the scan that runs (`(scan, model_path) -> scan`); the analyses know no model, the function is the model's. A model of the PBPK library whose condition moves a slow state (the fluid and the blood pressure of a PD component in renal impairment) runs a group from the drug-free steady state of its condition instead of a long pre-run, with the function of the library `pkpdsim.pbpk.Equilibration`: `SensitivityGroup(..., prepare=Equilibration(resets={"FLUID__Vurine": 0.0}))`. Every point of a design is equilibrated in its own condition (the varied parameters are changes before the initialization) on the build of the group, with the equilibration of the experiments, `pkpdsim.pbpk.equilibrated_simulation(simulation, model_path, resets=...)` (see [Equilibration of a condition](pbpk/impairment.md#equilibration-of-a-condition)): the doses before the initialization move to the start, the sinks and readouts of the library and `resets` (the states a PD component accumulates) are set back, the species of the drugs are exactly 0, a growing state without a reset is refused. The simulation of the group starts at the dose (time 0), so its output has no pre-run and an output which compares with the start (a change of the blood pressure against its value at the dose) reads time 0.
-- **The seed** of the designs is `seed`, 1234 by default.
+A model with several simulations (dulaglutide) has a runner per simulation and runs them with `run_subfolders(runners, words.analyses, subfolders=..., workers=words.workers)` of sbmlsim, the words read with `parse_command_line(argv, choices=...)` of one of its runners.
 
-| analysis | design and indices | the tables and figures of sbmlsim 0.8.5, `<analysis>/` | per group, `<analysis>/<group>/` | defaults |
-| --- | --- | --- | --- | --- |
-| `LocalAnalysis` | `sampling.local` of `delta * k / n_var`, `k = 1, ..., n_var`, with the values of the simulation of the group, `sensitivity.local` | `local_d<delta>_nvar<n_var>_<k>_<group>.tsv` (a row per parameter and output: `parameter`, `output`, `effect`, `Sij`, `|Sij|`, `classification`, `method`, `difference`, `n_var`, sorted by `|Sij|`; `Sij` the mean of `normalized` over the designs, as sbmlsim 0.8.5 averaged its steps) and its heatmap `.png` | none | `delta=0.01`, in (0, 1); `n_var=3` |
-| `SamplingAnalysis` | `sampling.lhs`, one design for every group | `sampling_N<n>.tsv` (a row per group and output: `gid`, `gname`, `uid`, `name`, `N`, `mean`, `median`, `std`, `cv`, `min`, `q005`, `q095`, `max`, the uncertainty `U = (P97.5 - P2.5) / P50`, `symbol`, `classification`, `unit`), `sampling_N<n>_compact.tsv` and `sampling_N<n>.tex` (an output per row, `mean (cv in %)` per group), the box, violin and points of every group, `sampling_N<n>_sensitivity_samples.png` (the parameters) and `..._outputs.png` | `samples.tsv` (the outputs and the parameters of every point) | `n=1000` |
-| `FastAnalysis` | `sampling.fast`, `sensitivity.fast` | `fast_M4_N<n>_sensitivity_<k>_<group>_S1.png`, `..._ST.png` (heatmaps) and `..._<o>_<output>.png` (the indices of an output with their intervals) | `<output>.S1.tsv`, `<output>.ST.tsv` | `n=1000`, more than 64 |
-| `SobolAnalysis` | `sampling.sobol`, `sensitivity.sobol` | `sobol_N<n>_sensitivity_<k>_<group>_S1.png`, `..._ST.png` and `..._<o>_<output>.png` | `<output>.S1.tsv`, `<output>.ST.tsv` | `n=4096`, a power of two |
+## The observables of the pharmacokinetics
 
-The number of samples `n` goes through `sample_size`, so `PKPDSIM_SENSITIVITY_N` replaces it in a smoke run (a smoke run of `fast` needs more than 64 samples and one of `sobol` a power of two, so they run with different values). What can go wrong is found before the first analysis runs, not hours into a run:
+`pk_observables(prefix, selection, outputs, *, dose, route, options, per_dose_mass, mr, pk_id)` gives the non-compartmental analysis of a concentration, the `PK` observable `pk_<prefix>` (or `pk_id`, since an id of the model, e.g. the species `hctz`, is no id of an observable) with the parameters of the outputs, and a `Formula` `<prefix>_<key>` per output in its unit. The dose of an analysis is a mass (`PODOSE_<s>` in mg), so an output whose unit has the amount of the dose (`per_dose_mass`, e.g. `cl_f` and `vz_f`) is divided by the molecular weight of the dosed substance at the start, `at(<mr>, 0)`, which it then requires. The observables are the `observables` of a runner, a list or a function which builds them when a run starts; an output names the formula `<prefix>_<key>` or the parameter `<pk_id>.<key>` of the analysis. `max_after_dose(time, values)` is the function of a `Custom` observable of one selection, its maximum from the dose at time 0 on (a simulation which starts before the dose).
 
-- when the runner is created: an analysis without a group or with two groups of one id, a `delta` outside of (0, 1), a number of samples which the design refuses (a positive int; for `FastAnalysis` more than 64, for `SobolAnalysis` a power of two); a runner without outputs, analyses or default analyses, with two outputs of one id or one observable, with an output whose observable is none of `observables`, with a default which is none of its analyses or is given twice (a `ValueError`; a string as `default` is a `TypeError`);
-- when a run starts, before anything is written: the names (an unknown or repeated name, a string instead of a sequence), the subfolder, and for every named analysis the parameters it varies (none, or one without valid bounds, see `distributions`) and the number of samples which `PKPDSIM_SENSITIVITY_N` gives; the error names the analysis in a note.
+```python
+from pkpdutils import NCAOptions
+from sbmlsim.simulation import Custom
 
-The analyses are these four: `Analysis` has no public hook for an analysis of a script's own, a script with its own analysis (simvastatin's central differences) runs it itself.
+from pkpdsim.sensitivity import max_after_dose, pk_observables
 
-### The tables and figures of sbmlsim 0.8.5
+observables = [
+    *pk_observables(
+        "hctz",
+        "[Cve_hctz]",
+        {"auc_inf_obs": "mM*min", "cl_f": "ml/min"},
+        dose="PODOSE_hctz",
+        route="oral",
+        options=NCAOptions(lloq=4.5e-10),
+        per_dose_mass={"cl_f"},
+        mr="Mr_hctz",
+        pk_id="pk_hctz",
+    ),
+    Custom("max_diuresis", max_after_dose, "l/min", symbols=["diuresis"]),
+]
+for observable in observables:
+    print(observable)
+```
 
-The sensitivity analyses of the models keep their parameters and outputs across the port onto sbmlsim 0.9: the numbers differ by construction (other designs and samplers), the tables and figures a manuscript uses do not. The files of sbmlsim 0.8.5 are therefore the results of an analysis, with their names, columns and content (see the table above), one result per quantity: the `<k>` of a name is the position of the group in the analysis (`00`), `<o>` the position of the output (`000`). Only what sbmlsim 0.8.5 wrote no file of is written in another form, per group: the samples of the sampling and the tables of the global indices. The heatmaps label the parameters `uid: name` and the outputs by name and leave out the parameters below 0.05 without clustering them (local: `seismic` from -2 to 2; `S1`, `ST`: `viridis` from 0 to 1); a heatmap of which no parameter reaches the cutoff shows every parameter, where `plot_heatmap` would refuse it. An undefined index (an output which is zero at the reference) has no class, a negative uncertainty (a negative median) the class of its magnitude, where the classifications of sbmlsim refuse them. What sbmlsim 0.9 does not give:
+## The parameters of a model of the PBPK library
 
-- the caches of sbmlsim 0.8.5, `<prefix>_results.pkl` and `<prefix>_sensitivity.pkl`: pickles of its own objects, written with `cache_results=False` too, which no script read;
-- the steps of the local analysis: sbmlsim 0.9 has one step per side, so the table averages the designs of `delta / 3`, `2 delta / 3` and `delta` (three scans instead of one), which is the mean over the steps of sbmlsim 0.8.5;
-- separate samples per group: the sampling shares one design for every group, so the samples of a parameter are the same in every group;
-- the bars of the indices of an output in the form of sbmlsim 0.8.5: they are the figure of `plot_indices`, which draws `S1` and `ST` with their intervals side by side and scales every output, where sbmlsim 0.8.5 overlaid them on one scale for every output of the group.
-
-### Several simulations
-
-A model with several simulations (dulaglutide: a single dose with the pharmacokinetic and the bodyweight outputs, weekly doses with the bodyweight outputs) has a runner per simulation and its own `main`, which reads the simulations with the analyses from the command line (`parse_command_line(argv, choices=...)`, in any order: `local sampling multi`) and runs them with `run_subfolders`: the analyses of every simulation into a subfolder, `sensitivity/<simulation>/<analysis>`, and the one table of the parameters into `sensitivity`, written and printed once:
+A model of the PBPK library has hundreds of constants, most of them initial assignments of its covariates, so its analysis names the parameters it varies: `library_parameters(model_path, ids, fit_ids=..., scaling_ids=..., references={}, relative=0.15)` is the table of the `ids` in their order (`SensitivityParameter`s of `sbmlsim.sensitivity.parameters`). The fitted parameters vary by `value * (1 +- relative)`, the scaling factors (1 in the healthy individual) by `1 +- relative`, the severities `SEVERITIES` (`CP_severity` 0 to 3, `HF_severity` 0 to 4) from 0 to `relative` of their top, and any other parameter by `value * (1 +- relative)`. The reference of a parameter is the `Sources:` list of its notes (`notes_sources`), replaced by the text of `references`. An id which is no parameter of the model, and an id of `fit_ids`, `scaling_ids` or `references` which is not in `ids`, is a `ValueError` naming it. `parameters_from_sbml(..., exclude_derived=True)` of sbmlsim is the table of every constant without the initial assignments. `NonzeroLocalAnalysis` is the `LocalAnalysis` of sbmlsim which leaves out the parameters whose value is 0 (a severity of the healthy individual), whose local sensitivity is 0/0; the sampled analyses vary the severities within their bounds.
 
 ```python
 # not executed
-SIMULATIONS = {"single": SINGLE, "multi": MULTI}  # a SensitivityRunner each
+from pkpdsim.sensitivity import NonzeroLocalAnalysis, library_parameters
 
 
-def main(argv: Sequence[str] | None = None) -> None:
-    words = SINGLE.parse_command_line(argv, choices=list(SIMULATIONS))
-    run_subfolders(SIMULATIONS, words.analyses, subfolders=words.choices or ("single",))
+def sensitivity_parameters() -> list:
+    return library_parameters(
+        MODEL_PATH,
+        ["BW", "f_renal_function", "CP_severity", "fu_ref_api"],
+        fit_ids={"fu_ref_api"},
+        scaling_ids={"f_renal_function"},
+        references={"f_renal_function": r"\cite{Stevens2024}"},
+    )
 
 
-if __name__ == "__main__":
-    main()
-```
-
-`parse_command_line` returns a `CommandLine` of the names of the analyses (the default analyses without one) the words of the choices in their order (none without one) and the `workers` of `--workers` (`None` if absent or `0`); a word which is neither, or is given twice, exits with 2, `--help` lists both. A choice which is the name of an analysis is a `ValueError`. `run_subfolders(runners, names, *, subfolders, path, simulator)` checks everything of every runner before anything is written (the names, the parameters and the sizes, as `run`), and that the runners share one model and give the same parameters, which share one table; `run(names, subfolder=...)` runs one runner into a subfolder.
-
-The outputs and the analyses do not need a model:
-
-```python
-from sbmlsim.simulation import Simulation
-
-from pkpdsim.sensitivity import LocalAnalysis, SensitivityGroup, SensitivityOutput
-
-print(SensitivityOutput("cmax", "Cmax").observable)
-print(SensitivityOutput("[Cve_api]_cmax", "API Cmax", observable="Cve_api_cmax"))
-control = SensitivityGroup("control", "Control", Simulation(end=24, steps=100))
-print(LocalAnalysis(groups=[control]).delta)
+LOCAL = NonzeroLocalAnalysis(groups=GROUPS[:1])
 ```
