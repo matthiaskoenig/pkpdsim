@@ -808,17 +808,14 @@ def test_a_sensitivity_group_runs_from_the_equilibrated_state(
     of the model (X 100), the equilibrated one at that of its condition (X
     50), whatever the EC50 of the drug, which the design varies.
     """
-    from sbmlsim.simulation import Formula
-
-    from pkpdsim.sensitivity import (
-        ParameterType,
+    from sbmlsim.sensitivity.parameters import ParameterType, SensitivityParameter
+    from sbmlsim.sensitivity.runner import (
         SamplingAnalysis,
         SensitivityGroup,
         SensitivityOutput,
-        SensitivityParameter,
         SensitivityRunner,
-        SimulatorRun,
     )
+    from sbmlsim.simulation import Formula
 
     placebo = Simulation(end=60, preinit_changes=CONDITION)
     groups = [
@@ -831,7 +828,11 @@ def test_a_sensitivity_group_runs_from_the_equilibrated_state(
         ),
     ]
     runner = SensitivityRunner(
-        model=_model(builds["sink"]).replace(results_path=tmp_path),
+        project=_model(builds["sink"]).replace(
+            simulator=SimulatorSettings(
+                absolute_tolerance=1e-10, relative_tolerance=1e-10
+            )
+        ),
         parameters=lambda: [
             SensitivityParameter(
                 uid="HOMEO__EC50",
@@ -847,13 +848,9 @@ def test_a_sensitivity_group_runs_from_the_equilibrated_state(
         observables=[Formula("X_start", "at(HOMEO__X, 0)", unit="dimensionless")],
         analyses={"sampling": SamplingAnalysis(groups=groups, n=8)},
         default=("sampling",),
+        out=tmp_path / "sensitivity",
     )
-    path = runner.run(
-        ["sampling"],
-        simulator=SimulatorRun(
-            SimulatorSettings(absolute_tolerance=1e-10, relative_tolerance=1e-10), 1
-        ),
-    )
+    path = runner.run(["sampling"], workers=1)
     starts = {
         group.uid: pd.read_csv(path / "sampling" / group.uid / "samples.tsv", sep="\t")[
             "X_start"
