@@ -93,7 +93,10 @@ import argparse
 import dataclasses
 import datetime
 import importlib
+import json
+import logging
 import math
+import os
 import re
 import shutil
 import sys
@@ -106,6 +109,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, NoReturn
 
 from sbmlsim import display, log
+from sbmlsim.atomic import write_text_atomic
 from sbmlsim.cgroup import available_cpus
 from sbmlsim.experiment import ExperimentRunError
 from sbmlsim.experiment.draws import UncertaintySettings
@@ -137,6 +141,7 @@ from sbmlsim.fit.result import FIT_ID, fit_id, fit_subset
 from sbmlsim.fit.sampling import SamplingType
 from sbmlsim.project import Project, collect_figure_files, load_project, resolve
 from sbmlsim.run import ConfigurationError, execute, list_analyses, plan
+from sbmlsim.run.context import SPEC_FILE
 from sbmlsim.run.profiling import (
     PROFILE_DIR,
     PROFILE_OPTION,
@@ -159,6 +164,9 @@ from pkpdsim.model import RUN_WORKERS, PKPDModel
 
 if TYPE_CHECKING:
     from sbmlsim.experiment import SimulationExperiment
+
+
+logger = logging.getLogger(__name__)
 
 
 class Action(StrEnum):
@@ -331,10 +339,24 @@ def project_reference(model: PKPDModel) -> str:
     return reference
 
 
+def _same(a: Path, b: Path) -> bool:
+    """Check whether two resolved paths are one, also on a case-insensitive file system."""
+    if a == b:
+        return True
+    try:
+        return os.path.samefile(a, b)
+    except OSError:
+        return False
+
+
 def _overlaps(out: Path, path: Path) -> bool:
     """Check whether an output is a path, contains it or lies inside it."""
     target, other = out.resolve(), path.resolve()
-    return target == other or target in other.parents or other in target.parents
+    return (
+        _same(target, other)
+        or any(_same(target, parent) for parent in other.parents)
+        or any(_same(other, parent) for parent in target.parents)
+    )
 
 
 def _check_out(
@@ -362,7 +384,7 @@ def _check_out(
             )
     for path in [model.root, *model.data_paths]:
         target, other = out.resolve(), path.resolve()
-        if target == other or target in other.parents:
+        if _same(target, other) or any(_same(target, p) for p in other.parents):
             parser.error(
                 f"The output '{out}' contains the input '{path}' of the command, "
                 "which the output would replace: give another output."
@@ -396,34 +418,77 @@ def _staged[T](
     token = uuid.uuid4().hex
     staging = target.parent / f".{target.name}.{token}"
     target.parent.mkdir(parents=True, exist_ok=True)
+    _sweep(target)
     try:
         result = run(staging)
+    except BaseException:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+    try:
         if inner is not None:
             _moved_up(staging / inner, staging)
     except OSError as err:
         shutil.rmtree(staging, ignore_errors=True)
         _failed(f"The result '{target}' is not written: {err}")
-    except BaseException:
-        shutil.rmtree(staging, ignore_errors=True)
-        raise
     earlier = target.parent / f".{target.name}.old.{token}"
-    try:
-        if target.exists():
-            console.print(
-                f"The earlier results in '{target}' are replaced.", markup=False
-            )
-            target.rename(earlier)
+    if target.exists():
+        console.print(f"The earlier results in '{target}' are replaced.", markup=False)
         try:
-            staging.rename(target)
-        except OSError:
-            if earlier.exists():
-                earlier.rename(target)
-            raise
+            target.rename(earlier)
+        except OSError as err:
+            shutil.rmtree(staging, ignore_errors=True)
+            _failed(f"The result '{target}' is not written: {err}")
+    try:
+        staging.rename(target)
     except OSError as err:
         shutil.rmtree(staging, ignore_errors=True)
+        if earlier.exists():
+            try:
+                earlier.rename(target)
+            except OSError as restore:
+                _failed(
+                    f"The result '{target}' is not written ({err}) and the earlier "
+                    f"result is not restored ({restore}), it is in '{earlier}'."
+                )
         _failed(f"The result '{target}' is not written: {err}")
     shutil.rmtree(earlier, ignore_errors=True)
     return result
+
+
+def _sweep(target: Path) -> None:
+    """Remove the stagings and earlier results of a target which a killed run left.
+
+    A run which was killed leaves `.<name>.<uuid>` or `.<name>.old.<uuid>`
+    next to the target, see `_staged`; each removal is logged.
+    """
+    pattern = re.compile(rf"^\.{re.escape(target.name)}\.(old\.)?[0-9a-f]{{32}}$")
+    for entry in sorted(target.parent.iterdir()):
+        if entry.is_dir() and pattern.match(entry.name):
+            logger.warning("A run which was killed left '%s', it is removed.", entry)
+            shutil.rmtree(entry, ignore_errors=True)
+
+
+def _relocated_input(spec_file: Path, staged: Path, final: Path) -> None:
+    """Name an input of a run where it is after the staged swap, see `_staged`.
+
+    The spec of a run records the absolute paths of its inputs; an input in
+    the staging directory is renamed with it.
+
+    Args:
+        spec_file: the planned spec of the run, `spec.json`.
+        staged: the input in the staging directory.
+        final: the input after the swap.
+    """
+    spec = json.loads(spec_file.read_text(encoding="utf-8"))
+    old = str(staged.resolve())
+    changed = {
+        key: str(final.resolve())
+        for key, value in spec.items()
+        if isinstance(value, str) and value == old
+    }
+    if changed:
+        spec.update(changed)
+        write_text_atomic(spec_file, json.dumps(spec, indent=2) + "\n")
 
 
 def _plain_name(parser: argparse.ArgumentParser, name: str, option: str) -> str:
@@ -1790,7 +1855,7 @@ def identifiability_command(
         "group_by": _group_by(options),
     }
 
-    def run(staging: Path) -> None:
+    def run(staging: Path) -> Path:
         analysis = staging / ANALYSIS_DIR
         _execute(
             p,
@@ -1802,8 +1867,12 @@ def identifiability_command(
         )
         report_run = staging / REPORT_RUN_DIR
         _execute(p, "report", report_spec, report_run, inputs={"fit": analysis})
+        return analysis
 
-    _staged(out, run, inner=f"{REPORT_RUN_DIR}/{REPORT_NAME}")
+    staged = _staged(out, run, inner=f"{REPORT_RUN_DIR}/{REPORT_NAME}")
+    # the report read the analysis in the staging directory: its spec names
+    # the analysis where it is now
+    _relocated_input(out / REPORT_RUN_DIR / SPEC_FILE, staged, out / ANALYSIS_DIR)
     # the report of the kind named its folder before it was moved
     display.link("results", out / "index.html")
     return out
