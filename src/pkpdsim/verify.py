@@ -116,11 +116,12 @@ def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="pkpdsim-verify",
         description=__doc__.split("\n\n")[0] if __doc__ else None,
+        allow_abbrev=False,
     )
     sub = p.add_subparsers(required=True)
 
     def command(name: str, help_: str) -> argparse.ArgumentParser:
-        return sub.add_parser(name, help=help_, description=help_)
+        return sub.add_parser(name, help=help_, description=help_, allow_abbrev=False)
 
     s = command("dump", "run the experiments of a model and store everything")
     s.add_argument("--root", required=True, help=ROOT_HELP)

@@ -676,7 +676,6 @@ class RatiosExtension(EvidenceExtension):
         return {"ratios": pd.DataFrame(rows, columns=["context", *RATIO_COLUMNS])}
 
     @override
-    @override
     def pool_lines(
         self, table: pd.DataFrame, options: Mapping[str, Any]
     ) -> Sequence[str]:
@@ -689,6 +688,7 @@ class RatiosExtension(EvidenceExtension):
             for row in pooled.to_dict("records")
         ]
 
+    @override
     def pool(
         self,
         contexts: Mapping[str, Sequence[Mapping[str, Any] | None]],
