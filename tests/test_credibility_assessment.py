@@ -15,6 +15,7 @@ with the PK battery the same checks.
 import dataclasses
 import json
 import math
+import re
 from collections.abc import Callable
 from datetime import date, timedelta
 from pathlib import Path
@@ -90,6 +91,62 @@ def _worded(statement: str) -> str:
     return statement
 
 
+#: a number of a statement: an integer, a decimal or a number with an exponent,
+#: not a digit inside a word such as `C1` or `within_2fold`
+NUMBER = re.compile(r"(?<![\w.])[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?(?![\w])")
+
+#: the point of the largest relative difference of a check of the verification,
+#: e.g. `, at CredA.fm_renal at 6,`, which another platform may find at another
+#: point of equal difference within the noise of the integrator
+LARGEST_AT = re.compile(r"(Largest relative difference .*?, at )[^,]+,")
+
+#: the relative tolerance of a decimal number of a statement: the numbers with
+#: a fraction or an exponent are the largest relative differences of the
+#: verification, printed with two significant digits, the maximum over the
+#: decisive points of the difference between two integrations at tolerances
+#: tightened 100-fold; that is the noise of the integrator, whose size the
+#: tolerances set and whose bits a platform (its libm, its compiler) changes,
+#: so a value within a factor of 2 (`math.isclose` relative to the larger of
+#: the two) is the same; an integer, a count of points, cases or rules, is
+#: compared exactly
+NOISE_RTOL = 0.5
+
+
+def _statement_parts(statement: str) -> tuple[str, list[str]]:
+    """Get a statement with its numbers as `<n>` and the location of a difference as `<at>`, and the numbers."""
+    masked = LARGEST_AT.sub(r"\1<at>,", statement)
+    return NUMBER.sub("<n>", masked), NUMBER.findall(masked)
+
+
+def _same_statement(after: str, before: str) -> bool:
+    """Compare two statements: the text exactly, the decimal numbers within the noise."""
+    text_after, numbers_after = _statement_parts(after)
+    text_before, numbers_before = _statement_parts(before)
+    if text_after != text_before or len(numbers_after) != len(numbers_before):
+        return False
+    for a, b in zip(numbers_after, numbers_before, strict=True):
+        decimal = any(c in a + b for c in ".eE")
+        if decimal and not math.isclose(float(a), float(b), rel_tol=NOISE_RTOL):
+            return False
+        if not decimal and a != b:
+            return False
+    return True
+
+
+def test_the_comparison_of_statements() -> None:
+    before = (
+        "Largest relative difference 2.5e-06 of 5 decisive predictions with the "
+        "tolerances of the fits divided by 100, at CredA.fm_renal at 6, "
+        "acceptance unchanged: passed."
+    )
+    moved = before.replace("2.5e-06", "3.1e-06").replace("at 6,", "at 8,")
+    assert _same_statement(moved, before)
+    assert not _same_statement(before.replace("2.5e-06", "9e-06"), before)
+    assert not _same_statement(before.replace("of 5 decisive", "of 6 decisive"), before)
+    assert not _same_statement(before.replace("passed", "failed"), before)
+    assert _same_statement("C1 within_2fold 10 of 10.", "C1 within_2fold 10 of 10.")
+
+
 def _same(a: object, b: object) -> bool:
     """Compare two values of a record, numbers within the integration."""
     if isinstance(a, float) and isinstance(b, float):
@@ -141,8 +198,20 @@ def _compare(
             )
         for a, b in zip(after.factors, before.factors, strict=True):
             assert a["id"] == b["id"]
-            if a["id"] != CODE_VERIFICATION:
-                assert dict(a) == {**b, "statement": _worded(b["statement"])}, a["id"]
+            if a["id"] == CODE_VERIFICATION:
+                continue
+            assert a.keys() == b.keys()
+            assert (a["id"], a["status"], a["name"], a["step"]) == (
+                b["id"],
+                b["status"],
+                b["name"],
+                b["step"],
+            )
+            assert _same_statement(a["statement"], _worded(b["statement"])), (
+                a["id"],
+                a["statement"],
+                b["statement"],
+            )
     assert [e.to_dict() for e in new.evidence] == [e.to_dict() for e in old.evidence]
     assert [c.to_dict() for c in new.coverage] == [c.to_dict() for c in old.coverage]
     # the folder of a study is the one of the run
