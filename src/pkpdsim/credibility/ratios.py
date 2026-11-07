@@ -676,6 +676,19 @@ class RatiosExtension(EvidenceExtension):
         return {"ratios": pd.DataFrame(rows, columns=["context", *RATIO_COLUMNS])}
 
     @override
+    @override
+    def pool_lines(
+        self, table: pd.DataFrame, options: Mapping[str, Any]
+    ) -> Sequence[str]:
+        """Word the pooled rows (the model `all`) as the share within the limits of Guest."""
+        pooled = table[table["model"] == "all"]
+        return [
+            f"  {row['value']}: {row['n_within']} of {row['n_pairs']} ratio pairs "
+            f"within the limits of Guest ({row['within']:.0f} %), GMFE "
+            f"{row['gmfe']:.3g}"
+            for row in pooled.to_dict("records")
+        ]
+
     def pool(
         self,
         contexts: Mapping[str, Sequence[Mapping[str, Any] | None]],

@@ -51,7 +51,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, override
 
 from sbmlsim.data import Data, load_pkdb_dataframe, rename_units
 from sbmlsim.experiment import SimulationExperiment, to_sid
@@ -291,6 +291,21 @@ class PKPDSimulationExperiment(SimulationExperiment):
             ValueError: for a sex which is no `Sex`.
         """
         return Sex(cls.simulation_sexes.get(simulation, cls.sex))
+
+    @override
+    def variant_of(self, simulation: str) -> str:
+        """Get the variant of the model a simulation runs on: the sex of its subjects.
+
+        The variants of a `PKPDModel` are the sexes, so `pkpdsim-verify dump`
+        stores the sex per task as `builds`.
+
+        Args:
+            simulation: the key of the simulation.
+
+        Returns:
+            The value of the sex (`male` or `female`).
+        """
+        return str(self.sex_of(simulation))
 
     def model_id(self, sex: Sex) -> str:
         """Get the key of the build of a sex among the models of the experiment.

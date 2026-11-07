@@ -1568,8 +1568,8 @@ requires-dist = [
     { name = "python-libsbml", specifier = ">=5.21.2" },
     { name = "pyyaml", marker = "extra == 'dev'", specifier = ">=6.0.3" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.17.3" },
-    { name = "sbmlsim", git = "https://github.com/matthiaskoenig/sbmlsim.git?rev=02dca1497f0b1c7e70859dcc5ccdc7668b314929" },
-    { name = "sbmlsim", extras = ["amici"], marker = "extra == 'amici'", git = "https://github.com/matthiaskoenig/sbmlsim.git?rev=02dca1497f0b1c7e70859dcc5ccdc7668b314929" },
+    { name = "sbmlsim", git = "https://github.com/matthiaskoenig/sbmlsim.git?rev=40299abbd1ec9f710e6f455a9bd5e9ffd1a079d5" },
+    { name = "sbmlsim", extras = ["amici"], marker = "extra == 'amici'", git = "https://github.com/matthiaskoenig/sbmlsim.git?rev=40299abbd1ec9f710e6f455a9bd5e9ffd1a079d5" },
     { name = "sbmlutils", specifier = ">=0.17.1" },
     { name = "scipy", specifier = ">=1.18.1" },
     { name = "tox", marker = "extra == 'dev'", specifier = ">=4.65.0,!=4.67.5" },
@@ -2172,7 +2172,7 @@ wheels = [
 [[package]]
 name = "sbmlsim"
 version = "0.16.0"
-source = { git = "https://github.com/matthiaskoenig/sbmlsim.git?rev=02dca1497f0b1c7e70859dcc5ccdc7668b314929#02dca1497f0b1c7e70859dcc5ccdc7668b314929" }
+source = { git = "https://github.com/matthiaskoenig/sbmlsim.git?rev=40299abbd1ec9f710e6f455a9bd5e9ffd1a079d5#40299abbd1ec9f710e6f455a9bd5e9ffd1a079d5" }
 dependencies = [
     { name = "certifi" },
     { name = "h5netcdf" },
