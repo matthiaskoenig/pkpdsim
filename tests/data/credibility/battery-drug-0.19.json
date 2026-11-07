@@ -1,0 +1,115 @@
+{
+  "results": [
+    {
+      "check": "mass_balance",
+      "status": "passed",
+      "cases": 4,
+      "largest": 5.041540102057548e-15,
+      "at": "male IVDOSE_d",
+      "problems": [],
+      "statement": "The amounts of the substances, of their sinks and doses change by the infusion and the flows of the reactions which read no dose alone, at most 1e-06 of the largest term."
+    },
+    {
+      "check": "non_negativity",
+      "status": "passed",
+      "cases": 3,
+      "largest": 0.0,
+      "at": "",
+      "problems": [],
+      "statement": "No species becomes negative beyond 1e-06 of its largest value."
+    },
+    {
+      "check": "zero_dose",
+      "status": "passed",
+      "cases": 3,
+      "largest": 0.0,
+      "at": "",
+      "problems": [],
+      "statement": "Without a dose the species of a substance which starts at zero stay zero."
+    },
+    {
+      "check": "steady_state",
+      "status": "passed",
+      "cases": 4,
+      "largest": 0.0,
+      "at": "",
+      "problems": [],
+      "statement": "Without a dose every state but the sinks stays at its start, within 1e-06 of it."
+    },
+    {
+      "check": "superposition",
+      "status": "passed",
+      "cases": 3,
+      "largest": 7.390104479287915e-10,
+      "at": "male PODOSE_d two doses: Cve_d",
+      "problems": [],
+      "statement": "Twice a dose of 0.01 mg gives twice the response, and two doses at 0 and 720 min the sum of their responses, within 0.01 of the largest response."
+    },
+    {
+      "check": "cross_simulator",
+      "status": "not_applicable",
+      "cases": 0,
+      "largest": null,
+      "at": "",
+      "problems": [],
+      "statement": "Not run."
+    },
+    {
+      "check": "plausibility",
+      "status": "passed",
+      "cases": 18,
+      "largest": null,
+      "at": "",
+      "problems": [],
+      "statement": "The default individual has finite values, positive compartments and species which are not negative, and no fitted value lies within 0.001 of the range of a bound."
+    },
+    {
+      "check": "rebuild",
+      "status": "not_applicable",
+      "cases": 0,
+      "largest": null,
+      "at": "",
+      "problems": [],
+      "statement": "Not run."
+    }
+  ],
+  "fates": [
+    {
+      "build": "male",
+      "dose": "IVDOSE_d",
+      "substance": "d",
+      "amount": 0.03333333333333333,
+      "parts": {
+        "body": 3.621769677175198e-08,
+        "urine": 0.032051245833585575,
+        "ELIM": -0.0012820512820511541
+      },
+      "imbalance": 5.041540102057548e-15
+    },
+    {
+      "build": "male",
+      "dose": "Ri_d",
+      "substance": "d",
+      "amount": 0.03333333333333333,
+      "parts": {
+        "body": 4.2236933257332406e-08,
+        "urine": 0.032051239814348834,
+        "ELIM": -0.0012820512820510873
+      },
+      "imbalance": 4.66423774603259e-15
+    },
+    {
+      "build": "male",
+      "dose": "PODOSE_d",
+      "substance": "d",
+      "amount": 0.03333333333333333,
+      "parts": {
+        "body": 4.587574648831851e-08,
+        "urine": 0.03205123617553587,
+        "ELIM": -0.0012820512820510268
+      },
+      "imbalance": 1.431146867680857e-15
+    }
+  ],
+  "settings": "roadrunner CVODE BDF, rtol 1e-10, atol 1e-16; every simulation 48 h on a grid of 10 min; a dose of 10 mg, an infusion over 60 min; the superposition of 0.01 mg at 0 and 720 min."
+}

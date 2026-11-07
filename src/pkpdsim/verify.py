@@ -2791,7 +2791,8 @@ def scorecard_command(options: argparse.Namespace) -> int:
         return 2
     table = scorecard(records, EXTENSIONS)
     qualified = pool(records, RATIOS, {"field": options.field})
-    assert qualified is not None  # the ratio pairs pool
+    if qualified is None:
+        raise TypeError("The extension of the ratio pairs pools no qualification.")
     if options.out:
         table.to_csv(options.out, sep="\t", index=False, lineterminator="\n")
     if options.qualification:

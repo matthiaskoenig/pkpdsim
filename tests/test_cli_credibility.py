@@ -320,3 +320,26 @@ def test_the_cross_validation_command(
     with pytest.raises(SystemExit) as exc:
         fit_command(model, ["--cross-validation", fit_id, "--experiments", "CredC"])
     assert exc.value.code == 1
+
+
+def test_a_lock_which_is_not_moved_is_an_error(
+    model: PKPDModel,
+    lock_file: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def refuse(source: object, target: object) -> None:
+        raise PermissionError("read-only")
+
+    monkeypatch.setattr(shutil, "move", refuse)
+    out = tmp_path / "out"
+    with pytest.raises(SystemExit) as exit_info:
+        credibility_command(model, ["-o", str(out), "--no-verification", "--lock"])
+    assert exit_info.value.code == 1
+    printed = "".join(capsys.readouterr().out.split())
+    assert "isnotwritten(read-only)" in printed
+    assert not lock_file.exists()
+    # the assessment is written, its lock is left in the output
+    assert (out / "credibility.json").is_file()
+    assert (out / "credibility.lock.json").is_file()
