@@ -109,49 +109,148 @@ ROOT_HELP = (
 
 
 def parser() -> argparse.ArgumentParser:
-    """Create the parser of the command line: the one of sbmlsim with the options of pkpdsim.
+    """Create the parser of the command line, which checks the arguments and shows the help.
 
-    `--project` is `--model` (the package, whose `MODEL` is the project), `--root`
-    is required for the commands which load a model, and `scorecard` has the
-    extensions and the pool of pkpdsim and `--field` defaults to `health`.
-
-    Returns:
-        The parser, which `verify` uses for the help and to check the arguments.
+    The arguments themselves are translated (`translate`) for `sbmlsim.verify`.
     """
-    from sbmlsim.verify.cli import parser as sbmlsim_parser
-
-    p = sbmlsim_parser()
-    p.prog = "pkpdsim-verify"
-    p.description = (
-        "Verify that a change of a model changes only what it is meant to change."
+    p = argparse.ArgumentParser(
+        prog="pkpdsim-verify",
+        description=__doc__.split("\n\n")[0] if __doc__ else None,
     )
-    (subparsers,) = (a for a in p._actions if isinstance(a, argparse._SubParsersAction))
-    for name, sub in subparsers.choices.items():
-        for action in sub._actions:
-            if action.option_strings == ["--project"]:
-                action.option_strings = ["--model"]
-                sub._option_string_actions["--model"] = sub._option_string_actions.pop(
-                    "--project"
-                )
-                action.help = MODEL_HELP
-                action.metavar = "PACKAGE"
-            elif action.option_strings == ["--root"] and name in MODEL_COMMANDS:
-                action.required = True
-                action.help = ROOT_HELP
-            elif action.option_strings in (["--extensions"], ["--pool"]):
-                action.help = argparse.SUPPRESS
-            elif action.option_strings == ["--field"]:
-                action.default = DEFAULT_FIELD
-                action.help = (
-                    "the field of the metadata of the numerator the ratios are "
-                    "pooled by, default %(default)s"
-                )
-    for sub in subparsers.choices.values():
-        sub.prog = sub.prog.replace("python -m sbmlsim.run verify", "pkpdsim-verify")
-        sub.description = (sub.description or "").replace("project", "model")
-    for choice in subparsers._choices_actions:
-        choice.help = (choice.help or "").replace("project", "model")
+    sub = p.add_subparsers(required=True)
+
+    def command(name: str, help_: str) -> argparse.ArgumentParser:
+        return sub.add_parser(name, help=help_, description=help_)
+
+    s = command("dump", "run the experiments of a model and store everything")
+    s.add_argument("--root", required=True, help=ROOT_HELP)
+    s.add_argument("--model", required=True, metavar="PACKAGE", help=MODEL_HELP)
+    s.add_argument("--out", required=True, help="pickle the dump is written to")
+    s.add_argument(
+        "--all",
+        action="store_true",
+        help="also the experiments of experiments/ which are not in the registry",
+    )
+    s.add_argument("--order", help="run in the order of a previous dump")
+    s.add_argument(
+        "--skip", default=[], type=lambda s: s.split(","), help="A,B: leave these out"
+    )
+    s.add_argument(
+        "--atol", help="absolute tolerance, or `model` for that of the model"
+    )
+    s.add_argument(
+        "--rtol", help="relative tolerance, or `model` for that of the model"
+    )
+    s.add_argument(
+        "--reduced-selections",
+        action="store_true",
+        help="only the selections the experiments need, as a run of the model does",
+    )
+    s.add_argument(
+        "--grid",
+        type=_positive_int,
+        default=None,
+        metavar="N",
+        help="output every simulation at N + 1 equidistant times from its start to "
+        "its end and the times of its changes instead of the steps of the "
+        "integrator, so two dumps share their times; a migration compare dumps "
+        "both models with the same grid",
+    )
+    s.add_argument("experiments", nargs="*", help="only these experiment classes")
+
+    s = command("compare", "compare two dumps")
+    s.add_argument("old")
+    s.add_argument("new")
+    s.add_argument(
+        "--renames",
+        help=(
+            "json file of the expected renames and differences (metadata, strings, "
+            "ids, sids, figure_fields, expected), applied to the old dump; in a "
+            "pattern of expected, * and ? are wildcards and a bracket is literal, "
+            "experiment/task/time names the output times only the new dump has"
+        ),
+    )
+    s.add_argument("--threshold", type=float, default=1e-6, help="default 1e-6")
+    s.add_argument("--top", type=int, default=20, help="lines per listing")
+    s.add_argument("experiments", nargs="*", help="only these experiments")
+
+    s = command("ranges", "fit mappings with data outside of the simulation")
+    s.add_argument("dump")
+    s.add_argument("--verbose", action="store_true", help="every mapping")
+
+    s = command("fits", "a minimal fit of every fit definition of a model")
+    s.add_argument("--root", required=True, help=ROOT_HELP)
+    s.add_argument("--model", required=True, metavar="PACKAGE", help=MODEL_HELP)
+    s.add_argument("--out", required=True, help="output directory of the fits")
+    s.add_argument("--max-nfev", type=int, default=3, help="evaluations per start")
+    s.add_argument("subsets", nargs="*", help="only these fit definitions")
+
+    s = command("definitions", "the fit definitions of a model as json")
+    s.add_argument("--root", required=True, help=ROOT_HELP)
+    s.add_argument("--model", required=True, metavar="PACKAGE", help=MODEL_HELP)
+    s.add_argument(
+        "--out", required=True, help="json file the definitions are written to"
+    )
+
+    s = command("settings", "the settings a run of a model hands to sbmlsim as json")
+    s.add_argument("--root", required=True, help=ROOT_HELP)
+    s.add_argument("--model", required=True, metavar="PACKAGE", help=MODEL_HELP)
+    s.add_argument("--out", required=True, help="json file the settings are written to")
+    s.add_argument(
+        "--experiment",
+        help="the experiment class to run, the first of the registry by default",
+    )
+
+    s = command("png", "compare the PNG figures of two directories")
+    s.add_argument("old")
+    s.add_argument("new")
+    s.add_argument(
+        "--sids",
+        action="store_true",
+        help=(
+            "pair an old figure with the new figure of the SId of its file name "
+            "(sbmlsim.experiment.to_sid), for a port which renamed the keys"
+        ),
+    )
+    s.add_argument("names", nargs="*", help="only files containing one of these")
+
+    s = command("sbml", "compare two SBML files or the SBML files of two dirs")
+    s.add_argument("old")
+    s.add_argument("new")
+
+    s = command(
+        "scorecard",
+        "the credibility of many models: the scorecard, the qualification of the "
+        "ratios across models and the regressions against a baseline",
+    )
+    s.add_argument(
+        "records", nargs="+", help="credibility.json files or directories with them"
+    )
+    s.add_argument(
+        "--baseline", help="a scorecard TSV to compare with, a regression exits 1"
+    )
+    s.add_argument("--out", help="TSV file the scorecard is written to")
+    s.add_argument("--qualification", help="TSV file the qualification is written to")
+    s.add_argument(
+        "--field",
+        default="health",
+        help="the field of the metadata of the numerator the ratios are pooled by",
+    )
+    s.add_argument(
+        "--tolerance",
+        type=float,
+        default=0.05,
+        help="the change of a metric which is no regression, default 0.05",
+    )
     return p
+
+
+def _positive_int(text: str) -> int:
+    """Parse a positive integer of the command line."""
+    value = int(text)
+    if value < 1:
+        raise argparse.ArgumentTypeError(f"a positive number, not {text}")
+    return value
 
 
 def verify(args: Sequence[str] | None = None) -> int:
