@@ -141,3 +141,30 @@ def test_a_package_without_a_model_object_is_a_usage_error(tmp_path: Path) -> No
         ]
     )
     assert code == 2
+
+
+@pytest.mark.parametrize(
+    "command", [None, "dump", "compare", "fits", "definitions", "settings", "scorecard"]
+)
+def test_the_help_shows_the_options_of_pkpdsim(
+    command: str | None, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert verify([command, "--help"] if command else ["--help"]) == 0
+    text = capsys.readouterr().out
+    assert "pkpdsim-verify" in text
+    assert "--project" not in text
+    assert "sbmlsim.run" not in text
+    if command in MODEL_COMMANDS:
+        assert "--model PACKAGE" in text
+
+
+def test_a_scorecard_without_pooled_rows_prints_no_qualification(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from sbmlsim.credibility.scorecard import load_records
+    from test_cli_credibility import _assessment, _write
+
+    records = _write(tmp_path / "records", _assessment("a"))
+    assert len(load_records([records])) == 1
+    assert verify(["scorecard", str(records), "--field", "nothing"]) == 0
+    assert "qualification by" not in capsys.readouterr().out

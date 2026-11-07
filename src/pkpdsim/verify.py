@@ -29,6 +29,7 @@ uv run pkpdsim-verify compare base.pkl new.pkl
 ```
 """
 
+import argparse
 import os
 import sys
 from collections.abc import Iterator, Sequence
@@ -99,6 +100,60 @@ def translate(arguments: Sequence[str]) -> list[str]:
     return translated
 
 
+MODEL_HELP = "dotted name of the model package, e.g. pkdb_models.models.hctz"
+
+ROOT_HELP = (
+    "directory put first on the python path, e.g. a checkout of the repository "
+    "of the model"
+)
+
+
+def parser() -> argparse.ArgumentParser:
+    """Create the parser of the command line: the one of sbmlsim with the options of pkpdsim.
+
+    `--project` is `--model` (the package, whose `MODEL` is the project), `--root`
+    is required for the commands which load a model, and `scorecard` has the
+    extensions and the pool of pkpdsim and `--field` defaults to `health`.
+
+    Returns:
+        The parser, which `verify` uses for the help and to check the arguments.
+    """
+    from sbmlsim.verify.cli import parser as sbmlsim_parser
+
+    p = sbmlsim_parser()
+    p.prog = "pkpdsim-verify"
+    p.description = (
+        "Verify that a change of a model changes only what it is meant to change."
+    )
+    (subparsers,) = (a for a in p._actions if isinstance(a, argparse._SubParsersAction))
+    for name, sub in subparsers.choices.items():
+        for action in sub._actions:
+            if action.option_strings == ["--project"]:
+                action.option_strings = ["--model"]
+                sub._option_string_actions["--model"] = sub._option_string_actions.pop(
+                    "--project"
+                )
+                action.help = MODEL_HELP
+                action.metavar = "PACKAGE"
+            elif action.option_strings == ["--root"] and name in MODEL_COMMANDS:
+                action.required = True
+                action.help = ROOT_HELP
+            elif action.option_strings in (["--extensions"], ["--pool"]):
+                action.help = argparse.SUPPRESS
+            elif action.option_strings == ["--field"]:
+                action.default = DEFAULT_FIELD
+                action.help = (
+                    "the field of the metadata of the numerator the ratios are "
+                    "pooled by, default %(default)s"
+                )
+    for sub in subparsers.choices.values():
+        sub.prog = sub.prog.replace("python -m sbmlsim.run verify", "pkpdsim-verify")
+        sub.description = (sub.description or "").replace("project", "model")
+    for choice in subparsers._choices_actions:
+        choice.help = (choice.help or "").replace("project", "model")
+    return p
+
+
 def verify(args: Sequence[str] | None = None) -> int:
     """Run a subcommand.
 
@@ -110,8 +165,12 @@ def verify(args: Sequence[str] | None = None) -> int:
         command which cannot be run, 3 a failure.
     """
     os.environ.setdefault("MPLBACKEND", "Agg")
+    arguments = sys.argv[1:] if args is None else args
     try:
-        translated = translate(sys.argv[1:] if args is None else args)
+        parser().parse_args(arguments)
+        translated = translate(arguments)
+    except SystemExit as stop:
+        return stop.code if isinstance(stop.code, int) else 2
     except UsageError as err:
         print(f"pkpdsim-verify: error: {err}", file=sys.stderr)
         return 2
