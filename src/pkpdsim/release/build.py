@@ -13,6 +13,14 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
+from sbmlsim.run.context import (
+    PROGRESS_DIR,
+    PROGRESS_FILE,
+    RUN_FILE,
+    SPEC_FILE,
+    SUMMARY_FILE,
+)
+
 from pkpdsim.model import PKPDModel
 from pkpdsim.release.source import ReleaseError, Runner, run, stage
 
@@ -32,11 +40,26 @@ class BuildPaths:
     RESULTS = "results"
 
 
+#: the records of a run of the run layer of sbmlsim in the folder of a result
+#: (the host, local paths and the git state), which a release leaves out
+RUN_RECORDS = frozenset(
+    {RUN_FILE, SPEC_FILE, SUMMARY_FILE, PROGRESS_FILE, PROGRESS_DIR}
+)
+
+
 def _replace(source: Path, target: Path) -> None:
-    """Replace the folder `target` by a copy of the folder `source`."""
+    """Replace the folder `target` by a copy of the folder `source`.
+
+    The records of the run which wrote the result, at the top of `source`,
+    are left out (`RUN_RECORDS`).
+    """
+
+    def records(directory: str, names: list[str]) -> set[str]:
+        return set(RUN_RECORDS & set(names)) if Path(directory) == source else set()
+
     if target.exists():
         shutil.rmtree(target)
-    shutil.copytree(source, target)
+    shutil.copytree(source, target, ignore=records)
 
 
 def _clear(path: Path) -> None:

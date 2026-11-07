@@ -30,7 +30,11 @@ of the package (the project `<package>:MODEL`, `project_reference`). A kind
 runs into an empty output directory and writes the records of the run into it
 (`run.json`, `spec.json`, `summary.json`, `progress.jsonl`), so a command runs
 it into the folder of its result below the directory the command wrote into
-before, which an earlier result in it is replaced with (`_replaced`):
+before. The run writes into a staging directory next to the folder, and an
+earlier result is replaced only after the run succeeded, a failed run or plan
+leaves it untouched (`_staged`); an output which is an input of the command
+(the records of a fit, the adopted fits, the factory, a build), contains one
+or lies inside one is refused before anything happens (`_check_out`):
 
 - `run_simulation --action simulate` (`run_command`) runs the kind `simulate`
   into the folder of the group (`simulation/<group>` of the results), any
@@ -45,9 +49,10 @@ before, which an earlier result in it is replaced with (`_replaced`):
   the adopted fits of the other subsets recorded (`record_adopted`); the
   records of the fit, which the kind writes into its folder `<fit id>`, are
   moved into the output of the run, so they are where they were.
-  `run_fit <package> --adopt <fit id>` runs the kind `adopt` into `adopt/` of
-  the fit and copies the record into the adopted fits of the model
-  (`sbmlsim.fit.records.adopt_fit`).
+  A fit which fails keeps the records it wrote in `<output_dir>/<fit id>`.
+  `run_fit <package> --adopt <fit id>` checks the id, runs the kind `adopt`
+  into a temporary output and copies the record into the adopted fits of the
+  model (`sbmlsim.fit.records.adopt_fit`); nothing is written into the fit.
 - `run_report` (`report_command`) runs the kind `report` on the records next
   to a `parameters.json` into `<output_dir>/<name>` (`report` by default);
   `run_report <package> --adopted` runs it with `adopted` for every adopted fit
@@ -88,9 +93,12 @@ import argparse
 import dataclasses
 import datetime
 import importlib
+import math
 import re
 import shutil
 import sys
+import tempfile
+import uuid
 import webbrowser
 from collections.abc import Callable, Mapping, Sequence
 from enum import StrEnum
@@ -98,8 +106,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, NoReturn
 
 from sbmlsim import display, log
+from sbmlsim.cgroup import available_cpus
 from sbmlsim.experiment import ExperimentRunError
 from sbmlsim.experiment.draws import UncertaintySettings
+from sbmlsim.experiment.runner import EXPERIMENTS_PER_WORKER
 from sbmlsim.fit import display as fit_display
 from sbmlsim.fit.cli import (
     ALGORITHMS,
@@ -125,8 +135,8 @@ from sbmlsim.fit.project_fits import (
 from sbmlsim.fit.records import adopt_fit
 from sbmlsim.fit.result import FIT_ID, fit_id, fit_subset
 from sbmlsim.fit.sampling import SamplingType
-from sbmlsim.project import collect_figure_files, load_project, resolve
-from sbmlsim.run import ConfigurationError, execute, list_analyses
+from sbmlsim.project import Project, collect_figure_files, load_project, resolve
+from sbmlsim.run import ConfigurationError, execute, list_analyses, plan
 from sbmlsim.run.profiling import (
     PROFILE_DIR,
     PROFILE_OPTION,
@@ -165,9 +175,6 @@ MODEL_ATTRIBUTE = "MODEL"
 
 #: the folder of the results of `--action factory --rebuild`
 FACTORY_DIR = "factory"
-
-#: the folder of the run of the kind `adopt` in the folder of a fit
-ADOPT_DIR = "adopt"
 
 #: the folder of the run of the kind `identifiability` in the folder of an
 #: identifiability analysis, next to its report
@@ -230,23 +237,31 @@ def parse_workers(text: str) -> int | None:
     return number
 
 
-def run_workers(text: str) -> int | None:
-    """Get the workers of the run of the kind `simulate` from `--workers`.
+def run_workers(text: str, n_experiments: int) -> int | None:
+    """Get the workers of a run of experiments from `--workers`.
 
     Args:
         text: the option, see `parse_workers`.
+        n_experiments: the number of experiments of the run.
 
     Returns:
-        The number of processes, `None` for `model` and `auto`, every CPU of
-        the quota: the experiments in a pool, at most one worker per
-        experiment, each serially in its worker, a single experiment with its
-        scans in the pool (see `sbmlsim.run.scan_kinds`).
+        The processes of the kind `simulate`: for `model`, the default of a
+        model, a worker per four experiments, at most one per CPU, serially
+        below (the rule of `sbmlsim.experiment.ExperimentRunner`), every
+        experiment with its scans serially in its worker; the number as given;
+        `None` for `auto`, the choice of sbmlsim, which the kind cannot take
+        (it resolves its workers), so the experiments run with
+        `Project.run_experiments` itself.
 
     Raises:
         ValueError: for an invalid option, see `parse_workers`.
     """
     number = parse_workers(text)
-    return None if text == "model" else number
+    if text == "model":
+        return max(
+            1, min(available_cpus(), math.ceil(n_experiments / EXPERIMENTS_PER_WORKER))
+        )
+    return number
 
 
 def resolve_experiments(
@@ -316,22 +331,99 @@ def project_reference(model: PKPDModel) -> str:
     return reference
 
 
-def _replaced(directory: Path) -> Path:
-    """Remove an earlier result of a command, the output of its run.
+def _overlaps(out: Path, path: Path) -> bool:
+    """Check whether an output is a path, contains it or lies inside it."""
+    target, other = out.resolve(), path.resolve()
+    return target == other or target in other.parents or other in target.parents
 
-    A kind runs into an empty output; the commands wrote over the files of an
-    earlier result before.
+
+def _check_out(
+    parser: argparse.ArgumentParser,
+    model: PKPDModel,
+    out: Path,
+    inputs: Sequence[Path] = (),
+) -> None:
+    """Refuse an output which would replace an input of a command.
+
+    A command replaces its output, so the output must not be an input of the
+    command (the records of a fit), the adopted fits, the factory or a build
+    of the model, contain one of them or lie inside one, nor contain the
+    package or a folder of its data.
+
+    Raises:
+        SystemExit: a usage error naming the input.
+    """
+    for path in [*inputs, model.fits_dir, model.factory_dir, *model.variants.values()]:
+        if _overlaps(out, path):
+            parser.error(
+                f"The output '{out}' is or contains the input '{path}' of the "
+                "command, or lies inside it, which the output would replace: "
+                "give another output."
+            )
+    for path in [model.root, *model.data_paths]:
+        target, other = out.resolve(), path.resolve()
+        if target == other or target in other.parents:
+            parser.error(
+                f"The output '{out}' contains the input '{path}' of the command, "
+                "which the output would replace: give another output."
+            )
+
+
+def _staged[T](
+    target: Path, run: Callable[[Path], T], *, inner: str | None = None
+) -> T:
+    """Run into a staging directory and replace the result only when the run succeeded.
+
+    The run writes into `.<name>.<uuid>` next to the target, a kind of the
+    run layer into an empty output; the result folder `inner` of the kind
+    (e.g. the records of a fit in `<fit id>`) is moved up into the staging
+    directory, then an earlier result is renamed aside, the staging directory
+    renamed into its place and the earlier result removed (the pattern of
+    `sbmlsim.fit.records.adopt_fit`). A failed run, also a failed plan,
+    removes the staging directory and leaves the earlier result untouched.
 
     Args:
-        directory: the output of the run.
+        target: the folder of the result.
+        run: runs into the staging directory, which it creates.
+        inner: the folder of the result in the staging directory, relative.
 
     Returns:
-        The directory, which does not exist.
+        What the run returns.
+
+    Raises:
+        SystemExit: exit 1 if the result is not moved into its place.
     """
-    if directory.is_dir():
-        console.print(f"The earlier results in '{directory}' are replaced.")
-        shutil.rmtree(directory)
-    return directory
+    token = uuid.uuid4().hex
+    staging = target.parent / f".{target.name}.{token}"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        result = run(staging)
+        if inner is not None:
+            _moved_up(staging / inner, staging)
+    except OSError as err:
+        shutil.rmtree(staging, ignore_errors=True)
+        _failed(f"The result '{target}' is not written: {err}")
+    except BaseException:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+    earlier = target.parent / f".{target.name}.old.{token}"
+    try:
+        if target.exists():
+            console.print(
+                f"The earlier results in '{target}' are replaced.", markup=False
+            )
+            target.rename(earlier)
+        try:
+            staging.rename(target)
+        except OSError:
+            if earlier.exists():
+                earlier.rename(target)
+            raise
+    except OSError as err:
+        shutil.rmtree(staging, ignore_errors=True)
+        _failed(f"The result '{target}' is not written: {err}")
+    shutil.rmtree(earlier, ignore_errors=True)
+    return result
 
 
 def _plain_name(parser: argparse.ArgumentParser, name: str, option: str) -> str:
@@ -382,18 +474,30 @@ def _execute(
 ) -> dict[str, Any]:
     """Run a kind of the run layer, see `sbmlsim.run.execute`.
 
+    The spec is planned first: a spec which does not plan, e.g. an unknown
+    experiment, an invalid start of a fit or a remainder of the model which
+    can become negative, is a usage error (exit 2); a configuration error of
+    the run itself, e.g. a fit adopted already, exits with 1.
+
     Returns:
         The summary of the run.
 
     Raises:
-        SystemExit: a usage error for an invalid spec, e.g. an unknown
-            experiment, an invalid start of a fit or a remainder of the model
-            which can become negative (`ConfigurationError`).
+        SystemExit: for a spec which does not plan or a run which is
+            configured wrongly (`ConfigurationError`).
     """
+    given = {
+        **spec,
+        **{name: str(Path(path).resolve()) for name, path in (inputs or {}).items()},
+    }
+    try:
+        plan(kind, given)
+    except ConfigurationError as err:
+        parser.error(str(err))
     try:
         return execute(kind, spec, out, workers=workers, inputs=inputs)
     except ConfigurationError as err:
-        parser.error(str(err))
+        _failed(str(err))
 
 
 def _failed(message: str) -> NoReturn:
@@ -498,13 +602,16 @@ def run_parser(model: PKPDModel) -> argparse.ArgumentParser:
             "-w",
             "--workers",
             default="model",
-            help="the processes of the run: a number (a pool of the experiments, "
-            "every experiment serially in its worker, the scans of a single "
-            "experiment in the pool), or 'model' and 'auto' for every CPU "
+            help="the processes of the run: a number (the experiments in a pool, "
+            "every experiment serially in its worker, a single experiment with "
+            "its scans in the pool), 'model' for the default of a model (a "
+            "worker per four experiments, at most one per CPU, serially below, "
+            "the scans of every experiment serially in its worker) or 'auto' "
+            "for the choice of sbmlsim (a worker per four experiments, the "
+            "scans in a pool of every CPU when one has 256 points or more) "
             "(default: %(default)s); an extra action gets the settings of the "
             "simulator as `options.simulator` and the processes as "
-            "`options.n_workers`: the number, 1 for 'model' and None, the "
-            "choice of sbmlsim, for 'auto'",
+            "`options.n_workers`: the number, 1 for 'model' and None for 'auto'",
         )
     if model.extra_arguments is not None:
         resolve(model.extra_arguments, model.package)(p)
@@ -534,8 +641,10 @@ def _run_factory(
         if model.archive_path is not None:
             display.link("archive", model.archive_path)
         return []
-    out = _replaced(results_dir / FACTORY_DIR)
-    summary = _execute(parser, "factory", {"project": project_reference(model)}, out)
+    out = results_dir / FACTORY_DIR
+    _check_out(parser, model, out)
+    spec = {"project": project_reference(model)}
+    summary = _staged(out, lambda staging: _execute(parser, "factory", spec, staging))
     changed: list[str] = list(summary["changed"])
     display.key_values({"compared": summary["outputs"], "changed": len(changed)})
     display.link("models", out / summary["directory"])
@@ -563,13 +672,17 @@ def _simulate(
     *,
     show_report: bool,
     figure_formats: Sequence[str],
-    workers: int | None,
+    workers: str,
     uncertainty: UncertaintySettings | None = None,
 ) -> list[str]:
     """Simulate the given groups and experiments with the kind `simulate`.
 
     A name which is neither a group nor an experiment is reported and left
-    out, the run of no experiment exits with 1.
+    out, the run of no experiment exits with 1. The run replaces an earlier
+    result only when it ran (`_staged`), also with failed experiments, whose
+    report is written. `--workers auto` runs the experiments with
+    `Project.run_experiments` and the choice of sbmlsim, without the records
+    of a run, see `run_workers`.
 
     Args:
         model: the model.
@@ -578,7 +691,7 @@ def _simulate(
         simulation_dir: directory the results of the simulations are written to.
         show_report: open the report in a web browser.
         figure_formats: the formats of the figures.
-        workers: the processes of the run, see `run_workers`.
+        workers: the option `--workers`, see `run_workers`.
         uncertainty: run over draws of the fitted parameters, `None` for once.
 
     Returns:
@@ -597,7 +710,9 @@ def _simulate(
     display.section("Simulations", icon=":chart_increasing:")
     display.key_values({"experiments": len(classes)})
     display.link("output", output_dir)
-    if model.save_results or not model.reduced_selections:
+    _check_out(parser, model, output_dir)
+    n_workers = run_workers(workers, len(classes))
+    if n_workers is not None and (model.save_results or not model.reduced_selections):
         console.print(
             "The kind `simulate` runs the experiments with the selections they "
             "use and without their results; `save_results` and "
@@ -615,12 +730,30 @@ def _simulate(
             "seed": uncertainty.seed,
             "quantiles": list(uncertainty.quantiles),
         }
-    failures: list[str] = []
-    try:
-        _execute(parser, "simulate", spec, _replaced(output_dir), workers=workers)
-    except ExperimentRunError as err:
-        failures = list(err.failures)
-    collect_figure_files(output_dir)
+
+    def run(staging: Path) -> list[str]:
+        try:
+            if n_workers is None:
+                Project.run_experiments(
+                    model,
+                    classes,
+                    staging,
+                    n_workers=None,
+                    figure_formats=figure_formats,
+                    save_results=model.save_results,
+                    reduced_selections=model.reduced_selections,
+                    uncertainty=uncertainty,
+                )
+            else:
+                _execute(parser, "simulate", spec, staging, workers=n_workers)
+        except ExperimentRunError as err:
+            collect_figure_files(staging)
+            return list(err.failures)
+        collect_figure_files(staging)
+        return []
+
+    failures = _staged(output_dir, run)
+    display.link("results", output_dir / "index.html")
     if show_report:
         webbrowser.open((output_dir / "index.html").resolve().as_uri())
     return failures
@@ -646,7 +779,6 @@ def run_command(model: PKPDModel, args: Sequence[str] | None = None) -> None:
     names: list[str] = []
     simulator = model.simulator
     n_workers: int | None = RUN_WORKERS
-    workers: int | None = None
     uncertainty: UncertaintySettings | None = None
     if model.experiments is not None:
         if options.uncertainty:
@@ -663,7 +795,6 @@ def run_command(model: PKPDModel, args: Sequence[str] | None = None) -> None:
             p.error("'--formats' requires at least one format")
         try:
             n_workers = parse_workers(options.workers)
-            workers = run_workers(options.workers)
         except ValueError as err:
             p.error(str(err))
         names = [
@@ -717,7 +848,7 @@ def run_command(model: PKPDModel, args: Sequence[str] | None = None) -> None:
             simulation_dir,
             show_report=options.open,
             figure_formats=formats,
-            workers=workers,
+            workers=options.workers,
             uncertainty=uncertainty,
         )
 
@@ -998,32 +1129,50 @@ def analyse_identifiability(
     return identifiability, fisher
 
 
-def _adopt(model: PKPDModel, fit_dir: Path, *, force: bool) -> Path:
+def _adopt(
+    model: PKPDModel,
+    parser: argparse.ArgumentParser,
+    output_dir: Path,
+    fit_id: str,
+    *,
+    force: bool,
+) -> Path:
     """Adopt a finished fit and print what the model object needs.
 
-    The kind `adopt` checks the fit and writes its record into `adopt/` of
-    the fit; the record is copied into the adopted fits of the model.
+    The argument is checked first: the id of a fit, whose records are in the
+    output directory. The kind `adopt` checks the fit and writes its record
+    into a temporary output, which is copied into the adopted fits of the
+    model (`adopt_fit`); nothing is written into the fit.
 
     Raises:
-        SystemExit: if the fit cannot be adopted.
+        SystemExit: a usage error for an argument which is no id of a fit,
+            exit 1 if the fit is not found or cannot be adopted.
     """
     fit_display.section("Adopt fit", icon=fit_display.ICON_FIT)
+    if Path(fit_id).name != fit_id or FIT_ID.match(fit_id) is None:
+        parser.error(
+            f"--adopt is the id of a fit, <subset>_<date>_<time>__<hash>, "
+            f"not '{fit_id}'"
+        )
+    fit_dir = output_dir / fit_id
+    if not (fit_dir / PARAMETERS_FILE).is_file():
+        _failed(f"The fit '{fit_dir}' does not exist, it has no {PARAMETERS_FILE}.")
     reference = project_reference(model)
-    if not fit_dir.is_dir():
-        _failed(f"The fit '{fit_dir}' does not exist.")
-    out = _replaced(fit_dir / ADOPT_DIR)
-    try:
-        summary = execute(
+    with tempfile.TemporaryDirectory(prefix="pkpdsim-adopt-") as tmp:
+        out = Path(tmp) / "adopt"
+        summary = _execute(
+            parser,
             "adopt",
             {"project": reference, "force": force},
             out,
             inputs={"fit": fit_dir},
         )
-        record = adopt_fit(
-            out / FITS_DIR / summary["opid"], model.fits_dir, force=force
-        )
-    except (ConfigurationError, FileNotFoundError, FileExistsError) as err:
-        _failed(str(err))
+        try:
+            record = adopt_fit(
+                out / FITS_DIR / summary["opid"], model.fits_dir, force=force
+            )
+        except (FileNotFoundError, FileExistsError) as err:
+            _failed(str(err))
     fit_display.key_values({"fit": record.name, "record": record})
     if record.name not in model.adopted_ids:
         console.print(
@@ -1107,6 +1256,7 @@ def _fit(
         )
     opid = fit_id(options.subset)
     out = options.output_dir / opid
+    _check_out(parser, model, out)
     _show_fit(options, opid, definition, out)
     spec: dict[str, Any] = {
         "project": reference,
@@ -1131,9 +1281,20 @@ def _fit(
         "report": True,
         "mapping_figures": not options.no_mapping_figures,
     }
-    _execute(parser, "fit", spec, out, workers=options.cores)
-    # the records of the fit where they were: in the folder of the fit id
-    _moved_up(out / opid, out)
+    try:
+        _execute(parser, "fit", spec, out, workers=options.cores)
+    finally:
+        # the records of the fit where they were, in the folder of the fit id,
+        # also of a fit which failed, so `--start <fit id>` finds them
+        if (out / opid).is_dir():
+            try:
+                _moved_up(out / opid, out)
+            except OSError as err:
+                console.print(
+                    f"The records of the fit stay in '{out / opid}': {err}",
+                    style="error",
+                    markup=False,
+                )
     # the report of the kind named its folder before it was moved
     display.link("results", out / "index.html")
     return {opid: out}
@@ -1261,7 +1422,7 @@ def fit_command(model: PKPDModel, args: Sequence[str] | None = None) -> dict[str
     options = parser.parse_args(args)
     log.enable_rich_logging()
     if options.adopt is not None:
-        _adopt(model, options.output_dir / options.adopt, force=options.force)
+        _adopt(model, parser, options.output_dir, options.adopt, force=options.force)
         return {}
     if options.cross_validation is not None:
         _cross_validate(model, options)
@@ -1408,21 +1569,21 @@ def _adopted_reports(model: PKPDModel, args: Sequence[str]) -> Path:
     if not model.adopted_ids:
         _failed(f"The model '{model.name}' has no adopted fits.")
     reference = project_reference(model)
-    directories: list[Path] = []
-    for adopted_id in model.adopted_ids:
-        out = _replaced(options.output_dir / adopted_id)
+    directories = [options.output_dir / adopted_id for adopted_id in model.adopted_ids]
+    for out in directories:
+        _check_out(p, model, out)
+    for adopted_id, out in zip(model.adopted_ids, directories, strict=True):
         spec = {
             "project": reference,
             "subset": fit_subset(adopted_id),
             "adopted": True,
             "mapping_figures": not options.no_mapping_figures,
         }
-        try:
-            execute("report", spec, out)
-        except ConfigurationError as err:
-            _failed(str(err))
-        _moved_up(out / adopted_id, out)
-        directories.append(out)
+        _staged(
+            out,
+            lambda staging, spec=spec: _execute(p, "report", spec, staging),
+            inner=adopted_id,
+        )
     for directory in directories:
         display.link(directory.name, directory / "index.html")
     return options.output_dir
@@ -1473,8 +1634,13 @@ def report_command(model: PKPDModel, args: Sequence[str] | None = None) -> Path:
         "mapping_figures": not options.no_mapping_figures,
         "group_by": _group_by(options),
     }
-    _execute(p, "report", spec, _replaced(out), inputs={"fit": parameters.parent})
-    _moved_up(out / REPORT_NAME, out)
+    _check_out(p, model, out, [parameters.parent])
+    inputs = {"fit": parameters.parent}
+    _staged(
+        out,
+        lambda staging: _execute(p, "report", spec, staging, inputs=inputs),
+        inner=REPORT_NAME,
+    )
     # the report of the kind named its folder before it was moved
     display.link("results", out / "index.html")
     return out
@@ -1602,8 +1768,8 @@ def identifiability_command(
     log.enable_rich_logging()
     reference = project_reference(model)
     name = _plain_name(p, options.name or "identifiability", "--name")
-    out = _replaced(options.output_dir / name)
-    analysis = out / ANALYSIS_DIR
+    out = options.output_dir / name
+    _check_out(p, model, out, [options.parameters.parent])
     spec = {
         "project": reference,
         "subset": options.subset,
@@ -1617,23 +1783,27 @@ def identifiability_command(
         "pids": options.parameter,
         "fisher": not options.no_fisher,
     }
-    _execute(
-        p,
-        "identifiability",
-        spec,
-        analysis,
-        workers=options.cores,
-        inputs={"fit": options.parameters.parent},
-    )
     report_spec = {
         "project": reference,
         "subset": options.subset,
         "mapping_figures": not options.no_mapping_figures,
         "group_by": _group_by(options),
     }
-    report_run = out / REPORT_RUN_DIR
-    _execute(p, "report", report_spec, report_run, inputs={"fit": analysis})
-    _moved_up(report_run / REPORT_NAME, out)
+
+    def run(staging: Path) -> None:
+        analysis = staging / ANALYSIS_DIR
+        _execute(
+            p,
+            "identifiability",
+            spec,
+            analysis,
+            workers=options.cores,
+            inputs={"fit": options.parameters.parent},
+        )
+        report_run = staging / REPORT_RUN_DIR
+        _execute(p, "report", report_spec, report_run, inputs={"fit": analysis})
+
+    _staged(out, run, inner=f"{REPORT_RUN_DIR}/{REPORT_NAME}")
     # the report of the kind named its folder before it was moved
     display.link("results", out / "index.html")
     return out

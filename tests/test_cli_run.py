@@ -366,10 +366,10 @@ def test_the_workers_of_a_run() -> None:
     assert parse_workers("model") == RUN_WORKERS == 1
     assert parse_workers("auto") is None
     assert parse_workers("3") == 3
-    # the run of the kind: every CPU of the quota for `model` and `auto`
-    assert run_workers("model") is None
-    assert run_workers("auto") is None
-    assert run_workers("3") == 3
+    # the run of the kind: the default of a model, sbmlsim's choice, a number
+    assert run_workers("model", 2) == 1
+    assert run_workers("auto", 2) is None
+    assert run_workers("3", 2) == 3
 
 
 @pytest.mark.parametrize("text", ["0", "-2", "two", "1.5", ""])
@@ -386,7 +386,7 @@ def test_a_bad_number_of_workers_is_a_usage_error(tmp_path: Path) -> None:
     assert info.value.code == 2
 
 
-@pytest.mark.parametrize(("options", "workers"), [([], None), (["-w", "2"], 2)])
+@pytest.mark.parametrize(("options", "workers"), [([], 1), (["-w", "2"], 2)])
 def test_the_workers_reach_the_run(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -224,3 +224,23 @@ def test_build_requires_the_credibility_folder(tmp_path: Path) -> None:
     model = MODEL_WITH_FIT.replace(credibility=CREDIBILITY_REFERENCE)
     with pytest.raises(ReleaseError, match="run_credibility"):
         build(model, tmp_path, runner=FakeRunner(no_credibility=True))
+
+
+def test_the_copies_leave_out_the_records_of_the_runs(tmp_path: Path) -> None:
+    """The records of a run name the host, local paths and the git state."""
+    from pkpdsim.release.build import _replace
+
+    source = tmp_path / "results" / "all"
+    (source / "Exp" / "progress").mkdir(parents=True)
+    for name in ("run.json", "spec.json", "summary.json", "progress.jsonl"):
+        (source / name).write_text("{}", encoding="utf-8")
+        # a file of an experiment of the same name is a result
+        (source / "Exp" / name).write_text("{}", encoding="utf-8")
+    (source / "progress").mkdir()
+    (source / "progress" / "unit-0.jsonl").write_text("", encoding="utf-8")
+    (source / "index.html").write_text("report", encoding="utf-8")
+    target = tmp_path / "simulations"
+    _replace(source, target)
+    assert sorted(p.name for p in target.iterdir()) == ["Exp", "index.html"]
+    assert (target / "Exp" / "run.json").is_file()
+    assert (target / "Exp" / "progress").is_dir()

@@ -61,8 +61,8 @@ def test_fit_adopt_command(
     )
     assert runs == {}
     assert (tmp_path / "fits" / toy_fit.name / "parameters.json").exists()
-    # the run of the kind `adopt` in the folder of the fit
-    assert (toy_fit / "adopt" / "fits" / toy_fit.name / "parameters.json").exists()
+    # nothing is written into the fit
+    assert not (toy_fit / "adopt").exists()
     with pytest.raises(SystemExit):
         fit_command(
             model, ["--adopt", toy_fit.name, "--output_dir", str(toy_fit.parent)]
