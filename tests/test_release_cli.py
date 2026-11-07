@@ -520,13 +520,16 @@ def test_an_output_of_another_build_is_refused(
     other = tmp_path / "other" / "toy-model"
     with pytest.raises(ReleaseError) as err:
         do_release(model, other, publish=False, runner=runner, out=out)
-    assert f"remove {out} or pass --out" in str(err.value)
-    assert "spec file" not in str(err.value)
+    assert str(err.value) == (
+        f"{out} holds the build of another release (another version, --repo or "
+        f"--pkpdsim-path): remove {out} or pass --out"
+    )
     assert sum(c[:2] == ["uv", "lock"] for c in runner.commands) == builds
     (tmp_path / "used").mkdir()
     (tmp_path / "used" / "notes.txt").write_text("mine\n", encoding="utf-8")
-    with pytest.raises(ReleaseError, match="or pass --out"):
-        do_release(model, clone, publish=False, runner=runner, out=tmp_path / "used")
+    used = tmp_path / "used"
+    with pytest.raises(ReleaseError, match="holds files of no build: remove"):
+        do_release(model, clone, publish=False, runner=runner, out=used)
 
 
 def test_an_unpushed_commit_of_the_checkout_is_refused(
@@ -535,8 +538,18 @@ def test_an_unpushed_commit_of_the_checkout_is_refused(
     (clone / "local.txt").write_text("not pushed\n", encoding="utf-8")
     git(clone, "add", "-A")
     git(clone, "commit", "-m", "not pushed")
-    out = default_out(clone, VERSION)
-    with pytest.raises(ReleaseError, match="ahead of origin/main") as err:
+    with pytest.raises(ReleaseError, match="push them first") as err:
         do_release(model, clone, publish=False, runner=runner)
-    assert f"push or reset in the checkout {clone}, or remove {out}" in str(err.value)
+    assert str(clone) in str(err.value)
     assert not runner.ran("uv lock")
+
+
+def test_a_reused_clone_on_another_branch_is_refused(
+    model: PKPDModel, clone: Path, runner: FakeRunner
+) -> None:
+    """The message of sbmlsim says what to do, pkpd_release adds nothing."""
+    path = do_release(model, clone, publish=False, runner=runner)
+    git(path, "checkout", "-b", "edits")
+    with pytest.raises(ReleaseError, match="not 'main'") as err:
+        do_release(model, clone, publish=False, runner=runner)
+    assert f"remove the out {path.parent}" in str(err.value)
