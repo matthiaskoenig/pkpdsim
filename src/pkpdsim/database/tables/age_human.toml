@@ -22,7 +22,7 @@ variable = "pma"
 x50 = 47.7
 n = 3.40
 source = "Rhodin2009"
-notes = "abstract (theory-based model): half of the adult GFR at 47.7 weeks of postmenstrual age, Hill coefficient 3.40; Rhodin 2009 scale the size by (WT/70)^0.75, the library by the body surface area (GFR per 1.73 m2 reaches the adult value at 1-2 years, Rubin 1949, so the two size terms differ little after infancy)"
+notes = "Table 2, the theoretical allometric model using normal fat mass (923 GFR measurements of 923 subjects from 22 weeks of postmenstrual age to 31 years, inulin, 51Cr-EDTA, 99mTc-DTPA and iohexol): half of the adult GFR at 47.7 weeks of postmenstrual age (95 % CI 45.1-50.5), Hill coefficient 3.40 (3.03-3.80), adult GFR 121 ml/min (117-125). At term (40 weeks of postmenstrual age) the function is 0.354, which is the 35 % of the asymptotic adult value the paper states, and at 1 year of postnatal age the predicted GFR is 90 % of the adult. Sex was not associated with any systematic difference, postnatal age added nothing over postmenstrual age, and the fat-free mass described the size better than the total body weight. The size term of this column is (WT/70)^0.75 while the library scales the GFR with the body surface area; Table 2 also gives the parameters estimated with a body surface area size model, TM50 52.7 weeks (48.9-56.6), Hill 3.30 (2.92-3.78) and an adult GFR of 101 ml/min (97-104), which would be the self-consistent pairing for the library and would make a term newborn 0.287 instead of 0.354 of the adult. The library keeps the normal fat mass column, which is the parameterisation of the paper and of every model derived from it, because Rhodin 2009 judge the body surface area scaling clearly worse and compute the body surface area by the Boyd formula from weight alone (their equation on p. 69), not by the Du Bois formula of the library; the body surface area column is recorded here as the alternative and is not used"
 
 [gfr.aging.male]
 form = "points"
@@ -71,14 +71,15 @@ form = "points"
 age = [50.0, 100.0]
 value = [1.0, 0.725]
 source = "Zoli1999"
-notes = "the fraction of the cardiac output to the liver (hepatic artery and portal organs) follows the liver volume (liver_mass), so the hepatic blood flow is the cardiac output times the liver volume factor, 0.72 at 80 years; Zoli 1999 measured 0.71 above 75 against below 45 years; a model choice of the form after Imamura 2026"
+notes = "the fraction of the cardiac output to the liver (hepatic artery and portal organs) follows the liver volume (liver_mass), so the hepatic blood flow is the cardiac output times the liver volume factor, 0.72 at 80 years; a model choice of the form after Imamura 2026. Zoli 1999 Table 1 (40 healthy subjects within 10 % of the ideal body weight, 10 per group, echo-Doppler of the portal vein and the common hepatic artery, functional flow by the hepatic clearance of D-sorbitol) measures, for the age groups below 45, 45-60, 61-75 and above 75 years: portal flow 1209 +- 205, 980 +- 337, 978 +- 194 and 749 +- 117 ml/min (ANOVA p = 0.0018), hepatic artery flow 235 +- 76, 313 +- 117, 318 +- 144 and 271 +- 94 ml/min (p = 0.3632, not significant), total hepatic flow 1445 +- 220, 1293 +- 340, 1297 +- 253 and 1020 +- 148 ml/min (p = 0.0088) and functional hepatic flow 1514 +- 250, 1326 +- 348, 1258 +- 226 and 1015 +- 163 ml/min (p = 0.0023). The total flow above 75 years is 1020/1445 = 0.706 of the flow below 45 years and the functional flow 1015/1514 = 0.670; the two are correlated over the whole population (r = 0.871), so the fall is a fall of the flow and not an intrahepatic shunt. The decline is in the portal limb: the hepatic artery flow does not change significantly (a mild rise between 45 and 75 years), while the library applies one factor to the hepatic artery and the portal organs together, which is a known simplification. The library's factor is also shallower than these data at the oldest ages (0.835 at 80 years against the 0.706 of the group above 75 years), because its form follows the liver volume of Imamura 2026 and is anchored at 50 years"
 
 [hematocrit.newborn]
 form = "points"
 age = [0.0, 0.019165, 0.038330, 0.076660, 0.16667]
 value = [0.522, 0.460, 0.416, 0.385, 0.35]
 source = "Scholkmann2019"
-notes = "the hematocrit (fraction) of a newborn at term: days 0, 7, 14 and 28 of Scholkmann 2019, Equation 2 evaluated as printed at a gestational age of 40 weeks (the fit of about 100 000 neonates of Henry and Christensen 2015); the nadir 0.35 at 2 months of the PK-Sim database (secondary, the source of the value not read); the sexes alike (Jopling 2009); from 1 year the table of NHANES"
+sources = ["Jopling2009"]
+notes = "the hematocrit (fraction) of a newborn at term: days 0, 7, 14 and 28 of Scholkmann 2019, Equation 2 evaluated as printed at a gestational age of 40 weeks (the fit of about 100 000 neonates of Henry and Christensen 2015); the nadir 0.35 at 2 months of the PK-Sim database (secondary, the source of the value not read); from 1 year the table of NHANES. Jopling 2009 (Intermountain Healthcare, 41 957 hematocrit and 39 559 hemoglobin values of the first 28 days, every patient who received an erythrocyte transfusion excluded) confirms two things read before from its abstract only: there is no effect of sex on the hematocrit or the hemoglobin of the neonate, which the authors state they can now conclude confidently from this sample size, and the fall over the first 28 days, their term group (35-42 weeks) going from a mean hemoglobin of 18 g/dl (5th percentile 14) at birth to 13 g/dl (5th percentile 9.5) at 28 days, a ratio of 0.72 against the 0.385/0.522 = 0.74 of this curve. Their regression of the hematocrit on the gestational age within 6 hours of birth, 28.59 + 0.6359*GA in weeks (25 464 values), gives 54.0 % at 40 weeks against the 52.2 % here, and their reference range of the hematocrit at birth in term neonates is 42 to 65 %. Not modelled: the hematocrit of a late preterm or term neonate rises by 3.6 +- 0.5 % during the first four hours after delivery (placental transfusion), so day 0 is the value within hours of birth"
 
 [hematocrit.adult]
 table = "blood_nhanes"
@@ -118,7 +119,8 @@ n = 12.7
 base = 0.88
 top = 1.0
 source = "AlSallami2015"
-notes = "the multiplier of the Janmahasatian 2005 fat-free mass of boys, 0.88 + (1 - 0.88)/(1 + (AGE/13.4)^-12.7) (model M2, 515 males of 3 to 29 years; the equation as printed in two open access papers citing it); relative to 20 years, 1 from 20 years; extrapolated below 3 years"
+sources = ["Fomon1982"]
+notes = "the multiplier of the Janmahasatian 2005 fat-free mass of boys, 0.88 + (1 - 0.88)/(1 + (AGE/13.4)^-12.7); model M2 of Al-Sallami 2015 Table 4, read from the paper: a = 0.88 (bootstrap 95 % CI 0.87-0.89), the sigmoidicity c = 12.7 (13.0, 5.2-19.0) and the maturation half time A50 = 13.4 years (13.4, 12.7-13.8), with the upper bound b fixed to 1 so that the asymptote is the adult model. The index dataset is 853 dual energy X-ray absorptiometry measurements of 515 males of a median age of 13.8 years (range 3-29.7) and a median body mass index of 19.9 kg/m2 (13.6-36.2), the external test dataset 86 males. Relative to 20 years, 1 from 20 years; extrapolated below 3 years. Against the reference children of Fomon 1982 Table I (chemical analysis and balance data) the chain of Janmahasatian 2005 and this factor gives 0.97 to 0.92 of their fat-free mass over 3 to 10 years, so it under-predicts the fat-free mass of a child by 3 to 8 % and puts its body fat at 18 to 20 % against their 13 to 18 %."
 
 [fat_free_mass.female]
 form = "hill"
@@ -128,7 +130,8 @@ n = 1.1
 base = 1.11
 top = 1.0
 source = "AlSallami2015"
-notes = "the multiplier of the Janmahasatian 2005 fat-free mass of girls, 1.11 + (1 - 1.11)/(1 + (AGE/7.1)^-1.1) (model M2, 496 females of 3 to 29 years); relative to 20 years, 1 from 20 years; extrapolated below 3 years"
+sources = ["Fomon1982"]
+notes = "the multiplier of the Janmahasatian 2005 fat-free mass of girls, 1.11 + (1 - 1.11)/(1 + (AGE/7.1)^-1.1); model M2 of Al-Sallami 2015 Table 4, read from the paper: a = 1.11 (bootstrap 95 % CI 1.09-1.16), c = 1.1 (1.1, 0.7-1.6) and A50 = 7.1 years (7.0, 3.5-10.3), with b fixed to 1. The index dataset is 926 dual energy X-ray absorptiometry measurements of 496 females of a median age of 11.6 years (range 3-29.3) and a median body mass index of 19.1 kg/m2 (12.6-41.3), the external test dataset 90 females; the factor is above 1 because the adult equation under-predicts the fat-free mass of girls. Relative to 20 years, 1 from 20 years; extrapolated below 3 years. Against the reference children of Fomon 1982 Table I the chain gives 0.94 to 0.91 of their fat-free mass over 3 to 10 years, so it puts the body fat of a girl at 23 to 27 % against their 16 to 19 %."
 
 [brain_perfusion.children]
 form = "points"

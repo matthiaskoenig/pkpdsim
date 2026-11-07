@@ -1,0 +1,27 @@
+{
+  "source": "Upreti2016",
+  "figure": "Figure 1, page 5 of the PDF; the image of `pdfimages -f 5 -l 5 -png` (1204 x 2400)",
+  "curve": "the in vivo ontogeny, the solid black curve; the gray dashed in vitro curve is lighter and the critically ill curve of panel I is blue, so both are left out by the thresholds",
+  "panels": {
+    "A": {
+      "what": "CYP1A2, in vivo (caffeine)",
+      "box": [62, 357, 80, 560],
+      "x": [78, 108.25],
+      "x0": -3,
+      "y": [358, 99.333],
+      "cut": 17.0,
+      "grid": [0.01, 0.02, 0.05, 0.1, 0.25, 0.5, 1.0, 1.5, 2.0, 3.0, 5.0, 8.0, 12.0, 16.0],
+      "close": [20.0, 1.0]
+    },
+    "I": {
+      "what": "CYP3A4 in vitro / CYP3A in vivo; the in vivo curve (sufentanil)",
+      "box": [2015, 2319, 82, 560],
+      "x": [80, 108.0],
+      "x0": -3,
+      "y": [2321, 103.5],
+      "cut": 16.0,
+      "grid": [0.01, 0.02, 0.05, 0.1, 0.25, 0.5, 1.0, 1.5, 2.0, 3.0, 5.0, 8.0, 12.0, 16.0],
+      "close": [20.0, 1.0]
+    }
+  }
+}

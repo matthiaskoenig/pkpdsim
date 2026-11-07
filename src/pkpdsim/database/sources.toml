@@ -1130,3 +1130,18 @@ doi = "10.1038/s41598-024-83762-0"
 [Nilsen2025]
 citation = "Nilsen I, Andersson A, Laurenius A, Osterberg J. Low-energy diets before metabolic bariatric surgery: a systematic review of the effect on total body weight, liver volume, glucose and insulin. Obes Rev 26(4):e13876, 2025."
 doi = "10.1111/obr.13876"
+
+# The publications of the age and paediatric tables which were read in full
+# (#149); the DOIs were checked against Crossref (2026-11-07).
+
+[Fomon1982]
+citation = "Fomon SJ, Haschke F, Ziegler EE, Nelson SE. Body composition of reference children from birth to age 10 years. Am J Clin Nutr 35(5):1169-1175, 1982."
+doi = "10.1093/ajcn/35.5.1169"
+
+[Jopling2009]
+citation = "Jopling J, Henry E, Wiedmeier SE, Christensen RD. Reference ranges for hematocrit and blood hemoglobin concentration during the neonatal period: data from a multihospital health care system. Pediatrics 123(2):e333-e337, 2009."
+doi = "10.1542/peds.2008-2654"
+
+[Upreti2016]
+citation = "Upreti VV, Wahlstrom JL. Meta-analysis of hepatic cytochrome P450 ontogeny to underwrite the prediction of pediatric pharmacokinetics using physiologically based pharmacokinetic modeling. J Clin Pharmacol 56(3):266-283, 2016."
+doi = "10.1002/jcph.585"
