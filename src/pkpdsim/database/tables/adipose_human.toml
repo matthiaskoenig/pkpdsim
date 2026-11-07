@@ -1,8 +1,9 @@
 # The adipose tissue and the body composition of the human builds
 # (`pkpdsim.pbpk.adipose`, `PBPKDefinition.adipose`): the split of the adipose
-# tissue into the visceral and the subcutaneous depot, the factors of
-# overweight and obesity on the physiology, and the rate at which the body
-# weight of a model follows its set point.
+# tissue into the visceral and the subcutaneous depot, the waist circumference
+# which personalises it, the factors of overweight and obesity on the
+# physiology, and the rate at which the body weight of a model follows its set
+# point.
 #
 # The adipose tissue of the library is the remainder of the body weight after
 # the lean organs and the blood (`pkpdsim.pbpk.physiology`, Huisinga 2012 on
@@ -31,6 +32,49 @@ value = [0.02313, 0.02402, 0.02913, 0.03763, 0.04861, 0.06114, 0.07432, 0.08722,
 source = "Shen2009"
 sources = ["Linge2018", "Demerath2007"]
 notes = "Shen 2009 (the same cohort, n = 188 women of 44.0 +- 17.4 years, BMI 25.5 +- 5.4): a total adipose tissue of 25.2 +- 11.9 l and a visceral adipose tissue of 1.4 +- 1.2 l, i.e. a visceral share of 0.056 of the women at 38 years, half that of the men; the shape over age is their Table 2 regression with the sex term, `+ 0.697 - 6.77e-2*age + 7.52e-4*age^2 - 4.10e-6*age^3`, relative to its value at 38 years, and the values below 18 and above 70 years are held as for the men."
+
+# The waist circumference of an individual of the covariates of a build
+# (`WAIST_base`), the prediction a model without a measured waist uses,
+#
+#   WAIST_base [cm] = intercept + bw*BW [kg] + height*HEIGHT [cm] + age*AGE [yr].
+#
+# The slopes are the weighted least squares of NHANES 2013-2018 printed by
+# `scripts/database/nhanes_waist.py`; the intercept is shifted onto the level
+# of the cohort of `visceral_waist`, so that the prediction and the
+# sensitivity of the visceral depot share their measurement site and their
+# population. A model with a measured waist sets the covariate `f_waist`, the
+# measured waist over this prediction, which it keeps over a change of the
+# body weight.
+[waist.male]
+coefficient = ["intercept", "bw", "height", "age"]
+value = [98.827, 0.76574, -0.44153, 0.20559]
+source = "NHANES2013_2018"
+sources = ["Haueise2023"]
+notes = "Weighted least squares of the waist circumference on the body weight, the height and the age of the 6985 men of 20 to 79 years of NHANES 2013-2018 with a waist, a weight and a height (survey weighted with the 6-year examination weights; the respondents of 80 years and over, whose age is top-coded, are left out): an adjusted R2 of 0.922 and a residual SD of 4.55 cm, i.e. the covariates of a build determine the waist of a man to about 4.5 cm. The slopes do not depend on the population of the fit: the non-Hispanic white respondents alone give 0.76266 per kg, -0.44048 per cm and 0.20205 per year (R2 0.928). The intercept is the fitted 101.267 cm shifted by -2.44 cm, so that the prediction reproduces the mean waist of the men of Haueise 2023, the cohort of `visceral_waist`: at their mean age of 52.1 years, height of 178.2 cm and weight of 86.9 kg the fit gives 99.84 cm against their measured 97.4 cm. The shift absorbs the measurement site (NHANES measures at the uppermost lateral border of the ilium, the German National Cohort at the midpoint between the lowest rib and the iliac crest, which is the site of the WHO protocol) together with the difference of the two populations, which their means cannot separate; it is a model choice, and it puts `WAIST` on the site which the WHO protocol and the clinical trials report. The prediction of the reference individual of ICRP 89 (73 kg, 176 cm, 35 years) is 84.2 cm, a waist-to-height ratio of 0.479, below the 94 cm of the action point of the WHO and below the boundary of 0.5."
+
+[waist.female]
+coefficient = ["intercept", "bw", "height", "age"]
+value = [88.264, 0.79039, -0.40087, 0.14821]
+source = "NHANES2013_2018"
+sources = ["Haueise2023"]
+notes = "The same fit for the 7291 women of 20 to 79 years (the women pregnant at the examination are left out of every NHANES table of the library): an R2 of 0.893 and a residual SD of 5.72 cm, wider than that of the men, as the waist of a woman at a given weight and height varies more. The non-Hispanic white respondents alone give 0.79286 per kg, -0.3858 per cm and 0.14771 per year (R2 0.893). The intercept is the fitted 94.484 cm shifted by -6.22 cm: at the mean age of 51.7 years, height of 164.9 cm and weight of 71.2 kg of the women of Haueise 2023 the fit gives 92.32 cm against their measured 86.1 cm. The shift is larger than that of the men, which is what the measurement site does (the iliac crest reads a larger waist than the WHO site, and the difference of the sites is larger in women). The prediction of the reference individual of ICRP 89 (60 kg, 163 cm, 35 years) is 75.5 cm, a waist-to-height ratio of 0.463, below the 80 cm of the action point of the WHO."
+
+# The sensitivity of the visceral depot to the waist circumference at a fixed
+# age, height and body weight (`k_vat_waist`, 1/cm): the share `f_vat` of the
+# age is multiplied by `exp(k_vat_waist*(WAIST - WAIST_base))`, so an
+# individual whose waist is the prediction keeps the share of Shen 2009 and
+# only a deviation of the waist moves the depot.
+[visceral_waist.male]
+value = 0.02958
+unit = "1/cm"
+source = "Haueise2023"
+notes = "Table S1, the multiple linear regression of the visceral adipose tissue on the age, the height, the weight and the waist circumference (model 2) of the 5697 men of the German National Cohort with a waist (whole-trunk MRI from the middle of the femoral heads to the cardiac apex, deep learning segmentation of 11,141 participants of 20 to 72 years, BMI 15.6 to 49.4 kg/m2, the waist at the midpoint between the lowest rib and the iliac crest): the standardized beta of the waist is 0.734 (R2 0.75, standard error of the estimate 1.18 l), which with the standard deviations of their Table 2 (visceral adipose tissue 2.36 l, waist 12.1 cm) is 0.1432 l per cm and, over their mean visceral adipose tissue of 4.84 l, 0.02958 per cm. The other three predictors of the regression are the covariates of a build, so the waist is the only residual over what the library already does: the beta of the age falls from 0.301 without the waist to 0.152 with it, i.e. about half of the rise of the visceral depot with age comes with a rising waist, which the prediction `waist` carries (0.206 cm per year), so the share of Shen 2009 over age and this factor do not count that rise twice. The library writes the factor as an exponential of the deviation, which agrees with the linear regression to first order and cannot make the share negative; the regression is linear, so the two differ by more than 5 % of the factor beyond about 40 cm of deviation, far outside the range of the cohort. Checked against the cohort: at their mean age, height and weight the library predicts 4.87 l of visceral adipose tissue against their measured 4.84 l."
+
+[visceral_waist.female]
+value = 0.02715
+unit = "1/cm"
+source = "Haueise2023"
+notes = "The same regression for the 5420 women: the standardized beta of the waist is 0.576 (R2 0.75, standard error of the estimate 0.77 l), which with the standard deviations of their Table 2 (visceral adipose tissue 1.55 l, waist 13.1 cm) is 0.06816 l per cm and, over their mean visceral adipose tissue of 2.51 l, 0.02715 per cm, within a tenth of the sensitivity of the men although the depot of a woman is half as large. The beta of the weight is larger than in the men (0.236 against 0.085) and that of the waist smaller (0.576 against 0.734), i.e. the waist of a woman says less about her visceral depot than the waist of a man. Checked against the cohort: at the mean age, height and weight of the women the library predicts 2.99 l against their measured 2.51 l, the same over-prediction of the visceral depot of a woman which the check against Linge 2018 shows (3.14 against 2.33 l), and which this factor does not correct: it is the share of Shen 2009, not the waist."
 
 # The rate at which the body weight of a model with an effect on its adipose
 # tissue approaches its set point (`Adipose(effect=...)`, `k_bw`).

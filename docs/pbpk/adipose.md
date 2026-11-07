@@ -2,7 +2,7 @@
 
 The adipose tissue of the library is the remainder of the body weight after the lean organs and the blood (`Mad = BW - Mlean - Vblood*rho_blood`, [physiology](physiology.md)): the fat-free mass is that of Janmahasatian 2005, every lean organ scales after Huisinga 2012, and what is left is adipose. The masses of an individual therefore always sum to its body weight and most of obesity is already in the model. `PBPKDefinition(adipose=Adipose())` (`pkpdsim.pbpk.adipose`, [#136](https://github.com/matthiaskoenig/pkpdsim/issues/136)) adds what the remainder does not give. It is a choice of the build; a build without it is unchanged.
 
-- **The body composition**: the lean body weight `LBW = BW - Mad`, the body fat mass `FM = BW - FFM` with the body fat fraction `BFF = FM/BW` and the fat mass index `FMI = FM/height^2` (Kelly 2009), and the split of the adipose tissue into the visceral `VAT = f_vat*Mad` and the subcutaneous `SAT = Mad - VAT`. The classes of the body mass index are `pkpdsim.impairment.BMI_CLASSES`, which an experiment scans and draws like the classes of an impairment ([classes](classes.md)).
+- **The body composition**: the lean body weight `LBW = BW - Mad`, the body fat mass `FM = BW - FFM` with the body fat fraction `BFF = FM/BW` and the fat mass index `FMI = FM/height^2` (Kelly 2009), the waist circumference `WAIST` with the waist-to-height ratio `WHtR`, and the split of the adipose tissue into the visceral `VAT = f_vat*Mad` and the subcutaneous `SAT = Mad - VAT`. The classes of the body mass index are `pkpdsim.impairment.BMI_CLASSES`, which an experiment scans and draws like the classes of an impairment ([classes](classes.md)).
 - **The physiology of overweight and obesity**: the factors `fobes_<key>` on the cardiac output, the flow fractions, the plasma proteins of the binding and the hepatic enzymes, each 1 up to a body mass index of 25 kg/m2. `Adipose(obesity=False)` leaves them out.
 - **A change of the body weight over time**: `Adipose(effect=Formula(...))` makes `BW` a state of the model which approaches a set point the effect of the model sets, and the whole physiology follows it.
 
@@ -29,25 +29,64 @@ The visceral share `f_vat` is the whole-body MRI regression of Shen 2009, the on
 
 Below 18 and above 70 years the values of 18 and 70 years are kept: the Shen cubic is not monotone in the children, whose visceral fat the regression does not resolve, and it turns over above about 70 years. A build which is not over age takes the share of 35 years. The visceral depot is a mass of the body composition and **not an organ of its own**: the adipose tissue of the library is one well-stirred organ which drains into the venous blood, while the visceral depot drains through the portal vein (about 3 to 10 % of the portal inflow at the perfusion of ICRP 89). Splitting it into two parallel sub-organs, the visceral one draining into the portal pool, is the natural extension and is not implemented.
 
+### Waist circumference
+
+The body mass index says how much adipose tissue an individual carries, the **waist circumference** says where it is, and it is the one covariate of the visceral depot a study is likely to report ([#154](https://github.com/matthiaskoenig/pkpdsim/issues/154)). Every build with the adipose option therefore carries it, measured or predicted:
+
+```
+WAIST_base = intercept + bw*BW + height*HEIGHT + age*AGE
+WAIST      = f_waist * WAIST_base
+f_vat      = f_vat(AGE, sex) * exp(k_vat_waist*(WAIST - WAIST_base))
+```
+
+`WAIST_base` is the waist of the population at the sex, body weight, height and age of the individual, and `f_waist` (default 1) is the covariate: the measured waist over that prediction, which `pkpdsim.pbpk.waist_factor(sex, waist, bw, height, age)` computes. The waist is the circumference at the site of the WHO protocol, the **midpoint between the lowest rib and the iliac crest**; the action points of the WHO are 94 and 102 cm in men and 80 and 88 cm in women, and the waist-to-height ratio `WHtR = WAIST/HEIGHT` is the index which needs no classification by sex, with the boundary of 0.5 every guideline shares.
+
+```equations
+WAIST = f_waist * WAIST_base
+WHtR = WAIST / HEIGHT
+```
+
+<!-- generated: adipose-waist (scripts/pbpk_tables.py), do not edit -->
+*Generated from `database/tables/adipose_human.toml` by `scripts/pbpk_tables.py`; the notes of every number are in the database.*
+
+| sex | intercept [cm] | per kg | per cm | per year | WAIST of the reference individual [cm] | VAT per cm [%] | sources |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| male | 98.83 | 0.7657 | -0.4415 | 0.2056 | 84.21 | 2.958 | `NHANES2013_2018`, `Haueise2023` |
+| female | 88.26 | 0.7904 | -0.4009 | 0.1482 | 75.53 | 2.715 | `NHANES2013_2018`, `Haueise2023` |
+
+??? note "Sources"
+
+    - `Haueise2023`: Haueise T, Schick F, Stefan N, Schlett CL, Weiss JB, Nattenmüller J, Göbel-Guéniot K, Norajitra T, et al. Analysis of volume and topography of adipose tissue in the trunk: results of MRI of 11,141 participants in the German National Cohort. Sci Adv 9(19):eadd0433, 2023. [doi:10.1126/sciadv.add0433](https://doi.org/10.1126/sciadv.add0433)
+    - `NHANES2013_2018`: Centers for Disease Control and Prevention, National Center for Health Statistics. National Health and Nutrition Examination Survey (NHANES) 2013-2014, 2015-2016 and 2017-2018, demographics (DEMO), body measures (BMX), complete blood count (CBC) and standard biochemistry profile (BIOPRO) of the cycles H, I and J (public domain). https://wwwn.cdc.gov/nchs/nhanes/ (accessed 2026-11-06). Read from the public files by scripts/database/nhanes_populations.py, scripts/database/nhanes_blood.py and scripts/database/nhanes_waist.py.
+<!-- end generated -->
+
+The prediction is the survey-weighted least squares of NHANES 2013-2018 (`scripts/database/nhanes_waist.py`, 6985 men and 7291 women of 20 to 79 years): the covariates of a build already determine the waist to 4.6 cm in a man (R2 0.922) and 5.7 cm in a woman (R2 0.893), and the slopes do not depend on the population of the fit (the non-Hispanic white respondents alone give the same numbers to the third digit). Its **level** is not NHANES's: the intercept is shifted by -2.4 cm (men) and -6.2 cm (women) so that the prediction reproduces the mean waist of Haueise 2023, the cohort of the sensitivity below. NHANES measures the waist at the uppermost lateral border of the ilium and the German National Cohort at the WHO site, the two populations differ as well, and their means cannot separate the two causes; the shift is a model choice, and it puts `WAIST` on the site which the guidelines and the trials report.
+
+The sensitivity `k_vat_waist` is the waist term of the multiple regression of Haueise 2023 (whole-trunk MRI of 11,141 participants of the German National Cohort, deep learning segmentation, 20 to 72 years, body mass index 15.6 to 54.6 kg/m2): at a fixed age, height and body weight the visceral depot rises by **3.0 % per cm of waist in men and 2.7 % in women** (their Table S1 model 2, standardized betas 0.734 and 0.576 with R2 0.75, over the standard deviations and means of their Table 2). The other three predictors of that regression are the covariates of the build, so only the waist is a residual over what the library already does, and the rise with age is not counted twice: the beta of the age falls from 0.301 to 0.152 when the waist enters, and the prediction `WAIST_base` carries that rise (0.21 cm per year in men).
+
+An individual of average shape (`f_waist = 1`) therefore keeps the visceral share of its age and sex, and the build of a model which measures no waist is the one described above. A waist 10 cm above the prediction raises the visceral depot of the reference man by 34 % (1.86 to 2.50 kg) and lowers the subcutaneous depot by the same mass; the total adipose tissue, every volume and every flow are untouched, because the waist moves adipose tissue between the two depots and nothing else.
+
+Against the cohort itself the library predicts **4.87 l of visceral adipose tissue for the men of Haueise 2023 against their measured 4.84 l**, and 2.99 against 2.51 l for the women, the same over-prediction in women which the check against Linge 2018 shows.
+
 The body composition of the classes of the body mass index, at the height of the reference individual of each sex:
 
 <!-- generated: adipose-classes (scripts/pbpk_tables.py), do not edit -->
 *Generated from `pkpdsim.pbpk.physiology.body_composition` at the height of the reference individual of the sex (ICRP 89, 35 years) by `scripts/pbpk_tables.py`; the notes of every number are in the database.*
 
-| class | sex | BMI | BW [kg] | FFM [kg] | FM [kg] | %fat | FMI | Mad [kg] | VAT [kg] | SAT [kg] |
-| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Underweight | male | 17 | 52.66 | 47.16 | 5.504 | 10.45 | 1.777 | 8.094 | 0.8061 | 7.288 |
-| Normal weight | male | 23.57 | 73 | 57.49 | 15.51 | 21.24 | 5.006 | 18.7 | 1.862 | 16.83 |
-| Overweight | male | 27.5 | 85.18 | 62.57 | 22.61 | 26.55 | 7.3 | 26.1 | 2.599 | 23.5 |
-| Obesity class I | male | 32.5 | 100.7 | 68.12 | 32.55 | 32.34 | 10.51 | 36.36 | 3.621 | 32.74 |
-| Obesity class II | male | 37.5 | 116.2 | 72.86 | 43.3 | 37.28 | 13.98 | 47.38 | 4.719 | 42.66 |
-| Obesity class III | male | 45 | 139.4 | 78.79 | 60.6 | 43.48 | 19.56 | 65.02 | 6.475 | 58.54 |
-| Underweight | female | 17 | 45.17 | 32.39 | 12.78 | 28.3 | 4.81 | 14.57 | 0.7085 | 13.87 |
-| Normal weight | female | 22.58 | 60 | 38.92 | 21.08 | 35.13 | 7.933 | 23.26 | 1.131 | 22.13 |
-| Overweight | female | 27.5 | 73.06 | 43.73 | 29.34 | 40.15 | 11.04 | 31.81 | 1.546 | 30.26 |
-| Obesity class I | female | 32.5 | 86.35 | 47.9 | 38.45 | 44.52 | 14.47 | 41.16 | 2.001 | 39.16 |
-| Obesity class II | female | 37.5 | 99.63 | 51.51 | 48.12 | 48.3 | 18.11 | 51.05 | 2.481 | 48.57 |
-| Obesity class III | female | 45 | 119.6 | 56.09 | 63.47 | 53.09 | 23.89 | 66.67 | 3.241 | 63.42 |
+| class | sex | BMI | BW [kg] | FFM [kg] | FM [kg] | %fat | FMI | Mad [kg] | WAIST [cm] | WHtR | VAT [kg] | SAT [kg] |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Underweight | male | 17 | 52.66 | 47.16 | 5.504 | 10.45 | 1.777 | 8.094 | 68.64 | 0.39 | 0.8061 | 7.288 |
+| Normal weight | male | 23.57 | 73 | 57.49 | 15.51 | 21.24 | 5.006 | 18.7 | 84.21 | 0.4785 | 1.862 | 16.83 |
+| Overweight | male | 27.5 | 85.18 | 62.57 | 22.61 | 26.55 | 7.3 | 26.1 | 93.54 | 0.5315 | 2.599 | 23.5 |
+| Obesity class I | male | 32.5 | 100.7 | 68.12 | 32.55 | 32.34 | 10.51 | 36.36 | 105.4 | 0.5989 | 3.621 | 32.74 |
+| Obesity class II | male | 37.5 | 116.2 | 72.86 | 43.3 | 37.28 | 13.98 | 47.38 | 117.3 | 0.6663 | 4.719 | 42.66 |
+| Obesity class III | male | 45 | 139.4 | 78.79 | 60.6 | 43.48 | 19.56 | 65.02 | 135.1 | 0.7673 | 6.475 | 58.54 |
+| Underweight | female | 17 | 45.17 | 32.39 | 12.78 | 28.3 | 4.81 | 14.57 | 63.81 | 0.3915 | 0.7085 | 13.87 |
+| Normal weight | female | 22.58 | 60 | 38.92 | 21.08 | 35.13 | 7.933 | 23.26 | 75.53 | 0.4634 | 1.131 | 22.13 |
+| Overweight | female | 27.5 | 73.06 | 43.73 | 29.34 | 40.15 | 11.04 | 31.81 | 85.86 | 0.5267 | 1.546 | 30.26 |
+| Obesity class I | female | 32.5 | 86.35 | 47.9 | 38.45 | 44.52 | 14.47 | 41.16 | 96.36 | 0.5912 | 2.001 | 39.16 |
+| Obesity class II | female | 37.5 | 99.63 | 51.51 | 48.12 | 48.3 | 18.11 | 51.05 | 106.9 | 0.6556 | 2.481 | 48.57 |
+| Obesity class III | female | 45 | 119.6 | 56.09 | 63.47 | 53.09 | 23.89 | 66.67 | 122.6 | 0.7522 | 3.241 | 63.42 |
 <!-- end generated -->
 
 The WHO cut-offs (18.5, 25, 30, 35, 40 kg/m2) are those of WHO Technical Report Series 894. The WHO Expert Consultation 2004 retained them as the international classification and added the public health action points **23.0, 27.5, 32.5 and 37.5 kg/m2** for Asian populations, because the point of observed risk varies between a body mass index of 22 and 25 across them. The percent body fat of Gallagher 2000 reproduces those points: an Asian man of 22.7 and an Asian woman of 23.5 have the body fat of a white subject at 25, and 27.1 and 28.5 the body fat at 30. The library carries the action points here and not as a classification of its own.
@@ -129,9 +168,11 @@ BW_set = BW0 * (1 dimensionless + f_bw)
 d(BW)/dt = k_bw * (BW_set - BW)
 BW_change = BW - BW0
 BW_ratio = BW / BW0
+WAIST0 = WAIST
+WAIST_change = WAIST - WAIST0
 ```
 
-with `f_bw` the effect of the model. `BW0` is the body weight of the covariates, the weight at the start of the simulation; `f_bw` is the fractional change of the body weight at the set point (negative for a loss), an assignment rule which may read the species and observers of the top model, e.g. an Emax of the concentration of a GLP-1 agonist; `k_bw` is the rate at which the weight approaches the set point, a half time of 35 weeks by default, which a model fits. The model reports `BW_change` and `BW_ratio`.
+with `f_bw` the effect of the model. `BW0` is the body weight of the covariates, the weight at the start of the simulation; `f_bw` is the fractional change of the body weight at the set point (negative for a loss), an assignment rule which may read the species and observers of the top model, e.g. an Emax of the concentration of a GLP-1 agonist; `k_bw` is the rate at which the weight approaches the set point, a half time of 35 weeks by default, which a model fits. The model reports `BW_change` and `BW_ratio`, and `WAIST_change` beside them: the waist follows the weight through its prediction at the ratio `f_waist` of the individual, which is held, so the prediction falls by 0.77 cm per kg in a man and 0.79 in a woman. The trials of the GLP-1 receptor agonists report about 0.85 cm per kg (SURMOUNT-1 lost about 18 cm of waist at 20.9 % of 104.8 kg), so the model under-predicts the waist of a large weight loss by about a tenth: the weight these drugs remove is more central than the weight by which the individuals of a cross section differ.
 
 Because `BW` is a dynamic parameter, every quantity downstream of it becomes an assignment rule: the fat-free mass, every organ mass, volume and flow, the blood volume, the cardiac output, the GFR, the body composition and the factors of obesity. **The physiology follows the weight**, which is the point: a weight loss lowers the cardiac output and the GFR, raises the hepatic CYP3A4 activity back towards its normal weight value and shrinks the adipose volume into which a lipophilic drug distributes.
 
@@ -252,8 +293,8 @@ PK-Sim has **no obese population and no obesity disease state**: a high-BMI PK-S
 - **The range of validity is a body mass index of 18.5 to 40**, with a warning above it. Berton 2022 declare their own equations robust to 40 and usable with caution to 60, and the fat-free mass of Janmahasatian 2005 saturates (its body mass index term tends to 9270/216 kg/m) and was developed on a cohort reaching about 40: at a body mass index of 60 the fat-free mass of the library is 0.80 of Berton's and the liver, muscle and blood volume follow it down to 0.74 to 0.81. The table of the factors carries the values to 50 and 60 so that a scan does not fall off the end, not because they are supported there.
 - `Mad` is a residual and is not `FM/0.853`: the implied neutral lipid fraction of the compartment runs from 0.77 at a body mass index of 20 to 0.95 at 40, against the 0.853 of the tissue composition the partition coefficients use, so the modelled lipid pool is about 18 % above the measured fat mass in a lean man and 5 % below it at a body mass index of 40. Making the adipose mass the fat mass over the lipid fraction plus the unmapped tissues would remove this and would change the SBML of every model above the reference size; it is not done here.
 - The alpha-1-acid glycoprotein is the one numeric conflict left in the factors: the regression of Berton 2022 (12 studies, 455 subjects) raises it 1.23-fold at a body mass index of 40 while Simcyp doubles it (2.03-fold at 30 to 40 and 2.25 above 40, from two studies of 18 and 11 subjects). The library follows the larger set; a model whose drug binds mainly to the acid glycoprotein should scan the alternative.
-- The visceral share is predicted within 10 to 19 % in men and over-predicted by 35 to 44 % in women against the two MRI cohorts, mostly because the adipose remainder of the library is 3 l larger than the measured total adipose tissue of a woman (the fat-free mass of Janmahasatian 2005 over-predicts the fat of a lean woman) and because the UK Biobank definition of the visceral depot is not that of Shen 2009. No open publication gives the whole-body visceral volume as a function of the body size; the two that do (Kvist 1988, Janssen 2002) are paywalled.
-- Visceral fat falls **faster** than total fat during a weight loss (-40.1 % against -33.9 % for a -21.3 % weight change, SURMOUNT-1 DXA substudy), which the age-only `f_vat` does not reproduce: the two depots fall in proportion.
+- The visceral depot of a **woman** is over-predicted by 19 % against Haueise 2023 and by 35 % against Linge 2018, while the men agree to 1 % and 10 %; the cause is mostly that the adipose remainder of the library is about 3 l larger than the measured total adipose tissue of a woman (the fat-free mass of Janmahasatian 2005 over-predicts the fat of a lean woman), and partly that neither cohort defines the visceral depot as Shen 2009 do (the German National Cohort segments from the femoral heads to the cardiac apex, the UK Biobank differently again). The waist does not correct it: `f_waist` is 1 for an individual of average shape by construction, and what is wrong is the share, not the waist.
+- Visceral fat falls **faster** than total fat during a weight loss (-40.1 % against -33.9 % for a -21.3 % weight change, SURMOUNT-1 DXA substudy). The waist reproduces part of it and only for an individual whose waist exceeds the prediction: the ratio `f_waist` is held while the predicted waist falls with the weight, so the deviation in cm shrinks and the visceral share falls with it, by about 4 % over a 20 % weight loss at `f_waist` = 1.1 against the 9 % the substudy measures. For an individual of average shape the two depots still fall in proportion. A faster visceral limb would need a longitudinal regression, which no open cohort publishes.
 - The organs do not all follow the weight at the same rate. The CALERIE ancillary (whole body MRI, 27 adults, 25 % caloric restriction, 13 % weight loss over 12 months) gives elasticities against the body weight of 2.8 for adipose tissue, 0.57 for skeletal muscle, 0.48 for the liver, 0.42 for the heart and about 0 for the kidney and the brain, while the library applies one elasticity (`SV_tis`) to every lean organ. The liver is the clearest exception in the other direction: a low energy diet reduces the liver volume by 13 % within 2 to 4 weeks and then stops, while the body weight goes on falling (Nilsen 2025, 33 articles, 1868 patients), because it is losing steatosis, glycogen and water. A model which simulates the first weeks of a severe deficit or of bariatric surgery needs its own, faster liver term.
 - No published PBPK model with a continuously time-varying body weight was found; every obesity and bariatric PBPK model in the literature is a static state. The circadian machinery of the library ([circadian rhythms](circadian.md)) is the architectural precedent and Marok 2024 its published use, at the wrong time scale.
 - The factors are those of adults. Obesity in children has its own virtual population (Gerhart 2022) which the library does not carry, and the factors do not interact with the factors of the age, the sex, the pregnancy or the impairments otherwise than by multiplying.

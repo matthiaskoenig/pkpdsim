@@ -39,6 +39,7 @@ __all__ = [
     "F_SHUNT",
     "F_TUBULAR",
     "F_VISCERAL",
+    "F_WAIST",
     "F_ZONE",
     "GA",
     "GFR",
@@ -80,7 +81,10 @@ __all__ = [
     "VURINE",
     "V_FETUS",
     "V_PLACENTA",
+    "WAIST",
+    "WAIST_BASE",
     "WALL_FRACTION",
+    "WHTR",
     "absorbed_amount",
     "absorbed_fraction",
     "absorption",
@@ -287,6 +291,14 @@ SAT = "SAT"
 """The subcutaneous adipose tissue mass (kg), the rest of the adipose tissue."""
 F_VISCERAL = "f_vat"
 """The visceral share of the adipose tissue."""
+WAIST = "WAIST"
+"""The waist circumference (cm) at the site of the WHO protocol."""
+WAIST_BASE = "WAIST_base"
+"""The waist circumference (cm) predicted from the covariates of the build."""
+F_WAIST = "f_waist"
+"""The waist circumference over the waist predicted from the covariates."""
+WHTR = "WHtR"
+"""The waist-to-height ratio."""
 BSA = "BSA"
 """The body surface area."""
 FFM = "FFM"
