@@ -23,6 +23,11 @@ lactate = { value = 1.0, unit = "mM", source = "ModelChoice", notes = "assumed i
 HCO3 = { value = 24.0, unit = "mM", source = "ModelChoice", notes = "assumed bicarbonate of a fresh buffered perfusate (the study measures 9 to 13 mM in the outflow after hours), awaiting the composition of the study protocol" }
 K = { value = 4.5, unit = "mM", source = "ModelChoice", notes = "assumed potassium of the fresh perfusate, awaiting the composition of the study protocol" }
 pH = { value = 7.4, unit = "dimensionless", source = "ModelChoice", notes = "assumed pH of the fresh perfusate (the study measures 7.3 at the start), awaiting the composition of the study protocol" }
+O2 = { value = 0.47, unit = "mM", source = "ModelChoice", notes = "assumed free oxygen of the oxygenated perfusate: a pO2 of 50 kPa (the outflow pO2 of the study at 1 to 5 h lies between 30 and 70 kPa, sheet 03_HCO3_K_PH_PO2 of flow_rate_raw_data_combined_updated.xlsx) times the oxygen solubility of plasma at 37 C (0.009464 mM/kPa, [oxygen] solubility); awaiting the oxygenation of the study protocol" }
+
+[acid_base]
+pK = { value = 6.1, unit = "dimensionless", source = "ModelChoice", notes = "the apparent pK of the bicarbonate buffer of plasma at 37 C in the Henderson-Hasselbalch equation, pH = pK + log10([HCO3-]/[CO2]), the textbook value; the dissolved CO2 stands for CO2 and H2CO3 together" }
+k_hydration = { value = 6.0, unit = "1/min", source = "ModelChoice", notes = "assumed first order rate constant of the uncatalysed hydration of CO2 at 37 C, of the order of 0.1 1/s; an acellular perfusate has no carbonic anhydrase; the buffer is close to its equilibrium on the time scale of a perfusion, so the value matters little" }
 
 [liver_rat]
 mass = { value = 7.229, unit = "g", source = "Brown1997", notes = "reference liver tissue mass of the 250 g male rat without its residual blood, the value of physiology_rat.toml ([male.organs.li] mass, 3.66 % BW times (1 - 0.21)); the livers of the study weigh 8 to 20 g and the experiments take their own weights" }
