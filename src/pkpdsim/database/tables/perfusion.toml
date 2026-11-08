@@ -7,6 +7,7 @@
 [oxygen]
 solubility = { value = 0.009464, unit = "mM/kPa", source = "Christmas2017", notes = "derived: solubility of O2 in plasma at 37 C from Equation 4a of Christmas and Bassingthwaighte 2017 with rho_plasma = 1.020 g/ml and rho_water = 0.99332 g/ml (the authors call the plasma parameters tentative): 0.02149 ml gas/ml/atm, against 0.0214 in their Table 1 at 37 C (column assignment of the flattened table inferred), converted with 22.414 ml/mmol (STPD) and 101.325 kPa/atm. The perfusate of a machine perfusion without an oxygen carrier is closer to saline (0.02273 ml/ml/atm, 0.01001 mM/kPa), a model choice for the carrier." }
 temperature_coefficient = { value = -0.01257, unit = "1/K", source = "Christmas2017", notes = "derived: relative change of the solubility per K at 37 C, the central difference of Equation 4a of Christmas and Bassingthwaighte 2017 (plasma), i.e. a decrease of 1.3 % per K" }
+temperature = { value = 37.0, unit = "degC", source = "Christmas2017", notes = "the temperature of the solubility and of its temperature coefficient, both evaluated at 37 C from Equation 4a of Christmas and Bassingthwaighte 2017; the solubility at another temperature is solubility*exp(temperature_coefficient*(T - temperature)), a model choice which extrapolates the coefficient at 37 C" }
 
 [enzymes]
 ALT = { value = 1.0, unit = "ukat/mmol", source = "ModelChoice", notes = "PLACEHOLDER: no activity but a scale which the fit absorbs into the enzyme content; no specific activity of rat ALT (kcat or U/mg of the purified enzyme at 37 C) was found in a readable source (the rat ALT1/ALT2 paper Yang 2009, DOI 10.1002/hep.22657, reports serum activities only); converts the ALT amount (mmole) of the model to the activity of the data (ukat/l = umol/(l*s)); fitted later" }
@@ -15,6 +16,7 @@ LDH = { value = 1.0, unit = "ukat/mmol", source = "ModelChoice", notes = "PLACEH
 
 [temperature]
 reference = { value = 37.0, unit = "degC", source = "ModelChoice", notes = "the reference temperature of the Arrhenius factor of the rates, normothermic perfusion; the study is normothermic (folder NMP), the protocol temperature to be confirmed by the study owner" }
+gas_constant = { value = 8.314462618, unit = "J/mol/K", source = "Tiesinga2021", notes = "the molar gas constant, exact in the SI since 2019 (N_A*k), given to ten digits" }
 activation_energy_factor = { value = 12.0, unit = "dimensionless", source = "ModelChoice", notes = "default f_Ea of the liver model of pkdb_models.misc.machine_perfusion (activation energy Ea = f_Ea*R*T_ref, 30.9 kJ/mol at 37 C), taken over unchanged; no source recorded there, fitted later" }
 
 [perfusate]
@@ -24,6 +26,14 @@ HCO3 = { value = 24.0, unit = "mM", source = "ModelChoice", notes = "assumed bic
 K = { value = 4.5, unit = "mM", source = "ModelChoice", notes = "assumed potassium of the fresh perfusate, awaiting the composition of the study protocol" }
 pH = { value = 7.4, unit = "dimensionless", source = "ModelChoice", notes = "assumed pH of the fresh perfusate (the study measures 7.3 at the start), awaiting the composition of the study protocol" }
 O2 = { value = 0.47, unit = "mM", source = "ModelChoice", notes = "assumed free oxygen of the oxygenated perfusate: a pO2 of 50 kPa (the outflow pO2 of the study at 1 to 5 h lies between 30 and 70 kPa, sheet 03_HCO3_K_PH_PO2 of flow_rate_raw_data_combined_updated.xlsx) times the oxygen solubility of plasma at 37 C (0.009464 mM/kPa, [oxygen] solubility); awaiting the oxygenation of the study protocol" }
+pO2 = { value = 50.0, unit = "kPa", source = "ModelChoice", notes = "assumed oxygen partial pressure which the oxygenator sets and of the fresh perfusate: the outflow pO2 of the study at 1 to 5 h lies between 30 and 70 kPa (sheet 03_HCO3_K_PH_PO2 of flow_rate_raw_data_combined_updated.xlsx), the inflow lies above the outflow; awaiting the oxygenation of the study protocol" }
+
+[circuit]
+reservoir = { value = 1000.0, unit = "ml", source = "ModelChoice", notes = "the volume of the perfusate in the reservoir as the study owner recalls it (a medium change replaces 500 ml of a 1000 ml reservoir), to be confirmed (TODO of pkdb_models misc/machine_perfusion)" }
+tubing_in = { value = 10.0, unit = "ml", source = "ModelChoice", notes = "assumed volume of the inflow tubing with the oxygenator, from the reservoir to the portal vein; awaiting the circuit of the study" }
+tubing_out = { value = 10.0, unit = "ml", source = "ModelChoice", notes = "assumed volume of the outflow tubing, from the hepatic veins back to the reservoir; awaiting the circuit of the study" }
+flow = { value = 3.0, unit = "ml/min", source = "ModelChoice", notes = "the total pump flow of the highest flow group of the study (1, 2 and 3 ml/min); the experiments set the flow of their group" }
+oxygenator_k = { value = 2.0, unit = "1/min", source = "ModelChoice", notes = "assumed first order rate constant of the oxygenation of the inflow tubing: an efficient membrane oxygenator brings the perfusate close to its target within the residence time of the inflow tubing (3.3 min at 10 ml and 3 ml/min); awaiting the oxygenator of the study" }
 
 [acid_base]
 pK = { value = 6.1, unit = "dimensionless", source = "ModelChoice", notes = "the apparent pK of the bicarbonate buffer of plasma at 37 C in the Henderson-Hasselbalch equation, pH = pK + log10([HCO3-]/[CO2]), the textbook value; the dissolved CO2 stands for CO2 and H2CO3 together" }
@@ -32,6 +42,7 @@ k_hydration = { value = 6.0, unit = "1/min", source = "ModelChoice", notes = "as
 [liver_rat]
 mass = { value = 7.229, unit = "g", source = "Brown1997", notes = "reference liver tissue mass of the 250 g male rat without its residual blood, the value of physiology_rat.toml ([male.organs.li] mass, 3.66 % BW times (1 - 0.21)); the livers of the study weigh 8 to 20 g and the experiments take their own weights" }
 vascular_fraction = { value = 0.21, unit = "dimensionless", source = "Brown1997", notes = "volume fraction of blood in the excised liver, Table 30 of Brown 1997 as in physiology_rat.toml ([male.organs.li] f_vas); a perfused liver is washed of blood, so the vascular space is the perfusate space of the organ" }
+density = { value = 1.0, unit = "kg/l", source = "ModelChoice", notes = "the density of the liver tissue taken as 1 kg/l, as for the bile per g of liver of the study ([liver_rat] bile_rate); converts the mass of a liver into its volume" }
 cell_fraction = { value = 0.69, unit = "dimensionless", source = "ModelChoice", notes = "derived: 1 - f_vas - f_int of physiology_rat.toml with f_int = 0.1003, rounded; the tissue space of the hepatocytes, fitted later if the zones need another split" }
 bile_rate = { value = 0.5113, unit = "ul/min/g", source = "ModelChoice", notes = "start value of a fit, derived from the study data: the median (30.68 ul/g, n = 3 animals XPC-096, XPC-097, XPC-098) of the column bile_per_g_1h of the sheet 01_bile_WIT of flow_rate_raw_data_combined_updated.xlsx for the group 3ml/min, the bile of the first hour per g liver, divided by 60 min; the fit adjusts it" }
 

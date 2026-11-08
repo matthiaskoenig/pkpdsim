@@ -39,6 +39,10 @@ doi = "10.1038/psp.2012.3"
 citation = "The UniProt Consortium. UniProt: the Universal Protein Knowledgebase in 2023. Nucleic Acids Res 51(D1):D523-D531, 2023."
 doi = "10.1093/nar/gkac1052"
 
+[Tiesinga2021]
+citation = "Tiesinga E, Mohr PJ, Newell DB, Taylor BN. CODATA recommended values of the fundamental physical constants: 2018. Rev Mod Phys 93(2):025010, 2021."
+doi = "10.1103/RevModPhys.93.025010"
+
 [ModelChoice]
 citation = "Choice of the pkpdsim PBPK library, not a value of the literature; the notes of the value give the reasoning."
 

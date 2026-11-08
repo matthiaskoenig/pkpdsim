@@ -1,0 +1,479 @@
+"""The definition of a machine perfusion: the circuit, the perfusate and the organ.
+
+A machine perfusion model is built from a `PerfusionDefinition`, as a PBPK
+model from a `pkpdsim.pbpk.PBPKDefinition`: the circuit (`Circuit`, the
+reservoir, the tubing, the pump flow and the oxygenator), the perfusate
+(`Perfusate`, the fresh composition, the oxygenation target, the oxygen
+carrier and the inert tracers), the mounted organ (`LiverOrgan`, a chain of
+zones with the cellular core; `KidneyOrgan` and `GenericOrgan` are declared
+and not built yet), the temperature and the constants of the cellular core
+(`pkpdsim.perfusion.core.CoreParameters`). `pkpdsim.perfusion.builder.build`
+writes its SBML.
+
+The numbers of a definition are `Value`s in the units an experimenter gives
+them (ml, ml/min, g, kPa, degC, `pkpdsim.perfusion.units.PU`), which the
+build converts into the units of the model; `validate` refuses a value in
+another unit. The defaults (`Circuit.default`, `Perfusate.default`,
+`LiverOrgan.default`) are the numbers of the parameter database
+(`tables/perfusion.toml`).
+"""
+
+import dataclasses
+import math
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
+from typing import ClassVar, Literal
+
+from sbmlutils.factory import Creator
+from sbmlutils.factory.units import UnitDefinition, UnitType
+
+from pkpdsim.database.tables import entry, load
+from pkpdsim.pbpk.units import U
+from pkpdsim.pbpk.values import SID, FrozenMap, Value, check_literals
+from pkpdsim.perfusion import ids
+from pkpdsim.perfusion.core import PROCESSES, CoreParameters
+from pkpdsim.perfusion.units import PU
+from pkpdsim.species import Species
+
+__all__ = [
+    "Circuit",
+    "GenericOrgan",
+    "KidneyOrgan",
+    "LiverOrgan",
+    "Organ",
+    "Perfusate",
+    "PerfusionDefinition",
+    "table_value",
+]
+
+_TABLE = "perfusion"
+
+_TABLE_UNITS: dict[str, UnitDefinition] = {
+    "ml": PU.ml,
+    "ml/min": PU.ml_per_min,
+    "g": PU.g,
+    "kg/l": U.kg_per_l,
+    "kPa": PU.kPa,
+    "mM": U.mM,
+    "mM/kPa": PU.mM_per_kPa,
+    "1/min": U.per_min,
+    "1/K": PU.per_K,
+    "degC": PU.degC,
+    "J/mol/K": PU.J_per_mole_K,
+    "ukat/mmol": PU.ukat_per_mmole,
+    "dimensionless": U.dimensionless,
+}
+"""The unit definitions of the units of the perfusion table."""
+
+
+def table_value(section: str, key: str) -> Value:
+    """Get a number of the perfusion table with its unit, source and notes.
+
+    Args:
+        section: the section of `tables/perfusion.toml`.
+        key: the key of the number.
+
+    Returns:
+        The value in the unit definition of its unit.
+
+    Raises:
+        TypeError: if the entry is no number.
+        ValueError: if its unit is no unit of `_TABLE_UNITS`.
+    """
+    e = entry(_TABLE, section, key)
+    if not isinstance(e.value, float):
+        raise TypeError(f"tables/{_TABLE}.toml [{section}] {key} is no number.")
+    try:
+        unit = _TABLE_UNITS[e.unit]
+    except KeyError:
+        raise ValueError(
+            f"tables/{_TABLE}.toml [{section}] {key}: unit '{e.unit}' is no unit "
+            "of a perfusion definition."
+        ) from None
+    return Value(e.value, unit, e.source, e.notes)
+
+
+@dataclass(frozen=True)
+class Perfusate:
+    """The fresh perfusate of a circuit.
+
+    The perfusate fills the reservoir, the tubing and the vascular space of
+    the organ at the start, and a medium change brings it in again; the
+    model has its composition as the constants `<q>_fresh` (mM) of every
+    quantity of the perfusate (`ids.PERFUSATE`, the tracers), the free
+    protons of its pH and the dissolved CO2 of the buffer equilibrium; the
+    free oxygen is that of `o2_target_kpa` at the temperature.
+
+    Attributes:
+        glucose: glucose (mM).
+        lactate: lactate (mM).
+        hco3: bicarbonate (mM).
+        k: potassium (mM).
+        o2_target_kpa: the oxygen partial pressure which the oxygenator sets
+            and of the fresh perfusate (kPa).
+        ph: the pH of the fresh perfusate.
+        carrier: the oxygen carrier, `none` (an acellular perfusate, the free
+            oxygen only) or `rbc` (red blood cells, declared and not built
+            yet, `validate` refuses it).
+        hct: the hematocrit of a perfusate with red blood cells.
+        tracers: inert quantities of the perfusate (SIds), which flow with it
+            and do not enter the cells (a mass balance, a filtration
+            marker); fresh at 0 mM.
+    """
+
+    glucose: Value
+    lactate: Value
+    hco3: Value
+    k: Value
+    o2_target_kpa: Value
+    ph: Value
+    carrier: Literal["none", "rbc"] = "none"
+    hct: Value | None = None
+    tracers: Sequence[str] = ()
+
+    def __post_init__(self) -> None:
+        """Keep the tracers as a tuple and check the carrier.
+
+        Raises:
+            ValueError: for a carrier which is no choice.
+        """
+        object.__setattr__(self, "tracers", tuple(self.tracers))
+        check_literals(self)
+
+    @classmethod
+    def default(cls) -> "Perfusate":
+        """Get the perfusate of the perfusion table (`[perfusate]`)."""
+        return cls(
+            glucose=table_value("perfusate", "glucose"),
+            lactate=table_value("perfusate", "lactate"),
+            hco3=table_value("perfusate", "HCO3"),
+            k=table_value("perfusate", "K"),
+            o2_target_kpa=table_value("perfusate", "pO2"),
+            ph=table_value("perfusate", "pH"),
+        )
+
+    def problems(self) -> list[str]:
+        """Get what is wrong with the perfusate."""
+        where = "perfusate"
+        out: list[str] = []
+        for name in ("glucose", "lactate", "hco3", "k"):
+            out += _unit(where, name, getattr(self, name), U.mM)
+            out += _at_least(where, name, getattr(self, name), 0.0)
+        out += _unit(where, "o2_target_kpa", self.o2_target_kpa, PU.kPa)
+        out += _at_least(where, "o2_target_kpa", self.o2_target_kpa, 0.0)
+        out += _unit(where, "ph", self.ph, U.dimensionless)
+        if self.carrier == "rbc":
+            out.append(
+                f"{where}: the oxygen carrier 'rbc' is not built yet, only 'none'"
+            )
+        if self.carrier == "none" and self.hct is not None:
+            out.append(f"{where}: a hematocrit needs the carrier 'rbc'")
+        taken = set(ids.PERFUSATE) | set(ids.CELL)
+        for t in self.tracers:
+            if not SID.fullmatch(t):
+                out.append(f"{where}: the tracer '{t}' is no SId")
+            elif t in taken:
+                out.append(f"{where}: the tracer '{t}' is a quantity of the model")
+        if len(set(self.tracers)) != len(self.tracers):
+            out.append(f"{where}: a tracer is given twice")
+        return out
+
+
+@dataclass(frozen=True)
+class Circuit:
+    """The circuit of a machine perfusion.
+
+    The pump drives the perfusate from the reservoir through the inflow
+    tubing, in which the oxygenator sets its oxygen, through the organ and
+    the outflow tubing back into the reservoir; every site is well stirred.
+
+    Attributes:
+        reservoir: the volume of the perfusate in the reservoir (ml).
+        tubing_in: the volume of the inflow tubing with the oxygenator (ml).
+        tubing_out: the volume of the outflow tubing (ml).
+        flow: the total flow of the pump (ml/min), the parameter `Q_pump`.
+        oxygenator_k: the first order rate constant with which the
+            oxygenator sets the oxygen of the inflow tubing towards the
+            target of the perfusate (1/min).
+    """
+
+    reservoir: Value
+    tubing_in: Value
+    tubing_out: Value
+    flow: Value
+    oxygenator_k: Value
+
+    @classmethod
+    def default(cls) -> "Circuit":
+        """Get the circuit of the perfusion table (`[circuit]`)."""
+        return cls(
+            **{f.name: table_value("circuit", f.name) for f in dataclasses.fields(cls)}
+        )
+
+    def problems(self) -> list[str]:
+        """Get what is wrong with the circuit."""
+        where = "circuit"
+        out: list[str] = []
+        for name in ("reservoir", "tubing_in", "tubing_out"):
+            out += _unit(where, name, getattr(self, name), PU.ml)
+            out += _positive(where, name, getattr(self, name))
+        out += _unit(where, "flow", self.flow, PU.ml_per_min)
+        out += _at_least(where, "flow", self.flow, 0.0)
+        out += _unit(where, "oxygenator_k", self.oxygenator_k, U.per_min)
+        out += _at_least(where, "oxygenator_k", self.oxygenator_k, 0.0)
+        return out
+
+
+@dataclass(frozen=True)
+class LiverOrgan:
+    """The liver, a chain of zones from periportal to pericentral.
+
+    The perfusate enters the first zone (a single portal inflow, the rat
+    setup; a split between the hepatic artery and the portal vein is not
+    built) and leaves the last one; each zone is a vascular space (the
+    sinusoids) in series with the flow and its hepatocytes with the cellular
+    core, so oxygen, glucose and the damage form gradients along the
+    sinusoid. The zones have `1/n` of the vascular and cell volume of the
+    organ. A profile weighs a process of the core per zone (`p_<process>_<zone>`),
+    normalised so that the total capacity of the organ is that of one zone
+    of the whole volume, the pattern of the zonated liver of the PBPK library
+    (`pkpdsim.pbpk.variants.liver_zonated`).
+
+    Attributes:
+        mass: the mass of the liver (g).
+        zones: the number of zones, 1 the single compartment.
+        profiles: the relative weight of a process of `core.PROCESSES` in
+            every zone, periportal first; a process without a profile is
+            uniform.
+        vascular_fraction: the volume fraction of the vascular space,
+            `None` for the value of the table of the species
+            (`[liver_<species>]`).
+        cell_fraction: the volume fraction of the hepatocytes, `None` for
+            the table.
+        density: the density of the liver (kg/l), `None` for the table.
+    """
+
+    key: ClassVar[str] = "li"
+    """The organ token of the ids (`M_li`)."""
+
+    mass: Value
+    zones: int = 1
+    profiles: Mapping[str, Sequence[float]] = field(default_factory=dict)
+    vascular_fraction: Value | None = None
+    cell_fraction: Value | None = None
+    density: Value | None = None
+
+    def __post_init__(self) -> None:
+        """Keep the profiles as a read-only map of tuples.
+
+        Raises:
+            ValueError: for less than one zone.
+        """
+        if self.zones < 1:
+            raise ValueError(f"A liver has at least one zone, not {self.zones}.")
+        profiles = {k: tuple(float(x) for x in v) for k, v in self.profiles.items()}
+        object.__setattr__(self, "profiles", FrozenMap(profiles))
+
+    @classmethod
+    def default(
+        cls,
+        zones: int = 1,
+        profiles: Mapping[str, Sequence[float]] | None = None,
+        species: Species = Species.RAT,
+    ) -> "LiverOrgan":
+        """Get the reference liver of a species (`[liver_<species>]`)."""
+        section = f"liver_{species}"
+        return cls(
+            mass=table_value(section, "mass"),
+            zones=zones,
+            profiles=profiles or {},
+            vascular_fraction=table_value(section, "vascular_fraction"),
+            cell_fraction=table_value(section, "cell_fraction"),
+            density=table_value(section, "density"),
+        )
+
+    def problems(self) -> list[str]:
+        """Get what is wrong with the liver."""
+        where = "liver"
+        out = _unit(where, "mass", self.mass, PU.g)
+        out += _positive(where, "mass", self.mass)
+        for name in ("vascular_fraction", "cell_fraction"):
+            out += _unit(where, name, getattr(self, name), U.dimensionless)
+            out += _positive(where, name, getattr(self, name))
+        out += _unit(where, "density", self.density, U.kg_per_l)
+        out += _positive(where, "density", self.density)
+        f_vas, f_cell = self.vascular_fraction, self.cell_fraction
+        if f_vas is not None and f_cell is not None and f_vas.value + f_cell.value > 1:
+            out.append(f"{where}: the vascular and cell fractions exceed 1")
+        for process, values in self.profiles.items():
+            if process not in PROCESSES:
+                out.append(
+                    f"{where}: the profile '{process}' is no process of the core "
+                    f"({', '.join(PROCESSES)})"
+                )
+            if len(values) != self.zones:
+                out.append(
+                    f"{where}: the profile '{process}' has {len(values)} values "
+                    f"for {self.zones} zones"
+                )
+            if any(not (x >= 0 and math.isfinite(x)) for x in values):
+                out.append(f"{where}: the profile '{process}' has a value below 0")
+            elif not sum(values) > 0:
+                out.append(f"{where}: the profile '{process}' is 0 in every zone")
+        return out
+
+
+@dataclass(frozen=True)
+class KidneyOrgan:
+    """The kidney, with the filtration and the urine (not built yet).
+
+    Attributes:
+        mass: the mass of the kidney (g).
+    """
+
+    key: ClassVar[str] = "ki"
+    """The organ token of the ids."""
+
+    mass: Value
+
+
+@dataclass(frozen=True)
+class GenericOrgan:
+    """An organ with the cellular core and no excretion (not built yet).
+
+    Attributes:
+        key: the organ token of the ids.
+        mass: the mass of the organ (g).
+    """
+
+    key: str
+    mass: Value
+
+
+type Organ = LiverOrgan | KidneyOrgan | GenericOrgan
+"""The organs which a circuit mounts."""
+
+
+@dataclass(frozen=True)
+class PerfusionDefinition:
+    """A machine perfusion: an organ mounted into a circuit.
+
+    Attributes:
+        sid: the id of the model, the name of its file.
+        name: the name of the model.
+        species: the species of the organ, the taxon of the model.
+        organ: the mounted organ.
+        circuit: the circuit.
+        perfusate: the fresh perfusate.
+        temperature: the temperature of the perfusion (degC), the parameter
+            `T`, which an experiment changes.
+        core: the constants of the cellular core of the organ.
+        creators: the creators of the model (its model history).
+    """
+
+    sid: str
+    name: str
+    species: Species
+    organ: Organ
+    circuit: Circuit
+    perfusate: Perfusate
+    temperature: Value
+    core: CoreParameters
+    creators: Sequence[Creator] = ()
+
+    def __post_init__(self) -> None:
+        """Normalise the species from text and keep the creators as a tuple."""
+        object.__setattr__(self, "species", Species(self.species))
+        object.__setattr__(self, "creators", tuple(self.creators))
+
+    def validate(self) -> list[str]:
+        """Get what is wrong with the definition.
+
+        Returns:
+            The problems, empty for a definition which builds.
+        """
+        out: list[str] = []
+        if not SID.fullmatch(self.sid):
+            out.append(f"the id '{self.sid}' is no SId")
+        out += self.circuit.problems()
+        out += self.perfusate.problems()
+        out += _unit("temperature", "temperature", self.temperature, PU.degC)
+        if not self.temperature.value > -273.15:
+            out.append("temperature: below the absolute zero")
+        if isinstance(self.organ, LiverOrgan):
+            out += self.organ.problems()
+            section = f"liver_{self.species}"
+            missing = self.organ.vascular_fraction is None or (
+                self.organ.cell_fraction is None or self.organ.density is None
+            )
+            if missing and section not in load(_TABLE):
+                out.append(
+                    f"liver: the table has no section [{section}] for the "
+                    "fractions and the density of the liver"
+                )
+        else:
+            out.append(
+                f"the organ {type(self.organ).__name__} is not built yet, only "
+                "the liver"
+            )
+        return out
+
+    def parameter_value(self, sid: str) -> float:
+        """Get the number of a constant parameter of the model of the definition.
+
+        The experiments read a number of the model here (the flow, the fresh
+        perfusate of a medium change), the one place of the number.
+
+        Args:
+            sid: the id of the parameter.
+
+        Returns:
+            The number in the unit of the parameter of the model.
+
+        Raises:
+            KeyError: if the model has no constant parameter of the id with a
+                number (a parameter of an initial assignment or a rule).
+        """
+        from pkpdsim.perfusion.builder import compose
+
+        model = compose(self)
+        assigned = {a.symbol for a in model.assignments or []}
+        for p in model.parameters or []:
+            if (
+                p.sid == sid
+                and p.constant
+                and sid not in assigned
+                and isinstance(p.value, int | float)
+            ):
+                return float(p.value)
+        raise KeyError(f"The model '{self.sid}' has no constant number '{sid}'.")
+
+
+def _unit(where: str, name: str, value: Value | None, unit: UnitType) -> list[str]:
+    """Check that a value is given in a unit, compared by the id of the unit.
+
+    The ids tell a temperature in `degC` from one in `kelvin`, which have
+    the same definition.
+    """
+    if value is None or _unit_id(value.unit) == _unit_id(unit):
+        return []
+    return [f"{where}: {name} must be in {_unit_id(unit)}, got {_unit_id(value.unit)}"]
+
+
+def _unit_id(unit: UnitType) -> str:
+    """Get the id of a unit definition, the text of any other unit."""
+    return str(getattr(unit, "sid", unit))
+
+
+def _positive(where: str, name: str, value: Value | None) -> list[str]:
+    """Check that a value is a positive number."""
+    if value is None or (value.value > 0 and math.isfinite(value.value)):
+        return []
+    return [f"{where}: {name} must be positive, got {value.value}"]
+
+
+def _at_least(where: str, name: str, value: Value, lower: float) -> list[str]:
+    """Check that a value is a finite number of at least `lower`."""
+    if value.value >= lower and math.isfinite(value.value):
+        return []
+    return [f"{where}: {name} must be at least {lower}, got {value.value}"]

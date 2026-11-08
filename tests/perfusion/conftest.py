@@ -4,7 +4,8 @@ The tests compile their models at `JIT_OPTIMIZATION` (`O0`) as the PBPK tests
 do, with the same autouse fixture.
 """
 
-from collections.abc import Mapping
+import dataclasses
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -13,7 +14,16 @@ from sbmlutils.factory import Compartment, FactoryResult, Model, Parameter, crea
 from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk.units import MODEL_UNITS, U
+from pkpdsim.pbpk.values import Value
 from pkpdsim.perfusion import core, ids
+from pkpdsim.perfusion.definition import (
+    Circuit,
+    LiverOrgan,
+    Perfusate,
+    PerfusionDefinition,
+)
+from pkpdsim.perfusion.units import PU
+from pkpdsim.species import Species as BuildSpecies
 
 if TYPE_CHECKING:
     import roadrunner
@@ -24,6 +34,8 @@ __all__ = [
     "VASCULAR",
     "ZONE",
     "jit_optimization",
+    "liver_definition",
+    "load_circuit",
     "load_zone",
     "zone_model",
 ]
@@ -114,3 +126,32 @@ def load_zone(path: Path) -> "roadrunner.RoadRunner":
     r.integrator.absolute_tolerance = 1e-14
     r.integrator.relative_tolerance = 1e-10
     return r
+
+
+def liver_definition(
+    zones: int = 1,
+    *,
+    profiles: Mapping[str, Sequence[float]] | None = None,
+    tracers: Sequence[str] = (),
+    temperature: float = 37.0,
+    sid: str = "perfusion_liver",
+) -> PerfusionDefinition:
+    """Get the rat liver in the circuit of the parameter database."""
+    perfusate = Perfusate.default()
+    if tracers:
+        perfusate = dataclasses.replace(perfusate, tracers=tuple(tracers))
+    return PerfusionDefinition(
+        sid=sid,
+        name="perfused rat liver",
+        species=BuildSpecies.RAT,
+        organ=LiverOrgan.default(zones=zones, profiles=profiles or {}),
+        circuit=Circuit.default(),
+        perfusate=perfusate,
+        temperature=Value(temperature, PU.degC, "ModelChoice", "the test temperature"),
+        core=core.CoreParameters.default(),
+    )
+
+
+def load_circuit(path: Path) -> "roadrunner.RoadRunner":
+    """Load a built circuit at `O0` with tight integrator tolerances."""
+    return load_zone(path)

@@ -1,6 +1,9 @@
 """The machine perfusion library: a circuit with a mounted organ (pkpdsim#146).
 
-An organ in a machine perfusion is a chain of zones, each a vascular space
+A model is built from a definition (`pkpdsim.perfusion.definition`: the
+circuit, the perfusate, the organ, the temperature) by
+`pkpdsim.perfusion.builder.build`, one SBML file. An organ in a machine
+perfusion is a chain of zones, each a vascular space
 in series with the flow and its cells with the cellular core
 (`pkpdsim.perfusion.core`: the energy metabolism, the redox and the damage of
 the cells, the release of their enzymes and potassium, the bicarbonate buffer
@@ -14,6 +17,7 @@ import importlib
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from pkpdsim.perfusion.builder import build, compose
     from pkpdsim.perfusion.core import (
         PROCESSES,
         Buffer,
@@ -24,7 +28,17 @@ if TYPE_CHECKING:
         buffer_parameters,
         core_parameters,
         perfusate_objects,
+        quantity_name,
         zone_objects,
+    )
+    from pkpdsim.perfusion.definition import (
+        Circuit,
+        GenericOrgan,
+        KidneyOrgan,
+        LiverOrgan,
+        Organ,
+        Perfusate,
+        PerfusionDefinition,
     )
 
 #: the names imported on their first access: name -> module of `pkpdsim.perfusion`
@@ -38,7 +52,17 @@ _LAZY_NAMES = {
     "buffer_parameters": "core",
     "core_parameters": "core",
     "perfusate_objects": "core",
+    "quantity_name": "core",
     "zone_objects": "core",
+    "Circuit": "definition",
+    "GenericOrgan": "definition",
+    "KidneyOrgan": "definition",
+    "LiverOrgan": "definition",
+    "Organ": "definition",
+    "Perfusate": "definition",
+    "PerfusionDefinition": "definition",
+    "build": "builder",
+    "compose": "builder",
 }
 
 
@@ -62,12 +86,22 @@ def __dir__() -> list[str]:
 __all__ = [
     "PROCESSES",
     "Buffer",
+    "Circuit",
     "Composition",
     "CoreObjects",
     "CoreParameters",
+    "GenericOrgan",
+    "KidneyOrgan",
+    "LiverOrgan",
+    "Organ",
+    "Perfusate",
+    "PerfusionDefinition",
     "buffer_objects",
     "buffer_parameters",
+    "build",
+    "compose",
     "core_parameters",
     "perfusate_objects",
+    "quantity_name",
     "zone_objects",
 ]

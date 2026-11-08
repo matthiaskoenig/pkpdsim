@@ -133,6 +133,7 @@ __all__ = [
     "buffer_parameters",
     "core_parameters",
     "perfusate_objects",
+    "quantity_name",
     "zone_objects",
 ]
 
@@ -911,6 +912,15 @@ def zone_objects(
             )
         )
     return out
+
+
+def quantity_name(quantity: str) -> str:
+    """Get the name of a quantity of the core (`glucose` of `glc`).
+
+    Raises:
+        KeyError: for a token which is no quantity of the core.
+    """
+    return _NAMES[quantity]
 
 
 def _ids(make: Callable[[str, str], str], suffix: str) -> Callable[[str], str]:
