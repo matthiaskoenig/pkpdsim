@@ -33,7 +33,7 @@ import numpy as np
 import svgelements as se  # ty: ignore[unresolved-import]
 from lxml import etree  # ty: ignore[unresolved-import]
 from PIL import Image, ImageDraw
-from shapely.geometry import Polygon, box  # ty: ignore[unresolved-import]
+from shapely.geometry import LineString, Point, Polygon, box  # ty: ignore[unresolved-import]
 from shapely.ops import unary_union  # ty: ignore[unresolved-import]
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -404,18 +404,157 @@ def build(key: str) -> dict:
     return res
 
 
+# --- the pig: an own silhouette (dorsal view) with the organs of the human drawings ------------
+#: the legs of the pig: x, y, side and the angle of the leg [degrees]
+PIG_LEGS = ((15, 66, -1, 25), (65, 66, 1, -25), (16, 120, -1, -20), (64, 120, 1, 20))
+#: the organs of the trunk of the pig, fitted from the human drawing of the sex
+PIG_TRUNK = ("lu", "he", "li", "st", "sp", "pa", "si", "la", "ki")
+PIG_LAYOUT = {"ki": (1.4, 6.5), "he": (0.0, 4.0)}
+PIG_ATTRIBUTION = (
+    "Silhouette of the pig drawn by pkpdsim (scripts/visual/anatomy_assets.py, CC BY 4.0); the organs "
+    "after the human anatomograms of the Expression Atlas (EMBL-EBI) and the Human Protein Atlas, "
+    "https://github.com/ebi-gene-expression-group/anatomogram, CC BY 4.0, fitted into its trunk."
+)
+
+
+def ellipse(cx: float, cy: float, rx: float, ry: float, rot: float = 0.0) -> Polygon:
+    from shapely.affinity import rotate, scale  # ty: ignore[unresolved-import]
+
+    e = scale(Point(cx, cy).buffer(1.0, 64), rx, ry)
+    return rotate(e, rot, origin=(cx, cy)) if rot else e
+
+
+def pig_silhouette() -> Polygon:
+    """A pig in dorsal view, the snout up: an oval trunk, a head tapering to the snout disc, floppy
+    ears, the legs at the sides and a curly tail."""
+    trunk = ellipse(40, 92, 26, 45)
+    head = Polygon(
+        [(24, 58), (26, 42), (33, 22), (36, 17), (44, 17), (47, 22), (54, 42), (56, 58)]
+    )
+    snout = ellipse(40, 11, 7.5, 5.2)
+    ears = [
+        Polygon([(31, 40), (14, 30), (16, 22), (33, 31)]).buffer(2.2),
+        Polygon([(49, 40), (66, 30), (64, 22), (47, 31)]).buffer(2.2),
+    ]
+    legs = [ellipse(x, y, 5.5, 9.5, rot=r) for x, y, _, r in PIG_LEGS]
+    body = unary_union([trunk, head, snout, *ears, *legs]).buffer(2.5).buffer(-2.5)
+    t = np.linspace(0, 2.6 * np.pi, 160)
+    r = 1.2 + 2.6 * t / (2.6 * np.pi)
+    tail = LineString(np.c_[40 + r * np.sin(t), 140 + r * np.cos(t) + t * 0.55]).buffer(
+        0.9
+    )
+    return unary_union([body, LineString([(40, 135), (40, 141)]).buffer(1.3), tail])
+
+
+def _polylines(d: str) -> list[np.ndarray]:
+    return [
+        np.array(
+            [[float(v) for v in p.split(",")] for p in sub.strip().rstrip("Z").split()]
+        )
+        for sub in d.split("M")[1:]
+    ]
+
+
+def _d(polys: list[np.ndarray]) -> str:
+    return "".join(
+        "M" + " ".join(f"{x:.2f},{y:.2f}" for x, y in q) + "Z" for q in polys
+    )
+
+
+def pig(human: dict, sex: str) -> dict:
+    """The resource of the pig of a sex: the own silhouette, the organs of the human drawing."""
+    body = pig_silhouette()
+    if not isinstance(body, Polygon):
+        body = max(body.geoms, key=lambda g: g.area)
+    details = [
+        ellipse(37.6, 10.5, 1.0, 1.6),
+        ellipse(42.4, 10.5, 1.0, 1.6),
+    ]  # the nostrils
+    details += [ellipse(34.5, 27, 1.2, 1.0), ellipse(45.5, 27, 1.2, 1.0)]  # the eyes
+    for x, y, _, r in PIG_LEGS:  # the split hooves
+        a = np.radians(-r)
+        tip = np.array([x, y]) + 8.5 * np.array([np.sin(a), np.cos(a)])
+        details += [
+            ellipse(tip[0] - 1.1, tip[1], 1.0, 1.6, rot=r),
+            ellipse(tip[0] + 1.1, tip[1], 1.0, 1.6, rot=r),
+        ]
+    cx = human["midline"]
+    pieces = {}
+    for k in (
+        *PIG_TRUNK,
+        "gallbladder",
+        "bladder",
+        *(("uterus", "go") if sex == "female" else ()),
+    ):
+        entry = human["organs"].get(k) or human["anatomy"].get(k)
+        if entry is None:
+            continue
+        polys = _polylines(entry["d"])
+        if k in PIG_LAYOUT:
+            dx, dy = PIG_LAYOUT[k]
+            polys = [
+                q + np.array([dx * np.sign(q[:, 0].mean() - cx), dy]) for q in polys
+            ]
+        pieces[k] = polys
+    block = np.vstack([q for v in pieces.values() for q in v])
+    lo, hi = block.min(0), block.max(0)
+    k_block = min(42 / (hi[0] - lo[0]), 80 / (hi[1] - lo[1]))
+    centre, target = (lo + hi) / 2, np.array([40.0, 92.0])
+    moved = {k: [(q - centre) * k_block + target for q in v] for k, v in pieces.items()}
+    brain = _polylines(human["organs"]["br"]["d"])
+    moved["br"] = [
+        (q - np.vstack(brain).mean(0)) * 0.75 + np.array([40.0, 40.0]) for q in brain
+    ]
+    if sex == "male":
+        testes = _polylines(human["organs"]["go"]["d"])
+        moved["go"] = [
+            (q - np.vstack(testes).mean(0)) * 1.6 + np.array([40.0, 131.0])
+            for q in testes
+        ]
+    organs, anatomy = {}, {}
+    for k, polys in moved.items():
+        src = human["organs"].get(k) or human["anatomy"].get(k)
+        entry = {**src, "d": _d(polys)}
+        (organs if k in human["organs"] else anatomy)[k] = entry
+    x0, y0, x1, y1 = body.bounds
+    return {
+        "id": f"pig_{sex}",
+        "species": "pig",
+        "sex": sex,
+        "source": {
+            "file": "",
+            "commit": COMMIT,
+            "license": "CC BY 4.0",
+            "attribution": PIG_ATTRIBUTION,
+        },
+        "viewbox": [round(x0, 2), round(y0, 2), round(x1 - x0, 2), round(y1 - y0, 2)],
+        "midline": 40.0,
+        # the points of the routes: the snout (oral gavage) and the ear vein (dose and sample)
+        "landmarks": {"snout_x": 40.0, "snout_y": 1.5, "vein_x": 64.0, "vein_y": 27.0},
+        "cavities": {"thorax": "", "abdomen": ""},
+        "outline": to_d(body, 0.03),
+        "details": to_d(unary_union(details), 0.02),
+        "organs": organs,
+        "anatomy": anatomy,
+    }
+
+
 NOTICE = """# Anatomy resources
 
 The files of this folder are derived from the anatomograms of the Expression Atlas (EMBL-EBI), which the Human Protein Atlas uses as well: https://github.com/ebi-gene-expression-group/anatomogram (commit {commit}). The anatomograms are distributed under the Creative Commons Attribution 4.0 International license (CC BY 4.0, https://creativecommons.org/licenses/by/4.0/), the code of that repository under the Apache License 2.0.
 
-Changes: the drawings were converted into simplified polylines, the tissues grouped by the organs of pkpdsim, the landmarks and the body cavities derived, by `scripts/visual/anatomy_assets.py` of pkpdsim. The resources are distributed under CC BY 4.0 as well; a figure made from them names the anatomograms in its legend.
+Changes: the drawings were converted into simplified polylines, the tissues grouped by the organs of pkpdsim, the landmarks and the body cavities derived, by `scripts/visual/anatomy_assets.py` of pkpdsim. The pig (`pig_male.json`, `pig_female.json`) is a silhouette drawn by pkpdsim with the organs of the human drawings fitted into its trunk. The resources are distributed under CC BY 4.0 as well; a figure made from them names the anatomograms in its legend.
 """
 
 
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
+    built = {}
     for key in SOURCES:
-        res = build(key)
+        built[key] = build(key)
+    for sex in ("male", "female"):
+        built[f"pig_{sex}"] = pig(built[f"human_{sex}"], sex)
+    for key, res in built.items():
         text = json.dumps(res, separators=(",", ":"), sort_keys=True)
         (OUT / f"{key}.json").write_text(text + "\n", encoding="utf-8")
         print(

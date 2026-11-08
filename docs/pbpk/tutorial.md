@@ -181,6 +181,23 @@ print(sorted(p.name for p in figures.iterdir()))
 ['anatomy.html', 'anatomy.svg', 'publication.svg', 'publication_legend.md', 'publication_panels.svg', 'schematic.svg']
 ```
 
+The same definition built on a laboratory animal is drawn on that animal, the reference animal of the library in the sex of the build: the mouse and the rat on the drawing of the mouse, the pig on its silhouette with the human organs, the oral dose as a gavage at the snout and the blood sample at the tail vein (the ear vein of the pig), see [Species](species.md#figures).
+
+```python
+import dataclasses
+
+from pkpdsim.pbpk import Species
+
+for species in (Species.RAT, Species.PIG):
+    animal = dataclasses.replace(definition, species=species)
+    print(anatomy_figure(animal, figures / f"{species.value}.svg").name)
+```
+
+```text
+rat.svg
+pig.svg
+```
+
 ## 8. In a model package
 
 The factory of the model package builds the definition with the fitted values from the adopted fits of the model (`FITS = MODEL.fit_records()`), so the uncertainties of the fits reach the SBML; the observers the experiments read which the library does not compute (the sum of the metabolites in urine) and the creators of the model are part of the definition, and so are the constants of the model which no field of the library holds (`parameters`, see [Substances](substances.md#parameters-of-the-definition)):

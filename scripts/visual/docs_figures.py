@@ -114,7 +114,7 @@ def write(out: Path) -> list[Path]:
     # the legend of a manuscript is not a page of the docs, which shows it inline
     (out / "publication_legend.md").unlink()
     files.append(out / "publication_panels.svg")
-    for species in (Species.MOUSE, Species.RAT):
+    for species in (Species.MOUSE, Species.RAT, Species.PIG):
         files.append(
             anatomy_figure(
                 dataclasses.replace(d, species=species), out / f"{species.value}.svg"

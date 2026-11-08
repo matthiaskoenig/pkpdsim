@@ -56,8 +56,23 @@ def test_the_mouse_drawing_has_every_organ_of_the_library() -> None:
 
 
 def test_a_species_without_a_drawing_is_refused() -> None:
-    with pytest.raises(ValueError, match="No drawing of the pig"):
-        AnimalBody("pig")
+    with pytest.raises(ValueError, match="No drawing of the dog"):
+        AnimalBody("dog")
+
+
+@pytest.mark.parametrize("sex", ["male", "female"])
+def test_the_pig_is_drawn_with_the_human_organs(sex: str, tmp_path: Path) -> None:
+    d = dataclasses.replace(seven_substances(), species=Species.PIG, sex=sex)
+    path = anatomy_figure(d, tmp_path / "pig.svg")
+    texts = " ".join(_texts(path))
+    assert f"pig {sex}, 30 kg" in texts
+    assert "ear vein: the observer Carm of every substance" in texts
+    body = AnimalBody("pig", sex)
+    for key in ("br", "lu", "he", "li", "ki", "st", "si", "la", "sp", "pa", "go"):
+        assert body.drawn(key), key
+    assert ("uterus" in body.organs) == (sex == "female")
+    # the points of the routes: the snout and the ear vein
+    assert body.snout[1] < body.tail[1]
 
 
 def test_the_cards_of_an_animal_carry_its_organ_masses(tmp_path: Path) -> None:

@@ -3,12 +3,14 @@
 The drawing is the anatomogram of the male mouse of the EBI Expression Atlas, for
 the mouse and for the rat (the rat drawing of the atlas is a side view which
 lacks the stomach, the small intestine, the pancreas, the muscle, the bone and
-the adipose tissue): the reference animal of the library as drawn, without
-deformation and without layers. Only the sexes with a physiology in the library
-are drawn (the male mouse and rat); the figure fills its height, the species
-are not on one scale. The labels, submodels, icons and key are those of the
-human figure (`pkpdsim.pbpk.visual.anatomy`); the oral gavage enters at the
-snout, the intravenous dose and the blood sample are at the tail vein.
+the adipose tissue), and for the pig a silhouette of pkpdsim with the organs of
+the human drawing of its sex in the trunk: the reference animal of the library
+as drawn, without deformation and without layers, of the sex of the build (the
+library has the male mouse and rat, the male and female pig); the figure fills
+its height, so the species are not on one scale. The labels, submodels, icons
+and key are those of the human figure (`pkpdsim.pbpk.visual.anatomy`); the oral
+gavage enters at the snout, the intravenous dose and the blood sample are at
+the tail vein of a rodent and the ear vein of the pig (`VEINS`).
 """
 
 from collections.abc import Mapping, Sequence
@@ -28,16 +30,26 @@ __all__ = [
     "DRAWINGS",
     "LEFT",
     "RIGHT",
+    "SKINS",
+    "VEINS",
     "AnimalBody",
     "AnimalFigure",
     "figure_of",
     "reference_volumes",
 ]
 
-DRAWINGS: Mapping[str, tuple[str, str]] = MappingProxyType(
-    {"mouse": ("mouse", "male"), "rat": ("mouse", "male")}
+DRAWINGS: Mapping[str, str] = MappingProxyType(
+    {"mouse": "mouse", "rat": "mouse", "pig": "pig"}
 )
-"""The drawing (species, sex of the resource) of every laboratory animal."""
+"""The drawing of every laboratory animal: the resource of its species (the mouse for the rat)."""
+
+VEINS: Mapping[str, str] = MappingProxyType(
+    {"mouse": "tail vein", "rat": "tail vein", "pig": "ear vein"}
+)
+"""The vein of the intravenous dose and the blood sample of every animal."""
+
+SKINS: Mapping[str, str] = MappingProxyType({"pig": "#f4c2c2"})
+"""The skin of an animal, `palette.SKIN` by default."""
 
 LEFT = ("br", "lu", "he", "li", "ki", "la", "sk", "mu", "blood")
 """The labels of the left column."""
@@ -91,7 +103,8 @@ class AnimalBody:
                 raise ValueError(
                     f"No drawing of the {species}; the animals drawn are {sorted(DRAWINGS)}."
                 )
-            drawing = anatomy(*DRAWINGS[species])
+            resource = DRAWINGS[species]
+            drawing = anatomy(resource, sex if resource == "pig" else "male")
         self.species, self.sex, self.a = species, sex, drawing
         self.organs: dict[str, list[np.ndarray]] = {
             k: list(s.paths) for k, s in drawing.organs.items()
@@ -117,6 +130,11 @@ class AnimalBody:
             else np.array([mid_x, self.hi[1] - 0.12 * span[1]])
         )
         self.mid = (self.lo + self.hi) / 2
+        lm = drawing.landmarks
+        if "snout_x" in lm:  # the points of the routes given by the drawing (the pig)
+            self.snout = np.array([lm["snout_x"], lm["snout_y"]])
+            self.tail = np.array([lm["vein_x"], lm["vein_y"]])
+        self.vein = VEINS.get(species, "tail vein")
 
     def centroid(self, key: str) -> np.ndarray:
         """The centre of the largest piece of an organ."""
@@ -159,7 +177,7 @@ class AnimalBody:
         """The drawing [drawing units]."""
         a = self.a
         o = [
-            f'<path d="{path([a.outline])}" fill="{palette.SKIN}" fill-opacity="0.6" stroke="{palette.INK}" '
+            f'<path d="{path([a.outline])}" fill="{SKINS.get(self.species, palette.SKIN)}" fill-opacity="0.7" stroke="{palette.INK}" '
             f'stroke-width="0.8" stroke-linejoin="round"/>'
         ]
         for k in _ORDER:
@@ -219,7 +237,9 @@ class AnimalBody:
 
     def caption(self) -> str:
         """The caption: the species, the sex and the body weight of the reference animal."""
-        return f"{self.species} {self.sex}, {_bodyweight(self.species, self.sex) * 1000:g} g"
+        bw = _bodyweight(self.species, self.sex)
+        weight = f"{bw:g} kg" if bw >= 1 else f"{bw * 1000:g} g"
+        return f"{self.species} {self.sex}, {weight}"
 
 
 def _species(definition: object) -> str:
@@ -232,6 +252,7 @@ class AnimalFigure(AnatomyFigure):
     Args:
         content: the content of the definition.
         species: the species of the build.
+        sex: the sex of the build.
         compact: labels without the process lines.
         body: the drawn animal, `AnimalBody(species)` by default.
     """
@@ -241,13 +262,14 @@ class AnimalFigure(AnatomyFigure):
         content: ModelContent,
         species: str,
         *,
+        sex: str = "male",
         compact: bool = False,
         body: AnimalBody | None = None,
     ) -> None:
         """Prepare the animal."""
         self.c = content
         self.compact = compact
-        self.animal = body or AnimalBody(species)
+        self.animal = body or AnimalBody(species, sex)
         self.size = (0, 0)
 
     def svg(
@@ -308,7 +330,7 @@ class AnimalFigure(AnatomyFigure):
                 lx = 0.0 if side < 0 else width - wcol
                 g, _ = self.label(k, 6 if side < 0 else 14, 0, wl - 20, side)
                 g = g.replace(
-                    "arm vein: the observer Carm", "tail vein: the observer Carm"
+                    "arm vein: the observer Carm", f"{a.vein}: the observer Carm"
                 )
                 out.append(
                     f'<g data-k="{k}" transform="translate({lx:.1f},{yy:.1f}) scale({text})">{g}</g>'
@@ -402,4 +424,5 @@ def figure_of(
     species = _species(definition)
     if species == "human":
         return AnatomyFigure(content, compact=compact)
-    return AnimalFigure(content, species, compact=compact)
+    sex = str(getattr(definition, "sex", "male"))
+    return AnimalFigure(content, species, sex=sex, compact=compact)
