@@ -538,8 +538,9 @@ class PKPDMappingMetaData(MappingMetaData):
             blood, arterial blood and plasma), a site other than `ARTERIAL` on
             arterial blood or plasma, a site of the circuit (`RESERVOIR`,
             `INFLOW`, `OUTFLOW`) on another tissue than the perfusate and any
-            other site on the perfusate are a `ValueError`. Appended after the fields of the first version, so a
-            subclass of a model keeps its fields valid.
+            other site on the perfusate are a `ValueError`. Appended after the
+            fields of the first version, so a subclass of a model keeps its
+            fields valid.
 
     Raises:
         ValueError: if the sampling site does not fit the tissue.
