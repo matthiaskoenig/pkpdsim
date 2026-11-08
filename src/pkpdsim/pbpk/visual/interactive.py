@@ -10,14 +10,16 @@ the legend below the figure, never in a card.
 """
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
 from xml.sax.saxutils import escape
 
 from pkpdsim import __version__
 from pkpdsim.pbpk.definition import PBPKDefinition
 from pkpdsim.pbpk.figure import schematic_svg
-from pkpdsim.pbpk.visual.anatomy import TITLES, AnatomyFigure
-from pkpdsim.pbpk.visual.body import Quantities, reference_body
+from pkpdsim.pbpk.visual.anatomy import TITLES
+from pkpdsim.pbpk.visual.animal import figure_of, reference_volumes
+from pkpdsim.pbpk.visual.body import reference_body
 from pkpdsim.pbpk.visual.content import ModelContent
 from pkpdsim.pbpk.visual.resources import anatomy
 
@@ -51,14 +53,14 @@ _FORMS = {
 
 
 def cards(
-    content: ModelContent, man: Quantities, woman: Quantities
+    content: ModelContent, volumes: Mapping[str, Mapping[str, float]]
 ) -> dict[str, list[str]]:
     """The hover cards of the figures by key, each a list of HTML lines.
 
     Args:
         content: the content of the definition.
-        man: the quantities of the reference man.
-        woman: the quantities of the reference woman.
+        volumes: the organ volumes [l] (or masses [kg]) of the individuals
+            the figure shows, by their name (`reference man`).
 
     Returns:
         The cards of the organs, substances (`sub:<sid>`), routes
@@ -71,10 +73,9 @@ def cards(
         rows = [f"<b>{escape(TITLES.get(key, key))}</b> <code>{key}</code>"]
         if org.variant:
             rows[0] += f" <i>({escape(org.variant)})</i>"
-        if key in man.volumes and key in woman.volumes:
-            rows.append(
-                f"volume: {man.volumes[key]:.3g} l (reference man), {woman.volumes[key]:.3g} l (reference woman)"
-            )
+        sizes = [f"{v[key]:.3g} ({escape(n)})" for n, v in volumes.items() if key in v]
+        if sizes:
+            rows.append("volume [l]: " + ", ".join(sizes))
         shape = shapes.organs.get(key)
         if shape is not None:
             rows.append(
@@ -193,9 +194,16 @@ def interactive_figure(
         ValueError: for another figure.
     """
     content = ModelContent.of(definition)
-    man, woman = reference_body("male").quantities, reference_body("female").quantities
+    species = str(definition.species)
+    if species == "human":
+        volumes = {
+            "reference man": reference_body("male").quantities.volumes,
+            "reference woman": reference_body("female").quantities.volumes,
+        }
+    else:
+        volumes = {f"reference {species}": reference_volumes(species)}
     if figure == "anatomy":
-        fig = AnatomyFigure(content)
+        fig = figure_of(definition, content)
         svg = fig.svg(tags=True)
         width = fig.size[0]
         legend = "Hover the organs, labels, substances and symbols for details."
@@ -208,7 +216,7 @@ def interactive_figure(
             f"No interactive figure '{figure}'; the figures are 'anatomy' and 'schematic'."
         )
     page = html_page(
-        svg, cards(content, man, woman), f"{content.name} ({figure})", width, legend
+        svg, cards(content, volumes), f"{content.name} ({figure})", width, legend
     )
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(page, encoding="utf-8")

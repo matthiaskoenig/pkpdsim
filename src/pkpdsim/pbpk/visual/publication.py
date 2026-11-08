@@ -15,7 +15,7 @@ from xml.sax.saxutils import escape
 from pkpdsim import __version__
 from pkpdsim.pbpk.definition import PBPKDefinition
 from pkpdsim.pbpk.figure import schematic_svg
-from pkpdsim.pbpk.visual.anatomy import AnatomyFigure
+from pkpdsim.pbpk.visual.animal import figure_of
 from pkpdsim.pbpk.visual.body import reference_body
 from pkpdsim.pbpk.visual.content import ModelContent
 from pkpdsim.pbpk.visual.interactive import LIBRARY, REPOSITORY
@@ -122,7 +122,7 @@ def publication_figure(
         ImportError: for `pdf` without cairosvg (`pip install pkpdsim[pdf]`).
     """
     content = ModelContent.of(definition)
-    a = AnatomyFigure(content, compact=True).svg(title=False, substances=False)
+    a = figure_of(definition, content, compact=True).svg(title=False, substances=False)
     b = schematic_svg(definition, (definition.sex,), compact=True)
     wa, ha, ba = _inner(a)
     wb, hb, bb = _inner(b)

@@ -866,6 +866,9 @@ def anatomy_figure(
 ) -> Path:
     """Write the anatomical figure of a definition, the male and the female build.
 
+    A definition of a laboratory animal (`species`) is drawn on its animal
+    (`pkpdsim.pbpk.visual.animal`), the sexes with a physiology in the library.
+
     Args:
         definition: the definition.
         path: the SVG file to write.
@@ -878,7 +881,9 @@ def anatomy_figure(
     Returns:
         The path of the figure.
     """
-    figure = AnatomyFigure(ModelContent.of(definition), compact=compact)
+    from pkpdsim.pbpk.visual.animal import figure_of
+
+    figure = figure_of(definition, ModelContent.of(definition), compact=compact)
     svg = figure.svg(title=title, substances=substances, scale=scale, text=text)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(svg + "\n", encoding="utf-8")

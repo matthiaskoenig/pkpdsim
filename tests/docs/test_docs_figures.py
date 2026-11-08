@@ -38,6 +38,8 @@ def _normal(text: str) -> str:
         "publication.svg",
         "publication_panels.svg",
         "individuals.svg",
+        "mouse.svg",
+        "rat.svg",
     ],
 )
 def test_the_figures_of_the_docs_are_up_to_date(

@@ -13,6 +13,7 @@ uv run python scripts/visual/docs_figures.py
 `tests/docs/test_docs_figures.py` fails while a file is out of date.
 """
 
+import dataclasses
 import sys
 from pathlib import Path
 
@@ -26,6 +27,7 @@ from pkpdsim.pbpk import (
     Organ,
     PBPKDefinition,
     Route,
+    Species,
     Substance,
     model_figure,
 )
@@ -112,6 +114,12 @@ def write(out: Path) -> list[Path]:
     # the legend of a manuscript is not a page of the docs, which shows it inline
     (out / "publication_legend.md").unlink()
     files.append(out / "publication_panels.svg")
+    for species in (Species.MOUSE, Species.RAT):
+        files.append(
+            anatomy_figure(
+                dataclasses.replace(d, species=species), out / f"{species.value}.svg"
+            )
+        )
     strip = out / "individuals.svg"
     strip.write_text(body_strip(individuals()) + "\n", encoding="utf-8")
     return [*files, strip]

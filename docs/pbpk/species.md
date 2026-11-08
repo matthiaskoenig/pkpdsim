@@ -192,6 +192,16 @@ Sources of the columns: mass: `Ellegaard2009`, `Lin2020`, `ModelChoice`; density
     - `Schiller2005`: Schiller C, Fröhlich CP, Giessmann T, Siegmund W, Mönnikes H, Hosten N, Weitschies W. Intestinal fluid volumes and transit of dosage forms as assessed by magnetic resonance imaging. Aliment Pharmacol Ther 22(10):971-979, 2005. [doi:10.1111/j.1365-2036.2005.02683.x](https://doi.org/10.1111/j.1365-2036.2005.02683.x)
 <!-- end generated -->
 
+## Figures
+
+The anatomical figure of a model (see [Figures](figures.md)) draws a laboratory animal on the anatomogram of the male mouse of the EBI Expression Atlas, for the mouse and for the rat (the rat drawing of the atlas is a side view without stomach, small intestine, pancreas, muscle, bone and adipose tissue). It is the reference animal of the library as drawn, without the layers of the human figure, the sexes with a physiology in the library (the male mouse and rat) and each figure filling its height, so the species are not on one scale. The labels, organ submodels and icons are those of the human figure; an oral dose is a gavage at the snout, an intravenous dose and the blood sample are at the tail vein. `anatomy_figure`, `interactive_figure` and `publication_figure` draw the animal of `definition.species`; the pig has no drawing yet.
+
+The figures of the glimepiride-like model of the tutorial built on the mouse and the rat:
+
+![The anatomical figure of the glimepiride-like model on the mouse](img/figures/mouse.svg)
+
+![The anatomical figure of the glimepiride-like model on the rat](img/figures/rat.svg)
+
 ## Limitations
 
 - Many numbers of the rodents come from compilations (Brown 1997, Davies and Morris 1993 through httk, the PK-Sim database) and not from the primary studies; the notes of every number say which. The split of the portal flow of the rat (PK-Sim) gives the large intestine twice the flow of the small intestine; Delp 1991 was not read.
