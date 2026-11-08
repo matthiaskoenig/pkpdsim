@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>rat liver in a normothermic machine perfusion (schematic)</title>
+<style>
+body { margin:0; background:#fff; color:#1f2a2e; font:14px/1.45 system-ui, sans-serif; }
+.wrap { max-width:1273px; margin:0 auto; padding:8px; }
+.wrap svg { width:100%; height:auto; display:block; }
+[data-k] { cursor:help; }
+path[data-k]:hover { filter:brightness(1.12) drop-shadow(0 0 2px #0006); }
+.legend { max-width:1273px; margin:4px auto 16px; padding:0 8px; font-size:12.5px; color:#555; }
+.legend a { color:#00796b; }
+#card { position:fixed; pointer-events:none; max-width:380px; background:#fff; border:1px solid #d5dde0; border-radius:8px;
+  box-shadow:0 6px 24px #0002; padding:8px 10px; font-size:12.5px; display:none; z-index:10; }
+#card div { margin:2px 0; } #card code { font-size:11.5px; color:#666; }
+#card .b { display:inline-block; font:700 10px monospace; color:#fff; background:#6d6d6d; border-radius:3px; padding:0 4px; }
+</style></head><body><div class="wrap"><svg xmlns="http://www.w3.org/2000/svg" width="1273" height="564" viewBox="0 0 1273 564" role="img" aria-labelledby="pkf-title">
+<title id="pkf-title">rat liver in a normothermic machine perfusion</title>
+<style>
+.pkf-t{font-family:'DejaVu Sans Mono', Menlo, Consolas, 'Liberation Mono', monospace;font-size:12px;fill:#1f2328}
+.pkf-s{font-size:11px}
+.pkf-h{font-size:16px;font-weight:700}
+.pkf-b{font-weight:700}
+.pkf-dim{fill:#57606a}
+.pkf-org{fill:#f6f8fa;stroke:#8c959f;stroke-width:1.2}
+.pkf-ven{fill:#dbe7fb;stroke:#4269d0;stroke-width:1.2}
+.pkf-art{fill:#fbe0e0;stroke:#d0413e;stroke-width:1.2}
+.pkf-por{fill:#efe3fa;stroke:#8a4fc0;stroke-width:1.2}
+.pkf-lum{fill:#fff7e0;stroke:#b7891d;stroke-width:1.2}
+.pkf-seg{fill:#ffffff;stroke:#b7891d;stroke-width:1}
+.pkf-line{stroke:#57606a;stroke-width:1.4;fill:none}
+.pkf-res{fill:#eef3f8;stroke:#57606a;stroke-width:1.2}
+</style>
+<defs>
+<marker id="pkf-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#57606a"/></marker>
+</defs>
+<rect x="0" y="0" width="1273" height="564" fill="#ffffff"/>
+<g class="pkf-temp" data-k="temperature">
+<circle cx="158.0" cy="30.0" r="11.0" fill="#fff" stroke="#8a8f93" stroke-width="1.3"/><rect x="156.4" y="23.5" width="3.2" height="11.0" rx="1.6" fill="#dbdbdb" stroke="#3a3a3a" stroke-width="0.9"/><circle cx="158.0" cy="35.5" r="2.9" fill="#a3a3a3" stroke="#3a3a3a" stroke-width="0.9"/>
+<text class="pkf-t" x="179" y="34.2" data-size="12">temperature 37 °C, the rates scaled by f_T</text>
+</g>
+<g class="pkf-box" data-k="reservoir">
+<rect class="pkf-res" x="16" y="16" width="83" height="532" rx="5"/>
+<text class="pkf-t pkf-b" x="24" y="34.2" data-size="12">reservoir</text>
+<text class="pkf-t pkf-dim" x="24" y="54.2" data-size="12">1000 ml</text>
+<g data-k="sub:glc">
+<rect style="fill:#4269d0;fill-opacity:.28;stroke:#4269d0;stroke-width:1.2" x="24" y="68" width="30.5" height="16" rx="4"/>
+<text class="pkf-t pkf-s" x="29" y="79.8" data-size="11">glc</text>
+</g>
+<g data-k="sub:o2">
+<rect style="fill:#efb118;fill-opacity:.28;stroke:#efb118;stroke-width:1.2" x="24" y="88" width="23.6" height="16" rx="4"/>
+<text class="pkf-t pkf-s" x="29" y="99.8" data-size="11">o2</text>
+</g>
+<g data-k="sub:lac">
+<rect style="fill:#ff725c;fill-opacity:.28;stroke:#ff725c;stroke-width:1.2" x="24" y="108" width="30.5" height="16" rx="4"/>
+<text class="pkf-t pkf-s" x="29" y="119.8" data-size="11">lac</text>
+</g>
+<g data-k="sub:co2">
+<rect style="fill:#6cc5b0;fill-opacity:.28;stroke:#6cc5b0;stroke-width:1.2" x="24" y="128" width="30.5" height="16" rx="4"/>
+<text class="pkf-t pkf-s" x="29" y="139.8" data-size="11">co2</text>
+</g>
+<g data-k="sub:hco3">
+<rect style="fill:#3ca951;fill-opacity:.28;stroke:#3ca951;stroke-width:1.2" x="24" y="148" width="37.3" height="16" rx="4"/>
+<text class="pkf-t pkf-s" x="29" y="159.8" data-size="11">hco3</text>
+</g>
+<g data-k="sub:h">
+<rect style="fill:#ff8ab7;fill-opacity:.28;stroke:#ff8ab7;stroke-width:1.2" x="24" y="168" width="16.8" height="16" rx="4"/>
+<text class="pkf-t pkf-s" x="29" y="179.8" data-size="11">h</text>
+</g>
+<g data-k="sub:k">
+<rect style="fill:#a463f2;fill-opacity:.28;stroke:#a463f2;stroke-width:1.2" x="24" y="188" width="16.8" height="16" rx="4"/>
+<text class="pkf-t pkf-s" x="29" y="199.8" data-size="11">k</text>
+</g>
+<g data-k="sub:alt">
+<rect style="fill:#97bbf5;fill-opacity:.28;stroke:#97bbf5;stroke-width:1.2" x="24" y="208" width="30.5" height="16" rx="4"/>
+<text class="pkf-t pkf-s" x="29" y="219.8" data-size="11">alt</text>
+</g>
+<g data-k="sub:ast">
+<rect style="fill:#9c6b4e;fill-opacity:.28;stroke:#9c6b4e;stroke-width:1.2" x="24" y="228" width="30.5" height="16" rx="4"/>
+<text class="pkf-t pkf-s" x="29" y="239.8" data-size="11">ast</text>
+</g>
+<g data-k="sub:ldh">
+<rect style="fill:#9498a0;fill-opacity:.28;stroke:#9498a0;stroke-width:1.2" x="24" y="248" width="30.5" height="16" rx="4"/>
+<text class="pkf-t pkf-s" x="29" y="259.9" data-size="11">ldh</text>
+</g>
+</g>
+<g class="pkf-box" data-k="pump">
+<rect class="pkf-org" x="139" y="70" width="692" height="50" rx="5"/>
+<circle cx="158.0" cy="86.0" r="12.0" fill="#fff" stroke="#8a8f93" stroke-width="1.3"/><circle cx="158.0" cy="86.0" r="7.2" fill="#dbdbdb" stroke="#3a3a3a" stroke-width="1"/><path d="M154.7,81.0 L163.7,86.0 L154.7,91.0 Z" fill="#a3a3a3" stroke="#3a3a3a" stroke-width="0.8"/>
+<text class="pkf-t pkf-b" x="179" y="89.2" data-size="12">pump</text>
+<text class="pkf-t pkf-dim" x="179" y="109.2" data-size="12">3 ml/min</text>
+<g class="pkf-proc" data-k="txt:FLO: Q_pump 3 ml/min, 0.415 ml/min/g of the organ">
+<rect style="fill:#eef6ff;stroke:#0969da" x="303.1" y="77" width="30.5" height="16" rx="4"/>
+<text class="pkf-t pkf-s pkf-b" x="308.1" y="88.8" data-size="11">FLO</text>
+<text class="pkf-t" x="339.6" y="89.2" data-size="12">Q_pump 3 ml/min, 0.415 ml/min/g of the organ</text>
+</g>
+</g>
+<line class="pkf-line" x1="99" y1="85" x2="139" y2="85" marker-end="url(#pkf-arrow)"/>
+<line class="pkf-line" x1="158" y1="120" x2="158" y2="144" marker-end="url(#pkf-arrow)"/>
+<g class="pkf-box" data-k="inflow">
+<rect class="pkf-org" x="139" y="144" width="692" height="76" rx="5"/>
+<circle cx="158.0" cy="160.0" r="12.0" fill="#fff" stroke="#8a8f93" stroke-width="1.3"/><rect x="151.2" y="155.4" width="13.4" height="9.1" rx="1.5" fill="#dbdbdb" stroke="#3a3a3a" stroke-width="1"/><path d="M153.2,157.7 h9.4" stroke="#3a3a3a" stroke-width="0.7"/><path d="M153.2,160.0 h9.4" stroke="#3a3a3a" stroke-width="0.7"/><path d="M153.2,162.3 h9.4" stroke="#3a3a3a" stroke-width="0.7"/>
+<text class="pkf-t pkf-b" x="179" y="163.2" data-size="12">inflow tubing</text>
+<text class="pkf-t pkf-dim" x="179" y="183.2" data-size="12">10 ml</text>
+<text class="pkf-t pkf-dim" x="179" y="203.2" data-size="12">oxygenator</text>
+<g class="pkf-proc" data-k="txt:OXY: O2 towards pO2 50 kPa, k_oxy 2 1/min">
+<rect style="fill:#e7f7f9;stroke:#0e7c86" x="303.1" y="151" width="30.5" height="16" rx="4"/>
+<text class="pkf-t pkf-s pkf-b" x="308.1" y="162.8" data-size="11">OXY</text>
+<text class="pkf-t" x="339.6" y="163.2" data-size="12">O2 towards pO2 50 kPa, k_oxy 2 1/min</text>
+</g>
+<g class="pkf-proc" data-k="txt:OXY: CO2 towards pCO2 5.223 kPa of the fresh perfusate, k_oxy_co2 2 1/min">
+<rect style="fill:#e7f7f9;stroke:#0e7c86" x="303.1" y="171" width="30.5" height="16" rx="4"/>
+<text class="pkf-t pkf-s pkf-b" x="308.1" y="182.8" data-size="11">OXY</text>
+<text class="pkf-t" x="339.6" y="183.2" data-size="12">CO2 towards pCO2 5.223 kPa of the fresh perfusate,</text>
+<text class="pkf-t" x="339.6" y="203.2" data-size="12">k_oxy_co2 2 1/min</text>
+</g>
+<g class="pkf-sink" data-k="gas">
+<rect style="fill:#eef6fb;stroke:#4a90a4;stroke-width:1.4" x="738" y="149" width="83" height="66" rx="6"/>
+<text class="pkf-t pkf-b" x="746" y="165.2" data-size="12">sweep gas</text>
+<g data-k="sub:o2">
+<rect style="fill:#efb118;fill-opacity:.28;stroke:#efb118;stroke-width:1.2" x="746" y="173" width="23.6" height="16" rx="4"/>
+<text class="pkf-t pkf-s" x="751" y="184.8" data-size="11">o2</text>
+</g>
+<g data-k="sub:co2">
+<rect style="fill:#6cc5b0;fill-opacity:.28;stroke:#6cc5b0;stroke-width:1.2" x="746" y="193" width="30.5" height="16" rx="4"/>
+<text class="pkf-t pkf-s" x="751" y="204.8" data-size="11">co2</text>
+</g>
+</g>
+<line class="pkf-line" x1="736" y1="181" x2="716" y2="181" marker-end="url(#pkf-arrow)"/>
+<line class="pkf-line" x1="716" y1="201" x2="736" y2="201" marker-end="url(#pkf-arrow)"/>
+</g>
+<line class="pkf-line" x1="158" y1="220" x2="158" y2="244" marker-end="url(#pkf-arrow)"/>
+<g class="pkf-box" data-k="li">
+<rect class="pkf-org" x="139" y="244" width="692" height="230" rx="5"/>
+<circle cx="158.0" cy="260.0" r="12.0" fill="#fff" stroke="#8a8f93" stroke-width="1.3"/><svg x="150.5" y="252.6" width="14.9" height="14.9" viewBox="40.79 55.71 26.08 16.34" preserveAspectRatio="xMidYMid meet"><path d="M54.19,57.24 50.98,56.80 49.12,56.68 46.54,56.70 45.40,56.84 44.88,56.99 44.30,57.32 43.45,58.08 42.80,58.87 42.34,59.64 42.09,60.23 41.83,61.24 41.76,61.98 41.91,65.68 42.13,68.27 42.44,70.04 42.65,70.65 42.90,71.01 43.10,71.09 43.74,71.05 45.03,70.64 46.83,69.76 50.67,67.59 52.37,66.86 54.66,65.71 55.61,65.35 57.00,64.53 58.22,64.09 60.77,63.35 61.95,62.88 65.18,61.05 65.74,60.50 65.91,60.05 65.87,59.49 65.81,59.33 65.55,59.06 64.59,58.61 63.27,58.25 59.16,57.45 57.27,57.31Z" fill="#6b6b6b" stroke="#3a3a3a" stroke-width="1.461" fill-rule="evenodd"/></svg>
+<text class="pkf-t pkf-b" x="179" y="263.2" data-size="12">liver li</text>
+<text class="pkf-t pkf-dim" x="179" y="283.2" data-size="12">7.229 g</text>
+<text class="pkf-t pkf-dim" x="179" y="303.2" data-size="12">4 zones</text>
+<text class="pkf-t pkf-dim" x="303.1" y="263.2" data-size="12">periportal</text>
+<g class="pkf-zone" data-k="zone:z1">
+<rect style="fill:rgb(246,246,246);stroke:#8c959f;stroke-width:1" x="385.5" y="251" width="60" height="16" rx="0"/>
+<text class="pkf-t pkf-s" x="408.7" y="262.9" data-size="11">z1</text>
+</g>
+<g class="pkf-zone" data-k="zone:z2">
+<rect style="fill:rgb(233,233,233);stroke:#8c959f;stroke-width:1" x="445.5" y="251" width="60" height="16" rx="0"/>
+<text class="pkf-t pkf-s" x="468.7" y="262.9" data-size="11">z2</text>
+</g>
+<g class="pkf-zone" data-k="zone:z3">
+<rect style="fill:rgb(219,219,219);stroke:#8c959f;stroke-width:1" x="505.5" y="251" width="60" height="16" rx="0"/>
+<text class="pkf-t pkf-s" x="528.7" y="262.9" data-size="11">z3</text>
+</g>
+<g class="pkf-zone" data-k="zone:z4">
+<rect style="fill:rgb(206,206,206);stroke:#8c959f;stroke-width:1" x="565.5" y="251" width="60" height="16" rx="0"/>
+<text class="pkf-t pkf-s" x="588.7" y="262.9" data-size="11">z4</text>
+</g>
+<line class="pkf-line" x1="629.5" y1="259" x2="645.5" y2="259" marker-end="url(#pkf-arrow)"/>
+<text class="pkf-t pkf-dim" x="651.5" y="263.2" data-size="12">pericentral</text>
+<g data-k="sub:glc">
+<rect style="fill:#4269d0;fill-opacity:.28;stroke:#4269d0;stroke-width:1.2" x="303.1" y="271" width="30.5" height="16" rx="4"/>
+<text class="pkf-t pkf-s" x="308.1" y="282.9" data-size="11">glc</text>
+</g>
+<g data-k="sub:o2">
+<rect style="fill:#efb118;fill-opacity:.28;stroke:#efb118;stroke-width:1.2" x="339.6" y="271" width="23.6" height="16" rx="4"/>
+<text class="pkf-t pkf-s" x="344.6" y="282.9" data-size="11">o2</text>
+</g>
+<g data-k="sub:lac">
+<rect style="fill:#ff725c;fill-opacity:.28;stroke:#ff725c;stroke-width:1.2" x="369.2" y="271" width="30.5" height="16" rx="4"/>
+<text class="pkf-t pkf-s" x="374.2" y="282.9" data-size="11">lac</text>
+</g>
+<g data-k="sub:co2">
+<rect style="fill:#ffffff;stroke:#6cc5b0;stroke-width:1.2;stroke-dasharray:3 2" x="405.7" y="271" width="30.5" height="16" rx="4"/>
+<text class="pkf-t pkf-s" x="410.7" y="282.9" data-size="11">co2</text>
+</g>
+<g data-k="sub:hco3">
+<rect style="fill:#ffffff;stroke:#3ca951;stroke-width:1.2;stroke-dasharray:3 2" x="442.1" y="271" width="37.3" height="16" rx="4"/>
+<text class="pkf-t pkf-s" x="447.1" y="282.9" data-size="11">hco3</text>
+</g>
+<g data-k="sub:h">
+<rect style="fill:#ffffff;stroke:#ff8ab7;stroke-width:1.2;stroke-dasharray:3 2" x="485.4" y="271" width="16.8" height="16" rx="4"/>
+<text class="pkf-t pkf-s" x="490.4" y="282.9" data-size="11">h</text>
+</g>
+<g data-k="sub:k">
+<rect style="fill:#a463f2;fill-opacity:.28;stroke:#a463f2;stroke-width:1.2" x="508.2" y="271" width="16.8" height="16" rx="4"/>
+<text class="pkf-t pkf-s" x="513.2" y="282.9" data-size="11">k</text>
+</g>
+<g data-k="sub:alt">
+<rect style="fill:#97bbf5;fill-opacity:.28;stroke:#97bbf5;stroke-width:1.2" x="531.1" y="271" width="30.5" height="16" rx="4"/>
+<text class="pkf-t pkf-s" x="536.1" y="282.9" data-size="11">alt</text>
+</g>
+<g data-k="sub:ast">
+<rect style="fill:#9c6b4e;fill-opacity:.28;stroke:#9c6b4e;stroke-width:1.2" x="567.5" y="271" width="30.5" height="16" rx="4"/>
+<text class="pkf-t pkf-s" x="572.5" y="282.9" data-size="11">ast</text>
+</g>
+<g data-k="sub:ldh">
+<rect style="fill:#9498a0;fill-opacity:.28;stroke:#9498a0;stroke-width:1.2" x="604" y="271" width="30.5" height="16" rx="4"/>
+<text class="pkf-t pkf-s" x="609" y="282.9" data-size="11">ldh</text>
+</g>
+<g class="pkf-proc" data-k="txt:TRA: glucose import, oxygen import, lactate export with a proton">
+<rect style="fill:#e6f6ec;stroke:#1a7f37" x="303.1" y="291" width="30.5" height="16" rx="4"/>
+<text class="pkf-t pkf-s pkf-b" x="308.1" y="302.9" data-size="11">TRA</text>
+<text class="pkf-t" x="339.6" y="303.2" data-size="12">glucose import, oxygen import, lactate export with</text>
+<text class="pkf-t" x="339.6" y="323.2" data-size="12">a proton</text>
+</g>
+<g class="pkf-proc" data-k="txt:MET: glycogenolysis, glycolysis, lactate dehydrogenase, ATP use, TCA cycle, oxidative phosphorylation, pentose phosphate pathway">
+<rect style="fill:#e8f0fe;stroke:#1a56db" x="303.1" y="331" width="30.5" height="16" rx="4"/>
+<text class="pkf-t pkf-s pkf-b" x="308.1" y="342.9" data-size="11">MET</text>
+<text class="pkf-t" x="339.6" y="343.2" data-size="12">glycogenolysis, glycolysis, lactate dehydrogenase,</text>
+<text class="pkf-t" x="339.6" y="363.2" data-size="12">ATP use, TCA cycle, oxidative phosphorylation,</text>
+<text class="pkf-t" x="339.6" y="383.2" data-size="12">pentose phosphate pathway</text>
+</g>
+<g class="pkf-proc" data-k="txt:ROS: ROS production, ROS detoxification, glutathione reductase">
+<rect style="fill:#fff0f6;stroke:#bf3989" x="303.1" y="391" width="30.5" height="16" rx="4"/>
+<text class="pkf-t pkf-s pkf-b" x="308.1" y="402.9" data-size="11">ROS</text>
+<text class="pkf-t" x="339.6" y="403.2" data-size="12">ROS production, ROS detoxification, glutathione</text>
+<text class="pkf-t" x="339.6" y="423.2" data-size="12">reductase</text>
+</g>
+<g class="pkf-proc" data-k="txt:NEC: necrosis releases ALT, AST, LDH and potassium">
+<rect style="fill:#fbe9e9;stroke:#a40e26" x="303.1" y="431" width="30.5" height="16" rx="4"/>
+<text class="pkf-t pkf-s pkf-b" x="308.1" y="442.9" data-size="11">NEC</text>
+<text class="pkf-t" x="339.6" y="443.2" data-size="12">necrosis releases ALT, AST, LDH and potassium</text>
+</g>
+<g class="pkf-proc" data-k="txt:BIL: bile secretion of the hepatocytes of every zone">
+<rect style="fill:#fff1e5;stroke:#953800" x="303.1" y="451" width="30.5" height="16" rx="4"/>
+<text class="pkf-t pkf-s pkf-b" x="308.1" y="462.9" data-size="11">BIL</text>
+<text class="pkf-t" x="339.6" y="463.2" data-size="12">bile secretion of the hepatocytes of every zone</text>
+</g>
+<g class="pkf-sink" data-k="bile">
+<rect style="fill:#e8f3eb;stroke:#3f8f55;stroke-width:1.4" x="775.2" y="249" width="45.8" height="26" rx="6"/>
+<text class="pkf-t pkf-b" x="783.2" y="265.2" data-size="12">bile</text>
+</g>
+<line class="pkf-line" x1="753.2" y1="261" x2="773.2" y2="261" marker-end="url(#pkf-arrow)"/>
+</g>
+<line class="pkf-line" x1="158" y1="474" x2="158" y2="498" marker-end="url(#pkf-arrow)"/>
+<g class="pkf-box" data-k="outflow">
+<rect class="pkf-org" x="139" y="498" width="692" height="50" rx="5"/>
+<circle cx="158.0" cy="514.0" r="12.0" fill="#fff" stroke="#8a8f93" stroke-width="1.3"/><path d="M150.8,517.6 C156.5,517.6 156.5,510.4 158.7,510.4 L165.2,510.4" fill="none" stroke="#3a3a3a" stroke-width="4" stroke-linecap="round"/><path d="M150.8,517.6 C156.5,517.6 156.5,510.4 158.7,510.4 L165.2,510.4" fill="none" stroke="#dbdbdb" stroke-width="2.2" stroke-linecap="round"/>
+<text class="pkf-t pkf-b" x="179" y="517.2" data-size="12">outflow tubing</text>
+<text class="pkf-t pkf-dim" x="179" y="537.2" data-size="12">10 ml</text>
+</g>
+<line class="pkf-line" x1="139" y1="513" x2="99" y2="513" marker-end="url(#pkf-arrow)"/>
+<text class="pkf-t pkf-h" x="859" y="32" data-size="16">rat liver in a normothermic machine</text>
+<text class="pkf-t pkf-h" x="859" y="52" data-size="16">perfusion</text>
+<text class="pkf-t pkf-dim" x="859" y="76.2" data-size="12">machine perfusion model rat_liver_nmp</text>
+<text class="pkf-t pkf-dim" x="859" y="96.2" data-size="12">rat liver li, 4 zones, 37 °C</text>
+<text class="pkf-t pkf-b" x="859" y="122.2" data-size="12">perfusate</text>
+<circle cx="864" cy="138" r="5" style="fill:#4269d0"/>
+<text class="pkf-t pkf-b" x="875" y="142.2" data-size="12">glc</text>
+<text class="pkf-t" x="916.8" y="142.2" data-size="12">glucose, fresh 6.5 mM</text>
+<circle cx="864" cy="158" r="5" style="fill:#efb118"/>
+<text class="pkf-t pkf-b" x="875" y="162.2" data-size="12">o2</text>
+<text class="pkf-t" x="916.8" y="162.2" data-size="12">oxygen, fresh at pO2 50 kPa</text>
+<circle cx="864" cy="178" r="5" style="fill:#ff725c"/>
+<text class="pkf-t pkf-b" x="875" y="182.2" data-size="12">lac</text>
+<text class="pkf-t" x="916.8" y="182.2" data-size="12">lactate, fresh 1 mM</text>
+<circle cx="864" cy="198" r="5" style="fill:#6cc5b0"/>
+<text class="pkf-t pkf-b" x="875" y="202.2" data-size="12">co2</text>
+<text class="pkf-t" x="916.8" y="202.2" data-size="12">CO2, fresh at the buffer equilibrium, pCO2</text>
+<text class="pkf-t" x="916.8" y="222.2" data-size="12">5.223 kPa</text>
+<circle cx="864" cy="238" r="5" style="fill:#3ca951"/>
+<text class="pkf-t pkf-b" x="875" y="242.2" data-size="12">hco3</text>
+<text class="pkf-t" x="916.8" y="242.2" data-size="12">bicarbonate, fresh 24 mM</text>
+<circle cx="864" cy="258" r="5" style="fill:#ff8ab7"/>
+<text class="pkf-t pkf-b" x="875" y="262.2" data-size="12">h</text>
+<text class="pkf-t" x="916.8" y="262.2" data-size="12">protons, fresh at pH 7.4</text>
+<circle cx="864" cy="278" r="5" style="fill:#a463f2"/>
+<text class="pkf-t pkf-b" x="875" y="282.2" data-size="12">k</text>
+<text class="pkf-t" x="916.8" y="282.2" data-size="12">potassium, fresh 4.5 mM, released by necrosis</text>
+<circle cx="864" cy="298" r="5" style="fill:#97bbf5"/>
+<text class="pkf-t pkf-b" x="875" y="302.2" data-size="12">alt</text>
+<text class="pkf-t" x="916.8" y="302.2" data-size="12">ALT, none fresh, released by necrosis</text>
+<circle cx="864" cy="318" r="5" style="fill:#9c6b4e"/>
+<text class="pkf-t pkf-b" x="875" y="322.2" data-size="12">ast</text>
+<text class="pkf-t" x="916.8" y="322.2" data-size="12">AST, none fresh, released by necrosis</text>
+<circle cx="864" cy="338" r="5" style="fill:#9498a0"/>
+<text class="pkf-t pkf-b" x="875" y="342.2" data-size="12">ldh</text>
+<text class="pkf-t" x="916.8" y="342.2" data-size="12">LDH, none fresh, released by necrosis</text>
+<text class="pkf-t" x="859" y="366.2" data-size="12">The bicarbonate buffer acts at every site; every</text>
+<text class="pkf-t" x="859" y="386.2" data-size="12">quantity is observable at every site of the circuit</text>
+<text class="pkf-t" x="859" y="406.2" data-size="12">and in every zone.</text>
+<text class="pkf-t pkf-b" x="859" y="432.2" data-size="12">key</text>
+<rect style="fill:#57606a;fill-opacity:.28;stroke:#57606a;stroke-width:1.2" x="888.8" y="420" width="16.8" height="16" rx="4"/>
+<text class="pkf-t pkf-s" x="893.8" y="431.9" data-size="11">q</text>
+<text class="pkf-t" x="911.6" y="432.2" data-size="12">in the perfusate and the cells</text>
+<rect style="fill:#ffffff;stroke:#57606a;stroke-width:1.2;stroke-dasharray:3 2" x="888.8" y="440" width="16.8" height="16" rx="4"/>
+<text class="pkf-t pkf-s" x="893.8" y="451.9" data-size="11">q</text>
+<text class="pkf-t" x="911.6" y="452.2" data-size="12">in the perfusate only</text>
+<rect style="fill:#eef6ff;stroke:#0969da" x="1085.8" y="440" width="30.5" height="16" rx="4"/>
+<text class="pkf-t pkf-s pkf-b" x="1090.8" y="451.9" data-size="11">FLO</text>
+<text class="pkf-t" x="1122.3" y="452.2" data-size="12">pump flow</text>
+<rect style="fill:#e7f7f9;stroke:#0e7c86" x="888.8" y="460" width="30.5" height="16" rx="4"/>
+<text class="pkf-t pkf-s pkf-b" x="893.8" y="471.9" data-size="11">OXY</text>
+<text class="pkf-t" x="925.2" y="472.2" data-size="12">oxygenator</text>
+<rect style="fill:#e6f6ec;stroke:#1a7f37" x="1017.6" y="460" width="30.5" height="16" rx="4"/>
+<text class="pkf-t pkf-s pkf-b" x="1022.6" y="471.9" data-size="11">TRA</text>
+<text class="pkf-t" x="1054.1" y="472.2" data-size="12">transport</text>
+<rect style="fill:#e8f0fe;stroke:#1a56db" x="1139" y="460" width="30.5" height="16" rx="4"/>
+<text class="pkf-t pkf-s pkf-b" x="1144" y="471.9" data-size="11">MET</text>
+<text class="pkf-t" x="1175.5" y="472.2" data-size="12">metabolism</text>
+<rect style="fill:#fff0f6;stroke:#bf3989" x="888.8" y="480" width="30.5" height="16" rx="4"/>
+<text class="pkf-t pkf-s pkf-b" x="893.8" y="491.9" data-size="11">ROS</text>
+<text class="pkf-t" x="925.2" y="492.2" data-size="12">redox</text>
+<rect style="fill:#fbe9e9;stroke:#a40e26" x="980.4" y="480" width="30.5" height="16" rx="4"/>
+<text class="pkf-t pkf-s pkf-b" x="985.4" y="491.9" data-size="11">NEC</text>
+<text class="pkf-t" x="1016.9" y="492.2" data-size="12">necrosis and release</text>
+<rect style="fill:#fff1e5;stroke:#953800" x="1183.7" y="480" width="30.5" height="16" rx="4"/>
+<text class="pkf-t pkf-s pkf-b" x="1188.7" y="491.9" data-size="11">BIL</text>
+<text class="pkf-t" x="1220.1" y="492.2" data-size="12">bile</text>
+</svg>
+</div>
+<p class="legend">Hover the circuit, the organ, its zones, the chips and the process lines for details.<br>Created with <a href="https://github.com/matthiaskoenig/pkpdsim">pkpdsim</a> 0.20.1 (<a href="https://matthiaskoenig.github.io/pkpdsim/pbpk/">PBPK library</a>) from the model definition; anatomy after the anatomograms of the <a href="https://www.ebi.ac.uk/gxa">Expression Atlas</a> and the <a href="https://www.proteinatlas.org">Human Protein Atlas</a> (<a href="https://github.com/ebi-gene-expression-group/anatomogram">anatomogram</a>, <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>).</p><div id="card" role="tooltip"></div>
+<script>
+const CARDS = {"bile": ["<b>bile</b>", "secreted by the hepatocytes of every zone", "observers <code>bile</code> (\u00b5l) and <code>bile_rate</code> (\u00b5l/min)"], "gas": ["<b>sweep gas</b> of the oxygenator", "O2 into the perfusate, towards 50 kPa", "CO2 out of the perfusate, towards 5.223 kPa"], "inflow": ["<b>inflow tubing with the oxygenator</b> <code>V_in</code>", "volume 10 ml, residence time 3.333 min", "O2 towards pO2 50 kPa (<code>pO2_target</code>), <code>k_oxy</code> 2 1/min", "CO2 towards pCO2 5.223 kPa of the fresh perfusate (<code>pCO2_gas</code>), <code>k_oxy_co2</code> 2 1/min"], "li": ["<b>liver li</b> <code>M_li</code>", "mass 7.229 g, density 1 kg/l, volume 7.229 ml", "vascular space 21 % (1.518 ml), cells 69 % (4.988 ml)", "4 zones in series from periportal to pericentral, each 1/4 of the volumes", "the core in the cells of every zone: glucose import, oxygen import, lactate export with a proton, glycogenolysis, glycolysis, lactate dehydrogenase, ATP use, TCA cycle, oxidative phosphorylation, pentose phosphate pathway, ROS production, ROS detoxification, glutathione reductase", "released by necrosis: ALT, AST, LDH, potassium", "secretes bile"], "outflow": ["<b>outflow tubing</b> <code>V_out</code>", "volume 10 ml"], "pump": ["<b>pump</b> <code>Q_pump</code>", "flow 3 ml/min, 0.415 ml/min/g of the organ", "the total flow of the circuit; an experiment sets the flow of its group"], "reservoir": ["<b>reservoir</b> <code>V_res</code>", "volume 1000 ml", "the perfusate: glc, o2, lac, co2, hco3, h, k, alt, ast, ldh", "a medium change of an experiment replaces a fraction of it with fresh perfusate"], "sub:alt": ["<b>alt</b> ALT", "none fresh, released by necrosis", "at every site <code>alt_&amp;lt;site&amp;gt;</code>"], "sub:ast": ["<b>ast</b> AST", "none fresh, released by necrosis", "at every site <code>ast_&amp;lt;site&amp;gt;</code>"], "sub:co2": ["<b>co2</b> CO2", "fresh at the buffer equilibrium, pCO2 5.223 kPa", "at every site <code>co2_&amp;lt;site&amp;gt;</code>"], "sub:glc": ["<b>glc</b> glucose", "fresh 6.5 mM", "at every site <code>glc_&amp;lt;site&amp;gt;</code>"], "sub:h": ["<b>h</b> protons", "fresh at pH 7.4", "at every site <code>h_&amp;lt;site&amp;gt;</code>"], "sub:hco3": ["<b>hco3</b> bicarbonate", "fresh 24 mM", "at every site <code>hco3_&amp;lt;site&amp;gt;</code>"], "sub:k": ["<b>k</b> potassium", "fresh 4.5 mM, released by necrosis", "at every site <code>k_&amp;lt;site&amp;gt;</code>"], "sub:lac": ["<b>lac</b> lactate", "fresh 1 mM", "at every site <code>lac_&amp;lt;site&amp;gt;</code>"], "sub:ldh": ["<b>ldh</b> LDH", "none fresh, released by necrosis", "at every site <code>ldh_&amp;lt;site&amp;gt;</code>"], "sub:o2": ["<b>o2</b> oxygen", "fresh at pO2 50 kPa", "at every site <code>o2_&amp;lt;site&amp;gt;</code>"], "temperature": ["<b>temperature</b> <code>T</code> 37 \u00b0C", "the rates of the core scale with the Arrhenius factor <code>f_T</code>, 1 at 37 \u00b0C", "the solubility of oxygen rises in the cold"], "zone:z1": ["<b>zone z1</b> of 4, periportal", "vascular space <code>Vvas_z1</code> 0.3795 ml, cells <code>Vcell_z1</code> 1.247 ml", "uniform: no zonal profile"], "zone:z2": ["<b>zone z2</b> of 4, between periportal and pericentral", "vascular space <code>Vvas_z2</code> 0.3795 ml, cells <code>Vcell_z2</code> 1.247 ml", "uniform: no zonal profile"], "zone:z3": ["<b>zone z3</b> of 4, between periportal and pericentral", "vascular space <code>Vvas_z3</code> 0.3795 ml, cells <code>Vcell_z3</code> 1.247 ml", "uniform: no zonal profile"], "zone:z4": ["<b>zone z4</b> of 4, pericentral", "vascular space <code>Vvas_z4</code> 0.3795 ml, cells <code>Vcell_z4</code> 1.247 ml", "uniform: no zonal profile"]};
+const card = document.getElementById('card');
+const esc = s => s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'})[c]);
+document.querySelectorAll('.wrap [data-k]').forEach(el => {
+  el.addEventListener('mousemove', ev => {
+    const k = el.dataset.k;
+    const rows = k.startsWith('txt:') ? [esc(k.slice(4))] : CARDS[k];
+    if (!rows) return;
+    ev.stopPropagation();
+    card.innerHTML = rows.map(r => `<div>${r}</div>`).join('');
+    card.style.display = 'block';
+    card.style.left = Math.min(ev.clientX + 14, window.innerWidth - card.offsetWidth - 8) + 'px';
+    card.style.top = Math.min(ev.clientY + 14, window.innerHeight - card.offsetHeight - 8) + 'px';
+  });
+  el.addEventListener('mouseleave', () => card.style.display = 'none');
+});
+// the height of the page for the frame which embeds it (the docs size their frames by it)
+// (of its content: the scroll height of the document is at least the height of the frame)
+const height = () => parent !== window && parent.postMessage(
+  {pkpdFigure: true, height: document.body.getBoundingClientRect().height + 16}, '*');
+addEventListener('load', height);
+addEventListener('resize', height);
+</script></body></html>

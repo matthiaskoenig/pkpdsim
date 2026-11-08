@@ -624,8 +624,11 @@ class _Circuit:
         """Draw the title, the quantities of the perfusate and the key from `x`; get the next top."""
         c, d, k = self.canvas, self.d, self.k
         right = x + LEGEND_WIDTH - 2 * _PAD
-        c.text(x, y + _TITLE, d.name, "pkf-h", _TITLE)
-        y += _TITLE + 10
+        # a long name wraps within the legend
+        for line in _wrap(d.name, _chars(right - x, _TITLE)):
+            c.text(x, y + _TITLE, line, "pkf-h", _TITLE)
+            y += _TITLE + 4
+        y += 6
         organ = self.organ
         y = self._paragraph(x, y, right, f"machine perfusion model {d.sid}", "pkf-dim")
         y = self._paragraph(

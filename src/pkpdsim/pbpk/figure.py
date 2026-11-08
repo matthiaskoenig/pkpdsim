@@ -673,8 +673,12 @@ class _Figure:
     def _legend(self, y: float) -> float:
         """Draw the title, the substances, routes, PD and the key; get the next top."""
         c, d = self.canvas, self.d
-        c.text((self.lx + _PAD), y + _TITLE, d.name or d.sid, "pkf-h", _TITLE)
-        y += _TITLE + 10
+        # a long name wraps within the legend
+        width = self.text_width - 2 * _PAD
+        for line in _wrap(d.name or d.sid, _chars(width, _TITLE)):
+            c.text((self.lx + _PAD), y + _TITLE, line, "pkf-h", _TITLE)
+            y += _TITLE + 4
+        y += 6
         y = self._paragraph(
             (self.lx + _PAD),
             y,

@@ -40,7 +40,7 @@ from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk.placement import value_parameter
 from pkpdsim.pbpk.units import U
-from pkpdsim.perfusion import core, ids
+from pkpdsim.perfusion import circuit, core, ids
 from pkpdsim.perfusion.definition import table_value
 from pkpdsim.perfusion.units import PU
 
@@ -202,7 +202,7 @@ def mean_objects(
                     ids.species(q, site),
                     _mean([ids.species(q, z) for z in zones], weights),
                     U.mM,
-                    f"{q} (perfusate, {where} mean)",
+                    f"{circuit.quantity_label(q)} (perfusate, {where} mean)",
                     SBO.MOLAR_CONCENTRATION_OF_AN_ENTITY,
                 ),
             )

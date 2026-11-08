@@ -6,7 +6,9 @@ circuit, the perfusate, the organ, the temperature) by
 `pkpdsim.perfusion.archive.create_archive` writes it with its ODEs, its
 antimony, the figures of the circuit (`pkpdsim.perfusion.figure`, the
 schematic, and `pkpdsim.perfusion.anatomy`, the organ in its circuit) and
-the COMBINE archive. An organ in a machine perfusion is a chain of zones,
+the COMBINE archive; `pkpdsim.perfusion.experiment` is the base of the
+simulation experiments of a model, with the condition of a perfusion and its
+medium changes. An organ in a machine perfusion is a chain of zones,
 each a vascular space in series with the flow and its cells with the cellular core
 (`pkpdsim.perfusion.core`: the energy metabolism, the redox and the damage of
 the cells, the release of their enzymes and potassium, the bicarbonate buffer
@@ -48,6 +50,14 @@ if TYPE_CHECKING:
         Perfusate,
         PerfusionDefinition,
     )
+    from pkpdsim.perfusion.experiment import (
+        PerfusionSimulationExperiment,
+        medium_change,
+        observable_labels,
+        observable_units,
+        perfusion_changes,
+        site_label,
+    )
     from pkpdsim.perfusion.figure import (
         circuit_cards,
         circuit_figure,
@@ -78,6 +88,12 @@ _LAZY_NAMES = {
     "circuit_anatomy_figure": "anatomy",
     "circuit_anatomy_svg": "anatomy",
     "create_archive": "archive",
+    "PerfusionSimulationExperiment": "experiment",
+    "medium_change": "experiment",
+    "observable_labels": "experiment",
+    "observable_units": "experiment",
+    "perfusion_changes": "experiment",
+    "site_label": "experiment",
     "circuit_cards": "figure",
     "circuit_figure": "figure",
     "circuit_svg": "figure",
@@ -117,6 +133,7 @@ __all__ = [
     "Organ",
     "Perfusate",
     "PerfusionDefinition",
+    "PerfusionSimulationExperiment",
     "buffer_objects",
     "buffer_parameters",
     "build",
@@ -129,7 +146,12 @@ __all__ = [
     "core_parameters",
     "create_archive",
     "interactive_circuit",
+    "medium_change",
+    "observable_labels",
+    "observable_units",
     "perfusate_objects",
+    "perfusion_changes",
     "quantity_name",
+    "site_label",
     "zone_objects",
 ]

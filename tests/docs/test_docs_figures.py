@@ -1,4 +1,9 @@
-"""The generated figures of the docs page `docs/pbpk/figures.md` are up to date."""
+"""The generated figures of the docs are up to date.
+
+The figures of the page `docs/pbpk/figures.md` and the figures A and B of every
+model a page of `docs/pbpk/` or `docs/perfusion.md` creates, a PBPK model or a
+machine perfusion circuit.
+"""
 
 import importlib.util
 import re
@@ -8,6 +13,8 @@ from types import ModuleType
 import numpy as np
 import pytest
 from scipy.spatial import KDTree
+
+from pkpdsim.perfusion import PerfusionDefinition
 
 ROOT = Path(__file__).parents[2]
 NUMBER = re.compile(r"-?\d+\.\d+")
@@ -155,6 +162,25 @@ def test_every_model_of_a_page_shows_its_figures() -> None:
             assert f"figures-{stem} " in text, page.name
             for figure in ("anatomy", "schematic"):
                 assert f"img/figures/models/{stem}-{figure}.html" in text, page.name
+
+
+def test_the_perfusion_page_shows_the_figures_of_its_circuit() -> None:
+    """A fence which creates a machine perfusion gets the figures of its circuit."""
+    script = _script()
+    page = ROOT / "docs" / "perfusion.md"
+    assert page in script.model_pages()
+    definitions = script.model_fences(page)
+    assert definitions, "the page creates no circuit"
+    text = page.read_text(encoding="utf-8")
+    for number, definition in definitions.items():
+        assert isinstance(definition, PerfusionDefinition)
+        for figure in ("anatomy", "schematic"):
+            # relative to the page, the folder of the figures of the models
+            src = f"pbpk/img/figures/models/perfusion-{number}-{figure}.html"
+            assert f'src="{src}"' in text
+            assert (ROOT / "docs" / src).exists()
+            html = (ROOT / "docs" / src).read_text(encoding="utf-8")
+            assert definition.name in html or definition.sid in html
 
 
 def test_the_docs_show_the_interactive_figures_only() -> None:

@@ -8,6 +8,7 @@ perfusate quantities as chips, bile or urine, and a hover card for every
 key of an interactive page.
 """
 
+import dataclasses
 import re
 from pathlib import Path
 from xml.etree import ElementTree
@@ -67,6 +68,11 @@ def _definitions() -> dict[str, PerfusionDefinition]:
         "kidney3": kidney_definition(3),
         "muscle": generic_definition(),
         "unknown": _unknown_organ(),
+        # a name longer than a line of the legend wraps
+        "long_name": dataclasses.replace(
+            liver_definition(4),
+            name="rat liver in a normothermic machine perfusion with two medium changes",
+        ),
     }
 
 

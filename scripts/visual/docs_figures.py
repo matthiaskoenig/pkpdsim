@@ -6,14 +6,18 @@ the publication figure (the panels on an A4 page with the legend below it) and a
 strip of individuals of the library; the anatomical figures of the species of
 `docs/pbpk/species.md`, interactive as well.
 
-Every page of `docs/pbpk/` whose python fences create a model shows the content of
-that model: after each fence which creates a `PBPKDefinition` the script runs the
-fences of the page up to it (in a temporary directory, as the snippet tests do),
-takes the definition it created and writes its figures A and B as interactive pages
-(`img/figures/models/<page>-<fence>-{anatomy,schematic}.html`) and the frames which
-show them into a generated region after the fence. The docs show the interactive
-figures only. Run it after a change of the figures, the anatomy resources or a
-model of a page:
+Every page of `docs/pbpk/` and the page `docs/perfusion.md` whose python fences
+create a model shows the content of that model: after each fence which creates a
+`PBPKDefinition` or a `PerfusionDefinition` the script runs the fences of the page
+up to it (in a temporary directory, as the snippet tests do), takes the definition
+it created and writes its figures A and B as interactive pages
+(`docs/pbpk/img/figures/models/<page>-<fence>-{anatomy,schematic}.html`, the
+anatomical figure and the schematic of a PBPK model with `interactive_figure`, the
+organ in its circuit and the schematic of a machine perfusion with
+`interactive_circuit`) and the frames which show them into a generated region
+after the fence, the path of a frame relative to its page. The docs show the
+interactive figures only. Run it after a change of the figures, the anatomy
+resources or a model of a page:
 
 ```bash
 uv run python scripts/visual/docs_figures.py
@@ -25,6 +29,7 @@ uv run python scripts/visual/docs_figures.py
 import ast
 import contextlib
 import dataclasses
+import os
 import re
 import sys
 import tempfile
@@ -46,10 +51,14 @@ from pkpdsim.pbpk import (
 from pkpdsim.pbpk.visual.body import Individual, body_strip
 from pkpdsim.pbpk.visual.interactive import interactive_figure
 from pkpdsim.pbpk.visual.publication import publication_figure
+from pkpdsim.perfusion import PerfusionDefinition, interactive_circuit
 from pkpdsim.sex import Sex
 
 ROOT = Path(__file__).resolve().parents[2]
-PBPK = ROOT / "docs" / "pbpk"
+DOCS = ROOT / "docs"
+PBPK = DOCS / "pbpk"
+PAGES = (DOCS / "perfusion.md",)
+"""The pages outside of `docs/pbpk/` whose models show their figures."""
 OUT = PBPK / "img" / "figures"
 MODELS = "models"
 """The folder of the figures of the models of the pages, below `OUT`."""
@@ -62,9 +71,18 @@ REGION = re.compile(
     r"do not edit -->\n.*?^<!-- end generated -->\n",
     re.S | re.M,
 )
-_SOURCES = re.compile(rf'src="img/figures/{MODELS}/([\w.-]+)"')
+_SOURCES = re.compile(rf'src="(?:[\w.-]+/)*img/figures/{MODELS}/([\w.-]+)"')
 NAMES = ("definition", "DEFINITION")
 """The names of the definition of a fence, preferred to another new definition."""
+type Definition = PBPKDefinition | PerfusionDefinition
+"""A definition of a model whose figures a page shows."""
+MARKERS = ("PBPKDefinition(", "PerfusionDefinition(")
+"""The calls which create a definition in a fence."""
+
+
+def _creates(code: str) -> bool:
+    """Whether a source creates a definition of a model."""
+    return any(marker in code for marker in MARKERS)
 
 
 def glimepiride() -> PBPKDefinition:
@@ -135,7 +153,7 @@ def _fences(text: str) -> list[tuple[int, str, int]]:
     ]
 
 
-def model_fences(page: Path) -> dict[int, PBPKDefinition]:
+def model_fences(page: Path) -> dict[int, Definition]:
     """The definitions which the python fences of a page create, by fence.
 
     The fences run in order in one namespace in a temporary directory, as the
@@ -148,8 +166,8 @@ def model_fences(page: Path) -> dict[int, PBPKDefinition]:
         for n, code, _ in _fences(page.read_text(encoding="utf-8"))
         if not code.lstrip().startswith(SKIP_MARKER)
     ]
-    last = max((n for n, code in fences if "PBPKDefinition(" in code), default=0)
-    found: dict[int, PBPKDefinition] = {}
+    last = max((n for n, code in fences if _creates(code)), default=0)
+    found: dict[int, Definition] = {}
     namespace: dict[str, object] = {"__name__": "__main__"}
     seen: set[int] = set()
     with tempfile.TemporaryDirectory() as tmp, contextlib.chdir(tmp):
@@ -162,10 +180,11 @@ def model_fences(page: Path) -> dict[int, PBPKDefinition]:
             new = {
                 name: value
                 for name, value in namespace.items()
-                if isinstance(value, PBPKDefinition) and id(value) not in seen
+                if isinstance(value, PBPKDefinition | PerfusionDefinition)
+                and id(value) not in seen
             }
             seen.update(id(v) for v in new.values())
-            if "PBPKDefinition(" in code and new:
+            if _creates(code) and new:
                 named = [new[k] for k in NAMES if k in new]
                 found[number] = named[0] if named else list(new.values())[-1]
     return found
@@ -182,18 +201,18 @@ def _up_to_definition(code: str) -> str:
     ends = [
         node.end_lineno
         for node in tree.body
-        if "PBPKDefinition(" in "".join(lines[node.lineno - 1 : node.end_lineno])
+        if _creates("".join(lines[node.lineno - 1 : node.end_lineno]))
     ]
     return "".join(lines[: ends[-1]]) if ends else code
 
 
 def model_pages() -> list[Path]:
-    """The pages of the PBPK library with a python fence which creates a model."""
+    """The pages of the PBPK library and `PAGES` with a python fence which creates a model."""
     return sorted(
         page
-        for page in PBPK.glob("*.md")
+        for page in [*PBPK.glob("*.md"), *PAGES]
         if any(
-            "PBPKDefinition(" in code and not code.lstrip().startswith(SKIP_MARKER)
+            _creates(code) and not code.lstrip().startswith(SKIP_MARKER)
             for _, code, _ in _fences(page.read_text(encoding="utf-8"))
         )
     )
@@ -209,26 +228,44 @@ def _frame(src: str, title: str, html: str) -> str:
     )
 
 
-def region(page: Path, number: int, definition: PBPKDefinition, out: Path) -> str:
-    """Write the figures A and B of a definition of a page; get the region of the page."""
+def _relative(page: Path, path: Path) -> str:
+    """The path of a file relative to the folder of a page, with slashes."""
+    return Path(os.path.relpath(path, page.parent)).as_posix()
+
+
+def region(page: Path, number: int, definition: Definition, out: Path) -> str:
+    """Write the figures A and B of a definition of a page; get the region of the page.
+
+    The figures of a PBPK model are its anatomical figure and its schematic, of a
+    machine perfusion the organ in its circuit and the schematic of the circuit.
+    """
     stem = f"{page.stem}-{number}"
+    perfusion = isinstance(definition, PerfusionDefinition)
     frames = []
     for figure, title in (("anatomy", "anatomical figure"), ("schematic", "schematic")):
-        path = interactive_figure(
-            definition, out / MODELS / f"{stem}-{figure}.html", figure=figure
-        )
+        target = out / MODELS / f"{stem}-{figure}.html"
+        if isinstance(definition, PerfusionDefinition):
+            path = interactive_circuit(definition, target, figure=figure)
+        else:
+            path = interactive_figure(definition, target, figure=figure)
         frames.append(
             _frame(
-                f"img/figures/{MODELS}/{path.name}",
+                _relative(page, OUT / MODELS / path.name),
                 f"The {title} of the model {definition.sid}",
                 path.read_text(encoding="utf-8"),
             )
         )
+    figures = _relative(page, PBPK / "figures.md")
+    content = (
+        "the organ in its circuit (A) and the schematic of the circuit (B)"
+        if perfusion
+        else "the anatomical figure (A) and the schematic (B)"
+    )
     return (
         f"\n<!-- generated: figures-{stem} (scripts/visual/docs_figures.py), "
         "do not edit -->\n"
-        f"The content of the model `{definition.sid}`: the anatomical figure (A) and "
-        "the schematic (B), hover them for details ([figures](figures.md)).\n\n"
+        f"The content of the model `{definition.sid}`: {content}, hover them for "
+        f"details ([figures]({figures})).\n\n"
         + "\n\n".join(frames)
         + "\n<!-- end generated -->\n"
     )

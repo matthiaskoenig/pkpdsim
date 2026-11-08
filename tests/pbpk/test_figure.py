@@ -237,10 +237,17 @@ def _definitions() -> dict[str, PBPKDefinition]:
             variants=Variants({Organ.SMALL_INTESTINE: "standard"}),
             routes=[Route.iv("drg")],
         ),
+        # a name longer than a line of the legend wraps
+        "long_name": definition(
+            sid="long_name",
+            name="a whole-body PBPK model of a drug with its metabolites and routes",
+        ),
     }
 
 
-@pytest.fixture(params=["simple", "seven", "single", "standard", "reabsorbed"])
+@pytest.fixture(
+    params=["simple", "seven", "single", "standard", "reabsorbed", "long_name"]
+)
 def figure(
     request: pytest.FixtureRequest, tmp_path: Path
 ) -> tuple[PBPKDefinition, Path]:
