@@ -1149,3 +1149,7 @@ doi = "10.1542/peds.2008-2654"
 [Upreti2016]
 citation = "Upreti VV, Wahlstrom JL. Meta-analysis of hepatic cytochrome P450 ontogeny to underwrite the prediction of pediatric pharmacokinetics using physiologically based pharmacokinetic modeling. J Clin Pharmacol 56(3):266-283, 2016."
 doi = "10.1002/jcph.585"
+
+[Christmas2017]
+citation = "Christmas KM, Bassingthwaighte JB. Equations for O2 and CO2 solubilities in saline and plasma: combining temperature and density dependences. J Appl Physiol 122(5):1313-1320, 2017."
+doi = "10.1152/japplphysiol.01124.2016"

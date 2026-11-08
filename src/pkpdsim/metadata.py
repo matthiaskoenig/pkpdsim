@@ -71,6 +71,7 @@ class Tissue(StrEnum):
     FECES = "feces"
     FECES_URINE = "feces and urine"
     BILE = "bile"
+    PERFUSATE = "perfusate"  # the fluid of a machine perfusion circuit
     NONE = "none"  # not a sample of a tissue, e.g. the blood pressure
 
 
@@ -469,6 +470,7 @@ _DEFAULT_SITES: Final[Mapping[Tissue, SamplingSite]] = MappingProxyType(
         Tissue.FECES: SamplingSite.NOT_APPLICABLE,
         Tissue.FECES_URINE: SamplingSite.NOT_APPLICABLE,
         Tissue.BILE: SamplingSite.NOT_APPLICABLE,
+        Tissue.PERFUSATE: SamplingSite.NOT_APPLICABLE,
         Tissue.NONE: SamplingSite.NOT_APPLICABLE,
     }
 )
@@ -476,7 +478,8 @@ _DEFAULT_SITES: Final[Mapping[Tissue, SamplingSite]] = MappingProxyType(
 
 Plasma, serum and blood are typically drawn from an arm vein; arterial blood
 and plasma name their site. Saliva is no blood sample, so it is treated like
-the excretions: no sampling site applies to the tissues without a blood sample.
+the excretions: no sampling site applies to the tissues without a blood sample
+(the perfusate of a machine perfusion is sampled in its circuit).
 A new member of `Tissue` is classified here (a test of the metadata fails until
 it is).
 """

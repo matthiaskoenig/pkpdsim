@@ -1,0 +1,31 @@
+# The parameters of a machine perfusion (ex vivo perfusion of an organ in a circuit).
+#
+# Units of the models: time min, amount mmole, volume l, concentration mM. The
+# numbers without a publication read are `ModelChoice` with a note which names
+# the quantity as fitted later or as awaiting the study protocol.
+
+[oxygen]
+solubility = { value = 0.009464, unit = "mM/kPa", source = "Christmas2017", notes = "derived: solubility of O2 in plasma at 37 C from Equation 4a of Christmas and Bassingthwaighte 2017 with rho_plasma = 1.020 g/ml and rho_water = 0.99332 g/ml (their Table 5 gives the exponential coefficient 0.0398 per C; the plasma parameters are called tentative by the authors): 0.02149 ml gas/ml/atm (their Table 1 lists 0.0214 at 37 C), converted with 22.414 ml/mmol (STPD) and 101.325 kPa/atm. The perfusate of a machine perfusion without an oxygen carrier is closer to saline (0.02273 ml/ml/atm, 0.01001 mM/kPa), a model choice for the carrier." }
+temperature_coefficient = { value = -0.01257, unit = "1/K", source = "Christmas2017", notes = "derived: relative change of the solubility per K at 37 C, the central difference of Equation 4a of Christmas and Bassingthwaighte 2017 (plasma), i.e. a decrease of 1.3 % per K" }
+
+[enzymes]
+ALT = { value = 1.0, unit = "ukat/mmol", source = "ModelChoice", notes = "placeholder scale of the conversion of the ALT amount (mmole) of the model to the activity of the data (ukat/l = umol/(l*s)); no specific activity of rat ALT (kcat or U/mg of the purified enzyme at 37 C) was found in a readable source (the rat ALT1/ALT2 paper Yang 2009, DOI 10.1002/hep.22657, reports serum activities only); fitted later" }
+AST = { value = 1.0, unit = "ukat/mmol", source = "ModelChoice", notes = "placeholder scale of the conversion of the AST amount (mmole) of the model to the activity of the data (ukat/l); no specific activity of rat AST was found in a readable source; fitted later" }
+LDH = { value = 1.0, unit = "ukat/mmol", source = "ModelChoice", notes = "placeholder scale of the conversion of the LDH amount (mmole) of the model to the activity of the data (ukat/l); no specific activity of rat LDH was found in a readable source; fitted later" }
+
+[temperature]
+reference = { value = 37.0, unit = "degC", source = "ModelChoice", notes = "the reference temperature of the Arrhenius factor of the rates, normothermic perfusion; the study is normothermic (folder NMP), the protocol temperature to be confirmed by the study owner" }
+activation_energy_factor = { value = 12.0, unit = "dimensionless", source = "ModelChoice", notes = "default f_Ea of the liver model of pkdb_models.misc.machine_perfusion (activation energy Ea = f_Ea*R*T_ref, 30.9 kJ/mol at 37 C), taken over unchanged; no source recorded there, fitted later" }
+
+[perfusate]
+glucose = { value = 5.7, unit = "mM", source = "ModelChoice", notes = "default of the study: the perfusate glucose at the start of the workbook 02_ALT_AST_glucose_LDH of the flow rate study (about 5.7 mM); awaiting the composition of the study protocol" }
+lactate = { value = 1.0, unit = "mM", source = "ModelChoice", notes = "assumed initial lactate of the fresh perfusate, awaiting the composition of the study protocol" }
+HCO3 = { value = 24.0, unit = "mM", source = "ModelChoice", notes = "assumed bicarbonate of a fresh buffered perfusate (the study measures 9 to 13 mM in the outflow after hours), awaiting the composition of the study protocol" }
+K = { value = 4.5, unit = "mM", source = "ModelChoice", notes = "assumed potassium of the fresh perfusate, awaiting the composition of the study protocol" }
+pH = { value = 7.4, unit = "dimensionless", source = "ModelChoice", notes = "assumed pH of the fresh perfusate (the study measures 7.3 at the start), awaiting the composition of the study protocol" }
+
+[liver_rat]
+mass = { value = 7.229, unit = "g", source = "Brown1997", notes = "reference liver tissue mass of the 250 g male rat without its residual blood, the value of physiology_rat.toml ([male.organs.li] mass, 3.66 % BW times (1 - 0.21)); the livers of the study weigh 8 to 20 g and the experiments take their own weights" }
+vascular_fraction = { value = 0.21, unit = "dimensionless", source = "Brown1997", notes = "volume fraction of blood in the excised liver, Table 30 of Brown 1997 as in physiology_rat.toml ([male.organs.li] f_vas); a perfused liver is washed of blood, so the vascular space is the perfusate space of the organ" }
+cell_fraction = { value = 0.69, unit = "dimensionless", source = "ModelChoice", notes = "derived: 1 - f_vas - f_int of physiology_rat.toml with f_int = 0.1003, rounded; the tissue space of the hepatocytes, fitted later if the zones need another split" }
+bile_rate = { value = 0.85, unit = "ul/min/g", source = "ModelChoice", notes = "order of magnitude of the control bile flow of an isolated perfused rat liver (about 0.85 ul/min/g in a Digest Dis Sci study seen only as a search snippet, not read); the study measures the hourly bile volume of its livers, fitted later" }

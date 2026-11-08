@@ -115,7 +115,7 @@ def test_other_values_are_their_strings() -> None:
         (
             Tissue,
             "PLASMA SERUM BLOOD ARTERIAL_BLOOD ARTERIAL_PLASMA SALIVA URINE FECES "
-            "FECES_URINE BILE NONE",
+            "FECES_URINE BILE PERFUSATE NONE",
         ),
         (
             Route,
@@ -267,6 +267,7 @@ NO_BLOOD = (
     Tissue.FECES,
     Tissue.FECES_URINE,
     Tissue.BILE,
+    Tissue.PERFUSATE,
     Tissue.NONE,
 )
 DEFAULT_SITE = {
@@ -414,3 +415,15 @@ def test_a_subclass_with_its_own_post_init_resolves() -> None:
         health=Health.HEALTHY,
     )
     assert plasma.to_dict()["sampling_site"] == "ARM_VEIN"
+
+
+def test_perfusate_is_a_tissue() -> None:
+    """The perfusate of a machine perfusion is no blood sample."""
+    assert Tissue("perfusate") is Tissue.PERFUSATE
+    md = PKPDMappingMetaData(
+        tissue=Tissue.PERFUSATE,
+        route=Route.NR,
+        dosing=Dosing.NR,
+        health=Health.HEALTHY,
+    )
+    assert md.resolved_sampling_site() is SamplingSite.NOT_APPLICABLE
