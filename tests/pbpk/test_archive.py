@@ -53,6 +53,7 @@ def test_the_archive_has_the_flat_model_as_master(tmp_path: Path) -> None:
         "simple_flat_md",
         "simple_flat_ant",
         "simple_svg",
+        "simple_body_svg",
     }
     masters = [k for k, v in results.items() if v["entry"].master]
     assert masters == ["simple_flat"]
@@ -89,7 +90,7 @@ def test_the_archive_carries_the_extra_models(tmp_path: Path) -> None:
     extra = tmp_path / "models" / "simple_fluid.xml"
     extra.write_text(MINIMAL_SBML, encoding="utf-8")
     results = _create(tmp_path, extra=(extra,))
-    assert list(results)[-2:] == ["simple_fluid", "simple_svg"]
+    assert list(results)[-3:] == ["simple_fluid", "simple_svg", "simple_body_svg"]
     entry = results["simple_fluid"]["entry"]
     assert entry.location == "./models/simple_fluid.xml"
     assert entry.format == EntryFormat.SBML_L3V2
@@ -144,9 +145,10 @@ def test_the_archive_carries_extra_files(tmp_path: Path) -> None:
     png = tmp_path / "figures" / "simple.png"
     png.write_bytes(b"\x89PNG")
     results = _create(tmp_path, extra=(extra,), files=(md, png))
-    assert list(results)[-4:] == [
+    assert list(results)[-5:] == [
         "simple_fluid",
         "simple_svg",
+        "simple_body_svg",
         "simple_fluid_md",
         "simple_png",
     ]
@@ -250,6 +252,7 @@ def test_the_built_files_have_the_location_rule_of_the_extra_files(
         "simple_flat_md": "./sbml/simple_flat.md",
         "simple_flat_ant": "./sbml/simple_flat.ant",
         "simple_svg": "./sbml/simple.svg",
+        "simple_body_svg": "./sbml/simple_body.svg",
         "notes_md": "./sbml/notes.md",
     }
     with zipfile.ZipFile(tmp_path / "simple_model.omex") as z:

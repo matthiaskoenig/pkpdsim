@@ -34,6 +34,7 @@ nav = [
   { "PBPK library" = [
     { "Overview" = "pbpk/index.md" },
     { "Tutorial" = "pbpk/tutorial.md" },
+    { "Figures" = "pbpk/figures.md" },
     { "Physiology" = "pbpk/physiology.md" },
     { "Standard organ" = "pbpk/organ.md" },
     { "Substances" = "pbpk/substances.md" },
@@ -80,6 +81,7 @@ nav = [
     { "pbpk kidney validity" = "api/pbpk_kidney_validity.md" },
     { "pbpk impairment" = "api/pbpk_impairment.md" },
     { "pbpk ids and data" = "api/pbpk_ids.md" },
+    { "pbpk figures" = "api/pbpk_visual.md" },
   ] },
   { "Contributing" = "development.md" },
 ]

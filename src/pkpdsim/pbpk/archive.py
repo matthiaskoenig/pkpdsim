@@ -77,7 +77,9 @@ def create_archive(
     the master entry, the first model of the archive. With `figure` the figure
     of the definition (`model_figure`, an SVG schematic of the organs, routes,
     substances and processes) is written into `model_output_dir` as
-    `<sid>.svg` and is an entry of the archive.
+    `<sid>.svg` and the anatomical figure of the male and the female build
+    (`anatomy_figure` of `pkpdsim.pbpk.visual.anatomy`) as `<sid>_body.svg`,
+    both entries of the archive.
 
     Args:
         definition: the definition of the model.
@@ -100,7 +102,8 @@ def create_archive(
         figure: write the figure of the definition, `<sid>.svg` (the key
             `<sid>_svg`, the first extra file of the archive); one figure for
             all sexes, which have the same organs, substances and processes,
-            its title names the builds.
+            its title names the builds; and the anatomical figure
+            `<sid>_body.svg` (the key `<sid>_body_svg`, the second extra file).
 
     Every file of the archive has one location rule: it is below the parent
     of `model_output_dir`, and its location in the archive is its path
@@ -124,8 +127,9 @@ def create_archive(
         factory: `README`, `cc-by`, `mit`, the sid of the definition, `<sid>_flat`,
         `<sid>_flat_md`, `<sid>_flat_ant` (and the same keys of the id of the
         build of every other sex, `<sid>_female_flat`), the stem of every extra
-        model, `<sid>_svg` of the figure and `<stem>_<suffix>` of every extra
-        file (`fluid_md`), each `{"path": Path, "entry": ManifestEntry}`.
+        model, `<sid>_svg` of the figure, `<sid>_body_svg` of the anatomical
+        figure and `<stem>_<suffix>` of every extra file (`fluid_md`), each
+        `{"path": Path, "entry": ManifestEntry}`.
     """
     sexes = (definition.sex,) if sexes is None else tuple(Sex(s) for s in sexes)
     if definition.sex not in sexes:
@@ -147,8 +151,12 @@ def create_archive(
         models.append(ArchiveModel(built.comp_path, flat=built.flat_path))
     figures = []
     if figure:
+        from pkpdsim.pbpk.visual.anatomy import anatomy_figure
+
         path = model_output_dir / f"{definition.sid}.svg"
         figures.append(model_figure(definition, path, sexes))
+        body = model_output_dir / f"{definition.sid}_body.svg"
+        figures.append(anatomy_figure(definition, body))
     return write_archive(
         models,
         model_output_dir.parent,

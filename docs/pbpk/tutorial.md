@@ -157,7 +157,48 @@ BW 100 kg: Vad 36.2 l, Vli 2.77 l, CO 7.72 l/min
 
 An individual of 100 kg and the reference height has more adipose, a larger liver and a higher cardiac output: the lean tissues and the cardiac output scale with the fat-free mass, adipose is the rest of the body weight (at 73 kg more than the ICRP adipose mass, since it takes the mass of the tissues which are no organ of the model). The severities of the impairment work the same way (`init(CP_severity)`, `init(f_renal_function)`), see [Impairment](impairment.md).
 
-## 7. In a model package
+## 7. Figures
+
+The figures of the model are generated from the definition: the anatomical figure of the male and the female build, its interactive page with hover cards, the schematic of the circulation and the one-page figure of a publication, which combines both with its legend. They show what the build has, read through the same rules, so they never disagree with the model. See [Figures](figures.md) for the figures of this model.
+
+```python
+from pkpdsim.pbpk import (
+    anatomy_figure,
+    interactive_figure,
+    model_figure,
+    publication_figure,
+)
+
+figures = Path("figures")
+anatomy_figure(definition, figures / "anatomy.svg")
+interactive_figure(definition, figures / "anatomy.html")
+model_figure(definition, figures / "schematic.svg")
+publication_figure(definition, figures / "publication.svg")
+print(sorted(p.name for p in figures.iterdir()))
+```
+
+```text
+['anatomy.html', 'anatomy.svg', 'publication.svg', 'publication_legend.md', 'publication_panels.svg', 'schematic.svg']
+```
+
+The same definition built on a laboratory animal is drawn on that animal, the reference animal of the library in the sex of the build: the mouse and the rat on the drawing of the mouse, the pig on its silhouette with the human organs, the oral dose as a gavage at the snout and the blood sample at the tail vein (the ear vein of the pig), see [Species](species.md#figures).
+
+```python
+import dataclasses
+
+from pkpdsim.pbpk import Species
+
+for species in (Species.RAT, Species.PIG):
+    animal = dataclasses.replace(definition, species=species)
+    print(anatomy_figure(animal, figures / f"{species.value}.svg").name)
+```
+
+```text
+rat.svg
+pig.svg
+```
+
+## 8. In a model package
 
 The factory of the model package builds the definition with the fitted values from the adopted fits of the model (`FITS = MODEL.fit_records()`), so the uncertainties of the fits reach the SBML; the observers the experiments read which the library does not compute (the sum of the metabolites in urine) and the creators of the model are part of the definition, and so are the constants of the model which no field of the library holds (`parameters`, see [Substances](substances.md#parameters-of-the-definition)):
 
@@ -225,6 +266,6 @@ def create_glimepiride_models(model_output_dir: Path) -> dict[str, dict[str, Any
 
 `create_archive` builds the definition (`build`), writes the differential equations of the flat model as markdown and its antimony, the texts of the licenses (CC BY-SA 4.0 and MIT with the copyright) into the parent of `model_output_dir` and the COMBINE archive `<model>_model.omex` there, with the README, the licenses, the comp model, the flat model as the master entry, the markdown, the antimony, the SBML files of `extra_models` (a submodel which is simulated on its own) and the files of `extra_files` (the ODEs of an extra model as markdown, a figure, in the format of their suffix: `.md`, `.ant` (antimony), `.txt`, `.png`, `.svg`, `.csv`, `.tsv`, `.pdf`). Every file of the archive but the README (`./README.md`) has one location rule: the file is below the parent of `model_output_dir`, at its path relative to it in the archive (the built files `./models/<name>` for the directory `models` of a package, the licenses `./mit.txt`, an extra model or file where it lies). It returns the files with their entries by the keys `README`, `cc-by`, `mit`, `<sid>`, `<sid>_flat`, `<sid>_flat_md`, `<sid>_flat_ant`, `<sid>_svg` (the figure), the stem of every extra model and `<stem>_<suffix>` of every extra file (`fluid_md`). With `sexes=(Sex.MALE, Sex.FEMALE)` it builds the female build as well, the same keys of `<sid>_female` (see [Builds per sex](index.md#builds-per-sex)).
 
-The archive carries the figure of the model (`figure=True`, the default; `figure=False` leaves it out): `model_figure(definition, path)` of `pkpdsim.pbpk.figure` writes `<sid>.svg` next to the models, a schematic of the definition, one for the builds of all sexes (`create_archive` passes its `sexes`, the title reads `male build` or `male and female builds`). The venous blood on the left and the arterial blood on the right, the lung between them, the organs which the arterial blood perfuses, the liver with the hepatic artery and the portal vein, the organs which drain into the portal vein and the lumen of the intestine with its segments to the feces (drawn when a substance reaches it), with the absorption into the wall and the bile duct from the liver; the variant of an organ is named under it. The substances are listed with a dot of their color, their binding, distribution (the organs a substance enters if not all, the organs with a Kp or an exchange of their own), an endogenous substance as such (`endogenous (baseline)` with a given baseline, `endogenous (production, baseline solved)` for one which a declared rate produces and whose baseline the library solves, creatinine) and interactions. Which substance reaches the lumen, goes into the bile, is absorbed (with its own `fabs`, colon factor or regional factors, `factor of ile2` for one segment, `factors of ile2, asc` for several) and enters a tissue are the rules of the build (`luminal_substances`, `bile_substances`, `wall_parts` of `pkpdsim.pbpk.variants.gut`, `absorbed_substances` and `absorption` of the intestine variants, `parts_for`), so the figure shows what the model has. Every organ shows a chip per substance, filled where the substance enters the tissue, dashed where it stays in the plasma, and its processes as badges: `MET` a metabolism (substrate, products, enzyme), `TRA` a transport (the side and the transporter), `CUS` a custom reaction, `URI` the urine (with the reabsorption), `SLW` a slow pool; the lumen has the oral routes `ORL`, the absorption `ABS`, the bile `BIL`, the conversions `CNV` and the feces `FEC`. The figure is pure python and deterministic, its text monospace, placed by the width of a character (`CHAR_WIDTH`), so no label leaves its box or overlaps another, also for many substances (a row grows by lines).
+The archive carries the figure of the model (`figure=True`, the default; `figure=False` leaves it out): `model_figure(definition, path)` of `pkpdsim.pbpk.figure` writes `<sid>.svg` next to the models, a schematic of the definition, one for the builds of all sexes (`create_archive` passes its `sexes`, the title reads `male build` or `male and female builds`). The venous blood on the left and the arterial blood on the right, the lung between them, the organs which the arterial blood perfuses, the liver with the hepatic artery and the portal vein, the organs which drain into the portal vein and the lumen of the intestine with its segments to the feces (drawn when a substance reaches it), with the absorption into the wall and the bile duct from the liver; the variant of an organ is named under it. The substances are listed with a dot of their color, their binding, distribution (the organs a substance enters if not all, the organs with a Kp or an exchange of their own), an endogenous substance as such (`endogenous (baseline)` with a given baseline, `endogenous (production, baseline solved)` for one which a declared rate produces and whose baseline the library solves, creatinine) and interactions. Which substance reaches the lumen, goes into the bile, is absorbed (with its own `fabs`, colon factor or regional factors, `factor of ile2` for one segment, `factors of ile2, asc` for several) and enters a tissue are the rules of the build (`luminal_substances`, `bile_substances`, `wall_parts` of `pkpdsim.pbpk.variants.gut`, `absorbed_substances` and `absorption` of the intestine variants, `parts_for`), so the figure shows what the model has. Every organ shows a chip per substance, filled where the substance enters the tissue, dashed where it stays in the plasma, and its processes as badges: `MET` a metabolism (substrate, products, enzyme), `TRA` a transport (the side and the transporter), `CUS` a custom reaction, `URI` the urine (with the reabsorption), `SLW` a slow pool; the lumen has the oral routes `ORL`, the absorption `ABS`, the bile `BIL`, the conversions `CNV` and the feces `FEC`. The figure is pure python and deterministic, its text monospace, placed by the width of a character (`CHAR_WIDTH`), so no label leaves its box or overlaps another, also for many substances (a row grows by lines). Next to it the archive carries the anatomical figure `<sid>_body.svg` of `anatomy_figure` (the key `<sid>_body_svg`), see [Figures](figures.md).
 
 The experiments then set the doses, covariates and activity factors and read the observables as before; the [migration guide](migration.md) lists the ids which change.

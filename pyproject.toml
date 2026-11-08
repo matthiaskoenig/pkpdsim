@@ -62,9 +62,12 @@ dependencies = [
     # the blocks of the credibility report (`pkpdsim.credibility.blocks`)
     "jinja2>=3.1.6",
     "matplotlib>=3.11.2",
-    # not imported: the images of matplotlib; 13.0.0 fixes the advisories of 12.3.0,
-    # among them the critical GHSA-5x8w-8jj5-q52h
+    # the raster of the bodies of the figures (`pkpdsim.pbpk.visual`), also the images
+    # of matplotlib; 13.0.0 fixes the advisories of 12.3.0, among them the critical
+    # GHSA-5x8w-8jj5-q52h
     "pillow>=13.0.0",
+    # the outlines of the layers of a body traced on its raster (`pkpdsim.pbpk.visual.body`)
+    "contourpy>=1.4.0",
     "python-libsbml>=5.21.2",
     # not imported: the CA bundle of requests, through which sbmlutils and pymetadata
     # reach the network; 2026.10.19 removes the emSign roots (GHSA-6q48-6c7w-9gw2)
@@ -72,6 +75,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# the PDF of the publication figure of a model (`pkpdsim.pbpk.visual.publication`),
+# cairosvg needs the cairo library of the system
+pdf = [
+    "cairosvg>=2.8.2",
+]
 # the second simulator of the battery of the credibility, the engine AMICI of
 # sbmlsim (`sbmlsim.credibility.battery`), built from source
 amici = [
@@ -137,6 +145,11 @@ root = ["./src", ".", "./tests"]
 
 [tool.ty.src]
 include = ["src", "tests", "scripts"]
+
+[tool.ty.analysis]
+# cairosvg, the PDF of the publication figure, is the optional extra `pdf` and not
+# in the environment of the check
+allowed-unresolved-imports = ["cairosvg"]
 
 [tool.ty.terminal]
 # warnings are failures: keep the codebase free of any diagnostic

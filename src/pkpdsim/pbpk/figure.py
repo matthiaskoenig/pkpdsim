@@ -31,9 +31,10 @@ and labels do not overlap, also with many substances: a row grows by lines
 instead of running out of its box.
 """
 
+import math
 import textwrap
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from xml.sax.saxutils import escape
 
@@ -66,9 +67,18 @@ from pkpdsim.pbpk.variants.gut import bile_substances, luminal_substances, wall_
 from pkpdsim.pbpk.variants.intestine import SegmentedIntestine, SingleLumen
 from pkpdsim.pbpk.variants.kidney_nephron import NephronKidney
 from pkpdsim.pbpk.variants.liver_zonated import ZonatedLiver
+from pkpdsim.pbpk.visual import icons
 from pkpdsim.sex import Sex
 
-__all__ = ["CHAR_WIDTH", "FONT", "model_figure"]
+__all__ = [
+    "CHAR_WIDTH",
+    "COMPACT",
+    "FONT",
+    "LEGEND_WIDTH",
+    "MAX_TEXT",
+    "model_figure",
+    "schematic_svg",
+]
 
 CHAR_WIDTH = 0.62
 """The width of a character in units of the font size: an upper bound of the
@@ -91,9 +101,57 @@ _GAP = 8
 _COLUMN = 76
 _ARROW = 40
 _BAR = 72
-_MX0 = _PAD + _COLUMN + _ARROW
-_MX1 = WIDTH - _PAD - _COLUMN - _ARROW
-_PX0 = _MX0 + _BAR + _ARROW
+_ICON = 24
+
+MAX_TEXT = 420
+"""The longest line of the processes of a row (px); longer texts wrap, so the
+figure is as wide as its content needs (`model_figure` trims the width)."""
+
+LEGEND_WIDTH = 430
+"""The width of the legend column right of the diagram (px)."""
+
+
+@dataclass(frozen=True)
+class _Dims:
+    """The dimensions of a layout of the figure (px).
+
+    Attributes:
+        width: the width of the diagram (the circulation, without a legend
+            column).
+        line: the height of a line of text.
+        vpad: the padding above and below the content of a box.
+        gap: the gap between two rows.
+        arrow: the length of the arrows between the blood and the rows.
+    """
+
+    width: float = WIDTH
+    line: float = _LINE
+    vpad: float = _VPAD
+    gap: float = _GAP
+    arrow: float = _ARROW
+
+    @property
+    def mx0(self) -> float:
+        """The left edge of the rows of the circulation."""
+        return _PAD + _COLUMN + self.arrow
+
+    @property
+    def mx1(self) -> float:
+        """The right edge of the rows."""
+        return self.width - _PAD - _COLUMN - self.arrow
+
+    @property
+    def px0(self) -> float:
+        """The left edge of the rows of the portal organs."""
+        return self.mx0 + _BAR + self.arrow
+
+    def baseline(self, top: float, size: float) -> float:
+        """The baseline of a text centred in a line which starts at `top`."""
+        return top + self.line / 2 + 0.35 * size
+
+
+COMPACT = _Dims(line=18, vpad=3, gap=4, arrow=28)
+"""The dimensions of the compact figure, the panel of a publication figure."""
 
 _COLORS = (
     "#4269d0",
@@ -177,11 +235,6 @@ def _wrap(text: str, chars: int) -> list[str]:
     ) or [""]
 
 
-def _baseline(top: float, size: float) -> float:
-    """The baseline of a text centred in a line which starts at `top`."""
-    return top + _LINE / 2 + 0.35 * size
-
-
 def _f(x: float) -> str:
     """A coordinate."""
     return f"{x:.1f}".removesuffix(".0")
@@ -191,6 +244,7 @@ def _f(x: float) -> str:
 class _Canvas:
     """The elements of the figure, in the order they are drawn."""
 
+    k: _Dims = field(default_factory=_Dims)
     elements: list[str] = field(default_factory=list)
 
     def rect(
@@ -247,33 +301,47 @@ class _Canvas:
             'marker-end="url(#pkf-arrow)"/>'
         )
 
-    def open(self, cls: str) -> None:
-        """Open a group of a box and its labels."""
-        self.elements.append(f'<g class="{cls}">')
+    def open(self, cls: str, key: str = "") -> None:
+        """Open a group of a box and its labels, `key` its hover card in an interactive page."""
+        k = f' data-k="{escape(key, {chr(34): "&quot;"})}"' if key else ""
+        self.elements.append(f'<g class="{cls}"{k}>')
 
     def close(self) -> None:
         """Close a group."""
         self.elements.append("</g>")
 
     def chip(
-        self, x: float, top: float, label: str, color: str, *, tissue: bool
+        self,
+        x: float,
+        top: float,
+        label: str,
+        color: str,
+        *,
+        tissue: bool,
+        substance: bool = False,
     ) -> float:
-        """Draw the chip of a substance in a line; get its width."""
+        """Draw the chip of a substance (or of the key) in a line; get its width."""
         w = _tag_width(label)
+        if substance:
+            self.elements.append(f'<g data-k="sub:{escape(label)}">')
         if tissue:
             style = f"fill:{color};fill-opacity:.28;stroke:{color};stroke-width:1.2"
         else:
             style = f"fill:#ffffff;stroke:{color};stroke-width:1.2;stroke-dasharray:3 2"
-        self.rect(x, top + 2, w, _LINE - 4, style=style, rx=4)
-        self.text(x + 5, _baseline(top, _SMALL), label, "pkf-s", _SMALL)
+        self.rect(x, top + 2, w, self.k.line - 4, style=style, rx=4)
+        self.text(x + 5, self.k.baseline(top, _SMALL), label, "pkf-s", _SMALL)
+        if substance:
+            self.elements.append("</g>")
         return w
 
     def badge(self, x: float, top: float, code: str) -> float:
         """Draw the badge of a process in a line; get its width."""
         _, fill, stroke = _BADGES[code]
         w = _tag_width(code)
-        self.rect(x, top + 2, w, _LINE - 4, style=f"fill:{fill};stroke:{stroke}", rx=4)
-        self.text(x + 5, _baseline(top, _SMALL), code, "pkf-s pkf-b", _SMALL)
+        self.rect(
+            x, top + 2, w, self.k.line - 4, style=f"fill:{fill};stroke:{stroke}", rx=4
+        )
+        self.text(x + 5, self.k.baseline(top, _SMALL), code, "pkf-s pkf-b", _SMALL)
         return w
 
 
@@ -285,6 +353,10 @@ class _Row:
     chips: list[tuple[str, str, bool]]
     lines: list[tuple[str, str]]
     chain: bool = False
+    key: str = ""
+    """The organ key of the row (its icon and hover card), `gu` or `lumen`."""
+    sink: tuple[str, list[tuple[str, str, bool]]] | None = None
+    """A compartment at the right end of the row: its name and chips (urine, feces)."""
 
 
 def _flow(widths: Sequence[float], width: float, gap: float) -> list[list[int]]:
@@ -308,9 +380,22 @@ def _tag_width(label: str) -> float:
 class _Figure:
     """The layout of the figure of a definition."""
 
-    def __init__(self, definition: PBPKDefinition, sexes: Sequence[Sex]) -> None:
+    def __init__(
+        self,
+        definition: PBPKDefinition,
+        sexes: Sequence[Sex],
+        k: _Dims | None = None,
+        *,
+        compact: bool = False,
+    ) -> None:
         """Collect what the figure shows."""
+        self.k = k or _Dims()
+        self.compact = compact
+        self.maxx = 0.0
+        self.text_width = self.k.width
+        self.lx = 0.0
         self.d = definition
+        self.sex = Sex(definition.sex).value
         self.sexes = tuple(sexes)
         self.colors = {
             s.sid: _COLORS[i % len(_COLORS)]
@@ -354,7 +439,7 @@ class _Figure:
             for (_, sid), steady in plan.organs.items()
             if sid in plan.solved and steady.has_rate
         }
-        self.canvas = _Canvas()
+        self.canvas = _Canvas(self.k)
         self.codes: set[str] = set()
 
     # --- content -----------------------------------------------------------
@@ -478,6 +563,7 @@ class _Figure:
             self._title(organs, name),
             self._chips(organs[0]),
             self._organ_lines(organs),
+            key=organs[0].value if len(organs) == 1 else "gu",
         )
 
     def _lumen_row(self, gut: SegmentedIntestine | SingleLumen) -> _Row:
@@ -491,7 +577,7 @@ class _Figure:
             segments = [*ids.GUT_SEGMENTS]
         else:
             segments = ["lumen"]
-        chips = [(seg, "", True) for seg in segments] + [("feces", "", False)]
+        chips = [(seg, "", True) for seg in segments]
         lines: list[tuple[str, str]] = []
         for r in self.d.routes:
             if r.kind == "oral":
@@ -513,7 +599,8 @@ class _Figure:
             )
         lines.append(("FEC", "from the last segment: " + ", ".join(self.luminal)))
         title = f"{len(segments)} segments" if len(segments) > 1 else "one segment"
-        return _Row(["lumen", title], chips, lines, chain=True)
+        sink = ("feces", [(sid, self.colors[sid], True) for sid in self.luminal])
+        return _Row(["lumen", title], chips, lines, chain=True, key="lumen", sink=sink)
 
     # --- legend ------------------------------------------------------------
 
@@ -569,39 +656,39 @@ class _Figure:
 
     def _paragraph(self, x: float, y: float, text: str, cls: str = "") -> float:
         """Draw a wrapped text from `x` to the right margin; get the next top."""
-        for line in _wrap(text, _chars(WIDTH - _PAD - x, _SIZE)):
-            self.canvas.text(x, _baseline(y, _SIZE), line, cls)
-            y += _LINE
+        for line in _wrap(text, _chars(self.text_width - _PAD - (x - self.lx), _SIZE)):
+            self.canvas.text(x, self.k.baseline(y, _SIZE), line, cls)
+            y += self.k.line
         return y
 
     def _legend(self, y: float) -> float:
         """Draw the title, the substances, routes, PD and the key; get the next top."""
         c, d = self.canvas, self.d
-        c.text(_PAD, y + _TITLE, d.name or d.sid, "pkf-h", _TITLE)
+        c.text((self.lx + _PAD), y + _TITLE, d.name or d.sid, "pkf-h", _TITLE)
         y += _TITLE + 10
         y = self._paragraph(
-            _PAD,
+            (self.lx + _PAD),
             y,
             f"PBPK model {d.sid}: {_builds(self.sexes)}, population {d.population}, "
             f"arm vein {d.arm_vein}",
             "pkf-dim",
         )
         y += 6
-        c.text(_PAD, _baseline(y, _SIZE), "substances", "pkf-b")
-        y += _LINE
+        c.text((self.lx + _PAD), self.k.baseline(y, _SIZE), "substances", "pkf-b")
+        y += self.k.line
         # a dot of the color of the substance, not a chip of the key
         sid_w = max((_width(s.sid, _SIZE) for s in d.substances), default=0.0)
-        x_text = _PAD + 16 + sid_w + 12
+        x_text = (self.lx + _PAD) + 16 + sid_w + 12
         for s in d.substances:
-            c.dot(_PAD + 5, y + _LINE / 2, self.colors[s.sid])
-            c.text(_PAD + 16, _baseline(y, _SIZE), s.sid, "pkf-b")
+            c.dot((self.lx + _PAD) + 5, y + self.k.line / 2, self.colors[s.sid])
+            c.text((self.lx + _PAD) + 16, self.k.baseline(y, _SIZE), s.sid, "pkf-b")
             y = self._paragraph(x_text, y, self._details(s))
-        y = self._paragraph(_PAD, y + 4, self._route_text())
+        y = self._paragraph((self.lx + _PAD), y + 4, self._route_text())
         for pd in d.pd:
             reads = ", ".join(pd.inputs.values()) or "nothing"
             sets = ", ".join(pd.outputs.values()) or "nothing"
             y = self._paragraph(
-                _PAD, y, f"PD {pd.model.sid}: reads {reads}; sets {sets}"
+                (self.lx + _PAD), y, f"PD {pd.model.sid}: reads {reads}; sets {sets}"
             )
         return y + 6
 
@@ -617,9 +704,9 @@ class _Figure:
         for kind, label in items:
             head = _tag_width("s") if kind in ("tissue", "plasma") else _tag_width(kind)
             widths.append(head + 6 + _width(label, _SIZE))
-        lines = _flow(widths, WIDTH - 2 * _PAD - _width("key ", _SIZE), 18)
-        c.text(_PAD, _baseline(y, _SIZE), "key", "pkf-b")
-        x0 = _PAD + _width("key ", _SIZE)
+        lines = _flow(widths, self.text_width - 2 * _PAD - _width("key ", _SIZE), 18)
+        c.text((self.lx + _PAD), self.k.baseline(y, _SIZE), "key", "pkf-b")
+        x0 = (self.lx + _PAD) + _width("key ", _SIZE)
         for line in lines:
             x = x0
             for i in line:
@@ -628,9 +715,9 @@ class _Figure:
                     w = c.chip(x, y, "s", "#57606a", tissue=kind == "tissue")
                 else:
                     w = c.badge(x, y, kind)
-                c.text(x + w + 6, _baseline(y, _SIZE), label)
+                c.text(x + w + 6, self.k.baseline(y, _SIZE), label)
                 x += widths[i] + 18
-            y += _LINE
+            y += self.k.line
         return y + 10
 
     def _draw_row(
@@ -645,27 +732,49 @@ class _Figure:
         """Draw a row from `x0` to `x1` with its chips and badges from `cx`; get its height.
 
         The box of the row is drawn first, behind its labels, with the height
-        of its content.
+        of its content: the icon of the organ, the title, the chips, the
+        processes (each line a group with its full text, the hover card of an
+        interactive page) and a compartment at the right end (urine, feces).
         """
         c = self.canvas
-        top = y + _VPAD
-        c.open("pkf-box")
+        top = y + self.k.vpad
+        c.open("pkf-box", row.key)
         box = len(c.elements)
-        title_chars = _chars(cx - x0 - 20, _SIZE)
+        icon = (
+            icons.organ(
+                row.key, x0 + 7 + _ICON / 2, top + _ICON / 2 - 1, _ICON, self.sex
+            )
+            if row.key
+            else ""
+        )
+        ix = _ICON + 6 if icon else 0
+        if icon:
+            c.elements.append(icon)
+        title_chars = _chars(cx - x0 - 20 - ix, _SIZE)
         t = top
         for i, line in enumerate(row.title):
             for part in _wrap(line, title_chars):
                 c.text(
-                    x0 + 10,
-                    _baseline(t, _SIZE),
+                    x0 + 10 + ix,
+                    self.k.baseline(t, _SIZE),
                     part,
                     "pkf-b" if i == 0 else "pkf-dim",
                 )
-                t += _LINE
-        right = x1 - 10
+                t += self.k.line
+        right = min(x1 - 10, cx + MAX_TEXT)
+        sink: tuple[float, float] | None = None
+        if row.sink is not None:
+            name, schips = row.sink
+            sw = (
+                max([_width(name, _SIZE)] + [_tag_width(lab) for lab, _, _ in schips])
+                + 16
+            )
+            sink = (x1 - 10 - sw, sw)
+            right = min(right, x1 - 10 - sw - 26)
         gap = 18.0 if row.chain else 6.0
         widths = [_tag_width(label) for label, _, _ in row.chips]
         lines = _flow(widths, right - cx, gap)
+        rowmax = cx
         cy = top
         for line in lines:
             x = cx
@@ -676,30 +785,62 @@ class _Figure:
                         x,
                         cy + 2,
                         widths[i],
-                        _LINE - 4,
+                        self.k.line - 4,
                         "pkf-seg" if tissue else "pkf-org",
                         rx=4,
                     )
-                    c.text(x + 5, _baseline(cy, _SMALL), label, "pkf-s", _SMALL)
+                    c.text(x + 5, self.k.baseline(cy, _SMALL), label, "pkf-s", _SMALL)
                     if k + 1 < len(line):
                         c.arrow(
                             x + widths[i] + 2,
-                            cy + _LINE / 2,
+                            cy + self.k.line / 2,
                             x + widths[i] + gap - 1,
-                            cy + _LINE / 2,
+                            cy + self.k.line / 2,
                         )
                 else:
-                    c.chip(x, cy, label, color, tissue=tissue)
+                    c.chip(x, cy, label, color, tissue=tissue, substance=True)
+                rowmax = max(rowmax, x + widths[i])
                 x += widths[i] + gap
-            cy += _LINE
+            cy += self.k.line
         for code, text in row.lines:
             bw = _tag_width(code)
             tx = cx + bw + 6
+            c.open("pkf-proc", f"txt:{code}: {text}")
             c.badge(cx, cy, code)
             for part in _wrap(text, _chars(right - tx, _SIZE)):
-                c.text(tx, _baseline(cy, _SIZE), part)
-                cy += _LINE
-        height = max(t, cy) - y + _VPAD
+                c.text(tx, self.k.baseline(cy, _SIZE), part)
+                rowmax = max(rowmax, tx + _width(part, _SIZE))
+                cy += self.k.line
+            c.close()
+        if sink is not None and row.sink is not None:
+            sx, sw = sink
+            name, schips = row.sink
+            sh = (1 + len(schips)) * self.k.line + 6
+            style = (
+                "fill:#fff8d6;stroke:#b08a00;stroke-width:1.4"
+                if name == "urine"
+                else "fill:#efe2d3;stroke:#7a5a3a;stroke-width:1.4"
+            )
+            c.open("pkf-sink", name)
+            c.rect(sx, top, sw, sh, style=style, rx=6)
+            c.text(sx + 8, self.k.baseline(top + 2, _SIZE), name, "pkf-b")
+            for j, (lab, col, tis) in enumerate(schips):
+                c.chip(
+                    sx + 8,
+                    top + 2 + (j + 1) * self.k.line,
+                    lab,
+                    col,
+                    tissue=tis,
+                    substance=True,
+                )
+            c.close()
+            c.arrow(
+                sx - 22, top + self.k.line / 2 + 2, sx - 2, top + self.k.line / 2 + 2
+            )
+            cy = max(cy, top + sh)
+            rowmax += sw + 26
+        self.maxx = max(self.maxx, rowmax)
+        height = max(t, cy) - y + self.k.vpad
         content = c.elements[box:]
         del c.elements[box:]
         c.rect(x0, y, x1 - x0, height, cls)
@@ -707,13 +848,65 @@ class _Figure:
         c.close()
         return height
 
+    def _band(self, x0: float, x1: float, top: float) -> float:
+        """The legend of the compact figure in the band above the first row.
+
+        The substances and the key of the chips and badges, flowing in lines;
+        get the next top.
+        """
+        c = self.canvas
+        items: list[tuple[str, str, str, str]] = [
+            ("dot", s.sid, s.sid, self.colors[s.sid]) for s in self.d.substances
+        ]
+        items += [
+            ("tissue", "s", "enters the tissue", ""),
+            ("plasma", "s", "plasma only", ""),
+        ]
+        items += [
+            (code, code, _BADGES[code][0], "") for code in _BADGES if code in self.codes
+        ]
+
+        def width(item: tuple[str, str, str, str]) -> float:
+            kind, head, label, _ = item
+            if kind == "dot":
+                return 14 + _width(label, _SIZE)
+            return _tag_width(head) + 6 + _width(label, _SIZE)
+
+        y = top
+        x = x0
+        for item in items:
+            w = width(item)
+            if x > x0 and x + w > x1:
+                x, y = self.k.mx0, y + self.k.line
+            kind, head, label, color = item
+            if kind == "dot":
+                c.dot(x + 5, y + self.k.line / 2, color)
+                c.text(x + 14, self.k.baseline(y, _SIZE), label, "pkf-b")
+            elif kind in ("tissue", "plasma"):
+                w0 = c.chip(x, y, "s", "#57606a", tissue=kind == "tissue")
+                c.text(x + w0 + 6, self.k.baseline(y, _SIZE), label)
+            else:
+                w0 = c.badge(x, y, head)
+                c.text(x + w0 + 6, self.k.baseline(y, _SIZE), label)
+            x += w + 16
+        return y + self.k.line
+
     def draw(self) -> str:
         """Draw the figure; get the SVG."""
         c = self.canvas
         rows = self._rows()
         self.codes = {code for row in rows.values() for code, _ in row.lines}
-        y = self._legend(_PAD)
-        y = self._key(y)
+        legend: list[str] = []
+        legend_bottom = 0.0
+        if not self.compact:
+            # the legend in a column right of the diagram
+            diagram, self.canvas = self.canvas, _Canvas(self.k)
+            self.text_width, self.lx = LEGEND_WIDTH, self.k.width - 4
+            legend_bottom = self._key(self._legend(_PAD))
+            legend, self.canvas = self.canvas.elements, diagram
+            self.text_width, self.lx = self.k.width, 0.0
+            c = self.canvas
+        y = _PAD
         circulation = {
             Organ.LUNG.value,
             *(o.value for o in _SYSTEMIC),
@@ -722,124 +915,173 @@ class _Figure:
 
         def chips_x(x0: float, keys: Iterable[str]) -> float:
             """The column of the chips of rows: after their longest title."""
-            return x0 + max(_width(t, _SIZE) for k in keys for t in rows[k].title) + 30
+            titles = max(_width(t, _SIZE) for k in keys for t in rows[k].title)
+            return x0 + titles + 30 + _ICON + 6
 
         portal = [k for k in rows if k not in circulation and k != "lumen"]
         # one column of chips for all organ rows, after the longest title
-        column = max(chips_x(_MX0, circulation), chips_x(_PX0, portal))
+        column = max(chips_x(self.k.mx0, circulation), chips_x(self.k.px0, portal))
         columns_x = dict.fromkeys([*circulation, *portal], column)
         ve0, ve1 = _PAD, _PAD + _COLUMN
-        ar0 = WIDTH - _PAD - _COLUMN
+        ar0 = self.k.width - _PAD - _COLUMN
 
-        # the intravenous routes enter the venous blood
+        body_top = y
+        rows_top = body_top + 2 * self.k.line + 14
+        # the intravenous routes enter the venous blood from the band above the
+        # first row, so the blood columns start at the top
         iv = list(dict.fromkeys(r.substance for r in self.d.routes if r.kind == "iv"))
+        band_x = self.k.mx0
         if iv:
             text = "iv: " + ", ".join(iv)
-            for line in _wrap(text, _chars(WIDTH / 2, _SIZE)):
-                c.text(_PAD, _baseline(y, _SIZE), line)
-                y += _LINE
-            arrow_top = y
-            y += 18
-            c.arrow((ve0 + ve1) / 2, arrow_top, (ve0 + ve1) / 2, y)
-        body_top = y
+            mid = body_top + 4 + self.k.line / 2
+            c.elements.append(icons.syringe(self.k.mx0 + 13, mid, 22, rot=90))
+            c.text(self.k.mx0 + 30, self.k.baseline(body_top + 4, _SIZE), text)
+            c.arrow(self.k.mx0 - 2, mid, ve1 + 2, mid)
+            band_x = self.k.mx0 + 30 + _width(text, _SIZE) + 24
+            self.maxx = max(self.maxx, band_x)
+        if self.compact:
+            band_bottom = self._band(band_x, ar0 - 10, body_top + 4)
+            rows_top = max(rows_top, band_bottom + 8)
         columns = len(c.elements)
-        rows_top = body_top + 2 * _LINE + 14
 
         def place(key: str, x0: float, top: float, cls: str = "pkf-org") -> float:
-            return top + self._draw_row(rows[key], x0, top, _MX1, columns_x[key], cls)
+            return top + self._draw_row(
+                rows[key], x0, top, self.k.mx1, columns_x[key], cls
+            )
 
         # the lung between the venous and the arterial blood
-        bottom = place(Organ.LUNG.value, _MX0, rows_top)
+        bottom = place(Organ.LUNG.value, self.k.mx0, rows_top)
         mid = (rows_top + bottom) / 2
-        c.arrow(ve1, mid, _MX0, mid)
-        c.arrow(_MX1, mid, ar0, mid)
-        top = bottom + _GAP
+        c.arrow(ve1, mid, self.k.mx0, mid)
+        c.arrow(self.k.mx1, mid, ar0, mid)
+        top = bottom + self.k.gap
         for organ in [*_SYSTEMIC, Organ.LIVER]:
-            bottom = place(organ.value, _MX0, top)
+            bottom = place(organ.value, self.k.mx0, top)
             mid = (top + bottom) / 2
-            c.arrow(ar0, mid, _MX1, mid)
-            c.arrow(_MX0, mid, ve1, mid)
-            top = bottom + _GAP
+            c.arrow(ar0, mid, self.k.mx1, mid)
+            c.arrow(self.k.mx0, mid, ve1, mid)
+            top = bottom + self.k.gap
         venous_bottom = bottom
         # the portal vein from the organs of the portal circulation into the liver
         bar_top = venous_bottom + 24
         top = bar_top
         last = top
         for key in portal:
-            bottom = place(key, _PX0, top)
+            bottom = place(key, self.k.px0, top)
             mid = (top + bottom) / 2
-            c.arrow(ar0, mid, _MX1, mid)
-            c.arrow(_PX0, mid, _MX0 + _BAR, mid)
+            c.arrow(ar0, mid, self.k.mx1, mid)
+            c.arrow(self.k.px0, mid, self.k.mx0 + _BAR, mid)
             last = bottom
-            top = bottom + _GAP
-        arterial_bottom = last
-        c.arrow(_MX0 + _BAR / 2, bar_top, _MX0 + _BAR / 2, venous_bottom)
+            top = bottom + self.k.gap
+        # the portal vein lists the circulating substances: as long as its chips need
+        chips_h = (2 + len(self.d.substances)) * self.k.line + 14
+        arterial_bottom = max(last, bar_top + chips_h, body_top + chips_h)
+        c.arrow(self.k.mx0 + _BAR / 2, bar_top, self.k.mx0 + _BAR / 2, venous_bottom)
         # the blood columns and the portal vein, behind the arrows
-        blood = _Canvas()
+        blood = _Canvas(self.k)
         blood.open("pkf-box")
         blood.rect(ve0, body_top, _COLUMN, venous_bottom - body_top, "pkf-ven")
-        blood.text(ve0 + 8, _baseline(body_top + 4, _SIZE), "venous", "pkf-b")
-        blood.text(ve0 + 8, _baseline(body_top + 4 + _LINE, _SIZE), "blood", "pkf-b")
+        blood.text(ve0 + 8, self.k.baseline(body_top + 4, _SIZE), "venous", "pkf-b")
+        blood.text(
+            ve0 + 8,
+            self.k.baseline(body_top + 4 + self.k.line, _SIZE),
+            "blood",
+            "pkf-b",
+        )
+        self._circulating(blood, ve0, body_top)
         blood.close()
         blood.open("pkf-box")
         blood.rect(ar0, body_top, _COLUMN, arterial_bottom - body_top, "pkf-art")
-        blood.text(ar0 + 8, _baseline(body_top + 4, _SIZE), "arterial", "pkf-b")
-        blood.text(ar0 + 8, _baseline(body_top + 4 + _LINE, _SIZE), "blood", "pkf-b")
+        blood.text(ar0 + 8, self.k.baseline(body_top + 4, _SIZE), "arterial", "pkf-b")
+        blood.text(
+            ar0 + 8,
+            self.k.baseline(body_top + 4 + self.k.line, _SIZE),
+            "blood",
+            "pkf-b",
+        )
+        self._circulating(blood, ar0, body_top)
         blood.close()
         blood.open("pkf-box")
-        blood.rect(_MX0, bar_top, _BAR, arterial_bottom - bar_top, "pkf-por")
-        blood.text(_MX0 + 8, _baseline(bar_top + 4, _SIZE), "portal", "pkf-b")
-        blood.text(_MX0 + 8, _baseline(bar_top + 4 + _LINE, _SIZE), "vein", "pkf-b")
+        blood.rect(self.k.mx0, bar_top, _BAR, arterial_bottom - bar_top, "pkf-por")
+        blood.text(
+            self.k.mx0 + 8, self.k.baseline(bar_top + 4, _SIZE), "portal", "pkf-b"
+        )
+        blood.text(
+            self.k.mx0 + 8,
+            self.k.baseline(bar_top + 4 + self.k.line, _SIZE),
+            "vein",
+            "pkf-b",
+        )
+        self._circulating(blood, self.k.mx0, bar_top)
         blood.close()
         c.elements[columns:columns] = blood.elements
         y = arterial_bottom
         # the lumen of the intestine below its wall, absorbing into it
         if "lumen" in rows:
             lumen_top = y + 30
-            lumen_cx = _MX0 + max(_width(t, _SIZE) for t in rows["lumen"].title) + 30
+            lumen_cx = (
+                self.k.mx0
+                + max(_width(t, _SIZE) for t in rows["lumen"].title)
+                + 36
+                + _ICON
+            )
             bottom = lumen_top + self._draw_row(
-                rows["lumen"], _MX0, lumen_top, _MX1, lumen_cx, "pkf-lum"
+                rows["lumen"], self.k.mx0, lumen_top, self.k.mx1, lumen_cx, "pkf-lum"
             )
             if self.absorbed:
                 # the absorption of `ka_<s>`: the oral substances and those a
                 # model reabsorbs after their biliary excretion
-                x = _PX0 + 24
+                x = self.k.px0 + 24
                 c.arrow(x, lumen_top, x, y)
                 c.text(
                     x + 10,
-                    _baseline(y + 5, _SMALL),
+                    self.k.baseline(y + 5, _SMALL),
                     "absorption",
                     "pkf-s pkf-dim",
                     _SMALL,
                 )
             if any(r.kind != "iv" for r in self.d.routes):
-                c.text(_PAD, _baseline(lumen_top + _VPAD, _SIZE), "oral")
-                mid = lumen_top + _VPAD + _LINE / 2
-                c.arrow(_PAD + _width("oral", _SIZE) + 6, mid, _MX0, mid)
+                c.text(_PAD, self.k.baseline(lumen_top + self.k.vpad, _SIZE), "oral")
+                c.elements.append(
+                    icons.tablet(
+                        _PAD + 13, lumen_top + self.k.vpad + self.k.line + 12, 22
+                    )
+                )
+                mid = lumen_top + self.k.vpad + self.k.line / 2
+                c.arrow(_PAD + _width("oral", _SIZE) + 6, mid, self.k.mx0, mid)
             if self.bile:
                 # the bile duct from the liver into the lumen, left of the
                 # portal vein, crossing no other arrow
-                channel = (ve1 + _MX0) / 2
+                channel = (ve1 + self.k.mx0) / 2
                 below = y + 12
                 c.bend(
                     [
-                        (_MX0 + 12, venous_bottom),
-                        (_MX0 + 12, venous_bottom + 10),
+                        (self.k.mx0 + 12, venous_bottom),
+                        (self.k.mx0 + 12, venous_bottom + 10),
                         (channel, venous_bottom + 10),
                         (channel, below),
-                        (_MX0 + 40, below),
-                        (_MX0 + 40, lumen_top),
+                        (self.k.mx0 + 40, below),
+                        (self.k.mx0 + 40, lumen_top),
                     ]
                 )
                 c.text(
-                    _MX0 + 48, _baseline(y + 5, _SMALL), "bile", "pkf-s pkf-dim", _SMALL
+                    self.k.mx0 + 48,
+                    self.k.baseline(y + 5, _SMALL),
+                    "bile",
+                    "pkf-s pkf-dim",
+                    _SMALL,
                 )
             y = bottom
         height = y + _PAD
+        width = self.k.width
+        if legend:
+            height = max(height, legend_bottom + _PAD)
+            c.elements += legend
+            width = self.k.width - 4 + LEGEND_WIDTH
         return "\n".join(
             [
-                f'<svg xmlns="http://www.w3.org/2000/svg" width="{WIDTH}" '
-                f'height="{_f(height)}" viewBox="0 0 {WIDTH} {_f(height)}" '
+                f'<svg xmlns="http://www.w3.org/2000/svg" width="{_f(width)}" '
+                f'height="{_f(height)}" viewBox="0 0 {_f(width)} {_f(height)}" '
                 'role="img" aria-labelledby="pkf-title">',
                 f'<title id="pkf-title">{escape(self.d.name or self.d.sid)}</title>',
                 f"<style>{_STYLE}</style>",
@@ -848,13 +1090,25 @@ class _Figure:
                 'markerWidth="7" markerHeight="7" orient="auto-start-reverse">'
                 '<path d="M0,0 L10,5 L0,10 z" fill="#57606a"/></marker>',
                 "</defs>",
-                f'<rect x="0" y="0" width="{WIDTH}" height="{_f(height)}" '
+                f'<rect x="0" y="0" width="{_f(width)}" height="{_f(height)}" '
                 'fill="#ffffff"/>',
                 *c.elements,
                 "</svg>",
                 "",
             ]
         )
+
+    def _circulating(self, canvas: _Canvas, x: float, top: float) -> None:
+        """The chips of the substances which circulate in a blood column, below its title."""
+        for j, s in enumerate(self.d.substances):
+            canvas.chip(
+                x + 8,
+                top + 10 + (2 + j) * self.k.line,
+                s.sid,
+                self.colors[s.sid],
+                tissue=True,
+                substance=True,
+            )
 
     def _rows(self) -> dict[str, _Row]:
         """The rows of the figure by key: the organ id, `gu` or `lumen`."""
@@ -885,6 +1139,12 @@ class _Figure:
                     rows["gu"] = self._row(list(self.gut.replaces), "intestine")
                 continue
             rows[o.value] = self._row([o], names[o])
+        urine = [s.sid for s in self.d.substances if s.excretion.urine]
+        if urine:
+            rows[Organ.KIDNEY.value].sink = (
+                "urine",
+                [(sid, self.colors[sid], True) for sid in urine],
+            )
         if self.gut is not None and self.luminal:
             # a lumen which no substance reaches is not drawn
             rows["lumen"] = self._lumen_row(self.gut)
@@ -947,7 +1207,11 @@ def _builds(sexes: Sequence[Sex]) -> str:
 
 
 def model_figure(
-    definition: PBPKDefinition, path: Path, sexes: Sequence[Sex] | None = None
+    definition: PBPKDefinition,
+    path: Path,
+    sexes: Sequence[Sex] | None = None,
+    *,
+    compact: bool = False,
 ) -> Path:
     """Write the figure of a definition, an SVG schematic of the model.
 
@@ -963,6 +1227,10 @@ def model_figure(
         sexes: the sexes which are built (`create_archive(..., sexes=...)`),
             the sex of the definition among them; `None` is the sex of the
             definition only.
+        compact: the panel of a publication figure: no legend column (the
+            substance dots and the key in the band above the first row, the
+            names and routes in the caption of the figure), tighter rows and
+            shorter arrows (`COMPACT`).
 
     Returns:
         The path of the figure.
@@ -979,5 +1247,30 @@ def model_figure(
             f"'{definition.sex}' among them."
         )
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(_Figure(definition, sexes).draw(), encoding="utf-8")
+    path.write_text(schematic_svg(definition, sexes, compact=compact), encoding="utf-8")
     return path
+
+
+def schematic_svg(
+    definition: PBPKDefinition, sexes: Sequence[Sex], *, compact: bool = False
+) -> str:
+    """The SVG of the figure of a definition (see `model_figure`).
+
+    The figure is drawn twice: once wide to measure its content, then at the
+    width the content needs.
+
+    Args:
+        definition: the definition of the model.
+        sexes: the sexes which are built.
+        compact: the panel of a publication figure.
+
+    Returns:
+        The SVG, deterministic.
+    """
+    dims = COMPACT if compact else _Dims()
+    probe = _Figure(definition, sexes, replace(dims, width=2400), compact=compact)
+    probe.draw()
+    width = math.ceil(probe.maxx + 16 + _PAD + _COLUMN + dims.arrow)
+    return _Figure(
+        definition, sexes, replace(dims, width=width), compact=compact
+    ).draw()

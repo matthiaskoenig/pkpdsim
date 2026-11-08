@@ -397,6 +397,9 @@ def test_the_archive_carries_the_figure(tmp_path: Path) -> None:
     assert entry.location == "./models/simple.svg"
     assert entry.format == EntryFormat.SVG
     assert results["simple_svg"]["path"] == tmp_path / "models" / "simple.svg"
+    body = results["simple_body_svg"]["entry"]
+    assert body.location == "./models/simple_body.svg"
+    assert body.format == EntryFormat.SVG
     plain = tmp_path / "plain"
     results = create_archive(
         definition(),
@@ -406,7 +409,9 @@ def test_the_archive_carries_the_figure(tmp_path: Path) -> None:
         figure=False,
     )
     assert "simple_svg" not in results
+    assert "simple_body_svg" not in results
     assert not (plain / "models" / "simple.svg").exists()
+    assert not (plain / "models" / "simple_body.svg").exists()
 
 
 def test_without_an_oral_route_the_lumen_absorbs_nothing(tmp_path: Path) -> None:
@@ -483,10 +488,12 @@ def test_a_custom_bile_reaction_and_an_intestinal_influx_are_drawn(
         parameters=[ModelParameter("k_bile", 1e-3, U.l_per_min)],
     )
     texts = _texts(model_figure(d, tmp_path / "custom.svg"))
-    assert "DRGBILE: Cti_drg -> Cbile_drg" in texts
-    assert "MABS: drg_m lumen -> cell by SLC6A8 (Michaelis-Menten)" in texts
-    assert "bile into du: drg" in texts
-    assert "from the last segment: drg, drg_m" in texts
+    # a process line wraps at the measure of the figure (`MAX_TEXT`)
+    text = " ".join(texts)
+    assert "DRGBILE: Cti_drg -> Cbile_drg" in text
+    assert "MABS: drg_m lumen -> cell by SLC6A8 (Michaelis-Menten)" in text
+    assert "bile into du: drg" in text
+    assert "from the last segment: drg, drg_m" in text
     assert "ABS" not in texts
 
 
@@ -502,10 +509,10 @@ def test_the_options_of_the_absorption_are_per_substance(tmp_path: Path) -> None
             }
         ),
     )
-    texts = _texts(model_figure(d, tmp_path / "options.svg"))
+    text = " ".join(_texts(model_figure(d, tmp_path / "options.svg")))
     assert (
         "into the intestinal wall: drg (colon factor); drg_m (fraction absorbed)"
-        in texts
+        in text
     )
 
 
@@ -543,7 +550,9 @@ def test_the_text_of_the_legend_and_the_processes(tmp_path: Path) -> None:
     )
     assert "SRC: -> Cti_drg" in text
     root, _ = _parse(path)
-    assert len(list(root.iter(f"{SVG}circle"))) == len(d.substances)
+    # the dots of the legend (the circles of the icons have no style)
+    dots = [c for c in root.iter(f"{SVG}circle") if "style" in c.attrib]
+    assert len(dots) == len(d.substances)
 
 
 def test_an_absorption_fixed_at_zero_is_not_drawn(tmp_path: Path) -> None:
@@ -679,3 +688,68 @@ def test_a_produced_substance_with_a_solved_baseline_is_endogenous(
     text = " ".join(_texts(model_figure(d, tmp_path / "produced.svg")))
     assert "endogenous (production, baseline solved)" in text
     assert text.count("endogenous (") == 1
+
+
+def _box_texts(root: ElementTree.Element, cls: str) -> list[str]:
+    """The texts of the boxes whose rectangle has a class."""
+    out = []
+    for g in root.iter(f"{SVG}g"):
+        rect = g.find(f"{SVG}rect")
+        if (
+            g.attrib.get("class") == "pkf-box"
+            and rect is not None
+            and rect.attrib.get("class") == cls
+        ):
+            out += [t.text or "" for t in g.iter(f"{SVG}text")]
+    return out
+
+
+def test_the_blood_columns_list_the_circulating_substances(tmp_path: Path) -> None:
+    """Venous and arterial blood and the portal vein carry a chip of every substance."""
+    d = seven_substances()
+    root, _ = _parse(model_figure(d, tmp_path / "seven.svg"))
+    for cls in ("pkf-ven", "pkf-art", "pkf-por"):
+        texts = _box_texts(root, cls)
+        for s in d.substances:
+            assert s.sid in texts, (cls, s.sid)
+
+
+def test_urine_and_feces_are_compartments(tmp_path: Path) -> None:
+    """The urine at the kidney and the feces at the end of the lumen hold their substances."""
+    d = seven_substances()
+    root, _ = _parse(model_figure(d, tmp_path / "seven.svg"))
+    sinks = {
+        g.attrib["data-k"]: [t.text for t in g.iter(f"{SVG}text")]
+        for g in root.iter(f"{SVG}g")
+        if g.attrib.get("class") == "pkf-sink"
+    }
+    urine = [s.sid for s in d.substances if s.excretion.urine]
+    assert sinks["urine"] == ["urine", *urine]
+    assert sinks["feces"][0] == "feces"
+    assert set(sinks["feces"][1:]) <= {s.sid for s in d.substances}
+
+
+def test_every_organ_row_has_its_icon(tmp_path: Path) -> None:
+    """A row of an organ carries the icon of the organ, a nested drawing on a circle."""
+    root, _ = _parse(model_figure(definition(), tmp_path / "simple.svg"))
+    keyed = [
+        g
+        for g in root.iter(f"{SVG}g")
+        if g.attrib.get("class") == "pkf-box" and g.attrib.get("data-k")
+    ]
+    assert len(keyed) >= 15
+    for g in keyed:
+        assert g.find(f"{SVG}svg") is not None, g.attrib["data-k"]
+
+
+def test_the_legend_is_a_column_and_the_compact_figure_has_none(tmp_path: Path) -> None:
+    """The legend sits right of the diagram; the compact figure carries the key in its band."""
+    full, _ = _parse(model_figure(seven_substances(), tmp_path / "full.svg"))
+    compact, labels = _parse(
+        model_figure(seven_substances(), tmp_path / "c.svg", compact=True)
+    )
+    full_texts = [t.text for t in full.iter(f"{SVG}text")]
+    texts = [label.text for label in labels]
+    assert "substances" in full_texts and "substances" not in texts
+    assert "enters the tissue" in texts and "metabolism" in texts
+    assert float(compact.attrib["width"]) < float(full.attrib["width"])
