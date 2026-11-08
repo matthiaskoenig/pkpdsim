@@ -108,8 +108,8 @@ if TYPE_CHECKING:
     )
     from pkpdsim.pbpk.kidney_validity import KidneyOutflow, kidney_outflow
 
-#: the names of the modules which import sbmlsim, imported on their first
-#: access: name -> module of `pkpdsim.pbpk`
+#: the names of the modules which import sbmlsim (or draw the figures), imported
+#: on their first access: name -> module of `pkpdsim.pbpk`
 _LAZY_NAMES = {
     "REFERENCE_GFR": "experiment",
     "PBPKSimulationExperiment": "experiment",
@@ -120,6 +120,11 @@ _LAZY_NAMES = {
     "molecular_weights": "experiment",
     "KidneyOutflow": "kidney_validity",
     "kidney_outflow": "kidney_validity",
+    # the figures: numpy, scipy and the raster of the bodies, not needed to build
+    "anatomy_figure": "visual.anatomy",
+    "body_strip": "visual.body",
+    "interactive_figure": "visual.interactive",
+    "publication_figure": "visual.publication",
 }
 
 
@@ -215,9 +220,11 @@ __all__ = [
     "VisceralComposition",
     "WeibullDissolution",
     "ZonatedLiver",
+    "anatomy_figure",
     "as_value",
     "axis",
     "body_composition",
+    "body_strip",
     "build",
     "cite",
     "compose",
@@ -226,6 +233,7 @@ __all__ = [
     "equilibrated_simulation",
     "fitted",
     "healthy_gfr",
+    "interactive_figure",
     "interstitial_share",
     "kidney_outflow",
     "load",
@@ -233,6 +241,7 @@ __all__ = [
     "molecular_weights",
     "parts_for",
     "physiology_objects",
+    "publication_figure",
     "reference_individual",
     "regional_key",
     "release_auc_ratios",

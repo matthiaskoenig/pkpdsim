@@ -149,7 +149,7 @@ def publication_figure(
         f'viewBox="0 0 {page_w} {page_h}" font-family="{_FONT}">{panels}</svg>'
     )
     path.parent.mkdir(parents=True, exist_ok=True)
-    Path(f"{stem}_panels.svg").write_text(page, encoding="utf-8")
+    Path(f"{stem}_panels.svg").write_text(page + "\n", encoding="utf-8")
     paragraphs = legend(content)
     n = int(width / (_TYPE * 0.52))
     lines = []
@@ -172,7 +172,7 @@ def publication_figure(
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{page_w}mm" height="{total:.0f}mm" '
         f'viewBox="0 0 {page_w} {total:.0f}" font-family="{_FONT}"><rect width="{page_w}" height="{total:.0f}" fill="#fff"/>'
         f'{panels}<path d="M0,{page_h} h{page_w}" stroke="#bbb" stroke-width="0.3" stroke-dasharray="2,1.5"/>'
-        f"{''.join(lines)}</svg>",
+        f"{''.join(lines)}</svg>\n",
         encoding="utf-8",
     )
     md = []

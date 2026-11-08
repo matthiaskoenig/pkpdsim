@@ -881,5 +881,5 @@ def anatomy_figure(
     figure = AnatomyFigure(ModelContent.of(definition), compact=compact)
     svg = figure.svg(title=title, substances=substances, scale=scale, text=text)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(svg, encoding="utf-8")
+    path.write_text(svg + "\n", encoding="utf-8")
     return path

@@ -397,6 +397,9 @@ def test_the_archive_carries_the_figure(tmp_path: Path) -> None:
     assert entry.location == "./models/simple.svg"
     assert entry.format == EntryFormat.SVG
     assert results["simple_svg"]["path"] == tmp_path / "models" / "simple.svg"
+    body = results["simple_body_svg"]["entry"]
+    assert body.location == "./models/simple_body.svg"
+    assert body.format == EntryFormat.SVG
     plain = tmp_path / "plain"
     results = create_archive(
         definition(),
@@ -406,7 +409,9 @@ def test_the_archive_carries_the_figure(tmp_path: Path) -> None:
         figure=False,
     )
     assert "simple_svg" not in results
+    assert "simple_body_svg" not in results
     assert not (plain / "models" / "simple.svg").exists()
+    assert not (plain / "models" / "simple_body.svg").exists()
 
 
 def test_without_an_oral_route_the_lumen_absorbs_nothing(tmp_path: Path) -> None:

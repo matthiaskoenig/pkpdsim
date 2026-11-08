@@ -97,10 +97,10 @@ _WHTR = np.array([0.65, 0.58, 0.52, 0.47, 0.45, 0.43, 0.44, 0.44])
 
 
 def path(subpaths: Sequence[np.ndarray], close: bool = True) -> str:
-    """The SVG path data of polylines (2 decimals)."""
+    """The SVG path data of polylines [cm], to a millimetre."""
     z = "Z" if close else ""
     return "".join(
-        "M" + " ".join(f"{x:.2f},{y:.2f}" for x, y in s) + z for s in subpaths
+        "M" + " ".join(f"{x:.1f},{y:.1f}" for x, y in s) + z for s in subpaths
     )
 
 
@@ -128,7 +128,7 @@ def _trace(
         pts = np.c_[
             (c[:, 0] - 2) * RES_CM + origin[0], (c[:, 1] - 2) * RES_CM + origin[1]
         ]
-        out.append(pts[::2] if len(pts) > 40 else pts)
+        out.append(pts[::3] if len(pts) > 60 else pts)
     return out
 
 
