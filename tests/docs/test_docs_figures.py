@@ -7,10 +7,10 @@ from types import ModuleType
 
 import pytest
 
-from pkpdsim import __version__
-
 ROOT = Path(__file__).parents[2]
 NUMBER = re.compile(r"-?\d+\.\d+")
+# any version, so that a release does not outdate the stored figures
+VERSION = re.compile(r"pkpdsim</a> \d+\.\d+\.\d+[^\s<]*")
 
 
 def _script() -> ModuleType:
@@ -25,7 +25,7 @@ def _script() -> ModuleType:
 
 def _normal(text: str) -> str:
     """The text without the version of pkpdsim (the credit of the interactive pages)."""
-    return re.sub(rf"pkpdsim</a> {re.escape(__version__)}", "pkpdsim</a> VERSION", text)
+    return VERSION.sub("pkpdsim</a> VERSION", text)
 
 
 @pytest.mark.parametrize(
