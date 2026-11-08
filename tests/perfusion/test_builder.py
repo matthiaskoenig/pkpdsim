@@ -287,6 +287,21 @@ def test_the_validation_of_a_definition(tmp_path: Path) -> None:
         LiverOrgan(mass=d.organ.mass, zones=0)
 
 
+@pytest.mark.parametrize(
+    ("ph", "refused"),
+    [(5.99, True), (6.0, False), (7.4, False), (8.0, False), (74.0, True)],
+)
+def test_the_ph_of_the_perfusate_is_in_its_range(ph: float, refused: bool) -> None:
+    """A pH outside of 6 to 8 is refused (a pH of 74 is a typo)."""
+    d = liver_definition(1)
+    value = dataclasses.replace(d.perfusate.ph, value=ph)
+    bad = dataclasses.replace(d, perfusate=dataclasses.replace(d.perfusate, ph=value))
+    problems = [p for p in bad.validate() if "pH" in p]
+    assert bool(problems) == refused, problems
+    if refused:
+        assert "outside of 6.0 to 8.0" in problems[0]
+
+
 def test_a_tracer_has_no_id_of_the_model() -> None:
     """A tracer whose ids are observers, compartments or constants is refused."""
     d = liver_definition(2)

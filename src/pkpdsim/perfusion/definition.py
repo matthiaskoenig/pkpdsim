@@ -40,6 +40,7 @@ from pkpdsim.perfusion.units import PU
 from pkpdsim.species import Species
 
 __all__ = [
+    "PH_RANGE",
     "Circuit",
     "GenericOrgan",
     "KidneyOrgan",
@@ -51,6 +52,15 @@ __all__ = [
 ]
 
 _TABLE = "perfusion"
+
+PH_RANGE: tuple[float, float] = (6.0, 8.0)
+"""The range of the pH of a fresh perfusate which `validate` accepts.
+
+A perfusate is buffered near the physiological pH (7.4); a pH outside of 6 to
+8 is a typo (a pH of 74 or of a hydrogen ion concentration) and not a
+perfusion, and the protons of the model would start far from any condition of
+the constants of the core.
+"""
 
 _TABLE_UNITS: dict[str, UnitDefinition] = {
     "ml": PU.ml,
@@ -116,7 +126,7 @@ class Perfusate:
         k: potassium (mM).
         o2_target_kpa: the oxygen partial pressure which the oxygenator sets
             and of the fresh perfusate (kPa).
-        ph: the pH of the fresh perfusate.
+        ph: the pH of the fresh perfusate, within `PH_RANGE` (6 to 8).
         carrier: the oxygen carrier, `none` (an acellular perfusate, the free
             oxygen only) or `rbc` (red blood cells, declared and not built
             yet, `validate` refuses it).
@@ -167,6 +177,11 @@ class Perfusate:
         out += _unit(where, "o2_target_kpa", self.o2_target_kpa, PU.kPa)
         out += _at_least(where, "o2_target_kpa", self.o2_target_kpa, 0.0)
         out += _unit(where, "ph", self.ph, U.dimensionless)
+        if not PH_RANGE[0] <= self.ph.value <= PH_RANGE[1]:
+            out.append(
+                f"{where}: the pH {self.ph.value} is outside of {PH_RANGE[0]} to "
+                f"{PH_RANGE[1]}, the range of a perfusate"
+            )
         if self.carrier == "rbc":
             out.append(
                 f"{where}: the oxygen carrier 'rbc' is not built yet, only 'none'"

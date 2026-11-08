@@ -70,7 +70,7 @@ OXY_co2_in: co2_in -> = k_oxy_co2 * V_in * (co2_in - alpha_co2 * pCO2_gas)
 pCO2_gas = co2_fresh / alpha_co2
 ```
 
-The fresh perfusate is the constants `<q>_fresh` (mM), the start of every perfusate species at every site: glucose, lactate, bicarbonate, potassium and the enzymes (none) as given, the free protons from its pH, the dissolved CO2 from the buffer equilibrium and the free oxygen from the target at the temperature. The bicarbonate buffer acts at every site, `H+ + HCO3- <-> CO2` by mass action (the hydration of CO2 sets the time), and the pH follows from the free protons.
+The fresh perfusate is the constants `<q>_fresh` (mM), the start of every perfusate species at every site: glucose, lactate, bicarbonate, potassium and the enzymes (none) as given, the free protons from its pH (between 6 and 8, `PH_RANGE` of `pkpdsim.perfusion.definition`, `validate` refuses another), the dissolved CO2 from the buffer equilibrium and the free oxygen from the target at the temperature. The bicarbonate buffer acts at every site, `H+ + HCO3- <-> CO2` by mass action (the hydration of CO2 sets the time), and the pH follows from the free protons.
 
 ```equations title="the fresh perfusate and the buffer"
 h_fresh = 10^(3 - pH_fresh) * 1
