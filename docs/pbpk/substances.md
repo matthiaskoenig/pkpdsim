@@ -278,6 +278,14 @@ print([p.sid for p in creatinine.parameters])
 ['CRTNPROD_k']
 ```
 
+<!-- generated: figures-substances-6 (scripts/visual/docs_figures.py), do not edit -->
+The content of the model `creatinine_body`: the anatomical figure (A) and the schematic (B), hover them for details ([figures](figures.md)).
+
+<iframe class="pkpd-figure" src="img/figures/models/substances-6-anatomy.html" title="The anatomical figure of the model creatinine_body" style="aspect-ratio:1460 / 885" loading="lazy"></iframe>
+
+<iframe class="pkpd-figure" src="img/figures/models/substances-6-schematic.html" title="The schematic of the model creatinine_body" style="aspect-ratio:1322 / 762" loading="lazy"></iframe>
+<!-- end generated -->
+
 The example starts every plasma species at `CRTNPROD_k / GFR`, the arterial plasma concentration at the steady state (the filtration clears `GFR*Car`, see [Organ](organ.md#kidney)). The body is not stationary at this start: the filtration takes its amount out of the plasma at once, while the production of the muscle reaches the plasma only as the tissue of the muscle rises. In a build of the example (`tests/docs/test_substances_example.py` checks these numbers) the arterial plasma drops about 17 % below the baseline within the first 20 minutes and is back within 0.2 % after two days; the arm vein plasma, which mixes the venous outflow of the muscle, settles about 5.5 % above the baseline. A model which needs a stationary start states the steady state of the producing organ as the [starts of its species](#starts-of-the-species).
 
 The parameters are constants: a change before the simulation (`preinit_changes`) moves every formula which reads them, and an id of `PBPKDefinition.dynamic` makes them variable. The validation refuses an id which is no SBML SId, contains `__`, is given twice or is an id of the physiology or an organ submodel, and a `Value` or `Formula` in another unit than `unit`; the build (`compose`) refuses an id which the body has (a parameter of a substance such as `fu_<s>` or `Kp_<s>`, a sink, an observer of the library, a PD component), the id of an observer of the definition and a local id of an organ which is no input under the same id (`Vti`, `<process>_Vmax`): a custom reaction there would read the element of the organ instead. Formulas which read each other in a cycle are refused, naming them. Without parameters the SBML is that of a definition without the field.

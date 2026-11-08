@@ -201,13 +201,13 @@ The anatomical figure of a model (see [Figures](figures.md)) draws a laboratory 
 
 The labels, organ submodels and icons are those of the human figure; an oral dose is a gavage at the snout, an intravenous dose and the blood sample are at the tail vein of a rodent and at the ear vein of the pig. `anatomy_figure`, `interactive_figure` and `publication_figure` draw the animal of `definition.species`.
 
-The figures of the glimepiride-like model of the tutorial built on the mouse, the rat and the pig:
+The figures of the glimepiride-like model of the tutorial built on the mouse, the rat and the pig (hover them for details):
 
-![The anatomical figure of the glimepiride-like model on the mouse](img/figures/mouse.svg)
+<iframe class="pkpd-figure" src="img/figures/mouse.html" title="The anatomical figure of the glimepiride-like model on the mouse" style="aspect-ratio:1216 / 1014" loading="lazy"></iframe>
 
-![The anatomical figure of the glimepiride-like model on the rat](img/figures/rat.svg)
+<iframe class="pkpd-figure" src="img/figures/rat.html" title="The anatomical figure of the glimepiride-like model on the rat" style="aspect-ratio:1216 / 1014" loading="lazy"></iframe>
 
-![The anatomical figure of the glimepiride-like model on the pig](img/figures/pig.svg)
+<iframe class="pkpd-figure" src="img/figures/pig.html" title="The anatomical figure of the glimepiride-like model on the pig" style="aspect-ratio:1174 / 1014" loading="lazy"></iframe>
 
 ## Limitations
 

@@ -75,7 +75,11 @@ def ring(cx: float, cy: float, r: float, color: str = palette.RING) -> str:
 
 
 def organ(key: str, cx: float, cy: float, d: float = 24.0, sex: str = "male") -> str:
-    """The icon of an organ on a circle of diameter `d`, centred at (cx, cy); empty without an icon."""
+    """The icon of an organ on a circle of diameter `d`, centred at (cx, cy); empty without an icon.
+
+    The icon is in the greys of `palette.ORGAN_GREYS`, so that the colours of a
+    figure are those of the substances and the tissues.
+    """
     icons = _icons(sex)
     if key not in icons:
         return ""
@@ -83,7 +87,7 @@ def organ(key: str, cx: float, cy: float, d: float = 24.0, sex: str = "male") ->
     s = d * 0.62
     width = extent / s * 0.9
     paths = "".join(
-        f'<path d="{p}" fill="{palette.ORGAN_COLORS.get(k, "#ccc")}" stroke="#3b2f28" '
+        f'<path d="{p}" fill="{palette.ORGAN_GREYS.get(k, "#ccc")}" stroke="{palette.ICON_INK}" '
         f'stroke-width="{width:.3f}" fill-rule="evenodd"/>'
         for k, p in items
     )

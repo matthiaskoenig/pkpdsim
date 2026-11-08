@@ -135,6 +135,10 @@ def html_page(
         width: the width of the figure [px], the maximal width of the page.
         legend: the legend below the figure (HTML), the credit appended.
 
+    The page posts its height to the page which embeds it in a frame
+    (`{"pkpdFigure": true, "height": ...}`), so the frame can fit it
+    (`docs/javascripts/figures.js`).
+
     Returns:
         The HTML, deterministic.
     """
@@ -172,6 +176,12 @@ document.querySelectorAll('.wrap [data-k]').forEach(el => {{
   }});
   el.addEventListener('mouseleave', () => card.style.display = 'none');
 }});
+// the height of the page for the frame which embeds it (the docs size their frames by it)
+// (of its content: the scroll height of the document is at least the height of the frame)
+const height = () => parent !== window && parent.postMessage(
+  {{pkpdFigure: true, height: document.body.getBoundingClientRect().height + 16}}, '*');
+addEventListener('load', height);
+addEventListener('resize', height);
 </script></body></html>
 """
 

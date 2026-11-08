@@ -170,6 +170,14 @@ rules: ['Cmu_drg_unbound']
 initial assignments: ['GFRbsa']
 ```
 
+<!-- generated: figures-observers-2 (scripts/visual/docs_figures.py), do not edit -->
+The content of the model `observed`: the anatomical figure (A) and the schematic (B), hover them for details ([figures](figures.md)).
+
+<iframe class="pkpd-figure" src="img/figures/models/observers-2-anatomy.html" title="The anatomical figure of the model observed" style="aspect-ratio:1460 / 898" loading="lazy"></iframe>
+
+<iframe class="pkpd-figure" src="img/figures/models/observers-2-schematic.html" title="The schematic of the model observed" style="aspect-ratio:1373 / 782" loading="lazy"></iframe>
+<!-- end generated -->
+
 An observer which reads a state, directly or through other observers (a species, an observer of the library, an output of an organ or a PD component, a readout, a dynamic parameter (`PBPKDefinition.dynamic`) or `time`), is an assignment rule. An observer of constants only (`GFRbsa` above, the GFR per body surface area) is a constant with an initial assignment: its value is fixed before the simulation and follows the changes of an experiment before it (sbmlsim evaluates the initial assignments again), and an assignment rule of constants would slow the compile of the model (the structural guard of the load time, see [the overview](index.md)). An observer of a constant observer is one too.
 
 The unit of an observer is a unit definition of the model. The units of `U` are those of every model; a unit outside `U` (`pkpdsim.pbpk.units.EXTRA_UNITS`) is added to every model (the top model, an organ) which uses it: as the unit of an observer, of a [parameter of the definition](substances.md#parameters-of-the-definition) or of a parameter of a custom reaction, or as the unit of a number of a formula; a model without it keeps its unit definitions. `pkpdsim.pbpk.units` has the unit per body surface area of the clearances and the GFR, `ML_PER_MIN_1P73M2` (`ml_per_min_1p73m2`, ml/min per 1.73 m2, `1e-3/1.73 l/min/m2`); a quantity in l/min divided by `BSA` (m2) is `1730` times its number in this unit, in consistent units `GFR / BSA * 1730 ml_per_min_1p73m2 * 1 m2 / 1 l_per_min` (the build checks the units of every formula).
@@ -236,6 +244,14 @@ print([str(p.sid) for p in model.parameters if str(p.sid) in oral.readouts])
 ```text
 ['Alumen_drg', 'Rabs_drg']
 ```
+
+<!-- generated: figures-observers-4 (scripts/visual/docs_figures.py), do not edit -->
+The content of the model `oral`: the anatomical figure (A) and the schematic (B), hover them for details ([figures](figures.md)).
+
+<iframe class="pkpd-figure" src="img/figures/models/observers-4-anatomy.html" title="The anatomical figure of the model oral" style="aspect-ratio:1460 / 885" loading="lazy"></iframe>
+
+<iframe class="pkpd-figure" src="img/figures/models/observers-4-schematic.html" title="The schematic of the model oral" style="aspect-ratio:1373 / 902" loading="lazy"></iframe>
+<!-- end generated -->
 
 `Fa_<s>` is the fraction absorbed from the lumen before the first pass of the wall and the liver, so above the bioavailability; it counts every absorption from the lumen, so the drug which an apical efflux returns into the lumen or the bile brings there counts again when it is absorbed again, and the fraction can exceed 1 (a strong efflux). `Aabs_<s>` and `Aapp_<s>` are states which nothing drains, so the equilibration sets them back as it sets back the sinks ([Impairment](impairment.md#equilibration-of-a-condition)); `Fa_<s>` alone keeps them in the intestine (`GU__Aabs_<s>`, `GU__Aapp_<s>`). These readouts are opt-in, a model without them keeps its SBML.
 

@@ -12,6 +12,7 @@ edit_uri = "edit/develop/docs/"
 
 # the diagrams of the PBPK library, see `docs/stylesheets/pbpk.css`
 extra_css = ["stylesheets/pbpk.css"]
+extra_javascript = ["javascripts/figures.js"]
 
 nav = [
   { "Home" = "index.md" },

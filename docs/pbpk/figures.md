@@ -2,7 +2,7 @@
 
 The figures of a model are generated from its definition, never drawn by hand: the anatomical figure of the male and the female build, the schematic of the circulation, the one-page figure of a publication which combines both, an interactive page of each for the web, and the bodies of individuals of the library. They read the definition through the same rules as the build (`parts_for`, `luminal_substances`, `bile_substances`, the absorption of the intestine variant), so a figure shows what the model has. Every figure is SVG, pure python and deterministic: the same definition gives the same bytes.
 
-The figures on this page are those of the glimepiride-like model of the [tutorial](tutorial.md), given orally and intravenously; `scripts/visual/docs_figures.py` writes them and `tests/docs/test_docs_figures.py` fails while one is out of date.
+The figures on this page are those of the glimepiride-like model of the [tutorial](tutorial.md), given orally and intravenously; `scripts/visual/docs_figures.py` writes them and `tests/docs/test_docs_figures.py` fails while one is out of date. The docs show the anatomical figure (A) and the schematic (B) as interactive pages only, and every page of the PBPK library which creates a model shows its two figures after the snippet which creates it: the script runs the snippets of the page up to the definition, writes its figures into `img/figures/models/` and the frames which show them into a generated region of the page (`<!-- generated: figures-<page>-<snippet> ... -->`). A frame takes the height its page posts (`docs/javascripts/figures.js`).
 
 | Figure | Function | Written by `create_archive` |
 | --- | --- | --- |
@@ -21,23 +21,19 @@ The man and the woman of the reference individuals of the library stand next to 
 - the connections of the model: the portal vein into the liver, the bile from the liver over the gallbladder into the duodenum, the ureters to the bladder and out, the feces and the oral route;
 - circled icons: a tablet for an oral dose, a syringe for an intravenous dose, a drop for the blood sample at the arm vein.
 
-Every organ has a label with its circled icon and its substances: a filled dot where the substance enters the tissue, a dashed ring where it stays in the plasma. An organ with processes shows its submodel: a row per substance, the compartments plasma, interstitium, cells and the apical side (bile, urine, lumen) as columns, a dot for every species the build has, arrows for the exchange with the plasma, the metabolism with its enzyme, the apical transport with its transporter and the filtration into the urine; the process lines of the schematic follow.
+Every organ has a label with its circled icon, in greys (`palette.ORGAN_GREYS`) so that the colours of a figure are those of the substances and the tissues, and its substances: a filled dot where the substance enters the tissue, a dashed ring where it stays in the plasma. An organ with processes shows its submodel: a row per substance, the compartments plasma, interstitium, cells and the apical side (bile, urine, lumen) as columns, a dot for every species the build has, arrows for the exchange with the plasma, the metabolism with its enzyme, the apical transport with its transporter and the filtration into the urine; the process lines of the schematic follow.
 
-![The anatomical figure of the glimepiride-like model](img/figures/anatomy.svg)
+Hovering an organ, a label, a substance or an icon shows its details (the volumes of the organ in the reference man and woman, its UBERON ids, the form of every substance, the processes). It is one HTML file without external scripts, for the docs or GitHub Pages; on github.com itself a README shows the SVG as an image, without scripts, so link the page from there.
 
-The interactive page shows the same figure; hovering an organ, a label, a substance or an icon shows its details (the volumes of the organ in the reference man and woman, its UBERON ids, the form of every substance, the processes). It is one HTML file without external scripts, for the docs or GitHub Pages; on github.com itself a README shows the SVG as an image, without scripts, so link the page from there.
-
-<iframe src="img/figures/anatomy.html" title="The interactive anatomical figure" style="width:100%;aspect-ratio:1460 / 1040;border:1px solid #ddd;border-radius:8px"></iframe>
+<iframe class="pkpd-figure" src="img/figures/anatomy.html" title="The interactive anatomical figure" style="aspect-ratio:1460 / 962" loading="lazy"></iframe>
 
 ## The schematic
 
-The circulation of the model: venous blood on the left and arterial blood on the right, each listing the substances which circulate, the lung between them, the systemic organs, the liver with the portal vein (with its substances) and the portal organs, the intestinal lumen in its segments, urine and feces as compartments with their substances. Every row carries the icon of its organ, its substances (filled: enters the tissue; dashed: plasma only) and its processes as badges: `MET` metabolism, `TRA` transport, `CUS` custom reaction, `URI` urine, `SLW` slow pool, `ORL` oral dose, `ABS` absorption, `BIL` bile, `CNV` lumen conversion, `FEC` feces. The legend (the substances with their mechanisms, the routes, the PD components and the key) is a column right of the diagram; the process text wraps at a fixed measure (`MAX_TEXT`) and the width of the figure is that of its content. `model_figure(..., compact=True)` is the panel of a publication figure: the substances and the key in the band above the first row, tighter rows.
+The circulation of the model: venous blood on the left and arterial blood on the right, each listing the substances which circulate, the lung between them, the systemic organs, the liver with the portal vein (with its substances) and the portal organs, the intestinal lumen in its segments, urine and feces as compartments with their substances. Every row carries the grey icon of its organ, its substances (filled: enters the tissue; dashed: plasma only) and its processes as badges: `MET` metabolism, `TRA` transport, `CUS` custom reaction, `URI` urine, `SLW` slow pool, `ORL` oral dose, `ABS` absorption, `BIL` bile, `CNV` lumen conversion, `FEC` feces. The legend (the substances with their mechanisms, the routes, the PD components and the key) is a column right of the diagram; the process text wraps at a fixed measure (`MAX_TEXT`) and the width of the figure is that of its content. `model_figure(..., compact=True)` is the panel of a publication figure: the substances and the key in the band above the first row, tighter rows.
 
-![The schematic of the glimepiride-like model](img/figures/schematic.svg)
+Hovering an organ row, a substance chip or a process line shows its details.
 
-The interactive page of the schematic shows the details of the organ rows, substance chips and process lines on hover.
-
-<iframe src="img/figures/schematic.html" title="The interactive schematic" style="width:100%;aspect-ratio:1410 / 1015;border:1px solid #ddd;border-radius:8px"></iframe>
+<iframe class="pkpd-figure" src="img/figures/schematic.html" title="The interactive schematic" style="aspect-ratio:1410 / 942" loading="lazy"></iframe>
 
 ## The publication figure
 

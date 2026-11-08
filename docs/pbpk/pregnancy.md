@@ -149,6 +149,14 @@ GA   26 weeks: Cmax 1.533 µM, AUC(48 h)  11.77 µM*h, fetal over maternal arter
 GA   40 weeks: Cmax 1.281 µM, AUC(48 h)  11.28 µM*h, fetal over maternal arterial AUC 0.99
 ```
 
+<!-- generated: figures-pregnancy-1 (scripts/visual/docs_figures.py), do not edit -->
+The content of the model `pregnant`: the anatomical figure (A) and the schematic (B), hover them for details ([figures](figures.md)).
+
+<iframe class="pkpd-figure" src="img/figures/models/pregnancy-1-anatomy.html" title="The anatomical figure of the model pregnant" style="aspect-ratio:1460 / 898" loading="lazy"></iframe>
+
+<iframe class="pkpd-figure" src="img/figures/models/pregnancy-1-schematic.html" title="The schematic of the model pregnant" style="aspect-ratio:1384 / 902" loading="lazy"></iframe>
+<!-- end generated -->
+
 ## No change
 
 The searches found no change of the pregnancy, or no number which could be used, for the gastric emptying (four scintigraphy and paracetamol studies), the gastric pH, UGT2B7 and the P-glycoprotein of the intestine; no data for the colonic transit and the other transporters. Not applied: the liver volume (+15 % by MRI, Bartlett 2021; the in vivo factors of the enzymes would count the growth twice), the kidney volume (the one study measures the dilated collecting system as well) and the body water of Abduljalil 2012 (it counts the fetus).

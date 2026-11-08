@@ -95,6 +95,14 @@ dose at 08.0 h: Cmax 1.791 µM at 1.70 h, AUC(24 h) 8.32 µM*h, GFR factor 0.85-
 dose at 20.0 h: Cmax 1.532 µM at 1.90 h, AUC(24 h) 8.32 µM*h, GFR factor 0.85-1.15
 ```
 
+<!-- generated: figures-circadian-1 (scripts/visual/docs_figures.py), do not edit -->
+The content of the model `chrono`: the anatomical figure (A) and the schematic (B), hover them for details ([figures](figures.md)).
+
+<iframe class="pkpd-figure" src="img/figures/models/circadian-1-anatomy.html" title="The anatomical figure of the model chrono" style="aspect-ratio:1460 / 898" loading="lazy"></iframe>
+
+<iframe class="pkpd-figure" src="img/figures/models/circadian-1-schematic.html" title="The schematic of the model chrono" style="aspect-ratio:1384 / 902" loading="lazy"></iframe>
+<!-- end generated -->
+
 ## No rhythm
 
 The search (PubMed, Europe PMC; reviews Bicker 2020, Ballesta 2017, Baraldo 2008) found no rhythm, or no amplitude which could be used, for:

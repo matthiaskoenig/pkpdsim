@@ -87,6 +87,14 @@ print(definition.variants.organs, definition.sex, definition.population)
 {} male european_icrp
 ```
 
+<!-- generated: figures-tutorial-3 (scripts/visual/docs_figures.py), do not edit -->
+The content of the model `glimepiride_body`: the anatomical figure (A) and the schematic (B), hover them for details ([figures](figures.md)).
+
+<iframe class="pkpd-figure" src="img/figures/models/tutorial-3-anatomy.html" title="The anatomical figure of the model glimepiride_body" style="aspect-ratio:1460 / 962" loading="lazy"></iframe>
+
+<iframe class="pkpd-figure" src="img/figures/models/tutorial-3-schematic.html" title="The schematic of the model glimepiride_body" style="aspect-ratio:1410 / 942" loading="lazy"></iframe>
+<!-- end generated -->
+
 `validate` names every problem at once (an unknown substance in a process, a fraction outside its interval, an id which collides with the id scheme); `build` calls it as well.
 
 ## 4. Build
