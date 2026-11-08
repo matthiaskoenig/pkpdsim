@@ -48,7 +48,7 @@ The content of the model `rat_liver_nmp`: the organ in its circuit (A) and the s
 <iframe class="pkpd-figure" src="pbpk/img/figures/models/perfusion-1-schematic.html" title="The schematic of the model rat_liver_nmp" style="aspect-ratio:1273 / 634" loading="lazy"></iframe>
 <!-- end generated -->
 
-`create_archive(definition, output_dir, model=, copyright=)` (`pkpdsim.perfusion.archive`) writes the model with its ODEs, its antimony, the two figures and the COMBINE archive, as the factory of a model package does.
+`create_archive(definition, output_dir, model=, copyright=)` (`pkpdsim.perfusion.archive`) writes the model with its ODEs, its antimony, the two figures and the COMBINE archive, as the factory of a model package does. The archive names the anatomical figure A `<sid>_anatomy.svg` (key `<sid>_anatomy_svg`; the PBPK library names its anatomical figure `<sid>_body.svg`) and the schematic B `<sid>.svg`. The legend of an interactive figure credits pkpdsim, the machine perfusion library with this page (`CREDIT` and `ICON_CREDIT` of `pkpdsim.perfusion.figure`) and the anatomograms of the Expression Atlas, whose organ shapes (CC BY 4.0) the figures draw.
 
 ## The circuit
 

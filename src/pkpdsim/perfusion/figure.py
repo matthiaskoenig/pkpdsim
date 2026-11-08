@@ -66,6 +66,7 @@ from pkpdsim.pbpk.figure import (
 )
 from pkpdsim.pbpk.visual import icons, palette
 from pkpdsim.pbpk.visual.anatomy import TITLES
+from pkpdsim.pbpk.visual.interactive import figure_credit
 from pkpdsim.perfusion import core, ids
 from pkpdsim.perfusion.builder import compose, zone_factors
 from pkpdsim.perfusion.circuit import fresh_co2_pressure, quantities, quantity_label
@@ -79,6 +80,9 @@ from pkpdsim.perfusion.definition import (
 
 __all__ = [
     "BADGES",
+    "CREDIT",
+    "ICON_CREDIT",
+    "LIBRARY",
     "circuit_cards",
     "circuit_figure",
     "circuit_svg",
@@ -99,6 +103,19 @@ BADGES: dict[str, tuple[str, str, str]] = {
 }
 """The badges of the circuit and of the core, in the order of the key: the
 label of the key, fill and stroke (those of the PBPK library for its codes)."""
+
+LIBRARY = "https://matthiaskoenig.github.io/pkpdsim/perfusion/"
+"""The docs page of the machine perfusion library, which its figures credit."""
+
+CREDIT = figure_credit("anatomy", library="machine perfusion library", url=LIBRARY)
+"""The credit of the anatomical figure A of a circuit, for its legend (HTML):
+pkpdsim, the machine perfusion library and the anatomograms of its organ."""
+
+ICON_CREDIT = figure_credit(
+    "organ icons", library="machine perfusion library", url=LIBRARY
+)
+"""The credit of the schematic B of a circuit, for its legend (HTML): its organ
+icons are the shapes of the anatomograms."""
 
 _GROUPS: dict[str, tuple[str, ...]] = {
     "TRA": ("GLCIM", "O2IM", "LACEX"),
@@ -1004,7 +1021,7 @@ def interactive_circuit(
         ValueError: for another figure or an invalid definition
             (`PerfusionDefinition.validate`).
     """
-    from pkpdsim.pbpk.visual.interactive import CREDIT, ICON_CREDIT, html_page
+    from pkpdsim.pbpk.visual.interactive import html_page
     from pkpdsim.perfusion.anatomy import anatomy_cards, circuit_anatomy_svg
 
     if figure == "anatomy":

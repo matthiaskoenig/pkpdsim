@@ -18,13 +18,15 @@ from svg_labels import SVG, assert_inside_and_apart, assert_inside_box, parse_la
 
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import Value
-from pkpdsim.pbpk.visual import palette
-from pkpdsim.pbpk.visual.interactive import CREDIT, ICON_CREDIT
+from pkpdsim.pbpk.visual import interactive, palette
 from pkpdsim.perfusion import ids
 from pkpdsim.perfusion.builder import compose
 from pkpdsim.perfusion.circuit import quantities
 from pkpdsim.perfusion.definition import GenericOrgan, PerfusionDefinition
 from pkpdsim.perfusion.figure import (
+    CREDIT,
+    ICON_CREDIT,
+    LIBRARY,
     circuit_cards,
     circuit_figure,
     circuit_svg,
@@ -321,6 +323,16 @@ def test_the_interactive_page(tmp_path: Path) -> None:
         encoding="utf-8"
     )
     assert CREDIT in anatomy
+    # the credit names the perfusion library and its page, not the PBPK library
+    for html in (page, anatomy):
+        assert f'<a href="{LIBRARY}">machine perfusion library</a>' in html
+        assert interactive.LIBRARY not in html
+        assert "PBPK library" not in html
+        assert "anatomogram" in html
+        assert "CC BY 4.0" in html
+    assert LIBRARY.endswith("/perfusion/")
+    assert CREDIT != interactive.CREDIT
+    assert ICON_CREDIT != interactive.ICON_CREDIT
 
 
 def test_an_invalid_definition_has_no_figure() -> None:

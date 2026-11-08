@@ -30,6 +30,7 @@ __all__ = [
     "LIBRARY",
     "REPOSITORY",
     "cards",
+    "figure_credit",
     "html_page",
     "interactive_figure",
 ]
@@ -38,11 +39,24 @@ REPOSITORY = "https://github.com/matthiaskoenig/pkpdsim"
 LIBRARY = "https://matthiaskoenig.github.io/pkpdsim/pbpk/"
 
 
-def _credit(drawn: str) -> str:
-    """The credit of a figure whose `drawn` part follows the anatomograms (HTML)."""
+def figure_credit(
+    drawn: str, *, library: str = "PBPK library", url: str = LIBRARY
+) -> str:
+    """Get the credit of a figure whose `drawn` part follows the anatomograms (HTML).
+
+    Args:
+        drawn: what of the figure follows the anatomograms (`anatomy`, `organ
+            icons`).
+        library: the name of the library of pkpdsim which drew the figure.
+        url: the docs page of that library.
+
+    Returns:
+        The credit: pkpdsim with its version, the library with its page, and
+        the attribution of the anatomograms with their license.
+    """
     return (
         f'Created with <a href="{REPOSITORY}">pkpdsim</a> {__version__} '
-        f'(<a href="{LIBRARY}">PBPK library</a>) from the model definition; {drawn} after '
+        f'(<a href="{url}">{escape(library)}</a>) from the model definition; {drawn} after '
         'the anatomograms of the <a href="https://www.ebi.ac.uk/gxa">Expression Atlas</a> '
         'and the <a href="https://www.proteinatlas.org">Human Protein Atlas</a> '
         '(<a href="https://github.com/ebi-gene-expression-group/anatomogram">anatomogram</a>, '
@@ -50,10 +64,10 @@ def _credit(drawn: str) -> str:
     )
 
 
-CREDIT = _credit("anatomy")
+CREDIT = figure_credit("anatomy")
 """The credit of an anatomical figure, for its legend (HTML)."""
 
-ICON_CREDIT = _credit("organ icons")
+ICON_CREDIT = figure_credit("organ icons")
 """The credit of a schematic, for its legend (HTML): its organ icons are the
 shapes of the anatomograms (`pkpdsim.pbpk.visual.icons`), so the license asks
 for the attribution, but the figure draws no anatomy."""
