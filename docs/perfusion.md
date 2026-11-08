@@ -4,7 +4,7 @@ Ex vivo machine perfusion keeps a donor organ alive in a circuit: a pump drives 
 
 ## A model
 
-A `PerfusionDefinition` has the id and name of the model, the species of the organ, the organ, the circuit, the fresh perfusate, the temperature and the constants of the cellular core. The defaults of `Circuit`, `Perfusate`, `LiverOrgan`, `KidneyOrgan` and `CoreParameters` are the numbers of the parameter database (`tables/perfusion.toml`, see [Parameter database](database.md)), in the units an experimenter gives them (ml, ml/min, g, kPa, degC); `build` validates the definition and writes `<sid>.xml`, SBML L3V2 with units, every element named and annotated with SBO. The rat liver of the study of pkdb_models, in four zones from periportal to pericentral:
+A `PerfusionDefinition` has the id and name of the model, the species of the organ, the organ, the circuit, the fresh perfusate, the temperature and the constants of the cellular core, and the creators and notes of the model (the notes, e.g. the terms of use of a model package, follow the description of the circuit). The defaults of `Circuit`, `Perfusate`, `LiverOrgan`, `KidneyOrgan` and `CoreParameters` are the numbers of the parameter database (`tables/perfusion.toml`, see [Parameter database](database.md)), in the units an experimenter gives them (ml, ml/min, g, kPa, degC); `build` validates the definition and writes `<sid>.xml`, SBML L3V2 with units, every element named and annotated with SBO. The rat liver of the study of pkdb_models, in four zones from periportal to pericentral:
 
 ```python
 from pathlib import Path

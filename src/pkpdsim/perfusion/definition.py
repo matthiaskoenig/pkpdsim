@@ -726,6 +726,9 @@ class PerfusionDefinition:
             `T`, which an experiment changes.
         core: the constants of the cellular core of the organ.
         creators: the creators of the model (its model history).
+        notes: further notes of the model (markdown), appended to the
+            description of the circuit which the build writes, e.g. the
+            terms of use of a model package.
     """
 
     sid: str
@@ -737,6 +740,7 @@ class PerfusionDefinition:
     temperature: Value
     core: CoreParameters
     creators: Sequence[Creator] = ()
+    notes: str | None = None
 
     def __post_init__(self) -> None:
         """Normalise the species from text and keep the creators as a tuple."""

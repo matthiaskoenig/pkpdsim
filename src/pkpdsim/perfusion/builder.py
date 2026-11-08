@@ -41,6 +41,7 @@ empty) and gives the observers `urine` (µl) and `urine_rate` (µl/min). A
 generic organ has neither bile nor urine.
 """
 
+import textwrap
 from pathlib import Path
 from typing import NamedTuple
 
@@ -524,14 +525,18 @@ def compose(definition: PerfusionDefinition) -> Model:
         objects += observers.bile_objects(zones_of.bile, zones, ids.mass(organ.key))
     objects += observers.uptake_objects(zones)
 
+    notes = (
+        f"Machine perfusion of the {organ.what} ({organ.key}) of the "
+        f"{definition.species} with {organ.zones} zone(s) in a circuit "
+        "(pkpdsim.perfusion)."
+    )
+    if definition.notes:
+        # the notes of a model package are an indented block, as its terms of use
+        notes = f"{notes}\n\n{textwrap.dedent(definition.notes).strip()}"
     return Model(
         sid=definition.sid,
         name=definition.name,
-        notes=(
-            f"Machine perfusion of the {organ.what} ({organ.key}) of the "
-            f"{definition.species} with {organ.zones} zone(s) in a circuit "
-            "(pkpdsim.perfusion)."
-        ),
+        notes=notes,
         annotations=[
             (BQB.HAS_TAXON, TAXA[definition.species]),
             (

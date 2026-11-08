@@ -389,3 +389,25 @@ def test_the_parameter_value() -> None:
     assert d.parameter_value(ids.fresh("glc")) == Perfusate.default().glucose.value
     with pytest.raises(KeyError, match="no constant"):
         d.parameter_value("unknown")
+
+
+def test_the_notes_of_a_definition_follow_the_description(tmp_path: Path) -> None:
+    """The notes of a definition (the terms of use of a model) follow its description."""
+    plain = _model(build(liver_definition(1), tmp_path / "plain")).getNotesString()
+    assert "Machine perfusion of the" in plain
+    terms = "This work is licensed under the terms of use of the test."
+    # an indented block, as the terms of use of a model package
+    d = dataclasses.replace(
+        liver_definition(1),
+        notes=f"""
+    The liver of the test.
+
+    ## Terms of use
+    {terms}
+    """,
+    )
+    notes = _model(build(d, tmp_path / "notes")).getNotesString()
+    assert "Machine perfusion of the" in notes
+    assert "<h2>Terms of use</h2>" in notes
+    assert f"<p>{terms}</p>" in notes
+    assert notes.index("Machine perfusion of the") < notes.index(terms)
