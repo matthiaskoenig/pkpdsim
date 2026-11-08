@@ -73,8 +73,8 @@ def test_the_landmarks_are_ordered(sex: str) -> None:
 
 
 def test_a_species_without_a_resource_is_refused() -> None:
-    with pytest.raises(ValueError, match="No anatomy for pig male"):
-        anatomy("pig", "male")
+    with pytest.raises(ValueError, match="No anatomy for dog male"):
+        anatomy("dog", "male")
 
 
 def test_parse_d_reads_subpaths() -> None:
