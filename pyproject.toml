@@ -75,6 +75,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# the PDF of the publication figure of a model (`pkpdsim.pbpk.visual.publication`),
+# cairosvg needs the cairo library of the system
+pdf = [
+    "cairosvg>=2.8.2",
+]
 # the second simulator of the battery of the credibility, the engine AMICI of
 # sbmlsim (`sbmlsim.credibility.battery`), built from source
 amici = [
@@ -140,6 +145,11 @@ root = ["./src", ".", "./tests"]
 
 [tool.ty.src]
 include = ["src", "tests", "scripts"]
+
+[tool.ty.analysis]
+# cairosvg, the PDF of the publication figure, is the optional extra `pdf` and not
+# in the environment of the check
+allowed-unresolved-imports = ["cairosvg"]
 
 [tool.ty.terminal]
 # warnings are failures: keep the codebase free of any diagnostic
