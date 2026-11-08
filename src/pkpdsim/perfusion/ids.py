@@ -26,6 +26,18 @@ shared by the zones and are ids of the whole model under their name
 and the temperature factor `F_T`; a zonal profile of a process is the factor
 `p_<process>_<zone>` (`profile`), the pattern of the zonated liver of the
 PBPK library.
+
+The cells release the quantities of `RELEASABLE`; an organ releases a subset
+of them (`released`, the liver ALT, AST, LDH and potassium, the kidney and a
+generic organ LDH and potassium), and the enzymes of the perfusate and the
+cells are the released ones (`perfusate_quantities`, `cell_quantities`).
+The kidney filters the small solutes of the perfusate (`FILTERED`) and the
+tracers into the urine, the site `urine` (`URINE_SITE`) of the amounts
+`<q>_urine` in the urine volume `V_urine`; the filtration of a quantity in a
+zone is the reaction `FILT_<q>_<zone>` (`filtration`), the GFR of the organ
+`GFR_<organ>` (`gfr`), its GFR per mass `gfr_<organ>` (`gfr_specific`) and
+the reabsorbed fraction `f_reab_<organ>` (`reabsorption`); the water which
+leaves a site is `Q_<site>` (`outflow`) where it is not the pump flow.
 """
 
 import re
@@ -40,6 +52,7 @@ __all__ = [
     "CO2_GAS",
     "CO2_SOLUBILITY",
     "ENZYMES",
+    "FILTERED",
     "F_T",
     "GAS_CONSTANT",
     "INFLOW",
@@ -53,7 +66,8 @@ __all__ = [
     "PERICENTRAL",
     "PERIPORTAL",
     "Q_PUMP",
-    "RELEASED",
+    "Q_URINE",
+    "RELEASABLE",
     "RESERVOIR",
     "SOLUBILITY",
     "SOLUBILITY_COEFFICIENT",
@@ -61,25 +75,35 @@ __all__ = [
     "SOLUBILITY_TEMPERATURE",
     "TEMPERATURE",
     "TEMPERATURE_REF",
+    "URINE",
+    "URINE_RATE",
+    "URINE_SITE",
     "VO2",
     "activity",
     "alive",
     "bile",
     "cell_fraction",
+    "cell_quantities",
     "cell_site",
     "cells",
     "dead_site",
     "density",
+    "filtration",
     "flow",
     "fresh",
+    "gfr",
+    "gfr_specific",
     "is_zone",
     "mass",
     "necrosis_rate",
     "organ_volume",
+    "outflow",
     "pco2",
+    "perfusate_quantities",
     "ph",
     "po2",
     "profile",
+    "reabsorption",
     "reaction",
     "species",
     "specific_activity",
@@ -221,10 +245,54 @@ CELL: tuple[str, ...] = (
 is glycogen in glucosyl units, `ros` the reactive oxygen species as H2O2
 equivalents."""
 
-RELEASED: tuple[str, ...] = ("alt", "ast", "ldh", "k")
-"""The quantities which necrotic cells release into the vascular space."""
+RELEASABLE: tuple[str, ...] = ("alt", "ast", "ldh", "k")
+"""The quantities which necrotic cells may release into the vascular space;
+an organ releases a subset of them, each with its content in the cells."""
+
+FILTERED: tuple[str, ...] = ("glc", "o2", "lac", "co2", "hco3", "h", "k")
+"""The small solutes of the perfusate, which the kidney filters with the
+water (the enzymes are not filtered)."""
+
+URINE = "urine"
+"""The urine volume of the organ (µl), an assignment rule."""
+
+URINE_RATE = "urine_rate"
+"""The urine flow of the organ (µl/min), an assignment rule."""
+
+URINE_SITE = "urine"
+"""The site of the urine, the amounts `<q>_urine` in the volume `V_urine`."""
+
+Q_URINE = "Q_urine"
+"""The net urine flow of the organ (l/min), the filtrate which the tubules
+do not reabsorb."""
 
 _ZONE = re.compile(r"z[1-9][0-9]*")
+
+
+def perfusate_quantities(released: tuple[str, ...]) -> tuple[str, ...]:
+    """Get the quantities of the perfusate of an organ which releases `released`.
+
+    Args:
+        released: the released quantities of the organ (of `RELEASABLE`).
+
+    Returns:
+        The quantities of `PERFUSATE` without the enzymes the organ does not
+        release.
+    """
+    return tuple(q for q in PERFUSATE if q not in ENZYMES or q in released)
+
+
+def cell_quantities(released: tuple[str, ...]) -> tuple[str, ...]:
+    """Get the quantities of the cells of an organ which releases `released`.
+
+    Args:
+        released: the released quantities of the organ (of `RELEASABLE`).
+
+    Returns:
+        The quantities of `CELL` without the enzymes the organ does not
+        release.
+    """
+    return tuple(q for q in CELL if q not in ENZYMES or q in released)
 
 
 def zone_id(k: int) -> str:
@@ -331,6 +399,31 @@ def vascular_fraction(organ: str) -> str:
 def cell_fraction(organ: str) -> str:
     """Get the cell fraction of the volume of an organ, `f_cell_<organ>`."""
     return f"f_cell_{organ}"
+
+
+def gfr(organ: str) -> str:
+    """Get the glomerular filtration rate of an organ (l/min), `GFR_<organ>`."""
+    return f"GFR_{organ}"
+
+
+def gfr_specific(organ: str) -> str:
+    """Get the GFR per mass of an organ (l/min/kg = ml/min/g), `gfr_<organ>`."""
+    return f"gfr_{organ}"
+
+
+def reabsorption(organ: str) -> str:
+    """Get the reabsorbed fraction of the filtrate of an organ, `f_reab_<organ>`."""
+    return f"f_reab_{organ}"
+
+
+def filtration(quantity: str, zone: str) -> str:
+    """Get the reaction of the net filtration of a quantity of a zone into the urine."""
+    return f"FILT_{quantity}_{zone}"
+
+
+def outflow(site: str) -> str:
+    """Get the flow of the perfusate out of a site (l/min), `Q_<site>`."""
+    return f"Q_{site}"
 
 
 def flow(quantity: str, source: str, target: str) -> str:

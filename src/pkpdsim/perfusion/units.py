@@ -4,7 +4,8 @@ The models have the units of the PBPK library (`pkpdsim.pbpk.units`: time in
 min, substance in mmole, volume in litre) and the units of a perfusion which
 the library lacks: the volumes and the flow of a circuit as an experimenter
 gives them (ml, ml/min), the mass of an organ (g), the temperature, the
-oxygen partial pressure (kPa), the bile (µl) and the catalytic activity of
+oxygen partial pressure (kPa), the bile and the urine (µl), the GFR per
+mass (ml/min/g, l/min/kg) and the catalytic activity of
 the enzymes (µkat/l = µmol/(l*s)). Every unit of `PU` is a unit definition of
 every perfusion model.
 
@@ -26,6 +27,8 @@ class PU(U):
     g = UnitDefinition("g", "g")
     ml = UnitDefinition("ml", "ml")
     ml_per_min = UnitDefinition("ml_per_min", "ml/min")
+    ml_per_min_g = UnitDefinition("ml_per_min_g", "ml/min/g")
+    l_per_min_kg = UnitDefinition("l_per_min_kg", "liter/min/kg")
     ul = UnitDefinition("ul", "microliter", name="µl")
     ul_per_min = UnitDefinition("ul_per_min", "microliter/min", name="µl/min")
     ul_per_l = UnitDefinition("ul_per_l", "microliter/liter", name="µl/l")

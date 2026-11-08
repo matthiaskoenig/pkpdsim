@@ -2,7 +2,18 @@
 
 from pkpdsim.database import tables
 
-SECTIONS = ("oxygen", "enzymes", "temperature", "perfusate", "liver_rat")
+SECTIONS = (
+    "oxygen",
+    "enzymes",
+    "temperature",
+    "perfusate",
+    "liver_rat",
+    "kidney_rat",
+    "kidney_human",
+    "kidney_pig",
+    "core_kidney_rat",
+    "core_generic",
+)
 
 
 def _entries() -> list[tuple[str, str]]:

@@ -5,9 +5,14 @@ reservoir `res` through the inflow tubing `in`, the zones of the organ
 (`z1` to `zn`) and the outflow tubing `out` back into the reservoir. Every
 site is a well-stirred volume, and the flow from a site to the next is the
 reaction `FLOW_<q>_<site>_<next>` of every quantity of the perfusate (the
-quantities of `ids.PERFUSATE` and the tracers) at `Q_pump * <q>_<site>`, so
-the amount of the perfusate is conserved and a flow of 0 is defined (no rate
-divides by the flow). The bicarbonate buffer acts at every site
+quantities of `ids.perfusate_quantities` of the released set of the organ and
+the tracers) at `Q_pump * <q>_<site>`, so the amount of the perfusate is
+conserved and a flow of 0 is defined (no rate divides by the flow). An organ
+which makes urine (the kidney) takes its water out of the perfusate: the
+flow out of its zones and of the outflow tubing is the pump flow less the
+urine of the zones up to there (`Q_<site>`), and the reservoir, whose
+volume is a rate rule, loses the urine, so the volume of the tubing and the
+organ is constant. The bicarbonate buffer acts at every site
 (`core.buffer_objects`).
 
 The membrane oxygenator exchanges the gases of the inflow tubing with its
@@ -40,7 +45,7 @@ reservoir towards them.
 """
 
 import dataclasses
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 from sbmlutils.factory import Compartment, Parameter, Reaction, Species
 from sbmlutils.factory.units import UnitType
@@ -66,6 +71,7 @@ __all__ = [
     "oxygen_objects",
     "perfusate_parameters",
     "quantities",
+    "quantity_label",
     "temperature_objects",
     "tracer_species",
 ]
@@ -82,12 +88,20 @@ _SITE_NAMES = {
 }
 
 
-def quantities(perfusate: Perfusate) -> tuple[str, ...]:
-    """Get the quantities of the perfusate: `ids.PERFUSATE` and the tracers."""
-    return (*ids.PERFUSATE, *perfusate.tracers)
+def quantities(
+    perfusate: Perfusate, released: tuple[str, ...] = ids.RELEASABLE
+) -> tuple[str, ...]:
+    """Get the quantities of the perfusate and the tracers.
+
+    Args:
+        perfusate: the perfusate.
+        released: the quantities which the organ releases, whose enzymes
+            are quantities of the perfusate (`ids.perfusate_quantities`).
+    """
+    return (*ids.perfusate_quantities(released), *perfusate.tracers)
 
 
-def _name(quantity: str) -> str:
+def quantity_label(quantity: str) -> str:
     """Get the name of a quantity of the perfusate, a tracer by its token."""
     try:
         return core.quantity_name(quantity)
@@ -274,15 +288,19 @@ def composition(perfusate: Perfusate) -> core.Composition:
     )
 
 
-def perfusate_parameters(perfusate: Perfusate) -> core.CoreObjects:
+def perfusate_parameters(
+    perfusate: Perfusate, released: tuple[str, ...] = ids.RELEASABLE
+) -> core.CoreObjects:
     """Get the fresh perfusate, the constants `<q>_fresh`, and the oxygen target.
 
     Args:
         perfusate: the perfusate.
+        released: the quantities which the organ releases.
 
     Returns:
         The constants `pO2_target`, `pH_fresh` and `<q>_fresh` of glucose,
-        lactate, bicarbonate, potassium, the enzymes (0) and the tracers (0);
+        lactate, bicarbonate, potassium, the released enzymes (0) and the
+        tracers (0);
         the free protons, the CO2 and the oxygen of the fresh perfusate as
         initial assignments.
     """
@@ -293,9 +311,10 @@ def perfusate_parameters(perfusate: Perfusate) -> core.CoreObjects:
         "k": perfusate.k,
     }
     none = Value(0.0, U.mM, "ModelChoice", "a fresh perfusate has none")
-    for q in (*ids.ENZYMES, *perfusate.tracers):
-        given[q] = none
-    names = {q: _name(q) for q in quantities(perfusate)}
+    for q in quantities(perfusate, released):
+        if q in ids.ENZYMES or q in perfusate.tracers:
+            given[q] = none
+    names = {q: quantity_label(q) for q in quantities(perfusate, released)}
     out = core.CoreObjects(
         parameters=[
             value_parameter(
@@ -341,7 +360,9 @@ def perfusate_parameters(perfusate: Perfusate) -> core.CoreObjects:
     return out
 
 
-def fresh_assignments(site: str, perfusate: Perfusate) -> core.CoreObjects:
+def fresh_assignments(
+    site: str, perfusate: Perfusate, released: tuple[str, ...] = ids.RELEASABLE
+) -> core.CoreObjects:
     """Get the start of the perfusate species of a site, the fresh perfusate.
 
     The CO2 keeps the initial assignment of the buffer equilibrium of its
@@ -353,9 +374,9 @@ def fresh_assignments(site: str, perfusate: Perfusate) -> core.CoreObjects:
                 ids.species(q, site),
                 ids.fresh(q),
                 U.mM,
-                f"{_name(q)} (perfusate {site}) from the fresh perfusate",
+                f"{quantity_label(q)} (perfusate {site}) from the fresh perfusate",
             )
-            for q in quantities(perfusate)
+            for q in quantities(perfusate, released)
             if q != "co2"
         ]
     )
@@ -374,8 +395,16 @@ def tracer_species(tracer: str, site: str, compartment: str) -> Species:
     )
 
 
-def circuit_compartments(circuit: Circuit) -> list[Compartment]:
-    """Get the compartments of the reservoir and the tubing (l)."""
+def circuit_compartments(
+    circuit: Circuit, reservoir_constant: bool = True
+) -> list[Compartment]:
+    """Get the compartments of the reservoir and the tubing (l).
+
+    Args:
+        circuit: the circuit.
+        reservoir_constant: the volume of the reservoir is constant; an organ
+            which makes urine takes its water from the reservoir, a rate rule.
+    """
     volumes = {
         ids.RESERVOIR: circuit.reservoir,
         ids.INFLOW: circuit.tubing_in,
@@ -389,6 +418,7 @@ def circuit_compartments(circuit: Circuit) -> list[Compartment]:
                 ids.volume(site),
                 v.value,
                 unit=U.litre,
+                constant=reservoir_constant or site != ids.RESERVOIR,
                 name=f"perfusate in the {_SITE_NAMES[site]}",
                 sboTerm=SBO.PHYSICAL_COMPARTMENT,
                 notes=value_notes(v),
@@ -420,12 +450,15 @@ def fresh_co2_pressure(perfusate: Perfusate) -> Value:
     )
 
 
-def circuit_objects(circuit: Circuit, perfusate: Perfusate) -> core.CoreObjects:
+def circuit_objects(
+    circuit: Circuit, perfusate: Perfusate, released: tuple[str, ...] = ids.RELEASABLE
+) -> core.CoreObjects:
     """Get the perfusate of the reservoir and the tubing, the pump and the oxygenator.
 
     Args:
         circuit: the circuit.
         perfusate: the perfusate.
+        released: the quantities which the organ releases.
 
     Returns:
         The perfusate species, the buffer and the start of the fresh
@@ -468,10 +501,10 @@ def circuit_objects(circuit: Circuit, perfusate: Perfusate) -> core.CoreObjects:
     start = composition(perfusate)
     for site in (ids.RESERVOIR, ids.INFLOW, ids.OUTFLOW):
         compartment = ids.volume(site)
-        out += core.perfusate_objects(site, compartment, start)
+        out += core.perfusate_objects(site, compartment, start, released)
         out += core.buffer_objects(site, compartment)
         out.species += [tracer_species(t, site, compartment) for t in perfusate.tracers]
-        out += fresh_assignments(site, perfusate)
+        out += fresh_assignments(site, perfusate, released)
     o2, v_in = ids.species("o2", ids.INFLOW), ids.volume(ids.INFLOW)
     out.reactions.append(
         Reaction(
@@ -518,27 +551,38 @@ def _co2_rate(circuit: Circuit) -> Value:
     return dataclasses.replace(k, notes=f"{notes}; {k.notes}" if k.notes else notes)
 
 
-def flow_objects(sites: Sequence[str], perfusate: Perfusate) -> core.CoreObjects:
+def flow_objects(
+    sites: Sequence[str],
+    perfusate: Perfusate,
+    released: tuple[str, ...] = ids.RELEASABLE,
+    outflows: Mapping[str, str] | None = None,
+) -> core.CoreObjects:
     """Get the flow of the perfusate through the sites of the circuit.
 
     Args:
         sites: the sites in the order of the flow, the last flows into the
             first (the reservoir, the inflow, the zones, the outflow).
         perfusate: the perfusate.
+        released: the quantities which the organ releases.
+        outflows: the id of the flow out of a site (l/min) where it is not
+            the pump flow, e.g. after a kidney, which takes the urine out of
+            the perfusate (`ids.outflow`).
 
     Returns:
         The reaction `FLOW_<q>_<site>_<next>` of every quantity and site,
-        `Q_pump * <q>_<site>`.
+        `Q_pump * <q>_<site>` or the outflow of the site times `<q>_<site>`.
     """
     out = core.CoreObjects()
+    outflows = outflows or {}
     for source, target in zip(sites, [*sites[1:], sites[0]], strict=True):
-        for q in quantities(perfusate):
+        flow = outflows.get(source, ids.Q_PUMP)
+        for q in quantities(perfusate, released):
             a, b = ids.species(q, source), ids.species(q, target)
             out.reactions.append(
                 Reaction(
                     ids.flow(q, source, target),
                     f"{a} -> {b}",
-                    formula=(f"{ids.Q_PUMP} * {a}", U.mmole_per_min),
+                    formula=(f"{flow} * {a}", U.mmole_per_min),
                     compartment=ids.volume(source),
                     name=f"flow of {q} from {source} to {target}",
                     sboTerm=SBO.TRANSPORT_REACTION,

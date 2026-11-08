@@ -18,7 +18,10 @@ from pkpdsim.pbpk.values import Value
 from pkpdsim.perfusion import core, ids
 from pkpdsim.perfusion.definition import (
     Circuit,
+    GenericOrgan,
+    KidneyOrgan,
     LiverOrgan,
+    Organ,
     Perfusate,
     PerfusionDefinition,
 )
@@ -33,7 +36,9 @@ __all__ = [
     "JIT_OPTIMIZATION",
     "VASCULAR",
     "ZONE",
+    "generic_definition",
     "jit_optimization",
+    "kidney_definition",
     "liver_definition",
     "load_circuit",
     "load_zone",
@@ -149,6 +154,57 @@ def liver_definition(
         perfusate=perfusate,
         temperature=Value(temperature, PU.degC, "ModelChoice", "the test temperature"),
         core=core.CoreParameters.default(),
+    )
+
+
+def _definition(
+    organ: Organ,
+    core_section: str,
+    *,
+    tracers: Sequence[str],
+    sid: str,
+    name: str,
+) -> PerfusionDefinition:
+    """Get an organ in the circuit of the parameter database."""
+    perfusate = Perfusate.default()
+    if tracers:
+        perfusate = dataclasses.replace(perfusate, tracers=tuple(tracers))
+    return PerfusionDefinition(
+        sid=sid,
+        name=name,
+        species=BuildSpecies.RAT,
+        organ=organ,
+        circuit=Circuit.default(),
+        perfusate=perfusate,
+        temperature=Value(37.0, PU.degC, "ModelChoice", "the test temperature"),
+        core=core.CoreParameters.default(core_section),
+    )
+
+
+def kidney_definition(
+    zones: int = 1, *, tracers: Sequence[str] = (), sid: str = "perfusion_kidney"
+) -> PerfusionDefinition:
+    """Get the rat kidney in the circuit of the parameter database."""
+    return _definition(
+        KidneyOrgan.default(zones=zones),
+        "kidney_rat",
+        tracers=tracers,
+        sid=sid,
+        name="perfused rat kidney",
+    )
+
+
+def generic_definition(
+    key: str = "mu",
+    mass: float = 5.0,
+    *,
+    tracers: Sequence[str] = (),
+    sid: str = "perfusion_muscle",
+) -> PerfusionDefinition:
+    """Get a generic organ (the muscle by default) of `mass` g in the circuit."""
+    organ = GenericOrgan(key, Value(mass, PU.g, "ModelChoice", "the test mass"))
+    return _definition(
+        organ, "generic", tracers=tracers, sid=sid, name=f"perfused rat {key}"
     )
 
 

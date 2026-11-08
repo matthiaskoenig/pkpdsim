@@ -8,8 +8,9 @@ observers add what the species do not give, as assignment rules:
 - `pO2_<site>` (kPa), the free oxygen over its solubility at the
   temperature, `o2_<site>/alpha_o2`;
 - `<e>_act_<site>` (µkat/l), the catalytic activity of an enzyme of
-  `ids.ENZYMES`, its concentration times its specific activity `a_<e>`
-  (µkat/mmole, `[enzymes]` of the perfusion table), the unit of the data;
+  `ids.ENZYMES` which the organ releases, its concentration times its
+  specific activity `a_<e>` (µkat/mmole, `[enzymes]` of the perfusion
+  table), the unit of the data;
 - the periportal and pericentral means, the sites `pp` and `pc` (`pp_cell`
   for the cells): every concentration of a zone averaged over the first and
   the last third of the length of the sinusoid, each zone weighted by its
@@ -20,9 +21,12 @@ observers add what the species do not give, as assignment rules:
   last zone; with four zones the periportal mean is `3/4` of the first and
   `1/4` of the second zone;
 - `pCO2_<site>` (kPa), the dissolved CO2 over its solubility;
-- the bile of the organ, the rate `bile_rate` (µl/min, the sum of the
-  secretion of the zones) and the volume `bile` (µl, the sum of the bile
+- the bile of an organ with bile, the rate `bile_rate` (µl/min, the sum of
+  the secretion of the zones) and the volume `bile` (µl, the sum of the bile
   volumes of the zones);
+- the urine of an organ with urine, the rate `urine_rate` (µl/min, the net
+  urine flow `Q_urine`) and the volume `urine` (µl, the urine volume
+  `V_urine`);
 - the oxygen uptake of the organ `VO2` (mmole/min), the oxygen which the
   cells take up from the perfusate, the sum of the zones.
 """
@@ -47,6 +51,7 @@ __all__ = [
     "site_objects",
     "third_weights",
     "uptake_objects",
+    "urine_objects",
 ]
 
 _RULE = SBO.MATHEMATICAL_EXPRESSION
@@ -68,8 +73,12 @@ def _add(objects: core.CoreObjects, observer: tuple[Parameter, AssignmentRule]) 
     objects.rules.append(observer[1])
 
 
-def enzyme_parameters() -> list[Parameter]:
-    """Get the specific activity of every enzyme, `a_<e>` (µkat/mmole)."""
+def enzyme_parameters(enzymes: Sequence[str] = ids.ENZYMES) -> list[Parameter]:
+    """Get the specific activity of every enzyme, `a_<e>` (µkat/mmole).
+
+    Args:
+        enzymes: the enzymes of the perfusate, those the organ releases.
+    """
     return [
         value_parameter(
             ids.specific_activity(e),
@@ -78,12 +87,17 @@ def enzyme_parameters() -> list[Parameter]:
             f"specific activity of {core.quantity_name(e)}",
             SBO.SPECIFIC_ACTIVITY,
         )
-        for e in ids.ENZYMES
+        for e in enzymes
     ]
 
 
-def site_objects(site: str) -> core.CoreObjects:
-    """Get the pO2, the pCO2 and the enzyme activities of the perfusate at a site."""
+def site_objects(site: str, enzymes: Sequence[str] = ids.ENZYMES) -> core.CoreObjects:
+    """Get the pO2, the pCO2 and the enzyme activities of the perfusate at a site.
+
+    Args:
+        site: the site.
+        enzymes: the enzymes of the perfusate, those the organ releases.
+    """
     out = core.CoreObjects()
     _add(
         out,
@@ -105,7 +119,7 @@ def site_objects(site: str) -> core.CoreObjects:
             SBO.PRESSURE,
         ),
     )
-    for e in ids.ENZYMES:
+    for e in enzymes:
         _add(
             out,
             _observer(
@@ -154,12 +168,22 @@ def _mean(of_zones: Sequence[str], weights: list[tuple[int, Fraction]]) -> str:
     return " + ".join(terms)
 
 
-def mean_objects(zones: Sequence[str], perfusate: Sequence[str]) -> core.CoreObjects:
+def mean_objects(
+    zones: Sequence[str],
+    perfusate: Sequence[str],
+    cells: Sequence[str] = ids.CELL,
+    enzymes: Sequence[str] = ids.ENZYMES,
+) -> core.CoreObjects:
     """Get the periportal and pericentral means of the zones.
+
+    The means of the first and the last third of the zones of any organ;
+    the periportal and the pericentral mean in the liver.
 
     Args:
         zones: the zones, periportal first.
         perfusate: the quantities of the perfusate (with the tracers).
+        cells: the quantities of the cells.
+        enzymes: the enzymes of the perfusate.
 
     Returns:
         The means of the perfusate concentrations, the cell concentrations
@@ -183,7 +207,7 @@ def mean_objects(zones: Sequence[str], perfusate: Sequence[str]) -> core.CoreObj
                 ),
             )
         cell = ids.cell_site(site)
-        for q in ids.CELL:
+        for q in cells:
             _add(
                 out,
                 _observer(
@@ -214,7 +238,7 @@ def mean_objects(zones: Sequence[str], perfusate: Sequence[str]) -> core.CoreObj
                 SBO.PH,
             ),
         )
-        out += site_objects(site)
+        out += site_objects(site, enzymes)
     return out
 
 
@@ -266,6 +290,38 @@ def uptake_objects(zones: Sequence[str]) -> core.CoreObjects:
             " + ".join(ids.reaction("O2IM", z) for z in zones),
             U.mmole_per_min,
             "oxygen uptake of the organ",
+            SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
+        ),
+    )
+    return out
+
+
+def urine_objects() -> core.CoreObjects:
+    """Get the urine rate and the urine volume of the organ.
+
+    Returns:
+        `urine_rate` (µl/min), the net urine flow `Q_urine`, and `urine`
+        (µl), the urine volume `V_urine`, both assignment rules.
+    """
+    out = core.CoreObjects()
+    ul = f"1000000 {PU.ul_per_l.sid}"
+    _add(
+        out,
+        _observer(
+            ids.URINE_RATE,
+            f"{ul} * {ids.Q_URINE}",
+            PU.ul_per_min,
+            "urine flow of the organ",
+            SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
+        ),
+    )
+    _add(
+        out,
+        _observer(
+            ids.URINE,
+            f"{ul} * {ids.volume(ids.URINE_SITE)}",
+            PU.ul,
+            "urine volume of the organ",
             SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
         ),
     )

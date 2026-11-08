@@ -92,7 +92,13 @@ The rate laws, one choice each, with the reason:
   conserved and a dead zone releases its whole content; the release is a
   leak of a ruptured membrane and does not scale with `f_T`.
 - Bile: the volume secreted at `BILE_Vmax*ATP/(Km + ATP)` per litre of
-  living cells (the ATP-dependent export of the bile salts), a volume only.
+  living cells (the ATP-dependent export of the bile salts), a volume only,
+  in an organ with bile (the liver).
+- Released quantities: an organ releases a subset of `ids.RELEASABLE`
+  (`zone_objects(released=)`), each with its content in the cells; an
+  enzyme which the organ does not release is neither in its cells nor in
+  the perfusate (`ids.cell_quantities`, `ids.perfusate_quantities`), and its
+  content is `None` in the constants (the kidney, a generic organ).
 - Bicarbonate buffer of the perfusate: `H+ + HCO3- <-> CO2` with the mass
   action `k_co2*(h*hco3/Ka - CO2)` (the dehydration of carbonic acid is fast,
   the hydration of CO2 sets the time), and the pH from the free protons,
@@ -316,7 +322,7 @@ PROCESSES: tuple[str, ...] = (
 """The processes of the living cells which a zonal profile may weigh."""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class CoreParameters:
     """The constants of the cellular core, shared by the zones of an organ.
 
@@ -328,7 +334,9 @@ class CoreParameters:
     in mmole per litre of cells, the bile secretion in litre of bile per
     minute and litre of cells and the living fraction at the start. `starts`
     are the initial concentrations of the other species of the cells (mM) by
-    quantity.
+    quantity. The contents of the enzymes and the bile constants are `None`
+    for an organ which does not release the enzyme or has no bile; the
+    model has no parameter of a constant which is `None`.
     """
 
     GLCIM_Vmax: Value
@@ -380,12 +388,12 @@ class CoreParameters:
     NEC_n_h: Value
     PROTEINR_k: Value
     KR_k: Value
-    ALT_content: Value
-    AST_content: Value
-    LDH_content: Value
+    ALT_content: Value | None = None
+    AST_content: Value | None = None
+    LDH_content: Value | None = None
     K_content: Value
-    BILE_Vmax: Value
-    BILE_Km_atp: Value
+    BILE_Vmax: Value | None = None
+    BILE_Km_atp: Value | None = None
     f_alive_start: Value
     starts: FrozenMap[Value]
 
@@ -396,19 +404,30 @@ class CoreParameters:
         Args:
             organ: the organ of the sections `core_<organ>` (the constants)
                 and `core_<organ>_start` (the starts of the cells) of the
-                perfusion table.
+                perfusion table (`liver_rat`, `kidney_rat`, `generic`).
 
         Returns:
-            The constants of the core; the bile secretion is derived from
-            the bile rate of the study (`[<organ>] bile_rate`, per g of
-            organ) per litre of cells (`cell_fraction`, 1 kg/l) at the ATP
-            of the start.
+            The constants of the core; a constant which may be `None` is
+            `None` when the section has none (the contents of the enzymes an
+            organ does not release, the bile of an organ without). The bile
+            secretion is derived from the bile rate of the study
+            (`[<organ>] bile_rate`, per g of organ) per litre of cells
+            (`cell_fraction`, 1 kg/l) at the ATP of the start, for a section
+            with `BILE_Km_atp`.
         """
         section = f"core_{organ}"
         start = f"{section}_start"
-        starts = FrozenMap({q: _value(start, q) for q in load(_TABLE)[start]})
+        table = load(_TABLE)
+        starts = FrozenMap({q: _value(start, q) for q in table[start]})
+        given = {
+            f.name: _value(section, f.name)
+            for f in dataclasses.fields(cls)
+            if f.name in table[section] and f.name != "BILE_Vmax"
+        }
+        if "BILE_Km_atp" not in given:
+            return cls(**given, starts=starts)
         atp0 = starts["atp"].value
-        km = _value(section, "BILE_Km_atp")
+        km = given["BILE_Km_atp"]
         # ul/min/g -> l/min per l of organ (1 kg/l) -> per l of cells, at ATP0
         rate = _number(organ, "bile_rate") * 1e-3 / _number(organ, "cell_fraction")
         bile = Value(
@@ -419,12 +438,27 @@ class CoreParameters:
             "1 kg/l over cell_fraction, divided by the ATP saturation at the "
             f"start (ATP {atp0} mM, BILE_Km_atp {km.value} mM); to be fitted",
         )
-        values = {
-            f.name: _value(section, f.name)
-            for f in dataclasses.fields(cls)
-            if f.name not in ("starts", "BILE_Vmax")
-        }
-        return cls(**values, BILE_Vmax=bile, starts=starts)
+        return cls(**given, BILE_Vmax=bile, starts=starts)
+
+    def problems(self, released: tuple[str, ...], bile: bool) -> list[str]:
+        """Get the constants which an organ needs and the constants lack.
+
+        Args:
+            released: the quantities which the organ releases.
+            bile: the organ secretes bile.
+
+        Returns:
+            A problem per missing content of a released quantity and per
+            missing bile constant.
+        """
+        needed = [_CONTENTS[q] for q in released if q in _CONTENTS]
+        if bile:
+            needed += ["BILE_Vmax", "BILE_Km_atp"]
+        return [
+            f"core: {name} is missing, which the organ needs"
+            for name in needed
+            if getattr(self, name) is None
+        ]
 
 
 @dataclass(frozen=True)
@@ -497,8 +531,14 @@ class Composition:
             ph=_value("perfusate", "pH"),
         )
 
-    def concentrations(self) -> dict[str, float | None]:
-        """Get the start of every quantity of `ids.PERFUSATE` (mM).
+    def concentrations(
+        self, released: tuple[str, ...] = ids.RELEASABLE
+    ) -> dict[str, float | None]:
+        """Get the start of every quantity of the perfusate (mM).
+
+        Args:
+            released: the quantities which the organ releases, whose enzymes
+                are quantities of the perfusate (`ids.perfusate_quantities`).
 
         Returns:
             The concentrations, `None` for the CO2, whose start is the
@@ -513,7 +553,7 @@ class Composition:
             "h": 10 ** (3 - self.ph.value),
             "k": self.k.value,
         }
-        return {q: values.get(q, 0.0) for q in ids.PERFUSATE}
+        return {q: values.get(q, 0.0) for q in ids.perfusate_quantities(released)}
 
 
 @dataclass
@@ -582,18 +622,19 @@ def core_parameters(params: CoreParameters) -> list[Parameter]:
         params: the constants.
 
     Returns:
-        A constant parameter of every field but `starts`, under its name,
-        with the citation of its source in the notes.
+        A constant parameter of every field but `starts` and the fields
+        which are `None`, under its name, with the citation of its source in
+        the notes.
 
     Raises:
         TypeError: if the unit of a constant is no unit definition.
     """
     parameters: list[Parameter] = []
     for f in dataclasses.fields(params):
-        if f.name == "starts":
+        value: Value | None = getattr(params, f.name)
+        if f.name == "starts" or value is None:
             continue
         spec = _SPECS[f.name]
-        value: Value = getattr(params, f.name)
         if not isinstance(value.unit, UnitDefinition):
             raise TypeError(f"The unit of '{f.name}' is no UnitDefinition.")
         parameters.append(
@@ -631,7 +672,10 @@ def buffer_parameters(buffer: Buffer | None = None) -> list[Parameter]:
 
 
 def perfusate_objects(
-    site: str, compartment: str, composition: Composition | None = None
+    site: str,
+    compartment: str,
+    composition: Composition | None = None,
+    released: tuple[str, ...] = ids.RELEASABLE,
 ) -> CoreObjects:
     """Get the perfusate species of a site, `ids.species(quantity, site)`.
 
@@ -639,13 +683,15 @@ def perfusate_objects(
         site: the site (a zone for its vascular space, `res`).
         compartment: the compartment of the perfusate at the site.
         composition: the start, `Composition.default()` by default.
+        released: the quantities which the organ releases.
 
     Returns:
-        A species of every quantity of `ids.PERFUSATE`, in mM, and the
+        A species of every quantity of the perfusate
+        (`ids.perfusate_quantities`), in mM, and the
         initial assignment of the CO2 at the equilibrium of the buffer with
         the protons and the bicarbonate, `CO2 = h*HCO3/Ka_hco3`.
     """
-    start = (composition or Composition.default()).concentrations()
+    start = (composition or Composition.default()).concentrations(released)
     h, hco3, co2 = (ids.species(q, site) for q in ("h", "hco3", "co2"))
     return CoreObjects(
         species=[
@@ -711,6 +757,7 @@ def zone_objects(
     profile: Mapping[str, float] | None = None,
     composition: Composition | None = None,
     bile: bool = True,
+    released: tuple[str, ...] = ids.RELEASABLE,
 ) -> CoreObjects:
     """Get the cellular core of a zone, its vascular space included.
 
@@ -725,6 +772,9 @@ def zone_objects(
             organ); a process without a factor has none.
         composition: the start of the perfusate species of the vascular space.
         bile: the zone secretes bile (a liver), `Vbile_<zone>`.
+        released: the quantities of `ids.RELEASABLE` which the dying cells
+            release (the necrotic cells of the zone); the enzymes of the
+            cells and the vascular space are the released ones.
 
     Returns:
         The species of the cells, the necrotic cells and the vascular space,
@@ -736,8 +786,10 @@ def zone_objects(
         the model defines once.
 
     Raises:
-        ValueError: if `zone` is no zone id, or the profile has a process
-            which is not in `PROCESSES` or a factor which is negative.
+        ValueError: if `zone` is no zone id, the profile has a process
+            which is not in `PROCESSES` or a factor which is negative, a
+            released quantity is no quantity of `ids.RELEASABLE`, or the
+            constants lack what the zone needs (`CoreParameters.problems`).
     """
     if not ids.is_zone(zone):
         raise ValueError(f"'{zone}' is no zone id (z1, z2, ...).")
@@ -748,6 +800,12 @@ def zone_objects(
     negative = sorted(k for k, x in profile.items() if not x >= 0)
     if negative:
         raise ValueError(f"The profile of {negative} in {zone} is not >= 0.")
+    other = [q for q in released if q not in ids.RELEASABLE]
+    if other:
+        raise ValueError(f"No releasable quantities: {other}, see ids.RELEASABLE.")
+    missing = params.problems(released, bile)
+    if missing:
+        raise ValueError("; ".join(missing))
     cell, dead = ids.cell_site(zone), ids.dead_site(zone)
     c = _ids(ids.species, cell)
     v = _ids(ids.species, zone)
@@ -773,7 +831,7 @@ def zone_objects(
             for process, factor in profile.items()
         ]
     )
-    for q in ids.CELL:
+    for q in ids.cell_quantities(released):
         if q in _CONTENTS:
             content = _CONTENTS[q]
             value = getattr(params, content).value
@@ -786,11 +844,11 @@ def zone_objects(
             out.species.append(
                 _species(c(q), cells, q, f"cells {zone}", s.value, s.notes)
             )
-    for q in ids.RELEASED:
+    for q in released:
         out.species.append(
             _species(ids.species(q, dead), cells, q, f"necrotic cells {zone}", 0.0)
         )
-    out += perfusate_objects(zone, vascular, composition)
+    out += perfusate_objects(zone, vascular, composition, released)
     out += buffer_objects(zone, vascular)
 
     def mm(s: str, km: str) -> str:
@@ -847,7 +905,7 @@ def zone_objects(
          f"{c('glc')} + 12 {c('nadp')} -> 12 {c('nadph')} + 6 {v('co2')}",
          f"{live('PPP')} * PPP_Vmax * {mm(c('glc'), 'PPP_Km_glc')} * {mm(c('nadp'), 'PPP_Km_nadp')}", b),
     ]  # fmt: skip
-    for q in ids.RELEASED:
+    for q in released:
         name, d = _NAMES[q], ids.species(q, dead)
         reactions += [
             (f"{q.upper()}D", f"{name} of dying cells", f"{c(q)} -> {d}",

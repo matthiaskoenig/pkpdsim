@@ -154,7 +154,7 @@ def test_the_ids_follow_the_scheme() -> None:
         assert ids.species(q, ZONE) in sids
     for q in ids.CELL:
         assert ids.species(q, CELL) in sids
-    for q in ids.RELEASED:
+    for q in ids.RELEASABLE:
         assert ids.species(q, DEAD) in sids
     assert not objects.parameters[0].sid.startswith("GLCIM")
     assert ids.zone_id(3) == "z3"
@@ -234,8 +234,8 @@ def test_dead_cells_release_their_enzymes(tmp_path: Path) -> None:
     zone_model(tmp_path / "zone.xml", params, _composition(o2=0.0))
     r = load_zone(tmp_path / "zone.xml")
     cells, vascular = r[CELLS], r[VASCULAR]
-    contents = {q: r[f"[{ids.species(q, CELL)}]"] * cells for q in ids.RELEASED}
-    before = {q: r[f"[{ids.species(q, ZONE)}]"] * vascular for q in ids.RELEASED}
+    contents = {q: r[f"[{ids.species(q, CELL)}]"] * cells for q in ids.RELEASABLE}
+    before = {q: r[f"[{ids.species(q, ZONE)}]"] * vascular for q in ids.RELEASABLE}
     glcim = ids.reaction("GLCIM", ZONE)
     o2im = ids.reaction("O2IM", ZONE)
     r.timeCourseSelections = [
@@ -244,13 +244,13 @@ def test_dead_cells_release_their_enzymes(tmp_path: Path) -> None:
         f"[{ids.species('atp', CELL)}]",
         glcim,
         o2im,
-        *[f"[{ids.species(q, ZONE)}]" for q in ids.RELEASED],
+        *[f"[{ids.species(q, ZONE)}]" for q in ids.RELEASABLE],
     ]
     s = r.simulate(0, 3000, 301)
     assert s[ids.alive(ZONE)][-1] < 1e-6
     assert s[f"[{ids.species('atp', CELL)}]"][-1] < 0.01
     assert s[glcim][0] > 0
-    for q in ids.RELEASED:
+    for q in ids.RELEASABLE:
         after = s[f"[{ids.species(q, ZONE)}]"][-1] * vascular
         assert after == pytest.approx(before[q] + contents[q], rel=1e-6), q
     assert abs(s[glcim][-1]) < 1e-9
@@ -333,7 +333,7 @@ def _totals(
         "nadp": amount("nadp") + amount("nadph"),
         "glutathione": amount("gsh") + 2 * amount("gssg"),
     }
-    for q in ids.RELEASED:
+    for q in ids.RELEASABLE:
         totals[q] = amount(q)
     return totals
 

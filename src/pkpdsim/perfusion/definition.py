@@ -4,9 +4,10 @@ A machine perfusion model is built from a `PerfusionDefinition`, as a PBPK
 model from a `pkpdsim.pbpk.PBPKDefinition`: the circuit (`Circuit`, the
 reservoir, the tubing, the pump flow and the oxygenator), the perfusate
 (`Perfusate`, the fresh composition, the oxygenation target, the oxygen
-carrier and the inert tracers), the mounted organ (`LiverOrgan`, a chain of
-zones with the cellular core; `KidneyOrgan` and `GenericOrgan` are declared
-and not built yet), the temperature and the constants of the cellular core
+carrier and the inert tracers), the mounted organ (a chain of zones with the
+cellular core: `LiverOrgan` with bile, `KidneyOrgan` with the filtration and
+the urine, `GenericOrgan` without excretion; each releases its quantities of
+`ids.RELEASABLE`), the temperature and the constants of the cellular core
 (`pkpdsim.perfusion.core.CoreParameters`). `pkpdsim.perfusion.builder.build`
 writes its SBML.
 
@@ -14,15 +15,17 @@ The numbers of a definition are `Value`s in the units an experimenter gives
 them (ml, ml/min, g, kPa, degC, `pkpdsim.perfusion.units.PU`), which the
 build converts into the units of the model; `validate` refuses a value in
 another unit. The defaults (`Circuit.default`, `Perfusate.default`,
-`LiverOrgan.default`) are the numbers of the parameter database
-(`tables/perfusion.toml`).
+`LiverOrgan.default`, `KidneyOrgan.default`) are the numbers of the
+parameter database (`tables/perfusion.toml`), `GenericOrgan.default` those of
+an organ of the physiology table of the species.
 """
 
 import dataclasses
 import math
+import re
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
-from typing import ClassVar, Literal
+from dataclasses import KW_ONLY, dataclass, field
+from typing import TYPE_CHECKING, ClassVar, Literal, Self
 
 from sbmlutils.factory import Creator
 from sbmlutils.factory.units import UnitDefinition, UnitType
@@ -51,6 +54,7 @@ _TABLE = "perfusion"
 _TABLE_UNITS: dict[str, UnitDefinition] = {
     "ml": PU.ml,
     "ml/min": PU.ml_per_min,
+    "ml/min/g": PU.ml_per_min_g,
     "g": PU.g,
     "kg/l": U.kg_per_l,
     "kPa": PU.kPa,
@@ -250,98 +254,120 @@ class Circuit:
         return out
 
 
-@dataclass(frozen=True)
-class LiverOrgan:
-    """The liver, a chain of zones from periportal to pericentral.
+_SITE_TOKENS = frozenset(
+    {ids.RESERVOIR, ids.INFLOW, ids.OUTFLOW, ids.PERIPORTAL, ids.PERICENTRAL}
+    | {ids.URINE_SITE}
+)
+"""The site tokens of the circuit, which no organ token may be."""
 
-    The perfusate enters the first zone (a single portal inflow, the rat
-    setup; a split between the hepatic artery and the portal vein is not
-    built) and leaves the last one; each zone is a vascular space (the
-    sinusoids) in series with the flow and its hepatocytes with the cellular
-    core, so oxygen, glucose and the damage form gradients along the
-    sinusoid. The zones have `1/n` of the vascular and cell volume of the
-    organ. A profile weighs a process of the core per zone (`p_<process>_<zone>`),
-    normalised so that the total capacity of the organ is that of one zone
-    of the whole volume, the pattern of the zonated liver of the PBPK library
+_ORGAN_TOKEN = re.compile(r"[a-z][a-z0-9]*")
+
+
+@dataclass(frozen=True)
+class _Zonated:
+    """The zones, the fractions and the released quantities of an organ.
+
+    The keyword-only fields and the methods shared by the organs; each organ
+    adds its mass (and the generic organ its token) as positional fields.
+
+    An organ is a chain of zones in series with the flow; each zone is a
+    vascular space and its cells with the cellular core, and has `1/n` of
+    the vascular and cell volume of the organ. A profile weighs a process of
+    the core per zone (`p_<process>_<zone>`), normalised so that the total
+    capacity of the organ is that of one zone of the whole volume, the
+    pattern of the zonated liver of the PBPK library
     (`pkpdsim.pbpk.variants.liver_zonated`).
 
     Attributes:
-        mass: the mass of the liver (g).
         zones: the number of zones, 1 the single compartment.
         profiles: the relative weight of a process of `core.PROCESSES` in
-            every zone, periportal first; a process without a profile is
+            every zone, the first zone first; a process without a profile is
             uniform.
         vascular_fraction: the volume fraction of the vascular space,
-            `None` for the value of the table of the species
-            (`[liver_<species>]`).
-        cell_fraction: the volume fraction of the hepatocytes, `None` for
-            the table.
-        density: the density of the liver (kg/l), `None` for the table.
+            `None` for the value of the table of the species.
+        cell_fraction: the volume fraction of the cells, `None` for the
+            table.
+        density: the density of the organ (kg/l), `None` for the table.
+        released: the quantities of `ids.RELEASABLE` which its necrotic
+            cells release into the perfusate, `None` for those of the organ
+            (`RELEASED`); each needs its content in the constants of the core.
     """
 
-    key: ClassVar[str] = "li"
-    """The organ token of the ids (`M_li`)."""
+    RELEASED: ClassVar[tuple[str, ...]] = ids.RELEASABLE
+    """The quantities which the organ releases by default."""
 
-    mass: Value
+    what: ClassVar[str] = "organ"
+    """The organ in the problems of a definition."""
+
+    TABLE_FIELDS: ClassVar[tuple[str, ...]] = (
+        "vascular_fraction",
+        "cell_fraction",
+        "density",
+    )
+    """The constants which the table of the organ gives where they are `None`."""
+
+    _: KW_ONLY
     zones: int = 1
     profiles: Mapping[str, Sequence[float]] = field(default_factory=dict)
     vascular_fraction: Value | None = None
     cell_fraction: Value | None = None
     density: Value | None = None
+    released: Sequence[str] | None = None
+
+    if TYPE_CHECKING:
+
+        @property
+        def mass(self) -> Value:
+            """The mass of the organ (g), a field of every organ."""
+            ...
 
     def __post_init__(self) -> None:
-        """Keep the profiles as a read-only map of tuples.
+        """Keep the profiles as a read-only map of tuples, the released as a tuple.
 
         Raises:
             ValueError: for less than one zone.
         """
         if self.zones < 1:
-            raise ValueError(f"A liver has at least one zone, not {self.zones}.")
+            raise ValueError(f"A {self.what} has at least one zone, not {self.zones}.")
         profiles = {k: tuple(float(x) for x in v) for k, v in self.profiles.items()}
         object.__setattr__(self, "profiles", FrozenMap(profiles))
+        if self.released is not None:
+            object.__setattr__(self, "released", tuple(self.released))
 
-    @classmethod
-    def default(
-        cls,
-        zones: int = 1,
-        profiles: Mapping[str, Sequence[float]] | None = None,
-        species: Species = Species.RAT,
-    ) -> "LiverOrgan":
-        """Get the reference liver of a species (`[liver_<species>]`)."""
-        section = f"liver_{species}"
-        return cls(
-            mass=table_value(section, "mass"),
-            zones=zones,
-            profiles=profiles or {},
-            vascular_fraction=table_value(section, "vascular_fraction"),
-            cell_fraction=table_value(section, "cell_fraction"),
-            density=table_value(section, "density"),
-        )
+    def releases(self) -> tuple[str, ...]:
+        """Get the released quantities, the default of the organ for `None`."""
+        return self.RELEASED if self.released is None else tuple(self.released)
 
-    def resolved(self, species: Species) -> "LiverOrgan":
-        """Get the liver with the constants of the table where it has none.
+    def _table(self, species: Species) -> Mapping[str, Value]:
+        """Get the fractions and the density of the table of the species.
+
+        Raises:
+            KeyError: if the table has no section of the organ and species.
+        """
+        raise NotImplementedError
+
+    def resolved(self, species: Species) -> "Self":
+        """Get the organ with the constants of the table where it has none.
 
         Args:
-            species: the species, the section `[liver_<species>]`.
+            species: the species of the table.
 
         Returns:
-            The liver with every fraction and the density given.
+            The organ with every fraction and the density given.
 
         Raises:
             KeyError: if a constant is missing and the table has no section
-                of the species.
+                of the organ and species.
         """
-        section = f"liver_{species}"
-        values = {
-            name: table_value(section, name)
-            for name in ("vascular_fraction", "cell_fraction", "density")
-            if getattr(self, name) is None
-        }
-        return dataclasses.replace(self, **values) if values else self
+        names = [n for n in self.TABLE_FIELDS if getattr(self, n) is None]
+        if not names:
+            return self
+        table = self._table(species)
+        return dataclasses.replace(self, **{n: table[n] for n in names})
 
     def problems(self) -> list[str]:
-        """Get what is wrong with the liver."""
-        where = "liver"
+        """Get what is wrong with the organ."""
+        where = self.what
         out = _unit(where, "mass", self.mass, PU.g)
         out += _positive(where, "mass", self.mass)
         if self.mass.uncertainties:
@@ -372,34 +398,284 @@ class LiverOrgan:
                 out.append(f"{where}: the profile '{process}' has a value below 0")
             elif not sum(values) > 0:
                 out.append(f"{where}: the profile '{process}' is 0 in every zone")
+        released = self.releases()
+        for q in released:
+            if q not in ids.RELEASABLE:
+                out.append(
+                    f"{where}: the released quantity '{q}' is none of "
+                    f"{', '.join(ids.RELEASABLE)}"
+                )
+        if len(set(released)) != len(released):
+            out.append(f"{where}: a released quantity is given twice")
         return out
 
 
 @dataclass(frozen=True)
-class KidneyOrgan:
-    """The kidney, with the filtration and the urine (not built yet).
+class LiverOrgan(_Zonated):
+    """The liver, a chain of zones from periportal to pericentral, with bile.
+
+    The perfusate enters the first zone (a single portal inflow, the rat
+    setup; a split between the hepatic artery and the portal vein is not
+    built) and leaves the last one; each zone is a vascular space (the
+    sinusoids) in series with the flow and its hepatocytes with the cellular
+    core, so oxygen, glucose and the damage form gradients along the
+    sinusoid, and secretes bile. The constants without a value are those of
+    `[liver_<species>]` of the perfusion table; the liver releases ALT, AST,
+    LDH and potassium.
 
     Attributes:
-        mass: the mass of the kidney (g).
+        mass: the mass of the liver (g).
+        zones: the number of zones (`_Zonated`, as the fields below).
+        profiles: the zonal profiles of the processes.
+        vascular_fraction: the vascular fraction, `None` for the table.
+        cell_fraction: the cell fraction, `None` for the table.
+        density: the density (kg/l), `None` for the table.
+        released: the released quantities, `None` for `RELEASED`.
     """
 
-    key: ClassVar[str] = "ki"
-    """The organ token of the ids."""
+    key: ClassVar[str] = "li"
+    """The organ token of the ids (`M_li`)."""
+
+    what: ClassVar[str] = "liver"
 
     mass: Value
+
+    @classmethod
+    def default(
+        cls,
+        zones: int = 1,
+        profiles: Mapping[str, Sequence[float]] | None = None,
+        species: Species = Species.RAT,
+    ) -> "LiverOrgan":
+        """Get the reference liver of a species (`[liver_<species>]`)."""
+        return cls(
+            mass=table_value(f"liver_{species}", "mass"),
+            zones=zones,
+            profiles=profiles or {},
+        ).resolved(species)
+
+    def _table(self, species: Species) -> Mapping[str, Value]:
+        """Get the constants of `[liver_<species>]`."""
+        return _section(f"liver_{species}", self.TABLE_FIELDS)
 
 
 @dataclass(frozen=True)
-class GenericOrgan:
-    """An organ with the cellular core and no excretion (not built yet).
+class KidneyOrgan(_Zonated):
+    """The kidney, with the filtration of the perfusate and the urine.
+
+    The perfusate enters the kidney by the renal artery and leaves by the
+    renal vein; the zones are in series with the flow (one zone, the cortex,
+    by default). The glomeruli filter the water and the small solutes of the
+    perfusate (`ids.FILTERED`, not the enzymes) at the GFR `gfr*mass`,
+    shared by the zones by their volume, and the tubules reabsorb the
+    fraction `reabsorption` of the filtered water and small solutes, so the
+    urine has the composition of the perfusate; the tracers are filtered and
+    not reabsorbed (a filtration marker). The urine leaves the perfusate, so
+    the flow after the kidney is the pump flow less the urine flow:
+    `PerfusionDefinition.validate` refuses a definition whose urine flow is
+    not below its pump flow, and an experiment keeps the pump flow above it
+    (the GFR is that of the organ and does not follow the flow). The kidney
+    releases LDH and potassium and secretes no bile. The constants without
+    a value are those of `[kidney_<species>]` of the perfusion table.
 
     Attributes:
-        key: the organ token of the ids.
-        mass: the mass of the organ (g).
+        mass: the mass of the kidney (g).
+        zones: the number of zones (`_Zonated`, as the fields below).
+        profiles: the zonal profiles of the processes.
+        vascular_fraction: the vascular fraction, `None` for the table.
+        cell_fraction: the cell fraction, `None` for the table.
+        density: the density (kg/l), `None` for the table.
+        released: the released quantities, `None` for `RELEASED`.
+        gfr: the glomerular filtration rate per g of kidney (ml/min/g),
+            `None` for the table.
+        reabsorption: the fraction of the filtered water and small solutes
+            which the tubules reabsorb, from 0 to below 1, `None` for the
+            table.
     """
+
+    key: ClassVar[str] = "ki"
+    """The organ token of the ids (`M_ki`)."""
+
+    RELEASED: ClassVar[tuple[str, ...]] = ("ldh", "k")
+    what: ClassVar[str] = "kidney"
+    TABLE_FIELDS: ClassVar[tuple[str, ...]] = (
+        *_Zonated.TABLE_FIELDS,
+        "gfr",
+        "reabsorption",
+    )
+
+    mass: Value
+    _: KW_ONLY
+    gfr: Value | None = None
+    reabsorption: Value | None = None
+
+    @classmethod
+    def default(
+        cls,
+        zones: int = 1,
+        profiles: Mapping[str, Sequence[float]] | None = None,
+        species: Species = Species.RAT,
+    ) -> "KidneyOrgan":
+        """Get the reference kidney of a species (`[kidney_<species>]`)."""
+        return cls(
+            mass=table_value(f"kidney_{species}", "mass"),
+            zones=zones,
+            profiles=profiles or {},
+        ).resolved(species)
+
+    def _table(self, species: Species) -> Mapping[str, Value]:
+        """Get the constants of `[kidney_<species>]`."""
+        return _section(f"kidney_{species}", self.TABLE_FIELDS)
+
+    def problems(self) -> list[str]:
+        """Get what is wrong with the kidney."""
+        where = self.what
+        out = super().problems()
+        out += _unit(where, "gfr", self.gfr, PU.ml_per_min_g)
+        out += _positive(where, "gfr", self.gfr)
+        out += _unit(where, "reabsorption", self.reabsorption, U.dimensionless)
+        f = self.reabsorption
+        if f is not None and not 0 <= f.value < 1:
+            out.append(
+                f"{where}: the reabsorption must be at least 0 and below 1, got "
+                f"{f.value}"
+            )
+        for name in ("gfr", "reabsorption"):
+            value = getattr(self, name)
+            if value is not None and value.uncertainties:
+                out.append(
+                    f"{where}: {name} has an uncertainty, which the build does "
+                    "not convert into the units of the model"
+                )
+        return out
+
+    def urine_flow(self) -> float:
+        """Get the net urine flow of the kidney (ml/min), `(1 - f_reab)*gfr*mass`.
+
+        Raises:
+            ValueError: if the GFR or the reabsorption is not given
+                (`resolved`).
+        """
+        if self.gfr is None or self.reabsorption is None:
+            raise ValueError("The kidney is not resolved: gfr or reabsorption.")
+        return (1 - self.reabsorption.value) * self.gfr.value * self.mass.value
+
+
+@dataclass(frozen=True)
+class GenericOrgan(_Zonated):
+    """An organ with the cellular core and no excretion (no bile, no urine).
+
+    Another organ in a circuit is a definition and not a new model: the
+    zones, the core and the release of LDH and potassium, with the constants
+    of the core of the organ (`core.CoreParameters`, `[core_generic]` copies
+    of the liver values by default). The constants without a value are those
+    of the organ `key` of the physiology table of the species (`[male.organs.
+    <key>]` of `physiology_<species>.toml`: the vascular fraction `f_vas`,
+    the cell fraction `1 - f_vas - f_int` and the density), so an organ of
+    the PBPK library needs its mass only.
+
+    Attributes:
+        key: the organ token of the ids (`M_<key>`), lower case letters and
+            digits, an organ of the physiology table (`mu`, `he`) or another.
+        mass: the mass of the organ (g).
+        zones: the number of zones (`_Zonated`, as the fields below).
+        profiles: the zonal profiles of the processes.
+        vascular_fraction: the vascular fraction, `None` for the table.
+        cell_fraction: the cell fraction, `None` for the table.
+        density: the density (kg/l), `None` for the table.
+        released: the released quantities, `None` for `RELEASED`.
+    """
+
+    RELEASED: ClassVar[tuple[str, ...]] = ("ldh", "k")
 
     key: str
     mass: Value
+
+    @classmethod
+    def default(cls, key: str, species: Species = Species.RAT) -> "GenericOrgan":
+        """Get an organ of the physiology table with its mass and fractions.
+
+        Args:
+            key: the organ of the physiology table (`mu`, `he`, `br`).
+            species: the species of the table.
+
+        Returns:
+            The organ of the reference individual (male) of the species.
+
+        Raises:
+            KeyError: if the table has no organ `key`.
+        """
+        mass = entry(f"physiology_{species}", f"male.organs.{key}", "mass")
+        assert isinstance(mass.value, float)
+        return cls(
+            key,
+            Value(
+                mass.value * 1e3,
+                PU.g,
+                mass.source,
+                f"physiology_{species}.toml [male.organs.{key}] mass in g; "
+                f"{mass.notes}",
+            ),
+        ).resolved(species)
+
+    def _table(self, species: Species) -> Mapping[str, Value]:
+        """Get the fractions and the density of the physiology table."""
+        return _physiology(self.key, species)
+
+    def token_problems(self) -> list[str]:
+        """Get what is wrong with the token of the organ."""
+        if not _ORGAN_TOKEN.fullmatch(self.key) or self.key in _SITE_TOKENS:
+            return [
+                f"organ: the token '{self.key}' is no organ token (lower case "
+                "letters and digits, no site of the circuit)"
+            ]
+        if ids.is_zone(self.key):
+            return [f"organ: the token '{self.key}' is a zone id"]
+        return []
+
+    def problems(self) -> list[str]:
+        """Get what is wrong with the organ, its token included."""
+        return self.token_problems() + super().problems()
+
+
+def _section(section: str, names: Sequence[str]) -> dict[str, Value]:
+    """Get numbers of a section of the perfusion table.
+
+    Raises:
+        KeyError: if the table has no such section or number.
+    """
+    return {k: table_value(section, k) for k in names}
+
+
+def _physiology(key: str, species: Species) -> dict[str, Value]:
+    """Get the fractions and the density of an organ of the physiology table.
+
+    Raises:
+        KeyError: if the table has no organ `key`.
+    """
+    name, section = f"physiology_{species}", f"male.organs.{key}"
+    f_vas = entry(name, section, "f_vas")
+    f_int = entry(name, section, "f_int")
+    rho = entry(name, section, "density")
+    assert isinstance(f_vas.value, float)
+    assert isinstance(f_int.value, float)
+    assert isinstance(rho.value, float)
+    where = f"{name}.toml [{section}]"
+    return {
+        "vascular_fraction": Value(
+            f_vas.value, U.dimensionless, f_vas.source, f"{where} f_vas; {f_vas.notes}"
+        ),
+        "cell_fraction": Value(
+            1 - f_vas.value - f_int.value,
+            U.dimensionless,
+            "ModelChoice",
+            f"derived: 1 - f_vas - f_int of {where}, f_int = {f_int.value}; the "
+            "tissue space of the cells",
+        ),
+        "density": Value(
+            rho.value, U.kg_per_l, rho.source, f"{where} density; {rho.notes}"
+        ),
+    }
 
 
 type Organ = LiverOrgan | KidneyOrgan | GenericOrgan
@@ -452,21 +728,41 @@ class PerfusionDefinition:
         out += _unit("temperature", "temperature", self.temperature, PU.degC)
         if not self.temperature.value > -273.15:
             out.append("temperature: below the absolute zero")
-        if isinstance(self.organ, LiverOrgan):
-            try:
-                out += self.organ.resolved(self.species).problems()
-            except KeyError:
-                out.append(
-                    f"liver: the table has no section [liver_{self.species}] for "
-                    "the fractions and the density of the liver"
-                )
-        else:
-            out.append(
-                f"the organ {type(self.organ).__name__} is not built yet, only "
-                "the liver"
-            )
+        out += self._organ_problems()
         if not out and self.perfusate.tracers:
             out += self._tracer_clashes()
+        return out
+
+    @property
+    def released(self) -> tuple[str, ...]:
+        """The quantities which the necrotic cells of the organ release."""
+        return self.organ.releases()
+
+    def _organ_problems(self) -> list[str]:
+        """Get what is wrong with the organ, its core and its urine flow."""
+        organ = self.organ
+        if isinstance(organ, GenericOrgan) and organ.token_problems():
+            return organ.token_problems()
+        try:
+            resolved = organ.resolved(self.species)
+        except KeyError:
+            return [
+                f"{organ.what}: the table of the {self.species} has no "
+                f"{organ.what} '{organ.key}' for the vascular_fraction, the "
+                "cell_fraction and the density, give them"
+            ]
+        out = resolved.problems()
+        out += self.core.problems(
+            tuple(q for q in self.released if q in ids.RELEASABLE),
+            bile=isinstance(organ, LiverOrgan),
+        )
+        if isinstance(resolved, KidneyOrgan) and not out:
+            flow = self.circuit.flow.value
+            if not resolved.urine_flow() < flow:
+                out.append(
+                    f"kidney: the urine flow {resolved.urine_flow():.4g} ml/min "
+                    f"is not below the pump flow {flow} ml/min"
+                )
         return out
 
     def _tracer_clashes(self) -> list[str]:

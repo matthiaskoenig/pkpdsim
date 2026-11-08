@@ -122,3 +122,174 @@ nadph = { value = 0.3, unit = "mM", source = "ModelChoice", notes = "the NADPH o
 ros = { value = 0.0, unit = "mM", source = "ModelChoice", notes = "PVL liver model, pkdb_models misc/machine_perfusion, to be fitted" }
 gsh = { value = 1.0, unit = "mM", source = "ModelChoice", notes = "PVL liver model, pkdb_models misc/machine_perfusion, to be fitted" }
 gssg = { value = 0.0, unit = "mM", source = "ModelChoice", notes = "PVL liver model, pkdb_models misc/machine_perfusion, to be fitted" }
+
+[kidney_rat]
+# one perfused kidney; the filtration of the perfusate water (pkpdsim.perfusion.builder)
+mass = { value = 0.7665, unit = "g", source = "Brown1997", notes = "derived: one of the two kidneys, half the reference kidney tissue mass of the 250 g male rat without its residual blood of physiology_rat.toml ([male.organs.ki] mass 1.533 g, 0.73 % BW times (1 - 0.16), Table 5 of Brown 1997)" }
+vascular_fraction = { value = 0.16, unit = "dimensionless", source = "Brown1997", notes = "volume fraction of blood in the excised kidney, Table 30 of Brown 1997 as in physiology_rat.toml ([male.organs.ki] f_vas); a perfused kidney is washed of blood, so the vascular space holds the perfusate" }
+density = { value = 1.05, unit = "kg/l", source = "httk", notes = "the density of the rat kidney of physiology_rat.toml ([male.organs.ki] density, httk 2.7.4 tissue.data)" }
+cell_fraction = { value = 0.7174, unit = "dimensionless", source = "ModelChoice", notes = "derived: 1 - f_vas - f_int of physiology_rat.toml ([male.organs.ki], f_int = 0.1226); the tissue space of the tubular and other cells" }
+gfr = { value = 1.614481, unit = "ml/min/g", source = "Carrara2016", notes = "derived: the GFR of the 250 g rat of physiology_rat.toml ([male] gfr 2.475 ml/min, iohexol plasma clearance 0.99 ml/min/100 g of conscious male Lewis rats) over the mass of both kidneys (1.533 g), the GFR per g of an intact kidney; an isolated perfused rat kidney filters 0.67 +- 0.05 ml/min at 35 to 45 min (MacDougall 1989, Table I, n = 15, albumin perfusate, kidney weight not reported) and 0.318 +- 0.043 ml/min with Krebs-Ringer bicarbonate at 4 ml/min, 0.574 ml/min at a normal function (Millis 1985), so the perfused kidney may filter less" }
+reabsorption = { value = 0.8657, unit = "dimensionless", source = "MacDougall1989", notes = "derived: the reabsorbed fraction of the filtered water of the isolated perfused rat kidney, 1 - urine flow/GFR = 1 - 0.09/0.67 of Table I of MacDougall 1989 (35 to 45 min, n = 15, bovine serum albumin 6.8 g/dl); Millis 1985 report 1 - 23/318 = 0.928 with Krebs-Ringer bicarbonate at 4 ml/min; in vivo the kidney reabsorbs 98 to 99 % of the filtered water (Millis 1985). Applied to the water and the small solutes of the perfusate alike, a model choice" }
+
+[kidney_human]
+mass = { value = 155.0, unit = "g", source = "ICRP89", notes = "derived: one of the two kidneys, half the mass of both kidneys of the adult male of physiology_human.toml ([male.organs.ki] mass 0.31 kg, ICRP 89 Table 2.8)" }
+vascular_fraction = { value = 0.2642, unit = "dimensionless", source = "ICRP89", notes = "the vascular fraction of the kidney of physiology_human.toml ([male.organs.ki] f_vas, derived from ICRP 89 Tables 2.8, 2.14)" }
+density = { value = 1.05, unit = "kg/l", source = "ICRP89", notes = "the density of the kidney of physiology_human.toml ([male.organs.ki] density, ICRP 89 Section 8.2.1 para 337)" }
+cell_fraction = { value = 0.6144, unit = "dimensionless", source = "ModelChoice", notes = "derived: 1 - f_vas - f_int of physiology_human.toml ([male.organs.ki], f_int = 0.1214)" }
+gfr = { value = 0.403226, unit = "ml/min/g", source = "ICRP89", notes = "derived: the GFR of the adult male of physiology_human.toml ([male] gfr 125 ml/min, ICRP 89 Section 8.3.1 para 380) over the mass of both kidneys (310 g)" }
+reabsorption = { value = 0.8657, unit = "dimensionless", source = "ModelChoice", notes = "the reabsorbed fraction of the isolated perfused rat kidney ([kidney_rat] reabsorption, MacDougall 1989); no value of a perfused human kidney read" }
+
+[kidney_pig]
+mass = { value = 57.0, unit = "g", source = "Lin2020", notes = "derived: one of the two kidneys, half the mass of both kidneys of the 30 kg male pig of physiology_pig.toml ([male.organs.ki] mass 0.114 kg, Lin 2020 Table 10, 0.38 % BW)" }
+vascular_fraction = { value = 0.2642, unit = "dimensionless", source = "ModelChoice", notes = "the vascular fraction of the kidney of physiology_pig.toml ([male.organs.ki] f_vas), the value of the human organ" }
+density = { value = 1.05, unit = "kg/l", source = "ModelChoice", notes = "the density of the kidney of physiology_pig.toml ([male.organs.ki] density), the human value of ICRP 89" }
+cell_fraction = { value = 0.6144, unit = "dimensionless", source = "ModelChoice", notes = "derived: 1 - f_vas - f_int of physiology_pig.toml ([male.organs.ki], f_int = 0.1214)" }
+gfr = { value = 1.134211, unit = "ml/min/g", source = "Gasthuys2017", notes = "derived: the GFR of the 30 kg pig of physiology_pig.toml ([male] gfr 129.3 ml/min, exo-iohexol plasma clearance 4.31 ml/min/kg of piglets times 30 kg) over the mass of both kidneys (114 g)" }
+reabsorption = { value = 0.8657, unit = "dimensionless", source = "ModelChoice", notes = "the reabsorbed fraction of the isolated perfused rat kidney ([kidney_rat] reabsorption, MacDougall 1989); no value of a perfused pig kidney read" }
+
+[core_kidney_rat]
+# the constants of the cellular core of the kidney, copies of [core_liver_rat] without the
+# contents of ALT and AST, which the kidney does not release, and without the bile
+GLCIM_Vmax = { value = 100.0, unit = "mmol/min/l", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] GLCIM_Vmax, no value of the kidney read" }
+GLCIM_Km_glc = { value = 0.1, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] GLCIM_Km_glc, no value of the kidney read" }
+O2IM_Vmax = { value = 100.0, unit = "mmol/min/l", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] O2IM_Vmax, no value of the kidney read" }
+O2IM_Km_o2 = { value = 0.001, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] O2IM_Km_o2, no value of the kidney read" }
+LACEX_Vmax = { value = 100.0, unit = "mmol/min/l", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] LACEX_Vmax, no value of the kidney read" }
+LACEX_Km_lac = { value = 0.5, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] LACEX_Km_lac, no value of the kidney read" }
+LACEX_h_cell = { value = 6.3e-05, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] LACEX_h_cell, no value of the kidney read" }
+GLGP_Vmax = { value = 0.2, unit = "mmol/min/l", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] GLGP_Vmax, no value of the kidney read" }
+GLGP_Km_glyc = { value = 10.0, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] GLGP_Km_glyc, no value of the kidney read" }
+GLC2PYR_Vmax = { value = 0.2, unit = "mmol/min/l", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] GLC2PYR_Vmax, no value of the kidney read" }
+GLC2PYR_Km_glc = { value = 0.5, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] GLC2PYR_Km_glc, no value of the kidney read" }
+GLC2PYR_Km_adp = { value = 0.01, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] GLC2PYR_Km_adp, no value of the kidney read" }
+GLC2PYR_Km_nad = { value = 0.01, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] GLC2PYR_Km_nad, no value of the kidney read" }
+GLC2PYR_Ki_atp = { value = 1.5, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] GLC2PYR_Ki_atp, no value of the kidney read" }
+GLC2PYR_n_atp = { value = 4.0, unit = "dimensionless", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] GLC2PYR_n_atp, no value of the kidney read" }
+LDH_Vmax = { value = 1.0, unit = "mmol/min/l", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] LDH_Vmax, no value of the kidney read" }
+LDH_Km_pyr = { value = 1.0, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] LDH_Km_pyr, no value of the kidney read" }
+LDH_Km_lac = { value = 1.0, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] LDH_Km_lac, no value of the kidney read" }
+LDH_Km_nadh = { value = 0.1, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] LDH_Km_nadh, no value of the kidney read" }
+LDH_Km_nad = { value = 0.1, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] LDH_Km_nad, no value of the kidney read" }
+LDH_Keq = { value = 1.5, unit = "dimensionless", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] LDH_Keq, no value of the kidney read" }
+ATPU_Vmax = { value = 0.1, unit = "mmol/min/l", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] ATPU_Vmax, no value of the kidney read" }
+ATPU_Km_atp = { value = 0.01, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] ATPU_Km_atp, no value of the kidney read" }
+TCA_Vmax = { value = 0.01, unit = "mmol/min/l", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] TCA_Vmax, no value of the kidney read" }
+TCA_Km_pyr = { value = 0.1, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] TCA_Km_pyr, no value of the kidney read" }
+TCA_Km_nad = { value = 0.01, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] TCA_Km_nad, no value of the kidney read" }
+OXPHOS_Vmax = { value = 0.03, unit = "mmol/min/l", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] OXPHOS_Vmax, no value of the kidney read" }
+OXPHOS_Km_nadh = { value = 0.01, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] OXPHOS_Km_nadh, no value of the kidney read" }
+OXPHOS_Km_o2 = { value = 0.001, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] OXPHOS_Km_o2, no value of the kidney read" }
+OXPHOS_Km_adp = { value = 0.01, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] OXPHOS_Km_adp, no value of the kidney read" }
+ROSP_Vmax = { value = 0.005, unit = "mmol/min/l", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] ROSP_Vmax, no value of the kidney read" }
+ROSP_Km_nadh = { value = 0.01, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] ROSP_Km_nadh, no value of the kidney read" }
+ROSP_Km_o2 = { value = 0.001, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] ROSP_Km_o2, no value of the kidney read" }
+ROSP_Ki_o2 = { value = 0.01, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] ROSP_Ki_o2, no value of the kidney read" }
+ROSP_n_o2 = { value = 4.0, unit = "dimensionless", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] ROSP_n_o2, no value of the kidney read" }
+ROSDETOX_k = { value = 0.005, unit = "1/min", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] ROSDETOX_k, no value of the kidney read" }
+ROSDETOX_Km_ros = { value = 0.5, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] ROSDETOX_Km_ros, no value of the kidney read" }
+GR_k = { value = 0.005, unit = "1/min", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] GR_k, no value of the kidney read" }
+GR_Km_nadph = { value = 0.1, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] GR_Km_nadph, no value of the kidney read" }
+PPP_Vmax = { value = 0.005, unit = "mmol/min/l", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] PPP_Vmax, no value of the kidney read" }
+PPP_Km_glc = { value = 0.5, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] PPP_Km_glc, no value of the kidney read" }
+PPP_Km_nadp = { value = 0.01, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] PPP_Km_nadp, no value of the kidney read" }
+NEC_k = { value = 0.02, unit = "1/min", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] NEC_k, no value of the kidney read" }
+NEC_atp = { value = 0.1, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] NEC_atp, no value of the kidney read" }
+NEC_n_atp = { value = 4.0, unit = "dimensionless", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] NEC_n_atp, no value of the kidney read" }
+NEC_h = { value = 0.0001, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] NEC_h, no value of the kidney read" }
+NEC_n_h = { value = 8.0, unit = "dimensionless", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] NEC_n_h, no value of the kidney read" }
+PROTEINR_k = { value = 0.2, unit = "1/min", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] PROTEINR_k, no value of the kidney read" }
+KR_k = { value = 1.0, unit = "1/min", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] KR_k, no value of the kidney read" }
+LDH_content = { value = 0.133333, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] LDH_content, no value of the kidney read" }
+K_content = { value = 140.0, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] K_content, no value of the kidney read" }
+f_alive_start = { value = 1.0, unit = "dimensionless", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] f_alive_start, no value of the kidney read" }
+
+[core_kidney_rat_start]
+# the initial concentrations of the cells of the kidney, copies of [core_liver_rat_start]
+glc = { value = 5.0, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat_start] glc, no value of the kidney read" }
+glyc = { value = 200.0, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat_start] glyc, no value of the kidney read" }
+o2 = { value = 0.085, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat_start] o2, no value of the kidney read" }
+pyr = { value = 0.8, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat_start] pyr, no value of the kidney read" }
+lac = { value = 1.0, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat_start] lac, no value of the kidney read" }
+atp = { value = 3.0, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat_start] atp, no value of the kidney read" }
+adp = { value = 1.0, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat_start] adp, no value of the kidney read" }
+nad = { value = 0.1, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat_start] nad, no value of the kidney read" }
+nadh = { value = 3.9, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat_start] nadh, no value of the kidney read" }
+nadp = { value = 0.03, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat_start] nadp, no value of the kidney read" }
+nadph = { value = 0.3, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat_start] nadph, no value of the kidney read" }
+ros = { value = 0.0, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat_start] ros, no value of the kidney read" }
+gsh = { value = 1.0, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat_start] gsh, no value of the kidney read" }
+gssg = { value = 0.0, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat_start] gssg, no value of the kidney read" }
+
+[core_generic]
+# the constants of the cellular core of the organ, copies of [core_liver_rat] without the
+# contents of ALT and AST, which the organ does not release, and without the bile
+GLCIM_Vmax = { value = 100.0, unit = "mmol/min/l", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] GLCIM_Vmax, no value of the organ read" }
+GLCIM_Km_glc = { value = 0.1, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] GLCIM_Km_glc, no value of the organ read" }
+O2IM_Vmax = { value = 100.0, unit = "mmol/min/l", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] O2IM_Vmax, no value of the organ read" }
+O2IM_Km_o2 = { value = 0.001, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] O2IM_Km_o2, no value of the organ read" }
+LACEX_Vmax = { value = 100.0, unit = "mmol/min/l", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] LACEX_Vmax, no value of the organ read" }
+LACEX_Km_lac = { value = 0.5, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] LACEX_Km_lac, no value of the organ read" }
+LACEX_h_cell = { value = 6.3e-05, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] LACEX_h_cell, no value of the organ read" }
+GLGP_Vmax = { value = 0.2, unit = "mmol/min/l", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] GLGP_Vmax, no value of the organ read" }
+GLGP_Km_glyc = { value = 10.0, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] GLGP_Km_glyc, no value of the organ read" }
+GLC2PYR_Vmax = { value = 0.2, unit = "mmol/min/l", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] GLC2PYR_Vmax, no value of the organ read" }
+GLC2PYR_Km_glc = { value = 0.5, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] GLC2PYR_Km_glc, no value of the organ read" }
+GLC2PYR_Km_adp = { value = 0.01, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] GLC2PYR_Km_adp, no value of the organ read" }
+GLC2PYR_Km_nad = { value = 0.01, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] GLC2PYR_Km_nad, no value of the organ read" }
+GLC2PYR_Ki_atp = { value = 1.5, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] GLC2PYR_Ki_atp, no value of the organ read" }
+GLC2PYR_n_atp = { value = 4.0, unit = "dimensionless", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] GLC2PYR_n_atp, no value of the organ read" }
+LDH_Vmax = { value = 1.0, unit = "mmol/min/l", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] LDH_Vmax, no value of the organ read" }
+LDH_Km_pyr = { value = 1.0, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] LDH_Km_pyr, no value of the organ read" }
+LDH_Km_lac = { value = 1.0, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] LDH_Km_lac, no value of the organ read" }
+LDH_Km_nadh = { value = 0.1, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] LDH_Km_nadh, no value of the organ read" }
+LDH_Km_nad = { value = 0.1, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] LDH_Km_nad, no value of the organ read" }
+LDH_Keq = { value = 1.5, unit = "dimensionless", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] LDH_Keq, no value of the organ read" }
+ATPU_Vmax = { value = 0.1, unit = "mmol/min/l", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] ATPU_Vmax, no value of the organ read" }
+ATPU_Km_atp = { value = 0.01, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] ATPU_Km_atp, no value of the organ read" }
+TCA_Vmax = { value = 0.01, unit = "mmol/min/l", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] TCA_Vmax, no value of the organ read" }
+TCA_Km_pyr = { value = 0.1, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] TCA_Km_pyr, no value of the organ read" }
+TCA_Km_nad = { value = 0.01, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] TCA_Km_nad, no value of the organ read" }
+OXPHOS_Vmax = { value = 0.03, unit = "mmol/min/l", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] OXPHOS_Vmax, no value of the organ read" }
+OXPHOS_Km_nadh = { value = 0.01, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] OXPHOS_Km_nadh, no value of the organ read" }
+OXPHOS_Km_o2 = { value = 0.001, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] OXPHOS_Km_o2, no value of the organ read" }
+OXPHOS_Km_adp = { value = 0.01, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] OXPHOS_Km_adp, no value of the organ read" }
+ROSP_Vmax = { value = 0.005, unit = "mmol/min/l", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] ROSP_Vmax, no value of the organ read" }
+ROSP_Km_nadh = { value = 0.01, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] ROSP_Km_nadh, no value of the organ read" }
+ROSP_Km_o2 = { value = 0.001, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] ROSP_Km_o2, no value of the organ read" }
+ROSP_Ki_o2 = { value = 0.01, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] ROSP_Ki_o2, no value of the organ read" }
+ROSP_n_o2 = { value = 4.0, unit = "dimensionless", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] ROSP_n_o2, no value of the organ read" }
+ROSDETOX_k = { value = 0.005, unit = "1/min", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] ROSDETOX_k, no value of the organ read" }
+ROSDETOX_Km_ros = { value = 0.5, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] ROSDETOX_Km_ros, no value of the organ read" }
+GR_k = { value = 0.005, unit = "1/min", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] GR_k, no value of the organ read" }
+GR_Km_nadph = { value = 0.1, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] GR_Km_nadph, no value of the organ read" }
+PPP_Vmax = { value = 0.005, unit = "mmol/min/l", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] PPP_Vmax, no value of the organ read" }
+PPP_Km_glc = { value = 0.5, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] PPP_Km_glc, no value of the organ read" }
+PPP_Km_nadp = { value = 0.01, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] PPP_Km_nadp, no value of the organ read" }
+NEC_k = { value = 0.02, unit = "1/min", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] NEC_k, no value of the organ read" }
+NEC_atp = { value = 0.1, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] NEC_atp, no value of the organ read" }
+NEC_n_atp = { value = 4.0, unit = "dimensionless", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] NEC_n_atp, no value of the organ read" }
+NEC_h = { value = 0.0001, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] NEC_h, no value of the organ read" }
+NEC_n_h = { value = 8.0, unit = "dimensionless", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] NEC_n_h, no value of the organ read" }
+PROTEINR_k = { value = 0.2, unit = "1/min", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] PROTEINR_k, no value of the organ read" }
+KR_k = { value = 1.0, unit = "1/min", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] KR_k, no value of the organ read" }
+LDH_content = { value = 0.133333, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] LDH_content, no value of the organ read" }
+K_content = { value = 140.0, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] K_content, no value of the organ read" }
+f_alive_start = { value = 1.0, unit = "dimensionless", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat] f_alive_start, no value of the organ read" }
+
+[core_generic_start]
+# the initial concentrations of the cells of the organ, copies of [core_liver_rat_start]
+glc = { value = 5.0, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat_start] glc, no value of the organ read" }
+glyc = { value = 200.0, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat_start] glyc, no value of the organ read" }
+o2 = { value = 0.085, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat_start] o2, no value of the organ read" }
+pyr = { value = 0.8, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat_start] pyr, no value of the organ read" }
+lac = { value = 1.0, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat_start] lac, no value of the organ read" }
+atp = { value = 3.0, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat_start] atp, no value of the organ read" }
+adp = { value = 1.0, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat_start] adp, no value of the organ read" }
+nad = { value = 0.1, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat_start] nad, no value of the organ read" }
+nadh = { value = 3.9, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat_start] nadh, no value of the organ read" }
+nadp = { value = 0.03, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat_start] nadp, no value of the organ read" }
+nadph = { value = 0.3, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat_start] nadph, no value of the organ read" }
+ros = { value = 0.0, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat_start] ros, no value of the organ read" }
+gsh = { value = 1.0, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat_start] gsh, no value of the organ read" }
+gssg = { value = 0.0, unit = "mM", source = "ModelChoice", notes = "liver values, to be replaced: the value of [core_liver_rat_start] gssg, no value of the organ read" }

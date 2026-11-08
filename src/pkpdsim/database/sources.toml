@@ -1157,3 +1157,11 @@ doi = "10.1002/jcph.585"
 [Christmas2017]
 citation = "Christmas KM, Bassingthwaighte JB. Equations for O2 and CO2 solubilities in saline and plasma: combining temperature and density dependences. J Appl Physiol 122(5):1313-1320, 2017."
 doi = "10.1152/japplphysiol.01124.2016"
+
+[MacDougall1989]
+citation = "MacDougall ML, Wiegmann TB. Urate excretion by the isolated perfused rat kidney and modification by drugs. Proc Soc Exp Biol Med 192(3):276-280, 1989."
+doi = "10.3181/00379727-192-42997"
+
+[Millis1985]
+citation = "Millis RM, Barber JD, Anderson WA, Gold AJ, Storm CB, Reindorf CA. Nephrotoxic effects of oxygen transport media in the isolated rat kidney. Proc Soc Exp Biol Med 178(4):643-647, 1985."
+doi = "10.3181/00379727-178-4-RC1A"
