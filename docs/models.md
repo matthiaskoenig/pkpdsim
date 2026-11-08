@@ -186,7 +186,7 @@ other value which is not a number exits with 2. A package without a model object
 exits with 2, and `compare --renames FILE` applies the expected renames of a
 migration to the old dump (see
 [Experiments and their metadata](experiments.md#renames-in-a-verification) and
-[Verification across versions of sbmlsim](#verification-across-versions-of-sbmlsim)).
+[Comparing two dumps](#comparing-two-dumps)).
 An experiment which cannot be initialized is recorded in the dump as an error and
 the command exits with 1 after the other experiments are stored. A dump records
 the sex of the build which every task of an experiment of pkpdsim ran
@@ -199,42 +199,18 @@ signatures: the arguments of `Simulator` (its tolerances and `n_workers`), of
 `ExperimentRunner` (without the simulator) and of the run, with its
 `figure_settings` (without the output path), the matplotlib `rc` settings a run
 changes and the counts of the calls. It exits with 2 for a run which did not
-complete. The json has `run.figure_settings`; the part `figure` of pkpdsim 0.4 (the
-class attributes of sbmlsim's `Figure`) is gone.
+complete. The json has `run.figure_settings`.
 
-## Verification across versions of sbmlsim
+## Comparing two dumps
 
-A dump records the versions of sbmlsim and pkpdsim it was made with, and `compare`
-prints them. A dump of pkpdsim 0.4 (sbmlsim 0.8) and one of pkpdsim 0.5 (sbmlsim
-0.9) differ in their layout, which `compare` takes into account:
+A dump records the versions of sbmlsim and pkpdsim it was made with, and `compare` prints them. The comparison itself is that of `sbmlsim.verify`:
 
-- sbmlsim 0.8 puts the time first, `(_point, *dims)`, sbmlsim 0.9 last,
-  `(*dims, time)`. `compare` moves the time of every array first and matches the
-  other dimensions by name. A dimension of size 1 which only one array has is
-  squeezed (a scan of one point is a simulation now), different names of the
-  dimensions are an infinite difference.
-- sbmlsim 0.9 keeps the state before and after a change at the time of the change
-  (a second dose), sbmlsim 0.8 only the state after it. Two dumps with the same
-  time vectors are compared row by row. Otherwise the rows of a repeated time are
-  matched from the last one, the k-th last old row with the k-th last new row, so
-  the state after a change is compared with the state after it, and only the rows
-  which one dump has more of at a time are left out (the states before a change
-  of a dump of sbmlsim 0.9 compared with one of sbmlsim 0.8; two dumps of sbmlsim
-  0.9 with two rows at a time compare both): the summary counts them and names
-  the experiments with `changes: <experiment> <rows> rows`.
-- The rows of every point of a scan are matched by the times of that point. The
-  points of a grid share their times; in the ragged layout of sbmlsim 0.9
-  (`_point`, every point with its own times, padded with NaN) and in a scan of
-  sbmlsim 0.8 a point is matched and its times are compared on its own.
-- A row at a time which only the old dump has is always a difference, and no
-  pattern of `expected` hides it. A row at a time which only the new dump has (a
-  new output time of a task) is a difference as well, which is printed per task
-  (`times of <experiment>/<task>: <n> rows only in new, at <times>`) and which
-  the pattern `experiment/task/time` of `expected` names.
+- The arrays are matched by the names of their dimensions, the time (or the scan point of the ragged layout) first. A dimension of size 1 which only one array has is squeezed, different names of the dimensions are an infinite difference.
+- A change keeps the state before and after it at the time of the change (a second dose). Two dumps with the same time vectors are compared row by row. Otherwise the rows of a repeated time are matched from the last one, the k-th last old row with the k-th last new row, and only the rows which one dump has more of at a time are left out: the summary counts them and names the experiments with `changes: <experiment> <rows> rows`.
+- The rows of every point of a scan are matched by the times of that point. The points of a grid share their times; in the ragged layout (`_point`, every point with its own times, padded with NaN) a point is matched and its times are compared on its own.
+- A row at a time which only the old dump has is always a difference, and no pattern of `expected` hides it. A row at a time which only the new dump has (a new output time of a task) is a difference as well, which is printed per task (`times of <experiment>/<task>: <n> rows only in new, at <times>`) and which the pattern `experiment/task/time` of `expected` names.
 
-The figures of a dump of sbmlsim 0.8 are no longer aligned with those of sbmlsim 0.9 (the port of the models is done): two figures are compared as they are, and `settings` compares the settings of the run.
-
-The ids of sbmlsim 0.9 are SIds (see [Keys](experiments.md#keys)). The migration says so in the renames file instead of weakening the comparison, which then passes with exit code 0 or fails:
+The expected differences of a change of a model package, e.g. a rename of its ids, are said in the renames file instead of weakening the comparison, which then passes with exit code 0 or fails. The ids of a task, a dataset, a figure or a mapping are SIds (see [Keys](experiments.md#keys)):
 
 | part | content |
 | --- | --- |
