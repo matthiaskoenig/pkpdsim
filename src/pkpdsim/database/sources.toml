@@ -44,7 +44,7 @@ citation = "Tiesinga E, Mohr PJ, Newell DB, Taylor BN. CODATA recommended values
 doi = "10.1103/RevModPhys.93.025010"
 
 [ModelChoice]
-citation = "Choice of the pkpdsim PBPK library, not a value of the literature; the notes of the value give the reasoning."
+citation = "Choice of a library of pkpdsim (PBPK or machine perfusion), not a value of the literature; the notes of the value give the reasoning."
 
 [Schiller2005]
 citation = "Schiller C, Fröhlich CP, Giessmann T, Siegmund W, Mönnikes H, Hosten N, Weitschies W. Intestinal fluid volumes and transit of dosage forms as assessed by magnetic resonance imaging. Aliment Pharmacol Ther 22(10):971-979, 2005."

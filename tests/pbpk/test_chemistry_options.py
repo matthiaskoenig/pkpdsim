@@ -236,7 +236,7 @@ def test_a_custom_parameter_is_a_local_id_of_the_organ(tmp_path: Path) -> None:
     assert flat.getParameter("k_deep") is None
     kp = _notes(flat, ids.flat(Organ.MUSCLE, "Kp_deep"))
     assert "The deep pool to tissue." in kp
-    assert "Choice of the pkpdsim PBPK library" in kp
+    assert "Choice of a library of pkpdsim" in kp
 
 
 def test_a_fitted_custom_parameter_carries_its_distribution_and_provenance(
