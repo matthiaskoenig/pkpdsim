@@ -319,6 +319,33 @@ def test_the_fresh_perfusate_stays_at_its_ph(tmp_path: Path) -> None:
     assert r[ids.ph(ids.INFLOW)] == pytest.approx(ph, abs=1e-9)
 
 
+def test_the_gas_follows_a_change_of_the_fresh_perfusate(tmp_path: Path) -> None:
+    """Without a pCO2 of the gas in the definition, the gas is the pCO2 of the
+    fresh perfusate (an initial assignment), so a fresh bicarbonate changed
+    before the initialization keeps the fresh perfusate at its pH."""
+    path = build(liver_definition(1), tmp_path)
+    r = individual(path, **{ids.Q_PUMP: 0.0, ids.fresh("hco3"): 12.0})
+    r.integrator.absolute_tolerance = 1e-14
+    r.integrator.relative_tolerance = 1e-10
+    gas = r[ids.CO2_SOLUBILITY] * r[ids.CO2_GAS]
+    assert gas == pytest.approx(r[ids.fresh("co2")], rel=1e-12)
+    assert r[ids.OXYGENATOR_CO2] == pytest.approx(0.0, abs=1e-15)
+    ph = r[ids.ph(ids.INFLOW)]
+    assert ph == pytest.approx(Perfusate.default().ph.value, abs=1e-12)
+    r.simulate(0, 360, 37)
+    assert r[ids.ph(ids.INFLOW)] == pytest.approx(ph, abs=1e-9)
+
+
+def test_a_given_gas_is_a_constant(tmp_path: Path) -> None:
+    """A pCO2 of the gas in the definition is a constant without an assignment."""
+    d = liver_definition(1)
+    gas = Value(5.0, PU.kPa, "ModelChoice", "a test")
+    d = dataclasses.replace(d, circuit=dataclasses.replace(d.circuit, pco2_gas=gas))
+    path = build(d, tmp_path)
+    r = individual(path, **{ids.fresh("hco3"): 12.0})
+    assert r[ids.CO2_GAS] == pytest.approx(5.0, rel=1e-12)
+
+
 def test_the_oxygenator_vents_co2(tmp_path: Path) -> None:
     """CO2 added at the inflow decays first order towards the gas (the
     hydration of the buffer switched off, so the decay is analytic)."""

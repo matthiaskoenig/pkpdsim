@@ -463,8 +463,10 @@ def circuit_objects(
     Returns:
         The perfusate species, the buffer and the start of the fresh
         perfusate at the sites of the circuit, the constants `Q_pump` (l/min),
-        `k_oxy`, `k_oxy_co2` and `pCO2_gas`, the reactions of the oxygenator
-        (oxygen and CO2).
+        `k_oxy`, `k_oxy_co2` and `pCO2_gas` (without a pCO2 of the gas in the
+        circuit the initial assignment `co2_fresh/alpha_co2`, so a change of
+        the fresh perfusate before the initialization moves the gas with it),
+        the reactions of the oxygenator (oxygen and CO2).
     """
     out = core.CoreObjects(
         parameters=[
@@ -498,6 +500,15 @@ def circuit_objects(
             ),
         ]
     )
+    if circuit.pco2_gas is None:
+        out.assignments.append(
+            initial_assignment(
+                ids.CO2_GAS,
+                f"{ids.fresh('co2')}/{ids.CO2_SOLUBILITY}",
+                PU.kPa,
+                "partial pressure of CO2 of the sweep gas, that of the fresh perfusate",
+            )
+        )
     start = composition(perfusate)
     for site in (ids.RESERVOIR, ids.INFLOW, ids.OUTFLOW):
         compartment = ids.volume(site)

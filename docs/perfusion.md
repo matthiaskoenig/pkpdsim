@@ -52,7 +52,7 @@ The content of the model `rat_liver_nmp`: the organ in its circuit (A) and the s
 
 ## The circuit
 
-The pump drives the perfusate at the flow `Q_pump` (l/min, the total flow of the pump) from the reservoir `res` through the inflow tubing `in`, the zones of the organ `z1` to `zn` and the outflow tubing `out` back into the reservoir. Every site is a well-stirred volume (`V_res`, `V_in`, `V_out`, `Vvas_<z>`), and every quantity of the perfusate flows from a site to the next at `Q_pump` times its concentration, so the amount of the perfusate is conserved and a flow of 0 is defined (no rate divides by the flow). The membrane oxygenator in the inflow tubing exchanges the gases with its sweep gas, first order: the oxygen towards the target of the perfusate, the CO2 towards the pCO2 of the gas, so the CO2 which the cells produce is vented and the bicarbonate buffer of the perfusate is open. Without a pCO2 of the gas in the definition it is that of the fresh perfusate, at whose buffer equilibrium the oxygenator then leaves it.
+The pump drives the perfusate at the flow `Q_pump` (l/min, the total flow of the pump) from the reservoir `res` through the inflow tubing `in`, the zones of the organ `z1` to `zn` and the outflow tubing `out` back into the reservoir. Every site is a well-stirred volume (`V_res`, `V_in`, `V_out`, `Vvas_<z>`), and every quantity of the perfusate flows from a site to the next at `Q_pump` times its concentration, so the amount of the perfusate is conserved and a flow of 0 is defined (no rate divides by the flow). The membrane oxygenator in the inflow tubing exchanges the gases with its sweep gas, first order: the oxygen towards the target of the perfusate, the CO2 towards the pCO2 of the gas, so the CO2 which the cells produce is vented and the bicarbonate buffer of the perfusate is open. Without a pCO2 of the gas in the definition it is that of the fresh perfusate, the initial assignment `pCO2_gas = co2_fresh/alpha_co2`, at whose buffer equilibrium the oxygenator then leaves it, also after a change of the fresh perfusate before the initialization.
 
 The equations below are those of a toy (`<q>` a quantity of the perfusate, `<z>` a zone, `<o>` the organ, `li` or `ki`); `tests/docs/test_perfusion_equations.py` builds a liver and a kidney of two zones and checks every equation of this page against them.
 
@@ -67,6 +67,7 @@ FLOW_<q>_out_res: <q>_out -> <q>_res = Q_pump * <q>_out
 ```equations title="the oxygenator"
 OXY_in: -> o2_in = k_oxy * V_in * (alpha_o2 * pO2_target - o2_in)
 OXY_co2_in: co2_in -> = k_oxy_co2 * V_in * (co2_in - alpha_co2 * pCO2_gas)
+pCO2_gas = co2_fresh / alpha_co2
 ```
 
 The fresh perfusate is the constants `<q>_fresh` (mM), the start of every perfusate species at every site: glucose, lactate, bicarbonate, potassium and the enzymes (none) as given, the free protons from its pH, the dissolved CO2 from the buffer equilibrium and the free oxygen from the target at the temperature. The bicarbonate buffer acts at every site, `H+ + HCO3- <-> CO2` by mass action (the hydration of CO2 sets the time), and the pH follows from the free protons.
