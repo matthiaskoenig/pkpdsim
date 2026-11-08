@@ -233,7 +233,12 @@ def outline(shapes: dict[str, list[np.ndarray]]) -> tuple[Polygon, Polygon | Non
     body_pts = max(subs, key=lambda q: Polygon(q).buffer(0).area)
     body = Polygon(body_pts).buffer(0)
     details = [polygon(q) for q in subs if q is not body_pts]
-    details = [d for d in details if d is not None and d.area < 6.0]
+    # the small shapes inside the body (eyes, nose, mouth, hands), not the icons beside it
+    details = [
+        d
+        for d in details
+        if d is not None and d.area < 6.0 and body.contains(d.centroid)
+    ]
     return body, (unary_union(details) if details else None)
 
 

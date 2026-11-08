@@ -1513,6 +1513,7 @@ name = "pkpdsim"
 source = { editable = "." }
 dependencies = [
     { name = "certifi" },
+    { name = "contourpy" },
     { name = "jinja2" },
     { name = "libroadrunner" },
     { name = "matplotlib" },
@@ -1551,6 +1552,7 @@ dev = [
 requires-dist = [
     { name = "bump-my-version", marker = "extra == 'dev'", specifier = ">=1.5.1" },
     { name = "certifi", specifier = ">=2026.10.19" },
+    { name = "contourpy", specifier = ">=1.4.0" },
     { name = "jinja2", specifier = ">=3.1.6" },
     { name = "libroadrunner", specifier = ">=2.11.0" },
     { name = "matplotlib", specifier = ">=3.11.2" },
