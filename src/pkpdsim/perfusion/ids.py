@@ -112,6 +112,7 @@ __all__ = [
     "reaction",
     "species",
     "specific_activity",
+    "start",
     "vascular",
     "vascular_fraction",
     "volume",
@@ -449,6 +450,11 @@ def outflow(site: str) -> str:
 def flow(quantity: str, source: str, target: str) -> str:
     """Get the reaction of the flow of a quantity between two sites."""
     return f"FLOW_{quantity}_{source}_{target}"
+
+
+def start(quantity: str) -> str:
+    """Get the start of a quantity of the cells, `<q>_start` (mM), shared by the zones."""
+    return f"{quantity}_start"
 
 
 def fresh(quantity: str) -> str:

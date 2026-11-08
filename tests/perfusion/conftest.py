@@ -113,7 +113,7 @@ def zone_model(
                 sboTerm=SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
             ),
             *core.buffer_parameters(),
-            *core.core_parameters(params),
+            *core.core_parameters(params, bile=bile),
             *objects.parameters,
         ],
         species=objects.species,

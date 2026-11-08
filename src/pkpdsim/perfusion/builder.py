@@ -503,7 +503,13 @@ def compose(definition: PerfusionDefinition) -> Model:
         compartments.append(urine)
         objects += kidney
         objects += observers.urine_objects()
-    objects += core.CoreObjects(parameters=core.core_parameters(definition.core))
+    objects += core.CoreObjects(
+        parameters=core.core_parameters(
+            definition.core,
+            released=released,
+            bile=isinstance(organ, LiverOrgan),
+        )
+    )
     objects += circuit.flow_objects(sites, perfusate, released, outflows)
     objects += core.CoreObjects(parameters=observers.enzyme_parameters(enzymes))
     for site in sites:

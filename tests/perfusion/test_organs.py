@@ -11,7 +11,7 @@ import pytest
 from sbmlutils.validation import ValidationOptions, validate_doc
 
 from pkpdsim.database import tables
-from pkpdsim.pbpk.values import Value
+from pkpdsim.pbpk.values import FrozenMap, Value
 from pkpdsim.perfusion import core, ids
 from pkpdsim.perfusion.builder import build
 from pkpdsim.perfusion.definition import (
@@ -277,6 +277,49 @@ def test_the_released_quantities_need_their_content() -> None:
     no_bile = dataclasses.replace(liver.core, BILE_Vmax=None)
     problems = "\n".join(dataclasses.replace(liver, core=no_bile).validate())
     assert "BILE_Vmax" in problems
+
+
+def test_validate_refuses_core_units_and_starts() -> None:
+    """A constant or a start in another unit, a quantity of the cells without a
+    start and a start of no quantity are refused by `validate`, before
+    `compose` would fail on them."""
+    d = liver_definition()
+    assert d.validate() == []
+    wrong = dataclasses.replace(
+        d.core,
+        GLCIM_Vmax=dataclasses.replace(d.core.GLCIM_Vmax, unit=PU.per_min),
+        NEC_k=dataclasses.replace(d.core.NEC_k, unit=PU.mM),
+    )
+    problems = "\n".join(dataclasses.replace(d, core=wrong).validate())
+    assert "GLCIM_Vmax must be in" in problems
+    assert "NEC_k must be in" in problems
+    starts = dict(d.core.starts)
+    del starts["atp"]
+    starts["unknown"] = starts["glc"]
+    starts["glc"] = dataclasses.replace(starts["glc"], unit=PU.ml)
+    core_ = dataclasses.replace(d.core, starts=FrozenMap(starts))
+    problems = "\n".join(dataclasses.replace(d, core=core_).validate())
+    assert "lack ['atp']" in problems
+    assert "['unknown']" in problems
+    assert "starts[glc] must be in" in problems
+
+
+def test_an_organ_without_bile_has_no_bile_constants(tmp_path: Path) -> None:
+    """A kidney or a generic organ given the liver core writes neither the
+    bile constants nor the contents of the enzymes it does not release."""
+    liver_core = liver_definition().core
+    for d in (kidney_definition(), generic_definition()):
+        d = dataclasses.replace(d, core=liver_core)
+        assert d.validate() == []
+        known = _ids(build(d, tmp_path / d.sid))
+        assert not {"BILE_Vmax", "BILE_Km_atp"} & known
+        for q, content in (("alt", "ALT_content"), ("ast", "AST_content")):
+            assert q not in d.released
+            assert content not in known
+        assert "K_content" in known
+    assert {"BILE_Vmax", "BILE_Km_atp", "ALT_content"} <= _ids(
+        build(liver_definition(), tmp_path / "liver")
+    )
 
 
 def test_the_validation_of_the_organs() -> None:

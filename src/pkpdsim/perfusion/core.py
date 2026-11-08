@@ -126,7 +126,7 @@ from pkpdsim.database.tables import entry, load
 from pkpdsim.pbpk.annotation import initial_assignment
 from pkpdsim.pbpk.placement import value_parameter
 from pkpdsim.pbpk.units import U
-from pkpdsim.pbpk.values import FrozenMap, Value
+from pkpdsim.pbpk.values import FrozenMap, Value, check_unit
 from pkpdsim.perfusion import ids
 
 __all__ = [
@@ -140,6 +140,7 @@ __all__ = [
     "core_parameters",
     "perfusate_objects",
     "quantity_name",
+    "start_quantities",
     "zone_objects",
 ]
 
@@ -180,10 +181,11 @@ def _value(section: str, key: str) -> Value:
 
 
 class _Spec(NamedTuple):
-    """The name and SBO term of a constant of the core."""
+    """The name, SBO term and unit of a constant of the core."""
 
     name: str
     sbo: str
+    unit: UnitDefinition
 
 
 _V, _KM, _KI = SBO.MAXIMAL_VELOCITY, SBO.MICHAELIS_CONSTANT, SBO.INHIBITORY_CONSTANT
@@ -194,66 +196,80 @@ _N, _K, _P = (
 )
 
 _SPECS: dict[str, _Spec] = {
-    "GLCIM_Vmax": _Spec("Vmax glucose import", _V),
-    "GLCIM_Km_glc": _Spec("Km glucose of the glucose import", _KM),
-    "O2IM_Vmax": _Spec("Vmax oxygen import", _V),
-    "O2IM_Km_o2": _Spec("Km oxygen of the oxygen import", _KM),
-    "LACEX_Vmax": _Spec("Vmax lactate export", _V),
-    "LACEX_Km_lac": _Spec("Km lactate of the lactate export", _KM),
-    "LACEX_h_cell": _Spec("cytosolic protons of the lactate export", _P),
-    "GLGP_Vmax": _Spec("Vmax glycogenolysis", _V),
-    "GLGP_Km_glyc": _Spec("Km glycogen of the glycogenolysis", _KM),
-    "GLC2PYR_Vmax": _Spec("Vmax glycolysis", _V),
-    "GLC2PYR_Km_glc": _Spec("Km glucose of the glycolysis", _KM),
-    "GLC2PYR_Km_adp": _Spec("Km ADP of the glycolysis", _KM),
-    "GLC2PYR_Km_nad": _Spec("Km NAD of the glycolysis", _KM),
-    "GLC2PYR_Ki_atp": _Spec("Ki ATP of the glycolysis", _KI),
-    "GLC2PYR_n_atp": _Spec("Hill coefficient ATP of the glycolysis", _N),
-    "LDH_Vmax": _Spec("Vmax lactate dehydrogenase", _V),
-    "LDH_Km_pyr": _Spec("Km pyruvate of the lactate dehydrogenase", _KM),
-    "LDH_Km_lac": _Spec("Km lactate of the lactate dehydrogenase", _KM),
-    "LDH_Km_nadh": _Spec("Km NADH of the lactate dehydrogenase", _KM),
-    "LDH_Km_nad": _Spec("Km NAD of the lactate dehydrogenase", _KM),
-    "LDH_Keq": _Spec("Keq lactate dehydrogenase", SBO.EQUILIBRIUM_CONSTANT),
-    "ATPU_Vmax": _Spec("Vmax ATP use", _V),
-    "ATPU_Km_atp": _Spec("Km ATP of the ATP use", _KM),
-    "TCA_Vmax": _Spec("Vmax TCA cycle", _V),
-    "TCA_Km_pyr": _Spec("Km pyruvate of the TCA cycle", _KM),
-    "TCA_Km_nad": _Spec("Km NAD of the TCA cycle", _KM),
-    "OXPHOS_Vmax": _Spec("Vmax oxidative phosphorylation", _V),
-    "OXPHOS_Km_nadh": _Spec("Km NADH of the oxidative phosphorylation", _KM),
-    "OXPHOS_Km_o2": _Spec("Km oxygen of the oxidative phosphorylation", _KM),
-    "OXPHOS_Km_adp": _Spec("Km ADP of the oxidative phosphorylation", _KM),
-    "ROSP_Vmax": _Spec("Vmax ROS production", _V),
-    "ROSP_Km_nadh": _Spec("Km NADH of the ROS production", _KM),
-    "ROSP_Km_o2": _Spec("Km oxygen of the ROS production", _KM),
-    "ROSP_Ki_o2": _Spec("Ki oxygen of the ROS production", _KI),
-    "ROSP_n_o2": _Spec("Hill coefficient oxygen of the ROS production", _N),
-    "ROSDETOX_k": _Spec("rate constant ROS detoxification", _K),
-    "ROSDETOX_Km_ros": _Spec("Km ROS of the ROS detoxification", _KM),
-    "GR_k": _Spec("rate constant glutathione reductase", _K),
-    "GR_Km_nadph": _Spec("Km NADPH of the glutathione reductase", _KM),
-    "PPP_Vmax": _Spec("Vmax pentose phosphate pathway", _V),
-    "PPP_Km_glc": _Spec("Km glucose of the pentose phosphate pathway", _KM),
-    "PPP_Km_nadp": _Spec("Km NADP of the pentose phosphate pathway", _KM),
-    "NEC_k": _Spec("maximal rate of necrosis", _K),
-    "NEC_atp": _Spec("ATP threshold of necrosis", _KI),
-    "NEC_n_atp": _Spec("Hill coefficient ATP of necrosis", _N),
-    "NEC_h": _Spec(
-        "protons of the half drive of necrosis by acidosis", SBO.ACTIVATION_CONSTANT
+    "GLCIM_Vmax": _Spec("Vmax glucose import", _V, U.mmole_per_min_l),
+    "GLCIM_Km_glc": _Spec("Km glucose of the glucose import", _KM, U.mM),
+    "O2IM_Vmax": _Spec("Vmax oxygen import", _V, U.mmole_per_min_l),
+    "O2IM_Km_o2": _Spec("Km oxygen of the oxygen import", _KM, U.mM),
+    "LACEX_Vmax": _Spec("Vmax lactate export", _V, U.mmole_per_min_l),
+    "LACEX_Km_lac": _Spec("Km lactate of the lactate export", _KM, U.mM),
+    "LACEX_h_cell": _Spec("cytosolic protons of the lactate export", _P, U.mM),
+    "GLGP_Vmax": _Spec("Vmax glycogenolysis", _V, U.mmole_per_min_l),
+    "GLGP_Km_glyc": _Spec("Km glycogen of the glycogenolysis", _KM, U.mM),
+    "GLC2PYR_Vmax": _Spec("Vmax glycolysis", _V, U.mmole_per_min_l),
+    "GLC2PYR_Km_glc": _Spec("Km glucose of the glycolysis", _KM, U.mM),
+    "GLC2PYR_Km_adp": _Spec("Km ADP of the glycolysis", _KM, U.mM),
+    "GLC2PYR_Km_nad": _Spec("Km NAD of the glycolysis", _KM, U.mM),
+    "GLC2PYR_Ki_atp": _Spec("Ki ATP of the glycolysis", _KI, U.mM),
+    "GLC2PYR_n_atp": _Spec(
+        "Hill coefficient ATP of the glycolysis", _N, U.dimensionless
     ),
-    "NEC_n_h": _Spec("Hill coefficient protons of necrosis", _N),
-    "PROTEINR_k": _Spec("rate constant of the enzyme release of necrotic cells", _K),
-    "KR_k": _Spec("rate constant of the potassium release of necrotic cells", _K),
-    "ALT_content": _Spec("ALT content of the cells", _P),
-    "AST_content": _Spec("AST content of the cells", _P),
-    "LDH_content": _Spec("LDH content of the cells", _P),
-    "K_content": _Spec("potassium content of the cells", _P),
-    "BILE_Vmax": _Spec("maximal bile secretion per volume of cells", _K),
-    "BILE_Km_atp": _Spec("Km ATP of the bile secretion", _KM),
-    "f_alive_start": _Spec("living fraction of the cells at the start", _P),
+    "LDH_Vmax": _Spec("Vmax lactate dehydrogenase", _V, U.mmole_per_min_l),
+    "LDH_Km_pyr": _Spec("Km pyruvate of the lactate dehydrogenase", _KM, U.mM),
+    "LDH_Km_lac": _Spec("Km lactate of the lactate dehydrogenase", _KM, U.mM),
+    "LDH_Km_nadh": _Spec("Km NADH of the lactate dehydrogenase", _KM, U.mM),
+    "LDH_Km_nad": _Spec("Km NAD of the lactate dehydrogenase", _KM, U.mM),
+    "LDH_Keq": _Spec(
+        "Keq lactate dehydrogenase", SBO.EQUILIBRIUM_CONSTANT, U.dimensionless
+    ),
+    "ATPU_Vmax": _Spec("Vmax ATP use", _V, U.mmole_per_min_l),
+    "ATPU_Km_atp": _Spec("Km ATP of the ATP use", _KM, U.mM),
+    "TCA_Vmax": _Spec("Vmax TCA cycle", _V, U.mmole_per_min_l),
+    "TCA_Km_pyr": _Spec("Km pyruvate of the TCA cycle", _KM, U.mM),
+    "TCA_Km_nad": _Spec("Km NAD of the TCA cycle", _KM, U.mM),
+    "OXPHOS_Vmax": _Spec("Vmax oxidative phosphorylation", _V, U.mmole_per_min_l),
+    "OXPHOS_Km_nadh": _Spec("Km NADH of the oxidative phosphorylation", _KM, U.mM),
+    "OXPHOS_Km_o2": _Spec("Km oxygen of the oxidative phosphorylation", _KM, U.mM),
+    "OXPHOS_Km_adp": _Spec("Km ADP of the oxidative phosphorylation", _KM, U.mM),
+    "ROSP_Vmax": _Spec("Vmax ROS production", _V, U.mmole_per_min_l),
+    "ROSP_Km_nadh": _Spec("Km NADH of the ROS production", _KM, U.mM),
+    "ROSP_Km_o2": _Spec("Km oxygen of the ROS production", _KM, U.mM),
+    "ROSP_Ki_o2": _Spec("Ki oxygen of the ROS production", _KI, U.mM),
+    "ROSP_n_o2": _Spec(
+        "Hill coefficient oxygen of the ROS production", _N, U.dimensionless
+    ),
+    "ROSDETOX_k": _Spec("rate constant ROS detoxification", _K, U.per_min),
+    "ROSDETOX_Km_ros": _Spec("Km ROS of the ROS detoxification", _KM, U.mM),
+    "GR_k": _Spec("rate constant glutathione reductase", _K, U.per_min),
+    "GR_Km_nadph": _Spec("Km NADPH of the glutathione reductase", _KM, U.mM),
+    "PPP_Vmax": _Spec("Vmax pentose phosphate pathway", _V, U.mmole_per_min_l),
+    "PPP_Km_glc": _Spec("Km glucose of the pentose phosphate pathway", _KM, U.mM),
+    "PPP_Km_nadp": _Spec("Km NADP of the pentose phosphate pathway", _KM, U.mM),
+    "NEC_k": _Spec("maximal rate of necrosis", _K, U.per_min),
+    "NEC_atp": _Spec("ATP threshold of necrosis", _KI, U.mM),
+    "NEC_n_atp": _Spec("Hill coefficient ATP of necrosis", _N, U.dimensionless),
+    "NEC_h": _Spec(
+        "protons of the half drive of necrosis by acidosis",
+        SBO.ACTIVATION_CONSTANT,
+        U.mM,
+    ),
+    "NEC_n_h": _Spec("Hill coefficient protons of necrosis", _N, U.dimensionless),
+    "PROTEINR_k": _Spec(
+        "rate constant of the enzyme release of necrotic cells", _K, U.per_min
+    ),
+    "KR_k": _Spec(
+        "rate constant of the potassium release of necrotic cells", _K, U.per_min
+    ),
+    "ALT_content": _Spec("ALT content of the cells", _P, U.mM),
+    "AST_content": _Spec("AST content of the cells", _P, U.mM),
+    "LDH_content": _Spec("LDH content of the cells", _P, U.mM),
+    "K_content": _Spec("potassium content of the cells", _P, U.mM),
+    "BILE_Vmax": _Spec("maximal bile secretion per volume of cells", _K, U.per_min),
+    "BILE_Km_atp": _Spec("Km ATP of the bile secretion", _KM, U.mM),
+    "f_alive_start": _Spec(
+        "living fraction of the cells at the start", _P, U.dimensionless
+    ),
 }
-"""The name and SBO term of every constant of `CoreParameters` but `starts`."""
+"""The name, SBO term and unit of every constant of `CoreParameters` but `starts`."""
 
 _CONTENTS = {
     "alt": "ALT_content",
@@ -262,6 +278,9 @@ _CONTENTS = {
     "k": "K_content",
 }
 """The constant of the content of the cells of every released quantity."""
+
+_STARTED = tuple(q for q in ids.CELL if q not in _CONTENTS)
+"""The quantities of the cells with a start (`CoreParameters.starts`)."""
 
 _RELEASE = {"alt": "PROTEINR_k", "ast": "PROTEINR_k", "ldh": "PROTEINR_k", "k": "KR_k"}
 """The release constant of every released quantity."""
@@ -441,24 +460,45 @@ class CoreParameters:
         return cls(**given, BILE_Vmax=bile, starts=starts)
 
     def problems(self, released: tuple[str, ...], bile: bool) -> list[str]:
-        """Get the constants which an organ needs and the constants lack.
+        """Get what the constants lack for an organ or give in a wrong unit.
 
         Args:
             released: the quantities which the organ releases.
             bile: the organ secretes bile.
 
         Returns:
-            A problem per missing content of a released quantity and per
-            missing bile constant.
+            A problem per missing content of a released quantity, per missing
+            bile constant, per constant (and start) whose unit is not the unit
+            of the model (`_SPECS`, mM for the starts), per quantity of the
+            cells of the organ without a start and per start of a quantity
+            which is no quantity of the cells with a start (`starts`).
         """
         needed = [_CONTENTS[q] for q in released if q in _CONTENTS]
         if bile:
             needed += ["BILE_Vmax", "BILE_Km_atp"]
-        return [
+        out = [
             f"core: {name} is missing, which the organ needs"
             for name in needed
             if getattr(self, name) is None
         ]
+        for f in dataclasses.fields(self):
+            value = getattr(self, f.name)
+            if f.name != "starts" and value is not None:
+                out += check_unit("core", f.name, value, _SPECS[f.name].unit)
+        started = start_quantities(released)
+        missing = [q for q in started if q not in self.starts]
+        if missing:
+            out.append(f"core: the starts of the cells lack {missing}")
+        other = sorted(q for q in self.starts if q not in _STARTED)
+        if other:
+            out.append(
+                f"core: the starts {other} are no quantities of the cells with "
+                f"a start, see {list(_STARTED)}"
+            )
+        for q in started:
+            if q in self.starts:
+                out += check_unit("core", f"starts[{q}]", self.starts[q], U.mM)
+        return out
 
 
 @dataclass(frozen=True)
@@ -615,24 +655,38 @@ def _state(
     return Parameter(sid, value, unit, constant=False, name=name, sboTerm=sbo)
 
 
-def core_parameters(params: CoreParameters) -> list[Parameter]:
+def core_parameters(
+    params: CoreParameters,
+    *,
+    released: tuple[str, ...] = ids.RELEASABLE,
+    bile: bool = True,
+) -> list[Parameter]:
     """Get the constants of the core, ids of the whole model.
 
     Args:
         params: the constants.
+        released: the quantities which the organ releases; the content of a
+            quantity it does not release is no constant of the model.
+        bile: the organ secretes bile; without, the bile constants are no
+            constants of the model.
 
     Returns:
-        A constant parameter of every field but `starts` and the fields
-        which are `None`, under its name, with the citation of its source in
-        the notes.
+        A constant parameter of every field but `starts`, the fields which
+        are `None` and the constants the organ does not read, under its
+        name, with the citation of its source in the notes, and the start of
+        every quantity of the cells with a start, `<q>_start` (mM, `starts`),
+        which the initial assignments of the zones read.
 
     Raises:
         TypeError: if the unit of a constant is no unit definition.
     """
+    unread = {c for q, c in _CONTENTS.items() if q not in released}
+    if not bile:
+        unread |= {"BILE_Vmax", "BILE_Km_atp"}
     parameters: list[Parameter] = []
     for f in dataclasses.fields(params):
         value: Value | None = getattr(params, f.name)
-        if f.name == "starts" or value is None:
+        if f.name == "starts" or value is None or f.name in unread:
             continue
         spec = _SPECS[f.name]
         if not isinstance(value.unit, UnitDefinition):
@@ -640,7 +694,30 @@ def core_parameters(params: CoreParameters) -> list[Parameter]:
         parameters.append(
             value_parameter(f.name, value, value.unit, spec.name, spec.sbo)
         )
+    for q in start_quantities(released):
+        parameters.append(
+            value_parameter(
+                ids.start(q),
+                params.starts[q],
+                U.mM,
+                f"{_NAMES[q]} (cells, start)",
+                SBO.MOLAR_CONCENTRATION_OF_AN_ENTITY,
+            )
+        )
     return parameters
+
+
+def start_quantities(released: tuple[str, ...] = ids.RELEASABLE) -> tuple[str, ...]:
+    """Get the quantities of the cells with a start of `CoreParameters.starts`.
+
+    Args:
+        released: the quantities which the organ releases.
+
+    Returns:
+        The quantities of the cells of the organ but those whose start is a
+        content (the released quantities).
+    """
+    return tuple(q for q in ids.cell_quantities(released) if q not in _CONTENTS)
 
 
 def buffer_parameters(buffer: Buffer | None = None) -> list[Parameter]:
@@ -843,6 +920,11 @@ def zone_objects(
             s = params.starts[q]
             out.species.append(
                 _species(c(q), cells, q, f"cells {zone}", s.value, s.notes)
+            )
+            out.assignments.append(
+                initial_assignment(
+                    c(q), ids.start(q), U.mM, f"{_NAMES[q]} (cells {zone})"
+                )
             )
     for q in released:
         out.species.append(

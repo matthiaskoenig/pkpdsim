@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 import libsbml
 import pytest
+from pbpk.conftest import individual
 
 from pkpdsim.pbpk.values import FrozenMap, Value
 from pkpdsim.perfusion import core, ids
@@ -121,6 +122,19 @@ def test_the_zones_share_the_constants(tmp_path: Path) -> None:
     assert r["GLC2PYR_z1"] == pytest.approx(r["GLC2PYR_z2"], rel=1e-12)
 
 
+def test_a_start_of_the_cells_is_one_constant_of_the_zones(tmp_path: Path) -> None:
+    """Every zone starts its cells from the shared constants `<q>_start`, so a
+    change of `atp_start` before the initialization changes every zone."""
+    zone_model(tmp_path / "zones.xml", zones=("z1", "z2", "z3"))
+    r = load_zone(tmp_path / "zones.xml")
+    atp = core.CoreParameters.default().starts["atp"].value
+    cells = [f"[{ids.species('atp', ids.cell_site(z))}]" for z in ("z1", "z2", "z3")]
+    assert r[ids.start("atp")] == atp
+    assert [r[c] for c in cells] == pytest.approx([atp] * 3, rel=1e-12)
+    changed = individual(tmp_path / "zones.xml", **{ids.start("atp"): 1.5})
+    assert [changed[c] for c in cells] == pytest.approx([1.5] * 3, rel=1e-12)
+
+
 def test_a_profile_names_processes_of_the_core() -> None:
     params = core.CoreParameters.default()
     with pytest.raises(ValueError, match="No processes of the core"):
@@ -156,7 +170,9 @@ def test_the_ids_follow_the_scheme() -> None:
         assert ids.species(q, CELL) in sids
     for q in ids.RELEASABLE:
         assert ids.species(q, DEAD) in sids
-    assert not objects.parameters[0].sid.startswith("GLCIM")
+    # the constants of the core are ids of the whole model, not of a zone
+    constants = {f.name for f in dataclasses.fields(core.CoreParameters)}
+    assert not {p.sid for p in objects.parameters} & constants
     assert ids.zone_id(3) == "z3"
     assert ids.species("o2", "res") == "o2_res"
     with pytest.raises(ValueError, match="numbered from 1"):
