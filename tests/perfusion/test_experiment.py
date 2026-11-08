@@ -24,7 +24,7 @@ from pkpdsim.fit import default_fit_settings
 from pkpdsim.model import PKPDModel
 from pkpdsim.perfusion import circuit, ids
 from pkpdsim.perfusion.builder import build, compose, model_ids
-from pkpdsim.perfusion.definition import PerfusionDefinition
+from pkpdsim.perfusion.definition import KidneyOrgan, PerfusionDefinition
 from pkpdsim.perfusion.experiment import (
     PerfusionSimulationExperiment,
     medium_change,
@@ -525,3 +525,78 @@ def test_an_experiment_refuses_a_temperature_quantity(
     # a number in degC, as perfusion_changes gives it
     good = experiment.perfusion_changes(flow, mass, Q(37.0, "degC"))
     runner(Simulation(end=10.0, preinit_changes=good))
+
+
+def _pools(definition: PerfusionDefinition, q: str) -> dict[str, list[str]]:
+    """The species of a quantity by pool: the perfusate of every site, the
+    living and the dead cells of every zone, and the urine of a kidney."""
+    zones = [ids.zone_id(k) for k in range(1, definition.organ.zones + 1)]
+    sites = [ids.RESERVOIR, ids.INFLOW, *zones, ids.OUTFLOW]
+    pools = {
+        "perfusate": [ids.species(q, s) for s in sites],
+        "cells": [ids.species(q, ids.cell_site(z)) for z in zones],
+        "dead": [ids.species(q, ids.dead_site(z)) for z in zones],
+    }
+    if q in ids.FILTERED and isinstance(definition.organ, KidneyOrgan):
+        pools["urine"] = [ids.species(q, ids.URINE_SITE)]
+    return pools
+
+
+@pytest.mark.parametrize("organ", ["liver", "kidney"])
+def test_the_circuit_conserves_potassium_and_the_enzymes_over_medium_changes(
+    organ: str, request: pytest.FixtureRequest
+) -> None:
+    """Potassium and every released enzyme, in the perfusate of every site,
+    the living and the dead cells and the urine, are conserved over 3 h but
+    for the medium changes, which remove the fraction of the reservoir and add
+    as much fresh perfusate: the total jumps at a change by the added less the
+    removed amount and is constant in between."""
+    definition: PerfusionDefinition = request.getfixturevalue(organ)
+    path: Path = request.getfixturevalue(f"{organ}_path")
+    released = [q for q in definition.released if q in (*ids.ENZYMES, "k")]
+    assert "k" in released and "ldh" in released
+    pools = {q: _pools(definition, q) for q in released}
+    res, v_res = ids.RESERVOIR, ids.volume(ids.RESERVOIR)
+    simulator = Simulator(
+        n_workers=1, absolute_tolerance=1e-14, relative_tolerance=1e-10
+    )
+    model = simulator.load(path)
+    amounts = sorted(
+        {sid for p in pools.values() for ids_ in p.values() for sid in ids_}
+    )
+    model.selections = ["time", v_res, *amounts, *(ids.fresh(q) for q in released)]
+    f = 0.5
+    changes = [Change(t, medium_change(definition, f)) for t in (FIRST, SECOND)]
+    times = [0.0, 30.0, FIRST, 90.0, SECOND, 180.0]
+    result = simulator.simulate(
+        model, Simulation(end=180.0, time_unit="min", changes=changes, times=times)
+    )
+    time = _column(result, "time")
+    for q in released:
+        column = {sid: _column(result, sid) for p in pools[q].values() for sid in p}
+        total = np.sum(list(column.values()), axis=0)
+        reservoir = column[ids.species(q, res)]
+        fresh = _column(result, ids.fresh(q))
+        volume = _column(result, v_res)
+        exchanged = np.zeros_like(total)
+        for t in (FIRST, SECOND):
+            before, after = _rows(result, t)
+            # the fraction f of the reservoir leaves, as much fresh perfusate comes
+            removed = f * reservoir[before]
+            added = f * volume[before] * fresh[before]
+            assert reservoir[after] == pytest.approx(
+                reservoir[before] - removed + added, rel=1e-12, abs=1e-18
+            ), q
+            assert total[after] - total[before] == pytest.approx(
+                added - removed, rel=1e-9, abs=1e-15
+            ), q
+            exchanged[after:] += added - removed
+        scale = max(abs(total[0]), 1e-12)
+        assert np.max(np.abs(total - exchanged - total[0])) / scale < 1e-8, q
+        assert time[-1] == 180.0
+        # the cells release into the perfusate, so the balance is not trivial
+        cells = np.sum([column[sid] for sid in pools[q]["cells"]], axis=0)
+        assert cells[-1] < cells[0], q
+    if isinstance(definition.organ, KidneyOrgan):
+        urine = _column(result, ids.species("k", ids.URINE_SITE))
+        assert urine[-1] > 0, "the kidney filters potassium into the urine"
