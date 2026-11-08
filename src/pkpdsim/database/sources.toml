@@ -191,7 +191,7 @@ citation = "Ring CL, Pearce RG, Setzer RW, Wetmore BA, Wambaugh JF. Identifying 
 doi = "10.1016/j.envint.2017.06.004"
 
 [NHANES2013_2018]
-citation = "Centers for Disease Control and Prevention, National Center for Health Statistics. National Health and Nutrition Examination Survey (NHANES) 2013-2014, 2015-2016 and 2017-2018, demographics (DEMO), body measures (BMX), complete blood count (CBC) and standard biochemistry profile (BIOPRO) of the cycles H, I and J (public domain). https://wwwn.cdc.gov/nchs/nhanes/ (accessed 2026-11-06). Read from the public files by scripts/database/nhanes_populations.py and scripts/database/nhanes_blood.py."
+citation = "Centers for Disease Control and Prevention, National Center for Health Statistics. National Health and Nutrition Examination Survey (NHANES) 2013-2014, 2015-2016 and 2017-2018, demographics (DEMO), body measures (BMX), complete blood count (CBC) and standard biochemistry profile (BIOPRO) of the cycles H, I and J (public domain). https://wwwn.cdc.gov/nchs/nhanes/ (accessed 2026-11-06). Read from the public files by scripts/database/nhanes_populations.py, scripts/database/nhanes_blood.py and scripts/database/nhanes_waist.py."
 
 [httk]
 citation = "Pearce RG, Setzer RW, Strope CL, Wambaugh JF, Sipes NS. httk: R package for high-throughput toxicokinetics. J Stat Softw 79(4):1-26, 2017. R package httk version 2.7.4 (CRAN, 2025-12-08), MIT license, copyright 2025 John Wambaugh; the data set mecdt of HTTK-Pop (Ring 2017) holds the preprocessed NHANES 2013-2018 respondents."
@@ -1071,6 +1071,10 @@ doi = "10.1002/oby.22210"
 [Demerath2007]
 citation = "Demerath EW, Shen W, Lee M, Choh AC, Czerwinski SA, Siervogel RM, Towne B. Approximation of total visceral adipose tissue with a single magnetic resonance image. Am J Clin Nutr 85(2):362-368, 2007."
 doi = "10.1093/ajcn/85.2.362"
+
+[Haueise2023]
+citation = "Haueise T, Schick F, Stefan N, Schlett CL, Weiss JB, Nattenmüller J, Göbel-Guéniot K, Norajitra T, et al. Analysis of volume and topography of adipose tissue in the trunk: results of MRI of 11,141 participants in the German National Cohort. Sci Adv 9(19):eadd0433, 2023."
+doi = "10.1126/sciadv.add0433"
 
 [Nielsen2004]
 citation = "Nielsen S, Guo Z, Johnson CM, Hensrud DD, Jensen MD. Splanchnic lipolysis in human obesity. J Clin Invest 113(11):1582-1588, 2004."

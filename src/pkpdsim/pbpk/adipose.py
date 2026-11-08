@@ -43,6 +43,7 @@ The body weight of the covariates is the weight at the start, `BW0`, and the
 model reports `BW_change` and `BW_ratio` over it.
 """
 
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import cache
@@ -65,6 +66,7 @@ from pkpdsim.pbpk.annotation import annotate, initial_assignment
 from pkpdsim.pbpk.curves import Curve, Interpolation
 from pkpdsim.pbpk.data import cite, load, value
 from pkpdsim.pbpk.organs import Organ
+from pkpdsim.pbpk.physiology import body_composition
 from pkpdsim.pbpk.units import KG_PER_MIN, U
 from pkpdsim.pbpk.values import Formula, Value, number
 from pkpdsim.sex import Sex
@@ -82,12 +84,17 @@ __all__ = [
     "Adipose",
     "ObesityFactor",
     "StartValue",
+    "VisceralComposition",
+    "WaistModel",
     "adipose_dynamic",
     "adipose_objects",
     "obesity_factor",
     "obesity_factors",
     "obesity_protein_factors",
+    "visceral_composition",
     "visceral_share",
+    "waist_factor",
+    "waist_model",
 ]
 
 ADIPOSE = "adipose_human"
@@ -206,6 +213,195 @@ def visceral_share(sex: Sex) -> AgeCurve:
     return AgeCurve(_interpolation(entry, "age", sex), sources, notes)
 
 
+@dataclass(frozen=True)
+class WaistModel:
+    """The waist circumference of an individual of the covariates of a build.
+
+    The prediction a model without a measured waist uses, and the reference of
+    the covariate `f_waist` of a model which has one: an individual whose
+    waist is the prediction keeps the visceral share of its age and sex.
+
+    Attributes:
+        intercept: the intercept of the prediction [cm].
+        bw: the coefficient of the body weight [cm/kg].
+        height: the coefficient of the height [cm/cm].
+        age: the coefficient of the age [cm/yr].
+        sensitivity: the relative change of the visceral adipose tissue per cm
+            of a deviation of the waist from the prediction [1/cm], at a fixed
+            age, height and body weight.
+        sources: the keys of the sources.
+        notes: where the coefficients come from.
+    """
+
+    intercept: float
+    bw: float
+    height: float
+    age: float
+    sensitivity: float
+    sources: tuple[str, ...]
+    notes: str
+
+    def value(self, bw: float, height: float, age: float = AGE_REFERENCE) -> float:
+        """The predicted waist circumference [cm] of an individual.
+
+        Args:
+            bw: the body weight [kg].
+            height: the height [cm].
+            age: the age [years].
+
+        Returns:
+            The waist circumference [cm].
+        """
+        return self.intercept + self.bw * bw + self.height * height + self.age * age
+
+    def formula(self, age: str) -> str:
+        """The formula of the predicted waist [cm] over the covariates.
+
+        Args:
+            age: the age of the individual, the id `AGE` over age and the
+                number of the reference age otherwise, dimensionless.
+
+        Returns:
+            The formula of `WAIST_base`.
+        """
+        out = repr(self.intercept)
+        for coefficient, factor in (
+            (self.bw, f"({ids.BW} / 1 kg)"),
+            (self.height, f"({ids.HEIGHT} / 1 cm)"),
+            (self.age, age),
+        ):
+            sign = "-" if coefficient < 0 else "+"
+            out = f"{out} {sign} {abs(coefficient)!r} * {factor}"
+        return f"({out}) * 1 cm"
+
+    def factor(self) -> str:
+        """The formula of the factor of a deviation of the waist on `f_vat`."""
+        deviation = f"(({ids.WAIST} - {ids.WAIST_BASE}) / 1 cm)"
+        return f"exp({self.sensitivity!r} * {deviation})"
+
+
+@cache
+def waist_model(sex: Sex) -> WaistModel:
+    """The waist circumference of a sex and its effect on the visceral depot.
+
+    Args:
+        sex: the sex of the build.
+
+    Returns:
+        The prediction of the waist from the covariates of the build and the
+        sensitivity of the visceral depot to a deviation from it.
+    """
+    entry = _table()["waist"][sex.value]
+    coefficients = dict(
+        zip(entry["coefficient"], (float(v) for v in entry["value"]), strict=True)
+    )
+    sensitivity = _table()["visceral_waist"][sex.value]
+    sources, notes = _provenance(entry)
+    more, sensitivity_notes = _provenance(sensitivity)
+    return WaistModel(
+        intercept=coefficients["intercept"],
+        bw=coefficients["bw"],
+        height=coefficients["height"],
+        age=coefficients["age"],
+        sensitivity=float(sensitivity["value"]),
+        sources=tuple(dict.fromkeys((*sources, *more))),
+        notes=f"{notes}\n\nThe sensitivity of the visceral depot: {sensitivity_notes}",
+    )
+
+
+def waist_factor(
+    sex: Sex, waist: float, bw: float, height: float, age: float = AGE_REFERENCE
+) -> float:
+    """The covariate `f_waist` of a measured waist circumference.
+
+    The waist of an individual relative to the waist of the population at its
+    sex, body weight, height and age, which is what a model sets: it keeps the
+    ratio over a change of the body weight. The waist is the circumference at
+    the site of the WHO protocol, the midpoint between the lowest rib and the
+    iliac crest.
+
+    Args:
+        sex: the sex of the individual.
+        waist: the measured waist circumference [cm].
+        bw: the body weight [kg].
+        height: the height [cm].
+        age: the age [years].
+
+    Returns:
+        The waist over the predicted waist of the covariates.
+
+    Raises:
+        ValueError: for a waist which is not positive.
+    """
+    if waist <= 0:
+        raise ValueError(f"The waist circumference {waist} cm is not positive.")
+    return waist / waist_model(sex).value(bw, height, age)
+
+
+@dataclass(frozen=True)
+class VisceralComposition:
+    """The waist circumference and the depots of an individual, as numbers.
+
+    What the build computes from the covariates and `f_waist`, so that a table
+    of the documentation, a test and an experiment restate no equation of the
+    body composition (`pkpdsim.pbpk.physiology.body_composition` gives the
+    masses it builds on).
+
+    Attributes:
+        waist_base: the predicted waist of the covariates [cm], `WAIST_base`.
+        waist: the waist circumference [cm], `WAIST`.
+        whtr: the waist-to-height ratio, `WHtR`.
+        f_visceral: the visceral share of the adipose tissue, `f_vat`.
+        visceral: the visceral adipose tissue [kg], `VAT`.
+        subcutaneous: the subcutaneous adipose tissue [kg], `SAT`.
+    """
+
+    waist_base: float
+    waist: float
+    whtr: float
+    f_visceral: float
+    visceral: float
+    subcutaneous: float
+
+
+def visceral_composition(
+    sex: Sex,
+    bw: float,
+    height: float,
+    age: float = AGE_REFERENCE,
+    f_waist: float = 1.0,
+) -> VisceralComposition:
+    """The waist and the visceral and subcutaneous depot of an individual.
+
+    Args:
+        sex: the sex of the build.
+        bw: the body weight [kg].
+        height: the height [cm].
+        age: the age [years]; the reference age of a build which is not over
+            age, whose share is that of the reference age.
+        f_waist: the waist over the predicted waist of the covariates
+            (`waist_factor` for a measured waist).
+
+    Returns:
+        The waist circumference and the depots.
+    """
+    model = waist_model(sex)
+    waist_base = model.value(bw, height, age)
+    waist = f_waist * waist_base
+    share = visceral_share(sex).curve.value(age) * math.exp(
+        model.sensitivity * (waist - waist_base)
+    )
+    adipose = body_composition(sex, bw, height, age).adipose
+    return VisceralComposition(
+        waist_base=waist_base,
+        waist=waist,
+        whtr=waist / height,
+        f_visceral=share,
+        visceral=share * adipose,
+        subcutaneous=(1.0 - share) * adipose,
+    )
+
+
 @cache
 def obesity_factors(sex: Sex) -> Mapping[str, ObesityFactor]:
     """The factors of overweight and obesity on the physiology of a sex.
@@ -319,12 +515,17 @@ def _parameter(
     kind: str,
     *,
     constant: bool = True,
+    value: float | None = None,
 ) -> Parameter:
-    """A parameter of the top model with its annotation."""
+    """A parameter of the top model with its annotation.
+
+    A parameter without a `value` takes it from its initial assignment; a
+    covariate states its default.
+    """
     return annotate(
         Parameter(
             pid,
-            None,
+            value,
             unit,
             constant=constant,
             name=name,
@@ -351,18 +552,23 @@ def _constant(
 
 
 def _composition(definition: "PBPKDefinition") -> list[Sbase]:
-    """The lean body weight, the fat mass and the visceral and subcutaneous depot."""
-    share = visceral_share(definition.sex)
+    """The lean body weight, the fat mass, the waist and the two depots."""
+    sex = definition.sex
+    share = visceral_share(sex)
+    waist = waist_model(sex)
     citations = "\n".join(f"- {cite(s)}" for s in share.sources)
+    waist_citations = "\n".join(f"- {cite(s)}" for s in waist.sources)
     fat = ids.organ_mass(Organ.ADIPOSE)
     height = f"({ids.HEIGHT} / 100 cm)"
     if definition.age:
         f_vat = share.curve.formula(ids.AGE)
-        over = f"of the age of the {definition.sex.value} individual"
+        age = f"({ids.AGE} / 1 yr)"
+        over = f"of the age of the {sex.value} individual"
     else:
         f_vat = f"{share.curve.value(AGE_REFERENCE)!r} dimensionless"
+        age = repr(float(AGE_REFERENCE))
         over = (
-            f"of the {definition.sex.value} individual of {AGE_REFERENCE:g} years "
+            f"of the {sex.value} individual of {AGE_REFERENCE:g} years "
             "(the build is not over age)"
         )
     return [
@@ -412,12 +618,65 @@ def _composition(definition: "PBPKDefinition") -> list[Sbase]:
             "body_composition",
         ),
         *_constant(
+            ids.WAIST_BASE,
+            waist.formula(age),
+            U.cm,
+            "predicted waist circumference [cm]",
+            "The waist circumference of the population at the sex, the body "
+            "weight, the height and the age of the individual, the reference "
+            f"of the covariate `{ids.F_WAIST}`: {waist.notes}\n\n"
+            f"{waist_citations}",
+            "body_composition",
+        ),
+        _parameter(
+            ids.F_WAIST,
+            U.dimensionless,
+            "waist circumference over the predicted waist",
+            "Covariate, an initial value; the waist circumference of the "
+            "individual over the waist which its body weight, height and age "
+            f"predict (`{ids.WAIST_BASE}`), 1.0 for the individual of the "
+            "population. It is the one covariate of the distribution of the "
+            "adipose tissue between the visceral and the subcutaneous depot, "
+            "and the individual keeps it over a change of the body weight, so "
+            f"that `{ids.WAIST}` follows the weight. "
+            f"`pkpdsim.pbpk.waist_factor` gives it for a measured waist "
+            "circumference (the site of the WHO protocol, the midpoint "
+            "between the lowest rib and the iliac crest).",
+            "body_composition",
+            value=1.0,
+        ),
+        *_constant(
+            ids.WAIST,
+            f"{ids.F_WAIST} * {ids.WAIST_BASE}",
+            U.cm,
+            "waist circumference [cm]",
+            "The waist circumference of the individual at the site of the WHO "
+            "protocol, the midpoint between the lowest rib and the iliac "
+            "crest. The action points of the WHO are 94 and 102 cm in men and "
+            "80 and 88 cm in women.",
+            "body_composition",
+        ),
+        *_constant(
+            ids.WHTR,
+            f"{ids.WAIST} / {ids.HEIGHT}",
+            U.dimensionless,
+            "waist-to-height ratio",
+            "The waist circumference over the height, the index of central "
+            "adiposity which needs no classification by sex: the boundary of "
+            "0.5 is the one every guideline shares.",
+            "body_composition",
+        ),
+        *_constant(
             ids.F_VISCERAL,
-            f_vat,
+            f"({f_vat}) * {waist.factor()}",
             U.dimensionless,
             "visceral share of the adipose tissue",
-            f"The share of the adipose tissue which is visceral, a function "
-            f"{over}: {share.notes}\n\n{citations}",
+            f"The share of the adipose tissue which is visceral: the share "
+            f"{over}, times the factor of a deviation of the waist "
+            f"circumference from the waist of the population "
+            f"(`{ids.WAIST_BASE}`), which is 1 for the individual of the "
+            f"population. The share of the age: {share.notes}\n\n"
+            f"{citations}\n{waist_citations}",
             "body_composition",
         ),
         *_constant(
@@ -532,6 +791,42 @@ def _weight_change(adipose: Adipose) -> list[Sbase]:
             "body weight ratio",
             "The body weight over the weight at the start.",
             "body_weight",
+        ),
+        _parameter(
+            "WAIST0",
+            U.cm,
+            "waist circumference at the start [cm]",
+            "The waist circumference at the start of the simulation, from "
+            f"which the waist of the individual departs with its weight.\n\n"
+            f"`WAIST0 = {ids.WAIST}`",
+            "body_composition",
+        ),
+        StartValue(
+            "WAIST0",
+            ids.WAIST,
+            U.cm,
+            name="waist circumference at the start",
+            sboTerm=SBO.MATHEMATICAL_EXPRESSION,
+        ),
+        *_constant(
+            "WAIST_change",
+            f"{ids.WAIST} - WAIST0",
+            U.cm,
+            "waist circumference change [cm]",
+            "The change of the waist circumference over the waist at the "
+            "start, the endpoint which the trials of a weight loss report "
+            "beside the weight. It follows the body weight through the "
+            f"prediction `{ids.WAIST_BASE}`, at the ratio `{ids.F_WAIST}` of "
+            "the individual, which is held: the waist of the prediction falls "
+            "by 0.766 cm per kg in a man and by 0.790 cm per kg in a woman, "
+            "while the trials of the GLP-1 receptor agonists report about "
+            "0.85 cm per kg (SURMOUNT-1: about 18 cm at a loss of 20.9 % of "
+            "104.8 kg), so "
+            "the model under-predicts the waist of a large weight loss by "
+            "about a tenth: the weight these drugs remove is more central "
+            "than the weight by which the individuals of a cross section "
+            "differ.",
+            "body_composition",
         ),
     ]
 

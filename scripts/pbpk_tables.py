@@ -51,7 +51,9 @@ from pkpdsim.pbpk.adipose import (
     obesity_factor,
     obesity_factors,
     obesity_protein_factors,
+    visceral_composition,
     visceral_share,
+    waist_model,
 )
 from pkpdsim.pbpk.age import (
     AGE_REFERENCE,
@@ -619,6 +621,41 @@ def adipose_visceral() -> str:
     )
 
 
+def adipose_waist() -> str:
+    """The prediction of the waist circumference and its effect on the depot."""
+    rows: list[list[str]] = []
+    cited: list[str] = []
+    for sex in Sex:
+        model = waist_model(sex)
+        reference = reference_individual(sex)
+        cited += list(model.sources)
+        rows.append(
+            [
+                sex.value,
+                _number(model.intercept),
+                _number(model.bw),
+                _number(model.height),
+                _number(model.age),
+                _number(model.value(reference.bw, reference.height)),
+                _number(100.0 * model.sensitivity),
+                ", ".join(f"`{k}`" for k in model.sources),
+            ]
+        )
+    header = [
+        "sex",
+        "intercept [cm]",
+        "per kg",
+        "per cm",
+        "per year",
+        "WAIST of the reference individual [cm]",
+        "VAT per cm [%]",
+        "sources",
+    ]
+    return _generated(
+        "`database/tables/adipose_human.toml`", _table(header, rows), cited
+    )
+
+
 def adipose_classes() -> str:
     """The body composition of the classes of the body mass index."""
     rows: list[list[str]] = []
@@ -640,7 +677,7 @@ def adipose_classes() -> str:
                 else c.value * (reference.height / 100.0) ** 2
             )
             comp = body_composition(sex, bw, reference.height)
-            f_vat = visceral_share(sex).curve.value(AGE_REFERENCE)
+            depots = visceral_composition(sex, bw, reference.height)
             rows.append(
                 [
                     c.label,
@@ -652,8 +689,10 @@ def adipose_classes() -> str:
                     _number(100.0 * comp.fm / comp.bw),
                     _number(comp.fm / (comp.height / 100.0) ** 2),
                     _number(comp.adipose),
-                    _number(f_vat * comp.adipose),
-                    _number((1.0 - f_vat) * comp.adipose),
+                    _number(depots.waist),
+                    _number(depots.whtr),
+                    _number(depots.visceral),
+                    _number(depots.subcutaneous),
                 ]
             )
     header = [
@@ -666,6 +705,8 @@ def adipose_classes() -> str:
         "%fat",
         "FMI",
         "Mad [kg]",
+        "WAIST [cm]",
+        "WHtR",
         "VAT [kg]",
         "SAT [kg]",
     ]
@@ -2071,6 +2112,7 @@ TABLES: dict[str, Callable[[], str]] = {
     "circadian-rhythms": circadian_rhythms,
     "adipose-factors": adipose_factors,
     "adipose-visceral": adipose_visceral,
+    "adipose-waist": adipose_waist,
     "adipose-classes": adipose_classes,
     "pregnancy-factors": pregnancy,
     "species-intestine": species_intestine,
