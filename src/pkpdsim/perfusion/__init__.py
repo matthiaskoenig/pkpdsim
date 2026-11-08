@@ -57,6 +57,7 @@ if TYPE_CHECKING:
         observable_units,
         perfusion_changes,
         site_label,
+        temperature_quantities,
     )
     from pkpdsim.perfusion.figure import (
         circuit_cards,
@@ -94,6 +95,7 @@ _LAZY_NAMES = {
     "observable_units": "experiment",
     "perfusion_changes": "experiment",
     "site_label": "experiment",
+    "temperature_quantities": "experiment",
     "circuit_cards": "figure",
     "circuit_figure": "figure",
     "circuit_svg": "figure",
@@ -153,5 +155,6 @@ __all__ = [
     "perfusion_changes",
     "quantity_name",
     "site_label",
+    "temperature_quantities",
     "zone_objects",
 ]

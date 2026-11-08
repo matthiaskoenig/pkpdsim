@@ -4,8 +4,9 @@
 perfusion model, a `pkpdsim.experiment.PKPDSimulationExperiment` with the
 `PerfusionDefinition` of the model (`definition`), from which it takes the
 ids of the condition and of the medium changes, and the labels and units of
-the observables (`observable_labels`, `observable_units`), which a subclass
-may replace.
+the observables (`observable_labels`, `observable_units`, by the selection of
+sbmlsim: `[<q>_<site>]` the concentration of a species, the id of an
+assignment rule), which a subclass may replace.
 
 The condition of a simulation is a change before the initialization
 (`perfusion_changes`): the pump flow `Q_pump`, the mass of the organ
@@ -15,7 +16,9 @@ initial assignments of it, so the temperature is a change before the
 initialization). The temperature of the model is in `degC`, a unit of the
 size of a kelvin without the offset (`pkpdsim.perfusion.units`), so the
 change is the number of the temperature in degC and not a quantity, which
-sbmlsim would convert to 310.15 for 37 degC.
+sbmlsim would convert to 310.15 for 37 degC; the initialization of an
+experiment refuses a simulation which sets `T` to a quantity
+(`temperature_quantities`).
 
 A medium change replaces the fraction `f` of the perfusate of the reservoir
 with fresh perfusate: every perfusate species of the reservoir, the
@@ -42,7 +45,8 @@ from collections.abc import Sequence
 from types import MappingProxyType
 from typing import ClassVar
 
-from sbmlsim.simulation import Change
+from pint.errors import PintError
+from sbmlsim.simulation import Change, Scan, Simulation
 from sbmlsim.units import Quantity, ureg
 
 from pkpdsim.experiment import PKPDSimulationExperiment
@@ -56,6 +60,7 @@ __all__ = [
     "observable_units",
     "perfusion_changes",
     "site_label",
+    "temperature_quantities",
 ]
 
 _SITES = {
@@ -166,16 +171,72 @@ def _converted(value: Quantity, unit: str, what: str) -> Quantity:
     """Convert a quantity into a unit of the model.
 
     Raises:
+        TypeError: for a value which is no quantity.
         ValueError: for a quantity of another dimension.
     """
+    if not isinstance(value, Quantity):
+        raise TypeError(f"The {what} '{value!r}' is no quantity of {unit}.")
     try:
         return value.to(unit)
-    except Exception as err:  # pint's DimensionalityError, also of an offset unit
+    except PintError as err:  # DimensionalityError, OffsetUnitCalculusError
         raise ValueError(f"The {what} '{value}' is no quantity of {unit}.") from err
 
 
+def temperature_quantities(key: str, simulation: object) -> list[str]:
+    """Get where a simulation sets the temperature `T` to a quantity.
+
+    The temperature of a perfusion model is in degC, a unit of the size of a
+    kelvin without the offset (`pkpdsim.perfusion.units`), and sbmlsim
+    converts a quantity of a temperature to kelvin, `Q(37, "degC")` to 310.15,
+    so the temperature is a number in degC (`perfusion_changes`).
+
+    Args:
+        key: the key of the simulation.
+        simulation: a `Simulation` or a `Scan` (its simulation, the
+            simulations and the values of its dimensions); anything else has
+            no temperature.
+
+    Returns:
+        A text per place which sets `T` to a quantity: the changes before the
+        initialization, of the presimulation, at a time, of a dimension.
+    """
+    t = ids.TEMPERATURE
+    if isinstance(simulation, Scan):
+        out = temperature_quantities(key, simulation.simulation)
+        for dimension in simulation.dimensions:
+            if isinstance(dimension.values.get(t), Quantity):
+                out.append(f"{key}: the dimension '{dimension.id}'")
+            for sub, inner in dimension.simulations.items():
+                out += temperature_quantities(f"{key}/{sub}", inner)
+        return out
+    if not isinstance(simulation, Simulation):
+        return []
+    out = []
+    if isinstance(simulation.preinit_changes.get(t), Quantity):
+        out.append(f"{key}: the changes before the initialization")
+    presimulation = simulation.presimulation
+    if presimulation is not None and isinstance(
+        presimulation.preinit_changes.get(t), Quantity
+    ):
+        out.append(f"{key}: the presimulation")
+    for change in simulation.changes:
+        if isinstance(change.values.get(t), Quantity):
+            out.append(f"{key}: the change at {change.times}")
+    return out
+
+
+def _key(sid: str, *, species: bool = True) -> str:
+    """Get the selection of an observable: `[<sid>]` for a species, its id else."""
+    return f"[{sid}]" if species else sid
+
+
 def _observables(definition: PerfusionDefinition) -> dict[str, tuple[str, str]]:
-    """Get the label and the unit of every observable of a definition."""
+    """Get the label and the unit of every observable of a definition.
+
+    A species is selected by its concentration, `[<q>_<site>]` (roadrunner and
+    sbmlsim read the plain id of a species as its amount); the means of the
+    zones and the other observers are assignment rules and selected by id.
+    """
     released = definition.released
     zones = [ids.zone_id(k) for k in range(1, definition.organ.zones + 1)]
     sites = [ids.RESERVOIR, ids.INFLOW, *zones, ids.OUTFLOW]
@@ -185,7 +246,8 @@ def _observables(definition: PerfusionDefinition) -> dict[str, tuple[str, str]]:
     for site in [*sites, *means]:
         where = site_label(site)
         for q in circuit.quantities(definition.perfusate, released):
-            out[ids.species(q, site)] = (f"{circuit.quantity_label(q)} ({where})", _MM)
+            key = _key(ids.species(q, site), species=site not in means)
+            out[key] = (f"{circuit.quantity_label(q)} ({where})", _MM)
         out[ids.po2(site)] = (f"pO2 ({where})", "kPa")
         out[ids.pco2(site)] = (f"pCO2 ({where})", "kPa")
         out[ids.ph(site)] = (f"pH ({where})", "dimensionless")
@@ -197,7 +259,8 @@ def _observables(definition: PerfusionDefinition) -> dict[str, tuple[str, str]]:
     for site in [*zones, *means]:
         where = site_label(site)
         for q in ids.cell_quantities(released):
-            out[ids.species(q, ids.cell_site(site))] = (
+            key = _key(ids.species(q, ids.cell_site(site)), species=site in zones)
+            out[key] = (
                 f"{core.quantity_name(q)} (cells, {where})",
                 _MM,
             )
@@ -215,7 +278,7 @@ def _observables(definition: PerfusionDefinition) -> dict[str, tuple[str, str]]:
         out[ids.URINE] = ("urine", "µl")
         out[ids.URINE_RATE] = ("urine rate", "µl/min")
         for q in (*ids.FILTERED, *definition.perfusate.tracers):
-            out[ids.species(q, ids.URINE_SITE)] = (
+            out[_key(ids.species(q, ids.URINE_SITE))] = (
                 f"{circuit.quantity_label(q)} (urine)",
                 _MM,
             )
@@ -223,9 +286,14 @@ def _observables(definition: PerfusionDefinition) -> dict[str, tuple[str, str]]:
 
 
 def observable_labels(definition: PerfusionDefinition) -> dict[str, str]:
-    """Get the labels of the observables of a perfusion model, by id.
+    """Get the labels of the observables of a perfusion model, by selection.
 
-    Every perfusate quantity, pO2, pCO2, pH and enzyme activity at every
+    The selections are those of roadrunner and sbmlsim: the concentration of
+    a species `[<q>_<site>]` (the reservoir, the inflow, the zones, the
+    outflow, the cells of a zone `[<q>_<zone>_cell]`, the urine
+    `[<q>_urine]`), the id of an assignment rule (the means `<q>_pp`,
+    `<q>_pc_cell`, `pO2_<site>`, `pH_<site>`, `alt_act_<site>`, `VO2`). Every
+    perfusate quantity, pO2, pCO2, pH and enzyme activity at every
     site (`reservoir`, `inflow`, every zone, `outflow`, the means
     `periportal` and `pericentral`), the quantities of the cells and the
     living fraction of every zone and mean, the rate of necrosis of a zone,
@@ -238,7 +306,7 @@ def observable_labels(definition: PerfusionDefinition) -> dict[str, str]:
 
 
 def observable_units(definition: PerfusionDefinition) -> dict[str, str]:
-    """Get the units of the observables of a perfusion model, by id.
+    """Get the units of the observables of a perfusion model, by selection.
 
     The units of the observables of `observable_labels` as sbmlsim reads
     them (concentrations `mM`, partial pressures `kPa`, activities
@@ -276,6 +344,29 @@ class PerfusionSimulationExperiment(PKPDSimulationExperiment):
                 cls.labels = MappingProxyType(observable_labels(definition))
             if "units" not in cls.__dict__:
                 cls.units = MappingProxyType(observable_units(definition))
+
+    def initialize(self) -> None:
+        """Initialize the experiment and check the temperature of its simulations.
+
+        Raises:
+            ValueError: for a simulation which sets the temperature `T` to a
+                quantity (see `temperature_quantities`); the runner reports
+                the experiment as failed.
+        """
+        super().initialize()
+        problems = [
+            p
+            for key, simulation in self._simulations.items()
+            for p in temperature_quantities(key, simulation)
+        ]
+        if problems:
+            raise ValueError(
+                f"The experiment '{self.sid}' sets the temperature "
+                f"'{ids.TEMPERATURE}' to a quantity, which sbmlsim converts to "
+                "kelvin (37 degC to 310.15), while the model has it in degC "
+                "steps from 0 degC: give the number in degC, "
+                "`perfusion_changes(flow, mass, temperature)`. " + "; ".join(problems)
+            )
 
     @classmethod
     def _definition(cls) -> PerfusionDefinition:

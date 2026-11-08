@@ -5,7 +5,8 @@ docs and GitHub Pages: hovering an element with a `data-k` key shows its card,
 an organ (its volumes in the reference man and woman, its UBERON ids, the form
 of every substance, the processes), a substance (its mechanisms), a route, the
 blood sample, the lumen or the urine; a key `txt:<text>` shows its own text
-(a process line). The credit (pkpdsim, the anatomy and its license) sits in
+(a process line). The credit (pkpdsim, the anatomy or the organ icons and the
+license of the anatomograms, `CREDIT`, `ICON_CREDIT`) sits in
 the legend below the figure, never in a card.
 """
 
@@ -25,6 +26,7 @@ from pkpdsim.pbpk.visual.resources import anatomy
 
 __all__ = [
     "CREDIT",
+    "ICON_CREDIT",
     "LIBRARY",
     "REPOSITORY",
     "cards",
@@ -34,15 +36,27 @@ __all__ = [
 
 REPOSITORY = "https://github.com/matthiaskoenig/pkpdsim"
 LIBRARY = "https://matthiaskoenig.github.io/pkpdsim/pbpk/"
-CREDIT = (
-    f'Created with <a href="{REPOSITORY}">pkpdsim</a> {__version__} '
-    f'(<a href="{LIBRARY}">PBPK library</a>) from the model definition; anatomy after the anatomograms '
-    'of the <a href="https://www.ebi.ac.uk/gxa">Expression Atlas</a> and the '
-    '<a href="https://www.proteinatlas.org">Human Protein Atlas</a> '
-    '(<a href="https://github.com/ebi-gene-expression-group/anatomogram">anatomogram</a>, '
-    '<a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>).'
-)
-"""The credit of a figure, for its legend (HTML)."""
+
+
+def _credit(drawn: str) -> str:
+    """The credit of a figure whose `drawn` part follows the anatomograms (HTML)."""
+    return (
+        f'Created with <a href="{REPOSITORY}">pkpdsim</a> {__version__} '
+        f'(<a href="{LIBRARY}">PBPK library</a>) from the model definition; {drawn} after '
+        'the anatomograms of the <a href="https://www.ebi.ac.uk/gxa">Expression Atlas</a> '
+        'and the <a href="https://www.proteinatlas.org">Human Protein Atlas</a> '
+        '(<a href="https://github.com/ebi-gene-expression-group/anatomogram">anatomogram</a>, '
+        '<a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>).'
+    )
+
+
+CREDIT = _credit("anatomy")
+"""The credit of an anatomical figure, for its legend (HTML)."""
+
+ICON_CREDIT = _credit("organ icons")
+"""The credit of a schematic, for its legend (HTML): its organ icons are the
+shapes of the anatomograms (`pkpdsim.pbpk.visual.icons`), so the license asks
+for the attribution, but the figure draws no anatomy."""
 
 _FORMS = {
     "none": "plasma only",
@@ -124,7 +138,12 @@ def cards(
 
 
 def html_page(
-    svg: str, cards: dict[str, list[str]], title: str, width: int, legend: str
+    svg: str,
+    cards: dict[str, list[str]],
+    title: str,
+    width: int,
+    legend: str,
+    credit: str = CREDIT,
 ) -> str:
     """A self-contained page of a figure with hover cards and its legend.
 
@@ -134,6 +153,8 @@ def html_page(
         title: the title of the page.
         width: the width of the figure [px], the maximal width of the page.
         legend: the legend below the figure (HTML), the credit appended.
+        credit: the credit (HTML), `CREDIT` of an anatomical figure,
+            `ICON_CREDIT` of a schematic.
 
     The page posts its height to the page which embeds it in a frame
     (`{"pkpdFigure": true, "height": ...}`), so the frame can fit it
@@ -158,7 +179,7 @@ path[data-k]:hover {{ filter:brightness(1.12) drop-shadow(0 0 2px #0006); }}
 #card div {{ margin:2px 0; }} #card code {{ font-size:11.5px; color:#666; }}
 #card .b {{ display:inline-block; font:700 10px monospace; color:#fff; background:#6d6d6d; border-radius:3px; padding:0 4px; }}
 </style></head><body><div class="wrap">{svg}</div>
-<p class="legend">{legend}<br>{CREDIT}</p><div id="card" role="tooltip"></div>
+<p class="legend">{legend}<br>{credit}</p><div id="card" role="tooltip"></div>
 <script>
 const CARDS = {json.dumps(cards, sort_keys=True)};
 const card = document.getElementById('card');
@@ -217,16 +238,23 @@ def interactive_figure(
         svg = fig.svg(tags=True)
         width = fig.size[0]
         legend = "Hover the organs, labels, substances and symbols for details."
+        credit = CREDIT
     elif figure == "schematic":
         svg = schematic_svg(definition, (definition.sex,))
         width = int(float(svg.split('width="', 1)[1].split('"', 1)[0]))
         legend = "Hover the organ rows, substance chips and process lines for details."
+        credit = ICON_CREDIT
     else:
         raise ValueError(
             f"No interactive figure '{figure}'; the figures are 'anatomy' and 'schematic'."
         )
     page = html_page(
-        svg, cards(content, volumes), f"{content.name} ({figure})", width, legend
+        svg,
+        cards(content, volumes),
+        f"{content.name} ({figure})",
+        width,
+        legend,
+        credit,
     )
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(page, encoding="utf-8")

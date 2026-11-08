@@ -8,7 +8,7 @@ from xml.etree import ElementTree
 from pkpdsim.pbpk import Route
 from pkpdsim.pbpk.visual.anatomy import TITLES, AnatomyFigure, anatomy_figure
 from pkpdsim.pbpk.visual.content import ModelContent
-from pkpdsim.pbpk.visual.interactive import interactive_figure
+from pkpdsim.pbpk.visual.interactive import CREDIT, ICON_CREDIT, interactive_figure
 
 from .conftest import definition
 from .test_figure import seven_substances
@@ -104,6 +104,7 @@ def test_the_interactive_page_has_cards_and_the_credit(tmp_path: Path) -> None:
     assert "Created with" not in figure
     assert legend.count("https://github.com/matthiaskoenig/pkpdsim") == 1
     assert legend.count("https://matthiaskoenig.github.io/pkpdsim/pbpk/") == 1
+    assert CREDIT in legend
 
 
 def test_the_interactive_schematic_has_process_cards(tmp_path: Path) -> None:
@@ -112,3 +113,6 @@ def test_the_interactive_schematic_has_process_cards(tmp_path: Path) -> None:
     ).read_text()
     assert 'data-k="txt:MET: API3A4: api -&gt; api_m1, api_m2 by CYP3A4' in html
     assert 'data-k="li"' in html
+    # the schematic draws no anatomy, its organ icons are the anatomograms
+    assert ICON_CREDIT in html
+    assert CREDIT not in html

@@ -29,10 +29,12 @@ uv run python scripts/visual/docs_figures.py
 import ast
 import contextlib
 import dataclasses
+import functools
 import os
 import re
 import sys
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
 
 from pkpdsim.pbpk import (
@@ -233,6 +235,16 @@ def _relative(page: Path, path: Path) -> str:
     return Path(os.path.relpath(path, page.parent)).as_posix()
 
 
+def _circuit(definition: PerfusionDefinition, path: Path, figure: str) -> Path:
+    """Write an interactive figure of a machine perfusion."""
+    return interactive_circuit(definition, path, figure=figure)
+
+
+def _body(definition: PBPKDefinition, path: Path, figure: str) -> Path:
+    """Write an interactive figure of a PBPK model."""
+    return interactive_figure(definition, path, figure=figure)
+
+
 def region(page: Path, number: int, definition: Definition, out: Path) -> str:
     """Write the figures A and B of a definition of a page; get the region of the page.
 
@@ -240,14 +252,16 @@ def region(page: Path, number: int, definition: Definition, out: Path) -> str:
     machine perfusion the organ in its circuit and the schematic of the circuit.
     """
     stem = f"{page.stem}-{number}"
-    perfusion = isinstance(definition, PerfusionDefinition)
+    write: Callable[[Path, str], Path]
+    if isinstance(definition, PerfusionDefinition):
+        write = functools.partial(_circuit, definition)
+        content = "the organ in its circuit (A) and the schematic of the circuit (B)"
+    else:
+        write = functools.partial(_body, definition)
+        content = "the anatomical figure (A) and the schematic (B)"
     frames = []
     for figure, title in (("anatomy", "anatomical figure"), ("schematic", "schematic")):
-        target = out / MODELS / f"{stem}-{figure}.html"
-        if isinstance(definition, PerfusionDefinition):
-            path = interactive_circuit(definition, target, figure=figure)
-        else:
-            path = interactive_figure(definition, target, figure=figure)
+        path = write(out / MODELS / f"{stem}-{figure}.html", figure)
         frames.append(
             _frame(
                 _relative(page, OUT / MODELS / path.name),
@@ -256,11 +270,6 @@ def region(page: Path, number: int, definition: Definition, out: Path) -> str:
             )
         )
     figures = _relative(page, PBPK / "figures.md")
-    content = (
-        "the organ in its circuit (A) and the schematic of the circuit (B)"
-        if perfusion
-        else "the anatomical figure (A) and the schematic (B)"
-    )
     return (
         f"\n<!-- generated: figures-{stem} (scripts/visual/docs_figures.py), "
         "do not edit -->\n"

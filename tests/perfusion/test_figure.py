@@ -19,6 +19,7 @@ from svg_labels import SVG, assert_inside_and_apart, assert_inside_box, parse_la
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import Value
 from pkpdsim.pbpk.visual import palette
+from pkpdsim.pbpk.visual.interactive import CREDIT, ICON_CREDIT
 from pkpdsim.perfusion import ids
 from pkpdsim.perfusion.builder import compose
 from pkpdsim.perfusion.circuit import quantities
@@ -304,6 +305,13 @@ def test_the_interactive_page(tmp_path: Path) -> None:
     width = re.search(r'<svg[^>]* width="([0-9.]+)"', page)
     assert width is not None
     assert f"max-width:{int(float(width.group(1)))}px" in page
+    # the schematic draws no anatomy, its organ icons are the anatomograms
+    assert ICON_CREDIT in page
+    assert CREDIT not in page
+    anatomy = interactive_circuit(d, tmp_path / "anatomy.html").read_text(
+        encoding="utf-8"
+    )
+    assert CREDIT in anatomy
 
 
 def test_an_invalid_definition_has_no_figure() -> None:

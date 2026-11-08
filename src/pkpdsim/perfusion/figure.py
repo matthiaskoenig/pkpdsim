@@ -1004,7 +1004,7 @@ def interactive_circuit(
         ValueError: for another figure or an invalid definition
             (`PerfusionDefinition.validate`).
     """
-    from pkpdsim.pbpk.visual.interactive import html_page
+    from pkpdsim.pbpk.visual.interactive import CREDIT, ICON_CREDIT, html_page
     from pkpdsim.perfusion.anatomy import anatomy_cards, circuit_anatomy_svg
 
     if figure == "anatomy":
@@ -1014,6 +1014,7 @@ def interactive_circuit(
             "Hover the organ, its zones, the apparatus, the labels and the chips "
             "for details."
         )
+        credit = CREDIT
     elif figure == "schematic":
         svg = circuit_svg(definition)
         cards = circuit_cards(definition)
@@ -1021,13 +1022,14 @@ def interactive_circuit(
             "Hover the circuit, the organ, its zones, the chips and the process "
             "lines for details."
         )
+        credit = ICON_CREDIT
     else:
         raise ValueError(
             f"No interactive figure '{figure}'; the figures are 'anatomy' and "
             "'schematic'."
         )
     width = int(float(svg.split('width="', 1)[1].split('"', 1)[0]))
-    page = html_page(svg, cards, f"{definition.name} ({figure})", width, legend)
+    page = html_page(svg, cards, f"{definition.name} ({figure})", width, legend, credit)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(page, encoding="utf-8")
     return path

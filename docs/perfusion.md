@@ -149,7 +149,7 @@ alpha_o2 = alpha_o2_ref * exp(k_alpha_o2 * (T - T_alpha_o2))
 
 ## The experiments and the medium change
 
-`PerfusionSimulationExperiment` (`pkpdsim.perfusion.experiment`) is the base of the simulation experiments of a perfusion model, a `PKPDSimulationExperiment` with the definition of the model as `definition`; a class with a definition gets the labels and units of its observables (`observable_labels`, `observable_units`) unless it sets its own. The condition of a simulation is a change before the initialization, `perfusion_changes(flow, mass, temperature=None)`: the pump flow `Q_pump`, the mass of the organ `M_<o>` and the temperature `T` as its number in degC (sbmlsim converts a quantity in degC to kelvin, 310.15 for 37 degC, while `T` is in steps of a kelvin from 0 degC). The groups of a study differ by these and by their medium changes, the parameters of the model are shared.
+`PerfusionSimulationExperiment` (`pkpdsim.perfusion.experiment`) is the base of the simulation experiments of a perfusion model, a `PKPDSimulationExperiment` with the definition of the model as `definition`; a class with a definition gets the labels and units of its observables (`observable_labels`, `observable_units`) unless it sets its own. The condition of a simulation is a change before the initialization, `perfusion_changes(flow, mass, temperature=None)`: the pump flow `Q_pump`, the mass of the organ `M_<o>` and the temperature `T` as its number in degC. Never give `T` as a quantity: sbmlsim converts a quantity of a temperature to kelvin, `Q(37, "degC")` to 310.15, while `T` counts kelvin steps from 0 degC, so the model would run at 310 degC (`f_T` about 276); the initialization of a `PerfusionSimulationExperiment` refuses a simulation which sets `T` to a quantity (before the initialization, in its presimulation, at a time or in a dimension of a scan). The groups of a study differ by these and by their medium changes, the parameters of the model are shared.
 
 A medium change replaces the fraction `f` of the reservoir with fresh perfusate: every perfusate species of the reservoir, the quantities of the perfusate of the organ and the tracers, is set to `(1 - f)*[X_res] + f*X_fresh` with the fresh perfusate of the model. It is a `Change` of sbmlsim at its time (`medium_changes(times, fraction, time_unit="min")`, one per time), so the model has no events and the times are a setting of the experiment. The change keeps the volume of the reservoir, as much fresh perfusate comes in as goes out; the reservoir of a kidney, which loses the urine, keeps the volume it has at the change, the urine is not made up. The tubing and the organ are not changed.
 
@@ -168,7 +168,7 @@ print(values["[glc_res]"])
 
 simulator = Simulator(n_workers=1)
 model = simulator.load(path)
-model.selections = ["time", "glc_res", "pO2_out"]
+model.selections = ["time", "[glc_res]", "pO2_out"]
 condition = perfusion_changes(
     definition, Q(3.0, "ml/min"), Q(10.0, "g"), Q(37.0, "degC")
 )
@@ -181,7 +181,7 @@ for n, text in ((0, "no change"), (1, "one change"), (2, "two changes")):
         times=[0.0, 6.0],
     )
     result = simulator.simulate(model, simulation)
-    glc = np.asarray(result["glc_res"]).ravel()[-1]
+    glc = np.asarray(result["[glc_res]"]).ravel()[-1]
     po2 = np.asarray(result["pO2_out"]).ravel()[-1]
     print(f"{text}: glucose {glc:.3f} mM, outflow pO2 {po2:.1f} kPa at 6 h")
 ```
@@ -223,12 +223,14 @@ class FlowRate(PerfusionSimulationExperiment):
 
 ## The observers and the sites
 
-Every quantity can be read at every site: the reservoir `res` (where the study samples the perfusate), the inflow `in` after the oxygenator, every zone `z<k>`, the outflow `out` after the organ, and the periportal and pericentral means `pp` and `pc`, the first and the last third of the zones, each zone weighted by its overlap with the third (with one zone both means are the zone). The cells of a zone are the site `<z>_cell` (`pp_cell`, `pc_cell` for the means).
+Every quantity can be read at every site: the reservoir `res` (where the study samples the perfusate), the inflow `in` after the oxygenator, every zone `z<k>`, the outflow `out` after the organ, and the periportal and pericentral means `pp` and `pc`, the first and the last third of the zones, each zone weighted by its overlap with the third (with one zone both means are the zone). The cells of a zone are the site `<z>_cell` (`pp_cell`, `pc_cell` for the means). A species is an amount in roadrunner and sbmlsim and its concentration is selected as `[<q>_<site>]` (the 10 ml of the inflow tubing hold 0.065 mmole of glucose, `glc_in`, at 6.5 mM, `[glc_in]`); the means and the other observers are assignment rules, selected by their id. The labels and units of `observable_labels` and `observable_units` are keyed by these selections.
 
 | observer | unit | what |
 |---|---|---|
-| `<q>_<site>` | mM | a quantity of the perfusate (glucose, oxygen, lactate, CO2, bicarbonate, protons, potassium, the released enzymes, the tracers) |
-| `<q>_<z>_cell` | mM | a quantity of the cells of a zone |
+| `[<q>_<site>]` | mM | a quantity of the perfusate (glucose, oxygen, lactate, CO2, bicarbonate, protons, potassium, the released enzymes, the tracers) at the reservoir, the inflow, a zone or the outflow, a species |
+| `<q>_pp`, `<q>_pc` | mM | the periportal and pericentral mean of a quantity of the perfusate, an assignment rule |
+| `[<q>_<z>_cell]`, `<q>_pp_cell`, `<q>_pc_cell` | mM | a quantity of the cells of a zone (a species) and its means |
+| `[<q>_urine]` | mM | a filtered quantity in the urine of a kidney |
 | `pO2_<site>` | kPa | the oxygen partial pressure, the free oxygen over its solubility at the temperature |
 | `pCO2_<site>` | kPa | the CO2 partial pressure |
 | `pH_<site>` | | the pH of the free protons |

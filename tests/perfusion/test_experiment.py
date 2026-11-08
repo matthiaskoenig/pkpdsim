@@ -16,7 +16,7 @@ from sbmlsim import Q
 from sbmlsim.experiment import ExperimentRunner
 from sbmlsim.fit.options import DataAtChangeType
 from sbmlsim.result import TimecourseResult
-from sbmlsim.simulation import Change, Scan, Simulation
+from sbmlsim.simulation import Change, Dimension, Scan, Simulation
 from sbmlsim.simulator import Simulator
 from sbmlsim.units import Quantity, ureg
 
@@ -345,20 +345,28 @@ def test_the_observables_have_labels_and_units(
         labels = observable_labels(definition)
         units = observable_units(definition)
         assert set(labels) == set(units)
-        assert set(labels) <= model_ids(compose(definition))
+        model = compose(definition)
+        assert {sid.strip("[]") for sid in labels} <= model_ids(model)
+        species = {sp.sid for sp in model.species}
+        for sid in labels:
+            # a species by its concentration, an assignment rule by its id
+            assert (sid.strip("[]") in species) == sid.startswith("["), sid
         for sid, unit in units.items():
             ureg(unit)  # a unit of sbmlsim
             assert labels[sid], sid
     labels, units = observable_labels(liver), observable_units(liver)
-    assert labels["glc_res"] == "glucose (reservoir)"
+    assert labels["[glc_res]"] == "glucose (reservoir)"
+    assert labels["glc_pp"] == "glucose (periportal)"
     assert labels["pO2_out"] == "pO2 (outflow)"
     assert labels["alt_act_res"] == "ALT activity (reservoir)"
-    assert labels["atp_z2_cell"] == "ATP (cells, zone 2)"
+    assert labels["[atp_z2_cell]"] == "ATP (cells, zone 2)"
+    assert labels["atp_pc_cell"] == "ATP (cells, pericentral)"
     assert labels["f_alive_pc"] == "living fraction (pericentral)"
     assert units["alt_act_res"] == "µkat/l"
     assert units["bile"] == "µl"
-    assert units[f"{TRACER}_res"] == "mM"
+    assert units[f"[{TRACER}_res]"] == "mM"
     assert "urine" in observable_units(kidney)
+    assert "[glc_urine]" in observable_units(kidney)
     assert "bile" not in observable_units(kidney)
 
 
@@ -369,9 +377,9 @@ def test_an_experiment_has_the_labels_of_its_definition(
     assert dict(experiment.units) == observable_units(liver)
 
     class Own(experiment):  # ty: ignore[unsupported-base]
-        labels: ClassVar = {"glc_res": "glucose"}
+        labels: ClassVar = {"[glc_res]": "glucose"}
 
-    assert dict(Own.labels) == {"glc_res": "glucose"}
+    assert dict(Own.labels) == {"[glc_res]": "glucose"}
     assert dict(Own.units) == observable_units(liver)
 
 
@@ -424,3 +432,87 @@ def test_an_experiment_runs_the_conditions_with_their_medium_changes(
     assert len(alt["q3_mc2"]) == 9, "two rows at each change"
     assert alt["q3_mc2"][-1] < alt["q3_mc0"][-1], "the changes dilute the ALT"
     assert np.all(np.isfinite(alt["q1_mc0"]))
+
+
+def test_a_species_of_the_map_is_its_concentration(
+    liver: PerfusionDefinition, liver_path: Path
+) -> None:
+    """The selection of a species in the labels is its concentration (mM).
+
+    roadrunner reads the plain id of a species as its amount: the inflow
+    tubing of 10 ml holds 0.065 mmole of glucose at 6.5 mM.
+    """
+    units = observable_units(liver)
+    selections = [s for s in units if s.startswith("[") and s.endswith("_in]")]
+    selections += ["[glc_z1]", "[atp_z1_cell]"]
+    assert set(selections) <= set(units)
+    simulator = Simulator(n_workers=1)
+    model = simulator.load(liver_path)
+    v_in, v_z1, v_cell = ids.volume(ids.INFLOW), ids.vascular("z1"), ids.cells("z1")
+    model.selections = [
+        "time",
+        *selections,
+        *(s.strip("[]") for s in selections),
+        v_in,
+        v_z1,
+        v_cell,
+    ]
+    result = simulator.simulate(model, Simulation(end=30.0, times=[0.0, 30.0]))
+    volume = {"_in": v_in, "_z1": v_z1, "_cell": v_cell}
+    for sid in selections:
+        amount = _column(result, sid.strip("[]"))
+        v = next(
+            _column(result, x) for end, x in volume.items() if sid.endswith(f"{end}]")
+        )
+        assert _column(result, sid) == pytest.approx(amount / v, rel=1e-12), sid
+    assert _column(result, "[glc_in]")[0] == pytest.approx(6.5)
+    assert _column(result, "glc_in")[0] == pytest.approx(0.065)
+
+
+def test_sbmlsim_converts_a_temperature_quantity_to_kelvin(liver_path: Path) -> None:
+    """The reason to give `T` as a number: `Q(37, "degC")` becomes 310.15."""
+    simulator = Simulator(n_workers=1)
+    model = simulator.load(liver_path)
+    model.selections = ["time", ids.TEMPERATURE, ids.F_T]
+    result = simulator.simulate(
+        model,
+        Simulation(
+            end=1.0, steps=1, preinit_changes={ids.TEMPERATURE: Q(37.0, "degC")}
+        ),
+    )
+    assert _column(result, ids.TEMPERATURE)[0] == pytest.approx(310.15)
+    assert _column(result, ids.F_T)[0] > 100.0
+
+
+def test_an_experiment_refuses_a_temperature_quantity(
+    experiment: type[PerfusionSimulationExperiment],
+) -> None:
+    flow, mass = Q(3.0, "ml/min"), Q(10.0, "g")
+
+    def runner(simulation: Simulation | Scan) -> ExperimentRunner:
+        class Warm(experiment):  # ty: ignore[unsupported-base]
+            def simulations(self) -> dict[str, Simulation | Scan]:
+                return {"warm": simulation}
+
+        return ExperimentRunner(
+            experiment_classes=[Warm],
+            base_path=experiment.pkpd_model.path,
+            simulator=Simulator(n_workers=1),
+            on_error="raise",
+        )
+
+    changes = experiment.perfusion_changes(flow, mass)
+    refused = [
+        Simulation(end=10.0, preinit_changes={**changes, "T": Q(37.0, "degC")}),
+        Simulation(end=10.0, changes=[Change(5.0, {"T": Q(20.0, "degC")})]),
+        Scan(
+            Simulation(end=10.0, preinit_changes=changes),
+            [Dimension("temperature", values={"T": Q([4.0, 37.0], "degC")})],
+        ),
+    ]
+    for simulation in refused:
+        with pytest.raises(ValueError, match="perfusion_changes"):
+            runner(simulation)
+    # a number in degC, as perfusion_changes gives it
+    good = experiment.perfusion_changes(flow, mass, Q(37.0, "degC"))
+    runner(Simulation(end=10.0, preinit_changes=good))
