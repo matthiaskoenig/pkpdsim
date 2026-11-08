@@ -119,7 +119,8 @@ def fresh(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, dict[Path, st
     out = tmp_path_factory.mktemp("docs_figures")
     script = _script()
     script.write(out)
-    return out, script.write_pages(out)
+    # the figures of the models of the pages, in the folders below the docs
+    return out, script.write_pages(out / "docs")
 
 
 @pytest.mark.parametrize("name", FIGURES)
@@ -142,15 +143,16 @@ def test_the_pages_of_the_models_are_up_to_date(
     command = "run `uv run python scripts/visual/docs_figures.py`"
     for page, text in pages.items():
         assert _same(text, page.read_text(encoding="utf-8")), f"{page.name}: {command}"
-    written = sorted(p.name for p in (out / script.MODELS).glob("*.html"))
-    stored = sorted(p.name for p in (script.OUT / script.MODELS).glob("*.html"))
-    assert written == stored, command
-    for name in written:
-        fresh_text = _normal((out / script.MODELS / name).read_text(encoding="utf-8"))
-        stored_text = _normal(
-            (script.OUT / script.MODELS / name).read_text(encoding="utf-8")
-        )
-        assert _same(fresh_text, stored_text), f"{name}: {command}"
+    for folder in script.FOLDERS:
+        fresh_folder, stored_folder = out / "docs" / folder, script.DOCS / folder
+        written = sorted(p.name for p in fresh_folder.glob("*.html"))
+        stored = sorted(p.name for p in stored_folder.glob("*.html"))
+        assert written, folder
+        assert written == stored, f"{folder}: {command}"
+        for name in written:
+            fresh_text = _normal((fresh_folder / name).read_text(encoding="utf-8"))
+            stored_text = _normal((stored_folder / name).read_text(encoding="utf-8"))
+            assert _same(fresh_text, stored_text), f"{name}: {command}"
 
 
 def test_every_model_of_a_page_shows_its_figures() -> None:
@@ -175,8 +177,9 @@ def test_the_perfusion_page_shows_the_figures_of_its_circuit() -> None:
     for number, definition in definitions.items():
         assert isinstance(definition, PerfusionDefinition)
         for figure in ("anatomy", "schematic"):
-            # relative to the page, the folder of the figures of the models
-            src = f"pbpk/img/figures/models/perfusion-{number}-{figure}.html"
+            # relative to the page, the folder of its figures, not of the PBPK
+            # library
+            src = f"img/figures/models/perfusion-{number}-{figure}.html"
             assert f'src="{src}"' in text
             assert (ROOT / "docs" / src).exists()
             html = (ROOT / "docs" / src).read_text(encoding="utf-8")

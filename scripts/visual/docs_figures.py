@@ -11,7 +11,9 @@ create a model shows the content of that model: after each fence which creates a
 `PBPKDefinition` or a `PerfusionDefinition` the script runs the fences of the page
 up to it (in a temporary directory, as the snippet tests do), takes the definition
 it created and writes its figures A and B as interactive pages
-(`docs/pbpk/img/figures/models/<page>-<fence>-{anatomy,schematic}.html`, the
+(`<page>-<fence>-{anatomy,schematic}.html` in the folder of the page,
+`docs/pbpk/img/figures/models/` for a page of the PBPK library and
+`docs/img/figures/models/` for `docs/perfusion.md`, `models_folder`; the
 anatomical figure and the schematic of a PBPK model with `interactive_figure`, the
 organ in its circuit and the schematic of a machine perfusion with
 `interactive_circuit`) and the frames which show them into a generated region
@@ -63,7 +65,10 @@ PAGES = (DOCS / "perfusion.md",)
 """The pages outside of `docs/pbpk/` whose models show their figures."""
 OUT = PBPK / "img" / "figures"
 MODELS = "models"
-"""The folder of the figures of the models of the pages, below `OUT`."""
+"""The folder of the figures of the models of the pages, below the figures."""
+FOLDERS = (Path("pbpk", "img", "figures", MODELS), Path("img", "figures", MODELS))
+"""The folders of the figures of the models relative to the docs: of the pages of
+the PBPK library and of the pages of `PAGES` (`models_folder`)."""
 
 BLOCK = re.compile(r"^```python\n(.*?)^```\n", re.S | re.M)
 SKIP_MARKER = "# not executed"
@@ -235,6 +240,11 @@ def _relative(page: Path, path: Path) -> str:
     return Path(os.path.relpath(path, page.parent)).as_posix()
 
 
+def models_folder(page: Path) -> Path:
+    """The folder of the figures of the models of a page, relative to the docs."""
+    return FOLDERS[0] if page.parent == PBPK else FOLDERS[1]
+
+
 def _circuit(definition: PerfusionDefinition, path: Path, figure: str) -> Path:
     """Write an interactive figure of a machine perfusion."""
     return interactive_circuit(definition, path, figure=figure)
@@ -245,11 +255,13 @@ def _body(definition: PBPKDefinition, path: Path, figure: str) -> Path:
     return interactive_figure(definition, path, figure=figure)
 
 
-def region(page: Path, number: int, definition: Definition, out: Path) -> str:
+def region(page: Path, number: int, definition: Definition, docs: Path) -> str:
     """Write the figures A and B of a definition of a page; get the region of the page.
 
     The figures of a PBPK model are its anatomical figure and its schematic, of a
-    machine perfusion the organ in its circuit and the schematic of the circuit.
+    machine perfusion the organ in its circuit and the schematic of the circuit,
+    written into the folder of the page (`models_folder`) below `docs`, a folder
+    in place of `DOCS`.
     """
     stem = f"{page.stem}-{number}"
     write: Callable[[Path, str], Path]
@@ -261,10 +273,11 @@ def region(page: Path, number: int, definition: Definition, out: Path) -> str:
         content = "the anatomical figure (A) and the schematic (B)"
     frames = []
     for figure, title in (("anatomy", "anatomical figure"), ("schematic", "schematic")):
-        path = write(out / MODELS / f"{stem}-{figure}.html", figure)
+        folder = models_folder(page)
+        path = write(docs / folder / f"{stem}-{figure}.html", figure)
         frames.append(
             _frame(
-                _relative(page, OUT / MODELS / path.name),
+                _relative(page, DOCS / folder / path.name),
                 f"The {title} of the model {definition.sid}",
                 path.read_text(encoding="utf-8"),
             )
@@ -280,7 +293,7 @@ def region(page: Path, number: int, definition: Definition, out: Path) -> str:
     )
 
 
-def page_text(page: Path, out: Path) -> str:
+def page_text(page: Path, docs: Path) -> str:
     """The text of a page with the figures of its models after their fences."""
     text = REGION.sub("", page.read_text(encoding="utf-8"))
     definitions = model_fences(page)
@@ -291,7 +304,7 @@ def page_text(page: Path, out: Path) -> str:
         output = OUTPUT.match(text, end)
         if output:
             end = output.end()
-        text = text[:end] + region(page, number, definitions[number], out) + text[end:]
+        text = text[:end] + region(page, number, definitions[number], docs) + text[end:]
     return text
 
 
@@ -321,15 +334,20 @@ def write(out: Path) -> list[Path]:
     return [*files, strip]
 
 
-def write_pages(out: Path) -> dict[Path, str]:
-    """Write the figures of the models of the pages into a folder; get the texts of the pages.
+def write_pages(docs: Path) -> dict[Path, str]:
+    """Write the figures of the models of the pages; get the texts of the pages.
 
-    A figure of a model which no page shows any more is removed.
+    The figures go into the folders of `FOLDERS` below `docs`, the docs or a
+    folder in place of them. A figure of a model which no page shows any more is
+    removed.
     """
-    folder = out / MODELS
-    before = set(folder.glob("*.html")) if folder.exists() else set()
-    texts = {page: page_text(page, out) for page in model_pages()}
-    shown = {folder / src for text in texts.values() for src in _SOURCES.findall(text)}
+    before = {p for folder in FOLDERS for p in (docs / folder).glob("*.html")}
+    texts = {page: page_text(page, docs) for page in model_pages()}
+    shown = {
+        docs / models_folder(page) / src
+        for page, text in texts.items()
+        for src in _SOURCES.findall(text)
+    }
     for stale in before - shown:
         stale.unlink()
     return texts
@@ -338,7 +356,7 @@ def write_pages(out: Path) -> dict[Path, str]:
 def main() -> None:
     for path in write(OUT):
         print(path.relative_to(ROOT))
-    for page, text in write_pages(OUT).items():
+    for page, text in write_pages(DOCS).items():
         page.write_text(text, encoding="utf-8")
         print(page.relative_to(ROOT))
 
