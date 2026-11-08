@@ -262,6 +262,14 @@ print(
 )
 ```
 
+<!-- generated: figures-adipose-1 (scripts/visual/docs_figures.py), do not edit -->
+The content of the model `obese`: the anatomical figure (A) and the schematic (B), hover them for details ([figures](figures.md)).
+
+<iframe class="pkpd-figure" src="img/figures/models/adipose-1-anatomy.html" title="The anatomical figure of the model obese" style="aspect-ratio:1460 / 898" loading="lazy"></iframe>
+
+<iframe class="pkpd-figure" src="img/figures/models/adipose-1-schematic.html" title="The schematic of the model obese" style="aspect-ratio:1384 / 902" loading="lazy"></iframe>
+<!-- end generated -->
+
 ```
 week 0 : BW 105.0 kg, BMI 33.9, Mad 39.4 kg, CO 7.08 l/min, GFR 146 ml/min
 week 52: BW 93.9 kg, BMI 30.3, Mad 31.7 kg, CO 6.92 l/min, GFR 139 ml/min

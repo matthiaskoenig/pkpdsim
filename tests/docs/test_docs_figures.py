@@ -94,45 +94,91 @@ def test_a_moved_cell_of_an_outline_is_the_same_figure() -> None:
     assert not _same(stored + "<g/>", stored)
 
 
-@pytest.mark.parametrize(
-    "name",
-    [
-        "anatomy.svg",
-        "anatomy.html",
-        "schematic.svg",
-        "schematic.html",
-        "publication.svg",
-        "publication_panels.svg",
-        "individuals.svg",
-        "mouse.svg",
-        "rat.svg",
-        "pig.svg",
-    ],
-)
-def test_the_figures_of_the_docs_are_up_to_date(
-    name: str, tmp_path_factory: pytest.TempPathFactory
-) -> None:
+FIGURES = [
+    "anatomy.html",
+    "schematic.html",
+    "publication.svg",
+    "publication_panels.svg",
+    "individuals.svg",
+    "mouse.html",
+    "rat.html",
+    "pig.html",
+]
+
+
+@pytest.fixture(scope="module")
+def fresh(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, dict[Path, str]]:
+    """The figures and the pages of the models, written once into a folder."""
+    out = tmp_path_factory.mktemp("docs_figures")
     script = _script()
-    out = tmp_path_factory.getbasetemp() / "docs_figures"
-    if not (out / name).exists():
-        script.write(out)
-    fresh = _normal((out / name).read_text(encoding="utf-8"))
-    stored = _normal((script.OUT / name).read_text(encoding="utf-8"))
-    assert _same(fresh, stored), (
+    script.write(out)
+    return out, script.write_pages(out)
+
+
+@pytest.mark.parametrize("name", FIGURES)
+def test_the_figures_of_the_docs_are_up_to_date(
+    name: str, fresh: tuple[Path, dict[Path, str]]
+) -> None:
+    out, _ = fresh
+    stored = _normal((_script().OUT / name).read_text(encoding="utf-8"))
+    assert _same(_normal((out / name).read_text(encoding="utf-8")), stored), (
         f"{name} is out of date: run `uv run python scripts/visual/docs_figures.py`"
     )
 
 
+def test_the_pages_of_the_models_are_up_to_date(
+    fresh: tuple[Path, dict[Path, str]],
+) -> None:
+    out, pages = fresh
+    script = _script()
+    assert pages, "no page of the PBPK library creates a model"
+    command = "run `uv run python scripts/visual/docs_figures.py`"
+    for page, text in pages.items():
+        assert _same(text, page.read_text(encoding="utf-8")), f"{page.name}: {command}"
+    written = sorted(p.name for p in (out / script.MODELS).glob("*.html"))
+    stored = sorted(p.name for p in (script.OUT / script.MODELS).glob("*.html"))
+    assert written == stored, command
+    for name in written:
+        fresh_text = _normal((out / script.MODELS / name).read_text(encoding="utf-8"))
+        stored_text = _normal(
+            (script.OUT / script.MODELS / name).read_text(encoding="utf-8")
+        )
+        assert _same(fresh_text, stored_text), f"{name}: {command}"
+
+
+def test_every_model_of_a_page_shows_its_figures() -> None:
+    script = _script()
+    for page in script.model_pages():
+        text = page.read_text(encoding="utf-8")
+        for number in script.model_fences(page):
+            stem = f"{page.stem}-{number}"
+            assert f"figures-{stem} " in text, page.name
+            for figure in ("anatomy", "schematic"):
+                assert f"img/figures/models/{stem}-{figure}.html" in text, page.name
+
+
+def test_the_docs_show_the_interactive_figures_only() -> None:
+    for page in (ROOT / "docs").rglob("*.md"):
+        text = page.read_text(encoding="utf-8")
+        for static in (
+            "anatomy.svg",
+            "schematic.svg",
+            "mouse.svg",
+            "rat.svg",
+            "pig.svg",
+        ):
+            assert f"img/figures/{static}" not in text, page.name
+
+
 def test_the_page_shows_every_figure() -> None:
-    page = (Path(__file__).parents[2] / "docs" / "pbpk" / "figures.md").read_text(
-        encoding="utf-8"
-    )
+    page = (ROOT / "docs" / "pbpk" / "figures.md").read_text(encoding="utf-8")
     for name in (
-        "anatomy.svg",
         "anatomy.html",
-        "schematic.svg",
         "schematic.html",
         "publication.svg",
         "individuals.svg",
     ):
         assert f"img/figures/{name}" in page, name
+    species = (ROOT / "docs" / "pbpk" / "species.md").read_text(encoding="utf-8")
+    for name in ("mouse.html", "rat.html", "pig.html"):
+        assert f"img/figures/{name}" in species, name

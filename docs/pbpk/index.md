@@ -65,6 +65,14 @@ print([s.sid for s in definition.substances], definition.sex, definition.populat
 ['api', 'api_m2'] male european_icrp
 ```
 
+<!-- generated: figures-index-1 (scripts/visual/docs_figures.py), do not edit -->
+The content of the model `api_body`: the anatomical figure (A) and the schematic (B), hover them for details ([figures](figures.md)).
+
+<iframe class="pkpd-figure" src="img/figures/models/index-1-anatomy.html" title="The anatomical figure of the model api_body" style="aspect-ratio:1460 / 898" loading="lazy"></iframe>
+
+<iframe class="pkpd-figure" src="img/figures/models/index-1-schematic.html" title="The schematic of the model api_body" style="aspect-ratio:1399 / 902" loading="lazy"></iframe>
+<!-- end generated -->
+
 Everything else is a default: the standard organ in every organ (the segmented intestine for small and large intestine), the male ICRP 89 reference individual, the arm vein preset of PK-Sim. The [tutorial](tutorial.md) builds and simulates such a model step by step.
 
 ## How the parts fit

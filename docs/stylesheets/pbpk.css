@@ -41,3 +41,14 @@
   vertical-align: -0.1em;
   border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
 }
+
+/* the interactive figures of a model (scripts/visual/docs_figures.py), sized by
+   javascripts/figures.js to the height of their page */
+iframe.pkpd-figure {
+  display: block;
+  width: 100%;
+  margin: 0.8em 0;
+  border: 1px solid var(--md-default-fg-color--lightest, #ddd);
+  border-radius: 8px;
+  background: #fff;
+}
