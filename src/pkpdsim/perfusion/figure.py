@@ -32,8 +32,9 @@ interactive page), as the COMBINE archive of a model carries it
   chips and badges) in a column right of the diagram.
 
 The figure is pure python and deterministic: the same definition gives the
-same text. `interactive_circuit` writes the self-contained page with the
-hover cards of `circuit_cards` (volumes, flow, temperature, the processes of
+same text. The anatomical figure of the organ in its circuit (panel A) is
+`pkpdsim.perfusion.anatomy`. `interactive_circuit` writes the
+self-contained page of either figure with the hover cards of `circuit_cards` (volumes, flow, temperature, the processes of
 the core per zone, the released enzymes, the tracers) through
 `pkpdsim.pbpk.visual.interactive.html_page`.
 """
@@ -976,35 +977,54 @@ def circuit_cards(definition: PerfusionDefinition) -> dict[str, list[str]]:
     return out
 
 
-def interactive_circuit(definition: PerfusionDefinition, path: Path) -> Path:
-    """Write the interactive page of the figure of a definition.
+def interactive_circuit(
+    definition: PerfusionDefinition, path: Path, *, figure: str = "anatomy"
+) -> Path:
+    """Write the interactive page of a figure of a definition.
 
-    The figure of `circuit_svg` with the hover cards of `circuit_cards`, one
-    self-contained HTML file (`pkpdsim.pbpk.visual.interactive.html_page`),
-    which posts its height to the docs page which embeds it.
+    A figure with its hover cards, one self-contained HTML file
+    (`pkpdsim.pbpk.visual.interactive.html_page`), which posts its height to
+    the docs page which embeds it; the keyword and its default are those of
+    `pkpdsim.pbpk.visual.interactive.interactive_figure`.
 
     Args:
         definition: the definition of the circuit.
         path: the HTML file to write.
+        figure: `anatomy` (panel A, the organ in its circuit,
+            `pkpdsim.perfusion.anatomy.circuit_anatomy_svg`, the default) or
+            `schematic` (panel B, `circuit_svg`).
 
     Returns:
         The path of the page.
 
     Raises:
-        ValueError: for an invalid definition (`PerfusionDefinition.validate`).
+        ValueError: for another figure or an invalid definition
+            (`PerfusionDefinition.validate`).
     """
     from pkpdsim.pbpk.visual.interactive import html_page
+    from pkpdsim.perfusion.anatomy import anatomy_cards, circuit_anatomy_svg
 
-    svg = circuit_svg(definition)
+    if figure == "anatomy":
+        svg = circuit_anatomy_svg(definition)
+        cards = anatomy_cards(definition)
+        legend = (
+            "Hover the organ, its zones, the apparatus, the labels and the chips "
+            "for details."
+        )
+    elif figure == "schematic":
+        svg = circuit_svg(definition)
+        cards = circuit_cards(definition)
+        legend = (
+            "Hover the circuit, the organ, its zones, the chips and the process "
+            "lines for details."
+        )
+    else:
+        raise ValueError(
+            f"No interactive figure '{figure}'; the figures are 'anatomy' and "
+            "'schematic'."
+        )
     width = int(float(svg.split('width="', 1)[1].split('"', 1)[0]))
-    page = html_page(
-        svg,
-        circuit_cards(definition),
-        f"{definition.name} (circuit)",
-        width,
-        "Hover the circuit, the organ, its zones, the chips and the process lines "
-        "for details.",
-    )
+    page = html_page(svg, cards, f"{definition.name} ({figure})", width, legend)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(page, encoding="utf-8")
     return path

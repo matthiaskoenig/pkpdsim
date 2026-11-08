@@ -288,7 +288,9 @@ def test_every_key_has_a_card(figure: tuple[PerfusionDefinition, Path]) -> None:
 def test_the_interactive_page(tmp_path: Path) -> None:
     """The page carries the figure, its cards and the credit."""
     d = liver_definition(8, tracers=["inulin"])
-    page = interactive_circuit(d, tmp_path / "circuit.html").read_text(encoding="utf-8")
+    page = interactive_circuit(
+        d, tmp_path / "circuit.html", figure="schematic"
+    ).read_text(encoding="utf-8")
     assert page.startswith("<!doctype html>")
     assert circuit_svg(d) in page
     assert '"zone:z8"' in page

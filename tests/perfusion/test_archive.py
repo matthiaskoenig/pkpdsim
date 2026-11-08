@@ -29,6 +29,7 @@ def test_the_archive_has_the_model_its_files_and_the_figure(tmp_path: Path) -> N
         "kidney_circuit_md",
         "kidney_circuit_ant",
         "kidney_circuit_svg",
+        "kidney_circuit_anatomy_svg",
     }
     models = tmp_path / "models"
     locations = {
@@ -48,13 +49,21 @@ def test_the_archive_has_the_model_its_files_and_the_figure(tmp_path: Path) -> N
             "./models/kidney_circuit.svg",
             models / "kidney_circuit.svg",
         ),
+        "kidney_circuit_anatomy_svg": (
+            "./models/kidney_circuit_anatomy.svg",
+            models / "kidney_circuit_anatomy.svg",
+        ),
     }
     for key, (location, path) in locations.items():
         assert results[key]["entry"].location == location, key
         assert results[key]["path"] == path, key
         assert path.is_file(), key
     assert results["kidney_circuit"]["entry"].master
-    assert results["kidney_circuit_svg"]["entry"].format == EntryFormat.SVG
+    for key in ("kidney_circuit_svg", "kidney_circuit_anatomy_svg"):
+        assert results[key]["entry"].format == EntryFormat.SVG
+    # the schematic first, then the anatomical figure
+    keys = list(results)
+    assert keys.index("kidney_circuit_svg") < keys.index("kidney_circuit_anatomy_svg")
     assert (tmp_path / "mit.txt").is_file() and (
         tmp_path / "cc-by-sa-4.0.txt"
     ).is_file()
