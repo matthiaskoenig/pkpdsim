@@ -221,6 +221,8 @@ class FlowRate(PerfusionSimulationExperiment):
         }
 ```
 
+The fit mappings of a perfusion describe their data with the vocabulary of `pkpdsim.metadata` shared by all models: the tissue `Tissue.PERFUSATE`, the route `Route.EX_VIVO` (an organ outside the body), the dosing `Dosing.PERFUSION` (no dose, the organ is kept in the perfusate of the circuit) and the sampling site of the circuit, `SamplingSite.RESERVOIR` (the default of the perfusate), `INFLOW` or `OUTFLOW`, the sites `res`, `in` and `out` of the observers below. A site of the circuit on another tissue and another site on the perfusate are a `ValueError`.
+
 ## The observers and the sites
 
 Every quantity can be read at every site: the reservoir `res` (where the study samples the perfusate), the inflow `in` after the oxygenator, every zone `z<k>`, the outflow `out` after the organ, and the periportal and pericentral means `pp` and `pc`, the first and the last third of the zones, each zone weighted by its overlap with the third (with one zone both means are the zone). The cells of a zone are the site `<z>_cell` (`pp_cell`, `pc_cell` for the means). A species is an amount in roadrunner and sbmlsim and its concentration is selected as `[<q>_<site>]` (the 10 ml of the inflow tubing hold 0.065 mmole of glucose, `glc_in`, at 6.5 mM, `[glc_in]`); the means and the other observers are assignment rules, selected by their id. The labels and units of `observable_labels` and `observable_units` are keyed by these selections.
