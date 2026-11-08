@@ -349,8 +349,13 @@ def test_the_observables_have_labels_and_units(
         assert {sid.strip("[]") for sid in labels} <= model_ids(model)
         species = {sp.sid for sp in model.species}
         for sid in labels:
-            # a species by its concentration, an assignment rule by its id
-            assert (sid.strip("[]") in species) == sid.startswith("["), sid
+            # a species by its concentration, an assignment rule by its id,
+            # the urine by its amount (its volume starts at 0)
+            urine = sid.endswith(f"_{ids.URINE_SITE}")
+            if urine:
+                assert sid in species, sid
+            else:
+                assert (sid.strip("[]") in species) == sid.startswith("["), sid
         for sid, unit in units.items():
             ureg(unit)  # a unit of sbmlsim
             assert labels[sid], sid
@@ -365,9 +370,13 @@ def test_the_observables_have_labels_and_units(
     assert units["alt_act_res"] == "µkat/l"
     assert units["bile"] == "µl"
     assert units[f"[{TRACER}_res]"] == "mM"
+    assert units["bile_per_mass"] == "µl/g"
     assert "urine" in observable_units(kidney)
-    assert "[glc_urine]" in observable_units(kidney)
+    assert observable_units(kidney)["glc_urine"] == "mmole"
+    assert observable_labels(kidney)["glc_urine"] == "glucose (urine, amount)"
+    assert "[glc_urine]" not in observable_units(kidney)
     assert "bile" not in observable_units(kidney)
+    assert "bile_per_mass" not in observable_units(kidney)
 
 
 def test_an_experiment_has_the_labels_of_its_definition(

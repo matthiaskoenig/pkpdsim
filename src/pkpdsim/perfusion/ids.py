@@ -47,6 +47,7 @@ import re
 __all__ = [
     "ACTIVATION_ENERGY",
     "BILE",
+    "BILE_PER_MASS",
     "BILE_RATE",
     "BUFFER_KA",
     "BUFFER_K_HYDRATION",
@@ -173,10 +174,15 @@ OXYGENATOR_CO2 = "OXY_co2_in"
 """The reaction of the oxygenator, which sets the CO2 of the inflow."""
 
 BILE = "bile"
-"""The volume of the bile of the organ (µl), a state."""
+"""The volume of the bile of the organ (µl), an assignment rule: the sum of
+the bile volumes of the zones, the states `Vbile_<zone>` (l)."""
 
 BILE_RATE = "bile_rate"
-"""The bile secretion of the organ (µl/min)."""
+"""The bile secretion of the organ (µl/min), an assignment rule."""
+
+BILE_PER_MASS = "bile_per_mass"
+"""The volume of the bile per gram of the organ (µl/g), an assignment rule,
+the unit of the data."""
 
 VO2 = "VO2"
 """The oxygen uptake of the organ from the perfusate (mmole/min)."""

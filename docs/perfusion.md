@@ -233,7 +233,7 @@ Every quantity can be read at every site: the reservoir `res` (where the study s
 | `[<q>_<site>]` | mM | a quantity of the perfusate (glucose, oxygen, lactate, CO2, bicarbonate, protons, potassium, the released enzymes, the tracers) at the reservoir, the inflow, a zone or the outflow, a species |
 | `<q>_pp`, `<q>_pc` | mM | the periportal and pericentral mean of a quantity of the perfusate, an assignment rule |
 | `[<q>_<z>_cell]`, `<q>_pp_cell`, `<q>_pc_cell` | mM | a quantity of the cells of a zone (a species) and its means |
-| `[<q>_urine]` | mM | a filtered quantity in the urine of a kidney |
+| `<q>_urine` | mmole | the amount of a filtered quantity in the urine of a kidney: the urine volume starts at 0, so its concentration `[<q>_urine]` is 0/0 at the start and the urine is selected by its amount |
 | `pO2_<site>` | kPa | the oxygen partial pressure, the free oxygen over its solubility at the temperature |
 | `pCO2_<site>` | kPa | the CO2 partial pressure |
 | `pH_<site>` | | the pH of the free protons |
@@ -241,6 +241,7 @@ Every quantity can be read at every site: the reservoir `res` (where the study s
 | `f_alive_<z>`, `f_alive_pp`, `f_alive_pc` | | the living fraction of the cells |
 | `VO2` | mmole/min | the oxygen uptake of the organ |
 | `bile`, `bile_rate` | µl, µl/min | the bile of a liver |
+| `bile_per_mass` | µl/g | the bile per gram of the liver, `bile/(1000 g/kg * M_li)`, the unit of the data |
 | `urine`, `urine_rate` | µl, µl/min | the urine of a kidney |
 
 ```equations title="observers"
@@ -248,6 +249,7 @@ pO2_<z> = o2_<z> / alpha_o2
 pCO2_<z> = co2_<z> / alpha_co2
 alt_act_res = alt_res * a_alt
 VO2 = O2IM_z1 + O2IM_z2
+bile_per_mass = bile / (1000 * M_li)
 o2_pp = o2_z1
 glc_pc = glc_z2
 ```

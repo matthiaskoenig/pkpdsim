@@ -515,7 +515,7 @@ def compose(definition: PerfusionDefinition) -> Model:
         enzymes,
     )
     if isinstance(organ, LiverOrgan):
-        objects += observers.bile_objects(zones_of.bile, zones)
+        objects += observers.bile_objects(zones_of.bile, zones, ids.mass(organ.key))
     objects += observers.uptake_objects(zones)
 
     return Model(

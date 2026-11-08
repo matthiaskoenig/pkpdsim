@@ -189,6 +189,7 @@ def test_every_quantity_at_every_site(tmp_path: Path) -> None:
         ids.F_T,
         ids.BILE,
         ids.BILE_RATE,
+        ids.BILE_PER_MASS,
         ids.VO2,
     }
     for site in sites:
@@ -239,6 +240,11 @@ def test_the_observers_read_the_sites(tmp_path: Path) -> None:
     assert r[ids.po2(ids.PERIPORTAL)] > r[ids.po2(ids.PERICENTRAL)]
     assert r[ids.BILE] == pytest.approx(
         sum(r[ids.bile(ids.zone_id(k))] for k in range(1, n + 1)) * 1e6, rel=1e-8
+    )
+    # µl per g: the bile (µl) over the mass of the organ (kg) in g
+    assert r[ids.BILE] > 0
+    assert r[ids.BILE_PER_MASS] == pytest.approx(
+        r[ids.BILE] / (1000 * r[ids.mass("li")]), rel=1e-12
     )
 
 

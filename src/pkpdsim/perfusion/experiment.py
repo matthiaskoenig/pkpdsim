@@ -236,6 +236,9 @@ def _observables(definition: PerfusionDefinition) -> dict[str, tuple[str, str]]:
     A species is selected by its concentration, `[<q>_<site>]` (roadrunner and
     sbmlsim read the plain id of a species as its amount); the means of the
     zones and the other observers are assignment rules and selected by id.
+    The urine of a kidney is the exception: its volume `V_urine` starts at 0,
+    so the concentration of a quantity in the urine is 0/0 at the start, and
+    the urine is selected by its amount, the plain id `<q>_urine` (mmole).
     """
     released = definition.released
     zones = [ids.zone_id(k) for k in range(1, definition.organ.zones + 1)]
@@ -274,13 +277,15 @@ def _observables(definition: PerfusionDefinition) -> dict[str, tuple[str, str]]:
     if isinstance(definition.organ, LiverOrgan):
         out[ids.BILE] = ("bile", "µl")
         out[ids.BILE_RATE] = ("bile rate", "µl/min")
+        out[ids.BILE_PER_MASS] = ("bile per mass", "µl/g")
     if isinstance(definition.organ, KidneyOrgan):
         out[ids.URINE] = ("urine", "µl")
         out[ids.URINE_RATE] = ("urine rate", "µl/min")
         for q in (*ids.FILTERED, *definition.perfusate.tracers):
-            out[_key(ids.species(q, ids.URINE_SITE))] = (
-                f"{circuit.quantity_label(q)} (urine)",
-                _MM,
+            # the amount: the concentration is 0/0 in the empty urine at 0
+            out[_key(ids.species(q, ids.URINE_SITE), species=False)] = (
+                f"{circuit.quantity_label(q)} (urine, amount)",
+                "mmole",
             )
     return out
 
@@ -290,8 +295,9 @@ def observable_labels(definition: PerfusionDefinition) -> dict[str, str]:
 
     The selections are those of roadrunner and sbmlsim: the concentration of
     a species `[<q>_<site>]` (the reservoir, the inflow, the zones, the
-    outflow, the cells of a zone `[<q>_<zone>_cell]`, the urine
-    `[<q>_urine]`), the id of an assignment rule (the means `<q>_pp`,
+    outflow, the cells of a zone `[<q>_<zone>_cell]`), the amount of a
+    species in the urine `<q>_urine` (its concentration is 0/0 in the empty
+    urine at the start), the id of an assignment rule (the means `<q>_pp`,
     `<q>_pc_cell`, `pO2_<site>`, `pH_<site>`, `alt_act_<site>`, `VO2`). Every
     perfusate quantity, pO2, pCO2, pH and enzyme activity at every
     site (`reservoir`, `inflow`, every zone, `outflow`, the means
@@ -310,7 +316,8 @@ def observable_units(definition: PerfusionDefinition) -> dict[str, str]:
 
     The units of the observables of `observable_labels` as sbmlsim reads
     them (concentrations `mM`, partial pressures `kPa`, activities
-    `µkat/l`, the bile and the urine `µl` and `µl/min`).
+    `µkat/l`, the bile and the urine `µl` and `µl/min`, the bile per mass
+    `µl/g`, the amounts in the urine `mmole`).
 
     Args:
         definition: the definition of the model.

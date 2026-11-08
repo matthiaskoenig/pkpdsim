@@ -22,8 +22,9 @@ observers add what the species do not give, as assignment rules:
   `1/4` of the second zone;
 - `pCO2_<site>` (kPa), the dissolved CO2 over its solubility;
 - the bile of an organ with bile, the rate `bile_rate` (µl/min, the sum of
-  the secretion of the zones) and the volume `bile` (µl, the sum of the bile
-  volumes of the zones);
+  the secretion of the zones), the volume `bile` (µl, the sum of the bile
+  volumes of the zones) and the volume per gram of the organ `bile_per_mass`
+  (µl/g, `bile/(1000 g/kg * M_<o>)`, the unit of the data);
 - the urine of an organ with urine, the rate `urine_rate` (µl/min, the net
   urine flow `Q_urine`) and the volume `urine` (µl, the urine volume
   `V_urine`);
@@ -242,17 +243,21 @@ def mean_objects(
     return out
 
 
-def bile_objects(rates: Sequence[str], zones: Sequence[str]) -> core.CoreObjects:
-    """Get the bile rate and the bile volume of the organ.
+def bile_objects(
+    rates: Sequence[str], zones: Sequence[str], mass: str
+) -> core.CoreObjects:
+    """Get the bile rate, the bile volume and the bile per mass of the organ.
 
     Args:
         rates: the formulas of the bile secretion of the zones (l/min), the
             rate rules of `Vbile_<zone>` of the core.
         zones: the zones.
+        mass: the id of the mass of the organ (kg), `M_<o>`.
 
     Returns:
-        `bile_rate` (µl/min) and `bile` (µl), the sum of the bile volumes of
-        the zones, both assignment rules.
+        `bile_rate` (µl/min), `bile` (µl), the sum of the bile volumes of
+        the zones, and `bile_per_mass` (µl/g), the bile volume per gram of
+        the organ, all assignment rules.
     """
     out = core.CoreObjects()
     ul = f"1000000 {PU.ul_per_l.sid}"
@@ -274,6 +279,16 @@ def bile_objects(rates: Sequence[str], zones: Sequence[str]) -> core.CoreObjects
             f"{ul} * ({' + '.join(ids.bile(z) for z in zones)})",
             PU.ul,
             "bile volume of the organ",
+            SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
+        ),
+    )
+    _add(
+        out,
+        _observer(
+            ids.BILE_PER_MASS,
+            f"{ids.BILE}/(1000 {PU.g_per_kg.sid} * {mass})",
+            PU.ul_per_g,
+            "bile volume per mass of the organ",
             SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
         ),
     )
