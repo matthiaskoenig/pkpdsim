@@ -25,18 +25,20 @@ the quantities of the organ (`PerfusionDefinition.released`), and the
 enzymes of the cells, the perfusate and the observers are the released ones.
 
 The liver secretes bile (`bile`, `bile_rate`). The kidney filters the
-perfusate (`_kidney`): the GFR `GFR_ki = gfr_ki*M_ki` (`gfr_ki` in l/min/kg,
-numerically ml/min/g) is shared by the zones by their volume, the tubules
-reabsorb the fraction `f_reab_ki` of the filtered water and small solutes
-and none of a tracer, and the net urine flow `Q_urine = (1 - f_reab_ki)*
-GFR_ki` leaves the perfusate. The volumes of the tubing and of the zones
-stay constant: the flow out of zone `k` of `n` is `Q_pump - k/n*Q_urine`,
-out of the outflow tubing `Q_pump - Q_urine`, and the reservoir loses the
-urine, its volume a rate rule `-Q_urine`, while the urine volume `V_urine`
-gains it, so the perfusate and the urine keep their water exactly. The
-urine holds the amounts `<q>_urine` (mmole, it starts empty) and gives the
-observers `urine` (µl) and `urine_rate` (µl/min). A generic organ has
-neither bile nor urine.
+perfusate (`_kidney`): the GFR `GFR_ki` is that of an ample flow,
+`GFR_max_ki = gfr_ki*M_ki` (`gfr_ki` in l/min/kg, numerically ml/min/g), at
+most the maximal filtration fraction `FF_max_ki` of the pump flow (a rule,
+so the kidney stops filtering with the pump), shared by the zones by their
+volume; the tubules reabsorb the fraction `f_reab_ki` of the filtered water
+and small solutes and none of a tracer, and the net urine flow `Q_urine =
+(1 - f_reab_ki)*GFR_ki` (a rule) leaves the perfusate. The volumes of the
+tubing and of the zones stay constant: the flow out of zone `k` of `n` is
+`Q_pump - k/n*Q_urine`, out of the outflow tubing `Q_pump - Q_urine`, and
+the reservoir loses the urine, its volume a rate rule `-Q_urine`, while the
+urine volume `V_urine` gains it, so the perfusate and the urine keep their
+water exactly. The urine holds the amounts `<q>_urine` (mmole, it starts
+empty) and gives the observers `urine` (µl) and `urine_rate` (µl/min). A
+generic organ has neither bile nor urine.
 """
 
 from pathlib import Path
@@ -222,13 +224,18 @@ def _kidney(
 ) -> tuple[Compartment, core.CoreObjects, dict[str, str]]:
     """Get the filtration and the urine of a kidney.
 
-    The GFR `GFR_<organ> = gfr_<organ>*M_<organ>` is shared by the zones by
-    their volume; each zone filters its small solutes (`ids.FILTERED`) at
-    `(1 - f_reab_<organ>)*GFR_<organ>/n` times their concentration into the
-    urine (the net of the filtration and the tubular reabsorption, which
-    takes the same fraction of the water and the small solutes), its
-    tracers at `GFR_<organ>/n` (not reabsorbed). The net urine flow
-    `Q_urine = (1 - f_reab_<organ>)*GFR_<organ>` leaves the perfusate: the
+    The GFR of an ample flow `GFR_max_<organ> = gfr_<organ>*M_<organ>` (an
+    initial assignment) is capped at the maximal filtration fraction of the
+    pump flow, `GFR_<organ> = piecewise(GFR_max_<organ>, GFR_max_<organ> <=
+    FF_max_<organ>*Q_pump, FF_max_<organ>*Q_pump)` (a rule, so the
+    filtration follows a change of the flow and stops with the pump), and
+    shared by the zones by their volume; each zone filters its small
+    solutes (`ids.FILTERED`) at `(1 - f_reab_<organ>)*GFR_<organ>/n` times
+    their concentration into the urine (the net of the filtration and the
+    tubular reabsorption, which takes the same fraction of the water and the
+    small solutes), its tracers at `GFR_<organ>/n` (not reabsorbed). The net urine flow
+    `Q_urine = (1 - f_reab_<organ>)*GFR_<organ>` (a rule) leaves the
+    perfusate, at most the fraction `FF_max_<organ>` of the flow: the
     flow out of zone `k` is `Q_pump - k/n*Q_urine`, out of the outflow tubing
     `Q_pump - Q_urine`, and the volume of the reservoir falls at `Q_urine`
     while the urine volume `V_urine` rises at it (rate rules), so the
@@ -242,11 +249,12 @@ def _kidney(
     """
     key, n = organ.key, organ.zones
     zones = [ids.zone_id(k) for k in range(1, n + 1)]
-    gfr, f_reab = organ.gfr, organ.reabsorption
-    assert gfr is not None and f_reab is not None
+    gfr, f_reab, ff = organ.gfr, organ.reabsorption, organ.ff_max
+    assert gfr is not None and f_reab is not None and ff is not None
     urine = ids.volume(ids.URINE_SITE)
     m, q_urine = ids.mass(key), ids.Q_URINE
     gfr_id, f_id = ids.gfr(key), ids.reabsorption(key)
+    max_id, ff_id = ids.gfr_max(key), ids.ff_max(key)
     tracers = definition.perfusate.tracers
     out = core.CoreObjects(
         parameters=[
@@ -264,35 +272,63 @@ def _kidney(
                 "reabsorbed fraction of the filtrate of the kidney",
                 _P,
             ),
+            value_parameter(
+                ff_id,
+                ff,
+                U.dimensionless,
+                "maximal filtration fraction of the flow of the kidney",
+                _P,
+            ),
             Parameter(
-                gfr_id,
+                max_id,
                 gfr.value * organ.mass.value * 1e-3,
                 U.l_per_min,
                 constant=True,
+                name="glomerular filtration rate of the kidney at an ample flow",
+                sboTerm=_P,
+            ),
+            Parameter(
+                gfr_id,
+                None,
+                U.l_per_min,
+                constant=False,
                 name="glomerular filtration rate of the kidney",
                 sboTerm=_P,
             ),
             Parameter(
                 q_urine,
-                (1 - f_reab.value) * gfr.value * organ.mass.value * 1e-3,
+                None,
                 U.l_per_min,
-                constant=True,
+                constant=False,
                 name="net urine flow of the kidney",
                 sboTerm=_P,
             ),
         ],
         assignments=[
             initial_assignment(
-                gfr_id,
+                max_id,
                 f"{ids.gfr_specific(key)} * {m}",
                 U.l_per_min,
-                "glomerular filtration rate of the kidney",
+                "glomerular filtration rate of the kidney at an ample flow",
             ),
-            initial_assignment(
+        ],
+        rules=[
+            AssignmentRule(
+                gfr_id,
+                f"piecewise({max_id}, {max_id} <= {ff_id} * {ids.Q_PUMP}, "
+                f"{ff_id} * {ids.Q_PUMP})",
+                U.l_per_min,
+                name="glomerular filtration rate of the kidney",
+                sboTerm=SBO.MATHEMATICAL_EXPRESSION,
+                notes="The GFR of an ample flow, at most the maximal filtration "
+                "fraction of the pump flow.",
+            ),
+            AssignmentRule(
                 q_urine,
                 f"(1 dimensionless - {f_id}) * {gfr_id}",
                 U.l_per_min,
-                "net urine flow of the kidney",
+                name="net urine flow of the kidney",
+                sboTerm=SBO.MATHEMATICAL_EXPRESSION,
             ),
         ],
         rate_rules=[

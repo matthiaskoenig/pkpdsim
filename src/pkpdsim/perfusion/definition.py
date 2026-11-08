@@ -23,6 +23,7 @@ an organ of the physiology table of the species.
 import dataclasses
 import math
 import re
+from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
 from dataclasses import KW_ONLY, dataclass, field
 from typing import TYPE_CHECKING, ClassVar, Literal, Self
@@ -264,11 +265,12 @@ _ORGAN_TOKEN = re.compile(r"[a-z][a-z0-9]*")
 
 
 @dataclass(frozen=True)
-class _Zonated:
+class _Zonated(ABC):
     """The zones, the fractions and the released quantities of an organ.
 
     The keyword-only fields and the methods shared by the organs; each organ
-    adds its mass (and the generic organ its token) as positional fields.
+    has the positional fields `mass`, `zones` and `profiles` (after its token,
+    a generic organ), so `zones` follows the mass.
 
     An organ is a chain of zones in series with the flow; each zone is a
     vascular space and its cells with the cellular core, and has `1/n` of
@@ -307,18 +309,27 @@ class _Zonated:
     """The constants which the table of the organ gives where they are `None`."""
 
     _: KW_ONLY
-    zones: int = 1
-    profiles: Mapping[str, Sequence[float]] = field(default_factory=dict)
     vascular_fraction: Value | None = None
     cell_fraction: Value | None = None
     density: Value | None = None
     released: Sequence[str] | None = None
 
     if TYPE_CHECKING:
+        # positional fields of every organ, after its token: mass, zones, profiles
 
         @property
         def mass(self) -> Value:
-            """The mass of the organ (g), a field of every organ."""
+            """The mass of the organ (g)."""
+            ...
+
+        @property
+        def zones(self) -> int:
+            """The number of zones, 1 the single compartment."""
+            ...
+
+        @property
+        def profiles(self) -> Mapping[str, Sequence[float]]:
+            """The relative weight of a process of `core.PROCESSES` per zone."""
             ...
 
     def __post_init__(self) -> None:
@@ -338,13 +349,13 @@ class _Zonated:
         """Get the released quantities, the default of the organ for `None`."""
         return self.RELEASED if self.released is None else tuple(self.released)
 
+    @abstractmethod
     def _table(self, species: Species) -> Mapping[str, Value]:
         """Get the fractions and the density of the table of the species.
 
         Raises:
             KeyError: if the table has no section of the organ and species.
         """
-        raise NotImplementedError
 
     def resolved(self, species: Species) -> "Self":
         """Get the organ with the constants of the table where it has none.
@@ -439,6 +450,8 @@ class LiverOrgan(_Zonated):
     what: ClassVar[str] = "liver"
 
     mass: Value
+    zones: int = 1
+    profiles: Mapping[str, Sequence[float]] = field(default_factory=dict)
 
     @classmethod
     def default(
@@ -467,14 +480,14 @@ class KidneyOrgan(_Zonated):
     renal vein; the zones are in series with the flow (one zone, the cortex,
     by default). The glomeruli filter the water and the small solutes of the
     perfusate (`ids.FILTERED`, not the enzymes) at the GFR `gfr*mass`,
-    shared by the zones by their volume, and the tubules reabsorb the
+    capped at the fraction `ff_max` of the pump flow (so the filtration
+    follows a low flow and stops with the pump), shared by the zones by
+    their volume, and the tubules reabsorb the
     fraction `reabsorption` of the filtered water and small solutes, so the
     urine has the composition of the perfusate; the tracers are filtered and
     not reabsorbed (a filtration marker). The urine leaves the perfusate, so
-    the flow after the kidney is the pump flow less the urine flow:
-    `PerfusionDefinition.validate` refuses a definition whose urine flow is
-    not below its pump flow, and an experiment keeps the pump flow above it
-    (the GFR is that of the organ and does not follow the flow). The kidney
+    the flow after the kidney is the pump flow less the urine flow, at least
+    `(1 - ff_max)` of it at any flow. The kidney
     releases LDH and potassium and secretes no bile. The constants without
     a value are those of `[kidney_<species>]` of the perfusion table.
 
@@ -491,6 +504,8 @@ class KidneyOrgan(_Zonated):
         reabsorption: the fraction of the filtered water and small solutes
             which the tubules reabsorb, from 0 to below 1, `None` for the
             table.
+        ff_max: the largest fraction of the pump flow which the glomeruli
+            filter, above 0 and at most 1, `None` for the table.
     """
 
     key: ClassVar[str] = "ki"
@@ -502,12 +517,16 @@ class KidneyOrgan(_Zonated):
         *_Zonated.TABLE_FIELDS,
         "gfr",
         "reabsorption",
+        "ff_max",
     )
 
     mass: Value
+    zones: int = 1
+    profiles: Mapping[str, Sequence[float]] = field(default_factory=dict)
     _: KW_ONLY
     gfr: Value | None = None
     reabsorption: Value | None = None
+    ff_max: Value | None = None
 
     @classmethod
     def default(
@@ -540,7 +559,11 @@ class KidneyOrgan(_Zonated):
                 f"{where}: the reabsorption must be at least 0 and below 1, got "
                 f"{f.value}"
             )
-        for name in ("gfr", "reabsorption"):
+        out += _unit(where, "ff_max", self.ff_max, U.dimensionless)
+        ff = self.ff_max
+        if ff is not None and not 0 < ff.value <= 1:
+            out.append(f"{where}: ff_max must be above 0 and at most 1, got {ff.value}")
+        for name in ("gfr", "reabsorption", "ff_max"):
             value = getattr(self, name)
             if value is not None and value.uncertainties:
                 out.append(
@@ -548,17 +571,6 @@ class KidneyOrgan(_Zonated):
                     "not convert into the units of the model"
                 )
         return out
-
-    def urine_flow(self) -> float:
-        """Get the net urine flow of the kidney (ml/min), `(1 - f_reab)*gfr*mass`.
-
-        Raises:
-            ValueError: if the GFR or the reabsorption is not given
-                (`resolved`).
-        """
-        if self.gfr is None or self.reabsorption is None:
-            raise ValueError("The kidney is not resolved: gfr or reabsorption.")
-        return (1 - self.reabsorption.value) * self.gfr.value * self.mass.value
 
 
 @dataclass(frozen=True)
@@ -590,6 +602,8 @@ class GenericOrgan(_Zonated):
 
     key: str
     mass: Value
+    zones: int = 1
+    profiles: Mapping[str, Sequence[float]] = field(default_factory=dict)
 
     @classmethod
     def default(cls, key: str, species: Species = Species.RAT) -> "GenericOrgan":
@@ -739,10 +753,12 @@ class PerfusionDefinition:
         return self.organ.releases()
 
     def _organ_problems(self) -> list[str]:
-        """Get what is wrong with the organ, its core and its urine flow."""
+        """Get what is wrong with the organ and its core."""
         organ = self.organ
-        if isinstance(organ, GenericOrgan) and organ.token_problems():
-            return organ.token_problems()
+        if isinstance(organ, GenericOrgan):
+            token = organ.token_problems()
+            if token:
+                return token
         try:
             resolved = organ.resolved(self.species)
         except KeyError:
@@ -756,13 +772,6 @@ class PerfusionDefinition:
             tuple(q for q in self.released if q in ids.RELEASABLE),
             bile=isinstance(organ, LiverOrgan),
         )
-        if isinstance(resolved, KidneyOrgan) and not out:
-            flow = self.circuit.flow.value
-            if not resolved.urine_flow() < flow:
-                out.append(
-                    f"kidney: the urine flow {resolved.urine_flow():.4g} ml/min "
-                    f"is not below the pump flow {flow} ml/min"
-                )
         return out
 
     def _tracer_clashes(self) -> list[str]:

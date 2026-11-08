@@ -35,7 +35,9 @@ The kidney filters the small solutes of the perfusate (`FILTERED`) and the
 tracers into the urine, the site `urine` (`URINE_SITE`) of the amounts
 `<q>_urine` in the urine volume `V_urine`; the filtration of a quantity in a
 zone is the reaction `FILT_<q>_<zone>` (`filtration`), the GFR of the organ
-`GFR_<organ>` (`gfr`), its GFR per mass `gfr_<organ>` (`gfr_specific`) and
+`GFR_<organ>` (`gfr`), its GFR at an ample flow `GFR_max_<organ>`
+(`gfr_max`), its maximal filtration fraction `FF_max_<organ>` (`ff_max`),
+its GFR per mass `gfr_<organ>` (`gfr_specific`) and
 the reabsorbed fraction `f_reab_<organ>` (`reabsorption`); the water which
 leaves a site is `Q_<site>` (`outflow`) where it is not the pump flow.
 """
@@ -88,10 +90,12 @@ __all__ = [
     "cells",
     "dead_site",
     "density",
+    "ff_max",
     "filtration",
     "flow",
     "fresh",
     "gfr",
+    "gfr_max",
     "gfr_specific",
     "is_zone",
     "mass",
@@ -404,6 +408,16 @@ def cell_fraction(organ: str) -> str:
 def gfr(organ: str) -> str:
     """Get the glomerular filtration rate of an organ (l/min), `GFR_<organ>`."""
     return f"GFR_{organ}"
+
+
+def gfr_max(organ: str) -> str:
+    """Get the GFR of an organ at an ample flow (l/min), `GFR_max_<organ>`."""
+    return f"GFR_max_{organ}"
+
+
+def ff_max(organ: str) -> str:
+    """Get the maximal filtration fraction of the flow of an organ, `FF_max_<organ>`."""
+    return f"FF_max_{organ}"
 
 
 def gfr_specific(organ: str) -> str:

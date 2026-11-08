@@ -171,6 +171,61 @@ def test_the_urine_of_a_filtered_marker_is_its_filtered_load(
     assert total + marker == pytest.approx(1.0 * 1.0, rel=1e-9)
 
 
+def _finite_and_positive(r: "roadrunner.RoadRunner", end: float) -> None:
+    """Simulate to `end` and check every value finite, no species below -1e-9."""
+    species = r.model.getFloatingSpeciesIds()
+    r.timeCourseSelections = [
+        "time",
+        *(f"[{s}]" if not s.endswith(f"_{ids.URINE_SITE}") else s for s in species),
+        *r.model.getGlobalParameterIds(),
+        *r.model.getReactionIds(),
+    ]
+    s = np.asarray(r.simulate(r.model.getTime(), end, 61))
+    assert np.isfinite(s).all()
+    lowest = s[:, 1 : 1 + len(species)].min(axis=0)
+    assert not [sp for sp, x in zip(species, lowest, strict=True) if x < -1e-9]
+
+
+@pytest.mark.parametrize("zones", [1, 3])
+def test_zero_flow_stays_defined(tmp_path: Path, zones: int) -> None:
+    """The kidney stops filtering when the pump stops: an hour at Q_pump = 0
+    after an hour at the default flow."""
+    r = load_circuit(build(kidney_definition(zones, tracers=(TRACER,)), tmp_path))
+    r[f"[{ids.species(TRACER, ids.RESERVOIR)}]"] = 1.0
+    start = _perfusate_volume(r, zones)
+    r.simulate(0, 60, 7)
+    assert r[ids.gfr(KIDNEY)] == pytest.approx(r[ids.gfr_max(KIDNEY)], rel=1e-12)
+    r[ids.Q_PUMP] = 0.0
+    _finite_and_positive(r, 120)
+    assert r[ids.gfr(KIDNEY)] == 0.0
+    assert r[ids.Q_URINE] == 0.0
+    for site in (*_zones(zones), ids.OUTFLOW):
+        assert r[ids.outflow(site)] == 0.0
+    urine = r[ids.volume(ids.URINE_SITE)]
+    assert _perfusate_volume(r, zones) + urine == pytest.approx(start, rel=1e-12)
+
+
+@pytest.mark.parametrize("zones", [1, 3])
+def test_a_low_flow_caps_the_filtration(tmp_path: Path, zones: int) -> None:
+    """Below the flow of the uncapped urine the glomeruli filter the maximal
+    filtration fraction of the flow, and the flow after the kidney stays
+    positive."""
+    r = load_circuit(build(kidney_definition(zones), tmp_path))
+    start = _perfusate_volume(r, zones)
+    uncapped = r[ids.Q_URINE]
+    q = uncapped / 2
+    r.simulate(0, 60, 7)
+    r[ids.Q_PUMP] = q
+    _finite_and_positive(r, 120)
+    ff = r[ids.ff_max(KIDNEY)]
+    f_reab = r[ids.reabsorption(KIDNEY)]
+    assert r[ids.gfr(KIDNEY)] == pytest.approx(ff * q, rel=1e-12)
+    assert r[ids.Q_URINE] == pytest.approx((1 - f_reab) * ff * q, rel=1e-12)
+    assert r[ids.outflow(ids.OUTFLOW)] > 0
+    urine = r[ids.volume(ids.URINE_SITE)]
+    assert _perfusate_volume(r, zones) + urine == pytest.approx(start, rel=1e-12)
+
+
 def test_the_kidney_zones_add_up_to_the_organ(tmp_path: Path) -> None:
     one = load_circuit(build(kidney_definition(1, sid="one"), tmp_path))
     many = load_circuit(build(kidney_definition(4, sid="many"), tmp_path))
@@ -238,12 +293,17 @@ def test_the_validation_of_the_organs() -> None:
     problems = "\n".join(dataclasses.replace(d, organ=bad).validate())
     assert "ml_per_min_g" in problems
     assert "reabsorption" in problems
-    # the urine flow must stay below the pump flow
+    # a slow pump flow is no problem: the filtration follows it
     slow = dataclasses.replace(
         d.circuit, flow=Value(0.1, PU.ml_per_min, "ModelChoice", "slow")
     )
-    problems = "\n".join(dataclasses.replace(d, circuit=slow).validate())
-    assert "urine flow" in problems
+    assert dataclasses.replace(d, circuit=slow).validate() == []
+    for ff in (0.0, 1.5):
+        bad = dataclasses.replace(
+            kidney, ff_max=Value(ff, PU.dimensionless, "ModelChoice", "test")
+        )
+        problems = "\n".join(dataclasses.replace(d, organ=bad).validate())
+        assert "ff_max" in problems, ff
     # a generic organ: a token of the ids, the fractions of an organ of the
     # physiology table or given
     for key in ("res", "z1", "Mu", "1a"):
@@ -268,6 +328,15 @@ def test_the_validation_of_the_organs() -> None:
     assert isinstance(liver_definition().organ, LiverOrgan)
 
 
+def test_zones_and_profiles_follow_the_mass() -> None:
+    """`zones` is positional after the mass (the token and the mass of a
+    generic organ)."""
+    mass = Value(1.0, PU.g, "ModelChoice", "test")
+    assert LiverOrgan(mass, 3).zones == 3
+    assert KidneyOrgan(mass, 2).zones == 2
+    assert GenericOrgan("mu", mass, 4, {"OXPHOS": [1, 1, 1, 2]}).zones == 4
+
+
 def test_the_generic_organ_reads_the_physiology_table() -> None:
     organ = GenericOrgan.default("mu")
     physiology = "physiology_rat"
@@ -289,7 +358,8 @@ def test_the_generic_organ_reads_the_physiology_table() -> None:
 @pytest.mark.parametrize("species", ["rat", "human", "pig"])
 def test_the_kidney_of_every_species(species: str) -> None:
     """The kidney sections of the table: one kidney, the GFR per g of the
-    physiology table."""
+    physiology table; the default rat kidney filters below its maximal
+    filtration fraction of the default flow."""
     organ = KidneyOrgan.default(species=Species(species))
     physiology = f"physiology_{species}"
     mass = tables.entry(physiology, "male.organs.ki", "mass").value
@@ -300,6 +370,13 @@ def test_the_kidney_of_every_species(species: str) -> None:
     assert organ.gfr is not None
     assert organ.gfr.value == pytest.approx(gfr / (mass * 1e3), rel=1e-3)
     assert organ.problems() == []
+    assert organ.ff_max is not None
+    assert 0 < organ.ff_max.value <= 1
+    if species == "rat":
+        gfr_ml = organ.gfr.value * organ.mass.value
+        flow = tables.entry("perfusion", "circuit", "flow").value
+        assert isinstance(flow, float)
+        assert gfr_ml < organ.ff_max.value * flow
 
 
 def test_the_copied_core_constants_say_so() -> None:
@@ -310,6 +387,11 @@ def test_the_copied_core_constants_say_so() -> None:
         for start in ("", "_start"):
             for key in data[section + start]:
                 e = tables.entry("perfusion", section + start, key)
+                if key == "glyc":
+                    # the glycogen store is the liver's
+                    assert e.value == 0.0
+                    assert e.source == "ModelChoice"
+                    continue
                 liver = tables.entry("perfusion", "core_liver_rat" + start, key)
                 assert e.value == liver.value, (section, key)
                 assert e.source == "ModelChoice"
