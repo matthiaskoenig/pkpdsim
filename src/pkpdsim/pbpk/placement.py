@@ -131,6 +131,7 @@ __all__ = [
     "start_formula",
     "stoichiometry",
     "unbound",
+    "value_notes",
     "value_parameter",
     "with_modifiers",
 ]
@@ -772,12 +773,6 @@ def value_parameter(
             f"Tied to other parameters of the model: `{pid} = {v.expression}`."
         )
         return FormulaParameter(pid, v, name, sbo, "\n\n".join(lines))
-    if v.notes:
-        lines.append(v.notes)
-    if v.source == "fit":
-        lines.append("Fitted value.")
-    elif v.source is not None:
-        lines.append(f"Source:\n\n- {cite(v.source)}")
     return Parameter(
         pid,
         v.value,
@@ -785,9 +780,30 @@ def value_parameter(
         constant=True,
         name=name,
         sboTerm=sbo,
-        notes="\n\n".join(lines) if lines else None,
+        notes=value_notes(v, text),
         uncertainties=v.uncertainties,
     )
+
+
+def value_notes(v: Value, text: str = "") -> str | None:
+    """Get the notes of a number with its provenance.
+
+    Args:
+        v: the value.
+        text: the description of the element which carries the value.
+
+    Returns:
+        The description, the notes of the value and the citation of its
+        source (`Fitted value.` for a fit), `None` without any.
+    """
+    lines = [text] if text else []
+    if v.notes:
+        lines.append(v.notes)
+    if v.source == "fit":
+        lines.append("Fitted value.")
+    elif v.source is not None:
+        lines.append(f"Source:\n\n- {cite(v.source)}")
+    return "\n\n".join(lines) if lines else None
 
 
 def place(

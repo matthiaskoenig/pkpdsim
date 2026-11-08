@@ -484,7 +484,13 @@ class Composition:
         """Get the perfusate of the perfusion table (`perfusate`)."""
         return cls(
             glc=_value("perfusate", "glucose"),
-            o2=_value("perfusate", "O2"),
+            o2=Value(
+                _number("perfusate", "pO2") * _number("oxygen", "solubility"),
+                U.mM,
+                "ModelChoice",
+                "derived: [perfusate] pO2 times [oxygen] solubility of the "
+                "perfusion table, the oxygenated perfusate at 37 C",
+            ),
             lac=_value("perfusate", "lactate"),
             hco3=_value("perfusate", "HCO3"),
             k=_value("perfusate", "K"),

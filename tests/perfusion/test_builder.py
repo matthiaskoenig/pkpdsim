@@ -193,7 +193,7 @@ def test_every_quantity_at_every_site(tmp_path: Path) -> None:
     }
     for site in sites:
         expected |= {ids.species(q, site) for q in (*ids.PERFUSATE, TRACER)}
-        expected |= {ids.po2(site), ids.ph(site)}
+        expected |= {ids.po2(site), ids.pco2(site), ids.ph(site)}
         expected |= {ids.activity(e, site) for e in ids.ENZYMES}
     for site in [ids.zone_id(k) for k in range(1, n + 1)] + [
         ids.PERIPORTAL,
@@ -257,7 +257,7 @@ def test_the_oxygenator_sets_the_inflow(tmp_path: Path) -> None:
     assert r[o2] == pytest.approx(target * (1 - math.exp(-k)), rel=1e-8)
 
 
-def test_the_validation_of_a_definition() -> None:
+def test_the_validation_of_a_definition(tmp_path: Path) -> None:
     d = liver_definition(2)
     assert d.validate() == []
     bad = dataclasses.replace(
@@ -276,9 +276,63 @@ def test_the_validation_of_a_definition() -> None:
     for text in ("OXPHOS", "NEC", "rbc", "'glc'", "'1x'", "degC"):
         assert text in problems, text
     with pytest.raises(ValueError, match="Invalid perfusion definition"):
-        build(bad, Path("."))
+        build(bad, tmp_path)
     with pytest.raises(ValueError, match="at least one zone"):
         LiverOrgan(mass=d.organ.mass, zones=0)
+
+
+def test_a_tracer_has_no_id_of_the_model() -> None:
+    """A tracer whose ids are observers, compartments or constants is refused."""
+    d = liver_definition(2)
+    for tracer, clash in (("pO2", "pO2_res"), ("V", "V_res"), ("Vvas", "Vvas_z1")):
+        bad = dataclasses.replace(
+            d, perfusate=dataclasses.replace(d.perfusate, tracers=(tracer,))
+        )
+        problems = "\n".join(bad.validate())
+        assert clash in problems, tracer
+    assert liver_definition(2, tracers=(TRACER,)).validate() == []
+
+
+def test_the_fractions_of_the_table_are_checked() -> None:
+    """A cell fraction which exceeds 1 with the vascular fraction of the
+    table is refused."""
+    d = liver_definition(1)
+    organ = LiverOrgan(
+        mass=d.organ.mass,
+        cell_fraction=Value(0.9, PU.dimensionless, "ModelChoice", "too large"),
+    )
+    problems = dataclasses.replace(d, organ=organ).validate()
+    assert any("exceed 1" in p for p in problems)
+
+
+def test_the_fresh_perfusate_stays_at_its_ph(tmp_path: Path) -> None:
+    """Without flow the inflow tubing holds the fresh perfusate: the
+    oxygenator neither adds nor vents CO2 at the pCO2 of the fresh perfusate."""
+    path = build(liver_definition(1), tmp_path)
+    r = individual(path, **{ids.Q_PUMP: 0.0})
+    r.integrator.absolute_tolerance = 1e-14
+    r.integrator.relative_tolerance = 1e-10
+    ph = r[ids.ph(ids.INFLOW)]
+    assert ph == pytest.approx(Perfusate.default().ph.value, abs=1e-12)
+    assert r[ids.OXYGENATOR_CO2] == pytest.approx(0.0, abs=1e-15)
+    r.simulate(0, 360, 37)
+    assert r[ids.ph(ids.INFLOW)] == pytest.approx(ph, abs=1e-9)
+
+
+def test_the_oxygenator_vents_co2(tmp_path: Path) -> None:
+    """CO2 added at the inflow decays first order towards the gas (the
+    hydration of the buffer switched off, so the decay is analytic)."""
+    path = build(liver_definition(1), tmp_path)
+    r = individual(path, **{ids.Q_PUMP: 0.0, ids.BUFFER_K_HYDRATION: 0.0})
+    r.integrator.absolute_tolerance = 1e-14
+    r.integrator.relative_tolerance = 1e-10
+    co2 = f"[{ids.species('co2', ids.INFLOW)}]"
+    gas = r[ids.CO2_SOLUBILITY] * r[ids.CO2_GAS]
+    assert r[co2] == pytest.approx(gas, rel=1e-12)
+    r[co2] = gas + 2.0
+    r.simulate(0, 1.0, 11)
+    k = r[ids.OXYGENATOR_K_CO2]
+    assert r[co2] == pytest.approx(gas + 2.0 * math.exp(-k), rel=1e-8)
 
 
 def test_the_parameter_value() -> None:

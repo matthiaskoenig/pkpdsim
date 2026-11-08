@@ -10,18 +10,27 @@ the amount of the perfusate is conserved and a flow of 0 is defined (no rate
 divides by the flow). The bicarbonate buffer acts at every site
 (`core.buffer_objects`).
 
-The oxygenator sets the oxygen of the inflow tubing towards the target of the
-perfusate: the reaction `OXY_in`, `k_oxy * V_in * (alpha_o2 * pO2_target -
-o2_in)`, first order with the gas side as the parameter `pO2_target`. It
-exchanges the oxygen only; the CO2 which the organ produces stays in the
-perfusate (the venting of CO2 by the gas is not built).
+The membrane oxygenator exchanges the gases of the inflow tubing with its
+sweep gas, first order: the reaction `OXY_in` sets the oxygen towards the
+target of the perfusate, `k_oxy * V_in * (alpha_o2 * pO2_target - o2_in)`,
+and the reaction `OXY_co2_in` the dissolved CO2 towards the partial pressure
+of CO2 of the gas, `k_oxy_co2 * V_in * (alpha_co2 * pCO2_gas - co2_in)`, so
+the CO2 which the cells produce and the bicarbonate buffer releases is
+vented and the bicarbonate buffer of the perfusate is open, as with a gas
+of fixed pCO2. Without a pCO2 of the gas in the definition it is that of
+the fresh perfusate (`co2_fresh/alpha_co2`), so the fresh perfusate is at
+its steady state in the oxygenator.
 
 The temperature `T` (degC) is a constant which an experiment changes; the
 rates of the cellular core scale with the Arrhenius factor `f_T = exp(Ea/R
 * (1/(T_ref + 273.15) - 1/(T + 273.15)))`, 1 at the reference temperature,
 and the solubility of oxygen is `alpha_o2 = alpha_o2_ref * exp(k_alpha_o2 *
 (T - T_alpha_o2))`, both initial assignments of `T`, so the free oxygen of a
-pO2 rises in the cold.
+pO2 rises in the cold; the solubility of CO2 `alpha_co2` is a constant (its
+value at 37 C). `T` takes effect as a change before the initialization of a
+simulation (the initial assignments of `f_T`, `alpha_o2` and `o2_fresh` are
+evaluated then); a change of `T` during a timecourse does not evaluate them
+again, so it leaves the rates and the solubility at the earlier temperature.
 
 The fresh perfusate is the constants `<q>_fresh` (mM), the start of every
 perfusate species at every site (an initial assignment); the free protons
@@ -30,6 +39,7 @@ the target at the temperature. A medium change of an experiment sets the
 reservoir towards them.
 """
 
+import dataclasses
 from collections.abc import Sequence
 
 from sbmlutils.factory import Compartment, Parameter, Reaction, Species
@@ -37,8 +47,7 @@ from sbmlutils.factory.units import UnitType
 from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk.annotation import initial_assignment
-from pkpdsim.pbpk.data import cite
-from pkpdsim.pbpk.placement import value_parameter
+from pkpdsim.pbpk.placement import value_notes, value_parameter
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import Value
 from pkpdsim.perfusion import core, ids
@@ -50,8 +59,10 @@ __all__ = [
     "circuit_compartments",
     "circuit_objects",
     "composition",
+    "converted",
     "flow_objects",
     "fresh_assignments",
+    "fresh_co2_pressure",
     "oxygen_objects",
     "perfusate_parameters",
     "quantities",
@@ -84,22 +95,34 @@ def _name(quantity: str) -> str:
         return f"tracer {quantity}"
 
 
-def _converted(value: Value, factor: float, unit: UnitType, text: str) -> Value:
-    """Get a value in the unit of the model, the conversion in the notes."""
+def converted(value: Value, factor: float, unit: UnitType, text: str) -> Value:
+    """Get a value in the unit of the model, the conversion in the notes.
+
+    Args:
+        value: the value of the definition.
+        factor: the factor of the unit of the definition in the unit of the
+            model.
+        unit: the unit of the model.
+        text: the unit of the definition, for the notes.
+
+    Returns:
+        The value with its source, in the unit of the model.
+
+    Raises:
+        ValueError: if the value has an uncertainty, which would keep the
+            unit of the definition (`PerfusionDefinition.validate` refuses it).
+    """
+    if value.uncertainties:
+        raise ValueError(
+            f"A value in {text} with an uncertainty is not converted; "
+            "the definition gives no uncertainty of it."
+        )
     notes = f"{value.value} {text} in the definition."
     if value.notes:
         notes = f"{value.notes}\n\n{notes}"
-    return Value(value.value * factor, unit, value.source, notes)
-
-
-def _notes(value: Value) -> str | None:
-    """Get the notes of a value with the citation of its source."""
-    lines = [value.notes] if value.notes else []
-    if value.source == "fit":
-        lines.append("Fitted value.")
-    elif value.source is not None:
-        lines.append(f"Source:\n\n- {cite(value.source)}")
-    return "\n\n".join(lines) or None
+    return dataclasses.replace(
+        value, value=value.value * factor, unit=unit, notes=notes
+    )
 
 
 def temperature_objects(temperature: Value) -> core.CoreObjects:
@@ -174,15 +197,22 @@ def temperature_objects(temperature: Value) -> core.CoreObjects:
 
 
 def oxygen_objects() -> core.CoreObjects:
-    """Get the solubility of oxygen in the perfusate at the temperature.
+    """Get the solubility of the gases in the perfusate at the temperature.
 
     Returns:
-        The constants of the database and `alpha_o2` with its initial
-        assignment.
+        The constants of the database, `alpha_o2` with its initial
+        assignment and the solubility of CO2 `alpha_co2`.
     """
     solubility = table_value("oxygen", "solubility")
     return core.CoreObjects(
         parameters=[
+            value_parameter(
+                ids.CO2_SOLUBILITY,
+                table_value("acid_base", "co2_solubility"),
+                PU.mM_per_kPa,
+                "solubility of CO2",
+                _P,
+            ),
             value_parameter(
                 ids.SOLUBILITY_REF,
                 solubility,
@@ -353,7 +383,7 @@ def circuit_compartments(circuit: Circuit) -> list[Compartment]:
     }
     out = []
     for site, value in volumes.items():
-        v = _converted(value, 1e-3, U.litre, "ml")
+        v = converted(value, 1e-3, U.litre, "ml")
         out.append(
             Compartment(
                 ids.volume(site),
@@ -361,10 +391,33 @@ def circuit_compartments(circuit: Circuit) -> list[Compartment]:
                 unit=U.litre,
                 name=f"perfusate in the {_SITE_NAMES[site]}",
                 sboTerm=SBO.PHYSICAL_COMPARTMENT,
-                notes=_notes(v),
+                notes=value_notes(v),
             )
         )
     return out
+
+
+def fresh_co2_pressure(perfusate: Perfusate) -> Value:
+    """Get the partial pressure of CO2 of the fresh perfusate (kPa).
+
+    The CO2 of the buffer equilibrium at the pH and the bicarbonate of the
+    fresh perfusate, `10^(3 - pH) mM * HCO3/Ka_hco3`, over the solubility of
+    CO2; the default pCO2 of the sweep gas, at which the fresh perfusate
+    stays at its pH.
+    """
+    ka = core.Buffer.default().ka.value
+    alpha = table_value("acid_base", "co2_solubility").value
+    co2 = 10 ** (3 - perfusate.ph.value) * perfusate.hco3.value / ka
+    return Value(
+        co2 / alpha,
+        PU.kPa,
+        "ModelChoice",
+        "derived: the pCO2 of the fresh perfusate at the equilibrium of its "
+        "bicarbonate buffer, CO2 = 10^(3 - pH_fresh) mM * HCO3_fresh/Ka_hco3, "
+        "over the solubility of CO2, so the fresh perfusate is at its steady "
+        "state in the oxygenator; the sweep gas of the study protocol (about "
+        "5 % CO2 is usual) is a TODO",
+    )
 
 
 def circuit_objects(circuit: Circuit, perfusate: Perfusate) -> core.CoreObjects:
@@ -376,14 +429,15 @@ def circuit_objects(circuit: Circuit, perfusate: Perfusate) -> core.CoreObjects:
 
     Returns:
         The perfusate species, the buffer and the start of the fresh
-        perfusate at the sites of the circuit, the constants `Q_pump` (l/min)
-        and `k_oxy`, the reaction of the oxygenator.
+        perfusate at the sites of the circuit, the constants `Q_pump` (l/min),
+        `k_oxy`, `k_oxy_co2` and `pCO2_gas`, the reactions of the oxygenator
+        (oxygen and CO2).
     """
     out = core.CoreObjects(
         parameters=[
             value_parameter(
                 ids.Q_PUMP,
-                _converted(circuit.flow, 1e-3, U.l_per_min, "ml/min"),
+                converted(circuit.flow, 1e-3, U.l_per_min, "ml/min"),
                 U.l_per_min,
                 "total flow of the pump",
                 _P,
@@ -392,8 +446,22 @@ def circuit_objects(circuit: Circuit, perfusate: Perfusate) -> core.CoreObjects:
                 ids.OXYGENATOR_K,
                 circuit.oxygenator_k,
                 U.per_min,
-                "rate constant of the oxygenator",
+                "rate constant of the oxygenator (oxygen)",
                 SBO.KINETIC_CONSTANT,
+            ),
+            value_parameter(
+                ids.OXYGENATOR_K_CO2,
+                _co2_rate(circuit),
+                U.per_min,
+                "rate constant of the oxygenator (CO2)",
+                SBO.KINETIC_CONSTANT,
+            ),
+            value_parameter(
+                ids.CO2_GAS,
+                circuit.pco2_gas or fresh_co2_pressure(perfusate),
+                PU.kPa,
+                "partial pressure of CO2 of the sweep gas",
+                SBO.PRESSURE,
             ),
         ]
     )
@@ -421,7 +489,33 @@ def circuit_objects(circuit: Circuit, perfusate: Perfusate) -> core.CoreObjects:
             "first order; the gas side is the parameter pO2_target.",
         )
     )
+    co2 = ids.species("co2", ids.INFLOW)
+    out.reactions.append(
+        Reaction(
+            ids.OXYGENATOR_CO2,
+            f"{co2} <->",
+            formula=(
+                f"{ids.OXYGENATOR_K_CO2} * {v_in} * "
+                f"({co2} - {ids.CO2_SOLUBILITY} * {ids.CO2_GAS})",
+                U.mmole_per_min,
+            ),
+            compartment=v_in,
+            name="oxygenator (CO2)",
+            sboTerm=SBO.TRANSPORT_REACTION,
+            notes="Vents the CO2 of the inflow tubing towards the pCO2 of the "
+            "sweep gas, first order; the gas side is the parameter pCO2_gas.",
+        )
+    )
     return out
+
+
+def _co2_rate(circuit: Circuit) -> Value:
+    """Get the rate constant of the CO2 exchange, that of the oxygen without one."""
+    if circuit.oxygenator_k_co2 is not None:
+        return circuit.oxygenator_k_co2
+    k = circuit.oxygenator_k
+    notes = "the rate constant of the oxygen (oxygenator_k)"
+    return dataclasses.replace(k, notes=f"{notes}; {k.notes}" if k.notes else notes)
 
 
 def flow_objects(sites: Sequence[str], perfusate: Perfusate) -> core.CoreObjects:

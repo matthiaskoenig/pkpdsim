@@ -37,6 +37,8 @@ __all__ = [
     "BUFFER_KA",
     "BUFFER_K_HYDRATION",
     "CELL",
+    "CO2_GAS",
+    "CO2_SOLUBILITY",
     "ENZYMES",
     "F_T",
     "GAS_CONSTANT",
@@ -44,7 +46,9 @@ __all__ = [
     "O2_TARGET",
     "OUTFLOW",
     "OXYGENATOR",
+    "OXYGENATOR_CO2",
     "OXYGENATOR_K",
+    "OXYGENATOR_K_CO2",
     "PERFUSATE",
     "PERICENTRAL",
     "PERIPORTAL",
@@ -72,6 +76,7 @@ __all__ = [
     "mass",
     "necrosis_rate",
     "organ_volume",
+    "pco2",
     "ph",
     "po2",
     "profile",
@@ -126,6 +131,18 @@ OXYGENATOR_K = "k_oxy"
 
 OXYGENATOR = "OXY_in"
 """The reaction of the oxygenator, which sets the oxygen of the inflow."""
+
+CO2_SOLUBILITY = "alpha_co2"
+"""The solubility of CO2 in the perfusate (mM/kPa)."""
+
+CO2_GAS = "pCO2_gas"
+"""The partial pressure of CO2 of the sweep gas of the oxygenator (kPa)."""
+
+OXYGENATOR_K_CO2 = "k_oxy_co2"
+"""The first order rate constant of the exchange of CO2 with the gas (1/min)."""
+
+OXYGENATOR_CO2 = "OXY_co2_in"
+"""The reaction of the oxygenator, which sets the CO2 of the inflow."""
 
 BILE = "bile"
 """The volume of the bile of the organ (µl), a state."""
@@ -329,6 +346,11 @@ def fresh(quantity: str) -> str:
 def po2(site: str) -> str:
     """Get the oxygen partial pressure of the perfusate at a site (kPa)."""
     return f"pO2_{site}"
+
+
+def pco2(site: str) -> str:
+    """Get the CO2 partial pressure of the perfusate at a site (kPa)."""
+    return f"pCO2_{site}"
 
 
 def activity(enzyme: str, site: str) -> str:

@@ -27,7 +27,7 @@ from typing import ClassVar, Literal
 from sbmlutils.factory import Creator
 from sbmlutils.factory.units import UnitDefinition, UnitType
 
-from pkpdsim.database.tables import entry, load
+from pkpdsim.database.tables import entry
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import SID, FrozenMap, Value, check_literals
 from pkpdsim.perfusion import ids
@@ -184,8 +184,9 @@ class Circuit:
     """The circuit of a machine perfusion.
 
     The pump drives the perfusate from the reservoir through the inflow
-    tubing, in which the oxygenator sets its oxygen, through the organ and
-    the outflow tubing back into the reservoir; every site is well stirred.
+    tubing, in which the membrane oxygenator exchanges its oxygen and CO2
+    with the sweep gas, through the organ and the outflow tubing back into
+    the reservoir; every site is well stirred.
 
     Attributes:
         reservoir: the volume of the perfusate in the reservoir (ml).
@@ -195,6 +196,11 @@ class Circuit:
         oxygenator_k: the first order rate constant with which the
             oxygenator sets the oxygen of the inflow tubing towards the
             target of the perfusate (1/min).
+        oxygenator_k_co2: the first order rate constant of the exchange of
+            CO2 with the gas (1/min), `None` for `oxygenator_k`.
+        pco2_gas: the partial pressure of CO2 of the sweep gas (kPa), `None`
+            for the pCO2 of the fresh perfusate, at which the fresh
+            perfusate stays at its pH.
     """
 
     reservoir: Value
@@ -202,12 +208,20 @@ class Circuit:
     tubing_out: Value
     flow: Value
     oxygenator_k: Value
+    oxygenator_k_co2: Value | None = None
+    pco2_gas: Value | None = None
 
     @classmethod
     def default(cls) -> "Circuit":
-        """Get the circuit of the perfusion table (`[circuit]`)."""
+        """Get the circuit of the perfusion table (`[circuit]`).
+
+        The pCO2 of the gas is that of the fresh perfusate (`None`): the
+        sweep gas of the study is not known.
+        """
+        names = ("reservoir", "tubing_in", "tubing_out", "flow", "oxygenator_k")
         return cls(
-            **{f.name: table_value("circuit", f.name) for f in dataclasses.fields(cls)}
+            **{name: table_value("circuit", name) for name in names},
+            oxygenator_k_co2=table_value("circuit", "oxygenator_k_co2"),
         )
 
     def problems(self) -> list[str]:
@@ -219,8 +233,20 @@ class Circuit:
             out += _positive(where, name, getattr(self, name))
         out += _unit(where, "flow", self.flow, PU.ml_per_min)
         out += _at_least(where, "flow", self.flow, 0.0)
-        out += _unit(where, "oxygenator_k", self.oxygenator_k, U.per_min)
-        out += _at_least(where, "oxygenator_k", self.oxygenator_k, 0.0)
+        for name in ("oxygenator_k", "oxygenator_k_co2"):
+            value = getattr(self, name)
+            out += _unit(where, name, value, U.per_min)
+            if value is not None:
+                out += _at_least(where, name, value, 0.0)
+        out += _unit(where, "pco2_gas", self.pco2_gas, PU.kPa)
+        if self.pco2_gas is not None:
+            out += _at_least(where, "pco2_gas", self.pco2_gas, 0.0)
+        for name in ("reservoir", "tubing_in", "tubing_out", "flow"):
+            if getattr(self, name).uncertainties:
+                out.append(
+                    f"{where}: {name} has an uncertainty, which the build does "
+                    "not convert into the units of the model"
+                )
         return out
 
 
@@ -292,11 +318,37 @@ class LiverOrgan:
             density=table_value(section, "density"),
         )
 
+    def resolved(self, species: Species) -> "LiverOrgan":
+        """Get the liver with the constants of the table where it has none.
+
+        Args:
+            species: the species, the section `[liver_<species>]`.
+
+        Returns:
+            The liver with every fraction and the density given.
+
+        Raises:
+            KeyError: if a constant is missing and the table has no section
+                of the species.
+        """
+        section = f"liver_{species}"
+        values = {
+            name: table_value(section, name)
+            for name in ("vascular_fraction", "cell_fraction", "density")
+            if getattr(self, name) is None
+        }
+        return dataclasses.replace(self, **values) if values else self
+
     def problems(self) -> list[str]:
         """Get what is wrong with the liver."""
         where = "liver"
         out = _unit(where, "mass", self.mass, PU.g)
         out += _positive(where, "mass", self.mass)
+        if self.mass.uncertainties:
+            out.append(
+                f"{where}: the mass has an uncertainty, which the build does not "
+                "convert into the units of the model"
+            )
         for name in ("vascular_fraction", "cell_fraction"):
             out += _unit(where, name, getattr(self, name), U.dimensionless)
             out += _positive(where, name, getattr(self, name))
@@ -401,21 +453,43 @@ class PerfusionDefinition:
         if not self.temperature.value > -273.15:
             out.append("temperature: below the absolute zero")
         if isinstance(self.organ, LiverOrgan):
-            out += self.organ.problems()
-            section = f"liver_{self.species}"
-            missing = self.organ.vascular_fraction is None or (
-                self.organ.cell_fraction is None or self.organ.density is None
-            )
-            if missing and section not in load(_TABLE):
+            try:
+                out += self.organ.resolved(self.species).problems()
+            except KeyError:
                 out.append(
-                    f"liver: the table has no section [{section}] for the "
-                    "fractions and the density of the liver"
+                    f"liver: the table has no section [liver_{self.species}] for "
+                    "the fractions and the density of the liver"
                 )
         else:
             out.append(
                 f"the organ {type(self.organ).__name__} is not built yet, only "
                 "the liver"
             )
+        if not out and self.perfusate.tracers:
+            out += self._tracer_clashes()
+        return out
+
+    def _tracer_clashes(self) -> list[str]:
+        """Get the ids of the tracers which are ids of the model without them.
+
+        A tracer `t` has the ids `t_<site>` (every site and mean), `t_fresh`
+        and the flows `FLOW_t_<site>_<next>`; one of them may be an observer,
+        a compartment or a constant of the model (`pO2`, `Vvas`, `V`).
+        """
+        from pkpdsim.perfusion.builder import compose, model_ids, tracer_ids
+
+        plain = dataclasses.replace(
+            self, perfusate=dataclasses.replace(self.perfusate, tracers=())
+        )
+        taken = model_ids(compose(plain))
+        out: list[str] = []
+        for t in self.perfusate.tracers:
+            clashes = sorted(tracer_ids(self, t) & taken)
+            if clashes:
+                out.append(
+                    f"perfusate: the ids of the tracer '{t}' are ids of the "
+                    f"model: {clashes}"
+                )
         return out
 
     def parameter_value(self, sid: str) -> float:

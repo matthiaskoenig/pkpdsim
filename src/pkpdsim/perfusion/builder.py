@@ -32,12 +32,11 @@ from sbmlutils.validation import ValidationOptions, validate_doc
 from pkpdsim.pbpk.annotation import TAXA, initial_assignment
 from pkpdsim.pbpk.placement import value_parameter
 from pkpdsim.pbpk.units import MODEL_UNITS, U
-from pkpdsim.pbpk.values import Value
 from pkpdsim.perfusion import circuit, core, ids, observers
-from pkpdsim.perfusion.definition import LiverOrgan, PerfusionDefinition, table_value
+from pkpdsim.perfusion.definition import LiverOrgan, PerfusionDefinition
 from pkpdsim.perfusion.units import PU
 
-__all__ = ["build", "compose", "zone_factors"]
+__all__ = ["build", "compose", "model_ids", "tracer_ids", "zone_factors"]
 
 _P = SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER
 
@@ -62,12 +61,6 @@ def zone_factors(organ: LiverOrgan) -> dict[str, dict[str, float]]:
     return out
 
 
-def _organ_value(organ: LiverOrgan, name: str, section: str) -> Value:
-    """Get a constant of the liver, of the table of the species without one."""
-    value = getattr(organ, name)
-    return value if isinstance(value, Value) else table_value(section, name)
-
-
 def _liver(
     definition: PerfusionDefinition, organ: LiverOrgan
 ) -> tuple[list[Compartment], core.CoreObjects, list[str]]:
@@ -80,17 +73,10 @@ def _liver(
         secretion of the zones.
     """
     key, n = organ.key, organ.zones
-    section = f"liver_{definition.species}"
-    mass = organ.mass
-    m = Value(
-        mass.value * 1e-3,
-        U.kg,
-        mass.source,
-        "\n\n".join(x for x in (mass.notes, f"{mass.value} g in the definition.") if x),
-    )
-    rho = _organ_value(organ, "density", section)
-    f_vas = _organ_value(organ, "vascular_fraction", section)
-    f_cell = _organ_value(organ, "cell_fraction", section)
+    organ = organ.resolved(definition.species)
+    m = circuit.converted(organ.mass, 1e-3, U.kg, "g")
+    rho, f_vas, f_cell = organ.density, organ.vascular_fraction, organ.cell_fraction
+    assert rho is not None and f_vas is not None and f_cell is not None
     volume = m.value / rho.value
     out = core.CoreObjects(
         parameters=[
@@ -136,16 +122,11 @@ def _liver(
     for k in range(1, n + 1):
         zone = ids.zone_id(k)
         cells, vascular = ids.cells(zone), ids.vascular(zone)
-        for sid, fraction, where in (
-            (cells, f_cell, "hepatocytes"),
-            (vascular, f_vas, "vascular space (sinusoids)"),
+        for sid, fraction, fid, where in (
+            (cells, f_cell, ids.cell_fraction(key), "hepatocytes"),
+            (vascular, f_vas, ids.vascular_fraction(key), "vascular space (sinusoids)"),
         ):
             name = f"{where} of the liver zone {k} of {n}"
-            fid = (
-                ids.cell_fraction(key)
-                if fraction is f_cell
-                else ids.vascular_fraction(key)
-            )
             compartments.append(
                 Compartment(
                     sid,
@@ -185,6 +166,41 @@ def _liver(
     return compartments, out, bile
 
 
+def _sites(definition: PerfusionDefinition) -> list[str]:
+    """Get the sites of the perfusate in the order of the flow."""
+    organ = definition.organ
+    n = organ.zones if isinstance(organ, LiverOrgan) else 1
+    zones = [ids.zone_id(k) for k in range(1, n + 1)]
+    return [ids.RESERVOIR, ids.INFLOW, *zones, ids.OUTFLOW]
+
+
+def tracer_ids(definition: PerfusionDefinition, tracer: str) -> set[str]:
+    """Get the ids which a tracer adds to the model of a definition.
+
+    Args:
+        definition: the definition.
+        tracer: the token of the tracer.
+
+    Returns:
+        The species at every site and mean, the fresh concentration and the
+        flows.
+    """
+    sites = _sites(definition)
+    out = {ids.species(tracer, s) for s in (*sites, ids.PERIPORTAL, ids.PERICENTRAL)}
+    out.add(ids.fresh(tracer))
+    out |= {
+        ids.flow(tracer, a, b)
+        for a, b in zip(sites, [*sites[1:], sites[0]], strict=True)
+    }
+    return out
+
+
+def model_ids(model: Model) -> set[str]:
+    """Get the ids of the compartments, species, parameters and reactions of a model."""
+    groups = (model.compartments, model.species, model.parameters, model.reactions)
+    return {str(e.sid) for group in groups for e in group or []}
+
+
 def compose(definition: PerfusionDefinition) -> Model:
     """Compose the model of a definition.
 
@@ -207,7 +223,7 @@ def compose(definition: PerfusionDefinition) -> Model:
     assert isinstance(organ, LiverOrgan)
     perfusate = definition.perfusate
     zones = [ids.zone_id(k) for k in range(1, organ.zones + 1)]
-    sites = [ids.RESERVOIR, ids.INFLOW, *zones, ids.OUTFLOW]
+    sites = _sites(definition)
 
     objects = circuit.temperature_objects(definition.temperature)
     objects += circuit.oxygen_objects()
@@ -222,7 +238,7 @@ def compose(definition: PerfusionDefinition) -> Model:
     for site in sites:
         objects += observers.site_objects(site)
     objects += observers.mean_objects(zones, circuit.quantities(perfusate))
-    objects += observers.bile_objects(bile)
+    objects += observers.bile_objects(bile, zones)
     objects += observers.uptake_objects(zones)
 
     return Model(

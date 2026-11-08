@@ -19,8 +19,10 @@ observers add what the species do not give, as assignment rules:
   zone and the pericentral the second; with three zones the first and the
   last zone; with four zones the periportal mean is `3/4` of the first and
   `1/4` of the second zone;
+- `pCO2_<site>` (kPa), the dissolved CO2 over its solubility;
 - the bile of the organ, the rate `bile_rate` (µl/min, the sum of the
-  secretion of the zones) and the volume `bile` (µl), a state of the rate;
+  secretion of the zones) and the volume `bile` (µl, the sum of the bile
+  volumes of the zones);
 - the oxygen uptake of the organ `VO2` (mmole/min), the oxygen which the
   cells take up from the perfusate, the sum of the zones.
 """
@@ -28,7 +30,7 @@ observers add what the species do not give, as assignment rules:
 from collections.abc import Sequence
 from fractions import Fraction
 
-from sbmlutils.factory import AssignmentRule, Parameter, RateRule
+from sbmlutils.factory import AssignmentRule, Parameter
 from sbmlutils.factory.units import UnitDefinition
 from sbmlutils.metadata import SBO
 
@@ -81,7 +83,7 @@ def enzyme_parameters() -> list[Parameter]:
 
 
 def site_objects(site: str) -> core.CoreObjects:
-    """Get the pO2 and the enzyme activities of the perfusate at a site."""
+    """Get the pO2, the pCO2 and the enzyme activities of the perfusate at a site."""
     out = core.CoreObjects()
     _add(
         out,
@@ -90,6 +92,16 @@ def site_objects(site: str) -> core.CoreObjects:
             f"{ids.species('o2', site)}/{ids.SOLUBILITY}",
             PU.kPa,
             f"oxygen partial pressure ({site})",
+            SBO.PRESSURE,
+        ),
+    )
+    _add(
+        out,
+        _observer(
+            ids.pco2(site),
+            f"{ids.species('co2', site)}/{ids.CO2_SOLUBILITY}",
+            PU.kPa,
+            f"CO2 partial pressure ({site})",
             SBO.PRESSURE,
         ),
     )
@@ -206,46 +218,40 @@ def mean_objects(zones: Sequence[str], perfusate: Sequence[str]) -> core.CoreObj
     return out
 
 
-def bile_objects(rates: Sequence[str]) -> core.CoreObjects:
+def bile_objects(rates: Sequence[str], zones: Sequence[str]) -> core.CoreObjects:
     """Get the bile rate and the bile volume of the organ.
 
     Args:
         rates: the formulas of the bile secretion of the zones (l/min), the
             rate rules of `Vbile_<zone>` of the core.
+        zones: the zones.
 
     Returns:
-        `bile_rate` (µl/min) and the state `bile` (µl) with its rate rule.
+        `bile_rate` (µl/min) and `bile` (µl), the sum of the bile volumes of
+        the zones, both assignment rules.
     """
     out = core.CoreObjects()
+    ul = f"1000000 {PU.ul_per_l.sid}"
     total = " + ".join(f"({r})" for r in rates)
     _add(
         out,
         _observer(
             ids.BILE_RATE,
-            f"1000000 {PU.ul_per_l.sid} * ({total})",
+            f"{ul} * ({total})",
             PU.ul_per_min,
             "bile secretion of the organ",
             SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
         ),
     )
-    out.parameters.append(
-        Parameter(
+    _add(
+        out,
+        _observer(
             ids.BILE,
-            0.0,
+            f"{ul} * ({' + '.join(ids.bile(z) for z in zones)})",
             PU.ul,
-            constant=False,
-            name="bile volume of the organ",
-            sboTerm=SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
-        )
-    )
-    out.rate_rules.append(
-        RateRule(
-            ids.BILE,
-            ids.BILE_RATE,
-            PU.ul_per_min,
-            name="bile volume of the organ",
-            sboTerm=_RULE,
-        )
+            "bile volume of the organ",
+            SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
+        ),
     )
     return out
 
