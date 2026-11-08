@@ -8,11 +8,16 @@ width of a character of the monospace fonts of the figure (`CHAR_WIDTH`).
 
 import dataclasses
 from pathlib import Path
-from typing import NamedTuple
 from xml.etree import ElementTree
 
 import pytest
 from pymetadata.omex import EntryFormat
+from svg_labels import (
+    SVG,
+    assert_inside_and_apart,
+    assert_inside_box,
+    parse_labels,
+)
 
 from pkpdsim.pbpk import (
     MM,
@@ -44,11 +49,8 @@ from pkpdsim.pbpk import (
     create_archive,
     model_figure,
 )
-from pkpdsim.pbpk.figure import CHAR_WIDTH
 
 from .conftest import cardiac_pd, definition
-
-SVG = "{http://www.w3.org/2000/svg}"
 
 #: the organ names of the rows of the figure
 ORGANS = (
@@ -193,42 +195,6 @@ def seven_substances() -> PBPKDefinition:
     )
 
 
-class Label(NamedTuple):
-    """A text of the figure: its content and box."""
-
-    text: str
-    x0: float
-    y0: float
-    x1: float
-    y1: float
-
-
-def _label(element: ElementTree.Element) -> Label:
-    """The box of a text element from its baseline, font size and length.
-
-    The box spans the ascent (0.8 of the size) above and the descent (0.25)
-    below the baseline, the width `CHAR_WIDTH` per character.
-    """
-    text = element.text or ""
-    size = float(element.attrib["data-size"])
-    x, y = float(element.attrib["x"]), float(element.attrib["y"])
-    assert element.attrib.get("text-anchor", "start") == "start"
-    return Label(
-        text, x, y - 0.8 * size, x + len(text) * size * CHAR_WIDTH, y + 0.25 * size
-    )
-
-
-def _parse(svg: Path) -> tuple[ElementTree.Element, list[Label]]:
-    """The root and the labels of a figure."""
-    root = ElementTree.parse(svg).getroot()
-    return root, [_label(t) for t in root.iter(f"{SVG}text")]
-
-
-def _overlap(a: Label, b: Label) -> bool:
-    """Whether two label boxes overlap."""
-    return a.x0 < b.x1 and b.x0 < a.x1 and a.y0 < b.y1 and b.y0 < a.y1
-
-
 def _reabsorbed() -> PBPKDefinition:
     """The drug given iv, its metabolite excreted into the bile and reabsorbed."""
     bile = Transport(
@@ -293,7 +259,7 @@ def test_the_figure_is_valid_svg(
 ) -> None:
     """An SVG of the size of its view box with a title, the same bytes for the same definition."""
     d, path = figure
-    root, _ = _parse(path)
+    root, _ = parse_labels(path)
     assert root.tag == f"{SVG}svg"
     width, height = float(root.attrib["width"]), float(root.attrib["height"])
     assert (
@@ -310,7 +276,7 @@ def test_every_organ_and_substance_is_labelled(
 ) -> None:
     """Every organ has a row with its name, every substance a chip in every organ row."""
     d, path = figure
-    _, labels = _parse(path)
+    _, labels = parse_labels(path)
     texts = [label.text for label in labels]
     for organ in ORGANS:
         assert any(t.startswith(f"{organ} ") for t in texts), organ
@@ -331,37 +297,24 @@ def test_the_labels_are_inside_the_canvas_and_do_not_overlap(
 ) -> None:
     """Every label box lies in the canvas and no two label boxes overlap."""
     _, path = figure
-    root, labels = _parse(path)
-    width, height = float(root.attrib["width"]), float(root.attrib["height"])
-    for label in labels:
-        assert label.x0 >= 0 and label.y0 >= 0, label
-        assert label.x1 <= width and label.y1 <= height, label
-    for i, a in enumerate(labels):
-        for b in labels[i + 1 :]:
-            assert not _overlap(a, b), (a, b)
+    root, labels = parse_labels(path)
+    assert_inside_and_apart(root, labels)
 
 
 def test_the_labels_of_a_box_are_inside_it(figure: tuple[PBPKDefinition, Path]) -> None:
     """The labels of an organ, a blood column or the lumen lie inside its rectangle."""
     _, path = figure
-    root, _ = _parse(path)
+    root, _ = parse_labels(path)
     boxes = [g for g in root.iter(f"{SVG}g") if g.attrib.get("class") == "pkf-box"]
     assert len(boxes) > 15
     for g in boxes:
-        rect = g.find(f"{SVG}rect")
-        assert rect is not None
-        x0, y0 = float(rect.attrib["x"]), float(rect.attrib["y"])
-        x1, y1 = x0 + float(rect.attrib["width"]), y0 + float(rect.attrib["height"])
-        for t in g.iter(f"{SVG}text"):
-            label = _label(t)
-            assert x0 < label.x0 and label.x1 < x1, label
-            assert y0 < label.y0 and label.y1 < y1, label
+        assert_inside_box(g)
 
 
 def test_the_figure_shows_the_processes_and_routes(tmp_path: Path) -> None:
     """The processes, the variants, the routes and the lumen of the seven substances."""
     path = model_figure(seven_substances(), tmp_path / "seven.svg")
-    text = " ".join(label.text for label in _parse(path)[1])
+    text = " ".join(label.text for label in parse_labels(path)[1])
     for expected in (
         "API3A4: api -> api_m1, api_m2 by CYP3A4",
         "APIM7BILE: api_m7 cell -> bile by ABCC2",
@@ -439,7 +392,7 @@ def test_without_an_oral_route_the_lumen_absorbs_nothing(tmp_path: Path) -> None
 
 def _texts(path: Path) -> list[str]:
     """The texts of the labels of a figure."""
-    return [label.text for label in _parse(path)[1]]
+    return [label.text for label in parse_labels(path)[1]]
 
 
 def test_the_reabsorption_after_the_bile_is_drawn(tmp_path: Path) -> None:
@@ -458,7 +411,7 @@ def test_the_reabsorption_after_the_bile_is_drawn(tmp_path: Path) -> None:
     assert "into the intestinal wall: drg_m" in texts
     assert {"ABS", "BIL", "absorption", "bile"} <= set(texts)
     assert "oral" not in texts
-    root, _ = _parse(path)
+    root, _ = parse_labels(path)
     assert len(list(root.iter(f"{SVG}polyline"))) == 1
 
 
@@ -549,7 +502,7 @@ def test_the_text_of_the_legend_and_the_processes(tmp_path: Path) -> None:
         "Kp, tissue exchange, in li, mu only, own Kp in mu, own exchange in li" in text
     )
     assert "SRC: -> Cti_drg" in text
-    root, _ = _parse(path)
+    root, _ = parse_labels(path)
     # the dots of the legend (the circles of the icons have no style)
     dots = [c for c in root.iter(f"{SVG}circle") if "style" in c.attrib]
     assert len(dots) == len(d.substances)
@@ -587,7 +540,7 @@ def test_the_figure_shows_the_source_of_a_slow_pool(tmp_path: Path) -> None:
     pool = SlowPool("cr", frozenset({Organ.MUSCLE}), k=0.001, kp=2.0, source="plasma")
     d = dataclasses.replace(seven_substances(), slow_pools=[pool])
     text = " ".join(
-        label.text for label in _parse(model_figure(d, tmp_path / "p.svg"))[1]
+        label.text for label in parse_labels(model_figure(d, tmp_path / "p.svg"))[1]
     )
     assert "slow pool of cr: plasma <-> pool" in text
     assert "tissue <-> pool" not in text
@@ -707,7 +660,7 @@ def _box_texts(root: ElementTree.Element, cls: str) -> list[str]:
 def test_the_blood_columns_list_the_circulating_substances(tmp_path: Path) -> None:
     """Venous and arterial blood and the portal vein carry a chip of every substance."""
     d = seven_substances()
-    root, _ = _parse(model_figure(d, tmp_path / "seven.svg"))
+    root, _ = parse_labels(model_figure(d, tmp_path / "seven.svg"))
     for cls in ("pkf-ven", "pkf-art", "pkf-por"):
         texts = _box_texts(root, cls)
         for s in d.substances:
@@ -717,7 +670,7 @@ def test_the_blood_columns_list_the_circulating_substances(tmp_path: Path) -> No
 def test_urine_and_feces_are_compartments(tmp_path: Path) -> None:
     """The urine at the kidney and the feces at the end of the lumen hold their substances."""
     d = seven_substances()
-    root, _ = _parse(model_figure(d, tmp_path / "seven.svg"))
+    root, _ = parse_labels(model_figure(d, tmp_path / "seven.svg"))
     sinks = {
         g.attrib["data-k"]: [t.text for t in g.iter(f"{SVG}text")]
         for g in root.iter(f"{SVG}g")
@@ -731,7 +684,7 @@ def test_urine_and_feces_are_compartments(tmp_path: Path) -> None:
 
 def test_every_organ_row_has_its_icon(tmp_path: Path) -> None:
     """A row of an organ carries the icon of the organ, a nested drawing on a circle."""
-    root, _ = _parse(model_figure(definition(), tmp_path / "simple.svg"))
+    root, _ = parse_labels(model_figure(definition(), tmp_path / "simple.svg"))
     keyed = [
         g
         for g in root.iter(f"{SVG}g")
@@ -744,8 +697,8 @@ def test_every_organ_row_has_its_icon(tmp_path: Path) -> None:
 
 def test_the_legend_is_a_column_and_the_compact_figure_has_none(tmp_path: Path) -> None:
     """The legend sits right of the diagram; the compact figure carries the key in its band."""
-    full, _ = _parse(model_figure(seven_substances(), tmp_path / "full.svg"))
-    compact, labels = _parse(
+    full, _ = parse_labels(model_figure(seven_substances(), tmp_path / "full.svg"))
+    compact, labels = parse_labels(
         model_figure(seven_substances(), tmp_path / "c.svg", compact=True)
     )
     full_texts = [t.text for t in full.iter(f"{SVG}text")]

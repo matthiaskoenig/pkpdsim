@@ -2,9 +2,11 @@
 
 A model is built from a definition (`pkpdsim.perfusion.definition`: the
 circuit, the perfusate, the organ, the temperature) by
-`pkpdsim.perfusion.builder.build`, one SBML file. An organ in a machine
-perfusion is a chain of zones, each a vascular space
-in series with the flow and its cells with the cellular core
+`pkpdsim.perfusion.builder.build`, one SBML file;
+`pkpdsim.perfusion.archive.create_archive` writes it with its ODEs, its
+antimony, the figure of the circuit (`pkpdsim.perfusion.figure`) and the
+COMBINE archive. An organ in a machine perfusion is a chain of zones, each a
+vascular space in series with the flow and its cells with the cellular core
 (`pkpdsim.perfusion.core`: the energy metabolism, the redox and the damage of
 the cells, the release of their enzymes and potassium, the bicarbonate buffer
 of the perfusate). The ids are those of `pkpdsim.perfusion.ids`.
@@ -17,6 +19,7 @@ import importlib
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from pkpdsim.perfusion.archive import create_archive
     from pkpdsim.perfusion.builder import build, compose
     from pkpdsim.perfusion.core import (
         PROCESSES,
@@ -40,6 +43,12 @@ if TYPE_CHECKING:
         Perfusate,
         PerfusionDefinition,
     )
+    from pkpdsim.perfusion.figure import (
+        circuit_cards,
+        circuit_figure,
+        circuit_svg,
+        interactive_circuit,
+    )
 
 #: the names imported on their first access: name -> module of `pkpdsim.perfusion`
 _LAZY_NAMES = {
@@ -61,6 +70,11 @@ _LAZY_NAMES = {
     "Organ": "definition",
     "Perfusate": "definition",
     "PerfusionDefinition": "definition",
+    "create_archive": "archive",
+    "circuit_cards": "figure",
+    "circuit_figure": "figure",
+    "circuit_svg": "figure",
+    "interactive_circuit": "figure",
     "build": "builder",
     "compose": "builder",
 }
@@ -99,8 +113,13 @@ __all__ = [
     "buffer_objects",
     "buffer_parameters",
     "build",
+    "circuit_cards",
+    "circuit_figure",
+    "circuit_svg",
     "compose",
     "core_parameters",
+    "create_archive",
+    "interactive_circuit",
     "perfusate_objects",
     "quantity_name",
     "zone_objects",
