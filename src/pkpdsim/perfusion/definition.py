@@ -728,7 +728,8 @@ class PerfusionDefinition:
         creators: the creators of the model (its model history).
         notes: further notes of the model (markdown), appended to the
             description of the circuit which the build writes, e.g. the
-            terms of use of a model package.
+            terms of use of a model package (`PBPKDefinition.notes` is the
+            whole notes of its model, this one is appended).
     """
 
     sid: str
