@@ -8,7 +8,7 @@ SECTIONS = ("oxygen", "enzymes", "temperature", "perfusate", "liver_rat")
 def _entries() -> list[tuple[str, str]]:
     """Get the section and key of every number of the table."""
     data = tables.load("perfusion")
-    return [(s, k) for s in SECTIONS for k in data[s]]
+    return [(s, k) for s, section in data.items() for k in section]
 
 
 def test_the_table_has_its_sections() -> None:
@@ -48,3 +48,15 @@ def test_the_oxygen_solubility() -> None:
 def test_the_temperature_reference() -> None:
     """The reference is 37 °C."""
     assert tables.entry("perfusion", "temperature", "reference").value == 37.0
+
+
+def test_every_placeholder_is_a_model_choice() -> None:
+    """A number which is no measurement says so and carries no publication."""
+    placeholders = [
+        (s, k)
+        for s, k in _entries()
+        if (tables.entry("perfusion", s, k).notes or "").startswith("PLACEHOLDER")
+    ]
+    assert placeholders
+    for section, key in placeholders:
+        assert tables.entry("perfusion", section, key).source == "ModelChoice"
