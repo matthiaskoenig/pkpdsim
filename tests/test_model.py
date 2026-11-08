@@ -52,15 +52,11 @@ def test_a_model_is_a_project() -> None:
     assert MODEL.data_paths == (TOY_PATH,)
 
 
-def test_the_keywords_of_a_package_are_the_fields_of_the_project(
-    tmp_path: Path,
-) -> None:
+def test_the_keywords_of_a_package_are_the_fields_of_the_project() -> None:
     model = PKPDModel(
         **keywords(
             female_model_path=MODEL_BASE_PATH / "toy_female.xml",
             fits=("PK_20260101_000000__abcde",),
-            fits_path=tmp_path / "fits",
-            factory_path=MODEL_BASE_PATH,
             figures=FigureSettings(formats=("svg", "png"), savefig_dpi=30, fig_dpi=300),
         )
     )
@@ -72,7 +68,7 @@ def test_the_keywords_of_a_package_are_the_fields_of_the_project(
     assert model.adopted_ids == ("PK_20260101_000000__abcde",)
     assert model.adopted_fits() == {"PK": "PK_20260101_000000__abcde"}
     assert model.fits == ".fitting:FIT_DEFINITIONS"
-    assert model.fits_dir == tmp_path / "fits"
+    assert model.fits_dir == MODEL_BASE_PATH.parent / "fits"
     assert model.factory_dir == MODEL_BASE_PATH
     assert model.figures == FigureOutputs(formats=("svg", "png"), savefig_dpi=30)
     assert model.figure_settings == SbmlsimFigureSettings(fig_dpi=300)
@@ -137,8 +133,6 @@ def test_given_directories_stay_with_other_builds(tmp_path: Path) -> None:
     [
         ("path", "root"),
         ("data_paths", "data_path"),
-        ("fits_path", "fits_dir"),
-        ("factory_path", "factory_dir"),
     ],
 )
 def test_a_keyword_and_its_field_are_given_once(keyword: str, field: str) -> None:

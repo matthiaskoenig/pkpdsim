@@ -96,11 +96,6 @@ class CovariateDistribution:
     rho: float | None
 
     @property
-    def bw_median(self) -> float:
-        """The median body weight (kg), `exp(ln_bw_mean)`."""
-        return float(np.exp(self.ln_bw_mean))
-
-    @property
     def bw_mean(self) -> float:
         """The mean body weight (kg) of the lognormal distribution."""
         return float(np.exp(self.ln_bw_mean + self.ln_bw_sd**2 / 2))

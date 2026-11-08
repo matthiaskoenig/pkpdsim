@@ -182,7 +182,7 @@ from pkpdsim.database import integration
 
 c = integration.factor("CYP3A4", {"condition": "cirrhosis", "child_pugh": "C"})
 print(c.text())
-print(f"tau^2 {c.tau2:.3f}, prediction interval {c.prediction_interval}")
+print(f"tau^2 {c.tau2:.3f}, prediction SE {c.prediction_se:.3f}")
 ```
 
 The levels of a quantity, the MELD score of a class, are integrated on the linear scale (`integration.level(entity, condition)`): the mean of a group with its standard error (the SE, or the SD over the root of `n`), or the median with the standard error of its quartiles; the groups of a study pooled by their inverse variance and the studies by the same random-effects meta-analysis.
