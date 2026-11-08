@@ -70,7 +70,15 @@ from pkpdsim.pbpk.variants.liver_zonated import ZonatedLiver
 from pkpdsim.pbpk.visual import icons
 from pkpdsim.sex import Sex
 
-__all__ = ["CHAR_WIDTH", "COMPACT", "FONT", "LEGEND_WIDTH", "MAX_TEXT", "model_figure"]
+__all__ = [
+    "CHAR_WIDTH",
+    "COMPACT",
+    "FONT",
+    "LEGEND_WIDTH",
+    "MAX_TEXT",
+    "model_figure",
+    "schematic_svg",
+]
 
 CHAR_WIDTH = 0.62
 """The width of a character in units of the font size: an upper bound of the
@@ -1239,10 +1247,30 @@ def model_figure(
             f"'{definition.sex}' among them."
         )
     path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(schematic_svg(definition, sexes, compact=compact), encoding="utf-8")
+    return path
+
+
+def schematic_svg(
+    definition: PBPKDefinition, sexes: Sequence[Sex], *, compact: bool = False
+) -> str:
+    """The SVG of the figure of a definition (see `model_figure`).
+
+    The figure is drawn twice: once wide to measure its content, then at the
+    width the content needs.
+
+    Args:
+        definition: the definition of the model.
+        sexes: the sexes which are built.
+        compact: the panel of a publication figure.
+
+    Returns:
+        The SVG, deterministic.
+    """
     dims = COMPACT if compact else _Dims()
     probe = _Figure(definition, sexes, replace(dims, width=2400), compact=compact)
     probe.draw()
     width = math.ceil(probe.maxx + 16 + _PAD + _COLUMN + dims.arrow)
-    figure = _Figure(definition, sexes, replace(dims, width=width), compact=compact)
-    path.write_text(figure.draw(), encoding="utf-8")
-    return path
+    return _Figure(
+        definition, sexes, replace(dims, width=width), compact=compact
+    ).draw()
