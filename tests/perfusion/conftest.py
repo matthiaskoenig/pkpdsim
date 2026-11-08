@@ -4,6 +4,7 @@ The tests compile their models at `JIT_OPTIMIZATION` (`O0`) as the PBPK tests
 do, with the same autouse fixture.
 """
 
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -41,41 +42,50 @@ def zone_model(
     params: core.CoreParameters | None = None,
     composition: core.Composition | None = None,
     bile: bool = True,
+    zones: tuple[str, ...] = (ZONE,),
+    profiles: Mapping[str, Mapping[str, float]] | None = None,
 ) -> FactoryResult:
-    """Write a model of one closed zone: the core with a fixed vascular space.
+    """Write a model of closed zones: the core with fixed vascular spaces.
 
-    The temperature factor `f_T` is a constant 1, the buffer constants are
-    the defaults; nothing flows in or out.
+    The temperature factor `f_T` is a constant 1, the constants of the core
+    and of the buffer are defined once; nothing flows in or out.
     """
-    objects = core.zone_objects(
-        ZONE,
-        CELLS,
-        VASCULAR,
-        params or core.CoreParameters.default(),
-        composition=composition,
-        bile=bile,
-    )
-    model = Model(
-        "perfusion_zone",
-        name="one zone of a perfused organ",
-        units=U,
-        model_units=MODEL_UNITS,
-        compartments=[
+    params = params or core.CoreParameters.default()
+    objects = core.CoreObjects()
+    compartments = []
+    for zone in zones:
+        cells, vascular = f"Vcell_{zone}", f"Vvas_{zone}"
+        objects += core.zone_objects(
+            zone,
+            cells,
+            vascular,
+            params,
+            profile=(profiles or {}).get(zone),
+            composition=composition,
+            bile=bile,
+        )
+        compartments += [
             Compartment(
-                CELLS,
+                cells,
                 CELL_VOLUME,
                 unit=U.litre,
-                name="cells of zone 1",
+                name=f"cells of {zone}",
                 sboTerm=SBO.PHYSICAL_COMPARTMENT,
             ),
             Compartment(
-                VASCULAR,
+                vascular,
                 VASCULAR_VOLUME,
                 unit=U.litre,
-                name="vascular space of zone 1",
+                name=f"vascular space of {zone}",
                 sboTerm=SBO.PHYSICAL_COMPARTMENT,
             ),
-        ],
+        ]
+    model = Model(
+        "perfusion_zone",
+        name="closed zones of a perfused organ",
+        units=U,
+        model_units=MODEL_UNITS,
+        compartments=compartments,
         parameters=[
             Parameter(
                 ids.F_T,
@@ -86,6 +96,7 @@ def zone_model(
                 sboTerm=SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
             ),
             *core.buffer_parameters(),
+            *core.core_parameters(params),
             *objects.parameters,
         ],
         species=objects.species,

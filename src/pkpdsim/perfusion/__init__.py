@@ -15,25 +15,29 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from pkpdsim.perfusion.core import (
+        PROCESSES,
         Buffer,
         Composition,
         CoreObjects,
         CoreParameters,
         buffer_objects,
         buffer_parameters,
-        perfusate_species,
+        core_parameters,
+        perfusate_objects,
         zone_objects,
     )
 
 #: the names imported on their first access: name -> module of `pkpdsim.perfusion`
 _LAZY_NAMES = {
+    "PROCESSES": "core",
     "Buffer": "core",
     "Composition": "core",
     "CoreObjects": "core",
     "CoreParameters": "core",
     "buffer_objects": "core",
     "buffer_parameters": "core",
-    "perfusate_species": "core",
+    "core_parameters": "core",
+    "perfusate_objects": "core",
     "zone_objects": "core",
 }
 
@@ -56,12 +60,14 @@ def __dir__() -> list[str]:
 
 
 __all__ = [
+    "PROCESSES",
     "Buffer",
     "Composition",
     "CoreObjects",
     "CoreParameters",
     "buffer_objects",
     "buffer_parameters",
-    "perfusate_species",
+    "core_parameters",
+    "perfusate_objects",
     "zone_objects",
 ]

@@ -21,15 +21,29 @@ The species of the cells are concentrations in mmole per l of cells, the
 species of the vascular space concentrations of the perfusate (mM); every
 rate is in mmole/min, a rate per volume of cells times the volume of the
 cells (`cells`) and the living fraction `f_alive_<zone>`. The ids are those
-of `pkpdsim.perfusion.ids`. The temperature factor `f_T` (`ids.F_T`) and the
-constants of the buffer (`buffer_parameters`) are ids of the whole model,
-defined once by the caller; the circuit defines `f_T` as the Arrhenius factor
-of the temperature.
+of `pkpdsim.perfusion.ids`.
+
+The constants of the core are ids of the whole model, shared by its zones
+(`core_parameters`, the numbers of the parameter database, the sections
+`core_<organ>` and `core_<organ>_start` of `tables/perfusion.toml`): a fit
+has one value per constant. A zonal profile weighs a process per zone (the
+pattern of the zonated liver of the PBPK library), the dimensionless factor
+`p_<process>_<zone>` in the rate of the process (`zone_objects(profile=)`),
+which the organ normalises; a process without a profile has none. The
+temperature factor `f_T` (`ids.F_T`) and the constants of the buffer
+(`buffer_parameters`) are ids of the whole model as well; the circuit defines
+`f_T` as the Arrhenius factor of the temperature, and the start of the
+dissolved CO2 of the perfusate is the initial assignment of the buffer
+equilibrium, `CO2 = h*HCO3/Ka_hco3`, so it follows the one buffer of the
+model.
 
 The rate laws, one choice each, with the reason:
 
 - Biological rates scale with `f_T * f_alive`: the temperature acts on the
   enzymes and transporters, only the living cells metabolise.
+- A Hill term reads the absolute value of its species, `(|S|/K)^n`, so it
+  stays defined for the small negative values of the integrator at a
+  non-integer `n`.
 - Glucose, oxygen import: the reversible facilitated transport of the ported
   model, `Vmax/Km*(S_out - S_in)/(1 + S_out/Km + S_in/Km)`, saturable both ways.
 - Lactate export: the monocarboxylate transporter co-transports a proton, so
@@ -42,7 +56,7 @@ The rate laws, one choice each, with the reason:
   since the perfusate glucose of the study rises from 6 to 11 mM.
 - Glycolysis: `glc + 2 ADP + 2 NAD -> 2 pyr + 2 ATP + 2 NADH`, carbon
   balanced (the ported model made one pyruvate), Michaelis-Menten in glucose,
-  ADP and NAD, inhibited by ATP with `1/(1 + (ATP/Ki)^n)` instead of the
+  ADP and NAD, inhibited by ATP with `1/(1 + (|ATP|/Ki)^n)` instead of the
   singular `(Ki/ATP)^n`; both are about 0.06 at the start (ATP 3 mM).
 - LDH: `pyr + NADH <-> lac + NAD`, a reversible random bi-bi law
   `Vmax/(Km_pyr*Km_nadh)*(pyr*NADH - lac*NAD/Keq)/((1 + pyr/Km_pyr + lac/Km_lac)
@@ -58,7 +72,7 @@ The rate laws, one choice each, with the reason:
   becomes `O2/(Km + O2) * 1/(1 + (O2/Ki)^n)`, smooth, 0 without oxygen (which
   it consumes) and small at normoxia.
 - ROS detoxification: `ROS + 2 GSH -> GSSG` (glutathione peroxidase), the
-  ported law `Vmax*GSH*ROS/(Km + ROS)` with the stoichiometry of the enzyme.
+  ported law `k*GSH*ROS/(Km + ROS)` with the stoichiometry of the enzyme.
 - Glutathione reductase: `GSSG + NADPH -> 2 GSH + NADP`, the ported law with
   NADPH, which the ported model replaced by NADH.
 - Pentose phosphate pathway: `glc + 12 NADP -> 12 NADPH + 6 CO2`, the net
@@ -87,7 +101,7 @@ The rate laws, one choice each, with the reason:
 """
 
 import dataclasses
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import NamedTuple
 
@@ -102,7 +116,7 @@ from sbmlutils.factory import (
 from sbmlutils.factory.units import UnitDefinition
 from sbmlutils.metadata import BQB, SBO
 
-from pkpdsim.database.tables import entry
+from pkpdsim.database.tables import entry, load
 from pkpdsim.pbpk.annotation import initial_assignment
 from pkpdsim.pbpk.placement import value_parameter
 from pkpdsim.pbpk.units import U
@@ -110,20 +124,27 @@ from pkpdsim.pbpk.values import FrozenMap, Value
 from pkpdsim.perfusion import ids
 
 __all__ = [
+    "PROCESSES",
     "Buffer",
     "Composition",
     "CoreObjects",
     "CoreParameters",
     "buffer_objects",
     "buffer_parameters",
-    "perfusate_species",
+    "core_parameters",
+    "perfusate_objects",
     "zone_objects",
 ]
 
-PORTED = "PVL liver model, pkdb_models misc/machine_perfusion, to be fitted"
-"""The note of a value of the ported liver model."""
-
 _TABLE = "perfusion"
+
+_UNITS: dict[str, UnitDefinition] = {
+    "mM": U.mM,
+    "mmol/min/l": U.mmole_per_min_l,
+    "1/min": U.per_min,
+    "dimensionless": U.dimensionless,
+}
+"""The units of the model for the units of the perfusion table."""
 
 
 def _number(section: str, key: str) -> float:
@@ -134,20 +155,21 @@ def _number(section: str, key: str) -> float:
     return value
 
 
-def _table(section: str, key: str, unit: UnitDefinition) -> Value:
-    """Get a number of the perfusion table as a value in `unit`."""
+def _value(section: str, key: str) -> Value:
+    """Get a number of the perfusion table with its unit, source and notes.
+
+    Raises:
+        ValueError: if the unit of the number is no unit of `_UNITS`.
+    """
     e = entry(_TABLE, section, key)
+    try:
+        unit = _UNITS[e.unit]
+    except KeyError:
+        raise ValueError(
+            f"tables/{_TABLE}.toml [{section}] {key}: unit '{e.unit}' is not a "
+            "unit of the core."
+        ) from None
     return Value(_number(section, key), unit, e.source, e.notes)
-
-
-def _ported(value: float, unit: UnitDefinition, note: str | None = None) -> Value:
-    """Get a value of the ported liver model, with a remark on a change."""
-    return Value(value, unit, "ModelChoice", PORTED + (f"; {note}" if note else ""))
-
-
-def _new(value: float, unit: UnitDefinition, note: str) -> Value:
-    """Get an assumed value of a process which the ported model lacks."""
-    return Value(value, unit, "ModelChoice", f"{note}; to be fitted")
 
 
 class _Spec(NamedTuple):
@@ -200,9 +222,9 @@ _SPECS: dict[str, _Spec] = {
     "ROSP_Km_o2": _Spec("Km oxygen of the ROS production", _KM),
     "ROSP_Ki_o2": _Spec("Ki oxygen of the ROS production", _KI),
     "ROSP_n_o2": _Spec("Hill coefficient oxygen of the ROS production", _N),
-    "ROSDETOX_Vmax": _Spec("rate constant ROS detoxification", _K),
+    "ROSDETOX_k": _Spec("rate constant ROS detoxification", _K),
     "ROSDETOX_Km_ros": _Spec("Km ROS of the ROS detoxification", _KM),
-    "GR_Vmax": _Spec("rate constant glutathione reductase", _K),
+    "GR_k": _Spec("rate constant glutathione reductase", _K),
     "GR_Km_nadph": _Spec("Km NADPH of the glutathione reductase", _KM),
     "PPP_Vmax": _Spec("Vmax pentose phosphate pathway", _V),
     "PPP_Km_glc": _Spec("Km glucose of the pentose phosphate pathway", _KM),
@@ -274,20 +296,38 @@ _TERMS: dict[str, list[tuple[BQB, str]]] = {
 _ENZYMES = ("alt", "ast", "ldh")
 
 
+PROCESSES: tuple[str, ...] = (
+    "GLCIM",
+    "O2IM",
+    "LACEX",
+    "GLGP",
+    "GLC2PYR",
+    "LDH",
+    "ATPU",
+    "TCA",
+    "OXPHOS",
+    "ROSP",
+    "ROSDETOX",
+    "GR",
+    "PPP",
+    "BILE",
+)
+"""The processes of the living cells which a zonal profile may weigh."""
+
+
 @dataclass(frozen=True)
 class CoreParameters:
-    """The constants of the cellular core of a zone.
+    """The constants of the cellular core, shared by the zones of an organ.
 
-    Every field but `starts` is a constant of `_SPECS`, a parameter
-    `<field>_<zone>` of the zone (`ids.parameter`), in its unit: the
-    maximal rates per litre of cells (mmole/min/l, `Vmax` of a mass action
-    law in 1/min), the Michaelis and inhibition constants (mM), the Hill
-    coefficients, the ATP threshold and rate of necrosis, the contents of the
-    released quantities in mmole per litre of cells, the bile secretion in
-    litre of bile per minute and litre of cells and the living fraction at
-    the start. `starts` are the initial concentrations of the other species
-    of the cells (mM) by quantity. A zonal profile is a `CoreParameters` per
-    zone (`dataclasses.replace`).
+    Every field but `starts` is a constant of `_SPECS`, a parameter of the
+    model under its name (`core_parameters`), in its unit: the maximal rates
+    per litre of cells (mmole/min/l), the first order constants (1/min), the
+    Michaelis and inhibition constants (mM), the Hill coefficients, the ATP
+    threshold and rate of necrosis, the contents of the released quantities
+    in mmole per litre of cells, the bile secretion in litre of bile per
+    minute and litre of cells and the living fraction at the start. `starts`
+    are the initial concentrations of the other species of the cells (mM) by
+    quantity.
     """
 
     GLCIM_Vmax: Value
@@ -325,9 +365,9 @@ class CoreParameters:
     ROSP_Km_o2: Value
     ROSP_Ki_o2: Value
     ROSP_n_o2: Value
-    ROSDETOX_Vmax: Value
+    ROSDETOX_k: Value
     ROSDETOX_Km_ros: Value
-    GR_Vmax: Value
+    GR_k: Value
     GR_Km_nadph: Value
     PPP_Vmax: Value
     PPP_Km_glc: Value
@@ -346,136 +386,44 @@ class CoreParameters:
     BILE_Vmax: Value
     BILE_Km_atp: Value
     f_alive_start: Value
-    starts: FrozenMap[Value] = field(default_factory=lambda: _starts())
+    starts: FrozenMap[Value]
 
     @classmethod
-    def default(cls) -> "CoreParameters":
-        """Get the ported values of the liver model and the assumed new ones.
+    def default(cls, organ: str = "liver_rat") -> "CoreParameters":
+        """Get the constants of an organ from the parameter database.
+
+        Args:
+            organ: the organ of the sections `core_<organ>` (the constants)
+                and `core_<organ>_start` (the starts of the cells) of the
+                perfusion table.
 
         Returns:
-            The constants of the core; the bile secretion is the bile rate of
-            the study (`liver_rat` of the perfusion table) per litre of cells
-            at the ATP of the start.
+            The constants of the core; the bile secretion is derived from
+            the bile rate of the study (`[<organ>] bile_rate`, per g of
+            organ) per litre of cells (`cell_fraction`, 1 kg/l) at the ATP
+            of the start.
         """
-        mm, d, per_min, vmax = U.mM, U.dimensionless, U.per_min, U.mmole_per_min_l
-        starts = _starts()
+        section = f"core_{organ}"
+        start = f"{section}_start"
+        starts = FrozenMap({q: _value(start, q) for q in load(_TABLE)[start]})
         atp0 = starts["atp"].value
-        km_bile = 0.1
-        cell_fraction = _number("liver_rat", "cell_fraction")
-        # ul/min/g -> l/min per l of liver (1 kg/l) -> per l of cells, at ATP0
-        bile = _number("liver_rat", "bile_rate") * 1e-3 / cell_fraction
-        bile_vmax = bile * (km_bile + atp0) / atp0
-        return cls(
-            GLCIM_Vmax=_ported(100.0, vmax),
-            GLCIM_Km_glc=_ported(0.1, mm),
-            O2IM_Vmax=_ported(100.0, vmax),
-            O2IM_Km_o2=_ported(0.001, mm),
-            LACEX_Vmax=_ported(100.0, vmax),
-            LACEX_Km_lac=_ported(0.5, mm),
-            LACEX_h_cell=_new(
-                6.310e-5,
-                mm,
-                "the cytosolic protons of a hepatocyte at pH 7.2, held constant",
-            ),
-            GLGP_Vmax=_new(
-                0.2, vmax, "glycogenolysis of a fed or stressed donor liver"
-            ),
-            GLGP_Km_glyc=_new(10.0, mm, "glycogen in glucosyl units"),
-            GLC2PYR_Vmax=_ported(0.2, vmax),
-            GLC2PYR_Km_glc=_ported(0.5, mm),
-            GLC2PYR_Km_adp=_ported(0.01, mm),
-            GLC2PYR_Km_nad=_new(0.01, mm, "the glycolysis reduces NAD (GAPDH)"),
-            GLC2PYR_Ki_atp=_ported(1.5, mm),
-            GLC2PYR_n_atp=_ported(4.0, d),
-            LDH_Vmax=_ported(1.0, vmax),
-            LDH_Km_pyr=_ported(1.0, mm),
-            LDH_Km_lac=_ported(1.0, mm),
-            LDH_Km_nadh=_ported(0.1, mm, "the activation constant of NADH, a Km now"),
-            LDH_Km_nad=_new(0.1, mm, "the reverse LDH reduces NAD"),
-            LDH_Keq=_ported(1.5, d, "of lac*NAD/(pyr*NADH) now, of lac/pyr before"),
-            ATPU_Vmax=_ported(0.1, vmax),
-            ATPU_Km_atp=_ported(0.01, mm),
-            TCA_Vmax=_ported(0.01, vmax),
-            TCA_Km_pyr=_ported(0.1, mm),
-            TCA_Km_nad=_ported(0.01, mm),
-            OXPHOS_Vmax=_ported(0.03, vmax),
-            OXPHOS_Km_nadh=_ported(0.01, mm),
-            OXPHOS_Km_o2=_ported(0.001, mm),
-            OXPHOS_Km_adp=_ported(0.01, mm),
-            ROSP_Vmax=_ported(0.005, vmax),
-            ROSP_Km_nadh=_ported(0.01, mm, "OXPHOS_Km_nadh before"),
-            ROSP_Km_o2=_new(0.001, mm, "the ROS production consumes oxygen"),
-            ROSP_Ki_o2=_ported(0.01, mm, "ros_o2_threshold of a step function before"),
-            ROSP_n_o2=_new(4.0, d, "the steepness of the smooth oxygen threshold"),
-            ROSDETOX_Vmax=_ported(0.005, per_min),
-            ROSDETOX_Km_ros=_ported(0.5, mm),
-            GR_Vmax=_ported(0.005, per_min, "GSH_Vmax before"),
-            GR_Km_nadph=_ported(0.1, mm, "GSH_Km_nadh of NADH before"),
-            PPP_Vmax=_new(0.005, vmax, "the source of NADPH, as fast as its use"),
-            PPP_Km_glc=_new(0.5, mm, "as the glycolysis"),
-            PPP_Km_nadp=_new(0.01, mm, "saturated at the NADP of the start"),
-            NEC_k=_new(0.02, per_min, "a dying zone dies within about an hour"),
-            NEC_atp=_ported(
-                0.1, mm, "atp_necrosis_threshold of a step function before"
-            ),
-            NEC_n_atp=_new(4.0, d, "the steepness of the smooth ATP threshold"),
-            NEC_h=_new(
-                1e-4, mm, "the protons of pH 7.0 (the study: 6.9 to 7.1 at 5 h)"
-            ),
-            NEC_n_h=_new(
-                8.0, d, "steep, so the fresh perfusate (pH 7.4) drives no damage"
-            ),
-            PROTEINR_k=_ported(0.2, per_min, "in 1/min, 1/min/l before"),
-            KR_k=_new(
-                1.0, per_min, "a small ion leaves a ruptured cell faster than an enzyme"
-            ),
-            ALT_content=_ported(1.0 / 1.5, mm, "1.0 mmole in the 1.5 l liver before"),
-            AST_content=_ported(0.7 / 1.5, mm, "0.7 mmole in the 1.5 l liver before"),
-            LDH_content=_ported(0.2 / 1.5, mm, "0.2 mmole in the 1.5 l liver before"),
-            K_content=_new(
-                140.0, mm, "the intracellular potassium of a mammalian cell"
-            ),
-            BILE_Vmax=Value(
-                bile_vmax,
-                per_min,
-                "ModelChoice",
-                "derived: bile_rate of [liver_rat] of the perfusion table (ul/min/g) "
-                "at 1 kg/l over cell_fraction, divided by the ATP saturation at the "
-                f"start ({atp0} mM, Km {km_bile} mM); to be fitted",
-            ),
-            BILE_Km_atp=_new(km_bile, mm, "the ATP-dependent export of the bile salts"),
-            f_alive_start=_new(
-                1.0, d, "a zone starts alive; the warm ischemia may lower it"
-            ),
-            starts=starts,
+        km = _value(section, "BILE_Km_atp")
+        # ul/min/g -> l/min per l of organ (1 kg/l) -> per l of cells, at ATP0
+        rate = _number(organ, "bile_rate") * 1e-3 / _number(organ, "cell_fraction")
+        bile = Value(
+            rate * (km.value + atp0) / atp0,
+            U.per_min,
+            "ModelChoice",
+            f"derived: [{organ}] bile_rate of the perfusion table (ul/min/g) at "
+            "1 kg/l over cell_fraction, divided by the ATP saturation at the "
+            f"start (ATP {atp0} mM, BILE_Km_atp {km.value} mM); to be fitted",
         )
-
-
-def _starts() -> FrozenMap[Value]:
-    """Get the initial concentrations of the cells but the released quantities."""
-    mm = U.mM
-    return FrozenMap(
-        {
-            "glc": _ported(5.0, mm),
-            "glyc": _new(
-                200.0,
-                mm,
-                "glucosyl units of the glycogen of a fed rat liver (about 300 mM) after the ischemia",
-            ),
-            "o2": _ported(0.085, mm),
-            "pyr": _ported(0.8, mm),
-            "lac": _ported(1.0, mm),
-            "atp": _ported(3.0, mm),
-            "adp": _ported(1.0, mm),
-            "nad": _ported(0.1, mm),
-            "nadh": _ported(3.9, mm),
-            "nadp": _new(0.03, mm, "the NADP of a liver, mostly reduced"),
-            "nadph": _new(0.3, mm, "the NADPH of a liver, mostly reduced"),
-            "ros": _ported(0.0, mm),
-            "gsh": _ported(1.0, mm),
-            "gssg": _ported(0.0, mm),
+        values = {
+            f.name: _value(section, f.name)
+            for f in dataclasses.fields(cls)
+            if f.name not in ("starts", "BILE_Vmax")
         }
-    )
+        return cls(**values, BILE_Vmax=bile, starts=starts)
 
 
 @dataclass(frozen=True)
@@ -499,9 +447,10 @@ class Buffer:
                 10 ** (3 - _number("acid_base", "pK")),
                 U.mM,
                 pk.source,
-                f"derived: 10^-pK M of [acid_base] pK of the perfusion table; {pk.notes}",
+                f"derived: 10^-pK M of [acid_base] pK of the perfusion table; "
+                f"{pk.notes}",
             ),
-            k_hydration=_table("acid_base", "k_hydration", U.per_min),
+            k_hydration=_value("acid_base", "k_hydration"),
         )
 
 
@@ -509,8 +458,9 @@ class Buffer:
 class Composition:
     """The composition of a perfusate, the start of the perfusate species.
 
-    The free protons and the dissolved CO2 follow from the pH and the
-    bicarbonate by the buffer; a fresh perfusate has no enzymes.
+    The free protons follow from the pH; the dissolved CO2 is the initial
+    assignment of the buffer equilibrium (`perfusate_objects`); a fresh
+    perfusate has no enzymes.
 
     Attributes:
         glc: glucose (mM).
@@ -531,26 +481,29 @@ class Composition:
     @classmethod
     def default(cls) -> "Composition":
         """Get the perfusate of the perfusion table (`perfusate`)."""
-        mm = U.mM
         return cls(
-            glc=_table("perfusate", "glucose", mm),
-            o2=_table("perfusate", "O2", mm),
-            lac=_table("perfusate", "lactate", mm),
-            hco3=_table("perfusate", "HCO3", mm),
-            k=_table("perfusate", "K", mm),
-            ph=_table("perfusate", "pH", U.dimensionless),
+            glc=_value("perfusate", "glucose"),
+            o2=_value("perfusate", "O2"),
+            lac=_value("perfusate", "lactate"),
+            hco3=_value("perfusate", "HCO3"),
+            k=_value("perfusate", "K"),
+            ph=_value("perfusate", "pH"),
         )
 
-    def concentrations(self, buffer: Buffer) -> dict[str, float]:
-        """Get the concentration of every quantity of `ids.PERFUSATE` (mM)."""
-        h = 10 ** (3 - self.ph.value)
-        values = {
+    def concentrations(self) -> dict[str, float | None]:
+        """Get the start of every quantity of `ids.PERFUSATE` (mM).
+
+        Returns:
+            The concentrations, `None` for the CO2, whose start is the
+            buffer equilibrium.
+        """
+        values: dict[str, float | None] = {
             "glc": self.glc.value,
             "o2": self.o2.value,
             "lac": self.lac.value,
-            "co2": h * self.hco3.value / buffer.ka.value,
+            "co2": None,
             "hco3": self.hco3.value,
-            "h": h,
+            "h": 10 ** (3 - self.ph.value),
             "k": self.k.value,
         }
         return {q: values.get(q, 0.0) for q in ids.PERFUSATE}
@@ -591,7 +544,7 @@ def _species(
     compartment: str,
     quantity: str,
     where: str,
-    start: float,
+    start: float | None,
     notes: str | None = None,
 ) -> Species:
     """Get a concentration species of a quantity."""
@@ -609,10 +562,37 @@ def _species(
 
 
 def _state(
-    sid: str, value: float, unit: UnitDefinition, name: str, sbo: str
+    sid: str, value: float | None, unit: UnitDefinition, name: str, sbo: str
 ) -> Parameter:
     """Get a parameter which a rule sets."""
     return Parameter(sid, value, unit, constant=False, name=name, sboTerm=sbo)
+
+
+def core_parameters(params: CoreParameters) -> list[Parameter]:
+    """Get the constants of the core, ids of the whole model.
+
+    Args:
+        params: the constants.
+
+    Returns:
+        A constant parameter of every field but `starts`, under its name,
+        with the citation of its source in the notes.
+
+    Raises:
+        TypeError: if the unit of a constant is no unit definition.
+    """
+    parameters: list[Parameter] = []
+    for f in dataclasses.fields(params):
+        if f.name == "starts":
+            continue
+        spec = _SPECS[f.name]
+        value: Value = getattr(params, f.name)
+        if not isinstance(value.unit, UnitDefinition):
+            raise TypeError(f"The unit of '{f.name}' is no UnitDefinition.")
+        parameters.append(
+            value_parameter(f.name, value, value.unit, spec.name, spec.sbo)
+        )
+    return parameters
 
 
 def buffer_parameters(buffer: Buffer | None = None) -> list[Parameter]:
@@ -643,30 +623,34 @@ def buffer_parameters(buffer: Buffer | None = None) -> list[Parameter]:
     ]
 
 
-def perfusate_species(
-    site: str,
-    compartment: str,
-    composition: Composition | None = None,
-    buffer: Buffer | None = None,
-) -> list[Species]:
+def perfusate_objects(
+    site: str, compartment: str, composition: Composition | None = None
+) -> CoreObjects:
     """Get the perfusate species of a site, `ids.species(quantity, site)`.
 
     Args:
         site: the site (a zone for its vascular space, `res`).
         compartment: the compartment of the perfusate at the site.
         composition: the start, `Composition.default()` by default.
-        buffer: the buffer which gives the start of the protons and CO2.
 
     Returns:
-        A species of every quantity of `ids.PERFUSATE`, in mM.
+        A species of every quantity of `ids.PERFUSATE`, in mM, and the
+        initial assignment of the CO2 at the equilibrium of the buffer with
+        the protons and the bicarbonate, `CO2 = h*HCO3/Ka_hco3`.
     """
-    start = (composition or Composition.default()).concentrations(
-        buffer or Buffer.default()
+    start = (composition or Composition.default()).concentrations()
+    h, hco3, co2 = (ids.species(q, site) for q in ("h", "hco3", "co2"))
+    return CoreObjects(
+        species=[
+            _species(ids.species(q, site), compartment, q, f"perfusate {site}", c)
+            for q, c in start.items()
+        ],
+        assignments=[
+            initial_assignment(
+                co2, f"{h} * {hco3}/{ids.BUFFER_KA}", U.mM, f"CO2 (perfusate {site})"
+            )
+        ],
     )
-    return [
-        _species(ids.species(q, site), compartment, q, f"perfusate {site}", start[q])
-        for q in ids.PERFUSATE
-    ]
 
 
 def buffer_objects(site: str, compartment: str) -> CoreObjects:
@@ -698,7 +682,7 @@ def buffer_objects(site: str, compartment: str) -> CoreObjects:
                 notes="H+ + HCO3- <-> CO2 + H2O, at the rate of the hydration of CO2.",
             )
         ],
-        parameters=[_state(ph, 7.4, U.dimensionless, f"pH ({site})", SBO.PH)],
+        parameters=[_state(ph, None, U.dimensionless, f"pH ({site})", SBO.PH)],
         rules=[
             AssignmentRule(
                 ph,
@@ -717,8 +701,8 @@ def zone_objects(
     vascular: str,
     params: CoreParameters,
     *,
+    profile: Mapping[str, float] | None = None,
     composition: Composition | None = None,
-    buffer: Buffer | None = None,
     bile: bool = True,
 ) -> CoreObjects:
     """Get the cellular core of a zone, its vascular space included.
@@ -727,50 +711,66 @@ def zone_objects(
         zone: the zone id (`ids.zone_id`).
         cells: the compartment of the cells of the zone.
         vascular: the compartment of the vascular space of the zone.
-        params: the constants of the core of the zone.
+        params: the constants of the core, of which the zone reads the starts
+            of its cells; the constants themselves are `core_parameters`.
+        profile: the factor of a process of `PROCESSES` in this zone, the
+            constant `p_<process>_<zone>` in its rate (normalised by the
+            organ); a process without a factor has none.
         composition: the start of the perfusate species of the vascular space.
-        buffer: the buffer which gives the start of the protons and CO2; the
-            model has its constants (`buffer_parameters`) once.
         bile: the zone secretes bile (a liver), `Vbile_<zone>`.
 
     Returns:
         The species of the cells, the necrotic cells and the vascular space,
-        the reactions, the constants `<name>_<zone>`, the rules of the pH and
-        of the rate of necrosis, the rate rules of the living fraction and of
-        the bile, the initial assignments of the contents of the cells. The
-        rate laws read `f_T` and the buffer constants, which the model defines.
+        the reactions, the factors of the profile, the rules of the pH and of
+        the rate of necrosis, the rate rules of the living fraction and of
+        the bile, the initial assignments of the contents of the cells, of
+        the living fraction and of the CO2 of the perfusate. The rate laws
+        read the constants of the core, `f_T` and the buffer constants, which
+        the model defines once.
 
     Raises:
-        ValueError: if `zone` is no zone id.
+        ValueError: if `zone` is no zone id, or the profile has a process
+            which is not in `PROCESSES` or a factor which is negative.
     """
     if not ids.is_zone(zone):
         raise ValueError(f"'{zone}' is no zone id (z1, z2, ...).")
-    p = _ids(ids.parameter, zone)
+    profile = dict(profile or {})
+    unknown = sorted(set(profile) - set(PROCESSES))
+    if unknown:
+        raise ValueError(f"No processes of the core: {unknown}, see PROCESSES.")
+    negative = sorted(k for k, x in profile.items() if not x >= 0)
+    if negative:
+        raise ValueError(f"The profile of {negative} in {zone} is not >= 0.")
     cell, dead = ids.cell_site(zone), ids.dead_site(zone)
     c = _ids(ids.species, cell)
     v = _ids(ids.species, zone)
     alive, nec = ids.alive(zone), ids.necrosis_rate(zone)
-    live = f"{ids.F_T} * {alive} * {cells}"
+    base = f"{ids.F_T} * {alive} * {cells}"
 
-    out = CoreObjects()
-    for f in dataclasses.fields(params):
-        if f.name == "starts":
-            continue
-        spec = _SPECS[f.name]
-        value: Value = getattr(params, f.name)
-        if not isinstance(value.unit, UnitDefinition):
-            raise TypeError(f"The unit of '{f.name}' is no UnitDefinition.")
-        out.parameters.append(
-            value_parameter(p(f.name), value, value.unit, spec.name, spec.sbo)
-        )
+    def live(process: str) -> str:
+        """The scale of a process: temperature, living cells, profile."""
+        if process in profile:
+            return f"{base} * {ids.profile(process, zone)}"
+        return base
+
+    out = CoreObjects(
+        parameters=[
+            Parameter(
+                ids.profile(process, zone),
+                factor,
+                U.dimensionless,
+                constant=True,
+                name=f"zonal factor of {process} ({zone})",
+                sboTerm=_P,
+            )
+            for process, factor in profile.items()
+        ]
+    )
     for q in ids.CELL:
         if q in _CONTENTS:
-            content = p(_CONTENTS[q])
-            out.species.append(
-                _species(
-                    c(q), cells, q, f"cells {zone}", getattr(params, _CONTENTS[q]).value
-                )
-            )
+            content = _CONTENTS[q]
+            value = getattr(params, content).value
+            out.species.append(_species(c(q), cells, q, f"cells {zone}", value))
             out.assignments.append(
                 initial_assignment(c(q), content, U.mM, f"{_NAMES[q]} (cells {zone})")
             )
@@ -783,21 +783,20 @@ def zone_objects(
         out.species.append(
             _species(ids.species(q, dead), cells, q, f"necrotic cells {zone}", 0.0)
         )
-    out += CoreObjects(species=perfusate_species(zone, vascular, composition, buffer))
+    out += perfusate_objects(zone, vascular, composition)
     out += buffer_objects(zone, vascular)
 
     def mm(s: str, km: str) -> str:
-        return f"{s}/({p(km)} + {s})"
+        return f"{s}/({km} + {s})"
 
     def inhibition(s: str, ki: str, n: str) -> str:
-        return f"1 dimensionless/(1 dimensionless + power({s}/{p(ki)}, {p(n)}))"
+        return f"1 dimensionless/(1 dimensionless + power(abs({s})/{ki}, {n}))"
 
     def exchange(process: str, km: str, source: str, sink: str, back: str) -> str:
         """The reversible facilitated transport from `source` to `sink`."""
-        k = p(km)
         return (
-            f"{live} * {p(process + '_Vmax')}/{k} * ({source} - {back})"
-            f"/(1 dimensionless + {source}/{k} + {sink}/{k})"
+            f"{live(process)} * {process}_Vmax/{km} * ({source} - {back})"
+            f"/(1 dimensionless + {source}/{km} + {sink}/{km})"
         )
 
     t = SBO.TRANSPORT_REACTION
@@ -809,37 +808,37 @@ def zone_objects(
          exchange("O2IM", "O2IM_Km_o2", v("o2"), c("o2"), c("o2")), t),
         ("LACEX", "lactate export with a proton", f"{c('lac')} <-> {v('lac')} + {v('h')}",
          exchange("LACEX", "LACEX_Km_lac", c("lac"), v("lac"),
-                  f"{v('lac')} * {v('h')}/{p('LACEX_h_cell')}"), t),
+                  f"{v('lac')} * {v('h')}/LACEX_h_cell"), t),
         ("GLGP", "glycogenolysis", f"{c('glyc')} -> {c('glc')}",
-         f"{live} * {p('GLGP_Vmax')} * {mm(c('glyc'), 'GLGP_Km_glyc')}", b),
+         f"{live('GLGP')} * GLGP_Vmax * {mm(c('glyc'), 'GLGP_Km_glyc')}", b),
         ("GLC2PYR", "glycolysis",
          f"{c('glc')} + 2 {c('adp')} + 2 {c('nad')} -> 2 {c('pyr')} + 2 {c('atp')} + 2 {c('nadh')}",
-         f"{live} * {p('GLC2PYR_Vmax')} * {mm(c('glc'), 'GLC2PYR_Km_glc')}"
+         f"{live('GLC2PYR')} * GLC2PYR_Vmax * {mm(c('glc'), 'GLC2PYR_Km_glc')}"
          f" * {mm(c('adp'), 'GLC2PYR_Km_adp')} * {mm(c('nad'), 'GLC2PYR_Km_nad')}"
          f" * {inhibition(c('atp'), 'GLC2PYR_Ki_atp', 'GLC2PYR_n_atp')}", b),
         ("LDH", "lactate dehydrogenase", f"{c('pyr')} + {c('nadh')} <-> {c('lac')} + {c('nad')}",
-         f"{live} * {p('LDH_Vmax')}/({p('LDH_Km_pyr')} * {p('LDH_Km_nadh')})"
-         f" * ({c('pyr')} * {c('nadh')} - {c('lac')} * {c('nad')}/{p('LDH_Keq')})"
-         f"/((1 dimensionless + {c('pyr')}/{p('LDH_Km_pyr')} + {c('lac')}/{p('LDH_Km_lac')})"
-         f" * (1 dimensionless + {c('nadh')}/{p('LDH_Km_nadh')} + {c('nad')}/{p('LDH_Km_nad')}))", b),
+         f"{live('LDH')} * LDH_Vmax/(LDH_Km_pyr * LDH_Km_nadh)"
+         f" * ({c('pyr')} * {c('nadh')} - {c('lac')} * {c('nad')}/LDH_Keq)"
+         f"/((1 dimensionless + {c('pyr')}/LDH_Km_pyr + {c('lac')}/LDH_Km_lac)"
+         f" * (1 dimensionless + {c('nadh')}/LDH_Km_nadh + {c('nad')}/LDH_Km_nad))", b),
         ("ATPU", "ATP use", f"{c('atp')} -> {c('adp')}",
-         f"{live} * {p('ATPU_Vmax')} * {mm(c('atp'), 'ATPU_Km_atp')}", b),
+         f"{live('ATPU')} * ATPU_Vmax * {mm(c('atp'), 'ATPU_Km_atp')}", b),
         ("TCA", "TCA cycle", f"{c('pyr')} + 5 {c('nad')} -> 5 {c('nadh')} + 3 {v('co2')}",
-         f"{live} * {p('TCA_Vmax')} * {mm(c('pyr'), 'TCA_Km_pyr')} * {mm(c('nad'), 'TCA_Km_nad')}", b),
+         f"{live('TCA')} * TCA_Vmax * {mm(c('pyr'), 'TCA_Km_pyr')} * {mm(c('nad'), 'TCA_Km_nad')}", b),
         ("OXPHOS", "oxidative phosphorylation",
          f"{c('nadh')} + 0.5 {c('o2')} + 3 {c('adp')} -> {c('nad')} + 3 {c('atp')}",
-         f"{live} * {p('OXPHOS_Vmax')} * {mm(c('nadh'), 'OXPHOS_Km_nadh')}"
+         f"{live('OXPHOS')} * OXPHOS_Vmax * {mm(c('nadh'), 'OXPHOS_Km_nadh')}"
          f" * {mm(c('o2'), 'OXPHOS_Km_o2')} * {mm(c('adp'), 'OXPHOS_Km_adp')}", b),
         ("ROSP", "ROS production", f"{c('nadh')} + {c('o2')} -> {c('nad')} + {c('ros')}",
-         f"{live} * {p('ROSP_Vmax')} * {mm(c('nadh'), 'ROSP_Km_nadh')} * {mm(c('o2'), 'ROSP_Km_o2')}"
+         f"{live('ROSP')} * ROSP_Vmax * {mm(c('nadh'), 'ROSP_Km_nadh')} * {mm(c('o2'), 'ROSP_Km_o2')}"
          f" * {inhibition(c('o2'), 'ROSP_Ki_o2', 'ROSP_n_o2')}", b),
         ("ROSDETOX", "ROS detoxification", f"{c('ros')} + 2 {c('gsh')} -> {c('gssg')}",
-         f"{live} * {p('ROSDETOX_Vmax')} * {c('gsh')} * {mm(c('ros'), 'ROSDETOX_Km_ros')}", b),
+         f"{live('ROSDETOX')} * ROSDETOX_k * {c('gsh')} * {mm(c('ros'), 'ROSDETOX_Km_ros')}", b),
         ("GR", "glutathione reductase", f"{c('gssg')} + {c('nadph')} -> 2 {c('gsh')} + {c('nadp')}",
-         f"{live} * {p('GR_Vmax')} * {c('gssg')} * {mm(c('nadph'), 'GR_Km_nadph')}", b),
+         f"{live('GR')} * GR_k * {c('gssg')} * {mm(c('nadph'), 'GR_Km_nadph')}", b),
         ("PPP", "pentose phosphate pathway",
          f"{c('glc')} + 12 {c('nadp')} -> 12 {c('nadph')} + 6 {v('co2')}",
-         f"{live} * {p('PPP_Vmax')} * {mm(c('glc'), 'PPP_Km_glc')} * {mm(c('nadp'), 'PPP_Km_nadp')}", b),
+         f"{live('PPP')} * PPP_Vmax * {mm(c('glc'), 'PPP_Km_glc')} * {mm(c('nadp'), 'PPP_Km_nadp')}", b),
     ]  # fmt: skip
     for q in ids.RELEASED:
         name, d = _NAMES[q], ids.species(q, dead)
@@ -847,7 +846,7 @@ def zone_objects(
             (f"{q.upper()}D", f"{name} of dying cells", f"{c(q)} -> {d}",
              f"{nec} * {c(q)} * {cells}", SBO.PROCESS),
             (f"{q.upper()}R", f"{name} release of necrotic cells", f"{d} -> {v(q)}",
-             f"{p(_RELEASE[q])} * {d} * {cells}", t),
+             f"{_RELEASE[q]} * {d} * {cells}", t),
         ]  # fmt: skip
     for sid, name, equation, rate, sbo in reactions:
         out.reactions.append(
@@ -862,8 +861,8 @@ def zone_objects(
         )
 
     atp, h = c("atp"), v("h")
-    power_atp = f"power({atp}/{p('NEC_atp')}, {p('NEC_n_atp')})"
-    power_h = f"power({h}/{p('NEC_h')}, {p('NEC_n_h')})"
+    power_atp = f"power(abs({atp})/NEC_atp, NEC_n_atp)"
+    power_h = f"power(abs({h})/NEC_h, NEC_n_h)"
     out.parameters += [
         _state(nec, 0.0, U.per_min, f"rate of necrosis ({zone})", _K),
         _state(
@@ -876,13 +875,13 @@ def zone_objects(
     ]
     out.assignments.append(
         initial_assignment(
-            alive, p("f_alive_start"), U.dimensionless, f"living fraction ({zone})"
+            alive, "f_alive_start", U.dimensionless, f"living fraction ({zone})"
         )
     )
     out.rules.append(
         AssignmentRule(
             nec,
-            f"{p('NEC_k')} * {ids.F_T} * (1 dimensionless - {power_atp}"
+            f"NEC_k * {ids.F_T} * (1 dimensionless - {power_atp}"
             f"/((1 dimensionless + {power_atp}) * (1 dimensionless + {power_h})))",
             U.per_min,
             name=f"rate of necrosis ({zone})",
@@ -905,7 +904,7 @@ def zone_objects(
         out.rate_rules.append(
             RateRule(
                 vbile,
-                f"{live} * {p('BILE_Vmax')} * {mm(atp, 'BILE_Km_atp')}",
+                f"{live('BILE')} * BILE_Vmax * {mm(atp, 'BILE_Km_atp')}",
                 U.l_per_min,
                 name=f"bile secretion ({zone})",
                 sboTerm=SBO.MATHEMATICAL_EXPRESSION,

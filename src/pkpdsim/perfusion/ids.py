@@ -13,11 +13,13 @@ the cells (glucose, oxygen, lactate, potassium, the enzymes) has the same
 quantity token at both sites. The sites of the circuit (the reservoir `res`,
 the tubing) are named by the circuit.
 
-The parameters, reactions and rules of the core of a zone carry the zone as
-suffix, `<name>_<zone>` (`GLC2PYR_Vmax_z3`, `OXPHOS_z3`), so every zone has
-its own constants and a zonal profile is a value per zone. The constants of
-the perfusate (the bicarbonate buffer) and the temperature factor `F_T` are
-ids of the whole model without a suffix.
+The reactions and rules of the core of a zone carry the zone as suffix,
+`<name>_<zone>` (`OXPHOS_z3`, `v_nec_z3`). The constants of the core are
+shared by the zones and are ids of the whole model under their name
+(`GLC2PYR_Vmax`), as the constants of the perfusate (the bicarbonate buffer)
+and the temperature factor `F_T`; a zonal profile of a process is the factor
+`p_<process>_<zone>` (`profile`), the pattern of the zonated liver of the
+PBPK library.
 """
 
 import re
@@ -35,8 +37,8 @@ __all__ = [
     "dead_site",
     "is_zone",
     "necrosis_rate",
-    "parameter",
     "ph",
+    "profile",
     "reaction",
     "species",
     "zone_id",
@@ -142,9 +144,9 @@ def dead_site(zone: str) -> str:
     return f"{zone}_dead"
 
 
-def parameter(name: str, zone: str) -> str:
-    """Get the id of a constant of the core of a zone, `<name>_<zone>`."""
-    return f"{name}_{zone}"
+def profile(process: str, zone: str) -> str:
+    """Get the id of the zonal factor of a process, `p_<process>_<zone>`."""
+    return f"p_{process}_{zone}"
 
 
 def reaction(name: str, zone: str) -> str:

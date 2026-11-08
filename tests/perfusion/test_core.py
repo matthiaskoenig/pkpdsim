@@ -1,6 +1,7 @@
 """Tests of the cellular core of a zone of a perfused organ."""
 
 import dataclasses
+import math
 import subprocess
 import sys
 from pathlib import Path
@@ -19,6 +20,31 @@ if TYPE_CHECKING:
 
 CELL = ids.cell_site(ZONE)
 DEAD = ids.dead_site(ZONE)
+
+
+def _replace(params: core.CoreParameters, **values: float) -> core.CoreParameters:
+    """The constants with other numbers of some of them."""
+    changes = {
+        k: dataclasses.replace(getattr(params, k), value=x) for k, x in values.items()
+    }
+    return dataclasses.replace(params, **changes)
+
+
+def _starts(params: core.CoreParameters, **values: float) -> core.CoreParameters:
+    """The constants with other starts of the cells."""
+    starts = dict(params.starts)
+    for q, x in values.items():
+        starts[q] = dataclasses.replace(starts[q], value=x)
+    return dataclasses.replace(params, starts=FrozenMap(starts))
+
+
+def _composition(**values: float) -> core.Composition:
+    """The default perfusate with other numbers of some quantities."""
+    c = core.Composition.default()
+    changes = {
+        k: dataclasses.replace(getattr(c, k), value=x) for k, x in values.items()
+    }
+    return dataclasses.replace(c, **changes)
 
 
 def _species_ids(model: libsbml.Model) -> set[str]:
@@ -77,12 +103,41 @@ def test_zone_objects_build_a_valid_model(tmp_path: Path) -> None:
     assert result.validation.warning_count == 0
 
 
-def test_every_element_has_a_name_and_an_sbo_term(tmp_path: Path) -> None:
-    objects = core.zone_objects(ZONE, CELLS, VASCULAR, core.CoreParameters.default())
+def test_the_zones_share_the_constants(tmp_path: Path) -> None:
+    """Two zones read one parameter per constant, the profile weighs a
+    process per zone."""
+    result = zone_model(
+        tmp_path / "zones.xml",
+        zones=("z1", "z2"),
+        profiles={"z1": {"OXPHOS": 1.5}, "z2": {"OXPHOS": 0.5}},
+    )
+    assert result.validation is not None
+    assert result.validation.error_count == 0
+    assert result.validation.warning_count == 0
+    r = load_zone(tmp_path / "zones.xml")
+    assert r["GLC2PYR_Vmax"] == 0.2
+    assert r[ids.profile("OXPHOS", "z1")] == 1.5
+    assert r["OXPHOS_z1"] == pytest.approx(3 * r["OXPHOS_z2"], rel=1e-12)
+    assert r["GLC2PYR_z1"] == pytest.approx(r["GLC2PYR_z2"], rel=1e-12)
+
+
+def test_a_profile_names_processes_of_the_core() -> None:
+    params = core.CoreParameters.default()
+    with pytest.raises(ValueError, match="No processes of the core"):
+        core.zone_objects(ZONE, CELLS, VASCULAR, params, profile={"NEC": 1.0})
+    with pytest.raises(ValueError, match="not >= 0"):
+        core.zone_objects(ZONE, CELLS, VASCULAR, params, profile={"TCA": -1.0})
+
+
+def test_every_element_has_a_name_and_an_sbo_term() -> None:
+    params = core.CoreParameters.default()
+    objects = core.zone_objects(ZONE, CELLS, VASCULAR, params, profile={"OXPHOS": 1.0})
     elements = [
         *objects.species,
         *objects.reactions,
         *objects.parameters,
+        *core.core_parameters(params),
+        *core.buffer_parameters(),
         *objects.rules,
         *objects.rate_rules,
         *objects.assignments,
@@ -101,13 +156,16 @@ def test_the_ids_follow_the_scheme() -> None:
         assert ids.species(q, CELL) in sids
     for q in ids.RELEASED:
         assert ids.species(q, DEAD) in sids
+    assert not objects.parameters[0].sid.startswith("GLCIM")
     assert ids.zone_id(3) == "z3"
     assert ids.species("o2", "res") == "o2_res"
     with pytest.raises(ValueError, match="numbered from 1"):
         ids.zone_id(0)
 
 
-def test_every_constant_is_a_value_with_a_source() -> None:
+def test_every_constant_is_a_value_of_the_database() -> None:
+    """Every constant is a value of the perfusion table with a source; the
+    module holds no numbers of its own."""
     params = core.CoreParameters.default()
     for field in dataclasses.fields(params):
         v = getattr(params, field.name)
@@ -117,41 +175,63 @@ def test_every_constant_is_a_value_with_a_source() -> None:
             assert x.source is not None, field.name
             if x.source == "ModelChoice":
                 assert x.notes, field.name
+    assert params.GLC2PYR_Vmax.notes is not None
+    assert "basis changed" in params.GLC2PYR_Vmax.notes
+    assert params.LDH_Keq.notes is not None
+    assert "1e4" in params.LDH_Keq.notes
 
 
 def test_no_rate_divides_by_a_species(tmp_path: Path) -> None:
-    """No kinetic law has a species in a denominator that can reach 0."""
+    """No kinetic law or rule has a species in a denominator that can reach 0."""
     zone_model(tmp_path / "zone.xml")
     doc = libsbml.readSBMLFromFile(str(tmp_path / "zone.xml"))
     model = doc.getModel()
     species = _species_ids(model)
-    problems: dict[str, list[str]] = {}
-    for k in range(model.getNumReactions()):
-        reaction = model.getReaction(k)
-        found = _unsafe_divisions(reaction.getKineticLaw().getMath(), species)
-        if found:
-            problems[reaction.getId()] = found
+    maths = {
+        model.getReaction(k).getId(): model.getReaction(k).getKineticLaw().getMath()
+        for k in range(model.getNumReactions())
+    }
+    maths |= {
+        f"rule {model.getRule(k).getVariable()}": model.getRule(k).getMath()
+        for k in range(model.getNumRules())
+    }
+    assert any(key.startswith("rule ") for key in maths)
+    problems = {
+        key: found
+        for key, math_ in maths.items()
+        if (found := _unsafe_divisions(math_, species))
+    }
     assert not problems
 
 
+def test_hill_terms_are_defined_below_zero(tmp_path: Path) -> None:
+    """A Hill coefficient of 2.5 and a species slightly below 0 give finite
+    rates (`power(abs(S)/K, n)`)."""
+    params = _replace(
+        core.CoreParameters.default(),
+        GLC2PYR_n_atp=2.5,
+        ROSP_n_o2=2.5,
+        NEC_n_atp=2.5,
+        NEC_n_h=2.5,
+    )
+    zone_model(tmp_path / "zone.xml", params)
+    r = load_zone(tmp_path / "zone.xml")
+    for q in ("atp", "o2"):
+        r[f"[{ids.species(q, CELL)}]"] = -1e-12
+    r[f"[{ids.species('h', ZONE)}]"] = -1e-12
+    rates = r.model.getReactionRates()
+    assert all(math.isfinite(x) for x in rates)
+    assert math.isfinite(r[ids.necrosis_rate(ZONE)])
+    assert r[ids.reaction("GLC2PYR", ZONE)] > 0
+
+
 def test_dead_cells_release_their_enzymes(tmp_path: Path) -> None:
-    """Without oxygen and glycolytic substrate ATP falls to 0, the cells die,
-    their enzymes and potassium move into the vascular space, the uptake of
-    glucose and oxygen stops."""
-    params = core.CoreParameters.default()
-    starts = dict(params.starts)
-    starts["o2"] = dataclasses.replace(starts["o2"], value=0.0)
-    starts["glyc"] = dataclasses.replace(starts["glyc"], value=0.0)
-    params = dataclasses.replace(
-        params,
-        GLC2PYR_Vmax=dataclasses.replace(params.GLC2PYR_Vmax, value=0.0),
-        starts=FrozenMap(starts),
-    )
-    composition = dataclasses.replace(
-        core.Composition.default(),
-        o2=dataclasses.replace(core.Composition.default().o2, value=0.0),
-    )
-    zone_model(tmp_path / "zone.xml", params, composition)
+    """Without oxygen ATP falls to 0 (the anaerobic glycolysis of the
+    default constants is limited by the NAD and cannot cover the ATP use),
+    the cells die, their enzymes and potassium move into the vascular space,
+    the uptake of glucose and oxygen stops."""
+    params = _starts(core.CoreParameters.default(), o2=0.0)
+    zone_model(tmp_path / "zone.xml", params, _composition(o2=0.0))
     r = load_zone(tmp_path / "zone.xml")
     cells, vascular = r[CELLS], r[VASCULAR]
     contents = {q: r[f"[{ids.species(q, CELL)}]"] * cells for q in ids.RELEASED}
@@ -166,14 +246,68 @@ def test_dead_cells_release_their_enzymes(tmp_path: Path) -> None:
         o2im,
         *[f"[{ids.species(q, ZONE)}]" for q in ids.RELEASED],
     ]
-    s = r.simulate(0, 10000, 1001)
-    assert s[f"[{ids.species('atp', CELL)}]"][-1] < 0.01
+    s = r.simulate(0, 3000, 301)
     assert s[ids.alive(ZONE)][-1] < 1e-6
+    assert s[f"[{ids.species('atp', CELL)}]"][-1] < 0.01
+    assert s[glcim][0] > 0
     for q in ids.RELEASED:
         after = s[f"[{ids.species(q, ZONE)}]"][-1] * vascular
         assert after == pytest.approx(before[q] + contents[q], rel=1e-6), q
     assert abs(s[glcim][-1]) < 1e-9
     assert abs(s[o2im][-1]) < 1e-9
+
+
+def test_the_buffer_follows_henderson_hasselbalch(tmp_path: Path) -> None:
+    """At the buffer equilibrium pH = pK + log10(HCO3/CO2), at the start
+    (the initial assignment of the CO2) and while the cells acidify."""
+    zone_model(tmp_path / "zone.xml")
+    r = load_zone(tmp_path / "zone.xml")
+    pk = 3 - math.log10(r[ids.BUFFER_KA])
+    assert pk == pytest.approx(6.1, rel=1e-12)
+
+    def henderson_hasselbalch() -> float:
+        hco3 = r[f"[{ids.species('hco3', ZONE)}]"]
+        co2 = r[f"[{ids.species('co2', ZONE)}]"]
+        return pk + math.log10(hco3 / co2)
+
+    assert r[ids.ph(ZONE)] == pytest.approx(7.4, abs=1e-12)
+    assert henderson_hasselbalch() == pytest.approx(7.4, abs=1e-12)
+    r.simulate(0, 300, 31)
+    assert r[ids.ph(ZONE)] < 7.35
+    # the CO2 the cells produce keeps the buffer slightly behind its equilibrium
+    assert r[ids.ph(ZONE)] == pytest.approx(henderson_hasselbalch(), abs=1e-4)
+
+
+def test_lactate_export_lowers_the_bicarbonate(tmp_path: Path) -> None:
+    """A lactate exported with its proton consumes one bicarbonate:
+    HCO3 + lac - h of the perfusate is conserved."""
+    params = _starts(core.CoreParameters.default(), lac=20.0)
+    zone_model(tmp_path / "zone.xml", params)
+    r = load_zone(tmp_path / "zone.xml")
+
+    def c(q: str) -> float:
+        return r[f"[{ids.species(q, ZONE)}]"]
+
+    lac0, hco30, h0 = c("lac"), c("hco3"), c("h")
+    r.simulate(0, 60, 61)
+    assert c("lac") - lac0 > 1.0
+    assert c("hco3") - hco30 == pytest.approx(
+        -(c("lac") - lac0) + (c("h") - h0), rel=1e-9
+    )
+    assert c("hco3") - hco30 == pytest.approx(-(c("lac") - lac0), rel=1e-3)
+
+
+def test_acidosis_drives_necrosis(tmp_path: Path) -> None:
+    """At the ATP of the start the cells die only in an acidic perfusate."""
+    rates = {}
+    for ph in (7.4, 6.8):
+        path = tmp_path / f"zone_{ph}.xml"
+        zone_model(path, composition=_composition(ph=ph))
+        r = load_zone(path)
+        assert r[f"[{ids.species('atp', CELL)}]"] == 3.0
+        rates[ph] = r[ids.necrosis_rate(ZONE)] / r["NEC_k"]
+    assert rates[7.4] < 1e-3
+    assert rates[6.8] > 0.9
 
 
 CARBON = {"glc": 6, "glyc": 6, "pyr": 3, "lac": 3, "co2": 1, "hco3": 1}
