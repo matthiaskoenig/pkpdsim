@@ -205,12 +205,6 @@ class Consensus:
         return math.sqrt(self.se**2 + self.tau2)
 
     @property
-    def prediction_interval(self) -> tuple[float, float]:
-        """The 95 % interval of the ratio of a new population."""
-        s = self.prediction_se
-        return math.exp(self.mu - Z * s), math.exp(self.mu + Z * s)
-
-    @property
     def sources(self) -> tuple[str, ...]:
         """The keys of the studies of the estimates."""
         return tuple(e.study for e in self.estimates)

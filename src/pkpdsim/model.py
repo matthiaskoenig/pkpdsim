@@ -25,7 +25,7 @@ simulator are the `sbmlsim.project.SimulatorSettings`, the known exceptions of
 the tests the `sbmlsim.project.CheckSettings` and the release metadata the
 `sbmlsim.release.settings.ReleaseSettings` of sbmlsim. The keywords of the
 model packages (`path`, `model_path`, `female_model_path`, `data_paths`,
-`fit_definitions`, `fits`, `fits_path`, `factory_path`, `figures`) are mapped
+`fit_definitions`, `fits`, `figures`) are mapped
 onto the fields of the project when a model is created, see `PKPDModel`; the
 release settings of a model are a `PKPDReleaseSettings`, the ones of sbmlsim
 with the framework pkpdsim and its release hook (`pkpdsim.release.hook`).
@@ -147,8 +147,6 @@ class PKPDReleaseSettings(ReleaseSettings):
 _RENAMED: dict[str, str] = {
     "path": "root",
     "data_paths": "data_path",
-    "fits_path": "fits_dir",
-    "factory_path": "factory_dir",
 }
 
 
@@ -492,10 +490,6 @@ class PKPDModel(Project):
     - `fit_definitions`: `fits`, the reference to the fit problems by name
       (`sbmlsim.fit.cli.FitDefinition`).
     - `fits` as a sequence of fit ids: `adopted_ids`.
-    - `fits_path`: `fits_dir`, `fits` next to the directory of the factory
-      by default.
-    - `factory_path`: `factory_dir`, the directory of the male build by
-      default.
     - `figures` as a `FigureSettings`: `figure_settings` and `figures`
       (`FigureSettings.sbmlsim_settings`, `FigureSettings.outputs`).
 
