@@ -429,9 +429,8 @@ remain:
 pkpdsim-verify compare base.pkl new.pkl --renames renames.json
 ```
 
-The file is a json object with the parts `metadata` and `strings` (and, across
-versions of sbmlsim, `ids`, `sids`, `figure_fields` and `expected`, see
-[Verification across versions of sbmlsim](models.md#verification-across-versions-of-sbmlsim));
+The file is a json object with the parts `metadata` and `strings` (and, for a migration, `ids`, `sids`, `figure_fields` and `expected`, see
+[Comparing two dumps](models.md#comparing-two-dumps));
 an unknown part or a part of the wrong type is an error (exit code 2):
 
 ```json
