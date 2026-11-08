@@ -954,7 +954,7 @@ def circuit_cards(definition: PerfusionDefinition) -> dict[str, list[str]]:
         out[f"sub:{q}"] = [
             f"<b>{escape(q)}</b> {escape(quantity_label(q))}",
             escape(_fresh(d, q)),
-            f"at every site <code>{escape(ids.species(q, '&lt;site&gt;'))}</code>",
+            f"at every site <code>{escape(ids.species(q, '<site>'))}</code>",
         ]
     if isinstance(organ, LiverOrgan):
         out["bile"] = [

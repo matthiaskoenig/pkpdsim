@@ -292,6 +292,15 @@ def test_every_key_has_a_card(figure: tuple[PerfusionDefinition, Path]) -> None:
             assert key in cards, key
 
 
+def test_the_cards_are_escaped_once() -> None:
+    """A placeholder of a card is escaped once, `alt_&lt;site&gt;`."""
+    d = liver_definition(2, tracers=["inulin"])
+    cards = circuit_cards(d)
+    rows = [row for card in cards.values() for row in card]
+    assert not [row for row in rows if "&amp;lt;" in row or "&amp;gt;" in row]
+    assert any("<code>alt_&lt;site&gt;</code>" in row for row in cards["sub:alt"])
+
+
 def test_the_interactive_page(tmp_path: Path) -> None:
     """The page carries the figure, its cards and the credit."""
     d = liver_definition(8, tracers=["inulin"])
