@@ -24,7 +24,7 @@ from pkpdsim.pbpk.values import Formula, Value
 from pkpdsim.perfusion.ids import flow
 from pkpdsim.species import Species
 from pkpdsim.zonation import ZonationBuilder, effective_peclet, ids
-from pkpdsim.zonation.flow import ImposedFlow, PressureFlow
+from pkpdsim.zonation.flow import ImposedFlow
 from pkpdsim.zonation.geometry import (
     Layer,
     axial_area,
@@ -311,13 +311,6 @@ def test_a_haematocrit_of_zero_has_no_erythrocyte_area() -> None:
         axial_area(Layer.RBC, _MASS, geo, fr)
 
 
-def test_a_pressure_flow_is_not_yet_built() -> None:
-    """The leaky tube arrives with its own task."""
-    flow = PressureFlow(Value(1.0, "kPa"), Value(0.0, "kPa"), Value(1.0, "ml/min/kPa"))
-    with pytest.raises(NotImplementedError, match="Task 9"):
-        ZonationBuilder(ZonationSettings(flow=flow), [TRACER], None).build()
-
-
 def test_the_well_stirred_geometry_flows_through_its_vascular_zones() -> None:
     """The vascular compartments of the zones are the chain."""
     s = _settings(3, 1.0, geometry=Geometry.WELL_STIRRED)
@@ -364,10 +357,10 @@ def test_the_dispersion_is_in_the_notes_of_the_model() -> None:
     assert "m**2/s" in str(model.notes)
 
 
-def test_a_formula_flow_names_the_task_it_arrives_with() -> None:
+def test_a_formula_flow_names_the_flow_to_use_instead() -> None:
     """A computed flow is refused with the reason."""
     flow = ImposedFlow(Formula("1 + 1", U.l_per_min))
-    with pytest.raises(ValueError, match="Task 9"):
+    with pytest.raises(ValueError, match="PressureFlow"):
         ZonationBuilder(ZonationSettings(flow=flow), [TRACER], None).build()
 
 

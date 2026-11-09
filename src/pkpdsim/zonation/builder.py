@@ -80,11 +80,22 @@ from pkpdsim.pbpk.annotation import TAXA, initial_assignment
 from pkpdsim.pbpk.placement import value_parameter
 from pkpdsim.pbpk.substance import Substance
 from pkpdsim.pbpk.units import MODEL_UNITS, U
-from pkpdsim.pbpk.values import Value, number, unit_text
+from pkpdsim.pbpk.values import Value, number
 from pkpdsim.perfusion.ids import flow as flow_id
 from pkpdsim.perfusion.units import PU
 from pkpdsim.zonation import ids
-from pkpdsim.zonation.flow import PressureFlow
+from pkpdsim.zonation.flow import (
+    M3_PER_S,
+    PA,
+    PA_S,
+    PA_S_PER_M2,
+    PA_S_PER_M4,
+    PER_M2,
+    PressureFlow,
+    flow_objects,
+    imposed_flow,
+    zone_flows,
+)
 from pkpdsim.zonation.geometry import (
     Layer,
     SinusoidGeometry,
@@ -92,7 +103,6 @@ from pkpdsim.zonation.geometry import (
     fractions,
     geometry,
     layer_volumes,
-    reference_flow,
     reference_liver_mass,
 )
 from pkpdsim.zonation.profiles import Profile, zone_positions
@@ -126,7 +136,6 @@ CANALICULAR_FLOW = "canalicular_flow"
 CANALICULAR_DIFFUSION = "canalicular_diffusion"
 """The process of the diffusion along the canaliculus (diffusive bile)."""
 
-_FLOW_TO_L_PER_MIN = {"l/min": 1.0, "ml/min": 1e-3}
 _CARRIERS = (Layer.RBC, Layer.PLASMA)
 _DIFFUSING = (Layer.PLASMA, Layer.DISSE)
 
@@ -140,6 +149,12 @@ class ZonationUnits(PU):
     l_per_m3 = UnitDefinition("l_per_m3", "litre/metre^3", name="litre per cubic metre")
     m2_per_s = M2_PER_S
     m_per_s = M_PER_S
+    m3_per_s = M3_PER_S
+    Pa = PA
+    Pa_s = PA_S
+    Pa_s_per_m4 = PA_S_PER_M4
+    Pa_s_per_m2 = PA_S_PER_M2
+    per_m2 = PER_M2
 
 
 _P = SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER
@@ -376,13 +391,18 @@ class ZonationBuilder:
     def _flow(self) -> float:
         """The blood flow through the whole liver (l/min), not negative.
 
+        A pressure flow has a flow which depends on the position: this is
+        the mean of the flows of the zones, the flow which sets the velocity.
+
         Raises:
-            NotImplementedError: for a flow driven by a pressure, which the
-                leaky tube of Task 9 solves.
             ValueError: for a flow which is no number, has no flow unit or is
                 negative (it would reverse the chain).
         """
-        q = self._imposed_flow()
+        flow = self.settings.flow
+        if isinstance(flow, PressureFlow):
+            flows = self._zone_flows()
+            return sum(flows) / len(flows)
+        q = imposed_flow(flow, self.settings.species, self._mass().value)
         if q < 0.0:
             raise ValueError(
                 f"The imposed flow {q} l/min is negative: it would run the "
@@ -391,32 +411,9 @@ class ZonationBuilder:
             )
         return q
 
-    def _imposed_flow(self) -> float:
-        """The imposed flow (l/min) as given, in l/min."""
-        flow = self.settings.flow
-        if isinstance(flow, PressureFlow):
-            raise NotImplementedError(
-                "A flow driven by the pressure needs the leaky tube of Task 9; "
-                "only an imposed flow is built."
-            )
-        if flow.flow is None:
-            return reference_flow(self.settings.species).value
-        x = number(flow.flow)
-        if x is None:
-            raise ValueError(
-                "The imposed flow needs a number, not a formula: a computed "
-                "flow arrives with the pressure-driven flow of Task 9."
-            )
-        if not isinstance(flow.flow, Value):
-            return x
-        unit = unit_text(flow.flow.unit)
-        try:
-            return x * _FLOW_TO_L_PER_MIN[unit]
-        except KeyError:
-            raise ValueError(
-                f"A flow needs a volume per time in {sorted(_FLOW_TO_L_PER_MIN)}, "
-                f"got {unit}."
-            ) from None
+    def _zone_flows(self) -> tuple[float, ...]:
+        """The flow of the liver (l/min) at every zone of a pressure flow."""
+        return zone_flows(self.settings, self._geo(), self._mass())
 
     def _haematocrit(self) -> float:
         """The haematocrit of the lumen, 0 without an erythrocyte layer."""
@@ -473,8 +470,14 @@ class ZonationBuilder:
             return [ids.VASCULAR]
         return [layer for layer in _CARRIERS if layer in self._fractions()]
 
-    def _carrier_flow(self, layer: Layer | str) -> str:
-        """The id of the flow of a carrier layer."""
+    def _carrier_flow(self, layer: Layer | str, zone: str) -> str:
+        """The id of the flow of a carrier layer out of a zone.
+
+        An imposed flow is one number for all zones; a pressure flow has the
+        flow of the position of the zone.
+        """
+        if isinstance(self.settings.flow, PressureFlow):
+            return ids.zone_flow(layer, zone)
         return ids.FLOW if layer == ids.VASCULAR else ids.layer_flow(layer)
 
     def _species(self) -> list[Species]:
@@ -498,14 +501,16 @@ class ZonationBuilder:
         return out
 
     def _flow_parameters(self) -> tuple[list[Parameter], list[InitialAssignment]]:
-        """The flow of the liver, its split between the carriers, the boundary."""
+        """The flow of the liver, its split between the carriers, the boundary.
+
+        A pressure flow adds the leaky tube and the flow of every zone
+        (`flow_objects`), and the carriers split the flow of each zone.
+        """
         q = self._flow()
-        params = [
-            value_parameter(
-                ids.FLOW, q, U.l_per_min, "blood flow through the liver", _P
-            )
-        ]
-        assignments: list[InitialAssignment] = []
+        objects = flow_objects(self.settings, self._geo(), self._mass())
+        params = [o for o in objects if isinstance(o, Parameter)]
+        assignments = [o for o in objects if isinstance(o, InitialAssignment)]
+        pressure = isinstance(self.settings.flow, PressureFlow)
         if self.settings.geometry is Geometry.SINUSOID:
             params.append(
                 value_parameter(
@@ -520,31 +525,39 @@ class ZonationBuilder:
                 Layer.PLASMA: f"(1 dimensionless - {ids.HAEMATOCRIT})",
                 Layer.RBC: ids.HAEMATOCRIT,
             }
+            flows = (
+                [(ids.zone(k), f) for k, f in enumerate(self._zone_flows(), 1)]
+                if pressure
+                else [(None, q)]
+            )
             for layer in self._carriers():
-                pid = ids.layer_flow(layer)
-                params.append(
-                    Parameter(
-                        pid,
-                        q
-                        * (
-                            self._haematocrit()
-                            if layer is Layer.RBC
-                            else 1.0 - self._haematocrit()
-                        ),
-                        unit=U.l_per_min,
-                        name=f"flow of the {_NAMES[layer]} through the liver",
-                        constant=True,
-                        sboTerm=_P,
+                h = self._haematocrit()
+                factor = h if layer is Layer.RBC else 1.0 - h
+                for zone, flow in flows:
+                    pid = (
+                        ids.layer_flow(layer)
+                        if zone is None
+                        else ids.zone_flow(layer, zone)
                     )
-                )
-                assignments.append(
-                    initial_assignment(
-                        pid,
-                        f"{ids.FLOW} * {share[Layer(layer)]}",
-                        U.l_per_min,
-                        f"flow of the {_NAMES[layer]} through the liver",
+                    source = ids.FLOW if zone is None else ids.zone_flow(None, zone)
+                    params.append(
+                        Parameter(
+                            pid,
+                            flow * factor,
+                            unit=U.l_per_min,
+                            name=f"flow of the {_NAMES[layer]} through the liver",
+                            constant=True,
+                            sboTerm=_P,
+                        )
                     )
-                )
+                    assignments.append(
+                        initial_assignment(
+                            pid,
+                            f"{source} * {share[Layer(layer)]}",
+                            U.l_per_min,
+                            f"flow of the {_NAMES[layer]} through the liver",
+                        )
+                    )
         if q > 0.0:
             for substance in self.substances:
                 for layer in self._carriers():
@@ -706,7 +719,10 @@ class ZonationBuilder:
         return Reaction(
             flow_id(substance.sid, ids.site(layer, source), ids.site(layer, target)),
             f"{left} -> {right}",
-            formula=(f"{self._carrier_flow(layer)} * {upstream}", U.mmole_per_min),
+            formula=(
+                f"{self._carrier_flow(layer, edge)} * {upstream}",
+                U.mmole_per_min,
+            ),
             compartment=ids.volume(layer, edge),
             name=f"flow of {substance.name} in the {_NAMES[layer]} from {source} to {target}",
             sboTerm=SBO.TRANSPORT_REACTION,
@@ -1287,13 +1303,15 @@ class ZonationBuilder:
             model_units=MODEL_UNITS,
             compartments=[*self.compartments(), *self._duct_compartments()],
             species=[*self._species(), *self._duct_species()],
-            parameters=[
-                *self._constants(),
-                *flow_parameters,
-                *self._diffusion_parameters(),
-                *self._bile_parameters(),
-                *self._radial_parameters(),
-            ],
+            parameters=_unique(
+                [
+                    *self._constants(),
+                    *flow_parameters,
+                    *self._diffusion_parameters(),
+                    *self._bile_parameters(),
+                    *self._radial_parameters(),
+                ]
+            ),
             assignments=[
                 *self._assignments(),
                 *flow_assignments,
@@ -1307,6 +1325,20 @@ class ZonationBuilder:
                 *self.bile(),
             ],
         )
+
+
+def _unique(parameters: Sequence[Parameter]) -> list[Parameter]:
+    """The parameters without a repeated id: the geometry the flow and the barrier share.
+
+    The leaky tube and the barrier (and the axial diffusion) read the same
+    radius, thickness and length; every part emits what it reads, and the first
+    of an id is kept (they carry the same value, which the test of the flow
+    checks).
+    """
+    seen: dict[str, Parameter] = {}
+    for p in parameters:
+        seen.setdefault(str(p.sid), p)
+    return list(seen.values())
 
 
 def effective_peclet(settings: ZonationSettings, d_eff: float) -> float:

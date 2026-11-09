@@ -23,21 +23,35 @@ from pkpdsim.zonation.geometry import Layer
 __all__ = [
     "BILE_FLOW",
     "BILE_FLOW_REFERENCE",
+    "DECAY_LENGTH",
     "DENSITY",
     "DUCT",
+    "FENESTRA_COUNT",
+    "FENESTRA_RADIUS",
     "FLOW",
     "HAEMATOCRIT",
     "INFLOW",
     "LENGTH",
+    "LUMEN_FRACTION",
     "MASS",
     "MASS_REFERENCE",
+    "N_SINUSOIDS",
     "OUTFLOW",
     "PARENCHYMA",
+    "POROSITY_MEAN",
+    "PRESSURE_CENTRAL",
+    "PRESSURE_ONCOTIC",
+    "PRESSURE_PORTAL",
     "RADIUS",
+    "RESISTANCE_LUMEN",
+    "RESISTANCE_PORES",
     "TEMPERATURE",
     "T_DISSE",
     "T_ENDO",
     "VASCULAR",
+    "VISCOSITY",
+    "VISCOSITY_FACTOR",
+    "VISCOSITY_LIVER",
     "area",
     "axial",
     "exchange",
@@ -48,11 +62,13 @@ __all__ = [
     "porosity",
     "position",
     "profile",
+    "sinusoid_flow",
     "site",
     "species",
     "submodel",
     "volume",
     "zone",
+    "zone_flow",
 ]
 
 MASS = "M_li"
@@ -97,6 +113,48 @@ OUTFLOW = "out"
 DUCT = "duct"
 """The token of the bile duct, downstream of the canaliculus of the first zone
 (`bile_duct`): the collector of the bile, a boundary and no zone."""
+
+PRESSURE_PORTAL = "P_pp"
+"""The id of the pressure at the periportal end of the sinusoid (Pa)."""
+
+PRESSURE_CENTRAL = "P_pc"
+"""The id of the pressure at the pericentral end of the sinusoid (Pa)."""
+
+PRESSURE_ONCOTIC = "P_onc"
+"""The id of the oncotic pressure of the leaky tube (Pa), `Poc - Pot` of spt."""
+
+VISCOSITY = "nu_plasma"
+"""The id of the viscosity of the plasma (Pa s)."""
+
+VISCOSITY_FACTOR = "f_nu_li"
+"""The id of the factor of the hepatic resistance over the plasma viscosity."""
+
+VISCOSITY_LIVER = "nu_li"
+"""The id of the viscosity of the blood in the sinusoid (Pa s), the factor times the plasma viscosity."""
+
+FENESTRA_RADIUS = "r_fen"
+"""The id of the radius of a fenestra (m)."""
+
+FENESTRA_COUNT = "N_fen"
+"""The id of the number of fenestrae per endothelial area (1/m**2), derived from the porosity."""
+
+POROSITY_MEAN = "eps_fen_li"
+"""The id of the fenestral porosity the leaky tube is evaluated at (the mean over the sinusoid)."""
+
+LUMEN_FRACTION = "f_lumen"
+"""The id of the volume fraction of the lumen (plasma and erythrocytes) in the liver."""
+
+N_SINUSOIDS = "N_sin"
+"""The id of the number of sinusoids of the liver (dimensionless)."""
+
+RESISTANCE_LUMEN = "W_sin"
+"""The id of the specific hydraulic resistance of the lumen (Pa s/m**4)."""
+
+RESISTANCE_PORES = "w_sin"
+"""The id of the specific hydraulic resistance of all pores (Pa s/m**2)."""
+
+DECAY_LENGTH = "lambda_sin"
+"""The id of the length (m) over which the pressure of the leaky tube relaxes."""
 
 BILE_FLOW = "Q_bile"
 """The id of the bile flow of the liver (l/min), through every canaliculus."""
@@ -185,6 +243,23 @@ def layer_flow(layer: Layer | str) -> str:
     blood flow `Q_li`, so they have one velocity.
     """
     return f"Q_{layer}_li"
+
+
+def zone_flow(layer: Layer | str | None, zone: str) -> str:
+    """Get the flow of a layer in a zone, `Q_<layer>_li_<zone>` (l/min).
+
+    A pressure-driven sinusoid has a flow which depends on the position, so
+    every zone has its own flow. `None` (and the vascular site of the
+    well-stirred geometry) is the blood flow of the zone, `Q_li_<zone>`.
+    """
+    if layer is None or layer == VASCULAR:
+        return f"Q_li_{zone}"
+    return f"Q_{layer}_li_{zone}"
+
+
+def sinusoid_flow(zone: str) -> str:
+    """Get the flow of one sinusoid in a zone, `Q_sin_<zone>` (m**3/s)."""
+    return f"Q_sin_{zone}"
 
 
 def axial(quantity: str, source: str, target: str) -> str:
