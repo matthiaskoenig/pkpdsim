@@ -474,13 +474,28 @@ class ZonationBuilder:
                 out[substance.sid] = d
         return out
 
-    def _carriers(self) -> list[Layer | str]:
+    def layers(self) -> list[Layer | str]:
+        """Get the layers of a zone the geometry produced, from the lumen to the bile.
+
+        Returns:
+            The layers of the sinusoid geometry without the erythrocytes at
+            a haematocrit of 0 and without the bile for `bile=None`; the
+            vascular site, the hepatocyte and the bile of the well-stirred
+            geometry.
+        """
+        return list(self._fractions())
+
+    def has_flow(self) -> bool:
+        """Get whether the blood flows through the chain (a flow above 0)."""
+        return self._flow() > 0.0
+
+    def carriers(self) -> list[Layer | str]:
         """The layers which the blood flows through."""
         if self.settings.geometry is Geometry.WELL_STIRRED:
             return [ids.VASCULAR]
         return [layer for layer in _CARRIERS if layer in self._fractions()]
 
-    def _carrier_flow(self, layer: Layer | str, zone: str) -> str:
+    def carrier_flow(self, layer: Layer | str, zone: str) -> str:
         """The id of the flow of a carrier layer out of a zone.
 
         An imposed flow is one number for all zones; a pressure flow has the
@@ -540,7 +555,7 @@ class ZonationBuilder:
                 if pressure
                 else [(None, q)]
             )
-            for layer in self._carriers():
+            for layer in self.carriers():
                 h = self._haematocrit()
                 factor = h if layer is Layer.RBC else 1.0 - h
                 for zone, flow in flows:
@@ -570,7 +585,7 @@ class ZonationBuilder:
                     )
         if q > 0.0:
             for substance in self.substances:
-                for layer in self._carriers():
+                for layer in self.carriers():
                     params.append(
                         Parameter(
                             ids.species(substance.sid, layer, ids.INFLOW),
@@ -730,7 +745,7 @@ class ZonationBuilder:
             flow_id(substance.sid, ids.site(layer, source), ids.site(layer, target)),
             f"{left} -> {right}",
             formula=(
-                f"{self._carrier_flow(layer, edge)} * {upstream}",
+                f"{self.carrier_flow(layer, edge)} * {upstream}",
                 U.mmole_per_min,
             ),
             compartment=ids.volume(layer, edge),
@@ -759,7 +774,7 @@ class ZonationBuilder:
         zones = [ids.zone(k) for k in range(1, n + 1)]
         chain = [ids.INFLOW, *zones, ids.OUTFLOW]
         for substance in self.substances:
-            for layer in self._carriers():
+            for layer in self.carriers():
                 out += [
                     self._flow_reaction(substance, layer, a, b)
                     for a, b in itertools.pairwise(chain)

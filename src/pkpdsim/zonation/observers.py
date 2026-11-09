@@ -1,0 +1,375 @@
+"""The observers of a zonated organ: the quantities a modeller plots and fits.
+
+The observers are read-only: assignment rules and the rate rules of cumulative
+ledgers, which no reaction of the model reads, so a model with them has the same
+states as a model without them. They are not part of `ZonationBuilder.build()`;
+`observer_objects` creates them and `add_observers` puts them into a model (for a
+composed model after `compose`), so a caller who does not want them does not pay
+for them.
+
+Per substance `<s>` (layers are the ones the geometry produced: `rbc` only at a
+haematocrit above 0, `bile` only with a bile, the single `vas` of the well-stirred
+geometry instead of `rbc`, `plasma`, `endo` and `disse`; see `ZonationBuilder.layers`):
+
+- `<s>_pp`, `<s>_pc` (mM): the periportal and the pericentral mean of the
+  concentration in the blood side of the lumen (the plasma, `vas` in the
+  well-stirred geometry), and `<s>_<layer>_pp`, `<s>_<layer>_pc` of every other
+  layer. The mean is that of the first (periportal) and the last (pericentral)
+  third of the sinusoid, every zone weighted by `pkpdsim.perfusion.observers.third_weights`
+  (the weighting of the perfusion library, shared and not copied).
+- `c_outflow_<s>` (mM): the concentration of the blood leaving the last zone, the
+  flux out over the flow out. It is **not** the pericentral mean (`<s>_pc`), which
+  averages the last third of the length: with a gradient the two differ. It is not
+  defined without a flow and not emitted then.
+- `amount_<s>_<layer>` (mmole): the amount in a layer, the sum over the zones, and
+  `amount_<s>` the sum over the layers, the amount in the organ (the bile duct is
+  outside of the organ).
+- `cum_in_<s>`, `cum_out_<s>` (mmole): what entered through the inflow and left
+  through the outflow since the start. `cum_consumed_<s>` (mmole): what the
+  reactions the caller declares consumed. `cum_dose_<s>` (mmole): what was put into
+  the organ by hand, the initial amounts and the doses; it starts as the amount of
+  the initial concentrations of the model and a dose or a changed initial amount
+  adds to it.
+- `balance_<s>` (mmole), the mass balance residual, see `balance_expression`.
+
+The axial profile is the species of the zones themselves, `<s>_<layer>_z<k>`;
+`profile_ids` lists them periportal first, so no copy of them is made.
+"""
+
+from collections.abc import Mapping, Sequence
+
+from sbmlutils.factory import AssignmentRule, Model, Parameter, RateRule
+from sbmlutils.factory.units import UnitDefinition
+from sbmlutils.metadata import SBO
+
+from pkpdsim.pbpk.annotation import initial_assignment
+from pkpdsim.pbpk.substance import Substance
+from pkpdsim.pbpk.units import U
+from pkpdsim.perfusion import core
+from pkpdsim.perfusion.observers import third_weights
+from pkpdsim.zonation import ids
+from pkpdsim.zonation.builder import ZonationBuilder
+from pkpdsim.zonation.geometry import Layer
+from pkpdsim.zonation.settings import ZonationSettings
+
+__all__ = [
+    "add_observers",
+    "amount",
+    "balance",
+    "balance_expression",
+    "layer_amount",
+    "ledger",
+    "mean",
+    "observer_objects",
+    "outflow_concentration",
+    "profile_ids",
+]
+
+PERIPORTAL = "pp"
+"""The suffix of the periportal mean."""
+PERICENTRAL = "pc"
+"""The suffix of the pericentral mean."""
+LEDGERS = ("in", "out", "consumed", "dose")
+"""The kinds of the cumulative amounts."""
+
+_RULE = SBO.MATHEMATICAL_EXPRESSION
+
+
+def mean(
+    substance: str, layer: Layer | str, periportal: bool, blood: Layer | str
+) -> str:
+    """Get the id of the mean of a substance in a layer over the first or last third.
+
+    Args:
+        substance: the id of the substance.
+        layer: the layer.
+        periportal: the first third, else the last.
+        blood: the layer of the blood side of the lumen (`plasma`, or `vas`),
+            whose means carry no layer in their id.
+
+    Returns:
+        `<s>_pp` / `<s>_pc` for the blood side, `<s>_<layer>_pp` / `_pc` else.
+    """
+    site = PERIPORTAL if periportal else PERICENTRAL
+    return f"{substance}_{site}" if layer == blood else f"{substance}_{layer}_{site}"
+
+
+def outflow_concentration(substance: str) -> str:
+    """Get the id of the concentration of the blood leaving the organ, `c_outflow_<s>`."""
+    return f"c_outflow_{substance}"
+
+
+def amount(substance: str) -> str:
+    """Get the id of the amount of a substance in the organ, `amount_<s>`."""
+    return f"amount_{substance}"
+
+
+def layer_amount(substance: str, layer: Layer | str) -> str:
+    """Get the id of the amount of a substance in a layer, `amount_<s>_<layer>`."""
+    return f"amount_{substance}_{layer}"
+
+
+def ledger(kind: str, substance: str) -> str:
+    """Get the id of a cumulative amount, `cum_<kind>_<s>` (kinds: `LEDGERS`).
+
+    Raises:
+        ValueError: for a kind which is no ledger.
+    """
+    if kind not in LEDGERS:
+        raise ValueError(f"A ledger is one of {LEDGERS}, not '{kind}'.")
+    return f"cum_{kind}_{substance}"
+
+
+def balance(substance: str) -> str:
+    """Get the id of the mass balance residual of a substance, `balance_<s>`."""
+    return f"balance_{substance}"
+
+
+def profile_ids(substance: str, layer: Layer | str, n_zones: int) -> list[str]:
+    """Get the species of the axial profile of a substance in a layer.
+
+    The profile is an array observable: one species per zone, concentrations
+    in mM, which a caller reads in this order. The order is **periportal first**:
+    index 0 is zone `z1` and the last is the pericentral `z<n>`, the order of
+    `third_weights` and of `zone_positions` (0 periportal, 1 pericentral). The
+    species are read as `[<id>]` in roadrunner. The choice of the species over
+    a parameter or an assignment per zone is that no copy of a state has to
+    be kept equal to it.
+
+    Args:
+        substance: the id of the substance.
+        layer: the layer.
+        n_zones: the number of zones.
+
+    Returns:
+        The ids from periportal to pericentral.
+    """
+    return [ids.species(substance, layer, ids.zone(k)) for k in range(1, n_zones + 1)]
+
+
+def balance_expression(substance: str, duct: bool) -> str:
+    """Get the formula of the mass balance residual of a substance.
+
+    The conservation law is: what is in the organ now, plus what left through
+    the outflow and into the bile duct and what the reactions consumed, equals
+    what entered through the inflow plus what was put in by hand:
+
+        balance = amount + cum_out + duct + cum_consumed - cum_in - cum_dose
+
+    It stays at 0 (to the tolerance of the integrator) whenever the model
+    moves the substance only between its compartments, the boundaries and the
+    reactions declared as consumption: the axial convection and diffusion, the
+    radial exchange and the bile in both transports, with and without a bile,
+    at a haematocrit of 0, in the well-stirred geometry and with an imposed or a
+    pressure driven flow. A pressure flow does not conserve water (the fluid
+    which leaks through the fenestrae is not removed from the lumen), but the
+    solute is moved only by the reactions, each of which takes from one species
+    what it gives to another, and the boundary ledgers integrate the same flows
+    the first and last reaction use, so the balance holds there as well. It
+    fails for a consumption or a dose which is not declared.
+
+    Args:
+        substance: the id of the substance.
+        duct: whether the model has a bile duct.
+    """
+    terms = [
+        amount(substance),
+        ledger("out", substance),
+        ledger("consumed", substance),
+    ]
+    if duct:
+        terms.append(ids.species(substance, Layer.BILE, ids.DUCT))
+    negative = [ledger("in", substance), ledger("dose", substance)]
+    return " + ".join(terms) + " - " + " - ".join(negative)
+
+
+def _observer(
+    sid: str, formula: str, unit: UnitDefinition, name: str, sbo: str
+) -> tuple[Parameter, AssignmentRule]:
+    """Get a parameter and the assignment rule which computes it."""
+    return (
+        Parameter(sid, None, unit, constant=False, name=name, sboTerm=sbo),
+        AssignmentRule(sid, formula, unit, name=name, sboTerm=_RULE),
+    )
+
+
+def _weighted(of_zones: Sequence[str], periportal: bool) -> str:
+    """Get the mean of the species of the zones over the first or last third."""
+    terms = [
+        of_zones[k - 1] if w == 1 else f"{float(w)!r} dimensionless * {of_zones[k - 1]}"
+        for k, w in third_weights(len(of_zones), periportal)
+    ]
+    return " + ".join(terms)
+
+
+def _ledger(
+    out: core.CoreObjects,
+    kind: str,
+    substance: Substance,
+    rate: str | None,
+    start: str | None = None,
+) -> None:
+    """Add a cumulative amount, integrated from a rate (mmole/min), or constant 0."""
+    sid = ledger(kind, substance.sid)
+    names = {
+        "in": "entered through the inflow",
+        "out": "left through the outflow",
+        "consumed": "consumed by the cells",
+        "dose": "put into the organ by hand (initial amounts and doses)",
+    }
+    name = f"amount of {substance.name} {names[kind]}"
+    out.parameters.append(
+        Parameter(
+            sid,
+            0.0,
+            U.mmole,
+            constant=rate is None,
+            name=name,
+            sboTerm=SBO.AMOUNT_OF_AN_ENTITY_POOL,
+        )
+    )
+    if rate is not None:
+        out.rate_rules.append(
+            RateRule(sid, rate, U.mmole_per_min, name=name, sboTerm=_RULE)
+        )
+    if start is not None:
+        out.assignments.append(initial_assignment(sid, start, U.mmole, name))
+
+
+def observer_objects(
+    settings: ZonationSettings,
+    substances: Sequence[Substance],
+    consumption: Mapping[str, str] | None = None,
+) -> core.CoreObjects:
+    """Get the observers of a zonated organ.
+
+    The weighting of the thirds is `pkpdsim.perfusion.observers.third_weights`.
+    `mean_objects` of that module is not reused: it writes the species ids of the
+    perfusion core (`<q>_<site>`, the cells, the living fraction, the pH and the
+    activities of the sites), which this model does not have; its weights are
+    the part which carries over.
+
+    Args:
+        settings: the settings of the model.
+        substances: the substances of the model.
+        consumption: per substance the formula (mmole/min) of the net rate at
+            which the reactions of the cells consume it, summed over the zones,
+            e.g. the ids of the reactions of the cell models; a substance
+            without one is not consumed.
+
+    Returns:
+        The parameters, the assignment rules, the rate rules and the initial
+        assignments of the observers of every substance.
+    """
+    consumption = consumption or {}
+    builder = ZonationBuilder(settings, substances, None)
+    n = settings.n_zones
+    layers = builder.layers()
+    carriers = builder.carriers()
+    blood = ids.VASCULAR if ids.VASCULAR in layers else Layer.PLASMA
+    first, last = ids.zone(1), ids.zone(n)
+    flowing = builder.has_flow()
+    out = core.CoreObjects()
+    for substance in substances:
+        s = substance.sid
+        for layer in layers:
+            of_zones = profile_ids(s, layer, n)
+            for periportal in (True, False):
+                where = "periportal" if periportal else "pericentral"
+                p, r = _observer(
+                    mean(s, layer, periportal, blood),
+                    _weighted(of_zones, periportal),
+                    U.mM,
+                    f"{substance.name} ({ids_name(layer)}, {where} mean)",
+                    SBO.MOLAR_CONCENTRATION_OF_AN_ENTITY,
+                )
+                out.parameters.append(p)
+                out.rules.append(r)
+        for layer in layers:
+            p, r = _observer(
+                layer_amount(s, layer),
+                " + ".join(
+                    f"{ids.species(s, layer, ids.zone(k))} * {ids.volume(layer, ids.zone(k))}"
+                    for k in range(1, n + 1)
+                ),
+                U.mmole,
+                f"amount of {substance.name} in the {ids_name(layer)}",
+                SBO.AMOUNT_OF_AN_ENTITY_POOL,
+            )
+            out.parameters.append(p)
+            out.rules.append(r)
+        p, r = _observer(
+            amount(s),
+            " + ".join(layer_amount(s, layer) for layer in layers),
+            U.mmole,
+            f"amount of {substance.name} in the organ",
+            SBO.AMOUNT_OF_AN_ENTITY_POOL,
+        )
+        out.parameters.append(p)
+        out.rules.append(r)
+
+        if flowing:
+            influx = " + ".join(
+                f"{builder.carrier_flow(layer, first)} * {ids.species(s, layer, ids.INFLOW)}"
+                for layer in carriers
+            )
+            efflux = " + ".join(
+                f"{builder.carrier_flow(layer, last)} * {ids.species(s, layer, last)}"
+                for layer in carriers
+            )
+            flow_out = " + ".join(
+                builder.carrier_flow(layer, last) for layer in carriers
+            )
+            p, r = _observer(
+                outflow_concentration(s),
+                f"({efflux}) / ({flow_out})",
+                U.mM,
+                f"{substance.name} in the blood leaving the organ (not the pericentral mean)",
+                SBO.MOLAR_CONCENTRATION_OF_AN_ENTITY,
+            )
+            out.parameters.append(p)
+            out.rules.append(r)
+        else:
+            influx = efflux = None
+        _ledger(out, "in", substance, influx)
+        _ledger(out, "out", substance, efflux)
+        _ledger(out, "consumed", substance, consumption.get(s))
+        _ledger(
+            out,
+            "dose",
+            substance,
+            None,
+            start=" + ".join(
+                f"{ids.species(s, layer, ids.zone(k))} * {ids.volume(layer, ids.zone(k))}"
+                for layer in layers
+                for k in range(1, n + 1)
+            ),
+        )
+        p, r = _observer(
+            balance(s),
+            balance_expression(s, settings.bile is not None),
+            U.mmole,
+            f"mass balance residual of {substance.name} (0 if conserved)",
+            SBO.MASS_CONSERVATION_LAW,
+        )
+        out.parameters.append(p)
+        out.rules.append(r)
+    return out
+
+
+def ids_name(layer: Layer | str) -> str:
+    """Get the name of a layer for the names of the observers."""
+    return "vascular space" if layer == ids.VASCULAR else str(layer)
+
+
+def add_observers(model: Model, objects: core.CoreObjects) -> None:
+    """Add the observers to a model, which they do not change.
+
+    Args:
+        model: the model of `ZonationBuilder.build()` or of `compose`.
+        objects: the observers (`observer_objects`).
+    """
+    model.parameters.extend(objects.parameters)
+    model.rules.extend(objects.rules)
+    model.rate_rules.extend(objects.rate_rules)
+    model.assignments.extend(objects.assignments)
