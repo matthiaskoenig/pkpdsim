@@ -277,7 +277,11 @@ _CONTENTS = {
     "ldh": "LDH_content",
     "k": "K_content",
 }
-"""The constant of the content of the cells of every released quantity."""
+"""The constant of the content of the cells of every quantity with one.
+
+The cells hold the content of a quantity of `ids.cell_quantities`, released or
+not: an enzyme is in the cells of an organ which releases it, potassium in
+every organ."""
 
 _STARTED = tuple(q for q in ids.CELL if q not in _CONTENTS)
 """The quantities of the cells with a start (`CoreParameters.starts`)."""
@@ -467,13 +471,13 @@ class CoreParameters:
             bile: the organ secretes bile.
 
         Returns:
-            A problem per missing content of a released quantity, per missing
+            A problem per missing content of a quantity of the cells, per missing
             bile constant, per constant (and start) whose unit is not the unit
             of the model (`_SPECS`, mM for the starts), per quantity of the
             cells of the organ without a start and per start of a quantity
             which is no quantity of the cells with a start (`starts`).
         """
-        needed = [_CONTENTS[q] for q in released if q in _CONTENTS]
+        needed = [_CONTENTS[q] for q in ids.cell_quantities(released) if q in _CONTENTS]
         if bile:
             needed += ["BILE_Vmax", "BILE_Km_atp"]
         out = [
@@ -665,8 +669,9 @@ def core_parameters(
 
     Args:
         params: the constants.
-        released: the quantities which the organ releases; the content of a
-            quantity it does not release is no constant of the model.
+        released: the quantities which the organ releases; the content of an
+            enzyme it does not release is no constant of the model (potassium
+            is in the cells of every organ).
         bile: the organ secretes bile; without, the bile constants are no
             constants of the model.
 
@@ -680,7 +685,8 @@ def core_parameters(
     Raises:
         TypeError: if the unit of a constant is no unit definition.
     """
-    unread = {c for q, c in _CONTENTS.items() if q not in released}
+    held = ids.cell_quantities(released)
+    unread = {c for q, c in _CONTENTS.items() if q not in held}
     if not bile:
         unread |= {"BILE_Vmax", "BILE_Km_atp"}
     parameters: list[Parameter] = []

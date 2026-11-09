@@ -7,6 +7,7 @@ the emitter was shared (see `zone_golden`): every object is compared by all its
 attributes, and the mapping of the objects is equal, not a superset.
 """
 
+import dataclasses
 import re
 from pathlib import Path
 from typing import Any
@@ -294,3 +295,24 @@ def test_the_engine_places_the_core_once_per_zone(tmp_path: Path) -> None:
     assert not {k for k in local if k.endswith("__glc_ext")}, "replaced by Disse"
     assert {f"M{k:02}__o2_ext" for k in range(1, 5)} <= local, "not a substance"
     assert np.all(np.isfinite(r.simulate(0, 10, 11)))
+
+
+def test_potassium_which_is_not_released_stays_in_the_cells(tmp_path: Path) -> None:
+    """The cells hold potassium whatever the organ releases (`k` is no enzyme),
+    so its content is a constant of the model: valid SBML for `released=("alt",)`
+    in a zone and in the standalone core (before, `K_content` was undefined)."""
+    released = ("alt",)
+    constants = {p.sid for p in core.core_parameters(PARAMS, released=released)}
+    assert "K_content" in constants
+    assert {"AST_content", "LDH_content"}.isdisjoint(constants)
+    model = cell_model(PARAMS, released=released)
+    document = libsbml.readSBMLFromFile(str(_written(model, tmp_path / "core.xml")))
+    assert document.checkConsistency() == 0
+    assert document.getNumErrors() == 0
+    assert "k_dead" not in {s.sid for s in model.species}
+
+
+def test_the_content_of_potassium_is_needed_without_its_release() -> None:
+    """A core without the content of potassium is refused for any organ."""
+    params = dataclasses.replace(PARAMS, K_content=None)
+    assert any("K_content" in p for p in params.problems((), bile=False))
