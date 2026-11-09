@@ -142,9 +142,18 @@ def test_the_initial_assignments_evaluate_to_the_layer_volumes(
     par = rr[ids.PARENCHYMA] * rr[ids.MASS] / rr[ids.DENSITY]
     # the reference liver of the table, in kg and kg/l
     assert rr[ids.MASS] == pytest.approx(_table_mass())
+    # the compartments which are no layer of a zone are exactly the duct
+    zone_layers = {
+        ids.volume(layer, ids.zone(k))
+        for layer in (*Layer, ids.VASCULAR)
+        for k in range(1, n + 1)
+    }
+    assert {c.sid for c in model.compartments} - zone_layers == {
+        ids.volume(Layer.BILE, ids.DUCT)
+    }
     for c in model.compartments:
         if c.sid == ids.volume(Layer.BILE, ids.DUCT):
-            continue  # the duct is a collector of amounts, no layer of a zone
+            continue  # a collector of amounts, asserted below as the one extra
         layer = c.sid.removeprefix("V_").rsplit("_", 1)[0]
         assert rr[c.sid] == pytest.approx(rr[ids.fraction(layer)] * par / n)
         assert rr[c.sid] > 0.0

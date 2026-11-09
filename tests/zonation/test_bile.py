@@ -138,18 +138,25 @@ def test_the_amount_is_conserved_while_it_runs(tmp_path: Path) -> None:
     assert out[-1, 1] + _in_bile(r) == pytest.approx(released, rel=1e-9)
 
 
-def test_the_transit_time_is_the_bile_volume_over_the_flow(tmp_path: Path) -> None:
-    """The mean transit from z10 to the duct is the bile volume over `Q_bile`.
+@pytest.mark.parametrize("mass", [1000.0, 2000.0, 7.229])
+def test_the_transit_time_is_the_bile_volume_over_the_flow(
+    tmp_path: Path, mass: float
+) -> None:
+    """The mean transit from z10 to the duct is the bile volume over `Q_bile`, at any mass.
 
-    10 tanks of a tenth of the bile volume each in series: 3.738 ml (0.4 % of
-    the 0.9346 l of 1 kg of liver at 1.07 kg/l) over 2.1607 ml/min (0.01562
-    ml/min of 7.229 g of rat liver, times 1000 g / 7.229 g) is 1.730 min. The
-    mean time is the area above the curve of the duct amount.
+    10 tanks of a tenth of the bile volume each in series: per kg of liver
+    3.738 ml (0.4 % of the 0.9346 l at 1.07 kg/l) over 2.1607 ml/min (0.01562
+    ml/min of 7.229 g of rat liver, times 1000 g / 7.229 g) is 1.730 min. Both
+    the volume and the flow are proportional to the mass, so the time is the
+    same for 1000 g, 2000 g and the 7.229 g of the reference liver. The mean
+    time is the area above the curve of the duct amount.
     """
-    r = _bile_chain(tmp_path, n=10, released_in_zone=10)
+    r = _bile_chain(tmp_path, n=10, released_in_zone=10, mass=mass)
     released = _released(r, 10)
-    t = np.linspace(0, 40, 40001)
-    out = r.simulate(0, 40, len(t), selections=["time", DUCT])
+    # the equality: the bile volume over the flow, read from the model
+    volume = sum(r[ids.volume(Layer.BILE, ids.zone(k))] for k in range(1, 11))
+    assert volume / r["Q_bile"] == pytest.approx(1.730, rel=2e-3)
+    out = r.simulate(0, 40, 40001, selections=["time", DUCT])
     mean = np.trapezoid(1.0 - out[:, 1] / released, out[:, 0])
     assert mean == pytest.approx(1.730, rel=2e-3)
 
@@ -164,13 +171,13 @@ def test_the_bile_flow_follows_the_liver_mass(tmp_path: Path) -> None:
 
 
 def test_the_bile_flow_of_the_species_are_not_scaled_from_each_other() -> None:
-    """The human secretes 0.43 ml/min of 1.8 kg, the rat 0.01562 ml/min of 7.229 g."""
+    """The human canalicular flow is 0.27 ml/min of 1.8 kg, the rat 0.01562 ml/min of 7.229 g."""
     human = bile_flow(Species.HUMAN).value  # l/min of the reference liver
     rat = bile_flow(Species.RAT).value
-    assert human == pytest.approx(0.43e-3, rel=1e-9)
+    assert human == pytest.approx(0.27e-3, rel=1e-9)
     assert rat == pytest.approx(0.01562e-3, rel=1e-9)
-    # per gram of liver the rat secretes 9 times more (2.16 against 0.239 ul/min)
-    assert (rat / 7.229) / (human / 1800.0) == pytest.approx(9.04, rel=1e-2)
+    # per gram of liver the rat secretes 14.4 times more (2.16 against 0.15 ul/min)
+    assert (rat / 7.229) / (human / 1800.0) == pytest.approx(14.4, rel=1e-2)
 
 
 def test_the_diffusive_mode_needs_no_bile_flow(tmp_path: Path) -> None:

@@ -854,7 +854,11 @@ class ZonationBuilder:
         a = ids.species(substance.sid, Layer.BILE, source)
         b = ids.species(substance.sid, Layer.BILE, target)
         to_duct = target == ids.DUCT
-        # the duct is an absorbing boundary half a zone away: twice the conductance
+        # The duct is an absorbing boundary (Dirichlet, c = 0) at the face of
+        # z1, so the distance from the centre of z1 is dx / 2 and the
+        # conductance D * A / (dx / 2) is twice that of a zone-to-zone
+        # interface by construction (the standard treatment of a boundary at a
+        # cell face); do not "fix" it to match the interior interfaces.
         gain = "2 dimensionless * " if to_duct else ""
         if CANALICULAR_DIFFUSION in self.settings.profiles:
             pa = ids.profile(CANALICULAR_DIFFUSION, source)
