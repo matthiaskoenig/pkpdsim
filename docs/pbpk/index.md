@@ -4,7 +4,7 @@
 
 Start with the [tutorial](tutorial.md), which writes a definition and simulates an oral dose step by step, and read [the build](build.md) next: how the parts are composed, what the library generates, how a build per sex works, where every number comes from and which ids a model has.
 
-The pages below are the components of the library, in the order in which it is layered: the physiology, the building blocks a model puts on top of it and the analysis which runs on the models. Some of them stand in the user guide of the navigation; the tier says which layer a page belongs to, not where it is filed.
+The pages below are the components of the library, in the order in which it is layered: the physiology, the building blocks a model puts on top of it and the analysis which runs on the models. Some of these pages are filed under the user guide in the navigation; the tier says which layer they belong to.
 
 ## Physiology
 
