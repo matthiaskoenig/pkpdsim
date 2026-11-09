@@ -48,6 +48,10 @@ One A4 page with the anatomical figure (A) and the schematic (B), each in compac
 
 ![The publication figure of the glimepiride-like model](img/figures/publication.svg)
 
+## Pictograms of impaired organs
+
+`impaired_organ(key, cx, cy, width, height, loss, color, title=None)` of `pkpdsim.pbpk.visual.icons` draws the liver (`li`), a kidney (`ki`) or the heart (`he`) as a pictogram on a card framed in the color of an impairment class: the shape of the anatomy resources in the color of the organ with its details (the lobes and the gallbladder of the liver, the cortex, vessels and ureter of a kidney, the groove of the heart), the lost part `loss` of its area faded (the liver from the right, the kidney and the heart from the top). The overview of [Impairment](impairment.md#impairment) shows them for every class, the figure of [Impairment classes](classes.md) above the scales of the classes.
+
 ## Individuals
 
 The body of an individual follows its numbers in the library: the height and weight of its age, the waist of the visceral depot, the subcutaneous and visceral adipose tissue and the volumes of its organs. The drawing changes by stretching: the proportions of the age along the height, the trunk by the waist, the limbs and the face by the body mass index, the pregnant belly as the one local change. `Individual(sex, age=35.0, bw=None, height=None, liver=1.0, pregnant=0.0, label="")` of `pkpdsim.pbpk.visual.body` is the reference individual of the age by default; `liver` is the functional liver of a Child-Pugh class.
