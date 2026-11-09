@@ -29,7 +29,7 @@ from pkpdsim.zonation.observers import (
 from pkpdsim.zonation.settings import BileTransport, Geometry, ZonationSettings
 from pkpdsim.zones import third_weights
 
-from .conftest import mass_g
+from .conftest import liver_flow, mass_g
 
 pytestmark = pytest.mark.filterwarnings("ignore:.*numerical dispersion:UserWarning")
 
@@ -43,6 +43,7 @@ PERMEABILITY = 2e-6
 def _settings(n: int = 10, **kwargs: object) -> ZonationSettings:
     """The settings of a chain of `n` zones of a 1 kg liver."""
     kwargs.setdefault("flow", ImposedFlow(1.0))
+    kwargs.setdefault("reference_flow", liver_flow())
     return ZonationSettings(
         n_zones=n,
         liver_mass=mass_g(1000.0),

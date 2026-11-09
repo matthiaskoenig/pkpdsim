@@ -40,11 +40,19 @@ zone is the reaction `FILT_<q>_<zone>` (`filtration`), the GFR of the organ
 its GFR per mass `gfr_<organ>` (`gfr_specific`) and
 the reabsorbed fraction `f_reab_<organ>` (`reabsorption`); the water which
 leaves a site is `Q_<site>` (`outflow`) where it is not the pump flow.
+
+The zone token and the reaction of a flow between two sites are the zonation
+engine's (`pkpdsim.zonation.ids.is_zone`, `flow`), which this module
+re-exports: the engine names the flows of the chain of zones of an organ and
+this module the flows of the circuit, with the same function, so the two
+agree. The engine is the lower layer, so its ids are imported here directly.
 """
 
-import importlib
 import re
-from types import ModuleType
+
+from pkpdsim.zonation import ids as zids
+from pkpdsim.zonation.geometry import Layer
+from pkpdsim.zonation.ids import flow, is_zone
 
 __all__ = [
     "ACTIVATION_ENERGY",
@@ -280,7 +288,6 @@ Q_URINE = "Q_urine"
 """The net urine flow of the organ (l/min), the filtrate which the tubules
 do not reabsorb."""
 
-_ZONE = re.compile(r"z[1-9][0-9]*")
 _CELL_SITE = re.compile(r"(z[1-9][0-9]*)_(cell|dead)")
 LIVER = "li"
 """The token of the liver, the organ whose zones the zonation engine builds."""
@@ -329,18 +336,9 @@ def zone_id(k: int) -> str:
     return f"z{k}"
 
 
-def _zonation() -> ModuleType:
-    """Get the id module of the zonation engine, imported when it is needed.
-
-    The engine imports this module (it names the flows after `flow`), so the
-    import at the top would be a cycle.
-    """
-    return importlib.import_module("pkpdsim.zonation.ids")
-
-
 def _cell_layer() -> str:
     """Get the layer of the cells of a zone in the engine."""
-    return str(importlib.import_module("pkpdsim.zonation.geometry").Layer.CELL)
+    return str(Layer.CELL)
 
 
 def _flat(zone: str, sid: str) -> str:
@@ -349,7 +347,7 @@ def _flat(zone: str, sid: str) -> str:
     The cell model is a submodel of the zone, so its elements are
     `M<kk>__<id>` (`pkpdsim.zonation.ids.flat`).
     """
-    return _zonation().flat(int(zone[1:]), sid)
+    return zids.flat(int(zone[1:]), sid)
 
 
 def species(quantity: str, site: str, *, submodel: bool = False) -> str:
@@ -371,7 +369,7 @@ def species(quantity: str, site: str, *, submodel: bool = False) -> str:
         The id of the species.
     """
     if is_zone(site):
-        return _zonation().species(quantity, _zonation().VASCULAR, site)
+        return zids.species(quantity, zids.VASCULAR, site)
     cell = _CELL_SITE.fullmatch(site)
     if cell and submodel:
         return _flat(cell[1], f"{quantity}_{cell[2]}")
@@ -435,12 +433,12 @@ def volume(site: str) -> str:
 
 def vascular(zone: str) -> str:
     """Get the compartment of the vascular space of a zone, `V_vas_<zone>`."""
-    return _zonation().volume(_zonation().VASCULAR, zone)
+    return zids.volume(zids.VASCULAR, zone)
 
 
 def cells(zone: str) -> str:
     """Get the compartment of the cells of a zone, `V_cell_<zone>`."""
-    return _zonation().volume(_cell_layer(), zone)
+    return zids.volume(_cell_layer(), zone)
 
 
 def mass(organ: str) -> str:
@@ -463,11 +461,7 @@ def vascular_fraction(organ: str) -> str:
 
     The liver is the one of the engine, `f_vas`.
     """
-    return (
-        _zonation().fraction(_zonation().VASCULAR)
-        if organ == LIVER
-        else f"f_vas_{organ}"
-    )
+    return zids.fraction(zids.VASCULAR) if organ == LIVER else f"f_vas_{organ}"
 
 
 def cell_fraction(organ: str) -> str:
@@ -475,7 +469,7 @@ def cell_fraction(organ: str) -> str:
 
     The liver is the one of the engine, `f_cell`.
     """
-    return _zonation().fraction(_cell_layer()) if organ == LIVER else f"f_cell_{organ}"
+    return zids.fraction(_cell_layer()) if organ == LIVER else f"f_cell_{organ}"
 
 
 def gfr(organ: str) -> str:
@@ -511,19 +505,6 @@ def filtration(quantity: str, zone: str) -> str:
 def outflow(site: str) -> str:
     """Get the flow of the perfusate out of a site (l/min), `Q_<site>`."""
     return f"Q_{site}"
-
-
-def flow(quantity: str, source: str, target: str) -> str:
-    """Get the reaction of the flow of a quantity between two sites.
-
-    The vascular space of a zone is the site `vas_<zone>` of the engine.
-    """
-    return f"FLOW_{quantity}_{_flow_site(source)}_{_flow_site(target)}"
-
-
-def _flow_site(site: str) -> str:
-    """Get the site of a flow, the vascular site of the engine for a zone."""
-    return f"{_zonation().VASCULAR}_{site}" if is_zone(site) else site
 
 
 def start(quantity: str) -> str:
@@ -563,8 +544,3 @@ def ph(site: str, *, submodel: bool = False) -> str:
     `M<kk>__pH_ext`.
     """
     return _flat(site, "pH_ext") if is_zone(site) and submodel else f"pH_{site}"
-
-
-def is_zone(zone: str) -> bool:
-    """Check whether a text is a zone id (`z1`, `z12`)."""
-    return _ZONE.fullmatch(zone) is not None

@@ -32,12 +32,15 @@ observers add what the species do not give, as assignment rules:
   `V_urine`);
 - the oxygen uptake of the organ `VO2` (mmole/min), the oxygen which the
   cells take up from the perfusate, the sum of the zones.
+
+The parameter of an observer with its assignment rule (`observer`, `RULE`) is
+the SBML writing kit's (`pkpdsim.sbml.parameters`), which the zonation engine
+writes its observers with as well; this module re-exports them unchanged.
 """
 
 from collections.abc import Sequence
 
 from sbmlutils.factory import AssignmentRule, Parameter
-from sbmlutils.factory.units import UnitDefinition
 from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk.placement import value_parameter
@@ -45,6 +48,7 @@ from pkpdsim.pbpk.units import U
 from pkpdsim.perfusion import circuit, core, ids
 from pkpdsim.perfusion.definition import table_value
 from pkpdsim.perfusion.units import PU
+from pkpdsim.sbml.parameters import RULE, observer
 from pkpdsim.zones import third_weights, weighted_mean
 
 __all__ = [
@@ -59,18 +63,6 @@ __all__ = [
     "urine_objects",
     "weighted_mean",
 ]
-
-RULE = SBO.MATHEMATICAL_EXPRESSION
-
-
-def observer(
-    sid: str, formula: str, unit: UnitDefinition, name: str, sbo: str
-) -> tuple[Parameter, AssignmentRule]:
-    """Get the parameter of an observer and its assignment rule."""
-    return (
-        Parameter(sid, None, unit, constant=False, name=name, sboTerm=sbo),
-        AssignmentRule(sid, formula, unit, name=name, sboTerm=RULE),
-    )
 
 
 def _add(objects: core.CoreObjects, observer: tuple[Parameter, AssignmentRule]) -> None:

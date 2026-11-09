@@ -16,27 +16,21 @@ from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk import MODEL_UNITS
 from pkpdsim.pbpk import ids as pbpk_ids
-from pkpdsim.pbpk.physiology import Sex, physiology_objects
+from pkpdsim.pbpk.physiology import Sex, physiology_objects, reference_flow
 from pkpdsim.pbpk.placement import value_parameter
 from pkpdsim.pbpk.substance import Substance
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import Formula, Value
-from pkpdsim.perfusion.ids import flow
 from pkpdsim.species import Species
 from pkpdsim.zonation import ZonationBuilder, effective_peclet, ids
 from pkpdsim.zonation.flow import ImposedFlow
-from pkpdsim.zonation.geometry import (
-    Layer,
-    axial_area,
-    fractions,
-    geometry,
-    reference_flow,
-)
+from pkpdsim.zonation.geometry import Layer, axial_area, fractions, geometry
+from pkpdsim.zonation.ids import flow
 from pkpdsim.zonation.profiles import Constant
 from pkpdsim.zonation.settings import Geometry, ZonationSettings
 from pkpdsim.zonation.transport import M2_PER_S, Solute
 
-from .conftest import mass_g
+from .conftest import liver_flow, mass_g
 
 pytestmark = pytest.mark.filterwarnings("ignore:.*numerical dispersion:UserWarning")
 
@@ -73,6 +67,7 @@ def _settings(
     n: int = 10, flow: float | None = None, **kwargs: object
 ) -> ZonationSettings:
     """The settings of a chain of `n` zones, the flow in l/min."""
+    kwargs.setdefault("reference_flow", liver_flow())
     return ZonationSettings(
         n_zones=n,
         flow=ImposedFlow(flow),
@@ -336,7 +331,10 @@ def test_the_reference_flow_is_the_total_liver_flow_of_the_pbpk_library(
     This is the invariant which lets the zonated liver stand in for the PBPK
     liver: both carry the same blood flow. The library's physiology is built
     as SBML and `QH` is read from roadrunner, so the renormalisation of the
-    flow fractions over the organs is the library's own.
+    flow fractions over the organs is the library's own. The value is the
+    library's (`pkpdsim.pbpk.physiology.reference_flow`), which a caller of
+    the engine passes as `ZonationSettings.reference_flow`: the engine reads
+    no physiology.
     """
     path = tmp_path / "physiology.xml"
     model = Model(

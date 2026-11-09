@@ -17,7 +17,7 @@ from pkpdsim.zonation.composition import CellPorts, compose, write
 from pkpdsim.zonation.geometry import Layer
 from pkpdsim.zonation.settings import Geometry, ZonationSettings
 
-from .conftest import mass_g
+from .conftest import liver_flow, mass_g
 from .data.toy_cell import TOY_ID, UPTAKE, create_toy_cell
 
 DRUG = Substance("drg", "drug", Value(180.0, U.g_per_mole))
@@ -26,7 +26,11 @@ DRUG = Substance("drg", "drug", Value(180.0, U.g_per_mole))
 def _builder(n: int = 10) -> ZonationBuilder:
     """A builder of `n` zones with the drug."""
     return ZonationBuilder(
-        ZonationSettings(n_zones=n, liver_mass=mass_g(1000.0)), [DRUG], None
+        ZonationSettings(
+            n_zones=n, liver_mass=mass_g(1000.0), reference_flow=liver_flow()
+        ),
+        [DRUG],
+        None,
     )
 
 
@@ -161,7 +165,12 @@ def test_the_flat_model_simulates(tmp_path: Path) -> None:
 def test_without_a_bile_no_port_is_replaced_by_it() -> None:
     """The bile port is left alone, the other four kinds of port stay."""
     b = ZonationBuilder(
-        ZonationSettings(n_zones=2, bile=None, liver_mass=mass_g(1000.0)),
+        ZonationSettings(
+            n_zones=2,
+            bile=None,
+            liver_mass=mass_g(1000.0),
+            reference_flow=liver_flow(),
+        ),
         [DRUG],
         None,
     )
@@ -177,7 +186,10 @@ def test_the_well_stirred_vascular_site_replaces_the_external_port() -> None:
     """The Disse space is merged into the vascular site there."""
     b = ZonationBuilder(
         ZonationSettings(
-            n_zones=2, geometry=Geometry.WELL_STIRRED, liver_mass=mass_g(1000.0)
+            n_zones=2,
+            geometry=Geometry.WELL_STIRRED,
+            liver_mass=mass_g(1000.0),
+            reference_flow=liver_flow(),
         ),
         [DRUG],
         None,
@@ -270,7 +282,11 @@ def test_configurations_validate_flat_and_unflat(
     """Both files validate on their own, and the flat model has these sizes."""
     create_toy_cell(tmp_path)
     builder = ZonationBuilder(
-        ZonationSettings(liver_mass=mass_g(1000.0), **kwargs),  # ty: ignore[invalid-argument-type]
+        ZonationSettings(
+            liver_mass=mass_g(1000.0),
+            reference_flow=liver_flow(),
+            **kwargs,  # ty: ignore[invalid-argument-type]
+        ),
         [DRUG],
         None,
     )

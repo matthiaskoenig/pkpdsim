@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 
-from pkpdsim.pbpk.values import Value
+from pkpdsim.sbml.values import Value
 from pkpdsim.species import Species
 from pkpdsim.zonation.flow import ImposedFlow, PressureFlow
 from pkpdsim.zonation.geometry import Layer, SinusoidGeometry
@@ -62,6 +62,14 @@ class ZonationSettings:
         species: the species of the geometry and of the reference liver.
         liver_mass: the liver mass (kg, g or mg); `None` takes the reference
             liver of the species.
+        reference_flow: the blood flow of the whole reference organ (l/min or
+            ml/min), which an `ImposedFlow` without a value takes and against
+            which a `PressureFlow` without a `resistance_factor` is
+            calibrated; `None` (the default) states none, which makes those
+            two an error. The engine reads no physiology of its own: the
+            caller gives the number, the zonated liver of the PBPK library
+            the total liver flow of its reference individual
+            (`pkpdsim.pbpk.physiology.reference_flow`).
         geometry_constants: the geometry replacing the one the table gives
             for the species; `None` takes `geometry(species)`.
         fractions: the volume fractions of the layers of the organ, replacing
@@ -85,6 +93,7 @@ class ZonationSettings:
     profiles: Mapping[str, Profile] = field(default_factory=dict)
     species: Species = Species.RAT
     liver_mass: Value | None = None
+    reference_flow: Value | None = None
     geometry_constants: SinusoidGeometry | None = None
     fractions: Mapping[Layer, float] | None = None
     boundary: FlowBoundary = FlowBoundary.OPEN

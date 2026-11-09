@@ -42,10 +42,10 @@ import roadrunner
 from sbmlutils.factory import Model, Parameter, RateRule
 from sbmlutils.metadata import SBO
 
-from pkpdsim.pbpk.annotation import initial_assignment
-from pkpdsim.pbpk.units import U
-from pkpdsim.perfusion import core
-from pkpdsim.perfusion.observers import RULE, observer
+from pkpdsim.sbml.annotation import initial_assignment
+from pkpdsim.sbml.objects import SbmlObjects
+from pkpdsim.sbml.parameters import RULE, observer
+from pkpdsim.sbml.units import U
 from pkpdsim.zonation import ids
 from pkpdsim.zonation.builder import ZonationBuilder
 from pkpdsim.zonation.geometry import Layer
@@ -199,7 +199,7 @@ def _layer_name(layer: Layer | str) -> str:
 
 
 def _ledger(
-    out: core.CoreObjects,
+    out: SbmlObjects,
     kind: str,
     substance: Solute,
     rate: str | None,
@@ -236,7 +236,7 @@ def observer_objects(
     settings: ZonationSettings,
     substances: Sequence[Solute],
     consumption: Mapping[str, str] | None = None,
-) -> core.CoreObjects:
+) -> SbmlObjects:
     """Get the observers of a zonated organ.
 
     The weighting of the thirds is `pkpdsim.zones.third_weights`, which every
@@ -266,7 +266,7 @@ def observer_objects(
     blood = ids.VASCULAR if ids.VASCULAR in layers else Layer.PLASMA
     first, last = ids.zone(1), ids.zone(n)
     flowing = builder.has_flow()
-    out = core.CoreObjects()
+    out = SbmlObjects()
     for substance in substances:
         s = substance.sid
         for layer in layers:
@@ -354,7 +354,7 @@ def observer_objects(
     return out
 
 
-def add_observers(model: Model, objects: core.CoreObjects) -> None:
+def add_observers(model: Model, objects: SbmlObjects) -> None:
     """Add the observers to a model, which they do not change.
 
     Args:

@@ -25,6 +25,14 @@ terms, the protein of a process, the substance of a species); the location
 is `BQB.IS_PART_OF` for a compartment, `BQB.IS_PROPERTY_OF` for a parameter
 and `BQB.OCCURS_IN` for a reaction; a parameter of a protein (activity,
 inhibition constant) is `BQB.IS_PROPERTY_OF` the protein.
+
+The annotations which every library of pkpdsim writes, the initial assignment
+of a constant (`initial_assignment`) and the taxon of a build (`TAXA`), are
+the SBML writing kit's (`pkpdsim.sbml.annotation`); this module is the import
+path of the library and re-exports them unchanged. `annotate` and its table
+stay here: no other library annotates by kind, and the kind of an element is
+resolved through the vocabulary of this library (the organs, the pools and
+the segments).
 """
 
 from collections.abc import Iterable, Mapping
@@ -33,18 +41,17 @@ from dataclasses import dataclass, field
 from pymetadata.ontologies.pbpko import PBPKO
 from sbmlutils.factory import (
     Compartment,
-    InitialAssignment,
     Reaction,
     Sbase,
     Species,
 )
-from sbmlutils.factory.units import UnitType
 from sbmlutils.metadata import BQB, SBO
 
 from pkpdsim.annotations import compartments as _compartments
 from pkpdsim.pbpk.organs import Organ, Pool
 from pkpdsim.pbpk.proteins import PROTEINS
 from pkpdsim.pbpk.substance import Mode, Substance
+from pkpdsim.sbml.annotation import TAXA, initial_assignment
 from pkpdsim.species import Species as BuildSpecies
 
 __all__ = [
@@ -925,30 +932,6 @@ def _location(element: Sbase) -> BQB:
     return BQB.IS_PROPERTY_OF
 
 
-def initial_assignment(
-    symbol: str, formula: str, unit: UnitType, name: str
-) -> InitialAssignment:
-    """Get the initial assignment of a constant, with a name and an SBO term.
-
-    Every quantity of the library which depends on parameters only is a
-    constant with an initial assignment; the assignment carries the name of
-    its target and the SBO term of a mathematical expression, so the factory
-    has nothing to hint about.
-
-    Args:
-        symbol: the id of the target.
-        formula: the formula.
-        unit: the unit of the formula.
-        name: the name of the target.
-
-    Returns:
-        The initial assignment.
-    """
-    return InitialAssignment(
-        symbol, formula, unit, name=name, sboTerm=SBO.MATHEMATICAL_EXPRESSION
-    )
-
-
 def annotate[S: Sbase](
     element: S,
     kind: str,
@@ -1020,15 +1003,6 @@ def annotate[S: Sbase](
         t for t in dict.fromkeys(terms) if t not in existing
     ]
     return element
-
-
-TAXA: dict[BuildSpecies, str] = {
-    BuildSpecies.HUMAN: "taxonomy/9606",  # Homo sapiens
-    BuildSpecies.RAT: "taxonomy/10116",  # Rattus norvegicus
-    BuildSpecies.MOUSE: "taxonomy/10090",  # Mus musculus
-    BuildSpecies.PIG: "taxonomy/9823",  # Sus scrofa
-}
-"""The NCBI taxon of every species of a build."""
 
 
 def model_annotations(

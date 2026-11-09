@@ -15,9 +15,8 @@ from enum import StrEnum
 from sbmlutils.factory.units import UnitDefinition
 
 from pkpdsim.database.tables import entry
-from pkpdsim.pbpk.physiology import reference_liver_flow
-from pkpdsim.pbpk.units import U
-from pkpdsim.pbpk.values import Q, Value, number
+from pkpdsim.sbml.units import U
+from pkpdsim.sbml.values import Q, Value, number
 from pkpdsim.species import Species
 from pkpdsim.zonation.profiles import zone_positions
 
@@ -30,7 +29,6 @@ __all__ = [
     "geometry",
     "layer_volumes",
     "porosities",
-    "reference_flow",
     "reference_liver_mass",
     "sinusoid_count",
     "table_value",
@@ -175,30 +173,6 @@ def fractions(
     fr[Layer.CELL] = _number(section, "hepatocyte")
     fr[Layer.BILE] = _number(section, "bile")
     return fr
-
-
-def reference_flow(species: Species) -> Value:
-    """Get the reference blood flow through the whole liver of a species (l/min).
-
-    The total liver flow `QH = QHA + QPO` of the PBPK library for its
-    reference individual (`pkpdsim.pbpk.physiology.reference_liver_flow`): the
-    flow fractions of the liver and of the portal organs, renormalised over
-    the organs in parallel as the library does, times the cardiac output.
-    The engine follows the renormalised library fractions, so the zonated
-    liver carries the flow of the PBPK liver it stands in for.
-
-    Args:
-        species: the species.
-
-    Returns:
-        The flow in l/min.
-    """
-    return Value(
-        reference_liver_flow(species),
-        U.l_per_min,
-        "pkpdsim.pbpk.physiology",
-        f"the total liver blood flow of the reference male {species} of the PBPK library",
-    )
 
 
 def reference_liver_mass(species: Species) -> Value:

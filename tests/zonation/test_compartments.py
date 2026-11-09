@@ -18,6 +18,8 @@ from pkpdsim.zonation.geometry import Layer, fractions, geometry
 from pkpdsim.zonation.profiles import Constant
 from pkpdsim.zonation.settings import BileTransport, Geometry, ZonationSettings
 
+from .conftest import liver_flow
+
 
 def _total(**kwargs: object) -> float:
     """The total volume (l) of the compartments of the settings."""
@@ -31,6 +33,7 @@ def _table_mass() -> float:
 
 def _compartments(**kwargs: object) -> list[Compartment]:
     """The compartments of a builder of the settings."""
+    kwargs.setdefault("reference_flow", liver_flow())
     return ZonationBuilder(ZonationSettings(**kwargs), (), None).compartments()  # ty: ignore[invalid-argument-type]
 
 
@@ -123,7 +126,8 @@ def test_an_unused_profile_key_raises() -> None:
 
 def test_every_compartment_has_unit_name_and_sbo_term() -> None:
     """Each compartment is annotated."""
-    model = ZonationBuilder(ZonationSettings(n_zones=3), (), None).build()
+    settings = ZonationSettings(n_zones=3, reference_flow=liver_flow())
+    model = ZonationBuilder(settings, (), None).build()
     assert all(c.unit is not None and c.name and c.sboTerm for c in model.compartments)
 
 
@@ -133,9 +137,8 @@ def test_the_initial_assignments_evaluate_to_the_layer_volumes(
 ) -> None:
     """The written model gives every compartment `f_<layer> * f_par * M_li / rho_li / n`."""
     n = 3
-    model = ZonationBuilder(
-        ZonationSettings(n_zones=n, geometry=geom), (), None
-    ).build()
+    settings = ZonationSettings(n_zones=n, geometry=geom, reference_flow=liver_flow())
+    model = ZonationBuilder(settings, (), None).build()
     path = tmp_path / "liver.xml"
     create_model(model, filepath=path, sbml_level=3, sbml_version=2, validate=False)
     rr = roadrunner.RoadRunner(str(path))

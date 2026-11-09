@@ -17,7 +17,7 @@ import numpy as np
 import pytest
 from pbpk.conftest import compiled, individual
 from sbmlutils.factory import PORT_SUFFIX, Model, create_model
-from zonation.conftest import mass_g
+from zonation.conftest import liver_flow, mass_g
 
 from pkpdsim.pbpk.substance import Substance
 from pkpdsim.pbpk.units import U
@@ -343,7 +343,11 @@ def test_the_engine_places_the_core_once_per_zone(tmp_path: Path) -> None:
     )
     glucose = Substance("glc", "glucose", Value(180.0, U.g_per_mole))
     builder = ZonationBuilder(
-        ZonationSettings(n_zones=4, liver_mass=mass_g(1000.0)), [glucose], None
+        ZonationSettings(
+            n_zones=4, liver_mass=mass_g(1000.0), reference_flow=liver_flow()
+        ),
+        [glucose],
+        None,
     )
     flat = write(
         compose(builder, "perfusion_core", CellPorts(), deletions=()), tmp_path

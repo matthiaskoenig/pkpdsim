@@ -68,6 +68,13 @@ A variant with a lumen of its own on the apical side of the cell gives it
 places the apical transport between the cells of the kidney and the lumen of
 the proximal tubule, an efflux secretes into it, an influx reabsorbs from it
 (with the inhibitors of its protein in the lumen).
+
+The parameter of a number with its provenance (`value_parameter`,
+`value_notes`) and the parameter of a formula over the top model
+(`FormulaParameter`, `formula_assignment`) are the SBML writing kit's
+(`pkpdsim.sbml.parameters`), which every library of pkpdsim shares; this
+module is the import path of the library and re-exports them unchanged. The
+placement of a process in the parts of an organ stays here.
 """
 
 import copy
@@ -81,7 +88,7 @@ from sbmlutils.factory import InitialAssignment, Parameter, Reaction, UnitDefini
 from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk import ids
-from pkpdsim.pbpk.annotation import annotate, initial_assignment
+from pkpdsim.pbpk.annotation import annotate
 from pkpdsim.pbpk.chemistry import (
     MM,
     CustomReaction,
@@ -94,14 +101,19 @@ from pkpdsim.pbpk.chemistry import (
     Rest,
     Transport,
 )
-from pkpdsim.pbpk.data import cite
 from pkpdsim.pbpk.impairment import organ_activity
 from pkpdsim.pbpk.organs import Organ, Part
 from pkpdsim.pbpk.parts import Parts
 from pkpdsim.pbpk.proteins import Inhibition
 from pkpdsim.pbpk.substance import KpMethod, Substance
 from pkpdsim.pbpk.units import U
-from pkpdsim.pbpk.values import Formula, ModelParameter, Q, Value, as_value
+from pkpdsim.pbpk.values import ModelParameter, Q, Value
+from pkpdsim.sbml.parameters import (
+    FormulaParameter,
+    formula_assignment,
+    value_notes,
+    value_parameter,
+)
 
 if TYPE_CHECKING:
     from pkpdsim.pbpk.organ import OrganContext
@@ -613,34 +625,6 @@ def inhibition_parameters(sid: str, inh: Inhibition) -> list[tuple[str, str]]:
     return pars
 
 
-class FormulaParameter(Parameter):
-    """A constant parameter whose value is a `Formula` over ids of the top model.
-
-    The parameter has no value; the build gives it the initial assignment of
-    the formula (`formula_assignment`): the top model in its objects, an organ
-    in its assignments, with an input port for every id of the top model the
-    formula reads (`OrganBuilder.model_definition`).
-
-    Attributes:
-        formula: the formula.
-    """
-
-    def __init__(
-        self, pid: str, formula: Formula, name: str, sbo: str, notes: str
-    ) -> None:
-        """Create the parameter of a formula."""
-        super().__init__(
-            pid,
-            None,
-            formula.unit,
-            constant=True,
-            name=name,
-            sboTerm=sbo,
-            notes=notes,
-        )
-        self.formula = formula
-
-
 class OrganFormulaParameter(Parameter):
     """A constant of an organ whose value is a formula over other constants of the organ.
 
@@ -739,78 +723,6 @@ def formula_problems(
             f"during the simulation: {states}"
         )
     return problems
-
-
-def formula_assignment(p: FormulaParameter) -> InitialAssignment:
-    """Get the initial assignment of the parameter of a formula."""
-    return initial_assignment(
-        str(p.sid), p.formula.expression, p.formula.unit, str(p.name)
-    )
-
-
-def value_parameter(
-    pid: str,
-    q: Q,
-    unit: UnitDefinition,
-    name: str,
-    sbo: str,
-    text: str = "",
-) -> Parameter:
-    """Get a constant parameter of a number with its provenance.
-
-    Args:
-        pid: the id of the parameter.
-        q: the number, plain (in `unit`) or a `Value` with unit and source,
-            or a `Formula` (a `FormulaParameter`, the notes name the formula).
-        unit: the unit of a plain number.
-        name: the name of the parameter.
-        sbo: the SBO term.
-        text: the description of the parameter.
-
-    Returns:
-        The parameter, the citation of the source in the notes and the
-        uncertainty of a fitted value.
-    """
-    v = as_value(q, unit)
-    lines = [text] if text else []
-    if isinstance(v, Formula):
-        if v.notes:
-            lines.append(v.notes)
-        lines.append(
-            f"Tied to other parameters of the model: `{pid} = {v.expression}`."
-        )
-        return FormulaParameter(pid, v, name, sbo, "\n\n".join(lines))
-    return Parameter(
-        pid,
-        v.value,
-        v.unit,
-        constant=True,
-        name=name,
-        sboTerm=sbo,
-        notes=value_notes(v, text),
-        uncertainties=v.uncertainties,
-    )
-
-
-def value_notes(v: Value, text: str = "") -> str | None:
-    """Get the notes of a number with its provenance.
-
-    Args:
-        v: the value.
-        text: the description of the element which carries the value.
-
-    Returns:
-        The description, the notes of the value and the citation of its
-        source (`Fitted value.` for a fit), `None` without any.
-    """
-    lines = [text] if text else []
-    if v.notes:
-        lines.append(v.notes)
-    if v.source == "fit":
-        lines.append("Fitted value.")
-    elif v.source is not None:
-        lines.append(f"Source:\n\n- {cite(v.source)}")
-    return "\n\n".join(lines) if lines else None
 
 
 def place(

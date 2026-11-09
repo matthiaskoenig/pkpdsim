@@ -21,6 +21,7 @@ import roadrunner
 from pbpk.conftest import individual
 from sbmlutils.factory import Parameter, create_model
 
+from pkpdsim.pbpk.physiology import reference_flow
 from pkpdsim.pbpk.substance import Substance
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import Value
@@ -34,7 +35,7 @@ from pkpdsim.zonation.flow import (
     resolved_resistance_factor,
     zone_flows,
 )
-from pkpdsim.zonation.geometry import SinusoidGeometry, geometry, reference_flow
+from pkpdsim.zonation.geometry import SinusoidGeometry, geometry
 from pkpdsim.zonation.profiles import Linear, zone_positions
 from pkpdsim.zonation.settings import ZonationSettings
 
@@ -50,7 +51,13 @@ _SPT_FLOW = PressureFlow(resistance_factor=10.0)
 
 
 def _settings(flow: ImposedFlow | PressureFlow, **kwargs: object) -> ZonationSettings:
-    """The settings of a chain of ten zones of a 1 kg liver."""
+    """The settings of a chain of ten zones of a 1 kg liver.
+
+    The reference flow of the species is the PBPK library's
+    (`pkpdsim.pbpk.physiology.reference_flow`): the engine takes it as a
+    setting, so every test which exercises a default flow states it.
+    """
+    kwargs.setdefault("reference_flow", reference_flow(ZonationSettings().species))
     return ZonationSettings(
         n_zones=_N,
         flow=flow,
@@ -186,6 +193,25 @@ def test_a_flow_and_a_flow_per_mass_exclude_each_other() -> None:
     """Which of the two would win is not for the model to guess."""
     with pytest.raises(ValueError, match="per_mass"):
         ImposedFlow(Value(1.0, "ml/min"), Value(1.0, "ml/min/g"))
+
+
+@pytest.mark.parametrize(
+    "flow", [ImposedFlow(), PressureFlow()], ids=["imposed", "pressure"]
+)
+def test_a_default_flow_without_a_reference_flow_says_what_to_give(
+    flow: ImposedFlow | PressureFlow,
+) -> None:
+    """The engine reads no physiology: the reference flow is a setting.
+
+    An `ImposedFlow` without a value and a `PressureFlow` without a
+    resistance factor both take the reference flow of the organ, which the
+    caller states (`pkpdsim.pbpk.physiology.reference_flow` for the liver of
+    the PBPK library). Without it the build refuses and names the setting and
+    the two alternatives, instead of reaching into a library above the engine.
+    """
+    settings = ZonationSettings(n_zones=_N, flow=flow, liver_mass=_MASS)
+    with pytest.raises(ValueError, match="reference_flow"):
+        ZonationBuilder(settings, [TRACER], None).build()
 
 
 def test_the_leaky_tube_reduces_to_poiseuille_without_fenestrae(tmp_path: Path) -> None:
@@ -393,7 +419,12 @@ def test_both_flow_modes_agree_at_their_defaults(
     """The periportal inflow of a default pressure flow is the default imposed flow."""
     outputs = {}
     for name, flow in (("pressure", PressureFlow()), ("imposed", ImposedFlow())):
-        settings = ZonationSettings(n_zones=_N, flow=flow, species=species)
+        settings = ZonationSettings(
+            n_zones=_N,
+            flow=flow,
+            species=species,
+            reference_flow=reference_flow(species),
+        )
         model = ZonationBuilder(settings, [TRACER], None).build()
         path = tmp_path / f"{name}.xml"
         create_model(model, filepath=path, sbml_level=3, sbml_version=2, validate=False)
@@ -406,14 +437,17 @@ def test_both_flow_modes_agree_at_their_defaults(
 def test_the_calibrated_factor_is_per_species_and_replaced_by_a_given_one() -> None:
     """The rat needs about five times the factor of spt; a given factor is kept."""
     rat, human = (
-        calibrated_resistance_factor(sp, geometry(sp))
+        calibrated_resistance_factor(sp, geometry(sp), reference_flow(sp))
         for sp in (Species.RAT, Species.HUMAN)
     )
     assert 45.0 < rat < 60.0
     assert human != _eq(rat, 0.1)
     assert (
         resolved_resistance_factor(
-            PressureFlow(resistance_factor=7.0), geometry(Species.RAT), Species.RAT
+            PressureFlow(resistance_factor=7.0),
+            geometry(Species.RAT),
+            Species.RAT,
+            reference_flow(Species.RAT),
         )
         == 7.0
     )
@@ -475,9 +509,10 @@ def test_the_calibrated_factor_follows_the_geometry() -> None:
     base = geometry(Species.RAT)
     longer = dataclasses.replace(base, L_sin=2.0 * base.L_sin)
     wider = dataclasses.replace(base, r_sin=1.2 * base.r_sin)
-    assert calibrated_resistance_factor(Species.RAT, base) == _eq(52.17, 1e-3)
-    assert calibrated_resistance_factor(Species.RAT, longer) == _eq(18.80, 1e-3)
-    assert calibrated_resistance_factor(Species.RAT, wider) == _eq(69.86, 1e-3)
+    rat = reference_flow(Species.RAT)
+    assert calibrated_resistance_factor(Species.RAT, base, rat) == _eq(52.17, 1e-3)
+    assert calibrated_resistance_factor(Species.RAT, longer, rat) == _eq(18.80, 1e-3)
+    assert calibrated_resistance_factor(Species.RAT, wider, rat) == _eq(69.86, 1e-3)
 
 
 @pytest.mark.parametrize(("n_zones", "ratio"), [(10, 0.82885), (1, 0.74724)])
@@ -490,6 +525,10 @@ def test_the_mean_flow_is_below_the_reference_flow(
     filters out of the first half returns in the second, so the mean
     throughput, which sets the velocity, is lower than the inflow.
     """
-    settings = ZonationSettings(n_zones=n_zones, flow=PressureFlow())
+    settings = ZonationSettings(
+        n_zones=n_zones,
+        flow=PressureFlow(),
+        reference_flow=reference_flow(ZonationSettings().species),
+    )
     r = _build(settings, tmp_path)
     assert r[ids.FLOW] / reference_flow(settings.species).value == _eq(ratio, 1e-4)

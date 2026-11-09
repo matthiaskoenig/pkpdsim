@@ -84,6 +84,7 @@ from pkpdsim.pbpk.sex_differences import (
     sex_factor,
 )
 from pkpdsim.pbpk.units import U
+from pkpdsim.pbpk.values import Value
 from pkpdsim.sex import Sex
 from pkpdsim.species import Species
 
@@ -101,9 +102,11 @@ __all__ = [
     "normal_gfr",
     "physiology_objects",
     "physiology_table",
+    "reference_flow",
     "reference_fractions",
     "reference_hematocrit",
     "reference_individual",
+    "reference_liver_flow",
     "reference_tissue_volumes",
     "scaled_cardiac_output",
 ]
@@ -1744,6 +1747,32 @@ def reference_liver_flow(species: Species, sex: Sex = Sex.MALE) -> float:
     organs = [Organ.LIVER, *(o for o in Organ if o in PORTAL_ORGANS)]
     fraction = sum(refs[ids.flow_fraction(o)].value for o in organs)
     return fraction * refs[ids.ref(ids.CO)].value
+
+
+def reference_flow(species: Species) -> Value:
+    """Get the reference blood flow through the whole liver of a species (l/min).
+
+    The total liver flow `QH = QHA + QPO` of the library for its reference
+    individual (`reference_liver_flow`): the flow fractions of the liver and
+    of the portal organs, renormalised over the organs in parallel as the
+    library does, times the cardiac output. The value with its provenance,
+    which the zonation engine takes as its reference flow
+    (`ZonationSettings.reference_flow`): the engine follows the renormalised
+    library fractions, so the zonated liver carries the flow of the PBPK
+    liver it stands in for.
+
+    Args:
+        species: the species.
+
+    Returns:
+        The flow in l/min.
+    """
+    return Value(
+        reference_liver_flow(species),
+        U.l_per_min,
+        "pkpdsim.pbpk.physiology",
+        f"the total liver blood flow of the reference male {species} of the PBPK library",
+    )
 
 
 @dataclass(frozen=True)

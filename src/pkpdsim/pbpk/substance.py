@@ -10,6 +10,7 @@ from sbmlutils.metadata import BQB
 from pkpdsim.pbpk.organs import Organ, as_member, as_organ_keys, as_organs
 from pkpdsim.pbpk.proteins import Induction, Inhibition
 from pkpdsim.pbpk.values import Q, Value, check_literals, number, unit_text
+from pkpdsim.sbml.values import DIFFUSION_UNITS
 
 __all__ = [
     "DIFFUSION_UNITS",
@@ -240,18 +241,6 @@ class Excretion:
     urine: bool = False
     fraction_reabsorbed: Q = 0.0
     reabsorption: ThresholdReabsorption | None = None
-
-
-DIFFUSION_UNITS: Mapping[str, float] = {
-    "meter^2/second": 1.0,
-    "m^2/s": 1.0,
-    "cm^2/second": 1e-4,
-    "cm^2/s": 1e-4,
-    "mm^2/second": 1e-6,
-    "micrometer^2/second": 1e-12,
-}
-"""The units a diffusion coefficient may have, the factor to m**2/s, by the
-definition of the unit (`unit_text`)."""
 
 
 @dataclass(frozen=True)

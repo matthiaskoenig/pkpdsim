@@ -16,7 +16,14 @@ The liver parameters the layer volumes are computed from are the mass `M_li`
 (kg), the density `rho_li` (kg/l), the parenchymal fraction `f_par` and the
 volume fraction `f_<layer>` of every layer. The well-stirred geometry has the
 vascular site `vas` (lumen, endothelium and Disse) instead of those layers.
+
+The zone token and the reaction of a flow between two sites are the engine's
+and not the perfusion library's (`is_zone`, `flow`): the engine names the
+flows of its chain, and a perfused organ names the flows of its circuit, with
+the same function, so the two agree. `pkpdsim.perfusion.ids` re-exports them.
 """
+
+import re
 
 from pkpdsim.zonation.geometry import Layer
 
@@ -56,7 +63,9 @@ __all__ = [
     "axial",
     "exchange",
     "flat",
+    "flow",
     "fraction",
+    "is_zone",
     "layer_flow",
     "meta_id",
     "permeability",
@@ -166,6 +175,9 @@ BILE_FLOW_REFERENCE = "Q_bile_ref"
 MASS_REFERENCE = "M_li_ref"
 """The id of the mass (kg) of the reference liver the bile flow is given for."""
 
+_ZONE = re.compile(r"z[1-9][0-9]*")
+"""The pattern of the token of a zone, `z1` to `z<n>`."""
+
 
 def zone(k: int) -> str:
     """Get the token of zone `k`, `z<k>`.
@@ -182,6 +194,11 @@ def zone(k: int) -> str:
     if k < 1:
         raise ValueError(f"The zones are numbered from 1, not {k}.")
     return f"z{k}"
+
+
+def is_zone(zone: str) -> bool:
+    """Check whether a text is a zone id (`z1`, `z12`)."""
+    return _ZONE.fullmatch(zone) is not None
 
 
 def site(layer: Layer | str, zone: str) -> str:
@@ -270,6 +287,19 @@ def zone_flow(layer: Layer | str | None, zone: str) -> str:
 def sinusoid_flow(zone: str) -> str:
     """Get the flow of one sinusoid in a zone, `Q_sin_<zone>` (m**3/s)."""
     return f"Q_sin_{zone}"
+
+
+def flow(quantity: str, source: str, target: str) -> str:
+    """Get the reaction of the flow of a quantity between two sites.
+
+    The vascular space of a zone is the site `vas_<zone>` of the engine.
+    """
+    return f"FLOW_{quantity}_{_flow_site(source)}_{_flow_site(target)}"
+
+
+def _flow_site(site: str) -> str:
+    """Get the site of a flow, the vascular site of the engine for a zone."""
+    return f"{VASCULAR}_{site}" if is_zone(site) else site
 
 
 def diffusion(quantity: str) -> str:

@@ -64,7 +64,10 @@ signature of `P0` and no defect.
 
 **The resistance factor is calibrated.** `nu = resistance_factor * viscosity`
 and the default factor is derived per species so that the periportal inflow at
-the default pressures is `reference_flow(species)`, the flow an imposed flow
+the default pressures is the reference flow of the settings
+(`ZonationSettings.reference_flow`, which the PBPK library fills with the
+total liver flow of its reference individual,
+`pkpdsim.pbpk.physiology.reference_flow`), the flow an imposed flow
 takes by default: switching between the two modes does not change the flow
 the organ receives. The 10 of the spt model gives about five times that flow
 for the rat. The guarantee holds at the default pressures, `p_onc`, viscosity
@@ -93,17 +96,16 @@ from sbmlutils.factory import InitialAssignment, Parameter
 from sbmlutils.factory.units import UnitDefinition
 from sbmlutils.metadata import SBO
 
-from pkpdsim.pbpk.annotation import initial_assignment
-from pkpdsim.pbpk.placement import value_parameter
-from pkpdsim.pbpk.units import U
-from pkpdsim.pbpk.values import Q, Value, number, unit_text
+from pkpdsim.sbml.annotation import initial_assignment
+from pkpdsim.sbml.parameters import value_parameter
+from pkpdsim.sbml.units import U
+from pkpdsim.sbml.values import Q, Value, number, unit_text
 from pkpdsim.species import Species
 from pkpdsim.zonation import ids
 from pkpdsim.zonation.geometry import (
     Layer,
     SinusoidGeometry,
     fractions,
-    reference_flow,
     reference_liver_mass,
     sinusoid_count,
 )
@@ -157,6 +159,15 @@ _PORTAL_PRESSURE = Value(1333.22, "Pa", notes="10 mmHg, the portal pressure of s
 _CENTRAL_PRESSURE = Value(266.64, "Pa", notes="2 mmHg, the perivenous pressure of spt")
 _PLASMA_VISCOSITY = Value(0.0018, "Pa*s", notes="the plasma viscosity of spt")
 
+_NO_REFERENCE = (
+    "The flow of the organ is its reference flow, and the settings state none: "
+    "give `ZonationSettings.reference_flow` (the total liver flow of the "
+    "reference individual of the PBPK library is "
+    "`pkpdsim.pbpk.physiology.reference_flow`), the flow of an `ImposedFlow` or "
+    "the `resistance_factor` of a `PressureFlow`."
+)
+"""The message of a flow which takes a reference flow the settings do not state."""
+
 
 @dataclass(frozen=True)
 class ImposedFlow:
@@ -168,7 +179,8 @@ class ImposedFlow:
         per_mass: the flow per mass of liver (ml/min/g, l/min/kg or
             ml/min/kg), which the flow of the liver follows, as the machine
             perfusion states it. `value` and `per_mass` exclude each other;
-            neither takes the reference flow of the species.
+            neither takes the reference flow of the settings
+            (`ZonationSettings.reference_flow`).
     """
 
     value: Q | None = None
@@ -201,8 +213,9 @@ class PressureFlow:
             sinusoid over the plasma viscosity, `nu = resistance_factor *
             viscosity`. `None` (the default) is calibrated per species
             (`calibrated_resistance_factor`) so that the periportal inflow at
-            the default pressures is the reference flow of the species, which
-            is what an `ImposedFlow` without a value gives. The 10 of the spt
+            the default pressures is the reference flow of the settings
+            (`ZonationSettings.reference_flow`), which is what an
+            `ImposedFlow` without a value gives. The 10 of the spt
             model is an uncalibrated stand-in for the microvascular geometry
             and gives about five times the reference flow for the rat. The
             agreement with an imposed flow holds only with the default
@@ -240,20 +253,23 @@ def _mass_kg(mass: Q) -> float:
     return _converted(mass, {"g": 1e-3, "kg": 1.0, "mg": 1e-6}, "liver mass")
 
 
-def imposed_flow(flow: ImposedFlow, species: str, mass_kg: float) -> float:
+def imposed_flow(flow: ImposedFlow, reference: Value | None, mass_kg: float) -> float:
     """Get an imposed flow of the liver in l/min.
 
     Args:
         flow: the imposed flow.
-        species: the species of the reference flow.
+        reference: the reference flow of the organ
+            (`ZonationSettings.reference_flow`), which a flow without a value
+            and without a flow per mass takes; `None` for none.
         mass_kg: the mass of the liver (kg).
 
     Returns:
         The flow (l/min), as given, not checked for its sign.
 
     Raises:
-        ValueError: for a flow which is a formula, has no flow unit, or a flow
-            per mass without a unit.
+        ValueError: for a flow which is a formula, has no flow unit, a flow
+            per mass without a unit, or a flow which takes the reference flow
+            of settings which state none.
     """
     if flow.per_mass is not None:
         if not isinstance(flow.per_mass, Value):
@@ -264,7 +280,9 @@ def imposed_flow(flow: ImposedFlow, species: str, mass_kg: float) -> float:
             flow.per_mass, _PER_MASS_TO_L_PER_MIN_KG, "flow per mass"
         )
     if flow.value is None:
-        return reference_flow(species).value  # ty: ignore[invalid-argument-type]
+        if reference is None:
+            raise ValueError(_NO_REFERENCE)
+        return _converted(reference, _FLOW_TO_L_PER_MIN, "reference flow")
     if number(flow.value) is None:
         raise ValueError(
             "The imposed flow needs a number, not a formula: a flow computed from "
@@ -371,13 +389,15 @@ def _mean_porosity(geo: SinusoidGeometry) -> float:
     return 0.5 * (geo.porosity_pp + geo.porosity_pc)
 
 
-def calibrated_resistance_factor(species: Species, geo: SinusoidGeometry) -> float:
+def calibrated_resistance_factor(
+    species: Species, geo: SinusoidGeometry, reference: Value
+) -> float:
     """Get the resistance factor for which the inflow is the reference flow.
 
     The flow of the leaky tube is inversely proportional to the viscosity (`W`
     and `w` both scale with it, `lambda` does not), so the factor is the
     periportal inflow of the whole reference liver at the default pressures
-    and the plasma viscosity (factor 1) over `reference_flow(species)`. The
+    and the plasma viscosity (factor 1) over the reference flow. The
     entrance flow is what the organ receives; the flows of the zones do not
     add up in a leaky tube. The factor is a property of the species and its
     geometry: it does not follow the pressures, the oncotic pressure or the
@@ -393,27 +413,42 @@ def calibrated_resistance_factor(species: Species, geo: SinusoidGeometry) -> flo
     Args:
         species: the species.
         geo: the geometry.
+        reference: the reference flow of the organ
+            (`ZonationSettings.reference_flow`), the target of the calibration.
 
     Returns:
         The factor (about 50 for the rat).
     """
-    tube = leaky_tube(PressureFlow(resistance_factor=1.0), geo, species)
+    tube = leaky_tube(PressureFlow(resistance_factor=1.0), geo, species, reference)
     n_sin = sinusoid_count(reference_liver_mass(species), geo, fractions(species, None))
     inflow = tube.flow(0.0) * n_sin * 1e3 * 60.0
-    return inflow / reference_flow(species).value
+    return inflow / _converted(reference, _FLOW_TO_L_PER_MIN, "reference flow")
 
 
 def resolved_resistance_factor(
-    flow: PressureFlow, geo: SinusoidGeometry, species: Species
+    flow: PressureFlow,
+    geo: SinusoidGeometry,
+    species: Species,
+    reference: Value | None,
 ) -> float:
-    """Get the resistance factor of a pressure flow: the given or the calibrated one."""
+    """Get the resistance factor of a pressure flow: the given or the calibrated one.
+
+    Raises:
+        ValueError: for a factor which is calibrated and settings which state
+            no reference flow.
+    """
     if flow.resistance_factor is not None:
         return flow.resistance_factor
-    return calibrated_resistance_factor(species, geo)
+    if reference is None:
+        raise ValueError(_NO_REFERENCE)
+    return calibrated_resistance_factor(species, geo, reference)
 
 
 def leaky_tube(
-    flow: PressureFlow, geo: SinusoidGeometry, species: Species
+    flow: PressureFlow,
+    geo: SinusoidGeometry,
+    species: Species,
+    reference: Value | None,
 ) -> LeakyTube:
     """Get the leaky tube of a pressure flow and a geometry.
 
@@ -421,6 +456,8 @@ def leaky_tube(
         flow: the pressure flow.
         geo: the geometry.
         species: the species, which calibrates a resistance factor of `None`.
+        reference: the reference flow of the organ
+            (`ZonationSettings.reference_flow`), the target of the calibration.
 
     Returns:
         The tube, at the mean porosity of the sinusoid.
@@ -432,7 +469,7 @@ def leaky_tube(
         if flow.p_onc is None
         else _converted(flow.p_onc, _PRESSURE_TO_PA, "oncotic pressure")
     )
-    nu = resolved_resistance_factor(flow, geo, species) * _converted(
+    nu = resolved_resistance_factor(flow, geo, species, reference) * _converted(
         flow.viscosity, _VISCOSITY_TO_PA_S, "viscosity"
     )
     return LeakyTube(
@@ -467,7 +504,7 @@ def zone_flows(
     flow = settings.flow
     if not isinstance(flow, PressureFlow):
         raise TypeError("Only a pressure flow has a flow per zone.")
-    tube = leaky_tube(flow, geo, settings.species)
+    tube = leaky_tube(flow, geo, settings.species, settings.reference_flow)
     n_sin = sinusoid_count(mass, geo, fractions(settings.species, settings.haematocrit))
     out = tuple(
         tube.flow(x) * n_sin * 1e3 * 60.0 for x in zone_positions(settings.n_zones)
@@ -520,7 +557,7 @@ def flow_objects(
     """
     flow = settings.flow
     if isinstance(flow, ImposedFlow):
-        q = imposed_flow(flow, settings.species, _mass_kg(mass))
+        q = imposed_flow(flow, settings.reference_flow, _mass_kg(mass))
         if q < 0.0:
             raise ValueError(
                 f"The imposed flow {q} l/min is negative: it would run the "
@@ -542,8 +579,10 @@ def _pressure_objects(
     mass: Q,
 ) -> list[Parameter | InitialAssignment]:
     """The leaky tube as parameters and initial assignments."""
-    tube = leaky_tube(flow, geo, settings.species)
-    factor = resolved_resistance_factor(flow, geo, settings.species)
+    tube = leaky_tube(flow, geo, settings.species, settings.reference_flow)
+    factor = resolved_resistance_factor(
+        flow, geo, settings.species, settings.reference_flow
+    )
     flows = zone_flows(settings, geo, mass)
     n = settings.n_zones
     fr = fractions(settings.species, settings.haematocrit)

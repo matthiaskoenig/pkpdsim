@@ -25,7 +25,7 @@ from pkpdsim.zonation.profiles import Weights
 from pkpdsim.zonation.settings import Geometry, ZonationSettings
 from pkpdsim.zonation.transport import M2_PER_S, Solute
 
-from .conftest import mass_g
+from .conftest import liver_flow, mass_g
 
 pytestmark = pytest.mark.filterwarnings("ignore:.*numerical dispersion:UserWarning")
 
@@ -57,6 +57,7 @@ def _builder(
     geo = dataclasses.replace(
         geometry(Species.RAT), porosity_pp=porosity_pp, porosity_pc=porosity_pc
     )
+    kwargs.setdefault("reference_flow", liver_flow())
     settings = ZonationSettings(
         n_zones=n,
         flow=ImposedFlow(flow),
@@ -441,7 +442,11 @@ def test_the_fenestral_clearance_is_p_times_a_in_litres_per_minute(
     (60000 for the units, say) would give 220 l/min or 6e-8 l/min.
     """
     builder = ZonationBuilder(
-        ZonationSettings(n_zones=1, liver_mass=mass_g(1000.0)), [TRACER], None
+        ZonationSettings(
+            n_zones=1, liver_mass=mass_g(1000.0), reference_flow=liver_flow()
+        ),
+        [TRACER],
+        None,
     )
     path = tmp_path / "barrier.xml"
     create_model(

@@ -64,10 +64,9 @@ from sbmlutils.factory import Parameter
 from sbmlutils.factory.units import UnitDefinition
 from sbmlutils.metadata import SBO
 
-from pkpdsim.pbpk.placement import value_parameter
-from pkpdsim.pbpk.substance import DIFFUSION_UNITS
-from pkpdsim.pbpk.units import U
-from pkpdsim.pbpk.values import Q, Value, number, unit_text
+from pkpdsim.sbml.parameters import value_parameter
+from pkpdsim.sbml.units import U
+from pkpdsim.sbml.values import DIFFUSION_UNITS, Q, Value, number, unit_text
 from pkpdsim.zonation import ids
 from pkpdsim.zonation.geometry import SinusoidGeometry
 

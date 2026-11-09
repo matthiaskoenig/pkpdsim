@@ -108,12 +108,11 @@ The rate laws, one choice each, with the reason:
 
 import dataclasses
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import NamedTuple
 
 from sbmlutils.factory import (
     AssignmentRule,
-    InitialAssignment,
     Parameter,
     RateRule,
     Reaction,
@@ -128,6 +127,7 @@ from pkpdsim.pbpk.placement import value_parameter
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import FrozenMap, Value, check_unit
 from pkpdsim.perfusion import ids
+from pkpdsim.sbml.objects import SbmlObjects
 
 __all__ = [
     "PROCESSES",
@@ -601,34 +601,12 @@ class Composition:
         return {q: values.get(q, 0.0) for q in ids.perfusate_quantities(released)}
 
 
-@dataclass
-class CoreObjects:
-    """The SBML objects of a part of a perfusion model.
+CoreObjects = SbmlObjects
+"""The SBML objects of a part of a perfusion model.
 
-    Attributes:
-        species: the species.
-        reactions: the reactions.
-        parameters: the parameters.
-        rules: the assignment rules.
-        rate_rules: the rate rules.
-        assignments: the initial assignments.
-    """
-
-    species: list[Species] = field(default_factory=list)
-    reactions: list[Reaction] = field(default_factory=list)
-    parameters: list[Parameter] = field(default_factory=list)
-    rules: list[AssignmentRule] = field(default_factory=list)
-    rate_rules: list[RateRule] = field(default_factory=list)
-    assignments: list[InitialAssignment] = field(default_factory=list)
-
-    def __add__(self, other: "CoreObjects") -> "CoreObjects":
-        """Get the objects of both."""
-        return CoreObjects(
-            *(
-                getattr(self, f.name) + getattr(other, f.name)
-                for f in dataclasses.fields(self)
-            )
-        )
+The container is the SBML writing kit's (`pkpdsim.sbml.objects.SbmlObjects`),
+in which the zonation engine hands its observers over as well; this is the
+name of the perfusion library for it."""
 
 
 def _species(
