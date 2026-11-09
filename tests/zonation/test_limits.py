@@ -204,10 +204,10 @@ def _base(node: ast.ImportFrom, package: str) -> str | None:
     """
     if node.level == 0:
         return node.module
-    parts = package.split(".")[: len(package.split(".")) - (node.level - 1)]
-    if not parts:
-        return None
-    root = ".".join(parts)
+    parts = package.split(".")
+    if node.level - 1 >= len(parts):
+        return None  # past the root: python refuses the import
+    root = ".".join(parts[: len(parts) - (node.level - 1)])
     return root if node.module is None else f"{root}.{node.module}"
 
 
