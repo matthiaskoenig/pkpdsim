@@ -29,10 +29,24 @@ inhibition constant) is `BQB.IS_PROPERTY_OF` the protein.
 The annotations which every library of pkpdsim writes, the initial assignment
 of a constant (`initial_assignment`) and the taxon of a build (`TAXA`), are
 the SBML writing kit's (`pkpdsim.sbml.annotation`); this module is the import
-path of the library and re-exports them unchanged. `annotate` and its table
-stay here: no other library annotates by kind, and the kind of an element is
-resolved through the vocabulary of this library (the organs, the pools and
-the segments).
+path of the library and re-exports them unchanged.
+
+`annotate`, `KINDS` and the places (`ORGANS`, `POOLS`, `SEGMENTS`, `SITES`)
+stay here, and on purpose. `annotate` is called by this library only: the
+zonation engine and the machine perfusion library write their own
+annotations and take `initial_assignment` and `TAXA` from the kit. And the
+PBPKO term of a kind is resolved through the vocabulary of this library,
+`_resolve` over the organ, the blood pool and the tokens of a `_Place`.
+Moving the table down would mean a registry which this library fills with its
+kinds and a hook which it fills with its resolver - machinery for one
+registrant, and a rewrite of the function whose output is the byte-pinned
+SBML of `tests/pbpk/data`.
+
+The condition under which it should move: a **second** library of pkpdsim
+needs `annotate`. Then `Kind`, `_Place` and the registry belong in
+`pkpdsim.sbml.annotation`, every library registering its kinds and the
+resolver of a place, and this module keeps the PBPK rows and the PBPK
+resolver. Until then the smaller shape is the right one.
 """
 
 from collections.abc import Iterable, Mapping

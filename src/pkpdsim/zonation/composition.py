@@ -55,7 +55,7 @@ from sbmlutils.factory import (
 )
 from sbmlutils.metadata import SBO
 
-from pkpdsim.sbml.units import PU, U
+from pkpdsim.sbml.units import OrganUnits, U
 from pkpdsim.zonation import ids
 from pkpdsim.zonation.builder import ZonationBuilder
 from pkpdsim.zonation.geometry import Layer
@@ -158,7 +158,7 @@ def compose(
         else Parameter(
             ids.TEMPERATURE,
             REFERENCE_TEMPERATURE,
-            unit=PU.degC,
+            unit=OrganUnits.degC,
             name="temperature of the liver, the same in all zones",
             constant=True,
             sboTerm=SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,

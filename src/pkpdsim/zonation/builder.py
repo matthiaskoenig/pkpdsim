@@ -77,7 +77,7 @@ from sbmlutils.metadata import BQB, SBO
 from pkpdsim.database.tables import entry
 from pkpdsim.sbml.annotation import TAXA, initial_assignment
 from pkpdsim.sbml.parameters import value_parameter
-from pkpdsim.sbml.units import MODEL_UNITS, PU, U
+from pkpdsim.sbml.units import MODEL_UNITS, OrganUnits, U
 from pkpdsim.sbml.values import Value, number
 from pkpdsim.zonation import ids
 from pkpdsim.zonation.flow import (
@@ -152,13 +152,13 @@ _MASS_TO_KG = {"g": 1e-3, "kg": 1.0, "mg": 1e-6}
 _VASCULAR = (Layer.RBC, Layer.PLASMA, Layer.ENDOTHELIUM, Layer.DISSE)
 
 
-class ZonationUnits(PU):
+class ZonationUnits(OrganUnits):
     """The unit definitions of the model of a zonated organ.
 
-    Those of a perfused organ (`pkpdsim.sbml.units.PU`: the mass of an organ,
-    the temperature, the oxygen partial pressure and the other units which
-    `U` lacks) and the units of the transport and the pressure flow of the
-    engine.
+    Those of a model of an organ (`pkpdsim.sbml.units.OrganUnits`: the mass
+    of an organ, the temperature, the oxygen partial pressure and the other
+    units which `U` lacks) and the units of the transport and the pressure
+    flow of the engine.
     """
 
     l_per_m3 = L_PER_M3

@@ -5,14 +5,19 @@ Time is in min, substance in mmole, volume in litre and area in m2, the
 definition of every model of the PBPK library; a unit outside `U`
 (`pkpdsim.pbpk.units.EXTRA_UNITS`) is one only of a model which uses it.
 
-`PU` adds the units of a perfused organ which `U` lacks: the volumes and the
-flow of a circuit as an experimenter gives them (ml, ml/min), the mass of an
-organ (g), the temperature, the oxygen partial pressure (kPa), the bile and
-the urine (µl, the bile per mass µl/g), the GFR per mass (ml/min/g,
-l/min/kg) and the catalytic activity of the enzymes (µkat/l = µmol/(l*s)).
-Every unit of `PU` is a unit definition of every machine perfusion model
-(`pkpdsim.perfusion.units`) and of every model of the zonation engine
+`OrganUnits` adds the units of a model of an organ which `U` lacks: the
+volumes and the flow of a circuit as an experimenter gives them (ml,
+ml/min), the mass of an organ (g), the temperature, the oxygen partial
+pressure (kPa), the bile and the urine (µl, the bile per mass µl/g), the GFR
+per mass (ml/min/g, l/min/kg) and the catalytic activity of the enzymes
+(µkat/l = µmol/(l*s)). Every unit of it is a unit definition of every
+machine perfusion model and of every model of the zonation engine
 (`pkpdsim.zonation.builder.ZonationUnits`).
+
+`PU` is the same class under the name the machine perfusion library has
+always used for it (`pkpdsim.perfusion.units`, which re-exports that name):
+an alias, so that library and its reference models are untouched by the move
+into this layer.
 
 SBML Level 3 has no degree Celsius: the temperature `T` is in `degC`, a unit
 of the size of a kelvin, so a temperature difference is right and the
@@ -21,7 +26,7 @@ absolute temperature is `T + 273.15 degC`, which the formulas write out.
 
 from sbmlutils.factory import ModelUnits, UnitDefinition, Units
 
-__all__ = ["MODEL_UNITS", "PU", "U"]
+__all__ = ["MODEL_UNITS", "PU", "OrganUnits", "U"]
 
 
 class U(Units):
@@ -60,8 +65,8 @@ MODEL_UNITS = ModelUnits(
 )
 
 
-class PU(U):
-    """The unit definitions of a perfusion model: those of the PBPK library and more."""
+class OrganUnits(U):
+    """The unit definitions of a model of an organ: those of `U` and more."""
 
     g = UnitDefinition("g", "g")
     ml = UnitDefinition("ml", "ml")
@@ -83,3 +88,9 @@ class PU(U):
     ukat_per_mmole = UnitDefinition(
         "ukat_per_mmole", "micromole/second/mmole", name="µkat/mmole"
     )
+
+
+PU = OrganUnits
+"""The unit definitions of a perfusion model, `OrganUnits` under the name of
+the machine perfusion library (`pkpdsim.perfusion.units`, which re-exports
+it). The same class, so a model built with either is the same model."""

@@ -160,11 +160,14 @@ _CENTRAL_PRESSURE = Value(266.64, "Pa", notes="2 mmHg, the perivenous pressure o
 _PLASMA_VISCOSITY = Value(0.0018, "Pa*s", notes="the plasma viscosity of spt")
 
 _NO_REFERENCE = (
-    "The flow of the organ is its reference flow, and the settings state none: "
-    "give `ZonationSettings.reference_flow` (the total liver flow of the "
-    "reference individual of the PBPK library is "
-    "`pkpdsim.pbpk.physiology.reference_flow`), the flow of an `ImposedFlow` or "
-    "the `resistance_factor` of a `PressureFlow`."
+    "The flow of the organ is its reference flow, and the settings state none. "
+    "Give the number: `ZonationSettings(..., reference_flow=Value(...))`, the "
+    "blood flow of the whole reference organ in l/min or ml/min; for a species of "
+    "the PBPK library it is `pkpdsim.pbpk.physiology.reference_flow(species)`, "
+    "which returns that `Value`. The engine reads no physiology of its own. Or "
+    "state the flow itself instead of a reference: `ImposedFlow(value=...)` or "
+    "`ImposedFlow(per_mass=...)` for a measured flow, "
+    "`PressureFlow(resistance_factor=...)` for a flow driven by the pressures."
 )
 """The message of a flow which takes a reference flow the settings do not state."""
 
@@ -178,9 +181,11 @@ class ImposedFlow:
             (l/min or ml/min); a plain number is l/min.
         per_mass: the flow per mass of liver (ml/min/g, l/min/kg or
             ml/min/kg), which the flow of the liver follows, as the machine
-            perfusion states it. `value` and `per_mass` exclude each other;
-            neither takes the reference flow of the settings
-            (`ZonationSettings.reference_flow`).
+            perfusion states it. `value` and `per_mass` exclude each other.
+            Giving neither takes the reference flow of the settings
+            (`ZonationSettings.reference_flow`, for a species of the PBPK
+            library `pkpdsim.pbpk.physiology.reference_flow(species)`), and is
+            an error when the settings state none.
     """
 
     value: Q | None = None
@@ -214,8 +219,10 @@ class PressureFlow:
             viscosity`. `None` (the default) is calibrated per species
             (`calibrated_resistance_factor`) so that the periportal inflow at
             the default pressures is the reference flow of the settings
-            (`ZonationSettings.reference_flow`), which is what an
-            `ImposedFlow` without a value gives. The 10 of the spt
+            (`ZonationSettings.reference_flow`, for a species of the PBPK
+            library `pkpdsim.pbpk.physiology.reference_flow(species)`), which
+            is what an `ImposedFlow` without a value gives, and is an error
+            when the settings state none. The 10 of the spt
             model is an uncalibrated stand-in for the microvascular geometry
             and gives about five times the reference flow for the rat. The
             agreement with an imposed flow holds only with the default

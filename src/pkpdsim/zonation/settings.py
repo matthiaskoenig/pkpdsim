@@ -66,10 +66,11 @@ class ZonationSettings:
             ml/min), which an `ImposedFlow` without a value takes and against
             which a `PressureFlow` without a `resistance_factor` is
             calibrated; `None` (the default) states none, which makes those
-            two an error. The engine reads no physiology of its own: the
-            caller gives the number, the zonated liver of the PBPK library
-            the total liver flow of its reference individual
-            (`pkpdsim.pbpk.physiology.reference_flow`).
+            two an error naming what to give. The engine reads no physiology
+            of its own: the caller gives the number, and for a species of the
+            PBPK library it is the total liver flow of the reference
+            individual, `pkpdsim.pbpk.physiology.reference_flow(species)`,
+            which returns that `Value`.
         geometry_constants: the geometry replacing the one the table gives
             for the species; `None` takes `geometry(species)`.
         fractions: the volume fractions of the layers of the organ, replacing
