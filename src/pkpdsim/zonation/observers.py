@@ -38,6 +38,7 @@ The axial profile is the species of the zones themselves, `<s>_<layer>_z<k>`;
 
 from collections.abc import Mapping, Sequence
 
+import roadrunner
 from sbmlutils.factory import AssignmentRule, Model, Parameter, RateRule
 from sbmlutils.factory.units import UnitDefinition
 from sbmlutils.metadata import SBO
@@ -63,6 +64,7 @@ __all__ = [
     "observer_objects",
     "outflow_concentration",
     "profile_ids",
+    "sync_dose",
 ]
 
 PERIPORTAL = "pp"
@@ -167,6 +169,16 @@ def balance_expression(substance: str, duct: bool) -> str:
     what it gives to another, and the boundary ledgers integrate the same flows
     the first and last reaction use, so the balance holds there as well. It
     fails for a consumption or a dose which is not declared.
+
+    A caller who sets species after loading the model calls `sync_dose` once
+    before the simulation: the initial assignment of `cum_dose_<s>` is
+    evaluated when the model is loaded and reset, not when a caller writes a
+    species (the behaviour of roadrunner), so without the call the residual
+    equals the amount set by hand.
+
+    The observers are read-only, but the ledgers are states the integrator
+    controls the error of, so a model with observers and one without agree to
+    the tolerance of the integrator and not bit for bit.
 
     Args:
         substance: the id of the substance.
@@ -350,7 +362,7 @@ def observer_objects(
             balance_expression(s, settings.bile is not None),
             U.mmole,
             f"mass balance residual of {substance.name} (0 if conserved)",
-            SBO.MASS_CONSERVATION_LAW,
+            SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
         )
         out.parameters.append(p)
         out.rules.append(r)
@@ -373,3 +385,33 @@ def add_observers(model: Model, objects: core.CoreObjects) -> None:
     model.rules.extend(objects.rules)
     model.rate_rules.extend(objects.rate_rules)
     model.assignments.extend(objects.assignments)
+
+
+def sync_dose(
+    runner: roadrunner.RoadRunner, substances: Sequence[Substance | str]
+) -> None:
+    """Bring the dose ledger in line with the amounts present at the start.
+
+    Sets `cum_dose_<s>` to `amount_<s>`, the amount of the substance in the organ,
+    for a model whose species a caller wrote after loading it. Call it once,
+    after setting the species and before the first simulation; a dose given
+    during a run is added to `cum_dose_<s>` by the caller. Amounts which a
+    cell model holds in its own species are not in `amount_<s>`; the cell
+    model's uptake into them is declared as consumption.
+
+    Args:
+        runner: the loaded roadrunner model with the observers.
+        substances: the substances (or their ids).
+
+    Raises:
+        ValueError: if the simulation has started (time above 0), when the
+            amount present is no longer the dose.
+    """
+    if runner["time"] != 0.0:
+        raise ValueError(
+            "sync_dose sets the dose to the amount present, which is only the dose "
+            f"at the start; the model is at time {runner['time']}."
+        )
+    for substance in substances:
+        s = substance.sid if isinstance(substance, Substance) else substance
+        runner[ledger("dose", s)] = runner[amount(s)]

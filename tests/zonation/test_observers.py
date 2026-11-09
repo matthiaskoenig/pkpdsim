@@ -146,7 +146,8 @@ def _load(
             zone = ids.zone(k)
             r[f"[{ids.species('drg', layer, zone)}]"] = c
             dose += c * r[ids.volume(layer, zone)]
-    r[observers.ledger("dose", "drg")] += dose
+    observers.sync_dose(r, [DRG])
+    assert r[observers.ledger("dose", "drg")] == pytest.approx(dose, rel=1e-12, abs=0)
     return dose
 
 
@@ -513,3 +514,64 @@ def test_the_profile_ids_run_from_periportal_to_pericentral(tmp_path: Path) -> N
     assert [r[f"[{sid}]"] for sid in profile_ids("drg", Layer.PLASMA, 6)] == [
         1.0, 2.0, 3.0, 4.0, 5.0, 6.0,
     ]  # fmt: skip
+
+
+def test_sync_dose_refuses_a_started_simulation(tmp_path: Path) -> None:
+    """After the start the amount present is no longer the dose."""
+    r = _runner(tmp_path, _settings(3))
+    r.simulate(0, 1, 10)
+    with pytest.raises(ValueError, match="only the dose at the start"):
+        observers.sync_dose(r, [DRG])
+
+
+def test_without_sync_dose_the_balance_shows_the_amount_set(tmp_path: Path) -> None:
+    """Writing species after load leaves the ledger at 0: the residual is the amount set."""
+    settings = _settings(3, flow=ImposedFlow(0.0), bile=None)
+    r = _runner(tmp_path, settings, sink=0.0)
+    r["[drg_plasma_z2]"] = 1.0
+    assert r["balance_drg"] == pytest.approx(r["V_plasma_z2"], rel=1e-12, abs=0)
+    observers.sync_dose(r, ["drg"])
+    assert abs(r["balance_drg"]) < 1e-15
+
+
+def test_the_observers_of_a_composed_model_close_the_balance(tmp_path: Path) -> None:
+    """After `compose`, flattening and libsbml validation, the cell's uptake is declared and the balance holds."""
+    import libsbml
+
+    from pkpdsim.zonation.composition import CellPorts, compose, write
+
+    from .data.toy_cell import TOY_ID, create_toy_cell
+
+    n = 4
+    settings = _settings(n)
+    create_toy_cell(tmp_path)
+    builder = ZonationBuilder(settings, [DRG], None)
+    model = compose(builder, TOY_ID, CellPorts())
+    uptake = " + ".join(f"M{k:02}__UP" for k in range(1, n + 1))
+    add_observers(model, observer_objects(settings, [DRG], {"drg": uptake}))
+    flat = write(model, tmp_path)
+    document = libsbml.readSBMLFromFile(str(flat))
+    document.checkConsistency()
+    problems = [
+        document.getError(i).getMessage()[:400] for i in range(document.getNumErrors())
+    ]
+    assert problems == []  # errors and warnings both count
+    r = roadrunner.RoadRunner(str(flat))
+    r.integrator.absolute_tolerance = 1e-14
+    r.integrator.relative_tolerance = 1e-10
+    r["drg_plasma_in"] = 1.0
+    r["drg_rbc_in"] = 1.0
+    for layer in _layer_tokens(r):
+        for k in range(1, n + 1):
+            r[f"[drg_{layer}_z{k}]"] = 0.5
+    observers.sync_dose(r, [DRG])
+    dose = r[observers.ledger("dose", "drg")]
+    r.simulate(0, 3, 300)
+    consumed = r[observers.ledger("consumed", "drg")]
+    in_cells = sum(r[f"M{k:02}__drg"] for k in range(1, n + 1))  # amounts, mmole
+    assert consumed > 0.01 * dose
+    assert consumed == pytest.approx(
+        in_cells, rel=1e-6, abs=0
+    )  # the toy keeps what it takes up
+    scale = dose + r[observers.ledger("in", "drg")]
+    assert abs(r["balance_drg"]) <= 1e-9 * scale
