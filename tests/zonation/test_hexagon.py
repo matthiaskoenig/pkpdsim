@@ -18,7 +18,7 @@ from pkpdsim.species import Species
 from pkpdsim.zonation import ids, observers
 from pkpdsim.zonation.figures import COLORBAR, data_axes, lobule_map
 from pkpdsim.zonation.geometry import Layer, geometry
-from pkpdsim.zonation.profiles import lobular_weight, zone_positions
+from pkpdsim.zonation.profiles import lobular_weight, zone_areas, zone_positions
 from pkpdsim.zonation.render import tube_mesh
 
 N = 10
@@ -96,10 +96,39 @@ def test_the_colours_are_the_scale_of_the_values() -> None:
         assert _zone_colour(fig, k) == pytest.approx(cmap(k / N))
 
 
-def test_the_hexagon_area_per_zone_matches_the_lobular_weight() -> None:
+def test_the_hexagon_area_per_zone_is_the_exact_zone_area() -> None:
+    """A zone is the interval `[(k - 1) / n, k / n]`, its area `zone_areas(n)`."""
     areas = _areas_per_zone(lobule_map(_result(), "drg", time=60, zones=N))
+    assert areas == pytest.approx(list(zone_areas(N)), rel=2e-4)
+
+
+def test_the_midpoint_shares_are_not_the_areas() -> None:
+    """`lobular_weight` at the centre is a density: it misses the area by a few percent.
+
+    The peak zone (the fourth of ten) is the worst, 5.6 % (measured, relative to the area); the map
+    must not be drawn from the midpoint rule.
+    """
     weights = [lobular_weight(x) for x in zone_positions(N)]
-    assert areas == pytest.approx([w / sum(weights) for w in weights], rel=1e-2)
+    midpoint = [w / sum(weights) for w in weights]
+    deviation = [abs(m / a - 1.0) for m, a in zip(midpoint, zone_areas(N), strict=True)]
+    assert max(deviation) == pytest.approx(0.0557, abs=1e-3)
+    assert deviation.index(max(deviation)) == 3
+    assert max(deviation) > 0.05
+
+
+def test_every_point_of_the_hexagon_lies_in_exactly_one_patch() -> None:
+    fig = lobule_map(_result(), "drg", time=60, zones=N)
+    rng = np.random.default_rng(0)
+    checked = 0
+    for x, y in rng.uniform(-1.0, 1.0, (1500, 2)):
+        if abs(y) >= np.sqrt(3.0) / 2.0 - 1e-9:
+            continue
+        if abs(y) * 0.5 + abs(x) * np.sqrt(3.0) / 2.0 >= np.sqrt(3.0) / 2.0 - 1e-9:
+            continue
+        held = [p for p in _patches(fig) if p.get_path().contains_point((x, y))]
+        assert len(held) == 1
+        checked += 1
+    assert checked > 500
 
 
 def test_the_hexagon_is_the_unit_hexagon_with_its_corners_on_the_axis() -> None:
@@ -179,3 +208,16 @@ def test_the_tube_mesh_is_the_tube_of_the_geometry() -> None:
 def test_the_tube_mesh_refuses_no_zone() -> None:
     with pytest.raises(ValueError, match="zone"):
         tube_mesh(geometry(Species.RAT), 0)
+
+
+def test_one_zone_has_one_peclet_number_of_two_and_constant_profiles() -> None:
+    """The claims of the documentation page for `n_zones=1`."""
+    from pkpdsim.pbpk.physiology import reference_flow
+    from pkpdsim.zonation import effective_peclet
+    from pkpdsim.zonation.profiles import Exponential, Linear, Sigmoid
+    from pkpdsim.zonation.settings import ZonationSettings
+
+    settings = ZonationSettings(n_zones=1, reference_flow=reference_flow(Species.RAT))
+    assert effective_peclet(settings, 0.0) == pytest.approx(2.0)
+    for profile in (Linear(1.0, 4.0), Sigmoid(0.5, 6.0), Exponential(1.0, 3.0)):
+        assert profile.values(1) == pytest.approx((1.0,))

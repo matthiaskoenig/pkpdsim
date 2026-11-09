@@ -31,7 +31,7 @@ from matplotlib.patches import Polygon
 
 from pkpdsim.zonation import ids, observers
 from pkpdsim.zonation.geometry import Layer
-from pkpdsim.zonation.profiles import lobular_area, lobular_radius, lobular_weight
+from pkpdsim.zonation.profiles import lobular_radius
 
 __all__ = [
     "ZoneProfile",
@@ -434,38 +434,21 @@ def layer_profile(
 
 _WEDGE = math.pi / 6.0
 """The angle of one twelfth of the hexagon, the wedge of one portal triad."""
-_ARC_POINTS = 64
-"""The points of the isoline of a band in a wedge; the error of the area is below 1e-5."""
+_ARC_POINTS = 256
+"""The points of the isoline of a band in a wedge; the error of the area is below 1e-4 of a zone."""
 
 
 def _zone_edges(n: int) -> list[float]:
-    """Get the positions which bound the `n` bands of the hexagon, 0 to 1.
+    """Get the positions which bound the `n` bands of the hexagon, `k / n`.
 
-    The band of zone `k` has the area share `lobular_weight(x_k)` of the
-    centre `x_k = (k - 0.5) / n`, normalized over the zones, so that the area
-    of a zone follows the weight of the lobule and the zones count like the
-    profiles which are weighted by it. The ends are the lobule's: zone 1
-    starts at the position 0 (the portal triads, the rim) and zone `n` ends
-    at 1 (the central vein, the centre), and an edge is the position whose
-    area share is the cumulative area of the bands up to it
-    (`lobular_area`, found by bisection).
+    A zone is an interval of the lobular position, `[(k - 1) / n, k / n]`:
+    zone 1 starts at 0 (the portal triads, the rim) and zone `n` ends at 1
+    (the central vein, the centre). The area of a band is then the difference
+    of the areas of its ends, `zone_areas(n)` exactly; it is not the weight at
+    the centre of the zone, which overstates the zone of the peak by a few
+    percent (see `pkpdsim.zonation.profiles`).
     """
-    weights = [lobular_weight((k - 0.5) / n) for k in range(1, n + 1)]
-    total = sum(weights)
-    edges = [0.0]
-    cumulative = 0.0
-    for w in weights[:-1]:
-        cumulative += w / total
-        low, high = edges[-1], 1.0
-        for _ in range(60):
-            mid = 0.5 * (low + high)
-            if lobular_area(mid) < cumulative:
-                low = mid
-            else:
-                high = mid
-        edges.append(0.5 * (low + high))
-    edges.append(1.0)
-    return edges
+    return [k / n for k in range(n + 1)]
 
 
 def _band(low: float, high: float) -> np.ndarray:
@@ -477,6 +460,14 @@ def _band(low: float, high: float) -> np.ndarray:
     the corner where it meets the edge is exact.
     """
     theta = np.linspace(0.0, _WEDGE, _ARC_POINTS)
+    # the direction in which an isoline leaves through the edge of the hexagon
+    # (`sin(theta) = sqrt(3) / 2 * x / (1 - x)`) is a corner of the band
+    kinks = [
+        math.asin(min(1.0, math.sqrt(3.0) / 2.0 * x / (1.0 - x)))
+        for x in (low, high)
+        if 0.0 < x < 1.0
+    ]
+    theta = np.unique(np.concatenate([theta, np.clip(kinks, 0.0, _WEDGE)]))
     outer = [lobular_radius(low, t) for t in theta]
     inner = [lobular_radius(high, t) for t in theta]
     return np.vstack(
@@ -535,8 +526,8 @@ def lobule_map(
     distance `d_pp / (d_pp + d_pc)` of the nearest triad and the central
     vein: the rim and the corners are zone 1 (periportal), the centre is zone
     `zones` (pericentral). The bands of the zones are bounded by the isolines
-    of that distance; their areas are the area shares of the zones
-    (`lobular_weight` at the centre of the zone, see `_zone_edges`). The
+    of that distance at `k / zones`, an interval of the position per zone, so
+    their areas are the area shares of the zones, `zone_areas(zones)`. The
     figure is vector: a patch per band and wedge, no image, and the solids of
     its colorbar are not rasterized either.
 

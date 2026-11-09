@@ -456,12 +456,13 @@ class ZonationBuilder:
 
     def velocity(self) -> float:
         """The velocity (m/s) of the blood in the sinusoid, 0 without a flow."""
-        # TODO(geometry): the velocity is low against the intravital literature:
-        # 91 um/s for the rat and 39 um/s for the human (default settings, the
-        # reference flow of the PBPK library over the lumen of the table
-        # geometry), against roughly 100 to 500 um/s (rat) and 100 to 300 um/s
-        # (human). It comes from pairing the PBPK reference flow with the
-        # table geometry, not from the calibration of the pressure flow.
+        # TODO(geometry): both numbers are outputs of this geometry paired with
+        # the PBPK reference flow (default settings), none is a measurement:
+        # 110 um/s for the rat (the lower end of the intravital literature,
+        # roughly 100 to 500 um/s) and 47 um/s for the human (below the roughly
+        # 100 to 300 um/s of the literature). The velocity comes from pairing
+        # the reference flow with the table geometry, not from the calibration
+        # of the pressure flow.
         # Candidates: the derived sinusoid count (lumen fraction over
         # pi r_sin**2 L_sin), the sinusoid radius, or the sinusoid length; the
         # human entries of the table are `fallback: rat`. Do not adjust the
