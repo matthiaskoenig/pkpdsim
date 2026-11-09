@@ -394,3 +394,19 @@ def test_the_random_profile_is_reproducible_and_spreads_with_its_cv() -> None:
 def test_a_declaration_which_is_no_profile_raises(call: Callable[[], Profile]) -> None:
     with pytest.raises(ValueError):
         call()
+
+
+def test_the_midpoint_shares_are_not_the_areas() -> None:
+    """`lobular_weight` at the centre is a density: it misses the area by a few percent.
+
+    The peak zone (the fourth of ten) is the worst, 5.6 % (measured, relative to the area); the map
+    must not be drawn from the midpoint rule.
+    """
+    weights = [lobular_weight(x) for x in zone_positions(10)]
+    midpoint = [w / sum(weights) for w in weights]
+    deviation = [
+        abs(m / a - 1.0) for m, a in zip(midpoint, zone_areas(10), strict=True)
+    ]
+    assert max(deviation) == pytest.approx(0.0557, abs=1e-3)
+    assert deviation.index(max(deviation)) == 3
+    assert max(deviation) > 0.05

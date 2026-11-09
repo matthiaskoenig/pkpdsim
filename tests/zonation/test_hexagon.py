@@ -19,7 +19,7 @@ from pkpdsim.species import Species
 from pkpdsim.zonation import ids, observers
 from pkpdsim.zonation.figures import COLORBAR, data_axes, lobule_map, space_time
 from pkpdsim.zonation.geometry import Layer, geometry
-from pkpdsim.zonation.profiles import lobular_weight, zone_areas, zone_positions
+from pkpdsim.zonation.profiles import zone_areas
 from pkpdsim.zonation.render import tube_mesh
 
 N = 10
@@ -101,20 +101,6 @@ def test_the_hexagon_area_per_zone_is_the_exact_zone_area() -> None:
     """A zone is the interval `[(k - 1) / n, k / n]`, its area `zone_areas(n)`."""
     areas = _areas_per_zone(lobule_map(_result(), "drg", time=60, zones=N))
     assert areas == pytest.approx(list(zone_areas(N)), rel=2e-4)
-
-
-def test_the_midpoint_shares_are_not_the_areas() -> None:
-    """`lobular_weight` at the centre is a density: it misses the area by a few percent.
-
-    The peak zone (the fourth of ten) is the worst, 5.6 % (measured, relative to the area); the map
-    must not be drawn from the midpoint rule.
-    """
-    weights = [lobular_weight(x) for x in zone_positions(N)]
-    midpoint = [w / sum(weights) for w in weights]
-    deviation = [abs(m / a - 1.0) for m, a in zip(midpoint, zone_areas(N), strict=True)]
-    assert max(deviation) == pytest.approx(0.0557, abs=1e-3)
-    assert deviation.index(max(deviation)) == 3
-    assert max(deviation) > 0.05
 
 
 def test_every_point_of_the_hexagon_lies_in_exactly_one_patch() -> None:
@@ -274,3 +260,14 @@ def test_vmin_and_vmax_override_the_data_range_and_default_to_it() -> None:
     assert data_axes(default)[0].collections[0].get_clim()[1] == pytest.approx(20.0)
     with pytest.raises(ValueError, match="no range"):
         lobule_map(result, "drg", time=60, zones=N, vmin=5.0, vmax=5.0)
+
+
+def test_a_vmin_at_a_constant_raises_where_the_default_has_a_fallback() -> None:
+    result = _result()
+    for sid in observers.profile_ids("drg", Layer.CELL, N):
+        result[sid] = 0.25
+    fig = lobule_map(result, "drg", time=60, zones=N)
+    bar = next(a for a in fig.axes if a.get_gid() == COLORBAR)
+    assert bar.get_ylim() == pytest.approx((0.0, 0.25))
+    with pytest.raises(ValueError, match="no range"):
+        lobule_map(result, "drg", time=60, zones=N, vmin=0.25)

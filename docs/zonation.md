@@ -96,7 +96,31 @@ figure.savefig("lobule.svg")
 
 ### The tube
 
-`tube_mesh(geo, n_zones)` returns the points (m) and cells of the tube of the geometry, the sinusoid radius and length with one segment per zone from the portal end (x = 0) to the central end, as plain numpy arrays; `cells[k]` lists the points of the two rings of the zone `k + 1`. The engine does not depend on a renderer. A script which draws the tube (colour on the real radii, frames or a video) installs pyvista for its run, as the videos of gdeobdtpa do.
+`tube_mesh(geo, n_zones)` returns the points (m) and cells of the tube of the geometry, the sinusoid radius and length with one segment per zone from the portal end (x = 0) to the central end, as plain numpy arrays; `cells[k]` lists the points of the two rings of the zone `k + 1`. The engine does not depend on a renderer. A script which draws the tube (colour on the real radii, frames or a video) installs pyvista for its run, as the videos of gdeobdtpa do. VTK has no cell type of a prism with `sides` corners, so the script builds a polyhedron per segment from the two rings (the caps) and the side faces which join ring point `j` to `j + 1` modulo `sides`:
+
+```python
+# not executed: pyvista is not a dependency of pkpdsim
+import numpy as np
+import pyvista as pv
+
+from pkpdsim.species import Species
+from pkpdsim.zonation.geometry import geometry
+from pkpdsim.zonation.render import tube_mesh
+
+sides = 24
+points, cells = tube_mesh(geometry(Species.RAT), 10, sides=sides)
+vtk_cells = []
+for cell in cells:
+    a, b = cell[:sides], cell[sides:]
+    faces = [a, b[::-1]] + [
+        [a[j], a[(j + 1) % sides], b[(j + 1) % sides], b[j]] for j in range(sides)
+    ]
+    body = [len(faces)] + [i for f in faces for i in (len(f), *f)]
+    vtk_cells += [len(body), *body]
+types = np.full(len(cells), pv.CellType.POLYHEDRON)
+grid = pv.UnstructuredGrid(np.array(vtk_cells), types, points)
+grid.cell_data["concentration"] = np.linspace(0.0, 1.0, len(cells))  # a value per zone
+```
 
 ## The cell model contract
 
@@ -130,7 +154,7 @@ The convection is a first order upwind scheme, so a chain of `n` stirred zones d
 - the Peclet number of the discretization alone, `v * L / (v * dx / 2) = 2 n`, with no physical diffusion: 20 at the default 10 zones. This is the value the notes of a built model record ("a Peclet number of 20 without physical diffusion") and what the design's rule of thumb of about `2 n` says;
 - the Peclet number with the physical diffusion of a solute, `v * L / (d_eff + v * dx / 2)`, which `effective_peclet(settings, d_eff)` returns: 12.96 at 10 zones for `d_eff` of glucose (0.9e-9 m2/s), lower than 20 because the diffusion adds to the dispersion.
 
-This is not small. At 10 zones, for the rat with the velocity above, the numerical dispersion `v * dx / 2` is 1.66e-9 m2/s, the same order as the aqueous diffusion of a small solute (0.9e-9 m2/s for glucose, the reference of the derivation above). The zone count therefore shares the setting of the axial gradient with the physics, and a finer chain (40 zones: 4.1e-10 m2/s, a Peclet number of 80) is what separates them. The build warns when a diffusion lies below the dispersion.
+This is not small. At 10 zones, for the rat with the velocity above, the numerical dispersion `v * dx / 2` is 1.66e-9 m2/s, the same order as the aqueous diffusion of a small solute (0.9e-9 m2/s for glucose, the reference of the derivation above). The zone count therefore shares the setting of the axial gradient with the physics, and a finer chain is what separates them: at 40 zones the numerical dispersion is 4.1e-10 m2/s, a Peclet number of 25 with glucose, 80 without physical diffusion. The build warns when a diffusion lies below the dispersion.
 
 ```python
 from pkpdsim.pbpk.physiology import reference_flow
@@ -140,7 +164,11 @@ from pkpdsim.zonation.settings import ZonationSettings
 
 settings = ZonationSettings(n_zones=10, reference_flow=reference_flow(Species.RAT))
 assert effective_peclet(settings, 0.0) == 20.0
-print(effective_peclet(settings, 0.9e-9))
+assert round(effective_peclet(settings, 0.9e-9), 2) == 12.96
+
+fine = ZonationSettings(n_zones=40, reference_flow=reference_flow(Species.RAT))
+assert effective_peclet(fine, 0.0) == 80.0
+assert round(effective_peclet(fine, 0.9e-9), 1) == 25.2
 ```
 
 ## Water in the pressure mode

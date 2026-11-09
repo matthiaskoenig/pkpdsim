@@ -14,10 +14,8 @@ so the SVG holds no embedded image (a viewer which drops embedded raster data
 would show an empty panel).
 """
 
-import math
 from collections.abc import Sequence
 from dataclasses import dataclass
-from itertools import pairwise
 
 import numpy as np
 import pandas as pd
@@ -31,7 +29,7 @@ from matplotlib.patches import Polygon
 
 from pkpdsim.zonation import ids, observers
 from pkpdsim.zonation.geometry import Layer
-from pkpdsim.zonation.profiles import lobular_radius
+from pkpdsim.zonation.render import lobule_bands
 
 __all__ = [
     "ZoneProfile",
@@ -143,7 +141,8 @@ def _limits(
 
     A concentration is never negative, so an axis of values at or above zero
     starts at zero; a layer which is zero everywhere gets zero to one. Values
-    below zero leave the limits to matplotlib (`None`).
+    below zero leave the limits to matplotlib (`None`). A colour scale does not
+    start at zero, it spans its values (`_scale`).
     """
     low = min(float(np.min(v)) for v in values)
     high = max(float(np.max(v)) for v in values)
@@ -163,7 +162,9 @@ def _scale(
     scale of no range (a constant, zeros) takes the limits of `_limits`, from
     zero to the value or to one; values below zero with no range leave it to
     matplotlib (`None`). An explicit `vmin` or `vmax` replaces that end of the
-    range, the way to clip a scale which a spike dominates.
+    range, the way to clip a scale which a spike dominates; a `vmin` equal to
+    the value of a constant therefore raises (no range), while the default
+    call for the same data returns the fallback (0, 1) or (0, value).
 
     Raises:
         ValueError: if the limits are not `vmin < vmax`.
@@ -200,6 +201,9 @@ def zone_profiles(
     style; the data of a time are markers of the colour of that time. The
     legend is one for the figure, right of the grid, if every row has the same
     entries, else one per row.
+
+    A line axis starts at zero when no value is negative; a colour scale
+    (`space_time`, `lobule_map`) spans the range of its values instead.
 
     Args:
         result: the simulation result.
@@ -334,7 +338,9 @@ def space_time(
             default.
         vmin: the lower end of the colour scale, the smallest value drawn by
             default; set it (with `vmax`) to clip a scale which a spike, e.g.
-            the initial condition in one zone, dominates.
+            the initial condition in one zone, dominates. It must be below `vmax`, so a `vmin` equal
+            to the value of constant data raises, where the default scale of
+            such data is the fallback zero to the value.
         vmax: the upper end of the colour scale, the largest value drawn by
             default.
 
@@ -413,6 +419,9 @@ def layer_profile(
     the radial geometry its layers. The grid carries the label of the zones
     and the label of the concentration once each, under and left of it.
 
+    The axes start at zero when no value is negative; a colour scale
+    (`space_time`, `lobule_map`) spans the range of its values instead.
+
     Args:
         result: the simulation result.
         substance: the id of the substance.
@@ -470,82 +479,6 @@ def layer_profile(
     return figure
 
 
-_WEDGE = math.pi / 6.0
-"""The angle of one twelfth of the hexagon, the wedge of one portal triad."""
-_ARC_POINTS = 256
-"""The points of the isoline of a band in a wedge; the error of the area is below 1e-4 of a zone."""
-
-
-def _zone_edges(n: int) -> list[float]:
-    """Get the positions which bound the `n` bands of the hexagon, `k / n`.
-
-    A zone is an interval of the lobular position, `[(k - 1) / n, k / n]`:
-    zone 1 starts at 0 (the portal triads, the rim) and zone `n` ends at 1
-    (the central vein, the centre). The area of a band is then the difference
-    of the areas of its ends, `zone_areas(n)` exactly; it is not the weight at
-    the centre of the zone, which overstates the zone of the peak by a few
-    percent (see `pkpdsim.zonation.profiles`).
-    """
-    return [k / n for k in range(n + 1)]
-
-
-def _band(low: float, high: float) -> np.ndarray:
-    """Get the polygon of the band `[low, high]` of a position in the wedge of a triad.
-
-    The outer arc is the isoline of `low`, the inner arc that of `high`, both
-    from the direction of the triad (theta 0) to that of the edge midpoint.
-    The directions in which an isoline leaves the hexagon are sampled too, so
-    the corner where it meets the edge is exact.
-    """
-    theta = np.linspace(0.0, _WEDGE, _ARC_POINTS)
-    # the direction in which an isoline leaves through the edge of the hexagon
-    # (`sin(theta) = sqrt(3) / 2 * x / (1 - x)`) is a corner of the band
-    kinks = [
-        math.asin(min(1.0, math.sqrt(3.0) / 2.0 * x / (1.0 - x)))
-        for x in (low, high)
-        if 0.0 < x < 1.0
-    ]
-    theta = np.unique(np.concatenate([theta, np.clip(kinks, 0.0, _WEDGE)]))
-    outer = [lobular_radius(low, t) for t in theta]
-    inner = [lobular_radius(high, t) for t in theta]
-    return np.vstack(
-        [
-            np.column_stack(
-                [np.array(outer) * np.cos(theta), np.array(outer) * np.sin(theta)]
-            ),
-            np.column_stack(
-                [
-                    np.array(inner[::-1]) * np.cos(theta[::-1]),
-                    np.array(inner[::-1]) * np.sin(theta[::-1]),
-                ]
-            ),
-        ]
-    )
-
-
-def _twelve(wedge: np.ndarray) -> list[np.ndarray]:
-    """Get the twelve copies of a polygon of the first wedge over the hexagon.
-
-    The hexagon has the corners on the angles 0, 60, ... degrees; the wedge
-    `[0, 30]` degrees is mirrored about the 30 degree line and rotated, the
-    copies of the odd wedges are the mirror images of the even ones.
-    """
-    copies: list[np.ndarray] = []
-    for j in range(6):
-        c, s = math.cos(j * math.pi / 3.0), math.sin(j * math.pi / 3.0)
-        rotation = np.array([[c, -s], [s, c]])
-        copies.append(wedge @ rotation.T)
-        # the mirror image about the line at 30 degrees: (x, y) -> (cos 60 x + sin 60 y, sin 60 x - cos 60 y)
-        mirror = np.array(
-            [
-                [math.cos(math.pi / 3.0), math.sin(math.pi / 3.0)],
-                [math.sin(math.pi / 3.0), -math.cos(math.pi / 3.0)],
-            ]
-        )
-        copies.append(wedge @ mirror.T @ rotation.T)
-    return copies
-
-
 def lobule_map(
     result: pd.DataFrame,
     quantity: str,
@@ -584,7 +517,9 @@ def lobule_map(
             default.
         vmin: the lower end of the colour scale, the smallest value drawn by
             default; set it (with `vmax`) to clip a scale which a spike, e.g.
-            the initial condition in one zone, dominates.
+            the initial condition in one zone, dominates. It must be below `vmax`, so a `vmin` equal
+            to the value of constant data raises, where the default scale of
+            such data is the fallback zero to the value.
         vmax: the upper end of the colour scale, the largest value drawn by
             default.
 
@@ -606,10 +541,9 @@ def lobule_map(
     mappable = ScalarMappable(Normalize(*limits), colormaps["viridis"])
     figure = Figure(figsize=(5.0, 4.4), layout="constrained")
     ax = figure.subplots()
-    edges = _zone_edges(zones)
-    for k, (low, high) in enumerate(pairwise(edges), start=1):
+    for k, polygons in enumerate(lobule_bands(zones), start=1):
         colour = mappable.to_rgba(values[k - 1])
-        for polygon in _twelve(_band(low, high)):
+        for polygon in polygons:
             ax.add_patch(
                 Polygon(
                     polygon,
