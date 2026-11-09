@@ -7,6 +7,7 @@ with `T / eta` (Stokes-Einstein) where it was measured at 20 or 25 C.
 """
 
 import pytest
+from sbmlutils.factory.units import UnitDefinition
 
 from pkpdsim.pbpk.substance import Substance
 from pkpdsim.pbpk.units import U
@@ -28,14 +29,14 @@ from pkpdsim.zonation.transport import (
 
 ANCHORS: dict[str, tuple[float, float]] = {
     # name: (Mr in g/mole, D in 1e-9 m**2/s at 37 C)
-    "glucose": (180.16, 0.90),  # 6.7e-10 at 25 C, biofilmbook Table 4-1
-    "sucrose": (342.30, 0.70),  # 5.2e-10 at 25 C, biofilmbook Table 4-1
-    "gd_chelate": (
-        558.6,
-        0.50,
-    ),  # Gd-DOTA, 2.92e-10 in plasma at 37 C, viscosity scaled
-    "insulin": (5808.0, 0.20),  # monomer, 1.5e-10 at 25 C
-    "albumin": (66500.0, 0.093),  # 6.1e-11 at 20 C, Sober 1970
+    "glucose": (180.16, 0.90),  # 6.7e-10 at 25 C, biofilmbook Table 4-1, x1.338
+    "sucrose": (342.30, 0.70),  # 5.2e-10 at 25 C, biofilmbook Table 4-1, x1.338
+    # Gd-DOTA proxy: Ga-DOTA in D2O at 310 K, 4.38e-10 (ISMRM 2014 abstract 2618),
+    # corrected from D2O to H2O by the assumed viscosity ratio 1.23
+    "gd_chelate": (558.6, 0.54),
+    # D(20,w) = 6.06e-11 m2/s, bovine serum albumin by dynamic light scattering
+    # (Bio-protocol e4195), scaled to 37 C by the factor 1.532
+    "albumin": (66500.0, 0.093),
 }
 
 
@@ -102,6 +103,40 @@ def test_fenestral_permeability_follows_the_formula() -> None:
     assert p.value == pytest.approx(expected)
 
 
+def test_fenestral_permeability_by_hand() -> None:
+    # rat: t_endo = 0.165e-6 m, r_fen = 53.5e-9 m. A radius of 5.35 nm is
+    # l = 0.1; renkin(0.1) = 0.9**2 * (1 - 0.2104 + 0.00209 - 0.0000095)
+    # = 0.81 * 0.7916805 = 0.6412612. With D = 1e-9 m2/s and a porosity of 0.07
+    # P = 0.07 * 1e-9 / 0.165e-6 * 0.6412612 = 4.242424e-4 * 0.6412612
+    # = 2.7205e-4 m/s. The radius is given in nm and converted.
+    geo = geometry(Species.RAT)
+    r = Value(5.35, UnitDefinition("nm", "nanometer"))
+    p = fenestral_permeability(Value(1e-9, M2_PER_S), r, geo, 0.07)
+    assert p.value == pytest.approx(2.7205e-4, rel=1e-4)
+
+
+def test_a_radius_which_is_no_length_raises() -> None:
+    with pytest.raises(ValueError, match="length"):
+        fenestral_permeability(
+            Value(1e-9, M2_PER_S),
+            Value(1.0, PU.ml),
+            geometry(Species.RAT),
+            0.07,
+        )
+
+
+def test_a_molar_mass_in_other_units_is_converted_not_reread() -> None:
+    kg = Value(0.34230, UnitDefinition("kg_per_mole", "kg/mole"))
+    assert aqueous_diffusion(kg) == aqueous_diffusion(_mr(342.30))
+    with pytest.raises(ValueError, match="mass per amount"):
+        aqueous_diffusion(Value(1.0, PU.ml))
+
+
+def test_a_negative_radius_ratio_raises() -> None:
+    with pytest.raises(ValueError, match="negative"):
+        renkin(-0.1)
+
+
 def test_an_explicit_diffusion_wins_over_the_correlation() -> None:
     s = _drug(diffusion=Value(1e-10, M2_PER_S))
     assert diffusion_of(s).value == pytest.approx(1e-10)
@@ -142,3 +177,8 @@ def test_a_given_parameter_says_so() -> None:
     assert "given" in (p.notes or "")
     assert "derived" not in (p.notes or "").replace("not derived", "")
     assert p.value == pytest.approx(1e-10)
+
+
+def test_a_given_parameter_keeps_the_notes_of_its_value() -> None:
+    s = _drug(diffusion=Value(1e-10, M2_PER_S, notes="measured by PFG-NMR"))
+    assert "measured by PFG-NMR" in (diffusion_parameter(s).notes or "")

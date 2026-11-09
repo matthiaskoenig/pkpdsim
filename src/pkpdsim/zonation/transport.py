@@ -16,17 +16,18 @@ with T = 310.15 K and the viscosity of water at 37 C, `ETA` = 0.692 mPa s
 (Kestin, Sokolov and Wakeham 1978). `EXPONENT` = 0.4 lies between the
 Stokes-Einstein scaling of a compact sphere (1/3, Young, Carroad and Bell
 1980) and the 1/2 of an extended chain (Polson 1950); a single exponent of 1/3
-misses the Gd chelate and insulin by 1.2 to 1.4; 0.4 keeps every anchor within 1.15. `D_REF`
-and `MR_REF` are the glucose anchor. `test_transport.py` checks that the four
-sourced anchors are reproduced within a factor of 1.5 (insulin within 2).
+misses the anchors by 1.15 (the Gd chelate) to 1.41 (insulin), albumin by
+1.35; 0.4 keeps every anchor within 1.15. `D_REF` and `MR_REF` are the glucose
+anchor. `test_transport.py` checks that the four sourced anchors are reproduced
+within a factor of 1.5 (insulin within 2).
 
 Anchors, D in 1e-9 m**2/s at 37 C. Where the measurement is at another
 temperature it is scaled with `T / eta` of water (Stokes-Einstein: x 1.338 from
 25 C with eta 0.890 and 0.692 mPa s, x 1.532 from 20 C with eta 1.002 mPa s):
 
 - glucose, 180.16 g/mole: 6.7e-10 m2/s at 25 C (table of diffusion
-  coefficients in water at 25 C, biofilmbook Table 4-1, hypertextbookshop.com;
-  an interferometric study gives 6.9 +- 0.3e-10), 0.90 at 37 C.
+  coefficients in water at 25 C, biofilmbook Table 4-1, hypertextbookshop.com),
+  0.90 at 37 C.
 - sucrose, 342.30 g/mole: 5.2e-10 m2/s at 25 C (same table), 0.70 at 37 C.
 - Gd-DOTA, 558.6 g/mole, the comparable Gd chelate: Ga-DOTA in D2O at 310 K,
   4.38 +- 0.04e-10 m2/s by NMR diffusometry, valid for Gd-DOTA as the two are
@@ -119,11 +120,37 @@ CORRELATION = (
 )
 
 
+MR_UNITS: dict[str, float] = {
+    "g/mole": 1.0,
+    "g/mol": 1.0,
+    "kg/mole": 1e3,
+    "kg/mol": 1e3,
+}
+"""The units of a molar mass, the factor to g/mole, by `unit_text`."""
+
+LENGTH_UNITS: dict[str, float] = {
+    "metre": 1.0,
+    "meter": 1.0,
+    "m": 1.0,
+    "nanometer": 1e-9,
+    "nm": 1e-9,
+    "micrometer": 1e-6,
+}
+"""The units of a radius, the factor to m, by `unit_text`."""
+
+
 def _mr_number(mr: Q) -> float:
-    """The molar mass (g/mole) of a plain number or a `Value`."""
+    """The molar mass (g/mole) of a plain number (g/mole) or a `Value`, converted."""
     x = number(mr)
     if x is None or not x > 0.0:
         raise ValueError(f"The molar mass must be a positive number, got {mr!r}.")
+    if isinstance(mr, Value):
+        try:
+            return x * MR_UNITS[unit_text(mr.unit)]
+        except KeyError:
+            raise ValueError(
+                f"A molar mass needs a mass per amount, got {unit_text(mr.unit)}."
+            ) from None
     return x
 
 
@@ -158,7 +185,18 @@ def renkin(lambda_: float) -> float:
     the radius of the solute to that of the pore; 1 for a point and 0 once the
     solute no longer fits (`l >= 1`). The polynomial stays positive on [0, 1]
     (0.036 at 1), so the hindrance is never negative; the clamp is a guard.
+
+    Args:
+        lambda_: the ratio of the radius of the solute to that of the pore.
+
+    Returns:
+        The hindrance in [0, 1].
+
+    Raises:
+        ValueError: for a negative ratio, which is no radius.
     """
+    if lambda_ < 0.0:
+        raise ValueError(f"The radius ratio {lambda_} is negative.")
     if lambda_ >= 1.0:
         return 0.0
     poly = 1.0 - 2.104 * lambda_ + 2.09 * lambda_**3 - 0.95 * lambda_**5
@@ -171,8 +209,27 @@ def fenestral_permeability(
     """Get the permeability of the endothelium through its fenestrae (m/s).
 
     `porosity * d_aq / t_endo * renkin(radius / r_fen)`.
+
+    Args:
+        d_aq: the aqueous diffusion coefficient (an area per time).
+        radius: the radius of the molecule (a length, converted to m).
+        geo: the geometry with the thickness of the endothelium and the radius
+            of a fenestra.
+        porosity: the fenestral porosity (fraction).
+
+    Returns:
+        The permeability (m/s).
+
+    Raises:
+        ValueError: for a radius which is no length.
     """
-    sieve = renkin(radius.value / geo.r_fen)
+    try:
+        r = radius.value * LENGTH_UNITS[unit_text(radius.unit)]
+    except KeyError:
+        raise ValueError(
+            f"A radius needs a length, got {unit_text(radius.unit)}."
+        ) from None
+    sieve = renkin(r / geo.r_fen)
     return Value(porosity * _as_m2_per_s(d_aq) / geo.t_endo * sieve, M_PER_S)
 
 
@@ -215,7 +272,7 @@ def diffusion_parameter(substance: Substance) -> Parameter:
         )
     return value_parameter(
         f"D_{substance.sid}",
-        Value(d.value, M2_PER_S, d.source),
+        Value(d.value, M2_PER_S, d.source, d.notes),
         M2_PER_S,
         f"diffusion {substance.name}",
         SBO.DIFFUSION_COEFFICIENT,
