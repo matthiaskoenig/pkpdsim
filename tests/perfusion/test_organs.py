@@ -247,14 +247,17 @@ def test_the_released_set_is_that_of_the_organ(tmp_path: Path) -> None:
     ):
         known = _ids(build(definition, tmp_path))
         assert definition.released == released
+        cells = definition.organ.SUBMODEL_CELLS
         for q in ids.RELEASABLE:
             present = q in released
-            assert (ids.species(q, ids.dead_site("z1")) in known) is present, q
+            assert (
+                ids.species(q, ids.dead_site("z1"), submodel=cells) in known
+            ) is present, q
         for e in ids.ENZYMES:
             present = e in released
             for sid in (
                 ids.species(e, ids.RESERVOIR),
-                ids.species(e, ids.cell_site("z1")),
+                ids.species(e, ids.cell_site("z1"), submodel=cells),
                 ids.activity(e, ids.OUTFLOW),
                 ids.specific_activity(e),
                 ids.fresh(e),
@@ -262,7 +265,7 @@ def test_the_released_set_is_that_of_the_organ(tmp_path: Path) -> None:
                 assert (sid in known) is present, sid
         # potassium stays in the perfusate and the cells
         assert ids.species("k", ids.RESERVOIR) in known
-        assert ids.species("k", ids.cell_site("z1")) in known
+        assert ids.species("k", ids.cell_site("z1"), submodel=cells) in known
 
 
 def test_the_released_quantities_need_their_content() -> None:

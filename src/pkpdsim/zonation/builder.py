@@ -10,7 +10,7 @@ the zones of `pkpdsim.perfusion` follow their organ. The sinusoid has a
 compartment per layer of `pkpdsim.zonation.geometry.fractions` (the
 erythrocytes only with a haematocrit above 0); the well-stirred geometry a
 vascular compartment (lumen, endothelium, Disse, the sum of their volumes), a cell compartment
-(hepatocytes) and the bile compartment per zone; `bile=None` omits the bile
+(the cells, the hepatocytes of the liver) and the bile compartment per zone; `bile=None` omits the bile
 in both geometries.
 
 Every substance has a species `<s>_<layer>_<zone>` (mM) in every layer
@@ -204,7 +204,7 @@ _NAMES: dict[Layer | str, str] = {
     Layer.PLASMA: "plasma",
     Layer.ENDOTHELIUM: "endothelium",
     Layer.DISSE: "space of Disse",
-    Layer.CELL: "hepatocytes",
+    Layer.CELL: "cells",
     Layer.BILE: "bile canaliculus",
 }
 
@@ -215,7 +215,7 @@ class ZonationBuilder:
     Attributes:
         settings: the settings.
         substances: the substances of the model.
-        cell_model: the cell model of the hepatocytes, supplied by the port of
+        cell_model: the cell model of the cells, supplied by the port of
             the perfusion core (`None` until then; it has no interface yet).
     """
 
@@ -231,7 +231,7 @@ class ZonationBuilder:
         Args:
             settings: the settings.
             substances: the substances.
-            cell_model: the cell model of the hepatocytes or `None`.
+            cell_model: the cell model of the cells or `None`.
             cell_processes: the processes of the cell model which a profile
                 can scale; the zonal factor `p_<process>_<zone>` of a profile
                 replaces the port `p_<process>` of the cell model of the zone

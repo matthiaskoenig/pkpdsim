@@ -132,7 +132,7 @@ def test_zones_add_up_to_the_organ(tmp_path: Path, n: int) -> None:
     for q in ("alt", "ast", "ldh", "k"):
 
         def amount(z: str, q: str = q) -> str:
-            return f"{ids.species(q, ids.cell_site(z))}"
+            return f"{ids.species(q, ids.cell_site(z), submodel=True)}"
 
         assert total(many, amount, zones) == pytest.approx(
             one[amount("z1")], rel=1e-12
@@ -142,7 +142,7 @@ def test_zones_add_up_to_the_organ(tmp_path: Path, n: int) -> None:
             continue
 
         def rate(z: str, p: str = process) -> str:
-            return ids.reaction(p, z)
+            return ids.reaction(p, z, submodel=True)
 
         assert total(many, rate, zones) == pytest.approx(one[rate("z1")], rel=1e-12), (
             process
@@ -161,8 +161,13 @@ def test_a_profile_keeps_the_capacity_of_the_organ(tmp_path: Path) -> None:
             tmp_path,
         )
     )
-    rates = [graded[ids.reaction("OXPHOS", ids.zone_id(k))] for k in range(1, 5)]
-    assert sum(rates) == pytest.approx(one[ids.reaction("OXPHOS", "z1")], rel=1e-12)
+    rates = [
+        graded[ids.reaction("OXPHOS", ids.zone_id(k), submodel=True)]
+        for k in range(1, 5)
+    ]
+    assert sum(rates) == pytest.approx(
+        one[ids.reaction("OXPHOS", "z1", submodel=True)], rel=1e-12
+    )
     assert rates[0] == pytest.approx(4 * rates[3], rel=1e-12)
     assert graded[ids.profile("OXPHOS", "z1")] == pytest.approx(1.6, rel=1e-12)
 
@@ -222,14 +227,16 @@ def test_every_quantity_at_every_site(tmp_path: Path) -> None:
     }
     for site in sites:
         expected |= {ids.species(q, site) for q in (*ids.PERFUSATE, TRACER)}
-        expected |= {ids.po2(site), ids.pco2(site), ids.ph(site)}
+        expected |= {ids.po2(site), ids.pco2(site), ids.ph(site, submodel=True)}
         expected |= {ids.activity(e, site) for e in ids.ENZYMES}
     for site in [ids.zone_id(k) for k in range(1, n + 1)] + [
         ids.PERIPORTAL,
         ids.PERICENTRAL,
     ]:
-        expected |= {ids.species(q, ids.cell_site(site)) for q in ids.CELL}
-        expected.add(ids.alive(site))
+        expected |= {
+            ids.species(q, ids.cell_site(site), submodel=True) for q in ids.CELL
+        }
+        expected.add(ids.alive(site, submodel=True))
     for site in _sites(n):
         expected.add(ids.volume(site))
     for k in range(1, n + 1):
@@ -267,7 +274,8 @@ def test_the_observers_read_the_sites(tmp_path: Path) -> None:
     # the oxygen falls along the sinusoid
     assert r[ids.po2(ids.PERIPORTAL)] > r[ids.po2(ids.PERICENTRAL)]
     assert r[ids.BILE] == pytest.approx(
-        sum(r[ids.bile(ids.zone_id(k))] for k in range(1, n + 1)) * 1e6, rel=1e-8
+        sum(r[ids.bile(ids.zone_id(k), submodel=True)] for k in range(1, n + 1)) * 1e6,
+        rel=1e-8,
     )
     # µl per g: the bile (µl) over the mass of the organ (kg) in g
     assert r[ids.BILE] > 0
@@ -461,3 +469,15 @@ def test_the_zones_share_the_arrhenius_constants_of_the_circuit(tmp_path: Path) 
     for sid in ("Ea", "T_ref", "R_gas"):
         assert sid in parameters
         assert not {p for p in parameters if p.endswith(f"__{sid}")}
+
+
+@pytest.mark.parametrize("flow", [0.5e-3, 3.0e-3, 0.0])
+def test_the_flow_through_the_liver_is_the_flow_of_the_pump(
+    tmp_path: Path, flow: float
+) -> None:
+    """The study sets its flow rates through `Q_pump`: the engine's `Q_li` follows
+    it exactly, whatever the pump is set to (also 0: no flow, nothing divides by it)."""
+    path = build(liver_definition(3), tmp_path)
+    r = individual(path, **{ids.Q_PUMP: flow})
+    assert r["Q_li"] == pytest.approx(flow, abs=0, rel=0)
+    assert r[ids.Q_PUMP] == flow

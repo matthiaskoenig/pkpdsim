@@ -261,18 +261,14 @@ def process_groups(definition: PerfusionDefinition) -> dict[str, list[tuple[str,
         for a kidney, `URI` (the filtration of every filtered quantity).
     """
     zone = ids.zone_id(1)
-    prefix = ids.reaction("", zone)
     names: dict[str, str] = {}
     cell = zone_cell_model(definition)
     for r in compose(definition).reactions or []:
         sid = r.sid or ""
         if sid.endswith(f"_{zone}"):
-            # the filtration of a zone of the kidney
+            # the cells and the filtration of a zone which the builder emits itself
             name = (r.name or sid).removesuffix(f" ({zone})")
             names[sid.removesuffix(f"_{zone}")] = name
-        elif cell is None and sid.startswith(prefix):
-            # the cells of a zone which the builder emits itself
-            names[sid.removeprefix(prefix)] = (r.name or sid).removesuffix(f" ({zone})")
     for r in cell.reactions if cell is not None else []:
         # the cells of the zones of a liver are the reactions of its cell model
         names[r.sid or ""] = r.name or r.sid or ""

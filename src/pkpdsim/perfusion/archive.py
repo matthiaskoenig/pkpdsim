@@ -41,8 +41,8 @@ def create_archive(
     `<sid>_flat.xml` of a liver, whose zones are submodels), writes the
     schematic of the circuit there (`<sid>.svg`, panel B), the anatomical
     figure of the organ in its circuit (`<sid>_anatomy.svg`, panel A), the
-    ODEs of the model as markdown (`<sid>.md`, `sbmlode`) and its antimony
-    (`<sid>.ant`), the texts of CC BY-SA 4.0 and MIT (with the copyright)
+    ODEs of the model as markdown (`<sid>.md`, `<sid>_flat.md` for a liver,
+    `sbmlode`) and its antimony (`<sid>.ant`, `<sid>_flat.ant`), the texts of CC BY-SA 4.0 and MIT (with the copyright)
     into the parent of the directory and the archive `<model>_model.omex`
     there, with the README, the licenses, the model (the master entry), the
     markdown, the antimony and the two figures (the schematic first). Every
@@ -64,7 +64,7 @@ def create_archive(
         The files with their entries in the COMBINE archive, by the keys of a
         factory, each `{"path": Path, "entry": ManifestEntry}`: `README` (with
         a README), `cc-by`, `mit`, `<sid>` of the model (`<sid>_flat` for a liver), `<sid>_md` of its
-        ODEs, `<sid>_ant` of its antimony, `<sid>_svg` of the schematic and
+        ODEs, `<sid>_ant` of its antimony (`<sid>_flat_md`, `<sid>_flat_ant` for a liver), `<sid>_svg` of the schematic and
         `<sid>_anatomy_svg` of the anatomical figure.
 
     Raises:

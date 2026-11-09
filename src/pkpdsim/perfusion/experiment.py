@@ -245,6 +245,7 @@ def _observables(definition: PerfusionDefinition) -> dict[str, tuple[str, str]]:
     sites = [ids.RESERVOIR, ids.INFLOW, *zones, ids.OUTFLOW]
     means = [ids.PERIPORTAL, ids.PERICENTRAL]
     enzymes = [e for e in ids.ENZYMES if e in released]
+    submodel = definition.organ.SUBMODEL_CELLS
     out: dict[str, tuple[str, str]] = {}
     for site in [*sites, *means]:
         where = site_label(site)
@@ -253,7 +254,7 @@ def _observables(definition: PerfusionDefinition) -> dict[str, tuple[str, str]]:
             out[key] = (f"{circuit.quantity_label(q)} ({where})", _MM)
         out[ids.po2(site)] = (f"pO2 ({where})", "kPa")
         out[ids.pco2(site)] = (f"pCO2 ({where})", "kPa")
-        out[ids.ph(site)] = (f"pH ({where})", "dimensionless")
+        out[ids.ph(site, submodel=submodel)] = (f"pH ({where})", "dimensionless")
         for e in enzymes:
             out[ids.activity(e, site)] = (
                 f"{core.quantity_name(e)} activity ({where})",
@@ -262,14 +263,20 @@ def _observables(definition: PerfusionDefinition) -> dict[str, tuple[str, str]]:
     for site in [*zones, *means]:
         where = site_label(site)
         for q in ids.cell_quantities(released):
-            key = _key(ids.species(q, ids.cell_site(site)), species=site in zones)
+            key = _key(
+                ids.species(q, ids.cell_site(site), submodel=submodel),
+                species=site in zones,
+            )
             out[key] = (
                 f"{core.quantity_name(q)} (cells, {where})",
                 _MM,
             )
-        out[ids.alive(site)] = (f"living fraction ({where})", "dimensionless")
+        out[ids.alive(site, submodel=submodel)] = (
+            f"living fraction ({where})",
+            "dimensionless",
+        )
     for zone in zones:
-        out[ids.necrosis_rate(zone)] = (
+        out[ids.necrosis_rate(zone, submodel=submodel)] = (
             f"rate of necrosis ({site_label(zone)})",
             "1/min",
         )

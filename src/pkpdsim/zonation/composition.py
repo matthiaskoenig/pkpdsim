@@ -1,6 +1,6 @@
 """A cell model per zone, composed through SBML comp.
 
-The hepatocytes of a zone are a standalone cell model, which the engine
+The cells of a zone (the hepatocytes of the liver) are a standalone cell model, which the engine
 composes once per zone: one `ExternalModelDefinition`, one `Submodel` `M<kk>`
 per zone (`ids.submodel`) and replaced elements which wire the compartments
 and species of the zone onto the ports of the cell model. The cell model is
@@ -75,7 +75,7 @@ class CellPorts:
     Attributes:
         external: the compartment of the surroundings of the cell, replaced by
             the space of Disse.
-        cell: the compartment of the cell, replaced by the hepatocyte.
+        cell: the compartment of the cell, replaced by the cell layer of the zone.
         bile: the compartment of the bile, replaced by the canaliculus.
         position: the parameter of the lobular position (0 periportal, 1
             pericentral).
@@ -152,7 +152,7 @@ def compose(
     model.external_model_definitions = [
         ExternalModelDefinition(
             sid=cell_model_id,
-            name="cell model of the hepatocytes",
+            name="cell model of the cells of a zone",
             source=f"{cell_model_id}.xml",
             modelRef=cell_model_id,
         )

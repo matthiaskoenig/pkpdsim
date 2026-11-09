@@ -24,7 +24,7 @@ and the kidney. An organ with the token `<o>` (`li` the liver, `ki` the
 kidney, the key of a generic organ) has the mass `M_<o>` (kg), the density
 `rho_<o>`, and the volume `V_<o> = M_<o>/rho_<o>` and the vascular and cell
 fractions `f_vas_<o>` and `f_cell_<o>` as constants (the liver those of the
-engine, `f_vas` and `f_cell`, without `V_li`); the vascular space and
+engine, `f_vas` and `f_cell`, and `V_li` for reference); the vascular space and
 the cells of each of its `n` zones are the compartments `V_vas_<zone> =
 f_vas_<o>*V_<o>/n` and `V_cell_<zone> = f_cell_<o>*V_<o>/n` (initial
 assignments, so a change of the mass before a simulation sets the zones). A
@@ -416,6 +416,22 @@ def _liver(definition: PerfusionDefinition, organ: LiverOrgan) -> _Organ:
         parameters=list(model.parameters),
         assignments=list(model.assignments),
     )
+    # the volume of the organ, `V_li = M_li/rho_li`, which `ids.organ_volume` names
+    key, what = organ.key, organ.what
+    volume = circuit.converted(organ.mass, 1e-3, U.kg, "g").value / organ.density.value
+    out.parameters.append(
+        value_parameter(
+            ids.organ_volume(key), volume, U.litre, f"volume of the {what}", _P
+        )
+    )
+    out.assignments.append(
+        initial_assignment(
+            ids.organ_volume(key),
+            f"{ids.mass(key)}/{ids.density(key)}",
+            U.litre,
+            f"volume of the {what}",
+        )
+    )
     # the flow of the liver is the pump flow of the circuit
     (flow,) = [p for p in out.parameters if p.sid == zonation_ids.FLOW]
     flow.constant = False
@@ -734,10 +750,11 @@ def compose(definition: PerfusionDefinition) -> Model:
         circuit.quantities(perfusate, released),
         ids.cell_quantities(released),
         enzymes,
+        submodel=organ.SUBMODEL_CELLS,
     )
     if isinstance(organ, LiverOrgan):
         objects += observers.bile_objects(zones_of.bile, zones, ids.mass(organ.key))
-    objects += observers.uptake_objects(zones)
+    objects += observers.uptake_objects(zones, submodel=organ.SUBMODEL_CELLS)
 
     notes = (
         f"Machine perfusion of the {organ.what} ({organ.key}) of the "

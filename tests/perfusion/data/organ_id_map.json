@@ -24,9 +24,7 @@
   "position_z9"
  ],
  "before": "98aacca",
- "dropped": [
-  "V_li"
- ],
+ "dropped": [],
  "renamed": {
   "ALTD_z1": "M01__ALTD",
   "ALTD_z10": "M10__ALTD",

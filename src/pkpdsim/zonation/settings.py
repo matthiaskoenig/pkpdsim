@@ -72,7 +72,7 @@ class ZonationSettings:
             the lumen layers (`Layer.PLASMA`) and the cells as
             `Layer.CELL`.
         boundary: who supplies the ends of the chain.
-        cell_species: every solute has a species in the hepatocyte layer; `False`
+        cell_species: every solute has a species in the cell layer; `False`
             when the cell model holds the species of the cell (well-stirred
             geometry only).
     """
@@ -99,7 +99,7 @@ class ZonationSettings:
         if not self.cell_species and self.geometry is not Geometry.WELL_STIRRED:
             raise ValueError(
                 "cell_species=False needs the well-stirred geometry: the radial "
-                "exchange of the sinusoid reads the species of the hepatocyte."
+                "exchange of the sinusoid reads the species of the cell layer."
             )
         if self.n_zones < 1:
             raise ValueError(f"A liver has at least one zone, not {self.n_zones}.")

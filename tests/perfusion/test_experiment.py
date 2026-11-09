@@ -376,7 +376,7 @@ def test_the_observables_have_labels_and_units(
     assert labels["glc_pp"] == "glucose (periportal)"
     assert labels["pO2_out"] == "pO2 (outflow)"
     assert labels["alt_act_res"] == "ALT activity (reservoir)"
-    assert labels[f"[{ids.species('atp', ids.cell_site('z2'))}]"] == (
+    assert labels[f"[{ids.species('atp', ids.cell_site('z2'), submodel=True)}]"] == (
         "ATP (cells, zone 2)"
     )
     assert labels["atp_pc_cell"] == "ATP (cells, pericentral)"
@@ -469,7 +469,7 @@ def test_a_species_of_the_map_is_its_concentration(
     selections = [s for s in units if s.startswith("[") and s.endswith("_in]")]
     selections += [
         f"[{ids.species('glc', 'z1')}]",
-        f"[{ids.species('atp', ids.cell_site('z1'))}]",
+        f"[{ids.species('atp', ids.cell_site('z1'), submodel=True)}]",
     ]
     assert set(selections) <= set(units)
     simulator = Simulator(n_workers=1)
@@ -549,10 +549,11 @@ def _pools(definition: PerfusionDefinition, q: str) -> dict[str, list[str]]:
     living and the dead cells of every zone, and the urine of a kidney."""
     zones = [ids.zone_id(k) for k in range(1, definition.organ.zones + 1)]
     sites = [ids.RESERVOIR, ids.INFLOW, *zones, ids.OUTFLOW]
+    cells = definition.organ.SUBMODEL_CELLS
     pools = {
         "perfusate": [ids.species(q, s) for s in sites],
-        "cells": [ids.species(q, ids.cell_site(z)) for z in zones],
-        "dead": [ids.species(q, ids.dead_site(z)) for z in zones],
+        "cells": [ids.species(q, ids.cell_site(z), submodel=cells) for z in zones],
+        "dead": [ids.species(q, ids.dead_site(z), submodel=cells) for z in zones],
     }
     if q in ids.FILTERED and isinstance(definition.organ, KidneyOrgan):
         pools["urine"] = [ids.species(q, ids.URINE_SITE)]

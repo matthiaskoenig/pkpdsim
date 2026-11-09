@@ -790,23 +790,26 @@ def perfusate_objects(
     )
 
 
-def buffer_objects(site: str, compartment: str) -> CoreObjects:
+def buffer_objects(
+    site: str, compartment: str, *, submodel: bool = False
+) -> CoreObjects:
     """Get the bicarbonate buffer and the pH of the perfusate at a site.
 
     Args:
         site: the site.
         compartment: the compartment of the perfusate at the site.
+        submodel: the zone is a submodel (its buffer is that of its cell model).
 
     Returns:
         The reaction `BUF_<site>`, `H+ + HCO3- <-> CO2`, and the pH
         `pH_<site>` with its assignment rule.
     """
     h, hco3, co2 = (ids.species(q, site) for q in ("h", "hco3", "co2"))
-    ph = ids.ph(site)
+    ph = ids.ph(site, submodel=submodel)
     return CoreObjects(
         reactions=[
             Reaction(
-                ids.buffer(site),
+                ids.buffer(site, submodel=submodel),
                 f"{h} + {hco3} <-> {co2}",
                 formula=(
                     f"{compartment} * {ids.BUFFER_K_HYDRATION} * "
@@ -840,9 +843,13 @@ class CoreNames:
         zone: the zone id; `None` for the standalone cell model, whose ids
             have no zone (`atp_cell`, `GLCIM`, `f_alive`) and whose vascular
             space is the external site (`glc_ext`, the port of a quantity).
+        submodel: the cells of the zone are a submodel of the model, so their
+            ids are those of the flat model (`M<kk>__<id>`); `False` for cells
+            which the model emits itself (`atp_<zone>_cell`).
     """
 
     zone: str | None = None
+    submodel: bool = False
 
     def __post_init__(self) -> None:
         """Check the zone.
@@ -886,17 +893,21 @@ class CoreNames:
     @property
     def alive(self) -> str:
         """The id of the living fraction."""
-        return ids.alive(self.zone) if self.zone else "f_alive"
+        return ids.alive(self.zone, submodel=self.submodel) if self.zone else "f_alive"
 
     @property
     def necrosis_rate(self) -> str:
         """The id of the rate of necrosis."""
-        return ids.necrosis_rate(self.zone) if self.zone else "v_nec"
+        return (
+            ids.necrosis_rate(self.zone, submodel=self.submodel)
+            if self.zone
+            else "v_nec"
+        )
 
     @property
     def bile(self) -> str:
         """The id of the secreted bile volume."""
-        return ids.bile(self.zone) if self.zone else "Vbile"
+        return ids.bile(self.zone, submodel=self.submodel) if self.zone else "Vbile"
 
     def profile(self, process: str) -> str:
         """Get the id of the zonal factor of a process."""
@@ -904,7 +915,9 @@ class CoreNames:
 
     def reaction(self, name: str) -> str:
         """Get the id of a reaction."""
-        return ids.reaction(name, self.zone) if self.zone else name
+        return (
+            ids.reaction(name, self.zone, submodel=self.submodel) if self.zone else name
+        )
 
     def label(self, text: str) -> str:
         """Get a name with its zone."""
@@ -974,7 +987,10 @@ def core_objects(
     if missing:
         raise ValueError("; ".join(missing))
     cell, dead, site = names.cell_site, names.dead_site, names.vascular_site
-    c = _ids(ids.species, cell)
+
+    def c(quantity: str) -> str:
+        return ids.species(quantity, cell, submodel=names.submodel)
+
     v = _ids(ids.species, site)
     alive, nec = names.alive, names.necrosis_rate
     base = f"{ids.F_T} * {alive} * {cells}"
@@ -1020,10 +1036,16 @@ def core_objects(
             )
     for q in released:
         out.species.append(
-            _species(ids.species(q, dead), cells, q, names.where_dead, 0.0)
+            _species(
+                ids.species(q, dead, submodel=names.submodel),
+                cells,
+                q,
+                names.where_dead,
+                0.0,
+            )
         )
     out += perfusate_objects(site, vascular, composition, released)
-    out += buffer_objects(site, vascular)
+    out += buffer_objects(site, vascular, submodel=names.submodel)
 
     def mm(s: str, km: str) -> str:
         return f"{s}/({km} + {s})"
@@ -1080,7 +1102,7 @@ def core_objects(
          f"{live('PPP')} * PPP_Vmax * {mm(c('glc'), 'PPP_Km_glc')} * {mm(c('nadp'), 'PPP_Km_nadp')}", b),
     ]  # fmt: skip
     for q in released:
-        name, d = _NAMES[q], ids.species(q, dead)
+        name, d = _NAMES[q], ids.species(q, dead, submodel=names.submodel)
         reactions += [
             (f"{q.upper()}D", f"{name} of dying cells", f"{c(q)} -> {d}",
              f"{nec} * {c(q)} * {cells}", SBO.PROCESS),

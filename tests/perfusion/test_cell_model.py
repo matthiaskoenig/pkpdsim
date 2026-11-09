@@ -215,38 +215,23 @@ def _count(by_kind: dict[str, dict[str, Any]]) -> dict[str, int]:
 def _flat_text(text: str) -> str:
     """Rename the ids of a zone in the golden file to those of the engine.
 
-    `Vcell_z1` and `Vvas_z1` are `V_cell_z1` and `V_vas_z1`, a perfusate
-    species `glc_z1` is `glc_vas_z1`, an element of the cell model is that of
-    the submodel of the zone, `atp_z1_cell` is `M01__atp_cell`, `GLC2PYR_z1`
-    is `M01__GLC2PYR` and the buffer and the pH of the zone are those of its
-    cell model (`M01__BUF_ext`, `M01__pH_ext`); the factors of a profile
-    `p_<process>_z1` are the ones of the engine, the same.
+    `Vcell_z1` and `Vvas_z1` are `V_cell_z1` and `V_vas_z1` and a perfusate
+    species `glc_z1` is `glc_vas_z1`; the cells of a zone which the builder
+    emits itself (the kidney) keep every other id, `atp_z1_cell`, `GLC2PYR_z1`,
+    `BUF_z1`, `pH_z1`, `f_alive_z1`: no submodel prefix without a submodel.
     """
     perfusate = set(ids.PERFUSATE)
 
     def rename(token: re.Match[str]) -> str:
         t = token.group(0)
         if t == GOLDEN_CELLS:
-            return ids.cells(ZONE)
+            return "V_cell_z1"
         if t == GOLDEN_VASCULAR:
-            return ids.vascular(ZONE)
-        for kind in ("cell", "dead"):
-            if t.endswith(f"_z1_{kind}"):
-                return ids.species(
-                    t.removesuffix(f"_{kind}").removesuffix("_z1"), f"z1_{kind}"
-                )
-        if not t.endswith("_z1") or t.startswith("p_"):
-            return t
+            return "V_vas_z1"
         stem = t.removesuffix("_z1")
-        if stem in perfusate:
-            return ids.species(stem, ZONE)
-        return {
-            "BUF": ids.buffer(ZONE),
-            "pH": ids.ph(ZONE),
-            "f_alive": ids.alive(ZONE),
-            "v_nec": ids.necrosis_rate(ZONE),
-            "Vbile": ids.bile(ZONE),
-        }.get(stem) or ids.reaction(stem, ZONE)
+        if t.endswith("_z1") and stem in perfusate:
+            return f"{stem}_vas_z1"
+        return t
 
     return re.sub(r"[A-Za-z_][A-Za-z0-9_]*", rename, text)
 

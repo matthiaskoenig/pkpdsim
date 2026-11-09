@@ -144,6 +144,8 @@ def mean_objects(
     perfusate: Sequence[str],
     cells: Sequence[str] = ids.CELL,
     enzymes: Sequence[str] = ids.ENZYMES,
+    *,
+    submodel: bool = False,
 ) -> core.CoreObjects:
     """Get the periportal and pericentral means of the zones.
 
@@ -155,6 +157,7 @@ def mean_objects(
         perfusate: the quantities of the perfusate (with the tracers).
         cells: the quantities of the cells.
         enzymes: the enzymes of the perfusate.
+        submodel: the cells of the zones are submodels (the liver).
 
     Returns:
         The means of the perfusate concentrations, the cell concentrations
@@ -184,7 +187,11 @@ def mean_objects(
                 observer(
                     ids.species(q, cell),
                     weighted_mean(
-                        [ids.species(q, ids.cell_site(z)) for z in zones], weights
+                        [
+                            ids.species(q, ids.cell_site(z), submodel=submodel)
+                            for z in zones
+                        ],
+                        weights,
                     ),
                     U.mM,
                     f"{core.quantity_name(q)} (cells, {where} mean)",
@@ -195,7 +202,9 @@ def mean_objects(
             out,
             observer(
                 ids.alive(site),
-                weighted_mean([ids.alive(z) for z in zones], weights),
+                weighted_mean(
+                    [ids.alive(z, submodel=submodel) for z in zones], weights
+                ),
                 U.dimensionless,
                 f"living fraction of the cells ({where} mean)",
                 SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
@@ -248,7 +257,7 @@ def bile_objects(
         out,
         observer(
             ids.BILE,
-            f"{ul} * ({' + '.join(ids.bile(z) for z in zones)})",
+            f"{ul} * ({' + '.join(ids.bile(z, submodel=True) for z in zones)})",
             PU.ul,
             "bile volume of the organ",
             SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
@@ -267,14 +276,19 @@ def bile_objects(
     return out
 
 
-def uptake_objects(zones: Sequence[str]) -> core.CoreObjects:
-    """Get the oxygen uptake of the organ, `VO2` (mmole/min)."""
+def uptake_objects(zones: Sequence[str], *, submodel: bool = False) -> core.CoreObjects:
+    """Get the oxygen uptake of the organ, `VO2` (mmole/min).
+
+    Args:
+        zones: the zones.
+        submodel: the cells of the zones are submodels (the liver).
+    """
     out = core.CoreObjects()
     _add(
         out,
         observer(
             ids.VO2,
-            " + ".join(ids.reaction("O2IM", z) for z in zones),
+            " + ".join(ids.reaction("O2IM", z, submodel=submodel) for z in zones),
             U.mmole_per_min,
             "oxygen uptake of the organ",
             SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,

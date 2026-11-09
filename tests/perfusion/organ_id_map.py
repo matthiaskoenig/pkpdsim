@@ -1,10 +1,14 @@
-"""The map of the ids of the perfusion liver from before the zonation engine to after.
+"""The map of the ids of the perfusion organs from before the zonation engine to after.
 
-`tests/perfusion/data/organ_id_map.json` is the record of what moved when the
-zones of the liver went onto the engine (the vascular space, the chain, the
-cells as a submodel of every zone): every id of `data/organ_ids.json` (the
-model before, commit 98aacca) which has another id in the model now, the ids
-the model lost and the ids it gained. It is read by `test_organ_reference`,
+`tests/perfusion/data/organ_id_map.json` (the liver), `kidney_id_map.json` and
+`generic_id_map.json` are the record of what moved when the zones of the liver
+went onto the engine (the vascular space, the chain, the cells as a submodel of
+every zone) and the ids of the zones of every organ took the names of the engine
+(`V_vas_<z>`, `V_cell_<z>`, `<q>_vas_<z>`, the flows between them): every id of
+`data/<name>_ids.json` (the model before, commit 98aacca) which has another id in
+the model now, the ids the model lost and the ids it gained. The kidney and the
+generic organ emit their cells themselves, so the ids of their cells keep their
+zone (`GLC2PYR_z1`) and carry no submodel prefix: only the liver has submodels. It is read by `test_organ_reference`,
 which checks it against the model that is built and uses it to compare the
 trajectories of the two models id by id.
 
@@ -24,19 +28,23 @@ import libsbml
 
 from pkpdsim.perfusion.builder import build
 
-from .organ_reference import DATA, IDS, definition
+from .organ_reference import DATA, DEFINITIONS, ids_file
 
-MAP = DATA / "organ_id_map.json"
 PERFUSATE = {"o2", "glc", "lac", "h", "co2", "hco3", "k", "alt", "ast", "ldh", "tr"}
-"""The quantities of the perfusate of the reference (the tracer `tr` included)."""
+"""The quantities of the perfusate of the references (the tracer `tr` included)."""
 CELL_PROCESSES = re.compile(r"[A-Z0-9]+")
+SUBMODEL = {"organ": True, "kidney": False, "generic": False}
+"""The cells of the zones are a submodel of the model (the liver) or are emitted by the builder."""
 
 
-def rename(old: str) -> str | None:
+def map_file(name: str) -> Path:
+    """Get the file of the map of a reference."""
+    return DATA / f"{name}_id_map.json"
+
+
+def rename(old: str, submodel: bool = True) -> str | None:
     """Get the id in the model now of an id of the model before, `None` if it is gone."""
-    if old == "V_li":
-        return None
-    if m := re.fullmatch(r"(.+)_z(\d+)_(cell|dead)", old):
+    if submodel and (m := re.fullmatch(r"(.+)_z(\d+)_(cell|dead)", old)):
         return f"M{int(m[2]):02}__{m[1]}_{m[3]}"
     if m := re.fullmatch(r"Vcell_z(\d+)", old):
         return f"V_cell_z{m[1]}"
@@ -51,12 +59,16 @@ def rename(old: str) -> str | None:
         stem, k = m[1], int(m[2])
         if stem in PERFUSATE:
             return f"{stem}_vas_z{k}"
-        if stem in {"BUF", "pH"}:
+        if submodel and stem in {"BUF", "pH"}:
             return f"M{k:02}__{stem}_ext"
-        if stem in {"f_alive", "v_nec", "Vbile"} or CELL_PROCESSES.fullmatch(stem):
+        if submodel and (
+            stem in {"f_alive", "v_nec", "Vbile"} or CELL_PROCESSES.fullmatch(stem)
+        ):
             return f"M{k:02}__{stem}"
         return old
-    return {"f_vas_li": "f_vas", "f_cell_li": "f_cell"}.get(old, old)
+    if submodel:
+        return {"f_vas_li": "f_vas", "f_cell_li": "f_cell"}.get(old, old)
+    return old
 
 
 def model_ids(path: Path) -> set[str]:
@@ -72,19 +84,25 @@ def model_ids(path: Path) -> set[str]:
 
 
 def main() -> None:
-    """Write the map from the rules and the model which is built."""
-    before = json.loads(IDS.read_text())
-    with TemporaryDirectory() as tmp:
-        now = model_ids(build(definition(), Path(tmp)))
-    renamed = {old: new for old in before if (new := rename(old)) not in (old, None)}
-    kept = {rename(old) or old for old in before}
-    out = {
-        "before": "98aacca",
-        "renamed": renamed,
-        "dropped": [old for old in before if rename(old) is None],
-        "added": sorted(now - kept - set(renamed.values())),
-    }
-    MAP.write_text(json.dumps(out, indent=1, sort_keys=True) + "\n")
+    """Write the maps from the rules and the models which are built."""
+    for name, make in DEFINITIONS.items():
+        submodel = SUBMODEL[name]
+        before = json.loads(ids_file(name).read_text())
+        with TemporaryDirectory() as tmp:
+            now = model_ids(build(make(), Path(tmp)))
+        renamed = {
+            old: new
+            for old in before
+            if (new := rename(old, submodel)) not in (old, None)
+        }
+        kept = {rename(old, submodel) or old for old in before}
+        out = {
+            "before": "98aacca",
+            "renamed": renamed,
+            "dropped": [old for old in before if rename(old, submodel) is None],
+            "added": sorted(now - kept - set(renamed.values())),
+        }
+        map_file(name).write_text(json.dumps(out, indent=1, sort_keys=True) + "\n")
 
 
 if __name__ == "__main__":

@@ -268,14 +268,13 @@ def test_every_process_of_the_core_is_drawn() -> None:
             # the cells of the zones of a liver are the reactions of its cell model
             sids = [r.sid or "" for r in cell.reactions]
         else:
-            # the cells of a zone the builder emits are those of the submodel `M01`
-            prefix = ids.reaction("", "z1")
+            # the cells of a zone the builder emits are the reactions of the zone
             sids = [
-                r.sid.removeprefix(prefix)
+                r.sid.removesuffix("_z1")
                 for r in compose(d).reactions or []
-                if r.sid and r.sid.startswith(prefix)
+                if r.sid and r.sid.endswith("_z1") and not r.sid.startswith("FLOW_")
             ]
-        reactions = [sid for sid in sids if sid != "BUF_ext"]
+        reactions = [sid for sid in sids if sid not in ("BUF_ext", "BUF")]
         assert len(reactions) >= 12, "the cells of a zone have their reactions"
         grouped = {sid for rows in process_groups(d).values() for sid, _ in rows}
         missing = [r for r in reactions if r not in grouped]

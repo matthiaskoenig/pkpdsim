@@ -352,18 +352,20 @@ def _flat(zone: str, sid: str) -> str:
     return _zonation().flat(int(zone[1:]), sid)
 
 
-def species(quantity: str, site: str) -> str:
+def species(quantity: str, site: str, *, submodel: bool = False) -> str:
     """Get the id of a quantity at a site, `<quantity>_<site>`.
 
     The vascular space of a zone is the vascular site of the engine,
-    `<quantity>_vas_<zone>`, and the cells of a zone are the cell model of
-    its submodel, `M<kk>__<quantity>_cell` (`M<kk>__<quantity>_dead` for the
-    necrotic cells); the other sites are `<quantity>_<site>`.
+    `<quantity>_vas_<zone>`. The cells of a zone are `<quantity>_<zone>_cell`
+    (`<quantity>_<zone>_dead` for the necrotic cells), or, where the cells are
+    the cell model of a submodel (`submodel`, the liver), `M<kk>__<quantity>_cell`
+    (`M<kk>__<quantity>_dead`); the other sites are `<quantity>_<site>`.
 
     Args:
         quantity: the quantity token (`glc`, `o2`, `atp`).
         site: the site (`res`, the zone `z3` for its vascular space, the
             cells `z3_cell`).
+        submodel: the cells of the zone are a submodel of the model.
 
     Returns:
         The id of the species.
@@ -371,7 +373,7 @@ def species(quantity: str, site: str) -> str:
     if is_zone(site):
         return _zonation().species(quantity, _zonation().VASCULAR, site)
     cell = _CELL_SITE.fullmatch(site)
-    if cell:
+    if cell and submodel:
         return _flat(cell[1], f"{quantity}_{cell[2]}")
     return f"{quantity}_{site}"
 
@@ -391,32 +393,39 @@ def profile(process: str, zone: str) -> str:
     return f"p_{process}_{zone}"
 
 
-def reaction(name: str, zone: str) -> str:
-    """Get the id of a reaction of the core of a zone, `M<kk>__<name>`."""
-    return _flat(zone, name) if is_zone(zone) else f"{name}_{zone}"
+def reaction(name: str, zone: str, *, submodel: bool = False) -> str:
+    """Get the id of a reaction of the core of a zone, `<name>_<zone>`.
 
-
-def buffer(site: str) -> str:
-    """Get the id of the bicarbonate buffer reaction at a site.
-
-    The buffer of a zone is part of its cell model, `M<kk>__BUF_ext`.
+    Where the cells of the zone are a submodel (`submodel`) it is `M<kk>__<name>`.
     """
-    return _flat(site, "BUF_ext") if is_zone(site) else f"BUF_{site}"
+    return _flat(zone, name) if is_zone(zone) and submodel else f"{name}_{zone}"
 
 
-def alive(zone: str) -> str:
-    """Get the id of the living fraction of the cells of a zone, `M<kk>__f_alive`."""
-    return _flat(zone, "f_alive") if is_zone(zone) else f"f_alive_{zone}"
+def buffer(site: str, *, submodel: bool = False) -> str:
+    """Get the id of the bicarbonate buffer reaction at a site, `BUF_<site>`.
+
+    The buffer of a zone whose cells are a submodel is part of its cell model,
+    `M<kk>__BUF_ext`.
+    """
+    return _flat(site, "BUF_ext") if is_zone(site) and submodel else f"BUF_{site}"
 
 
-def necrosis_rate(zone: str) -> str:
-    """Get the id of the rate of necrosis of the cells of a zone (1/min)."""
-    return _flat(zone, "v_nec") if is_zone(zone) else f"v_nec_{zone}"
+def alive(zone: str, *, submodel: bool = False) -> str:
+    """Get the id of the living fraction of the cells of a zone, `f_alive_<zone>`.
+
+    `M<kk>__f_alive` where the cells are a submodel.
+    """
+    return _flat(zone, "f_alive") if is_zone(zone) and submodel else f"f_alive_{zone}"
 
 
-def bile(zone: str) -> str:
-    """Get the id of the volume of bile which a zone has secreted (l)."""
-    return _flat(zone, "Vbile") if is_zone(zone) else f"Vbile_{zone}"
+def necrosis_rate(zone: str, *, submodel: bool = False) -> str:
+    """Get the id of the rate of necrosis of the cells of a zone (1/min), `v_nec_<zone>`."""
+    return _flat(zone, "v_nec") if is_zone(zone) and submodel else f"v_nec_{zone}"
+
+
+def bile(zone: str, *, submodel: bool = False) -> str:
+    """Get the id of the volume of bile which a zone has secreted (l), `Vbile_<zone>`."""
+    return _flat(zone, "Vbile") if is_zone(zone) and submodel else f"Vbile_{zone}"
 
 
 def volume(site: str) -> str:
@@ -547,12 +556,13 @@ def specific_activity(enzyme: str) -> str:
     return f"a_{enzyme}"
 
 
-def ph(site: str) -> str:
-    """Get the id of the pH of the perfusate at a site.
+def ph(site: str, *, submodel: bool = False) -> str:
+    """Get the id of the pH of the perfusate at a site, `pH_<site>`.
 
-    The pH of a zone is that of its cell model, `M<kk>__pH_ext`.
+    The pH of a zone whose cells are a submodel is that of its cell model,
+    `M<kk>__pH_ext`.
     """
-    return _flat(site, "pH_ext") if is_zone(site) else f"pH_{site}"
+    return _flat(site, "pH_ext") if is_zone(site) and submodel else f"pH_{site}"
 
 
 def is_zone(zone: str) -> bool:
