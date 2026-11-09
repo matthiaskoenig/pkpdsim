@@ -69,6 +69,7 @@ __all__ = [
     "Weight",
     "Weights",
     "lobular_area",
+    "lobular_radius",
     "lobular_weight",
     "normalized",
     "zone_areas",
@@ -167,6 +168,42 @@ def lobular_area(x: float) -> float:
     # squared radius over the rest of the wedge is `apothem**2 * tan`
     beyond = inside + _APOTHEM**2 * math.tan(_WEDGE - edge)
     return 1.0 - beyond / _WEDGE_AREA
+
+
+def lobular_radius(x: float, theta: float) -> float:
+    """Get the radius at which the lobule has a position in a direction.
+
+    The idealized hexagon has its centre (the central vein, position 1) at the
+    origin and the circumradius 1; `theta` is the direction measured from the
+    nearest portal triad, in the wedge `[0, pi / 6]` (a twelfth of the
+    hexagon). The points of a position lie on an Apollonius circle of the
+    triad and the centre, and the circle is cut off by the edge of the
+    hexagon: the area up to this radius and beyond is what `lobular_area`
+    integrates. A point at a smaller radius has a larger position.
+
+    Args:
+        x: the lobular position, 0 periportal and 1 pericentral.
+        theta: the direction in the wedge of the triad (rad).
+
+    Returns:
+        The radius of the position in the direction, the radius of the edge of
+        the hexagon where the isoline has left the lobule (always for the
+        position 0), 0 for the position 1.
+
+    Raises:
+        ValueError: for a position outside the lobule, or a direction outside
+            the wedge.
+    """
+    if not 0.0 <= x <= 1.0:
+        raise ValueError(f"The lobular position {x} is outside [0, 1].")
+    if not 0.0 <= theta <= _WEDGE:
+        raise ValueError(f"The direction {theta} is outside the wedge [0, pi/6].")
+    if x == 1.0:
+        return 0.0
+    edge = _radius_of_the_edge(theta)
+    if x == 0.0:
+        return edge
+    return min(edge, _radius_of_the_isoline(x / (1.0 - x), theta))
 
 
 def lobular_weight(x: float) -> float:

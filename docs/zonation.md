@@ -1,0 +1,147 @@
+# Zonated liver
+
+`pkpdsim.zonation` is the engine of the zonated liver models: a one-dimensional sinusoid of `n` zones from periportal (`z1`) to pericentral (`z<n>`), in which a substance travels down the sinusoid by flow and diffusion and every zone has a cell model of its own. The design behind it is that of pkpdsim#168 (one zonation builder for all zonated liver models); this page is the reader's view of what the engine builds, what is set, and what to take care of.
+
+The engine writes plain SBML and imports only `pkpdsim.sbml` and itself. It does not import the PBPK library or the perfusion library: a caller (a zonated liver of a body model, a perfused organ) hands over its own boundary and cell model. The first snippet below imports the PBPK library for the reference flow of the rat, which the engine reads from nobody and the caller states.
+
+## The layers
+
+Every zone has up to six layers, each a compartment `V<layer>_z<k>` which carries every substance:
+
+| Layer | Carries substance | Fraction of the parenchyma |
+|---|---|---|
+| erythrocytes | only if the haematocrit is above 0 | `Hct` x 10.6 % |
+| plasma (the sinusoidal lumen) | yes | `(1 - Hct)` x 10.6 % |
+| endothelial cell | yes | 2.8 % |
+| space of Disse | yes | 4.9 % |
+| hepatocyte (the cell model) | yes | 78.0 % |
+| bile canaliculus | yes | 0.4 % |
+
+The fractions are those of the rat liver, Blouin, Bolender and Weibel 1977 (J Cell Biol 72:441), and are entered in the parameter table `tables/zonation.toml` (see [Parameter database](database.md)), the lumen 10.6 % split by the haematocrit. The Kupffer cells (2.1 %) and the stellate cells (1.4 %) are in the table and get no compartment, by decision: their volume stays unassigned, so the represented volume does not inflate. The human liver carries the rat fractions with the note `fallback: rat` until a sourced human stereology is entered; its density (1.0 kg/l) and haematocrit (0.43) are human values. The haematocrit of the rat is 0.45, a model choice.
+
+A volume is the fraction of the layer times the parenchyma of the liver mass over the density, shared evenly over the zones, so a change of the mass before the simulation sets all volumes. The geometry (`SinusoidGeometry`, per species from the table) gives only areas and lengths: the sinusoid radius `r_sin` 4.4 um and length `L_sin` 300 um, the endothelium of 0.165 um, the space of Disse of 1.0 um (model choices, taken over from the models of pkdb_models), and the number of sinusoids follows from the lumen volume. The axial exchange uses the prism identity, the conductance `D * A / dx` with `A / dx = n**2 * V_k / L_sin**2`, so no radius enters it.
+
+The `WELL_STIRRED` geometry is the same engine with a vascular compartment (lumen, endothelium and space of Disse in one), a cell compartment and the bile per zone, without axial diffusion and without the barrier. Switching is one setting, the experiments do not change.
+
+## The settings
+
+`ZonationSettings` holds what is set; the defaults are the sinusoid of the rat at 10 zones.
+
+| Setting | Meaning |
+|---|---|
+| `n_zones` | the number of zones, at least 1 (default 10) |
+| `geometry` | `Geometry.SINUSOID` (six layers) or `Geometry.WELL_STIRRED` |
+| `flow` | `ImposedFlow` (the flow is given) or `PressureFlow` (the flow follows the pressure drop) |
+| `bile` | `BileTransport.ADVECTIVE` (default), `DIFFUSIVE`, or `None` for no bile |
+| `haematocrit` | the haematocrit of the lumen; `None` takes the species, 0 leaves out the erythrocytes |
+| `profiles` | the zonal profile of a process by its name |
+| `species`, `liver_mass`, `reference_flow` | the species of the table, the mass of the liver, the blood flow of the reference organ |
+| `geometry_constants`, `fractions` | a geometry or fractions replacing the table (a perfused organ states its own) |
+| `boundary` | who supplies the ends of the chain: the engine (`OPEN`) or the caller (`EXTERNAL`) |
+
+Both flow modes emit the same flow per zone, so nothing downstream depends on which one was chosen. A `PressureFlow` is the leaky tube of the spt model: the pressure falls from `p_pp` (default 1333 Pa, 10 mmHg) to `p_pc` (266 Pa, 2 mmHg), the plasma viscosity is 1.8e-3 Pa s, and the resistance factor of the blood is calibrated per species so that the periportal inflow at the default pressures is the reference flow of the settings. The mean flow over the zones is lower than that inflow (0.829 of it at 10 zones).
+
+The engine reads no physiology of its own. A default flow needs the `reference_flow` of the caller; for a species of the PBPK library that is `pkpdsim.pbpk.physiology.reference_flow(species)`.
+
+The diffusion coefficients are derived from the molar mass `Mr` and need nothing else for a new substance. The aqueous coefficient at 37 C is `D = D_REF * (Mr / MR_REF) ** -0.4`, anchored on glucose (`MR_REF` 180.16 g/mole, `D_REF` 0.90e-9 m2/s) and checked against sucrose, a Gd chelate, albumin and insulin (`tests/zonation/test_transport.py`, within a factor of 1.5, insulin within 2); the cytosolic coefficient is 0.27 of it (Seksek, Biwersi and Verkman 1997). A `Substance.diffusion` overrides the derived value, and every derived value is written into the model as a parameter whose notes name the correlation, so a fit can replace it. Gadoxetate (682 Da), for example, gets about 0.53e-9 m2/s.
+
+The fenestrae are a path from plasma to the space of Disse in parallel to the endothelial cell. Its permeability is `P_fen = porosity * (D_w / t_endo) * F(lambda)` with the Renkin sieving `F(lambda) = (1 - lambda)**2 * (1 - 2.104 lambda + 2.09 lambda**3 - 0.95 lambda**5)` (Renkin 1954) and `lambda` the ratio of the radius of the molecule to that of the fenestra. The measured gradient is the porosity of Braet and Wisse 2002 (Comp Hepatol 1:1): 6 % periportal rising to 8 % pericentral, a fenestral diameter of 110.7 nm periportal to 104.8 nm pericentral and 9 to 13 fenestrae per um2. The table holds the porosities and, as model choices of the spt model, the radius of 53.5 nm and the density of 10 per um2. Transcellular permeabilities (`P_endo_in`, `P_endo_out`, `P_hep`) are 0, the path is off, until a model sets them.
+
+## The profiles
+
+A profile is a gradient as a shape of the normalized position `x`, 0 periportal and 1 pericentral, so a fit estimates the two parameters of the shape and not one level per zone, and the same declaration gives the same gradient at any number of zones. The shapes are `Constant`, `Linear(pp, pc)`, `Exponential`, `Sigmoid(midpoint, steepness)` (a Hill form, optionally reversed), a list of weights for measured zonation and `Random(seed, cv)`. Every shape is normalized to the mean 1 over the volumes of the zones, so the total amount of a protein does not change with its distribution:
+
+```python
+from pkpdsim.zonation.profiles import Linear, Sigmoid, zone_areas, zone_positions
+
+print(zone_positions(4))
+levels = Linear(1.0, 4.0).values(4)
+print(levels)
+assert abs(sum(levels) / 4 - 1.0) < 1e-12
+assert abs(sum(Sigmoid(0.5, 6.0).values(10)) / 10 - 1.0) < 1e-12
+assert abs(sum(zone_areas(10)) - 1.0) < 1e-12
+```
+
+The position of a zone is its centre, `(k - 0.5) / n`. `lobular_weight` is the area of the idealized hexagonal lobule at a position and `zone_areas(n)` the exact area share of every zone, for a comparison with literature values which are weighted by the area.
+
+## The figures
+
+Five visualizations are functions over a simulation result, usable by every zonated model. The result is a `pandas.DataFrame` with a `time` column and a column per selection named by its plain id (`result_frame` converts a roadrunner result); the number of zones and the layers are read from the ids present. A figure is a `matplotlib.figure.Figure` owned by the caller, `matplotlib.pyplot` is not used, and every figure is vector: the heatmap and the colorbar are not rasterized, so an SVG holds no embedded image, which a viewer that drops raster data would show as an empty panel. A position axis names its ends (0 periportal, 1 pericentral), a time carries its unit (`time_unit`, default min) and a concentration its unit (`unit`, default mM) and an optional display `name`. Axes and colour scales do not draw negative concentration space. `data_axes(fig)` gives the panels without the colorbars.
+
+1. `zone_profiles`: a row per observable, the zones on the x axis, a line per time, data overlaid.
+2. `space_time`: the zones against the time, the colour the concentration, a heatmap per layer and the outflow curve below.
+3. `layer_profile`: one substance in every layer which carries it, at one time, on one scale.
+4. `lobule_map`: the idealized lobule hexagon, below.
+5. `tube_mesh` (`pkpdsim.zonation.render`): the points and cells of the sinusoid tube, below.
+
+### The lobule hexagon
+
+`lobule_map(result, quantity, *, time, zones)` draws the value of every zone on the hexagonal lobule: the central vein is the centre, the six portal triads are the corners, and a point has the normalized distance `d_pp / (d_pp + d_pc)` of its nearest triad and the central vein. The rim is zone 1 (periportal), the centre is zone `zones` (pericentral). The bands of the zones are bounded by the isolines of that distance, and their areas follow the area weight of the lobule, `lobular_weight` at the centre of the zone, normalized over the zones: the periportal and pericentral zones are small, and the zones in between, where the isoline reaches the edges, are large. The map is meant for patterns such as necrosis, which are results of the one-dimensional model and not a two-dimensional model. It draws the hepatocytes by default (`layer=Layer.CELL`) and a vector patch per band and wedge.
+
+```python
+import numpy as np
+import pandas as pd
+
+from pkpdsim.zonation import observers
+from pkpdsim.zonation.figures import lobule_map
+from pkpdsim.zonation.geometry import Layer
+
+time = np.linspace(0.0, 120.0, 25)
+columns = {"time": time}
+for k, sid in enumerate(observers.profile_ids("drg", Layer.CELL, 10), start=1):
+    columns[sid] = k * time / 60.0
+figure = lobule_map(pd.DataFrame(columns), "drg", time=60, zones=10)
+figure.savefig("lobule.svg")
+```
+
+### The tube
+
+`tube_mesh(geo, n_zones)` returns the points (m) and cells of the tube of the geometry, the sinusoid radius and length with one segment per zone from the portal end (x = 0) to the central end, as plain numpy arrays; `cells[k]` lists the points of the two rings of the zone `k + 1`. The engine does not depend on a renderer. A script which draws the tube (colour on the real radii, frames or a video) installs pyvista for its run, as the videos of gdeobdtpa do.
+
+## The cell model contract
+
+A zone is a `comp` submodel of a standalone cell model, which stays loadable on its own for the couplings to meshes. The engine places it once per zone and replaces its ports:
+
+| Port | Replaced by |
+|---|---|
+| `Vext` | the space of Disse of the zone |
+| `Vli` | the hepatocyte compartment of the zone |
+| `Vbi` (optional) | the canaliculus of the zone |
+| `[x_ext]` | the Disse species of the substance |
+| `position` | `(k - 0.5) / n_zones` |
+| `temperature` | the temperature of the organ or the circuit |
+
+The submodel of zone `k` is named `M{k:02}`. The engine exposes the layer species of a zone to the reactions of the cell model, so a transport may span plasma, endothelial cell, Disse, hepatocyte and canaliculus, and custom kinetics are accepted. The ids follow one convention: zones are `z<k>`, a profile factor is `p_<process>_z<k>`, a compartment `V<layer>_z<k>`, a reaction `<name>_z<k>`; the observers (`pkpdsim.zonation.observers`) give the profile of every layer, the outflow concentration, the amount per layer and the mass balance residual `balance_<s>`.
+
+## One zone
+
+`n_zones=1` is the unzonated organ: one zone, the position 0.5, and every profile is a constant 1 whatever its shape. There is no axial reaction, the chain has one tank (a Peclet number of 2), and `lobule_map` draws one colour. The same code path builds it, so it is the check that a zonated model reduces to its well-mixed form.
+
+## Numerical dispersion
+
+The convection is a first order upwind scheme, so a chain of `n` stirred zones disperses like `n` tanks in series: a numerical dispersion `v * dx / 2` and a Peclet number of `2 n` when the physical diffusion is negligible, 20 at the default 10 zones. This is not small. At 10 zones, for the rat with the reference flow of the PBPK library, the velocity is 1.1e-4 m/s and the dispersion of the discretization is 1.7e-9 m2/s, the same order as the aqueous diffusion of a small solute (0.9e-9 m2/s for glucose, the reference of the derivation above). The zone count therefore shares the setting of the axial gradient with the physics, and a finer chain (40 zones: 4.1e-10 m2/s, a Peclet number of 80) is what separates them. The engine states the number: `effective_peclet(settings, d_eff)` is `v * L / (d_eff + v * dx / 2)`, the notes of every built model record the realized Peclet number without physical diffusion (here "a Peclet number of 20 without physical diffusion", with the dispersion and the velocity), and the build warns when a diffusion lies below the dispersion.
+
+```python
+from pkpdsim.pbpk.physiology import reference_flow
+from pkpdsim.species import Species
+from pkpdsim.zonation import effective_peclet
+from pkpdsim.zonation.settings import ZonationSettings
+
+settings = ZonationSettings(n_zones=10, reference_flow=reference_flow(Species.RAT))
+assert effective_peclet(settings, 0.0) == 20.0
+print(effective_peclet(settings, 0.9e-9))
+```
+
+## Water in the pressure mode
+
+In the pressure flow mode the fluid which leaks through the fenestrae is not removed from the lumen, so water is not conserved there: the flow of the zones follows the leaky tube and is not a closed balance of the volumes. The solute balance is unaffected, and `balance_<s>` holds.
+
+## References
+
+- Blouin, Bolender, Weibel 1977, J Cell Biol 72:441: volume fractions of the rat liver parenchyma.
+- Braet, Wisse 2002, Comp Hepatol 1:1: fenestrae, their diameter, frequency and porosity from periportal to pericentral.
+- Renkin 1954, J Gen Physiol 38:225: hindered diffusion through pores, the sieving factor.
+- Seksek, Biwersi, Verkman 1997, J Cell Biol 138:131: the diffusion in the cytosol.
+- Schwen et al. 2015, PLoS ONE 10:e0133653: representative sinusoids, the layers of the sinusoid.
+- Berndt et al. 2018, PLoS Comput Biol 14:e1006005: zonated carbohydrate metabolism, the thickness of the space of Disse and the fenestration, pressure-driven convection.
+- Goresky 1963 and the multiple-indicator dilution literature: flow-limited and barrier-limited distribution.

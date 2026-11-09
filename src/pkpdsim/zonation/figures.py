@@ -14,23 +14,30 @@ so the SVG holds no embedded image (a viewer which drops embedded raster data
 would show an empty panel).
 """
 
+import math
 from collections.abc import Sequence
 from dataclasses import dataclass
+from itertools import pairwise
 
 import numpy as np
 import pandas as pd
 from matplotlib import colormaps
 from matplotlib.axes import Axes
+from matplotlib.cm import ScalarMappable
 from matplotlib.colorbar import Colorbar
+from matplotlib.colors import Normalize
 from matplotlib.figure import Figure
+from matplotlib.patches import Polygon
 
 from pkpdsim.zonation import ids, observers
 from pkpdsim.zonation.geometry import Layer
+from pkpdsim.zonation.profiles import lobular_area, lobular_radius, lobular_weight
 
 __all__ = [
     "ZoneProfile",
     "data_axes",
     "layer_profile",
+    "lobule_map",
     "result_frame",
     "space_time",
     "zone_profiles",
@@ -422,4 +429,169 @@ def layer_profile(
     figure.supxlabel(POSITION)
     figure.supylabel(_label(substance, unit))
     figure.suptitle(f"{substance} at {_time_text(time, time_unit)}")
+    return figure
+
+
+_WEDGE = math.pi / 6.0
+"""The angle of one twelfth of the hexagon, the wedge of one portal triad."""
+_ARC_POINTS = 64
+"""The points of the isoline of a band in a wedge; the error of the area is below 1e-5."""
+
+
+def _zone_edges(n: int) -> list[float]:
+    """Get the positions which bound the `n` bands of the hexagon, 0 to 1.
+
+    The band of zone `k` has the area share `lobular_weight(x_k)` of the
+    centre `x_k = (k - 0.5) / n`, normalized over the zones, so that the area
+    of a zone follows the weight of the lobule and the zones count like the
+    profiles which are weighted by it. The ends are the lobule's: zone 1
+    starts at the position 0 (the portal triads, the rim) and zone `n` ends
+    at 1 (the central vein, the centre), and an edge is the position whose
+    area share is the cumulative area of the bands up to it
+    (`lobular_area`, found by bisection).
+    """
+    weights = [lobular_weight((k - 0.5) / n) for k in range(1, n + 1)]
+    total = sum(weights)
+    edges = [0.0]
+    cumulative = 0.0
+    for w in weights[:-1]:
+        cumulative += w / total
+        low, high = edges[-1], 1.0
+        for _ in range(60):
+            mid = 0.5 * (low + high)
+            if lobular_area(mid) < cumulative:
+                low = mid
+            else:
+                high = mid
+        edges.append(0.5 * (low + high))
+    edges.append(1.0)
+    return edges
+
+
+def _band(low: float, high: float) -> np.ndarray:
+    """Get the polygon of the band `[low, high]` of a position in the wedge of a triad.
+
+    The outer arc is the isoline of `low`, the inner arc that of `high`, both
+    from the direction of the triad (theta 0) to that of the edge midpoint.
+    The directions in which an isoline leaves the hexagon are sampled too, so
+    the corner where it meets the edge is exact.
+    """
+    theta = np.linspace(0.0, _WEDGE, _ARC_POINTS)
+    outer = [lobular_radius(low, t) for t in theta]
+    inner = [lobular_radius(high, t) for t in theta]
+    return np.vstack(
+        [
+            np.column_stack(
+                [np.array(outer) * np.cos(theta), np.array(outer) * np.sin(theta)]
+            ),
+            np.column_stack(
+                [
+                    np.array(inner[::-1]) * np.cos(theta[::-1]),
+                    np.array(inner[::-1]) * np.sin(theta[::-1]),
+                ]
+            ),
+        ]
+    )
+
+
+def _twelve(wedge: np.ndarray) -> list[np.ndarray]:
+    """Get the twelve copies of a polygon of the first wedge over the hexagon.
+
+    The hexagon has the corners on the angles 0, 60, ... degrees; the wedge
+    `[0, 30]` degrees is mirrored about the 30 degree line and rotated, the
+    copies of the odd wedges are the mirror images of the even ones.
+    """
+    copies: list[np.ndarray] = []
+    for j in range(6):
+        c, s = math.cos(j * math.pi / 3.0), math.sin(j * math.pi / 3.0)
+        rotation = np.array([[c, -s], [s, c]])
+        copies.append(wedge @ rotation.T)
+        # the mirror image about the line at 30 degrees: (x, y) -> (cos 60 x + sin 60 y, sin 60 x - cos 60 y)
+        mirror = np.array(
+            [
+                [math.cos(math.pi / 3.0), math.sin(math.pi / 3.0)],
+                [math.sin(math.pi / 3.0), -math.cos(math.pi / 3.0)],
+            ]
+        )
+        copies.append(wedge @ mirror.T @ rotation.T)
+    return copies
+
+
+def lobule_map(
+    result: pd.DataFrame,
+    quantity: str,
+    *,
+    time: float,
+    zones: int,
+    layer: Layer | str = Layer.CELL,
+    unit: str = DEFAULT_UNIT,
+    time_unit: str = DEFAULT_TIME_UNIT,
+    name: str | None = None,
+) -> Figure:
+    """Draw the value of every zone on the idealized hexagonal lobule.
+
+    The central vein is the centre of the hexagon, the six portal triads are
+    its corners, and a point has the normalized periportal to pericentral
+    distance `d_pp / (d_pp + d_pc)` of the nearest triad and the central
+    vein: the rim and the corners are zone 1 (periportal), the centre is zone
+    `zones` (pericentral). The bands of the zones are bounded by the isolines
+    of that distance; their areas are the area shares of the zones
+    (`lobular_weight` at the centre of the zone, see `_zone_edges`). The
+    figure is vector: a patch per band and wedge, no image, and the solids of
+    its colorbar are not rasterized either.
+
+    Args:
+        result: the simulation result.
+        quantity: the id of the substance.
+        time: the time of the map, interpolated in the result.
+        zones: the number of zones of the result.
+        layer: the layer whose zones are drawn, the hepatocytes by default.
+        unit: the unit of the concentrations in the labels (the default is the
+            unit of the profile observers, mM).
+        time_unit: the unit of the time, the convention of the engine (min).
+        name: the display name of the substance in the labels, the id by
+            default.
+
+    Returns:
+        The figure, one panel of the hexagon and its colorbar. A concentration
+        is never negative: when no value is, the colour scale starts at zero.
+
+    Raises:
+        KeyError: if the result has no column of a zone.
+        ValueError: for less than one zone.
+    """
+    if zones < 1:
+        raise ValueError(f"A lobule has at least one zone, not {zones}.")
+    name = quantity if name is None else name
+    values = _at(result, observers.profile_ids(quantity, layer, zones), time)
+    limits = _limits([values]) or (float(values.min()), float(values.max()))
+    mappable = ScalarMappable(Normalize(*limits), colormaps["viridis"])
+    figure = Figure(figsize=(5.0, 4.4), layout="constrained")
+    ax = figure.subplots()
+    edges = _zone_edges(zones)
+    for k, (low, high) in enumerate(pairwise(edges), start=1):
+        colour = mappable.to_rgba(values[k - 1])
+        for polygon in _twelve(_band(low, high)):
+            ax.add_patch(
+                Polygon(
+                    polygon,
+                    closed=True,
+                    facecolor=colour,
+                    edgecolor=colour,
+                    linewidth=0.3,
+                    gid=ids.zone(k),
+                )
+            )
+    ax.set_xlim(-1.02, 1.02)
+    ax.set_ylim(-0.9, 0.9)
+    ax.set_aspect("equal")
+    ax.set_xticks([])
+    ax.set_yticks([])
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    ax.set_xlabel(
+        "Corners: portal triads (0, periportal). Centre: central vein (1, pericentral)"
+    )
+    ax.set_title(f"{name} {layer} at {_time_text(time, time_unit)}")
+    _colorbar(figure, mappable, ax, _label(f"{name} {layer}", unit))
     return figure

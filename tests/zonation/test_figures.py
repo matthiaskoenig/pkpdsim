@@ -23,6 +23,7 @@ from pkpdsim.zonation.figures import (
     ZoneProfile,
     data_axes,
     layer_profile,
+    lobule_map,
     result_frame,
     space_time,
     zone_profiles,
@@ -281,6 +282,7 @@ def test_no_figure_embeds_a_raster_image(tmp_path: Path) -> None:
         "profiles": zone_profiles(result, _profiles(2), times=(0, 60)),
         "space_time": space_time(result, "drg", layers=(Layer.PLASMA, Layer.CELL)),
         "layers": layer_profile(result, "drg", time=60),
+        "lobule": lobule_map(result, "drg", time=60, zones=N, layer=Layer.CELL),
     }
     for name, fig in figures.items():
         path = tmp_path / f"{name}.svg"

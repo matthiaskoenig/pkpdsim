@@ -1,0 +1,181 @@
+"""The lobule hexagon and the tube mesh, measured from the artists and not from pixels."""
+
+import matplotlib
+import numpy as np
+import pandas as pd
+import pytest
+
+matplotlib.use("Agg")
+
+from pathlib import Path
+
+from matplotlib import colormaps
+from matplotlib.colors import to_rgba
+from matplotlib.figure import Figure
+from matplotlib.patches import Polygon
+
+from pkpdsim.species import Species
+from pkpdsim.zonation import ids, observers
+from pkpdsim.zonation.figures import COLORBAR, data_axes, lobule_map
+from pkpdsim.zonation.geometry import Layer, geometry
+from pkpdsim.zonation.profiles import lobular_weight, zone_positions
+from pkpdsim.zonation.render import tube_mesh
+
+N = 10
+
+
+def _result(layer: Layer = Layer.CELL, n: int = N) -> pd.DataFrame:
+    """A synthetic result of `drg`, the value of a zone `k` is `k` at the time 60."""
+    t = np.linspace(0.0, 120.0, 25)
+    cols: dict[str, np.ndarray] = {"time": t}
+    for k, sid in enumerate(observers.profile_ids("drg", layer, n), start=1):
+        cols[sid] = k * t / 60.0
+    cols[observers.outflow_concentration("drg")] = t / 120.0
+    return pd.DataFrame(cols)
+
+
+def _patches(fig: Figure) -> list[Polygon]:
+    """The polygons of the hexagon, from the artists."""
+    (ax,) = data_axes(fig)
+    return [p for p in ax.patches if isinstance(p, Polygon)]
+
+
+def _colour_at(fig: Figure, point: tuple[float, float]) -> tuple[float, ...]:
+    """The face colour of the patch which holds a point (data coordinates)."""
+    colours = {
+        to_rgba(p.get_facecolor())
+        for p in _patches(fig)
+        if p.get_path().contains_point(point, radius=0.0)
+    }
+    assert len(colours) == 1, f"{point} lies in {len(colours)} colours"
+    return colours.pop()
+
+
+def _rim_point() -> tuple[float, float]:
+    """A point at a corner of the hexagon (the portal triad at angle 0)."""
+    return (0.98, 0.0)
+
+
+def _zone_colour(fig: Figure, k: int) -> tuple[float, ...]:
+    """The face colour of the patches of zone `k`."""
+    colours = {
+        to_rgba(p.get_facecolor()) for p in _patches(fig) if p.get_gid() == ids.zone(k)
+    }
+    assert len(colours) == 1
+    return colours.pop()
+
+
+def _area(patch: Polygon) -> float:
+    """The area of a polygon by the shoelace formula over its vertices."""
+    v = np.asarray(patch.get_xy())
+    x, y = v[:, 0], v[:, 1]
+    return 0.5 * abs(float(np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1))))
+
+
+def _areas_per_zone(fig: Figure) -> list[float]:
+    """The share of the area of the hexagon of every zone."""
+    total = dict.fromkeys(range(1, N + 1), 0.0)
+    for p in _patches(fig):
+        total[int(str(p.get_gid())[1:])] += _area(p)
+    s = sum(total.values())
+    return [a / s for a in total.values()]
+
+
+def test_the_hexagon_maps_zone_one_to_the_rim_and_zone_n_to_the_centre() -> None:
+    fig = lobule_map(_result(), "drg", time=60, zones=N)
+    assert _colour_at(fig, _rim_point()) == pytest.approx(_zone_colour(fig, 1))
+    assert _colour_at(fig, (0.0, 0.0)) == pytest.approx(_zone_colour(fig, N))
+    assert _zone_colour(fig, 1) != pytest.approx(_zone_colour(fig, N))
+
+
+def test_the_colours_are_the_scale_of_the_values() -> None:
+    """The value of zone `k` is `k`, the scale runs from 0 to the maximum."""
+    fig = lobule_map(_result(), "drg", time=60, zones=N)
+    cmap = colormaps["viridis"]
+    for k in (1, 5, N):
+        assert _zone_colour(fig, k) == pytest.approx(cmap(k / N))
+
+
+def test_the_hexagon_area_per_zone_matches_the_lobular_weight() -> None:
+    areas = _areas_per_zone(lobule_map(_result(), "drg", time=60, zones=N))
+    weights = [lobular_weight(x) for x in zone_positions(N)]
+    assert areas == pytest.approx([w / sum(weights) for w in weights], rel=1e-2)
+
+
+def test_the_hexagon_is_the_unit_hexagon_with_its_corners_on_the_axis() -> None:
+    fig = lobule_map(_result(), "drg", time=60, zones=N)
+    v = np.vstack([p.get_xy() for p in _patches(fig)])
+    assert v[:, 0].max() == pytest.approx(1.0)
+    assert np.hypot(v[:, 0], v[:, 1]).max() == pytest.approx(1.0)
+    total = sum(_area(p) for p in _patches(fig))
+    assert total == pytest.approx(3.0 * np.sqrt(3.0) / 2.0, rel=1e-6)
+
+
+def test_the_map_names_its_ends_and_the_unit_and_has_one_colorbar() -> None:
+    fig = lobule_map(_result(), "drg", time=60, zones=N, unit="uM", name="Drug")
+    (ax,) = data_axes(fig)
+    text = ax.get_xlabel() + ax.get_title()
+    assert "periportal" in text
+    assert "pericentral" in text
+    assert "t = 60 min" in text
+    bars = [a for a in fig.axes if a.get_gid() == COLORBAR]
+    assert len(bars) == 1
+    assert "[uM]" in bars[0].get_ylabel()
+    assert "Drug" in bars[0].get_ylabel()
+
+
+def test_the_map_of_a_layer_reads_that_layer() -> None:
+    result = _result(Layer.PLASMA)
+    fig = lobule_map(result, "drg", time=60, zones=N, layer=Layer.PLASMA)
+    assert len(_patches(fig)) > 0
+    with pytest.raises(KeyError, match="column"):
+        lobule_map(result, "drg", time=60, zones=N)
+
+
+def test_the_map_is_vector_and_uses_no_pyplot(tmp_path: Path) -> None:
+    import matplotlib.pyplot as plt
+
+    before = plt.get_fignums()
+    fig = lobule_map(_result(), "drg", time=60, zones=N)
+    assert isinstance(fig, Figure)
+    assert plt.get_fignums() == before
+    fig.savefig(tmp_path / "lobule.svg")
+    text = (tmp_path / "lobule.svg").read_text()
+    assert "<image" not in text
+    assert text.count("<path") >= N
+
+
+def test_one_zone_is_one_colour() -> None:
+    fig = lobule_map(_result(n=1), "drg", time=60, zones=1)
+    assert {to_rgba(p.get_facecolor()) for p in _patches(fig)} == {
+        _zone_colour_one(fig)
+    }
+
+
+def _zone_colour_one(fig: Figure) -> tuple[float, ...]:
+    return _zone_colour(fig, 1)
+
+
+def test_the_tube_mesh_has_a_segment_per_zone() -> None:
+    _, cells = tube_mesh(geometry(Species.RAT), N)
+    assert len(cells) == N
+
+
+def test_the_tube_mesh_is_the_tube_of_the_geometry() -> None:
+    geo = geometry(Species.RAT)
+    points, cells = tube_mesh(geo, N, sides=12)
+    assert points.shape == ((N + 1) * 12, 3)
+    assert cells.shape == (N, 24)
+    assert cells.max() == len(points) - 1
+    assert points[:, 0].min() == pytest.approx(0.0)
+    assert points[:, 0].max() == pytest.approx(geo.L_sin)
+    assert np.hypot(points[:, 1], points[:, 2]) == pytest.approx(geo.r_sin)
+    # the segments follow each other from the periportal end
+    x = points[cells][:, :, 0]
+    assert x[:, :12].max(axis=1) == pytest.approx(np.arange(N) * geo.L_sin / N)
+    assert x[:, 12:].max(axis=1) == pytest.approx(np.arange(1, N + 1) * geo.L_sin / N)
+
+
+def test_the_tube_mesh_refuses_no_zone() -> None:
+    with pytest.raises(ValueError, match="zone"):
+        tube_mesh(geometry(Species.RAT), 0)
