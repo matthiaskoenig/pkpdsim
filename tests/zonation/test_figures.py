@@ -528,8 +528,33 @@ def test_the_outflow_panel_is_lower_than_a_heatmap_and_the_name_is_chosen() -> N
     assert spec is not None
     assert spec.get_gridspec().get_height_ratios() == [1.0, 0.6]
     _drawn(fig)
-    assert out.get_position().height < 0.7 * heat.get_position().height
+    ratio = out.get_window_extent().height / heat.get_window_extent().height
+    assert ratio == pytest.approx(0.6, rel=0.05)
     assert fig.axes[-1].get_ylabel() == "Drug plasma [mM]"
     assert out.get_ylabel() == "Drug outflow [mM]"
     default = space_time(_result(), "drg", layers=(Layer.PLASMA,))
     assert default.axes[-1].get_ylabel() == "drg plasma [mM]"
+
+
+def test_a_shared_scale_labels_the_ticks_of_the_outer_panels_only() -> None:
+    def ticks(ax: Axes) -> tuple[bool, bool]:
+        return (
+            bool(ax.yaxis.get_tick_params()["labelleft"]),
+            bool(ax.xaxis.get_tick_params()["labelbottom"]),
+        )
+
+    shared = [ticks(ax) for ax in data_axes(layer_profile(_result(), "drg", time=0))]
+    assert shared == [
+        (True, False),
+        (False, False),
+        (False, False),
+        (True, True),
+        (False, True),
+        (False, True),
+    ]
+    five = [
+        ticks(ax) for ax in data_axes(layer_profile(_result(LAYERS[:5]), "drg", time=0))
+    ]
+    assert five[2] == (False, True)  # above a gap, so on its own bottom edge
+    own = data_axes(layer_profile(_result(), "drg", time=0, share_y=False))
+    assert all(ticks(ax) == (True, True) for ax in own)

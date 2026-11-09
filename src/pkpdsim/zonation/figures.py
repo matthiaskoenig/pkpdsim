@@ -379,7 +379,8 @@ def layer_profile(
             maximum over all layers (the default): the figure compares the
             layers at one time, and a layer of which the substance is nearly
             absent must look so. Pass `False` for a scale per panel, to see the
-            detail of a layer of low concentration.
+            detail of a layer of low concentration; then every panel keeps its
+            own tick labels, as the numbers differ.
 
     Returns:
         The figure, a panel per layer.
@@ -406,13 +407,20 @@ def layer_profile(
         for layer, n in present
     ]
     shared = _limits(profiles, _HEADROOM) if share_y else None
-    for ax, (layer, n), y in zip(flat[: len(present)], present, profiles, strict=True):
+    for i, (ax, (layer, n), y) in enumerate(
+        zip(flat[: len(present)], present, profiles, strict=True)
+    ):
         ax.plot(_positions(n), y, color="C0", linewidth=2.0)
         limits = shared if share_y else _limits([y], _HEADROOM)
         if limits is not None:
             ax.set_ylim(*limits)
         ax.set_title(str(layer))
         ax.set_xlim(0.0, 1.0)
+        if share_y:
+            # one scale: its numbers on the left column and the bottom row only
+            ax.tick_params(
+                labelleft=i % ncols == 0, labelbottom=i + ncols >= len(present)
+            )
     figure.supxlabel(POSITION)
     figure.supylabel(_label(substance, unit))
     figure.suptitle(f"{substance} at {_time_text(time, time_unit)}")
