@@ -251,10 +251,10 @@ def test_the_basolateral_path_moves_the_solute_into_the_hepatocyte(
     """The hepatocyte fills when the basolateral path is set, and not otherwise."""
     r = _barrier(tmp_path, basolateral_ps=1e-5, porosity=1.0)
     r.simulate(0, 60, 61)
-    assert r["[tr_hepatocyte_z1]"] > 0.0
+    assert r["[tr_cell_z1]"] > 0.0
     closed = _barrier(tmp_path, porosity=1.0)
     closed.simulate(0, 60, 61)
-    assert closed["[tr_hepatocyte_z1]"] == 0.0
+    assert closed["[tr_cell_z1]"] == 0.0
 
 
 def test_the_transcellular_paths_default_to_off(tmp_path: Path) -> None:
@@ -342,7 +342,7 @@ def test_all_paths_at_zero_flow_conserve_the_substance(tmp_path: Path) -> None:
     before = total()
     r.simulate(0, 60, 61)
     assert total() == pytest.approx(before, rel=1e-6)
-    for layer in ("endothelium", "disse", "hepatocyte"):
+    for layer in ("endothelium", "disse", "cell"):
         assert r[f"[tr_{layer}_z1]"] > 0.0, f"nothing reached the {layer}"
 
 

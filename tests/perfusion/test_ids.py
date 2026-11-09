@@ -15,12 +15,12 @@ from pkpdsim.zonation.geometry import Layer
 def test_the_perfusion_ids_of_a_zone_are_those_of_the_engine() -> None:
     """The vascular space and the cells of a zone are named by the engine."""
     assert perf_ids.vascular("z3") == ids.volume(ids.VASCULAR, "z3") == "V_vas_z3"
-    assert perf_ids.cells("z3") == ids.volume(Layer.HEPATOCYTE, "z3")
+    assert perf_ids.cells("z3") == ids.volume(Layer.CELL, "z3")
     assert perf_ids.species("glc", "z3") == ids.species("glc", ids.VASCULAR, "z3")
     assert perf_ids.flow("glc", "z2", "z3") == "FLOW_glc_vas_z2_vas_z3"
     assert perf_ids.flow("glc", "in", "z1") == "FLOW_glc_in_vas_z1"
     assert perf_ids.vascular_fraction("li") == ids.fraction(ids.VASCULAR)
-    assert perf_ids.cell_fraction("li") == ids.fraction(Layer.HEPATOCYTE)
+    assert perf_ids.cell_fraction("li") == ids.fraction(Layer.CELL)
     assert perf_ids.vascular_fraction("ki") == "f_vas_ki"
 
 

@@ -65,7 +65,7 @@ def test_the_disse_compartment_replaces_the_external_port() -> None:
         if r.submodelRef == "M03"
     }
     assert found[("M03", f"Vext{PORT_SUFFIX}")] == ids.volume(Layer.DISSE, "z3")
-    assert found[("M03", f"Vli{PORT_SUFFIX}")] == ids.volume(Layer.HEPATOCYTE, "z3")
+    assert found[("M03", f"Vli{PORT_SUFFIX}")] == ids.volume(Layer.CELL, "z3")
     assert found[("M03", f"Vbi{PORT_SUFFIX}")] == ids.volume(Layer.BILE, "z3")
     assert found[("M03", f"drg_ext{PORT_SUFFIX}")] == ids.species(
         "drg", Layer.DISSE, "z3"
@@ -203,7 +203,7 @@ def test_every_port_is_replaced_exactly_once() -> None:
         for k in (1, 2)
         for port, element in (
             ("Vext", f"V_disse_z{k}"),
-            ("Vli", f"V_hepatocyte_z{k}"),
+            ("Vli", f"V_cell_z{k}"),
             ("Vbi", f"V_bile_z{k}"),
             ("drg_ext", f"drg_disse_z{k}"),
             ("position", f"position_z{k}"),
@@ -223,7 +223,7 @@ def test_the_flat_cell_lives_in_the_hepatocyte_of_its_zone(tmp_path: Path) -> No
     for k in range(1, n + 1):
         z = f"z{k}"
         assert model.getSpecies(f"M{k:02}__drg").getCompartment() == ids.volume(
-            Layer.HEPATOCYTE, z
+            Layer.CELL, z
         )
         reaction = model.getReaction(f"M{k:02}__UP")
         assert [

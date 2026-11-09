@@ -70,7 +70,7 @@ class ZonationSettings:
             (`f_par` of `geometry_constants`). `None` takes the table. The
             well-stirred geometry takes the vascular fraction as the sum of
             the lumen layers (`Layer.PLASMA`) and the cells as
-            `Layer.HEPATOCYTE`.
+            `Layer.CELL`.
         boundary: who supplies the ends of the chain.
         cell_species: every solute has a species in the hepatocyte layer; `False`
             when the cell model holds the species of the cell (well-stirred

@@ -39,7 +39,7 @@ def rename(old: str) -> str | None:
     if m := re.fullmatch(r"(.+)_z(\d+)_(cell|dead)", old):
         return f"M{int(m[2]):02}__{m[1]}_{m[3]}"
     if m := re.fullmatch(r"Vcell_z(\d+)", old):
-        return f"V_hepatocyte_z{m[1]}"
+        return f"V_cell_z{m[1]}"
     if m := re.fullmatch(r"Vvas_z(\d+)", old):
         return f"V_vas_z{m[1]}"
     if m := re.fullmatch(r"FLOW_(\w+?)_(res|in|out|z\d+)_(res|in|out|z\d+)", old):
@@ -56,7 +56,7 @@ def rename(old: str) -> str | None:
         if stem in {"f_alive", "v_nec", "Vbile"} or CELL_PROCESSES.fullmatch(stem):
             return f"M{k:02}__{stem}"
         return old
-    return {"f_vas_li": "f_vas", "f_cell_li": "f_hepatocyte"}.get(old, old)
+    return {"f_vas_li": "f_vas", "f_cell_li": "f_cell"}.get(old, old)
 
 
 def model_ids(path: Path) -> set[str]:

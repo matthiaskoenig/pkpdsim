@@ -23,7 +23,7 @@ def test_the_ids_of_a_layer() -> None:
     """The site, the volume and the species of a layer of a zone."""
     assert ids.site(Layer.DISSE, "z3") == "disse_z3"
     assert ids.volume(Layer.DISSE, "z3") == "V_disse_z3"
-    assert ids.species("glc", Layer.HEPATOCYTE, "z2") == "glc_hepatocyte_z2"
+    assert ids.species("glc", Layer.CELL, "z2") == "glc_cell_z2"
 
 
 def test_the_submodel_id_is_zero_padded() -> None:

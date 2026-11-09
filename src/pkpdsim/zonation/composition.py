@@ -197,7 +197,7 @@ def compose(
         )
         wiring: list[tuple[str, str]] = [
             (ids.volume(disse, zone), ports.external),
-            (ids.volume(Layer.HEPATOCYTE, zone), ports.cell),
+            (ids.volume(Layer.CELL, zone), ports.cell),
             (ids.position(zone), ports.position),
             (
                 temperature.sid if temperature is not None else ids.TEMPERATURE,

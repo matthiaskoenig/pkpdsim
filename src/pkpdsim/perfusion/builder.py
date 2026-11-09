@@ -11,7 +11,7 @@ with the units.
 The organ is a chain of zones in series with the flow, the first zone first
 (periportal in the liver). The zones of a liver are the zonation engine's
 (`pkpdsim.zonation`, `_liver`): the well-stirred geometry with the vascular
-space `V_vas_<zone>` and the cells `V_hepatocyte_<zone>` of the fractions of
+space `V_vas_<zone>` and the cells `V_cell_<zone>` of the fractions of
 the organ, the flow between the zones (`Q_li`, the pump flow of the circuit,
 which is the boundary of the chain), the zonal factors of the profiles and the
 cellular core (`pkpdsim.perfusion.cell_model`) as a submodel `M<kk>` of every
@@ -24,9 +24,9 @@ and the kidney. An organ with the token `<o>` (`li` the liver, `ki` the
 kidney, the key of a generic organ) has the mass `M_<o>` (kg), the density
 `rho_<o>`, and the volume `V_<o> = M_<o>/rho_<o>` and the vascular and cell
 fractions `f_vas_<o>` and `f_cell_<o>` as constants (the liver those of the
-engine, `f_vas` and `f_hepatocyte`, without `V_li`); the vascular space and
+engine, `f_vas` and `f_cell`, without `V_li`); the vascular space and
 the cells of each of its `n` zones are the compartments `V_vas_<zone> =
-f_vas_<o>*V_<o>/n` and `V_hepatocyte_<zone> = f_cell_<o>*V_<o>/n` (initial
+f_vas_<o>*V_<o>/n` and `V_cell_<zone> = f_cell_<o>*V_<o>/n` (initial
 assignments, so a change of the mass before a simulation sets the zones). A
 profile of a process (`profiles` of the organ) is normalised to the zonal
 factors `p_<process>_<zone> = n*p/sum(p)`, so the total capacity of the organ,
@@ -353,7 +353,7 @@ def _liver(definition: PerfusionDefinition, organ: LiverOrgan) -> _Organ:
         ),
         fractions={
             Layer.PLASMA: organ.vascular_fraction.value,
-            Layer.HEPATOCYTE: organ.cell_fraction.value,
+            Layer.CELL: organ.cell_fraction.value,
         },
         boundary=FlowBoundary.EXTERNAL,
         cell_species=False,

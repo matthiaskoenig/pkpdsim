@@ -83,14 +83,14 @@ pH_res = 3 - log10(h_res / 1)
 
 ## The zonated organ
 
-The organ is a chain of `n` zones in series with the flow, the first zone first (periportal in the liver, as the zonated liver of the PBPK library): each zone a vascular space through which the perfusate flows and its cells with the cellular core, so that oxygen, glucose, lactate, ATP and the damage form gradients along the sinusoid; `n = 1` is the single compartment. An organ with the token `<o>` has the mass `M_<o>` (kg), the density `rho_<o>`, the volume `V_<o>` and the vascular and cell fractions `f_vas_<o>` and `f_cell_<o>`; the zones share the volume equally. The zones of the liver are those of the zonation engine (`pkpdsim.zonation`, in the well-stirred geometry with the fractions of the organ), so the liver (the last two equations) has the engine's ids `f_vas`, `f_hepatocyte`, `f_par` (1) and `V_vas_<z>`, `V_hepatocyte_<z>` and no `V_li`; the cells of a zone are a submodel of the cell model `<sid>_core`, `M<kk>__<id>` in the flat model, and the constants of the core are shared by the zones. The volumes are initial assignments of the mass, so a change of the mass before a simulation (the liver weight of an animal) sets the zones.
+The organ is a chain of `n` zones in series with the flow, the first zone first (periportal in the liver, as the zonated liver of the PBPK library): each zone a vascular space through which the perfusate flows and its cells with the cellular core, so that oxygen, glucose, lactate, ATP and the damage form gradients along the sinusoid; `n = 1` is the single compartment. An organ with the token `<o>` has the mass `M_<o>` (kg), the density `rho_<o>`, the volume `V_<o>` and the vascular and cell fractions `f_vas_<o>` and `f_cell_<o>`; the zones share the volume equally. The zones of the liver are those of the zonation engine (`pkpdsim.zonation`, in the well-stirred geometry with the fractions of the organ), so the liver (the last two equations) has the engine's ids `f_vas`, `f_cell`, `f_par` (1) and `V_vas_<z>`, `V_cell_<z>` and no `V_li`; the cells of a zone are a submodel of the cell model `<sid>_core`, `M<kk>__<id>` in the flat model, and the constants of the core are shared by the zones. The volumes are initial assignments of the mass, so a change of the mass before a simulation (the liver weight of an animal) sets the zones.
 
 ```equations title="the volumes of the zones (an organ of two zones)"
 V_<o> = M_<o> / rho_<o>
 V_vas_<z> = f_vas_<o> * V_<o> / 2
-V_hepatocyte_<z> = f_cell_<o> * V_<o> / 2
+V_cell_<z> = f_cell_<o> * V_<o> / 2
 V_vas_<z> = f_vas * f_par * M_li / rho_li / 2
-V_hepatocyte_<z> = f_hepatocyte * f_par * M_li / rho_li / 2
+V_cell_<z> = f_cell * f_par * M_li / rho_li / 2
 ```
 
 A profile of a process (`LiverOrgan(profiles={"OXPHOS": [2, 1]})`) weighs it per zone with the factor `p_<process>_<z> = n*p/sum(p)` in its rate, so the factors sum to `n` and the total capacity of the organ is that of one zone of the whole organ; a process without a profile has none, a uniform profile is 1 in every zone.
@@ -107,27 +107,27 @@ The cells of a zone take up glucose and oxygen, store glycogen, run glycolysis, 
 Every biological rate scales with the temperature factor `f_T` (that of the cell model, `<m>__f_T`), the living fraction `f_alive_<z>` (`<m>__f_alive`) and the cell volume, only the living cells metabolise; a Hill term reads the absolute value of its species, so it stays defined for the small negative values of the integrator, and no rate divides by a species which can reach 0 (the inhibition of the glycolysis by ATP is defined at ATP 0).
 
 ```equations title="transport between the perfusate and the cells"
-<m>__GLCIM: glc_vas_<z> -> <m>__glc_cell = (<m>__f_T * <m>__f_alive * V_hepatocyte_<z> * GLCIM_Vmax / GLCIM_Km_glc) * (glc_vas_<z> - <m>__glc_cell) / (1 + glc_vas_<z> / GLCIM_Km_glc + <m>__glc_cell / GLCIM_Km_glc)
-<m>__O2IM: o2_vas_<z> -> <m>__o2_cell = (<m>__f_T * <m>__f_alive * V_hepatocyte_<z> * O2IM_Vmax / O2IM_Km_o2) * (o2_vas_<z> - <m>__o2_cell) / (1 + o2_vas_<z> / O2IM_Km_o2 + <m>__o2_cell / O2IM_Km_o2)
-<m>__LACEX: <m>__lac_cell -> lac_vas_<z> + h_vas_<z> = (<m>__f_T * <m>__f_alive * V_hepatocyte_<z> * LACEX_Vmax / LACEX_Km_lac) * (<m>__lac_cell - lac_vas_<z> * h_vas_<z> / LACEX_h_cell) / (1 + <m>__lac_cell / LACEX_Km_lac + lac_vas_<z> / LACEX_Km_lac)
+<m>__GLCIM: glc_vas_<z> -> <m>__glc_cell = (<m>__f_T * <m>__f_alive * V_cell_<z> * GLCIM_Vmax / GLCIM_Km_glc) * (glc_vas_<z> - <m>__glc_cell) / (1 + glc_vas_<z> / GLCIM_Km_glc + <m>__glc_cell / GLCIM_Km_glc)
+<m>__O2IM: o2_vas_<z> -> <m>__o2_cell = (<m>__f_T * <m>__f_alive * V_cell_<z> * O2IM_Vmax / O2IM_Km_o2) * (o2_vas_<z> - <m>__o2_cell) / (1 + o2_vas_<z> / O2IM_Km_o2 + <m>__o2_cell / O2IM_Km_o2)
+<m>__LACEX: <m>__lac_cell -> lac_vas_<z> + h_vas_<z> = (<m>__f_T * <m>__f_alive * V_cell_<z> * LACEX_Vmax / LACEX_Km_lac) * (<m>__lac_cell - lac_vas_<z> * h_vas_<z> / LACEX_h_cell) / (1 + <m>__lac_cell / LACEX_Km_lac + lac_vas_<z> / LACEX_Km_lac)
 ```
 
 ```equations title="the energy metabolism"
-<m>__GLGP: <m>__glyc_cell -> <m>__glc_cell = <m>__f_T * <m>__f_alive * V_hepatocyte_<z> * GLGP_Vmax * <m>__glyc_cell / (GLGP_Km_glyc + <m>__glyc_cell)
-<m>__GLC2PYR: <m>__glc_cell + <m>__adp_cell + <m>__nad_cell -> <m>__pyr_cell + <m>__atp_cell + <m>__nadh_cell = <m>__f_T * <m>__f_alive * V_hepatocyte_<z> * GLC2PYR_Vmax * <m>__glc_cell / (GLC2PYR_Km_glc + <m>__glc_cell) * <m>__adp_cell / (GLC2PYR_Km_adp + <m>__adp_cell) * <m>__nad_cell / (GLC2PYR_Km_nad + <m>__nad_cell) * 1 / (1 + (abs(<m>__atp_cell) / GLC2PYR_Ki_atp)^GLC2PYR_n_atp)
-<m>__LDH: <m>__pyr_cell + <m>__nadh_cell -> <m>__lac_cell + <m>__nad_cell = (<m>__f_T * <m>__f_alive * V_hepatocyte_<z> * LDH_Vmax / (LDH_Km_pyr * LDH_Km_nadh)) * (<m>__pyr_cell * <m>__nadh_cell - <m>__lac_cell * <m>__nad_cell / LDH_Keq) / ((1 + <m>__pyr_cell / LDH_Km_pyr + <m>__lac_cell / LDH_Km_lac) * (1 + <m>__nadh_cell / LDH_Km_nadh + <m>__nad_cell / LDH_Km_nad))
-<m>__TCA: <m>__pyr_cell + <m>__nad_cell -> <m>__nadh_cell + co2_vas_<z> = <m>__f_T * <m>__f_alive * V_hepatocyte_<z> * TCA_Vmax * <m>__pyr_cell / (TCA_Km_pyr + <m>__pyr_cell) * <m>__nad_cell / (TCA_Km_nad + <m>__nad_cell)
-<m>__OXPHOS: <m>__nadh_cell + <m>__o2_cell + <m>__adp_cell -> <m>__nad_cell + <m>__atp_cell = <m>__f_T * <m>__f_alive * V_hepatocyte_<z> * OXPHOS_Vmax * <m>__nadh_cell / (OXPHOS_Km_nadh + <m>__nadh_cell) * <m>__o2_cell / (OXPHOS_Km_o2 + <m>__o2_cell) * <m>__adp_cell / (OXPHOS_Km_adp + <m>__adp_cell)
-<m>__ATPU: <m>__atp_cell -> <m>__adp_cell = <m>__f_T * <m>__f_alive * V_hepatocyte_<z> * ATPU_Vmax * <m>__atp_cell / (ATPU_Km_atp + <m>__atp_cell)
+<m>__GLGP: <m>__glyc_cell -> <m>__glc_cell = <m>__f_T * <m>__f_alive * V_cell_<z> * GLGP_Vmax * <m>__glyc_cell / (GLGP_Km_glyc + <m>__glyc_cell)
+<m>__GLC2PYR: <m>__glc_cell + <m>__adp_cell + <m>__nad_cell -> <m>__pyr_cell + <m>__atp_cell + <m>__nadh_cell = <m>__f_T * <m>__f_alive * V_cell_<z> * GLC2PYR_Vmax * <m>__glc_cell / (GLC2PYR_Km_glc + <m>__glc_cell) * <m>__adp_cell / (GLC2PYR_Km_adp + <m>__adp_cell) * <m>__nad_cell / (GLC2PYR_Km_nad + <m>__nad_cell) * 1 / (1 + (abs(<m>__atp_cell) / GLC2PYR_Ki_atp)^GLC2PYR_n_atp)
+<m>__LDH: <m>__pyr_cell + <m>__nadh_cell -> <m>__lac_cell + <m>__nad_cell = (<m>__f_T * <m>__f_alive * V_cell_<z> * LDH_Vmax / (LDH_Km_pyr * LDH_Km_nadh)) * (<m>__pyr_cell * <m>__nadh_cell - <m>__lac_cell * <m>__nad_cell / LDH_Keq) / ((1 + <m>__pyr_cell / LDH_Km_pyr + <m>__lac_cell / LDH_Km_lac) * (1 + <m>__nadh_cell / LDH_Km_nadh + <m>__nad_cell / LDH_Km_nad))
+<m>__TCA: <m>__pyr_cell + <m>__nad_cell -> <m>__nadh_cell + co2_vas_<z> = <m>__f_T * <m>__f_alive * V_cell_<z> * TCA_Vmax * <m>__pyr_cell / (TCA_Km_pyr + <m>__pyr_cell) * <m>__nad_cell / (TCA_Km_nad + <m>__nad_cell)
+<m>__OXPHOS: <m>__nadh_cell + <m>__o2_cell + <m>__adp_cell -> <m>__nad_cell + <m>__atp_cell = <m>__f_T * <m>__f_alive * V_cell_<z> * OXPHOS_Vmax * <m>__nadh_cell / (OXPHOS_Km_nadh + <m>__nadh_cell) * <m>__o2_cell / (OXPHOS_Km_o2 + <m>__o2_cell) * <m>__adp_cell / (OXPHOS_Km_adp + <m>__adp_cell)
+<m>__ATPU: <m>__atp_cell -> <m>__adp_cell = <m>__f_T * <m>__f_alive * V_cell_<z> * ATPU_Vmax * <m>__atp_cell / (ATPU_Km_atp + <m>__atp_cell)
 ```
 
 The stoichiometry of a reaction is in its SBML (the equations list the species): the glycolysis `glc + 2 ADP + 2 NAD -> 2 pyr + 2 ATP + 2 NADH`, the TCA cycle `pyr + 5 NAD -> 5 NADH + 3 CO2` (the CO2 into the perfusate), the oxidative phosphorylation `NADH + 0.5 O2 + 3 ADP -> NAD + 3 ATP`.
 
 ```equations title="the redox"
-<m>__ROSP: <m>__nadh_cell + <m>__o2_cell -> <m>__nad_cell + <m>__ros_cell = <m>__f_T * <m>__f_alive * V_hepatocyte_<z> * ROSP_Vmax * <m>__nadh_cell / (ROSP_Km_nadh + <m>__nadh_cell) * <m>__o2_cell / (ROSP_Km_o2 + <m>__o2_cell) * 1 / (1 + (abs(<m>__o2_cell) / ROSP_Ki_o2)^ROSP_n_o2)
-<m>__ROSDETOX: <m>__ros_cell + <m>__gsh_cell -> <m>__gssg_cell = <m>__f_T * <m>__f_alive * V_hepatocyte_<z> * ROSDETOX_k * <m>__gsh_cell * <m>__ros_cell / (ROSDETOX_Km_ros + <m>__ros_cell)
-<m>__GR: <m>__gssg_cell + <m>__nadph_cell -> <m>__gsh_cell + <m>__nadp_cell = <m>__f_T * <m>__f_alive * V_hepatocyte_<z> * GR_k * <m>__gssg_cell * <m>__nadph_cell / (GR_Km_nadph + <m>__nadph_cell)
-<m>__PPP: <m>__glc_cell + <m>__nadp_cell -> <m>__nadph_cell + co2_vas_<z> = <m>__f_T * <m>__f_alive * V_hepatocyte_<z> * PPP_Vmax * <m>__glc_cell / (PPP_Km_glc + <m>__glc_cell) * <m>__nadp_cell / (PPP_Km_nadp + <m>__nadp_cell)
+<m>__ROSP: <m>__nadh_cell + <m>__o2_cell -> <m>__nad_cell + <m>__ros_cell = <m>__f_T * <m>__f_alive * V_cell_<z> * ROSP_Vmax * <m>__nadh_cell / (ROSP_Km_nadh + <m>__nadh_cell) * <m>__o2_cell / (ROSP_Km_o2 + <m>__o2_cell) * 1 / (1 + (abs(<m>__o2_cell) / ROSP_Ki_o2)^ROSP_n_o2)
+<m>__ROSDETOX: <m>__ros_cell + <m>__gsh_cell -> <m>__gssg_cell = <m>__f_T * <m>__f_alive * V_cell_<z> * ROSDETOX_k * <m>__gsh_cell * <m>__ros_cell / (ROSDETOX_Km_ros + <m>__ros_cell)
+<m>__GR: <m>__gssg_cell + <m>__nadph_cell -> <m>__gsh_cell + <m>__nadp_cell = <m>__f_T * <m>__f_alive * V_cell_<z> * GR_k * <m>__gssg_cell * <m>__nadph_cell / (GR_Km_nadph + <m>__nadph_cell)
+<m>__PPP: <m>__glc_cell + <m>__nadp_cell -> <m>__nadph_cell + co2_vas_<z> = <m>__f_T * <m>__f_alive * V_cell_<z> * PPP_Vmax * <m>__glc_cell / (PPP_Km_glc + <m>__glc_cell) * <m>__nadp_cell / (PPP_Km_nadp + <m>__nadp_cell)
 ```
 
 The cells die at the rate `v_nec_<z>` (`<m>__v_nec`), either drive alone gives the full rate: the energy failure, a smooth threshold of ATP, and the acidosis of the perfusate, a Hill term of the free protons. The acidosis drives the damage and does not inhibit the energy metabolism, since the medium changes of the study protect the liver far beyond the dilution of the enzymes. A dying cell moves its enzymes and potassium into the dead cells of the zone (`<q>_<z>_dead`, `<m>__<q>_dead`), which release them first order into the vascular space, so the totals are conserved; the release is the leak of a ruptured membrane and does not scale with the temperature. The liver releases ALT, AST, LDH and potassium, the kidney and a generic organ LDH and potassium.
@@ -135,14 +135,14 @@ The cells die at the rate `v_nec_<z>` (`<m>__v_nec`), either drive alone gives t
 ```equations title="necrosis and release"
 <m>__v_nec = NEC_k * <m>__f_T * (1 - (abs(<m>__atp_cell) / NEC_atp)^NEC_n_atp / ((1 + (abs(<m>__atp_cell) / NEC_atp)^NEC_n_atp) * (1 + (abs(h_vas_<z>) / NEC_h)^NEC_n_h)))
 d(<m>__f_alive)/dt = -<m>__v_nec * <m>__f_alive
-<m>__ALTD: <m>__alt_cell -> <m>__alt_dead = <m>__v_nec * <m>__alt_cell * V_hepatocyte_<z>
-<m>__ALTR: <m>__alt_dead -> alt_vas_<z> = PROTEINR_k * <m>__alt_dead * V_hepatocyte_<z>
-<m>__KD: <m>__k_cell -> <m>__k_dead = <m>__v_nec * <m>__k_cell * V_hepatocyte_<z>
-<m>__KR: <m>__k_dead -> k_vas_<z> = KR_k * <m>__k_dead * V_hepatocyte_<z>
+<m>__ALTD: <m>__alt_cell -> <m>__alt_dead = <m>__v_nec * <m>__alt_cell * V_cell_<z>
+<m>__ALTR: <m>__alt_dead -> alt_vas_<z> = PROTEINR_k * <m>__alt_dead * V_cell_<z>
+<m>__KD: <m>__k_cell -> <m>__k_dead = <m>__v_nec * <m>__k_cell * V_cell_<z>
+<m>__KR: <m>__k_dead -> k_vas_<z> = KR_k * <m>__k_dead * V_cell_<z>
 ```
 
 ```equations title="bile (a liver of two zones)"
-d(<m>__Vbile)/dt = <m>__f_T * <m>__f_alive * V_hepatocyte_<z> * BILE_Vmax * <m>__atp_cell / (BILE_Km_atp + <m>__atp_cell)
+d(<m>__Vbile)/dt = <m>__f_T * <m>__f_alive * V_cell_<z> * BILE_Vmax * <m>__atp_cell / (BILE_Km_atp + <m>__atp_cell)
 bile = 1000000 * (M01__Vbile + M02__Vbile)
 ```
 
@@ -290,5 +290,5 @@ The open points of the first version, each a decision of the implementation (pkp
 - The figures draw the organ of a laboratory animal with the shape of the human organ of the anatomy resources (`pkpdsim.perfusion.anatomy`).
 - The maximal filtration fraction `FF_max_ki` of the kidney (0.5) is a `ModelChoice` without a source; the kidney has no data and is not validated.
 - The enzyme activities are placeholders and most constants of the core are values of the ported model, to be fitted with the study (`ModelChoice`, see the notes of the parameter database).
-- The rates of the cells are those of the living cells (`f_T*f_alive_<z>*V_hepatocyte_<z>` times a rate per litre of cells), while the concentrations of the cells are per litre of all cells: the dead cells keep their metabolites (glucose, ATP, glycogen, ...), only the enzymes and the potassium move into the dead pool, and the time constants of the cells grow as `1/f_alive_<z>` while the cells die, so a zone with few living cells changes its metabolites slowly.
+- The rates of the cells are those of the living cells (`f_T*f_alive_<z>*V_cell_<z>` times a rate per litre of cells), while the concentrations of the cells are per litre of all cells: the dead cells keep their metabolites (glucose, ATP, glycogen, ...), only the enzymes and the potassium move into the dead pool, and the time constants of the cells grow as `1/f_alive_<z>` while the cells die, so a zone with few living cells changes its metabolites slowly.
 - A Michaelis-Menten term `s/(km + s)` is singular at `s = -km`, which the integrator reaches only at an undershoot of a species far below 0 (the Hill terms read `abs` and stay defined); the tolerances of the tests keep the species far from it.

@@ -20,7 +20,7 @@ def test_rat_fractions_match_blouin() -> None:
     fr = fractions(Species.RAT)
     assert fr[Layer.PLASMA] + fr[Layer.RBC] == pytest.approx(0.106)
     assert fr[Layer.DISSE] == pytest.approx(0.049)
-    assert fr[Layer.HEPATOCYTE] == pytest.approx(0.780)
+    assert fr[Layer.CELL] == pytest.approx(0.780)
     assert fr[Layer.ENDOTHELIUM] == pytest.approx(0.028)
     assert fr[Layer.BILE] == pytest.approx(0.004)
     # Kupffer 2.1 % and stellate 1.4 % are unassigned
@@ -44,7 +44,7 @@ def test_layer_order_is_lumen_to_bile() -> None:
         Layer.PLASMA,
         Layer.ENDOTHELIUM,
         Layer.DISSE,
-        Layer.HEPATOCYTE,
+        Layer.CELL,
         Layer.BILE,
     ]
 
@@ -59,18 +59,14 @@ def test_volumes_scale_with_mass_and_split_over_zones() -> None:
     geo, fr = geometry(Species.RAT), fractions(Species.RAT)
     v10 = layer_volumes(mass_g(10.0), 10, geo, fr)
     v1 = layer_volumes(mass_g(10.0), 1, geo, fr)
-    assert v10[(Layer.HEPATOCYTE, 1)].value * 10 == pytest.approx(
-        v1[(Layer.HEPATOCYTE, 1)].value
-    )
+    assert v10[(Layer.CELL, 1)].value * 10 == pytest.approx(v1[(Layer.CELL, 1)].value)
     v20 = layer_volumes(mass_g(20.0), 1, geo, fr)
-    assert v20[(Layer.HEPATOCYTE, 1)].value == pytest.approx(
-        2 * v1[(Layer.HEPATOCYTE, 1)].value
-    )
+    assert v20[(Layer.CELL, 1)].value == pytest.approx(2 * v1[(Layer.CELL, 1)].value)
 
 
 def test_hepatocyte_volume_is_fraction_of_liver_volume() -> None:
     geo, fr = geometry(Species.RAT), fractions(Species.RAT)
-    v = layer_volumes(mass_g(10.0), 1, geo, fr)[(Layer.HEPATOCYTE, 1)]
+    v = layer_volumes(mass_g(10.0), 1, geo, fr)[(Layer.CELL, 1)]
     # 10 g at 1.07 kg/l is 9.346 ml
     assert v.value == pytest.approx(0.780 * 10.0 / 1070.0)
 

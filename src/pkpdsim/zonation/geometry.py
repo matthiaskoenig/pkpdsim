@@ -57,7 +57,11 @@ class Layer(StrEnum):
     PLASMA = "plasma"
     ENDOTHELIUM = "endothelium"
     DISSE = "disse"
-    HEPATOCYTE = "hepatocyte"
+    CELL = "cell"
+    """The cells of the organ, the parenchymal cells (for the liver the hepatocytes).
+
+    The engine serves any zoned organ, so the layer, its compartment `V_cell_<zone>` and
+    its fraction `f_cell` carry no organ name."""
     BILE = "bile"
 
 
@@ -168,7 +172,7 @@ def fractions(
     fr[Layer.PLASMA] = (1.0 - hct) * lumen
     fr[Layer.ENDOTHELIUM] = _number(section, "endothelium")
     fr[Layer.DISSE] = _number(section, "disse")
-    fr[Layer.HEPATOCYTE] = _number(section, "hepatocyte")
+    fr[Layer.CELL] = _number(section, "hepatocyte")
     fr[Layer.BILE] = _number(section, "bile")
     return fr
 

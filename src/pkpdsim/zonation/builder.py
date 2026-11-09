@@ -204,7 +204,7 @@ _NAMES: dict[Layer | str, str] = {
     Layer.PLASMA: "plasma",
     Layer.ENDOTHELIUM: "endothelium",
     Layer.DISSE: "space of Disse",
-    Layer.HEPATOCYTE: "hepatocytes",
+    Layer.CELL: "hepatocytes",
     Layer.BILE: "bile canaliculus",
 }
 
@@ -570,7 +570,7 @@ class ZonationBuilder:
             for k in range(1, self.settings.n_zones + 1):
                 zone = ids.zone(k)
                 for layer in self._fractions():
-                    if layer == Layer.HEPATOCYTE and not self.settings.cell_species:
+                    if layer == Layer.CELL and not self.settings.cell_species:
                         continue
                     out.append(
                         Species(
@@ -1046,7 +1046,7 @@ class ZonationBuilder:
                 Layer.PLASMA,
                 Layer.ENDOTHELIUM,
                 Layer.DISSE,
-                Layer.HEPATOCYTE,
+                Layer.CELL,
             )
         )
 
@@ -1346,7 +1346,7 @@ class ZonationBuilder:
                         "PS",
                         "",
                         zone,
-                        (Layer.DISSE, Layer.HEPATOCYTE),
+                        (Layer.DISSE, Layer.CELL),
                         ids.permeability("hep", substance.sid),
                         "dh",
                         "basolateral exchange",

@@ -338,9 +338,9 @@ def _zonation() -> ModuleType:
     return importlib.import_module("pkpdsim.zonation.ids")
 
 
-def _hepatocyte() -> str:
+def _cell_layer() -> str:
     """Get the layer of the cells of a zone in the engine."""
-    return str(importlib.import_module("pkpdsim.zonation.geometry").Layer.HEPATOCYTE)
+    return str(importlib.import_module("pkpdsim.zonation.geometry").Layer.CELL)
 
 
 def _flat(zone: str, sid: str) -> str:
@@ -430,8 +430,8 @@ def vascular(zone: str) -> str:
 
 
 def cells(zone: str) -> str:
-    """Get the compartment of the cells of a zone, `V_hepatocyte_<zone>`."""
-    return _zonation().volume(_hepatocyte(), zone)
+    """Get the compartment of the cells of a zone, `V_cell_<zone>`."""
+    return _zonation().volume(_cell_layer(), zone)
 
 
 def mass(organ: str) -> str:
@@ -464,9 +464,9 @@ def vascular_fraction(organ: str) -> str:
 def cell_fraction(organ: str) -> str:
     """Get the cell fraction of the volume of an organ, `f_cell_<organ>`.
 
-    The liver is the one of the engine, `f_hepatocyte`.
+    The liver is the one of the engine, `f_cell`.
     """
-    return _zonation().fraction(_hepatocyte()) if organ == LIVER else f"f_cell_{organ}"
+    return _zonation().fraction(_cell_layer()) if organ == LIVER else f"f_cell_{organ}"
 
 
 def gfr(organ: str) -> str:

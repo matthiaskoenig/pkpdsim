@@ -75,16 +75,16 @@ def test_the_fractions_of_the_organ_set_the_volumes() -> None:
 
     own = dataclasses.replace(geo, f_par=1.0, density=1.1)
     builder = _builder(
-        fractions={Layer.PLASMA: 0.15, Layer.HEPATOCYTE: 0.6}, geometry_constants=own
+        fractions={Layer.PLASMA: 0.15, Layer.CELL: 0.6}, geometry_constants=own
     )
     model = builder.build()
     volume = {str(c.sid): c.value for c in model.compartments}
     litre = 10e-3 / 1.1
     assert volume[ids.volume(ids.VASCULAR, "z2")] == pytest.approx(0.15 * litre / 4)
-    assert volume[ids.volume(Layer.HEPATOCYTE, "z2")] == pytest.approx(0.6 * litre / 4)
+    assert volume[ids.volume(Layer.CELL, "z2")] == pytest.approx(0.6 * litre / 4)
     constants = _constants(model)
     assert constants[ids.fraction(ids.VASCULAR)] == pytest.approx(0.15)
-    assert constants[ids.fraction(Layer.HEPATOCYTE)] == pytest.approx(0.6)
+    assert constants[ids.fraction(Layer.CELL)] == pytest.approx(0.6)
 
 
 def test_the_volumes_follow_a_change_of_the_mass(tmp_path: Path) -> None:
@@ -93,7 +93,7 @@ def test_the_volumes_follow_a_change_of_the_mass(tmp_path: Path) -> None:
 
     own = dataclasses.replace(geometry(_settings().species), f_par=1.0, density=1.0)
     model = _builder(
-        fractions={Layer.PLASMA: 0.2, Layer.HEPATOCYTE: 0.5}, geometry_constants=own
+        fractions={Layer.PLASMA: 0.2, Layer.CELL: 0.5}, geometry_constants=own
     ).build()
     path = tmp_path / "m.xml"
     create_model(model, filepath=path, sbml_level=3, sbml_version=2, validate=False)
@@ -105,7 +105,7 @@ def test_the_volumes_follow_a_change_of_the_mass(tmp_path: Path) -> None:
 
 def test_without_fractions_the_table_gives_them() -> None:
     constants = _constants(_builder().build())
-    assert 0 < constants[ids.fraction(Layer.HEPATOCYTE)] < 1
+    assert 0 < constants[ids.fraction(Layer.CELL)] < 1
     assert constants[ids.fraction(ids.VASCULAR)] != 0.15
 
 
@@ -137,7 +137,7 @@ def test_the_cell_model_holds_the_cell_species() -> None:
 
 def test_the_cell_species_are_the_default() -> None:
     species = {str(s.sid) for s in _builder().build().species}
-    assert "o2_hepatocyte_z1" in species
+    assert "o2_cell_z1" in species
 
 
 def test_a_sinusoid_needs_the_cell_species() -> None:

@@ -36,7 +36,7 @@ PARAMS = core.CoreParameters.default("liver_rat")
 GOLDEN_CELLS = "Vcell_z1"
 GOLDEN_VASCULAR = "Vvas_z1"
 """The compartments of the zone in the golden file, which has the ids of the
-zone before the engine named them (`V_hepatocyte_z1`, `V_vas_z1`)."""
+zone before the engine named them (`V_cell_z1`, `V_vas_z1`)."""
 PORTS = {"Vext", "Vli", "Vbi", "position", "temperature"}
 SITES = {"cell", "dead", "ext"}
 
@@ -215,7 +215,7 @@ def _count(by_kind: dict[str, dict[str, Any]]) -> dict[str, int]:
 def _flat_text(text: str) -> str:
     """Rename the ids of a zone in the golden file to those of the engine.
 
-    `Vcell_z1` and `Vvas_z1` are `V_hepatocyte_z1` and `V_vas_z1`, a perfusate
+    `Vcell_z1` and `Vvas_z1` are `V_cell_z1` and `V_vas_z1`, a perfusate
     species `glc_z1` is `glc_vas_z1`, an element of the cell model is that of
     the submodel of the zone, `atp_z1_cell` is `M01__atp_cell`, `GLC2PYR_z1`
     is `M01__GLC2PYR` and the buffer and the pH of the zone are those of its

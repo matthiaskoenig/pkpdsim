@@ -54,7 +54,7 @@ def _sink_layer(settings: ZonationSettings) -> Layer | str:
     """The layer the cells consume from: the hepatocyte, the vascular site of the well-stirred."""
     if settings.geometry is Geometry.WELL_STIRRED:
         return ids.VASCULAR
-    return Layer.HEPATOCYTE
+    return Layer.CELL
 
 
 def _consumed(settings: ZonationSettings) -> str:

@@ -8,7 +8,7 @@ transport and the observers agree on them. The zone token is `z<k>` from
 A layer of a zone is the site `<layer>_<zone>` (`disse_z3`, `site`), its
 volume the compartment `V_<layer>_<zone>` (`volume`) and the amount or
 concentration of a quantity there `<quantity>_<layer>_<zone>` (`species`,
-`glc_hepatocyte_z2`). The zonal factor of a process is `p_<process>_<zone>`
+`glc_cell_z2`). The zonal factor of a process is `p_<process>_<zone>`
 (`profile`), the pattern of `pkpdsim.perfusion.ids.profile`, and the submodel
 of zone `k` is `M<kk>` (`submodel`, `M03`).
 
