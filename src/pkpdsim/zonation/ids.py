@@ -162,6 +162,9 @@ def profile(process: str, zone: str) -> str:
 def submodel(k: int) -> str:
     """Get the id of the submodel of zone `k`, `M<kk>`.
 
+    The two-digit padding is a minimum width for readability. Above 99 zones
+    the ids widen (`M100`) and no longer sort lexically; they stay unique.
+
     Raises:
         ValueError: for a zone below 1.
     """

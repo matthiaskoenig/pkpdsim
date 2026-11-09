@@ -188,3 +188,118 @@ def test_the_well_stirred_vascular_site_replaces_the_external_port() -> None:
     }
     assert found[f"Vext{PORT_SUFFIX}"] == ids.volume(ids.VASCULAR, "z2")
     assert found[f"drg_ext{PORT_SUFFIX}"] == ids.species("drg", ids.VASCULAR, "z2")
+
+
+def test_every_port_is_replaced_exactly_once() -> None:
+    """The full set of replacements of two zones, and no pair twice."""
+    m = compose(_builder(2), TOY_ID, CellPorts())
+    triples = [(r.submodelRef, r.portRef, r.elementRef) for r in m.replaced_elements]
+    expected = {
+        (
+            f"M0{k}",
+            f"{port}{PORT_SUFFIX}",
+            element,
+        )
+        for k in (1, 2)
+        for port, element in (
+            ("Vext", f"V_disse_z{k}"),
+            ("Vli", f"V_hepatocyte_z{k}"),
+            ("Vbi", f"V_bile_z{k}"),
+            ("drg_ext", f"drg_disse_z{k}"),
+            ("position", f"position_z{k}"),
+            ("temperature", "temperature"),
+        )
+    }
+    assert set(triples) == expected
+    pairs = [(t[0], t[1]) for t in triples]
+    assert len(pairs) == len(set(pairs)) == len(triples)
+
+
+def test_the_flat_cell_lives_in_the_hepatocyte_of_its_zone(tmp_path: Path) -> None:
+    """Every zone has its own cell species in its own hepatocyte, fed from its Disse space."""
+    n = 4
+    doc = libsbml.readSBMLFromFile(str(_written(tmp_path, n)))
+    model = doc.getModel()
+    for k in range(1, n + 1):
+        z = f"z{k}"
+        assert model.getSpecies(f"M{k:02}__drg").getCompartment() == ids.volume(
+            Layer.HEPATOCYTE, z
+        )
+        reaction = model.getReaction(f"M{k:02}__UP")
+        assert [
+            reaction.getReactant(i).getSpecies()
+            for i in range(reaction.getNumReactants())
+        ] == [ids.species("drg", Layer.DISSE, z)]
+        assert [
+            reaction.getProduct(i).getSpecies()
+            for i in range(reaction.getNumProducts())
+        ] == [f"M{k:02}__drg"]
+
+
+def _problems(path: Path) -> list[tuple[str, int]]:
+    """The libsbml errors and warnings of a file."""
+    document = libsbml.readSBMLFromFile(str(path))
+    document.checkConsistency()
+    return [
+        (e.getSeverityAsString(), e.getErrorId())
+        for e in map(document.getError, range(document.getNumErrors()))
+    ]
+
+
+def _counts(path: Path) -> tuple[int, int]:
+    """The numbers of compartments and species of a file."""
+    model = libsbml.readSBMLFromFile(str(path)).getModel()
+    return model.getNumCompartments(), model.getNumSpecies()
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "compartments", "species"),
+    [
+        ({"n_zones": 10}, 61, 71),
+        ({"n_zones": 1}, 7, 8),
+        ({"n_zones": 10, "geometry": Geometry.WELL_STIRRED}, 31, 41),
+        # the bile port is not replaced: ten local bile compartments remain
+        ({"n_zones": 10, "bile": None}, 60, 60),
+        ({"n_zones": 10, "haematocrit": 0.0}, 51, 61),
+    ],
+    ids=["ten", "one", "well_stirred", "no_bile", "no_haematocrit"],
+)
+def test_configurations_validate_flat_and_unflat(
+    tmp_path: Path, kwargs: dict[str, object], compartments: int, species: int
+) -> None:
+    """Both files validate on their own, and the flat model has these sizes."""
+    create_toy_cell(tmp_path)
+    builder = ZonationBuilder(
+        ZonationSettings(liver_mass=mass_g(1000.0), **kwargs),  # ty: ignore[invalid-argument-type]
+        [DRUG],
+        None,
+    )
+    model = compose(builder, TOY_ID, CellPorts())
+    flat = write(model, tmp_path)
+    assert _problems(flat) == []
+    assert _problems(tmp_path / f"{model.sid}.xml") == []
+    assert _counts(flat) == (compartments, species)
+
+
+def test_the_deleted_element_is_absent_from_the_flat_model(tmp_path: Path) -> None:
+    """A deletion which does nothing would leave the reaction in."""
+    create_toy_cell(tmp_path)
+    flat = write(compose(_builder(3), TOY_ID, CellPorts(), deletions=("UP",)), tmp_path)
+    model = libsbml.readSBMLFromFile(str(flat)).getModel()
+    assert [model.getReaction(i).getId() for i in range(model.getNumReactions())].count(
+        "M01__UP"
+    ) == 0
+    assert not [
+        i
+        for i in range(model.getNumReactions())
+        if model.getReaction(i).getId().endswith("__UP")
+    ]
+    assert _problems(flat) == []
+
+
+def test_the_submodel_ids_stay_unique_above_99_zones() -> None:
+    """M100 widens the padding and the ids stay distinct."""
+    m = compose(_builder(100), TOY_ID, CellPorts())
+    sids = [s.sid for s in m.submodels]
+    assert len(sids) == len(set(sids)) == 100
+    assert sids[-1] == "M100"

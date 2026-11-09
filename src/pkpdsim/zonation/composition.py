@@ -105,6 +105,10 @@ def compose(
 ) -> Model:
     """Compose the model of a builder with a cell model per zone.
 
+    Without a bile (`settings.bile is None`) the bile port is not replaced, so
+    every submodel keeps its own local bile compartment (`M01__Vbi`, one more
+    compartment per zone in the flat model); this is expected.
+
     Args:
         builder: the builder of the zonated liver; its `build()` is the model.
         cell_model_id: the id of the cell model, which is the id of its model

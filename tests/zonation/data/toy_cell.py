@@ -94,6 +94,7 @@ def create_toy_cell(output_dir: Path) -> Path:
                 "drg_ext -> drg",
                 formula=("k_up * drg_ext * Vext", U.mmole_per_min),
                 name="uptake",
+                port=True,
             )
         ],
     )
