@@ -37,6 +37,8 @@ model and the cell model) is portable. `write` requires that file and raises a
 stay separate: `build` is the engine model without a cell model.
 """
 
+import shutil
+import tempfile
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -81,6 +83,8 @@ class CellPorts:
         temperature: the parameter of the temperature (degC).
         concentration: the pattern of the concentration port of a substance
             in the external compartment, with the substance as `{sid}`.
+        profile: the pattern of the port of the zonal factor of a process of
+            the cell model, with the process as `{process}`.
     """
 
     external: str = "Vext"
@@ -89,6 +93,7 @@ class CellPorts:
     position: str = "position"
     temperature: str = "temperature"
     concentration: str = "{sid}_ext"
+    profile: str = "p_{process}"
 
 
 def _port(sid: str) -> str:
@@ -101,6 +106,8 @@ def compose(
     cell_model_id: str,
     ports: CellPorts,
     deletions: Sequence[str] = (),
+    exchange: Sequence[str] | None = None,
+    temperature: Parameter | None = None,
 ) -> Model:
     """Compose the model of a builder with a cell model per zone.
 
@@ -113,9 +120,15 @@ def compose(
         cell_model_id: the id of the cell model, which is the id of its model
             and the stem of its file `<cell_model_id>.xml` next to the model.
         ports: the ports of the cell model. The cell model needs the port
-            `ports.concentration` of every substance of the builder.
+            `ports.concentration` of every substance of `exchange`.
         deletions: the ids of ports of the cell model, deleted from every
             submodel (what the liver model replaces by its own).
+        exchange: the ids of the solutes of the builder which the cell model
+            has a concentration port of; `None` for all (a tracer which the
+            cell does not see has none).
+        temperature: the parameter of the temperature of the liver, which the
+            caller defines (a circuit has one, which the zones follow); `None`
+            adds the default one at 37 degC.
 
     Returns:
         The model of `builder.build()` with the external model definition,
@@ -140,7 +153,9 @@ def compose(
         )
     ]
     model.parameters.append(
-        Parameter(
+        temperature
+        if temperature is not None
+        else Parameter(
             ids.TEMPERATURE,
             REFERENCE_TEMPERATURE,
             unit=PU.degC,
@@ -149,6 +164,12 @@ def compose(
             sboTerm=SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
         )
     )
+    exchanged = (
+        [x for x in builder.substances if x.sid in set(exchange)]
+        if exchange is not None
+        else list(builder.substances)
+    )
+    scaled = [p for p in builder.cell_processes if p in s.profiles]
     for k, x in zip(range(1, n + 1), zone_positions(n), strict=True):
         zone = ids.zone(k)
         sm = ids.submodel(k)
@@ -182,7 +203,11 @@ def compose(
                 ids.species(substance.sid, disse, zone),
                 ports.concentration.format(sid=substance.sid),
             )
-            for substance in builder.substances
+            for substance in exchanged
+        )
+        wiring.extend(
+            (ids.profile(process, zone), ports.profile.format(process=process))
+            for process in scaled
         )
         for element, port in wiring:
             if element in species:
@@ -214,16 +239,51 @@ def compose(
     return model
 
 
-def write(model: Model, output_dir: Path) -> Path:
+def _write_cell_model(cell_model: Model, model: Model, output_dir: Path) -> None:
+    """Write the cell model beside the composed model, never over another model.
+
+    Raises:
+        ValueError: if the composed model does not use the cell model.
+        FileExistsError: if another model is in the file of the cell model.
+    """
+    used = {d.modelRef for d in model.external_model_definitions}
+    if cell_model.sid not in used:
+        raise ValueError(
+            f"The composed model '{model.sid}' uses the cell models {sorted(used)}, "
+            f"not '{cell_model.sid}'."
+        )
+    target = output_dir / f"{cell_model.sid}.xml"
+    with tempfile.TemporaryDirectory() as staging:
+        staged = Path(staging) / target.name
+        create_model(
+            cell_model,
+            filepath=staged,
+            sbml_level=3,
+            sbml_version=2,
+            validate=False,
+        )
+        if target.is_file() and target.read_bytes() != staged.read_bytes():
+            raise FileExistsError(
+                f"'{target}' holds another model than the cell model "
+                f"'{cell_model.sid}': it is not overwritten."
+            )
+        shutil.copyfile(staged, target)
+
+
+def write(model: Model, output_dir: Path, cell_model: Model | None = None) -> Path:
     """Write the comp model, flatten it and return the flat model.
 
     The comp model is written as `<model id>.xml` and the flat model as
     `<model id>_flat.xml` into `output_dir`, where the file of every external
-    model definition has to be.
+    model definition has to be: the cell model is written there as
+    `<cell model id>.xml` when it is given, and never over a file which holds
+    another model (the same model again is fine).
 
     Args:
         model: the composed model (`compose`).
         output_dir: the folder.
+        cell_model: the cell model of the composition; `None` requires its
+            file in `output_dir` already.
 
     Returns:
         The path of the flat model.
@@ -231,7 +291,11 @@ def write(model: Model, output_dir: Path) -> Path:
     Raises:
         FileNotFoundError: if the file of an external model definition is not
             in `output_dir`.
+        FileExistsError: if the file of the cell model holds another model.
+        ValueError: if the composed model does not use the cell model.
     """
+    if cell_model is not None:
+        _write_cell_model(cell_model, model, output_dir)
     for definition in model.external_model_definitions:
         source = output_dir / definition.source
         if not source.is_file():

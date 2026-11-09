@@ -7,10 +7,10 @@ from enum import StrEnum
 from pkpdsim.pbpk.values import Value
 from pkpdsim.species import Species
 from pkpdsim.zonation.flow import ImposedFlow, PressureFlow
-from pkpdsim.zonation.geometry import SinusoidGeometry
+from pkpdsim.zonation.geometry import Layer, SinusoidGeometry
 from pkpdsim.zonation.profiles import Profile
 
-__all__ = ["BileTransport", "Geometry", "ZonationSettings"]
+__all__ = ["BileTransport", "FlowBoundary", "Geometry", "ZonationSettings"]
 
 
 class Geometry(StrEnum):
@@ -33,6 +33,18 @@ class BileTransport(StrEnum):
     """The bile mixes by diffusion along the canaliculus."""
 
 
+class FlowBoundary(StrEnum):
+    """Who supplies the ends of the chain of zones."""
+
+    OPEN = "open"
+    """The engine: the concentration `<s>_<layer>_in` (a parameter, 0) flows into
+    the first zone and the last zone flows out into nothing."""
+
+    EXTERNAL = "external"
+    """The caller (a perfusion circuit): the chain has the flows between the zones
+    and neither an inflow nor an outflow, which the caller adds."""
+
+
 @dataclass(frozen=True)
 class ZonationSettings:
     """The settings of a zonated liver.
@@ -52,6 +64,17 @@ class ZonationSettings:
             liver of the species.
         geometry_constants: the geometry replacing the one the table gives
             for the species; `None` takes `geometry(species)`.
+        fractions: the volume fractions of the layers of the organ, replacing
+            the table of the species (a perfused organ states its own); the
+            fraction of a layer is of the parenchyma of the geometry
+            (`f_par` of `geometry_constants`). `None` takes the table. The
+            well-stirred geometry takes the vascular fraction as the sum of
+            the lumen layers (`Layer.PLASMA`) and the cells as
+            `Layer.HEPATOCYTE`.
+        boundary: who supplies the ends of the chain.
+        cell_species: every solute has a species in the hepatocyte layer; `False`
+            when the cell model holds the species of the cell (well-stirred
+            geometry only).
     """
 
     n_zones: int = 10
@@ -63,6 +86,9 @@ class ZonationSettings:
     species: Species = Species.RAT
     liver_mass: Value | None = None
     geometry_constants: SinusoidGeometry | None = None
+    fractions: Mapping[Layer, float] | None = None
+    boundary: FlowBoundary = FlowBoundary.OPEN
+    cell_species: bool = True
 
     def __post_init__(self) -> None:
         """Check the number of zones and the haematocrit.
@@ -70,6 +96,11 @@ class ZonationSettings:
         Raises:
             ValueError: for less than one zone, or a haematocrit outside [0, 1).
         """
+        if not self.cell_species and self.geometry is not Geometry.WELL_STIRRED:
+            raise ValueError(
+                "cell_species=False needs the well-stirred geometry: the radial "
+                "exchange of the sinusoid reads the species of the hepatocyte."
+            )
         if self.n_zones < 1:
             raise ValueError(f"A liver has at least one zone, not {self.n_zones}.")
         h = self.haematocrit

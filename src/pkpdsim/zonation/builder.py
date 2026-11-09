@@ -106,7 +106,12 @@ from pkpdsim.zonation.geometry import (
     reference_liver_mass,
 )
 from pkpdsim.zonation.profiles import Profile
-from pkpdsim.zonation.settings import BileTransport, Geometry, ZonationSettings
+from pkpdsim.zonation.settings import (
+    BileTransport,
+    FlowBoundary,
+    Geometry,
+    ZonationSettings,
+)
 from pkpdsim.zonation.transport import (
     L_PER_M3,
     M2_PER_S,
@@ -219,6 +224,7 @@ class ZonationBuilder:
         settings: ZonationSettings,
         substances: Sequence[Solute],
         cell_model: object | None,
+        cell_processes: Sequence[str] = (),
     ) -> None:
         """Check the settings.
 
@@ -226,6 +232,10 @@ class ZonationBuilder:
             settings: the settings.
             substances: the substances.
             cell_model: the cell model of the hepatocytes or `None`.
+            cell_processes: the processes of the cell model which a profile
+                can scale; the zonal factor `p_<process>_<zone>` of a profile
+                replaces the port `p_<process>` of the cell model of the zone
+                (`pkpdsim.zonation.composition.compose`).
 
         Raises:
             ValueError: for a profile of a process nothing uses.
@@ -239,6 +249,7 @@ class ZonationBuilder:
         self.settings = settings
         self.substances = tuple(substances)
         self.cell_model = cell_model
+        self.cell_processes = tuple(cell_processes)
         unused = sorted(set(settings.profiles) & self._unused_bile_processes())
         if unused:
             raise ValueError(
@@ -269,7 +280,7 @@ class ZonationBuilder:
             The processes: the axial diffusion (the zonal factor
             `p_axial_diffusion_<zone>` scales the conductance of an interface
             by the arithmetic mean of its two zones, a choice and not a result); the cell model and the barrier add
-            theirs. The barrier adds the `porosity` (a factor on the gradient
+            theirs (`cell_processes`). The barrier adds the `porosity` (a factor on the gradient
             of the table, `p_porosity_<zone>`), the `endothelial_permeability`
             and the `basolateral_permeability`. The bile adds the
             `canalicular_flow` (the factor `p_canalicular_flow_<zone>` of the
@@ -289,6 +300,7 @@ class ZonationBuilder:
                 BASOLATERAL_PERMEABILITY,
                 CANALICULAR_FLOW,
                 CANALICULAR_DIFFUSION,
+                *self.cell_processes,
             }
         )
 
@@ -305,7 +317,12 @@ class ZonationBuilder:
         rat) instead of redistributing it. This is deliberate, and the same
         in both geometries.
         """
-        fr = fractions(self.settings.species, self.settings.haematocrit)
+        given = self.settings.fractions
+        fr = (
+            dict(given)
+            if given is not None
+            else fractions(self.settings.species, self.settings.haematocrit)
+        )
         return {
             layer: f
             for layer, f in fr.items()
@@ -553,6 +570,8 @@ class ZonationBuilder:
             for k in range(1, self.settings.n_zones + 1):
                 zone = ids.zone(k)
                 for layer in self._fractions():
+                    if layer == Layer.HEPATOCYTE and not self.settings.cell_species:
+                        continue
                     out.append(
                         Species(
                             ids.species(substance.sid, layer, zone),
@@ -624,7 +643,7 @@ class ZonationBuilder:
                             f"flow of the {_NAMES[layer]} through the liver",
                         )
                     )
-        if q > 0.0:
+        if q > 0.0 and self.settings.boundary is FlowBoundary.OPEN:
             for substance in self.substances:
                 for layer in self.carriers():
                     params.append(
@@ -757,6 +776,15 @@ class ZonationBuilder:
             for substance in self.substances
         ]
 
+    def _cell_profile_parameters(self) -> list[Parameter]:
+        """The zonal factors of the processes of the cell model which have a profile."""
+        out: list[Parameter] = []
+        for process in self.cell_processes:
+            profile = self.settings.profiles.get(process)
+            if profile is not None:
+                out += self._profile_parameters(process, profile)
+        return out
+
     def _profile_parameters(self, process: str, profile: Profile) -> list[Parameter]:
         """The zonal factors `p_<process>_<zone>` of a profile."""
         values = profile.values(self.settings.n_zones)
@@ -813,7 +841,11 @@ class ZonationBuilder:
             return []
         out: list[Reaction] = []
         zones = [ids.zone(k) for k in range(1, n + 1)]
-        chain = [ids.INFLOW, *zones, ids.OUTFLOW]
+        chain = (
+            [ids.INFLOW, *zones, ids.OUTFLOW]
+            if self.settings.boundary is FlowBoundary.OPEN
+            else zones
+        )
         for substance in self.substances:
             for layer in self.carriers():
                 out += [
@@ -1377,6 +1409,7 @@ class ZonationBuilder:
                     *self._diffusion_parameters(),
                     *self._bile_parameters(),
                     *self._radial_parameters(),
+                    *self._cell_profile_parameters(),
                 ]
             ),
             assignments=[

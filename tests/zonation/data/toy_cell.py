@@ -30,18 +30,20 @@ UPTAKE = 0.5
 """The first-order uptake rate (1/min) of the toy."""
 
 
-def create_toy_cell(output_dir: Path, annotated: bool = False) -> Path:
-    """Write the toy cell model as `toy.xml` into `output_dir`.
+def toy_cell_model(annotated: bool = False, processes: tuple[str, ...] = ()) -> Model:
+    """Get the toy cell model.
 
     Args:
-        output_dir: the folder.
         annotated: annotate the external drug with a term, which gives the
             species a metaid as the species of every real cell model have.
+        processes: the processes with a zonal factor `p_<process>` (a port,
+            1), which scales the uptake.
 
     Returns:
-        The path of the file.
+        The model.
     """
-    model = Model(
+    factor = "".join(f" * p_{p}" for p in processes)
+    return Model(
         sid=TOY_ID,
         name="toy cell model",
         units=PU,
@@ -91,17 +93,49 @@ def create_toy_cell(output_dir: Path, annotated: bool = False) -> Path:
             Parameter(
                 "k_up", UPTAKE, unit=U.per_min, name="uptake rate", constant=True
             ),
+            *(
+                Parameter(
+                    f"p_{p}",
+                    1.0,
+                    unit=U.dimensionless,
+                    name=f"zonal factor of {p}",
+                    constant=True,
+                    port=True,
+                )
+                for p in processes
+            ),
         ],
         reactions=[
             Reaction(
                 "UP",
                 "drg_ext -> drg",
-                formula=("k_up * drg_ext * Vext", U.mmole_per_min),
+                formula=(f"k_up{factor} * drg_ext * Vext", U.mmole_per_min),
                 name="uptake",
                 port=True,
             )
         ],
     )
+
+
+def create_toy_cell(
+    output_dir: Path, annotated: bool = False, processes: tuple[str, ...] = ()
+) -> Path:
+    """Write the toy cell model as `toy.xml` into `output_dir`.
+
+    Args:
+        output_dir: the folder.
+        annotated: see `toy_cell_model`.
+        processes: see `toy_cell_model`.
+
+    Returns:
+        The path of the file.
+    """
     path = output_dir / f"{TOY_ID}.xml"
-    create_model(model, filepath=path, sbml_level=3, sbml_version=2, validate=False)
+    create_model(
+        toy_cell_model(annotated, processes),
+        filepath=path,
+        sbml_level=3,
+        sbml_version=2,
+        validate=False,
+    )
     return path
