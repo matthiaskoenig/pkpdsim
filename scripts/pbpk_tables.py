@@ -1657,7 +1657,7 @@ def _band_color(c: ImpairmentClass) -> tuple[str, str]:
     return ("#9e9e9e", "0.35") if c.color == "black" else (c.color, "0.9")
 
 
-_PICTOGRAM = 58.0
+_PICTOGRAM = 72.0
 """The height of the row of the pictograms of the classes figure."""
 
 
