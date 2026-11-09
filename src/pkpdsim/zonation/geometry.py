@@ -26,6 +26,7 @@ __all__ = [
     "fractions",
     "geometry",
     "layer_volumes",
+    "reference_flow",
     "sinusoid_count",
     "table_value",
 ]
@@ -37,6 +38,7 @@ _TABLE_UNITS: dict[str, UnitDefinition] = {
     "1/m**2": UnitDefinition("per_m2", "1/meter^2"),
     "kg/l": U.kg_per_l,
     "dimensionless": U.dimensionless,
+    "l/min": U.l_per_min,
 }
 """The unit definitions of the units of the zonation table."""
 
@@ -167,6 +169,11 @@ def fractions(
     return fr
 
 
+def reference_flow(species: Species) -> Value:
+    """Get the reference blood flow through the whole liver of a species (l/min)."""
+    return table_value(_section(species), "flow")
+
+
 def geometry(species: Species) -> SinusoidGeometry:
     """Get the sinusoid geometry of a species from the table."""
     section = _section(species)
@@ -246,6 +253,15 @@ def axial_area(
     """Get the axial cross-section of a layer of the whole liver (m**2).
 
     The volume of the layer in all zones over the sinusoid length.
+
+    Raises:
+        ValueError: for a layer without a volume in `fr`, the erythrocytes at
+            a haematocrit of 0.
     """
+    if layer not in fr:
+        raise ValueError(
+            f"The layer {layer} has no volume at this haematocrit, so it has no "
+            f"axial area (layers with a volume: {sorted(str(x) for x in fr)})."
+        )
     v_m3 = fr[layer] * _parenchyma_litre(mass, geo) * 1e-3
     return Value(v_m3 / geo.L_sin, U.m2)

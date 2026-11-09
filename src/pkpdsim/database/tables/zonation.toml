@@ -25,6 +25,7 @@ porosity_pc = { value = 0.08, unit = "dimensionless", source = "Braet2002", note
 density = { value = 1.07, unit = "kg/l", source = "ModelChoice", notes = "the density of the liver tissue, taken over from the models of pkdb_models" }
 f_par = { value = 1.0, unit = "dimensionless", source = "ModelChoice", notes = "the fraction of the liver mass which is parenchyma and carries the sinusoids" }
 haematocrit = { value = 0.45, unit = "dimensionless", source = "ModelChoice", notes = "the haematocrit of the sinusoidal lumen, the share of the lumen which is erythrocytes" }
+flow = { value = 0.014458, unit = "l/min", source = "Brown1997", notes = "derived: the total blood flow of the liver, 17.4 % of the cardiac output (Table 25, hepatic artery 2.4 % and portal vein 15.1 %, liver total 17.4 %), times the cardiac output of 0.08309 l/min of a 250 g rat (physiology_rat.toml); the flow through the whole liver, whatever its mass" }
 
 [liver_human]
 lumen = { value = 0.106, unit = "dimensionless", source = "Blouin1977", notes = "fallback: rat; the sinusoidal lumen (plasma and erythrocytes) as a fraction of the liver volume, rat liver, Blouin, Bolender and Weibel 1977" }
@@ -45,3 +46,4 @@ porosity_pc = { value = 0.08, unit = "dimensionless", source = "Braet2002", note
 density = { value = 1.0, unit = "kg/l", source = "ICRP89", notes = "the density of the liver tissue: ICRP 89 gives no specific gravity for the liver, and the convention of physiology_human.toml is that an organ without one has the density 1.0 kg/l; the human convention, not a rat fallback" }
 f_par = { value = 1.0, unit = "dimensionless", source = "ModelChoice", notes = "fallback: rat; the fraction of the liver mass which is parenchyma and carries the sinusoids" }
 haematocrit = { value = 0.43, unit = "dimensionless", source = "ICRP89", notes = "the haematocrit of the sinusoidal lumen, the human reference of physiology_human.toml (hematocrit): red blood cells about 43 % of the blood volume of adult males, ICRP 89 Section 7.3 para 309, Table 2.12 2300 ml of 5300 ml; the female reference is 0.38 (1500 ml of 3900 ml) and a female build takes that value" }
+flow = { value = 1.6575, unit = "l/min", source = "ICRP89", notes = "derived: the total blood flow of the liver, 25.5 % of the cardiac output of 6.5 l/min (Table 2.40, liver total of the male; physiology_human.toml); the flow through the whole liver, whatever its mass" }

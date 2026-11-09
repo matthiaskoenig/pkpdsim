@@ -22,10 +22,17 @@ from pkpdsim.zonation.geometry import Layer
 
 __all__ = [
     "DENSITY",
+    "FLOW",
+    "HAEMATOCRIT",
+    "INFLOW",
+    "LENGTH",
     "MASS",
+    "OUTFLOW",
     "PARENCHYMA",
     "VASCULAR",
+    "axial",
     "fraction",
+    "layer_flow",
     "profile",
     "site",
     "species",
@@ -45,6 +52,21 @@ PARENCHYMA = "f_par"
 
 VASCULAR = "vas"
 """The token of the vascular site of the well-stirred geometry."""
+
+FLOW = "Q_li"
+"""The id of the blood flow through the whole liver (l/min)."""
+
+HAEMATOCRIT = "Hct_li"
+"""The id of the haematocrit of the sinusoidal lumen (fraction)."""
+
+LENGTH = "L_sin"
+"""The id of the length of a sinusoid (m), which the zones divide."""
+
+INFLOW = "in"
+"""The token of the boundary upstream of the first zone (`plasma_in`)."""
+
+OUTFLOW = "out"
+"""The token of the boundary downstream of the last zone (`plasma_out`)."""
 
 
 def zone(k: int) -> str:
@@ -98,3 +120,17 @@ def submodel(k: int) -> str:
 def fraction(layer: Layer | str) -> str:
     """Get the id of the volume fraction of a layer of the liver, `f_<layer>`."""
     return f"f_{layer}"
+
+
+def layer_flow(layer: Layer | str) -> str:
+    """Get the flow of a layer through the chain, `Q_<layer>_li` (l/min).
+
+    The plasma and the erythrocytes carry the shares `1 - Hct` and `Hct` of the
+    blood flow `Q_li`, so they have one velocity.
+    """
+    return f"Q_{layer}_li"
+
+
+def axial(quantity: str, source: str, target: str) -> str:
+    """Get the axial diffusion of a quantity between two sites, `D_<q>_<from>_<to>`."""
+    return f"D_{quantity}_{source}_{target}"

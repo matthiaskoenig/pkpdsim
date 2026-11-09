@@ -38,3 +38,9 @@ def test_a_zone_below_one_raises() -> None:
         ids.zone(0)
     with pytest.raises(ValueError, match="from 1"):
         ids.submodel(0)
+
+
+def test_the_flow_and_diffusion_ids() -> None:
+    """The ids of the chain."""
+    assert ids.layer_flow(Layer.PLASMA) == "Q_plasma_li"
+    assert ids.axial("glc", "disse_z1", "disse_z2") == "D_glc_disse_z1_disse_z2"

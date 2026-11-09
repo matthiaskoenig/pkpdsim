@@ -110,8 +110,15 @@ def test_an_unused_profile_key_raises() -> None:
     """A profile of a process nothing uses is refused before anything is built."""
     with pytest.raises(ValueError, match="no process"):
         ZonationBuilder(
-            ZonationSettings(profiles={"nothing": Constant()}), (), None
+            ZonationSettings(
+                profiles={"axial_diffusion": Constant(), "nothing": Constant()}
+            ),
+            (),
+            None,
         ).build()
+    ZonationBuilder(
+        ZonationSettings(profiles={"axial_diffusion": Constant()}), (), None
+    )
 
 
 def test_every_compartment_has_unit_name_and_sbo_term() -> None:
