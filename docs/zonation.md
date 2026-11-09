@@ -68,11 +68,60 @@ The position of a zone is its centre, `(k - 0.5) / n`. `lobular_weight` is the a
 
 Five visualizations are functions over a simulation result, usable by every zonated model. The result is a `pandas.DataFrame` with a `time` column and a column per selection named by its plain id (`result_frame` converts a roadrunner result); the number of zones and the layers are read from the ids present. A figure is a `matplotlib.figure.Figure` owned by the caller, `matplotlib.pyplot` is not used, and every figure is vector: the heatmap and the colorbar are not rasterized, so an SVG holds no embedded image, which a viewer that drops raster data would show as an empty panel. A position axis names its ends (0 periportal, 1 pericentral), a time carries its unit (`time_unit`, default min) and a concentration its unit (`unit`, default mM) and an optional display `name`. A line axis starts at zero when no value is negative; a colour scale spans the range of the values it draws (the zero is explicit on the ticks of a colorbar, and a scale from zero would show a small gradient as one shade). `space_time` and `lobule_map` take `vmin` and `vmax` to clip a scale which a spike dominates, e.g. the initial condition in one zone; a caption can state the pair. `data_axes(fig)` gives the panels without the colorbars.
 
-1. `zone_profiles`: a row per observable, the zones on the x axis, a line per time, data overlaid.
+1. `zone_profiles`: a row per observable, the zones on the x axis, a line per time, data overlaid; a column per condition with the bands of a fit, below.
 2. `space_time`: the zones against the time, the colour the concentration, a heatmap per layer and the outflow curve below.
 3. `layer_profile`: one substance in every layer which carries it, at one time, on one scale.
 4. `lobule_map`: the idealized lobule hexagon, below.
 5. `tube_mesh` (`pkpdsim.zonation.render`): the points and cells of the sinusoid tube, below.
+
+### The grid of conditions
+
+`zone_profiles` draws more than one condition: in place of a frame it takes a sequence of `ZoneColumn`, one column of the grid each, and draws `len(profiles)` rows by `len(columns)` columns with the x axis shared and the y axis shared per row. The label of a column is the title of its panel in the top row, the colour of a line is the colour of its column where the column has one, and the line style stays the style of the time, so a reader tells the times apart inside a column and the columns apart by colour. A column carries a `Band` per profile and time, the median and, over the draws of an adopted fit, the ends of the band, which are filled in the colour of the line. A row draws times of its own where it has them (`ZoneProfile.times`) instead of the times of the figure, with its own legend right of the last column, and a row of the data names the column it belongs to in the column `column` (a row without one is drawn in every column).
+
+```python
+import numpy as np
+
+from pkpdsim.zonation.figures import Band, ZoneColumn, ZoneProfile, zone_profiles
+
+zones = 4
+drug = ZoneProfile("Drug", "mM", tuple(f"drg_cell_z{k}" for k in range(1, zones + 1)))
+dead = ZoneProfile("Dead cells", "%", tuple(f"alive_z{k}" for k in range(1, zones + 1)))
+profiles = [drug, dead]
+times = (60.0, 360.0)
+columns = []
+for label, color, level in (("1 ml/min", "#1f77b4", 1.0), ("3 ml/min", "#d62728", 1.6)):
+    values = {}
+    for i, profile in enumerate(profiles):
+        for time in times:
+            median = level * (i + 1) * time / 60.0 * np.linspace(1.0, 0.4, zones)
+            values[(profile.label, time)] = Band(median, 0.8 * median, 1.2 * median)
+    columns.append(ZoneColumn(label, values, color))
+figure = zone_profiles(columns, profiles, times=times)
+figure.savefig("zones.svg")
+```
+
+The bands are plain arrays, so the figures need no result object of a simulator; `pkpdsim.zonation.results` is the bridge which reads them out of a `sbmlsim.result.scan.ScanResult`, with the draws of an adopted fit as the band. `zone_values` reads the zones at a time, matched and not interpolated: the nearest point of the result, and of several points at the same distance the last, because a change of the simulation (a medium change, a second dose) gives two points at its time and the state after the change is the one to draw. `zone_band` is the same over the draws of an `UncertaintyRun` (the median and the quantiles of the run), `series_band` a time course over the draws, `zone_column` the whole column of a condition (every profile at its own times, read in `source_unit or unit` and transformed into `unit`, so a living fraction becomes the percentage of dead cells) and `band_text` the text a title names the band with:
+
+```python
+# not executed: the result and the draws come from a run of the model
+from pkpdsim.zonation.figures import zone_profiles
+from pkpdsim.zonation.results import band_text, zone_column
+
+columns = [
+    zone_column(
+        results[group.key],
+        profiles,
+        times=TIMES,
+        run=run,
+        time_unit="hr",
+        label=group.text,
+        color=group.color,
+    )
+    for group in groups
+]
+figure = zone_profiles(columns, profiles, times=TIMES, data=measured, time_unit="hr")
+figure.suptitle("The zones of the liver" + band_text(run))
+```
 
 ### The lobule hexagon
 

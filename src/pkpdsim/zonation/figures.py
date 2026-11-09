@@ -7,6 +7,12 @@ column and a column per selection named by its plain id (`glc_cell_z2`);
 `result_frame` converts a roadrunner result. The number of zones and the layers
 which carry a substance are read from the ids present in the result.
 
+`zone_profiles` draws a grid of conditions as well: a `ZoneColumn` per
+condition carries plain arrays, the `Band` of every profile and time, so the
+figures stay free of the result objects of a simulator.
+`pkpdsim.zonation.results` is the bridge which reads them out of a
+`sbmlsim.result.scan.ScanResult`, with the draws of an adopted fit as the band.
+
 A figure is built directly as a `matplotlib.figure.Figure` and owned by the
 caller; `matplotlib.pyplot` and its global state are not used. Every figure is
 vector: the heatmap is not rasterized and neither is the solid of its colorbar,
@@ -14,7 +20,7 @@ so the SVG holds no embedded image (a viewer which drops embedded raster data
 would show an empty panel).
 """
 
-from collections.abc import Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
 import numpy as np
@@ -25,13 +31,17 @@ from matplotlib.cm import ScalarMappable
 from matplotlib.colorbar import Colorbar
 from matplotlib.colors import Normalize
 from matplotlib.figure import Figure
+from matplotlib.lines import Line2D
 from matplotlib.patches import Polygon
+from matplotlib.typing import LineStyleType
 
 from pkpdsim.zonation import ids, observers
 from pkpdsim.zonation.geometry import Layer
 from pkpdsim.zonation.render import lobule_bands
 
 __all__ = [
+    "Band",
+    "ZoneColumn",
     "ZoneProfile",
     "data_axes",
     "layer_profile",
@@ -44,7 +54,7 @@ __all__ = [
 #: the group id of the axes of a colorbar
 COLORBAR = "colorbar"
 
-_LINE_STYLES: tuple[str, ...] = (":", "--", "-", "-.")
+_LINE_STYLES: tuple[LineStyleType, ...] = (":", "--", "-", "-.")
 _MARKERS: tuple[str, ...] = ("s", "D", "o", "^")
 _LAYER_ORDER: tuple[str, ...] = (*(str(layer) for layer in Layer), ids.VASCULAR)
 POSITION = "Position (0 periportal, 1 pericentral)"
@@ -57,21 +67,78 @@ OUTFLOW_HEIGHT = 0.6
 _HEADROOM = 0.05
 DEFAULT_UNIT = "mM"
 """The unit of the concentrations of the profile observers (`observers.profile_ids`)."""
+_BAND_ALPHA = 0.25
+"""The opacity of the fill of a band of the draws."""
+_NEUTRAL = "0.3"
+"""The colour of a legend handle which stands for a time in every column."""
 
 
 @dataclass(frozen=True)
 class ZoneProfile:
     """A profile over the zones, a row of `zone_profiles`.
 
+    `transform` and `source_unit` belong to the reading of a result
+    (`pkpdsim.zonation.results.zone_column`), which reads the selections in
+    `source_unit or unit` and transforms the values into `unit`: a living
+    fraction read as dimensionless becomes the percentage of dead cells with
+    `transform=lambda v: 100.0 * (1.0 - v)`. A frame carries its values in the
+    unit of the profile already, so `zone_profiles` of a frame ignores
+    `source_unit` and applies `transform` to the interpolated values.
+
     Attributes:
         label: the name of the quantity, the label of the y axis.
-        unit: the unit of the quantity.
-        selections: the ids of the result by zone, periportal first.
+        unit: the unit of the quantity, the unit of the values which are drawn.
+        selections: the ids of the result by zone, periportal first; their
+            number is the number of zones of the row.
+        times: the times of this row, `None` the times of the figure.
+        transform: the transformation of the values into `unit`, `None` none.
+        source_unit: the unit the selections are read in, `None` is `unit`.
     """
 
     label: str
     unit: str
     selections: tuple[str, ...]
+    times: tuple[float, ...] | None = None
+    transform: Callable[[np.ndarray], np.ndarray] | None = None
+    source_unit: str | None = None
+
+
+@dataclass(frozen=True)
+class Band:
+    """The values over the zones or over the time: the median and its band.
+
+    A simulation without draws carries its values as the median and has no
+    ends, so it draws a line and no fill. A transformation which decreases
+    swaps the ends (the lower draws give the larger value), which fills the
+    same area.
+
+    Attributes:
+        median: the values, the median over the draws of a run over them.
+        lower: the lower quantile of the draws, `None` without draws.
+        upper: the upper quantile of the draws, `None` without draws.
+    """
+
+    median: np.ndarray
+    lower: np.ndarray | None = None
+    upper: np.ndarray | None = None
+
+
+@dataclass(frozen=True)
+class ZoneColumn:
+    """A column of `zone_profiles`: one condition, its values by profile and time.
+
+    Attributes:
+        label: the name of the condition, the title of its panel in the top
+            row; empty draws no title.
+        values: the band of every profile and time of the figure, by the label
+            of the profile and the time.
+        color: the colour of every line of the column, `None` the colour of
+            the time.
+    """
+
+    label: str
+    values: Mapping[tuple[str, float], Band]
+    color: str | None = None
 
 
 def result_frame(result: object) -> pd.DataFrame:
@@ -187,113 +254,322 @@ def _time_text(time: float, time_unit: str) -> str:
     return f"t = {time:g} {time_unit}"
 
 
+def _colors(count: int) -> np.ndarray:
+    """Get the colour of every time, a sequential map from early to late."""
+    return colormaps["viridis"](np.linspace(0.1, 0.75, count))
+
+
+def _row_times(profile: ZoneProfile, times: Sequence[float]) -> list[float]:
+    """Get the times of a row: its own times, else the times of the figure."""
+    return [float(t) for t in (times if profile.times is None else profile.times)]
+
+
+def _frame_column(
+    result: pd.DataFrame, profiles: Sequence[ZoneProfile], times: Sequence[float]
+) -> ZoneColumn:
+    """Get the one column of a frame: the values at the times, no label, no colour.
+
+    A frame carries its values in the unit of the profile, so `source_unit` is
+    ignored; `transform` is applied to the interpolated values.
+
+    Raises:
+        KeyError: if the result has no column of a selection.
+    """
+    values: dict[tuple[str, float], Band] = {}
+    for profile in profiles:
+        for time in _row_times(profile, times):
+            y = _at(result, profile.selections, time)
+            values[(profile.label, time)] = Band(
+                y if profile.transform is None else profile.transform(y)
+            )
+    return ZoneColumn("", values)
+
+
+def _band_of(column: ZoneColumn, label: str, time: float) -> Band:
+    """Get the band of a profile at a time in a column.
+
+    Raises:
+        KeyError: naming the pair, if the column has no band of it.
+    """
+    try:
+        return column.values[(label, time)]
+    except KeyError:
+        raise KeyError(
+            f"The column '{column.label}' has no band of the profile '{label}' "
+            f"at the time {time:g}."
+        ) from None
+
+
+def _fill_band(ax: Axes, x: np.ndarray, band: Band, color: str | np.ndarray) -> None:
+    """Fill a band between its ends; a band without ends fills nothing."""
+    if band.lower is None or band.upper is None:
+        return
+    ax.fill_between(x, band.lower, band.upper, color=color, alpha=_BAND_ALPHA, lw=0.0)
+
+
+def _check_data(
+    data: pd.DataFrame, profiles: Sequence[ZoneProfile], columns: Sequence[ZoneColumn]
+) -> None:
+    """Check the labels of the data against the profiles and the columns.
+
+    Raises:
+        ValueError: naming them, if a row has a label which no profile has or
+            a column which no column of the figure has.
+    """
+    labels = [profile.label for profile in profiles]
+    unknown = sorted(set(data["label"]) - set(labels))
+    if unknown:
+        raise ValueError(
+            f"The data has the labels {unknown} which no profile has; "
+            f"the labels of the profiles are {labels}."
+        )
+    if "column" not in data:
+        return
+    names = [column.label for column in columns]
+    unknown = sorted(set(data["column"].dropna()) - set(names))
+    if unknown:
+        raise ValueError(
+            f"The data has the column labels {unknown} which no column has; "
+            f"the labels of the columns are {names}."
+        )
+
+
+def _data_rows(
+    data: pd.DataFrame, profile: ZoneProfile, column: ZoneColumn
+) -> pd.DataFrame:
+    """Get the rows of the data of a profile which a column draws.
+
+    A row with a `column` is drawn in the column of that label only, a row
+    without one (no `column` at all, or no label in it) in every column.
+    """
+    rows = data[data["label"] == profile.label]
+    if "column" in rows:
+        rows = rows[rows["column"].isna() | (rows["column"] == column.label)]
+    return rows
+
+
+def _draw_data(
+    ax: Axes,
+    rows: pd.DataFrame,
+    times: Sequence[float],
+    colors: np.ndarray,
+    column: ZoneColumn,
+    time_unit: str,
+) -> dict[float, np.ndarray]:
+    """Draw the data of a row in a column, the markers of a time.
+
+    Returns:
+        The drawn values plus their error, by the time they are drawn at; a
+        time of which no row is drawn is absent.
+    """
+    drawn: dict[float, np.ndarray] = {}
+    for k, time in enumerate(times):
+        at = rows[np.isclose(rows["time"], time)]
+        if at.empty:
+            continue
+        err = at["sd"].to_numpy(dtype=float) if "sd" in at else 0.0
+        drawn[time] = at["value"].to_numpy(dtype=float) + err
+        ax.errorbar(
+            at["position"],
+            at["value"],
+            yerr=at.get("sd"),
+            linestyle="",
+            marker=_MARKERS[k % len(_MARKERS)],
+            markeredgecolor="black",
+            color=colors[k] if column.color is None else column.color,
+            label=f"Data {_time_text(time, time_unit)}",
+        )
+    return drawn
+
+
+def _row_legend(
+    ax: Axes,
+    times: Sequence[float],
+    colors: np.ndarray,
+    *,
+    by_time: bool,
+    data_at: Sequence[float],
+    time_unit: str,
+) -> None:
+    """Draw the legend of a row right of it: its times and the data of its times.
+
+    The columns are named by the titles of the top row, so the handles stand
+    for the times: in the colour of the time where the colours are the times
+    (no column has a colour), neutral where a column has one.
+    """
+    handles: list[Line2D] = []
+    labels: list[str] = []
+    for k, time in enumerate(times):
+        color = colors[k] if by_time else _NEUTRAL
+        handles.append(
+            Line2D(
+                [],
+                [],
+                color=color,
+                linestyle=_LINE_STYLES[k % len(_LINE_STYLES)],
+                linewidth=2.0,
+            )
+        )
+        labels.append(f"Sim {_time_text(time, time_unit)}")
+        if time in data_at:
+            handles.append(
+                Line2D(
+                    [],
+                    [],
+                    color=color,
+                    linestyle="",
+                    marker=_MARKERS[k % len(_MARKERS)],
+                    markeredgecolor="black",
+                )
+            )
+            labels.append(f"Data {_time_text(time, time_unit)}")
+    ax.legend(
+        handles, labels, loc="upper left", bbox_to_anchor=(1.02, 1.0), borderaxespad=0.0
+    )
+
+
 def zone_profiles(
-    result: pd.DataFrame,
+    result: pd.DataFrame | Sequence[ZoneColumn],
     profiles: Sequence[ZoneProfile],
     *,
     times: Sequence[float],
     data: pd.DataFrame | None = None,
     time_unit: str = DEFAULT_TIME_UNIT,
 ) -> Figure:
-    """Draw a row per profile, with a line per time over the zones.
+    """Draw a row per profile and a column per condition, a line per time.
 
-    Every time has its colour (a sequential map, early to late) and its line
-    style; the data of a time are markers of the colour of that time. The
-    legend is one for the figure, right of the grid, if every row has the same
-    entries, else one per row.
+    A `pandas.DataFrame` is one condition: one column, no title, a colour and
+    a line style per time (a sequential map, early to late), the data of a time
+    in the colour of that time, and one legend for the figure, right of the
+    grid, if every row has the same entries, else one per row. A sequence of
+    `ZoneColumn` is a grid of conditions: the label of a column is the title of
+    its panel in the top row, the colour of a line is the colour of its column
+    where it has one and the line style stays the style of the time, so a
+    reader tells the times apart inside a column and the columns apart by
+    colour. A band of the draws of a fit is filled between its ends; the
+    legend is then one per row, right of the last column, and names the times
+    of that row. `pkpdsim.zonation.results.zone_column` builds a column from a
+    result of sbmlsim.
 
-    A line axis starts at zero when no value is negative; a colour scale
-    (`space_time`, `lobule_map`) spans the range of its values instead.
+    The x axis is shared and the y axis is shared per row, over the values of
+    every column of that row. A line axis starts at zero when no value is
+    negative; a colour scale (`space_time`, `lobule_map`) spans the range of
+    its values instead.
 
     Args:
-        result: the simulation result.
+        result: the simulation result as a frame, or a column per condition.
         profiles: the profiles, a row each; the number of zones is the number
-            of selections of a profile.
-        times: the times of the lines, interpolated in the result.
+            of selections of a profile. A profile with `times` draws those
+            times in its row, including its data and its legend.
+        times: the times of the lines, of a row which has none of its own;
+            interpolated in a frame, read at the nearest point of a column
+            (`results.zone_values`).
         data: optional data, a long frame with the columns `label` (of a
             profile), `time`, `position` (0 periportal to 1 pericentral),
             `value` (in the unit of the profile) and optionally `sd` (a
-            symmetric error in the same unit), drawn over the lines as
-            markers by time. The rows of a time which is not in `times` are
-            skipped, as plotting a subset of the times of a dataset is
-            legitimate.
+            symmetric error in the same unit) and `column` (the label of a
+            column, a row without one is drawn in every column), drawn over
+            the lines as markers by time. The rows of a time which the row
+            does not draw are skipped, as plotting a subset of the times of a
+            dataset is legitimate.
         time_unit: the unit of the times, the convention of the engine (min).
 
     Returns:
         The figure.
 
     Raises:
-        KeyError: if the result has no column of a selection.
-        ValueError: if `profiles` or `times` is empty, if a row of `data` has a
-            label which no profile has, or if no row of `data` is drawn.
+        KeyError: if the result has no column of a selection, or if a column
+            has no band of a profile and a time it is asked for.
+        ValueError: if `profiles`, `times` or `result` is empty, if a row of
+            `data` has a label which no profile or no column has, or if no row
+            of `data` is drawn.
     """
     if not profiles:
         raise ValueError("The profiles are empty, there is no row to draw.")
     if not len(times):
         raise ValueError("The times are empty, there is no line to draw.")
+    single = isinstance(result, pd.DataFrame)
+    columns = [_frame_column(result, profiles, times)] if single else list(result)
+    if not columns:
+        raise ValueError("The columns are empty, there is no condition to draw.")
     if data is not None:
-        labels = [profile.label for profile in profiles]
-        unknown = sorted(set(data["label"]) - set(labels))
-        if unknown:
-            raise ValueError(
-                f"The data has the labels {unknown} which no profile has; "
-                f"the labels of the profiles are {labels}."
-            )
+        _check_data(data, profiles, columns)
+    n_rows, n_columns = len(profiles), len(columns)
+    by_time = all(column.color is None for column in columns)
+    figure = Figure(
+        figsize=(7.0 if single else 3.6 * n_columns + 2.4, 3.0 * n_rows),
+        layout="constrained",
+    )
+    axes = figure.subplots(n_rows, n_columns, sharex=True, sharey="row", squeeze=False)
     drawn = 0
-    colors = colormaps["viridis"](np.linspace(0.1, 0.75, len(times)))
-    n_rows = len(profiles)
-    figure = Figure(figsize=(7.0, 3.0 * n_rows), layout="constrained")
-    axes = figure.subplots(n_rows, 1, sharex=True, squeeze=False)[:, 0]
-    for ax, profile in zip(axes, profiles, strict=True):
+    for row, profile in enumerate(profiles):
+        row_times = _row_times(profile, times)
+        colors = _colors(len(row_times))
         x = _positions(len(profile.selections))
         values: list[np.ndarray] = []
-        for k, t in enumerate(times):
-            y = _at(result, profile.selections, t)
-            values.append(y)
-            ax.plot(
-                x,
-                y,
-                linestyle=_LINE_STYLES[k % len(_LINE_STYLES)],
-                color=colors[k],
-                linewidth=2.0,
-                label=f"Sim {_time_text(t, time_unit)}",
-            )
-        if data is not None:
-            rows = data[data["label"] == profile.label]
-            for k, t in enumerate(times):
-                at = rows[np.isclose(rows["time"], t)]
-                if at.empty:
-                    continue
-                drawn += len(at)
-                err = at["sd"].to_numpy(dtype=float) if "sd" in at else 0.0
-                values.append(at["value"].to_numpy(dtype=float) + err)
-                ax.errorbar(
-                    at["position"],
-                    at["value"],
-                    yerr=at.get("sd"),
-                    linestyle="",
-                    marker=_MARKERS[k % len(_MARKERS)],
-                    markeredgecolor="black",
-                    color=colors[k],
-                    label=f"Data {_time_text(t, time_unit)}",
+        data_at: set[float] = set()
+        for ax, column in zip(axes[row], columns, strict=True):
+            for k, time in enumerate(row_times):
+                band = _band_of(column, profile.label, time)
+                color = colors[k] if column.color is None else column.color
+                _fill_band(ax, x, band, color)
+                ax.plot(
+                    x,
+                    band.median,
+                    linestyle=_LINE_STYLES[k % len(_LINE_STYLES)],
+                    color=color,
+                    linewidth=2.0,
+                    label=f"Sim {_time_text(time, time_unit)}",
                 )
+                values += [
+                    v for v in (band.median, band.lower, band.upper) if v is not None
+                ]
+            if data is not None:
+                points = _draw_data(
+                    ax,
+                    _data_rows(data, profile, column),
+                    row_times,
+                    colors,
+                    column,
+                    time_unit,
+                )
+                drawn += sum(v.size for v in points.values())
+                values += list(points.values())
+                data_at |= set(points)
         limits = _limits(values, _HEADROOM)
-        if limits is not None:
-            ax.set_ylim(*limits)
-        ax.set_ylabel(_label(profile.label, profile.unit))
-        ax.set_xlim(0.0, 1.0)
+        for ax in axes[row]:
+            if limits is not None:
+                ax.set_ylim(*limits)
+            ax.set_xlim(0.0, 1.0)
+        axes[row, 0].set_ylabel(_label(profile.label, profile.unit))
+        if not single:
+            _row_legend(
+                axes[row, -1],
+                row_times,
+                colors,
+                by_time=by_time,
+                data_at=sorted(data_at),
+                time_unit=time_unit,
+            )
     if data is not None and not drawn:
         raise ValueError(
             f"No row of the data is drawn: its times {sorted(set(data['time']))} "
             f"include none of the times {list(times)} of the figure."
         )
-    entries = [ax.get_legend_handles_labels() for ax in axes]
-    if all(e[1] == entries[0][1] for e in entries):
-        figure.legend(*entries[0], loc="outside right center")
-    else:
-        for ax in axes:
-            ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1.0), borderaxespad=0.0)
-    axes[-1].set_xlabel(POSITION)
+    for ax, column in zip(axes[0], columns, strict=True):
+        if column.label:
+            ax.set_title(column.label, fontweight="bold")
+    if single:
+        entries = [ax.get_legend_handles_labels() for ax in axes[:, 0]]
+        if all(e[1] == entries[0][1] for e in entries):
+            figure.legend(*entries[0], loc="outside right center")
+        else:
+            for ax in axes[:, 0]:
+                ax.legend(
+                    loc="upper left", bbox_to_anchor=(1.02, 1.0), borderaxespad=0.0
+                )
+    for ax in axes[-1]:
+        ax.set_xlabel(POSITION)
     return figure
 
 

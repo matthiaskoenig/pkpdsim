@@ -7,11 +7,13 @@ import pytest
 
 matplotlib.use("Agg")
 
+from collections.abc import Sequence
 from pathlib import Path
 
+from matplotlib import colormaps
 from matplotlib.axes import Axes
 from matplotlib.backends.backend_agg import FigureCanvasAgg
-from matplotlib.collections import LineCollection, QuadMesh
+from matplotlib.collections import LineCollection, PolyCollection, QuadMesh
 from matplotlib.figure import Figure
 from matplotlib.legend import Legend
 from matplotlib.lines import Line2D
@@ -20,6 +22,9 @@ from sbmlutils.factory import create_model
 
 from pkpdsim.zonation import ids, observers
 from pkpdsim.zonation.figures import (
+    POSITION,
+    Band,
+    ZoneColumn,
     ZoneProfile,
     data_axes,
     layer_profile,
@@ -556,3 +561,273 @@ def test_a_shared_scale_labels_the_ticks_of_the_outer_panels_only() -> None:
     assert five[2] == (False, True)  # above a gap, so on its own bottom edge
     own = data_axes(layer_profile(_result(), "drg", time=0, share_y=False))
     assert all(ticks(ax) == (True, True) for ax in own)
+
+
+def _band(values: np.ndarray, spread: float | None = None) -> Band:
+    """A band of values, optionally with ends at a distance from the median."""
+    median = np.asarray(values, dtype=float)
+    if spread is None:
+        return Band(median)
+    return Band(median, median - spread, median + spread)
+
+
+def _medians(
+    profiles: Sequence[ZoneProfile], times: Sequence[float], level: float
+) -> dict[tuple[str, float], np.ndarray]:
+    """A value per zone, per profile and per time: `level * (i + 1) * t * k / n`."""
+    out: dict[tuple[str, float], np.ndarray] = {}
+    for i, profile in enumerate(profiles):
+        n = len(profile.selections)
+        for t in profile.times if profile.times is not None else times:
+            out[(profile.label, float(t))] = (
+                level * (i + 1) * float(t) * np.arange(1, n + 1) / n
+            )
+    return out
+
+
+def _column(
+    label: str,
+    *,
+    profiles: Sequence[ZoneProfile],
+    times: Sequence[float],
+    color: str | None = None,
+    level: float = 1.0,
+    spread: float | None = None,
+) -> ZoneColumn:
+    """A column of a condition, the values distinct per row, time and level."""
+    return ZoneColumn(
+        label,
+        {
+            key: _band(median, spread)
+            for key, median in _medians(profiles, times, level).items()
+        },
+        color,
+    )
+
+
+def _fills(ax: Axes) -> list[PolyCollection]:
+    """The filled bands of an axes."""
+    return [c for c in ax.collections if isinstance(c, PolyCollection)]
+
+
+def test_a_frame_draws_one_column_as_before() -> None:
+    fig = zone_profiles(_result(), _profiles(2), times=(0, 60))
+    axes = data_axes(fig)
+    assert len(axes) == 2
+    assert tuple(fig.get_size_inches()) == pytest.approx((7.0, 6.0))
+    assert [ax.get_title() for ax in axes] == ["", ""]
+    assert len(fig.legends) == 1
+    assert [ax.get_ylabel() for ax in axes] == ["p0 [mM]", "p1 [mM]"]
+    assert axes[-1].get_xlabel() == POSITION
+    assert _fills(axes[0]) == []
+
+
+def test_a_column_per_condition_has_its_label_as_the_title_of_the_top_row() -> None:
+    profiles = _profiles(2, n=4)
+    times = (0.0, 60.0)
+    columns = [
+        _column("1 ml/min", profiles=profiles, times=times, level=1.0),
+        _column("3 ml/min", profiles=profiles, times=times, level=2.0),
+    ]
+    fig = zone_profiles(columns, profiles, times=times)
+    axes = data_axes(fig)
+    assert len(axes) == 4
+    assert tuple(fig.get_size_inches()) == pytest.approx((3.6 * 2 + 2.4, 6.0))
+    assert [ax.get_title() for ax in axes] == ["1 ml/min", "3 ml/min", "", ""]
+    assert axes[0].title.get_fontweight() == "bold"
+    # the y label on the first column of every row, the x label on the bottom row
+    assert [ax.get_ylabel() for ax in axes] == ["p0 [mM]", "", "p1 [mM]", ""]
+    assert [ax.get_xlabel() for ax in axes] == ["", "", POSITION, POSITION]
+    # the values of the column are drawn, the level of the second twice the first
+    assert _y(axes[1].lines[1]) == pytest.approx(2.0 * _y(axes[0].lines[1]))
+
+
+def test_the_lines_of_a_column_take_its_colour_and_the_style_of_their_time() -> None:
+    profiles = _profiles(1, n=4)
+    times = (0.0, 60.0, 120.0)
+    columns = [
+        _column("A", profiles=profiles, times=times, color="#ff0000"),
+        _column("B", profiles=profiles, times=times, color="#0000ff", level=2.0),
+    ]
+    first, second = data_axes(zone_profiles(columns, profiles, times=times))
+    assert [line.get_color() for line in first.lines] == ["#ff0000"] * 3
+    assert [line.get_color() for line in second.lines] == ["#0000ff"] * 3
+    # the style is the time, so the same styles in both columns
+    assert [line.get_linestyle() for line in first.lines] == [":", "--", "-"]
+    assert [line.get_linestyle() for line in second.lines] == [":", "--", "-"]
+
+
+def test_a_column_without_a_colour_takes_the_colour_of_the_time() -> None:
+    profiles = _profiles(1, n=4)
+    times = (0.0, 60.0, 120.0)
+    columns = [_column("A", profiles=profiles, times=times)]
+    ax = data_axes(zone_profiles(columns, profiles, times=times))[0]
+    frame = data_axes(zone_profiles(_result(n=4), profiles, times=times))[0]
+    drawn = [tuple(line.get_color()) for line in ax.lines]
+    assert len(set(drawn)) == 3
+    assert drawn == [tuple(line.get_color()) for line in frame.lines]
+    expected = colormaps["viridis"](np.linspace(0.1, 0.75, 3))
+    assert np.asarray(drawn) == pytest.approx(expected)
+
+
+def test_a_band_is_filled_between_its_ends() -> None:
+    profiles = _profiles(1, n=4)
+    columns = [
+        _column("A", profiles=profiles, times=(60.0,), color="#ff0000", spread=0.5)
+    ]
+    ax = data_axes(zone_profiles(columns, profiles, times=(60.0,)))[0]
+    fills = _fills(ax)
+    assert len(fills) == 1
+    fill = fills[0]
+    assert fill.get_alpha() == pytest.approx(0.25)
+    assert np.asarray(fill.get_facecolor())[0] == pytest.approx((1.0, 0.0, 0.0, 0.25))
+    assert fill.get_linewidth() == pytest.approx([0.0])
+    median = _y(ax.lines[0])
+    y = np.asarray(fill.get_paths()[0].vertices, dtype=float)[:, 1]
+    assert y.min() == pytest.approx(median.min() - 0.5)
+    assert y.max() == pytest.approx(median.max() + 0.5)
+    # the band is in the limits of the row, the median alone would cut it off
+    assert ax.get_ylim()[1] > median.max() + 0.5
+
+
+def test_a_band_without_ends_fills_nothing() -> None:
+    profiles = _profiles(1, n=4)
+    columns = [_column("A", profiles=profiles, times=(60.0,), color="#ff0000")]
+    ax = data_axes(zone_profiles(columns, profiles, times=(60.0,)))[0]
+    assert len(ax.lines) == 1
+    assert _fills(ax) == []
+
+
+def test_a_row_draws_its_own_times() -> None:
+    plain = ZoneProfile("Drug", "mM", tuple(observers.profile_ids("drg", "plasma", 4)))
+    own = ZoneProfile(
+        "Dead",
+        "%",
+        tuple(observers.profile_ids("drg", "cell", 4)),
+        times=(30.0, 90.0),
+    )
+    profiles = [plain, own]
+    times = (0.0, 60.0)
+    # the column covers every time of the figure and of a row, so a row which
+    # drew the times of the other one would draw a band it has, not raise
+    every = (0.0, 30.0, 60.0, 90.0)
+    covering = [ZoneProfile(p.label, p.unit, p.selections) for p in profiles]
+    columns = [_column("A", profiles=covering, times=every, color="#ff0000")]
+    fig = zone_profiles(columns, profiles, times=times)
+    top, bottom = data_axes(fig)
+    expected = _medians(covering, every, 1.0)
+    assert [_y(line) for line in top.lines] == [
+        pytest.approx(expected[("Drug", t)]) for t in times
+    ]
+    assert [_y(line) for line in bottom.lines] == [
+        pytest.approx(expected[("Dead", t)]) for t in (30.0, 90.0)
+    ]
+    # the legend of a row names the times of that row
+    assert [t.get_text() for t in _legend(top).get_texts()] == [
+        "Sim t = 0 min",
+        "Sim t = 60 min",
+    ]
+    assert [t.get_text() for t in _legend(bottom).get_texts()] == [
+        "Sim t = 30 min",
+        "Sim t = 90 min",
+    ]
+
+
+def test_the_transform_of_a_profile_is_applied() -> None:
+    """A frame carries its values in the unit of the profile; the transform applies."""
+    result = _flat(plasma=0.8)
+    profile = ZoneProfile(
+        "Dead cells",
+        "%",
+        tuple(observers.profile_ids("drg", "plasma", 4)),
+        transform=lambda v: 100.0 * (1.0 - v),
+    )
+    ax = data_axes(zone_profiles(result, [profile], times=(5.0,)))[0]
+    assert _y(ax.lines[0]) == pytest.approx([20.0] * 4)
+    assert ax.get_ylabel() == "Dead cells [%]"
+
+
+def test_the_data_of_a_column_is_drawn_in_that_column_only() -> None:
+    profiles = _profiles(1, n=4)
+    times = (60.0,)
+    columns = [
+        _column("A", profiles=profiles, times=times, color="#ff0000"),
+        _column("B", profiles=profiles, times=times, color="#0000ff"),
+    ]
+    data = pd.DataFrame(
+        {
+            "label": ["p0", "p0"],
+            "time": [60.0, 60.0],
+            "position": [0.25, 0.75],
+            "value": [1.0, 2.0],
+            "column": ["A", None],
+        }
+    )
+    first, second = data_axes(zone_profiles(columns, profiles, times=times, data=data))
+    # the row of the column A and the row of no column in A, the row of no column in B
+    assert list(_x(first.lines[1])) == [0.25, 0.75]
+    assert list(_x(second.lines[1])) == [0.75]
+    # the markers take the colour of their column
+    assert first.lines[1].get_color() == "#ff0000"
+    assert second.lines[1].get_color() == "#0000ff"
+
+
+def test_data_of_a_column_which_no_column_has_raises() -> None:
+    profiles = _profiles(1, n=4)
+    times = (60.0,)
+    columns = [_column("A", profiles=profiles, times=times)]
+    data = pd.DataFrame(
+        {
+            "label": ["p0"],
+            "time": [60.0],
+            "position": [0.25],
+            "value": [1.0],
+            "column": ["Z"],
+        }
+    )
+    with pytest.raises(ValueError, match="Z") as info:
+        zone_profiles(columns, profiles, times=times, data=data)
+    assert "['A']" in str(info.value)
+
+
+def test_a_missing_band_raises_and_names_the_pair() -> None:
+    profiles = _profiles(1, n=4)
+    columns = [_column("A", profiles=profiles, times=(60.0,))]
+    with pytest.raises(KeyError) as info:
+        zone_profiles(columns, profiles, times=(60.0, 120.0))
+    message = str(info.value)
+    assert "p0" in message
+    assert "120" in message
+    assert "A" in message
+
+
+def test_the_rows_of_a_grid_share_their_y_axis() -> None:
+    profiles = _profiles(2, n=4)
+    times = (60.0,)
+    columns = [
+        _column("A", profiles=profiles, times=times, level=1.0),
+        _column("B", profiles=profiles, times=times, level=3.0),
+    ]
+    fig = zone_profiles(columns, profiles, times=times)
+    first, second, third, fourth = data_axes(fig)
+    assert first.get_ylim() == second.get_ylim()
+    assert third.get_ylim() == fourth.get_ylim()
+    # the limit of a row is the largest value of its columns, the second here
+    expected = _medians(profiles, times, 3.0)
+    assert first.get_ylim()[1] == pytest.approx(expected[("p0", 60.0)].max() * 1.05)
+    assert third.get_ylim()[1] == pytest.approx(expected[("p1", 60.0)].max() * 1.05)
+    assert first.get_ylim() != third.get_ylim()
+
+
+def test_the_svg_of_a_grid_holds_no_image(tmp_path: Path) -> None:
+    profiles = _profiles(2, n=4)
+    times = (0.0, 60.0)
+    columns = [
+        _column("A", profiles=profiles, times=times, color="#ff0000", spread=0.5),
+        _column("B", profiles=profiles, times=times, color="#0000ff", spread=0.5),
+    ]
+    path = tmp_path / "grid.svg"
+    zone_profiles(columns, profiles, times=times).savefig(path)
+    text = path.read_text()
+    assert text.startswith("<?xml")
+    assert "<image" not in text
