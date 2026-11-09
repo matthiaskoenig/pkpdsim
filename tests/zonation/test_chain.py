@@ -11,11 +11,12 @@ import numpy as np
 import pytest
 import roadrunner
 from pbpk.conftest import individual
-from sbmlutils.factory import Parameter, create_model
+from sbmlutils.factory import Model, Parameter, create_model
 from sbmlutils.metadata import SBO
 
-from pkpdsim.database.tables import entry
-from pkpdsim.pbpk.organs import PORTAL_ORGANS
+from pkpdsim.pbpk import MODEL_UNITS
+from pkpdsim.pbpk import ids as pbpk_ids
+from pkpdsim.pbpk.physiology import Sex, physiology_objects
 from pkpdsim.pbpk.placement import value_parameter
 from pkpdsim.pbpk.substance import Substance
 from pkpdsim.pbpk.units import U
@@ -318,17 +319,26 @@ def test_the_axial_diffusion_profile_scales_the_conductance() -> None:
 
 
 @pytest.mark.parametrize("species", [Species.RAT, Species.HUMAN])
-def test_the_reference_flow_is_the_library_derivation(species: Species) -> None:
-    """The artery and the portal organs times the cardiac output of the table."""
-    table = f"physiology_{species}"
-    fractions_ = sum(
-        float(entry(table, f"male.organs.{o}", "flow").value)  # ty: ignore[invalid-argument-type]
-        for o in ("li", *sorted(str(o) for o in PORTAL_ORGANS))
+def test_the_reference_flow_is_the_total_liver_flow_of_the_pbpk_library(
+    species: Species, tmp_path: Path
+) -> None:
+    """`reference_flow` equals `QH = QHA + QPO` of the library's physiology model.
+
+    This is the invariant which lets the zonated liver stand in for the PBPK
+    liver: both carry the same blood flow. The library's physiology is built
+    as SBML and `QH` is read from roadrunner, so the renormalisation of the
+    flow fractions over the organs is the library's own.
+    """
+    path = tmp_path / "physiology.xml"
+    model = Model(
+        sid="physiology",
+        units=U,
+        model_units=MODEL_UNITS,
+        objects=physiology_objects(Sex.MALE, species=species),
     )
-    expected = fractions_ * float(entry(table, "male", "cardiac_output").value)  # ty: ignore[invalid-argument-type]
-    assert reference_flow(species).value == pytest.approx(expected)
-    if species is Species.RAT:
-        assert expected == pytest.approx((0.024 + 0.151) * 0.08309, rel=1e-3)
+    create_model(model, filepath=path, validate=False)
+    qh = individual(path)[pbpk_ids.QH]
+    assert reference_flow(species).value == pytest.approx(qh, rel=1e-9)
 
 
 def test_the_dispersion_is_in_the_notes_of_the_model() -> None:

@@ -1726,6 +1726,26 @@ def reference_hematocrit(
     return hct * factor_curves(sex)[ids.HCT].curve.value(age)
 
 
+def reference_liver_flow(species: Species, sex: Sex = Sex.MALE) -> float:
+    """The total blood flow of the liver of the reference individual (l/min).
+
+    `QH = QHA + QPO` of the model: the flow fractions of the liver and of the
+    `PORTAL_ORGANS`, renormalised over the organs in parallel as the model
+    does, times the reference cardiac output.
+
+    Args:
+        species: the species.
+        sex: the sex of the reference individual.
+
+    Returns:
+        The flow, at the reference body weight and without impairment.
+    """
+    refs = _references(sex, load(physiology_table(species)), species)
+    organs = [Organ.LIVER, *(o for o in Organ if o in PORTAL_ORGANS)]
+    fraction = sum(refs[ids.flow_fraction(o)].value for o in organs)
+    return fraction * refs[ids.ref(ids.CO)].value
+
+
 @dataclass(frozen=True)
 class ReferenceIndividual:
     """The reference individual of a sex (ICRP 89, `database/tables/physiology_human.toml`).

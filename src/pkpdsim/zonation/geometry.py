@@ -15,7 +15,7 @@ from enum import StrEnum
 from sbmlutils.factory.units import UnitDefinition
 
 from pkpdsim.database.tables import entry
-from pkpdsim.pbpk.organs import PORTAL_ORGANS, Organ
+from pkpdsim.pbpk.physiology import reference_liver_flow
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import Q, Value, number
 from pkpdsim.species import Species
@@ -169,22 +169,15 @@ def fractions(
     return fr
 
 
-def _table_number(table: str, section: str, key: str) -> float:
-    """The number of an entry of a physiology table."""
-    value = entry(table, section, key).value
-    if not isinstance(value, float):
-        raise TypeError(f"tables/{table}.toml [{section}] {key} is no number.")
-    return value
-
-
 def reference_flow(species: Species) -> Value:
     """Get the reference blood flow through the whole liver of a species (l/min).
 
-    The hepatic artery plus the portal organs, the way the PBPK library
-    assembles `QH = QHA + QPO` (`pkpdsim.pbpk.physiology`): the flow fractions
-    of the liver and of the `PORTAL_ORGANS` of `physiology_<species>` times
-    the cardiac output. The fractions are those of the table, not
-    renormalised over the organs as the library does for its individual.
+    The total liver flow `QH = QHA + QPO` of the PBPK library for its
+    reference individual (`pkpdsim.pbpk.physiology.reference_liver_flow`): the
+    flow fractions of the liver and of the portal organs, renormalised over
+    the organs in parallel as the library does, times the cardiac output.
+    The engine follows the renormalised library fractions, so the zonated
+    liver carries the flow of the PBPK liver it stands in for.
 
     Args:
         species: the species.
@@ -192,19 +185,11 @@ def reference_flow(species: Species) -> Value:
     Returns:
         The flow in l/min.
     """
-    table = f"physiology_{species}"
-    organs = [Organ.LIVER, *(o for o in Organ if o in PORTAL_ORGANS)]
-    fraction = sum(
-        _table_number(table, f"male.organs.{o.value}", "flow") for o in organs
-    )
-    cardiac_output = _table_number(table, "male", "cardiac_output")
-    co = entry(table, "male", "cardiac_output")
     return Value(
-        fraction * cardiac_output,
+        reference_liver_flow(species),
         U.l_per_min,
-        co.source,
-        f"derived: the flow fractions of the liver and of the portal organs "
-        f"({fraction:.4g}) times the cardiac output ({cardiac_output} l/min) of {table}",
+        "pkpdsim.pbpk.physiology",
+        f"the total liver blood flow of the reference male {species} of the PBPK library",
     )
 
 
