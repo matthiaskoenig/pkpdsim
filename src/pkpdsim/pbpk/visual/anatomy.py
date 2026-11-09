@@ -643,6 +643,7 @@ class AnatomyFigure:
         left: Sequence[str] = LEFT,
         right: Sequence[str] = RIGHT,
         tags: bool = False,
+        annotations: bool = True,
     ) -> str:
         """The figure as a standalone SVG.
 
@@ -654,11 +655,17 @@ class AnatomyFigure:
             left: the labels of the left column.
             right: the labels of the right column.
             tags: mark the organs of the bodies for hover cards.
+            annotations: the labels, the substances, the connections of the
+                model, the captions and the key; without them the bodies with
+                their organs alone, e.g. for a slide (`title` and `substances`
+                are then ignored).
 
         Returns:
             The SVG, deterministic.
         """
         man, woman = self.man, self.woman
+        if not annotations:
+            return self._bodies(scale, tags)
         wl = 330.0
         wcol, gap = wl * text, 34.0
         xm0, xm1, hm = man.b.bounds()
@@ -764,6 +771,30 @@ class AnatomyFigure:
             f"{''.join(header)}{bodies}{''.join(out)}{''.join(captions)}{key}</svg>"
         )
 
+    def _bodies(self, scale: float, tags: bool) -> str:
+        """The male and the female body with their organs, without annotations."""
+        man, woman = self.man, self.woman
+        margin = 12.0
+        xm0, xm1, hm = man.b.bounds()
+        xf0, xf1, hf = woman.b.bounds()
+        # the bodies side by side, the hands apart [cm]
+        midlines = xm1 - xf0 + 8.0
+        lo, hi = min(xm0, midlines + xf0), max(xm1, midlines + xf1)
+        hmax = max(hm, hf)
+        oxm = margin - lo * scale
+        oxf = oxm + midlines * scale
+        width = round((hi - lo) * scale + 2 * margin)
+        height = round(hmax * scale + 2 * margin)
+        bodies = (
+            f'<g transform="translate({oxf:.1f},{margin + (hmax - hf) * scale:.1f}) scale({scale})">{woman.b.svg(tags=tags)}</g>'
+            f'<g transform="translate({oxm:.1f},{margin + (hmax - hm) * scale:.1f}) scale({scale})">{man.b.svg(tags=tags)}</g>'
+        )
+        self.size = (width, height)
+        return (
+            f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="{width}" height="{height}" '
+            f'font-family="{FONT}">{self._style(1.0)}{self._defs()}{bodies}</svg>'
+        )
+
     def _key(self) -> str:
         """The key of the lines, chips, layers and icons (two rows)."""
         k = []
@@ -863,6 +894,7 @@ def anatomy_figure(
     substances: bool = True,
     scale: float = 3.3,
     text: float = 1.3,
+    annotations: bool = True,
 ) -> Path:
     """Write the anatomical figure of a definition, the male and the female build.
 
@@ -877,6 +909,9 @@ def anatomy_figure(
         substances: the substances at the top.
         scale: the bodies [px per cm].
         text: the scale of the labels, icons and the key.
+        annotations: the labels, substances, connections, captions and key;
+            without them the bodies with their organs alone, on a transparent
+            background (e.g. for a slide).
 
     Returns:
         The path of the figure.
@@ -884,7 +919,13 @@ def anatomy_figure(
     from pkpdsim.pbpk.visual.animal import figure_of
 
     figure = figure_of(definition, ModelContent.of(definition), compact=compact)
-    svg = figure.svg(title=title, substances=substances, scale=scale, text=text)
+    svg = figure.svg(
+        title=title,
+        substances=substances,
+        scale=scale,
+        text=text,
+        annotations=annotations,
+    )
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(svg + "\n", encoding="utf-8")
     return path

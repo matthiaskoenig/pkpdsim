@@ -7,6 +7,7 @@ The figures on this page are those of the glimepiride-like model of the [tutoria
 | Figure | Function | Written by `create_archive` |
 | --- | --- | --- |
 | Anatomical figure | `anatomy_figure(definition, path)` | `<sid>_body.svg` (key `<sid>_body_svg`) |
+| Bodies without annotations | `anatomy_figure(definition, path, annotations=False)` | no |
 | Schematic | `model_figure(definition, path)` | `<sid>.svg` (key `<sid>_svg`) |
 | Interactive page | `interactive_figure(definition, path, figure="anatomy" or "schematic")` | no |
 | Publication figure | `publication_figure(definition, path, pdf=False)` | no |
@@ -27,6 +28,12 @@ Hovering an organ, a label, a substance or an icon shows its details (the volume
 
 <iframe class="pkpd-figure" src="img/figures/anatomy.html" title="The interactive anatomical figure" style="aspect-ratio:1460 / 962" loading="lazy"></iframe>
 
+### The bodies alone
+
+`anatomy_figure(definition, path, annotations=False)` draws the bodies of the builds with their organs and layers alone, without labels, substances, connections, captions and key, on a transparent background, for a slide or a poster. A definition of a laboratory animal gives the animal alone. The drawings are the anatomograms of the Expression Atlas (CC BY 4.0), so a slide credits them next to the figure, see [Anatomy and license](#anatomy-and-license).
+
+![The male and the female build of the glimepiride-like model, without annotations](img/figures/bodies.svg)
+
 ## The schematic
 
 The circulation of the model: venous blood on the left and arterial blood on the right, each listing the substances which circulate, the lung between them, the systemic organs, the liver with the portal vein (with its substances) and the portal organs, the intestinal lumen in its segments, urine and feces as compartments with their substances. Every row carries the grey icon of its organ, its substances (filled: enters the tissue; dashed: plasma only) and its processes as badges: `MET` metabolism, `TRA` transport, `CUS` custom reaction, `URI` urine, `SLW` slow pool, `ORL` oral dose, `ABS` absorption, `BIL` bile, `CNV` lumen conversion, `FEC` feces. The legend (the substances with their mechanisms, the routes, the PD components and the key) is a column right of the diagram; the process text wraps at a fixed measure (`MAX_TEXT`) and the width of the figure is that of its content. `model_figure(..., compact=True)` is the panel of a publication figure: the substances and the key in the band above the first row, tighter rows.
@@ -40,6 +47,10 @@ Hovering an organ row, a substance chip or a process line shows its details.
 One A4 page with the anatomical figure (A) and the schematic (B), each in compact form at the width of the page; only the panels have to fit on the page, the legend sits below them. `publication_figure(definition, path)` writes the panels with the legend below (`path`), the panels alone on the A4 page (`<stem>_panels.svg`), the legend as Markdown for the caption of a manuscript (`<stem>_legend.md`) and, with `pdf=True`, the PDF of the panels (the extra `pdf`, `pip install pkpdsim[pdf]`, needs the cairo library of the system).
 
 ![The publication figure of the glimepiride-like model](img/figures/publication.svg)
+
+## Pictograms of impaired organs
+
+`impaired_organ(key, cx, cy, width, height, loss, color, title=None)` of `pkpdsim.pbpk.visual.icons` draws the liver (`li`), a kidney (`ki`) or the heart (`he`) as a pictogram on a card framed in the color of an impairment class: the shape of the anatomy resources in the color of the organ with its details (the lobes and the gallbladder of the liver, the cortex, vessels and ureter of a kidney, the groove of the heart), the lost part `loss` of its area faded (the liver from the right, the kidney and the heart from the top). The overview of [Impairment](impairment.md#impairment) shows them for every class, the figure of [Impairment classes](classes.md) above the scales of the classes.
 
 ## Individuals
 

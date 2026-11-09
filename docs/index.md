@@ -1,9 +1,13 @@
-# pkpdsim: PBPK/PD models in SBML
+# pkpdsim: PBPK/PD models in SBML using python
 [![GitHub Actions CI/CD Status](https://github.com/matthiaskoenig/pkpdsim/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/matthiaskoenig/pkpdsim/actions/workflows/ci-cd.yml) [![Documentation](https://img.shields.io/badge/docs-pkpdsim-3f51b5.svg)](https://matthiaskoenig.github.io/pkpdsim) [![Version](https://img.shields.io/pypi/v/pkpdsim.svg)](https://pypi.org/project/pkpdsim/) [![Python Versions](https://img.shields.io/pypi/pyversions/pkpdsim.svg)](https://pypi.org/project/pkpdsim/) [![MIT License](https://img.shields.io/pypi/l/pkpdsim.svg)](https://opensource.org/licenses/MIT)
 
 `pkpdsim` is a library for physiologically based pharmacokinetic and pharmacodynamic (PBPK/PD) models in [SBML](https://sbml.org): a standard physiology at its centre, the substances, chemistry, routes and observers of a model on top of it, and the simulation experiments, fits, scans, uncertainty and credibility of [sbmlsim](https://github.com/matthiaskoenig/sbmlsim) on top of those. The source code is available from [https://github.com/matthiaskoenig/pkpdsim](https://github.com/matthiaskoenig/pkpdsim).
 
-A model package writes one definition of what is specific to its substances: the substances with their mechanism flags, the chemistry of its organs, its choices and its PD components. The library adds the body and writes the SBML, a comp model with one submodel per organ and the flat model which is simulated. The [PBPK library](pbpk/index.md) links every component of the three layers below, and its [tutorial](pbpk/tutorial.md) builds such a model step by step.
+A model package writes one definition of what is specific to its substances: the substances with their mechanism flags, the chemistry of its organs, its choices and its PD components. The library adds the body and writes the SBML with the factory of [sbmlutils](https://github.com/matthiaskoenig/sbmlutils), a comp model with one submodel per organ and the flat model which is simulated. The [PBPK library](pbpk/index.md) links every component of the three layers below, and its [tutorial](pbpk/tutorial.md) builds such a model step by step.
+
+<iframe class="pkpd-figure" src="pbpk/img/figures/anatomy.html" title="The interactive anatomical figure of the glimepiride-like model" style="aspect-ratio:1460 / 962" loading="lazy"></iframe>
+
+The anatomical figure of the glimepiride-like model of the [tutorial](pbpk/tutorial.md), generated from its definition: the male and the female build with the organs sized by their volumes, the substances of every organ, the submodels of the liver and the kidney, the routes and the blood sample. Hover an organ, a label, a substance or an icon for its details; [Figures](pbpk/figures.md) describes all figures of a model.
 
 ## Background
 
@@ -27,7 +31,7 @@ On top of the physiology a model puts what is specific to its substances, and th
 - **[Substances](pbpk/substances.md)** and **[chemistry](pbpk/chemistry.md)** - the mechanism flags of a substance (binding, erythrocytes, distribution, excretion, inhibition, induction) and the processes of an organ with the proteins which carry them.
 - **[Intestine and routes](pbpk/intestine.md)** - how a dose is applied, the lumen segments with their dissolution and absorption, the mucosa, the bile and the enterohepatic circulation.
 - **[Observers](pbpk/observers.md)** - what a model is read at: the arm vein, the hepatic vein, the free and the blood concentrations, the excretion rates and the observers of a definition.
-- **[Annotation](pbpk/annotation.md)**, **[templates and annotations](templates.md)** and **[figures](pbpk/figures.md)** - the SBO, PBPKO, UBERON, NCIT, UniProt and ChEBI terms of every created element, the creators and the terms of use of a model, and the figures generated from its definition.
+- **[Annotation](pbpk/annotation.md)**, **[templates and annotations](templates.md)** and **[figures](pbpk/figures.md)** - the SBO, PBPKO, UBERON, NCIT, UniProt and ChEBI terms of every created element, the creators and the terms of use of a model, and the figures generated from its definition: the anatomical figure, the schematic, the publication figure, the bodies of individuals and the pictograms of the impaired organs.
 - **[Parameter database](database.md)** - the numbers the libraries are built from, each with the publication it is taken from; **[initial values](initial_values.md)** put a substance into every tissue at the start.
 
 ## The analysis

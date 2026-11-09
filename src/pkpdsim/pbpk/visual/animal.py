@@ -282,10 +282,28 @@ class AnimalFigure(AnatomyFigure):
         left: Sequence[str] = LEFT,
         right: Sequence[str] = RIGHT,
         tags: bool = False,
+        annotations: bool = True,
         **unused: object,
     ) -> str:
-        """The figure as a standalone SVG; the animal fills `height` [px]."""
+        """The figure as a standalone SVG; the animal fills `height` [px].
+
+        Without `annotations` the animal with its organs alone (no labels,
+        substances, connections, captions or key).
+        """
         a = self.animal
+        if not annotations:
+            margin = 12.0
+            span = a.hi - a.lo
+            scale = height / span[1]
+            width = round(span[0] * scale + 2 * margin)
+            h = round(height + 2 * margin)
+            self.size = (width, h)
+            return (
+                f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {h}" width="{width}" height="{h}" '
+                f'font-family="{FONT}">{self._style(1.0)}{self._defs()}'
+                f'<g transform="translate({margin - a.lo[0] * scale:.1f},{margin - a.lo[1] * scale:.1f}) '
+                f'scale({scale:.4f})">{a.svg(tags=tags)}</g></svg>'
+            )
         wl = 330.0
         wcol, gap = wl * text, 34.0
         span = a.hi - a.lo

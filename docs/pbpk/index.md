@@ -32,7 +32,7 @@ On top of the physiology a model puts what is specific to its substances, and th
 - [Intestine and routes](intestine.md) - how a dose is applied, the lumen segments with their dissolution and absorption, the mucosa, the bile and the enterohepatic circulation.
 - [Observers](observers.md) - what a model is read at: the arm vein, the hepatic vein, the free and the blood concentrations, the excretion rates and the observers of a definition.
 - [Annotation](annotation.md) - the SBO, PBPKO, UBERON, NCIT, UniProt and ChEBI terms which every created element carries.
-- [Figures](figures.md) - the anatomical figure, the schematic, the publication figure and the interactive pages, all generated from the definition.
+- [Figures](figures.md) - the anatomical figure, the schematic, the publication figure, the bodies of individuals and the pictograms of the impaired organs, all generated from the definition, with an interactive page of each for the web.
 - [Migration](migration.md) - how a hand-written model of pkdb_models moves onto the library, with glimepiride as the example.
 - [Templates and annotations](../templates.md) - the creators of a model, its terms of use and the annotations of the compartments which recur in the models.
 - [Parameter database](../database.md) - the numbers the libraries are built from, each with the publication it is taken from.

@@ -2,8 +2,10 @@
 
 The figures of the page `docs/pbpk/figures.md`, of the glimepiride-like model of
 the tutorial: the anatomical figure (A) and the schematic (B) as interactive pages,
-the publication figure (the panels on an A4 page with the legend below it) and a
-strip of individuals of the library; the anatomical figures of the species of
+the publication figure (the panels on an A4 page with the legend below it), a
+strip of individuals of the library, the static anatomical figure of the README
+(`anatomy.svg`, the docs show the interactive one) and the bodies with their
+organs without annotations (`bodies.svg`, e.g. for a slide); the anatomical figures of the species of
 `docs/pbpk/species.md`, interactive as well.
 
 Every page of `docs/pbpk/` and the page `docs/perfusion.md` whose python fences
@@ -52,6 +54,7 @@ from pkpdsim.pbpk import (
     Species,
     Substance,
 )
+from pkpdsim.pbpk.visual.anatomy import anatomy_figure
 from pkpdsim.pbpk.visual.body import Individual, body_strip
 from pkpdsim.pbpk.visual.interactive import interactive_figure
 from pkpdsim.pbpk.visual.publication import publication_figure
@@ -319,6 +322,10 @@ def write(out: Path) -> list[Path]:
         interactive_figure(d, out / "anatomy.html"),
         interactive_figure(d, out / "schematic.html", figure="schematic"),
         publication_figure(d, out / "publication.svg"),
+        # the static anatomical figure of the README, which has no scripts
+        anatomy_figure(d, out / "anatomy.svg"),
+        # the bodies with their organs alone, e.g. for a slide
+        anatomy_figure(d, out / "bodies.svg", annotations=False),
     ]
     # the legend of a manuscript is not a page of the docs, which shows it inline
     (out / "publication_legend.md").unlink()
