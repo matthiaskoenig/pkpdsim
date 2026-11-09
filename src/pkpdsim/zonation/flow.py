@@ -44,8 +44,10 @@ r_fen**2)` (6.7e12 periportal, 8.9e12 pericentral), and the table value is a
 cross-check (`tests/zonation/test_flow.py`, within 35 %). The leaky tube has
 one `w`, so it is evaluated at the mean porosity of the sinusoid, the mean of
 the zones, which is exact for a tube of uniform porosity and the first order
-for the linear gradient of the table; the zonal `porosity` profile scales the
-solute path of the barrier and not the hydraulic resistance.
+for the linear gradient of the table; the analytic solution assumes a uniform leak, so the hydraulic resistance uses
+the mean porosity and the per-zone `fenestra_counts` enter only the
+cross-check; the zonal `porosity` profile scales the solute path of the
+barrier and not the hydraulic resistance.
 
 **The oncotic pressure** `P0` (`p_onc`, `Poc - Pot` of spt) defaults to the mean
 of the two pressures, as spt sets `P0 = 0.5 (Pa + Pb)`. The net filtration is
@@ -53,6 +55,18 @@ zero then: what leaks out of the first half of the tube returns in the second
 half, and the flow is symmetric about the middle. A default which filtered
 would change the mass balance of every model which switches to the pressure
 flow, so a lower oncotic pressure is a choice of the model.
+
+**The flow is not monotonic.** With `P0` at the mean of the two pressures the
+flow falls from the portal end to a minimum in the middle and rises again to
+the central end, though the pressure falls monotonically: fluid filters out of
+the first half of the tube and is reabsorbed in the second. This is the
+signature of `P0` and no defect.
+
+**The resistance factor is calibrated.** `nu = resistance_factor * viscosity`
+and the default factor is derived per species so that the periportal inflow at
+the default pressures is `reference_flow(species)`, the flow an imposed flow
+takes by default: switching between the two modes does not change the flow.
+The 10 of the spt model gives about five times that flow for the rat.
 
 A pressure which gives a negative flow in a zone is refused: the chain does
 not run backwards.
@@ -71,12 +85,14 @@ from pkpdsim.pbpk.annotation import initial_assignment
 from pkpdsim.pbpk.placement import value_parameter
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import Q, Value, number, unit_text
+from pkpdsim.species import Species
 from pkpdsim.zonation import ids
 from pkpdsim.zonation.geometry import (
     Layer,
     SinusoidGeometry,
     fractions,
     reference_flow,
+    reference_liver_mass,
     sinusoid_count,
 )
 from pkpdsim.zonation.profiles import zone_positions
@@ -88,6 +104,7 @@ __all__ = [
     "ImposedFlow",
     "LeakyTube",
     "PressureFlow",
+    "calibrated_resistance_factor",
     "fenestra_counts",
     "flow_objects",
     "imposed_flow",
@@ -170,7 +187,12 @@ class PressureFlow:
         viscosity: the viscosity of the plasma.
         resistance_factor: the factor of the viscosity of the blood in the
             sinusoid over the plasma viscosity, `nu = resistance_factor *
-            viscosity` (10 in the spt model).
+            viscosity`. `None` (the default) is calibrated per species
+            (`calibrated_resistance_factor`) so that the periportal inflow at
+            the default pressures is the reference flow of the species, which
+            is what an `ImposedFlow` without a value gives. The 10 of the spt
+            model is an uncalibrated stand-in for the microvascular geometry
+            and gives about five times the reference flow for the rat.
         p_onc: the oncotic pressure `P0 = Poc - Pot` the pressure relaxes to
             along the leaky tube; `None` (the default) is the mean of the two
             pressures, as spt sets it, which makes the net filtration zero.
@@ -179,7 +201,7 @@ class PressureFlow:
     p_pp: Q = _PORTAL_PRESSURE
     p_pc: Q = _CENTRAL_PRESSURE
     viscosity: Q = _PLASMA_VISCOSITY
-    resistance_factor: float = 10.0
+    resistance_factor: float | None = None
     p_onc: Q | None = None
 
 
@@ -335,12 +357,48 @@ def _mean_porosity(geo: SinusoidGeometry) -> float:
     return 0.5 * (geo.porosity_pp + geo.porosity_pc)
 
 
-def leaky_tube(flow: PressureFlow, geo: SinusoidGeometry) -> LeakyTube:
+def calibrated_resistance_factor(species: Species, geo: SinusoidGeometry) -> float:
+    """Get the resistance factor for which the inflow is the reference flow.
+
+    The flow of the leaky tube is inversely proportional to the viscosity (`W`
+    and `w` both scale with it, `lambda` does not), so the factor is the
+    periportal inflow of the whole reference liver at the default pressures
+    and the plasma viscosity (factor 1) over `reference_flow(species)`. The
+    entrance flow is what the organ receives; the flows of the zones do not
+    add up in a leaky tube. The factor is a property of the species and its
+    geometry: it does not follow the pressures or the viscosity of a model.
+
+    Args:
+        species: the species.
+        geo: the geometry.
+
+    Returns:
+        The factor (about 50 for the rat).
+    """
+    tube = leaky_tube(PressureFlow(resistance_factor=1.0), geo, species)
+    n_sin = sinusoid_count(reference_liver_mass(species), geo, fractions(species, None))
+    inflow = tube.flow(0.0) * n_sin * 1e3 * 60.0
+    return inflow / reference_flow(species).value
+
+
+def resolved_resistance_factor(
+    flow: PressureFlow, geo: SinusoidGeometry, species: Species
+) -> float:
+    """Get the resistance factor of a pressure flow: the given or the calibrated one."""
+    if flow.resistance_factor is not None:
+        return flow.resistance_factor
+    return calibrated_resistance_factor(species, geo)
+
+
+def leaky_tube(
+    flow: PressureFlow, geo: SinusoidGeometry, species: Species
+) -> LeakyTube:
     """Get the leaky tube of a pressure flow and a geometry.
 
     Args:
         flow: the pressure flow.
         geo: the geometry.
+        species: the species, which calibrates a resistance factor of `None`.
 
     Returns:
         The tube, at the mean porosity of the sinusoid.
@@ -352,7 +410,7 @@ def leaky_tube(flow: PressureFlow, geo: SinusoidGeometry) -> LeakyTube:
         if flow.p_onc is None
         else _converted(flow.p_onc, _PRESSURE_TO_PA, "oncotic pressure")
     )
-    nu = flow.resistance_factor * _converted(
+    nu = resolved_resistance_factor(flow, geo, species) * _converted(
         flow.viscosity, _VISCOSITY_TO_PA_S, "viscosity"
     )
     return LeakyTube(
@@ -387,7 +445,7 @@ def zone_flows(
     flow = settings.flow
     if not isinstance(flow, PressureFlow):
         raise TypeError("Only a pressure flow has a flow per zone.")
-    tube = leaky_tube(flow, geo)
+    tube = leaky_tube(flow, geo, settings.species)
     n_sin = sinusoid_count(mass, geo, fractions(settings.species, settings.haematocrit))
     out = tuple(
         tube.flow(x) * n_sin * 1e3 * 60.0 for x in zone_positions(settings.n_zones)
@@ -462,7 +520,8 @@ def _pressure_objects(
     mass: Q,
 ) -> list[Parameter | InitialAssignment]:
     """The leaky tube as parameters and initial assignments."""
-    tube = leaky_tube(flow, geo)
+    tube = leaky_tube(flow, geo, settings.species)
+    factor = resolved_resistance_factor(flow, geo, settings.species)
     flows = zone_flows(settings, geo, mass)
     n = settings.n_zones
     fr = fractions(settings.species, settings.haematocrit)
@@ -495,13 +554,13 @@ def _pressure_objects(
         ),
         _constant(
             ids.VISCOSITY,
-            tube.viscosity / flow.resistance_factor,
+            tube.viscosity / factor,
             PA_S,
             "viscosity of the plasma",
         ),
         _constant(
             ids.VISCOSITY_FACTOR,
-            flow.resistance_factor,
+            factor,
             U.dimensionless,
             "factor of the hepatic viscosity over the plasma viscosity",
         ),

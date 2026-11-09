@@ -11,6 +11,7 @@ exponential form, where the engine uses hyperbolic functions).
 """
 
 import dataclasses
+import itertools
 import math
 from collections.abc import Sequence
 from pathlib import Path
@@ -23,10 +24,18 @@ from sbmlutils.factory import Parameter, create_model
 from pkpdsim.pbpk.substance import Substance
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import Value
+from pkpdsim.species import Species
 from pkpdsim.zonation import ZonationBuilder, ids
-from pkpdsim.zonation.flow import ImposedFlow, PressureFlow, flow_objects
-from pkpdsim.zonation.geometry import SinusoidGeometry, geometry
-from pkpdsim.zonation.profiles import zone_positions
+from pkpdsim.zonation.flow import (
+    ImposedFlow,
+    PressureFlow,
+    calibrated_resistance_factor,
+    flow_objects,
+    resolved_resistance_factor,
+    zone_flows,
+)
+from pkpdsim.zonation.geometry import SinusoidGeometry, geometry, reference_flow
+from pkpdsim.zonation.profiles import Linear, zone_positions
 from pkpdsim.zonation.settings import ZonationSettings
 
 from .conftest import mass_g
@@ -36,6 +45,8 @@ pytestmark = pytest.mark.filterwarnings("ignore:.*numerical dispersion:UserWarni
 TRACER = Substance("tr", "tracer", Value(100.0, U.g_per_mole))
 _MASS = mass_g(1000.0)
 _N = 10
+_SPT_FLOW = PressureFlow(resistance_factor=10.0)
+"""The uncalibrated factor of the spt model, which its formula is checked at."""
 
 
 def _settings(flow: ImposedFlow | PressureFlow, **kwargs: object) -> ZonationSettings:
@@ -46,6 +57,15 @@ def _settings(flow: ImposedFlow | PressureFlow, **kwargs: object) -> ZonationSet
         liver_mass=_MASS,
         **kwargs,  # ty: ignore[invalid-argument-type]
     )
+
+
+def _build(settings: ZonationSettings, directory: Path) -> roadrunner.RoadRunner:
+    """The roadrunner model of the settings, loaded as written."""
+    directory.mkdir(parents=True, exist_ok=True)
+    model = ZonationBuilder(settings, [TRACER], None).build()
+    path = directory / "flow.xml"
+    create_model(model, filepath=path, sbml_level=3, sbml_version=2, validate=False)
+    return roadrunner.RoadRunner(str(path))
 
 
 def _simulated(
@@ -177,8 +197,8 @@ def test_the_leaky_tube_reduces_to_poiseuille_without_fenestrae(tmp_path: Path) 
     next test approaches it with a vanishing porosity through the formula.
     """
     geo = _without_leak(geometry(ZonationSettings().species))
-    flow = PressureFlow()
-    expected = _poiseuille(geo, 1333.22 - 266.64, flow.resistance_factor * 0.0018)
+    flow = PressureFlow(resistance_factor=10.0)
+    expected = _poiseuille(geo, 1333.22 - 266.64, 10.0 * 0.0018)
     for q in _q_sin(_simulated(flow, tmp_path, geo)):
         assert q == _eq(expected, rel=1e-9)
 
@@ -190,12 +210,12 @@ def test_the_flow_approaches_poiseuille_as_the_leak_vanishes(tmp_path: Path) -> 
     deviation = []
     for porosity in (1e-4, 1e-6, 1e-8):
         geo = dataclasses.replace(base, porosity_pp=porosity, porosity_pc=porosity)
-        flows = _q_sin(_simulated(PressureFlow(), tmp_path, geo))
+        flows = _q_sin(_simulated(_SPT_FLOW, tmp_path, geo))
         deviation.append(max(abs(q / expected - 1.0) for q in flows))
     assert deviation[-1] < 1e-6
     assert deviation[0] > 10.0 * deviation[1] > 100.0 * deviation[2] > 0.0
     # and the real porosity is far from it: the leak matters
-    leaky = _q_sin(_simulated(PressureFlow(), tmp_path))
+    leaky = _q_sin(_simulated(_SPT_FLOW, tmp_path))
     assert max(abs(q / expected - 1.0) for q in leaky) > 0.05
 
 
@@ -203,7 +223,7 @@ def test_the_leaky_tube_matches_the_spt_formula_at_the_spt_parameters(
     tmp_path: Path,
 ) -> None:
     """Every zone has the spt flow at its own position, `PP_x = position * L`."""
-    flows = _q_sin(_simulated(PressureFlow(), tmp_path, _spt_geometry()))
+    flows = _q_sin(_simulated(_SPT_FLOW, tmp_path, _spt_geometry()))
     for q, position in zip(flows, zone_positions(_N), strict=True):
         assert q == _eq(_spt_q(position), rel=1e-6)
 
@@ -344,3 +364,87 @@ def test_a_formula_flow_is_refused() -> None:
     flow = ImposedFlow(Formula("1 + 1", U.l_per_min))
     with pytest.raises(ValueError, match="PressureFlow"):
         ZonationBuilder(ZonationSettings(flow=flow), [TRACER], None).build()
+
+
+def _inflow(r: roadrunner.RoadRunner) -> float:
+    """The periportal inflow (l/min) of a pressure flow from the values of its model.
+
+    The flow of the leaky tube at `x = 0` from `W_sin`, `lambda_sin`, the
+    pressures and the number of sinusoids of the loaded model, in the closed
+    form `(a cosh(l) - b) / (W lambda sinh(l))`.
+    """
+    pop = r[ids.PRESSURE_ONCOTIC]
+    a, b = r[ids.PRESSURE_PORTAL] - pop, r[ids.PRESSURE_CENTRAL] - pop
+    big = r[ids.LENGTH] / r[ids.DECAY_LENGTH]
+    q = (a * math.cosh(big) - b) / (
+        r[ids.RESISTANCE_LUMEN] * r[ids.DECAY_LENGTH] * math.sinh(big)
+    )
+    return q * r[ids.N_SINUSOIDS] * 1e3 * 60.0
+
+
+@pytest.mark.parametrize("species", [Species.RAT, Species.HUMAN])
+def test_both_flow_modes_agree_at_their_defaults(
+    species: Species, tmp_path: Path
+) -> None:
+    """The periportal inflow of a default pressure flow is the default imposed flow."""
+    outputs = {}
+    for name, flow in (("pressure", PressureFlow()), ("imposed", ImposedFlow())):
+        settings = ZonationSettings(n_zones=_N, flow=flow, species=species)
+        model = ZonationBuilder(settings, [TRACER], None).build()
+        path = tmp_path / f"{name}.xml"
+        create_model(model, filepath=path, sbml_level=3, sbml_version=2, validate=False)
+        outputs[name] = roadrunner.RoadRunner(str(path))
+    expected = reference_flow(species).value
+    assert outputs["imposed"][ids.FLOW] == _eq(expected, 1e-12)
+    assert _inflow(outputs["pressure"]) == _eq(expected, 1e-9)
+
+
+def test_the_calibrated_factor_is_per_species_and_replaced_by_a_given_one() -> None:
+    """The rat needs about five times the factor of spt; a given factor is kept."""
+    rat, human = (
+        calibrated_resistance_factor(sp, geometry(sp))
+        for sp in (Species.RAT, Species.HUMAN)
+    )
+    assert 45.0 < rat < 60.0
+    assert human != _eq(rat, 0.1)
+    assert (
+        resolved_resistance_factor(
+            PressureFlow(resistance_factor=7.0), geometry(Species.RAT), Species.RAT
+        )
+        == 7.0
+    )
+
+
+def test_a_porosity_profile_changes_the_sieving_and_not_the_hydraulics(
+    tmp_path: Path,
+) -> None:
+    """The leaky tube is evaluated at the mean porosity of the table.
+
+    The analytic solution assumes a uniform leak, so a zonal `porosity`
+    profile scales the fenestral permeability of Task 6 and leaves the flows
+    of the zones as they are.
+    """
+    profile = {"porosity": Linear(pp=2.0, pc=0.5)}
+    plain, scaled = (
+        _build(_settings(PressureFlow(), **extra), tmp_path / name)
+        for name, extra in (("a", {}), ("b", {"profiles": profile}))
+    )
+    assert _q_sin(scaled) == _eq(_q_sin(plain), 1e-12)
+    for r in (plain, scaled):
+        r["[tr_plasma_z1]"] = 1.0
+    ratio = scaled["FEN_tr_z1"] / plain["FEN_tr_z1"]
+    assert ratio == _eq(scaled["p_porosity_z1"], 1e-9)
+    assert abs(ratio - 1.0) > 0.5
+
+
+def test_the_flow_falls_to_the_middle_and_rises_again() -> None:
+    """With `P0` at the mean of the pressures the flow is not monotonic.
+
+    Fluid filters out of the first half and is reabsorbed in the second.
+    """
+    settings = _settings(PressureFlow())
+    geo = geometry(settings.species)
+    q = zone_flows(settings, geo, _MASS)
+    half = _N // 2
+    assert all(a > b for a, b in itertools.pairwise(q[:half]))
+    assert all(a < b for a, b in itertools.pairwise(q[half:]))
