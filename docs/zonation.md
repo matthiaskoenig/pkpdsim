@@ -112,7 +112,7 @@ points, cells = tube_mesh(geometry(Species.RAT), 10, sides=sides)
 vtk_cells = []
 for cell in cells:
     a, b = cell[:sides], cell[sides:]
-    faces = [a, b[::-1]] + [
+    faces = [a[::-1], b] + [
         [a[j], a[(j + 1) % sides], b[(j + 1) % sides], b[j]] for j in range(sides)
     ]
     body = [len(faces)] + [i for f in faces for i in (len(f), *f)]

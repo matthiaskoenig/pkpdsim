@@ -338,9 +338,10 @@ def space_time(
             default.
         vmin: the lower end of the colour scale, the smallest value drawn by
             default; set it (with `vmax`) to clip a scale which a spike, e.g.
-            the initial condition in one zone, dominates. It must be below `vmax`, so a `vmin` equal
-            to the value of constant data raises, where the default scale of
-            such data is the fallback zero to the value.
+            the initial condition in one zone, dominates. It must be below
+            `vmax`, so a `vmin` equal to the value of constant data raises,
+            where the default scale of such data is the fallback zero to the
+            value.
         vmax: the upper end of the colour scale, the largest value drawn by
             default.
 
@@ -517,9 +518,10 @@ def lobule_map(
             default.
         vmin: the lower end of the colour scale, the smallest value drawn by
             default; set it (with `vmax`) to clip a scale which a spike, e.g.
-            the initial condition in one zone, dominates. It must be below `vmax`, so a `vmin` equal
-            to the value of constant data raises, where the default scale of
-            such data is the fallback zero to the value.
+            the initial condition in one zone, dominates. It must be below
+            `vmax`, so a `vmin` equal to the value of constant data raises,
+            where the default scale of such data is the fallback zero to the
+            value.
         vmax: the upper end of the colour scale, the largest value drawn by
             default.
 
