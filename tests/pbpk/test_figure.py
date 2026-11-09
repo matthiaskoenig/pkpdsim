@@ -329,7 +329,7 @@ def test_the_figure_shows_the_processes_and_routes(tmp_path: Path) -> None:
         "CR2CRTN: Cti_cr -> Cti_crtn",
         "slow pool of cr: tissue <-> pool",
         "api_m2 (reabsorbed)",
-        "zonated, 8 zones",
+        "zonated, 10 zones",
         "nephron",
         "12 segments",
         "cr -> crtn in st",

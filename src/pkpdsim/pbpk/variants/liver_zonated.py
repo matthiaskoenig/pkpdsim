@@ -62,6 +62,8 @@ from pkpdsim.pbpk.organ import Boundary, OrganContext, StandardBuilder
 from pkpdsim.pbpk.organs import Organ, Part
 from pkpdsim.pbpk.placement import inhibitor_unbound, place
 from pkpdsim.pbpk.units import U
+from pkpdsim.zonation.profiles import Profile
+from pkpdsim.zonation.settings import Geometry
 
 __all__ = ["ZonatedLiver"]
 
@@ -72,16 +74,28 @@ class ZonatedLiver:
 
     Attributes:
         n_zones: the number of zones, periportal to pericentral.
-        profiles: the relative abundance of a protein in each zone, from the
-            periportal to the pericentral zone (`n_zones` values, not all 0),
-            by the id of the protein or the `profile` of a metabolism; the
-            processes of a protein without a profile are placed by volume.
+        profiles: the relative abundance of a protein in each zone, by the id
+            of the protein or the `profile` of a metabolism; the processes of
+            a protein without a profile are placed by volume. A sequence
+            gives the abundance of every zone from the periportal to the
+            pericentral one (`n_zones` values, not all 0); a
+            `pkpdsim.zonation.profiles.Profile` is a shape of the lobular
+            position which the engine evaluates at the zone count
+            (`Linear(1.0, 4.0)` is the four-fold pericentral gradient at any
+            number of zones), normalized to the mean 1.
+        geometry: the geometry of a zone
+            (`pkpdsim.zonation.settings.Geometry`): `WELL_STIRRED` (the
+            default) is one mixed zone of the parts of the standard liver,
+            `SINUSOID` adds the axial diffusion along the sinusoid and the
+            fenestrated barrier between the plasma and the space of Disse of
+            a substance in the full form.
         name: the name of the component, the prefix of the id of the model
             definition (`zonated_li`).
     """
 
-    n_zones: int = 8
-    profiles: Mapping[str, Sequence[float]] = field(default_factory=dict)
+    n_zones: int = 10
+    profiles: Mapping[str, Profile | Sequence[float]] = field(default_factory=dict)
+    geometry: Geometry = Geometry.WELL_STIRRED
     name: str = "zonated"
 
     def __post_init__(self) -> None:
@@ -89,14 +103,16 @@ class ZonatedLiver:
 
         Raises:
             ValueError: for less than one zone, a profile key which is no
-                id, two keys which differ in case only, or a profile without
-                a value per zone, with a negative value or only zeros.
+                id, two keys which differ in case only, or a profile which is
+                a sequence without a value per zone, with a negative value or
+                only zeros.
         """
         if isinstance(self.n_zones, bool) or self.n_zones < 1:
             raise ValueError(
                 f"The zonated liver needs at least one zone, not {self.n_zones}."
             )
         lower: dict[str, str] = {}
+        resolved: dict[str, Profile | Sequence[float]] = {}
         for key, values in self.profiles.items():
             if not key.isidentifier():
                 raise ValueError(f"Profile '{key}': the key must be an id.")
@@ -105,6 +121,9 @@ class ZonatedLiver:
                     f"Profiles '{lower[key.lower()]}' and '{key}' have the same id."
                 )
             lower[key.lower()] = key
+            if isinstance(values, Profile):
+                resolved[key] = values
+                continue
             if len(values) != self.n_zones:
                 raise ValueError(
                     f"Profile '{key}' has {len(values)} values, the liver has "
@@ -115,14 +134,8 @@ class ZonatedLiver:
                     f"Profile '{key}' needs finite values >= 0, not all 0: "
                     f"{list(values)}."
                 )
-        object.__setattr__(
-            self,
-            "profiles",
-            {
-                key: tuple(float(v) for v in values)
-                for key, values in self.profiles.items()
-            },
-        )
+            resolved[key] = tuple(float(v) for v in values)
+        object.__setattr__(self, "profiles", resolved)
 
     def build(self, ctx: OrganContext) -> tuple[ModelDefinition, Boundary]:
         """Build the model of the liver and its boundary.
@@ -242,6 +255,18 @@ class ZonatedBuilder(StandardBuilder):
             return p.protein
         return None
 
+    def _levels(self, key: str) -> tuple[float, ...]:
+        """The relative abundance of a profile in every zone, periportal first.
+
+        A sequence is taken as it is given, a `Profile` is evaluated by the
+        engine at the number of zones (`pkpdsim.zonation.profiles`), which
+        normalizes the levels to the mean 1 over the zones of equal volume.
+        """
+        profile = self.profiles[key]
+        if isinstance(profile, Profile):
+            return profile.values(len(self.zones))
+        return tuple(float(v) for v in profile)
+
     def _weight(self, key: str | None, zone: str) -> str:
         """The share of a zone of the capacity of a process with a profile, by volume without.
 
@@ -257,7 +282,7 @@ class ZonatedBuilder(StandardBuilder):
             return weight
         abundances = [ids.placement_profile(token, z) for z in self.zones]
         for z, pid, value in zip(
-            self.zones, abundances, self.profiles[key], strict=True
+            self.zones, abundances, self._levels(key), strict=True
         ):
             self._constant(
                 pid,

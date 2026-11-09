@@ -50,6 +50,7 @@ from pkpdsim.pbpk import (
 )
 from pkpdsim.pbpk.builder import build, organ_context
 from pkpdsim.pbpk.organ import OrganComponent
+from pkpdsim.zonation.profiles import Linear
 
 from .conftest import (
     definition,
@@ -221,14 +222,14 @@ def _x(r: "roadrunner.RoadRunner", clint: float) -> float:
 
 
 def test_registry_has_zonated_liver(tmp_path: Path) -> None:
-    """The liver has the variant `zonated`, 8 zones placed by volume."""
+    """The liver has the variant `zonated`, 10 zones placed by volume."""
     assert variants.names(Organ.LIVER) == ["standard", "zonated"]
     liver = variants.lookup(Organ.LIVER, "zonated")
-    assert liver == ZonatedLiver(n_zones=8)
+    assert liver == ZonatedLiver(n_zones=10)
     path = _model(tmp_path, "registry", "zonated", [_linear(1.0)])
     r = _load(path)
-    assert r[f"[{_liver(ids.species(Part.TISSUE, S, ids.zone(8)))}]"] == 0.0
-    assert r[_liver(ids.F_ZONE)] == pytest.approx(1 / 8, rel=1e-15)
+    assert r[f"[{_liver(ids.species(Part.TISSUE, S, ids.zone(10)))}]"] == 0.0
+    assert r[_liver(ids.F_ZONE)] == pytest.approx(1 / 10, rel=1e-15)
 
 
 _UPTAKE = Transport(
@@ -368,14 +369,16 @@ def test_uniform_zones_equal_standard_liver(
     clearance they extract `1 - (1 + x/n)^-n` instead of `x/(1 + x)`, a
     relative difference of about `x/2*(1 - 1/n)` (`x` of the steady state of
     the standard liver, `E/(1 - E)`). The test drug has
-    `x` about 1e-3 (asserted), so that 8 zones differ from the standard liver
-    by about 6e-4 in the steady-state extraction, below the tolerance 1e-3,
+    `x` about 1e-3 (asserted), so that the zones of the default variant differ
+    from the standard liver by about 7e-4 in the steady-state extraction,
+    below the tolerance 1e-3,
     and less in the venous and the hepatic outflow curves after an IV bolus
     (`PASSED`), where the liver is one of two eliminating organs. The Michaelis-Menten metabolism
     (`Vmax*V/Km` the linear clearance, `Km` 1 mM about 20 times the unbound
     concentration of the infusion) is nearly linear here; with a saturated
     metabolism the zones see different concentrations and differ more.
     """
+    n = ZonatedLiver().n_zones
     process = dataclasses.replace(_linear(2e-3), kinetics=kinetics)
     results = {}
     for name, liver in (("standard", "standard"), ("zonated", "zonated")):
@@ -394,8 +397,8 @@ def test_uniform_zones_equal_standard_liver(
     else:
         # saturated by `Cu/Km` (about 5 %) at the infusion
         assert x_ss == pytest.approx(x, rel=0.1)
-    expected = (1 - (1 + x_ss / 8) ** -8) / e_standard - 1
-    assert expected == pytest.approx(x_ss / 2 * (1 - 1 / 8), rel=1e-2)
+    expected = (1 - (1 + x_ss / n) ** -n) / e_standard - 1
+    assert expected == pytest.approx(x_ss / 2 * (1 - 1 / n), rel=1e-2)
     # the saturation `Cu/(Km + Cu)` (about 5 %) lowers the clearance of the
     # zones before the last one, whose concentration is higher, by about that
     # fraction of the difference
@@ -450,9 +453,10 @@ def test_profile_preserves_total_capacity(tmp_path: Path) -> None:
     With the same tissue concentration in every zone the zones together
     metabolize what the standard liver does, with and without the functional
     fraction; the rate of a zone follows the profile (pericentral CYP3A4,
-    1 to 8); a metabolism takes the profile of its name.
+    1 to `n`); a metabolism takes the profile of its name.
     """
-    profile = [float(i) for i in range(1, 9)]
+    n = ZonatedLiver().n_zones
+    profile = [float(i) for i in range(1, n + 1)]
     d = definition(routes=[Route.iv(S)])
     named = definition(
         routes=[Route.iv(S)],
@@ -489,15 +493,40 @@ def test_profile_preserves_total_capacity(tmp_path: Path) -> None:
         standard = r[_liver("DRG2M")]
         for key, token in (("protein", "cyp3a4"), ("named", "pericentral")):
             r = _load(people[key], f_functional=f_functional)
-            for z in _zones(8):
+            for z in _zones(n):
                 r[f"[{_liver(ids.species(Part.TISSUE, S, z))}]"] = c
-            rates = [r[_liver(ids.segment_process("DRG2M", z))] for z in _zones(8)]
-            weights = [r[_liver(ids.placement_weight(token, z))] for z in _zones(8)]
+            rates = [r[_liver(ids.segment_process("DRG2M", z))] for z in _zones(n)]
+            weights = [r[_liver(ids.placement_weight(token, z))] for z in _zones(n)]
             assert sum(weights) == pytest.approx(1.0, rel=1e-14)
             assert sum(rates) == pytest.approx(standard, rel=1e-12)
             np.testing.assert_allclose(
                 np.array(rates) / rates[0], profile, rtol=1e-12, atol=0
             )
+
+
+def test_a_profile_object_sets_the_zonal_levels(tmp_path: Path) -> None:
+    """`profiles` takes a `Profile` of the engine, evaluated at the zone count.
+
+    The levels of the zones are those of the shape, normalized to the mean 1
+    by the engine, so the share of a zone is the level over the number of
+    zones and the shares sum to 1 (the capacity of the liver is kept).
+    """
+    n = 4
+    shape = Linear(1.0, 4.0)
+    d = definition(
+        routes=[Route.iv(S)],
+        variants=Variants(
+            organs={Organ.LIVER: ZonatedLiver(n_zones=n, profiles={"CYP3A4": shape})}
+        ),
+    )
+    r = _load(build(d, tmp_path / "shape").flat_path)
+    levels = [r[_liver(ids.placement_profile("cyp3a4", z))] for z in _zones(n)]
+    np.testing.assert_allclose(levels, shape.values(n), rtol=1e-12, atol=0)
+    weights = [r[_liver(ids.placement_weight("cyp3a4", z))] for z in _zones(n)]
+    assert sum(weights) == pytest.approx(1.0, rel=1e-14)
+    np.testing.assert_allclose(
+        np.array(weights) * n, shape.values(n), rtol=1e-12, atol=0
+    )
 
 
 def test_first_order_per_volume_in_zones(tmp_path: Path) -> None:
