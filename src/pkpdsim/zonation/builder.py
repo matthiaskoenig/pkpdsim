@@ -29,7 +29,9 @@ compartment. The zones are a chain from periportal to pericentral:
   geometry. `A / dx` of zone `k` is `n**2 * V_k / L_sin**2` (the layer
   volume of the zone over the squared sinusoid length, the cross section
   `axial_area` of the whole liver over the zone length), so the conductance
-  follows the liver mass as the volumes do. A zone of the well-stirred
+  follows the liver mass as the volumes do (the two forms are equal because
+  `V_k = A * L / n`, the layer volume of a zone is its cross section times
+  its length). A zone of the well-stirred
   geometry is mixed and has no axial diffusion.
 
 A flow of 0 and a diffusion of 0 emit no reaction, so the chain is closed or
@@ -138,7 +140,7 @@ class ZonationBuilder:
         Returns:
             The processes: the axial diffusion (the zonal factor
             `p_axial_diffusion_<zone>` scales the conductance of an interface
-            by the mean of its two zones); the cell model and the barrier add
+            by the arithmetic mean of its two zones, a choice and not a result); the cell model and the barrier add
             theirs. This is the registry a later task extends with the
             processes it adds, and the validation of the profiles is only as
             strong as its contents.
@@ -299,7 +301,10 @@ class ZonationBuilder:
             return reference_flow(self.settings.species).value
         x = number(flow.flow)
         if x is None:
-            raise ValueError("The imposed flow needs a number, not a formula.")
+            raise ValueError(
+                "The imposed flow needs a number, not a formula: a computed "
+                "flow arrives with the pressure-driven flow of Task 9."
+            )
         if not isinstance(flow.flow, Value):
             return x
         unit = unit_text(flow.flow.unit)
@@ -611,12 +616,18 @@ class ZonationBuilder:
         s = self.settings
         flow_parameters, flow_assignments = self._flow_parameters()
         self._warn_dispersion()
+        dispersion = self._dispersion()
+        velocity = self._velocity()
+        peclet = velocity * self._geo().L_sin / dispersion if dispersion > 0.0 else 0.0
         return Model(
             sid=f"zonated_liver_{s.species}",
             name=f"Zonated liver of the {s.species}",
             notes=(
                 f"A liver of {s.n_zones} zone(s) from periportal to pericentral, "
-                f"{s.geometry} geometry (pkpdsim.zonation)."
+                f"{s.geometry} geometry (pkpdsim.zonation). The upwind convection "
+                f"disperses numerically with v * dx / 2 = {dispersion:.3g} m**2/s "
+                f"(v = {velocity:.3g} m/s), a Peclet number of {peclet:.3g} "
+                "without physical diffusion."
             ),
             annotations=[(BQB.HAS_TAXON, TAXA[s.species])],
             units=U,
@@ -646,6 +657,12 @@ def effective_peclet(settings: ZonationSettings, d_eff: float) -> float:
 
     Returns:
         The Peclet number; 0 without a flow.
+
+    Note:
+        A rat liver at 10 zones with an aqueous diffusion coefficient is
+        expected to trigger the warning of the build: `v * dx / 2` is of the
+        order of 1e-9 m**2/s, the same as the diffusion. That is a property of
+        the discretization and not a defect of the settings.
     """
     builder = ZonationBuilder(settings, (), None)
     v = builder._velocity()

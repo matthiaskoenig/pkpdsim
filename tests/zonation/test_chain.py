@@ -14,14 +14,23 @@ from pbpk.conftest import individual
 from sbmlutils.factory import Parameter, create_model
 from sbmlutils.metadata import SBO
 
+from pkpdsim.database.tables import entry
+from pkpdsim.pbpk.organs import PORTAL_ORGANS
 from pkpdsim.pbpk.placement import value_parameter
 from pkpdsim.pbpk.substance import Substance
 from pkpdsim.pbpk.units import U
-from pkpdsim.pbpk.values import Value
+from pkpdsim.pbpk.values import Formula, Value
 from pkpdsim.perfusion.ids import flow
+from pkpdsim.species import Species
 from pkpdsim.zonation import ZonationBuilder, effective_peclet, ids
 from pkpdsim.zonation.flow import ImposedFlow, PressureFlow
-from pkpdsim.zonation.geometry import Layer, axial_area, fractions, geometry
+from pkpdsim.zonation.geometry import (
+    Layer,
+    axial_area,
+    fractions,
+    geometry,
+    reference_flow,
+)
 from pkpdsim.zonation.profiles import Constant
 from pkpdsim.zonation.settings import Geometry, ZonationSettings
 from pkpdsim.zonation.transport import M2_PER_S
@@ -306,3 +315,31 @@ def test_the_axial_diffusion_profile_scales_the_conductance() -> None:
     assert ids.profile("axial_diffusion", "z2") in {
         str(p.sid) for p in model.parameters or []
     }
+
+
+@pytest.mark.parametrize("species", [Species.RAT, Species.HUMAN])
+def test_the_reference_flow_is_the_library_derivation(species: Species) -> None:
+    """The artery and the portal organs times the cardiac output of the table."""
+    table = f"physiology_{species}"
+    fractions_ = sum(
+        float(entry(table, f"male.organs.{o}", "flow").value)  # ty: ignore[invalid-argument-type]
+        for o in ("li", *sorted(str(o) for o in PORTAL_ORGANS))
+    )
+    expected = fractions_ * float(entry(table, "male", "cardiac_output").value)  # ty: ignore[invalid-argument-type]
+    assert reference_flow(species).value == pytest.approx(expected)
+    if species is Species.RAT:
+        assert expected == pytest.approx((0.024 + 0.151) * 0.08309, rel=1e-3)
+
+
+def test_the_dispersion_is_in_the_notes_of_the_model() -> None:
+    """A silenced warning does not take the numbers with it."""
+    model = _builder(10, 1.0, 1e-9).build()
+    assert "Peclet number of 20" in str(model.notes)
+    assert "m**2/s" in str(model.notes)
+
+
+def test_a_formula_flow_names_the_task_it_arrives_with() -> None:
+    """A computed flow is refused with the reason."""
+    flow = ImposedFlow(Formula("1 + 1", U.l_per_min))
+    with pytest.raises(ValueError, match="Task 9"):
+        ZonationBuilder(ZonationSettings(flow=flow), [TRACER], None).build()
