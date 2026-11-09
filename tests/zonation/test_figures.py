@@ -10,6 +10,7 @@ matplotlib.use("Agg")
 from pathlib import Path
 
 from matplotlib.axes import Axes
+from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.collections import LineCollection, QuadMesh
 from matplotlib.figure import Figure
 from matplotlib.legend import Legend
@@ -186,13 +187,10 @@ def test_the_unit_of_a_label_is_an_argument() -> None:
     fig = space_time(_result(), "drg", layers=(Layer.PLASMA,), unit="uM")
     assert data_axes(fig)[1].get_ylabel() == "drg outflow [uM]"
     assert fig.axes[-1].get_ylabel() == "drg plasma [uM]"
-    assert (
-        data_axes(layer_profile(_result(), "drg", time=0, unit="uM"))[0].get_ylabel()
-        == "drg [uM]"
+    assert layer_profile(_result(), "drg", time=0, unit="uM").get_supylabel() == (
+        "drg [uM]"
     )
-    assert data_axes(layer_profile(_result(), "drg", time=0))[0].get_ylabel() == (
-        "drg [mM]"
-    )
+    assert layer_profile(_result(), "drg", time=0).get_supylabel() == "drg [mM]"
 
 
 def test_a_missing_selection_names_the_column() -> None:
@@ -351,6 +349,12 @@ def test_the_figures_draw_the_result_of_a_built_chain(tmp_path: Path) -> None:
     assert "<image" not in (tmp_path / "chain.svg").read_text()
 
 
+def _drawn(fig: Figure) -> Figure:
+    """Lay a figure out: a figure of the library has no canvas which draws."""
+    FigureCanvasAgg(fig).draw()
+    return fig
+
+
 def _legend(ax: Axes) -> Legend:
     """The legend of an axes, which must exist."""
     legend = ax.get_legend()
@@ -383,8 +387,9 @@ def test_every_position_label_names_the_ends_of_the_sinusoid() -> None:
     assert data_axes(fig)[-1].get_xlabel() == f"Position {end}"
     heat = data_axes(space_time(_result(), "drg", layers=(Layer.PLASMA,)))[0]
     assert heat.get_ylabel().replace("\n", " ") == f"Position {end}"
-    for ax in data_axes(layer_profile(_result(), "drg", time=0))[3:]:
-        assert ax.get_xlabel() == f"Position {end}"
+    assert layer_profile(_result(), "drg", time=0).get_supxlabel() == (
+        f"Position {end}"
+    )
 
 
 def test_the_time_carries_its_unit_in_every_figure() -> None:
@@ -424,7 +429,8 @@ def test_a_layer_of_zeros_is_drawn_from_zero_to_one() -> None:
     assert plasma.collections[0].get_clim() == (0.0, 3.0)
     assert out.get_ylim() == pytest.approx((0.0, 3.0 * 1.05))
     axes = {
-        ax.get_title(): ax for ax in data_axes(layer_profile(result, "drg", time=5))
+        ax.get_title(): ax
+        for ax in data_axes(layer_profile(result, "drg", time=5, share_y=False))
     }
     assert axes["cell"].get_ylim() == (0.0, 1.0)
     assert axes["plasma"].get_ylim() == pytest.approx((0.0, 3.0 * 1.05))
@@ -470,13 +476,49 @@ def test_the_legend_is_one_when_the_rows_agree_and_one_per_row_when_they_differ(
     assert len(_legend(second).get_texts()) == 2
 
 
-def test_the_layer_grid_labels_the_left_column_and_the_bottom_row_only() -> None:
-    axes = data_axes(layer_profile(_result(), "drg", time=0))
-    assert [bool(ax.get_ylabel()) for ax in axes] == [True, False, False] * 2
-    assert [bool(ax.get_xlabel()) for ax in axes] == [False] * 3 + [True] * 3
-    # a grid of five has its last panel of the first row above a gap
-    five = data_axes(layer_profile(_result(LAYERS[:5]), "drg", time=0))
-    assert [bool(ax.get_xlabel()) for ax in five] == [False, False, True, True, True]
+def test_the_layer_grid_carries_each_label_once() -> None:
+    for layers in (LAYERS, LAYERS[:5]):
+        fig = layer_profile(_result(layers), "drg", time=0)
+        assert fig.get_supxlabel() == "Position (0 periportal, 1 pericentral)"
+        assert fig.get_supylabel() == "drg [mM]"
+        assert [ax.get_xlabel() for ax in data_axes(fig)] == [""] * len(layers)
+        assert [ax.get_ylabel() for ax in data_axes(fig)] == [""] * len(layers)
+
+
+def test_the_layers_share_one_concentration_scale_unless_told_otherwise() -> None:
+    result = _flat()
+    shared = data_axes(layer_profile(result, "drg", time=5))
+    assert {tuple(round(v, 6) for v in ax.get_ylim()) for ax in shared} == {(0.0, 3.15)}
+    own = {
+        ax.get_title(): ax.get_ylim()
+        for ax in data_axes(layer_profile(result, "drg", time=5, share_y=False))
+    }
+    assert own["plasma"] == pytest.approx((0.0, 3.15))
+    assert own["cell"] == (0.0, 1.0)
+    zero = _flat(plasma=0.0)
+    limits = {ax.get_ylim() for ax in data_axes(layer_profile(zero, "drg", time=5))}
+    assert limits == {(0.0, 1.0)}
+
+
+def test_the_single_legend_is_centred_on_the_grid() -> None:
+    fig = zone_profiles(_result(), _profiles(2), times=(0, 60))
+    _drawn(fig)
+    box = fig.legends[0].get_window_extent()
+    axes = data_axes(fig)
+    top = max(ax.get_window_extent().y1 for ax in axes)
+    bottom = min(ax.get_window_extent().y0 for ax in axes)
+    # centred on the figure, which is within the span of the grid
+    assert (box.y0 + box.y1) / 2 == pytest.approx(fig.bbox.height / 2, rel=0.01)
+    assert bottom < box.y0 < box.y1 < top
+    assert box.x0 > max(ax.get_window_extent().x1 for ax in axes)
+
+
+def test_the_y_labels_are_aligned() -> None:
+    fig = space_time(_result(), "drg", layers=(Layer.PLASMA, Layer.CELL))
+    _drawn(fig)
+    heat, other, out = data_axes(fig)
+    xs = {round(ax.yaxis.label.get_position()[0], 3) for ax in (heat, other, out)}
+    assert len(xs) == 1
 
 
 def test_the_outflow_panel_is_lower_than_a_heatmap_and_the_name_is_chosen() -> None:
@@ -485,7 +527,7 @@ def test_the_outflow_panel_is_lower_than_a_heatmap_and_the_name_is_chosen() -> N
     spec = heat.get_subplotspec()
     assert spec is not None
     assert spec.get_gridspec().get_height_ratios() == [1.0, 0.6]
-    fig.canvas.draw()
+    _drawn(fig)
     assert out.get_position().height < 0.7 * heat.get_position().height
     assert fig.axes[-1].get_ylabel() == "Drug plasma [mM]"
     assert out.get_ylabel() == "Drug outflow [mM]"

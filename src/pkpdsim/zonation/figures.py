@@ -200,7 +200,7 @@ def zone_profiles(
                 f"the labels of the profiles are {labels}."
             )
     drawn = 0
-    colors = colormaps["viridis"](np.linspace(0.1, 0.85, len(times)))
+    colors = colormaps["viridis"](np.linspace(0.1, 0.75, len(times)))
     n_rows = len(profiles)
     figure = Figure(figsize=(7.0, 3.0 * n_rows), layout="constrained")
     axes = figure.subplots(n_rows, 1, sharex=True, squeeze=False)[:, 0]
@@ -249,11 +249,12 @@ def zone_profiles(
         )
     entries = [ax.get_legend_handles_labels() for ax in axes]
     if all(e[1] == entries[0][1] for e in entries):
-        figure.legend(*entries[0], loc="outside right upper")
+        figure.legend(*entries[0], loc="outside right center")
     else:
         for ax in axes:
             ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1.0), borderaxespad=0.0)
     axes[-1].set_xlabel(POSITION)
+    figure.align_ylabels(axes)
     return figure
 
 
@@ -347,6 +348,7 @@ def space_time(
         ax.set_ylabel(_label(f"{name} outflow", unit))
     axes[-1].set_xlabel(f"Time [{time_unit}]")
     axes[-1].set_xlim(float(time.min()), float(time.max()))
+    figure.align_ylabels(axes)
     return figure
 
 
@@ -357,13 +359,14 @@ def layer_profile(
     time: float,
     unit: str = DEFAULT_UNIT,
     time_unit: str = DEFAULT_TIME_UNIT,
+    share_y: bool = True,
 ) -> Figure:
     """Draw the profile over the zones in every layer which carries the substance.
 
     The layers are those of which the result holds the substance in zones
     from `z1` on, so a well-stirred build shows its vascular site and a build of
-    the radial geometry its layers. The y axis is labelled in the left column
-    of the grid, the x axis in its bottom row.
+    the radial geometry its layers. The grid carries the label of the zones
+    and the label of the concentration once each, under and left of it.
 
     Args:
         result: the simulation result.
@@ -372,6 +375,11 @@ def layer_profile(
         unit: the unit of the concentration in the labels; the default is the
             unit of the profile observers (`observers.profile_ids`, mM).
         time_unit: the unit of the time, the convention of the engine (min).
+        share_y: draw every panel on one concentration scale, from zero to the
+            maximum over all layers (the default): the figure compares the
+            layers at one time, and a layer of which the substance is nearly
+            absent must look so. Pass `False` for a scale per panel, to see the
+            detail of a layer of low concentration.
 
     Returns:
         The figure, a panel per layer.
@@ -389,24 +397,23 @@ def layer_profile(
     ncols = min(3, len(present))
     nrows = -(-len(present) // ncols)
     figure = Figure(figsize=(3.4 * ncols, 2.8 * nrows), layout="constrained")
-    axes = figure.subplots(nrows, ncols, squeeze=False)
+    axes = figure.subplots(nrows, ncols, squeeze=False, sharey=share_y)
     flat = list(axes.flat)
     for ax in flat[len(present) :]:
         ax.remove()
-    for i, (ax, (layer, n)) in enumerate(
-        zip(flat[: len(present)], present, strict=True)
-    ):
-        selections = observers.profile_ids(substance, layer, n)
-        y = _at(result, selections, time)
+    profiles = [
+        _at(result, observers.profile_ids(substance, layer, n), time)
+        for layer, n in present
+    ]
+    shared = _limits(profiles, _HEADROOM) if share_y else None
+    for ax, (layer, n), y in zip(flat[: len(present)], present, profiles, strict=True):
         ax.plot(_positions(n), y, color="C0", linewidth=2.0)
-        limits = _limits([y], _HEADROOM)
+        limits = shared if share_y else _limits([y], _HEADROOM)
         if limits is not None:
             ax.set_ylim(*limits)
         ax.set_title(str(layer))
         ax.set_xlim(0.0, 1.0)
-        if i % ncols == 0:
-            ax.set_ylabel(_label(substance, unit))
-        if i + ncols >= len(present):
-            ax.set_xlabel(POSITION)
+    figure.supxlabel(POSITION)
+    figure.supylabel(_label(substance, unit))
     figure.suptitle(f"{substance} at {_time_text(time, time_unit)}")
     return figure
