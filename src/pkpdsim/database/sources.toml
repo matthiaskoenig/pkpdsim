@@ -39,8 +39,12 @@ doi = "10.1038/psp.2012.3"
 citation = "The UniProt Consortium. UniProt: the Universal Protein Knowledgebase in 2023. Nucleic Acids Res 51(D1):D523-D531, 2023."
 doi = "10.1093/nar/gkac1052"
 
+[Tiesinga2021]
+citation = "Tiesinga E, Mohr PJ, Newell DB, Taylor BN. CODATA recommended values of the fundamental physical constants: 2018. Rev Mod Phys 93(2):025010, 2021."
+doi = "10.1103/RevModPhys.93.025010"
+
 [ModelChoice]
-citation = "Choice of the pkpdsim PBPK library, not a value of the literature; the notes of the value give the reasoning."
+citation = "Choice of a library of pkpdsim (PBPK or machine perfusion), not a value of the literature; the notes of the value give the reasoning."
 
 [Schiller2005]
 citation = "Schiller C, Fröhlich CP, Giessmann T, Siegmund W, Mönnikes H, Hosten N, Weitschies W. Intestinal fluid volumes and transit of dosage forms as assessed by magnetic resonance imaging. Aliment Pharmacol Ther 22(10):971-979, 2005."
@@ -1149,3 +1153,11 @@ doi = "10.1542/peds.2008-2654"
 [Upreti2016]
 citation = "Upreti VV, Wahlstrom JL. Meta-analysis of hepatic cytochrome P450 ontogeny to underwrite the prediction of pediatric pharmacokinetics using physiologically based pharmacokinetic modeling. J Clin Pharmacol 56(3):266-283, 2016."
 doi = "10.1002/jcph.585"
+
+[Christmas2017]
+citation = "Christmas KM, Bassingthwaighte JB. Equations for O2 and CO2 solubilities in saline and plasma: combining temperature and density dependences. J Appl Physiol 122(5):1313-1320, 2017."
+doi = "10.1152/japplphysiol.01124.2016"
+
+[MacDougall1989]
+citation = "MacDougall ML, Wiegmann TB. Urate excretion by the isolated perfused rat kidney and modification by drugs. Proc Soc Exp Biol Med 192(3):276-280, 1989."
+doi = "10.3181/00379727-192-42997"

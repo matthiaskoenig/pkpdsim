@@ -107,7 +107,7 @@ Sources of the columns: flow: `Scotcher2016`; volume: `Huang2018`, `ModelChoice`
 ??? note "Sources"
 
     - `Huang2018`: Huang W, Isoherranen N. Development of a dynamic physiologically based mechanistic kidney model to predict renal clearance. CPT Pharmacometrics Syst Pharmacol 7(9):593-602, 2018. [doi:10.1002/psp4.12321](https://doi.org/10.1002/psp4.12321)
-    - `ModelChoice`: Choice of the pkpdsim PBPK library, not a value of the literature; the notes of the value give the reasoning.
+    - `ModelChoice`: Choice of a library of pkpdsim (PBPK or machine perfusion), not a value of the literature; the notes of the value give the reasoning.
     - `Scotcher2016`: Scotcher D, Jones C, Rostami-Hodjegan A, Galetin A. Novel minimal physiologically-based model for the prediction of passive tubular reabsorption and renal excretion clearance. Eur J Pharm Sci 94:59-71, 2016. [doi:10.1016/j.ejps.2016.03.018](https://doi.org/10.1016/j.ejps.2016.03.018)
 <!-- end generated -->
 

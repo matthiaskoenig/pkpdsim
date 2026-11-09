@@ -1,4 +1,9 @@
-"""The generated figures of the docs page `docs/pbpk/figures.md` are up to date."""
+"""The generated figures of the docs are up to date.
+
+The figures of the page `docs/pbpk/figures.md` and the figures A and B of every
+model a page of `docs/pbpk/` or `docs/perfusion.md` creates, a PBPK model or a
+machine perfusion circuit.
+"""
 
 import importlib.util
 import re
@@ -8,6 +13,8 @@ from types import ModuleType
 import numpy as np
 import pytest
 from scipy.spatial import KDTree
+
+from pkpdsim.perfusion import PerfusionDefinition
 
 ROOT = Path(__file__).parents[2]
 NUMBER = re.compile(r"-?\d+\.\d+")
@@ -112,7 +119,8 @@ def fresh(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, dict[Path, st
     out = tmp_path_factory.mktemp("docs_figures")
     script = _script()
     script.write(out)
-    return out, script.write_pages(out)
+    # the figures of the models of the pages, in the folders below the docs
+    return out, script.write_pages(out / "docs")
 
 
 @pytest.mark.parametrize("name", FIGURES)
@@ -135,15 +143,16 @@ def test_the_pages_of_the_models_are_up_to_date(
     command = "run `uv run python scripts/visual/docs_figures.py`"
     for page, text in pages.items():
         assert _same(text, page.read_text(encoding="utf-8")), f"{page.name}: {command}"
-    written = sorted(p.name for p in (out / script.MODELS).glob("*.html"))
-    stored = sorted(p.name for p in (script.OUT / script.MODELS).glob("*.html"))
-    assert written == stored, command
-    for name in written:
-        fresh_text = _normal((out / script.MODELS / name).read_text(encoding="utf-8"))
-        stored_text = _normal(
-            (script.OUT / script.MODELS / name).read_text(encoding="utf-8")
-        )
-        assert _same(fresh_text, stored_text), f"{name}: {command}"
+    for folder in script.FOLDERS:
+        fresh_folder, stored_folder = out / "docs" / folder, script.DOCS / folder
+        written = sorted(p.name for p in fresh_folder.glob("*.html"))
+        stored = sorted(p.name for p in stored_folder.glob("*.html"))
+        assert written, folder
+        assert written == stored, f"{folder}: {command}"
+        for name in written:
+            fresh_text = _normal((fresh_folder / name).read_text(encoding="utf-8"))
+            stored_text = _normal((stored_folder / name).read_text(encoding="utf-8"))
+            assert _same(fresh_text, stored_text), f"{name}: {command}"
 
 
 def test_every_model_of_a_page_shows_its_figures() -> None:
@@ -155,6 +164,26 @@ def test_every_model_of_a_page_shows_its_figures() -> None:
             assert f"figures-{stem} " in text, page.name
             for figure in ("anatomy", "schematic"):
                 assert f"img/figures/models/{stem}-{figure}.html" in text, page.name
+
+
+def test_the_perfusion_page_shows_the_figures_of_its_circuit() -> None:
+    """A fence which creates a machine perfusion gets the figures of its circuit."""
+    script = _script()
+    page = ROOT / "docs" / "perfusion.md"
+    assert page in script.model_pages()
+    definitions = script.model_fences(page)
+    assert definitions, "the page creates no circuit"
+    text = page.read_text(encoding="utf-8")
+    for number, definition in definitions.items():
+        assert isinstance(definition, PerfusionDefinition)
+        for figure in ("anatomy", "schematic"):
+            # relative to the page, the folder of its figures, not of the PBPK
+            # library
+            src = f"img/figures/models/perfusion-{number}-{figure}.html"
+            assert f'src="{src}"' in text
+            assert (ROOT / "docs" / src).exists()
+            html = (ROOT / "docs" / src).read_text(encoding="utf-8")
+            assert definition.name in html or definition.sid in html
 
 
 def test_the_docs_show_the_interactive_figures_only() -> None:

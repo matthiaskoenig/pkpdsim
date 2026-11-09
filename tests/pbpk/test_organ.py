@@ -635,7 +635,7 @@ def test_kidney_processes_follow_the_renal_function() -> None:
     share = _parameters(md)["f_tubular"]
     assert share.value == 1.0
     assert "intact nephron hypothesis (Bricker 1960), not verified" in str(share.notes)
-    assert "Choice of the pkpdsim PBPK library" in str(share.notes)
+    assert "Choice of a library of pkpdsim" in str(share.notes)
     md, boundary = _build(Organ.KIDNEY)
     assert "f_renal_function" not in boundary.replacements
     assert "f_tubular" not in _parameters(md)

@@ -29,6 +29,7 @@ nav = [
     { "Parameter database" = "database.md" },
     { "Initial values" = "initial_values.md" },
     { "Timecourses in parts" = "timecourse.md" },
+    { "Machine perfusion" = "perfusion.md" },
     { "Licenses" = "licenses.md" },
     { "Release of a model repository" = "release.md" },
   ] },
@@ -83,6 +84,7 @@ nav = [
     { "pbpk impairment" = "api/pbpk_impairment.md" },
     { "pbpk ids and data" = "api/pbpk_ids.md" },
     { "pbpk figures" = "api/pbpk_visual.md" },
+    { "perfusion" = "api/perfusion.md" },
   ] },
   { "Contributing" = "development.md" },
 ]

@@ -71,6 +71,7 @@ class Tissue(StrEnum):
     FECES = "feces"
     FECES_URINE = "feces and urine"
     BILE = "bile"
+    PERFUSATE = "perfusate"  # the fluid of a machine perfusion circuit
     NONE = "none"  # not a sample of a tissue, e.g. the blood pressure
 
 
@@ -95,6 +96,7 @@ class Route(StrEnum):
     PATCH = "patch"
     RING = "ring"
     MIXED = "mixed"  # several routes, e.g. po and iv
+    EX_VIVO = "ex vivo"  # an organ outside the body, e.g. a machine perfusion
     NR = "not reported"
 
 
@@ -106,6 +108,7 @@ class Dosing(StrEnum):
     MULTIPLE = "multiple"
     CONSTANT_INFUSION = "infusion"
     BOTH = "single and multiple"
+    PERFUSION = "perfusion"  # no dose: the organ is kept in the perfusate of a circuit
     NR = "not reported"
 
 
@@ -441,11 +444,13 @@ class AdministrationSite(StrEnum):
 
 @unique
 class SamplingSite(StrEnum):
-    """The site at which the blood of a sample is drawn.
+    """The site at which the blood or perfusate of a sample is drawn.
 
     Plasma, serum and blood are typically sampled from an arm vein, which is
     their default; the other sites are taken where a study states them. Arterial
-    blood and plasma are arterial samples (see `PKPDMappingMetaData`).
+    blood and plasma are arterial samples (see `PKPDMappingMetaData`). The
+    perfusate of a machine perfusion is sampled at a site of its circuit, the
+    reservoir by default.
     """
 
     ARM_VEIN = "arm vein"  # antecubital or forearm vein, peripheral venous
@@ -455,6 +460,9 @@ class SamplingSite(StrEnum):
     HEPATIC_VEIN = "hepatic vein"
     CAPILLARY = "capillary"  # e.g. finger prick
     NOT_APPLICABLE = "not applicable"  # no blood sample, e.g. urine or feces
+    RESERVOIR = "reservoir"  # the reservoir of a perfusion circuit
+    INFLOW = "inflow"  # the perfusate entering the organ, after the oxygenator
+    OUTFLOW = "outflow"  # the perfusate leaving the organ, before the reservoir
 
 
 _DEFAULT_SITES: Final[Mapping[Tissue, SamplingSite]] = MappingProxyType(
@@ -469,6 +477,7 @@ _DEFAULT_SITES: Final[Mapping[Tissue, SamplingSite]] = MappingProxyType(
         Tissue.FECES: SamplingSite.NOT_APPLICABLE,
         Tissue.FECES_URINE: SamplingSite.NOT_APPLICABLE,
         Tissue.BILE: SamplingSite.NOT_APPLICABLE,
+        Tissue.PERFUSATE: SamplingSite.RESERVOIR,
         Tissue.NONE: SamplingSite.NOT_APPLICABLE,
     }
 )
@@ -477,9 +486,16 @@ _DEFAULT_SITES: Final[Mapping[Tissue, SamplingSite]] = MappingProxyType(
 Plasma, serum and blood are typically drawn from an arm vein; arterial blood
 and plasma name their site. Saliva is no blood sample, so it is treated like
 the excretions: no sampling site applies to the tissues without a blood sample.
+The perfusate of a machine perfusion is sampled at a site of its circuit
+(`PERFUSATE_SITES`), the reservoir unless a study states another.
 A new member of `Tissue` is classified here (a test of the metadata fails until
 it is).
 """
+
+PERFUSATE_SITES: Final[frozenset[SamplingSite]] = frozenset(
+    {SamplingSite.RESERVOIR, SamplingSite.INFLOW, SamplingSite.OUTFLOW}
+)
+"""The sampling sites of a perfusion circuit, the sites of `Tissue.PERFUSATE` only."""
 
 
 def _name(value: object) -> str:
@@ -515,13 +531,16 @@ class PKPDMappingMetaData(MappingMetaData):
             site it follows the tissue: plasma, serum and blood are typically
             sampled from an arm vein, so their data without a stated site are
             arm-vein samples (`ARM_VEIN`), arterial blood and plasma are
-            `ARTERIAL`, and the tissues without a blood sample (saliva, urine,
-            feces, feces and urine, bile, none) are `NOT_APPLICABLE`. A blood
-            site on such a tissue, `NOT_APPLICABLE` on a tissue with a blood
-            sample (plasma, serum, blood, arterial blood and plasma) and a site
-            other than `ARTERIAL` on arterial blood or plasma are a
-            `ValueError`. Appended after the fields of the first version, so a
-            subclass of a model keeps its fields valid.
+            `ARTERIAL`, the perfusate `RESERVOIR`, and the tissues without a
+            blood sample (saliva, urine, feces, feces and urine, bile, none)
+            are `NOT_APPLICABLE`. A blood site on such a tissue,
+            `NOT_APPLICABLE` on a tissue with a blood sample (plasma, serum,
+            blood, arterial blood and plasma), a site other than `ARTERIAL` on
+            arterial blood or plasma, a site of the circuit (`RESERVOIR`,
+            `INFLOW`, `OUTFLOW`) on another tissue than the perfusate and any
+            other site on the perfusate are a `ValueError`. Appended after the
+            fields of the first version, so a subclass of a model keeps its
+            fields valid.
 
     Raises:
         ValueError: if the sampling site does not fit the tissue.
@@ -547,7 +566,14 @@ class PKPDMappingMetaData(MappingMetaData):
         if site is None:
             return
         default = _DEFAULT_SITES[self.tissue]
-        if default is SamplingSite.NOT_APPLICABLE:
+        if default in PERFUSATE_SITES:
+            if site not in PERFUSATE_SITES:
+                raise ValueError(
+                    f"{self.tissue.name} is sampled in its circuit, so the sampling "
+                    f"site '{site.name}' does not apply: use RESERVOIR, INFLOW or "
+                    "OUTFLOW"
+                )
+        elif default is SamplingSite.NOT_APPLICABLE:
             if site is not SamplingSite.NOT_APPLICABLE:
                 raise ValueError(
                     f"{self.tissue.name} has no blood sample, so the sampling site "
@@ -563,6 +589,11 @@ class PKPDMappingMetaData(MappingMetaData):
                 f"{self.tissue.name} is an arterial sample, so the sampling site "
                 f"'{site.name}' does not apply: use ARTERIAL or a venous tissue"
             )
+        elif site in PERFUSATE_SITES:
+            raise ValueError(
+                f"{self.tissue.name} is no perfusate, so the sampling site "
+                f"'{site.name}' of a perfusion circuit does not apply"
+            )
 
     def resolved_sampling_site(self) -> SamplingSite:
         """Get the sampling site: the stated one, else the one of the tissue.
@@ -575,8 +606,9 @@ class PKPDMappingMetaData(MappingMetaData):
 
         Returns:
             The stated site; if none was stated `ARTERIAL` for arterial
-            blood and plasma, `NOT_APPLICABLE` for a tissue without a blood
-            sample and `ARM_VEIN` for plasma, serum and blood.
+            blood and plasma, `RESERVOIR` for the perfusate, `NOT_APPLICABLE`
+            for a tissue without a blood sample and `ARM_VEIN` for plasma,
+            serum and blood.
         """
         if self.sampling_site is not None:
             return self.sampling_site
