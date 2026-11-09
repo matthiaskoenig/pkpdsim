@@ -5,7 +5,7 @@ import pkpdsim
 
 
 def test_version() -> None:
-    assert pkpdsim.__version__ == "0.20.1"
+    assert pkpdsim.__version__ == "0.21.0.dev0"
 
 
 def test_all() -> None:
