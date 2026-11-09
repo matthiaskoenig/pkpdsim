@@ -254,7 +254,6 @@ def zone_profiles(
         for ax in axes:
             ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1.0), borderaxespad=0.0)
     axes[-1].set_xlabel(POSITION)
-    figure.align_ylabels(axes)
     return figure
 
 
@@ -348,7 +347,8 @@ def space_time(
         ax.set_ylabel(_label(f"{name} outflow", unit))
     axes[-1].set_xlabel(f"Time [{time_unit}]")
     axes[-1].set_xlim(float(time.min()), float(time.max()))
-    figure.align_ylabels(axes)
+    # no `align_ylabels`: constrained layout puts the labels of the column at one
+    # x already (the wrapped label of a heatmap is wider, its right edge is the one)
     return figure
 
 
@@ -417,10 +417,8 @@ def layer_profile(
         ax.set_title(str(layer))
         ax.set_xlim(0.0, 1.0)
         if share_y:
-            # one scale: its numbers on the left column and the bottom row only
-            ax.tick_params(
-                labelleft=i % ncols == 0, labelbottom=i + ncols >= len(present)
-            )
+            # one scale: its numbers on the left column (`sharey`) and the bottom row
+            ax.tick_params(labelbottom=i + ncols >= len(present))
     figure.supxlabel(POSITION)
     figure.supylabel(_label(substance, unit))
     figure.suptitle(f"{substance} at {_time_text(time, time_unit)}")

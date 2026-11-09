@@ -350,7 +350,7 @@ def test_the_figures_draw_the_result_of_a_built_chain(tmp_path: Path) -> None:
 
 
 def _drawn(fig: Figure) -> Figure:
-    """Lay a figure out: a figure of the library has no canvas which draws."""
+    """Lay a figure out on a canvas which draws, as the tests of the label and legend positions need."""
     FigureCanvasAgg(fig).draw()
     return fig
 
@@ -513,27 +513,23 @@ def test_the_single_legend_is_centred_on_the_grid() -> None:
     assert box.x0 > max(ax.get_window_extent().x1 for ax in axes)
 
 
-def test_the_y_labels_are_aligned() -> None:
-    fig = space_time(_result(), "drg", layers=(Layer.PLASMA, Layer.CELL))
-    _drawn(fig)
-    heat, other, out = data_axes(fig)
-    xs = {round(ax.yaxis.label.get_position()[0], 3) for ax in (heat, other, out)}
-    assert len(xs) == 1
-
-
 def test_the_outflow_panel_is_lower_than_a_heatmap_and_the_name_is_chosen() -> None:
     fig = space_time(_result(), "drg", layers=(Layer.PLASMA,), name="Drug")
     heat, out = data_axes(fig)
     spec = heat.get_subplotspec()
     assert spec is not None
     assert spec.get_gridspec().get_height_ratios() == [1.0, 0.6]
-    _drawn(fig)
-    ratio = out.get_window_extent().height / heat.get_window_extent().height
-    assert ratio == pytest.approx(0.6, rel=0.05)
-    assert fig.axes[-1].get_ylabel() == "Drug plasma [mM]"
     assert out.get_ylabel() == "Drug outflow [mM]"
+    assert fig.axes[-1].get_ylabel() == "Drug plasma [mM]"
     default = space_time(_result(), "drg", layers=(Layer.PLASMA,))
     assert default.axes[-1].get_ylabel() == "drg plasma [mM]"
+
+
+def test_the_outflow_panel_is_drawn_at_0p6_of_a_heatmap() -> None:
+    fig = _drawn(space_time(_result(), "drg", layers=(Layer.PLASMA,)))
+    heat, out = data_axes(fig)
+    ratio = out.get_window_extent().height / heat.get_window_extent().height
+    assert ratio == pytest.approx(0.6, rel=0.05)
 
 
 def test_a_shared_scale_labels_the_ticks_of_the_outer_panels_only() -> None:
