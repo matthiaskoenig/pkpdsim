@@ -152,7 +152,9 @@ def _limits(
     return (0.0, high * (1.0 + headroom) if high > 0.0 else 1.0)
 
 
-def _scale(values: Sequence[np.ndarray]) -> tuple[float, float] | None:
+def _scale(
+    values: Sequence[np.ndarray], vmin: float | None = None, vmax: float | None = None
+) -> tuple[float, float] | None:
     """Get the limits of a colour scale: the range of the values it draws.
 
     A colour scale spans the range of its values, a line axis keeps its zero
@@ -160,10 +162,20 @@ def _scale(values: Sequence[np.ndarray]) -> tuple[float, float] | None:
     a scale from zero would draw a gradient of a few percent as one shade. A
     scale of no range (a constant, zeros) takes the limits of `_limits`, from
     zero to the value or to one; values below zero with no range leave it to
-    matplotlib (`None`).
+    matplotlib (`None`). An explicit `vmin` or `vmax` replaces that end of the
+    range, the way to clip a scale which a spike dominates.
+
+    Raises:
+        ValueError: if the limits are not `vmin < vmax`.
     """
     low = min(float(np.min(v)) for v in values)
     high = max(float(np.max(v)) for v in values)
+    if vmin is not None or vmax is not None:
+        low = low if vmin is None else vmin
+        high = high if vmax is None else vmax
+        if not low < high:
+            raise ValueError(f"The colour scale {low} to {high} has no range.")
+        return (low, high)
     if high > low:
         return (low, high)
     return _limits(values)
@@ -298,6 +310,8 @@ def space_time(
     unit: str = DEFAULT_UNIT,
     time_unit: str = DEFAULT_TIME_UNIT,
     name: str | None = None,
+    vmin: float | None = None,
+    vmax: float | None = None,
 ) -> Figure:
     """Draw the concentration over the zones and the time, a heatmap per layer.
 
@@ -317,6 +331,11 @@ def space_time(
             the unit of the result if it is another.
         time_unit: the unit of the time, the convention of the engine (min).
         name: the display name of the substance in the labels, the id by
+            default.
+        vmin: the lower end of the colour scale, the smallest value drawn by
+            default; set it (with `vmax`) to clip a scale which a spike, e.g.
+            the initial condition in one zone, dominates.
+        vmax: the upper end of the colour scale, the largest value drawn by
             default.
 
     Returns:
@@ -344,7 +363,7 @@ def space_time(
         if n == 0:
             raise KeyError(f"The result has no zone of '{quantity}' in '{layer}'.")
         values = result[observers.profile_ids(quantity, layer, n)].to_numpy(dtype=float)
-        limits = _scale([values]) or (None, None)
+        limits = _scale([values], vmin, vmax) or (None, None)
         # `rasterized=False` is the matplotlib default and is stated for the
         # reader only: what keeps the SVG free of images is the colorbar
         # (`_colorbar` un-rasterizes its solids, the default is an image) and
@@ -537,6 +556,8 @@ def lobule_map(
     unit: str = DEFAULT_UNIT,
     time_unit: str = DEFAULT_TIME_UNIT,
     name: str | None = None,
+    vmin: float | None = None,
+    vmax: float | None = None,
 ) -> Figure:
     """Draw the value of every zone on the idealized hexagonal lobule.
 
@@ -561,6 +582,11 @@ def lobule_map(
         time_unit: the unit of the time, the convention of the engine (min).
         name: the display name of the substance in the labels, the id by
             default.
+        vmin: the lower end of the colour scale, the smallest value drawn by
+            default; set it (with `vmax`) to clip a scale which a spike, e.g.
+            the initial condition in one zone, dominates.
+        vmax: the upper end of the colour scale, the largest value drawn by
+            default.
 
     Returns:
         The figure, one panel of the hexagon and its colorbar. The colour
@@ -576,7 +602,7 @@ def lobule_map(
         raise ValueError(f"A lobule has at least one zone, not {zones}.")
     name = quantity if name is None else name
     values = _at(result, observers.profile_ids(quantity, layer, zones), time)
-    limits = _scale([values]) or (float(values.min()), float(values.max()))
+    limits = _scale([values], vmin, vmax) or (float(values.min()), float(values.max()))
     mappable = ScalarMappable(Normalize(*limits), colormaps["viridis"])
     figure = Figure(figsize=(5.0, 4.4), layout="constrained")
     ax = figure.subplots()

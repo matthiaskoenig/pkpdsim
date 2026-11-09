@@ -253,3 +253,24 @@ def test_the_colour_scale_spans_the_range_of_the_values() -> None:
     heat = space_time(result, "drg", layers=(Layer.CELL,))
     assert data_axes(heat)[0].collections[0].get_clim() == pytest.approx((0.078, 0.090))
     assert min(bar.get_yticks()) >= 0.0
+
+
+def test_vmin_and_vmax_override_the_data_range_and_default_to_it() -> None:
+    """A caller clips a scale which a spike dominates; leaving them out keeps the data range."""
+    result = _result()
+    values = (1.0, 10.0)  # zone 1 and zone 10 at time 60
+    fig = lobule_map(result, "drg", time=60, zones=N)
+    bar = next(a for a in fig.axes if a.get_gid() == COLORBAR)
+    assert bar.get_ylim() == pytest.approx(values)
+    clipped = lobule_map(result, "drg", time=60, zones=N, vmin=2.0, vmax=6.0)
+    bar = next(a for a in clipped.axes if a.get_gid() == COLORBAR)
+    assert bar.get_ylim() == pytest.approx((2.0, 6.0))
+    half = lobule_map(result, "drg", time=60, zones=N, vmax=5.0)
+    bar = next(a for a in half.axes if a.get_gid() == COLORBAR)
+    assert bar.get_ylim() == pytest.approx((1.0, 5.0))
+    heat = space_time(result, "drg", layers=(Layer.CELL,), vmin=0.0, vmax=3.0)
+    assert data_axes(heat)[0].collections[0].get_clim() == (0.0, 3.0)
+    default = space_time(result, "drg", layers=(Layer.CELL,))
+    assert data_axes(default)[0].collections[0].get_clim()[1] == pytest.approx(20.0)
+    with pytest.raises(ValueError, match="no range"):
+        lobule_map(result, "drg", time=60, zones=N, vmin=5.0, vmax=5.0)
