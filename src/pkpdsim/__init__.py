@@ -16,6 +16,6 @@ tissue). `import pkpdsim` imports none of them. The license texts of the
 COMBINE archive of a model are `sbmlsim.licenses`.
 """
 
-__version__ = "0.21.0.dev0"
+__version__ = "0.21.0"
 
 __all__ = ["__version__"]
