@@ -12,6 +12,7 @@ from pathlib import Path
 from matplotlib.axes import Axes
 from matplotlib.collections import LineCollection, QuadMesh
 from matplotlib.figure import Figure
+from matplotlib.legend import Legend
 from matplotlib.lines import Line2D
 from pbpk.conftest import individual
 from sbmlutils.factory import create_model
@@ -207,7 +208,7 @@ def test_the_space_time_panel_carries_the_outflow_below() -> None:
     assert len(heat.collections) == 1
     assert _cells(heat.collections[0]).size == 25 * N
     assert _y(out.lines[0])[-1] == pytest.approx(1.0)
-    assert out.get_xlabel() == "Time"
+    assert out.get_xlabel() == "Time [min]"
 
 
 def test_the_heatmap_has_the_zones_periportal_first_and_the_time_to_the_right() -> None:
@@ -348,3 +349,145 @@ def test_the_figures_draw_the_result_of_a_built_chain(tmp_path: Path) -> None:
     assert np.isfinite(flow_out.lines[0].get_ydata()).all()
     fig.savefig(tmp_path / "chain.svg")
     assert "<image" not in (tmp_path / "chain.svg").read_text()
+
+
+def _legend(ax: Axes) -> Legend:
+    """The legend of an axes, which must exist."""
+    legend = ax.get_legend()
+    assert legend is not None
+    return legend
+
+
+def _flat(plasma: float = 3.0, cell: float = 0.0) -> pd.DataFrame:
+    """A result of constant layers: the plasma at a value, the cells at another."""
+    t = np.linspace(0.0, 10.0, 11)
+    cols: dict[str, np.ndarray] = {"time": t}
+    for layer, value in ((Layer.PLASMA, plasma), (Layer.CELL, cell)):
+        for sid in observers.profile_ids("drg", layer, 4):
+            cols[sid] = np.full_like(t, value)
+    cols[observers.outflow_concentration("drg")] = np.full_like(t, plasma)
+    return pd.DataFrame(cols)
+
+
+def _plasma_cell() -> list[ZoneProfile]:
+    """Two profiles over four zones, the plasma and the cells."""
+    return [
+        ZoneProfile("Plasma", "mM", tuple(observers.profile_ids("drg", "plasma", 4))),
+        ZoneProfile("Cell", "mM", tuple(observers.profile_ids("drg", "cell", 4))),
+    ]
+
+
+def test_every_position_label_names_the_ends_of_the_sinusoid() -> None:
+    end = "(0 periportal, 1 pericentral)"
+    fig = zone_profiles(_result(), _profiles(2), times=(0,))
+    assert data_axes(fig)[-1].get_xlabel() == f"Position {end}"
+    heat = data_axes(space_time(_result(), "drg", layers=(Layer.PLASMA,)))[0]
+    assert heat.get_ylabel().replace("\n", " ") == f"Position {end}"
+    for ax in data_axes(layer_profile(_result(), "drg", time=0))[3:]:
+        assert ax.get_xlabel() == f"Position {end}"
+
+
+def test_the_time_carries_its_unit_in_every_figure() -> None:
+    result = _result()
+    fig = zone_profiles(result, _profiles(1), times=(0, 60), data=None)
+    legend = fig.legends[0]
+    assert [t.get_text() for t in legend.get_texts()] == [
+        "Sim t = 0 min",
+        "Sim t = 60 min",
+    ]
+    fig = zone_profiles(result, _profiles(1), times=(60,), time_unit="h")
+    assert fig.legends[0].get_texts()[0].get_text() == "Sim t = 60 h"
+    heat = space_time(result, "drg", layers=(Layer.PLASMA,))
+    assert data_axes(heat)[-1].get_xlabel() == "Time [min]"
+    heat = space_time(result, "drg", layers=(Layer.PLASMA,), time_unit="h")
+    assert data_axes(heat)[-1].get_xlabel() == "Time [h]"
+    layers = layer_profile(result, "drg", time=60)
+    assert layers.get_suptitle() == "drg at t = 60 min"
+    assert layer_profile(result, "drg", time=2, time_unit="h").get_suptitle() == (
+        "drg at t = 2 h"
+    )
+
+
+def test_a_layer_of_zeros_is_drawn_from_zero_to_one() -> None:
+    result = _flat()
+    for profile, ax in zip(
+        _plasma_cell(),
+        data_axes(zone_profiles(result, _plasma_cell(), times=(5,))),
+        strict=True,
+    ):
+        assert ax.get_ylim()[0] == 0.0, profile.label
+    cell = data_axes(zone_profiles(result, _plasma_cell(), times=(5,)))[1]
+    assert cell.get_ylim() == (0.0, 1.0)
+    fig = space_time(result, "drg", layers=(Layer.PLASMA, Layer.CELL))
+    plasma, cells, out = data_axes(fig)
+    assert cells.collections[0].get_clim() == (0.0, 1.0)
+    assert plasma.collections[0].get_clim() == (0.0, 3.0)
+    assert out.get_ylim() == pytest.approx((0.0, 3.0 * 1.05))
+    axes = {
+        ax.get_title(): ax for ax in data_axes(layer_profile(result, "drg", time=5))
+    }
+    assert axes["cell"].get_ylim() == (0.0, 1.0)
+    assert axes["plasma"].get_ylim() == pytest.approx((0.0, 3.0 * 1.05))
+
+
+def test_a_constant_layer_is_drawn_from_zero_to_its_value() -> None:
+    """Zero to one would hide a constant above one, so the scale runs to the value."""
+    fig = space_time(_flat(plasma=0.25), "drg", layers=(Layer.PLASMA,))
+    assert data_axes(fig)[0].collections[0].get_clim() == (0.0, 0.25)
+
+
+def test_a_negative_value_leaves_the_axis_to_matplotlib() -> None:
+    result = _flat()
+    result[observers.profile_ids("drg", "cell", 4)] = -1.0
+    ax = data_axes(zone_profiles(result, _plasma_cell(), times=(5,)))[1]
+    assert ax.get_ylim()[0] < -1.0
+
+
+def test_every_time_has_a_colour_and_its_data_has_the_colour_of_the_time() -> None:
+    data = _data(time=[0.0, 60.0, 60.0], label=["p0", "p0", "p0"])
+    fig = zone_profiles(_result(), _profiles(1), times=(0, 60, 120), data=data.iloc[:2])
+    ax = data_axes(fig)[0]
+    lines = ax.lines[:3]
+    colors = [line.get_color() for line in lines]
+    assert len({tuple(c) for c in colors}) == 3
+    assert [line.get_linestyle() for line in lines] == [":", "--", "-"]
+    # the markers of 0 and of 60 are drawn in the colour of their curve
+    assert tuple(ax.lines[3].get_color()) == tuple(colors[0])
+    assert tuple(ax.lines[4].get_color()) == tuple(colors[1])
+
+
+def test_the_legend_is_one_when_the_rows_agree_and_one_per_row_when_they_differ() -> (
+    None
+):
+    same = zone_profiles(_result(), _profiles(2), times=(0, 60))
+    assert len(same.legends) == 1
+    assert all(ax.get_legend() is None for ax in data_axes(same))
+    data = _data(label=["p0", "p0", "p0"])
+    differ = zone_profiles(_result(), _profiles(2), times=(0, 60), data=data)
+    assert differ.legends == []
+    first, second = data_axes(differ)
+    assert len(_legend(first).get_texts()) == 3
+    assert len(_legend(second).get_texts()) == 2
+
+
+def test_the_layer_grid_labels_the_left_column_and_the_bottom_row_only() -> None:
+    axes = data_axes(layer_profile(_result(), "drg", time=0))
+    assert [bool(ax.get_ylabel()) for ax in axes] == [True, False, False] * 2
+    assert [bool(ax.get_xlabel()) for ax in axes] == [False] * 3 + [True] * 3
+    # a grid of five has its last panel of the first row above a gap
+    five = data_axes(layer_profile(_result(LAYERS[:5]), "drg", time=0))
+    assert [bool(ax.get_xlabel()) for ax in five] == [False, False, True, True, True]
+
+
+def test_the_outflow_panel_is_lower_than_a_heatmap_and_the_name_is_chosen() -> None:
+    fig = space_time(_result(), "drg", layers=(Layer.PLASMA,), name="Drug")
+    heat, out = data_axes(fig)
+    spec = heat.get_subplotspec()
+    assert spec is not None
+    assert spec.get_gridspec().get_height_ratios() == [1.0, 0.6]
+    fig.canvas.draw()
+    assert out.get_position().height < 0.7 * heat.get_position().height
+    assert fig.axes[-1].get_ylabel() == "Drug plasma [mM]"
+    assert out.get_ylabel() == "Drug outflow [mM]"
+    default = space_time(_result(), "drg", layers=(Layer.PLASMA,))
+    assert default.axes[-1].get_ylabel() == "drg plasma [mM]"

@@ -19,6 +19,7 @@ from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
+from matplotlib import colormaps
 from matplotlib.axes import Axes
 from matplotlib.colorbar import Colorbar
 from matplotlib.figure import Figure
@@ -41,6 +42,14 @@ COLORBAR = "colorbar"
 _LINE_STYLES: tuple[str, ...] = (":", "--", "-", "-.")
 _MARKERS: tuple[str, ...] = ("s", "D", "o", "^")
 _LAYER_ORDER: tuple[str, ...] = (*(str(layer) for layer in Layer), ids.VASCULAR)
+POSITION = "Position (0 periportal, 1 pericentral)"
+"""The label of the axis of the zones, which names its ends: a flip must be visible."""
+DEFAULT_TIME_UNIT = "min"
+"""The unit of the time of the engine (the rates of the engine are per minute)."""
+HEATMAP_HEIGHT = 1.0
+OUTFLOW_HEIGHT = 0.6
+"""The height of the outflow panel of `space_time` relative to a heatmap."""
+_HEADROOM = 0.05
 DEFAULT_UNIT = "mM"
 """The unit of the concentrations of the profile observers (`observers.profile_ids`)."""
 
@@ -120,21 +129,47 @@ def _colorbar(figure: Figure, mesh: object, ax: Axes, label: str) -> Colorbar:
     return bar
 
 
+def _limits(
+    values: Sequence[np.ndarray], headroom: float = 0.0
+) -> tuple[float, float] | None:
+    """Get the limits of a concentration axis or colour scale, from zero if nothing is negative.
+
+    A concentration is never negative, so an axis of values at or above zero
+    starts at zero; a layer which is zero everywhere gets zero to one. Values
+    below zero leave the limits to matplotlib (`None`).
+    """
+    low = min(float(np.min(v)) for v in values)
+    high = max(float(np.max(v)) for v in values)
+    if low < 0.0:
+        return None
+    return (0.0, high * (1.0 + headroom) if high > 0.0 else 1.0)
+
+
+def _time_text(time: float, time_unit: str) -> str:
+    """Get a time with its unit, `t = 0.5 min`."""
+    return f"t = {time:g} {time_unit}"
+
+
 def zone_profiles(
     result: pd.DataFrame,
     profiles: Sequence[ZoneProfile],
     *,
     times: Sequence[float],
     data: pd.DataFrame | None = None,
+    time_unit: str = DEFAULT_TIME_UNIT,
 ) -> Figure:
     """Draw a row per profile, with a line per time over the zones.
+
+    Every time has its colour (a sequential map, early to late) and its line
+    style; the data of a time are markers of the colour of that time. The
+    legend is one for the figure, right of the grid, if every row has the same
+    entries, else one per row.
 
     Args:
         result: the simulation result.
         profiles: the profiles, a row each; the number of zones is the number
             of selections of a profile.
-        times: the times of the lines, interpolated in the result; the line
-            style is by time.
+        times: the times of the lines, interpolated in the result.
         data: optional data, a long frame with the columns `label` (of a
             profile), `time`, `position` (0 periportal to 1 pericentral),
             `value` (in the unit of the profile) and optionally `sd` (a
@@ -142,6 +177,7 @@ def zone_profiles(
             markers by time. The rows of a time which is not in `times` are
             skipped, as plotting a subset of the times of a dataset is
             legitimate.
+        time_unit: the unit of the times, the convention of the engine (min).
 
     Returns:
         The figure.
@@ -164,19 +200,23 @@ def zone_profiles(
                 f"the labels of the profiles are {labels}."
             )
     drawn = 0
+    colors = colormaps["viridis"](np.linspace(0.1, 0.85, len(times)))
     n_rows = len(profiles)
-    figure = Figure(figsize=(6.0, 3.0 * n_rows), layout="constrained")
+    figure = Figure(figsize=(7.0, 3.0 * n_rows), layout="constrained")
     axes = figure.subplots(n_rows, 1, sharex=True, squeeze=False)[:, 0]
     for ax, profile in zip(axes, profiles, strict=True):
         x = _positions(len(profile.selections))
+        values: list[np.ndarray] = []
         for k, t in enumerate(times):
+            y = _at(result, profile.selections, t)
+            values.append(y)
             ax.plot(
                 x,
-                _at(result, profile.selections, t),
+                y,
                 linestyle=_LINE_STYLES[k % len(_LINE_STYLES)],
-                color="C0",
+                color=colors[k],
                 linewidth=2.0,
-                label=f"Sim {t:g}",
+                label=f"Sim {_time_text(t, time_unit)}",
             )
         if data is not None:
             rows = data[data["label"] == profile.label]
@@ -185,6 +225,8 @@ def zone_profiles(
                 if at.empty:
                     continue
                 drawn += len(at)
+                err = at["sd"].to_numpy(dtype=float) if "sd" in at else 0.0
+                values.append(at["value"].to_numpy(dtype=float) + err)
                 ax.errorbar(
                     at["position"],
                     at["value"],
@@ -192,18 +234,26 @@ def zone_profiles(
                     linestyle="",
                     marker=_MARKERS[k % len(_MARKERS)],
                     markeredgecolor="black",
-                    color="C0",
-                    label=f"Data {t:g}",
+                    color=colors[k],
+                    label=f"Data {_time_text(t, time_unit)}",
                 )
+        limits = _limits(values, _HEADROOM)
+        if limits is not None:
+            ax.set_ylim(*limits)
         ax.set_ylabel(_label(profile.label, profile.unit))
         ax.set_xlim(0.0, 1.0)
-        ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1.0), borderaxespad=0.0)
     if data is not None and not drawn:
         raise ValueError(
             f"No row of the data is drawn: its times {sorted(set(data['time']))} "
             f"include none of the times {list(times)} of the figure."
         )
-    axes[-1].set_xlabel("Position along the sinusoid (0 periportal, 1 pericentral)")
+    entries = [ax.get_legend_handles_labels() for ax in axes]
+    if all(e[1] == entries[0][1] for e in entries):
+        figure.legend(*entries[0], loc="outside right upper")
+    else:
+        for ax in axes:
+            ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1.0), borderaxespad=0.0)
+    axes[-1].set_xlabel(POSITION)
     return figure
 
 
@@ -222,8 +272,14 @@ def space_time(
     layers: Sequence[Layer | str],
     outflow: bool = True,
     unit: str = DEFAULT_UNIT,
+    time_unit: str = DEFAULT_TIME_UNIT,
+    name: str | None = None,
 ) -> Figure:
     """Draw the concentration over the zones and the time, a heatmap per layer.
+
+    The heatmaps are as tall as the figure allows and the outflow panel below
+    them is 0.6 of one. A concentration is never negative: when no value is,
+    the colour scale and the axis of the outflow start at zero.
 
     Args:
         result: the simulation result.
@@ -233,6 +289,9 @@ def space_time(
         unit: the unit of the concentrations in the labels; the default is the
             unit of the profile observers (`observers.profile_ids`, mM), pass
             the unit of the result if it is another.
+        time_unit: the unit of the time, the convention of the engine (min).
+        name: the display name of the substance in the labels, the id by
+            default.
 
     Returns:
         The figure.
@@ -246,44 +305,65 @@ def space_time(
             "The layers are empty and there is no outflow: nothing to draw."
         )
     _columns(result, ["time"])
+    name = quantity if name is None else name
     time = result["time"].to_numpy(dtype=float)
     rows = len(layers) + int(outflow)
-    figure = Figure(figsize=(7.0, 2.6 * rows), layout="constrained")
-    axes = figure.subplots(rows, 1, sharex=True, squeeze=False)[:, 0]
+    heights = [HEATMAP_HEIGHT] * len(layers) + [OUTFLOW_HEIGHT] * int(outflow)
+    figure = Figure(figsize=(7.0, 2.6 * sum(heights)), layout="constrained")
+    axes = figure.subplots(
+        rows, 1, sharex=True, squeeze=False, gridspec_kw={"height_ratios": heights}
+    )[:, 0]
     for ax, layer in zip(axes[: len(layers)], layers, strict=True):
         n = _zones(result, quantity, layer)
         if n == 0:
             raise KeyError(f"The result has no zone of '{quantity}' in '{layer}'.")
         values = result[observers.profile_ids(quantity, layer, n)].to_numpy(dtype=float)
+        limits = _limits([values]) or (None, None)
         # `rasterized=False` is the matplotlib default and is stated for the
         # reader only: what keeps the SVG free of images is the colorbar
         # (`_colorbar` un-rasterizes its solids, the default is an image) and
         # the test which looks for `<image` in the saved figures.
         mesh = ax.pcolormesh(
-            time, _positions(n), values.T, shading="nearest", rasterized=False
+            time,
+            _positions(n),
+            values.T,
+            shading="nearest",
+            rasterized=False,
+            vmin=limits[0],
+            vmax=limits[1],
         )
-        _colorbar(figure, mesh, ax, _label(f"{quantity} {layer}", unit))
-        ax.set_ylabel("Position")
+        _colorbar(figure, mesh, ax, _label(f"{name} {layer}", unit))
+        ax.set_ylabel(POSITION.replace(" (", "\n("))
         ax.set_ylim(0.0, 1.0)
     if outflow:
         sid = observers.outflow_concentration(quantity)
         _columns(result, [sid])
         ax = axes[-1]
-        ax.plot(time, result[sid].to_numpy(dtype=float), color="C0", linewidth=2.0)
-        ax.set_ylabel(_label(f"{quantity} outflow", unit))
-    axes[-1].set_xlabel("Time")
+        y = result[sid].to_numpy(dtype=float)
+        ax.plot(time, y, color="C0", linewidth=2.0)
+        limits = _limits([y], _HEADROOM)
+        if limits is not None:
+            ax.set_ylim(*limits)
+        ax.set_ylabel(_label(f"{name} outflow", unit))
+    axes[-1].set_xlabel(f"Time [{time_unit}]")
     axes[-1].set_xlim(float(time.min()), float(time.max()))
     return figure
 
 
 def layer_profile(
-    result: pd.DataFrame, substance: str, *, time: float, unit: str = DEFAULT_UNIT
+    result: pd.DataFrame,
+    substance: str,
+    *,
+    time: float,
+    unit: str = DEFAULT_UNIT,
+    time_unit: str = DEFAULT_TIME_UNIT,
 ) -> Figure:
     """Draw the profile over the zones in every layer which carries the substance.
 
     The layers are those of which the result holds the substance in zones
     from `z1` on, so a well-stirred build shows its vascular site and a build of
-    the radial geometry its layers.
+    the radial geometry its layers. The y axis is labelled in the left column
+    of the grid, the x axis in its bottom row.
 
     Args:
         result: the simulation result.
@@ -291,6 +371,7 @@ def layer_profile(
         time: the time of the profile, interpolated in the result.
         unit: the unit of the concentration in the labels; the default is the
             unit of the profile observers (`observers.profile_ids`, mM).
+        time_unit: the unit of the time, the convention of the engine (min).
 
     Returns:
         The figure, a panel per layer.
@@ -312,12 +393,20 @@ def layer_profile(
     flat = list(axes.flat)
     for ax in flat[len(present) :]:
         ax.remove()
-    for ax, (layer, n) in zip(flat[: len(present)], present, strict=True):
+    for i, (ax, (layer, n)) in enumerate(
+        zip(flat[: len(present)], present, strict=True)
+    ):
         selections = observers.profile_ids(substance, layer, n)
-        ax.plot(_positions(n), _at(result, selections, time), color="C0", linewidth=2.0)
+        y = _at(result, selections, time)
+        ax.plot(_positions(n), y, color="C0", linewidth=2.0)
+        limits = _limits([y], _HEADROOM)
+        if limits is not None:
+            ax.set_ylim(*limits)
         ax.set_title(str(layer))
         ax.set_xlim(0.0, 1.0)
-        ax.set_xlabel("Position")
-        ax.set_ylabel(_label(substance, unit))
-    figure.suptitle(f"{substance} at {time:g}")
+        if i % ncols == 0:
+            ax.set_ylabel(_label(substance, unit))
+        if i + ncols >= len(present):
+            ax.set_xlabel(POSITION)
+    figure.suptitle(f"{substance} at {_time_text(time, time_unit)}")
     return figure
