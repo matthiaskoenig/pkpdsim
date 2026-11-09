@@ -9,7 +9,8 @@ matplotlib.use("Agg")
 
 from pathlib import Path
 
-from matplotlib.collections import QuadMesh
+from matplotlib.axes import Axes
+from matplotlib.collections import LineCollection, QuadMesh
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from pbpk.conftest import individual
@@ -30,6 +31,7 @@ from pkpdsim.zonation.observers import add_observers, observer_objects
 from .test_chain import TRACER, _Diffusing, _settings
 
 N = 10
+LITERAL_LAYERS = ["rbc", "plasma", "endothelium", "disse", "cell", "bile"]
 LAYERS = (
     Layer.RBC,
     Layer.PLASMA,
@@ -99,22 +101,97 @@ def test_the_profile_values_are_the_result_at_the_time() -> None:
     assert fig.axes[0].lines[0].get_ydata() == pytest.approx(expected)
 
 
+def _data(**columns: list[object]) -> pd.DataFrame:
+    """A long frame of data, by default two points of `p0` and one of `p1` at 60."""
+    base: dict[str, list[object]] = {
+        "label": ["p0", "p0", "p1"],
+        "time": [60.0, 60.0, 60.0],
+        "position": [0.25, 0.75, 0.5],
+        "value": [1.0, 2.0, 3.0],
+        "sd": [0.1, 0.2, 0.3],
+    }
+    base.update(columns)
+    return pd.DataFrame(base)
+
+
+def _error_bars(ax: Axes) -> list[np.ndarray]:
+    """The segments of the error bars of an axes as arrays."""
+    out = []
+    for collection in ax.collections:
+        assert isinstance(collection, LineCollection)
+        out.extend(np.asarray(seg, dtype=float) for seg in collection.get_segments())
+    return out
+
+
 def test_the_data_is_overlaid_where_given() -> None:
-    data = pd.DataFrame(
-        {
-            "label": ["p0", "p0", "p1"],
-            "time": [60.0, 60.0, 60.0],
-            "position": [0.25, 0.75, 0.5],
-            "value": [1.0, 2.0, 3.0],
-            "sd": [0.1, 0.1, 0.1],
-        }
-    )
-    fig = zone_profiles(_result(), _profiles(2), times=(0, 60), data=data)
+    fig = zone_profiles(_result(), _profiles(2), times=(0, 60), data=_data())
     first, second = data_axes(fig)
-    # two lines, the data are a marker line and its error bars, in the first row two points
+    # the two lines of the simulation, then the markers of the data
     assert len(first.lines) == 3
     assert list(_x(first.lines[2])) == [0.25, 0.75]
+    assert list(_y(first.lines[2])) == [1.0, 2.0]
     assert list(_x(second.lines[2])) == [0.5]
+    assert list(_y(second.lines[2])) == [3.0]
+    # the error bars are value -/+ sd, per row
+    bars = _error_bars(first)
+    assert [float(v) for seg in bars for v in (seg[0, 1], seg[1, 1])] == pytest.approx(
+        [0.9, 1.1, 1.8, 2.2]
+    )
+    bars = _error_bars(second)
+    assert [float(v) for seg in bars for v in (seg[0, 1], seg[1, 1])] == pytest.approx(
+        [2.7, 3.3]
+    )
+
+
+def test_the_data_of_another_time_is_skipped() -> None:
+    data = _data(time=[60.0, 30.0, 60.0])
+    fig = zone_profiles(_result(), _profiles(2), times=(0, 60), data=data)
+    first, second = data_axes(fig)
+    assert list(_x(first.lines[2])) == [0.25]
+    assert list(_x(second.lines[2])) == [0.5]
+
+
+def test_data_with_a_label_no_profile_has_is_refused() -> None:
+    with pytest.raises(ValueError) as info:
+        zone_profiles(
+            _result(), _profiles(2), times=(60,), data=_data(label=["p0", "p9", "p1"])
+        )
+    assert str(info.value) == (
+        "The data has the labels ['p9'] which no profile has; "
+        "the labels of the profiles are ['p0', 'p1']."
+    )
+
+
+def test_data_of_which_no_row_is_drawn_is_refused() -> None:
+    with pytest.raises(ValueError) as info:
+        zone_profiles(_result(), _profiles(2), times=(0, 120), data=_data())
+    assert str(info.value) == (
+        "No row of the data is drawn: its times [60.0] include none of the "
+        "times [0, 120] of the figure."
+    )
+
+
+def test_nothing_to_draw_is_refused() -> None:
+    result = _result()
+    with pytest.raises(ValueError, match="profiles are empty"):
+        zone_profiles(result, [], times=(0,))
+    with pytest.raises(ValueError, match="times are empty"):
+        zone_profiles(result, _profiles(1), times=())
+    with pytest.raises(ValueError, match="layers are empty"):
+        space_time(result, "drg", layers=(), outflow=False)
+
+
+def test_the_unit_of_a_label_is_an_argument() -> None:
+    fig = space_time(_result(), "drg", layers=(Layer.PLASMA,), unit="uM")
+    assert data_axes(fig)[1].get_ylabel() == "drg outflow [uM]"
+    assert fig.axes[-1].get_ylabel() == "drg plasma [uM]"
+    assert (
+        data_axes(layer_profile(_result(), "drg", time=0, unit="uM"))[0].get_ylabel()
+        == "drg [uM]"
+    )
+    assert data_axes(layer_profile(_result(), "drg", time=0))[0].get_ylabel() == (
+        "drg [mM]"
+    )
 
 
 def test_a_missing_selection_names_the_column() -> None:
@@ -131,6 +208,30 @@ def test_the_space_time_panel_carries_the_outflow_below() -> None:
     assert _cells(heat.collections[0]).size == 25 * N
     assert _y(out.lines[0])[-1] == pytest.approx(1.0)
     assert out.get_xlabel() == "Time"
+
+
+def test_the_heatmap_has_the_zones_periportal_first_and_the_time_to_the_right() -> None:
+    """The plasma of the fixture is `2 k t / 120` in zone `k` at time `t`."""
+    fig = space_time(_result(), "drg", layers=(Layer.PLASMA,))
+    heat = data_axes(fig)[0]
+    mesh = heat.collections[0]
+    cells = _cells(mesh).reshape(N, 25)  # a row per zone, a column per time
+    assert cells[0, -1] == pytest.approx(2.0)  # z1 at 120
+    assert cells[N - 1, -1] == pytest.approx(2.0 * N)  # z10 at 120
+    assert cells[N - 1, 12] == pytest.approx(N)  # z10 at 60
+    assert cells[0, 0] == pytest.approx(0.0)  # z1 at 0
+    # the periportal zone is lowest, as the axis (0 periportal) says
+    assert cells[N - 1, -1] > cells[0, -1]
+    assert isinstance(mesh, QuadMesh)
+    corners = np.asarray(mesh.get_coordinates(), dtype=float)
+    assert corners.shape == (N + 1, 26, 2)
+    assert corners[0, 0, 1] == pytest.approx(0.0)
+    assert corners[1, 0, 1] == pytest.approx(0.1)
+    assert corners[-1, 0, 1] == pytest.approx(1.0)
+    centers = (corners[0, :-1, 0] + corners[0, 1:, 0]) / 2
+    assert centers == pytest.approx(np.linspace(0.0, 120.0, 25))
+    assert heat.get_ylim() == (0.0, 1.0)
+    assert heat.get_xlim() == pytest.approx((0.0, 120.0))
 
 
 def test_the_space_time_without_the_outflow_has_a_panel_per_layer() -> None:
@@ -229,15 +330,9 @@ def test_the_figures_draw_the_result_of_a_built_chain(tmp_path: Path) -> None:
         assert np.isfinite(y).all()
     assert np.abs(ax.lines[0].get_ydata()).max() > 0
 
-    layers = [
-        layer
-        for layer in (*Layer, ids.VASCULAR)
-        if observers.profile_ids("tr", layer, 1)[0] in result.columns
-    ]
-    assert Layer.PLASMA in layers
     fig = layer_profile(result, "tr", time=1.0)
     axes = data_axes(fig)
-    assert [ax.get_title() for ax in axes] == [str(layer) for layer in layers]
+    assert [ax.get_title() for ax in axes] == LITERAL_LAYERS
     for ax in axes:
         assert len(_x(ax.lines[0])) == n
         y = np.asarray(ax.lines[0].get_ydata())

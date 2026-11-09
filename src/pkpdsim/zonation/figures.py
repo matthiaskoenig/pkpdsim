@@ -41,8 +41,8 @@ COLORBAR = "colorbar"
 _LINE_STYLES: tuple[str, ...] = (":", "--", "-", "-.")
 _MARKERS: tuple[str, ...] = ("s", "D", "o", "^")
 _LAYER_ORDER: tuple[str, ...] = (*(str(layer) for layer in Layer), ids.VASCULAR)
-_UNIT = "mM"
-"""The unit of the concentrations of the profile observers."""
+DEFAULT_UNIT = "mM"
+"""The unit of the concentrations of the profile observers (`observers.profile_ids`)."""
 
 
 @dataclass(frozen=True)
@@ -75,7 +75,13 @@ def result_frame(result: object) -> pd.DataFrame:
 
 
 def data_axes(figure: Figure) -> list[Axes]:
-    """Get the axes of the panels of a figure, the axes of a colorbar left out."""
+    """Get the axes of the panels of a figure, the axes of a colorbar left out.
+
+    A caller which post-processes a returned figure (a title, a limit, a
+    legend) needs to know which axes are panels: the colorbars of the
+    heatmaps carry the group id `COLORBAR`, and this function is the
+    documented way to tell them apart.
+    """
     return [ax for ax in figure.axes if ax.get_gid() != COLORBAR]
 
 
@@ -131,15 +137,33 @@ def zone_profiles(
             style is by time.
         data: optional data, a long frame with the columns `label` (of a
             profile), `time`, `position` (0 periportal to 1 pericentral),
-            `value` and optionally `sd`, drawn over the lines as markers by
-            time; the rows of a time which is not in `times` are not drawn.
+            `value` (in the unit of the profile) and optionally `sd` (a
+            symmetric error in the same unit), drawn over the lines as
+            markers by time. The rows of a time which is not in `times` are
+            skipped, as plotting a subset of the times of a dataset is
+            legitimate.
 
     Returns:
         The figure.
 
     Raises:
         KeyError: if the result has no column of a selection.
+        ValueError: if `profiles` or `times` is empty, if a row of `data` has a
+            label which no profile has, or if no row of `data` is drawn.
     """
+    if not profiles:
+        raise ValueError("The profiles are empty, there is no row to draw.")
+    if not len(times):
+        raise ValueError("The times are empty, there is no line to draw.")
+    if data is not None:
+        labels = [profile.label for profile in profiles]
+        unknown = sorted(set(data["label"]) - set(labels))
+        if unknown:
+            raise ValueError(
+                f"The data has the labels {unknown} which no profile has; "
+                f"the labels of the profiles are {labels}."
+            )
+    drawn = 0
     n_rows = len(profiles)
     figure = Figure(figsize=(6.0, 3.0 * n_rows), layout="constrained")
     axes = figure.subplots(n_rows, 1, sharex=True, squeeze=False)[:, 0]
@@ -160,6 +184,7 @@ def zone_profiles(
                 at = rows[np.isclose(rows["time"], t)]
                 if at.empty:
                     continue
+                drawn += len(at)
                 ax.errorbar(
                     at["position"],
                     at["value"],
@@ -173,6 +198,11 @@ def zone_profiles(
         ax.set_ylabel(_label(profile.label, profile.unit))
         ax.set_xlim(0.0, 1.0)
         ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1.0), borderaxespad=0.0)
+    if data is not None and not drawn:
+        raise ValueError(
+            f"No row of the data is drawn: its times {sorted(set(data['time']))} "
+            f"include none of the times {list(times)} of the figure."
+        )
     axes[-1].set_xlabel("Position along the sinusoid (0 periportal, 1 pericentral)")
     return figure
 
@@ -191,6 +221,7 @@ def space_time(
     *,
     layers: Sequence[Layer | str],
     outflow: bool = True,
+    unit: str = DEFAULT_UNIT,
 ) -> Figure:
     """Draw the concentration over the zones and the time, a heatmap per layer.
 
@@ -199,27 +230,39 @@ def space_time(
         quantity: the id of the substance.
         layers: the layers, a heatmap each, from the top.
         outflow: add the concentration of the blood leaving the organ below.
+        unit: the unit of the concentrations in the labels; the default is the
+            unit of the profile observers (`observers.profile_ids`, mM), pass
+            the unit of the result if it is another.
 
     Returns:
         The figure.
 
     Raises:
         KeyError: if the result has no zone of a layer or no outflow.
+        ValueError: if there is no layer and no outflow to draw.
     """
+    if not layers and not outflow:
+        raise ValueError(
+            "The layers are empty and there is no outflow: nothing to draw."
+        )
     _columns(result, ["time"])
     time = result["time"].to_numpy(dtype=float)
     rows = len(layers) + int(outflow)
     figure = Figure(figsize=(7.0, 2.6 * rows), layout="constrained")
     axes = figure.subplots(rows, 1, sharex=True, squeeze=False)[:, 0]
-    for ax, layer in zip(axes, layers, strict=False):
+    for ax, layer in zip(axes[: len(layers)], layers, strict=True):
         n = _zones(result, quantity, layer)
         if n == 0:
             raise KeyError(f"The result has no zone of '{quantity}' in '{layer}'.")
         values = result[observers.profile_ids(quantity, layer, n)].to_numpy(dtype=float)
+        # `rasterized=False` is the matplotlib default and is stated for the
+        # reader only: what keeps the SVG free of images is the colorbar
+        # (`_colorbar` un-rasterizes its solids, the default is an image) and
+        # the test which looks for `<image` in the saved figures.
         mesh = ax.pcolormesh(
             time, _positions(n), values.T, shading="nearest", rasterized=False
         )
-        _colorbar(figure, mesh, ax, _label(f"{quantity} {layer}", _UNIT))
+        _colorbar(figure, mesh, ax, _label(f"{quantity} {layer}", unit))
         ax.set_ylabel("Position")
         ax.set_ylim(0.0, 1.0)
     if outflow:
@@ -227,13 +270,15 @@ def space_time(
         _columns(result, [sid])
         ax = axes[-1]
         ax.plot(time, result[sid].to_numpy(dtype=float), color="C0", linewidth=2.0)
-        ax.set_ylabel(_label(f"{quantity} outflow", _UNIT))
+        ax.set_ylabel(_label(f"{quantity} outflow", unit))
     axes[-1].set_xlabel("Time")
     axes[-1].set_xlim(float(time.min()), float(time.max()))
     return figure
 
 
-def layer_profile(result: pd.DataFrame, substance: str, *, time: float) -> Figure:
+def layer_profile(
+    result: pd.DataFrame, substance: str, *, time: float, unit: str = DEFAULT_UNIT
+) -> Figure:
     """Draw the profile over the zones in every layer which carries the substance.
 
     The layers are those of which the result holds the substance in zones
@@ -244,6 +289,8 @@ def layer_profile(result: pd.DataFrame, substance: str, *, time: float) -> Figur
         result: the simulation result.
         substance: the id of the substance.
         time: the time of the profile, interpolated in the result.
+        unit: the unit of the concentration in the labels; the default is the
+            unit of the profile observers (`observers.profile_ids`, mM).
 
     Returns:
         The figure, a panel per layer.
@@ -265,12 +312,12 @@ def layer_profile(result: pd.DataFrame, substance: str, *, time: float) -> Figur
     flat = list(axes.flat)
     for ax in flat[len(present) :]:
         ax.remove()
-    for ax, (layer, n) in zip(flat, present, strict=False):
+    for ax, (layer, n) in zip(flat[: len(present)], present, strict=True):
         selections = observers.profile_ids(substance, layer, n)
         ax.plot(_positions(n), _at(result, selections, time), color="C0", linewidth=2.0)
         ax.set_title(str(layer))
         ax.set_xlim(0.0, 1.0)
         ax.set_xlabel("Position")
-        ax.set_ylabel(_label(substance, _UNIT))
+        ax.set_ylabel(_label(substance, unit))
     figure.suptitle(f"{substance} at {time:g}")
     return figure
