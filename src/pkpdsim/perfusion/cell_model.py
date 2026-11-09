@@ -8,6 +8,9 @@ terms, but one cell instead of a zone of an organ. There is one emitter of
 the chemistry, `core._core_objects`; `core.zone_objects` calls it with the
 ids of a zone, `cell_model` with the ids of a cell.
 
+The function is not among the lazy exports of `pkpdsim.perfusion`: it would
+shadow this module of the same name; import it from here.
+
 The ports are the contract of the cell models of the zonation
 (`CellPorts`; "Cell model contract" of the zonation spec):
 

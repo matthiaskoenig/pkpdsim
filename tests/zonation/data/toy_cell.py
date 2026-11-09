@@ -18,6 +18,7 @@ from sbmlutils.factory import (
     Species,
     create_model,
 )
+from sbmlutils.metadata import BQB
 
 from pkpdsim.pbpk.units import MODEL_UNITS, U
 from pkpdsim.perfusion.units import PU
@@ -29,11 +30,13 @@ UPTAKE = 0.5
 """The first-order uptake rate (1/min) of the toy."""
 
 
-def create_toy_cell(output_dir: Path) -> Path:
+def create_toy_cell(output_dir: Path, annotated: bool = False) -> Path:
     """Write the toy cell model as `toy.xml` into `output_dir`.
 
     Args:
         output_dir: the folder.
+        annotated: annotate the external drug with a term, which gives the
+            species a metaid as the species of every real cell model have.
 
     Returns:
         The path of the file.
@@ -56,6 +59,7 @@ def create_toy_cell(output_dir: Path) -> Path:
                 substanceUnit=U.mmole,
                 hasOnlySubstanceUnits=False,
                 name="drug external",
+                annotations=[(BQB.IS, "chebi/CHEBI:17234")] if annotated else [],
                 port=True,
             ),
             Species(

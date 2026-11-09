@@ -303,3 +303,19 @@ def test_the_submodel_ids_stay_unique_above_99_zones() -> None:
     sids = [s.sid for s in m.submodels]
     assert len(sids) == len(set(sids)) == 100
     assert sids[-1] == "M100"
+
+
+def test_a_cell_model_with_annotated_species_flattens_and_validates(
+    tmp_path: Path,
+) -> None:
+    """An annotated species of the cell model has a metaid, which comp requires
+    of the species of the liver which replaces it: `compose` gives it one."""
+    create_toy_cell(tmp_path, annotated=True)
+    model = compose(_builder(3), TOY_ID, CellPorts())
+    path = write(model, tmp_path)
+    document = libsbml.readSBMLFromFile(str(path))
+    assert document.getNumErrors() == 0
+    assert document.checkConsistency() == 0
+    flat = document.getModel()
+    assert flat.getSpecies("M01__drg_ext") is None, "replaced by the Disse species"
+    assert flat.getNumSpecies() > 0

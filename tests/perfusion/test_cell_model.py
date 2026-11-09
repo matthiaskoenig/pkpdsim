@@ -46,7 +46,12 @@ def _written(model: Model, path: Path) -> Path:
 
 
 def _document_ports(path: Path) -> set[str]:
-    """The ids of the ports of the written model, without their suffix."""
+    """The ids of the ports of the written model, without their suffix.
+
+    Read from the document on purpose: `port=True` of sbmlutils creates the
+    ports when the model is written and leaves `Model.ports` empty, so a test
+    against `m.ports` finds no port.
+    """
     document = libsbml.readSBMLFromFile(str(path))  # keeps the model alive
     plugin = document.getModel().getPlugin("comp")
     return {
