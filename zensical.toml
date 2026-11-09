@@ -87,6 +87,7 @@ nav = [
     { "pbpk impairment" = "api/pbpk_impairment.md" },
     { "pbpk ids and data" = "api/pbpk_ids.md" },
     { "pbpk figures" = "api/pbpk_visual.md" },
+    { "zonation" = "api/zonation.md" },
     { "perfusion" = "api/perfusion.md" },
   ] },
   { "Contributing" = "development.md" },

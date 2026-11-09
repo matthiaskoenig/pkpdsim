@@ -42,20 +42,51 @@ If you have any questions or issues please [open an issue](https://github.com/ma
 
 ## Quickstart
 
-```python
-from pkpdsim.annotations import compartments
-from pkpdsim.templates import creators
+A definition of what is specific to the substance, and the library writes the whole-body model: the organs with their volumes and blood flows, the oral route, the kidney which clears the drug and the observers it is read at. The numbers are illustrative.
 
-print(creators[0].givenName, creators[0].familyName)
-print([resource for _, resource in compartments["li"]])
+```python
+from pathlib import Path
+from tempfile import mkdtemp
+
+from sbmlsim.model.model_roadrunner import load_roadrunner
+
+from pkpdsim.pbpk import Binding, Excretion, Kp, PBPKDefinition, Route, Substance, build
+
+# what is specific to the substance: an oral drug which the kidney clears
+definition = PBPKDefinition(
+    sid="drg_body",
+    substances=[
+        Substance(
+            "drg",
+            name="drug",
+            mr=450.0,
+            binding=Binding(fu=0.1, protein="albumin"),
+            distribution=Kp(1.5, ftissue=5.0),
+            excretion=Excretion(urine=True),
+        )
+    ],
+    routes=[Route.oral("drg")],
+)
+
+# the library adds the physiology, the organs, the routes and the observers
+model = build(definition, Path(mkdtemp()))
+
+r = load_roadrunner(model.flat_path)
+r.timeCourseSelections = ["time", "Carm_drg"]
+r["PODOSE_drg"] = 10.0  # mg
+s = r.simulate(0, 24 * 60, 1441)  # min
+
+carm = 1000 * s["Carm_drg"]  # µM
+print(f"BW {r['BW']:.0f} kg, Vli {r['Vli']:.2f} l, Qh {r['Qh']:.2f} l/min")
+print(f"Cmax {carm.max():.3f} µM, C(24 h) {carm[-1]:.3f} µM")
 ```
 
 ```text
-Matthias König
-['fma/FMA:7197', 'bto/BTO:0000759', 'ncit/C12392']
+BW 73 kg, Vli 2.33 l, Qh 1.79 l/min
+Cmax 0.445 µM, C(24 h) 0.169 µM
 ```
 
-The [tutorial](https://matthiaskoenig.github.io/pkpdsim/pbpk/tutorial/) builds a model and simulates an oral dose step by step; every page of the documentation describes its part with a snippet which runs.
+The [tutorial](https://matthiaskoenig.github.io/pkpdsim/pbpk/tutorial/) builds such a model step by step and adds what this example leaves out: the hepatic chemistry with its metabolites, the individual of a study, the impairment of an organ and the figures of the model. Every page of the documentation describes its part with a snippet which runs.
 
 ## How to cite
 

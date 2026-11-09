@@ -63,6 +63,13 @@ MODEL_UNITS = ModelUnits(
     area=U.m2,
     volume=U.litre,
 )
+"""The `model_units` of every model of pkpdsim: time in min, substance and extent
+in mmole, length in m, area in m2 and volume in litre.
+
+Every model of every library of pkpdsim is created with these, so that the
+math of one model can be read in another and a quantity needs no conversion
+when it crosses a boundary (a perfused organ in a circuit, a zone of a
+sinusoid in a liver, an organ in a body)."""
 
 
 class OrganUnits(U):
