@@ -24,10 +24,12 @@ __all__ = [
     "Layer",
     "SinusoidGeometry",
     "axial_area",
+    "bile_flow",
     "fractions",
     "geometry",
     "layer_volumes",
     "reference_flow",
+    "reference_liver_mass",
     "sinusoid_count",
     "table_value",
 ]
@@ -191,6 +193,47 @@ def reference_flow(species: Species) -> Value:
         "pkpdsim.pbpk.physiology",
         f"the total liver blood flow of the reference male {species} of the PBPK library",
     )
+
+
+def reference_liver_mass(species: Species) -> Value:
+    """Get the mass (kg) of the reference liver of a species.
+
+    The liver of the reference male of `physiology_<species>.toml`, the liver
+    the sourced flows of the zonation table (`bile_flow`) belong to.
+    """
+    e = entry(f"physiology_{species}", "male.organs.li", "mass")
+    if not isinstance(e.value, float):
+        raise TypeError(f"The reference liver mass of the {species} is no number.")
+    return Value(e.value, U.kg, e.source, e.notes)
+
+
+def bile_flow(species: Species) -> Value:
+    """Get the bile secretion of the reference liver of a species (l/min).
+
+    A sourced value of each species, never scaled from the other one: the rat
+    secretes about 9 times more bile per g of liver than the human (see the
+    entries `bile_flow` of `tables/zonation.toml`). The flow of a liver of
+    another mass is this flow times the mass over `reference_liver_mass`.
+
+    Args:
+        species: the species.
+
+    Returns:
+        The flow (l/min) of the liver of `reference_liver_mass`.
+
+    Raises:
+        ValueError: if the table gives the flow in no unit of ml/min and l/min.
+    """
+    e = entry(_TABLE, _section(species), "bile_flow")
+    if not isinstance(e.value, float):
+        raise TypeError(f"tables/{_TABLE}.toml bile_flow is no number.")
+    try:
+        factor = {"ml/min": 1e-3, "l/min": 1.0}[e.unit]
+    except KeyError:
+        raise ValueError(
+            f"The bile flow has the unit {e.unit}, not ml/min or l/min."
+        ) from None
+    return Value(e.value * factor, U.l_per_min, e.source, e.notes)
 
 
 def geometry(species: Species) -> SinusoidGeometry:

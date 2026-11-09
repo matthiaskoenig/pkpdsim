@@ -143,6 +143,8 @@ def test_the_initial_assignments_evaluate_to_the_layer_volumes(
     # the reference liver of the table, in kg and kg/l
     assert rr[ids.MASS] == pytest.approx(_table_mass())
     for c in model.compartments:
+        if c.sid == ids.volume(Layer.BILE, ids.DUCT):
+            continue  # the duct is a collector of amounts, no layer of a zone
         layer = c.sid.removeprefix("V_").rsplit("_", 1)[0]
         assert rr[c.sid] == pytest.approx(rr[ids.fraction(layer)] * par / n)
         assert rr[c.sid] > 0.0

@@ -86,13 +86,15 @@ from pkpdsim.zonation.flow import PressureFlow
 from pkpdsim.zonation.geometry import (
     Layer,
     SinusoidGeometry,
+    bile_flow,
     fractions,
     geometry,
     layer_volumes,
     reference_flow,
+    reference_liver_mass,
 )
 from pkpdsim.zonation.profiles import Profile, zone_positions
-from pkpdsim.zonation.settings import Geometry, ZonationSettings
+from pkpdsim.zonation.settings import BileTransport, Geometry, ZonationSettings
 from pkpdsim.zonation.transport import (
     M_PER_S,
     diffusion_of,
@@ -114,6 +116,12 @@ ENDOTHELIAL_PERMEABILITY = "endothelial_permeability"
 
 BASOLATERAL_PERMEABILITY = "basolateral_permeability"
 """The process of the exchange of the space of Disse with the hepatocyte."""
+
+CANALICULAR_FLOW = "canalicular_flow"
+"""The process of the bile flow through the canaliculus (advective bile)."""
+
+CANALICULAR_DIFFUSION = "canalicular_diffusion"
+"""The process of the diffusion along the canaliculus (diffusive bile)."""
 
 _FLOW_TO_L_PER_MIN = {"l/min": 1.0, "ml/min": 1e-3}
 _CARRIERS = (Layer.RBC, Layer.PLASMA)
@@ -162,12 +170,28 @@ class ZonationBuilder:
         self.settings = settings
         self.substances = tuple(substances)
         self.cell_model = cell_model
+        unused = sorted(set(settings.profiles) & self._unused_bile_processes())
+        if unused:
+            raise ValueError(
+                f"The profiles {unused} scale a process the bile of the settings "
+                f"({settings.bile}) does not have."
+            )
         unknown = sorted(set(settings.profiles) - self.processes())
         if unknown:
             raise ValueError(
                 f"The profiles {unknown} name no process of the model "
                 f"(processes: {sorted(self.processes())})."
             )
+
+    def _unused_bile_processes(self) -> frozenset[str]:
+        """The processes of the bile the transport of the settings does not have."""
+        match self.settings.bile:
+            case BileTransport.ADVECTIVE:
+                return frozenset({CANALICULAR_DIFFUSION})
+            case BileTransport.DIFFUSIVE:
+                return frozenset({CANALICULAR_FLOW})
+            case _:
+                return frozenset({CANALICULAR_FLOW, CANALICULAR_DIFFUSION})
 
     def processes(self) -> frozenset[str]:
         """Get the names of the processes a profile can scale.
@@ -178,7 +202,13 @@ class ZonationBuilder:
             by the arithmetic mean of its two zones, a choice and not a result); the cell model and the barrier add
             theirs. The barrier adds the `porosity` (a factor on the gradient
             of the table, `p_porosity_<zone>`), the `endothelial_permeability`
-            and the `basolateral_permeability`. This is the registry a later task extends with the
+            and the `basolateral_permeability`. The bile adds the
+            `canalicular_flow` (the factor `p_canalicular_flow_<zone>` of the
+            zone the bile leaves scales the flow of an interface) and the
+            `canalicular_diffusion` (the mean of the two zones, as for the
+            axial diffusion; the duct interface takes the factor of `z1`); a
+            profile of the one the bile of the settings does not have is
+            refused. This is the registry a later task extends with the
             processes it adds, and the validation of the profiles is only as
             strong as its contents.
         """
@@ -188,6 +218,8 @@ class ZonationBuilder:
                 POROSITY,
                 ENDOTHELIAL_PERMEABILITY,
                 BASOLATERAL_PERMEABILITY,
+                CANALICULAR_FLOW,
+                CANALICULAR_DIFFUSION,
             }
         )
 
@@ -515,9 +547,15 @@ class ZonationBuilder:
         return params, assignments
 
     def _diffusion_parameters(self) -> list[Parameter]:
-        """The sinusoid length, the diffusions and the profiles of the diffusion."""
+        """The sinusoid length, the diffusions and the profiles of the diffusion.
+
+        The axial diffusion of the blood and the diffusion along the
+        canaliculus share the length and the diffusions of the substances.
+        """
         s = self.settings
-        if s.geometry is Geometry.WELL_STIRRED or s.n_zones < 2:
+        axial = s.geometry is Geometry.SINUSOID and s.n_zones >= 2
+        canalicular = s.bile is BileTransport.DIFFUSIVE
+        if not (axial or canalicular):
             return []
         diffusions = self._diffusions()
         if not diffusions:
@@ -533,9 +571,97 @@ class ZonationBuilder:
             *diffusions.values(),
         ]
         profile = s.profiles.get(AXIAL_DIFFUSION)
-        if profile is not None:
+        if axial and profile is not None:
             params += self._profile_parameters(AXIAL_DIFFUSION, profile)
         return params
+
+    def _bile_parameters(self) -> list[Parameter]:
+        """The bile flow, its reference and the profile of the canalicular transport."""
+        s = self.settings
+        if s.bile is None:
+            return []
+        if s.bile is BileTransport.DIFFUSIVE:
+            profile = s.profiles.get(CANALICULAR_DIFFUSION)
+            return (
+                self._profile_parameters(CANALICULAR_DIFFUSION, profile)
+                if profile is not None
+                else []
+            )
+        flow = bile_flow(s.species)
+        reference_mass = reference_liver_mass(s.species)
+        params = [
+            value_parameter(
+                ids.BILE_FLOW_REFERENCE,
+                flow,
+                U.l_per_min,
+                "bile flow of the reference liver",
+                _P,
+            ),
+            value_parameter(
+                ids.MASS_REFERENCE,
+                reference_mass,
+                U.kg,
+                "mass of the reference liver of the bile flow",
+                _P,
+            ),
+            Parameter(
+                ids.BILE_FLOW,
+                flow.value * self._mass().value / reference_mass.value,
+                unit=U.l_per_min,
+                name="bile flow through the liver",
+                constant=True,
+                sboTerm=_P,
+            ),
+        ]
+        profile = s.profiles.get(CANALICULAR_FLOW)
+        if profile is not None:
+            params += self._profile_parameters(CANALICULAR_FLOW, profile)
+        return params
+
+    def _bile_assignments(self) -> list[InitialAssignment]:
+        """The bile flow follows the liver mass: the reference flow per reference mass."""
+        if self.settings.bile is not BileTransport.ADVECTIVE:
+            return []
+        return [
+            initial_assignment(
+                ids.BILE_FLOW,
+                f"{ids.BILE_FLOW_REFERENCE} * {ids.MASS} / {ids.MASS_REFERENCE}",
+                U.l_per_min,
+                "bile flow through the liver",
+            )
+        ]
+
+    def _duct_compartments(self) -> list[Compartment]:
+        """The compartment of the duct, which holds amounts and has no volume of its own."""
+        if self.settings.bile is None:
+            return []
+        return [
+            Compartment(
+                ids.volume(Layer.BILE, ids.DUCT),
+                1.0,
+                unit=U.litre,
+                name="bile duct (a collector of amounts, no physical volume)",
+                constant=True,
+                sboTerm=SBO.PHYSICAL_COMPARTMENT,
+            )
+        ]
+
+    def _duct_species(self) -> list[Species]:
+        """The amount of every substance which has left the liver with the bile."""
+        if self.settings.bile is None:
+            return []
+        return [
+            Species(
+                ids.species(substance.sid, Layer.BILE, ids.DUCT),
+                ids.volume(Layer.BILE, ids.DUCT),
+                initialAmount=0.0,
+                substanceUnit=U.mmole,
+                hasOnlySubstanceUnits=True,
+                name=f"{substance.name} in the bile duct (amount)",
+                sboTerm=SBO.SIMPLE_CHEMICAL,
+            )
+            for substance in self.substances
+        ]
 
     def _profile_parameters(self, process: str, profile: Profile) -> list[Parameter]:
         """The zonal factors `p_<process>_<zone>` of a profile."""
@@ -653,6 +779,110 @@ class ZonationBuilder:
                         )
                     )
         return out
+
+    def bile(self) -> list[Reaction]:
+        """Get the transport along the canaliculus, from `z<n>` to `z1` and the duct.
+
+        The bile runs the other way than the blood: pericentral to periportal,
+        and what leaves the canaliculus of `z1` is collected in the duct
+        (`<s>_bile_duct`, an amount), which gives nothing back.
+
+        - `ADVECTIVE`: `FLOW_<s>_bile_z<k+1>_bile_z<k>` is `Q_bile * c` of the
+          upstream (pericentral) zone, and `FLOW_<s>_bile_z1_bile_duct` takes
+          the first zone out; a profile `canalicular_flow` scales every one
+          by the factor of the zone it leaves.
+        - `DIFFUSIVE`: `D_<s>_bile_z<k+1>_bile_z<k>` is reversible, `D * A / dx *
+          (c_k+1 - c_k)`, with `A / dx = n**2 * V_k / L_sin**2` (the layer
+          volume of a zone is its cross-section times its length, `V_k = A *
+          L_sin / n`, as for the axial diffusion of the blood). The duct is
+          an absorbing boundary (concentration 0) half a zone from the centre
+          of `z1`, so `D_<s>_bile_z1_bile_duct` is `2 D A / dx * c_1`, without
+          return. It needs no bile flow.
+
+        Returns:
+            The reactions of every substance; none for `bile=None`.
+        """
+        s = self.settings
+        if s.bile is None:
+            return []
+        n = s.n_zones
+        chain = [ids.zone(k) for k in range(n, 0, -1)] + [ids.DUCT]
+        out: list[Reaction] = []
+        for substance in self.substances:
+            d = self._diffusion(substance)
+            for source, target in itertools.pairwise(chain):
+                if s.bile is BileTransport.ADVECTIVE:
+                    out.append(self._bile_flow_reaction(substance, source, target))
+                elif d is not None:
+                    out.append(
+                        self._bile_diffusion_reaction(substance, d, source, target)
+                    )
+        return out
+
+    def _bile_flow_reaction(
+        self, substance: Substance, source: str, target: str
+    ) -> Reaction:
+        """The advection of a substance in the canaliculus from one site to the next."""
+        a = ids.species(substance.sid, Layer.BILE, source)
+        b = ids.species(substance.sid, Layer.BILE, target)
+        factor = (
+            f" * {ids.profile(CANALICULAR_FLOW, source)}"
+            if CANALICULAR_FLOW in self.settings.profiles
+            else ""
+        )
+        return Reaction(
+            flow_id(
+                substance.sid,
+                ids.site(Layer.BILE, source),
+                ids.site(Layer.BILE, target),
+            ),
+            f"{a} -> {b}",
+            formula=(f"{ids.BILE_FLOW} * {a}{factor}", U.mmole_per_min),
+            compartment=ids.volume(Layer.BILE, source),
+            name=(
+                f"bile flow of {substance.name} in the canaliculus from {source} "
+                f"to {target}"
+            ),
+            sboTerm=SBO.TRANSPORT_REACTION,
+        )
+
+    def _bile_diffusion_reaction(
+        self, substance: Substance, d: Parameter, source: str, target: str
+    ) -> Reaction:
+        """The diffusion of a substance in the canaliculus between two sites."""
+        n = self.settings.n_zones
+        a = ids.species(substance.sid, Layer.BILE, source)
+        b = ids.species(substance.sid, Layer.BILE, target)
+        to_duct = target == ids.DUCT
+        # the duct is an absorbing boundary half a zone away: twice the conductance
+        gain = "2 dimensionless * " if to_duct else ""
+        if CANALICULAR_DIFFUSION in self.settings.profiles:
+            pa = ids.profile(CANALICULAR_DIFFUSION, source)
+            pb = ids.profile(CANALICULAR_DIFFUSION, target)
+            factor = f" * {pa}" if to_duct else f" * ({pa} + {pb}) / 2 dimensionless"
+        else:
+            factor = ""
+        gradient = a if to_duct else f"({a} - {b})"
+        return Reaction(
+            ids.axial(
+                substance.sid,
+                ids.site(Layer.BILE, source),
+                ids.site(Layer.BILE, target),
+            ),
+            f"{a} -> {b}" if to_duct else f"{a} <-> {b}",
+            formula=(
+                f"{gain}{d.sid} * {ids.volume(Layer.BILE, source)} * {n**2} "
+                f"dimensionless / ({ids.LENGTH} * {ids.LENGTH}) * 60 s_per_min * "
+                f"{gradient}{factor}",
+                U.mmole_per_min,
+            ),
+            compartment=ids.volume(Layer.BILE, source),
+            name=(
+                f"diffusion of {substance.name} in the canaliculus between "
+                f"{source} and {target}"
+            ),
+            sboTerm=SBO.TRANSPORT_REACTION,
+        )
 
     def _radius(self, substance: Substance) -> Value:
         """Get the molecular radius of a substance (a subclass may override it)."""
@@ -1019,23 +1249,26 @@ class ZonationBuilder:
             annotations=[(BQB.HAS_TAXON, TAXA[s.species])],
             units=U,
             model_units=MODEL_UNITS,
-            compartments=self.compartments(),
-            species=self._species(),
+            compartments=[*self.compartments(), *self._duct_compartments()],
+            species=[*self._species(), *self._duct_species()],
             parameters=[
                 *self._constants(),
                 *flow_parameters,
                 *self._diffusion_parameters(),
+                *self._bile_parameters(),
                 *self._radial_parameters(),
             ],
             assignments=[
                 *self._assignments(),
                 *flow_assignments,
                 *self._radial_assignments(),
+                *self._bile_assignments(),
             ],
             reactions=[
                 *self.convection(),
                 *self.axial_diffusion(),
                 *self.radial_exchange(),
+                *self.bile(),
             ],
         )
 

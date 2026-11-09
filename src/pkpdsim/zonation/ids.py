@@ -21,12 +21,16 @@ vascular site `vas` (lumen, endothelium and Disse) instead of those layers.
 from pkpdsim.zonation.geometry import Layer
 
 __all__ = [
+    "BILE_FLOW",
+    "BILE_FLOW_REFERENCE",
     "DENSITY",
+    "DUCT",
     "FLOW",
     "HAEMATOCRIT",
     "INFLOW",
     "LENGTH",
     "MASS",
+    "MASS_REFERENCE",
     "OUTFLOW",
     "PARENCHYMA",
     "RADIUS",
@@ -83,6 +87,19 @@ INFLOW = "in"
 
 OUTFLOW = "out"
 """The token of the boundary downstream of the last zone (`plasma_out`)."""
+
+DUCT = "duct"
+"""The token of the bile duct, downstream of the canaliculus of the first zone
+(`bile_duct`): the collector of the bile, a boundary and no zone."""
+
+BILE_FLOW = "Q_bile"
+"""The id of the bile flow of the liver (l/min), through every canaliculus."""
+
+BILE_FLOW_REFERENCE = "Q_bile_ref"
+"""The id of the bile flow (l/min) of the reference liver of the species."""
+
+MASS_REFERENCE = "M_li_ref"
+"""The id of the mass (kg) of the reference liver the bile flow is given for."""
 
 
 def zone(k: int) -> str:
