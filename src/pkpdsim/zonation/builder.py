@@ -794,7 +794,8 @@ class ZonationBuilder:
         - `DIFFUSIVE`: `D_<s>_bile_z<k+1>_bile_z<k>` is reversible, `D * A / dx *
           (c_k+1 - c_k)`, with `A / dx = n**2 * V_k / L_sin**2` (the layer
           volume of a zone is its cross-section times its length, `V_k = A *
-          L_sin / n`, as for the axial diffusion of the blood). The duct is
+          L_sin / n`, as for the axial diffusion of the blood; the volume of
+          an interface is the harmonic mean of its two zones). The duct is
           an absorbing boundary (concentration 0) half a zone from the centre
           of `z1`, so `D_<s>_bile_z1_bile_duct` is `2 D A / dx * c_1`, without
           return. It needs no bile flow.
@@ -867,6 +868,20 @@ class ZonationBuilder:
         else:
             factor = ""
         gradient = a if to_duct else f"({a} - {b})"
+        va = ids.volume(Layer.BILE, source)
+        # The face area of an interior interface is the harmonic mean of the two
+        # zone areas, `2 Va Vb / (Va + Vb)` in volumes (`A_k = V_k n / L_sin`):
+        # the two half-cells `dx / 2` are conductances in series, `1 / G = dx / 2
+        # / (D A_a) + dx / 2 / (D A_b)`, so the conductance is one number of the
+        # face and the diffusion is reciprocal. With the uniform bile volume of
+        # today it is `V`, identical to the volume of the source zone alone, so
+        # this changes no present number. The duct has one zone only.
+        volume = (
+            va
+            if to_duct
+            else f"(2 dimensionless * {va} * {ids.volume(Layer.BILE, target)} / "
+            f"({va} + {ids.volume(Layer.BILE, target)}))"
+        )
         return Reaction(
             ids.axial(
                 substance.sid,
@@ -875,7 +890,7 @@ class ZonationBuilder:
             ),
             f"{a} -> {b}" if to_duct else f"{a} <-> {b}",
             formula=(
-                f"{gain}{d.sid} * {ids.volume(Layer.BILE, source)} * {n**2} "
+                f"{gain}{d.sid} * {volume} * {n**2} "
                 f"dimensionless / ({ids.LENGTH} * {ids.LENGTH}) * 60 s_per_min * "
                 f"{gradient}{factor}",
                 U.mmole_per_min,

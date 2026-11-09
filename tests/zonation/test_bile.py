@@ -165,8 +165,13 @@ def test_the_bile_flow_follows_the_liver_mass(tmp_path: Path) -> None:
     """`Q_bile` is the 0.01562 ml/min of the 7.229 g rat liver per gram of liver."""
     small = _bile_chain(tmp_path, mass=1000.0)
     big = _bile_chain(tmp_path, mass=2000.0)
-    # 0.01562 ml/min / 7.229 g = 2.1607e-3 ml/min per g
-    assert small["Q_bile"] == pytest.approx(2.1607e-3 * 1000.0 / 1000.0, rel=1e-4)
+    q_ref = 0.01562e-3  # l/min of the reference rat liver
+    m_ref = 7.229e-3  # kg, the reference rat liver
+    m_li = 1.0  # kg, the liver of the chain
+    assert small["Q_bile_ref"] == pytest.approx(q_ref, rel=1e-9)
+    assert small["M_li_ref"] == pytest.approx(m_ref, rel=1e-9)
+    assert small["M_li"] == pytest.approx(m_li, rel=1e-12)
+    assert small["Q_bile"] == pytest.approx(q_ref * m_li / m_ref, rel=1e-9)
     assert big["Q_bile"] == pytest.approx(2.0 * small["Q_bile"], rel=1e-12)
 
 
@@ -180,7 +185,14 @@ def test_the_bile_flow_of_the_species_are_not_scaled_from_each_other() -> None:
     # an upper bound on the species difference, a rat total (with a ductular part)
     # against a human canalicular value; against the human total of 0.43 ml/min
     # (0.24 ul/min/g) it is about 9
-    assert (rat / 7.229) / (human / 1800.0) == pytest.approx(14.4, rel=1e-2)
+    per_gram_rat = rat / 7.229
+    per_gram_human = human / 1800.0
+    assert per_gram_rat / per_gram_human == pytest.approx(14.4, rel=1e-2)
+    # The tripwire: a `fallback: rat` or a per-gram scaling of the rat to the
+    # human liver would give the human the per-gram rate of the rat, within a few
+    # per cent; the sourced values differ by more than a factor of 5, so it fails.
+    assert per_gram_rat / per_gram_human > 5.0
+    assert human != pytest.approx(rat * 1800.0 / 7.229, rel=0.5)
 
 
 def test_the_diffusive_mode_needs_no_bile_flow(tmp_path: Path) -> None:
@@ -287,3 +299,85 @@ def test_a_profile_of_a_process_the_bile_does_not_have_is_refused(
     settings = _settings(4, mode, profiles={process: Weights((1.0, 1.0, 1.0, 2.0))})
     with pytest.raises(ValueError, match="does not have"):
         ZonationBuilder(settings, [TRACER], None)
+
+
+@pytest.mark.parametrize("mode", [BileTransport.ADVECTIVE, BileTransport.DIFFUSIVE])
+@pytest.mark.parametrize("n", [1, 2])
+def test_the_duct_collects_everything_of_few_zones(
+    tmp_path: Path, n: int, mode: BileTransport
+) -> None:
+    """One and two zones: the duct receives the whole release of the last zone."""
+    r = _bile_chain(tmp_path, n=n, released_in_zone=n, mode=mode)
+    released = _released(r, n)
+    assert released > 0.0
+    r.simulate(0, 600, 101)
+    assert r[DUCT] / released == pytest.approx(1.0, abs=1e-6)
+
+
+def _conductances(r: roadrunner.RoadRunner, n: int) -> list[float]:
+    """The conductance (l/min) of every interface of the chain from z<n> to the duct.
+
+    The concentration of zone `k` is `k` mM, so every interface of the chain has
+    a gradient of 1 mM and its rate (mmole/min) is its conductance; the duct
+    interface has the concentration 1 of `z1` against the absorbing 0.
+    """
+    for k in range(1, n + 1):
+        r[f"[{ids.species('tr', Layer.BILE, ids.zone(k))}]"] = float(k)
+    return [
+        r[f"D_tr_bile_z{k}_bile_z{k - 1}" if k > 1 else "D_tr_bile_z1_bile_duct"]
+        for k in range(n, 0, -1)
+    ]
+
+
+def test_the_diffusive_conductance_is_the_same_both_ways(tmp_path: Path) -> None:
+    """A face has one conductance, the harmonic mean of the areas of its two zones.
+
+    The bile volume is uniform at present and cannot be set zone by zone by the
+    settings, but the compartment size of a built model can: zone 3 gets 3 times
+    the volume of zone 4. The one reaction of the face then has the conductance
+    `D n^2 2 Va Vb / (Va + Vb) / L^2 * 60` of the two volumes (here 1.5 V4), and
+    not that of the volume of the source zone (V4) or of the target (3 V4).
+    """
+    r = _bile_chain(tmp_path, n=4, released_in_zone=4, mode=BileTransport.DIFFUSIVE)
+    v4 = r["V_bile_z4"]
+    r["V_bile_z3"] = 3.0 * v4
+    assert r["V_bile_z3"] == pytest.approx(3.0 * v4)
+    # there is one reaction per face, no second one the other way
+    reactions = r.model.getReactionIds()
+    assert "D_tr_bile_z4_bile_z3" in reactions
+    assert "D_tr_bile_z3_bile_z4" not in reactions
+    r["[tr_bile_z4]"] = 1.0
+    r["[tr_bile_z3]"] = 0.0
+    k_face = r["D_tr_bile_z4_bile_z3"]
+    per_litre = r["D_tr"] * 16.0 / 300e-6**2 * 60.0  # 1/min per litre of volume
+    assert k_face == pytest.approx(per_litre * 1.5 * v4, rel=1e-9)
+    assert k_face != pytest.approx(per_litre * v4, rel=0.1)
+    assert k_face != pytest.approx(per_litre * 3.0 * v4, rel=0.1)
+    # the same gradient the other way round gives the same magnitude
+    r["[tr_bile_z4]"] = 0.0
+    r["[tr_bile_z3]"] = 1.0
+    assert r["D_tr_bile_z4_bile_z3"] == pytest.approx(-k_face, rel=1e-12)
+
+
+def test_a_profile_of_the_canalicular_diffusion_scales_the_conductances(
+    tmp_path: Path,
+) -> None:
+    """The conductance of a face is the flat one times the mean of its two factors.
+
+    The levels 1, 2, 3, 4 are normalized to the mean 1: 0.4, 0.8, 1.2, 1.6. The
+    face between z4 and z3 has the factor (1.6 + 1.2) / 2 = 1.4, z3 and z2 1.0,
+    z2 and z1 0.6, and the duct interface the factor 0.4 of z1 alone.
+    """
+    kwargs = {"n": 4, "released_in_zone": 4, "mode": BileTransport.DIFFUSIVE}
+    flat = _conductances(_bile_chain(tmp_path, **kwargs), 4)  # ty: ignore[invalid-argument-type]
+    zoned = _bile_chain(
+        tmp_path,
+        profiles={"canalicular_diffusion": Weights((1.0, 2.0, 3.0, 4.0))},
+        **kwargs,  # ty: ignore[invalid-argument-type]
+    )
+    levels = [zoned[f"p_canalicular_diffusion_z{k}"] for k in (1, 2, 3, 4)]
+    assert levels == pytest.approx([0.4, 0.8, 1.2, 1.6])
+    conductances = _conductances(zoned, 4)
+    expected = [1.4, 1.0, 0.6, 0.4]
+    for got, base, factor in zip(conductances, flat, expected, strict=True):
+        assert got / base == pytest.approx(factor, rel=1e-9)
