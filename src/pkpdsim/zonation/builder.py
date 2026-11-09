@@ -34,8 +34,27 @@ compartment. The zones are a chain from periportal to pericentral:
   its length). A zone of the well-stirred
   geometry is mixed and has no axial diffusion.
 
+- radial exchange (`radial_exchange`, sinusoid geometry only, the well-stirred
+  vascular compartment contains the Disse space already): `FEN_<s>_<zone>`
+  (plasma to Disse through the fenestrae), `END_<s>_<zone>_in` and `_out`
+  (plasma to endothelial cell to Disse) and `PS_<s>_<zone>` (Disse to
+  hepatocyte). The fenestral path is physics the engine knows, the paracellular
+  permeability `P_fen_<s>` of an open pore (`fenestral_permeability`, from the
+  aqueous diffusion, the radius of the molecule and the geometry) times the
+  porosity of the zone `eps_fen_<zone>`, which rises from `porosity_pp` to
+  `porosity_pc` of the table over the zone positions (a profile
+  `porosity` multiplies it). The transcellular paths are model input of a
+  transporter set and not of the molar mass: `P_endo_in_<s>`, `P_endo_out_<s>`
+  and `P_hep_<s>` (m/s of the lateral area) are 0, the path is off, until a
+  model sets them. The lateral areas `A_pd_<zone>` and `A_dh_<zone>` follow the
+  mass: `n_sin * pi * 2 * r_sin * dx` is `2 V_lumen / r_sin` of the zone
+  (`n_sin * pi * r_sin**2 * L_sin` is the volume of the whole lumen) and the
+  Disse to hepatocyte interface is that area times `(r_sin + t_endo + t_disse)
+  / r_sin`.
+
 A flow of 0 and a diffusion of 0 emit no reaction, so the chain is closed or
-has no diffusion by construction and no rate law is zero or divides by zero.
+has no diffusion by construction (a solute larger than a fenestra has no fenestral
+reaction either) and no rate law is zero or divides by zero.
 Convection is a first order upwind scheme: a chain of `n` zones disperses like
 `n` tanks in series, a Peclet number of `2 n` (`effective_peclet`).
 """
@@ -71,14 +90,29 @@ from pkpdsim.zonation.geometry import (
     layer_volumes,
     reference_flow,
 )
-from pkpdsim.zonation.profiles import Profile
+from pkpdsim.zonation.profiles import Profile, zone_positions
 from pkpdsim.zonation.settings import Geometry, ZonationSettings
-from pkpdsim.zonation.transport import diffusion_parameter
+from pkpdsim.zonation.transport import (
+    M_PER_S,
+    diffusion_of,
+    diffusion_parameter,
+    fenestral_permeability,
+    molecular_radius,
+)
 
 __all__ = ["ZonationBuilder", "effective_peclet"]
 
 AXIAL_DIFFUSION = "axial_diffusion"
 """The process of the axial diffusion, which a profile scales by zone."""
+
+POROSITY = "porosity"
+"""The process of the fenestral porosity, which a profile scales by zone."""
+
+ENDOTHELIAL_PERMEABILITY = "endothelial_permeability"
+"""The process of the transcellular path of the endothelium."""
+
+BASOLATERAL_PERMEABILITY = "basolateral_permeability"
+"""The process of the exchange of the space of Disse with the hepatocyte."""
 
 _FLOW_TO_L_PER_MIN = {"l/min": 1.0, "ml/min": 1e-3}
 _CARRIERS = (Layer.RBC, Layer.PLASMA)
@@ -141,11 +175,20 @@ class ZonationBuilder:
             The processes: the axial diffusion (the zonal factor
             `p_axial_diffusion_<zone>` scales the conductance of an interface
             by the arithmetic mean of its two zones, a choice and not a result); the cell model and the barrier add
-            theirs. This is the registry a later task extends with the
+            theirs. The barrier adds the `porosity` (a factor on the gradient
+            of the table, `p_porosity_<zone>`), the `endothelial_permeability`
+            and the `basolateral_permeability`. This is the registry a later task extends with the
             processes it adds, and the validation of the profiles is only as
             strong as its contents.
         """
-        return frozenset({AXIAL_DIFFUSION})
+        return frozenset(
+            {
+                AXIAL_DIFFUSION,
+                POROSITY,
+                ENDOTHELIAL_PERMEABILITY,
+                BASOLATERAL_PERMEABILITY,
+            }
+        )
 
     def _geo(self) -> SinusoidGeometry:
         """The geometry: the given one or that of the species."""
@@ -610,6 +653,290 @@ class ZonationBuilder:
                     )
         return out
 
+    def _radius(self, substance: Substance) -> Value:
+        """Get the molecular radius of a substance (a subclass may override it)."""
+        return molecular_radius(substance.mr)
+
+    def _has_radial(self) -> bool:
+        """Whether the zones have a barrier: a sinusoid with its radial layers."""
+        fr = self._fractions()
+        return self.settings.geometry is Geometry.SINUSOID and all(
+            layer in fr
+            for layer in (
+                Layer.PLASMA,
+                Layer.ENDOTHELIUM,
+                Layer.DISSE,
+                Layer.HEPATOCYTE,
+            )
+        )
+
+    def _porosities(self) -> tuple[float, ...]:
+        """The fenestral porosity of every zone: the gradient of the table."""
+        geo = self._geo()
+        return tuple(
+            geo.porosity_pp + (geo.porosity_pc - geo.porosity_pp) * x
+            for x in zone_positions(self.settings.n_zones)
+        )
+
+    def _lumen(self, zone: str) -> str:
+        """The expression of the lumen volume (l) of a zone."""
+        rbc = Layer.RBC in self._fractions()
+        plasma = ids.volume(Layer.PLASMA, zone)
+        return f"({plasma} + {ids.volume(Layer.RBC, zone)})" if rbc else plasma
+
+    def _lumen_litre(self, k: int) -> float:
+        """The lumen volume (l) of zone `k`."""
+        n = self.settings.n_zones
+        volumes = layer_volumes(self._mass(), n, self._geo(), self._full_fractions())
+        return sum(
+            volumes[(layer, k)].value
+            for layer in (Layer.PLASMA, Layer.RBC)
+            if (layer, k) in volumes
+        )
+
+    def _radial_parameters(self) -> list[Parameter]:
+        """The geometry, the porosities, the lateral areas and the permeabilities."""
+        if not self._has_radial():
+            return []
+        geo = self._geo()
+        params = [
+            value_parameter(
+                ids.RADIUS,
+                Value(geo.r_sin, U.meter),
+                U.meter,
+                "radius of the sinusoid",
+                _P,
+            ),
+            value_parameter(
+                ids.T_ENDO,
+                Value(geo.t_endo, U.meter),
+                U.meter,
+                "thickness of the endothelium",
+                _P,
+            ),
+            value_parameter(
+                ids.T_DISSE,
+                Value(geo.t_disse, U.meter),
+                U.meter,
+                "thickness of the space of Disse",
+                _P,
+            ),
+        ]
+        outer = (geo.r_sin + geo.t_endo + geo.t_disse) / geo.r_sin
+        for k, eps in enumerate(self._porosities(), start=1):
+            zone = ids.zone(k)
+            area = 2.0 * self._lumen_litre(k) * 1e-3 / geo.r_sin
+            params += [
+                Parameter(
+                    ids.porosity(zone),
+                    eps,
+                    unit=U.dimensionless,
+                    name=f"fenestral porosity of the endothelium in zone {k}",
+                    constant=True,
+                    sboTerm=_P,
+                ),
+                Parameter(
+                    ids.area("pd", zone),
+                    area,
+                    unit=U.m2,
+                    name=f"lateral area between the plasma and the space of Disse in zone {k}",
+                    constant=False,
+                    sboTerm=_P,
+                ),
+                Parameter(
+                    ids.area("dh", zone),
+                    area * outer,
+                    unit=U.m2,
+                    name=f"lateral area between the space of Disse and the hepatocytes in zone {k}",
+                    constant=False,
+                    sboTerm=_P,
+                ),
+            ]
+        for substance in self.substances:
+            sid = substance.sid
+            fen = fenestral_permeability(
+                diffusion_of(substance), self._radius(substance), geo, 1.0
+            )
+            params.append(
+                Parameter(
+                    ids.permeability("fen", sid),
+                    fen.value,
+                    unit=M_PER_S,
+                    name=(
+                        f"permeability of {substance.name} through an open "
+                        "fenestra (the porosity of the zone scales it)"
+                    ),
+                    constant=True,
+                    sboTerm=_P,
+                )
+            )
+            for path, text in (
+                ("endo_in", "the luminal membrane of the endothelial cell"),
+                ("endo_out", "the abluminal membrane of the endothelial cell"),
+                ("hep", "the basolateral membrane of the hepatocyte"),
+            ):
+                params.append(
+                    Parameter(
+                        ids.permeability(path, sid),
+                        0.0,
+                        unit=M_PER_S,
+                        name=f"permeability of {substance.name} through {text} (model input, 0: off)",
+                        constant=True,
+                        sboTerm=_P,
+                    )
+                )
+        for process in (POROSITY, ENDOTHELIAL_PERMEABILITY, BASOLATERAL_PERMEABILITY):
+            profile = self.settings.profiles.get(process)
+            if profile is not None:
+                params += self._profile_parameters(process, profile)
+        return params
+
+    def _radial_assignments(self) -> list[InitialAssignment]:
+        """The lateral areas, which follow the volumes of the lumen."""
+        if not self._has_radial():
+            return []
+        out: list[InitialAssignment] = []
+        for k in range(1, self.settings.n_zones + 1):
+            zone = ids.zone(k)
+            area = f"2 dimensionless * {self._lumen(zone)} / {ids.RADIUS} / 1000 dimensionless"
+            out.append(
+                initial_assignment(
+                    ids.area("pd", zone),
+                    area,
+                    U.m2,
+                    f"lateral area between the plasma and the space of Disse in zone {k}",
+                )
+            )
+            out.append(
+                initial_assignment(
+                    ids.area("dh", zone),
+                    f"{ids.area('pd', zone)} * ({ids.RADIUS} + {ids.T_ENDO} + "
+                    f"{ids.T_DISSE}) / {ids.RADIUS}",
+                    U.m2,
+                    f"lateral area between the space of Disse and the hepatocytes in zone {k}",
+                )
+            )
+        return out
+
+    def _exchange(
+        self,
+        substance: Substance,
+        kind: str,
+        suffix: str,
+        zone: str,
+        layers: tuple[Layer, Layer],
+        permeability: str,
+        interface: str,
+        text: str,
+        factor: str = "",
+    ) -> Reaction:
+        """A reversible exchange of a substance between two layers of a zone."""
+        a = ids.species(substance.sid, layers[0], zone)
+        b = ids.species(substance.sid, layers[1], zone)
+        porosity = f"{ids.porosity(zone)} * " if kind == "FEN" else ""
+        return Reaction(
+            ids.exchange(kind, substance.sid, zone, suffix),
+            f"{a} <-> {b}",
+            formula=(
+                f"{permeability} * {porosity}{ids.area(interface, zone)} * 1000 "
+                f"dimensionless * 60 s_per_min * ({a} - {b}){factor}",
+                U.mmole_per_min,
+            ),
+            compartment=ids.volume(layers[0], zone),
+            name=f"{text} of {substance.name} in zone {zone[1:]}",
+            sboTerm=SBO.TRANSPORT_REACTION,
+        )
+
+    def radial_exchange(self) -> list[Reaction]:
+        """Get the radial exchange between the layers of the zones.
+
+        Returns:
+            The reversible reactions per zone and substance: `FEN_<s>_<zone>`
+            (plasma to the space of Disse through the fenestrae, the derived
+            paracellular path `P_fen_<s> * eps_fen_<zone> * A_pd_<zone>`; none
+            for a solute whose radius reaches the radius of a fenestra, which
+            has no fenestral flux by construction), `END_<s>_<zone>_in`
+            (plasma to endothelial cell) and `END_<s>_<zone>_out` (endothelial
+            cell to Disse), with `P_endo_in_<s>` and `P_endo_out_<s>`, and
+            `PS_<s>_<zone>` (Disse to hepatocyte, `P_hep_<s>` over the area
+            `A_dh_<zone>`). The transcellular permeabilities are model input
+            and 0 (off) by default. None for the well-stirred geometry.
+        """
+        if not self._has_radial():
+            return []
+        profiles = self.settings.profiles
+        geo = self._geo()
+        out: list[Reaction] = []
+        for substance in self.substances:
+            sieve = fenestral_permeability(
+                diffusion_of(substance), self._radius(substance), geo, 1.0
+            ).value
+            for k in range(1, self.settings.n_zones + 1):
+                zone = ids.zone(k)
+
+                def scaled(process: str, zone: str = zone) -> str:
+                    return (
+                        f" * {ids.profile(process, zone)}"
+                        if process in profiles
+                        else ""
+                    )
+
+                if sieve > 0.0:
+                    out.append(
+                        self._exchange(
+                            substance,
+                            "FEN",
+                            "",
+                            zone,
+                            (Layer.PLASMA, Layer.DISSE),
+                            ids.permeability("fen", substance.sid),
+                            "pd",
+                            "fenestral exchange",
+                            scaled(POROSITY),
+                        )
+                    )
+                endo = scaled(ENDOTHELIAL_PERMEABILITY)
+                out.append(
+                    self._exchange(
+                        substance,
+                        "END",
+                        "in",
+                        zone,
+                        (Layer.PLASMA, Layer.ENDOTHELIUM),
+                        ids.permeability("endo_in", substance.sid),
+                        "pd",
+                        "uptake into the endothelial cell",
+                        endo,
+                    )
+                )
+                out.append(
+                    self._exchange(
+                        substance,
+                        "END",
+                        "out",
+                        zone,
+                        (Layer.ENDOTHELIUM, Layer.DISSE),
+                        ids.permeability("endo_out", substance.sid),
+                        "pd",
+                        "release of the endothelial cell into the space of Disse",
+                        endo,
+                    )
+                )
+                out.append(
+                    self._exchange(
+                        substance,
+                        "PS",
+                        "",
+                        zone,
+                        (Layer.DISSE, Layer.HEPATOCYTE),
+                        ids.permeability("hep", substance.sid),
+                        "dh",
+                        "basolateral exchange",
+                        scaled(BASOLATERAL_PERMEABILITY),
+                    )
+                )
+        return out
+
     def _warn_dispersion(self) -> None:
         """Warn once when a diffusion lies below the numerical dispersion."""
         limit = self.dispersion()
@@ -661,9 +988,18 @@ class ZonationBuilder:
                 *self._constants(),
                 *flow_parameters,
                 *self._diffusion_parameters(),
+                *self._radial_parameters(),
             ],
-            assignments=[*self._assignments(), *flow_assignments],
-            reactions=[*self.convection(), *self.axial_diffusion()],
+            assignments=[
+                *self._assignments(),
+                *flow_assignments,
+                *self._radial_assignments(),
+            ],
+            reactions=[
+                *self.convection(),
+                *self.axial_diffusion(),
+                *self.radial_exchange(),
+            ],
         )
 
 

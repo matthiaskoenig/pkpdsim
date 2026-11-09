@@ -51,6 +51,10 @@ class _Diffusing(ZonationBuilder):
 
     diffusion_value = 0.0
 
+    def _radius(self, substance: Substance) -> Value:
+        """Get a radius above that of a fenestra: the tracer stays in the lumen."""
+        return Value(1e-6, U.meter)
+
     def _diffusion(self, substance: Substance) -> Parameter | None:
         """Get the diffusion of the tracer, `None` for none."""
         if not self.diffusion_value:

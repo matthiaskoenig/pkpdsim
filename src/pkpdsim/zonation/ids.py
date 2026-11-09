@@ -29,10 +29,17 @@ __all__ = [
     "MASS",
     "OUTFLOW",
     "PARENCHYMA",
+    "RADIUS",
+    "T_DISSE",
+    "T_ENDO",
     "VASCULAR",
+    "area",
     "axial",
+    "exchange",
     "fraction",
     "layer_flow",
+    "permeability",
+    "porosity",
     "profile",
     "site",
     "species",
@@ -61,6 +68,15 @@ HAEMATOCRIT = "Hct_li"
 
 LENGTH = "L_sin"
 """The id of the length of a sinusoid (m), which the zones divide."""
+
+RADIUS = "r_sin"
+"""The id of the radius of the lumen of a sinusoid (m)."""
+
+T_ENDO = "t_endo"
+"""The id of the thickness of the endothelium (m)."""
+
+T_DISSE = "t_disse"
+"""The id of the thickness of the space of Disse (m)."""
 
 INFLOW = "in"
 """The token of the boundary upstream of the first zone (`plasma_in`)."""
@@ -134,3 +150,38 @@ def layer_flow(layer: Layer | str) -> str:
 def axial(quantity: str, source: str, target: str) -> str:
     """Get the axial diffusion of a quantity between two sites, `D_<q>_<from>_<to>`."""
     return f"D_{quantity}_{source}_{target}"
+
+
+def porosity(zone: str) -> str:
+    """Get the id of the fenestral porosity of a zone, `eps_fen_<zone>`."""
+    return f"eps_fen_{zone}"
+
+
+def area(interface: str, zone: str) -> str:
+    """Get the id of the lateral area of an interface in a zone, `A_<interface>_<zone>`.
+
+    The interfaces are `pd` (plasma to the space of Disse) and `dh` (the space
+    of Disse to the hepatocyte).
+    """
+    return f"A_{interface}_{zone}"
+
+
+def permeability(path: str, quantity: str) -> str:
+    """Get the id of a permeability of a substance, `P_<path>_<quantity>`.
+
+    The paths are `fen` (the fenestrae, of an open pore), `endo_in` and
+    `endo_out` (the luminal and the abluminal membrane of the endothelial cell)
+    and `hep` (the basolateral membrane of the hepatocyte).
+    """
+    return f"P_{path}_{quantity}"
+
+
+def exchange(kind: str, quantity: str, zone: str, suffix: str = "") -> str:
+    """Get the id of a radial exchange reaction, `<kind>_<q>_<zone>[_<suffix>]`.
+
+    The kinds are `FEN` (plasma to Disse through the fenestrae), `END` (plasma to
+    endothelial cell to Disse; the suffix `in` or `out`) and `PS` (Disse to
+    hepatocyte).
+    """
+    base = f"{kind}_{quantity}_{zone}"
+    return f"{base}_{suffix}" if suffix else base
