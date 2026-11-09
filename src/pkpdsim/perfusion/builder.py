@@ -78,7 +78,7 @@ from pkpdsim.pbpk.annotation import TAXA, initial_assignment
 from pkpdsim.pbpk.placement import value_parameter
 from pkpdsim.pbpk.units import MODEL_UNITS, U
 from pkpdsim.perfusion import circuit, core, ids, observers
-from pkpdsim.perfusion.cell_model import cell_model
+from pkpdsim.perfusion.cell_model import ARRHENIUS, cell_model
 from pkpdsim.perfusion.cell_model import constants as cell_constants
 from pkpdsim.perfusion.definition import (
     KidneyOrgan,
@@ -276,7 +276,8 @@ def zone_cell_model(definition: PerfusionDefinition) -> Model | None:
     """Get the cell model of the zones of the liver of a definition, `None` for no liver.
 
     The cell model has the zonal factor of every process with a profile as a
-    port, and is named after the model (`<sid>_core`, the stem of its file), so
+    port and no bile compartment (the liver of the builder has no bile of the
+    engine), and is named after the model (`<sid>_core`, the stem of its file), so
     that the models of two definitions in one folder have a file each.
     """
     organ = definition.organ
@@ -287,6 +288,7 @@ def zone_cell_model(definition: PerfusionDefinition) -> Model | None:
         bile=True,
         released=definition.released,
         processes=tuple(organ.profiles),
+        bile_port=False,
     )
     cell.sid = f"{definition.sid}_core"
     return cell
@@ -369,14 +371,20 @@ def _liver(definition: PerfusionDefinition, organ: LiverOrgan) -> _Organ:
         for p in circuit.temperature_objects(definition.temperature).parameters
         if p.sid == ids.TEMPERATURE
     )
-    shared = cell_constants(definition.core, bile=True, released=released)
+    shared = [
+        *(
+            str(p.sid)
+            for p in cell_constants(definition.core, bile=True, released=released)
+        ),
+        *ARRHENIUS,
+    ]
     model = composition.compose(
         builder,
         cell.sid,
         composition.CellPorts(),
         exchange=ids.perfusate_quantities(released),
         temperature=temperature,
-        shared=[str(p.sid) for p in shared],
+        shared=shared,
     )
     # the species of the vascular space are those of the perfusion
     start = circuit.composition(definition.perfusate)
@@ -395,7 +403,7 @@ def _liver(definition: PerfusionDefinition, organ: LiverOrgan) -> _Organ:
         species.update({str(x.sid): x for x in zone_species})
         out += circuit.fresh_assignments(zone, definition.perfusate, released)
         replaced = {
-            **{str(p.sid): str(p.sid) for p in shared},
+            **{sid: sid for sid in shared},
             "Vli": ids.cells(zone),
             **{
                 f"p_{process}": ids.profile(process, zone) for process in organ.profiles

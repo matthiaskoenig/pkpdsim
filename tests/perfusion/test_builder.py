@@ -439,3 +439,25 @@ def test_the_notes_of_a_definition_follow_the_description(tmp_path: Path) -> Non
     assert "<h2>Terms of use</h2>" in notes
     assert f"<p>{terms}</p>" in notes
     assert notes.index("Machine perfusion of the") < notes.index(terms)
+
+
+def test_a_zone_has_no_empty_bile_compartment(tmp_path: Path) -> None:
+    """The compartments of the liver are the circuit and, per zone, its vascular
+    space and its cells: no bile compartment is left by an unreplaced port."""
+    model = _model(build(liver_definition(3), tmp_path))
+    compartments = {
+        model.getCompartment(k).getId() for k in range(model.getNumCompartments())
+    }
+    zones = {f"V_{kind}_z{k}" for kind in ("vas", "cell") for k in (1, 2, 3)}
+    assert compartments == {"V_res", "V_in", "V_out"} | zones
+
+
+def test_the_zones_share_the_arrhenius_constants_of_the_circuit(tmp_path: Path) -> None:
+    """One `Ea`, `T_ref` and `R_gas` in the liver: the zones have none of their own."""
+    model = _model(build(liver_definition(3), tmp_path))
+    parameters = {
+        model.getParameter(k).getId() for k in range(model.getNumParameters())
+    }
+    for sid in ("Ea", "T_ref", "R_gas"):
+        assert sid in parameters
+        assert not {p for p in parameters if p.endswith(f"__{sid}")}

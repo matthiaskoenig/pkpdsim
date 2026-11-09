@@ -23,7 +23,7 @@ from pkpdsim.pbpk.substance import Substance
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import Value
 from pkpdsim.perfusion import core, ids
-from pkpdsim.perfusion.cell_model import cell_model
+from pkpdsim.perfusion.cell_model import ARRHENIUS, cell_model
 from pkpdsim.perfusion.cell_model import constants as cell_constants
 from pkpdsim.zonation import ZonationBuilder
 from pkpdsim.zonation.composition import CellPorts, compose, write
@@ -72,7 +72,7 @@ def test_the_core_is_a_standalone_model_with_the_cell_ports(tmp_path: Path) -> N
     quantities = {
         ids.species(q, "ext") for q in ids.perfusate_quantities(ids.RELEASABLE)
     }
-    constants = {p.sid for p in cell_constants(PARAMS)}
+    constants = {p.sid for p in cell_constants(PARAMS)} | set(ARRHENIUS)
     assert _document_ports(path) == PORTS | quantities | constants
 
 
@@ -397,7 +397,7 @@ def test_the_constants_are_ports_which_the_zones_share(tmp_path: Path) -> None:
     """Every constant of the core and of the buffer is a port, and no other parameter is."""
     model = cell_model(PARAMS)
     path = _written(model, tmp_path / "core.xml")
-    constants = {p.sid for p in cell_constants(PARAMS)}
+    constants = {p.sid for p in cell_constants(PARAMS)} | set(ARRHENIUS)
     assert "GLC2PYR_Vmax" in constants
     assert ids.BUFFER_KA in constants
     assert constants <= _document_ports(path)
@@ -406,12 +406,23 @@ def test_the_constants_are_ports_which_the_zones_share(tmp_path: Path) -> None:
     }
 
 
+def test_the_arrhenius_constants_are_shared_and_the_factor_is_not(
+    tmp_path: Path,
+) -> None:
+    """`T_ref`, `R_gas` and `Ea` are ports; `f_T` is an initial assignment of the
+    cell model which it needs to simulate alone, so it is no port."""
+    path = _written(cell_model(PARAMS), tmp_path / "core.xml")
+    ports = _document_ports(path)
+    assert set(ARRHENIUS) <= ports
+    assert "f_T" not in ports
+
+
 def test_a_process_with_a_zonal_factor_has_the_port_of_it(tmp_path: Path) -> None:
     """The factor `p_<process>` (1) is a port the engine replaces by the one of
     the zone; a process without a profile has neither factor nor port."""
     model = cell_model(PARAMS, processes=("OXPHOS", "BILE"))
     path = _written(model, tmp_path / "core.xml")
-    constants = {p.sid for p in cell_constants(PARAMS)}
+    constants = {p.sid for p in cell_constants(PARAMS)} | set(ARRHENIUS)
     assert _document_ports(path) - constants == PORTS | {
         "p_OXPHOS",
         "p_BILE",
@@ -428,3 +439,15 @@ def test_a_process_with_a_zonal_factor_has_the_port_of_it(tmp_path: Path) -> Non
 def test_a_process_of_no_core_is_refused() -> None:
     with pytest.raises(ValueError, match="CYP2E1"):
         cell_model(PARAMS, processes=("CYP2E1",))
+
+
+def test_without_a_bile_port_the_cell_model_has_no_bile_compartment(
+    tmp_path: Path,
+) -> None:
+    """A liver whose engine has no bile composes a cell model without `Vbi`,
+    so no zone carries an empty bile compartment; the secretion `Vbile` stays."""
+    model = cell_model(PARAMS, bile_port=False)
+    path = _written(model, tmp_path / "core.xml")
+    assert "Vbi" not in {c.sid for c in model.compartments}
+    assert "Vbi" not in _document_ports(path)
+    assert "Vbile" in {p.sid for p in model.parameters}

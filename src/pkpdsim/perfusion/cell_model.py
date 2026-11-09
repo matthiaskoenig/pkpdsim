@@ -46,10 +46,18 @@ from pkpdsim.perfusion.definition import table_value
 from pkpdsim.perfusion.units import PU
 from pkpdsim.zonation.composition import CellPorts
 
-__all__ = ["CELL_MODEL_ID", "cell_model", "constants"]
+__all__ = ["ARRHENIUS", "CELL_MODEL_ID", "cell_model", "constants"]
 
 CELL_MODEL_ID = "perfusion_core"
 """The id of the cell model, and the stem of its file."""
+
+ARRHENIUS = (ids.TEMPERATURE_REF, ids.GAS_CONSTANT, ids.ACTIVATION_ENERGY)
+"""The constants of the Arrhenius factor of the cell model (`circuit.temperature_objects`),
+which are ports: a liver defines them once, for its circuit, and the zones share
+them, as the temperature itself (the port `temperature`). The factor `f_T` is
+not a port: it is an initial assignment of the cell model, and comp refuses two
+initial assignments of one (replaced) symbol, so a shared `f_T` would leave the
+cell model without a factor of its own, which it needs to simulate alone."""
 
 CELL_VOLUME = 0.0069
 """The cells of a liver of 10 g (l), the size of a closed example."""
@@ -93,13 +101,14 @@ def cell_model(
     bile: bool = True,
     released: tuple[str, ...] = ids.RELEASABLE,
     processes: tuple[str, ...] = (),
+    bile_port: bool = True,
 ) -> Model:
     """Get the cellular core as a standalone model with the cell ports.
 
     Args:
         params: the constants of the core.
-        bile: the cell secretes bile (a liver), `Vbile`; the compartment `Vbi`
-            is a port in either case, so that a composition can wire it.
+        bile: the cell secretes bile (a liver), `Vbile` (a volume which the
+            cell integrates, in no compartment).
         released: the quantities of `ids.RELEASABLE` which the dying cells
             release; the enzymes of the cells and the perfusate are the
             released ones.
@@ -107,6 +116,9 @@ def cell_model(
             the parameter `p_<process>` (1, a port) in the rate of the
             process, which a composition replaces by the factor of the zone;
             a process without one has no factor.
+        bile_port: the model has the bile compartment `Vbi` as a port, which a
+            composition with a bile of the engine replaces; `False` for a
+            liver without one, which then has no empty compartment per zone.
 
     Returns:
         The model `CELL_MODEL_ID`: the objects of `core.core_objects`
@@ -142,7 +154,7 @@ def cell_model(
         table_value("temperature", "reference"), ports.temperature
     )
     for parameter in temperature.parameters:
-        if parameter.sid == ports.temperature:
+        if parameter.sid == ports.temperature or parameter.sid in ARRHENIUS:
             parameter.port = True
     shared = constants(params, bile=bile, released=released)
     for parameter in shared:
@@ -175,6 +187,7 @@ def cell_model(
                 (ports.cell, CELL_VOLUME, "cells"),
                 (ports.bile, BILE_VOLUME, "bile"),
             )
+            if bile_port or sid != ports.bile
         ],
         parameters=[
             position,
