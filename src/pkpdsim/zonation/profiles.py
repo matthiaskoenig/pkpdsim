@@ -7,34 +7,43 @@ the level of every zone (`Profile.values`): a fit estimates the two parameters
 of the shape instead of one level per zone, and the same declaration gives the
 same gradient at any number of zones.
 
-The levels are normalized: their mean over the weight of the zones is 1, so the
-total amount of the quantity in the liver is the one of a liver without a
-gradient, whatever the shape. Only the shape of a declaration survives the
-normalization, not the scale it is written on: `Linear(1.0, 4.0)` is the
-four-fold pericentral gradient, and so is `Linear(2.0, 8.0)`.
+The levels are normalized: their mean over the volumes of the zones is 1, so
+the total amount of the quantity in the liver does not change with its
+distribution, whatever the shape. The volumes are those the engine builds, and
+`pkpdsim.zonation.geometry.layer_volumes` splits every layer evenly over the
+zones, so a profile without a weight normalizes to the arithmetic mean 1 over
+the zones and follows the volumes if a later geometry makes them unequal. Only
+the shape of a declaration survives the normalization, not the scale it is
+written on: `Linear(1.0, 4.0)` is the four-fold pericentral gradient, and so is
+`Linear(2.0, 8.0)`.
 
-The weight of a position is `lobular_weight`, the area of the idealized
-hexagonal lobule at that position: the central vein in its centre, the six
-portal triads in its corners, and the position of a point the relative distance
+The area of the lobule is `lobular_weight`, which is passed in where it is the
+weight: the figure of the lobule and the comparison with literature values
+which are weighted by the area. It is the area of the idealized hexagonal
+lobule at a position: the central vein in its centre, the six portal triads in
+its corners, and the position of a point the relative distance
 `d_pp / (d_pp + d_pc)` of the nearest triad and the central vein, as the
-zonation coordinate of a histological section is measured. The weight is the
-area of the lobule between two positions, which the geometry gives in closed
-form: the points of one position lie on an Apollonius circle of a triad and the
-centre, so the area beyond a position is a single integral over one twelfth of
-the hexagon, and the weight is its derivative (`_WEDGE_NODES`, 32 nodes of
-Gauss-Legendre are exact to 1e-11). The weight is 0 at both vessels, peaks at
+zonation coordinate of a histological section is measured. The geometry gives
+the area in closed form: the points of one position lie on an Apollonius circle
+of a triad and the centre, so the area up to a position is a single integral
+over one twelfth of the hexagon (`lobular_area`, `_WEDGE_NODES`, 32 nodes of
+Gauss-Legendre are exact to 1e-11) and `lobular_weight` is its derivative. The
+area of a zone is the difference of the areas of its ends (`zone_areas`), not
+the weight at its centre, which overstates the zone of the peak of the weight
+by 7 % at 10 zones. The weight is 0 at both vessels, peaks at
 `1 / (1 + sqrt(3))` where the isoline leaves the hexagon through the edges, and
 cuts the lobule in the ratio 2 to 1 at the bisectors, its 1/3 beyond the
 position 0.5 being the inner hexagon of the perpendicular bisectors.
 
-The hexagonal lobule reproduces the normalization constants of the linear
-patterns of the spt cell model (pkdb_models `tpm/spt/models/spt_liver.py`,
-`protein = 0.5 * <constant> * <shape>`) to 1 %, where a uniform weight is 14 %
-and the weight of a disc 24 % off. Its two sharp patterns it misses by 24 % and
-11 %, and no weight of this geometry carries all four constants: the sharp
-constants of spt are not the moments of the weight of its linear ones (the
-`TODO.md` of spt asks for the sharp patterns to be fixed), see
-`tests/zonation/test_profiles.py`.
+The area of the hexagonal lobule reproduces the normalization constants of the
+linear patterns of the spt cell model (pkdb_models
+`tpm/spt/models/spt_liver.py`, `protein = 0.5 * <constant> * <shape>`) to 1 %,
+where a uniform weight is 14 % and the weight of a disc 24 % off: the constants
+of spt were computed from a hexagonal lobule. Its two sharp patterns it misses
+by 23.78 % and 11.08 %, and no weight of the lobule reproduces them (no
+distance power, vessel radius, Hill exponent or threshold of this geometry
+meets both); the `TODO.md` of spt records those patterns as too sharp and not
+symmetrical, see `tests/zonation/test_profiles.py`.
 """
 
 import math
@@ -42,6 +51,7 @@ import random
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from itertools import pairwise
 from typing import Protocol, runtime_checkable
 
 import numpy as np
@@ -54,8 +64,10 @@ __all__ = [
     "Random",
     "Sigmoid",
     "Weights",
+    "lobular_area",
     "lobular_weight",
     "normalized",
+    "zone_areas",
     "zone_positions",
 ]
 
@@ -111,11 +123,50 @@ def _direction_of_the_edge(ratio: float) -> float:
     return min(_WEDGE, math.asin(min(1.0, _APOTHEM * ratio)))
 
 
+def lobular_area(x: float) -> float:
+    """Get the area fraction of the idealized hexagonal lobule up to a position.
+
+    The periportal share of the lobule, 0 at the portal triads and 1 at the
+    central vein. The area beyond the position is bounded by the isoline of the
+    position up to the direction in which it leaves the hexagon and by the edge
+    of the hexagon beyond it; `lobular_weight` is the derivative of the area
+    and `zone_areas` the areas of the zones.
+
+    Args:
+        x: the lobular position, 0 periportal (the portal triads) and 1
+            pericentral (the central vein).
+
+    Returns:
+        The fraction of the area of the lobule with a position below `x`.
+
+    Raises:
+        ValueError: for a position outside the lobule.
+    """
+    if not 0.0 <= x <= 1.0:
+        raise ValueError(f"The lobular position {x} is outside [0, 1].")
+    if x == 0.0:
+        return 0.0
+    if x == 1.0:
+        return 1.0
+    ratio = x / (1.0 - x)
+    edge = _direction_of_the_edge(ratio)
+    half = 0.5 * edge
+    inside = 0.0
+    for node, weight in _WEDGE_NODES:
+        theta = half * (node + 1.0)
+        inside += weight * half * _radius_of_the_isoline(ratio, theta) ** 2
+    # beyond `edge` the hexagon bounds the area, and the integral of its
+    # squared radius over the rest of the wedge is `apothem**2 * tan`
+    beyond = inside + _APOTHEM**2 * math.tan(_WEDGE - edge)
+    return 1.0 - beyond / _WEDGE_AREA
+
+
 def lobular_weight(x: float) -> float:
     """Get the area of the idealized hexagonal lobule at a lobular position.
 
-    The density of the area over the position: the area of the lobule between
-    two positions is its integral, and over the whole lobule it is 1.
+    The density of the area over the position (the derivative of
+    `lobular_area`): the area of the lobule between two positions is its
+    integral, and over the whole lobule it is 1.
 
     Args:
         x: the lobular position, 0 periportal (the portal triads) and 1
@@ -165,15 +216,59 @@ def zone_positions(n: int) -> tuple[float, ...]:
     return tuple((k - 0.5) / n for k in range(1, n + 1))
 
 
+def zone_areas(n: int) -> tuple[float, ...]:
+    """Get the area fraction of the lobule of every zone.
+
+    The exact area of a zone, the difference of the areas of its ends
+    (`lobular_area`), and not the weight at its centre: at 10 zones the density
+    at the centre overstates the zone which holds the peak of the weight by
+    7 %.
+
+    Args:
+        n: the number of zones.
+
+    Returns:
+        The fraction of the area of the lobule of every zone, numbered from 1
+        (periportal), which sum to 1.
+
+    Raises:
+        ValueError: for less than one zone.
+    """
+    if n < 1:
+        raise ValueError(f"A lobule has at least one zone, not {n}.")
+    edges = [lobular_area(k / n) for k in range(n + 1)]
+    return tuple(b - a for a, b in pairwise(edges))
+
+
+def _zone_weights(n: int, weight: Callable[[float], float] | None) -> tuple[float, ...]:
+    """The weight of every zone, its share of the volume of the liver.
+
+    Args:
+        n: the number of zones.
+        weight: `None` for zones of equal volume, the even split of
+            `pkpdsim.zonation.geometry.layer_volumes`; `lobular_weight` for the
+            area of the lobule, which the zones take exactly (`zone_areas`) and
+            not as the density at their centre; any other density at the centre
+            of every zone.
+    """
+    if weight is None:
+        return (1.0,) * n
+    if weight is lobular_weight:
+        return zone_areas(n)
+    return tuple(weight(x) for x in zone_positions(n))
+
+
 def normalized(
-    raw: Sequence[float], n: int, weight: Callable[[float], float] = lobular_weight
+    raw: Sequence[float], n: int, weight: Callable[[float], float] | None = None
 ) -> tuple[float, ...]:
     """Normalize the levels of the zones to the volume-weighted mean 1.
 
     Args:
         raw: the level of every zone on the scale of its declaration.
         n: the number of zones.
-        weight: the weight of a lobular position, the area of the lobule.
+        weight: the weight of the zones, `None` for the zones of equal volume
+            the engine builds (the arithmetic mean), `lobular_weight` for the
+            area of the lobule.
 
     Returns:
         The levels divided by their weighted mean, so that a liver with the
@@ -185,7 +280,7 @@ def normalized(
     """
     if len(raw) != n:
         raise ValueError(f"{len(raw)} levels for the {n} zones of the lobule.")
-    weights = [weight(x) for x in zone_positions(n)]
+    weights = _zone_weights(n, weight)
     mean = sum(v * w for v, w in zip(raw, weights, strict=True)) / sum(weights)
     if not mean > 0.0:
         raise ValueError(f"The levels {tuple(raw)} have the weighted mean {mean}.")
@@ -196,12 +291,16 @@ def normalized(
 class Profile(Protocol):
     """A gradient of a quantity along the lobule."""
 
-    def values(self, n: int, weight: Callable[[float], float]) -> tuple[float, ...]:
+    def values(
+        self, n: int, weight: Callable[[float], float] | None = None
+    ) -> tuple[float, ...]:
         """The level of every zone, normalized to the weighted mean 1.
 
         Args:
             n: the number of zones.
-            weight: the weight of a lobular position.
+            weight: the weight of the zones, `None` for the zones of equal
+                volume the engine builds, `lobular_weight` for the area of
+                the lobule.
         """
         ...
 
@@ -213,12 +312,16 @@ class _Pointwise(ABC):
     def _shape(self, x: float) -> float:
         """The level at a lobular position, on the scale of the declaration."""
 
-    def values(self, n: int, weight: Callable[[float], float]) -> tuple[float, ...]:
+    def values(
+        self, n: int, weight: Callable[[float], float] | None = None
+    ) -> tuple[float, ...]:
         """The shape at the centre of every zone, normalized.
 
         Args:
             n: the number of zones.
-            weight: the weight of a lobular position.
+            weight: the weight of the zones, `None` for the zones of equal
+                volume the engine builds, `lobular_weight` for the area of
+                the lobule.
         """
         return normalized([self._shape(x) for x in zone_positions(n)], n, weight)
 
@@ -366,12 +469,14 @@ class Weights:
             raise ValueError(f"Weights: the levels {levels} are no profile.")
         object.__setattr__(self, "levels", levels)
 
-    def values(self, n: int, weight: Callable[[float], float]) -> tuple[float, ...]:
+    def values(
+        self, n: int, weight: Callable[[float], float] | None = None
+    ) -> tuple[float, ...]:
         """The measured levels, normalized.
 
         Args:
             n: the number of zones, which the levels are those of.
-            weight: the weight of a lobular position.
+            weight: the weight of the zones, as of `normalized`.
 
         Returns:
             The levels divided by their weighted mean.
@@ -407,12 +512,16 @@ class Random:
         if self.cv < 0.0:
             raise ValueError(f"Random: the cv {self.cv} is negative.")
 
-    def values(self, n: int, weight: Callable[[float], float]) -> tuple[float, ...]:
+    def values(
+        self, n: int, weight: Callable[[float], float] | None = None
+    ) -> tuple[float, ...]:
         """The drawn levels, normalized.
 
         Args:
             n: the number of zones.
-            weight: the weight of a lobular position.
+            weight: the weight of the zones, `None` for the zones of equal
+                volume the engine builds, `lobular_weight` for the area of
+                the lobule.
         """
         rng = random.Random(self.seed)
         sigma = math.sqrt(math.log(1.0 + self.cv**2))

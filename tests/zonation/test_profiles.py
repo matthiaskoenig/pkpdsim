@@ -1,7 +1,7 @@
 """Tests of the profiles over the lobular position and of the lobular weight."""
 
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from itertools import pairwise
 
 import pytest
@@ -14,15 +14,17 @@ from pkpdsim.zonation.profiles import (
     Random,
     Sigmoid,
     Weights,
+    lobular_area,
     lobular_weight,
     normalized,
+    zone_areas,
     zone_positions,
 )
 
 # The normalization constants of the spt cell model (pkdb_models
 # `tpm/spt/models/spt_liver.py`), where `protein = 0.5 * <constant> * <shape>`:
 # the constant makes the protein amount of every pattern the same, so
-# `<constant> * mean(<shape>) = 0.5` over the weight of the lobule.
+# `<constant> * mean(<shape>) = 0.5` over the area of the lobule.
 SPT_LINEAR_INCREASE = 1.1406136
 SPT_LINEAR_DECREASE = 0.8902508
 SPT_SHARP_PERICENTRAL = 4.552802
@@ -70,8 +72,7 @@ def _sampled_mean(f: Callable[[float], float], n: int = 240) -> float:
     return num / den
 
 
-def _weighted_mean(values: tuple[float, ...], n: int) -> float:
-    weights = [lobular_weight(x) for x in zone_positions(n)]
+def _weighted_mean(values: Sequence[float], weights: Sequence[float]) -> float:
     return sum(v * w for v, w in zip(values, weights, strict=True)) / sum(weights)
 
 
@@ -90,10 +91,13 @@ def test_the_lobular_weight_is_positive_inside_and_vanishes_at_the_vessels() -> 
     assert all(lobular_weight(k / 100.0) > 0.0 for k in range(1, 100))
 
 
+@pytest.mark.parametrize("f", [lobular_weight, lobular_area])
 @pytest.mark.parametrize("x", [-0.001, 1.001, 2.0])
-def test_a_position_outside_the_lobule_raises(x: float) -> None:
+def test_a_position_outside_the_lobule_raises(
+    f: Callable[[float], float], x: float
+) -> None:
     with pytest.raises(ValueError, match="position"):
-        lobular_weight(x)
+        f(x)
 
 
 def test_the_bisectors_cut_a_third_of_the_lobule() -> None:
@@ -101,7 +105,30 @@ def test_the_bisectors_cut_a_third_of_the_lobule() -> None:
     # hexagon of the perpendicular bisectors, a third of the lobule, and the
     # weight at the bisector is 40/27
     assert _integral(lobular_weight, 0.5, 1.0) == pytest.approx(1.0 / 3.0, rel=1e-6)
+    assert lobular_area(0.5) == pytest.approx(2.0 / 3.0, rel=1e-9)
     assert lobular_weight(0.5) == pytest.approx(40.0 / 27.0, rel=1e-9)
+
+
+def test_the_lobule_area_is_the_integral_of_the_lobular_weight() -> None:
+    assert lobular_area(0.0) == 0.0
+    assert lobular_area(1.0) == 1.0
+    for x in (0.1, 1.0 / (1.0 + math.sqrt(3.0)), 0.5, 0.8):
+        assert lobular_area(x) == pytest.approx(
+            _integral(lobular_weight, 0.0, x), rel=1e-4
+        )
+    assert all(b > a for a, b in pairwise([lobular_area(k / 20.0) for k in range(21)]))
+
+
+def test_the_areas_of_the_zones_are_exact_and_not_the_midpoint_density() -> None:
+    areas = zone_areas(10)
+    assert sum(areas) == pytest.approx(1.0, rel=1e-12)
+    assert areas == pytest.approx(
+        [lobular_area(k / 10.0) - lobular_area((k - 1) / 10.0) for k in range(1, 11)]
+    )
+    assert areas[3] == pytest.approx(_integral(lobular_weight, 0.3, 0.4), rel=1e-4)
+    # the fourth zone holds the peak of the weight at `1 / (1 + sqrt(3))`, and
+    # the density at the centre of the zone overstates its area by 6.7 %
+    assert lobular_weight(0.35) / (10.0 * areas[3]) == pytest.approx(1.067, rel=1e-2)
 
 
 def test_the_lobular_weight_matches_the_hexagon_it_is_derived_from() -> None:
@@ -120,9 +147,10 @@ def test_the_lobular_weight_lies_between_the_uniform_and_the_disc_weight() -> No
 
 
 def test_the_lobular_weight_reproduces_the_spt_linear_normalization() -> None:
-    # the hexagonal lobule gives 0.434041 and 0.565959 against the 0.438361
-    # and 0.561640 of spt, 1.0 % and 0.8 % off; a uniform weight (0.5) is 14 %
-    # off and the disc weight (1/3) 24 %
+    # the area of the hexagonal lobule gives 0.434041 and 0.565959 against the
+    # 0.438361 and 0.561640 of spt, -0.99 % and +0.77 % off, so the constants
+    # of the linear patterns of spt were computed from a hexagonal lobule; a
+    # uniform weight (0.5) is 14 % off and the disc weight (1/3) 24 %
     assert _mean_of(lambda x: x) == pytest.approx(0.5 / SPT_LINEAR_INCREASE, rel=1.5e-2)
     assert _mean_of(lambda x: 1.0 - x) == pytest.approx(
         0.5 / SPT_LINEAR_DECREASE, rel=1.5e-2
@@ -131,10 +159,12 @@ def test_the_lobular_weight_reproduces_the_spt_linear_normalization() -> None:
 
 @pytest.mark.xfail(
     strict=True,
-    reason="the sharp constants of spt are not the moments of one lobular weight: "
-    "the hexagonal lobule is 24 % and 11 % off and no vessel radius, Hill exponent "
-    "or threshold reconciles both; the spt TODO.md asks for the sharp patterns to "
-    "be fixed",
+    reason="no lobular weight reproduces the sharp constants of spt: the area of "
+    "the hexagonal lobule, which carries its linear constants to 1 %, is -23.78 % "
+    "off the sharp pericentral and -11.08 % off the sharp periportal constant, and "
+    "no distance power, vessel radius, Hill exponent or threshold of the geometry "
+    "meets both; `pkdb_models/tpm/spt/TODO.md` records those two patterns as too "
+    "sharp and not symmetrical",
 )
 def test_the_lobular_weight_reproduces_the_spt_sharp_normalization() -> None:
     assert _mean_of(_hill_pericentral) == pytest.approx(
@@ -156,10 +186,13 @@ def test_zone_positions_are_the_centres_of_the_zones() -> None:
     assert len(zone_positions(10)) == 10
 
 
+@pytest.mark.parametrize("f", [zone_positions, zone_areas])
 @pytest.mark.parametrize("n", [0, -1])
-def test_a_lobule_without_zones_raises(n: int) -> None:
+def test_a_lobule_without_zones_raises(
+    f: Callable[[int], tuple[float, ...]], n: int
+) -> None:
     with pytest.raises(ValueError, match="at least one zone"):
-        zone_positions(n)
+        f(n)
 
 
 def test_normalized_checks_the_zone_count() -> None:
@@ -178,6 +211,7 @@ def test_a_profile_without_a_positive_mean_cannot_be_normalized() -> None:
 
 
 @pytest.mark.parametrize("n", [1, 5, 10, 50])
+@pytest.mark.parametrize("weight", [None, lobular_weight])
 @pytest.mark.parametrize(
     "profile",
     [
@@ -189,10 +223,29 @@ def test_a_profile_without_a_positive_mean_cannot_be_normalized() -> None:
         Exponential(1.0, 2.0),
     ],
 )
-def test_every_profile_has_weighted_mean_one(profile: Profile, n: int) -> None:
-    values = profile.values(n, lobular_weight)
+def test_every_profile_has_weighted_mean_one(
+    profile: Profile, weight: Callable[[float], float] | None, n: int
+) -> None:
+    values = profile.values(n, weight)
+    weights = (1.0,) * n if weight is None else zone_areas(n)
     assert len(values) == n
-    assert _weighted_mean(values, n) == pytest.approx(1.0, rel=1e-9)
+    assert _weighted_mean(values, weights) == pytest.approx(1.0, rel=1e-9)
+
+
+def test_the_default_weight_is_the_even_split_of_the_zones() -> None:
+    profile = Linear(0.0, 1.0)
+    values = profile.values(10)
+    assert sum(values) / 10.0 == pytest.approx(1.0, rel=1e-12)
+    assert values == pytest.approx(profile.values(10, lambda _: 1.0))
+    assert values != pytest.approx(profile.values(10, lobular_weight))
+
+
+def test_the_lobular_weight_normalizes_over_the_exact_areas_of_the_zones() -> None:
+    raw = [_hill_periportal(x) for x in zone_positions(10)]
+    mean = _weighted_mean(raw, zone_areas(10))
+    assert Sigmoid(0.25, 10.0).values(10, lobular_weight) == pytest.approx(
+        [v / mean for v in raw]
+    )
 
 
 @pytest.mark.parametrize(
@@ -201,7 +254,10 @@ def test_every_profile_has_weighted_mean_one(profile: Profile, n: int) -> None:
 def test_the_explicit_and_the_random_profile_have_weighted_mean_one(
     profile: Profile,
 ) -> None:
-    assert _weighted_mean(profile.values(10, lobular_weight), 10) == pytest.approx(1.0)
+    assert _weighted_mean(
+        profile.values(10, lobular_weight), zone_areas(10)
+    ) == pytest.approx(1.0)
+    assert sum(profile.values(10)) / 10.0 == pytest.approx(1.0)
 
 
 def test_every_profile_satisfies_the_protocol() -> None:
