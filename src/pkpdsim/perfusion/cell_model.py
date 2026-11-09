@@ -5,7 +5,7 @@ SBML model, which the zonation engine composes once per zone
 (`pkpdsim.zonation.composition.compose`): the same objects as a zone of the
 perfusion builder emits, with the same values, units, rate laws and SBO
 terms, but one cell instead of a zone of an organ. There is one emitter of
-the chemistry, `core._core_objects`; `core.zone_objects` calls it with the
+the chemistry, `core.core_objects`; `core.zone_objects` calls it with the
 ids of a zone, `cell_model` with the ids of a cell.
 
 The function is not among the lazy exports of `pkpdsim.perfusion`: it would
@@ -85,8 +85,8 @@ def cell_model(
             (`core.CoreParameters.problems`).
     """
     ports = CellPorts()
-    names = core._Names()
-    objects = core._core_objects(
+    names = core.CoreNames()
+    objects = core.core_objects(
         names,
         ports.cell,
         ports.external,

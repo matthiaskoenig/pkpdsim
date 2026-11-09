@@ -34,7 +34,6 @@ from .conftest import CELLS, VASCULAR, ZONE, load_zone
 PARAMS = core.CoreParameters.default("liver_rat")
 PORTS = {"Vext", "Vli", "Vbi", "position", "temperature"}
 SITES = {"cell", "dead", "ext"}
-SUFFIX = re.compile(r"\bz1\b|\bext\b")
 
 
 def _written(model: Model, path: Path) -> Path:
@@ -85,17 +84,23 @@ def test_the_ports_are_the_cell_ports_of_the_engine() -> None:
 
 
 def test_the_standalone_core_simulates_on_its_own(tmp_path: Path) -> None:
-    """The core runs without a circuit: finite, the living cells use their ATP
-    and oxygen, bile is secreted."""
+    """The closed core (1 ml of perfusate around 10 g of cells) does its work
+    in an hour: the cells use up the oxygen of the perfusate (0.47 mM to 0), run
+    short of ATP (3 mM to 0.9 mM), draw on their glycogen (200 to 192 mM) and
+    release glucose (6.5 mM to 11.7 mM, the dilute perfusate takes it), a part of
+    the cells dies (living fraction 0.38) and bile is secreted (0.21 ml)."""
     r = load_zone(_written(cell_model(PARAMS), tmp_path / "core.xml"))
-    result = r.simulate(0, 60, 61)
-    assert np.all(np.isfinite(result))
-    assert r["[glc_ext]"] > 0
-    assert r["Vbile"] > 0
-    assert 0 < r["f_alive"] <= 1
+    start = {k: r[k] for k in ("[o2_ext]", "[atp_cell]", "[glyc_cell]", "[glc_ext]")}
+    assert np.all(np.isfinite(r.simulate(0, 60, 61)))
+    assert r["[o2_ext]"] < 0.01 * start["[o2_ext]"]
+    assert r["[atp_cell]"] < 0.5 * start["[atp_cell]"]
+    assert r["[glyc_cell]"] < start["[glyc_cell]"] - 5.0
+    assert r["[glc_ext]"] > start["[glc_ext]"] + 3.0
+    assert 0.2 < r["f_alive"] < 0.6
+    assert 1e-4 < r["Vbile"] < 4e-4
 
 
-def test_the_core_is_per_temperature_of_its_port(tmp_path: Path) -> None:
+def test_the_temperature_port_sets_the_arrhenius_factor(tmp_path: Path) -> None:
     """The temperature port sets the Arrhenius factor, warmer is faster."""
     path = _written(cell_model(PARAMS), tmp_path / "core.xml")
     warm = individual(path, temperature=37.0 + 5.0)
@@ -134,24 +139,30 @@ def _normalise_text(text: str) -> str:
     return re.sub(r"[A-Za-z_][A-Za-z0-9_]*", rename, text)
 
 
-def _normalise(value: Any, key: str = "") -> Any:  # noqa: ANN401
-    """Rename the ids in a description of an object of a zone; a name loses
-    its sites (`z1`, `ext`) on both sides of the comparison."""
+def _cell_name(name: str, external: bool) -> str:
+    """Get the name of an object of a zone as the standalone core names it.
+
+    The site stays in the name: an object of the perfusate (id `<..>_ext`)
+    says `ext` where the zone said `z1`, every other object loses its zone
+    (`cells z1` to `cells`, `(z1)` to nothing). A name which says `z1` or `ext`
+    in the wrong place then differs.
+    """
+    if external:
+        return name.replace("z1", "ext")
+    return name.replace(" (z1)", "").replace(" z1", "")
+
+
+def _normalise(value: Any, key: str = "", external: bool = False) -> Any:  # noqa: ANN401
+    """Rename the ids and names in a description of an object of a zone."""
     if isinstance(value, dict):
-        return {k: _normalise(v, k) for k, v in value.items()}
+        return {k: _normalise(v, k, external) for k, v in value.items()}
     if isinstance(value, list):
-        return [_normalise(v, key) for v in value]
+        return [_normalise(v, key, external) for v in value]
     if isinstance(value, str):
         if key == "name":
-            return _site_free(value)
+            return _cell_name(value, external)
         return _normalise_text(value)
     return value
-
-
-def _site_free(name: str) -> str:
-    """Get a name without its sites."""
-    bare = re.sub(r"\s*\(\s*\)", "", SUFFIX.sub("", name))
-    return " ".join(re.sub(r"\s+\)", ")", bare).split())
 
 
 def _without_port(described: dict[str, dict[str, Any]]) -> dict[str, Any]:
@@ -164,20 +175,12 @@ def _without_port(described: dict[str, dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def _named(described: dict[str, Any]) -> dict[str, Any]:
-    """The description with a name without sites."""
-    return {
-        a: _site_free(v) if a == "name" and isinstance(v, str) else v
-        for a, v in described.items()
-    }
-
-
 def _cell_objects(model: Model) -> dict[str, dict[str, Any]]:
     """The objects of the model, described as the golden file is."""
     return _without_port(
         {
             kind: {
-                zone_golden.key(o): _named(zone_golden.describe(o))
+                zone_golden.key(o): zone_golden.describe(o)
                 for o in getattr(model, kind)
             }
             for kind in zone_golden.KINDS
@@ -189,7 +192,12 @@ def _golden(config: str) -> dict[str, Any]:
     """The objects of a zone before the move, as a standalone core names them."""
     golden = _without_port(zone_golden.load()[config])
     return {
-        kind: {_normalise_text(sid): _normalise(d) for sid, d in objects.items()}
+        kind: {
+            _normalise_text(sid): _normalise(
+                d, external=_normalise_text(sid).endswith("_ext")
+            )
+            for sid, d in objects.items()
+        }
         for kind, objects in golden.items()
     }
 

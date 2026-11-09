@@ -133,10 +133,12 @@ __all__ = [
     "PROCESSES",
     "Buffer",
     "Composition",
+    "CoreNames",
     "CoreObjects",
     "CoreParameters",
     "buffer_objects",
     "buffer_parameters",
+    "core_objects",
     "core_parameters",
     "perfusate_objects",
     "quantity_name",
@@ -844,8 +846,8 @@ def zone_objects(
 ) -> CoreObjects:
     """Get the cellular core of a zone, its vascular space included.
 
-    The objects are those of `_core_objects` with the ids of the zone
-    (`_Names(zone)`); the standalone cell model (`cell_model`) is the same
+    The objects are those of `core_objects` with the ids of the zone
+    (`CoreNames(zone)`); the standalone cell model (`cell_model`) is the same
     emitter without a zone.
 
     Args:
@@ -880,8 +882,8 @@ def zone_objects(
     """
     if not ids.is_zone(zone):
         raise ValueError(f"'{zone}' is no zone id (z1, z2, ...).")
-    return _core_objects(
-        _Names(zone),
+    return core_objects(
+        CoreNames(zone),
         cells,
         vascular,
         params,
@@ -893,7 +895,7 @@ def zone_objects(
 
 
 @dataclass(frozen=True)
-class _Names:
+class CoreNames:
     """The ids and labels of the objects of the core of a zone or of a cell.
 
     Attributes:
@@ -962,8 +964,8 @@ class _Names:
         return f"{text} ({self.zone})" if self.zone else text
 
 
-def _core_objects(
-    names: "_Names",
+def core_objects(
+    names: "CoreNames",
     cells: str,
     vascular: str,
     params: CoreParameters,
@@ -975,13 +977,19 @@ def _core_objects(
 ) -> CoreObjects:
     """Get the objects of the cellular core, the one emitter of its chemistry.
 
+    This is the seam between the cellular core and its placements: a zone of a
+    perfusion organ (`zone_objects`), the standalone cell model
+    (`cell_model.cell_model`) and the organs of the engine each call it with
+    their `CoreNames`, compartments and profile, and never write a value, a
+    rate law or a unit of their own.
+
     A zone of an organ (`zone_objects`) and the standalone cell model
     (`cell_model.cell_model`) are this function with other `names`, other
     compartments and nothing else: every value, rate law and unit is written
     here once.
 
     Args:
-        names: the ids of the objects (`_Names`).
+        names: the ids of the objects (`CoreNames`).
         cells: the compartment of the cells.
         vascular: the compartment of the vascular space (the surroundings of
             the cells).
