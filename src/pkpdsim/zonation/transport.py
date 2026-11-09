@@ -58,13 +58,14 @@ partition and hindrance of a spherical solute in a cylindrical pore.
 """
 
 import math
+from typing import Protocol, runtime_checkable
 
 from sbmlutils.factory import Parameter
 from sbmlutils.factory.units import UnitDefinition
 from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk.placement import value_parameter
-from pkpdsim.pbpk.substance import DIFFUSION_UNITS, Substance
+from pkpdsim.pbpk.substance import DIFFUSION_UNITS
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import Q, Value, number, unit_text
 from pkpdsim.zonation import ids
@@ -77,9 +78,11 @@ __all__ = [
     "L_PER_M3",
     "M2_PER_S",
     "M_PER_S",
+    "Solute",
     "aqueous_diffusion",
     "axial_velocity",
     "cytosolic_diffusion",
+    "diffuses",
     "diffusion_of",
     "diffusion_parameter",
     "dispersion",
@@ -314,8 +317,57 @@ def _as_m2_per_s(d: Value) -> float:
         ) from None
 
 
-def diffusion_of(substance: Substance) -> Value:
-    """Get the aqueous diffusion of a substance (m**2/s), the override or derived."""
+@runtime_checkable
+class Solute(Protocol):
+    """What rides the chain of zones: an id and a name, nothing more is needed.
+
+    A perfusate quantity (oxygen, glucose, an enzyme) is no PBPK substance and
+    has no molar mass; the engine carries it through the zones by convection.
+    The optional attributes add the transport which needs them: a `diffusion`
+    (or a molar mass `mr` to derive it from) adds the axial diffusion, a molar
+    mass the path through the fenestrae (the radius of the molecule). A
+    `pkpdsim.pbpk.substance.Substance` satisfies it.
+
+    Attributes:
+        sid: the id of the solute.
+        name: the name of the solute.
+        mr: the molar mass, `None` for none.
+        diffusion: the aqueous diffusion coefficient, `None` derives it from
+            the molar mass.
+    """
+
+    @property
+    def sid(self) -> str:
+        """The id."""
+        ...
+
+    @property
+    def name(self) -> str:
+        """The name."""
+        ...
+
+    @property
+    def mr(self) -> Q | None:
+        """The molar mass."""
+        ...
+
+    @property
+    def diffusion(self) -> Value | None:
+        """The aqueous diffusion coefficient."""
+        ...
+
+
+def diffuses(substance: Solute) -> bool:
+    """Get whether a solute has a diffusion: a given one or a molar mass to derive it."""
+    return substance.diffusion is not None or substance.mr is not None
+
+
+def diffusion_of(substance: Solute) -> Value:
+    """Get the aqueous diffusion of a substance (m**2/s), the override or derived.
+
+    Raises:
+        ValueError: for a solute with neither a diffusion nor a molar mass.
+    """
     if substance.diffusion is not None:
         return Value(
             _as_m2_per_s(substance.diffusion),
@@ -323,10 +375,14 @@ def diffusion_of(substance: Substance) -> Value:
             substance.diffusion.source,
             substance.diffusion.notes,
         )
+    if substance.mr is None:
+        raise ValueError(
+            f"The solute '{substance.sid}' has neither a diffusion nor a molar mass."
+        )
     return aqueous_diffusion(substance.mr)
 
 
-def diffusion_parameter(substance: Substance, note: str = "") -> Parameter:
+def diffusion_parameter(substance: Solute, note: str = "") -> Parameter:
     """Get the diffusion of a substance as a parameter `D_<sid>` with its provenance.
 
     Args:
@@ -346,6 +402,7 @@ def diffusion_parameter(substance: Substance, note: str = "") -> Parameter:
             f"{unit_text(substance.diffusion.unit)}."
         )
     else:
+        assert substance.mr is not None  # diffusion_of raised otherwise
         text = (
             f"The diffusion coefficient of {substance.name} in water at 37 C, "
             f"derived from its molar mass {_mr_number(substance.mr):g} g/mole: "

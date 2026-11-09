@@ -79,7 +79,6 @@ from sbmlutils.metadata import BQB, SBO
 from pkpdsim.database.tables import entry
 from pkpdsim.pbpk.annotation import TAXA, initial_assignment
 from pkpdsim.pbpk.placement import value_parameter
-from pkpdsim.pbpk.substance import Substance
 from pkpdsim.pbpk.units import MODEL_UNITS, U
 from pkpdsim.pbpk.values import Value, number
 from pkpdsim.perfusion.ids import flow as flow_id
@@ -112,7 +111,9 @@ from pkpdsim.zonation.transport import (
     L_PER_M3,
     M2_PER_S,
     M_PER_S,
+    Solute,
     axial_velocity,
+    diffuses,
     diffusion_of,
     diffusion_parameter,
     dispersion,
@@ -216,7 +217,7 @@ class ZonationBuilder:
     def __init__(
         self,
         settings: ZonationSettings,
-        substances: Sequence[Substance],
+        substances: Sequence[Solute],
         cell_model: object | None,
     ) -> None:
         """Check the settings.
@@ -229,6 +230,12 @@ class ZonationBuilder:
         Raises:
             ValueError: for a profile of a process nothing uses.
         """
+        for substance in substances:
+            if not isinstance(substance, Solute):
+                raise TypeError(
+                    f"{substance!r} is no solute: it needs an id (sid), a name, "
+                    "a molar mass (mr) and a diffusion (diffusion, both may be None)."
+                )
         self.settings = settings
         self.substances = tuple(substances)
         self.cell_model = cell_model
@@ -490,13 +497,14 @@ class ZonationBuilder:
         """
         return peclet(self.velocity(), self._geo().L_sin, self.settings.n_zones, d_eff)
 
-    def _diffusion(self, substance: Substance) -> Parameter | None:
+    def _diffusion(self, substance: Solute) -> Parameter | None:
         """Get the axial diffusion of a substance, `None` for none.
 
-        The aqueous diffusion of the substance; a subclass may override it
-        (a tracer without diffusion).
+        The aqueous diffusion of the substance, none for a solute with
+        neither a diffusion nor a molar mass; a subclass may override it (a
+        tracer without diffusion).
         """
-        return diffusion_parameter(substance)
+        return diffusion_parameter(substance) if diffuses(substance) else None
 
     def _diffusions(self) -> dict[str, Parameter]:
         """The diffusion parameters of the substances which diffuse."""
@@ -765,7 +773,7 @@ class ZonationBuilder:
         ]
 
     def _flow_reaction(
-        self, substance: Substance, layer: Layer | str, source: str, target: str
+        self, substance: Solute, layer: Layer | str, source: str, target: str
     ) -> Reaction:
         """The flow of a substance in a layer from one site to the next."""
         a = ids.species(substance.sid, layer, source)
@@ -910,7 +918,7 @@ class ZonationBuilder:
         return out
 
     def _bile_flow_reaction(
-        self, substance: Substance, source: str, target: str
+        self, substance: Solute, source: str, target: str
     ) -> Reaction:
         """The advection of a substance in the canaliculus from one site to the next."""
         a = ids.species(substance.sid, Layer.BILE, source)
@@ -937,7 +945,7 @@ class ZonationBuilder:
         )
 
     def _bile_diffusion_reaction(
-        self, substance: Substance, d: Parameter, source: str, target: str
+        self, substance: Solute, d: Parameter, source: str, target: str
     ) -> Reaction:
         """The diffusion of a substance in the canaliculus between two sites."""
         n = self.settings.n_zones
@@ -992,8 +1000,9 @@ class ZonationBuilder:
             sboTerm=SBO.TRANSPORT_REACTION,
         )
 
-    def _radius(self, substance: Substance) -> Value:
+    def _radius(self, substance: Solute) -> Value:
         """Get the molecular radius of a substance (a subclass may override it)."""
+        assert substance.mr is not None  # a solute without a molar mass has no radius
         return molecular_radius(substance.mr)
 
     def _has_radial(self) -> bool:
@@ -1096,6 +1105,8 @@ class ZonationBuilder:
                 ),
             ]
         for substance in self.substances:
+            if substance.mr is None:
+                continue
             sid = substance.sid
             fen = fenestral_permeability(
                 diffusion_of(substance), self._radius(substance), geo, 1.0
@@ -1174,7 +1185,7 @@ class ZonationBuilder:
 
     def _exchange(
         self,
-        substance: Substance,
+        substance: Solute,
         kind: str,
         suffix: str,
         zone: str,
@@ -1241,6 +1252,8 @@ class ZonationBuilder:
         geo = self._geo()
         out: list[Reaction] = []
         for substance in self.substances:
+            if substance.mr is None:
+                continue
             sieve = fenestral_permeability(
                 diffusion_of(substance), self._radius(substance), geo, 1.0
             ).value

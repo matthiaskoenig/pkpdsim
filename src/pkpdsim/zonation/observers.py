@@ -43,7 +43,6 @@ from sbmlutils.factory import Model, Parameter, RateRule
 from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk.annotation import initial_assignment
-from pkpdsim.pbpk.substance import Substance
 from pkpdsim.pbpk.units import U
 from pkpdsim.perfusion import core
 from pkpdsim.perfusion.observers import RULE, observer
@@ -51,6 +50,7 @@ from pkpdsim.zonation import ids
 from pkpdsim.zonation.builder import ZonationBuilder
 from pkpdsim.zonation.geometry import Layer
 from pkpdsim.zonation.settings import ZonationSettings
+from pkpdsim.zonation.transport import Solute
 from pkpdsim.zones import third_weights, weighted_mean
 
 __all__ = [
@@ -201,7 +201,7 @@ def _layer_name(layer: Layer | str) -> str:
 def _ledger(
     out: core.CoreObjects,
     kind: str,
-    substance: Substance,
+    substance: Solute,
     rate: str | None,
     start: str | None = None,
 ) -> None:
@@ -234,7 +234,7 @@ def _ledger(
 
 def observer_objects(
     settings: ZonationSettings,
-    substances: Sequence[Substance],
+    substances: Sequence[Solute],
     consumption: Mapping[str, str] | None = None,
 ) -> core.CoreObjects:
     """Get the observers of a zonated organ.
@@ -368,7 +368,7 @@ def add_observers(model: Model, objects: core.CoreObjects) -> None:
 
 
 def sync_dose(
-    runner: roadrunner.RoadRunner, substances: Sequence[Substance | str]
+    runner: roadrunner.RoadRunner, substances: Sequence[Solute | str]
 ) -> None:
     """Bring the dose ledger in line with the amounts present at the start.
 
@@ -393,5 +393,5 @@ def sync_dose(
             f"at the start; the model is at time {runner['time']}."
         )
     for substance in substances:
-        s = substance.sid if isinstance(substance, Substance) else substance
+        s = substance.sid if isinstance(substance, Solute) else substance
         runner[ledger("dose", s)] = runner[amount(s)]

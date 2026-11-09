@@ -23,7 +23,7 @@ from pkpdsim.zonation.flow import ImposedFlow
 from pkpdsim.zonation.geometry import Layer, geometry
 from pkpdsim.zonation.profiles import Weights
 from pkpdsim.zonation.settings import Geometry, ZonationSettings
-from pkpdsim.zonation.transport import M2_PER_S
+from pkpdsim.zonation.transport import M2_PER_S, Solute
 
 from .conftest import mass_g
 
@@ -38,7 +38,7 @@ class _Sized(ZonationBuilder):
 
     radius = 0.0
 
-    def _radius(self, substance: Substance) -> Value:
+    def _radius(self, substance: Solute) -> Value:
         """Get the radius of the tracer."""
         if not self.radius:
             return super()._radius(substance)
