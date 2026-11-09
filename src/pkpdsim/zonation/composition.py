@@ -55,7 +55,6 @@ from sbmlutils.factory import (
 from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk.units import U
-from pkpdsim.perfusion.units import PU
 from pkpdsim.zonation import ids
 from pkpdsim.zonation.builder import ZonationBuilder
 from pkpdsim.zonation.geometry import Layer
@@ -122,6 +121,11 @@ def compose(
         The model of `builder.build()` with the external model definition,
         one submodel per zone, the replaced elements and the deletions.
     """
+    # the units of the perfusion library when the engine composes and not
+    # when it is imported, as `zonation_units` of the builder takes them
+    # (the three libraries import in any order)
+    from pkpdsim.perfusion.units import PU
+
     model = builder.build()
     s = builder.settings
     n = s.n_zones

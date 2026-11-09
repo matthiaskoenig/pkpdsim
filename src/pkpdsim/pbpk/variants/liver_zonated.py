@@ -45,19 +45,35 @@ created once, the species with the zone in their ids.
 
 The zones are well-stirred tanks in series (`Geometry.WELL_STIRRED`). The
 sinusoid geometry (`Geometry.SINUSOID`) adds the two transport steps of the
-sinusoid which the well-stirred zone collapses, with the geometry of the
+sinusoid which the well-stirred zone leaves out, with the geometry of the
 species of the zonation engine (`pkpdsim.zonation`): the diffusion along the
 sinusoid between the zones (`D_z1_pl_<s>`, in the plasma of the lumen and in
 the interstitium, the space of Disse) and the fenestrated endothelium
-between them, whose conductance `P_fen_<s>*eps_fen_<zone>*A_pd_<zone>`
-replaces the generic endothelium `PS_vas` of the standard organ (the
-porosity falls from the periportal to the pericentral end, the lateral area
-follows the lumen of the zone). The layers of the engine are the parts of the
-liver: the plasma of the lumen is the plasma, the erythrocytes the blood
-cells, the space of Disse the interstitium and the hepatocyte the
-intracellular space; a substance whose form has no interstitium has no
-barrier either (the space of Disse is inside its tissue), and the
-endothelial cell and the bile canaliculus are no part of the PBPK liver.
+between them, whose conductance `PS_vas_<zone>_<s> =
+P_fen_<s>*eps_fen_<zone>*A_pd_<zone>` replaces the generic endothelium
+`PS_vas` of the standard organ (the fenestral porosity rises from the
+periportal to the pericentral end, 0.06 to 0.08 of the table of the engine,
+Braet and Wisse 2002; the lateral area follows the lumen of the zone). The
+layers of the engine are the parts of the liver: the plasma of the lumen is
+the plasma, the erythrocytes the blood cells, the space of Disse the
+interstitium and the hepatocyte the intracellular space; a substance whose
+form has no interstitium has no barrier either (the space of Disse is inside
+its tissue), and the endothelial cell and the bile canaliculus are no part
+of the PBPK liver.
+
+Neither step is a small correction of the chain, and the axial diffusion is
+the larger of the two. For a small molecule its conductance between two
+zones, `D*V_<part>_<zone>*n^2/L_sin^2`, is of the order of the plasma flow
+through the chain (the Peclet number of the notes is about 6 for a drug of
+0.3 kDa in ten zones, against the `2n = 20` of a substance which does not
+diffuse), so it back-mixes the zones and partly undoes the zonation: the
+venous concentration of such a drug deviates from the well-stirred liver by
+about 7e-03 with the diffusion on and by 2e-05 with it off. A modeller who
+chooses a zone count, or who wants the gradient along the lobule and not its
+mean, needs that number; `axial_diffusion=False` leaves the term out. The
+fenestral path, in contrast, limits nothing for a small molecule: its
+conductance is hundreds of times the plasma flow, and the basolateral `PS`
+of the substance is the step which limits the transfer into the tissue.
 
 With one zone the zonated liver is the standard liver. With `n` zones and
 linear kinetics the availability of a flow-limited liver at steady state is
@@ -142,6 +158,18 @@ class SinusoidUnits(U):
     l_per_m3 = L_PER_M3
     m_per_s = M_PER_S
     m2_per_s = M2_PER_S
+
+
+_REFERENCE_SEX = Sex.MALE
+"""The sex of the one individual the numbers of the notes are of.
+
+The mass of the reference liver of the geometry table of the engine is that
+of the reference male of `physiology_<species>.toml`
+(`pkpdsim.zonation.geometry.reference_liver_mass`), so the vascular fraction
+and the hepatic blood flow of the notes are the male ones too: the velocity,
+the dispersion and the Peclet number describe one individual, not a mix of
+a male liver and a female flow. Every species of the geometry table has a
+reference male."""
 
 
 _PART_NAMES: Mapping[Part, str] = {
@@ -335,7 +363,7 @@ class ZonatedBuilder(StandardBuilder):
         """The two transport steps of the sinusoid and the numbers of its chain.
 
         The dispersion of the upwind chain and its Peclet number at the
-        reference individual of the build: a reader who chooses a zone count
+        reference male of the species: a reader who chooses a zone count
         needs the order of magnitude of both, and the flow and the volume of
         the simulated individual are parameters of the model and no numbers
         at build time (`_reference_velocity`).
@@ -357,7 +385,7 @@ class ZonatedBuilder(StandardBuilder):
             "of the endothelium, with the geometry of the liver of the species. "
             "The chain is upwind, so the convection from zone to zone disperses "
             "numerically with `v*L_sin/(2n)` of the velocity v of the plasma: at "
-            f"the reference individual of the build (the liver of "
+            f"the reference male of the species (the liver of "
             f"{reference_liver_mass(self.ctx.species).value:.3g} kg and its blood "
             f"flow {self._reference_flow():.3g} l/min) the blood moves at "
             f"{v * 1e6:.3g} um/s, the chain of {n} zones disperses with "
@@ -375,19 +403,9 @@ class ZonatedBuilder(StandardBuilder):
             )
         )
 
-    def _reference_sex(self) -> Sex:
-        """The sex whose reference individual the numbers of the notes are of.
-
-        The sex of the build where the physiology of the species has it (the
-        human), otherwise the one sex of its table (the laboratory animals,
-        whose reference individual is male).
-        """
-        fractions = reference_fractions(self.organ, self.ctx.species)
-        return self.ctx.sex if self.ctx.sex in fractions else next(iter(fractions))
-
     def _reference_flow(self) -> float:
-        """The hepatic blood flow of the reference individual of the build (l/min)."""
-        return reference_liver_flow(self.ctx.species, self._reference_sex())
+        """The hepatic blood flow of the reference male of the species (l/min)."""
+        return reference_liver_flow(self.ctx.species, _REFERENCE_SEX)
 
     def _reference_velocity(self) -> float:
         """The velocity of the blood in the sinusoid of the reference individual (m/s).
@@ -395,13 +413,17 @@ class ZonatedBuilder(StandardBuilder):
         The length of the sinusoid over the residence time of its lumen, the
         velocity of the engine (`ZonationBuilder.velocity`,
         `pkpdsim.zonation.transport.axial_velocity`) with the lumen and the
-        flow of the reference individual of the build: the vascular fraction
-        of the liver of `physiology_<species>.toml` times the mass of its
-        reference liver (the liver of the geometry table of the engine) over
-        the density of the liver, and the hepatic blood flow of the same
-        individual. The volume and the flow of the simulated individual are
+        flow of one individual, the reference male of the species: the
+        vascular fraction of the liver of `physiology_<species>.toml` times
+        the mass of its reference liver over the density of the liver, and
+        the hepatic blood flow of the same individual. The mass is that of
+        the reference male (`reference_liver_mass` of the engine reads
+        `male.organs.li`, the liver the geometry table belongs to), so the
+        fraction and the flow are the male ones as well and not those of the
+        sex of the build: a number of a mixed individual would belong to
+        nobody. The volume and the flow of the simulated individual are
         parameters of the model, so the velocity of the notes is that of the
-        reference individual and not of the simulation.
+        reference male and not of the simulation.
 
         It is about half of the velocity of the engine (22 against 47 um/s
         for the human): the lumen of a zone of the PBPK liver is the whole
@@ -411,9 +433,7 @@ class ZonatedBuilder(StandardBuilder):
         volume.
         """
         geo = self._geometry()
-        f_vas = reference_fractions(self.organ, self.ctx.species)[
-            self._reference_sex()
-        ][0]
+        f_vas = reference_fractions(self.organ, self.ctx.species)[_REFERENCE_SEX][0]
         lumen = f_vas * reference_liver_mass(self.ctx.species).value / geo.density
         return axial_velocity(geo.L_sin, lumen, self._reference_flow())
 
@@ -650,9 +670,10 @@ class ZonatedBuilder(StandardBuilder):
     def _porosity(self, zone: str) -> str:
         """The fenestral porosity of the endothelium of a zone (fraction).
 
-        The gradient of the table from the periportal to the pericentral end
-        over the positions of the zones (the engine,
-        `pkpdsim.zonation.geometry.porosities`).
+        The gradient of the table over the positions of the zones (the
+        engine, `pkpdsim.zonation.geometry.porosities`), which rises towards
+        the pericentral end (0.06 to 0.08 for the human, Braet and Wisse
+        2002): the pericentral endothelium is the more open one.
         """
         values = porosities(len(self.zones), self._geometry())
         return self._constant(
@@ -661,9 +682,9 @@ class ZonatedBuilder(StandardBuilder):
             U.dimensionless,
             in_zone("fenestral porosity of the endothelium", zone),
             "Fraction of the endothelium of the zone which the fenestrae open, "
-            f"{_TABLE}: the gradient from the periportal to the pericentral end "
-            "at the position of the zone. It scales the fenestral exchange of "
-            "the zone.",
+            f"{_TABLE}: the gradient at the position of the zone, which rises "
+            "from the periportal to the pericentral end. It scales the "
+            "fenestral exchange of the zone.",
             kind="sinusoid_geometry",
         )
 
@@ -674,6 +695,14 @@ class ZonatedBuilder(StandardBuilder):
         zone (the engine, `ZonationBuilder._radial_assignments`), from the
         vascular volume of the zone, so that it follows the liver volume of
         the individual.
+
+        The lumen of a zone of this model is the whole vascular space of the
+        liver (`f_vas`, the sinusoids and the larger vessels), where the
+        engine takes the sinusoidal lumen only, so the area and with it
+        `PS_vas_<zone>_<s>` are about 2.1 times the engine's for the same
+        liver (the factor of `_reference_velocity`, which reports the lower
+        velocity of the same volume). It changes no behaviour, since neither
+        conductance limits the transfer of a small molecule.
         """
         lumen = self._share(f"{self.v} * {self.f_vas}", zone)
         return self._initial(
@@ -742,6 +771,13 @@ class ZonatedBuilder(StandardBuilder):
         `PS_vas` of the standard organ is, so it follows the liver volume of
         the individual. The transcellular path of the endothelium is no path
         of the PBPK liver, which has no endothelial compartment.
+
+        It is the conductance of the engine over the lateral area of this
+        model, which is that of the whole vascular space of the zone and
+        about 2.1 times the engine's sinusoidal wall (`_lateral_area`). For
+        a small molecule neither number limits anything: both are hundreds
+        of times the plasma flow through the chain, and the basolateral
+        `PS_<s>` of the substance is the limiting step.
         """
         if not self._is_sinusoid:
             return super()._ps_vas(s, zone)
@@ -777,7 +813,7 @@ class ZonatedBuilder(StandardBuilder):
         """What the chain of zones does to the axial diffusion of a substance.
 
         The Peclet number of the chain with this coefficient at the
-        reference individual of the build, against the numerical dispersion
+        reference male of the species, against the numerical dispersion
         of the upwind convection: where the dispersion exceeds the
         coefficient, the zone count and not the physics sets the gradient
         along the sinusoid (the warning of the engine,
@@ -790,7 +826,7 @@ class ZonatedBuilder(StandardBuilder):
         d = float(diffusion_of(s).value)
         above = "above" if d > numerical else "below"
         return (
-            f"At the reference individual of the build the chain of {n} zones "
+            f"At the reference male of the species the chain of {n} zones "
             f"realizes the Peclet number {peclet(v, geo.L_sin, n, d):.3g} with "
             f"this coefficient, against {peclet(v, geo.L_sin, n, 0.0):.3g} = 2n "
             f"for a substance which does not diffuse: the coefficient lies "

@@ -37,6 +37,7 @@ from pkpdsim.pbpk import (
     Membrane,
     Metabolism,
     Mode,
+    ModelParameter,
     Organ,
     Part,
     PBPKDefinition,
@@ -58,8 +59,9 @@ from pkpdsim.pbpk.physiology import (
     reference_liver_flow,
 )
 from pkpdsim.pbpk.units import U
+from pkpdsim.sex import Sex
 from pkpdsim.zonation import ids as zids
-from pkpdsim.zonation.geometry import geometry, reference_liver_mass
+from pkpdsim.zonation.geometry import geometry, porosities, reference_liver_mass
 from pkpdsim.zonation.profiles import Linear
 from pkpdsim.zonation.settings import Geometry
 from pkpdsim.zonation.transport import (
@@ -328,6 +330,15 @@ def test_boundary_same_as_standard(form: str) -> None:
     every form of a substance in the liver: merged tissue, the full form with
     transport into the bile and kinetic erythrocytes, the flow-limited liver
     with erythrocytes in equilibrium, a mechanism-based inhibitor.
+
+    It pins the boundary, the elements the liver reads and gives, and not the
+    SBML of the standard liver: what pins that byte for byte are the six
+    gzipped standard references of `tests/pbpk/data`
+    (`chemistry_reference{,_flat}.xml.gz`, `baseline_reference{,_flat}.xml.gz`
+    and `nephron_reference{,_flat}.xml.gz`, compared line by line by
+    `test_chemistry_options.py`, `test_definition.py` and the others), while
+    the four zonated references pin the zonated liver. A change of the
+    standard organ which this test still accepts fails there.
     """
     ctx = organ_context(_boundary_definitions()[form], Organ.LIVER)
     _, standard = StandardOrgan().build(ctx)
@@ -593,11 +604,15 @@ def test_a_molecule_no_fenestra_passes_is_refused_and_told_the_well_stirred_geom
 
 
 def _reference_velocity(ctx: OrganContext, geo: "SinusoidGeometry") -> float:
-    """The velocity of the blood in the sinusoid of the reference individual (m/s)."""
-    fractions = reference_fractions(Organ.LIVER, ctx.species)
-    sex = ctx.sex if ctx.sex in fractions else next(iter(fractions))
-    lumen = fractions[sex][0] * reference_liver_mass(ctx.species).value / geo.density
-    return axial_velocity(geo.L_sin, lumen, reference_liver_flow(ctx.species, sex))
+    """The velocity of the blood in the sinusoid of the reference male (m/s).
+
+    One individual: the liver mass of the geometry table of the engine is
+    that of the reference male, so the vascular fraction and the hepatic
+    blood flow are the male ones too, whatever the sex of the build.
+    """
+    f_vas = reference_fractions(Organ.LIVER, ctx.species)[Sex.MALE][0]
+    lumen = f_vas * reference_liver_mass(ctx.species).value / geo.density
+    return axial_velocity(geo.L_sin, lumen, reference_liver_flow(ctx.species, Sex.MALE))
 
 
 def test_the_notes_of_the_sinusoid_give_the_peclet_number_of_the_reference_individual() -> (
@@ -632,6 +647,16 @@ def test_the_notes_of_the_sinusoid_give_the_peclet_number_of_the_reference_indiv
     assert f"{pe:.3g}" in parameters[str(coefficient.sid)]
     stirred, _ = ZonatedLiver(n_zones=n).build(ctx)
     assert "Peclet" not in str(stirred.notes)
+    female = organ_context(
+        definition(
+            substances=[_permeable_drug(), _METABOLITE],
+            chemistry=[_drg2m()],
+            sex=Sex.FEMALE,
+        ),
+        Organ.LIVER,
+    )
+    other, _ = ZonatedLiver(n_zones=n, geometry=Geometry.SINUSOID).build(female)
+    assert str(other.notes) == notes
 
 
 def _rule_formulas(liver: ZonatedLiver, ctx: OrganContext) -> dict[str, str]:
@@ -723,6 +748,13 @@ def test_the_fenestral_conductance_is_a_named_parameter_of_the_zone(
     follows the liver volume of the individual, as `PS_vas` of the standard
     organ does), and the parameter is the conductance of the engine,
     `P_fen_<s>*eps_fen_<zone>*A_pd_<zone>` in l/min.
+
+    The porosity of its zones is the gradient of the engine in the order of
+    the zones, which rises from the periportal `z1` to the pericentral
+    `z<n>` (0.06 to 0.08 for the human, Braet and Wisse 2002): the porosity
+    is the one zone-indexed number of the sinusoid geometry and it decides
+    at which end of the lobule a large solute crosses the endothelium, so a
+    reversed or mis-indexed gradient must fail here.
     """
     n = 3
     ctx = _full_context()
@@ -758,6 +790,12 @@ def test_the_fenestral_conductance_is_a_named_parameter_of_the_zone(
             * 60.0,
             rel=1e-12,
         )
+    gradient = [r[_liver(zids.porosity(zone))] for zone in _zones(n)]
+    assert gradient == pytest.approx(
+        list(porosities(n, geometry(ctx.species))), rel=1e-12
+    )
+    assert sorted(gradient) == gradient
+    assert gradient[0] < gradient[-1]
 
 
 def test_the_sinusoid_without_axial_diffusion_emits_no_diffusion_at_all(
@@ -805,6 +843,85 @@ def test_the_sinusoid_without_axial_diffusion_emits_no_diffusion_at_all(
     )
     document = libsbml.readSBMLFromFile(str(path))
     assert document.getNumErrors(libsbml.LIBSBML_SEV_ERROR) == 0
+
+
+def test_the_axial_diffusion_flows_down_the_gradient_of_the_sinusoid(
+    tmp_path: Path,
+) -> None:
+    """The axial reaction of a pair of zones is Fick's law from the upstream zone on.
+
+    `D_<s>*V<part>_<zone>*n^2/L_sin^2*(C_<zone> - C_<next>)`, the reaction of
+    the engine over the parts of the liver: a substance which is more
+    concentrated in the periportal zone diffuses towards the pericentral end
+    (a positive rate, in the direction of the reaction), and the conductance
+    is the cross-section of the part over the distance of two zones. The sign
+    and the magnitude are pinned on a model roadrunner evaluates, with a
+    gradient set by hand: a flipped sign is anti-diffusion, which sharpens
+    the gradient instead of flattening it, and a wrong factor changes every
+    simulation of the sinusoid geometry.
+    """
+    n = 4
+    zones = _zones(n)
+    path = _model(
+        tmp_path,
+        "axial",
+        ZonatedLiver(n_zones=n, geometry=Geometry.SINUSOID),
+        [_drg2m()],
+        [_permeable_drug(), _METABOLITE],
+    )
+    r = _load(path)
+    for k, zone in enumerate(zones):
+        r[f"[{_liver(ids.species(Part.PLASMA, S, zone))}]"] = 1e-3 * (n - k)
+    d = r[_liver(zids.diffusion(S))]
+    length = r[_liver(zids.LENGTH)]
+    assert d > 0.0
+    for upstream, downstream in itertools.pairwise(zones):
+        a = r[f"[{_liver(ids.species(Part.PLASMA, S, upstream))}]"]
+        b = r[f"[{_liver(ids.species(Part.PLASMA, S, downstream))}]"]
+        volume = r[_liver(ids.compartment(Part.PLASMA, upstream))]
+        rate = r[_liver(ids.axial_reaction(Part.PLASMA, S, upstream))]
+        assert a > b
+        assert rate == pytest.approx(
+            d * volume * n * n / length**2 * 60.0 * (a - b), rel=1e-9
+        )
+        assert rate > 0.0
+
+
+def test_the_axial_diffusion_flattens_the_gradient_along_the_sinusoid(
+    tmp_path: Path,
+) -> None:
+    """The axial diffusion back-mixes the zones of a liver which extracts the drug.
+
+    A liver with a first order metabolism builds up a gradient along the
+    sinusoid at the steady state of an infusion, the periportal zone above
+    the pericentral one. The axial diffusion of a small molecule is no small
+    correction of that gradient: its conductance between two zones
+    (`D*V_pl_<zone>*n^2/L_sin^2`, about 1.5 l/min for the test drug in ten
+    zones) is of the order of the plasma flow through the chain (about
+    1 l/min, the Peclet number of about 6 which the notes of `D_<s>` give),
+    so it flattens the gradient measurably, and `axial_diffusion=False`
+    leaves the term out and keeps the steeper one.
+    """
+    n = 10
+
+    def gradient(axial: bool) -> float:
+        """The relative drop of the plasma concentration over the chain."""
+        liver = ZonatedLiver(
+            n_zones=n, geometry=Geometry.SINUSOID, axial_diffusion=axial
+        )
+        path = _model(
+            tmp_path, f"flat{axial}", liver, [_linear(1.0)], [_permeable_drug()]
+        )
+        r = _load(path)
+        r[ids.infusion_rate(S)] = INFUSION
+        r.simulate(0, STEADY, 2)
+        c = [r[f"[{_liver(ids.species(Part.PLASMA, S, z))}]"] for z in _zones(n)]
+        assert c == sorted(c, reverse=True)
+        return (c[0] - c[-1]) / c[0]
+
+    diffusing, without = gradient(axial=True), gradient(axial=False)
+    assert without > 0.05
+    assert diffusing < 0.85 * without
 
 
 def test_the_sinusoid_geometry_adds_the_elements_of_the_barrier_and_the_diffusion() -> (
@@ -1014,9 +1131,19 @@ def test_first_order_per_volume_in_zones(tmp_path: Path) -> None:
     )
 
 
-def _ctx_with_custom_reaction() -> OrganContext:
-    """The context of the liver with a custom reaction from the tissue into the plasma."""
-    custom = CustomReaction(
+def _custom_reaction(factor: str | None = None) -> CustomReaction:
+    """The custom reaction of the liver, from the tissue into the plasma.
+
+    Args:
+        factor: an id the rate law reads besides the elements of the zone, a
+            parameter of the definition (`ModelParameter`) or an unknown id;
+            `None` for the rate law of the elements of the zone alone.
+
+    Returns:
+        The reaction `k_custom*[*factor]*Vti*Cti_<s>`.
+    """
+    read = f"{factor} * " if factor else ""
+    return CustomReaction(
         sid="CUSTOM",
         organ=Organ.LIVER,
         part=Part.TISSUE,
@@ -1024,11 +1151,18 @@ def _ctx_with_custom_reaction() -> OrganContext:
             f"{ids.species(Part.TISSUE, S)} -> {ids.species(Part.PLASMA, 'drg_m')}"
         ),
         formula=(
-            f"k_custom * {ids.compartment(Part.TISSUE)} * {ids.species(Part.TISSUE, S)}"
+            f"k_custom * {read}{ids.compartment(Part.TISSUE)} * "
+            f"{ids.species(Part.TISSUE, S)}"
         ),
         parameters=[SbmlParameter("k_custom", 0.1, U.per_min)],
     )
-    return organ_context(definition(chemistry=[_drg2m(), custom]), Organ.LIVER)
+
+
+def _ctx_with_custom_reaction(factor: str | None = None) -> OrganContext:
+    """The context of the liver with a custom reaction from the tissue into the plasma."""
+    return organ_context(
+        definition(chemistry=[_drg2m(), _custom_reaction(factor)]), Organ.LIVER
+    )
 
 
 def test_a_custom_reaction_is_placed_per_zone() -> None:
@@ -1039,6 +1173,11 @@ def test_a_custom_reaction_is_placed_per_zone() -> None:
     is extensive in the volume of the part (`k*Vti_<zone>*Cti_<zone>_<s>`)
     keeps the rate of the whole liver. The constant of the rate law is
     defined once for the liver.
+
+    The zoned reaction ids go through the checks of the organ as well
+    (`_custom_placed`): a rate law which reads an id of neither the organ nor
+    the top model is refused, naming the reaction and the id, as it is in the
+    standard organ.
     """
     model, _ = ZonatedLiver(n_zones=10).build(_ctx_with_custom_reaction())
     assert sum(1 for r in model.reactions if str(r.sid).startswith("CUSTOM_")) == 10
@@ -1050,6 +1189,10 @@ def test_a_custom_reaction_is_placed_per_zone() -> None:
     assert by_sid["CUSTOM_z1"].compartment == "Vti_z1"
     pars = [str(q.sid) for r in model.reactions for q in r.pars or []]
     assert pars.count("k_custom") == 1
+    unknown = _ctx_with_custom_reaction(factor="k_missing")
+    with pytest.raises(ValueError, match=r"CUSTOM.*\['k_missing'\]") as error:
+        ZonatedLiver(n_zones=3).build(unknown)
+    assert "no elements of the organ" in str(error.value)
 
 
 def test_a_custom_reaction_runs_in_every_zone(tmp_path: Path) -> None:
@@ -1059,35 +1202,43 @@ def test_a_custom_reaction_runs_in_every_zone(tmp_path: Path) -> None:
     in every zone: with the same tissue concentration in every zone the rates
     of the zones sum to the rate of the standard liver, and the metabolite
     appears in the plasma of the zone.
+
+    Its rate law reads a parameter of the definition (`k_scale`), which the
+    liver reads through an input port under the same id: the checks of the
+    organ create the ports from the ids of the zoned reactions
+    (`_custom_placed`, `_custom_inputs` of the organ builder), so the
+    parameter reaches the rate law of every zone of the flattened model and
+    scales the rate of every zone.
     """
     n = 4
-    custom = CustomReaction(
-        sid="CUSTOM",
-        organ=Organ.LIVER,
-        part=Part.TISSUE,
-        equation=(
-            f"{ids.species(Part.TISSUE, S)} -> {ids.species(Part.PLASMA, 'drg_m')}"
-        ),
-        formula=(
-            f"k_custom * {ids.compartment(Part.TISSUE)} * {ids.species(Part.TISSUE, S)}"
-        ),
-        parameters=[SbmlParameter("k_custom", 0.1, U.per_min)],
+    scale = 2.0
+    d = definition(
+        chemistry=[_drg2m(), _custom_reaction(factor="k_scale")],
+        parameters=[ModelParameter("k_scale", scale, U.dimensionless)],
+        routes=[Route.iv(S)],
     )
-    d = definition(chemistry=[_drg2m(), custom], routes=[Route.iv(S)])
     c = 0.005
     r = _load(build(d, tmp_path / "standard").flat_path)
     r[f"[{_liver(ids.species(Part.TISSUE, S))}]"] = c
     standard = r[_liver("CUSTOM")]
     assert standard > 0
+    assert standard == pytest.approx(
+        0.1 * scale * r[_liver(ids.compartment(Part.TISSUE))] * c, rel=1e-12
+    )
     zonated = dataclasses.replace(
         d, variants=Variants(organs={Organ.LIVER: ZonatedLiver(n_zones=n)})
     )
     r = _load(build(zonated, tmp_path / "zonated").flat_path)
+    assert r["k_scale"] == scale
     for z in _zones(n):
         r[f"[{_liver(ids.species(Part.TISSUE, S, z))}]"] = c
     rates = [r[_liver(ids.segment_process("CUSTOM", z))] for z in _zones(n)]
     assert sum(rates) == pytest.approx(standard, rel=1e-12)
     np.testing.assert_allclose(rates, [standard / n] * n, rtol=1e-12, atol=0)
+    for z in _zones(n):
+        assert r[_liver(ids.segment_process("CUSTOM", z))] == pytest.approx(
+            0.1 * scale * r[_liver(ids.compartment(Part.TISSUE, z))] * c, rel=1e-12
+        )
 
 
 def test_unplaced_process_raises() -> None:

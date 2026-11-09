@@ -63,6 +63,7 @@ Convection is a first order upwind scheme: a chain of `n` zones disperses like
 import itertools
 import warnings
 from collections.abc import Sequence
+from functools import cache
 
 from sbmlutils.factory import (
     Compartment,
@@ -72,6 +73,7 @@ from sbmlutils.factory import (
     Reaction,
     Species,
 )
+from sbmlutils.factory.units import Units
 from sbmlutils.metadata import BQB, SBO
 
 from pkpdsim.database.tables import entry
@@ -81,7 +83,6 @@ from pkpdsim.pbpk.substance import Substance
 from pkpdsim.pbpk.units import MODEL_UNITS, U
 from pkpdsim.pbpk.values import Value, number
 from pkpdsim.perfusion.ids import flow as flow_id
-from pkpdsim.perfusion.units import PU
 from pkpdsim.zonation import ids
 from pkpdsim.zonation.flow import (
     M3_PER_S,
@@ -147,18 +148,47 @@ _MASS_TO_KG = {"g": 1e-3, "kg": 1.0, "mg": 1e-6}
 _VASCULAR = (Layer.RBC, Layer.PLASMA, Layer.ENDOTHELIUM, Layer.DISSE)
 
 
-class ZonationUnits(PU):
-    """The unit definitions of the zonated liver: those of the perfusion and the transport."""
+@cache
+def zonation_units() -> type[Units]:
+    """The unit definitions of the model of a zonated liver.
 
-    l_per_m3 = L_PER_M3
-    m2_per_s = M2_PER_S
-    m_per_s = M_PER_S
-    m3_per_s = M3_PER_S
-    Pa = PA
-    Pa_s = PA_S
-    Pa_s_per_m4 = PA_S_PER_M4
-    Pa_s_per_m2 = PA_S_PER_M2
-    per_m2 = PER_M2
+    Those of the perfusion library (`pkpdsim.perfusion.units.PU`: the mass of
+    an organ, the temperature, the oxygen partial pressure and the other
+    units of a perfusion which the PBPK library lacks) and the units of the
+    transport and the pressure flow of the engine.
+
+    The class is built on the first build and not when this module is
+    imported, which is what keeps the three libraries importable in any
+    order: `pkpdsim.perfusion.units` imports the units of the PBPK library
+    and so the whole library, which imports its zonated liver, which imports
+    the engine, which imports this module - so a process whose first import
+    is `pkpdsim.perfusion.units` used to come back here while that module
+    had not defined `PU` yet (`ImportError`, found by
+    `tests/zonation/test_limits.py::test_the_packages_import_in_any_order`).
+    Taking the name when the engine builds instead of when it is imported
+    closes no cycle but breaks the import-time one; the cycle itself goes
+    when the SBML writing kit and the units of the PBPK library move into a
+    layer below the three libraries.
+
+    Returns:
+        The unit class of the model, one object per process (`cache`).
+    """
+    from pkpdsim.perfusion.units import PU
+
+    class ZonationUnits(PU):
+        """The unit definitions of the zonated liver: the perfusion and the transport."""
+
+        l_per_m3 = L_PER_M3
+        m2_per_s = M2_PER_S
+        m_per_s = M_PER_S
+        m3_per_s = M3_PER_S
+        Pa = PA
+        Pa_s = PA_S
+        Pa_s_per_m4 = PA_S_PER_M4
+        Pa_s_per_m2 = PA_S_PER_M2
+        per_m2 = PER_M2
+
+    return ZonationUnits
 
 
 _P = SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER
@@ -1323,7 +1353,7 @@ class ZonationBuilder:
                 "without physical diffusion."
             ),
             annotations=[(BQB.HAS_TAXON, TAXA[s.species])],
-            units=ZonationUnits,
+            units=zonation_units(),
             model_units=MODEL_UNITS,
             compartments=[*self.compartments(), *self._duct_compartments()],
             species=[*self._species(), *self._duct_species()],
