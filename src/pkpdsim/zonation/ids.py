@@ -160,8 +160,9 @@ def porosity(zone: str) -> str:
 def area(interface: str, zone: str) -> str:
     """Get the id of the lateral area of an interface in a zone, `A_<interface>_<zone>`.
 
-    The interfaces are `pd` (plasma to the space of Disse) and `dh` (the space
-    of Disse to the hepatocyte).
+    The interfaces are `pd` (plasma to the space of Disse, the lumen), `pe` (the
+    abluminal face of the endothelial cell) and `dh` (the space of Disse to the
+    hepatocyte).
     """
     return f"A_{interface}_{zone}"
 

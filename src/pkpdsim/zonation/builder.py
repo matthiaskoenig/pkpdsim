@@ -46,7 +46,8 @@ compartment. The zones are a chain from periportal to pericentral:
   `porosity` multiplies it). The transcellular paths are model input of a
   transporter set and not of the molar mass: `P_endo_in_<s>`, `P_endo_out_<s>`
   and `P_hep_<s>` (m/s of the lateral area) are 0, the path is off, until a
-  model sets them. The lateral areas `A_pd_<zone>` and `A_dh_<zone>` follow the
+  model sets them. The lateral areas `A_pd_<zone>` (lumen), `A_pe_<zone>` (abluminal face of the
+  endothelial cell, at `r_sin + t_endo`) and `A_dh_<zone>` follow the
   mass: `n_sin * pi * 2 * r_sin * dx` is `2 V_lumen / r_sin` of the zone
   (`n_sin * pi * r_sin**2 * L_sin` is the volume of the whole lumen) and the
   Disse to hepatocyte interface is that area times `(r_sin + t_endo + t_disse)
@@ -744,6 +745,14 @@ class ZonationBuilder:
                     sboTerm=_P,
                 ),
                 Parameter(
+                    ids.area("pe", zone),
+                    area * (geo.r_sin + geo.t_endo) / geo.r_sin,
+                    unit=U.m2,
+                    name=f"lateral area of the abluminal membrane of the endothelial cell in zone {k}",
+                    constant=False,
+                    sboTerm=_P,
+                ),
+                Parameter(
                     ids.area("dh", zone),
                     area * outer,
                     unit=U.m2,
@@ -809,6 +818,15 @@ class ZonationBuilder:
             )
             out.append(
                 initial_assignment(
+                    ids.area("pe", zone),
+                    f"{ids.area('pd', zone)} * ({ids.RADIUS} + {ids.T_ENDO}) / "
+                    f"{ids.RADIUS}",
+                    U.m2,
+                    f"lateral area of the abluminal membrane of the endothelial cell in zone {k}",
+                )
+            )
+            out.append(
+                initial_assignment(
                     ids.area("dh", zone),
                     f"{ids.area('pd', zone)} * ({ids.RADIUS} + {ids.T_ENDO} + "
                     f"{ids.T_DISSE}) / {ids.RADIUS}",
@@ -857,7 +875,7 @@ class ZonationBuilder:
             for a solute whose radius reaches the radius of a fenestra, which
             has no fenestral flux by construction), `END_<s>_<zone>_in`
             (plasma to endothelial cell) and `END_<s>_<zone>_out` (endothelial
-            cell to Disse), with `P_endo_in_<s>` and `P_endo_out_<s>`, and
+            cell to Disse, over the abluminal area `A_pe_<zone>`), with `P_endo_in_<s>` and `P_endo_out_<s>`, and
             `PS_<s>_<zone>` (Disse to hepatocyte, `P_hep_<s>` over the area
             `A_dh_<zone>`). The transcellular permeabilities are model input
             and 0 (off) by default. None for the well-stirred geometry.
@@ -928,7 +946,7 @@ class ZonationBuilder:
                         zone,
                         (Layer.ENDOTHELIUM, Layer.DISSE),
                         ids.permeability("endo_out", substance.sid),
-                        "pd",
+                        "pe",
                         "release of the endothelial cell into the space of Disse",
                         endo,
                     )

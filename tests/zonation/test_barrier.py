@@ -23,10 +23,7 @@ from pkpdsim.zonation.flow import ImposedFlow
 from pkpdsim.zonation.geometry import Layer, geometry
 from pkpdsim.zonation.profiles import Weights
 from pkpdsim.zonation.settings import Geometry, ZonationSettings
-from pkpdsim.zonation.transport import (
-    fenestral_permeability,
-    molecular_radius,
-)
+from pkpdsim.zonation.transport import M2_PER_S
 
 from .conftest import mass_g
 
@@ -50,6 +47,7 @@ class _Sized(ZonationBuilder):
 
 def _builder(
     n: int = 4,
+    flow: float = 1.0,
     radius: float = 0.0,
     porosity_pp: float = 0.06,
     porosity_pc: float = 0.08,
@@ -61,7 +59,7 @@ def _builder(
     )
     settings = ZonationSettings(
         n_zones=n,
-        flow=ImposedFlow(1.0),
+        flow=ImposedFlow(flow),
         liver_mass=mass_g(1000.0),
         geometry_constants=geo,
         **kwargs,  # ty: ignore[invalid-argument-type]
@@ -111,13 +109,38 @@ def _flux(r: roadrunner.RoadRunner) -> float:
     return r["FEN_tr_z1"] + r["END_tr_z1_in"]
 
 
+def _arrived(r: roadrunner.RoadRunner, horizon: float) -> float:
+    """The amount (mmole) in the space of Disse of the first zone after `horizon` min."""
+    r.simulate(0, horizon, 101)
+    return r["[tr_disse_z1]"] * r["V_disse_z1"]
+
+
 def test_the_two_paths_are_parallel_and_additive(tmp_path: Path) -> None:
-    """The cell path adds to the fenestral one."""
-    only_fen = _barrier(tmp_path, endothelial_ps=0.0, porosity=0.06)
-    both = _barrier(tmp_path, endothelial_ps=1e-6, porosity=0.06)
-    assert _flux(both) > _flux(only_fen)
-    assert both["FEN_tr_z1"] == pytest.approx(only_fen["FEN_tr_z1"])
-    assert _flux(both) == pytest.approx(both["FEN_tr_z1"] + both["END_tr_z1_in"])
+    """The amount arriving in the Disse space with both paths is about the sum.
+
+    Fenestral path alone, cell path alone (a 60 nm solute has no fenestral
+    reaction; the cell path is the two membranes in series) and both, over
+    0.01 min with the Disse concentration far below the plasma one. Both is
+    strictly greater than either and within 10 % below the sum. It is not
+    exact: the paths share the plasma they draw from and the Disse pool they
+    fill (which pushes back on both), and the cell path drains the Disse pool
+    through its reversible abluminal membrane while its intermediate pool, the
+    endothelial cell, fills.
+    """
+    horizon = 0.01
+    ps = 1e-7
+    fen = _arrived(_barrier(tmp_path, porosity=1e-5), horizon)
+    cell_dir = tmp_path / "cell"
+    cell_dir.mkdir()
+    cell = _arrived(
+        _barrier(cell_dir, endothelial_ps=ps, builder=_builder(radius=60e-9)),
+        horizon,
+    )
+    both_dir = tmp_path / "both"
+    both_dir.mkdir()
+    both = _arrived(_barrier(both_dir, endothelial_ps=ps, porosity=1e-5), horizon)
+    assert both > max(fen, cell)
+    assert 0.9 * (fen + cell) <= both <= fen + cell
 
 
 def test_a_solute_larger_than_the_fenestra_uses_only_the_cell_path(
@@ -159,11 +182,39 @@ def test_a_profile_scales_the_gradient(tmp_path: Path) -> None:
         assert b == pytest.approx(a * f)
 
 
+def _mismatch(r: roadrunner.RoadRunner, floor: float = 0.0) -> float:
+    """The relative difference of plasma and Disse concentration at 0.5 min.
+
+    No absolute tolerance: the tracer washes out of the lumen, so a late sample
+    compares two numbers near 0; `floor` asserts there is still tracer.
+    """
+    r.simulate(0, 0.5, 51)
+    plasma = r["[tr_plasma_z1]"]
+    assert plasma > floor, "the tracer has washed out, the test would be vacuous"
+    return abs(plasma - r["[tr_disse_z1]"]) / plasma
+
+
 def test_an_open_barrier_equilibrates_plasma_and_disse(tmp_path: Path) -> None:
-    """With open paths the two layers reach one concentration."""
-    r = _barrier(tmp_path, endothelial_ps=1e3, porosity=1.0)
-    r.simulate(0, 60, 61)
-    assert r["[tr_plasma_z1]"] == pytest.approx(r["[tr_disse_z1]"], rel=1e-3)
+    """Open paths equilibrate the layers, a nearly closed barrier does not.
+
+    At 0.5 min with the tracer still in the lumen: the open barrier (porosity 1,
+    open endothelial path) is within 1e-3, a barrier of porosity 1e-6 (and
+    one a 60 nm solute cannot cross) is far from it. The barrier at the
+    measured porosity equilibrates a small solute within 1 %: the fenestrae
+    exchange it in seconds, which is why the porosity matters for larger solutes.
+    """
+    openb = _mismatch(_barrier(tmp_path, endothelial_ps=1e3, porosity=1.0), floor=1e-4)
+    assert openb < 1e-3
+    for name, kwargs in (
+        ("tight", {"porosity": 1e-6}),
+        ("large", {"builder": _builder(radius=60e-9)}),
+    ):
+        d = tmp_path / name
+        d.mkdir()
+        assert _mismatch(_barrier(d, **kwargs)) > 0.5  # ty: ignore[invalid-argument-type]
+    measured = tmp_path / "measured"
+    measured.mkdir()
+    assert _mismatch(_barrier(measured), floor=1e-4) < 1e-2
 
 
 def test_the_basolateral_path_moves_the_solute_into_the_hepatocyte(
@@ -190,32 +241,81 @@ def test_the_transcellular_paths_default_to_off(tmp_path: Path) -> None:
     assert r["P_fen_tr"] > 0.0
 
 
-def test_the_fenestral_permeability_is_the_derived_one(tmp_path: Path) -> None:
-    """The open pore permeability of the model is that of `transport`."""
-    r = _barrier(tmp_path)
-    geo = geometry(Species.RAT)
-    d = molecular_radius(TRACER.mr)
-    assert r["P_fen_tr"] > 0.0
-    from pkpdsim.zonation.transport import diffusion_of
+def test_the_fenestral_permeability_by_hand(tmp_path: Path) -> None:
+    """A radius of 5.35 nm in a rat fenestra gives 3.886e-3 m/s for D = 1e-9.
 
-    expected = fenestral_permeability(diffusion_of(TRACER), d, geo, 1.0)
-    assert r["P_fen_tr"] == pytest.approx(expected.value)
+    rat: t_endo = 0.165e-6 m, r_fen = 53.5e-9 m, so the ratio is 0.1 and
+    renkin(0.1) = 0.81 * 0.7916805 = 0.6412612; the permeability of an open
+    pore is 1e-9 / 0.165e-6 * 0.6412612 = 6.060606e-3 * 0.6412612 = 3.8864e-3
+    m/s.
+    """
+
+    class _Diffusing(_Sized):
+        """A tracer of a given diffusion coefficient."""
+
+    substance = Substance(
+        "tr", "tracer", Value(180.0, U.g_per_mole), diffusion=Value(1e-9, M2_PER_S)
+    )
+    builder = _Diffusing(_builder().settings, [substance], None)
+    builder.radius = 5.35e-9
+    assert _barrier(tmp_path, builder=builder)["P_fen_tr"] == pytest.approx(
+        3.8864e-3, rel=1e-4
+    )
+
+
+def test_the_lateral_areas_by_hand(tmp_path: Path) -> None:
+    """The areas of zone 1 of 4 in a rat liver of 1 kg without erythrocytes.
+
+    The liver is 1 / 1.07 = 0.934579 l, the plasma 10.6 % of it, a quarter of
+    that per zone: 0.0247664 l = 2.47664e-5 m3. With the radius 4.4 um of the
+    sinusoid the area of the lumen is 2 * 2.47664e-5 / 4.4e-6 = 11.2574 m2.
+    The abluminal face of the endothelial cell lies at 4.4 + 0.165 = 4.565 um,
+    the interface of the hepatocyte at 4.565 + 1.0 = 5.565 um: 11.2574 *
+    4.565 / 4.4 = 11.6796 m2 and 11.2574 * 5.565 / 4.4 = 14.2381 m2.
+    """
+    r = _barrier(tmp_path, haematocrit=0.0)
+    assert r["A_pd_z1"] == pytest.approx(11.2574, rel=1e-4)
+    assert r["A_pe_z1"] == pytest.approx(11.6796, rel=1e-4)
+    assert r["A_dh_z1"] == pytest.approx(14.2381, rel=1e-4)
 
 
 def test_the_lateral_area_follows_the_mass(tmp_path: Path) -> None:
-    """The area of the interface is 2 V / r_sin of the lumen of the zone."""
+    """Doubling the liver mass doubles every lateral area."""
     r = _barrier(tmp_path)
-    geo = geometry(Species.RAT)
-    lumen = r["V_plasma_z1"] + r["V_rbc_z1"]
-    assert r["A_pd_z1"] == pytest.approx(2.0 * lumen * 1e-3 / geo.r_sin)
-    outer = geo.r_sin + geo.t_endo + geo.t_disse
-    assert r["A_dh_z1"] == pytest.approx(r["A_pd_z1"] * outer / geo.r_sin)
     big = tmp_path / "big"
     big.mkdir()
     doubled = _builder(n=4)
     doubled.settings = dataclasses.replace(doubled.settings, liver_mass=mass_g(2000.0))
     r2 = _barrier(big, builder=doubled)
-    assert r2["A_pd_z1"] == pytest.approx(2.0 * r["A_pd_z1"])
+    for pid in ("A_pd_z1", "A_pe_z1", "A_dh_z1"):
+        assert r2[pid] == pytest.approx(2.0 * r[pid])
+
+
+def test_a_solute_at_the_radius_of_the_fenestra_has_no_fenestral_path(
+    tmp_path: Path,
+) -> None:
+    """A radius equal to `r_fen` closes the sieve exactly: no reaction, finite run."""
+    builder = _builder(radius=geometry(Species.RAT).r_fen)
+    assert not [r for r in builder.radial_exchange() if str(r.sid).startswith("FEN_")]
+    r = _barrier(tmp_path, endothelial_ps=1e-6, builder=builder)
+    assert np.all(np.isfinite(r.simulate(0, 10, 11)))
+
+
+def test_all_paths_at_zero_flow_conserve_the_substance(tmp_path: Path) -> None:
+    """Fenestral, endothelial and basolateral exchange only move the tracer."""
+    r = _barrier(tmp_path, endothelial_ps=1e-6, basolateral_ps=1e-6, flow=0.0)
+
+    def total() -> float:
+        return sum(
+            r[f"[{sid}]"] * r[f"V_{sid.removeprefix('tr_')}"]
+            for sid in r.model.getFloatingSpeciesIds()
+        )
+
+    before = total()
+    r.simulate(0, 60, 61)
+    assert total() == pytest.approx(before, rel=1e-6)
+    for layer in ("endothelium", "disse", "hepatocyte"):
+        assert r[f"[tr_{layer}_z1]"] > 0.0, f"nothing reached the {layer}"
 
 
 def test_without_erythrocytes_the_area_is_that_of_the_plasma(tmp_path: Path) -> None:
@@ -296,6 +396,6 @@ def test_a_small_solute_stays_longer_than_the_intravascular_marker(
     q = r["Q_plasma_li"]
     plasma = sum(r[f"V_plasma_z{k}"] for k in range(1, 5))
     disse = sum(r[f"V_disse_z{k}"] for k in range(1, 5))
-    assert marker == pytest.approx(plasma / q, rel=0.1)
+    assert marker == pytest.approx(plasma / q, rel=1e-6)
     assert small > marker
-    assert small == pytest.approx((plasma + disse) / q, rel=0.1)
+    assert small == pytest.approx((plasma + disse) / q, rel=1e-6)
