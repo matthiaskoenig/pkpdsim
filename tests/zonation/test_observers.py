@@ -283,20 +283,86 @@ def test_the_outflow_concentration_is_not_the_pericentral_mean(
     )  # the last zone is the lowest, the mean includes zone 8 and 9
 
 
-def test_the_outflow_concentration_is_the_flux_over_the_flow(tmp_path: Path) -> None:
-    """The concentration leaving is the flow weighted blood concentration of the last zone."""
-    settings = _settings(5)
-    r = _runner(tmp_path, settings)
+@pytest.mark.parametrize(
+    "flow",
+    [ImposedFlow(1.5), PressureFlow(), PressureFlow(p_onc=2000.0)],
+    ids=["imposed", "pressure", "pressure_asymmetric"],
+)
+def test_the_outflow_concentration_is_the_flux_over_the_flow(
+    tmp_path: Path, flow: ImposedFlow | PressureFlow
+) -> None:
+    """The concentration leaving is the flux over the flow of the last zone, flows included."""
+    n = 5
+    r = _runner(tmp_path, _settings(n, flow=flow))
     r["drg_plasma_in"] = 1.0
     r["drg_rbc_in"] = 1.0
     r.simulate(0, 5, 100)
-    z = ids.zone(5)
-    flux = (
-        r[ids.layer_flow(Layer.PLASMA)] * r[f"[drg_plasma_{z}]"]
-        + r[ids.layer_flow(Layer.RBC)] * r[f"[drg_rbc_{z}]"]
+    z = ids.zone(n)
+
+    def carrier_flow(layer: Layer) -> float:
+        sid = (
+            ids.layer_flow(layer)
+            if isinstance(flow, ImposedFlow)
+            else ids.zone_flow(layer, z)
+        )
+        return float(r[sid])
+
+    flux = sum(
+        carrier_flow(layer) * r[f"[drg_{layer}_{z}]"]
+        for layer in (Layer.PLASMA, Layer.RBC)
     )
-    assert r["c_outflow_drg"] == pytest.approx(flux / r[ids.FLOW], rel=1e-12)
+    q = sum(carrier_flow(layer) for layer in (Layer.PLASMA, Layer.RBC))
+    print(f"MEASURED {flow!r:.40} flux {flux!r} flow {q!r}")
+    assert r["c_outflow_drg"] == pytest.approx(flux / q, rel=1e-12, abs=0)
     assert r[f"[drg_plasma_{z}]"] != pytest.approx(r[f"[drg_rbc_{z}]"], rel=1e-3)
+
+
+def test_the_amounts_follow_the_volumes_of_their_zones(tmp_path: Path) -> None:
+    """With a different volume in every zone, a layer amount sums c_k * V_k of the same zone."""
+    n = 4
+    r = _runner(tmp_path, _settings(n))
+    for layer in _layer_tokens(r):
+        for k in range(1, n + 1):
+            r[f"V_{layer}_z{k}"] = 0.01 * (k + 1) * (1 + len(layer))
+            r[f"[drg_{layer}_z{k}]"] = 0.2 * k + 0.1 * len(layer)
+        expected = sum(
+            r[f"[drg_{layer}_z{k}]"] * r[f"V_{layer}_z{k}"] for k in range(1, n + 1)
+        )
+        assert r[observers.layer_amount("drg", layer)] == pytest.approx(
+            expected, rel=1e-12, abs=0
+        )
+
+
+def test_the_dose_of_the_initial_concentrations_follows_the_zones(
+    tmp_path: Path,
+) -> None:
+    """The ledger starts as the amount of the initial concentrations, zone by zone and layer by layer."""
+    n = 4
+    settings = _settings(n)
+    builder = ZonationBuilder(settings, [DRG], None)
+    model = builder.build()
+    expected = 0.0
+    cells = [sp for sp in model.species if "_z" in str(sp.sid)]
+    for sp in cells:
+        sid = str(sp.sid)
+        zone = int(sid.rsplit("_z", 1)[1])
+        sp.initialConcentration = 0.1 * zone + 0.01 * len(sid)
+    add_observers(model, observer_objects(settings, [DRG]))
+    path = tmp_path / "initial.xml"
+    create_model(model, filepath=path, sbml_level=3, sbml_version=2, validate=False)
+    sizes = {
+        str(c.sid): 0.01 * (i + 1)
+        for i, c in enumerate(model.compartments)
+        if str(c.sid).startswith("V_") and c.sid != "V_bile_duct"
+    }
+    r = individual(path, **sizes)  # a volume of its own in every zone and layer
+    for sp in cells:
+        expected += r[f"[{sp.sid}]"] * r[str(sp.compartment)]
+    assert len({r[v] for v in sizes}) == len(sizes)
+    assert r[observers.ledger("dose", "drg")] == pytest.approx(
+        expected, rel=1e-12, abs=0
+    )
+    assert r[observers.amount("drg")] == pytest.approx(expected, rel=1e-12, abs=0)
 
 
 def test_a_chain_without_flow_has_no_outflow_concentration(tmp_path: Path) -> None:
