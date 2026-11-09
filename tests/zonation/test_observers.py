@@ -18,7 +18,6 @@ from sbmlutils.factory import Parameter, Reaction, create_model
 from pkpdsim.pbpk.substance import Substance
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import Value
-from pkpdsim.perfusion.observers import third_weights
 from pkpdsim.zonation import ZonationBuilder, ids, observers
 from pkpdsim.zonation.flow import ImposedFlow, PressureFlow
 from pkpdsim.zonation.geometry import Layer
@@ -28,6 +27,7 @@ from pkpdsim.zonation.observers import (
     profile_ids,
 )
 from pkpdsim.zonation.settings import BileTransport, Geometry, ZonationSettings
+from pkpdsim.zones import third_weights
 
 from .conftest import mass_g
 

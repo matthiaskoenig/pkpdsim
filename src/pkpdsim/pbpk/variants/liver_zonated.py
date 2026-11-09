@@ -82,6 +82,7 @@ from pkpdsim.pbpk.chemistry import CustomReaction, Metabolism, Transport
 from pkpdsim.pbpk.organ import Boundary, OrganContext, StandardBuilder
 from pkpdsim.pbpk.organ_builder import stationary_ids
 from pkpdsim.pbpk.organs import Organ, Part
+from pkpdsim.pbpk.physiology import reference_fractions, reference_liver_flow
 from pkpdsim.pbpk.placement import (
     built_parts,
     formula_ids,
@@ -92,19 +93,29 @@ from pkpdsim.pbpk.placement import (
 )
 from pkpdsim.pbpk.substance import Substance
 from pkpdsim.pbpk.units import U
+from pkpdsim.sex import Sex
 from pkpdsim.zonation import ids as zids
-from pkpdsim.zonation.geometry import SinusoidGeometry, geometry, porosities
+from pkpdsim.zonation.geometry import (
+    SinusoidGeometry,
+    geometry,
+    porosities,
+    reference_liver_mass,
+)
 from pkpdsim.zonation.profiles import Profile
 from pkpdsim.zonation.settings import Geometry
 from pkpdsim.zonation.transport import (
     L_PER_M3,
     M2_PER_S,
     M_PER_S,
+    axial_velocity,
     diffusion_of,
     diffusion_parameter,
+    dispersion,
     fenestral_permeability,
     molecular_radius,
+    peclet,
 )
+from pkpdsim.zones import third_weights, weighted_mean
 
 __all__ = ["ZonatedLiver"]
 
@@ -131,6 +142,16 @@ class SinusoidUnits(U):
     l_per_m3 = L_PER_M3
     m_per_s = M_PER_S
     m2_per_s = M2_PER_S
+
+
+_PART_NAMES: Mapping[Part, str] = {
+    Part.PLASMA: "plasma",
+    Part.BLOOD_CELLS: "blood cells",
+    Part.INTERSTITIAL: "interstitium",
+    Part.INTRACELLULAR: "cells",
+    Part.TISSUE: "tissue",
+}
+"""The parts of a zone in words, for the names of the means."""
 
 
 _TABLE = (
@@ -162,6 +183,25 @@ class ZonatedLiver:
             `SINUSOID` adds the axial diffusion along the sinusoid and the
             fenestrated barrier between the plasma and the space of Disse of
             a substance in the full form.
+        axial_diffusion: whether the zones of the sinusoid geometry diffuse
+            into each other along the sinusoid (the default). `False` is the
+            limit of a chain which only convects: no reaction between two
+            zones, no diffusion coefficient and no length of the sinusoid
+            are emitted, as the engine emits none for a substance without a
+            diffusion (`ZonationBuilder._diffusion` returning `None`). A
+            coefficient of 0 is no way to say it: a `Substance` needs a
+            positive diffusion. Without the sinusoid geometry there is no
+            axial diffusion either way.
+        means: whether every zonated part gets the periportal and the
+            pericentral mean of its concentration, `C<part>_pp_<s>` and
+            `C<part>_pc_<s>` (mM): the mean of the first and the last third
+            of the sinusoid, every zone weighted by its overlap with the
+            third, the observers of the engine
+            (`pkpdsim.zonation.observers`, the weights of
+            `pkpdsim.zones.third_weights`). They are read-only
+            and on request, as the observers of the engine are added on
+            request and the readouts of the intestine
+            (`PBPKDefinition.readouts`) are.
         name: the name of the component, the prefix of the id of the model
             definition (`zonated_li`).
     """
@@ -169,6 +209,8 @@ class ZonatedLiver:
     n_zones: int = 10
     profiles: Mapping[str, Profile | Sequence[float]] = field(default_factory=dict)
     geometry: Geometry = Geometry.WELL_STIRRED
+    axial_diffusion: bool = True
+    means: bool = False
     name: str = "zonated"
 
     def __post_init__(self) -> None:
@@ -256,6 +298,8 @@ class ZonatedBuilder(StandardBuilder):
         self.zones = tuple(zids.zone(i) for i in range(1, liver.n_zones + 1))
         self.profiles = liver.profiles
         self.geometry = liver.geometry
+        self.axial = liver.axial_diffusion
+        self.means = liver.means
         self.geo = geometry(ctx.species) if self._is_sinusoid else None
         self.customs = [p for p in self._processes() if isinstance(p, CustomReaction)]
         self.processes, self.profile_of = self._placed()
@@ -273,19 +317,7 @@ class ZonatedBuilder(StandardBuilder):
         line; the sinusoid names its two transport steps.
         """
         n = len(self.zones)
-        sinusoid = (
-            " The zones are tanks in series along the sinusoid: the plasma and "
-            "the interstitium of neighbouring zones diffuse into each other and "
-            "the plasma exchanges with the interstitium through the fenestrae of "
-            "the endothelium, with the geometry of the liver of the species. The "
-            "chain is upwind, so the convection from zone to zone disperses "
-            "numerically with `v*L_sin/(2n)` of the velocity v of the plasma, "
-            "which exceeds the axial diffusion of a small molecule at a low zone "
-            "count (`pkpdsim.zonation.effective_peclet`): the diffusion is then a "
-            "correction below the discretization."
-            if self._is_sinusoid
-            else ""
-        )
+        sinusoid = f" {self._sinusoid_notes()}" if self._is_sinusoid else ""
         return (
             f"The {self.name} liver: {n} zones in series along the sinusoid, from "
             f"the periportal zone {self.zones[0]} to the pericentral zone "
@@ -298,6 +330,92 @@ class ZonatedBuilder(StandardBuilder):
     def _is_sinusoid(self) -> bool:
         """Whether the zones have the geometry of the sinusoid."""
         return self.geometry is Geometry.SINUSOID
+
+    def _sinusoid_notes(self) -> str:
+        """The two transport steps of the sinusoid and the numbers of its chain.
+
+        The dispersion of the upwind chain and its Peclet number at the
+        reference individual of the build: a reader who chooses a zone count
+        needs the order of magnitude of both, and the flow and the volume of
+        the simulated individual are parameters of the model and no numbers
+        at build time (`_reference_velocity`).
+        """
+        n = len(self.zones)
+        geo = self._geometry()
+        v = self._reference_velocity()
+        axial = (
+            "the plasma and the interstitium of neighbouring zones diffuse into "
+            "each other and "
+            if self.axial
+            else "the zones do not diffuse into each other (`axial_diffusion` is "
+            "off) and "
+        )
+        return (
+            "The zones are tanks in series along the sinusoid: "
+            + axial
+            + "the plasma exchanges with the interstitium through the fenestrae "
+            "of the endothelium, with the geometry of the liver of the species. "
+            "The chain is upwind, so the convection from zone to zone disperses "
+            "numerically with `v*L_sin/(2n)` of the velocity v of the plasma: at "
+            f"the reference individual of the build (the liver of "
+            f"{reference_liver_mass(self.ctx.species).value:.3g} kg and its blood "
+            f"flow {self._reference_flow():.3g} l/min) the blood moves at "
+            f"{v * 1e6:.3g} um/s, the chain of {n} zones disperses with "
+            f"{dispersion(v, geo.L_sin, n):.3g} m**2/s and its Peclet number is "
+            f"{peclet(v, geo.L_sin, n, 0.0):.3g} = 2n for a substance whose "
+            "axial diffusion is negligible against the dispersion "
+            "(`pkpdsim.zonation.transport.peclet`, the `effective_peclet` of the "
+            "engine)"
+            + (
+                "; the notes of the diffusion coefficient of a substance give "
+                "its own Peclet number."
+                if self.axial
+                else ", which is the Peclet number of this chain: it has no "
+                "axial diffusion."
+            )
+        )
+
+    def _reference_sex(self) -> Sex:
+        """The sex whose reference individual the numbers of the notes are of.
+
+        The sex of the build where the physiology of the species has it (the
+        human), otherwise the one sex of its table (the laboratory animals,
+        whose reference individual is male).
+        """
+        fractions = reference_fractions(self.organ, self.ctx.species)
+        return self.ctx.sex if self.ctx.sex in fractions else next(iter(fractions))
+
+    def _reference_flow(self) -> float:
+        """The hepatic blood flow of the reference individual of the build (l/min)."""
+        return reference_liver_flow(self.ctx.species, self._reference_sex())
+
+    def _reference_velocity(self) -> float:
+        """The velocity of the blood in the sinusoid of the reference individual (m/s).
+
+        The length of the sinusoid over the residence time of its lumen, the
+        velocity of the engine (`ZonationBuilder.velocity`,
+        `pkpdsim.zonation.transport.axial_velocity`) with the lumen and the
+        flow of the reference individual of the build: the vascular fraction
+        of the liver of `physiology_<species>.toml` times the mass of its
+        reference liver (the liver of the geometry table of the engine) over
+        the density of the liver, and the hepatic blood flow of the same
+        individual. The volume and the flow of the simulated individual are
+        parameters of the model, so the velocity of the notes is that of the
+        reference individual and not of the simulation.
+
+        It is about half of the velocity of the engine (22 against 47 um/s
+        for the human): the lumen of a zone of the PBPK liver is the whole
+        vascular space of the liver (`f_vas`, the sinusoids and the larger
+        vessels), the lumen of the engine only the sinusoidal one. The
+        number describes the chain of this model, whose zones hold that
+        volume.
+        """
+        geo = self._geometry()
+        f_vas = reference_fractions(self.organ, self.ctx.species)[
+            self._reference_sex()
+        ][0]
+        lumen = f_vas * reference_liver_mass(self.ctx.species).value / geo.density
+        return axial_velocity(geo.L_sin, lumen, self._reference_flow())
 
     def _units(self) -> type[Units]:
         """The unit definitions of the model of the liver.
@@ -591,7 +709,10 @@ class ZonatedBuilder(StandardBuilder):
                 f"radius of a fenestra ({geo.r_fen:.3g} m), so no fenestra lets "
                 "the substance through and the sinusoid geometry of the zonated "
                 "liver would cut it off from the tissue. It needs a transcellular "
-                "path, which the liver does not have yet."
+                "path through the endothelium, which the liver does not have "
+                "(it has no endothelial compartment); the geometry "
+                "`Geometry.WELL_STIRRED` holds such a molecule, across the "
+                "generic endothelium of the standard organ."
             )
         return self._constant(
             zids.permeability("fen", s.sid),
@@ -610,18 +731,32 @@ class ZonatedBuilder(StandardBuilder):
         """The exchange between the plasma and the interstitium of a zone (l/min).
 
         The well-stirred zone exchanges across the generic endothelium of the
-        standard organ; the sinusoid exchanges through the fenestrae of its
-        zone, `P_fen_<s>*eps_fen_<zone>*A_pd_<zone>`, the conductance of the
-        engine (`ZonationBuilder.radial_exchange`) over the lateral area of
-        the lumen of the zone. The transcellular path of the endothelium is
-        no path of the PBPK liver, which has no endothelial compartment.
+        standard organ, the one `PS_vas` of the organ whose share it takes;
+        the sinusoid exchanges through the fenestrae of its zone, the
+        conductance of the engine (`ZonationBuilder.radial_exchange`) over
+        the lateral area of the lumen of the zone, as the named parameter
+        `PS_vas_<zone>_<s> = P_fen_<s>*eps_fen_<zone>*A_pd_<zone>` of the
+        zone and the substance: a conductance a sensitivity analysis scans
+        and a fit changes is a parameter of the model and not a formula in a
+        kinetic law. It is a constant with an initial assignment, as
+        `PS_vas` of the standard organ is, so it follows the liver volume of
+        the individual. The transcellular path of the endothelium is no path
+        of the PBPK liver, which has no endothelial compartment.
         """
         if not self._is_sinusoid:
             return super()._ps_vas(s, zone)
         assert zone is not None
-        return (
+        return self._initial(
+            ids.ps_vas(s.sid, zone),
             f"{self._fenestral(s)} * {self._porosity(zone)} * "
-            f"{self._lateral_area(zone)} * 1000 l_per_m3 * 60 s_per_min"
+            f"{self._lateral_area(zone)} * 1000 l_per_m3 * 60 s_per_min",
+            U.l_per_min,
+            in_zone(f"exchange {s.sid} plasma and interstitium [l/min]", zone),
+            f"Exchange of {s.sid} between the plasma of the sinusoid and the "
+            "space of Disse of the zone, through the fenestrae of its "
+            "endothelium: its permeability through an open fenestra times the "
+            "fenestral porosity of the zone and the lateral area of its lumen.",
+            kind="permeability",
         )
 
     def _diffusion(self, s: Substance) -> str:
@@ -632,17 +767,76 @@ class ZonatedBuilder(StandardBuilder):
         with the substance or the one derived from its molar mass, with its
         provenance in the notes.
         """
-        parameter = diffusion_parameter(s)
-        pid = str(parameter.sid)
+        pid = zids.diffusion(s.sid)
         if pid not in self.parameters:
+            parameter = diffusion_parameter(s, self._peclet_notes(s))
             self.parameters[pid] = self._annotate(parameter, "diffusion")
         return pid
 
+    def _peclet_notes(self, s: Substance) -> str:
+        """What the chain of zones does to the axial diffusion of a substance.
+
+        The Peclet number of the chain with this coefficient at the
+        reference individual of the build, against the numerical dispersion
+        of the upwind convection: where the dispersion exceeds the
+        coefficient, the zone count and not the physics sets the gradient
+        along the sinusoid (the warning of the engine,
+        `ZonationBuilder._warn_dispersion`).
+        """
+        n = len(self.zones)
+        geo = self._geometry()
+        v = self._reference_velocity()
+        numerical = dispersion(v, geo.L_sin, n)
+        d = float(diffusion_of(s).value)
+        above = "above" if d > numerical else "below"
+        return (
+            f"At the reference individual of the build the chain of {n} zones "
+            f"realizes the Peclet number {peclet(v, geo.L_sin, n, d):.3g} with "
+            f"this coefficient, against {peclet(v, geo.L_sin, n, 0.0):.3g} = 2n "
+            f"for a substance which does not diffuse: the coefficient lies "
+            f"{above} the numerical dispersion {numerical:.3g} m**2/s "
+            "(`v*L_sin/(2n)`) of the upwind chain, which the zone count and not "
+            "the physics sets."
+        )
+
     def _substance(self, s: Substance) -> None:
-        """The species, flows and exchanges of a substance, with its axial diffusion."""
+        """The species, flows and exchanges of a substance, its diffusion and its means."""
         super()._substance(s)
-        if self._is_sinusoid:
+        if self._is_sinusoid and self.axial:
             self._axial_diffusion(s)
+        if self.means:
+            self._zonal_means(s)
+
+    def _zonal_means(self, s: Substance) -> None:
+        """The periportal and the pericentral mean of a substance in every zonated part.
+
+        The observers of the engine (`pkpdsim.zonation.observers`): the mean
+        of the concentration over the first (periportal) and the last
+        (pericentral) third of the sinusoid, every zone weighted by its
+        overlap with the third
+        (`pkpdsim.zones.third_weights`, the weighting every zonated model of
+        pkpdsim shares, so a zonated model of the engine and one of this
+        library report the same two means). They read the species
+        of the zones and nothing reads them, so they change no state of the
+        model.
+        """
+        n = len(self.zones)
+        for part in built_parts(self.ctx.parts[s.sid]):
+            of_zones = [ids.species(part, s.sid, zone) for zone in self.zones]
+            for periportal in (True, False):
+                third = "periportal" if periportal else "pericentral"
+                self._rule(
+                    ids.zonal_mean(part, s.sid, periportal),
+                    weighted_mean(of_zones, third_weights(n, periportal)),
+                    U.mM,
+                    f"{third} mean {s.sid} {_PART_NAMES[part]}",
+                    f"Mean concentration of {s.sid} in the {_PART_NAMES[part]} of "
+                    f"the {third} third of the sinusoid, the zones of the third "
+                    "weighted by their overlap with it (the observers of the "
+                    "zonation engine, `pkpdsim.zonation.observers`). It reads the "
+                    "zones and nothing reads it.",
+                    kind="organ_concentration",
+                )
 
     def _axial_diffusion(self, s: Substance) -> None:
         """The diffusion of a substance along the sinusoid, between consecutive zones.

@@ -78,11 +78,14 @@ __all__ = [
     "M2_PER_S",
     "M_PER_S",
     "aqueous_diffusion",
+    "axial_velocity",
     "cytosolic_diffusion",
     "diffusion_of",
     "diffusion_parameter",
+    "dispersion",
     "fenestral_permeability",
     "molecular_radius",
+    "peclet",
     "renkin",
 ]
 
@@ -184,6 +187,68 @@ def cytosolic_diffusion(d_aq: Value, f_cyt: float = F_CYT) -> Value:
     return Value(f_cyt * _as_m2_per_s(d_aq), M2_PER_S)
 
 
+def axial_velocity(length: float, lumen: float, flow: float) -> float:
+    """Get the velocity of the blood along a lumen (m/s).
+
+    The length over the residence time, `L / (lumen / flow)`; the one
+    expression the engine and the zonated liver of the PBPK library share,
+    each with its own lumen.
+
+    Args:
+        length: the length of the lumen (m).
+        lumen: the volume of the lumen (l).
+        flow: the flow through the lumen (l/min).
+
+    Returns:
+        The velocity (m/s); 0 without a flow.
+
+    Raises:
+        ValueError: for a lumen of 0, which has no velocity.
+    """
+    if flow == 0.0:
+        return 0.0
+    if lumen <= 0.0:
+        raise ValueError(f"The lumen {lumen} l has no volume, so it has no velocity.")
+    return length / (lumen / flow * 60.0)
+
+
+def dispersion(velocity: float, length: float, n_zones: int) -> float:
+    """Get the numerical dispersion of an upwind chain of zones (m**2/s).
+
+    `v * dx / 2` with the length `dx = L / n` of a zone: the dispersion the
+    upwind discretization of the convection adds to the physical diffusion.
+
+    Args:
+        velocity: the velocity of the blood (m/s).
+        length: the length of the chain (m).
+        n_zones: the number of zones.
+
+    Returns:
+        The dispersion (m**2/s).
+    """
+    return velocity * length / n_zones / 2.0
+
+
+def peclet(velocity: float, length: float, n_zones: int, d_eff: float) -> float:
+    """Get the Peclet number an upwind chain of zones realizes.
+
+    `v * L / (d_eff + v * dx / 2)`, which is `2 n` when the physical
+    diffusion is negligible against the dispersion of the chain.
+
+    Args:
+        velocity: the velocity of the blood (m/s).
+        length: the length of the chain (m).
+        n_zones: the number of zones.
+        d_eff: the effective axial diffusion (m**2/s).
+
+    Returns:
+        The Peclet number; 0 without a flow.
+    """
+    if velocity == 0.0:
+        return 0.0
+    return velocity * length / (d_eff + dispersion(velocity, length, n_zones))
+
+
 def renkin(lambda_: float) -> float:
     """Get the Renkin hindrance of a spherical solute in a cylindrical pore.
 
@@ -261,8 +326,18 @@ def diffusion_of(substance: Substance) -> Value:
     return aqueous_diffusion(substance.mr)
 
 
-def diffusion_parameter(substance: Substance) -> Parameter:
-    """Get the diffusion of a substance as a parameter `D_<sid>` with its provenance."""
+def diffusion_parameter(substance: Substance, note: str = "") -> Parameter:
+    """Get the diffusion of a substance as a parameter `D_<sid>` with its provenance.
+
+    Args:
+        substance: the substance.
+        note: a paragraph which is appended to the notes, what the model of
+            the caller does with the coefficient (the zonated liver of the
+            PBPK library states the Peclet number of its chain).
+
+    Returns:
+        The parameter.
+    """
     d = diffusion_of(substance)
     if substance.diffusion is not None:
         text = (
@@ -282,5 +357,5 @@ def diffusion_parameter(substance: Substance) -> Parameter:
         M2_PER_S,
         f"diffusion {substance.name}",
         SBO.DIFFUSION_COEFFICIENT,
-        text,
+        f"{text}\n\n{note}" if note else text,
     )

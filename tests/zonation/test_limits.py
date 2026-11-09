@@ -72,10 +72,22 @@ def test_a_plain_build_is_valid_sbml(tmp_path: Path, geometry: Geometry) -> None
         "pkpdsim.zonation.observers",
         "pkpdsim.pbpk",
         "pkpdsim.pbpk.variants.liver_zonated",
+        "pkpdsim.perfusion.definition",
+        "pkpdsim.perfusion.circuit",
+        "pkpdsim.perfusion.observers",
+        "pkpdsim.perfusion.builder",
     ],
 )
 def test_the_packages_import_in_any_order(first: str) -> None:
-    """The engine and the PBPK library import in a fresh interpreter, either first."""
+    """Every entry point into the three libraries imports in a fresh interpreter.
+
+    The engine builds on the PBPK library and the zonated liver of the PBPK
+    library builds on the engine, and both report the means of the perfusion
+    library's weighting, so the modules of the three import each other and an
+    entry point below one of them can find a partially initialized module
+    (`ImportError`). Every entry point is imported first in a subprocess of
+    its own, with one of the other two after it.
+    """
     second = (
         "pkpdsim.pbpk" if first.startswith("pkpdsim.zonation") else "pkpdsim.zonation"
     )

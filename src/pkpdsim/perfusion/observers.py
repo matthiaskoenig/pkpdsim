@@ -14,7 +14,9 @@ observers add what the species do not give, as assignment rules:
 - the periportal and pericentral means, the sites `pp` and `pc` (`pp_cell`
   for the cells): every concentration of a zone averaged over the first and
   the last third of the length of the sinusoid, each zone weighted by its
-  overlap with that third (the zones have the same volume), and the pO2,
+  overlap with that third (`third_weights` and `weighted_mean` of
+  `pkpdsim.zones`, which every zonated model of pkpdsim shares; the zones
+  have the same volume), and the pO2,
   the pH and the activities of these means as at any site. With one zone
   both means are the zone; with two zones the periportal mean is the first
   zone and the pericentral the second; with three zones the first and the
@@ -33,7 +35,6 @@ observers add what the species do not give, as assignment rules:
 """
 
 from collections.abc import Sequence
-from fractions import Fraction
 
 from sbmlutils.factory import AssignmentRule, Parameter
 from sbmlutils.factory.units import UnitDefinition
@@ -44,6 +45,7 @@ from pkpdsim.pbpk.units import U
 from pkpdsim.perfusion import circuit, core, ids
 from pkpdsim.perfusion.definition import table_value
 from pkpdsim.perfusion.units import PU
+from pkpdsim.zones import third_weights, weighted_mean
 
 __all__ = [
     "RULE",
@@ -135,41 +137,6 @@ def site_objects(site: str, enzymes: Sequence[str] = ids.ENZYMES) -> core.CoreOb
             ),
         )
     return out
-
-
-def third_weights(n: int, periportal: bool) -> list[tuple[int, Fraction]]:
-    """Get the weights of the zones in the mean of a third of the sinusoid.
-
-    Zone `k` of `n` covers `[(k - 1)/n, k/n]` of the length of the sinusoid;
-    its weight is its overlap with the first (periportal) or the last
-    (pericentral) third over the length of the third, so the weights sum to 1.
-
-    Args:
-        n: the number of zones.
-        periportal: the first third, else the last.
-
-    Returns:
-        The zones (from 1) with a weight above 0 and their weights.
-    """
-    third = Fraction(1, 3)
-    out = []
-    for k in range(1, n + 1):
-        lower, upper = Fraction(k - 1, n), Fraction(k, n)
-        if not periportal:
-            lower, upper = 1 - upper, 1 - lower
-        overlap = min(upper, third) - lower
-        if overlap > 0:
-            out.append((k, overlap / third))
-    return out
-
-
-def weighted_mean(of_zones: Sequence[str], weights: list[tuple[int, Fraction]]) -> str:
-    """Get the weighted mean of an id of the zones (periportal first)."""
-    terms = [
-        of_zones[k - 1] if w == 1 else f"{float(w)!r} dimensionless * {of_zones[k - 1]}"
-        for k, w in weights
-    ]
-    return " + ".join(terms)
 
 
 def mean_objects(

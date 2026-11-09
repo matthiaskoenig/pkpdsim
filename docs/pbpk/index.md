@@ -117,6 +117,8 @@ One id scheme for every model, built by the functions of `pkpdsim.pbpk.ids`, so 
 | `Cpl_<s>` | the plasma concentration in an organ (local) | `ids.species(part, s)` |
 | `Cti_<s>` | the merged tissue (interstitial and intracellular) of an organ | `ids.species(Part.TISSUE, s)` |
 | `Cu_ti_<s>` | the unbound tissue concentration of an organ | `ids.unbound(Part.TISSUE, s)` |
+| `C<part>_pp_<s>` | the periportal mean of a part of a zonated organ, the mean of the first third of the sinusoid (local id, `means` of the zonated liver) | `ids.zonal_mean(part, s, True)` |
+| `C<part>_pc_<s>` | the pericentral mean of a part of a zonated organ, the mean of the last third of the sinusoid (local id) | `ids.zonal_mean(part, s, False)` |
 | `C<pool>_<s>` | the plasma concentration of a blood pool (`ar`, `ve`, `po`) | `ids.pool_species(pool, s)` |
 | `C<pool>_bc_<s>` | the blood cells of a pool (kinetic erythrocytes) | `ids.pool_species(pool, s, Part.BLOOD_CELLS)` |
 | `C<pool>_free_<s>` | the unbound plasma concentration of a pool | `ids.free(pool, s)` |
@@ -242,6 +244,7 @@ Every other id of the scheme, the ids a model rarely reads: the physiology, the 
 | `Qha` | the blood flow of the hepatic artery | `ids.QHA` |
 | `Qpo` | the blood flow of the portal vein | `ids.QPO` |
 | `PS_vas` | the exchange of plasma and interstitium of an organ (local id) | `ids.PS_VAS` |
+| `PS_vas_<zone>_<s>` | the exchange of plasma and interstitium of a zone through its fenestrated endothelium, the sinusoid geometry (local id) | `ids.ps_vas(s, zone)` |
 | `eGFR` | the GFR per 1.73 m2 body surface area of the renal function, which gives the CKD stage | `ids.EGFR` |
 | `CKD_hepatic` | the switch (0 off, 1 on) of the hepatic changes of chronic kidney disease | `ids.CKD_HEPATIC` |
 | `FED` | the prandial state, 0 fasted (default) and 1 fed, which slows the gastric emptying | `ids.FED` |

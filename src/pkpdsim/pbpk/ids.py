@@ -203,6 +203,7 @@ __all__ = [
     "ps",
     "ps_placenta",
     "ps_ref",
+    "ps_vas",
     "rate_ratio",
     "reabsorption_n",
     "reabsorption_threshold",
@@ -237,6 +238,7 @@ __all__ = [
     "urine_rate",
     "vascular_fraction",
     "wall_compartment",
+    "zonal_mean",
     "zone",
 ]
 
@@ -498,6 +500,18 @@ def species(part: Part, s: str, zone: str | None = None) -> str:
     return _zoned(f"C{part.value}", zone, s)
 
 
+def zonal_mean(part: Part, s: str, periportal: bool) -> str:
+    """The local id of a mean over a third of a zonated organ, `Cpl_pp_<s>`.
+
+    The mean concentration of `s` in a part of the first (periportal, `pp`)
+    or the last (pericentral, `pc`) third of the sinusoid, the observers of
+    the zonation engine (`pkpdsim.zonation.observers`): the zones of the
+    third weighted by their overlap with it. The tokens cannot be a zone
+    (`z1` to `z<n>`), so a mean is no species of a zone.
+    """
+    return _zoned(f"C{part.value}", "pp" if periportal else "pc", s)
+
+
 def pool_compartment(pool: Pool, part: Part) -> str:
     """The id of a compartment of a blood pool, `Vve_pl`."""
     return f"V{pool.value}_{part.value}"
@@ -591,6 +605,18 @@ def ps_ref(s: str) -> str:
     `ps_per_volume=False`): the liver has `PS_<s> = PS_ref_<s> * f_functional`.
     """
     return f"PS_ref_{s}"
+
+
+def ps_vas(s: str, zone: str) -> str:
+    """The local id of the exchange of `s` through the endothelium of a zone, `PS_vas_z1_<s>`.
+
+    The exchange between the plasma and the interstitium of a zone of a
+    geometry which gives every zone and every substance its own conductance
+    (the fenestrated endothelium of the sinusoid of the zonated liver), in
+    l/min; the generic endothelium of an organ is the one `PS_VAS` of all of
+    them, whose share a zone takes.
+    """
+    return _zoned(PS_VAS, zone, s)
 
 
 def kps(s: str) -> str:

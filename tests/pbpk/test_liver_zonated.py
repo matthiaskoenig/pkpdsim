@@ -23,6 +23,7 @@ import libsbml
 import numpy as np
 import pytest
 from sbmlutils.factory import Parameter as SbmlParameter
+from sbmlutils.factory import Reaction as SbmlReaction
 
 from pkpdsim.pbpk import (
     MM,
@@ -52,12 +53,23 @@ from pkpdsim.pbpk import (
 )
 from pkpdsim.pbpk.builder import build, organ_context
 from pkpdsim.pbpk.organ import OrganComponent, OrganContext
+from pkpdsim.pbpk.physiology import (
+    reference_fractions,
+    reference_liver_flow,
+)
 from pkpdsim.pbpk.units import U
-from pkpdsim.pbpk.values import Value
 from pkpdsim.zonation import ids as zids
+from pkpdsim.zonation.geometry import geometry, reference_liver_mass
 from pkpdsim.zonation.profiles import Linear
 from pkpdsim.zonation.settings import Geometry
-from pkpdsim.zonation.transport import M2_PER_S, diffusion_parameter
+from pkpdsim.zonation.transport import (
+    axial_velocity,
+    diffusion_of,
+    diffusion_parameter,
+    dispersion,
+    peclet,
+)
+from pkpdsim.zones import third_weights, weighted_mean
 
 from .conftest import (
     definition,
@@ -73,6 +85,8 @@ if TYPE_CHECKING:
 
     import roadrunner
     from sbmlutils.factory import Sbase
+
+    from pkpdsim.zonation.geometry import SinusoidGeometry
 
 S = "drg"
 """The substance of the tests."""
@@ -465,32 +479,21 @@ molecule, so that the barrier does not limit the transfer."""
 TIGHT_POROSITY = 1e-6
 """The fenestral porosity of a nearly closed barrier (`tests/zonation/test_barrier.py`)."""
 
-NO_DIFFUSION = 1e-30
-"""The aqueous diffusion (m**2/s) of a substance which does not diffuse axially.
 
-A `Substance` needs a positive diffusion coefficient
-(`tests/zonation/test_transport.py::test_a_non_positive_diffusion_raises`), so
-the axial diffusion is switched off with a negligible value instead of 0: the
-conductance `D*A/dx` of a zone is then about 1e-21 l/min against a plasma flow
-of about 1 l/min."""
-
-
-def _permeable_drug(diffusion: float | None = None) -> Substance:
+def _permeable_drug() -> Substance:
     """The drug in the full form (interstitium and cells), fu 0.5, Kp 2.
 
     The sinusoid geometry has the space of Disse and its barrier only for a
-    substance with an interstitial part. `diffusion` is the aqueous diffusion
-    coefficient (m**2/s) which replaces the one derived from the molar mass;
-    `NO_DIFFUSION` leaves the axial diffusion out.
+    substance with an interstitial part. Its axial diffusion is the
+    coefficient derived from its molar mass; the limit of no axial diffusion
+    is `ZonatedLiver(axial_diffusion=False)` and not a coefficient of 0,
+    which a `Substance` refuses.
     """
-    drug = dataclasses.replace(
+    return dataclasses.replace(
         simple_drug(),
         binding=Binding(fu=0.5, protein="albumin"),
         distribution=Kp(2.0, ftissue=10.0, mode=Mode.PERMEABILITY),
     )
-    if diffusion is None:
-        return drug
-    return dataclasses.replace(drug, diffusion=Value(diffusion, M2_PER_S))
 
 
 def _barrier_changes(barrier: str, n: int) -> dict[str, float]:
@@ -511,7 +514,6 @@ def _barrier_changes(barrier: str, n: int) -> dict[str, float]:
 def _simulate(
     tmp_path: Path,
     liver: str | OrganComponent,
-    diffusion: float | None = None,
     barrier: str | None = None,
 ) -> dict[str, np.ndarray]:
     """The curves of the drug in the full form after an IV bolus of 10 mg.
@@ -519,8 +521,6 @@ def _simulate(
     Args:
         tmp_path: the directory of the build (one model per call).
         liver: the liver variant.
-        diffusion: the aqueous diffusion of the drug (m**2/s), `None` the one
-            derived from its molar mass, `NO_DIFFUSION` no axial diffusion.
         barrier: `open` or `tight` for the fenestrated barrier of the
             sinusoid geometry (`_barrier_changes`), `None` for the measured
             porosity of the table.
@@ -530,10 +530,7 @@ def _simulate(
         selection.
     """
     sid = f"sim{sum(1 for _ in tmp_path.iterdir())}"
-    metabolite = Substance(sid="drg_m", name="metabolite", mr=316.0)
-    path = _model(
-        tmp_path, sid, liver, [_drg2m()], [_permeable_drug(diffusion), metabolite]
-    )
+    path = _model(tmp_path, sid, liver, [_drg2m()], [_permeable_drug(), _METABOLITE])
     zones = getattr(liver, "n_zones", 1)
     changes = _barrier_changes(barrier, zones) if barrier is not None else {}
     r = _load(path, **changes)
@@ -560,6 +557,256 @@ def _sinusoid_elements(liver: ZonatedLiver, ctx: OrganContext) -> dict[str, "Sba
     return {str(e.sid): e for e in elements}
 
 
+_METABOLITE = Substance(sid="drg_m", name="metabolite", mr=316.0)
+"""The metabolite of the CYP3A4 metabolism of the sinusoid tests."""
+
+
+def _full_context() -> OrganContext:
+    """The context of the liver of the drug in the full form and its metabolite."""
+    return organ_context(
+        definition(substances=[_permeable_drug(), _METABOLITE], chemistry=[_drg2m()]),
+        Organ.LIVER,
+    )
+
+
+def test_a_molecule_no_fenestra_passes_is_refused_and_told_the_well_stirred_geometry() -> (
+    None
+):
+    """A molecule which no fenestra lets through is refused, with the way out.
+
+    The sinusoid of the PBPK liver has no transcellular path through the
+    endothelium (the liver has no endothelial compartment), so a molecule
+    whose radius reaches the radius of a fenestra would be cut off from the
+    tissue of the liver. The build refuses it instead of cutting it off, and
+    the message names the well-stirred geometry, which exchanges across the
+    generic endothelium of the standard organ and does hold such a molecule.
+    """
+    big = dataclasses.replace(_permeable_drug(), mr=1e8)
+    ctx = organ_context(
+        definition(substances=[big, _METABOLITE], chemistry=[_drg2m()]), Organ.LIVER
+    )
+    liver = ZonatedLiver(n_zones=3, geometry=Geometry.SINUSOID)
+    with pytest.raises(ValueError, match="WELL_STIRRED") as error:
+        liver.build(ctx)
+    assert "no fenestra" in str(error.value)
+    ZonatedLiver(n_zones=3).build(ctx)
+
+
+def _reference_velocity(ctx: OrganContext, geo: "SinusoidGeometry") -> float:
+    """The velocity of the blood in the sinusoid of the reference individual (m/s)."""
+    fractions = reference_fractions(Organ.LIVER, ctx.species)
+    sex = ctx.sex if ctx.sex in fractions else next(iter(fractions))
+    lumen = fractions[sex][0] * reference_liver_mass(ctx.species).value / geo.density
+    return axial_velocity(geo.L_sin, lumen, reference_liver_flow(ctx.species, sex))
+
+
+def test_the_notes_of_the_sinusoid_give_the_peclet_number_of_the_reference_individual() -> (
+    None
+):
+    """The notes of the sinusoid state the dispersion and the Peclet number of the chain.
+
+    The upwind chain of zones adds the numerical dispersion `v*dx/2` to the
+    axial diffusion, so a reader who chooses a zone count needs the order of
+    magnitude of both. The flow and the volume of the liver are parameters
+    of the simulated individual and not numbers at build time, so the notes
+    give the velocity, the dispersion and the Peclet number of the chain at
+    the reference individual of the build, the engine's expression
+    (`pkpdsim.zonation.transport.peclet`, the `effective_peclet` of the
+    engine) at the reference liver and the reference hepatic blood flow; the
+    notes of the diffusion coefficient of a substance give the Peclet number
+    with that coefficient.
+    """
+    n = 10
+    ctx = _full_context()
+    md, _ = ZonatedLiver(n_zones=n, geometry=Geometry.SINUSOID).build(ctx)
+    geo = geometry(ctx.species)
+    v = _reference_velocity(ctx, geo)
+    notes = str(md.notes)
+    assert f"{dispersion(v, geo.L_sin, n):.3g}" in notes
+    assert f"{v * 1e6:.3g}" in notes
+    assert f"{peclet(v, geo.L_sin, n, 0.0):.3g}" in notes
+    coefficient = diffusion_parameter(_permeable_drug())
+    pe = peclet(v, geo.L_sin, n, float(diffusion_of(_permeable_drug()).value))
+    assert pe != pytest.approx(2 * n, rel=1e-2)
+    parameters = {str(q.sid): str(q.notes) for q in md.parameters}
+    assert f"{pe:.3g}" in parameters[str(coefficient.sid)]
+    stirred, _ = ZonatedLiver(n_zones=n).build(ctx)
+    assert "Peclet" not in str(stirred.notes)
+
+
+def _rule_formulas(liver: ZonatedLiver, ctx: OrganContext) -> dict[str, str]:
+    """The formulas of the assignment rules of a liver by the id of their target."""
+    md, _ = liver.build(ctx)
+    return {str(r.variable): str(r.value) for r in md.rules}
+
+
+def test_the_zonal_means_are_the_thirds_of_the_engine(tmp_path: Path) -> None:
+    """`means=True` adds the periportal and pericentral means of the engine.
+
+    A zonated model of the PBPK library reports the two means the way the
+    zonation engine does (`pkpdsim.zonation.observers`): the mean of the
+    first and the last third of the sinusoid, every zone weighted by its
+    overlap with the third
+    (`pkpdsim.zones.third_weights`, the weighting every zonated model of
+    pkpdsim shares), as an assignment rule per zonated part and substance.
+    They are on request, so a liver without them has none of them, they
+    carry an SBO term and an ontology term as every element of a model does
+    (`tests/pbpk/test_annotation.py`, which does not build a liver with
+    them), and they are read-only: the means of the first simulated point are
+    the weighted sums of the species of the zones.
+    """
+    n = 10
+    ctx = _full_context()
+    liver = ZonatedLiver(n_zones=n, means=True)
+    expected = {
+        ids.zonal_mean(part, s, periportal)
+        for part, s in (
+            (Part.PLASMA, S),
+            (Part.INTERSTITIAL, S),
+            (Part.INTRACELLULAR, S),
+            (Part.PLASMA, _METABOLITE.sid),
+        )
+        for periportal in (True, False)
+    }
+    without = _sinusoid_elements(ZonatedLiver(n_zones=n), ctx)
+    elements = _sinusoid_elements(liver, ctx)
+    assert set(elements) - set(without) == expected
+    missing = [
+        sid
+        for sid in sorted(expected)
+        if elements[sid].sboTerm is None or not elements[sid].annotations
+    ]
+    assert not missing
+    formulas = _rule_formulas(liver, ctx)
+    for periportal in (True, False):
+        pid = ids.zonal_mean(Part.PLASMA, S, periportal)
+        parameter = elements[pid]
+        assert isinstance(parameter, SbmlParameter)
+        assert parameter.constant is False
+        assert parameter.unit == U.mM
+        assert formulas[pid] == weighted_mean(
+            [ids.species(Part.PLASMA, S, z) for z in _zones(n)],
+            third_weights(n, periportal),
+        )
+    path = _model(
+        tmp_path, "means", liver, [_drg2m()], [_permeable_drug(), _METABOLITE]
+    )
+    r = _load(path)
+    r[ids.iv_dose(S)] = 10.0
+    r.simulate(0.0, 5.0, 2)
+    for periportal in (True, False):
+        total = sum(
+            float(w) * r[f"[{_liver(ids.species(Part.PLASMA, S, ids.zone(k)))}]"]
+            for k, w in third_weights(n, periportal)
+        )
+        assert r[_liver(ids.zonal_mean(Part.PLASMA, S, periportal))] == pytest.approx(
+            total, rel=1e-12
+        )
+    assert total > 0.0
+
+
+def _initial_assignments(liver: ZonatedLiver, ctx: OrganContext) -> dict[str, str]:
+    """The formulas of the initial assignments of a liver by the id of their target."""
+    md, _ = liver.build(ctx)
+    return {str(a.symbol): str(a.value) for a in md.assignments}
+
+
+def test_the_fenestral_conductance_is_a_named_parameter_of_the_zone(
+    tmp_path: Path,
+) -> None:
+    """The fenestral path of a zone is a named `PS_vas_<zone>_<s>` (l/min).
+
+    A conductance which a sensitivity analysis scans, a fit changes and a
+    reader of the flat SBML looks up has to be a parameter of the model and
+    not a formula inlined into a kinetic law: the exchange of a zone reads
+    `PS_vas_<zone>_<s>`, a constant with an initial assignment (so it
+    follows the liver volume of the individual, as `PS_vas` of the standard
+    organ does), and the parameter is the conductance of the engine,
+    `P_fen_<s>*eps_fen_<zone>*A_pd_<zone>` in l/min.
+    """
+    n = 3
+    ctx = _full_context()
+    liver = ZonatedLiver(n_zones=n, geometry=Geometry.SINUSOID)
+    elements = _sinusoid_elements(liver, ctx)
+    assignments = _initial_assignments(liver, ctx)
+    for zone in _zones(n):
+        pid = ids.ps_vas(S, zone)
+        parameter = elements[pid]
+        assert isinstance(parameter, SbmlParameter)
+        assert parameter.constant is True
+        assert parameter.unit == U.l_per_min
+        assert assignments[pid] == (
+            f"{zids.permeability('fen', S)} * {zids.porosity(zone)} * "
+            f"{zids.area('pd', zone)} * 1000 l_per_m3 * 60 s_per_min"
+        )
+        exchange = elements[ids.exchange_reaction(Part.INTERSTITIAL, S, zone)]
+        assert isinstance(exchange, SbmlReaction)
+        law = exchange.formula
+        assert law is not None
+        assert pid in str(law.math)
+        assert zids.permeability("fen", S) not in str(law.math)
+    path = _model(
+        tmp_path, "conductance", liver, [_drg2m()], [_permeable_drug(), _METABOLITE]
+    )
+    r = _load(path)
+    for zone in _zones(n):
+        assert r[_liver(ids.ps_vas(S, zone))] == pytest.approx(
+            r[_liver(zids.permeability("fen", S))]
+            * r[_liver(zids.porosity(zone))]
+            * r[_liver(zids.area("pd", zone))]
+            * 1000.0
+            * 60.0,
+            rel=1e-12,
+        )
+
+
+def test_the_sinusoid_without_axial_diffusion_emits_no_diffusion_at_all(
+    tmp_path: Path,
+) -> None:
+    """`axial_diffusion=False` is the exact limit of no axial diffusion: no term.
+
+    A `Substance` needs a positive diffusion coefficient
+    (`tests/zonation/test_transport.py::test_a_non_positive_diffusion_raises`),
+    so the limit of no axial diffusion is not a coefficient of 0 but no term,
+    as the engine leaves it out for a substance whose `_diffusion` is `None`:
+    neither a reaction between two zones nor a diffusion coefficient nor the
+    length of the sinusoid, which only they read, is emitted. The fenestral
+    barrier is untouched, and the model is valid SBML.
+    """
+    n = 3
+    ctx = _full_context()
+    diffusing = _sinusoid_elements(
+        ZonatedLiver(n_zones=n, geometry=Geometry.SINUSOID), ctx
+    )
+    without = _sinusoid_elements(
+        ZonatedLiver(n_zones=n, geometry=Geometry.SINUSOID, axial_diffusion=False),
+        ctx,
+    )
+    assert set(diffusing) - set(without) == {
+        zids.LENGTH,
+        *(str(diffusion_parameter(s).sid) for s in (_permeable_drug(), _METABOLITE)),
+        *(
+            ids.axial_reaction(part, s, z)
+            for part, s in (
+                (Part.PLASMA, S),
+                (Part.INTERSTITIAL, S),
+                (Part.PLASMA, _METABOLITE.sid),
+            )
+            for z in _zones(n)[:-1]
+        ),
+    }
+    assert not set(without) - set(diffusing)
+    path = _model(
+        tmp_path,
+        "nodiffusion",
+        ZonatedLiver(n_zones=n, geometry=Geometry.SINUSOID, axial_diffusion=False),
+        [_drg2m()],
+        [_permeable_drug(), _METABOLITE],
+    )
+    document = libsbml.readSBMLFromFile(str(path))
+    assert document.getNumErrors(libsbml.LIBSBML_SEV_ERROR) == 0
+
+
 def test_the_sinusoid_geometry_adds_the_elements_of_the_barrier_and_the_diffusion() -> (
     None
 ):
@@ -567,26 +814,23 @@ def test_the_sinusoid_geometry_adds_the_elements_of_the_barrier_and_the_diffusio
 
     The geometry of the engine adds the radius and the length of the
     sinusoid, the fenestral porosity and the lateral area of every zone, the
-    fenestral permeability of the substance in the full form and the
-    diffusion coefficient of every substance which diffuses, and one
-    reaction per pair of zones and diffusing part; the generic endothelium of
-    the standard organ (`PS_vas`, `k_vas`) is gone. Every element it adds has
+    fenestral permeability of the substance in the full form, the conductance
+    of the fenestral path of every zone and the diffusion coefficient of
+    every substance which diffuses, and one reaction per pair of zones and
+    diffusing part; the generic endothelium of the standard organ (`PS_vas`,
+    `k_vas`) is gone. Every element it adds has
     an SBO term and an ontology term, as `tests/pbpk/test_annotation.py`
     requires of every element of a model.
     """
     n = 3
-    metabolite = Substance(sid="drg_m", name="metabolite", mr=316.0)
-    ctx = organ_context(
-        definition(substances=[_permeable_drug(), metabolite], chemistry=[_drg2m()]),
-        Organ.LIVER,
-    )
+    ctx = _full_context()
     stirred = _sinusoid_elements(ZonatedLiver(n_zones=n), ctx)
     sinusoid = _sinusoid_elements(
         ZonatedLiver(n_zones=n, geometry=Geometry.SINUSOID), ctx
     )
     zones = _zones(n)
     diffusions = [
-        str(diffusion_parameter(s).sid) for s in (_permeable_drug(), metabolite)
+        str(diffusion_parameter(s).sid) for s in (_permeable_drug(), _METABOLITE)
     ]
     expected = {
         zids.RADIUS,
@@ -595,12 +839,13 @@ def test_the_sinusoid_geometry_adds_the_elements_of_the_barrier_and_the_diffusio
         *diffusions,
         *(zids.porosity(z) for z in zones),
         *(zids.area("pd", z) for z in zones),
+        *(ids.ps_vas(S, z) for z in zones),
         *(
             ids.axial_reaction(part, s, z)
             for part, s in (
                 (Part.PLASMA, S),
                 (Part.INTERSTITIAL, S),
-                (Part.PLASMA, metabolite.sid),
+                (Part.PLASMA, _METABOLITE.sid),
             )
             for z in zones[:-1]
         ),
@@ -625,26 +870,17 @@ def test_the_sinusoid_with_diffusion_off_and_an_open_barrier_equals_well_stirred
     flows; the sinusoid exchanges through the fenestrae of its zone, the
     geometry of the liver. The two agree when the fenestral path does not
     limit the transfer either (`barrier="open"`) and the sinusoid has no
-    axial diffusion (`NO_DIFFUSION`), and the test is not vacuous: a nearly
-    closed barrier keeps the drug out of the cells and differs by far more
-    than the tolerance.
+    axial diffusion (`axial_diffusion=False`, which emits no term), and the
+    test is not vacuous: a nearly closed barrier keeps the drug out of the
+    cells and differs by far more than the tolerance.
     """
     n = 10
+    limit = ZonatedLiver(n_zones=n, geometry=Geometry.SINUSOID, axial_diffusion=False)
     stirred = _simulate(
         tmp_path, ZonatedLiver(n_zones=n, geometry=Geometry.WELL_STIRRED)
     )
-    opened = _simulate(
-        tmp_path,
-        ZonatedLiver(n_zones=n, geometry=Geometry.SINUSOID),
-        diffusion=NO_DIFFUSION,
-        barrier="open",
-    )
-    tight = _simulate(
-        tmp_path,
-        ZonatedLiver(n_zones=n, geometry=Geometry.SINUSOID),
-        diffusion=NO_DIFFUSION,
-        barrier="tight",
-    )
+    opened = _simulate(tmp_path, limit, barrier="open")
+    tight = _simulate(tmp_path, limit, barrier="tight")
     key = f"[{ids.pool_species(Pool.VENOUS, S)}]"
     assert opened[key] == pytest.approx(stirred[key], rel=1e-3, abs=0)
     reference = stirred[key][MIXED]

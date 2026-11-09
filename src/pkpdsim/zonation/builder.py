@@ -111,10 +111,13 @@ from pkpdsim.zonation.transport import (
     L_PER_M3,
     M2_PER_S,
     M_PER_S,
+    axial_velocity,
     diffusion_of,
     diffusion_parameter,
+    dispersion,
     fenestral_permeability,
     molecular_radius,
+    peclet,
 )
 
 __all__ = ["ZonationBuilder", "effective_peclet"]
@@ -441,22 +444,21 @@ class ZonationBuilder:
         geo = self._geo()
         lumen = fr[Layer.PLASMA] + fr.get(Layer.RBC, 0.0)
         litre = lumen * geo.f_par * self._mass().value / geo.density
-        return geo.L_sin / (litre / q * 60.0)
+        return axial_velocity(geo.L_sin, litre, q)
 
     def dispersion(self) -> float:
         """The numerical dispersion (m**2/s) of the upwind chain, `v * dx / 2`."""
-        return self.velocity() * self._geo().L_sin / self.settings.n_zones / 2.0
+        return dispersion(self.velocity(), self._geo().L_sin, self.settings.n_zones)
 
     def peclet(self, d_eff: float) -> float:
         """The Peclet number the chain realizes with a physical diffusion `d_eff`.
 
-        `v * L / (d_eff + v * dx / 2)`: the one expression which the notes of
-        the model, the warning and `effective_peclet` report; 0 without a flow.
+        `v * L / (d_eff + v * dx / 2)` of `pkpdsim.zonation.transport.peclet`,
+        the one expression which the notes of the model, the warning,
+        `effective_peclet` and the zonated liver of the PBPK library report;
+        0 without a flow.
         """
-        v = self.velocity()
-        if v == 0.0:
-            return 0.0
-        return v * self._geo().L_sin / (d_eff + self.dispersion())
+        return peclet(self.velocity(), self._geo().L_sin, self.settings.n_zones, d_eff)
 
     def _diffusion(self, substance: Substance) -> Parameter | None:
         """Get the axial diffusion of a substance, `None` for none.

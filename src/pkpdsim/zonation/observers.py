@@ -15,8 +15,8 @@ geometry instead of `rbc`, `plasma`, `endo` and `disse`; see `ZonationBuilder.la
   concentration in the blood side of the lumen (the plasma, `vas` in the
   well-stirred geometry), and `<s>_<layer>_pp`, `<s>_<layer>_pc` of every other
   layer. The mean is that of the first (periportal) and the last (pericentral)
-  third of the sinusoid, every zone weighted by `pkpdsim.perfusion.observers.third_weights`
-  (the weighting of the perfusion library, shared and not copied).
+  third of the sinusoid, every zone weighted by `pkpdsim.zones.third_weights`
+  (the weighting every zonated model of pkpdsim shares, not a copy).
 - `c_outflow_<s>` (mM): the concentration of the blood leaving the last zone, the
   flux out over the flow out. It is **not** the pericentral mean (`<s>_pc`), which
   averages the last third of the length: with a gradient the two differ. It is not
@@ -46,16 +46,12 @@ from pkpdsim.pbpk.annotation import initial_assignment
 from pkpdsim.pbpk.substance import Substance
 from pkpdsim.pbpk.units import U
 from pkpdsim.perfusion import core
-from pkpdsim.perfusion.observers import (
-    RULE,
-    observer,
-    third_weights,
-    weighted_mean,
-)
+from pkpdsim.perfusion.observers import RULE, observer
 from pkpdsim.zonation import ids
 from pkpdsim.zonation.builder import ZonationBuilder
 from pkpdsim.zonation.geometry import Layer
 from pkpdsim.zonation.settings import ZonationSettings
+from pkpdsim.zones import third_weights, weighted_mean
 
 __all__ = [
     "add_observers",
@@ -243,8 +239,9 @@ def observer_objects(
 ) -> core.CoreObjects:
     """Get the observers of a zonated organ.
 
-    The weighting of the thirds is `pkpdsim.perfusion.observers.third_weights`.
-    `mean_objects` of that module is not reused: it writes the species ids of the
+    The weighting of the thirds is `pkpdsim.zones.third_weights`, which every
+    zonated model of pkpdsim shares. `mean_objects` of
+    `pkpdsim.perfusion.observers` is not reused: it writes the species ids of the
     perfusion core (`<q>_<site>`, the cells, the living fraction, the pH and the
     activities of the sites), which this model does not have; its weights are
     the part which carries over.
