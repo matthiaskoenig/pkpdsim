@@ -176,7 +176,10 @@ def test_the_bile_flow_of_the_species_are_not_scaled_from_each_other() -> None:
     rat = bile_flow(Species.RAT).value
     assert human == pytest.approx(0.27e-3, rel=1e-9)
     assert rat == pytest.approx(0.01562e-3, rel=1e-9)
-    # per gram of liver the rat secretes 14.4 times more (2.16 against 0.15 ul/min)
+    # per gram of liver the rat secretes 14.4 times more (2.16 against 0.15 ul/min):
+    # an upper bound on the species difference, a rat total (with a ductular part)
+    # against a human canalicular value; against the human total of 0.43 ml/min
+    # (0.24 ul/min/g) it is about 9
     assert (rat / 7.229) / (human / 1800.0) == pytest.approx(14.4, rel=1e-2)
 
 

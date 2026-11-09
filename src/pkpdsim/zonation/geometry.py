@@ -211,7 +211,7 @@ def bile_flow(species: Species) -> Value:
     """Get the canalicular bile flow of the reference liver of a species (l/min).
 
     A sourced value of each species, never scaled from the other one: the rat
-    secretes about 14 times more bile per g of liver than the human canalicular flow (see the
+    secretes about 14 times more bile per g of liver than the human canalicular flow, an upper bound on the species difference (the rat value includes a ductular contribution; like for like with the human total it is about 9 times; see the
     entries `bile_flow` of `tables/zonation.toml`). The flow of a liver of
     another mass is this flow times the mass over `reference_liver_mass`.
 
