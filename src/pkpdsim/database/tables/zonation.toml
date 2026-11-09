@@ -1,0 +1,47 @@
+# The geometry and the volume fractions of the zonated liver of `pkpdsim.zonation`.
+#
+# Units: lengths m, areas m**2, densities kg/l, fractions dimensionless. The rat
+# fractions are the stereology of Blouin, Bolender and Weibel 1977. The human
+# liver carries the rat numbers (`fallback: rat`) until a sourced human
+# stereology is entered.
+
+
+[liver_rat]
+lumen = { value = 0.106, unit = "dimensionless", source = "Blouin1977", notes = "the sinusoidal lumen (plasma and erythrocytes) as a fraction of the liver volume, rat liver, Blouin, Bolender and Weibel 1977" }
+disse = { value = 0.049, unit = "dimensionless", source = "Blouin1977", notes = "the space of Disse as a fraction of the liver volume, rat liver" }
+hepatocyte = { value = 0.780, unit = "dimensionless", source = "Blouin1977", notes = "the hepatocytes as a fraction of the liver volume, rat liver" }
+endothelium = { value = 0.028, unit = "dimensionless", source = "Blouin1977", notes = "the sinusoidal endothelial cells as a fraction of the liver volume, rat liver" }
+kupffer = { value = 0.021, unit = "dimensionless", source = "Blouin1977", notes = "the Kupffer cells as a fraction of the liver volume, rat liver; not assigned to a layer of the engine" }
+stellate = { value = 0.014, unit = "dimensionless", source = "Blouin1977", notes = "the stellate (Ito) cells as a fraction of the liver volume, rat liver; not assigned to a layer of the engine" }
+bile = { value = 0.004, unit = "dimensionless", source = "Blouin1977", notes = "the bile canaliculi as a fraction of the liver volume, rat liver" }
+r_sin = { value = 4.4e-6, unit = "m", source = "ModelChoice", notes = "the sinusoid radius, taken over from the zonation builder of pkdb_models (misc/zonation)" }
+L_sin = { value = 300e-6, unit = "m", source = "ModelChoice", notes = "the sinusoid length, taken over from the zonation builder of pkdb_models (misc/zonation)" }
+t_endo = { value = 0.165e-6, unit = "m", source = "ModelChoice", notes = "the thickness of the endothelium, taken over from the spt model of pkdb_models" }
+t_disse = { value = 1.0e-6, unit = "m", source = "ModelChoice", notes = "the width of the space of Disse, taken over from the zonation builder of pkdb_models" }
+r_fen = { value = 53.5e-9, unit = "m", source = "ModelChoice", notes = "the radius of a fenestra, taken over from the spt model of pkdb_models" }
+n_fen = { value = 10e12, unit = "1/m**2", source = "ModelChoice", notes = "the number of fenestrae per endothelial area, taken over from the spt model of pkdb_models" }
+porosity_pp = { value = 0.06, unit = "dimensionless", source = "Braet2002", notes = "the fenestral porosity of the endothelium at the periportal end, 6 % (rising to 8 % pericentral), Braet and Wisse 2002" }
+porosity_pc = { value = 0.08, unit = "dimensionless", source = "Braet2002", notes = "the fenestral porosity of the endothelium at the pericentral end, 8 % (6 % periportal), Braet and Wisse 2002" }
+density = { value = 1.07, unit = "kg/l", source = "ModelChoice", notes = "the density of the liver tissue, taken over from the models of pkdb_models" }
+f_par = { value = 1.0, unit = "dimensionless", source = "ModelChoice", notes = "the fraction of the liver mass which is parenchyma and carries the sinusoids" }
+haematocrit = { value = 0.45, unit = "dimensionless", source = "ModelChoice", notes = "the haematocrit of the sinusoidal lumen, the share of the lumen which is erythrocytes" }
+
+[liver_human]
+lumen = { value = 0.106, unit = "dimensionless", source = "Blouin1977", notes = "fallback: rat; the sinusoidal lumen (plasma and erythrocytes) as a fraction of the liver volume, rat liver, Blouin, Bolender and Weibel 1977" }
+disse = { value = 0.049, unit = "dimensionless", source = "Blouin1977", notes = "fallback: rat; the space of Disse as a fraction of the liver volume, rat liver" }
+hepatocyte = { value = 0.780, unit = "dimensionless", source = "Blouin1977", notes = "fallback: rat; the hepatocytes as a fraction of the liver volume, rat liver" }
+endothelium = { value = 0.028, unit = "dimensionless", source = "Blouin1977", notes = "fallback: rat; the sinusoidal endothelial cells as a fraction of the liver volume, rat liver" }
+kupffer = { value = 0.021, unit = "dimensionless", source = "Blouin1977", notes = "fallback: rat; the Kupffer cells as a fraction of the liver volume, rat liver; not assigned to a layer of the engine" }
+stellate = { value = 0.014, unit = "dimensionless", source = "Blouin1977", notes = "fallback: rat; the stellate (Ito) cells as a fraction of the liver volume, rat liver; not assigned to a layer of the engine" }
+bile = { value = 0.004, unit = "dimensionless", source = "Blouin1977", notes = "fallback: rat; the bile canaliculi as a fraction of the liver volume, rat liver" }
+r_sin = { value = 4.4e-6, unit = "m", source = "ModelChoice", notes = "fallback: rat; the sinusoid radius, taken over from the zonation builder of pkdb_models (misc/zonation)" }
+L_sin = { value = 300e-6, unit = "m", source = "ModelChoice", notes = "fallback: rat; the sinusoid length, taken over from the zonation builder of pkdb_models (misc/zonation)" }
+t_endo = { value = 0.165e-6, unit = "m", source = "ModelChoice", notes = "fallback: rat; the thickness of the endothelium, taken over from the spt model of pkdb_models" }
+t_disse = { value = 1.0e-6, unit = "m", source = "ModelChoice", notes = "fallback: rat; the width of the space of Disse, taken over from the zonation builder of pkdb_models" }
+r_fen = { value = 53.5e-9, unit = "m", source = "ModelChoice", notes = "fallback: rat; the radius of a fenestra, taken over from the spt model of pkdb_models" }
+n_fen = { value = 10e12, unit = "1/m**2", source = "ModelChoice", notes = "fallback: rat; the number of fenestrae per endothelial area, taken over from the spt model of pkdb_models" }
+porosity_pp = { value = 0.06, unit = "dimensionless", source = "Braet2002", notes = "fallback: rat; the fenestral porosity of the endothelium at the periportal end, 6 % (rising to 8 % pericentral), Braet and Wisse 2002" }
+porosity_pc = { value = 0.08, unit = "dimensionless", source = "Braet2002", notes = "fallback: rat; the fenestral porosity of the endothelium at the pericentral end, 8 % (6 % periportal), Braet and Wisse 2002" }
+density = { value = 1.0, unit = "kg/l", source = "ICRP89", notes = "the density of the liver tissue: ICRP 89 gives no specific gravity for the liver, and the convention of physiology_human.toml is that an organ without one has the density 1.0 kg/l; the human convention, not a rat fallback" }
+f_par = { value = 1.0, unit = "dimensionless", source = "ModelChoice", notes = "fallback: rat; the fraction of the liver mass which is parenchyma and carries the sinusoids" }
+haematocrit = { value = 0.43, unit = "dimensionless", source = "ICRP89", notes = "the haematocrit of the sinusoidal lumen, the human reference of physiology_human.toml (hematocrit): red blood cells about 43 % of the blood volume of adult males, ICRP 89 Section 7.3 para 309, Table 2.12 2300 ml of 5300 ml; the female reference is 0.38 (1500 ml of 3900 ml) and a female build takes that value" }
