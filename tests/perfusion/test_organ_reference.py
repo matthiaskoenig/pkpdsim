@@ -27,10 +27,22 @@ from .organ_reference import DEFINITIONS, ids_file, simulate, trajectories_file
 RTOL = 1e-6
 """The relative difference of a trajectory."""
 ATOL = 1e-12
-"""The absolute difference which is no difference, 1/100 of the absolute tolerance
-of the integrator (1e-14, `load_circuit`) times 1e4: the pool of NADP is depleted to
+"""The absolute difference which is no difference, 100 times the absolute tolerance
+of the integrator (1e-14, `load_circuit`): the pool of NADP is depleted to
 1e-12 mM and differs by 1.6e-17 mM between the models, which is noise. A series
-agrees when `|a - b| <= RTOL * max(|a|, |b|) + ATOL`."""
+agrees when `|a - b| <= RTOL * max(|a|, |b|) + ATOL`.
+
+A blind spot, named: a flux below about 1e-9 mmole/min (`LOW_FLUX`; 31 liver
+reactions, 20 of the kidney, 4 of the generic organ, measured by the test below) is judged by the absolute term
+alone, so its own comparison cannot see a change of the reaction (GR peaks at
+3e-14 mmole/min: a factor 1.001 on GR or ROSDETOX passes the flux comparison
+entirely). The states of those reactions pin them: the same 1.001 moves `gssg`,
+`gsh` and `ros` by 4.4e-06. A per-series term of `RTOL * max|series|` would ask
+3e-20 of GR, below the noise of the integrator, so there is none; instead
+`test_the_states_of_the_low_flux_reactions_are_compared` checks that the species
+of every such reaction is among the states which are compared."""
+LOW_FLUX = 1e-9
+"""The flux (mmole/min) below which a reaction is judged by `ATOL` alone."""
 
 NAMES = list(DEFINITIONS)
 
@@ -159,3 +171,47 @@ def test_the_trajectories_are_the_trajectories_before_through_the_map(
     assert compared["flux"] > 10, "the fluxes of the reactions are compared"
     for kind, (difference, where) in worst.items():
         assert difference <= RTOL, f"{kind}: {difference:.3e} at {where}"
+
+
+def test_the_states_of_the_low_flux_reactions_are_compared(
+    organ: tuple[str, Path],
+) -> None:
+    """The reactions whose flux the comparison cannot see (below `LOW_FLUX`) have a
+    species which is a compared state that moves, so the states pin them.
+
+    This is what keeps the sentence of `ATOL` true when a series is added or
+    dropped. A reaction without any flux in the reference is inert and pins
+    nothing."""
+    name, path = organ
+    reference = json.loads(trajectories_file(name).read_text())
+    now = simulate(path)
+    document = libsbml.readSBMLFromFile(str(path))  # keeps the model alive
+    model = document.getModel()
+    renamed = {v: k for k, v in _renamed(name).items()}  # new id -> old id
+    low, unpinned = [], []
+    for k in range(model.getNumReactions()):
+        reaction = model.getReaction(k)
+        sid = reaction.getId()
+        flux = float(np.max(np.abs(reference[renamed.get(sid, sid)])))
+        if not 0.0 < flux < LOW_FLUX:
+            continue
+        low.append(sid)
+        species = {
+            reaction.getReactant(i).getSpecies()
+            for i in range(reaction.getNumReactants())
+        }
+        species |= {
+            reaction.getProduct(i).getSpecies()
+            for i in range(reaction.getNumProducts())
+        }
+        compared = [
+            x
+            for x in species
+            if renamed.get(x, x) in reference
+            and np.ptp(np.asarray(now[x])) > 0.0
+            and np.ptp(np.asarray(reference[renamed.get(x, x)])) > 0.0
+        ]
+        if not compared:
+            unpinned.append(sid)
+    print(f"{name}: {len(low)} reactions with a flux below {LOW_FLUX:g}")
+    assert not unpinned, f"no compared state moves with {unpinned}"
