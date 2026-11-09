@@ -1,0 +1,221 @@
+"""The transport coefficients of a substance in the zonated liver.
+
+A new substance needs only its molar mass: the aqueous diffusion coefficient is
+derived from it, the cytosolic one is a fraction of it and the sieving of the
+fenestrae follows from the radius of the molecule. A `Substance.diffusion`
+overrides the derived value. The units are SI (m, m**2/s).
+
+Correlation
+-----------
+The aqueous diffusion coefficient at 37 C is the Stokes-Einstein scaling with
+a hydrodynamic radius which grows with a power of the molar mass,
+
+    D = D_REF * (Mr / MR_REF) ** -EXPONENT,    r = kT / (6 pi eta D),
+
+with T = 310.15 K and the viscosity of water at 37 C, `ETA` = 0.692 mPa s
+(Kestin, Sokolov and Wakeham 1978). `EXPONENT` = 0.4 lies between the
+Stokes-Einstein scaling of a compact sphere (1/3, Young, Carroad and Bell
+1980) and the 1/2 of an extended chain (Polson 1950); a single exponent of 1/3
+misses insulin by a factor of 1.4, 0.4 keeps every anchor within 1.15. `D_REF`
+and `MR_REF` are the glucose anchor. The values the constants are fitted to are
+below; `test_transport.py` checks that every anchor is reproduced within a
+factor of 1.5.
+
+Anchors, D in 1e-9 m**2/s at 37 C. Where the measurement is at another
+temperature it is scaled with `(T / eta)` of water (Stokes-Einstein: x 1.338
+from 25 C, x 1.53 from 20 C; eta(20 C) = 1.002, eta(25 C) = 0.890 mPa s):
+
+- glucose, 180.16 g/mole: 0.673 at 25 C (Gladden and Dole 1953, J Am Chem Soc
+  75:3900), 0.90 at 37 C.
+- sucrose, 342.30 g/mole: 0.522 at 25 C (Gladden and Dole 1953; CRC Handbook
+  of Chemistry and Physics, diffusion in water), 0.70 at 37 C.
+- Gd-DOTA, 558.6 g/mole, the comparable Gd chelate (gadoxetate itself has no
+  measured diffusion coefficient in water that we found): 2.92e-10 in blood
+  plasma at 310 K, a Ga-DOTA measurement in D2O with a viscosity correction
+  (ISMRM 2014, abstract 2618), scaled by the viscosity of plasma (about 1.2
+  mPa s) to water: about 0.50. Indicative, the least firm anchor.
+- insulin monomer, 5808 g/mole: 1.5e-10 at 25 C (zinc-free insulin at low
+  concentration, the range of the dynamic light scattering and NMR studies of
+  insulin), 0.20 at 37 C.
+- human serum albumin, 66.5 kDa: 6.1e-11 at 20 C (Sober, Handbook of
+  Biochemistry, 1970), 0.093 at 37 C; the radius it gives, 3.5 nm, is the
+  accepted one of albumin.
+
+The anchors were entered from the literature as remembered; an online search
+did not confirm the Gd-DOTA and insulin values, they should be checked before
+a release.
+
+The cytosolic diffusion of a small solute is about a quarter to a third of the
+aqueous one (Verkman 2002, Trends Biochem Sci 27:27: fluid-phase cytoplasm
+reduces the translational diffusion of small solutes 3 to 4 fold), `F_CYT` =
+0.27.
+
+The sieving of the fenestrae is the Renkin 1954 (J Gen Physiol 38:225)
+partition and hindrance of a spherical solute in a cylindrical pore.
+"""
+
+import math
+
+from sbmlutils.factory import Parameter
+from sbmlutils.factory.units import UnitDefinition
+from sbmlutils.metadata import SBO
+
+from pkpdsim.pbpk.placement import value_parameter
+from pkpdsim.pbpk.substance import DIFFUSION_UNITS, Substance
+from pkpdsim.pbpk.units import U
+from pkpdsim.pbpk.values import Q, Value, number, unit_text
+from pkpdsim.zonation.geometry import SinusoidGeometry
+
+__all__ = [
+    "CM2_PER_S",
+    "ETA",
+    "F_CYT",
+    "M2_PER_S",
+    "M_PER_S",
+    "aqueous_diffusion",
+    "cytosolic_diffusion",
+    "diffusion_of",
+    "diffusion_parameter",
+    "fenestral_permeability",
+    "molecular_radius",
+    "renkin",
+]
+
+M2_PER_S = UnitDefinition("m2_per_s", "meter^2/second")
+"""The unit of a diffusion coefficient."""
+
+M_PER_S = UnitDefinition("m_per_s", "meter/second")
+"""The unit of a permeability."""
+
+CM2_PER_S = UnitDefinition("cm2_per_s", "cm^2/second")
+"""A diffusion coefficient as it is often published."""
+
+T_BODY = 310.15
+"""The body temperature (K)."""
+
+ETA = 0.692e-3
+"""The viscosity of water at 37 C (Pa s), Kestin, Sokolov and Wakeham 1978."""
+
+K_B = 1.380649e-23
+"""The Boltzmann constant (J/K)."""
+
+D_REF = 0.90e-9
+"""The aqueous diffusion of the reference, glucose, at 37 C (m**2/s)."""
+
+MR_REF = 180.16
+"""The molar mass of the reference, glucose (g/mole)."""
+
+EXPONENT = 0.4
+"""The exponent of the molar mass of the diffusion coefficient."""
+
+F_CYT = 0.27
+"""The cytosolic diffusion as a fraction of the aqueous one, Verkman 2002."""
+
+CORRELATION = (
+    f"D = {D_REF:g} m2/s * (Mr / {MR_REF:g} g/mole)^-{EXPONENT:g} at 37 C "
+    "(Stokes-Einstein scaling, anchors in pkpdsim.zonation.transport)"
+)
+
+
+def _mr_number(mr: Q) -> float:
+    """The molar mass (g/mole) of a plain number or a `Value`."""
+    x = number(mr)
+    if x is None or not x > 0.0:
+        raise ValueError(f"The molar mass must be a positive number, got {mr!r}.")
+    return x
+
+
+def aqueous_diffusion(mr: Q) -> Value:
+    """Get the diffusion coefficient in water at 37 C derived from the molar mass.
+
+    Args:
+        mr: the molar mass (g/mole), a plain number or a `Value`.
+
+    Returns:
+        The diffusion coefficient (m**2/s).
+    """
+    d = D_REF * (_mr_number(mr) / MR_REF) ** -EXPONENT
+    return Value(d, M2_PER_S, notes=CORRELATION)
+
+
+def molecular_radius(mr: Q) -> Value:
+    """Get the Stokes-Einstein radius of a molecule (m) from its aqueous diffusion."""
+    d = aqueous_diffusion(mr).value
+    return Value(K_B * T_BODY / (6.0 * math.pi * ETA * d), U.meter)
+
+
+def cytosolic_diffusion(d_aq: Value, f_cyt: float = F_CYT) -> Value:
+    """Get the diffusion in the cytosol as a fraction of the aqueous one (m**2/s)."""
+    return Value(f_cyt * _as_m2_per_s(d_aq), M2_PER_S)
+
+
+def renkin(lambda_: float) -> float:
+    """Get the Renkin hindrance of a spherical solute in a cylindrical pore.
+
+    `(1 - l)**2 * (1 - 2.104 l + 2.09 l**3 - 0.95 l**5)` for the ratio `l` of
+    the radius of the solute to that of the pore; 1 for a point and 0 once the
+    solute no longer fits (`l >= 1`). The polynomial stays positive on [0, 1]
+    (0.036 at 1), so the hindrance is never negative; the clamp is a guard.
+    """
+    if lambda_ >= 1.0:
+        return 0.0
+    poly = 1.0 - 2.104 * lambda_ + 2.09 * lambda_**3 - 0.95 * lambda_**5
+    return max(0.0, (1.0 - lambda_) ** 2 * poly)
+
+
+def fenestral_permeability(
+    d_aq: Value, radius: Value, geo: SinusoidGeometry, porosity: float
+) -> Value:
+    """Get the permeability of the endothelium through its fenestrae (m/s).
+
+    `porosity * d_aq / t_endo * renkin(radius / r_fen)`.
+    """
+    sieve = renkin(radius.value / geo.r_fen)
+    return Value(porosity * _as_m2_per_s(d_aq) / geo.t_endo * sieve, M_PER_S)
+
+
+def _as_m2_per_s(d: Value) -> float:
+    """The number of a diffusion coefficient in m**2/s."""
+    try:
+        return d.value * DIFFUSION_UNITS[unit_text(d.unit)]
+    except KeyError:
+        raise ValueError(
+            f"A diffusion coefficient needs an area per time, got {unit_text(d.unit)}."
+        ) from None
+
+
+def diffusion_of(substance: Substance) -> Value:
+    """Get the aqueous diffusion of a substance (m**2/s), the override or derived."""
+    if substance.diffusion is not None:
+        return Value(
+            _as_m2_per_s(substance.diffusion),
+            M2_PER_S,
+            substance.diffusion.source,
+            substance.diffusion.notes,
+        )
+    return aqueous_diffusion(substance.mr)
+
+
+def diffusion_parameter(substance: Substance) -> Parameter:
+    """Get the diffusion of a substance as a parameter `D_<sid>` with its provenance."""
+    d = diffusion_of(substance)
+    if substance.diffusion is not None:
+        text = (
+            f"The diffusion coefficient of {substance.name} in water, given "
+            f"(not derived) as {substance.diffusion.value:g} "
+            f"{unit_text(substance.diffusion.unit)}."
+        )
+    else:
+        text = (
+            f"The diffusion coefficient of {substance.name} in water at 37 C, "
+            f"derived from its molar mass {_mr_number(substance.mr):g} g/mole: "
+            f"{CORRELATION}."
+        )
+    return value_parameter(
+        f"D_{substance.sid}",
+        Value(d.value, M2_PER_S, d.source),
+        M2_PER_S,
+        f"diffusion {substance.name}",
+        SBO.DIFFUSION_COEFFICIENT,
+        text,
+    )
