@@ -8,6 +8,10 @@
 
 `pkpdsim` is a python package with the building blocks shared by physiologically based pharmacokinetic and pharmacodynamic (PBPK/PD) models in [SBML](https://sbml.org). The models of [pkdb_models](https://github.com/matthiaskoenig/pkdb_models) are written in python with the factory of [sbmlutils](https://github.com/matthiaskoenig/sbmlutils) and simulated with [sbmlsim](https://github.com/matthiaskoenig/sbmlsim); what they share lives in `pkpdsim`, so that the folder of a model imports nothing but itself and released packages.
 
+[![The anatomical figure of a PBPK model of glimepiride built with pkpdsim](https://raw.githubusercontent.com/matthiaskoenig/pkpdsim/develop/docs/pbpk/img/figures/anatomy.svg)](https://matthiaskoenig.github.io/pkpdsim/pbpk/figures/)
+
+*The anatomical figure of the glimepiride-like model of the [tutorial](https://matthiaskoenig.github.io/pkpdsim/pbpk/tutorial/), generated from its definition: the male and the female build with the organs sized by their volumes, the substances of every organ, the submodels of the liver and the kidney, the routes and the blood sample. The [interactive figure](https://matthiaskoenig.github.io/pkpdsim/pbpk/figures/) shows the details of every element on hover.*
+
 Features include
 
 - **templates and annotations** - the creators and the terms of use of a model, the annotations of the compartments which recur in the models (liver, kidneys, gut, blood, urine, ...)

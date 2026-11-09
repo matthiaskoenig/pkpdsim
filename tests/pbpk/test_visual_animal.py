@@ -86,3 +86,10 @@ def test_the_publication_figure_of_an_animal(tmp_path: Path) -> None:
     d = dataclasses.replace(seven_substances(), species=Species.MOUSE)
     path = publication_figure(d, tmp_path / "f.svg")
     assert "mouse male, 25 g" in path.with_name("f_panels.svg").read_text()
+
+
+def test_an_animal_alone_has_no_annotations(tmp_path: Path) -> None:
+    d = dataclasses.replace(seven_substances(), species=Species.RAT)
+    path = anatomy_figure(d, tmp_path / "a.svg", annotations=False)
+    assert _texts(path) == []
+    assert "<path" in path.read_text()

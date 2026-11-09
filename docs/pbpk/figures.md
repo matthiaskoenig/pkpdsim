@@ -7,6 +7,7 @@ The figures on this page are those of the glimepiride-like model of the [tutoria
 | Figure | Function | Written by `create_archive` |
 | --- | --- | --- |
 | Anatomical figure | `anatomy_figure(definition, path)` | `<sid>_body.svg` (key `<sid>_body_svg`) |
+| Bodies without annotations | `anatomy_figure(definition, path, annotations=False)` | no |
 | Schematic | `model_figure(definition, path)` | `<sid>.svg` (key `<sid>_svg`) |
 | Interactive page | `interactive_figure(definition, path, figure="anatomy" or "schematic")` | no |
 | Publication figure | `publication_figure(definition, path, pdf=False)` | no |
@@ -26,6 +27,12 @@ Every organ has a label with its circled icon, in greys (`palette.ORGAN_GREYS`) 
 Hovering an organ, a label, a substance or an icon shows its details (the volumes of the organ in the reference man and woman, its UBERON ids, the form of every substance, the processes). It is one HTML file without external scripts, for the docs or GitHub Pages; on github.com itself a README shows the SVG as an image, without scripts, so link the page from there.
 
 <iframe class="pkpd-figure" src="img/figures/anatomy.html" title="The interactive anatomical figure" style="aspect-ratio:1460 / 962" loading="lazy"></iframe>
+
+### The bodies alone
+
+`anatomy_figure(definition, path, annotations=False)` draws the bodies of the builds with their organs and layers alone, without labels, substances, connections, captions and key, on a transparent background, for a slide or a poster. A definition of a laboratory animal gives the animal alone. The drawings are the anatomograms of the Expression Atlas (CC BY 4.0), so a slide credits them next to the figure, see [Anatomy and license](#anatomy-and-license).
+
+![The male and the female build of the glimepiride-like model, without annotations](img/figures/bodies.svg)
 
 ## The schematic
 

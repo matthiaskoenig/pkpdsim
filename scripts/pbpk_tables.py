@@ -24,6 +24,7 @@ uv run python scripts/pbpk_tables.py
 `tests/docs/test_pbpk_tables.py` fails while a page is out of date.
 """
 
+import html
 import itertools
 import re
 from collections.abc import Callable, Iterable, Mapping
@@ -68,6 +69,7 @@ from pkpdsim.pbpk.circadian import circadian_factor, protein_rhythms, rhythms
 from pkpdsim.pbpk.data import load, sources
 from pkpdsim.pbpk.experiment import PBPKSimulationExperiment
 from pkpdsim.pbpk.impairment import (
+    _HF_ORGANS,
     child_pugh_protein,
     child_pugh_proteins,
     class_factors,
@@ -95,6 +97,7 @@ from pkpdsim.pbpk.sex_differences import (
     sex_factor,
 )
 from pkpdsim.pbpk.variants.segments import intestine_table
+from pkpdsim.pbpk.visual import icons
 from pkpdsim.species import Species
 
 REPO_DIR: Path = Path(__file__).parent.parent
@@ -1654,21 +1657,53 @@ def _band_color(c: ImpairmentClass) -> tuple[str, str]:
     return ("#9e9e9e", "0.35") if c.color == "black" else (c.color, "0.9")
 
 
+_PICTOGRAM = 58.0
+"""The height of the row of the pictograms of the classes figure."""
+
+
 def _scale_row(
     y: float,
     name: str,
     bands: list[tuple[ImpairmentClass, float, float]],
     marks: list[tuple[float, str]],
     note: str,
+    organ: str,
+    losses: list[tuple[float, str]],
 ) -> list[str]:
-    """A row of the classes figure: the bands of the classes and the marks below."""
+    """A row of the classes figure: the pictograms, the bands of the classes and the marks.
+
+    Args:
+        y: the top of the pictograms.
+        name: the title of the row.
+        bands: the classes with their extent on the axis.
+        marks: the values of the scan, `(x, label)`.
+        note: the text under the row.
+        organ: the organ of the pictograms (`li`, `ki`, `he`).
+        losses: the lost fraction of the organ of each class and its hover text.
+    """
     out = [f'<text x="10" y="{_number(y - 10)}" font-weight="600">{name}</text>']
+    width = min(x1 - x0 for _, x0, x1 in bands) - 10
+    for (c, x0, x1), (loss, text) in zip(bands, losses, strict=True):
+        fill = "#9e9e9e" if c.color == "black" else c.color
+        out.append(
+            icons.impaired_organ(
+                organ,
+                (x0 + x1) / 2,
+                y + (_PICTOGRAM - 8) / 2,
+                width,
+                _PICTOGRAM - 14,
+                loss,
+                fill,
+                title=f"{c.label}: {text}",
+            )
+        )
+    y += _PICTOGRAM
     for c, x0, x1 in bands:
         fill, opacity = _band_color(c)
         out.append(
             f'<rect x="{_number(x0 + 1)}" y="{_number(y)}" width="{_number(x1 - x0 - 2)}" '
             f'height="22" rx="3" fill="{fill}" fill-opacity="{opacity}">'
-            f"<title>{c.label}: {c.definition}</title></rect>"
+            f"<title>{html.escape(f'{c.label}: {c.definition}')}</title></rect>"
         )
         out.append(
             f'<text x="{_number((x0 + x1) / 2)}" y="{_number(y + 41)}" '
@@ -1689,29 +1724,67 @@ def _scale_row(
     return out
 
 
+_EGFR_NORMAL = 114.5
+"""The eGFR of the male build (ml/min/1.73 m2), the renal function 1."""
+
+
+def _hf_cardiac_output(severity: float) -> float:
+    """The cardiac output of heart failure relative to healthy, from its flows.
+
+    The factors of heart failure multiply the flows of their organs, the
+    cardiac output is the sum of the flows: `1 + sum f_o (factor_o - 1)` with the
+    flow fractions `f_o` of the reference man.
+    """
+    refs = _references(Sex.MALE, load("physiology_human"))
+    co = 1.0
+    for key, organs in _HF_ORGANS.items():
+        share = sum(refs[ids.flow_fraction(o)].value for o in organs)
+        co += share * (_hf_factor(key)(severity) - 1.0)
+    return co
+
+
 def classes_figure() -> str:
-    """The classes of the three conditions on their scales, with the scan values."""
+    """The classes of the three conditions on their scales, with the scan values.
+
+    Above every class a pictogram of its organ, the lost part pale: the liver by
+    the portosystemic shunt of the class, the kidney by the eGFR of the class
+    over that of the build, the heart by the cardiac output of the class.
+    """
     left, right = 10.0, 710.0
+    healthy = 90.0
+    row = 118.0 + _PICTOGRAM
     body: list[str] = []
     # Child-Pugh: the score 5 to 15, healthy before it
-    span = (right - left - 60) / 11
+    span = (right - left - healthy) / 11
     cp = list(CHILD_PUGH_CLASSES)
-    bands = [(cp[0], left, left + 60)]
+    bands = [(cp[0], left, left + healthy)]
     for c in cp[1:]:
         assert c.limits is not None
         lo, hi = c.limits
         assert lo is not None and hi is not None
-        bands.append((c, left + 60 + (lo - 5) * span, left + 60 + (hi - 4) * span))
+        bands.append(
+            (c, left + healthy + (lo - 5) * span, left + healthy + (hi - 4) * span)
+        )
     marks = [((x0 + x1) / 2, _number(c.value or 0)) for c, x0, x1 in bands]
     melds = ", ".join(
         f"{'ABC'[int(a.severity) - 1]} {a.meld:.3g}" for a in meld_anchors()[1:]
     )
+    shunt = _cp_factor("shunt")
+    losses = [
+        (
+            shunt(c.value or 0.0),
+            f"shunt {shunt(c.value or 0.0):.2f}, the portal blood which bypasses the liver",
+        )
+        for c in cp
+    ]
     body += _scale_row(
         36,
         "Child-Pugh classes by the score 5-15, the CP_severity of each below",
         bands,
         marks,
         f"MELD of the classes (consensus of the database): healthy 6.43, {melds}",
+        "li",
+        losses,
     )
 
     # KDIGO: the eGFR from 120 down to 0
@@ -1719,37 +1792,59 @@ def classes_figure() -> str:
         return left + (120 - min(egfr, 120)) / 120 * (right - left)
 
     bands = []
+    losses = []
     for c in KDIGO_GFR_CLASSES:
         assert c.limits is not None
         lo, hi = c.limits
         bands.append((c, gx(hi if hi is not None else 120), gx(lo or 0)))
+        egfr = min(c.value or _EGFR_NORMAL, _EGFR_NORMAL)
+        losses.append(
+            (
+                1.0 - egfr / _EGFR_NORMAL,
+                f"eGFR {_number(egfr)}, {100 * egfr / _EGFR_NORMAL:.0f} % of the "
+                "renal function of the build",
+            )
+        )
     marks = [
         (gx(c.value), f"{_number(c.value)}")
         for c in KDIGO_GFR_CLASSES
         if c.value is not None
     ]
     body += _scale_row(
-        154,
+        36 + row,
         "KDIGO GFR categories by the eGFR (120 to 0 ml/min/1.73 m2), the eGFR of each below",
         bands,
         marks,
         "the eGFR of the scan of a category; G1 is the renal function 1 of the "
-        "build (eGFR 114.5 male, 114.7 female)",
+        f"build (eGFR {_number(_EGFR_NORMAL)} male, 114.7 female)",
+        "ki",
+        losses,
     )
     # NYHA: equal bands
     ny = list(NYHA_CLASSES)
     width = (right - left) / len(ny)
     bands = [(c, left + i * width, left + (i + 1) * width) for i, c in enumerate(ny)]
     marks = [((x0 + x1) / 2, _number(c.value or 0)) for c, x0, x1 in bands]
+    losses = []
+    for c in ny:
+        co = _hf_cardiac_output(c.value or 0.0)
+        losses.append(
+            (1.0 - co, f"cardiac output {co:.2f} of healthy (the sum of its flows)")
+        )
     body += _scale_row(
-        272,
+        36 + 2 * row,
         "NYHA functional classes, the HF_severity of each below",
         bands,
         marks,
         "the classes grade the symptoms at physical activity",
+        "he",
+        losses,
     )
     return _svg(
-        720, 362, "The clinical classes of the impairments and their scan values", body
+        720,
+        36 + 2 * row + _PICTOGRAM + 90,
+        "The clinical classes of the impairments and their scan values",
+        body,
     )
 
 
@@ -2048,7 +2143,7 @@ def _heatmap(
 
 def combinations_figure() -> str:
     """Quantities of combined impairments over the severities, heat maps."""
-    normal = 114.5
+    normal = _EGFR_NORMAL
     cp_gfr = _cp_factor("gfr")
     cp_alb = _cp_factor("albumin")
     hf_kf = _hf_factor("kidney_flow")
