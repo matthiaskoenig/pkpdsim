@@ -47,7 +47,7 @@ from sbmlutils.factory import (
     Species,
     UnitDefinition,
 )
-from sbmlutils.factory.units import UnitType
+from sbmlutils.factory.units import Units, UnitType
 from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk import ids
@@ -899,6 +899,33 @@ class OrganBuilder:
             initial_assignment(str(p.sid), p.expression, p.unit, str(p.name))
         )
 
+    def _custom_placed(
+        self, p: CustomReaction, placed: set[str]
+    ) -> frozenset[str] | None:
+        """The ids of the reactions the organ placed for a custom process.
+
+        The standard organ places one reaction under the id of the process;
+        a variant which places it several times overrides this (the zonated
+        liver, one reaction per zone).
+
+        Args:
+            p: the custom reaction of the definition.
+            placed: the ids of the reactions of the organ.
+
+        Returns:
+            The ids of its reactions, `None` if the organ did not place it.
+        """
+        return frozenset({p.sid}) if p.sid in placed else None
+
+    def _custom_read(self, p: CustomReaction) -> set[str]:
+        """The ids which the placed reactions of a custom process read.
+
+        The ids of its rate law and of its declared steady state; a variant
+        which rewrites the rate law overrides this (the zonated liver, the
+        ids of every zone).
+        """
+        return formula_ids(p.formula) | stationary_ids(p)
+
     def _custom_clashes(self, placed: set[str]) -> None:
         """Refuse a parameter of a custom reaction under the id of another element of the organ.
 
@@ -911,8 +938,11 @@ class OrganBuilder:
             ValueError: naming the reaction, the ids and the organ.
         """
         custom = {
-            p.sid for p in self.ctx.chemistry if isinstance(p, CustomReaction)
-        } & placed
+            rid
+            for p in self.ctx.chemistry
+            if isinstance(p, CustomReaction)
+            for rid in self._custom_placed(p, placed) or ()
+        }
         for r in self.reactions:
             if str(r.sid) not in custom:
                 continue
@@ -962,9 +992,12 @@ class OrganBuilder:
             "time",
         }
         for p in self.ctx.chemistry:
-            if not isinstance(p, CustomReaction) or p.sid not in placed:
+            if (
+                not isinstance(p, CustomReaction)
+                or self._custom_placed(p, placed) is None
+            ):
                 continue
-            read = formula_ids(p.formula) | stationary_ids(p)
+            read = self._custom_read(p)
             refused: list[str] = []
             for symbol in sorted(read - local):
                 kind, unit = self.ctx.top.get(symbol, ("", None))
@@ -983,6 +1016,15 @@ class OrganBuilder:
                     "top model is not read by an organ"
                 )
             local |= read
+
+    def _units(self) -> type[Units]:
+        """The unit definitions of the model of the organ.
+
+        The units of the library (`pkpdsim.pbpk.units.U`); a variant which
+        needs a unit outside them returns a subclass with it (the sinusoid of
+        the zonated liver, the units of its geometry).
+        """
+        return U
 
     def model_definition(self, notes: str) -> ModelDefinition:
         """Get the model definition of the collected elements.
@@ -1032,7 +1074,7 @@ class OrganBuilder:
             sid=f"{self.name}_{self.organ.value}",
             name=f"{label(self.organ)} ({self.name} organ)",
             notes=notes,
-            units=U,
+            units=self._units(),
             model_units=MODEL_UNITS,
             compartments=list(self.compartments.values()),
             species=list(self.species.values()),

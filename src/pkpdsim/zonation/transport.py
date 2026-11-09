@@ -67,12 +67,14 @@ from pkpdsim.pbpk.placement import value_parameter
 from pkpdsim.pbpk.substance import DIFFUSION_UNITS, Substance
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import Q, Value, number, unit_text
+from pkpdsim.zonation import ids
 from pkpdsim.zonation.geometry import SinusoidGeometry
 
 __all__ = [
     "CM2_PER_S",
     "ETA",
     "F_CYT",
+    "L_PER_M3",
     "M2_PER_S",
     "M_PER_S",
     "aqueous_diffusion",
@@ -92,6 +94,10 @@ M_PER_S = UnitDefinition("m_per_s", "meter/second")
 
 CM2_PER_S = UnitDefinition("cm2_per_s", "cm^2/second")
 """A diffusion coefficient as it is often published."""
+
+L_PER_M3 = UnitDefinition("l_per_m3", "litre/metre^3", name="litre per cubic metre")
+"""The conversion of a volume in cubic metres into litres, which every
+conductance of a permeability times an area needs (`P*A*1000 l_per_m3`)."""
 
 T_BODY = 310.15
 """The body temperature (K)."""
@@ -271,7 +277,7 @@ def diffusion_parameter(substance: Substance) -> Parameter:
             f"{CORRELATION}."
         )
     return value_parameter(
-        f"D_{substance.sid}",
+        ids.diffusion(substance.sid),
         Value(d.value, M2_PER_S, d.source, d.notes),
         M2_PER_S,
         f"diffusion {substance.name}",

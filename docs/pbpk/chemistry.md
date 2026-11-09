@@ -277,7 +277,7 @@ The chemistry is defined once per organ; the organ variant places it into its pa
 - the intestine places the processes of `Organ.SMALL_INTESTINE` into the mucosa of its segments by the relative expression of the protein times the mucosa volume (CYP3A4 of the data; any other protein by mucosa volume), see [Intestine and routes](intestine.md#mucosa);
 - the nephron kidney places an apical transport between the cells and the lumen of the proximal tubule.
 
-A custom reaction states its rate for the whole organ: the variants refuse it with an error which names the process, since an arbitrary formula cannot be split by volume.
+A custom reaction states its rate itself and the variants do not scale it. The zonated liver places it in every zone (`CUSTOM_z1`), with the species, compartments and observers of its zone (`pkpdsim.pbpk.placement.zone_ids`) and the species it brings itself under the id of the zone: a rate which is extensive in the volume of its part (`k*Vti_z1*Cti_z1_<s>`) keeps the rate of the whole liver, one stated for the whole organ (`k*Cti_<s>`) is then stated per zone. The constants of its rate law belong to the liver and are defined once. The other variants refuse it with an error which names the process: their parts are not those of the standard organ (the segments of the intestine, the tubule of the nephron kidney).
 
 ## Custom reactions
 

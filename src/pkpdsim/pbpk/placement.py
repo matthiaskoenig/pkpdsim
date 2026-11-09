@@ -48,6 +48,11 @@ A zonated organ (`pkpdsim.pbpk.variants.liver_zonated`) places every
 metabolism and transport into the parts of each of its zones (`zone`), with
 the ids of the zone (`Cti_z1_<s>`, `DRG2M_z1`) and the share of the zone of
 the capacity of the organ (`capacity`); the apical sink is that of the organ.
+A custom reaction is placed once per zone as well (`CUSTOM_z1`), with the
+ids of its zone (`zone_ids`) and its rate law as the modeller states it: a
+rate which is extensive in the volume of its part (`k*Vti_z1*Cti_z1_<s>`)
+keeps the rate of the whole organ, one stated for the whole organ is then
+stated per zone.
 
 A constant of a process given as `RateOf` is the initial assignment
 `<p>_Vmax = <p>_Vmax_ratio * <other>_Vmax` over local ids of the organ
@@ -66,6 +71,7 @@ the proximal tubule, an efflux secretes into it, an influx reabsorbs from it
 """
 
 import copy
+import re
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -134,6 +140,7 @@ __all__ = [
     "value_notes",
     "value_parameter",
     "with_modifiers",
+    "zone_ids",
 ]
 
 _PART_NAMES = {
@@ -831,7 +838,10 @@ def place(
             `f_renal_function`); `None` for none. A custom reaction states
             its rate itself and is not scaled.
         zone: the zone of a zonated organ in which the process is placed,
-            `None` for the organ.
+            `None` for the organ. A custom reaction placed in a zone reads
+            the species, compartments and observers of that zone
+            (`zone_ids`), so its rate law spans the parts of its zone; it is
+            placed once per zone and its rate is not scaled.
         apical: the apical side of the cell of a variant (the lumen of the
             proximal tubule of the nephron kidney), `None` for the sink of
             the organ.
@@ -843,8 +853,7 @@ def place(
         ValueError: if the process is of another organ, transports a substance
             without interstitial and intracellular species, is apical in an
             organ without sink, is an apical influx from the urine of the
-            standard kidney, acts in a part which is not built, or is a
-            custom reaction in a zone (its rate is that of the whole organ).
+            standard kidney, or acts in a part which is not built.
     """
     if process.organ is not ctx.organ:
         raise ValueError(
@@ -855,12 +864,7 @@ def place(
         return _metabolism(process, ctx, parts, capacity, zone)
     if isinstance(process, Transport):
         return [_transport(process, ctx, parts, capacity, zone, apical)]
-    if zone is not None:
-        raise ValueError(
-            f"Custom reaction '{process.sid}' cannot be placed in zone '{zone}': "
-            "its rate is stated for the whole organ."
-        )
-    return [_custom(process, ctx, parts)]
+    return [_custom(process, ctx, parts, zone)]
 
 
 def _substance(ctx: "OrganContext", sid: str) -> Substance:
@@ -1397,13 +1401,71 @@ def _transport(
     )
 
 
-def _custom(
-    process: CustomReaction, ctx: "OrganContext", parts: Mapping[str, Parts]
-) -> Reaction:
-    """The reaction of a custom process in the part it names.
+def zone_ids(
+    ctx: "OrganContext",
+    parts: Mapping[str, Parts],
+    zone: str,
+    extra: Iterable[str] = (),
+) -> dict[str, str]:
+    """Get the ids of a zone of a zonated organ by the id of the organ without zone.
 
-    A parameter id which custom reactions of another organ use as well gets
-    the metaid of its flat id (`_custom_parameter`).
+    The compartments of the parts which are built, the species and the
+    unbound concentrations of every part of every substance, the
+    plasma-equivalent capacity of erythrocytes in equilibrium and the species
+    a custom reaction brings itself (`extra`), each mapped onto the id of the
+    zone: what a process placed in a zone reads instead of the ids of the
+    whole organ (`place(..., zone=...)`).
+
+    Args:
+        ctx: the context of the organ.
+        parts: the parts of the substances in the organ by substance id.
+        zone: the zone.
+        extra: further ids which get the zone appended (`<id>_<zone>`).
+
+    Returns:
+        The id of the zone by the id without zone.
+    """
+    mapping: dict[str, str] = {}
+    for part in _built(parts.values()):
+        mapping[ids.compartment(part)] = ids.compartment(part, zone)
+    for s in ctx.substances:
+        p = parts.get(s.sid)
+        if p is None:
+            continue
+        for part in built_parts(p):
+            mapping[ids.species(part, s.sid)] = ids.species(part, s.sid, zone)
+            mapping[ids.unbound(part, s.sid)] = ids.unbound(part, s.sid, zone)
+        if p.flow_carrier == "blood_bp" and p.tissue != "organ":
+            mapping[ids.plasma_capacity(s.sid)] = ids.plasma_capacity(s.sid, zone)
+    for sid in extra:
+        mapping[sid] = ids.segment_process(sid, zone)
+    return mapping
+
+
+def _in_zone(expression: str, mapping: Mapping[str, str]) -> str:
+    """An equation or a rate law with the ids of a zone (`zone_ids`).
+
+    Only whole ids are replaced: `Cti_<s>` in `Cti_<s>_m` is no id of its own
+    (`_` is a word character, so the boundaries do not match inside an id).
+    """
+    if not mapping:
+        return expression
+    pattern = re.compile(r"\b(" + "|".join(map(re.escape, mapping)) + r")\b")
+    return pattern.sub(lambda m: mapping[m.group(0)], expression)
+
+
+def _custom(
+    process: CustomReaction,
+    ctx: "OrganContext",
+    parts: Mapping[str, Parts],
+    zone: str | None = None,
+) -> Reaction:
+    """The reaction of a custom process in the part it names (of a zone).
+
+    In a zone the equation and the rate law read the ids of the zone
+    (`zone_ids`), the reaction is `<sid>_<zone>` and its species are those of
+    the zone. A parameter id which custom reactions of another organ use as
+    well gets the metaid of its flat id (`_custom_parameter`).
     """
     shared = {
         str(q.sid)
@@ -1416,11 +1478,16 @@ def _custom(
             f"Custom reaction '{process.sid}' acts in part '{process.part.value}' "
             f"of organ '{process.organ.value}', which no substance has there."
         )
+    mapping = (
+        {}
+        if zone is None
+        else zone_ids(ctx, parts, zone, [str(sp.sid) for sp in process.species])
+    )
     return annotate(
         Reaction(
-            sid=process.sid,
-            equation=process.equation,
-            formula=(process.formula, U.mmole_per_min),
+            sid=ids.segment_process(process.sid, zone),
+            equation=_in_zone(process.equation, mapping),
+            formula=(_in_zone(process.formula, mapping), U.mmole_per_min),
             pars=[
                 annotate(
                     _custom_parameter(par, process.organ, str(par.sid) in shared),
@@ -1429,8 +1496,11 @@ def _custom(
                 )
                 for par in process.parameters
             ],
-            compartment=ids.compartment(process.part),
-            notes=f"Custom reaction in the {_PART_NAMES[process.part]} part.",
+            compartment=ids.compartment(process.part, zone),
+            notes=in_zone(
+                f"Custom reaction in the {_PART_NAMES[process.part]} part", zone
+            )
+            + ".",
         ),
         "custom_reaction",
         organ=process.organ,

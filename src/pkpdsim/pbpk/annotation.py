@@ -556,6 +556,21 @@ KINDS: dict[str, Kind] = {
     "permeability": Kind(
         _P, _BIOCHEM, requested="permeability surface area product (exchange flow)"
     ),
+    "pore_permeability": Kind(
+        _P,
+        _BIOCHEM,
+        requested="permeability of a solute through a membrane or a pore (a velocity)",
+    ),
+    "diffusion": Kind(None, "DIFFUSION_COEFFICIENT"),
+    "sinusoid_geometry": Kind(
+        _P,
+        _PHYS,
+        requested=(
+            "geometry of the hepatic sinusoid (the radius and the length of the "
+            "lumen, the lateral area of an interface, the fenestral porosity of "
+            "the endothelium)"
+        ),
+    ),
     "bp": Kind(_P, "BLOOD_PLASMA_RATIO"),
     "kbc": Kind(_P, "RED_BLOOD_CELLS_PARTITION_COEFFICIENT"),
     "exchange_rate": Kind(

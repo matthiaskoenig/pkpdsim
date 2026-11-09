@@ -72,7 +72,6 @@ from sbmlutils.factory import (
     Reaction,
     Species,
 )
-from sbmlutils.factory.units import UnitDefinition
 from sbmlutils.metadata import BQB, SBO
 
 from pkpdsim.database.tables import entry
@@ -103,11 +102,13 @@ from pkpdsim.zonation.geometry import (
     fractions,
     geometry,
     layer_volumes,
+    porosities,
     reference_liver_mass,
 )
-from pkpdsim.zonation.profiles import Profile, zone_positions
+from pkpdsim.zonation.profiles import Profile
 from pkpdsim.zonation.settings import BileTransport, Geometry, ZonationSettings
 from pkpdsim.zonation.transport import (
+    L_PER_M3,
     M2_PER_S,
     M_PER_S,
     diffusion_of,
@@ -146,7 +147,7 @@ _VASCULAR = (Layer.RBC, Layer.PLASMA, Layer.ENDOTHELIUM, Layer.DISSE)
 class ZonationUnits(PU):
     """The unit definitions of the zonated liver: those of the perfusion and the transport."""
 
-    l_per_m3 = UnitDefinition("l_per_m3", "litre/metre^3", name="litre per cubic metre")
+    l_per_m3 = L_PER_M3
     m2_per_s = M2_PER_S
     m_per_s = M_PER_S
     m3_per_s = M3_PER_S
@@ -978,11 +979,7 @@ class ZonationBuilder:
 
     def _porosities(self) -> tuple[float, ...]:
         """The fenestral porosity of every zone: the gradient of the table."""
-        geo = self._geo()
-        return tuple(
-            geo.porosity_pp + (geo.porosity_pc - geo.porosity_pp) * x
-            for x in zone_positions(self.settings.n_zones)
-        )
+        return porosities(self.settings.n_zones, self._geo())
 
     def _lumen(self, zone: str) -> str:
         """The expression of the lumen volume (l) of a zone."""

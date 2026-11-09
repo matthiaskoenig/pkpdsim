@@ -262,6 +262,11 @@ def sinusoid_flow(zone: str) -> str:
     return f"Q_sin_{zone}"
 
 
+def diffusion(quantity: str) -> str:
+    """Get the id of the diffusion coefficient of a quantity in water, `D_<q>` (m**2/s)."""
+    return f"D_{quantity}"
+
+
 def axial(quantity: str, source: str, target: str) -> str:
     """Get the axial diffusion of a quantity between two sites, `D_<q>_<from>_<to>`."""
     return f"D_{quantity}_{source}_{target}"

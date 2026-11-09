@@ -38,34 +38,107 @@ inactivates or induces has one turnover state `E_<protein>` for the liver
 (as the intestine), driven by the unbound concentration in the cells of the
 zones weighted by the placement of the protein: exact for the same
 concentration in every zone, the mean of the zones along a gradient. A
-custom reaction states its rate for the whole liver and is not split over
-the zones: the zonated liver refuses it.
+custom reaction is placed in every zone with its rate law over the ids of
+the zone (`CUSTOM_z1`), so it reads the species of its zone; the constants
+of its rate law and the species it brings itself belong to the liver and are
+created once, the species with the zone in their ids.
 
-The zones are well-stirred tanks in series. With one zone the zonated liver
-is the standard liver. With `n` zones and linear kinetics the availability
-of a flow-limited liver at steady state is `(1 + x/n)^-n` with
-`x = fu*CLint/(Q*BP)` instead of the well-stirred `1/(1 + x)`: with the same
-intrinsic clearance the zonated liver extracts more, the difference of the
-extraction is about `x/2*(1 - 1/n)` of it (second order in `x`), and for
-large `n` it approaches the parallel tube, `exp(-x)`.
+The zones are well-stirred tanks in series (`Geometry.WELL_STIRRED`). The
+sinusoid geometry (`Geometry.SINUSOID`) adds the two transport steps of the
+sinusoid which the well-stirred zone collapses, with the geometry of the
+species of the zonation engine (`pkpdsim.zonation`): the diffusion along the
+sinusoid between the zones (`D_z1_pl_<s>`, in the plasma of the lumen and in
+the interstitium, the space of Disse) and the fenestrated endothelium
+between them, whose conductance `P_fen_<s>*eps_fen_<zone>*A_pd_<zone>`
+replaces the generic endothelium `PS_vas` of the standard organ (the
+porosity falls from the periportal to the pericentral end, the lateral area
+follows the lumen of the zone). The layers of the engine are the parts of the
+liver: the plasma of the lumen is the plasma, the erythrocytes the blood
+cells, the space of Disse the interstitium and the hepatocyte the
+intracellular space; a substance whose form has no interstitium has no
+barrier either (the space of Disse is inside its tissue), and the
+endothelial cell and the bile canaliculus are no part of the PBPK liver.
+
+With one zone the zonated liver is the standard liver. With `n` zones and
+linear kinetics the availability of a flow-limited liver at steady state is
+`(1 + x/n)^-n` with `x = fu*CLint/(Q*BP)` instead of the well-stirred
+`1/(1 + x)`: with the same intrinsic clearance the zonated liver extracts
+more, the difference of the extraction is about `x/2*(1 - 1/n)` of it (second
+order in `x`), and for large `n` it approaches the parallel tube, `exp(-x)`.
 """
 
+import copy
+import itertools
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
 from sbmlutils.factory import ModelDefinition
+from sbmlutils.factory.units import Units
 
 from pkpdsim.pbpk import ids
+from pkpdsim.pbpk.annotation import annotate
 from pkpdsim.pbpk.chemistry import CustomReaction, Metabolism, Transport
 from pkpdsim.pbpk.organ import Boundary, OrganContext, StandardBuilder
+from pkpdsim.pbpk.organ_builder import stationary_ids
 from pkpdsim.pbpk.organs import Organ, Part
-from pkpdsim.pbpk.placement import inhibitor_unbound, place
+from pkpdsim.pbpk.placement import (
+    built_parts,
+    formula_ids,
+    in_zone,
+    inhibitor_unbound,
+    place,
+    zone_ids,
+)
+from pkpdsim.pbpk.substance import Substance
 from pkpdsim.pbpk.units import U
+from pkpdsim.zonation import ids as zids
+from pkpdsim.zonation.geometry import SinusoidGeometry, geometry, porosities
 from pkpdsim.zonation.profiles import Profile
 from pkpdsim.zonation.settings import Geometry
+from pkpdsim.zonation.transport import (
+    L_PER_M3,
+    M2_PER_S,
+    M_PER_S,
+    diffusion_of,
+    diffusion_parameter,
+    fenestral_permeability,
+    molecular_radius,
+)
 
 __all__ = ["ZonatedLiver"]
+
+_DIFFUSING: Mapping[Part, str] = {
+    Part.PLASMA: "plasma",
+    Part.INTERSTITIAL: "interstitium",
+}
+"""The parts a substance diffuses in along the sinusoid, in names.
+
+The plasma of the sinusoidal lumen and the space of Disse, the two layers the
+engine diffuses in; the erythrocytes and the cells do not diffuse axially."""
+
+
+class SinusoidUnits(U):
+    """The units of the library and the three of the sinusoid geometry.
+
+    The unit definitions are those of the transport of the engine
+    (`pkpdsim.zonation.transport`), so that the model of the liver and the
+    model of the engine write one definition of each; the units of the
+    pressure flow of the engine are none of the liver, and the module of its
+    unit class imports the PBPK library, which imports this variant.
+    """
+
+    l_per_m3 = L_PER_M3
+    m_per_s = M_PER_S
+    m2_per_s = M2_PER_S
+
+
+_TABLE = (
+    "the geometry of the liver of the species in the table of the zonation "
+    "engine (`pkpdsim.zonation.geometry`, "
+    "`pkpdsim/database/tables/zonation.toml`)"
+)
+"""Where a number of the sinusoid geometry comes from, for the notes."""
 
 
 @dataclass(frozen=True)
@@ -148,10 +221,11 @@ class ZonatedLiver:
 
         Raises:
             ValueError: if the organ is not the liver, a process cannot be
-                placed (a custom reaction, a metabolism with a profile the
-                liver does not give), the processes of a protein have
-                different profiles, a profile is used by no process, or the
-                standard liver refuses a substance.
+                placed (a metabolism with a profile the liver does not give),
+                the processes of a protein have different profiles, a profile
+                is used by no process, the standard liver refuses a
+                substance, or the sinusoid geometry has no geometry of the
+                species or no fenestra which lets a substance through.
         """
         return ZonatedBuilder(ctx, self).build()
 
@@ -167,8 +241,10 @@ class ZonatedBuilder(StandardBuilder):
             liver: the component.
 
         Raises:
-            ValueError: for another organ than the liver, or a process the
-                zonated liver cannot place.
+            ValueError: for another organ than the liver, a process the
+                zonated liver cannot place, or a species whose liver the
+                geometry table of the engine does not have (the sinusoid
+                geometry only).
         """
         if ctx.organ is not Organ.LIVER:
             raise ValueError(
@@ -176,8 +252,12 @@ class ZonatedBuilder(StandardBuilder):
                 f"'{ctx.organ.value}'."
             )
         super().__init__(ctx, liver.name)
-        self.zones = tuple(ids.zone(i) for i in range(1, liver.n_zones + 1))
+        # the chain is the engine's: its zone tokens, its count and its geometry
+        self.zones = tuple(zids.zone(i) for i in range(1, liver.n_zones + 1))
         self.profiles = liver.profiles
+        self.geometry = liver.geometry
+        self.geo = geometry(ctx.species) if self._is_sinusoid else None
+        self.customs = [p for p in self._processes() if isinstance(p, CustomReaction)]
         self.processes, self.profile_of = self._placed()
         self.protein_profile = {
             p.protein: self.profile_of[p.sid]
@@ -186,35 +266,71 @@ class ZonatedBuilder(StandardBuilder):
         }
 
     def _notes(self) -> str:
-        """The notes of the model definition."""
+        """The notes of the model definition.
+
+        The well-stirred zones keep the notes they had before the sinusoid
+        geometry, which the stored references of `tests/pbpk` pin line by
+        line; the sinusoid names its two transport steps.
+        """
         n = len(self.zones)
+        sinusoid = (
+            " The zones are tanks in series along the sinusoid: the plasma and "
+            "the interstitium of neighbouring zones diffuse into each other and "
+            "the plasma exchanges with the interstitium through the fenestrae of "
+            "the endothelium, with the geometry of the liver of the species. The "
+            "chain is upwind, so the convection from zone to zone disperses "
+            "numerically with `v*L_sin/(2n)` of the velocity v of the plasma, "
+            "which exceeds the axial diffusion of a small molecule at a low zone "
+            "count (`pkpdsim.zonation.effective_peclet`): the diffusion is then a "
+            "correction below the discretization."
+            if self._is_sinusoid
+            else ""
+        )
         return (
             f"The {self.name} liver: {n} zones in series along the sinusoid, from "
             f"the periportal zone {self.zones[0]} to the pericentral zone "
             f"{self.zones[-1]}, each with the parts which the substances need and "
             "its share of the volumes, the exchanges and the chemistry of the "
-            "liver; the boundary of the standard liver."
+            "liver; the boundary of the standard liver." + sinusoid
         )
+
+    @property
+    def _is_sinusoid(self) -> bool:
+        """Whether the zones have the geometry of the sinusoid."""
+        return self.geometry is Geometry.SINUSOID
+
+    def _units(self) -> type[Units]:
+        """The unit definitions of the model of the liver.
+
+        The sinusoid needs the units of its transport (`SinusoidUnits`:
+        m/s, m**2/s, l/m**3); the well-stirred liver has the units of the
+        library, so that its model is that of the standard liver.
+        """
+        return SinusoidUnits if self._is_sinusoid else super()._units()
+
+    def _geometry(self) -> SinusoidGeometry:
+        """The geometry of the sinusoid of the species of the build."""
+        assert self.geo is not None
+        return self.geo
 
     def _placed(
         self,
     ) -> tuple[list[Metabolism | Transport], dict[str, str | None]]:
-        """The processes of the liver and their profiles (`None`: by volume).
+        """The metabolism and transport of the liver and their profiles (`None`: by volume).
+
+        A custom reaction has no profile: it states its rate itself and is
+        placed in every zone with the ids of the zone (`self.customs`).
 
         Raises:
-            ValueError: for a custom reaction, a metabolism with a profile
-                the liver does not give, the processes of a protein with
-                different profiles, or a profile which no process uses.
+            ValueError: for a metabolism with a profile the liver does not
+                give, the processes of a protein with different profiles, or
+                a profile which no process uses.
         """
         processes: list[Metabolism | Transport] = []
         profile_of: dict[str, str | None] = {}
         for p in self._processes():
             if isinstance(p, CustomReaction):
-                raise ValueError(
-                    f"Custom reaction '{p.sid}' of the liver: the zonated liver "
-                    "places metabolism and transport only, a custom reaction "
-                    "states its rate for the whole liver."
-                )
+                continue
             processes.append(p)
             profile_of[p.sid] = self._profile(p)
         by_protein: dict[str, set[str | None]] = {}
@@ -312,8 +428,14 @@ class ZonatedBuilder(StandardBuilder):
         return weight
 
     def _chemistry(self) -> None:
-        """The processes of the liver in every zone, each with its share of the capacity."""
-        self._proteins_and_sinks(self.processes)
+        """The processes of the liver in every zone, each with its share of the capacity.
+
+        A metabolism and a transport take the share of the capacity of their
+        zone; a custom reaction is placed in every zone with its own rate law
+        over the ids of the zone, and the constants of the rate law and the
+        species it brings itself are created once for the liver.
+        """
+        self._proteins_and_sinks([*self.processes, *self.customs])
         capacity = self._capacity()
         assert capacity is not None
         for p in self.processes:
@@ -324,6 +446,238 @@ class ZonatedBuilder(StandardBuilder):
                         self.parameters.setdefault(str(par.sid), par)
                     reaction.pars = []
                     self.reactions.append(reaction)
+        for p in self.customs:
+            self._custom_species(p)
+            for k, zone in enumerate(self.zones):
+                for reaction in place(p, self.ctx, self.ctx.parts, None, zone):
+                    if k:
+                        # the constants of the rate law belong to the liver,
+                        # not to a zone: they are created with the reaction
+                        # of the first zone and read by the others
+                        reaction.pars = []
+                    self.reactions.append(reaction)
+
+    def _custom_species(self, p: CustomReaction) -> None:
+        """The species a custom reaction brings itself, one per zone.
+
+        Raises:
+            ValueError: if a species of the zone has the id of a species of
+                the liver already.
+        """
+        for zone in self.zones:
+            mapping = zone_ids(self.ctx, self.ctx.parts, zone)
+            for sp in p.species:
+                sid = ids.segment_process(str(sp.sid), zone)
+                if sid in self.species:
+                    raise ValueError(
+                        f"Custom reaction '{p.sid}': species '{sid}' is a species "
+                        f"of the zone {zone} of the liver already."
+                    )
+                species = copy.copy(sp)
+                species.sid = sid
+                compartment = str(sp.compartment)
+                species.compartment = mapping.get(compartment, compartment)
+                self.species[sid] = annotate(
+                    species,
+                    "custom_amount" if sp.hasOnlySubstanceUnits else "custom_species",
+                )
+
+    def _custom_placed(
+        self, p: CustomReaction, placed: set[str]
+    ) -> frozenset[str] | None:
+        """The ids of the reactions of a custom process, one per zone."""
+        reactions = frozenset(ids.segment_process(p.sid, zone) for zone in self.zones)
+        return reactions if reactions <= placed else None
+
+    def _custom_read(self, p: CustomReaction) -> set[str]:
+        """The ids which the reaction of a custom process reads in every zone.
+
+        The ids of its rate law and of its declared steady state, each the id
+        of the zone where the liver has one (`zone_ids`), so that the inputs
+        of the ids of the top model are those of the rewritten rate laws.
+        """
+        read = formula_ids(p.formula) | stationary_ids(p)
+        out: set[str] = set()
+        for zone in self.zones:
+            mapping = zone_ids(
+                self.ctx, self.ctx.parts, zone, [str(sp.sid) for sp in p.species]
+            )
+            out |= {mapping.get(i, i) for i in read}
+        return out
+
+    def _radius(self) -> str:
+        """The radius of the lumen of a sinusoid (m)."""
+        return self._constant(
+            zids.RADIUS,
+            self._geometry().r_sin,
+            U.meter,
+            "radius of the sinusoid [m]",
+            f"Radius of the lumen of a sinusoid, {_TABLE}. The lateral area of "
+            "the zone follows it.",
+            kind="sinusoid_geometry",
+        )
+
+    def _length(self) -> str:
+        """The length of a sinusoid (m), which the zones divide."""
+        return self._constant(
+            zids.LENGTH,
+            self._geometry().L_sin,
+            U.meter,
+            "length of the sinusoid [m]",
+            f"Length of a sinusoid, {_TABLE}; the zones divide it, so two zones "
+            "are `L_sin/n` apart.",
+            kind="sinusoid_geometry",
+        )
+
+    def _porosity(self, zone: str) -> str:
+        """The fenestral porosity of the endothelium of a zone (fraction).
+
+        The gradient of the table from the periportal to the pericentral end
+        over the positions of the zones (the engine,
+        `pkpdsim.zonation.geometry.porosities`).
+        """
+        values = porosities(len(self.zones), self._geometry())
+        return self._constant(
+            zids.porosity(zone),
+            values[self.zones.index(zone)],
+            U.dimensionless,
+            in_zone("fenestral porosity of the endothelium", zone),
+            "Fraction of the endothelium of the zone which the fenestrae open, "
+            f"{_TABLE}: the gradient from the periportal to the pericentral end "
+            "at the position of the zone. It scales the fenestral exchange of "
+            "the zone.",
+            kind="sinusoid_geometry",
+        )
+
+    def _lateral_area(self, zone: str) -> str:
+        """The lateral area between the plasma and the space of Disse of a zone (m**2).
+
+        `2*V_lumen/r_sin`, the surface of the cylinder of the lumen of the
+        zone (the engine, `ZonationBuilder._radial_assignments`), from the
+        vascular volume of the zone, so that it follows the liver volume of
+        the individual.
+        """
+        lumen = self._share(f"{self.v} * {self.f_vas}", zone)
+        return self._initial(
+            zids.area("pd", zone),
+            f"2 dimensionless * {lumen} / {self._radius()} / 1000 l_per_m3",
+            U.m2,
+            in_zone("lateral area plasma and interstitium [m2]", zone),
+            "Lateral area between the plasma and the space of Disse of the zone: "
+            "the surface of the cylinder of its lumen, `2*V_lumen/r_sin` with the "
+            "vascular volume of the zone (plasma and blood cells).",
+            kind="sinusoid_geometry",
+        )
+
+    def _fenestral(self, s: Substance) -> str:
+        """The permeability of a substance through an open fenestra (m/s).
+
+        `d_aq/t_endo * renkin(r/r_fen)` of the engine
+        (`pkpdsim.zonation.transport.fenestral_permeability`) at the porosity
+        1, which the porosity of the zone scales; a model input, to be raised
+        where the endothelium is known not to limit the substance.
+
+        Raises:
+            ValueError: for a molecule which no fenestra lets through (its
+                radius reaches the radius of a fenestra), which would cut it
+                off from the tissue of the liver.
+        """
+        geo = self._geometry()
+        radius = molecular_radius(s.mr)
+        p = fenestral_permeability(diffusion_of(s), radius, geo, 1.0)
+        if p.value <= 0.0:
+            raise ValueError(
+                f"{s.sid}: the molecular radius {radius.value:.3g} m reaches the "
+                f"radius of a fenestra ({geo.r_fen:.3g} m), so no fenestra lets "
+                "the substance through and the sinusoid geometry of the zonated "
+                "liver would cut it off from the tissue. It needs a transcellular "
+                "path, which the liver does not have yet."
+            )
+        return self._constant(
+            zids.permeability("fen", s.sid),
+            p.value,
+            SinusoidUnits.m_per_s,
+            f"fenestral permeability {s.sid} [m/s]",
+            f"Permeability of {s.sid} through an open fenestra: its diffusion "
+            "coefficient in water over the thickness of the endothelium times "
+            "the hindrance of its molecular radius "
+            f"({radius.value:.3g} m) in a fenestra ({geo.r_fen:.3g} m, "
+            f"Renkin 1954); {_TABLE}.",
+            kind="pore_permeability",
+        )
+
+    def _ps_vas(self, s: Substance, zone: str | None) -> str:
+        """The exchange between the plasma and the interstitium of a zone (l/min).
+
+        The well-stirred zone exchanges across the generic endothelium of the
+        standard organ; the sinusoid exchanges through the fenestrae of its
+        zone, `P_fen_<s>*eps_fen_<zone>*A_pd_<zone>`, the conductance of the
+        engine (`ZonationBuilder.radial_exchange`) over the lateral area of
+        the lumen of the zone. The transcellular path of the endothelium is
+        no path of the PBPK liver, which has no endothelial compartment.
+        """
+        if not self._is_sinusoid:
+            return super()._ps_vas(s, zone)
+        assert zone is not None
+        return (
+            f"{self._fenestral(s)} * {self._porosity(zone)} * "
+            f"{self._lateral_area(zone)} * 1000 l_per_m3 * 60 s_per_min"
+        )
+
+    def _diffusion(self, s: Substance) -> str:
+        """The diffusion coefficient of a substance in water (m**2/s).
+
+        The coefficient of the engine
+        (`pkpdsim.zonation.transport.diffusion_parameter`): the value given
+        with the substance or the one derived from its molar mass, with its
+        provenance in the notes.
+        """
+        parameter = diffusion_parameter(s)
+        pid = str(parameter.sid)
+        if pid not in self.parameters:
+            self.parameters[pid] = self._annotate(parameter, "diffusion")
+        return pid
+
+    def _substance(self, s: Substance) -> None:
+        """The species, flows and exchanges of a substance, with its axial diffusion."""
+        super()._substance(s)
+        if self._is_sinusoid:
+            self._axial_diffusion(s)
+
+    def _axial_diffusion(self, s: Substance) -> None:
+        """The diffusion of a substance along the sinusoid, between consecutive zones.
+
+        `D_<s>*V<part>_<zone>*n^2/L_sin^2*(C_<zone> - C_<next>)` in the
+        plasma and in the interstitium (the space of Disse), the reactions of
+        the engine (`ZonationBuilder.axial_diffusion`) over the parts of the
+        liver: the cross-section of a part is its volume in all zones over
+        the length of the sinusoid and two zones are `L_sin/n` apart. None
+        with one zone, and none in a part the substance does not have.
+        """
+        n = len(self.zones)
+        if n < 2:
+            return
+        parts = [p for p in built_parts(self.ctx.parts[s.sid]) if p in _DIFFUSING]
+        if not parts:
+            return
+        d = self._diffusion(s)
+        length = self._length()
+        for part in parts:
+            for k, (upstream, downstream) in enumerate(
+                itertools.pairwise(self.zones), start=1
+            ):
+                a = ids.species(part, s.sid, upstream)
+                b = ids.species(part, s.sid, downstream)
+                self._reaction(
+                    ids.axial_reaction(part, s.sid, upstream),
+                    f"{a} <-> {b}",
+                    f"{d} * {ids.compartment(part, upstream)} * {n * n} "
+                    f"dimensionless / ({length} * {length}) * 60 s_per_min * "
+                    f"({a} - {b})",
+                    f"axial diffusion {s.sid} {_DIFFUSING[part]}, zones {k} "
+                    f"and {k + 1}",
+                    kind="exchange",
+                )
 
     def _unbound_in_cell(self, sid: str, protein: str) -> str:
         """The unbound concentration in the cells which drives the turnover of a protein.

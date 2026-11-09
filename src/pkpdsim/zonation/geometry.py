@@ -19,6 +19,7 @@ from pkpdsim.pbpk.physiology import reference_liver_flow
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import Q, Value, number
 from pkpdsim.species import Species
+from pkpdsim.zonation.profiles import zone_positions
 
 __all__ = [
     "Layer",
@@ -28,6 +29,7 @@ __all__ = [
     "fractions",
     "geometry",
     "layer_volumes",
+    "porosities",
     "reference_flow",
     "reference_liver_mass",
     "sinusoid_count",
@@ -300,6 +302,27 @@ def layer_volumes(
         for layer, f in fr.items()
         for z in range(1, n_zones + 1)
     }
+
+
+def porosities(n_zones: int, geo: SinusoidGeometry) -> tuple[float, ...]:
+    """Get the fenestral porosity of every zone, the gradient of the table.
+
+    Args:
+        n_zones: the number of zones.
+        geo: the geometry with the periportal and the pericentral porosity.
+
+    Returns:
+        The porosity of every zone, periportal first: the linear gradient
+        from `porosity_pp` to `porosity_pc` over the lobular positions of the
+        centres of the zones (`zone_positions`).
+
+    Raises:
+        ValueError: for less than one zone.
+    """
+    return tuple(
+        geo.porosity_pp + (geo.porosity_pc - geo.porosity_pp) * x
+        for x in zone_positions(n_zones)
+    )
 
 
 def sinusoid_count(mass: Q, geo: SinusoidGeometry, fr: Mapping[Layer, float]) -> float:

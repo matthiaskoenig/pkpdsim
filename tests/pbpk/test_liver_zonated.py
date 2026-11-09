@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING
 import libsbml
 import numpy as np
 import pytest
+from sbmlutils.factory import Parameter as SbmlParameter
 
 from pkpdsim.pbpk import (
     MM,
@@ -45,12 +46,18 @@ from pkpdsim.pbpk import (
     Transport,
     Variants,
     ZonatedLiver,
+    distribution,
     ids,
     variants,
 )
 from pkpdsim.pbpk.builder import build, organ_context
-from pkpdsim.pbpk.organ import OrganComponent
+from pkpdsim.pbpk.organ import OrganComponent, OrganContext
+from pkpdsim.pbpk.units import U
+from pkpdsim.pbpk.values import Value
+from pkpdsim.zonation import ids as zids
 from pkpdsim.zonation.profiles import Linear
+from pkpdsim.zonation.settings import Geometry
+from pkpdsim.zonation.transport import M2_PER_S, diffusion_parameter
 
 from .conftest import (
     definition,
@@ -65,6 +72,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     import roadrunner
+    from sbmlutils.factory import Sbase
 
 S = "drg"
 """The substance of the tests."""
@@ -447,6 +455,202 @@ def test_extraction_tanks_in_series(tmp_path: Path) -> None:
     assert extractions[-1] < 1 - math.exp(-x)
 
 
+OPEN_PERMEABILITY = 1e3
+"""The permeability (m/s) of an open fenestral path.
+
+The value of the open barrier of `tests/zonation/test_barrier.py`
+(`endothelial_ps=1e3` with the porosity 1), far above the permeability of a
+molecule, so that the barrier does not limit the transfer."""
+
+TIGHT_POROSITY = 1e-6
+"""The fenestral porosity of a nearly closed barrier (`tests/zonation/test_barrier.py`)."""
+
+NO_DIFFUSION = 1e-30
+"""The aqueous diffusion (m**2/s) of a substance which does not diffuse axially.
+
+A `Substance` needs a positive diffusion coefficient
+(`tests/zonation/test_transport.py::test_a_non_positive_diffusion_raises`), so
+the axial diffusion is switched off with a negligible value instead of 0: the
+conductance `D*A/dx` of a zone is then about 1e-21 l/min against a plasma flow
+of about 1 l/min."""
+
+
+def _permeable_drug(diffusion: float | None = None) -> Substance:
+    """The drug in the full form (interstitium and cells), fu 0.5, Kp 2.
+
+    The sinusoid geometry has the space of Disse and its barrier only for a
+    substance with an interstitial part. `diffusion` is the aqueous diffusion
+    coefficient (m**2/s) which replaces the one derived from the molar mass;
+    `NO_DIFFUSION` leaves the axial diffusion out.
+    """
+    drug = dataclasses.replace(
+        simple_drug(),
+        binding=Binding(fu=0.5, protein="albumin"),
+        distribution=Kp(2.0, ftissue=10.0, mode=Mode.PERMEABILITY),
+    )
+    if diffusion is None:
+        return drug
+    return dataclasses.replace(drug, diffusion=Value(diffusion, M2_PER_S))
+
+
+def _barrier_changes(barrier: str, n: int) -> dict[str, float]:
+    """The changes of the fenestrated barrier of the sinusoid geometry.
+
+    `open` is the mechanism of `tests/zonation/test_barrier.py`: the fenestral
+    porosity of every zone 1 and a permeability far above the one of the
+    molecule. `tight` is its nearly closed barrier, the porosity 1e-6.
+    """
+    if barrier == "tight":
+        return {_liver(zids.porosity(z)): TIGHT_POROSITY for z in _zones(n)}
+    if barrier != "open":
+        raise ValueError(f"The barrier is 'open' or 'tight', not '{barrier}'.")
+    changes = {_liver(zids.permeability("fen", S)): OPEN_PERMEABILITY}
+    return changes | {_liver(zids.porosity(z)): 1.0 for z in _zones(n)}
+
+
+def _simulate(
+    tmp_path: Path,
+    liver: str | OrganComponent,
+    diffusion: float | None = None,
+    barrier: str | None = None,
+) -> dict[str, np.ndarray]:
+    """The curves of the drug in the full form after an IV bolus of 10 mg.
+
+    Args:
+        tmp_path: the directory of the build (one model per call).
+        liver: the liver variant.
+        diffusion: the aqueous diffusion of the drug (m**2/s), `None` the one
+            derived from its molar mass, `NO_DIFFUSION` no axial diffusion.
+        barrier: `open` or `tight` for the fenestrated barrier of the
+            sinusoid geometry (`_barrier_changes`), `None` for the measured
+            porosity of the table.
+
+    Returns:
+        The venous plasma and the hepatic outflow concentration (mM) by their
+        selection.
+    """
+    sid = f"sim{sum(1 for _ in tmp_path.iterdir())}"
+    metabolite = Substance(sid="drg_m", name="metabolite", mr=316.0)
+    path = _model(
+        tmp_path, sid, liver, [_drg2m()], [_permeable_drug(diffusion), metabolite]
+    )
+    zones = getattr(liver, "n_zones", 1)
+    changes = _barrier_changes(barrier, zones) if barrier is not None else {}
+    r = _load(path, **changes)
+    r[ids.iv_dose(S)] = 10.0
+    cols = [f"[{ids.pool_species(Pool.VENOUS, S)}]", ids.organ_outflow(Organ.LIVER, S)]
+    result = r.simulate(times=TIMES, selections=["time", *cols])
+    return {col: np.asarray(result[:, i + 1]) for i, col in enumerate(cols)}
+
+
+def test_the_zone_tokens_are_those_of_the_engine() -> None:
+    """The zone of the PBPK ids and of the engine are one token, which the adapter needs.
+
+    The zonated liver numbers its zones with the engine (`pkpdsim.zonation`)
+    and feeds the tokens into the id functions of the library, so the two id
+    modules must agree on the token of a zone.
+    """
+    assert [ids.zone(k) for k in range(1, 11)] == [zids.zone(k) for k in range(1, 11)]
+
+
+def _sinusoid_elements(liver: ZonatedLiver, ctx: OrganContext) -> dict[str, "Sbase"]:
+    """The parameters and reactions of a liver by id."""
+    md, _ = liver.build(ctx)
+    elements = [*md.parameters, *md.reactions, *md.compartments, *md.species]
+    return {str(e.sid): e for e in elements}
+
+
+def test_the_sinusoid_geometry_adds_the_elements_of_the_barrier_and_the_diffusion() -> (
+    None
+):
+    """The sinusoid replaces `PS_vas` by the fenestral path and adds the axial diffusion.
+
+    The geometry of the engine adds the radius and the length of the
+    sinusoid, the fenestral porosity and the lateral area of every zone, the
+    fenestral permeability of the substance in the full form and the
+    diffusion coefficient of every substance which diffuses, and one
+    reaction per pair of zones and diffusing part; the generic endothelium of
+    the standard organ (`PS_vas`, `k_vas`) is gone. Every element it adds has
+    an SBO term and an ontology term, as `tests/pbpk/test_annotation.py`
+    requires of every element of a model.
+    """
+    n = 3
+    metabolite = Substance(sid="drg_m", name="metabolite", mr=316.0)
+    ctx = organ_context(
+        definition(substances=[_permeable_drug(), metabolite], chemistry=[_drg2m()]),
+        Organ.LIVER,
+    )
+    stirred = _sinusoid_elements(ZonatedLiver(n_zones=n), ctx)
+    sinusoid = _sinusoid_elements(
+        ZonatedLiver(n_zones=n, geometry=Geometry.SINUSOID), ctx
+    )
+    zones = _zones(n)
+    diffusions = [
+        str(diffusion_parameter(s).sid) for s in (_permeable_drug(), metabolite)
+    ]
+    expected = {
+        zids.RADIUS,
+        zids.LENGTH,
+        zids.permeability("fen", S),
+        *diffusions,
+        *(zids.porosity(z) for z in zones),
+        *(zids.area("pd", z) for z in zones),
+        *(
+            ids.axial_reaction(part, s, z)
+            for part, s in (
+                (Part.PLASMA, S),
+                (Part.INTERSTITIAL, S),
+                (Part.PLASMA, metabolite.sid),
+            )
+            for z in zones[:-1]
+        ),
+    }
+    assert set(sinusoid) - set(stirred) == expected
+    assert set(stirred) - set(sinusoid) == {ids.PS_VAS, distribution.K_VAS}
+    missing = [
+        sid
+        for sid in sorted(expected)
+        if sinusoid[sid].sboTerm is None or not sinusoid[sid].annotations
+    ]
+    assert not missing
+
+
+def test_the_sinusoid_with_diffusion_off_and_an_open_barrier_equals_well_stirred(
+    tmp_path: Path,
+) -> None:
+    """The sinusoid without axial diffusion and with an open barrier is the well-stirred liver.
+
+    The well-stirred zone exchanges with the interstitium across the generic
+    endothelium `PS_vas = k_vas*Vli`, which is chosen large against the blood
+    flows; the sinusoid exchanges through the fenestrae of its zone, the
+    geometry of the liver. The two agree when the fenestral path does not
+    limit the transfer either (`barrier="open"`) and the sinusoid has no
+    axial diffusion (`NO_DIFFUSION`), and the test is not vacuous: a nearly
+    closed barrier keeps the drug out of the cells and differs by far more
+    than the tolerance.
+    """
+    n = 10
+    stirred = _simulate(
+        tmp_path, ZonatedLiver(n_zones=n, geometry=Geometry.WELL_STIRRED)
+    )
+    opened = _simulate(
+        tmp_path,
+        ZonatedLiver(n_zones=n, geometry=Geometry.SINUSOID),
+        diffusion=NO_DIFFUSION,
+        barrier="open",
+    )
+    tight = _simulate(
+        tmp_path,
+        ZonatedLiver(n_zones=n, geometry=Geometry.SINUSOID),
+        diffusion=NO_DIFFUSION,
+        barrier="tight",
+    )
+    key = f"[{ids.pool_species(Pool.VENOUS, S)}]"
+    assert opened[key] == pytest.approx(stirred[key], rel=1e-3, abs=0)
+    reference = stirred[key][MIXED]
+    assert np.max(np.abs(tight[key][MIXED] - reference) / reference) > 1e-2
+
+
 def test_profile_preserves_total_capacity(tmp_path: Path) -> None:
     """A profile redistributes the capacity of a process over the zones and keeps the total.
 
@@ -574,23 +778,87 @@ def test_first_order_per_volume_in_zones(tmp_path: Path) -> None:
     )
 
 
+def _ctx_with_custom_reaction() -> OrganContext:
+    """The context of the liver with a custom reaction from the tissue into the plasma."""
+    custom = CustomReaction(
+        sid="CUSTOM",
+        organ=Organ.LIVER,
+        part=Part.TISSUE,
+        equation=(
+            f"{ids.species(Part.TISSUE, S)} -> {ids.species(Part.PLASMA, 'drg_m')}"
+        ),
+        formula=(
+            f"k_custom * {ids.compartment(Part.TISSUE)} * {ids.species(Part.TISSUE, S)}"
+        ),
+        parameters=[SbmlParameter("k_custom", 0.1, U.per_min)],
+    )
+    return organ_context(definition(chemistry=[_drg2m(), custom]), Organ.LIVER)
+
+
+def test_a_custom_reaction_is_placed_per_zone() -> None:
+    """A custom reaction is placed in every zone, reading the species of its zone.
+
+    Its rate law is the modeller's and is not split over the zones: in a zone
+    it reads the species and the compartments of that zone, so a rate which
+    is extensive in the volume of the part (`k*Vti_<zone>*Cti_<zone>_<s>`)
+    keeps the rate of the whole liver. The constant of the rate law is
+    defined once for the liver.
+    """
+    model, _ = ZonatedLiver(n_zones=10).build(_ctx_with_custom_reaction())
+    assert sum(1 for r in model.reactions if str(r.sid).startswith("CUSTOM_")) == 10
+    by_sid = {str(r.sid): r for r in model.reactions}
+    assert by_sid["CUSTOM_z1"].equation.to_string() == "Cti_z1_drg => Cpl_z1_drg_m"
+    law = by_sid["CUSTOM_z10"].formula
+    assert law is not None
+    assert str(law.math) == "k_custom * Vti_z10 * Cti_z10_drg"
+    assert by_sid["CUSTOM_z1"].compartment == "Vti_z1"
+    pars = [str(q.sid) for r in model.reactions for q in r.pars or []]
+    assert pars.count("k_custom") == 1
+
+
+def test_a_custom_reaction_runs_in_every_zone(tmp_path: Path) -> None:
+    """The zones together run a volume-extensive custom reaction as the standard liver.
+
+    `k*Vti*Cti_<s>` in the standard liver and `k*Vti_<zone>*Cti_<zone>_<s>`
+    in every zone: with the same tissue concentration in every zone the rates
+    of the zones sum to the rate of the standard liver, and the metabolite
+    appears in the plasma of the zone.
+    """
+    n = 4
+    custom = CustomReaction(
+        sid="CUSTOM",
+        organ=Organ.LIVER,
+        part=Part.TISSUE,
+        equation=(
+            f"{ids.species(Part.TISSUE, S)} -> {ids.species(Part.PLASMA, 'drg_m')}"
+        ),
+        formula=(
+            f"k_custom * {ids.compartment(Part.TISSUE)} * {ids.species(Part.TISSUE, S)}"
+        ),
+        parameters=[SbmlParameter("k_custom", 0.1, U.per_min)],
+    )
+    d = definition(chemistry=[_drg2m(), custom], routes=[Route.iv(S)])
+    c = 0.005
+    r = _load(build(d, tmp_path / "standard").flat_path)
+    r[f"[{_liver(ids.species(Part.TISSUE, S))}]"] = c
+    standard = r[_liver("CUSTOM")]
+    assert standard > 0
+    zonated = dataclasses.replace(
+        d, variants=Variants(organs={Organ.LIVER: ZonatedLiver(n_zones=n)})
+    )
+    r = _load(build(zonated, tmp_path / "zonated").flat_path)
+    for z in _zones(n):
+        r[f"[{_liver(ids.species(Part.TISSUE, S, z))}]"] = c
+    rates = [r[_liver(ids.segment_process("CUSTOM", z))] for z in _zones(n)]
+    assert sum(rates) == pytest.approx(standard, rel=1e-12)
+    np.testing.assert_allclose(rates, [standard / n] * n, rtol=1e-12, atol=0)
+
+
 def test_unplaced_process_raises() -> None:
     """A process the zonated liver cannot place is refused, naming it.
 
-    A custom reaction states its rate for the whole liver, which is not split
-    over the zones; a metabolism with a profile the liver does not give.
+    A metabolism with a profile the liver does not give.
     """
-    custom = CustomReaction(
-        sid="DRGC",
-        organ=Organ.LIVER,
-        part=Part.TISSUE,
-        equation=f"{ids.species(Part.TISSUE, S)} ->",
-        formula=f"k_drgc * {ids.species(Part.TISSUE, S)}",
-        parameters=[],
-    )
-    d = definition(chemistry=[_drg2m(), custom])
-    with pytest.raises(ValueError, match="DRGC"):
-        ZonatedLiver().build(organ_context(d, Organ.LIVER))
     named = definition(chemistry=[_drg2m(profile="pericentral")])
     with pytest.raises(ValueError, match=r"DRG2M.*pericentral"):
         ZonatedLiver().build(organ_context(named, Organ.LIVER))

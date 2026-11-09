@@ -945,15 +945,24 @@ class StandardBuilder(OrganBuilder):
             kind="exchange",
         )
 
-    def _full(self, s: Substance, fu: str, zone: str | None = None) -> None:
-        """The exchanges plasma - interstitium - intracellular space.
+    def _ps_vas(self, s: Substance, zone: str | None) -> str:
+        """The exchange between plasma and interstitium of the organ (of a zone), l/min.
 
-        `PS_vas*fu*(Cpl - Cis/K_int_pls)` and
-        `PS*(fu/K_int_pls*Cis - fu/K_cell_pls*Cic)`, with `K_int_pls` of
-        Schmitt 2008 and `K_cell_pls` such that the whole tissue has the Kp;
-        a zone has the share `f_zone` of both exchanges.
+        `PS_vas = k_vas*V<o>` across the endothelium, of a zone its share
+        `f_zone`; the number is chosen large against the blood flows, so the
+        endothelium does not limit the exchange of a small molecule. A
+        variant with a geometry of its own overrides it (the sinusoid of the
+        zonated liver, the fenestrated endothelium), which is why the
+        parameter is created here and not before the exchanges.
+
+        Args:
+            s: the substance (a geometric exchange depends on its molecule).
+            zone: the zone of a zonated organ, `None` for the organ.
+
+        Returns:
+            The exchange (a formula in l/min).
         """
-        k_int, k_cell = self._cell_coefficients(s, fu)
+        del s
         if ids.PS_VAS not in self.parameters:
             self.parameters[distribution.K_VAS] = distribution.constant(
                 distribution.K_VAS
@@ -966,6 +975,20 @@ class StandardBuilder(OrganBuilder):
                 "Exchange between plasma and interstitium across the endothelium.",
                 kind="permeability",
             )
+        return self._share(ids.PS_VAS, zone)
+
+    def _full(self, s: Substance, fu: str, zone: str | None = None) -> None:
+        """The exchanges plasma - interstitium - intracellular space.
+
+        `PS_vas*fu*(Cpl - Cis/K_int_pls)` and
+        `PS*(fu/K_int_pls*Cis - fu/K_cell_pls*Cic)`, with `K_int_pls` of
+        Schmitt 2008 and `K_cell_pls` such that the whole tissue has the Kp;
+        a zone has the share `f_zone` of both exchanges. The exchange with
+        the interstitium is `_ps_vas`, which a variant with a geometry of its
+        own replaces.
+        """
+        k_int, k_cell = self._cell_coefficients(s, fu)
+        ps_vas = self._ps_vas(s, zone)
         ps = self._ps(s)
         cpl = ids.species(Part.PLASMA, s.sid, zone)
         cis = ids.species(Part.INTERSTITIAL, s.sid, zone)
@@ -973,7 +996,7 @@ class StandardBuilder(OrganBuilder):
         self._reaction(
             ids.exchange_reaction(Part.INTERSTITIAL, s.sid, zone),
             f"{cpl} <-> {cis}",
-            f"{self._share(ids.PS_VAS, zone)} * {fu} * ({cpl} - {cis} / {k_int})",
+            f"{ps_vas} * {fu} * ({cpl} - {cis} / {k_int})",
             in_zone(f"exchange {s.sid} plasma and interstitium", zone),
             kind="exchange",
         )

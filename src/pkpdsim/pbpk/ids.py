@@ -96,6 +96,7 @@ __all__ = [
     "arm_blood",
     "arm_free",
     "arm_weight",
+    "axial_reaction",
     "baseline",
     "bile",
     "bile_reaction",
@@ -723,6 +724,15 @@ def sinusoid_reaction(part: Part, s: str, zone: str) -> str:
     (the whole organ of a flow-limited substance carries it as plasma).
     """
     return f"J_sin_{zone}_{part.value}_{s}"
+
+
+def axial_reaction(part: Part, s: str, zone: str) -> str:
+    """The local id of the axial diffusion of `s` from a zone into the next, `D_z1_pl_<s>`.
+
+    `part` is the part the substance diffuses in along the sinusoid, the
+    plasma or the interstitium (the space of Disse) of the zone.
+    """
+    return f"D_{zone}_{part.value}_{s}"
 
 
 def outflow_conc(s: str) -> str:

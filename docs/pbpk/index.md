@@ -342,6 +342,7 @@ Every other id of the scheme, the ids a model rarely reads: the physiology, the 
 | `J_out_<part>_<s>` | the outflow from an organ into its pool (local id) | `ids.outflow_reaction(part, s)` |
 | `J_shunt_po_<part>_<s>` | the shunt from a pool past the liver (local id) | `ids.shunt_reaction(Pool.PORTAL, part, s)` |
 | `J_sin_<zone>_<part>_<s>` | the flow from a zone into the next one (local id) | `ids.sinusoid_reaction(part, s, zone)` |
+| `D_<zone>_<part>_<s>` | the axial diffusion from a zone into the next one, the sinusoid geometry (local id) | `ids.axial_reaction(part, s, zone)` |
 | `J_bc_<pool>_<s>` | the exchange between plasma and blood cells of a pool | `ids.pool_exchange_reaction(pool, s)` |
 | `J_gfr_<s>` | the glomerular filtration into the urine (local id) | `ids.filtration_reaction(s)` |
 | `J_bile_<s>` | the transit of the bile into the intestinal lumen | `ids.bile_reaction(s)` |
