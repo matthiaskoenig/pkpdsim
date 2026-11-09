@@ -1,0 +1,94 @@
+"""The id scheme of the zonated liver.
+
+Every id of the engine is built here, so that the zones, the layers, the
+transport and the observers agree on them. The zone token is `z<k>` from
+`z1` (periportal) to `z<n>` (pericentral), the one of the PBPK library
+(`pkpdsim.pbpk.ids.zone`) and of the perfusion (`pkpdsim.perfusion.ids.zone_id`).
+
+A layer of a zone is the site `<layer>_<zone>` (`disse_z3`, `site`), its
+volume the compartment `V_<layer>_<zone>` (`volume`) and the amount or
+concentration of a quantity there `<quantity>_<layer>_<zone>` (`species`,
+`glc_hepatocyte_z2`). The zonal factor of a process is `p_<process>_<zone>`
+(`profile`), the pattern of `pkpdsim.perfusion.ids.profile`, and the submodel
+of zone `k` is `M<kk>` (`submodel`, `M03`).
+
+The liver parameters the layer volumes are computed from are the mass `M_li`
+(kg), the density `rho_li` (kg/l), the parenchymal fraction `f_par` and the
+volume fraction `f_<layer>` of every layer. The well-stirred geometry has the
+vascular site `vas` (lumen, endothelium and Disse) instead of those layers.
+"""
+
+from pkpdsim.zonation.geometry import Layer
+
+__all__ = [
+    "DENSITY",
+    "MASS",
+    "PARENCHYMA",
+    "VASCULAR",
+    "fraction",
+    "profile",
+    "site",
+    "species",
+    "submodel",
+    "volume",
+    "zone",
+]
+
+MASS = "M_li"
+"""The id of the liver mass (kg)."""
+
+DENSITY = "rho_li"
+"""The id of the liver density (kg/l)."""
+
+PARENCHYMA = "f_par"
+"""The id of the parenchymal fraction of the liver mass."""
+
+VASCULAR = "vas"
+"""The token of the vascular site of the well-stirred geometry."""
+
+
+def zone(k: int) -> str:
+    """Get the token of zone `k`, `z<k>`.
+
+    Args:
+        k: the number of the zone, from 1 (periportal).
+
+    Returns:
+        The zone token.
+
+    Raises:
+        ValueError: for a zone below 1.
+    """
+    if k < 1:
+        raise ValueError(f"The zones are numbered from 1, not {k}.")
+    return f"z{k}"
+
+
+def site(layer: Layer | str, zone: str) -> str:
+    """Get the site of a layer in a zone, `<layer>_<zone>`."""
+    return f"{layer}_{zone}"
+
+
+def volume(layer: Layer | str, zone: str) -> str:
+    """Get the compartment of a layer in a zone, `V_<layer>_<zone>`."""
+    return f"V_{site(layer, zone)}"
+
+
+def species(quantity: str, layer: Layer | str, zone: str) -> str:
+    """Get the id of a quantity in a layer of a zone, `<quantity>_<layer>_<zone>`."""
+    return f"{quantity}_{site(layer, zone)}"
+
+
+def profile(process: str, zone: str) -> str:
+    """Get the id of the zonal factor of a process, `p_<process>_<zone>`."""
+    return f"p_{process}_{zone}"
+
+
+def submodel(k: int) -> str:
+    """Get the id of the submodel of zone `k`, `M<kk>`."""
+    return f"M{k:02}"
+
+
+def fraction(layer: Layer | str) -> str:
+    """Get the id of the volume fraction of a layer of the liver, `f_<layer>`."""
+    return f"f_{layer}"
