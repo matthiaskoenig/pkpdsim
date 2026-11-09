@@ -41,7 +41,8 @@ from .conftest import mass_g
 pytestmark = pytest.mark.filterwarnings("ignore:.*numerical dispersion:UserWarning")
 
 TRACER = Substance("tr", "tracer", Value(100.0, U.g_per_mole))
-"""A substance which does not react."""
+"""A substance which does not react; the builder of these tests gives it the radius
+of an intravascular marker (`_Diffusing._radius`), which cannot cross the fenestrae."""
 
 _MASS = mass_g(1000.0)
 
@@ -92,7 +93,7 @@ def _builder(
 def _tracer_chain(
     n: int, flow: float, diffusion: float, tmp_path: Path, **kwargs: object
 ) -> roadrunner.RoadRunner:
-    """A bolus of the tracer in the plasma of the first zone of a chain."""
+    """A bolus of the tracer (an intravascular marker) in the plasma of the first zone."""
     model = _builder(n, flow, diffusion, **kwargs).build()
     path = tmp_path / "chain.xml"
     create_model(model, filepath=path, sbml_level=3, sbml_version=2, validate=False)
@@ -164,13 +165,23 @@ def test_a_closed_chain_conserves_the_substance(tmp_path: Path) -> None:
 
 
 def test_mean_residence_time_is_volume_over_flow(tmp_path: Path) -> None:
-    """The mean of a bolus through the chain is the plasma volume over the flow."""
+    """The mean of a bolus through the chain is the plasma volume over the flow.
+
+    The tracer is an intravascular marker (1 um, it cannot cross the fenestrae),
+    which is why it stays in the plasma: this is no claim about every solute.
+    A small solute distributes into the space of Disse and stays longer
+    (`test_barrier.py`).
+    """
     r = _tracer_chain(10, 1.0, 0.0, tmp_path, haematocrit=0.0)
     assert _mrt(r) == pytest.approx(_volume(r) / 1.0, rel=1 / 10)
 
 
 def test_numerical_dispersion_matches_two_n(tmp_path: Path) -> None:
-    """The upwind chain of n zones has the Peclet number 2n."""
+    """The upwind chain of n zones has the Peclet number 2n.
+
+    The tracer is an intravascular marker which cannot cross the fenestrae, so
+    only the convection spreads the bolus.
+    """
     variance = _outflow_variance(_tracer_chain(10, 1.0, 0.0, tmp_path, haematocrit=0.0))
     assert variance == pytest.approx(2.0 / 20.0, rel=0.25)  # Pe = 2n
 

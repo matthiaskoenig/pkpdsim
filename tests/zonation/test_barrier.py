@@ -8,6 +8,7 @@ radial reactions are read at the start.
 import dataclasses
 from pathlib import Path
 
+import numpy as np
 import pytest
 import roadrunner
 from pbpk.conftest import individual
@@ -250,3 +251,51 @@ def test_the_processes_are_registered() -> None:
         "basolateral_permeability",
         "axial_diffusion",
     } <= processes
+
+
+def _mean_residence_time(r: roadrunner.RoadRunner) -> float:
+    """The mean time (min) a bolus in the first plasma takes to leave the chain."""
+    n = sum(1 for sid in r.model.getFloatingSpeciesIds() if "_plasma_" in sid)
+    for k in range(1, n + 1):
+        r[f"[{ids.species('tr', Layer.PLASMA, ids.zone(k))}]"] = 0.0
+    r[f"[{ids.species('tr', Layer.PLASMA, ids.zone(1))}]"] = 1.0
+    volume = sum(
+        r[f"V_{layer}_z{k}"] for k in range(1, n + 1) for layer in ("plasma", "disse")
+    )
+    horizon = 15.0 * volume / r["Q_plasma_li"]
+    last = ids.species("tr", Layer.PLASMA, ids.zone(n))
+    out = r.simulate(0, horizon, 60001, selections=["time", f"[{last}]"])
+    t, c = out[:, 0], out[:, 1]
+    return float(np.trapezoid(t * c, t) / np.trapezoid(c, t))
+
+
+def test_a_small_solute_stays_longer_than_the_intravascular_marker(
+    tmp_path: Path,
+) -> None:
+    """A solute which crosses the fenestrae distributes into the space of Disse.
+
+    The marker of 1 um cannot cross a fenestra, so its mean residence time is
+    the plasma volume over the flow. A small solute leaves the lumen and
+    returns, so it stays longer. As the barrier opens (porosity 1, no
+    erythrocytes) the mean residence time approaches the plasma plus the space
+    of Disse over the flow, the volume of distribution of the fenestral path
+    alone; an open endothelial path would add the endothelium.
+    """
+    marker_dir = tmp_path / "marker"
+    marker_dir.mkdir()
+    marker = _mean_residence_time(
+        _barrier(
+            marker_dir,
+            builder=_builder(
+                radius=1e-6, haematocrit=0.0, porosity_pp=1.0, porosity_pc=1.0
+            ),
+        )
+    )
+    small = _mean_residence_time(_barrier(tmp_path, porosity=1.0, haematocrit=0.0))
+    r = _barrier(tmp_path, porosity=1.0, haematocrit=0.0)
+    q = r["Q_plasma_li"]
+    plasma = sum(r[f"V_plasma_z{k}"] for k in range(1, 5))
+    disse = sum(r[f"V_disse_z{k}"] for k in range(1, 5))
+    assert marker == pytest.approx(plasma / q, rel=0.1)
+    assert small > marker
+    assert small == pytest.approx((plasma + disse) / q, rel=0.1)

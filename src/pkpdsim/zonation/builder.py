@@ -861,6 +861,17 @@ class ZonationBuilder:
             `PS_<s>_<zone>` (Disse to hepatocyte, `P_hep_<s>` over the area
             `A_dh_<zone>`). The transcellular permeabilities are model input
             and 0 (off) by default. None for the well-stirred geometry.
+
+        Note:
+            A flow of 0 and a diffusion of 0 emit no reaction, but the
+            transcellular reactions exist with a permeability of 0. That is no
+            inconsistency: `Q` and the diffusion coefficient are structural
+            settings fixed at the build, while `P_endo_in_<s>`,
+            `P_endo_out_<s>` and `P_hep_<s>` are model input a caller sets on
+            the built model, and a parameter which can change after the build
+            needs its reaction present to act on. The fenestral reaction is
+            structural (the radius of the solute is fixed at the build) and
+            absent for a solute which cannot pass.
         """
         if not self._has_radial():
             return []
