@@ -212,8 +212,12 @@ def test_the_flow_approaches_poiseuille_as_the_leak_vanishes(tmp_path: Path) -> 
         geo = dataclasses.replace(base, porosity_pp=porosity, porosity_pc=porosity)
         flows = _q_sin(_simulated(_SPT_FLOW, tmp_path, geo))
         deviation.append(max(abs(q / expected - 1.0) for q in flows))
+    # the deviation is linear in the porosity (the count of the fenestrae): a
+    # factor of 100 per step of 100 in the porosity, not merely a decrease
+    # (a square root would give 10)
     assert deviation[-1] < 1e-6
-    assert deviation[0] > 10.0 * deviation[1] > 100.0 * deviation[2] > 0.0
+    assert deviation[0] / deviation[1] == _eq(100.0, 0.01)
+    assert deviation[1] / deviation[2] == _eq(100.0, 0.01)
     # and the real porosity is far from it: the leak matters
     leaky = _q_sin(_simulated(_SPT_FLOW, tmp_path))
     assert max(abs(q / expected - 1.0) for q in leaky) > 0.05
@@ -448,3 +452,44 @@ def test_the_flow_falls_to_the_middle_and_rises_again() -> None:
     half = _N // 2
     assert all(a > b for a, b in itertools.pairwise(q[:half]))
     assert all(a < b for a, b in itertools.pairwise(q[half:]))
+
+
+def test_the_calibrated_factor_does_not_follow_the_pressures(tmp_path: Path) -> None:
+    """The factor is a property of the geometry: the pressures do not move it."""
+    factors = [
+        _build(_settings(flow), tmp_path / str(i))[ids.VISCOSITY_FACTOR]
+        for i, flow in enumerate(
+            (
+                PressureFlow(),
+                PressureFlow(p_pp=Value(2000.0, "Pa")),
+                PressureFlow(p_pc=Value(0.0, "Pa"), p_onc=Value(100.0, "Pa")),
+            )
+        )
+    ]
+    assert factors[1] == _eq(factors[0], 1e-12)
+    assert factors[2] == _eq(factors[0], 1e-12)
+
+
+def test_the_calibrated_factor_follows_the_geometry() -> None:
+    """The factor is not a fit constant: the geometry moves it (flow ~ r**4 / L)."""
+    base = geometry(Species.RAT)
+    longer = dataclasses.replace(base, L_sin=2.0 * base.L_sin)
+    wider = dataclasses.replace(base, r_sin=1.2 * base.r_sin)
+    assert calibrated_resistance_factor(Species.RAT, base) == _eq(52.17, 1e-3)
+    assert calibrated_resistance_factor(Species.RAT, longer) == _eq(18.80, 1e-3)
+    assert calibrated_resistance_factor(Species.RAT, wider) == _eq(69.86, 1e-3)
+
+
+@pytest.mark.parametrize(("n_zones", "ratio"), [(10, 0.82885), (1, 0.74724)])
+def test_the_mean_flow_is_below_the_reference_flow(
+    n_zones: int, ratio: float, tmp_path: Path
+) -> None:
+    """`Q_li`, the mean over the zones, is 0.829 (10 zones) or 0.747 (1 zone) of the reference.
+
+    The inflow is calibrated; with `P0` at the mean pressure the fluid which
+    filters out of the first half returns in the second, so the mean
+    throughput, which sets the velocity, is lower than the inflow.
+    """
+    settings = ZonationSettings(n_zones=n_zones, flow=PressureFlow())
+    r = _build(settings, tmp_path)
+    assert r[ids.FLOW] / reference_flow(settings.species).value == _eq(ratio, 1e-4)

@@ -44,10 +44,10 @@ r_fen**2)` (6.7e12 periportal, 8.9e12 pericentral), and the table value is a
 cross-check (`tests/zonation/test_flow.py`, within 35 %). The leaky tube has
 one `w`, so it is evaluated at the mean porosity of the sinusoid, the mean of
 the zones, which is exact for a tube of uniform porosity and the first order
-for the linear gradient of the table; the analytic solution assumes a uniform leak, so the hydraulic resistance uses
-the mean porosity and the per-zone `fenestra_counts` enter only the
-cross-check; the zonal `porosity` profile scales the solute path of the
-barrier and not the hydraulic resistance.
+for the linear gradient of the table. The analytic solution assumes a uniform
+leak, so the hydraulic resistance uses the mean porosity and the per-zone
+`fenestra_counts` enter only the cross-check; the zonal `porosity` profile
+scales the solute path of the barrier and not the hydraulic resistance.
 
 **The oncotic pressure** `P0` (`p_onc`, `Poc - Pot` of spt) defaults to the mean
 of the two pressures, as spt sets `P0 = 0.5 (Pa + Pb)`. The net filtration is
@@ -65,8 +65,20 @@ signature of `P0` and no defect.
 **The resistance factor is calibrated.** `nu = resistance_factor * viscosity`
 and the default factor is derived per species so that the periportal inflow at
 the default pressures is `reference_flow(species)`, the flow an imposed flow
-takes by default: switching between the two modes does not change the flow.
-The 10 of the spt model gives about five times that flow for the rat.
+takes by default: switching between the two modes does not change the flow
+the organ receives. The 10 of the spt model gives about five times that flow
+for the rat. The guarantee holds at the default pressures, `p_onc`, viscosity
+and the table geometry; the factor is calibrated at those and does not follow a
+change of them.
+
+**The inflow is calibrated, the mean flow is lower.** The target is the
+periportal inflow, what the portal vein and the hepatic artery deliver. `Q_li`,
+the mean over the zones, sets the velocity and the Peclet number and is not the
+reference flow: with `p_onc` at the mean pressure the fluid filters out of the
+first half and is reabsorbed in the second, so the mean throughput is 17 %
+below the inflow at 10 zones (`Q_li` is 0.829 of the reference flow) and 25 %
+below at one zone (0.747), and the residence time is correspondingly longer
+than `V / QH`.
 
 A pressure which gives a negative flow in a zone is refused: the chain does
 not run backwards.
@@ -192,7 +204,9 @@ class PressureFlow:
             the default pressures is the reference flow of the species, which
             is what an `ImposedFlow` without a value gives. The 10 of the spt
             model is an uncalibrated stand-in for the microvascular geometry
-            and gives about five times the reference flow for the rat.
+            and gives about five times the reference flow for the rat. The
+            agreement with an imposed flow holds only with the default
+            `p_onc`, `viscosity` and pressures: an explicit one breaks it.
         p_onc: the oncotic pressure `P0 = Poc - Pot` the pressure relaxes to
             along the leaky tube; `None` (the default) is the mean of the two
             pressures, as spt sets it, which makes the net filtration zero.
@@ -366,7 +380,15 @@ def calibrated_resistance_factor(species: Species, geo: SinusoidGeometry) -> flo
     and the plasma viscosity (factor 1) over `reference_flow(species)`. The
     entrance flow is what the organ receives; the flows of the zones do not
     add up in a leaky tube. The factor is a property of the species and its
-    geometry: it does not follow the pressures or the viscosity of a model.
+    geometry: it does not follow the pressures, the oncotic pressure or the
+    viscosity of a model, so the agreement with an imposed flow holds at their
+    defaults only.
+
+    The inflow is calibrated, not the mean over the zones: `Q_li`, which sets
+    the velocity and the Peclet number, is 0.829 of the reference flow at 10
+    zones and 0.747 at one zone, because with `P0` at the mean pressure fluid
+    filters out of the first half of the tube and returns in the second, so
+    the residence time is longer than `V / QH`.
 
     Args:
         species: the species.
