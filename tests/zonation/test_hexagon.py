@@ -10,13 +10,14 @@ matplotlib.use("Agg")
 from pathlib import Path
 
 from matplotlib import colormaps
+from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.colors import to_rgba
 from matplotlib.figure import Figure
 from matplotlib.patches import Polygon
 
 from pkpdsim.species import Species
 from pkpdsim.zonation import ids, observers
-from pkpdsim.zonation.figures import COLORBAR, data_axes, lobule_map
+from pkpdsim.zonation.figures import COLORBAR, data_axes, lobule_map, space_time
 from pkpdsim.zonation.geometry import Layer, geometry
 from pkpdsim.zonation.profiles import lobular_weight, zone_areas, zone_positions
 from pkpdsim.zonation.render import tube_mesh
@@ -89,11 +90,11 @@ def test_the_hexagon_maps_zone_one_to_the_rim_and_zone_n_to_the_centre() -> None
 
 
 def test_the_colours_are_the_scale_of_the_values() -> None:
-    """The value of zone `k` is `k`, the scale runs from 0 to the maximum."""
+    """The value of zone `k` is `k`, the scale runs from the smallest value to the largest."""
     fig = lobule_map(_result(), "drg", time=60, zones=N)
     cmap = colormaps["viridis"]
     for k in (1, 5, N):
-        assert _zone_colour(fig, k) == pytest.approx(cmap(k / N))
+        assert _zone_colour(fig, k) == pytest.approx(cmap((k - 1) / (N - 1)))
 
 
 def test_the_hexagon_area_per_zone_is_the_exact_zone_area() -> None:
@@ -221,3 +222,34 @@ def test_one_zone_has_one_peclet_number_of_two_and_constant_profiles() -> None:
     assert effective_peclet(settings, 0.0) == pytest.approx(2.0)
     for profile in (Linear(1.0, 4.0), Sigmoid(0.5, 6.0), Exponential(1.0, 3.0)):
         assert profile.values(1) == pytest.approx((1.0,))
+
+
+def test_the_caption_is_whole_and_clear_of_the_colorbar() -> None:
+    fig = lobule_map(_result(), "drg", time=60, zones=N)
+    FigureCanvasAgg(fig).draw()
+    (ax,) = data_axes(fig)
+    renderer = fig.canvas.get_renderer()  # ty: ignore[unresolved-attribute]
+    caption = ax.xaxis.label.get_window_extent(renderer)
+    bar = next(a for a in fig.axes if a.get_gid() == COLORBAR)
+    bar_box = bar.get_tightbbox(renderer)
+    assert ax.get_xlabel().count("\n") == 1
+    assert "portal triads (0, periportal)" in ax.get_xlabel()
+    assert "central vein (1, pericentral)" in ax.get_xlabel()
+    assert fig.bbox.x0 <= caption.x0
+    assert caption.x1 <= fig.bbox.x1
+    assert caption.y0 >= fig.bbox.y0
+    assert bar_box is not None
+    assert not caption.overlaps(bar_box)
+
+
+def test_the_colour_scale_spans_the_range_of_the_values() -> None:
+    """A small gradient far from zero must not be one shade; a line axis keeps its zero."""
+    result = _result()
+    for k, sid in enumerate(observers.profile_ids("drg", Layer.CELL, N)):
+        result[sid] = 0.078 + 0.012 * k / (N - 1)
+    fig = lobule_map(result, "drg", time=60, zones=N)
+    bar = next(a for a in fig.axes if a.get_gid() == COLORBAR)
+    assert bar.get_ylim() == pytest.approx((0.078, 0.090))
+    heat = space_time(result, "drg", layers=(Layer.CELL,))
+    assert data_axes(heat)[0].collections[0].get_clim() == pytest.approx((0.078, 0.090))
+    assert min(bar.get_yticks()) >= 0.0

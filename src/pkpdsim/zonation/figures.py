@@ -139,7 +139,7 @@ def _colorbar(figure: Figure, mesh: object, ax: Axes, label: str) -> Colorbar:
 def _limits(
     values: Sequence[np.ndarray], headroom: float = 0.0
 ) -> tuple[float, float] | None:
-    """Get the limits of a concentration axis or colour scale, from zero if nothing is negative.
+    """Get the limits of a concentration axis, from zero if nothing is negative.
 
     A concentration is never negative, so an axis of values at or above zero
     starts at zero; a layer which is zero everywhere gets zero to one. Values
@@ -150,6 +150,23 @@ def _limits(
     if low < 0.0:
         return None
     return (0.0, high * (1.0 + headroom) if high > 0.0 else 1.0)
+
+
+def _scale(values: Sequence[np.ndarray]) -> tuple[float, float] | None:
+    """Get the limits of a colour scale: the range of the values it draws.
+
+    A colour scale spans the range of its values, a line axis keeps its zero
+    baseline (`_limits`): the zero is explicit on the ticks of a colorbar, and
+    a scale from zero would draw a gradient of a few percent as one shade. A
+    scale of no range (a constant, zeros) takes the limits of `_limits`, from
+    zero to the value or to one; values below zero with no range leave it to
+    matplotlib (`None`).
+    """
+    low = min(float(np.min(v)) for v in values)
+    high = max(float(np.max(v)) for v in values)
+    if high > low:
+        return (low, high)
+    return _limits(values)
 
 
 def _time_text(time: float, time_unit: str) -> str:
@@ -285,8 +302,10 @@ def space_time(
     """Draw the concentration over the zones and the time, a heatmap per layer.
 
     The heatmaps are as tall as the figure allows and the outflow panel below
-    them is 0.6 of one. A concentration is never negative: when no value is,
-    the colour scale and the axis of the outflow start at zero.
+    them is 0.6 of one. The axis of the outflow starts at zero when no value is
+    negative, but a colour scale spans the range of the values it draws: the
+    zero is explicit on the ticks of a colorbar, and a scale from zero would
+    show a gradient of a few percent as one shade.
 
     Args:
         result: the simulation result.
@@ -325,7 +344,7 @@ def space_time(
         if n == 0:
             raise KeyError(f"The result has no zone of '{quantity}' in '{layer}'.")
         values = result[observers.profile_ids(quantity, layer, n)].to_numpy(dtype=float)
-        limits = _limits([values]) or (None, None)
+        limits = _scale([values]) or (None, None)
         # `rasterized=False` is the matplotlib default and is stated for the
         # reader only: what keeps the SVG free of images is the colorbar
         # (`_colorbar` un-rasterizes its solids, the default is an image) and
@@ -544,8 +563,10 @@ def lobule_map(
             default.
 
     Returns:
-        The figure, one panel of the hexagon and its colorbar. A concentration
-        is never negative: when no value is, the colour scale starts at zero.
+        The figure, one panel of the hexagon and its colorbar. The colour
+        scale spans the range of the values: a line axis starts at zero, a
+        colour scale does not, because the zero is explicit on the ticks of a
+        colorbar and a scale from zero would show a small gradient as one shade.
 
     Raises:
         KeyError: if the result has no column of a zone.
@@ -555,7 +576,7 @@ def lobule_map(
         raise ValueError(f"A lobule has at least one zone, not {zones}.")
     name = quantity if name is None else name
     values = _at(result, observers.profile_ids(quantity, layer, zones), time)
-    limits = _limits([values]) or (float(values.min()), float(values.max()))
+    limits = _scale([values]) or (float(values.min()), float(values.max()))
     mappable = ScalarMappable(Normalize(*limits), colormaps["viridis"])
     figure = Figure(figsize=(5.0, 4.4), layout="constrained")
     ax = figure.subplots()
@@ -581,7 +602,7 @@ def lobule_map(
     for spine in ax.spines.values():
         spine.set_visible(False)
     ax.set_xlabel(
-        "Corners: portal triads (0, periportal). Centre: central vein (1, pericentral)"
+        "Corners: portal triads (0, periportal)\nCentre: central vein (1, pericentral)"
     )
     ax.set_title(f"{name} {layer} at {_time_text(time, time_unit)}")
     _colorbar(figure, mappable, ax, _label(f"{name} {layer}", unit))
