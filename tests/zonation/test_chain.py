@@ -239,9 +239,10 @@ def test_without_erythrocytes_no_reaction_names_them() -> None:
 def test_a_single_zone_has_only_the_inflow_and_the_outflow(tmp_path: Path) -> None:
     """No convection and no diffusion between zones, and it simulates."""
     builder = _builder(1, 1.0, 1e-9, haematocrit=0.0)
-    assert builder.convection() == [] or all(
-        "in" in str(r.sid) or "out" in str(r.sid) for r in builder.convection()
-    )
+    assert [str(r.sid) for r in builder.convection()] == [
+        "FLOW_tr_plasma_in_plasma_z1",
+        "FLOW_tr_plasma_z1_plasma_out",
+    ]
     assert builder.axial_diffusion() == []
     r = _tracer_chain(1, 1.0, 1e-9, tmp_path)
     assert np.all(np.isfinite(r.simulate(0, 5, 51)))
@@ -353,3 +354,24 @@ def test_a_formula_flow_names_the_task_it_arrives_with() -> None:
     flow = ImposedFlow(Formula("1 + 1", U.l_per_min))
     with pytest.raises(ValueError, match="Task 9"):
         ZonationBuilder(ZonationSettings(flow=flow), [TRACER], None).build()
+
+
+@pytest.mark.parametrize("haematocrit", [1.0, 1.5, -0.1])
+def test_a_haematocrit_without_plasma_is_refused(haematocrit: float) -> None:
+    """A haematocrit of 1 leaves no plasma, which the solver cannot integrate."""
+    with pytest.raises(ValueError, match=r"outside \[0, 1\)"):
+        ZonationSettings(haematocrit=haematocrit)
+
+
+def test_a_negative_flow_is_refused() -> None:
+    """A negative flow would reverse the blood chain."""
+    with pytest.raises(ValueError, match="negative"):
+        _builder(10, -1.0, 0.0).convection()
+    with pytest.raises(ValueError, match="-1"):
+        effective_peclet(_settings(n=10, flow=-1.0), d_eff=0.0)
+
+
+def test_the_notes_the_warning_and_the_function_report_one_peclet_number() -> None:
+    """The reported number is the one the builder computes."""
+    builder = _builder(10, 1.0, 0.0)
+    assert builder.peclet(1e-9) == effective_peclet(builder.settings, 1e-9)

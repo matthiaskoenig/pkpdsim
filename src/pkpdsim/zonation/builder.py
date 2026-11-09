@@ -284,13 +284,25 @@ class ZonationBuilder:
         return out
 
     def _flow(self) -> float:
-        """The blood flow through the whole liver (l/min).
+        """The blood flow through the whole liver (l/min), not negative.
 
         Raises:
             NotImplementedError: for a flow driven by a pressure, which the
                 leaky tube of Task 9 solves.
-            ValueError: for a flow which is no number or has no flow unit.
+            ValueError: for a flow which is no number, has no flow unit or is
+                negative (it would reverse the chain).
         """
+        q = self._imposed_flow()
+        if q < 0.0:
+            raise ValueError(
+                f"The imposed flow {q} l/min is negative: it would run the "
+                "blood from the pericentral to the periportal end, which is "
+                "not a flow of the chain."
+            )
+        return q
+
+    def _imposed_flow(self) -> float:
+        """The imposed flow (l/min) as given, in l/min."""
         flow = self.settings.flow
         if isinstance(flow, PressureFlow):
             raise NotImplementedError(
@@ -322,7 +334,7 @@ class ZonationBuilder:
         rbc = fr.get(Layer.RBC, 0.0)
         return rbc / (rbc + fr[Layer.PLASMA])
 
-    def _velocity(self) -> float:
+    def velocity(self) -> float:
         """The velocity (m/s) of the blood in the sinusoid, 0 without a flow."""
         q = self._flow()
         if q == 0.0:
@@ -333,9 +345,20 @@ class ZonationBuilder:
         litre = lumen * geo.f_par * self._mass().value / geo.density
         return geo.L_sin / (litre / q * 60.0)
 
-    def _dispersion(self) -> float:
+    def dispersion(self) -> float:
         """The numerical dispersion (m**2/s) of the upwind chain, `v * dx / 2`."""
-        return self._velocity() * self._geo().L_sin / self.settings.n_zones / 2.0
+        return self.velocity() * self._geo().L_sin / self.settings.n_zones / 2.0
+
+    def peclet(self, d_eff: float) -> float:
+        """The Peclet number the chain realizes with a physical diffusion `d_eff`.
+
+        `v * L / (d_eff + v * dx / 2)`: the one expression which the notes of
+        the model, the warning and `effective_peclet` report; 0 without a flow.
+        """
+        v = self.velocity()
+        if v == 0.0:
+            return 0.0
+        return v * self._geo().L_sin / (d_eff + self.dispersion())
 
     def _diffusion(self, substance: Substance) -> Parameter | None:
         """Get the axial diffusion of a substance, `None` for none.
@@ -589,7 +612,7 @@ class ZonationBuilder:
 
     def _warn_dispersion(self) -> None:
         """Warn once when a diffusion lies below the numerical dispersion."""
-        limit = self._dispersion()
+        limit = self.dispersion()
         low = sorted(
             substance.sid
             for substance in self.substances
@@ -616,9 +639,9 @@ class ZonationBuilder:
         s = self.settings
         flow_parameters, flow_assignments = self._flow_parameters()
         self._warn_dispersion()
-        dispersion = self._dispersion()
-        velocity = self._velocity()
-        peclet = velocity * self._geo().L_sin / dispersion if dispersion > 0.0 else 0.0
+        dispersion = self.dispersion()
+        velocity = self.velocity()
+        peclet = self.peclet(0.0)
         return Model(
             sid=f"zonated_liver_{s.species}",
             name=f"Zonated liver of the {s.species}",
@@ -664,9 +687,4 @@ def effective_peclet(settings: ZonationSettings, d_eff: float) -> float:
         order of 1e-9 m**2/s, the same as the diffusion. That is a property of
         the discretization and not a defect of the settings.
     """
-    builder = ZonationBuilder(settings, (), None)
-    v = builder._velocity()
-    if v == 0.0:
-        return 0.0
-    length = builder._geo().L_sin
-    return v * length / (d_eff + builder._dispersion())
+    return ZonationBuilder(settings, (), None).peclet(d_eff)

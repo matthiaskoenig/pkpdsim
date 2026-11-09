@@ -65,10 +65,16 @@ class ZonationSettings:
     geometry_constants: SinusoidGeometry | None = None
 
     def __post_init__(self) -> None:
-        """Check the number of zones.
+        """Check the number of zones and the haematocrit.
 
         Raises:
-            ValueError: for less than one zone.
+            ValueError: for less than one zone, or a haematocrit outside [0, 1).
         """
         if self.n_zones < 1:
             raise ValueError(f"A liver has at least one zone, not {self.n_zones}.")
+        h = self.haematocrit
+        if h is not None and not 0.0 <= h < 1.0:
+            raise ValueError(
+                f"The haematocrit {h} is outside [0, 1): a haematocrit of 1 leaves "
+                "no plasma, and without plasma there is no plasma chain."
+            )
