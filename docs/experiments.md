@@ -282,10 +282,12 @@ A model uses `PKPDMappingMetaData`, which has the fields `tissue`, `route`,
 `data` and `data_type` (default `NR`) and `sampling_site` (stated or `None`; read the
 site with `resolved_sampling_site()`. Without a stated site it follows the tissue:
 plasma, serum and blood are typically drawn from an arm vein, so they are
-`ARM_VEIN`; arterial blood and plasma are `ARTERIAL`; saliva, urine, feces, feces
-and urine, bile and no tissue have no blood sample and are `NOT_APPLICABLE`; a blood
-site on such a tissue, `NOT_APPLICABLE` on a blood tissue and a site other than
-`ARTERIAL` on arterial blood or plasma are a `ValueError`). All fields
+`ARM_VEIN`; arterial blood and plasma are `ARTERIAL`; the perfusate of a machine
+perfusion is `RESERVOIR` (or the stated `INFLOW` or `OUTFLOW` of its circuit);
+saliva, urine, feces, feces and urine, bile and no tissue have no blood sample and
+are `NOT_APPLICABLE`; a blood site on such a tissue, `NOT_APPLICABLE` on a blood
+tissue, a site other than `ARTERIAL` on arterial blood or plasma, a site of the
+circuit on another tissue and another site on the perfusate are a `ValueError`). All fields
 are keyword-only, so a field without a default may follow the defaults:
 
 ```python

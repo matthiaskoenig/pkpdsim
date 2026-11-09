@@ -1,9 +1,9 @@
 # Parameter database
 
-The numbers which the PBPK library and the models are built from are the parameter database `pkpdsim.database`, apart from the code which uses them: the library reads the database and holds no numbers of its own. The database has three parts.
+The numbers which the PBPK library, the machine perfusion library and the models are built from are the parameter database `pkpdsim.database`, apart from the code which uses them: the libraries read the database and hold no numbers of their own. The database has three parts.
 
-- **Sources** (`pkpdsim/database/sources.toml`): the publications every number is taken from, by key (e.g. `ICRP89`), with the citation and the DOI, and `ModelChoice` for a number the library chooses where the literature gives none.
-- **Tables** (`pkpdsim/database/tables/*.toml`): the tables of the library, one file per topic: the physiology of the reference individuals, the populations, the distribution, the intestine, the kidney, the routes, the proteins and the impairment.
+- **Sources** (`pkpdsim/database/sources.toml`): the publications every number is taken from, by key (e.g. `ICRP89`), with the citation and the DOI, and `ModelChoice` for a number a library of pkpdsim chooses where the literature gives none.
+- **Tables** (`pkpdsim/database/tables/*.toml`): the tables of the libraries, one file per topic: the physiology of the reference individuals, the populations, the distribution, the intestine, the kidney, the routes, the proteins and the impairment of the PBPK library, and the circuit, the perfusate, the organs and the cellular core of a machine perfusion (`tables/perfusion.toml`, see [Machine perfusion](perfusion.md)).
 - **Studies** (`pkpdsim/database/studies/<source>/`): the data of the studies as their sources report them, the groups and the statistics of every measurement, from which the database integrates a consensus with its uncertainty.
 
 ## Tables

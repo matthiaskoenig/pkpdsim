@@ -48,6 +48,7 @@ The module by module notes live next to this file; read the one that covers what
 - [.claude/architecture/models.md](.claude/architecture/models.md) - the model and run layer: `model.py`, the run of the experiments, `cli.py`, `fit.py`, `metadata.py`, `experiment.py`, `pk.py`, `sensitivity.py`, the uncertainty bands, the reports of the adopted fits, `credibility/`, `database/`, `impairment.py`, `verify.py` and `release/`.
 - [.claude/architecture/pbpk-definition.md](.claude/architecture/pbpk-definition.md) - the PBPK definition: `pbpk/`, substances and proteins, chemistry, variants and routes, PD components and observers, slow pools, the generated steady state, the archive and the figures.
 - [.claude/architecture/pbpk-physiology.md](.claude/architecture/pbpk-physiology.md) - physiology and populations: age and sex, species, circadian rhythms, pregnancy, adipose tissue, the build, the parts, the experiments of a library model, the kidney validity, the equilibration and the tested docs.
+- [.claude/architecture/perfusion.md](.claude/architecture/perfusion.md) - the machine perfusion library `perfusion/`: the definition, the id scheme, the cellular core, the circuit, the builder, the observers, the figures, the archive and the experiments with medium changes.
 - [.claude/architecture/tests.md](.claude/architecture/tests.md) - what the tests share: the flat model cache, the toy package and the `O0` compilation of the PBPK tests.
 
 ## Conventions

@@ -58,7 +58,7 @@ The reference animals against the human of ICRP 89 (the human GFR scales with th
     - `ICRP89`: Valentin J (ed). Basic anatomical and physiological data for use in radiological protection: reference values. ICRP Publication 89. Ann ICRP 32(3-4), 2002. [doi:10.1016/S0146-6453(03)00002-2](https://doi.org/10.1016/S0146-6453(03)00002-2)
     - `Lee1985`: Lee HB, Blaufox MD. Blood volume in the rat. J Nucl Med 26(1):72-76, 1985. PMID 3965655.
     - `Lin2020`: Lin Z, Li M, Wang YS, Tell LA, Baynes RE, Davis JL, Vickroy TW, Riviere JE. Physiological parameter values for physiologically based pharmacokinetic models in food-producing animals. Part I: Cattle and swine. J Vet Pharmacol Ther 43(5):385-420, 2020. [doi:10.1111/jvp.12861](https://doi.org/10.1111/jvp.12861)
-    - `ModelChoice`: Choice of the pkpdsim PBPK library, not a value of the literature; the notes of the value give the reasoning.
+    - `ModelChoice`: Choice of a library of pkpdsim (PBPK or machine perfusion), not a value of the literature; the notes of the value give the reasoning.
     - `Qi2004`: Qi Z, Whitt I, Mehta A, Jin J, Zhao M, Harris RC, Fogo AB, Breyer MD. Serial determination of glomerular filtration rate in conscious mice using FITC-inulin clearance. Am J Physiol Renal Physiol 286(3):F590-F596, 2004. [doi:10.1152/ajprenal.00324.2003](https://doi.org/10.1152/ajprenal.00324.2003)
     - `Riches1973`: Riches AC, Sharp JG, Thomas DB, Smith SV. Blood volume determination in the mouse. J Physiol 228(2):279-284, 1973. [doi:10.1113/jphysiol.1973.sp010086](https://doi.org/10.1113/jphysiol.1973.sp010086)
 <!-- end generated -->
@@ -163,7 +163,7 @@ Sources of the columns: mass: `Ellegaard2009`, `Lin2020`, `ModelChoice`; density
 
     - `Ellegaard2009`: Ellegaard Göttingen Minipigs. Organ weight 2009: absolute (g) and relative (% of body weight) organ weight, group mean values, 8 weeks and 6 months. https://minipigs.dk/sites/default/files/2024-05/Organ%20Weights.pdf (accessed 2026-11-06).
     - `Lin2020`: Lin Z, Li M, Wang YS, Tell LA, Baynes RE, Davis JL, Vickroy TW, Riviere JE. Physiological parameter values for physiologically based pharmacokinetic models in food-producing animals. Part I: Cattle and swine. J Vet Pharmacol Ther 43(5):385-420, 2020. [doi:10.1111/jvp.12861](https://doi.org/10.1111/jvp.12861)
-    - `ModelChoice`: Choice of the pkpdsim PBPK library, not a value of the literature; the notes of the value give the reasoning.
+    - `ModelChoice`: Choice of a library of pkpdsim (PBPK or machine perfusion), not a value of the literature; the notes of the value give the reasoning.
     - `Moher2002`: Moher HE, Carey GB. Technical note: adipose tissue blood flow in miniature swine (Sus scrofa) using the 133xenon washout technique. J Anim Sci 80(5):1294-1298, 2002. [doi:10.2527/2002.8051294x](https://doi.org/10.2527/2002.8051294x)
     - `httk`: Pearce RG, Setzer RW, Strope CL, Wambaugh JF, Sipes NS. httk: R package for high-throughput toxicokinetics. J Stat Softw 79(4):1-26, 2017. R package httk version 2.7.4 (CRAN, 2025-12-08), MIT license, copyright 2025 John Wambaugh; the data set mecdt of HTTK-Pop (Ring 2017) holds the preprocessed NHANES 2013-2018 respondents. [doi:10.18637/jss.v079.i04](https://doi.org/10.18637/jss.v079.i04)
 <!-- end generated -->
@@ -186,7 +186,7 @@ Sources of the columns: mass: `Ellegaard2009`, `Lin2020`, `ModelChoice`; density
     - `Davis2001`: Davis SS, Illum L, Hinchcliffe M. Gastrointestinal transit of dosage forms in the pig. J Pharm Pharmacol 53(1):33-39, 2001. [doi:10.1211/0022357011775163](https://doi.org/10.1211/0022357011775163)
     - `Merchant2011`: Merchant HA, McConnell EL, Liu F, Ramaswamy C, Kulkarni RP, Basit AW, Murdan S. Assessment of gastrointestinal pH, fluid and lymphoid tissue in the guinea pig, rabbit and pig, and implications for their use in drug development. Eur J Pharm Sci 42(1-2):3-10, 2011. [doi:10.1016/j.ejps.2010.09.019](https://doi.org/10.1016/j.ejps.2010.09.019)
     - `Metcalf1987`: Metcalf AM, Phillips SF, Zinsmeister AR, MacCarty RL, Beart RW, Wolff BG. Simplified assessment of segmental colonic transit. Gastroenterology 92(1):40-47, 1987. [doi:10.1016/0016-5085(87)90837-7](https://doi.org/10.1016/0016-5085(87)90837-7)
-    - `ModelChoice`: Choice of the pkpdsim PBPK library, not a value of the literature; the notes of the value give the reasoning.
+    - `ModelChoice`: Choice of a library of pkpdsim (PBPK or machine perfusion), not a value of the literature; the notes of the value give the reasoning.
     - `Mudie2010`: Mudie DM, Amidon GL, Amidon GE. Physiological parameters for oral delivery and in vitro testing. Mol Pharm 7(5):1388-1405, 2010. [doi:10.1021/mp100149j](https://doi.org/10.1021/mp100149j)
     - `PKSimDB`: Open Systems Pharmacology. PK-Sim database src/Db/PKSimDB.sqlite, github.com/Open-Systems-Pharmacology/PK-Sim, branch develop, commit aaebb648cbc3e4bf71fb9768916932f881dde19d (downloaded 2026-11-06), GPL-2.0; the rat and mouse species of Thiel 2015.
     - `Schiller2005`: Schiller C, Fröhlich CP, Giessmann T, Siegmund W, Mönnikes H, Hosten N, Weitschies W. Intestinal fluid volumes and transit of dosage forms as assessed by magnetic resonance imaging. Aliment Pharmacol Ther 22(10):971-979, 2005. [doi:10.1111/j.1365-2036.2005.02683.x](https://doi.org/10.1111/j.1365-2036.2005.02683.x)

@@ -245,7 +245,7 @@ Degradation rate `kdeg_<protein>` of the turnover state (1/hr): li 0.0193, si 0.
 ??? note "Sources"
 
     - `Greenblatt2003`: Greenblatt DJ, von Moltke LL, Harmatz JS, Chen G, Weemhoff JL, Jen C, Kelley CJ, LeDuc BW, Zinny MA. Time course of recovery of cytochrome P450 3A function after single doses of grapefruit juice. Clin Pharmacol Ther 74(2):121-129, 2003. [doi:10.1016/S0009-9236(03)00118-8](https://doi.org/10.1016/S0009-9236(03)00118-8)
-    - `ModelChoice`: Choice of the pkpdsim PBPK library, not a value of the literature; the notes of the value give the reasoning.
+    - `ModelChoice`: Choice of a library of pkpdsim (PBPK or machine perfusion), not a value of the literature; the notes of the value give the reasoning.
     - `RowlandYeo2011`: Rowland Yeo K, Walsky RL, Jamei M, Rostami-Hodjegan A, Tucker GT. Prediction of time-dependent CYP3A4 drug-drug interactions by physiologically based pharmacokinetic modelling: impact of inactivation parameters and enzyme turnover. Eur J Pharm Sci 43(3):160-173, 2011. [doi:10.1016/j.ejps.2011.04.008](https://doi.org/10.1016/j.ejps.2011.04.008)
     - `UniProt`: The UniProt Consortium. UniProt: the Universal Protein Knowledgebase in 2023. Nucleic Acids Res 51(D1):D523-D531, 2023. [doi:10.1093/nar/gkac1052](https://doi.org/10.1093/nar/gkac1052)
 <!-- end generated -->

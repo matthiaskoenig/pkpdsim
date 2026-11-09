@@ -115,13 +115,13 @@ def test_other_values_are_their_strings() -> None:
         (
             Tissue,
             "PLASMA SERUM BLOOD ARTERIAL_BLOOD ARTERIAL_PLASMA SALIVA URINE FECES "
-            "FECES_URINE BILE NONE",
+            "FECES_URINE BILE PERFUSATE NONE",
         ),
         (
             Route,
-            "PO IV SC IM SL BU RE INHALATION INTESTINAL PATCH RING MIXED NR",
+            "PO IV SC IM SL BU RE INHALATION INTESTINAL PATCH RING MIXED EX_VIVO NR",
         ),
-        (Dosing, "SINGLE MULTIPLE CONSTANT_INFUSION BOTH NR"),
+        (Dosing, "SINGLE MULTIPLE CONSTANT_INFUSION BOTH PERFUSION NR"),
         (Fasting, "NR FASTED FED LIGHT_BREAKFAST"),
         (
             ApplicationForm,
@@ -136,7 +136,7 @@ def test_other_values_are_their_strings() -> None:
         (
             SamplingSite,
             "ARM_VEIN VENOUS ARTERIAL ARTERIALISED HEPATIC_VEIN CAPILLARY "
-            "NOT_APPLICABLE",
+            "NOT_APPLICABLE RESERVOIR INFLOW OUTFLOW",
         ),
         (PKPDData, "PK PD NR"),
     ],
@@ -148,7 +148,8 @@ def test_the_vocabularies_hold_the_members_of_the_models(
 
     `SamplingSite` holds the sites of the observers of the PBPK library
     (`pkpdsim.pbpk.observers`), which the models take up when they are built
-    on it; the hand-written models do not set it.
+    on it, and the sites of a perfusion circuit (`pkpdsim.perfusion`); the
+    hand-written models do not set it.
     """
     assert list(enum.__members__) == members.split()
 
@@ -269,16 +270,19 @@ NO_BLOOD = (
     Tissue.BILE,
     Tissue.NONE,
 )
+PERFUSATE = (Tissue.PERFUSATE,)
+CIRCUIT_SITES = {SamplingSite.RESERVOIR, SamplingSite.INFLOW, SamplingSite.OUTFLOW}
 DEFAULT_SITE = {
     **dict.fromkeys(VENOUS_BLOOD, SamplingSite.ARM_VEIN),
     **dict.fromkeys(ARTERIAL_BLOOD, SamplingSite.ARTERIAL),
     **dict.fromkeys(NO_BLOOD, SamplingSite.NOT_APPLICABLE),
+    **dict.fromkeys(PERFUSATE, SamplingSite.RESERVOIR),
 }
 
 
 def test_every_tissue_is_classified() -> None:
     """Every member of `Tissue` is in exactly one class of this test."""
-    classes = VENOUS_BLOOD + ARTERIAL_BLOOD + NO_BLOOD
+    classes = VENOUS_BLOOD + ARTERIAL_BLOOD + NO_BLOOD + PERFUSATE
     assert len(classes) == len(set(classes))
     assert set(classes) == set(Tissue)
 
@@ -296,9 +300,14 @@ def test_the_site_without_a_statement_follows_the_tissue(tissue: Tissue) -> None
 @pytest.mark.parametrize("tissue", list(Tissue))
 @pytest.mark.parametrize("site", list(SamplingSite))
 def test_a_stated_site_is_kept_or_refused(tissue: Tissue, site: SamplingSite) -> None:
-    """A tissue takes its own site; a venous blood tissue any blood site."""
+    """A tissue takes its own site; a venous blood tissue any blood site.
+
+    The perfusate takes the sites of its circuit and no other tissue does.
+    """
     if tissue in VENOUS_BLOOD:
-        allowed = set(SamplingSite) - {SamplingSite.NOT_APPLICABLE}
+        allowed = set(SamplingSite) - {SamplingSite.NOT_APPLICABLE} - CIRCUIT_SITES
+    elif tissue in PERFUSATE:
+        allowed = CIRCUIT_SITES
     else:
         allowed = {DEFAULT_SITE[tissue]}
 
@@ -320,7 +329,11 @@ def test_a_stated_site_is_kept_or_refused(tissue: Tissue, site: SamplingSite) ->
 
 @pytest.mark.parametrize(
     "site",
-    sorted(set(SamplingSite) - {SamplingSite.ARTERIAL, SamplingSite.NOT_APPLICABLE}),
+    sorted(
+        set(SamplingSite)
+        - {SamplingSite.ARTERIAL, SamplingSite.NOT_APPLICABLE}
+        - CIRCUIT_SITES
+    ),
 )
 def test_a_non_arterial_site_on_arterial_blood_is_refused(site: SamplingSite) -> None:
     with pytest.raises(ValueError, match="arterial"):
@@ -414,3 +427,28 @@ def test_a_subclass_with_its_own_post_init_resolves() -> None:
         health=Health.HEALTHY,
     )
     assert plasma.to_dict()["sampling_site"] == "ARM_VEIN"
+
+
+def test_perfusate_is_a_tissue_sampled_in_its_circuit() -> None:
+    """The perfusate is sampled in the reservoir unless a study states a site."""
+    assert Tissue("perfusate") is Tissue.PERFUSATE
+    assert Route("ex vivo") is Route.EX_VIVO
+    assert Dosing("perfusion") is Dosing.PERFUSION
+    md = PKPDMappingMetaData(
+        tissue=Tissue.PERFUSATE,
+        route=Route.EX_VIVO,
+        dosing=Dosing.PERFUSION,
+        health=Health.HEALTHY,
+    )
+    assert md.resolved_sampling_site() is SamplingSite.RESERVOIR
+    assert md.to_dict()["sampling_site"] == "RESERVOIR"
+    outflow = dataclasses.replace(md, sampling_site=SamplingSite.OUTFLOW)
+    assert outflow.resolved_sampling_site() is SamplingSite.OUTFLOW
+    with pytest.raises(ValueError, match="sampled in its circuit"):
+        dataclasses.replace(md, sampling_site=SamplingSite.ARM_VEIN)
+    with pytest.raises(ValueError, match="sampled in its circuit"):
+        dataclasses.replace(md, sampling_site=SamplingSite.NOT_APPLICABLE)
+    with pytest.raises(ValueError, match="no perfusate"):
+        dataclasses.replace(
+            md, tissue=Tissue.PLASMA, sampling_site=SamplingSite.RESERVOIR
+        )

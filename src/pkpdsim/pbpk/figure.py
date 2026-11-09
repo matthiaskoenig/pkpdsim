@@ -242,10 +242,19 @@ def _f(x: float) -> str:
 
 @dataclass
 class _Canvas:
-    """The elements of the figure, in the order they are drawn."""
+    """The elements of the figure, in the order they are drawn.
+
+    Attributes:
+        k: the dimensions of the layout.
+        elements: the SVG elements drawn so far.
+        badges: the badges of the processes by code (`_BADGES`), the label
+            of the key, fill and stroke; another figure (the circuit of a
+            machine perfusion) draws its own codes on the same canvas.
+    """
 
     k: _Dims = field(default_factory=_Dims)
     elements: list[str] = field(default_factory=list)
+    badges: Mapping[str, tuple[str, str, str]] = field(default_factory=lambda: _BADGES)
 
     def rect(
         self,
@@ -336,7 +345,7 @@ class _Canvas:
 
     def badge(self, x: float, top: float, code: str) -> float:
         """Draw the badge of a process in a line; get its width."""
-        _, fill, stroke = _BADGES[code]
+        _, fill, stroke = self.badges[code]
         w = _tag_width(code)
         self.rect(
             x, top + 2, w, self.k.line - 4, style=f"fill:{fill};stroke:{stroke}", rx=4
@@ -664,8 +673,12 @@ class _Figure:
     def _legend(self, y: float) -> float:
         """Draw the title, the substances, routes, PD and the key; get the next top."""
         c, d = self.canvas, self.d
-        c.text((self.lx + _PAD), y + _TITLE, d.name or d.sid, "pkf-h", _TITLE)
-        y += _TITLE + 10
+        # a long name wraps within the legend
+        width = self.text_width - 2 * _PAD
+        for line in _wrap(d.name or d.sid, _chars(width, _TITLE)):
+            c.text((self.lx + _PAD), y + _TITLE, line, "pkf-h", _TITLE)
+            y += _TITLE + 4
+        y += 6
         y = self._paragraph(
             (self.lx + _PAD),
             y,
