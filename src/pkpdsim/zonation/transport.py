@@ -16,39 +16,41 @@ with T = 310.15 K and the viscosity of water at 37 C, `ETA` = 0.692 mPa s
 (Kestin, Sokolov and Wakeham 1978). `EXPONENT` = 0.4 lies between the
 Stokes-Einstein scaling of a compact sphere (1/3, Young, Carroad and Bell
 1980) and the 1/2 of an extended chain (Polson 1950); a single exponent of 1/3
-misses insulin by a factor of 1.4, 0.4 keeps every anchor within 1.15. `D_REF`
-and `MR_REF` are the glucose anchor. The values the constants are fitted to are
-below; `test_transport.py` checks that every anchor is reproduced within a
-factor of 1.5.
+misses the Gd chelate and insulin by 1.2 to 1.4; 0.4 keeps every anchor within 1.15. `D_REF`
+and `MR_REF` are the glucose anchor. `test_transport.py` checks that the four
+sourced anchors are reproduced within a factor of 1.5 (insulin within 2).
 
 Anchors, D in 1e-9 m**2/s at 37 C. Where the measurement is at another
-temperature it is scaled with `(T / eta)` of water (Stokes-Einstein: x 1.338
-from 25 C, x 1.53 from 20 C; eta(20 C) = 1.002, eta(25 C) = 0.890 mPa s):
+temperature it is scaled with `T / eta` of water (Stokes-Einstein: x 1.338 from
+25 C with eta 0.890 and 0.692 mPa s, x 1.532 from 20 C with eta 1.002 mPa s):
 
-- glucose, 180.16 g/mole: 0.673 at 25 C (Gladden and Dole 1953, J Am Chem Soc
-  75:3900), 0.90 at 37 C.
-- sucrose, 342.30 g/mole: 0.522 at 25 C (Gladden and Dole 1953; CRC Handbook
-  of Chemistry and Physics, diffusion in water), 0.70 at 37 C.
-- Gd-DOTA, 558.6 g/mole, the comparable Gd chelate (gadoxetate itself has no
-  measured diffusion coefficient in water that we found): 2.92e-10 in blood
-  plasma at 310 K, a Ga-DOTA measurement in D2O with a viscosity correction
-  (ISMRM 2014, abstract 2618), scaled by the viscosity of plasma (about 1.2
-  mPa s) to water: about 0.50. Indicative, the least firm anchor.
-- insulin monomer, 5808 g/mole: 1.5e-10 at 25 C (zinc-free insulin at low
-  concentration, the range of the dynamic light scattering and NMR studies of
-  insulin), 0.20 at 37 C.
-- human serum albumin, 66.5 kDa: 6.1e-11 at 20 C (Sober, Handbook of
-  Biochemistry, 1970), 0.093 at 37 C; the radius it gives, 3.5 nm, is the
-  accepted one of albumin.
+- glucose, 180.16 g/mole: 6.7e-10 m2/s at 25 C (table of diffusion
+  coefficients in water at 25 C, biofilmbook Table 4-1, hypertextbookshop.com;
+  an interferometric study gives 6.9 +- 0.3e-10), 0.90 at 37 C.
+- sucrose, 342.30 g/mole: 5.2e-10 m2/s at 25 C (same table), 0.70 at 37 C.
+- Gd-DOTA, 558.6 g/mole, the comparable Gd chelate: Ga-DOTA in D2O at 310 K,
+  4.38 +- 0.04e-10 m2/s by NMR diffusometry, valid for Gd-DOTA as the two are
+  hydrodynamically similar (ISMRM 2014, abstract 2618). Corrected from D2O to
+  H2O by the assumed viscosity ratio of about 1.23: 0.54 at 37 C. Consistency
+  check, not the anchor: 2.92 +- 0.25e-10 in blood plasma, same abstract. No
+  measured diffusion coefficient of gadoxetate itself was found.
+- human serum albumin, 66.5 kDa: D(20,w) = 6.06 +- 0.07e-11 m2/s (bovine serum
+  albumin, dynamic light scattering, extrapolated to water at 20 C and
+  infinite dilution; Bio-protocol e4195, doi 10.21769/BioProtoc.4195), 0.093 at
+  37 C; the radius it gives, 3.5 nm, is the accepted one of albumin.
+- insulin, 5808 g/mole: 0.20 at 37 C, from 1.5e-10 at 25 C. Not confirmed by a
+  source: insulin self-associates, so its measured D depends on concentration,
+  pH and zinc, monomer and hexamer differ by a factor of about 1.6. It is kept
+  as an indicative anchor with a factor of 2 in the test.
 
-The anchors were entered from the literature as remembered; an online search
-did not confirm the Gd-DOTA and insulin values, they should be checked before
-a release.
+The exponent is an interpolation between the two cited scalings, not a fit.
 
-The cytosolic diffusion of a small solute is about a quarter to a third of the
-aqueous one (Verkman 2002, Trends Biochem Sci 27:27: fluid-phase cytoplasm
-reduces the translational diffusion of small solutes 3 to 4 fold), `F_CYT` =
-0.27.
+The cytosolic diffusion of a small solute is about a quarter of the aqueous
+one: Seksek, Biwersi and Verkman 1997 (J Cell Biol 138:131) measured
+D/D0 = 0.26 +- 0.01 in MDCK cells and 0.27 +- 0.01 in fibroblasts by FRAP,
+independent of the size of FITC-dextran and Ficoll; `F_CYT` = 0.27. Dix and
+Verkman 2008 (Annu Rev Biophys 37:247) found the slowing less marked than
+generally assumed.
 
 The sieving of the fenestrae is the Renkin 1954 (J Gen Physiol 38:225)
 partition and hindrance of a spherical solute in a cylindrical pore.
@@ -109,7 +111,7 @@ EXPONENT = 0.4
 """The exponent of the molar mass of the diffusion coefficient."""
 
 F_CYT = 0.27
-"""The cytosolic diffusion as a fraction of the aqueous one, Verkman 2002."""
+"""The cytosolic diffusion as a fraction of the aqueous one, Seksek, Biwersi and Verkman 1997."""
 
 CORRELATION = (
     f"D = {D_REF:g} m2/s * (Mr / {MR_REF:g} g/mole)^-{EXPONENT:g} at 37 C "

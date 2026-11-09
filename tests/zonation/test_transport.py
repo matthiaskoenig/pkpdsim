@@ -1,7 +1,7 @@
 """Tests of the derived diffusion, the override and the sieving of the fenestrae.
 
 The anchors are aqueous diffusion coefficients at 37 C in 1e-9 m**2/s. The
-sources of the measured values are in the docstring of
+sources of the measured values (insulin is not sourced) are in the docstring of
 `pkpdsim.zonation.transport`; the value at 37 C is the measured one scaled
 with `T / eta` (Stokes-Einstein) where it was measured at 20 or 25 C.
 """
@@ -28,8 +28,8 @@ from pkpdsim.zonation.transport import (
 
 ANCHORS: dict[str, tuple[float, float]] = {
     # name: (Mr in g/mole, D in 1e-9 m**2/s at 37 C)
-    "glucose": (180.16, 0.90),  # 0.673e-9 at 25 C, Gladden and Dole 1953
-    "sucrose": (342.30, 0.70),  # 0.522e-9 at 25 C, Gladden and Dole 1953
+    "glucose": (180.16, 0.90),  # 6.7e-10 at 25 C, biofilmbook Table 4-1
+    "sucrose": (342.30, 0.70),  # 5.2e-10 at 25 C, biofilmbook Table 4-1
     "gd_chelate": (
         558.6,
         0.50,
@@ -52,6 +52,14 @@ def test_derived_diffusion_matches_the_anchor_within_a_factor(name: str) -> None
     mr, expected = ANCHORS[name]
     got = aqueous_diffusion(_mr(mr)).value * 1e9
     assert 1 / 1.5 <= got / expected <= 1.5
+
+
+def test_insulin_is_within_a_factor_of_two() -> None:
+    # Not sourced: insulin self-associates, its D depends on concentration, pH and
+    # zinc and monomer and hexamer differ by a factor of about 1.6, so the gate
+    # is a factor of 2 around the indicative 0.20e-9 m2/s (1.5e-10 at 25 C).
+    got = aqueous_diffusion(_mr(5808.0)).value * 1e9
+    assert 0.5 <= got / 0.20 <= 2.0
 
 
 def test_diffusion_decreases_with_the_molar_mass() -> None:
