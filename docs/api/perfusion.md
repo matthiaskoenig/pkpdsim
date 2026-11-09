@@ -48,4 +48,4 @@ The machine perfusion library, see [Machine perfusion](../perfusion.md): the def
 
 ## units
 
-::: pkpdsim.perfusion.units
+`PU`, the units of every perfusion model, is the kit's `OrganUnits` under the name this library has always called it by, documented at [sbml](sbml.md#units); `pkpdsim.perfusion.units` re-exports it and keeps the import path of the library. `CoreObjects` of the core above is the kit's `SbmlObjects` the same way.

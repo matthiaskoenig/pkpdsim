@@ -1,24 +1,45 @@
-# pkpdsim: building blocks of PBPK/PD models
+# pkpdsim: PBPK/PD models in SBML
 [![GitHub Actions CI/CD Status](https://github.com/matthiaskoenig/pkpdsim/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/matthiaskoenig/pkpdsim/actions/workflows/ci-cd.yml) [![Documentation](https://img.shields.io/badge/docs-pkpdsim-3f51b5.svg)](https://matthiaskoenig.github.io/pkpdsim) [![Version](https://img.shields.io/pypi/v/pkpdsim.svg)](https://pypi.org/project/pkpdsim/) [![Python Versions](https://img.shields.io/pypi/pyversions/pkpdsim.svg)](https://pypi.org/project/pkpdsim/) [![MIT License](https://img.shields.io/pypi/l/pkpdsim.svg)](https://opensource.org/licenses/MIT)
 
-`pkpdsim` is a python package with the building blocks shared by physiologically based pharmacokinetic and pharmacodynamic (PBPK/PD) models in [SBML](https://sbml.org). The source code is available from [https://github.com/matthiaskoenig/pkpdsim](https://github.com/matthiaskoenig/pkpdsim).
+`pkpdsim` is a library for physiologically based pharmacokinetic and pharmacodynamic (PBPK/PD) models in [SBML](https://sbml.org): a standard physiology at its centre, the substances, chemistry, routes and observers of a model on top of it, and the simulation experiments, fits, scans, uncertainty and credibility of [sbmlsim](https://github.com/matthiaskoenig/sbmlsim) on top of those. The source code is available from [https://github.com/matthiaskoenig/pkpdsim](https://github.com/matthiaskoenig/pkpdsim).
+
+A model package writes one definition of what is specific to its substances: the substances with their mechanism flags, the chemistry of its organs, its choices and its PD components. The library adds the body and writes the SBML, a comp model with one submodel per organ and the flat model which is simulated. The [PBPK library](pbpk/index.md) links every component of the three layers below, and its [tutorial](pbpk/tutorial.md) builds such a model step by step.
 
 ## Background
 
-The models of [pkdb_models](https://github.com/matthiaskoenig/pkdb_models) describe the pharmacokinetics and pharmacodynamics of a substance in the whole body: one SBML model per tissue, composed into a whole-body model, written in python with the factory of [sbmlutils](https://github.com/matthiaskoenig/sbmlutils), simulated with [sbmlsim](https://github.com/matthiaskoenig/sbmlsim) against the studies curated in [PK-DB](https://pk-db.com). `pkpdsim` holds what these models share, so that the folder of a model imports nothing but itself and released packages and can live in a repository of its own.
+The models of [pkdb_models](https://github.com/matthiaskoenig/pkdb_models) describe the pharmacokinetics and pharmacodynamics of a substance in the whole body, against the studies curated in [PK-DB](https://pk-db.com). They were written one by one, each with its own body, liver, kidney and intestine model in python with the factory of [sbmlutils](https://github.com/matthiaskoenig/sbmlutils); they are being rebuilt from this library, and each lives in a repository of its own, which imports nothing but itself and released packages (see [Migration](pbpk/migration.md) and [Release of a model repository](release.md)).
 
-## Features
+## The physiology
 
-- **[Templates and annotations](templates.md)** - the creators and the terms of use of a model, the annotations of the compartments which recur in the models (liver, kidneys, gut, blood, urine, ...) with the terms of FMA, BTO, NCIT, UBERON and GO.
-- **[Study data](data.md)** - the study folders of PK-DB in a checkout of pkdb_data, found through the environment variable `PKDB_DATA`, and the data of a model collected from them into its own folder.
-- **[Initial values](initial_values.md)** - the same initial concentration or amount of a substance in every tissue of a model, which removes the distribution kinetics.
-- **[Timecourses in parts](timecourse.md)** - the one runner of a roadrunner model which is simulated in parts, the parts one after the other in one timecourse.
-- **[Licenses](licenses.md)** - the texts of CC BY-SA 4.0 and MIT for the COMBINE archive of a model, written byte for byte the same on every platform by `sbmlsim.licenses`.
-- **[Models and their commands](models.md)** - the model object and the commands of a model (`run`, `fit`, `report`, `identifiability`), the tests of a model as functions and the verification of a change, also across versions of sbmlsim (`pkpdsim-verify`).
-- **[Experiments and their metadata](experiments.md)** - the base class of the simulation experiments of a model (the SIds of its keys, the units of its data), the presets of the impaired organ function, the shared vocabulary of the metadata of a fit mapping and the filters which select the mappings of a fit by it.
-- **[Scans and sensitivity analyses](scans.md)** - the PK observables and the PBPK library parameters of the sensitivity analyses, which run on the runner of sbmlsim.
+Every model is built on one physiology, scaled to the individual of a study and changed by its condition.
+
+- **[Physiology](pbpk/physiology.md)** - the organs with their volumes, blood flows and blood (ICRP 89), the topology of the circulation, and everything which follows from the covariates `BW`, `HEIGHT` and `AGE`; [species](pbpk/species.md) builds the same definition on the rat, the mouse or the pig.
+- **[Virtual populations](pbpk/populations.md)** - how an individual is drawn (sex, age, body weight, height, organ function) and how a population is simulated.
+- **[Impairment](pbpk/impairment.md)** - liver cirrhosis, chronic kidney disease and heart failure as parameter vectors on the physiology, by the clinical [classes](pbpk/classes.md) the studies report.
+- **[Pregnancy](pbpk/pregnancy.md)**, **[circadian rhythms](pbpk/circadian.md)** and **[adipose tissue](pbpk/adipose.md)** - the physiology over the gestational age with the fetoplacental unit, the clock time in a model, and the fat of an individual with its depots.
+- **[Standard organ](pbpk/organ.md)** - the four compartments every organ is built from, and the [variants](pbpk/variants.md) within its boundary: the zonated liver, the nephron kidney, the intestines.
+- **[Zonated liver](zonation.md)** and **[machine perfusion](perfusion.md)** - the sinusoid of `n` zones with flow and diffusion, and the circuit of an ex vivo perfusion with one mounted organ.
+
+## The building blocks
+
+On top of the physiology a model puts what is specific to its substances, and the library writes the SBML for it.
+
+- **[Substances](pbpk/substances.md)** and **[chemistry](pbpk/chemistry.md)** - the mechanism flags of a substance (binding, erythrocytes, distribution, excretion, inhibition, induction) and the processes of an organ with the proteins which carry them.
+- **[Intestine and routes](pbpk/intestine.md)** - how a dose is applied, the lumen segments with their dissolution and absorption, the mucosa, the bile and the enterohepatic circulation.
+- **[Observers](pbpk/observers.md)** - what a model is read at: the arm vein, the hepatic vein, the free and the blood concentrations, the excretion rates and the observers of a definition.
+- **[Annotation](pbpk/annotation.md)**, **[templates and annotations](templates.md)** and **[figures](pbpk/figures.md)** - the SBO, PBPKO, UBERON, NCIT, UniProt and ChEBI terms of every created element, the creators and the terms of use of a model, and the figures generated from its definition.
+- **[Parameter database](database.md)** - the numbers the libraries are built from, each with the publication it is taken from; **[initial values](initial_values.md)** put a substance into every tissue at the start.
+
+## The analysis
+
+The models are simulated, fitted and assessed with sbmlsim; these pages are its capabilities in the PBPK context.
+
+- **[Experiments and their metadata](experiments.md)** - a published study as code (its data, its dosing protocol as simulations, its fit mappings) with the shared vocabulary which describes it and the filters which select the mappings of a fit by it.
+- **[Scans and sensitivity analyses](scans.md)** - the designs which run a model over many parameter values, and the sensitivity of its PK observables.
 - **[Uncertainty of the fitted parameters](uncertainty.md)** - adopted fits whose values the factory takes, their confidence intervals as distrib uncertainties of the SBML parameters, and the run of the experiments over draws of the fitted parameters with bands (`run_simulation <package> --uncertainty`).
-- **[PBPK library](pbpk/index.md)** - the PBPK model library `pkpdsim.pbpk`, from which the PBPK models of pkdb_models will be built: substances, chemistry and choices of a model package on a standard human physiology (ICRP 89), with the standard organ, organ variants, routes, impairment, observers and annotation, built into the comp and the flat SBML model.
+- **[Context of use and credibility](credibility.md)** - what a model is credible for, which evidence supports each use and when the use is accepted.
+- **[Models and their commands](models.md)** - the model object of a package, the [commands](commands.md) which work with every model, the tests of a model as functions and the verification of a change (`pkpdsim-verify`).
+- **[Study data](data.md)**, **[timecourses in parts](timecourse.md)**, **[licenses](licenses.md)** and the **[release of a model repository](release.md)** - the studies of PK-DB a model keeps in its own folder, a model simulated directly with roadrunner in parts, the license texts of a COMBINE archive and the complete release of the repository of a model.
 
 ## Quickstart
 
@@ -35,7 +56,7 @@ Matthias König
 ['fma/FMA:7197', 'bto/BTO:0000759', 'ncit/C12392']
 ```
 
-Continue with [Installation](installation.md) and the [Templates and annotations](templates.md) of a model.
+Continue with [Installation](installation.md) and the [tutorial](pbpk/tutorial.md), which builds a model and simulates an oral dose step by step.
 
 ## How to cite
 

@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "pkpdsim"
 dynamic = ["version"]
-description = "pkpdsim provides the building blocks shared by physiologically based pharmacokinetic and pharmacodynamic (PBPK/PD) models in SBML."
+description = "A library for physiologically based pharmacokinetic and pharmacodynamic (PBPK/PD) models in SBML: a standard physiology at its centre, the substances, chemistry, routes and observers of a model on top of it, and the simulation experiments, fits, scans, uncertainty and credibility of sbmlsim on top of those."
 readme = "README.md"
 requires-python = ">=3.14"
 license = "MIT"
