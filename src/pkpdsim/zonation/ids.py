@@ -34,6 +34,7 @@ __all__ = [
     "OUTFLOW",
     "PARENCHYMA",
     "RADIUS",
+    "TEMPERATURE",
     "T_DISSE",
     "T_ENDO",
     "VASCULAR",
@@ -42,8 +43,10 @@ __all__ = [
     "exchange",
     "fraction",
     "layer_flow",
+    "meta_id",
     "permeability",
     "porosity",
+    "position",
     "profile",
     "site",
     "species",
@@ -81,6 +84,9 @@ T_ENDO = "t_endo"
 
 T_DISSE = "t_disse"
 """The id of the thickness of the space of Disse (m)."""
+
+TEMPERATURE = "temperature"
+"""The id of the temperature of the liver (degC), one for all zones."""
 
 INFLOW = "in"
 """The token of the boundary upstream of the first zone (`plasma_in`)."""
@@ -132,6 +138,20 @@ def volume(layer: Layer | str, zone: str) -> str:
 def species(quantity: str, layer: Layer | str, zone: str) -> str:
     """Get the id of a quantity in a layer of a zone, `<quantity>_<layer>_<zone>`."""
     return f"{quantity}_{site(layer, zone)}"
+
+
+def meta_id(sid: str) -> str:
+    """Get the metaid of an element, `meta_<sid>`.
+
+    A compartment which a cell model replaces needs one, or the comp model
+    cannot be flattened.
+    """
+    return f"meta_{sid}"
+
+
+def position(zone: str) -> str:
+    """Get the id of the lobular position of a zone, `position_<zone>`."""
+    return f"position_{zone}"
 
 
 def profile(process: str, zone: str) -> str:

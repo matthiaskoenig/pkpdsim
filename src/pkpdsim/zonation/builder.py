@@ -81,6 +81,7 @@ from pkpdsim.pbpk.substance import Substance
 from pkpdsim.pbpk.units import MODEL_UNITS, U
 from pkpdsim.pbpk.values import Value, number, unit_text
 from pkpdsim.perfusion.ids import flow as flow_id
+from pkpdsim.perfusion.units import PU
 from pkpdsim.zonation import ids
 from pkpdsim.zonation.flow import PressureFlow
 from pkpdsim.zonation.geometry import (
@@ -96,6 +97,7 @@ from pkpdsim.zonation.geometry import (
 from pkpdsim.zonation.profiles import Profile, zone_positions
 from pkpdsim.zonation.settings import BileTransport, Geometry, ZonationSettings
 from pkpdsim.zonation.transport import (
+    M2_PER_S,
     M_PER_S,
     diffusion_of,
     diffusion_parameter,
@@ -129,6 +131,15 @@ _DIFFUSING = (Layer.PLASMA, Layer.DISSE)
 
 _MASS_TO_KG = {"g": 1e-3, "kg": 1.0, "mg": 1e-6}
 _VASCULAR = (Layer.RBC, Layer.PLASMA, Layer.ENDOTHELIUM, Layer.DISSE)
+
+
+class ZonationUnits(PU):
+    """The unit definitions of the zonated liver: those of the perfusion and the transport."""
+
+    m2_per_s = M2_PER_S
+    m_per_s = M_PER_S
+
+
 _P = SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER
 _NAMES: dict[Layer | str, str] = {
     ids.VASCULAR: "vascular space",
@@ -309,6 +320,7 @@ class ZonationBuilder:
                         unit=U.litre,
                         name=f"{label} of zone {k} of {n}",
                         sboTerm=SBO.PHYSICAL_COMPARTMENT,
+                        metaId=ids.meta_id(ids.volume(layer, zone)),
                     )
                 )
         return out
@@ -643,6 +655,7 @@ class ZonationBuilder:
                 name="bile duct (a collector of amounts, no physical volume)",
                 constant=True,
                 sboTerm=SBO.PHYSICAL_COMPARTMENT,
+                metaId=ids.meta_id(ids.volume(Layer.BILE, ids.DUCT)),
             )
         ]
 
@@ -1266,7 +1279,7 @@ class ZonationBuilder:
                 "without physical diffusion."
             ),
             annotations=[(BQB.HAS_TAXON, TAXA[s.species])],
-            units=U,
+            units=ZonationUnits,
             model_units=MODEL_UNITS,
             compartments=[*self.compartments(), *self._duct_compartments()],
             species=[*self._species(), *self._duct_species()],
