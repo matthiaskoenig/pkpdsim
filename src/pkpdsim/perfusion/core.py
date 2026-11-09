@@ -838,6 +838,10 @@ def zone_objects(
 ) -> CoreObjects:
     """Get the cellular core of a zone, its vascular space included.
 
+    The objects are those of `_core_objects` with the ids of the zone
+    (`_Names(zone)`); the standalone cell model (`cell_model`) is the same
+    emitter without a zone.
+
     Args:
         zone: the zone id (`ids.zone_id`).
         cells: the compartment of the cells of the zone.
@@ -870,39 +874,158 @@ def zone_objects(
     """
     if not ids.is_zone(zone):
         raise ValueError(f"'{zone}' is no zone id (z1, z2, ...).")
+    return _core_objects(
+        _Names(zone),
+        cells,
+        vascular,
+        params,
+        profile=profile,
+        composition=composition,
+        bile=bile,
+        released=released,
+    )
+
+
+@dataclass(frozen=True)
+class _Names:
+    """The ids and labels of the objects of the core of a zone or of a cell.
+
+    Attributes:
+        zone: the zone id; `None` for the standalone cell model, whose ids
+            have no zone (`atp_cell`, `GLCIM`, `f_alive`) and whose vascular
+            space is the external site (`glc_ext`, the port of a quantity).
+    """
+
+    zone: str | None = None
+
+    @property
+    def where(self) -> str:
+        """The zone or the cell model, for a message."""
+        return self.zone or "the cell model"
+
+    @property
+    def cell_site(self) -> str:
+        """The site of the living cells."""
+        return ids.cell_site(self.zone) if self.zone else "cell"
+
+    @property
+    def dead_site(self) -> str:
+        """The site of the necrotic cells."""
+        return ids.dead_site(self.zone) if self.zone else "dead"
+
+    @property
+    def vascular_site(self) -> str:
+        """The site of the vascular space, `ext` of the cell model."""
+        return self.zone or "ext"
+
+    @property
+    def where_cells(self) -> str:
+        """The place of the cells in a name."""
+        return f"cells {self.zone}" if self.zone else "cells"
+
+    @property
+    def where_dead(self) -> str:
+        """The place of the necrotic cells in a name."""
+        return f"necrotic cells {self.zone}" if self.zone else "necrotic cells"
+
+    @property
+    def alive(self) -> str:
+        """The id of the living fraction."""
+        return ids.alive(self.zone) if self.zone else "f_alive"
+
+    @property
+    def necrosis_rate(self) -> str:
+        """The id of the rate of necrosis."""
+        return ids.necrosis_rate(self.zone) if self.zone else "v_nec"
+
+    @property
+    def bile(self) -> str:
+        """The id of the secreted bile volume."""
+        return ids.bile(self.zone) if self.zone else "Vbile"
+
+    def profile(self, process: str) -> str:
+        """Get the id of the zonal factor of a process."""
+        return ids.profile(process, self.zone) if self.zone else f"p_{process}"
+
+    def reaction(self, name: str) -> str:
+        """Get the id of a reaction."""
+        return ids.reaction(name, self.zone) if self.zone else name
+
+    def label(self, text: str) -> str:
+        """Get a name with its zone."""
+        return f"{text} ({self.zone})" if self.zone else text
+
+
+def _core_objects(
+    names: "_Names",
+    cells: str,
+    vascular: str,
+    params: CoreParameters,
+    *,
+    profile: Mapping[str, float] | None,
+    composition: Composition | None,
+    bile: bool,
+    released: tuple[str, ...],
+) -> CoreObjects:
+    """Get the objects of the cellular core, the one emitter of its chemistry.
+
+    A zone of an organ (`zone_objects`) and the standalone cell model
+    (`cell_model.cell_model`) are this function with other `names`, other
+    compartments and nothing else: every value, rate law and unit is written
+    here once.
+
+    Args:
+        names: the ids of the objects (`_Names`).
+        cells: the compartment of the cells.
+        vascular: the compartment of the vascular space (the surroundings of
+            the cells).
+        params: the constants of the core.
+        profile: the factor of a process of `PROCESSES`, the constant
+            `p_<process>` of `names` in its rate.
+        composition: the start of the perfusate species.
+        bile: secrete bile.
+        released: the quantities of `ids.RELEASABLE` which the dying cells
+            release.
+
+    Returns:
+        The objects of `zone_objects`.
+
+    Raises:
+        ValueError: as `zone_objects`, but for the zone id.
+    """
     profile = dict(profile or {})
     unknown = sorted(set(profile) - set(PROCESSES))
     if unknown:
         raise ValueError(f"No processes of the core: {unknown}, see PROCESSES.")
     negative = sorted(k for k, x in profile.items() if not x >= 0)
     if negative:
-        raise ValueError(f"The profile of {negative} in {zone} is not >= 0.")
+        raise ValueError(f"The profile of {negative} in {names.where} is not >= 0.")
     other = [q for q in released if q not in ids.RELEASABLE]
     if other:
         raise ValueError(f"No releasable quantities: {other}, see ids.RELEASABLE.")
     missing = params.problems(released, bile)
     if missing:
         raise ValueError("; ".join(missing))
-    cell, dead = ids.cell_site(zone), ids.dead_site(zone)
+    cell, dead, site = names.cell_site, names.dead_site, names.vascular_site
     c = _ids(ids.species, cell)
-    v = _ids(ids.species, zone)
-    alive, nec = ids.alive(zone), ids.necrosis_rate(zone)
+    v = _ids(ids.species, site)
+    alive, nec = names.alive, names.necrosis_rate
     base = f"{ids.F_T} * {alive} * {cells}"
 
     def live(process: str) -> str:
         """The scale of a process: temperature, living cells, profile."""
         if process in profile:
-            return f"{base} * {ids.profile(process, zone)}"
+            return f"{base} * {names.profile(process)}"
         return base
 
     out = CoreObjects(
         parameters=[
             Parameter(
-                ids.profile(process, zone),
+                names.profile(process),
                 factor,
                 U.dimensionless,
                 constant=True,
-                name=f"zonal factor of {process} ({zone})",
+                name=names.label(f"zonal factor of {process}"),
                 sboTerm=_P,
             )
             for process, factor in profile.items()
@@ -912,26 +1035,28 @@ def zone_objects(
         if q in _CONTENTS:
             content = _CONTENTS[q]
             value = getattr(params, content).value
-            out.species.append(_species(c(q), cells, q, f"cells {zone}", value))
+            out.species.append(_species(c(q), cells, q, names.where_cells, value))
             out.assignments.append(
-                initial_assignment(c(q), content, U.mM, f"{_NAMES[q]} (cells {zone})")
+                initial_assignment(
+                    c(q), content, U.mM, f"{_NAMES[q]} ({names.where_cells})"
+                )
             )
         else:
             s = params.starts[q]
             out.species.append(
-                _species(c(q), cells, q, f"cells {zone}", s.value, s.notes)
+                _species(c(q), cells, q, names.where_cells, s.value, s.notes)
             )
             out.assignments.append(
                 initial_assignment(
-                    c(q), ids.start(q), U.mM, f"{_NAMES[q]} (cells {zone})"
+                    c(q), ids.start(q), U.mM, f"{_NAMES[q]} ({names.where_cells})"
                 )
             )
     for q in released:
         out.species.append(
-            _species(ids.species(q, dead), cells, q, f"necrotic cells {zone}", 0.0)
+            _species(ids.species(q, dead), cells, q, names.where_dead, 0.0)
         )
-    out += perfusate_objects(zone, vascular, composition, released)
-    out += buffer_objects(zone, vascular)
+    out += perfusate_objects(site, vascular, composition, released)
+    out += buffer_objects(site, vascular)
 
     def mm(s: str, km: str) -> str:
         return f"{s}/({km} + {s})"
@@ -998,11 +1123,11 @@ def zone_objects(
     for sid, name, equation, rate, sbo in reactions:
         out.reactions.append(
             Reaction(
-                ids.reaction(sid, zone),
+                names.reaction(sid),
                 equation,
                 formula=(rate, U.mmole_per_min),
                 compartment=cells,
-                name=f"{name} ({zone})",
+                name=names.label(name),
                 sboTerm=sbo,
             )
         )
@@ -1011,18 +1136,18 @@ def zone_objects(
     power_atp = f"power(abs({atp})/NEC_atp, NEC_n_atp)"
     power_h = f"power(abs({h})/NEC_h, NEC_n_h)"
     out.parameters += [
-        _state(nec, 0.0, U.per_min, f"rate of necrosis ({zone})", _K),
+        _state(nec, 0.0, U.per_min, names.label("rate of necrosis"), _K),
         _state(
             alive,
             params.f_alive_start.value,
             U.dimensionless,
-            f"living fraction of the cells ({zone})",
+            names.label("living fraction of the cells"),
             _P,
         ),
     ]
     out.assignments.append(
         initial_assignment(
-            alive, "f_alive_start", U.dimensionless, f"living fraction ({zone})"
+            alive, "f_alive_start", U.dimensionless, names.label("living fraction")
         )
     )
     out.rules.append(
@@ -1031,7 +1156,7 @@ def zone_objects(
             f"NEC_k * {ids.F_T} * (1 dimensionless - {power_atp}"
             f"/((1 dimensionless + {power_atp}) * (1 dimensionless + {power_h})))",
             U.per_min,
-            name=f"rate of necrosis ({zone})",
+            name=names.label("rate of necrosis"),
             sboTerm=SBO.MATHEMATICAL_EXPRESSION,
             notes="Either the energy failure or the acidosis of the perfusate drives it.",
         )
@@ -1041,19 +1166,21 @@ def zone_objects(
             alive,
             f"-{nec} * {alive}",
             U.per_min,
-            name=f"necrosis ({zone})",
+            name=names.label("necrosis"),
             sboTerm=SBO.MATHEMATICAL_EXPRESSION,
         )
     )
     if bile:
-        vbile = ids.bile(zone)
-        out.parameters.append(_state(vbile, 0.0, U.litre, f"bile volume ({zone})", _P))
+        vbile = names.bile
+        out.parameters.append(
+            _state(vbile, 0.0, U.litre, names.label("bile volume"), _P)
+        )
         out.rate_rules.append(
             RateRule(
                 vbile,
                 f"{live('BILE')} * BILE_Vmax * {mm(atp, 'BILE_Km_atp')}",
                 U.l_per_min,
-                name=f"bile secretion ({zone})",
+                name=names.label("bile secretion"),
                 sboTerm=SBO.MATHEMATICAL_EXPRESSION,
             )
         )

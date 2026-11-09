@@ -130,6 +130,7 @@ def compose(
     s = builder.settings
     n = s.n_zones
     disse = ids.VASCULAR if s.geometry is Geometry.WELL_STIRRED else Layer.DISSE
+    species = {x.sid: x for x in model.species}
     model.external_model_definitions = [
         ExternalModelDefinition(
             sid=cell_model_id,
@@ -184,6 +185,12 @@ def compose(
             for substance in builder.substances
         )
         for element, port in wiring:
+            if element in species:
+                # an annotated species of the cell model has a metaid, which
+                # comp requires of the species which replaces it as well
+                species[element].metaId = species[element].metaId or ids.meta_id(
+                    element
+                )
             rid = f"{sm}_{element}_{port}_RE"
             model.replaced_elements.append(
                 ReplacedElement(

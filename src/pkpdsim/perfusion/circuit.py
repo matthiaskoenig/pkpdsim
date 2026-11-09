@@ -139,14 +139,18 @@ def converted(value: Value, factor: float, unit: UnitType, text: str) -> Value:
     )
 
 
-def temperature_objects(temperature: Value) -> core.CoreObjects:
+def temperature_objects(
+    temperature: Value, variable: str = ids.TEMPERATURE
+) -> core.CoreObjects:
     """Get the temperature and the Arrhenius factor `f_T` of the rates.
 
     Args:
         temperature: the temperature of the perfusion (degC).
+        variable: the id of the temperature parameter, `T` of a perfusion
+            model and the port `temperature` of the cell model.
 
     Returns:
-        The constants `T`, `T_ref`, `R_gas` and `Ea` (the activation energy
+        The constants `T` (`variable`), `T_ref`, `R_gas` and `Ea` (the activation energy
         `f_Ea*R*T_ref` of the database, a constant, so a change of the
         reference keeps it) and `f_T` with its initial assignment.
     """
@@ -165,7 +169,7 @@ def temperature_objects(temperature: Value) -> core.CoreObjects:
     return core.CoreObjects(
         parameters=[
             value_parameter(
-                ids.TEMPERATURE,
+                variable,
                 temperature,
                 PU.degC,
                 "temperature",
@@ -202,7 +206,7 @@ def temperature_objects(temperature: Value) -> core.CoreObjects:
                 ids.F_T,
                 f"exp({ids.ACTIVATION_ENERGY}/{ids.GAS_CONSTANT} * "
                 f"(1 dimensionless/({ids.TEMPERATURE_REF} + {t_abs}) - "
-                f"1 dimensionless/({ids.TEMPERATURE} + {t_abs})))",
+                f"1 dimensionless/({variable} + {t_abs})))",
                 U.dimensionless,
                 "temperature factor of the rates (Arrhenius)",
             )
