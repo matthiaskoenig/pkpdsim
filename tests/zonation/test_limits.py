@@ -113,16 +113,58 @@ def _modules() -> list[str]:
     return sorted(out)
 
 
-def _imported(tree: ast.Module) -> set[str]:
-    """The modules a parsed module imports, by their dotted name.
+SUBSTANCE = (
+    "pkpdsim.sbml.units",
+    "pkpdsim.zonation.builder",
+    "pkpdsim.zonation.profiles",
+    "pkpdsim.pbpk.annotation",
+    "pkpdsim.perfusion.core",
+)
+"""Modules the walk must find, one or two per layer.
 
-    Every `import a.b`, `from a.b import c` and `importlib.import_module("a.b")`
-    of the file, those inside a function included: an import which is deferred
-    to break a cycle is the layering violation this guard is about. A relative
-    import stays inside the package of the module and is no violation.
+The guard below is generated from `_modules`, and a generated test which
+collects nothing passes. The walk raises on a package it cannot import, so it
+cannot come back empty by accident today; this states the floor, so that a
+refactor which silently stops walking a package (a namespace package without
+`__path__`, a rename of a layer) fails here instead of passing quietly."""
+
+
+def test_the_walk_finds_the_modules_of_every_layer() -> None:
+    """Every layer contributes modules, and the ones which carry the substance."""
+    found = _modules()
+    for package in LAYERS:
+        assert [m for m in found if m.startswith(f"{package}.")], (
+            f"the walk found no module below {package}"
+        )
+    assert sorted(set(SUBSTANCE) - set(found)) == []
+
+
+def _imported(tree: ast.Module, package: str) -> set[str]:
+    """The modules a parsed module imports, by their absolute dotted name.
+
+    Every `import a.b`, `from a.b import c`, `from . import c`, `from ..b
+    import c` and `importlib.import_module("a.b")` of the file, those inside a
+    function included: an import which is deferred to break a cycle is the
+    layering violation this guard is about.
+
+    A relative import does not stay inside its package - `from ..pbpk import
+    physiology` leaves it - so it is resolved against `package` the way python
+    resolves it, by dropping `level - 1` trailing components. And the name a
+    `from` import binds may itself be a module (`from pkpdsim import pbpk`),
+    so every bound name is recorded under the module it is imported from as
+    well as that module itself; a name which is not a module is a dotted name
+    no package of `LAYERS` is a prefix of, and is ignored below.
+
+    `import_module` is read only with a literal argument: a computed one
+    (`import_module(f"pkpdsim.{name}")`) and `__import__` pass this guard. The
+    first says nothing statically about the layer it reaches, so catching it
+    would mean running the call, and the layering is a property of the source;
+    the forms the code actually uses are the ones above.
 
     Args:
         tree: the parsed module.
+        package: the package of the module, which a relative import of it is
+            resolved against (`__package__`).
 
     Returns:
         The dotted names.
@@ -132,8 +174,10 @@ def _imported(tree: ast.Module) -> set[str]:
         if isinstance(node, ast.Import):
             out |= {a.name for a in node.names}
         elif isinstance(node, ast.ImportFrom):
-            if node.level == 0 and node.module is not None:
-                out.add(node.module)
+            base = _base(node, package)
+            if base is not None:
+                out.add(base)
+                out |= {f"{base}.{a.name}" for a in node.names if a.name != "*"}
         elif (
             isinstance(node, ast.Call)
             and isinstance(node.func, ast.Attribute | ast.Name)
@@ -145,6 +189,26 @@ def _imported(tree: ast.Module) -> set[str]:
                 if isinstance(a, ast.Constant) and isinstance(a.value, str)
             }
     return out
+
+
+def _base(node: ast.ImportFrom, package: str) -> str | None:
+    """The absolute dotted name a `from` import imports from.
+
+    Args:
+        node: the `from ... import ...` node.
+        package: the package of the module which holds it.
+
+    Returns:
+        The dotted name, `None` for a relative import which reaches past the
+        root package (which python refuses, so no module of the walk has one).
+    """
+    if node.level == 0:
+        return node.module
+    parts = package.split(".")[: len(package.split(".")) - (node.level - 1)]
+    if not parts:
+        return None
+    root = ".".join(parts)
+    return root if node.module is None else f"{root}.{node.module}"
 
 
 def _called(func: ast.Attribute | ast.Name) -> str:
@@ -168,8 +232,9 @@ def test_a_module_imports_only_lower_layers(name: str) -> None:
     above = LAYERS[layer + 1 :]
     assert module.__file__ is not None
     tree = ast.parse(Path(module.__file__).read_text(encoding="utf-8"))
+    imported = _imported(tree, module.__package__ or name)
     forbidden = sorted(
-        m for m in _imported(tree) for p in above if m == p or m.startswith(f"{p}.")
+        m for m in imported for p in above if m == p or m.startswith(f"{p}.")
     )
     assert forbidden == [], (
         f"{name} is in the layer '{LAYERS[layer]}' and imports {forbidden}, "
