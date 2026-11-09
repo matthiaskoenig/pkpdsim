@@ -881,6 +881,14 @@ class ZonationBuilder:
             and 0 (off) by default. None for the well-stirred geometry.
 
         Note:
+            The fenestral path is a conductance. The transcellular path is two
+            conductances in series through a compartment with volume, the
+            endothelial cell, so the two paths add as parallel paths only in
+            the quasi-steady state and not instantaneously: early after a
+            change the endothelium is a sink (and drains the Disse space
+            through its reversible abluminal membrane), so with a weak cell
+            path both paths can deliver less than the fenestrae alone.
+
             A flow of 0 and a diffusion of 0 emit no reaction, but the
             transcellular reactions exist with a permeability of 0. That is no
             inconsistency: `Q` and the diffusion coefficient are structural

@@ -125,7 +125,9 @@ def test_the_two_paths_are_parallel_and_additive(tmp_path: Path) -> None:
     exact: the paths share the plasma they draw from and the Disse pool they
     fill (which pushes back on both), and the cell path drains the Disse pool
     through its reversible abluminal membrane while its intermediate pool, the
-    endothelial cell, fills.
+    endothelial cell, fills. The buffering of that pool is pinned by
+    `test_the_endothelial_cell_buffers_the_cell_path_early`, the same mechanism
+    at a weaker cell path.
     """
     horizon = 0.01
     ps = 1e-7
@@ -141,6 +143,32 @@ def test_the_two_paths_are_parallel_and_additive(tmp_path: Path) -> None:
     both = _arrived(_barrier(both_dir, endothelial_ps=ps, porosity=1e-5), horizon)
     assert both > max(fen, cell)
     assert 0.9 * (fen + cell) <= both <= fen + cell
+
+
+def test_the_endothelial_cell_buffers_the_cell_path_early(tmp_path: Path) -> None:
+    """With a weak cell path both paths deliver less than the fenestrae alone, at first.
+
+    The transcellular path is two conductances in series through a compartment
+    with volume, the endothelial cell, so early after the tracer arrives the
+    cell is a sink which also drains the Disse space through its reversible
+    abluminal membrane. Porosity 1e-5, `ps` 1e-8, flow 1 l/min: the amount in
+    the Disse space of zone 1 with both paths is 0.9955 of the fenestral-only
+    amount at 0.01 min, and 1.0545 of it at 1 min, when the plasma has washed
+    out and the filled cell gives its tracer back to the Disse space.
+    Additivity is a quasi-steady-state property, not an instantaneous one.
+    """
+    fen = _barrier(tmp_path, porosity=1e-5)
+    both_dir = tmp_path / "both"
+    both_dir.mkdir()
+    both = _barrier(both_dir, porosity=1e-5, endothelial_ps=1e-8)
+    amounts = {}
+    for name, r in (("fen", fen), ("both", both)):
+        r.simulate(0, 0.01, 11)
+        early = r["[tr_disse_z1]"] * r["V_disse_z1"]
+        r.simulate(0.01, 1.0, 101)
+        amounts[name] = (early, r["[tr_disse_z1]"] * r["V_disse_z1"])
+    assert amounts["both"][0] < amounts["fen"][0]
+    assert amounts["both"][1] > amounts["fen"][1]
 
 
 def test_a_solute_larger_than_the_fenestra_uses_only_the_cell_path(
