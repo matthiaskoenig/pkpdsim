@@ -1,16 +1,32 @@
 """The layer compartments of the zones."""
 
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
-from sbmlutils.factory import Compartment
+import roadrunner
+from sbmlutils.factory import Compartment, create_model
 
+from pkpdsim.database.tables import entry
+from pkpdsim.pbpk.units import U
+from pkpdsim.pbpk.values import Value
+from pkpdsim.perfusion.units import PU
 from pkpdsim.species import Species
 from pkpdsim.zonation import ids
 from pkpdsim.zonation.builder import ZonationBuilder
-from pkpdsim.zonation.geometry import Layer, geometry
+from pkpdsim.zonation.geometry import Layer, fractions, geometry
 from pkpdsim.zonation.profiles import Constant
 from pkpdsim.zonation.settings import BileTransport, Geometry, ZonationSettings
+
+
+def _total(**kwargs: object) -> float:
+    """The total volume (l) of the compartments of the settings."""
+    return sum(float(c.value) for c in _compartments(**kwargs))  # ty: ignore[invalid-argument-type]
+
+
+def _table_mass() -> float:
+    """The reference liver mass (kg) of the physiology table of the rat."""
+    return entry("physiology_rat", "male.organs.li", "mass").value  # ty: ignore[invalid-return-type]
 
 
 def _compartments(**kwargs: object) -> list[Compartment]:
@@ -40,14 +56,23 @@ def test_without_bile_the_compartments_are_the_old_counts() -> None:
     )
 
 
-def test_well_stirred_keeps_the_total_volume_of_the_sinusoid() -> None:
+@pytest.mark.parametrize("bile", [BileTransport.ADVECTIVE, None])
+@pytest.mark.parametrize("haematocrit", [None, 0.0])
+def test_well_stirred_keeps_the_total_volume_of_the_sinusoid(
+    bile: BileTransport | None, haematocrit: float | None
+) -> None:
     """Collapsing the layers preserves the volume."""
-    for bile in (BileTransport.ADVECTIVE, None):
-        totals = [
-            sum(float(c.value) for c in _compartments(n_zones=4, bile=bile, geometry=g))  # ty: ignore[invalid-argument-type]
-            for g in (Geometry.SINUSOID, Geometry.WELL_STIRRED)
-        ]
-        assert totals[0] == pytest.approx(totals[1])
+    totals = [
+        _total(n_zones=4, bile=bile, haematocrit=haematocrit, geometry=g)
+        for g in (Geometry.SINUSOID, Geometry.WELL_STIRRED)
+    ]
+    assert totals[0] == pytest.approx(totals[1])
+
+
+def test_well_stirred_without_erythrocytes_has_three_compartments_per_zone() -> None:
+    """The vascular compartment exists at haematocrit 0."""
+    m = _compartments(n_zones=10, geometry=Geometry.WELL_STIRRED, haematocrit=0.0)
+    assert len(m) == 30
 
 
 def test_the_geometry_constants_replace_the_table() -> None:
@@ -89,23 +114,51 @@ def test_an_unused_profile_key_raises() -> None:
         ).build()
 
 
-def test_every_compartment_follows_the_liver_mass() -> None:
-    """Each compartment has an initial assignment, a unit, a name and an SBO term."""
+def test_every_compartment_has_unit_name_and_sbo_term() -> None:
+    """Each compartment is annotated."""
     model = ZonationBuilder(ZonationSettings(n_zones=3), (), None).build()
-    assert {a.symbol for a in model.assignments} >= {c.sid for c in model.compartments}
     assert all(c.unit is not None and c.name and c.sboTerm for c in model.compartments)
+
+
+@pytest.mark.parametrize("geom", list(Geometry))
+def test_the_initial_assignments_evaluate_to_the_layer_volumes(
+    geom: Geometry, tmp_path: Path
+) -> None:
+    """The written model gives every compartment `f_<layer> * f_par * M_li / rho_li / n`."""
+    n = 3
+    model = ZonationBuilder(
+        ZonationSettings(n_zones=n, geometry=geom), (), None
+    ).build()
+    path = tmp_path / "liver.xml"
+    create_model(model, filepath=path, sbml_level=3, sbml_version=2, validate=False)
+    rr = roadrunner.RoadRunner(str(path))
+    par = rr[ids.PARENCHYMA] * rr[ids.MASS] / rr[ids.DENSITY]
+    # the reference liver of the table, in kg and kg/l
+    assert rr[ids.MASS] == pytest.approx(_table_mass())
+    for c in model.compartments:
+        layer = c.sid.removeprefix("V_").rsplit("_", 1)[0]
+        assert rr[c.sid] == pytest.approx(rr[ids.fraction(layer)] * par / n)
+        assert rr[c.sid] > 0.0
 
 
 def test_the_total_volume_is_the_parenchyma() -> None:
     """The layers of all zones fill the parenchyma, whatever the number of zones."""
-    from pkpdsim.zonation.geometry import fractions, geometry
-
-    sums = []
-    for n in (1, 3, 10):
-        model = ZonationBuilder(ZonationSettings(n_zones=n), (), None).build()
-        sums.append(sum(float(c.value) for c in model.compartments))  # ty: ignore[invalid-argument-type]
     geo = geometry(Species.RAT)
-    assert sums[0] == pytest.approx(sums[1]) == pytest.approx(sums[2])
-    assert sums[0] == pytest.approx(
-        sum(fractions(Species.RAT).values()) * geo.f_par * 0.007229 / geo.density
+    expected = (
+        sum(fractions(Species.RAT).values()) * geo.f_par * _table_mass() / geo.density
     )
+    for n in (1, 3, 10):
+        assert _total(n_zones=n) == pytest.approx(expected)
+
+
+def test_a_liver_mass_in_another_mass_unit_is_converted() -> None:
+    """A mass in g gives the volumes of the same mass in kg."""
+    in_g = _total(liver_mass=Value(7.229, PU.g))
+    in_kg = _total(liver_mass=Value(0.007229, U.kg))
+    assert in_g == pytest.approx(in_kg)
+
+
+def test_a_liver_mass_without_a_mass_unit_raises() -> None:
+    """The unit is named in the error."""
+    with pytest.raises(ValueError, match="needs a mass"):
+        _compartments(liver_mass=Value(1.0, U.litre))

@@ -36,3 +36,5 @@ def test_a_zone_below_one_raises() -> None:
     """Zones are numbered from 1."""
     with pytest.raises(ValueError, match="from 1"):
         ids.zone(0)
+    with pytest.raises(ValueError, match="from 1"):
+        ids.submodel(0)

@@ -43,9 +43,8 @@ __all__ = ["ZonationBuilder"]
 _MASS_TO_KG = {"g": 1e-3, "kg": 1.0, "mg": 1e-6}
 _VASCULAR = (Layer.RBC, Layer.PLASMA, Layer.ENDOTHELIUM, Layer.DISSE)
 _P = SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER
-_VASCULAR_NAME = "vascular space"
 _NAMES: dict[Layer | str, str] = {
-    ids.VASCULAR: _VASCULAR_NAME,
+    ids.VASCULAR: "vascular space",
     Layer.RBC: "erythrocytes",
     Layer.PLASMA: "plasma",
     Layer.ENDOTHELIUM: "endothelium",
@@ -108,7 +107,13 @@ class ZonationBuilder:
         return given if given is not None else geometry(self.settings.species)
 
     def _full_fractions(self) -> dict[Layer, float]:
-        """The volume fractions of the layers of the sinusoid, without the bile if omitted."""
+        """The volume fractions of the layers of the sinusoid.
+
+        `bile=None` drops the bile volume and does not renormalise the other
+        fractions: the organ loses that fraction of its volume (0.4 % in the
+        rat) instead of redistributing it. This is deliberate, and the same
+        in both geometries.
+        """
         fr = fractions(self.settings.species, self.settings.haematocrit)
         return {
             layer: f
@@ -119,20 +124,15 @@ class ZonationBuilder:
     def _fractions(self) -> dict[Layer | str, float]:
         """The volume fractions of the layers of a zone, by the geometry."""
         fr = self._full_fractions()
-        out: dict[Layer | str, float] = {}
         if self.settings.geometry is Geometry.SINUSOID:
-            for layer, f in fr.items():
-                out[layer] = f
-            return out
-        out[ids.VASCULAR] = sum(fr.get(layer, 0.0) for layer in _VASCULAR)
+            return {**fr}
+        out: dict[Layer | str, float] = {
+            ids.VASCULAR: sum(fr.get(layer, 0.0) for layer in _VASCULAR)
+        }
         for layer, f in fr.items():
             if layer not in _VASCULAR:
                 out[layer] = f
         return out
-
-    def _layers(self) -> list[Layer | str]:
-        """The tokens of the layers of a zone, from the lumen outwards."""
-        return list(self._fractions())
 
     def _mass(self) -> Value:
         """The liver mass, in kg."""
@@ -141,7 +141,13 @@ class ZonationBuilder:
             unit = getattr(mass.unit, "sid", mass.unit)
             value = number(mass)
             assert value is not None
-            return Value(value * _MASS_TO_KG[str(unit)], U.kg, mass.source, mass.notes)
+            try:
+                factor = _MASS_TO_KG[str(unit)]
+            except KeyError:
+                raise ValueError(
+                    f"A liver mass needs a mass in {sorted(_MASS_TO_KG)}, got {unit}."
+                ) from None
+            return Value(value * factor, U.kg, mass.source, mass.notes)
         section = "male.organs.li"
         table = f"physiology_{self.settings.species}"
         e = entry(table, section, "mass")
@@ -159,7 +165,7 @@ class ZonationBuilder:
         out: list[Compartment] = []
         for k in range(1, n + 1):
             zone = ids.zone(k)
-            for layer in self._layers():
+            for layer in self._fractions():
                 label = _NAMES[layer]
                 if self.settings.geometry is Geometry.WELL_STIRRED:
                     # one source of truth: the vascular volume is the sum of its layers
@@ -219,7 +225,7 @@ class ZonationBuilder:
         out: list[InitialAssignment] = []
         for k in range(1, n + 1):
             zone = ids.zone(k)
-            for layer in self._layers():
+            for layer in self._fractions():
                 out.append(
                     initial_assignment(
                         ids.volume(layer, zone),

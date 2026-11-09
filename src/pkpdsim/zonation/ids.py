@@ -85,7 +85,13 @@ def profile(process: str, zone: str) -> str:
 
 
 def submodel(k: int) -> str:
-    """Get the id of the submodel of zone `k`, `M<kk>`."""
+    """Get the id of the submodel of zone `k`, `M<kk>`.
+
+    Raises:
+        ValueError: for a zone below 1.
+    """
+    if k < 1:
+        raise ValueError(f"The zones are numbered from 1, not {k}.")
     return f"M{k:02}"
 
 
