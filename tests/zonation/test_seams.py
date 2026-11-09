@@ -214,15 +214,21 @@ def test_only_the_exchanged_solutes_are_wired() -> None:
 
 def test_a_given_temperature_parameter_replaces_the_default() -> None:
     mine = Parameter(
-        ids.TEMPERATURE,
+        "T",
         25.0,
         unit=PU.degC,
         name="temperature of the circuit",
         constant=False,
     )
     m = compose(_builder(), TOY_ID, CellPorts(), exchange=("drg",), temperature=mine)
-    (found,) = [p for p in m.parameters if p.sid == ids.TEMPERATURE]
+    (found,) = [p for p in m.parameters if p.sid in ("T", ids.TEMPERATURE)]
     assert found is mine
+    wired = {
+        r.elementRef
+        for r in m.replaced_elements
+        if r.portRef == f"temperature{PORT_SUFFIX}"
+    }
+    assert wired == {"T"}
 
 
 # the file of the cell model
@@ -249,10 +255,37 @@ def test_write_writes_the_same_cell_model_again(tmp_path: Path) -> None:
         )
 
 
+def test_write_replaces_an_older_version_of_the_cell_model(tmp_path: Path) -> None:
+    """A rebuilt model overwrites its own file: the version with a process is the new one."""
+    create_toy_cell(tmp_path)
+    write(
+        compose(_builder(), TOY_ID, CellPorts(), exchange=("drg",)),
+        tmp_path,
+        cell_model=_toy(),
+    )
+    older = (tmp_path / f"{TOY_ID}.xml").read_text()
+    newer = toy_cell_model(processes=("UP",))
+    write(
+        compose(_builder(), TOY_ID, CellPorts(), exchange=("drg",)),
+        tmp_path,
+        cell_model=newer,
+    )
+    assert (tmp_path / f"{TOY_ID}.xml").read_text() != older
+    assert "p_UP" in (tmp_path / f"{TOY_ID}.xml").read_text()
+
+
 def test_write_refuses_to_overwrite_another_model(tmp_path: Path) -> None:
-    create_toy_cell(tmp_path, processes=("UP",))
+    other = toy_cell_model()
+    other.sid = "something_else"
+    create_model(
+        other,
+        filepath=tmp_path / f"{TOY_ID}.xml",
+        sbml_level=3,
+        sbml_version=2,
+        validate=False,
+    )
     before = (tmp_path / f"{TOY_ID}.xml").read_text()
-    with pytest.raises(FileExistsError, match=TOY_ID):
+    with pytest.raises(FileExistsError, match="something_else"):
         write(
             compose(_builder(), TOY_ID, CellPorts(), exchange=("drg",)),
             tmp_path,
@@ -270,3 +303,45 @@ def test_write_refuses_a_cell_model_of_another_id(tmp_path: Path) -> None:
             tmp_path,
             cell_model=other,
         )
+
+
+# the constants the zones share
+
+
+def test_a_shared_constant_is_one_parameter_of_the_liver(tmp_path: Path) -> None:
+    """The constant of the cell model is a port, which the liver replaces in
+    every zone by its own: changing it changes every zone."""
+    model = compose(
+        _builder(), TOY_ID, CellPorts(), exchange=("drg",), shared=("k_up",)
+    )
+    twice = Parameter(
+        "k_up",
+        2 * UPTAKE,
+        unit=U.per_min,
+        name="uptake rate of all zones",
+        constant=True,
+    )
+    model.parameters.append(twice)
+    flat = write(model, tmp_path, cell_model=toy_cell_model(shared=True))
+    doc = libsbml.readSBMLFromFile(str(flat)).getModel()
+    assert not [
+        p.getId() for p in doc.getListOfParameters() if p.getId().endswith("__k_up")
+    ]
+    r = roadrunner.RoadRunner(str(flat))
+    for k in (1, 2, 3, 4):
+        r[f"[{ids.species('drg', ids.VASCULAR, ids.zone(k))}]"] = 1.0
+    volume = {k: r[ids.volume(ids.VASCULAR, ids.zone(k))] for k in (1, 4)}
+    for k in (1, 4):
+        assert r[f"M0{k}__UP"] == pytest.approx(2 * UPTAKE * volume[k])
+    r["k_up"] = 3 * UPTAKE
+    assert r["M04__UP"] == pytest.approx(3 * UPTAKE * volume[4])
+
+
+def test_a_shared_constant_is_wired_in_every_zone() -> None:
+    m = compose(_builder(), TOY_ID, CellPorts(), exchange=("drg",), shared=("k_up",))
+    found = {
+        (r.submodelRef, r.elementRef)
+        for r in m.replaced_elements
+        if r.portRef == f"k_up{PORT_SUFFIX}"
+    }
+    assert found == {(f"M0{k}", "k_up") for k in (1, 2, 3, 4)}

@@ -23,7 +23,7 @@ from sbmlsim.units import Quantity, ureg
 from pkpdsim.fit import default_fit_settings
 from pkpdsim.model import PKPDModel
 from pkpdsim.perfusion import circuit, ids
-from pkpdsim.perfusion.builder import build, compose, model_ids
+from pkpdsim.perfusion.builder import build
 from pkpdsim.perfusion.definition import KidneyOrgan, PerfusionDefinition
 from pkpdsim.perfusion.experiment import (
     PerfusionSimulationExperiment,
@@ -44,6 +44,17 @@ FIRST, SECOND = 60.0, 120.0
 def liver() -> PerfusionDefinition:
     """The rat liver circuit with two zones and a tracer."""
     return liver_definition(zones=2, tracers=(TRACER,), sid="mp_liver")
+
+
+def flat_ids(model: libsbml.Model) -> set[str]:
+    """The ids of the compartments, species, parameters and reactions of a model."""
+    groups = (
+        model.getListOfCompartments(),
+        model.getListOfSpecies(),
+        model.getListOfParameters(),
+        model.getListOfReactions(),
+    )
+    return {g.get(k).getId() for g in groups for k in range(g.size())}
 
 
 @pytest.fixture(scope="module")
@@ -339,15 +350,16 @@ def test_the_perfusion_changes_are_checked(
 
 
 def test_the_observables_have_labels_and_units(
-    liver: PerfusionDefinition, kidney: PerfusionDefinition
+    liver: PerfusionDefinition, kidney: PerfusionDefinition, tmp_path: Path
 ) -> None:
     for definition in (liver, kidney):
         labels = observable_labels(definition)
         units = observable_units(definition)
         assert set(labels) == set(units)
-        model = compose(definition)
-        assert {sid.strip("[]") for sid in labels} <= model_ids(model)
-        species = {sp.sid for sp in model.species}
+        # the model which is simulated: the cells of a liver are in its flat model
+        model = libsbml.readSBMLFromFile(str(build(definition, tmp_path))).getModel()
+        assert {sid.strip("[]") for sid in labels} <= flat_ids(model)
+        species = {model.getSpecies(k).getId() for k in range(model.getNumSpecies())}
         for sid in labels:
             # a species by its concentration, an assignment rule by its id,
             # the urine by its amount (its volume starts at 0)
@@ -364,7 +376,9 @@ def test_the_observables_have_labels_and_units(
     assert labels["glc_pp"] == "glucose (periportal)"
     assert labels["pO2_out"] == "pO2 (outflow)"
     assert labels["alt_act_res"] == "ALT activity (reservoir)"
-    assert labels["[atp_z2_cell]"] == "ATP (cells, zone 2)"
+    assert labels[f"[{ids.species('atp', ids.cell_site('z2'))}]"] == (
+        "ATP (cells, zone 2)"
+    )
     assert labels["atp_pc_cell"] == "ATP (cells, pericentral)"
     assert labels["f_alive_pc"] == "living fraction (pericentral)"
     assert units["alt_act_res"] == "µkat/l"
@@ -453,7 +467,10 @@ def test_a_species_of_the_map_is_its_concentration(
     """
     units = observable_units(liver)
     selections = [s for s in units if s.startswith("[") and s.endswith("_in]")]
-    selections += ["[glc_z1]", "[atp_z1_cell]"]
+    selections += [
+        f"[{ids.species('glc', 'z1')}]",
+        f"[{ids.species('atp', ids.cell_site('z1'))}]",
+    ]
     assert set(selections) <= set(units)
     simulator = Simulator(n_workers=1)
     model = simulator.load(liver_path)

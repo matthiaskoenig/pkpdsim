@@ -24,14 +24,19 @@ from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import Value
 from pkpdsim.perfusion import core, ids
 from pkpdsim.perfusion.cell_model import cell_model
+from pkpdsim.perfusion.cell_model import constants as cell_constants
 from pkpdsim.zonation import ZonationBuilder
 from pkpdsim.zonation.composition import CellPorts, compose, write
 from pkpdsim.zonation.settings import ZonationSettings
 
 from . import zone_golden
-from .conftest import CELLS, VASCULAR, ZONE, load_zone
+from .conftest import ZONE, load_zone, zone_objects
 
 PARAMS = core.CoreParameters.default("liver_rat")
+GOLDEN_CELLS = "Vcell_z1"
+GOLDEN_VASCULAR = "Vvas_z1"
+"""The compartments of the zone in the golden file, which has the ids of the
+zone before the engine named them (`V_hepatocyte_z1`, `V_vas_z1`)."""
 PORTS = {"Vext", "Vli", "Vbi", "position", "temperature"}
 SITES = {"cell", "dead", "ext"}
 
@@ -67,7 +72,8 @@ def test_the_core_is_a_standalone_model_with_the_cell_ports(tmp_path: Path) -> N
     quantities = {
         ids.species(q, "ext") for q in ids.perfusate_quantities(ids.RELEASABLE)
     }
-    assert _document_ports(path) == PORTS | quantities
+    constants = {p.sid for p in cell_constants(PARAMS)}
+    assert _document_ports(path) == PORTS | quantities | constants
 
 
 def test_the_ports_are_the_cell_ports_of_the_engine() -> None:
@@ -125,9 +131,9 @@ def _normalise_text(text: str) -> str:
 
     def rename(token: re.Match[str]) -> str:
         t = token.group(0)
-        if t == CELLS:
+        if t == GOLDEN_CELLS:
             return "Vli"
-        if t == VASCULAR:
+        if t == GOLDEN_VASCULAR:
             return "Vext"
         if t.endswith(("_z1_cell", "_z1_dead")):
             return t.replace("_z1", "")
@@ -206,15 +212,76 @@ def _count(by_kind: dict[str, dict[str, Any]]) -> dict[str, int]:
     return {kind: len(objects) for kind, objects in by_kind.items()}
 
 
+def _flat_text(text: str) -> str:
+    """Rename the ids of a zone in the golden file to those of the engine.
+
+    `Vcell_z1` and `Vvas_z1` are `V_hepatocyte_z1` and `V_vas_z1`, a perfusate
+    species `glc_z1` is `glc_vas_z1`, an element of the cell model is that of
+    the submodel of the zone, `atp_z1_cell` is `M01__atp_cell`, `GLC2PYR_z1`
+    is `M01__GLC2PYR` and the buffer and the pH of the zone are those of its
+    cell model (`M01__BUF_ext`, `M01__pH_ext`); the factors of a profile
+    `p_<process>_z1` are the ones of the engine, the same.
+    """
+    perfusate = set(ids.PERFUSATE)
+
+    def rename(token: re.Match[str]) -> str:
+        t = token.group(0)
+        if t == GOLDEN_CELLS:
+            return ids.cells(ZONE)
+        if t == GOLDEN_VASCULAR:
+            return ids.vascular(ZONE)
+        for kind in ("cell", "dead"):
+            if t.endswith(f"_z1_{kind}"):
+                return ids.species(
+                    t.removesuffix(f"_{kind}").removesuffix("_z1"), f"z1_{kind}"
+                )
+        if not t.endswith("_z1") or t.startswith("p_"):
+            return t
+        stem = t.removesuffix("_z1")
+        if stem in perfusate:
+            return ids.species(stem, ZONE)
+        return {
+            "BUF": ids.buffer(ZONE),
+            "pH": ids.ph(ZONE),
+            "f_alive": ids.alive(ZONE),
+            "v_nec": ids.necrosis_rate(ZONE),
+            "Vbile": ids.bile(ZONE),
+        }.get(stem) or ids.reaction(stem, ZONE)
+
+    return re.sub(r"[A-Za-z_][A-Za-z0-9_]*", rename, text)
+
+
+def _flat_golden(value: Any, key: str = "") -> Any:  # noqa: ANN401
+    """Rename the ids in a description of an object of the golden file."""
+    if isinstance(value, dict):
+        return {k: _flat_golden(v, k) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_flat_golden(v, key) for v in value]
+    if isinstance(value, str) and key != "name":
+        return _flat_text(value)
+    return value
+
+
 @pytest.mark.parametrize("config", list(zone_golden.CONFIGS))
 def test_zone_objects_are_the_golden_objects(config: str) -> None:
-    """The zone emits what it emitted before the emitter was shared."""
-    objects = core.zone_objects(
-        ZONE, CELLS, VASCULAR, PARAMS, **zone_golden.CONFIGS[config]
+    """The zone emits what it emitted before the emitter was shared, with the
+    ids of the engine (`_flat_text`): every object by all its attributes."""
+    objects = zone_objects(
+        ZONE,
+        ids.cells(ZONE),
+        ids.vascular(ZONE),
+        PARAMS,
+        **zone_golden.CONFIGS[config],
     )
-    assert _without_port(zone_golden.describe_objects(objects)) == _without_port(
-        zone_golden.load()[config]
+    golden = _flat_golden(
+        {
+            kind: {_flat_text(sid): d for sid, d in by.items()}
+            for kind, by in _without_port(zone_golden.load()[config]).items()
+        }
     )
+    assert _without_port(zone_golden.describe_objects(objects)) == golden
+    if config in _COUNTS:
+        assert _count(golden) == _COUNTS[config]
 
 
 EXTRA_PARAMETERS = {"position", "temperature", "T_ref", "R_gas", "Ea", "f_T"}
@@ -324,3 +391,40 @@ def test_the_content_of_potassium_is_needed_without_its_release() -> None:
     """A core without the content of potassium is refused for any organ."""
     params = dataclasses.replace(PARAMS, K_content=None)
     assert any("K_content" in p for p in params.problems((), bile=False))
+
+
+def test_the_constants_are_ports_which_the_zones_share(tmp_path: Path) -> None:
+    """Every constant of the core and of the buffer is a port, and no other parameter is."""
+    model = cell_model(PARAMS)
+    path = _written(model, tmp_path / "core.xml")
+    constants = {p.sid for p in cell_constants(PARAMS)}
+    assert "GLC2PYR_Vmax" in constants
+    assert ids.BUFFER_KA in constants
+    assert constants <= _document_ports(path)
+    assert _document_ports(path) - constants == PORTS | {
+        f"{q}_ext" for q in ids.perfusate_quantities(ids.RELEASABLE)
+    }
+
+
+def test_a_process_with_a_zonal_factor_has_the_port_of_it(tmp_path: Path) -> None:
+    """The factor `p_<process>` (1) is a port the engine replaces by the one of
+    the zone; a process without a profile has neither factor nor port."""
+    model = cell_model(PARAMS, processes=("OXPHOS", "BILE"))
+    path = _written(model, tmp_path / "core.xml")
+    constants = {p.sid for p in cell_constants(PARAMS)}
+    assert _document_ports(path) - constants == PORTS | {
+        "p_OXPHOS",
+        "p_BILE",
+    } | {f"{q}_ext" for q in ids.perfusate_quantities(ids.RELEASABLE)}
+    factors = {p.sid: p.value for p in model.parameters if p.sid.startswith("p_")}
+    assert factors == {"p_OXPHOS": 1.0, "p_BILE": 1.0}
+    rates = {r.sid: str(r.formula.math) for r in model.reactions}  # ty: ignore[unresolved-attribute]
+    assert "p_OXPHOS" in rates["OXPHOS"]
+    assert "p_OXPHOS" not in rates["GLC2PYR"]
+    (bile,) = [r for r in model.rate_rules if r.variable == "Vbile"]
+    assert "p_BILE" in str(bile.value)
+
+
+def test_a_process_of_no_core_is_refused() -> None:
+    with pytest.raises(ValueError, match="CYP2E1"):
+        cell_model(PARAMS, processes=("CYP2E1",))

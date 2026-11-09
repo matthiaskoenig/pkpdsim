@@ -20,7 +20,7 @@ from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import Value
 from pkpdsim.pbpk.visual import interactive, palette
 from pkpdsim.perfusion import ids
-from pkpdsim.perfusion.builder import compose
+from pkpdsim.perfusion.builder import compose, zone_cell_model
 from pkpdsim.perfusion.circuit import quantities
 from pkpdsim.perfusion.definition import GenericOrgan, PerfusionDefinition
 from pkpdsim.perfusion.figure import (
@@ -263,12 +263,20 @@ def test_bile_or_urine_is_a_compartment(
 def test_every_process_of_the_core_is_drawn() -> None:
     """Every reaction of the cells of a zone belongs to a group of a badge of the figure."""
     for d in (liver_definition(), kidney_definition(), generic_definition()):
-        sids = [r.sid or "" for r in compose(d).reactions or []]
-        reactions = [
-            sid.removesuffix("_z1")
-            for sid in sids
-            if sid.endswith("_z1") and not sid.startswith(("FLOW_", "BUF_"))
-        ]
+        cell = zone_cell_model(d)
+        if cell is not None:
+            # the cells of the zones of a liver are the reactions of its cell model
+            sids = [r.sid or "" for r in cell.reactions]
+        else:
+            # the cells of a zone the builder emits are those of the submodel `M01`
+            prefix = ids.reaction("", "z1")
+            sids = [
+                r.sid.removeprefix(prefix)
+                for r in compose(d).reactions or []
+                if r.sid and r.sid.startswith(prefix)
+            ]
+        reactions = [sid for sid in sids if sid != "BUF_ext"]
+        assert len(reactions) >= 12, "the cells of a zone have their reactions"
         grouped = {sid for rows in process_groups(d).values() for sid, _ in rows}
         missing = [r for r in reactions if r not in grouped]
         assert not missing, missing

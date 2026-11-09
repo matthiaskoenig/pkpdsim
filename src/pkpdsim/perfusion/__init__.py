@@ -39,7 +39,6 @@ if TYPE_CHECKING:
         core_parameters,
         perfusate_objects,
         quantity_name,
-        zone_objects,
     )
     from pkpdsim.perfusion.definition import (
         Circuit,
@@ -78,7 +77,6 @@ _LAZY_NAMES = {
     "core_parameters": "core",
     "perfusate_objects": "core",
     "quantity_name": "core",
-    "zone_objects": "core",
     "Circuit": "definition",
     "GenericOrgan": "definition",
     "KidneyOrgan": "definition",
@@ -156,5 +154,4 @@ __all__ = [
     "quantity_name",
     "site_label",
     "temperature_quantities",
-    "zone_objects",
 ]

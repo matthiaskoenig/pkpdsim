@@ -55,6 +55,7 @@ __all__ = [
     "area",
     "axial",
     "exchange",
+    "flat",
     "fraction",
     "layer_flow",
     "meta_id",
@@ -229,6 +230,15 @@ def submodel(k: int) -> str:
     if k < 1:
         raise ValueError(f"The zones are numbered from 1, not {k}.")
     return f"M{k:02}"
+
+
+def flat(k: int, sid: str) -> str:
+    """Get the id of an element of the cell model of zone `k` in the flat model.
+
+    The flattening of a comp model prefixes the elements of a submodel with its
+    id, `M<kk>__<id>`.
+    """
+    return f"{submodel(k)}__{sid}"
 
 
 def fraction(layer: Layer | str) -> str:

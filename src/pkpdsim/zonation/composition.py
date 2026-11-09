@@ -37,12 +37,11 @@ model and the cell model) is portable. `write` requires that file and raises a
 stay separate: `build` is the engine model without a cell model.
 """
 
-import shutil
-import tempfile
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+import libsbml
 from sbmlutils.comp import flatten_sbml
 from sbmlutils.factory import (
     PORT_SUFFIX,
@@ -108,6 +107,7 @@ def compose(
     deletions: Sequence[str] = (),
     exchange: Sequence[str] | None = None,
     temperature: Parameter | None = None,
+    shared: Sequence[str] = (),
 ) -> Model:
     """Compose the model of a builder with a cell model per zone.
 
@@ -128,7 +128,12 @@ def compose(
             cell does not see has none).
         temperature: the parameter of the temperature of the liver, which the
             caller defines (a circuit has one, which the zones follow); `None`
-            adds the default one at 37 degC.
+            adds the default one, `temperature` at 37 degC; the zones follow
+            the parameter whatever its id.
+        shared: the ids of parameters of the cell model (ports) which the
+            liver replaces in every zone by its own parameter of the same id,
+            which the caller adds to the model: a constant of the cell, one
+            for all zones.
 
     Returns:
         The model of `builder.build()` with the external model definition,
@@ -194,7 +199,10 @@ def compose(
             (ids.volume(disse, zone), ports.external),
             (ids.volume(Layer.HEPATOCYTE, zone), ports.cell),
             (ids.position(zone), ports.position),
-            (ids.TEMPERATURE, ports.temperature),
+            (
+                temperature.sid if temperature is not None else ids.TEMPERATURE,
+                ports.temperature,
+            ),
         ]
         if s.bile is not None:
             wiring.append((ids.volume(Layer.BILE, zone), ports.bile))
@@ -205,6 +213,7 @@ def compose(
             )
             for substance in exchanged
         )
+        wiring.extend((sid, sid) for sid in shared)
         wiring.extend(
             (ids.profile(process, zone), ports.profile.format(process=process))
             for process in scaled
@@ -239,8 +248,18 @@ def compose(
     return model
 
 
+def _model_id(path: Path) -> str:
+    """The id of the model in a file (empty for a file without a model)."""
+    document = libsbml.readSBMLFromFile(str(path))
+    model = document.getModel()
+    return model.getId() if model is not None else ""
+
+
 def _write_cell_model(cell_model: Model, model: Model, output_dir: Path) -> None:
     """Write the cell model beside the composed model, never over another model.
+
+    A file which holds a version of the same model (the id of its model is that
+    of the cell model) is rewritten, as the composed model is.
 
     Raises:
         ValueError: if the composed model does not use the cell model.
@@ -253,21 +272,14 @@ def _write_cell_model(cell_model: Model, model: Model, output_dir: Path) -> None
             f"not '{cell_model.sid}'."
         )
     target = output_dir / f"{cell_model.sid}.xml"
-    with tempfile.TemporaryDirectory() as staging:
-        staged = Path(staging) / target.name
-        create_model(
-            cell_model,
-            filepath=staged,
-            sbml_level=3,
-            sbml_version=2,
-            validate=False,
+    if target.is_file() and _model_id(target) != cell_model.sid:
+        raise FileExistsError(
+            f"'{target}' holds the model '{_model_id(target)}', not the cell "
+            f"model '{cell_model.sid}': it is not overwritten."
         )
-        if target.is_file() and target.read_bytes() != staged.read_bytes():
-            raise FileExistsError(
-                f"'{target}' holds another model than the cell model "
-                f"'{cell_model.sid}': it is not overwritten."
-            )
-        shutil.copyfile(staged, target)
+    create_model(
+        cell_model, filepath=target, sbml_level=3, sbml_version=2, validate=False
+    )
 
 
 def write(model: Model, output_dir: Path, cell_model: Model | None = None) -> Path:
@@ -276,8 +288,8 @@ def write(model: Model, output_dir: Path, cell_model: Model | None = None) -> Pa
     The comp model is written as `<model id>.xml` and the flat model as
     `<model id>_flat.xml` into `output_dir`, where the file of every external
     model definition has to be: the cell model is written there as
-    `<cell model id>.xml` when it is given, and never over a file which holds
-    another model (the same model again is fine).
+    `<cell model id>.xml` when it is given, over a file which holds a version
+    of the same model but never over a file which holds another model.
 
     Args:
         model: the composed model (`compose`).

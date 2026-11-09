@@ -1,11 +1,14 @@
 """The objects of a zone of the cellular core as they were before the cell model.
 
 `tests/perfusion/data/zone_objects.json` was written from `core.zone_objects`
-at commit 37679df, before the emitter was shared with `cell_model`, by
-`python -m perfusion.zone_golden` run from `tests/`. It is the one witness that
-the move changed no id, value, unit, formula or SBO term, so it is never
-regenerated from newer code: a regeneration would make the tests which read it
-agree with whatever the code says.
+at commit 37679df, before the emitter was shared with `cell_model`, by a
+`main()` of this module (`describe_objects` of the three `CONFIGS`, run from
+`tests/`). It is the one witness that the move changed no id, value, unit,
+formula or SBO term, so it is never regenerated from newer code: a regeneration
+would make the tests which read it agree with whatever the code says.
+`core.zone_objects` was deleted when the zone chain moved onto the zonation
+engine, so the file cannot be written again from the code, only from that
+commit; the ids in it are those of a zone before the engine named them.
 
 Every public attribute of an object is described (the formula of a rule or a
 kinetic law as text, units by their id, SBO terms by their value), the key of
@@ -85,19 +88,3 @@ def describe_objects(objects: core.CoreObjects) -> dict[str, dict[str, Any]]:
 def load() -> Mapping[str, dict[str, dict[str, Any]]]:
     """Get the golden file, by configuration."""
     return json.loads(GOLDEN.read_text())
-
-
-def main() -> None:
-    """Write the golden file from `core.zone_objects`."""
-    params = core.CoreParameters.default()
-    out = {
-        name: describe_objects(
-            core.zone_objects(ZONE, CELLS, VASCULAR, params, **options)
-        )
-        for name, options in CONFIGS.items()
-    }
-    GOLDEN.write_text(json.dumps(out, indent=1, sort_keys=True) + "\n")
-
-
-if __name__ == "__main__":
-    main()

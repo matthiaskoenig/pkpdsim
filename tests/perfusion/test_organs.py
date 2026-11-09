@@ -13,7 +13,7 @@ from sbmlutils.validation import ValidationOptions, validate_doc
 from pkpdsim.database import tables
 from pkpdsim.pbpk.values import FrozenMap, Value
 from pkpdsim.perfusion import core, ids
-from pkpdsim.perfusion.builder import build
+from pkpdsim.perfusion.builder import build, zone_factors
 from pkpdsim.perfusion.definition import (
     GenericOrgan,
     KidneyOrgan,
@@ -22,6 +22,7 @@ from pkpdsim.perfusion.definition import (
 )
 from pkpdsim.perfusion.units import PU
 from pkpdsim.species import Species
+from pkpdsim.zonation.profiles import Sigmoid
 
 from .conftest import (
     generic_definition,
@@ -444,3 +445,30 @@ def test_the_copied_core_constants_say_so() -> None:
         assert "AST_content" not in data[section]
         assert "BILE_Km_atp" not in data[section]
         assert "LDH_content" in data[section]
+
+
+def test_the_zone_factors_still_normalize_to_n() -> None:
+    weights = [1, 2, 3, 4, 5, 5, 4, 3, 2, 1]
+    organ = LiverOrgan.default(zones=10, profiles={"OXPHOS": weights})
+    factors = zone_factors(organ)
+    assert sum(f["OXPHOS"] for f in factors.values()) == pytest.approx(10.0)
+    assert factors["z5"]["OXPHOS"] == pytest.approx(10 * 5 / 30)
+    assert factors["z1"]["OXPHOS"] == pytest.approx(10 * 1 / 30)
+
+
+def test_a_profile_object_is_accepted_beside_a_weight_list() -> None:
+    """The profile of the engine is the weights of the zones it gives for them."""
+    shape = Sigmoid(0.25, 10.0)
+    organ = LiverOrgan.default(zones=10, profiles={"OXPHOS": shape, "BILE": [1] * 10})
+    factors = zone_factors(organ)
+    assert [factors[f"z{k}"]["OXPHOS"] for k in range(1, 11)] == pytest.approx(
+        shape.values(10)
+    )
+    assert sum(f["OXPHOS"] for f in factors.values()) == pytest.approx(10.0)
+    assert [f["BILE"] for f in factors.values()] == pytest.approx([1.0] * 10)
+    assert organ.problems() == []
+
+
+def test_a_profile_of_another_number_of_zones_is_a_problem() -> None:
+    organ = LiverOrgan.default(zones=4, profiles={"OXPHOS": [1, 2, 3]})
+    assert any("3 values for 4 zones" in p for p in organ.problems())

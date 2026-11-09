@@ -14,7 +14,7 @@ from pbpk.conftest import individual
 from pkpdsim.pbpk.values import FrozenMap, Value
 from pkpdsim.perfusion import core, ids
 
-from .conftest import CELLS, VASCULAR, ZONE, load_zone, zone_model
+from .conftest import CELLS, VASCULAR, ZONE, load_zone, zone_model, zone_objects
 
 if TYPE_CHECKING:
     import roadrunner
@@ -118,8 +118,12 @@ def test_the_zones_share_the_constants(tmp_path: Path) -> None:
     r = load_zone(tmp_path / "zones.xml")
     assert r["GLC2PYR_Vmax"] == 0.2
     assert r[ids.profile("OXPHOS", "z1")] == 1.5
-    assert r["OXPHOS_z1"] == pytest.approx(3 * r["OXPHOS_z2"], rel=1e-12)
-    assert r["GLC2PYR_z1"] == pytest.approx(r["GLC2PYR_z2"], rel=1e-12)
+    assert r[ids.reaction("OXPHOS", "z1")] == pytest.approx(
+        3 * r[ids.reaction("OXPHOS", "z2")], rel=1e-12
+    )
+    assert r[ids.reaction("GLC2PYR", "z1")] == pytest.approx(
+        r[ids.reaction("GLC2PYR", "z2")], rel=1e-12
+    )
 
 
 def test_a_start_of_the_cells_is_one_constant_of_the_zones(tmp_path: Path) -> None:
@@ -138,14 +142,14 @@ def test_a_start_of_the_cells_is_one_constant_of_the_zones(tmp_path: Path) -> No
 def test_a_profile_names_processes_of_the_core() -> None:
     params = core.CoreParameters.default()
     with pytest.raises(ValueError, match="No processes of the core"):
-        core.zone_objects(ZONE, CELLS, VASCULAR, params, profile={"NEC": 1.0})
+        zone_objects(ZONE, CELLS, VASCULAR, params, profile={"NEC": 1.0})
     with pytest.raises(ValueError, match="not >= 0"):
-        core.zone_objects(ZONE, CELLS, VASCULAR, params, profile={"TCA": -1.0})
+        zone_objects(ZONE, CELLS, VASCULAR, params, profile={"TCA": -1.0})
 
 
 def test_every_element_has_a_name_and_an_sbo_term() -> None:
     params = core.CoreParameters.default()
-    objects = core.zone_objects(ZONE, CELLS, VASCULAR, params, profile={"OXPHOS": 1.0})
+    objects = zone_objects(ZONE, CELLS, VASCULAR, params, profile={"OXPHOS": 1.0})
     elements = [
         *objects.species,
         *objects.reactions,
@@ -162,7 +166,7 @@ def test_every_element_has_a_name_and_an_sbo_term() -> None:
 
 
 def test_the_ids_follow_the_scheme() -> None:
-    objects = core.zone_objects(ZONE, CELLS, VASCULAR, core.CoreParameters.default())
+    objects = zone_objects(ZONE, CELLS, VASCULAR, core.CoreParameters.default())
     sids = {s.sid for s in objects.species}
     for q in ids.PERFUSATE:
         assert ids.species(q, ZONE) in sids
@@ -386,7 +390,7 @@ def test_the_check_of_the_denominators() -> None:
 
 def test_a_zone_id_is_checked() -> None:
     with pytest.raises(ValueError, match="no zone id"):
-        core.zone_objects("li", CELLS, VASCULAR, core.CoreParameters.default())
+        core.CoreNames("li")
 
 
 def test_importing_the_library_is_light() -> None:
@@ -395,6 +399,6 @@ def test_importing_the_library_is_light() -> None:
         "import sys, pkpdsim.perfusion as p; "
         "assert 'sbmlutils' not in sys.modules; "
         "assert 'pkpdsim.pbpk' not in sys.modules; "
-        "assert callable(p.zone_objects)"
+        "assert callable(p.core_parameters)"
     )
     subprocess.run([sys.executable, "-c", code], check=True)

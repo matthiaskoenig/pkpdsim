@@ -28,7 +28,7 @@ The constants of the core are ids of the whole model, shared by its zones
 `core_<organ>` and `core_<organ>_start` of `tables/perfusion.toml`): a fit
 has one value per constant. A zonal profile weighs a process per zone (the
 pattern of the zonated liver of the PBPK library), the dimensionless factor
-`p_<process>_<zone>` in the rate of the process (`zone_objects(profile=)`),
+`p_<process>_<zone>` in the rate of the process (`core_objects(profile=)`),
 which the organ normalises; a process without a profile has none. The
 temperature factor `f_T` (`ids.F_T`) and the constants of the buffer
 (`buffer_parameters`) are ids of the whole model as well; the circuit defines
@@ -95,7 +95,7 @@ The rate laws, one choice each, with the reason:
   living cells (the ATP-dependent export of the bile salts), a volume only,
   in an organ with bile (the liver).
 - Released quantities: an organ releases a subset of `ids.RELEASABLE`
-  (`zone_objects(released=)`), each with its content in the cells; an
+  (`core_objects(released=)`), each with its content in the cells; an
   enzyme which the organ does not release is neither in its cells nor in
   the perfusate (`ids.cell_quantities`, `ids.perfusate_quantities`), and its
   content is `None` in the constants (the kidney, a generic organ).
@@ -143,7 +143,6 @@ __all__ = [
     "perfusate_objects",
     "quantity_name",
     "start_quantities",
-    "zone_objects",
 ]
 
 _TABLE = "perfusion"
@@ -807,7 +806,7 @@ def buffer_objects(site: str, compartment: str) -> CoreObjects:
     return CoreObjects(
         reactions=[
             Reaction(
-                ids.reaction("BUF", site),
+                ids.buffer(site),
                 f"{h} + {hco3} <-> {co2}",
                 formula=(
                     f"{compartment} * {ids.BUFFER_K_HYDRATION} * "
@@ -833,67 +832,6 @@ def buffer_objects(site: str, compartment: str) -> CoreObjects:
     )
 
 
-def zone_objects(
-    zone: str,
-    cells: str,
-    vascular: str,
-    params: CoreParameters,
-    *,
-    profile: Mapping[str, float] | None = None,
-    composition: Composition | None = None,
-    bile: bool = True,
-    released: tuple[str, ...] = ids.RELEASABLE,
-) -> CoreObjects:
-    """Get the cellular core of a zone, its vascular space included.
-
-    The objects are those of `core_objects` with the ids of the zone
-    (`CoreNames(zone)`); the standalone cell model (`cell_model`) is the same
-    emitter without a zone.
-
-    Args:
-        zone: the zone id (`ids.zone_id`).
-        cells: the compartment of the cells of the zone.
-        vascular: the compartment of the vascular space of the zone.
-        params: the constants of the core, of which the zone reads the starts
-            of its cells; the constants themselves are `core_parameters`.
-        profile: the factor of a process of `PROCESSES` in this zone, the
-            constant `p_<process>_<zone>` in its rate (normalised by the
-            organ); a process without a factor has none.
-        composition: the start of the perfusate species of the vascular space.
-        bile: the zone secretes bile (a liver), `Vbile_<zone>`.
-        released: the quantities of `ids.RELEASABLE` which the dying cells
-            release (the necrotic cells of the zone); the enzymes of the
-            cells and the vascular space are the released ones.
-
-    Returns:
-        The species of the cells, the necrotic cells and the vascular space,
-        the reactions, the factors of the profile, the rules of the pH and of
-        the rate of necrosis, the rate rules of the living fraction and of
-        the bile, the initial assignments of the contents of the cells, of
-        the living fraction and of the CO2 of the perfusate. The rate laws
-        read the constants of the core, `f_T` and the buffer constants, which
-        the model defines once.
-
-    Raises:
-        ValueError: if `zone` is no zone id, the profile has a process
-            which is not in `PROCESSES` or a factor which is negative, a
-            released quantity is no quantity of `ids.RELEASABLE`, or the
-            constants lack what the zone needs (`CoreParameters.problems`).
-    """
-    if not ids.is_zone(zone):
-        raise ValueError(f"'{zone}' is no zone id (z1, z2, ...).")
-    return core_objects(
-        CoreNames(zone),
-        cells,
-        vascular,
-        params,
-        profile=profile,
-        composition=composition,
-        bile=bile,
-        released=released,
-    )
-
-
 @dataclass(frozen=True)
 class CoreNames:
     """The ids and labels of the objects of the core of a zone or of a cell.
@@ -905,6 +843,15 @@ class CoreNames:
     """
 
     zone: str | None = None
+
+    def __post_init__(self) -> None:
+        """Check the zone.
+
+        Raises:
+            ValueError: if the zone is no zone id.
+        """
+        if self.zone is not None and not ids.is_zone(self.zone):
+            raise ValueError(f"'{self.zone}' is no zone id (z1, z2, ...).")
 
     @property
     def where(self) -> str:
@@ -977,16 +924,13 @@ def core_objects(
 ) -> CoreObjects:
     """Get the objects of the cellular core, the one emitter of its chemistry.
 
-    This is the seam between the cellular core and its placements: a zone of a
-    perfusion organ (`zone_objects`), the standalone cell model
-    (`cell_model.cell_model`) and the organs of the engine each call it with
-    their `CoreNames`, compartments and profile, and never write a value, a
-    rate law or a unit of their own.
-
-    A zone of an organ (`zone_objects`) and the standalone cell model
-    (`cell_model.cell_model`) are this function with other `names`, other
-    compartments and nothing else: every value, rate law and unit is written
-    here once.
+    This is the seam between the cellular core and its placements: the zones
+    of a perfusion organ without the engine (`CoreNames(zone)`, the zones of
+    the kidney) and the standalone cell model (`cell_model.cell_model`,
+    `CoreNames()`, which the engine places in every zone of a liver) call it
+    with their `CoreNames`, compartments and profile, and never write a value,
+    a rate law or a unit of their own: every value, rate law and unit is
+    written here once.
 
     Args:
         names: the ids of the objects (`CoreNames`).
@@ -1002,10 +946,19 @@ def core_objects(
             release.
 
     Returns:
-        The objects of `zone_objects`.
+        The species of the cells, the necrotic cells and the vascular space,
+        the reactions, the factors of the profile, the rules of the pH and of
+        the rate of necrosis, the rate rules of the living fraction and of
+        the bile, the initial assignments of the contents of the cells, of
+        the living fraction and of the CO2 of the perfusate. The rate laws
+        read the constants of the core, `f_T` and the buffer constants, which
+        the model defines once.
 
     Raises:
-        ValueError: as `zone_objects`, but for the zone id.
+        ValueError: if the profile has a process which is not in `PROCESSES`
+            or a factor which is negative, a released quantity is no quantity
+            of `ids.RELEASABLE`, or the constants lack what the cells need
+            (`CoreParameters.problems`).
     """
     profile = dict(profile or {})
     unknown = sorted(set(profile) - set(PROCESSES))

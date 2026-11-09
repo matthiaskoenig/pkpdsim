@@ -5,8 +5,8 @@ SBML model, which the zonation engine composes once per zone
 (`pkpdsim.zonation.composition.compose`): the same objects as a zone of the
 perfusion builder emits, with the same values, units, rate laws and SBO
 terms, but one cell instead of a zone of an organ. There is one emitter of
-the chemistry, `core.core_objects`; `core.zone_objects` calls it with the
-ids of a zone, `cell_model` with the ids of a cell.
+the chemistry, `core.core_objects`; the zones of an organ without the engine
+call it with the ids of a zone, `cell_model` with the ids of a cell.
 
 The function is not among the lazy exports of `pkpdsim.perfusion`: it would
 shadow this module of the same name; import it from here.
@@ -22,13 +22,16 @@ The ports are the contract of the cell models of the zonation
   (degC), which sets the Arrhenius factor `f_T` of the rates, as the
   temperature of a perfusion model does, and
 * one species `<q>_ext` per quantity of the perfusate
-  (`ids.perfusate_quantities`), in `Vext`.
+  (`ids.perfusate_quantities`), in `Vext`,
+* the constants of the core and the buffer (`constants`), which the zones of a
+  liver share (one parameter of the liver replaces them in every zone), and
+* the zonal factor `p_<process>` of every process of `processes`.
 
 The ids of the cell: `<q>_cell` and `<q>_dead` for the living and the necrotic
 cells, `<q>_ext` for the perfusate, the reactions and the constants without a
 zone (`GLCIM`, `f_alive`, `v_nec`, `Vbile`); the constants of the core, the
 buffer and the Arrhenius factor are defined in the model, so that it
-simulates on its own. The compartments have placeholder sizes of a closed
+simulates on its own, and are ports. The compartments have placeholder sizes of a closed
 example (the cells of a liver of 10 g, a perfusate of 1 ml), which a
 composition replaces by the zone.
 """
@@ -43,7 +46,7 @@ from pkpdsim.perfusion.definition import table_value
 from pkpdsim.perfusion.units import PU
 from pkpdsim.zonation.composition import CellPorts
 
-__all__ = ["CELL_MODEL_ID", "cell_model"]
+__all__ = ["CELL_MODEL_ID", "cell_model", "constants"]
 
 CELL_MODEL_ID = "perfusion_core"
 """The id of the cell model, and the stem of its file."""
@@ -58,11 +61,38 @@ BILE_VOLUME = 1e-4
 """The bile compartment of a closed example (l)."""
 
 
+def constants(
+    params: core.CoreParameters,
+    *,
+    bile: bool = True,
+    released: tuple[str, ...] = ids.RELEASABLE,
+) -> list[Parameter]:
+    """Get the constants of the cell model: those of the core and of the buffer.
+
+    They are ports of the cell model: a liver which composes it into zones
+    defines each once and the zones share it (`compose(shared=)`), as the zones
+    of the perfusion model have always shared them.
+
+    Args:
+        params: the constants of the core.
+        bile: the cell secretes bile.
+        released: the quantities which the dying cells release.
+
+    Returns:
+        The parameters, `core.buffer_parameters` and `core.core_parameters`.
+    """
+    return [
+        *core.buffer_parameters(),
+        *core.core_parameters(params, released=released, bile=bile),
+    ]
+
+
 def cell_model(
     params: core.CoreParameters,
     *,
     bile: bool = True,
     released: tuple[str, ...] = ids.RELEASABLE,
+    processes: tuple[str, ...] = (),
 ) -> Model:
     """Get the cellular core as a standalone model with the cell ports.
 
@@ -73,15 +103,20 @@ def cell_model(
         released: the quantities of `ids.RELEASABLE` which the dying cells
             release; the enzymes of the cells and the perfusate are the
             released ones.
+        processes: the processes of `core.PROCESSES` with a zonal factor,
+            the parameter `p_<process>` (1, a port) in the rate of the
+            process, which a composition replaces by the factor of the zone;
+            a process without one has no factor.
 
     Returns:
-        The model `CELL_MODEL_ID`: the objects of `core.zone_objects`
+        The model `CELL_MODEL_ID`: the objects of `core.core_objects`
         without a zone, the constants of the core, the buffer and the
         Arrhenius factor, and the ports.
 
     Raises:
         ValueError: if a released quantity is no quantity of
-            `ids.RELEASABLE`, or the constants lack what the core needs
+            `ids.RELEASABLE`, a process is no process of `core.PROCESSES`,
+            or the constants lack what the core needs
             (`core.CoreParameters.problems`).
     """
     ports = CellPorts()
@@ -91,11 +126,15 @@ def cell_model(
         ports.cell,
         ports.external,
         params,
-        profile=None,
+        profile=dict.fromkeys(processes, 1.0),
         composition=None,
         bile=bile,
         released=released,
     )
+    factors = {names.profile(process) for process in processes}
+    for parameter in objects.parameters:
+        if parameter.sid in factors:
+            parameter.port = True
     for q in ids.perfusate_quantities(released):
         species = next(s for s in objects.species if s.sid == ids.species(q, "ext"))
         species.port = True
@@ -105,6 +144,9 @@ def cell_model(
     for parameter in temperature.parameters:
         if parameter.sid == ports.temperature:
             parameter.port = True
+    shared = constants(params, bile=bile, released=released)
+    for parameter in shared:
+        parameter.port = True
     position = Parameter(
         ports.position,
         0.5,
@@ -136,8 +178,7 @@ def cell_model(
         ],
         parameters=[
             position,
-            *core.buffer_parameters(),
-            *core.core_parameters(params, released=released, bile=bile),
+            *shared,
             *temperature.parameters,
             *objects.parameters,
         ],

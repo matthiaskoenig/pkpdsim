@@ -2,27 +2,39 @@
 
 `build` validates a `PerfusionDefinition`, composes the model (`compose`)
 and writes `<sid>.xml`, SBML L3V2 (the level of the models of pkdb_models)
-without the comp package: the circuit (`pkpdsim.perfusion.circuit`), the
-zones of the organ with the cellular core (`pkpdsim.perfusion.core`) and the
-observers (`pkpdsim.perfusion.observers`). Every element has a name and an
+(the flat model of a liver, its comp package resolved): the circuit
+(`pkpdsim.perfusion.circuit`), the zones of the organ with the cellular core
+(`pkpdsim.perfusion.core`) and the observers (`pkpdsim.perfusion.observers`). Every element has a name and an
 SBO term, every initial assignment its name; the written file is validated
 with the units.
 
-The organ is a chain of zones in series with the flow, the first zone
-first (periportal in the liver). An organ with the token `<o>` (`li` the
-liver, `ki` the kidney, the key of a generic organ) has the mass `M_<o>`
-(kg), the density `rho_<o>`, the volume `V_<o> = M_<o>/rho_<o>` and the
-vascular and cell fractions `f_vas_<o>` and `f_cell_<o>` as constants; the
-vascular space and the cells of each of its `n` zones are the compartments
-`Vvas_<zone> = f_vas_<o>*V_<o>/n` and `Vcell_<zone> = f_cell_<o>*V_<o>/n`
-(initial assignments, so a change of the mass before a simulation sets the
-zones). A profile of a process (`profiles` of the organ) is normalised to
-the zonal factors `p_<process>_<zone> = n*p/sum(p)`, so the total capacity
-of the organ, the rate per litre of cells times the cell volume of the
-zones, is that of one zone of the whole organ, as in the zonated liver of
-the PBPK library; a uniform profile is 1 in every zone. The cells release
-the quantities of the organ (`PerfusionDefinition.released`), and the
-enzymes of the cells, the perfusate and the observers are the released ones.
+The organ is a chain of zones in series with the flow, the first zone first
+(periportal in the liver). The zones of a liver are the zonation engine's
+(`pkpdsim.zonation`, `_liver`): the well-stirred geometry with the vascular
+space `V_vas_<zone>` and the cells `V_hepatocyte_<zone>` of the fractions of
+the organ, the flow between the zones (`Q_li`, the pump flow of the circuit,
+which is the boundary of the chain), the zonal factors of the profiles and the
+cellular core (`pkpdsim.perfusion.cell_model`) as a submodel `M<kk>` of every
+zone, composed through SBML comp and flattened (`build` writes both and the
+cell model; the flat model is simulated). The elements of the cells are
+`M<kk>__<id>` in it (`pkpdsim.perfusion.ids`), the constants of the core are
+shared by the zones. The zones of the kidney and of a generic organ are emitted
+here, by the same core with the same ids, as are the circuit, the pump flow
+and the kidney. An organ with the token `<o>` (`li` the liver, `ki` the
+kidney, the key of a generic organ) has the mass `M_<o>` (kg), the density
+`rho_<o>`, and the volume `V_<o> = M_<o>/rho_<o>` and the vascular and cell
+fractions `f_vas_<o>` and `f_cell_<o>` as constants (the liver those of the
+engine, `f_vas` and `f_hepatocyte`, without `V_li`); the vascular space and
+the cells of each of its `n` zones are the compartments `V_vas_<zone> =
+f_vas_<o>*V_<o>/n` and `V_hepatocyte_<zone> = f_cell_<o>*V_<o>/n` (initial
+assignments, so a change of the mass before a simulation sets the zones). A
+profile of a process (`profiles` of the organ) is normalised to the zonal
+factors `p_<process>_<zone> = n*p/sum(p)`, so the total capacity of the organ,
+the rate per litre of cells times the cell volume of the zones, is that of one
+zone of the whole organ, as in the zonated liver of the PBPK library; a
+uniform profile is 1 in every zone. The cells release the quantities of the
+organ (`PerfusionDefinition.released`), and the enzymes of the cells, the
+perfusate and the observers are the released ones.
 
 The liver secretes bile (`bile`, `bile_rate`). The kidney filters the
 perfusate (`_kidney`): the GFR `GFR_ki` is that of an ample flow,
@@ -41,7 +53,10 @@ empty) and gives the observers `urine` (µl) and `urine_rate` (µl/min). A
 generic organ has neither bile nor urine.
 """
 
+import dataclasses
+import re
 import textwrap
+from collections.abc import Mapping
 from pathlib import Path
 from typing import NamedTuple
 
@@ -63,6 +78,8 @@ from pkpdsim.pbpk.annotation import TAXA, initial_assignment
 from pkpdsim.pbpk.placement import value_parameter
 from pkpdsim.pbpk.units import MODEL_UNITS, U
 from pkpdsim.perfusion import circuit, core, ids, observers
+from pkpdsim.perfusion.cell_model import cell_model
+from pkpdsim.perfusion.cell_model import constants as cell_constants
 from pkpdsim.perfusion.definition import (
     KidneyOrgan,
     LiverOrgan,
@@ -70,8 +87,22 @@ from pkpdsim.perfusion.definition import (
     PerfusionDefinition,
 )
 from pkpdsim.perfusion.units import PU
+from pkpdsim.zonation import composition
+from pkpdsim.zonation import ids as zonation_ids
+from pkpdsim.zonation.builder import ZonationBuilder
+from pkpdsim.zonation.flow import ImposedFlow
+from pkpdsim.zonation.geometry import Layer, geometry
+from pkpdsim.zonation.profiles import Weights
+from pkpdsim.zonation.settings import FlowBoundary, Geometry, ZonationSettings
 
-__all__ = ["build", "compose", "model_ids", "tracer_ids", "zone_factors"]
+__all__ = [
+    "build",
+    "compose",
+    "model_ids",
+    "tracer_ids",
+    "zone_cell_model",
+    "zone_factors",
+]
 
 _P = SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER
 
@@ -89,7 +120,7 @@ def zone_factors(organ: Organ) -> dict[str, dict[str, float]]:
     """
     n = organ.zones
     out: dict[str, dict[str, float]] = {ids.zone_id(k): {} for k in range(1, n + 1)}
-    for process, values in organ.profiles.items():
+    for process, values in organ.weights().items():
         total = sum(values)
         for k, p in enumerate(values, start=1):
             out[ids.zone_id(k)][process] = n * p / total
@@ -111,10 +142,44 @@ class _Organ(NamedTuple):
     objects: core.CoreObjects
     bile: list[str]
     """The formulas of the bile secretion of the zones (a liver)."""
+    comp: Model | None = None
+    """The composed model of the liver (its submodels), which the model keeps."""
+
+
+def _zone_core(
+    definition: PerfusionDefinition, zone: str, profile: Mapping[str, float]
+) -> core.CoreObjects:
+    """Get the cellular core of a zone which the builder emits itself (no liver)."""
+    return core.core_objects(
+        core.CoreNames(zone),
+        ids.cells(zone),
+        ids.vascular(zone),
+        definition.core,
+        profile=profile or None,
+        composition=circuit.composition(definition.perfusate),
+        bile=False,
+        released=definition.released,
+    )
+
+
+def _compartment(
+    sid: str, fraction: float, volume: float, n: int, text: str, k: int, what: str
+) -> Compartment:
+    """Get the compartment of the vascular space or the cells of a zone."""
+    return Compartment(
+        sid,
+        fraction * volume / n,
+        unit=U.litre,
+        name=f"{text} of the {what} zone {k} of {n}",
+        sboTerm=SBO.PHYSICAL_COMPARTMENT,
+    )
 
 
 def _organ(definition: PerfusionDefinition) -> _Organ:
     """Get the compartments and objects of the zones of the organ.
+
+    The zones of a liver are the zonation engine's (`_liver`); the zones of
+    the other organs are emitted here.
 
     Returns:
         The compartments of the zones, the objects (the constants of the
@@ -123,8 +188,9 @@ def _organ(definition: PerfusionDefinition) -> _Organ:
         secretion of the zones of a liver.
     """
     organ = definition.organ.resolved(definition.species)
+    if isinstance(organ, LiverOrgan):
+        return _liver(definition, organ)
     key, n, what = organ.key, organ.zones, organ.what
-    released = definition.released
     m = circuit.converted(organ.mass, 1e-3, U.kg, "g")
     rho, f_vas, f_cell = organ.density, organ.vascular_fraction, organ.cell_fraction
     assert rho is not None and f_vas is not None and f_cell is not None
@@ -168,9 +234,6 @@ def _organ(definition: PerfusionDefinition) -> _Organ:
     )
     compartments: list[Compartment] = []
     factors = zone_factors(organ)
-    start = circuit.composition(definition.perfusate)
-    has_bile = isinstance(organ, LiverOrgan)
-    bile: list[str] = []
     for k in range(1, n + 1):
         zone = ids.zone_id(k)
         cells, vascular = ids.cells(zone), ids.vascular(zone)
@@ -178,46 +241,187 @@ def _organ(definition: PerfusionDefinition) -> _Organ:
             (cells, f_cell, ids.cell_fraction(key), _CELLS[what]),
             (vascular, f_vas, ids.vascular_fraction(key), _VASCULAR[what]),
         ):
-            name = f"{where} of the {what} zone {k} of {n}"
             compartments.append(
-                Compartment(
-                    sid,
-                    fraction.value * volume / n,
-                    unit=U.litre,
-                    name=name,
-                    sboTerm=SBO.PHYSICAL_COMPARTMENT,
-                )
+                _compartment(sid, fraction.value, volume, n, where, k, what)
             )
             out.assignments.append(
                 initial_assignment(
                     sid,
                     f"{fid} * {ids.organ_volume(key)}/{n} dimensionless",
                     U.litre,
-                    name,
+                    str(compartments[-1].name),
                 )
             )
-        zone_objects = core.zone_objects(
-            zone,
-            cells,
-            vascular,
-            definition.core,
-            profile=factors[zone] or None,
-            composition=start,
-            bile=has_bile,
-            released=released,
-        )
-        bile += [
-            str(r.value)
-            for r in zone_objects.rate_rules
-            if r.variable == ids.bile(zone)
-        ]
-        out += zone_objects
+        out += _zone_core(definition, zone, factors[zone])
         out.species += [
             circuit.tracer_species(t, zone, vascular)
             for t in definition.perfusate.tracers
         ]
+        out += circuit.fresh_assignments(
+            zone, definition.perfusate, definition.released
+        )
+    return _Organ(compartments, out, [])
+
+
+class _Quantity(NamedTuple):
+    """A quantity of the perfusate as a solute of the chain: an id and a name."""
+
+    sid: str
+    name: str
+    mr: None = None
+    diffusion: None = None
+
+
+def zone_cell_model(definition: PerfusionDefinition) -> Model | None:
+    """Get the cell model of the zones of the liver of a definition, `None` for no liver.
+
+    The cell model has the zonal factor of every process with a profile as a
+    port, and is named after the model (`<sid>_core`, the stem of its file), so
+    that the models of two definitions in one folder have a file each.
+    """
+    organ = definition.organ
+    if not isinstance(organ, LiverOrgan):
+        return None
+    cell = cell_model(
+        definition.core,
+        bile=True,
+        released=definition.released,
+        processes=tuple(organ.profiles),
+    )
+    cell.sid = f"{definition.sid}_core"
+    return cell
+
+
+def _flat_formula(
+    formula: str, k: int, cell: Model, replaced: Mapping[str, str]
+) -> str:
+    """Get a formula of the cell model as it reads in the flat model of zone `k`.
+
+    The elements of the cell model are those of its submodel (`M<kk>__<id>`)
+    but the ports which the zone replaces, which are the elements of the zone.
+    """
+    local = {
+        str(x.sid)
+        for group in (cell.compartments, cell.species, cell.parameters, cell.reactions)
+        for x in group or []
+    }
+
+    def rename(token: re.Match[str]) -> str:
+        t = token.group(0)
+        if t in replaced:
+            return replaced[t]
+        return zonation_ids.flat(k, t) if t in local else t
+
+    return re.sub(r"[A-Za-z_][A-Za-z0-9_]*", rename, formula)
+
+
+def _liver(definition: PerfusionDefinition, organ: LiverOrgan) -> _Organ:
+    """Get the zones of the liver from the zonation engine.
+
+    The engine chains the zones (the vascular space and the cells of every
+    zone, the flow between the zones, the zonal factors of the profiles) and
+    places the cellular core as a cell model, a submodel of every zone; the
+    circuit is the boundary of the chain (`FlowBoundary.EXTERNAL`) with the
+    pump flow as the flow of the liver, and the organ keeps its own
+    fractions of the vascular space and the cells (`ZonationSettings.fractions`).
+    The perfusate species of the zones are those of the perfusion (the
+    annotations, the start of the fresh perfusate), under the ids of the engine.
+
+    Returns:
+        The compartments, the objects of the engine and the fresh perfusate,
+        the formulas of the bile secretion of the zones and the composed
+        model.
+    """
+    n, released = organ.zones, definition.released
+    cell = zone_cell_model(definition)
+    assert cell is not None
+    quantities = circuit.quantities(definition.perfusate, released)
+    assert organ.density is not None
+    assert organ.vascular_fraction is not None and organ.cell_fraction is not None
+    settings = ZonationSettings(
+        n_zones=n,
+        geometry=Geometry.WELL_STIRRED,
+        flow=ImposedFlow(
+            circuit.converted(definition.circuit.flow, 1e-3, U.l_per_min, "ml/min")
+        ),
+        bile=None,
+        profiles={process: Weights(w) for process, w in organ.weights().items()},
+        species=definition.species,
+        liver_mass=organ.mass,
+        geometry_constants=dataclasses.replace(
+            geometry(definition.species), f_par=1.0, density=organ.density.value
+        ),
+        fractions={
+            Layer.PLASMA: organ.vascular_fraction.value,
+            Layer.HEPATOCYTE: organ.cell_fraction.value,
+        },
+        boundary=FlowBoundary.EXTERNAL,
+        cell_species=False,
+    )
+    builder = ZonationBuilder(
+        settings,
+        [_Quantity(q, circuit.quantity_label(q)) for q in quantities],
+        cell,
+        cell_processes=tuple(organ.profiles),
+    )
+    temperature = next(
+        p
+        for p in circuit.temperature_objects(definition.temperature).parameters
+        if p.sid == ids.TEMPERATURE
+    )
+    shared = cell_constants(definition.core, bile=True, released=released)
+    model = composition.compose(
+        builder,
+        cell.sid,
+        composition.CellPorts(),
+        exchange=ids.perfusate_quantities(released),
+        temperature=temperature,
+        shared=[str(p.sid) for p in shared],
+    )
+    # the species of the vascular space are those of the perfusion
+    start = circuit.composition(definition.perfusate)
+    species: dict[str, Species] = {}
+    out = core.CoreObjects()
+    bile: list[str] = []
+    (rule,) = [r for r in cell.rate_rules if r.variable == "Vbile"]
+    for k in range(1, n + 1):
+        zone = ids.zone_id(k)
+        vascular = ids.vascular(zone)
+        zone_species = core.perfusate_objects(zone, vascular, start, released).species
+        zone_species += [
+            circuit.tracer_species(t, zone, vascular)
+            for t in definition.perfusate.tracers
+        ]
+        species.update({str(x.sid): x for x in zone_species})
         out += circuit.fresh_assignments(zone, definition.perfusate, released)
-    return _Organ(compartments, out, bile)
+        replaced = {
+            **{str(p.sid): str(p.sid) for p in shared},
+            "Vli": ids.cells(zone),
+            **{
+                f"p_{process}": ids.profile(process, zone) for process in organ.profiles
+            },
+        }
+        bile.append(_flat_formula(str(rule.value), k, cell, replaced))
+    out += core.CoreObjects(
+        species=[species.get(str(x.sid), x) for x in model.species],
+        reactions=list(model.reactions),
+        parameters=list(model.parameters),
+        assignments=list(model.assignments),
+    )
+    # the flow of the liver is the pump flow of the circuit
+    (flow,) = [p for p in out.parameters if p.sid == zonation_ids.FLOW]
+    flow.constant = False
+    flow.value = None
+    out.rules.append(
+        AssignmentRule(
+            zonation_ids.FLOW,
+            ids.Q_PUMP,
+            U.l_per_min,
+            name="blood flow through the liver, the flow of the pump",
+            sboTerm=SBO.MATHEMATICAL_EXPRESSION,
+        )
+    )
+    return _Organ(list(model.compartments), out, bile, model)
 
 
 def _kidney(
@@ -511,7 +715,9 @@ def compose(definition: PerfusionDefinition) -> Model:
             bile=isinstance(organ, LiverOrgan),
         )
     )
-    objects += circuit.flow_objects(sites, perfusate, released, outflows)
+    objects += circuit.flow_objects(
+        sites, perfusate, released, outflows, zone_flows=zones_of.comp is None
+    )
     objects += core.CoreObjects(parameters=observers.enzyme_parameters(enzymes))
     for site in sites:
         objects += observers.site_objects(site, enzymes)
@@ -533,7 +739,7 @@ def compose(definition: PerfusionDefinition) -> Model:
     if definition.notes:
         # the notes of a model package are an indented block, as its terms of use
         notes = f"{notes}\n\n{textwrap.dedent(definition.notes).strip()}"
-    return Model(
+    model = Model(
         sid=definition.sid,
         name=definition.name,
         notes=notes,
@@ -549,33 +755,64 @@ def compose(definition: PerfusionDefinition) -> Model:
         model_units=MODEL_UNITS,
         compartments=compartments,
         species=objects.species,
-        parameters=objects.parameters,
+        parameters=_unique(objects.parameters),
         reactions=objects.reactions,
         rules=objects.rules,
         rate_rules=objects.rate_rules,
         assignments=objects.assignments,
     )
+    if zones_of.comp is not None:
+        # the zones of the liver are the submodels of the cell model
+        comp = zones_of.comp
+        model.external_model_definitions = comp.external_model_definitions
+        model.submodels = comp.submodels
+        model.replaced_elements = comp.replaced_elements
+        model.deletions = comp.deletions
+    return model
+
+
+def _unique(parameters: list[Parameter]) -> list[Parameter]:
+    """Get the parameters without a repeated id, the first of an id kept.
+
+    The temperature of the circuit is the one of the zones of a liver, which
+    the engine adds to its model as well.
+    """
+    seen: dict[str, Parameter] = {}
+    for parameter in parameters:
+        seen.setdefault(str(parameter.sid), parameter)
+    return list(seen.values())
 
 
 def build(definition: PerfusionDefinition, output_dir: Path) -> Path:
-    """Build a definition: write the SBML model `<sid>.xml`.
+    """Build a definition: write the SBML model of the circuit.
+
+    The model of an organ without submodels is written as `<sid>.xml`. The
+    liver has the cellular core as a submodel of every zone: the composed model
+    `<sid>.xml`, the cell model `<sid>_core.xml` and the flat model, the
+    composition resolved, `<sid>_flat.xml` (the model which is simulated), by
+    `pkpdsim.zonation.composition.write`.
 
     Args:
         definition: the definition.
         output_dir: the folder of the model.
 
     Returns:
-        The path of the model.
+        The path of the model which is simulated: `<sid>.xml`, `<sid>_flat.xml`
+        for a liver.
 
     Raises:
         ValueError: if the definition is invalid or the model has SBML
             errors (the units included).
     """
     model = compose(definition)
-    path = output_dir / f"{definition.sid}.xml"
-    # SBML L3V2, the level of the models of pkdb_models: the names of the rules
-    # and initial assignments are written (L3V1 has no name on them)
-    create_model(model, filepath=path, sbml_level=3, sbml_version=2, validate=False)
+    cell = zone_cell_model(definition)
+    if cell is None:
+        path = output_dir / f"{definition.sid}.xml"
+        # SBML L3V2, the level of the models of pkdb_models: the names of the rules
+        # and initial assignments are written (L3V1 has no name on them)
+        create_model(model, filepath=path, sbml_level=3, sbml_version=2, validate=False)
+    else:
+        path = composition.write(model, output_dir, cell_model=cell)
     doc = libsbml.readSBMLFromFile(str(path))
     validation = validate_doc(doc, options=ValidationOptions(), title=str(path))
     if validation.error_count:

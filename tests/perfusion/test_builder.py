@@ -56,7 +56,7 @@ def _label(e: libsbml.SBase) -> str:
 def test_build_writes_a_valid_model(tmp_path: Path, zones: int) -> None:
     """A rat liver in the circuit validates with units and loads at O0."""
     path = build(liver_definition(zones), tmp_path)
-    assert path == tmp_path / "perfusion_liver.xml"
+    assert path == tmp_path / "perfusion_liver_flat.xml"
     doc = libsbml.readSBMLFromFile(str(path))
     assert (doc.getLevel(), doc.getVersion()) == (3, 2)
     assert doc.getModel().getPlugin("comp") is None
@@ -65,6 +65,34 @@ def test_build_writes_a_valid_model(tmp_path: Path, zones: int) -> None:
     assert validation.warning_count == 0
     r = load_circuit(path)
     r.simulate(0, 10, 11)
+
+
+def test_a_liver_is_written_with_its_cell_model_and_the_flat_model(
+    tmp_path: Path,
+) -> None:
+    """The composed model, the cell model of its zones and the flat model which is simulated."""
+    build(liver_definition(3), tmp_path)
+    assert sorted(p.name for p in tmp_path.iterdir()) == [
+        "perfusion_liver.xml",
+        "perfusion_liver_core.xml",
+        "perfusion_liver_flat.xml",
+    ]
+    composed = libsbml.readSBMLFromFile(str(tmp_path / "perfusion_liver.xml"))
+    plugin = composed.getModel().getPlugin("comp")
+    assert [plugin.getSubmodel(k).getId() for k in range(plugin.getNumSubmodels())] == [
+        "M01",
+        "M02",
+        "M03",
+    ]
+
+
+def test_two_definitions_in_one_folder_have_a_cell_model_each(tmp_path: Path) -> None:
+    build(liver_definition(2, sid="one"), tmp_path)
+    build(liver_definition(2, sid="two", profiles={"OXPHOS": [2, 1]}), tmp_path)
+    assert (tmp_path / "one_core.xml").is_file()
+    assert (tmp_path / "two_core.xml").is_file()
+    assert "p_OXPHOS" not in (tmp_path / "one_core.xml").read_text()
+    assert "p_OXPHOS" in (tmp_path / "two_core.xml").read_text()
 
 
 def test_every_element_has_a_name_and_an_sbo_term(tmp_path: Path) -> None:
@@ -305,7 +333,7 @@ def test_the_ph_of_the_perfusate_is_in_its_range(ph: float, refused: bool) -> No
 def test_a_tracer_has_no_id_of_the_model() -> None:
     """A tracer whose ids are observers, compartments or constants is refused."""
     d = liver_definition(2)
-    for tracer, clash in (("pO2", "pO2_res"), ("V", "V_res"), ("Vvas", "Vvas_z1")):
+    for tracer, clash in (("pO2", "pO2_res"), ("V", "V_res"), ("V", "V_vas_z1")):
         bad = dataclasses.replace(
             d, perfusate=dataclasses.replace(d.perfusate, tracers=(tracer,))
         )

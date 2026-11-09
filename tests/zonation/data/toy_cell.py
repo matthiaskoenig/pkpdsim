@@ -30,7 +30,9 @@ UPTAKE = 0.5
 """The first-order uptake rate (1/min) of the toy."""
 
 
-def toy_cell_model(annotated: bool = False, processes: tuple[str, ...] = ()) -> Model:
+def toy_cell_model(
+    annotated: bool = False, processes: tuple[str, ...] = (), shared: bool = False
+) -> Model:
     """Get the toy cell model.
 
     Args:
@@ -38,6 +40,8 @@ def toy_cell_model(annotated: bool = False, processes: tuple[str, ...] = ()) -> 
             species a metaid as the species of every real cell model have.
         processes: the processes with a zonal factor `p_<process>` (a port,
             1), which scales the uptake.
+        shared: the uptake rate `k_up` is a port, which the liver replaces by
+            its own constant, one for all zones.
 
     Returns:
         The model.
@@ -91,7 +95,12 @@ def toy_cell_model(annotated: bool = False, processes: tuple[str, ...] = ()) -> 
                 port=True,
             ),
             Parameter(
-                "k_up", UPTAKE, unit=U.per_min, name="uptake rate", constant=True
+                "k_up",
+                UPTAKE,
+                unit=U.per_min,
+                name="uptake rate",
+                constant=True,
+                port=shared,
             ),
             *(
                 Parameter(

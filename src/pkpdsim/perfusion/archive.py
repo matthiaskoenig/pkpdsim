@@ -37,7 +37,8 @@ def create_archive(
 ) -> dict[str, dict[str, Any]]:
     """Build a definition and write its files and the COMBINE archive.
 
-    Builds the definition into `model_output_dir` (`<sid>.xml`), writes the
+    Builds the definition into `model_output_dir` (`<sid>.xml`, the flat model
+    `<sid>_flat.xml` of a liver, whose zones are submodels), writes the
     schematic of the circuit there (`<sid>.svg`, panel B), the anatomical
     figure of the organ in its circuit (`<sid>_anatomy.svg`, panel A), the
     ODEs of the model as markdown (`<sid>.md`, `sbmlode`) and its antimony
@@ -62,7 +63,7 @@ def create_archive(
     Returns:
         The files with their entries in the COMBINE archive, by the keys of a
         factory, each `{"path": Path, "entry": ManifestEntry}`: `README` (with
-        a README), `cc-by`, `mit`, `<sid>` of the model, `<sid>_md` of its
+        a README), `cc-by`, `mit`, `<sid>` of the model (`<sid>_flat` for a liver), `<sid>_md` of its
         ODEs, `<sid>_ant` of its antimony, `<sid>_svg` of the schematic and
         `<sid>_anatomy_svg` of the anatomical figure.
 

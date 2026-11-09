@@ -44,3 +44,9 @@ def test_the_flow_and_diffusion_ids() -> None:
     """The ids of the chain."""
     assert ids.layer_flow(Layer.PLASMA) == "Q_plasma_li"
     assert ids.axial("glc", "disse_z1", "disse_z2") == "D_glc_disse_z1_disse_z2"
+
+
+def test_a_flat_id_is_prefixed_with_its_submodel() -> None:
+    """What the flattening of a comp model makes of the id of a submodel element."""
+    assert ids.flat(3, "glc_cell") == "M03__glc_cell"
+    assert ids.flat(12, "x") == "M12__x"
