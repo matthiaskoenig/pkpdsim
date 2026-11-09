@@ -13,6 +13,7 @@ from pkpdsim.zonation.profiles import (
     Profile,
     Random,
     Sigmoid,
+    Weight,
     Weights,
     lobular_area,
     lobular_weight,
@@ -200,6 +201,11 @@ def test_normalized_checks_the_zone_count() -> None:
         normalized([1.0, 1.0], 10)
 
 
+def test_a_weight_of_the_wrong_length_raises() -> None:
+    with pytest.raises(ValueError, match="10 zones"):
+        normalized([1.0] * 10, 10, [1.0, 2.0])
+
+
 def test_a_profile_without_a_positive_mean_cannot_be_normalized() -> None:
     with pytest.raises(ValueError, match="mean"):
         normalized([0.0] * 10, 10)
@@ -210,8 +216,17 @@ def test_a_profile_without_a_positive_mean_cannot_be_normalized() -> None:
 # ------------------------------------------------------------------------------------
 
 
+def _weight_and_weights(kind: str, n: int) -> tuple[Weight, tuple[float, ...]]:
+    """A weight of every kind the module takes, and the weights it stands for."""
+    if kind == "even":
+        return None, (1.0,) * n
+    if kind == "areas":
+        return zone_areas(n), zone_areas(n)
+    return lobular_weight, tuple(lobular_weight(x) for x in zone_positions(n))
+
+
 @pytest.mark.parametrize("n", [1, 5, 10, 50])
-@pytest.mark.parametrize("weight", [None, lobular_weight])
+@pytest.mark.parametrize("kind", ["even", "areas", "density"])
 @pytest.mark.parametrize(
     "profile",
     [
@@ -224,10 +239,10 @@ def test_a_profile_without_a_positive_mean_cannot_be_normalized() -> None:
     ],
 )
 def test_every_profile_has_weighted_mean_one(
-    profile: Profile, weight: Callable[[float], float] | None, n: int
+    profile: Profile, kind: str, n: int
 ) -> None:
+    weight, weights = _weight_and_weights(kind, n)
     values = profile.values(n, weight)
-    weights = (1.0,) * n if weight is None else zone_areas(n)
     assert len(values) == n
     assert _weighted_mean(values, weights) == pytest.approx(1.0, rel=1e-9)
 
@@ -236,15 +251,27 @@ def test_the_default_weight_is_the_even_split_of_the_zones() -> None:
     profile = Linear(0.0, 1.0)
     values = profile.values(10)
     assert sum(values) / 10.0 == pytest.approx(1.0, rel=1e-12)
+    assert values == pytest.approx(profile.values(10, [1.0] * 10))
     assert values == pytest.approx(profile.values(10, lambda _: 1.0))
-    assert values != pytest.approx(profile.values(10, lobular_weight))
+    assert values != pytest.approx(profile.values(10, zone_areas(10)))
 
 
-def test_the_lobular_weight_normalizes_over_the_exact_areas_of_the_zones() -> None:
+def test_the_exact_areas_weight_the_zones_and_a_density_is_only_sampled() -> None:
     raw = [_hill_periportal(x) for x in zone_positions(10)]
-    mean = _weighted_mean(raw, zone_areas(10))
-    assert Sigmoid(0.25, 10.0).values(10, lobular_weight) == pytest.approx(
-        [v / mean for v in raw]
+    areas = zone_areas(10)
+    midpoints = tuple(lobular_weight(x) for x in zone_positions(10))
+    exact = Sigmoid(0.25, 10.0).values(10, areas)
+    sampled = Sigmoid(0.25, 10.0).values(10, lobular_weight)
+    assert exact == pytest.approx([v / _weighted_mean(raw, areas) for v in raw])
+    assert sampled == pytest.approx([v / _weighted_mean(raw, midpoints) for v in raw])
+    # the lobular weighting is the sequence of the exact areas; a callable is
+    # sampled at the centres of the zones, whatever it is, which for the
+    # density of the lobule shifts this profile by 1.48 %
+    assert max(abs(a / b - 1.0) for a, b in zip(exact, sampled, strict=True)) == (
+        pytest.approx(0.0148, rel=1e-2)
+    )
+    assert sampled == pytest.approx(
+        Sigmoid(0.25, 10.0).values(10, lambda x: lobular_weight(x))
     )
 
 
@@ -254,9 +281,8 @@ def test_the_lobular_weight_normalizes_over_the_exact_areas_of_the_zones() -> No
 def test_the_explicit_and_the_random_profile_have_weighted_mean_one(
     profile: Profile,
 ) -> None:
-    assert _weighted_mean(
-        profile.values(10, lobular_weight), zone_areas(10)
-    ) == pytest.approx(1.0)
+    areas = zone_areas(10)
+    assert _weighted_mean(profile.values(10, areas), areas) == pytest.approx(1.0)
     assert sum(profile.values(10)) / 10.0 == pytest.approx(1.0)
 
 

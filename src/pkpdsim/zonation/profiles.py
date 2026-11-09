@@ -28,9 +28,12 @@ the area in closed form: the points of one position lie on an Apollonius circle
 of a triad and the centre, so the area up to a position is a single integral
 over one twelfth of the hexagon (`lobular_area`, `_WEDGE_NODES`, 32 nodes of
 Gauss-Legendre are exact to 1e-11) and `lobular_weight` is its derivative. The
-area of a zone is the difference of the areas of its ends (`zone_areas`), not
-the weight at its centre, which overstates the zone of the peak of the weight
-by 7 % at 10 zones. The weight is 0 at both vessels, peaks at
+area of a zone is the difference of the areas of its ends, so the lobular
+weighting of the zones is the sequence `zone_areas(n)`, which is exact; a
+density handed over as a callable is taken at the centre of every zone, which
+for `lobular_weight` overstates the zone of its peak by 6.7 % and shifts a
+sharp profile by up to 1.5 % at 10 zones. The weight is 0 at both vessels,
+peaks at
 `1 / (1 + sqrt(3))` where the isoline leaves the hexagon through the edges, and
 cuts the lobule in the ratio 2 to 1 at the bisectors, its 1/3 beyond the
 position 0.5 being the inner hexagon of the perpendicular bisectors.
@@ -63,6 +66,7 @@ __all__ = [
     "Profile",
     "Random",
     "Sigmoid",
+    "Weight",
     "Weights",
     "lobular_area",
     "lobular_weight",
@@ -70,6 +74,10 @@ __all__ = [
     "zone_areas",
     "zone_positions",
 ]
+
+type Weight = Callable[[float], float] | Sequence[float] | None
+"""The weight of the zones: a density of the position, the weights of the zones
+themselves (`zone_areas`) or none, the zones of equal volume."""
 
 _WEDGE = math.pi / 6.0
 """The angle of one twelfth of the hexagon, the wedge of one portal triad."""
@@ -240,43 +248,56 @@ def zone_areas(n: int) -> tuple[float, ...]:
     return tuple(b - a for a, b in pairwise(edges))
 
 
-def _zone_weights(n: int, weight: Callable[[float], float] | None) -> tuple[float, ...]:
+def _zone_weights(n: int, weight: Weight) -> tuple[float, ...]:
     """The weight of every zone, its share of the volume of the liver.
 
     Args:
         n: the number of zones.
-        weight: `None` for zones of equal volume, the even split of
-            `pkpdsim.zonation.geometry.layer_volumes`; `lobular_weight` for the
-            area of the lobule, which the zones take exactly (`zone_areas`) and
-            not as the density at their centre; any other density at the centre
-            of every zone.
+        weight: `None` for zones of equal volume, a sequence of the weights of
+            the `n` zones, or a density of the lobular position, which is taken
+            at the centre of every zone.
+
+    Returns:
+        The weight of every zone.
+
+    Raises:
+        ValueError: for a sequence which is not of the number of zones.
     """
     if weight is None:
         return (1.0,) * n
-    if weight is lobular_weight:
-        return zone_areas(n)
+    if isinstance(weight, Sequence):
+        weights = tuple(weight)
+        if len(weights) != n:
+            raise ValueError(f"{len(weights)} weights for the {n} zones of the lobule.")
+        return weights
     return tuple(weight(x) for x in zone_positions(n))
 
 
 def normalized(
-    raw: Sequence[float], n: int, weight: Callable[[float], float] | None = None
+    raw: Sequence[float], n: int, weight: Weight = None
 ) -> tuple[float, ...]:
     """Normalize the levels of the zones to the volume-weighted mean 1.
 
     Args:
         raw: the level of every zone on the scale of its declaration.
         n: the number of zones.
-        weight: the weight of the zones, `None` for the zones of equal volume
-            the engine builds (the arithmetic mean), `lobular_weight` for the
-            area of the lobule.
+        weight: the weight of the zones, their share of the volume of the
+            liver. `None` weights the zones of equal volume the engine builds
+            (the arithmetic mean, see
+            `pkpdsim.zonation.geometry.layer_volumes`). A sequence is used as
+            it is given, one weight per zone: `zone_areas(n)` is the exact area
+            of the lobule and the lobular weighting. A callable is a density of
+            the lobular position and is taken at the centre of every zone,
+            always, so `lobular_weight` as a callable samples the density and
+            overstates the zone which holds its peak by 6.7 % at 10 zones.
 
     Returns:
         The levels divided by their weighted mean, so that a liver with the
         gradient holds the amount of a liver without one.
 
     Raises:
-        ValueError: for a number of levels which is not the number of zones,
-            or for levels whose weighted mean is not positive.
+        ValueError: for a number of levels or of weights which is not the
+            number of zones, or for levels whose weighted mean is not positive.
     """
     if len(raw) != n:
         raise ValueError(f"{len(raw)} levels for the {n} zones of the lobule.")
@@ -291,16 +312,16 @@ def normalized(
 class Profile(Protocol):
     """A gradient of a quantity along the lobule."""
 
-    def values(
-        self, n: int, weight: Callable[[float], float] | None = None
-    ) -> tuple[float, ...]:
+    def values(self, n: int, weight: Weight = None) -> tuple[float, ...]:
         """The level of every zone, normalized to the weighted mean 1.
 
         Args:
             n: the number of zones.
-            weight: the weight of the zones, `None` for the zones of equal
-                volume the engine builds, `lobular_weight` for the area of
-                the lobule.
+            weight: the weight of the zones, as of `normalized`: `None` for
+                the zones of equal volume the engine builds, a sequence used
+                as it is given (`zone_areas(n)` for the exact area of the
+                lobule) or a density taken at the centre of every zone
+                (`lobular_weight`, which samples it).
         """
         ...
 
@@ -312,16 +333,16 @@ class _Pointwise(ABC):
     def _shape(self, x: float) -> float:
         """The level at a lobular position, on the scale of the declaration."""
 
-    def values(
-        self, n: int, weight: Callable[[float], float] | None = None
-    ) -> tuple[float, ...]:
+    def values(self, n: int, weight: Weight = None) -> tuple[float, ...]:
         """The shape at the centre of every zone, normalized.
 
         Args:
             n: the number of zones.
-            weight: the weight of the zones, `None` for the zones of equal
-                volume the engine builds, `lobular_weight` for the area of
-                the lobule.
+            weight: the weight of the zones, as of `normalized`: `None` for
+                the zones of equal volume the engine builds, a sequence used
+                as it is given (`zone_areas(n)` for the exact area of the
+                lobule) or a density taken at the centre of every zone
+                (`lobular_weight`, which samples it).
         """
         return normalized([self._shape(x) for x in zone_positions(n)], n, weight)
 
@@ -469,14 +490,16 @@ class Weights:
             raise ValueError(f"Weights: the levels {levels} are no profile.")
         object.__setattr__(self, "levels", levels)
 
-    def values(
-        self, n: int, weight: Callable[[float], float] | None = None
-    ) -> tuple[float, ...]:
+    def values(self, n: int, weight: Weight = None) -> tuple[float, ...]:
         """The measured levels, normalized.
 
         Args:
             n: the number of zones, which the levels are those of.
-            weight: the weight of the zones, as of `normalized`.
+            weight: the weight of the zones, as of `normalized`: `None` for
+                the zones of equal volume the engine builds, a sequence used
+                as it is given (`zone_areas(n)` for the exact area of the
+                lobule) or a density taken at the centre of every zone
+                (`lobular_weight`, which samples it).
 
         Returns:
             The levels divided by their weighted mean.
@@ -512,16 +535,16 @@ class Random:
         if self.cv < 0.0:
             raise ValueError(f"Random: the cv {self.cv} is negative.")
 
-    def values(
-        self, n: int, weight: Callable[[float], float] | None = None
-    ) -> tuple[float, ...]:
+    def values(self, n: int, weight: Weight = None) -> tuple[float, ...]:
         """The drawn levels, normalized.
 
         Args:
             n: the number of zones.
-            weight: the weight of the zones, `None` for the zones of equal
-                volume the engine builds, `lobular_weight` for the area of
-                the lobule.
+            weight: the weight of the zones, as of `normalized`: `None` for
+                the zones of equal volume the engine builds, a sequence used
+                as it is given (`zone_areas(n)` for the exact area of the
+                lobule) or a density taken at the centre of every zone
+                (`lobular_weight`, which samples it).
         """
         rng = random.Random(self.seed)
         sigma = math.sqrt(math.log(1.0 + self.cv**2))
