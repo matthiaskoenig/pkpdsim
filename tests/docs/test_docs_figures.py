@@ -107,6 +107,8 @@ FIGURES = [
     "publication.svg",
     "publication_panels.svg",
     "individuals.svg",
+    "anatomy.svg",
+    "bodies.svg",
     "mouse.html",
     "rat.html",
     "pig.html",
@@ -186,6 +188,13 @@ def test_the_perfusion_page_shows_the_figures_of_its_circuit() -> None:
             assert definition.name in html or definition.sid in html
 
 
+def test_the_readme_shows_the_anatomical_figure() -> None:
+    """The README shows the static figure, GitHub runs no scripts of a page."""
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "docs/pbpk/img/figures/anatomy.svg" in readme
+    assert (ROOT / "docs" / "pbpk" / "img" / "figures" / "anatomy.svg").exists()
+
+
 def test_the_docs_show_the_interactive_figures_only() -> None:
     for page in (ROOT / "docs").rglob("*.md"):
         text = page.read_text(encoding="utf-8")
@@ -206,6 +215,7 @@ def test_the_page_shows_every_figure() -> None:
         "schematic.html",
         "publication.svg",
         "individuals.svg",
+        "bodies.svg",
     ):
         assert f"img/figures/{name}" in page, name
     species = (ROOT / "docs" / "pbpk" / "species.md").read_text(encoding="utf-8")

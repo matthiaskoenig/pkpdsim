@@ -6,6 +6,7 @@ from pathlib import Path
 from xml.etree import ElementTree
 
 from pkpdsim.pbpk import Route
+from pkpdsim.pbpk.visual import palette
 from pkpdsim.pbpk.visual.anatomy import TITLES, AnatomyFigure, anatomy_figure
 from pkpdsim.pbpk.visual.content import ModelContent
 from pkpdsim.pbpk.visual.interactive import CREDIT, ICON_CREDIT, interactive_figure
@@ -116,3 +117,19 @@ def test_the_interactive_schematic_has_process_cards(tmp_path: Path) -> None:
     # the schematic draws no anatomy, its organ icons are the anatomograms
     assert ICON_CREDIT in html
     assert CREDIT not in html
+
+
+def test_the_bodies_alone_have_no_annotations(tmp_path: Path) -> None:
+    """The bodies with their organs, for a slide: no text, transparent."""
+    path = anatomy_figure(definition(), tmp_path / "a.svg", annotations=False)
+    assert _texts(path) == []
+    svg = path.read_text()
+    assert 'fill="#fff"/>' not in svg.split("</style>", 1)[1][:200]
+    for organ in ("br", "lu", "he", "li", "ki"):
+        assert palette.ORGAN_COLORS[organ] in svg, organ
+    annotated = anatomy_figure(definition(), tmp_path / "b.svg")
+    width = float(ElementTree.parse(path).getroot().get("width") or 0)
+    assert 0 < width < float(ElementTree.parse(annotated).getroot().get("width") or 0)
+    # deterministic
+    again = anatomy_figure(definition(), tmp_path / "c.svg", annotations=False)
+    assert again.read_bytes() == path.read_bytes()
