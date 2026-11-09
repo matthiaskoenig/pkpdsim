@@ -367,6 +367,7 @@ _CONFIGS = {
     "imposed": {"flow": ImposedFlow(2.0)},
     "noflow": {"flow": ImposedFlow(0.0)},
     "pressure": {"flow": PressureFlow()},
+    "pressure_asymmetric": {"flow": PressureFlow(p_onc=2000.0)},
     "pressure_well_stirred": {
         "flow": PressureFlow(),
         "geometry": Geometry.WELL_STIRRED,
@@ -396,7 +397,7 @@ def test_the_balance_residual_stays_at_zero(tmp_path: Path, name: str) -> None:
     scale = dose + r[observers.ledger("in", "drg")]
     assert dose > 0.0
     assert consumed > 0.01 * scale  # the sink matters, so the balance is not vacuous
-    assert abs(r["balance_drg"]) <= 1e-9 * scale
+    assert abs(r["balance_drg"]) <= 1e-11 * scale
 
 
 @pytest.mark.parametrize("name", ["advective", "diffusive"])
@@ -574,4 +575,52 @@ def test_the_observers_of_a_composed_model_close_the_balance(tmp_path: Path) -> 
         in_cells, rel=1e-6, abs=0
     )  # the toy keeps what it takes up
     scale = dose + r[observers.ledger("in", "drg")]
-    assert abs(r["balance_drg"]) <= 1e-9 * scale
+    assert abs(r["balance_drg"]) <= 1e-11 * scale
+
+
+@pytest.mark.parametrize(
+    "flow",
+    [ImposedFlow(1.5), PressureFlow(), PressureFlow(p_onc=2000.0)],
+    ids=["imposed", "pressure", "pressure_asymmetric"],
+)
+def test_the_boundary_ledgers_integrate_the_flows_of_their_zones(
+    tmp_path: Path, flow: ImposedFlow | PressureFlow
+) -> None:
+    """`cum_in` grows with the carrier flows of z1 and `cum_out` with those of the last zone."""
+    n = 5
+    settings = _settings(n, flow=flow)
+    r = _runner(tmp_path, settings)
+    c_in = {"plasma": 1.0, "rbc": 2.0}
+    for layer, c in c_in.items():
+        r[f"drg_{layer}_in"] = c
+        for k in range(1, n + 1):
+            r[f"[drg_{layer}_z{k}]"] = c * (1.0 + 0.1 * k)
+
+    def carrier_flow(layer: Layer, k: int) -> float:
+        sid = (
+            ids.layer_flow(layer)
+            if isinstance(flow, ImposedFlow)
+            else ids.zone_flow(layer, ids.zone(k))
+        )
+        return float(r[sid])
+
+    expected_in = sum(
+        carrier_flow(layer, 1) * c
+        for layer, c in ((Layer.PLASMA, 1.0), (Layer.RBC, 2.0))
+    )
+    expected_out = sum(
+        carrier_flow(layer, n) * r[f"[drg_{layer}_z{n}]"]
+        for layer in (Layer.PLASMA, Layer.RBC)
+    )
+    assert r[observers.ledger("in", "drg") + "'"] == pytest.approx(
+        expected_in, rel=1e-12, abs=0
+    )
+    assert r[observers.ledger("out", "drg") + "'"] == pytest.approx(
+        expected_out, rel=1e-12, abs=0
+    )
+    if not isinstance(flow, ImposedFlow):
+        # the first and the last zone differ, so a swapped zone is seen
+        first, last = carrier_flow(Layer.PLASMA, 1), carrier_flow(Layer.PLASMA, n)
+        print(f"Q_plasma z1 {first!r} z{n} {last!r}")
+        if flow.p_onc is not None:
+            assert first != pytest.approx(last, rel=1e-3, abs=0)

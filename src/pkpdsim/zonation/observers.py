@@ -39,15 +39,19 @@ The axial profile is the species of the zones themselves, `<s>_<layer>_z<k>`;
 from collections.abc import Mapping, Sequence
 
 import roadrunner
-from sbmlutils.factory import AssignmentRule, Model, Parameter, RateRule
-from sbmlutils.factory.units import UnitDefinition
+from sbmlutils.factory import Model, Parameter, RateRule
 from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk.annotation import initial_assignment
 from pkpdsim.pbpk.substance import Substance
 from pkpdsim.pbpk.units import U
 from pkpdsim.perfusion import core
-from pkpdsim.perfusion.observers import third_weights
+from pkpdsim.perfusion.observers import (
+    RULE,
+    observer,
+    third_weights,
+    weighted_mean,
+)
 from pkpdsim.zonation import ids
 from pkpdsim.zonation.builder import ZonationBuilder
 from pkpdsim.zonation.geometry import Layer
@@ -73,8 +77,6 @@ PERICENTRAL = "pc"
 """The suffix of the pericentral mean."""
 LEDGERS = ("in", "out", "consumed", "dose")
 """The kinds of the cumulative amounts."""
-
-_RULE = SBO.MATHEMATICAL_EXPRESSION
 
 
 def mean(
@@ -195,23 +197,9 @@ def balance_expression(substance: str, duct: bool) -> str:
     return " + ".join(terms) + " - " + " - ".join(negative)
 
 
-def _observer(
-    sid: str, formula: str, unit: UnitDefinition, name: str, sbo: str
-) -> tuple[Parameter, AssignmentRule]:
-    """Get a parameter and the assignment rule which computes it."""
-    return (
-        Parameter(sid, None, unit, constant=False, name=name, sboTerm=sbo),
-        AssignmentRule(sid, formula, unit, name=name, sboTerm=_RULE),
-    )
-
-
-def _weighted(of_zones: Sequence[str], periportal: bool) -> str:
-    """Get the mean of the species of the zones over the first or last third."""
-    terms = [
-        of_zones[k - 1] if w == 1 else f"{float(w)!r} dimensionless * {of_zones[k - 1]}"
-        for k, w in third_weights(len(of_zones), periportal)
-    ]
-    return " + ".join(terms)
+def _layer_name(layer: Layer | str) -> str:
+    """Get the name of a layer for the names of the observers."""
+    return "vascular space" if layer == ids.VASCULAR else str(layer)
 
 
 def _ledger(
@@ -242,7 +230,7 @@ def _ledger(
     )
     if rate is not None:
         out.rate_rules.append(
-            RateRule(sid, rate, U.mmole_per_min, name=name, sboTerm=_RULE)
+            RateRule(sid, rate, U.mmole_per_min, name=name, sboTerm=RULE)
         )
     if start is not None:
         out.assignments.append(initial_assignment(sid, start, U.mmole, name))
@@ -288,29 +276,29 @@ def observer_objects(
             of_zones = profile_ids(s, layer, n)
             for periportal in (True, False):
                 where = "periportal" if periportal else "pericentral"
-                p, r = _observer(
+                p, r = observer(
                     mean(s, layer, periportal, blood),
-                    _weighted(of_zones, periportal),
+                    weighted_mean(of_zones, third_weights(n, periportal)),
                     U.mM,
-                    f"{substance.name} ({ids_name(layer)}, {where} mean)",
+                    f"{substance.name} ({_layer_name(layer)}, {where} mean)",
                     SBO.MOLAR_CONCENTRATION_OF_AN_ENTITY,
                 )
                 out.parameters.append(p)
                 out.rules.append(r)
         for layer in layers:
-            p, r = _observer(
+            p, r = observer(
                 layer_amount(s, layer),
                 " + ".join(
                     f"{ids.species(s, layer, ids.zone(k))} * {ids.volume(layer, ids.zone(k))}"
                     for k in range(1, n + 1)
                 ),
                 U.mmole,
-                f"amount of {substance.name} in the {ids_name(layer)}",
+                f"amount of {substance.name} in the {_layer_name(layer)}",
                 SBO.AMOUNT_OF_AN_ENTITY_POOL,
             )
             out.parameters.append(p)
             out.rules.append(r)
-        p, r = _observer(
+        p, r = observer(
             amount(s),
             " + ".join(layer_amount(s, layer) for layer in layers),
             U.mmole,
@@ -332,7 +320,7 @@ def observer_objects(
             flow_out = " + ".join(
                 builder.carrier_flow(layer, last) for layer in carriers
             )
-            p, r = _observer(
+            p, r = observer(
                 outflow_concentration(s),
                 f"({efflux}) / ({flow_out})",
                 U.mM,
@@ -357,7 +345,7 @@ def observer_objects(
                 for k in range(1, n + 1)
             ),
         )
-        p, r = _observer(
+        p, r = observer(
             balance(s),
             balance_expression(s, settings.bile is not None),
             U.mmole,
@@ -367,11 +355,6 @@ def observer_objects(
         out.parameters.append(p)
         out.rules.append(r)
     return out
-
-
-def ids_name(layer: Layer | str) -> str:
-    """Get the name of a layer for the names of the observers."""
-    return "vascular space" if layer == ids.VASCULAR else str(layer)
 
 
 def add_observers(model: Model, objects: core.CoreObjects) -> None:

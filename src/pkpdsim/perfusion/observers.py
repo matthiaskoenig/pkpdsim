@@ -46,25 +46,28 @@ from pkpdsim.perfusion.definition import table_value
 from pkpdsim.perfusion.units import PU
 
 __all__ = [
+    "RULE",
     "bile_objects",
     "enzyme_parameters",
     "mean_objects",
+    "observer",
     "site_objects",
     "third_weights",
     "uptake_objects",
     "urine_objects",
+    "weighted_mean",
 ]
 
-_RULE = SBO.MATHEMATICAL_EXPRESSION
+RULE = SBO.MATHEMATICAL_EXPRESSION
 
 
-def _observer(
+def observer(
     sid: str, formula: str, unit: UnitDefinition, name: str, sbo: str
 ) -> tuple[Parameter, AssignmentRule]:
     """Get the parameter of an observer and its assignment rule."""
     return (
         Parameter(sid, None, unit, constant=False, name=name, sboTerm=sbo),
-        AssignmentRule(sid, formula, unit, name=name, sboTerm=_RULE),
+        AssignmentRule(sid, formula, unit, name=name, sboTerm=RULE),
     )
 
 
@@ -102,7 +105,7 @@ def site_objects(site: str, enzymes: Sequence[str] = ids.ENZYMES) -> core.CoreOb
     out = core.CoreObjects()
     _add(
         out,
-        _observer(
+        observer(
             ids.po2(site),
             f"{ids.species('o2', site)}/{ids.SOLUBILITY}",
             PU.kPa,
@@ -112,7 +115,7 @@ def site_objects(site: str, enzymes: Sequence[str] = ids.ENZYMES) -> core.CoreOb
     )
     _add(
         out,
-        _observer(
+        observer(
             ids.pco2(site),
             f"{ids.species('co2', site)}/{ids.CO2_SOLUBILITY}",
             PU.kPa,
@@ -123,7 +126,7 @@ def site_objects(site: str, enzymes: Sequence[str] = ids.ENZYMES) -> core.CoreOb
     for e in enzymes:
         _add(
             out,
-            _observer(
+            observer(
                 ids.activity(e, site),
                 f"{ids.species(e, site)} * {ids.specific_activity(e)}",
                 PU.ukat_per_l,
@@ -160,7 +163,7 @@ def third_weights(n: int, periportal: bool) -> list[tuple[int, Fraction]]:
     return out
 
 
-def _mean(of_zones: Sequence[str], weights: list[tuple[int, Fraction]]) -> str:
+def weighted_mean(of_zones: Sequence[str], weights: list[tuple[int, Fraction]]) -> str:
     """Get the weighted mean of an id of the zones (periportal first)."""
     terms = [
         of_zones[k - 1] if w == 1 else f"{float(w)!r} dimensionless * {of_zones[k - 1]}"
@@ -199,9 +202,9 @@ def mean_objects(
         for q in perfusate:
             _add(
                 out,
-                _observer(
+                observer(
                     ids.species(q, site),
-                    _mean([ids.species(q, z) for z in zones], weights),
+                    weighted_mean([ids.species(q, z) for z in zones], weights),
                     U.mM,
                     f"{circuit.quantity_label(q)} (perfusate, {where} mean)",
                     SBO.MOLAR_CONCENTRATION_OF_AN_ENTITY,
@@ -211,9 +214,11 @@ def mean_objects(
         for q in cells:
             _add(
                 out,
-                _observer(
+                observer(
                     ids.species(q, cell),
-                    _mean([ids.species(q, ids.cell_site(z)) for z in zones], weights),
+                    weighted_mean(
+                        [ids.species(q, ids.cell_site(z)) for z in zones], weights
+                    ),
                     U.mM,
                     f"{core.quantity_name(q)} (cells, {where} mean)",
                     SBO.MOLAR_CONCENTRATION_OF_AN_ENTITY,
@@ -221,9 +226,9 @@ def mean_objects(
             )
         _add(
             out,
-            _observer(
+            observer(
                 ids.alive(site),
-                _mean([ids.alive(z) for z in zones], weights),
+                weighted_mean([ids.alive(z) for z in zones], weights),
                 U.dimensionless,
                 f"living fraction of the cells ({where} mean)",
                 SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
@@ -231,7 +236,7 @@ def mean_objects(
         )
         _add(
             out,
-            _observer(
+            observer(
                 ids.ph(site),
                 f"3 dimensionless - log10({ids.species('h', site)}/(1 mM))",
                 U.dimensionless,
@@ -264,7 +269,7 @@ def bile_objects(
     total = " + ".join(f"({r})" for r in rates)
     _add(
         out,
-        _observer(
+        observer(
             ids.BILE_RATE,
             f"{ul} * ({total})",
             PU.ul_per_min,
@@ -274,7 +279,7 @@ def bile_objects(
     )
     _add(
         out,
-        _observer(
+        observer(
             ids.BILE,
             f"{ul} * ({' + '.join(ids.bile(z) for z in zones)})",
             PU.ul,
@@ -284,7 +289,7 @@ def bile_objects(
     )
     _add(
         out,
-        _observer(
+        observer(
             ids.BILE_PER_MASS,
             f"{ids.BILE}/(1000 {PU.g_per_kg.sid} * {mass})",
             PU.ul_per_g,
@@ -300,7 +305,7 @@ def uptake_objects(zones: Sequence[str]) -> core.CoreObjects:
     out = core.CoreObjects()
     _add(
         out,
-        _observer(
+        observer(
             ids.VO2,
             " + ".join(ids.reaction("O2IM", z) for z in zones),
             U.mmole_per_min,
@@ -322,7 +327,7 @@ def urine_objects() -> core.CoreObjects:
     ul = f"1000000 {PU.ul_per_l.sid}"
     _add(
         out,
-        _observer(
+        observer(
             ids.URINE_RATE,
             f"{ul} * {ids.Q_URINE}",
             PU.ul_per_min,
@@ -332,7 +337,7 @@ def urine_objects() -> core.CoreObjects:
     )
     _add(
         out,
-        _observer(
+        observer(
             ids.URINE,
             f"{ul} * {ids.volume(ids.URINE_SITE)}",
             PU.ul,
