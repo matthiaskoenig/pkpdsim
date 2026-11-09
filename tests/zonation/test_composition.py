@@ -121,16 +121,20 @@ def test_the_flat_model_has_no_submodels_left(tmp_path: Path) -> None:
     assert (tmp_path / "zonated_liver_rat.xml").is_file()
 
 
+ACCEPTED_WARNINGS: dict[int, str] = {}
+"""The libsbml warnings (by number, with the reason) the flat model may emit: none."""
+
+
 def test_the_flat_model_validates(tmp_path: Path) -> None:
-    """No libsbml error, the units checks included (warnings are not counted)."""
+    """No libsbml error and no warning, the units checks included."""
     document = libsbml.readSBMLFromFile(str(_written(tmp_path)))
     document.checkConsistency()
-    errors = [
-        document.getError(i).getMessage()
-        for i in range(document.getNumErrors())
-        if document.getError(i).getSeverity() >= libsbml.LIBSBML_SEV_ERROR
+    problems = [
+        (e.getSeverityAsString(), e.getErrorId(), e.getMessage()[:300])
+        for e in map(document.getError, range(document.getNumErrors()))
+        if e.getErrorId() not in ACCEPTED_WARNINGS
     ]
-    assert errors == []
+    assert problems == []
 
 
 def test_the_flat_model_simulates(tmp_path: Path) -> None:

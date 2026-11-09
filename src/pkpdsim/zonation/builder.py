@@ -72,6 +72,7 @@ from sbmlutils.factory import (
     Reaction,
     Species,
 )
+from sbmlutils.factory.units import UnitDefinition
 from sbmlutils.metadata import BQB, SBO
 
 from pkpdsim.database.tables import entry
@@ -136,6 +137,7 @@ _VASCULAR = (Layer.RBC, Layer.PLASMA, Layer.ENDOTHELIUM, Layer.DISSE)
 class ZonationUnits(PU):
     """The unit definitions of the zonated liver: those of the perfusion and the transport."""
 
+    l_per_m3 = UnitDefinition("l_per_m3", "litre/metre^3", name="litre per cubic metre")
     m2_per_s = M2_PER_S
     m_per_s = M_PER_S
 
@@ -515,7 +517,7 @@ class ZonationBuilder:
                 )
             )
             share = {
-                Layer.PLASMA: f"(1 - {ids.HAEMATOCRIT})",
+                Layer.PLASMA: f"(1 dimensionless - {ids.HAEMATOCRIT})",
                 Layer.RBC: ids.HAEMATOCRIT,
             }
             for layer in self._carriers():
@@ -1069,7 +1071,9 @@ class ZonationBuilder:
         out: list[InitialAssignment] = []
         for k in range(1, self.settings.n_zones + 1):
             zone = ids.zone(k)
-            area = f"2 dimensionless * {self._lumen(zone)} / {ids.RADIUS} / 1000 dimensionless"
+            area = (
+                f"2 dimensionless * {self._lumen(zone)} / {ids.RADIUS} / 1000 l_per_m3"
+            )
             out.append(
                 initial_assignment(
                     ids.area("pd", zone),
@@ -1119,7 +1123,7 @@ class ZonationBuilder:
             f"{a} <-> {b}",
             formula=(
                 f"{permeability} * {porosity}{ids.area(interface, zone)} * 1000 "
-                f"dimensionless * 60 s_per_min * ({a} - {b}){factor}",
+                f"l_per_m3 * 60 s_per_min * ({a} - {b}){factor}",
                 U.mmole_per_min,
             ),
             compartment=ids.volume(layers[0], zone),

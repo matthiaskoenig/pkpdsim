@@ -427,3 +427,30 @@ def test_a_small_solute_stays_longer_than_the_intravascular_marker(
     assert marker == pytest.approx(plasma / q, rel=1e-6)
     assert small > marker
     assert small == pytest.approx((plasma + disse) / q, rel=1e-6)
+
+
+def test_the_fenestral_clearance_is_p_times_a_in_litres_per_minute(
+    tmp_path: Path,
+) -> None:
+    """A permeability in m/s on an area in m2 is a clearance in l/min.
+
+    By hand: P = 5.45e-9 m/s on A = 11.26 m2 is 6.137e-8 m3/s = 6.137e-5 l/s
+    = 3.682e-3 l/min. The rate of the reaction at 1 mM in the plasma and 0 in
+    the space of Disse is that clearance in mmole/min. The barrier is the rate
+    limiting step here (no flow, nothing else is set), and a wrong factor
+    (60000 for the units, say) would give 220 l/min or 6e-8 l/min.
+    """
+    builder = ZonationBuilder(
+        ZonationSettings(n_zones=1, liver_mass=mass_g(1000.0)), [TRACER], None
+    )
+    path = tmp_path / "barrier.xml"
+    create_model(
+        builder.build(), filepath=path, sbml_level=3, sbml_version=2, validate=False
+    )
+    r = roadrunner.RoadRunner(str(path))
+    r["P_fen_tr"] = 5.45e-9
+    r[ids.porosity("z1")] = 1.0
+    r[ids.area("pd", "z1")] = 11.26
+    r[f"[{ids.species('tr', Layer.PLASMA, 'z1')}]"] = 1.0
+    r[f"[{ids.species('tr', Layer.DISSE, 'z1')}]"] = 0.0
+    assert r[ids.exchange("FEN", "tr", "z1", "")] == pytest.approx(3.682e-3, rel=1e-3)
