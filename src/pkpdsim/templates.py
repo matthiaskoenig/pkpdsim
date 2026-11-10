@@ -17,8 +17,14 @@ creators = [
     Creator(
         familyName="König",
         givenName="Matthias",
-        email="koenigmx@hu-berlin.de",
-        organization="Humboldt-University Berlin, Institute for Theoretical Biology",
+        email="matthias.koenig@uni-luebeck.de",
+        organization=(
+            "University of Lübeck, Lübeck, Germany; "
+            "University Hospital Schleswig-Holstein, Campus Lübeck, "
+            "First Department of Medicine, Lübeck, Germany; "
+            "Humboldt-Universität zu Berlin, Faculty of Life Sciences, "
+            "Department of Biology, Institute of Theoretical Biology, Berlin, Germany"
+        ),
         site="https://livermetabolism.com",
     ),
 ]
