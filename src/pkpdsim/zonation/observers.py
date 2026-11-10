@@ -25,7 +25,10 @@ geometry instead of `rbc`, `plasma`, `endo` and `disse`; see `ZonationBuilder.la
   `amount_<s>` the sum over the layers, the amount in the organ (the bile duct is
   outside of the organ).
 - `cum_in_<s>`, `cum_out_<s>` (mmole): what entered through the inflow and left
-  through the outflow since the start. `cum_consumed_<s>` (mmole): what the
+  through the outflow since the start; the outflow ledger holds the filtrate of
+  a net filtration as well (`ZonationBuilder.filtrate_efflux`, which leaves the
+  space of Disse at the pericentral end and is negative for a net
+  reabsorption). `cum_consumed_<s>` (mmole): what the
   reactions the caller declares consumed. `cum_dose_<s>` (mmole): what was put into
   the organ by hand, the initial amounts and the doses; it starts as the amount of
   the initial concentrations of the model and a dose or a changed initial amount
@@ -310,16 +313,23 @@ def observer_objects(
                 f"{builder.carrier_flow(layer, first)} * {ids.species(s, layer, ids.INFLOW)}"
                 for layer in carriers
             )
-            efflux = " + ".join(
+            blood = " + ".join(
                 f"{builder.carrier_flow(layer, last)} * {ids.species(s, layer, last)}"
                 for layer in carriers
             )
+            # the filtrate which a net filtration takes out of the space of
+            # Disse at the pericentral end leaves the organ as well, so the
+            # outflow ledger integrates it (negative for a net reabsorption,
+            # which draws water in there); it is not part of `c_outflow`,
+            # which is the concentration of the blood
+            lymph = builder.filtrate_efflux(substance)
+            efflux = blood if lymph is None else f"{blood} + {lymph}"
             flow_out = " + ".join(
                 builder.carrier_flow(layer, last) for layer in carriers
             )
             p, r = observer(
                 outflow_concentration(s),
-                f"({efflux}) / ({flow_out})",
+                f"({blood}) / ({flow_out})",
                 U.mM,
                 f"{substance.name} in the blood leaving the organ (not the pericentral mean)",
                 SBO.MOLAR_CONCENTRATION_OF_AN_ENTITY,

@@ -19,7 +19,7 @@ from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import Value
 from pkpdsim.species import Species
 from pkpdsim.zonation import ZonationBuilder, ids
-from pkpdsim.zonation.flow import ImposedFlow
+from pkpdsim.zonation.flow import ImposedFlow, PressureFlow
 from pkpdsim.zonation.geometry import Layer, geometry
 from pkpdsim.zonation.profiles import Weights
 from pkpdsim.zonation.settings import Geometry, ZonationSettings
@@ -459,3 +459,156 @@ def test_the_fenestral_clearance_is_p_times_a_in_litres_per_minute(
     r[f"[{ids.species('tr', Layer.PLASMA, 'z1')}]"] = 1.0
     r[f"[{ids.species('tr', Layer.DISSE, 'z1')}]"] = 0.0
     assert r[ids.exchange("FEN", "tr", "z1", "")] == pytest.approx(3.682e-3, rel=1e-3)
+
+
+# --- the filtrate of a pressure-driven sinusoid ------------------------------
+#
+# The leaky tube loses plasma through the fenestrae where its flow falls and
+# regains it where the flow rises, so a zone receives more solute than it
+# passes on. The filtrate carries the solute it took with it (the solvent drag
+# and the chain of the space of Disse), and the test of that is the steady
+# profile of a tracer at a constant inflow: flat for a solute the fenestrae do
+# not hinder, enriched by `Q(z1)/Q(zk)` for one they stop.
+
+_PRESSURE_PROFILE = (
+    1.0,
+    1.094652,
+    1.175702,
+    1.235407,
+    1.267174,
+    1.267174,
+    1.235407,
+    1.175702,
+    1.094652,
+    1.0,
+)
+"""`Q(z1)/Q(z<k>)` of a default pressure flow at ten zones, the enrichment of a
+solute which stays in the lumen (the flow falls to the middle of the sinusoid
+and rises back, `pkpdsim.zonation.flow`)."""
+
+
+def _steady(
+    tmp_path: Path,
+    radius: float,
+    *,
+    n: int = 10,
+    geometry: Geometry = Geometry.SINUSOID,
+    p_onc: float | None = None,
+) -> roadrunner.RoadRunner:
+    """A pressure-driven chain at the steady state of an inflow of 1 mM.
+
+    The axial diffusion is switched off (`D_tr = 0`), so the convection, the
+    barrier and the filtrate alone set the profile and it can be compared with
+    the flows of the zones.
+    """
+    settings = ZonationSettings(
+        n_zones=n,
+        geometry=geometry,
+        flow=PressureFlow(p_onc=p_onc),
+        bile=None,
+        haematocrit=0.0,
+        liver_mass=mass_g(7.229),
+        reference_flow=liver_flow(),
+    )
+    builder = _Sized(settings, [TRACER], None)
+    builder.radius = radius
+    path = tmp_path / "filtrate.xml"
+    create_model(
+        builder.build(), filepath=path, sbml_level=3, sbml_version=2, validate=False
+    )
+    r = individual(path)
+    r.integrator.absolute_tolerance = 1e-14
+    r.integrator.relative_tolerance = 1e-12
+    if ids.diffusion("tr") in r.model.getGlobalParameterIds():
+        r[ids.diffusion("tr")] = 0.0
+    layer = ids.VASCULAR if geometry is Geometry.WELL_STIRRED else Layer.PLASMA
+    r[ids.species("tr", layer, ids.INFLOW)] = 1.0
+    r.simulate(0.0, 200.0, 2)
+    return r
+
+
+def _profile(r: roadrunner.RoadRunner, layer: Layer | str, n: int = 10) -> list[float]:
+    """The concentrations of a layer over the zones."""
+    return [r[f"[{ids.species('tr', layer, ids.zone(k))}]"] for k in range(1, n + 1)]
+
+
+def test_a_freely_sieved_solute_keeps_the_concentration_of_the_inflow(
+    tmp_path: Path,
+) -> None:
+    """The filtered water takes the solute with it and brings it back.
+
+    A solute which no fenestra hinders (`sigma = 0`) is dragged out of the
+    lumen with the plasma which filters and back in where the lumen regains
+    flow, so neither the lumen nor the space of Disse is enriched: the profile
+    is the concentration of the inflow in every zone. Without the solvent drag
+    and the chain of the filtrate it is `_PRESSURE_PROFILE`, a hump of 26 %
+    out of nothing.
+    """
+    r = _steady(tmp_path, radius=1e-12)
+    assert _profile(r, Layer.PLASMA) == pytest.approx([1.0] * 10, rel=1e-6)
+    assert _profile(r, Layer.DISSE) == pytest.approx([1.0] * 10, rel=1e-6)
+
+
+def test_a_solute_no_fenestra_lets_through_follows_the_flow_of_the_zones(
+    tmp_path: Path,
+) -> None:
+    """A fully reflected solute stays in the lumen and is concentrated there.
+
+    `sigma = 1`: the water leaves it behind, so the flux `Q*c` through every
+    zone is the one of the inflow and the concentration is `Q(z1)/Q(zk)`. This
+    is the physics of a solute which cannot cross the endothelium, and the
+    reason the drag is scaled by the reflection coefficient and not applied to
+    every solute.
+    """
+    r = _steady(tmp_path, radius=1e-6)
+    assert _profile(r, Layer.PLASMA) == pytest.approx(_PRESSURE_PROFILE, rel=1e-5)
+    assert _profile(r, Layer.DISSE) == pytest.approx([0.0] * 10, abs=1e-12)
+
+
+def test_a_well_stirred_zone_carries_the_whole_axial_water_flux(
+    tmp_path: Path,
+) -> None:
+    """One compartment holds the lumen and the space of Disse, so nothing filters out.
+
+    The filtrate stays in the vascular compartment of the zone and flows on
+    with it, so the chain carries the flow which enters it and the profile is
+    flat; with the flow of the zone it would be `_PRESSURE_PROFILE`.
+    """
+    r = _steady(tmp_path, radius=1e-12, geometry=Geometry.WELL_STIRRED)
+    assert _profile(r, ids.VASCULAR) == pytest.approx([1.0] * 10, rel=1e-9)
+
+
+@pytest.mark.parametrize(
+    "p_onc,lymph", [(None, False), (0.0, True), (2000.0, True)], ids=str
+)
+def test_only_a_net_filtration_leaves_at_the_pericentral_end(
+    p_onc: float | None, lymph: bool, tmp_path: Path
+) -> None:
+    """The default oncotic pressure filters and reabsorbs the same amount.
+
+    It is the mean of the two pressures, so `Q(z<n>)` is `Q(z1)` and the space
+    of Disse gives everything back to the lumen: no reaction takes the
+    filtrate out of the organ. A lower or a higher oncotic pressure filters or
+    reabsorbs on balance, and that remainder leaves (or enters) at the
+    pericentral end and is in the outflow ledger, which keeps the mass balance
+    exact (`tests/zonation/test_observers.py`).
+    """
+    r = _steady(tmp_path, radius=1e-12, p_onc=p_onc)
+    out = ids.flow(
+        "tr", ids.site(Layer.DISSE, ids.zone(10)), ids.site(Layer.DISSE, ids.OUTFLOW)
+    )
+    assert (out in r.model.getReactionIds()) is lymph
+    assert _profile(r, Layer.PLASMA) == pytest.approx([1.0] * 10, rel=1e-4)
+
+
+def test_an_imposed_flow_filters_nothing(tmp_path: Path) -> None:
+    """Every zone has the same flow, so no water crosses the endothelium.
+
+    The filtrate is the leaky tube's and nothing else emits it: an imposed
+    flow has neither the drag nor the chain of the space of Disse nor the
+    parameters of the filtrate.
+    """
+    model = _builder(n=10, flow=1.0, radius=1e-12).build()
+    reactions = {str(x.sid) for x in model.reactions}
+    assert not [x for x in reactions if x.startswith(("SD_", "FLOW_tr_disse_"))]
+    assert not [str(p.sid) for p in model.parameters if str(p.sid).startswith("Q_fil_")]

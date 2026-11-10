@@ -56,6 +56,24 @@ compartment. The zones are a chain from periportal to pericentral:
   Disse to hepatocyte interface is that area times `(r_sin + t_endo + t_disse)
   / r_sin`.
 
+- the filtrate (`filtrate`, a pressure-driven sinusoid only): the plasma which
+  leaves the lumen through the fenestrae where the flow of the leaky tube falls
+  takes solute with it (`SD_<s>_<zone>`, the solvent drag, scaled by
+  `1 - sigma_<s>` of the reflection coefficient of the fenestrae), flows along
+  the space of Disse (`FLOW_<s>_disse_z<k>_disse_z<k+1>` of `Q_fil_<zone>`) and
+  is reabsorbed where the lumen regains flow. The water is conserved term by
+  term, so a freely sieved solute keeps the concentration of the inflow through
+  the whole chain and a solute no fenestra lets through is enriched by
+  `Q(z1)/Q(z<k>)`, which is the physics of the two. The transmural flux is that
+  of the plasma conduit, `Q_plasma_li_<z<k-1>> - Q_plasma_li_<z<k>>`: the
+  erythrocytes do not pass a fenestra. The haematocrit of the lumen is a
+  constant of the build, so the erythrocyte conduit of a pressure flow loses
+  its share of the flow where the plasma filters, with nowhere for it to go,
+  and a substance in the erythrocytes is enriched by `Q(z1)/Q(z<k>)` there; a
+  model whose solute distributes into the erythrocytes and which needs the
+  interior concentrations of a pressure-driven chain should run it at a
+  haematocrit of 0 until the conduit follows the plasma it loses.
+
 A flow of 0 and a diffusion of 0 emit no reaction, so the chain is closed or
 has no diffusion by construction (a solute larger than a fenestra has no fenestral
 reaction either) and no rate law is zero or divides by zero.
@@ -129,6 +147,8 @@ from pkpdsim.zonation.transport import (
     fenestral_permeability,
     molecular_radius,
     peclet,
+    radius_ratio,
+    reflection,
 )
 
 __all__ = ["ZonationBuilder", "effective_peclet"]
@@ -539,8 +559,20 @@ class ZonationBuilder:
 
         An imposed flow is one number for all zones; a pressure flow has the
         flow of the position of the zone.
+
+        A **well-stirred** zone of a pressure flow is the exception: its one
+        vascular compartment holds the lumen and the space of Disse, so the
+        plasma which filters out of the lumen stays in it and flows on with
+        it. The axial water flux of the compartment is the sum of the two,
+        which is the flow entering the chain, the same in every zone
+        (`Q_li_z1`); the position-dependent `Q_li_<zone>` of the lumen alone
+        would make the zones lose water to nowhere and enrich every interior
+        zone by `Q(z1)/Q(zk)`. The sinusoid geometry has the two conduits
+        apart and carries the filtrate explicitly (`filtrate`).
         """
         if isinstance(self.settings.flow, PressureFlow):
+            if self.settings.geometry is Geometry.WELL_STIRRED:
+                return ids.zone_flow(layer, ids.zone(1))
             return ids.zone_flow(layer, zone)
         return ids.FLOW if layer == ids.VASCULAR else ids.layer_flow(layer)
 
@@ -1040,6 +1072,107 @@ class ZonationBuilder:
         """The fenestral porosity of every zone: the gradient of the table."""
         return porosities(self.settings.n_zones, self._geo())
 
+    def _reflection(self, substance: Solute) -> float:
+        """The reflection coefficient of the endothelium for a substance.
+
+        `1 - renkin(r / r_fen)` of `transport.reflection`; 0 (the filtered
+        water takes the solute with it, unhindered) for a solute without a
+        molar mass, which has no radius the engine could derive a hindrance
+        from, as 0 is the permeability of a path which is model input.
+        """
+        if substance.mr is None:
+            return 0.0
+        return reflection(radius_ratio(self._radius(substance), self._geo()))
+
+    def _has_filtrate(self) -> bool:
+        """Whether the chain carries a filtrate in the space of Disse.
+
+        A pressure-driven sinusoid loses plasma through the fenestrae where its
+        flow falls and regains it where the flow rises; an imposed flow is the
+        same in every zone and filters nothing, and the well-stirred geometry
+        holds the lumen and the space of Disse in one compartment, so the
+        filtrate never leaves it (and the chain carries the whole axial water
+        flux, `carrier_flow`).
+        """
+        return (
+            isinstance(self.settings.flow, PressureFlow)
+            and self._has_radial()
+            and self.has_flow()
+        )
+
+    def _filtrate_flows(self) -> tuple[float, ...]:
+        """The filtrate flow (l/min) the space of Disse carries out of every zone.
+
+        The plasma which has left the lumen up to the pericentral face of the
+        zone, `Q_plasma(z1) - Q_plasma(zk)`: the lumen of the first zone
+        receives the inflow at its own flow and so neither filters nor
+        reabsorbs, which makes the first entry 0, and every further zone
+        filters the flow its lumen loses. The share of the lumen which is
+        filtered is the plasma's: the erythrocytes do not pass a fenestra, so
+        the transmural flux is that of the plasma conduit, which keeps the
+        plasma chain conservative (see the module docstring).
+        """
+        h = self._haematocrit()
+        flows = [(1.0 - h) * q for q in self._zone_flows()]
+        return tuple(flows[0] - q for q in flows)
+
+    def _filtrate_objects(self) -> tuple[list[Parameter], list[AssignmentRule]]:
+        """The filtrate flow of every zone and the reflection of every substance.
+
+        `Q_fil_<zone>` is an assignment rule of the plasma flows, so it follows
+        a change of the pressures as the flows do; the first zone has none (it
+        is 0 by construction).
+        """
+        if not self._has_filtrate():
+            return [], []
+        n = self.settings.n_zones
+        flows = self._filtrate_flows()
+        first = ids.zone_flow(Layer.PLASMA, ids.zone(1))
+        params: list[Parameter] = []
+        rules: list[AssignmentRule] = []
+        for k in range(2, n + 1):
+            zone = ids.zone(k)
+            pid = ids.filtrate_flow(zone)
+            name = (
+                f"filtrate the space of Disse carries out of zone {k} of {n} "
+                "(the plasma the lumen has lost through the fenestrae)"
+            )
+            params.append(
+                Parameter(
+                    pid,
+                    flows[k - 1],
+                    unit=U.l_per_min,
+                    name=name,
+                    constant=False,
+                    sboTerm=_P,
+                )
+            )
+            rules.append(
+                assignment_rule(
+                    pid,
+                    f"{first} - {ids.zone_flow(Layer.PLASMA, zone)}",
+                    U.l_per_min,
+                    name,
+                )
+            )
+        for substance in self.substances:
+            derived = substance.mr is not None
+            params.append(
+                Parameter(
+                    ids.reflection(substance.sid),
+                    self._reflection(substance),
+                    unit=U.dimensionless,
+                    name=(
+                        f"reflection coefficient of the endothelium for "
+                        f"{substance.name}"
+                        + ("" if derived else " (no molar mass: freely sieved)")
+                    ),
+                    constant=True,
+                    sboTerm=_P,
+                )
+            )
+        return params, rules
+
     def _lumen(self, zone: str) -> str:
         """The expression of the lumen volume (l) of a zone."""
         rbc = Layer.RBC in self._fractions()
@@ -1348,6 +1481,142 @@ class ZonationBuilder:
                 )
         return out
 
+    def _upwind(self, flux: str, source: str, target: str) -> str:
+        """The concentration a flux carries: the source's where it is positive.
+
+        The first order upwind scheme of the chain, written so that the
+        direction follows the sign of the flux at any time: a flux which the
+        pressures of the model reverse carries the concentration of the site
+        it then comes from.
+        """
+        return f"piecewise({source}, {flux} > 0 l_per_min, {target})"
+
+    def filtrate(self) -> list[Reaction]:
+        """Get the transport of the filtrate: the solvent drag and its chain.
+
+        The plasma which leaves the lumen of a zone through the fenestrae
+        takes solute with it (the solvent drag), flows along the space of
+        Disse and is reabsorbed where the lumen regains flow. Both are the
+        water balance of the pressure-driven sinusoid, written for the solute:
+
+        - `SD_<s>_<zone>` (plasma to the space of Disse of the zone where its
+          lumen loses flow, the reverse where it gains): `(1 - sigma_<s>) *
+          (Q_fil_<zone> - Q_fil_<previous>) * c`, with the concentration of
+          the side the water comes from (upwind). `sigma_<s>` is the
+          reflection coefficient of the fenestrae
+          (`transport.reflection`, the Renkin ratio of the fenestral
+          permeability): a solute which no fenestra lets through
+          (`sigma = 1`) stays in the lumen and is enriched by the filtration,
+          which is the physics; a freely sieved one (`sigma = 0`) is carried
+          with the water and keeps the concentration of the inflow.
+        - `FLOW_<s>_disse_z<k>_disse_z<k+1>`: `Q_fil_<z<k>> * c` of the space
+          of Disse, upwind, the filtrate flowing along the barrier. Without it
+          the space of Disse of a zone would be a dead end, the net transmural
+          flux would be zero at steady state whatever the drag, and the lumen
+          would keep the whole enrichment (the defect this fixes).
+        - `FLOW_<s>_disse_z<n>_disse_out` at the pericentral end, the filtrate
+          which the lumen has not taken back (the hepatic lymph): the net
+          filtration of the whole sinusoid, `Q_fil_<z<n>>`, which is 0 at the
+          default oncotic pressure (the mean of the two pressures, where what
+          filters out of the first half returns in the second) and is then not
+          emitted. The reaction is the zero-gradient boundary of the space of
+          Disse: a net filtration leaves at the concentration of the last
+          zone, and a net reabsorption draws water in at that same
+          concentration, so no gradient is invented at a boundary the engine
+          has no interstitium behind. The observers count it in `cum_out_<s>`
+          (`observers.observer_objects`), which keeps the mass balance exact.
+
+        Returns:
+            The reactions; none without a filtrate (`_has_filtrate`: an
+            imposed flow, the well-stirred geometry, no flow) and none of the
+            drag for a solute which is fully reflected.
+        """
+        if not self._has_filtrate():
+            return []
+        n = self.settings.n_zones
+        flows = self._filtrate_flows()
+        out: list[Reaction] = []
+        for substance in self.substances:
+            sid = substance.sid
+            if self._reflection(substance) < 1.0:
+                for k in range(2, n + 1):
+                    out.append(self._drag_reaction(substance, k))
+            for k in range(2, n):
+                out.append(self._filtrate_reaction(sid, ids.zone(k), ids.zone(k + 1)))
+            if flows[-1] != 0.0:
+                out.append(
+                    self._filtrate_reaction(sid, ids.zone(n), ids.OUTFLOW, lymph=True)
+                )
+        return out
+
+    def _drag_reaction(self, substance: Solute, k: int) -> Reaction:
+        """The solvent drag of a substance across the endothelium of zone `k`."""
+        zone = ids.zone(k)
+        a = ids.species(substance.sid, Layer.PLASMA, zone)
+        b = ids.species(substance.sid, Layer.DISSE, zone)
+        # the filtrate of the first zone is 0 by construction, so the flux of
+        # the second zone is its own filtrate and not a difference
+        flux = (
+            ids.filtrate_flow(zone)
+            if k == 2
+            else f"({ids.filtrate_flow(zone)} - {ids.filtrate_flow(ids.zone(k - 1))})"
+        )
+        return Reaction(
+            ids.exchange("SD", substance.sid, zone),
+            f"{a} <-> {b}",
+            formula=(
+                f"(1 dimensionless - {ids.reflection(substance.sid)}) * {flux} * "
+                f"{self._upwind(flux, a, b)}",
+                U.mmole_per_min,
+            ),
+            compartment=ids.volume(Layer.PLASMA, zone),
+            name=(
+                f"solvent drag of {substance.name} with the filtered plasma of zone {k}"
+            ),
+            sboTerm=SBO.TRANSPORT_REACTION,
+        )
+
+    def _filtrate_reaction(
+        self, sid: str, source: str, target: str, lymph: bool = False
+    ) -> Reaction:
+        """The filtrate carrying a substance along the space of Disse."""
+        a = ids.species(sid, Layer.DISSE, source)
+        b = "" if lymph else ids.species(sid, Layer.DISSE, target)
+        flux = ids.filtrate_flow(source)
+        where = (
+            "out of the liver (the lymph of the net filtration)"
+            if lymph
+            else f"from {source} to {target}"
+        )
+        return Reaction(
+            flow_id(sid, ids.site(Layer.DISSE, source), ids.site(Layer.DISSE, target)),
+            f"{a} -> " if lymph else f"{a} <-> {b}",
+            formula=(
+                f"{flux} * {a}" if lymph else f"{flux} * {self._upwind(flux, a, b)}",
+                U.mmole_per_min,
+            ),
+            compartment=ids.volume(Layer.DISSE, source),
+            name=f"filtrate flow of {sid} in the space of Disse {where}",
+            sboTerm=SBO.TRANSPORT_REACTION,
+        )
+
+    def filtrate_efflux(self, substance: Solute) -> str | None:
+        """Get the flux (mmole/min) the filtrate takes out of the organ, `None` for none.
+
+        The lymph of the net filtration at the pericentral end
+        (`filtrate`), negative for a net reabsorption, which draws water in
+        there; `None` when the sinusoid filters and reabsorbs the same amount
+        (the default oncotic pressure) or carries no filtrate at all. The
+        observers add it to the outflow ledger.
+        """
+        if not self._has_filtrate() or self._filtrate_flows()[-1] == 0.0:
+            return None
+        zone = ids.zone(self.settings.n_zones)
+        return (
+            f"{ids.filtrate_flow(zone)} * "
+            f"{ids.species(substance.sid, Layer.DISSE, zone)}"
+        )
+
     def _warn_dispersion(self) -> None:
         """Warn once when a diffusion lies below the numerical dispersion."""
         limit = self.dispersion()
@@ -1376,6 +1645,7 @@ class ZonationBuilder:
         """
         s = self.settings
         flow_parameters, flow_assignments, flow_rules = self._flow_parameters()
+        filtrate_parameters, filtrate_rules = self._filtrate_objects()
         self._warn_dispersion()
         dispersion = self.dispersion()
         velocity = self.velocity()
@@ -1402,6 +1672,7 @@ class ZonationBuilder:
                     *self._diffusion_parameters(),
                     *self._bile_parameters(),
                     *self._radial_parameters(),
+                    *filtrate_parameters,
                     *self._cell_profile_parameters(),
                 ]
             ),
@@ -1410,11 +1681,12 @@ class ZonationBuilder:
                 *flow_assignments,
                 *self._radial_assignments(),
             ],
-            rules=[*flow_rules, *self._bile_rules()],
+            rules=[*flow_rules, *filtrate_rules, *self._bile_rules()],
             reactions=[
                 *self.convection(),
                 *self.axial_diffusion(),
                 *self.radial_exchange(),
+                *self.filtrate(),
                 *self.bile(),
             ],
         )
