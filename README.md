@@ -100,7 +100,7 @@ The [tutorial](https://matthiaskoenig.github.io/pkpdsim/pbpk/tutorial/) builds s
 
 If you use `pkpdsim` please cite the archived software on [Zenodo](https://doi.org/10.5281/zenodo.23297325):
 
-> König, M. (2026). *pkpdsim: building blocks of physiologically based pharmacokinetic and pharmacodynamic models in SBML* (Version 0.22.0) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.23297325
+> König, M. (2026). *pkpdsim: building blocks of physiologically based pharmacokinetic and pharmacodynamic models in SBML* (Version 0.23.0) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.23297325
 
 ```bibtex
 @software{konig_pkpdsim,
@@ -108,7 +108,7 @@ If you use `pkpdsim` please cite the archived software on [Zenodo](https://doi.o
   title     = {pkpdsim: building blocks of physiologically based pharmacokinetic and pharmacodynamic models in SBML},
   year      = {2026},
   month     = nov,
-  version   = {0.22.0},
+  version   = {0.23.0},
   publisher = {Zenodo},
   doi       = {10.5281/zenodo.23297325},
   url       = {https://doi.org/10.5281/zenodo.23297325},
