@@ -268,6 +268,52 @@ def test_an_extension_which_replaces_a_law_of_the_library_drops_its_constants(
     assert {ids.reaction("O2IM", ids.zone_id(k)) for k in zones} <= flat
 
 
+def test_an_extension_releases_into_a_quantity_of_the_perfusate(
+    tmp_path: Path,
+) -> None:
+    """A quantity of the perfusate which the cells of the library do not exchange is
+    wired like the others when the extension gives the cell model its port: the
+    reaction of the zone releases into the vascular space of the zone, and no copy
+    of the port is left in the submodel."""
+
+    def cell(model: Model) -> Model:
+        model.species.append(
+            Species(
+                "tracer_ext",
+                "Vext",
+                initialConcentration=0.0,
+                substanceUnit=U.mmole,
+                hasOnlySubstanceUnits=False,
+                name="tracer of the perfusate of the zone",
+                sboTerm=SBO.SIMPLE_CHEMICAL,
+                port=True,
+            )
+        )
+        model.reactions.append(
+            Reaction(
+                "TRACERR",
+                "-> tracer_ext",
+                formula=("f_alive * Vli * 1 mM * 1 per_min", U.mmole_per_min),
+                compartment="Vext",
+                name="release of the tracer",
+                sboTerm=SBO.TRANSPORT_REACTION,
+            )
+        )
+        return model
+
+    definition = liver_definition(2, tracers=("tracer",))
+    flat = _model(build(definition, tmp_path, PerfusionExtension(cell=cell)))
+    sids = _ids(flat)
+    for k in (1, 2):
+        zone = ids.zone_id(k)
+        release = flat.getReaction(ids.reaction("TRACERR", zone))
+        assert release is not None, ids.reaction("TRACERR", zone)
+        products = [r.getSpecies() for r in release.getListOfProducts()]
+        assert products == [ids.species("tracer", zone)], products
+    left = {f"M{k:02}__tracer_ext" for k in (1, 2)} & sids
+    assert not left, sorted(left)
+
+
 def test_a_shared_element_an_extension_leaves_out_of_the_liver_is_refused(
     tmp_path: Path,
 ) -> None:

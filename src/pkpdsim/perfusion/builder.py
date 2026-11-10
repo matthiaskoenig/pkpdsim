@@ -567,11 +567,15 @@ def _liver(
     def names(zone: str) -> dict[str, str]:
         return table[zone]
 
+    # the quantities of the chain the cells exchange are those with a port in the
+    # cell model, so a quantity an extension exchanges is wired like the others
+    ports = {str(x.sid) for x in cell.species if x.sid is not None}
+    exchange = tuple(q for q in quantities if f"{q}_ext" in ports)
     model = composition.compose(
         builder,
         cell.sid,
         composition.CellPorts(),
-        exchange=ids.perfusate_quantities(released),
+        exchange=exchange,
         temperature=temperature,
         shared=shared,
         expose={
