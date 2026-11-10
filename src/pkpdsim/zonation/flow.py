@@ -106,7 +106,7 @@ not run backwards.
 """
 
 import math
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -130,7 +130,6 @@ from pkpdsim.zonation import ids
 from pkpdsim.zonation.geometry import (
     Layer,
     SinusoidGeometry,
-    fractions,
     lumen_fraction,
     mass_kg,
     porosities,
@@ -434,7 +433,10 @@ def _mean_porosity(geo: SinusoidGeometry) -> float:
 
 
 def calibrated_resistance_factor(
-    species: Species, geo: SinusoidGeometry, reference: Value
+    species: Species,
+    geo: SinusoidGeometry,
+    reference: Value,
+    fr: Mapping[Layer, Value],
 ) -> float:
     """Get the resistance factor for which the inflow is the reference flow.
 
@@ -443,10 +445,14 @@ def calibrated_resistance_factor(
     periportal inflow of the whole reference liver at the default pressures
     and the plasma viscosity (factor 1) over the reference flow. The
     entrance flow is what the organ receives; the flows of the zones do not
-    add up in a leaky tube. The factor is a property of the species and its
-    geometry: it does not follow the pressures, the oncotic pressure or the
-    viscosity of a model, so the agreement with an imposed flow holds at their
-    defaults only.
+    add up in a leaky tube. The factor is a property of the species, its
+    geometry and its volume fractions, which give the number of sinusoids the
+    inflow is spread over: it does not follow the pressures, the oncotic
+    pressure or the viscosity of a model, so the agreement with an imposed flow
+    holds at their defaults only. The fractions are those of the build
+    (`ZonationSettings.full_fractions`) and not the table of the species, or
+    the calibration would contradict the geometry it calibrates for a caller
+    which states its own fractions.
 
     The inflow is calibrated, not the mean over the zones: `Q_li`, which sets
     the velocity and the Peclet number, is 0.8315 of the reference flow at 10
@@ -461,12 +467,15 @@ def calibrated_resistance_factor(
         geo: the geometry.
         reference: the reference flow of the organ
             (`ZonationSettings.reference_flow`), the target of the calibration.
+        fr: the volume fractions of the layers of the build
+            (`ZonationSettings.full_fractions`), which give the lumen the
+            sinusoids carry.
 
     Returns:
         The factor (about 50 for the rat).
     """
-    tube = leaky_tube(PressureFlow(resistance_factor=1.0), geo, species, reference)
-    n_sin = sinusoid_count(reference_liver_mass(species), geo, fractions(species, None))
+    tube = leaky_tube(PressureFlow(resistance_factor=1.0), geo, species, reference, fr)
+    n_sin = sinusoid_count(reference_liver_mass(species), geo, fr)
     inflow = tube.flow(0.0) * n_sin * 1e3 * 60.0
     return inflow / _converted(reference, _FLOW_TO_L_PER_MIN, "reference flow")
 
@@ -476,8 +485,21 @@ def resolved_resistance_factor(
     geo: SinusoidGeometry,
     species: Species,
     reference: Value | None,
+    fr: Mapping[Layer, Value],
 ) -> float:
     """Get the resistance factor of a pressure flow: the given or the calibrated one.
+
+    Args:
+        flow: the pressure flow.
+        geo: the geometry.
+        species: the species.
+        reference: the reference flow of the organ, the target of a
+            calibration.
+        fr: the volume fractions of the layers of the build, which a
+            calibration needs.
+
+    Returns:
+        The factor.
 
     Raises:
         ValueError: for a factor which is calibrated and settings which state
@@ -487,7 +509,7 @@ def resolved_resistance_factor(
         return flow.resistance_factor
     if reference is None:
         raise ValueError(_NO_REFERENCE)
-    return calibrated_resistance_factor(species, geo, reference)
+    return calibrated_resistance_factor(species, geo, reference, fr)
 
 
 def leaky_tube(
@@ -495,6 +517,7 @@ def leaky_tube(
     geo: SinusoidGeometry,
     species: Species,
     reference: Value | None,
+    fr: Mapping[Layer, Value],
 ) -> LeakyTube:
     """Get the leaky tube of a pressure flow and a geometry.
 
@@ -504,6 +527,8 @@ def leaky_tube(
         species: the species, which calibrates a resistance factor of `None`.
         reference: the reference flow of the organ
             (`ZonationSettings.reference_flow`), the target of the calibration.
+        fr: the volume fractions of the layers of the build, which a
+            calibration needs.
 
     Returns:
         The tube, at the mean porosity of the sinusoid.
@@ -515,7 +540,7 @@ def leaky_tube(
         if flow.p_onc is None
         else _converted(flow.p_onc, _PRESSURE_TO_PA, "oncotic pressure")
     )
-    nu = resolved_resistance_factor(flow, geo, species, reference) * _converted(
+    nu = resolved_resistance_factor(flow, geo, species, reference, fr) * _converted(
         flow.viscosity, _VISCOSITY_TO_PA_S, "viscosity"
     )
     return LeakyTube(
@@ -555,8 +580,9 @@ def face_flows(
     flow = settings.flow
     if not isinstance(flow, PressureFlow):
         raise TypeError("Only a pressure flow has a flow per face.")
-    tube = leaky_tube(flow, geo, settings.species, settings.reference_flow)
-    n_sin = sinusoid_count(mass, geo, fractions(settings.species, settings.haematocrit))
+    fr = settings.full_fractions()
+    tube = leaky_tube(flow, geo, settings.species, settings.reference_flow, fr)
+    n_sin = sinusoid_count(mass, geo, fr)
     out = tuple(
         tube.flow(x) * n_sin * 1e3 * 60.0 for x in face_positions(settings.n_zones)
     )
@@ -739,13 +765,13 @@ def _pressure_objects(
     mass: Q,
 ) -> list[Parameter | InitialAssignment | AssignmentRule]:
     """The leaky tube: parameters and initial assignments, the flows as rules."""
-    tube = leaky_tube(flow, geo, settings.species, settings.reference_flow)
+    fr = settings.full_fractions()
+    tube = leaky_tube(flow, geo, settings.species, settings.reference_flow, fr)
     factor = resolved_resistance_factor(
-        flow, geo, settings.species, settings.reference_flow
+        flow, geo, settings.species, settings.reference_flow, fr
     )
     flows = face_flows(settings, geo, mass)
     n = settings.n_zones
-    fr = fractions(settings.species, settings.haematocrit)
     f_lumen = derived(
         lumen_fraction(fr),
         U.dimensionless,

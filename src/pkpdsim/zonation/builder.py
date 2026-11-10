@@ -137,7 +137,6 @@ from pkpdsim.zonation.geometry import (
     Layer,
     SinusoidGeometry,
     bile_flow,
-    fractions,
     geometry,
     layer_volumes,
     lumen_fraction,
@@ -389,29 +388,8 @@ class ZonationBuilder:
         return given if given is not None else geometry(self.settings.species)
 
     def _full_fractions(self) -> dict[Layer, Value]:
-        """The volume fractions of the layers of the sinusoid, with their provenance.
-
-        The values of the table (`geometry.fractions`), or the fractions the
-        caller states (`ZonationSettings.fractions`, a perfused organ its
-        own), a plain number of which is the model choice it is
-        (`ZonationSettings.layer_fractions`).
-
-        `bile=None` drops the bile volume and does not renormalise the other
-        fractions: the organ loses that fraction of its volume (0.4 % in the
-        rat) instead of redistributing it. This is deliberate, and the same
-        in both geometries.
-        """
-        given = self.settings.layer_fractions()
-        fr = (
-            given
-            if given is not None
-            else fractions(self.settings.species, self.settings.haematocrit)
-        )
-        return {
-            layer: f
-            for layer, f in fr.items()
-            if layer is not Layer.BILE or self.settings.bile is not None
-        }
+        """The volume fractions of the layers of the build (`ZonationSettings.full_fractions`)."""
+        return self.settings.full_fractions()
 
     def _fractions(self) -> dict[Layer | str, Value]:
         """The volume fractions of the layers of a zone, by the geometry.

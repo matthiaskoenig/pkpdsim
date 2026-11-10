@@ -38,7 +38,9 @@ from pkpdsim.zonation.flow import (
     resolved_resistance_factor,
 )
 from pkpdsim.zonation.geometry import (
+    Layer,
     SinusoidGeometry,
+    fractions,
     geometry,
     reference_liver_mass,
 )
@@ -531,7 +533,9 @@ def test_the_chain_receives_the_reference_flow_in_both_modes(
 def test_the_calibrated_factor_is_per_species_and_replaced_by_a_given_one() -> None:
     """The rat needs about five times the factor of spt; a given factor is kept."""
     rat, human = (
-        calibrated_resistance_factor(sp, geometry(sp), reference_flow(sp))
+        calibrated_resistance_factor(
+            sp, geometry(sp), reference_flow(sp), fractions(sp, None)
+        )
         for sp in (Species.RAT, Species.HUMAN)
     )
     assert 45.0 < rat < 60.0
@@ -542,6 +546,7 @@ def test_the_calibrated_factor_is_per_species_and_replaced_by_a_given_one() -> N
             geometry(Species.RAT),
             Species.RAT,
             reference_flow(Species.RAT),
+            fractions(Species.RAT, None),
         )
         == 7.0
     )
@@ -604,9 +609,55 @@ def test_the_calibrated_factor_follows_the_geometry() -> None:
     longer = dataclasses.replace(base, L_sin=2.0 * base.L_sin.value)
     wider = dataclasses.replace(base, r_sin=1.2 * base.r_sin.value)
     rat = reference_flow(Species.RAT)
-    assert calibrated_resistance_factor(Species.RAT, base, rat) == _eq(53.16, 1e-3)
-    assert calibrated_resistance_factor(Species.RAT, longer, rat) == _eq(19.16, 1e-3)
-    assert calibrated_resistance_factor(Species.RAT, wider, rat) == _eq(71.19, 1e-3)
+    fr = fractions(Species.RAT, None)
+    assert calibrated_resistance_factor(Species.RAT, base, rat, fr) == _eq(53.16, 1e-3)
+    assert calibrated_resistance_factor(Species.RAT, longer, rat, fr) == _eq(
+        19.16, 1e-3
+    )
+    assert calibrated_resistance_factor(Species.RAT, wider, rat, fr) == _eq(71.19, 1e-3)
+
+
+def test_a_pressure_build_with_its_own_fractions_is_one_geometry(
+    tmp_path: Path,
+) -> None:
+    """The sinusoid count of a pressure build is the lumen of its own compartments.
+
+    A caller may state the fractions of its organ (`ZonationSettings.fractions`,
+    what a perfused organ does), and the flow chain has to read the same ones:
+    the leak of the tube is spread over `N_sin` sinusoids whose lumen is the
+    plasma and the erythrocytes of the build. Before the fractions of the build
+    reached the flow, `N_sin` and `f_lumen` were the table's while the volumes
+    were the caller's, a factor of two apart here, and the calibration of the
+    resistance factor contradicted the geometry it calibrated. The flows of the
+    faces do not move: the sinusoid count cancels against the factor it
+    calibrates (both are proportional to the lumen), which is why only the
+    emitted geometry was wrong.
+    """
+    table = {layer: f.value for layer, f in fractions(Species.RAT, None).items()}
+    given = {
+        **table,
+        Layer.PLASMA: 2.0 * table[Layer.PLASMA],
+        Layer.RBC: 2.0 * table[Layer.RBC],
+    }
+    own = _build(_settings(PressureFlow(), fractions=given), tmp_path / "own")
+    geo = geometry(Species.RAT)
+    lumen = sum(
+        own[ids.volume(layer, ids.zone(k))]
+        for layer in (Layer.PLASMA, Layer.RBC)
+        for k in range(1, _N + 1)
+    )
+    count = lumen * 1e-3 / (math.pi * geo.r_sin.value**2 * geo.L_sin.value)
+    assert own[ids.N_SINUSOIDS] == _eq(count, rel=1e-9)
+    assert own[ids.LUMEN_FRACTION] == _eq(
+        given[Layer.PLASMA] + given[Layer.RBC], rel=1e-9
+    )
+    assert own[ids.fraction(Layer.PLASMA)] == _eq(given[Layer.PLASMA], rel=1e-12)
+    # the tripwire: the table build has half the lumen and half the sinusoids
+    plain = _build(_settings(PressureFlow()), tmp_path / "table")
+    assert own[ids.N_SINUSOIDS] == _eq(2.0 * plain[ids.N_SINUSOIDS], rel=1e-9)
+    assert own[ids.zone_flow(None, ids.INFLOW)] == _eq(
+        plain[ids.zone_flow(None, ids.INFLOW)], rel=1e-12
+    )
 
 
 @pytest.mark.parametrize(

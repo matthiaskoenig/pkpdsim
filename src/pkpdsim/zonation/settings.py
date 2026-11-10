@@ -8,7 +8,7 @@ from pkpdsim.sbml.units import U
 from pkpdsim.sbml.values import Value, model_choice
 from pkpdsim.species import Species
 from pkpdsim.zonation.flow import ImposedFlow, PressureFlow
-from pkpdsim.zonation.geometry import Layer, SinusoidGeometry
+from pkpdsim.zonation.geometry import Layer, SinusoidGeometry, fractions
 from pkpdsim.zonation.profiles import Profile
 
 __all__ = ["BileTransport", "FlowBoundary", "Geometry", "ZonationSettings"]
@@ -132,6 +132,34 @@ class ZonationSettings:
                 "by the caller of the engine and no value of a table",
             )
             for layer, f in self.fractions.items()
+        }
+
+    def full_fractions(self) -> dict[Layer, Value]:
+        """Get the volume fractions of the layers of the build, with their provenance.
+
+        The values of the table (`geometry.fractions`), or the fractions the
+        caller states (`fractions`, a perfused organ its own), a plain number
+        of which is the model choice it is (`layer_fractions`).
+
+        `bile=None` drops the bile volume and does not renormalise the other
+        fractions: the organ loses that fraction of its volume (0.4 % in the
+        rat) instead of redistributing it. This is deliberate, and the same in
+        both geometries.
+
+        These are the fractions of the whole build: the compartments, the
+        sinusoid count of the flow chain and the calibration of a resistance
+        factor read them here, so a caller who states its own fractions gets
+        one geometry and not two.
+
+        Returns:
+            The fraction of every layer of the build.
+        """
+        given = self.layer_fractions()
+        fr = given if given is not None else fractions(self.species, self.haematocrit)
+        return {
+            layer: f
+            for layer, f in fr.items()
+            if layer is not Layer.BILE or self.bile is not None
         }
 
     def __post_init__(self) -> None:
