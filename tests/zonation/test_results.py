@@ -1,5 +1,6 @@
 """The bridge from a scan result of sbmlsim to the arrays the zone figures draw."""
 
+import warnings
 from collections.abc import Mapping, Sequence
 
 import matplotlib
@@ -378,3 +379,75 @@ def test_a_selection_the_result_does_not_have_is_named() -> None:
         zone_values(_flat(), ["nope_z1"], 30.0, "mM")
     with pytest.raises(KeyError, match="nope_z1"):
         zone_band(_draws(5), ["nope_z1"], 60.0, "mM", run=_run(5))
+
+
+def _with_failed(draws: int = 5, failed: Sequence[int] = (2,)) -> ScanResult:
+    """A ragged result whose named draws are padding alone (a failed simulation)."""
+    points = 4
+    time = np.full((draws, points), np.nan)
+    series = {sid: np.full((draws, points), np.nan) for sid in CELL}
+    for d in range(draws):
+        if d in failed:
+            continue
+        time[d] = np.linspace(0.0, 120.0, points)
+        for k, sid in enumerate(CELL, start=1):
+            series[sid][d] = k * (1.0 + d) * np.linspace(0.0, 1.0, points)
+    return ScanResult(
+        xr.Dataset(
+            {
+                "time": ((UNCERTAINTY_DIMENSION, "_point"), time),
+                **{
+                    sid: ((UNCERTAINTY_DIMENSION, "_point"), v)
+                    for sid, v in series.items()
+                },
+            },
+            coords={UNCERTAINTY_DIMENSION: np.arange(draws)},
+            attrs={
+                "dims": [UNCERTAINTY_DIMENSION],
+                "units": {"time": "min", **dict.fromkeys(CELL, "mM")},
+            },
+        )
+    )
+
+
+def test_a_draw_which_failed_is_left_out_of_the_band() -> None:
+    band = zone_band(_with_failed(5, (2,)), CELL, 120.0, "mM", run=_run(5))
+    # the band of the draws which ran, the failed one neither shifts nor NaNs it
+    kept = _with_failed(5, ()).isel(**{UNCERTAINTY_DIMENSION: [0, 1, 3, 4]})
+    expected = zone_band(kept, CELL, 120.0, "mM", run=_run(4))
+    assert band.median == pytest.approx(expected.median)
+    assert band.lower == pytest.approx(expected.lower)
+    assert band.upper == pytest.approx(expected.upper)
+    assert np.isfinite(band.median).all()
+
+
+def test_a_band_of_which_every_draw_failed_is_nan_and_no_error() -> None:
+    band = zone_band(_with_failed(3, (0, 1, 2)), CELL, 60.0, "mM", run=_run(3))
+    assert np.isnan(band.median).all()
+    assert band.lower is not None
+    assert band.upper is not None
+    assert np.isnan(band.lower).all()
+    assert np.isnan(band.upper).all()
+
+
+def test_a_time_course_of_padding_alone_is_nan() -> None:
+    res = _with_failed(2, (0,)).isel(**{UNCERTAINTY_DIMENSION: 0})
+    assert np.isnan(zone_values(res, CELL, 60.0, "mM")).all()
+
+
+@pytest.mark.parametrize("failed", [(2,), (0, 1, 2, 3, 4)], ids=["one", "every"])
+def test_a_draw_which_failed_warns_about_nothing(failed: Sequence[int]) -> None:
+    """numpy warns about an all-NaN reduction; it is expected here and silenced."""
+    res = _with_failed(5, failed)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")  # every warning of the read fails here
+        zone_band(res, CELL, 60.0, "mM", run=_run(5))
+        zone_values(res.isel(**{UNCERTAINTY_DIMENSION: 2}), CELL, 60.0, "mM")
+
+
+def test_series_band_names_a_selection_the_result_does_not_have() -> None:
+    """The `KeyError` of the module, not the `ValueError` of `point_timecourse`."""
+    with pytest.raises(KeyError, match="nope_z1"):
+        series_band(_flat(), "nope_z1", "mM")
+    with pytest.raises(KeyError, match="nope_z1"):
+        series_band(_draws(5), "nope_z1", "mM", run=_run(5))

@@ -30,6 +30,7 @@ the later row is the one taken here either way;
 of times and on a ragged result whose draws keep their own time points.
 """
 
+import warnings
 from collections.abc import Callable, Sequence
 
 import numpy as np
@@ -93,9 +94,12 @@ def _rows(res: ScanResult, key: str, across: str | None) -> np.ndarray:
 def _nearest(times: np.ndarray, time: float) -> np.ndarray:
     """Get the index of the last point nearest a time, per row of the times.
 
-    The padding of a ragged result is `NaN` and is no point: a row of padding
-    alone (a draw whose simulation failed) gives the index 0, whose value is
-    the `NaN` the median and the quantiles of the draws leave out.
+    The padding of a ragged result is `NaN` and is no point. A row of padding
+    alone (a draw whose simulation failed) has no nearest point: its distances
+    are all `NaN`, none of them equals the (`NaN`) minimum, and the index is
+    the last one of the row, whose value is the `NaN` the median and the
+    quantiles of the draws leave out. `numpy` warns about such a row
+    (`All-NaN slice encountered`), which is expected here and is silenced.
 
     Args:
         times: the time points `(rows, points)`, padded with `NaN`.
@@ -105,7 +109,8 @@ def _nearest(times: np.ndarray, time: float) -> np.ndarray:
         The index of the point per row.
     """
     distance = np.abs(times - time)
-    with np.errstate(invalid="ignore"):
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)  # a row of padding alone
         nearest = np.nanmin(distance, axis=1, keepdims=True)
     at = distance == nearest
     # the last of the nearest points: a change gives two points at its time,
@@ -163,6 +168,11 @@ def zone_values(
 ) -> np.ndarray:
     """Get the values of the zones at a time, in a unit (the state after a change).
 
+    A selection whose time points are padding alone (`NaN`, a draw whose
+    simulation failed) has no value at any time and gives `NaN`, which is no
+    error here: over the draws of a run such a draw is left out of the band
+    (`zone_band`).
+
     Args:
         res: the result of the simulation, of one point of a scan.
         selections: the selections of the zones, periportal first.
@@ -171,7 +181,8 @@ def zone_values(
         time_unit: the unit of `time`, the convention of the engine (min).
 
     Returns:
-        The value of every selection, in `unit`.
+        The value of every selection, in `unit`, `NaN` for a time course of
+        padding alone.
 
     Raises:
         KeyError: naming the variables of the result, if it has no variable of
@@ -188,9 +199,18 @@ def _draws(res: ScanResult, run: UncertaintyRun | None) -> int:
 
 
 def _band(values: np.ndarray, run: UncertaintyRun) -> Band:
-    """Get the median and the quantiles of values by draw (the first axis)."""
-    lower, upper = np.nanquantile(values, run.quantiles, axis=0)
-    return Band(np.nanmedian(values, axis=0), lower, upper)
+    """Get the median and the quantiles of values by draw (the first axis).
+
+    A draw of `NaN` (a failed simulation, a time course which is padding
+    alone) is left out; a value of which every draw is `NaN` is `NaN`, and
+    `numpy` warns about that reduction (`All-NaN slice encountered`), which is
+    expected here and is silenced.
+    """
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)  # every draw NaN
+        lower, upper = np.nanquantile(values, run.quantiles, axis=0)
+        median = np.nanmedian(values, axis=0)
+    return Band(median, lower, upper)
 
 
 def zone_band(
@@ -203,6 +223,11 @@ def zone_band(
     time_unit: str = DEFAULT_TIME_UNIT,
 ) -> Band:
     """Get the values of the zones at a time, over the draws of a run.
+
+    A draw whose simulation failed is padding alone (`NaN`) and is left out of
+    the median and of the quantiles, so the band is the band of the draws
+    which ran; a band of which every draw is `NaN` is `NaN` and is no error
+    here, it is a condition the figure draws as a gap.
 
     Args:
         res: the result of the simulation, of one point of a scan.
@@ -257,8 +282,11 @@ def series_band(
         times of the band.
 
     Raises:
+        KeyError: naming the variables of the result, if it has no variable of
+            the selection, the rule of the module (`zone_values`).
         ValueError: if the selection is no time course of the result.
     """
+    _ = res[selection]  # the `KeyError` of the module for an unknown selection
 
     def series(result: ScanResult) -> tuple[np.ndarray, np.ndarray]:
         """The time and the values of one point of the scan, as they are read."""
