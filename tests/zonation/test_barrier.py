@@ -248,12 +248,28 @@ def test_an_open_barrier_equilibrates_plasma_and_disse(tmp_path: Path) -> None:
 def test_the_basolateral_path_moves_the_solute_into_the_hepatocyte(
     tmp_path: Path,
 ) -> None:
-    """The hepatocyte fills when the basolateral path is set, and not otherwise."""
+    """The hepatocyte fills when the basolateral path is set, and not otherwise.
+
+    Sampled at 0.5 min, while the tracer is still in the chain: with the path
+    set the cell holds 2.341e-2 mM against the 2.258e-2 mM of the plasma of its
+    own zone (measured), so the assertion is that the cell reaches at least
+    half of the plasma, and the floor on the plasma keeps the test from
+    comparing two numbers near 0. Without the path the cell has no reaction at
+    all and stays exactly 0 at every time.
+
+    The test read the cell at 60 min until 2026-11-10, where the tracer has
+    washed out of the whole chain and every layer is at 1e-17, the integrator's
+    noise: `> 0.0` then passed or failed on the sign of that noise, which
+    differs between platforms (macOS gave -7.9e-17 where linux gave +2.8e-17),
+    and a basolateral path which moved nothing would have passed just as well.
+    """
     r = _barrier(tmp_path, basolateral_ps=1e-5, porosity=1.0)
-    r.simulate(0, 60, 61)
-    assert r["[tr_cell_z1]"] > 0.0
+    r.simulate(0, 0.5, 51)
+    plasma = r["[tr_plasma_z1]"]
+    assert plasma > 1e-3, "the tracer has washed out, the test would be vacuous"
+    assert r["[tr_cell_z1]"] > 0.5 * plasma
     closed = _barrier(tmp_path, porosity=1.0)
-    closed.simulate(0, 60, 61)
+    closed.simulate(0, 0.5, 51)
     assert closed["[tr_cell_z1]"] == 0.0
 
 
