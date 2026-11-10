@@ -2,7 +2,49 @@
 
 `pkpdsim.zonation` is the engine of the zonated liver models: a one-dimensional sinusoid of `n` zones from periportal (`z1`) to pericentral (`z<n>`), in which a substance travels down the sinusoid by flow and diffusion and every zone has a cell model of its own. The design behind it is that of pkpdsim#168 (one zonation builder for all zonated liver models); this page is the reader's view of what the engine builds, what is set, and what to take care of.
 
-The engine writes plain SBML and imports only `pkpdsim.sbml` and itself. It does not import the PBPK library or the perfusion library: a caller (a zonated liver of a body model, a perfused organ) hands over its own boundary and cell model. The first snippet below imports the PBPK library for the reference flow of the rat, which the engine reads from nobody and the caller states.
+The engine writes plain SBML and imports neither the PBPK library nor the perfusion library: a caller (a zonated liver of a body model, a perfused organ) hands over its own boundary and cell model. What it does import of pkpdsim is the SBML writing kit (`pkpdsim.sbml`), the parameter database (`pkpdsim.database.tables`), the species (`pkpdsim.species`) and the zone vocabulary (`pkpdsim.zones`) - and itself. The reference flow is the clearest case of the division: the engine reads no physiology, so the caller states the flow of the reference organ, and the snippet of the Peclet number below takes it from the PBPK library (`pkpdsim.pbpk.physiology.reference_flow`) as a caller does.
+
+To build one, see [the `ZonatedLiver` variant](pbpk/variants.md) of the PBPK library (`Geometry.SINUSOID` for the six layers), [machine perfusion](perfusion.md) for a liver in a circuit, and [the build](pbpk/build.md) for what a build writes; the snippet under [One zonated liver](#one-zonated-liver) builds a small one with the engine alone.
+
+## One zonated liver
+
+The engine is one class: `ZonationBuilder(settings, substances, cell_model)` and its `build()`, which returns the SBML model of the chain. A liver of ten zones with gadoxetate, a pericentral porosity gradient and the reference flow of the rat:
+
+```python
+from pkpdsim.pbpk.physiology import reference_flow
+from pkpdsim.pbpk.substance import Substance
+from pkpdsim.pbpk.units import U
+from pkpdsim.pbpk.values import Value
+from pkpdsim.species import Species
+from pkpdsim.zonation.builder import ZonationBuilder
+from pkpdsim.zonation.flow import ImposedFlow
+from pkpdsim.zonation.profiles import Linear
+from pkpdsim.zonation.settings import Geometry, ZonationSettings
+
+settings = ZonationSettings(
+    n_zones=10,
+    geometry=Geometry.SINUSOID,
+    flow=ImposedFlow(),  # no value: the reference flow, scaled with the mass
+    species=Species.RAT,
+    liver_mass=Value(0.01, U.kg),
+    reference_flow=reference_flow(Species.RAT),  # the caller states it
+    profiles={"porosity": Linear(1.0, 2.0)},  # twice as porous pericentral
+)
+gadoxetate = Substance("ged", "gadoxetate", Value(682.0, U.g_per_mole))
+model = ZonationBuilder(settings, [gadoxetate], None).build()
+
+# six layers per zone, the chain between them, and the fenestral path
+compartments = {str(c.sid) for c in model.compartments}
+assert {"V_plasma_z1", "V_disse_z1", "V_cell_z10", "V_bile_z10"} <= compartments
+reactions = {str(r.sid) for r in model.reactions}
+assert {"FLOW_ged_plasma_z1_plasma_z2", "FEN_ged_z1"} <= reactions
+
+# every number of the table reaches the model with the citation of its source
+notes = {str(p.sid): str(p.notes) for p in model.parameters}
+assert "Source:" in notes["rho_li"]
+```
+
+`cell_model=None` is a chain without cells, which is what a tracer needs; a real model hands over a cell model and the ports of [the cell model contract](#the-cell-model-contract). Inside a body model this is done for the caller by the [`ZonatedLiver` variant](pbpk/variants.md), inside a circuit by [machine perfusion](perfusion.md).
 
 ## The layers
 
@@ -256,6 +298,13 @@ assert round(effective_peclet(fine, 0.9e-9), 1) == 24.9
 ## Water in the pressure mode
 
 In the pressure flow mode the fluid which leaks through the fenestrae is not removed from the lumen, so water is not conserved there: the flow of the zones follows the leaky tube and is not a closed balance of the volumes. The solute balance is unaffected, and `balance_<s>` holds.
+
+## Limits
+
+The limits the sections above state, with the two which belong nowhere else: the [velocity](#velocity) of the human sinusoid lies below its literature range, the [numerical dispersion](#numerical-dispersion) of the upwind chain is of the order of the aqueous diffusion of a small solute at the default zone count, the [water of the pressure mode](#water-in-the-pressure-mode) is no closed balance, the Kupffer and the stellate cells have no compartment, the transcellular permeabilities are 0 until a model sets them, the human fractions are the rat ones (`fallback: rat`), and the lobule map is a plot of a one-dimensional model and no two-dimensional model.
+
+- **The transporter and enzyme profiles of Gd-EOB-DTPA are constant.** No zonation of OATP1B1, OATP1B3 or MRP2 for gadoxetate was found in the literature, so the gadoxetate model gives those processes a constant profile: its zones differ in their geometry, their porosity and their flow, and not in their transporters. The profiles are the one place to change it - a sourced gradient is entered as the profile of the process and nothing else moves - and until one is entered a zonal difference of the uptake or the biliary excretion of gadoxetate is not something the model has.
+- **The flattening and the ODE export of a large zonated model are slow.** The composition writes one `comp` submodel per zone, and the cost of flattening it and of exporting the ODEs grows with the zone count times the size of the cell model; the predecessor spt model is where that was first felt. The merge of the duplicated unit definitions relieves the largest part of it (`pkpdsim.sbml.flatten`: the flat model of a liver of ten zones carried 429 unit definitions against the 39 the model has, one copy per submodel, and keeps 39 now), and what is left is the number of elements itself. A chain of a few dozen zones with a large cell model is a build to run once and keep, not one to put in a loop.
 
 ## References
 
