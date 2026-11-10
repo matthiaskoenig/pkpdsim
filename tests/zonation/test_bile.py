@@ -26,8 +26,6 @@ from pkpdsim.zonation.settings import BileTransport, Geometry, ZonationSettings
 
 from .conftest import mass_g
 
-pytestmark = pytest.mark.filterwarnings("ignore:.*numerical dispersion:UserWarning")
-
 TRACER = Substance("tr", "tracer", Value(180.0, U.g_per_mole))
 DUCT = "tr_bile_duct"
 """The amount (mmole) of the tracer in the duct."""
@@ -295,10 +293,13 @@ def test_a_profile_of_the_canalicular_flow_scales_the_zones(tmp_path: Path) -> N
 def test_a_profile_of_a_process_the_bile_does_not_have_is_refused(
     mode: BileTransport | None, process: str
 ) -> None:
-    """A profile of the diffusion of a bile with a flow (and the reverse) names no process."""
+    """A profile of the diffusion of a bile with a flow (and the reverse) names no process.
+
+    The build refuses it, which is where the profiles are consumed.
+    """
     settings = _settings(4, mode, profiles={process: Weights((1.0, 1.0, 1.0, 2.0))})
     with pytest.raises(ValueError, match="does not have"):
-        ZonationBuilder(settings, [TRACER], None)
+        ZonationBuilder(settings, [TRACER], None).build()
 
 
 @pytest.mark.parametrize("mode", [BileTransport.ADVECTIVE, BileTransport.DIFFUSIVE])

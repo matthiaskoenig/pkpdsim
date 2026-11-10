@@ -27,8 +27,6 @@ from pkpdsim.zonation.transport import M2_PER_S, Solute
 
 from .conftest import liver_flow, mass_g
 
-pytestmark = pytest.mark.filterwarnings("ignore:.*numerical dispersion:UserWarning")
-
 TRACER = Substance("tr", "tracer", Value(180.0, U.g_per_mole))
 """A small solute, much smaller than a fenestra."""
 

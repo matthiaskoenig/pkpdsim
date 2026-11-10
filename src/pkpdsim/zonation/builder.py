@@ -188,6 +188,23 @@ CANALICULAR_FLOW = "canalicular_flow"
 CANALICULAR_DIFFUSION = "canalicular_diffusion"
 """The process of the diffusion along the canaliculus (diffusive bile)."""
 
+DISPERSION_FACTOR = 10.0
+"""How far above a diffusion coefficient the numerical dispersion of the chain
+has to lie for the build to warn.
+
+The upwind convection of `n` zones disperses like `v * dx / 2`, which adds to
+the physical diffusion: at the physiological defaults of the engine the two are
+of the same order (1.66e-9 m**2/s against 0.9e-9 m**2/s of glucose at ten
+zones of a rat liver), so a warning at the first m**2/s of dispersion above the
+coefficient fires for every build a correct caller can write and says nothing.
+A factor of ten is the point where the dispersion dominates: the Peclet number
+of the chain is then within 10 % of the `2 n` it realizes without any physical
+diffusion, so the coefficient of the substance is decoration and the zone count
+alone sets the axial gradient. That is worth saying - a chain of ten zones does
+it to albumin - and a chain which has no axial diffusion at all (one zone, the
+well-stirred geometry) is not warned about, there being no axial gradient to
+get wrong."""
+
 EQUILIBRATION = 100.0
 """How much faster than the transit of a zone the erythrocytes of a substance
 in equilibrium exchange with the plasma.
@@ -981,10 +998,10 @@ class ZonationBuilder:
             vascular site of the well-stirred geometry), the inflow
             `FLOW_<s>_<layer>_in_<layer>_z1` of the periportal boundary and
             the outflow `FLOW_<s>_<layer>_z<n>_<layer>_out` of the pericentral
-            end; none for a flow of 0.
-
-        Raises:
-            NotImplementedError: for a flow driven by a pressure.
+            end; none for a flow of 0. A pressure flow carries the flow of
+            the position of every zone (`carrier_flow`), and the water it
+            filters through the fenestrae carries its solute with it
+            (`filtrate`).
         """
         n = self.settings.n_zones
         if self._flow() == 0.0:
@@ -1993,8 +2010,18 @@ class ZonationBuilder:
         )
 
     def _warn_dispersion(self) -> None:
-        """Warn once when a diffusion lies below the numerical dispersion."""
-        limit = self.dispersion()
+        """Warn once when the numerical dispersion dominates a diffusion.
+
+        The comparison is `DISPERSION_FACTOR` and not the bare dispersion, and
+        only a chain which has an axial diffusion is compared: the warning
+        then names a chain whose axial gradient is the zone count's, which a
+        caller can do something about (more zones), and is silent for the
+        builds at the defaults of the engine, where the two are of the same
+        order by construction.
+        """
+        if self.settings.geometry is Geometry.WELL_STIRRED or self.settings.n_zones < 2:
+            return
+        limit = self.dispersion() / DISPERSION_FACTOR
         low = sorted(
             substance.sid
             for substance in self.substances
@@ -2004,10 +2031,12 @@ class ZonationBuilder:
         )
         if low:
             warnings.warn(
-                f"The diffusion of {low} lies below the numerical dispersion "
-                f"{limit:.3g} m**2/s (v * dx / 2) of {self.settings.n_zones} "
-                "zones: the zone count and not the physics sets the gradient "
-                "along the sinusoid.",
+                f"The diffusion of {low} lies more than {DISPERSION_FACTOR:g} "
+                "times below the numerical dispersion "
+                f"{self.dispersion():.3g} m**2/s (v * dx / 2) of "
+                f"{self.settings.n_zones} zones: the zone count and not the "
+                "physics sets the gradient along the sinusoid, and a finer "
+                "chain is what separates them.",
                 UserWarning,
                 stacklevel=3,
             )

@@ -46,8 +46,6 @@ from pkpdsim.zonation.settings import ZonationSettings
 
 from .conftest import mass_g
 
-pytestmark = pytest.mark.filterwarnings("ignore:.*numerical dispersion:UserWarning")
-
 TRACER = Substance("tr", "tracer", Value(100.0, U.g_per_mole))
 _MASS = mass_g(1000.0)
 _N = 10

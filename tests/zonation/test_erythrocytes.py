@@ -34,8 +34,6 @@ from pkpdsim.zonation.transport import Solute, blood_cell_coefficient
 
 from .conftest import liver_flow, mass_g
 
-pytestmark = pytest.mark.filterwarnings("ignore:.*numerical dispersion:UserWarning")
-
 HCT = 0.45
 """The haematocrit of the tests, the one of the rat."""
 
@@ -220,7 +218,10 @@ def test_a_lumen_which_is_one_compartment_has_no_exchange(
     haematocrit of 0 leaves out the erythrocyte layer altogether.
     """
     reactions = _reactions(
-        EQUILIBRIUM, geometry=geometry, haematocrit=haematocrit, flow=ImposedFlow(1.0)
+        EQUILIBRIUM,
+        geometry=geometry,
+        haematocrit=haematocrit,
+        flow=ImposedFlow(0.015),
     )
     assert not [r for r in reactions if r.startswith("RBC_")]
 

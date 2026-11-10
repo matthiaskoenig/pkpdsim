@@ -42,8 +42,6 @@ from pkpdsim.zonation.settings import BileTransport, Geometry, ZonationSettings
 
 from .conftest import mass_g
 
-pytestmark = pytest.mark.filterwarnings("ignore:.*numerical dispersion:UserWarning")
-
 DRG = Substance("drg", "drug", Value(180.0, U.g_per_mole))
 """A small solute, which every layer and the bile carry."""
 

@@ -32,8 +32,6 @@ from pkpdsim.zonation.transport import M2_PER_S, Solute
 
 from .conftest import liver_flow, mass_g
 
-pytestmark = pytest.mark.filterwarnings("ignore:.*numerical dispersion:UserWarning")
-
 TRACER = Substance("tr", "tracer", Value(100.0, U.g_per_mole))
 """A substance which does not react; the builder of these tests gives it the radius
 of an intravascular marker (`_Diffusing._radius`), which cannot cross the fenestrae."""
@@ -190,7 +188,7 @@ def test_zero_flow_or_zero_diffusion_stays_finite(
     assert np.all(np.isfinite(r.simulate(0, 60, 61)))
 
 
-def test_a_diffusion_below_the_numerical_dispersion_warns() -> None:
+def test_a_diffusion_the_numerical_dispersion_dominates_warns() -> None:
     """The zone count and not the physics sets the gradient then."""
     with pytest.warns(UserWarning, match="numerical dispersion"):
         _builder(10, 1.0, 1e-14).build()
@@ -201,6 +199,33 @@ def test_a_diffusion_above_the_numerical_dispersion_does_not_warn() -> None:
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         _builder(10, 1.0, 1e-3).build()
+
+
+@pytest.mark.parametrize(
+    ("n", "diffusion", "geometry"),
+    [
+        (10, 0.9e-9, Geometry.SINUSOID),
+        (1, 1e-14, Geometry.SINUSOID),
+        (10, 1e-14, Geometry.WELL_STIRRED),
+    ],
+    ids=["same_order", "one_zone", "well_stirred"],
+)
+def test_the_builds_a_caller_cannot_avoid_do_not_warn(
+    n: int, diffusion: float, geometry: Geometry
+) -> None:
+    """The warning has to be one a correct caller can avoid.
+
+    The numerical dispersion of the engine's own defaults is of the order of
+    the aqueous diffusion of a small solute (1.66e-9 m**2/s against 0.9e-9 of
+    glucose at ten zones of a rat liver), so a comparison with the bare
+    dispersion fired for every physiological build and five test modules muted
+    it; it is `DISPERSION_FACTOR` now. A chain without an axial diffusion (one
+    zone, the well-stirred geometry) is not compared at all: it has no axial
+    gradient to get wrong.
+    """
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        _builder(n, 1.0, diffusion, geometry=geometry).build()
 
 
 def test_the_reported_peclet_number_is_the_physical_one() -> None:

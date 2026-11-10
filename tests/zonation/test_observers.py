@@ -38,8 +38,6 @@ from pkpdsim.zones import third_weights
 
 from .conftest import liver_flow, mass_g
 
-pytestmark = pytest.mark.filterwarnings("ignore:.*numerical dispersion:UserWarning")
-
 DRG = Substance("drg", "drug", Value(180.0, U.g_per_mole))
 SINK = 0.5
 """The first-order rate (1/min) with which the cells consume the drug."""
