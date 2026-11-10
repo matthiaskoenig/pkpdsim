@@ -17,10 +17,11 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.cm import ScalarMappable
 from matplotlib.collections import LineCollection, PolyCollection, QuadMesh
 from matplotlib.colors import Normalize, to_rgba
+from matplotlib.container import ErrorbarContainer
 from matplotlib.figure import Figure
 from matplotlib.legend import Legend
 from matplotlib.lines import Line2D
-from matplotlib.patches import Polygon
+from matplotlib.patches import PathPatch
 from matplotlib.patheffects import withStroke
 from matplotlib.text import Text
 from pbpk.conftest import individual
@@ -37,6 +38,7 @@ from pkpdsim.zonation.figures import (
     colorbar,
     data_axes,
     draw_lobule,
+    fill_band,
     layer_profile,
     lobule_map,
     result_frame,
@@ -146,7 +148,7 @@ def test_the_data_is_overlaid_where_given() -> None:
     fig = zone_profiles(_result(), _profiles(2), times=(0, 60), data=_data())
     first, second = data_axes(fig)
     # the two lines of the simulation, then the markers of the data
-    assert len(first.lines) == 3
+    assert len(first.lines) == 3 + 2  # and the two caps of its error bars
     assert list(_x(first.lines[2])) == [0.25, 0.75]
     assert list(_y(first.lines[2])) == [1.0, 2.0]
     assert list(_x(second.lines[2])) == [0.5]
@@ -478,8 +480,9 @@ def test_every_time_has_a_colour_and_its_data_has_the_colour_of_the_time() -> No
     assert len({tuple(c) for c in colors}) == 3
     assert [line.get_linestyle() for line in lines] == [":", "--", "-"]
     # the markers of 0 and of 60 are drawn in the colour of their curve
-    assert tuple(ax.lines[3].get_color()) == tuple(colors[0])
-    assert tuple(ax.lines[4].get_color()) == tuple(colors[1])
+    markers = [c.lines[0] for c in ax.containers if isinstance(c, ErrorbarContainer)]
+    assert tuple(markers[0].get_color()) == tuple(colors[0])
+    assert tuple(markers[1].get_color()) == tuple(colors[1])
 
 
 def test_the_legend_is_one_when_the_rows_agree_and_one_per_row_when_they_differ() -> (
@@ -946,9 +949,9 @@ def _axes() -> Axes:
     return Figure().subplots()
 
 
-def _polygons(ax: Axes) -> list[Polygon]:
-    """The patches of the bands of a panel."""
-    return [p for p in ax.patches if isinstance(p, Polygon)]
+def _polygons(ax: Axes) -> list[PathPatch]:
+    """The patches of the bands of a panel, one compound patch per zone."""
+    return [p for p in ax.patches if isinstance(p, PathPatch)]
 
 
 def _zone_face(ax: Axes, k: int) -> tuple[float, ...]:
@@ -990,7 +993,15 @@ def test_draw_lobule_colours_a_band_per_zone() -> None:
     mappable = _mappable()
     ax = _axes()
     draw_lobule(ax, values, mappable=mappable)
-    assert len(_polygons(ax)) == 12 * N
+    assert len(_polygons(ax)) == N
+    assert [p.get_gid() for p in _polygons(ax)] == [
+        ids.zone(k) for k in range(1, N + 1)
+    ]
+    # every zone is one path of twelve wedges, each closed on its first vertex
+    for patch in _polygons(ax):
+        wedges = [np.asarray(w) for w in patch.get_path().to_polygons(closed_only=True)]
+        assert len(wedges) == 12
+        assert all(np.array_equal(w[0], w[-1]) for w in wedges)
     for k in (1, 4, N):
         assert _zone_face(ax, k) == pytest.approx(_colour(mappable, values[k - 1]))
     # the band of a zone lies where the zone lies: 1 at a corner, N at the centre
@@ -1124,7 +1135,7 @@ def test_lobule_map_is_unchanged_by_the_renderer() -> None:
     """The map draws its panel with the renderer: the patches, the colours, the title."""
     fig = lobule_map(_result(), "drg", time=60, zones=N)
     (ax,) = data_axes(fig)
-    assert len(_polygons(ax)) == 12 * N
+    assert len(_polygons(ax)) == N
     # the cell layer is the fifth: the value of zone k at the time 60 is 2.5 k
     assert _zone_face(ax, 1) == pytest.approx(colormaps["viridis"](0.0))
     assert _zone_face(ax, N) == pytest.approx(colormaps["viridis"](1.0))
@@ -1162,8 +1173,41 @@ def test_the_colorbar_of_several_axes_is_vector(tmp_path: Path) -> None:
     fig.savefig(tmp_path / "grid.svg")
     assert "<image" not in (tmp_path / "grid.svg").read_text()
     # the budget of this figure, two lobules of ten zones with one colorbar:
-    # it writes 268 kB, and a grid of a model has six panels of the kind. The
+    # it writes 236 kB (one compound patch per zone, 268 kB before), and a grid of a model has six panels of the kind. The
     # sampling of the bands is what the picture weighs (`_ARC_POINTS`), so a
     # return to the accuracy a measurement wants (`points=256`, 1.4 MB a
     # panel) is a regression which no other test would catch.
-    assert (tmp_path / "grid.svg").stat().st_size < 300 * 1024
+    assert (tmp_path / "grid.svg").stat().st_size < 260 * 1024
+
+
+def test_the_points_of_a_panel_are_the_callers_to_choose() -> None:
+    coarse, fine = _axes(), _axes()
+    draw_lobule(coarse, _values(), mappable=_mappable(), points=4)
+    draw_lobule(fine, _values(), mappable=_mappable(), points=64)
+    size = [
+        sum(np.shape(p.get_path().vertices)[0] for p in _polygons(ax))
+        for ax in (coarse, fine)
+    ]
+    assert size[0] < size[1]
+    assert len(_polygons(coarse)) == len(_polygons(fine)) == N
+
+
+def test_fill_band_fills_between_the_ends_and_a_band_without_ends_nothing() -> None:
+    ax = _axes()
+    x = np.linspace(0.0, 1.0, 5)
+    fill_band(ax, x, Band(x), "C0")
+    assert len(ax.collections) == 0
+    fill_band(ax, x, Band(x, x - 0.1, x + 0.1), "C0", alpha=0.4)
+    (fill,) = ax.collections
+    assert fill.get_alpha() == pytest.approx(0.4)
+
+
+def test_the_error_bars_of_the_data_have_caps_of_three_points() -> None:
+    fig = zone_profiles(_result(), _profiles(2), times=(0, 60), data=_data())
+    first, _ = data_axes(fig)
+    containers = [c for c in first.containers if isinstance(c, ErrorbarContainer)]
+    assert containers
+    for container in containers:
+        caps = container.lines[1]
+        assert len(caps) == 2
+        assert all(cap.get_markersize() == pytest.approx(6.0) for cap in caps)

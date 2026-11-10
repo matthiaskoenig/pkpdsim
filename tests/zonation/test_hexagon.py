@@ -14,7 +14,7 @@ from matplotlib import colormaps
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.colors import to_rgba
 from matplotlib.figure import Figure
-from matplotlib.patches import Polygon
+from matplotlib.patches import PathPatch
 
 from pkpdsim.species import Species
 from pkpdsim.zonation import ids, observers
@@ -38,10 +38,10 @@ def _result(layer: Layer = Layer.CELL, n: int = N) -> pd.DataFrame:
     return pd.DataFrame(cols)
 
 
-def _patches(fig: Figure) -> list[Polygon]:
-    """The polygons of the hexagon, from the artists."""
+def _patches(fig: Figure) -> list[PathPatch]:
+    """The compound patches of the hexagon, one per zone, from the artists."""
     (ax,) = data_axes(fig)
-    return [p for p in ax.patches if isinstance(p, Polygon)]
+    return [p for p in ax.patches if isinstance(p, PathPatch)]
 
 
 def _colour_at(fig: Figure, point: tuple[float, float]) -> tuple[float, ...]:
@@ -69,11 +69,14 @@ def _zone_colour(fig: Figure, k: int) -> tuple[float, ...]:
     return colours.pop()
 
 
-def _area(patch: Polygon) -> float:
-    """The area of a polygon by the shoelace formula over its vertices."""
-    v = np.asarray(patch.get_xy())
-    x, y = v[:, 0], v[:, 1]
-    return 0.5 * abs(float(np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1))))
+def _area(patch: PathPatch) -> float:
+    """The area of a compound patch by the shoelace formula over its wedges."""
+    total = 0.0
+    for wedge in patch.get_path().to_polygons(closed_only=True):
+        v = np.asarray(wedge)
+        x, y = v[:, 0], v[:, 1]
+        total += 0.5 * abs(float(np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1))))
+    return total
 
 
 def _areas_per_zone(fig: Figure) -> list[float]:
@@ -166,7 +169,7 @@ def test_every_point_of_the_hexagon_lies_in_exactly_one_patch() -> None:
 
 def test_the_hexagon_is_the_unit_hexagon_with_its_corners_on_the_axis() -> None:
     fig = lobule_map(_result(), "drg", time=60, zones=N)
-    v = np.vstack([p.get_xy() for p in _patches(fig)])
+    v = np.vstack([p.get_path().vertices for p in _patches(fig)])
     assert v[:, 0].max() == pytest.approx(1.0)
     assert np.hypot(v[:, 0], v[:, 1]).max() == pytest.approx(1.0)
     total = sum(_area(p) for p in _patches(fig))

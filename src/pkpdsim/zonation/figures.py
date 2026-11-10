@@ -35,13 +35,14 @@ from matplotlib.colorbar import Colorbar
 from matplotlib.colors import Normalize, to_rgba
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
-from matplotlib.patches import Polygon
+from matplotlib.patches import PathPatch
+from matplotlib.path import Path
 from matplotlib.patheffects import withStroke
 from matplotlib.typing import ColorType, LineStyleType
 
 from pkpdsim.zonation import ids, observers
 from pkpdsim.zonation.geometry import Layer
-from pkpdsim.zonation.render import lobule_bands, lobule_isoline
+from pkpdsim.zonation.render import _ARC_POINTS, lobule_bands, lobule_isoline
 
 __all__ = [
     "MISSING",
@@ -51,6 +52,7 @@ __all__ = [
     "colorbar",
     "data_axes",
     "draw_lobule",
+    "fill_band",
     "layer_profile",
     "lobule_map",
     "result_frame",
@@ -76,6 +78,8 @@ DEFAULT_UNIT = "mM"
 """The unit of the concentrations of the profile observers (`observers.profile_ids`)."""
 _BAND_ALPHA = 0.25
 """The opacity of the fill of a band of the draws."""
+_CAPSIZE = 3.0
+"""The length of the caps of the error bars of the data, in points."""
 _NEUTRAL = "0.3"
 """The colour of a legend handle which stands for a time in every column."""
 _TRIAD_OFFSET = 0.045
@@ -363,11 +367,29 @@ def _band_of(column: ZoneColumn, label: str, time: float) -> Band:
         ) from None
 
 
-def _fill_band(ax: Axes, x: np.ndarray, band: Band, color: str | np.ndarray) -> None:
-    """Fill a band between its ends; a band without ends fills nothing."""
+def fill_band(
+    ax: Axes,
+    x: np.ndarray,
+    band: Band,
+    color: str | np.ndarray,
+    *,
+    alpha: float = _BAND_ALPHA,
+) -> None:
+    """Fill a band between its ends; a band without ends fills nothing.
+
+    The look of the bands of `zone_profiles`, for a model which draws a profile
+    of its own beside a map and fills the band of a run the same way.
+
+    Args:
+        ax: the axes to fill into.
+        x: the positions of the values of the band.
+        band: the band, of which the lower and the upper end are filled.
+        color: the colour of the fill.
+        alpha: the opacity of the fill.
+    """
     if band.lower is None or band.upper is None:
         return
-    ax.fill_between(x, band.lower, band.upper, color=color, alpha=_BAND_ALPHA, lw=0.0)
+    ax.fill_between(x, band.lower, band.upper, color=color, alpha=alpha, lw=0.0)
 
 
 def _check_data(
@@ -449,6 +471,7 @@ def _draw_data(
             at["position"],
             at["value"],
             yerr=at.get("sd"),
+            capsize=_CAPSIZE,
             linestyle="",
             marker=_MARKERS[k % len(_MARKERS)],
             markeredgecolor="black",
@@ -590,7 +613,7 @@ def zone_profiles(
             for k, time in enumerate(row_times):
                 band = _band_of(column, profile.label, time)
                 color = colors[k] if column.color is None else column.color
-                _fill_band(ax, x, band, color)
+                fill_band(ax, x, band, color)
                 text = f"Sim {_time_text(time, time_unit)}"
                 ax.plot(
                     x,
@@ -866,6 +889,20 @@ def _portal_triads(ax: Axes) -> None:
         )
 
 
+def _compound(polygons: Sequence[np.ndarray]) -> Path:
+    """Get the polygons of a band as one path, a closed subpath per polygon."""
+    vertices = np.concatenate(
+        [np.vstack([polygon, polygon[:1]]) for polygon in polygons]
+    )
+    codes = np.concatenate(
+        [
+            [Path.MOVETO, *[Path.LINETO] * (len(polygon) - 1), Path.CLOSEPOLY]
+            for polygon in polygons
+        ]
+    )
+    return Path(vertices, codes)
+
+
 def draw_lobule(
     ax: Axes,
     values: Sequence[float] | np.ndarray,
@@ -875,6 +912,7 @@ def draw_lobule(
     thirds: bool = False,
     anatomy: bool = False,
     labels: bool = False,
+    points: int = _ARC_POINTS,
 ) -> None:
     """Draw a value per zone on the idealized hexagonal lobule, into given axes.
 
@@ -884,7 +922,8 @@ def draw_lobule(
     one colorbar over its panels through `colorbar`). The hexagon has the
     circumradius 1, the central vein at the origin and the portal triads at the
     corners on the angles 0, 60, ... degrees; a value is drawn as the band of
-    its zone (`pkpdsim.zonation.render.lobule_bands`), twelve patches bounded
+    its zone (`pkpdsim.zonation.render.lobule_bands`), twelve wedges drawn as
+    one compound `PathPatch` per zone (a grid of panels stays light), bounded
     by the isolines of the lobular position at `(k - 1) / n` and `k / n`, so
     the area of a band is the area share of the zone, `zone_areas(n)`. The
     centre of this idealization is the central vein itself, so no disc of a
@@ -916,29 +955,31 @@ def draw_lobule(
             right corner, for the first panel of a grid of several; both are
             written over a white stroke, so they read on a dark map and on a
             light one.
+        points: the sampling of the isolines of the bands, the directions over
+            the arc of an Apollonius circle (`lobule_bands`); a caller which
+            draws many small panels samples more coarsely. The default is that
+            of `lobule_bands`.
 
     Raises:
         ValueError: if there is no value, so no zone to draw.
     """
     per_zone = np.asarray(values, dtype=float)
-    bands = lobule_bands(len(per_zone))
+    bands = lobule_bands(len(per_zone), points=points)
     # the mask keeps the norm off the values which are not finite; their colour
     # is `missing` and not what the colormap happens to give a masked value
     colours = mappable.to_rgba(np.ma.masked_invalid(per_zone))
     colours[~np.isfinite(per_zone)] = to_rgba(missing)
     for k, polygons in enumerate(bands, start=1):
         colour = colours[k - 1]
-        for polygon in polygons:
-            ax.add_patch(
-                Polygon(
-                    polygon,
-                    closed=True,
-                    facecolor=colour,
-                    edgecolor=colour,
-                    linewidth=0.3,
-                    gid=ids.zone(k),
-                )
+        ax.add_patch(
+            PathPatch(
+                _compound(polygons),
+                facecolor=colour,
+                edgecolor=colour,
+                linewidth=0.3,
+                gid=ids.zone(k),
             )
+        )
     if thirds:
         for position in _THIRDS:
             ax.plot(*lobule_isoline(position).T, ":", color=_THIRDS_GREY, lw=0.7)
