@@ -34,9 +34,11 @@ from xml.sax.saxutils import escape
 import numpy as np
 
 from pkpdsim.pbpk.definition import PBPKDefinition
+from pkpdsim.pbpk.figure import builds_text
 from pkpdsim.pbpk.visual import icons, palette
 from pkpdsim.pbpk.visual.body import Body, reference_body
 from pkpdsim.pbpk.visual.content import ModelContent, Process
+from pkpdsim.sex import Sex
 
 __all__ = [
     "LEFT",
@@ -644,6 +646,7 @@ class AnatomyFigure:
         right: Sequence[str] = RIGHT,
         tags: bool = False,
         annotations: bool = True,
+        sexes: Sequence[Sex] | None = None,
     ) -> str:
         """The figure as a standalone SVG.
 
@@ -659,6 +662,8 @@ class AnatomyFigure:
                 model, the captions and the key; without them the bodies with
                 their organs alone, e.g. for a slide (`title` and `substances`
                 are then ignored).
+            sexes: the sexes which are built, which the subtitle names; `None`
+                names no build.
 
         Returns:
             The SVG, deterministic.
@@ -747,9 +752,10 @@ class AnatomyFigure:
                 )
         header = []
         if title:
+            builds = f" · {builds_text(tuple(sexes))}" if sexes else ""
             header += [
                 f'<text x="6" y="22" class="tt">{escape(self.c.name)}</text>',
-                f'<text x="6" y="40" class="st">{escape(self.c.sid)} · male and female builds · reference individuals</text>',
+                f'<text x="6" y="40" class="st">{escape(self.c.sid)}{builds} · reference individuals</text>',
             ]
         if title or substances:
             x, y = 6.0, 62.0 if title else 22.0
@@ -895,8 +901,9 @@ def anatomy_figure(
     scale: float = 3.3,
     text: float = 1.3,
     annotations: bool = True,
+    sexes: Sequence[Sex] | None = None,
 ) -> Path:
-    """Write the anatomical figure of a definition, the male and the female build.
+    """Write the anatomical figure of a definition on the reference man and woman.
 
     A definition of a laboratory animal (`species`) is drawn on its animal
     (`pkpdsim.pbpk.visual.animal`), the sexes with a physiology in the library.
@@ -912,6 +919,10 @@ def anatomy_figure(
         annotations: the labels, substances, connections, captions and key;
             without them the bodies with their organs alone, on a transparent
             background (e.g. for a slide).
+        sexes: the sexes which are built (`create_archive(..., sexes=...)`),
+            which the subtitle names; `None` names no build, since the two
+            bodies of the figure are the reference individuals and not the
+            builds of the model.
 
     Returns:
         The path of the figure.
@@ -925,6 +936,7 @@ def anatomy_figure(
         scale=scale,
         text=text,
         annotations=annotations,
+        sexes=sexes,
     )
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(svg + "\n", encoding="utf-8")
