@@ -10,7 +10,14 @@ import libsbml
 import numpy as np
 import pytest
 from pbpk.conftest import individual
-from sbmlutils.factory import Creator, Model, Parameter, Reaction, Species
+from sbmlutils.factory import (
+    AssignmentRule,
+    Creator,
+    Model,
+    Parameter,
+    Reaction,
+    Species,
+)
 from sbmlutils.factory.core_elements import KineticLaw
 from sbmlutils.metadata import SBO
 from sbmlutils.validation import ValidationOptions, validate_doc
@@ -150,7 +157,7 @@ def test_the_flat_ids_of_the_cells_are_the_ids_of_the_perfusion(
 
 
 def _mechanism(model: Model) -> Model:
-    """Add a mechanism of the cells to a cell model: a species, a reaction, a constant."""
+    """Add a mechanism to a cell model: a species, a reaction, a state, a constant."""
     model.parameters.append(
         Parameter(
             "XP_k",
@@ -170,6 +177,25 @@ def _mechanism(model: Model) -> Model:
             hasOnlySubstanceUnits=False,
             name="product of the mechanism (cells)",
             sboTerm=SBO.SIMPLE_CHEMICAL,
+        )
+    )
+    model.parameters.append(
+        Parameter(
+            "s_x",
+            0.0,
+            U.dimensionless,
+            constant=False,
+            name="state of the mechanism",
+            sboTerm=SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
+        )
+    )
+    model.rules.append(
+        AssignmentRule(
+            "s_x",
+            "atp_cell/(1 mM + atp_cell)",
+            U.dimensionless,
+            name="state of the mechanism",
+            sboTerm=SBO.MATHEMATICAL_EXPRESSION,
         )
     )
     model.reactions.append(
@@ -215,12 +241,16 @@ def test_an_extension_of_the_cells_is_one_mechanism_in_every_zone(
         return model
 
     zones = (1, 2, 3)
-    extension = PerfusionExtension(cell=_mechanism, shared=("XP_k",), composed=composed)
+    extension = PerfusionExtension(
+        cell=_mechanism, shared=("XP_k",), expose=("s_x",), composed=composed
+    )
     path = build(liver_definition(len(zones)), tmp_path, extension)
     flat = _ids(_model(path))
     expected = {
         *(ids.species("x", ids.cell_site(ids.zone_id(k))) for k in zones),
         *(ids.reaction("XP", ids.zone_id(k)) for k in zones),
+        # the state the extension exposes is named as the perfusion names its own
+        *(f"s_x_{ids.zone_id(k)}" for k in zones),
         "XP_k",
         "x_reservoir",
     }

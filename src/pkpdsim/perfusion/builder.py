@@ -149,12 +149,19 @@ class PerfusionExtension:
             loadable alone, with its own value) and an element of the composed
             model, which replaces the port of every submodel: `compose`
             refuses an id which its model does not hold.
+        expose: the ids of the elements of `cell` which the liver observes per
+            zone, under `<id>_<zone>` as the perfusion names its own: a state
+            of the cells which a figure draws or which the liver reads (the
+            formula of the bile secretion of a zone). Every element the engine
+            exposes of itself (a species of the cells, a reaction, the living
+            fraction, the necrosis, the bile) is named without it.
         composed: the extension of the composed model, in place, which returns
             it; `None` for a mechanism of the cells alone.
     """
 
     cell: Callable[[Model], Model] | None = None
     shared: tuple[str, ...] = ()
+    expose: tuple[str, ...] = ()
     composed: Callable[[Model], Model] | None = None
 
 
@@ -562,7 +569,16 @@ def _liver(
             },
         }
 
-    table = {ids.zone_id(k): _cell_names(cell, ids.zone_id(k)) for k in range(1, n + 1)}
+    exposed = extension.expose if extension is not None else ()
+    table = {
+        zone: {
+            **_cell_names(cell, zone),
+            # a state of the cells of an extension is named as the perfusion
+            # names its own, so the liver reads it and a figure draws it
+            **{sid: f"{sid}_{zone}" for sid in exposed},
+        }
+        for zone in (ids.zone_id(k) for k in range(1, n + 1))
+    }
 
     def names(zone: str) -> dict[str, str]:
         return table[zone]
