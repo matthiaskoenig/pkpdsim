@@ -71,7 +71,7 @@ Five visualizations are functions over a simulation result, usable by every zona
 1. `zone_profiles`: a row per observable, the zones on the x axis, a line per time, data overlaid; a column per condition with the bands of a fit, below.
 2. `space_time`: the zones against the time, the colour the concentration, a heatmap per layer and the outflow curve below.
 3. `layer_profile`: one substance in every layer which carries it, at one time, on one scale.
-4. `lobule_map`: the idealized lobule hexagon, below.
+4. `lobule_map`: the idealized lobule hexagon, below; `draw_lobule` draws one into the axes of a caller and `colorbar` is the colorbar every figure here goes through.
 5. `tube_mesh` (`pkpdsim.zonation.render`): the points and cells of the sinusoid tube, below.
 
 ### The grid of conditions
@@ -141,6 +141,32 @@ for k, sid in enumerate(observers.profile_ids("drg", Layer.CELL, 10), start=1):
     columns[sid] = k * time / 60.0
 figure = lobule_map(pd.DataFrame(columns), "drg", time=60, zones=10)
 figure.savefig("lobule.svg")
+```
+
+`draw_lobule(ax, values, mappable=...)` is the renderer behind the map, for a model which composes a grid of lobules of its own (its conditions, its measured data and its legend stay in the model): it draws one band per zone and wedge into the axes its caller made and sets them up for the hexagon, the limits, the equal aspect, no ticks and no spines. A value which is not finite takes the colour the colormap gives a masked value, so a zone without data is told from the lowest value of the scale (`colormaps["viridis"].with_extremes(bad="#f0f0f0")`). `thirds=True` adds the isolines of 1/3 and 2/3 as dotted rings, the thirds a histology counts its zones in; `anatomy=True` the outline of the hexagon and the three dots of the portal triad of every corner (portal vein, hepatic artery, bile duct); `labels=True` names the vessels, `CV` at the centre and `PT` beside one corner, for the first panel of a grid. The centre of this idealization is the central vein itself, so no disc of a vein lumen covers the pericentral bands. `colorbar(figure, mappable, ax, label=...)` is the one colorbar of the package: it un-rasterizes the solids of the bar, which matplotlib draws as an embedded image, and marks its axes `COLORBAR`; it passes its keyword arguments on to `Figure.colorbar`, so a grid takes one bar over its panels (`ax=[...]`, `location`, `shrink`, `aspect`).
+
+`lobule_isoline(position)` (`pkpdsim.zonation.render`) is one contour of the lobular position over the same hexagon, the twelve wedges of `lobular_radius` joined into a closed ring around the centre: the isoline of 0 is the hexagon itself (the radius 1 towards a triad, the apothem `cos(pi / 6)` towards the middle of an edge), the isoline of 1 is the centre, the radius towards a triad is `1 - position`, and the area inside the ring is `1 - lobular_area(position)` of the area of the hexagon.
+
+```python
+import numpy as np
+from matplotlib import colormaps
+from matplotlib.cm import ScalarMappable
+from matplotlib.colors import Normalize
+from matplotlib.figure import Figure
+
+from pkpdsim.zonation.figures import colorbar, draw_lobule
+
+values = np.linspace(0.2, 1.0, 10)
+values[3] = np.nan  # a zone without data, the grey of the colormap
+scale = ScalarMappable(
+    Normalize(0.2, 1.0), colormaps["viridis"].with_extremes(bad="#f0f0f0")
+)
+figure = Figure(figsize=(6.4, 3.2), layout="constrained")
+left, right = figure.subplots(1, 2)
+draw_lobule(left, values, mappable=scale, thirds=True, anatomy=True, labels=True)
+draw_lobule(right, values[::-1], mappable=scale, anatomy=True)
+colorbar(figure, scale, [left, right], label="Drug [mM]", location="right", shrink=0.8)
+figure.savefig("lobules.svg")
 ```
 
 ### The tube

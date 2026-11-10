@@ -1,8 +1,11 @@
 """The geometry of the zonated liver for renderers: the tube and the lobule hexagon.
 
 Both are plain numpy arrays and know no figure library. `lobule_bands` is the
-polygons of the idealized hexagonal lobule which `pkpdsim.zonation.figures.lobule_map`
-draws; `tube_mesh` is the sinusoid as points and cells.
+polygons of the idealized hexagonal lobule which
+`pkpdsim.zonation.figures.draw_lobule` colours and `lobule_isoline` one contour
+of the lobular position over the same hexagon, the outline of the lobule (the
+position 0), the thirds of a histology or any other level; `tube_mesh` is the
+sinusoid as points and cells.
 
 The tube is the geometry of the engine (`SinusoidGeometry`): a cylinder of the
 sinusoid radius and length along the x axis, from the portal end (x = 0) to
@@ -14,6 +17,7 @@ the zone values, `values[k]` for the segment `k`.
 """
 
 import math
+from collections.abc import Sequence
 from itertools import pairwise
 
 import numpy as np
@@ -21,7 +25,7 @@ import numpy as np
 from pkpdsim.zonation.geometry import SinusoidGeometry
 from pkpdsim.zonation.profiles import lobular_radius
 
-__all__ = ["lobule_bands", "tube_mesh"]
+__all__ = ["lobule_bands", "lobule_isoline", "tube_mesh"]
 
 
 _WEDGE = math.pi / 6.0
@@ -43,23 +47,39 @@ def _zone_edges(n: int) -> list[float]:
     return [k / n for k in range(n + 1)]
 
 
+def _directions(positions: Sequence[float], points: int) -> np.ndarray:
+    """Get the directions of the wedge of a triad, the kinks of the positions included.
+
+    The wedge is sampled with `points` directions from the triad (theta 0) to
+    the midpoint of an edge (theta `pi / 6`), and the direction in which the
+    isoline of a position leaves through the edge of the hexagon
+    (`sin(theta) = sqrt(3) / 2 * x / (1 - x)`) is sampled too: it is the corner
+    where the isoline meets the edge, which the chords would otherwise cut off.
+    """
+    theta = np.linspace(0.0, _WEDGE, points)
+    kinks = [
+        math.asin(min(1.0, math.sqrt(3.0) / 2.0 * x / (1.0 - x)))
+        for x in positions
+        if 0.0 < x < 1.0
+    ]
+    return np.unique(np.concatenate([theta, np.clip(kinks, 0.0, _WEDGE)]))
+
+
+def _arc(position: float, points: int) -> np.ndarray:
+    """Get the polyline of one position over the wedge of a triad, `(n, 2)`."""
+    theta = _directions((position,), points)
+    radius = np.array([lobular_radius(position, t) for t in theta])
+    return np.column_stack([radius * np.cos(theta), radius * np.sin(theta)])
+
+
 def _band(low: float, high: float) -> np.ndarray:
     """Get the polygon of the band `[low, high]` of a position in the wedge of a triad.
 
     The outer arc is the isoline of `low`, the inner arc that of `high`, both
-    from the direction of the triad (theta 0) to that of the edge midpoint.
-    The directions in which an isoline leaves the hexagon are sampled too, so
-    the corner where it meets the edge is exact.
+    from the direction of the triad (theta 0) to that of the edge midpoint,
+    over the same directions (`_directions`), which include the kinks of both.
     """
-    theta = np.linspace(0.0, _WEDGE, _ARC_POINTS)
-    # the direction in which an isoline leaves through the edge of the hexagon
-    # (`sin(theta) = sqrt(3) / 2 * x / (1 - x)`) is a corner of the band
-    kinks = [
-        math.asin(min(1.0, math.sqrt(3.0) / 2.0 * x / (1.0 - x)))
-        for x in (low, high)
-        if 0.0 < x < 1.0
-    ]
-    theta = np.unique(np.concatenate([theta, np.clip(kinks, 0.0, _WEDGE)]))
+    theta = _directions((low, high), _ARC_POINTS)
     outer = [lobular_radius(low, t) for t in theta]
     inner = [lobular_radius(high, t) for t in theta]
     return np.vstack(
@@ -122,6 +142,53 @@ def lobule_bands(n: int) -> list[list[np.ndarray]]:
     if n < 1:
         raise ValueError(f"A lobule has at least one zone, not {n}.")
     return [_twelve(_band(low, high)) for low, high in pairwise(_zone_edges(n))]
+
+
+def lobule_isoline(position: float, *, points: int = 256) -> np.ndarray:
+    """Get the closed polyline of the points of one lobular position.
+
+    The isoline over the whole hexagon of `lobule_bands`: the twelve copies of
+    the arc of the wedge `[0, pi / 6]` (`lobular_radius`), joined into one ring
+    around the centre, counterclockwise from the triad at the angle 0. A plot
+    of the ring is the contour of the position and a `Polygon` of it the area
+    at or beyond the position, the pericentral side, whose share of the hexagon
+    is `1 - lobular_area(position)`.
+
+    The isoline of 0 is the hexagon itself, of the circumradius 1 towards a
+    portal triad and of the apothem `cos(pi / 6)` towards the middle of an
+    edge; the isoline of 1 is the centre, the central vein, every radius 0. The
+    radius in a direction does not grow with the position, and where an isoline
+    has left the hexagon it follows the edge, so two positions share that part
+    of their rings.
+
+    Args:
+        position: the lobular position, 0 periportal (the portal triads) and 1
+            pericentral (the central vein).
+        points: the directions sampled over one wedge; the kink where the
+            isoline leaves through an edge is always one of them.
+
+    Returns:
+        The points of the ring, an array of shape `(n, 2)` in the hexagon of
+        the circumradius 1 with its centre at the origin, in order around the
+        centre; the last point is the first, so the ring is closed.
+
+    Raises:
+        ValueError: for a position outside the lobule, or for less than two
+            points per wedge.
+    """
+    if points < 2:
+        raise ValueError(f"A wedge has at least two points, not {points}.")
+    wedge = _arc(position, points)
+    # the odd wedges are the mirror images, which run from the edge back to the
+    # triad: reversed, so that the ring goes around the centre in one direction
+    pieces = [
+        copy if k % 2 == 0 else copy[::-1] for k, copy in enumerate(_twelve(wedge))
+    ]
+    # two wedges share the direction where they meet, so a copy drops its first
+    # point; the last point of the last copy is the first point of the first one
+    ring = np.vstack([pieces[0], *(piece[1:] for piece in pieces[1:])])
+    ring[-1] = ring[0]  # the rotation of the last copy closes it to rounding only
+    return ring
 
 
 def tube_mesh(

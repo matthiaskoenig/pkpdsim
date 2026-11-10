@@ -17,11 +17,14 @@ A figure is built directly as a `matplotlib.figure.Figure` and owned by the
 caller; `matplotlib.pyplot` and its global state are not used. Every figure is
 vector: the heatmap is not rasterized and neither is the solid of its colorbar,
 so the SVG holds no embedded image (a viewer which drops embedded raster data
-would show an empty panel).
+would show an empty panel). `colorbar` is the one way to that guarantee, here
+and in a model, and `draw_lobule` the renderer of the lobule, which `lobule_map`
+draws its one panel with and a model its own grid of lobules.
 """
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -37,13 +40,15 @@ from matplotlib.typing import LineStyleType
 
 from pkpdsim.zonation import ids, observers
 from pkpdsim.zonation.geometry import Layer
-from pkpdsim.zonation.render import lobule_bands
+from pkpdsim.zonation.render import lobule_bands, lobule_isoline
 
 __all__ = [
     "Band",
     "ZoneColumn",
     "ZoneProfile",
+    "colorbar",
     "data_axes",
+    "draw_lobule",
     "layer_profile",
     "lobule_map",
     "result_frame",
@@ -71,6 +76,18 @@ _BAND_ALPHA = 0.25
 """The opacity of the fill of a band of the draws."""
 _NEUTRAL = "0.3"
 """The colour of a legend handle which stands for a time in every column."""
+_TRIAD_OFFSET = 0.045
+"""The distance of a dot of a portal triad from its corner, of the circumradius."""
+_TRIAD_COLORS: tuple[str, ...] = ("#1f77b4", "#d62728", "#2ca02c")
+"""The colours of the portal vein, the hepatic artery and the bile duct of a triad."""
+_THIRDS: tuple[float, ...] = (1.0 / 3.0, 2.0 / 3.0)
+"""The lobular positions which bound the thirds a histology counts its zones in."""
+_ANATOMY_GREY = "0.15"
+"""The grey of the outline of the hexagon and of the edge of a dot of a triad."""
+_THIRDS_GREY = "0.25"
+"""The grey of the dotted isolines of the thirds."""
+_VESSEL_SIZE = 7
+"""The font size of the names of the vessels (`CV`, `PT`) on a lobule."""
 NO_LEGEND = "_nolegend_"
 """The label matplotlib leaves out of a legend, the lines of a grid of columns.
 
@@ -205,9 +222,38 @@ def _label(label: str, unit: str) -> str:
     return label if unit in {"", "dimensionless"} else f"{label} [{unit}]"
 
 
-def _colorbar(figure: Figure, mesh: object, ax: Axes, label: str) -> Colorbar:
-    """Add a colorbar which is vector and is no data axes."""
-    bar = figure.colorbar(mesh, ax=ax, label=label)  # ty: ignore[invalid-argument-type]
+def colorbar(
+    figure: Figure,
+    mappable: ScalarMappable,
+    ax: Axes | Sequence[Axes],
+    label: str | None = None,
+    **kwargs: Any,  # noqa: ANN401
+) -> Colorbar:
+    """Add a colorbar which is vector and is no data axes.
+
+    The one way a figure of this package or of a model gets a colorbar: the
+    solids of a colorbar are a rasterized image by default, which an SVG viewer
+    that drops embedded raster data shows as an empty bar, so they are
+    un-rasterized here (`tests/zonation/test_figures.py` looks for `<image` in
+    the saved figures). The axes of the bar carry the group id `COLORBAR`, so
+    `data_axes` tells them from the panels.
+
+    Args:
+        figure: the figure the colorbar belongs to.
+        mappable: the scale which is drawn, a `ScalarMappable` of a norm and a
+            colormap or an artist which carries one (a heatmap).
+        ax: the panel the colorbar is taken from, or the panels of a grid it
+            spans.
+        label: the label of the bar, `None` none.
+        **kwargs: further arguments of `matplotlib.figure.Figure.colorbar`
+            (`location`, `shrink`, `aspect`, ... of a bar beside a grid).
+
+    Returns:
+        The colorbar.
+    """
+    if label is not None:
+        kwargs["label"] = label
+    bar = figure.colorbar(mappable, ax=ax, **kwargs)
     if bar.solids is not None:
         bar.solids.set_rasterized(False)
     bar.ax.set_gid(COLORBAR)
@@ -679,7 +725,7 @@ def space_time(
         limits = _scale([values], vmin, vmax) or (None, None)
         # `rasterized=False` is the matplotlib default and is stated for the
         # reader only: what keeps the SVG free of images is the colorbar
-        # (`_colorbar` un-rasterizes its solids, the default is an image) and
+        # (`colorbar` un-rasterizes its solids, the default is an image) and
         # the test which looks for `<image` in the saved figures.
         mesh = ax.pcolormesh(
             time,
@@ -690,7 +736,7 @@ def space_time(
             vmin=limits[0],
             vmax=limits[1],
         )
-        _colorbar(figure, mesh, ax, _label(f"{name} {layer}", unit))
+        colorbar(figure, mesh, ax, _label(f"{name} {layer}", unit))
         ax.set_ylabel(POSITION.replace(" (", "\n("))
         ax.set_ylim(0.0, 1.0)
     if outflow:
@@ -786,6 +832,118 @@ def layer_profile(
     return figure
 
 
+def _portal_triads(ax: Axes) -> None:
+    """Draw the portal triad of every corner of the hexagon.
+
+    Three dots around the corner, the portal vein, the hepatic artery and the
+    bile duct, the convention of the figures of the machine perfusion model.
+    The corners are on the angles 0, 60, ... degrees (`lobule_bands`).
+    """
+    offsets = _TRIAD_OFFSET * np.array([[1.0, 0.0], [-0.5, 0.87], [-0.5, -0.87]])
+    angles = np.deg2rad(60.0 * np.arange(6))
+    corners = np.column_stack([np.cos(angles), np.sin(angles)])
+    for offset, color in zip(offsets, _TRIAD_COLORS, strict=True):
+        x, y = (corners + offset).T
+        # a dot lies a little beyond the limits, which hold the hexagon and not
+        # the triads around its corners: clipped, it would be half a dot
+        ax.plot(
+            x,
+            y,
+            "o",
+            ms=2.6,
+            color=color,
+            mec=_ANATOMY_GREY,
+            mew=0.3,
+            ls="",
+            lw=0.0,
+            clip_on=False,
+        )
+
+
+def draw_lobule(
+    ax: Axes,
+    values: Sequence[float] | np.ndarray,
+    *,
+    mappable: ScalarMappable,
+    thirds: bool = False,
+    anatomy: bool = False,
+    labels: bool = False,
+) -> None:
+    """Draw a value per zone on the idealized hexagonal lobule, into given axes.
+
+    The renderer of the lobule of this package, which `lobule_map` draws its
+    one panel with and a model composes its own grid of maps from (its
+    conditions, its measured rings, its legend stay in the model; a grid takes
+    one colorbar over its panels through `colorbar`). The hexagon has the
+    circumradius 1, the central vein at the origin and the portal triads at the
+    corners on the angles 0, 60, ... degrees; a value is drawn as the band of
+    its zone (`pkpdsim.zonation.render.lobule_bands`), twelve patches bounded
+    by the isolines of the lobular position at `(k - 1) / n` and `k / n`, so
+    the area of a band is the area share of the zone, `zone_areas(n)`. The
+    centre of this idealization is the central vein itself, so no disc of a
+    vein lumen covers the pericentral bands.
+
+    The axes are set up for the lobule: the limits of the hexagon, an equal
+    aspect, no ticks and no spines. Everything is a vector patch or line, no
+    image.
+
+    Args:
+        ax: the axes, which the caller made and owns.
+        values: the value of every zone, periportal first; their number is the
+            number of zones. A value which is not finite is drawn in the colour
+            the colormap gives a masked value, so a zone without data is told
+            from the lowest value of the scale: the caller sets that colour on
+            its colormap (`colormaps["viridis"].with_extremes(bad="#f0f0f0")`).
+        mappable: the colour of a value, a `ScalarMappable` of a norm and a
+            colormap; the same one goes to `colorbar`.
+        thirds: draw the isolines of 1/3 and 2/3 as dotted lines, the thirds of
+            the lobulus the histology of a study counts its zones in.
+        anatomy: draw the outline of the hexagon and the three dots of the
+            portal triad of every corner (portal vein, hepatic artery, bile
+            duct).
+        labels: name the vessels, `CV` at the centre and `PT` beside one
+            corner, for the first panel of a grid of several.
+
+    Raises:
+        ValueError: if there is no value, so no zone to draw.
+    """
+    per_zone = np.asarray(values, dtype=float)
+    bands = lobule_bands(len(per_zone))
+    colours = mappable.to_rgba(np.ma.masked_invalid(per_zone))
+    for k, polygons in enumerate(bands, start=1):
+        colour = colours[k - 1]
+        for polygon in polygons:
+            ax.add_patch(
+                Polygon(
+                    polygon,
+                    closed=True,
+                    facecolor=colour,
+                    edgecolor=colour,
+                    linewidth=0.3,
+                    gid=ids.zone(k),
+                )
+            )
+    if thirds:
+        for position in _THIRDS:
+            ax.plot(*lobule_isoline(position).T, ":", color=_THIRDS_GREY, lw=0.7)
+    if anatomy:
+        ax.plot(*lobule_isoline(0.0).T, color=_ANATOMY_GREY, lw=1.1)
+        _portal_triads(ax)
+    if labels:
+        ax.text(0.0, 0.0, "CV", ha="center", va="center", fontsize=_VESSEL_SIZE)
+        # beside the corner at the angle 0, outside the rim and clear of the
+        # dots of its triad: no band is covered, and the hexagon fills the
+        # limits, so the name of the triads stands a little outside them
+        ax.text(1.08, 0.0, "PT", ha="left", va="center", fontsize=_VESSEL_SIZE)
+    ax.set_xlim(-1.02, 1.02)
+    ax.set_ylim(-0.9, 0.9)
+    ax.set_aspect("equal")
+    ax.set_xticks([])
+    ax.set_yticks([])
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+
+
 def lobule_map(
     result: pd.DataFrame,
     quantity: str,
@@ -810,6 +968,10 @@ def lobule_map(
     their areas are the area shares of the zones, `zone_areas(zones)`. The
     figure is vector: a patch per band and wedge, no image, and the solids of
     its colorbar are not rasterized either.
+
+    The panel is drawn by `draw_lobule`, with the outline of the hexagon and
+    the portal triads of its corners; a model which composes its own grid of
+    lobules calls that renderer and `colorbar` directly.
 
     Args:
         result: the simulation result.
@@ -849,29 +1011,10 @@ def lobule_map(
     mappable = ScalarMappable(Normalize(*limits), colormaps["viridis"])
     figure = Figure(figsize=(5.0, 4.4), layout="constrained")
     ax = figure.subplots()
-    for k, polygons in enumerate(lobule_bands(zones), start=1):
-        colour = mappable.to_rgba(values[k - 1])
-        for polygon in polygons:
-            ax.add_patch(
-                Polygon(
-                    polygon,
-                    closed=True,
-                    facecolor=colour,
-                    edgecolor=colour,
-                    linewidth=0.3,
-                    gid=ids.zone(k),
-                )
-            )
-    ax.set_xlim(-1.02, 1.02)
-    ax.set_ylim(-0.9, 0.9)
-    ax.set_aspect("equal")
-    ax.set_xticks([])
-    ax.set_yticks([])
-    for spine in ax.spines.values():
-        spine.set_visible(False)
+    draw_lobule(ax, values, mappable=mappable, anatomy=True)
     ax.set_xlabel(
         "Corners: portal triads (0, periportal)\nCentre: central vein (1, pericentral)"
     )
     ax.set_title(f"{name} {layer} at {_time_text(time, time_unit)}")
-    _colorbar(figure, mappable, ax, _label(f"{name} {layer}", unit))
+    colorbar(figure, mappable, ax, _label(f"{name} {layer}", unit))
     return figure

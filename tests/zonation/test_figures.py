@@ -13,21 +13,26 @@ from pathlib import Path
 from matplotlib import colormaps
 from matplotlib.axes import Axes
 from matplotlib.backends.backend_agg import FigureCanvasAgg
+from matplotlib.cm import ScalarMappable
 from matplotlib.collections import LineCollection, PolyCollection, QuadMesh
-from matplotlib.colors import to_rgba
+from matplotlib.colors import Normalize, to_rgba
 from matplotlib.figure import Figure
 from matplotlib.legend import Legend
 from matplotlib.lines import Line2D
+from matplotlib.patches import Polygon
 from pbpk.conftest import individual
 from sbmlutils.factory import create_model
 
 from pkpdsim.zonation import ids, observers
 from pkpdsim.zonation.figures import (
+    COLORBAR,
     POSITION,
     Band,
     ZoneColumn,
     ZoneProfile,
+    colorbar,
     data_axes,
+    draw_lobule,
     layer_profile,
     lobule_map,
     result_frame,
@@ -36,6 +41,7 @@ from pkpdsim.zonation.figures import (
 )
 from pkpdsim.zonation.geometry import Layer
 from pkpdsim.zonation.observers import add_observers, observer_objects
+from pkpdsim.zonation.render import lobule_isoline
 
 from .test_chain import TRACER, _Diffusing, _settings
 
@@ -906,3 +912,201 @@ def test_a_panel_of_a_grid_draws_no_legend_of_its_own() -> None:
     assert first.get_legend_handles_labels() == ([], [])
     frame = data_axes(zone_profiles(_result(n=4), profiles, times=times))[0]
     assert frame.get_legend_handles_labels()[1] == ["Sim t = 0 min", "Sim t = 60 min"]
+
+
+BAD = "#f0f0f0"
+TRIAD_COLORS = ("#1f77b4", "#d62728", "#2ca02c")
+
+
+def _mappable() -> ScalarMappable:
+    """A viridis scale of the values 1 to N, the grey of a zone without data."""
+    return ScalarMappable(
+        Normalize(1.0, float(N)), colormaps["viridis"].with_extremes(bad=BAD)
+    )
+
+
+def _colour(mappable: ScalarMappable, value: float) -> np.ndarray:
+    """The rgba of one value on a scale (`to_rgba` is annotated for arrays)."""
+    return np.asarray(mappable.to_rgba(np.array([value])))[0]
+
+
+def _values() -> list[float]:
+    """A distinct value per zone, the gradient the maps draw."""
+    return [float(k) for k in range(1, N + 1)]
+
+
+def _axes() -> Axes:
+    """One axes of a figure of its own, the panel a caller hands to the renderer."""
+    return Figure().subplots()
+
+
+def _polygons(ax: Axes) -> list[Polygon]:
+    """The patches of the bands of a panel."""
+    return [p for p in ax.patches if isinstance(p, Polygon)]
+
+
+def _zone_face(ax: Axes, k: int) -> tuple[float, ...]:
+    """The one face colour of the patches of zone `k`."""
+    colours = {
+        to_rgba(p.get_facecolor()) for p in _polygons(ax) if p.get_gid() == ids.zone(k)
+    }
+    assert len(colours) == 1
+    return colours.pop()
+
+
+def _face_at(ax: Axes, point: tuple[float, float]) -> tuple[float, ...]:
+    """The face colour of the patch which holds a point (data coordinates)."""
+    colours = {
+        to_rgba(p.get_facecolor())
+        for p in _polygons(ax)
+        if p.get_path().contains_point(point, radius=0.0)
+    }
+    assert len(colours) == 1, f"{point} lies in {len(colours)} colours"
+    return colours.pop()
+
+
+def _xy(line: Line2D) -> np.ndarray:
+    """The points of a line as an array of shape (n, 2)."""
+    return np.column_stack([_x(line), _y(line)])
+
+
+def test_draw_lobule_colours_a_band_per_zone() -> None:
+    values = _values()
+    mappable = _mappable()
+    ax = _axes()
+    draw_lobule(ax, values, mappable=mappable)
+    assert len(_polygons(ax)) == 12 * N
+    for k in (1, 4, N):
+        assert _zone_face(ax, k) == pytest.approx(_colour(mappable, values[k - 1]))
+    # the band of a zone lies where the zone lies: 1 at a corner, N at the centre
+    assert _face_at(ax, (0.98, 0.0)) == pytest.approx(_colour(mappable, values[0]))
+    assert _face_at(ax, (0.0, 0.0)) == pytest.approx(_colour(mappable, values[-1]))
+    assert ax.get_xlim() == pytest.approx((-1.02, 1.02))
+    assert ax.get_ylim() == pytest.approx((-0.9, 0.9))
+    assert ax.get_aspect() == 1.0
+    assert list(ax.get_xticks()) == []
+    assert list(ax.get_yticks()) == []
+    assert not any(spine.get_visible() for spine in ax.spines.values())
+
+
+def test_draw_lobule_draws_a_zone_without_data_as_the_bad_colour() -> None:
+    values = _values()
+    for k in (4, 5, 6, 7):
+        values[k - 1] = float("nan")
+    mappable = _mappable()
+    ax = _axes()
+    draw_lobule(ax, values, mappable=mappable)
+    for k in (4, 7):
+        assert _zone_face(ax, k) == pytest.approx(to_rgba(BAD))
+        # not the lowest value of the scale, which a zone without data is not
+        assert _zone_face(ax, k) != pytest.approx(_colour(mappable, 1.0))
+    # the zones with data keep the colour of their own value, not of a neighbour
+    for k in (1, 3, 8, N):
+        assert _zone_face(ax, k) == pytest.approx(_colour(mappable, float(k)))
+
+
+def test_draw_lobule_draws_the_thirds_only_when_asked() -> None:
+    plain = _axes()
+    draw_lobule(plain, _values(), mappable=_mappable())
+    assert len(plain.lines) == 0
+    ax = _axes()
+    draw_lobule(ax, _values(), mappable=_mappable(), thirds=True)
+    assert len(ax.lines) == 2
+    for line, position in zip(ax.lines, (1.0 / 3.0, 2.0 / 3.0), strict=True):
+        assert _xy(line) == pytest.approx(lobule_isoline(position))
+        assert line.get_linestyle() == ":"
+        assert to_rgba(line.get_color()) == to_rgba("0.25")
+        assert line.get_linewidth() == pytest.approx(0.7)
+    # the ring of 1/3 lies wholly outside the ring of 2/3, in that order
+    radii = [np.hypot(*_xy(line).T) for line in ax.lines]
+    assert radii[0].min() == pytest.approx(2.0 / 3.0)  # towards a portal triad
+    assert radii[1].min() == pytest.approx(1.0 / 3.0)
+    assert radii[0].min() > radii[1].max()
+
+
+def test_draw_lobule_draws_the_triads_only_when_asked() -> None:
+    plain = _axes()
+    draw_lobule(plain, _values(), mappable=_mappable())
+    assert len(plain.lines) == 0
+    ax = _axes()
+    draw_lobule(ax, _values(), mappable=_mappable(), anatomy=True)
+    outline, *triads = ax.lines
+    assert _xy(outline) == pytest.approx(lobule_isoline(0.0))
+    assert to_rgba(outline.get_color()) == to_rgba("0.15")
+    assert outline.get_linewidth() == pytest.approx(1.1)
+    assert [to_rgba(line.get_color()) for line in triads] == [
+        to_rgba(colour) for colour in TRIAD_COLORS
+    ]
+    points = np.vstack([_xy(line) for line in triads])
+    assert len(points) == 18  # three dots at every one of the six corners
+    angles = np.deg2rad(60.0 * np.arange(6))
+    corners = np.column_stack([np.cos(angles), np.sin(angles)])
+    distance = np.linalg.norm(points[:, None, :] - corners[None, :, :], axis=2)
+    assert distance.min(axis=1) == pytest.approx(0.045, abs=5e-4)
+    assert sorted(np.bincount(distance.argmin(axis=1), minlength=6)) == [3] * 6
+    for line in triads:
+        assert line.get_marker() == "o"
+        assert line.get_linestyle() == "None"
+        assert line.get_markersize() == pytest.approx(2.6)
+        assert to_rgba(line.get_markeredgecolor()) == to_rgba("0.15")
+        assert line.get_markeredgewidth() == pytest.approx(0.3)
+
+
+def test_draw_lobule_names_the_vessels_only_when_asked() -> None:
+    plain = _axes()
+    draw_lobule(plain, _values(), mappable=_mappable(), anatomy=True)
+    assert [t.get_text() for t in plain.texts] == []
+    ax = _axes()
+    draw_lobule(ax, _values(), mappable=_mappable(), anatomy=True, labels=True)
+    assert [t.get_text() for t in ax.texts] == ["CV", "PT"]
+    centre, triad = ax.texts
+    assert centre.get_position() == pytest.approx((0.0, 0.0))
+    assert centre.get_fontsize() == pytest.approx(7.0)
+    assert triad.get_fontsize() == pytest.approx(7.0)
+    # beside the corner at the angle 0, outside the hexagon and not over a band
+    x, y = triad.get_position()
+    assert x >= 1.0
+    assert y == pytest.approx(0.0)
+
+
+def test_lobule_map_is_unchanged_by_the_renderer() -> None:
+    """The map draws its panel with the renderer: the patches, the colours, the title."""
+    fig = lobule_map(_result(), "drg", time=60, zones=N)
+    (ax,) = data_axes(fig)
+    assert len(_polygons(ax)) == 12 * N
+    # the cell layer is the fifth: the value of zone k at the time 60 is 2.5 k
+    assert _zone_face(ax, 1) == pytest.approx(colormaps["viridis"](0.0))
+    assert _zone_face(ax, N) == pytest.approx(colormaps["viridis"](1.0))
+    assert _face_at(ax, (0.98, 0.0)) == pytest.approx(_zone_face(ax, 1))
+    assert _face_at(ax, (0.0, 0.0)) == pytest.approx(_zone_face(ax, N))
+    assert ax.get_title() == "drg cell at t = 60 min"
+    assert "portal triads (0, periportal)" in ax.get_xlabel()
+    assert len([a for a in fig.axes if a.get_gid() == COLORBAR]) == 1
+    # and it draws the anatomy: the outline and the three dots of every triad
+    assert len(ax.lines) == 4
+    assert len(ax.texts) == 0
+
+
+def test_the_colorbar_of_several_axes_is_vector(tmp_path: Path) -> None:
+    """A model which composes its own grid of maps needs the guarantee of the module."""
+    fig = Figure(figsize=(6.0, 3.0), layout="constrained")
+    left, right = fig.subplots(1, 2)
+    mappable = _mappable()
+    draw_lobule(left, _values(), mappable=mappable, anatomy=True)
+    draw_lobule(right, _values()[::-1], mappable=mappable, anatomy=True)
+    bar = colorbar(
+        fig,
+        mappable,
+        [left, right],
+        label="Drug [mM]",
+        location="right",
+        shrink=0.8,
+        aspect=30,
+    )
+    assert bar.solids is not None
+    assert not bar.solids.get_rasterized()
+    assert bar.ax.get_gid() == COLORBAR
+    assert bar.ax.get_ylabel() == "Drug [mM]"
+    assert data_axes(fig) == [left, right]
+    fig.savefig(tmp_path / "grid.svg")
+    assert "<image" not in (tmp_path / "grid.svg").read_text()

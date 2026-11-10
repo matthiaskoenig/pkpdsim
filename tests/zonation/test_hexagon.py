@@ -7,6 +7,7 @@ import pytest
 
 matplotlib.use("Agg")
 
+from itertools import pairwise
 from pathlib import Path
 
 from matplotlib import colormaps
@@ -19,10 +20,12 @@ from pkpdsim.species import Species
 from pkpdsim.zonation import ids, observers
 from pkpdsim.zonation.figures import COLORBAR, data_axes, lobule_map, space_time
 from pkpdsim.zonation.geometry import Layer, geometry
-from pkpdsim.zonation.profiles import zone_areas
-from pkpdsim.zonation.render import tube_mesh
+from pkpdsim.zonation.profiles import lobular_area, zone_areas
+from pkpdsim.zonation.render import lobule_isoline, tube_mesh
 
 N = 10
+HEXAGON_AREA = 3.0 * np.sqrt(3.0) / 2.0
+APOTHEM = np.cos(np.pi / 6.0)
 
 
 def _result(layer: Layer = Layer.CELL, n: int = N) -> pd.DataFrame:
@@ -170,6 +173,98 @@ def test_one_zone_is_one_colour() -> None:
 
 def _zone_colour_one(fig: Figure) -> tuple[float, ...]:
     return _zone_colour(fig, 1)
+
+
+def _shoelace(ring: np.ndarray) -> float:
+    """The area enclosed by a closed polyline, by the shoelace formula."""
+    x, y = ring[:, 0], ring[:, 1]
+    return 0.5 * abs(float(np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1))))
+
+
+def _angles(ring: np.ndarray) -> np.ndarray:
+    """The direction of every point of a ring around the centre (degrees)."""
+    return np.rad2deg(np.arctan2(ring[:, 1], ring[:, 0])) % 360.0
+
+
+def _radius_at(ring: np.ndarray, degrees: float) -> float:
+    """The radius of an isoline in a direction, interpolated along its points."""
+    angle, radius = _angles(ring), np.hypot(ring[:, 0], ring[:, 1])
+    order = np.argsort(angle)
+    return float(np.interp(degrees, angle[order], radius[order]))
+
+
+def test_the_isoline_of_zero_is_the_hexagon() -> None:
+    ring = lobule_isoline(0.0)
+    radius = np.hypot(ring[:, 0], ring[:, 1])
+    # radius 1 towards a corner, cos(pi / 6) towards the middle of an edge
+    assert radius.max() == pytest.approx(1.0)
+    assert radius.min() == pytest.approx(APOTHEM)
+    assert _radius_at(ring, 0.0) == pytest.approx(1.0)
+    assert _radius_at(ring, 30.0) == pytest.approx(APOTHEM)
+    corners = np.unique(np.round(_angles(ring)[np.isclose(radius, 1.0, atol=1e-9)]))
+    assert sorted(corners % 360.0) == [0.0, 60.0, 120.0, 180.0, 240.0, 300.0]
+    assert _shoelace(ring) == pytest.approx(HEXAGON_AREA, rel=1e-9)
+
+
+def test_the_isoline_of_one_is_the_centre() -> None:
+    ring = lobule_isoline(1.0)
+    assert np.hypot(ring[:, 0], ring[:, 1]) == pytest.approx(0.0)
+    assert _shoelace(ring) == pytest.approx(0.0)
+
+
+def test_the_isoline_shrinks_with_the_position() -> None:
+    """The radius in a direction never grows with the position, and the area shrinks."""
+    rings = [lobule_isoline(x) for x in (0.0, 0.25, 0.5, 0.75, 0.9)]
+    for degrees in (0.0, 5.0, 30.0, 60.0, 95.0, 200.0, 330.0):
+        radii = [_radius_at(ring, degrees) for ring in rings]
+        assert all(b <= a + 1e-9 for a, b in pairwise(radii)), (degrees, radii)
+    # towards a portal triad it decreases strictly, and so does the area inside
+    for degrees in (0.0, 60.0, 180.0):
+        radii = [_radius_at(ring, degrees) for ring in rings]
+        assert all(b < a for a, b in pairwise(radii)), (degrees, radii)
+    areas = [_shoelace(ring) for ring in rings]
+    assert all(b < a for a, b in pairwise(areas)), areas
+
+
+@pytest.mark.parametrize("x", [0.0, 0.2, 0.5, 0.8, 1.0])
+def test_the_radius_towards_a_triad_is_the_distance_to_the_central_vein(
+    x: float,
+) -> None:
+    """On the line triad to centre the position is the distance from the triad."""
+    ring = lobule_isoline(x)
+    for degrees in (0.0, 120.0, 240.0):
+        assert _radius_at(ring, degrees) == pytest.approx(1.0 - x)
+
+
+@pytest.mark.parametrize("x", [0.0, 0.1, 0.3, 0.5, 0.7, 0.9, 1.0])
+def test_the_area_inside_an_isoline_is_the_pericentral_area(x: float) -> None:
+    """The shoelace area of the isoline of `x` is `1 - lobular_area(x)` of the hexagon."""
+    share = _shoelace(lobule_isoline(x)) / HEXAGON_AREA
+    assert share == pytest.approx(1.0 - lobular_area(x), abs=1e-3)
+
+
+def test_the_isoline_is_closed_and_ordered() -> None:
+    ring = lobule_isoline(0.4)
+    assert ring.ndim == 2
+    assert ring.shape[1] == 2
+    assert ring[-1] == pytest.approx(ring[0])
+    angle = np.unwrap(np.arctan2(ring[:, 1], ring[:, 0]))
+    assert np.all(np.diff(angle) >= -1e-12)
+    assert angle[-1] - angle[0] == pytest.approx(2.0 * np.pi)
+
+
+def test_the_isoline_samples_a_wedge_as_asked_and_refuses_one_point() -> None:
+    assert len(lobule_isoline(0.0, points=8)) < len(lobule_isoline(0.0, points=64))
+    assert _shoelace(lobule_isoline(0.5, points=16)) == pytest.approx(
+        _shoelace(lobule_isoline(0.5)), rel=1e-3
+    )
+    with pytest.raises(ValueError, match="two points"):
+        lobule_isoline(0.5, points=1)
+
+
+def test_the_isoline_refuses_a_position_outside_the_lobule() -> None:
+    with pytest.raises(ValueError, match="outside"):
+        lobule_isoline(1.5)
 
 
 def test_the_tube_mesh_has_a_segment_per_zone() -> None:
