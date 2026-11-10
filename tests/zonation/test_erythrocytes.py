@@ -324,13 +324,16 @@ def test_the_coefficient_is_inverted_from_the_blood_to_plasma_ratio() -> None:
 
     The relation `BP = 1 - Hct + Hct*Kbc` of the PBPK library, read the other
     way: the engine needs the concentration of the erythrocytes, a study
-    measures the ratio of the whole blood. The round trip through
-    `blood_to_plasma` of the library returns the ratio.
+    measures the ratio of the whole blood. The round trip goes through the
+    coefficient: a substance which carries `Kbc` and no `bp` gives the ratio
+    back from `blood_to_plasma`, which returns a `bp` it is given unchanged
+    (1.6667 at the haematocrit of the tests gives 1.3).
     """
     ery = Erythrocytes(mode="equilibrium", bp=1.3)
     kbc = blood_cell_coefficient(ery, HCT)
     assert kbc == pytest.approx((1.3 - 1.0 + HCT) / HCT, rel=1e-12)
-    assert blood_to_plasma(_tracer(ery), HCT) == pytest.approx(1.3, rel=1e-12)
+    inverted = _tracer(Erythrocytes(mode="equilibrium", kbc=kbc))
+    assert blood_to_plasma(inverted, HCT) == pytest.approx(1.3, rel=1e-12)
     assert _parameters(ery)["Kbc_tr"] == pytest.approx(kbc, rel=1e-12)
 
 

@@ -588,6 +588,47 @@ def test_a_well_stirred_zone_carries_the_whole_axial_water_flux(
     assert _profile(r, ids.VASCULAR) == pytest.approx([1.0] * 10, rel=1e-9)
 
 
+@pytest.mark.parametrize("p_onc", [None, 0.0, 2000.0], ids=str)
+def test_the_filtrate_of_a_zone_is_the_leak_through_its_fenestrae(
+    p_onc: float | None, tmp_path: Path
+) -> None:
+    """The drop of the lumen flow over a zone is the pore flux integrated over it.
+
+    The independent measurement of the water. The balance of the three flows
+    (`test_the_erythrocytes_keep_their_flow_along_a_pressure_driven_sinusoid`
+    of `test_erythrocytes.py`) is an identity in the face flows: it holds for
+    any sequence of them, physical or not, and catches a wrong site index and
+    an erythrocyte flow which follows the local flow, which is what it was
+    written for. The pore equation is the physics: with `P(x) - P0 = (a
+    sinh((L - x) / lam) + b sinh(x / lam)) / sinh(L / lam)`, `a = P_pp - P0`
+    and `b = P_pc - P0`, the wall flux of a length `dx` is `(P(x) - P0) /
+    w_sin`, and its integral over a zone has to be the drop of the flow
+    between the two faces of that zone. Read from the parameters of the built
+    model (nothing of the engine's python) and integrated with the
+    trapezoidal rule over 20001 points per zone, the two agree to 5.3486e-12
+    of the leak of the zone at the default oncotic pressure (the sinusoid
+    filters and reabsorbs), at 0 Pa (it only filters) and at 2000 Pa (it only
+    reabsorbs); the residual is the error of the quadrature, which falls as
+    `h**2` with the points.
+    """
+    n = 10
+    r = _steady(tmp_path, radius=1e-12, n=n, p_onc=p_onc)
+    lam, length, w = r[ids.DECAY_LENGTH], r[ids.LENGTH], r[ids.RESISTANCE_PORES]
+    a = r[ids.PRESSURE_PORTAL] - r[ids.PRESSURE_ONCOTIC]
+    b = r[ids.PRESSURE_CENTRAL] - r[ids.PRESSURE_ONCOTIC]
+    faces = [
+        r[ids.sinusoid_flow(site)]
+        for site in (ids.INFLOW, *(ids.zone(k) for k in range(1, n + 1)))
+    ]
+    for k in range(1, n + 1):
+        x = np.linspace((k - 1) / n * length, k / n * length, 20001)
+        pressure = (a * np.sinh((length - x) / lam) + b * np.sinh(x / lam)) / np.sinh(
+            length / lam
+        )
+        leak = float(np.trapezoid(pressure / w, x))
+        assert leak == pytest.approx(faces[k - 1] - faces[k], rel=1e-11)
+
+
 @pytest.mark.parametrize(
     ("p_onc", "lymph", "flatness"),
     [(None, False, 1e-7), (0.0, True, 2e-7), (2000.0, True, 2e-4)],
