@@ -66,7 +66,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import libsbml
-from sbmlutils.comp import flatten_sbml
+from sbmlutils.comp import flatten_sbml_doc
 from sbmlutils.factory import (
     PORT_SUFFIX,
     Deletion,
@@ -80,8 +80,10 @@ from sbmlutils.factory import (
     Submodel,
     create_model,
 )
+from sbmlutils.io import read_sbml, write_sbml
 from sbmlutils.metadata import SBO
 
+from pkpdsim.sbml.flatten import merge_unit_definitions
 from pkpdsim.sbml.units import OrganUnits, U
 from pkpdsim.zonation import ids
 from pkpdsim.zonation.builder import ZonationBuilder
@@ -520,7 +522,10 @@ def write(model: Model, output_dir: Path, cell_model: Model | None = None) -> Pa
     `<model id>_flat.xml` into `output_dir`, where the file of every external
     model definition has to be: the cell model is written there as
     `<cell model id>.xml` when it is given, over a file which holds a version
-    of the same model but never over a file which holds another model.
+    of the same model but never over a file which holds another model. The
+    units the flattening copied, one set of definitions per zone, are merged in
+    the flat model (`pkpdsim.sbml.flatten.merge_unit_definitions`), so a zone
+    of it reads the `mM` of the model and not an `M01__mM` of its own.
 
     Args:
         model: the composed model (`compose`).
@@ -550,5 +555,9 @@ def write(model: Model, output_dir: Path, cell_model: Model | None = None) -> Pa
     path = output_dir / f"{model.sid}.xml"
     flat_path = output_dir / f"{model.sid}_flat.xml"
     create_model(model, filepath=path, sbml_level=3, sbml_version=2, validate=False)
-    flatten_sbml(path, flat_path, leave_ports=True, validate=False)
+    # the flat model is written once, with the units of the submodels merged
+    # (`merge_unit_definitions`): a flattening copies them, one set per zone
+    flat = flatten_sbml_doc(read_sbml(path), leave_ports=True, validate=False)
+    merge_unit_definitions(flat.getModel())
+    write_sbml(flat, filepath=flat_path)
     return flat_path

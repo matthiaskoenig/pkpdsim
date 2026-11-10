@@ -141,6 +141,55 @@ def test_the_flat_model_validates(tmp_path: Path) -> None:
     assert problems == []
 
 
+def _math_units(model: libsbml.Model) -> set[str]:
+    """The unit definitions the numbers of the math of a model name."""
+    out: set[str] = set()
+    elements = model.getListOfAllElements()
+    for k in range(elements.getSize()):
+        math = getattr(elements.get(k), "getMath", lambda: None)()
+        stack = [] if math is None else [math]
+        while stack:
+            node = stack.pop()
+            if node.isSetUnits():
+                out.add(node.getUnits())
+            stack.extend(node.getChild(i) for i in range(node.getNumChildren()))
+    return out
+
+
+def test_the_flat_model_carries_every_unit_once(tmp_path: Path) -> None:
+    """The cell model declares the units of a model which simulates alone, and a
+    flattening copies them with its prefix, one set per zone: the copies are
+    merged, so the units of the flat model are the units of the model and the
+    math of a zone reads `1 mM` and not `1 M01__mM`."""
+    path = _written(tmp_path)
+    document = libsbml.readSBMLFromFile(str(path))
+    model = document.getModel()
+    units = [
+        model.getUnitDefinition(k).getId() for k in range(model.getNumUnitDefinitions())
+    ]
+    assert units and sorted(units) == sorted(set(units))
+    assert [u for u in units if "__" in u] == []
+    # the math of the cell of a zone names the units of the model
+    assert [u for u in _math_units(model) if "__" in u] == []
+
+
+def test_a_unit_of_the_cell_model_alone_survives_the_merge(tmp_path: Path) -> None:
+    """A unit which only the cell model declares is kept, under the one id of the
+    zone which declared it first: the merge drops copies, never a unit."""
+    create_toy_cell(tmp_path)
+    path = write(compose(_builder(3), TOY_ID, CellPorts()), tmp_path)
+    cell = libsbml.readSBMLFromFile(str(tmp_path / f"{TOY_ID}.xml")).getModel()
+    declared = {
+        cell.getUnitDefinition(k).getId() for k in range(cell.getNumUnitDefinitions())
+    }
+    model = libsbml.readSBMLFromFile(str(path)).getModel()
+    units = {
+        model.getUnitDefinition(k).getId().removeprefix("M01__")
+        for k in range(model.getNumUnitDefinitions())
+    }
+    assert declared <= units
+
+
 def test_the_flat_model_simulates(tmp_path: Path) -> None:
     """The toy takes up the drug of the Disse space of zone 1 into its cell."""
     r = roadrunner.RoadRunner(str(_written(tmp_path)))
